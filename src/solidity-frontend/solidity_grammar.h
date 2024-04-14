@@ -58,6 +58,9 @@ enum TypeNameT
   // tuple
   TupleTypeName,
 
+  // built-in member
+  SpecialTypeName,
+
   TypeNameTError
 };
 TypeNameT get_type_name_t(const nlohmann::json &type_name);
@@ -336,6 +339,9 @@ enum ExpressionT
 
   // Enum Member Access
   EnumMemberCall,
+
+  // Built-in Member Access
+  SpecialMemberCall,
 
   ExpressionTError
 };

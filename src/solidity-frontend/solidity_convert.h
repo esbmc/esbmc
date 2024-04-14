@@ -27,6 +27,10 @@ public:
 
 protected:
   bool convert_ast_nodes(const nlohmann::json &contract_def);
+  void convert_builtin_members();
+  void populate_builtin_members(
+    const std::string &bs,
+    const std::map<std::string, std::string> &mems);
 
   // conversion functions
   // get decl in rule contract-body-element

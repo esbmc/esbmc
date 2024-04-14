@@ -80,6 +80,9 @@ bool solidity_convertert::convert()
   }
   assert(found_contract_def && "No contracts were found in the program.");
 
+  // pre-processing: populate built-in members into the symbol table
+  convert_builtin_members();
+
   // reasoning-based verification
 
   // populate exportedSymbolsList
@@ -192,6 +195,139 @@ bool solidity_convertert::convert()
   }
 
   return false; // 'false' indicates successful completion.
+}
+
+void solidity_convertert::convert_builtin_members()
+{
+  //! The symex needs to be defined later
+
+  // msg
+  // mem = {mem_name : mem_rtn_typ}
+  std::string msg_bs = "msg";
+  std::map<std::string, std::string> msg_mem = {
+    {"data", "bytes"},
+    {"sender", "address"},
+    {"sig", "bytes4"},
+    {"value", "uint"}};
+  populate_builtin_members(msg_bs, msg_mem);
+
+  // block
+  std::string block_bs = "block";
+  std::map<std::string, std::string> block_mem = {
+    {"basefee", "uint"},
+    {"chainid", "uint"},
+    {"coinbase", "address"},
+    {"difficulty", "uint"},
+    {"gaslimit", "uint"},
+    {"number", "uint"},
+    {"prevrandao", "uint"},
+    {"timestamp", "uint"}};
+  populate_builtin_members(block_bs, block_mem);
+
+  //!FIXME: this should be defined as function
+  // tx
+  std::string tx_bs = "tx";
+  std::map<std::string, std::string> tx_mem = {
+    {"gasprice", "uint"}, {"origin", "address"}};
+  populate_builtin_members(tx_bs, tx_mem);
+
+  // abi
+  std::string abi_bs = "abi";
+  std::map<std::string, std::string> ai_mem = {
+    {"encode", "bytes"},
+    {"encodePacked", "bytes"},
+    {"encodeWithSelector", "bytes"},
+    {"encodeWithSignature", "bytes"},
+    {"encodeCall", "bytes"}}; // {"decode","tuple"},
+  populate_builtin_members(abi_bs, ai_mem);
+
+  // byte
+  std::string byte_bs = "byte";
+  std::map<std::string, std::string> byte_mem = {
+    {"concat", "bytes"},
+  };
+  populate_builtin_members(byte_bs, byte_mem);
+  //TODO: symex
+
+  // string
+  std::string string_bs = "string";
+  std::map<std::string, std::string> string_mem = {{"concat", "string"}};
+  populate_builtin_members(string_bs, string_mem);
+  // populate function body
+  auto &sym = *context.find_symbol("sol:@F@string@concat");
+
+  code_blockt _block;
+  side_effect_expr_function_callt call_expr;
+
+  exprt type_expr("symbol");
+  type_expr.name("strcat");
+  type_expr.identifier("c:@F@strcat");
+
+  code_typet type;
+  size_t value_length = 128;
+  type.return_type() = pointer_typet(signed_char_type());
+  type_expr.type() = type;
+
+  call_expr.function() = type_expr;
+  call_expr.type() = pointer_typet(signed_char_type());
+  call_expr.set("#cpp_type", "signed char *");
+
+  solidity_gen_typecast(ns, lhs, double_type());
+  solidity_gen_typecast(ns, rhs, double_type());
+  call_expr.arguments().push_back(lhs);
+  call_expr.arguments().push_back(rhs);
+
+  new_expr = call_expr;
+}
+
+void solidity_convertert::populate_builtin_members(
+  const std::string &bs,
+  const std::map<std::string, std::string> &mems)
+{
+  for (const auto &item : mems)
+  {
+    const auto mem = item.first;
+    const auto rtn_typ = item.second;
+
+    std::string name = bs + "@" + mem;
+    std::string id = "sol:@F@" + name;
+    locationt location_begin;
+
+    std::string debug_modulename =
+      get_modulename_from_path(location_begin.file().as_string());
+    symbolt symbol;
+
+    typet t;
+    if (rtn_typ.find("uint") != std::string::npos)
+    {
+      t = uint_type();
+    }
+    else if (rtn_typ.find("bytes") != std::string::npos)
+    {
+      int byte_num;
+      if (rtn_typ == "bytes")
+        byte_num = 32;
+      else
+        byte_num = std::stoi(rtn_typ.substr(5));
+      t = signedbv_typet(byte_num * 8);
+    }
+    else if (rtn_typ.find("address") != std::string::npos)
+    {
+      t = unsignedbv_typet(160);
+    }
+    else if (rtn_typ == "string")
+    {
+    }
+    else
+    {
+      log_error("Unsupported Special Members.");
+      abort();
+    }
+    get_default_symbol(symbol, debug_modulename, t, name, id, location_begin);
+    auto &sym = *move_symbol_to_context(symbol);
+    sym.lvalue = false;
+    sym.file_local = true;
+  }
 }
 
 bool solidity_convertert::convert_ast_nodes(const nlohmann::json &contract_def)
@@ -2054,6 +2190,12 @@ bool solidity_convertert::get_expr(
     }
 
     break;
+  }
+  case SolidityGrammar::ExpressionT::SpecialMemberCall:
+  {
+    // get_special_member_basename()
+
+    //
   }
   case SolidityGrammar::ExpressionT::ElementaryTypeNameExpression:
   {

@@ -192,15 +192,11 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
       // For state var declaration,
       return ElementaryTypeName;
     }
-    else if (
-      type_name["typeIdentifier"].get<std::string>().find("t_enum$") !=
-      std::string::npos)
+    else if (typeIdentifier.find("t_enum$") != std::string::npos)
     {
       return EnumTypeName;
     }
-    else if (
-      type_name["typeIdentifier"].get<std::string>().find("t_contract$") !=
-      std::string::npos)
+    else if (typeIdentifier.find("t_contract$") != std::string::npos)
     {
       return ContractTypeName;
     }
@@ -225,12 +221,15 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
       // FunctionToPointer decay in CallExpr when making a function call
       return Pointer;
     }
-    else if (
-      type_name["typeIdentifier"].get<std::string>().find("ArrayToPtr") !=
-      std::string::npos)
+    else if (typeIdentifier.find("ArrayToPtr") != std::string::npos)
     {
       // ArrayToPointer decay in DeclRefExpr when dereferencing an array, e.g. a[0]
       return PointerArrayToPtr;
+    }
+    // for Special Variables and Functions
+    else if (typeString == "msg" || typeString == "block" || typeString == "tx")
+    {
+      return SpecialTypeName;
     }
     else
     {
@@ -274,6 +273,7 @@ const char *type_name_to_str(TypeNameT type)
     ENUM_TO_STR(TypeConversionName)
     ENUM_TO_STR(EnumTypeName)
     ENUM_TO_STR(StructTypeName)
+    ENUM_TO_STR(SpecialTypeName)
     ENUM_TO_STR(TypeNameTError)
   default:
   {
@@ -686,10 +686,12 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
       get_type_name_t(expr["expression"]["typeDescriptions"]);
     if (type_name == SolidityGrammar::TypeNameT::StructTypeName)
       return StructMemberCall;
-    if (type_name == SolidityGrammar::TypeNameT::EnumTypeName)
+    else if (type_name == SolidityGrammar::TypeNameT::EnumTypeName)
       return EnumMemberCall;
-    if (type_name == SolidityGrammar::TypeNameT::ContractTypeName)
+    else if (type_name == SolidityGrammar::TypeNameT::ContractTypeName)
       return ContractMemberCall;
+    else if (type_name == SolidityGrammar::TypeNameT::SpecialTypeName)
+      return SpecialMemberCall;
   }
   else if (expr["nodeType"] == "ImplicitCastExprClass")
   {
@@ -940,6 +942,7 @@ const char *expression_to_str(ExpressionT type)
     ENUM_TO_STR(ContractMemberCall)
     ENUM_TO_STR(StructMemberCall)
     ENUM_TO_STR(EnumMemberCall)
+    ENUM_TO_STR(SpecialMemberCall)
     ENUM_TO_STR(ElementaryTypeNameExpression)
     ENUM_TO_STR(ExpressionTError)
   default:
