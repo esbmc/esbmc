@@ -1678,6 +1678,15 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       static_cast<const clang::CallExpr &>(stmt);
 
     const clang::Stmt *callee = function_call.getCallee();
+    const clang::Decl *callee_decl = function_call.getCalleeDecl();
+//    log_error("BEGIN");
+    if(callee_decl)
+    {
+//      callee_decl->dump();
+      exprt unused;
+      get_decl(*callee_decl, unused);
+    }
+//    log_error("END");
 
     exprt callee_expr;
     if (get_expr(*callee, callee_expr))

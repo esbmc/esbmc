@@ -43,9 +43,9 @@ bool clang_cpp_convertert::get_decl(
   exprt &new_expr,
   bool only_forward_declare)
 {
-  assert(
-    !only_forward_declare ||
-    decl.getKind() == clang::Decl::ClassTemplateSpecialization);
+//  assert(
+//    !only_forward_declare ||
+//    decl.getKind() == clang::Decl::ClassTemplateSpecialization);
   new_expr = code_skipt();
 
   switch (decl.getKind())
@@ -1267,13 +1267,13 @@ bool clang_cpp_convertert::get_template_decl(
   bool DumpExplicitInst,
   exprt &new_expr)
 {
-  for (auto *Child : D->specializations())
-    if (get_template_decl_specialization(
-          Child,
-          DumpExplicitInst,
-          new_expr,
-          !D->isThisDeclarationADefinition()))
-      return true;
+//  for (auto *Child : D->specializations())
+//    if (get_template_decl_specialization(
+//          Child,
+//          DumpExplicitInst,
+//          new_expr,
+//          !D->isThisDeclarationADefinition()))
+//      return true;
 
   return false;
 }
