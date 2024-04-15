@@ -824,7 +824,7 @@ bool clang_c_convertert::get_type(
     new_type.restricted(true);
 
 #ifdef ESBMC_CHERI_CLANG
-  if (the_type.canCarryProvenance(*ASTContext))
+  if (the_type->canCarryProvenance(*ASTContext))
     new_type.can_carry_provenance(true);
 #endif
 
