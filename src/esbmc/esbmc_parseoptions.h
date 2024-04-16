@@ -79,7 +79,7 @@ protected:
   expr2tc calculate_a_property_monitor(
     const std::string &prefix,
     const std::map<std::string, std::string> &strings,
-    std::set<std::string> &used_syms);
+    std::set<std::string> &used_syms) const;
   void add_monitor_exprs(
     goto_programt::targett insn,
     goto_programt::instructionst &insn_list,

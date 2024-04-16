@@ -2133,24 +2133,22 @@ static void replace_symbol_names(
 expr2tc esbmc_parseoptionst::calculate_a_property_monitor(
   const std::string &name,
   const std::map<std::string, std::string> &strings,
-  std::set<std::string> &used_syms)
+  std::set<std::string> &used_syms) const
 {
-  exprt main_expr;
+  const symbolt *fn = context.find_symbol("c:@F@" + name + "_status");
+  assert(fn);
 
-  namespacet ns(context);
-  languagest languages(ns, language_idt::C);
+  const codet &fn_code = to_code(fn->value);
+  assert(fn_code.get_statement() == "block");
+  assert(fn_code.operands().size() == 1);
 
-  auto it = strings.find("__ESBMC_property_" + name);
-  assert(it != strings.end());
-  const std::string &expr_str = it->second;
-  // TODO: std::string dummy_str;
-
-  assert(!"to_expr() not implemented");
-  // TODO: languages.to_expr(expr_str, dummy_str, main_expr);
+  const codet &fn_ret = to_code(fn_code.op0());
+  assert(fn_ret.get_statement() == "return");
+  assert(fn_ret.operands().size() == 1);
 
   expr2tc new_main_expr;
+  migrate_expr(fn_ret.op0(), new_main_expr);
 
-  // TODO: migrate_expr(main_expr, new_main_expr);
   replace_symbol_names(new_main_expr, name, strings, used_syms);
 
   return new_main_expr;
