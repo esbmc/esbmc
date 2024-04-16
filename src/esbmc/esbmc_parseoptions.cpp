@@ -2048,7 +2048,7 @@ void esbmc_parseoptionst::add_property_monitors(
     {
       std::set<std::string> used_syms;
       expr2tc main_expr;
-      std::string prop_name = str_it->first.substr(20, std::string::npos);
+      std::string prop_name = str_it->first.substr(17, std::string::npos);
       main_expr =
         calculate_a_property_monitor(prop_name, strings, used_syms);
       monitors[prop_name] =
