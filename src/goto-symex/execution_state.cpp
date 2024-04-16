@@ -1246,7 +1246,7 @@ void execution_statet::init_property_monitors()
     {
       std::set<std::string> used_syms;
       exprt main_expr;
-      std::string prop_name = str_it->first.substr(20, std::string::npos);
+      std::string prop_name = str_it->first.substr(17, std::string::npos);
 
       namespacet ns(new_context);
       languagest languages(ns, language_idt::C);
