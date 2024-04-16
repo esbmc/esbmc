@@ -2042,17 +2042,17 @@ void esbmc_parseoptionst::add_property_monitors(
 
   std::map<std::string, std::pair<std::set<std::string>, expr2tc>> monitors;
   std::map<std::string, std::string>::const_iterator str_it;
-  for (str_it = strings.begin(); str_it != strings.end(); str_it++)
+  for (const auto &[sym_name, value] : strings)
   {
-    if (str_it->first.find("$type") == std::string::npos)
-    {
-      std::set<std::string> used_syms;
-      expr2tc main_expr;
-      std::string prop_name = str_it->first.substr(17, std::string::npos);
-      main_expr = calculate_a_property_monitor(prop_name, strings, used_syms);
-      monitors[prop_name] =
-        std::pair<std::set<std::string>, expr2tc>(used_syms, main_expr);
-    }
+    if (sym_name.find("$type") != std::string::npos)
+      continue;
+
+    std::set<std::string> used_syms;
+    expr2tc main_expr;
+    // strip prefix "__ESBMC_property_"
+    std::string prop_name = sym_name.substr(17, std::string::npos);
+    main_expr = calculate_a_property_monitor(prop_name, strings, used_syms);
+    monitors[prop_name] = std::pair{used_syms, main_expr};
   }
 
   if (monitors.size() == 0)
@@ -2109,21 +2109,21 @@ void esbmc_parseoptionst::add_property_monitors(
 }
 
 static void replace_symbol_names(
-  expr2tc &e,
-  std::string prefix,
-  std::map<std::string, std::string> &strings,
+  const expr2tc &e,
+  const std::string &prefix,
+  const std::map<std::string, std::string> &strings,
   std::set<std::string> &used_syms)
 {
   if (is_symbol2t(e))
   {
-    symbol2t &thesym = to_symbol2t(e);
+    const symbol2t &thesym = to_symbol2t(e);
     std::string sym = thesym.get_symbol_name();
 
     used_syms.insert(sym);
   }
   else
   {
-    e->Foreach_operand([&prefix, &strings, &used_syms](expr2tc &e) {
+    e->foreach_operand([&prefix, &strings, &used_syms](const expr2tc &e) {
       if (!is_nil_expr(e))
         replace_symbol_names(e, prefix, strings, used_syms);
     });
@@ -2132,16 +2132,17 @@ static void replace_symbol_names(
 
 expr2tc esbmc_parseoptionst::calculate_a_property_monitor(
   const std::string &name,
-  std::map<std::string, std::string> &strings,
+  const std::map<std::string, std::string> &strings,
   std::set<std::string> &used_syms)
 {
   exprt main_expr;
-  std::map<std::string, std::string>::const_iterator it;
 
   namespacet ns(context);
   languagest languages(ns, language_idt::C);
 
-  std::string expr_str = strings["__ESBMC_property_" + name];
+  auto it = strings.find("__ESBMC_property_" + name);
+  assert(it != strings.end());
+  const std::string &expr_str = it->second;
   // TODO: std::string dummy_str;
 
   assert(!"to_expr() not implemented");

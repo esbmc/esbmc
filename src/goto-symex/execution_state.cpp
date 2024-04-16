@@ -1246,6 +1246,7 @@ void execution_statet::init_property_monitors()
     {
       std::set<std::string> used_syms;
       exprt main_expr;
+      // strip prefix "__ESBMC_property_"
       std::string prop_name = str_it->first.substr(17, std::string::npos);
 
       namespacet ns(new_context);

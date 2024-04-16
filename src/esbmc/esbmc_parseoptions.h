@@ -78,7 +78,7 @@ protected:
   void add_property_monitors(goto_functionst &goto_functions, namespacet &ns);
   expr2tc calculate_a_property_monitor(
     const std::string &prefix,
-    std::map<std::string, std::string> &strings,
+    const std::map<std::string, std::string> &strings,
     std::set<std::string> &used_syms);
   void add_monitor_exprs(
     goto_programt::targett insn,
