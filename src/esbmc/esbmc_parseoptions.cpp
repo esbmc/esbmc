@@ -2018,7 +2018,7 @@ void esbmc_parseoptionst::preprocessing()
 
 void esbmc_parseoptionst::add_property_monitors(
   goto_functionst &goto_functions,
-  namespacet &ns __attribute__((unused)))
+  namespacet &ns [[maybe_unused]])
 {
   std::map<std::string, std::string> strings;
 
