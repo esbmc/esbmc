@@ -2235,11 +2235,12 @@ static unsigned int calc_globals_used(const namespacet &ns, const expr2tc &expr)
   }
 
   std::string identifier = to_symbol2t(expr).get_symbol_name();
-  const symbolt *sym = ns.lookup(identifier);
 
-  if (identifier == "__ESBMC_alloc" || identifier == "__ESBMC_alloc_size")
+  if (identifier == "NULL" || identifier == "__ESBMC_alloc" ||
+      identifier == "__ESBMC_alloc_size")
     return 0;
 
+  const symbolt *sym = ns.lookup(identifier);
   assert(sym);
   if (sym->static_lifetime || sym->type.is_dynamic_set())
     return 1;
