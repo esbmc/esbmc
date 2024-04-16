@@ -2088,12 +2088,12 @@ void esbmc_parseoptionst::add_property_monitors(
       // Insert initializers for each monitor expr.
       std::map<std::string, std::pair<std::set<std::string>, expr2tc>>::
         const_iterator it;
-      for (it = monitors.begin(); it != monitors.end(); it++)
+      for (const auto &[prop, pair] : monitors)
       {
         goto_programt::instructiont new_insn;
         new_insn.type = ASSIGN;
-        std::string prop_name = it->first + "_status";
-        expr2tc cast = typecast2tc(get_int_type(32), it->second.second);
+        std::string prop_name = prop + "_status";
+        expr2tc cast = typecast2tc(get_int_type(32), pair.second);
         expr2tc assign =
           code_assign2tc(symbol2tc(get_int_type(32), prop_name), cast);
         new_insn.code = assign;
@@ -2182,13 +2182,12 @@ void esbmc_parseoptionst::add_monitor_exprs(
     const_iterator it;
   std::string sym_name = sym.get_symbol_name();
   std::set<std::pair<std::string, expr2tc>> triggered;
-  for (it = monitors.begin(); it != monitors.end(); it++)
+  for (const auto &[prop, pair] : monitors)
   {
-    if (it->second.first.find(sym_name) == it->second.first.end())
+    if (pair.first.find(sym_name) == pair.first.end())
       continue;
 
-    triggered.insert(
-      std::pair<std::string, expr2tc>(it->first, it->second.second));
+    triggered.insert(std::pair<std::string, expr2tc>(prop, pair.second));
   }
 
   if (triggered.empty())
@@ -2203,11 +2202,10 @@ void esbmc_parseoptionst::add_monitor_exprs(
   insn++;
 
   new_insn.type = ASSIGN;
-  std::set<std::pair<std::string, expr2tc>>::const_iterator trig_it;
-  for (trig_it = triggered.begin(); trig_it != triggered.end(); trig_it++)
+  for (const auto &[prop, expr] : triggered)
   {
-    std::string prop_name = trig_it->first + "_status";
-    expr2tc hack_cast = typecast2tc(get_int_type(32), trig_it->second);
+    std::string prop_name = prop + "_status";
+    expr2tc hack_cast = typecast2tc(get_int_type(32), expr);
     expr2tc newsym = symbol2tc(get_int_type(32), prop_name);
     new_insn.code = code_assign2tc(newsym, hack_cast);
     new_insn.function = insn->function;
