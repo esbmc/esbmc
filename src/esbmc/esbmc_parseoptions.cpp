@@ -2050,7 +2050,7 @@ void esbmc_parseoptionst::add_property_monitors(
       expr2tc main_expr;
       std::string prop_name = str_it->first.substr(20, std::string::npos);
       main_expr =
-        calculate_a_property_monitor(std::move(prop_name), strings, used_syms);
+        calculate_a_property_monitor(prop_name, strings, used_syms);
       monitors[prop_name] =
         std::pair<std::set<std::string>, expr2tc>(used_syms, main_expr);
     }
@@ -2132,7 +2132,7 @@ static void replace_symbol_names(
 }
 
 expr2tc esbmc_parseoptionst::calculate_a_property_monitor(
-  const std::string &&name,
+  const std::string &name,
   std::map<std::string, std::string> &strings,
   std::set<std::string> &used_syms)
 {
