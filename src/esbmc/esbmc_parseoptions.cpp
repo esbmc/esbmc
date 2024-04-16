@@ -2178,17 +2178,11 @@ void esbmc_parseoptionst::add_monitor_exprs(
   symbol2t &sym = to_symbol2t(assign.target);
 
   // Is this actually an assignment that we're interested in?
-  std::map<std::string, std::pair<std::set<std::string>, expr2tc>>::
-    const_iterator it;
   std::string sym_name = sym.get_symbol_name();
   std::set<std::pair<std::string, expr2tc>> triggered;
   for (const auto &[prop, pair] : monitors)
-  {
-    if (pair.first.find(sym_name) == pair.first.end())
-      continue;
-
-    triggered.insert(std::pair<std::string, expr2tc>(prop, pair.second));
-  }
+    if (pair.first.find(sym_name) != pair.first.end())
+      triggered.emplace(prop, pair.second);
 
   if (triggered.empty())
     return;
