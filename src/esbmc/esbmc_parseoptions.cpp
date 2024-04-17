@@ -2020,40 +2020,20 @@ void esbmc_parseoptionst::add_property_monitors(
   goto_functionst &goto_functions,
   namespacet &ns [[maybe_unused]])
 {
-  std::map<std::string, std::string> strings;
-
-  context.foreach_operand([this, &strings](const symbolt &s) {
-    if (s.name.as_string().find("__ESBMC_property_") != std::string::npos)
-    {
-      // Munge back into the shape of an actual string
-      std::string str;
-      forall_operands (iter2, s.value)
-      {
-        char c = (char)strtol(iter2->value().as_string().c_str(), nullptr, 2);
-        if (c != 0)
-          str += c;
-        else
-          break;
-      }
-
-      strings[s.name.as_string()] = str;
-    }
-  });
-
   std::map<std::string, std::pair<std::set<std::string>, expr2tc>> monitors;
-  std::map<std::string, std::string>::const_iterator str_it;
-  for (const auto &[sym_name, value] : strings)
-  {
-    if (sym_name.find("$type") != std::string::npos)
-      continue;
 
-    std::set<std::string> used_syms;
-    expr2tc main_expr;
+  context.foreach_operand([this, &monitors](const symbolt &s) {
+    if (
+      !has_prefix(s.name, "__ESBMC_property_") ||
+      s.name.as_string().find("$type") != std::string::npos)
+      return;
+
     // strip prefix "__ESBMC_property_"
-    std::string prop_name = sym_name.substr(17, std::string::npos);
-    main_expr = calculate_a_property_monitor(prop_name, strings, used_syms);
+    std::string prop_name = s.name.as_string().substr(17);
+    std::set<std::string> used_syms;
+    expr2tc main_expr = calculate_a_property_monitor(prop_name, used_syms);
     monitors[prop_name] = std::pair{used_syms, main_expr};
-  }
+  });
 
   if (monitors.size() == 0)
     return;
@@ -2063,9 +2043,7 @@ void esbmc_parseoptionst::add_property_monitors(
     goto_functiont &func = f_it->second;
     goto_programt &prog = func.body;
     Forall_goto_program_instructions (p_it, prog)
-    {
       add_monitor_exprs(p_it, prog.instructions, monitors);
-    }
   }
 
   // Find main function; find first function call; insert updates to each
@@ -2111,7 +2089,6 @@ void esbmc_parseoptionst::add_property_monitors(
 static void replace_symbol_names(
   const expr2tc &e,
   const std::string &prefix,
-  const std::map<std::string, std::string> &strings,
   std::set<std::string> &used_syms)
 {
   if (is_symbol2t(e))
@@ -2123,16 +2100,15 @@ static void replace_symbol_names(
   }
   else
   {
-    e->foreach_operand([&prefix, &strings, &used_syms](const expr2tc &e) {
+    e->foreach_operand([&prefix, &used_syms](const expr2tc &e) {
       if (!is_nil_expr(e))
-        replace_symbol_names(e, prefix, strings, used_syms);
+        replace_symbol_names(e, prefix, used_syms);
     });
   }
 }
 
 expr2tc esbmc_parseoptionst::calculate_a_property_monitor(
   const std::string &name,
-  const std::map<std::string, std::string> &strings,
   std::set<std::string> &used_syms) const
 {
   const symbolt *fn = context.find_symbol("c:@F@" + name + "_status");
@@ -2149,7 +2125,7 @@ expr2tc esbmc_parseoptionst::calculate_a_property_monitor(
   expr2tc new_main_expr;
   migrate_expr(fn_ret.op0(), new_main_expr);
 
-  replace_symbol_names(new_main_expr, name, strings, used_syms);
+  replace_symbol_names(new_main_expr, name, used_syms);
 
   return new_main_expr;
 }
@@ -2157,7 +2133,7 @@ expr2tc esbmc_parseoptionst::calculate_a_property_monitor(
 void esbmc_parseoptionst::add_monitor_exprs(
   goto_programt::targett insn,
   goto_programt::instructionst &insn_list,
-  std::map<std::string, std::pair<std::set<std::string>, expr2tc>> monitors)
+  const std::map<std::string, std::pair<std::set<std::string>, expr2tc>> &monitors)
 {
   // We've been handed an instruction, look for assignments to the
   // symbol we're looking for. When we find one, append a goto instruction that
@@ -2207,7 +2183,7 @@ void esbmc_parseoptionst::add_monitor_exprs(
   }
 
   new_insn.type = FUNCTION_CALL;
-  expr2tc func_sym = symbol2tc(get_empty_type(), "__ESBMC_switch_to_monitor");
+  expr2tc func_sym = symbol2tc(get_empty_type(), "c:@F@__ESBMC_switch_to_monitor");
   std::vector<expr2tc> args;
   new_insn.code = code_function_call2tc(expr2tc(), func_sym, args);
   new_insn.function = insn->function;
@@ -2252,43 +2228,50 @@ void esbmc_parseoptionst::print_ileave_points(
   namespacet &ns,
   goto_functionst &goto_functions)
 {
-  bool print_insn;
-
   forall_goto_functions (fit, goto_functions)
-  {
     forall_goto_program_instructions (pit, fit->second.body)
     {
-      print_insn = false;
+      bool print_insn = false;
+
       switch (pit->type)
       {
       case GOTO:
       case ASSUME:
       case ASSERT:
-        if (calc_globals_used(ns, pit->guard) > 0)
-          print_insn = true;
-        break;
       case ASSIGN:
-        if (calc_globals_used(ns, pit->code) > 0)
+        if (calc_globals_used(ns, pit->guard) > 0)
           print_insn = true;
         break;
       case FUNCTION_CALL:
       {
-        code_function_call2t deref_code = to_code_function_call2t(pit->code);
-
+        const code_function_call2t &deref_code =
+          to_code_function_call2t(pit->code);
         if (
           is_symbol2t(deref_code.function) &&
-          to_symbol2t(deref_code.function).get_symbol_name() == "__ESBMC_yield")
+          to_symbol2t(deref_code.function).get_symbol_name() == "c:@F@__ESBMC_yield")
           print_insn = true;
+        break;
       }
-      break;
-      default:
+      case NO_INSTRUCTION_TYPE:
+      case OTHER:
+      case SKIP:
+      case LOCATION:
+      case END_FUNCTION:
+      case ATOMIC_BEGIN:
+      case ATOMIC_END:
+      case RETURN:
+      case DECL:
+      case DEAD:
+      case THROW:
+      case CATCH:
+      case THROW_DECL:
+      case THROW_DECL_END:
         break;
       }
 
       if (print_insn)
         pit->output_instruction(ns, pit->function, std::cout);
     }
-  }
 }
 
 // This prints the ESBMC version and a list of CMD options
