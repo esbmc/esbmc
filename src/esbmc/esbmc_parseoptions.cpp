@@ -2066,11 +2066,9 @@ void esbmc_parseoptionst::add_property_monitors(
   goto_functionst::function_mapt::iterator f_it =
     goto_functions.function_map.find("__ESBMC_main");
   assert(f_it != goto_functions.function_map.end());
-  goto_programt &body = f_it->second.body;
-  goto_programt::instructionst &insn_list = body.instructions;
   std::string main_suffix = "@" + (config.main.empty() ? "main" : config.main);
-  goto_programt::instructiont::targett call_main = insn_list.end();
-  Forall_goto_program_instructions (p_it, body)
+  const symbol2t *entry_sym = nullptr;
+  Forall_goto_program_instructions (p_it, f_it->second.body)
   {
     /* Find the call to the entry point, usually 'main'. At that point
      * everything like pthreads, etc., is already set up. */
@@ -2102,24 +2100,35 @@ void esbmc_parseoptionst::add_property_monitors(
 #endif
 
     /* found it */
-    call_main = p_it;
+    entry_sym = &func_sym;
     break;
   }
-  assert(call_main != insn_list.end());
+  assert(entry_sym);
+
+  f_it = goto_functions.function_map.find(entry_sym->thename.as_string());
+  assert(f_it != goto_functions.function_map.end());
+
+  goto_programt &body = f_it->second.body;
+  goto_programt::instructionst &insn_list = body.instructions;
 
   /* insert a call to start the monitor thread and after it also to kill it */
   goto_programt::instructiont new_insn;
-  new_insn.function = call_main->function;
+  new_insn.function = entry_sym->thename;
 
   expr2tc func_sym = symbol2tc(get_empty_type(), "c:@F@ltl2ba_start_monitor");
   std::vector<expr2tc> args;
   new_insn.make_function_call(code_function_call2tc(expr2tc(), func_sym, args));
-  insn_list.insert(call_main, new_insn);
+  insn_list.insert(insn_list.begin(), new_insn);
 
-  ++call_main;
   func_sym = symbol2tc(get_empty_type(), "c:@F@ltl2ba_finish_monitor");
   new_insn.make_function_call(code_function_call2tc(expr2tc(), func_sym, args));
-  insn_list.insert(call_main, new_insn);
+  // add this call before each 'return' instruction
+  for (auto it = insn_list.begin(); it != insn_list.end(); ++it)
+  {
+    if (it->type != RETURN)
+      continue;
+    insn_list.insert(it, new_insn);
+  }
 }
 
 static void replace_symbol_names(
