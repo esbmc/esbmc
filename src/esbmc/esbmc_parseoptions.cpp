@@ -2066,38 +2066,46 @@ void esbmc_parseoptionst::add_property_monitors(
   goto_functionst::function_mapt::iterator f_it =
     goto_functions.function_map.find("__ESBMC_main");
   assert(f_it != goto_functions.function_map.end());
-  Forall_goto_program_instructions (p_it, f_it->second.body)
+  goto_programt &body = f_it->second.body;
+  goto_programt::instructionst &insn_list = body.instructions;
+  std::string main_suffix = "@" + (config.main.empty() ? "main" : config.main);
+  goto_programt::instructiont::targett call_main = insn_list.end();
+  Forall_goto_program_instructions (p_it, body)
   {
-    if (p_it->type == FUNCTION_CALL)
+    /* Find the call to the entry point, usually 'main'. At that point
+     * everything like pthreads, etc., is already set up. */
+    if (p_it->type != FUNCTION_CALL)
+      continue;
+    const code_function_call2t &func_call = to_code_function_call2t(p_it->code);
+    if (!is_symbol2t(func_call.function))
+      continue;
+    const symbol2t &func_sym = to_symbol2t(func_call.function);
+    if (!has_suffix(func_sym.thename, main_suffix))
+      continue;
+
+#if 0
+    // Insert initializers for each monitor expr.
+    for (const auto &[prop, pair] : monitors)
     {
-      const code_function_call2t &func_call =
-        to_code_function_call2t(p_it->code);
-      if (
-        is_symbol2t(func_call.function) &&
-        to_symbol2t(func_call.function).thename == "main")
-        continue;
+      goto_programt::instructiont new_insn;
+      new_insn.type = ASSIGN;
+      std::string prop_name = prop + "_status";
+      expr2tc cast = typecast2tc(get_int_type(32), pair.second);
+      expr2tc assign =
+        code_assign2tc(symbol2tc(get_int_type(32), prop_name), cast);
+      new_insn.code = assign;
+      new_insn.function = p_it->function;
 
-      // Insert initializers for each monitor expr.
-      std::map<std::string, std::pair<std::set<std::string>, expr2tc>>::
-        const_iterator it;
-      for (const auto &[prop, pair] : monitors)
-      {
-        goto_programt::instructiont new_insn;
-        new_insn.type = ASSIGN;
-        std::string prop_name = prop + "_status";
-        expr2tc cast = typecast2tc(get_int_type(32), pair.second);
-        expr2tc assign =
-          code_assign2tc(symbol2tc(get_int_type(32), prop_name), cast);
-        new_insn.code = assign;
-        new_insn.function = p_it->function;
-
-        // new_insn location field not set - I believe it gets numbered later.
-        f_it->second.body.instructions.insert(p_it, new_insn);
-      }
-
-      break;
+      // new_insn location field not set - I believe it gets numbered later.
+      f_it->second.body.instructions.insert(p_it, new_insn);
     }
+#endif
+
+    /* found it */
+    call_main = p_it;
+    break;
   }
+  assert(call_main != insn_list.end());
 }
 
 static void replace_symbol_names(
@@ -2183,19 +2191,19 @@ void esbmc_parseoptionst::add_monitor_exprs(
   insn_list.insert(insn, new_insn);
 
   insn++;
-
+#if 0
   new_insn.type = ASSIGN;
   for (const auto &[prop, expr] : triggered)
   {
     std::string prop_name = prop + "_status";
-    expr2tc hack_cast = typecast2tc(get_int_type(32), expr);
-    expr2tc newsym = symbol2tc(get_int_type(32), prop_name);
+    expr2tc hack_cast = typecast2tc(int_type2(), expr);
+    expr2tc newsym = symbol2tc(int_type2(), prop_name);
     new_insn.code = code_assign2tc(newsym, hack_cast);
     new_insn.function = insn->function;
 
     insn_list.insert(insn, new_insn);
   }
-
+#endif
   new_insn.type = FUNCTION_CALL;
   expr2tc func_sym = symbol2tc(get_empty_type(), "c:@F@__ESBMC_switch_to_monitor");
   std::vector<expr2tc> args;
