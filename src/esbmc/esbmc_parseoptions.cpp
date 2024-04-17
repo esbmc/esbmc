@@ -2178,7 +2178,8 @@ expr2tc esbmc_parseoptionst::calculate_a_property_monitor(
 void esbmc_parseoptionst::add_monitor_exprs(
   goto_programt::targett insn,
   goto_programt::instructionst &insn_list,
-  const std::map<std::string, std::pair<std::set<std::string>, expr2tc>> &monitors)
+  const std::map<std::string, std::pair<std::set<std::string>, expr2tc>>
+    &monitors)
 {
   // We've been handed an instruction, look for assignments to the
   // symbol we're looking for. When we find one, append a goto instruction that
@@ -2228,7 +2229,8 @@ void esbmc_parseoptionst::add_monitor_exprs(
   }
 #endif
   new_insn.type = FUNCTION_CALL;
-  expr2tc func_sym = symbol2tc(get_empty_type(), "c:@F@__ESBMC_switch_to_monitor");
+  expr2tc func_sym =
+    symbol2tc(get_empty_type(), "c:@F@__ESBMC_switch_to_monitor");
   std::vector<expr2tc> args;
   new_insn.code = code_function_call2tc(expr2tc(), func_sym, args);
   new_insn.function = insn->function;
@@ -2257,8 +2259,9 @@ static unsigned int calc_globals_used(const namespacet &ns, const expr2tc &expr)
 
   std::string identifier = to_symbol2t(expr).get_symbol_name();
 
-  if (identifier == "NULL" || identifier == "__ESBMC_alloc" ||
-      identifier == "__ESBMC_alloc_size")
+  if (
+    identifier == "NULL" || identifier == "__ESBMC_alloc" ||
+    identifier == "__ESBMC_alloc_size")
     return 0;
 
   const symbolt *sym = ns.lookup(identifier);
@@ -2293,7 +2296,8 @@ void esbmc_parseoptionst::print_ileave_points(
           to_code_function_call2t(pit->code);
         if (
           is_symbol2t(deref_code.function) &&
-          to_symbol2t(deref_code.function).get_symbol_name() == "c:@F@__ESBMC_yield")
+          to_symbol2t(deref_code.function).get_symbol_name() ==
+            "c:@F@__ESBMC_yield")
           print_insn = true;
         break;
       }
