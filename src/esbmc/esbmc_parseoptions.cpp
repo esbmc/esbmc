@@ -2106,6 +2106,20 @@ void esbmc_parseoptionst::add_property_monitors(
     break;
   }
   assert(call_main != insn_list.end());
+
+  /* insert a call to start the monitor thread and after it also to kill it */
+  goto_programt::instructiont new_insn;
+  new_insn.function = call_main->function;
+
+  expr2tc func_sym = symbol2tc(get_empty_type(), "c:@F@ltl2ba_start_monitor");
+  std::vector<expr2tc> args;
+  new_insn.make_function_call(code_function_call2tc(expr2tc(), func_sym, args));
+  insn_list.insert(call_main, new_insn);
+
+  ++call_main;
+  func_sym = symbol2tc(get_empty_type(), "c:@F@ltl2ba_finish_monitor");
+  new_insn.make_function_call(code_function_call2tc(expr2tc(), func_sym, args));
+  insn_list.insert(call_main, new_insn);
 }
 
 static void replace_symbol_names(
