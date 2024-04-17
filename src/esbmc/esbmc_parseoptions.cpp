@@ -2040,6 +2040,20 @@ void esbmc_parseoptionst::add_property_monitors(
 
   Forall_goto_functions (f_it, goto_functions)
   {
+    /* do not instrument global entry function */
+    if (f_it->first == "__ESBMC_main")
+      continue;
+
+    /* do also not instrument functions computing the propositions themselves */
+    if (has_prefix(f_it->first, "c:@F@") && has_suffix(f_it->first, "_status"))
+    {
+      const std::string &name = f_it->first.as_string();
+      std::string prop_name = name.substr(5, name.length() - 5 - 7);
+      if (monitors.find(prop_name) != monitors.end())
+        continue;
+    }
+
+    log_debug("ltl", "adding monitor exprs in function {}", f_it->first);
     goto_functiont &func = f_it->second;
     goto_programt &prog = func.body;
     Forall_goto_program_instructions (p_it, prog)
