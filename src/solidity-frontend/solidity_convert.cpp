@@ -411,6 +411,28 @@ bool solidity_convertert::get_var_decl(
     decl.operands().push_back(val);
   }
 
+  // special handle for contract type
+  // e.g.
+  //  Base x ==> Base x = new Base();
+  else if (
+    SolidityGrammar::get_type_name_t(
+      ast_node["typeName"]["typeDescriptions"]) ==
+    SolidityGrammar::ContractTypeName)
+  {
+    assert(
+      ast_node["typeName"]["nodeType"].get<std::string>() ==
+      "UserDefinedTypeName");
+    const std::string contract_name =
+      ast_node["typeName"]["name"].get<std::string>();
+    exprt val;
+    if (get_implicit_ctor_call(val, contract_name))
+      return true;
+
+    solidity_gen_typecast(ns, val, t);
+    added_symbol.value = val;
+    decl.operands().push_back(val);
+  }
+
   decl.location() = location_begin;
   new_expr = decl;
 
