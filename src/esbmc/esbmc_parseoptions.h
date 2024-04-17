@@ -82,7 +82,8 @@ protected:
   void add_monitor_exprs(
     goto_programt::targett insn,
     goto_programt::instructionst &insn_list,
-    const std::map<std::string, std::pair<std::set<std::string>, expr2tc>> &monitors);
+    const std::map<std::string, std::pair<std::set<std::string>, expr2tc>>
+      &monitors);
 
   void print_ileave_points(namespacet &ns, goto_functionst &goto_functions);
 
