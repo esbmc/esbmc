@@ -142,6 +142,7 @@ if(APPLE)
                     extensions
                     ${REGRESSIONS_CHERI}
                     ${REGRESSIONS_PYTHON}
+                    ltl
        )
 elseif(WIN32)
     # FUTURE: Add floats-regression esbmc-cpp/cpp
@@ -158,6 +159,7 @@ elseif(WIN32)
                     ${REGRESSIONS_MATHSAT}
                     ${REGRESSIONS_SMTLIB}
                     ${REGRESSIONS_Z3}
+                    ltl
        )
 else()
   if(NOT BENCHBRINGUP)
@@ -193,6 +195,7 @@ else()
                     linux
                     ${REGRESSIONS_CHERI}
                     ${REGRESSIONS_PYTHON}
+                    ltl
        )
   else()
     set(REGRESSIONS $ENV{BENCHMARK_TO_RUN}) # run a single user-specified benchmark
