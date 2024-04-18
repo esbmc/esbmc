@@ -288,7 +288,8 @@ void symex_target_equationt::SSA_stept::output(
     break;
 
   default:
-    assert(type == goto_trace_stept::SKIP && config.options.get_bool_option("ltl"));
+    assert(
+      type == goto_trace_stept::SKIP && config.options.get_bool_option("ltl"));
   }
 
   if (is_assert() || is_assume() || is_assignment())
