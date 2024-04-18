@@ -670,7 +670,7 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 
     if (options.get_bool_option("ltl"))
     {
-      int res = ltl_run_thread(eq);
+      int res = ltl_run_thread(*eq);
       // Record that we've seen this outcome; later decide what the least
       // outcome was.
       ltl_results_seen[res]++;
@@ -710,7 +710,7 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
   }
 }
 
-int bmct::ltl_run_thread(std::shared_ptr<symex_target_equationt> &equation)
+int bmct::ltl_run_thread(symex_target_equationt &equation)
 {
   unsigned int num_asserts = 0;
   // LTL checking - first check for whether we have an indeterminate prefix,
@@ -718,7 +718,7 @@ int bmct::ltl_run_thread(std::shared_ptr<symex_target_equationt> &equation)
 
   // Start by turning all assertions that aren't the negative prefix
   // assertion into skips.
-  for (auto &SSA_step : equation->SSA_steps)
+  for (auto &SSA_step : equation.SSA_steps)
   {
     if (SSA_step.is_assert())
     {
@@ -736,7 +736,7 @@ int bmct::ltl_run_thread(std::shared_ptr<symex_target_equationt> &equation)
   std::cout << "Checking for LTL_BAD" << std::endl;
   if (num_asserts != 0)
   {
-    if (run(equation))
+    if (run_decision_procedure(*std::unique_ptr<smt_convt>(create_solver("", ns, options)), equation) == smt_convt::P_SATISFIABLE)
     {
       std::cout << "Found trace satisfying LTL_BAD" << std::endl;
       return ltl_res_bad;
@@ -748,7 +748,7 @@ int bmct::ltl_run_thread(std::shared_ptr<symex_target_equationt> &equation)
   }
 
   // Didn't find it; turn skip steps back into assertions.
-  for (auto &SSA_step : equation->SSA_steps)
+  for (auto &SSA_step : equation.SSA_steps)
   {
     if (SSA_step.type == goto_trace_stept::SKIP)
       SSA_step.type = goto_trace_stept::ASSERT;
@@ -756,7 +756,7 @@ int bmct::ltl_run_thread(std::shared_ptr<symex_target_equationt> &equation)
 
   // Try again, with LTL_FAILING
   num_asserts = 0;
-  for (auto &SSA_step : equation->SSA_steps)
+  for (auto &SSA_step : equation.SSA_steps)
   {
     if (SSA_step.is_assert())
     {
@@ -774,7 +774,7 @@ int bmct::ltl_run_thread(std::shared_ptr<symex_target_equationt> &equation)
   std::cout << "Checking for LTL_FAILING" << std::endl;
   if (num_asserts != 0)
   {
-    if (run(equation))
+    if (run_decision_procedure(*std::unique_ptr<smt_convt>(create_solver("", ns, options)), equation) == smt_convt::P_SATISFIABLE)
     {
       std::cout << "Found trace satisfying LTL_FAILING" << std::endl;
       return ltl_res_failing;
@@ -786,7 +786,7 @@ int bmct::ltl_run_thread(std::shared_ptr<symex_target_equationt> &equation)
   }
 
   // Didn't find it; turn skip steps back into assertions.
-  for (auto &SSA_step : equation->SSA_steps)
+  for (auto &SSA_step : equation.SSA_steps)
   {
     if (SSA_step.type == goto_trace_stept::SKIP)
       SSA_step.type = goto_trace_stept::ASSERT;
@@ -794,7 +794,7 @@ int bmct::ltl_run_thread(std::shared_ptr<symex_target_equationt> &equation)
 
   // Try again, with LTL_SUCCEEDING
   num_asserts = 0;
-  for (auto &SSA_step : equation->SSA_steps)
+  for (auto &SSA_step : equation.SSA_steps)
   {
     if (SSA_step.is_assert())
     {
@@ -812,7 +812,7 @@ int bmct::ltl_run_thread(std::shared_ptr<symex_target_equationt> &equation)
   std::cout << "Checking for LTL_SUCCEEDING" << std::endl;
   if (num_asserts != 0)
   {
-    if (run(equation))
+    if (run_decision_procedure(*std::unique_ptr<smt_convt>(create_solver("", ns, options)), equation) == smt_convt::P_SATISFIABLE)
     {
       std::cout << "Found trace satisfying LTL_SUCCEEDING" << std::endl;
       return ltl_res_succeeding;
@@ -824,7 +824,7 @@ int bmct::ltl_run_thread(std::shared_ptr<symex_target_equationt> &equation)
   }
 
   // Otherwise, we just got a good prefix.
-  for (auto &SSA_step : equation->SSA_steps)
+  for (auto &SSA_step : equation.SSA_steps)
   {
     if (SSA_step.type == goto_trace_stept::SKIP)
       SSA_step.type = goto_trace_stept::ASSERT;
