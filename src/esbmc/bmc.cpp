@@ -736,7 +736,10 @@ int bmct::ltl_run_thread(symex_target_equationt &equation)
   std::cout << "Checking for LTL_BAD" << std::endl;
   if (num_asserts != 0)
   {
-    if (run_decision_procedure(*std::unique_ptr<smt_convt>(create_solver("", ns, options)), equation) == smt_convt::P_SATISFIABLE)
+    if (
+      run_decision_procedure(
+        *std::unique_ptr<smt_convt>(create_solver("", ns, options)),
+        equation) == smt_convt::P_SATISFIABLE)
     {
       std::cout << "Found trace satisfying LTL_BAD" << std::endl;
       return ltl_res_bad;
@@ -774,7 +777,10 @@ int bmct::ltl_run_thread(symex_target_equationt &equation)
   std::cout << "Checking for LTL_FAILING" << std::endl;
   if (num_asserts != 0)
   {
-    if (run_decision_procedure(*std::unique_ptr<smt_convt>(create_solver("", ns, options)), equation) == smt_convt::P_SATISFIABLE)
+    if (
+      run_decision_procedure(
+        *std::unique_ptr<smt_convt>(create_solver("", ns, options)),
+        equation) == smt_convt::P_SATISFIABLE)
     {
       std::cout << "Found trace satisfying LTL_FAILING" << std::endl;
       return ltl_res_failing;
@@ -812,7 +818,10 @@ int bmct::ltl_run_thread(symex_target_equationt &equation)
   std::cout << "Checking for LTL_SUCCEEDING" << std::endl;
   if (num_asserts != 0)
   {
-    if (run_decision_procedure(*std::unique_ptr<smt_convt>(create_solver("", ns, options)), equation) == smt_convt::P_SATISFIABLE)
+    if (
+      run_decision_procedure(
+        *std::unique_ptr<smt_convt>(create_solver("", ns, options)),
+        equation) == smt_convt::P_SATISFIABLE)
     {
       std::cout << "Found trace satisfying LTL_SUCCEEDING" << std::endl;
       return ltl_res_succeeding;
