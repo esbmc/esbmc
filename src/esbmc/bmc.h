@@ -71,7 +71,7 @@ protected:
 
   smt_convt::resultt run_thread(std::shared_ptr<symex_target_equationt> &eq);
 
-  int ltl_run_thread(std::shared_ptr<symex_target_equationt> &equation);
+  int ltl_run_thread(symex_target_equationt &equation);
 
   smt_convt::resultt multi_property_check(
     const symex_target_equationt &eq,
