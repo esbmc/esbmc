@@ -490,8 +490,6 @@ public:
    *  produced code when the monitor is to be ended. */
   void kill_monitor_thread();
 
-  void init_property_monitors();
-
 public:
   /** Pointer to reachability_treet that owns this ex_state */
   reachability_treet *owning_rt;
