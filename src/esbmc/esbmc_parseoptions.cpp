@@ -2228,6 +2228,7 @@ void esbmc_parseoptionst::add_monitor_exprs(
     insn_list.insert(insn, new_insn);
   }
 #endif
+#if 0
   new_insn.type = FUNCTION_CALL;
   expr2tc func_sym =
     symbol2tc(get_empty_type(), "c:@F@__ESBMC_switch_to_monitor");
@@ -2235,7 +2236,7 @@ void esbmc_parseoptionst::add_monitor_exprs(
   new_insn.code = code_function_call2tc(expr2tc(), func_sym, args);
   new_insn.function = insn->function;
   insn_list.insert(insn, new_insn);
-
+#endif
   new_insn.type = ATOMIC_END;
   new_insn.function = insn->function;
   insn_list.insert(insn, new_insn);
