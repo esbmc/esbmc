@@ -48,6 +48,7 @@ OPT2FLAGS = {
     '--incremental-bmc': {'strat=incr'},
     '--falsification'  : {'strat=falsify'},
     '--termination'    : {'strat=term'},
+    '--ltl'            : {'strat=ltl'},
 } | { # Optimiziation related
     '--interval-analysis': {'ia'},
     '--gcse'             : {'gcse'},
