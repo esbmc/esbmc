@@ -446,25 +446,15 @@ smt_convt::resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
   {
     // So, what was the lowest value ltl outcome that we saw?
     if (ltl_results_seen[ltl_res_bad])
-    {
-      std::cout << "Final lowest outcome: LTL_BAD" << std::endl;
-    }
+      log_result("Final lowest outcome: LTL_BAD");
     else if (ltl_results_seen[ltl_res_failing])
-    {
-      std::cout << "Final lowest outcome: LTL_FAILING" << std::endl;
-    }
+      log_result("Final lowest outcome: LTL_FAILING");
     else if (ltl_results_seen[ltl_res_succeeding])
-    {
-      std::cout << "Final lowest outcome: LTL_SUCCEEDING" << std::endl;
-    }
+      log_result("Final lowest outcome: LTL_SUCCEEDING");
     else if (ltl_results_seen[ltl_res_good])
-    {
-      std::cout << "Final lowest outcome: LTL_GOOD" << std::endl;
-    }
+      log_result("Final lowest outcome: LTL_GOOD");
     else
-    {
-      std::cout << "No traces seen, apparently" << std::endl;
-    }
+      log_warning("No LTL traces seen, apparently");
   }
 
   return interleaving_failed > 0 ? smt_convt::P_SATISFIABLE : res;
@@ -727,7 +717,7 @@ int bmct::ltl_run_thread(symex_target_equationt &equation)
         num_asserts++;
     }
 
-  std::cout << "Checking for LTL_BAD" << std::endl;
+  log_status("Checking for LTL_BAD");
   if (num_asserts != 0)
   {
     if (
@@ -735,12 +725,12 @@ int bmct::ltl_run_thread(symex_target_equationt &equation)
         *std::unique_ptr<smt_convt>(create_solver("", ns, options)),
         equation) == smt_convt::P_SATISFIABLE)
     {
-      std::cout << "Found trace satisfying LTL_BAD" << std::endl;
+      log_status("Found trace satisfying LTL_BAD");
       return ltl_res_bad;
     }
   }
   else
-    std::cerr << "Warning: Couldn't find LTL_BAD assertion" << std::endl;
+    log_warning("Couldn't find LTL_BAD assertion");
 
   // Didn't find it; turn skip steps back into assertions.
   for (auto &SSA_step : equation.SSA_steps)
@@ -760,18 +750,18 @@ int bmct::ltl_run_thread(symex_target_equationt &equation)
         num_asserts++;
     }
 
-  std::cout << "Checking for LTL_FAILING" << std::endl;
+  log_status("Checking for LTL_FAILING");
   if (num_asserts != 0)
   {
     std::unique_ptr<smt_convt> smt_conv(create_solver("", ns, options));
     if (run_decision_procedure(*smt_conv, equation) == smt_convt::P_SATISFIABLE)
     {
-      std::cout << "Found trace satisfying LTL_FAILING" << std::endl;
+      log_status("Found trace satisfying LTL_FAILING");
       return ltl_res_failing;
     }
   }
   else
-    std::cerr << "Warning: Couldn't find LTL_FAILING assertion" << std::endl;
+    log_warning("Couldn't find LTL_FAILING assertion");
 
   // Didn't find it; turn skip steps back into assertions.
   for (auto &SSA_step : equation.SSA_steps)
@@ -791,7 +781,7 @@ int bmct::ltl_run_thread(symex_target_equationt &equation)
         num_asserts++;
     }
 
-  std::cout << "Checking for LTL_SUCCEEDING" << std::endl;
+  log_status("Checking for LTL_SUCCEEDING");
   if (num_asserts != 0)
   {
     if (
@@ -799,12 +789,12 @@ int bmct::ltl_run_thread(symex_target_equationt &equation)
         *std::unique_ptr<smt_convt>(create_solver("", ns, options)),
         equation) == smt_convt::P_SATISFIABLE)
     {
-      std::cout << "Found trace satisfying LTL_SUCCEEDING" << std::endl;
+      log_status("Found trace satisfying LTL_SUCCEEDING");
       return ltl_res_succeeding;
     }
   }
   else
-    std::cerr << "Warning: Couldn't find LTL_SUCCEEDING assertion" << std::endl;
+    log_warning("Couldn't find LTL_SUCCEEDING assertion");
 
   // Otherwise, we just got a good prefix.
   for (auto &SSA_step : equation.SSA_steps)
