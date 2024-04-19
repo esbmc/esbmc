@@ -1758,6 +1758,8 @@ bool esbmc_parseoptionst::process_goto_program(
       }
     }
 
+    goto_check(ns, options, goto_functions);
+
     if (cmdline.isset("interval-analysis") || cmdline.isset("goto-contractor"))
     {
       interval_analysis(goto_functions, ns, options);
@@ -1791,7 +1793,7 @@ bool esbmc_parseoptionst::process_goto_program(
     if (cmdline.isset("termination"))
       goto_termination(goto_functions);
 
-    goto_check(ns, options, goto_functions);
+    
 
     // Once again, remove all unreachable and no-op code that could have been
     // introduced by the above algorithms

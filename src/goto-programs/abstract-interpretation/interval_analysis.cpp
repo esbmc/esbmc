@@ -2,6 +2,9 @@
 /// Interval Analysis
 
 #include "interval_analysis.h"
+#include "irep2/irep2_expr.h"
+#include "irep2/irep2_type.h"
+#include "irep2/irep2_utils.h"
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 #include <goto-programs/abstract-interpretation/interval_domain.h>
 #include <unordered_set>
@@ -46,6 +49,29 @@ inline void optimize_expr_interval(expr2tc &expr, const interval_domaint &state)
   }
 }
 
+
+static void optimize_overflow(expr2tc &expr, const interval_domaint &state)
+{
+  assert(is_overflow2t(expr));
+  assert(!interval_domaint::enable_wrapped_intervals);
+  const overflow2t &overflow = to_overflow2t(expr);
+
+  overflow.operand->dump();
+  if (!is_signedbv_type(overflow.operand->type))
+    return;
+
+  BigInt limit = BigInt::power2(overflow.operand->type->get_width() - 1);
+  interval_domaint::integer_intervalt limits(-limit, limit - 1);
+
+  interval_domaint::integer_intervalt result =
+    state.get_interval<interval_domaint::integer_intervalt>(overflow.operand);
+
+  if (result.is_subseteq(limits))
+    // We are processing an overflow, the original assertion is !overflow
+    expr = gen_false_expr();
+
+}
+
 static void optimize_expression(expr2tc &expr, const interval_domaint &state)
 {
   // Preconditions
@@ -72,6 +98,13 @@ static void optimize_expression(expr2tc &expr, const interval_domaint &state)
       optimize_expression(x, state);
     return;
   }
+
+  if (is_overflow2t(expr))
+  {
+    optimize_overflow(expr, state);
+    return;
+  }
+    
 
   if (interval_domaint::enable_wrapped_intervals)
     optimize_expr_interval<wrapped_interval>(expr, state);
