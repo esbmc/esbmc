@@ -553,8 +553,6 @@ public:
   unsigned int monitor_from_tid;
   /** Whether monitor_from_tid is set */
   bool mon_from_tid;
-  /** Are we performing LTL monitor checking? */
-  bool check_ltl;
   /** Have we warned of an ended monitor thread already?. */
   bool mon_thread_warning;
   /** Minimum number of threads to exist to consider a context switch.

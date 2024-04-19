@@ -98,7 +98,6 @@ execution_statet::execution_statet(
   nondet_count = 0;
   DFS_traversed.reserve(1);
   DFS_traversed[0] = false;
-  check_ltl = false;
   mon_thread_warning = false;
 
   thread_cswitch_threshold = (options.get_bool_option("ltl")) ? 3 : 2;
@@ -146,7 +145,6 @@ execution_statet &execution_statet::operator=(const execution_statet &ex)
   interleaving_unviable = ex.interleaving_unviable;
   pre_goto_guard = ex.pre_goto_guard;
   mon_thread_warning = ex.mon_thread_warning;
-  check_ltl = ex.check_ltl;
 
   monitor_tid = ex.monitor_tid;
   tid_is_set = ex.tid_is_set;
