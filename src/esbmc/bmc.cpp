@@ -5,8 +5,6 @@
 #include <thread>
 #include <chrono>
 
-#include <iostream>
-
 #ifndef _WIN32
 #include <unistd.h>
 #include <sched.h>
@@ -720,10 +718,8 @@ int bmct::ltl_run_thread(symex_target_equationt &equation)
   log_status("Checking for LTL_BAD");
   if (num_asserts != 0)
   {
-    if (
-      run_decision_procedure(
-        *std::unique_ptr<smt_convt>(create_solver("", ns, options)),
-        equation) == smt_convt::P_SATISFIABLE)
+    std::unique_ptr<smt_convt> smt_conv(create_solver("", ns, options));
+    if (run_decision_procedure(*smt_conv, equation) == smt_convt::P_SATISFIABLE)
     {
       log_status("Found trace satisfying LTL_BAD");
       return ltl_res_bad;
@@ -784,10 +780,8 @@ int bmct::ltl_run_thread(symex_target_equationt &equation)
   log_status("Checking for LTL_SUCCEEDING");
   if (num_asserts != 0)
   {
-    if (
-      run_decision_procedure(
-        *std::unique_ptr<smt_convt>(create_solver("", ns, options)),
-        equation) == smt_convt::P_SATISFIABLE)
+    std::unique_ptr<smt_convt> smt_conv(create_solver("", ns, options));
+    if (run_decision_procedure(*smt_conv, equation) == smt_convt::P_SATISFIABLE)
     {
       log_status("Found trace satisfying LTL_SUCCEEDING");
       return ltl_res_succeeding;
