@@ -35,7 +35,7 @@ public:
   // Map of variables into intervals.
   // If a key does not exist then imply the TOP interval.
   // If a key exists then the shared_ptr must point to a valid place
-  using interval_map = std::unordered_map<irep_idt, interval, irep_id_hash>;
+  using interval_map = std::unordered_map<std::string, interval>;
 
   interval_domaint() : bottom(true)
   {
@@ -255,6 +255,7 @@ protected:
    */
   void assign(const expr2tc &assignment, const bool recursive = false);
 
+public:
   /**
    * @brief Applies LHS <= RHS and RHS <= LHS from assignment instructions
    *
@@ -266,7 +267,7 @@ protected:
    */
   template <class Interval>
   void apply_assignment(const expr2tc &lhs, const expr2tc &rhs, bool recursive);
-
+protected:
   /**
    * @brief Applies Extrapolation widening algorithm
    *

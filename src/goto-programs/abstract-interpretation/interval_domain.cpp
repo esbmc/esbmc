@@ -14,7 +14,7 @@
 template <size_t Index, class Interval>
 Interval interval_domaint::get_interval_from_variant(const symbol2t &sym) const
 {
-  const auto &it = intervals->find(sym.thename);
+  const auto &it = intervals->find(sym.get_symbol_name());
   // TODO: mix floats/integer
   if (it != intervals->end() && it->second.index() == Index)
   {
@@ -49,7 +49,7 @@ void interval_domaint::update_symbol_from_variant(
   const symbol2t &sym,
   const Interval &value)
 {
-  const auto &it = intervals->find(sym.thename);
+  const auto &it = intervals->find(sym.get_symbol_name());
   const bool is_new_value_top = value.is_top();
 
   // Are we actually changing it?
@@ -61,11 +61,11 @@ void interval_domaint::update_symbol_from_variant(
   copy_if_needed();
   if (is_new_value_top)
   {
-    intervals->erase(sym.thename);
+    intervals->erase(sym.get_symbol_name());
     return;
   }
 
-  (*intervals)[sym.thename] = std::make_shared<Interval>(value);
+  (*intervals)[sym.get_symbol_name()] = std::make_shared<Interval>(value);
 }
 
 template <>
@@ -679,20 +679,20 @@ template <>
 bool interval_domaint::is_mapped<interval_domaint::integer_intervalt>(
   const symbol2t &sym) const
 {
-  return intervals->find(sym.thename) != intervals->end();
+  return intervals->find(sym.get_symbol_name()) != intervals->end();
 }
 
 template <>
 bool interval_domaint::is_mapped<interval_domaint::real_intervalt>(
   const symbol2t &sym) const
 {
-  return intervals->find(sym.thename) != intervals->end();
+  return intervals->find(sym.get_symbol_name()) != intervals->end();
 }
 
 template <>
 bool interval_domaint::is_mapped<wrapped_interval>(const symbol2t &sym) const
 {
-  return intervals->find(sym.thename) != intervals->end();
+  return intervals->find(sym.get_symbol_name()) != intervals->end();
 }
 
 template <>
@@ -883,13 +883,13 @@ void interval_domaint::output(std::ostream &out) const
     switch (i.second.index())
     {
     case 0:
-      print_interval(*std::get<0>(i.second), i.first.as_string(), out);
+      print_interval(*std::get<0>(i.second), i.first, out);
       break;
     case 1:
-      print_interval(*std::get<1>(i.second), i.first.as_string(), out);
+      print_interval(*std::get<1>(i.second), i.first, out);
       break;
     case 2:
-      print_interval(*std::get<2>(i.second), i.first.as_string(), out);
+      print_interval(*std::get<2>(i.second), i.first, out);
       break;
     default:
       // unreachable
@@ -1105,7 +1105,7 @@ bool interval_domaint::join(
   // the map that needs to be updated
   IntervalMap &updated_map = a0;
   bool result = false;
-  std::unordered_set<irep_idt, irep_id_hash> symbol_map;
+  std::unordered_set<std::string, irep_id_hash> symbol_map;
   for (const auto &myPair : a0)
   {
     const auto next_it = a1.find(myPair.first);
@@ -1120,7 +1120,7 @@ bool interval_domaint::join(
   }
 
   // Here we apply the HULL operation (before, after)
-  for (const irep_idt &symbol : symbol_map)
+  for (const auto &symbol : symbol_map)
   {
     const auto previous_it = a0.find(symbol);
     const auto next_it = a1.find(symbol);
@@ -1259,8 +1259,8 @@ void interval_domaint::havoc_rec(const expr2tc &expr)
   else if (is_symbol2t(expr) || is_code_decl2t(expr))
   {
     // Reset the interval domain if it is being reasigned (-infinity, +infinity).
-    irep_idt identifier = is_symbol2t(expr) ? to_symbol2t(expr).thename
-                                            : to_code_decl2t(expr).value;
+    auto identifier = is_symbol2t(expr) ? to_symbol2t(expr).get_symbol_name()
+      : to_code_decl2t(expr).value.as_string();
     if (intervals->count(identifier))
       copy_if_needed();
     intervals->erase(identifier);

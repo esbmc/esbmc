@@ -1,4 +1,4 @@
-add_library(algorithms algorithms.cpp)
+add_library(algorithms algorithms.cpp ssa_intervals.cpp)
 target_include_directories(algorithms
     PRIVATE ${Boost_INCLUDE_DIRS}
     )
