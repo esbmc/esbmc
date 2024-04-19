@@ -1367,7 +1367,7 @@ void interval_domaint::assume(const expr2tc &cond)
             upper = int_interval.get_upper();
           if (int_interval.lower)
             lower = int_interval.get_lower();
-          contractor.interval_to_domain(lower, upper, i.first.as_string());
+          contractor.interval_to_domain(lower, upper, i.first);
           break;
         }
         case 1:
@@ -1379,7 +1379,7 @@ void interval_domaint::assume(const expr2tc &cond)
             upper = (double)real_interval.get_upper();
           if (real_interval.lower)
             lower = (double)real_interval.get_lower();
-          contractor.interval_to_domain(lower, upper, i.first.as_string());
+          contractor.interval_to_domain(lower, upper, i.first);
           break;
         }
         default:
