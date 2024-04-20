@@ -2676,6 +2676,7 @@ bool solidity_convertert::get_var_decl_ref(
     new_expr.identifier(id);
     new_expr.cmt_lvalue(true);
     new_expr.name(name);
+    new_expr.pretty_name(name);
   }
 
   return false;
