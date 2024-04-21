@@ -419,16 +419,23 @@ bool solidity_convertert::get_var_decl(
       ast_node["typeName"]["typeDescriptions"]) ==
     SolidityGrammar::ContractTypeName)
   {
+    // 1. get constract name
     assert(
       ast_node["typeName"]["nodeType"].get<std::string>() ==
       "UserDefinedTypeName");
     const std::string contract_name =
       ast_node["typeName"]["pathNode"]["name"].get<std::string>();
+
+    // 2. since the contract type variable has no initial value, i.e. explicit constructor call,
+    // we construct an implicit constructor expression
     exprt val;
     if (get_implicit_ctor_call(val, contract_name))
       return true;
 
+    // 3. generate typecast for Solidity contract
     solidity_gen_typecast(ns, val, t);
+
+    // 4. populate the ctor expression as symbol's value
     added_symbol.value = val;
     decl.operands().push_back(val);
   }
