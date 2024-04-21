@@ -19,14 +19,14 @@ public:
   bmct(goto_functionst &funcs, optionst &opts, contextt &_context);
 
   optionst &options;
-  enum
+  enum ltl_res
   {
     ltl_res_good,
     ltl_res_succeeding,
     ltl_res_failing,
     ltl_res_bad
   };
-  int ltl_results_seen[4];
+  size_t ltl_results_seen[4];
 
   BigInt interleaving_number;
   BigInt interleaving_failed;
@@ -71,7 +71,7 @@ protected:
 
   smt_convt::resultt run_thread(std::shared_ptr<symex_target_equationt> &eq);
 
-  int ltl_run_thread(symex_target_equationt &equation);
+  int ltl_run_thread(symex_target_equationt &equation) const;
 
   smt_convt::resultt multi_property_check(
     const symex_target_equationt &eq,

@@ -660,6 +660,8 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     if (options.get_bool_option("ltl"))
     {
       int res = ltl_run_thread(*eq);
+      if (res < 0)
+        return smt_convt::P_ERROR;
       // Record that we've seen this outcome; later decide what the least
       // outcome was.
       ltl_results_seen[res]++;
@@ -699,105 +701,65 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
   }
 }
 
-int bmct::ltl_run_thread(symex_target_equationt &equation)
+int bmct::ltl_run_thread(symex_target_equationt &equation) const
 {
-  unsigned int num_asserts = 0;
-  // LTL checking - first check for whether we have an indeterminate prefix,
-  // and then check for all others.
+  // LTL checking - first check for whether we have a negative prefix, then
+  // the indeterminate ones.
+  using Type = std::pair<std::string_view, ltl_res>;
+  static const std::array seq = {
+    Type{"LTL_BAD", ltl_res_bad}, // negative prefix
+    Type{"LTL_FAILING", ltl_res_failing},
+    Type{"LTL_SUCCEEDING", ltl_res_succeeding},
+  };
 
-  // Start by turning all assertions that aren't the negative prefix
-  // assertion into skips.
-  for (auto &SSA_step : equation.SSA_steps)
-    if (SSA_step.is_assert())
-    {
-      if (SSA_step.comment != "LTL_BAD")
-        SSA_step.type = goto_trace_stept::SKIP;
-      else
-        num_asserts++;
-    }
-
-  log_status("Checking for LTL_BAD");
-  if (num_asserts != 0)
+  for (const auto &[which, check] : seq)
   {
-    std::unique_ptr<smt_convt> smt_conv(create_solver("", ns, options));
-    if (run_decision_procedure(*smt_conv, equation) == smt_convt::P_SATISFIABLE)
+    size_t num_asserts = 0;
+    smt_convt::resultt result = smt_convt::P_UNSATISFIABLE;
+
+    // Start by turning all assertions that aren't the sought prefix
+    // assertion into skips.
+    for (auto &SSA_step : equation.SSA_steps)
+      if (SSA_step.is_assert())
+      {
+        if (SSA_step.comment != which)
+          SSA_step.type = goto_trace_stept::SKIP;
+        else
+          num_asserts++;
+      }
+
+    log_status("Checking for {}", which);
+    if (num_asserts != 0)
     {
-      log_status("Found trace satisfying LTL_BAD");
-      return ltl_res_bad;
+      std::unique_ptr<smt_convt> smt_conv(create_solver("", ns, options));
+      result = run_decision_procedure(*smt_conv, equation);
+      if (result == smt_convt::P_SATISFIABLE)
+        log_status("Found trace satisfying {}", which);
+    }
+    else
+      log_warning("Couldn't find {} assertion", which);
+
+    // turn skip steps back into assertions.
+    for (auto &SSA_step : equation.SSA_steps)
+      if (
+        SSA_step.is_skip() &&
+        (SSA_step.comment == "LTL_BAD" || SSA_step.comment == "LTL_FAILING" ||
+         SSA_step.comment == "LTL_SUCCEEDING"))
+        SSA_step.type = goto_trace_stept::ASSERT;
+
+    switch (result)
+    {
+    case smt_convt::P_SATISFIABLE:
+      return check;
+    case smt_convt::P_ERROR:
+    case smt_convt::P_SMTLIB:
+      return -1;
+    case smt_convt::P_UNSATISFIABLE:
+      continue;
     }
   }
-  else
-    log_warning("Couldn't find LTL_BAD assertion");
-
-  // Didn't find it; turn skip steps back into assertions.
-  for (auto &SSA_step : equation.SSA_steps)
-    if (
-      SSA_step.comment == "LTL_BAD" || SSA_step.comment == "LTL_FAILING" ||
-      SSA_step.comment == "LTL_SUCCEEDING")
-      SSA_step.type = goto_trace_stept::ASSERT;
-
-  // Try again, with LTL_FAILING
-  num_asserts = 0;
-  for (auto &SSA_step : equation.SSA_steps)
-    if (SSA_step.is_assert())
-    {
-      if (SSA_step.comment != "LTL_FAILING")
-        SSA_step.type = goto_trace_stept::SKIP;
-      else
-        num_asserts++;
-    }
-
-  log_status("Checking for LTL_FAILING");
-  if (num_asserts != 0)
-  {
-    std::unique_ptr<smt_convt> smt_conv(create_solver("", ns, options));
-    if (run_decision_procedure(*smt_conv, equation) == smt_convt::P_SATISFIABLE)
-    {
-      log_status("Found trace satisfying LTL_FAILING");
-      return ltl_res_failing;
-    }
-  }
-  else
-    log_warning("Couldn't find LTL_FAILING assertion");
-
-  // Didn't find it; turn skip steps back into assertions.
-  for (auto &SSA_step : equation.SSA_steps)
-    if (
-      SSA_step.comment == "LTL_BAD" || SSA_step.comment == "LTL_FAILING" ||
-      SSA_step.comment == "LTL_SUCCEEDING")
-      SSA_step.type = goto_trace_stept::ASSERT;
-
-  // Try again, with LTL_SUCCEEDING
-  num_asserts = 0;
-  for (auto &SSA_step : equation.SSA_steps)
-    if (SSA_step.is_assert())
-    {
-      if (SSA_step.comment != "LTL_SUCCEEDING")
-        SSA_step.type = goto_trace_stept::SKIP;
-      else
-        num_asserts++;
-    }
-
-  log_status("Checking for LTL_SUCCEEDING");
-  if (num_asserts != 0)
-  {
-    std::unique_ptr<smt_convt> smt_conv(create_solver("", ns, options));
-    if (run_decision_procedure(*smt_conv, equation) == smt_convt::P_SATISFIABLE)
-    {
-      log_status("Found trace satisfying LTL_SUCCEEDING");
-      return ltl_res_succeeding;
-    }
-  }
-  else
-    log_warning("Couldn't find LTL_SUCCEEDING assertion");
 
   // Otherwise, we just got a good prefix.
-  for (auto &SSA_step : equation.SSA_steps)
-    if (
-      SSA_step.comment == "LTL_BAD" || SSA_step.comment == "LTL_FAILING" ||
-      SSA_step.comment == "LTL_SUCCEEDING")
-      SSA_step.type = goto_trace_stept::ASSERT;
-
   return ltl_res_good;
 }
 
