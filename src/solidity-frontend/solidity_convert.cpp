@@ -1866,11 +1866,7 @@ bool solidity_convertert::get_expr(
     // 2.1 arr[n]
     if (expr["baseExpression"].contains("referencedDeclaration"))
     {
-      const nlohmann::json &decl =
-        find_decl_ref(expr["baseExpression"]["referencedDeclaration"]);
-      if (decl == empty_json)
-        return true;
-      if (get_var_decl_ref(decl, array))
+      if (get_expr(expr["baseExpression"], literal_type, array))
         return true;
     }
     else
