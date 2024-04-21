@@ -43,7 +43,7 @@ protected:
   std::unique_ptr<reachability_treet> symex;
 
   virtual smt_convt::resultt
-  run_decision_procedure(smt_convt &smt_conv, symex_target_equationt &eq);
+  run_decision_procedure(smt_convt &smt_conv, symex_target_equationt &eq) const;
 
   virtual void show_program(const symex_target_equationt &eq);
   virtual void report_success();
@@ -79,8 +79,9 @@ protected:
 
   std::vector<std::unique_ptr<ssa_step_algorithm>> algorithms;
 
-  void
-  generate_smt_from_equation(smt_convt &smt_conv, symex_target_equationt &eq);
+  void generate_smt_from_equation(
+    smt_convt &smt_conv,
+    symex_target_equationt &eq) const;
 };
 
 #endif

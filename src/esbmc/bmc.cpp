@@ -144,7 +144,7 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
 
 void bmct::generate_smt_from_equation(
   smt_convt &smt_conv,
-  symex_target_equationt &eq)
+  symex_target_equationt &eq) const
 {
   std::string logic;
 
@@ -166,8 +166,9 @@ void bmct::generate_smt_from_equation(
     "Encoding to solver time: {}s", time2string(encode_stop - encode_start));
 }
 
-smt_convt::resultt
-bmct::run_decision_procedure(smt_convt &smt_conv, symex_target_equationt &eq)
+smt_convt::resultt bmct::run_decision_procedure(
+  smt_convt &smt_conv,
+  symex_target_equationt &eq) const
 {
   generate_smt_from_equation(smt_conv, eq);
 
