@@ -57,6 +57,9 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
   {
     adjust_side_effect_assign(expr);
   }
+  else if (statement == "cpp-throw")
+  {
+  }
   else
     clang_c_adjust::adjust_side_effect(expr);
 }
