@@ -423,7 +423,7 @@ bool solidity_convertert::get_var_decl(
       ast_node["typeName"]["nodeType"].get<std::string>() ==
       "UserDefinedTypeName");
     const std::string contract_name =
-      ast_node["typeName"]["name"].get<std::string>();
+      ast_node["typeName"]["pathNode"]["name"].get<std::string>();
     exprt val;
     if (get_implicit_ctor_call(val, contract_name))
       return true;
@@ -1863,7 +1863,7 @@ bool solidity_convertert::get_expr(
 
     exprt array;
 
-    // 2.1 arr[n]
+    // 2.1 arr[n] / x.arr[n]
     if (expr["baseExpression"].contains("referencedDeclaration"))
     {
       if (get_expr(expr["baseExpression"], literal_type, array))
