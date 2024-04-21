@@ -660,6 +660,8 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     if (options.get_bool_option("ltl"))
     {
       int res = ltl_run_thread(*eq);
+      if (res == -1)
+        return smt_convt::P_SMTLIB;
       if (res < 0)
         return smt_convt::P_ERROR;
       // Record that we've seen this outcome; later decide what the least
@@ -703,11 +705,11 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 
 int bmct::ltl_run_thread(symex_target_equationt &equation) const
 {
-  // LTL checking - first check for whether we have a negative prefix, then
-  // the indeterminate ones.
+  /* LTL checking - first check for whether we have a negative prefix, then
+   * the indeterminate ones. */
   using Type = std::pair<std::string_view, ltl_res>;
-  static const std::array seq = {
-    Type{"LTL_BAD", ltl_res_bad}, // negative prefix
+  static constexpr std::array seq = {
+    Type{"LTL_BAD", ltl_res_bad},
     Type{"LTL_FAILING", ltl_res_failing},
     Type{"LTL_SUCCEEDING", ltl_res_succeeding},
   };
@@ -715,10 +717,9 @@ int bmct::ltl_run_thread(symex_target_equationt &equation) const
   for (const auto &[which, check] : seq)
   {
     size_t num_asserts = 0;
-    smt_convt::resultt result = smt_convt::P_UNSATISFIABLE;
 
-    // Start by turning all assertions that aren't the sought prefix
-    // assertion into skips.
+    /* Start by turning all assertions that aren't the sought prefix assertion
+     * into skips. */
     for (auto &SSA_step : equation.SSA_steps)
       if (SSA_step.is_assert())
       {
@@ -728,6 +729,7 @@ int bmct::ltl_run_thread(symex_target_equationt &equation) const
           num_asserts++;
       }
 
+    smt_convt::resultt result = smt_convt::P_UNSATISFIABLE;
     log_status("Checking for {}", which);
     if (num_asserts != 0)
     {
@@ -739,19 +741,22 @@ int bmct::ltl_run_thread(symex_target_equationt &equation) const
     else
       log_warning("Couldn't find {} assertion", which);
 
-    // turn skip steps back into assertions.
+    /* Turn skip steps back into assertions. */
     for (auto &SSA_step : equation.SSA_steps)
-      if (
-        SSA_step.is_skip() &&
-        (SSA_step.comment == "LTL_BAD" || SSA_step.comment == "LTL_FAILING" ||
-         SSA_step.comment == "LTL_SUCCEEDING"))
-        SSA_step.type = goto_trace_stept::ASSERT;
+      if (SSA_step.is_skip())
+        for (const auto &[which2, _] : seq)
+          if (SSA_step.comment == which2)
+          {
+            SSA_step.type = goto_trace_stept::ASSERT;
+            break;
+          }
 
     switch (result)
     {
     case smt_convt::P_SATISFIABLE:
       return check;
     case smt_convt::P_ERROR:
+      return -2;
     case smt_convt::P_SMTLIB:
       return -1;
     case smt_convt::P_UNSATISFIABLE:
@@ -759,7 +764,7 @@ int bmct::ltl_run_thread(symex_target_equationt &equation) const
     }
   }
 
-  // Otherwise, we just got a good prefix.
+  /* Otherwise, we just got a good prefix. */
   return ltl_res_good;
 }
 
