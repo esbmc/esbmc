@@ -435,7 +435,7 @@ bool solidity_convertert::get_var_decl(
     // 3. generate typecast for Solidity contract
     solidity_gen_typecast(ns, val, t);
 
-    // 4. populate the ctor expression as symbol's value
+    // 4. add constructor call to declaration operands
     added_symbol.value = val;
     decl.operands().push_back(val);
   }
