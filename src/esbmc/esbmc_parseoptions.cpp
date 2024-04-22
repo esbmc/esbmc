@@ -2131,7 +2131,7 @@ void esbmc_parseoptionst::add_property_monitors(
   }
 }
 
-static void replace_symbol_names(
+static void collect_symbol_names(
   const expr2tc &e,
   const std::string &prefix,
   std::set<std::string> &used_syms)
@@ -2139,6 +2139,7 @@ static void replace_symbol_names(
   if (is_symbol2t(e))
   {
     const symbol2t &thesym = to_symbol2t(e);
+    assert(thesym.rlevel == 0);
     std::string sym = thesym.get_symbol_name();
 
     used_syms.insert(sym);
@@ -2147,7 +2148,7 @@ static void replace_symbol_names(
   {
     e->foreach_operand([&prefix, &used_syms](const expr2tc &e) {
       if (!is_nil_expr(e))
-        replace_symbol_names(e, prefix, used_syms);
+        collect_symbol_names(e, prefix, used_syms);
     });
   }
 }
@@ -2170,7 +2171,7 @@ expr2tc esbmc_parseoptionst::calculate_a_property_monitor(
   expr2tc new_main_expr;
   migrate_expr(fn_ret.op0(), new_main_expr);
 
-  replace_symbol_names(new_main_expr, name, used_syms);
+  collect_symbol_names(new_main_expr, name, used_syms);
 
   return new_main_expr;
 }
