@@ -48,6 +48,7 @@ public:
   void adjust_new(exprt &expr);
   void adjust_cpp_member(member_exprt &expr);
   void adjust_if(exprt &expr) override;
+  void adjust_side_effect_throw(side_effect_exprt &expr);
 
   /**
    * methods for implicit GOTO code generation
@@ -84,6 +85,10 @@ public:
   void align_se_function_call_return_type(
     exprt &f_op,
     side_effect_expr_function_callt &expr) override;
+  void convert_exception_id(
+    const typet &type,
+    const std::string &suffix,
+    std::vector<irep_idt> &ids);
 };
 
 #endif /* CLANG_CPP_FRONTEND_CLANG_CPP_ADJUST_H_ */
