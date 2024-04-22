@@ -432,10 +432,18 @@ bool solidity_convertert::get_var_decl(
     if (get_implicit_ctor_call(val, contract_name))
       return true;
 
-    // 3. generate typecast for Solidity contract
+    // 3. make it to a temporary object
+    side_effect_exprt tmp_obj("temporary_object", val.type());
+    codet code_expr("expression");
+    code_expr.operands().push_back(val);
+    tmp_obj.initializer(code_expr);
+    tmp_obj.location() = val.location();
+    val.swap(tmp_obj);
+
+    // 4. generate typecast for Solidity contract
     solidity_gen_typecast(ns, val, t);
 
-    // 4. add constructor call to declaration operands
+    // 5. add constructor call to declaration operands
     added_symbol.value = val;
     decl.operands().push_back(val);
   }
