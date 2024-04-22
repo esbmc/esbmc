@@ -59,6 +59,7 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
   }
   else if (statement == "cpp-throw")
   {
+    adjust_side_effect_throw(expr);
   }
   else
     clang_c_adjust::adjust_side_effect(expr);
@@ -284,4 +285,53 @@ void clang_cpp_adjust::align_se_function_call_return_type(
   const typet &return_type = (typet &)f_op.type().return_type();
   if (return_type.id() != "constructor" && return_type.is_not_nil())
     expr.type() = return_type;
+}
+
+void clang_cpp_adjust::adjust_side_effect_throw(side_effect_exprt &expr)
+{
+  // throw or rethrow
+  assert(expr.operands().size() == 1 || expr.operands().size() == 0);
+
+  // no ajustment for rethrow
+  if (expr.operands().size() == 0)
+    return;
+
+  const typet &exception_type = expr.op0().type();
+
+  std::vector<irep_idt> ids;
+  
+  // XL: Do we have a better way to store it?
+  irept result("exception_list");
+  convert_exception_id(exception_type, "", ids);
+  result.get_sub().resize(ids.size());
+
+  // exception_list 0: type_1 1: type_2
+  for (unsigned i = 0; i < ids.size(); i++)
+    result.get_sub()[i].id(ids[i]);
+
+  expr.set("exception_list", result);
+}
+
+void clang_cpp_adjust::convert_exception_id(
+  const typet &type,
+  const std::string &suffix,
+  std::vector<irep_idt> &ids)
+{
+  if (type.id() == "pointer" || type.id() == "array")
+  {
+    // TODO
+  }
+  else if (type.id() == "symbol")
+  {
+    // TODO
+  }
+  else if (type.id() == "ellipsis")
+  {
+    // TODO
+  }
+
+  // add C++ type
+  std::string cpp_type = type.get("#cpp_type").as_string();
+  if (!cpp_type.empty())
+    ids.emplace_back(cpp_type + suffix);
 }
