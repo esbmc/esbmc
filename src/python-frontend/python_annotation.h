@@ -57,11 +57,10 @@ private:
 
   std::string get_type_from_constant(Json &element)
   {
-    if (element["value"].contains("esbmc_type_annotation"))
-      return element["value"]["esbmc_type_annotation"]
-        .template get<std::string>();
+    if (element.contains("esbmc_type_annotation"))
+      return element["esbmc_type_annotation"].template get<std::string>();
 
-    auto rhs = element["value"]["value"];
+    auto rhs = element["value"];
 
     if (rhs.is_number_integer() || rhs.is_number_unsigned())
       return "int";
@@ -85,7 +84,7 @@ private:
         // Get type from rhs constant
         if (element["value"]["_type"] == "Constant")
         {
-          type = get_type_from_constant(element);
+          type = get_type_from_constant(element["value"]);
         }
         // Get type from RHS variable
         else if (element["value"]["_type"] == "Name")
@@ -128,6 +127,8 @@ private:
               if (!left_op.empty())
                 type = left_op["annotation"]["id"];
             }
+            else if (lhs["_type"] == "Constant")
+              type = get_type_from_constant(lhs);
           }
         }
         // Get type from constructor call
