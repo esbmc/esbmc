@@ -642,11 +642,11 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
             obj_symbol_id);
         }
       }
-      else if (is_builtin_type(func_name))
+      else if (is_builtin_type(func_name) || is_consensus_type(func_name))
       {
         // Replace the function call with a constant value. For example, x = int(1) becomes x = 1
         typet t = get_typet(func_name);
-        if (t == int_type())
+        if (t == int_type() || t == long_long_uint_type())
           return from_integer(element["args"][0]["value"].get<int>(), t);
         else if (t == bool_type())
           return gen_boolean(element["args"][0]["value"].get<bool>());

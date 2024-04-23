@@ -41,3 +41,6 @@ struct function_id
 };
 
 bool is_builtin_type(const std::string &name);
+
+// TODO: Add a compilation flag or move it to a specific implementation
+bool is_consensus_type(const std::string &name);
