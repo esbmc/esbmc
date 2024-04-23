@@ -325,10 +325,10 @@ void goto_contractort::goto_contractor_condition(
             const interval_templatet<BigInt> &value = *std::get<0>(i.second);
             if (value.lower)
               map.update_lb_interval(
-                value.get_lower().to_int64(), i.first.as_string());
+                value.get_lower().to_int64(), i.first);
             if (value.upper)
               map.update_ub_interval(
-                value.get_upper().to_int64(), i.first.as_string());
+                value.get_upper().to_int64(), i.first);
           }
 
           auto in = contractor.get_inner();
@@ -403,10 +403,10 @@ void goto_contractort::goto_contractor_condition(
           const interval_templatet<BigInt> &value = *std::get<0>(i.second);
           if (value.lower)
             map.update_lb_interval(
-              value.get_lower().to_int64(), i.first.as_string());
+              value.get_lower().to_int64(), i.first);
           if (value.upper)
             map.update_ub_interval(
-              value.get_upper().to_int64(), i.first.as_string());
+              value.get_upper().to_int64(), i.first);
         }
 
         auto X = map.create_interval_vector();
