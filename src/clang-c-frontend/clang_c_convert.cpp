@@ -281,9 +281,15 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     // expanded by clang itself
     const clang::BuiltinTemplateDecl &btd =
       static_cast<const clang::BuiltinTemplateDecl &>(decl);
-    assert(
-      btd.getBuiltinTemplateKind() ==
-      clang::BuiltinTemplateKind::BTK__make_integer_seq);
+    if (
+      btd.getBuiltinTemplateKind() !=
+      clang::BuiltinTemplateKind::BTK__make_integer_seq)
+    {
+      log_error(
+        "Unsupported builtin template kind id: {}",
+        (int)btd.getBuiltinTemplateKind());
+      abort();
+    }
 
     break;
   }
