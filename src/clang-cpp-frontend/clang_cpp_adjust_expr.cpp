@@ -299,7 +299,7 @@ void clang_cpp_adjust::adjust_side_effect_throw(side_effect_exprt &expr)
   const typet &exception_type = expr.op0().type();
 
   std::vector<irep_idt> ids;
-  
+
   // XL: Do we have a better way to store it?
   irept result("exception_list");
   convert_exception_id(exception_type, "", ids);
