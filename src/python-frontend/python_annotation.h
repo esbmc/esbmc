@@ -135,10 +135,9 @@ private:
         else if (
           element["value"]["_type"] == "Call" &&
           (json_utils::is_class<Json>(element["value"]["func"]["id"], ast_) ||
-           is_builtin_type(element["value"]["func"]["id"])))
-        {
+           is_builtin_type(element["value"]["func"]["id"]) ||
+           is_consensus_type(element["value"]["func"]["id"])))
           type = element["value"]["func"]["id"];
-        }
         else
           continue;
 
