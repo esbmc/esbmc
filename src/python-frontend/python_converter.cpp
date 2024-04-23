@@ -310,6 +310,17 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   assert(lhs.type() == rhs.type());
 
+  // Replace ** operation with the resultant constant.
+  if (op == "Pow")
+  {
+    BigInt base(
+      binary2integer(lhs.value().as_string(), lhs.type().is_signedbv()));
+    BigInt exp(
+      binary2integer(rhs.value().as_string(), rhs.type().is_signedbv()));
+    constant_exprt pow_expr(power(base, exp), lhs.type());
+    return pow_expr;
+  }
+
   typet type = (is_relational_op(op)) ? bool_type() : lhs.type();
   exprt bin_expr(get_op(op, type), type);
   bin_expr.copy_to_operands(lhs, rhs);
