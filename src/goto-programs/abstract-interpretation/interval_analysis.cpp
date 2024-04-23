@@ -7,6 +7,7 @@
 #include <unordered_set>
 #include <util/prefix.h>
 #include <goto-programs/goto_loops.h>
+#include <util/time_stopping.h>
 
 template <class Interval>
 inline void optimize_expr_interval(expr2tc &expr, const interval_domaint &state)
@@ -265,6 +266,7 @@ void interval_analysis(
   const optionst &options,
   const INTERVAL_INSTRUMENTATION_MODE instrument_mode)
 {
+  fine_timet algorithm_start = current_time();
   // TODO: add options for instrumentation mode
   ait<interval_domaint> interval_analysis;
   interval_domaint::set_options(options);
@@ -304,4 +306,9 @@ void interval_analysis(
     }
   }
   goto_functions.update();
+
+  fine_timet algorithm_stop = current_time();
+  log_status(
+    "Interval Analysis time: {}s",
+    time2string(algorithm_stop - algorithm_start));
 }
