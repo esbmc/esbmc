@@ -848,6 +848,33 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     }
     break;
   }
+  case clang::Expr::ArrayInitLoopExprClass:
+  {
+    const clang::ArrayInitLoopExpr &array_init_loop =
+      static_cast<const clang::ArrayInitLoopExpr &>(stmt);
+
+    exprt source_array_expr;
+    if (get_expr(*array_init_loop.getCommonExpr(), source_array_expr))
+      return true;
+
+    exprt per_element_init_expr;
+    if (get_expr(*array_init_loop.getSubExpr(), per_element_init_expr))
+      return true;
+
+    exprt array_size_expr = constant_exprt(array_init_loop.getArraySize().getSExtValue(), index_type());
+
+    new_expr = side_effect_exprt("array_init_loop_expr", source_array_expr.type());
+    new_expr.copy_to_operands(source_array_expr, per_element_init_expr, array_size_expr);
+    break;
+  }
+
+  case clang::Stmt::ArrayInitIndexExprClass:
+  {
+    exprt array_init_index_expr;
+    array_init_index_expr.name("__ARRAY_INIT_INDEX_EXPR__");
+    new_expr = array_init_index_expr;
+    break;
+  }
 
   default:
     if (clang_c_convertert::get_expr(stmt, new_expr))

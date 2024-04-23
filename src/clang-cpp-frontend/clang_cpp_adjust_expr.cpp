@@ -4,9 +4,10 @@
 #include <util/c_types.h>
 #include <util/destructor.h>
 #include <util/expr_util.h>
+#include "util/message.h"
 
 clang_cpp_adjust::clang_cpp_adjust(contextt &_context)
-  : clang_c_adjust(_context)
+  : clang_c_adjust(_context), tmp_symbol("cpp_adjust::", 0)
 {
 }
 
@@ -204,6 +205,12 @@ void clang_cpp_adjust::adjust_side_effect_assign(side_effect_exprt &expr)
     }
     adjust_expr(rhs);
   }
+  else if (lhs.type().is_array() && rhs.statement() == "array_init_loop_expr")
+  {
+    // adjust array initialization
+    adjust_array_init_loop_expr(lhs, rhs, expr);
+    adjust_expr(expr);
+  }
   else
     clang_c_adjust::adjust_side_effect(expr);
 }
@@ -281,4 +288,125 @@ void clang_cpp_adjust::align_se_function_call_return_type(
   const typet &return_type = (typet &)f_op.type().return_type();
   if (return_type.id() != "constructor" && return_type.is_not_nil())
     expr.type() = return_type;
+}
+
+static bool dag_match_replace_helper(
+  exprt &to_search,
+  exprt &replacement,
+  const std::function<bool(exprt &)> &is_match)
+{
+  if (is_match(to_search))
+  {
+    to_search = replacement;
+    return true;
+  }
+  else
+  {
+    for (auto &op : to_search.operands())
+    {
+      if (dag_match_replace_helper(op, replacement, is_match))
+      {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+// Assumes that pattern and to_search are both DAGs.
+// Expects that there is no more than one match.
+// Returns true if a match was found and replaced.
+static bool dag_match_replace_one(
+  exprt &to_search,
+  exprt &replacement,
+  const std::function<bool(exprt &)> &is_match)
+{
+  bool result = dag_match_replace_helper(to_search, replacement, is_match);
+  if (result)
+  {
+    assert(!dag_match_replace_helper(to_search, replacement, is_match));
+  }
+  return result;
+}
+
+void clang_cpp_adjust::adjust_array_init_loop_expr(
+  exprt &lhs,
+  exprt &rhs,
+  exprt &new_expr)
+{
+  assert(rhs.statement() == "array_init_loop_expr");
+  assert(lhs.type().is_array());
+
+  exprt source_array_expr = rhs.op0();
+
+  typet array_element_type = source_array_expr.type().subtype();
+  typet array_element_ptr_type = pointer_typet(array_element_type);
+
+  exprt array_init = side_effect_exprt("assign", lhs.type());
+  array_init.copy_to_operands(lhs, rhs);
+  symbolt source_array_symbol = tmp_symbol.new_symbol(
+    context, array_element_ptr_type, "array_init_loop_expr_tmp");
+  context.add(source_array_symbol);
+  source_array_symbol.lvalue = true;
+  source_array_symbol.value = source_array_expr;
+
+  exprt source_array_expr_evaluated = symbol_expr(source_array_symbol);
+
+  // Generate `source_array_expr_evaluated = source_array_expr;`
+  side_effect_exprt evaluate_source_array_stmt("assign");
+  // Cast from e.g. int[3] to int *
+  exprt source_array_typecasted = source_array_expr;
+  gen_typecast(ns, source_array_typecasted, array_element_ptr_type);
+  evaluate_source_array_stmt.type() = array_element_ptr_type;
+  evaluate_source_array_stmt.copy_to_operands(
+    source_array_expr_evaluated, source_array_typecasted);
+
+  code_blockt array_init_body = code_blockt();
+  convert_expression_to_code(evaluate_source_array_stmt);
+  array_init_body.operands().push_back(evaluate_source_array_stmt);
+
+  exprt per_element_initializer = rhs.op1();
+
+  // Replace reference to `source_array_expr` with `source_array_expr_evaluated` such that
+  // it is only evaluated once as per the clang docs.
+  if (!dag_match_replace_one(
+        per_element_initializer,
+        source_array_expr_evaluated,
+        [&](exprt &other) { return other == source_array_expr; }))
+  {
+    log_error("Failed to match expected pattern in {} {}", __func__, __LINE__);
+    abort();
+  }
+
+  exprt array_size_expr = rhs.op2();
+  assert(array_size_expr.is_constant());
+  int64_t array_size =
+    binary2integer(array_size_expr.value().as_string(), true).to_int64();
+  for (int64_t i = 0; i < array_size; i++)
+  {
+    exprt new_rhs;
+    new_rhs = per_element_initializer;
+
+    exprt pos = constant_exprt(i, index_type());
+
+    if (!dag_match_replace_one(
+          new_rhs,
+          pos,
+          [&](exprt &other)
+          { return other.name().operator==("__ARRAY_INIT_INDEX_EXPR__"); }))
+    {
+      log_error(
+        "Failed to match expected pattern in {} {}", __func__, __LINE__);
+      abort();
+    }
+
+    exprt new_lhs = index_exprt(lhs, pos, array_element_type);
+
+    array_init = side_effect_exprt("assign", lhs.type());
+    array_init.copy_to_operands(new_lhs, new_rhs);
+    convert_expression_to_code(array_init);
+    array_init_body.operands().push_back(array_init);
+  }
+  //  convert_expression_to_code(array_init_body);
+  new_expr = array_init_body;
 }

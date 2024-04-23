@@ -2,6 +2,7 @@
 #define CLANG_CPP_FRONTEND_CLANG_CPP_ADJUST_H_
 
 #include <clang-c-frontend/clang_c_adjust.h>
+#include "util/symbol_generator.h"
 
 /**
  * clang C++ adjuster class for:
@@ -84,6 +85,10 @@ public:
   void align_se_function_call_return_type(
     exprt &f_op,
     side_effect_expr_function_callt &expr) override;
+  void adjust_array_init_loop_expr(exprt &lhs, exprt &rhs, exprt &new_expr);
+
+protected:
+  symbol_generator tmp_symbol;
 };
 
 #endif /* CLANG_CPP_FRONTEND_CLANG_CPP_ADJUST_H_ */
