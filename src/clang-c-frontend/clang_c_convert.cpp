@@ -1485,10 +1485,8 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
   switch (stmt.getStmtClass())
   {
-  /*
-       The following enum values are the the expr of a program,
-       defined on the Expr class
-    */
+  /* The following enum values are the the expr of a program,
+   * defined on the Expr class */
 
   // Objects that are implicit defined on the code syntax.
   // One example is the gcc ternary operator, which can be:
