@@ -1546,6 +1546,8 @@ bool python_converter::convert()
   main_symbol.is_extern = false;
   main_symbol.file_local = false;
 
+  python_filename = ast_json["filename"].get<std::string>();
+
   // Handle --function option
   const std::string function = config.options.get_option("function");
   if (!function.empty())
@@ -1569,6 +1571,17 @@ bool python_converter::convert()
     {
       log_error("Function \"{}\" not found\n", function);
       return true;
+    }
+
+    // Convert all variables from global scope
+    for (const auto &elem : ast_json["body"])
+    {
+      StatementType type = get_statement_type(elem);
+      if (type == StatementType::VARIABLE_ASSIGN)
+      {
+        code_blockt block;
+        get_var_assign(elem, block);
+      }
     }
 
     // Convert a single function
@@ -1631,7 +1644,6 @@ bool python_converter::convert()
     }
 
     // Convert main statements
-    python_filename = ast_json["filename"].get<std::string>();
     exprt main_block = get_block(ast_json["body"]);
     codet main_code = convert_expression_to_code(main_block);
 

@@ -44,6 +44,9 @@ public:
   // Add annotation in a specific function
   void add_type_annotation(const std::string &func_name)
   {
+    // Add type annotation in global scope variables
+    add_annotation(ast_);
+
     for (Json &elem : ast_["body"])
     {
       if (elem["_type"] == "FunctionDef" && elem["name"] == func_name)
