@@ -78,10 +78,15 @@ private:
   {
     std::string type("");
 
-    const Json &lhs = element["value"]["left"];
+    const Json &lhs =
+      element.contains("value") ? element["value"]["left"] : element["left"];
 
+    if (lhs["_type"] == "BinOp")
+      type = get_type_from_binary_expr(lhs, body);
     // Floor division (//) operations always result in an integer value
-    if (element["value"]["op"]["_type"] == "FloorDiv")
+    else if (
+      element.contains("value") &&
+      element["value"]["op"]["_type"] == "FloorDiv")
       type = "int";
     else
     {
