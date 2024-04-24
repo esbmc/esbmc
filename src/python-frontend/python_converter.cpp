@@ -646,10 +646,9 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       {
         // Replace the function call with a constant value. For example, x = int(1) becomes x = 1
         typet t = get_typet(func_name);
-        if (t == int_type() || t == long_long_uint_type())
-          return from_integer(element["args"][0]["value"].get<int>(), t);
-        else if (t == bool_type())
-          return gen_boolean(element["args"][0]["value"].get<bool>());
+        exprt expr = get_expr(element["args"][0]);
+        expr.type() = t;
+        return expr;
       }
       else
       {
@@ -1458,9 +1457,8 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       exprt empty;
       exprt expr = get_expr(element["value"]);
       if (expr != empty)
-      {
         block.move_to_operands(expr);
-      }
+
       break;
     }
     case StatementType::CLASS_DEFINITION:
