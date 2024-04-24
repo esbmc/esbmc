@@ -1093,7 +1093,24 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
 
     clang::QualType q_type = ent.getDecl()->getIntegerType();
 
-    if (get_type(q_type, new_type))
+    /* The q_type is nil when the enum is just declared but not defined in the
+     * translation unit. That case should only happen under a pointer like
+     *
+     *   enum E (*f)()
+     *
+     * which should never be dereferencable. Hence, this type won't be used.
+     * Hopefully. As it's not standard C, and because this looks fragile, let's
+     * print a warning.
+     */
+    if (!q_type.getTypePtrOrNull())
+    {
+      log_warning(
+        "No definition attached to enum declaration, this is not standard C. "
+        "Upstream issue <https://github.com/esbmc/esbmc/issues/1794> tracks "
+        "this.");
+      new_type = enum_type();
+    }
+    else if (get_type(q_type, new_type))
       return true;
 
     break;
