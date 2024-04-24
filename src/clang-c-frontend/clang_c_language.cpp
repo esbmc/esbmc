@@ -207,6 +207,12 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
   for (auto const &inc : config.ansi_c.include_paths)
     compiler_args.push_back("-I" + inc);
 
+  for (const auto &inc : config.ansi_c.include_files)
+  {
+    compiler_args.push_back("-include");
+    compiler_args.push_back(inc);
+  }
+
   for (auto const &inc : config.ansi_c.forces)
     compiler_args.push_back("-f" + inc);
 
