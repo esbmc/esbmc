@@ -330,21 +330,13 @@ void goto_convertt::convert_throw_decl(const exprt &expr, goto_programt &dest)
 
 void goto_convertt::convert_throw(const exprt &expr, goto_programt &dest)
 {
-  // add the THROW_DECL instruction to 'dest'
+  // add the THROW instruction to 'dest'
   goto_programt::targett throw_instruction = dest.add_instruction();
-  codet c("code");
-  c.set_statement("cpp-throw");
+  codet c("cpp-throw");
 
-  // the THROW instruction is annotated with a list of IDs,
-  // one per target
-  irept::subt &throw_list = c.add("throw_list").get_sub();
-  for (const auto &block : expr.operands())
-  {
-    irept type = irept(block.get("throw_decl_id"));
-
-    // grab the ID and add to THROW_DECL instruction
-    throw_list.emplace_back(type);
-  }
+  c.operands() = expr.operands();
+  c.location() = expr.location();
+  c.set("exception_list", expr.find("exception_list"));
 
   throw_instruction->make_throw();
   throw_instruction->location = expr.location();

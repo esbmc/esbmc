@@ -9,6 +9,7 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/AST/QualTypeNames.h>
 #include <clang/AST/Type.h>
 #include <clang/Basic/Version.inc>
+#include <clang/Basic/Builtins.h>
 #include <clang/Index/USRGeneration.h>
 #include <clang/Frontend/ASTUnit.h>
 #include <llvm/Support/raw_os_ostream.h>
@@ -275,6 +276,23 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   case clang::Decl::Typedef:
     break;
 
+  case clang::Decl::BuiltinTemplate:
+  {
+    // expanded by clang itself
+    const clang::BuiltinTemplateDecl &btd =
+      static_cast<const clang::BuiltinTemplateDecl &>(decl);
+    if (
+      btd.getBuiltinTemplateKind() !=
+      clang::BuiltinTemplateKind::BTK__make_integer_seq)
+    {
+      log_error(
+        "Unsupported builtin template kind id: {}",
+        (int)btd.getBuiltinTemplateKind());
+      abort();
+    }
+
+    break;
+  }
   default:
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);

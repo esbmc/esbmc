@@ -849,6 +849,70 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  case clang::Stmt::CXXTryStmtClass:
+  {
+    const clang::CXXTryStmt &cxxtry =
+      static_cast<const clang::CXXTryStmt &>(stmt);
+
+    new_expr = codet("cpp-catch");
+
+    exprt try_body;
+    if (get_expr(*cxxtry.getTryBlock(), try_body))
+      return true;
+
+    new_expr.location() = try_body.location();
+    new_expr.move_to_operands(try_body);
+
+    for (unsigned i = 0; i < cxxtry.getNumHandlers(); i++)
+    {
+      exprt handler;
+      if (get_expr(*cxxtry.getHandler(i), handler))
+        return true;
+
+      new_expr.move_to_operands(handler);
+    }
+
+    break;
+  }
+
+  case clang::Stmt::CXXCatchStmtClass:
+  {
+    const clang::CXXCatchStmt &cxxcatch =
+      static_cast<const clang::CXXCatchStmt &>(stmt);
+
+    exprt decl;
+    if (get_decl(*cxxcatch.getExceptionDecl(), decl))
+      return true;
+
+    typet t;
+    if (get_type(*cxxcatch.getCaughtType(), t))
+      return true;
+
+    if (get_expr(*cxxcatch.getHandlerBlock(), new_expr))
+      return true;
+
+    convert_expression_to_code(decl);
+    codet::operandst &ops = new_expr.operands();
+    ops.insert(ops.begin(), decl);
+
+    break;
+  }
+
+  case clang::Stmt::CXXThrowExprClass:
+  {
+    const clang::CXXThrowExpr &cxxte =
+      static_cast<const clang::CXXThrowExpr &>(stmt);
+
+    exprt tmp;
+    if (get_expr(*cxxte.getSubExpr(), tmp))
+      return true;
+
+    new_expr = side_effect_exprt("cpp-throw", tmp.type());
+    new_expr.move_to_operands(tmp);
+
+    break;
+  }
+
   default:
     if (clang_c_convertert::get_expr(stmt, new_expr))
       return true;
