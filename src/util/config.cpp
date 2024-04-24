@@ -119,6 +119,9 @@ bool configt::set(const cmdlinet &cmdline)
   if (cmdline.isset("define"))
     ansi_c.defines = cmdline.get_values("define");
 
+  if (cmdline.isset("include-file"))
+    ansi_c.include_files = cmdline.get_values("include-file");
+
   if (cmdline.isset("include"))
     ansi_c.include_paths = cmdline.get_values("include");
 

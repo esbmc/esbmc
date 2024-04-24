@@ -119,6 +119,7 @@ public:
     std::string locale_name;
 
     std::list<std::string> defines;
+    std::list<std::string> include_files;
     std::list<std::string> include_paths;
     std::list<std::string> idirafter_paths;
     std::list<std::string> forces;

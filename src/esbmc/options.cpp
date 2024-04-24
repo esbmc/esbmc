@@ -67,6 +67,10 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::vector<std::string>>()->value_name(
        "path"),
      "set include path"},
+    {"include-file",
+     boost::program_options::value<std::vector<std::string>>()->value_name(
+       "file"),
+     "include files via frontend's -include option before anything else"},
     {"nostdinc", NULL, "do not include from standard system paths"},
     {"idirafter",
      boost::program_options::value<std::vector<std::string>>()->value_name(
