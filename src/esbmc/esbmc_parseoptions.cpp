@@ -2081,24 +2081,6 @@ void esbmc_parseoptionst::add_property_monitors(
     if (!has_suffix(func_sym.thename, main_suffix))
       continue;
 
-#if 0
-    // Insert initializers for each monitor expr.
-    for (const auto &[prop, pair] : monitors)
-    {
-      goto_programt::instructiont new_insn;
-      new_insn.type = ASSIGN;
-      std::string prop_name = prop + "_status";
-      expr2tc cast = typecast2tc(get_int_type(32), pair.second);
-      expr2tc assign =
-        code_assign2tc(symbol2tc(get_int_type(32), prop_name), cast);
-      new_insn.code = assign;
-      new_insn.function = p_it->function;
-
-      // new_insn location field not set - I believe it gets numbered later.
-      f_it->second.body.instructions.insert(p_it, new_insn);
-    }
-#endif
-
     /* found it */
     entry_sym = &func_sym;
     break;
@@ -2216,19 +2198,7 @@ void esbmc_parseoptionst::add_monitor_exprs(
   insn_list.insert(insn, new_insn);
 
   insn++;
-#if 0
-  new_insn.type = ASSIGN;
-  for (const auto &[prop, expr] : triggered)
-  {
-    std::string prop_name = prop + "_status";
-    expr2tc hack_cast = typecast2tc(int_type2(), expr);
-    expr2tc newsym = symbol2tc(int_type2(), prop_name);
-    new_insn.code = code_assign2tc(newsym, hack_cast);
-    new_insn.function = insn->function;
 
-    insn_list.insert(insn, new_insn);
-  }
-#endif
 #if 0
   new_insn.type = FUNCTION_CALL;
   expr2tc func_sym =
@@ -2238,6 +2208,7 @@ void esbmc_parseoptionst::add_monitor_exprs(
   new_insn.function = insn->function;
   insn_list.insert(insn, new_insn);
 #endif
+
   new_insn.type = ATOMIC_END;
   new_insn.function = insn->function;
   insn_list.insert(insn, new_insn);
