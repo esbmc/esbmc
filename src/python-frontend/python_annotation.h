@@ -55,7 +55,7 @@ private:
     ast["end_col_offset"] = max_col_offset;
   }
 
-  std::string get_type_from_constant(Json &element)
+  std::string get_type_from_constant(const Json &element)
   {
     if (element.contains("esbmc_type_annotation"))
       return element["esbmc_type_annotation"].template get<std::string>();
@@ -72,6 +72,31 @@ private:
       return "str";
 
     return std::string();
+  }
+
+  std::string get_type_from_binary_expr(const Json &element, const Json &body)
+  {
+    std::string type("");
+
+    const Json &lhs = element["value"]["left"];
+
+    // Floor division (//) operations always result in an integer value
+    if (element["value"]["op"]["_type"] == "FloorDiv")
+      type = "int";
+    else
+    {
+      // If the LHS of the binary operation is a variable, its type is retrieved
+      if (lhs["_type"] == "Name")
+      {
+        Json left_op = find_node(lhs["id"], body["body"]);
+        if (!left_op.empty())
+          type = left_op["annotation"]["id"];
+      }
+      else if (lhs["_type"] == "Constant")
+        type = get_type_from_constant(lhs);
+    }
+
+    return type;
   }
 
   void add_annotation(Json &body)
@@ -114,22 +139,7 @@ private:
         // Get type from RHS binary expression
         else if (element["value"]["_type"] == "BinOp")
         {
-          // Floor division (//) operations always result in an integer value
-          if (element["value"]["op"]["_type"] == "FloorDiv")
-            type = "int";
-          else
-          {
-            // If the LHS of the binary operation is a variable, its type is retrieved
-            Json &lhs = element["value"]["left"];
-            if (lhs["_type"] == "Name")
-            {
-              Json left_op = find_node(lhs["id"], body["body"]);
-              if (!left_op.empty())
-                type = left_op["annotation"]["id"];
-            }
-            else if (lhs["_type"] == "Constant")
-              type = get_type_from_constant(lhs);
-          }
+          type = get_type_from_binary_expr(element, body);
         }
         // Get type from constructor call
         else if (
@@ -141,7 +151,11 @@ private:
         else
           continue;
 
-        assert(!type.empty());
+        if (type.empty())
+        {
+          log_status("Type undefined for:\n{}", element.dump(2).c_str());
+          abort();
+        }
 
         // Update type field
         element["_type"] = "AnnAssign";
