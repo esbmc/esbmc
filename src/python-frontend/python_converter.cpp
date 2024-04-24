@@ -469,6 +469,26 @@ symbolt *python_converter::find_function_in_imported_modules(
   return nullptr;
 }
 
+symbolt *
+python_converter::find_symbol_in_global_scope(std::string &symbol_id) const
+{
+  std::size_t class_start_pos = symbol_id.find("@C@");
+  std::size_t func_start_pos = symbol_id.find("@F@");
+
+  // Remove class name from symbol
+  if (class_start_pos != std::string::npos)
+    symbol_id.erase(class_start_pos, func_start_pos - class_start_pos);
+
+  func_start_pos = symbol_id.find("@F@");
+  std::size_t func_end_pos = symbol_id.rfind("@");
+
+  // Remove function name from symbol
+  if (func_start_pos != std::string::npos)
+    symbol_id.erase(func_start_pos, func_end_pos - func_start_pos);
+
+  return context.find_symbol(symbol_id);
+}
+
 std::string python_converter::get_classname_from_symbol_id(
   const std::string &symbol_id) const
 {
@@ -785,9 +805,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     symbolt *symbol = context.find_symbol(symbol_id);
     if (!symbol)
     {
-      log_error("Symbol not found: {}\n", symbol_id.c_str());
-      abort();
+      symbol = find_symbol_in_global_scope(symbol_id);
+      if (!symbol)
+      {
+        log_error("Symbol not found: {}\n", symbol_id.c_str());
+        abort();
+      }
     }
+
     expr = symbol_expr(*symbol);
 
     // Get instance attribute
