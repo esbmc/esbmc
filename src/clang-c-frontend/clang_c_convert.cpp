@@ -2756,6 +2756,18 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  case clang::Stmt::AttributedStmtClass:
+  {
+    const clang::AttributedStmt &astmt =
+      static_cast<const clang::AttributedStmt &>(stmt);
+
+    /* ignore attributes for now */
+    if (get_expr(*astmt.getSubStmt(), new_expr))
+      return true;
+
+    break;
+  }
+
   default:
   {
     std::ostringstream oss;
