@@ -61,7 +61,8 @@ std::map<std::string, std::string> string_mem = {{"concat", "string"}};
 std::map<std::string, std::string> addmod = {{"addmod", "uint"}};
 
 /// function body
-// Always set "stateVariable": true
+// 1. set "stateVariable": true
+// 2. add "isTemplate": true and "templateFunctionID"
 
 /* 
     addmod(uint x, uint y, uint k) returns (uint)
@@ -73,6 +74,8 @@ std::map<std::string, std::string> addmod = {{"addmod", "uint"}};
 */
 const std::string addmod_body =
   R"({
+                        "isTemplate": true,
+                        "templateFunctionID": "sol:@F@addmod",
                         "body": {
                         "id": 25,
                         "nodeType": "Block",
@@ -160,7 +163,7 @@ const std::string addmod_body =
                                     "typeDescriptions": {
                                         "typeIdentifier": "t_tuple__$",                     
                                         "typeString": "tuple)" +
-  parentheis + R"("
+  parentheis + R"( "
                                     }
                                 },
                                 "id": 17,

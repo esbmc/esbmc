@@ -26,6 +26,7 @@ public:
   bool convert();
 
 protected:
+  // for builtin variables and functions
   bool convert_ast_nodes(const nlohmann::json &contract_def);
   bool convert_builtin_members();
   void populate_builtin_variables(
@@ -34,7 +35,9 @@ protected:
   bool populate_builtin_functions(
     const std::string &bs,
     const std::map<std::string, std::string> &mems,
-    const std::string &ast_json = "");
+    const std::string &ast_node = "");
+  bool
+  get_builtin_function_ref(const nlohmann::json &ast_node, exprt &new_expr);
 
   // conversion functions
   // get decl in rule contract-body-element
@@ -179,7 +182,7 @@ protected:
   contextt &context;
   namespacet ns;
   // json for Solidity AST. Use vector for multiple contracts
-  nlohmann::json &ast_json;
+  nlohmann::json &src_ast_json;
   // Solidity function to be verified
   const std::string &sol_func;
   //smart contract source file

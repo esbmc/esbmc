@@ -100,7 +100,7 @@ bool solidity_languaget::parse(const std::string &path)
   }
 
   // parse explicitly
-  ast_json = nlohmann::json::parse(ast_json_content);
+  src_ast_json = nlohmann::json::parse(ast_json_content);
 
   return false;
 }
@@ -122,7 +122,7 @@ bool solidity_languaget::typecheck(contextt &context, const std::string &module)
   log_progress("Done conversion of intrinsics...");
 
   solidity_convertert converter(
-    new_context, ast_json, func_name, smart_contract);
+    new_context, src_ast_json, func_name, smart_contract);
   if (converter.convert()) // Add Solidity symbols to the context
     return true;
 
