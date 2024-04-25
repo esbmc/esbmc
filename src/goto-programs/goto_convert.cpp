@@ -332,15 +332,10 @@ void goto_convertt::convert_throw(const exprt &expr, goto_programt &dest)
 {
   // add the THROW instruction to 'dest'
   goto_programt::targett throw_instruction = dest.add_instruction();
-  codet c("cpp-throw");
-
-  c.operands() = expr.operands();
-  c.location() = expr.location();
-  c.set("exception_list", expr.find("exception_list"));
 
   throw_instruction->make_throw();
   throw_instruction->location = expr.location();
-  migrate_expr(c, throw_instruction->code);
+  migrate_expr(expr, throw_instruction->code);
 }
 
 void goto_convertt::convert_catch(const codet &code, goto_programt &dest)
@@ -373,7 +368,7 @@ void goto_convertt::convert_catch(const codet &code, goto_programt &dest)
   catch_pop_instruction->code = code_cpp_catch2tc(empty_excp_list);
 
   // add a goto to the end of the 'try' block
-  dest.add_instruction()->make_goto(end_target);
+  // dest.add_instruction()->make_goto(end_target);
 
   for (unsigned i = 1; i < code.operands().size(); i++)
   {
@@ -391,7 +386,7 @@ void goto_convertt::convert_catch(const codet &code, goto_programt &dest)
     dest.destructive_append(tmp);
 
     // add a goto to the end of the 'catch' block
-    dest.add_instruction()->make_goto(end_target);
+    // dest.add_instruction()->make_goto(end_target);
   }
 
   // add end-target

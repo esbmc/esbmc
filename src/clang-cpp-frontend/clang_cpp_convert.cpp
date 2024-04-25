@@ -884,11 +884,10 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (get_decl(*cxxcatch.getExceptionDecl(), decl))
       return true;
 
-    typet t;
-    if (get_type(*cxxcatch.getCaughtType(), t))
+    if (get_expr(*cxxcatch.getHandlerBlock(), new_expr))
       return true;
 
-    if (get_expr(*cxxcatch.getHandlerBlock(), new_expr))
+    if (get_type(*cxxcatch.getCaughtType(), new_expr.type()))
       return true;
 
     convert_expression_to_code(decl);

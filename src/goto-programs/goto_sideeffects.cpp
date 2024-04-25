@@ -328,7 +328,11 @@ void goto_convertt::remove_sideeffects(
     }
     else if (statement == "cpp-throw")
     {
-      convert_throw(expr, dest);
+      codet c("cpp-throw");
+      c.operands() = expr.operands();
+      c.location() = expr.location();
+      c.set("exception_list", expr.find("exception_list"));
+      convert_throw(c, dest);
       // the result can't be used, these are void
       expr.make_nil();
     }
