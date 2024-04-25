@@ -1632,22 +1632,70 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     // Use clang to calculate offsetof
     clang::Expr::EvalResult result;
-    bool res = offset.EvaluateAsInt(result, *ASTContext);
-    if (!res)
+    if (offset.EvaluateAsInt(result, *ASTContext))
     {
-      log_error("Clang could not calculate offset");
-      std::ostringstream oss;
-      llvm::raw_os_ostream ross(oss);
-      offset.dump(ross, *ASTContext);
-      ross.flush();
-      log_error("{}", oss.str());
-      return true;
+      new_expr = constant_exprt(
+        integer2binary(
+          result.Val.getInt().getSExtValue(), bv_width(size_type())),
+        integer2string(result.Val.getInt().getSExtValue()),
+        size_type());
+    }
+    else
+    {
+      unsigned n = offset.getNumComponents();
+      assert(n > 0);
+
+      const clang::TypeSourceInfo *ti = offset.getTypeSourceInfo();
+      const clang::QualType q_type = ti->getType();
+      typet base;
+      if (get_type(q_type, base))
+        return true;
+
+      exprt e = constant_exprt(
+        integer2binary(0, bv_width(size_type())),
+        integer2string(0),
+        size_type());
+      e = typecast_exprt(e, pointer_typet(base));
+      e = dereference_exprt(e, e.type());
+      for (unsigned i = 0; i < n; i++)
+      {
+        const clang::OffsetOfNode &o = offset.getComponent(i);
+        switch (o.getKind())
+        {
+        case clang::OffsetOfNode::Array:
+        {
+          const clang::Expr *cidx = offset.getIndexExpr(o.getArrayExprIndex());
+          exprt idx;
+          if (get_expr(*cidx, idx))
+            return true;
+          e = index_exprt(e, idx);
+          break;
+        }
+        case clang::OffsetOfNode::Field:
+        {
+          const clang::FieldDecl *fd = o.getField();
+          exprt comp;
+          if (get_decl(*fd, comp))
+            return true;
+          e = member_exprt(e, comp.name(), comp.type());
+          break;
+        }
+        case clang::OffsetOfNode::Identifier:
+        {
+          const clang::IdentifierInfo *fii = o.getFieldName();
+          e = member_exprt(e, irep_idt(fii->getNameStart()));
+          break;
+        }
+        case clang::OffsetOfNode::Base:
+          log_error("offsetof() on base class members not implemented");
+          abort();
+        }
+      }
+      e = address_of_exprt(e);
+      e = typecast_exprt(e, size_type());
+      new_expr = e;
     }
 
-    new_expr = constant_exprt(
-      integer2binary(result.Val.getInt().getSExtValue(), bv_width(size_type())),
-      integer2string(result.Val.getInt().getSExtValue()),
-      size_type());
     break;
   }
 
