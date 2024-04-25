@@ -2695,6 +2695,17 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  case clang::Stmt::ChooseExprClass:
+  {
+    const clang::ChooseExpr &cexpr =
+      static_cast<const clang::ChooseExpr &>(stmt);
+
+    if (get_expr(*cexpr.getChosenSubExpr(), new_expr))
+      return true;
+
+    break;
+  }
+
   default:
   {
     std::ostringstream oss;
