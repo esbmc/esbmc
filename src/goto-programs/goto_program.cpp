@@ -299,6 +299,15 @@ void goto_programt::get_successors(
     if (!is_false(i.guard))
       successors.push_back(next);
   }
+  else if (i.is_catch())
+  {
+    // CATCH signed_int->1, bool->2, float->3
+    // we consider these targets as successors
+    for (auto target : i.targets)
+      successors.emplace_back(target);
+
+    successors.push_back(next);
+  }
   else
     successors.push_back(next);
 }

@@ -368,7 +368,7 @@ void goto_convertt::convert_catch(const codet &code, goto_programt &dest)
   catch_pop_instruction->code = code_cpp_catch2tc(empty_excp_list);
 
   // add a goto to the end of the 'try' block
-  // dest.add_instruction()->make_goto(end_target);
+  dest.add_instruction()->make_goto(end_target);
 
   for (unsigned i = 1; i < code.operands().size(); i++)
   {
@@ -386,7 +386,7 @@ void goto_convertt::convert_catch(const codet &code, goto_programt &dest)
     dest.destructive_append(tmp);
 
     // add a goto to the end of the 'catch' block
-    // dest.add_instruction()->make_goto(end_target);
+    dest.add_instruction()->make_goto(end_target);
   }
 
   // add end-target
