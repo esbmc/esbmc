@@ -2685,7 +2685,9 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (get_type(tte.getType(), type))
       return true;
 
-    assert(type.id() == typet::t_bool);
+    assert(
+      type.id() == typet::t_bool || type.id() == typet::t_signedbv ||
+      type.id() == typet::t_unsignedbv);
 
     if (tte.getValue())
       new_expr = true_exprt();
