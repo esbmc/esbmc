@@ -29,11 +29,13 @@ public:
    * methods for code (codet) adjustment
    * and other IRs derived from codet
    */
+  void adjust_code(codet &code) override;
   void adjust_while(codet &code) override;
   void adjust_switch(codet &code) override;
   void adjust_for(codet &code) override;
   void adjust_ifthenelse(codet &code) override;
   void adjust_decl_block(codet &code) override;
+  void adjust_catch(codet &code);
 
   /**
    * methods for expression (exprt) adjustment
