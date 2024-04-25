@@ -26,6 +26,18 @@ public:
         add_annotation(element);
         update_end_col_offset(element);
       }
+      else if (element["_type"] == "ClassDef")
+      {
+        for (auto &class_member : element["body"])
+        {
+          // Process methods
+          if (class_member["_type"] == "FunctionDef")
+          {
+            add_annotation(class_member);
+            update_end_col_offset(class_member);
+          }
+        }
+      }
     }
   }
 
