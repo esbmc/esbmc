@@ -173,11 +173,14 @@ void clang_cpp_adjust::adjust_decl_block(codet &code)
 void clang_cpp_adjust::adjust_catch(codet &code)
 {
   codet::operandst &operands = code.operands();
+  // adjust try block
+  adjust_expr(operands[0]);
 
-  // First operand is always the try block
+  // First operand is always the try block, skip it
   for (auto it = ++operands.begin(); it != operands.end(); it++)
   {
     // The following operands are the catchs
+    adjust_expr(*it);
     code_blockt &block = to_code_block(to_code(*it));
 
     std::vector<irep_idt> ids;
