@@ -868,7 +868,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       };
 
       // Get instance attribute from class component
-      if (class_type.has_component(attr_name) && is_instance_attr())
+      if (
+        class_type.has_component(attr_name) &&
+        (is_instance_attr() || is_converting_rhs))
       {
         const typet &attr_type = class_type.get_component(attr_name).type();
         expr = member_exprt(
@@ -1079,8 +1081,10 @@ void python_converter::get_var_assign(
   bool has_value = false;
   if (!ast_node["value"].is_null())
   {
+    is_converting_rhs = true;
     rhs = get_expr(ast_node["value"]);
     has_value = true;
+    is_converting_rhs = false;
   }
 
   if (has_value && rhs != exprt("_init_undefined"))

@@ -5,6 +5,9 @@ class MyClass:
     def foo(self) -> None:
         self.data = 1
 
+    def blah(self) -> None:
+        x:int = self.data
+
 
 obj1 = MyClass(5)
 assert(obj1.data == 5)
