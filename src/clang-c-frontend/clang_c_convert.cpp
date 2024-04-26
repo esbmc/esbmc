@@ -1642,6 +1642,18 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     }
     else
     {
+      /* Clang failed, i.e., a dynamic offsetof, something like
+       * offsetof(struct S, member[idx]). We're building the equivalent of the
+       * manual offsetof() macro definition. Details below. */
+
+      /* TODO: It would be good to put the expression we're constructing here
+       *       into compute_pointer_offset(), e.g., already in the adjuster.
+       *       However, that would require the migrate_namespace_lookup to be
+       *       setup correctly. Modelling it as pointer_offset expression would
+       *       be throwing away the information that the value-set of this
+       *       pointer expression is effectively a singleton with constant
+       *       address zero. */
+
       unsigned n = offset.getNumComponents();
       assert(n > 0);
 
@@ -1651,12 +1663,15 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       if (get_type(q_type, base))
         return true;
 
+      /* start by building the expression e := *(base *)0 */
       exprt e = constant_exprt(
         integer2binary(0, bv_width(size_type())),
         integer2string(0),
         size_type());
       e = typecast_exprt(e, pointer_typet(base));
       e = dereference_exprt(e, e.type());
+
+      /* process the list comprised of member, index, and base-class accesses */
       for (unsigned i = 0; i < n; i++)
       {
         const clang::OffsetOfNode &o = offset.getComponent(i);
@@ -1686,11 +1701,13 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           e = member_exprt(e, irep_idt(fii->getNameStart()));
           break;
         }
-        case clang::OffsetOfNode::Base:
+        case clang::OffsetOfNode::Base: /* TODO */
           log_error("offsetof() on base class members not implemented");
           abort();
         }
       }
+
+      /* finally, the result is (size_t)&e */
       e = address_of_exprt(e);
       e = typecast_exprt(e, size_type());
       new_expr = e;
