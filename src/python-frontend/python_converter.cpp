@@ -1337,7 +1337,12 @@ void python_converter::get_attributes_from_self(
       typet type = get_typet(stmt["annotation"]["id"].get<std::string>());
       struct_typet::componentt comp =
         build_component(current_class_name, attr_name, type);
-      clazz.components().push_back(comp);
+
+      auto &class_components = clazz.components();
+      if (
+        std::find(class_components.begin(), class_components.end(), comp) ==
+        class_components.end())
+        class_components.push_back(comp);
     }
   }
 }
