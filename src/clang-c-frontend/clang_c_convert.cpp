@@ -2745,6 +2745,20 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  /* Clang docs:
+   *
+   * GNU builtin-in function __builtin_choose_expr.
+   *
+   * This AST node is similar to the conditional operator (?:) in C, with the
+   * following exceptions:
+   *
+   * - the test expression must be a integer constant expression.
+   * - the expression returned acts like the chosen subexpression in every
+   *   visible way: the type is the same as that of the chosen subexpression,
+   *   and all predicates (whether it's an l-value, whether it's an integer
+   *   constant expression, etc.) return the same result as for the chosen
+   *   sub-expression.
+   */
   case clang::Stmt::ChooseExprClass:
   {
     const clang::ChooseExpr &cexpr =
