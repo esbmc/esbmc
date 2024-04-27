@@ -1,3 +1,7 @@
+set(range_py ${CMAKE_CURRENT_SOURCE_DIR}/memory-model/range.py)
+set(link_name ${CMAKE_CURRENT_BINARY_DIR}/range.py)
+
+file(CREATE_LINK ${range_py} ${link_name} SYMBOLIC)
 
 # `mangle` function is defined in src/scripts/cmake/Utils.cmake
   mangle(${CMAKE_CURRENT_BINARY_DIR}/pythonastgen.c  # an C file output containing python code
@@ -8,6 +12,8 @@
          MACRO ESBMC_FLAIL
          ACC_HEADERS_INTO ${CMAKE_CURRENT_BINARY_DIR}/pythonastgen.h
   )
+
+file(REMOVE ${link_name})
 
 add_library(pythonfrontend STATIC
             python_language.cpp
