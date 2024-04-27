@@ -113,11 +113,15 @@ def main():
     with open(filename, "r") as source:
         tree = ast.parse(source.read())
 
-    # Handle imports
+    range_import = ast.ImportFrom(module='range', names=[ast.alias(name='*', asname=None)], level=0)
+    tree.body.insert(0, range_import)
+
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
+            # Handle imports
             process_imports(node, output_dir)
         elif isinstance(node, ast.Assign):
+            # Add type annotation on assignments
             add_type_annotation(node)
 
     # Generate JSON from AST for the main file.
