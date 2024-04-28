@@ -220,7 +220,7 @@ void goto_symext::symex_step(reachability_treet &art)
           it != thrown_obj_map.end())
       {
         const expr2tc &thrown_obj = it->second;
-        assert(is_symbol2t(thrown_obj));
+        assert(is_symbol2t(thrown_obj) || is_constant(thrown_obj));
 
         if (
           is_pointer_type(deref_code.target->type) &&
