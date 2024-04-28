@@ -378,8 +378,9 @@ void goto_convertt::convert_catch(const codet &code, goto_programt &dest)
     exception_list.push_back(block.get("exception_id"));
 
     // Hack for object value passing
-    const_cast<exprt::operandst &>(block.op0().operands())
-      .push_back(gen_zero(block.op0().op0().type()));
+    if (block.op0().statement() != "skip")
+      const_cast<exprt::operandst &>(block.op0().operands())
+        .push_back(gen_zero(block.op0().op0().type()));
 
     convert(block, tmp);
     catch_push_instruction->targets.push_back(tmp.instructions.begin());

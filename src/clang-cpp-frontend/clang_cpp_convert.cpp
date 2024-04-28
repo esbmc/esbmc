@@ -880,15 +880,24 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::CXXCatchStmt &cxxcatch =
       static_cast<const clang::CXXCatchStmt &>(stmt);
 
-    exprt decl;
-    if (get_decl(*cxxcatch.getExceptionDecl(), decl))
-      return true;
-
     if (get_expr(*cxxcatch.getHandlerBlock(), new_expr))
       return true;
 
-    if (get_type(*cxxcatch.getCaughtType(), new_expr.type()))
-      return true;
+    exprt decl;
+    if (cxxcatch.getExceptionDecl())
+    {
+      if (get_decl(*cxxcatch.getExceptionDecl(), decl))
+        return true;
+
+      if (get_type(*cxxcatch.getCaughtType(), new_expr.type()))
+        return true;
+    }
+    else
+    {
+      // for catch(...), we don't need decl
+      decl = code_skipt();
+      new_expr.type().set("ellipsis", 1);
+    }
 
     convert_expression_to_code(decl);
     codet::operandst &ops = new_expr.operands();

@@ -165,7 +165,7 @@ bool goto_symext::symex_throw()
 
         if (c_it != except->catch_map.end())
         {
-          update_throw_target(except, c_it->second, instruction.code);
+          update_throw_target(except, c_it->second, instruction.code, true);
           catch_insn = &c_it->second;
           catch_name = c_it->first;
         }
@@ -271,7 +271,8 @@ bool goto_symext::unexpected_handler()
 void goto_symext::update_throw_target(
   goto_symex_statet::exceptiont *except [[maybe_unused]],
   goto_programt::const_targett target,
-  const expr2tc &code)
+  const expr2tc &code,
+  bool is_ellipsis)
 {
   // Something is going to catch, therefore we need something to be caught.
   // Assign that something to a variable and make records so that it's merged
@@ -291,13 +292,20 @@ void goto_symext::update_throw_target(
   // Target is, as far as I can tell, always a declaration of the variable
   // that the thrown obj ends up in, and is followed by a (blank) assignment
   // to it. So point at the next insn.
-  assert(is_code_decl2t(target->code));
-  target++;
-  assert(is_code_assign2t(target->code));
+  if (!is_ellipsis)
+  {
+    assert(is_code_decl2t(target->code));
+    target++;
+    assert(is_code_assign2t(target->code));
+    // signed int b;
+    // b = NONDET(signed int);
+    // b = 0; move to this line
+    target++;
 
-  // Signal assignment code to fetch the thrown object and rewrite the
-  // assignment, assigning the thrown obj to the local variable.
-  thrown_obj_map.insert_or_assign(target, thrown_obj);
+    // Signal assignment code to fetch the thrown object and rewrite the
+    // assignment, assigning the thrown obj to the local variable.
+    thrown_obj_map.insert_or_assign(target, thrown_obj);
+  }
 
   if (!options.get_bool_option("extended-try-analysis"))
   {

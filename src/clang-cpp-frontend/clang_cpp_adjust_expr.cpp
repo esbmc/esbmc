@@ -325,9 +325,10 @@ void clang_cpp_adjust::convert_exception_id(
   {
     // TODO
   }
-  else if (type.id() == "ellipsis")
+  else if (type.ellipsis())
   {
-    // TODO
+    irep_idt identifier = "ellipsis";
+    ids.emplace_back(id2string(identifier) + suffix);
   }
 
   // add C++ type
