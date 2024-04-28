@@ -150,7 +150,8 @@ jobs:
           name: esbmc-result
           path: output.zip  
       - name: Checkout code
-        uses: actions/checkout@master
+        if: ${{ inputs.cpachecker == true }}
+        uses: actions/checkout@v3
         with:
           path: esbmc-src      
       - name: Run Validation (Full)
