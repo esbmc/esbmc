@@ -6,12 +6,18 @@
 class goto_coveraget
 {
 public:
-  explicit goto_coveraget(const namespacet &ns) : ns(ns){};
+  explicit goto_coveraget(const namespacet &ns, goto_functionst &goto_functions)
+    : ns(ns), goto_functions(goto_functions){};
+  explicit goto_coveraget(
+    const namespacet &ns,
+    goto_functionst &goto_functions,
+    const std::string filename)
+    : ns(ns), goto_functions(goto_functions), filename(filename){};
   // add an assert(0)
   // - at the beginning of each GOTO program
   // - at the beginning of each branch body
   // - before each END_FUNCTION statement
-  void add_false_asserts(goto_functionst &goto_functions);
+  void add_false_asserts();
 
   void insert_assert(
     goto_programt &goto_program,
@@ -19,14 +25,13 @@ public:
     const expr2tc &guard);
 
   // convert every assertion to an assert(0)
-  void make_asserts_false(goto_functionst &goto_functions);
+  void make_asserts_false();
 
   // convert every assertion to an assert(1)
-  void make_asserts_true(goto_functionst &goto_functions);
+  void make_asserts_true();
 
   // condition cov
-  void
-  gen_cond_cov(goto_functionst &goto_functions, const std::string &filename);
+  void gen_cond_cov();
   exprt handle_single_guard(exprt &guard, bool &flag);
   void add_cond_cov_init_assert(
     const exprt &expr,
@@ -41,7 +46,6 @@ public:
     goto_programt &goto_program,
     goto_programt::targett &it);
   int get_total_instrument() const;
-  void count_assert_instance(goto_functionst goto_functions);
   int get_total_assert_instance() const;
   std::unordered_set<std::string> get_total_cond_assert() const;
 
@@ -54,9 +58,8 @@ protected:
 
   static void collect_atom_operands(const exprt &expr, std::set<exprt> &atoms);
 
-  static int total_instrument;
-  static int total_assert_instance;
   static std::unordered_set<std::string> total_cond_assert;
   namespacet ns;
+  goto_functionst &goto_functions;
   std::string filename;
 };
