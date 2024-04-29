@@ -1141,6 +1141,31 @@ bool clang_cpp_convertert::get_function_body(
     }
   }
 
+  auto *type = fd.getType().getTypePtr();
+  if (const auto *fpt = llvm::dyn_cast<const clang::FunctionProtoType>(type))
+  {
+    if (fpt->hasDynamicExceptionSpec())
+    {
+      codet decl = codet("throw_decl");
+      for (unsigned i = 0; i < fpt->getNumExceptions(); i++)
+      {
+        codet tmp;
+        if (get_type(fpt->getExceptionType(i), tmp.type()))
+          return true;
+
+        decl.move_to_operands(tmp);
+      }
+      body.operands().insert(body.operands().begin(), decl);
+
+      codet end = codet("throw_decl_end");
+      body.operands().push_back(end);
+    }
+    else if (fpt->hasNoexceptExceptionSpec())
+    {
+      // TODO
+    }
+  }
+
   return false;
 }
 

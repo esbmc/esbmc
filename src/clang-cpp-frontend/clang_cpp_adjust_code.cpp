@@ -20,6 +20,10 @@ void clang_cpp_adjust::adjust_code(codet &code)
   {
     adjust_catch(code);
   }
+  else if (statement == "throw_decl")
+  {
+    adjust_throw_decl(code);
+  }
   else
     clang_c_adjust::adjust_code(code);
 }
@@ -188,5 +192,19 @@ void clang_cpp_adjust::adjust_catch(codet &code)
 
     block.type() = code_typet();
     block.set("exception_id", ids.front());
+  }
+}
+
+void clang_cpp_adjust::adjust_throw_decl(codet &code)
+{
+  codet::operandst &operands = code.operands();
+
+  for (auto &op : operands)
+  {
+    std::vector<irep_idt> ids;
+    convert_exception_id(op.type(), "", ids);
+
+    op.type() = code_typet();
+    op.set("throw_decl_id", ids.front());
   }
 }
