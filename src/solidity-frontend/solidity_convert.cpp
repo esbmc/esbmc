@@ -1372,6 +1372,10 @@ bool solidity_convertert::get_statement(
     typet return_type;
     if ((*current_functionDecl).contains("returnParameters"))
     {
+      assert(
+        (*current_functionDecl)["returnParameters"]["id"]
+          .get<std::uint16_t>() ==
+        stmt["functionReturnParameters"].get<std::uint16_t>());
       if (get_type_description(
             (*current_functionDecl)["returnParameters"], return_type))
         return true;
@@ -1617,7 +1621,7 @@ bool solidity_convertert::get_expr(
   SolidityGrammar::ExpressionT type = SolidityGrammar::get_expression_t(expr);
   log_debug(
     "solidity",
-    "solidity @@@ got Expr: SolidityGrammar::ExpressionT::{}",
+    " @@@ got Expr: SolidityGrammar::ExpressionT::{}",
     SolidityGrammar::expression_to_str(type));
 
   switch (type)
@@ -4052,7 +4056,8 @@ solidity_convertert::find_decl_ref(int ref_decl_id, std::string &contract_name)
   // A "global function", which stands for the situation
   // where we are handling solidity_template
   // therefore, we skip the search in original src_ast_json.
-  if (!(current_functionDecl != nullptr && current_contractName.empty()))
+  if (!(current_functionDecl != nullptr && current_contractName.empty() &&
+        is_builtin_members))
   {
     // First, search state variable nodes
     nlohmann::json &nodes = src_ast_json["nodes"];
