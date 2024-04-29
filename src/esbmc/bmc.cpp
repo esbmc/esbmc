@@ -924,9 +924,10 @@ smt_convt::resultt bmct::multi_property_check(
   // Assertion Coverage:
   if (is_assert_cov)
   {
-    const int total = goto_coveraget(ns).get_total_instrument();
+    goto_coveraget tmp(ns, symex->goto_functions);
+    const int total = tmp.get_total_instrument();
     const int tracked_instance = reached_mul_claims.size();
-    const int total_instance = goto_coveraget(ns).get_total_assert_instance();
+    const int total_instance = tmp.get_total_assert_instance();
 
     if (total)
     {
@@ -958,12 +959,13 @@ smt_convt::resultt bmct::multi_property_check(
   }
 
   // Condition Coverage:
-  if (is_cond_cov)
+  else if (is_cond_cov)
   {
     log_success("\n[Coverage]\n");
 
+    goto_coveraget tmp(ns, symex->goto_functions);
     const std::unordered_set<std::string> &total_cond_assert =
-      goto_coveraget(ns).get_total_cond_assert();
+      tmp.get_total_cond_assert();
     int tracked_instance = 0;
     const int total_instance = total_cond_assert.size();
 

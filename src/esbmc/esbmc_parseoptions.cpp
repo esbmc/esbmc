@@ -1833,9 +1833,8 @@ bool esbmc_parseoptionst::process_goto_program(
       options.set_option("multi-property", true);
       options.set_option("keep-verified-claims", false);
 
-      goto_coveraget tmp(ns);
-      tmp.make_asserts_false(goto_functions);
-      tmp.count_assert_instance(goto_functions);
+      goto_coveraget tmp(ns, goto_functions);
+      tmp.make_asserts_false();
     }
 
     if (
@@ -1848,22 +1847,21 @@ bool esbmc_parseoptionst::process_goto_program(
       options.set_option("multi-property", true);
       options.set_option("keep-verified-claims", false);
 
-      goto_coveraget tmp(ns);
-      tmp.make_asserts_true(goto_functions);
-      tmp.gen_cond_cov(goto_functions, cmdline.args[0]);
-      tmp.count_assert_instance(goto_functions);
+      goto_coveraget tmp(ns, goto_functions, cmdline.args[0]);
+      tmp.make_asserts_true();
+      tmp.gen_cond_cov();
     }
 
     if (options.get_bool_option("make-assert-false"))
     {
-      goto_coveraget tmp(ns);
-      tmp.make_asserts_false(goto_functions);
+      goto_coveraget tmp(ns, goto_functions);
+      tmp.make_asserts_false();
     }
 
     if (cmdline.isset("add-false-assert"))
     {
-      goto_coveraget tmp(ns);
-      tmp.add_false_asserts(goto_functions);
+      goto_coveraget tmp(ns, goto_functions);
+      tmp.add_false_asserts();
     }
   }
 
