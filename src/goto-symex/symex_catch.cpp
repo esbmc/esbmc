@@ -298,9 +298,7 @@ void goto_symext::update_throw_target(
     target++;
     assert(is_code_assign2t(target->code));
     // signed int b;
-    // b = NONDET(signed int);
-    // b = 0; move to this line
-    target++;
+    // b = NONDET(signed int); move to this line
 
     // Signal assignment code to fetch the thrown object and rewrite the
     // assignment, assigning the thrown obj to the local variable.
