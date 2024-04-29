@@ -36,6 +36,7 @@ public:
   void adjust_ifthenelse(codet &code) override;
   void adjust_decl_block(codet &code) override;
   void adjust_catch(codet &code);
+  void adjust_throw_decl(codet &code);
 
   /**
    * methods for expression (exprt) adjustment
