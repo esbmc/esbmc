@@ -32,7 +32,8 @@ solidity_convertert::solidity_convertert(
     current_contractName(""),
     scope_map({}),
     tgt_func(config.options.get_option("function")),
-    tgt_cnt(config.options.get_option("contract"))
+    tgt_cnt(config.options.get_option("contract")),
+    is_builtin_members(false)
 {
   std::ifstream in(_contract_path);
   contract_contents.assign(
@@ -82,8 +83,10 @@ bool solidity_convertert::convert()
   assert(found_contract_def && "No contracts were found in the program.");
 
   // pre-processing: populate built-in members into the symbol table
+  is_builtin_members = true;
   if (convert_builtin_members())
     return true;
+  is_builtin_members = false;
 
   // reasoning-based verification
 
@@ -263,7 +266,7 @@ void solidity_convertert::populate_builtin_variables(
 
     std::string name, id;
     if (!bs.empty())
-      name = bs + "_" + mem + "#";
+      name = bs + "_" + mem;
     else
       name = mem;
     id = "sol:@" + name + "#";
@@ -276,7 +279,7 @@ void solidity_convertert::populate_builtin_variables(
     typet t;
     if (rtn_typ.find("uint") != std::string::npos)
     {
-      t = uint_type();
+      t = unsignedbv_typet(256);
     }
     else if (rtn_typ.find("bytes") != std::string::npos)
     {
@@ -310,6 +313,8 @@ void solidity_convertert::populate_builtin_variables(
     auto &sym = *move_symbol_to_context(symbol);
     sym.lvalue = false;
     sym.file_local = true;
+    symbol.mode = "C++";
+    symbol.module = "esbmc_intrinsics";
   }
 }
 
@@ -325,7 +330,7 @@ bool solidity_convertert::populate_builtin_functions(
 
     std::string name, id;
     if (!bs.empty())
-      name = bs + "_" + mem + "#";
+      name = bs + "_" + mem;
     else
       name = mem;
     id = "sol:@F@" + name + "#";
@@ -337,7 +342,7 @@ bool solidity_convertert::populate_builtin_functions(
     code_typet type;
     if (rtn_typ.find("uint") != std::string::npos)
     {
-      type.return_type() = uint_type();
+      type.return_type() = unsignedbv_typet(256);
     }
     else if (rtn_typ.find("bytes") != std::string::npos)
     {
@@ -373,9 +378,10 @@ bool solidity_convertert::populate_builtin_functions(
       symbol, debug_modulename, type, name, id, location_begin);
 
     symbol.lvalue = true;
-    symbol.is_extern =
-      false; // TODO: hard coded for now, may need to change later
+    symbol.is_extern = false;
     symbol.file_local = false;
+    symbol.mode = "C++";
+    symbol.module = "esbmc_intrinsics";
 
     // 10. Add symbol into the context
     symbolt &added_symbol = *move_symbol_to_context(symbol);
@@ -384,15 +390,37 @@ bool solidity_convertert::populate_builtin_functions(
     {
       const nlohmann::json *old_functionDecl = current_functionDecl;
       const std::string old_functionName = current_functionName;
+      auto func_json = nlohmann::json::parse(ast_node);
+      current_functionDecl = &func_json;
+      current_functionName = name;
 
-      auto tmp = nlohmann::json::parse(ast_node);
-      current_functionDecl = &tmp;
+      SolidityGrammar::ParameterListT params =
+        SolidityGrammar::get_parameter_list_t(func_json["parameters"]);
+      if (params != SolidityGrammar::ParameterListT::EMPTY)
+      {
+        // convert parameters if the function has them
+        // update the typet, since typet contains parameter annotations
+        for (const auto &decl : func_json["parameters"]["parameters"].items())
+        {
+          const nlohmann::json &func_param_decl = decl.value();
 
-      assert(tmp.contains("body"));
+          code_typet::argumentt param;
+          if (get_function_params(func_param_decl, param))
+            return true;
+
+          // clear the location info as it's incorrect
+          param.location().clear();
+          param.location().set_function(name);
+          param.location().set_file("solidity_template");
+          type.arguments().push_back(param);
+        }
+      }
+      added_symbol.type = type;
+
+      assert(func_json.contains("body"));
       exprt body_exprt;
-      if (get_block(tmp["body"], body_exprt))
+      if (get_block(func_json["body"], body_exprt))
         return true;
-
       added_symbol.value = body_exprt;
 
       current_functionDecl = old_functionDecl;
@@ -408,7 +436,10 @@ bool solidity_convertert::get_builtin_function_ref(
   exprt &new_expr)
 {
   std::string name, id;
-  get_function_definition_name(ast_node, name, id);
+  //TODO bs
+  name = ast_node["name"].get<std::string>();
+  id = "sol:@F@" + name + "#";
+
   if (context.find_symbol(id) == nullptr)
     return true;
 
@@ -1279,7 +1310,8 @@ bool solidity_convertert::get_statement(
   }
   case SolidityGrammar::StatementT::ExpressionStatement:
   {
-    get_expr(stmt["expression"], new_expr);
+    if (get_expr(stmt["expression"], new_expr))
+      return true;
     break;
   }
   case SolidityGrammar::StatementT::VariableDeclStatement:
@@ -1583,7 +1615,8 @@ bool solidity_convertert::get_expr(
   get_start_location_from_stmt(expr, location);
 
   SolidityGrammar::ExpressionT type = SolidityGrammar::get_expression_t(expr);
-  log_status(
+  log_debug(
+    "solidity",
     "solidity @@@ got Expr: SolidityGrammar::ExpressionT::{}",
     SolidityGrammar::expression_to_str(type));
 
@@ -3749,6 +3782,13 @@ void solidity_convertert::get_state_var_decl_name(
   if (!contract_name.empty())
     id = "sol:@C@" + contract_name + "@" + name + "#" +
          i2string(ast_node["id"].get<std::int16_t>());
+  else if (
+    current_functionDecl && !current_functionName.empty() && is_builtin_members)
+  {
+    //!Assume is solidity_template
+    id = "sol:@F@" + current_functionName + "@" + name + "#" +
+         i2string(ast_node["id"].get<std::int16_t>());
+  }
   else
     id = "sol:@" + name + "#" + i2string(ast_node["id"].get<std::int16_t>());
 }
@@ -3785,6 +3825,14 @@ void solidity_convertert::get_var_decl_name(
     id = "sol:@C@" + contract_name + "@F@" + current_functionName + "@" + name +
          "#" + i2string(ast_node["id"].get<std::int16_t>());
   }
+  else if (
+    current_functionDecl && !current_functionName.empty() && is_builtin_members)
+  {
+    // Assume it is a solidity template
+    id = "sol:@F@" + current_functionName + "@" + name + "#" +
+         i2string(ast_node["id"].get<std::int16_t>());
+  }
+
   else if (ast_node.contains("scope"))
   {
     // This means we are handling a local variable which is not inside a function body.
@@ -3818,37 +3866,26 @@ void solidity_convertert::get_function_definition_name(
   // Follow the way in clang:
   //  - For function name, just use the ast_node["name"]
   // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
-
-  // solidity template
-  if (current_contractName.empty())
+  std::string contract_name;
+  assert(ast_node.contains("scope"));
+  if (get_current_contract_name(ast_node, contract_name))
   {
-    //TODO: bs
-    name = ast_node["name"].get<std::string>();
-    id = "sol:@" + name + "#";
+    log_error("Internal error when obtaining the contract name. Aborting...");
+    abort();
+  }
+
+  if (ast_node["kind"].get<std::string>() == "constructor")
+  {
+    name = contract_name;
+    // constructors cannot be overridden, primarily because they don't have names
+    // to align with the implicit constructor, we do not add the 'id'
+    id = "sol:@C@" + contract_name + "@F@" + name + "#";
   }
   else
   {
-    std::string contract_name;
-    assert(ast_node.contains("scope"));
-    if (get_current_contract_name(ast_node, contract_name))
-    {
-      log_error("Internal error when obtaining the contract name. Aborting...");
-      abort();
-    }
-
-    if (ast_node["kind"].get<std::string>() == "constructor")
-    {
-      name = contract_name;
-      // constructors cannot be overridden, primarily because they don't have names
-      // to align with the implicit constructor, we do not add the 'id'
-      id = "sol:@C@" + contract_name + "@F@" + name + "#";
-    }
-    else
-    {
-      name = ast_node["name"].get<std::string>();
-      id = "sol:@C@" + contract_name + "@F@" + name + "#" +
-           i2string(ast_node["id"].get<std::int16_t>());
-    }
+    name = ast_node["name"].get<std::string>();
+    id = "sol:@C@" + contract_name + "@F@" + name + "#" +
+         i2string(ast_node["id"].get<std::int16_t>());
   }
 }
 

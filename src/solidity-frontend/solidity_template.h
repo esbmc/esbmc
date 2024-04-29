@@ -63,7 +63,7 @@ std::map<std::string, std::string> addmod = {{"addmod", "uint"}};
 /// function body
 // 1. set "stateVariable": true
 // 2. add "isTemplate": true and "templateFunctionID"
-
+// 3. make sure the Visibility is intnernal or private
 /* 
     addmod(uint x, uint y, uint k) returns (uint)
     function addmod(uint x, uint y, uint k) public returns (uint)
@@ -75,101 +75,12 @@ std::map<std::string, std::string> addmod = {{"addmod", "uint"}};
 const std::string addmod_body =
   R"({
                         "isTemplate": true,
-                        "templateFunctionID": "sol:@F@addmod",
+                        "templateFunctionID": "sol:@F@addmod#",
                         "body": {
                         "id": 25,
                         "nodeType": "Block",
                         "src": "107:59:0",
                         "statements": [
-                            {
-                                "expression": {
-                                    "arguments": [
-                                        {
-                                            "commonType": {
-                                                "typeIdentifier": "t_uint256",
-                                                "typeString": "uint256"
-                                            },
-                                            "id": 15,
-                                            "isConstant": false,
-                                            "isLValue": false,
-                                            "isPure": false,
-                                            "lValueRequested": false,
-                                            "leftExpression": {
-                                                "id": 13,
-                                                "name": "k",
-                                                "nodeType": "Identifier",
-                                                "overloadedDeclarations": [],
-                                                "referencedDeclaration": 7,
-                                                "src": "124:1:0",
-                                                "typeDescriptions": {
-                                                    "typeIdentifier": "t_uint256",
-                                                    "typeString": "uint256"
-                                                }
-                                            },
-                                            "nodeType": "BinaryOperation",
-                                            "operator": "!=",
-                                            "rightExpression": {
-                                                "hexValue": "30",
-                                                "id": 14,
-                                                "isConstant": false,
-                                                "isLValue": false,
-                                                "isPure": true,
-                                                "kind": "number",
-                                                "lValueRequested": false,
-                                                "nodeType": "Literal",
-                                                "src": "129:1:0",
-                                                "typeDescriptions": {
-                                                    "typeIdentifier": "t_rational_0_by_1",
-                                                    "typeString": "int_const 0"
-                                                },
-                                                "value": "0"
-                                            },
-                                            "src": "124:6:0",
-                                            "typeDescriptions": {
-                                                "typeIdentifier": "t_bool",
-                                                "typeString": "bool"
-                                            }
-                                        }
-                                    ],
-                                    "expression": {
-                                        "argumentTypes": [
-                                            {
-                                                "typeIdentifier": "t_bool",
-                                                "typeString": "bool"
-                                            }
-                                        ],
-                                        "id": 12,
-                                        "name": "assert",
-                                        "nodeType": "Identifier",
-                                        "overloadedDeclarations": [],
-                                        "referencedDeclaration": -3,
-                                        "src": "117:6:0",
-                                        "typeDescriptions": {
-                                            "typeIdentifier": "t_function_assert_pure$_t_bool_$returns$__$",
-                                            "typeString": "function (bool) pure"
-                                        }
-                                    },
-                                    "id": 16,
-                                    "isConstant": false,
-                                    "isLValue": false,
-                                    "isPure": false,
-                                    "kind": "functionCall",
-                                    "lValueRequested": false,
-                                    "nameLocations": [],
-                                    "names": [],
-                                    "nodeType": "FunctionCall",
-                                    "src": "117:14:0",
-                                    "tryCall": false,
-                                    "typeDescriptions": {
-                                        "typeIdentifier": "t_tuple__$",                     
-                                        "typeString": "tuple)" +
-  parentheis + R"( "
-                                    }
-                                },
-                                "id": 17,
-                                "nodeType": "ExpressionStatement",
-                                "src": "117:14:0"
-                            },
                             {
                                 "expression": {
                                     "commonType": {
@@ -362,7 +273,7 @@ const std::string addmod_body =
                     "src": "45:121:0",
                     "stateMutability": "nonpayable",
                     "virtual": false,
-                    "visibility": "public"
+                    "visibility": "private"
     })";
 
 }; // namespace SolidityTemplate

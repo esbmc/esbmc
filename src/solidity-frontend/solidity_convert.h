@@ -232,6 +232,10 @@ protected:
   // --contract
   std::string tgt_cnt;
 
+  // flag to indicate built-in member processing
+  // this is used in get_(state_)var_decl_name
+  bool is_builtin_members;
+
 private:
   bool get_elementary_type_name_uint(
     SolidityGrammar::ElementaryTypeNameT &type,
