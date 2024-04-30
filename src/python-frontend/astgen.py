@@ -113,9 +113,6 @@ def main():
     with open(filename, "r") as source:
         tree = ast.parse(source.read())
 
-    range_import = ast.ImportFrom(module='range', names=[ast.alias(name='*', asname=None)], level=0)
-    tree.body.insert(0, range_import)
-
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             # Handle imports
