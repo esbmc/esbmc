@@ -110,6 +110,7 @@ def main():
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
+    # Process and convert AST for main file
     with open(filename, "r") as source:
         tree = ast.parse(source.read())
 
@@ -123,6 +124,14 @@ def main():
 
     # Generate JSON from AST for the main file.
     generate_ast_json(tree, filename, None, output_dir)
+
+    # Process and convert AST for memory models
+    mm_filename = output_dir + "/memory-models/range.py"
+    with open(output_dir + "/memory-models/range.py") as memory_model:
+        mm_tree = ast.parse(memory_model.read())
+
+    # Generate JSON from AST for the memory models.
+    generate_ast_json(mm_tree, "range.py", None, output_dir) # TODO: Convert all Python files in memory-models folder
 
 
 if __name__ == "__main__":
