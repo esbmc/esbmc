@@ -17,7 +17,7 @@ class ForToWhileTransformer(ast.NodeTransformer):
             else:
                 step = ast.Constant(value=1)
 
-            start_assign = ast.Assign(targets=[ast.Name(id='start', ctx=ast.Store())], value=start)
+            start_assign = ast.AnnAssign(target=ast.Name(id='start', ctx=ast.Store()), annotation=ast.Name(id='int', ctx=ast.Load()), value=start, simple=1)
             has_next_call = ast.Call(func=ast.Name(id='ESBMC_range_has_next_', ctx=ast.Load()), args=[start, end, step], keywords=[])
             has_next_assign = ast.AnnAssign(target=ast.Name(id='has_next', ctx=ast.Store()), annotation=ast.Name(id='bool', ctx=ast.Load()), value=has_next_call, simple=1)
             has_next_name = ast.Name(id='has_next', ctx=ast.Load())
