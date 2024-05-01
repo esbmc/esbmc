@@ -9,7 +9,7 @@ template <class Json>
 class python_annotation
 {
 public:
-  python_annotation(Json &ast) : ast_(ast)
+  python_annotation(Json &ast) : ast_(ast), current_func(nullptr)
   {
   }
 
@@ -23,8 +23,10 @@ public:
     {
       if (element["_type"] == "FunctionDef")
       {
+        current_func = &element;
         add_annotation(element);
         update_end_col_offset(element);
+        current_func = nullptr;
       }
       else if (element["_type"] == "ClassDef")
       {
@@ -33,8 +35,10 @@ public:
           // Process methods
           if (class_member["_type"] == "FunctionDef")
           {
+            current_func = &class_member;
             add_annotation(class_member);
             update_end_col_offset(class_member);
+            current_func = nullptr;
           }
         }
       }
@@ -108,7 +112,7 @@ private:
       // If the LHS of the binary operation is a variable, its type is retrieved
       if (lhs["_type"] == "Name")
       {
-        Json left_op = find_node(lhs["id"], body["body"]);
+        Json left_op = find_annotated_assign(lhs["id"], body["body"]);
         if (!left_op.empty())
           type = left_op["annotation"]["id"];
       }
@@ -123,27 +127,57 @@ private:
   {
     for (auto &element : body["body"])
     {
-      if (element["_type"] == "Assign" && element["type_comment"].is_null())
+      auto &stmt_type = element["_type"];
+      if (stmt_type == "If" || stmt_type == "While")
+        add_annotation(element);
+
+      if (stmt_type == "Assign" && element["type_comment"].is_null())
       {
-        std::string type;
+        std::string type("");
+
+        // Check if LHS was annotated previously
+        if (
+          element.contains("targets") &&
+          element["targets"][0]["_type"] == "Name")
+        {
+          // Look LHS annotation in the current scope
+          Json node =
+            find_annotated_assign(element["targets"][0]["id"], body["body"]);
+          if (node == Json() && current_func != nullptr)
+            // Fallback to current function
+            node = find_annotated_assign(
+              element["targets"][0]["id"], (*current_func)["body"]);
+          if (node == Json())
+            // Fallback to current function
+            node =
+              find_annotated_assign(element["targets"][0]["id"], ast_["body"]);
+
+          if (node != Json())
+            type = node["annotation"]["id"];
+        }
+
         // Get type from rhs constant
         if (element["value"]["_type"] == "Constant")
         {
           type = get_type_from_constant(element["value"]);
         }
+
         // Get type from RHS variable
         else if (element["value"]["_type"] == "Name")
         {
           // Find rhs variable declaration in the current function
-          auto rhs_node = find_node(element["value"]["id"], body["body"]);
+          auto rhs_node =
+            find_annotated_assign(element["value"]["id"], body["body"]);
 
           // Find rhs variable in the function args
           if (rhs_node.empty() && body.contains("args"))
-            rhs_node = find_node(element["value"]["id"], body["args"]["args"]);
+            rhs_node = find_annotated_assign(
+              element["value"]["id"], body["args"]["args"]);
 
           // Find rhs variable node in the global scope
           if (rhs_node.empty())
-            rhs_node = find_node(element["value"]["id"], ast_["body"]);
+            rhs_node =
+              find_annotated_assign(element["value"]["id"], ast_["body"]);
 
           if (rhs_node.empty())
           {
@@ -156,11 +190,15 @@ private:
           // Get type from RHS type annotation
           type = rhs_node["annotation"]["id"];
         }
+
         // Get type from RHS binary expression
         else if (element["value"]["_type"] == "BinOp")
         {
-          type = get_type_from_binary_expr(element, body);
+          std::string got_type = get_type_from_binary_expr(element, body);
+          if (!got_type.empty())
+            type = got_type;
         }
+
         // Get type from constructor call
         else if (
           element["value"]["_type"] == "Call" &&
@@ -168,6 +206,7 @@ private:
            is_builtin_type(element["value"]["func"]["id"]) ||
            is_consensus_type(element["value"]["func"]["id"])))
           type = element["value"]["func"]["id"];
+
         else
           continue;
 
@@ -250,7 +289,8 @@ private:
     }
   }
 
-  const Json find_node(const std::string &node_name, const Json &body)
+  const Json
+  find_annotated_assign(const std::string &node_name, const Json &body)
   {
     for (const Json &elem : body)
     {
@@ -268,4 +308,5 @@ private:
   }
 
   Json &ast_;
+  Json *current_func;
 };
