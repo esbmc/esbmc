@@ -42,7 +42,10 @@ protected:
    * we should not dereference it, because the reference/pointer is _not_ yet initialized.
    * See test case "RefMemberInit". Default should be true.
    */
-  bool get_decl_ref(const clang::Decl &decl, exprt &new_expr, bool dereference_reference);
+  bool get_decl_ref(
+    const clang::Decl &decl,
+    exprt &new_expr,
+    bool dereference_reference);
 
   bool get_type(const clang::QualType &type, typet &new_type) override;
 
