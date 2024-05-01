@@ -4,7 +4,7 @@ import importlib.util
 import json
 import os
 
-class ForToWhileTransformer(ast.NodeTransformer):
+class ForRangeToWhileTransformer(ast.NodeTransformer):
     def __init__(self):
         self.target_name = ""
 
@@ -145,7 +145,7 @@ def main():
     with open(filename, "r") as source:
         tree = ast.parse(source.read())
 
-    transformer = ForToWhileTransformer()
+    transformer = ForRangeToWhileTransformer()
     tree = transformer.visit(tree)
 
     for node in ast.walk(tree):

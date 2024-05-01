@@ -55,8 +55,10 @@ public:
     {
       if (elem["_type"] == "FunctionDef" && elem["name"] == func_name)
       {
+        current_func = &elem;
         add_annotation(elem);
         update_end_col_offset(elem);
+        current_func = nullptr;
         return;
       }
     }
@@ -135,20 +137,20 @@ private:
       {
         std::string type("");
 
-        // Check if LHS was annotated previously
+        // Check if LHS was previously annotated
         if (
           element.contains("targets") &&
           element["targets"][0]["_type"] == "Name")
         {
-          // Look LHS annotation in the current scope
+          // Search for LHS annotation in the current scope
           Json node =
             find_annotated_assign(element["targets"][0]["id"], body["body"]);
           if (node == Json() && current_func != nullptr)
-            // Fallback to current function
+            // Fall back to the current function
             node = find_annotated_assign(
               element["targets"][0]["id"], (*current_func)["body"]);
           if (node == Json())
-            // Fallback to current function
+            // Fall back to variables in the global scope
             node =
               find_annotated_assign(element["targets"][0]["id"], ast_["body"]);
 
@@ -156,7 +158,7 @@ private:
             type = node["annotation"]["id"];
         }
 
-        // Get type from rhs constant
+        // Get type from RHS constant
         if (element["value"]["_type"] == "Constant")
         {
           type = get_type_from_constant(element["value"]);
@@ -165,16 +167,21 @@ private:
         // Get type from RHS variable
         else if (element["value"]["_type"] == "Name")
         {
-          // Find rhs variable declaration in the current function
+          // Find RHS variable declaration in the current scope
           auto rhs_node =
             find_annotated_assign(element["value"]["id"], body["body"]);
 
-          // Find rhs variable in the function args
+          // Find RHS variable declaration in the current function
+          if (rhs_node.empty() && current_func)
+            rhs_node = find_annotated_assign(
+              element["value"]["id"], (*current_func)["body"]);
+
+          // Find RHS variable in the function args
           if (rhs_node.empty() && body.contains("args"))
             rhs_node = find_annotated_assign(
               element["value"]["id"], body["args"]["args"]);
 
-          // Find rhs variable node in the global scope
+          // Find RHS variable node in the global scope
           if (rhs_node.empty())
             rhs_node =
               find_annotated_assign(element["value"]["id"], ast_["body"]);
@@ -221,10 +228,10 @@ private:
 
         auto target = element["targets"][0];
         std::string id;
-        // Get lhs from simple variables on assignments.
+        // Get LHS from simple variables on assignments.
         if (target.contains("id"))
           id = target["id"];
-        // Get lhs from members access on assignments. e.g.: x.data = 10
+        // Get LHS from members access on assignments. e.g.: x.data = 10
         else if (target["_type"] == "Attribute")
           id = target["value"]["id"].template get<std::string>() + "." +
                target["attr"].template get<std::string>();
@@ -290,7 +297,7 @@ private:
   }
 
   const Json
-  find_annotated_assign(const std::string &node_name, const Json &body)
+  find_annotated_assign(const std::string &node_name, const Json &body) const
   {
     for (const Json &elem : body)
     {
