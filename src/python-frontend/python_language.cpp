@@ -32,14 +32,13 @@ static const std::string &dump_python_script()
   {
     dumped = true;
 #define ESBMC_FLAIL(body, size, ...)                                           \
-{ \
-  fs::path filePath(fs::path(p.path()) / #__VA_ARGS__); \
-  fs::path directory = filePath.parent_path(); \
-  if (!directory.empty() && !fs::exists(directory)) \
-    fs::create_directories(directory); \
-  std::ofstream(filePath.string()).write(body, size); \
-}
-
+  {                                                                            \
+    fs::path filePath(fs::path(p.path()) / #__VA_ARGS__);                      \
+    fs::path directory = filePath.parent_path();                               \
+    if (!directory.empty() && !fs::exists(directory))                          \
+      fs::create_directories(directory);                                       \
+    std::ofstream(filePath.string()).write(body, size);                        \
+  }
 
 #include <pythonastgen.h>
 #undef ESBMC_FLAIL
