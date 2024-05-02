@@ -557,11 +557,15 @@ function_id python_converter::build_function_id(const nlohmann::json &element)
       else if (is_member_function_call)
       {
         assert(!obj_name.empty());
-        auto obj_node = find_var_decl(obj_name, ast_json);
-        if (obj_node == nlohmann::json())
-          abort();
-
-        class_name = obj_node["annotation"]["id"].get<std::string>();
+        if (is_builtin_type(obj_name))
+          class_name = obj_name;
+        else
+        {
+          auto obj_node = find_var_decl(obj_name, ast_json);
+          if (obj_node == nlohmann::json())
+            abort();
+          class_name = obj_node["annotation"]["id"].get<std::string>();
+        }
       }
       func_symbol_id.insert(pos, "@C@" + class_name);
     }
