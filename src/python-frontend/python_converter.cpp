@@ -557,7 +557,7 @@ function_id python_converter::build_function_id(const nlohmann::json &element)
       else if (is_member_function_call)
       {
         assert(!obj_name.empty());
-        if (is_builtin_type(obj_name))
+        if (is_builtin_type(obj_name) || is_class(obj_name, ast_json))
           class_name = obj_name;
         else
         {
@@ -579,11 +579,16 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   // TODO: Refactor into different classes/functions
   if (element.contains("func") && element["_type"] == "Call")
   {
-    bool is_member_function_call = false;
+    bool is_instance_method_call = false;
+    bool is_class_method_call = false;
+
     if (element["func"]["_type"] == "Attribute")
     {
-      if (!json_utils::is_module(element["func"]["value"]["id"], ast_json))
-        is_member_function_call = true;
+      const auto &func_value = element["func"]["value"]["id"];
+      if (is_class(func_value, ast_json))
+        is_class_method_call = true;
+      else if (!json_utils::is_module(func_value, ast_json))
+        is_instance_method_call = true;
     }
 
     function_id func_id = build_function_id(element);
@@ -637,7 +642,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 
     if (func_symbol == nullptr)
     {
-      if (is_ctor_call || is_member_function_call)
+      if (is_ctor_call || is_instance_method_call)
       {
         // Get method from a base class when it is not defined in the current class
         const std::string class_name(func_id.class_name);
@@ -655,7 +660,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
           }
           base_ctor_called = true;
         }
-        else if (is_member_function_call)
+        else if (is_instance_method_call)
         {
           // Update obj attributes from self
           const std::string &obj_name = element["func"]["value"]["id"];
@@ -696,7 +701,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       assert(ref_instance);
       call.arguments().push_back(gen_address_of(*ref_instance));
     }
-    else if (is_member_function_call)
+    else if (is_instance_method_call)
     {
       // Self is the obj instance from obj.method() call
       std::string symbol_id = create_symbol_id() + "@" +
@@ -704,6 +709,11 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       symbolt *obj_symbol = context.find_symbol(symbol_id);
       assert(obj_symbol);
       call.arguments().push_back(gen_address_of(symbol_expr(*obj_symbol)));
+    }
+    else if (is_class_method_call)
+    {
+      typet t = pointer_typet(empty_typet());
+      call.arguments().push_back(gen_zero(t));
     }
 
     for (const auto &arg_node : element["args"])
@@ -1282,8 +1292,10 @@ void python_converter::get_function_definition(
     std::string arg_name = element["arg"].get<std::string>();
     // Argument type
     typet arg_type;
-    if (arg_name == "self" || arg_name == "cls")
+    if (arg_name == "self")
       arg_type = gen_pointer_type(get_typet(current_class_name));
+    else if (arg_name == "cls")
+      arg_type = pointer_typet(empty_typet());
     else
       arg_type = get_typet(element["annotation"]["id"].get<std::string>());
 
