@@ -1282,7 +1282,7 @@ void python_converter::get_function_definition(
     std::string arg_name = element["arg"].get<std::string>();
     // Argument type
     typet arg_type;
-    if (arg_name == "self")
+    if (arg_name == "self" || arg_name == "cls")
       arg_type = gen_pointer_type(get_typet(current_class_name));
     else
       arg_type = get_typet(element["annotation"]["id"].get<std::string>());
