@@ -7,6 +7,7 @@ CC_DIAGNOSTIC_POP()
 
 #include <solidity-frontend/solidity_language.h>
 #include <solidity-frontend/solidity_convert.h>
+#include <solidity-frontend/solidity_template.h>
 #include <clang-c-frontend/clang_c_main.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <clang-c-frontend/clang_c_convert.h>
@@ -119,7 +120,6 @@ bool solidity_languaget::typecheck(contextt &context, const std::string &module)
   contextt new_context;
   convert_intrinsics(
     new_context); // Add ESBMC and TACAS intrinsic symbols to the context
-  log_progress("Done conversion of intrinsics...");
 
   solidity_convertert converter(
     new_context, src_ast_json, func_name, smart_contract);
@@ -159,6 +159,7 @@ std::string solidity_languaget::temp_c_file()
 {
   // This function populates the temp file so that Clang has a compilation job.
   // Clang needs a job to convert the intrinsics.
-  std::string content = R"(int main() { return 0; } )";
+  std::string content =
+    R"(int main() { return 0; } )" + SolidityTemplate::sol_library;
   return content;
 }

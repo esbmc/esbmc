@@ -1,5 +1,5 @@
 #include <solidity-frontend/solidity_convert.h>
-#include <solidity_template.h>
+#include <solidity-frontend/solidity_template.h>
 #include <solidity-frontend/typecast.h>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
@@ -87,6 +87,8 @@ bool solidity_convertert::convert()
   if (convert_builtin_members())
     return true;
   is_builtin_members = false;
+
+  log_progress("Done conversion of intrinsics");
 
   // reasoning-based verification
 
@@ -246,6 +248,9 @@ bool solidity_convertert::convert_builtin_members()
   // math
   if (populate_builtin_functions(
         "", SolidityTemplate::addmod, SolidityTemplate::addmod_body))
+    return true;
+  if (populate_builtin_functions(
+        "", SolidityTemplate::mulmod, SolidityTemplate::mulmod_body))
     return true;
 
   return false;
@@ -2329,7 +2334,8 @@ bool solidity_convertert::get_expr(
   }
   case SolidityGrammar::ExpressionT::SpecialMemberCall:
   {
-    // get_special_member_basename()
+    //!TODO
+    log_error("Unsupported built-in member call");
     abort();
     break;
     //
@@ -3700,7 +3706,7 @@ bool solidity_convertert::get_elementary_type_name(
   }
   case SolidityGrammar::ElementaryTypeNameT::BYTES:
   {
-    new_type = uint_type();
+    new_type = unsignedbv_typet(256);
     new_type.set("#sol_type", elementary_type_name_to_str(type));
 
     break;
