@@ -237,7 +237,7 @@ bool goto_symext::unexpected_handler()
     return false;
 
   // We must look on the context if the user included exception lib
-  const symbolt *tmp = ns.lookup("std::unexpected()");
+  const symbolt *tmp = ns.lookup("c:@N@std@F@unexpected#");
   bool is_included = !tmp;
 
   // If it do, we must call the unexpected function:
@@ -252,7 +252,7 @@ bool goto_symext::unexpected_handler()
     // We only call it if the user replaced the default one
     if (
       to_symbol2t(to_code_function_call2t(the_call).function).thename ==
-      "std::default_unexpected()")
+      "c:@N@std@F@default_unexpected#")
       return false;
 
     // Indicate there we're inside the unexpected flow
