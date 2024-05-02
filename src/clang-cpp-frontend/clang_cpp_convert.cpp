@@ -912,8 +912,9 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       static_cast<const clang::CXXThrowExpr &>(stmt);
 
     exprt tmp;
-    if (get_expr(*cxxte.getSubExpr(), tmp))
-      return true;
+    if (cxxte.getSubExpr())
+      if (get_expr(*cxxte.getSubExpr(), tmp))
+        return true;
 
     new_expr = side_effect_exprt("cpp-throw", tmp.type());
     new_expr.move_to_operands(tmp);
