@@ -101,8 +101,8 @@ macos_setup () {
     if [ $STATIC = ON ]; then
         error "static macOS build is currently not supported"
     fi
-    brew install z3 gmp csmith cmake boost ninja python3 automake bison flex llvm@15 &&
-    BASE_ARGS=" -DLLVM_DIR=/opt/homebrew/opt/llvm@15 -DClang_DIR=/opt/homebrew/opt/llvm@15 -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -DCMAKE_BUILD_TYPE=Debug -GNinja" &&
+    brew install z3 gmp csmith cmake boost ninja python3 automake bison flex llvm@$CLANG_VERSION &&
+    BASE_ARGS=" -DLLVM_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION -DClang_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -DCMAKE_BUILD_TYPE=Debug -GNinja -DCMAKE_INSTALL_PREFIX:PATH=$PWD/release" &&
     SOLVER_FLAGS=""
 }
 
