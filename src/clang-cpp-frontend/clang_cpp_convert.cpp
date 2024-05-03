@@ -1084,27 +1084,19 @@ bool clang_cpp_convertert::get_function_body(
           if (init->isMemberInitializer())
           {
             exprt lhs;
+            lhs.set("#member_init", 1);
             // parsing non-static member initializer
-            if (get_decl_ref(*init->getMember(), lhs, false))
+            if (get_decl_ref(*init->getMember(), lhs))
               return true;
 
             build_member_from_component(fd, lhs);
+            // set #member_init flag again, as it has been cleared between the first call...
+            lhs.set("#member_init", 1);
 
             exprt rhs;
             rhs.set("#member_init", 1);
             if (get_expr(*init->getInit(), rhs))
               return true;
-
-            if (lhs.type().reference())
-            {
-              /* Insert a cast such that (psuedo code) `int x = 1; int &y = x` is converted to
-               `int x = 1; int &y = &x`.
-               (for _actual_ variables, this is done in `get_var`) */
-              gen_typecast(ns, rhs, lhs.type());
-              /* Remove the reference from the type, otherwise `convert_reference`
-               in `clang_cpp_adjust` will try to dereference it, which is wrong. */
-              lhs.type().set("#reference", false);
-            }
 
             initializer = side_effect_exprt("assign", lhs.type());
             initializer.copy_to_operands(lhs, rhs);
@@ -1336,20 +1328,21 @@ bool clang_cpp_convertert::get_template_decl(
 
   return false;
 }
+
 bool clang_cpp_convertert::get_decl_ref(
   const clang::Decl &decl,
   exprt &new_expr)
 {
-  return get_decl_ref(decl, new_expr, true);
-}
-
-bool clang_cpp_convertert::get_decl_ref(
-  const clang::Decl &decl,
-  exprt &new_expr,
-  bool dereference_reference)
-{
   std::string name, id;
   typet type;
+  /**
+   * References are modeled as pointers in ESBMC.
+   * Normally, when getting a reference, we should therefore dereference it.
+   * However, when a reference type variable is initialized in a (member initializer) constructor call,
+   * we should not dereference it, because the reference/pointer is _not_ yet initialized.
+   * See test case "RefMemberInit".
+   */
+  bool should_dereference = !new_expr.get_bool("#member_init");
 
   switch (decl.getKind())
   {
@@ -1367,7 +1360,7 @@ bool clang_cpp_convertert::get_decl_ref(
     if (id.empty() && name.empty())
       name_param_and_continue(*param, id, name, new_expr);
 
-    if (is_lvalue_or_rvalue_reference(new_expr.type()) && dereference_reference)
+    if (is_lvalue_or_rvalue_reference(new_expr.type()) && should_dereference)
     {
       new_expr = dereference_exprt(new_expr, new_expr.type());
       new_expr.set("#lvalue", true);
@@ -1408,7 +1401,7 @@ bool clang_cpp_convertert::get_decl_ref(
     if (clang_c_convertert::get_decl_ref(decl, new_expr))
       return true;
 
-    if (is_lvalue_or_rvalue_reference(new_expr.type()) && dereference_reference)
+    if (is_lvalue_or_rvalue_reference(new_expr.type()) && should_dereference)
     {
       new_expr = dereference_exprt(new_expr, new_expr.type());
       new_expr.set("#lvalue", true);
