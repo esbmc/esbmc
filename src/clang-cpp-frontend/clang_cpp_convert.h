@@ -35,18 +35,6 @@ protected:
    */
   bool get_decl_ref(const clang::Decl &decl, exprt &new_expr) override;
 
-  /**
-   * @param dereference_reference references are modeled as pointers in ESBMC.
-   * Normally, when getting a reference, we should therefore dereference it.
-   * However, when a reference type variable is initialized in a (member initializer) constructor call,
-   * we should not dereference it, because the reference/pointer is _not_ yet initialized.
-   * See test case "RefMemberInit". Default should be true.
-   */
-  bool get_decl_ref(
-    const clang::Decl &decl,
-    exprt &new_expr,
-    bool dereference_reference);
-
   bool get_type(const clang::QualType &type, typet &new_type) override;
 
   bool get_type(const clang::Type &the_type, typet &new_type) override;

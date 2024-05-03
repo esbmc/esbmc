@@ -208,6 +208,15 @@ void clang_cpp_adjust::adjust_side_effect_assign(side_effect_exprt &expr)
     }
     adjust_expr(rhs);
   }
+  else if (lhs.get_bool("#member_init"))
+  {
+    // Only adjust references in the rhs.
+    // Don't change the lhs if it is a member initializer.
+    // See "RefMemberInit".
+    adjust_operands(expr);
+    adjust_side_effect_assignment(expr);
+    adjust_expr(rhs);
+  }
   else
     clang_c_adjust::adjust_side_effect(expr);
 }
