@@ -1147,6 +1147,9 @@ bool clang_cpp_convertert::get_function_body(
   {
     if (fpt->hasDynamicExceptionSpec())
     {
+      // e.g: void func() throw(int) { throw 1;}
+      // body is converted to
+      // {THROW_DECL(signed_int) throw 1; THROW_DECL_END}
       codet decl = codet("throw_decl");
       for (unsigned i = 0; i < fpt->getNumExceptions(); i++)
       {
