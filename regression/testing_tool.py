@@ -139,7 +139,7 @@ class Executor:
 
         try:
             # use subprocess.run because we want to wait for the subprocess to finish
-            print('running:' + repr(cmd))
+            print('running:' + repr(cmd), file=sys.stderr)
             p = subprocess.run(cmd, stdout=PIPE, stderr=PIPE, timeout=self.timeout);
 
             # get the RSS (resident set size) of the subprocess that just terminated.
