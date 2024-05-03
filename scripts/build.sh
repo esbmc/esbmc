@@ -101,24 +101,11 @@ macos_setup () {
     if [ $STATIC = ON ]; then
         error "static macOS build is currently not supported"
     fi
-    brew install z3 gmp csmith cmake boost ninja python3 automake bison flex &&
-    pip3 install PySMT toml ast2json &&
-    wget https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/clang+llvm-11.0.0-x86_64-apple-darwin.tar.xz &&
-    tar xf clang+llvm-11.0.0-x86_64-apple-darwin.tar.xz &&
-    mv clang+llvm-11.0.0-x86_64-apple-darwin ../clang &&
-    BASE_ARGS="$BASE_ARGS \
-        -DENABLE_WERROR=Off \
-        -DBUILD_STATIC=$STATIC \
-        -DClang_DIR=$PWD/../clang \
-        -DLLVM_DIR=$PWD/../clang \
-        -DC2GOTO_SYSROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk \
-    "
+    brew install z3 gmp csmith cmake boost ninja python3 automake bison flex llvm@15 &&
+    BASE_ARGS=" -DLLVM_DIR=/opt/homebrew/opt/llvm@15 -DClang_DIR=/opt/homebrew/opt/llvm@15 -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -DCMAKE_BUILD_TYPE=Debug -GNinja" &&
+    SOLVER_FLAGS=""
 }
 
-# macOS needs an extra step before testing
-macos_post_setup () {
-  chmod +x build/macos-wrapper.sh
-}
 
 usage() {
     echo "$0 [-OPTS]"
