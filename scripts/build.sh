@@ -106,6 +106,10 @@ macos_setup () {
     SOLVER_FLAGS=""
 }
 
+macos_post_setup () {
+  echo "No further steps needed for macOS"
+}
+
 
 usage() {
     echo "$0 [-OPTS]"
