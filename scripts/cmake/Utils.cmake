@@ -2,7 +2,7 @@
 
 set(ESBMC_BIN "${CMAKE_BINARY_DIR}/src/esbmc/esbmc")
 if(WIN32)
-    set(ESBMC_BIN "${CMAKE_INSTALL_PREFIX}/bin/esbmc.exe")
+    set(ESBMC_BIN "${CMAKE_BINARY_DIR}/src/esbmc/esbmc.exe")
 endif()
 
 # Assert that a variable is defined
