@@ -52,6 +52,15 @@ jobs:
       build-flags: '-b DebugOpt -S OFF -B OFF'
       testing: false
 
+  build-macos-arm:
+    uses: ./.github/workflows/build-unix.yml
+    name: arm64 darwin build
+    with:
+      operating-system: macos-latest
+      build-flags: '-c 15'
+      testing: false
+
+
   # Also run a build with frontend linked shared against Ubuntu's clang-13
   build-shared:
     name: dyn. llvm-13 DebugOpt
