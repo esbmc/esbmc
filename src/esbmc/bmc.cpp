@@ -25,6 +25,7 @@
 #include <goto-symex/goto_trace.h>
 #include <goto-symex/reachability_tree.h>
 #include <goto-symex/slice.h>
+#include <goto-symex/features.h>
 #include <goto-symex/xml_goto_trace.h>
 #include <langapi/language_util.h>
 #include <langapi/languages.h>
@@ -64,6 +65,9 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
       // Store the set between runs
       algorithms.emplace_back(std::make_unique<assertion_cache>(
         config.ssa_caching_db, !options.get_bool_option("forward-condition")));
+
+    if (opts.get_bool_option("ssa-features-dump"))
+      algorithms.emplace_back(std::make_unique<ssa_features>());
   }
 
   if (options.get_bool_option("smt-during-symex"))
@@ -869,6 +873,12 @@ smt_convt::resultt bmct::multi_property_check(
     // Slice
     symex_slicet slicer(options);
     slicer.run(local_eq.SSA_steps);
+
+    if (options.get_bool_option("ssa-features-dump"))
+    {
+      ssa_features features;
+      features.run(local_eq.SSA_steps);
+    }
 
     // Initialize a solver
     std::unique_ptr<smt_convt> runtime_solver(create_solver("", ns, options));
