@@ -165,6 +165,7 @@ void clang_cpp_convertert::get_decl_name(
   std::string &id)
 {
   id = name = clang_c_convertert::get_decl_name(nd);
+  std::string id_suffix = "";
 
   switch (nd.getKind())
   {
@@ -184,11 +185,34 @@ void clang_cpp_convertert::get_decl_name(
                                        location_begin.column().as_string();
       name = "__anon_constructor_at_" + location_begin_str;
       std::replace(name.begin(), name.end(), '.', '_');
-
       // "id" will be derived from USR so break instead of return here
       break;
     }
     break;
+  case clang::Decl::ParmVar:
+  {
+    const clang::ParmVarDecl &pd = static_cast<const clang::ParmVarDecl &>(nd);
+    // If the parameter is unnamed, it will be handled by `name_param_and_continue`, but not here.
+    if (!name.empty())
+    {
+      /* Add the parameter index to the name and id to avoid name clashes.
+     * Consider the following example:
+     * ```
+     * template <typename... f> int e(f... g) {return 0;};
+     * int d = e(1, 2.0);
+     * ```
+     * The two parameters in the function e will have the same name and id
+     * because clang does not differentiate between them. This will cause
+     * the second parameter to overwrite the first in the symbol table which
+     * causes all kinds of problems. To avoid this, we append the parameter
+     * index to the name and id.
+    */
+      name += "::" + std::to_string(pd.getFunctionScopeIndex());
+      id_suffix = "::" + std::to_string(pd.getFunctionScopeIndex());
+      break;
+    }
+    /* intentional fallthrough */
+  }
 
   default:
     clang_c_convertert::get_decl_name(nd, name, id);
@@ -198,7 +222,7 @@ void clang_cpp_convertert::get_decl_name(
   clang::SmallString<128> DeclUSR;
   if (!clang::index::generateUSRForDecl(&nd, DeclUSR))
   {
-    id = DeclUSR.str().str();
+    id = DeclUSR.str().str() + id_suffix;
     return;
   }
 
