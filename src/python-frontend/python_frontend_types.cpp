@@ -9,7 +9,7 @@ bool is_builtin_type(const std::string &name)
 
 bool is_consensus_type(const std::string &name)
 {
-  return (name == "uint64");
+  return (name == "uint64" || name == "Epoch" || name == "Gwei");
 }
 
 std::map<std::string, std::string> consensus_func_to_type = {
