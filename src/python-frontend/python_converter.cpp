@@ -102,7 +102,7 @@ typet python_converter::get_typet(const std::string &ast_type, size_t type_size)
     /* FIXME: We need to map 'int' to another irep type that provides unlimited precision
 	https://docs.python.org/3/library/stdtypes.html#numeric-types-int-float-complex */
     return int_type();
-  if (ast_type == "uint64")
+  if (ast_type == "uint64" || ast_type == "Epoch"  || ast_type == "Slot")
     return long_long_uint_type();
   if (ast_type == "bool")
     return bool_type();
@@ -1613,15 +1613,15 @@ bool python_converter::convert()
       return true;
     }
 
-    // Convert all variables from global scope
+    // Convert all variables from global scope and class definitions
+    code_blockt block;
     for (const auto &elem : ast_json["body"])
     {
       StatementType type = get_statement_type(elem);
       if (type == StatementType::VARIABLE_ASSIGN)
-      {
-        code_blockt block;
         get_var_assign(elem, block);
-      }
+      else if (type == StatementType::CLASS_DEFINITION)
+        get_class_definition(elem, block);
     }
 
     // Convert a single function
