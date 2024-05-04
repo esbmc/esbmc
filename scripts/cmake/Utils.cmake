@@ -1,8 +1,12 @@
 # Module to utilities used throughout the project
 
-set(ESBMC_BIN "${CMAKE_BINARY_DIR}/src/esbmc/esbmc")
-if(WIN32)
-    set(ESBMC_BIN "${CMAKE_BINARY_DIR}/src/esbmc/esbmc.exe")
+set(ESBMC_BIN "${CMAKE_BINARY_DIR}/src/esbmc")
+if (MSVC)
+    string(APPEND ESBMC_BIN "/${CMAKE_BUILD_TYPE}")
+endif()
+string(APPEND ESBMC_BIN "/esbmc")
+if (WIN32)
+    string(APPEND ESBMC_BIN ".exe")
 endif()
 
 # Assert that a variable is defined
