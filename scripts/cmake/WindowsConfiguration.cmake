@@ -16,7 +16,7 @@ if (WIN32)
 	set(Python_EXECUTABLE python)
   endif()
   message(STATUS "Found Python: ${Python_EXECUTABLE}")
-  set(LIBGOMP_LIB "-lgomp -ldl")
+  set(LIBGOMP_LIB "-lgomp")
   set(OS_X86_INCLUDE_FOLDER "C:/")
 
   if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
