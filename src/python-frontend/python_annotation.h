@@ -9,7 +9,7 @@ template <class Json>
 class python_annotation
 {
 public:
-  python_annotation(Json &ast) : ast_(ast)
+  python_annotation(Json &ast) : ast_(ast), current_func(nullptr)
   {
   }
 
@@ -23,8 +23,10 @@ public:
     {
       if (element["_type"] == "FunctionDef")
       {
+        current_func = &element;
         add_annotation(element);
         update_end_col_offset(element);
+        current_func = nullptr;
       }
       else if (element["_type"] == "ClassDef")
       {
@@ -33,8 +35,10 @@ public:
           // Process methods
           if (class_member["_type"] == "FunctionDef")
           {
+            current_func = &class_member;
             add_annotation(class_member);
             update_end_col_offset(class_member);
+            current_func = nullptr;
           }
         }
       }
@@ -51,8 +55,10 @@ public:
     {
       if (elem["_type"] == "FunctionDef" && elem["name"] == func_name)
       {
+        current_func = &elem;
         add_annotation(elem);
         update_end_col_offset(elem);
+        current_func = nullptr;
         return;
       }
     }
@@ -108,7 +114,7 @@ private:
       // If the LHS of the binary operation is a variable, its type is retrieved
       if (lhs["_type"] == "Name")
       {
-        Json left_op = find_node(lhs["id"], body["body"]);
+        Json left_op = find_annotated_assign(lhs["id"], body["body"]);
         if (!left_op.empty())
           type = left_op["annotation"]["id"];
       }
@@ -123,27 +129,69 @@ private:
   {
     for (auto &element : body["body"])
     {
-      if (element["_type"] == "Assign" && element["type_comment"].is_null())
+      auto &stmt_type = element["_type"];
+      if (stmt_type == "If" || stmt_type == "While")
+        add_annotation(element);
+
+      if (stmt_type == "Assign" && element["type_comment"].is_null())
       {
-        std::string type;
-        // Get type from rhs constant
+        std::string type("");
+
+        // Check if LHS was previously annotated
+        if (
+          element.contains("targets") &&
+          element["targets"][0]["_type"] == "Name")
+        {
+          // Search for LHS annotation in the current scope
+          Json node =
+            find_annotated_assign(element["targets"][0]["id"], body["body"]);
+          if (node == Json() && current_func != nullptr)
+            // Fall back to the current function
+            node = find_annotated_assign(
+              element["targets"][0]["id"], (*current_func)["body"]);
+          if (node == Json())
+            // Fall back to variables in the global scope
+            node =
+              find_annotated_assign(element["targets"][0]["id"], ast_["body"]);
+
+          if (node != Json())
+            type = node["annotation"]["id"];
+        }
+
+        // Get type from RHS constant
         if (element["value"]["_type"] == "Constant")
         {
           type = get_type_from_constant(element["value"]);
         }
+
         // Get type from RHS variable
-        else if (element["value"]["_type"] == "Name")
+        else if (
+          element["value"]["_type"] == "Name" ||
+          element["value"]["_type"] == "Subscript")
         {
-          // Find rhs variable declaration in the current function
-          auto rhs_node = find_node(element["value"]["id"], body["body"]);
+          std::string rhs_var_name;
+          if (element["value"]["_type"] == "Name")
+            rhs_var_name = element["value"]["id"];
+          else if (element["value"]["_type"] == "Subscript")
+            rhs_var_name = element["value"]["value"]["id"];
 
-          // Find rhs variable in the function args
+          // Find RHS variable declaration in the current scope
+          auto rhs_node = find_annotated_assign(rhs_var_name, body["body"]);
+
+          // Find RHS variable declaration in the current function
+          if (rhs_node.empty() && current_func)
+            rhs_node =
+              find_annotated_assign(rhs_var_name, (*current_func)["body"]);
+
+          // Find RHS variable in the function args
           if (rhs_node.empty() && body.contains("args"))
-            rhs_node = find_node(element["value"]["id"], body["args"]["args"]);
+            rhs_node = find_annotated_assign(
+              element["value"]["id"], body["args"]["args"]);
 
-          // Find rhs variable node in the global scope
+          // Find RHS variable node in the global scope
           if (rhs_node.empty())
-            rhs_node = find_node(element["value"]["id"], ast_["body"]);
+            rhs_node =
+              find_annotated_assign(element["value"]["id"], ast_["body"]);
 
           if (rhs_node.empty())
           {
@@ -156,11 +204,15 @@ private:
           // Get type from RHS type annotation
           type = rhs_node["annotation"]["id"];
         }
+
         // Get type from RHS binary expression
         else if (element["value"]["_type"] == "BinOp")
         {
-          type = get_type_from_binary_expr(element, body);
+          std::string got_type = get_type_from_binary_expr(element, body);
+          if (!got_type.empty())
+            type = got_type;
         }
+
         // Get type from constructor call
         else if (
           element["value"]["_type"] == "Call" &&
@@ -168,6 +220,10 @@ private:
            is_builtin_type(element["value"]["func"]["id"]) ||
            is_consensus_type(element["value"]["func"]["id"])))
           type = element["value"]["func"]["id"];
+        else if (
+          element["value"]["_type"] == "Call" &&
+          is_consensus_func(element["value"]["func"]["id"]))
+          type = get_type_from_consensus_func(element["value"]["func"]["id"]);
         else
           continue;
 
@@ -182,10 +238,10 @@ private:
 
         auto target = element["targets"][0];
         std::string id;
-        // Get lhs from simple variables on assignments.
+        // Get LHS from simple variables on assignments.
         if (target.contains("id"))
           id = target["id"];
-        // Get lhs from members access on assignments. e.g.: x.data = 10
+        // Get LHS from members access on assignments. e.g.: x.data = 10
         else if (target["_type"] == "Attribute")
           id = target["value"]["id"].template get<std::string>() + "." +
                target["attr"].template get<std::string>();
@@ -250,7 +306,8 @@ private:
     }
   }
 
-  const Json find_node(const std::string &node_name, const Json &body)
+  const Json
+  find_annotated_assign(const std::string &node_name, const Json &body) const
   {
     for (const Json &elem : body)
     {
@@ -268,4 +325,5 @@ private:
   }
 
   Json &ast_;
+  Json *current_func;
 };

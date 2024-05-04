@@ -106,6 +106,8 @@ typet python_converter::get_typet(const std::string &ast_type, size_t type_size)
     return long_long_uint_type();
   if (ast_type == "bool")
     return bool_type();
+  if (ast_type == "uint256" || ast_type == "BLSFieldElement")
+    return uint256_type();
   if (ast_type == "bytes")
   {
     typet char_type = signed_char_type();
@@ -555,11 +557,15 @@ function_id python_converter::build_function_id(const nlohmann::json &element)
       else if (is_member_function_call)
       {
         assert(!obj_name.empty());
-        auto obj_node = find_var_decl(obj_name, ast_json);
-        if (obj_node == nlohmann::json())
-          abort();
-
-        class_name = obj_node["annotation"]["id"].get<std::string>();
+        if (is_builtin_type(obj_name) || is_class(obj_name, ast_json))
+          class_name = obj_name;
+        else
+        {
+          auto obj_node = find_var_decl(obj_name, ast_json);
+          if (obj_node == nlohmann::json())
+            abort();
+          class_name = obj_node["annotation"]["id"].get<std::string>();
+        }
       }
       func_symbol_id.insert(pos, "@C@" + class_name);
     }
@@ -573,11 +579,16 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   // TODO: Refactor into different classes/functions
   if (element.contains("func") && element["_type"] == "Call")
   {
-    bool is_member_function_call = false;
+    bool is_instance_method_call = false;
+    bool is_class_method_call = false;
+
     if (element["func"]["_type"] == "Attribute")
     {
-      if (!json_utils::is_module(element["func"]["value"]["id"], ast_json))
-        is_member_function_call = true;
+      const auto &func_value = element["func"]["value"]["id"];
+      if (is_class(func_value, ast_json))
+        is_class_method_call = true;
+      else if (!json_utils::is_module(func_value, ast_json))
+        is_instance_method_call = true;
     }
 
     function_id func_id = build_function_id(element);
@@ -631,7 +642,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 
     if (func_symbol == nullptr)
     {
-      if (is_ctor_call || is_member_function_call)
+      if (is_ctor_call || is_instance_method_call)
       {
         // Get method from a base class when it is not defined in the current class
         const std::string class_name(func_id.class_name);
@@ -649,7 +660,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
           }
           base_ctor_called = true;
         }
-        else if (is_member_function_call)
+        else if (is_instance_method_call)
         {
           // Update obj attributes from self
           const std::string &obj_name = element["func"]["value"]["id"];
@@ -690,7 +701,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       assert(ref_instance);
       call.arguments().push_back(gen_address_of(*ref_instance));
     }
-    else if (is_member_function_call)
+    else if (is_instance_method_call)
     {
       // Self is the obj instance from obj.method() call
       std::string symbol_id = create_symbol_id() + "@" +
@@ -698,6 +709,11 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       symbolt *obj_symbol = context.find_symbol(symbol_id);
       assert(obj_symbol);
       call.arguments().push_back(gen_address_of(symbol_expr(*obj_symbol)));
+    }
+    else if (is_class_method_call)
+    {
+      typet t = pointer_typet(empty_typet());
+      call.arguments().push_back(gen_zero(t));
     }
 
     for (const auto &arg_node : element["args"])
@@ -868,7 +884,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       };
 
       // Get instance attribute from class component
-      if (class_type.has_component(attr_name) && is_instance_attr())
+      if (
+        class_type.has_component(attr_name) &&
+        (is_instance_attr() || is_converting_rhs))
       {
         const typet &attr_type = class_type.get_component(attr_name).type();
         expr = member_exprt(
@@ -1079,8 +1097,10 @@ void python_converter::get_var_assign(
   bool has_value = false;
   if (!ast_node["value"].is_null())
   {
+    is_converting_rhs = true;
     rhs = get_expr(ast_node["value"]);
     has_value = true;
+    is_converting_rhs = false;
   }
 
   if (has_value && rhs != exprt("_init_undefined"))
@@ -1274,6 +1294,8 @@ void python_converter::get_function_definition(
     typet arg_type;
     if (arg_name == "self")
       arg_type = gen_pointer_type(get_typet(current_class_name));
+    else if (arg_name == "cls")
+      arg_type = pointer_typet(empty_typet());
     else
       arg_type = get_typet(element["annotation"]["id"].get<std::string>());
 
@@ -1337,7 +1359,12 @@ void python_converter::get_attributes_from_self(
       typet type = get_typet(stmt["annotation"]["id"].get<std::string>());
       struct_typet::componentt comp =
         build_component(current_class_name, attr_name, type);
-      clazz.components().push_back(comp);
+
+      auto &class_components = clazz.components();
+      if (
+        std::find(class_components.begin(), class_components.end(), comp) ==
+        class_components.end())
+        class_components.push_back(comp);
     }
   }
 }
@@ -1547,6 +1574,19 @@ bool python_converter::convert()
   main_symbol.file_local = false;
 
   python_filename = ast_json["filename"].get<std::string>();
+
+  // Load memory models -----
+  std::stringstream model_path;
+  model_path << ast_json["ast_output_dir"].get<std::string>() << "/range.json";
+  std::ifstream model_file(model_path.str());
+  nlohmann::json model_json;
+  model_file >> model_json;
+
+  exprt mm_code = get_block(model_json["body"]);
+  convert_expression_to_code(mm_code);
+
+  // Add imported code to main symbol
+  main_symbol.value.swap(mm_code);
 
   // Handle --function option
   const std::string function = config.options.get_option("function");
