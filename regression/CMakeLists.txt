@@ -24,9 +24,13 @@ endif()
 
 function(add_esbmc_regression_test folder modes test)
     set(test_name "regression/${folder}/${test}")
+    set(cmd ${CMAKE_CROSSCOMPILING_EMULATOR}\ ${ESBMC_BIN})
+    if (DEFINED C2GOTO_SYSROOT)
+      string(APPEND cmd \ --sysroot\ ${C2GOTO_SYSROOT})
+    endif()
     add_test(NAME ${test_name}
              COMMAND ${Python_EXECUTABLE} ${ESBMC_REGRESSION_TOOL}
-                     --tool=${CMAKE_CROSSCOMPILING_EMULATOR}\ ${ESBMC_BIN}
+                     --tool=${cmd}
                      --regression=${CMAKE_CURRENT_SOURCE_DIR}/${folder}
                      --modes ${modes}
                      --file=${test}
