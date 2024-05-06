@@ -76,8 +76,8 @@ contents
 	#!/bin/sh
 
 	exec env \
-		WINEDEBUG=fixme-all \
-		WINEPATH='/usr/x86_64-w64-mingw32/usr/bin;/usr/x86_64-w64-mingw32/usr/lib;/usr/lib/gcc/x86_64-w64-mingw32/13' \
+		WINEDEBUG=fixme-all,err-all \
+		WINEPATH='/usr/x86_64-w64-mingw32/usr/bin;/usr/x86_64-w64-mingw32/usr/lib;/usr/lib/gcc/x86_64-w64-mingw32/10-posix' \
 		wine64 "$@"
 
 and set it executable with
