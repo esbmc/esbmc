@@ -96,7 +96,7 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
   // Since the input might only be virtual, don't check whether it exists.
   Driver->setCheckInputsExist(false);
   const std::unique_ptr<clang::driver::Compilation> Compilation(
-    Driver->BuildCompilation(llvm::makeArrayRef(Argv)));
+    Driver->BuildCompilation(llvm::ArrayRef<const char *>(Argv)));
 
   const clang::driver::JobList &Jobs = Compilation->getJobs();
   assert(Jobs.size() == 1);
