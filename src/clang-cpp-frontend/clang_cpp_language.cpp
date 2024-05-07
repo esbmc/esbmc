@@ -25,7 +25,8 @@ languaget *new_clang_cpp_language()
 void clang_cpp_languaget::force_file_type()
 {
   // C++ standard
-  std::string cppstd = config.options.get_option("cppstd");
+  assert(config.language.lid == language_idt::CPP);
+  const std::string &cppstd = config.language.std;
   if (!cppstd.empty())
   {
     auto it = std::find(standards.begin(), standards.end(), cppstd);
@@ -36,7 +37,7 @@ void clang_cpp_languaget::force_file_type()
     }
   }
 
-  std::string clangstd = cppstd.empty() ? "-std=c++03" : "-std=c++" + cppstd;
+  std::string clangstd = cppstd.empty() ? "-std=c++03" : "-std=" + cppstd;
   compiler_args.push_back(clangstd);
 
   if (

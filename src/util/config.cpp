@@ -107,6 +107,9 @@ std::string configt::triple::to_string() const
 
 bool configt::set(const cmdlinet &cmdline)
 {
+  if (cmdline.isset("std"))
+    language.std = cmdline.getval("std");
+
   if (cmdline.isset("function"))
     main = cmdline.getval("function");
 

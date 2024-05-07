@@ -276,6 +276,12 @@ void clang_c_languaget::force_file_type()
   // which allow us to perform transformations using -D
   compiler_args.push_back("-x");
   compiler_args.push_back("c");
+
+  // C language standard
+  assert(config.language.lid == language_idt::C);
+  const std::string &cstd = config.language.std;
+  if (!cstd.empty())
+    compiler_args.emplace_back("-std=" + cstd);
 }
 
 bool clang_c_languaget::parse(const std::string &path)
