@@ -70,6 +70,15 @@ jobs:
       build-flags: '-b DebugOpt -e On -S OFF -c 13'
       testing: true
 
+  # Also run a build with frontend linked shared against Ubuntu's clang-16
+  build-shared16:
+    name: dyn. llvm-16 DebugOpt
+    uses: ./.github/workflows/build-unix.yml
+    with:
+      operating-system: ubuntu-latest
+      build-flags: '-b DebugOpt -e On -S OFF -c 16'
+      testing: true
+
     # Check project with clang-format
   code-style:
     name: Check C/C++ code-style
