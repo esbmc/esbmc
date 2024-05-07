@@ -29,7 +29,14 @@ void clang_cpp_languaget::force_file_type()
   const std::string &cppstd = config.language.std;
   if (!cppstd.empty())
   {
-    auto it = std::find(standards.begin(), standards.end(), cppstd);
+    std::string v;
+    if (has_prefix(cppstd, "c++"))
+      v = cppstd.substr(3);
+    else if (has_prefix(cppstd, "gnu++"))
+      v = cppstd.substr(5);
+    else
+      assert(!"unrecognized --std parameter");
+    auto it = std::find(standards.begin(), standards.end(), v);
     if (it == standards.end())
     {
       log_error("Invalid C++ standard: {}", cppstd);
