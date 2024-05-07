@@ -232,7 +232,7 @@ void goto_checkt::overflow_check(
 
   // First, check type.
   const type2tc &type = ns.follow(expr->type);
-  if (config.language == language_idt::SOLIDITY)
+  if (config.language.lid == language_idt::SOLIDITY)
   {
     if (!is_signedbv_type(type) && !is_unsignedbv_type(type))
       return;

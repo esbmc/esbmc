@@ -47,7 +47,11 @@ public:
 #undef dm
 
   // Language the frontend has been parsing
-  language_idt language = language_idt::NONE;
+  struct language_stdt
+  {
+    language_idt lid;
+    std::string std;
+  } language = {language_idt::NONE, ""};
 
   struct ansi_ct
   {
