@@ -78,6 +78,10 @@ unsigned goto_symext::argument_assignments(
     {
       ; // XXX jmorse, is this valid?
     }
+    else if (is_constant_string2t(*it1))
+    {
+      // ignore
+    }
     else
     {
       expr2tc rhs = *it1;

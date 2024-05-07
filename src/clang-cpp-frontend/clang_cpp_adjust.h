@@ -91,7 +91,8 @@ public:
   void convert_exception_id(
     const typet &type,
     const std::string &suffix,
-    std::vector<irep_idt> &ids);
+    std::vector<irep_idt> &ids,
+    bool is_catch = false);
 };
 
 #endif /* CLANG_CPP_FRONTEND_CLANG_CPP_ADJUST_H_ */
