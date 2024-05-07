@@ -9,6 +9,7 @@
 // Remove warnings from Clang headers
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
+#include <clang/Basic/Version.inc>
 #include <clang/AST/Attr.h>
 #include <clang/AST/DeclCXX.h>
 #include <clang/AST/DeclFriend.h>
@@ -97,6 +98,15 @@ bool clang_cpp_convertert::get_struct_class_virtual_methods(
   return false;
 }
 
+static bool is_pure_virtual(const clang::CXXMethodDecl &md)
+{
+#if CLANG_VERSION_MAJOR < 18
+  return md.isPure();
+#else
+  return md.isPureVirtual();
+#endif
+}
+
 bool clang_cpp_convertert::annotate_virtual_overriding_methods(
   const clang::CXXMethodDecl &md,
   struct_typet::componentt &comp)
@@ -109,7 +119,7 @@ bool clang_cpp_convertert::annotate_virtual_overriding_methods(
   comp.set("is_virtual", true);
   comp.set("virtual_name", method_name);
 
-  if (md.isPure())
+  if (is_pure_virtual(md))
     comp.set("is_pure_virtual", true);
 
   return false;
