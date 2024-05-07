@@ -911,13 +911,17 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::CXXThrowExpr &cxxte =
       static_cast<const clang::CXXThrowExpr &>(stmt);
 
+    new_expr = side_effect_exprt("cpp-throw", empty_typet());
+
     exprt tmp;
     if (cxxte.getSubExpr())
+    {
       if (get_expr(*cxxte.getSubExpr(), tmp))
         return true;
 
-    new_expr = side_effect_exprt("cpp-throw", tmp.type());
-    new_expr.move_to_operands(tmp);
+      new_expr.move_to_operands(tmp);
+      new_expr.type() = tmp.type();
+    }
 
     break;
   }
@@ -1052,6 +1056,9 @@ bool clang_cpp_convertert::get_function_body(
   // Parse body
   if (clang_c_convertert::get_function_body(fd, new_expr, ftype))
     return true;
+
+  if (new_expr.statement() != "block")
+    return false;
 
   code_blockt &body = to_code_block(to_code(new_expr));
 
