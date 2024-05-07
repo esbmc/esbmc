@@ -27,8 +27,8 @@ void clang_cpp_languaget::force_file_type()
   // C++ standard
   assert(config.language.lid == language_idt::CPP);
   const std::string &cppstd = config.language.std;
-  std::string clangstd = cppstd.empty() ? "-std=c++03" : "-std=" + cppstd;
-  compiler_args.push_back(clangstd);
+  if (!cppstd.empty())
+    compiler_args.emplace_back("-std=" + cppstd);
 
   if (
     !config.options.get_bool_option("no-abstracted-cpp-includes") &&
