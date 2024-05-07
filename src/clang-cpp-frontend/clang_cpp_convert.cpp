@@ -1696,6 +1696,7 @@ void clang_cpp_convertert::get_base_components_methods(
   base_map &map,
   struct_union_typet &type)
 {
+  irept::subt &base_ids = type.add("bases").get_sub();
   for (const auto &base : map)
   {
     std::string class_id = base.first;
@@ -1703,6 +1704,7 @@ void clang_cpp_convertert::get_base_components_methods(
     // get base class symbol
     symbolt *s = context.find_symbol(class_id);
     assert(s);
+    base_ids.emplace_back(s->id);
 
     const struct_typet &base_type = to_struct_type(s->type);
 
