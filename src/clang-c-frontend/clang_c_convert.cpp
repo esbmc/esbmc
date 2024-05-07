@@ -614,7 +614,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     code_declt decl(symbol_expr(*added_symbol));
     decl.location() = location_begin;
 
-    if (vd.hasInit())
+    if (vd.hasInit() && !vd.isExceptionVariable())
     {
       exprt val;
       if (get_expr(*vd.getInit(), val))
