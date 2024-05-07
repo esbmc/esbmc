@@ -324,15 +324,59 @@ void clang_cpp_adjust::adjust_side_effect_throw(side_effect_exprt &expr)
 void clang_cpp_adjust::convert_exception_id(
   const typet &type,
   const std::string &suffix,
-  std::vector<irep_idt> &ids)
+  std::vector<irep_idt> &ids,
+  bool is_catch)
 {
   if (type.id() == "pointer" || type.id() == "array")
   {
-    // TODO
+    if (type.reference())
+    {
+      convert_exception_id(type.subtype(), suffix, ids, is_catch);
+      return;
+    }
+    if (type.subtype().id() == "empty")
+    {
+      irep_idt identifier = "void_ptr";
+      ids.emplace_back(id2string(identifier) + suffix);
+    }
+    else
+    {
+      convert_exception_id(type.subtype(), "_ptr" + suffix, ids, is_catch);
+      return;
+    }
   }
   else if (type.id() == "symbol")
   {
-    // TODO
+    irep_idt identifier = type.identifier();
+
+    // Check if base class exists
+    typet t = ns.lookup(identifier)->type;
+
+    // only get the base class when throwing
+    if (t.id() == "struct" && !is_catch)
+    {
+      struct_typet struct_type = to_struct_type(t);
+      const exprt &bases =
+        static_cast<const exprt &>(struct_type.find("bases"));
+
+      // Throwing a derived class
+      if (bases.is_not_nil() && bases.get_sub().size())
+      {
+        // record the derived class
+        ids.emplace_back(id2string(identifier) + suffix);
+
+        // record all the base classes id
+        for (const auto &i : bases.get_sub())
+        {
+          identifier = i.id();
+          ids.emplace_back(id2string(identifier) + suffix);
+        }
+      }
+      else
+        ids.emplace_back(id2string(identifier) + suffix);
+    }
+    else
+      ids.emplace_back(id2string(identifier) + suffix);
   }
   else if (type.ellipsis())
   {
