@@ -211,7 +211,8 @@ void clang_cpp_convertert::get_decl_name(
       id_suffix = "::" + std::to_string(pd.getFunctionScopeIndex());
       break;
     }
-    /* intentional fallthrough */
+    clang_c_convertert::get_decl_name(nd, name, id);
+    return;
   }
 
   default:
