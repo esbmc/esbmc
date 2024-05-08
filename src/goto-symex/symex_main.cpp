@@ -167,7 +167,7 @@ void goto_symext::symex_step(reachability_treet &art)
   case END_FUNCTION:
     symex_end_of_function();
 
-    if (stack_catch.size())
+    if (!stack_catch.empty())
     {
       // Get to the correct try (always the last one)
       goto_symex_statet::exceptiont *except = &stack_catch.top();
