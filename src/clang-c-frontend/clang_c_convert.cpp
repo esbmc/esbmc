@@ -3513,7 +3513,7 @@ void clang_c_convertert::get_decl_name(
   case clang::Decl::Field:
     if (name.empty())
     {
-      // Anonymous fields, generate a name based on the type
+      // Anonymous fields, generate a name based on the field index
       const clang::FieldDecl &fd = static_cast<const clang::FieldDecl &>(nd);
       name = "__anon_field_" + std::to_string(fd.getFieldIndex());
       id = name;
@@ -3523,7 +3523,7 @@ void clang_c_convertert::get_decl_name(
   case clang::Decl::IndirectField:
     if (name.empty())
     {
-      // Anonymous fields, generate a name based on the type
+      // Anonymous fields, generate a name based on the field index
       const clang::IndirectFieldDecl &fd =
         static_cast<const clang::IndirectFieldDecl &>(nd);
       name = "__anon_indirect_field_" +
@@ -3586,7 +3586,7 @@ void clang_c_convertert::get_decl_name(
   case clang::Decl::Var:
     if (name.empty())
     {
-      // Anonymous variable, generate a name based on the type,
+      // Anonymous variable, generate a name based on the location,
       // see regression union1
       const clang::VarDecl &vd = static_cast<const clang::VarDecl &>(nd);
       locationt location_begin;
