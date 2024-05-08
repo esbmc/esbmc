@@ -387,7 +387,7 @@ public:
   };
 
   string();
-  string(char *);
+  string(const char *);
   string(const char *s, size_t n);
   string(const string &str, size_t pos, size_t n);
   string(string &s, size_t n);
@@ -982,7 +982,7 @@ string::string()
   _size = 0;
 }
 
-string::string(char *s)
+string::string(const char *s)
 {
 __ESBMC_HIDE:
   __ESBMC_assert(s != NULL, "string invalid");
