@@ -2,6 +2,7 @@
 // Remove warnings from Clang headers
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
+#include <clang/Basic/Version.inc>
 #include <clang/AST/Attr.h>
 #include <clang/AST/DeclCXX.h>
 #include <clang/AST/DeclFriend.h>
@@ -286,6 +287,19 @@ bool clang_cpp_convertert::get_type(
 
     break;
   }
+
+#if CLANG_VERSION_MAJOR >= 14
+  case clang::Type::Using:
+  {
+    const clang::UsingType &ut =
+      static_cast<const clang::UsingType &>(the_type);
+
+    if (get_type(ut.getUnderlyingType(), new_type))
+      return true;
+
+    break;
+  }
+#endif
 
   default:
     return clang_c_convertert::get_type(the_type, new_type);
