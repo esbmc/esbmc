@@ -97,6 +97,7 @@ bool goto_symext::symex_throw()
   // a derived object with multiple inheritance
   unsigned old_id_number = -1, new_id_number = 0;
 
+  goto_symex_statet::call_stackt old_stack = cur_state->call_stack;
   for (auto const &it : throw_ref.exception_list)
   {
     // Handle throw declarations
@@ -132,6 +133,9 @@ bool goto_symext::symex_throw()
 
       if (new_id_number < old_id_number)
       {
+        cur_state->call_stack = old_stack;
+        cur_state->guard.make_true();
+
         update_throw_target(except, c_it->second, instruction.code);
         catch_insn = &c_it->second;
         catch_name = c_it->first;
@@ -287,7 +291,8 @@ void goto_symext::update_throw_target(
   symex_assign(code_assign2tc(thrown_obj, operand));
 
   // Now record that value for future reference.
-  cur_state->rename(thrown_obj);
+  if (!is_pointer_type(target->code->type))
+    cur_state->rename(thrown_obj);
 
   // Target is, as far as I can tell, always a declaration of the variable
   // that the thrown obj ends up in, and is followed by a (blank) assignment
