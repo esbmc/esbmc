@@ -1,5 +1,6 @@
 class int:
-  def from_bytes(bytes_data:bytes, big_endian:bool, signed:bool) -> int:
+  @classmethod
+  def from_bytes(cls, bytes_data:bytes, big_endian:bool, signed:bool) -> int:
     result = 0
     index = 0
     step = 1
@@ -10,7 +11,9 @@ class int:
         index = len(bytes_data) - 1
         step = -1
 
-    while index >= 0 and index < len(bytes_data):
+    bytes_len:int = len(bytes_data)
+
+    while index >= 0 and index < bytes_len:
        byte:int = bytes_data[index]
        result = (result << 8) + byte
        index = index + step
@@ -23,8 +26,8 @@ class int:
 
     return result
 
-bytes_data = b'\x00\x10'
-result = int.from_bytes(bytes_data, True, False)
+# bytes_data:bytes = b'\x00\x10'
+# result:int = int.from_bytes(bytes_data, True, False)
 # assert result == 16
 
 # bytes_data_2 = b'\xFF\xFF'

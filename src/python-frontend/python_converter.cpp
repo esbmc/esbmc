@@ -102,7 +102,7 @@ typet python_converter::get_typet(const std::string &ast_type, size_t type_size)
     /* FIXME: We need to map 'int' to another irep type that provides unlimited precision
 	https://docs.python.org/3/library/stdtypes.html#numeric-types-int-float-complex */
     return int_type();
-  if (ast_type == "uint64" || ast_type == "Epoch"  || ast_type == "Slot")
+  if (ast_type == "uint64" || ast_type == "Epoch" || ast_type == "Slot")
     return long_long_uint_type();
   if (ast_type == "bool")
     return bool_type();
@@ -523,14 +523,18 @@ function_id python_converter::build_function_id(const nlohmann::json &element)
 
   if (func_type == "Name")
     func_name = func_json["id"];
-  else if (func_type == "Attribute")
+  else if (func_type == "Attribute") // Handling obj_name.func_name() calls
   {
+    is_member_function_call = true;
     func_name = func_json["attr"];
     obj_name = func_json["value"]["id"];
-    if (json_utils::is_module(obj_name, ast_json))
+    if (
+      !is_class(obj_name, ast_json) &&
+      json_utils::is_module(obj_name, ast_json))
+    {
       func_symbol_id = create_symbol_id(imported_modules[obj_name]);
-    else
-      is_member_function_call = true;
+      is_member_function_call = false;
+    }
   }
 
   if (func_name == "len")
@@ -562,8 +566,9 @@ function_id python_converter::build_function_id(const nlohmann::json &element)
         else
         {
           auto obj_node = find_var_decl(obj_name, ast_json);
-          if (obj_node == nlohmann::json())
+          if (obj_node.empty())
             abort();
+
           class_name = obj_node["annotation"]["id"].get<std::string>();
         }
       }
