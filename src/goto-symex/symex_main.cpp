@@ -167,6 +167,14 @@ void goto_symext::symex_step(reachability_treet &art)
   case END_FUNCTION:
     symex_end_of_function();
 
+    if (stack_catch.size())
+    {
+      // Get to the correct try (always the last one)
+      goto_symex_statet::exceptiont *except = &stack_catch.top();
+
+      except->has_throw_decl = false;
+      except->throw_list_set.clear();
+    }
     // Potentially skip to run another function ptr target; if not,
     // continue
     if (!run_next_function_ptr_target(false))
