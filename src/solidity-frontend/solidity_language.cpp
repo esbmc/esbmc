@@ -71,7 +71,9 @@ bool solidity_languaget::parse(const std::string &path)
 
   // get AST nodes of ESBMC intrinsics and the dummy main
   // populate ASTs inherited from parent class
+  auto sol_lang = std::exchange(config.language, {language_idt::C, ""});
   clang_c_languaget::parse(temp_path);
+  config.language = std::move(sol_lang);
 
   // Process AST json file
   std::ifstream ast_json_file_stream(path);
