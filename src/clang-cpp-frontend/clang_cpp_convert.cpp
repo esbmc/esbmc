@@ -1177,28 +1177,30 @@ bool clang_cpp_convertert::get_function_body(
   auto *type = fd.getType().getTypePtr();
   if (const auto *fpt = llvm::dyn_cast<const clang::FunctionProtoType>(type))
   {
-    if (fpt->hasDynamicExceptionSpec())
+    if (fpt->hasExceptionSpec())
     {
-      // e.g: void func() throw(int) { throw 1;}
-      // body is converted to
-      // {THROW_DECL(signed_int) throw 1; THROW_DECL_END}
       codet decl = codet("throw_decl");
-      for (unsigned i = 0; i < fpt->getNumExceptions(); i++)
+      if (fpt->hasDynamicExceptionSpec())
+      {
+        // e.g: void func() throw(int) { throw 1;}
+        // body is converted to
+        // {THROW_DECL(signed_int) throw 1; THROW_DECL_END}
+        for (unsigned i = 0; i < fpt->getNumExceptions(); i++)
+        {
+          codet tmp;
+          if (get_type(fpt->getExceptionType(i), tmp.type()))
+            return true;
+
+          decl.move_to_operands(tmp);
+        }
+      }
+      else if (fpt->hasNoexceptExceptionSpec())
       {
         codet tmp;
-        if (get_type(fpt->getExceptionType(i), tmp.type()))
-          return true;
-
+        tmp.type() = typet("noexcept");
         decl.move_to_operands(tmp);
       }
       body.operands().insert(body.operands().begin(), decl);
-
-      codet end = codet("throw_decl_end");
-      body.operands().push_back(end);
-    }
-    else if (fpt->hasNoexceptExceptionSpec())
-    {
-      // TODO
     }
   }
 

@@ -383,6 +383,11 @@ void clang_cpp_adjust::convert_exception_id(
     irep_idt identifier = "ellipsis";
     ids.emplace_back(id2string(identifier) + suffix);
   }
+  else if (type.id() == "noexcept")
+  {
+    irep_idt identifier = "noexcept";
+    ids.emplace_back(id2string(identifier) + suffix);
+  }
 
   // add C++ type
   std::string cpp_type = type.get("#cpp_type").as_string();
