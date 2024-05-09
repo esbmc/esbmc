@@ -80,7 +80,6 @@ void ssa_features::check(const expr2tc &e)
 
 void ssa_features::print_result() const
 {
-  log_status("SSA: Printing features");
   if (features.count(SSA_FEATURES::NON_LINEAR))
     log_status("SSA: Contains NON LINEAR");
   if (features.count(SSA_FEATURES::NON_INTEGER_NUMERAL))
