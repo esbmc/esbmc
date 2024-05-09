@@ -1,4 +1,4 @@
 CORE
 main.c
---force-malloc-success
+--force-malloc-success -Wno-error=implicit-function-declaration
 ^VERIFICATION FAILED$

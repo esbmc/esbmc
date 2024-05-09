@@ -1,4 +1,4 @@
 THOROUGH
 main.c
---smt-model --bitwuzla
+--smt-model --bitwuzla -Wno-error=implicit-function-declaration
 ^VERIFICATION FAILED$

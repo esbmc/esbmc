@@ -1,4 +1,4 @@
 CORE
 struct_bytewise.c
---32
+--32 -Wno-error=implicit-function-declaration
 ^VERIFICATION SUCCESSFUL$

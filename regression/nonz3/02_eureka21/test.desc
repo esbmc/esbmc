@@ -1,4 +1,4 @@
 CORE
 main.c
---claim 1 --unwind 8
+--claim 1 --unwind 8 -Wno-error=implicit-function-declaration
 ^VERIFICATION SUCCESSFUL$
