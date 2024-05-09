@@ -8,8 +8,7 @@ bool ssa_features::run(symex_target_equationt::SSA_stepst &steps)
 
   for (const auto &step : steps)
   {
-    const expr2tc expressions[2] = {step.cond, step.guard};
-    for (const expr2tc &e : expressions)
+    for (const expr2tc &e : std::array { step.cond, step.guard })      
       check(e);
   }
 
