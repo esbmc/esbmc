@@ -729,7 +729,11 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         c_typecastt c_typecast(ns);
         c_typecast.implicit_typecast(arg, pointer_typet(empty_typet()));
       }
-      call.arguments().push_back(arg);
+
+      if (arg.type().is_array())
+        call.arguments().push_back(gen_address_of(arg));
+      else
+        call.arguments().push_back(arg);
     }
 
     if (func_name == "__ESBMC_get_object_size")
@@ -835,6 +839,17 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     }
 
     expr = symbol_expr(*symbol);
+//    expr.dump();
+//    if (expr.type().is_pointer())
+//    {
+//      printf("is pointer!\n");
+//      //      exprt deref_expr = exprt("dereference", expr.type());
+//      //      deref_expr.copy_to_operands(expr);
+//      //      deref_expr.dump();
+//      //      expr = deref_expr;
+//      expr = dereference_exprt(expr, expr.type());
+//      expr.dump();
+//    }
 
     // Get instance attribute
     if (!is_class_attr && element["_type"] == "Attribute")
@@ -928,7 +943,18 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   case ExpressionType::SUBSCRIPT:
   {
     exprt array = get_expr(element["value"]);
+//    array.dump();
     typet t = array.type().subtype();
+    //    t.dump();
+//    typet t;
+//    if (array.type().is_array())
+//      t = array.type().subtype();
+//    else
+//      t = array.type();
+//
+//    printf("array type\n");
+//    t.dump();
+
     const nlohmann::json &slice = element["slice"];
     exprt pos = get_expr(slice);
 
@@ -943,6 +969,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       pos = from_integer(v, pos.type());
     }
     expr = index_exprt(array, pos, t);
+//    expr.dump();
     break;
   }
   default:
@@ -1303,6 +1330,9 @@ void python_converter::get_function_definition(
       arg_type = pointer_typet(empty_typet());
     else
       arg_type = get_typet(element["annotation"]["id"].get<std::string>());
+
+    if (arg_type.is_array())
+      arg_type = gen_pointer_type(arg_type);
 
     assert(arg_type != typet());
 
