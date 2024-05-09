@@ -47,7 +47,7 @@ class CTest1(ParseTest):
         self.assertEqual(test_obj.test_mode, "CORE")
         self.assertEqual(test_obj.test_file, "main.c")
         self.assertEqual(test_obj.test_args,
-                         "--unwind 1 --context-bound 2 --schedule --depth 300")
+                         "--unwind 1 --context-bound 2 --schedule --depth 300 -Wno-error=implicit-function-declaration")
         self.assertEqual(test_obj.test_regex, ["^VERIFICATION FAILED$"])
 
     def _argument_list_checks(self, test_obj):
