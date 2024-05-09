@@ -1,4 +1,4 @@
 CORE
 main.c
---unwind 1 --context-bound 2 --schedule --depth 300
+--unwind 1 --context-bound 2 --schedule --depth 300 -Wno-error=implicit-function-declaration
 ^VERIFICATION FAILED$

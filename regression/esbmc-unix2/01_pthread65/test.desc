@@ -1,4 +1,4 @@
 CORE
 main.c
---unwind 6 --context-bound 2
+--unwind 6 --context-bound 2 -Wno-error=implicit-function-declaration
 ^VERIFICATION SUCCESSFUL$

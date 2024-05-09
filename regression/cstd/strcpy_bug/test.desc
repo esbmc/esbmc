@@ -1,4 +1,4 @@
 CORE
 main.c
---unwind 15
+--unwind 15 -Wno-error=implicit-function-declaration
 ^VERIFICATION FAILED$
