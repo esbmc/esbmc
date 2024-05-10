@@ -90,22 +90,6 @@ copy(InputIterator first, InputIterator last, ForwardIterator result)
   return result;
 }
 
-template <class ForwardIterator, class T>
-void fill(ForwardIterator first, ForwardIterator last, const T &x)
-{
-  for (; first != last; ++first)
-    new (static_cast<void *>(&*first))
-      typename iterator_traits<ForwardIterator>::value_type(x);
-}
-
-template <class ForwardIterator, class Size, class T>
-void fill(ForwardIterator first, Size n, const T &x)
-{
-  for (; n--; ++first)
-    new (static_cast<void *>(&*first))
-      typename iterator_traits<ForwardIterator>::value_type(x);
-}
-
 #if 0
 template <class OutputIterator, class T>
 class raw_storage_iterator :
