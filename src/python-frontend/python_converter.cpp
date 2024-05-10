@@ -731,7 +731,14 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       }
 
       if (arg.type().is_array())
-        call.arguments().push_back(gen_address_of(arg));
+      {
+        // Passing address of the array's first element
+        typet ptr_type = pointer_typet(arg.type().subtype());
+        exprt pos = gen_zero(size_type());
+        exprt index = index_exprt(arg, pos, arg.type().subtype());
+        exprt address_expr = address_of_exprt(index);
+        call.arguments().push_back(address_expr);
+      }
       else
         call.arguments().push_back(arg);
     }
@@ -839,17 +846,6 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     }
 
     expr = symbol_expr(*symbol);
-//    expr.dump();
-//    if (expr.type().is_pointer())
-//    {
-//      printf("is pointer!\n");
-//      //      exprt deref_expr = exprt("dereference", expr.type());
-//      //      deref_expr.copy_to_operands(expr);
-//      //      deref_expr.dump();
-//      //      expr = deref_expr;
-//      expr = dereference_exprt(expr, expr.type());
-//      expr.dump();
-//    }
 
     // Get instance attribute
     if (!is_class_attr && element["_type"] == "Attribute")
@@ -943,17 +939,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   case ExpressionType::SUBSCRIPT:
   {
     exprt array = get_expr(element["value"]);
-//    array.dump();
     typet t = array.type().subtype();
-    //    t.dump();
-//    typet t;
-//    if (array.type().is_array())
-//      t = array.type().subtype();
-//    else
-//      t = array.type();
-//
-//    printf("array type\n");
-//    t.dump();
 
     const nlohmann::json &slice = element["slice"];
     exprt pos = get_expr(slice);
@@ -969,7 +955,6 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       pos = from_integer(v, pos.type());
     }
     expr = index_exprt(array, pos, t);
-//    expr.dump();
     break;
   }
   default:
@@ -1332,7 +1317,7 @@ void python_converter::get_function_definition(
       arg_type = get_typet(element["annotation"]["id"].get<std::string>());
 
     if (arg_type.is_array())
-      arg_type = gen_pointer_type(arg_type);
+      arg_type = gen_pointer_type(arg_type.subtype());
 
     assert(arg_type != typet());
 
