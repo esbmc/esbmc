@@ -1,14 +1,3 @@
-## ESBMC-CHERI Video & Download
-
-This [video](https://youtu.be/CsWHnmU4UMs) describes how to obtain, build and run ESBMC-CHERI on an example.
-
-A pre-compiled binary for Linux is available in the pre-release
-[ESBMC-CHERI](https://github.com/esbmc/esbmc/releases/tag/v6.9-cheri), for other
-systems/archs the [BUILDING.md](https://github.com/esbmc/esbmc/blob/cheri-clang/BUILDING.md)
-document explains the necessary installation steps.
-
-
-
 # The ESBMC model checker
 
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/d14d06e975644907a2eb9521e09ccfe4)](https://app.codacy.com/gh/esbmc/esbmc?utm_source=github.com&utm_medium=referral&utm_content=esbmc/esbmc&utm_campaign=Badge_Grade_Dashboard)
@@ -112,6 +101,15 @@ Many SMT solvers are currently supported:
 In addition, ESBMC can be configured to use the SMTLIB interactive text format with a pipe to communicate with an arbitrary solver process, although not-insignificant overheads are involved.
 
 A limited subset of C++98/03 is supported, too -- a library modeling the STL is also available.
+
+### ESBMC-CHERI Video & Download
+
+This [video](https://youtu.be/CsWHnmU4UMs) describes how to obtain, build and run ESBMC-CHERI on an example.
+
+A pre-compiled binary for Linux is available in the pre-release
+[ESBMC-CHERI](https://github.com/esbmc/esbmc/releases/tag/v6.9-cheri), for other
+systems/archs the [BUILDING.md](https://github.com/esbmc/esbmc/blob/cheri-clang/BUILDING.md)
+document explains the necessary installation steps.
 
 ### Differences from CBMC
 
