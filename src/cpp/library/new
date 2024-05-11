@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstddef>
+#include <exception>
 
 /* These are not in the 'std' namespace */
 
@@ -15,4 +16,13 @@ void *operator new(std::size_t count, void *ptr)
 void *operator new[](std::size_t count, void *ptr)
 {
   return ptr;
+}
+
+namespace std
+{
+class bad_alloc : public exception
+{
+public:
+  virtual const char * what() const throw() { return "std::bad_alloc"; }
+};
 }

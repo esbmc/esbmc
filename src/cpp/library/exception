@@ -6,8 +6,6 @@
 namespace std
 {
 
-const char *message;
-
 typedef void (*terminate_handler)();
 typedef void (*unexpected_handler)();
 
@@ -87,7 +85,7 @@ public:
      *Both the wording of such description and the character width are implementation-defined.
      *source: https://cplusplus.com/reference/exception/exception/what/
      **/
-    return (const char *)message;
+    return "std::exception";
   }
 };
 
@@ -103,7 +101,7 @@ public:
   bad_exception &operator=(const bad_exception &other) throw();
   virtual const char *what() const throw()
   {
-    return (const char *)message;
+    return "std::bad_exception";
   }
 };
 } // namespace std
