@@ -14,6 +14,7 @@ namespace std
 
 class reference
 {
+  template <size_t>
   friend class bitset;
   reference(); // no public constructor
 public:
@@ -65,13 +66,14 @@ public:
   bitset<N> operator>>(size_t pos) const;
   bool operator==(const bitset<N> &rhs) const;
   bool operator!=(const bitset<N> &rhs) const;
-  template <size_t N>
-  bitset<N> operator&(const bitset<N> &lhs, const bitset<N> &rhs);
-  template <size_t N>
-  bitset<N> operator|(const bitset<N> &lhs, const bitset<N> &rhs);
-  template <size_t N>
-  bitset<N> operator^(const bitset<N> &lhs, const bitset<N> &rhs);
 };
+
+template <size_t N>
+bitset<N> operator&(const bitset<N> &lhs, const bitset<N> &rhs);
+template <size_t N>
+bitset<N> operator|(const bitset<N> &lhs, const bitset<N> &rhs);
+template <size_t N>
+bitset<N> operator^(const bitset<N> &lhs, const bitset<N> &rhs);
 
 } // namespace std
 #endif
