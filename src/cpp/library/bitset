@@ -5,9 +5,6 @@
 #include "utility"
 #include "iterator"
 #include "string"
-using namespace std;
-
-#define BITSET_CAPACITY 20
 
 namespace std
 {
@@ -29,21 +26,18 @@ public:
 template <size_t N>
 class bitset
 {
-  int _size = 0;
-
 public:
-  bitset() : _size(0)
+  bitset()
   {
   }
-  bitset(unsigned long val) : _size(0)
+  bitset(unsigned long val)
   {
   }
   bitset<N> &flip();
   bitset<N> &flip(size_t pos);
   size_t size() const
   {
-    assert(0 <= _size && _size <= BITSET_CAPACITY);
-    return _size;
+    return N;
   }
   unsigned long to_ulong() const;
   bool any() const;
