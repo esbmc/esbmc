@@ -701,7 +701,7 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
     else if (type_name == SolidityGrammar::TypeNameT::ContractTypeName)
       return ContractMemberCall;
     else
-      //!Fixme. Assume it's a builtin member
+      //TODO Assume it's a builtin member
       // due to that the BuiltinTypeName cannot cover all the builtin member
       // e.g. string.concat ==> TypeConversionName
       return BuiltinMemberCall;
