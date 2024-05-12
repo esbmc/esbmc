@@ -1721,21 +1721,22 @@ bool solidity_convertert::get_expr(
       call.type() = type;
 
       // populate params
+      // the number of arguments defined in the template
       size_t define_size = to_code_type(new_expr.type()).arguments().size();
+      // the number of arguments actually inside the json file
       const size_t arg_size = expr["arguments"].size();
-
-      for (const auto &arg : expr["arguments"].items())
+      if (define_size >= arg_size)
       {
         // we only populate the exact number of args according to the template
-        if (define_size >= arg_size)
-          break;
-        else
-          --define_size;
-        exprt single_arg;
-        if (get_expr(arg.value(), arg.value()["typeDescriptions"], single_arg))
-          return true;
+        for (const auto &arg : expr["arguments"].items())
+        {
+          exprt single_arg;
+          if (get_expr(
+                arg.value(), arg.value()["typeDescriptions"], single_arg))
+            return true;
 
-        call.arguments().push_back(single_arg);
+          call.arguments().push_back(single_arg);
+        }
       }
 
       new_expr = call;
@@ -3241,7 +3242,9 @@ bool solidity_convertert::get_type_description(
     // since the key will always be regarded as string, we only need to obtain the value type.
 
     typet val_t;
-    //!TODO
+    //!TODO Unimplement Mapping
+    log_error("Unimplement Mapping");
+    abort();
     break;
   }
   default:
