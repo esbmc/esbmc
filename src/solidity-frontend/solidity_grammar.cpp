@@ -152,11 +152,11 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     // we must first handle tuple
     // otherwise we might parse tuple(literal_string, literal_string)
     // as ElementaryTypeName
-    if (typeString.substr(0, 6) == "tuple(" && typeString != "tuple()")
+    if (typeString.compare(0, 6, "tuple(") == 0 && typeString != "tuple()")
     {
       return TupleTypeName;
     }
-    if (typeIdentifier.substr(0, 10) == "t_mapping(")
+    if (typeIdentifier.compare(0, 10, "t_mapping(") == 0)
     {
       return MappingTypeName;
     }
@@ -191,7 +191,7 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
       typeString == "string" || typeString.find("literal_string") == 0 ||
       typeString == "string storage ref" || typeString == "string memory" ||
       typeString == "address payable" || typeString == "address" ||
-      typeString.substr(0, 5) == "bytes")
+      typeString.compare(0, 5, "bytes") == 0)
     {
       // For state var declaration,
       return ElementaryTypeName;
@@ -231,7 +231,7 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
       return PointerArrayToPtr;
     }
     // for Special Variables and Functions
-    else if (typeIdentifier.substr(0, 7) == "t_magic")
+    else if (typeIdentifier.compare(0, 7, "t_magic") == 0)
     {
       return BuiltinTypeName;
     }

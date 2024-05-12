@@ -248,6 +248,7 @@ const char *statement_to_str(StatementT type);
 //  - Skipped since it just contains 1 type: "expression + ;"
 
 // rule expression
+// these are used to identify the type of the expression
 enum ExpressionT
 {
   // BinaryOperator
@@ -309,7 +310,7 @@ enum ExpressionT
   // rule Tuple
   Tuple,
 
-  // Mapping
+  // rule Mapping
   Mapping,
 
   // FunctionCall
