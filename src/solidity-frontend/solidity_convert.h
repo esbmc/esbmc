@@ -46,8 +46,7 @@ protected:
 
   // handle the implicit constructor
   bool add_implicit_constructor();
-  bool
-  get_implicit_ctor_call(exprt &new_expr, const std::string &contract_name);
+  bool get_implicit_ctor_ref(exprt &new_expr, const std::string &contract_name);
   bool
   get_struct_class_fields(const nlohmann::json &ast_node, struct_typet &type);
   bool
@@ -80,7 +79,7 @@ protected:
   bool get_var_decl_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_func_decl_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_enum_member_ref(const nlohmann::json &decl, exprt &new_expr);
-  bool get_decl_ref_builtin(const nlohmann::json &decl, exprt &new_expr);
+  bool get_esbmc_builtin_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_type_description(const nlohmann::json &type_name, typet &new_type);
   bool get_func_decl_ref_type(const nlohmann::json &decl, typet &new_type);
   bool get_array_to_pointer_type(const nlohmann::json &decl, typet &new_type);
@@ -144,6 +143,7 @@ protected:
   nlohmann::json add_dyn_array_size_expr(
     const nlohmann::json &type_descriptor,
     const nlohmann::json &dyn_array_node);
+  bool is_child_mapping(const nlohmann::json &ast_node);
 
   void get_default_symbol(
     symbolt &symbol,
@@ -154,6 +154,7 @@ protected:
     locationt location);
 
   std::string get_ctor_call_id(const std::string &contract_name);
+  bool get_sol_builtin_ref(const nlohmann::json expr, exprt &new_expr);
 
   // literal conversion functions
   bool convert_integer_literal(
@@ -171,7 +172,7 @@ protected:
   contextt &context;
   namespacet ns;
   // json for Solidity AST. Use vector for multiple contracts
-  nlohmann::json &ast_json;
+  nlohmann::json &src_ast_json;
   // Solidity function to be verified
   const std::string &sol_func;
   //smart contract source file

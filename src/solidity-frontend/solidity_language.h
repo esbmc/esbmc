@@ -47,7 +47,7 @@ public:
   std::string smart_contract;
 
   // store AST json in nlohmann::json data structure
-  nlohmann::json ast_json;
+  nlohmann::json src_ast_json;
   nlohmann::json intrinsic_json;
 
   languaget *clang_c_module;

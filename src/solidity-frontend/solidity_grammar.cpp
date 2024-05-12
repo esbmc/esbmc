@@ -1,5 +1,5 @@
-#include <solidity-frontend/solidity_grammar.h>
 #include <fmt/core.h>
+#include <solidity-frontend/solidity_grammar.h>
 #include <set>
 #include <util/message.h>
 
@@ -156,6 +156,10 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     {
       return TupleTypeName;
     }
+    if (typeIdentifier.substr(0, 10) == "t_mapping(")
+    {
+      return MappingTypeName;
+    }
     else if (typeIdentifier.find("t_array$") != std::string::npos)
     {
       // Solidity's array type description is like:
@@ -192,15 +196,11 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
       // For state var declaration,
       return ElementaryTypeName;
     }
-    else if (
-      type_name["typeIdentifier"].get<std::string>().find("t_enum$") !=
-      std::string::npos)
+    else if (typeIdentifier.find("t_enum$") != std::string::npos)
     {
       return EnumTypeName;
     }
-    else if (
-      type_name["typeIdentifier"].get<std::string>().find("t_contract$") !=
-      std::string::npos)
+    else if (typeIdentifier.find("t_contract$") != std::string::npos)
     {
       return ContractTypeName;
     }
@@ -225,12 +225,15 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
       // FunctionToPointer decay in CallExpr when making a function call
       return Pointer;
     }
-    else if (
-      type_name["typeIdentifier"].get<std::string>().find("ArrayToPtr") !=
-      std::string::npos)
+    else if (typeIdentifier.find("ArrayToPtr") != std::string::npos)
     {
       // ArrayToPointer decay in DeclRefExpr when dereferencing an array, e.g. a[0]
       return PointerArrayToPtr;
+    }
+    // for Special Variables and Functions
+    else if (typeIdentifier.substr(0, 7) == "t_magic")
+    {
+      return BuiltinTypeName;
     }
     else
     {
@@ -274,6 +277,9 @@ const char *type_name_to_str(TypeNameT type)
     ENUM_TO_STR(TypeConversionName)
     ENUM_TO_STR(EnumTypeName)
     ENUM_TO_STR(StructTypeName)
+    ENUM_TO_STR(TupleTypeName)
+    ENUM_TO_STR(MappingTypeName)
+    ENUM_TO_STR(BuiltinTypeName)
     ENUM_TO_STR(TypeNameTError)
   default:
   {
@@ -669,6 +675,10 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
   {
     return Tuple;
   }
+  else if (expr["nodeType"] == "Mapping")
+  {
+    return Mapping;
+  }
   else if (expr["nodeType"] == "FunctionCall")
   {
     if (expr["expression"]["nodeType"] == "NewExpression")
@@ -686,10 +696,15 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
       get_type_name_t(expr["expression"]["typeDescriptions"]);
     if (type_name == SolidityGrammar::TypeNameT::StructTypeName)
       return StructMemberCall;
-    if (type_name == SolidityGrammar::TypeNameT::EnumTypeName)
+    else if (type_name == SolidityGrammar::TypeNameT::EnumTypeName)
       return EnumMemberCall;
-    if (type_name == SolidityGrammar::TypeNameT::ContractTypeName)
+    else if (type_name == SolidityGrammar::TypeNameT::ContractTypeName)
       return ContractMemberCall;
+    else
+      //!Fixme. Assume it's a builtin member
+      // due to that the BuiltinTypeName cannot cover all the builtin member
+      // e.g. string.concat ==> TypeConversionName
+      return BuiltinMemberCall;
   }
   else if (expr["nodeType"] == "ImplicitCastExprClass")
   {
@@ -933,6 +948,7 @@ const char *expression_to_str(ExpressionT type)
     ENUM_TO_STR(DeclRefExprClass)
     ENUM_TO_STR(Literal)
     ENUM_TO_STR(Tuple)
+    ENUM_TO_STR(Mapping)
     ENUM_TO_STR(CallExprClass)
     ENUM_TO_STR(ImplicitCastExprClass)
     ENUM_TO_STR(IndexAccess)
@@ -940,6 +956,7 @@ const char *expression_to_str(ExpressionT type)
     ENUM_TO_STR(ContractMemberCall)
     ENUM_TO_STR(StructMemberCall)
     ENUM_TO_STR(EnumMemberCall)
+    ENUM_TO_STR(BuiltinMemberCall)
     ENUM_TO_STR(ElementaryTypeNameExpression)
     ENUM_TO_STR(ExpressionTError)
   default:
