@@ -10,7 +10,6 @@
 
 namespace SolidityTemplate
 {
-
 /// header & typedef
 
 const std::string sol_header = R"(
