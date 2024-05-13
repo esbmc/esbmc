@@ -110,10 +110,8 @@ typet python_converter::get_typet(const std::string &ast_type, size_t type_size)
     return uint256_type();
   if (ast_type == "bytes")
   {
-    typet char_type = signed_char_type();
-    char_type.set("#cpp_type", "signed_char");
     typet t = array_typet(
-      char_type,
+      int_type(),
       constant_exprt(
         integer2binary(BigInt(type_size), bv_width(size_type())),
         integer2string(BigInt(type_size)),
@@ -731,14 +729,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       }
 
       if (arg.type().is_array())
-      {
-        // Passing address of the array's first element
-        typet ptr_type = pointer_typet(arg.type().subtype());
-        exprt pos = gen_zero(size_type());
-        exprt index = index_exprt(arg, pos, arg.type().subtype());
-        exprt address_expr = address_of_exprt(index);
-        call.arguments().push_back(address_expr);
-      }
+        call.arguments().push_back(address_of_exprt(arg));
       else
         call.arguments().push_back(arg);
     }
