@@ -948,8 +948,6 @@ smt_convt::resultt bmct::multi_property_check(
       }
     }
 
-    //TODO: show unreached claims
-
     if (total_instance != 0)
       log_result(
         "Assertion Instances Coverage: {}%",
@@ -968,8 +966,6 @@ smt_convt::resultt bmct::multi_property_check(
       tmp.get_total_cond_assert();
     int tracked_instance = 0;
     int total_instance = 0;
-    std::unordered_set<std::string> short_circuit_instance = {};
-    std::unordered_set<std::string> reached_instance_loc = {};
 
     // show claims
     bool cond_show_claims =
@@ -995,7 +991,6 @@ smt_convt::resultt bmct::multi_property_check(
         auto pos = claim.find(delimiter);
         std::string claim_msg = claim.substr(0, pos);
         std::string claim_loc = claim.substr(pos + 1);
-        reached_instance_loc.insert(claim_loc);
 
         if (
           claim_msg[0] == '!' && claim_msg[1] == '(' && claim_msg.back() == ')')
@@ -1035,27 +1030,18 @@ smt_convt::resultt bmct::multi_property_check(
       }
     }
 
-    //! the reached_claim might not be empty (due to unwinding assertions)
+    //! the reached_claims might not be empty (due to unwinding assertions)
     // show short-circuited:
-    // to distinguish with unreachable, we utilize the location info
-    for (const auto &claim : total_cond_assert_cpy)
-    {
-      std::string delimiter = "\t";
-      auto pos = claim.find(delimiter);
-      std::string claim_loc = claim.substr(pos + 1);
-      if (reached_instance_loc.count(claim_loc))
-        short_circuit_instance.insert(claim);
-    }
 
     if (cond_show_claims)
     {
       log_status(
-        "Short Circuited Conditions:  {}", short_circuit_instance.size());
-      for (const auto &claim : short_circuit_instance)
+        "Short Circuited Conditions:  {}", total_cond_assert_cpy.size());
+      for (const auto &claim : total_cond_assert_cpy)
         log_status("  {}", claim);
     }
 
-    total_instance += short_circuit_instance.size();
+    total_instance += total_cond_assert_cpy.size();
     if (total_instance != 0)
       log_result(
         "Condition Coverage: {}%", tracked_instance * 100.0 / total_instance);
