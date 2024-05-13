@@ -1033,7 +1033,7 @@ smt_convt::resultt bmct::multi_property_check(
 
     //! the reached_claims might not be empty (due to unwinding assertions)
     // show short-circuited:
-    if (cond_show_claims)
+    if (cond_show_claims && total_cond_assert_cpy.size() > 0)
     {
       log_status("[Short Circuited Conditions]");
       for (const auto &claim : total_cond_assert_cpy)
@@ -1041,7 +1041,7 @@ smt_convt::resultt bmct::multi_property_check(
     }
 
     // show the number
-    log_result("Reached Conditions:  {}", total_instance);
+    log_result("\nReached Conditions:  {}", total_instance);
     log_result("Short Circuited Conditions:  {}", total_cond_assert_cpy.size());
 
     total_instance += total_cond_assert_cpy.size();
