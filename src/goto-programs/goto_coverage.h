@@ -30,6 +30,13 @@ public:
     goto_programt::targett &it,
     const expr2tc &guard);
 
+  // customize comment
+  void insert_assert(
+    goto_programt &goto_program,
+    goto_programt::targett &it,
+    const expr2tc &guard,
+    const std::string &idf);
+
   // convert every assertion to an assert(0)
   void make_asserts_false();
 
