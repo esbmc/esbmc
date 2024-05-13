@@ -85,12 +85,21 @@ void goto_coveraget::insert_assert(
   goto_programt::targett &it,
   const expr2tc &guard)
 {
+  insert_assert(goto_program, it, guard, from_expr(ns, "", guard));
+}
+
+void goto_coveraget::insert_assert(
+  goto_programt &goto_program,
+  goto_programt::targett &it,
+  const expr2tc &guard,
+  const std::string &idf)
+{
   goto_programt::targett t = goto_program.insert(it);
   t->type = ASSERT;
   t->guard = guard;
   t->location = it->location;
   t->location.property("instrumented assertion");
-  t->location.comment(from_expr(ns, "", guard));
+  t->location.comment(idf);
   t->location.user_provided(true);
   it = ++t;
 }
@@ -306,8 +315,12 @@ void goto_coveraget::add_cond_cov_init_assert(
   expr2tc guard;
   migrate_expr(expr, guard);
 
-  insert_assert(goto_program, it, guard);
-  std::string idf = from_expr(ns, "", guard) + "\t" + it->location.as_string();
+  // e.g. assert(!(a==1));  // a==1
+  std::string idf = from_expr(ns, "", guard);
+  make_not(guard);
+
+  // insert assert
+  insert_assert(goto_program, it, guard, idf);
 
   if (target_num != -1)
   {
@@ -344,9 +357,9 @@ void goto_coveraget::add_cond_cov_init_assert(
   }
 
   // reversal
+  idf = from_expr(ns, "", guard);
   make_not(guard);
-  insert_assert(goto_program, it, guard);
-  idf = from_expr(ns, "", guard) + "\t" + it->location.as_string();
+  insert_assert(goto_program, it, guard, idf);
 }
 
 /*
@@ -435,17 +448,9 @@ void goto_coveraget::add_cond_cov_rhs_assert(
   make_not(a_guard);
 
   // 5. modified insert_assert
-  goto_programt::targett t = goto_program.insert(it);
-  t->type = ASSERT;
-  t->guard = guard;
-  t->location = it->location;
-  t->location.property("instrumented assertion");
-  t->location.comment(from_expr(ns, "", a_guard));
-  t->location.user_provided(true);
-  it = ++t;
-
   std::string idf =
-    from_expr(ns, "", a_guard) + "\t" + it->location.as_string();
+    from_expr(ns, "", a_guard);
+  insert_assert(goto_program, it, guard, idf);
 
   // 6. reversal
   *root_ptr = old_root;
@@ -471,16 +476,8 @@ void goto_coveraget::add_cond_cov_rhs_assert(
   migrate_expr(join_not_expr, guard);
   migrate_expr(rhs, a_guard);
 
-  t = goto_program.insert(it);
-  t->type = ASSERT;
-  t->guard = guard;
-  t->location = it->location;
-  t->location.property("instrumented assertion");
-  t->location.comment(from_expr(ns, "", a_guard));
-  t->location.user_provided(true);
-  it = ++t;
-
-  idf = from_expr(ns, "", a_guard) + "\t" + it->location.as_string();
+  idf = from_expr(ns, "", a_guard);
+  insert_assert(goto_program, it, guard, idf);
 
   // 7. restore root_ptr
   // noted that this should be done before the updating of *top_ptr
