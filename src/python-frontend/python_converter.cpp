@@ -110,6 +110,8 @@ typet python_converter::get_typet(const std::string &ast_type, size_t type_size)
     return uint256_type();
   if (ast_type == "bytes")
   {
+	// TODO: Keep "bytes" as signed char instead of "int_type()", and cast to an 8-bit integer in [] operations
+	// or consider modelling it with string_constantt.
     typet t = array_typet(
       int_type(),
       constant_exprt(
