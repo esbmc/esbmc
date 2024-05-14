@@ -1,8 +1,10 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/json_utils.h>
 #include <python_frontend_types.h>
+#include <ansi-c/convert_float_literal.h>
 #include <util/std_code.h>
 #include <util/c_types.h>
+#include <util/c_typecast.h>
 #include <util/arith_tools.h>
 #include <util/expr_util.h>
 #include <util/message.h>
@@ -36,6 +38,8 @@ static const std::unordered_map<std::string, StatementType> statement_map = {
   {"Assert", StatementType::ASSERT},
   {"ClassDef", StatementType::CLASS_DEFINITION},
   {"Pass", StatementType::PASS},
+  {"Break", StatementType::BREAK},
+  {"Continue", StatementType::CONTINUE},
   {"ImportFrom", StatementType::IMPORT},
   {"Import", StatementType::IMPORT}};
 
@@ -56,8 +60,20 @@ static StatementType get_statement_type(const nlohmann::json &element)
 }
 
 // Convert Python/AST to irep2 operations
-static std::string get_op(const std::string &op)
+static std::string get_op(const std::string &op, const typet &type)
 {
+  if (type.is_floatbv())
+  {
+    if (op == "Add")
+      return "ieee_add";
+    if (op == "Sub")
+      return "ieee_sub";
+    if (op == "Mult")
+      return "ieee_mul";
+    if (op == "Div")
+      return "ieee_div";
+  }
+
   auto it = operator_map.find(op);
   if (it != operator_map.end())
   {
@@ -78,10 +94,10 @@ static struct_typet::componentt build_component(
 }
 
 // Convert Python/AST types to irep2 types
-typet python_converter::get_typet(const std::string &ast_type)
+typet python_converter::get_typet(const std::string &ast_type, size_t type_size)
 {
   if (ast_type == "float")
-    return float_type();
+    return double_type();
   if (ast_type == "int")
     /* FIXME: We need to map 'int' to another irep type that provides unlimited precision
 	https://docs.python.org/3/library/stdtypes.html#numeric-types-int-float-complex */
@@ -90,6 +106,20 @@ typet python_converter::get_typet(const std::string &ast_type)
     return long_long_uint_type();
   if (ast_type == "bool")
     return bool_type();
+  if (ast_type == "uint256" || ast_type == "BLSFieldElement")
+    return uint256_type();
+  if (ast_type == "bytes")
+  {
+    typet char_type = signed_char_type();
+    char_type.set("#cpp_type", "signed_char");
+    typet t = array_typet(
+      char_type,
+      constant_exprt(
+        integer2binary(BigInt(type_size), bv_width(size_type())),
+        integer2string(BigInt(type_size)),
+        size_type()));
+    return t;
+  }
   if (is_class(ast_type, ast_json))
     return symbol_typet("tag-" + ast_type);
   return empty_typet();
@@ -153,13 +183,16 @@ static ExpressionType get_expression_type(const nlohmann::json &element)
   if (type == "IfExp")
     return ExpressionType::IF_EXPR;
 
+  if (type == "Subscript")
+    return ExpressionType::SUBSCRIPT;
+
   return ExpressionType::UNKNOWN;
 }
 
 exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 {
   std::string op(element["op"]["_type"].get<std::string>());
-  exprt logical_expr(get_op(op), bool_type());
+  exprt logical_expr(get_op(op, bool_type()), bool_type());
 
   // Iterate over operands of logical operations (and/or)
   for (const auto &operand : element["values"])
@@ -279,8 +312,19 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   assert(lhs.type() == rhs.type());
 
+  // Replace ** operation with the resultant constant.
+  if (op == "Pow")
+  {
+    BigInt base(
+      binary2integer(lhs.value().as_string(), lhs.type().is_signedbv()));
+    BigInt exp(
+      binary2integer(rhs.value().as_string(), rhs.type().is_signedbv()));
+    constant_exprt pow_expr(power(base, exp), lhs.type());
+    return pow_expr;
+  }
+
   typet type = (is_relational_op(op)) ? bool_type() : lhs.type();
-  exprt bin_expr(get_op(op), type);
+  exprt bin_expr(get_op(op, type), type);
   bin_expr.copy_to_operands(lhs, rhs);
 
   // floor division (//) operation corresponds to an int division with floor rounding
@@ -330,7 +374,8 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
   if (element["operand"].contains("value"))
     type = get_typet(element["operand"]["value"]);
 
-  exprt unary_expr(get_op(element["op"]["_type"].get<std::string>()), type);
+  exprt unary_expr(
+    get_op(element["op"]["_type"].get<std::string>(), type), type);
 
   // get subexpr
   exprt unary_sub = get_expr(element["operand"]);
@@ -426,6 +471,26 @@ symbolt *python_converter::find_function_in_imported_modules(
   return nullptr;
 }
 
+symbolt *
+python_converter::find_symbol_in_global_scope(std::string &symbol_id) const
+{
+  std::size_t class_start_pos = symbol_id.find("@C@");
+  std::size_t func_start_pos = symbol_id.find("@F@");
+
+  // Remove class name from symbol
+  if (class_start_pos != std::string::npos)
+    symbol_id.erase(class_start_pos, func_start_pos - class_start_pos);
+
+  func_start_pos = symbol_id.find("@F@");
+  std::size_t func_end_pos = symbol_id.rfind("@");
+
+  // Remove function name from symbol
+  if (func_start_pos != std::string::npos)
+    symbol_id.erase(func_start_pos, func_end_pos - func_start_pos);
+
+  return context.find_symbol(symbol_id);
+}
+
 std::string python_converter::get_classname_from_symbol_id(
   const std::string &symbol_id) const
 {
@@ -444,28 +509,90 @@ std::string python_converter::get_classname_from_symbol_id(
   return class_name;
 }
 
+function_id python_converter::build_function_id(const nlohmann::json &element)
+{
+  const std::string __ESBMC_get_object_size = "__ESBMC_get_object_size";
+  const std::string __ESBMC_assume = "__ESBMC_assume";
+  const std::string __VERIFIER_assume = "__VERIFIER_assume";
+
+  bool is_member_function_call = false;
+  const nlohmann::json &func_json = element["func"];
+  const std::string &func_type = func_json["_type"];
+  std::string func_name, obj_name;
+  std::string func_symbol_id = create_symbol_id();
+
+  if (func_type == "Name")
+    func_name = func_json["id"];
+  else if (func_type == "Attribute")
+  {
+    func_name = func_json["attr"];
+    obj_name = func_json["value"]["id"];
+    if (json_utils::is_module(obj_name, ast_json))
+      func_symbol_id = create_symbol_id(imported_modules[obj_name]);
+    else
+      is_member_function_call = true;
+  }
+
+  if (func_name == "len")
+  {
+    func_name = __ESBMC_get_object_size;
+    func_symbol_id = "c:@F@" + __ESBMC_get_object_size;
+  }
+  else if (func_name == __ESBMC_assume || func_name == __VERIFIER_assume)
+    func_symbol_id = func_name;
+  else if (func_symbol_id.find("@F@") == std::string::npos)
+    func_symbol_id += "@F@" + func_name;
+
+  bool is_ctor_call = is_constructor_call(element);
+
+  // Insert class name in the symbol id
+  std::string class_name;
+  if (is_ctor_call || is_member_function_call)
+  {
+    std::size_t pos = func_symbol_id.rfind("@F@");
+    if (pos != std::string::npos)
+    {
+      if (is_ctor_call)
+        class_name = func_name;
+      else if (is_member_function_call)
+      {
+        assert(!obj_name.empty());
+        if (is_builtin_type(obj_name) || is_class(obj_name, ast_json))
+          class_name = obj_name;
+        else
+        {
+          auto obj_node = find_var_decl(obj_name, ast_json);
+          if (obj_node == nlohmann::json())
+            abort();
+          class_name = obj_node["annotation"]["id"].get<std::string>();
+        }
+      }
+      func_symbol_id.insert(pos, "@C@" + class_name);
+    }
+  }
+
+  return {func_name, func_symbol_id, class_name};
+}
+
 exprt python_converter::get_function_call(const nlohmann::json &element)
 {
   // TODO: Refactor into different classes/functions
   if (element.contains("func") && element["_type"] == "Call")
   {
-    bool is_member_function_call = false;
-    bool is_imported_module_call = false;
-    std::string func_name, obj_name;
+    bool is_instance_method_call = false;
+    bool is_class_method_call = false;
 
-    if (element["func"]["_type"] == "Name")
+    if (element["func"]["_type"] == "Attribute")
     {
-      func_name = element["func"]["id"];
+      const auto &func_value = element["func"]["value"]["id"];
+      if (is_class(func_value, ast_json))
+        is_class_method_call = true;
+      else if (!json_utils::is_module(func_value, ast_json))
+        is_instance_method_call = true;
     }
-    else if (element["func"]["_type"] == "Attribute")
-    {
-      func_name = element["func"]["attr"];
-      obj_name = element["func"]["value"]["id"];
-      if (json_utils::is_module(obj_name, ast_json))
-        is_imported_module_call = true;
-      else
-        is_member_function_call = true;
-    }
+
+    function_id func_id = build_function_id(element);
+    std::string func_name(func_id.function_name);
 
     // nondet_X() functions restricted to basic types supported in Python
     std::regex pattern(
@@ -482,56 +609,30 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
 
     locationt location = get_location_from_decl(element);
+    const std::string func_symbol_id(func_id.symbol_id);
+    assert(!func_symbol_id.empty());
 
-    std::string func_symbol_id =
-      (is_imported_module_call) ? create_symbol_id(imported_modules[obj_name])
-                                : create_symbol_id();
-
-    if (func_symbol_id.find("@F@") == func_symbol_id.npos)
-      func_symbol_id += std::string("@F@") + func_name;
-
-    // __ESBMC_assume
-    if (func_name == "__ESBMC_assume" || func_name == "__VERIFIER_assume")
+    if (
+      func_name == "__ESBMC_assume" || func_name == "__VERIFIER_assume" ||
+      func_name == "__ESBMC_get_object_size")
     {
-      func_symbol_id = func_name;
       if (context.find_symbol(func_symbol_id.c_str()) == nullptr)
       {
         // Create/init symbol
-        symbolt symbol;
-        symbol.mode = "C";
-        symbol.module = python_filename;
-        symbol.location = location;
-        symbol.type = code_typet();
-        symbol.name = func_name;
-        symbol.id = func_symbol_id;
+        code_typet code_type;
+        if (func_name == "__ESBMC_get_object_size")
+        {
+          code_type.return_type() = int_type();
+          code_type.arguments().push_back(pointer_typet(empty_typet()));
+        }
 
+        symbolt symbol = create_symbol(
+          python_filename, func_name, func_symbol_id, location, code_type);
         context.add(symbol);
       }
     }
 
     bool is_ctor_call = is_constructor_call(element);
-
-    // Insert class name in the symbol id
-    std::string class_name;
-    if (is_ctor_call || is_member_function_call)
-    {
-      std::size_t pos = func_symbol_id.rfind("@F@");
-      if (pos != std::string::npos)
-      {
-        if (is_ctor_call)
-          class_name = func_name;
-        else if (is_member_function_call)
-        {
-          // Get class name from obj annotation
-          auto obj_node = find_var_decl(obj_name, ast_json);
-          if (obj_node == nlohmann::json())
-            abort();
-
-          class_name = obj_node["annotation"]["id"].get<std::string>();
-        }
-        func_symbol_id.insert(pos, "@C@" + class_name);
-      }
-    }
 
     const symbolt *func_symbol = context.find_symbol(func_symbol_id.c_str());
 
@@ -541,9 +642,11 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 
     if (func_symbol == nullptr)
     {
-      if (is_ctor_call || is_member_function_call)
+      if (is_ctor_call || is_instance_method_call)
       {
         // Get method from a base class when it is not defined in the current class
+        const std::string class_name(func_id.class_name);
+
         func_symbol = find_function_in_base_classes(
           class_name, func_symbol_id, func_name, is_ctor_call);
 
@@ -557,9 +660,10 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
           }
           base_ctor_called = true;
         }
-        else if (is_member_function_call)
+        else if (is_instance_method_call)
         {
           // Update obj attributes from self
+          const std::string &obj_name = element["func"]["value"]["id"];
           const std::string obj_symbol_id = create_symbol_id() + "@" + obj_name;
           assert(context.find_symbol(obj_symbol_id));
 
@@ -569,19 +673,18 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
             obj_symbol_id);
         }
       }
-      else if (is_builtin_type(func_name))
+      else if (is_builtin_type(func_name) || is_consensus_type(func_name))
       {
         // Replace the function call with a constant value. For example, x = int(1) becomes x = 1
         typet t = get_typet(func_name);
-        if (t == int_type())
-          return from_integer(element["args"][0]["value"].get<int>(), t);
-        else if (t == bool_type())
-          return gen_boolean(element["args"][0]["value"].get<bool>());
+        exprt expr = get_expr(element["args"][0]);
+        expr.type() = t;
+        return expr;
       }
       else
       {
-        log_error("Undefined function: {}", func_name.c_str());
-        abort();
+        log_warning("Undefined function: {}", func_name.c_str());
+        return exprt();
       }
     }
 
@@ -598,7 +701,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       assert(ref_instance);
       call.arguments().push_back(gen_address_of(*ref_instance));
     }
-    else if (is_member_function_call)
+    else if (is_instance_method_call)
     {
       // Self is the obj instance from obj.method() call
       std::string symbol_id = create_symbol_id() + "@" +
@@ -607,9 +710,33 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       assert(obj_symbol);
       call.arguments().push_back(gen_address_of(symbol_expr(*obj_symbol)));
     }
+    else if (is_class_method_call)
+    {
+      typet t = pointer_typet(empty_typet());
+      call.arguments().push_back(gen_zero(t));
+    }
 
     for (const auto &arg_node : element["args"])
-      call.arguments().push_back(get_expr(arg_node));
+    {
+      exprt arg = get_expr(arg_node);
+      if (func_name == "__ESBMC_get_object_size")
+      {
+        c_typecastt c_typecast(ns);
+        c_typecast.implicit_typecast(arg, pointer_typet(empty_typet()));
+      }
+      call.arguments().push_back(arg);
+    }
+
+    if (func_name == "__ESBMC_get_object_size")
+    {
+      side_effect_expr_function_callt sideeffect;
+      sideeffect.function() = call.function();
+      sideeffect.arguments() = call.arguments();
+      sideeffect.location() = call.location();
+      sideeffect.type() =
+        static_cast<const typet &>(call.function().type().return_type());
+      return sideeffect;
+    }
 
     return call;
   }
@@ -643,13 +770,25 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   case ExpressionType::LITERAL:
   {
     auto value = element["value"];
-    if (element["value"].is_number_integer())
-    {
+    if (value.is_number_integer())
       expr = from_integer(value.get<int>(), int_type());
-    }
-    else if (element["value"].is_boolean())
-    {
+    else if (value.is_boolean())
       expr = gen_boolean(value.get<bool>());
+    else if (value.is_number_float())
+      convert_float_literal(value.dump(), expr);
+    else if (value.is_string() && current_element_type.is_array())
+    {
+      expr = gen_zero(current_element_type);
+      typet t = signed_char_type();
+      unsigned int i = 0;
+      for (char &ch : element["value"].get<std::string>())
+      {
+        exprt char_value = constant_exprt(
+          integer2binary(BigInt(ch), bv_width(t)),
+          integer2string(BigInt(ch)),
+          t);
+        expr.operands().at(i++) = char_value;
+      }
     }
     break;
   }
@@ -682,9 +821,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     symbolt *symbol = context.find_symbol(symbol_id);
     if (!symbol)
     {
-      log_error("Symbol not found: {}\n", symbol_id.c_str());
-      abort();
+      symbol = find_symbol_in_global_scope(symbol_id);
+      if (!symbol)
+      {
+        log_error("Symbol not found: {}\n", symbol_id.c_str());
+        abort();
+      }
     }
+
     expr = symbol_expr(*symbol);
 
     // Get instance attribute
@@ -740,7 +884,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       };
 
       // Get instance attribute from class component
-      if (class_type.has_component(attr_name) && is_instance_attr())
+      if (
+        class_type.has_component(attr_name) &&
+        (is_instance_attr() || is_converting_rhs))
       {
         const typet &attr_type = class_type.get_component(attr_name).type();
         expr = member_exprt(
@@ -772,6 +918,26 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   case ExpressionType::IF_EXPR:
   {
     expr = get_conditional_stm(element);
+    break;
+  }
+  case ExpressionType::SUBSCRIPT:
+  {
+    exprt array = get_expr(element["value"]);
+    typet t = array.type().subtype();
+    const nlohmann::json &slice = element["slice"];
+    exprt pos = get_expr(slice);
+
+    // Adjust negative indexes
+    if (slice.contains("op") && slice["op"]["_type"] == "USub")
+    {
+      BigInt v = binary2integer(pos.op0().value().c_str(), true);
+      v *= -1;
+      array_typet t = static_cast<array_typet &>(array.type());
+      BigInt s = binary2integer(t.size().value().c_str(), true);
+      v += s;
+      pos = from_integer(v, pos.type());
+    }
+    expr = index_exprt(array, pos, t);
     break;
   }
   default:
@@ -834,8 +1000,14 @@ void python_converter::get_var_assign(
   if (ast_node.contains("annotation"))
   {
     // Get type from current annotation node
+    size_t type_size = 0;
+    if (
+      ast_node["value"].contains("value") &&
+      ast_node["value"]["value"].is_string())
+      type_size = ast_node["value"]["value"].get<std::string>().size();
+
     current_element_type =
-      get_typet(ast_node["annotation"]["id"].get<std::string>());
+      get_typet(ast_node["annotation"]["id"].get<std::string>(), type_size);
   }
   else
   {
@@ -925,8 +1097,10 @@ void python_converter::get_var_assign(
   bool has_value = false;
   if (!ast_node["value"].is_null())
   {
+    is_converting_rhs = true;
     rhs = get_expr(ast_node["value"]);
     has_value = true;
+    is_converting_rhs = false;
   }
 
   if (has_value && rhs != exprt("_init_undefined"))
@@ -1120,6 +1294,8 @@ void python_converter::get_function_definition(
     typet arg_type;
     if (arg_name == "self")
       arg_type = gen_pointer_type(get_typet(current_class_name));
+    else if (arg_name == "cls")
+      arg_type = pointer_typet(empty_typet());
     else
       arg_type = get_typet(element["annotation"]["id"].get<std::string>());
 
@@ -1183,7 +1359,12 @@ void python_converter::get_attributes_from_self(
       typet type = get_typet(stmt["annotation"]["id"].get<std::string>());
       struct_typet::componentt comp =
         build_component(current_class_name, attr_name, type);
-      clazz.components().push_back(comp);
+
+      auto &class_components = clazz.components();
+      if (
+        std::find(class_components.begin(), class_components.end(), comp) ==
+        class_components.end())
+        class_components.push_back(comp);
     }
   }
 }
@@ -1328,14 +1509,25 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       exprt empty;
       exprt expr = get_expr(element["value"]);
       if (expr != empty)
-      {
         block.move_to_operands(expr);
-      }
+
       break;
     }
     case StatementType::CLASS_DEFINITION:
     {
       get_class_definition(element, block);
+      break;
+    }
+    case StatementType::BREAK:
+    {
+      code_breakt break_expr;
+      block.move_to_operands(break_expr);
+      break;
+    }
+    case StatementType::CONTINUE:
+    {
+      code_continuet continue_expr;
+      block.move_to_operands(continue_expr);
       break;
     }
     /* "https://docs.python.org/3/tutorial/controlflow.html: "The pass statement does nothing.
@@ -1360,6 +1552,7 @@ python_converter::python_converter(
   contextt &_context,
   const nlohmann::json &ast)
   : context(_context),
+    ns(_context),
     ast_json(ast),
     current_func_name(""),
     current_class_name(""),
@@ -1379,6 +1572,21 @@ bool python_converter::convert()
   main_symbol.lvalue = true;
   main_symbol.is_extern = false;
   main_symbol.file_local = false;
+
+  python_filename = ast_json["filename"].get<std::string>();
+
+  // Load memory models -----
+  std::stringstream model_path;
+  model_path << ast_json["ast_output_dir"].get<std::string>() << "/range.json";
+  std::ifstream model_file(model_path.str());
+  nlohmann::json model_json;
+  model_file >> model_json;
+
+  exprt mm_code = get_block(model_json["body"]);
+  convert_expression_to_code(mm_code);
+
+  // Add imported code to main symbol
+  main_symbol.value.swap(mm_code);
 
   // Handle --function option
   const std::string function = config.options.get_option("function");
@@ -1403,6 +1611,17 @@ bool python_converter::convert()
     {
       log_error("Function \"{}\" not found\n", function);
       return true;
+    }
+
+    // Convert all variables from global scope
+    for (const auto &elem : ast_json["body"])
+    {
+      StatementType type = get_statement_type(elem);
+      if (type == StatementType::VARIABLE_ASSIGN)
+      {
+        code_blockt block;
+        get_var_assign(elem, block);
+      }
     }
 
     // Convert a single function
@@ -1465,7 +1684,6 @@ bool python_converter::convert()
     }
 
     // Convert main statements
-    python_filename = ast_json["filename"].get<std::string>();
     exprt main_block = get_block(ast_json["body"]);
     codet main_code = convert_expression_to_code(main_block);
 

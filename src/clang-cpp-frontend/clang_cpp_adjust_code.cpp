@@ -12,6 +12,22 @@ void clang_cpp_adjust::convert_expression_to_code(exprt &expr)
   expr.swap(code);
 }
 
+void clang_cpp_adjust::adjust_code(codet &code)
+{
+  const irep_idt &statement = code.statement();
+
+  if (statement == "cpp-catch")
+  {
+    adjust_catch(code);
+  }
+  else if (statement == "throw_decl")
+  {
+    adjust_throw_decl(code);
+  }
+  else
+    clang_c_adjust::adjust_code(code);
+}
+
 void clang_cpp_adjust::adjust_ifthenelse(codet &code)
 {
   // In addition to the C syntax, C++ also allows a declaration
@@ -156,4 +172,39 @@ void clang_cpp_adjust::adjust_decl_block(codet &code)
   }
 
   code.swap(new_block);
+}
+
+void clang_cpp_adjust::adjust_catch(codet &code)
+{
+  codet::operandst &operands = code.operands();
+  // adjust try block
+  adjust_expr(operands[0]);
+
+  // First operand is always the try block, skip it
+  for (auto it = ++operands.begin(); it != operands.end(); it++)
+  {
+    // The following operands are the catchs
+    adjust_expr(*it);
+    code_blockt &block = to_code_block(to_code(*it));
+
+    std::vector<irep_idt> ids;
+    convert_exception_id(block.type(), "", ids);
+
+    block.type() = code_typet();
+    block.set("exception_id", ids.front());
+  }
+}
+
+void clang_cpp_adjust::adjust_throw_decl(codet &code)
+{
+  codet::operandst &operands = code.operands();
+
+  for (auto &op : operands)
+  {
+    std::vector<irep_idt> ids;
+    convert_exception_id(op.type(), "", ids);
+
+    op.type() = code_typet();
+    op.set("throw_decl_id", ids.front());
+  }
 }

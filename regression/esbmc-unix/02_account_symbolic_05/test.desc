@@ -1,4 +1,4 @@
 CORE
 main.c
---context-bound 1 
+--context-bound 1  -Wno-error=implicit-function-declaration
 ^VERIFICATION SUCCESSFUL$

@@ -23,6 +23,10 @@ public:
 
   interval_templatet() = default;
 
+  explicit interval_templatet(const type2tc &)
+  {
+  }
+
   explicit interval_templatet(const T &x) : lower(x), upper(x)
   {
   }
@@ -221,6 +225,19 @@ public:
         upper = *i.upper;
       }
     }
+  }
+
+  // Wether *this \subseteq other
+  bool is_subseteq(const interval_templatet &other) const
+  {
+    if ((!lower && other.lower) || (!upper && other.upper))
+      return false;
+    if (other.lower && *lower < *other.lower)
+      return false;
+    if (other.upper && *upper > *other.upper)
+      return false;
+
+    return true;
   }
 
   virtual void approx_union_with(const interval_templatet &i)

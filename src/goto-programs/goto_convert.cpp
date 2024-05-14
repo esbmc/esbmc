@@ -330,25 +330,12 @@ void goto_convertt::convert_throw_decl(const exprt &expr, goto_programt &dest)
 
 void goto_convertt::convert_throw(const exprt &expr, goto_programt &dest)
 {
-  // add the THROW_DECL instruction to 'dest'
+  // add the THROW instruction to 'dest'
   goto_programt::targett throw_instruction = dest.add_instruction();
-  codet c("code");
-  c.set_statement("cpp-throw");
-
-  // the THROW instruction is annotated with a list of IDs,
-  // one per target
-  irept::subt &throw_list = c.add("throw_list").get_sub();
-  for (const auto &block : expr.operands())
-  {
-    irept type = irept(block.get("throw_decl_id"));
-
-    // grab the ID and add to THROW_DECL instruction
-    throw_list.emplace_back(type);
-  }
 
   throw_instruction->make_throw();
   throw_instruction->location = expr.location();
-  migrate_expr(c, throw_instruction->code);
+  migrate_expr(expr, throw_instruction->code);
 }
 
 void goto_convertt::convert_catch(const codet &code, goto_programt &dest)
@@ -389,10 +376,6 @@ void goto_convertt::convert_catch(const codet &code, goto_programt &dest)
 
     // grab the ID and add to CATCH instruction
     exception_list.push_back(block.get("exception_id"));
-
-    // Hack for object value passing
-    const_cast<exprt::operandst &>(block.op0().operands())
-      .push_back(gen_zero(block.op0().op0().type()));
 
     convert(block, tmp);
     catch_push_instruction->targets.push_back(tmp.instructions.begin());

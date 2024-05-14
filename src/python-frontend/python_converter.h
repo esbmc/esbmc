@@ -1,6 +1,7 @@
 #pragma once
 
 #include <util/context.h>
+#include <util/namespace.h>
 #include <nlohmann/json.hpp>
 
 #include <map>
@@ -8,6 +9,7 @@
 
 class codet;
 class struct_typet;
+class function_id;
 
 class python_converter
 {
@@ -30,6 +32,7 @@ private:
   exprt get_binary_operator_expr(const nlohmann::json &element);
   exprt get_logical_operator_expr(const nlohmann::json &element);
   exprt get_conditional_stm(const nlohmann::json &ast_node);
+  function_id build_function_id(const nlohmann::json &element);
   exprt get_function_call(const nlohmann::json &ast_block);
   exprt get_block(const nlohmann::json &ast_block);
 
@@ -39,7 +42,7 @@ private:
   std::string create_symbol_id() const;
   std::string create_symbol_id(const std::string &filename) const;
   bool is_constructor_call(const nlohmann::json &json);
-  typet get_typet(const std::string &ast_type);
+  typet get_typet(const std::string &ast_type, size_t type_size = 0);
   typet get_typet(const nlohmann::json &elem);
   void get_attributes_from_self(
     const nlohmann::json &method_body,
@@ -54,6 +57,8 @@ private:
   symbolt *
   find_function_in_imported_modules(const std::string &symbol_id) const;
 
+  symbolt *find_symbol_in_global_scope(std::string &symbol_id) const;
+
   void update_instance_from_self(
     const std::string &class_name,
     const std::string &func_name,
@@ -62,6 +67,7 @@ private:
   std::string get_classname_from_symbol_id(const std::string &symbol_id) const;
 
   contextt &context;
+  namespacet ns;
   typet current_element_type;
   std::string python_filename;
   const nlohmann::json &ast_json;
@@ -69,6 +75,7 @@ private:
   std::string current_class_name;
   exprt *ref_instance;
   bool is_converting_lhs = false;
+  bool is_converting_rhs = false;
   bool base_ctor_called = false;
 
   // Map object to list of instance attributes

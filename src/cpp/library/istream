@@ -96,6 +96,16 @@ istream &operator>>(istream &is, char &val)
   is._gcount = 0;
   return is;
 }
+istream &operator>>(istream &is, signed char &val)
+{
+  is._gcount = 0;
+  return is;
+}
+istream &operator>>(istream &is, unsigned char &val)
+{
+  is._gcount = 0;
+  return is;
+}
 istream &operator>>(istream &is, short &val)
 {
   is._gcount = 0;
@@ -123,6 +133,18 @@ istream &operator>>(istream &is, long &val)
   return is;
 }
 istream &operator>>(istream &is, unsigned long &val)
+{
+  is._gcount = 0;
+  return is;
+}
+#endif
+#if __cplusplus >= 201103L
+istream &operator>>(istream &is, long long &val)
+{
+  is._gcount = 0;
+  return is;
+}
+istream &operator>>(istream &is, unsigned long long &val)
 {
   is._gcount = 0;
   return is;

@@ -4,6 +4,37 @@ import importlib.util
 import json
 import os
 
+class ForRangeToWhileTransformer(ast.NodeTransformer):
+    def __init__(self):
+        self.target_name = ""
+
+    def visit_For(self, node):
+        if isinstance(node.iter, ast.Call) and isinstance(node.iter.func, ast.Name) and node.iter.func.id == "range":
+            start = node.iter.args[0]
+            end = node.iter.args[1]
+            if len(node.iter.args) > 2:
+                step = node.iter.args[2]
+            else:
+                step = ast.Constant(value=1)
+
+            start_assign = ast.AnnAssign(target=ast.Name(id='start', ctx=ast.Store()), annotation=ast.Name(id='int', ctx=ast.Load()), value=start, simple=1)
+            has_next_call = ast.Call(func=ast.Name(id='ESBMC_range_has_next_', ctx=ast.Load()), args=[start, end, step], keywords=[])
+            has_next_assign = ast.AnnAssign(target=ast.Name(id='has_next', ctx=ast.Store()), annotation=ast.Name(id='bool', ctx=ast.Load()), value=has_next_call, simple=1)
+            has_next_name = ast.Name(id='has_next', ctx=ast.Load())
+            while_cond = ast.Compare(left=has_next_name, ops=[ast.Eq()], comparators=[ast.Constant(value=True)])
+            transformed_body = []
+            self.target_name = node.target.id
+            for statement in node.body:
+                transformed_body.append(self.visit(statement))
+            while_body = transformed_body + [ast.Assign(targets=[ast.Name(id='start', ctx=ast.Store())], value=ast.Call(func=ast.Name(id='ESBMC_range_next_', ctx=ast.Load()), args=[ast.Name(id='start', ctx=ast.Load()), step], keywords=[])), ast.Assign(targets=[has_next_name], value=ast.Call(func=ast.Name(id='ESBMC_range_has_next_', ctx=ast.Load()), args=[ast.Name(id='start', ctx=ast.Load()), end, step], keywords=[]))]
+            while_stmt = ast.While(test=while_cond, body=while_body, orelse=[])
+            return [start_assign, has_next_assign, while_stmt]
+        return node
+
+    def visit_Name(self, node):
+        if node.id == self.target_name:
+            node.id = 'start'
+        return node
 
 def check_usage():
     if len(sys.argv) != 3:
@@ -19,6 +50,14 @@ def import_module_by_name(module_name):
         print(f"Error: Module '{module_name}' not found.")
         print(f"Please install it with: pip3 install {module_name}")
         sys.exit(1)
+
+
+def add_type_annotation(node):
+    value_node = node.value
+    if isinstance(value_node, ast.Str):
+        value_node.esbmc_type_annotation = "str"
+    elif isinstance(value_node, ast.Bytes):
+        value_node.esbmc_type_annotation = "bytes"
 
 
 def process_imports(node, output_dir):
@@ -102,16 +141,30 @@ def main():
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
+    # Process and convert AST for main file
     with open(filename, "r") as source:
         tree = ast.parse(source.read())
 
-    # Handle imports
+    transformer = ForRangeToWhileTransformer()
+    tree = transformer.visit(tree)
+
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
+            # Handle imports
             process_imports(node, output_dir)
+        elif isinstance(node, ast.Assign):
+            # Add type annotation on assignments
+            add_type_annotation(node)
 
     # Generate JSON from AST for the main file.
     generate_ast_json(tree, filename, None, output_dir)
+
+    # Process and convert AST for memory models
+    with open(output_dir + "/memory-models/range.py") as memory_model:
+        mm_tree = ast.parse(memory_model.read())
+
+    # Generate JSON from AST for the memory models.
+    generate_ast_json(mm_tree, "range.py", None, output_dir) # TODO: Convert all Python files in memory-models folder
 
 
 if __name__ == "__main__":

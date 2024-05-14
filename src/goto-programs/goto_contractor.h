@@ -18,9 +18,9 @@
 #include <ibex/ibex_Ctc.h>
 #include <irep2/irep2.h>
 #include <util/type_byte_size.h>
-#include <goto-programs/abstract-interpretation/interval_domain.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 #include <limits>
+#include <chrono>
 
 void goto_contractor(
   goto_functionst &goto_functions,
@@ -620,14 +620,6 @@ private:
 class interval_analysis_ibex_contractor
 {
 public:
-  typedef interval_templatet<BigInt> integer_intervalt;
-  using real_intervalt =
-    interval_templatet<boost::multiprecision::cpp_bin_float_100>;
-  typedef std::unordered_map<irep_idt, integer_intervalt, irep_id_hash>
-    int_mapt;
-
-  typedef std::unordered_map<irep_idt, real_intervalt, irep_id_hash> real_mapt;
-
   double parse_time{}, apply_time{}, mod_time{}, cpy_time{};
 
   interval_analysis_ibex_contractor()
@@ -658,7 +650,7 @@ public:
     return true;
   }
 
-  void maps_to_domains(int_mapt, real_mapt);
+  // void maps_to_domains(int_mapt, real_mapt);
 
   void apply_contractor();
 
@@ -667,6 +659,28 @@ public:
   void dump(bool is_timed);
 
   [[maybe_unused]] void modularize_intervals();
+
+  void interval_to_domain(
+    const std::optional<BigInt> &lower,
+    const std::optional<BigInt> &upper,
+    const std::string &name)
+  {
+    if (lower)
+      map.update_lb_interval(lower->to_int64(), name);
+    if (upper)
+      map.update_ub_interval(upper->to_int64(), name);
+  }
+
+  void interval_to_domain(
+    const std::optional<double> &lower,
+    const std::optional<double> &upper,
+    const std::string &name)
+  {
+    if (lower)
+      map.update_lb_interval(*lower, name);
+    if (upper)
+      map.update_ub_interval(*upper, name);
+  }
 
 private:
   ibex::IntervalVector domains;

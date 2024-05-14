@@ -9,6 +9,7 @@
 // Remove warnings from Clang headers
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
+#include <clang/Basic/Version.inc>
 #include <clang/AST/Attr.h>
 #include <clang/AST/DeclCXX.h>
 #include <clang/AST/DeclFriend.h>
@@ -97,19 +98,28 @@ bool clang_cpp_convertert::get_struct_class_virtual_methods(
   return false;
 }
 
+static bool is_pure_virtual(const clang::CXXMethodDecl &md)
+{
+#if CLANG_VERSION_MAJOR < 18
+  return md.isPure();
+#else
+  return md.isPureVirtual();
+#endif
+}
+
 bool clang_cpp_convertert::annotate_virtual_overriding_methods(
   const clang::CXXMethodDecl &md,
   struct_typet::componentt &comp)
 {
   std::string method_id, method_name;
-  clang_c_convertert::get_decl_name(md, method_name, method_id);
+  get_decl_name(md, method_name, method_id);
 
   comp.type().set("#is_virtual", true);
   comp.type().set("#virtual_name", method_name);
   comp.set("is_virtual", true);
   comp.set("virtual_name", method_name);
 
-  if (md.isPure())
+  if (is_pure_virtual(md))
     comp.set("is_pure_virtual", true);
 
   return false;
@@ -614,7 +624,7 @@ void clang_cpp_convertert::get_overriden_methods(
 
     // get the id for this overriden method
     std::string method_id, method_name;
-    clang_c_convertert::get_decl_name(*md_overriden, method_name, method_id);
+    get_decl_name(*md_overriden, method_name, method_id);
 
     // avoid adding the same overriden method, e.g. in case of diamond problem
     if (map.find(method_id) != map.end())

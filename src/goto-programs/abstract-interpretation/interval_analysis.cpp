@@ -7,6 +7,7 @@
 #include <unordered_set>
 #include <util/prefix.h>
 #include <goto-programs/goto_loops.h>
+#include <util/time_stopping.h>
 
 template <class Interval>
 inline void optimize_expr_interval(expr2tc &expr, const interval_domaint &state)
@@ -76,7 +77,7 @@ static void optimize_expression(expr2tc &expr, const interval_domaint &state)
   if (interval_domaint::enable_wrapped_intervals)
     optimize_expr_interval<wrapped_interval>(expr, state);
   else
-    optimize_expr_interval<integer_intervalt>(expr, state);
+    optimize_expr_interval<interval_domaint::integer_intervalt>(expr, state);
 
   // Try sub-expressions
   expr->Foreach_operand(
@@ -254,8 +255,6 @@ void dump_intervals(
           interval.second.is_top());
       }
     };
-    d.enable_wrapped_intervals ? print_vars(d.get_wrap_map())
-                               : print_vars(d.get_int_map());
   }
 }
 
@@ -267,6 +266,7 @@ void interval_analysis(
   const optionst &options,
   const INTERVAL_INSTRUMENTATION_MODE instrument_mode)
 {
+  fine_timet algorithm_start = current_time();
   // TODO: add options for instrumentation mode
   ait<interval_domaint> interval_analysis;
   interval_domaint::set_options(options);
@@ -306,4 +306,9 @@ void interval_analysis(
     }
   }
   goto_functions.update();
+
+  fine_timet algorithm_stop = current_time();
+  log_status(
+    "Interval Analysis time: {}s",
+    time2string(algorithm_stop - algorithm_start));
 }

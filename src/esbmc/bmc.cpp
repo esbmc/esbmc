@@ -47,6 +47,11 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   interleaving_number = 0;
   interleaving_failed = 0;
 
+  ltl_results_seen[ltl_res_bad] = 0;
+  ltl_results_seen[ltl_res_failing] = 0;
+  ltl_results_seen[ltl_res_succeeding] = 0;
+  ltl_results_seen[ltl_res_good] = 0;
+
   // The next block will initialize the algorithms used for the analysis.
   {
     if (opts.get_bool_option("no-slice"))
@@ -139,7 +144,7 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
 
 void bmct::generate_smt_from_equation(
   smt_convt &smt_conv,
-  symex_target_equationt &eq)
+  symex_target_equationt &eq) const
 {
   std::string logic;
 
@@ -161,8 +166,9 @@ void bmct::generate_smt_from_equation(
     "Encoding to solver time: {}s", time2string(encode_stop - encode_start));
 }
 
-smt_convt::resultt
-bmct::run_decision_procedure(smt_convt &smt_conv, symex_target_equationt &eq)
+smt_convt::resultt bmct::run_decision_procedure(
+  smt_convt &smt_conv,
+  symex_target_equationt &eq) const
 {
   generate_smt_from_equation(smt_conv, eq);
 
@@ -435,6 +441,21 @@ smt_convt::resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
 
   } while (symex->setup_next_formula());
 
+  if (options.get_bool_option("ltl"))
+  {
+    // So, what was the lowest value ltl outcome that we saw?
+    if (ltl_results_seen[ltl_res_bad])
+      log_result("Final lowest outcome: LTL_BAD");
+    else if (ltl_results_seen[ltl_res_failing])
+      log_result("Final lowest outcome: LTL_FAILING");
+    else if (ltl_results_seen[ltl_res_succeeding])
+      log_result("Final lowest outcome: LTL_SUCCEEDING");
+    else if (ltl_results_seen[ltl_res_good])
+      log_result("Final lowest outcome: LTL_GOOD");
+    else
+      log_warning("No LTL traces seen, apparently");
+  }
+
   return interleaving_failed > 0 ? smt_convt::P_SATISFIABLE : res;
 }
 
@@ -636,6 +657,19 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       return smt_convt::P_UNSATISFIABLE;
     }
 
+    if (options.get_bool_option("ltl"))
+    {
+      int res = ltl_run_thread(*eq);
+      if (res == -1)
+        return smt_convt::P_SMTLIB;
+      if (res < 0)
+        return smt_convt::P_ERROR;
+      // Record that we've seen this outcome; later decide what the least
+      // outcome was.
+      ltl_results_seen[res]++;
+      return smt_convt::P_UNSATISFIABLE;
+    }
+
     if (!options.get_bool_option("smt-during-symex"))
     {
       runtime_solver =
@@ -667,6 +701,71 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     log_error("Out of memory\n");
     return smt_convt::P_ERROR;
   }
+}
+
+int bmct::ltl_run_thread(symex_target_equationt &equation) const
+{
+  /* LTL checking - first check for whether we have a negative prefix, then
+   * the indeterminate ones. */
+  using Type = std::pair<std::string_view, ltl_res>;
+  static constexpr std::array seq = {
+    Type{"LTL_BAD", ltl_res_bad},
+    Type{"LTL_FAILING", ltl_res_failing},
+    Type{"LTL_SUCCEEDING", ltl_res_succeeding},
+  };
+
+  for (const auto &[which, check] : seq)
+  {
+    size_t num_asserts = 0;
+
+    /* Start by turning all assertions that aren't the sought prefix assertion
+     * into skips. */
+    for (auto &SSA_step : equation.SSA_steps)
+      if (SSA_step.is_assert())
+      {
+        if (SSA_step.comment != which)
+          SSA_step.type = goto_trace_stept::SKIP;
+        else
+          num_asserts++;
+      }
+
+    smt_convt::resultt result = smt_convt::P_UNSATISFIABLE;
+    log_status("Checking for {}", which);
+    if (num_asserts != 0)
+    {
+      std::unique_ptr<smt_convt> smt_conv(create_solver("", ns, options));
+      result = run_decision_procedure(*smt_conv, equation);
+      if (result == smt_convt::P_SATISFIABLE)
+        log_status("Found trace satisfying {}", which);
+    }
+    else
+      log_warning("Couldn't find {} assertion", which);
+
+    /* Turn skip steps back into assertions. */
+    for (auto &SSA_step : equation.SSA_steps)
+      if (SSA_step.is_skip())
+        for (const auto &[which2, _] : seq)
+          if (SSA_step.comment == which2)
+          {
+            SSA_step.type = goto_trace_stept::ASSERT;
+            break;
+          }
+
+    switch (result)
+    {
+    case smt_convt::P_SATISFIABLE:
+      return check;
+    case smt_convt::P_ERROR:
+      return -2;
+    case smt_convt::P_SMTLIB:
+      return -1;
+    case smt_convt::P_UNSATISFIABLE:
+      continue;
+    }
+  }
+
+  /* Otherwise, we just got a good prefix. */
+  return ltl_res_good;
 }
 
 smt_convt::resultt bmct::multi_property_check(

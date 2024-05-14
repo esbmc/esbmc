@@ -1,4 +1,4 @@
 CORE
 time_var_mutex.c
---unwind 1 --no-unwinding-assertions
+--unwind 1 --no-unwinding-assertions -Wno-error=implicit-function-declaration -Wno-error=implicit-int -Wno-error=incompatible-function-pointer-types
 ^VERIFICATION SUCCESSFUL$

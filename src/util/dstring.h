@@ -38,9 +38,14 @@ public:
   {
   }
 
-  friend bool has_prefix(dstring s, std::string_view prefix)
+  friend bool has_prefix(const dstring &s, std::string_view prefix)
   {
     return has_prefix(std::string_view(s.as_string()), prefix);
+  }
+
+  friend bool has_suffix(const dstring &s, std::string_view suffix)
+  {
+    return has_suffix(std::string_view(s.as_string()), suffix);
   }
 
   inline bool empty() const

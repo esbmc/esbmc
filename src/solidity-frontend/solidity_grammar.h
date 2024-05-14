@@ -58,6 +58,12 @@ enum TypeNameT
   // tuple
   TupleTypeName,
 
+  // mapping
+  MappingTypeName,
+
+  // built-in member
+  BuiltinTypeName,
+
   TypeNameTError
 };
 TypeNameT get_type_name_t(const nlohmann::json &type_name);
@@ -242,6 +248,7 @@ const char *statement_to_str(StatementT type);
 //  - Skipped since it just contains 1 type: "expression + ;"
 
 // rule expression
+// these are used to identify the type of the expression
 enum ExpressionT
 {
   // BinaryOperator
@@ -303,8 +310,8 @@ enum ExpressionT
   // rule Tuple
   Tuple,
 
-  // rule revert
-  Revert,
+  // rule Mapping
+  Mapping,
 
   // FunctionCall
   CallExprClass,
@@ -336,6 +343,9 @@ enum ExpressionT
 
   // Enum Member Access
   EnumMemberCall,
+
+  // Built-in Member Access
+  BuiltinMemberCall,
 
   ExpressionTError
 };

@@ -105,13 +105,18 @@ set(REGRESSIONS_CPP03 esbmc-cpp/cpp
                       esbmc-cpp/stack
                       esbmc-cpp/unix
                       esbmc-cpp/vector
+                      esbmc-cpp/try_catch
                       )
 # list of C++11 test suites
 set(REGRESSIONS_CPP11 esbmc-cpp11/cpp
                       esbmc-cpp11/constructors
                       esbmc-cpp11/new-delete
                       esbmc-cpp11/reference
+                      esbmc-cpp11/template
                       )
+
+# list of C++14 test suites
+set(REGRESSIONS_CPP14 esbmc-cpp14/template)
 
 # NOTE: In order to make the best of the concurrency set sort the tests from the slowest to fastest.
 if(APPLE)
@@ -138,6 +143,7 @@ if(APPLE)
                     extensions
                     ${REGRESSIONS_CHERI}
                     ${REGRESSIONS_PYTHON}
+                    ltl
        )
 elseif(WIN32)
     # FUTURE: Add floats-regression esbmc-cpp/cpp
@@ -154,6 +160,7 @@ elseif(WIN32)
                     ${REGRESSIONS_MATHSAT}
                     ${REGRESSIONS_SMTLIB}
                     ${REGRESSIONS_Z3}
+                    ltl
        )
 else()
   if(NOT BENCHBRINGUP)
@@ -179,6 +186,7 @@ else()
                     ${REGRESSIONS_SMTLIB}
                     ${REGRESSIONS_Z3}
                     incremental-smt
+                    ${REGRESSIONS_CPP14}
                     ${REGRESSIONS_CPP11}
                     ${REGRESSIONS_CPP03}
                     ${REGRESSIONS_GOTO_CONTRACTOR}
@@ -188,6 +196,7 @@ else()
                     linux
                     ${REGRESSIONS_CHERI}
                     ${REGRESSIONS_PYTHON}
+                    ltl
        )
   else()
     set(REGRESSIONS $ENV{BENCHMARK_TO_RUN}) # run a single user-specified benchmark

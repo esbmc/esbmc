@@ -69,7 +69,7 @@ protected:
    * methods for code (codet) adjustment
    * and other IRs derived from codet
    */
-  void adjust_code(codet &code);
+  virtual void adjust_code(codet &code);
   virtual void adjust_ifthenelse(codet &code);
   virtual void adjust_while(codet &code);
   virtual void adjust_for(codet &code);
@@ -93,6 +93,8 @@ protected:
   virtual void align_se_function_call_return_type(
     exprt &f_op,
     side_effect_expr_function_callt &expr);
+
+  virtual void adjust_reference(exprt &expr);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_ADJUST_H_ */

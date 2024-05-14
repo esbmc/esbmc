@@ -15,6 +15,7 @@ typet int128_type();
 type2tc int128_type2();
 typet uint128_type();
 type2tc uint128_type2();
+typet uint256_type();
 typet long_int_type();
 type2tc long_int_type2();
 

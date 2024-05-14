@@ -11,52 +11,86 @@
 #endif
 // Let's start with all templates specializations.
 
-template <>
-integer_intervalt
-interval_domaint::get_interval_from_symbol(const symbol2t &sym) const
+template <size_t Index, class Interval>
+Interval interval_domaint::get_interval_from_variant(const symbol2t &sym) const
 {
-  auto it = int_map.find(sym.thename);
-  return it != int_map.end() ? it->second : integer_intervalt();
+  const auto &it = intervals->find(sym.thename);
+  // TODO: mix floats/integer
+  if (it != intervals->end() && it->second.index() == Index)
+  {
+    return *std::get<Index>(it->second);
+  }
+  return Interval(sym.type);
 }
 
 template <>
-real_intervalt
+interval_domaint::integer_intervalt
 interval_domaint::get_interval_from_symbol(const symbol2t &sym) const
 {
-  auto it = real_map.find(sym.thename);
-  return it != real_map.end() ? it->second : real_intervalt();
+  return get_interval_from_variant<0, interval_domaint::integer_intervalt>(sym);
+}
+
+template <>
+interval_domaint::real_intervalt
+interval_domaint::get_interval_from_symbol(const symbol2t &sym) const
+{
+  return get_interval_from_variant<1, interval_domaint::real_intervalt>(sym);
 }
 
 template <>
 wrapped_interval
 interval_domaint::get_interval_from_symbol(const symbol2t &sym) const
 {
-  auto it = wrap_map.find(sym.thename);
-  return it != wrap_map.end() ? it->second : wrapped_interval(sym.type);
+  return get_interval_from_variant<2, wrapped_interval>(sym);
+}
+
+template <size_t Index, class Interval>
+void interval_domaint::update_symbol_from_variant(
+  const symbol2t &sym,
+  const Interval &value)
+{
+  const auto &it = intervals->find(sym.thename);
+  const bool is_new_value_top = value.is_top();
+
+  // Are we actually changing it?
+  if (
+    (it == intervals->end() && is_new_value_top) ||
+    (it != intervals->end() && *std::get<Index>(it->second) == value))
+    return;
+
+  copy_if_needed();
+  if (is_new_value_top)
+  {
+    intervals->erase(sym.thename);
+    return;
+  }
+
+  (*intervals)[sym.thename] = std::make_shared<Interval>(value);
 }
 
 template <>
 void interval_domaint::update_symbol_interval(
   const symbol2t &sym,
-  const integer_intervalt value)
+  const interval_domaint::integer_intervalt &value)
 {
-  int_map[sym.thename] = value;
+  update_symbol_from_variant<0, interval_domaint::integer_intervalt>(
+    sym, value);
 }
 
 template <>
 void interval_domaint::update_symbol_interval(
   const symbol2t &sym,
-  const real_intervalt value)
+  const interval_domaint::real_intervalt &value)
 {
-  real_map[sym.thename] = value;
+  update_symbol_from_variant<1, interval_domaint::real_intervalt>(sym, value);
 }
 
 template <>
 void interval_domaint::update_symbol_interval(
   const symbol2t &sym,
-  const wrapped_interval value)
+  const wrapped_interval &value)
 {
-  wrap_map[sym.thename] = value;
+  update_symbol_from_variant<2, wrapped_interval>(sym, value);
 }
 
 template <class Interval>
@@ -71,8 +105,9 @@ void interval_domaint::apply_assume_symbol_truth(
     interval.set_upper(0);
     interval.set_lower(0);
   }
+
   // [1, infinity]
-  else if (is_unsignedbv_type(sym.type) || is_bool_type(sym.type))
+  else if (is_unsignedbv_type(sym.type))
     interval.make_ge_than(1);
   else if (is_signedbv_type(sym.type))
   {
@@ -81,15 +116,20 @@ void interval_domaint::apply_assume_symbol_truth(
     else if (interval.upper && interval.get_upper() == 0)
       interval.make_le_than(-1);
   }
+  else if (is_bool_type(sym.type))
+  {
+    interval.make_ge_than(1);
+    interval.make_le_than(1);
+  }
 
   update_symbol_interval(sym, interval);
 }
 
 template <>
-integer_intervalt
+interval_domaint::integer_intervalt
 interval_domaint::get_interval_from_const(const expr2tc &e) const
 {
-  integer_intervalt result; // (-infinity, infinity)
+  interval_domaint::integer_intervalt result; // (-infinity, infinity)
   if (!is_constant_int2t(e))
     return result;
   auto value = to_constant_int2t(e).value;
@@ -101,9 +141,10 @@ interval_domaint::get_interval_from_const(const expr2tc &e) const
 #include <cmath>
 
 template <>
-real_intervalt interval_domaint::get_interval_from_const(const expr2tc &e) const
+interval_domaint::real_intervalt
+interval_domaint::get_interval_from_const(const expr2tc &e) const
 {
-  real_intervalt result; // (-infinity, infinity)
+  interval_domaint::real_intervalt result; // (-infinity, infinity)
   if (!is_constant_floatbv2t(e))
     return result;
 
@@ -165,12 +206,11 @@ interval_domaint::get_interval_from_const(const expr2tc &e) const
 }
 
 template <>
-integer_intervalt
-interval_domaint::generate_modular_interval<integer_intervalt>(
-  const symbol2t sym) const
+interval_domaint::integer_intervalt interval_domaint::generate_modular_interval<
+  interval_domaint::integer_intervalt>(const symbol2t sym) const
 {
   auto t = sym.type;
-  integer_intervalt result;
+  interval_domaint::integer_intervalt result;
   if (is_unsignedbv_type(t))
   {
     result.make_le_than(BigInt::power2m1(t->get_width()));
@@ -192,11 +232,12 @@ interval_domaint::generate_modular_interval<integer_intervalt>(
 }
 
 template <>
-real_intervalt interval_domaint::generate_modular_interval<real_intervalt>(
+interval_domaint::real_intervalt
+interval_domaint::generate_modular_interval<interval_domaint::real_intervalt>(
   const symbol2t) const
 {
   // TODO: Support this
-  real_intervalt t;
+  interval_domaint::real_intervalt t;
   assert(t.is_top() && !t.is_bottom());
   return t;
 }
@@ -238,7 +279,7 @@ void interval_domaint::apply_assignment(
 }
 
 template <class T>
-T interval_domaint::extrapolate_intervals(const T &before, const T &after)
+T interval_domaint::extrapolate_intervals(const T &before, const T &after) const
 {
   T result; // Full extrapolation
   bool lower_decreased = !after.lower || (before.lower && after.lower &&
@@ -262,7 +303,7 @@ T interval_domaint::extrapolate_intervals(const T &before, const T &after)
 template <>
 wrapped_interval interval_domaint::extrapolate_intervals(
   const wrapped_interval &before,
-  const wrapped_interval &after)
+  const wrapped_interval &after) const
 {
   return wrapped_interval::extrapolate_to(before, after);
 }
@@ -285,17 +326,16 @@ interval_domaint::get_top_interval_from_expr(const expr2tc &e) const
 template <class T>
 T interval_domaint::interpolate_intervals(const T &before, const T &after)
 {
+  // More details on Principles of Abstract Interpretation.
+  // The intuition here is that if an extrapolated (infinity) interval
+  // is being reduced after the state, then we can contract on the limits.
+  // Note that this requires that the `before` is extrapolated.
   T result;
-
-  // before: [-infinity, +infinity], after: [a,b] ==> [a,b]
   bool lower_increased = !before.lower && after.lower;
   bool upper_decreased = !before.upper && after.upper;
 
-  if (lower_increased)
-    result.lower = after.lower;
-
-  if (upper_decreased)
-    result.upper = after.upper;
+  result.lower = lower_increased ? after.lower : before.lower;
+  result.upper = upper_decreased ? after.upper : before.upper;
   return result;
 }
 
@@ -461,9 +501,8 @@ T interval_domaint::get_interval(const expr2tc &e) const
     if (enable_interval_arithmetic)
     {
       const auto &arith_op = dynamic_cast<const arith_2ops &>(*e);
-      auto lhs = get_interval<T>(arith_op.side_1);
-      auto rhs = get_interval<T>(arith_op.side_2);
-
+      const T lhs = get_interval<T>(arith_op.side_1);
+      const T rhs = get_interval<T>(arith_op.side_2);
       if (is_add2t(e))
         result = lhs + rhs;
 
@@ -580,8 +619,8 @@ void interval_domaint::apply_assume_less(const expr2tc &a, const expr2tc &b)
 {
   // 1. Apply contractor algorithms
   // 2. Update refs
-  auto lhs = get_interval<Interval>(a);
-  auto rhs = get_interval<Interval>(b);
+  Interval lhs = get_interval<Interval>(a);
+  Interval rhs = get_interval<Interval>(b);
 
   // TODO: Add less than equal
   if (enable_contraction_for_abstract_states)
@@ -637,26 +676,29 @@ void interval_domaint::apply_assume_less<wrapped_interval>(
 }
 
 template <>
-bool interval_domaint::is_mapped<integer_intervalt>(const symbol2t &sym) const
+bool interval_domaint::is_mapped<interval_domaint::integer_intervalt>(
+  const symbol2t &sym) const
 {
-  return int_map.find(sym.thename) != int_map.end();
+  return intervals->find(sym.thename) != intervals->end();
 }
 
 template <>
-bool interval_domaint::is_mapped<real_intervalt>(const symbol2t &sym) const
+bool interval_domaint::is_mapped<interval_domaint::real_intervalt>(
+  const symbol2t &sym) const
 {
-  return real_map.find(sym.thename) != real_map.end();
+  return intervals->find(sym.thename) != intervals->end();
 }
 
 template <>
 bool interval_domaint::is_mapped<wrapped_interval>(const symbol2t &sym) const
 {
-  return wrap_map.find(sym.thename) != wrap_map.end();
+  return intervals->find(sym.thename) != intervals->end();
 }
 
 template <>
-expr2tc interval_domaint::make_expression_value<integer_intervalt>(
-  const integer_intervalt &interval,
+expr2tc
+interval_domaint::make_expression_value<interval_domaint::integer_intervalt>(
+  const interval_domaint::integer_intervalt &interval,
   const type2tc &type,
   bool is_upper) const
 {
@@ -664,8 +706,9 @@ expr2tc interval_domaint::make_expression_value<integer_intervalt>(
 }
 
 template <>
-expr2tc interval_domaint::make_expression_value<real_intervalt>(
-  const real_intervalt &interval,
+expr2tc
+interval_domaint::make_expression_value<interval_domaint::real_intervalt>(
+  const interval_domaint::real_intervalt &interval,
   const type2tc &type,
   bool upper) const
 {
@@ -808,6 +851,24 @@ expr2tc interval_domaint::make_expression_helper(const expr2tc &symbol) const
 
 // END TEMPLATES
 
+template <class Interval>
+void print_interval(
+  const interval_templatet<Interval> &i,
+  const std::string &name,
+  std::ostream &out)
+{
+  if (i.is_top())
+    return;
+
+  if (i.lower)
+    out << i.get_lower() << " <= ";
+
+  out << name;
+
+  if (i.upper)
+    out << " <= " << i.get_upper() << "\n";
+}
+
 // TODO: refactor
 void interval_domaint::output(std::ostream &out) const
 {
@@ -817,37 +878,23 @@ void interval_domaint::output(std::ostream &out) const
     return;
   }
 
-  for (const auto &interval : int_map)
+  for (const auto &i : *intervals)
   {
-    if (interval.second.is_top())
-      continue;
-    if (interval.second.lower)
-      out << *interval.second.lower << " <= ";
-    out << interval.first;
-    if (interval.second.upper)
-      out << " <= " << *interval.second.upper;
-    out << "\n";
-  }
-
-  for (const auto &interval : wrap_map)
-  {
-    out << interval.second.get_lower() << " <= ";
-    out << interval.first;
-
-    out << " <= " << interval.second.get_upper();
-    out << "\n";
-  }
-
-  for (const auto &interval : real_map)
-  {
-    if (interval.second.is_top())
-      continue;
-    if (interval.second.lower)
-      out << *interval.second.lower << " <= ";
-    out << interval.first;
-    if (interval.second.upper)
-      out << " <= " << *interval.second.upper;
-    out << "\n";
+    switch (i.second.index())
+    {
+    case 0:
+      print_interval(*std::get<0>(i.second), i.first.as_string(), out);
+      break;
+    case 1:
+      print_interval(*std::get<1>(i.second), i.first.as_string(), out);
+      break;
+    case 2:
+      print_interval(*std::get<2>(i.second), i.first.as_string(), out);
+      break;
+    default:
+      // unreachable
+      break;
+    }
   }
 }
 
@@ -1017,82 +1064,157 @@ void interval_domaint::transform(
   }
 }
 
+template <class Interval>
+bool interval_domaint::join_intervals(
+  const std::shared_ptr<Interval> &after,
+  std::shared_ptr<Interval> &dst,
+  bool can_extrapolate) const
+{
+  const Interval before = *dst;
+  Interval joined = *dst;
+  joined.join(*after);
+  if (before != joined)
+  {
+    if (widening_extrapolate && can_extrapolate)
+      joined = extrapolate_intervals(before, joined);
+
+    dst = std::make_shared<Interval>(joined);
+    return true;
+  }
+  return false;
+}
+
+bool do_is_subset(
+  const interval_domaint::interval &a,
+  const interval_domaint::interval &b)
+{
+  //  return false;
+  if (a.index() != 0)
+    return false;
+
+  return std::get<0>(b)->is_subseteq(*std::get<0>(a));
+}
+
 template <class IntervalMap>
 bool interval_domaint::join(
-  IntervalMap &new_map,
-  const IntervalMap &previous_map)
+  IntervalMap &a0,
+  const IntervalMap &a1,
+  const bool should_extrapolate_instruction)
 {
+  // Terrible convention, a0 is both the state before join and
+  // the map that needs to be updated
+  IntervalMap &updated_map = a0;
   bool result = false;
-  for (auto new_it = new_map.begin(); new_it != new_map.end();) // no new_it++
+  std::unordered_set<irep_idt, irep_id_hash> symbol_map;
+  for (const auto &myPair : a0)
   {
-    // search for the variable that needs to be merged
-    // containers have different sizes and ordering
-    const auto b_it = previous_map.find(new_it->first);
-    const auto f_it = fixpoint_map.find(new_it->first);
-    if (b_it == previous_map.end())
+    const auto next_it = a1.find(myPair.first);
+    if (next_it == a1.end())
     {
-      new_it = new_map.erase(new_it);
-      if (f_it != fixpoint_map.end())
-        fixpoint_map.erase(f_it);
-      result = true;
+      symbol_map.insert(myPair.first);
+      continue;
     }
-    else
-    {
-      auto previous = new_it->second; // [0,0] ... [0, +inf]
-      auto after = b_it->second;      // [1,100] ... [1, 100]
-      new_it->second.join(after);     // HULL // [0,100] ... [0, +inf]
-      // Did we reach a fixpoint?
-      if (new_it->second != previous)
-      {
-        if (f_it != fixpoint_map.end())
-          f_it->second += 1;
-        else
-          fixpoint_map[new_it->first] = 0;
 
-        result = true;
-        // Try to extrapolate
-        if (
-          widening_extrapolate && fixpoint_map[new_it->first] > fixpoint_limit)
-        {
-          new_it->second = extrapolate_intervals(
-            previous,
-            new_it
-              ->second); // ([0,0], [0,100] -> [0,inf]) ... ([0,inf], [0,100] --> [0,inf])
-        }
-      }
-
-      else
-      {
-        // Found a fixpoint, we might try to narrow now!
-        if (widening_narrowing)
-        {
-          after = interpolate_intervals(
-            new_it->second,
-            b_it
-              ->second); // ([0,100], [1,100] --> [0,100] ... ([0,inf], [1,100] --> [0,100]))
-          result |= new_it->second != after;
-          new_it->second = after;
-        }
-      }
-
-      new_it++;
-    }
+    if (!do_is_subset(myPair.second, next_it->second))
+      symbol_map.insert(myPair.first);
   }
+
+  // Here we apply the HULL operation (before, after)
+  for (const irep_idt &symbol : symbol_map)
+  {
+    const auto previous_it = a0.find(symbol);
+    const auto next_it = a1.find(symbol);
+    const bool previous_is_top = previous_it == a0.end();
+
+    // HULL(TOP, next_it) = TOP
+    if (previous_is_top)
+    {
+      // Narrowing
+      if (widening_narrowing)
+      {
+        /* TODO: Narrowing needs more fixes
+         * This happens due to the Abstract Interpreter
+         * being unable to merge the information that is
+         * coming before the loop (see #1738)
+        */
+        log_error(
+          "Narrowing is currently disabled. See GitHub issue #1738 for more "
+          "details");
+        abort();
+      }
+      continue;
+    }
+
+    const bool next_is_top = next_it == a1.end();
+    // HULL (previous_it, TOP) = TOP
+    if (next_is_top)
+    {
+      result = true;
+      updated_map.erase(symbol);
+      continue;
+    }
+
+    bool join_changed = false;
+    switch (next_it->second.index())
+    {
+    case 0:
+      join_changed = join_intervals<interval_domaint::integer_intervalt>(
+        std::get<0>(next_it->second),
+        std::get<0>(previous_it->second),
+        should_extrapolate_instruction);
+      break;
+    case 1:
+      join_changed = join_intervals<interval_domaint::real_intervalt>(
+        std::get<1>(next_it->second),
+        std::get<1>(previous_it->second),
+        should_extrapolate_instruction);
+      break;
+    case 2:
+      join_changed = join_intervals<wrapped_interval>(
+        std::get<2>(next_it->second),
+        std::get<2>(previous_it->second),
+        should_extrapolate_instruction);
+      break;
+    default:
+      // unreachable
+      abort();
+      break;
+    }
+    result |= join_changed;
+  }
+
   return result;
 }
 
-bool interval_domaint::join(const interval_domaint &b)
+bool interval_domaint::join(
+  const interval_domaint &b,
+  const goto_programt::const_targett &to)
 {
-  if (b.is_bottom())
+  if (b.is_bottom() || is_top())
     return false;
-  if (is_bottom())
+  if (is_bottom() || b.is_top())
   {
-    *this = b;
+    bottom = false;
+    intervals = b.intervals;
     return true;
   }
 
-  bool result = join(int_map, b.int_map) || join(real_map, b.real_map) ||
-                join(wrap_map, b.wrap_map);
+  if (intervals == b.intervals)
+    return false;
+
+  // Possible optimization here. "b" might have a copy already
+  // so we could just change it directly. However, while testing
+  // hardware category I found out that most of cases we will need
+  // to do a copy anyway. For btor2c-lazyMod.cal91.c:
+  // 26900 copies were needed vs 600 not needed. Probably not worth
+  // to expend much time on this.
+  copy_if_needed();
+
+  const bool is_if_goto = to->is_goto() && !is_true(to->guard);
+  const bool is_guard = to->is_assume() || to->is_assert() || is_if_goto;
+
+  // Prevent short-circuit
+  bool result = join(*intervals, *b.intervals, is_guard);
   return result;
 }
 
@@ -1115,10 +1237,12 @@ void interval_domaint::assign(const expr2tc &expr, const bool recursive)
     if (enable_wrapped_intervals)
       apply_assignment<wrapped_interval>(c.target, c.source, recursive);
     else
-      apply_assignment<integer_intervalt>(c.target, c.source, recursive);
+      apply_assignment<interval_domaint::integer_intervalt>(
+        c.target, c.source, recursive);
   }
   else if (isfloatbvop && enable_real_intervals)
-    apply_assignment<real_intervalt>(c.target, c.source, recursive);
+    apply_assignment<interval_domaint::real_intervalt>(
+      c.target, c.source, recursive);
 }
 
 void interval_domaint::havoc_rec(const expr2tc &expr)
@@ -1137,15 +1261,9 @@ void interval_domaint::havoc_rec(const expr2tc &expr)
     // Reset the interval domain if it is being reasigned (-infinity, +infinity).
     irep_idt identifier = is_symbol2t(expr) ? to_symbol2t(expr).thename
                                             : to_code_decl2t(expr).value;
-    if (is_bv_type(expr))
-    {
-      if (enable_wrapped_intervals)
-        wrap_map.erase(identifier);
-      else
-        int_map.erase(identifier);
-    }
-    if (is_floatbv_type(expr))
-      real_map.erase(identifier);
+    if (intervals->count(identifier))
+      copy_if_needed();
+    intervals->erase(identifier);
   }
   else
     log_debug("interval", "[havoc_rec] Missing support: {}", *expr);
@@ -1206,11 +1324,11 @@ void interval_domaint::assume_rec(
     if (enable_wrapped_intervals)
       apply_assume_less<wrapped_interval>(lhs, rhs);
     else
-      apply_assume_less<integer_intervalt>(lhs, rhs);
+      apply_assume_less<interval_domaint::integer_intervalt>(lhs, rhs);
   }
   else if (
     is_floatbv_type(lhs) && is_floatbv_type(rhs) && enable_real_intervals)
-    apply_assume_less<real_intervalt>(lhs, rhs);
+    apply_assume_less<interval_domaint::real_intervalt>(lhs, rhs);
 }
 
 void interval_domaint::assume(const expr2tc &cond)
@@ -1229,7 +1347,6 @@ void interval_domaint::assume(const expr2tc &cond)
     return;
   }
 #endif
-
 #ifdef ENABLE_GOTO_CONTRACTOR
   /// use ibex contractors to reduce the intervals for interval analysis
   if (enable_ibex_contractor)
@@ -1237,14 +1354,44 @@ void interval_domaint::assume(const expr2tc &cond)
     interval_analysis_ibex_contractor contractor;
     if (contractor.parse_guard(new_cond))
     {
-      contractor.maps_to_domains(int_map, real_map);
+      for (const auto &i : *intervals)
+      {
+        switch (i.second.index())
+        {
+        case 0:
+        {
+          const integer_intervalt &int_interval = *std::get<0>(i.second);
+          std::optional<BigInt> upper;
+          std::optional<BigInt> lower;
+          if (int_interval.upper)
+            upper = int_interval.get_upper();
+          if (int_interval.lower)
+            lower = int_interval.get_lower();
+          contractor.interval_to_domain(lower, upper, i.first.as_string());
+          break;
+        }
+        case 1:
+        {
+          const real_intervalt &real_interval = *std::get<1>(i.second);
+          std::optional<double> upper;
+          std::optional<double> lower;
+          if (real_interval.upper)
+            upper = (double)real_interval.get_upper();
+          if (real_interval.lower)
+            lower = (double)real_interval.get_lower();
+          contractor.interval_to_domain(lower, upper, i.first.as_string());
+          break;
+        }
+        default:
+          break;
+        }
+      }
       contractor.apply_contractor();
       new_cond = contractor.result_of_outer();
       simplify(new_cond);
     }
   }
 #endif
-
   assume_rec(new_cond, false);
 }
 
@@ -1266,7 +1413,7 @@ tvt interval_domaint::eval_boolean_expression(
     return tvt(tvt::TV_UNKNOWN);
   }
 
-  auto interval = id.get_interval<integer_intervalt>(cond);
+  auto interval = id.get_interval<interval_domaint::integer_intervalt>(cond);
 
   // If the interval does not contain zero then it's always true
   if (!interval.contains(0))
@@ -1338,11 +1485,12 @@ void interval_domaint::assume_rec(const expr2tc &cond, bool negation)
         apply_assume_symbol_truth<wrapped_interval>(
           to_symbol2t(cond), negation);
       else
-        apply_assume_symbol_truth<integer_intervalt>(
+        apply_assume_symbol_truth<interval_domaint::integer_intervalt>(
           to_symbol2t(cond), negation);
     }
     else if (is_floatbv_type(cond) && enable_real_intervals)
-      apply_assume_symbol_truth<real_intervalt>(to_symbol2t(cond), negation);
+      apply_assume_symbol_truth<interval_domaint::real_intervalt>(
+        to_symbol2t(cond), negation);
   }
   //added in case "cond = false" which happens when the ibex contractor results in empty set.
   else if (is_constant_bool2t(cond))
@@ -1370,10 +1518,11 @@ expr2tc interval_domaint::make_expression(const expr2tc &symbol) const
     if (enable_wrapped_intervals)
       return make_expression_helper<wrapped_interval>(symbol);
     else
-      return make_expression_helper<integer_intervalt>(symbol);
+      return make_expression_helper<interval_domaint::integer_intervalt>(
+        symbol);
   }
   if (is_floatbv_type(symbol) && enable_real_intervals)
-    return make_expression_helper<real_intervalt>(symbol);
+    return make_expression_helper<interval_domaint::real_intervalt>(symbol);
   return gen_true_expr();
 }
 

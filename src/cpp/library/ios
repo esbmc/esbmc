@@ -427,6 +427,19 @@ ios_base &scientific(ios_base &str)
   return str;
 }
 
+#if __cplusplus >= 201103L
+ios_base &hexfloat(ios_base &str)
+{
+  str.ios_base::setf(__scientific | __fixed, __floatfield);
+  return str;
+}
+ios_base &defaultfloat(ios_base &str)
+{
+  str.ios_base::unsetf(__floatfield);
+  return str;
+}
+#endif
+
 //Adustment format flags ("adjustfield" flags):
 ios_base &internal(ios_base &str)
 {

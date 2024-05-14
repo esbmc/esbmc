@@ -14,7 +14,11 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/Lex/PreprocessorOptions.h>
 #include <clang/Tooling/Tooling.h>
 #include <llvm/Option/ArgList.h>
+#if CLANG_VERSION_MAJOR < 16
 #include <llvm/Support/Host.h>
+#else
+#include <llvm/TargetParser/Host.h>
+#endif
 #include <llvm/Support/Path.h>
 CC_DIAGNOSTIC_POP()
 
@@ -96,7 +100,7 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
   // Since the input might only be virtual, don't check whether it exists.
   Driver->setCheckInputsExist(false);
   const std::unique_ptr<clang::driver::Compilation> Compilation(
-    Driver->BuildCompilation(llvm::makeArrayRef(Argv)));
+    Driver->BuildCompilation(llvm::ArrayRef<const char *>(Argv)));
 
   const clang::driver::JobList &Jobs = Compilation->getJobs();
   assert(Jobs.size() == 1);

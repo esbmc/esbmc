@@ -2118,6 +2118,17 @@ void dereferencet::valid_check(
           guard);
         return;
       }
+
+      /* Writes to globals of const-qualified type are not allowed either. */
+      if (is_write(mode) && sym.static_lifetime && sym.type.cmt_constant())
+      {
+        dereference_failure(
+          "pointer dereference",
+          "write access to const object `" +
+            get_pretty_name(sym.id.as_string()) + "'",
+          guard);
+        return;
+      }
     }
   }
 }

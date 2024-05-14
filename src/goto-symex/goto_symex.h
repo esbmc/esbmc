@@ -487,9 +487,10 @@ protected:
 
   /** Update throw target. */
   void update_throw_target(
-    goto_symex_statet::exceptiont *except,
+    goto_symex_statet::exceptiont *except [[maybe_unused]],
     goto_programt::const_targett target,
-    const expr2tc &code);
+    const expr2tc &code,
+    bool is_ellipsis = false);
 
   /** Check if we can rethrow an exception:
    *  if we can then update the target.

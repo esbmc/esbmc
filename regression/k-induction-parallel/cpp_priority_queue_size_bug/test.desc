@@ -1,4 +1,4 @@
 CORE
 main.cpp
 --k-induction-parallel --max-k-step 5 
-^VERIFICATION UNKNOWN$
+^VERIFICATION FAILED$

@@ -13,10 +13,7 @@
 #include <util/mp_arith.h>
 #include <util/threeval.h>
 #include <boost/multiprecision/cpp_bin_float.hpp>
-
-typedef interval_templatet<BigInt> integer_intervalt;
-using real_intervalt =
-  interval_templatet<boost::multiprecision::cpp_bin_float_100>;
+#include <variant>
 
 /**
  * @brief Trivial, conjunctive interval domain for both float
@@ -26,6 +23,20 @@ using real_intervalt =
 class interval_domaint : public ai_domain_baset
 {
 public:
+  using integer_intervalt = interval_templatet<BigInt>;
+  using real_intervalt =
+    interval_templatet<boost::multiprecision::cpp_bin_float_100>;
+
+  using interval = std::variant<
+    std::shared_ptr<integer_intervalt>,
+    std::shared_ptr<real_intervalt>,
+    std::shared_ptr<wrapped_interval>>;
+
+  // Map of variables into intervals.
+  // If a key does not exist then imply the TOP interval.
+  // If a key exists then the shared_ptr must point to a valid place
+  using interval_map = std::unordered_map<irep_idt, interval, irep_id_hash>;
+
   interval_domaint() : bottom(true)
   {
   }
@@ -71,25 +82,6 @@ public:
     widening_extrapolate; /// Extrapolate bound to infinity based on previous iteration
   static bool widening_narrowing; /// Interpolate bound back after fixpoint
 
-  typedef std::unordered_map<irep_idt, integer_intervalt, irep_id_hash>
-    int_mapt;
-
-  typedef std::unordered_map<irep_idt, real_intervalt, irep_id_hash> real_mapt;
-  typedef std::unordered_map<irep_idt, wrapped_interval, irep_id_hash>
-    wrap_mapt;
-
-  typedef std::unordered_map<irep_idt, unsigned, irep_id_hash> fixpoint_counter;
-
-  int_mapt get_int_map() const
-  {
-    return int_map;
-  }
-
-  wrap_mapt get_wrap_map() const
-  {
-    return wrap_map;
-  }
-
   /// Eval whether a boolean expression is always true, always false, or either (for the current state)
   static tvt
   eval_boolean_expression(const expr2tc &cond, const interval_domaint &id);
@@ -109,23 +101,22 @@ protected:
   * @return True if the join increases the set represented by *this, False if
   *   there is no change.
   */
-  bool join(const interval_domaint &b);
+  bool join(const interval_domaint &b, const goto_programt::const_targett &to);
 
 public:
   bool merge(
     const interval_domaint &b,
     goto_programt::const_targett,
-    goto_programt::const_targett)
+    goto_programt::const_targett to)
   {
-    return join(b);
+    const bool result = join(b, to);
+    copied = false;
+    return result;
   }
 
   void clear_state()
   {
-    int_map.clear();
-    real_map.clear();
-    wrap_map.clear();
-    fixpoint_map.clear();
+    intervals = get_empty();
   }
 
   // no states
@@ -154,7 +145,7 @@ public:
 
   bool is_top() const override final
   {
-    return !bottom && int_map.empty() && real_map.empty();
+    return !bottom && intervals->empty();
   }
 
   /**
@@ -201,18 +192,28 @@ public:
   virtual bool
   ai_simplify(expr2tc &condition, const namespacet &ns) const override;
 
+  std::shared_ptr<interval_map> intervals;
+  bool copied = false;
+
+  static std::shared_ptr<interval_map> get_empty()
+  {
+    static std::shared_ptr<interval_map> map = std::make_shared<interval_map>();
+    return map;
+  }
+  void copy_if_needed()
+  {
+    if (copied)
+      return;
+    std::shared_ptr<interval_map> cpy = std::make_shared<interval_map>();
+    *cpy = *intervals;
+    intervals = cpy;
+    copied = true;
+  }
+
 protected:
   // Abstract state information
   /// Is this state a bottom. I.e., there is a contradiction between an assignment and an assume
   bool bottom;
-  /// Map for all integers intervals
-  int_mapt int_map;
-  /// Map for all real intervals
-  real_mapt real_map;
-  /// Map for all wrap intervals
-  wrap_mapt wrap_map;
-  /// Map for all fixpoint counters
-  fixpoint_counter fixpoint_map;
 
   /**
    * @brief Recursively explores an Expression until it reaches a symbol. If the
@@ -296,7 +297,8 @@ protected:
    * @param rhs
    */
   template <class Interval>
-  Interval extrapolate_intervals(const Interval &before, const Interval &after);
+  Interval
+  extrapolate_intervals(const Interval &before, const Interval &after) const;
 
   /**
    * @brief Applies Interpolation narrowing algorithm
@@ -377,6 +379,15 @@ public:
   template <class Interval>
   Interval get_interval_from_symbol(const symbol2t &sym) const;
 
+  template <size_t Index, class Interval>
+  Interval get_interval_from_variant(const symbol2t &sym) const;
+
+  template <class Interval>
+  bool join_intervals(
+    const std::shared_ptr<Interval> &after,
+    std::shared_ptr<Interval> &dst,
+    bool can_extrapolate) const;
+
   /**
    * @brief Get the interval from constant expression
    *
@@ -404,7 +415,10 @@ public:
 
 protected:
   template <class IntervalMap>
-  bool join(IntervalMap &new_map, const IntervalMap &previous_map);
+  bool join(
+    IntervalMap &new_map,
+    const IntervalMap &previous_map,
+    const bool is_guard_instruction = true);
 
   /**
    * @brief Sets new interval for symbol
@@ -414,7 +428,10 @@ protected:
    * @param value
    */
   template <class Interval>
-  void update_symbol_interval(const symbol2t &sym, const Interval value);
+  void update_symbol_interval(const symbol2t &sym, const Interval &value);
+
+  template <size_t Index, class Interval>
+  void update_symbol_from_variant(const symbol2t &sym, const Interval &value);
 };
 
 #endif // CPROVER_ANALYSES_INTERVAL_DOMAIN_H

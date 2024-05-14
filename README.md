@@ -1,14 +1,3 @@
-## ESBMC-CHERI Video & Download
-
-This [video](https://youtu.be/CsWHnmU4UMs) describes how to obtain, build and run ESBMC-CHERI on an example.
-
-A pre-compiled binary for Linux is available in the pre-release
-[ESBMC-CHERI](https://github.com/esbmc/esbmc/releases/tag/v6.9-cheri), for other
-systems/archs the [BUILDING.md](https://github.com/esbmc/esbmc/blob/cheri-clang/BUILDING.md)
-document explains the necessary installation steps.
-
-
-
 # The ESBMC model checker
 
 [![Codacy Badge](https://api.codacy.com/project/badge/Grade/d14d06e975644907a2eb9521e09ccfe4)](https://app.codacy.com/gh/esbmc/esbmc?utm_source=github.com&utm_medium=referral&utm_content=esbmc/esbmc&utm_campaign=Badge_Grade_Dashboard)
@@ -114,6 +103,15 @@ In addition, ESBMC can be configured to use the SMTLIB interactive text format w
 
 A limited subset of C++98/03 is supported, too -- a library modeling the STL is also available.
 
+### ESBMC-CHERI Video & Download
+
+This [video](https://youtu.be/CsWHnmU4UMs) describes how to obtain, build and run ESBMC-CHERI on an example.
+
+A pre-compiled binary for Linux is available in the pre-release
+[ESBMC-CHERI](https://github.com/esbmc/esbmc/releases/tag/v6.9-cheri), for other
+systems/archs the [BUILDING.md](https://github.com/esbmc/esbmc/blob/cheri-clang/BUILDING.md)
+document explains the necessary installation steps.
+
 ### Differences from CBMC
 
 ESBMC is a fork of CBMC v2.9 (2008), the C Bounded Model Checker. The primary differences between the two are:
@@ -128,13 +126,15 @@ ESBMC is a fork of CBMC v2.9 (2008), the C Bounded Model Checker. The primary di
 
 # Open source
 
-ESBMC has now been released as open-source software -- mainly distributed under the terms of the Apache License 2.0. ESBMC contains a significant amount of other people's software. However, please see the COPYING file for an explanation of who-owns-what and under what terms they are distributed.
+ESBMC has now been released as open-source software, mainly distributed under the terms of the Apache License 2.0. ESBMC contains a significant amount of other people's software. However, please see the COPYING file for an explanation of who owns what and under what terms it is distributed.
 
-We'd be extremely happy to receive contributions to make ESBMC better (under the terms of the Apache License 2.0). Please file a pull request against the public GitHub repo if you'd like to submit anything. General discussion and release announcements will be made via GitHub. Please post an issue on GitHub to contact us about research or collaboration.
+We'd be extremely happy to receive contributions to improve ESBMC (under the terms of the Apache License 2.0). If you'd like to submit anything, please file a pull request against the public GitHub repo. General discussion and release announcements will be made via GitHub. Please post an issue on GitHub and contact us about research or collaboration.
 
 ### Getting started
 
 We need a better guide for getting started with ESBMC, although we hope to improve this in the future. Examining some of the benchmarks in the SV-COMP competition (http://sv-comp.sosy-lab.org/) would be a good start, using the ESBMC command line for the relevant competition year.
+
+You can also explore practical examples using the ESBMC tool on the documentation page, which is available at https://ssvlab.github.io/esbmc/documentation.html.
 
 ### Contributing to the code base
 
@@ -161,7 +161,7 @@ git pull --rebase upstream master
 git push origin HEAD:master
 ```
 
-Note that if you have not yet setup the `upstream`, you need to type the following command:
+Note that if you have not yet set up the `upstream`, you need to type the following command:
 
 ```
 git remote add upstream https://github.com/esbmc/esbmc
