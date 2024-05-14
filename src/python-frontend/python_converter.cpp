@@ -786,7 +786,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     else if (value.is_string() && current_element_type.is_array())
     {
       expr = gen_zero(current_element_type);
-      typet t = signed_char_type();
+      typet& t = current_element_type.subtype();
+
       unsigned int i = 0;
       for (char &ch : element["value"].get<std::string>())
       {
