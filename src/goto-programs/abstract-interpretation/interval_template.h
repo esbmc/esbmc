@@ -23,6 +23,10 @@ public:
 
   interval_templatet() = default;
 
+  explicit interval_templatet(const type2tc &)
+  {
+  }
+
   explicit interval_templatet(const T &x) : lower(x), upper(x)
   {
   }
@@ -33,7 +37,8 @@ public:
 
   /// Bound value
   std::optional<T> lower, upper;
-
+  /// Type to be used for shift operations
+  type2tc type;
   T get_lower() const
   {
     return get(false);
@@ -52,7 +57,7 @@ public:
 
   virtual void set(bool is_upper, const T &b)
   {
-    if(is_upper)
+    if (is_upper)
       upper = b;
     else
       lower = b;
@@ -76,18 +81,18 @@ public:
   {
     std::ostringstream oss;
 
-    if(is_bottom())
+    if (is_bottom())
       oss << "EMPTY";
     else
     {
-      if(lower)
+      if (lower)
 
         oss << "[" << get_lower();
       else
         oss << "(-inf";
 
       oss << ",";
-      if(upper)
+      if (upper)
         oss << get_upper() << "]";
       else
         oss << "+inf)";
@@ -129,9 +134,9 @@ public:
   virtual void make_le_than(const T &v) // add upper bound
   {
     auto value = adjust(v);
-    if(upper)
+    if (upper)
     {
-      if(is_le_than(value, get_upper()))
+      if (is_le_than(value, get_upper()))
         set_upper(value);
     }
     else
@@ -142,13 +147,13 @@ public:
 
   virtual bool contains(const T &e) const
   {
-    if(is_top())
+    if (is_top())
       return true;
 
-    if(lower && e < get_lower())
+    if (lower && e < get_lower())
       return false;
 
-    if(upper && e > get_upper())
+    if (upper && e > get_upper())
       return false;
 
     return true;
@@ -159,11 +164,11 @@ public:
   {
     // [lower, upper] <= [v.lower,v.upper] <==> [lower, min(upper,v.upper)] <= [max(lower, v.lower), v.upper]
 
-    if(upper || v.upper)
+    if (upper || v.upper)
       upper = upper && v.upper ? std::min(*upper, *v.upper)
               : upper          ? *upper
                                : *v.upper;
-    if(lower || v.lower)
+    if (lower || v.lower)
       v.lower = lower && v.lower ? std::max(*lower, *v.lower)
                 : lower          ? *lower
                                  : *v.lower;
@@ -172,9 +177,9 @@ public:
   virtual void make_ge_than(const T &v) // add lower bound
   {
     auto value = adjust(v);
-    if(lower)
+    if (lower)
     {
-      if(is_le_than(get_lower(), value))
+      if (is_le_than(get_lower(), value))
         set_lower(value);
     }
     else
@@ -197,9 +202,9 @@ public:
 
   void intersect_with(const interval_templatet &i)
   {
-    if(i.lower)
+    if (i.lower)
     {
-      if(lower)
+      if (lower)
       {
         lower = std::max(*lower, *i.lower);
       }
@@ -209,9 +214,9 @@ public:
       }
     }
 
-    if(i.upper)
+    if (i.upper)
     {
-      if(upper)
+      if (upper)
       {
         upper = std::min(*upper, *i.upper);
       }
@@ -222,16 +227,29 @@ public:
     }
   }
 
+  // Wether *this \subseteq other
+  bool is_subseteq(const interval_templatet &other) const
+  {
+    if ((!lower && other.lower) || (!upper && other.upper))
+      return false;
+    if (other.lower && *lower < *other.lower)
+      return false;
+    if (other.upper && *upper > *other.upper)
+      return false;
+
+    return true;
+  }
+
   virtual void approx_union_with(const interval_templatet &i)
   {
-    if(i.lower && lower)
+    if (i.lower && lower)
       lower = std::min(*lower, *i.lower);
-    else if(!i.lower)
+    else if (!i.lower)
       lower.reset();
 
-    if(i.upper && upper)
+    if (i.upper && upper)
       upper = std::max(*upper, *i.upper);
-    else if(!i.upper)
+    else if (!i.upper)
       upper.reset();
   }
 
@@ -266,15 +284,15 @@ public:
   {
     // [a_0, a_1] + [b_0, b_1] = [a_0+b_0, a_1 + b_1]
     auto result = rhs.empty() ? rhs : lhs;
-    if(result.empty())
+    if (result.empty())
       return result;
 
-    if(!lhs.lower || !rhs.lower)
+    if (!lhs.lower || !rhs.lower)
       result.lower.reset();
     else
       result.lower = *lhs.lower + *rhs.lower;
 
-    if(!lhs.upper || !rhs.upper)
+    if (!lhs.upper || !rhs.upper)
       result.upper.reset();
     else
       result.upper = *lhs.upper + *rhs.upper;
@@ -286,14 +304,14 @@ public:
   {
     // -[a_0, a_1] = [-a_1, -a_0]
     auto result = lhs;
-    if(!lhs.upper)
+    if (!lhs.upper)
       result.lower.reset();
     else
     {
       result.lower = -(*lhs.upper);
     }
 
-    if(!lhs.lower)
+    if (!lhs.lower)
     {
       result.upper.reset();
     }
@@ -309,15 +327,15 @@ public:
   {
     // [a_0, a_1] - [b_0, b_1] = [a_0-b_1, a_1 - b_0]
     auto result = rhs.empty() ? rhs : lhs;
-    if(result.empty())
+    if (result.empty())
       return result;
 
-    if(!lhs.lower || !rhs.upper)
+    if (!lhs.lower || !rhs.upper)
       result.lower.reset();
     else
       result.lower = *lhs.lower - *rhs.upper;
 
-    if(!lhs.upper || !rhs.lower)
+    if (!lhs.upper || !rhs.lower)
       result.upper.reset();
     else
       result.upper = *lhs.upper - *rhs.lower;
@@ -330,11 +348,11 @@ public:
   {
     // [a_0, a_1] * [b_0, b_1] = [min(a_0*b_0, a_0*b_1, a_1*b_0, a_1*b_1), max(a_0*b_0, a_0*b_1, a_1*b_0, a_1*b_1)]
     interval_templatet<T> result;
-    if(rhs.empty() || lhs.empty())
+    if (rhs.empty() || lhs.empty())
       return rhs.empty() ? rhs : lhs;
 
     // Let's deal with infinities first
-    if(!lhs.lower || !rhs.lower || !lhs.upper || !rhs.upper)
+    if (!lhs.lower || !rhs.lower || !lhs.upper || !rhs.upper)
       return result;
 
     // Initialize with a0 * b0
@@ -362,13 +380,13 @@ public:
      * associative. For example, [-6, 10] / 2 which is [-3, 5] cannot be computed through
      * the [-6, 10] * [1/2, 1/2] because 1/2 will result in 0.
     */
-    if(rhs.empty() || lhs.empty())
+    if (rhs.empty() || lhs.empty())
       return rhs.empty() ? rhs : lhs;
 
     interval_templatet<T> result;
 
     // Let's (not) deal with infinities first and division by 0.
-    if(
+    if (
       !lhs.lower || !rhs.lower || !lhs.upper || !rhs.upper || *rhs.lower == 0 ||
       *rhs.upper == 0)
       return result;
@@ -395,10 +413,10 @@ public:
     const interval_templatet<T> &true_value,
     const interval_templatet<T> &false_value)
   {
-    if(!cond.contains(0))
+    if (!cond.contains(0))
       return true_value;
 
-    if(cond.singleton())
+    if (cond.singleton())
       return false_value;
 
     interval_templatet<T> result = true_value;
@@ -508,8 +526,6 @@ public:
   static interval_templatet<T> bitnot(const interval_templatet<T> &w)
   {
     interval_templatet<T> result;
-    result.set_lower(-w.get_upper() - 1);
-    result.set_upper(-w.get_lower() - 1);
     return result;
   }
 
@@ -521,7 +537,8 @@ public:
     result.set_upper(1);
 
     // If the intervals are singletons and equal then it's always true
-    if(lhs.singleton() && rhs.singleton() && lhs.get_lower() == rhs.get_lower())
+    if (
+      lhs.singleton() && rhs.singleton() && lhs.get_lower() == rhs.get_lower())
     {
       result.set_lower(1);
       return result;
@@ -530,7 +547,7 @@ public:
     // If the intervals don't intersect, then they are always empty
     auto lhs_cpy = lhs;
     lhs_cpy.intersect_with(rhs);
-    if(lhs_cpy.empty())
+    if (lhs_cpy.empty())
       result.set_upper(0);
 
     return result;
@@ -538,13 +555,25 @@ public:
 
   static interval_templatet<T> invert_bool(const interval_templatet<T> &i)
   {
-    if(!i.singleton())
-      return i;
-
-    auto result = i;
-    auto inverted = result.get_lower() == 0 ? 1 : 0;
-    result.set_lower(inverted);
-    result.set_upper(inverted);
+    interval_templatet<T> result;
+    if (!i.contains(0))
+    {
+      // i is always true, return false
+      result.set_lower(0);
+      result.set_upper(0);
+    }
+    else if (i.singleton())
+    {
+      // i is always false, return true
+      result.set_lower(1);
+      result.set_upper(1);
+    }
+    else
+    {
+      // i is a maybe
+      result.set_lower(0);
+      result.set_upper(1);
+    }
     return result;
   }
 
@@ -562,14 +591,14 @@ public:
     result.set_upper(1);
 
     // MAX LHS < MIN RHS => TRUE
-    if(lhs.upper && rhs.lower && lhs.get_upper() < rhs.get_lower())
+    if (lhs.upper && rhs.lower && lhs.get_upper() < rhs.get_lower())
     {
       result.set_lower(1);
       return result;
     }
 
     // MIN LHS >= MAX RHS => FALSE
-    if(lhs.lower && rhs.upper && lhs.get_lower() >= rhs.get_upper())
+    if (lhs.lower && rhs.upper && lhs.get_lower() >= rhs.get_upper())
     {
       result.set_upper(0);
       return result;
@@ -588,14 +617,14 @@ public:
     result.set_upper(1);
 
     // MAX LHS <= MIN RHS => TRUE
-    if(lhs.upper && rhs.lower && lhs.get_upper() <= rhs.get_lower())
+    if (lhs.upper && rhs.lower && lhs.get_upper() <= rhs.get_lower())
     {
       result.set_lower(1);
       return result;
     }
 
     // MIN LHS > MAX RHS => FALSE
-    if(lhs.lower && rhs.upper && lhs.get_lower() > rhs.get_upper())
+    if (lhs.lower && rhs.upper && lhs.get_lower() > rhs.get_upper())
     {
       result.set_upper(0);
       return result;
@@ -624,10 +653,10 @@ public:
   /// This is just to check if a value has changed. This is not the same as an interval comparation!
   bool inline has_changed(const interval_templatet<T> &i)
   {
-    if(empty())
+    if (empty())
       return false;
 
-    if((lower != i.lower) || (upper != i.upper))
+    if ((lower != i.lower) || (upper != i.upper))
       return true;
 
     return false;
@@ -672,16 +701,16 @@ public:
       b.intersect_with(tmp_a - y);
 
       changed = a.has_changed(tmp_a) || b.has_changed(tmp_b);
-    } while(changed);
+    } while (changed);
   }
 };
 
 template <class T>
 tvt operator<=(const interval_templatet<T> &a, const interval_templatet<T> &b)
 {
-  if(a.upper && b.lower && *a.upper <= *b.lower)
+  if (a.upper && b.lower && *a.upper <= *b.lower)
     return tvt(true);
-  if(a.lower && b.upper && *a.lower > *b.upper)
+  if (a.lower && b.upper && *a.lower > *b.upper)
     return tvt(false);
 
   return tvt(tvt::TV_UNKNOWN);
@@ -708,14 +737,14 @@ tvt operator>(const interval_templatet<T> &a, const interval_templatet<T> &b)
 template <class T>
 bool operator==(const interval_templatet<T> &a, const interval_templatet<T> &b)
 {
-  if(a.lower.has_value() != b.lower.has_value())
+  if (a.lower.has_value() != b.lower.has_value())
     return false;
-  if(a.upper.has_value() != b.upper.has_value())
+  if (a.upper.has_value() != b.upper.has_value())
     return false;
 
-  if(a.lower && *a.lower != *b.lower)
+  if (a.lower && *a.lower != *b.lower)
     return false;
-  if(a.upper && *a.upper != *b.upper)
+  if (a.upper && *a.upper != *b.upper)
     return false;
 
   return true;
@@ -746,14 +775,14 @@ interval_templatet<T> lower_interval(const T &l)
 template <class T>
 std::ostream &operator<<(std::ostream &out, const interval_templatet<T> &i)
 {
-  if(i.lower)
+  if (i.lower)
     out << '[' << *i.lower;
   else
     out << ")-INF";
 
   out << ',';
 
-  if(i.upper)
+  if (i.upper)
     out << *i.upper << ']';
   else
     out << "+INF(";

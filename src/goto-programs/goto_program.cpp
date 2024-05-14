@@ -15,11 +15,11 @@ void goto_programt::instructiont::output_instruction(
   std::ostream &out,
   bool show_location) const
 {
-  if(show_location)
+  if (show_location)
   {
     out << "        // " << location_number << " ";
 
-    if(!location.is_nil())
+    if (!location.is_nil())
       out << location.as_string();
     else
       out << "no location";
@@ -27,10 +27,10 @@ void goto_programt::instructiont::output_instruction(
     out << "\n";
   }
 
-  if(!labels.empty())
+  if (!labels.empty())
   {
     out << "        // Labels:";
-    for(const auto &label : labels)
+    for (const auto &label : labels)
     {
       out << " " << label;
     }
@@ -38,12 +38,12 @@ void goto_programt::instructiont::output_instruction(
     out << "\n";
   }
 
-  if(is_target())
+  if (is_target())
     out << std::setw(6) << target_number << ": ";
   else
     out << "        ";
 
-  switch(type)
+  switch (type)
   {
   case NO_INSTRUCTION_TYPE:
     out << "NO INSTRUCTION TYPE SET"
@@ -51,18 +51,18 @@ void goto_programt::instructiont::output_instruction(
     break;
 
   case GOTO:
-    if(!is_true(guard))
+    if (!is_true(guard))
     {
       out << "IF " << from_expr(ns, identifier, guard) << " THEN ";
     }
 
     out << "GOTO ";
 
-    for(instructiont::targetst::const_iterator gt_it = targets.begin();
-        gt_it != targets.end();
-        gt_it++)
+    for (instructiont::targetst::const_iterator gt_it = targets.begin();
+         gt_it != targets.end();
+         gt_it++)
     {
-      if(gt_it != targets.begin())
+      if (gt_it != targets.begin())
         out << ", ";
       out << (*gt_it)->target_number;
     }
@@ -79,7 +79,7 @@ void goto_programt::instructiont::output_instruction(
   {
     std::string arg;
     const code_return2t &ref = to_code_return2t(code);
-    if(!is_nil_expr(ref.operand))
+    if (!is_nil_expr(ref.operand))
       arg = from_expr(ns, "", ref.operand);
     out << "RETURN: " << arg << "\n";
   }
@@ -94,7 +94,7 @@ void goto_programt::instructiont::output_instruction(
 
   case ASSUME:
   case ASSERT:
-    if(is_assume())
+    if (is_assume())
       out << "ASSUME ";
     else
       out << "ASSERT ";
@@ -103,7 +103,7 @@ void goto_programt::instructiont::output_instruction(
       out << from_expr(ns, identifier, guard);
 
       const irep_idt &comment = location.comment();
-      if(comment != "")
+      if (comment != "")
         out << " // " << comment;
     }
 
@@ -119,7 +119,7 @@ void goto_programt::instructiont::output_instruction(
     out << "END_FUNCTION";
     {
       const irep_idt &function = location.function();
-      if(function != "")
+      if (function != "")
         out << " // " << function;
     }
     out << "\n";
@@ -135,14 +135,14 @@ void goto_programt::instructiont::output_instruction(
 
     {
       const code_cpp_throw2t &throw_ref = to_code_cpp_throw2t(code);
-      for(auto const &it : throw_ref.exception_list)
+      for (auto const &it : throw_ref.exception_list)
       {
-        if(it != *throw_ref.exception_list.begin())
+        if (it != *throw_ref.exception_list.begin())
           out << ",";
         out << " " << it;
       }
 
-      if(!is_nil_expr(throw_ref.operand))
+      if (!is_nil_expr(throw_ref.operand))
         out << ": " << from_expr(ns, identifier, throw_ref.operand);
     }
 
@@ -157,11 +157,11 @@ void goto_programt::instructiont::output_instruction(
       const code_cpp_catch2t &catch_ref = to_code_cpp_catch2t(code);
       assert(targets.size() == catch_ref.exception_list.size());
 
-      for(instructiont::targetst::const_iterator gt_it = targets.begin();
-          gt_it != targets.end();
-          gt_it++, i++)
+      for (instructiont::targetst::const_iterator gt_it = targets.begin();
+           gt_it != targets.end();
+           gt_it++, i++)
       {
-        if(gt_it != targets.begin())
+        if (gt_it != targets.begin())
           out << ", ";
         out << catch_ref.exception_list[i] << "->" << (*gt_it)->target_number;
       }
@@ -186,9 +186,9 @@ void goto_programt::instructiont::output_instruction(
     {
       const code_cpp_throw_decl2t &ref = to_code_cpp_throw_decl2t(code);
 
-      for(unsigned int i = 0; i < ref.exception_list.size(); ++i)
+      for (unsigned int i = 0; i < ref.exception_list.size(); ++i)
       {
-        if(i)
+        if (i)
           out << ", ";
         out << ref.exception_list[i];
       }
@@ -199,23 +199,7 @@ void goto_programt::instructiont::output_instruction(
     break;
 
   case THROW_DECL_END:
-    out << "THROW_DECL_END (";
-
-    if(!is_nil_expr(code))
-    {
-      const code_cpp_throw_decl_end2t &decl_end =
-        to_code_cpp_throw_decl_end2t(code);
-
-      for(auto const &it : decl_end.exception_list)
-      {
-        if(it != *decl_end.exception_list.begin())
-          out << ", ";
-        out << it;
-      }
-    }
-
-    out << ")";
-
+    out << "THROW_DECL_END";
     out << "\n";
     break;
 
@@ -235,8 +219,8 @@ bool operator<(
 
 void goto_programt::compute_loop_numbers(unsigned int &num)
 {
-  for(auto &instruction : instructions)
-    if(instruction.is_backwards_goto())
+  for (auto &instruction : instructions)
+    if (instruction.is_backwards_goto())
     {
       (*instruction.targets.begin())->loop_number = num;
       instruction.loop_number = num++;
@@ -258,13 +242,13 @@ void goto_programt::get_successors(
   successors.clear();
 
   // The last instruction does not have any successors
-  if(target == instructions.end())
+  if (target == instructions.end())
     return;
 
   const auto next = std::next(target);
   const instructiont &i = *target;
 
-  if(i.is_goto())
+  if (i.is_goto())
   {
     // GOTO instructions may have multiple successors:
     // the next instruction in the list + all the instructions
@@ -273,31 +257,40 @@ void goto_programt::get_successors(
     // If the guard is definitely FALSE, then the corresponding
     // jump can never occur. Hence, we can ignore all jump targets
     // as successors. Otherwise, we consider these targets as successors.
-    if(!is_false(i.guard))
+    if (!is_false(i.guard))
     {
-      for(auto target : i.targets)
+      for (auto target : i.targets)
         successors.emplace_back(target);
     }
 
     // If the guard is definitely TRUE, then this GOTO
     // jump always happens. Hence, only one kind of successors
     // is possible -- the target instructions of the GOTO jump.
-    if(!is_true(i.guard) && next != instructions.end())
+    if (!is_true(i.guard) && next != instructions.end())
       successors.push_back(next);
   }
-  else if(i.is_return())
+  else if (i.is_return())
   {
     // A RETURN instruction is basically an "unguarded" jump to
     // the corresponding END_FUNCTION instruction.
     successors.push_back(--instructions.end());
   }
-  else if(i.is_assume() || i.is_assert())
+  else if (i.is_assume() || i.is_assert())
   {
     // This is an ASSERT or ASSUME with a guard that
     // might hold (i.e., definitely not FALSE), so the next target
     // might be reached.
-    if(!is_false(i.guard))
+    if (!is_false(i.guard))
       successors.push_back(next);
+  }
+  else if (i.is_catch())
+  {
+    // CATCH signed_int->1, bool->2, float->3
+    // we consider these targets as successors
+    for (auto target : i.targets)
+      successors.emplace_back(target);
+
+    successors.push_back(next);
   }
   else
     successors.push_back(next);
@@ -316,7 +309,7 @@ std::ostream &goto_programt::output(
 {
   // output program
 
-  for(const auto &instruction : instructions)
+  for (const auto &instruction : instructions)
     instruction.output_instruction(ns, identifier, out);
 
   return out;
@@ -326,18 +319,18 @@ void goto_programt::compute_target_numbers()
 {
   // reset marking
 
-  for(auto &instruction : instructions)
+  for (auto &instruction : instructions)
     instruction.target_number = -1;
 
   // mark the goto targets
 
-  for(instructionst::const_iterator it = instructions.begin();
-      it != instructions.end();
-      it++)
+  for (instructionst::const_iterator it = instructions.begin();
+       it != instructions.end();
+       it++)
   {
-    for(auto t : it->targets)
+    for (auto t : it->targets)
     {
-      if(t != instructions.end())
+      if (t != instructions.end())
         t->target_number = 0;
     }
   }
@@ -345,11 +338,11 @@ void goto_programt::compute_target_numbers()
   // number the targets properly
   unsigned cnt = 0;
 
-  for(instructionst::iterator it = instructions.begin();
-      it != instructions.end();
-      it++)
+  for (instructionst::iterator it = instructions.begin();
+       it != instructions.end();
+       it++)
   {
-    if(it->is_target())
+    if (it->is_target())
     {
       it->target_number = ++cnt;
       assert(it->target_number != 0);
@@ -359,13 +352,13 @@ void goto_programt::compute_target_numbers()
   // check the targets!
   // (this is a consistency check only)
 
-  for(instructionst::const_iterator it = instructions.begin();
-      it != instructions.end();
-      it++)
+  for (instructionst::const_iterator it = instructions.begin();
+       it != instructions.end();
+       it++)
   {
-    for(auto t : it->targets)
+    for (auto t : it->targets)
     {
-      if(t != instructions.end())
+      if (t != instructions.end())
       {
         assert(t->target_number != 0);
         assert(t->target_number != unsigned(-1));
@@ -387,9 +380,9 @@ void goto_programt::copy_from(const goto_programt &src)
 
   // Loop over program - 1st time collects targets and copy
 
-  for(instructionst::const_iterator it = src.instructions.begin();
-      it != src.instructions.end();
-      it++)
+  for (instructionst::const_iterator it = src.instructions.begin();
+       it != src.instructions.end();
+       it++)
   {
     targett new_instruction = add_instruction();
     targets_mapping[it] = new_instruction;
@@ -398,13 +391,13 @@ void goto_programt::copy_from(const goto_programt &src)
 
   // Loop over program - 2nd time updates targets
 
-  for(auto &instruction : instructions)
+  for (auto &instruction : instructions)
   {
-    for(auto &target : instruction.targets)
+    for (auto &target : instruction.targets)
     {
       targets_mappingt::iterator m_target_it = targets_mapping.find(target);
 
-      if(m_target_it == targets_mapping.end())
+      if (m_target_it == targets_mapping.end())
         throw "copy_from: target not found";
 
       target = m_target_it->second;
@@ -416,7 +409,7 @@ void goto_programt::copy_from(const goto_programt &src)
 
 std::ostream &operator<<(std::ostream &out, goto_program_instruction_typet t)
 {
-  switch(t)
+  switch (t)
   {
   case NO_INSTRUCTION_TYPE:
     out << "NO_INSTRUCTION_TYPE";
@@ -493,9 +486,9 @@ void goto_programt::dump() const
 void goto_programt::get_decl_identifiers(
   decl_identifierst &decl_identifiers) const
 {
-  forall_goto_program_instructions(it, (*this))
+  forall_goto_program_instructions (it, (*this))
   {
-    if(it->is_decl())
+    if (it->is_decl())
       decl_identifiers.insert(to_code_decl2t(it->code).value);
   }
 }

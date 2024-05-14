@@ -22,13 +22,13 @@ void goto_factory::create_file_from_istream(
   std::string filename)
 {
   std::ofstream output(filename); // Change this for C++
-  if(!output.good())
+  if (!output.good())
   {
     perror("Could not create output C file\n");
     exit(1);
   }
 
-  while(c_inputstream.good())
+  while (c_inputstream.good())
   {
     std::string line;
     c_inputstream >> line;
@@ -44,7 +44,7 @@ void goto_factory::create_file_from_string(
   std::string filename)
 {
   std::ofstream output(filename); // Change this for C++
-  if(!output.good())
+  if (!output.good())
   {
     perror("Could not create output C file\n");
     exit(1);
@@ -62,7 +62,7 @@ void goto_factory::config_environment(
 {
   config.set(c);
 
-  switch(arch)
+  switch (arch)
   {
   case goto_factory::Architecture::BIT_16:
     config.ansi_c.set_data_model(configt::LP32);
@@ -169,14 +169,14 @@ optionst goto_factory::get_default_options(cmdlinet cmd)
   return options;
 }
 
-bool goto_factory::parse(language_uit &l)
+bool goto_factory::parse(const cmdlinet &cmdline, language_uit &l)
 {
   l.context.clear();
-  if(l.parse())
+  if (l.parse(cmdline))
     return false; // TODO: This can be used to add testcases for frontend
-  if(l.typecheck())
+  if (l.typecheck())
     return false;
-  if(l.final())
+  if (l.final())
     return false;
   l.clear_parse();
   return true;
@@ -184,28 +184,27 @@ bool goto_factory::parse(language_uit &l)
 
 program goto_factory::get_goto_functions(cmdlinet &cmd, optionst &opts)
 {
-  goto_functionst goto_functions;
-  language_uit lui(cmd);
-  migrate_namespace_lookup = new namespacet(lui.context);
-  if(!goto_factory::parse(lui))
+  program P;
+
+  if (goto_factory::parse(cmd, P))
   {
-    return program(lui.context, goto_functions);
+    goto_functionst &goto_functions = P.functions;
+    goto_convert(P.context, opts, goto_functions);
+
+    namespacet &ns = P.ns;
+    goto_check(ns, opts, goto_functions);
+    // remove no-op's
+    remove_no_op(goto_functions);
+
+    // Remove unreachable code
+    remove_unreachable(goto_functions);
+
+    // recalculate numbers, etc.
+    goto_functions.update();
+
+    // add loop ids
+    goto_functions.compute_loop_numbers();
   }
 
-  goto_convert(lui.context, opts, goto_functions);
-
-  namespacet ns(lui.context);
-  goto_check(ns, opts, goto_functions);
-  // remove no-op's
-  remove_no_op(goto_functions);
-
-  // Remove unreachable code
-  remove_unreachable(goto_functions);
-
-  // recalculate numbers, etc.
-  goto_functions.update();
-
-  // add loop ids
-  goto_functions.compute_loop_numbers();
-  return program(ns, goto_functions);
+  return P;
 }

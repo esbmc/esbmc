@@ -47,15 +47,15 @@ typedef __uint128_t __UINT128_TYPE__;
   type name(type x, int *exp)                                                  \
   {                                                                            \
   __ESBMC_HIDE:;                                                               \
-    if(!isfinite(x))                                                           \
+    if (!isfinite(x))                                                          \
       return x;                                                                \
-    if(x == 0)                                                                 \
+    if (x == 0)                                                                \
     {                                                                          \
       *exp = 0;                                                                \
       return x;                                                                \
     }                                                                          \
     int off = 0;                                                               \
-    if(!isnormal(x))                                                           \
+    if (!isnormal(x))                                                          \
     {                                                                          \
       x *= (TYPE(pre))1 << MANT_BITS(pre);                                     \
       off -= MANT_BITS(pre);                                                   \
@@ -75,18 +75,18 @@ typedef __uint128_t __UINT128_TYPE__;
   type name(type x, int exp)                                                   \
   {                                                                            \
   __ESBMC_HIDE:;                                                               \
-    if(!isfinite(x) || x == 0.0##suff)                                         \
+    if (!isfinite(x) || x == 0.0##suff)                                        \
       return x;                                                                \
     TYPE(pre) v, m;                                                            \
     __ESBMC_bitcast(&v, &x);                                                   \
     m = v & (((TYPE(pre))1 << MANT_BITS(pre)) - 1); /* mantissa encoding */    \
     int e = (v & EXP_MASK(pre)) >> MANT_BITS(pre);                             \
     exp += e; /* add exponent encoding */                                      \
-    if(exp < -MANT_BITS(pre))                                                  \
+    if (exp < -MANT_BITS(pre))                                                 \
       return copysign##suff(0.0##suff, x);                                     \
-    if(exp >= (1 << EXP_BITS(pre)) - 1)                                        \
+    if (exp >= (1 << EXP_BITS(pre)) - 1)                                       \
       return copysign##suff(HUGE_VAL##SUFF, x);                                \
-    if(exp <= 0)                                                               \
+    if (exp <= 0)                                                              \
     {                                                                          \
       /* make a denormalized number */                                         \
       m |= (TYPE(pre))1 << MANT_BITS(pre);                                     \

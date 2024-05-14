@@ -50,7 +50,7 @@ void *kmalloc(int size, int flags)
   //check if flags have corresponding valid values
   check_gfp_flags(flags);
   // If the size is larger than the KMALLOC_MAX_CACHE_SIZE, then handle in kmalloc_large
-  if(size > KMALLOC_MAX_CACHE_SIZE)
+  if (size > KMALLOC_MAX_CACHE_SIZE)
   {
     // Call to kmalloc_large or equivalent function can be here.
     return __kmalloc_large(size, flags);
@@ -123,10 +123,10 @@ bool spin_lock(spinlock_t *lock)
   __ESBMC_assert(lock != NULL, "The lock is null, verfication failed");
 
   int retries = 0;
-  while(retries < SPIN_LIMIT)
+  while (retries < SPIN_LIMIT)
   {
     __ESBMC_atomic_begin();
-    if(lock->locked == false)
+    if (lock->locked == false)
     {
       lock->locked = true;
       __ESBMC_atomic_end();

@@ -375,7 +375,7 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
     REQUIRE(C.is_top());
 
     // Char initialization
-    for(int c = 0; c < 256; c++)
+    for (int c = 0; c < 256; c++)
     {
       A.set_lower(c);
       A.set_upper(c);
@@ -396,7 +396,7 @@ TEST_CASE("Wrapped Intervals tests", "[ai][interval-analysis]")
     REQUIRE(A.is_top());
 
     // Char initialization
-    for(int c = -128; c < 128; c++)
+    for (int c = -128; c < 128; c++)
     {
       A.set_lower(c);
       A.set_upper(c);
@@ -740,13 +740,13 @@ TEST_CASE("Interval templates arithmetic operations", "[ai][interval-analysis]")
     w3.upper = 129;
 
     // There is no way for me to check the order
-    for(auto &c : cut)
+    for (auto &c : cut)
     {
-      if(c == w1)
+      if (c == w1)
         check1 = true;
-      if(c == w2)
+      if (c == w2)
         check2 = true;
-      if(c == w3)
+      if (c == w3)
         check3 = true;
     }
 
@@ -1486,5 +1486,66 @@ TEST_CASE("Bitnot Operations", "[ai][interval-analysis]")
     CAPTURE(r.lower, r.upper);
     REQUIRE(*r.lower == 254); // 0xFE
     REQUIRE(*r.upper == 255); // 0xFF
+  }
+}
+
+TEST_CASE("Wrapped interval bounds", "[ai][interval-analysis]")
+{
+  config.ansi_c.set_data_model(configt::ILP32);
+  wrapped_interval w1(get_int_type(8));
+  std::pair<BigInt, BigInt> result;
+  SECTION("[10, 127] --> <10, 127>")
+  {
+    w1.lower = 10;
+    w1.upper = 127;
+
+    result = w1.get_interval_bounds();
+    CAPTURE(result.first, result.second);
+    REQUIRE(result.first == 10);
+    REQUIRE(result.second == 127);
+  }
+
+  SECTION("[10, 128] --> <-128, 127>")
+  {
+    w1.lower = 10;
+    w1.upper = 128;
+
+    result = w1.get_interval_bounds();
+    CAPTURE(result.first, result.second);
+    REQUIRE(result.first == -128);
+    REQUIRE(result.second == 127);
+  }
+
+  SECTION("[10, 255] --> <-128, 127>")
+  {
+    w1.lower = 10;
+    w1.upper = 255;
+
+    result = w1.get_interval_bounds();
+    CAPTURE(result.first, result.second);
+    REQUIRE(result.first == -128);
+    REQUIRE(result.second == 127);
+  }
+
+  SECTION("[129, 130] --> <-127, -126>")
+  {
+    w1.lower = 129;
+    w1.upper = 130;
+
+    result = w1.get_interval_bounds();
+    CAPTURE(result.first, result.second);
+    REQUIRE(result.first == -127);
+    REQUIRE(result.second == -126);
+  }
+
+  SECTION("[255, 10] --> <-1, 10>")
+  {
+    w1.lower = 255;
+    w1.upper = 10;
+
+    result = w1.get_interval_bounds();
+    CAPTURE(result.first, result.second);
+    REQUIRE(result.first == -1);
+    REQUIRE(result.second == 10);
   }
 }

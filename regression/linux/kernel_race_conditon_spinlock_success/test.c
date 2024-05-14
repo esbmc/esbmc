@@ -5,7 +5,7 @@ int shared_counter = 0;
 spinlock_t lock;
 #define MAX_THREADS 2
 
-void increment_counter()
+void * increment_counter(void *)
 {
     //apply spin lock
     spin_lock(&lock);

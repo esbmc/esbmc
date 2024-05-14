@@ -16,7 +16,7 @@ void cpp_typecheckt::convert(cpp_namespace_spect &namespace_spec)
 
   const irep_idt &name = namespace_spec.get_namespace();
 
-  if(name == "")
+  if (name == "")
   {
     // "unique namespace"
     err_location(namespace_spec);
@@ -30,9 +30,9 @@ void cpp_typecheckt::convert(cpp_namespace_spect &namespace_spec)
 
   symbolt *s = context.find_symbol(identifier);
 
-  if(s != nullptr)
+  if (s != nullptr)
   {
-    if(namespace_spec.alias().is_not_nil())
+    if (namespace_spec.alias().is_not_nil())
     {
       err_location(namespace_spec);
       str << "namespace alias `" << final_name << "' previously declared"
@@ -41,7 +41,7 @@ void cpp_typecheckt::convert(cpp_namespace_spect &namespace_spec)
       throw 0;
     }
 
-    if(s->type.id() != "namespace")
+    if (s->type.id() != "namespace")
     {
       err_location(namespace_spec);
       str << "namespace `" << final_name << "' previously declared"
@@ -65,7 +65,7 @@ void cpp_typecheckt::convert(cpp_namespace_spect &namespace_spec)
     symbol.module = module;
     symbol.type = typet("namespace");
 
-    if(context.move(symbol))
+    if (context.move(symbol))
       throw "cpp_typecheckt::convert_namespace: context.move() failed";
 
     cpp_scopes.new_namespace(final_name);
@@ -80,7 +80,7 @@ void cpp_typecheckt::convert(cpp_namespace_spect &namespace_spec)
   else
   {*/
   // do the declarations
-  for(auto &it : namespace_spec.items())
+  for (auto &it : namespace_spec.items())
     convert(it);
   //  }
 }

@@ -44,6 +44,23 @@ jobs:
       build-flags: '-b DebugOpt -e On'
       testing: true
 
+  build-arm:
+    uses: ./.github/workflows/build-unix.yml
+    name: ARM64 linux build
+    with:
+      operating-system: ARM64
+      build-flags: '-b DebugOpt -S OFF -B OFF'
+      testing: false
+
+  build-macos-arm:
+    uses: ./.github/workflows/build-unix.yml
+    name: arm64 darwin build
+    with:
+      operating-system: macos-latest
+      build-flags: '-c 15'
+      testing: false
+
+
   # Also run a build with frontend linked shared against Ubuntu's clang-13
   build-shared:
     name: dyn. llvm-13 DebugOpt
@@ -53,10 +70,23 @@ jobs:
       build-flags: '-b DebugOpt -e On -S OFF -c 13'
       testing: true
 
+  # Also run a build with frontend linked shared against Ubuntu's clang-16
+  build-shared16:
+    name: dyn. llvm-16 DebugOpt
+    uses: ./.github/workflows/build-unix.yml
+    with:
+      operating-system: ubuntu-latest
+      build-flags: '-b DebugOpt -e On -S OFF -c 16'
+      testing: true
+
     # Check project with clang-format
   code-style:
     name: Check C/C++ code-style
     runs-on: ubuntu-20.04
+    permissions:
+      # Give the default GITHUB_TOKEN write permission to commit and push the
+      # added or changed files to the repository.
+      contents: write
     steps:
     - uses: actions/checkout@v2
     - name: Install Dependencies
@@ -66,12 +96,18 @@ jobs:
     - name: Extract Clang 11
       run: tar xf clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz && mv clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04 clang
     - name: Run clang-format (src)
-      run: find src -iname *.h -o -iname *.c -o -iname *.cpp -o -iname *.hpp -iname *.hh | grep -v src/ansi-c/cpp | grep -v src/clang-c-frontend/headers/ | xargs ./clang/bin/clang-format -style=file -i -fallback-style=none
+      run: find src -iname *.h -o -iname *.c -o -iname *.cpp -o -iname *.hpp -iname *.hh | grep -v src/ansi-c/cpp | grep -v src/clang-c-frontend/headers/ | grep -v src/c2goto/library/libm/musl | xargs ./clang/bin/clang-format -style=file -i -fallback-style=none
     - name: Run clang-format (tests)
       run: find unit -iname *.h -o -iname *.c -o -iname *.cpp -o -iname *.hpp -iname *.hh  | xargs ./clang/bin/clang-format -style=file -i -fallback-style=none
+    - name: Delete downloaded Clang 11
+      run: rm -rf clang*
+    # Commit all changed files back to the repository
+    - uses: stefanzweifel/git-auto-commit-action@v5
+      if: ${{ ! startsWith(github.head_ref, 'fb/') }}
     - name: Throws error if changes were made
       run: git diff --exit-code --ignore-cr-at-eol
-      
+      if: ${{ startsWith(github.head_ref, 'fb/') }}
+
   cmake-lint:
     name: Check CMake modules
     runs-on: ubuntu-20.04

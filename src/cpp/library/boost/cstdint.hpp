@@ -1,8 +1,8 @@
 //  boost cstdint.hpp header file  ------------------------------------------//
 
-//  (C) Copyright Beman Dawes 1999. 
-//  (C) Copyright Jens Mauer 2001  
-//  (C) Copyright John Maddock 2001 
+//  (C) Copyright Beman Dawes 1999.
+//  (C) Copyright Jens Mauer 2001
+//  (C) Copyright John Maddock 2001
 //  Distributed under the Boost
 //  Software License, Version 1.0. (See accompanying file
 //  LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt)
@@ -19,10 +19,7 @@
 //   29 Jun 00  Reimplement to avoid including stdint.h within namespace boost
 //    8 Aug 99  Initial version (Beman Dawes)
 
-
 #ifndef BOOST_CSTDINT_HPP
 #define BOOST_CSTDINT_HPP
-
-
 
 #endif

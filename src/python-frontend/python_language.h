@@ -13,11 +13,19 @@ public:
 
   bool typecheck(contextt &context, const std::string &module) override;
 
-  bool from_expr(const exprt &expr, std::string &code, const namespacet &ns)
-    override;
+  bool from_expr(
+    const exprt &expr,
+    std::string &code,
+    const namespacet &ns,
+    unsigned flags) override;
 
-  bool from_type(const typet &type, std::string &code, const namespacet &ns)
-    override;
+  bool from_type(
+    const typet &type,
+    std::string &code,
+    const namespacet &ns,
+    unsigned flags) override;
+
+  unsigned default_flags(presentationt target) const override;
 
   std::string id() const override
   {

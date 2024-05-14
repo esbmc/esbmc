@@ -3,17 +3,17 @@
 /* TODO: this is basically thrash_type_symbols() modulo pointers in slow */
 static void complete_type(typet &type, const namespacet &ns)
 {
-  if(type.is_struct() || type.is_union())
+  if (type.is_struct() || type.is_union())
   {
-    for(auto &comp : to_struct_union_type(type).components())
+    for (auto &comp : to_struct_union_type(type).components())
       complete_type(comp.type(), ns);
     return;
   }
 
-  if(type.is_array())
+  if (type.is_array())
     return complete_type(type.subtype(), ns);
 
-  if(type.is_symbol())
+  if (type.is_symbol())
   {
     const symbolt *sym = ns.lookup(type.identifier());
     assert(sym);

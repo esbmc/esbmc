@@ -9,6 +9,7 @@
 // Remove warnings from Clang headers
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
+#include <clang/Basic/Version.inc>
 #include <clang/AST/Attr.h>
 #include <clang/AST/DeclCXX.h>
 #include <clang/AST/DeclFriend.h>
@@ -31,20 +32,20 @@ bool clang_cpp_convertert::get_struct_class_virtual_methods(
   const clang::CXXRecordDecl &cxxrd,
   struct_typet &type)
 {
-  for(const auto &md : cxxrd.methods())
+  for (const auto &md : cxxrd.methods())
   {
-    if(!md->isVirtual())
+    if (!md->isVirtual())
       continue;
 
     /*
      * 1. convert this virtual method and add them to class symbol type
      */
     struct_typet::componentt comp;
-    if(get_decl(*md, comp))
+    if (get_decl(*md, comp))
       return true;
 
     // additional annotations for virtual/overriding methods
-    if(annotate_virtual_overriding_methods(*md, comp))
+    if (annotate_virtual_overriding_methods(*md, comp))
       return true;
     type.methods().push_back(comp);
 
@@ -54,11 +55,11 @@ bool clang_cpp_convertert::get_struct_class_virtual_methods(
      *  entry in the vtable.
      */
     symbolt *vtable_type_symbol = check_vtable_type_symbol_existence(type);
-    if(!vtable_type_symbol)
+    if (!vtable_type_symbol)
     {
       // first time we create the vtable type for this class
       vtable_type_symbol = add_vtable_type_symbol(comp, type);
-      if(vtable_type_symbol == nullptr)
+      if (vtable_type_symbol == nullptr)
         return true;
 
       add_vptr(type);
@@ -72,7 +73,7 @@ bool clang_cpp_convertert::get_struct_class_virtual_methods(
     /*
      * 4. deal with overriding method
      */
-    if(md->begin_overridden_methods() != md->end_overridden_methods())
+    if (md->begin_overridden_methods() != md->end_overridden_methods())
     {
       /*
        * In a multi-inheritance case(e.g. diamond problem)
@@ -83,7 +84,7 @@ bool clang_cpp_convertert::get_struct_class_virtual_methods(
       overriden_map cxxmethods_overriden;
       get_overriden_methods(*md, cxxmethods_overriden);
 
-      for(const auto &overriden_md_entry : cxxmethods_overriden)
+      for (const auto &overriden_md_entry : cxxmethods_overriden)
         add_thunk_method(overriden_md_entry.second, comp, type);
     }
   }
@@ -97,19 +98,28 @@ bool clang_cpp_convertert::get_struct_class_virtual_methods(
   return false;
 }
 
+static bool is_pure_virtual(const clang::CXXMethodDecl &md)
+{
+#if CLANG_VERSION_MAJOR < 18
+  return md.isPure();
+#else
+  return md.isPureVirtual();
+#endif
+}
+
 bool clang_cpp_convertert::annotate_virtual_overriding_methods(
   const clang::CXXMethodDecl &md,
   struct_typet::componentt &comp)
 {
   std::string method_id, method_name;
-  clang_c_convertert::get_decl_name(md, method_name, method_id);
+  get_decl_name(md, method_name, method_id);
 
   comp.type().set("#is_virtual", true);
   comp.type().set("#virtual_name", method_name);
   comp.set("is_virtual", true);
   comp.set("virtual_name", method_name);
 
-  if(md.isPure())
+  if (is_pure_virtual(md))
     comp.set("is_pure_virtual", true);
 
   return false;
@@ -150,7 +160,7 @@ symbolt *clang_cpp_convertert::add_vtable_type_symbol(
   vt_type_symb.module =
     get_modulename_from_path(comp.location().file().as_string());
 
-  if(context.move(vt_type_symb))
+  if (context.move(vt_type_symb))
   {
     log_error(
       "Failed add vtable type symbol {} to symbol table", vt_type_symb.id);
@@ -342,7 +352,7 @@ void clang_cpp_convertert::add_thunk_method_arguments(symbolt &thunk_func_symb)
 
   code_typet &code_type = to_code_type(thunk_func_symb.type);
   code_typet::argumentst &args = code_type.arguments();
-  for(unsigned i = 0; i < args.size(); i++)
+  for (unsigned i = 0; i < args.size(); i++)
   {
     code_typet::argumentt &arg = args[i];
     irep_idt base_name = arg.get_base_name();
@@ -361,7 +371,7 @@ void clang_cpp_convertert::add_thunk_method_arguments(symbolt &thunk_func_symb)
 
     // add the argument to the symbol table
     symbolt *tmp_symbol;
-    if(context.move(arg_symb, tmp_symbol))
+    if (context.move(arg_symb, tmp_symbol))
     {
       log_error(
         "Failed to add arg symbol `{}' for thunk function `{}'.\n"
@@ -389,7 +399,7 @@ void clang_cpp_convertert::add_thunk_method_body(
   late_cast_this.op0() =
     symbol_expr(*namespacet(context).lookup(args[0].cmt_identifier()));
 
-  if(
+  if (
     code_type.return_type().id() != "empty" &&
     code_type.return_type().id() != "destructor")
     add_thunk_method_body_return(thunk_func_symb, component, late_cast_this);
@@ -419,7 +429,7 @@ void clang_cpp_convertert::add_thunk_method_body_return(
   // `this` parameter is always the first one to add
   expr_call.arguments().push_back(late_cast_this);
 
-  for(unsigned i = 1; i < args.size(); i++)
+  for (unsigned i = 1; i < args.size(); i++)
   {
     expr_call.arguments().push_back(
       symbol_expr(*namespacet(context).lookup(args[i].cmt_identifier())));
@@ -450,7 +460,7 @@ void clang_cpp_convertert::add_thunk_method_body_no_return(
   // `this` parameter is always the first one to add
   code_func.arguments().push_back(late_cast_this);
 
-  for(unsigned i = 1; i < args.size(); i++)
+  for (unsigned i = 1; i < args.size(); i++)
   {
     code_func.arguments().push_back(
       symbol_expr(*namespacet(context).lookup(args[i].cmt_identifier())));
@@ -503,9 +513,9 @@ void clang_cpp_convertert::build_vtable_map(
    * This table will be used to create the vtable variable symbols.
    */
 
-  for(const auto &method : struct_type.methods())
+  for (const auto &method : struct_type.methods())
   {
-    if(!method.get_bool("is_virtual"))
+    if (!method.get_bool("is_virtual"))
       continue;
 
     const code_typet &code_type = to_code_type(method.type());
@@ -520,7 +530,7 @@ void clang_cpp_convertert::build_vtable_map(
       vtable_value_map[class_id]; // switch_map = switch_table
     exprt e = symbol_exprt(method.get_name(), code_type);
 
-    if(method.get_bool("is_pure_virtual"))
+    if (method.get_bool("is_pure_virtual"))
     {
       pointer_typet pointer_type(code_type);
       e = gen_zero(pointer_type);
@@ -547,36 +557,36 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
    * and add them to the symbol table.
    */
 
-  for(const auto &vft_switch_kv_pair : vtable_value_map)
+  for (const auto &vft_switch_kv_pair : vtable_value_map)
   {
     const function_switch &switch_map = vft_switch_kv_pair.second;
 
     // To create the vtable variable symbol we need to get the corresponding type
-    const symbolt *late_cast_symb =
-      namespacet(context).lookup(vft_switch_kv_pair.first);
+    const symbolt *late_cast_symb = ns.lookup(vft_switch_kv_pair.first);
     assert(late_cast_symb);
-    const symbolt &vt_symb_type = *namespacet(context).lookup(
-      "virtual_table::" + late_cast_symb->id.as_string());
+    const symbolt *vt_symb_type =
+      ns.lookup("virtual_table::" + late_cast_symb->id.as_string());
+    assert(vt_symb_type);
 
     // This is the class we are currently dealing with
     std::string class_id, class_name;
     get_decl_name(cxxrd, class_name, class_id);
 
     symbolt vt_symb_var;
-    vt_symb_var.id = vt_symb_type.id.as_string() + "@" + class_id;
-    vt_symb_var.name = vt_symb_type.name.as_string() + "@" + class_id;
+    vt_symb_var.id = vt_symb_type->id.as_string() + "@" + class_id;
+    vt_symb_var.name = vt_symb_type->name.as_string() + "@" + class_id;
     vt_symb_var.mode = mode;
     vt_symb_var.module =
       get_modulename_from_path(type.location().file().as_string());
-    vt_symb_var.location = vt_symb_type.location;
-    vt_symb_var.type = symbol_typet(vt_symb_type.id);
+    vt_symb_var.location = vt_symb_type->location;
+    vt_symb_var.type = symbol_typet(vt_symb_type->id);
     vt_symb_var.lvalue = true;
     vt_symb_var.static_lifetime = true;
 
     // add vtable variable symbols
-    const struct_typet &vt_type = to_struct_type(vt_symb_type.type);
-    exprt values("struct", symbol_typet(vt_symb_type.id));
-    for(const auto &compo : vt_type.components())
+    const struct_typet &vt_type = to_struct_type(vt_symb_type->type);
+    exprt values("struct", symbol_typet(vt_symb_type->id));
+    for (const auto &compo : vt_type.components())
     {
       std::map<irep_idt, exprt>::const_iterator cit2 =
         switch_map.find(compo.get("virtual_name").as_string());
@@ -587,7 +597,7 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
     }
     vt_symb_var.value = values;
 
-    if(context.move(vt_symb_var))
+    if (context.move(vt_symb_var))
     {
       log_error(
         "Failed to add vtable variable symbol {} for class {}",
@@ -605,19 +615,19 @@ void clang_cpp_convertert::get_overriden_methods(
   /*
    * This function gets all the overriden methods to which we need to create a thunk
    */
-  for(const auto &md_overriden : md.overridden_methods())
+  for (const auto &md_overriden : md.overridden_methods())
   {
-    if(
+    if (
       md_overriden->begin_overridden_methods() !=
       md_overriden->end_overridden_methods())
       get_overriden_methods(*md_overriden, map);
 
     // get the id for this overriden method
     std::string method_id, method_name;
-    clang_c_convertert::get_decl_name(*md_overriden, method_name, method_id);
+    get_decl_name(*md_overriden, method_name, method_id);
 
     // avoid adding the same overriden method, e.g. in case of diamond problem
-    if(map.find(method_id) != map.end())
+    if (map.find(method_id) != map.end())
       continue;
 
     auto status = map.insert({method_id, *md_overriden});

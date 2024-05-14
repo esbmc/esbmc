@@ -2,7 +2,7 @@
 
 code_blockt &codet::make_block()
 {
-  if(get_statement() == "block")
+  if (get_statement() == "block")
     return (code_blockt &)*this;
 
   exprt tmp;
@@ -19,11 +19,11 @@ codet &codet::first_statement()
 {
   const irep_idt &statement = get_statement();
 
-  if(has_operands())
+  if (has_operands())
   {
-    if(statement == "block")
+    if (statement == "block")
       return to_code(op0()).first_statement();
-    if(statement == "label")
+    if (statement == "label")
       return to_code(op0()).first_statement();
   }
 
@@ -34,11 +34,11 @@ const codet &codet::first_statement() const
 {
   const irep_idt &statement = get_statement();
 
-  if(has_operands())
+  if (has_operands())
   {
-    if(statement == "block")
+    if (statement == "block")
       return to_code(op0()).first_statement();
-    if(statement == "label")
+    if (statement == "label")
       return to_code(op0()).first_statement();
   }
 
@@ -49,11 +49,11 @@ codet &codet::last_statement()
 {
   const irep_idt &statement = get_statement();
 
-  if(has_operands())
+  if (has_operands())
   {
-    if(statement == "block")
+    if (statement == "block")
       return to_code(operands().back()).last_statement();
-    if(statement == "label")
+    if (statement == "label")
       return to_code(operands().back()).last_statement();
   }
 
@@ -64,11 +64,11 @@ const codet &codet::last_statement() const
 {
   const irep_idt &statement = get_statement();
 
-  if(has_operands())
+  if (has_operands())
   {
-    if(statement == "block")
+    if (statement == "block")
       return to_code(operands().back()).last_statement();
-    if(statement == "label")
+    if (statement == "label")
       return to_code(operands().back()).last_statement();
   }
 

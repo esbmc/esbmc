@@ -8,8 +8,13 @@ Date:
 
 \*******************************************************************/
 
-class QPointF{
+class QPointF
+{
 public:
-	QPointF(){}
-	~QPointF(){}
+  QPointF()
+  {
+  }
+  ~QPointF()
+  {
+  }
 };

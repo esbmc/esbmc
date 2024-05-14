@@ -5,19 +5,19 @@ bool sort_operands(exprt::operandst &operands)
 {
   bool do_sort = false;
 
-  forall_expr(it, operands)
+  forall_expr (it, operands)
   {
     exprt::operandst::const_iterator next_it = it;
     next_it++;
 
-    if(next_it != operands.end() && *next_it < *it)
+    if (next_it != operands.end() && *next_it < *it)
     {
       do_sort = true;
       break;
     }
   }
 
-  if(!do_sort)
+  if (!do_sort)
     return true;
 
   std::sort(operands.begin(), operands.end());

@@ -1,12 +1,3 @@
-int __ESBMC_sync_fetch_and_add(int *ptr, int value)
-{
-  __ESBMC_atomic_begin();
-  int initial = *ptr;
-  *ptr += value;
-  __ESBMC_atomic_end();
-  return initial;
-}
-
 #if __ESBMC_CHERI__ == 128
 
 #if 1
@@ -39,8 +30,8 @@ int __ESBMC_sync_fetch_and_add(int *ptr, int value)
 
 uint64_t __esbmc_clzll(uint64_t v)
 {
-  for(int i = 0; i < 64; i++, v <<= 1)
-    if(v & (uint64_t)1 << 63)
+  for (int i = 0; i < 64; i++, v <<= 1)
+    if (v & (uint64_t)1 << 63)
       return i;
   __ESBMC_assert(0, "clzll is not defined for zero arguments");
   return nondet_uint64();
@@ -120,9 +111,7 @@ __esbmc_cheri_bounds_set(void *__capability cap, __SIZE_TYPE__ sz)
   __ESBMC_assert(cheri_gettag(cap), "tag-violation c2exception");
   // __ESBMC_assert(!cc128_is_cap_sealed(&comp) /*cheri_getsealed(cap)*/, "seal-violation c2exception");
   __ESBMC_assert(base <= cursor, "length-violation c2exception");
-  __uint128_t newTop = cursor;
-  newTop += sz;
-  bool exact = cc128_setbounds(&comp, cursor, newTop);
+  bool exact = cc128_setbounds(&comp, sz);
   (void)exact; /* ignore */
   u.pesbt = cc128_compress_mem(&comp);
   __ESBMC_assert(
@@ -200,7 +189,7 @@ __SIZE_TYPE__ __esbmc_cheri_length_get(void *__capability cap)
   __UINT64_TYPE__ B = u.B_13_3 << 3;
   int L_carry_out;
   int L_msb;
-  if(u.I_E)
+  if (u.I_E)
   {
     E = u.T_E << 3 | u.B_E;
     L_carry_out = (T & 0x7f8) < (B & 0x7f8);
@@ -214,7 +203,7 @@ __SIZE_TYPE__ __esbmc_cheri_length_get(void *__capability cap)
     L_carry_out = (T & 0x7ff) < (B & 0x7ff);
     L_msb = 0;
   }
-  if(E > 52) /* 52 is the max. exponent for this format on non-morello */
+  if (E > 52) /* 52 is the max. exponent for this format on non-morello */
     E = 52;
   T |= (((B >> 12) + L_carry_out + L_msb) & 3) << 12;
   __UINT64_TYPE__ a_top = E + 14 < 64 ? u.cursor >> (E + 14) : 0;
@@ -230,15 +219,15 @@ __SIZE_TYPE__ __esbmc_cheri_length_get(void *__capability cap)
   __UINT64_TYPE__ t_lo =
     ((__UINT64_TYPE__)((__INT64_TYPE__)a_top + c_t) << 14 | T) << E;
   __UINT64_TYPE__ t_hi;
-  if(14 + E <= 64)
+  if (14 + E <= 64)
     t_hi = (__UINT64_TYPE__)((__INT64_TYPE__)a_top + c_t) >> (64 - (14 + E));
   else
     t_hi = (__UINT64_TYPE__)((__INT64_TYPE__)a_top + c_t) << (14 + E - 64) |
            (E ? T >> (64 - E) : 0);
   __UINT64_TYPE__ b = (E + 14 < 64 ? (a_top + c_b) << (E + 14) : 0) | B << E;
-  if(t_hi > 1)
+  if (t_hi > 1)
     t_hi = 1;
-  if(E < 51 && (int)((t_hi << 1 | t_lo >> 63) & 3) - (int)(b >> 63) > 1)
+  if (E < 51 && (int)((t_hi << 1 | t_lo >> 63) & 3) - (int)(b >> 63) > 1)
     t_hi ^= 1;
   return t_lo - b;
 #endif

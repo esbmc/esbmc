@@ -3,7 +3,7 @@
 smt_astt smt_convt::overflow_arith(const expr2tc &expr)
 {
   // If in integer mode, this is completely pointless. Return false.
-  if(int_encoding)
+  if (int_encoding)
     return mk_smt_bool(false);
 
   const overflow2t &overflow = to_overflow2t(expr);
@@ -17,11 +17,11 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
   bool is_signed =
     (is_signedbv_type(opers.side_1) || is_signedbv_type(opers.side_2));
 
-  switch(overflow.operand->expr_id)
+  switch (overflow.operand->expr_id)
   {
   case expr2t::add_id:
   {
-    if(is_signed)
+    if (is_signed)
     {
       // Two cases: pos/pos, and neg/neg, which can over and underflow resp.
       // In pos/neg cases, no overflow or underflow is possible, for any value.
@@ -50,7 +50,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
 
   case expr2t::sub_id:
   {
-    if(is_signed)
+    if (is_signed)
     {
       // Convert to be an addition
       expr2tc negop2 = neg2tc(opers.side_2->type, opers.side_2);
@@ -59,28 +59,27 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
 
       // Corner case: subtracting MIN_INT from many things overflows. The result
       // should always be positive.
-      uint64_t topbit = 1ULL << (opers.side_1->type->get_width() - 1);
-      expr2tc min_int = constant_int2tc(opers.side_1->type, BigInt(topbit));
+      BigInt topbit = -BigInt::power2(opers.side_1->type->get_width() - 1);
+      expr2tc min_int = constant_int2tc(opers.side_1->type, topbit);
       expr2tc is_min_int = equality2tc(min_int, opers.side_2);
       return convert_ast(or2tc(add_overflows, is_min_int));
     }
 
-    // Just ensure the result is >= the operands.
-    expr2tc le1 = lessthanequal2tc(overflow.operand, opers.side_1);
-    expr2tc le2 = lessthanequal2tc(overflow.operand, opers.side_2);
-    expr2tc res = and2tc(le1, le2);
-    expr2tc inv = not2tc(res);
+    // Just ensure the result is <= the first operand.
+    expr2tc sub = sub2tc(opers.side_1->type, opers.side_1, opers.side_2);
+    expr2tc le = lessthanequal2tc(sub, opers.side_1);
+    expr2tc inv = not2tc(le);
     return convert_ast(inv);
   }
 
   case expr2t::div_id:
   case expr2t::modulus_id:
   {
-    if(is_signed)
+    if (is_signed)
     {
       // We can't divide -MIN_INT/-1
-      uint64_t topbit = 1ULL << (opers.side_1->type->get_width() - 1);
-      expr2tc min_int = constant_int2tc(opers.side_1->type, -BigInt(topbit));
+      BigInt topbit = -BigInt::power2(opers.side_1->type->get_width() - 1);
+      expr2tc min_int = constant_int2tc(opers.side_1->type, topbit);
       expr2tc is_min_int = equality2tc(min_int, opers.side_1);
       expr2tc imp =
         implies2tc(is_min_int, greaterthan2tc(overflow.operand, zero));
@@ -106,8 +105,8 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
                                               : mk_zero_ext(arg1_ext, sz);
 
     expr2tc op2 = opers.side_2;
-    if(is_shl2t(overflow.operand))
-      if(opers.side_1->type->get_width() != opers.side_2->type->get_width())
+    if (is_shl2t(overflow.operand))
+      if (opers.side_1->type->get_width() != opers.side_2->type->get_width())
         op2 = typecast2tc(opers.side_1->type, opers.side_2);
 
     smt_astt arg2_ext = convert_ast(op2);
@@ -117,7 +116,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
     smt_astt result = is_mul2t(overflow.operand) ? mk_bvmul(arg1_ext, arg2_ext)
                                                  : mk_bvshl(arg1_ext, arg2_ext);
 
-    if(is_signed)
+    if (is_signed)
     {
       // Extract top half plus one (for the sign)
       smt_astt toppart = mk_extract(result, (sz * 2) - 1, sz - 1);
@@ -126,7 +125,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
       type2tc newtype = unsignedbv_type2tc(sz + 1);
 
       // All one bit vector is tricky, might be 64 bits wide for all we know.
-      expr2tc allonesexpr = constant_int2tc(newtype, ones(sz + 1));
+      expr2tc allonesexpr = constant_int2tc(newtype, BigInt::power2m1(sz + 1));
       smt_astt allonesvector = convert_ast(allonesexpr);
 
       // It should either be zero or all one's;
@@ -157,14 +156,14 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
 smt_astt smt_convt::overflow_cast(const expr2tc &expr)
 {
   // If in integer mode, this is completely pointless. Return false.
-  if(int_encoding)
+  if (int_encoding)
     return mk_smt_bool(false);
 
   const overflow_cast2t &ocast = to_overflow_cast2t(expr);
   unsigned int width = ocast.operand->type->get_width();
   unsigned int bits = ocast.bits;
 
-  if(ocast.bits >= width || ocast.bits == 0)
+  if (ocast.bits >= width || ocast.bits == 0)
   {
     log_error("SMT conversion: overflow-typecast got wrong number of bits");
     abort();
@@ -184,7 +183,7 @@ smt_astt smt_convt::overflow_cast(const expr2tc &expr)
   unsigned int neg_one_bits = (width - bits) + 1;
 
   smt_astt pos_bits = mk_smt_bv(BigInt(0), pos_zero_bits);
-  smt_astt neg_bits = mk_smt_bv(BigInt((1 << neg_one_bits) - 1), neg_one_bits);
+  smt_astt neg_bits = mk_smt_bv(BigInt::power2m1(neg_one_bits), neg_one_bits);
 
   smt_astt pos_sel = mk_extract(orig_val, width - 1, width - pos_zero_bits);
   smt_astt neg_sel = mk_extract(orig_val, width - 1, width - neg_one_bits);
@@ -204,7 +203,7 @@ smt_astt smt_convt::overflow_cast(const expr2tc &expr)
 smt_astt smt_convt::overflow_neg(const expr2tc &expr)
 {
   // If in integer mode, this is completely pointless. Return false.
-  if(int_encoding)
+  if (int_encoding)
     return mk_smt_bool(false);
 
   // Single failure mode: MIN_INT can't be neg'd
@@ -212,7 +211,7 @@ smt_astt smt_convt::overflow_neg(const expr2tc &expr)
   unsigned int width = neg.operand->type->get_width();
 
   expr2tc min_int =
-    constant_int2tc(neg.operand->type, BigInt(1 << (width - 1)));
+    constant_int2tc(neg.operand->type, -BigInt::power2(width - 1));
   expr2tc val = equality2tc(neg.operand, min_int);
   return convert_ast(val);
 }

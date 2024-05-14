@@ -19,7 +19,7 @@ static double expm1_taylor(double x)
 
 double expm1(double x) /* exp(x) - 1 */
 {
-  switch(fpclassify(x))
+  switch (fpclassify(x))
   {
   case FP_NAN:
   case FP_ZERO:
@@ -34,7 +34,7 @@ double expm1(double x) /* exp(x) - 1 */
   /* Taylor series converges everywhere, but the rate of convergence
    * is pretty bad; below we do a simple range reduction for larger |x|.
    */
-  if(fabs(x) < 0x1p-3)
+  if (fabs(x) < 0x1p-3)
     return expm1_taylor(x);
 
   /* range reduction: exp(xm * 2^xe) = exp(xm) ^ (2^xe) */
@@ -44,7 +44,7 @@ double expm1(double x) /* exp(x) - 1 */
   xe += 3;                         // |xm| in [2^-4,2^-3)
   double r = expm1_taylor(xm) + 1; // r = exp(xm)
   /* xe is > 0 and xe < 1025+3, square xe times to account for 2^xe */
-  for(int i = 0; i < xe; i++)
+  for (int i = 0; i < xe; i++)
     r *= r;
   return r - 1;
 }
@@ -72,7 +72,7 @@ static double log1p_taylor(double x)
 
 double log1p(double x) /* ln(x+1) */
 {
-  switch(fpclassify(x))
+  switch (fpclassify(x))
   {
   case FP_NAN:
     return x;
@@ -82,13 +82,13 @@ double log1p(double x) /* ln(x+1) */
     break;
   case FP_SUBNORMAL:
   case FP_NORMAL:
-    if(x == -1.0)
+    if (x == -1.0)
       return -HUGE_VAL;
-    if(x < -1.0)
+    if (x < -1.0)
       return NAN;
     break;
   }
-  if(fabs(x) >= 0.125) /* adding 1 won't destroy many bits */
+  if (fabs(x) >= 0.125) /* adding 1 won't destroy many bits */
     return log(x + 1);
 
   return log1p_taylor(x);
@@ -101,7 +101,7 @@ double log(double x)
 
 double log2(double x)
 {
-  switch(fpclassify(x))
+  switch (fpclassify(x))
   {
   case FP_NAN:
     return x;
@@ -111,14 +111,14 @@ double log2(double x)
     return -HUGE_VAL;
   case FP_SUBNORMAL:
   case FP_NORMAL:
-    if(signbit(x))
+    if (signbit(x))
       return NAN;
     break;
   }
 
   int xe;
   double xm = frexp(x, &xe); /* xm in [0.5, 1) */
-  if(xm < 2.0 / 3.0)
+  if (xm < 2.0 / 3.0)
   {
     xm *= 2;
     xe--;

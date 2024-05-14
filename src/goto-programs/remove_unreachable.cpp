@@ -8,7 +8,7 @@
 // (Note that we do not attempt to detect and remove unused functions yet.)
 void remove_unreachable(goto_functionst &goto_functions)
 {
-  for(auto &fun_it : goto_functions.function_map)
+  for (auto &fun_it : goto_functions.function_map)
     remove_unreachable(fun_it.second);
 }
 
@@ -32,12 +32,12 @@ void remove_unreachable(goto_programt &goto_program)
   // Building a set of reachable instructions.
   // Note that the first instruction in the GOTO program is considered to be
   // always reachable.
-  while(!working.empty())
+  while (!working.empty())
   {
     goto_programt::const_targett t = working.top();
     working.pop();
 
-    if(
+    if (
       reachable.find(t) == reachable.end() &&
       t != goto_program.instructions.end())
     {
@@ -45,10 +45,10 @@ void remove_unreachable(goto_programt &goto_program)
       goto_programt::const_targetst successors;
       goto_program.get_successors(t, successors);
 
-      for(goto_programt::const_targetst::const_iterator s_it =
-            successors.begin();
-          s_it != successors.end();
-          s_it++)
+      for (goto_programt::const_targetst::const_iterator s_it =
+             successors.begin();
+           s_it != successors.end();
+           s_it++)
         working.push(*s_it);
     }
   }
@@ -57,9 +57,9 @@ void remove_unreachable(goto_programt &goto_program)
   // reachable set. Note that we never remove the END_FUNCTION instructions
   // (even when they are unreachable)
   auto it = goto_program.instructions.begin();
-  while(it != goto_program.instructions.end())
+  while (it != goto_program.instructions.end())
   {
-    if(reachable.find(it) == reachable.end() && !it->is_end_function())
+    if (reachable.find(it) == reachable.end() && !it->is_end_function())
       it = goto_program.instructions.erase(it);
     else
       ++it;

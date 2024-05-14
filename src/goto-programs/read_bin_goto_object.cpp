@@ -23,13 +23,13 @@ bool read_bin_goto_object(
     hdr[1] = in.get();
     hdr[2] = in.get();
 
-    if(hdr[0] != 'G' || hdr[1] != 'B' || hdr[2] != 'F')
+    if (hdr[0] != 'G' || hdr[1] != 'B' || hdr[2] != 'F')
     {
       hdr[3] = in.get();
 
-      if(hdr[0] == 0x7f && hdr[1] == 'E' && hdr[2] == 'L' && hdr[3] == 'F')
+      if (hdr[0] == 0x7f && hdr[1] == 'E' && hdr[2] == 'L' && hdr[3] == 'F')
       {
-        if(filename != "")
+        if (filename != "")
           str << "Sorry, but I can't read ELF binary `" << filename << "'";
         else
           str << "Sorry, but I can't read ELF binaries";
@@ -51,7 +51,7 @@ bool read_bin_goto_object(
   {
     unsigned version = irepconverter.read_long(in);
 
-    if(version != BINARY_VERSION)
+    if (version != BINARY_VERSION)
     {
       str << "The input was compiled with a different version of "
           << "goto-cc, please recompile";
@@ -62,20 +62,20 @@ bool read_bin_goto_object(
 
   unsigned count = irepconverter.read_long(in);
 
-  for(unsigned i = 0; i < count; i++)
+  for (unsigned i = 0; i < count; i++)
   {
     irept t;
     symbolconverter.convert(in, t);
     symbolt symbol;
     symbol.from_irep(t);
 
-    if(!symbol.is_type && symbol.type.is_code())
+    if (!symbol.is_type && symbol.type.is_code())
     {
       // makes sure there is an empty function
       // for every function symbol and fixes
       // the function types.
       auto it = functions.function_map.find(symbol.id);
-      if(it == functions.function_map.end())
+      if (it == functions.function_map.end())
         functions.function_map.emplace(symbol.id, goto_functiont());
       functions.function_map.at(symbol.id).type = to_code_type(symbol.type);
     }
@@ -85,13 +85,13 @@ bool read_bin_goto_object(
   assert(migrate_namespace_lookup);
 
   count = irepconverter.read_long(in);
-  for(unsigned i = 0; i < count; i++)
+  for (unsigned i = 0; i < count; i++)
   {
     irept t;
     dstring fname = irepconverter.read_string(in);
     gfconverter.convert(in, t);
     auto it = functions.function_map.find(fname);
-    if(it == functions.function_map.end())
+    if (it == functions.function_map.end())
       functions.function_map.emplace(fname, goto_functiont());
     goto_functiont &f = functions.function_map.at(fname);
     convert(t, f.body);

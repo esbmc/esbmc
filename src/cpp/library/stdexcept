@@ -1,125 +1,140 @@
-/*******************************************************************
- Module:
-
- Author: Felipe Rodrigues
-
- Date: September 2012
-
- \*******************************************************************/
-
 #ifndef STL_STDEXCEPT
 #define STL_STDEXCEPT
 
 #include "definitions.h"
 #include "exception"
 
-namespace std {
+namespace std
+{
 
-struct runtime_error: public exception
+struct runtime_error : public exception
 {
 public:
-  runtime_error() {}
-
-  runtime_error(const char* what_arg)
+  runtime_error()
   {
-    message = (char *) what_arg;
+  }
+
+  runtime_error(const char *what_arg)
+  {
+    message = (char *)what_arg;
   }
 };
 
-class range_error: public runtime_error
+class range_error : public runtime_error
 {
 public:
-  explicit range_error() {}
-
-  explicit range_error(const char* what_arg)
+  explicit range_error()
   {
-    message = (char *) what_arg;
+  }
+
+  explicit range_error(const char *what_arg)
+  {
+    message = (char *)what_arg;
   }
 };
 
-class overflow_error: public runtime_error
+class overflow_error : public runtime_error
 {
 public:
-  explicit overflow_error() {}
-
-  explicit overflow_error(const char* what_arg)
+  explicit overflow_error()
   {
-    message = (char *) what_arg;
+  }
+
+  explicit overflow_error(const char *what_arg)
+  {
+    message = (char *)what_arg;
   }
 };
 
-class underflow_error: public runtime_error {
-public:
-  explicit underflow_error() {}
-
-  explicit underflow_error(const char* what_arg)
-  {
-    message = (char *) what_arg;
-  }
-};
-
-class logic_error: public exception
+class underflow_error : public runtime_error
 {
 public:
-  explicit logic_error() {}
-
-  explicit logic_error(const char* what_arg)
+  explicit underflow_error()
   {
-    message = (char *) what_arg;
   }
-  virtual ~logic_error() {
+
+  explicit underflow_error(const char *what_arg)
+  {
+    message = (char *)what_arg;
   }
 };
 
-class domain_error: public logic_error
+class logic_error : public exception
 {
 public:
-  explicit domain_error() {}
-
-  explicit domain_error(const char* what_arg)
+  explicit logic_error()
   {
-    message = (char *) what_arg;
+  }
+
+  explicit logic_error(const char *what_arg)
+  {
+    message = (char *)what_arg;
+  }
+  virtual ~logic_error()
+  {
   }
 };
 
-class invalid_argument: public logic_error
+class domain_error : public logic_error
 {
 public:
-  explicit invalid_argument() {}
-
-  explicit invalid_argument(const char* what_arg)
+  explicit domain_error()
   {
-    message = (char *) what_arg;
+  }
+
+  explicit domain_error(const char *what_arg)
+  {
+    message = (char *)what_arg;
   }
 };
 
-class length_error: public logic_error
+class invalid_argument : public logic_error
 {
 public:
-  explicit length_error() {}
-
-  explicit length_error(const char* what_arg)
+  explicit invalid_argument()
   {
-    message = (char *) what_arg;
   }
 
-  virtual ~length_error() {}
-
+  explicit invalid_argument(const char *what_arg)
+  {
+    message = (char *)what_arg;
+  }
 };
 
-class out_of_range: public logic_error
+class length_error : public logic_error
 {
 public:
-  explicit out_of_range() {}
-
-  explicit out_of_range(const char* what_arg)
+  explicit length_error()
   {
-    message = (char *) what_arg;
   }
 
-  virtual ~out_of_range() {}
+  explicit length_error(const char *what_arg)
+  {
+    message = (char *)what_arg;
+  }
+
+  virtual ~length_error()
+  {
+  }
 };
 
-}
+class out_of_range : public logic_error
+{
+public:
+  explicit out_of_range()
+  {
+  }
+
+  explicit out_of_range(const char *what_arg)
+  {
+    message = (char *)what_arg;
+  }
+
+  virtual ~out_of_range()
+  {
+  }
+};
+
+} // namespace std
 
 #endif

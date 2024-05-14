@@ -29,9 +29,9 @@ struct_union_typet::component_number(const irep_idt &component_name) const
 
   unsigned number = 0;
 
-  for(const auto &it : c)
+  for (const auto &it : c)
   {
-    if(it.get_name() == component_name)
+    if (it.get_name() == component_name)
       return number;
 
     number++;
@@ -46,9 +46,9 @@ struct_union_typet::get_component(const irep_idt &component_name) const
 {
   const componentst &c = components();
 
-  for(const auto &it : c)
+  for (const auto &it : c)
   {
-    if(it.get_name() == component_name)
+    if (it.get_name() == component_name)
       return it;
   }
 
@@ -67,14 +67,14 @@ bool struct_typet::is_prefix_of(const struct_typet &other) const
   const componentst &ot_components = other.components();
   const componentst &tt_components = components();
 
-  if(ot_components.size() < tt_components.size())
+  if (ot_components.size() < tt_components.size())
     return false;
 
   componentst::const_iterator ot_it = ot_components.begin();
 
-  for(const auto &tt_component : tt_components)
+  for (const auto &tt_component : tt_components)
   {
-    if(
+    if (
       ot_it->type() != tt_component.type() ||
       ot_it->name() != tt_component.name())
     {
@@ -94,7 +94,13 @@ bool is_reference(const typet &type)
 
 bool is_rvalue_reference(const typet &type)
 {
-  return type.id() == "pointer" && type.get_bool("#reference");
+  return type.id() == "pointer" && type.get_bool("#rvalue_reference");
+}
+
+bool is_lvalue_or_rvalue_reference(const typet &type)
+{
+  return type.id() == "pointer" &&
+         (type.reference() || type.get_bool("#rvalue_reference"));
 }
 
 BigInt signedbv_typet::smallest() const

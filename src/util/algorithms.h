@@ -65,6 +65,10 @@ public:
 protected:
   virtual bool runOnFunction(std::pair<const dstring, goto_functiont> &F);
   virtual bool runOnLoop(loopst &loop, goto_programt &goto_program);
+  virtual bool runOnProgram(goto_functionst &)
+  {
+    return false;
+  }
 
 private:
   unsigned number_of_functions = 0;

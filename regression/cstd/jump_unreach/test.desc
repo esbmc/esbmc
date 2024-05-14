@@ -1,0 +1,4 @@
+CORE
+main.c
+--enable-unreachability-intrinsic
+\breachability: unreachable code reached\b

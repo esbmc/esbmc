@@ -15,7 +15,7 @@ void goto2ct::preprocess()
   simplify_initializers();
   // Sorting all compound (i.e., struct/union) types (global and local)
   sort_compound_types(ns, global_types);
-  for(auto &it : local_types)
+  for (auto &it : local_types)
     sort_compound_types(ns, local_types[it.first]);
   // Preprocessing the functions now
   preprocess(goto_functions);
@@ -26,11 +26,11 @@ void goto2ct::preprocess(goto_functionst &goto_functions)
   // Remove ESBMC main first
   goto_functions.function_map.erase("__ESBMC_main");
   // Iterating through all GOTO functions
-  for(auto it = goto_functions.function_map.begin();
-      it != goto_functions.function_map.end();)
+  for (auto it = goto_functions.function_map.begin();
+       it != goto_functions.function_map.end();)
   {
     // Preprocess the function if its body is available
-    if(it->second.body_available)
+    if (it->second.body_available)
     {
       preprocess(it->first.as_string(), it->second);
       ++it;
@@ -66,23 +66,23 @@ void goto2ct::preprocess(goto_programt &goto_program)
 // in the symbol table.
 typet goto2ct::get_base_type(typet type, namespacet ns)
 {
-  if(type.id() == "array")
+  if (type.id() == "array")
     return get_base_type(type.subtype(), ns);
 
   // This happens when the type is defined through a "typedef"
   // that cannot be reduced to one of the primitive types
-  if(type.id() == "symbol")
+  if (type.id() == "symbol")
   {
     const symbolt *symbol = ns.lookup(type.identifier());
-    if(symbol && symbol->is_type && !symbol->type.is_nil())
+    if (symbol && symbol->is_type && !symbol->type.is_nil())
       return get_base_type(symbol->type, ns);
   }
 
   // This is to deal with incomplete types and unions
-  if(type.id() == "struct" || type.id() == "union")
+  if (type.id() == "struct" || type.id() == "union")
   {
     const symbolt *symbol = ns.lookup(("tag-" + type.tag().as_string()));
-    if(symbol && symbol->is_type && !symbol->type.is_nil())
+    if (symbol && symbol->is_type && !symbol->type.is_nil())
       return symbol->type;
   }
 
@@ -105,15 +105,15 @@ void goto2ct::sort_compound_types_rec(
   typet base_type = get_base_type(type, ns);
 
   // The compound type have not been seen before by now
-  if(observed_types.count(base_type) == 0)
+  if (observed_types.count(base_type) == 0)
   {
     observed_types.insert(base_type);
     // If "base_type" is struct/union, then iterate through its members.
-    if(base_type.id() == "struct" || base_type.id() == "union")
+    if (base_type.id() == "struct" || base_type.id() == "union")
     {
       struct_union_typet struct_union_type = to_struct_union_type(base_type);
 
-      for(auto comp : struct_union_type.components())
+      for (auto comp : struct_union_type.components())
         sort_compound_types_rec(ns, sorted_types, observed_types, comp.type());
 
       sorted_types.push_back(struct_union_type);
@@ -129,7 +129,7 @@ void goto2ct::sort_compound_types(namespacet &ns, std::list<typet> &types)
   std::list<typet> sorted_types;
   std::set<typet> observed_types;
 
-  for(auto it = types.begin(); it != types.end(); it++)
+  for (auto it = types.begin(); it != types.end(); it++)
     sort_compound_types_rec(ns, sorted_types, observed_types, *it);
 
   types = sorted_types;
@@ -143,7 +143,7 @@ void goto2ct::extract_symbol_tables()
   ns.get_context().foreach_operand_in_order([this](const symbolt &s) {
     // Skipping everything that appears in "esbmc_intrinsics.h"
     // or with an empty location.
-    if(
+    if (
       s.location.file().as_string() == "esbmc_intrinsics.h" ||
       s.location.as_string() == "")
       return;
@@ -154,24 +154,24 @@ void goto2ct::extract_symbol_tables()
     std::string sym_fun_name = s.location.function().as_string();
 
     // This is a type definition
-    if(s.is_type)
+    if (s.is_type)
     {
-      if(sym_fun_name.empty())
+      if (sym_fun_name.empty())
         global_types.push_back(s.type);
       else
         local_types[sym_fun_name].push_back(s.type);
     }
     // This is a function declaration
-    else if(s.type.id() == "code")
+    else if (s.type.id() == "code")
       fun_decls.push_back(s);
     // This is an extern variable
-    else if(s.is_extern)
+    else if (s.is_extern)
       extern_vars.push_back(s);
     // This is a static variable
-    else if(s.static_lifetime)
+    else if (s.static_lifetime)
     {
       // This is a global variable
-      if(sym_fun_name.empty())
+      if (sym_fun_name.empty())
         global_vars.push_back(s);
       else
         local_static_vars[sym_fun_name].push_back(s);
@@ -197,12 +197,12 @@ void goto2ct::extract_symbol_tables()
 // which never seem to appear in our GOTO programs.
 void goto2ct::simplify_initializers()
 {
-  for(auto init : initializers)
+  for (auto init : initializers)
   {
-    if(init.second.id() == "symbol")
+    if (init.second.id() == "symbol")
     {
       std::string init_sym = init.second.identifier().as_string();
-      if(initializers.count(init_sym) > 0)
+      if (initializers.count(init_sym) > 0)
         initializers[init.first] = initializers[init_sym];
     }
   }
@@ -221,20 +221,20 @@ void goto2ct::simplify_initializers()
 void goto2ct::extract_initializers_from_esbmc_main()
 {
   // The program does not feature a goto function "__ESBMC_main"
-  if(goto_functions.function_map.count("__ESBMC_main") == 0)
+  if (goto_functions.function_map.count("__ESBMC_main") == 0)
     return;
 
-  for(auto instr :
-      goto_functions.function_map["__ESBMC_main"].body.instructions)
+  for (auto instr :
+       goto_functions.function_map["__ESBMC_main"].body.instructions)
   {
-    if(instr.type == ASSIGN)
+    if (instr.type == ASSIGN)
     {
       const code_assign2t &assign = to_code_assign2t(instr.code);
-      if(is_symbol2t(assign.target))
+      if (is_symbol2t(assign.target))
       {
         const symbolt *sym = ns.lookup(to_symbol2t(assign.target).thename);
         exprt init = migrate_expr_back(assign.source);
-        if(sym && sym->static_lifetime)
+        if (sym && sym->static_lifetime)
         {
           initializers[sym->id.as_string()] = init;
         }
@@ -264,15 +264,15 @@ void goto2ct::assign_scope_ids(goto_programt &goto_program)
 {
   // First try to identify and separate DEAD clusters
   std::vector<std::string> scope_cluster;
-  for(auto it = goto_program.instructions.rbegin();
-      it != goto_program.instructions.rend();
-      it++)
+  for (auto it = goto_program.instructions.rbegin();
+       it != goto_program.instructions.rend();
+       it++)
   {
-    if(it->type == DEAD && std::next(it)->type == DEAD)
+    if (it->type == DEAD && std::next(it)->type == DEAD)
     {
       std::string sym_name = to_code_dead2t(it->code).value.as_string();
       std::string sym_name_short = expr2ct::get_name_shorthand(sym_name);
-      if(
+      if (
         std::find(scope_cluster.begin(), scope_cluster.end(), sym_name_short) !=
         scope_cluster.end())
       {
@@ -302,23 +302,23 @@ void goto2ct::assign_scope_ids(goto_programt &goto_program)
   // List of all scopes recorded until the current instruction is processed.
   std::vector<std::vector<std::string>> scope_syms_stack = {{}, {}};
   // Iterating through the GOTO instructions in reverse order
-  for(auto it = goto_program.instructions.rbegin();
-      it != goto_program.instructions.rend();
-      it++)
+  for (auto it = goto_program.instructions.rbegin();
+       it != goto_program.instructions.rend();
+       it++)
   {
     unsigned int cur_scope_id = scope_ids_stack.back();
     unsigned int parent_scope_id = 0;
-    if(scope_ids_stack.size() > 1)
+    if (scope_ids_stack.size() > 1)
       parent_scope_id = scope_ids_stack.at(scope_ids_stack.size() - 2);
 
-    if(it->type == DEAD)
+    if (it->type == DEAD)
     {
       std::string sym_name = to_code_dead2t(it->code).value.as_string();
       // First we check if this symbol already appears in one of the scopes.
       bool in_a_scope = false;
-      for(auto scope_syms : scope_syms_stack)
+      for (auto scope_syms : scope_syms_stack)
       {
-        if(
+        if (
           std::find(scope_syms.begin(), scope_syms.end(), sym_name) !=
           scope_syms.end())
         {
@@ -328,14 +328,14 @@ void goto2ct::assign_scope_ids(goto_programt &goto_program)
       }
       // If this symbol is not in the current scope already,
       // then it is added to the current stack.
-      if(!in_a_scope)
+      if (!in_a_scope)
       {
         // Adding this symbol to the current scope
         scope_syms_stack.back().push_back(sym_name);
         // If the previous instruction wasn't a DEAD
         // then we are entering a new scope.
         // Hence, creating a new unique scope ID
-        if(
+        if (
           std::prev(it)->type != DEAD &&
           it != goto_program.instructions.rbegin())
         {
@@ -349,13 +349,13 @@ void goto2ct::assign_scope_ids(goto_programt &goto_program)
         // to the list of scopes and clear the current scope.
         // Otherwise, just continue.
         // !!! Also probably need to check whether it == instructions.rend()
-        if(std::next(it)->type != DEAD && scope_syms_stack.back().size() > 0)
+        if (std::next(it)->type != DEAD && scope_syms_stack.back().size() > 0)
         {
           scope_syms_stack.push_back({});
         }
       }
     }
-    else if(it->type == DECL)
+    else if (it->type == DECL)
     {
       // Firstly, pop_back from the scope stack
       scope_syms_stack.pop_back();
@@ -371,7 +371,7 @@ void goto2ct::assign_scope_ids(goto_programt &goto_program)
       // Removing the symbol from the current list of DEAD
       // variables since the first corresponding DECL
       // for this symbol has been found.
-      if(cur_sym_it != scope_syms_stack.back().end())
+      if (cur_sym_it != scope_syms_stack.back().end())
         scope_syms_stack.back().erase(cur_sym_it);
 
       // Declarations of all declared variables within
@@ -379,10 +379,10 @@ void goto2ct::assign_scope_ids(goto_programt &goto_program)
       // the parent scope. So we can pop the current scope
       // from the stack. Unless it is the only scope on the stack
       // (i.e., all the declared symbols have function scope lifetime).
-      if(scope_syms_stack.back().empty() && scope_syms_stack.size() > 1)
+      if (scope_syms_stack.back().empty() && scope_syms_stack.size() > 1)
       {
         scope_syms_stack.pop_back();
-        if(scope_ids_stack.size() > 1)
+        if (scope_ids_stack.size() > 1)
           scope_ids_stack.pop_back();
       }
       // Finally, push back empty set
@@ -410,7 +410,7 @@ void goto2ct::adjust_invalid_assignment_rec(
   assert(is_code_assign2t(instruction.code));
   const code_assign2t &assign = to_code_assign2t(instruction.code);
   // Assignment to a typecast
-  if(is_typecast2t(assign.target))
+  if (is_typecast2t(assign.target))
   {
     expr2tc new_lhs = to_typecast2t(assign.target).from;
     expr2tc new_assign = code_assign2tc(new_lhs, assign.source);
@@ -421,7 +421,7 @@ void goto2ct::adjust_invalid_assignment_rec(
   }
   // Assignment to an array variable.
   // Turning it into a function call to "memcpy"
-  else if(is_array_type(assign.target->type))
+  else if (is_array_type(assign.target->type))
   {
     expr2tc fun_call = replace_array_assignment_with_memcpy(assign);
     instruction.code = fun_call;
@@ -442,11 +442,11 @@ void goto2ct::adjust_invalid_assignment_rec(
 void goto2ct::adjust_invalid_assignments(goto_programt &goto_program)
 {
   goto_programt::instructionst new_instructions;
-  for(auto it = goto_program.instructions.begin();
-      it != goto_program.instructions.end();
-      it++)
+  for (auto it = goto_program.instructions.begin();
+       it != goto_program.instructions.end();
+       it++)
   {
-    if(it->type == ASSIGN)
+    if (it->type == ASSIGN)
     {
       // Apply the recursive method first to the given ASSIGN instruction.
       adjust_invalid_assignment_rec(new_instructions, *it, ns);
@@ -468,15 +468,15 @@ void goto2ct::adjust_invalid_assignments(goto_programt &goto_program)
 void goto2ct::remove_unsupported_instructions(goto_programt &goto_program)
 {
   goto_programt::instructionst new_instructions;
-  for(auto it = goto_program.instructions.begin();
-      it != goto_program.instructions.end();
-      it++)
+  for (auto it = goto_program.instructions.begin();
+       it != goto_program.instructions.end();
+       it++)
   {
-    if(it->type == ASSIGN)
+    if (it->type == ASSIGN)
     {
       const code_assign2t &assign = to_code_assign2t(it->code);
       // Removing assignments to "dynamic_type2t"
-      if(is_dynamic_size2t(assign.target))
+      if (is_dynamic_size2t(assign.target))
         it = goto_program.instructions.erase(it);
     }
   }

@@ -8,8 +8,9 @@ Date:
 
 \*******************************************************************/
 
-class QFont {
+class QFont
+{
 public:
-	QFont();
-	~QFont();
+  QFont();
+  ~QFont();
 };

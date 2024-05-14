@@ -77,7 +77,7 @@ public:
 
   virtual void initialize(const goto_programt &goto_program)
   {
-    if(!initialized)
+    if (!initialized)
     {
       initialized = true;
       generate_states(goto_program);
@@ -86,7 +86,7 @@ public:
 
   virtual void initialize(const goto_functionst &goto_functions)
   {
-    if(!initialized)
+    if (!initialized)
     {
       initialized = true;
       generate_states(goto_functions);
@@ -220,7 +220,7 @@ public:
   inline T &operator[](locationt l)
   {
     typename state_mapt::iterator it = state_map.find(l);
-    if(it == state_map.end())
+    if (it == state_map.end())
       throw "failed to find state";
     return it->second;
   }
@@ -228,7 +228,7 @@ public:
   inline const T &operator[](locationt l) const
   {
     typename state_mapt::const_iterator it = state_map.find(l);
-    if(it == state_map.end())
+    if (it == state_map.end())
       throw "failed to find state";
     return it->second;
   }
@@ -251,7 +251,7 @@ protected:
   statet &get_state(locationt l) override
   {
     typename state_mapt::iterator it = state_map.find(l);
-    if(it == state_map.end())
+    if (it == state_map.end())
       throw "failed to find state";
     return it->second;
   }
@@ -259,7 +259,7 @@ protected:
   const statet &get_state(locationt l) const override
   {
     typename state_mapt::const_iterator it = state_map.find(l);
-    if(it == state_map.end())
+    if (it == state_map.end())
       throw "failed to find state";
     return it->second;
   }

@@ -20,7 +20,7 @@ on:
         default: 'svcomp23'      	
       mode:
         type: choice
-        description: Benchecex run mode
+        description: Benchexec run mode
         options:
         - Full
         - Task
@@ -35,6 +35,7 @@ on:
         - SV-COMP23_valid-memsafety
         - SV-COMP23_termination
         - SV-COMP23_no-overflow
+        - Custom
       task:
         type: choice
         description: Task to use Run-set to use (be sure to set mode to "Task")
@@ -83,6 +84,10 @@ on:
         - Termination-MainControlFlow
         - Termination-MainHeap
         - Termination-Other
+      cpachecker:
+            description: "Run CPAChecker for violation witness validation"
+            required: true
+            type: boolean
 
 jobs:
 
@@ -91,7 +96,7 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       operating-system: ubuntu-latest
-      build-flags: '-b Release -e Off'
+      build-flags: '-b Release -e Off -C'
       testing: false     
 
   run-benchexec:
@@ -107,9 +112,12 @@ jobs:
           name: release-ubuntu-latest
           path: ./
       - name: Checkout code
-        uses: actions/checkout@master
+        uses: actions/checkout@v3
         with:
           path: esbmc-src
+      - name: Set up the custom runset
+        if: ${{ inputs.mode == 'RunSet' && inputs.runset == 'Custom' }}
+        run: cp ./esbmc-src/scripts/competitions/svcomp/custom-reach.set $HOME/sv-benchmarks/c/ && mv ./esbmc-src/scripts/competitions/svcomp/custom.xml ./esbmc-src/scripts/competitions/svcomp/esbmc.xml
       - name: Run Benchexec (Full)
         if: ${{ inputs.mode == 'Full' }}
         run: ./esbmc-src/scripts/benchexec.sh -f
@@ -128,7 +136,7 @@ jobs:
         env:
           TIMEOUT: ${{ inputs.timeout }}
           ESBMC_OPTS: ${{ inputs.options }}
-      - name: Show summary
+      - name: Show summary (ESBMC)
         run: tail $HOME/esbmc-output/*results*.txt
       - name: Save logs
         if: ${{ inputs.output != '' }}
@@ -139,6 +147,32 @@ jobs:
         run: ls
       - uses: actions/upload-artifact@v1
         with:
-          name: benchexec-result
-          path: output.zip
+          name: esbmc-result
+          path: output.zip  
+      - name: Checkout code
+        if: ${{ inputs.cpachecker == true }}
+        uses: actions/checkout@v3
+        with:
+          path: esbmc-src      
+      - name: Run Validation (Full)
+        if: ${{ inputs.cpachecker == true && inputs.mode == 'Full' }}
+        run: ./esbmc-src/scripts/witness.sh -f
+      - name: Run Validation (RunSet)
+        if: ${{ inputs.cpachecker == true && inputs.mode == 'RunSet' }}
+        run: ./esbmc-src/scripts/witness.sh -r ${{ inputs.runset }}
+      - name: Run Validation (Task)
+        if: ${{ inputs.cpachecker == true && inputs.mode == 'Task' }}
+        run: ./esbmc-src/scripts/witness.sh -t ${{ inputs.task }}
+      - name: Move output
+        if: ${{ inputs.cpachecker == true }}
+        run: mv $HOME/witness-output.zip ./witness-output.zip      
+      - name: Show summary (CPAChecker)
+        if: ${{ inputs.cpachecker == true }}
+        run: tail $HOME/witness-output/*results*.txt
+      - uses: actions/upload-artifact@v1
+        if: ${{ inputs.cpachecker == true }}
+        with:
+          name: witness-result
+          path: witness-output.zip
+
       

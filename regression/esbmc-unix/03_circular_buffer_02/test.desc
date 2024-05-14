@@ -1,4 +1,4 @@
-CORE
+KNOWNBUG
 main.c
 --context-bound 3
 ^VERIFICATION FAILED$

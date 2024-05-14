@@ -1,3 +1,4 @@
+#include "irep2/irep2_expr.h"
 #include <cassert>
 #include <goto-programs/static_analysis.h>
 #include <memory>
@@ -7,13 +8,13 @@
 
 expr2tc abstract_domain_baset::get_guard(locationt from, locationt to) const
 {
-  if(!from->is_goto())
+  if (!from->is_goto())
     return gen_true_expr();
 
   locationt next = from;
   next++;
 
-  if(next == to)
+  if (next == to)
   {
     expr2tc tmp = not2tc(from->guard);
     return tmp;
@@ -28,7 +29,7 @@ expr2tc abstract_domain_baset::get_return_lhs(locationt to) const
 
   to--;
 
-  if(to->is_end_function())
+  if (to->is_end_function())
     return expr2tc();
 
   // must be the function call
@@ -56,7 +57,7 @@ void static_analysis_baset::output(
   const goto_functionst &goto_functions,
   std::ostream &out) const
 {
-  for(const auto &f_it : goto_functions.function_map)
+  for (const auto &f_it : goto_functions.function_map)
   {
     out << "////"
         << "\n";
@@ -74,7 +75,7 @@ void static_analysis_baset::output(
   const irep_idt &identifier,
   std::ostream &out) const
 {
-  forall_goto_program_instructions(i_it, goto_program)
+  forall_goto_program_instructions (i_it, goto_program)
   {
     out << i_it->location << "\n";
 
@@ -88,19 +89,19 @@ void static_analysis_baset::output(
 void static_analysis_baset::generate_states(
   const goto_functionst &goto_functions)
 {
-  for(const auto &f_it : goto_functions.function_map)
+  for (const auto &f_it : goto_functions.function_map)
     generate_states(f_it.second.body);
 }
 
 void static_analysis_baset::generate_states(const goto_programt &goto_program)
 {
-  forall_goto_program_instructions(i_it, goto_program)
+  forall_goto_program_instructions (i_it, goto_program)
     generate_state(i_it);
 }
 
 void static_analysis_baset::update(const goto_functionst &goto_functions)
 {
-  for(const auto &f_it : goto_functions.function_map)
+  for (const auto &f_it : goto_functions.function_map)
     update(f_it.second.body);
 }
 
@@ -109,14 +110,14 @@ void static_analysis_baset::update(const goto_programt &goto_program)
   locationt previous;
   bool first = true;
 
-  forall_goto_program_instructions(i_it, goto_program)
+  forall_goto_program_instructions (i_it, goto_program)
   {
     // do we have it already?
-    if(!has_location(i_it))
+    if (!has_location(i_it))
     {
       generate_state(i_it);
 
-      if(!first)
+      if (!first)
         merge(get_state(i_it), get_state(previous));
     }
 
@@ -141,7 +142,7 @@ bool static_analysis_baset::fixedpoint(
   const goto_programt &goto_program,
   const goto_functionst &goto_functions)
 {
-  if(goto_program.instructions.empty())
+  if (goto_program.instructions.empty())
     return false;
 
   working_sett working_set;
@@ -150,11 +151,11 @@ bool static_analysis_baset::fixedpoint(
 
   bool new_data = false;
 
-  while(!working_set.empty())
+  while (!working_set.empty())
   {
     locationt l = get_next(working_set);
 
-    if(visit(l, working_set, goto_program, goto_functions))
+    if (visit(l, working_set, goto_program, goto_functions))
       new_data = true;
   }
 
@@ -177,13 +178,13 @@ bool static_analysis_baset::visit(
 
   goto_program.get_successors(l, successors);
 
-  for(goto_programt::const_targetst::const_iterator it = successors.begin();
-      it != successors.end();
-      it++)
+  for (goto_programt::const_targetst::const_iterator it = successors.begin();
+       it != successors.end();
+       it++)
   {
     locationt to_l = *it;
 
-    if(to_l == goto_program.instructions.end())
+    if (to_l == goto_program.instructions.end())
       continue;
 
     std::unique_ptr<statet> tmp_state(make_temporary_state(current));
@@ -193,7 +194,7 @@ bool static_analysis_baset::visit(
     // Do we want to pull new variables into the new state when tracking?
     bool merge_new_vals = true;
 
-    if(l->is_function_call())
+    if (l->is_function_call())
     {
       // this is a big special case
       const code_function_call2t &code = to_code_function_call2t(l->code);
@@ -213,10 +214,10 @@ bool static_analysis_baset::visit(
 
     bool have_new_values = merge(other, new_values, merge_new_vals);
 
-    if(have_new_values)
+    if (have_new_values)
       new_data = true;
 
-    if(have_new_values || !other.seen)
+    if (have_new_values || !other.seen)
       put_in_working_set(working_set, to_l);
   }
 
@@ -232,7 +233,7 @@ void static_analysis_baset::do_function_call(
 {
   const goto_functiont &goto_function = f_it->second;
 
-  if(!goto_function.body_available)
+  if (!goto_function.body_available)
     return; // do nothing
 
   assert(!goto_function.body.instructions.empty());
@@ -251,18 +252,18 @@ void static_analysis_baset::do_function_call(
     // merge the new stuff. Place local state of callers into the value set of
     // the callee, it might end up accessing a pointer to the callers local
     // variables.
-    if(merge(begin_state, new_state, true))
+    if (merge(begin_state, new_state, true))
       new_data = true;
 
     // do each function at least once
-    if(functions_done.find(f_it->first) == functions_done.end())
+    if (functions_done.find(f_it->first) == functions_done.end())
     {
       new_data = true;
       functions_done.insert(f_it->first);
     }
 
     // do we need to do the fixedpoint of the body?
-    if(new_data)
+    if (new_data)
     {
       // recursive call
       fixedpoint(goto_function.body, goto_functions);
@@ -296,11 +297,11 @@ void static_analysis_baset::do_function_call_rec(
   statet &new_state,
   const goto_functionst &goto_functions)
 {
-  if(is_symbol2t(function))
+  if (is_symbol2t(function))
   {
     irep_idt identifier = to_symbol2t(function).get_symbol_name();
 
-    if(recursion_set.find(identifier) != recursion_set.end())
+    if (recursion_set.find(identifier) != recursion_set.end())
     {
       // recursion detected!
       return;
@@ -311,14 +312,14 @@ void static_analysis_baset::do_function_call_rec(
     goto_functionst::function_mapt::const_iterator it =
       goto_functions.function_map.find(identifier);
 
-    if(it == goto_functions.function_map.end())
+    if (it == goto_functions.function_map.end())
       throw "failed to find function " + id2string(identifier);
 
     do_function_call(l_call, goto_functions, it, arguments, new_state);
 
     recursion_set.erase(identifier);
   }
-  else if(is_if2t(function))
+  else if (is_if2t(function))
   {
     const if2t ifval = to_if2t(function);
     std::unique_ptr<statet> n2(make_temporary_state(new_state));
@@ -331,7 +332,7 @@ void static_analysis_baset::do_function_call_rec(
 
     merge(new_state, *n2);
   }
-  else if(is_dereference2t(function))
+  else if (is_dereference2t(function))
   {
     // get value set
     std::list<expr2tc> values;
@@ -340,11 +341,11 @@ void static_analysis_baset::do_function_call_rec(
     std::unique_ptr<statet> state_from(make_temporary_state(new_state));
 
     // now call all of these
-    for(std::list<expr2tc>::const_iterator it = values.begin();
-        it != values.end();
-        it++)
+    for (std::list<expr2tc>::const_iterator it = values.begin();
+         it != values.end();
+         it++)
     {
-      if(is_object_descriptor2t(*it))
+      if (is_object_descriptor2t(*it))
       {
         const object_descriptor2t &obj = to_object_descriptor2t(*it);
         std::unique_ptr<statet> n2(make_temporary_state(new_state));
@@ -354,11 +355,19 @@ void static_analysis_baset::do_function_call_rec(
       }
     }
   }
-  else if(is_null_object2t(function))
+  else if (is_null_object2t(function))
   {
     // ignore, can't be a function
   }
-  else if(is_member2t(function) || is_index2t(function))
+  else if (is_member2t(function) || is_index2t(function))
+  {
+    // ignore, can't be a function
+  }
+  else if (is_dynamic_object2t(function))
+  {
+    // TODO
+  }
+  else if (is_constant_string2t(function))
   {
     // ignore, can't be a function
   }
@@ -373,11 +382,11 @@ void static_analysis_baset::fixedpoint(const goto_functionst &goto_functions)
 {
   // do each function at least once
 
-  for(goto_functionst::function_mapt::const_iterator it =
-        goto_functions.function_map.begin();
-      it != goto_functions.function_map.end();
-      it++)
-    if(functions_done.find(it->first) == functions_done.end())
+  for (goto_functionst::function_mapt::const_iterator it =
+         goto_functions.function_map.begin();
+       it != goto_functions.function_map.end();
+       it++)
+    if (functions_done.find(it->first) == functions_done.end())
     {
       fixedpoint(it, goto_functions);
     }

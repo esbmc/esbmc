@@ -116,7 +116,7 @@ cublasStatus_t cublasSscal(
   float *x,
   int incx)
 {
-  for(int i = 0; i < n; i++)
+  for (int i = 0; i < n; i++)
   {
     int j = 1 + (i - 1) * incx;
     x[j] = ((float)alpha[0]) * x[j];
@@ -131,7 +131,7 @@ cublasStatus_t cublasDscal(
   double *x,
   int incx)
 {
-  for(int i = 0; i < n; i++)
+  for (int i = 0; i < n; i++)
   {
     int j = 1 + (i - 1) * incx;
     x[j] = ((double)alpha[0]) * x[j];
@@ -147,7 +147,7 @@ cublasStatus_t cublasSswap(
   float *y,
   int incy)
 {
-  for(int i = 0; i < n; i++)
+  for (int i = 0; i < n; i++)
   {
     int k = 1 + (i - 1) * incx;
     int j = 1 + (i - 1) * incy;
@@ -165,7 +165,7 @@ cublasStatus_t cublasDswap(
   double *y,
   int incy)
 {
-  for(int i = 0; i < n; i++)
+  for (int i = 0; i < n; i++)
   {
     int k = 1 + (i - 1) * incx;
     int j = 1 + (i - 1) * incy;
@@ -185,7 +185,7 @@ cublasStatus_t cublasSdot(
   float *result)
 {
   float aux = 0;
-  for(int i = 0; i < n; i++)
+  for (int i = 0; i < n; i++)
   {
     int k = 1 + (i - 1) * incx;
     int j = 1 + (i - 1) * incy;
@@ -205,7 +205,7 @@ cublasStatus_t cublasDdot(
   double *result)
 {
   double aux = 0;
-  for(int i = 0; i < n; i++)
+  for (int i = 0; i < n; i++)
   {
     int k = 1 + (i - 1) * incx;
     int j = 1 + (i - 1) * incy;
@@ -223,7 +223,7 @@ cublasStatus_t cublasScopy(
   float *y,
   int incy)
 {
-  for(int i = 0; i < n; i++)
+  for (int i = 0; i < n; i++)
   {
     int k = 1 + (i - 1) * incx;
     int j = 1 + (i - 1) * incy;
@@ -240,7 +240,7 @@ cublasStatus_t cublasDcopy(
   double *y,
   int incy)
 {
-  for(int i = 0; i < n; i++)
+  for (int i = 0; i < n; i++)
   {
     int k = 1 + (i - 1) * incx;
     int j = 1 + (i - 1) * incy;
@@ -265,14 +265,14 @@ cublasStatus_t cublasSgemm(
   float *C,
   int ldc)
 {
-  if((transa == CUBLAS_OP_N) && (transb == CUBLAS_OP_N))
+  if ((transa == CUBLAS_OP_N) && (transb == CUBLAS_OP_N))
   {
-    for(int contadorZ = 0; contadorZ < m; contadorZ++)
+    for (int contadorZ = 0; contadorZ < m; contadorZ++)
     {
-      for(int contadorY = 0; contadorY < n; contadorY++)
+      for (int contadorY = 0; contadorY < n; contadorY++)
       {
         float result = 0;
-        for(int contadorX = 0; contadorX < k; contadorX++)
+        for (int contadorX = 0; contadorX < k; contadorX++)
         {
           result =
             (A[contadorX + contadorZ * k] * B[contadorX * n + contadorY]) +
@@ -284,14 +284,14 @@ cublasStatus_t cublasSgemm(
     }
   }
 
-  else if((transa == CUBLAS_OP_N) && (transb == CUBLAS_OP_T))
+  else if ((transa == CUBLAS_OP_N) && (transb == CUBLAS_OP_T))
   {
-    for(int contadorZ = 0; contadorZ < m; contadorZ++)
+    for (int contadorZ = 0; contadorZ < m; contadorZ++)
     {
-      for(int contadorY = 0; contadorY < n; contadorY++)
+      for (int contadorY = 0; contadorY < n; contadorY++)
       {
         float result = 0;
-        for(int contadorX = 0; contadorX < k; contadorX++)
+        for (int contadorX = 0; contadorX < k; contadorX++)
         {
           result =
             (A[contadorX + contadorZ * k] * B[contadorX + contadorY * n]) +
@@ -302,14 +302,14 @@ cublasStatus_t cublasSgemm(
       }
     }
   }
-  else if((transa == CUBLAS_OP_T) && (transb == CUBLAS_OP_N))
+  else if ((transa == CUBLAS_OP_T) && (transb == CUBLAS_OP_N))
   {
-    for(int contadorZ = 0; contadorZ < m; contadorZ++)
+    for (int contadorZ = 0; contadorZ < m; contadorZ++)
     {
-      for(int contadorY = 0; contadorY < n; contadorY++)
+      for (int contadorY = 0; contadorY < n; contadorY++)
       {
         float result = 0;
-        for(int contadorX = 0; contadorX < k; contadorX++)
+        for (int contadorX = 0; contadorX < k; contadorX++)
         {
           result =
             (A[contadorX * k + contadorZ] * B[contadorX * n + contadorY]) +
@@ -320,14 +320,14 @@ cublasStatus_t cublasSgemm(
       }
     }
   }
-  else if((transa == CUBLAS_OP_T) && (transb == CUBLAS_OP_T))
+  else if ((transa == CUBLAS_OP_T) && (transb == CUBLAS_OP_T))
   {
-    for(int contadorZ = 0; contadorZ < m; contadorZ++)
+    for (int contadorZ = 0; contadorZ < m; contadorZ++)
     {
-      for(int contadorY = 0; contadorY < n; contadorY++)
+      for (int contadorY = 0; contadorY < n; contadorY++)
       {
         float result = 0;
-        for(int contadorX = 0; contadorX < k; contadorX++)
+        for (int contadorX = 0; contadorX < k; contadorX++)
         {
           result =
             (A[contadorX * k + contadorZ] * B[contadorX + contadorY * n]) +
@@ -357,14 +357,14 @@ cublasStatus_t cublasDgemm(
   double *C,
   int ldc)
 {
-  if((transa == CUBLAS_OP_N) && (transb == CUBLAS_OP_N))
+  if ((transa == CUBLAS_OP_N) && (transb == CUBLAS_OP_N))
   {
-    for(int contadorZ = 0; contadorZ < m; contadorZ++)
+    for (int contadorZ = 0; contadorZ < m; contadorZ++)
     {
-      for(int contadorY = 0; contadorY < n; contadorY++)
+      for (int contadorY = 0; contadorY < n; contadorY++)
       {
         float result = 0;
-        for(int contadorX = 0; contadorX < k; contadorX++)
+        for (int contadorX = 0; contadorX < k; contadorX++)
         {
           result =
             (A[contadorX + contadorZ * k] * B[contadorX * n + contadorY]) +
@@ -375,14 +375,14 @@ cublasStatus_t cublasDgemm(
       }
     }
   }
-  else if((transa == CUBLAS_OP_N) && (transb == CUBLAS_OP_T))
+  else if ((transa == CUBLAS_OP_N) && (transb == CUBLAS_OP_T))
   {
-    for(int contadorZ = 0; contadorZ < m; contadorZ++)
+    for (int contadorZ = 0; contadorZ < m; contadorZ++)
     {
-      for(int contadorY = 0; contadorY < n; contadorY++)
+      for (int contadorY = 0; contadorY < n; contadorY++)
       {
         float result = 0;
-        for(int contadorX = 0; contadorX < k; contadorX++)
+        for (int contadorX = 0; contadorX < k; contadorX++)
         {
           result =
             (A[contadorX + contadorZ * k] * B[contadorX + contadorY * n]) +
@@ -393,14 +393,14 @@ cublasStatus_t cublasDgemm(
       }
     }
   }
-  else if((transa == CUBLAS_OP_T) && (transb == CUBLAS_OP_N))
+  else if ((transa == CUBLAS_OP_T) && (transb == CUBLAS_OP_N))
   {
-    for(int contadorZ = 0; contadorZ < m; contadorZ++)
+    for (int contadorZ = 0; contadorZ < m; contadorZ++)
     {
-      for(int contadorY = 0; contadorY < n; contadorY++)
+      for (int contadorY = 0; contadorY < n; contadorY++)
       {
         float result = 0;
-        for(int contadorX = 0; contadorX < k; contadorX++)
+        for (int contadorX = 0; contadorX < k; contadorX++)
         {
           result =
             (A[contadorX * k + contadorZ] * B[contadorX * n + contadorY]) +
@@ -411,14 +411,14 @@ cublasStatus_t cublasDgemm(
       }
     }
   }
-  else if((transa == CUBLAS_OP_T) && (transb == CUBLAS_OP_T))
+  else if ((transa == CUBLAS_OP_T) && (transb == CUBLAS_OP_T))
   {
-    for(int contadorZ = 0; contadorZ < m; contadorZ++)
+    for (int contadorZ = 0; contadorZ < m; contadorZ++)
     {
-      for(int contadorY = 0; contadorY < n; contadorY++)
+      for (int contadorY = 0; contadorY < n; contadorY++)
       {
         float result = 0;
-        for(int contadorX = 0; contadorX < k; contadorX++)
+        for (int contadorX = 0; contadorX < k; contadorX++)
         {
           result =
             (A[contadorX * k + contadorZ] * B[contadorX + contadorY * n]) +
@@ -440,7 +440,7 @@ cublasStatus_t cublasSaxpy(
   float *y,
   int incy)
 {
-  for(int i = 0; i < n; i++)
+  for (int i = 0; i < n; i++)
   {
     int k = 1 + (i - 1) * incx;
     int j = 1 + (i - 1) * incy;
@@ -458,7 +458,7 @@ cublasStatus_t cublasDaxpy(
   double *y,
   int incy)
 {
-  for(int i = 0; i < n; i++)
+  for (int i = 0; i < n; i++)
   {
     int k = 1 + (i - 1) * incx;
     int j = 1 + (i - 1) * incy;

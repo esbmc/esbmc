@@ -13,6 +13,7 @@ if(DOWNLOAD_DEPENDENCIES AND (NOT DEFINED IBEX_DIR))
 
    message("[ibex] Setting up ibex")
    if(ACADEMIC_BUILD)
+      message(WARNING "the version of ibex you have is ZIB licensed, distribution is impossible.")
       execute_process(COMMAND ./waf --prefix=${ibex_BINARY_DIR} --lp-lib=soplex  configure
          WORKING_DIRECTORY ${ibex_SOURCE_DIR})
    else()
@@ -34,4 +35,5 @@ endif()
 find_package(PkgConfig)
 
 set(ENV{PKG_CONFIG_PATH} "$ENV{PKG_CONFIG_PATH}:${IBEX_DIR}/share/pkgconfig")
+pkg_search_module(IBEX REQUIRED IMPORTED_TARGET ibex)
 pkg_check_modules(IBEX REQUIRED ibex)

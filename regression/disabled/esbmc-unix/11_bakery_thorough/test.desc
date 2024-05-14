@@ -1,0 +1,4 @@
+THOROUGH
+bakery.c
+--no-unwinding-assertions --unwind 100
+^VERIFICATION SUCCESSFUL$

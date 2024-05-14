@@ -1,0 +1,5 @@
+CORE
+main.c
+--witness-output - --compact-trace -Wno-error=implicit-function-declaration
+^VERIFICATION FAILED$
+\bA = \{ 0 \}

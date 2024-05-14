@@ -14,7 +14,11 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/Lex/PreprocessorOptions.h>
 #include <clang/Tooling/Tooling.h>
 #include <llvm/Option/ArgList.h>
+#if CLANG_VERSION_MAJOR < 16
 #include <llvm/Support/Host.h>
+#else
+#include <llvm/TargetParser/Host.h>
+#endif
 #include <llvm/Support/Path.h>
 CC_DIAGNOSTIC_POP()
 
@@ -69,7 +73,7 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
     new clang::DiagnosticOptions();
 
   std::vector<const char *> Argv;
-  for(const std::string &Str : compiler_args)
+  for (const std::string &Str : compiler_args)
     Argv.push_back(Str.c_str());
   const char *const BinaryName = Argv[0];
 
@@ -96,7 +100,7 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
   // Since the input might only be virtual, don't check whether it exists.
   Driver->setCheckInputsExist(false);
   const std::unique_ptr<clang::driver::Compilation> Compilation(
-    Driver->BuildCompilation(llvm::makeArrayRef(Argv)));
+    Driver->BuildCompilation(llvm::ArrayRef<const char *>(Argv)));
 
   const clang::driver::JobList &Jobs = Compilation->getJobs();
   assert(Jobs.size() == 1);
@@ -107,7 +111,7 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
     clang::tooling::newInvocation(Diagnostics, *CC1Args, BinaryName));
 
   // Show the invocation, with -v.
-  if(Invocation->getHeaderSearchOpts().Verbose)
+  if (Invocation->getHeaderSearchOpts().Verbose)
   {
     llvm::errs() << "clang Invocation:\n";
     Compilation->getJobs().Print(llvm::errs(), "\n", true);
@@ -128,7 +132,7 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
 
   // The action is only used locally, we can delete it now
   // See: https://clang.llvm.org/doxygen/ASTUnit_8cpp_source.html#l01510
-  delete(action);
+  delete (action);
 
   return unit;
 }

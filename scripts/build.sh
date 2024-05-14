@@ -11,17 +11,23 @@ BASE_ARGS="\
     -DENABLE_JIMPLE_FRONTEND=On \
     -DCMAKE_INSTALL_PREFIX:PATH=$PWD/release \
 "
+# Must disable old frontend to enable goto contractor. github issue #1110
+# https://github.com/esbmc/esbmc/issues/1110.
 SOLVER_FLAGS="\
     -DENABLE_BOOLECTOR=On \
     -DENABLE_YICES=Off \
     -DENABLE_CVC4=OFF \
     -DENABLE_BITWUZLA=On \
-    -DENABLE_GOTO_CONTRACTOR=OFF \
+    -DENABLE_GOTO_CONTRACTOR=On \
+    -DACADEMIC_BUILD=Off \
 "
+
 COMPILER_ARGS=''
 
 STATIC=
 CLANG_VERSION=11
+
+ARCH=`uname -m`
 
 error() {
     echo "error: $*" >&2
@@ -30,6 +36,8 @@ error() {
 
 # Ubuntu setup (pre-config)
 ubuntu_setup () {
+    
+    
     # Tested on ubuntu 22.04
     PKGS="\
         clang-$CLANG_VERSION clang-tidy-$CLANG_VERSION \
@@ -57,23 +65,29 @@ ubuntu_setup () {
     else
         echo "Configuring static Ubuntu build"
     fi
+
+    if [ $ARCH = "aarch64" ]
+    then
+	echo "Detected ARM64 Linux!"
+	# TODO: We should start using container builds in actions!
+	SOLVER_FLAGS="$SOLVER_FLAGS -DENABLE_Z3=On -DZ3_DIR=/usr -DENABLE_GOTO_CONTRACTOR=OFF"
+	return
+    fi
+    
     sudo apt-get update &&
     sudo apt-get install -y $PKGS &&
     echo "Installing Python dependencies" &&
     pip3 install --user meson ast2json &&
     meson --version &&
+
     BASE_ARGS="$BASE_ARGS \
-        -DENABLE_OLD_FRONTEND=On \
+        -DENABLE_OLD_FRONTEND=Off \
         -DENABLE_PYTHON_FRONTEND=On \
         -DBUILD_STATIC=$STATIC \
     " &&
     SOLVER_FLAGS="$SOLVER_FLAGS \
         -DENABLE_Z3=ON \
-    " &&
-    # Hack: Boolector might fail to download some dependencies using curl (maybe we should patch it?)
-    # curl: (60) SSL: no alternative certificate subject name matches target host name 'codeload.github.com'
-    # As a unsafe workaround... we can just tell curl to be unsafe
-    echo "insecure" > $HOME/.curlrc
+    " 
 }
 
 ubuntu_post_setup () {
@@ -87,24 +101,15 @@ macos_setup () {
     if [ $STATIC = ON ]; then
         error "static macOS build is currently not supported"
     fi
-    brew install z3 gmp csmith cmake boost ninja python3 automake bison flex &&
-    pip3 install PySMT toml ast2json &&
-    wget https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/clang+llvm-11.0.0-x86_64-apple-darwin.tar.xz &&
-    tar xf clang+llvm-11.0.0-x86_64-apple-darwin.tar.xz &&
-    mv clang+llvm-11.0.0-x86_64-apple-darwin ../clang &&
-    BASE_ARGS="$BASE_ARGS \
-        -DENABLE_WERROR=Off \
-        -DBUILD_STATIC=$STATIC \
-        -DClang_DIR=$PWD/../clang \
-        -DLLVM_DIR=$PWD/../clang \
-        -DC2GOTO_SYSROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk \
-    "
+    brew install z3 gmp csmith cmake boost ninja python3 automake bison flex llvm@$CLANG_VERSION &&
+    BASE_ARGS=" -DLLVM_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION -DClang_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -DCMAKE_BUILD_TYPE=Debug -GNinja -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release" &&
+    SOLVER_FLAGS=""
 }
 
-# macOS needs an extra step before testing
 macos_post_setup () {
-  chmod +x build/macos-wrapper.sh
+  echo "No further steps needed for macOS"
 }
+
 
 usage() {
     echo "$0 [-OPTS]"
@@ -119,6 +124,7 @@ usage() {
     echo "  -S ON|OFF  enable/disable static build [ON for Ubuntu, OFF for macOS]"
     echo "  -c VERS    use packaged clang-VERS in a shared build on Ubuntu [11]"
     echo "  -C         build an SV-COMP version [disabled]"
+    echo "  -B ON|OFF  enable/disable esbmc bundled libc [ON]"
     echo
     echo "This script prepares the environment, downloads dependencies, configures"
     echo "the ESBMC build and runs the commands to compile and install ESBMC into"
@@ -130,7 +136,7 @@ usage() {
 }
 
 # Setup build flags (release, debug, sanitizer, ...)
-while getopts hb:s:e:r:dS:c:C flag
+while getopts hb:s:e:r:dS:c:CB: flag
 do
     case "${flag}" in
     h) usage; exit 0 ;;
@@ -142,7 +148,17 @@ do
     d) set -x; export ESBMC_OPTS='--verbosity 9' ;;
     S) STATIC=$OPTARG ;; # should be capital ON or OFF
     c) CLANG_VERSION=$OPTARG ;; # LLVM/Clang major version
-    C) BASE_ARGS="$BASE_ARGS -DESBMC_SVCOMP=ON" ;;
+    C) BASE_ARGS="$BASE_ARGS -DESBMC_SVCOMP=ON"
+       SOLVER_FLAGS="\
+          -DENABLE_BOOLECTOR=On \
+    	  -DENABLE_YICES=ON \
+	  -DENABLE_CVC4=OFF \
+          -DENABLE_BITWUZLA=On \
+	  -DENABLE_Z3=On \
+          -DENABLE_Mathsat=ON \
+          -DENABLE_GOTO_CONTRACTOR=On \
+          -DACADEMIC_BUILD=ON"  ;;
+    B) BASE_ARGS="$BASE_ARGS -DESBMC_BUNDLE_LIBC=$OPTARG" ;;
     *) exit 1 ;;
     esac
 done

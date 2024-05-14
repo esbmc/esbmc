@@ -22,7 +22,7 @@ array_sym_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
 
   // Iterate through each field and encode an ite.
   unsigned int i = 0;
-  for(auto const &it : data.members)
+  for (auto const &it : data.members)
   {
     type2tc arrtype =
       array_type2tc(it, array_type.array_size, array_type.size_is_infinite);
@@ -57,7 +57,7 @@ smt_astt array_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
 
   // Iterate through each field and encode an equality.
   unsigned int i = 0;
-  for(auto const &it : data.members)
+  for (auto const &it : data.members)
   {
     type2tc tmparrtype =
       array_type2tc(it, arrtype.array_size, arrtype.size_is_infinite);
@@ -68,7 +68,7 @@ smt_astt array_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   }
 
   // Create an ast representing the fact that all the members are equal.
-  return ctx->make_n_ary(ctx, &smt_convt::mk_and, eqs);
+  return ctx->make_n_ary_and(eqs);
 }
 
 smt_astt array_sym_smt_ast::update(
@@ -81,7 +81,7 @@ smt_astt array_sym_smt_ast::update(
   const struct_union_data &data = ctx->get_type_def(array_type.subtype);
 
   expr2tc index;
-  if(is_nil_expr(idx_expr))
+  if (is_nil_expr(idx_expr))
   {
     index = constant_int2tc(make_array_domain_type(array_type), BigInt(idx));
   }
@@ -95,7 +95,7 @@ smt_astt array_sym_smt_ast::update(
 
   // Iterate over all members. They are _all_ indexed and updated.
   unsigned int i = 0;
-  for(auto const &it : data.members)
+  for (auto const &it : data.members)
   {
     type2tc arrtype =
       array_type2tc(it, array_type.array_size, array_type.size_is_infinite);
@@ -125,7 +125,7 @@ smt_astt array_sym_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
   tuple_sym_smt_astt result = new tuple_sym_smt_ast(ctx, result_sort, name);
 
   unsigned int i = 0;
-  for(auto const &it : data.members)
+  for (auto const &it : data.members)
   {
     type2tc arrtype =
       array_type2tc(it, array_type.array_size, array_type.size_is_infinite);
@@ -160,7 +160,7 @@ smt_astt array_sym_smt_ast::project(smt_convt *ctx, unsigned int idx) const
     array_type2tc(restype, arr.array_size, arr.size_is_infinite);
   smt_sortt s = ctx->convert_sort(new_arr_type);
 
-  if(is_tuple_ast_type(restype) || is_tuple_array_ast_type(restype))
+  if (is_tuple_ast_type(restype) || is_tuple_array_ast_type(restype))
   {
     // This is a struct within a struct, so just generate the name prefix of
     // the internal struct being projected.
@@ -183,7 +183,7 @@ void array_sym_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
   const struct_union_data &data = ctx->get_type_def(arrtype.subtype);
 
   unsigned int i = 0;
-  for(auto const &it : data.members)
+  for (auto const &it : data.members)
   {
     type2tc tmparrtype =
       array_type2tc(it, arrtype.array_size, arrtype.size_is_infinite);

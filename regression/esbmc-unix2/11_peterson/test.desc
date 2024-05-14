@@ -1,4 +1,4 @@
 CORE
 peterson.c
---unwind 1 --no-unwinding-assertions --context-bound 2
+--unwind 1 --no-unwinding-assertions --context-bound 2 -Wno-error=implicit-function-declaration -Wno-error=incompatible-function-pointer-types
 ^VERIFICATION SUCCESSFUL$

@@ -25,7 +25,7 @@ codet cpp_typecheckt::cpp_constructor(
   follow_symbol(tmp_type);
 
   assert(!is_reference(tmp_type));
-  if(tmp_type.id() == "array")
+  if (tmp_type.id() == "array")
   {
     // We allow only one operand and it must be tagged with '#array_ini'.
     // Note that the operand is an array that is used for copy-initialization.
@@ -34,7 +34,7 @@ codet cpp_typecheckt::cpp_constructor(
     // The purpose of the tag #arra_ini is to rule out ill-formed
     // programs.
 
-    if(!operands.empty() && !operands.front().get_bool("#array_ini"))
+    if (!operands.empty() && !operands.front().get_bool("#array_ini"))
     {
       err_location(location);
       str << "bad array initializer";
@@ -43,7 +43,7 @@ codet cpp_typecheckt::cpp_constructor(
 
     assert(operands.empty() || operands.size() == 1);
 
-    if(operands.empty() && cpp_is_pod(tmp_type))
+    if (operands.empty() && cpp_is_pod(tmp_type))
     {
       codet nil;
       nil.make_nil();
@@ -52,7 +52,7 @@ codet cpp_typecheckt::cpp_constructor(
 
     const exprt &size_expr = to_array_type(tmp_type).size();
 
-    if(size_expr.id() == "infinity")
+    if (size_expr.id() == "infinity")
     {
       // don't initialize
       codet nil;
@@ -61,7 +61,7 @@ codet cpp_typecheckt::cpp_constructor(
     }
 
     BigInt s;
-    if(to_integer(size_expr, s))
+    if (to_integer(size_expr, s))
     {
       err_location(tmp_type);
       str << "array size `" << to_string(size_expr) << "' is not a constant";
@@ -88,7 +88,7 @@ codet cpp_typecheckt::cpp_constructor(
       codet new_code("block");
 
       // for each element of the array, call the default constructor
-      for(BigInt i = 0; i < s; ++i)
+      for (BigInt i = 0; i < s; ++i)
       {
         exprt::operandst tmp_operands;
 
@@ -100,7 +100,7 @@ codet cpp_typecheckt::cpp_constructor(
         index.copy_to_operands(constant);
         index.location() = location;
 
-        if(!operands.empty())
+        if (!operands.empty())
         {
           exprt operand("index");
           operand.copy_to_operands(operands.front());
@@ -111,7 +111,7 @@ codet cpp_typecheckt::cpp_constructor(
 
         exprt i_code = cpp_constructor(location, index, tmp_operands);
 
-        if(i_code.is_nil())
+        if (i_code.is_nil())
         {
           new_code.is_nil();
           break;
@@ -122,23 +122,23 @@ codet cpp_typecheckt::cpp_constructor(
       return new_code;
     }
   }
-  else if(cpp_is_pod(tmp_type))
+  else if (cpp_is_pod(tmp_type))
   {
     code_expressiont new_code;
     exprt::operandst operands_tc = operands;
 
-    for(auto &it : operands_tc)
+    for (auto &it : operands_tc)
     {
       typecheck_expr(it);
       add_implicit_dereference(it);
     }
 
-    if(operands_tc.size() == 0)
+    if (operands_tc.size() == 0)
     {
       // a POD is NOT initialized
       new_code.make_nil();
     }
-    else if(operands_tc.size() == 1)
+    else if (operands_tc.size() == 1)
     {
       // Override constantness
       object_tc.type().cmt_constant(false);
@@ -147,10 +147,10 @@ codet cpp_typecheckt::cpp_constructor(
       assign.location() = location;
       assign.copy_to_operands(object_tc, operands_tc.front());
       typecheck_side_effect_assignment(assign);
-      if(new_code.operands().size() == 1)
+      if (new_code.operands().size() == 1)
       {
         // remove zombie operands
-        if(new_code.operands().front().id() == "")
+        if (new_code.operands().front().id() == "")
           new_code.operands().clear();
       }
       new_code.move_to_operands(assign);
@@ -166,15 +166,15 @@ codet cpp_typecheckt::cpp_constructor(
 
     return new_code;
   }
-  else if(tmp_type.id() == "union")
+  else if (tmp_type.id() == "union")
   {
     assert(0); // Todo: union
   }
-  else if(tmp_type.id() == "struct")
+  else if (tmp_type.id() == "struct")
   {
     exprt::operandst operands_tc = operands;
 
-    for(auto &it : operands_tc)
+    for (auto &it : operands_tc)
     {
       typecheck_expr(it);
       add_implicit_dereference(it);
@@ -184,9 +184,9 @@ codet cpp_typecheckt::cpp_constructor(
 
     // set most-derived bits
     codet block("block");
-    for(const auto &component : struct_type.components())
+    for (const auto &component : struct_type.components())
     {
-      if(component.base_name() != "@most_derived")
+      if (component.base_name() != "@most_derived")
         continue;
 
       exprt member("member", bool_typet());
@@ -198,7 +198,7 @@ codet cpp_typecheckt::cpp_constructor(
       exprt val;
       val.make_false();
 
-      if(!component.get_bool("from_base"))
+      if (!component.get_bool("from_base"))
         val.make_true();
 
       side_effect_exprt assign("assign");
@@ -207,10 +207,10 @@ codet cpp_typecheckt::cpp_constructor(
       typecheck_side_effect_assignment(assign);
       code_expressiont code_exp;
 
-      if(code_exp.operands().size() == 1)
+      if (code_exp.operands().size() == 1)
       {
         // remove zombie operands
-        if(code_exp.operands().front().id() == "")
+        if (code_exp.operands().front().id() == "")
           code_exp.operands().clear();
       }
 
@@ -227,11 +227,11 @@ codet cpp_typecheckt::cpp_constructor(
 
     irep_idt constructor_name;
 
-    for(const auto &component : components)
+    for (const auto &component : components)
     {
       const typet &type = component.type();
 
-      if(
+      if (
         !component.get_bool("from_base") && type.id() == "code" &&
         type.return_type().id() == "constructor")
       {
@@ -253,17 +253,17 @@ codet cpp_typecheckt::cpp_constructor(
     function_call.function().swap(static_cast<exprt &>(cpp_name));
     function_call.arguments().reserve(operands_tc.size());
 
-    for(auto &it : operands_tc)
+    for (auto &it : operands_tc)
       function_call.op1().copy_to_operands(it);
 
     // Decorate function call with the 'this' object. Important so that
     // constructor overloading works. Would add as an argument, but due to
     // overriding of the C version of this method, that causes type horror.
-    if(object.id() == "already_typechecked")
+    if (object.id() == "already_typechecked")
     {
       function_call.add("#this_expr") = object.op0();
     }
-    else if(object.id() == "symbol")
+    else if (object.id() == "symbol")
     {
       // Alas, we need to add a type.
       function_call.add("#this_expr") = object;
@@ -276,7 +276,7 @@ codet cpp_typecheckt::cpp_constructor(
       // Also need to extract a type.
       exprt tmp_object = object;
       unsigned int num_subtypes = 0;
-      while(tmp_object.id() == "index")
+      while (tmp_object.id() == "index")
       {
         tmp_object = tmp_object.op0();
         num_subtypes++;
@@ -289,7 +289,7 @@ codet cpp_typecheckt::cpp_constructor(
       function_call.add("#this_expr").type() = tmp_object.op0().type();
 
       // Now rectify type to not be an array any more.
-      while(num_subtypes-- != 0)
+      while (num_subtypes-- != 0)
         function_call.add("#this_expr").type() =
           function_call.add("#this_expr").type().subtype();
     }
@@ -317,7 +317,7 @@ codet cpp_typecheckt::cpp_constructor(
     address_of.copy_to_operands(object_tc);
     tmp_this.swap(address_of);
 
-    if(block.operands().empty())
+    if (block.operands().empty())
       return to_code(initializer);
 
     block.move_to_operands(initializer);
@@ -352,9 +352,9 @@ void cpp_typecheckt::new_temporary(
 
   codet new_code = cpp_constructor(location, new_object, ops);
 
-  if(new_code.is_not_nil())
+  if (new_code.is_not_nil())
   {
-    if(new_code.statement() == "assign")
+    if (new_code.statement() == "assign")
       tmp_object_expr.move_to_operands(new_code.op1());
     else
       tmp_object_expr.add("initializer") = new_code;

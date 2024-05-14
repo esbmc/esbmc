@@ -8,8 +8,9 @@ Date:
 
 \*******************************************************************/
 
-class QEvent {
+class QEvent
+{
 public:
-	QEvent();
-	~QEvent();
+  QEvent();
+  ~QEvent();
 };

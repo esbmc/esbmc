@@ -29,11 +29,14 @@ public:
    * methods for code (codet) adjustment
    * and other IRs derived from codet
    */
+  void adjust_code(codet &code) override;
   void adjust_while(codet &code) override;
   void adjust_switch(codet &code) override;
   void adjust_for(codet &code) override;
   void adjust_ifthenelse(codet &code) override;
   void adjust_decl_block(codet &code) override;
+  void adjust_catch(codet &code);
+  void adjust_throw_decl(codet &code);
 
   /**
    * methods for expression (exprt) adjustment
@@ -44,9 +47,11 @@ public:
   void adjust_side_effect_assign(side_effect_exprt &expr);
   void adjust_function_call_arguments(
     side_effect_expr_function_callt &expr) override;
-  void adjust_expr_rel(exprt &expr) override;
+  void adjust_reference(exprt &expr) override;
   void adjust_new(exprt &expr);
   void adjust_cpp_member(member_exprt &expr);
+  void adjust_if(exprt &expr) override;
+  void adjust_side_effect_throw(side_effect_exprt &expr);
 
   /**
    * methods for implicit GOTO code generation
@@ -77,11 +82,17 @@ public:
    * ancillary methods to support the expr/code adjustments above
    */
   void convert_expression_to_code(exprt &expr);
-  void convert_lvalue_ref_to_deref_symbol(exprt &expr);
+  void convert_reference(exprt &expr);
+  void convert_ref_to_deref_symbol(exprt &expr);
   void convert_lvalue_ref_to_deref_sideeffect(exprt &expr);
   void align_se_function_call_return_type(
     exprt &f_op,
     side_effect_expr_function_callt &expr) override;
+  void convert_exception_id(
+    const typet &type,
+    const std::string &suffix,
+    std::vector<irep_idt> &ids,
+    bool is_catch = false);
 };
 
 #endif /* CLANG_CPP_FRONTEND_CLANG_CPP_ADJUST_H_ */

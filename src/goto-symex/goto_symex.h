@@ -123,7 +123,7 @@ public:
   /**
    *  Create a symex result for this run.
    */
-  std::shared_ptr<goto_symext::symex_resultt> get_symex_result();
+  goto_symext::symex_resultt get_symex_result();
 
   /**
    *  Symbolically execute one instruction.
@@ -394,6 +394,17 @@ protected:
     reachability_treet &art,
     const std::string &symname);
 
+  /**
+   *  Run a builtin, something prefixed with __builtin.
+   *  This looks through a set of builtin functions that are implemented in
+   *  ESBMC, and calls the appropriate one.
+   *  @param call Function call being performed.
+   *  @param symname Name of builtin we're calling.
+   *  @return true if we handled the builtin
+   */
+  bool
+  run_builtin(const code_function_call2t &call, const std::string &symname);
+
   /** Perform yield; forces a context switch point. */
   void intrinsic_yield(reachability_treet &arg);
   /** Perform switch_to; switches control to explicit thread ID. */
@@ -449,6 +460,11 @@ protected:
   void intrinsic_memset(
     reachability_treet &art,
     const code_function_call2t &func_call);
+
+  // Function to call a symname function, in case where were not able to optimize it
+  void
+  bump_call(const code_function_call2t &func_call, const std::string &symname);
+
   /** Returns the size of the object
    *
    * If the object is invalid, then this function will return 0
@@ -456,6 +472,9 @@ protected:
   void intrinsic_get_object_size(
     const code_function_call2t &func_call,
     reachability_treet &art);
+
+  /* Handles dereferencing between threads and is used only in data race checks. **/
+  void intrinsic_races_check_dereference(expr2tc &expr);
 
   /** Walk back up stack frame looking for exception handler. */
   bool symex_throw();
@@ -468,9 +487,10 @@ protected:
 
   /** Update throw target. */
   void update_throw_target(
-    goto_symex_statet::exceptiont *except,
+    goto_symex_statet::exceptiont *except [[maybe_unused]],
     goto_programt::const_targett target,
-    const expr2tc &code);
+    const expr2tc &code,
+    bool is_ellipsis = false);
 
   /** Check if we can rethrow an exception:
    *  if we can then update the target.

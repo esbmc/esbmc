@@ -1,4 +1,4 @@
 CORE
 main.c
---big-endian --bv
+--big-endian --bv -Wno-error=implicit-function-declaration
 ^VERIFICATION SUCCESSFUL$

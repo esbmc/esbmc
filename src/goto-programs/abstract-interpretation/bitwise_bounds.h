@@ -20,7 +20,7 @@ UINT_X unsigned_max_or(UINT_X a, UINT_X b, UINT_X c, UINT_X d)
 
   // scan all the bits that are active in both upper bounds
   UINT_X cand_bits = b & d;
-  while(cand_bits != 0)
+  while (cand_bits != 0)
   {
     // isolate the least significant candidate bit
     // e.g. cand_bits = 0b01101010 yields least_bit = 0b00000010
@@ -32,7 +32,7 @@ UINT_X unsigned_max_or(UINT_X a, UINT_X b, UINT_X c, UINT_X d)
     UINT_X alternate_d = (d - least_bit) | (least_bit - 1);
 
     // stop only if both alternate values are outside of the valid interval
-    if(alternate_b < a && alternate_d < c)
+    if (alternate_b < a && alternate_d < c)
       break;
 
     // collect the extra activated bits
@@ -64,7 +64,7 @@ UINT_X unsigned_min_or(UINT_X a, UINT_X b, UINT_X c, UINT_X d)
 
   // scan all the bits that are already active in the other lower bound
   UINT_X cand_bits = ~a & c;
-  while(cand_bits != 0)
+  while (cand_bits != 0)
   {
     // isolate the least significant candidate bit
     // e.g. cand_bits = 0b01101010 yields least_bit = 0b00000010
@@ -75,7 +75,7 @@ UINT_X unsigned_min_or(UINT_X a, UINT_X b, UINT_X c, UINT_X d)
     UINT_X alternate_a = (a | least_bit) & (-least_bit);
 
     // stop if the alternate value is outside of the valid interval
-    if(alternate_a > b)
+    if (alternate_a > b)
       break;
 
     // keep track of the best value of a found so far
@@ -87,11 +87,11 @@ UINT_X unsigned_min_or(UINT_X a, UINT_X b, UINT_X c, UINT_X d)
 
   // repeat the same procedure for the interval y in [c,d]
   cand_bits = a & ~c;
-  while(cand_bits != 0)
+  while (cand_bits != 0)
   {
     UINT_X least_bit = cand_bits & (-cand_bits);
     UINT_X alternate_c = (c | least_bit) & (-least_bit);
-    if(alternate_c > d)
+    if (alternate_c > d)
       break;
     best_c = alternate_c;
     cand_bits &= (cand_bits - 1);
@@ -291,7 +291,7 @@ UINT_X unsigned_2_unsigned_min_truncate(UINT_X a, UINT_X b, UINT_X n)
 UINT_X signed_2_unsigned_max_truncate(INT_X a, INT_X b, UINT_X n)
 {
   // if the input interval contains zero, return truncated -1
-  if(a < 0 && b >= 0)
+  if (a < 0 && b >= 0)
     return (1 << n) - 1;
 
   // otherwise interpret [a,b] as an unsigned interval
@@ -310,7 +310,7 @@ UINT_X signed_2_unsigned_max_truncate(INT_X a, INT_X b, UINT_X n)
 UINT_X signed_2_unsigned_min_truncate(INT_X a, INT_X b, UINT_X n)
 {
   // if the input interval contains zero, return zero
-  if(a < 0 && b >= 0)
+  if (a < 0 && b >= 0)
     return 0;
 
   // otherwise interpret [a,b] as an unsigned interval
@@ -335,7 +335,7 @@ UINT_X signed_2_unsigned_max_extend(INT_X a, INT_X b, UINT_X n)
   UINT_X mask = sign_bit | (sign_bit - 1);
 
   // if a <= 0 and b > 0, return the n-bit representation of -1
-  if((a & sign_bit) != 0 && (b & sign_bit) == 0)
+  if ((a & sign_bit) != 0 && (b & sign_bit) == 0)
     return -1 & mask;
 
   // otherwise, extend the upper bound
@@ -359,7 +359,7 @@ UINT_X signed_2_unsigned_min_extend(INT_X a, INT_X b, UINT_X n)
   UINT_X mask = sign_bit | (sign_bit - 1);
 
   // if a <= 0 and b > 0, return zero
-  if((a & sign_bit) != 0 && (b & sign_bit) == 0)
+  if ((a & sign_bit) != 0 && (b & sign_bit) == 0)
     return 0;
 
   // otherwise, extend the upper bound
@@ -377,13 +377,13 @@ UINT_X signed_2_unsigned_min_extend(INT_X a, INT_X b, UINT_X n)
  */
 INT_X signed_max_or(INT_X a, INT_X b, INT_X c, INT_X d)
 {
-  if(a < 0)
+  if (a < 0)
   {
-    if(b < 0)
+    if (b < 0)
     {
-      if(c < 0)
+      if (c < 0)
       {
-        if(d < 0)
+        if (d < 0)
         {
           return unsigned_max_or(a, b, c, d); // a < 0, b < 0, c < 0, d < 0
         }
@@ -399,9 +399,9 @@ INT_X signed_max_or(INT_X a, INT_X b, INT_X c, INT_X d)
     }
     else
     {
-      if(c < 0)
+      if (c < 0)
       {
-        if(d < 0)
+        if (d < 0)
         {
           return -1; // a < 0, b >= 0, c < 0, d < 0
         }
@@ -418,9 +418,9 @@ INT_X signed_max_or(INT_X a, INT_X b, INT_X c, INT_X d)
   }
   else
   {
-    if(c < 0)
+    if (c < 0)
     {
-      if(d < 0)
+      if (d < 0)
       {
         return unsigned_max_or(a, b, c, d); // a >= 0, b >= 0, c < 0, d < 0
       }
@@ -447,13 +447,13 @@ INT_X signed_max_or(INT_X a, INT_X b, INT_X c, INT_X d)
  */
 INT_X signed_min_or(INT_X a, INT_X b, INT_X c, INT_X d)
 {
-  if(a < 0)
+  if (a < 0)
   {
-    if(b < 0)
+    if (b < 0)
     {
-      if(c < 0)
+      if (c < 0)
       {
-        if(d < 0)
+        if (d < 0)
         {
           return unsigned_min_or(a, b, c, d); // a < 0, b < 0, c < 0, d < 0
         }
@@ -469,9 +469,9 @@ INT_X signed_min_or(INT_X a, INT_X b, INT_X c, INT_X d)
     }
     else
     {
-      if(c < 0)
+      if (c < 0)
       {
-        if(d < 0)
+        if (d < 0)
         {
           return c; // a < 0, b >= 0, c < 0, d < 0
         }
@@ -488,9 +488,9 @@ INT_X signed_min_or(INT_X a, INT_X b, INT_X c, INT_X d)
   }
   else
   {
-    if(c < 0)
+    if (c < 0)
     {
-      if(d < 0)
+      if (d < 0)
       {
         return unsigned_min_or(a, b, c, d); // a >= 0, b >= 0, c < 0, d < 0
       }
@@ -546,13 +546,13 @@ INT_X signed_min_and(INT_X a, INT_X b, INT_X c, INT_X d)
  */
 INT_X signed_max_xor(INT_X a, INT_X b, INT_X c, INT_X d)
 {
-  if(a < 0)
+  if (a < 0)
   {
-    if(b < 0)
+    if (b < 0)
     {
-      if(c < 0)
+      if (c < 0)
       {
-        if(d < 0)
+        if (d < 0)
         {
           return unsigned_max_xor(a, b, c, d); // a < 0, b < 0, c < 0, d < 0
         }
@@ -568,9 +568,9 @@ INT_X signed_max_xor(INT_X a, INT_X b, INT_X c, INT_X d)
     }
     else
     {
-      if(c < 0)
+      if (c < 0)
       {
-        if(d < 0)
+        if (d < 0)
         {
           return unsigned_max_xor(a, -1, c, d); // a < 0, b >= 0, c < 0, d < 0
         }
@@ -589,9 +589,9 @@ INT_X signed_max_xor(INT_X a, INT_X b, INT_X c, INT_X d)
   }
   else
   {
-    if(c < 0)
+    if (c < 0)
     {
-      if(d < 0)
+      if (d < 0)
       {
         return unsigned_max_xor(a, b, c, d); // a >= 0, b >= 0, c < 0, d < 0
       }
@@ -619,13 +619,13 @@ INT_X signed_max_xor(INT_X a, INT_X b, INT_X c, INT_X d)
  */
 INT_X signed_min_xor(INT_X a, INT_X b, INT_X c, INT_X d)
 {
-  if(a < 0)
+  if (a < 0)
   {
-    if(b < 0)
+    if (b < 0)
     {
-      if(c < 0)
+      if (c < 0)
       {
-        if(d < 0)
+        if (d < 0)
         {
           return unsigned_min_xor(a, b, c, d); // a < 0, b < 0, c < 0, d < 0
         }
@@ -641,9 +641,9 @@ INT_X signed_min_xor(INT_X a, INT_X b, INT_X c, INT_X d)
     }
     else
     {
-      if(c < 0)
+      if (c < 0)
       {
-        if(d < 0)
+        if (d < 0)
         {
           return unsigned_min_xor(0, b, c, d); // a < 0, b >= 0, c < 0, d < 0
         }
@@ -662,9 +662,9 @@ INT_X signed_min_xor(INT_X a, INT_X b, INT_X c, INT_X d)
   }
   else
   {
-    if(c < 0)
+    if (c < 0)
     {
-      if(d < 0)
+      if (d < 0)
       {
         return unsigned_min_xor(a, b, c, d); // a >= 0, b >= 0, c < 0, d < 0
       }
@@ -715,7 +715,7 @@ INT_X signed_min_not(INT_X, INT_X b)
  */
 INT_X signed_max_left_shift(INT_X, INT_X b, UINT_X c, UINT_X d)
 {
-  if(b >= 0)
+  if (b >= 0)
     return b << d;
   else
     return b << c;
@@ -732,7 +732,7 @@ INT_X signed_max_left_shift(INT_X, INT_X b, UINT_X c, UINT_X d)
  */
 INT_X signed_min_left_shift(INT_X a, INT_X, UINT_X c, UINT_X d)
 {
-  if(a >= 0)
+  if (a >= 0)
     return a << c;
   else
     return a << d;
@@ -749,7 +749,7 @@ INT_X signed_min_left_shift(INT_X a, INT_X, UINT_X c, UINT_X d)
  */
 INT_X signed_max_right_shift(INT_X, INT_X b, UINT_X c, UINT_X d)
 {
-  if(b >= 0)
+  if (b >= 0)
     return b >> c;
   else
     return b >> d;
@@ -766,7 +766,7 @@ INT_X signed_max_right_shift(INT_X, INT_X b, UINT_X c, UINT_X d)
  */
 INT_X signed_min_right_shift(INT_X a, INT_X, UINT_X c, UINT_X d)
 {
-  if(a >= 0)
+  if (a >= 0)
     return a >> d;
   else
     return a >> c;
@@ -788,7 +788,7 @@ INT_X unsigned_2_signed(UINT_X x, UINT_X n)
   UINT_X mask = sign_bit | (sign_bit - 1);
 
   // if the input is positive, just truncate and cast
-  if((x & sign_bit) == 0)
+  if ((x & sign_bit) == 0)
     return (INT_X)x & mask;
 
   // if the input is negative, convert it to positive with relation -x = (~x) + 1,
@@ -828,15 +828,15 @@ INT_X unsigned_2_signed_max_truncate(UINT_X a, UINT_X b, UINT_X n)
   UINT_X positive_b = alternate_b & ~sign_bit;
 
   // check if the reduced positive b still belongs to the input interval
-  if(positive_b >= a && positive_b <= b)
+  if (positive_b >= a && positive_b <= b)
     return unsigned_2_signed(positive_b, n);
 
   // otherwise, try to use the upper bound (if positive)
-  if((b & sign_bit) == 0)
+  if ((b & sign_bit) == 0)
     return unsigned_2_signed(b, n);
 
   // if we are forced to return a negative number, try to maximise it
-  if(alternate_b >= a && alternate_b <= b)
+  if (alternate_b >= a && alternate_b <= b)
     return unsigned_2_signed(alternate_b, n);
 
   // otherwise, just use the negative upper bound
@@ -874,15 +874,15 @@ INT_X unsigned_2_signed_min_truncate(UINT_X a, UINT_X b, UINT_X n)
   UINT_X negative_a = alternate_a | sign_bit;
 
   // check if the increased negative a still belongs to the input interval
-  if(negative_a >= a && negative_a <= b)
+  if (negative_a >= a && negative_a <= b)
     return unsigned_2_signed(negative_a, n);
 
   // otherwise, try to use the lower bound (if negative)
-  if((a & sign_bit) != 0)
+  if ((a & sign_bit) != 0)
     return unsigned_2_signed(a, n);
 
   // if we are forced to return a positive number, try to minimise it
-  if(alternate_a >= a && alternate_a <= b)
+  if (alternate_a >= a && alternate_a <= b)
     return unsigned_2_signed(alternate_a, n);
 
   // otherwise, just use the upper bound
@@ -900,7 +900,7 @@ INT_X unsigned_2_signed_min_truncate(UINT_X a, UINT_X b, UINT_X n)
 INT_X signed_2_signed_max_truncate(INT_X a, INT_X b, UINT_X n)
 {
   // if the input interval contains zero, split it
-  if(a < 0 && b >= 0)
+  if (a < 0 && b >= 0)
   {
     INT_X c = unsigned_2_signed_max_truncate(a, -1, n);
     INT_X d = unsigned_2_signed_max_truncate(0, b, n);
@@ -922,7 +922,7 @@ INT_X signed_2_signed_max_truncate(INT_X a, INT_X b, UINT_X n)
 INT_X signed_2_signed_min_truncate(INT_X a, INT_X b, UINT_X n)
 {
   // if the input interval contains zero, split it
-  if(a < 0 && b >= 0)
+  if (a < 0 && b >= 0)
   {
     INT_X c = unsigned_2_signed_min_truncate(a, -1, n);
     INT_X d = unsigned_2_signed_min_truncate(0, b, n);
@@ -947,9 +947,9 @@ INT_X unsigned_2_signed_max_extend(UINT_X a, UINT_X b, UINT_X n)
   UINT_X sign_bit = 1 << (n - 1);
 
   // if a > 0 and b <= 0, return the largest positive number
-  if((b & sign_bit) != 0)
+  if ((b & sign_bit) != 0)
   {
-    if((a & sign_bit) == 0)
+    if ((a & sign_bit) == 0)
       return sign_bit - 1;
 
     // if both a <= 0 and b <= 0, extend the sign of the upper bound
@@ -974,9 +974,9 @@ INT_X unsigned_2_signed_min_extend(UINT_X a, UINT_X b, UINT_X n)
   UINT_X sign_bit = 1 << (n - 1);
 
   // if a > 0 and b <= 0, return the smallest negative number
-  if((b & sign_bit) != 0)
+  if ((b & sign_bit) != 0)
   {
-    if((a & sign_bit) == 0)
+    if ((a & sign_bit) == 0)
       return unsigned_2_signed(sign_bit, n);
 
     // if both a <= 0 and b <= 0, extend the sign of the lower bound
@@ -987,20 +987,12 @@ INT_X unsigned_2_signed_min_extend(UINT_X a, UINT_X b, UINT_X n)
   return a;
 }
 
-#define IS_UINT(LHS, RHS)                                                      \
-  LHS.get_lower().is_uint64() && LHS.get_upper().is_uint64() &&                \
-    RHS.get_lower().is_uint64() && RHS.get_upper().is_uint64()
-
 #define UINT_FUNC(FUNC, LHS, RHS)                                              \
   FUNC(                                                                        \
     LHS.get_lower().to_uint64(),                                               \
     LHS.get_upper().to_uint64(),                                               \
     RHS.get_lower().to_uint64(),                                               \
     RHS.get_upper().to_uint64())
-
-#define IS_INT(LHS, RHS)                                                       \
-  LHS.get_lower().is_int64() && LHS.get_upper().is_int64() &&                  \
-    RHS.get_lower().is_int64() && RHS.get_upper().is_int64()
 
 #define INT_FUNC(FUNC, LHS, RHS)                                               \
   FUNC(                                                                        \
@@ -1016,12 +1008,14 @@ INT_X unsigned_2_signed_min_extend(UINT_X a, UINT_X b, UINT_X n)
     const interval_templatet<BigInt> &rhs) const                               \
   {                                                                            \
     interval_templatet<BigInt> result;                                         \
-    if(IS_UINT(lhs, rhs))                                                      \
+    if (!lhs.lower || !lhs.upper || !rhs.lower || !rhs.upper)                  \
+      return result;                                                           \
+    if (is_unsignedbv_type(lhs.type) && is_unsignedbv_type(rhs.type))          \
     {                                                                          \
       result.set_lower(UINT_FUNC(MIN_UFUNC, lhs, rhs));                        \
       result.set_upper(UINT_FUNC(MAX_UFUNC, lhs, rhs));                        \
     }                                                                          \
-    else if(IS_INT(lhs, rhs))                                                  \
+    else if (is_signedbv_type(lhs.type) && is_signedbv_type(rhs.type))         \
     {                                                                          \
       result.set_lower(INT_FUNC(MIN_FUNC, lhs, rhs));                          \
       result.set_upper(INT_FUNC(MAX_FUNC, lhs, rhs));                          \
@@ -1066,8 +1060,6 @@ GET_BIT_INTERVALS(
   signed_min_left_shift,
   signed_max_left_shift)
 
-#undef IS_UINT
-#undef IS_INT
 #undef UINT_FUNC
 #undef INT_FUNC
 #undef GET_BIT_INTERVALS

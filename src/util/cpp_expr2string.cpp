@@ -1,5 +1,4 @@
 #include <cassert>
-#include <util/c_expr2string.h>
 #include <util/cpp_expr2string.h>
 #include <util/std_types.h>
 #include <util/symbol.h>
@@ -9,8 +8,8 @@
 class cpp_expr2stringt : public c_expr2stringt
 {
 public:
-  cpp_expr2stringt(const namespacet &_ns, const bool _fullname)
-    : c_expr2stringt(_ns, _fullname)
+  cpp_expr2stringt(const namespacet &_ns, unsigned _flags)
+    : c_expr2stringt(_ns, _flags)
   {
   }
 
@@ -47,7 +46,7 @@ cpp_expr2stringt::convert_struct(const exprt &src, unsigned &precedence)
 {
   const typet &full_type = ns.follow(src.type());
 
-  if(full_type.id() != "struct")
+  if (full_type.id() != "struct")
     return convert_norep(src, precedence);
 
   const struct_typet &struct_type = to_struct_type(full_type);
@@ -63,9 +62,9 @@ cpp_expr2stringt::convert_struct(const exprt &src, unsigned &precedence)
   bool first = true;
   unsigned last_size = 0;
 
-  for(const auto &component : components)
+  for (const auto &component : components)
   {
-    if(component.type().id() == "code")
+    if (component.type().id() == "code")
     {
     }
     else
@@ -73,11 +72,11 @@ cpp_expr2stringt::convert_struct(const exprt &src, unsigned &precedence)
       std::string tmp = convert(*o_it);
       std::string sep;
 
-      if(first)
+      if (first)
         first = false;
       else
       {
-        if(last_size + 40 < dest.size())
+        if (last_size + 40 < dest.size())
         {
           sep = ",\n    ";
           last_size = dest.size();
@@ -104,12 +103,12 @@ cpp_expr2stringt::convert_struct(const exprt &src, unsigned &precedence)
 std::string
 cpp_expr2stringt::convert_constant(const exprt &src, unsigned &precedence)
 {
-  if(src.type().id() == "bool")
+  if (src.type().id() == "bool")
   {
     // C++ has built-in Boolean constants, in contrast to C
-    if(src.is_true())
+    if (src.is_true())
       return "true";
-    if(src.is_false())
+    if (src.is_false())
       return "false";
   }
 
@@ -128,71 +127,71 @@ std::string cpp_expr2stringt::convert_rec(
 
   const std::string q = new_qualifiers.as_string();
 
-  if(is_reference(src))
+  if (is_reference(src))
   {
     return new_qualifiers.as_string() + convert(src.subtype()) + " &" + d;
   }
-  if(is_rvalue_reference(src))
+  if (is_rvalue_reference(src))
   {
     return new_qualifiers.as_string() + convert(src.subtype()) + " &&" + d;
   }
-  else if(src.get("#cpp_type") != "")
+  else if (src.get("#cpp_type") != "")
   {
     const irep_idt cpp_type = src.get("#cpp_type");
 
-    if(cpp_type == "signed_char")
+    if (cpp_type == "signed_char")
       return new_qualifiers.as_string() + "signed char" + d;
-    if(cpp_type == "unsigned_char")
+    if (cpp_type == "unsigned_char")
       return new_qualifiers.as_string() + "unsigned char" + d;
-    else if(cpp_type == "char")
+    else if (cpp_type == "char")
       return new_qualifiers.as_string() + "char" + d;
-    else if(cpp_type == "signed_short_int")
+    else if (cpp_type == "signed_short_int")
       return new_qualifiers.as_string() + "short" + d;
-    else if(cpp_type == "unsigned_short_int")
+    else if (cpp_type == "unsigned_short_int")
       return new_qualifiers.as_string() + "unsigned short" + d;
-    else if(cpp_type == "signed_int")
+    else if (cpp_type == "signed_int")
       return new_qualifiers.as_string() + "int" + d;
-    else if(cpp_type == "unsigned_int")
+    else if (cpp_type == "unsigned_int")
       return new_qualifiers.as_string() + "unsigned" + d;
-    else if(cpp_type == "signed_long_int")
+    else if (cpp_type == "signed_long_int")
       return new_qualifiers.as_string() + "long" + d;
-    else if(cpp_type == "unsigned_long_int")
+    else if (cpp_type == "unsigned_long_int")
       return new_qualifiers.as_string() + "unsigned long" + d;
-    else if(cpp_type == "signed_long_long_int")
+    else if (cpp_type == "signed_long_long_int")
       return new_qualifiers.as_string() + "long long" + d;
-    else if(cpp_type == "unsigned_long_long_int")
+    else if (cpp_type == "unsigned_long_long_int")
       return new_qualifiers.as_string() + "unsigned long long" + d;
-    else if(cpp_type == "wchar_t")
+    else if (cpp_type == "wchar_t")
       return new_qualifiers.as_string() + "wchar_t" + d;
-    else if(cpp_type == "float")
+    else if (cpp_type == "float")
       return new_qualifiers.as_string() + "float" + d;
-    else if(cpp_type == "double")
+    else if (cpp_type == "double")
       return new_qualifiers.as_string() + "double" + d;
-    else if(cpp_type == "long_double")
+    else if (cpp_type == "long_double")
       return new_qualifiers.as_string() + "long double" + d;
     else
       return c_expr2stringt::convert_rec(src, qualifiers, declarator);
   }
-  else if(src.id() == "symbol")
+  else if (src.id() == "symbol")
   {
     const irep_idt &identifier = src.identifier();
 
     const symbolt *symbol = ns.lookup(identifier);
-    if(!symbol)
+    if (!symbol)
     {
       log_error(
         "could not find symbol {} in the context in {}", identifier, __func__);
       abort();
     }
 
-    if(
+    if (
       symbol->type.id() == "struct" || symbol->type.id() == "incomplete_struct")
     {
       std::string dest = new_qualifiers.as_string();
 
-      if(symbol->type.get_bool("#class"))
+      if (symbol->type.get_bool("#class"))
         dest += "class";
-      else if(symbol->type.get_bool("#interface"))
+      else if (symbol->type.get_bool("#interface"))
         dest += "__interface"; // MS-specific
       else
         dest += "struct";
@@ -201,7 +200,7 @@ std::string cpp_expr2stringt::convert_rec(
       dest += d;
       return dest;
     }
-    if(symbol->type.id() == "c_enum")
+    if (symbol->type.id() == "c_enum")
     {
       std::string dest = new_qualifiers.as_string();
 
@@ -214,13 +213,13 @@ std::string cpp_expr2stringt::convert_rec(
     else
       return c_expr2stringt::convert_rec(src, qualifiers, declarator);
   }
-  else if(src.id() == "struct" || src.id() == "incomplete_struct")
+  else if (src.id() == "struct" || src.id() == "incomplete_struct")
   {
     std::string dest = new_qualifiers.as_string();
 
-    if(src.get_bool("#class"))
+    if (src.get_bool("#class"))
       dest += "class";
-    else if(src.get_bool("#interface"))
+    else if (src.get_bool("#interface"))
       dest += "__interface"; // MS-specific
     else
       dest += "struct";
@@ -229,37 +228,37 @@ std::string cpp_expr2stringt::convert_rec(
 
     return dest;
   }
-  else if(src.id() == "constructor")
+  else if (src.id() == "constructor")
   {
     return "constructor ";
   }
-  else if(src.id() == "destructor")
+  else if (src.id() == "destructor")
   {
     return "destructor ";
   }
-  else if(src.id() == "cpp-template-type")
+  else if (src.id() == "cpp-template-type")
   {
     return "typename";
   }
-  else if(src.id() == "template")
+  else if (src.id() == "template")
   {
     std::string dest = "template<";
 
     const irept::subt &arguments = src.arguments().get_sub();
 
-    forall_irep(it, arguments)
+    forall_irep (it, arguments)
     {
-      if(it != arguments.begin())
+      if (it != arguments.begin())
         dest += ", ";
 
       const exprt &argument = (const exprt &)*it;
 
-      if(argument.id() == "symbol")
+      if (argument.id() == "symbol")
       {
         dest += convert(argument.type()) + " ";
         dest += convert(argument);
       }
-      else if(argument.id() == "type")
+      else if (argument.id() == "type")
         dest += convert(argument.type());
       else
         dest += argument.to_string();
@@ -268,7 +267,7 @@ std::string cpp_expr2stringt::convert_rec(
     dest += "> " + convert(src.subtype());
     return dest;
   }
-  else if(src.id() == "pointer" && src.find("to-member").is_not_nil())
+  else if (src.id() == "pointer" && src.find("to-member").is_not_nil())
   {
     typet tmp = src;
     typet member;
@@ -276,7 +275,7 @@ std::string cpp_expr2stringt::convert_rec(
 
     std::string dest = "(" + convert_rec(member, c_qualifierst(), "") + ":: *)";
 
-    if(src.subtype().id() == "code")
+    if (src.subtype().id() == "code")
     {
       const code_typet &code_type = to_code_type(src.subtype());
       const typet &return_type = code_type.return_type();
@@ -285,10 +284,10 @@ std::string cpp_expr2stringt::convert_rec(
       const code_typet::argumentst &args = code_type.arguments();
       dest += "(";
 
-      if(args.size() > 0)
+      if (args.size() > 0)
         dest += convert_rec(args[0].type(), c_qualifierst(), "");
 
-      for(unsigned i = 1; i < args.size(); i++)
+      for (unsigned i = 1; i < args.size(); i++)
         dest += ", " + convert_rec(args[i].type(), c_qualifierst(), "");
       dest += ")";
       dest += d;
@@ -299,7 +298,7 @@ std::string cpp_expr2stringt::convert_rec(
     }
     return dest;
   }
-  else if(src.id() == "unassigned")
+  else if (src.id() == "unassigned")
     return "?";
   else
     return c_expr2stringt::convert_rec(src, qualifiers, declarator);
@@ -314,11 +313,11 @@ std::string cpp_expr2stringt::convert_cpp_new(const exprt &src, unsigned)
 {
   std::string dest;
 
-  if(src.statement() == "cpp_new[]")
+  if (src.statement() == "cpp_new[]")
   {
     dest = "new";
 
-    std::string tmp_size = convert(static_cast<const exprt &>(src.size_irep()));
+    std::string tmp_size = convert(static_cast<const exprt &>(src.cmt_size()));
 
     dest += " ";
     dest += convert(src.type().subtype());
@@ -337,7 +336,7 @@ cpp_expr2stringt::convert_code_cpp_delete(const exprt &src, unsigned indent)
 {
   std::string dest = indent_str(indent) + "delete ";
 
-  if(src.operands().size() != 1)
+  if (src.operands().size() != 1)
   {
     unsigned precedence;
     return convert_norep(src, precedence);
@@ -352,21 +351,21 @@ cpp_expr2stringt::convert_code_cpp_delete(const exprt &src, unsigned indent)
 
 std::string cpp_expr2stringt::convert(const exprt &src, unsigned &precedence)
 {
-  if(src.id() == "cpp-this")
+  if (src.id() == "cpp-this")
     return convert_cpp_this(src, precedence = 15);
 
-  if(
+  if (
     src.id() == "sideeffect" &&
     (src.statement() == "cpp_new" || src.statement() == "cpp_new[]"))
     return convert_cpp_new(src, precedence = 15);
 
-  if(src.id() == "cpp_delete" || src.id() == "cpp_delete[]")
+  if (src.id() == "cpp_delete" || src.id() == "cpp_delete[]")
     return convert_code_cpp_delete(src, precedence = 0);
 
-  if(src.id() == "unassigned")
+  if (src.id() == "unassigned")
     return "?";
 
-  if(src.id() == "pod_constructor")
+  if (src.id() == "pod_constructor")
     return "pod_constructor";
 
   return c_expr2stringt::convert(src, precedence);
@@ -376,26 +375,26 @@ std::string cpp_expr2stringt::convert_code(const codet &src, unsigned indent)
 {
   const irep_idt &statement = src.statement();
 
-  if(statement == "cpp_delete" || statement == "cpp_delete[]")
+  if (statement == "cpp_delete" || statement == "cpp_delete[]")
     return convert_code_cpp_delete(src, indent);
 
-  if(statement == "cpp_new" || statement == "cpp_new[]")
+  if (statement == "cpp_new" || statement == "cpp_new[]")
     return convert_cpp_new(src, indent);
 
   return c_expr2stringt::convert_code(src, indent);
 }
 
 std::string
-cpp_expr2string(const exprt &expr, const namespacet &ns, const bool fullname)
+cpp_expr2string(const exprt &expr, const namespacet &ns, unsigned flags)
 {
-  cpp_expr2stringt cpp_expr2string(ns, fullname);
+  cpp_expr2stringt cpp_expr2string(ns, flags);
   cpp_expr2string.get_shorthands(expr);
   return cpp_expr2string.convert(expr);
 }
 
 std::string
-cpp_type2string(const typet &type, const namespacet &ns, const bool fullname)
+cpp_type2string(const typet &type, const namespacet &ns, unsigned flags)
 {
-  cpp_expr2stringt cpp_expr2string(ns, fullname);
+  cpp_expr2stringt cpp_expr2string(ns, flags);
   return cpp_expr2string.convert(type);
 }

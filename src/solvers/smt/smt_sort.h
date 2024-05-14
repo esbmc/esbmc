@@ -94,7 +94,7 @@ public:
 
   size_t get_data_width() const
   {
-    if(id == SMT_SORT_ARRAY)
+    if (id == SMT_SORT_ARRAY)
       return data_width * range_sort->data_width;
     return data_width;
   }

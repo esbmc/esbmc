@@ -8,9 +8,11 @@ set(inputs
            stdlib.h
            string.h
            __esbmc/stddefs.h
+           semaphore.h
 
            # pthreads
            pthread.h
+           sched.h
            # Glibc
            bits/pthreadtypes.h
            bits/thread-shared-types.h

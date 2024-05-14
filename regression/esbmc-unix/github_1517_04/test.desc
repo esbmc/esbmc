@@ -1,0 +1,4 @@
+CORE
+main.c
+--deadlock-check --context-bound 2
+^VERIFICATION FAILED$

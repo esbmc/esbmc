@@ -18,7 +18,7 @@ smt_astt smt_tuple_sym_flattener::tuple_create(const expr2tc &structdef)
   smt_astt result =
     new tuple_sym_smt_ast(ctx, ctx->convert_sort(structdef->type), name);
 
-  for(unsigned int i = 0; i < structdef->get_num_sub_exprs(); i++)
+  for (unsigned int i = 0; i < structdef->get_num_sub_exprs(); i++)
   {
     smt_astt tmp = ctx->convert_ast(*structdef->get_sub_expr(i));
     smt_astt elem = result->project(ctx, i);
@@ -33,7 +33,7 @@ smt_astt smt_tuple_sym_flattener::tuple_fresh(smt_sortt s, std::string name)
   std::string n =
     (name == "") ? ctx->mk_fresh_name("tuple_fresh::") + "." : name;
 
-  if(s->id == SMT_SORT_ARRAY)
+  if (s->id == SMT_SORT_ARRAY)
     return new array_sym_smt_ast(ctx, s, n);
 
   return new tuple_sym_smt_ast(ctx, s, n);
@@ -46,7 +46,7 @@ smt_tuple_sym_flattener::mk_tuple_symbol(const std::string &name, smt_sortt s)
   // name. However, these names may become expressions again, then be converted
   // again, thus accumulating dots. So don't.
   std::string name2 = name;
-  if(name2[name2.size() - 1] != '.')
+  if (name2[name2.size() - 1] != '.')
     name2 += ".";
 
   assert(s->id != SMT_SORT_ARRAY);
@@ -79,12 +79,12 @@ smt_astt smt_tuple_sym_flattener::tuple_array_create(
 
   // Check size
   const array_type2t &arr_type = to_array_type(array_type);
-  if(arr_type.size_is_infinite)
+  if (arr_type.size_is_infinite)
   {
     // Guarentee nothing, this is modelling only.
     return newsym;
   }
-  if(!is_constant_int2t(arr_type.array_size))
+  if (!is_constant_int2t(arr_type.array_size))
   {
     log_error("Non-constant sized array of type constant_array_of2t");
     abort();
@@ -93,12 +93,12 @@ smt_astt smt_tuple_sym_flattener::tuple_array_create(
   const constant_int2t &thesize = to_constant_int2t(arr_type.array_size);
   unsigned int sz = thesize.value.to_uint64();
 
-  if(const_array)
+  if (const_array)
   {
     // Repeatedly store the same value into this at all the demanded
     // indexes.
     smt_astt init = inputargs[0];
-    for(unsigned int i = 0; i < sz; i++)
+    for (unsigned int i = 0; i < sz; i++)
     {
       newsym = newsym->update(ctx, init, i);
     }
@@ -107,7 +107,7 @@ smt_astt smt_tuple_sym_flattener::tuple_array_create(
   }
 
   // Repeatedly store operands into this.
-  for(unsigned int i = 0; i < sz; i++)
+  for (unsigned int i = 0; i < sz; i++)
   {
     newsym = newsym->update(ctx, inputargs[i], i);
   }
@@ -138,7 +138,7 @@ expr2tc smt_tuple_sym_flattener::tuple_get(const expr2tc &expr)
 
   // Run through all fields and despatch to 'get' again.
   unsigned int i = 0;
-  for(auto const &it : strct.members)
+  for (auto const &it : strct.members)
   {
     std::stringstream ss;
     ss << name << "." << strct.member_names[i];
@@ -148,10 +148,10 @@ expr2tc smt_tuple_sym_flattener::tuple_get(const expr2tc &expr)
   }
 
   // If it's a pointer, rewrite.
-  if(is_pointer_type(expr->type))
+  if (is_pointer_type(expr->type))
   {
     // Guard against free pointer value
-    if(is_nil_expr(outmem[0]))
+    if (is_nil_expr(outmem[0]))
       return expr2tc();
 
     unsigned int num = to_constant_int2t(outmem[0]).value.to_uint64();
@@ -182,7 +182,7 @@ smt_astt smt_tuple_sym_flattener::tuple_array_of(
   smt_astt newsym = new array_sym_smt_ast(ctx, sort, name);
 
   assert(subtype.members.size() == data.datatype_members.size());
-  for(unsigned long i = 0; i < subtype.members.size(); i++)
+  for (unsigned long i = 0; i < subtype.members.size(); i++)
   {
     const expr2tc &val = data.datatype_members[i];
     type2tc subarr_type = array_type2tc(val->type, arrsize, false);
@@ -212,7 +212,7 @@ expr2tc smt_tuple_sym_flattener::tuple_get_array_elem(
 
 smt_sortt smt_tuple_sym_flattener::mk_struct_sort(const type2tc &type)
 {
-  if(is_array_type(type))
+  if (is_array_type(type))
   {
     const array_type2t &arrtype = to_array_type(type);
     assert(

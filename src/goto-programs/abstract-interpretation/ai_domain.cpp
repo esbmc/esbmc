@@ -16,25 +16,25 @@ bool ai_domain_baset::ai_simplify_lhs(expr2tc &condition, const namespacet &ns)
   const
 {
   // Care must be taken here to give something that is still writable
-  if(is_index2t(condition))
+  if (is_index2t(condition))
   {
     bool no_simplification = ai_simplify(to_index2t(condition).index, ns);
-    if(!no_simplification)
+    if (!no_simplification)
       simplify(condition);
 
     return no_simplification;
   }
 
-  if(is_dereference2t(condition))
+  if (is_dereference2t(condition))
   {
     bool no_simplification = ai_simplify(to_dereference2t(condition).value, ns);
-    if(!no_simplification)
+    if (!no_simplification)
       simplify(condition);
 
     return no_simplification;
   }
 
-  if(is_member2t(condition))
+  if (is_member2t(condition))
   {
     // Since simplify_ai_lhs is required to return an addressable object
     // (so remains a valid left hand side), to simplify
@@ -42,7 +42,7 @@ bool ai_domain_baset::ai_simplify_lhs(expr2tc &condition, const namespacet &ns)
     // must also be addressable
     bool no_simplification =
       ai_simplify_lhs(to_member2t(condition).source_value, ns);
-    if(!no_simplification)
+    if (!no_simplification)
       simplify(condition);
 
     return no_simplification;

@@ -26,14 +26,14 @@ typedef struct atexit_key
 
 static __ESBMC_atexit_key *__ESBMC_atexits = NULL;
 
-void __atexit_handler()
+void __ESBMC_atexit_handler()
 {
 __ESBMC_HIDE:;
   // This is here to prevent k-induction from unwind the next loop unnecessarily
-  if(__ESBMC_atexits == NULL)
+  if (__ESBMC_atexits == NULL)
     return;
 
-  while(__ESBMC_atexits)
+  while (__ESBMC_atexits)
   {
     __ESBMC_atexits->atexit_func();
     __ESBMC_atexit_key *__ESBMC_tmp = __ESBMC_atexits->next;
@@ -47,7 +47,7 @@ int atexit(void (*func)(void))
 __ESBMC_HIDE:;
   __ESBMC_atexit_key *l =
     (__ESBMC_atexit_key *)malloc(sizeof(__ESBMC_atexit_key));
-  if(l == NULL)
+  if (l == NULL)
     return -1;
   l->atexit_func = func;
   l->next = __ESBMC_atexits;
@@ -60,7 +60,7 @@ __ESBMC_HIDE:;
 void exit(int status)
 {
 __ESBMC_HIDE:;
-  __atexit_handler();
+  __ESBMC_atexit_handler();
   __ESBMC_memory_leak_checks();
   __ESBMC_assume(0);
 }
@@ -70,7 +70,7 @@ _Bool __ESBMC_no_abnormal_memory_leak(void);
 void abort(void)
 {
 __ESBMC_HIDE:;
-  if(!__ESBMC_no_abnormal_memory_leak())
+  if (!__ESBMC_no_abnormal_memory_leak())
     __ESBMC_memory_leak_checks();
   __ESBMC_assume(0);
 }
@@ -86,12 +86,12 @@ __ESBMC_HIDE:;
 void *calloc(size_t nmemb, size_t size)
 {
 __ESBMC_HIDE:;
-  if(!nmemb)
+  if (!nmemb)
     return NULL;
 
   size_t total_size = nmemb * size;
   void *res = malloc(total_size);
-  if(res)
+  if (res)
     memset(res, 0, total_size);
   return res;
 }
@@ -103,25 +103,25 @@ __ESBMC_HIDE:;
   int sign = 1;
 
   // Handle whitespace
-  while(isspace(*str))
+  while (isspace(*str))
     str++;
 
   // Handle sign
-  if(*str == '-')
+  if (*str == '-')
   {
     sign = -1;
     str++;
   }
-  else if(*str == '+')
+  else if (*str == '+')
     str++;
 
   // Handle base
-  if(base == 0)
+  if (base == 0)
   {
-    if(*str == '0')
+    if (*str == '0')
     {
       base = 8;
-      if(tolower(str[1]) == 'x')
+      if (tolower(str[1]) == 'x')
       {
         base = 16;
         str += 2;
@@ -132,23 +132,23 @@ __ESBMC_HIDE:;
     else
       base = 10;
   }
-  else if(base == 16 && *str == '0' && tolower(str[1]) == 'x')
+  else if (base == 16 && *str == '0' && tolower(str[1]) == 'x')
     str += 2;
 
   // Convert digits
-  while(isdigit(*str) || (base == 16 && isxdigit(*str)))
+  while (isdigit(*str) || (base == 16 && isxdigit(*str)))
   {
     int digit = tolower(*str) - '0';
-    if(digit > 9)
+    if (digit > 9)
       digit -= 7;
-    if(result > (LONG_MAX - digit) / base)
+    if (result > (LONG_MAX - digit) / base)
       return sign == -1 ? LONG_MIN : LONG_MAX;
     result = result * base + digit;
     str++;
   }
 
   // Set end pointer
-  if(endptr != NULL)
+  if (endptr != NULL)
     *endptr = (char *)str;
 
   return sign * result;
@@ -172,21 +172,21 @@ static const unsigned char ATOI_MAP[256] = {
   type name(const char *s)                                                     \
   {                                                                            \
   __ESBMC_HIDE:;                                                               \
-    while(isspace(*s))                                                         \
+    while (isspace(*s))                                                        \
       s++;                                                                     \
     int neg = 0;                                                               \
-    if(*s == '-')                                                              \
+    if (*s == '-')                                                             \
     {                                                                          \
       neg = 1;                                                                 \
       s++;                                                                     \
     }                                                                          \
-    else if(*s == '+')                                                         \
+    else if (*s == '+')                                                        \
       s++;                                                                     \
     unsigned type r = 0;                                                       \
-    for(unsigned char c; (c = ATOI_MAP[(unsigned char)*s]); s++)               \
+    for (unsigned char c; (c = ATOI_MAP[(unsigned char)*s]); s++)              \
     {                                                                          \
       c--;                                                                     \
-      if(r > (TYPE##_MAX - c) / 10)                                            \
+      if (r > (TYPE##_MAX - c) / 10)                                           \
         return neg ? TYPE##_MIN : TYPE##_MAX;                                  \
       r *= 10;                                                                 \
       r += c;                                                                  \
@@ -205,7 +205,7 @@ char *getenv(const char *name)
 __ESBMC_HIDE:;
 
   _Bool found;
-  if(!found)
+  if (!found)
     return 0;
 
   char *buffer;
@@ -235,16 +235,16 @@ size_t strlcat(char *dst, const char *src, size_t siz)
   size_t dlen;
 
   /* Find the end of dst and adjust bytes left but don't go past end */
-  while(n-- != 0 && *d != '\0')
+  while (n-- != 0 && *d != '\0')
     d++;
   dlen = d - dst;
   n = siz - dlen;
 
-  if(n == 0)
+  if (n == 0)
     return (dlen + strlen(s));
-  while(*s != '\0')
+  while (*s != '\0')
   {
-    if(n != 1)
+    if (n != 1)
     {
       *d++ = *s;
       n--;
@@ -259,7 +259,7 @@ size_t strlcat(char *dst, const char *src, size_t siz)
 int posix_memalign(void **memptr, size_t align, size_t size)
 {
 __ESBMC_HIDE:;
-  if(
+  if (
     !align || (align & (align - 1)) || /* alignment must be a power of 2 */
     (size & (align - 1)) /* size must be a multiple of alignment */
   )
@@ -268,7 +268,7 @@ __ESBMC_HIDE:;
   void *r = malloc(size);
   errno = save;
   __ESBMC_assume(!((uintptr_t)r & (align - 1)));
-  if(size && !r)
+  if (size && !r)
     return ENOMEM;
   *memptr = r;
   return 0;
@@ -284,12 +284,12 @@ __ESBMC_HIDE:;
 
 int rand(void)
 {
-  return nondet_uint() % RAND_MAX;
+  return nondet_uint() % ((unsigned)RAND_MAX + 1);
 }
 
 long random(void)
 {
-  return nondet_ulong() % RAND_MAX;
+  return nondet_ulong() % ((unsigned)INT32_MAX + 1);
 }
 
 #if 0

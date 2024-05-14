@@ -1,5 +1,7 @@
 #pragma once
 
+#include <string>
+
 enum class StatementType
 {
   VARIABLE_ASSIGN,
@@ -10,17 +12,39 @@ enum class StatementType
   EXPR,
   RETURN,
   ASSERT,
+  CLASS_DEFINITION,
+  PASS,
+  IMPORT,
+  BREAK,
+  CONTINUE,
   UNKNOWN,
 };
 
 enum class ExpressionType
 {
-  UNARY_OPERATION,
   BINARY_OPERATION,
+  UNARY_OPERATION,
+  FUNC_CALL,
+  IF_EXPR,
   LOGICAL_OPERATION,
   LITERAL,
-  IF_EXPR,
+  SUBSCRIPT,
   VARIABLE_REF,
-  FUNC_CALL,
   UNKNOWN,
 };
+
+struct function_id
+{
+  std::string function_name;
+  std::string symbol_id;
+  std::string class_name;
+};
+
+bool is_builtin_type(const std::string &name);
+
+// TODO: Add a compilation flag or move it to a specific implementation
+bool is_consensus_type(const std::string &name);
+
+bool is_consensus_func(const std::string &name);
+
+std::string get_type_from_consensus_func(const std::string &name);

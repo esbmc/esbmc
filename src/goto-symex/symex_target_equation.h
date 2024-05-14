@@ -78,6 +78,10 @@ public:
     smt_convt::ast_vec &assertions,
     SSA_stept &s);
 
+  void reconstruct_symbolic_expression(expr2tc &expr, bool keep_local_variables)
+    const override;
+  void replace_rec(const SSA_stept &step, expr2tc &e, bool keep_local) const;
+
   class SSA_stept
   {
   public:
@@ -156,8 +160,8 @@ public:
   unsigned count_ignored_SSA_steps() const
   {
     unsigned i = 0;
-    for(const auto &SSA_step : SSA_steps)
-      if(SSA_step.ignore)
+    for (const auto &SSA_step : SSA_steps)
+      if (SSA_step.ignore)
         i++;
     return i;
   }
@@ -168,7 +172,7 @@ public:
   SSA_stepst::iterator get_SSA_step(unsigned s)
   {
     SSA_stepst::iterator it = SSA_steps.begin();
-    for(; s != 0; s--)
+    for (; s != 0; s--)
     {
       assert(it != SSA_steps.end());
       it++;

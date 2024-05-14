@@ -8,8 +8,9 @@ Date:
 
 \*******************************************************************/
 
-class QTimer {
+class QTimer
+{
 public:
-	QTimer();
-	~QTimer();
+  QTimer();
+  ~QTimer();
 };

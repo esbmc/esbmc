@@ -13,7 +13,7 @@ void clang_c_maint::init_variable(codet &dest, const symbolt &sym)
 {
   const exprt &value = sym.value;
 
-  if(value.is_nil())
+  if (value.is_nil())
     return;
 
   assert(!value.type().is_code());
@@ -41,13 +41,13 @@ void clang_c_maint::static_lifetime_init(const contextt &context, codet &dest)
 
   // Do assignments based on "value".
   context.foreach_operand_in_order([&dest, this](const symbolt &s) {
-    if(s.static_lifetime)
+    if (s.static_lifetime)
       init_variable(dest, s);
   });
 
   // call designated "initialization" functions
   context.foreach_operand_in_order([&dest](const symbolt &s) {
-    if(s.type.initialization() && s.type.is_code())
+    if (s.type.initialization() && s.type.is_code())
     {
       code_function_callt function_call;
       function_call.function() = symbol_expr(s);
@@ -65,32 +65,32 @@ bool clang_c_maint::clang_main()
   // find main symbol
   std::list<irep_idt> matches;
 
-  forall_symbol_base_map(it, context.symbol_base_map, main)
+  forall_symbol_base_map (it, context.symbol_base_map, main)
   {
     // if user provided class/contract name
-    if(!config.cname.empty() && !config.main.empty())
+    if (!config.cname.empty() && !config.main.empty())
     {
       const std::string fmt = "@" + config.cname + "@F@" + main;
-      if(it->second.as_string().find(fmt) == std::string::npos)
+      if (it->second.as_string().find(fmt) == std::string::npos)
         continue;
     }
     // look it up
     symbolt *s = context.find_symbol(it->second);
 
-    if(s == nullptr)
+    if (s == nullptr)
       continue;
 
-    if(s->type.is_code())
+    if (s->type.is_code())
       matches.push_back(it->second);
   }
 
-  if(matches.empty())
+  if (matches.empty())
   {
     log_error("main symbol `{}' not found", main);
     return true; // give up
   }
 
-  if(matches.size() >= 2)
+  if (matches.size() >= 2)
   {
     log_error("main symbol `{}' is ambiguous", main);
     return true;
@@ -100,13 +100,13 @@ bool clang_c_maint::clang_main()
 
   // look it up
   symbolt *s = context.find_symbol(main_symbol);
-  if(s == nullptr)
+  if (s == nullptr)
     return false; // give up, no main
 
   const symbolt &symbol = *s;
 
   // check if it has a body
-  if(symbol.value.is_nil())
+  if (symbol.value.is_nil())
     return false; // give up
 
   codet init_code;
@@ -125,13 +125,13 @@ bool clang_c_maint::clang_main()
   const code_typet::argumentst &arguments =
     to_code_type(symbol.type).arguments();
 
-  if(symbol.name == "main")
+  if (symbol.name == "main")
   {
-    if(arguments.size() == 0)
+    if (arguments.size() == 0)
     {
       // ok
     }
-    else if(arguments.size() == 2 || arguments.size() == 3)
+    else if (arguments.size() == 2 || arguments.size() == 3)
     {
       namespacet ns(context);
 
@@ -163,9 +163,9 @@ bool clang_c_maint::clang_main()
       // assume argc is at most MAX-1
       BigInt max;
 
-      if(argc_symbol.type.id() == "signedbv")
+      if (argc_symbol.type.id() == "signedbv")
         max = power(2, atoi(argc_symbol.type.width().c_str()) - 1) - 1;
-      else if(argc_symbol.type.id() == "unsignedbv")
+      else if (argc_symbol.type.id() == "unsignedbv")
         max = power(2, atoi(argc_symbol.type.width().c_str())) - 1;
       else
         assert(false);
@@ -199,7 +199,7 @@ bool clang_c_maint::clang_main()
 
       exprt::operandst &operands = call.arguments();
 
-      if(arguments.size() == 3)
+      if (arguments.size() == 3)
         operands.resize(3);
       else
         operands.resize(2);
@@ -223,7 +223,7 @@ bool clang_c_maint::clang_main()
       op1 = exprt("address_of", arg1.type());
       op1.move_to_operands(arg1_index);
 
-      if(arguments.size() == 3)
+      if (arguments.size() == 3)
       {
         const symbolt &envp_symbol = *ns.lookup("envp'");
         const symbolt &envp_size_symbol = *ns.lookup("envp_size'");
@@ -280,14 +280,16 @@ bool clang_c_maint::clang_main()
 
   code_function_callt thread_start_call;
   thread_start_call.location() = symbol.location;
-  thread_start_call.function() = symbol_exprt("c:@F@pthread_start_main_hook");
+  thread_start_call.function() =
+    symbol_exprt("c:@F@__ESBMC_pthread_start_main_hook");
   code_function_callt thread_end_call;
   thread_end_call.location() = symbol.location;
-  thread_end_call.function() = symbol_exprt("c:@F@pthread_end_main_hook");
+  thread_end_call.function() =
+    symbol_exprt("c:@F@__ESBMC_pthread_end_main_hook");
 
   code_function_callt atexit_call;
   atexit_call.location() = symbol.location;
-  atexit_call.function() = symbol_exprt("c:@F@__atexit_handler");
+  atexit_call.function() = symbol_exprt("c:@F@__ESBMC_atexit_handler");
 
   init_code.move_to_operands(thread_start_call);
   init_code.move_to_operands(call);
@@ -305,7 +307,7 @@ bool clang_c_maint::clang_main()
   new_symbol.type.swap(main_type);
   new_symbol.value.swap(init_code);
 
-  if(context.move(new_symbol))
+  if (context.move(new_symbol))
   {
     log_error("main already defined by another language module");
     return true;

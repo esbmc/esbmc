@@ -51,20 +51,26 @@ const struct group_opt_templ all_cmd_options[] = {
      "show value-set analysis during symbolic execution"}}},
 #ifdef ENABLE_SOLIDITY_FRONTEND
   {"Solidity frontend",
-   {
-     {"sol",
-      boost::program_options::value<std::string>()->value_name("path"),
-      ".sol and .solast file names"},
-     {"contract",
-      boost::program_options::value<std::string>()->value_name("cname"),
-      "set contract name"},
-   }},
+   {{"sol",
+     boost::program_options::value<std::string>()->value_name("path"),
+     ".sol and .solast file names"},
+    {"contract",
+     boost::program_options::value<std::string>()->value_name("cname"),
+     "set contract name"},
+    {"no-visibility",
+     NULL,
+     "force to verify every function, even it's an unreachable "
+     "internal/private function"}}},
 #endif
   {"Frontend",
    {{"include,I",
      boost::program_options::value<std::vector<std::string>>()->value_name(
        "path"),
      "set include path"},
+    {"include-file",
+     boost::program_options::value<std::vector<std::string>>()->value_name(
+       "file"),
+     "include files via frontend's -include option before anything else"},
     {"nostdinc", NULL, "do not include from standard system paths"},
     {"idirafter",
      boost::program_options::value<std::vector<std::string>>()->value_name(
@@ -77,9 +83,9 @@ const struct group_opt_templ all_cmd_options[] = {
     {"warning,W",
      boost::program_options::value<std::vector<std::string>>(),
      ""},
-    {"cppstd",
+    {"std",
      boost::program_options::value<std::string>()->value_name("version"),
-     "set C++ standard (available: 98, 03, 11, 14, or 17)"},
+     "set C/C++ standard version"},
     {"sysroot",
      boost::program_options::value<std::string>()->value_name("<path>"),
      "set the sysroot for the frontend"},
@@ -130,8 +136,9 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::string>(),
      "redirects every message into a file (no stdout/stderr)"},
     {"witness-output",
-     boost::program_options::value<std::string>(),
-     "generate the verification result witness in GraphML format"},
+     boost::program_options::value<std::string>()->value_name("{ path | - }"),
+     "generate the verification result witness in GraphML format; use '-' for "
+     "output to stdout"},
     {"witness-producer", boost::program_options::value<std::string>(), ""},
     {"witness-programfile", boost::program_options::value<std::string>(), ""},
     {"old-frontend",
@@ -285,7 +292,6 @@ const struct group_opt_templ all_cmd_options[] = {
     {"no-div-by-zero-check", NULL, "do not do division by zero check"},
     {"no-pointer-check", NULL, "do not do pointer check"},
     {"no-align-check", NULL, "do not check pointer alignment"},
-    {"no-pointer-relation-check", NULL, "do not check pointer relations"},
     {"no-unlimited-scanf-check",
      NULL,
      "do not do overflow check for scanf/fscanf with unlimited character "
@@ -328,7 +334,11 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::string>()->value_name("label"),
      "check if label is unreachable"},
     {"force-malloc-success", NULL, "do not check for malloc/new failure"},
-    {"malloc-zero-is-null", NULL, "force malloc(0) to return NULL"}}},
+    {"malloc-zero-is-null", NULL, "force malloc(0) to return NULL"},
+    {"enable-unreachability-intrinsic",
+     NULL,
+     "enable the functionality of the __ESBMC_unreachable() intrinsic, which "
+     "results in a verification failure when its call is reachable"}}},
   {"k-induction",
    {{"base-case", NULL, "check the base case"},
     {"forward-condition", NULL, "check the forward condition"},
@@ -444,54 +454,72 @@ const struct group_opt_templ all_cmd_options[] = {
     {"enable-core-dump", NULL, "do not disable core dump output"},
     {"no-simplify", NULL, "do not simplify any expression"},
     {"no-propagation", NULL, "disable constant propagation"},
+    {"gcse",
+     NULL,
+     "adds intermediate variables to precompute common sub-expressions between "
+     "assignments"},
     {"add-symex-value-sets",
      NULL,
      "enable value-set analysis for pointers and add assumes to the "
      "program"}}},
 
   {"DEBUG options",
-   {// Print commit hash for current binary
-    {"git-hash", NULL, ""},
-    // Check if there is two or more assingments to the same SSA instruction
-    {"double-assign-check", NULL, ""},
-    // Abort if the program contains a recursion
-    {"abort-on-recursion", NULL, ""},
-    /* see <https://github.com/esbmc/esbmc/pull/1281> for a list of supported
+   {
+     // Print commit hash for current binary
+     {"git-hash", NULL, ""},
+     // Check if there is two or more assingments to the same SSA instruction
+     {"double-assign-check", NULL, ""},
+     {"no-pointer-relation-check",
+      NULL,
+      "do not check whether pointers in order relations refer to the same "
+      "object (unsound)"},
+     // Abort if the program contains a recursion
+     {"abort-on-recursion", NULL, ""},
+     // LTL mode?
+     {"ltl", NULL, ""},
+     /* see <https://github.com/esbmc/esbmc/pull/1281> for a list of supported
      * modules; check "grep -rw 'log_debug(' src" for more up-to-date info. */
-    {"verbosity",
-     boost::program_options::value<std::vector<std::string>>(),
-     "Verbosity of log output, can be given multiple times. Parameter is "
-     "either a decimal N or 'module:N' to set the log-level of debug messages "
-     "of the module to N; without module, it sets the global log-level"},
-    // --break-at $insnnum will cause ESBMC to execute a trap
-    // instruction when it executes the designated GOTO instruction number.
-    {"break-at", boost::program_options::value<std::string>(), ""},
-    // I added some intrinsics along the line of "__ESBMC_switch_to_thread"
-    // that immediately transitioned to a particular thread and didn't allow
-    // any other exploration from that point. Useful for constructing an
-    // explicit multithreading path
-    {"direct-interleavings", NULL, ""},
-    // I think this dumps the current stack of all threads on an ileave point.
-    // Useful for working out the state of _all_ the threads and how they
-    // evolve, also see next flag,
-    {"print-stack-traces", NULL, ""},
-    // At every ileave point ESBMC stops and asks the user what thread to
-    // transition to. Useful again for trying to replicate a particular context
-    // switch order, or quickly explore what's reachable.
-    {"interactive-ileaves", NULL, ""},
-    {"add-false-assert",
-     NULL,
-     "insert a false assertion at the beginning of each function/branch and "
-     "the end of each function"},
-    {"make-assert-false", NULL, "convert every assertion to false"},
-    {"goto-coverage",
-     NULL,
-     "this activates --make-assert-false and --multi-property, "
-     "deactivates --keep-verified-claims, and "
-     "shows the coverage of assertion instances"},
-    {"goto-coverage-claims",
-     NULL,
-     "enable goto-coverage and shows all reached claims"}}},
+     {"verbosity",
+      boost::program_options::value<std::vector<std::string>>(),
+      "Verbosity of log output, can be given multiple times. Parameter is "
+      "either a decimal N or 'module:N' to set the log-level of debug messages "
+      "of the module to N; without module, it sets the global log-level"},
+     // --break-at $insnnum will cause ESBMC to execute a trap
+     // instruction when it executes the designated GOTO instruction number.
+     {"break-at", boost::program_options::value<std::string>(), ""},
+     // I added some intrinsics along the line of "__ESBMC_switch_to_thread"
+     // that immediately transitioned to a particular thread and didn't allow
+     // any other exploration from that point. Useful for constructing an
+     // explicit multithreading path
+     {"direct-interleavings", NULL, ""},
+     // Used to print out the instructions that had been identified as touching
+     // global variables, thus instructions that cause interleavings. Probably
+     // isn't sound any more seeing how we don't do the static pointer analysis
+     // any more.
+     {"show-ileave-points", NULL, ""},
+     // I think this dumps the current stack of all threads on an ileave point.
+     // Useful for working out the state of _all_ the threads and how they
+     // evolve, also see next flag,
+     {"print-stack-traces", NULL, ""},
+     // At every ileave point ESBMC stops and asks the user what thread to
+     // transition to. Useful again for trying to replicate a particular context
+     // switch order, or quickly explore what's reachable.
+     {"interactive-ileaves", NULL, ""},
+     {"add-false-assert",
+      NULL,
+      "insert a false assertion at the beginning of each function/branch and "
+      "the end of each function"},
+     {"make-assert-false", NULL, "convert every assertion to false"},
+     {"goto-coverage",
+      NULL,
+      "this activates --make-assert-false and --multi-property, "
+      "deactivates --keep-verified-claims, and "
+      "shows the coverage of assertion instances"},
+     {"goto-coverage-claims",
+      NULL,
+      "enable goto-coverage and shows all reached claims"},
+     {"segfault-handler", NULL, "print stacktrace on segmentation fault"},
+   }},
   {"end", {{"", NULL, "end of options"}}},
   {"Hidden Options",
    {{"depth", boost::program_options::value<int>(), "instruction"},

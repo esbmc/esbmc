@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--cheri hybrid
+^VERIFICATION SUCCESSFUL$

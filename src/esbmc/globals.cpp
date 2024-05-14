@@ -19,6 +19,3 @@ const mode_table_et mode_table[] = {
   LANGAPI_MODE_PYTHON,
 #endif
   LANGAPI_MODE_END};
-
-extern "C" const uint8_t buildidstring_buf[];
-extern "C" const uint8_t *const esbmc_version_string = buildidstring_buf;

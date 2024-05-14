@@ -10,7 +10,7 @@ void jimple_type::from_json(const json &j)
 
 typet jimple_type::get_base_type(const contextt &ctx) const
 {
-  switch(bt)
+  switch (bt)
   {
   case BASE_TYPES::INT:
     return int_type();
@@ -23,7 +23,7 @@ typet jimple_type::get_base_type(const contextt &ctx) const
 
   default:
     auto symbol = ctx.find_symbol("tag-" + name);
-    if(symbol == nullptr)
+    if (symbol == nullptr)
       throw "Type not found: " + name;
     return pointer_typet(symbol->type);
   }
@@ -31,7 +31,7 @@ typet jimple_type::get_base_type(const contextt &ctx) const
 
 typet jimple_type::to_typet(const contextt &ctx) const
 {
-  if(is_array())
+  if (is_array())
     return get_arr_type(ctx);
   return get_base_type(ctx);
 }

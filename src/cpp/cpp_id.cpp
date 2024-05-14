@@ -27,9 +27,9 @@ void cpp_idt::print(std::ostream &out, unsigned indent) const
 {
   print_fields(out, indent);
 
-  if(!sub.empty())
+  if (!sub.empty())
   {
-    for(const auto &it : sub)
+    for (const auto &it : sub)
       it.second.print(out, indent + 2);
 
     out << std::endl;
@@ -38,46 +38,46 @@ void cpp_idt::print(std::ostream &out, unsigned indent) const
 
 void cpp_idt::print_fields(std::ostream &out, unsigned indent) const
 {
-  for(unsigned i = 0; i < indent; i++)
+  for (unsigned i = 0; i < indent; i++)
     out << ' ';
   out << "**identifier=" << identifier << std::endl;
 
-  for(unsigned i = 0; i < indent; i++)
+  for (unsigned i = 0; i < indent; i++)
     out << ' ';
   out << "  prefix=" << prefix << std::endl;
 
-  for(unsigned i = 0; i < indent; i++)
+  for (unsigned i = 0; i < indent; i++)
     out << ' ';
   out << "  base_name=" << base_name << std::endl;
 
-  for(unsigned i = 0; i < indent; i++)
+  for (unsigned i = 0; i < indent; i++)
     out << ' ';
   out << "  method=" << is_method << std::endl;
 
-  if(original_scope != nullptr)
+  if (original_scope != nullptr)
   {
-    for(unsigned i = 0; i < indent; i++)
+    for (unsigned i = 0; i < indent; i++)
       out << ' ';
     out << "  original_scope=" << original_scope->identifier << std::endl;
   }
 
-  for(unsigned i = 0; i < indent; i++)
+  for (unsigned i = 0; i < indent; i++)
     out << ' ';
   out << "  is_static_member=" << is_static_member << std::endl;
 
-  for(unsigned i = 0; i < indent; i++)
+  for (unsigned i = 0; i < indent; i++)
     out << ' ';
   out << "  is_scope=" << is_scope << std::endl;
 
-  for(unsigned i = 0; i < indent; i++)
+  for (unsigned i = 0; i < indent; i++)
     out << ' ';
   out << "  is_constructor=" << is_constructor << std::endl;
 
-  for(unsigned i = 0; i < indent; i++)
+  for (unsigned i = 0; i < indent; i++)
     out << ' ';
   out << "  class_identifier=" << class_identifier << std::endl;
 
-  for(unsigned i = 0; i < indent; i++)
+  for (unsigned i = 0; i < indent; i++)
     out << ' ';
   out << "  id_class=" << id_class << std::endl;
 }
@@ -90,7 +90,7 @@ std::ostream &operator<<(std::ostream &out, const cpp_idt &cpp_id)
 
 std::ostream &operator<<(std::ostream &out, const cpp_idt::id_classt &id_class)
 {
-  switch(id_class)
+  switch (id_class)
   {
   case cpp_idt::UNKNOWN:
     out << "UNKNOWN";

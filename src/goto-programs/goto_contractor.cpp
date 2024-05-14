@@ -1,6 +1,5 @@
 #include <goto-programs/goto_contractor.h>
 #include <goto-programs/abstract-interpretation/interval_domain.h>
-#include <goto-programs/abstract-interpretation/interval_analysis.h>
 
 void goto_contractor(
   goto_functionst &goto_functions,
@@ -15,13 +14,13 @@ void goto_contractor(
 void goto_contractort::get_contractors(goto_functionst goto_functions)
 {
   auto function = goto_functions.function_map.find("c:@F@main");
-  for(const auto &ins : function->second.body.instructions)
+  for (const auto &ins : function->second.body.instructions)
   {
-    if(ins.is_assert())
+    if (ins.is_assert())
     {
       contractors.add_contractor(parser.parse(ins.guard), ins.location_number);
     }
-    else if(
+    else if (
       ins.is_function_call() &&
       is_symbol2t(to_code_function_call2t(ins.code).function) &&
       to_symbol2t(to_code_function_call2t(ins.code).function)
@@ -44,9 +43,9 @@ void goto_contractort::get_intervals(
 
   auto f_it = goto_functions.function_map.find("c:@F@main");
   {
-    Forall_goto_program_instructions(i_it, f_it->second.body)
+    Forall_goto_program_instructions (i_it, f_it->second.body)
     {
-      if(
+      if (
         i_it->is_assert() ||
         (i_it->is_function_call() &&
          is_symbol2t(to_code_function_call2t(i_it->code).function) &&
@@ -54,11 +53,17 @@ void goto_contractort::get_intervals(
              .get_symbol_name() == "c:@F@__VERIFIER_assert"))
       {
         auto it = map.var_map.begin();
-        while(it != map.var_map.end())
+        while (it != map.var_map.end())
         {
           auto var_name = to_symbol2t(it->second.getSymbol()).get_symbol_name();
-          auto new_interval = interval_analysis[i_it].get_int_map()[var_name];
-          if(!new_interval.is_top())
+          auto _new_interval = interval_analysis[i_it].intervals->at(var_name);
+          if (_new_interval.index() != 0)
+          {
+            it++;
+            continue;
+          }
+          interval_templatet<BigInt> new_interval = *std::get<0>(_new_interval);
+          if (!new_interval.is_top())
           {
             auto lb = new_interval.get_lower().to_int64();
             auto ub = new_interval.get_upper().to_int64();
@@ -68,9 +73,9 @@ void goto_contractort::get_intervals(
                 << " Var: " << var_name << " this out " << i
                 << " should be: " << new_interval << std::endl;
 
-            if(new_interval.lower && (isinf(i.lb()) || i.lb() > lb))
+            if (new_interval.lower && (isinf(i.lb()) || i.lb() > lb))
               map.update_lb_interval(lb, var_name);
-            if(new_interval.upper && (isinf(i.ub()) || i.ub() < ub))
+            if (new_interval.upper && (isinf(i.ub()) || i.ub() < ub))
               map.update_ub_interval(ub, var_name);
           }
           it++;
@@ -88,14 +93,14 @@ void goto_contractort::parse_intervals(expr2tc expr)
 
   expr = get_base_object(expr);
 
-  if(is_and2t(expr))
+  if (is_and2t(expr))
   {
     parse_intervals(to_and2t(expr).side_1);
     parse_intervals(to_and2t(expr).side_2);
     return;
   }
 
-  if(!is_comp_expr(expr))
+  if (!is_comp_expr(expr))
     return;
 
   const relation_data &rel = dynamic_cast<const relation_data &>(*expr);
@@ -106,25 +111,25 @@ void goto_contractort::parse_intervals(expr2tc expr)
   auto side2 = rel.side_2;
 
   auto obj = get_base_object(side1);
-  if(!is_symbol2t(obj))
+  if (!is_symbol2t(obj))
     return;
 
   bool neg = false;
-  if(is_neg2t(side2))
+  if (is_neg2t(side2))
   {
     neg = true;
     side2 = to_neg2t(side2).value;
   }
 
-  if(!is_constant_int2t(side2))
+  if (!is_constant_int2t(side2))
     return;
 
   value = to_constant_int2t(side2).as_long() * (neg ? -1 : 1) + (neg ? -1 : 1);
 
   std::string symbol_name = to_symbol2t(obj).get_symbol_name();
-  if(map.find(symbol_name) == CspMap::NOT_FOUND)
+  if (map.find(symbol_name) == CspMap::NOT_FOUND)
     return;
-  switch(expr->expr_id)
+  switch (expr->expr_id)
   {
   case expr2t::expr_ids::greaterthan_id:
   case expr2t::expr_ids::greaterthanequal_id:
@@ -146,8 +151,8 @@ void goto_contractort::insert_assume(goto_functionst goto_functions)
   unsigned int last_loc = 0;
 
   ///This loop is to find the last loop in the code based on location
-  for(auto &function_loop : function_loops)
-    if(last_loc < function_loop.get_original_loop_head()->location_number)
+  for (auto &function_loop : function_loops)
+    if (last_loc < function_loop.get_original_loop_head()->location_number)
     {
       loop = function_loop;
       last_loc = loop.get_original_loop_head()->location_number;
@@ -159,7 +164,7 @@ void goto_contractort::insert_assume(goto_functionst goto_functions)
 
   auto goto_function = goto_functions.function_map.find("c:@F@main")->second;
 
-  if(map.is_empty_set())
+  if (map.is_empty_set())
   {
     auto cond = gen_zero(int_type2());
     goto_programt tmp_e;
@@ -170,11 +175,11 @@ void goto_contractort::insert_assume(goto_functionst goto_functions)
     goto_function.body.destructive_insert(loop_exit, tmp_e);
   }
   else
-    for(auto const &var : map.var_map)
+    for (auto const &var : map.var_map)
     {
       //testing with updating both bounds after reduction.
       expr2tc X = var.second.getSymbol();
-      if(var.second.isIntervalChanged())
+      if (var.second.isIntervalChanged())
       {
         auto ub = create_value_expr(var.second.getInterval().ub(), int_type2());
         auto cond2 = create_lessthanequal_relation(X, ub);
@@ -219,7 +224,7 @@ bool goto_contractort::initialize_main_function_loops()
   {
     number_of_functions++;
     runOnFunction(*it);
-    if(it->second.body_available)
+    if (it->second.body_available)
     {
       goto_loopst goto_loops(it->first, goto_functions, it->second);
       this->function_loops = goto_loops.get_loops();
@@ -237,24 +242,24 @@ void goto_contractort::insert_assume_at(
   /// We start with a true expression and add other conditions with and2tc
   /// eventually, we will have somthing like: true and x>0 and x<10
   expr2tc cond = gen_true_expr();
-  for(auto const &var : map.var_map)
+  for (auto const &var : map.var_map)
   {
     //testing with updating both bounds after reduction.
     auto X = var.second.getSymbol();
     {
-      if(var.second.getInterval().is_empty())
+      if (var.second.getInterval().is_empty())
         continue;
-      if(
+      if (
         isinf(var.second.getInterval().lb()) &&
         isinf(var.second.getInterval().ub()))
         continue;
-      if(!isinf(var.second.getInterval().lb()))
+      if (!isinf(var.second.getInterval().lb()))
       {
         auto lb = create_value_expr(var.second.getInterval().lb(), int_type2());
         auto cond1 = greaterthanequal2tc(X, lb);
         cond = and2tc(cond, cond1);
       }
-      if(!isinf(var.second.getInterval().ub()))
+      if (!isinf(var.second.getInterval().ub()))
       {
         auto ub = create_value_expr(var.second.getInterval().ub(), int_type2());
         auto cond2 = lessthanequal2tc(X, ub);
@@ -289,16 +294,16 @@ void goto_contractort::goto_contractor_condition(
   interval_analysis(goto_functions, namespacet);
   std::ostringstream oss;
 
-  Forall_goto_functions(f_it, goto_functions)
+  Forall_goto_functions (f_it, goto_functions)
   {
-    Forall_goto_program_instructions(i_it, f_it->second.body)
+    Forall_goto_program_instructions (i_it, f_it->second.body)
     {
-      if(i_it->is_goto() && !is_true(i_it->guard)) //if or if-else or loop
+      if (i_it->is_goto() && !is_true(i_it->guard)) //if or if-else or loop
       {
         Contractor contractor;
 
         //create contractor and domains
-        if(is_not2t(i_it->guard))
+        if (is_not2t(i_it->guard))
         {
           vars = new ibex::Variable(CspMap::MAX_VAR);
           map = CspMap();
@@ -306,24 +311,24 @@ void goto_contractort::goto_contractor_condition(
           contractor = Contractor(parser.parse(to_not2t(i_it->guard).value), 0);
 
           auto out = contractor.get_outer();
-          if(out == nullptr)
+          if (out == nullptr)
           {
             continue;
           }
 
           interval_analysis(goto_functions, namespacet);
-          auto interval_map = interval_analysis[i_it].get_int_map();
-          auto it = interval_map.begin();
-
-          while(it != interval_map.end())
+          for (const auto &i : *interval_analysis[i_it].intervals)
           {
-            if(it->second.lower)
+            if (i.second.index() != 0)
+              continue;
+
+            const interval_templatet<BigInt> &value = *std::get<0>(i.second);
+            if (value.lower)
               map.update_lb_interval(
-                it->second.get_lower().to_int64(), it->first.as_string());
-            if(it->second.upper)
+                value.get_lower().to_int64(), i.first.as_string());
+            if (value.upper)
               map.update_ub_interval(
-                it->second.get_upper().to_int64(), it->first.as_string());
-            it++;
+                value.get_upper().to_int64(), i.first.as_string());
           }
 
           auto in = contractor.get_inner();
@@ -339,9 +344,9 @@ void goto_contractort::goto_contractor_condition(
           auto goto_target = i_it->get_target();
           goto_target--;
 
-          if(goto_target->is_goto()) //tarrget-1 is goto and
+          if (goto_target->is_goto()) //tarrget-1 is goto and
           {
-            if(!goto_target->is_backwards_goto())
+            if (!goto_target->is_backwards_goto())
             {
               // IF-ELSE
               //ELSE clause gets the inner contractor results
@@ -366,10 +371,10 @@ void goto_contractort::goto_contractor_condition(
 
             insert_assume_at(f_it->second, next);
           }
-          delete(vars);
+          delete (vars);
         }
       }
-      if(
+      if (
         i_it->is_assert() ||
         (i_it->is_function_call() &&
          is_symbol2t(to_code_function_call2t(i_it->code).function) &&
@@ -383,25 +388,27 @@ void goto_contractort::goto_contractor_condition(
         parser = expr_to_ibex_parser(&map, vars);
         Contractor contractor(parser.parse(i_it->guard), 0);
         auto out = contractor.get_outer();
-        if(out == nullptr)
+        if (out == nullptr)
         {
           continue;
         }
 
         //get intervals and convert them to ibex intervals by updating the map
         interval_analysis(goto_functions, namespacet);
-        auto interval_map = interval_analysis[i_it].get_int_map();
-        auto it = interval_map.begin();
-        while(it != interval_map.end())
+        for (const auto &i : *interval_analysis[i_it].intervals)
         {
-          if(it->second.lower)
+          if (i.second.index() != 0)
+            continue;
+
+          const interval_templatet<BigInt> &value = *std::get<0>(i.second);
+          if (value.lower)
             map.update_lb_interval(
-              it->second.get_lower().to_int64(), it->first.as_string());
-          if(it->second.upper)
+              value.get_lower().to_int64(), i.first.as_string());
+          if (value.upper)
             map.update_ub_interval(
-              it->second.get_upper().to_int64(), it->first.as_string());
-          it++;
+              value.get_upper().to_int64(), i.first.as_string());
         }
+
         auto X = map.create_interval_vector();
 
         out->contract(X);
@@ -411,7 +418,7 @@ void goto_contractort::goto_contractor_condition(
         next++;
 
         insert_assume_at(f_it->second, next);
-        delete(vars);
+        delete (vars);
       }
     }
   }
@@ -459,11 +466,10 @@ vart::vart()
 {
 }
 
-void vart::dump()
+void vart::dump() const
 {
   std::ostringstream oss;
-  oss << to_symbol2t(this->getSymbol()).get_symbol_name() << this->getInterval()
-      << "\n";
+  oss << this->var_name << " " << this->getInterval();
   log_status("{}", oss.str());
 }
 
@@ -474,29 +480,29 @@ expr_to_ibex_parser::create_contractor_from_expr2t(const expr2tc &expr)
   ibex::Ctc *contractor = nullptr;
   expr2tc base_object = get_base_object(expr);
 
-  if(is_not2t(expr))
+  if (is_not2t(expr))
   {
     auto not_ = to_not2t(base_object);
     contractor = create_contractor_from_expr2t_not(not_.value);
   }
-  else if(is_constraint_operator(expr))
+  else if (is_constraint_operator(expr))
   {
     auto cons = create_constraint_from_expr2t(base_object);
-    if(cons == nullptr)
+    if (cons == nullptr)
       return nullptr;
     contractor = new ibex::CtcFwdBwd(*cons);
     vector_ctc.push_back(contractor);
   }
   else
   {
-    switch(base_object->expr_id)
+    switch (base_object->expr_id)
     {
     case expr2t::expr_ids::and_id:
     {
       auto logic_op = to_and2t(base_object);
       auto side1 = create_contractor_from_expr2t(logic_op.side_1);
       auto side2 = create_contractor_from_expr2t(logic_op.side_2);
-      if(side1 != nullptr && side2 != nullptr)
+      if (side1 != nullptr && side2 != nullptr)
       {
         contractor = new ibex::CtcCompo(*side1, *side2);
         vector_ctc.push_back(contractor);
@@ -508,7 +514,7 @@ expr_to_ibex_parser::create_contractor_from_expr2t(const expr2tc &expr)
       auto logic_op = to_or2t(base_object);
       auto side1 = create_contractor_from_expr2t(logic_op.side_1);
       auto side2 = create_contractor_from_expr2t(logic_op.side_2);
-      if(side1 != nullptr && side2 != nullptr)
+      if (side1 != nullptr && side2 != nullptr)
       {
         contractor = new ibex::CtcUnion(*side1, *side2);
         vector_ctc.push_back(contractor);
@@ -521,7 +527,7 @@ expr_to_ibex_parser::create_contractor_from_expr2t(const expr2tc &expr)
       auto rel = to_notequal2t(base_object);
       ibex::Function *f = create_function_from_expr2t(rel.side_1);
       ibex::Function *g = create_function_from_expr2t(rel.side_2);
-      if(g == nullptr || f == nullptr)
+      if (g == nullptr || f == nullptr)
         return nullptr;
 
       auto *side1 = new ibex::NumConstraint(*vars, (*f)(*vars) > (*g)(*vars));
@@ -557,29 +563,29 @@ expr_to_ibex_parser::create_contractor_from_expr2t_not(const expr2tc &expr)
   ibex::Ctc *contractor = nullptr;
   auto base_object = get_base_object(expr);
 
-  if(is_not2t(expr))
+  if (is_not2t(expr))
   {
     auto not_ = to_not2t(base_object);
     contractor = create_contractor_from_expr2t(not_.value);
   }
-  else if(is_constraint_operator_not(expr))
+  else if (is_constraint_operator_not(expr))
   {
     auto cons = create_constraint_from_expr2t_not(base_object);
-    if(cons == nullptr)
+    if (cons == nullptr)
       return nullptr;
     contractor = new ibex::CtcFwdBwd(*cons);
     vector_ctc.push_back(contractor);
   }
   else
   {
-    switch(base_object->expr_id)
+    switch (base_object->expr_id)
     {
     case expr2t::expr_ids::or_id:
     {
       auto logic_op = to_or2t(base_object);
       auto side1 = create_contractor_from_expr2t_not(logic_op.side_1);
       auto side2 = create_contractor_from_expr2t_not(logic_op.side_2);
-      if(side1 != nullptr && side2 != nullptr)
+      if (side1 != nullptr && side2 != nullptr)
       {
         contractor = new ibex::CtcCompo(*side1, *side2);
         vector_ctc.push_back(contractor);
@@ -591,7 +597,7 @@ expr_to_ibex_parser::create_contractor_from_expr2t_not(const expr2tc &expr)
       auto logic_op = to_and2t(base_object);
       auto side1 = create_contractor_from_expr2t_not(logic_op.side_1);
       auto side2 = create_contractor_from_expr2t_not(logic_op.side_2);
-      if(side1 != nullptr && side2 != nullptr)
+      if (side1 != nullptr && side2 != nullptr)
       {
         contractor = new ibex::CtcUnion(*side1, *side2);
         vector_ctc.push_back(contractor);
@@ -603,7 +609,7 @@ expr_to_ibex_parser::create_contractor_from_expr2t_not(const expr2tc &expr)
       auto rel = to_equality2t(base_object);
       ibex::Function *f = create_function_from_expr2t(rel.side_1);
       ibex::Function *g = create_function_from_expr2t(rel.side_2);
-      if(g == nullptr || f == nullptr)
+      if (g == nullptr || f == nullptr)
         return nullptr;
       auto *side1 = new ibex::NumConstraint(*vars, (*f)(*vars) > (*g)(*vars));
       auto *side2 = new ibex::NumConstraint(*vars, (*f)(*vars) < (*g)(*vars));
@@ -651,13 +657,13 @@ expr_to_ibex_parser::create_constraint_from_expr2t(const expr2tc &expr)
   ibex::NumConstraint *c = nullptr;
   auto base_object = get_base_object(expr);
 
-  if(is_unsupported_operator_in_constraint(expr))
+  if (is_unsupported_operator_in_constraint(expr))
   {
     parse_error(expr);
     return nullptr;
   }
 
-  if(is_not2t(expr))
+  if (is_not2t(expr))
   {
     c = create_constraint_from_expr2t_not(to_not2t(base_object).value);
     return c;
@@ -667,10 +673,10 @@ expr_to_ibex_parser::create_constraint_from_expr2t(const expr2tc &expr)
   ibex::Function *f, *g;
   f = create_function_from_expr2t(rel->side_1);
   g = create_function_from_expr2t(rel->side_2);
-  if(f == nullptr || g == nullptr)
+  if (f == nullptr || g == nullptr)
     return nullptr;
 
-  switch(base_object->expr_id)
+  switch (base_object->expr_id)
   {
   case expr2t::expr_ids::greaterthanequal_id:
     c = new ibex::NumConstraint(*vars, (*f)(*vars) >= (*g)(*vars));
@@ -701,12 +707,12 @@ expr_to_ibex_parser::create_constraint_from_expr2t_not(const expr2tc &expr)
 {
   ibex::NumConstraint *c;
 
-  if(is_unsupported_operator_in_constraint_not(expr))
+  if (is_unsupported_operator_in_constraint_not(expr))
   {
     parse_error(expr);
     return nullptr;
   }
-  if(is_not2t(expr))
+  if (is_not2t(expr))
   {
     c = create_constraint_from_expr2t(to_not2t(expr).value);
     return c;
@@ -717,9 +723,9 @@ expr_to_ibex_parser::create_constraint_from_expr2t_not(const expr2tc &expr)
   ibex::Function *f, *g;
   f = create_function_from_expr2t(rel->side_1);
   g = create_function_from_expr2t(rel->side_2);
-  if(f == nullptr || g == nullptr)
+  if (f == nullptr || g == nullptr)
     return nullptr;
-  switch(get_base_object(expr)->expr_id)
+  switch (get_base_object(expr)->expr_id)
   {
   case expr2t::expr_ids::lessthan_id:
     c = new ibex::NumConstraint(*vars, (*f)(*vars) >= (*g)(*vars));
@@ -766,27 +772,27 @@ ibex::Function *expr_to_ibex_parser::create_function_from_expr2t(expr2tc expr)
   ibex::Function *f = nullptr;
   ibex::Function *g, *h;
 
-  if(is_comp_expr(expr))
+  if (is_comp_expr(expr))
   {
     parse_error(expr);
     return nullptr;
   }
-  switch(expr->expr_id)
+  switch (expr->expr_id)
   {
   case expr2t::expr_ids::add_id:
   case expr2t::expr_ids::sub_id:
   case expr2t::expr_ids::mul_id:
   case expr2t::expr_ids::div_id:
   {
-    if(!is_arith_expr(expr))
+    if (!is_arith_expr(expr))
       return nullptr;
     auto arith_op = &dynamic_cast<const arith_2ops &>(*get_base_object(expr));
     g = create_function_from_expr2t(arith_op->side_1);
     h = create_function_from_expr2t(arith_op->side_2);
-    if(g == nullptr || h == nullptr)
+    if (g == nullptr || h == nullptr)
       return nullptr;
 
-    switch(arith_op->expr_id)
+    switch (arith_op->expr_id)
     {
     case expr2t::expr_ids::add_id:
       f = new ibex::Function(*vars, (*g)(*vars) + (*h)(*vars));
@@ -808,7 +814,7 @@ ibex::Function *expr_to_ibex_parser::create_function_from_expr2t(expr2tc expr)
   case expr2t::expr_ids::neg_id:
   {
     h = create_function_from_expr2t(to_neg2t(expr).value);
-    if(h == nullptr)
+    if (h == nullptr)
       return nullptr;
     f = new ibex::Function(*vars, -(*h)(*vars));
     break;
@@ -816,12 +822,12 @@ ibex::Function *expr_to_ibex_parser::create_function_from_expr2t(expr2tc expr)
   case expr2t::expr_ids::symbol_id:
   {
     int index = create_variable_from_expr2t(expr);
-    if(index == CspMap::NOT_FOUND)
+    if (index == CspMap::NOT_FOUND)
     {
       log_error("MAX VAR SIZE REACHED");
       return nullptr;
     }
-    else if(index == CspMap::IGNORE)
+    else if (index == CspMap::IGNORE)
     {
       log_debug("contractor", "Expression contains ignored variable name");
       return nullptr;
@@ -859,10 +865,10 @@ ibex::Function *expr_to_ibex_parser::create_function_from_expr2t(expr2tc expr)
 
 int expr_to_ibex_parser::create_variable_from_expr2t(expr2tc expr)
 {
-  if(is_symbol2t(expr))
+  if (is_symbol2t(expr))
   {
     std::string var_name = to_symbol2t(expr).get_symbol_name();
-    if(
+    if (
       var_name == "c:stdlib.c@__ESBMC_atexits" || var_name == "NULL" ||
       has_prefix(var_name, "c:@__ESBMC"))
       return map->IGNORE;
@@ -880,43 +886,56 @@ void expr_to_ibex_parser::parse_error(const expr2tc &expr)
   log_debug("contractor", "{}", oss.str());
 }
 
+#if 0
 void interval_analysis_ibex_contractor::maps_to_domains(
   int_mapt int_map,
   real_mapt real_map)
 {
   auto t_0 = std::chrono::steady_clock::now();
   auto it = int_map.begin();
-  while(it != int_map.end())
+  while (it != int_map.end())
   {
-    if(map.find(it->first.as_string()) == -1)
+    auto index = map.find(it->first.as_string());
+    if (index == CspMap::NOT_FOUND)
     {
       it++;
       continue;
     }
 
-    if(it->second.lower)
+    auto is_unsigned = is_unsignedbv_type(
+      map.var_map.find(it->first.as_string())->second.getSymbol());
+
+    if (it->second.lower)
     {
-      map.update_lb_interval(
-        it->second.get_lower().to_int64(), it->first.as_string());
+      if (is_unsigned)
+        map.update_lb_interval(
+          it->second.get_lower().to_uint64(), it->first.as_string());
+      else
+        map.update_lb_interval(
+          it->second.get_lower().to_int64(), it->first.as_string());
     }
 
-    if(it->second.upper)
+    if (it->second.upper)
     {
-      map.update_ub_interval(
-        it->second.get_upper().to_int64(), it->first.as_string());
+      if (is_unsigned)
+        map.update_ub_interval(
+          it->second.get_upper().to_uint64(), it->first.as_string());
+      else
+        map.update_ub_interval(
+          it->second.get_upper().to_int64(), it->first.as_string());
     }
     it++;
   }
 
   auto rit = real_map.begin();
-  while(rit != real_map.end())
+  while (rit != real_map.end())
   {
-    if(rit->second.lower)
+    if (rit->second.lower)
     {
       map.update_lb_interval(
         (double)rit->second.get_lower(), rit->first.as_string());
     }
-    if(rit->second.upper)
+    if (rit->second.upper)
     {
       map.update_ub_interval(
         (double)rit->second.get_upper(), rit->first.as_string());
@@ -927,15 +946,26 @@ void interval_analysis_ibex_contractor::maps_to_domains(
     std::chrono::duration<double>(std::chrono::steady_clock::now() - t_0)
       .count();
 }
-
+#endif
 void interval_analysis_ibex_contractor::apply_contractor()
 {
   auto t_0 = std::chrono::steady_clock::now();
   auto X = map.create_interval_vector();
   auto c_out = contractor.get_outer();
+  auto Y = X;
+  int i = 5;
 
   c_out->contract(X);
 
+  //Find a fixed point in 5 or fewer iterations
+  while (Y != X && i >= 0)
+  {
+    Y = X;
+    c_out->contract(X);
+    i--;
+  }
+
+  //copy results to map_outer
   map_outer = CspMap(map);
   map_outer.update_intervals(X);
   apply_time =
@@ -943,71 +973,67 @@ void interval_analysis_ibex_contractor::apply_contractor()
       .count();
 }
 
-expr2tc interval_analysis_ibex_contractor::result_of_outer(expr2tc exp)
+expr2tc interval_analysis_ibex_contractor::result_of_outer()
 {
-  expr2tc cond = exp;
+  expr2tc cond = gen_true_expr();
 
-  if(map_outer.is_empty_set())
+  if (map_outer.is_empty_set())
     return gen_false_expr();
   else
   {
-    for(auto const &var : map_outer.var_map)
+    for (auto const &var : map_outer.var_map)
     {
       //testing with updating both bounds after reduction.
       expr2tc X = var.second.getSymbol();
 
       //if empty, skip
-      if(var.second.getInterval().is_empty())
+      if (var.second.getInterval().is_empty())
         continue;
 
       //if unbounded, skip
-      if(
+      if (
         isinf(var.second.getInterval().lb()) &&
         isinf(var.second.getInterval().ub()))
         continue;
 
-      //if there is a lower bound,
-      if(!isinf(var.second.getInterval().lb()))
+      BigInt upper_limit, lower_limit(0);
+      upper_limit = BigInt::power2(
+        X->type->get_width() - (is_unsignedbv_type(X->type) ? 0 : 1));
+      upper_limit = upper_limit - 1;
+
+      if (is_signedbv_type(X->type))
       {
-        //check if it overflows when cast back to integer
-        long integer;
-        if(
-          (long)var.second.getInterval().lb() > 0 &&
-          var.second.getInterval().lb() < 0)
-          integer = (long)var.second.getInterval().lb() + 1;
+        lower_limit = BigInt::power2(X->type->get_width() - 1);
+        lower_limit = -lower_limit;
+      } //if its unsigned then its just zero
+
+      if (isfinite(var.second.getInterval().lb()))
+      {
+        BigInt integerValue(0);
+
+        if (var.second.getInterval().lb() < lower_limit.to_int64())
+          integerValue = lower_limit;
+        else if (var.second.getInterval().lb() > upper_limit.to_uint64())
+          integerValue = upper_limit;
         else
-          integer = (long)var.second.getInterval().lb();
+          integerValue = (long)ceil(var.second.getInterval().lb());
 
-        auto w = to_symbol2t(X).type->get_width();
-        int is_unsigned = is_unsignedbv_type(X->type) ? 0 : 1;
-        long long type_limit = -pow(2, w - is_unsigned);
-        if(integer < type_limit)
-          integer = type_limit;
-
-        auto lb = create_value_expr(integer, X->type);
+        auto lb = constant_int2tc(X->type, integerValue);
         auto cond1 = greaterthanequal2tc(X, lb);
         cond = and2tc(cond, cond1);
       }
-      if(!isinf(var.second.getInterval().ub()))
+      if (isfinite(var.second.getInterval().ub()))
       {
-        long integerValue;
+        BigInt integerValue(0);
 
-        if(
-          (long)var.second.getInterval().ub() < 0 &&
-          var.second.getInterval().ub() > 0)
-          integerValue = (long)var.second.getInterval().ub() - 1;
+        if (var.second.getInterval().ub() > upper_limit.to_uint64())
+          integerValue = upper_limit;
+        else if (var.second.getInterval().ub() < lower_limit.to_int64())
+          integerValue = lower_limit;
         else
-          integerValue = (long)var.second.getInterval().ub();
+          integerValue = (long)floor(var.second.getInterval().ub());
 
-        //intersect with type limits
-        auto w = to_symbol2t(X).type->get_width();
-        int is_unsigned = is_unsignedbv_type(X->type) ? 0 : 1;
-        double type_limit = pow(2, w - is_unsigned) - 1;
-
-        if(integerValue > type_limit)
-          integerValue = type_limit;
-
-        auto ub = create_value_expr(integerValue, X->type);
+        auto ub = constant_int2tc(X->type, integerValue);
         auto cond2 = lessthanequal2tc(X, ub);
         cond = and2tc(cond, cond2);
       }
@@ -1016,7 +1042,7 @@ expr2tc interval_analysis_ibex_contractor::result_of_outer(expr2tc exp)
   return cond;
 }
 
-void interval_analysis_ibex_contractor::dump()
+void interval_analysis_ibex_contractor::dump(bool is_timed)
 {
   std::ostringstream oss;
   auto number_of_vars = map.size();
@@ -1028,21 +1054,26 @@ void interval_analysis_ibex_contractor::dump()
   oss << "number of variables: " << number_of_vars << "\n";
   oss << "before : " << x1 << " diam: " << x1.diam() << std::endl;
   oss << "after : " << x2 << " diam: " << x2.diam() << std::endl;
-  oss << "Contractor parse time: " << parse_time << "\n";
-  oss << "Contractor maps_to_domains time: " << cpy_time << "\n";
-  oss << "Contractor modularize time: " << mod_time << "\n";
-  oss << "Contractor contract time: " << apply_time << "\n";
+  if (is_timed)
+  {
+    oss << "Contractor parse time: " << parse_time << "\n";
+    oss << "Contractor maps_to_domains time: " << cpy_time << "\n";
+    oss << "Contractor modularize time: " << mod_time << "\n";
+    oss << "Contractor contract time: " << apply_time << "\n";
+  }
   oss << "------------------------";
-  log_status("{}", oss.str());
+  map.dump();
+  map_outer.dump();
+  log_status("{}\n\n", oss.str());
 }
 
 [[maybe_unused]] void interval_analysis_ibex_contractor::modularize_intervals()
 {
   auto t_0 = std::chrono::steady_clock::now();
   std::ostringstream oss;
-  for(auto &var : map.var_map)
+  for (auto &var : map.var_map)
   {
-    if(!var.second.getInterval().is_unbounded())
+    if (!var.second.getInterval().is_unbounded())
       continue;
 
     auto v = to_symbol2t(var.second.getSymbol());
@@ -1053,19 +1084,19 @@ void interval_analysis_ibex_contractor::dump()
 
     double lb = i.lb(), ub = i.ub();
 
-    if(is_floatbv_type(v.type))
+    if (is_floatbv_type(v.type))
     {
-      if(isinf(i.lb()))
+      if (isinf(i.lb()))
         lb = -std::numeric_limits<double>::max();
-      if(isinf(i.ub()))
+      if (isinf(i.ub()))
         ub = std::numeric_limits<double>::max();
     }
     else
     {
-      if(isinf(i.lb()))
+      if (isinf(i.lb()))
         lb = std::numeric_limits<long>::min();
 
-      if(isinf(i.ub()))
+      if (isinf(i.ub()))
         ub = std::numeric_limits<unsigned long>::max();
     }
     ibex::Interval new_interval(lb, ub);

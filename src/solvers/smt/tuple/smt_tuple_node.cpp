@@ -18,7 +18,7 @@ smt_astt smt_tuple_node_flattener::tuple_create(const expr2tc &structdef)
     *this, ctx, ctx->convert_sort(structdef->type), name);
   result->elements.resize(structdef->get_num_sub_exprs());
 
-  for(unsigned int i = 0; i < structdef->get_num_sub_exprs(); i++)
+  for (unsigned int i = 0; i < structdef->get_num_sub_exprs(); i++)
   {
     smt_astt tmp = ctx->convert_ast(*structdef->get_sub_expr(i));
     result->elements[i] = tmp;
@@ -29,10 +29,10 @@ smt_astt smt_tuple_node_flattener::tuple_create(const expr2tc &structdef)
 
 smt_astt smt_tuple_node_flattener::tuple_fresh(smt_sortt s, std::string name)
 {
-  if(name == "")
+  if (name == "")
     name = ctx->mk_fresh_name("tuple_fresh::") + ".";
 
-  if(s->id == SMT_SORT_ARRAY)
+  if (s->id == SMT_SORT_ARRAY)
   {
     assert(is_array_type(s->get_tuple_type()));
     smt_sortt subtype =
@@ -48,17 +48,17 @@ smt_tuple_node_flattener::mk_tuple_symbol(const std::string &name, smt_sortt s)
 {
   // Because this tuple flattening doesn't join tuples through the symbol
   // table, there are some special names that need to be intercepted.
-  if(name == "NULL")
+  if (name == "NULL")
     return ctx->null_ptr_ast;
 
-  if(name == "INVALID")
+  if (name == "INVALID")
     return ctx->invalid_ptr_ast;
 
   // We put a '.' on the end of all symbols to deliminate the rest of the
   // name. However, these names may become expressions again, then be converted
   // again, thus accumulating dots. So don't.
   std::string name2 = name;
-  if(name2[name2.size() - 1] != '.')
+  if (name2[name2.size() - 1] != '.')
     name2 += ".";
 
   assert(s->id != SMT_SORT_ARRAY);
@@ -91,7 +91,7 @@ smt_astt smt_tuple_node_flattener::tuple_array_create(
   smt_sortt subtype = ctx->convert_sort(get_array_subtype(array_type));
 
   // Optimise the creation of a const array.
-  if(const_array)
+  if (const_array)
     return array_conv.convert_array_of_wsort(
       inputargs[0], domain->get_data_width(), sort);
 
@@ -101,12 +101,12 @@ smt_astt smt_tuple_node_flattener::tuple_array_create(
 
   // Check size
   const array_type2t &arr_type = to_array_type(array_type);
-  if(arr_type.size_is_infinite)
+  if (arr_type.size_is_infinite)
   {
     // Guarentee nothing, this is modelling only.
     return newsym;
   }
-  if(!is_constant_int2t(arr_type.array_size))
+  if (!is_constant_int2t(arr_type.array_size))
   {
     log_error("Non-constant sized array of type constant_array_of2t");
     abort();
@@ -116,7 +116,7 @@ smt_astt smt_tuple_node_flattener::tuple_array_create(
   unsigned int sz = thesize.value.to_uint64();
 
   // Repeatedly store operands into this.
-  for(unsigned int i = 0; i < sz; i++)
+  for (unsigned int i = 0; i < sz; i++)
   {
     newsym = newsym->update(ctx, inputargs[i], i);
   }
@@ -148,38 +148,38 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
 
   // If this tuple was free and never read, don't attempt to extract data from
   // it. There isn't any.
-  if(tuple->elements.size() == 0)
+  if (tuple->elements.size() == 0)
   {
-    for(unsigned int i = 0; i < strct.members.size(); i++)
+    for (unsigned int i = 0; i < strct.members.size(); i++)
       outmem.emplace_back();
     return constant_struct2tc(tuple->sort->get_tuple_type(), std::move(outmem));
   }
 
   // Run through all fields and despatch to 'get' again.
   unsigned int i = 0;
-  for(auto const &it : strct.members)
+  for (auto const &it : strct.members)
   {
     expr2tc res;
-    if(is_tuple_ast_type(it))
+    if (is_tuple_ast_type(it))
     {
       res = tuple_get_rec(to_tuple_node_ast(tuple->elements[i]));
     }
-    else if(is_tuple_array_ast_type(it))
+    else if (is_tuple_array_ast_type(it))
     {
       res = expr2tc(); // XXX currently unimplemented
     }
-    else if(is_bool_type(it))
+    else if (is_bool_type(it))
     {
       res =
         ctx->get_bool(tuple->elements[i]) ? gen_true_expr() : gen_false_expr();
     }
-    else if(is_number_type(it) || is_union_type(it))
+    else if (is_number_type(it) || is_union_type(it))
     {
       res = ctx->get_by_ast(it, tuple->elements[i]);
     }
-    else if(is_array_type(it))
+    else if (is_array_type(it))
     {
-      if(is_fetching_from_array_an_error)
+      if (is_fetching_from_array_an_error)
       {
         log_error(
           "Fetching array elements inside tuples currently unimplemented, "
@@ -202,12 +202,12 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
   }
 
   // If it's a pointer, rewrite.
-  if(
+  if (
     is_pointer_type(tuple->sort->get_tuple_type()) ||
     tuple->sort->get_tuple_type() == ctx->pointer_struct)
   {
     // Guard against a free pointer though
-    if(is_nil_expr(outmem[0]))
+    if (is_nil_expr(outmem[0]))
       return expr2tc();
 
     unsigned int num = to_constant_int2t(outmem[0]).value.to_uint64();
@@ -243,7 +243,7 @@ smt_astt smt_tuple_node_flattener::tuple_array_of(
 
 smt_sortt smt_tuple_node_flattener::mk_struct_sort(const type2tc &type)
 {
-  if(is_array_type(type))
+  if (is_array_type(type))
   {
     const array_type2t &arrtype = to_array_type(type);
     assert(

@@ -184,19 +184,34 @@ public:
 class constant_string_data : public constant2t
 {
 public:
-  constant_string_data(const type2tc &t, expr2t::expr_ids id, const irep_idt &v)
-    : constant2t(t, id), value(v)
+  enum kindt
+  {
+    DEFAULT, /* "" */
+    WIDE,    /* L"" */
+    UNICODE, /* u8"", u"" and U"" */
+  };
+
+  constant_string_data(
+    const type2tc &t,
+    expr2t::expr_ids id,
+    const irep_idt &v,
+    kindt kind)
+    : constant2t(t, id), value(v), kind(kind)
   {
   }
   constant_string_data(const constant_string_data &ref) = default;
 
   irep_idt value;
+  kindt kind;
 
   // Type mangling:
   typedef esbmct::
     field_traits<irep_idt, constant_string_data, &constant_string_data::value>
       value_field;
-  typedef esbmct::expr2t_traits<value_field> traits;
+  typedef esbmct::
+    field_traits<kindt, constant_string_data, &constant_string_data::kind>
+      kind_field;
+  typedef esbmct::expr2t_traits<value_field, kind_field> traits;
 };
 
 class symbol_data : public expr2t
@@ -1614,17 +1629,34 @@ class constant_string2t : public constant_string_expr_methods
 {
 public:
   /** Primary constructor.
-   *  @param type Type of this string; presumably a string_type2t.
+   *  @param type Type of this string; presumably an array_type2t.
    *  @param stringref String pool'd string we're dealing with
+   *  @param kind The kind of string literal:
+   *              - DEFAULT: `""`
+   *              - WIDE   : `L""`
+   *              - UNICODE: `u8""`, `u""` and `U""`
    */
-  constant_string2t(const type2tc &type, const irep_idt &stringref)
-    : constant_string_expr_methods(type, constant_string_id, stringref)
+  constant_string2t(const type2tc &type, const irep_idt &stringref, kindt kind)
+    : constant_string_expr_methods(type, constant_string_id, stringref, kind)
   {
   }
   constant_string2t(const constant_string2t &ref) = default;
 
   /** Convert string to a constant length array of characters */
   expr2tc to_array() const;
+
+  /**
+   * sizeof(literal)/sizeof(*literal), i.e., the number of elements in the
+   * underlying array, including the '\0' terminator
+   */
+  size_t array_size() const;
+
+  /**
+   * Extract the i-th element from the string for i between 0 and
+   * to_array_type(this->type).array_size (not the same as value.c_str()[i] when
+   * to_array_type(this->type).subtype != char type)
+   */
+  expr2tc at(size_t i) const;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -1891,7 +1923,7 @@ public:
     {
       assert(type->get_width() == from->type->get_width());
     }
-    catch(const type2t::symbolic_type_excp &)
+    catch (const type2t::symbolic_type_excp &)
     {
       /* ignore */
     }
@@ -2717,6 +2749,8 @@ public:
   address_of2t(const type2tc &subtype, const expr2tc &ptrobj)
     : address_of_expr_methods(pointer_type2tc(subtype), address_of_id, ptrobj)
   {
+    assert(ptrobj->expr_id != expr2t::constant_int_id);
+    assert(ptrobj->expr_id != expr2t::address_of_id);
   }
   address_of2t(const address_of2t &ref) = default;
 
@@ -2865,9 +2899,7 @@ public:
   index2t(const type2tc &type, const expr2tc &source, const expr2tc &index)
     : index_expr_methods(type, index_id, source, index)
   {
-    assert(
-      is_array_type(source) || is_string_type(source) ||
-      is_vector_type(source));
+    assert(is_array_type(source) || is_vector_type(source));
 #if 0
     assert(
       is_array_type(source)
@@ -3124,7 +3156,7 @@ public:
     allockind k)
     : sideeffect_expr_methods(t, sideeffect_id, oper, sz, a, alloct, k)
   {
-    if(k == allockind::alloca)
+    if (k == allockind::alloca)
       assert(oper->type == sz->type);
   }
   sideeffect2t(const sideeffect2t &ref) = default;
@@ -3515,9 +3547,8 @@ public:
   concat2t(const type2tc &type, const expr2tc &forward, const expr2tc &aft)
     : concat_expr_methods(type, concat_id, forward, aft)
   {
-    /* TODO: what are the semantics of a signed-bv concatenation? */
-    assert(is_unsignedbv_type(forward) || is_signedbv_type(forward));
-    assert(is_unsignedbv_type(aft) || is_signedbv_type(aft));
+    assert(is_unsignedbv_type(forward));
+    assert(is_unsignedbv_type(aft));
   }
   concat2t(const concat2t &ref) = default;
 

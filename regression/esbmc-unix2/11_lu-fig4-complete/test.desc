@@ -1,4 +1,4 @@
 CORE
 lu-fig4-complete.c
---unwind 1 --no-unwinding-assertions
+--unwind 1 --no-unwinding-assertions -Wno-error=implicit-function-declaration -Wno-error=incompatible-function-pointer-types
 ^VERIFICATION FAILED$

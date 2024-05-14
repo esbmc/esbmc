@@ -1,10 +1,12 @@
 Here is an example to run a given regression suite: 
 
-```
-python3 testing_tool.py --regression floats --tool /Users/lucascordeiro/esbmc/build/src/esbmc/esbmc --mode CORE
-```
+After configuring the project with cmake in the build directory, please (be sure to pass `-DBUILD_TESTING=On -DENABLE_REGRESSION=1`), the tests will be available through [ctest](https://cmake.org/cmake/help/latest/manual/ctest.1.html). 
 
-* `regression` indicates the suite we want to verify (e.g., `floats`).
-* `tool` indicates the location of the binary we want to use.
-* `mode` indicates which test cases will be executed; possible values are: `CORE`, `KNOWNBUG`, `FUTURE`, and `THOROUGH`.
+You can see below some examples that you can from the build directory:
 
+- `ctest -j4 -L esbmc-cpp/cpp`. Executes all tests inside esbmc-cpp/cpp with 4 threads.
+- `ctest -L esbmc-cpp/*`. Executes all tests matching esbmc-cpp/*.
+- `ctest -LE esbmc-cpp*`. Executes all tests except the ones inside esbmc-cpp.
+- `ctest --progress`. Show testing progress in one line.
+
+See ctest documentation for the list of available commands.
