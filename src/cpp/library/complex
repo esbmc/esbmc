@@ -2,7 +2,6 @@
 #define __STL_COMPLEX
 
 #include "iostream"
-using namespace std;
 
 namespace std
 {
