@@ -33,6 +33,7 @@ static const std::unordered_map<std::string, solver_creator *> esbmc_solvers = {
 #endif
 #ifdef USECVC
   {"cvc", create_new_cvc_solver},
+  {"cvc4", create_new_cvc_solver},
 #endif
 #ifdef USECVC5
   {"cvc5", create_new_cvc5_solver},
@@ -54,6 +55,8 @@ static const std::string all_solvers[] = {
   "minisat",
   "boolector",
   "cvc",
+  "cvc4",
+  "cvc5",
   "mathsat",
   "yices",
   "bitwuzla"};
