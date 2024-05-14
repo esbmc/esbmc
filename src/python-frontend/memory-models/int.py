@@ -1,37 +1,37 @@
 class int:
   @classmethod
   def from_bytes(cls, bytes_data:bytes, big_endian:bool, signed:bool) -> int:
-    result = 0
-    index = 0
-    step = 1
-    byte = 0
+    result:int = 0
+    index:int = 0
+    step:int = 1
+    byte:int = 0
 
     ## If little endian
     if big_endian == False:
-        index = len(bytes_data) - 1
-        step = -1
+        index:int = len(bytes_data) - 1
+        step:int = -1
 
     bytes_len:int = len(bytes_data)
 
     while index >= 0 and index < bytes_len:
-       byte:int = bytes_data[index]
-       result = (result << 8) + byte
-       index = index + step
+        byte:int = bytes_data[index]
+        result:int = (result << 8) + byte
+        index:int = index + step
 
     if signed and bytes_data[-1] & 128 == 128: # Check MSB of last byte
-       is_negative = True
+        is_negative:bool = True
 
     if signed and is_negative:
-      result = result - (1 << (8 * len(bytes_data)))
+       result:int = result - (1 << (8 * len(bytes_data)))
 
     return result
 
 # bytes_data:bytes = b'\x00\x10'
-# result:int = int.from_bytes(bytes_data, True, False)
-# assert result == 16
+# x:int = int.from_bytes(bytes_data, True, False)
+# assert x == 16
 
 # bytes_data_2 = b'\xFF\xFF'
-# result_2 = int.from_bytes(bytes_data_2, True, signed=True)
+# result_2 = int.from_bytes(bytes_data_2, True, True)
 # assert result_2 == -1
 
 # bytes_data_3 = b'\x80'
