@@ -336,8 +336,10 @@ smt_astt cvc5_convt::mk_smt_typecast_from_fpbv_to_fpbv(
     to);
 }
 
-smt_astt
-cvc5_convt::mk_smt_typecast_ubv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
+smt_astt cvc5_convt::mk_smt_typecast_ubv_to_fpbv(
+  smt_astt from,
+  smt_sortt to,
+  smt_astt rm)
 {
   unsigned sw = to->get_significand_width();
   unsigned ew = to->get_exponent_width();
@@ -352,8 +354,10 @@ cvc5_convt::mk_smt_typecast_ubv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm
     to);
 }
 
-smt_astt
-cvc5_convt::mk_smt_typecast_sbv_to_fpbv(smt_astt from, smt_sortt to, smt_astt rm)
+smt_astt cvc5_convt::mk_smt_typecast_sbv_to_fpbv(
+  smt_astt from,
+  smt_sortt to,
+  smt_astt rm)
 {
   unsigned sw = to->get_significand_width();
   unsigned ew = to->get_exponent_width();
