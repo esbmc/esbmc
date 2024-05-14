@@ -8,10 +8,11 @@
 namespace std
 {
 
-// a dummy locale
-class locale
-{
-};
+/* forward declaration */
+class locale;
+
+template <typename>
+struct char_traits;
 
 /* References:
  * - https://cplusplus.com/reference/streambuf/
@@ -135,6 +136,17 @@ protected:
   }
   CC_DIAGNOSTIC_POP()
 };
+
+template <typename CharT, typename Traits = char_traits<CharT> >
+class istreambuf_iterator
+{
+};
+
+template <typename CharT, typename Traits = char_traits<CharT> >
+class ostreambuf_iterator
+{
+};
+
 } // namespace std
 
 #endif
