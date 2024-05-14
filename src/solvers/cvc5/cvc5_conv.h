@@ -1,5 +1,5 @@
-#ifndef _ESBMC_SOLVERS_CVC_CVC_CONV_H_
-#define _ESBMC_SOLVERS_CVC_CVC_CONV_H_
+#ifndef _ESBMC_SOLVERS_CVC_CVC5_CONV_H_
+#define _ESBMC_SOLVERS_CVC_CVC5_CONV_H_
 
 #include <solvers/smt/smt_conv.h>
 #include <cvc5/cvc5.h>
