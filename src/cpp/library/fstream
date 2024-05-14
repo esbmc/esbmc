@@ -48,9 +48,9 @@ public:
   }
 
 private:
-  static bool _fileopen = false;
-  static streamsize _filesize = nondet_uint();
-  static ios::streampos _filepos = 0;
+  bool _fileopen = false;
+  streamsize _filesize = nondet_uint();
+  ios::streampos _filepos = 0;
 };
 
 class fstream : public istream, public ostream
@@ -115,12 +115,12 @@ fstream::fstream()
   ostream();
   _fileopen = false;
   _m_filebuf = NULL;
-  ostream::_filesize = NULL;
+  ostream::_filesize = 0;
   ostream::_filepos = 0;
 }
 fstream::fstream(
   const char *filename,
-  ios_base::openmode mode = ios_base::in | ios_base::out)
+  ios_base::openmode mode)
 {
   istream();
   ostream();
@@ -139,7 +139,7 @@ bool fstream::is_open()
 }
 void fstream::open(
   const char *filename,
-  ios_base::openmode mode = ios_base::in | ios_base::out)
+  ios_base::openmode mode)
 {
   //	__ESBMC_assert (!strcmp(filename,""),"Error! filename is empty");
   __ESBMC_assert(_fileopen == false, "File is open");
@@ -152,7 +152,7 @@ void fstream::open(
 void fstream::close()
 {
   _fileopen = false;
-  ostream::_filesize = NULL;
+  ostream::_filesize = 0;
   ostream::_filepos = 0;
 }
 //=======================================================
@@ -162,12 +162,12 @@ ofstream::ofstream()
   ostream();
   _fileopen = false;
   _m_filebuf = NULL; //new filebuf;
-  ostream::_filesize = NULL;
+  ostream::_filesize = 0;
   ostream::_filepos = 0;
 }
 ofstream::ofstream(
   const char *filename,
-  ios_base::openmode mode = ios_base::out)
+  ios_base::openmode mode)
 {
   ostream();
   _fileopen = false;
@@ -196,7 +196,7 @@ void ofstream::open(const char *filename, ios_base::openmode mode)
 void ofstream::close()
 {
   _fileopen = false;
-  ostream::_filesize = NULL;
+  ostream::_filesize = 0;
   ostream::_filepos = 0;
 }
 //======================================================
@@ -207,10 +207,10 @@ ifstream::ifstream()
   istream();
   _fileopen = false;
   _m_filebuf = NULL; //new filebuf;
-  _filesize = NULL;
+  _filesize = 0;
   _filepos = 0;
 }
-ifstream::ifstream(const char *filename, ios_base::openmode mode = ios_base::in)
+ifstream::ifstream(const char *filename, ios_base::openmode mode)
 {
   istream();
   _fileopen = false;
@@ -228,7 +228,7 @@ bool ifstream::is_open()
 }
 void ifstream::open(
   const char *filename,
-  ios_base::openmode mode = ios_base::in)
+  ios_base::openmode mode)
 {
   //	__ESBMC_assert (!strcmp(filename,""),"Error! filename is empty");
   __ESBMC_assert(_fileopen == false, "File is open");
@@ -240,7 +240,7 @@ void ifstream::open(
 void ifstream::close()
 {
   _fileopen = false;
-  _filesize = NULL;
+  _filesize = 0;
   _filepos = 0;
 }
 //======================================================
