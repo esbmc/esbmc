@@ -296,7 +296,6 @@ void interval_analysis(
     optimize_function(interval_analysis, f_it->second);
   }
 
-  return;
   if (instrument_mode == INTERVAL_INSTRUMENTATION_MODE::LOOP_MODE)
     instrument_loops(interval_analysis, goto_functions);
   else
