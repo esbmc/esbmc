@@ -16,6 +16,9 @@
 #endif
 #define DEC 10
 
+/* TODO: this is not part of <sstream> */
+extern "C" void itoa(int value, char *str, int base);
+
 namespace std
 {
 class stringbuf : public streambuf
@@ -61,9 +64,7 @@ public:
   {
   }
 
-  stringbuf *rdbuf() const
-  {
-  }
+  stringbuf *rdbuf() const;
 
   string str() const
   {
@@ -73,7 +74,7 @@ public:
   ostream &operator<<(string &val)
   {
     _string.append(val);
-    return ostream();
+    return *this;
   }
 
   ostream &operator<<(bool &val)
@@ -83,8 +84,7 @@ public:
       _string.append("1");
     else
       _string.append("0");
-
-    return ostream();
+    return *this;
   }
 
   ostream &operator<<(short &val)
@@ -127,7 +127,7 @@ public:
       strcat(temp, temp2);
     }
     _string.append(temp);
-    return ostream();
+    return *this;
   }
 
   ostream &operator<<(double val)
@@ -146,7 +146,7 @@ public:
       strcat(temp, temp2);
     }
     _string.append(temp);
-    return ostream();
+    return *this;
   }
 
   ostream &operator<<(char &val)
@@ -165,7 +165,7 @@ public:
   {
     int tam = strlen(val);
     _string.append(val, tam);
-    return ostream();
+    return *this;
   }
 
   ostream &operator<<(unsigned short &val)
