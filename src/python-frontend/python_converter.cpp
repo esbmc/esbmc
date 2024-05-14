@@ -110,8 +110,8 @@ typet python_converter::get_typet(const std::string &ast_type, size_t type_size)
     return uint256_type();
   if (ast_type == "bytes")
   {
-	// TODO: Keep "bytes" as signed char instead of "int_type()", and cast to an 8-bit integer in [] operations
-	// or consider modelling it with string_constantt.
+    // TODO: Keep "bytes" as signed char instead of "int_type()", and cast to an 8-bit integer in [] operations
+    // or consider modelling it with string_constantt.
     typet t = array_typet(
       int_type(),
       constant_exprt(
@@ -788,7 +788,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     else if (value.is_string() && current_element_type.is_array())
     {
       expr = gen_zero(current_element_type);
-      typet& t = current_element_type.subtype();
+      typet &t = current_element_type.subtype();
 
       unsigned int i = 0;
       for (char &ch : element["value"].get<std::string>())
