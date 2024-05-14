@@ -4,19 +4,19 @@
 #include <solvers/smt/smt_conv.h>
 #include <cvc5/cvc5.h>
 
-class cvc_smt_ast : public solver_smt_ast<cvc5::Term>
+class cvc5_smt_ast : public solver_smt_ast<cvc5::Term>
 {
 public:
   using solver_smt_ast<cvc5::Term>::solver_smt_ast;
-  ~cvc_smt_ast() override = default;
+  ~cvc5_smt_ast() override = default;
   void dump() const override;
 };
 
-class cvc_convt : public smt_convt, public array_iface, public fp_convt
+class cvc5_convt : public smt_convt, public array_iface, public fp_convt
 {
 public:
-  cvc_convt(const namespacet &ns, const optionst &options);
-  ~cvc_convt() override = default;
+  cvc5_convt(const namespacet &ns, const optionst &options);
+  ~cvc5_convt() override = default;
 
   smt_convt::resultt dec_solve() override;
   const std::string solver_text() override;
