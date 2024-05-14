@@ -200,7 +200,9 @@ void symex_target_equationt::convert_internal_step(
         expr2tc sym =
           symbol2tc(tmp->type, "symex::output::" + i2string(output_count++));
         expr2tc eq = equality2tc(sym, tmp);
-        smt_conv.set_to(eq, true);
+        smt_astt assign = smt_conv.convert_assign(eq);
+        if (ssa_smt_trace)
+          assign->dump();
         step.converted_output_args.push_back(sym);
       }
     }
@@ -286,7 +288,8 @@ void symex_target_equationt::SSA_stept::output(
     break;
 
   default:
-    assert(false);
+    assert(
+      type == goto_trace_stept::SKIP && config.options.get_bool_option("ltl"));
   }
 
   if (is_assert() || is_assume() || is_assignment())
@@ -375,6 +378,41 @@ unsigned int symex_target_equationt::clear_assertions()
   }
 
   return num_asserts;
+}
+
+// To be used by reconstruct_symbolic_expression
+void symex_target_equationt::replace_rec(
+  const SSA_stept &step,
+  expr2tc &e,
+  bool keep_local) const
+{
+  assert(step.is_assignment());
+  if (is_symbol2t(e))
+  {
+    const std::string lhs_name = to_symbol2t(step.lhs).get_symbol_name();
+    if (keep_local && lhs_name.find("goto_symex::") == std::string::npos)
+      return;
+
+    if (lhs_name == to_symbol2t(e).get_symbol_name())
+      e = step.rhs;
+  }
+
+  e->Foreach_operand([&step, &keep_local, this](expr2tc &inner) {
+    replace_rec(step, inner, keep_local);
+  });
+}
+
+void symex_target_equationt::reconstruct_symbolic_expression(
+  expr2tc &expr,
+  bool keep_local_variables) const
+{
+  for (auto rit = SSA_steps.rbegin(); rit != SSA_steps.rend(); rit++)
+  {
+    if (!rit->is_assignment())
+      continue;
+
+    replace_rec(*rit, expr, keep_local_variables);
+  }
 }
 
 runtime_encoded_equationt::runtime_encoded_equationt(

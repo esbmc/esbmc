@@ -100,7 +100,7 @@ execution_statet::execution_statet(
   DFS_traversed[0] = false;
   mon_thread_warning = false;
 
-  thread_cswitch_threshold = 2;
+  thread_cswitch_threshold = (options.get_bool_option("ltl")) ? 3 : 2;
 }
 
 execution_statet::execution_statet(const execution_statet &ex)
@@ -263,6 +263,7 @@ void execution_statet::symex_step(reachability_treet &art)
       // TODO: we should support verifying memory leaks in multi-threaded C programs.
       assume(gen_false_expr());
       end_thread();
+      interleaving_unviable = true;
     }
     else
     {
@@ -836,7 +837,9 @@ void execution_statet::get_expr_globals(
       name == "c:@__ESBMC_alloc" || name == "c:@__ESBMC_alloc_size" ||
       name == "c:@__ESBMC_is_dynamic" ||
       name == "c:@__ESBMC_blocked_threads_count" ||
-      name.find("c:pthread_lib") != std::string::npos)
+      name.find("c:pthread_lib") != std::string::npos ||
+      name == "c:@__ESBMC_rounding_mode" ||
+      name.find("c:@__ESBMC_pthread_thread") != std::string::npos)
     {
       return;
     }

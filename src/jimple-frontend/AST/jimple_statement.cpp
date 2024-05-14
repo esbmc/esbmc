@@ -431,13 +431,16 @@ void jimple_throw::from_json(const json &j)
 }
 
 exprt jimple_throw::to_exprt(
-  contextt &ctx,
-  const std::string &class_name,
-  const std::string &function_name) const
+  contextt &,
+  const std::string &,
+  const std::string &) const
 {
   codet p = codet("cpp-throw");
-  //TODO: throw
-  auto to_add = expr->to_exprt(ctx, class_name, function_name);
-  p.move_to_operands(to_add);
+  // TODO: throw
+  // Since the implementation of Throw isn't complete,
+  // the expression shouldn't be used.
+
+  // auto to_add = expr->to_exprt(ctx, class_name, function_name);
+  // p.move_to_operands(to_add);
   return p;
 }

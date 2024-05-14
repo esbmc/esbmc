@@ -4,7 +4,7 @@
 #include <catch2/catch.hpp>
 
 #include "../testing-utils/goto_factory.h"
-#include "goto-programs/abstract-interpretation/interval_domain.h"
+#include <goto-programs/abstract-interpretation/interval_domain.h>
 
 struct test_item
 {
@@ -30,23 +30,25 @@ public:
         log_status("Baseline");
         set_baseline_config();
         ait<interval_domaint> baseline;
-        run_test<interval_domaint::int_mapt>(baseline);
+        run_test<0>(baseline);
       }
+
       SECTION("Interval Arithmetic")
       {
         log_status("Interval Arithmetic");
         set_baseline_config();
         interval_domaint::enable_interval_arithmetic = true;
         ait<interval_domaint> baseline;
-        run_test<interval_domaint::int_mapt>(baseline);
+        run_test<0>(baseline);
       }
+
       SECTION("Modular Intervals")
       {
         log_status("Modular Intervals");
         set_baseline_config();
         interval_domaint::enable_modular_intervals = true;
         ait<interval_domaint> baseline;
-        run_test<interval_domaint::int_mapt>(baseline);
+        run_test<0>(baseline);
       }
 
       SECTION("Contractor")
@@ -55,7 +57,7 @@ public:
         set_baseline_config();
         interval_domaint::enable_contraction_for_abstract_states = true;
         ait<interval_domaint> baseline;
-        run_test<interval_domaint::int_mapt>(baseline);
+        run_test<0>(baseline);
       }
 
       SECTION("Interval Arithmetic + Modular")
@@ -65,7 +67,7 @@ public:
         interval_domaint::enable_interval_arithmetic = true;
         interval_domaint::enable_modular_intervals = true;
         ait<interval_domaint> baseline;
-        run_test<interval_domaint::int_mapt>(baseline);
+        run_test<0>(baseline);
       }
 
       SECTION("Interval Arithmetic + Modular + Contractor")
@@ -76,8 +78,9 @@ public:
         interval_domaint::enable_modular_intervals = true;
         interval_domaint::enable_contraction_for_abstract_states = true;
         ait<interval_domaint> baseline;
-        run_test<interval_domaint::int_mapt>(baseline);
+        run_test<0>(baseline);
       }
+
       // Wrapped Intervals logic (see "Interval Analysis and Machine Arithmetic 2015" paper)
       SECTION("Wrapped Intervals")
       {
@@ -85,9 +88,10 @@ public:
         set_baseline_config();
         interval_domaint::enable_wrapped_intervals = true;
         ait<interval_domaint> baseline;
-        run_test<interval_domaint::wrap_mapt>(baseline);
+        run_test<2>(baseline);
       }
     }
+
     SECTION("Wrapped Intervals + Arithmetic + Bitwise")
     {
       log_status("Wrapped + Arithmetic + Bitwise");
@@ -96,7 +100,7 @@ public:
       interval_domaint::enable_interval_arithmetic = true;
       interval_domaint::enable_interval_bitwise_arithmetic = true;
       ait<interval_domaint> baseline;
-      run_test<interval_domaint::wrap_mapt>(baseline, true);
+      run_test<2>(baseline, true);
     }
   }
 
@@ -114,10 +118,7 @@ public:
     interval_domaint::widening_narrowing = false;
   }
 
-  template <class T>
-  T get_map(interval_domaint &d) const;
-
-  template <class IntervalMap>
+  template <size_t Index>
   void run_test(
     ait<interval_domaint> &interval_analysis,
     bool precise_intervals = false)
@@ -140,7 +141,7 @@ public:
             property.find(i_it->location.get_line().as_string());
           if (to_check != property.end())
           {
-            auto state = get_map<IntervalMap>(interval_analysis[i_it]);
+            auto state = interval_analysis[i_it].intervals;
 
             for (auto property_it = to_check->second.begin();
                  property_it != to_check->second.end();
@@ -152,10 +153,10 @@ public:
               const auto &value = property_it->v;
 
               // we need to find the actual interval however... getting the original name is hard
-              auto interval = state.begin();
-              for (; interval != state.end(); interval++)
+              auto interval_it = state->begin();
+              for (; interval_it != state->end(); interval_it++)
               {
-                auto real_name = interval->first.as_string();
+                auto real_name = interval_it->first.as_string();
                 auto var_name = property_it->var;
 
                 if (var_name.size() > real_name.size())
@@ -166,7 +167,7 @@ public:
                   break;
               }
 
-              if (interval == state.end())
+              if (interval_it == state->end())
               {
                 CAPTURE(
                   precise_intervals,
@@ -177,13 +178,22 @@ public:
                 continue; // Var not present means TOP (which is always correct)
               }
 
-              // Hack to get values!
-              auto cpy = interval->second;
+              const interval_domaint::interval &ref_variant =
+                interval_it->second;
+              REQUIRE(Index == ref_variant.index());
+              const auto &ref = std::get<Index>(ref_variant);
+              interval_domaint::integer_intervalt cpy = *ref;
               cpy.set_lower(value);
-              assert(cpy.lower);
+              CAPTURE(
+                ref->is_top(),
+                ref->is_bottom(),
+                property_it->should_contain,
+                cpy.get_lower());
+              REQUIRE((
+                ref->is_top() || ref->is_bottom() || ref->upper || ref->lower));
+              ref->dump();
               REQUIRE(
-                interval->second.contains(*cpy.lower) ==
-                property_it->should_contain);
+                ref->contains(cpy.get_lower()) == property_it->should_contain);
             }
           }
         }
@@ -193,18 +203,6 @@ public:
     log_status("Success");
   }
 };
-
-template <>
-interval_domaint::int_mapt test_program::get_map(interval_domaint &d) const
-{
-  return d.get_int_map();
-}
-
-template <>
-interval_domaint::wrap_mapt test_program::get_map(interval_domaint &d) const
-{
-  return d.get_wrap_map();
-}
 
 TEST_CASE("Interval Analysis - Base Sign", "[ai][interval-analysis]")
 {
@@ -523,9 +521,10 @@ TEST_CASE("Interval Analysis - While Statement", "[ai][interval-analysis]")
     "return a;\n" // a : [100, 100]
     "}";
 
+  T.property["5"].push_back({"@F@main@a", 99, true});
   T.property["2"].push_back({"@F@main@a", 0, true});
   T.property["5"].push_back({"@F@main@a", 0, true});
-  T.property["5"].push_back({"@F@main@a", 99, true});
+
   T.property["7"].push_back({"@F@main@a", 1, true});
   T.property["7"].push_back({"@F@main@a", 100, true});
   T.property["9"].push_back({"@F@main@a", 100, true});

@@ -23,6 +23,10 @@ public:
 
   interval_templatet() = default;
 
+  explicit interval_templatet(const type2tc &)
+  {
+  }
+
   explicit interval_templatet(const T &x) : lower(x), upper(x)
   {
   }
@@ -33,7 +37,8 @@ public:
 
   /// Bound value
   std::optional<T> lower, upper;
-
+  /// Type to be used for shift operations
+  type2tc type;
   T get_lower() const
   {
     return get(false);
@@ -220,6 +225,19 @@ public:
         upper = *i.upper;
       }
     }
+  }
+
+  // Wether *this \subseteq other
+  bool is_subseteq(const interval_templatet &other) const
+  {
+    if ((!lower && other.lower) || (!upper && other.upper))
+      return false;
+    if (other.lower && *lower < *other.lower)
+      return false;
+    if (other.upper && *upper > *other.upper)
+      return false;
+
+    return true;
   }
 
   virtual void approx_union_with(const interval_templatet &i)
@@ -508,8 +526,6 @@ public:
   static interval_templatet<T> bitnot(const interval_templatet<T> &w)
   {
     interval_templatet<T> result;
-    result.set_lower(-w.get_upper() - 1);
-    result.set_upper(-w.get_lower() - 1);
     return result;
   }
 

@@ -47,7 +47,11 @@ public:
 #undef dm
 
   // Language the frontend has been parsing
-  language_idt language = language_idt::NONE;
+  struct language_stdt
+  {
+    language_idt lid;
+    std::string std;
+  } language = {language_idt::NONE, ""};
 
   struct ansi_ct
   {
@@ -119,6 +123,7 @@ public:
     std::string locale_name;
 
     std::list<std::string> defines;
+    std::list<std::string> include_files;
     std::list<std::string> include_paths;
     std::list<std::string> idirafter_paths;
     std::list<std::string> forces;

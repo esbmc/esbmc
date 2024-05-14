@@ -1,16 +1,9 @@
-/*******************************************************************
- Module:
-
- Author: Hendrio Marques and Felipe Rodrigues
-
- Date: Feb 2012
-
- \*******************************************************************/
-
 #ifndef STL_UTILITY
 #define STL_UTILITY
 
+#if __cplusplus >= 201103L
 #include <type_traits>
+#endif
 
 namespace std
 {
@@ -55,11 +48,13 @@ pair<T1, T2> make_pair(T1 x, T2 y)
  * source: https://en.cppreference.com/w/cpp/utility/move
  */
 
+#if __cplusplus >= 201103L // Check if C++11 or later is being used
 template <class T>
 typename std::remove_reference<T>::type &&move(T &&t) noexcept
 {
   return static_cast<typename std::remove_reference<T>::type &&>(t);
 }
+#endif
 
 } // namespace std
 

@@ -167,6 +167,14 @@ void goto_symext::symex_step(reachability_treet &art)
   case END_FUNCTION:
     symex_end_of_function();
 
+    if (!stack_catch.empty())
+    {
+      // Get to the correct try (always the last one)
+      goto_symex_statet::exceptiont *except = &stack_catch.top();
+
+      except->has_throw_decl = false;
+      except->throw_list_set.clear();
+    }
     // Potentially skip to run another function ptr target; if not,
     // continue
     if (!run_next_function_ptr_target(false))
@@ -220,14 +228,24 @@ void goto_symext::symex_step(reachability_treet &art)
           it != thrown_obj_map.end())
       {
         const expr2tc &thrown_obj = it->second;
-        assert(is_symbol2t(thrown_obj));
 
         if (
           is_pointer_type(deref_code.target->type) &&
           !is_pointer_type(thrown_obj->type))
         {
-          expr2tc new_thrown_obj = address_of2tc(thrown_obj->type, thrown_obj);
-          deref_code.source = new_thrown_obj;
+          if (is_constant(thrown_obj))
+          {
+            expr2tc new_target =
+              dereference2tc(thrown_obj->type, deref_code.target);
+            deref_code.target = new_target;
+            deref_code.source = thrown_obj;
+          }
+          else
+          {
+            expr2tc new_thrown_obj =
+              address_of2tc(thrown_obj->type, thrown_obj);
+            deref_code.source = new_thrown_obj;
+          }
         }
         else
           deref_code.source = thrown_obj;
@@ -270,6 +288,18 @@ void goto_symext::symex_step(reachability_treet &art)
       {
         cur_state->source.pc++;
         run_intrinsic(call, art, id.as_string());
+        return;
+      }
+
+      if (id == "c:@F@scanf" || id == "c:@F@sscanf" || id == "c:@F@fscanf")
+      {
+        cur_state->source.pc++;
+
+        auto &ex_state = art.get_cur_state();
+        if (ex_state.cur_state->guard.is_false())
+          return;
+
+        symex_input(call);
         return;
       }
     }
@@ -649,19 +679,6 @@ void goto_symext::run_intrinsic(
     symex_assign(code_assign2tc(
       func_call.ret,
       is_constant_int2t(op1) ? gen_one(int_type2()) : gen_zero(int_type2())));
-    return;
-  }
-
-  if (
-    has_prefix(symname, "c:@F@__ESBMC_scanf") ||
-    has_prefix(symname, "c:@F@__ESBMC_sscanf") ||
-    has_prefix(symname, "c:@F@__ESBMC_fscanf"))
-  {
-    auto &ex_state = art.get_cur_state();
-    if (ex_state.cur_state->guard.is_false())
-      return;
-
-    symex_input(func_call);
     return;
   }
 

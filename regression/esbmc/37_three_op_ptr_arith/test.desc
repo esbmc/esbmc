@@ -1,4 +1,4 @@
 THOROUGH
 replace.c
---function omatch --unwind 1 --timeout 3600s --no-library --overflow-check --ir --z3
+--function omatch --unwind 1 --timeout 3600s --no-library --overflow-check --ir --z3 -Wno-error=implicit-function-declaration -Wno-error=implicit-int
 ^VERIFICATION FAILED$

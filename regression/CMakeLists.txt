@@ -31,7 +31,10 @@ function(add_esbmc_regression_test folder modes test)
                      --modes ${modes}
                      --file=${test}
                      ${BENCHBRINGUP_ARGS}) # additional args for BENCHBRINGUP workflow
-    set_tests_properties(${test_name} PROPERTIES SKIP_RETURN_CODE 10)
+    # TODO: Testing Tool should have a command to dump the TAG of a test		   
+    set_tests_properties(${test_name}
+      PROPERTIES SKIP_RETURN_CODE 10
+      LABELS "regression;${folder}")
 endfunction()
 
 function(add_esbmc_regression folder modes)
@@ -102,13 +105,18 @@ set(REGRESSIONS_CPP03 esbmc-cpp/cpp
                       esbmc-cpp/stack
                       esbmc-cpp/unix
                       esbmc-cpp/vector
+                      esbmc-cpp/try_catch
                       )
 # list of C++11 test suites
 set(REGRESSIONS_CPP11 esbmc-cpp11/cpp
                       esbmc-cpp11/constructors
                       esbmc-cpp11/new-delete
                       esbmc-cpp11/reference
+                      esbmc-cpp11/template
                       )
+
+# list of C++14 test suites
+set(REGRESSIONS_CPP14 esbmc-cpp14/template)
 
 # NOTE: In order to make the best of the concurrency set sort the tests from the slowest to fastest.
 if(APPLE)
@@ -135,6 +143,7 @@ if(APPLE)
                     extensions
                     ${REGRESSIONS_CHERI}
                     ${REGRESSIONS_PYTHON}
+                    ltl
        )
 elseif(WIN32)
     # FUTURE: Add floats-regression esbmc-cpp/cpp
@@ -144,12 +153,14 @@ elseif(WIN32)
                     llvm
                     floats
                     k-induction
+                    windows
                     ${REGRESSIONS_JIMPLE}
                     ${REGRESSIONS_BITWUZLA}
                     ${REGRESSIONS_CVC}
                     ${REGRESSIONS_MATHSAT}
                     ${REGRESSIONS_SMTLIB}
                     ${REGRESSIONS_Z3}
+                    ltl
        )
 else()
   if(NOT BENCHBRINGUP)
@@ -175,6 +186,7 @@ else()
                     ${REGRESSIONS_SMTLIB}
                     ${REGRESSIONS_Z3}
                     incremental-smt
+                    ${REGRESSIONS_CPP14}
                     ${REGRESSIONS_CPP11}
                     ${REGRESSIONS_CPP03}
                     ${REGRESSIONS_GOTO_CONTRACTOR}
@@ -184,6 +196,7 @@ else()
                     linux
                     ${REGRESSIONS_CHERI}
                     ${REGRESSIONS_PYTHON}
+                    ltl
        )
   else()
     set(REGRESSIONS $ENV{BENCHMARK_TO_RUN}) # run a single user-specified benchmark

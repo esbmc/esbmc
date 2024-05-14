@@ -1,4 +1,4 @@
 CORE
 main.c
---function f
+--function f -Wno-error=implicit-function-declaration
 ^VERIFICATION SUCCESSFUL$

@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--unwind 6 --no-unwinding-assertions --timeout 900 --std c++03
+^VERIFICATION FAILED$

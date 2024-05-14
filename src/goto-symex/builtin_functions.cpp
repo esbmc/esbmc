@@ -270,7 +270,7 @@ void goto_symext::track_new_pointer(
 
 void goto_symext::symex_free(const expr2tc &expr)
 {
-  const code_free2t &code = to_code_free2t(expr);
+  const auto &code = static_cast<const code_expression_data &>(*expr);
 
   // Trigger 'free'-mode dereference of this pointer. Should generate various
   // dereference failure callbacks.
@@ -483,20 +483,17 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
   assert(is_symbol2t(func_call.function));
 
   unsigned number_of_format_args, fmt_idx;
-  const std::string func_name =
-    to_symbol2t(func_call.function).thename.as_string();
+  const irep_idt func_name = to_symbol2t(func_call.function).thename;
 
-  if (func_name.find("__ESBMC_scanf") != std::string::npos)
+  if (func_name == "c:@F@scanf")
   {
-    assert(func_call.operands.size() >= 2 && "Wrong __ESBMC_scanf signature");
+    assert(func_call.operands.size() >= 2 && "Wrong scanf signature");
     fmt_idx = 0;
     number_of_format_args = func_call.operands.size() - 1;
   }
-  else if (
-    (func_name.find("__ESBMC_fscanf") != std::string::npos) ||
-    (func_name.find("__ESBMC_sscanf") != std::string::npos))
+  else if (func_name == "c:@F@fscanf" || func_name == "c:@F@sscanf")
   {
-    assert(func_call.operands.size() >= 3 && "Wrong __ESBMC_fscanf signature");
+    assert(func_call.operands.size() >= 3 && "Wrong fscanf/sscanf signature");
     fmt_idx = 1;
     number_of_format_args = func_call.operands.size() - 2;
   }
@@ -542,9 +539,9 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
 
 void goto_symext::symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code)
 {
-  bool do_array;
+  expr2tc size = code.size;
 
-  do_array = (code.kind == sideeffect2t::cpp_new_arr);
+  bool do_array = (code.kind == sideeffect2t::cpp_new_arr);
 
   unsigned int &dynamic_counter = get_dynamic_counter();
   dynamic_counter++;
@@ -588,27 +585,41 @@ void goto_symext::symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code)
 
   cur_state->rename(rhs);
   expr2tc rhs_copy(rhs);
+  expr2tc ptr_rhs(rhs);
 
   symex_assign(code_assign2tc(lhs, rhs), true);
 
-  // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
-  type2tc sym_type = array_type2tc(get_bool_type(), expr2tc(), true);
-  expr2tc sym = symbol2tc(sym_type, "__ESBMC_is_dynamic");
-
-  expr2tc ptr_obj = pointer_object2tc(pointer_type2(), lhs);
-  expr2tc idx = index2tc(get_bool_type(), sym, ptr_obj);
-  expr2tc truth = gen_true_expr();
-
-  symex_assign(code_assign2tc(idx, truth), true);
+  expr2tc ptr_obj = pointer_object2tc(pointer_type2(), ptr_rhs);
+  track_new_pointer(ptr_obj, newtype, size);
 
   dynamic_memory.emplace_back(
     rhs_copy, cur_state->guard, false, symbol.name.as_string());
 }
 
-// XXX - implement as a call to free?
-void goto_symext::symex_cpp_delete(const expr2tc &)
+void goto_symext::symex_cpp_delete(const expr2tc &expr)
 {
-  //bool do_array=code.statement()=="delete[]";
+  const auto &code = static_cast<const code_expression_data &>(*expr);
+
+  expr2tc tmp = code.operand;
+
+  internal_deref_items.clear();
+  expr2tc deref = dereference2tc(get_empty_type(), tmp);
+  dereference(deref, dereferencet::INTERNAL);
+
+  // we need to check the memory deallocation operator:
+  // new and delete, new[] and delete[]
+  bool is_arr = is_array_type(internal_deref_items.front().object->type);
+  bool is_del_arr = is_code_cpp_del_array2t(expr);
+
+  if (is_arr != is_del_arr)
+  {
+    const std::string &msg =
+      "Mismatched memory deallocation operators: " + get_expr_id(expr);
+    claim(gen_false_expr(), msg);
+  }
+
+  // implement delete as a call to free
+  symex_free(expr);
 }
 
 void goto_symext::intrinsic_yield(reachability_treet &art)

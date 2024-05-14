@@ -759,6 +759,8 @@ public:
   explicit address_of_exprt(const exprt &op)
     : exprt(exprt::addrof, typet("pointer"))
   {
+    assert(!op.is_constant());
+    assert(op.id() != exprt::addrof);
     type().subtype() = op.type();
     copy_to_operands(op);
   }

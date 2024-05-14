@@ -52,6 +52,15 @@ jobs:
       build-flags: '-b DebugOpt -S OFF -B OFF'
       testing: false
 
+  build-macos-arm:
+    uses: ./.github/workflows/build-unix.yml
+    name: arm64 darwin build
+    with:
+      operating-system: macos-latest
+      build-flags: '-c 15'
+      testing: false
+
+
   # Also run a build with frontend linked shared against Ubuntu's clang-13
   build-shared:
     name: dyn. llvm-13 DebugOpt
@@ -59,6 +68,15 @@ jobs:
     with:
       operating-system: ubuntu-latest
       build-flags: '-b DebugOpt -e On -S OFF -c 13'
+      testing: true
+
+  # Also run a build with frontend linked shared against Ubuntu's clang-16
+  build-shared16:
+    name: dyn. llvm-16 DebugOpt
+    uses: ./.github/workflows/build-unix.yml
+    with:
+      operating-system: ubuntu-latest
+      build-flags: '-b DebugOpt -e On -S OFF -c 16'
       testing: true
 
     # Check project with clang-format
@@ -84,8 +102,12 @@ jobs:
     - name: Delete downloaded Clang 11
       run: rm -rf clang*
     # Commit all changed files back to the repository
-    - uses: stefanzweifel/git-auto-commit-action@v5  
-      
+    - uses: stefanzweifel/git-auto-commit-action@v5
+      if: ${{ ! startsWith(github.head_ref, 'fb/') }}
+    - name: Throws error if changes were made
+      run: git diff --exit-code --ignore-cr-at-eol
+      if: ${{ startsWith(github.head_ref, 'fb/') }}
+
   cmake-lint:
     name: Check CMake modules
     runs-on: ubuntu-20.04

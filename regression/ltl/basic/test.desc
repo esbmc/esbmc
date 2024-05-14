@@ -1,0 +1,5 @@
+CORE
+test.c
+--ltl test.ba-2.c -DLTL_PREFIX_BOUND=10
+^VERIFICATION SUCCESSFUL$
+^Final lowest outcome: LTL_FAILING$

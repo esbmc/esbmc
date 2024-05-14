@@ -12,6 +12,7 @@ set(inputs
 
            # pthreads
            pthread.h
+           sched.h
            # Glibc
            bits/pthreadtypes.h
            bits/thread-shared-types.h

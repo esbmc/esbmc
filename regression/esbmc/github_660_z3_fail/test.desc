@@ -1,4 +1,4 @@
 CORE
 main.c
---ir --z3
+--ir --z3 -Wno-error=implicit-function-declaration
 ^VERIFICATION FAILED$

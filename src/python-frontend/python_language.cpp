@@ -21,6 +21,7 @@ extern "C"
 #undef ESBMC_FLAIL
 }
 
+// TODO: Rename this function as it is dumping other files now.
 static const std::string &dump_python_script()
 {
   // Dump astgen.py into a temporary directory
@@ -31,7 +32,13 @@ static const std::string &dump_python_script()
   {
     dumped = true;
 #define ESBMC_FLAIL(body, size, ...)                                           \
-  std::ofstream(p.path() + "/" #__VA_ARGS__).write(body, size);
+  {                                                                            \
+    fs::path filePath(fs::path(p.path()) / #__VA_ARGS__);                      \
+    fs::path directory = filePath.parent_path();                               \
+    if (!directory.empty() && !fs::exists(directory))                          \
+      fs::create_directories(directory);                                       \
+    std::ofstream(filePath.string()).write(body, size);                        \
+  }
 
 #include <pythonastgen.h>
 #undef ESBMC_FLAIL
@@ -70,8 +77,18 @@ bool python_languaget::parse(const std::string &path)
     return true;
   }
 
+  std::stringstream script_path;
+  script_path << ast_output_dir << "/" << script.stem().string() << ".json";
+
   // Parse and generate AST
-  std::ifstream ast_json(ast_output_dir + "/ast.json");
+  std::ifstream ast_json(script_path.str());
+  if (!ast_json.good())
+  {
+    log_error(
+      "<python-parser> {} was not generated\n", script_path.str().c_str());
+    exit(1);
+  }
+
   ast = nlohmann::json::parse(ast_json);
 
   // Add annotation

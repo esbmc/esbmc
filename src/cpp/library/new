@@ -1,0 +1,18 @@
+
+#pragma once
+
+#include <cstddef>
+
+/* These are not in the 'std' namespace */
+
+/* placement-new */
+void *operator new(std::size_t count, void *ptr)
+{
+  return ptr;
+}
+
+/* placement-new */
+void *operator new[](std::size_t count, void *ptr)
+{
+  return ptr;
+}

@@ -18,9 +18,9 @@
 #include <ibex/ibex_Ctc.h>
 #include <irep2/irep2.h>
 #include <util/type_byte_size.h>
-#include <goto-programs/abstract-interpretation/interval_domain.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 #include <limits>
+#include <chrono>
 
 void goto_contractor(
   goto_functionst &goto_functions,
@@ -38,17 +38,14 @@ private:
 
 public:
   size_t getIndex() const;
-
   vart();
-
-public:
   vart(const string &varName, const expr2tc &symbol, const size_t &index);
   const ibex::Interval &getInterval() const;
   void setInterval(const ibex::Interval &interval);
   bool isIntervalChanged() const;
   void setIntervalChanged(bool intervalChanged);
   const expr2tc &getSymbol() const;
-  void dump();
+  void dump() const;
 };
 
 class Contractor
@@ -405,6 +402,23 @@ public:
   {
     return is_empty_vector;
   }
+  void dump()
+  {
+    std::ostringstream oss;
+    oss << "This map has : " << this->n;
+    if (is_empty_vector)
+    {
+      oss << "empty vector";
+      log_status("{}", oss.str());
+      return;
+    }
+    log_status("{}", oss.str());
+
+    for (const auto &var : var_map)
+    {
+      var.second.dump();
+    }
+  }
 };
 //-----------------------------------------------------------------------------------------------------------------
 /// This class will parse ESBMC expressions to ibex expressions:
@@ -606,14 +620,6 @@ private:
 class interval_analysis_ibex_contractor
 {
 public:
-  typedef interval_templatet<BigInt> integer_intervalt;
-  using real_intervalt =
-    interval_templatet<boost::multiprecision::cpp_bin_float_100>;
-  typedef std::unordered_map<irep_idt, integer_intervalt, irep_id_hash>
-    int_mapt;
-
-  typedef std::unordered_map<irep_idt, real_intervalt, irep_id_hash> real_mapt;
-
   double parse_time{}, apply_time{}, mod_time{}, cpy_time{};
 
   interval_analysis_ibex_contractor()
@@ -640,20 +646,41 @@ public:
     else if (map.var_map.size() == 0)
       return false;
 
-    ibex::CtcFixPoint *f = new ibex::CtcFixPoint(*c);
-    contractor = Contractor(f);
+    contractor = Contractor(c);
     return true;
   }
 
-  void maps_to_domains(int_mapt, real_mapt);
+  // void maps_to_domains(int_mapt, real_mapt);
 
   void apply_contractor();
 
-  expr2tc result_of_outer(expr2tc exp);
+  expr2tc result_of_outer();
 
-  void dump();
+  void dump(bool is_timed);
 
   [[maybe_unused]] void modularize_intervals();
+
+  void interval_to_domain(
+    const std::optional<BigInt> &lower,
+    const std::optional<BigInt> &upper,
+    const std::string &name)
+  {
+    if (lower)
+      map.update_lb_interval(lower->to_int64(), name);
+    if (upper)
+      map.update_ub_interval(upper->to_int64(), name);
+  }
+
+  void interval_to_domain(
+    const std::optional<double> &lower,
+    const std::optional<double> &upper,
+    const std::string &name)
+  {
+    if (lower)
+      map.update_lb_interval(*lower, name);
+    if (upper)
+      map.update_ub_interval(*upper, name);
+  }
 
 private:
   ibex::IntervalVector domains;

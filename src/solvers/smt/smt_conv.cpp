@@ -215,14 +215,6 @@ smt_astt smt_convt::imply_ast(smt_astt a, smt_astt b)
   return mk_implies(a, b);
 }
 
-void smt_convt::set_to(const expr2tc &expr, bool value)
-{
-  smt_astt a = convert_ast(expr);
-  if (value == false)
-    a = invert_ast(a);
-  assert_ast(a);
-}
-
 smt_astt smt_convt::convert_assign(const expr2tc &expr)
 {
   const equality2t &eq = to_equality2t(expr);
@@ -2360,7 +2352,14 @@ expr2tc smt_convt::get(const expr2tc &expr)
 
   case expr2t::member_id:
   {
-    if (is_array_type(expr))
+    const member2t &mem = to_member2t(res);
+    expr2tc mem_src = mem.source_value;
+
+    if (is_symbol2t(mem_src) && !is_pointer_type(expr) && !is_struct_type(expr))
+    {
+      return get_by_type(res);
+    }
+    else if (is_array_type(expr))
     {
       if (extracting_from_array_tuple_is_error)
       {
@@ -2371,6 +2370,7 @@ expr2tc smt_convt::get(const expr2tc &expr)
       }
       return expr2tc(); // TODO: ??? This is horrible
     }
+
     simplify(res);
     return res;
   }

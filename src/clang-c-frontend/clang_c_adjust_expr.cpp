@@ -97,6 +97,7 @@ void clang_c_adjust::adjust_expr(exprt &expr)
     expr.id() == "<=" || expr.id() == ">" || expr.id() == ">=")
   {
     adjust_expr_rel(expr);
+    adjust_reference(expr);
   }
   else if (expr.is_index())
   {
@@ -112,6 +113,7 @@ void clang_c_adjust::adjust_expr(exprt &expr)
     expr.id() == "bitxor" || expr.id() == "bitor")
   {
     adjust_expr_binary_arithmetic(expr);
+    adjust_reference(expr);
   }
   else if (expr.id() == "shl" || expr.id() == "shr")
   {
@@ -123,14 +125,7 @@ void clang_c_adjust::adjust_expr(exprt &expr)
   }
   else if (expr.id() == "if")
   {
-    // Check all operands
-    adjust_operands(expr);
-
-    // If the condition is not of boolean type, it must be casted
-    gen_typecast(ns, expr.op0(), bool_type());
-
-    // Typecast both the true and false results
-    gen_typecast_arithmetic(ns, expr.op1(), expr.op2());
+    adjust_if(expr);
   }
   else if (expr.id() == "builtin_va_arg")
   {
@@ -229,7 +224,10 @@ void clang_c_adjust::adjust_side_effect(side_effect_exprt &expr)
     {
     }
     else if (has_prefix(id2string(statement), "assign"))
+    {
       adjust_side_effect_assignment(expr);
+      adjust_reference(expr);
+    }
     else if (statement == "statement_expression")
       adjust_side_effect_statement_expression(expr);
     else if (statement == "gcc_conditional_expression")
@@ -752,7 +750,10 @@ void clang_c_adjust::adjust_side_effect_function_call(
     }
   }
   else
+  {
+    align_se_function_call_return_type(f_op, expr);
     adjust_expr(f_op);
+  }
 
   // do implicit dereference
   if (f_op.is_address_of() && f_op.implicit() && (f_op.operands().size() == 1))
@@ -1332,9 +1333,27 @@ void clang_c_adjust::adjust_operands(exprt &expr)
     adjust_expr(op);
 }
 
+void clang_c_adjust::adjust_if(exprt &expr)
+{
+  // Check all operands
+  adjust_operands(expr);
+
+  // If the condition is not of boolean type, it must be casted
+  gen_typecast(ns, expr.op0(), bool_type());
+
+  // Typecast both the true and false results
+  // If the types are inconsistent
+  gen_typecast_arithmetic(ns, expr.op1(), expr.op2());
+}
+
 void clang_c_adjust::align_se_function_call_return_type(
   exprt &,
   side_effect_expr_function_callt &)
 {
   // nothing to be aligned for C
+}
+
+void clang_c_adjust::adjust_reference(exprt &)
+{
+  // nothing to adjust for C
 }

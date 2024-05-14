@@ -1,5 +1,7 @@
+#include <clang-c-frontend/typecast.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <util/c_sizeof.h>
+#include <util/c_types.h>
 #include <util/destructor.h>
 #include <util/expr_util.h>
 
@@ -46,16 +48,18 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
   }
   else if (statement == "temporary_object")
   {
-    exprt &initializer = static_cast<exprt &>(expr.add("initializer"));
+    adjust_operands(expr);
 
-    side_effect_expr_function_callt &constructor_call =
-      to_side_effect_expr_function_call(initializer.op0());
-
-    adjust_function_call_arguments(constructor_call);
+    exprt &initializer = (exprt &)expr.find("initializer");
+    adjust_expr(initializer);
   }
   else if (statement == "assign")
   {
     adjust_side_effect_assign(expr);
+  }
+  else if (statement == "cpp-throw")
+  {
+    adjust_side_effect_throw(expr);
   }
   else
     clang_c_adjust::adjust_side_effect(expr);
@@ -67,6 +71,13 @@ void clang_cpp_adjust::adjust_new(exprt &expr)
   {
     exprt &initializer = static_cast<exprt &>(expr.add("initializer"));
     adjust_expr(initializer);
+  }
+
+  if (expr.size_irep().is_not_nil())
+  {
+    exprt new_size = static_cast<const exprt &>(expr.size_irep());
+    adjust_expr(new_size);
+    expr.size(new_size);
   }
 
   // Set sizeof and cmt_sizeof_type
@@ -114,13 +125,26 @@ void clang_cpp_adjust::adjust_cpp_member(member_exprt &expr)
    *      * type: ...
    *      * id: <setX_clang_ID>
    */
-  const symbolt *comp_symb = namespacet(context).lookup(expr.component_name());
+  const symbolt *comp_symb = ns.lookup(expr.component_name());
   assert(comp_symb);
   // compoment's type shall be the same as member_exprt's type
   // and both are of the type `code`
   assert(comp_symb->type.is_code());
   exprt method_call = symbol_expr(*comp_symb);
   expr.swap(method_call);
+}
+
+void clang_cpp_adjust::adjust_if(exprt &expr)
+{
+  // Check all operands
+  adjust_operands(expr);
+
+  // If the condition is not of boolean type, it must be casted
+  gen_typecast(ns, expr.op0(), bool_type());
+
+  // Typecast both the true and false results
+  gen_typecast(ns, expr.op1(), expr.type());
+  gen_typecast(ns, expr.op2(), expr.type());
 }
 
 void clang_cpp_adjust::adjust_side_effect_assign(side_effect_exprt &expr)
@@ -150,7 +174,8 @@ void clang_cpp_adjust::adjust_side_effect_assign(side_effect_exprt &expr)
     exprt base_symbol = arg.op0();
     assert(base_symbol.op0().id() == "symbol");
     // TODO: wrap base symbol into dereference if it's a member
-    rhs_func_call.arguments().push_back(arg);
+    exprt::operandst &arguments = rhs_func_call.arguments();
+    arguments.insert(arguments.begin(), arg);
 
     expr.swap(rhs);
 
@@ -159,9 +184,7 @@ void clang_cpp_adjust::adjust_side_effect_assign(side_effect_exprt &expr)
     clang_c_adjust::adjust_side_effect_function_call(
       to_side_effect_expr_function_call(expr));
   }
-  else if (
-    lhs.is_symbol() &&
-    (is_reference(lhs.type()) || is_rvalue_reference(lhs.type())))
+  else if (lhs.is_symbol() && is_lvalue_or_rvalue_reference(lhs.type()))
   {
     // since we modelled lvalue reference as pointers
     // turn assign expression r = 1, where r is an lvalue reference
@@ -183,49 +206,63 @@ void clang_cpp_adjust::adjust_side_effect_assign(side_effect_exprt &expr)
     {
       convert_lvalue_ref_to_deref_sideeffect(lhs);
     }
+    adjust_expr(rhs);
+  }
+  else if (lhs.get_bool("#member_init"))
+  {
+    // Only adjust references in the rhs.
+    // Don't change the lhs if it is a member initializer.
+    // See "RefMemberInit".
+    adjust_operands(expr);
+    adjust_side_effect_assignment(expr);
+    adjust_expr(rhs);
   }
   else
     clang_c_adjust::adjust_side_effect(expr);
 }
 
-void clang_cpp_adjust::adjust_expr_rel(exprt &expr)
+void clang_cpp_adjust::adjust_reference(exprt &expr)
 {
-  clang_c_adjust::adjust_expr_rel(expr);
+  if (!expr.has_operands())
+    return;
 
-  exprt &op0 = expr.op0();
-  if (op0.is_typecast())
+  for (auto &op : expr.operands())
+    convert_reference(op);
+}
+
+void clang_cpp_adjust::convert_reference(exprt &expr)
+{
+  if (expr.is_typecast())
   {
     // special treatment for lvalue reference typecasting
-    // if lhs is a typecast of lvalue reference, e.g. (int)r == 1
+    // if lhs is a typecast of lvalue reference,
+    // e.g. (int)r == 1, (int)r + 1, (int)r += 1
     // where r is a reference
-    // we turn it into (int)*r == 1
-    exprt &tp_op0 = op0.op0();
-    if (
-      tp_op0.is_symbol() &&
-      (is_reference(tp_op0.type()) || is_rvalue_reference(tp_op0.type())))
+    // we turn it into (int)*r
+    exprt &tp_op0 = expr.op0();
+    if (tp_op0.is_symbol() && is_lvalue_or_rvalue_reference(tp_op0.type()))
       convert_ref_to_deref_symbol(tp_op0);
   }
-  if (is_reference(op0.type()) || is_rvalue_reference(op0.type()))
+  if (is_lvalue_or_rvalue_reference(expr.type()))
   {
     // special treatment for lvalue reference
-    // if LHS is an lvalue reference, e.g.
-    //  r == 1 or F(a) == 1 where F is a function that returns a reference
-    // but RHS is not a pointer. We got to dereference the LHS
+    // if LHS is an lvalue reference,
+    // e.g. r == 1, r += 1 or F(a) == 1 where F is a function that
+    // returns a reference but RHS is not a pointer.
+    // We got to dereference the LHS
     // and turn it into:
-    //  *r == 1 *F(a) == 1
-    dereference_exprt tmp_deref(op0, op0.type());
-    tmp_deref.location() = op0.location();
+    //  *r, *F(a)
+    dereference_exprt tmp_deref(expr, expr.type());
+    tmp_deref.location() = expr.location();
     tmp_deref.set("#lvalue", true);
     tmp_deref.set("#implicit", true);
-    op0.swap(tmp_deref);
+    expr.swap(tmp_deref);
   }
 }
 
 void clang_cpp_adjust::convert_ref_to_deref_symbol(exprt &expr)
 {
-  assert(
-    expr.is_symbol() &&
-    (is_reference(expr.type()) || is_rvalue_reference(expr.type())));
+  assert(expr.is_symbol() && is_lvalue_or_rvalue_reference(expr.type()));
 
   dereference_exprt tmp(expr, expr.type());
   tmp.location() = expr.location();
@@ -246,30 +283,6 @@ void clang_cpp_adjust::adjust_function_call_arguments(
   side_effect_expr_function_callt &expr)
 {
   clang_c_adjust::adjust_function_call_arguments(expr);
-
-  exprt::operandst &arguments = expr.arguments();
-
-  for (unsigned i = 0; i < arguments.size(); i++)
-  {
-    exprt &op = arguments[i];
-    if (op.is_typecast() && op.type().get_bool("#reference"))
-    {
-      // special treatment for lvalue reference in function parameter list
-      // e.g. for F(a), where F is a function taking an int lvalue reference.
-      // Since we've modelled lvalue references as pointers, clang_c_aduster
-      // would have adjusted the parameter to a typecasting expression:
-      //  F((int &)a);
-      // but what we really want is an address_of expression:
-      //  F(*a);
-      address_of_exprt tmp_expr;
-      assert(op.type().is_pointer());
-      tmp_expr.type() = op.type();
-      tmp_expr.operands().resize(0);
-      tmp_expr.move_to_operands(op.op0());
-      tmp_expr.location() = op.location();
-      op.swap(tmp_expr);
-    }
-  }
 }
 
 void clang_cpp_adjust::align_se_function_call_return_type(
@@ -279,6 +292,105 @@ void clang_cpp_adjust::align_se_function_call_return_type(
   // align the side effect's type at callsite with the
   // function return type. But ignore constructors
   const typet &return_type = (typet &)f_op.type().return_type();
-  if (return_type.id() != "constructor")
+  if (return_type.id() != "constructor" && return_type.is_not_nil())
     expr.type() = return_type;
+}
+
+void clang_cpp_adjust::adjust_side_effect_throw(side_effect_exprt &expr)
+{
+  // throw or rethrow
+  assert(expr.operands().size() == 1 || expr.operands().size() == 0);
+
+  // no ajustment for rethrow
+  if (expr.operands().size() == 0)
+    return;
+
+  const typet &exception_type = expr.op0().type();
+
+  std::vector<irep_idt> ids;
+
+  // XL: Do we have a better way to store it?
+  irept result("exception_list");
+  convert_exception_id(exception_type, "", ids);
+  result.get_sub().resize(ids.size());
+
+  // exception_list 0: type_1 1: type_2
+  for (unsigned i = 0; i < ids.size(); i++)
+    result.get_sub()[i].id(ids[i]);
+
+  expr.set("exception_list", result);
+}
+
+void clang_cpp_adjust::convert_exception_id(
+  const typet &type,
+  const std::string &suffix,
+  std::vector<irep_idt> &ids,
+  bool is_catch)
+{
+  if (type.id() == "pointer" || type.id() == "array")
+  {
+    if (type.reference())
+    {
+      convert_exception_id(type.subtype(), suffix, ids, is_catch);
+      return;
+    }
+    if (type.subtype().id() == "empty")
+    {
+      irep_idt identifier = "void_ptr";
+      ids.emplace_back(id2string(identifier) + suffix);
+    }
+    else
+    {
+      convert_exception_id(type.subtype(), "_ptr" + suffix, ids, is_catch);
+      return;
+    }
+  }
+  else if (type.id() == "symbol")
+  {
+    irep_idt identifier = type.identifier();
+
+    // Check if base class exists
+    typet t = ns.lookup(identifier)->type;
+
+    // only get the base class when throwing
+    if (t.id() == "struct" && !is_catch)
+    {
+      struct_typet struct_type = to_struct_type(t);
+      const exprt &bases =
+        static_cast<const exprt &>(struct_type.find("bases"));
+
+      // Throwing a derived class
+      if (bases.is_not_nil() && bases.get_sub().size())
+      {
+        // record the derived class
+        ids.emplace_back(id2string(identifier) + suffix);
+
+        // record all the base classes id
+        for (const auto &i : bases.get_sub())
+        {
+          identifier = i.id();
+          ids.emplace_back(id2string(identifier) + suffix);
+        }
+      }
+      else
+        ids.emplace_back(id2string(identifier) + suffix);
+    }
+    else
+      ids.emplace_back(id2string(identifier) + suffix);
+  }
+  else if (type.ellipsis())
+  {
+    irep_idt identifier = "ellipsis";
+    ids.emplace_back(id2string(identifier) + suffix);
+  }
+  else if (type.id() == "noexcept")
+  {
+    irep_idt identifier = "noexcept";
+    ids.emplace_back(id2string(identifier) + suffix);
+  }
+
+  // add C++ type
+  std::string cpp_type = type.get("#cpp_type").as_string();
+  if (!cpp_type.empty())
+    ids.emplace_back(cpp_type + suffix);
 }

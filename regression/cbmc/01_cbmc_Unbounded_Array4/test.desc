@@ -1,4 +1,4 @@
 CORE
 main.c
---array-flattener
+--array-flattener -Wno-error=implicit-function-declaration
 ^VERIFICATION SUCCESSFUL$

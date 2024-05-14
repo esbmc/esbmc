@@ -465,7 +465,7 @@ expr2tc dereferencet::dereference(
   if (!is_pointer_type(orig_src))
     src = typecast2tc(pointer_type2tc(get_empty_type()), src);
 
-  type2tc type = to_type;
+  type2tc type = ns.follow(to_type);
 
   // collect objects dest may point to
   value_setst::valuest points_to_set;
@@ -2115,6 +2115,17 @@ void dereferencet::valid_check(
           "pointer dereference",
           "accessed expired variable pointer `" +
             get_pretty_name(to_symbol2t(symbol).thename.as_string()) + "'",
+          guard);
+        return;
+      }
+
+      /* Writes to globals of const-qualified type are not allowed either. */
+      if (is_write(mode) && sym.static_lifetime && sym.type.cmt_constant())
+      {
+        dereference_failure(
+          "pointer dereference",
+          "write access to const object `" +
+            get_pretty_name(sym.id.as_string()) + "'",
           guard);
         return;
       }

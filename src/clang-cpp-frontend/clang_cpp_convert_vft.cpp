@@ -9,6 +9,7 @@
 // Remove warnings from Clang headers
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
+#include <clang/Basic/Version.inc>
 #include <clang/AST/Attr.h>
 #include <clang/AST/DeclCXX.h>
 #include <clang/AST/DeclFriend.h>
@@ -97,19 +98,28 @@ bool clang_cpp_convertert::get_struct_class_virtual_methods(
   return false;
 }
 
+static bool is_pure_virtual(const clang::CXXMethodDecl &md)
+{
+#if CLANG_VERSION_MAJOR < 18
+  return md.isPure();
+#else
+  return md.isPureVirtual();
+#endif
+}
+
 bool clang_cpp_convertert::annotate_virtual_overriding_methods(
   const clang::CXXMethodDecl &md,
   struct_typet::componentt &comp)
 {
   std::string method_id, method_name;
-  clang_c_convertert::get_decl_name(md, method_name, method_id);
+  get_decl_name(md, method_name, method_id);
 
   comp.type().set("#is_virtual", true);
   comp.type().set("#virtual_name", method_name);
   comp.set("is_virtual", true);
   comp.set("virtual_name", method_name);
 
-  if (md.isPure())
+  if (is_pure_virtual(md))
     comp.set("is_pure_virtual", true);
 
   return false;
@@ -552,30 +562,30 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
     const function_switch &switch_map = vft_switch_kv_pair.second;
 
     // To create the vtable variable symbol we need to get the corresponding type
-    const symbolt *late_cast_symb =
-      namespacet(context).lookup(vft_switch_kv_pair.first);
+    const symbolt *late_cast_symb = ns.lookup(vft_switch_kv_pair.first);
     assert(late_cast_symb);
-    const symbolt &vt_symb_type = *namespacet(context).lookup(
-      "virtual_table::" + late_cast_symb->id.as_string());
+    const symbolt *vt_symb_type =
+      ns.lookup("virtual_table::" + late_cast_symb->id.as_string());
+    assert(vt_symb_type);
 
     // This is the class we are currently dealing with
     std::string class_id, class_name;
     get_decl_name(cxxrd, class_name, class_id);
 
     symbolt vt_symb_var;
-    vt_symb_var.id = vt_symb_type.id.as_string() + "@" + class_id;
-    vt_symb_var.name = vt_symb_type.name.as_string() + "@" + class_id;
+    vt_symb_var.id = vt_symb_type->id.as_string() + "@" + class_id;
+    vt_symb_var.name = vt_symb_type->name.as_string() + "@" + class_id;
     vt_symb_var.mode = mode;
     vt_symb_var.module =
       get_modulename_from_path(type.location().file().as_string());
-    vt_symb_var.location = vt_symb_type.location;
-    vt_symb_var.type = symbol_typet(vt_symb_type.id);
+    vt_symb_var.location = vt_symb_type->location;
+    vt_symb_var.type = symbol_typet(vt_symb_type->id);
     vt_symb_var.lvalue = true;
     vt_symb_var.static_lifetime = true;
 
     // add vtable variable symbols
-    const struct_typet &vt_type = to_struct_type(vt_symb_type.type);
-    exprt values("struct", symbol_typet(vt_symb_type.id));
+    const struct_typet &vt_type = to_struct_type(vt_symb_type->type);
+    exprt values("struct", symbol_typet(vt_symb_type->id));
     for (const auto &compo : vt_type.components())
     {
       std::map<irep_idt, exprt>::const_iterator cit2 =
@@ -614,7 +624,7 @@ void clang_cpp_convertert::get_overriden_methods(
 
     // get the id for this overriden method
     std::string method_id, method_name;
-    clang_c_convertert::get_decl_name(*md_overriden, method_name, method_id);
+    get_decl_name(*md_overriden, method_name, method_id);
 
     // avoid adding the same overriden method, e.g. in case of diamond problem
     if (map.find(method_id) != map.end())

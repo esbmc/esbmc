@@ -111,9 +111,7 @@ __esbmc_cheri_bounds_set(void *__capability cap, __SIZE_TYPE__ sz)
   __ESBMC_assert(cheri_gettag(cap), "tag-violation c2exception");
   // __ESBMC_assert(!cc128_is_cap_sealed(&comp) /*cheri_getsealed(cap)*/, "seal-violation c2exception");
   __ESBMC_assert(base <= cursor, "length-violation c2exception");
-  __uint128_t newTop = cursor;
-  newTop += sz;
-  bool exact = cc128_setbounds(&comp, cursor, newTop);
+  bool exact = cc128_setbounds(&comp, sz);
   (void)exact; /* ignore */
   u.pesbt = cc128_compress_mem(&comp);
   __ESBMC_assert(

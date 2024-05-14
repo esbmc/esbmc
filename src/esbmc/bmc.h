@@ -19,6 +19,14 @@ public:
   bmct(goto_functionst &funcs, optionst &opts, contextt &_context);
 
   optionst &options;
+  enum ltl_res
+  {
+    ltl_res_good,
+    ltl_res_succeeding,
+    ltl_res_failing,
+    ltl_res_bad
+  };
+  size_t ltl_results_seen[4];
 
   BigInt interleaving_number;
   BigInt interleaving_failed;
@@ -35,7 +43,7 @@ protected:
   std::unique_ptr<reachability_treet> symex;
 
   virtual smt_convt::resultt
-  run_decision_procedure(smt_convt &smt_conv, symex_target_equationt &eq);
+  run_decision_procedure(smt_convt &smt_conv, symex_target_equationt &eq) const;
 
   virtual void show_program(const symex_target_equationt &eq);
   virtual void report_success();
@@ -63,14 +71,17 @@ protected:
 
   smt_convt::resultt run_thread(std::shared_ptr<symex_target_equationt> &eq);
 
+  int ltl_run_thread(symex_target_equationt &equation) const;
+
   smt_convt::resultt multi_property_check(
     const symex_target_equationt &eq,
     size_t remaining_claims);
 
   std::vector<std::unique_ptr<ssa_step_algorithm>> algorithms;
 
-  void
-  generate_smt_from_equation(smt_convt &smt_conv, symex_target_equationt &eq);
+  void generate_smt_from_equation(
+    smt_convt &smt_conv,
+    symex_target_equationt &eq) const;
 };
 
 #endif

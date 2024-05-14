@@ -221,11 +221,15 @@ std::string goto2ct::translate(goto_programt::instructiont &instruction)
   case NO_INSTRUCTION_TYPE:
     out << "// " << instruction.location << "";
     break;
+  case ATOMIC_BEGIN:
+    out << "__ESBMC_atomic_begin()";
+    break;
+  case ATOMIC_END:
+    out << "__ESBMC_atomic_end()";
+    break;
   // These are C++ instructions. We do not translate those at the moment.
   case THROW:
   case CATCH:
-  case ATOMIC_BEGIN:
-  case ATOMIC_END:
   case THROW_DECL:
   case THROW_DECL_END:
     assert(!"C++ instructions are not supported by GOTO2C");

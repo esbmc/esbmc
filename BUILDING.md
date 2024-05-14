@@ -105,6 +105,11 @@ First, we need to download the package. It can be performed using the following 
 wget https://github.com/CTSRD-CHERI/llvm-project/archive/refs/tags/cheri-rel-20210817.tar.gz
 ```
 
+Before build the package, check that lld is installed:
+```
+sudo apt-get install lld
+```
+
 Then, we need to extract and build the package. You can use the following commands:
 
 ```
@@ -118,7 +123,13 @@ ninja &&
 ninja install &&
 cd ../.. &&
 ESBMC_CLANG=$(echo -D{LLVM,Clang}_DIR=$PWD/clang13) &&
-ESBMC_STATIC=ON
+ESBMC_STATIC=Off
+```
+
+If you want to build ESBMC-CHERI, please built with the option:
+
+```
+-DESBMC_CHERI=On -DCMAKE_BUILD_TYPE=Sanitizer -DSANITIZER_TYPE=UBSAN
 ```
 
 ## Preparing the Solidity frontend (optional)
@@ -368,9 +379,17 @@ of a C standard library for one of these platforms.
 To obtain and install a CHERI sysroot, the
 [cheribuild](https://github.com/CTSRD-CHERI/cheribuild)
 tool is the recommended way:
+
+The following command will install the packages required for the most commonly used cheribuild targets:
 ```
-cheribuild.py cheribsd-riscv64-purecap disk-image-riscv64-purecap -d
+sudo apt install autoconf automake libtool pkg-config clang bison cmake mercurial ninja-build samba flex texinfo time libglib2.0-dev libpixman-1-dev libarchive-dev libarchive-tools libbz2-dev libattr1-dev libcap-ng-dev libexpat1-dev libgmp-dev bc
 ```
+
+Download and build Cheri:
+```
+git clone https://github.com/CTSRD-CHERI/cheribuild.git && cd cheribuild && python3 cheribuild.py cheribsd-riscv64-purecap disk-image-riscv64-purecap -d
+```
+
 Once the build completed, you'll find `cheri` directory in your HOME directory.
 
 CHERI-enabled ESBMC defaults to the platform mips64-unknown-freebsd and

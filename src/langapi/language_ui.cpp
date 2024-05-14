@@ -53,7 +53,7 @@ bool language_uit::parse(const std::string &filename)
     return true;
   }
 
-  config.language = lang;
+  config.language.lid = lang;
 
   // Check that it opens
   std::ifstream infile(filename.c_str());

@@ -199,23 +199,7 @@ void goto_programt::instructiont::output_instruction(
     break;
 
   case THROW_DECL_END:
-    out << "THROW_DECL_END (";
-
-    if (!is_nil_expr(code))
-    {
-      const code_cpp_throw_decl_end2t &decl_end =
-        to_code_cpp_throw_decl_end2t(code);
-
-      for (auto const &it : decl_end.exception_list)
-      {
-        if (it != *decl_end.exception_list.begin())
-          out << ", ";
-        out << it;
-      }
-    }
-
-    out << ")";
-
+    out << "THROW_DECL_END";
     out << "\n";
     break;
 
@@ -298,6 +282,15 @@ void goto_programt::get_successors(
     // might be reached.
     if (!is_false(i.guard))
       successors.push_back(next);
+  }
+  else if (i.is_catch())
+  {
+    // CATCH signed_int->1, bool->2, float->3
+    // we consider these targets as successors
+    for (auto target : i.targets)
+      successors.emplace_back(target);
+
+    successors.push_back(next);
   }
   else
     successors.push_back(next);

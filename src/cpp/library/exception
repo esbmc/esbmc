@@ -1,24 +1,12 @@
-/*******************************************************************
- Module:
-
- Author: Felipe Rodrigues
- Created in: September 2012
- Updated in: March 2023 by Kunjian Song
-
- Ref:
- https://en.cppreference.com/w/cpp/header/exception
- https://cplusplus.com/reference/exception/
-
- \*******************************************************************/
-
 #ifndef STL_EXCEPTION
 #define STL_EXCEPTION
 
 #include "definitions.h"
 
-namespace std {
+namespace std
+{
 
-const char* message;
+const char *message;
 
 typedef void (*terminate_handler)();
 typedef void (*unexpected_handler)();
@@ -48,18 +36,18 @@ void default_unexpected() throw()
   default_terminate();
 }
 
-terminate_handler terminate_pf=default_terminate;
-unexpected_handler unexpected_pf=default_unexpected;
+terminate_handler terminate_pf = default_terminate;
+unexpected_handler unexpected_pf = default_unexpected;
 
 terminate_handler set_terminate(terminate_handler f) throw()
 {
-  terminate_pf=f;
+  terminate_pf = f;
   return terminate_pf;
 }
 
 unexpected_handler set_unexpected(unexpected_handler f) throw()
 {
-  unexpected_pf=f;
+  unexpected_pf = f;
   return unexpected_pf;
 }
 
@@ -80,36 +68,44 @@ void terminate() throw()
   terminate_pf();
 }
 
-class exception {
+class exception
+{
 public:
-  exception() throw() {};
-  exception(const exception&) throw() {};
+  exception() throw(){};
+  exception(const exception &) throw(){};
 
-  exception& operator=(const exception&) throw();
+  exception &operator=(const exception &) throw();
 
-  virtual ~exception() {}
+  virtual ~exception()
+  {
+  }
 
-  virtual const char* what() const throw() {
+  virtual const char *what() const throw()
+  {
     /**
      *Returns a null terminated character sequence containing a generic description of the exception.
      *Both the wording of such description and the character width are implementation-defined.
      *source: https://cplusplus.com/reference/exception/exception/what/
      **/
-    return (const char*) message;
+    return (const char *)message;
   }
 };
 
 /** If an %exception is thrown which is not listed in a function's
  *  %exception specification, one of these may be thrown.
  **/
-class bad_exception: public exception {
+class bad_exception : public exception
+{
 public:
-  bad_exception() throw() {}
-  bad_exception& operator=( const bad_exception& other ) throw();
-  virtual const char* what() const throw() {
-    return (const char*) message;
+  bad_exception() throw()
+  {
+  }
+  bad_exception &operator=(const bad_exception &other) throw();
+  virtual const char *what() const throw()
+  {
+    return (const char *)message;
   }
 };
-}
+} // namespace std
 
 #endif
