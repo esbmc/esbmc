@@ -13,6 +13,8 @@ SOLVERS = [
     'z3',
     'boolector',
     'cvc',
+    'cvc4',
+    'cvc5',
     'mathsat',
     'yices',
     'bitwuzla'
