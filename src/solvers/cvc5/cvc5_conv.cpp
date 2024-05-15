@@ -1289,6 +1289,18 @@ smt_sortt cvc5_convt::mk_fpbv_rm_sort()
     SMT_SORT_FPBV_RM, slv.getRoundingModeSort(), 3);
 }
 
+void cvc5_convt::push_ctx()
+{
+  smt_convt::push_ctx();
+  slv.push();
+}
+
+void cvc5_convt::pop_ctx()
+{
+  slv.pop();
+  smt_convt::pop_ctx();
+}
+
 void cvc5_convt::dump_smt()
 {
   std::ostringstream oss;
