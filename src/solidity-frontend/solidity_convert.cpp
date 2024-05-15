@@ -2274,12 +2274,13 @@ bool solidity_convertert::get_binary_operator_expr(
   }
   else if (expr.contains("leftExpression"))
   {
-    nlohmann::json commonType = expr["commonType"];
+    nlohmann::json literalType_l = expr["leftExpression"]["typeDescriptions"];
+    nlohmann::json literalType_r = expr["rightExpression"]["typeDescriptions"];
 
-    if (get_expr(expr["leftExpression"], commonType, lhs))
+    if (get_expr(expr["leftExpression"], literalType_l, lhs))
       return true;
 
-    if (get_expr(expr["rightExpression"], commonType, rhs))
+    if (get_expr(expr["rightExpression"], literalType_r, rhs))
       return true;
   }
   else
@@ -2453,10 +2454,12 @@ bool solidity_convertert::get_binary_operator_expr(
   }
 
   // for bytes type
-  if (
-    lhs.type().get("#sol_type").as_string().find("BYTES") !=
-      std::string::npos ||
-    rhs.type().get("#sol_type").as_string().find("BYTES") != std::string::npos)
+  bool is_lhs_byte =
+    lhs.type().get("#sol_type").as_string().find("BYTES") != std::string::npos;
+  bool is_rhs_byte =
+    rhs.type().get("#sol_type").as_string().find("BYTES") != std::string::npos;
+
+  if (is_lhs_byte || is_rhs_byte)
   {
     switch (opcode)
     {
@@ -2497,7 +2500,17 @@ bool solidity_convertert::get_binary_operator_expr(
     }
   }
 
-  // 4. Copy to operands
+  // 4.1 check if it needs type conversion
+  if (expr.contains("commonType"))
+  {
+    typet common_type;
+    if (get_type_description(expr["commonType"], common_type))
+      return true;
+    solidity_gen_typecast(ns, lhs, common_type);
+    solidity_gen_typecast(ns, rhs, common_type);
+  }
+
+  // 4.2 Copy to operands
   new_expr.copy_to_operands(lhs, rhs);
 
   // Pop current_BinOp_type.push as we've finished this conversion
@@ -2891,6 +2904,11 @@ bool solidity_convertert::get_esbmc_builtin_ref(
   return false;
 }
 
+/*
+  check if it's a solidity built-in function
+  - if so, get the function definition reference, assign to new_expr and return false  
+  - if not, return true
+*/
 bool solidity_convertert::get_sol_builtin_ref(
   const nlohmann::json expr,
   exprt &new_expr)
@@ -2904,8 +2922,7 @@ bool solidity_convertert::get_sol_builtin_ref(
     //  e.g. gasleft() <=> c:@gasleft
     if (expr["expression"]["nodeType"].get<std::string>() != "Identifier")
       // this means it's not a builtin funciton
-      // however, we should not treat this as an error ("return true")
-      return get_expr(expr["expression"], new_expr);
+      return true;
 
     std::string name = expr["expression"]["name"].get<std::string>();
     std::string id = "c:@F@" + name;
@@ -3418,8 +3435,12 @@ bool solidity_convertert::get_elementary_type_name_bytesn(
   SolidityGrammar::ElementaryTypeNameT &type,
   typet &out)
 {
+  /*
+    bytes1 has size of 8 bits (possible values 0x00 to 0xff), 
+    which you can implicitly convert to uint8 (unsigned integer of size 8 bits) but not to int8
+  */
   const unsigned int byte_num = SolidityGrammar::bytesn_type_name_to_size(type);
-  out = signedbv_typet(byte_num * 8);
+  out = unsignedbv_typet(byte_num * 8);
 
   return false;
 }
