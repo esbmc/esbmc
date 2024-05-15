@@ -61,10 +61,8 @@ ieee_floatt cvc5_convt::get_fpbv(smt_astt a)
   assert(ew == a->sort->get_exponent_width());
   assert(sw == a->sort->get_significand_width());
 
-  ieee_floatt number(ieee_float_spect(
-    // in mk_bvfp_sort() we added +1 for the sign bit
-    a->sort->get_significand_width() - 1,
-    a->sort->get_exponent_width()));
+  /* the sign bit isn't part of the significand's width for ieee_float_spect */
+  ieee_floatt number(ieee_float_spect(sw - 1, ew));
 
   if (e.isFloatingPointNaN())
     number.make_NaN();
