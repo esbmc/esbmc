@@ -1167,7 +1167,7 @@ smt_astt cvc5_convt::mk_extract(smt_astt a, unsigned int high, unsigned int low)
 
   auto const *ca = to_solver_smt_ast<cvc5_smt_ast>(a);
 
-  auto op = slv.mkOp(cvc5::Kind::BITVECTOR_EXTRACT, {high, low});
+  cvc5::Op op = slv.mkOp(cvc5::Kind::BITVECTOR_EXTRACT, {high, low});
   cvc5::Term fin = slv.mkTerm(op, {ca->a});
 
   smt_sortt s = mk_bv_sort(high - low + 1);
@@ -1178,8 +1178,7 @@ smt_astt cvc5_convt::mk_sign_ext(smt_astt a, unsigned int topwidth)
 {
   auto const *ca = to_solver_smt_ast<cvc5_smt_ast>(a);
 
-  auto op = slv.mkOp(cvc5::Kind::BITVECTOR_SIGN_EXTEND, {topwidth});
-
+  cvc5::Op op = slv.mkOp(cvc5::Kind::BITVECTOR_SIGN_EXTEND, {topwidth});
   cvc5::Term fin = slv.mkTerm(op, {ca->a});
 
   smt_sortt s = mk_bv_sort(a->sort->get_data_width() + topwidth);
@@ -1190,7 +1189,7 @@ smt_astt cvc5_convt::mk_zero_ext(smt_astt a, unsigned int topwidth)
 {
   auto const *ca = to_solver_smt_ast<cvc5_smt_ast>(a);
 
-  auto op = slv.mkOp(cvc5::Kind::BITVECTOR_ZERO_EXTEND, {topwidth});
+  cvc5::Op op = slv.mkOp(cvc5::Kind::BITVECTOR_ZERO_EXTEND, {topwidth});
   cvc5::Term fin = slv.mkTerm(op, {ca->a});
 
   smt_sortt s = mk_bv_sort(a->sort->get_data_width() + topwidth);
