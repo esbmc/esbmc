@@ -1590,17 +1590,25 @@ bool python_converter::convert()
   python_filename = ast_json["filename"].get<std::string>();
 
   // Load memory models -----
-  std::stringstream model_path;
-  model_path << ast_json["ast_output_dir"].get<std::string>() << "/range.json";
-  std::ifstream model_file(model_path.str());
-  nlohmann::json model_json;
-  model_file >> model_json;
+  const std::string &ast_output_dir =
+    ast_json["ast_output_dir"].get<std::string>();
+  std::list<std::string> memory_model_files = {"range.json", "int.json"};
+  for (const auto &file : memory_model_files)
+  {
+    std::stringstream model_path;
+    model_path << ast_json["ast_output_dir"].get<std::string>() << "/" << file;
 
-  exprt mm_code = get_block(model_json["body"]);
-  convert_expression_to_code(mm_code);
+    std::ifstream model_file(model_path.str());
+    nlohmann::json model_json;
+    model_file >> model_json;
+    model_file.close();
 
-  // Add imported code to main symbol
-  main_symbol.value.swap(mm_code);
+    exprt mm_code = get_block(model_json["body"]);
+    convert_expression_to_code(mm_code);
+
+    // Add imported code to main symbol
+    main_symbol.value.swap(mm_code);
+  }
 
   // Handle --function option
   const std::string function = config.options.get_option("function");
