@@ -187,10 +187,8 @@ smt_astt cvc5_convt::mk_shl(smt_astt a, smt_astt b)
   assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
   assert(a->sort->id == b->sort->id);
 
-  cvc5::Term p = slv.mkTerm(
-    cvc5::Kind::POW,
-    {to_solver_smt_ast<cvc5_smt_ast>(mk_smt_bv(2, b->sort))->a,
-     to_solver_smt_ast<cvc5_smt_ast>(b)->a});
+  cvc5::Term p =
+    slv.mkTerm(cvc5::Kind::POW2, {to_solver_smt_ast<cvc5_smt_ast>(b)->a});
   return new_ast(
     slv.mkTerm(cvc5::Kind::MULT, {to_solver_smt_ast<cvc5_smt_ast>(a)->a, p}),
     a->sort);
