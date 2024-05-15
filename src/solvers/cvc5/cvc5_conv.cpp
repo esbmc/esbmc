@@ -1143,20 +1143,16 @@ smt_astt cvc5_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   // Standard arrangement: if we already have the name, return the expression
   // from the symbol table. If not, time for a new name.
 
-  /*if(sym_tab.isBound(name))
+  auto [it, ins] = symtable.try_emplace(name, nullptr);
+  if (ins)
   {
-    cvc5::Term e = sym_tab.lookup(name);
-    return new_ast(e, s);
-  }*/
+    // Time for a new one.
+    const cvc5::Sort &srt = to_solver_smt_sort<cvc5::Sort>(s)->s;
+    cvc5::Term e = slv.mkConst(srt, name); // "global", eh?
+    it->second = new_ast(e, s);
+  }
 
-  //AYB CVC5 no longer has a symbol table. Hopefully it does some silent checking internally
-  // if not, we may need to implement a symbol table here
-
-  // Time for a new one.
-  cvc5::Term e =
-    slv.mkConst(to_solver_smt_sort<cvc5::Sort>(s)->s, name); // "global", eh?
-  //sym_tab.bind(name, e, true);
-  return new_ast(e, s);
+  return it->second;
 }
 
 smt_astt cvc5_convt::mk_extract(smt_astt a, unsigned int high, unsigned int low)
