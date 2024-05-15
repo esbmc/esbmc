@@ -228,7 +228,7 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::string>()->value_name("log.smt2"),
      "name for Z3 smt2 file"},
     {"mathsat", NULL, "use MathSAT"},
-    {"cvc", NULL, "use CVC4"},
+    {"cvc", NULL, "alias for --cvc4; this may change in the future to --cvc5"},
     {"cvc4", NULL, "use CVC4"},
     {"cvc5", NULL, "use CVC5"},
     {"yices", NULL, "use Yices"},
