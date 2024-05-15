@@ -56,6 +56,7 @@ option(ESBMC_SVCOMP "Enable an SV-COMP build of ESBMC (default: OFF)" OFF)
 # PRE-BUILT DEPENDENCIES
 #############################
 
+# these URLs are all for an x86_64 target
 if(WIN32)
   set(DEFAULT_LLVM_URL "https://gitlab.com/Anthonysdu/llvm11/-/raw/main/llvm+clang+lld-11.0.0-x86_64-windows-msvc-release-mt.zip")
   set(DEFAULT_LLVM_NAME "llvm+clang+lld-11.0.0-x86_64-windows-msvc-release-mt")
