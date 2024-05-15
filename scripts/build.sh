@@ -35,8 +35,6 @@ error() {
 
 # Ubuntu setup (pre-config)
 ubuntu_setup () {
-    
-    
     # Tested on ubuntu 22.04
     PKGS="\
         clang-$CLANG_VERSION clang-tidy-$CLANG_VERSION \
@@ -67,14 +65,17 @@ ubuntu_setup () {
 
     if [ $ARCH = "aarch64" ]
     then
-	echo "Detected ARM64 Linux!"
-	# TODO: We should start using container builds in actions!
-	SOLVER_FLAGS="$SOLVER_FLAGS -DENABLE_Z3=On -DZ3_DIR=/usr -DENABLE_GOTO_CONTRACTOR=OFF"
-	return
+        echo "Detected ARM64 Linux!"
+        # TODO: We should start using container builds in actions!
+        SOLVER_FLAGS="$SOLVER_FLAGS \
+            -DENABLE_Z3=On -DZ3_DIR=/usr \
+            -DENABLE_GOTO_CONTRACTOR=OFF \
+        "
+        return
     fi
 
     SOLVER_FLAGS="$SOLVER_FLAGS -DENABLE_CVC5=On"
-    
+
     sudo apt-get update &&
     sudo apt-get install -y $PKGS &&
     echo "Installing Python dependencies" &&
@@ -90,7 +91,7 @@ ubuntu_setup () {
     " &&
     SOLVER_FLAGS="$SOLVER_FLAGS \
         -DENABLE_Z3=ON \
-    " 
+    "
 }
 
 ubuntu_post_setup () {
@@ -154,10 +155,10 @@ do
     C) BASE_ARGS="$BASE_ARGS -DESBMC_SVCOMP=ON"
        SOLVER_FLAGS="\
           -DENABLE_BOOLECTOR=On \
-    	  -DENABLE_YICES=ON \
-	  -DENABLE_CVC4=OFF \
+          -DENABLE_YICES=ON \
+          -DENABLE_CVC4=OFF \
           -DENABLE_BITWUZLA=On \
-	  -DENABLE_Z3=On \
+          -DENABLE_Z3=On \
           -DENABLE_Mathsat=ON \
           -DENABLE_GOTO_CONTRACTOR=On \
           -DACADEMIC_BUILD=ON"  ;;
