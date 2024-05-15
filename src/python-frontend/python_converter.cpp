@@ -1599,25 +1599,29 @@ bool python_converter::convert()
 
   python_filename = ast_json["filename"].get<std::string>();
 
-  // Load memory models -----
-  const std::string &ast_output_dir =
-    ast_json["ast_output_dir"].get<std::string>();
-  std::list<std::string> memory_model_files = {"range.json", "int.json"};
-  for (const auto &file : memory_model_files)
+  if (!config.options.get_bool_option("no-library"))
   {
-    std::stringstream model_path;
-    model_path << ast_json["ast_output_dir"].get<std::string>() << "/" << file;
+    // Load memory models -----
+    const std::string &ast_output_dir =
+      ast_json["ast_output_dir"].get<std::string>();
+    std::list<std::string> memory_model_files = {"range.json", "int.json"};
+    for (const auto &file : memory_model_files)
+    {
+      std::stringstream model_path;
+      model_path << ast_json["ast_output_dir"].get<std::string>() << "/"
+                 << file;
 
-    std::ifstream model_file(model_path.str());
-    nlohmann::json model_json;
-    model_file >> model_json;
-    model_file.close();
+      std::ifstream model_file(model_path.str());
+      nlohmann::json model_json;
+      model_file >> model_json;
+      model_file.close();
 
-    exprt mm_code = get_block(model_json["body"]);
-    convert_expression_to_code(mm_code);
+      exprt mm_code = get_block(model_json["body"]);
+      convert_expression_to_code(mm_code);
 
-    // Add imported code to main symbol
-    main_symbol.value.swap(mm_code);
+      // Add imported code to main symbol
+      main_symbol.value.swap(mm_code);
+    }
   }
 
   // Handle --function option
