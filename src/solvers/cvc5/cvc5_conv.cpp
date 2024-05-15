@@ -19,7 +19,7 @@ smt_convt *create_new_cvc5_solver(
 
 cvc5_convt::cvc5_convt(const namespacet &ns, const optionst &options)
   : smt_convt(ns, options),
-    array_iface(false, false), /* TODO: cvc5 does support bools in arrays */
+    array_iface(true, true),
     fp_convt(this),
     to_bv_counter(0),
     slv()
@@ -1215,8 +1215,14 @@ smt_astt cvc5_convt::mk_ite(smt_astt cond, smt_astt t, smt_astt f)
 smt_astt
 cvc5_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 {
-  /* TODO: use slv.mkConstArray() */
-  return default_convert_array_of(init_val, domain_width, this);
+  smt_sortt dom = mk_int_bv_sort(domain_width);
+  smt_sortt arr = mk_array_sort(dom, init_val->sort);
+
+  cvc5::Term t = slv.mkConstArray(
+    to_solver_smt_sort<cvc5::Sort>(arr)->s,
+    to_solver_smt_ast<cvc5_smt_ast>(init_val)->a);
+
+  return new_ast(t, arr);
 }
 
 smt_sortt cvc5_convt::mk_bool_sort()
