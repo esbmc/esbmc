@@ -288,15 +288,16 @@ cvc5_convt::mk_smt_fpbv_fma(smt_astt v1, smt_astt v2, smt_astt v3, smt_astt rm)
 smt_astt
 cvc5_convt::mk_smt_typecast_from_fpbv_to_ubv(smt_astt from, std::size_t width)
 {
-  assert(width <= UINT32_MAX);
   // Conversion from float to integers always truncate, so we assume
   // the round mode to be toward zero
   const cvc5_smt_ast *mrm =
     to_solver_smt_ast<cvc5_smt_ast>(mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO));
   const cvc5_smt_ast *mfrom = to_solver_smt_ast<cvc5_smt_ast>(from);
 
-  // AYB TODO, width is too large
-  auto op = slv.mkOp(cvc5::Kind::FLOATINGPOINT_TO_UBV, {width});
+  /* The cvc5::Op API works with uint32_t indices for operators */
+  assert(width <= UINT32_MAX);
+  uint32_t w32 = width;
+  cvc5::Op op = slv.mkOp(cvc5::Kind::FLOATINGPOINT_TO_UBV, {w32});
 
   return new_ast(slv.mkTerm(op, {mrm->a, mfrom->a}), mk_bv_sort(width));
 }
@@ -304,15 +305,16 @@ cvc5_convt::mk_smt_typecast_from_fpbv_to_ubv(smt_astt from, std::size_t width)
 smt_astt
 cvc5_convt::mk_smt_typecast_from_fpbv_to_sbv(smt_astt from, std::size_t width)
 {
-  assert(width <= UINT32_MAX);
   // Conversion from float to integers always truncate, so we assume
   // the round mode to be toward zero
   const cvc5_smt_ast *mrm =
     to_solver_smt_ast<cvc5_smt_ast>(mk_smt_fpbv_rm(ieee_floatt::ROUND_TO_ZERO));
   const cvc5_smt_ast *mfrom = to_solver_smt_ast<cvc5_smt_ast>(from);
 
-  // AYB TODO, width is too large
-  auto op = slv.mkOp(cvc5::Kind::FLOATINGPOINT_TO_SBV, {width});
+  /* The cvc5::Op API works with uint32_t indices for operators */
+  assert(width <= UINT32_MAX);
+  uint32_t w32 = width;
+  auto op = slv.mkOp(cvc5::Kind::FLOATINGPOINT_TO_SBV, {w32});
 
   return new_ast(slv.mkTerm(op, {mrm->a, mfrom->a}), mk_bv_sort(width));
 }
