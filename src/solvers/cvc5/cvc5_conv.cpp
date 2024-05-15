@@ -1074,11 +1074,8 @@ smt_astt cvc5_convt::mk_smt_fpbv_inf(bool sign, unsigned ew, unsigned sw)
 {
   smt_sortt s = mk_real_fp_sort(ew, sw - 1);
 
-  // TODO: some template magic?
-  cvc5::Term t = sign ? slv.mkFloatingPointNegInf(
-                          s->get_exponent_width(), s->get_significand_width())
-                      : slv.mkFloatingPointPosInf(
-                          s->get_exponent_width(), s->get_significand_width());
+  cvc5::Term t = sign ? slv.mkFloatingPointNegInf(ew, sw)
+                      : slv.mkFloatingPointPosInf(ew, sw);
 
   return new_ast(t, s);
 }
