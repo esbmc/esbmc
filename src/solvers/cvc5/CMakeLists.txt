@@ -23,7 +23,7 @@ if(ENABLE_CVC5)
         message(FATAL_ERROR "Expected version ${CVC5_MIN_VERSION} or greater")
     endif()
 
-    add_library(solvercvc5 cvc_conv.cpp)
+    add_library(solvercvc5 cvc5_conv.cpp)
     target_include_directories(solvercvc5
             PRIVATE ${Boost_INCLUDE_DIRS}
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
