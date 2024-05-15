@@ -54,28 +54,32 @@ ieee_floatt cvc5_convt::get_fpbv(smt_astt a)
 {
   auto const *ca = to_solver_smt_ast<cvc5_smt_ast>(a);
   cvc5::Term e = slv.getValue(ca->a);
-  //cvc5::FloatingPoint foo = e.getFloatingPointValue();
+
+  /* widths of exponent, significand and the bitvector value as a cvc5::Term */
+  auto [ew, sw, bv] = e.getFloatingPointValue();
+
+  assert(ew == a->sort->get_exponent_width());
+  assert(sw == a->sort->get_significand_width());
 
   ieee_floatt number(ieee_float_spect(
     // in mk_bvfp_sort() we added +1 for the sign bit
     a->sort->get_significand_width() - 1,
     a->sort->get_exponent_width()));
-  return number;
-#if 0 
-  if (foo.isNaN())
+
+  if (e.isFloatingPointNaN())
     number.make_NaN();
-  else if (foo.isInfinite())
-  {
-    if (foo.isPositive())
-      number.make_plus_infinity();
-    else
-      number.make_minus_infinity();
-  }
+  else if (e.isFloatingPointPosInf())
+    number.make_plus_infinity();
+  else if (e.isFloatingPointNegInf())
+    number.make_minus_infinity();
   else
-    number.unpack(BigInt(foo.pack().toInteger().getUnsignedLong()));
+  {
+    std::string str = bv.getBitVectorValue(2);
+    BigInt value = binary2integer(str, false);
+    number.unpack(value);
+  }
 
   return number;
-#endif
 }
 
 BigInt cvc5_convt::get_bv(smt_astt a, bool is_signed)
