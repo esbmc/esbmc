@@ -1043,11 +1043,16 @@ smt_astt cvc5_convt::mk_smt_real(const std::string &str)
 
 smt_astt cvc5_convt::mk_smt_fpbv(const ieee_floatt &thereal)
 {
-  assert(thereal.spec.width() <= 64);
   smt_sortt s = mk_real_fp_sort(thereal.spec.e, thereal.spec.f);
+  BigInt fp_rep = thereal.pack();
 
-  cvc5::Term float_bv =
-    slv.mkBitVector(thereal.spec.width(), thereal.pack().to_uint64());
+  unsigned width = thereal.spec.width();
+  cvc5::Term float_bv;
+  if (thereal.spec.width() <= 64)
+    float_bv = slv.mkBitVector(width, fp_rep.to_uint64());
+  else
+    float_bv = slv.mkBitVector(width, integer2binary(fp_rep, width), 2);
+
   return new_ast(
     slv.mkFloatingPoint(
       s->get_exponent_width(), s->get_significand_width(), float_bv),
