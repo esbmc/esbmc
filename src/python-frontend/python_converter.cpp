@@ -518,7 +518,7 @@ function_id python_converter::build_function_id(const nlohmann::json &element)
   bool is_member_function_call = false;
   const nlohmann::json &func_json = element["func"];
   const std::string &func_type = func_json["_type"];
-  std::string func_name, obj_name;
+  std::string func_name, obj_name, class_name;
   std::string func_symbol_id = create_symbol_id();
 
   if (func_type == "Name")
@@ -537,10 +537,17 @@ function_id python_converter::build_function_id(const nlohmann::json &element)
     }
   }
 
+  // build symbol_id
   if (func_name == "len")
   {
     func_name = __ESBMC_get_object_size;
     func_symbol_id = "c:@F@" + __ESBMC_get_object_size;
+  }
+  else if (is_builtin_type(obj_name))
+  {
+    class_name = obj_name;
+    func_symbol_id =
+      "py:" + python_filename + "@C@" + class_name + "@F@" + func_name;
   }
   else if (func_name == __ESBMC_assume || func_name == __VERIFIER_assume)
     func_symbol_id = func_name;
@@ -550,7 +557,6 @@ function_id python_converter::build_function_id(const nlohmann::json &element)
   bool is_ctor_call = is_constructor_call(element);
 
   // Insert class name in the symbol id
-  std::string class_name;
   if (is_ctor_call || is_member_function_call)
   {
     std::size_t pos = func_symbol_id.rfind("@F@");
@@ -589,8 +595,9 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 
     if (element["func"]["_type"] == "Attribute")
     {
-      const auto &func_value = element["func"]["value"]["id"];
-      if (is_class(func_value, ast_json))
+      const std::string &func_value =
+        element["func"]["value"]["id"].get<std::string>();
+      if (is_class(func_value, ast_json) || is_builtin_type(func_value))
         is_class_method_call = true;
       else if (!json_utils::is_module(func_value, ast_json))
         is_instance_method_call = true;
@@ -637,13 +644,13 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       }
     }
 
-    bool is_ctor_call = is_constructor_call(element);
-
     const symbolt *func_symbol = context.find_symbol(func_symbol_id.c_str());
 
     // Find function in imported modules
     if (!func_symbol)
       func_symbol = find_function_in_imported_modules(func_symbol_id);
+
+    bool is_ctor_call = is_constructor_call(element);
 
     if (func_symbol == nullptr)
     {
