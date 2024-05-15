@@ -3,6 +3,7 @@ import sys
 import importlib.util
 import json
 import os
+import glob
 
 class ForRangeToWhileTransformer(ast.NodeTransformer):
     def __init__(self):
@@ -160,11 +161,15 @@ def main():
     generate_ast_json(tree, filename, None, output_dir)
 
     # Process and convert AST for memory models
-    with open(output_dir + "/memory-models/range.py") as memory_model:
-        mm_tree = ast.parse(memory_model.read())
+    memory_models_dir = os.path.join(output_dir, "memory-models")
 
-    # Generate JSON from AST for the memory models.
-    generate_ast_json(mm_tree, "range.py", None, output_dir) # TODO: Convert all Python files in memory-models folder
+    # Iterate over all .py files in the directory
+    for python_file in glob.glob(os.path.join(memory_models_dir, "*.py")):
+        with open(python_file) as memory_model:
+            mm_tree = ast.parse(memory_model.read())
+            filename = os.path.basename(python_file)
+            # Generate JSON from AST for the memory models.
+            generate_ast_json(mm_tree, filename, None, output_dir)
 
 
 if __name__ == "__main__":
