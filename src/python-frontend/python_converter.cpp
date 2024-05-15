@@ -972,6 +972,9 @@ bool python_converter::is_constructor_call(const nlohmann::json &json)
 
   const std::string &func_name = json["func"]["id"];
 
+  if (is_builtin_type(func_name))
+    return false;
+
   /* f:Foo = Foo()
    * The statement is a constructor call if the function call on the
    * rhs corresponds to the name of a class. */
