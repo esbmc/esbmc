@@ -74,10 +74,9 @@ ubuntu_setup () {
         return
     fi
 
-    SOLVER_FLAGS="$SOLVER_FLAGS -DENABLE_CVC5=On"
-
     sudo apt-get update &&
     sudo apt-get install -y $PKGS &&
+
     echo "Installing Python dependencies" &&
     pip3 install --user meson ast2json &&
     pip3 install --user pyparsing toml &&
@@ -91,6 +90,7 @@ ubuntu_setup () {
     " &&
     SOLVER_FLAGS="$SOLVER_FLAGS \
         -DENABLE_Z3=ON \
+        -DENABLE_CVC5=On \
     "
 }
 
@@ -105,8 +105,17 @@ macos_setup () {
     if [ $STATIC = ON ]; then
         error "static macOS build is currently not supported"
     fi
-    brew install z3 gmp csmith cmake boost ninja python3 automake bison flex llvm@$CLANG_VERSION &&
-    BASE_ARGS=" -DLLVM_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION -DClang_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -DCMAKE_BUILD_TYPE=Debug -GNinja -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release" &&
+    brew install \
+        z3 gmp csmith cmake boost ninja python3 automake bison flex \
+        llvm@$CLANG_VERSION &&
+    BASE_ARGS="\
+        -DLLVM_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION \
+        -DClang_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION \
+        -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk \
+        -DCMAKE_BUILD_TYPE=Debug \
+        -GNinja \
+        -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release \
+    " &&
     SOLVER_FLAGS=""
 }
 
