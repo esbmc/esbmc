@@ -1534,8 +1534,8 @@ bool solidity_convertert::get_expr(
 
       int byte_size;
       if (type == SolidityGrammar::ElementaryTypeNameT::BYTES)
-        // dynamic bytes array, the type is set to uint_type()
-        byte_size = 0;
+        // dynamic bytes array, the type is set to unsignedbv(256);
+        byte_size = 32;
       else
         byte_size = bytesn_type_name_to_size(type);
 
@@ -2465,12 +2465,24 @@ bool solidity_convertert::get_binary_operator_expr(
     {
       // e.g. cmp(0x74,  0x7500)
       // ->   cmp(0x74, 0x0075)
+      assert(expr.contains("commonType"));
+      typet common_type;
+      if (get_type_description(expr["commonType"], common_type))
+        return true;
+
+      // e.g.
+      //    data1 = "test"; data2 = 0x74657374; // "test"
+      //    assert(data1 == data2); // true
+      // Do type conversion before the bswap
+      convert_type_expr(ns, lhs, common_type);
+      convert_type_expr(ns, rhs, common_type);
+
       exprt bwrhs, bwlhs;
-      bwrhs = exprt("bswap", rhs.type());
+      bwrhs = exprt("bswap", common_type);
       bwrhs.operands().push_back(rhs);
       rhs = bwrhs;
 
-      bwlhs = exprt("bswap", lhs.type());
+      bwlhs = exprt("bswap", common_type);
       bwlhs.operands().push_back(lhs);
       lhs = bwlhs;
 
@@ -2482,7 +2494,7 @@ bool solidity_convertert::get_binary_operator_expr(
       //    bytes1 = 0x11
       //    x<<8 == 0x00
       new_expr.copy_to_operands(lhs, rhs);
-      solidity_gen_typecast(ns, new_expr, lhs.type());
+      convert_type_expr(ns, new_expr, lhs.type());
       current_BinOp_type.pop();
 
       return false;
@@ -2500,10 +2512,8 @@ bool solidity_convertert::get_binary_operator_expr(
     typet common_type;
     if (get_type_description(expr["commonType"], common_type))
       return true;
-    if (lhs.type() != common_type)
-      convert_type_expr(ns, lhs, common_type);
-    if (rhs.type() != common_type)
-      convert_type_expr(ns, rhs, common_type);
+    convert_type_expr(ns, lhs, common_type);
+    convert_type_expr(ns, rhs, common_type);
   }
 
   // 4.2 Copy to operands
@@ -2618,10 +2628,8 @@ bool solidity_convertert::get_compound_assign_expr(
     typet common_type;
     if (get_type_description(expr["commonType"], common_type))
       return true;
-    if (lhs.type() != common_type)
-      convert_type_expr(ns, lhs, common_type);
-    if (rhs.type() != common_type)
-      convert_type_expr(ns, rhs, common_type);
+    convert_type_expr(ns, lhs, common_type);
+    convert_type_expr(ns, rhs, common_type);
   }
 
   new_expr.copy_to_operands(lhs, rhs);
@@ -4658,35 +4666,38 @@ void solidity_convertert::convert_type_expr(
   exprt &src_expr,
   const typet &dest_type)
 {
-  if (is_bytes_type(src_expr.type()) && is_bytes_type(dest_type))
+  if (src_expr.type() != dest_type)
   {
-    // 1. Fixed-size Bytes Converted to Smaller Types
-    //    bytes2 a = 0x4326;
-    //    bytes1 b = bytes1(a); // b will be 0x43
-    // 2. Fixed-size Bytes Converted to Larger Types
-    //    bytes2 a = 0x4235;
-    //    bytes4 b = bytes4(a); // b will be 0x42350000
-    // which equals to:
-    //    new_type b = bswap(new_type)(bswap(x)))
+    // only do conversion when the src.type != dest.type
+    if (is_bytes_type(src_expr.type()) && is_bytes_type(dest_type))
+    {
+      // 1. Fixed-size Bytes Converted to Smaller Types
+      //    bytes2 a = 0x4326;
+      //    bytes1 b = bytes1(a); // b will be 0x43
+      // 2. Fixed-size Bytes Converted to Larger Types
+      //    bytes2 a = 0x4235;
+      //    bytes4 b = bytes4(a); // b will be 0x42350000
+      // which equals to:
+      //    new_type b = bswap(new_type)(bswap(x)))
 
-    exprt bswap_expr, sub_bswap_expr;
+      exprt bswap_expr, sub_bswap_expr;
 
-    // 1. bswap
-    sub_bswap_expr = exprt("bswap", src_expr.type());
-    sub_bswap_expr.operands().push_back(src_expr);
+      // 1. bswap
+      sub_bswap_expr = exprt("bswap", src_expr.type());
+      sub_bswap_expr.operands().push_back(src_expr);
 
-    // 2. typecast
-    solidity_gen_typecast(ns, sub_bswap_expr, dest_type);
+      // 2. typecast
+      solidity_gen_typecast(ns, sub_bswap_expr, dest_type);
 
-    // 3. bswap back
-    bswap_expr = exprt("bswap", sub_bswap_expr.type());
-    bswap_expr.operands().push_back(sub_bswap_expr);
+      // 3. bswap back
+      bswap_expr = exprt("bswap", sub_bswap_expr.type());
+      bswap_expr.operands().push_back(sub_bswap_expr);
 
-    src_expr = bswap_expr;
+      src_expr = bswap_expr;
+    }
+    else
+      solidity_gen_typecast(ns, src_expr, dest_type);
   }
-
-  else
-    solidity_gen_typecast(ns, src_expr, dest_type);
 }
 
 static inline void static_lifetime_init(const contextt &context, codet &dest)
