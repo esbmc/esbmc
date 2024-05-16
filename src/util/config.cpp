@@ -137,12 +137,11 @@ bool configt::set(const cmdlinet &cmdline)
   if (cmdline.isset("warning"))
     for (const std::string &w : cmdline.get_values("warning"))
     {
-      if (has_prefix(w, "c,") && w.length() > 2)
-        for (size_t i = 2, j; i; i = j + 1)
+      if (has_prefix(w, "c,"))
+        for (size_t i = 2, j; i < w.length(); i = j + 1)
         {
-          j = w.find(',', i);
-          ansi_c.frontend_opts.push_back(
-            w.substr(i, j == std::string::npos ? j : j - i));
+          j = std::min(w.find(',', i), w.length());
+          ansi_c.frontend_opts.push_back(w.substr(i, j - i));
         }
       else
         ansi_c.warnings.push_back(w);
