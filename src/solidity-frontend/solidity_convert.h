@@ -167,7 +167,8 @@ protected:
     exprt &dest);
   bool convert_string_literal(std::string the_value, exprt &dest);
   void convert_type_expr(const namespacet &ns, exprt &dest, const typet &type);
-  bool convert_hex_literal(std::string the_value, exprt &dest, const int n = 0);
+  bool
+  convert_hex_literal(std::string the_value, exprt &dest, const int n = 256);
 
   contextt &context;
   namespacet ns;

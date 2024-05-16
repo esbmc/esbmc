@@ -2500,8 +2500,8 @@ bool solidity_convertert::get_binary_operator_expr(
     }
   }
 
-  // 4.1 check if it needs type conversion
-  if (expr.contains("commonType"))
+  // 4.1 check if it needs implicit type conversion
+  if (expr.contains("commonType") && !is_lhs_byte && !is_rhs_byte)
   {
     typet common_type;
     if (get_type_description(expr["commonType"], common_type))
@@ -3540,7 +3540,7 @@ bool solidity_convertert::get_elementary_type_name(
   case SolidityGrammar::ElementaryTypeNameT::INT_LITERAL:
   {
     // for int_const type
-    new_type = int_type();
+    new_type = signedbv_typet(256);
     new_type.set("#cpp_type", "signed_char");
     break;
   }
