@@ -1,9 +1,9 @@
-bytes_data:bytes = b'\x00\x10'
+bytes_data = b'\x00\x10'
 x:int = int.from_bytes(bytes_data, True, False)
 assert x == 16
 
-# bytes_data_2 = b'\xFF\xFF'
-# result_2 = int.from_bytes(bytes_data_2, True, True)
+# bytes_data_2 = b'\x00\x10'
+# result_2:int = int.from_bytes(bytes_data_2, True, True)
 # assert result_2 == -1
 
 # bytes_data_3 = b'\x80'

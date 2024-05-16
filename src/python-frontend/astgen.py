@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 import glob
+import base64
 
 class ForRangeToWhileTransformer(ast.NodeTransformer):
     def __init__(self):
@@ -52,6 +53,8 @@ def import_module_by_name(module_name):
         print(f"Please install it with: pip3 install {module_name}")
         sys.exit(1)
 
+def encode_bytes(value: bytes) -> str:
+    return base64.b64encode(value).decode('ascii')
 
 def add_type_annotation(node):
     value_node = node.value
@@ -59,6 +62,7 @@ def add_type_annotation(node):
         value_node.esbmc_type_annotation = "str"
     elif isinstance(value_node, ast.Bytes):
         value_node.esbmc_type_annotation = "bytes"
+        value_node.encoded_bytes = encode_bytes(value_node.value)
 
 
 def process_imports(node, output_dir):
@@ -126,7 +130,7 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir):
     # Write AST JSON to file
     try:
         with open(json_filename, "w") as json_file:
-            json.dump(ast_json, json_file, indent=4)
+            json.dump(ast_json, json_file, indent=4, ensure_ascii=False)
     except Exception as e:
         print(f"Error writing JSON file: {e}")
 
