@@ -2500,8 +2500,10 @@ bool solidity_convertert::get_binary_operator_expr(
     typet common_type;
     if (get_type_description(expr["commonType"], common_type))
       return true;
-    convert_type_expr(ns, lhs, common_type);
-    convert_type_expr(ns, rhs, common_type);
+    if (lhs.type() != common_type)
+      convert_type_expr(ns, lhs, common_type);
+    if (rhs.type() != common_type)
+      convert_type_expr(ns, rhs, common_type);
   }
 
   // 4.2 Copy to operands
@@ -2616,9 +2618,11 @@ bool solidity_convertert::get_compound_assign_expr(
     typet common_type;
     if (get_type_description(expr["commonType"], common_type))
       return true;
-    convert_type_expr(ns, lhs, common_type);
-    convert_type_expr(ns, rhs, common_type);
-    }
+    if (lhs.type() != common_type)
+      convert_type_expr(ns, lhs, common_type);
+    if (rhs.type() != common_type)
+      convert_type_expr(ns, rhs, common_type);
+  }
 
   new_expr.copy_to_operands(lhs, rhs);
   return false;
