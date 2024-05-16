@@ -473,6 +473,10 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("base-case", true);
   }
 
+  /* compatibility: --cvc maps to --cvc4 */
+  if (cmdline.isset("cvc"))
+    options.set_option("cvc4", true);
+
   config.options = options;
 }
 

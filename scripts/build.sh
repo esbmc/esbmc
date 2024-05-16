@@ -16,7 +16,6 @@ BASE_ARGS="\
 SOLVER_FLAGS="\
     -DENABLE_BOOLECTOR=On \
     -DENABLE_YICES=Off \
-    -DENABLE_CVC4=OFF \
     -DENABLE_BITWUZLA=On \
     -DENABLE_GOTO_CONTRACTOR=On \
     -DACADEMIC_BUILD=Off \
@@ -36,8 +35,6 @@ error() {
 
 # Ubuntu setup (pre-config)
 ubuntu_setup () {
-    
-    
     # Tested on ubuntu 22.04
     PKGS="\
         clang-$CLANG_VERSION clang-tidy-$CLANG_VERSION \
@@ -68,16 +65,22 @@ ubuntu_setup () {
 
     if [ $ARCH = "aarch64" ]
     then
-	echo "Detected ARM64 Linux!"
-	# TODO: We should start using container builds in actions!
-	SOLVER_FLAGS="$SOLVER_FLAGS -DENABLE_Z3=On -DZ3_DIR=/usr -DENABLE_GOTO_CONTRACTOR=OFF"
-	return
+        echo "Detected ARM64 Linux!"
+        # TODO: We should start using container builds in actions!
+        SOLVER_FLAGS="$SOLVER_FLAGS \
+            -DENABLE_Z3=On -DZ3_DIR=/usr \
+            -DENABLE_GOTO_CONTRACTOR=OFF \
+        "
+        return
     fi
-    
+
     sudo apt-get update &&
     sudo apt-get install -y $PKGS &&
+
     echo "Installing Python dependencies" &&
     pip3 install --user meson ast2json &&
+    pip3 install --user pyparsing toml &&
+    pip3 install --user pyparsing tomli &&
     meson --version &&
 
     BASE_ARGS="$BASE_ARGS \
@@ -87,7 +90,8 @@ ubuntu_setup () {
     " &&
     SOLVER_FLAGS="$SOLVER_FLAGS \
         -DENABLE_Z3=ON \
-    " 
+        -DENABLE_CVC5=On \
+    "
 }
 
 ubuntu_post_setup () {
@@ -101,8 +105,17 @@ macos_setup () {
     if [ $STATIC = ON ]; then
         error "static macOS build is currently not supported"
     fi
-    brew install z3 gmp csmith cmake boost ninja python3 automake bison flex llvm@$CLANG_VERSION &&
-    BASE_ARGS=" -DLLVM_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION -DClang_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -DCMAKE_BUILD_TYPE=Debug -GNinja -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release" &&
+    brew install \
+        z3 gmp csmith cmake boost ninja python3 automake bison flex \
+        llvm@$CLANG_VERSION &&
+    BASE_ARGS="\
+        -DLLVM_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION \
+        -DClang_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION \
+        -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk \
+        -DCMAKE_BUILD_TYPE=Debug \
+        -GNinja \
+        -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release \
+    " &&
     SOLVER_FLAGS=""
 }
 
@@ -151,10 +164,10 @@ do
     C) BASE_ARGS="$BASE_ARGS -DESBMC_SVCOMP=ON"
        SOLVER_FLAGS="\
           -DENABLE_BOOLECTOR=On \
-    	  -DENABLE_YICES=ON \
-	  -DENABLE_CVC4=OFF \
+          -DENABLE_YICES=ON \
+          -DENABLE_CVC4=OFF \
           -DENABLE_BITWUZLA=On \
-	  -DENABLE_Z3=On \
+          -DENABLE_Z3=On \
           -DENABLE_Mathsat=ON \
           -DENABLE_GOTO_CONTRACTOR=On \
           -DACADEMIC_BUILD=ON"  ;;
