@@ -1931,7 +1931,7 @@ bool solidity_convertert::get_expr(
       return true;
 
     // for BYTESN, where the index access is read-only
-    if (t.get("#sol_type").as_string().find("BYTES") != std::string::npos)
+    if (is_bytes_type(t))
     {
       // this means we are dealing with bytes type
       // jump out if it's "bytes[]" or "bytesN[]" or "func()[]"
@@ -2002,9 +2002,7 @@ bool solidity_convertert::get_expr(
 
     // BYTES:  func_ret_bytes()[]
     // same process as above
-    if (
-      array.type().get("#sol_type").as_string().find("BYTES") !=
-      std::string::npos)
+    if (is_bytes_type(array.type()))
     {
       exprt bexpr = exprt("byte_extract_big_endian", pos.type());
       bexpr.copy_to_operands(array, pos);
@@ -2454,12 +2452,7 @@ bool solidity_convertert::get_binary_operator_expr(
   }
 
   // for bytes type
-  bool is_lhs_byte =
-    lhs.type().get("#sol_type").as_string().find("BYTES") != std::string::npos;
-  bool is_rhs_byte =
-    rhs.type().get("#sol_type").as_string().find("BYTES") != std::string::npos;
-
-  if (is_lhs_byte || is_rhs_byte)
+  if (is_bytes_type(lhs.type()) || is_bytes_type(rhs.type()))
   {
     switch (opcode)
     {
@@ -2490,6 +2483,7 @@ bool solidity_convertert::get_binary_operator_expr(
       //    x<<8 == 0x00
       new_expr.copy_to_operands(lhs, rhs);
       solidity_gen_typecast(ns, new_expr, lhs.type());
+      current_BinOp_type.pop();
 
       return false;
     }
@@ -2501,13 +2495,13 @@ bool solidity_convertert::get_binary_operator_expr(
   }
 
   // 4.1 check if it needs implicit type conversion
-  if (expr.contains("commonType") && !is_lhs_byte && !is_rhs_byte)
+  if (expr.contains("commonType"))
   {
     typet common_type;
     if (get_type_description(expr["commonType"], common_type))
       return true;
-    solidity_gen_typecast(ns, lhs, common_type);
-    solidity_gen_typecast(ns, rhs, common_type);
+    convert_type_expr(ns, lhs, common_type);
+    convert_type_expr(ns, rhs, common_type);
   }
 
   // 4.2 Copy to operands
@@ -2597,12 +2591,13 @@ bool solidity_convertert::get_compound_assign_expr(
   }
   else if (expr.contains("leftExpression"))
   {
-    nlohmann::json commonType = expr["commonType"];
+    nlohmann::json literalType_l = expr["leftExpression"]["typeDescriptions"];
+    nlohmann::json literalType_r = expr["rightExpression"]["typeDescriptions"];
 
-    if (get_expr(expr["leftExpression"], commonType, lhs))
+    if (get_expr(expr["leftExpression"], literalType_l, lhs))
       return true;
 
-    if (get_expr(expr["rightExpression"], commonType, rhs))
+    if (get_expr(expr["rightExpression"], literalType_r, rhs))
       return true;
   }
   else
@@ -2613,8 +2608,17 @@ bool solidity_convertert::get_compound_assign_expr(
   if (get_type_description(binop_type, new_expr.type()))
     return true;
 
-  if (!lhs.type().is_pointer())
-    solidity_gen_typecast(ns, rhs, lhs.type());
+  // if (!lhs.type().is_pointer())
+  //   solidity_gen_typecast(ns, rhs, lhs.type());
+
+  if (expr.contains("commonType"))
+  {
+    typet common_type;
+    if (get_type_description(expr["commonType"], common_type))
+      return true;
+    convert_type_expr(ns, lhs, common_type);
+    convert_type_expr(ns, rhs, common_type);
+    }
 
   new_expr.copy_to_operands(lhs, rhs);
   return false;
@@ -4638,15 +4642,19 @@ bool solidity_convertert::get_default_function(
   return false;
 }
 
+bool solidity_convertert::is_bytes_type(const typet &t)
+{
+  if (t.get("#sol_type").as_string().find("BYTES") != std::string::npos)
+    return true;
+  return false;
+}
+
 void solidity_convertert::convert_type_expr(
   const namespacet &ns,
   exprt &src_expr,
   const typet &dest_type)
 {
-  if (
-    src_expr.type().get("#sol_type").as_string().find("BYTES") !=
-      std::string::npos &&
-    dest_type.get("#sol_type").as_string().find("BYTES") != std::string::npos)
+  if (is_bytes_type(src_expr.type()) && is_bytes_type(dest_type))
   {
     // 1. Fixed-size Bytes Converted to Smaller Types
     //    bytes2 a = 0x4326;
