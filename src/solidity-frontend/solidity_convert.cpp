@@ -2470,23 +2470,42 @@ bool solidity_convertert::get_binary_operator_expr(
       if (get_type_description(expr["commonType"], common_type))
         return true;
 
+      // convert string to bytes
       // e.g.
       //    data1 = "test"; data2 = 0x74657374; // "test"
       //    assert(data1 == data2); // true
       // Do type conversion before the bswap
+      // the arguement of bswap should only be int/uint type, not string
+      // e.g. data1 == "test", it should not be bswap("test")
+      // instead it should be bswap(0x74657374)
+      if (!is_bytes_type(lhs.type()))
+      {
+        if (get_expr(expr["leftExpression"], expr["commonType"], lhs))
+          return true;
+      }
+      if (!is_bytes_type(rhs.type()))
+      {
+        if (get_expr(expr["rightExpression"], expr["commonType"], rhs))
+          return true;
+      }
+
+      // do implicit type conversion
       convert_type_expr(ns, lhs, common_type);
       convert_type_expr(ns, rhs, common_type);
 
       exprt bwrhs, bwlhs;
-      bwrhs = exprt("bswap", common_type);
-      bwrhs.operands().push_back(rhs);
-      rhs = bwrhs;
-
       bwlhs = exprt("bswap", common_type);
       bwlhs.operands().push_back(lhs);
       lhs = bwlhs;
 
-      break;
+      bwrhs = exprt("bswap", common_type);
+      bwrhs.operands().push_back(rhs);
+      rhs = bwrhs;
+
+      new_expr.copy_to_operands(lhs, rhs);
+      // Pop current_BinOp_type.push as we've finished this conversion
+      current_BinOp_type.pop();
+      return false;
     }
     case SolidityGrammar::ExpressionT::BO_Shl:
     {
@@ -2496,7 +2515,6 @@ bool solidity_convertert::get_binary_operator_expr(
       new_expr.copy_to_operands(lhs, rhs);
       convert_type_expr(ns, new_expr, lhs.type());
       current_BinOp_type.pop();
-
       return false;
     }
     default:
