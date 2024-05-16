@@ -128,6 +128,7 @@ public:
     std::list<std::string> idirafter_paths;
     std::list<std::string> forces;
     std::list<std::string> warnings;
+    std::vector<std::string> frontend_opts;
 
     typedef enum
     {
