@@ -2291,6 +2291,13 @@ bool solidity_convertert::get_binary_operator_expr(
   if (get_type_description(binop_type, t))
     return true;
 
+  typet common_type;
+  if (expr.contains("commonType"))
+  {
+    if (get_type_description(expr["commonType"], common_type))
+      return true;
+  }
+
   // 3. Convert opcode
   SolidityGrammar::ExpressionT opcode =
     SolidityGrammar::get_expr_operator_t(expr);
@@ -2465,10 +2472,6 @@ bool solidity_convertert::get_binary_operator_expr(
     {
       // e.g. cmp(0x74,  0x7500)
       // ->   cmp(0x74, 0x0075)
-      assert(expr.contains("commonType"));
-      typet common_type;
-      if (get_type_description(expr["commonType"], common_type))
-        return true;
 
       // convert string to bytes
       // e.g.
@@ -2478,6 +2481,7 @@ bool solidity_convertert::get_binary_operator_expr(
       // the arguement of bswap should only be int/uint type, not string
       // e.g. data1 == "test", it should not be bswap("test")
       // instead it should be bswap(0x74657374)
+      // this may overwrite the lhs & rhs.
       if (!is_bytes_type(lhs.type()))
       {
         if (get_expr(expr["leftExpression"], expr["commonType"], lhs))
@@ -2525,11 +2529,8 @@ bool solidity_convertert::get_binary_operator_expr(
   }
 
   // 4.1 check if it needs implicit type conversion
-  if (expr.contains("commonType"))
+  if (common_type.id() != "")
   {
-    typet common_type;
-    if (get_type_description(expr["commonType"], common_type))
-      return true;
     convert_type_expr(ns, lhs, common_type);
     convert_type_expr(ns, rhs, common_type);
   }
@@ -2638,14 +2639,15 @@ bool solidity_convertert::get_compound_assign_expr(
   if (get_type_description(binop_type, new_expr.type()))
     return true;
 
-  // if (!lhs.type().is_pointer())
-  //   solidity_gen_typecast(ns, rhs, lhs.type());
-
+  typet common_type;
   if (expr.contains("commonType"))
   {
-    typet common_type;
     if (get_type_description(expr["commonType"], common_type))
       return true;
+  }
+
+  if (common_type.id() != "")
+  {
     convert_type_expr(ns, lhs, common_type);
     convert_type_expr(ns, rhs, common_type);
   }
