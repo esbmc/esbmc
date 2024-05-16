@@ -265,6 +265,13 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
   // of __leaf__ attributes that we don't care about
   compiler_args.emplace_back("-Wno-unknown-attributes");
 
+  /* put custom options at the end of the cmdline such that they can override
+   * whatever defaults we put in before. */
+  compiler_args.insert(
+    compiler_args.end(),
+    config.ansi_c.frontend_opts.begin(),
+    config.ansi_c.frontend_opts.end());
+
   // Option to avoid creating a linking command
   compiler_args.emplace_back("-fsyntax-only");
 }
