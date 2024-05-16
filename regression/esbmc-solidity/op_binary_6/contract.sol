@@ -21,7 +21,7 @@ contract Derived {
         uint16 xx = 10;
 
         y.UO_Minus(-x);
-        // y.UO_Not(0);
-        // y.UO_LNot(x);
+        y.UO_Not(0);
+        y.UO_LNot(x);
     }
 }
