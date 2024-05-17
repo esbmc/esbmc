@@ -1621,7 +1621,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
      *  It can be used when a statement is required syntactically but the program requires no action." */
     case StatementType::PASS:
       break;
-    // Imports are handled by astgen.py so we can just ignore here.
+    // Imports are handled by parser.py so we can just ignore here.
     case StatementType::IMPORT:
       break;
     case StatementType::UNKNOWN:
