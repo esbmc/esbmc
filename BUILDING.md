@@ -198,6 +198,20 @@ pip3 install toml && git clone https://github.com/CVC4/CVC4.git && cd CVC4 && gi
 
 If you need more details on CVC4, please refer to [its Github](https://github.com/CVC4/CVC4).
 
+### Setting Up CVC5
+
+We have wrapped the entire build and setup of CVC5 in the following command:
+
+```
+Linux:
+
+
+macOS:
+pip3 install toml && git clone https://github.com/CVC5/CVC5.git && cd CVC5 && git reset --hard 4cb2ab9 && ./configure.sh --prefix=../cvc5 --auto-download --static --no-static-binary && cd build && make -j4 && make install && cd .. && cd ..
+```
+
+If you need more details on CVC5, please refer to [its Github](https://github.com/CVC5/CVC5).
+
 ### Setting Up MathSAT
 
 We have wrapped the entire build and setup of MathSAT in the following command:
