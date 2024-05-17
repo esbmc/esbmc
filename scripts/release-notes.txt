@@ -1,5 +1,18 @@
 Release Notes of the ESBMC model checker
 
+*** Version 7.6.1
+* Clang C/C++ Frontend
+- Interpret option -Wc,OPT1,OPT2,... as passing OPT1 OPT2 ... to the clang frontend directly (#1840) 
+- Fix additional C++ APIs: [sf]stream, valarray, locale  C++ OM (#1834) 
+- Fix some more C++ APIs: bitset, csignal and string_view  C++ OM (#1832)
+- fixed std::move functions call (#1827)
+* Solidity Frontend
+- Bug fixing and code refactoring (#1839)
+- Support Solidity built-in variables and functions (#1828)
+* General Improvements
+- Added total VCCs column (#1841)
+- Improved build instructions about ESBMC-CHERI (#1833)
+
 *** Version 7.6
 * Clang-C/C++ Frontend
 - Support "noexcept" keyword (#1819)
