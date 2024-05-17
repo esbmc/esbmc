@@ -165,15 +165,15 @@ def main():
     generate_ast_json(tree, filename, None, output_dir)
 
     # Process and convert AST for memory models
-    memory_models_dir = os.path.join(output_dir, "memory-models")
+    models_dir = os.path.join(output_dir, "models")
 
     # Iterate over all .py files in the directory
-    for python_file in glob.glob(os.path.join(memory_models_dir, "*.py")):
-        with open(python_file) as memory_model:
-            mm_tree = ast.parse(memory_model.read())
+    for python_file in glob.glob(os.path.join(models_dir, "*.py")):
+        with open(python_file) as model:
+            model_tree = ast.parse(model.read())
             filename = os.path.basename(python_file)
             # Generate JSON from AST for the memory models.
-            generate_ast_json(mm_tree, filename, None, output_dir)
+            generate_ast_json(model_tree, filename, None, output_dir)
 
 
 if __name__ == "__main__":
