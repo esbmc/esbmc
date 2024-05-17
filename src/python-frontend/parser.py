@@ -6,11 +6,12 @@ import os
 import glob
 import base64
 
-class ForRangeToWhileTransformer(ast.NodeTransformer):
+class ASTTransformer(ast.NodeTransformer):
     def __init__(self):
         self.target_name = ""
 
     def visit_For(self, node):
+        # Transformation from for to while if the iterator is range
         if isinstance(node.iter, ast.Call) and isinstance(node.iter.func, ast.Name) and node.iter.func.id == "range":
             start = node.iter.args[0]
             end = node.iter.args[1]
@@ -34,8 +35,19 @@ class ForRangeToWhileTransformer(ast.NodeTransformer):
         return node
 
     def visit_Name(self, node):
+        # Replace variable names as needed in the for to while transformation
         if node.id == self.target_name:
             node.id = 'start'
+        return node
+
+    def visit_Call(self, node):
+        # Transformation for int.from_bytes
+        if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name) and node.func.value.id == "int" and node.func.attr == "from_bytes":
+            if len(node.args) > 1 and isinstance(node.args[1], ast.Str) and node.args[1].s == 'big':
+                node.args[1] = ast.NameConstant(value=True)
+            else:
+                node.args[1] = ast.NameConstant(value=False)
+        self.generic_visit(node)
         return node
 
 def check_usage():
@@ -150,7 +162,8 @@ def main():
     with open(filename, "r") as source:
         tree = ast.parse(source.read())
 
-    transformer = ForRangeToWhileTransformer()
+    # Apply the transformer to the AST
+    transformer = ASTTransformer()
     tree = transformer.visit(tree)
 
     for node in ast.walk(tree):
