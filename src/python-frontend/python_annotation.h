@@ -165,7 +165,8 @@ private:
         }
         else if (
           element["value"]["_type"] == "UnaryOp" &&
-          element["value"]["operand"]["_type"] == "Constant") // Handle negative numbers
+          element["value"]["operand"]["_type"] ==
+            "Constant") // Handle negative numbers
         {
           type = get_type_from_constant(element["value"]["operand"]);
         }
