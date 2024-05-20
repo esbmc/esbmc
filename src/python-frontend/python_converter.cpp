@@ -547,8 +547,9 @@ function_id python_converter::build_function_id(const nlohmann::json &element)
   else if (is_builtin_type(obj_name))
   {
     class_name = obj_name;
-    func_symbol_id =
-      "py:" + python_filename + "@C@" + class_name + "@F@" + func_name;
+    std::stringstream ss;
+    ss << "py:" + python_filename + "@C@" + class_name + "@F@" + func_name;
+    func_symbol_id = ss.str();
   }
   else if (func_name == __ESBMC_assume || func_name == __VERIFIER_assume)
     func_symbol_id = func_name;
@@ -738,6 +739,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         c_typecast.implicit_typecast(arg, pointer_typet(empty_typet()));
       }
 
+      // All array function arguments (e.g. bytes type) are handled as pointers.
       if (arg.type().is_array())
         call.arguments().push_back(address_of_exprt(arg));
       else
@@ -1616,11 +1618,14 @@ bool python_converter::convert()
     // Load operational models -----
     const std::string &ast_output_dir =
       ast_json["ast_output_dir"].get<std::string>();
-    std::list<std::string> model_files = {"range.json", "int.json"};
+    std::list<std::string> model_files = {"range", "int"};
+
     for (const auto &file : model_files)
     {
+      log_progress("Loading model: {}", file + ".py");
+
       std::stringstream model_path;
-      model_path << ast_output_dir << "/" << file;
+      model_path << ast_output_dir << "/" << file << ".json";
 
       std::ifstream model_file(model_path.str());
       nlohmann::json model_json;
