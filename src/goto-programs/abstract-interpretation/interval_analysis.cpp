@@ -266,7 +266,6 @@ void interval_analysis(
   const optionst &options,
   const INTERVAL_INSTRUMENTATION_MODE instrument_mode)
 {
-return;
   fine_timet algorithm_start = current_time();
   // TODO: add options for instrumentation mode
   ait<interval_domaint> interval_analysis;
