@@ -297,7 +297,13 @@ void interval_analysis(
   }
 
   if (instrument_mode == INTERVAL_INSTRUMENTATION_MODE::LOOP_MODE)
+  {
+    Forall_goto_functions (f_it, goto_functions)
+    {
+      instrument_intervals(interval_analysis, f_it->second, INTERVAL_INSTRUMENTATION_MODE::GUARD_INSTRUCTIONS_LOCAL);
+    }
     instrument_loops(interval_analysis, goto_functions);
+  }
   else
   {
     Forall_goto_functions (f_it, goto_functions)
