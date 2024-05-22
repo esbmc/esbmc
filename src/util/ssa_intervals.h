@@ -16,6 +16,7 @@ public:
 
   bool run(symex_target_equationt::SSA_stepst &eq) override
   {
+    // TODO: enable arithmetic
     intervals.make_top();
     optimized = 0;
     fine_timet algorithm_start = current_time();
@@ -27,7 +28,6 @@ public:
       time2string(algorithm_stop - algorithm_start),
       optimized);
 
-    intervals.dump();
     return true;
   }
 

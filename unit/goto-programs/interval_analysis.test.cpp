@@ -156,7 +156,7 @@ public:
               auto interval_it = state->begin();
               for (; interval_it != state->end(); interval_it++)
               {
-                auto real_name = interval_it->first.as_string();
+                auto real_name = interval_it->first;
                 auto var_name = property_it->var;
 
                 if (var_name.size() > real_name.size())

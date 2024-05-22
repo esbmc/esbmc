@@ -7,8 +7,8 @@ void ssa_intervals::run_on_assert(symex_target_equationt::SSA_stept &SSA_step)
   // GUARD => COND
   if (is_constant_bool2t(SSA_step.cond))
     return;
-
-  assert(is_implies2t(SSA_step.cond));
+  if (!is_implies2t(SSA_step.cond))
+    return; // !GUARD is currently not supported
   expr2tc &cond = to_implies2t(SSA_step.cond).side_2;
   assert(is_bool_type(cond->type));
   const auto result =
@@ -29,8 +29,9 @@ void ssa_intervals::run_on_assume(symex_target_equationt::SSA_stept &SSA_step)
   // GUARD => COND
   if (is_constant_bool2t(SSA_step.cond))
     return;
+  if (!is_implies2t(SSA_step.cond))
+    return; // !GUARD is currently not supported
 
-  assert(is_implies2t(SSA_step.cond));
   expr2tc &cond = to_implies2t(SSA_step.cond).side_2;
   assert(is_bool_type(cond->type));
   const auto result =
