@@ -646,6 +646,15 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       }
     }
 
+    if (is_builtin_type(func_name) || is_consensus_type(func_name))
+    {
+      // Replace the function call with a constant value. For example, x = int(1) becomes x = 1
+      typet t = get_typet(func_name);
+      exprt expr = get_expr(element["args"][0]);
+      expr.type() = t;
+      return expr;
+    }
+
     const symbolt *func_symbol = context.find_symbol(func_symbol_id.c_str());
 
     // Find function in imported modules
@@ -686,14 +695,6 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
             func_name,
             obj_symbol_id);
         }
-      }
-      else if (is_builtin_type(func_name) || is_consensus_type(func_name))
-      {
-        // Replace the function call with a constant value. For example, x = int(1) becomes x = 1
-        typet t = get_typet(func_name);
-        exprt expr = get_expr(element["args"][0]);
-        expr.type() = t;
-        return expr;
       }
       else
       {
