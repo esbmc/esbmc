@@ -152,7 +152,7 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     // we must first handle tuple
     // otherwise we might parse tuple(literal_string, literal_string)
     // as ElementaryTypeName
-    if (typeString.compare(0, 6, "tuple(") == 0 && typeString != "tuple()")
+    if (typeString.compare(0, 6, "tuple(") == 0)
     {
       return TupleTypeName;
     }
@@ -495,9 +495,13 @@ ParameterListT get_parameter_list_t(const nlohmann::json &type_name)
   {
     return EMPTY;
   }
-  else
+  else if (type_name["parameters"].size() == 1)
   {
-    return NONEMPTY;
+    return ONE_PARAM;
+  }
+  else if (type_name["parameters"].size() > 1)
+  {
+    return MORE_THAN_ONE_PARAM;
   }
 
   return ParameterListTError; // to make some old gcc compilers happy
@@ -508,7 +512,8 @@ const char *parameter_list_to_str(ParameterListT type)
   switch (type)
   {
     ENUM_TO_STR(EMPTY)
-    ENUM_TO_STR(NONEMPTY)
+    ENUM_TO_STR(ONE_PARAM)
+    ENUM_TO_STR(MORE_THAN_ONE_PARAM)
     ENUM_TO_STR(ParameterListTError)
   default:
   {
@@ -650,6 +655,10 @@ const char *statement_to_str(StatementT type)
 // rule expression
 ExpressionT get_expression_t(const nlohmann::json &expr)
 {
+  if (expr.is_null())
+  {
+    return NullExpr;
+  }
   if (expr["nodeType"] == "Assignment" || expr["nodeType"] == "BinaryOperation")
   {
     return BinaryOperatorClass;
@@ -958,6 +967,7 @@ const char *expression_to_str(ExpressionT type)
     ENUM_TO_STR(EnumMemberCall)
     ENUM_TO_STR(BuiltinMemberCall)
     ENUM_TO_STR(ElementaryTypeNameExpression)
+    ENUM_TO_STR(NullExpr)
     ENUM_TO_STR(ExpressionTError)
   default:
   {

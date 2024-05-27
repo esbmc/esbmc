@@ -206,7 +206,8 @@ unsigned int bytesn_type_name_to_size(ElementaryTypeNameT);
 enum ParameterListT
 {
   EMPTY = 0, // In Solidity, "void" means an empty parameter list
-  NONEMPTY,
+  ONE_PARAM,
+  MORE_THAN_ONE_PARAM,
   ParameterListTError
 };
 ParameterListT get_parameter_list_t(const nlohmann::json &type_name);
@@ -346,6 +347,9 @@ enum ExpressionT
 
   // Built-in Member Access
   BuiltinMemberCall,
+
+  // Null Expression
+  NullExpr,
 
   ExpressionTError
 };
