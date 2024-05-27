@@ -9,6 +9,7 @@
 #include <util/context.h>
 #include <util/namespace.h>
 #include <util/std_types.h>
+#include <util/std_code.h>
 #include <nlohmann/json.hpp>
 #include <solidity-frontend/solidity_grammar.h>
 #include <solidity-frontend/pattern_check.h>
@@ -103,6 +104,23 @@ protected:
     const nlohmann::json &ast_node,
     std::string &contract_name);
   bool get_empty_array_ref(const nlohmann::json &ast_node, exprt &new_expr);
+  bool get_tuple_definition(const nlohmann::json &ast_node);
+  bool get_tuple_instance(const nlohmann::json &ast_node, exprt &new_expr);
+  void get_tuple_name(
+    const nlohmann::json &ast_node,
+    std::string &name,
+    std::string &id);
+  bool get_tuple_instance_name(
+    const nlohmann::json &ast_node,
+    std::string &name,
+    std::string &id);
+  bool get_tuple_function_ref(const nlohmann::json &ast_node, exprt &new_expr);
+  bool get_tuple_member_call(
+    const irep_idt instance_id,
+    const exprt &comp,
+    exprt &new_expr);
+  void get_tuple_assignment(code_blockt &_block, const exprt &lop, exprt rop);
+  void get_tuple_function_call(code_blockt &_block, const exprt &op);
 
   // line number and locations
   void
