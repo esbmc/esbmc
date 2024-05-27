@@ -11,8 +11,6 @@
 namespace std
 {
 
-class string;
-
 class __refcnted_cstr {
 protected:
   struct refcnted {
