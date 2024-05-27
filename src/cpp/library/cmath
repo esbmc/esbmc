@@ -106,6 +106,7 @@ CIMPORT1(ceil)
 CIMPORT2(pow)
 CIMPORT1(sqrt)
 CIMPORT2(fmod)
+CIMPORT1(round)
 
 using ::frexp;
 using ::frexpf;
