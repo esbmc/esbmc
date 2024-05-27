@@ -2571,7 +2571,7 @@ bool solidity_convertert::get_binary_operator_expr(
                 to_struct_type(rhs.type()).components().at(j),
                 rop))
             return true;
-          
+
           if (lcomp.name() != rcomp.name())
           {
             // e.g. (, x) = (1, 2)
