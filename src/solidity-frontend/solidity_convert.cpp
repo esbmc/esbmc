@@ -60,7 +60,7 @@ bool solidity_convertert::convert()
   nlohmann::json &nodes = src_ast_json["nodes"];
 
   bool found_contract_def = false;
-  unsigned index = 0;
+  size_t index = 0;
   for (nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end();
        ++itr, ++index)
   {
@@ -196,7 +196,7 @@ bool solidity_convertert::convert()
 
 bool solidity_convertert::convert_ast_nodes(const nlohmann::json &contract_def)
 {
-  unsigned index = 0;
+  size_t index = 0;
   nlohmann::json ast_nodes = contract_def["nodes"];
   for (nlohmann::json::iterator itr = ast_nodes.begin(); itr != ast_nodes.end();
        ++itr, ++index)
@@ -1209,11 +1209,11 @@ bool solidity_convertert::get_statement(
         if (get_expr(stmt["expression"], rhs))
           return true;
 
-        unsigned int ls = to_struct_type(lhs.type()).components().size();
-        unsigned int rs = rhs.operands().size();
+        size_t ls = to_struct_type(lhs.type()).components().size();
+        size_t rs = rhs.operands().size();
         assert(ls == rs);
 
-        for (unsigned int i = 0; i < ls; i++)
+        for (size_t i = 0; i < ls; i++)
         {
           // lop: struct member call (e.g. tuple.men0)
           exprt lop;
@@ -1249,11 +1249,11 @@ bool solidity_convertert::get_statement(
           return true;
         get_tuple_function_call(_block, func_call);
 
-        unsigned int ls = to_struct_type(lhs.type()).components().size();
-        unsigned int rs = to_struct_type(rhs.type()).components().size();
+        size_t ls = to_struct_type(lhs.type()).components().size();
+        size_t rs = to_struct_type(rhs.type()).components().size();
         assert(ls == rs);
 
-        for (unsigned int i = 0; i < ls; i++)
+        for (size_t i = 0; i < ls; i++)
         {
           // lop: struct member call (e.g. tupleA.men0)
           exprt lop;
@@ -2044,8 +2044,7 @@ bool solidity_convertert::get_expr(
       const nlohmann::json args = expr["arguments"];
 
       // popluate components
-      for (unsigned int i = 0; i < inits.operands().size() && i < args.size();
-           i++)
+      for (size_t i = 0; i < inits.operands().size() && i < args.size(); i++)
       {
         exprt init;
         if (get_expr(args.at(i), members.at(i)["typeDescriptions"], init))
@@ -2531,10 +2530,10 @@ bool solidity_convertert::get_binary_operator_expr(
         //  x = t.mem0; #3
         //  y = t.mem1; #4
 
-        unsigned int i = 0;
-        unsigned int j = 0;
-        unsigned int ls = to_struct_type(lhs.type()).components().size();
-        unsigned int rs = to_struct_type(rhs.type()).components().size();
+        size_t i = 0;
+        size_t j = 0;
+        size_t ls = to_struct_type(lhs.type()).components().size();
+        size_t rs = to_struct_type(rhs.type()).components().size();
         assert(ls <= rs);
 
         // do #1 #2
@@ -2598,11 +2597,11 @@ bool solidity_convertert::get_binary_operator_expr(
         // add function call
         get_tuple_function_call(_block, rhs);
 
-        unsigned int ls = to_struct_type(lhs.type()).components().size();
-        unsigned int rs = to_struct_type(new_rhs.type()).components().size();
+        size_t ls = to_struct_type(lhs.type()).components().size();
+        size_t rs = to_struct_type(new_rhs.type()).components().size();
         assert(ls == rs);
 
-        for (unsigned int i = 0; i < ls; i++)
+        for (size_t i = 0; i < ls; i++)
         {
           exprt lop = lhs.operands().at(i);
 
@@ -3809,7 +3808,7 @@ bool solidity_convertert::get_tuple_definition(const nlohmann::json &ast_node)
 
   // populate params
   //TODO: flatten the nested tuple (e.g. ((x,y),z) = (func(),1); )
-  unsigned int counter = 0;
+  size_t counter = 0;
   for (const auto &arg : args.items())
   {
     if (arg.value().is_null())
@@ -3907,8 +3906,8 @@ bool solidity_convertert::get_tuple_instance(
   exprt inits = gen_zero(t);
   auto &args = ast_node["components"];
 
-  unsigned int i = 0;
-  unsigned int j = 0;
+  size_t i = 0;
+  size_t j = 0;
   unsigned is = inits.operands().size();
   unsigned as = args.size();
   assert(is <= as);
@@ -3970,6 +3969,10 @@ bool solidity_convertert::get_tuple_instance_name(
   return false;
 }
 
+/*
+  obtain the corresponding tuple struct instance from the symbol table 
+  based on the function definition json
+*/
 bool solidity_convertert::get_tuple_function_ref(
   const nlohmann::json &ast_node,
   exprt &new_expr)
