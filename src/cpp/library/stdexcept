@@ -4,7 +4,9 @@
 #include "definitions.h"
 #include "exception"
 #include "new"
-#include <cstdlib> /* malloc */
+#include <string>
+#include <cstring> /* strlen(), memcpy() */
+#include <cstdlib> /* malloc(), free() */
 
 namespace std
 {
