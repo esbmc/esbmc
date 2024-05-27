@@ -24,7 +24,7 @@ extern "C"
 // TODO: Rename this function as it is dumping other files now.
 static const std::string &dump_python_script()
 {
-  // Dump astgen.py into a temporary directory
+  // Dump all Python (.py) files from src/python-frontend into a temporary directory
   static bool dumped = false;
   static auto p =
     file_operations::create_tmp_dir("esbmc-python-astgen-%%%%-%%%%-%%%%");
@@ -60,7 +60,7 @@ bool python_languaget::parse(const std::string &path)
     return true;
 
   ast_output_dir = dump_python_script();
-  const std::string python_script_path = ast_output_dir + "/astgen.py";
+  const std::string python_script_path = ast_output_dir + "/parser.py";
 
   // Execute python script to generate json file from AST
   std::vector<std::string> args = {python_script_path, path, ast_output_dir};

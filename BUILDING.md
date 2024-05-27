@@ -1,3 +1,15 @@
+# TLDR
+
+To compile ESBMC on Ubuntu 24.04 with LLVM 14 and Z3:
+
+```
+sudo apt install clang-14 llvm-14 clang-tidy-14 python-is-python3 python3 git ccache unzip wget curl bison flex g++-multilib linux-libc-dev libboost-all-dev libz3-dev libclang-14-dev libclang-cpp-dev cmake
+git clone https://github.com/esbmc/esbmc.git
+mkdir build && cd build
+cmake .. -DENABLE_Z3=1
+make -j4
+```
+
 # ESBMC Static Build Guide
 
 This is a guide on how to build ESBMC and its supported solvers.
@@ -105,6 +117,11 @@ First, we need to download the package. It can be performed using the following 
 wget https://github.com/CTSRD-CHERI/llvm-project/archive/refs/tags/cheri-rel-20210817.tar.gz
 ```
 
+Before build the package, check that lld is installed:
+```
+sudo apt-get install lld
+```
+
 Then, we need to extract and build the package. You can use the following commands:
 
 ```
@@ -118,7 +135,13 @@ ninja &&
 ninja install &&
 cd ../.. &&
 ESBMC_CLANG=$(echo -D{LLVM,Clang}_DIR=$PWD/clang13) &&
-ESBMC_STATIC=ON
+ESBMC_STATIC=Off
+```
+
+If you want to build ESBMC-CHERI, please built with the option:
+
+```
+-DESBMC_CHERI=On -DCMAKE_BUILD_TYPE=Sanitizer -DSANITIZER_TYPE=UBSAN
 ```
 
 ## Preparing the Solidity frontend (optional)
@@ -186,6 +209,20 @@ pip3 install toml && git clone https://github.com/CVC4/CVC4.git && cd CVC4 && gi
 ```
 
 If you need more details on CVC4, please refer to [its Github](https://github.com/CVC4/CVC4).
+
+### Setting Up CVC5
+
+We have wrapped the entire build and setup of CVC5 in the following command:
+
+```
+Linux:
+
+
+macOS:
+pip3 install toml && git clone https://github.com/CVC5/CVC5.git && cd CVC5 && git reset --hard 4cb2ab9 && ./configure.sh --prefix=../cvc5 --auto-download --static --no-static-binary && cd build && make -j4 && make install && cd .. && cd ..
+```
+
+If you need more details on CVC5, please refer to [its Github](https://github.com/CVC5/CVC5).
 
 ### Setting Up MathSAT
 
@@ -368,9 +405,17 @@ of a C standard library for one of these platforms.
 To obtain and install a CHERI sysroot, the
 [cheribuild](https://github.com/CTSRD-CHERI/cheribuild)
 tool is the recommended way:
+
+The following command will install the packages required for the most commonly used cheribuild targets:
 ```
-cheribuild.py cheribsd-riscv64-purecap disk-image-riscv64-purecap -d
+sudo apt install autoconf automake libtool pkg-config clang bison cmake mercurial ninja-build samba flex texinfo time libglib2.0-dev libpixman-1-dev libarchive-dev libarchive-tools libbz2-dev libattr1-dev libcap-ng-dev libexpat1-dev libgmp-dev bc
 ```
+
+Download and build Cheri:
+```
+git clone https://github.com/CTSRD-CHERI/cheribuild.git && cd cheribuild && python3 cheribuild.py cheribsd-riscv64-purecap disk-image-riscv64-purecap -d
+```
+
 Once the build completed, you'll find `cheri` directory in your HOME directory.
 
 CHERI-enabled ESBMC defaults to the platform mips64-unknown-freebsd and

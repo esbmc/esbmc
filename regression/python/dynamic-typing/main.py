@@ -9,3 +9,6 @@ def foo(a:int) -> None:
 v:uint64 = 16
 y = 1
 x = (v + y)//2
+
+f = -1
+

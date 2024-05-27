@@ -135,7 +135,17 @@ bool configt::set(const cmdlinet &cmdline)
     ansi_c.forces = cmdline.get_values("force");
 
   if (cmdline.isset("warning"))
-    ansi_c.warnings = cmdline.get_values("warning");
+    for (const std::string &w : cmdline.get_values("warning"))
+    {
+      if (has_prefix(w, "c,"))
+        for (size_t i = 2, j; i < w.length(); i = j + 1)
+        {
+          j = std::min(w.find(',', i), w.length());
+          ansi_c.frontend_opts.push_back(w.substr(i, j - i));
+        }
+      else
+        ansi_c.warnings.push_back(w);
+    }
 
   if (cmdline.isset("floatbv") && cmdline.isset("fixedbv"))
   {

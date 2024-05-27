@@ -1534,8 +1534,8 @@ bool solidity_convertert::get_expr(
 
       int byte_size;
       if (type == SolidityGrammar::ElementaryTypeNameT::BYTES)
-        // dynamic bytes array, the type is set to uint_type()
-        byte_size = 0;
+        // dynamic bytes array, the type is set to unsignedbv(256);
+        byte_size = 32;
       else
         byte_size = bytesn_type_name_to_size(type);
 
@@ -1931,7 +1931,7 @@ bool solidity_convertert::get_expr(
       return true;
 
     // for BYTESN, where the index access is read-only
-    if (t.get("#sol_type").as_string().find("BYTES") != std::string::npos)
+    if (is_bytes_type(t))
     {
       // this means we are dealing with bytes type
       // jump out if it's "bytes[]" or "bytesN[]" or "func()[]"
@@ -2002,9 +2002,7 @@ bool solidity_convertert::get_expr(
 
     // BYTES:  func_ret_bytes()[]
     // same process as above
-    if (
-      array.type().get("#sol_type").as_string().find("BYTES") !=
-      std::string::npos)
+    if (is_bytes_type(array.type()))
     {
       exprt bexpr = exprt("byte_extract_big_endian", pos.type());
       bexpr.copy_to_operands(array, pos);
@@ -2274,12 +2272,13 @@ bool solidity_convertert::get_binary_operator_expr(
   }
   else if (expr.contains("leftExpression"))
   {
-    nlohmann::json commonType = expr["commonType"];
+    nlohmann::json literalType_l = expr["leftExpression"]["typeDescriptions"];
+    nlohmann::json literalType_r = expr["rightExpression"]["typeDescriptions"];
 
-    if (get_expr(expr["leftExpression"], commonType, lhs))
+    if (get_expr(expr["leftExpression"], literalType_l, lhs))
       return true;
 
-    if (get_expr(expr["rightExpression"], commonType, rhs))
+    if (get_expr(expr["rightExpression"], literalType_r, rhs))
       return true;
   }
   else
@@ -2291,6 +2290,13 @@ bool solidity_convertert::get_binary_operator_expr(
   const nlohmann::json &binop_type = *(current_BinOp_type.top());
   if (get_type_description(binop_type, t))
     return true;
+
+  typet common_type;
+  if (expr.contains("commonType"))
+  {
+    if (get_type_description(expr["commonType"], common_type))
+      return true;
+  }
 
   // 3. Convert opcode
   SolidityGrammar::ExpressionT opcode =
@@ -2453,10 +2459,7 @@ bool solidity_convertert::get_binary_operator_expr(
   }
 
   // for bytes type
-  if (
-    lhs.type().get("#sol_type").as_string().find("BYTES") !=
-      std::string::npos ||
-    rhs.type().get("#sol_type").as_string().find("BYTES") != std::string::npos)
+  if (is_bytes_type(lhs.type()) || is_bytes_type(rhs.type()))
   {
     switch (opcode)
     {
@@ -2469,16 +2472,44 @@ bool solidity_convertert::get_binary_operator_expr(
     {
       // e.g. cmp(0x74,  0x7500)
       // ->   cmp(0x74, 0x0075)
-      exprt bwrhs, bwlhs;
-      bwrhs = exprt("bswap", rhs.type());
-      bwrhs.operands().push_back(rhs);
-      rhs = bwrhs;
 
-      bwlhs = exprt("bswap", lhs.type());
+      // convert string to bytes
+      // e.g.
+      //    data1 = "test"; data2 = 0x74657374; // "test"
+      //    assert(data1 == data2); // true
+      // Do type conversion before the bswap
+      // the arguement of bswap should only be int/uint type, not string
+      // e.g. data1 == "test", it should not be bswap("test")
+      // instead it should be bswap(0x74657374)
+      // this may overwrite the lhs & rhs.
+      if (!is_bytes_type(lhs.type()))
+      {
+        if (get_expr(expr["leftExpression"], expr["commonType"], lhs))
+          return true;
+      }
+      if (!is_bytes_type(rhs.type()))
+      {
+        if (get_expr(expr["rightExpression"], expr["commonType"], rhs))
+          return true;
+      }
+
+      // do implicit type conversion
+      convert_type_expr(ns, lhs, common_type);
+      convert_type_expr(ns, rhs, common_type);
+
+      exprt bwrhs, bwlhs;
+      bwlhs = exprt("bswap", common_type);
       bwlhs.operands().push_back(lhs);
       lhs = bwlhs;
 
-      break;
+      bwrhs = exprt("bswap", common_type);
+      bwrhs.operands().push_back(rhs);
+      rhs = bwrhs;
+
+      new_expr.copy_to_operands(lhs, rhs);
+      // Pop current_BinOp_type.push as we've finished this conversion
+      current_BinOp_type.pop();
+      return false;
     }
     case SolidityGrammar::ExpressionT::BO_Shl:
     {
@@ -2486,8 +2517,8 @@ bool solidity_convertert::get_binary_operator_expr(
       //    bytes1 = 0x11
       //    x<<8 == 0x00
       new_expr.copy_to_operands(lhs, rhs);
-      solidity_gen_typecast(ns, new_expr, lhs.type());
-
+      convert_type_expr(ns, new_expr, lhs.type());
+      current_BinOp_type.pop();
       return false;
     }
     default:
@@ -2497,7 +2528,14 @@ bool solidity_convertert::get_binary_operator_expr(
     }
   }
 
-  // 4. Copy to operands
+  // 4.1 check if it needs implicit type conversion
+  if (common_type.id() != "")
+  {
+    convert_type_expr(ns, lhs, common_type);
+    convert_type_expr(ns, rhs, common_type);
+  }
+
+  // 4.2 Copy to operands
   new_expr.copy_to_operands(lhs, rhs);
 
   // Pop current_BinOp_type.push as we've finished this conversion
@@ -2584,12 +2622,13 @@ bool solidity_convertert::get_compound_assign_expr(
   }
   else if (expr.contains("leftExpression"))
   {
-    nlohmann::json commonType = expr["commonType"];
+    nlohmann::json literalType_l = expr["leftExpression"]["typeDescriptions"];
+    nlohmann::json literalType_r = expr["rightExpression"]["typeDescriptions"];
 
-    if (get_expr(expr["leftExpression"], commonType, lhs))
+    if (get_expr(expr["leftExpression"], literalType_l, lhs))
       return true;
 
-    if (get_expr(expr["rightExpression"], commonType, rhs))
+    if (get_expr(expr["rightExpression"], literalType_r, rhs))
       return true;
   }
   else
@@ -2600,8 +2639,18 @@ bool solidity_convertert::get_compound_assign_expr(
   if (get_type_description(binop_type, new_expr.type()))
     return true;
 
-  if (!lhs.type().is_pointer())
-    solidity_gen_typecast(ns, rhs, lhs.type());
+  typet common_type;
+  if (expr.contains("commonType"))
+  {
+    if (get_type_description(expr["commonType"], common_type))
+      return true;
+  }
+
+  if (common_type.id() != "")
+  {
+    convert_type_expr(ns, lhs, common_type);
+    convert_type_expr(ns, rhs, common_type);
+  }
 
   new_expr.copy_to_operands(lhs, rhs);
   return false;
@@ -2891,6 +2940,11 @@ bool solidity_convertert::get_esbmc_builtin_ref(
   return false;
 }
 
+/*
+  check if it's a solidity built-in function
+  - if so, get the function definition reference, assign to new_expr and return false  
+  - if not, return true
+*/
 bool solidity_convertert::get_sol_builtin_ref(
   const nlohmann::json expr,
   exprt &new_expr)
@@ -2904,8 +2958,7 @@ bool solidity_convertert::get_sol_builtin_ref(
     //  e.g. gasleft() <=> c:@gasleft
     if (expr["expression"]["nodeType"].get<std::string>() != "Identifier")
       // this means it's not a builtin funciton
-      // however, we should not treat this as an error ("return true")
-      return get_expr(expr["expression"], new_expr);
+      return true;
 
     std::string name = expr["expression"]["name"].get<std::string>();
     std::string id = "c:@F@" + name;
@@ -3418,8 +3471,12 @@ bool solidity_convertert::get_elementary_type_name_bytesn(
   SolidityGrammar::ElementaryTypeNameT &type,
   typet &out)
 {
+  /*
+    bytes1 has size of 8 bits (possible values 0x00 to 0xff), 
+    which you can implicitly convert to uint8 (unsigned integer of size 8 bits) but not to int8
+  */
   const unsigned int byte_num = SolidityGrammar::bytesn_type_name_to_size(type);
-  out = signedbv_typet(byte_num * 8);
+  out = unsignedbv_typet(byte_num * 8);
 
   return false;
 }
@@ -3519,7 +3576,7 @@ bool solidity_convertert::get_elementary_type_name(
   case SolidityGrammar::ElementaryTypeNameT::INT_LITERAL:
   {
     // for int_const type
-    new_type = int_type();
+    new_type = signedbv_typet(256);
     new_type.set("#cpp_type", "signed_char");
     break;
   }
@@ -4617,43 +4674,50 @@ bool solidity_convertert::get_default_function(
   return false;
 }
 
+bool solidity_convertert::is_bytes_type(const typet &t)
+{
+  if (t.get("#sol_type").as_string().find("BYTES") != std::string::npos)
+    return true;
+  return false;
+}
+
 void solidity_convertert::convert_type_expr(
   const namespacet &ns,
   exprt &src_expr,
   const typet &dest_type)
 {
-  if (
-    src_expr.type().get("#sol_type").as_string().find("BYTES") !=
-      std::string::npos &&
-    dest_type.get("#sol_type").as_string().find("BYTES") != std::string::npos)
+  if (src_expr.type() != dest_type)
   {
-    // 1. Fixed-size Bytes Converted to Smaller Types
-    //    bytes2 a = 0x4326;
-    //    bytes1 b = bytes1(a); // b will be 0x43
-    // 2. Fixed-size Bytes Converted to Larger Types
-    //    bytes2 a = 0x4235;
-    //    bytes4 b = bytes4(a); // b will be 0x42350000
-    // which equals to:
-    //    new_type b = bswap(new_type)(bswap(x)))
+    // only do conversion when the src.type != dest.type
+    if (is_bytes_type(src_expr.type()) && is_bytes_type(dest_type))
+    {
+      // 1. Fixed-size Bytes Converted to Smaller Types
+      //    bytes2 a = 0x4326;
+      //    bytes1 b = bytes1(a); // b will be 0x43
+      // 2. Fixed-size Bytes Converted to Larger Types
+      //    bytes2 a = 0x4235;
+      //    bytes4 b = bytes4(a); // b will be 0x42350000
+      // which equals to:
+      //    new_type b = bswap(new_type)(bswap(x)))
 
-    exprt bswap_expr, sub_bswap_expr;
+      exprt bswap_expr, sub_bswap_expr;
 
-    // 1. bswap
-    sub_bswap_expr = exprt("bswap", src_expr.type());
-    sub_bswap_expr.operands().push_back(src_expr);
+      // 1. bswap
+      sub_bswap_expr = exprt("bswap", src_expr.type());
+      sub_bswap_expr.operands().push_back(src_expr);
 
-    // 2. typecast
-    solidity_gen_typecast(ns, sub_bswap_expr, dest_type);
+      // 2. typecast
+      solidity_gen_typecast(ns, sub_bswap_expr, dest_type);
 
-    // 3. bswap back
-    bswap_expr = exprt("bswap", sub_bswap_expr.type());
-    bswap_expr.operands().push_back(sub_bswap_expr);
+      // 3. bswap back
+      bswap_expr = exprt("bswap", sub_bswap_expr.type());
+      bswap_expr.operands().push_back(sub_bswap_expr);
 
-    src_expr = bswap_expr;
+      src_expr = bswap_expr;
+    }
+    else
+      solidity_gen_typecast(ns, src_expr, dest_type);
   }
-
-  else
-    solidity_gen_typecast(ns, src_expr, dest_type);
 }
 
 static inline void static_lifetime_init(const contextt &context, codet &dest)

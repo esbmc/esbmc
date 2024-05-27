@@ -8,6 +8,7 @@
 #include <util/arith_tools.h>
 #include <util/expr_util.h>
 #include <util/message.h>
+#include <util/encoding.h>
 
 #include <fstream>
 #include <regex>
@@ -102,7 +103,7 @@ typet python_converter::get_typet(const std::string &ast_type, size_t type_size)
     /* FIXME: We need to map 'int' to another irep type that provides unlimited precision
 	https://docs.python.org/3/library/stdtypes.html#numeric-types-int-float-complex */
     return int_type();
-  if (ast_type == "uint64")
+  if (ast_type == "uint64" || ast_type == "Epoch" || ast_type == "Slot")
     return long_long_uint_type();
   if (ast_type == "bool")
     return bool_type();
@@ -110,10 +111,10 @@ typet python_converter::get_typet(const std::string &ast_type, size_t type_size)
     return uint256_type();
   if (ast_type == "bytes")
   {
-    typet char_type = signed_char_type();
-    char_type.set("#cpp_type", "signed_char");
+    // TODO: Keep "bytes" as signed char instead of "int_type()", and cast to an 8-bit integer in [] operations
+    // or consider modelling it with string_constantt.
     typet t = array_typet(
-      char_type,
+      int_type(),
       constant_exprt(
         integer2binary(BigInt(type_size), bv_width(size_type())),
         integer2string(BigInt(type_size)),
@@ -518,25 +519,37 @@ function_id python_converter::build_function_id(const nlohmann::json &element)
   bool is_member_function_call = false;
   const nlohmann::json &func_json = element["func"];
   const std::string &func_type = func_json["_type"];
-  std::string func_name, obj_name;
+  std::string func_name, obj_name, class_name;
   std::string func_symbol_id = create_symbol_id();
 
   if (func_type == "Name")
     func_name = func_json["id"];
-  else if (func_type == "Attribute")
+  else if (func_type == "Attribute") // Handling obj_name.func_name() calls
   {
+    is_member_function_call = true;
     func_name = func_json["attr"];
     obj_name = func_json["value"]["id"];
-    if (json_utils::is_module(obj_name, ast_json))
+    if (
+      !is_class(obj_name, ast_json) &&
+      json_utils::is_module(obj_name, ast_json))
+    {
       func_symbol_id = create_symbol_id(imported_modules[obj_name]);
-    else
-      is_member_function_call = true;
+      is_member_function_call = false;
+    }
   }
 
+  // build symbol_id
   if (func_name == "len")
   {
     func_name = __ESBMC_get_object_size;
     func_symbol_id = "c:@F@" + __ESBMC_get_object_size;
+  }
+  else if (is_builtin_type(obj_name))
+  {
+    class_name = obj_name;
+    std::stringstream ss;
+    ss << "py:" + python_filename + "@C@" + class_name + "@F@" + func_name;
+    func_symbol_id = ss.str();
   }
   else if (func_name == __ESBMC_assume || func_name == __VERIFIER_assume)
     func_symbol_id = func_name;
@@ -546,7 +559,6 @@ function_id python_converter::build_function_id(const nlohmann::json &element)
   bool is_ctor_call = is_constructor_call(element);
 
   // Insert class name in the symbol id
-  std::string class_name;
   if (is_ctor_call || is_member_function_call)
   {
     std::size_t pos = func_symbol_id.rfind("@F@");
@@ -562,8 +574,9 @@ function_id python_converter::build_function_id(const nlohmann::json &element)
         else
         {
           auto obj_node = find_var_decl(obj_name, ast_json);
-          if (obj_node == nlohmann::json())
+          if (obj_node.empty())
             abort();
+
           class_name = obj_node["annotation"]["id"].get<std::string>();
         }
       }
@@ -584,8 +597,9 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 
     if (element["func"]["_type"] == "Attribute")
     {
-      const auto &func_value = element["func"]["value"]["id"];
-      if (is_class(func_value, ast_json))
+      const std::string &func_value =
+        element["func"]["value"]["id"].get<std::string>();
+      if (is_class(func_value, ast_json) || is_builtin_type(func_value))
         is_class_method_call = true;
       else if (!json_utils::is_module(func_value, ast_json))
         is_instance_method_call = true;
@@ -632,13 +646,13 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       }
     }
 
-    bool is_ctor_call = is_constructor_call(element);
-
     const symbolt *func_symbol = context.find_symbol(func_symbol_id.c_str());
 
     // Find function in imported modules
     if (!func_symbol)
       func_symbol = find_function_in_imported_modules(func_symbol_id);
+
+    bool is_ctor_call = is_constructor_call(element);
 
     if (func_symbol == nullptr)
     {
@@ -724,7 +738,12 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         c_typecastt c_typecast(ns);
         c_typecast.implicit_typecast(arg, pointer_typet(empty_typet()));
       }
-      call.arguments().push_back(arg);
+
+      // All array function arguments (e.g. bytes type) are handled as pointers.
+      if (arg.type().is_array())
+        call.arguments().push_back(address_of_exprt(arg));
+      else
+        call.arguments().push_back(arg);
     }
 
     if (func_name == "__ESBMC_get_object_size")
@@ -779,9 +798,13 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     else if (value.is_string() && current_element_type.is_array())
     {
       expr = gen_zero(current_element_type);
-      typet t = signed_char_type();
+      typet &t = current_element_type.subtype();
+
+      const std::string &str = element["encoded_bytes"].get<std::string>();
+      std::vector<uint8_t> decoded = base64_decode(str);
+
       unsigned int i = 0;
-      for (char &ch : element["value"].get<std::string>())
+      for (uint8_t &ch : decoded)
       {
         exprt char_value = constant_exprt(
           integer2binary(BigInt(ch), bv_width(t)),
@@ -924,6 +947,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   {
     exprt array = get_expr(element["value"]);
     typet t = array.type().subtype();
+
     const nlohmann::json &slice = element["slice"];
     exprt pos = get_expr(slice);
 
@@ -960,6 +984,9 @@ bool python_converter::is_constructor_call(const nlohmann::json &json)
     return false;
 
   const std::string &func_name = json["func"]["id"];
+
+  if (is_builtin_type(func_name))
+    return false;
 
   /* f:Foo = Foo()
    * The statement is a constructor call if the function call on the
@@ -1001,10 +1028,18 @@ void python_converter::get_var_assign(
   {
     // Get type from current annotation node
     size_t type_size = 0;
-    if (
-      ast_node["value"].contains("value") &&
-      ast_node["value"]["value"].is_string())
-      type_size = ast_node["value"]["value"].get<std::string>().size();
+    if (ast_node["value"].contains("value"))
+    {
+      if (ast_node["annotation"]["id"] == "bytes")
+      {
+        const std::string &str =
+          ast_node["value"]["encoded_bytes"].get<std::string>();
+        std::vector<uint8_t> decoded = base64_decode(str);
+        type_size = decoded.size();
+      }
+      else if (ast_node["value"]["value"].is_string())
+        type_size = ast_node["value"]["value"].get<std::string>().size();
+    }
 
     current_element_type =
       get_typet(ast_node["annotation"]["id"].get<std::string>(), type_size);
@@ -1299,6 +1334,9 @@ void python_converter::get_function_definition(
     else
       arg_type = get_typet(element["annotation"]["id"].get<std::string>());
 
+    if (arg_type.is_array())
+      arg_type = gen_pointer_type(arg_type.subtype());
+
     assert(arg_type != typet());
 
     code_typet::argumentt arg;
@@ -1534,7 +1572,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
      *  It can be used when a statement is required syntactically but the program requires no action." */
     case StatementType::PASS:
       break;
-    // Imports are handled by astgen.py so we can just ignore here.
+    // Imports are handled by parser.py so we can just ignore here.
     case StatementType::IMPORT:
       break;
     case StatementType::UNKNOWN:
@@ -1575,18 +1613,32 @@ bool python_converter::convert()
 
   python_filename = ast_json["filename"].get<std::string>();
 
-  // Load memory models -----
-  std::stringstream model_path;
-  model_path << ast_json["ast_output_dir"].get<std::string>() << "/range.json";
-  std::ifstream model_file(model_path.str());
-  nlohmann::json model_json;
-  model_file >> model_json;
+  if (!config.options.get_bool_option("no-library"))
+  {
+    // Load operational models -----
+    const std::string &ast_output_dir =
+      ast_json["ast_output_dir"].get<std::string>();
+    std::list<std::string> model_files = {"range", "int"};
 
-  exprt mm_code = get_block(model_json["body"]);
-  convert_expression_to_code(mm_code);
+    for (const auto &file : model_files)
+    {
+      log_progress("Loading model: {}", file + ".py");
 
-  // Add imported code to main symbol
-  main_symbol.value.swap(mm_code);
+      std::stringstream model_path;
+      model_path << ast_output_dir << "/" << file << ".json";
+
+      std::ifstream model_file(model_path.str());
+      nlohmann::json model_json;
+      model_file >> model_json;
+      model_file.close();
+
+      exprt model_code = get_block(model_json["body"]);
+      convert_expression_to_code(model_code);
+
+      // Add imported code to main symbol
+      main_symbol.value.swap(model_code);
+    }
+  }
 
   // Handle --function option
   const std::string function = config.options.get_option("function");
@@ -1613,15 +1665,15 @@ bool python_converter::convert()
       return true;
     }
 
-    // Convert all variables from global scope
+    // Convert all variables from global scope and class definitions
+    code_blockt block;
     for (const auto &elem : ast_json["body"])
     {
       StatementType type = get_statement_type(elem);
       if (type == StatementType::VARIABLE_ASSIGN)
-      {
-        code_blockt block;
         get_var_assign(elem, block);
-      }
+      else if (type == StatementType::CLASS_DEFINITION)
+        get_class_definition(elem, block);
     }
 
     // Convert a single function

@@ -63,7 +63,9 @@ public:
   // Operations
   size_t copy(char *dest, size_t count, size_t pos = 0) const
   {
-    memcpy(dest, str + pos, std::min(count, len - pos));
+    size_t n = std::min(count, len - pos);
+    memcpy(dest, str + pos, n);
+    return n;
   }
   string_view substr(size_t pos = 0, size_t count = npos) const
   {

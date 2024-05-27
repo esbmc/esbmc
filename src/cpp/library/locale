@@ -4,7 +4,6 @@
 #include "string"
 #include "iterator"
 #include "iostream"
-using namespace std;
 
 namespace std
 {
@@ -80,7 +79,7 @@ class locale
 {
 public:
   typedef int category;
-  class locale::facet
+  class facet
   {
   public:
     explicit facet(size_t refs = 0);
@@ -90,7 +89,7 @@ public:
     facet(const facet &);          // not defined
     void operator=(const facet &); // not defined
   };
-  class locale::id
+  class id
   {
   public:
     id();
@@ -114,15 +113,7 @@ public:
   string &name() const;
   bool operator!=(const locale &other) const;
   template <class charT, class Traits, class Allocator>
-  bool operator()(
-    const basic_string<charT, Traits, Allocator> &s1,
-    const basic_string<charT, Traits, Allocator> &s2) const
-  {
-    return (
-      use_facet<collate<charT>>(*this).compare(
-        s1.data(), s1.data() + s1.size(), s2.data(), s2.data() + s2.size()) <
-      0);
-  }
+  bool operator()(const string &s1, const string &s2) const;
   const locale &operator=(const locale &other) throw();
   bool operator==(const locale &other) const;
 };
@@ -169,7 +160,7 @@ public:
 };
 
 template <class charT>
-class ctype_byname : public ctype
+class ctype_byname : public ctype<charT>
 {
   explicit ctype_byname(const char *std_name, size_t refs = 0);
 };
@@ -183,7 +174,7 @@ public:
   typedef internT intern_type;
 
   explicit codecvt(size_t refs = 0);
-  ~ctype();
+  ~codecvt();
   result in(
     stateT &state,
     const externT *from,
@@ -241,13 +232,13 @@ public:
 };
 
 template <class internT, class externT, class stateT>
-class codecvt_byname : public codecvt
+class codecvt_byname : public codecvt<internT, externT, stateT>
 {
 public:
   explicit codecvt_byname(const char *std_name, size_t refs = 0);
 };
 
-template <class charT, class InputIterator = istreambuf_iterator<charT>>
+template <class charT, class InputIterator = istreambuf_iterator<charT> >
 class num_get : locale::facet
 {
 public:
@@ -365,12 +356,12 @@ public:
     void *&val) const;
 };
 
-template <class charT, class OutputIterator = ostreambuf_iterator<charT>>
+template <class charT, class OutputIterator = ostreambuf_iterator<charT> >
 class num_put : public locale::facet
 {
 public:
   typedef charT char_type;
-  typedef OutputIterator char_type;
+  typedef OutputIterator iter_type;
   explicit num_put(size_t refs = 0);
   ~num_put();
   iter_type put(iter_type out, ios_base &str, char_type fill, bool val) const;
@@ -416,7 +407,7 @@ public:
 };
 
 template <class charT>
-class numpunct_byname : public numpunct
+class numpunct_byname : public numpunct<charT>
 {
 public:
   explicit numpunct_byname(const char *std_name, size_t refs = 0);
@@ -447,13 +438,13 @@ public:
 };
 
 template <class charT>
-class collate_byname : public collate
+class collate_byname : public collate<charT>
 {
 public:
   explicit collate_byname(const char *std_name, size_t refs = 0);
 };
 
-template <class charT, class InputIterator = istreambuf_iterator<charT>>
+template <class charT, class InputIterator = istreambuf_iterator<charT> >
 class time_get : public locale::facet, time_base
 {
 public:
@@ -525,19 +516,19 @@ public:
     tm *t) const;
 };
 
-template <class charT, class InputIterator = istreambuf_iterator<charT>>
-class time_get_byname : public time_get
+template <class charT, class InputIterator = istreambuf_iterator<charT> >
+class time_get_byname : public time_get<charT, InputIterator>
 {
 public:
   explicit time_get_byname(const char *std_name, size_t refs = 0);
 };
 
-template <class charT, class OutputIterator = ostreambuf_iterator<charT>>
+template <class charT, class OutputIterator = ostreambuf_iterator<charT> >
 class time_put : public locale::facet
 {
 public:
   typedef charT char_type;
-  typedef OutputIterator char_type;
+  typedef OutputIterator iter_type;
   explicit time_put(size_t refs = 0);
   ~time_put();
   iter_type put(
@@ -563,14 +554,14 @@ public:
     char modifier = 0) const;
 };
 
-template <class charT, class OutputIterator = ostreambuf_iterator<charT>>
-class time_put_byname : public time_put
+template <class charT, class OutputIterator = ostreambuf_iterator<charT> >
+class time_put_byname : public time_put<charT, OutputIterator>
 {
 public:
   explicit time_put_byname(const char *std_name, size_t refs = 0);
 };
 
-template <class charT, class InputIterator = istreambuf_iterator<charT>>
+template <class charT, class InputIterator = istreambuf_iterator<charT> >
 class money_get : public locale::facet
 {
 public:
@@ -609,12 +600,12 @@ public:
     string_type &digits) const;
 };
 
-template <class charT, class OutputIterator = ostreambuf_iterator<charT>>
+template <class charT, class OutputIterator = ostreambuf_iterator<charT> >
 class money_put : public locale::facet
 {
 public:
   typedef charT char_type;
-  typedef InputIterator iter_type;
+  typedef OutputIterator iter_type;
   typedef string string_type;
   explicit money_put(size_t refs = 0);
   ~money_put();
@@ -671,10 +662,10 @@ public:
 };
 
 template <class charT, bool International = false>
-class numpunct_byname : public moneypunct
+class moneypunct_byname : public moneypunct<charT, International>
 {
 public:
-  explicit numpunct_byname(const char *std_name, size_t refs = 0);
+  explicit moneypunct_byname(const char *std_name, size_t refs = 0);
 };
 
 template <class charT>
@@ -697,11 +688,20 @@ public:
 };
 
 template <class charT>
-class messages_byname : public messages
+class messages_byname : public messages<charT>
 {
 public:
   explicit messages_byname(const char *std_name, size_t refs = 0);
 };
+
+template <class charT, class Traits, class Allocator>
+bool locale::operator()(const string &s1, const string &s2) const
+{
+  return (
+    use_facet<collate<charT> >(*this).compare(
+      s1.data(), s1.data() + s1.size(), s2.data(), s2.data() + s2.size()) <
+    0);
+}
 
 } // namespace std
 
