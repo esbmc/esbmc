@@ -961,11 +961,17 @@ smt_convt::resultt bmct::multi_property_check(
   {
     log_success("\n[Coverage]\n");
 
+    // not all the claims are cond-cov instrumentations
+    // thus we need to skip the irrelevant claims
+    // when comparing 'total_cond_assert' and 'reached_claims'
     goto_coveraget tmp(ns, symex->goto_functions);
     const std::unordered_set<std::string> &total_cond_assert =
       tmp.get_total_cond_assert();
-    int tracked_instance = 0;
-    int total_instance = 0;
+    size_t total_instance = total_cond_assert.size();
+    size_t reached_instance = 0;
+    size_t short_circuit_instance = 0;
+    size_t sat_instance = 0;
+    size_t unsat_instance = 0;
 
     // show claims
     bool cond_show_claims =
@@ -977,76 +983,80 @@ smt_convt::resultt bmct::multi_property_check(
     {
       if (reached_claims.count(claim))
       {
-        // update counter
-        total_instance += 2;
-
+        // show sat claims
         if (cond_show_claims)
           log_status("  {} : SATISFIED", claim);
-        tracked_instance++;
+
+        // update counter +=2
+        // as we handle ass and !ass at the same time
+        reached_instance += 2;
+
+        // update sat counter
+        ++sat_instance;
+
+        // prevent double count
         reached_claims.erase(claim);
         total_cond_assert_cpy.erase(claim);
 
-        // reversal
+        // reversal: obtain !ass
+        std::string r_claim;
         std::string delimiter = "\t";
         auto pos = claim.find(delimiter);
         std::string claim_msg = claim.substr(0, pos);
         std::string claim_loc = claim.substr(pos + 1);
-
         if (
           claim_msg[0] == '!' && claim_msg[1] == '(' && claim_msg.back() == ')')
-        {
           // e.g. !(a==1)
-          std::string r_claim =
+          r_claim =
             claim_msg.substr(2, claim_msg.length() - 3) + "\t" + claim_loc;
-          if (cond_show_claims)
-          {
-            if (reached_claims.count(r_claim))
-              log_status("  {} : SATISFIED", r_claim);
-            else
-              log_status("  {} : UNSATISFIED", r_claim);
-          }
+        else
+          r_claim = "!(" + claim_msg + ")" + "\t" + claim_loc;
 
-          if (reached_claims.count(r_claim))
-            tracked_instance++;
-          reached_claims.erase(r_claim);
-          total_cond_assert_cpy.erase(r_claim);
+        if (reached_claims.count(r_claim))
+        {
+          ++sat_instance;
+          if (cond_show_claims)
+            log_result("  {} : SATISFIED", r_claim);
         }
         else
         {
-          std::string r_claim = "!(" + claim_msg + ")" + "\t" + claim_loc;
+          ++unsat_instance;
           if (cond_show_claims)
-          {
-            if (reached_claims.count(r_claim))
-              log_status("  {} : SATISFIED", r_claim);
-            else
-              log_status("  {} : UNSATISFIED", r_claim);
-          }
-
-          if (reached_claims.count(r_claim))
-            tracked_instance++;
-          reached_claims.erase(r_claim);
-          total_cond_assert_cpy.erase(r_claim);
+            log_result("  {} : UNSATISFIED", r_claim);
         }
+
+        // prevent double count
+        // e.g if( a ==0 && a == 0)
+        // we only count a==0 and !(a==0) once
+        reached_claims.erase(r_claim);
+        total_cond_assert_cpy.erase(r_claim);
       }
     }
 
+    // the remain unreached instrumentaion are regarded as short-circuited
     //! the reached_claims might not be empty (due to unwinding assertions)
+    short_circuit_instance = total_cond_assert_cpy.size();
+
     // show short-circuited:
-    if (cond_show_claims && total_cond_assert_cpy.size() > 0)
+    if (cond_show_claims && short_circuit_instance > 0)
     {
       log_status("[Short Circuited Conditions]");
       for (const auto &claim : total_cond_assert_cpy)
-        log_status("  {}", claim);
+        log_result("  {}", claim);
     }
 
     // show the number
-    log_result("Reached Conditions:  {}", total_instance);
-    log_result("Short Circuited Conditions:  {}", total_cond_assert_cpy.size());
+    log_result("Reached Conditions:  {}", reached_instance);
+    log_result("Short Circuited Conditions:  {}", short_circuit_instance);
+    log_result(
+      "Total Conditions:  {}\n", reached_instance + short_circuit_instance);
 
-    total_instance += total_cond_assert_cpy.size();
+    log_result("Condition Properties - SATISFIED:  {}", sat_instance);
+    log_result("Condition Properties - UNSATISFIED:  {}\n", unsat_instance);
+
     if (total_instance != 0)
       log_result(
-        "Condition Coverage: {}%", tracked_instance * 100.0 / total_instance);
+        "Condition Coverage: {}%", sat_instance * 100.0 / total_instance);
     else
       log_result("Condition Coverage: 0%");
   }
