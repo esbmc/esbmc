@@ -31,7 +31,7 @@ Before starting, note that ESBMC is mainly distributed under the terms of the [A
 | CVC4      | no       | 1.8             |
 | CVC5      | no       | 1.1.2           |
 | MathSAT   | no       | 5.5.4           |
-| Yices     | no       | 2.6.1           |
+| Yices     | no       | 2.6.4           |
 | Z3        | no       | 4.8.9           |
 | Bitwuzla  | no       | 0.3.1           |
 
