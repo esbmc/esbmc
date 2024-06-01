@@ -161,7 +161,7 @@ protected:
   nlohmann::json add_dyn_array_size_expr(
     const nlohmann::json &type_descriptor,
     const nlohmann::json &dyn_array_node);
-  bool is_child_mapping(const nlohmann::json &ast_node);
+  bool is_mapping(const nlohmann::json &ast_node);
 
   void get_default_symbol(
     symbolt &symbol,

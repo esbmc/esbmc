@@ -11,12 +11,12 @@
 namespace SolidityTemplate
 {
 /// header & typedef
-
 const std::string sol_header = R"(
 #include <stddef.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
+#include <stdbool.h>
 )";
 
 /*
@@ -26,13 +26,13 @@ const std::string sol_header = R"(
   address == address_t
 */
 const std::string sol_typedef = R"(
+typedef _ExtInt(256) int256_t;
 typedef unsigned _ExtInt(256) uint256_t;
 typedef unsigned _ExtInt(160) address_t;
 )";
 
 /// Variables
 // the value of these variables need to be set to rand afterwards
-
 const std::string sol_msg = R"(
 uint256_t msg_data;
 address_t msg_address;
@@ -61,7 +61,6 @@ const std::string sol_vars = sol_msg + sol_tx + sol_block;
 /// functions
 // if the function does not currently have an actual implement,
 // leave the params empty.
-
 const std::string blockhash = R"(
 uint256_t blockhash();
 )";
@@ -132,48 +131,6 @@ typedef struct
 	map_node_t *node;
 } map_iter_t;
 
-#define map_t(T)         \
-	struct               \
-	{                    \
-		map_base_t base; \
-		T *ref;          \
-		T tmp;           \
-	}
-
-#define map_init(m) \
-	memset(m, 0, sizeof(*(m)))
-
-#define map_deinit(m) \
-	map_deinit_(&(m)->base)
-
-#define map_get(m, key) \
-	((m)->ref = map_get_(&(m)->base, key))
-
-#define map_set(m, key, value) \
-	((m)->tmp = (value),       \
-	 map_set_(&(m)->base, key, &(m)->tmp, sizeof((m)->tmp)))
-
-#define map_remove(m, key) \
-	map_remove_(&(m)->base, key)
-
-#define map_iter(m) \
-	map_iter_()
-
-#define map_next(m, iter) \
-	map_next_(&(m)->base, iter)
-
-void map_deinit_(map_base_t *m);
-void *map_get_(map_base_t *m, const char *key);
-int map_set_(map_base_t *m, const char *key, void *value, int vsize);
-void map_remove_(map_base_t *m, const char *key);
-map_iter_t map_iter_(void);
-const char *map_next_(map_base_t *m, map_iter_t *iter);
-
-typedef map_t(void *) map_void_t;
-typedef map_t(char *) map_str_t;
-typedef map_t(int) map_int_t;
-typedef map_t(char) map_char_t;
-
 struct map_node_t
 {
 	unsigned hash;
@@ -181,6 +138,89 @@ struct map_node_t
 	map_node_t *next;
 };
 
+void *map_get_(map_base_t *m, const char *key);
+int map_set_(map_base_t *m, const char *key, void *value, int vsize);
+void map_remove_(map_base_t *m, const char *key);
+
+typedef struct map_int_t
+{
+	map_base_t base;
+	int *ref;
+	int tmp;
+} map_int_t;
+
+typedef struct map_uint_t
+{
+	map_base_t base;
+	unsigned int *ref;
+	unsigned int tmp;
+} map_uint_t;
+
+typedef struct map_str_t
+{
+	map_base_t base;
+	char **ref;
+	char *tmp;
+} map_str_t;
+
+/// Init
+static void map_init_int(map_int_t *m)
+{
+	memset(m, 0, sizeof(*(m)));
+}
+
+static void map_init_uint(map_uint_t *m)
+{
+	memset(m, 0, sizeof(*(m)));
+}
+
+static void map_init_string(map_str_t *m)
+{
+	memset(m, 0, sizeof(*(m)));
+}
+
+/// Set
+// int
+static void map_set_int(map_int_t *m, const char *key, int value)
+{
+	(m)->tmp = value;
+	map_set_(&(m)->base, key, &(m)->tmp, sizeof((m)->tmp));
+}
+
+// uint
+static void map_set_uint(map_uint_t *m, const char *key, unsigned int value)
+{
+	(m)->tmp = value;
+	map_set_(&(m)->base, key, &(m)->tmp, sizeof((m)->tmp));
+}
+
+// string: contract_id/struct_instance_id/string
+static void map_set_string(map_uint_t *m, const char *key, const char *value)
+{
+	(m)->tmp = value;
+	map_set_(&(m)->base, key, &(m)->tmp, sizeof((m)->tmp));
+}
+
+/// Get
+static int *map_get_int(map_int_t *m, int key)
+{
+	(m)->ref = map_get_(&(m)->base, key);
+	return (m)->ref;
+}
+
+static int *map_get_uint(map_int_t *m, unsigned int key)
+{
+	(m)->ref = map_get_(&(m)->base, key);
+	return (m)->ref;
+}
+
+static int *map_get_string(map_int_t *m, const char *key)
+{
+	(m)->ref = map_get_(&(m)->base, key);
+	return (m)->ref;
+}
+
+/// General
 static unsigned map_hash(const char *str)
 {
 	unsigned hash = 5381;
@@ -237,7 +277,8 @@ static int map_resize(map_base_t *m, int nbuckets)
 		}
 	}
 	/* Reset buckets */
-	buckets = realloc(m->buckets, sizeof(*m->buckets) * nbuckets);
+	/* --force-malloc-success */
+	buckets = malloc(sizeof(*m->buckets) * nbuckets);
 	if (buckets != NULL)
 	{
 		m->buckets = buckets;
@@ -256,7 +297,8 @@ static int map_resize(map_base_t *m, int nbuckets)
 		}
 	}
 	/* Return error code if realloc() failed */
-	return (buckets == NULL) ? -1 : 0;
+	/* --force-malloc-success */
+	return 0;
 }
 
 static map_node_t **map_getref(map_base_t *m, const char *key)
@@ -276,24 +318,6 @@ static map_node_t **map_getref(map_base_t *m, const char *key)
 		}
 	}
 	return NULL;
-}
-
-void map_deinit_(map_base_t *m)
-{
-	map_node_t *next, *node;
-	int i;
-	i = m->nbuckets;
-	while (i--)
-	{
-		node = m->buckets[i];
-		while (node)
-		{
-			next = node->next;
-			free(node);
-			node = next;
-		}
-	}
-	free(m->buckets);
 }
 
 void *map_get_(map_base_t *m, const char *key)
@@ -343,43 +367,64 @@ void map_remove_(map_base_t *m, const char *key)
 		m->nnodes--;
 	}
 }
-
-map_iter_t map_iter_(void)
-{
-	map_iter_t iter;
-	iter.bucketidx = -1;
-	iter.node = NULL;
-	return iter;
-}
-
-const char *map_next_(map_base_t *m, map_iter_t *iter)
-{
-	if (iter->node)
-	{
-		iter->node = iter->node->next;
-		if (iter->node == NULL)
-			goto nextBucket;
-	}
-	else
-	{
-	nextBucket:
-		do
-		{
-			if (++iter->bucketidx >= m->nbuckets)
-			{
-				return NULL;
-			}
-			iter->node = m->buckets[iter->bucketidx];
-		} while (iter->node == NULL);
-	}
-	return (char *)(iter->node + 1);
-}
 #endif
 )";
 
+/// external library
+// itoa
+const std::string sol_itoa = R"(
+char get_char(int digit)
+{
+    char charstr[] = "0123456789ABCDEF";
+    return charstr[digit];
+}
+
+void rev(char *p)
+{
+    char *q = &p[strlen(p) - 1];
+    char *r = p;
+    for (; q > r; q--, r++)
+    {
+        char s = *q;
+        *q = *r;
+        *r = s;
+    }
+}
+
+void i256toa(int value, char *str, int base)
+{
+    int count = 0;
+    bool flag = true;
+    if (value < 0 && base == 10)
+    {
+        flag = false;
+    }
+    while (value != 0)
+    {
+        int dig = value % base;
+        value -= dig;
+        value /= base;
+
+        if (flag == true)
+            str[count] = get_char(dig);
+        else
+            str[count] = get_char(-dig);
+        count++;
+    }
+    if (flag == false)
+    {
+        str[count] = '-';
+        count++;
+    }
+    str[count] = 0;
+    rev(str);
+})";
+
+const std::string sol_ext_library = sol_itoa;
+
 // combination
-const std::string sol_library =
-  sol_header + sol_typedef + sol_vars + sol_funcs + sol_mapping;
+const std::string sol_library = sol_header + sol_typedef + sol_vars +
+                                sol_funcs + sol_mapping + sol_ext_library;
 
 }; // namespace SolidityTemplate
 

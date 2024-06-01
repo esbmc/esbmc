@@ -312,8 +312,8 @@ bool solidity_convertert::get_var_decl(
   // to improve the re-usability of get_type* function, when dealing with non-array var decls.
   // For array, do NOT use ["typeName"]. Otherwise, it will cause problem
   // when populating typet in get_cast
-  bool dyn_array = is_dyn_array(ast_node["typeDescriptions"]);
-  bool mapping = is_child_mapping(ast_node);
+  bool dyn_array = is_dyn_array(ast_node);
+  bool mapping = is_mapping(ast_node);
   if (dyn_array)
   {
     if (ast_node.contains("initialValue"))
@@ -2236,7 +2236,7 @@ bool solidity_convertert::get_expr(
       // convert to
       //    uint y[7] = {0,0,0,0,0,0,0};
       //    a = y;
-      if (is_dyn_array(callee_expr_json["typeName"]["typeDescriptions"]))
+      if (is_dyn_array(callee_expr_json["typeName"]))
       {
         if (get_empty_array_ref(expr, new_expr))
           return true;
@@ -5126,26 +5126,23 @@ solidity_convertert::get_array_size(const nlohmann::json &type_descrpt)
   return the_size;
 }
 
-bool solidity_convertert::is_dyn_array(const nlohmann::json &json_in)
+bool solidity_convertert::is_dyn_array(const nlohmann::json &ast_node)
 {
-  if (json_in.contains("typeIdentifier"))
-  {
-    if (
-      json_in["typeIdentifier"].get<std::string>().find("dyn") !=
-      std::string::npos)
-    {
-      return true;
-    }
-  }
+  if (
+    ast_node.contains("typeDescriptions") &&
+    SolidityGrammar::get_type_name_t(ast_node["typeDescriptions"]) ==
+      SolidityGrammar::DynArrayTypeName)
+    return true;
   return false;
 }
 
-// check if the child node "typeName" is a mapping
-bool solidity_convertert::is_child_mapping(const nlohmann::json &ast_node)
+// check if the node is a mapping
+bool solidity_convertert::is_mapping(const nlohmann::json &ast_node)
 {
   if (
-    ast_node.contains("typeName") &&
-    ast_node["typeName"]["nodeType"] == "Mapping")
+    ast_node.contains("typeDescriptions") &&
+    SolidityGrammar::get_type_name_t(ast_node["typeDescriptions"]) ==
+      SolidityGrammar::MappingTypeName)
     return true;
   return false;
 }
