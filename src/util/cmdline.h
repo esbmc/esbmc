@@ -11,7 +11,7 @@
  * makes the definition of isset as a macro, which conflicts with
  * the member */
 #ifdef isset
-#undef isset
+#  undef isset
 #endif
 struct opt_templ
 {

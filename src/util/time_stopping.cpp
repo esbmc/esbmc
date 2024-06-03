@@ -1,8 +1,8 @@
 #if defined(_WIN32) && !defined(__MINGW32__)
-#include <windows.h>
-#include <winbase.h>
+#  include <windows.h>
+#  include <winbase.h>
 #else
-#include <sys/time.h>
+#  include <sys/time.h>
 #endif
 
 #include <iomanip>

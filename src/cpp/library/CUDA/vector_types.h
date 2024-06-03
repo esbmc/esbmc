@@ -1,51 +1,51 @@
 #if !defined(__VECTOR_TYPES_H__)
-#define __VECTOR_TYPES_H__
+#  define __VECTOR_TYPES_H__
 
-#include <stddef.h>
-#include <stdlib.h>
+#  include <stddef.h>
+#  include <stdlib.h>
 
-#if !defined(__CUDA_LIBDEVICE__)
-#include "builtin_types.h"
-#endif /* !__CUDA_LIBDEVICE__ */
-#include "host_defines.h"
+#  if !defined(__CUDA_LIBDEVICE__)
+#    include "builtin_types.h"
+#  endif /* !__CUDA_LIBDEVICE__ */
+#  include "host_defines.h"
 
-#ifdef __cplusplus
+#  ifdef __cplusplus
 
 extern "C"
 {
-#endif
+#  endif
 
-#if !defined(__CUDACC__) && !defined(__CUDABE__) && defined(_WIN32) &&         \
-  !defined(_WIN64)
+#  if !defined(__CUDACC__) && !defined(__CUDABE__) && defined(_WIN32) &&       \
+    !defined(_WIN64)
 
-#pragma warning(push)
-#pragma warning(disable : 4201 4408)
+#    pragma warning(push)
+#    pragma warning(disable : 4201 4408)
 
-#define __cuda_builtin_vector_align8(tag, members)                             \
-  struct __device_builtin__ tag                                                \
-  {                                                                            \
-    union                                                                      \
-    {                                                                          \
-      struct                                                                   \
+#    define __cuda_builtin_vector_align8(tag, members)                         \
+      struct __device_builtin__ tag                                            \
+      {                                                                        \
+        union                                                                  \
+        {                                                                      \
+          struct                                                               \
+          {                                                                    \
+            members                                                            \
+          };                                                                   \
+          struct                                                               \
+          {                                                                    \
+            long long int : 1, : 0;                                            \
+          };                                                                   \
+        };                                                                     \
+      }
+
+#  else /* !__CUDACC__ && !__CUDABE__ && _WIN32 && !_WIN64 */
+
+#    define __cuda_builtin_vector_align8(tag, members)                         \
+      struct __device_builtin__ __align__(8) tag                               \
       {                                                                        \
         members                                                                \
-      };                                                                       \
-      struct                                                                   \
-      {                                                                        \
-        long long int : 1, : 0;                                                \
-      };                                                                       \
-    };                                                                         \
-  }
+      }
 
-#else /* !__CUDACC__ && !__CUDABE__ && _WIN32 && !_WIN64 */
-
-#define __cuda_builtin_vector_align8(tag, members)                             \
-  struct __device_builtin__ __align__(8) tag                                   \
-  {                                                                            \
-    members                                                                    \
-  }
-
-#endif /* !__CUDACC__ && !__CUDABE__ && _WIN32 && !_WIN64 */
+#  endif /* !__CUDACC__ && !__CUDABE__ && _WIN32 && !_WIN64 */
 
   struct __device_builtin__ char1
   {
@@ -165,11 +165,11 @@ extern "C"
     unsigned long x;
   };
 
-#if defined(_WIN32)
+#  if defined(_WIN32)
   __cuda_builtin_vector_align8(long2, long int x; long int y;);
   __cuda_builtin_vector_align8(ulong2, unsigned long int x;
                                unsigned long int y;);
-#else /* _WIN32 */
+#  else /* _WIN32 */
 
 struct __device_builtin__ __align__(2 * sizeof(long int)) long2
 {
@@ -181,7 +181,7 @@ struct __device_builtin__ __align__(2 * sizeof(unsigned long int)) ulong2
   unsigned long int x, y;
 };
 
-#endif /* _WIN32 */
+#  endif /* _WIN32 */
 
   struct __device_builtin__ long3
   {
@@ -208,11 +208,11 @@ struct __device_builtin__ __align__(2 * sizeof(unsigned long int)) ulong2
     float x;
   };
 
-#if !defined(__CUDACC__) && !defined(__CUDABE__) && defined(__arm__) &&        \
-  defined(__ARM_PCS_VFP) && __GNUC__ == 4 && __GNUC_MINOR__ == 6
+#  if !defined(__CUDACC__) && !defined(__CUDABE__) && defined(__arm__) &&      \
+    defined(__ARM_PCS_VFP) && __GNUC__ == 4 && __GNUC_MINOR__ == 6
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-pedantic"
+#    pragma GCC diagnostic push
+#    pragma GCC diagnostic ignored "-pedantic"
 
   struct __device_builtin__ __attribute__((aligned(8))) float2
   {
@@ -221,15 +221,15 @@ struct __device_builtin__ __align__(2 * sizeof(unsigned long int)) ulong2
     float __cuda_gnu_arm_ice_workaround[0];
   };
 
-#pragma GCC poison __cuda_gnu_arm_ice_workaround
-#pragma GCC diagnostic pop
+#    pragma GCC poison __cuda_gnu_arm_ice_workaround
+#    pragma GCC diagnostic pop
 
-#else /* !__CUDACC__ && !__CUDABE__ && __arm__ && __ARM_PCS_VFP &&
+#  else /* !__CUDACC__ && !__CUDABE__ && __arm__ && __ARM_PCS_VFP &&
          __GNUC__ == 4&& __GNUC_MINOR__ == 6 */
 
 __cuda_builtin_vector_align8(float2, float x; float y;);
 
-#endif /* !__CUDACC__ && !__CUDABE__ && __arm__ && __ARM_PCS_VFP &&
+#  endif /* !__CUDACC__ && !__CUDABE__ && __arm__ && __ARM_PCS_VFP &&
           __GNUC__ == 4&& __GNUC_MINOR__ == 6 */
 
   struct __device_builtin__ float3
@@ -302,12 +302,12 @@ __cuda_builtin_vector_align8(float2, float x; float y;);
     double x, y, z, w;
   };
 
-#if !defined(__CUDACC__) && !defined(__CUDABE__) && defined(_WIN32) &&         \
-  !defined(_WIN64)
+#  if !defined(__CUDACC__) && !defined(__CUDABE__) && defined(_WIN32) &&       \
+    !defined(_WIN64)
 
-#pragma warning(pop)
+#    pragma warning(pop)
 
-#endif /* !__CUDACC__ && !__CUDABE__ && _WIN32 && !_WIN64 */
+#  endif /* !__CUDACC__ && !__CUDABE__ && _WIN32 && !_WIN64 */
 
   typedef __device_builtin__ struct char1 char1;
   typedef __device_builtin__ struct uchar1 uchar1;
@@ -361,7 +361,7 @@ __cuda_builtin_vector_align8(float2, float x; float y;);
   struct __device_builtin__ __dim3
   {
     unsigned int x, y, z;
-#if defined(__cplusplus)
+#  if defined(__cplusplus)
     __host__ __device__
     __dim3(unsigned int vx = 1, unsigned int vy = 1, unsigned int vz = 1)
     {
@@ -389,16 +389,16 @@ __cuda_builtin_vector_align8(float2, float x; float y;);
       t.z = z;
       return t;
     }
-#endif /* __cplusplus */
+#  endif /* __cplusplus */
   };
 
   typedef __device_builtin__ struct __dim3 dim3;
 
-#undef __cuda_builtin_vector_align8
+#  undef __cuda_builtin_vector_align8
 
-#ifdef __cplusplus
+#  ifdef __cplusplus
 }
 
-#endif
+#  endif
 
 #endif /* !__VECTOR_TYPES_H__ */

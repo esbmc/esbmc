@@ -22,16 +22,16 @@ void __ESBMC_atomic_end()
 
 #ifndef _WIN32
 
-#define sync_fetch(OPERATOR) __sync_fetch_and_##OPERATOR
+#  define sync_fetch(OPERATOR) __sync_fetch_and_##OPERATOR
 
-#define sync_fetch_generator(TYPE, OPERATOR)                                   \
-  {                                                                            \
-    int dest = 10;                                                             \
-    TYPE value = 5;                                                            \
-    int fetch = sync_fetch(OPERATOR)(&dest, value);                            \
-    CHECK(dest == 15);                                                         \
-    CHECK(fetch == 10);                                                        \
-  }
+#  define sync_fetch_generator(TYPE, OPERATOR)                                 \
+    {                                                                          \
+      int dest = 10;                                                           \
+      TYPE value = 5;                                                          \
+      int fetch = sync_fetch(OPERATOR)(&dest, value);                          \
+      CHECK(dest == 15);                                                       \
+      CHECK(fetch == 10);                                                      \
+    }
 
 TEST_CASE("sync_fetch_add", "[core][c2goto][builtin]")
 {

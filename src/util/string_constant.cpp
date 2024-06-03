@@ -39,17 +39,17 @@ string_constantt::string_constantt(
 static_assert(sizeof(wchar_t) == sizeof(char32_t));
 static_assert(sizeof(mbstate_t) >= sizeof(uint32_t));
 
-#define UNI_PLANE_SZ 0x10000
-#define SURR_VAL_BITS 10
-#define SURR_VAL_MASK ((1 << SURR_VAL_BITS) - 1)
-#define SURR_HI_MASK 0xd800
-#define SURR_LO_MASK 0xdc00
-#define IS_SURR(c) (((c) & ~0x7ff) == 0xd800)
-#define IS_SURR_HI(c) (((c) & ~SURR_VAL_MASK) == SURR_HI_MASK)
-#define IS_SURR_LO(c) (((c) & ~SURR_VAL_MASK) == SURR_LO_MASK)
-#define SURR_COMBINE(hi, lo)                                                   \
-  (((char32_t)(((hi)&SURR_VAL_MASK) << SURR_VAL_BITS) + UNI_PLANE_SZ) |        \
-   (char32_t)((lo)&SURR_VAL_MASK))
+#  define UNI_PLANE_SZ 0x10000
+#  define SURR_VAL_BITS 10
+#  define SURR_VAL_MASK ((1 << SURR_VAL_BITS) - 1)
+#  define SURR_HI_MASK 0xd800
+#  define SURR_LO_MASK 0xdc00
+#  define IS_SURR(c) (((c) & ~0x7ff) == 0xd800)
+#  define IS_SURR_HI(c) (((c) & ~SURR_VAL_MASK) == SURR_HI_MASK)
+#  define IS_SURR_LO(c) (((c) & ~SURR_VAL_MASK) == SURR_LO_MASK)
+#  define SURR_COMBINE(hi, lo)                                                 \
+    (((char32_t)(((hi)&SURR_VAL_MASK) << SURR_VAL_BITS) + UNI_PLANE_SZ) |      \
+     (char32_t)((lo)&SURR_VAL_MASK))
 
 /* Define the missing functions, statically, so once they choose to implement
  * them in their libc, we'll be notified and have to see about the version... */

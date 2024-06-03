@@ -1,7 +1,7 @@
 #if !defined(CURAND_H_)
-#define CURAND_H_
+#  define CURAND_H_
 
-#include "builtin_types.h"
+#  include "builtin_types.h"
 
 /**
  * \file
@@ -18,18 +18,18 @@
 
 //#include <cuda_runtime.h>
 
-#ifndef CURANDAPI
-#ifdef _WIN32
-#define CURANDAPI __stdcall
-#else
-#define CURANDAPI
-#endif
-#endif
+#  ifndef CURANDAPI
+#    ifdef _WIN32
+#      define CURANDAPI __stdcall
+#    else
+#      define CURANDAPI
+#    endif
+#  endif
 
-#if defined(__cplusplus)
+#  if defined(__cplusplus)
 extern "C"
 {
-#endif /* __cplusplus */
+#  endif /* __cplusplus */
 
   /** CURAND Host API datatypes
  * @{
@@ -824,8 +824,8 @@ CURAND function call status types
  * @}
  */
 
-#if defined(__cplusplus)
+#  if defined(__cplusplus)
 }
-#endif /* __cplusplus */
+#  endif /* __cplusplus */
 
 #endif /* !defined(CURAND_H_) */

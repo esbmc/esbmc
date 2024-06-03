@@ -15,9 +15,9 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/Tooling/Tooling.h>
 #include <llvm/Option/ArgList.h>
 #if CLANG_VERSION_MAJOR < 16
-#include <llvm/Support/Host.h>
+#  include <llvm/Support/Host.h>
 #else
-#include <llvm/TargetParser/Host.h>
+#  include <llvm/TargetParser/Host.h>
 #endif
 #include <llvm/Support/Path.h>
 CC_DIAGNOSTIC_POP()

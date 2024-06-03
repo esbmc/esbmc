@@ -1,11 +1,11 @@
 #ifdef _MINGW
 
-#define __declspec /* hacks */
+#  define __declspec /* hacks */
 #endif
 
 #ifdef _MSVC
-#define _INC_TIME_INL
-#define time crt_time
+#  define _INC_TIME_INL
+#  define time crt_time
 #endif
 #include <time.h>
 #undef time

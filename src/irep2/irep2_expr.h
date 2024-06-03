@@ -3577,7 +3577,7 @@ public:
 
 // Same deal as for "type_macros".
 #ifdef NDEBUG
-#define dynamic_cast static_cast
+#  define dynamic_cast static_cast
 #endif
 #define expr_macros(name)                                                      \
   inline bool is_##name##2t(const expr2tc &t)                                  \
@@ -3603,7 +3603,7 @@ BOOST_PP_LIST_FOR_EACH(_ESBMC_IREP2_MACROS_ENUM, foo, ESBMC_LIST_OF_EXPRS)
 
 #undef expr_macros
 #ifdef dynamic_cast
-#undef dynamic_cast
+#  undef dynamic_cast
 #endif
 
 #endif /* IREP2_EXPR_H_ */

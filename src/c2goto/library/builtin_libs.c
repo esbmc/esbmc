@@ -1,32 +1,32 @@
 #if __ESBMC_CHERI__ == 128
 
-#if 1
+#  if 1
 
-#ifdef __ESBMC_CHERI_MORELLO__
-#define CC_IS_MORELLO /* for cheri-compressed-cap */
-#endif
+#    ifdef __ESBMC_CHERI_MORELLO__
+#      define CC_IS_MORELLO /* for cheri-compressed-cap */
+#    endif
 
-#if !defined(cheri_debug_assert)
+#    if !defined(cheri_debug_assert)
 /* Disable cheri-compressed-cap's debug assertions since they assert that
  * base <= top in compute_base_top, which the comment above it admits is not
  * always true. */
-#if 1
-#ifndef assert
-#define assert(expr) __ESBMC_assert(expr, "builtin libc assertion")
-#endif
-#define cheri_debug_assert(...)
-#else
-#define cheri_debug_assert(...)                                                \
-  __ESBMC_assert(__VA_ARGS__, "cheri-compressed-cap internal assertion")
-#endif
-#endif
-#include <cheri_compressed_cap.h>
+#      if 1
+#        ifndef assert
+#          define assert(expr) __ESBMC_assert(expr, "builtin libc assertion")
+#        endif
+#        define cheri_debug_assert(...)
+#      else
+#        define cheri_debug_assert(...)                                        \
+          __ESBMC_assert(__VA_ARGS__, "cheri-compressed-cap internal assertion")
+#      endif
+#    endif
+#    include <cheri_compressed_cap.h>
 
-#ifdef __ESBMC_CHERI_MORELLO__
-#undef CC_IS_MORELLO
-#endif
+#    ifdef __ESBMC_CHERI_MORELLO__
+#      undef CC_IS_MORELLO
+#    endif
 
-#include <cheri/cheric.h>
+#    include <cheri/cheric.h>
 
 uint64_t __esbmc_clzll(uint64_t v)
 {
@@ -96,18 +96,18 @@ _Bool __esbmc_cheri_sealed_get(void *__capability cap)
 void *__capability
 __esbmc_cheri_bounds_set(void *__capability cap, __SIZE_TYPE__ sz)
 {
-#if 1
+#    if 1
   union __esbmc_cheri_cap128 u = {cap};
   cc128_cap_t comp;
   cc128_decompress_mem(u.pesbt, u.cursor, true /* tag */, &comp);
   __PTRADDR_TYPE__ cursor = comp._cr_cursor;
   __PTRADDR_TYPE__ base = comp.cr_base;
   __PTRADDR_TYPE__ top = comp._cr_top;
-#else
+#    else
   __PTRADDR_TYPE__ cursor = (__PTRADDR_TYPE__)cap;
   __PTRADDR_TYPE__ base = cheri_getbase(cap);
   __PTRADDR_TYPE__ top = cheri_gettop(cap);
-#endif
+#    endif
   __ESBMC_assert(cheri_gettag(cap), "tag-violation c2exception");
   // __ESBMC_assert(!cc128_is_cap_sealed(&comp) /*cheri_getsealed(cap)*/, "seal-violation c2exception");
   __ESBMC_assert(base <= cursor, "length-violation c2exception");
@@ -127,22 +127,22 @@ __esbmc_cheri_bounds_set(void *__capability cap, __SIZE_TYPE__ sz)
   return u.cap;
 }
 
-#endif
+#  endif
 
-#if 0
-#define cheri_ptr(ptr, len)                                                    \
-  cheri_bounds_set(                                                            \
-    (union __esbmc_cheri_cap128){.cursor = (uintptr_t)(ptr)}.cap, len)
-#endif
+#  if 0
+#    define cheri_ptr(ptr, len)                                                \
+      cheri_bounds_set(                                                        \
+        (union __esbmc_cheri_cap128){.cursor = (uintptr_t)(ptr)}.cap, len)
+#  endif
 
 __SIZE_TYPE__ __esbmc_cheri_length_get(void *__capability cap)
 {
-#if 1
+#  if 1
   union __esbmc_cheri_cap128 u = {cap};
   cc128_cap_t result;
   cc128_decompress_mem(u.pesbt, u.cursor, true /* TODO: tag bit */, &result);
   return result.cr_bounds_valid ? result._cr_top - result.cr_base : 0;
-#else
+#  else
   union u
   {
     void *__capability cap;
@@ -153,7 +153,7 @@ __SIZE_TYPE__ __esbmc_cheri_length_get(void *__capability cap)
     };
     struct
     {
-#if __BYTE_ORDER == __LITTLE_ENDIAN
+#    if __BYTE_ORDER == __LITTLE_ENDIAN
       __UINT64_TYPE__ B_E : 3;
       __UINT64_TYPE__ B_13_3 : 11;
       __UINT64_TYPE__ T_E : 3;
@@ -162,7 +162,7 @@ __SIZE_TYPE__ __esbmc_cheri_length_get(void *__capability cap)
       __UINT64_TYPE__ otype : 18;
       __UINT64_TYPE__ /* reserved */ : 3;
       __UINT64_TYPE__ perms : 16;
-#elif __BYTE_ORDER == __BIG_ENDIAN
+#    elif __BYTE_ORDER == __BIG_ENDIAN
       __UINT64_TYPE__ perms : 16;
       __UINT64_TYPE__ /* reserved */ : 3;
       __UINT64_TYPE__ otype : 18;
@@ -171,9 +171,9 @@ __SIZE_TYPE__ __esbmc_cheri_length_get(void *__capability cap)
       __UINT64_TYPE__ T_E : 3;
       __UINT64_TYPE__ B_13_3 : 11;
       __UINT64_TYPE__ B_E : 3;
-#else
-#error neither big nor little endian, no CHERI-C support for this architecture
-#endif
+#    else
+#      error neither big nor little endian, no CHERI-C support for this architecture
+#    endif
     };
   } u = {cap};
   u.pesbt ^=
@@ -230,7 +230,7 @@ __SIZE_TYPE__ __esbmc_cheri_length_get(void *__capability cap)
   if (E < 51 && (int)((t_hi << 1 | t_lo >> 63) & 3) - (int)(b >> 63) > 1)
     t_hi ^= 1;
   return t_lo - b;
-#endif
+#  endif
 }
 
 #endif

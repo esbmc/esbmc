@@ -7,7 +7,7 @@
 #include <util/c_typecast.h>
 #include <util/std_expr.h>
 #ifdef ENABLE_GOTO_CONTRACTOR
-#include <goto-programs/goto_contractor.h>
+#  include <goto-programs/goto_contractor.h>
 #endif
 // Let's start with all templates specializations.
 

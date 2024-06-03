@@ -145,5 +145,5 @@ struct messaget
 
 // TODO: Eventually this will be removed
 #ifdef ENABLE_OLD_FRONTEND
-#define err_location(E) (E).location().dump()
+#  define err_location(E) (E).location().dump()
 #endif

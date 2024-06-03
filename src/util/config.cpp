@@ -331,56 +331,56 @@ std::string configt::this_architecture()
 #ifdef __alpha__
   this_arch = "alpha";
 #elif __thumb__
-#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#  if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
   this_arch = "thumbeb"
-#else
+#  else
   this_arch = "thumb";
-#endif
+#  endif
 #elif __aarch64__
-#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#  if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
   this_arch = "aarch64_be"
-#else
+#  else
   this_arch = "aarch64";
-#endif
+#  endif
 #elif __arm__
-#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#  if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
   this_arch = "armeb";
-#else
+#  else
   this_arch = "arm";
-#endif
+#  endif
 #elif __mipsel__
-#if _MIPS_SIM == _ABIO32
+#  if _MIPS_SIM == _ABIO32
   this_arch = "mipsel";
-#elif _MIPS_SIM == _ABIN32
+#  elif _MIPS_SIM == _ABIN32
   this_arch = "mipsn32el";
-#else
+#  else
   this_arch = "mips64el";
-#endif
+#  endif
 #elif __mips__
-#if _MIPS_SIM == _ABIO32
+#  if _MIPS_SIM == _ABIO32
   this_arch = "mips";
-#elif _MIPS_SIM == _ABIN32
+#  elif _MIPS_SIM == _ABIN32
   this_arch = "mipsn32";
-#else
+#  else
   this_arch = "mips64";
-#endif
+#  endif
 #elif __powerpc__
-#if defined(__ppc64__) || defined(__PPC64__) || defined(__powerpc64__) ||      \
-  defined(__POWERPC64__)
-#ifdef __LITTLE_ENDIAN__
+#  if defined(__ppc64__) || defined(__PPC64__) || defined(__powerpc64__) ||    \
+    defined(__POWERPC64__)
+#    ifdef __LITTLE_ENDIAN__
   this_arch = "ppc64le";
-#else
+#    else
   this_arch = "ppc64";
-#endif
-#else
+#    endif
+#  else
   this_arch = "powerpc";
-#endif
+#  endif
 #elif __sparc__
-#ifdef __arch64__
+#  ifdef __arch64__
   this_arch = "sparc64";
-#else
+#  else
   this_arch = "sparc";
-#endif
+#  endif
 #elif __ia64__
   this_arch = "ia64";
 #elif __s390x__
@@ -388,11 +388,11 @@ std::string configt::this_architecture()
 #elif __s390__
   this_arch = "s390";
 #elif __x86_64__
-#ifdef __ILP32__
+#  ifdef __ILP32__
   this_arch = "x32"; // variant of x86_64 with 32-bit pointers
-#else
+#  else
   this_arch = "x86_64";
-#endif
+#  endif
 #elif __i386__
   this_arch = "i386";
 #elif _WIN64

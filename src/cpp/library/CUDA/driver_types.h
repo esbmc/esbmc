@@ -16,8 +16,8 @@ extern "C"
 
 #if !defined(__CUDA_INTERNAL_COMPILATION__)
 
-#include <limits.h>
-#include <stddef.h>
+#  include <limits.h>
+#  include <stddef.h>
 
   enum __device_builtin__ cudaMemcpyKind
   {
@@ -264,10 +264,10 @@ extern "C"
       85 /**< Unique identifier for a group of devices on the same multi-GPU board */
   };
 
-#ifdef __cplusplus
+#  ifdef __cplusplus
 }
 
-#endif
+#  endif
 
 #endif
 

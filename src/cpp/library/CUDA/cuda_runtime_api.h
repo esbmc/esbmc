@@ -16,15 +16,15 @@
 /** \cond impl_private */
 #if !defined(__dv)
 
-#if defined(__cplusplus)
+#  if defined(__cplusplus)
 
-#define __dv(v)
+#    define __dv(v)
 
-#else /* __cplusplus */
+#  else /* __cplusplus */
 
-#define __dv(v)
+#    define __dv(v)
 
-#endif /* __cplusplus */
+#  endif /* __cplusplus */
 
 #endif /* !__dv */
 /** \endcond impl_private */
