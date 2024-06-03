@@ -27,7 +27,8 @@ languaget *new_clang_c_language()
 
 clang_c_languaget::clang_c_languaget() = default;
 
-void clang_c_languaget::build_compiler_args(std::vector<std::string> &compiler_args)
+void clang_c_languaget::build_compiler_args(
+  std::vector<std::string> &compiler_args)
 {
   const std::string *libc_headers = internal_libc_header_dir();
   if (libc_headers)
@@ -36,8 +37,8 @@ void clang_c_languaget::build_compiler_args(std::vector<std::string> &compiler_a
     compiler_args.push_back(*libc_headers);
   }
 
-  compiler_args.push_back("-isystem");
-  compiler_args.push_back(clang_headers_path());
+  compiler_args.push_back("-resource-dir");
+  compiler_args.push_back(clang_resource_dir());
 
   // Append mode arg
   switch (config.ansi_c.word_size)

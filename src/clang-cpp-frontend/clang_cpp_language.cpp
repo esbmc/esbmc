@@ -22,7 +22,8 @@ languaget *new_clang_cpp_language()
   return new clang_cpp_languaget;
 }
 
-void clang_cpp_languaget::force_file_type(std::vector<std::string> &compiler_args)
+void clang_cpp_languaget::force_file_type(
+  std::vector<std::string> &compiler_args)
 {
   // C++ standard
   assert(config.language.lid == language_idt::CPP);
@@ -35,27 +36,31 @@ void clang_cpp_languaget::force_file_type(std::vector<std::string> &compiler_arg
   compiler_args.push_back("c++");
 }
 
-void clang_cpp_languaget::build_compiler_args(std::vector<std::string> &compiler_args)
+void clang_cpp_languaget::build_compiler_args(
+  std::vector<std::string> &compiler_args)
 {
-  if (
-    !config.options.get_bool_option("no-abstracted-cpp-includes") &&
-    !config.options.get_bool_option("no-library"))
+  std::string cppinc;
+  bool do_inc = !config.options.get_bool_option("no-abstracted-cpp-includes") &&
+                !config.options.get_bool_option("no-library");
+
+  if (do_inc)
   {
-    log_debug(
-      "c++", "Adding CPP includes: {}", esbmct::abstract_cpp_includes());
-    //compiler_args.push_back("-cxx-isystem");
-    //compiler_args.push_back(esbmct::abstract_cpp_includes());
+    cppinc = esbmct::abstract_cpp_includes();
+    log_debug("c++", "Adding CPP includes: {}", cppinc);
     // Let the cpp include "overtake" others.
-    // Bear in mind that this is just a workaround to make sure we include the right headers we want,
-    // and to get consistent error signatures in standalone runs and CIs
-    compiler_args.push_back("-isystem" + esbmct::abstract_cpp_includes());
-    compiler_args.push_back("-I" + esbmct::abstract_cpp_includes() + "/CUDA");
-    compiler_args.push_back("-I" + esbmct::abstract_cpp_includes() + "/Qt");
-    compiler_args.push_back(
-      "-I" + esbmct::abstract_cpp_includes() + "/Qt/QtCore");
+    compiler_args.push_back("-isystem");
+    compiler_args.push_back(cppinc);
   }
 
   clang_c_languaget::build_compiler_args(compiler_args);
+
+  if (do_inc)
+  {
+    /* add include search paths for the default "library" models */
+    compiler_args.push_back("-I" + cppinc + "/CUDA");
+    compiler_args.push_back("-I" + cppinc + "/Qt");
+    compiler_args.push_back("-I" + cppinc + "/Qt/QtCore");
+  }
 }
 
 std::string clang_cpp_languaget::internal_additions()

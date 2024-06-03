@@ -59,7 +59,7 @@ protected:
   // Force the file type, .c for the C frontend and .cpp for the C++ one
   virtual void force_file_type(std::vector<std::string> &compiler_args);
 
-  static const std::string &clang_headers_path();
+  static const std::string &clang_resource_dir();
   virtual void build_compiler_args(std::vector<std::string> &compiler_args);
 
   std::vector<std::string> compiler_args(std::string tool_name)
