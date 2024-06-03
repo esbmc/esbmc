@@ -168,7 +168,7 @@ cudaOccupancyMaxActiveBlocksPerMultiprocessor(
 } // namespace
 
 #      endif // !defined(__CUDA_ARCH__) || (__CUDA_ARCH__ >= 350)
-#    endif   // defined(__cplusplus) && defined(__CUDACC__)
+#    endif // defined(__cplusplus) && defined(__CUDACC__)
 
 #  endif /* defined(__CUDABE__) */
 
