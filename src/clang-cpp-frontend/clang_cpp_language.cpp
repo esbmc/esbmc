@@ -60,12 +60,20 @@ void clang_cpp_languaget::build_compiler_args(std::vector<std::string> &compiler
 
 std::string clang_cpp_languaget::internal_additions()
 {
-  std::string intrinsics = "extern \"C\" {\n";
+  std::string intrinsics = R"(
+# 1 "esbmc_intrinsics.hh" 1
+extern "C" {
+#pragma push_macro("_Bool")
+#undef _Bool
+#define _Bool bool
+)";
   intrinsics.append(clang_c_languaget::internal_additions());
-  intrinsics.append("}\n");
+  intrinsics.append(R"(
+#undef _Bool
+#pragma pop_macro("_Bool")
+})");
 
-  // Replace _Bool by bool and return
-  return std::regex_replace(intrinsics, std::regex("_Bool"), "bool");
+  return intrinsics;
 }
 
 bool clang_cpp_languaget::typecheck(
