@@ -25,27 +25,10 @@ languaget *new_clang_c_language()
   return new clang_c_languaget();
 }
 
-clang_c_languaget::clang_c_languaget()
+clang_c_languaget::clang_c_languaget() = default;
+
+void clang_c_languaget::build_compiler_args(std::vector<std::string> &compiler_args)
 {
-  // Build the compile arguments
-  build_compiler_args(clang_headers_path());
-
-  if (FILE *f = messaget::state.target("clang", VerbosityLevel::Debug))
-  {
-    fprintf(f, "clang invocation:");
-    for (const std::string &s : compiler_args)
-      fprintf(f, " '%s'", s.c_str());
-    fprintf(f, "\n");
-  }
-}
-
-void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
-{
-  compiler_args.emplace_back("clang-tool");
-
-  // TODO: Implement a similar way to add opertional models for C++. For the time being,
-  // we are still following the way old ESBMC++ includes these operational models using -I.
-  // See discussions in PR834.
   const std::string *libc_headers = internal_libc_header_dir();
   if (libc_headers)
   {
@@ -54,7 +37,7 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
   }
 
   compiler_args.push_back("-isystem");
-  compiler_args.push_back(tmp_dir);
+  compiler_args.push_back(clang_headers_path());
 
   // Append mode arg
   switch (config.ansi_c.word_size)
@@ -276,7 +259,7 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
   compiler_args.emplace_back("-fsyntax-only");
 }
 
-void clang_c_languaget::force_file_type()
+void clang_c_languaget::force_file_type(std::vector<std::string> &compiler_args)
 {
   // Force clang see all files as .c
   // This forces the preprocessor to be called even in preprocessed files
@@ -299,12 +282,17 @@ bool clang_c_languaget::parse(const std::string &path)
   if (preprocess(path, o_preprocessed))
     return true;
 
-  // Force the file type, .c for the C frontend and .cpp for the C++ one
-  force_file_type();
-
   // Get compiler arguments and add the file path
-  std::vector<std::string> new_compiler_args(compiler_args);
+  std::vector<std::string> new_compiler_args = compiler_args("clang-tool");
   new_compiler_args.push_back(path);
+
+  if (FILE *f = messaget::state.target("clang", VerbosityLevel::Debug))
+  {
+    fprintf(f, "clang invocation:");
+    for (const std::string &s : new_compiler_args)
+      fprintf(f, " '%s'", s.c_str());
+    fprintf(f, "\n");
+  }
 
   // Get intrinsics
   std::string intrinsics = internal_additions();

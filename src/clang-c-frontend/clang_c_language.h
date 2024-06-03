@@ -51,18 +51,25 @@ public:
     return new clang_c_languaget();
   }
 
-  // constructor, destructor
-  ~clang_c_languaget() override = default;
-  explicit clang_c_languaget();
+  clang_c_languaget();
 
 protected:
   virtual std::string internal_additions();
-  virtual void force_file_type();
+
+  // Force the file type, .c for the C frontend and .cpp for the C++ one
+  virtual void force_file_type(std::vector<std::string> &compiler_args);
 
   static const std::string &clang_headers_path();
-  void build_compiler_args(const std::string &tmp_dir);
+  virtual void build_compiler_args(std::vector<std::string> &compiler_args);
 
-  std::vector<std::string> compiler_args;
+  std::vector<std::string> compiler_args(std::string tool_name)
+  {
+    std::vector<std::string> v{std::move(tool_name)};
+    force_file_type(v);
+    build_compiler_args(v);
+    return v;
+  }
+
   std::vector<std::unique_ptr<clang::ASTUnit>> ASTs;
 };
 
