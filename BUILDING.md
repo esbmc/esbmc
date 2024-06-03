@@ -29,8 +29,9 @@ Before starting, note that ESBMC is mainly distributed under the terms of the [A
 | CMake     | yes      | 3.18.0          |
 | Boolector | no       | 3.2.2           |
 | CVC4      | no       | 1.8             |
+| CVC5      | no       | 1.1.2           |
 | MathSAT   | no       | 5.5.4           |
-| Yices     | no       | 2.6.1           |
+| Yices     | no       | 2.6.4           |
 | Z3        | no       | 4.8.9           |
 | Bitwuzla  | no       | 0.3.1           |
 
@@ -215,11 +216,13 @@ If you need more details on CVC4, please refer to [its Github](https://github.co
 We have wrapped the entire build and setup of CVC5 in the following command:
 
 ```
-Linux:
-
-
-macOS:
-pip3 install toml && git clone https://github.com/CVC5/CVC5.git && cd CVC5 && git reset --hard 4cb2ab9 && ./configure.sh --prefix=../cvc5 --auto-download --static --no-static-binary && cd build && make -j4 && make install && cd .. && cd ..
+pip3 install toml &&
+git clone https://github.com/CVC5/CVC5.git &&
+cd CVC5 &&
+git switch --detach cvc5-1.1.2 &&
+./configure.sh --prefix=../cvc5 --auto-download --static --no-static-binary &&
+cd build && make -j4 && make install && cd .. &&
+cd ..
 ```
 
 If you need more details on CVC5, please refer to [its Github](https://github.com/CVC5/CVC5).
@@ -256,10 +259,10 @@ Then, we are able to build and setup Yices 2 using the following command:
 
 ```
 Linux:
-git clone https://github.com/SRI-CSL/yices2.git && cd yices2 && git checkout Yices-2.6.1 && autoreconf -fi && ./configure --prefix $PWD/../yices --with-static-gmp=$PWD/../gmp/lib/libgmp.a && make -j9 && make static-lib && make install && cp ./build/x86_64-pc-linux-gnu-release/static_lib/libyices.a ../yices/lib && cd ..
+git clone https://github.com/SRI-CSL/yices2.git && cd yices2 && git checkout Yices-2.6.4 && autoreconf -fi && ./configure --prefix $PWD/../yices --with-static-gmp=$PWD/../gmp/lib/libgmp.a && make -j9 && make static-lib && make install && cp ./build/x86_64-pc-linux-gnu-release/static_lib/libyices.a ../yices/lib && cd ..
 
 macOS:
-git clone https://github.com/SRI-CSL/yices2.git && cd yices2 && git checkout Yices-2.6.1 && autoreconf -fi && ./configure --prefix $PWD/../yices && make -j9 && make static-lib && make install && cp ./build/x86_64-apple-darwin*release/static_lib/libyices.a ../yices/lib && cd ..
+git clone https://github.com/SRI-CSL/yices2.git && cd yices2 && git checkout Yices-2.6.4 && autoreconf -fi && ./configure --prefix $PWD/../yices && make -j9 && make static-lib && make install && cp ./build/x86_64-apple-darwin*release/static_lib/libyices.a ../yices/lib && cd ..
 ```
 
 If you need more details on Yices 2, please refer to [its Github](https://github.com/SRI-CSL/yices2).
