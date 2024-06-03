@@ -6,7 +6,7 @@
 #include <unordered_set>
 
 #ifndef SOLIDITY_TEMPLATE_H_
-#define SOLIDITY_TEMPLATE_H_
+#  define SOLIDITY_TEMPLATE_H_
 
 namespace SolidityTemplate
 {

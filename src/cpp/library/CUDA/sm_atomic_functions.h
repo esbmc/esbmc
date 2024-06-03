@@ -1,7 +1,7 @@
 #if !defined(__SM_ATOMIC_FUNCTIONS_H__)
-#define __SM_ATOMIC_FUNCTIONS_H__
+#  define __SM_ATOMIC_FUNCTIONS_H__
 
-#include "vector_types.h"
+#  include "vector_types.h"
 
 /*DEVICE_BUILTIN*/
 extern __device__ int __iAtomicAdd(int *address, int val);

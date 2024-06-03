@@ -11,10 +11,10 @@
 // using the old names for the non-binary version. (This is a design decision).
 
 #if __YICES_VERSION > 2 || (__YICES_VERSION == 2 && __YICES_VERSION_MAJOR >= 3)
-#define yices_bvxor yices_bvxor2
-#define yices_bvconcat yices_bvconcat2
-#define yices_bvand yices_bvand2
-#define yices_bvor yices_bvor2
+#  define yices_bvxor yices_bvxor2
+#  define yices_bvconcat yices_bvconcat2
+#  define yices_bvand yices_bvand2
+#  define yices_bvor yices_bvor2
 #endif
 
 #define new_ast new_solver_ast<yices_smt_ast>

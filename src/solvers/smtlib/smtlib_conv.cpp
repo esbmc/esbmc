@@ -12,8 +12,8 @@
 #include <sstream>
 
 #ifndef _WIN32
-#include <unistd.h>
-#include <signal.h>
+#  include <unistd.h>
+#  include <signal.h>
 #endif
 
 // clang-format off
@@ -271,7 +271,7 @@ smtlib_convt::process_emitter::process_emitter(const std::string &cmd)
   smtlib_tokin = in_stream;
 
   // Fetch solver name and version.
-#if 0
+#  if 0
   emit("%s", "(get-info :name)\n");
   flush();
   smtlib_send_start_code = 1;
@@ -329,10 +329,10 @@ smtlib_convt::process_emitter::process_emitter(const std::string &cmd)
     solver_name,
     solver_version,
     solver_proc_pid);
-#else
+#  else
   log_status(
     "Using external solver cmd '{}' with PID {}", cmd, solver_proc_pid);
-#endif
+#  endif
 #endif
 }
 

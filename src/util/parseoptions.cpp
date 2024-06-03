@@ -1,8 +1,8 @@
 #if defined(_WIN32)
-#define EX_OK 0
-#define EX_USAGE 1
+#  define EX_OK 0
+#  define EX_USAGE 1
 #else
-#include <sysexits.h>
+#  include <sysexits.h>
 #endif
 
 #include <util/cmdline.h>

@@ -5,7 +5,7 @@
 #include <solvers/smt/smt_conv.h>
 #include <string>
 #ifndef _WIN32
-#include <unistd.h>
+#  include <unistd.h>
 #endif
 #include <irep2/irep2.h>
 

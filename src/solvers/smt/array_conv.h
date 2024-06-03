@@ -88,7 +88,7 @@ public:
 };
 
 #ifdef NDEBUG
-#define array_downcast(x) static_cast<const array_ast *>(x)
+#  define array_downcast(x) static_cast<const array_ast *>(x)
 #else
 static inline const array_ast *array_downcast(const smt_ast *x)
 {

@@ -1,10 +1,10 @@
 /* Byte order includes, for context switch checkpoint files */
 #ifndef _WIN32
-#include <arpa/inet.h>
-#include <netinet/in.h>
+#  include <arpa/inet.h>
+#  include <netinet/in.h>
 #else
-#include <winsock2.h>
-#undef small // mingw workaround
+#  include <winsock2.h>
+#  undef small // mingw workaround
 #endif
 
 #include <goto-symex/goto_symex.h>
@@ -654,13 +654,13 @@ abort();
     if (i + 1 < dfs.states.size())
       assert(get_cur_state().get_active_state_number() == it->cur_thread);
 
-#if 0
+#  if 0
     if (get_cur_state().get_active_state().source.pc->location_number !=
         it->location_number) {
 log_error("Interleave at unexpected location when restoring checkpoint").
 abort();
 }
-#endif
+#  endif
   }
 #endif
   return false;

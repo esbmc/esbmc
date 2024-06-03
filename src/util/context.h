@@ -8,7 +8,7 @@
 #include <util/symbol.h>
 #include <util/type.h>
 #ifdef ENABLE_OLD_FRONTEND
-#include <util/message.h>
+#  include <util/message.h>
 #endif
 
 typedef std::unordered_map<irep_idt, symbolt, irep_id_hash> symbolst;

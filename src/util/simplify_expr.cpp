@@ -22,12 +22,12 @@ struct simplify_expr_cachet
 public:
   friend class simplify_exprt;
 
-#if 1
+#  if 1
   typedef std::unordered_map<exprt, exprt, irep_full_hash, irep_full_eq>
     containert;
-#else
+#  else
   typedef std::unordered_map<exprt, exprt, irep_hash> containert;
-#endif
+#  endif
 
   containert container_normal, container_no_simpl_const_objects;
 

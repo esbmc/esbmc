@@ -1,31 +1,31 @@
 #if !defined(CURAND_KERNEL_H_)
-#define CURAND_KERNEL_H_
+#  define CURAND_KERNEL_H_
 
-#include "curand_precalc.h"
-#include <cmath>
-#include <curand.h>
+#  include "curand_precalc.h"
+#  include <cmath>
+#  include <curand.h>
 
-#define MAX_XOR_N (5)
-#define SKIPAHEAD_BLOCKSIZE (4)
-#define SKIPAHEAD_MASK ((1 << SKIPAHEAD_BLOCKSIZE) - 1)
-#define CURAND_2POW32_INV (2.3283064e-10f)
-#define CURAND_2POW32_INV_DOUBLE (2.3283064365386963e-10)
-#define CURAND_2POW53_INV_DOUBLE (1.1102230246251565e-16)
-#define CURAND_2POW32_INV_2PI (2.3283064e-10f * 6.2831855f)
-#define CURAND_2POW53_INV_2PI_DOUBLE                                           \
-  (1.1102230246251565e-16 * 6.2831853071795860)
-#define CURAND_SQRT2 (-1.4142135f)
-#define CURAND_SQRT2_DOUBLE (-1.4142135623730951)
-#define PRECALC_NUM_MATRICES (8)
-#define PRECALC_BLOCK_SIZE (2)
-#define PRECALC_BLOCK_MASK ((1 << PRECALC_BLOCK_SIZE) - 1)
-#define XORWOW_SEQUENCE_SPACING (67)
+#  define MAX_XOR_N (5)
+#  define SKIPAHEAD_BLOCKSIZE (4)
+#  define SKIPAHEAD_MASK ((1 << SKIPAHEAD_BLOCKSIZE) - 1)
+#  define CURAND_2POW32_INV (2.3283064e-10f)
+#  define CURAND_2POW32_INV_DOUBLE (2.3283064365386963e-10)
+#  define CURAND_2POW53_INV_DOUBLE (1.1102230246251565e-16)
+#  define CURAND_2POW32_INV_2PI (2.3283064e-10f * 6.2831855f)
+#  define CURAND_2POW53_INV_2PI_DOUBLE                                         \
+    (1.1102230246251565e-16 * 6.2831853071795860)
+#  define CURAND_SQRT2 (-1.4142135f)
+#  define CURAND_SQRT2_DOUBLE (-1.4142135623730951)
+#  define PRECALC_NUM_MATRICES (8)
+#  define PRECALC_BLOCK_SIZE (2)
+#  define PRECALC_BLOCK_MASK ((1 << PRECALC_BLOCK_SIZE) - 1)
+#  define XORWOW_SEQUENCE_SPACING (67)
 
 static unsigned int precalc_xorwow_matrix[8][2] = {{850664906UL, 4258393217UL}};
 
-#if !defined(QUALIFIERS)
-#define QUALIFIERS static inline __device__
-#endif
+#  if !defined(QUALIFIERS)
+#    define QUALIFIERS static inline __device__
+#  endif
 
 /* Test RNG */
 /* This generator uses the formula:
@@ -290,11 +290,11 @@ __curand_hilouint32AsDouble(unsigned int hi, unsigned int lo)
 /* Convert unsigned int to float, as efficiently as possible */
 /*QUALIFIERS*/ float __curand_uint32_as_float(unsigned int x)
 {
-#if __CUDA_ARCH__ > 0
+#  if __CUDA_ARCH__ > 0
   return __int_as_float(x);
-#elif !defined(__CUDA_ARCH__)
+#  elif !defined(__CUDA_ARCH__)
   return __curand_uint32AsFloat(x);
-#endif
+#  endif
 }
 
 /*
@@ -383,12 +383,12 @@ _skipahead_scratch(unsigned long long x, T *state, unsigned int *scratch)
   {
     for (unsigned int t = 0; t < (p & PRECALC_BLOCK_MASK); t++)
     {
-#ifdef __CUDA_ARCH__
+#  ifdef __CUDA_ARCH__
       __curand_matvec(
         vector, precalc_xorwow_offset_matrix[matrix_num], result, n);
-#else
+#  else
 //            __curand_matvec(vector, precalc_xorwow_offset_matrix_host[matrix_num], result, n);
-#endif
+#  endif
       __curand_veccopy(vector, result, n);
     }
     p >>= PRECALC_BLOCK_SIZE;
@@ -396,15 +396,15 @@ _skipahead_scratch(unsigned long long x, T *state, unsigned int *scratch)
   }
   if (p)
   {
-#ifdef __CUDA_ARCH__
+#  ifdef __CUDA_ARCH__
     __curand_matcopy(
       matrix, precalc_xorwow_offset_matrix[PRECALC_NUM_MATRICES - 1], n);
     __curand_matcopy(
       matrixA, precalc_xorwow_offset_matrix[PRECALC_NUM_MATRICES - 1], n);
-#else
+#  else
 //        __curand_matcopy(matrix, precalc_xorwow_offset_matrix_host[PRECALC_NUM_MATRICES - 1], n);
 //        __curand_matcopy(matrixA, precalc_xorwow_offset_matrix_host[PRECALC_NUM_MATRICES - 1], n);
-#endif
+#  endif
   }
   while (p)
   {
@@ -454,11 +454,11 @@ template <typename T, int n>
   {
     for (unsigned int t = 0; t < (p & PRECALC_BLOCK_MASK); t++)
     {
-#ifdef __CUDA_ARCH__
+#  ifdef __CUDA_ARCH__
       __curand_matvec(vector, precalc_xorwow_matrix[matrix_num], result, n);
-#else
+#  else
 //            __curand_matvec(vector, precalc_xorwow_matrix_host[matrix_num], result, n);
-#endif
+#  endif
       __curand_veccopy(vector, result, n);
     }
     p >>= PRECALC_BLOCK_SIZE;
@@ -466,15 +466,15 @@ template <typename T, int n>
   }
   if (p)
   {
-#ifdef __CUDA_ARCH__
+#  ifdef __CUDA_ARCH__
     __curand_matcopy(
       matrix, precalc_xorwow_matrix[PRECALC_NUM_MATRICES - 1], n);
     __curand_matcopy(
       matrixA, precalc_xorwow_matrix[PRECALC_NUM_MATRICES - 1], n);
-#else
+#  else
 //        __curand_matcopy(matrix, precalc_xorwow_matrix_host[PRECALC_NUM_MATRICES - 1], n);
 //        __curand_matcopy(matrixA, precalc_xorwow_matrix_host[PRECALC_NUM_MATRICES - 1], n);
-#endif
+#  endif
   }
   while (p)
   {
@@ -734,11 +734,11 @@ template <typename T>
 template <typename XT>
 /*QUALIFIERS*/ int __curand_find_trailing_zero(XT x)
 {
-#if __CUDA_ARCH__ > 0
+#  if __CUDA_ARCH__ > 0
   unsigned long long z = x;
   int y = __ffsll(~z) | 0x40;
   return (y - 1) & 0x3F;
-#else
+#  else
   unsigned long long z = x;
   int i = 1;
   while (z & 1)
@@ -747,7 +747,7 @@ template <typename XT>
     z >>= 1;
   }
   return i - 1;
-#endif
+#  endif
 }
 /**
  * \brief Initialize Sobol64 state.

@@ -10,7 +10,7 @@
 #define SEEK_END 2
 
 #ifndef __TIMESTAMP__
-#define __TIMESTAMP__ (0)
+#  define __TIMESTAMP__ (0)
 #endif
 
 #ifdef _WIN64

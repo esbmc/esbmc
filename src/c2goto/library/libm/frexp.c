@@ -29,8 +29,8 @@ _Static_assert(
  */
 #if __SIZEOF_LONG_DOUBLE__ == __SIZEOF_INT128__ &&                             \
   !defined(__LONG_DOUBLE_IBM128__)
-#define LDBL_BITS 128
-#define LDBL_EXP_BITS 15
+#  define LDBL_BITS 128
+#  define LDBL_EXP_BITS 15
 typedef __uint128_t __UINT128_TYPE__;
 #endif
 
@@ -113,21 +113,21 @@ LDEXP(ldexpl, long double, LDBL, l, L)
 /* we asserted this above for the definitions to work, but if they change let's
  * better be safe */
 #if FLT_RADIX == 2
-#define SCALBN(type, suff)                                                     \
-  type scalbn##suff(type x, int exp)                                           \
-  {                                                                            \
-    return ldexp##suff(x, exp);                                                \
-  }
+#  define SCALBN(type, suff)                                                   \
+    type scalbn##suff(type x, int exp)                                         \
+    {                                                                          \
+      return ldexp##suff(x, exp);                                              \
+    }
 SCALBN(float, f)
 SCALBN(double, )
 SCALBN(long double, l)
 
-#define SCALBLN(type, suff, SUFF)                                              \
-  type scalbln##suff(type x, long exp)                                         \
-  {                                                                            \
-    exp = exp > INT_MAX ? INT_MAX : exp < INT_MIN ? INT_MIN : exp;             \
-    return ldexp##suff(x, exp);                                                \
-  }
+#  define SCALBLN(type, suff, SUFF)                                            \
+    type scalbln##suff(type x, long exp)                                       \
+    {                                                                          \
+      exp = exp > INT_MAX ? INT_MAX : exp < INT_MIN ? INT_MIN : exp;           \
+      return ldexp##suff(x, exp);                                              \
+    }
 SCALBLN(float, f, F)
 SCALBLN(double, , )
 SCALBLN(long double, l, L)

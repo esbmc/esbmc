@@ -102,7 +102,7 @@ public:
 };
 
 #ifdef NDEBUG
-#define dynamic_cast static_cast
+#  define dynamic_cast static_cast
 #endif
 template <typename derived_class>
 const derived_class *to_solver_smt_ast(smt_astt s)
@@ -112,7 +112,7 @@ const derived_class *to_solver_smt_ast(smt_astt s)
   return r;
 }
 #ifdef dynamic_cast
-#undef dynamic_cast
+#  undef dynamic_cast
 #endif
 
 #endif /* SOLVERS_SMT_SMT_AST_H_ */

@@ -1,25 +1,25 @@
 #if !defined(__DEVICE_LAUNCH_PARAMETERS_H__)
-#define __DEVICE_LAUNCH_PARAMETERS_H__
+#  define __DEVICE_LAUNCH_PARAMETERS_H__
 
-#include <stddef.h>
-#include <stdlib.h>
-#include "vector_types.h"
+#  include <stddef.h>
+#  include <stdlib.h>
+#  include "vector_types.h"
 
-#include <pthread.h>
+#  include <pthread.h>
 
 pthread_t __ESBMC_get_thread_id(void);
 
-#if !defined(__STORAGE__)
+#  if !defined(__STORAGE__)
 
-#define __STORAGE__ extern const
+#    define __STORAGE__ extern const
 
-#endif /* __STORAGE__ */
+#  endif /* __STORAGE__ */
 
-#ifdef __cplusplus
+#  ifdef __cplusplus
 
 extern "C"
 {
-#endif
+#  endif
 
   /*__device_builtin__ __STORAGE__ */ dim3 blockDim;
 
@@ -51,8 +51,8 @@ extern "C"
     __ESBMC_atomic_end();
   }
 
-#define threadIdx indexOfThread[__ESBMC_get_thread_id() - 1]
-#define blockIdx indexOfBlock[__ESBMC_get_thread_id() - 1]
+#  define threadIdx indexOfThread[__ESBMC_get_thread_id() - 1]
+#  define blockIdx indexOfBlock[__ESBMC_get_thread_id() - 1]
 
   uint3 getThreadIdx(unsigned int id)
   {
@@ -139,10 +139,10 @@ extern "C"
     return block_index;
   }
 
-#undef __STORAGE__
+#  undef __STORAGE__
 
-#ifdef __cplusplus
+#  ifdef __cplusplus
 }
-#endif
+#  endif
 
 #endif /* !__DEVICE_LAUNCH_PARAMETERS_H__ */

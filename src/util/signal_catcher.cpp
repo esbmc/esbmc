@@ -1,8 +1,8 @@
 #if defined(_WIN32)
 
 #else
-#include <csignal>
-#include <cstdlib>
+#  include <csignal>
+#  include <cstdlib>
 #endif
 
 #include <util/signal_catcher.h>

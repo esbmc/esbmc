@@ -1,5 +1,5 @@
 #if !defined(CUBLAS_H_)
-#define CUBLAS_H_
+#  define CUBLAS_H_
 
 typedef enum cublasstatus
 {

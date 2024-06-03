@@ -3,16 +3,16 @@
 #ifndef _WIN32
 extern "C"
 {
-#include <fcntl.h>
-#include <unistd.h>
+#  include <fcntl.h>
+#  include <unistd.h>
 
-#ifdef HAVE_SENDFILE_ESBMC
-#include <sys/sendfile.h>
-#endif
+#  ifdef HAVE_SENDFILE_ESBMC
+#    include <sys/sendfile.h>
+#  endif
 
-#include <sys/resource.h>
-#include <sys/time.h>
-#include <sys/types.h>
+#  include <sys/resource.h>
+#  include <sys/time.h>
+#  include <sys/types.h>
 }
 #endif
 
@@ -53,17 +53,17 @@ extern "C"
 #include <util/time_stopping.h>
 
 #ifndef _WIN32
-#include <sys/wait.h>
-#include <execinfo.h>
-#include <fcntl.h>
+#  include <sys/wait.h>
+#  include <execinfo.h>
+#  include <fcntl.h>
 #endif
 
 #ifdef ENABLE_OLD_FRONTEND
-#include <ansi-c/c_preprocess.h>
+#  include <ansi-c/c_preprocess.h>
 #endif
 
 #ifdef ENABLE_GOTO_CONTRACTOR
-#include <goto-programs/goto_contractor.h>
+#  include <goto-programs/goto_contractor.h>
 #endif
 
 #define BT_BUF_SIZE 256

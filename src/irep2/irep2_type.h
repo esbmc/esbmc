@@ -683,7 +683,7 @@ public:
 // fine in terms of using/ keywords in syntax, because the preprocessor
 // preprocesses everything out.
 #ifdef NDEBUG
-#define dynamic_cast static_cast
+#  define dynamic_cast static_cast
 #endif
 #define type_macros(name)                                                      \
   inline bool is_##name##_type(const expr2tc &e)                               \
@@ -727,7 +727,7 @@ type_macros(floatbv);
 type_macros(cpp_name);
 #undef type_macros
 #ifdef dynamic_cast
-#undef dynamic_cast
+#  undef dynamic_cast
 #endif
 
 #endif /* IREP2_TYPE_H_ */

@@ -6,13 +6,13 @@
 #include <chrono>
 
 #ifndef _WIN32
-#include <unistd.h>
-#include <sched.h>
+#  include <unistd.h>
+#  include <sched.h>
 #else
-#include <windows.h>
-#include <winbase.h>
-#undef ERROR
-#undef small
+#  include <windows.h>
+#  include <winbase.h>
+#  undef ERROR
+#  undef small
 #endif
 
 #include <fmt/format.h>

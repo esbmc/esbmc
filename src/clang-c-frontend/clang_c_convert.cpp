@@ -1244,11 +1244,11 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
   }
 
 #if CLANG_VERSION_MAJOR < 14
-#define BITINT_TAG clang::Type::ExtInt
-#define BITINT_TYPE clang::ExtIntType
+#  define BITINT_TAG clang::Type::ExtInt
+#  define BITINT_TYPE clang::ExtIntType
 #else
-#define BITINT_TAG clang::Type::BitInt
-#define BITINT_TYPE clang::BitIntType
+#  define BITINT_TAG clang::Type::BitInt
+#  define BITINT_TYPE clang::BitIntType
 #endif
   case BITINT_TAG:
   {
