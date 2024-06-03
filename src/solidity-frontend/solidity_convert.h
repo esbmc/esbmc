@@ -104,6 +104,8 @@ protected:
     const nlohmann::json &ast_node,
     std::string &contract_name);
   bool get_empty_array_ref(const nlohmann::json &ast_node, exprt &new_expr);
+
+  // tuple
   bool get_tuple_definition(const nlohmann::json &ast_node);
   bool get_tuple_instance(const nlohmann::json &ast_node, exprt &new_expr);
   void get_tuple_name(
@@ -121,6 +123,9 @@ protected:
     exprt &new_expr);
   void get_tuple_assignment(code_blockt &_block, const exprt &lop, exprt rop);
   void get_tuple_function_call(code_blockt &_block, const exprt &op);
+
+  // mapping
+  bool get_mapping_definition(const nlohmann::json &ast_node, exprt &new_expr);
 
   // line number and locations
   void
