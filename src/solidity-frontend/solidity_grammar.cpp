@@ -156,7 +156,7 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     {
       return TupleTypeName;
     }
-    if (typeIdentifier.compare(0, 10, "t_mapping(") == 0)
+    if (typeIdentifier.find("t_mapping$") != std::string::npos)
     {
       return MappingTypeName;
     }
@@ -684,7 +684,10 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
   {
     return Tuple;
   }
-  else if (expr["nodeType"] == "Mapping")
+  else if (
+    expr["nodeType"] == "Mapping" ||
+    (expr["nodeType"] == "VariableDeclaration" &&
+     expr["typeName"]["nodeType"] == "Mapping"))
   {
     return Mapping;
   }

@@ -336,7 +336,7 @@ bool solidity_convertert::get_var_decl(
     // it should be an expression inside the function.
 
     // 1. get the expr
-    if (get_expr(ast_node["typeName"], new_expr))
+    if (get_expr(ast_node, new_expr))
       return true;
 
     // 2. move it to a function.
@@ -354,18 +354,18 @@ bool solidity_convertert::get_var_decl(
     }
     else
     {
-      // assume it's not inside a funciton, then move it to the ctor
-      std::string contract_name;
-      if (get_current_contract_name(ast_node, contract_name))
-        return true;
-      if (contract_name.empty())
-        return true;
-      // add an implict ctor if it's not declared explictly
-      if (add_implicit_constructor())
-        return true;
-      symbolt &ctor =
-        *context.find_symbol("sol:@" + contract_name + "@F@" + contract_name);
-      ctor.value.operands().push_back(new_expr);
+      // // assume it's not inside a funciton, then move it to the ctor
+      // std::string contract_name;
+      // if (get_current_contract_name(ast_node, contract_name))
+      //   return true;
+      // if (contract_name.empty())
+      //   return true;
+      // // add an implict ctor if it's not declared explictly
+      // if (add_implicit_constructor())
+      //   return true;
+      // symbolt &ctor =
+      //   *context.find_symbol("sol:@" + contract_name + "@F@" + contract_name);
+      // ctor.value.operands().push_back(new_expr);
 
       return false;
     }
@@ -859,7 +859,7 @@ bool solidity_convertert::get_function_definition(
 
   // special handling for tuple:
   // construct a tuple type and a tuple instance
-  if (type.return_type().get("#sol_type") == "tuple")
+  if (type.return_type().get("#sol_type") == "TUPLE")
   {
     exprt dump;
     if (get_tuple_definition(*current_functionDecl))
@@ -1175,7 +1175,7 @@ bool solidity_convertert::get_statement(
           stmt["expression"]["typeDescriptions"], return_exrp_type))
       return true;
 
-    if (return_exrp_type.get("#sol_type") == "tuple")
+    if (return_exrp_type.get("#sol_type") == "TUPLE")
     {
       if (
         stmt["expression"]["nodeType"].get<std::string>() !=
@@ -1889,18 +1889,11 @@ bool solidity_convertert::get_expr(
   }
   case SolidityGrammar::ExpressionT::Mapping:
   {
-    // convert
-    //   mapping(string => int) m;
-    // to
-    //   map_int_t m; map_init(&m);
-
-    // 1. populate the symbol
-    exprt dump;
-    if (get_var_decl(expr, dump))
+    exprt _block;
+    if (get_mapping_definition(expr, _block))
       return true;
 
-    // 2. call map_init;
-    //TODO
+    new_expr = _block;
     break;
   }
   case SolidityGrammar::ExpressionT::CallExprClass:
@@ -2518,10 +2511,10 @@ bool solidity_convertert::get_binary_operator_expr(
     // special handling for tuple-type assignment;
     typet lt = lhs.type();
     typet rt = rhs.type();
-    if (lt.get("#sol_type") == "tuple_instance")
+    if (lt.get("#sol_type") == "TUPLE_INSTANCE")
     {
       code_blockt _block;
-      if (rt.get("#sol_type") == "tuple_instance")
+      if (rt.get("#sol_type") == "TUPLE_INSTANCE")
       {
         // e.g. (x,y) = (1,2); (x,y) = (func(),x);
         // =>
@@ -2586,7 +2579,7 @@ bool solidity_convertert::get_binary_operator_expr(
           ++j;
         }
       }
-      else if (rt.get("#sol_type") == "tuple")
+      else if (rt.get("#sol_type") == "TUPLE")
       {
         // e.g. (x,y) = func(); (x,y) = func(func2()); (x, (x,y)) = (x, func());
         exprt new_rhs;
@@ -3441,6 +3434,7 @@ bool solidity_convertert::get_type_description(
         integer2string(z_ext_value),
         int_type()));
 
+    new_type.set("#sol_type", "ARRAY");
     break;
   }
   case SolidityGrammar::TypeNameT::DynArrayTypeName:
@@ -3508,6 +3502,8 @@ bool solidity_convertert::get_type_description(
       // 3. make pointer
       new_type = gen_pointer_type(sub_type);
     }
+
+    new_type.set("#sol_type", "DYNARRAY");
     break;
   }
   case SolidityGrammar::TypeNameT::ContractTypeName:
@@ -3523,7 +3519,7 @@ bool solidity_convertert::get_type_description(
 
     const symbolt &s = *context.find_symbol(id);
     new_type = s.type;
-
+    new_type.set("#sol_type", "CONTRACT");
     break;
   }
   case SolidityGrammar::TypeNameT::TypeConversionName:
@@ -3568,6 +3564,7 @@ bool solidity_convertert::get_type_description(
   case SolidityGrammar::TypeNameT::EnumTypeName:
   {
     new_type = enum_type();
+    new_type.set("#sol_type", "ENUM");
     break;
   }
   case SolidityGrammar::TypeNameT::StructTypeName:
@@ -3621,20 +3618,15 @@ bool solidity_convertert::get_type_description(
     }
 
     new_type = symbol_typet(id);
-
+    new_type.set("#sol_type", "STRUCT");
     break;
   }
   case SolidityGrammar::TypeNameT::MappingTypeName:
   {
-    // e.g.
-    //  "typeIdentifier": "t_mapping$_t_uint256_$_t_string_storage_$",
-    //  "typeString": "mapping(uint256 => string)"
-    // since the key will always be regarded as string, we only need to obtain the value type.
-
-    typet val_t;
-    //!TODO Unimplement Mapping
-    log_error("Unimplement Mapping");
-    abort();
+    // do nothing as it won't be used
+    new_type = struct_typet();
+    new_type.set("#cpp_type", "void");
+    new_type.set("#sol_type", "MAPPING");
     break;
   }
   case SolidityGrammar::TypeNameT::TupleTypeName:
@@ -3642,7 +3634,7 @@ bool solidity_convertert::get_type_description(
     // do nothing as it won't be used
     new_type = struct_typet();
     new_type.set("#cpp_type", "void");
-    new_type.set("#sol_type", "tuple");
+    new_type.set("#sol_type", "TUPLE");
     break;
   }
   default:
@@ -3867,7 +3859,7 @@ bool solidity_convertert::get_tuple_instance(
 
   // get type
   typet t = sym.type;
-  t.set("#sol_type", "tuple_instance");
+  t.set("#sol_type", "TUPLE_INSTANCE");
   assert(t.id() == typet::id_struct);
 
   // get instance name,id
@@ -4036,6 +4028,120 @@ void solidity_convertert::get_tuple_assignment(
   _block.move_to_operands(assign_expr);
 }
 
+/*
+  This function converts
+    mapping(string => int) m;
+  to
+  {
+    map_int_t m;
+    map_init_int(&m);
+  }
+*/
+bool solidity_convertert::get_mapping_definition(
+  const nlohmann::json &ast_node,
+  exprt &new_expr)
+{
+  // get type
+  const auto &val_node = ast_node["typeName"]["valueType"];
+  typet val_type;
+  if (get_type_description(val_node["typeDescriptions"], val_type))
+    return true;
+
+  std::string sol_type = val_type.get("#sol_type").as_string();
+  std::string _val;
+  if (sol_type == "MAPPING")
+  {
+    log_error("Unsupported nested mapping");
+    return true;
+  }
+  else if (sol_type.compare(0, 3, "INT") == 0)
+    _val = "int";
+  else if (
+    sol_type.compare(0, 4, "UINT") == 0 || sol_type.compare(0, 5, "BYTES") ||
+    sol_type == "ADDRESS")
+    _val = "uint";
+  else if (
+    sol_type == "STRING" || sol_type == "STRUCT" || sol_type == "CONTRACT")
+    _val = "str";
+  else if (sol_type == "BOOL")
+    _val = "bool";
+
+  std::string struct_id =
+    "tag-struct map_" + _val + "_t"; // e.g. tag-struct map_str_t
+  if (context.find_symbol(struct_id) == nullptr)
+    return true;
+  const auto &sym = *context.find_symbol(struct_id);
+  typet t = sym.type;
+
+  // get name, id
+  std::string name, id;
+  bool is_state_var = ast_node["stateVariable"] == true;
+  if (is_state_var)
+    get_state_var_decl_name(ast_node, name, id);
+  else if (current_functionDecl)
+  {
+    assert(current_functionName != "");
+    get_var_decl_name(ast_node, name, id);
+  }
+  else
+  {
+    log_error("ESBMC could not find the parent scope for this local variable");
+    return true;
+  }
+
+  // get location
+  locationt location_begin;
+  get_location_from_decl(ast_node, location_begin);
+
+  // get debug module name
+  std::string debug_modulename =
+    get_modulename_from_path(location_begin.file().as_string());
+
+  // populate symbool
+  symbolt symbol;
+  get_default_symbol(symbol, debug_modulename, t, name, id, location_begin);
+  symbol.is_extern = false;
+
+  exprt mapping_ins = symbol_expr(symbol);
+
+  // get init
+  // e.g. map_init_int(&m);
+  std::string func_name = "map_init_" + _val;
+  std::string func_id = "c:temp_sol.c@F@map_init_" + _val;
+
+  side_effect_expr_function_callt call_expr;
+
+  exprt type_expr("symbol");
+  type_expr.name(func_name);
+  type_expr.identifier(func_id);
+
+  assert(ast_node.contains("typeName"));
+  locationt l;
+  get_location_from_decl(ast_node["typeName"], l);
+  type_expr.location() = l;
+
+  code_typet type;
+  type.return_type() = empty_typet();
+  type_expr.type() = type;
+
+  call_expr.function() = type_expr;
+  call_expr.type() = empty_typet();
+  call_expr.set("#cpp_type", "void");
+
+  // get address: &m
+  exprt address_of = address_of_exprt(mapping_ins);
+  call_expr.arguments().push_back(mapping_ins);
+
+  // get block
+  code_blockt _block;
+  convert_expression_to_code(mapping_ins);
+  convert_expression_to_code(call_expr);
+  _block.move_to_operands(mapping_ins, call_expr);
+
+  new_expr = _block;
+  return false;
+}
+
 /**
      * @brief Populate the out `typet` parameter with the uint type specified by type parameter
      *
@@ -4138,6 +4244,8 @@ bool solidity_convertert::get_elementary_type_name(
   {
     if (get_elementary_type_name_uint(type, new_type))
       return true;
+
+    new_type.set("#sol_type", elementary_type_name_to_str(type));
     break;
   }
   case SolidityGrammar::ElementaryTypeNameT::INT8:
@@ -4175,6 +4283,8 @@ bool solidity_convertert::get_elementary_type_name(
   {
     if (get_elementary_type_name_int(type, new_type))
       return true;
+
+    new_type.set("#sol_type", elementary_type_name_to_str(type));
     break;
   }
   case SolidityGrammar::ElementaryTypeNameT::INT_LITERAL:
@@ -4182,13 +4292,14 @@ bool solidity_convertert::get_elementary_type_name(
     // for int_const type
     new_type = signedbv_typet(256);
     new_type.set("#cpp_type", "signed_char");
+    new_type.set("#sol_type", "INT_CONST");
     break;
   }
   case SolidityGrammar::ElementaryTypeNameT::BOOL:
   {
     new_type = bool_type();
-    c_type = "bool";
-    new_type.set("#cpp_type", c_type);
+    new_type.set("#cpp_type", "bool");
+    new_type.set("#sol_type", "BOOL");
     break;
   }
   case SolidityGrammar::ElementaryTypeNameT::STRING:
@@ -4201,6 +4312,7 @@ bool solidity_convertert::get_elementary_type_name(
         integer2binary(value_length, bv_width(int_type())),
         integer2string(value_length),
         int_type()));
+    new_type.set("#sol_type", "STRING");
     break;
   }
   case SolidityGrammar::ElementaryTypeNameT::ADDRESS:
@@ -4214,7 +4326,7 @@ bool solidity_convertert::get_elementary_type_name(
 
     // for type conversion
     new_type.set("#sol_type", elementary_type_name_to_str(type));
-
+    new_type.set("#sol_type", "ADDRESS");
     break;
   }
   case SolidityGrammar::ElementaryTypeNameT::BYTES1:
@@ -4318,7 +4430,7 @@ bool solidity_convertert::get_parameter_list(
     assert(type_name["parameters"].size() > 1);
     new_type = empty_typet();
     new_type.set("#cpp_type", "void");
-    new_type.set("#sol_type", "tuple");
+    new_type.set("#sol_type", "TUPLE");
     break;
   }
   default:

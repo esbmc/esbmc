@@ -163,6 +163,13 @@ typedef struct map_str_t
 	char *tmp;
 } map_str_t;
 
+typedef struct map_bool_t
+{
+	map_base_t base;
+	bool *ref;
+	bool tmp;
+} map_bool_t;
+
 /// Init
 static void map_init_int(map_int_t *m)
 {
@@ -179,42 +186,50 @@ static void map_init_string(map_str_t *m)
 	memset(m, 0, sizeof(*(m)));
 }
 
+static void map_init_bool(map_bool_t *m)
+{
+	memset(m, 0, sizeof(*(m)));
+}
+
 /// Set
-// int
-static void map_set_int(map_int_t *m, const char *key, int value)
+static void map_set_int(map_int_t *m, const char *key, const int value)
 {
 	(m)->tmp = value;
 	map_set_(&(m)->base, key, &(m)->tmp, sizeof((m)->tmp));
 }
-
-// uint
-static void map_set_uint(map_uint_t *m, const char *key, unsigned int value)
+static void map_set_uint(map_uint_t *m, const char *key, const unsigned int value)
 {
 	(m)->tmp = value;
 	map_set_(&(m)->base, key, &(m)->tmp, sizeof((m)->tmp));
 }
-
-// string: contract_id/struct_instance_id/string
-static void map_set_string(map_uint_t *m, const char *key, const char *value)
+static void map_set_string(map_str_t *m, const char *key, char *value)
+{
+	(m)->tmp = value;
+	map_set_(&(m)->base, key, &(m)->tmp, sizeof((m)->tmp));
+}
+static void map_set_bool(map_bool_t *m, const char *key, const bool value)
 {
 	(m)->tmp = value;
 	map_set_(&(m)->base, key, &(m)->tmp, sizeof((m)->tmp));
 }
 
 /// Get
-static int *map_get_int(map_int_t *m, int key)
+static int *map_get_int(map_int_t *m, const char *key)
 {
 	(m)->ref = map_get_(&(m)->base, key);
 	return (m)->ref;
 }
-
-static int *map_get_uint(map_int_t *m, unsigned int key)
+static unsigned int *map_get_uint(map_uint_t *m, const char *key)
 {
 	(m)->ref = map_get_(&(m)->base, key);
 	return (m)->ref;
 }
-
-static int *map_get_string(map_int_t *m, const char *key)
+static char **map_get_string(map_str_t *m, const char *key)
+{
+	(m)->ref = map_get_(&(m)->base, key);
+	return (m)->ref;
+}
+static bool *map_get_bool(map_bool_t *m, const char *key)
 {
 	(m)->ref = map_get_(&(m)->base, key);
 	return (m)->ref;
