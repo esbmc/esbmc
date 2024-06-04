@@ -80,6 +80,13 @@ protected:
    * 7. the default system include directories, e.g. /usr/local/include and
    *    /usr/include
    * 8. any user-specified --idirafter from left to right
+   *
+   * 1 and 2 are done by passing '-I'; 3 and 4 via '-isystem'; 5, 6 and 7 are
+   * built into Clang where 5 can be adjusted by passing '--gcc-install-dir'
+   * and '-stdlib', 6 is given via '-resource-dir', and 7 is optionally disabled
+   * per '-nostdinc'; 8 is done via '-idirafter'.
+   *
+   * Note: built-in paths are subject to --sysroot.
    */
   virtual void build_include_args(std::vector<std::string> &compiler_args);
   virtual void build_compiler_args(std::vector<std::string> &compiler_args);
