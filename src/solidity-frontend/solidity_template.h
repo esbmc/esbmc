@@ -393,47 +393,81 @@ char get_char(int digit)
     char charstr[] = "0123456789ABCDEF";
     return charstr[digit];
 }
-
 void rev(char *p)
 {
-    char *q = &p[strlen(p) - 1];
-    char *r = p;
-    for (; q > r; q--, r++)
-    {
-        char s = *q;
-        *q = *r;
-        *r = s;
-    }
+	char *q = &p[strlen(p) - 1];
+	char *r = p;
+	for (; q > r; q--, r++)
+	{
+		char s = *q;
+		*q = *r;
+		*r = s;
+	}
+}
+char *i256toa(int256_t value, int256_t base)
+{
+	// we might have memory leak as we will not free this afterwards
+	char *str = malloc(256);
+	int256_t count = 0;
+	bool flag = true;
+	if (value < (int256_t)0 && base == (int256_t)10)
+	{
+		flag = false;
+	}
+	while (value != (int256_t)0)
+	{
+		int256_t dig = value % base;
+		value -= dig;
+		value /= base;
+
+		if (flag == true)
+			str[count] = get_char(dig);
+		else
+			str[count] = get_char(-dig);
+		count++;
+	}
+	if (flag == false)
+	{
+		str[count] = '-';
+		count++;
+	}
+	str[count] = 0;
+	rev(str);
+	return str;
 }
 
-void i256toa(int value, char *str, int base)
+char *u256toa(uint256_t value, uint256_t base)
 {
-    int count = 0;
-    bool flag = true;
-    if (value < 0 && base == 10)
-    {
-        flag = false;
-    }
-    while (value != 0)
-    {
-        int dig = value % base;
-        value -= dig;
-        value /= base;
+	// we might have memory leak as we will not free this afterwards
+	char *str = malloc(256);
+	uint256_t count = 0;
+	bool flag = true;
+	if (value < (uint256_t)0 && base == (uint256_t)10)
+	{
+		flag = false;
+	}
+	while (value != (uint256_t)0)
+	{
+		uint256_t dig = value % base;
+		value -= dig;
+		value /= base;
 
-        if (flag == true)
-            str[count] = get_char(dig);
-        else
-            str[count] = get_char(-dig);
-        count++;
-    }
-    if (flag == false)
-    {
-        str[count] = '-';
-        count++;
-    }
-    str[count] = 0;
-    rev(str);
-})";
+		if (flag == true)
+			str[count] = get_char(dig);
+		else
+			str[count] = get_char(-dig);
+		count++;
+	}
+	if (flag == false)
+	{
+		str[count] = '-';
+		count++;
+	}
+	str[count] = 0;
+	rev(str);
+	return str;
+}
+)";
 
 const std::string sol_ext_library = sol_itoa;
 
