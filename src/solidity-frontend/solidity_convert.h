@@ -103,6 +103,12 @@ protected:
   bool get_current_contract_name(
     const nlohmann::json &ast_node,
     std::string &contract_name);
+  void get_library_function_call(
+    const std::string &func_name,
+    const std::string &func_id,
+    const typet &t,
+    const locationt &l,
+    exprt &new_expr);
   bool get_empty_array_ref(const nlohmann::json &ast_node, exprt &new_expr);
 
   // tuple
@@ -126,6 +132,8 @@ protected:
 
   // mapping
   bool get_mapping_definition(const nlohmann::json &ast_node, exprt &new_expr);
+  bool get_mapping_value_type(const typet &val_type, std::string &_val);
+  bool get_mapping_key(const nlohmann::json &ast_node, exprt &new_expr);
 
   // line number and locations
   void

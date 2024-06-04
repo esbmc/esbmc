@@ -771,18 +771,11 @@ bool solidity_convertert::get_error_definition(const nlohmann::json &ast_node)
 
   // construct a "__ESBMC_assume(false)" statement
   typet return_type = bool_type();
-  return_type.set("#cpp_type", "bool");
-  code_typet convert_type;
-  convert_type.return_type() = return_type;
-
-  exprt statement = exprt("symbol", convert_type);
-  statement.cmt_lvalue(true);
-  statement.name("__ESBMC_assume");
-  statement.identifier("__ESBMC_assume");
-
+  locationt loc;
   side_effect_expr_function_callt call;
-  call.function() = statement;
-  call.type() = return_type;
+  get_library_function_call(
+    "__ESBMC_assume", "__ESBMC_assume", return_type, loc, call);
+
   exprt arg = false_exprt();
   call.arguments().push_back(arg);
   convert_expression_to_code(call);
@@ -2175,6 +2168,53 @@ bool solidity_convertert::get_expr(
       }
     }
 
+    // for MAPPING
+    typet base_t;
+    if (get_type_description(
+          expr["baseExpression"]["typeDescriptions"], base_t))
+      return true;
+    if (base_t.get("#sol_type").as_string() == "MAPPING")
+    {
+      // this could be set or get
+      // e.g. y = map[x] or map[x] = y
+      // here, we convert it to a 'get' and check if it's a 'set' in other places
+      // ==> map_get_int(&m, "1234")
+
+      // get m
+      exprt base;
+      if (get_expr(
+            expr["baseExpression"],
+            expr["baseExpression"]["typeDescriptions"],
+            base))
+        return true;
+      // &m
+      exprt address_of = address_of_exprt(base);
+
+      // get key
+      // e.g.  "1234", 1234, struct s...
+      exprt idx;
+      if (get_mapping_key(expr["indexExpression"], idx))
+        return true;
+
+      // get func_call
+      std::string _val;
+      if (get_mapping_value_type(base_t, _val))
+        return true;
+      std::string func_name = "map_get_" + _val;
+      std::string func_id = "c:temp_sol.c@F@map_get_" + _val;
+
+      if (context.find_symbol(func_id) == nullptr)
+        return true;
+      const auto &sym = *context.find_symbol(func_id);
+
+      locationt l;
+      get_location_from_decl(expr, l);
+
+      side_effect_expr_function_callt call_expr;
+      get_library_function_call(func_name, func_id, sym.type, l, call_expr);
+      break;
+    }
+
     // 2. get the decl ref of the array
 
     exprt array;
@@ -2760,19 +2800,8 @@ bool solidity_convertert::get_binary_operator_expr(
     // double pow(double base, double exponent)
 
     side_effect_expr_function_callt call_expr;
-
-    exprt type_expr("symbol");
-    type_expr.name("pow");
-    type_expr.identifier("c:@F@pow");
-    type_expr.location() = lhs.location();
-
-    code_typet type;
-    type.return_type() = double_type();
-    type_expr.type() = type;
-
-    call_expr.function() = type_expr;
-    call_expr.type() = double_type();
-    call_expr.set("#cpp_type", "double");
+    get_library_function_call(
+      "pow", "c:@F@pow", double_type(), lhs.location(), call_expr);
 
     solidity_gen_typecast(ns, lhs, double_type());
     solidity_gen_typecast(ns, rhs, double_type());
@@ -4037,6 +4066,88 @@ void solidity_convertert::get_tuple_assignment(
   _block.move_to_operands(assign_expr);
 }
 
+// get the value type of the mapping
+bool solidity_convertert::get_mapping_value_type(
+  const typet &val_type,
+  std::string &_val)
+{
+  /*
+    _ValueType can be any type, including mappings, arrays and structs
+  */
+  std::string sol_type = val_type.get("#sol_type").as_string();
+  if (sol_type == "MAPPING")
+  {
+    log_error("Unsupported nested mapping");
+    return true;
+  }
+  else if (sol_type.compare(0, 3, "INT") == 0 || sol_type == "ENUM")
+    _val = "int";
+  else if (
+    sol_type.compare(0, 4, "UINT") == 0 || sol_type.compare(0, 5, "BYTES") ||
+    sol_type == "ADDRESS")
+    _val = "uint";
+  else if (
+    sol_type == "STRING" || sol_type == "STRUCT" || sol_type == "CONTRACT")
+    _val = "str";
+  else if (sol_type == "BOOL")
+    _val = "bool";
+  else if (sol_type == "ARRAY" || sol_type == "DYNARRAY")
+  {
+    log_error("Unsupported array-type mapping");
+    return true;
+  }
+  return false;
+}
+
+bool solidity_convertert::get_mapping_key(
+  const nlohmann::json &ast_node,
+  exprt &new_expr)
+{
+  /*
+    The _KeyType can be any built-in value type, bytes, string, or any contract or enum type.
+    Other user-defined or complex types, such as mappings, structs or array types are not allowed.
+  */
+  exprt idx;
+  if (get_expr(ast_node, ast_node["typeDescriptions"], idx))
+    return true;
+
+  //TODO: not including contract since the contract type is not supported
+  if (
+    idx.type().id() == irept::id_signedbv ||
+    idx.type().id() == irept::id_unsignedbv)
+  {
+    // int, enum
+    // uint, address, bytes
+    std::string func_id, func_name;
+    if (idx.type().id() == irept::id_signedbv)
+    {
+      func_name = "i256toa";
+      func_id = "c:@F@i256toa";
+    }
+    else
+    {
+      func_name = "u256toa";
+      func_id = "c:@F@u256toa";
+    }
+    const auto &sym = *context.find_symbol(func_id);
+
+    locationt l;
+    get_location_from_decl(ast_node, l);
+
+    side_effect_expr_function_callt call_expr;
+    get_library_function_call(func_name, func_id, sym.type, l, call_expr);
+  }
+  else if (idx.type().id() == irept::id_array)
+  {
+    // string
+    new_expr = idx;
+  }
+  log_status("{}", idx);
+
+  abort();
+  return false;
+}
+
 /*
   This function converts
     mapping(string => int) m;
@@ -4056,24 +4167,9 @@ bool solidity_convertert::get_mapping_definition(
   if (get_type_description(val_node["typeDescriptions"], val_type))
     return true;
 
-  std::string sol_type = val_type.get("#sol_type").as_string();
   std::string _val;
-  if (sol_type == "MAPPING")
-  {
-    log_error("Unsupported nested mapping");
+  if (get_mapping_value_type(val_type, _val))
     return true;
-  }
-  else if (sol_type.compare(0, 3, "INT") == 0)
-    _val = "int";
-  else if (
-    sol_type.compare(0, 4, "UINT") == 0 || sol_type.compare(0, 5, "BYTES") ||
-    sol_type == "ADDRESS")
-    _val = "uint";
-  else if (
-    sol_type == "STRING" || sol_type == "STRUCT" || sol_type == "CONTRACT")
-    _val = "str";
-  else if (sol_type == "BOOL")
-    _val = "bool";
 
   std::string struct_id =
     "tag-struct map_" + _val + "_t"; // e.g. tag-struct map_str_t
@@ -4120,23 +4216,10 @@ bool solidity_convertert::get_mapping_definition(
   std::string func_id = "c:temp_sol.c@F@map_init_" + _val;
 
   side_effect_expr_function_callt call_expr;
-
-  exprt type_expr("symbol");
-  type_expr.name(func_name);
-  type_expr.identifier(func_id);
-
-  assert(ast_node.contains("typeName"));
   locationt l;
   get_location_from_decl(ast_node["typeName"], l);
-  type_expr.location() = l;
 
-  code_typet type;
-  type.return_type() = empty_typet();
-  type_expr.type() = type;
-
-  call_expr.function() = type_expr;
-  call_expr.type() = empty_typet();
-  call_expr.set("#cpp_type", "void");
+  get_library_function_call(func_name, func_id, empty_typet(), l, call_expr);
 
   // get address: &m
   exprt address_of = address_of_exprt(mapping_ins);
@@ -4150,6 +4233,31 @@ bool solidity_convertert::get_mapping_definition(
 
   new_expr = _block;
   return false;
+}
+
+// invoking a function in the library
+void solidity_convertert::get_library_function_call(
+  const std::string &func_name,
+  const std::string &func_id,
+  const typet &t,
+  const locationt &l,
+  exprt &new_expr)
+{
+  side_effect_expr_function_callt call_expr;
+
+  exprt type_expr("symbol");
+  type_expr.name(func_name);
+  type_expr.identifier(func_id);
+  type_expr.location() = l;
+
+  code_typet type;
+  type.return_type() = t;
+  type_expr.type() = type;
+
+  call_expr.function() = type_expr;
+  call_expr.type() = t;
+
+  new_expr = call_expr;
 }
 
 /**
@@ -5675,11 +5783,12 @@ bool solidity_convertert::multi_transaction_verification(
       const symbolt &guard = *context.find_symbol("c:@F@nondet_bool");
 
       side_effect_expr_function_callt guard_expr;
-      guard_expr.name("nondet_bool");
-      guard_expr.identifier("c:@F@nondet_bool");
-      guard_expr.location() = guard.location;
-      guard_expr.cmt_lvalue(true);
-      guard_expr.function() = symbol_expr(guard);
+      get_library_function_call(
+        "nondet_bool",
+        "c:@F@nondet_bool",
+        guard.type,
+        guard.location,
+        guard_expr);
 
       // then: function_call
       if (context.find_symbol(func_id) == nullptr)
@@ -5705,11 +5814,12 @@ bool solidity_convertert::multi_transaction_verification(
   // while-cond:
   const symbolt &guard = *context.find_symbol("c:@F@nondet_bool");
   side_effect_expr_function_callt cond_expr;
-  cond_expr.name("nondet_bool");
-  cond_expr.identifier("c:@F@nondet_bool");
-  cond_expr.cmt_lvalue(true);
-  cond_expr.location() = func_body.location();
-  cond_expr.function() = symbol_expr(guard);
+  get_library_function_call(
+    "nondet_bool",
+    "c:@F@nondet_bool",
+    guard.type,
+    func_body.location(),
+    cond_expr);
 
   // while-loop statement:
   code_whilet code_while;
