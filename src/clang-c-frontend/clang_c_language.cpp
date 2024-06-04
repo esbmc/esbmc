@@ -27,9 +27,18 @@ languaget *new_clang_c_language()
 
 clang_c_languaget::clang_c_languaget() = default;
 
-void clang_c_languaget::build_compiler_args(
+void clang_c_languaget::build_include_args(
   std::vector<std::string> &compiler_args)
 {
+  if (config.options.get_bool_option("nostdinc"))
+  {
+    compiler_args.push_back("-nostdinc");
+    compiler_args.push_back("-ibuiltininc");
+  }
+
+  for (auto const &inc : config.ansi_c.include_paths)
+    compiler_args.push_back("-I" + inc);
+
   const std::string *libc_headers = internal_libc_header_dir();
   if (libc_headers)
   {
@@ -40,6 +49,16 @@ void clang_c_languaget::build_compiler_args(
   compiler_args.push_back("-resource-dir");
   compiler_args.push_back(clang_resource_dir());
 
+  for (const auto &dir : config.ansi_c.idirafter_paths)
+  {
+    compiler_args.push_back("-idirafter");
+    compiler_args.push_back(dir);
+  }
+}
+
+void clang_c_languaget::build_compiler_args(
+  std::vector<std::string> &compiler_args)
+{
   // Append mode arg
   switch (config.ansi_c.word_size)
   {
@@ -175,21 +194,6 @@ void clang_c_languaget::build_compiler_args(
     compiler_args.push_back("--sysroot=" + sysroot);
   else
     compiler_args.emplace_back("--sysroot=" ESBMC_C2GOTO_SYSROOT);
-
-  if (config.options.get_bool_option("nostdinc"))
-  {
-    compiler_args.push_back("-nostdinc");
-    compiler_args.push_back("-ibuiltininc");
-  }
-
-  for (const auto &dir : config.ansi_c.idirafter_paths)
-  {
-    compiler_args.push_back("-idirafter");
-    compiler_args.push_back(dir);
-  }
-
-  for (auto const &inc : config.ansi_c.include_paths)
-    compiler_args.push_back("-I" + inc);
 
   for (const auto &inc : config.ansi_c.include_files)
   {
