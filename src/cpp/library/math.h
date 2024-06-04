@@ -1,6 +1,8 @@
 
 #pragma once
 
+#include "definitions.h"
+
 #ifdef _LIBCPP_VERSION
 
 /* Support LLVM's libc++, which defines the float and long double overloads
