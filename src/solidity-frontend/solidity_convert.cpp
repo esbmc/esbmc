@@ -335,8 +335,9 @@ bool solidity_convertert::get_var_decl(
     // the mapping should not handled in var decl, instead
     // it should be an expression inside the function.
 
+    exprt dump;
     // 1. get the expr
-    if (get_expr(ast_node, new_expr))
+    if (get_expr(ast_node, dump))
       return true;
 
     // 2. move it to a function.
@@ -349,24 +350,32 @@ bool solidity_convertert::get_var_decl(
       //
       // Beside, it should always have an initial value, otherwise:
       // "Uninitialized mapping. Mappings cannot be created dynamically, you have to assign them from a state variable."
-      // Do nothing since we have already updated the new_expr (was "code_skipt").
+      new_expr = dump;
       return false;
     }
     else
     {
-      // // assume it's not inside a funciton, then move it to the ctor
-      // std::string contract_name;
-      // if (get_current_contract_name(ast_node, contract_name))
-      //   return true;
-      // if (contract_name.empty())
-      //   return true;
-      // // add an implict ctor if it's not declared explictly
-      // if (add_implicit_constructor())
-      //   return true;
-      // symbolt &ctor =
-      //   *context.find_symbol("sol:@" + contract_name + "@F@" + contract_name);
-      // ctor.value.operands().push_back(new_expr);
+      // assume it's not inside a funciton, then move it to the ctor
+      std::string contract_name;
+      if (get_current_contract_name(ast_node, contract_name))
+        return true;
+      if (contract_name.empty())
+        return true;
+      // add an implict ctor if it's not declared explictly
+      if (add_implicit_constructor())
+        return true;
+      if (
+        context.find_symbol(
+          "sol:@C@" + contract_name + "@F@" + contract_name + "#") == nullptr)
+        return true;
+      symbolt &ctor = *context.find_symbol(
+        "sol:@C@" + contract_name + "@F@" + contract_name + "#");
 
+      // map_init_int(&m)
+      ctor.value.operands().push_back(dump.op1());
+
+      // map_int_t m
+      new_expr = dump.op0().op0();
       return false;
     }
   }
@@ -4102,7 +4111,8 @@ bool solidity_convertert::get_mapping_definition(
   get_default_symbol(symbol, debug_modulename, t, name, id, location_begin);
   symbol.is_extern = false;
 
-  exprt mapping_ins = symbol_expr(symbol);
+  symbolt &added_symbol = *move_symbol_to_context(symbol);
+  exprt mapping_ins = symbol_expr(added_symbol);
 
   // get init
   // e.g. map_init_int(&m);
