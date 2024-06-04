@@ -36,7 +36,7 @@ void clang_cpp_languaget::force_file_type(
   compiler_args.push_back("c++");
 }
 
-void clang_cpp_languaget::build_compiler_args(
+void clang_cpp_languaget::build_include_args(
   std::vector<std::string> &compiler_args)
 {
   std::string cppinc;
@@ -52,7 +52,7 @@ void clang_cpp_languaget::build_compiler_args(
     compiler_args.push_back(cppinc);
   }
 
-  clang_c_languaget::build_compiler_args(compiler_args);
+  clang_c_languaget::build_include_args(compiler_args);
 
   if (do_inc)
   {
