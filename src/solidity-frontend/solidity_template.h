@@ -404,17 +404,19 @@ void rev(char *p)
 		*r = s;
 	}
 }
-char *i256toa(int256_t value, int256_t base)
+char *i256toa(int256_t value)
 {
 	// we might have memory leak as we will not free this afterwards
-	char *str = malloc(256);
-	int256_t count = 0;
+	char *str = (char *)malloc(256 * sizeof(char));
+	int256_t base = (int256_t)10;
+	unsigned int count = 0;
 	bool flag = true;
+
 	if (value < (int256_t)0 && base == (int256_t)10)
 	{
 		flag = false;
 	}
-	while (value != (int256_t)0)
+	while (value != (int256_t)0 && count < 256)
 	{
 		int256_t dig = value % base;
 		value -= dig;
@@ -436,17 +438,17 @@ char *i256toa(int256_t value, int256_t base)
 	return str;
 }
 
-char *u256toa(uint256_t value, uint256_t base)
+char *u256toa(uint256_t value)
 {
-	// we might have memory leak as we will not free this afterwards
-	char *str = malloc(256);
-	uint256_t count = 0;
+	char *str = (char *)malloc(256 * sizeof(char));
+	uint256_t base = (int256_t)10;
+	unsigned int count = 0;
 	bool flag = true;
 	if (value < (uint256_t)0 && base == (uint256_t)10)
 	{
 		flag = false;
 	}
-	while (value != (uint256_t)0)
+	while (value != (uint256_t)0 && count < 256)
 	{
 		uint256_t dig = value % base;
 		value -= dig;

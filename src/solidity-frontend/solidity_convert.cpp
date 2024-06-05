@@ -2198,7 +2198,7 @@ bool solidity_convertert::get_expr(
 
       // get func_call
       std::string _val;
-      if (get_mapping_value_type(base_t, _val))
+      if (get_mapping_value_type(t, _val))
         return true;
       std::string func_name = "map_get_" + _val;
       std::string func_id = "c:temp_sol.c@F@map_get_" + _val;
@@ -2211,7 +2211,19 @@ bool solidity_convertert::get_expr(
       get_location_from_decl(expr, l);
 
       side_effect_expr_function_callt call_expr;
+      log_status("sym{}", sym.type.to_string());
       get_library_function_call(func_name, func_id, sym.type, l, call_expr);
+      log_status("call_expr{}", call_expr);
+      log_status("address_of{}", address_of);
+
+      call_expr.arguments().push_back(address_of);
+      call_expr.arguments().push_back(idx);
+      log_status("after_call_expr{}", call_expr);
+
+      new_expr = call_expr;
+
+      // add label
+      new_expr.type().set("#sol_type", "MAP_GET");
       break;
     }
 
@@ -2552,6 +2564,21 @@ bool solidity_convertert::get_binary_operator_expr(
     "solidity",
     "	@@@ got binop.getOpcode: SolidityGrammar::{}",
     SolidityGrammar::expression_to_str(opcode));
+
+  // special handling for mapping set value
+  if (lhs.type().get("sol_type").as_string() == "MAP_GET")
+  {
+    // handling rhs
+    // if rhs is struct/contract(/...)
+    // we only use the idf as value
+
+    // handling compound assignment
+    // e.g map[x] +=1 ==> map[x] = map[x] + 1;
+
+    abort();
+    current_BinOp_type.pop();
+    return false;
+  }
 
   switch (opcode)
   {
@@ -4118,16 +4145,21 @@ bool solidity_convertert::get_mapping_key(
   {
     // int, enum
     // uint, address, bytes
+
+    // convert int/uint to string via i256toa/u256toa
     std::string func_id, func_name;
+    typet type_cast;
     if (idx.type().id() == irept::id_signedbv)
     {
       func_name = "i256toa";
       func_id = "c:@F@i256toa";
+      type_cast = signedbv_typet(256);
     }
     else
     {
       func_name = "u256toa";
       func_id = "c:@F@u256toa";
+      type_cast = unsignedbv_typet(256);
     }
     const auto &sym = *context.find_symbol(func_id);
 
@@ -4136,15 +4168,19 @@ bool solidity_convertert::get_mapping_key(
 
     side_effect_expr_function_callt call_expr;
     get_library_function_call(func_name, func_id, sym.type, l, call_expr);
+
+    // gen typecast (necessary?)
+    solidity_gen_typecast(ns, idx, type_cast);
+
+    // pass arg
+    call_expr.arguments().push_back(idx);
+    new_expr = call_expr;
   }
   else if (idx.type().id() == irept::id_array)
   {
     // string
     new_expr = idx;
   }
-  log_status("{}", idx);
-
-  abort();
   return false;
 }
 
