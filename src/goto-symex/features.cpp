@@ -41,11 +41,17 @@ void ssa_features::check(const expr2tc &e)
   case expr2t::expr_ids::mul_id:
   case expr2t::expr_ids::div_id:
   case expr2t::modulus_id:
-    if (!(is_constant_expr(dynamic_cast<const arith_2ops &>(*e).side_1) ||
-          is_constant_expr(dynamic_cast<const arith_2ops &>(*e).side_2)))
+  {
+    const auto &arith_op = dynamic_cast<const arith_2ops &>(*e);
+    const expr2tc side_1 = arith_op.side_1;
+    const expr2tc side_2 = arith_op.side_2;
+    if (
+      !is_entirely_constant(arith_op.side_1) &&
+      !is_entirely_constant(arith_op.side_2))
       features.insert(SSA_FEATURES::NON_LINEAR);
-    
+
     break;
+  }
 
   case expr2t::shl_id:
   case expr2t::ashr_id:
@@ -56,10 +62,15 @@ void ssa_features::check(const expr2tc &e)
   case expr2t::bitnand_id:
   case expr2t::bitnor_id:
   case expr2t::bitnxor_id:
-    // TODO: shifts are linear if shifted by a constant size
-    features.insert(SSA_FEATURES::NON_LINEAR);
-    features.insert(SSA_FEATURES::BITWISE_OPERATIONS);    
+  {
+    features.insert(SSA_FEATURES::BITWISE_OPERATIONS);
+    const auto &bit_op = dynamic_cast<const bit_2ops &>(*e);
+    if (
+      !is_entirely_constant(bit_op.side_1) &&
+      !is_entirely_constant(bit_op.side_2))
+      features.insert(SSA_FEATURES::NON_LINEAR);
     break;
+  }
 
   case expr2t::overflow_cast_id:
   case expr2t::overflow_id:
@@ -91,4 +102,29 @@ void ssa_features::print_result() const
     log_status("SSA: Contains ARRAY");
   if (features.count(SSA_FEATURES::STRUCTS))
     log_status("SSA: Contains STRUCTS");
+}
+bool ssa_features::is_entirely_constant(const expr2tc &e)
+{
+  if(is_constant_expr(e))
+    return true;
+
+  if(is_pointer_type(e))
+    return false;
+
+  switch (e->expr_id)
+  {
+  case expr2t::overflow_cast_id:
+  case expr2t::overflow_id:
+  case expr2t::overflow_neg_id:
+    return false;
+
+  default:
+    break;
+  }
+
+  bool result = true;
+  e->foreach_operand([this, &result](const expr2tc &next) {
+    result &= is_entirely_constant(next); });
+
+  return false;
 }

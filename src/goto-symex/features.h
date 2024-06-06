@@ -33,5 +33,7 @@ public:
 
 protected:
   void check(const expr2tc &e);
+
+  bool is_entirely_constant(const expr2tc &e);
   
 };
