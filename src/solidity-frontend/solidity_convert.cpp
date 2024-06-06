@@ -2194,6 +2194,8 @@ bool solidity_convertert::get_expr(
 
       // get key
       // e.g.  "1234", 1234, struct s...
+      // "Let's say you have a mapping mapping(uint => uint) myMapping, then all elements myMapping[0], myMapping[1], myMapping[123123], ... are already initialized with the default value. If you map uint to uint, then you map key-type "uint" to value-type "uint"."
+
       exprt idx;
       if (get_mapping_key(expr["indexExpression"], idx))
         return true;
@@ -2218,7 +2220,8 @@ bool solidity_convertert::get_expr(
       call_expr.arguments().push_back(address_of);
       call_expr.arguments().push_back(idx);
 
-      new_expr = call_expr;
+      // dereference: *map_get
+      new_expr = dereference_exprt(call_expr, call_expr.type());
 
       // add label
       new_expr.type().set("#sol_type", "MAP_GET");
@@ -2564,14 +2567,78 @@ bool solidity_convertert::get_binary_operator_expr(
     SolidityGrammar::expression_to_str(opcode));
 
   // special handling for mapping set value
-  if (lhs.type().get("sol_type").as_string() == "MAP_GET")
+  // for any mapping index access, we will initially return as map_get
+  // here, we further identidy it as map_get or map_set
+  std::string op_str = SolidityGrammar::expression_to_str(opcode);
+  if (
+    lhs.type().get("sol_type").as_string() == "MAP_GET" &&
+    op_str.find("Assign") != std::string::npos)
   {
-    // handling rhs
-    // if rhs is struct/contract(/...)
-    // we only use the idf as value
+    // handling (compound) assignment
+    // e.g  map_get(map, x) = 1 ==> map_set(map, x, 1);
+    // map[x] +=1 ==> map[x] = map[x] + 1 ==> map_set(map,x,*map_get(x,1))
 
-    // handling compound assignment
-    // e.g map[x] +=1 ==> map[x] = map[x] + 1;
+    // if(opcode == SolidityGrammar::ExpressionT::BO_Assign)
+    // {
+
+    // }
+
+    // switch (opcode)
+    // {
+    // case SolidityGrammar::ExpressionT::BO_Assign:
+    // {
+    // }
+    // case SolidityGrammar::ExpressionT::BO_AddAssign:
+    // {
+    //   new_expr = side_effect_exprt("assign+");
+    //   break;
+    // }
+    // case SolidityGrammar::ExpressionT::BO_SubAssign:
+    // {
+    //   new_expr = side_effect_exprt("assign-");
+    //   break;
+    // }
+    // case SolidityGrammar::ExpressionT::BO_MulAssign:
+    // {
+    //   new_expr = side_effect_exprt("assign*");
+    //   break;
+    // }
+    // case SolidityGrammar::ExpressionT::BO_DivAssign:
+    // {
+    //   new_expr = side_effect_exprt("assign_div");
+    //   break;
+    // }
+    // case SolidityGrammar::ExpressionT::BO_RemAssign:
+    // {
+    //   new_expr = side_effect_exprt("assign_mod");
+    //   break;
+    // }
+    // case SolidityGrammar::ExpressionT::BO_ShlAssign:
+    // {
+    //   new_expr = side_effect_exprt("assign_shl");
+    //   break;
+    // }
+    // case SolidityGrammar::ExpressionT::BO_ShrAssign:
+    // {
+    //   new_expr = side_effect_exprt("assign_shr");
+    //   break;
+    // }
+    // case SolidityGrammar::ExpressionT::BO_AndAssign:
+    // {
+    //   new_expr = side_effect_exprt("assign_bitand");
+    //   break;
+    // }
+    // case SolidityGrammar::ExpressionT::BO_XorAssign:
+    // {
+    //   new_expr = side_effect_exprt("assign_bitxor");
+    //   break;
+    // }
+    // case SolidityGrammar::ExpressionT::BO_OrAssign:
+    // {
+    //   new_expr = side_effect_exprt("assign_bitor");
+    //   break;
+    // }
+    // }
 
     abort();
     current_BinOp_type.pop();
@@ -4111,12 +4178,13 @@ bool solidity_convertert::get_mapping_value_type(
     sol_type.compare(0, 4, "UINT") == 0 || sol_type.compare(0, 5, "BYTES") ||
     sol_type == "ADDRESS")
     _val = "uint";
-  else if (
-    sol_type == "STRING" || sol_type == "STRUCT" || sol_type == "CONTRACT")
+  else if (sol_type == "STRING")
     _val = "str";
   else if (sol_type == "BOOL")
     _val = "bool";
-  else if (sol_type == "ARRAY" || sol_type == "DYNARRAY")
+  else if (
+    sol_type == "ARRAY" || sol_type == "DYNARRAY" || sol_type == "STRUCT" ||
+    sol_type == "CONTRACT")
   {
     log_error("Unsupported array-type mapping");
     return true;
