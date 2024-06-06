@@ -416,6 +416,11 @@ char *i256toa(int256_t value)
 	{
 		flag = false;
 	}
+	if (value == (int256_t)0)
+	{
+		str[0] = '0';
+		return str;
+	}
 	while (value != (int256_t)0 && count < 256)
 	{
 		int256_t dig = value % base;
@@ -447,6 +452,11 @@ char *u256toa(uint256_t value)
 	if (value < (uint256_t)0 && base == (uint256_t)10)
 	{
 		flag = false;
+	}
+	if (value == (uint256_t)0)
+	{
+		str[0] = '0';
+		return str;
 	}
 	while (value != (uint256_t)0 && count < 256)
 	{
