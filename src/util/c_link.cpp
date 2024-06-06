@@ -206,22 +206,35 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       {
         // keep the one in in_context -- libraries come last!
         log_warning(
-          "function `{}' in module `{}' is shadowed by a definition in module "
-          "`{}'",
+          "function '{}' in module '{}' is shadowed by a definition in module "
+          "'{}'\n"
+          "  {}:{}:{}: location of the old definition\n"
+          "  {}:{}:{}: location of the new definition",
           in_context.name,
           new_symbol.module,
-          in_context.module);
+          in_context.module,
+          in_context.location.file().c_str(),
+          in_context.location.line().c_str(),
+          in_context.location.column().c_str(),
+          new_symbol.location.file().c_str(),
+          new_symbol.location.line().c_str(),
+          new_symbol.location.column().c_str());
       }
       else
       {
         log_error(
-          "duplicate definition of function `{}'\n"
-          "In module `{}' and module `{}'\n"
-          "Location: {}",
+          "duplicate definition of function '{}'\n"
+          "  {}:{}:{}: location of the old definition in module {}\n"
+          "  {}:{}:{}: location of the new definition in module {}",
           in_context.name,
+          in_context.value.location().file().c_str(),
+          in_context.value.location().line().c_str(),
+          in_context.value.location().column().c_str(),
           in_context.module,
-          new_symbol.module,
-          new_symbol.value.location());
+          new_symbol.value.location().file().c_str(),
+          new_symbol.value.location().line().c_str(),
+          new_symbol.value.location().column().c_str(),
+          new_symbol.module);
       }
     }
   }
@@ -275,18 +288,20 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       else
       {
         log_error(
-          "conflicting definition for variable `{}'\n"
-          "old definition: {}\n"
-          "Module: {}\n"
-          "new definition: {}\n"
-          "Module: {}\n"
-          "Location: {}",
+          "conflicting definition for variable '{}'\n"
+          "  {}:{}:{}: old definition in module {}: {}\n"
+          "  {}:{}:{}: new definition in module {}: {}",
           in_context.name,
-          to_string(in_context.type),
+          in_context.location.file().c_str(),
+          in_context.location.line().c_str(),
+          in_context.location.column().c_str(),
           in_context.module,
-          to_string(new_symbol.type),
+          to_string(in_context.type),
+          new_symbol.location.file().c_str(),
+          new_symbol.location.line().c_str(),
+          new_symbol.location.column().c_str(),
           new_symbol.module,
-          new_symbol.location);
+          to_string(new_symbol.type));
       }
     }
 
@@ -301,16 +316,20 @@ void c_linkt::duplicate_symbol(symbolt &in_context, symbolt &new_symbol)
       else if (!base_type_eq(in_context.value, new_symbol.value, ns))
       {
         log_error(
-          "conflicting initializers for variable `{}'\n"
-          "old value: {}\n"
-          "Module: {}\n"
-          "new value: {}\n"
-          "Module: {}",
+          "conflicting initializers for variable '{}'\n"
+          "  {}:{}:{}: old value in module {}: {}\n"
+          "  {}:{}:{}: new value in module {}: {}",
           in_context.name,
-          to_string(in_context.value),
+          in_context.location.file().c_str(),
+          in_context.location.line().c_str(),
+          in_context.location.column().c_str(),
           in_context.module,
-          to_string(new_symbol.value),
-          new_symbol.module);
+          to_string(in_context.value),
+          new_symbol.location.file().c_str(),
+          new_symbol.location.line().c_str(),
+          new_symbol.location.column().c_str(),
+          new_symbol.module,
+          to_string(new_symbol.value));
         abort();
       }
     }
