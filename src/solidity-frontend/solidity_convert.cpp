@@ -736,7 +736,9 @@ bool solidity_convertert::get_error_definition(const nlohmann::json &ast_node)
 
   // no return value
   code_typet type;
-  type.return_type() = empty_typet();
+  typet e_type = empty_typet();
+  e_type.set("cpp_type", "void");
+  type.return_type() = e_type;
 
   locationt location_begin;
   get_location_from_decl(ast_node, location_begin);
@@ -2211,10 +2213,7 @@ bool solidity_convertert::get_expr(
       get_location_from_decl(expr, l);
 
       side_effect_expr_function_callt call_expr;
-      log_status("sym{}", sym.type.to_string());
       get_library_function_call(func_name, func_id, sym.type, l, call_expr);
-      log_status("call_expr{}", call_expr);
-      log_status("address_of{}", address_of);
 
       call_expr.arguments().push_back(address_of);
       call_expr.arguments().push_back(idx);
@@ -4207,12 +4206,9 @@ bool solidity_convertert::get_mapping_definition(
   if (get_mapping_value_type(val_type, _val))
     return true;
 
-  std::string struct_id =
-    "tag-struct map_" + _val + "_t"; // e.g. tag-struct map_str_t
-  if (context.find_symbol(struct_id) == nullptr)
-    return true;
-  const auto &sym = *context.find_symbol(struct_id);
-  typet t = sym.type;
+  std::string struct_name = "struct map_" + _val + "_t";
+  std::string struct_id = prefix + struct_name; // e.g. tag-struct map_str_t
+  typet t = symbol_typet(struct_id);
 
   // get name, id
   std::string name, id;
@@ -4255,7 +4251,11 @@ bool solidity_convertert::get_mapping_definition(
   locationt l;
   get_location_from_decl(ast_node["typeName"], l);
 
-  get_library_function_call(func_name, func_id, empty_typet(), l, call_expr);
+  if (context.find_symbol(func_id) == nullptr)
+    return true;
+
+  const auto &s = *context.find_symbol(func_id);
+  get_library_function_call(func_name, func_id, s.type, l, call_expr);
 
   // get address: &m
   exprt address_of = address_of_exprt(mapping_ins);
@@ -4272,6 +4272,7 @@ bool solidity_convertert::get_mapping_definition(
 }
 
 // invoking a function in the library
+// note that the function symbol might not be inside the symbol table at the moment
 void solidity_convertert::get_library_function_call(
   const std::string &func_name,
   const std::string &func_id,
@@ -4287,11 +4288,20 @@ void solidity_convertert::get_library_function_call(
   type_expr.location() = l;
 
   code_typet type;
-  type.return_type() = t;
-  type_expr.type() = type;
+  if (t.is_code())
+    // this means it's a func symbol read from the symbol_table
+    type_expr.type() = to_code_type(t);
+  else
+  {
+    type.return_type() = t;
+    type_expr.type() = type;
+  }
 
   call_expr.function() = type_expr;
-  call_expr.type() = t;
+  if (t.is_code())
+    call_expr.type() = to_code_type(t).return_type();
+  else
+    call_expr.type() = t;
 
   new_expr = call_expr;
 }
@@ -5868,7 +5878,9 @@ bool solidity_convertert::multi_transaction_verification(
   // 3. add "sol_main" to symbol table
   symbolt new_symbol;
   code_typet main_type;
-  main_type.return_type() = empty_typet();
+  typet e_type = empty_typet();
+  e_type.set("cpp_type", "void");
+  main_type.return_type() = e_type;
   const std::string sol_name = "sol_main_" + contractName;
   const std::string sol_id = "sol:@C@" + contractName + "@F@" + sol_name;
   const symbolt &contract = *context.find_symbol(prefix + contractName);
