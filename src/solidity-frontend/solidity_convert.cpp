@@ -2217,7 +2217,6 @@ bool solidity_convertert::get_expr(
 
       call_expr.arguments().push_back(address_of);
       call_expr.arguments().push_back(idx);
-      log_status("after_call_expr{}", call_expr);
 
       new_expr = call_expr;
 
