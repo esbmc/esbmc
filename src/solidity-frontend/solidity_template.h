@@ -115,9 +115,17 @@ const std::string sol_funcs =
 const std::string sol_mapping = R"(
 #ifndef MAP_H
 #define MAP_H
+typedef _ExtInt(256) int256_t;
+typedef unsigned _ExtInt(256) uint256_t;
+typedef unsigned _ExtInt(160) address_t;
 
 struct map_node_t;
 typedef struct map_node_t map_node_t;
+
+static int zero_int = 0;
+static unsigned int zero_uint = 0;
+static bool zero_bool = false;
+static char *zero_string = "0";
 
 typedef struct
 {
@@ -217,28 +225,28 @@ static void map_set_bool(map_bool_t *m, const char *key, const bool value)
 static int *map_get_int(map_int_t *m, const char *key)
 {
 	(m)->ref = map_get_(&(m)->base, key);
-	return (m)->ref;
+	return (m)->ref != NULL ? (m)->ref : &zero_int;
 }
 static unsigned int *map_get_uint(map_uint_t *m, const char *key)
 {
 	(m)->ref = map_get_(&(m)->base, key);
-	return (m)->ref;
+	return (m)->ref != NULL ? (m)->ref : &zero_uint;
 }
 static char **map_get_string(map_str_t *m, const char *key)
 {
 	(m)->ref = map_get_(&(m)->base, key);
-	return (m)->ref;
+	return (m)->ref != NULL ? (m)->ref : &zero_string;
 }
 static bool *map_get_bool(map_bool_t *m, const char *key)
 {
 	(m)->ref = map_get_(&(m)->base, key);
-	return (m)->ref;
+	return (m)->ref != NULL ? (m)->ref : &zero_bool;
 }
 
 /// General
 static unsigned map_hash(const char *str)
 {
-	unsigned hash = 5381;
+	unsigned long long hash = 5381;
 	while (*str)
 	{
 		hash = ((hash << 5) + hash) ^ *str++;
