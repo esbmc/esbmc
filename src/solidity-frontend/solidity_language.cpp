@@ -160,6 +160,6 @@ std::string solidity_languaget::temp_c_file()
   // This function populates the temp file so that Clang has a compilation job.
   // Clang needs a job to convert the intrinsics.
   std::string content =
-    R"(int main() { return 0; } )" + SolidityTemplate::sol_library;
+    SolidityTemplate::sol_library + R"(int main() { return 0; })";
   return content;
 }
