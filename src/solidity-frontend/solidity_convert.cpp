@@ -341,43 +341,33 @@ bool solidity_convertert::get_var_decl(
       return true;
 
     // 2. move it to a function.
-    if (current_functionDecl)
-    {
-      // trace:
-      //        get_function_definition =>
-      //        get_block => get_statement =>
-      //        get_var_decl_stmt => get_var_decl
-      //
-      // Beside, it should always have an initial value, otherwise:
-      // "Uninitialized mapping. Mappings cannot be created dynamically, you have to assign them from a state variable."
-      new_expr = dump;
-      return false;
-    }
-    else
-    {
-      // assume it's not inside a funciton, then move it to the ctor
-      std::string contract_name;
-      if (get_current_contract_name(ast_node, contract_name))
-        return true;
-      if (contract_name.empty())
-        return true;
-      // add an implict ctor if it's not declared explictly
-      if (add_implicit_constructor())
-        return true;
-      if (
-        context.find_symbol(
-          "sol:@C@" + contract_name + "@F@" + contract_name + "#") == nullptr)
-        return true;
-      symbolt &ctor = *context.find_symbol(
-        "sol:@C@" + contract_name + "@F@" + contract_name + "#");
 
-      // map_init_int(&m)
-      ctor.value.operands().push_back(dump.op1());
+    // Mappings cannot be created dynamically
+    // which means it should not be declared inside a function
+    assert(!current_functionDecl);
 
-      // map_int_t m
-      new_expr = dump.op0().op0();
-      return false;
-    }
+    // move it to the ctor
+    std::string contract_name;
+    if (get_current_contract_name(ast_node, contract_name))
+      return true;
+    if (contract_name.empty())
+      return true;
+    // add an implict ctor if it's not declared explictly
+    if (add_implicit_constructor())
+      return true;
+    if (
+      context.find_symbol(
+        "sol:@C@" + contract_name + "@F@" + contract_name + "#") == nullptr)
+      return true;
+    symbolt &ctor = *context.find_symbol(
+      "sol:@C@" + contract_name + "@F@" + contract_name + "#");
+
+    // map_init_int(&m)
+    ctor.value.operands().push_back(dump.op1());
+
+    // map_int_t m
+    new_expr = dump.op0().op0();
+    return false;
   }
   else
   {
@@ -2205,7 +2195,7 @@ bool solidity_convertert::get_expr(
       if (get_mapping_value_type(t, _val))
         return true;
       std::string func_name = "map_get_" + _val;
-      std::string func_id = "c:temp_sol.c@F@map_get_" + _val;
+      std::string func_id = "c:@F@map_get_" + _val;
 
       if (context.find_symbol(func_id) == nullptr)
         return true;
@@ -3415,7 +3405,7 @@ bool solidity_convertert::get_sol_builtin_ref(
 
   if (expr["nodeType"].get<std::string>() == "FunctionCall")
   {
-    //  e.g. gasleft() <=> c:@gasleft
+    //  e.g. gasleft() <=> c:@F@gasleft
     if (expr["expression"]["nodeType"].get<std::string>() != "Identifier")
       // this means it's not a builtin funciton
       return true;
@@ -4312,7 +4302,7 @@ bool solidity_convertert::get_mapping_definition(
   // get init
   // e.g. map_init_int(&m);
   std::string func_name = "map_init_" + _val;
-  std::string func_id = "c:temp_sol.c@F@map_init_" + _val;
+  std::string func_id = "c:@F@map_init_" + _val;
 
   side_effect_expr_function_callt call_expr;
   locationt l;

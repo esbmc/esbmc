@@ -35,7 +35,7 @@ typedef unsigned _ExtInt(160) address_t;
 // the value of these variables need to be set to rand afterwards
 const std::string sol_msg = R"(
 uint256_t msg_data;
-address_t msg_address;
+address_t msg_sender;
 __uint32_t msg_sig;
 uint256_t msg_value;
 )";
@@ -113,19 +113,13 @@ const std::string sol_funcs =
 
 /* https://github.com/rxi/map */
 const std::string sol_mapping = R"(
-#ifndef MAP_H
-#define MAP_H
-typedef _ExtInt(256) int256_t;
-typedef unsigned _ExtInt(256) uint256_t;
-typedef unsigned _ExtInt(160) address_t;
-
 struct map_node_t;
 typedef struct map_node_t map_node_t;
 
-static int zero_int = 0;
-static unsigned int zero_uint = 0;
-static bool zero_bool = false;
-static char *zero_string = "0";
+int zero_int;
+unsigned int zero_uint;
+bool zero_bool;
+char *zero_string;
 
 typedef struct
 {
@@ -179,74 +173,78 @@ typedef struct map_bool_t
 } map_bool_t;
 
 /// Init
-static void map_init_int(map_int_t *m)
+void map_init_int(map_int_t *m)
 {
 	memset(m, 0, sizeof(*(m)));
 }
 
-static void map_init_uint(map_uint_t *m)
+void map_init_uint(map_uint_t *m)
 {
 	memset(m, 0, sizeof(*(m)));
 }
 
-static void map_init_string(map_str_t *m)
+void map_init_string(map_str_t *m)
 {
 	memset(m, 0, sizeof(*(m)));
 }
 
-static void map_init_bool(map_bool_t *m)
+void map_init_bool(map_bool_t *m)
 {
 	memset(m, 0, sizeof(*(m)));
 }
 
 /// Set
-static void map_set_int(map_int_t *m, const char *key, const int value)
+void map_set_int(map_int_t *m, const char *key, const int value)
 {
 	(m)->tmp = value;
 	map_set_(&(m)->base, key, &(m)->tmp, sizeof((m)->tmp));
 }
-static void map_set_uint(map_uint_t *m, const char *key, const unsigned int value)
+void map_set_uint(map_uint_t *m, const char *key, const unsigned int value)
 {
 	(m)->tmp = value;
 	map_set_(&(m)->base, key, &(m)->tmp, sizeof((m)->tmp));
 }
-static void map_set_string(map_str_t *m, const char *key, char *value)
+void map_set_string(map_str_t *m, const char *key, char *value)
 {
 	(m)->tmp = value;
 	map_set_(&(m)->base, key, &(m)->tmp, sizeof((m)->tmp));
 }
-static void map_set_bool(map_bool_t *m, const char *key, const bool value)
+void map_set_bool(map_bool_t *m, const char *key, const bool value)
 {
 	(m)->tmp = value;
 	map_set_(&(m)->base, key, &(m)->tmp, sizeof((m)->tmp));
 }
 
 /// Get
-static int *map_get_int(map_int_t *m, const char *key)
+int *map_get_int(map_int_t *m, const char *key)
 {
 	(m)->ref = map_get_(&(m)->base, key);
+	zero_int = 0;
 	return (m)->ref != NULL ? (m)->ref : &zero_int;
 }
-static unsigned int *map_get_uint(map_uint_t *m, const char *key)
+unsigned int *map_get_uint(map_uint_t *m, const char *key)
 {
 	(m)->ref = map_get_(&(m)->base, key);
+	zero_uint = 0;
 	return (m)->ref != NULL ? (m)->ref : &zero_uint;
 }
-static char **map_get_string(map_str_t *m, const char *key)
+char **map_get_string(map_str_t *m, const char *key)
 {
 	(m)->ref = map_get_(&(m)->base, key);
+	zero_string = "0";
 	return (m)->ref != NULL ? (m)->ref : &zero_string;
 }
-static bool *map_get_bool(map_bool_t *m, const char *key)
+bool *map_get_bool(map_bool_t *m, const char *key)
 {
 	(m)->ref = map_get_(&(m)->base, key);
+	zero_bool = false;
 	return (m)->ref != NULL ? (m)->ref : &zero_bool;
 }
 
 /// General
-static unsigned map_hash(const char *str)
+unsigned map_hash(const char *str)
 {
-	unsigned long long hash = 5381;
+	unsigned hash = 5381;
 	while (*str)
 	{
 		hash = ((hash << 5) + hash) ^ *str++;
@@ -254,7 +252,7 @@ static unsigned map_hash(const char *str)
 	return hash;
 }
 
-static map_node_t *map_newnode(const char *key, void *value, int vsize)
+map_node_t *map_newnode(const char *key, void *value, int vsize)
 {
 	map_node_t *node;
 	int ksize = strlen(key) + 1;
@@ -269,19 +267,19 @@ static map_node_t *map_newnode(const char *key, void *value, int vsize)
 	return node;
 }
 
-static int map_bucketidx(map_base_t *m, unsigned hash)
+int map_bucketidx(map_base_t *m, unsigned hash)
 {
 	return hash & (m->nbuckets - 1);
 }
 
-static void map_addnode(map_base_t *m, map_node_t *node)
+void map_addnode(map_base_t *m, map_node_t *node)
 {
 	int n = map_bucketidx(m, node->hash);
 	node->next = m->buckets[n];
 	m->buckets[n] = node;
 }
 
-static int map_resize(map_base_t *m, int nbuckets)
+int map_resize(map_base_t *m, int nbuckets)
 {
 	map_node_t *nodes, *node, *next;
 	map_node_t **buckets;
@@ -324,7 +322,7 @@ static int map_resize(map_base_t *m, int nbuckets)
 	return 0;
 }
 
-static map_node_t **map_getref(map_base_t *m, const char *key)
+map_node_t **map_getref(map_base_t *m, const char *key)
 {
 	unsigned hash = map_hash(key);
 	map_node_t **next;
@@ -390,7 +388,6 @@ void map_remove_(map_base_t *m, const char *key)
 		m->nnodes--;
 	}
 }
-#endif
 )";
 
 /// external library
@@ -417,7 +414,7 @@ char *i256toa(int256_t value)
 	// we might have memory leak as we will not free this afterwards
 	char *str = (char *)malloc(256 * sizeof(char));
 	int256_t base = (int256_t)10;
-	unsigned int count = 0;
+	unsigned short count = 0;
 	bool flag = true;
 
 	if (value < (int256_t)0 && base == (int256_t)10)
@@ -426,10 +423,10 @@ char *i256toa(int256_t value)
 	}
 	if (value == (int256_t)0)
 	{
-		str[0] = '0';
+		str = "0";
 		return str;
 	}
-	while (value != (int256_t)0 && count < 256)
+	while (value != (int256_t)0)
 	{
 		int256_t dig = value % base;
 		value -= dig;
@@ -454,8 +451,8 @@ char *i256toa(int256_t value)
 char *u256toa(uint256_t value)
 {
 	char *str = (char *)malloc(256 * sizeof(char));
-	uint256_t base = (int256_t)10;
-	unsigned int count = 0;
+	uint256_t base = (uint256_t)10;
+	unsigned short count = 0;
 	bool flag = true;
 	if (value < (uint256_t)0 && base == (uint256_t)10)
 	{
@@ -463,10 +460,10 @@ char *u256toa(uint256_t value)
 	}
 	if (value == (uint256_t)0)
 	{
-		str[0] = '0';
+		str = "0";
 		return str;
 	}
-	while (value != (uint256_t)0 && count < 256)
+	while (value != (uint256_t)0)
 	{
 		uint256_t dig = value % base;
 		value -= dig;
