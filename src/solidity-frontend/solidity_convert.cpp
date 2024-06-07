@@ -2215,6 +2215,7 @@ bool solidity_convertert::get_expr(
 
       // add label
       new_expr.type().set("#sol_type", "MAP_GET");
+      new_expr.type().set("#sol_mapping_type", _val);
       break;
     }
 
@@ -2561,76 +2562,121 @@ bool solidity_convertert::get_binary_operator_expr(
   // here, we further identidy it as map_get or map_set
   std::string op_str = SolidityGrammar::expression_to_str(opcode);
   if (
-    lhs.type().get("sol_type").as_string() == "MAP_GET" &&
+    lhs.type().get("#sol_type").as_string() == "MAP_GET" &&
     op_str.find("Assign") != std::string::npos)
   {
-    // handling (compound) assignment
-    // e.g  map_get(map, x) = 1 ==> map_set(map, x, 1);
-    // map[x] +=1 ==> map[x] = map[x] + 1 ==> map_set(map,x,*map_get(x,1))
+    // get map_set function call
+    assert(!lhs.type().get("#sol_mapping_type").empty());
+    std::string _val = lhs.type().get("#sol_mapping_type").as_string();
+    std::string func_name = "map_set_" + _val;
+    std::string func_id = "c:@F@map_set_" + _val;
 
-    // if(opcode == SolidityGrammar::ExpressionT::BO_Assign)
-    // {
+    if (context.find_symbol(func_id) == nullptr)
+      return true;
+    const auto &sym = *context.find_symbol(func_id);
 
-    // }
+    locationt l;
+    get_location_from_decl(expr, l);
 
-    // switch (opcode)
-    // {
-    // case SolidityGrammar::ExpressionT::BO_Assign:
-    // {
-    // }
-    // case SolidityGrammar::ExpressionT::BO_AddAssign:
-    // {
-    //   new_expr = side_effect_exprt("assign+");
-    //   break;
-    // }
-    // case SolidityGrammar::ExpressionT::BO_SubAssign:
-    // {
-    //   new_expr = side_effect_exprt("assign-");
-    //   break;
-    // }
-    // case SolidityGrammar::ExpressionT::BO_MulAssign:
-    // {
-    //   new_expr = side_effect_exprt("assign*");
-    //   break;
-    // }
-    // case SolidityGrammar::ExpressionT::BO_DivAssign:
-    // {
-    //   new_expr = side_effect_exprt("assign_div");
-    //   break;
-    // }
-    // case SolidityGrammar::ExpressionT::BO_RemAssign:
-    // {
-    //   new_expr = side_effect_exprt("assign_mod");
-    //   break;
-    // }
-    // case SolidityGrammar::ExpressionT::BO_ShlAssign:
-    // {
-    //   new_expr = side_effect_exprt("assign_shl");
-    //   break;
-    // }
-    // case SolidityGrammar::ExpressionT::BO_ShrAssign:
-    // {
-    //   new_expr = side_effect_exprt("assign_shr");
-    //   break;
-    // }
-    // case SolidityGrammar::ExpressionT::BO_AndAssign:
-    // {
-    //   new_expr = side_effect_exprt("assign_bitand");
-    //   break;
-    // }
-    // case SolidityGrammar::ExpressionT::BO_XorAssign:
-    // {
-    //   new_expr = side_effect_exprt("assign_bitxor");
-    //   break;
-    // }
-    // case SolidityGrammar::ExpressionT::BO_OrAssign:
-    // {
-    //   new_expr = side_effect_exprt("assign_bitor");
-    //   break;
-    // }
-    // }
+    side_effect_expr_function_callt call_expr;
+    get_library_function_call(func_name, func_id, sym.type, l, call_expr);
 
-    abort();
+    // extract args from map_get
+    exprt fst_arg = lhs.op0().op1().op0();
+    exprt snd_arg = lhs.op0().op1().op1();
+
+    if (opcode == SolidityGrammar::ExpressionT::BO_Assign)
+    {
+      // handling non-compound assignment
+      // e.g  *map_get(map, x) = 1 ==> map_set(map, x, 1);
+      call_expr.arguments().push_back(fst_arg); // map
+      call_expr.arguments().push_back(snd_arg); // x
+      call_expr.arguments().push_back(rhs);     // 1
+
+      new_expr = call_expr;
+    }
+    else
+    {
+      // handling compound assignment
+      // e.g. map[x] +=1 ==> map[x] = map[x] + 1 ==> map_set(map,x,(*map_get(x,1) + 1))
+
+      exprt sub_expr;
+      switch (opcode)
+      {
+      case SolidityGrammar::ExpressionT::BO_AddAssign:
+      {
+        sub_expr = exprt("+", t);
+        break;
+      }
+      case SolidityGrammar::ExpressionT::BO_SubAssign:
+      {
+        sub_expr = exprt("-", t);
+        break;
+      }
+      case SolidityGrammar::ExpressionT::BO_MulAssign:
+      {
+        sub_expr = exprt("*", t);
+        break;
+      }
+      case SolidityGrammar::ExpressionT::BO_DivAssign:
+      {
+        sub_expr = exprt("/", t);
+        break;
+      }
+      case SolidityGrammar::ExpressionT::BO_RemAssign:
+      {
+        sub_expr = exprt("mod", t);
+        break;
+      }
+      case SolidityGrammar::ExpressionT::BO_ShlAssign:
+      {
+        sub_expr = exprt("shl", t);
+        break;
+      }
+      case SolidityGrammar::ExpressionT::BO_ShrAssign:
+      {
+        sub_expr = exprt("shr", t);
+        break;
+      }
+      case SolidityGrammar::ExpressionT::BO_AndAssign:
+      {
+        sub_expr = exprt("bitand", t);
+        break;
+      }
+      case SolidityGrammar::ExpressionT::BO_XorAssign:
+      {
+        sub_expr = exprt("bitxor", t);
+        break;
+      }
+      case SolidityGrammar::ExpressionT::BO_OrAssign:
+      {
+        sub_expr = exprt("bitor", t);
+        break;
+      }
+      default:
+      {
+        log_error(
+          "Unexpected side-effect, got {}",
+          SolidityGrammar::expression_to_str(opcode));
+        return true;
+      }
+      }
+
+      // gen_type_cast
+      if (common_type.id() != "")
+      {
+        convert_type_expr(ns, lhs, common_type);
+        convert_type_expr(ns, rhs, common_type);
+      }
+
+      sub_expr.copy_to_operands(lhs, rhs);
+      call_expr.arguments().push_back(fst_arg);  // map
+      call_expr.arguments().push_back(snd_arg);  // x
+      call_expr.arguments().push_back(sub_expr); // (*map_get(x,1) + 1)
+
+      new_expr = call_expr;
+    }
+
     current_BinOp_type.pop();
     return false;
   }
