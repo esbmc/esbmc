@@ -2115,51 +2115,6 @@ bool solidity_convertert::get_expr(
     if (get_type_description(expr["typeDescriptions"], t))
       return true;
 
-    // for BYTESN, where the index access is read-only
-    if (is_bytes_type(t))
-    {
-      // this means we are dealing with bytes type
-      // jump out if it's "bytes[]" or "bytesN[]" or "func()[]"
-      SolidityGrammar::TypeNameT tname = SolidityGrammar::get_type_name_t(
-        expr["baseExpression"]["typeDescriptions"]);
-      if (
-        !(tname == SolidityGrammar::ArrayTypeName ||
-          tname == SolidityGrammar::DynArrayTypeName) &&
-        expr["baseExpression"].contains("referencedDeclaration"))
-      {
-        // e.g.
-        //    bytes3 x = 0x123456
-        //    bytes1 y = x[0]; // 0x12
-        //    bytes1 z = x[1]; // 0x34
-        // which equals to
-        //    bytes1 z = bswap(x) >> 1 & 0xff
-        // for bytes32 x = "test";
-        //    x[10] == 0x00 due to the padding
-        exprt src_val, src_offset, bswap, bexpr;
-
-        const nlohmann::json &decl = find_decl_ref(
-          expr["baseExpression"]["referencedDeclaration"].get<int>());
-        if (decl == empty_json)
-          return true;
-
-        if (get_var_decl_ref(decl, src_val))
-          return true;
-
-        if (get_expr(
-              expr["indexExpression"], expr["typeDescriptions"], src_offset))
-          return true;
-
-        // extract particular byte based on idx (offset)
-        bexpr = exprt("byte_extract_big_endian", src_val.type());
-        bexpr.copy_to_operands(src_val, src_offset);
-
-        solidity_gen_typecast(ns, bexpr, unsignedbv_typet(8));
-
-        new_expr = bexpr;
-        break;
-      }
-    }
-
     // for MAPPING
     typet base_t;
     if (get_type_description(
@@ -2219,8 +2174,52 @@ bool solidity_convertert::get_expr(
       break;
     }
 
-    // 2. get the decl ref of the array
+    // for BYTESN, where the index access is read-only
+    if (is_bytes_type(t))
+    {
+      // this means we are dealing with bytes type
+      // jump out if it's "bytes[]" or "bytesN[]" or "func()[]"
+      SolidityGrammar::TypeNameT tname = SolidityGrammar::get_type_name_t(
+        expr["baseExpression"]["typeDescriptions"]);
+      if (
+        !(tname == SolidityGrammar::ArrayTypeName ||
+          tname == SolidityGrammar::DynArrayTypeName) &&
+        expr["baseExpression"].contains("referencedDeclaration"))
+      {
+        // e.g.
+        //    bytes3 x = 0x123456
+        //    bytes1 y = x[0]; // 0x12
+        //    bytes1 z = x[1]; // 0x34
+        // which equals to
+        //    bytes1 z = bswap(x) >> 1 & 0xff
+        // for bytes32 x = "test";
+        //    x[10] == 0x00 due to the padding
+        exprt src_val, src_offset, bswap, bexpr;
 
+        const nlohmann::json &decl = find_decl_ref(
+          expr["baseExpression"]["referencedDeclaration"].get<int>());
+        if (decl == empty_json)
+          return true;
+
+        if (get_var_decl_ref(decl, src_val))
+          return true;
+
+        if (get_expr(
+              expr["indexExpression"], expr["typeDescriptions"], src_offset))
+          return true;
+
+        // extract particular byte based on idx (offset)
+        bexpr = exprt("byte_extract_big_endian", src_val.type());
+        bexpr.copy_to_operands(src_val, src_offset);
+
+        solidity_gen_typecast(ns, bexpr, unsignedbv_typet(8));
+
+        new_expr = bexpr;
+        break;
+      }
+    }
+
+    // 2. get the decl ref of the array
     exprt array;
 
     // 2.1 arr[n] / x.arr[n]
@@ -2241,7 +2240,10 @@ bool solidity_convertert::get_expr(
 
     // 3. get the position index
     exprt pos;
-    if (get_expr(expr["indexExpression"], expr["typeDescriptions"], pos))
+    if (get_expr(
+          expr["indexExpression"],
+          expr["indexExpression"]["typeDescriptions"],
+          pos))
       return true;
 
     // BYTES:  func_ret_bytes()[]
