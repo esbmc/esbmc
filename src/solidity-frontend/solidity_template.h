@@ -158,12 +158,12 @@ typedef struct map_uint_t
 	unsigned int tmp;
 } map_uint_t;
 
-typedef struct map_str_t
+typedef struct map_string_t
 {
 	map_base_t base;
 	char **ref;
 	char *tmp;
-} map_str_t;
+} map_string_t;
 
 typedef struct map_bool_t
 {
@@ -183,7 +183,7 @@ void map_init_uint(map_uint_t *m)
 	memset(m, 0, sizeof(*(m)));
 }
 
-void map_init_string(map_str_t *m)
+void map_init_string(map_string_t *m)
 {
 	memset(m, 0, sizeof(*(m)));
 }
@@ -204,7 +204,7 @@ void map_set_uint(map_uint_t *m, const char *key, const unsigned int value)
 	(m)->tmp = value;
 	map_set_(&(m)->base, key, &(m)->tmp, sizeof((m)->tmp));
 }
-void map_set_string(map_str_t *m, const char *key, char *value)
+void map_set_string(map_string_t *m, const char *key, char *value)
 {
 	(m)->tmp = value;
 	map_set_(&(m)->base, key, &(m)->tmp, sizeof((m)->tmp));
@@ -228,7 +228,7 @@ unsigned int *map_get_uint(map_uint_t *m, const char *key)
 	zero_uint = 0;
 	return (m)->ref != NULL ? (m)->ref : &zero_uint;
 }
-char **map_get_string(map_str_t *m, const char *key)
+char **map_get_string(map_string_t *m, const char *key)
 {
 	(m)->ref = map_get_(&(m)->base, key);
 	zero_string = "0";

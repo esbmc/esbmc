@@ -4211,11 +4211,11 @@ bool solidity_convertert::get_mapping_value_type(
   else if (sol_type.compare(0, 3, "INT") == 0 || sol_type == "ENUM")
     _val = "int";
   else if (
-    sol_type.compare(0, 4, "UINT") == 0 || sol_type.compare(0, 5, "BYTES") ||
-    sol_type == "ADDRESS")
+    sol_type.compare(0, 4, "UINT") == 0 ||
+    sol_type.compare(0, 5, "BYTES") == 0 || sol_type == "ADDRESS")
     _val = "uint";
   else if (sol_type == "STRING")
-    _val = "str";
+    _val = "string";
   else if (sol_type == "BOOL")
     _val = "bool";
   else if (
