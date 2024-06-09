@@ -245,10 +245,12 @@ bool *map_get_bool(map_bool_t *m, const char *key)
 unsigned map_hash(const char *str)
 {
 	unsigned hash = 5381;
-	while (*str)
-	{
-		hash = ((hash << 5) + hash) ^ *str++;
-	}
+	// avoid derefencing null ptr
+	if (str != NULL)
+		while (*str)
+		{
+			hash = ((hash << 5) + hash) ^ *str++;
+		}
 	return hash;
 }
 
