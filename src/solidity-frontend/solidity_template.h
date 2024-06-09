@@ -425,7 +425,7 @@ char *i256toa(int256_t value)
 	}
 	if (value == (int256_t)0)
 	{
-		str = "0";
+		str[count] = '\0';
 		return str;
 	}
 	while (value != (int256_t)0)
@@ -462,7 +462,7 @@ char *u256toa(uint256_t value)
 	}
 	if (value == (uint256_t)0)
 	{
-		str = "0";
+		str[count] = '\0';
 		return str;
 	}
 	while (value != (uint256_t)0)
