@@ -2240,10 +2240,7 @@ bool solidity_convertert::get_expr(
 
     // 3. get the position index
     exprt pos;
-    if (get_expr(
-          expr["indexExpression"],
-          expr["indexExpression"]["typeDescriptions"],
-          pos))
+    if (get_expr(expr["indexExpression"], expr["typeDescriptions"], pos))
       return true;
 
     // BYTES:  func_ret_bytes()[]
