@@ -2662,11 +2662,8 @@ bool solidity_convertert::get_binary_operator_expr(
       }
 
       // gen_type_cast
-      if (common_type.id() != "")
-      {
-        convert_type_expr(ns, lhs, common_type);
-        convert_type_expr(ns, rhs, common_type);
-      }
+      convert_type_expr(ns, lhs, t);
+      convert_type_expr(ns, rhs, t);
 
       sub_expr.copy_to_operands(lhs, rhs);
       call_expr.arguments().push_back(fst_arg);  // map
