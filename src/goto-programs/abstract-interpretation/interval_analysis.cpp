@@ -110,7 +110,9 @@ inline void instrument_symbol_constraints(
   goto_functiont &goto_function)
 {
   std::vector<expr2tc> symbol_constraints;
-  const interval_domaint &d = interval_analysis[it];
+  try 
+  {
+    const interval_domaint &d = interval_analysis[it];
   for (const auto &symbol_expr : symbols)
   {
     expr2tc tmp = d.make_expression(symbol_expr);
@@ -127,6 +129,13 @@ inline void instrument_symbol_constraints(
     instruction.function = it->function;
     goto_function.body.insert_swap(it++, instruction);
   }
+
+  }
+  catch(...)
+  {
+    
+  }
+  
 }
 
 /**
