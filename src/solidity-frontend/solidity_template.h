@@ -121,24 +121,24 @@ unsigned int zero_uint;
 bool zero_bool;
 char *zero_string;
 
-typedef struct
+typedef struct map_base_t
 {
 	map_node_t **buckets;
 	unsigned nbuckets, nnodes;
 } map_base_t;
 
-typedef struct
+typedef struct map_iter_t
 {
 	unsigned bucketidx;
 	map_node_t *node;
 } map_iter_t;
 
-struct map_node_t
+typedef struct map_node_t
 {
 	unsigned hash;
 	void *value;
 	map_node_t *next;
-};
+} map_node_t;
 
 void *map_get_(map_base_t *m, const char *key);
 int map_set_(map_base_t *m, const char *key, void *value, int vsize);
@@ -361,21 +361,17 @@ int map_set_(map_base_t *m, const char *key, void *value, int vsize)
 	}
 	node = map_newnode(key, value, vsize);
 	if (node == NULL)
-		goto fail;
+		return -1;
 	if (m->nnodes >= m->nbuckets)
 	{
 		n = (m->nbuckets > 0) ? (m->nbuckets << 1) : 1;
 		err = map_resize(m, n);
 		if (err)
-			goto fail;
+			return -1;
 	}
 	map_addnode(m, node);
 	m->nnodes++;
 	return 0;
-fail:
-	if (node)
-		free(node);
-	return -1;
 }
 
 void map_remove_(map_base_t *m, const char *key)
