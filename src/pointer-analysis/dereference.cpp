@@ -1051,6 +1051,8 @@ void dereferencet::build_reference_rec(
       uni_type.members[selected_member_index],
       value,
       uni_type.member_names[selected_member_index]);
+
+    /* type didn't change, it's not an array, so recursion is safe */
     build_reference_rec(value, offset, type, guard, mode, alignment);
     break;
   }
@@ -1534,7 +1536,10 @@ void dereferencet::construct_from_multidir_array(
   expr2tc mod = modulus2tc(offset->type, offset, subtype_sz);
   simplify(mod);
 
-  build_reference_rec(value, mod, type, guard, mode, alignment);
+  if (is_array_type(type))
+    construct_from_array(value, mod, type, guard, mode, alignment);
+  else
+    build_reference_rec(value, mod, type, guard, mode, alignment);
 }
 
 void dereferencet::construct_struct_ref_from_const_offset_array(
