@@ -31,7 +31,8 @@ protected:
 
   // conversion functions
   // get decl in rule contract-body-element
-  bool get_decl(const nlohmann::json &ast_node, exprt &new_expr);
+  bool get_non_function_decl(const nlohmann::json &ast_node, exprt &new_expr);
+  bool get_function_decl(const nlohmann::json &ast_node);
   // get decl in rule variable-declaration-statement, e.g. function local declaration
   bool get_var_decl_stmt(const nlohmann::json &ast_node, exprt &new_expr);
   bool get_var_decl(const nlohmann::json &ast_node, exprt &new_expr);
@@ -134,6 +135,7 @@ protected:
   bool get_mapping_definition(const nlohmann::json &ast_node, exprt &new_expr);
   bool get_mapping_value_type(const typet &val_type, std::string &_val);
   bool get_mapping_key(const nlohmann::json &ast_node, exprt &new_expr);
+  bool move_mapping_to_ctor();
 
   // line number and locations
   void
@@ -250,6 +252,10 @@ protected:
   // dealing with the implicit constructor call
   // this is to avoid reference to stack memory associated with local variable returned
   const nlohmann::json empty_json;
+
+  // this block stores the map_init function calls and
+  // will merge to the constructor later on
+  code_blockt map_init_block;
 
   // --function
   std::string tgt_func;

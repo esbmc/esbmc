@@ -67,13 +67,17 @@ std::string solidity_languaget::get_temp_file()
 
 bool solidity_languaget::parse(const std::string &path)
 {
+  /// For c
   // prepare temp file
   temp_path = get_temp_file();
 
   // get AST nodes of ESBMC intrinsics and the dummy main
   // populate ASTs inherited from parent class
   auto sol_lang = std::exchange(config.language, {language_idt::C, ""});
-  clang_c_languaget::parse(temp_path);
+  if (clang_c_languaget::parse(temp_path))
+    return true;
+
+  /// For solidity
   config.language = std::move(sol_lang);
 
   // Process AST json file
@@ -108,7 +112,7 @@ bool solidity_languaget::parse(const std::string &path)
 
 bool solidity_languaget::convert_intrinsics(contextt &context)
 {
-  clang_c_convertert converter(context, ASTs, "C++");
+  clang_c_convertert converter(context, ASTs, "C");
   if (converter.convert())
     return true;
 

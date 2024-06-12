@@ -165,6 +165,10 @@ bool solidity_convertert::convert()
       // add implicit construcor function
       if (add_implicit_constructor())
         return true;
+
+      // handling mapping_init
+      if (move_mapping_to_ctor())
+        return true;
     }
 
     // reset
@@ -173,6 +177,7 @@ bool solidity_convertert::convert()
     current_functionDecl = nullptr;
     current_forStmt = nullptr;
     global_scope_id = 0;
+    map_init_block.clear();
   }
 
   // Do Verification
@@ -210,8 +215,15 @@ bool solidity_convertert::convert_ast_nodes(const nlohmann::json &contract_def)
       index,
       node_name.c_str(),
       node_type.c_str());
+
+    // we first handle non-functional declaration,
+    // due to that the vars/struct might be mentioned in the constructor
     exprt dummy_decl;
-    if (get_decl(ast_node, dummy_decl))
+    if (get_non_function_decl(ast_node, dummy_decl))
+      return true;
+
+    // then we handle function definition
+    if (get_function_decl(ast_node))
       return true;
   }
 
@@ -221,7 +233,7 @@ bool solidity_convertert::convert_ast_nodes(const nlohmann::json &contract_def)
   return false;
 }
 
-bool solidity_convertert::get_decl(
+bool solidity_convertert::get_non_function_decl(
   const nlohmann::json &ast_node,
   exprt &new_expr)
 {
@@ -240,14 +252,11 @@ bool solidity_convertert::get_decl(
   {
     return get_var_decl(ast_node, new_expr); // rule state-variable-declaration
   }
-  case SolidityGrammar::ContractBodyElementT::FunctionDef:
-  {
-    return get_function_definition(ast_node); // rule function-definition
-  }
   case SolidityGrammar::ContractBodyElementT::StructDef:
   {
     return get_struct_class(ast_node); // rule enum-definition
   }
+  case SolidityGrammar::ContractBodyElementT::FunctionDef:
   case SolidityGrammar::ContractBodyElementT::EnumDef:
   case SolidityGrammar::ContractBodyElementT::ErrorDef:
   {
@@ -259,7 +268,37 @@ bool solidity_convertert::get_decl(
     return true;
   }
   }
+  return false;
+}
 
+bool solidity_convertert::get_function_decl(const nlohmann::json &ast_node)
+{
+  if (!ast_node.contains("nodeType"))
+    assert(!"Missing \'nodeType\' filed in ast_node");
+
+  SolidityGrammar::ContractBodyElementT type =
+    SolidityGrammar::get_contract_body_element_t(ast_node);
+
+  // based on each element as in Solidty grammar "rule contract-body-element"
+  switch (type)
+  {
+  case SolidityGrammar::ContractBodyElementT::FunctionDef:
+  {
+    return get_function_definition(ast_node); // rule function-definition
+  }
+  case SolidityGrammar::ContractBodyElementT::VarDecl:
+  case SolidityGrammar::ContractBodyElementT::StructDef:
+  case SolidityGrammar::ContractBodyElementT::EnumDef:
+  case SolidityGrammar::ContractBodyElementT::ErrorDef:
+  {
+    break;
+  }
+  default:
+  {
+    log_error("Unimplemented type in rule contract-body-element");
+    return true;
+  }
+  }
   return false;
 }
 
@@ -341,29 +380,12 @@ bool solidity_convertert::get_var_decl(
       return true;
 
     // 2. move it to a function.
-
     // Mappings cannot be created dynamically
     // which means it should not be declared inside a function
     assert(!current_functionDecl);
 
-    // move it to the ctor
-    std::string contract_name;
-    if (get_current_contract_name(ast_node, contract_name))
-      return true;
-    if (contract_name.empty())
-      return true;
-    // add an implict ctor if it's not declared explictly
-    if (add_implicit_constructor())
-      return true;
-    if (
-      context.find_symbol(
-        "sol:@C@" + contract_name + "@F@" + contract_name + "#") == nullptr)
-      return true;
-    symbolt &ctor = *context.find_symbol(
-      "sol:@C@" + contract_name + "@F@" + contract_name + "#");
-
     // map_init_int(&m)
-    ctor.value.operands().push_back(dump.op1());
+    map_init_block.operands().push_back(dump.op1());
 
     // map_int_t m
     new_expr = dump.op0().op0();
@@ -790,6 +812,8 @@ bool solidity_convertert::add_implicit_constructor()
   name = current_contractName;
 
   id = get_ctor_call_id(current_contractName);
+
+  // ctor is already in the symbol table
   if (context.find_symbol(id) != nullptr)
     return false;
 
@@ -1497,8 +1521,8 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
      * !Unless you are 100% sure it will not be a constant
      * 
      * This function is called throught two paths:
-     * 1. get_decl => get_var_decl => get_expr
-     * 2. get_decl => get_function_definition => get_statement => get_expr
+     * 1. get_non_function_decl => get_var_decl => get_expr
+     * 2. get_non_function_decl => get_function_definition => get_statement => get_expr
      * 
      * @param expr The expression that is to be converted to the IR
      * @param literal_type Type information ast to create the the literal
@@ -4367,6 +4391,33 @@ bool solidity_convertert::get_mapping_definition(
   _block.move_to_operands(mapping_ins, call_expr);
 
   new_expr = _block;
+  return false;
+}
+
+bool solidity_convertert::move_mapping_to_ctor()
+{
+  // no mapping
+  if (map_init_block.is_empty())
+    return false;
+
+  // get ctor
+  std::string ctor_id = get_ctor_call_id(current_contractName);
+  if (context.find_symbol(ctor_id) == nullptr)
+    return true;
+  symbolt &ctor = *context.find_symbol(ctor_id);
+
+  if (ctor.value.is_empty())
+  {
+    // empty or implicit ctor
+    ctor.value = map_init_block;
+  }
+  else
+  {
+    // move to operands (insert in the front)
+    for (auto &op : ctor.value.operands())
+      map_init_block.operands().push_back(op);
+    ctor.value.operands() = map_init_block.operands();
+  }
   return false;
 }
 
