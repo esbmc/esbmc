@@ -1527,10 +1527,7 @@ void dereferencet::construct_from_multidir_array(
   expr2tc mod = modulus2tc(offset->type, offset, subtype_sz);
   simplify(mod);
 
-  if (is_array_type(type))
-    construct_from_array(value, mod, type, guard, mode, alignment);
-  else
-    build_reference_rec(value, mod, type, guard, mode, alignment);
+  construct_from_array(value, mod, type, guard, mode, alignment);
 }
 
 void dereferencet::construct_struct_ref_from_const_offset_array(
