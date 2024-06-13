@@ -451,11 +451,6 @@ char *u256toa(uint256_t value)
 	char *str = (char *)malloc(256 * sizeof(char));
 	uint256_t base = (uint256_t)10;
 	unsigned short count = 0;
-	bool flag = true;
-	if (value < (uint256_t)0 && base == (uint256_t)10)
-	{
-		flag = false;
-	}
 	if (value == (uint256_t)0)
 	{
 		str[count] = '\0';
@@ -466,16 +461,7 @@ char *u256toa(uint256_t value)
 		uint256_t dig = value % base;
 		value -= dig;
 		value /= base;
-
-		if (flag == true)
-			str[count] = get_char(dig);
-		else
-			str[count] = get_char(-dig);
-		count++;
-	}
-	if (flag == false)
-	{
-		str[count] = '-';
+		str[count] = get_char(dig);
 		count++;
 	}
 	str[count] = 0;

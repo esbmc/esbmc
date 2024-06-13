@@ -4263,10 +4263,12 @@ bool solidity_convertert::get_mapping_key(
   //TODO: not including contract since the contract type is not supported
   if (
     idx.type().id() == irept::id_signedbv ||
-    idx.type().id() == irept::id_unsignedbv)
+    idx.type().id() == irept::id_unsignedbv ||
+    idx.type().id() == irept::id_bool)
   {
     // int, enum
     // uint, address, bytes
+    // bool
 
     // convert int/uint to string via i256toa/u256toa
     std::string func_id, func_name;
@@ -4302,6 +4304,12 @@ bool solidity_convertert::get_mapping_key(
   {
     // string
     new_expr = idx;
+  }
+  else
+  {
+    log_error(
+      "Unexpected mapping index type, got {}", idx.type().id().as_string());
+    return true;
   }
   return false;
 }
