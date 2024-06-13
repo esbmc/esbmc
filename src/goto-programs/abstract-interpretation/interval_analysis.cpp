@@ -319,7 +319,8 @@ void interval_analysis(
   {
     Forall_goto_functions (f_it, goto_functions)
     {
-      instrument_intervals(interval_analysis, f_it->second, instrument_mode);
+      if(f_it->first.as_string() != "__ESBMC_main")
+        instrument_intervals(interval_analysis, f_it->second, instrument_mode);
     }
   }
 
