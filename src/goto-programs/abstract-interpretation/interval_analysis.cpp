@@ -324,7 +324,6 @@ void interval_analysis(
         instrument_intervals(interval_analysis, f_it->second, instrument_mode);
     }
   }
-  #endif
   goto_functions.update();
 
   fine_timet algorithm_stop = current_time();
@@ -332,4 +331,5 @@ void interval_analysis(
     "Interval Analysis time: {}s",
     time2string(algorithm_stop - algorithm_start));
   
+  #endif
 }
