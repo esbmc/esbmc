@@ -275,7 +275,7 @@ void interval_analysis(
   const optionst &options,
   const INTERVAL_INSTRUMENTATION_MODE instrument_mode)
 {
- #if 0
+ 
   fine_timet algorithm_start = current_time();
   // TODO: add options for instrumentation mode
   ait<interval_domaint> interval_analysis;
@@ -303,11 +303,11 @@ void interval_analysis(
 
   Forall_goto_functions (f_it, goto_functions)
   {
-    //optimize_function(interval_analysis, f_it->second);
+    optimize_function(interval_analysis, f_it->second);
   }
 
   
-
+  #if 0
   if (instrument_mode == INTERVAL_INSTRUMENTATION_MODE::LOOP_MODE)
   {
     Forall_goto_functions (f_it, goto_functions)
@@ -324,12 +324,12 @@ void interval_analysis(
         instrument_intervals(interval_analysis, f_it->second, instrument_mode);
     }
   }
-
+  #endif
   goto_functions.update();
 
   fine_timet algorithm_stop = current_time();
   log_status(
     "Interval Analysis time: {}s",
     time2string(algorithm_stop - algorithm_start));
-    #endif
+  
 }
