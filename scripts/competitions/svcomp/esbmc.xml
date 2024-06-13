@@ -9,8 +9,28 @@
   <option name="-s">kinduction</option>
 
 <rundefinition name="SV-COMP23_unreach-call">
+  <tasks name="ReachSafety-Arrays">
+    <includesfile>$HOME/sv-benchmarks/c/ReachSafety-Arrays.set</includesfile>
+    <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
+  </tasks>
+  <tasks name="ReachSafety-BitVectors">
+    <includesfile>$HOME/sv-benchmarks/c/ReachSafety-BitVectors.set</includesfile>
+    <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
+  </tasks>
+  <tasks name="ReachSafety-ControlFlow">
+    <includesfile>$HOME/sv-benchmarks/c/ReachSafety-ControlFlow.set</includesfile>
+    <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
+  </tasks>
   <tasks name="ReachSafety-ECA">
     <includesfile>$HOME/sv-benchmarks/c/ReachSafety-ECA.set</includesfile>
+    <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
+  </tasks>
+  <tasks name="ReachSafety-Floats">
+    <includesfile>$HOME/sv-benchmarks/c/ReachSafety-Floats.set</includesfile>
+    <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
+  </tasks>
+  <tasks name="ReachSafety-Heap">
+    <includesfile>$HOME/sv-benchmarks/c/ReachSafety-Heap.set</includesfile>
     <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
   </tasks>
   <tasks name="ReachSafety-Loops">
@@ -21,8 +41,16 @@
     <includesfile>$HOME/sv-benchmarks/c/ReachSafety-ProductLines.set</includesfile>
     <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
   </tasks>
+  <tasks name="ReachSafety-Recursive">
+    <includesfile>$HOME/sv-benchmarks/c/ReachSafety-Recursive.set</includesfile>
+    <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
+  </tasks>
   <tasks name="ReachSafety-Sequentialized">
     <includesfile>$HOME/sv-benchmarks/c/ReachSafety-Sequentialized.set</includesfile>
+    <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
+  </tasks>
+  <tasks name="ReachSafety-XCSP">
+    <includesfile>$HOME/sv-benchmarks/c/ReachSafety-XCSP.set</includesfile>
     <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
   </tasks>
   <tasks name="ReachSafety-Combinations">
@@ -34,6 +62,19 @@
     <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
   </tasks>
 
+  <tasks name="ConcurrencySafety-Main">
+    <includesfile>$HOME/sv-benchmarks/c/ConcurrencySafety-Main.set</includesfile>
+    <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
+  </tasks>
+
+  <tasks name="SoftwareSystems-AWS-C-Common-ReachSafety">
+    <includesfile>$HOME/sv-benchmarks/c/SoftwareSystems-AWS-C-Common-ReachSafety.set</includesfile>
+    <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
+  </tasks>
+  <tasks name="SoftwareSystems-BusyBox-ReachSafety">
+    <includesfile>$HOME/sv-benchmarks/c/SoftwareSystems-BusyBox-ReachSafety.set</includesfile>
+    <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
+  </tasks>
   <tasks name="SoftwareSystems-DeviceDriversLinux64-ReachSafety">
     <includesfile>$HOME/sv-benchmarks/c/SoftwareSystems-DeviceDriversLinux64-ReachSafety.set</includesfile>
     <excludesfile>$HOME/sv-benchmarks/c/SoftwareSystems-DeviceDriversLinux64Large-ReachSafety.set</excludesfile>
@@ -41,6 +82,10 @@
   </tasks>
   <tasks name="SoftwareSystems-DeviceDriversLinux64Large-ReachSafety">
     <includesfile>$HOME/sv-benchmarks/c/SoftwareSystems-DeviceDriversLinux64Large-ReachSafety.set</includesfile>
+    <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
+  </tasks>
+  <tasks name="SoftwareSystems-uthash-ReachSafety">
+    <includesfile>$HOME/sv-benchmarks/c/SoftwareSystems-uthash-ReachSafety.set</includesfile>
     <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
   </tasks>
 </rundefinition>
