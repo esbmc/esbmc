@@ -121,6 +121,23 @@ typet python_converter::get_typet(const std::string &ast_type, size_t type_size)
         size_type()));
     return t;
   }
+  if (ast_type == "str")
+  {
+    if (type_size == 1)
+    {
+      typet type = char_type();
+      type.set("#cpp_type", "char");
+      return type;
+    }
+
+    typet t = array_typet(
+      char_type(),
+      constant_exprt(
+        integer2binary(BigInt(type_size), bv_width(size_type())),
+        integer2string(BigInt(type_size)),
+        size_type()));
+    return t;
+  }
   if (is_class(ast_type, ast_json))
     return symbol_typet("tag-" + ast_type);
   return empty_typet();
@@ -796,21 +813,39 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       expr = gen_boolean(value.get<bool>());
     else if (value.is_number_float())
       convert_float_literal(value.dump(), expr);
+    else if (value.is_string() && value.get<std::string>().size() == 1)
+    {
+      const std::string &str = value.get<std::string>();
+      typet t = get_typet("str", str.size());
+      expr = from_integer(str[0], t);
+    }
     else if (value.is_string() && current_element_type.is_array())
     {
+      std::vector<uint8_t> string_literal;
       expr = gen_zero(current_element_type);
-      typet &t = current_element_type.subtype();
 
-      const std::string &str = element["encoded_bytes"].get<std::string>();
-      std::vector<uint8_t> decoded = base64_decode(str);
+      // Handling "bytes" literals
+      if (element.contains("encoded_bytes"))
+      {
+        string_literal =
+          base64_decode(element["encoded_bytes"].get<std::string>());
+      }
+      else // Handling string literals
+      {
+        const std::string &value = element["value"].get<std::string>();
+        string_literal =
+          std::vector<uint8_t>(std::begin(value), std::end(value));
+      }
+
+      typet &char_type = current_element_type.subtype();
 
       unsigned int i = 0;
-      for (uint8_t &ch : decoded)
+      for (uint8_t &ch : string_literal)
       {
         exprt char_value = constant_exprt(
-          integer2binary(BigInt(ch), bv_width(t)),
+          integer2binary(BigInt(ch), bv_width(char_type)),
           integer2string(BigInt(ch)),
-          t);
+          char_type);
         expr.operands().at(i++) = char_value;
       }
     }
