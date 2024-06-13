@@ -259,6 +259,7 @@ bool solidity_convertert::get_non_function_decl(
   case SolidityGrammar::ContractBodyElementT::FunctionDef:
   case SolidityGrammar::ContractBodyElementT::EnumDef:
   case SolidityGrammar::ContractBodyElementT::ErrorDef:
+  case SolidityGrammar::ContractBodyElementT::EventDef:
   {
     break;
   }
@@ -290,6 +291,7 @@ bool solidity_convertert::get_function_decl(const nlohmann::json &ast_node)
   case SolidityGrammar::ContractBodyElementT::StructDef:
   case SolidityGrammar::ContractBodyElementT::EnumDef:
   case SolidityGrammar::ContractBodyElementT::ErrorDef:
+  case SolidityGrammar::ContractBodyElementT::EventDef:
   {
     break;
   }
@@ -611,6 +613,7 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &struct_def)
     case SolidityGrammar::ContractBodyElementT::StructDef:
     case SolidityGrammar::ContractBodyElementT::EnumDef:
     case SolidityGrammar::ContractBodyElementT::ErrorDef:
+    case SolidityGrammar::ContractBodyElementT::EventDef:
     {
       // skip
       break;
@@ -1481,6 +1484,11 @@ bool solidity_convertert::get_statement(
     if (!stmt.contains("errorCall") || get_expr(stmt["errorCall"], new_expr))
       return true;
 
+    break;
+  }
+  case SolidityGrammar::StatementT::EmitStatement:
+  {
+    new_expr = code_skipt();
     break;
   }
   case SolidityGrammar::StatementT::StatementTError:
