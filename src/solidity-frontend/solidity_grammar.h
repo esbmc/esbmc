@@ -17,6 +17,7 @@ enum ContractBodyElementT
   StructDef,   // rule struct-definition
   EnumDef,     // rule enum-definition
   ErrorDef,    // rule error-definition
+  EventDef,    // rule event-definition
   ContractBodyElementTError
 };
 ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element);
@@ -240,7 +241,8 @@ enum StatementT
   StatementTError,
   ContinueStatement, // rule continue
   BreakStatement,    // rule break
-  RevertStatement    // rule revert
+  RevertStatement,   // rule revert
+  EmitStatement      // rule emit
 };
 StatementT get_statement_t(const nlohmann::json &stmt);
 const char *statement_to_str(StatementT type);
