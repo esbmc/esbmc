@@ -448,8 +448,7 @@ void goto_coveraget::add_cond_cov_rhs_assert(
   make_not(a_guard);
 
   // 5. modified insert_assert
-  std::string idf =
-    from_expr(ns, "", a_guard);
+  std::string idf = from_expr(ns, "", a_guard);
   insert_assert(goto_program, it, guard, idf);
 
   // 6. reversal
@@ -660,13 +659,26 @@ void goto_coveraget::collect_operators(
   }
 }
 
+/*
+  This function does:
+  1. convert single guard to a equal expression, e.g. if(true) ==> if(1==1)
+  2. add implied parentheses in boolean expression
+*/
 exprt goto_coveraget::handle_single_guard(exprt &expr, bool &flag)
 {
+  log_status("00{}", expr);
   if (
     expr.operands().size() == 1 ||
-    (expr.operands().size() == 0 && expr.id() == exprt::constant))
+    (expr.operands().size() != 0 && expr.id() == exprt::constant))
   {
-    // e.g. if(!(a++)) => if(!(a++==1) == 1) if(true) ==> if(1==1)
+    // extend single guard to a equal expression
+    // e.g.
+    //    if (true) => if (true == true)
+    //    if (a)    => if (a == true)
+    //    if (!(a++)) => if(!(a++==1) == 1)
+    // op.size == 1: a++, (bool)a
+    //! we assume when expr.id() == exprt::symbol, there is always a upper node expr::typecast
+    //! while constant do not have typecast.
     bool flg0 = false;
     Forall_operands (it, expr)
     {
@@ -675,12 +687,12 @@ exprt goto_coveraget::handle_single_guard(exprt &expr, bool &flag)
     flag = true;
     if (!flg0)
     {
-      exprt not_eq_expr = exprt("=", bool_type());
+      exprt eq_expr = exprt("=", bool_type());
       expr2tc tmp = gen_true_expr();
       exprt new_expr = migrate_expr_back(tmp);
-      not_eq_expr.operands().emplace_back(expr);
-      not_eq_expr.operands().emplace_back(new_expr);
-      return not_eq_expr;
+      eq_expr.operands().emplace_back(expr);
+      eq_expr.operands().emplace_back(new_expr);
+      return eq_expr;
     }
     else
       return expr;
