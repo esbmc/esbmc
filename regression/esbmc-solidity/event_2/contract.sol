@@ -1,11 +1,11 @@
-// SPDX-License-Identifier: GPL-3.0 
+// SPDX-License-Identifier: GPL-3.0
 pragma solidity >=0.5.0;
 
 contract Test {
-    event Deposit(address indexed _from, bytes32 indexed _id, uint8 _value);
+    event Deposit(address indexed _from, bytes32 indexed _id, int8 _value); // delete
     function deposit(bytes32 _id) public payable {
-        uint8 x = 255;
-        uint8 y = 2;
-        emit Deposit(msg.sender, _id, x+y);
+        int8 x = 127;
+        int8 y = 0;
+        emit Deposit(msg.sender, _id, x / y); // skip()
     }
 }

@@ -686,6 +686,11 @@ bool solidity_convertert::get_noncontract_defition(nlohmann::json &ast_node)
     if (get_error_definition(ast_node))
       return true;
   }
+  else if (node_type == "EventDefinition")
+  {
+    if (get_function_definition(ast_node))
+      return true;
+  }
 
   return false;
 }
@@ -847,6 +852,7 @@ bool solidity_convertert::get_function_definition(
   // 1. Check fd.isImplicit() --- skipped since it's not applicable to Solidity
   // 2. Check fd.isDefined() and fd.isThisDeclarationADefinition()
   if (
+    ast_node.contains("implemented") &&
     !ast_node
       ["implemented"]) // TODO: for interface function, it's just a definition. Add something like "&& isInterface_JustDefinition()"
     return false;
@@ -864,8 +870,10 @@ bool solidity_convertert::get_function_definition(
   bool is_ctor = false;
   if (
     (*current_functionDecl)["name"].get<std::string>() == "" &&
+    (*current_functionDecl).contains("kind") &&
     (*current_functionDecl)["kind"] == "constructor")
   {
+    // for construcotr
     is_ctor = true;
     if (get_current_contract_name(*current_functionDecl, current_functionName))
       return true;
@@ -875,8 +883,13 @@ bool solidity_convertert::get_function_definition(
 
   // 4. Return type
   code_typet type;
-  if (get_type_description(ast_node["returnParameters"], type.return_type()))
-    return true;
+  if (ast_node.contains("returnParameters"))
+  {
+    if (get_type_description(ast_node["returnParameters"], type.return_type()))
+      return true;
+  }
+  else
+    type.return_type() = empty_typet();
 
   // special handling for tuple:
   // construct a tuple type and a tuple instance
@@ -965,6 +978,14 @@ bool solidity_convertert::get_function_definition(
       return true;
 
     added_symbol.value = body_exprt;
+  }
+  else
+  {
+    //! assume it's event-definition
+    // construct an empty body
+    assert(ast_node["nodeType"] == "EventDefinition");
+    code_blockt _block;
+    added_symbol.value = _block;
   }
 
   //assert(!"done - finished all expr stmt in function?");
@@ -1488,7 +1509,11 @@ bool solidity_convertert::get_statement(
   }
   case SolidityGrammar::StatementT::EmitStatement:
   {
-    new_expr = code_skipt();
+    // treat emit as function call
+    assert(stmt.contains("eventCall"));
+    if (get_expr(stmt["eventCall"], new_expr))
+      return true;
+
     break;
   }
   case SolidityGrammar::StatementT::StatementTError:
@@ -1633,6 +1658,12 @@ bool solidity_convertert::get_expr(
           if (context.find_symbol(id) == nullptr)
             return true;
           new_expr = symbol_expr(*context.find_symbol(id));
+        }
+        else if (decl["nodeType"] == "EventDefinition")
+        {
+          // treat event as a function definition
+          if (get_func_decl_ref(decl, new_expr))
+            return true;
         }
         else
         {
@@ -3361,6 +3392,7 @@ bool solidity_convertert::get_var_decl_ref(
           type)) // "type-name" as in state-variable-declaration
       return true;
 
+    // variable with no value
     new_expr = exprt("symbol", type);
     new_expr.identifier(id);
     new_expr.cmt_lvalue(true);
@@ -3377,15 +3409,23 @@ bool solidity_convertert::get_func_decl_ref(
 {
   // Function to configure new_expr that has a +ve referenced id, referring to a function declaration
   // This allow to get func symbol before we add it to the symbol table
-  assert(decl["nodeType"] == "FunctionDefinition");
+  assert(
+    decl["nodeType"] == "FunctionDefinition" ||
+    decl["nodeType"] == "EventDefinition");
   std::string name, id;
   get_function_definition_name(decl, name, id);
+
+  if (context.find_symbol(id) != nullptr)
+  {
+    new_expr = symbol_expr(*context.find_symbol(id));
+    return false;
+  }
 
   typet type;
   if (get_func_decl_ref_type(
         decl, type)) // "type-name" as in state-variable-declaration
     return true;
-
+  //! function with no value i.e function body
   new_expr = exprt("symbol", type);
   new_expr.identifier(id);
   new_expr.cmt_lvalue(true);
@@ -4869,14 +4909,16 @@ void solidity_convertert::get_function_definition_name(
   //  - For function name, just use the ast_node["name"]
   // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
   std::string contract_name;
-  assert(ast_node.contains("scope"));
+
   if (get_current_contract_name(ast_node, contract_name))
   {
     log_error("Internal error when obtaining the contract name. Aborting...");
     abort();
   }
 
-  if (ast_node["kind"].get<std::string>() == "constructor")
+  if (
+    ast_node.contains("kind") &&
+    ast_node["kind"].get<std::string>() == "constructor")
   {
     name = contract_name;
     // constructors cannot be overridden, primarily because they don't have names
@@ -5161,6 +5203,13 @@ solidity_convertert::find_decl_ref(int ref_decl_id, std::string &contract_name)
     const nlohmann::json &current_func = *current_functionDecl;
     if (!current_func.contains("body"))
     {
+      //! assume it's an event-definition
+      if (
+        current_func.contains("nodeType") &&
+        current_func["nodeType"] == "EventDefinition")
+      {
+        return current_func;
+      }
       log_error(
         "Unable to find the corresponding local variable decl. Current "
         "function "

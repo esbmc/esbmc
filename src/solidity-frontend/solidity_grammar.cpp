@@ -1026,7 +1026,9 @@ const char *var_decl_statement_to_str(VarDeclStmtT type)
 // auxiliary type to convert function call
 FunctionDeclRefT get_func_decl_ref_t(const nlohmann::json &decl)
 {
-  assert(decl["nodeType"] == "FunctionDefinition");
+  assert(
+    decl["nodeType"] == "FunctionDefinition" ||
+    decl["nodeType"] == "EventDefinition");
   if (
     decl["parameters"]["parameters"].size() == 0 ||
     decl["kind"] == "constructor")
