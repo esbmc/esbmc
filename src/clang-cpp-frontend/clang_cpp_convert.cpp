@@ -618,6 +618,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     exprt implicit_object;
     if (get_expr(*member_call.getImplicitObjectArgument(), implicit_object))
       return true;
+    implicit_object.set("#implicit_object", true);
 
     call.arguments().push_back(implicit_object);
 

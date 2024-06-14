@@ -283,6 +283,30 @@ void clang_cpp_adjust::adjust_function_call_arguments(
   side_effect_expr_function_callt &expr)
 {
   clang_c_adjust::adjust_function_call_arguments(expr);
+  if (!expr.arguments().empty())
+  {
+    exprt &first_arg = expr.arguments().front();
+    if (first_arg.get_bool("#implicit_object"))
+    {
+      adjust_member_function_this_argument(first_arg);
+    }
+  }
+}
+
+void clang_cpp_adjust::adjust_member_function_this_argument(exprt &expr)
+{
+  // Consider the following C++ code:
+  // Foo f = Foo();
+  // f.bar();
+  // Where `bar` is a member function of `Foo`, i.e., has an implicit `this` pointer.
+  // The above code will be rewritten as `bar(f)` initially.
+  // We need to adjust the function call to `bar(&f)` if `f` is not a pointer.
+  if (expr.type().id() != "pointer")
+  {
+    assert(expr.type().is_struct());
+    address_of_exprt new_expr = address_of_exprt(expr);
+    expr.swap(new_expr);
+  }
 }
 
 void clang_cpp_adjust::align_se_function_call_return_type(
