@@ -656,14 +656,33 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     call.function() = callee_expr;
     call.type() = type;
 
+    const clang::Decl *funcDecl = operator_call.getCalleeDecl();
+
+    bool has_this_pointer = false;
+    // Check if the function has a `this` pointer
+    if (
+      const clang::CXXMethodDecl *methodDecl =
+        llvm::dyn_cast<clang::CXXMethodDecl>(funcDecl))
+    {
+      if (methodDecl->isInstance())
+      {
+        has_this_pointer = true;
+      }
+    }
+
     // Do args
+    size_t arg_index = 0;
     for (const clang::Expr *arg : operator_call.arguments())
     {
       exprt single_arg;
       if (get_expr(*arg, single_arg))
         return true;
 
+      if (arg_index == 0 && has_this_pointer)
+        single_arg.set("#implicit_object", true);
+
       call.arguments().push_back(single_arg);
+      arg_index++;
     }
 
     new_expr = call;
