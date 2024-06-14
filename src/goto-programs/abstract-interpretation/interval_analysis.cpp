@@ -302,7 +302,7 @@ void interval_analysis(
 
   Forall_goto_functions (f_it, goto_functions)
   {
-    optimize_function(interval_analysis, f_it->second);
+    //optimize_function(interval_analysis, f_it->second);
   }
 
   
