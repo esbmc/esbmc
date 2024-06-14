@@ -22,6 +22,6 @@ void interval_analysis(
   const namespacet &ns,
   const optionst &options,
   const INTERVAL_INSTRUMENTATION_MODE instrument_mode =
-    INTERVAL_INSTRUMENTATION_MODE::ALL_INSTRUCTIONS_LOCAL);
+    INTERVAL_INSTRUMENTATION_MODE::GUARD_INSTRUCTIONS_FULL);
 
 #endif // CPROVER_ANALYSES_INTERVAL_ANALYSIS_H
