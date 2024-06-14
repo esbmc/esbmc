@@ -982,8 +982,15 @@ bool solidity_convertert::get_function_definition(
   else
   {
     //! assume it's event-definition
+    if (ast_node["nodeType"] != "EventDefinition")
+    {
+      log_error(
+        "Expect nodeType=EventDefinition, got {}",
+        ast_node["nodeType"].get<std::string>());
+      return true;
+    }
+
     // construct an empty body
-    assert(ast_node["nodeType"] == "EventDefinition");
     code_blockt _block;
     added_symbol.value = _block;
   }
@@ -1510,7 +1517,11 @@ bool solidity_convertert::get_statement(
   case SolidityGrammar::StatementT::EmitStatement:
   {
     // treat emit as function call
-    assert(stmt.contains("eventCall"));
+    if (!stmt.contains("eventCall"))
+    {
+      log_error("Unexpected emit statement.");
+      return true;
+    }
     if (get_expr(stmt["eventCall"], new_expr))
       return true;
 
