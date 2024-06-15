@@ -34,6 +34,7 @@ private:
   exprt get_conditional_stm(const nlohmann::json &ast_node);
   function_id build_function_id(const nlohmann::json &element);
   exprt get_function_call(const nlohmann::json &ast_block);
+  exprt get_literal(const nlohmann::json &element);
   exprt get_block(const nlohmann::json &ast_block);
 
   const nlohmann::json
