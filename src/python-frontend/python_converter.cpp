@@ -782,6 +782,75 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   abort();
 }
 
+exprt python_converter::get_literal(const nlohmann::json &element)
+{
+  auto value = element["value"];
+
+  // integer literals
+  if (value.is_number_integer())
+    return from_integer(value.get<int>(), int_type());
+
+  // bool literals
+  if (value.is_boolean())
+    return gen_boolean(value.get<bool>());
+
+  // float literals
+  if (value.is_number_float())
+  {
+    exprt expr;
+    convert_float_literal(value.dump(), expr);
+    return expr;
+  }
+
+  // char literals
+  if (value.is_string() && value.get<std::string>().size() == 1)
+  {
+    const std::string &str = value.get<std::string>();
+    typet t = get_typet("str", str.size());
+    return from_integer(str[0], t);
+  }
+
+  // bytes/string literals
+  if (value.is_string() && current_element_type.is_array())
+  {
+    exprt expr = gen_zero(current_element_type);
+    std::vector<uint8_t> string_literal;
+
+    // "bytes" literals
+    if (element.contains("encoded_bytes"))
+    {
+      string_literal =
+        base64_decode(element["encoded_bytes"].get<std::string>());
+    }
+    else // string literals
+    {
+      const std::string &value = element["value"].get<std::string>();
+      string_literal = std::vector<uint8_t>(std::begin(value), std::end(value));
+    }
+
+    typet &char_type = current_element_type.subtype();
+
+    // initialize array
+    unsigned int i = 0;
+    for (uint8_t &ch : string_literal)
+    {
+      exprt char_value = constant_exprt(
+        integer2binary(BigInt(ch), bv_width(char_type)),
+        integer2string(BigInt(ch)),
+        char_type);
+      expr.operands().at(i++) = char_value;
+    }
+    return expr;
+  }
+
+  // Docstrings are ignored
+  if (value.get<std::string>()[0] == '\n')
+    return exprt();
+
+  log_error("Unsupported literal: {}\n", value.get<std::string>());
+  abort();
+}
+
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
   exprt expr;
@@ -806,49 +875,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   case ExpressionType::LITERAL:
   {
-    auto value = element["value"];
-    if (value.is_number_integer())
-      expr = from_integer(value.get<int>(), int_type());
-    else if (value.is_boolean())
-      expr = gen_boolean(value.get<bool>());
-    else if (value.is_number_float())
-      convert_float_literal(value.dump(), expr);
-    else if (value.is_string() && value.get<std::string>().size() == 1)
-    {
-      const std::string &str = value.get<std::string>();
-      typet t = get_typet("str", str.size());
-      expr = from_integer(str[0], t);
-    }
-    else if (value.is_string() && current_element_type.is_array())
-    {
-      std::vector<uint8_t> string_literal;
-      expr = gen_zero(current_element_type);
-
-      // Handling "bytes" literals
-      if (element.contains("encoded_bytes"))
-      {
-        string_literal =
-          base64_decode(element["encoded_bytes"].get<std::string>());
-      }
-      else // Handling string literals
-      {
-        const std::string &value = element["value"].get<std::string>();
-        string_literal =
-          std::vector<uint8_t>(std::begin(value), std::end(value));
-      }
-
-      typet &char_type = current_element_type.subtype();
-
-      unsigned int i = 0;
-      for (uint8_t &ch : string_literal)
-      {
-        exprt char_value = constant_exprt(
-          integer2binary(BigInt(ch), bv_width(char_type)),
-          integer2string(BigInt(ch)),
-          char_type);
-        expr.operands().at(i++) = char_value;
-      }
-    }
+    expr = get_literal(element);
     break;
   }
   case ExpressionType::VARIABLE_REF:
