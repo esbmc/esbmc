@@ -45,6 +45,7 @@ public:
 
   // condition cov
   void gen_cond_cov();
+  exprt gen_no_eq_expr(const exprt &lhs, const exprt &rhs);
   int get_total_instrument() const;
   int get_total_assert_instance() const;
   std::unordered_set<std::string> get_total_cond_assert() const;
@@ -57,7 +58,7 @@ protected:
   static void
   collect_operators(const exprt &expr, std::list<std::string> &operators);
   static void collect_atom_operands(const exprt &expr, std::set<exprt> &atoms);
-  exprt handle_single_guard(exprt &guard, bool &flag);
+  exprt handle_single_guard(exprt &guard);
   void add_cond_cov_init_assert(
     const exprt &expr,
     goto_programt &goto_program,

@@ -213,13 +213,12 @@ void goto_coveraget::gen_cond_cov()
           // preprocessing: if(true) ==> if(true == true)
           exprt guard = migrate_expr_back(it->guard);
 
-          bool dump = false;
-          guard = handle_single_guard(guard, dump);
+          guard = handle_single_guard(guard);
 
           // split the guard
           std::list<exprt> operands;
           std::list<std::string> operators;
-          dump = false;
+          bool dump = false;
           collect_operands(guard, operands, dump);
           collect_operators(guard, operators);
 
@@ -659,78 +658,70 @@ void goto_coveraget::collect_operators(
   }
 }
 
-/*
-  This function does:
-  1. convert single guard to a equal expression, e.g. if(true) ==> if(1==1)
-  2. add implied parentheses in boolean expression
-*/
-exprt goto_coveraget::handle_single_guard(exprt &expr, bool &flag)
+exprt goto_coveraget::gen_no_eq_expr(const exprt &lhs, const exprt &rhs)
 {
-  log_status("00{}", expr);
-  if (
-    expr.operands().size() == 1 ||
-    (expr.operands().size() != 0 && expr.id() == exprt::constant))
+  exprt not_eq_expr = exprt("notequal", bool_type());
+  exprt new_expr = false_exprt();
+  not_eq_expr.operands().emplace_back(lhs);
+  not_eq_expr.operands().emplace_back(rhs);
+  return not_eq_expr;
+}
+
+/*
+  This function convert single guard to a non_equal_to_false expression
+  e.g. if(true) ==> if(true!=false)
+*/
+exprt goto_coveraget::handle_single_guard(exprt &expr)
+{
+  if (expr.operands().size() == 0)
   {
-    // extend single guard to a equal expression
-    // e.g.
-    //    if (true) => if (true == true)
-    //    if (a)    => if (a == true)
-    //    if (!(a++)) => if(!(a++==1) == 1)
-    // op.size == 1: a++, (bool)a
-    //! we assume when expr.id() == exprt::symbol, there is always a upper node expr::typecast
-    //! while constant do not have typecast.
-    bool flg0 = false;
-    Forall_operands (it, expr)
+    if (expr.id() == exprt::constant)
     {
-      *it = handle_single_guard(*it, flg0);
+      //    if (true) => if (true != false)
+      //    if (a)    => if (a != false)
+      exprt false_expr = false_exprt();
+      return gen_no_eq_expr(expr, false_expr);
     }
-    flag = true;
-    if (!flg0)
+    // when expr.id() == exprt::symbol, there is always a upper node expr::typecast
+    // thus we add no_equal_false at upper level, i.e. (bool)x ==> (bool)x != false
+  }
+  else if (expr.operands().size() == 1)
+  {
+    // Unary operator or typecast
+    // e.g.
+    //    if (!(bool)(a++)) => if(!(bool)(a++) != false)
+    // note that we do not need to convert a++ to a++!=0
+
+    if (expr.id() == exprt::typecast)
     {
-      exprt eq_expr = exprt("=", bool_type());
-      expr2tc tmp = gen_true_expr();
-      exprt new_expr = migrate_expr_back(tmp);
-      eq_expr.operands().emplace_back(expr);
-      eq_expr.operands().emplace_back(new_expr);
-      return eq_expr;
+      exprt false_expr = false_exprt();
+      return gen_no_eq_expr(expr, false_expr);
     }
     else
-      return expr;
-  }
-
-  if (
-    (expr.id() == exprt::id_and || expr.id() == exprt::id_or) && flag == false)
-  {
-    Forall_operands (it, expr)
     {
-      bool flg0 = false;
-      *it = handle_single_guard(*it, flg0);
-      if (!flg0)
-      {
-        // e.g. (a+1) && (b+2 == 1) => (a+1 != 0) && (b+2 == 1)
-        exprt not_eq_expr = exprt("notequal", bool_type());
-        exprt new_expr = constant_exprt(
-          integer2binary(string2integer("0"), bv_width(int_type())),
-          "0",
-          int_type());
-        not_eq_expr.operands().emplace_back(*it);
-        not_eq_expr.operands().emplace_back(new_expr);
-        *it = not_eq_expr;
-      }
-    }
-    flag = true;
-  }
-
-  const auto &id = expr.id();
-  if (!(id == exprt::equality || id == exprt::notequal || id == exprt::i_lt ||
-        id == exprt::i_gt || id == exprt::i_le || id == exprt::i_ge))
-  {
-    Forall_operands (it, expr)
-    {
-      *it = handle_single_guard(*it, flag);
+      Forall_operands (it, expr)
+        *it = handle_single_guard(*it);
     }
   }
-  else
-    flag = true;
+  else if (expr.operands().size() == 2)
+  {
+    if (expr.id() == exprt::id_and || expr.id() == exprt::id_or)
+    {
+      // e.g. if(a && b) ==> if(a!=0 && b!=0)
+      Forall_operands (it, expr)
+        *it = handle_single_guard(*it);
+    }
+    // "there always a typecast bool beforehand"
+    // e.g. bool a[10]; if(a[1]) ==> if((bool)a[1])
+    // thus we do not need to handle other 2-opd expression here
+  }
+  else if (expr.operands().size() == 3)
+  {
+    // if(a ? b:c) ==> if (a!=0 ? b!=0 : c!=0)
+    Forall_operands (it, expr)
+      *it = handle_single_guard(*it);
+  }
+
+  // fall-through
   return expr;
 }
