@@ -682,8 +682,10 @@ exprt goto_coveraget::handle_single_guard(exprt &expr)
       exprt false_expr = false_exprt();
       return gen_no_eq_expr(expr, false_expr);
     }
-    // when expr.id() == exprt::symbol, there is always a upper node expr::typecast
-    // thus we add no_equal_false at upper level, i.e. (bool)x ==> (bool)x != false
+    else
+      // when expr.id() == exprt::symbol, there is always a upper node expr::typecast
+      // thus we add no_equal_false at upper level, i.e. (bool)x ==> (bool)x != false
+      return expr;
   }
   else if (expr.operands().size() == 1)
   {
@@ -701,6 +703,7 @@ exprt goto_coveraget::handle_single_guard(exprt &expr)
     {
       Forall_operands (it, expr)
         *it = handle_single_guard(*it);
+      return expr;
     }
   }
   else if (expr.operands().size() == 2)
@@ -714,14 +717,15 @@ exprt goto_coveraget::handle_single_guard(exprt &expr)
     // "there always a typecast bool beforehand"
     // e.g. bool a[10]; if(a[1]) ==> if((bool)a[1])
     // thus we do not need to handle other 2-opd expression here
+    return expr;
   }
   else if (expr.operands().size() == 3)
   {
     // if(a ? b:c) ==> if (a!=0 ? b!=0 : c!=0)
     Forall_operands (it, expr)
+    {
       *it = handle_single_guard(*it);
+    }
+    return expr;
   }
-
-  // fall-through
-  return expr;
 }
