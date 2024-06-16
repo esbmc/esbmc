@@ -212,7 +212,6 @@ void goto_coveraget::gen_cond_cov()
 
           // preprocessing: if(true) ==> if(true == true)
           exprt guard = migrate_expr_back(it->guard);
-
           guard = handle_single_guard(guard);
 
           // split the guard
@@ -499,16 +498,17 @@ void goto_coveraget::add_cond_cov_rhs_assert(
 }
 
 /*
-  - flag: if we have handled one
+  collect the operands splited by && and ||
+  - flag: indicated the (sub-)expression have beed handled or not
 */
 void goto_coveraget::collect_operands(
   const exprt &expr,
   std::list<exprt> &operands,
   bool &flag)
 {
-  const std::string &id = expr.id().as_string();
+  const irep_idt &id = expr.id();
 
-  if ((id == "and" || id == "or") && flag == false)
+  if ((id == irept::id_and || id == irept::id_or) && flag == false)
   {
     bool flg0 = false;
     collect_operands(expr.op0(), operands, flg0);
@@ -528,6 +528,9 @@ void goto_coveraget::collect_operands(
   }
 }
 
+/*
+  collect the conditions (i.e. atom operands) identified by the relational operators
+*/
 void goto_coveraget::collect_atom_operands(
   const exprt &expr,
   std::set<exprt> &atoms)
@@ -543,6 +546,9 @@ void goto_coveraget::collect_atom_operands(
   }
 }
 
+/*
+  collect the operators from the expression
+*/
 void goto_coveraget::collect_operators(
   const exprt &expr,
   std::list<std::string> &operators)
@@ -678,7 +684,6 @@ exprt goto_coveraget::handle_single_guard(exprt &expr)
     if (expr.id() == exprt::constant)
     {
       //    if (true) => if (true != false)
-      //    if (a)    => if (a != false)
       exprt false_expr = false_exprt();
       return gen_no_eq_expr(expr, false_expr);
     }
@@ -703,7 +708,6 @@ exprt goto_coveraget::handle_single_guard(exprt &expr)
     {
       Forall_operands (it, expr)
         *it = handle_single_guard(*it);
-      return expr;
     }
   }
   else if (expr.operands().size() == 2)
@@ -717,15 +721,14 @@ exprt goto_coveraget::handle_single_guard(exprt &expr)
     // "there always a typecast bool beforehand"
     // e.g. bool a[10]; if(a[1]) ==> if((bool)a[1])
     // thus we do not need to handle other 2-opd expression here
-    return expr;
   }
   else if (expr.operands().size() == 3)
   {
     // if(a ? b:c) ==> if (a!=0 ? b!=0 : c!=0)
     Forall_operands (it, expr)
-    {
       *it = handle_single_guard(*it);
-    }
-    return expr;
   }
+
+  // fall through
+  return expr;
 }

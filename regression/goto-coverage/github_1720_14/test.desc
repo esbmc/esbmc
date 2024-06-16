@@ -1,0 +1,6 @@
+CORE
+main.c
+--condition-coverage
+^Condition Properties - SATISFIED:  1
+^Condition Properties - UNSATISFIED:  5
+^VERIFICATION FAILED$
