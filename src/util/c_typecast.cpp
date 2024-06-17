@@ -616,8 +616,8 @@ void c_typecastt::implicit_typecast_followed(
     // to prevent anything that may surprise us.
 
     if (
-      ns.follow(dest_type.subtype()).id() ==
-      src_type.id()) // TODO: remove this condition
+      ns.follow(dest_type.subtype()).id() == src_type.id() &&
+      src_type != dest_type) // TODO: remove this condition
     {
       address_of_exprt addr(expr);
       addr.location() = expr.location();

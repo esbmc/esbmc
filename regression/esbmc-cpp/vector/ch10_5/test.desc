@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.cpp
 point.cpp circle.cpp cylinder.cpp shape.cpp --unwind 1 --no-unwinding-assertions  --depth 500 --timeout 900
 ^VERIFICATION SUCCESSFUL$
