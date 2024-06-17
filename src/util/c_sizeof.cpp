@@ -31,6 +31,6 @@ expr2tc c_sizeof(const type2tc &src, const namespacet &ns)
   // Array size simplification and so forth will have already occurred in
   // migration, but we might still run into a nondeterministically sized
   // array.
-  BigInt size = type_byte_size(t);
+  BigInt size = type_byte_size(t, &ns);
   return constant_int2tc(get_uint64_type(), size);
 }
