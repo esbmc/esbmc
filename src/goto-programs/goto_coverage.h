@@ -37,11 +37,12 @@ public:
     const expr2tc &guard,
     const std::string &idf);
 
-  // convert every assertion to an assert(0)
-  void make_asserts_false();
+  // replace every assertion to a specific guard
+  void
+  replace_all_asserts_to_guard(expr2tc guard, bool is_instrumentation = false);
 
   // convert every assertion to an assert(1)
-  void make_asserts_true();
+  void make_asserts_true(bool is_instrumentation);
 
   // condition cov
   void gen_cond_cov();
@@ -50,16 +51,11 @@ public:
   exprt gen_not_expr(const exprt &expr);
   int get_total_instrument() const;
   int get_total_assert_instance() const;
-  std::unordered_set<std::string> get_total_cond_assert() const;
+  std::set<std::pair<std::string, std::string>> get_total_cond_assert() const;
   std::string get_filename_from_path(std::string path);
 
 protected:
   // turn a OP b OP c into a list a, b, c
-  static void
-  collect_operands(const exprt &expr, std::list<exprt> &operands, bool &flag);
-  static void
-  collect_operators(const exprt &expr, std::list<std::string> &operators);
-  static void collect_atom_operands(const exprt &expr, std::set<exprt> &atoms);
   exprt handle_single_guard(exprt &guard);
   void add_cond_cov_assert(
     const exprt &top_ptr,

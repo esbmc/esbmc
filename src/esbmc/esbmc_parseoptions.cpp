@@ -1834,7 +1834,7 @@ bool esbmc_parseoptionst::process_goto_program(
       options.set_option("keep-verified-claims", false);
 
       goto_coveraget tmp(ns, goto_functions);
-      tmp.make_asserts_false();
+      tmp.replace_all_asserts_to_guard(gen_false_expr(), true);
     }
 
     if (
@@ -1847,22 +1847,23 @@ bool esbmc_parseoptionst::process_goto_program(
       options.set_option("multi-property", true);
       options.set_option("keep-verified-claims", false);
 
-      //TODO: 
+      //?:
       // if we do not want expressions like 'if(2 || 3)' get simplified to 'if(1||1)'
       // we need to enable the options below:
       //    options.set_option("no-simplify", true);
       //    options.set_option("no-propagation", true);
-      // however, this will affect the performance, so we do not it enabled by default 
+      // however, this will affect the performance, thus they are not enabled by default
 
-      goto_coveraget tmp(ns, goto_functions, cmdline.args[0]);
-      tmp.make_asserts_true();
+      std::string filename = cmdline.args[0];
+      goto_coveraget tmp(ns, goto_functions, filename);
+      tmp.replace_all_asserts_to_guard(gen_true_expr());
       tmp.gen_cond_cov();
     }
 
     if (options.get_bool_option("make-assert-false"))
     {
       goto_coveraget tmp(ns, goto_functions);
-      tmp.make_asserts_false();
+      tmp.replace_all_asserts_to_guard(gen_false_expr());
     }
 
     if (cmdline.isset("add-false-assert"))
