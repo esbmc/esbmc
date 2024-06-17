@@ -4482,7 +4482,7 @@ bool solidity_convertert::get_mapping_definition(
 
   // get address: &m
   exprt address_of = address_of_exprt(mapping_ins);
-  call_expr.arguments().push_back(mapping_ins);
+  call_expr.arguments().push_back(address_of);
 
   // get block
   code_blockt _block;
