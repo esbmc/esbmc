@@ -965,7 +965,7 @@ smt_convt::resultt bmct::multi_property_check(
     // thus we need to skip the irrelevant claims
     // when comparing 'total_cond_assert' and 'reached_claims'
     goto_coveraget tmp(ns, symex->goto_functions);
-    const std::unordered_set<std::string> &total_cond_assert =
+    const std::set<std::pair<std::string, std::string>> &total_cond_assert =
       tmp.get_total_cond_assert();
     size_t total_instance = total_cond_assert.size();
     size_t reached_instance = 0;
@@ -979,8 +979,11 @@ smt_convt::resultt bmct::multi_property_check(
 
     // reached claims:
     auto total_cond_assert_cpy = total_cond_assert;
-    for (const auto &claim : total_cond_assert)
+    for (const auto &claim_pair : total_cond_assert)
     {
+      std::string claim_msg = claim_pair.first;
+      std::string claim_loc = claim_pair.second;
+      std::string claim = claim_msg + "\t" + claim_loc;
       if (reached_claims.count(claim))
       {
         // show sat claims
@@ -996,21 +999,16 @@ smt_convt::resultt bmct::multi_property_check(
 
         // prevent double count
         reached_claims.erase(claim);
-        total_cond_assert_cpy.erase(claim);
+        total_cond_assert_cpy.erase(claim_pair);
 
         // reversal: obtain !ass
-        std::string r_claim;
-        std::string delimiter = "\t";
-        auto pos = claim.find(delimiter);
-        std::string claim_msg = claim.substr(0, pos);
-        std::string claim_loc = claim.substr(pos + 1);
         if (
           claim_msg[0] == '!' && claim_msg[1] == '(' && claim_msg.back() == ')')
           // e.g. !(a==1)
-          r_claim =
-            claim_msg.substr(2, claim_msg.length() - 3) + "\t" + claim_loc;
+          claim_msg = claim_msg.substr(2, claim_msg.length() - 3);
         else
-          r_claim = "!(" + claim_msg + ")" + "\t" + claim_loc;
+          claim_msg = "!(" + claim_msg + ")";
+        std::string r_claim = claim_msg + "\t" + claim_loc;
 
         if (reached_claims.count(r_claim))
         {
@@ -1029,7 +1027,9 @@ smt_convt::resultt bmct::multi_property_check(
         // e.g if( a ==0 && a == 0)
         // we only count a==0 and !(a==0) once
         reached_claims.erase(r_claim);
-        total_cond_assert_cpy.erase(r_claim);
+        std::pair<std::string, std::string> _pair =
+          std::make_pair(claim_msg, claim_loc);
+        total_cond_assert_cpy.erase(_pair);
       }
     }
 
@@ -1041,8 +1041,13 @@ smt_convt::resultt bmct::multi_property_check(
     if (cond_show_claims && short_circuit_instance > 0)
     {
       log_status("[Short Circuited Conditions]");
-      for (const auto &claim : total_cond_assert_cpy)
+      for (const auto &claim_pair : total_cond_assert_cpy)
+      {
+        std::string claim_msg = claim_pair.first;
+        std::string claim_loc = claim_pair.second;
+        std::string claim = claim_msg + "\t" + claim_loc;
         log_result("  {}", claim);
+      }
     }
 
     // show the number

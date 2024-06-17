@@ -8,7 +8,9 @@ std::string goto_coveraget::get_filename_from_path(std::string path)
   return path;
 }
 
-void goto_coveraget::make_asserts_false()
+void goto_coveraget::replace_all_asserts_to_guard(
+  expr2tc guard,
+  bool is_instrumentation)
 {
   log_progress("Converting all assertions to false...");
   Forall_goto_functions (f_it, goto_functions)
@@ -20,30 +22,11 @@ void goto_coveraget::make_asserts_false()
         const expr2tc old_guard = it->guard;
         if (it->is_assert())
         {
-          it->guard = gen_false_expr();
-          it->location.property("instrumented assertion");
-          it->location.comment(from_expr(ns, "", old_guard));
-          it->location.user_provided(true);
-        }
-      }
-    }
-}
-
-void goto_coveraget::make_asserts_true()
-{
-  log_progress("Converting all assertions to true...");
-  Forall_goto_functions (f_it, goto_functions)
-    if (f_it->second.body_available && f_it->first != "__ESBMC_main")
-    {
-      goto_programt &goto_program = f_it->second.body;
-      Forall_goto_program_instructions (it, goto_program)
-      {
-        const expr2tc old_guard = it->guard;
-        if (it->is_assert())
-        {
-          it->guard = gen_true_expr();
-          // not an instrumentation
-          it->location.property("assertion");
+          it->guard = guard;
+          if (is_instrumentation)
+            it->location.property("instrumented assertion");
+          else
+            it->location.property("assertion");
           it->location.comment(from_expr(ns, "", old_guard));
           it->location.user_provided(true);
         }
@@ -130,31 +113,16 @@ int goto_coveraget::get_total_instrument() const
 int goto_coveraget::get_total_assert_instance() const
 {
   // 1. execute goto uniwnd
-  int total_assert_instance = 0;
   bounded_loop_unroller unwind_loops;
   unwind_loops.run(goto_functions);
   // 2. calculate the number of assertion instance
-  forall_goto_functions (f_it, goto_functions)
-    if (f_it->second.body_available && f_it->first != "__ESBMC_main")
-    {
-      const goto_programt &goto_program = f_it->second.body;
-      forall_goto_program_instructions (it, goto_program)
-      {
-        if (
-          it->is_assert() &&
-          it->location.property().as_string() == "instrumented assertion" &&
-          it->location.user_provided() == true)
-          total_assert_instance++;
-      }
-    }
-  return total_assert_instance;
+  return get_total_instrument();
 }
 
-std::unordered_set<std::string> goto_coveraget::get_total_cond_assert() const
+std::set<std::pair<std::string, std::string>>
+goto_coveraget::get_total_cond_assert() const
 {
-  std::unordered_set<std::string> total_cond_assert = {};
-  std::string idf = "";
-
+  std::set<std::pair<std::string, std::string>> total_cond_assert = {};
   forall_goto_functions (f_it, goto_functions)
   {
     if (f_it->second.body_available && f_it->first != "__ESBMC_main")
@@ -167,9 +135,9 @@ std::unordered_set<std::string> goto_coveraget::get_total_cond_assert() const
           it->location.property().as_string() == "instrumented assertion" &&
           it->location.user_provided() == true)
         {
-          idf = it->location.comment().as_string() + "\t" +
-                it->location.as_string();
-          total_cond_assert.insert(idf);
+          std::pair<std::string, std::string> claim_pair = std::make_pair(
+            it->location.comment().as_string(), it->location.as_string());
+          total_cond_assert.insert(claim_pair);
         }
       }
     }
@@ -191,6 +159,15 @@ std::unordered_set<std::string> goto_coveraget::get_total_cond_assert() const
 */
 void goto_coveraget::gen_cond_cov()
 {
+  // we need to skip the conditions within the built-in library
+  // while kepping the file manually included by user
+  // this filter, however, is unsound.. E.g. if the src filename is the same as the biuilt in library name
+  std::unordered_set<std::string> location_pool = {};
+  // cmdline.arg[0]
+  location_pool.insert(get_filename_from_path(filename));
+  for (auto const &inc : config.ansi_c.include_files)
+    location_pool.insert(get_filename_from_path(inc));
+
   Forall_goto_functions (f_it, goto_functions)
     if (f_it->second.body_available && f_it->first != "__ESBMC_main")
     {
@@ -199,10 +176,11 @@ void goto_coveraget::gen_cond_cov()
       {
         const std::string cur_filename =
           get_filename_from_path(it->location.file().as_string());
-        filename = get_filename_from_path(filename);
+        if (location_pool.count(cur_filename) == 0)
+          continue;
 
         // e.g. IF !(a > 1) THEN GOTO 3
-        if (!is_true(it->guard) && it->is_goto() && filename == cur_filename)
+        if (!is_true(it->guard) && it->is_goto())
         {
           // e.g.
           //    GOTO 2;
