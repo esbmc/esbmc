@@ -46,6 +46,8 @@ public:
   // condition cov
   void gen_cond_cov();
   exprt gen_no_eq_expr(const exprt &lhs, const exprt &rhs);
+  exprt gen_and_expr(const exprt &lhs, const exprt &rhs);
+  exprt gen_not_expr(const exprt &expr);
   int get_total_instrument() const;
   int get_total_assert_instance() const;
   std::unordered_set<std::string> get_total_cond_assert() const;
@@ -59,18 +61,16 @@ protected:
   collect_operators(const exprt &expr, std::list<std::string> &operators);
   static void collect_atom_operands(const exprt &expr, std::set<exprt> &atoms);
   exprt handle_single_guard(exprt &guard);
-  void add_cond_cov_init_assert(
-    const exprt &expr,
+  void add_cond_cov_assert(
+    const exprt &top_ptr,
+    const exprt &pre_cond,
     goto_programt &goto_program,
-    goto_programt::targett &it);
-  void add_cond_cov_rhs_assert(
-    const irep_idt &op_tp,
-    exprt::operandst::iterator &top_ptr,
-    exprt::operandst::iterator &rhs_ptr,
-    const exprt::operandst::iterator &root_ptr,
-    const exprt &rhs,
+    goto_programt::instructiont::targett &it);
+  void gen_cond_cov_assert(
+    exprt top_ptr,
+    exprt pre_cond,
     goto_programt &goto_program,
-    goto_programt::targett &it);
+    goto_programt::instructiont::targett &it);
 
   namespacet ns;
   goto_functionst &goto_functions;
