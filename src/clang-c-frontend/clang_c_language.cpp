@@ -22,7 +22,8 @@ CC_DIAGNOSTIC_POP()
 
 languaget *new_clang_c_language()
 {
-  return new clang_c_languaget();
+  static clang_c_languaget cl;
+  return &cl;
 }
 
 clang_c_languaget::clang_c_languaget() = default;
@@ -303,15 +304,16 @@ bool clang_c_languaget::parse(const std::string &path)
   std::string intrinsics = internal_additions();
 
   // Generate ASTUnit and add to our vector
-  auto AST = buildASTs(intrinsics, new_compiler_args);
-
-  ASTs.push_back(std::move(AST));
+  auto newAST = buildASTs(intrinsics, new_compiler_args);
 
   // Use diagnostics to find errors, rather than the return code.
-  for (auto const &astunit : ASTs)
-    if (astunit->getDiagnostics().hasErrorOccurred())
-      return true;
+  if (newAST->getDiagnostics().hasErrorOccurred())
+    return true;
 
+  if (!AST)
+    AST = move(newAST);
+  else
+    mergeASTs(AST, newAST);
   return false;
 }
 
@@ -319,7 +321,7 @@ bool clang_c_languaget::typecheck(contextt &context, const std::string &module)
 {
   contextt new_context;
 
-  clang_c_convertert converter(new_context, ASTs, "C");
+  clang_c_convertert converter(new_context, AST, "C");
   if (converter.convert())
     return true;
 
@@ -335,8 +337,7 @@ bool clang_c_languaget::typecheck(contextt &context, const std::string &module)
 
 void clang_c_languaget::show_parse(std::ostream &)
 {
-  for (auto const &translation_unit : ASTs)
-    (*translation_unit).getASTContext().getTranslationUnitDecl()->dump();
+  AST->getASTContext().getTranslationUnitDecl()->dump();
 }
 
 bool clang_c_languaget::preprocess(const std::string &, std::ostream &)
