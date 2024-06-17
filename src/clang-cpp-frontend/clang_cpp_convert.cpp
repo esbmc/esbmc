@@ -965,6 +965,17 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  case clang::Stmt::CXXTypeidExprClass:
+  {
+    const clang::CXXTypeidExpr &cxxtid =
+      static_cast<const clang::CXXTypeidExpr &>(stmt);
+
+    if (get_expr(*cxxtid.getExprOperand(), new_expr))
+      return true;
+
+    break;
+  }
+
   default:
     if (clang_c_convertert::get_expr(stmt, new_expr))
       return true;
