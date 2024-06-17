@@ -1,5 +1,10 @@
 CORE
 main.c
---condition-coverage
-^Condition Coverage: 100%
+--condition-coverage-claims
+^Reached Conditions:  30
+^Short Circuited Conditions:  66
+^Total Conditions:  96
+^Condition Properties - SATISFIED:  30
+^Condition Properties - UNSATISFIED:  0
+^Condition Coverage: 31.25%
 ^VERIFICATION FAILED$

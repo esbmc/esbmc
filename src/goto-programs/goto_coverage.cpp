@@ -214,107 +214,106 @@ void goto_coveraget::gen_cond_cov()
           exprt guard = migrate_expr_back(it->guard);
           guard = handle_single_guard(guard);
 
-          // split the guard
-          std::list<exprt> operands;
-          std::list<std::string> operators;
-          bool dump = false;
-          collect_operands(guard, operands, dump);
-          collect_operators(guard, operators);
-
-          // e.g. if(a == 1)
-          if (operands.empty())
-            operands.push_back(guard);
-
-          auto opd = operands.begin();
-          auto opt = operators.begin();
-
-          // fisrt atoms
-          std::set<exprt> atoms;
-          collect_atom_operands(*opd, atoms);
-          if (atoms.empty())
-          {
-            log_error(
-              "Internal error when collecting atom condition expression.");
-            abort();
-          }
-          add_cond_cov_init_assert(*atoms.begin(), goto_program, it);
-
-          // set up pointer to re-build the binary tree
-          //   ||       <-- top_ptr
-          // a    &&
-          //     b   c   <--- rhs_ptr
-          exprt root;
-          root.operands().emplace_back(*opd);
-          const exprt::operandst::iterator root_ptr = root.operands().begin();
-          exprt::operandst::iterator top_ptr = root.operands().begin();
-          exprt::operandst::iterator rhs_ptr = top_ptr;
-          std::vector<exprt::operandst::iterator> top_ptr_stack;
-          opd++;
-
-          while (opd != operands.end() && opt != operators.end())
-          {
-            if (*opt == "(")
-            {
-              if (!top_ptr->is_empty())
-              {
-                // store
-                top_ptr_stack.emplace_back(top_ptr);
-                top_ptr = rhs_ptr;
-              }
-              ++opt;
-              continue;
-            }
-            else if (*opt == ")")
-            {
-              if (!top_ptr_stack.empty())
-              {
-                // retrieve top_ptr
-                top_ptr = top_ptr_stack.back();
-                top_ptr_stack.pop_back();
-              }
-              ++opt;
-              continue;
-            }
-            else if (*opt == "&&" || *opt == "||")
-            {
-              // get atom
-              atoms = {};
-              const exprt elem = *opd;
-              collect_atom_operands(elem, atoms);
-
-              assert(atoms.size() == 1);
-              const auto &atom = *atoms.begin();
-              irep_idt op = (*opt) == "&&" ? exprt::id_and : exprt::id_or;
-              add_cond_cov_rhs_assert(
-                op, top_ptr, rhs_ptr, root_ptr, atom, goto_program, it);
-            }
-            else
-            {
-              log_error("Unexpected operators");
-              abort();
-            }
-
-            // update counter
-            assert(opd != operands.end() && opt != operators.end());
-            ++opd;
-            ++opt;
-          }
+          exprt pre_cond = nil_exprt();
+          gen_cond_cov_assert(guard, pre_cond, goto_program, it);
         }
         target_num = -1;
       }
     }
 }
 
-void goto_coveraget::add_cond_cov_init_assert(
-  const exprt &expr,
+/*
+  algo:
+  if(b==0 && c > 90)
+  => assert(b==0)
+  => assert(!(b==0));
+  => assert(!(b==0 && c>90))
+  => assert(!(b==0 && !(c>90)))
+
+  if(b==0 || c > 90)
+  => assert(b==0)
+  => assert((b==0));
+  => assert(!(!b==0 && c>90))
+  => assert(!(!(b==0) && !(c>90)))
+*/
+void goto_coveraget::gen_cond_cov_assert(
+  exprt ptr,
+  exprt pre_cond,
   goto_programt &goto_program,
-  goto_programt::targett &it)
+  goto_programt::instructiont::targett &it)
+{
+  const auto &id = ptr.id();
+  if (
+    id == exprt::equality || id == exprt::notequal || id == exprt::i_lt ||
+    id == exprt::i_gt || id == exprt::i_le || id == exprt::i_ge)
+  {
+    add_cond_cov_assert(ptr, pre_cond, goto_program, it);
+  }
+
+  if (ptr.id() == irept::id_and)
+  {
+    // got lhs
+    gen_cond_cov_assert(ptr.op0(), pre_cond, goto_program, it);
+
+    // update pre-condition: pre_cond && op0
+    pre_cond =
+      pre_cond.is_nil() ? ptr.op0() : gen_and_expr(pre_cond, ptr.op0());
+
+    // go rhs
+    gen_cond_cov_assert(ptr.op1(), pre_cond, goto_program, it);
+  }
+  else if (ptr.id() == irept::id_or)
+  {
+    // got lhs
+    gen_cond_cov_assert(ptr.op0(), pre_cond, goto_program, it);
+
+    // update pre-condition: !(pre_cond && op0)
+    pre_cond =
+      pre_cond.is_nil() ? ptr.op0() : gen_and_expr(pre_cond, ptr.op0());
+    pre_cond = gen_not_expr(pre_cond);
+
+    // go rhs
+    gen_cond_cov_assert(ptr.op1(), pre_cond, goto_program, it);
+  }
+  else if (ptr.id() == "if")
+  {
+    // go left
+    gen_cond_cov_assert(ptr.op0(), pre_cond, goto_program, it);
+
+    // update pre-condition: pre_cond && op0
+    exprt pre_cond_1 =
+      pre_cond.is_nil() ? ptr.op0() : gen_and_expr(pre_cond, ptr.op0());
+
+    // go mid
+    gen_cond_cov_assert(ptr.op1(), pre_cond_1, goto_program, it);
+
+    // update pre-condition: pre_cond && !op0
+    exprt not_expr = gen_not_expr(ptr.op0());
+    exprt pre_cond_2 =
+      pre_cond.is_nil() ? not_expr : gen_and_expr(pre_cond, not_expr);
+
+    // go right
+    gen_cond_cov_assert(ptr.op2(), pre_cond_2, goto_program, it);
+  }
+  else
+    forall_operands (op, ptr)
+      gen_cond_cov_assert(*op, pre_cond, goto_program, it);
+}
+
+void goto_coveraget::add_cond_cov_assert(
+  const exprt &expr,
+  const exprt &pre_cond,
+  goto_programt &goto_program,
+  goto_programt::instructiont::targett &it)
 {
   expr2tc guard;
-  migrate_expr(expr, guard);
+  exprt cond = pre_cond.is_nil() ? expr : gen_and_expr(pre_cond, expr);
+  migrate_expr(cond, guard);
 
   // e.g. assert(!(a==1));  // a==1
-  std::string idf = from_expr(ns, "", guard);
+  // the idf is used as the claim_msg
+  // note that it's difference from the acutal guard.
+  std::string idf = from_expr(ns, "", expr);
   make_not(guard);
 
   // insert assert
@@ -355,313 +354,13 @@ void goto_coveraget::add_cond_cov_init_assert(
   }
 
   // reversal
-  idf = from_expr(ns, "", guard);
+  exprt not_expr = gen_not_expr(expr);
+  cond = pre_cond.is_nil() ? not_expr : gen_and_expr(pre_cond, not_expr);
+  migrate_expr(cond, guard);
+
+  idf = from_expr(ns, "", gen_not_expr(expr));
   make_not(guard);
   insert_assert(goto_program, it, guard, idf);
-}
-
-/*
-  algo:
-  if(b==0 && c > 90)
-  => assert(b==0)
-  => assert(!(b==0));
-  => assert(!(b==0 && c>90))
-  => assert(!(b==0 && !(c>90)))
-
-  if(b==0 || c > 90)
-  => assert(b==0)
-  => assert((b==0));
-  => assert(!(!b==0 && c>90))
-  => assert(!(!(b==0) && !(c>90)))
-*/
-void goto_coveraget::add_cond_cov_rhs_assert(
-  const irep_idt &op_tp,
-  exprt::operandst::iterator &top_ptr,
-  exprt::operandst::iterator &rhs_ptr,
-  const exprt::operandst::iterator &root_ptr,
-  const exprt &rhs,
-  goto_programt &goto_program,
-  goto_programt::targett &it)
-{
-  /* 
-  example:
-     root
-      ||  <- root_ptr/top_ptr
-   &&   b <- rhs_ptr/top_ptr
-  a  a  
-  */
-
-  // 0. store previous state
-  const exprt old_top = *top_ptr;
-  const exprt old_root = *root_ptr;
-
-  // 2. build new joined expr
-  exprt lhs_expr;
-  if (op_tp == exprt::id_or)
-  {
-    exprt not_expr = exprt("not", bool_type());
-    not_expr.operands().emplace_back(*top_ptr);
-    lhs_expr = not_expr;
-  }
-  else
-    lhs_expr = *top_ptr;
-
-  exprt rhs_not_expr = exprt("not", bool_type());
-  rhs_not_expr.operands().emplace_back(rhs);
-  exprt join_expr = exprt(exprt::id_and, bool_type());
-  join_expr.operands().emplace_back(lhs_expr);
-  join_expr.operands().emplace_back(rhs_not_expr);
-
-  // 2. replace top_expr with the joined expr
-  // the rhs of (*root_ptr) is also changed during this process
-  *top_ptr = join_expr;
-
-  // 3. preprocess for pre_cond lhs
-  bool pre_cond_flg = false;
-  if (root_ptr->has_operands() && root_ptr->operands().size() == 2)
-  {
-    const std::string sub_id = (*root_ptr).op0().id().as_string();
-    // pre_cond_flg: the lhs should be an atom.
-    pre_cond_flg = (sub_id != "constant" && sub_id != "symbol") &&
-                   (*root_ptr).op0().has_operands() &&
-                   (*root_ptr).id() == exprt::id_or;
-    if (pre_cond_flg)
-    {
-      // change 'a && a or b' to 'not (a && a) and b'
-      exprt not_pre_cond = exprt("not", bool_type());
-      not_pre_cond.operands().emplace_back(root_ptr->op0());
-      root_ptr->op0() = not_pre_cond;
-      root_ptr->id(exprt::id_and);
-    }
-  }
-
-  exprt join_not_expr = exprt("not", bool_type());
-  join_not_expr.operands().emplace_back(*root_ptr);
-
-  // 4. obtain guard
-  expr2tc guard;
-  migrate_expr(join_not_expr, guard);
-  expr2tc a_guard;
-  migrate_expr(rhs, a_guard);
-  make_not(a_guard);
-
-  // 5. modified insert_assert
-  std::string idf = from_expr(ns, "", a_guard);
-  insert_assert(goto_program, it, guard, idf);
-
-  // 6. reversal
-  *root_ptr = old_root;
-  *top_ptr = old_top;
-  join_not_expr.clear();
-
-  exprt join_rev_expr = exprt(exprt::id_and, bool_type());
-  join_rev_expr.operands().emplace_back(lhs_expr);
-  join_rev_expr.operands().emplace_back(rhs);
-
-  *top_ptr = join_rev_expr;
-  if (pre_cond_flg)
-  {
-    exprt not_pre_cond = exprt("not", bool_type());
-    not_pre_cond.operands().emplace_back(root_ptr->op0());
-    root_ptr->op0() = not_pre_cond;
-    root_ptr->id(exprt::id_and);
-  }
-
-  join_not_expr = exprt("not", bool_type());
-  join_not_expr.operands().emplace_back(*root_ptr);
-
-  migrate_expr(join_not_expr, guard);
-  migrate_expr(rhs, a_guard);
-
-  idf = from_expr(ns, "", a_guard);
-  insert_assert(goto_program, it, guard, idf);
-
-  // 7. restore root_ptr
-  // noted that this should be done before the updating of *top_ptr
-  if (pre_cond_flg)
-  {
-    // change 'not (a && a) and b' back to 'a && a or b'
-    *root_ptr = old_root;
-  }
-
-  // 8. update *top_ptr;
-  join_expr.clear();
-  *top_ptr = old_top;
-  join_expr = exprt(op_tp, bool_type());
-  join_expr.operands().emplace_back(*top_ptr);
-  join_expr.operands().emplace_back(rhs);
-  *top_ptr = join_expr;
-
-  // 9. update rhs_ptr
-  rhs_ptr = top_ptr->operands().begin();
-  rhs_ptr++;
-}
-
-/*
-  collect the operands splited by && and ||
-  - flag: indicated the (sub-)expression have beed handled or not
-*/
-void goto_coveraget::collect_operands(
-  const exprt &expr,
-  std::list<exprt> &operands,
-  bool &flag)
-{
-  const irep_idt &id = expr.id();
-
-  if ((id == irept::id_and || id == irept::id_or) && flag == false)
-  {
-    bool flg0 = false;
-    collect_operands(expr.op0(), operands, flg0);
-    if (!flg0)
-      operands.emplace_back(expr.op0());
-    // operators.emplace_back(id);
-    bool flg1 = false;
-    collect_operands(expr.op1(), operands, flg1);
-    if (!flg1)
-      operands.emplace_back(expr.op1());
-    flag = true;
-  }
-  else
-  {
-    forall_operands (it, expr)
-      collect_operands(*it, operands, flag);
-  }
-}
-
-/*
-  collect the conditions (i.e. atom operands) identified by the relational operators
-*/
-void goto_coveraget::collect_atom_operands(
-  const exprt &expr,
-  std::set<exprt> &atoms)
-{
-  const auto &id = expr.id();
-  forall_operands (it, expr)
-    collect_atom_operands(*it, atoms);
-  if (
-    id == exprt::equality || id == exprt::notequal || id == exprt::i_lt ||
-    id == exprt::i_gt || id == exprt::i_le || id == exprt::i_ge)
-  {
-    atoms.insert(expr);
-  }
-}
-
-/*
-  collect the operators from the expression
-*/
-void goto_coveraget::collect_operators(
-  const exprt &expr,
-  std::list<std::string> &operators)
-{
-  std::string str = from_expr(expr);
-  // prepocess: remove parenthesis in type_cast
-  // e.g. if(return_bool()) ==> IF !(_Bool)return_value$_return_bool$1
-  //                        ==> IF !return_value$_return_bool$1
-  // !FIXME: maybe this should be regex like \(\_[A-Za-z]+\) iF there are other typecasts
-  const std::string subStr = "(_Bool)";
-  size_t pos = str.find(subStr);
-  while (pos != std::string::npos)
-  {
-    str.erase(pos, subStr.length());
-    pos = str.find(subStr, pos);
-  }
-
-  std::list<std::string> opt;
-  for (std::size_t i = 0; i < str.length(); i++)
-  {
-    if (str[i] == ' ')
-      continue;
-    else if (str[i] == '|' && i + 1 < str.length() && str[i + 1] == '|')
-    {
-      opt.emplace_back("||");
-      i++;
-    }
-    else if (str[i] == '&' && i + 1 < str.length() && str[i + 1] == '&')
-    {
-      opt.emplace_back("&&");
-      i++;
-    }
-    else if (str[i] == '(')
-      opt.emplace_back("(");
-    else if (str[i] == ')')
-      opt.emplace_back(")");
-  }
-
-  // add implied parentheses in boolean expression
-  // e.g.
-  //   if(a&&b || c&&d) ==> if((a&&b) || (c&&d))
-  //   (a == 1 || b != 2 && (b == 3 || a == 1)) => (a == 1 || (b != 2 && (b == 3 || a == 1)))
-  // general rule: add parenthesis between || and &&
-  // (&&||&&)
-  std::list<std::string> tmp;
-  std::string lst_op = "";
-  std::vector<std::string> pnt_stk;
-  for (auto &op : opt)
-  {
-    if (op == "(")
-    {
-      if (pnt_stk.empty() && !tmp.empty())
-      {
-        // combine
-        operators.insert(operators.end(), tmp.begin(), tmp.end());
-        tmp.clear();
-      }
-      pnt_stk.emplace_back("(");
-    }
-    else if (op == ")")
-    {
-      tmp.emplace_back(")");
-      tmp.emplace_front("(");
-      if (!pnt_stk.empty())
-        pnt_stk.pop_back();
-
-      if (pnt_stk.empty() && !tmp.empty())
-      {
-        operators.insert(operators.end(), tmp.begin(), tmp.end());
-        tmp.clear();
-      }
-    }
-    else if (op == "&&" && lst_op == "||")
-    {
-      if (!tmp.empty())
-      {
-        operators.insert(operators.end(), tmp.begin(), tmp.end());
-        tmp.clear();
-      }
-      pnt_stk.push_back("(");
-      tmp.emplace_back(op);
-    }
-    else if (op == "||" && lst_op == "&&")
-    {
-      tmp.emplace_front("(");
-      tmp.emplace_back(")");
-      if (!pnt_stk.empty())
-        pnt_stk.pop_back();
-
-      if (pnt_stk.empty() && !tmp.empty())
-      {
-        operators.insert(operators.end(), tmp.begin(), tmp.end());
-        tmp.clear();
-      }
-      tmp.emplace_back(op);
-    }
-    else
-    {
-      tmp.emplace_back(op);
-    }
-    lst_op = op;
-  }
-
-  if (!tmp.empty())
-  {
-    while (!pnt_stk.empty())
-    {
-      tmp.emplace_back(")");
-      tmp.emplace_front("(");
-      pnt_stk.pop_back();
-    }
-    operators.insert(operators.end(), tmp.begin(), tmp.end());
-  }
 }
 
 exprt goto_coveraget::gen_no_eq_expr(const exprt &lhs, const exprt &rhs)
@@ -671,6 +370,21 @@ exprt goto_coveraget::gen_no_eq_expr(const exprt &lhs, const exprt &rhs)
   not_eq_expr.operands().emplace_back(lhs);
   not_eq_expr.operands().emplace_back(rhs);
   return not_eq_expr;
+}
+
+exprt goto_coveraget::gen_and_expr(const exprt &lhs, const exprt &rhs)
+{
+  exprt join_expr = exprt(exprt::id_and, bool_type());
+  join_expr.operands().emplace_back(lhs);
+  join_expr.operands().emplace_back(rhs);
+  return join_expr;
+}
+
+exprt goto_coveraget::gen_not_expr(const exprt &expr)
+{
+  exprt not_expr = exprt(exprt::id_not, bool_type());
+  not_expr.operands().emplace_back(expr);
+  return not_expr;
 }
 
 /*
@@ -725,8 +439,22 @@ exprt goto_coveraget::handle_single_guard(exprt &expr)
   else if (expr.operands().size() == 3)
   {
     // if(a ? b:c) ==> if (a!=0 ? b!=0 : c!=0)
-    Forall_operands (it, expr)
-      *it = handle_single_guard(*it);
+
+    expr.op0() = handle_single_guard(expr.op0());
+
+    // special handling for function call within the guard expressions:
+    // e.g.
+    //    if(func() && a) ==> if(func()?a?1:0:0)
+    // we do not add '!=0' to '1' and '0'.
+    if (!(expr.op1().id() == irept::id_constant &&
+          expr.op1().type().id() == typet::t_bool &&
+          expr.op1().value().as_string() == "true"))
+      expr.op1() = handle_single_guard(expr.op1());
+
+    if (!(expr.op2().id() == irept::id_constant &&
+          expr.op2().type().id() == typet::t_bool &&
+          expr.op2().value().as_string() == "false"))
+      expr.op2() = handle_single_guard(expr.op2());
   }
 
   // fall through

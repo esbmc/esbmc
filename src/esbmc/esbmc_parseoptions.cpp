@@ -1847,6 +1847,13 @@ bool esbmc_parseoptionst::process_goto_program(
       options.set_option("multi-property", true);
       options.set_option("keep-verified-claims", false);
 
+      //TODO: 
+      // if we do not want expressions like 'if(2 || 3)' get simplified to 'if(1||1)'
+      // we need to enable the options below:
+      //    options.set_option("no-simplify", true);
+      //    options.set_option("no-propagation", true);
+      // however, this will affect the performance, so we do not it enabled by default 
+
       goto_coveraget tmp(ns, goto_functions, cmdline.args[0]);
       tmp.make_asserts_true();
       tmp.gen_cond_cov();
