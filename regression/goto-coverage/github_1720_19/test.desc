@@ -1,6 +1,6 @@
 CORE
 main.c
---condition-coverage -I . --include-file lib.c
+--condition-coverage -I . --include-file lib.c -Wno-error=implicit-function-declaration
 ^Reached Conditions:  6
 ^Short Circuited Conditions:  0
 ^Total Conditions:  6
