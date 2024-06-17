@@ -1625,10 +1625,9 @@ bool esbmc_parseoptionst::parse_goto_program(
 
     if (cmdline.isset("parse-tree-too") || cmdline.isset("parse-tree-only"))
     {
-      assert(language_files.filemap.size());
-      languaget &language = *language_files.filemap.begin()->second.language;
       std::ostringstream oss;
-      language.show_parse(oss);
+      for (auto &it : filemap)
+        it.second->show_parse(oss);
       log_status("{}", oss.str());
       if (cmdline.isset("parse-tree-only"))
         return true;

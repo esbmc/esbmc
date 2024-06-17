@@ -280,6 +280,8 @@ void clang_c_languaget::force_file_type(std::vector<std::string> &compiler_args)
     compiler_args.emplace_back("-std=" + cstd);
 }
 
+#include <iostream>
+
 bool clang_c_languaget::parse(const std::string &path)
 {
   // preprocessing
@@ -313,11 +315,11 @@ bool clang_c_languaget::parse(const std::string &path)
   if (!AST)
     AST = move(newAST);
   else
-    mergeASTs(AST, newAST);
+    mergeASTs(newAST, AST);
   return false;
 }
 
-bool clang_c_languaget::typecheck(contextt &context, const std::string &module)
+bool clang_c_languaget::typecheck(contextt &context)
 {
   contextt new_context;
 
@@ -329,7 +331,7 @@ bool clang_c_languaget::typecheck(contextt &context, const std::string &module)
   if (adjuster.adjust())
     return true;
 
-  if (c_link(context, new_context, module))
+  if (c_link(context, new_context))
     return true;
 
   return false;

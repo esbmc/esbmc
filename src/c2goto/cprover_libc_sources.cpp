@@ -123,7 +123,7 @@ void add_bundled_library_sources(contextt &context, const languaget &c_language)
         return;
       languaget *l = c_language.new_language();
       log_status("file {}: Parsing", path);
-      if (l->parse(path) || l->typecheck(context, path))
+      if (l->parse(path) || l->typecheck(context))
       {
         log_error("error processing internal libc source {}", path);
         abort();

@@ -81,9 +81,7 @@ extern "C" {
   return intrinsics;
 }
 
-bool clang_cpp_languaget::typecheck(
-  contextt &context,
-  const std::string &module)
+bool clang_cpp_languaget::typecheck(contextt &context)
 {
   contextt new_context;
 
@@ -95,7 +93,7 @@ bool clang_cpp_languaget::typecheck(
   if (adjuster.adjust())
     return true;
 
-  if (c_link(context, new_context, module))
+  if (c_link(context, new_context))
     return true;
 
   return false;
