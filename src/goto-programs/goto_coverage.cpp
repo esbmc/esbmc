@@ -12,7 +12,6 @@ void goto_coveraget::replace_all_asserts_to_guard(
   expr2tc guard,
   bool is_instrumentation)
 {
-  log_progress("Converting all assertions to false...");
   Forall_goto_functions (f_it, goto_functions)
     if (f_it->second.body_available && f_it->first != "__ESBMC_main")
     {

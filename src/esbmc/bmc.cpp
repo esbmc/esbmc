@@ -1040,7 +1040,7 @@ smt_convt::resultt bmct::multi_property_check(
     // show short-circuited:
     if (cond_show_claims && short_circuit_instance > 0)
     {
-      log_status("[Short Circuited Conditions]");
+      log_success("[Short Circuited Conditions]\n");
       for (const auto &claim_pair : total_cond_assert_cpy)
       {
         std::string claim_msg = claim_pair.first;
