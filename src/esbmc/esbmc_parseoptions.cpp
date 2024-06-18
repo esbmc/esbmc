@@ -1700,7 +1700,9 @@ bool esbmc_parseoptionst::process_goto_program(
 
     bool is_no_remove = cmdline.isset("multi-property") ||
                         cmdline.isset("assertion-coverage") ||
-                        cmdline.isset("assertion-coverage-claims");
+                        cmdline.isset("assertion-coverage-claims") ||
+                        cmdline.isset("condition-coverage") ||
+                        cmdline.isset("condition-coverage-claims");
 
     // Start by removing all no-op instructions and unreachable code
     if (!(cmdline.isset("no-remove-no-op")))
@@ -1846,6 +1848,7 @@ bool esbmc_parseoptionst::process_goto_program(
       options.set_option("base-case", true);
       options.set_option("multi-property", true);
       options.set_option("keep-verified-claims", false);
+      // unreachable conditions should be also considered as short-circuited
 
       //?:
       // if we do not want expressions like 'if(2 || 3)' get simplified to 'if(1||1)'
