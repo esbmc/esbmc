@@ -22,7 +22,8 @@ CC_DIAGNOSTIC_POP()
 
 languaget *new_clang_c_language()
 {
-  return new clang_c_languaget();
+  static clang_c_languaget cl;
+  return &cl;
 }
 
 clang_c_languaget::clang_c_languaget() = default;
@@ -303,11 +304,16 @@ bool clang_c_languaget::parse(const std::string &path)
   std::string intrinsics = internal_additions();
 
   // Generate ASTUnit and add to our vector
-  auto AST = buildASTs(intrinsics, new_compiler_args);
+  auto newAST = buildASTs(intrinsics, new_compiler_args);
 
   // Use diagnostics to find errors, rather than the return code.
-  if (AST->getDiagnostics().hasErrorOccurred())
+  if (newAST->getDiagnostics().hasErrorOccurred())
     return true;
+
+  if (!AST)
+    AST = move(newAST);
+  else
+    mergeASTs(newAST, AST);
 
   return false;
 }
