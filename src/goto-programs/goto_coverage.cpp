@@ -227,8 +227,7 @@ void goto_coveraget::gen_cond_cov_assert(
   {
     add_cond_cov_assert(ptr, pre_cond, goto_program, it);
   }
-
-  if (ptr.id() == irept::id_and)
+  else if (id == irept::id_and)
   {
     // got lhs
     gen_cond_cov_assert(ptr.op0(), pre_cond, goto_program, it);
@@ -240,7 +239,7 @@ void goto_coveraget::gen_cond_cov_assert(
     // go rhs
     gen_cond_cov_assert(ptr.op1(), pre_cond, goto_program, it);
   }
-  else if (ptr.id() == irept::id_or)
+  else if (id == irept::id_or)
   {
     // got lhs
     gen_cond_cov_assert(ptr.op0(), pre_cond, goto_program, it);
@@ -253,7 +252,7 @@ void goto_coveraget::gen_cond_cov_assert(
     // go rhs
     gen_cond_cov_assert(ptr.op1(), pre_cond, goto_program, it);
   }
-  else if (ptr.id() == "if")
+  else if (id == "if")
   {
     // go left
     gen_cond_cov_assert(ptr.op0(), pre_cond, goto_program, it);
