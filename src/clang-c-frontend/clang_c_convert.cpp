@@ -84,7 +84,7 @@ bool clang_c_convertert::convert_top_level_decl()
     if (get_decl(*ASTContext->getTranslationUnitDecl(), dummy_decl))
       return true;
   }
-  
+
   assert(current_functionDecl == nullptr);
 
   return false;
