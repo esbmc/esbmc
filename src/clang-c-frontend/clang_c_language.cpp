@@ -22,8 +22,7 @@ CC_DIAGNOSTIC_POP()
 
 languaget *new_clang_c_language()
 {
-  static clang_c_languaget cl;
-  return &cl;
+  return new clang_c_languaget();
 }
 
 clang_c_languaget::clang_c_languaget() = default;
@@ -279,8 +278,6 @@ void clang_c_languaget::force_file_type(std::vector<std::string> &compiler_args)
   if (!cstd.empty())
     compiler_args.emplace_back("-std=" + cstd);
 }
-
-#include <iostream>
 
 bool clang_c_languaget::parse(const std::string &path)
 {
