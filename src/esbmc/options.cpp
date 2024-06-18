@@ -524,6 +524,14 @@ const struct group_opt_templ all_cmd_options[] = {
      {"condition-coverage-claims",
       NULL,
       "enable condition-coverage and shows the instrumented claims"},
+     {"condition-coverage-rm",
+      NULL,
+      "use '--condition-coverage' while disable "
+      "'--no-remove-unreachable'"},
+     {"condition-coverage-claims-rm",
+      NULL,
+      "use '--condition-coverage-claims' while disable "
+      "'--no-remove-unreachable'"},
      {"segfault-handler", NULL, "print stacktrace on segmentation fault"},
    }},
   {"end", {{"", NULL, "end of options"}}},

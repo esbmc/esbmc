@@ -1,10 +1,8 @@
 CORE
 main.c
 --condition-coverage-claims -Wno-error=implicit-function-declaration
-^Reached Conditions:  30
-^Short Circuited Conditions:  66
+^Reached Conditions:  96
+^Short Circuited Conditions:  0
 ^Total Conditions:  96
-^Condition Properties - SATISFIED:  30
-^Condition Properties - UNSATISFIED:  0
-^Condition Coverage: 31.25%
+^Condition Coverage: 100%
 ^VERIFICATION FAILED$
