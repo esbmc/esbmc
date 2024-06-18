@@ -107,6 +107,10 @@ ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element)
   {
     return ErrorDef;
   }
+  else if (element["nodeType"] == "EventDefinition")
+  {
+    return EventDef;
+  }
   else
   {
     log_error(
@@ -127,6 +131,7 @@ const char *contract_body_element_to_str(ContractBodyElementT type)
     ENUM_TO_STR(StructDef)
     ENUM_TO_STR(EnumDef)
     ENUM_TO_STR(ErrorDef)
+    ENUM_TO_STR(EventDef)
     ENUM_TO_STR(ContractBodyElementTError)
   default:
   {
@@ -618,7 +623,10 @@ StatementT get_statement_t(const nlohmann::json &stmt)
   {
     return RevertStatement;
   }
-
+  else if (stmt["nodeType"] == "EmitStatement")
+  {
+    return EmitStatement;
+  }
   else
   {
     log_error(
@@ -644,6 +652,7 @@ const char *statement_to_str(StatementT type)
     ENUM_TO_STR(ContinueStatement)
     ENUM_TO_STR(BreakStatement)
     ENUM_TO_STR(RevertStatement)
+    ENUM_TO_STR(EmitStatement)
   default:
   {
     assert(!"Unknown statement type");
@@ -1017,7 +1026,9 @@ const char *var_decl_statement_to_str(VarDeclStmtT type)
 // auxiliary type to convert function call
 FunctionDeclRefT get_func_decl_ref_t(const nlohmann::json &decl)
 {
-  assert(decl["nodeType"] == "FunctionDefinition");
+  assert(
+    decl["nodeType"] == "FunctionDefinition" ||
+    decl["nodeType"] == "EventDefinition");
   if (
     decl["parameters"]["parameters"].size() == 0 ||
     decl["kind"] == "constructor")
