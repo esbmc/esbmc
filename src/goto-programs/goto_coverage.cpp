@@ -192,11 +192,8 @@ void goto_coveraget::gen_cond_cov()
           exprt guard = migrate_expr_back(it->guard);
           guard = handle_single_guard(guard);
 
-          log_status("guard{}", guard);
-
           exprt pre_cond = nil_exprt();
           gen_cond_cov_assert(guard, pre_cond, goto_program, it);
-          log_status("done");
         }
         target_num = -1;
       }
@@ -288,7 +285,6 @@ void goto_coveraget::add_cond_cov_assert(
 {
   expr2tc guard;
   exprt cond = pre_cond.is_nil() ? expr : gen_and_expr(pre_cond, expr);
-  log_status("cond{}", cond);
   migrate_expr(cond, guard);
 
   // e.g. assert(!(a==1));  // a==1
@@ -442,7 +438,6 @@ exprt goto_coveraget::handle_single_guard(exprt &expr)
   else if (expr.operands().size() == 3)
   {
     // if(a ? b:c) ==> if (a!=0 ? b!=0 : c!=0)
-    log_status("expr{}", expr);
     expr.op0() = handle_single_guard(expr.op0());
 
     // special handling for function call within the guard expressions:
