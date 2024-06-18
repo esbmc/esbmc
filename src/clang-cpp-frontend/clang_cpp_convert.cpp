@@ -28,9 +28,9 @@ CC_DIAGNOSTIC_POP()
 
 clang_cpp_convertert::clang_cpp_convertert(
   contextt &_context,
-  std::vector<std::unique_ptr<clang::ASTUnit>> &_ASTs,
+  std::unique_ptr<clang::ASTUnit> &_AST,
   irep_idt _mode)
-  : clang_c_convertert(_context, _ASTs, _mode)
+  : clang_c_convertert(_context, _AST, _mode)
 {
 }
 
