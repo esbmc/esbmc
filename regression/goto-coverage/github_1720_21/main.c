@@ -1,10 +1,10 @@
-#include <stdbool.h>
-
 int main()
 {
-    bool a = true;
-    bool b = false;
-
-    if ((a ? b ? 1 : 0 : a == b) && a>b)
+    int b;
+    if (b)
+        ;
+    return 0;
+    int a;
+    if (a + b)
         ;
 }
