@@ -8,7 +8,7 @@ int main()
 {
   bool a = nondet_bool();
   bool b =  true;
-  auto c = nondet_bool();
+  bool c = nondet_bool();
   if (b && c|| a && b) 
   {
     assert(1);
