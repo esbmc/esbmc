@@ -788,7 +788,9 @@ smt_convt::resultt bmct::multi_property_check(
   bool is_assert_cov = options.get_bool_option("assertion-coverage") ||
                        options.get_bool_option("assertion-coverage-claims");
   bool is_cond_cov = options.get_bool_option("condition-coverage") ||
-                     options.get_bool_option("condition-coverage-claims");
+                     options.get_bool_option("condition-coverage-claims") ||
+                     options.get_bool_option("condition-coverage-rm") ||
+                     options.get_bool_option("condition-coverage-claims-rm");
   // For multi-fail-fast
   const std::string fail_fast = options.get_option("multi-fail-fast");
   const bool is_fail_fast = !fail_fast.empty() ? true : false;
@@ -975,7 +977,8 @@ smt_convt::resultt bmct::multi_property_check(
 
     // show claims
     bool cond_show_claims =
-      options.get_bool_option("condition-coverage-claims");
+      options.get_bool_option("condition-coverage-claims") ||
+      options.get_bool_option("condition-coverage-claims-rm");
 
     // reached claims:
     auto total_cond_assert_cpy = total_cond_assert;

@@ -327,6 +327,9 @@ void goto_coveraget::add_cond_cov_assert(
       // 4. reset
       ++it;
     }
+
+    // reset
+    target_num = -1;
   }
 
   // reversal

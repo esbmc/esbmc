@@ -1841,7 +1841,9 @@ bool esbmc_parseoptionst::process_goto_program(
 
     if (
       cmdline.isset("condition-coverage") ||
-      cmdline.isset("condition-coverage-claims"))
+      cmdline.isset("condition-coverage-claims") ||
+      cmdline.isset("condition-coverage-rm") ||
+      cmdline.isset("condition-coverage-claims-rm"))
     {
       // for multi-property
       options.set_option("result-only", true);

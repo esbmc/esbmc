@@ -538,7 +538,9 @@ void goto_symext::pop_frame()
 
   if (
     (options.get_bool_option("condition-coverage") ||
-     options.get_bool_option("condition-coverage-claims")) &&
+     options.get_bool_option("condition-coverage-claims") ||
+     options.get_bool_option("condition-coverage-rm") ||
+     options.get_bool_option("condition-coverage-claims-rm")) &&
     cur_state->call_stack.back().goto_state_map.size() != 0)
   {
     //TODO: temporary fix for the condition coverage
