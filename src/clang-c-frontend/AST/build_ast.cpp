@@ -14,6 +14,7 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/Lex/PreprocessorOptions.h>
 #include <clang/Tooling/Tooling.h>
 #include <llvm/Option/ArgList.h>
+#include <clang/AST/ASTImporter.h>
 #if CLANG_VERSION_MAJOR < 16
 #  include <llvm/Support/Host.h>
 #else
@@ -135,4 +136,32 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
   delete (action);
 
   return unit;
+}
+
+void mergeASTs(
+  const std::unique_ptr<clang::ASTUnit> &FromUnit,
+  std::unique_ptr<clang::ASTUnit> &ToUnit)
+{
+  // Call enableSourceFileDiagnostics on the
+  // ASTUnit objects to get diagnostics.
+  FromUnit->enableSourceFileDiagnostics();
+  ToUnit->enableSourceFileDiagnostics();
+
+  clang::ASTImporter Importer(
+    ToUnit->getASTContext(),
+    ToUnit->getFileManager(),
+    FromUnit->getASTContext(),
+    FromUnit->getFileManager(),
+    false);
+
+  for (auto decl : FromUnit->getASTContext().getTranslationUnitDecl()->decls())
+  {
+    llvm::Expected<clang::Decl *> ImportedOrErr = Importer.Import(decl);
+    if (!ImportedOrErr)
+    {
+      llvm::Error Err = ImportedOrErr.takeError();
+      llvm::errs() << "Error: " << Err << "\n";
+      consumeError(std::move(Err));
+    }
+  }
 }
