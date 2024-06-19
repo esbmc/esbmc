@@ -59,6 +59,77 @@ bool solidity_convertert::convert()
   // We need to convert Solidity AST nodes to the equivalent symbols and add them to the context
   nlohmann::json &nodes = src_ast_json["nodes"];
 
+  // Since the interface itself does not create any vulnerabilities
+  // consider removing it and its inheritance information from the contract
+  std::vector<int> interface_ids;
+  for (nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end();)
+  {
+    //check if the node is a interface definition
+    if (itr->contains("contractKind") && itr->at("contractKind") == "interface")
+    {
+      log_error("Interface definition found in the contract");
+      interface_ids.push_back(itr->at("id").get<int>());
+      itr = nodes.erase(itr);
+    }
+    else if (
+      itr->contains("nodeType") &&
+      itr->at("nodeType") == "ContractDefinition" &&
+      !(*itr)["baseContracts"].empty())
+    {
+      //clean the baseContracts and linearizedBaseContracts
+      auto &baseContracts = itr->at("baseContracts");
+      auto newEnd1 = std::remove_if(
+        baseContracts.begin(),
+        baseContracts.end(),
+        [&interface_ids](const nlohmann::json &base)
+        {
+          int refDecl =
+            base.at("baseName").at("referencedDeclaration").get<int>();
+          return std::find(
+                   interface_ids.begin(), interface_ids.end(), refDecl) !=
+                 interface_ids.end();
+        });
+      baseContracts.erase(newEnd1, baseContracts.end());
+
+      auto &linBaseContracts = itr->at("linearizedBaseContracts");
+      auto newEnd2 = std::remove_if(
+        linBaseContracts.begin(),
+        linBaseContracts.end(),
+        [&interface_ids](int id)
+        {
+          return std::find(interface_ids.begin(), interface_ids.end(), id) !=
+                 interface_ids.end();
+        });
+      linBaseContracts.erase(newEnd2, linBaseContracts.end());
+      ++itr;
+    }
+    else
+    {
+      ++itr;
+    }
+  }
+  //remove exportedSymbols that are interfaces
+  auto &exportedSymbols = src_ast_json["exportedSymbols"];
+  for (auto it = exportedSymbols.begin(); it != exportedSymbols.end(); ++it)
+  {
+    auto &ids = it.value();
+    ids.erase(
+      std::remove_if(
+        ids.begin(),
+        ids.end(),
+        [&interface_ids](int id)
+        {
+          return std::find(interface_ids.begin(), interface_ids.end(), id) !=
+                 interface_ids.end();
+        }),
+      ids.end());
+
+    if (ids.empty())
+    {
+      it = exportedSymbols.erase(it);
+    }
+  }
+
   bool found_contract_def = false;
   size_t index = 0;
   for (nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end();
