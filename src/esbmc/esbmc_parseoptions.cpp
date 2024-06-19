@@ -51,6 +51,7 @@ extern "C"
 #include <pointer-analysis/value_set_analysis.h>
 #include <util/symbol.h>
 #include <util/time_stopping.h>
+#include <goto-programs/goto_cfg.h>
 
 #ifndef _WIN32
 #  include <sys/wait.h>
@@ -1970,6 +1971,13 @@ bool esbmc_parseoptionst::output_goto_program(
       log_status("{}", oss.str());
       if (cmdline.isset("goto-functions-only"))
         return true;
+    }
+
+    if (cmdline.isset("goto-cfg-only"))
+    {
+      goto_cfg cfg(goto_functions);
+      cfg.dump_graph();
+      return true;
     }
 
     // Translate the GOTO program to C and output it into the log or
