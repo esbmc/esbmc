@@ -1,6 +1,6 @@
 CORE
 main.c
- --condition-coverage-claims
+ --condition-coverage-claims -Wno-error=implicit-function-declaration
 ^Reached Conditions:  4
 ^Short Circuited Conditions:  18
 ^Total Conditions:  22
