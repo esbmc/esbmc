@@ -39,7 +39,7 @@ jobs:
     - uses: actions/checkout@v4
     - name: Configure ESBMC
       run: ./scripts/build.ps1
-    - uses: actions/upload-artifact@master
+    - uses: actions/upload-artifact@v4
       with:
         name: release-windows-latest
         path: C:/deps/esbmc

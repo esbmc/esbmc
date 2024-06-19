@@ -145,7 +145,7 @@ jobs:
         run: mv $HOME/output.zip ./output.zip      
       - name: Debug Info
         run: ls
-      - uses: actions/upload-artifact@master
+      - uses: actions/upload-artifact@v4
         with:
           name: esbmc-result
           path: output.zip  
@@ -169,7 +169,7 @@ jobs:
       - name: Show summary (CPAChecker)
         if: ${{ inputs.cpachecker == true }}
         run: tail $HOME/witness-output/*results*.txt
-      - uses: actions/upload-artifact@master
+      - uses: actions/upload-artifact@v4
         if: ${{ inputs.cpachecker == true }}
         with:
           name: witness-result

@@ -37,7 +37,7 @@ jobs:
           BENCHMARK_TO_RUN: ${{ inputs.benchmark }}
           LOG_DIR: ${{ inputs.logdirectory }}
         run: ./scripts/build.sh -b Release -r On
-      - uses: actions/upload-artifact@v1
+      - uses: actions/upload-artifact@v4
         with:
           name: release-linux
           path: ./build/src/esbmc/esbmc
@@ -47,7 +47,7 @@ jobs:
           ESBMC_OPTS: ${{ inputs.options }}
           LOG_DIR: ${{ inputs.logdirectory }}
         run: cd build/ && ctest -j4 --output-on-failure --progress .
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v4
         with:
           name: benchmark-logs
           path: ./build/regression/${{ inputs.logdirectory }}

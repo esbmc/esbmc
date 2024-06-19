@@ -30,7 +30,7 @@ jobs:
       if: ${{ startsWith(inputs.operating-system, 'ubuntu-') }}
     - name: Build ESBMC
       run: ./scripts/build.sh ${{ inputs.build-flags }}
-    - uses: actions/upload-artifact@master
+    - uses: actions/upload-artifact@v4
       with:
         name: release-${{ inputs.operating-system }}-${{ inputs.build-flags }}
         path: ./release
