@@ -8,7 +8,7 @@ jobs:
   testing-tool:
     runs-on: ubuntu-20.04
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     - name: Runs testing tool unit test
       run: cd regression && python3 testing_tool_test.py
  
@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Set up Git repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     - name: Compile LaTeX document
       uses: xu-cheng/latex-action@v2
       with:
@@ -88,7 +88,7 @@ jobs:
       # added or changed files to the repository.
       contents: write
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     - name: Install Dependencies
       run: sudo apt-get update && sudo apt-get install libtinfo-dev
     - name: Download Clang 11
@@ -113,7 +113,7 @@ jobs:
     runs-on: ubuntu-20.04
     continue-on-error: true # TODO: Eventually this will be removed
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     - name: Set up Python 3.8
       uses: actions/setup-python@v2
       with:
