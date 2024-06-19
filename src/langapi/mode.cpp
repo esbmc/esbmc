@@ -121,7 +121,7 @@ static int get_old_frontend_mode(int current_mode)
   return -1;
 }
 
-std::unique_ptr<languaget> new_language(language_idt lang)
+languaget *new_language(language_idt lang)
 {
   int mode = get_mode(lang);
 
@@ -132,5 +132,5 @@ std::unique_ptr<languaget> new_language(language_idt lang)
   if (mode >= 0)
     l = mode_table[mode].new_language();
 
-  return std::unique_ptr<languaget>(l);
+  return l;
 }
