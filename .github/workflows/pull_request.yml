@@ -23,7 +23,7 @@ jobs:
       with:
         root_file: docs/manual.tex
     - name: Upload PDF file
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: Developer-Manual
         path: manual.pdf    
