@@ -978,15 +978,16 @@ bool solidity_convertert::get_function_definition(
       return true;
 
     added_symbol.value = body_exprt;
-  }// In interface or abstract function, there is no body
-  else if (!ast_node.contains("body") && ast_node.contains("implemented") &&
-           !ast_node["implemented"].get<bool>())
+  } // In interface or abstract function, there is no body
+  else if (
+    !ast_node.contains("body") && ast_node.contains("implemented") &&
+    !ast_node["implemented"].get<bool>())
   {
     // if it is a interface or abstract function, it does not have a body and we just skip it
     exprt body_exprt = code_skipt();
     added_symbol.value = body_exprt;
   }
-  
+
   else
   {
     //! assume it's event-definition
@@ -5230,7 +5231,9 @@ solidity_convertert::find_decl_ref(int ref_decl_id, std::string &contract_name)
         return current_func;
       }
       //In inteface and abstract(contract) funtion, the function body is not defined
-      else if(current_func.contains("implemented") && current_func["implemented"] == false)
+      else if (
+        current_func.contains("implemented") &&
+        current_func["implemented"] == false)
       {
         return current_func;
       }
@@ -6047,17 +6050,20 @@ bool solidity_convertert::multi_transaction_verification(
     for (const auto &method : methods)
     {
       // skip funtion definition without body
-      for(auto& item : src_ast_json["nodes"].items())
+      for (auto &item : src_ast_json["nodes"].items())
       {
-        for(auto& item2 : item.value()["nodes"].items())
+        for (auto &item2 : item.value()["nodes"].items())
         {
-          if(item2.value().contains("name") && item2.value()["name"] == method.get_name().as_string() &&!item2.value().contains("body"))
+          if (
+            item2.value().contains("name") &&
+            item2.value()["name"] == method.get_name().as_string() &&
+            !item2.value().contains("body"))
           {
             is_pure_def = true;
           }
-       }
+        }
       }
-      if(is_pure_def)
+      if (is_pure_def)
       {
         is_pure_def = false;
         continue;
@@ -6197,13 +6203,15 @@ bool solidity_convertert::multi_contract_verification()
     // check if the contract is an interface
     // if it is, we skip this contract
     bool is_interface = false;
-    for(auto& item : src_ast_json["nodes"].items())
+    for (auto &item : src_ast_json["nodes"].items())
     {
-      if(item.value().contains("contractKind") && item.value()["contractKind"] == "interface" && item.value()["name"] == c_name)
+      if (
+        item.value().contains("contractKind") &&
+        item.value()["contractKind"] == "interface" &&
+        item.value()["name"] == c_name)
       {
         is_interface = true;
       }
-
     }
     if (linearizedBaseList.count(c_name) && !is_interface)
     {
