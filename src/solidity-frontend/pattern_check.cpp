@@ -51,10 +51,18 @@ bool pattern_checker::do_pattern_check()
 bool pattern_checker::start_pattern_based_check(const nlohmann::json &func)
 {
   // SWC-115: Authorization through tx.origin
-  check_authorization_through_tx_origin(func);
-  return false;
+  // In interface and abstract functions, there is no body
+  if (func.contains("body") && !func["body"].empty())
+  {
+    check_authorization_through_tx_origin(func);
+    return false;
+  }
+  else
+  {
+    log_progress("Function body is empty");
+    return false;
+  }
 }
-
 void pattern_checker::check_authorization_through_tx_origin(
   const nlohmann::json &func)
 {

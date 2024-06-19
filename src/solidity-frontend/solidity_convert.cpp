@@ -59,77 +59,6 @@ bool solidity_convertert::convert()
   // We need to convert Solidity AST nodes to the equivalent symbols and add them to the context
   nlohmann::json &nodes = src_ast_json["nodes"];
 
-  // Since the interface itself does not create any vulnerabilities
-  // consider removing it and its inheritance information from the contract
-  std::vector<int> interface_ids;
-  for (nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end();)
-  {
-    //check if the node is a interface definition
-    if (itr->contains("contractKind") && itr->at("contractKind") == "interface")
-    {
-      log_error("Interface definition found in the contract");
-      interface_ids.push_back(itr->at("id").get<int>());
-      itr = nodes.erase(itr);
-    }
-    else if (
-      itr->contains("nodeType") &&
-      itr->at("nodeType") == "ContractDefinition" &&
-      !(*itr)["baseContracts"].empty())
-    {
-      //clean the baseContracts and linearizedBaseContracts
-      auto &baseContracts = itr->at("baseContracts");
-      auto newEnd1 = std::remove_if(
-        baseContracts.begin(),
-        baseContracts.end(),
-        [&interface_ids](const nlohmann::json &base)
-        {
-          int refDecl =
-            base.at("baseName").at("referencedDeclaration").get<int>();
-          return std::find(
-                   interface_ids.begin(), interface_ids.end(), refDecl) !=
-                 interface_ids.end();
-        });
-      baseContracts.erase(newEnd1, baseContracts.end());
-
-      auto &linBaseContracts = itr->at("linearizedBaseContracts");
-      auto newEnd2 = std::remove_if(
-        linBaseContracts.begin(),
-        linBaseContracts.end(),
-        [&interface_ids](int id)
-        {
-          return std::find(interface_ids.begin(), interface_ids.end(), id) !=
-                 interface_ids.end();
-        });
-      linBaseContracts.erase(newEnd2, linBaseContracts.end());
-      ++itr;
-    }
-    else
-    {
-      ++itr;
-    }
-  }
-  //remove exportedSymbols that are interfaces
-  auto &exportedSymbols = src_ast_json["exportedSymbols"];
-  for (auto it = exportedSymbols.begin(); it != exportedSymbols.end(); ++it)
-  {
-    auto &ids = it.value();
-    ids.erase(
-      std::remove_if(
-        ids.begin(),
-        ids.end(),
-        [&interface_ids](int id)
-        {
-          return std::find(interface_ids.begin(), interface_ids.end(), id) !=
-                 interface_ids.end();
-        }),
-      ids.end());
-
-    if (ids.empty())
-    {
-      it = exportedSymbols.erase(it);
-    }
-  }
-
   bool found_contract_def = false;
   size_t index = 0;
   for (nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end();
@@ -1049,7 +978,15 @@ bool solidity_convertert::get_function_definition(
       return true;
 
     added_symbol.value = body_exprt;
+  }// In interface or abstract function, there is no body
+  else if (!ast_node.contains("body") && ast_node.contains("implemented") &&
+           !ast_node["implemented"].get<bool>())
+  {
+    // if it is a interface or abstract function, it does not have a body and we just skip it
+    exprt body_exprt = code_skipt();
+    added_symbol.value = body_exprt;
   }
+  
   else
   {
     //! assume it's event-definition
@@ -5292,11 +5229,19 @@ solidity_convertert::find_decl_ref(int ref_decl_id, std::string &contract_name)
       {
         return current_func;
       }
-      log_error(
-        "Unable to find the corresponding local variable decl. Current "
-        "function "
-        "does not have a function body.");
-      abort();
+      //In inteface and abstract(contract) funtion, the function body is not defined
+      else if(current_func.contains("implemented") && current_func["implemented"] == false)
+      {
+        return current_func;
+      }
+      else
+      {
+        log_error(
+          "Unable to find the corresponding local variable decl. Current "
+          "function "
+          "does not have a function body.");
+        abort();
+      }
     }
 
     // var declaration in local statements
@@ -6056,6 +6001,7 @@ bool solidity_convertert::multi_transaction_verification(
     const std::string id = prefix + c_name;
     if (context.find_symbol(id) == nullptr)
       return true;
+    log_error("we are here1!");
     const symbolt &contract = *context.find_symbol(id);
     assert(contract.type.is_struct() && "A contract should be a struct");
 
@@ -6096,9 +6042,26 @@ bool solidity_convertert::multi_transaction_verification(
     const struct_typet::componentst &methods =
       to_struct_type(contract.type).methods();
     bool is_tgt_cnt = c_name == contractName ? true : false;
+    bool is_pure_def = false;
 
     for (const auto &method : methods)
     {
+      // skip funtion definition without body
+      for(auto& item : src_ast_json["nodes"].items())
+      {
+        for(auto& item2 : item.value()["nodes"].items())
+        {
+          if(item2.value().contains("name") && item2.value()["name"] == method.get_name().as_string() &&!item2.value().contains("body"))
+          {
+            is_pure_def = true;
+          }
+       }
+      }
+      if(is_pure_def)
+      {
+        is_pure_def = false;
+        continue;
+      }
       // we only handle public (and external) function
       // as the private and internal function cannot be directly called
       if (is_tgt_cnt)
@@ -6231,14 +6194,28 @@ bool solidity_convertert::multi_contract_verification()
     // 1.1 construct multi-transaction verification entry function
     // function "sol_main_contractname" will be created and inserted to the symbol table.
     const std::string &c_name = sym.second;
-    if (linearizedBaseList.count(c_name))
+    // check if the contract is an interface
+    // if it is, we skip this contract
+    bool is_interface = false;
+    for(auto& item : src_ast_json["nodes"].items())
+    {
+      if(item.value().contains("contractKind") && item.value()["contractKind"] == "interface" && item.value()["name"] == c_name)
+      {
+        is_interface = true;
+      }
+
+    }
+    if (linearizedBaseList.count(c_name) && !is_interface)
     {
       if (multi_transaction_verification(c_name))
         return true;
     }
     else
+    {
       //! Assume is not a contract (e.g. error type)
+      is_interface = false;
       continue;
+    }
 
     // 1.2 construct a "case n"
     exprt case_cond = constant_exprt(
