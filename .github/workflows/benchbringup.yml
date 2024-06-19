@@ -30,7 +30,7 @@ jobs:
     steps:
       - name: Confirm the benchmark
         run: echo ${{ github.event.inputs.benchmark }}
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Build ESBMC
         env:
           TEST_TIMEOUT: ${{ inputs.timeout }}
