@@ -8,7 +8,7 @@ static language_idt language_id_from_mode(irep_idt mode)
   return mode.empty() ? language_idt::C : language_id_by_name(id2string(mode));
 }
 
-std::unique_ptr<languaget> language_from_symbol(const symbolt &symbol)
+languaget *language_from_symbol(const symbolt &symbol)
 {
   language_idt lang = language_id_from_mode(symbol.mode);
   if (lang != language_idt::NONE)

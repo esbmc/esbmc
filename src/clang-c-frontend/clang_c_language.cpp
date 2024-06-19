@@ -318,21 +318,21 @@ bool clang_c_languaget::parse(const std::string &path)
   return false;
 }
 
-bool clang_c_languaget::typecheck(contextt &context, const std::string &module)
+bool clang_c_languaget::typecheck(
+  contextt &context,
+  const std::string &module [[maybe_unused]])
 {
-  contextt new_context;
-
-  clang_c_convertert converter(new_context, AST, "C");
+  clang_c_convertert converter(context, AST, "C");
   if (converter.convert())
     return true;
 
-  clang_c_adjust adjuster(new_context);
+  clang_c_adjust adjuster(context);
   if (adjuster.adjust())
     return true;
-
+#if 0
   if (c_link(context, new_context, module))
     return true;
-
+#endif
   return false;
 }
 

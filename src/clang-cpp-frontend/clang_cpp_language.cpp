@@ -19,7 +19,8 @@ CC_DIAGNOSTIC_POP()
 
 languaget *new_clang_cpp_language()
 {
-  return new clang_cpp_languaget;
+  static clang_cpp_languaget cppl;
+  return &cppl;
 }
 
 void clang_cpp_languaget::force_file_type(
@@ -83,21 +84,20 @@ extern "C" {
 
 bool clang_cpp_languaget::typecheck(
   contextt &context,
-  const std::string &module)
+  const std::string &module [[maybe_unused]])
 {
-  contextt new_context;
-
-  clang_cpp_convertert converter(new_context, AST, "C++");
+  clang_cpp_convertert converter(context, AST, "C++");
   if (converter.convert())
     return true;
 
-  clang_cpp_adjust adjuster(new_context);
+  clang_cpp_adjust adjuster(context);
   if (adjuster.adjust())
     return true;
 
+#if 0
   if (c_link(context, new_context, module))
     return true;
-
+#endif
   return false;
 }
 

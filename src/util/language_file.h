@@ -22,7 +22,7 @@ class language_filet
 public:
   std::set<std::string> modules;
 
-  std::unique_ptr<languaget> language;
+  languaget *language;
   std::string filename;
 
   void get_modules();
