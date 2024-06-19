@@ -10,12 +10,12 @@ add_library(gotoprograms goto_convert.cpp goto_function.cpp goto_main.cpp
   goto_program_serialization.cpp goto_function_serialization.cpp
   read_bin_goto_object.cpp goto_program_irep.cpp format_strings.cpp
   loop_numbers.cpp goto_loops.cpp write_goto_binary.cpp
-  goto_k_induction.cpp loopst.cpp goto_coverage.cpp)
+  goto_k_induction.cpp loopst.cpp goto_coverage.cpp goto_cfg.cpp)
 add_library(gotoalgorithms loop_unroll.cpp mark_decl_as_non_det.cpp)
 
 if(ENABLE_GOTO_CONTRACTOR)
     include(FindIbex)
-    add_library(gotocontractor goto_contractor.cpp)    
+    add_library(gotocontractor goto_contractor.cpp)
     target_include_directories(gotocontractor PUBLIC ${IBEX_INCLUDE_DIRS} ${IBEX_INCLUDE_DIRS}/ibex ${IBEX_INCLUDE_DIRS}/ibex/3rd)
     target_link_libraries(gotocontractor PUBLIC algorithms gotoprograms PkgConfig::IBEX)
 endif()
