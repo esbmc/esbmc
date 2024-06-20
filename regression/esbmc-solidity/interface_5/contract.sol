@@ -1,6 +1,6 @@
 pragma solidity >=0.5.0;
 
-abstract contract caculator {
+interface caculator {
     enum E {
         x,
         y

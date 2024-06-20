@@ -11,6 +11,6 @@ contract Test is caculator{
         int8 b = 8;
         int8 result = 0;
         result = a + b;
-        assert(result == 16);
+        assert(result == 17);
     }
 }
