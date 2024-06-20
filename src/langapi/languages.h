@@ -7,7 +7,7 @@
 class languagest final
 {
   const namespacet &ns;
-  languaget *language;
+  std::unique_ptr<languaget> language;
 
 public:
   languagest(const namespacet &_ns, language_idt lang)
