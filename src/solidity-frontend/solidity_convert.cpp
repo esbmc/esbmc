@@ -59,25 +59,6 @@ bool solidity_convertert::convert()
   // We need to convert Solidity AST nodes to the equivalent symbols and add them to the context
   nlohmann::json &nodes = src_ast_json["nodes"];
   // add empty body for functions without body
-  for (auto &node : nodes)
-  {
-    if (
-      (node["nodeType"] == "ContractDefinition" &&
-       (node["contractKind"] == "interface" || node["abstract"] == true)) &&
-      node.contains("nodes"))
-    {
-      for (auto &subNode : node["nodes"])
-      {
-        if (
-          subNode["nodeType"] == "FunctionDefinition" &&
-          !subNode.contains("body"))
-        {
-          subNode["body"] = {
-            {"nodeType", "Block"}, {"statements", nlohmann::json::array()}};
-        }
-      }
-    }
-  }
 
   bool found_contract_def = false;
   size_t index = 0;
@@ -711,7 +692,34 @@ bool solidity_convertert::get_noncontract_defition(nlohmann::json &ast_node)
     if (get_function_definition(ast_node))
       return true;
   }
+  else if (node_type == "ContractDefinition")
+  {
+    if (get_interface_abstract_definition(ast_node))
+      return true;
+  }
+  return false;
+}
 
+bool solidity_convertert::get_interface_abstract_definition(
+  nlohmann::json &ast_node)
+{
+  if (
+    (ast_node["nodeType"] == "ContractDefinition" &&
+     (ast_node["contractKind"] == "interface" ||
+      ast_node["abstract"] == true)) &&
+    ast_node.contains("nodes"))
+  {
+    for (auto &subNode : ast_node["nodes"])
+    {
+      if (
+        subNode["nodeType"] == "FunctionDefinition" &&
+        !subNode.contains("body"))
+      {
+        subNode["body"] = {
+          {"nodeType", "Block"}, {"statements", nlohmann::json::array()}};
+      }
+    }
+  }
   return false;
 }
 
@@ -1004,7 +1012,7 @@ bool solidity_convertert::get_function_definition(
     !ast_node["implemented"].get<bool>())
   {
     // if it is a interface or abstract function, it does not have a body and we just skip it
-    exprt body_exprt = code_skipt();
+    exprt body_exprt;
     added_symbol.value = body_exprt;
   }
 
@@ -6064,29 +6072,9 @@ bool solidity_convertert::multi_transaction_verification(
     const struct_typet::componentst &methods =
       to_struct_type(contract.type).methods();
     bool is_tgt_cnt = c_name == contractName ? true : false;
-    bool is_pure_def = false;
 
     for (const auto &method : methods)
     {
-      // skip funtion definition without body
-      for (auto &item : src_ast_json["nodes"].items())
-      {
-        for (auto &item2 : item.value()["nodes"].items())
-        {
-          if (
-            item2.value().contains("name") &&
-            item2.value()["name"] == method.get_name().as_string() &&
-            !item2.value().contains("body"))
-          {
-            is_pure_def = true;
-          }
-        }
-      }
-      if (is_pure_def)
-      {
-        is_pure_def = false;
-        continue;
-      }
       // we only handle public (and external) function
       // as the private and internal function cannot be directly called
       if (is_tgt_cnt)
