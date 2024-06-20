@@ -4,7 +4,7 @@
 
 bool is_builtin_type(const std::string &name)
 {
-  return (name == "int" || name == "float" || name == "bool");
+  return (name == "int" || name == "float" || name == "bool" || name == "str");
 }
 
 bool is_consensus_type(const std::string &name)
