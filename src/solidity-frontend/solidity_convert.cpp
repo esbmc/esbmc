@@ -197,6 +197,7 @@ bool solidity_convertert::convert()
       return true;
   }
 
+  // otherwise, we verify the target function.
   return false; // 'false' indicates successful completion.
 }
 
@@ -689,38 +690,58 @@ bool solidity_convertert::get_noncontract_defition(nlohmann::json &ast_node)
   }
   else if (node_type == "EventDefinition")
   {
+    add_empty_function_body(ast_node);
     if (get_function_definition(ast_node))
       return true;
   }
   else if (node_type == "ContractDefinition")
   {
-    if (get_interface_abstract_definition(ast_node))
-      return true;
+    add_empty_function_body(ast_node);
   }
   return false;
 }
 
-bool solidity_convertert::get_interface_abstract_definition(
-  nlohmann::json &ast_node)
+// add body to funcitons within interfacae && abstract && event
+void solidity_convertert::add_empty_function_body(nlohmann::json &ast_node)
 {
-  if (
-    (ast_node["nodeType"] == "ContractDefinition" &&
-     (ast_node["contractKind"] == "interface" ||
-      ast_node["abstract"] == true)) &&
-    ast_node.contains("nodes"))
+  if (ast_node["nodeType"] == "EventDefinition")
   {
+    // for event-definition
+    if (!ast_node.contains("body"))
+
+      ast_node["body"] = {
+        {"nodeType", "Block"},
+        {"statements", nlohmann::json::array()},
+        {"src", ast_node["src"]}};
+  }
+  else if (ast_node["contractKind"] == "interface")
+  {
+    // For interface: functions have no body
     for (auto &subNode : ast_node["nodes"])
     {
       if (
         subNode["nodeType"] == "FunctionDefinition" &&
         !subNode.contains("body"))
-      {
         subNode["body"] = {
-          {"nodeType", "Block"}, {"statements", nlohmann::json::array()}};
-      }
+          {"nodeType", "Block"},
+          {"statements", nlohmann::json::array()},
+          {"src", ast_node["src"]}};
     }
   }
-  return false;
+  else if (ast_node["abstract"] == true)
+  {
+    // For abstract: functions may or may not have body
+    for (auto &subNode : ast_node["nodes"])
+    {
+      if (
+        subNode["nodeType"] == "FunctionDefinition" &&
+        !subNode.contains("body"))
+        subNode["body"] = {
+          {"nodeType", "Block"},
+          {"statements", nlohmann::json::array()},
+          {"src", ast_node["src"]}};
+    }
+  }
 }
 
 void solidity_convertert::add_enum_member_val(nlohmann::json &ast_node)
@@ -879,11 +900,6 @@ bool solidity_convertert::get_function_definition(
   // Order matters! do not change!
   // 1. Check fd.isImplicit() --- skipped since it's not applicable to Solidity
   // 2. Check fd.isDefined() and fd.isThisDeclarationADefinition()
-  if (
-    ast_node.contains("implemented") &&
-    !ast_node
-      ["implemented"]) // TODO: for interface function, it's just a definition. Add something like "&& isInterface_JustDefinition()"
-    return false;
 
   // Check intrinsic functions
   if (check_intrinsic_function(ast_node))
@@ -1006,27 +1022,12 @@ bool solidity_convertert::get_function_definition(
       return true;
 
     added_symbol.value = body_exprt;
-  } // In interface or abstract function, there is no body
-  else if (
-    !ast_node.contains("body") && ast_node.contains("implemented") &&
-    !ast_node["implemented"].get<bool>())
-  {
-    // if it is a interface or abstract function, it does not have a body and we just skip it
-    exprt body_exprt;
-    added_symbol.value = body_exprt;
   }
-
-  else
+  else if (
+    (ast_node.contains("implemented") && !ast_node["implemented"]) ||
+    ast_node["nodeType"] == "EventDefinition")
   {
-    //! assume it's event-definition
-    if (ast_node["nodeType"] != "EventDefinition")
-    {
-      log_error(
-        "Expect nodeType=EventDefinition, got {}",
-        ast_node["nodeType"].get<std::string>());
-      return true;
-    }
-
+    // For interface, abstract and event, where functions have no body
     // construct an empty body
     code_blockt _block;
     added_symbol.value = _block;
@@ -1160,6 +1161,7 @@ bool solidity_convertert::get_block(
     get_expr(block["expression"], new_expr);
     break;
   }
+  case SolidityGrammar::BlockT::BlockTError:
   default:
   {
     assert(!"Unimplemented type in rule block");
@@ -5020,7 +5022,7 @@ solidity_convertert::get_src_from_json(const nlohmann::json &ast_node)
   }
   default:
   {
-    assert(!"Unsupported node type when getting src from JSON");
+    log_error("Unsupported node type when getting src from JSON");
     abort();
   }
   }
@@ -5251,28 +5253,11 @@ solidity_convertert::find_decl_ref(int ref_decl_id, std::string &contract_name)
     const nlohmann::json &current_func = *current_functionDecl;
     if (!current_func.contains("body"))
     {
-      //! assume it's an event-definition
-      if (
-        current_func.contains("nodeType") &&
-        current_func["nodeType"] == "EventDefinition")
-      {
-        return current_func;
-      }
-      //In inteface and abstract(contract) funtion, the function body is not defined
-      else if (
-        current_func.contains("implemented") &&
-        current_func["implemented"] == false)
-      {
-        return current_func;
-      }
-      else
-      {
-        log_error(
-          "Unable to find the corresponding local variable decl. Current "
-          "function "
-          "does not have a function body.");
-        abort();
-      }
+      log_error(
+        "Unable to find the corresponding local variable decl. Current "
+        "function "
+        "does not have a function body.");
+      abort();
     }
 
     // var declaration in local statements
@@ -6207,20 +6192,7 @@ bool solidity_convertert::multi_contract_verification()
     // 1.1 construct multi-transaction verification entry function
     // function "sol_main_contractname" will be created and inserted to the symbol table.
     const std::string &c_name = sym.second;
-    // check if the contract is an interface
-    // if it is, we skip this contract
-    bool is_interface = false;
-    for (auto &item : src_ast_json["nodes"].items())
-    {
-      if (
-        item.value().contains("contractKind") &&
-        item.value()["contractKind"] == "interface" &&
-        item.value()["name"] == c_name)
-      {
-        is_interface = true;
-      }
-    }
-    if (linearizedBaseList.count(c_name) && !is_interface)
+    if (linearizedBaseList.count(c_name))
     {
       if (multi_transaction_verification(c_name))
         return true;
@@ -6228,7 +6200,6 @@ bool solidity_convertert::multi_contract_verification()
     else
     {
       //! Assume is not a contract (e.g. error type)
-      is_interface = false;
       continue;
     }
 
