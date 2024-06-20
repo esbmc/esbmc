@@ -58,7 +58,6 @@ bool solidity_convertert::convert()
   // By now the context should have the symbols of all ESBMC's intrinsics and the dummy main
   // We need to convert Solidity AST nodes to the equivalent symbols and add them to the context
   nlohmann::json &nodes = src_ast_json["nodes"];
-  // add empty body for functions without body
 
   bool found_contract_def = false;
   size_t index = 0;
@@ -700,7 +699,8 @@ bool solidity_convertert::get_noncontract_defition(nlohmann::json &ast_node)
   return false;
 }
 
-// add body to funcitons within interfacae && abstract && event
+// add a "body" node to funcitons within interfacae && abstract && event
+// the idea is to utilize the function-handling APIs.
 void solidity_convertert::add_empty_function_body(nlohmann::json &ast_node)
 {
   if (ast_node["nodeType"] == "EventDefinition")
@@ -1014,22 +1014,17 @@ bool solidity_convertert::get_function_definition(
   added_symbol.type = type;
 
   // 12. Convert body and embed the body into the same symbol
-  if (ast_node.contains("body"))
+  // skip for 'unimplemented' functions which has no body,
+  // e.g. asbstract/interface, the symbol value would be left as unset
+  if (
+    ast_node.contains("body") ||
+    (ast_node.contains("implemented") && ast_node["implemented"] == true))
   {
     exprt body_exprt;
     if (get_block(ast_node["body"], body_exprt))
       return true;
 
     added_symbol.value = body_exprt;
-  }
-  else if (
-    (ast_node.contains("implemented") && !ast_node["implemented"]) ||
-    ast_node["nodeType"] == "EventDefinition")
-  {
-    // For interface, abstract and event, where functions have no body
-    // construct an empty body
-    code_blockt _block;
-    added_symbol.value = _block;
   }
 
   //assert(!"done - finished all expr stmt in function?");
