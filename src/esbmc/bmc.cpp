@@ -768,9 +768,8 @@ int bmct::ltl_run_thread(symex_target_equationt &equation) const
   return ltl_res_good;
 }
 
-smt_convt::resultt bmct::multi_property_check(
-  const symex_target_equationt &eq,
-  size_t remaining_claims)
+smt_convt::resultt
+bmct::multi_property_check(symex_target_equationt &eq, size_t remaining_claims)
 {
   // As of now, it only makes sense to do this for the base-case
   assert(
@@ -791,6 +790,9 @@ smt_convt::resultt bmct::multi_property_check(
                      options.get_bool_option("condition-coverage-claims") ||
                      options.get_bool_option("condition-coverage-rm") ||
                      options.get_bool_option("condition-coverage-claims-rm");
+  bool is_clear_verified = options.get_bool_option("k-induction") ||
+                           options.get_bool_option("incremental-bmc") ||
+                           options.get_bool_option("k-induction-parallel");
   // For multi-fail-fast
   const std::string fail_fast = options.get_option("multi-fail-fast");
   const bool is_fail_fast = !fail_fast.empty() ? true : false;
@@ -827,6 +829,7 @@ smt_convt::resultt bmct::multi_property_check(
                        &reached_mul_claims,
                        &is_assert_cov,
                        &is_cond_cov,
+                       &is_clear_verified,
                        &is_fail_fast,
                        &fail_fast_limit,
                        &fail_fast_cnt](const size_t &i) {
@@ -847,17 +850,12 @@ smt_convt::resultt bmct::multi_property_check(
     // to avoid double verifying the claims that are already verified
     bool is_verified = false;
     std::string cmt_loc;
+    cmt_loc = claim.claim_msg + "\t" + claim.claim_loc;
     if (is_assert_cov)
-    {
-      cmt_loc = claim.claim_msg + "\t" + claim.claim_loc;
       // C++20 reached_mul_claims.contains
       is_verified = reached_mul_claims.count(cmt_loc) ? true : false;
-    }
     else
-    {
-      cmt_loc = claim.claim_msg + "\t" + claim.claim_loc;
       is_verified = reached_claims.count(cmt_loc) ? true : false;
-    }
     if (is_assert_cov && is_verified)
       // insert to the multiset before skipping the verification process
       reached_mul_claims.emplace(cmt_loc);
@@ -870,19 +868,15 @@ smt_convt::resultt bmct::multi_property_check(
 
     // Initialize a solver
     std::unique_ptr<smt_convt> runtime_solver(create_solver("", ns, options));
-    // Save current instance
-    generate_smt_from_equation(*runtime_solver, local_eq);
 
     log_status(
       "Solving claim '{}' with solver {}",
       claim.claim_msg,
       runtime_solver->solver_text());
 
-    fine_timet sat_start = current_time();
-    smt_convt::resultt result = runtime_solver->dec_solve();
-    fine_timet sat_stop = current_time();
-    log_status(
-      "Runtime decision procedure: {}s", time2string(sat_stop - sat_start));
+    // Save current instance
+    smt_convt::resultt result =
+      run_decision_procedure(*runtime_solver, local_eq);
 
     // If an assertion instance is verified to be violated
     if (result == smt_convt::P_SATISFIABLE)
@@ -917,6 +911,25 @@ smt_convt::resultt bmct::multi_property_check(
 
       // Update fail-fast-counter
       fail_fast_cnt++;
+
+      // for kind && incr: remove verified claims
+      if (is_clear_verified)
+      {
+        for (auto &it : symex->goto_functions.function_map)
+        {
+          for (auto &instruction : it.second.body.instructions)
+          {
+            if (
+              instruction.is_assert() &&
+              from_expr(ns, "", instruction.guard) == claim.claim_msg &&
+              instruction.location.as_string() == claim.claim_loc)
+            {
+              // convert assert to skip
+              instruction.clear(SKIP);
+            }
+          }
+        }
+      }
     }
   };
 
