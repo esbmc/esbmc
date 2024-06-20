@@ -1191,7 +1191,9 @@ int esbmc_parseoptionst::do_bmc_strategy(
     // k-induction
     if (options.get_bool_option("k-induction"))
     {
-      if (is_base_case_violated(options, goto_functions, k_step).is_true() && !cmdline.isset("multi-property"))
+      if (
+        is_base_case_violated(options, goto_functions, k_step).is_true() &&
+        !cmdline.isset("multi-property"))
         return 1;
 
       if (does_forward_condition_hold(options, goto_functions, k_step)
@@ -1221,7 +1223,9 @@ int esbmc_parseoptionst::do_bmc_strategy(
     // incremental-bmc
     if (options.get_bool_option("incremental-bmc"))
     {
-      if (is_base_case_violated(options, goto_functions, k_step).is_true() && !cmdline.isset("multi-property"))
+      if (
+        is_base_case_violated(options, goto_functions, k_step).is_true() &&
+        !cmdline.isset("multi-property"))
         return 1;
 
       if (does_forward_condition_hold(options, goto_functions, k_step)
