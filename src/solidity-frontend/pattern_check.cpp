@@ -57,11 +57,6 @@ bool pattern_checker::start_pattern_based_check(const nlohmann::json &func)
     check_authorization_through_tx_origin(func);
     return false;
   }
-  else
-  {
-    log_progress("Function body is empty");
-    return false;
-  }
 }
 void pattern_checker::check_authorization_through_tx_origin(
   const nlohmann::json &func)
