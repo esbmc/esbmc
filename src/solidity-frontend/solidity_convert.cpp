@@ -75,8 +75,7 @@ bool solidity_convertert::convert()
       assert(itr->contains("nodes"));
       auto pattern_check =
         std::make_unique<pattern_checker>((*itr)["nodes"], sol_func);
-      if (pattern_check->do_pattern_check())
-        return true; // 'true' indicates something goes wrong.
+      pattern_check->do_pattern_check();
     }
   }
   assert(found_contract_def && "No contracts were found in the program.");
