@@ -24,7 +24,8 @@ goto_cfg::goto_cfg(goto_functionst &goto_functions)
       {
         for (const auto &target : i_it->targets)
           leaders.insert(target);
-          auto next = i_it;
+
+        auto next = i_it;
         next++;
         leaders.insert(next);
       }
