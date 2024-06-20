@@ -65,17 +65,15 @@ bool language_uit::parse(const std::string &filename)
 
   log_progress("Parsing {}", filename);
 
-  std::pair<language_filest::filemapt::iterator, bool> result =
-    language_files.filemap.emplace(
-      std::piecewise_construct,
-      std::forward_as_tuple(filename),
-      std::tuple<>{});
-  assert(result.second);
+  auto it = language_files.filemap.find(lang);
+  if (it == language_files.filemap.end())
+  {
+    auto emplace = language_files.filemap.emplace(lang, new_language(lang));
+    assert(emplace.second);
+    it = emplace.first;
+  }
 
-  language_filet &lf = result.first->second;
-  lf.filename = filename;
-  lf.language = new_language(lang);
-  if (!lf.language)
+  if (!it->second)
   {
     log_error(
       "{}frontend for {} was not built on this version of ESBMC",
@@ -83,9 +81,8 @@ bool language_uit::parse(const std::string &filename)
       language_name(lang));
     return true;
   }
-  languaget &language = *lf.language;
 
-  if (language.parse(filename))
+  if (it->second->parse(filename))
   {
     log_error("PARSING ERROR");
     return true;
