@@ -1103,6 +1103,13 @@ void python_converter::get_var_assign(
       else if (ast_node["value"]["value"].is_string())
         type_size = ast_node["value"]["value"].get<std::string>().size();
     }
+    else if (
+      ast_node["value"].contains("args") &&
+      ast_node["value"]["args"].size() > 0 &&
+      ast_node["value"]["args"][0].contains("value") &&
+      ast_node["value"]["args"][0]["value"].is_string())
+      type_size =
+        ast_node["value"]["args"][0]["value"].get<std::string>().size();
 
     current_element_type =
       get_typet(ast_node["annotation"]["id"].get<std::string>(), type_size);
