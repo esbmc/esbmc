@@ -8,7 +8,7 @@ bool ssa_features::run(symex_target_equationt::SSA_stepst &steps)
 
   for (const auto &step : steps)
   {
-    for (const expr2tc &e : std::array { step.cond, step.guard })      
+    for (const expr2tc &e : std::array { step.cond, step.guard })
       check(e);
   }
 
@@ -25,7 +25,7 @@ void ssa_features::check(const expr2tc &e)
   // TODO: We could add a cache
   if (is_array_type(e->type))
     features.insert(SSA_FEATURES::ARRAY);
-    
+
 
   if (is_struct_type(e->type))
     features.insert(SSA_FEATURES::STRUCTS);
@@ -37,7 +37,7 @@ void ssa_features::check(const expr2tc &e)
   case expr2t::constant_floatbv_id:
     features.insert(SSA_FEATURES::NON_INTEGER_NUMERAL);
     break;
-    
+
   case expr2t::expr_ids::mul_id:
   case expr2t::expr_ids::div_id:
   case expr2t::modulus_id:
@@ -75,7 +75,7 @@ void ssa_features::check(const expr2tc &e)
   case expr2t::overflow_cast_id:
   case expr2t::overflow_id:
   case expr2t::overflow_neg_id:
-    features.insert(SSA_FEATURES::OVERFLOW_ASSERTIONS);    
+    features.insert(SSA_FEATURES::OVERFLOW_ASSERTIONS);
     break;
 
   default:
@@ -126,5 +126,5 @@ bool ssa_features::is_entirely_constant(const expr2tc &e)
   e->foreach_operand([this, &result](const expr2tc &next) {
     result &= is_entirely_constant(next); });
 
-  return false;
+  return result;
 }
