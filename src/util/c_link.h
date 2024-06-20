@@ -4,8 +4,6 @@
 #include <util/context.h>
 #include <util/message.h>
 
-bool c_link(
-  contextt &context,
-  contextt &new_context);
+bool c_link(contextt &context, contextt &new_context);
 
 #endif
