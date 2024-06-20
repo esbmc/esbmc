@@ -81,23 +81,20 @@ extern "C" {
   return intrinsics;
 }
 
-bool clang_cpp_languaget::typecheck(
-  contextt &context,
-  const std::string &module)
+bool clang_cpp_languaget::typecheck(contextt &context)
 {
-  contextt new_context;
-
-  clang_cpp_convertert converter(new_context, AST, "C++");
+  clang_cpp_convertert converter(context, AST, "C++");
   if (converter.convert())
     return true;
 
-  clang_cpp_adjust adjuster(new_context);
+  clang_cpp_adjust adjuster(context);
   if (adjuster.adjust())
     return true;
-
-  if (c_link(context, new_context, module))
+    
+#if 0
+  if (c_link(context, new_context))
     return true;
-
+#endif
   return false;
 }
 
