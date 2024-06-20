@@ -107,9 +107,7 @@ bool python_languaget::final(contextt & /*context*/)
   return false;
 }
 
-bool python_languaget::typecheck(
-  contextt &context,
-  const std::string & /*module*/)
+bool python_languaget::typecheck(contextt &context)
 {
   python_converter converter(context, ast);
   if (converter.convert())
