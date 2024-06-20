@@ -2,111 +2,143 @@
 
 goto_cfg::goto_cfg(goto_functionst &goto_functions)
 {
-  log_status("Building CFG");
   Forall_goto_functions (f_it, goto_functions)
   {
-    std::shared_ptr<basic_block> function_start = std::make_shared<basic_block>();
-    functions[f_it->first.as_string()] = function_start;
     if(!f_it->second.body_available)
         continue;
 
     goto_programt &body = f_it->second.body;
-    function_start->begin = body.instructions.begin();
 
-    // First pass - identify all the labels
-    std::unordered_map<size_t, std::shared_ptr<basic_block>> labels;
-    log_progress("Building labels for function: {} ", f_it->first.as_string());
+    // First pass - identify all the leaders
+    std::set<goto_programt::instructionst::iterator> leaders;
+    leaders.insert(body.instructions.begin()); // First instruction is always a leader
+
     Forall_goto_program_instructions (i_it, body)
     {
       if (i_it->is_target())
       {
-        log_progress("Adding label {} ", i_it->target_number);
-        labels[i_it->target_number] = std::make_shared<basic_block>();
-        labels[i_it->target_number]->begin = i_it;
+        leaders.insert(i_it);
       }
+
+      if (i_it->is_goto() || i_it->is_backwards_goto())
+      {
+        for (const auto &target : i_it->targets)
+          leaders.insert(target);
+          auto next = i_it;
+        next++;
+        leaders.insert(next);
+      }
+
+      if (i_it->is_return())
+      {
+        auto next = i_it;
+        next++;
+        leaders.insert(next);
+      }
+
+      if (i_it->is_throw() || i_it->is_catch())
+      {
+        log_error("[CFG], Throw and catch instructions are not supported yet");
+        abort();
+      }
+
+      // TODO: there are some special C functions that should be handled: exit, longjmp, etc.
     }
-    log_progress("Finished building labels");
 
     // Second pass - identify all the basic blocks
-    std::shared_ptr<basic_block> current_block = function_start;
-    Forall_goto_program_instructions (i_it, body)
+    auto start= body.instructions.begin();
+    const auto &end = body.instructions.end();
+    std::vector<std::shared_ptr<basic_block>> bbs;
+
+    while(start != end)
     {
-      if (i_it->is_target())
+      std::shared_ptr<basic_block> bb = std::make_shared<basic_block>();
+      bb->begin = start;
+      start++;
+      bb->end = start;
+
+      while(start != end && leaders.find(start) == leaders.end())
       {
-        assert(labels.find(i_it->target_number) != labels.end());
-        auto tmp = i_it;
-        tmp--; // the label itself is not part of the block
-        current_block->end = tmp;
-
-        const std::shared_ptr<basic_block> &label_start = labels[i_it->target_number];
-        current_block->successors.insert(label_start);
-        label_start->predecessors.insert(current_block);
-
-        current_block = label_start;
+        start++;
+        bb->end = start;
       }
-      else if (i_it->is_goto())
+
+      if(bbs.size() > 0)
       {
-        assert(labels.find(i_it->target_number) != labels.end());
-        current_block->end = i_it;
-        const std::shared_ptr<basic_block> &label_start = labels[i_it->target_number];
-        current_block->successors.insert(label_start);
-        label_start->predecessors.insert(current_block);
+        bbs.back()->successors.insert(bb);
+        bb->predecessors.insert(bbs.back());
+      }
+      bbs.push_back(bb);
+    }
 
-        if(0 && i_it->guard)
+    // Third pass - identify all the successors/predecessors
+    for(auto &bb : bbs)
+    {
+      assert(bb->begin != bb->end);
+      auto last = bb->end;
+      last--;
+
+      for(const auto &bb2 : bbs)
+      {
+        if(bb2->begin == bb->end)
         {
-            // If the guard is false, we go to the next instruction
-            std::shared_ptr<basic_block> next_block = std::make_shared<basic_block>();
-            current_block->successors.insert(next_block);
-            next_block->predecessors.insert(current_block);
+          bb->successors.insert(bb2);
+          bb2->predecessors.insert(bb);
+        }
 
-            auto tmp = i_it;
-            tmp++;
-            next_block->begin = tmp;
-            current_block = next_block;
+        if (last->is_goto() || last->is_backwards_goto())
+        {
+          for(const auto &target : last->targets)
+          {
+            if(target == bb2->begin)
+            {
+              bb->successors.insert(bb2);
+              bb2->predecessors.insert(bb);
+            }
+          }
         }
       }
     }
+
+    basic_blocks[f_it->first.as_string()] = bbs;
   }
+
   log_progress("Finished CFG construction");
 
 }
 
+#include <fstream>
+
 void goto_cfg::dump_graph() const {
     log_status("Dumping CFG");
-
-    for (const auto& [function, bb] : functions)
+    for (const auto& [function, bbs] : basic_blocks)
     {
-        log_status("Function: {}", function);
-
-        std::unordered_set<std::shared_ptr<basic_block>> visited;
-        std::unordered_set<std::shared_ptr<basic_block>> to_visit = {bb};
-
-        while(!to_visit.empty())
+      std::ofstream file("cfg_" + function + ".dot");
+      file << "digraph G {\n";
+      for(size_t t = 0; t < bbs.size(); t++)
+      {
+        file << "BB" << t << " [shape=record, label=\"{" << t << ":\\l|";
+        for(auto i = bbs[t]->begin; i != bbs[t]->end; i++)
         {
-            std::shared_ptr<basic_block> current = *to_visit.begin();
-            visited.insert(current);
-            to_visit.erase(to_visit.begin());
-
-            log_status("Basic Block:");
-            for(goto_programt::instructionst::iterator it = current->begin; it != current->end; it++)
-            {
-                it->dump();
-            }
-
-            for(const auto &successor : current->successors)
-            {
-                log_status("Successor: {}", std::to_string(successor->begin->location_number));
-                if(visited.find(successor) == visited.end())
-                    to_visit.insert(successor);
-            }
-
-            for(const auto &successor : current->predecessors)
-            {
-                log_status("Predecessor: {}", std::to_string(successor->begin->location_number));
-                if(visited.find(successor) == visited.end())
-                    to_visit.insert(successor);
-            }
+          std::ostringstream oss;
+          i->output_instruction(*migrate_namespace_lookup, "", oss);
+          // TODO: escape special characters
+          file << oss.str() << "\\l";
         }
-    }
 
+        const bool is_conditional_jump = bbs[t]->successors.size() > 1;
+        if(is_conditional_jump)
+            file << "|{<s0>T|<s1>F}";
+
+        file << "}\"];\n";
+        for(const auto &suc : bbs[t]->successors)
+        {
+          if(!is_conditional_jump)
+            file << "BB" << t << " -> " << "BB" << std::distance(bbs.begin(), std::find(bbs.begin(), bbs.end(), suc)) << ";\n";
+          else
+            file << "BB" << t << (suc->begin != bbs[t]->end ? ":s0" : ":s1") << " -> " << "BB" << std::distance(bbs.begin(), std::find(bbs.begin(), bbs.end(), suc)) << ";\n";
+        }
+      }
+      file << "}\n";
+    }
 }
