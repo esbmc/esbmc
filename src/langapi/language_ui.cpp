@@ -13,9 +13,7 @@ language_uit::language_uit() : ns(context)
 }
 
 language_uit::language_uit(language_uit &&o) noexcept
-  : language_files(std::move(o.language_files)),
-    context(std::move(o.context)),
-    ns(context)
+  : context(std::move(o.context)), ns(context)
 {
   // Ahem
   migrate_namespace_lookup = &ns;
@@ -23,7 +21,6 @@ language_uit::language_uit(language_uit &&o) noexcept
 
 language_uit &language_uit::operator=(language_uit &&o) noexcept
 {
-  language_files = std::move(o.language_files);
   context = std::move(o.context);
   ns = namespacet(context);
 
@@ -65,10 +62,10 @@ bool language_uit::parse(const std::string &filename)
 
   log_progress("Parsing {}", filename);
 
-  auto it = language_files.filemap.find(lang);
-  if (it == language_files.filemap.end())
+  auto it = filemap.find(lang);
+  if (it == filemap.end())
   {
-    auto emplace = language_files.filemap.emplace(lang, new_language(lang));
+    auto emplace = filemap.emplace(lang, new_language(lang));
     assert(emplace.second);
     it = emplace.first;
   }
@@ -88,8 +85,6 @@ bool language_uit::parse(const std::string &filename)
     return true;
   }
 
-  lf.get_modules();
-
   return false;
 }
 
@@ -97,22 +92,24 @@ bool language_uit::typecheck()
 {
   log_progress("Converting");
 
-  if (language_files.typecheck(context))
-  {
-    log_error("CONVERSION ERROR");
-    return true;
-  }
+  for (auto &it : filemap)
+    if (it.second->typecheck(context))
+    {
+      log_error("CONVERSION ERROR");
+      return true;
+    }
 
   return false;
 }
 
 bool language_uit::final()
 {
-  if (language_files.final(context))
-  {
-    log_error("CONVERSION ERROR");
-    return true;
-  }
+  for (auto &it : filemap)
+    if (it.second->final(context))
+    {
+      log_error("CONVERSION ERROR");
+      return true;
+    }
 
   return false;
 }
