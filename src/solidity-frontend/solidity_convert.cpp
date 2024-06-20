@@ -58,6 +58,26 @@ bool solidity_convertert::convert()
   // By now the context should have the symbols of all ESBMC's intrinsics and the dummy main
   // We need to convert Solidity AST nodes to the equivalent symbols and add them to the context
   nlohmann::json &nodes = src_ast_json["nodes"];
+  // add empty body for functions without body
+  for (auto &node : nodes)
+  {
+    if (
+      (node["nodeType"] == "ContractDefinition" &&
+       (node["contractKind"] == "interface" || node["abstract"] == true)) &&
+      node.contains("nodes"))
+    {
+      for (auto &subNode : node["nodes"])
+      {
+        if (
+          subNode["nodeType"] == "FunctionDefinition" &&
+          !subNode.contains("body"))
+        {
+          subNode["body"] = {
+            {"nodeType", "Block"}, {"statements", nlohmann::json::array()}};
+        }
+      }
+    }
+  }
 
   bool found_contract_def = false;
   size_t index = 0;
@@ -6004,7 +6024,6 @@ bool solidity_convertert::multi_transaction_verification(
     const std::string id = prefix + c_name;
     if (context.find_symbol(id) == nullptr)
       return true;
-    log_error("we are here1!");
     const symbolt &contract = *context.find_symbol(id);
     assert(contract.type.is_struct() && "A contract should be a struct");
 

@@ -2,19 +2,27 @@
 pragma solidity >=0.5.0;
 
 interface IUserRegistry {
-    function register(address user) external;
-    function isRegistered(address user) external view returns (bool);
+    function test() external view;
 }
 
-contract UserRegistry is IUserRegistry {
-    
-
-    function register(address user) external  {
-        _registeredUsers[user] = true;
+contract Base is IUserRegistry{
+    enum T {
+        xxx
     }
+    mapping(uint => uint) test1;
+    mapping(int8 => uint) test2;
 
-    function isRegistered(address user) external view  returns (bool) {
-        return _registeredUsers[user];
+    function test() external view {
+        int8 x = 0;
+        assert(test2[0] == 0);
+        assert(test2[x] == 0);
+		assert(test2[-1] == 0);
+		assert(test2[1] == 0);
+
+        assert(test1[0] == 0);
+		assert(test1[uint(T.xxx)] == 0);
+		assert(test1[1] == 0);
+
+        
     }
-    mapping(address => bool) private _registeredUsers;
 }

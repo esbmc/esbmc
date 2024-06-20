@@ -1,15 +1,14 @@
 pragma solidity >=0.5.0;
 
 interface caculator {
-    function getResult() external view returns (int8);
+    function getResult() external view ;
 }
 
 contract Test is caculator{
-    constructor() {}
-    function getResult() external view returns (int8) {
-        int8 a = 127;
-        int8 b = 0;
-        int8 result = a / b;
-        return result;
+    function getResult() external view {
+        int8 y0 = 127;
+        int8 y1 = 1;
+        y0 = y0 + y1;
+		assert(y0 > 0);
     }
 }
