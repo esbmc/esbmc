@@ -77,6 +77,6 @@ languaget *new_python_language();
     language_idt::NONE, NULL                                                   \
   }
 
-languaget *new_language(language_idt lang);
+std::unique_ptr<languaget> new_language(language_idt lang);
 
 #endif

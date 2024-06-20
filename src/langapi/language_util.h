@@ -7,7 +7,7 @@
 #include <util/namespace.h>
 #include <util/symbol.h>
 
-languaget *language_from_symbol(const symbolt &symbol);
+std::unique_ptr<languaget> language_from_symbol(const symbolt &symbol);
 
 std::string from_expr(
   const namespacet &ns,
