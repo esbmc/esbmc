@@ -1083,43 +1083,49 @@ void python_converter::update_instance_from_self(
   }
 }
 
+size_t get_type_size(const nlohmann::json &ast_node)
+{
+  size_t type_size = 0;
+  if (ast_node["value"].contains("value"))
+  {
+    if (ast_node["annotation"]["id"] == "bytes")
+    {
+      const std::string &str =
+        ast_node["value"]["encoded_bytes"].get<std::string>();
+      std::vector<uint8_t> decoded = base64_decode(str);
+      type_size = decoded.size();
+    }
+    else if (ast_node["value"]["value"].is_string())
+      type_size = ast_node["value"]["value"].get<std::string>().size();
+  }
+  else if (
+    ast_node["value"].contains("args") &&
+    ast_node["value"]["args"].size() > 0 &&
+    ast_node["value"]["args"][0].contains("value") &&
+    ast_node["value"]["args"][0]["value"].is_string())
+    type_size = ast_node["value"]["args"][0]["value"].get<std::string>().size();
+
+  return type_size;
+}
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
   if (ast_node.contains("annotation"))
   {
-    // Get type from current annotation node
-    size_t type_size = 0;
-    if (ast_node["value"].contains("value"))
-    {
-      if (ast_node["annotation"]["id"] == "bytes")
-      {
-        const std::string &str =
-          ast_node["value"]["encoded_bytes"].get<std::string>();
-        std::vector<uint8_t> decoded = base64_decode(str);
-        type_size = decoded.size();
-      }
-      else if (ast_node["value"]["value"].is_string())
-        type_size = ast_node["value"]["value"].get<std::string>().size();
-    }
-    else if (
-      ast_node["value"].contains("args") &&
-      ast_node["value"]["args"].size() > 0 &&
-      ast_node["value"]["args"][0].contains("value") &&
-      ast_node["value"]["args"][0]["value"].is_string())
-      type_size =
-        ast_node["value"]["args"][0]["value"].get<std::string>().size();
-
-    current_element_type =
-      get_typet(ast_node["annotation"]["id"].get<std::string>(), type_size);
+    // Get type from annotation node
+    size_t type_size = get_type_size(ast_node);
+    const auto &annotated_type = ast_node["annotation"]["id"];
+    current_element_type = get_typet(annotated_type, type_size);
   }
   else
   {
     // Get type from declaration node
     std::string var_name = ast_node["targets"][0]["id"].get<std::string>();
-    // Get variable from current function
     nlohmann::json ref;
+
+    // Get variable from current function
     for (const auto &elem : ast_json["body"])
     {
       if (elem["_type"] == "FunctionDef" && elem["name"] == current_func_name)
@@ -1131,6 +1137,7 @@ void python_converter::get_var_assign(
       ref = find_var_decl(var_name, ast_json);
 
     assert(!ref.empty());
+
     current_element_type =
       get_typet(ref["annotation"]["id"].get<std::string>());
   }
@@ -1183,7 +1190,7 @@ void python_converter::get_var_assign(
   }
   else if (ast_node["_type"] == "Assign")
   {
-    std::string name = ast_node["targets"][0]["id"].get<std::string>();
+    const std::string &name = ast_node["targets"][0]["id"].get<std::string>();
     std::string symbol_id = create_symbol_id() + "@" + name;
     lhs_symbol = context.find_symbol(symbol_id);
     assert(lhs_symbol);
