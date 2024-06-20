@@ -1973,7 +1973,7 @@ bool esbmc_parseoptionst::output_goto_program(
         return true;
     }
 
-    if (cmdline.isset("goto-cfg-only"))
+    if (cmdline.isset("dump-goto-cfg"))
     {
       goto_cfg cfg(goto_functions);
       cfg.dump_graph();
