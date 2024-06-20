@@ -124,7 +124,7 @@ void pattern_checker::check_require_argument(const nlohmann::json &call_args)
         check_tx_origin(left_expr);
       }
     } // end of "=="
-  } // end of "BinaryOperation"
+  }   // end of "BinaryOperation"
 }
 
 void pattern_checker::check_tx_origin(const nlohmann::json &left_expr)
