@@ -7,7 +7,6 @@ add_library(symex symex_target.cpp symex_target_equation.cpp symex_assign.cpp
   witnesses.cpp printf_formatter.cpp features.cpp)
 target_include_directories(symex
     PRIVATE ${CMAKE_BINARY_DIR}/src
-    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
 target_link_libraries(symex fmt::fmt)
