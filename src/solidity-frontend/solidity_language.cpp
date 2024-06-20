@@ -119,7 +119,7 @@ bool solidity_languaget::convert_intrinsics(contextt &context)
   return false;
 }
 
-bool solidity_languaget::typecheck(contextt &context, const std::string &module)
+bool solidity_languaget::typecheck(contextt &context)
 {
   contextt new_context;
   convert_intrinsics(
@@ -138,10 +138,8 @@ bool solidity_languaget::typecheck(contextt &context, const std::string &module)
   if (adjuster.adjust())
     return true;
 
-  if (c_link(
-        context,
-        new_context,
-        module)) // also populates language_uit::context
+  if (c_link(context,
+             new_context)) // also populates language_uit::context
     return true;
 
   return false;
