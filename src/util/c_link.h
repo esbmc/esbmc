@@ -6,7 +6,6 @@
 
 bool c_link(
   contextt &context,
-  contextt &new_context,
-  const std::string &module);
+  contextt &new_context);
 
 #endif

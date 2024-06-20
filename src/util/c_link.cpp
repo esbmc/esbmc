@@ -38,10 +38,9 @@ public:
 class c_linkt : public typecheckt
 {
 public:
-  c_linkt(contextt &_context, contextt &_new_context, std::string _module)
+  c_linkt(contextt &_context, contextt &_new_context)
     : context(_context),
       new_context(_new_context),
-      module(std::move(_module)),
       ns(_context, _new_context),
       type_counter(0)
   {
@@ -77,7 +76,6 @@ protected:
 
   contextt &context;
   contextt &new_context;
-  std::string module;
   merged_namespacet ns;
 
   typedef std::unordered_set<irep_idt, irep_id_hash> known_modulest;
@@ -401,8 +399,8 @@ void c_linkt::move(symbolt &new_symbol)
 }
 } /* end anonymous namespace */
 
-bool c_link(contextt &context, contextt &new_context, const std::string &module)
+bool c_link(contextt &context, contextt &new_context)
 {
-  c_linkt c_link(context, new_context, module);
+  c_linkt c_link(context, new_context);
   return c_link.typecheck_main();
 }
