@@ -666,8 +666,14 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     if (is_builtin_type(func_name) || is_consensus_type(func_name))
     {
       // Replace the function call with a constant value. For example, x = int(1) becomes x = 1
-      typet t = get_typet(func_name);
-      exprt expr = get_expr(element["args"][0]);
+      size_t arg_size = 1;
+      const auto &arg = element["args"][0];
+
+      if (func_name == "str")
+        arg_size = arg["value"].get<std::string>().size(); // get string length
+
+      typet t = get_typet(func_name, arg_size);
+      exprt expr = get_expr(arg);
       expr.type() = t;
       return expr;
     }
@@ -810,10 +816,14 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     return from_integer(str[0], t);
   }
 
+  // Docstrings are ignored
+  if (value.get<std::string>()[0] == '\n')
+    return exprt();
+
   // bytes/string literals
-  if (value.is_string() && current_element_type.is_array())
+  if (value.is_string())
   {
-    exprt expr = gen_zero(current_element_type);
+    typet t = current_element_type;
     std::vector<uint8_t> string_literal;
 
     // "bytes" literals
@@ -824,13 +834,15 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     }
     else // string literals
     {
+      t = get_typet("str", value.get<std::string>().size());
       const std::string &value = element["value"].get<std::string>();
       string_literal = std::vector<uint8_t>(std::begin(value), std::end(value));
     }
 
-    typet &char_type = current_element_type.subtype();
+    typet &char_type = t.subtype();
+    exprt expr = gen_zero(t);
 
-    // initialize array
+    // Initialise array
     unsigned int i = 0;
     for (uint8_t &ch : string_literal)
     {
@@ -842,10 +854,6 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     }
     return expr;
   }
-
-  // Docstrings are ignored
-  if (value.get<std::string>()[0] == '\n')
-    return exprt();
 
   log_error("Unsupported literal: {}\n", value.get<std::string>());
   abort();
