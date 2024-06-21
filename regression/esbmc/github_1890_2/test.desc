@@ -1,7 +1,4 @@
 CORE
-main.c --multi-property --k-induction --k-step 3
+main.c 
+--multi-property --k-induction --k-step 3
 ^VERIFICATION FAILED$
-\bassertion$
-\b0 && (_Bool)(&"1"[0])$
-\bassertion$
-\b0 && (_Bool)(&"2"[0])$

@@ -1,5 +1,6 @@
 CORE
-main.c --multi-property --incremental-bmc --k-step 10
+main.c 
+--multi-property --incremental-bmc --k-step 10
 ^VERIFICATION FAILED$
 \bassertion 2==1$
 \b2 == 1$
