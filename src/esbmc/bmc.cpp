@@ -768,8 +768,9 @@ int bmct::ltl_run_thread(symex_target_equationt &equation) const
   return ltl_res_good;
 }
 
-smt_convt::resultt
-bmct::multi_property_check(symex_target_equationt &eq, size_t remaining_claims)
+smt_convt::resultt bmct::multi_property_check(
+  const symex_target_equationt &eq,
+  size_t remaining_claims)
 {
   // As of now, it only makes sense to do this for the base-case
   assert(
@@ -924,8 +925,9 @@ bmct::multi_property_check(symex_target_equationt &eq, size_t remaining_claims)
               from_expr(ns, "", instruction.guard) == claim.claim_msg &&
               instruction.location.as_string() == claim.claim_loc)
             {
-              // convert assert to skip
-              instruction.clear(SKIP);
+              // convert ASSERT to SKIP
+              instruction.make_skip();
+              break;
             }
           }
         }
