@@ -153,7 +153,7 @@ void mergeASTs(
     FromUnit->getASTContext(),
     FromUnit->getFileManager(),
     false);
-  
+
   Importer.setODRHandling(clang::ASTImporter::ODRHandlingType::Liberal);
 
   for (auto decl : FromUnit->getASTContext().getTranslationUnitDecl()->decls())

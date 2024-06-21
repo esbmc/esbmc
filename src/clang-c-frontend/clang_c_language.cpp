@@ -326,7 +326,7 @@ bool clang_c_languaget::typecheck(contextt &context)
   clang_c_adjust adjuster(context);
   if (adjuster.adjust())
     return true;
-    
+
   return false;
 }
 
