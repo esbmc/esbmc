@@ -2,6 +2,7 @@
 // Remove warnings from Clang headers
 CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
+#include <clang/AST/ASTImporter.h>
 #include <clang/Basic/Version.inc>
 #include <clang/Driver/Compilation.h>
 #include <clang/Driver/Driver.h>
@@ -14,7 +15,6 @@ CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/Lex/PreprocessorOptions.h>
 #include <clang/Tooling/Tooling.h>
 #include <llvm/Option/ArgList.h>
-#include <clang/AST/ASTImporter.h>
 #if CLANG_VERSION_MAJOR < 16
 #  include <llvm/Support/Host.h>
 #else
@@ -153,6 +153,8 @@ void mergeASTs(
     FromUnit->getASTContext(),
     FromUnit->getFileManager(),
     false);
+  
+  Importer.setODRHandling(clang::ASTImporter::ODRHandlingType::Liberal);
 
   for (auto decl : FromUnit->getASTContext().getTranslationUnitDecl()->decls())
   {
