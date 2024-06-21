@@ -103,6 +103,7 @@ void ssa_features::print_result() const
   if (features.count(SSA_FEATURES::STRUCTS))
     log_status("SSA: Contains STRUCTS");
 }
+
 bool ssa_features::is_entirely_constant(const expr2tc &e)
 {
   if(is_constant_expr(e))
