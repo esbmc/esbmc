@@ -1,3 +1,4 @@
+#include <assert.h>
 void func()
 {
     for (int i = 0; i <= 1; i++)

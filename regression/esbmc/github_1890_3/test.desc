@@ -1,8 +1,5 @@
 CORE
 main.c 
---multi-property --incremental-bmc --k-step 10
+--multi-property --incremental-bmc
 ^VERIFICATION FAILED$
-\bassertion 2==1$
-\b2 == 1$
-\bassertion 2==1$
-\b0 == 1$
+\bdivision by zero\b

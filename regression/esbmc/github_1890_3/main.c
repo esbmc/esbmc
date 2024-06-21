@@ -1,34 +1,19 @@
 #include <assert.h>
 
-void loop1()
+void func()
 {
-   for (int i = 0; i < 10; i++)
-   {
-      assert(2==1);
-   }
+   for (int i = 0; i <= 1; i++)
+      assert(0 && "1");
 }
-
-void loop2()
+void func2()
 {
-   for (int i = 0; i < 2; i++)
-   {
-      assert(0==1);
-   }
-}
 
+   assert(0 && "2");
+}
 int main()
-
 {
-   switch (1)
-   {
-   case 1:
-      loop1();
-      /*Fallthrough*/
-   case 2:
-      loop2();
-    /*Fallthrough*/
-   default:
-       ;
-   }
-   return 0;
+   func();
+   int x = 0;
+   10 / x;
+   func2();
 }
