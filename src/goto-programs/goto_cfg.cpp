@@ -4,14 +4,15 @@ goto_cfg::goto_cfg(goto_functionst &goto_functions)
 {
   Forall_goto_functions (f_it, goto_functions)
   {
-    if(!f_it->second.body_available)
-        continue;
+    if (!f_it->second.body_available)
+      continue;
 
     goto_programt &body = f_it->second.body;
 
     // First pass - identify all the leaders
     std::set<goto_programt::instructionst::iterator> leaders;
-    leaders.insert(body.instructions.begin()); // First instruction is always a leader
+    leaders.insert(
+      body.instructions.begin()); // First instruction is always a leader
 
     Forall_goto_program_instructions (i_it, body)
     {
@@ -47,24 +48,24 @@ goto_cfg::goto_cfg(goto_functionst &goto_functions)
     }
 
     // Second pass - identify all the basic blocks
-    auto start= body.instructions.begin();
+    auto start = body.instructions.begin();
     const auto &end = body.instructions.end();
     std::vector<std::shared_ptr<basic_block>> bbs;
 
-    while(start != end)
+    while (start != end)
     {
       std::shared_ptr<basic_block> bb = std::make_shared<basic_block>();
       bb->begin = start;
       start++;
       bb->end = start;
 
-      while(start != end && leaders.find(start) == leaders.end())
+      while (start != end && leaders.find(start) == leaders.end())
       {
         start++;
         bb->end = start;
       }
 
-      if(bbs.size() > 0)
+      if (bbs.size() > 0)
       {
         bbs.back()->successors.insert(bb);
         bb->predecessors.insert(bbs.back());
@@ -73,15 +74,15 @@ goto_cfg::goto_cfg(goto_functionst &goto_functions)
     }
 
     // Third pass - identify all the successors/predecessors
-    for(auto &bb : bbs)
+    for (auto &bb : bbs)
     {
       assert(bb->begin != bb->end);
       auto last = bb->end;
       last--;
 
-      for(const auto &bb2 : bbs)
+      for (const auto &bb2 : bbs)
       {
-        if(bb2->begin == bb->end)
+        if (bb2->begin == bb->end)
         {
           bb->successors.insert(bb2);
           bb2->predecessors.insert(bb);
@@ -89,9 +90,10 @@ goto_cfg::goto_cfg(goto_functionst &goto_functions)
 
         if (last->is_goto() || last->is_backwards_goto())
         {
-          for(const auto &target : last->targets)
+          bb->terminator = basic_block::terminator_type::IF_GOTO;
+          for (const auto &target : last->targets)
           {
-            if(target == bb2->begin)
+            if (target == bb2->begin)
             {
               bb->successors.insert(bb2);
               bb2->predecessors.insert(bb);
@@ -105,41 +107,57 @@ goto_cfg::goto_cfg(goto_functionst &goto_functions)
   }
 
   log_progress("Finished CFG construction");
-
 }
 
 #include <fstream>
 
-void goto_cfg::dump_graph() const {
-    log_status("Dumping CFG");
-    for (const auto& [function, bbs] : basic_blocks)
+void goto_cfg::dump_graph() const
+{
+  log_status("Dumping CFG");
+  for (const auto &[function, bbs] : basic_blocks)
+  {
+    std::ofstream file("cfg_" + function + ".dot");
+    file << "digraph G {\n";
+    for (size_t t = 0; t < bbs.size(); t++)
     {
-      std::ofstream file("cfg_" + function + ".dot");
-      file << "digraph G {\n";
-      for(size_t t = 0; t < bbs.size(); t++)
+      file << "BB" << t << " [shape=record, label=\"{" << t << ":\\l|";
+      for (auto i = bbs[t]->begin; i != bbs[t]->end; i++)
       {
-        file << "BB" << t << " [shape=record, label=\"{" << t << ":\\l|";
-        for(auto i = bbs[t]->begin; i != bbs[t]->end; i++)
-        {
-          std::ostringstream oss;
-          i->output_instruction(*migrate_namespace_lookup, "", oss);
-          // TODO: escape special characters
-          file << oss.str() << "\\l";
-        }
-
-        const bool is_conditional_jump = bbs[t]->successors.size() > 1;
-        if(is_conditional_jump)
-            file << "|{<s0>T|<s1>F}";
-
-        file << "}\"];\n";
-        for(const auto &suc : bbs[t]->successors)
-        {
-          if(!is_conditional_jump)
-            file << "BB" << t << " -> " << "BB" << std::distance(bbs.begin(), std::find(bbs.begin(), bbs.end(), suc)) << ";\n";
-          else
-            file << "BB" << t << (suc->begin != bbs[t]->end ? ":s0" : ":s1") << " -> " << "BB" << std::distance(bbs.begin(), std::find(bbs.begin(), bbs.end(), suc)) << ";\n";
-        }
+        std::ostringstream oss;
+        i->output_instruction(*migrate_namespace_lookup, "", oss);
+        // TODO: escape special characters
+        file << oss.str() << "\\l";
       }
-      file << "}\n";
+
+      const bool is_conditional_jump = bbs[t]->successors.size() > 1;
+      switch (bbs[t]->terminator)
+      {
+      case basic_block::terminator_type::IF_GOTO:
+      {
+        file << "|{<s0>T|<s1>F}}\"];\n";
+        auto suc = bbs[t]->successors.begin();
+        file << "BB" << t << ":s0" << " -> " << "BB"
+             << std::distance(
+                  bbs.begin(), std::find(bbs.begin(), bbs.end(), *suc))
+             << ";\n";
+        suc++;
+        file << "BB" << t << ":s1" << " -> " << "BB"
+             << std::distance(
+                  bbs.begin(), std::find(bbs.begin(), bbs.end(), *suc))
+             << ";\n";
+      }
+      break;
+
+      default:
+        file << "}\"];\n";
+        for (const auto &suc : bbs[t]->successors)
+          file << "BB" << t << " -> " << "BB"
+               << std::distance(
+                    bbs.begin(), std::find(bbs.begin(), bbs.end(), suc))
+               << ";\n";
+        break;
+      }
     }
+    file << "}\n";
+  }
 }
