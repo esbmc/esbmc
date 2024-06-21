@@ -1630,7 +1630,7 @@ bool esbmc_parseoptionst::parse_goto_program(
     if (cmdline.isset("parse-tree-too") || cmdline.isset("parse-tree-only"))
     {
       std::ostringstream oss;
-      for (auto &it : filemap)
+      for (auto &it : langmap)
         it.second->show_parse(oss);
       log_status("{}", oss.str());
       if (cmdline.isset("parse-tree-only"))

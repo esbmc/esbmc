@@ -62,10 +62,10 @@ bool language_uit::parse(const std::string &filename)
 
   log_progress("Parsing {}", filename);
 
-  auto it = filemap.find(lang);
-  if (it == filemap.end())
+  auto it = langmap.find(lang);
+  if (it == langmap.end())
   {
-    auto emplace = filemap.emplace(lang, new_language(lang));
+    auto emplace = langmap.emplace(lang, new_language(lang));
     assert(emplace.second);
     it = emplace.first;
   }
@@ -92,7 +92,7 @@ bool language_uit::typecheck()
 {
   log_progress("Converting");
 
-  for (auto &it : filemap)
+  for (auto &it : langmap)
     if (it.second->typecheck(context))
     {
       log_error("CONVERSION ERROR");
@@ -104,7 +104,7 @@ bool language_uit::typecheck()
 
 bool language_uit::final()
 {
-  for (auto &it : filemap)
+  for (auto &it : langmap)
     if (it.second->final(context))
     {
       log_error("CONVERSION ERROR");
