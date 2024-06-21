@@ -311,6 +311,8 @@ void goto_symext::symex_assign_symbol(
   guardt tmp_guard(cur_state->guard);
   tmp_guard.append(guard);
 
+  apply_assignment(renamed_lhs, rhs);
+
   // do the assignment
   target->assignment(
     tmp_guard.as_expr(),

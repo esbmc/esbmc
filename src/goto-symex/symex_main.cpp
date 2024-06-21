@@ -82,6 +82,11 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
   // first try simplifier on it
   do_simplify(new_expr);
 
+  // Let's try interval analysis as well
+  tvt interval_check = assume_expression(new_expr);
+  if (interval_check.is_known())
+    new_expr = interval_check.is_true() ? gen_true_expr() : gen_false_expr();
+
   if (is_true(new_expr))
     return;
 
@@ -118,6 +123,10 @@ void goto_symext::assume(const expr2tc &the_assumption)
   expr2tc assumption = the_assumption;
   cur_state->rename(assumption);
   do_simplify(assumption);
+
+  tvt interval_check = assume_expression(assumption);
+  if (interval_check.is_known())
+    assumption = interval_check.is_true() ? gen_true_expr() : gen_false_expr();
 
   if (is_true(assumption))
     return;
@@ -396,7 +405,6 @@ void goto_symext::symex_assume()
   replace_nondet(cond);
   dereference(cond, dereferencet::READ);
   replace_dynamic_allocation(cond);
-
   assume(cond);
 }
 
@@ -423,7 +431,6 @@ void goto_symext::symex_assert()
 
   dereference(tmp, dereferencet::READ);
   replace_dynamic_allocation(tmp);
-
   claim(tmp, msg);
 }
 
