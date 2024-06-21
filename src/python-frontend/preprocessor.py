@@ -26,55 +26,15 @@ class Preprocessor(ast.NodeTransformer):
     #   has_next = ESBMC_range_has_next_(start, 5, 1)
 
     def visit_For(self, node):
-        # Transformation from for to while if the iterator is range and the counter does not matter :
-        if isinstance(node.iter, ast.Call) and isinstance(node.iter.func, ast.Name) and node.iter.func.id == "range" and len(node.iter.args) == 1:
-            n = node.iter.args[0] # the only argument passed for the range. (0 to n)
-
-            # create a counter initialized to zero.
-            counter_assign = ast.AnnAssign(
-                target=ast.Name(id='counter', ctx=ast.Store()),
-                annotation=ast.Name(id='int', ctx=ast.Load()),
-                value=ast.Constant(value=0),
-                simple=1
-            )
-
-            # create the while loop condition.
-            while_cond = ast.Compare(
-                    left=ast.Name(id='counter', ctx=ast.Load()),
-                    ops=[ast.Lt()],
-                    comparators=[n]
-                )
-
-            # transorm the for loop structure
-            transformed_body = []
-            for statement in node.body:
-                transformed_body.append(self.visit(statement))
-
-            # create the while loop structure
-            while_body = transformed_body + [
-                ast.Assign(
-                    targets=[ast.Name(id='counter', ctx=ast.Store())],
-                    value=ast.BinOp(
-                        left=ast.Name(id='counter', ctx=ast.Load()),
-                        op=ast.Add(),
-                        right=ast.Constant(value=1)
-                    ) 
-                )
-            ]
-
-            # create the while statement
-            while_stmt = ast.While(
-                test=while_cond,
-                body=while_body,
-                orelse=[]
-            )
-
-        return [counter_assign, while_stmt]
-
         # Transformation from for to while if the iterator is range
-        elif isinstance(node.iter, ast.Call) and isinstance(node.iter.func, ast.Name) and node.iter.func.id == "range":
-            start = node.iter.args[0]  # Start of the range
-            end = node.iter.args[1]    # End of the range
+        if isinstance(node.iter, ast.Call) and isinstance(node.iter.func, ast.Name) and node.iter.func.id == "range":
+
+            if len(node.iter.args) > 1:
+                start = node.iter.args[0]  # Start of the range
+                end = node.iter.args[1]    # End of the range
+            elif len(node.iter.args) == 1:
+                start = ast.Constant(value=0)
+                end = node.iter.args[0]
 
             # Check if step is provided in range, otherwise default to 1
             if len(node.iter.args) > 2:
