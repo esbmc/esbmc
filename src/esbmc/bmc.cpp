@@ -791,9 +791,11 @@ smt_convt::resultt bmct::multi_property_check(
                      options.get_bool_option("condition-coverage-claims") ||
                      options.get_bool_option("condition-coverage-rm") ||
                      options.get_bool_option("condition-coverage-claims-rm");
-  bool is_clear_verified = options.get_bool_option("k-induction") ||
-                           options.get_bool_option("incremental-bmc") ||
-                           options.get_bool_option("k-induction-parallel");
+  bool is_keep_verified = options.get_bool_option("keep-verified-claims");
+  bool is_clear_verified = (options.get_bool_option("k-induction") ||
+                            options.get_bool_option("incremental-bmc") ||
+                            options.get_bool_option("k-induction-parallel")) &&
+                           !is_keep_verified;
   // For multi-fail-fast
   const std::string fail_fast = options.get_option("multi-fail-fast");
   const bool is_fail_fast = !fail_fast.empty() ? true : false;
@@ -830,6 +832,7 @@ smt_convt::resultt bmct::multi_property_check(
                        &reached_mul_claims,
                        &is_assert_cov,
                        &is_cond_cov,
+                       &is_keep_verified,
                        &is_clear_verified,
                        &is_fail_fast,
                        &fail_fast_limit,
@@ -860,7 +863,7 @@ smt_convt::resultt bmct::multi_property_check(
     if (is_assert_cov && is_verified)
       // insert to the multiset before skipping the verification process
       reached_mul_claims.emplace(cmt_loc);
-    if (is_verified && !options.get_bool_option("keep-verified-claims"))
+    if (is_verified && !is_keep_verified)
       return;
 
     // Slice
