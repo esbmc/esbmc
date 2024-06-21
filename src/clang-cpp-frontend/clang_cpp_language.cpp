@@ -91,10 +91,6 @@ bool clang_cpp_languaget::typecheck(contextt &context)
   if (adjuster.adjust())
     return true;
 
-#if 0
-  if (c_link(context, new_context))
-    return true;
-#endif
   return false;
 }
 
