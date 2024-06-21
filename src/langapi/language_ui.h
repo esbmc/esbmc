@@ -7,8 +7,8 @@
 class language_uit
 {
 public:
-  typedef std::map<language_idt, std::unique_ptr<languaget>> filemapt;
-  filemapt filemap;
+  typedef std::map<language_idt, std::unique_ptr<languaget>> langmapt;
+  langmapt langmap;
 
   contextt context;
   namespacet ns;
@@ -23,7 +23,7 @@ public:
 
   virtual void clear_parse()
   {
-    filemap.clear();
+    langmap.clear();
   }
 
   virtual void show_symbol_table();
