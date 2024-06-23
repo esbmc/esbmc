@@ -107,6 +107,7 @@ public:
   // Members
   Bitwuzla *bitw;
   BitwuzlaOptions *bitw_options;
+  BitwuzlaTermManager *bitw_TermManager;
 
   typedef std::unordered_map<std::string, smt_astt> symtable_type;
   symtable_type symtable;
