@@ -129,7 +129,6 @@ void goto_cfg::dump_graph() const
         file << oss.str() << "\\l";
       }
 
-      const bool is_conditional_jump = bbs[t]->successors.size() > 1;
       switch (bbs[t]->terminator)
       {
       case basic_block::terminator_type::IF_GOTO:
