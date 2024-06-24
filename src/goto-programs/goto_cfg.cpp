@@ -135,12 +135,16 @@ void goto_cfg::dump_graph() const
       {
         file << "|{<s0>T|<s1>F}}\"];\n";
         auto suc = bbs[t]->successors.begin();
-        file << "BB" << t << ":s0" << " -> " << "BB"
+        file << "BB" << t << ":s0"
+             << " -> "
+             << "BB"
              << std::distance(
                   bbs.begin(), std::find(bbs.begin(), bbs.end(), *suc))
              << ";\n";
         suc++;
-        file << "BB" << t << ":s1" << " -> " << "BB"
+        file << "BB" << t << ":s1"
+             << " -> "
+             << "BB"
              << std::distance(
                   bbs.begin(), std::find(bbs.begin(), bbs.end(), *suc))
              << ";\n";
@@ -150,7 +154,8 @@ void goto_cfg::dump_graph() const
       default:
         file << "}\"];\n";
         for (const auto &suc : bbs[t]->successors)
-          file << "BB" << t << " -> " << "BB"
+          file << "BB" << t << " -> "
+               << "BB"
                << std::distance(
                     bbs.begin(), std::find(bbs.begin(), bbs.end(), suc))
                << ";\n";
