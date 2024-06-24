@@ -42,6 +42,7 @@ void ssa_features::check(const expr2tc &e)
   case expr2t::expr_ids::div_id:
   case expr2t::modulus_id:
   {
+    // TODO: We should deal with some non-linearity here e.g.: division-by-zero
     const auto &arith_op = dynamic_cast<const arith_2ops &>(*e);
     const expr2tc side_1 = arith_op.side_1;
     const expr2tc side_2 = arith_op.side_2;
