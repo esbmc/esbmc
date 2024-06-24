@@ -123,6 +123,7 @@ inline void instrument_symbol_constraints(
     goto_programt::instructiont instruction;
     instruction.make_assumption(conjunction(symbol_constraints));
     instruction.inductive_step_instruction = config.options.is_kind();
+    instruction.sliceable = true;
     instruction.location = it->location;
     instruction.function = it->function;
     goto_function.body.insert_swap(it++, instruction);

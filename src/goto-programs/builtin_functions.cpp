@@ -501,8 +501,9 @@ void goto_convertt::do_function_call_symbol(
 
   std::string base_name = symbol->name.as_string();
 
-  bool is_assume =
-    (base_name == "__ESBMC_assume") || (base_name == "__VERIFIER_assume");
+  bool is_assume = (base_name == "__ESBMC_assume") ||
+                   (base_name == "__VERIFIER_assume") ||
+                   (base_name == "__ESBMC_sliceable_assume");
   bool is_assert = (base_name == "assert");
 
   if (is_assume || is_assert)
@@ -519,6 +520,8 @@ void goto_convertt::do_function_call_symbol(
     goto_programt::targett t =
       dest.add_instruction(is_assume ? ASSUME : ASSERT);
     migrate_expr(arguments.front(), t->guard);
+
+    t->sliceable = is_assume && base_name == "__ESBMC_sliceable_assume";
 
     // The user may have re-declared the assert or assume functions to take an
     // integer argument, rather than a boolean. This leads to problems at the
