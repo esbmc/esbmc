@@ -3,12 +3,11 @@
 
 bool ssa_features::run(symex_target_equationt::SSA_stepst &steps)
 {
-
   features.clear();
 
   for (const auto &step : steps)
   {
-    for (const expr2tc &e : std::array { step.cond, step.guard })
+    for (const expr2tc &e : std::array{step.cond, step.guard})
       check(e);
   }
 
@@ -26,10 +25,8 @@ void ssa_features::check(const expr2tc &e)
   if (is_array_type(e->type))
     features.insert(SSA_FEATURES::ARRAY);
 
-
   if (is_struct_type(e->type))
     features.insert(SSA_FEATURES::STRUCTS);
-
 
   switch (e->expr_id)
   {
@@ -83,11 +80,8 @@ void ssa_features::check(const expr2tc &e)
     break;
   }
 
-  e->foreach_operand([this](const expr2tc &next) {
-    check(next);
-});
+  e->foreach_operand([this](const expr2tc &next) { check(next); });
 }
-
 
 void ssa_features::print_result() const
 {
@@ -107,10 +101,10 @@ void ssa_features::print_result() const
 
 bool ssa_features::is_entirely_constant(const expr2tc &e)
 {
-  if(is_constant_expr(e))
+  if (is_constant_expr(e))
     return true;
 
-  if(is_pointer_type(e))
+  if (is_pointer_type(e))
     return false;
 
   switch (e->expr_id)
@@ -126,7 +120,8 @@ bool ssa_features::is_entirely_constant(const expr2tc &e)
 
   bool result = true;
   e->foreach_operand([this, &result](const expr2tc &next) {
-    result &= is_entirely_constant(next); });
+    result &= is_entirely_constant(next);
+  });
 
   return result;
 }

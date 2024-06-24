@@ -10,18 +10,16 @@ enum class SSA_FEATURES
   NON_INTEGER_NUMERAL,
   BITWISE_OPERATIONS,
   OVERFLOW_ASSERTIONS,
-  ARRAY,  
+  ARRAY,
   STRUCTS
 };
 
-
 class ssa_features : public ssa_step_algorithm
 {
-
 public:
   ssa_features() : ssa_step_algorithm(false){};
   bool run(symex_target_equationt::SSA_stepst &) override;
-  
+
   std::unordered_set<SSA_FEATURES> features;
   void print_result() const;
 
@@ -30,10 +28,8 @@ public:
     return 0;
   }
 
-
 protected:
   void check(const expr2tc &e);
 
   bool is_entirely_constant(const expr2tc &e);
-  
 };
