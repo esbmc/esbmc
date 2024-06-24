@@ -25,9 +25,14 @@ smt_convt *create_new_bitwuzla_solver(
 bitwuzla_convt::bitwuzla_convt(const namespacet &ns, const optionst &options)
   : smt_convt(ns, options), array_iface(true, true), fp_convt(this)
 {
+  if (options.get_bool_option("int-encoding"))
+  {
+    log_error("Bitwuzla does not support integer encoding mode");
+    abort();
+  }
+
   bitw_options = bitwuzla_options_new();
   bitw_term_manager = bitwuzla_term_manager_new();
-
   bitwuzla_set_option(bitw_options, BITWUZLA_OPT_PRODUCE_MODELS, 1);
   bitwuzla_set_abort_callback(bitwuzla_error_handler);
   bitw = bitwuzla_new(bitw_term_manager, bitw_options);
