@@ -204,9 +204,9 @@ ESBMC is a fork of CBMC v2.9 (2008), the C Bounded Model Checker. The primary di
 
 # Open source
 
-ESBMC has now been released as open-source software, mainly distributed under the terms of the Apache License 2.0. ESBMC contains a significant amount of other people's software. However, please see the COPYING file for an explanation of who owns what and under what terms it is distributed.
+ESBMC is open-source software mainly distributed under the Apache License 2.0. It contains a significant amount of other people's software. However, please see the COPYING file to explain who owns what and under what terms it is distributed.
 
-We'd be extremely happy to receive contributions to improve ESBMC (under the terms of the Apache License 2.0). If you'd like to submit anything, please file a pull request against the public GitHub repo. General discussion and release announcements will be made via GitHub. Please post an issue on GitHub and contact us about research or collaboration.
+We'd be extremely happy to receive contributions to improve ESBMC (under the terms of the Apache License 2.0). Please file a pull request against the public GitHub repo if you'd like to submit anything. General discussion and release announcements will be made via GitHub. Please post an issue on GitHub and contact us about research or collaboration.
 
 ### Getting started
 
