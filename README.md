@@ -32,13 +32,14 @@ The figure below illustrates the current ESBMC architecture. The tool inputs a C
 
 To compile ESBMC on Ubuntu 24.04 with LLVM 14 and the SMT solver Z3:
 
-```
-sudo apt install clang-14 llvm-14 clang-tidy-14 python-is-python3 python3 git ccache unzip wget curl bison flex g++-multilib linux-libc-dev libboost-all-dev libz3-dev libclang-14-dev libclang-cpp-dev cmake
+````
+sudo apt update
+sudo apt-get install -y clang-14 llvm-14 clang-tidy-14 python-is-python3 python3 git ccache unzip wget curl bison flex g++-multilib linux-libc-dev libboost-all-dev libz3-dev libclang-14-dev libclang-cpp-dev cmake
 git clone https://github.com/esbmc/esbmc.git
 mkdir build && cd build
 cmake ../esbmc -DENABLE_Z3=1
 make -j4
-```
+````
 
 To build ESBMC with other operating systems and SMT solvers, please see the [BUILDING](https://github.com/esbmc/esbmc/blob/master/BUILDING.md) file. 
 
