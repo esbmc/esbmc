@@ -18,17 +18,25 @@ ESBMC supports:
 
 ESBMC also implements state-of-the-art incremental BMC and *k*-induction proof-rule algorithms based on Satisfiability Modulo Theories (SMT) and Constraint Programming (CP) solvers.
 
+We recommend you read some background material/publications to understand exactly what ESBMC can provide, which are available [online](https://ssvlab.github.io/esbmc/publications.html).
+
+Our main website is [esbmc.org](http://esbmc.org). 
+
 ### How to build/install ESBMC
 
-To build ESBMC, please see the [BUILDING](https://github.com/esbmc/esbmc/blob/master/BUILDING.md) file. To get started, we recommend first reading some of the background material/publications to understand exactly what this technique can provide, for example, our SV-COMP papers, which are available [online](https://ssvlab.github.io/esbmc/publications.html).
+To compile ESBMC on Ubuntu 24.04 with LLVM 14 and the SMT solver Z3:
 
-The canonical public location of ESBMCs source is on GitHub:
+```
+sudo apt install clang-14 llvm-14 clang-tidy-14 python-is-python3 python3 git ccache unzip wget curl bison flex g++-multilib linux-libc-dev libboost-all-dev libz3-dev libclang-14-dev libclang-cpp-dev cmake
+git clone https://github.com/esbmc/esbmc.git
+mkdir build && cd build
+cmake .. -DENABLE_Z3=1
+make -j4
+```
 
-    https://github.com/esbmc/esbmc
+To build ESBMC with other operating systems and SMT solvers, please see the [BUILDING](https://github.com/esbmc/esbmc/blob/master/BUILDING.md) file. 
 
-While our main website is [esbmc.org](http://esbmc.org). 
-
-The user can download the latest ESBMC binary for Ubuntu and Windows from the [releases page](https://github.com/esbmc/esbmc/releases).
+The user can also download the latest ESBMC binary for Ubuntu and Windows from the [releases page](https://github.com/esbmc/esbmc/releases).
 
 ### How to use ESBMC
 
