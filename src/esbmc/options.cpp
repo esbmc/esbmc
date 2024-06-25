@@ -215,7 +215,7 @@ const struct group_opt_templ all_cmd_options[] = {
      "do not unroll bounded loops at goto level"},
     {"slice-assumes", NULL, "remove unused assume statements"},
     {"extended-try-analysis", NULL, ""},
-    {"skip-bmc", NULL, ""},
+    {"skip-bmc", NULL, "do not perform bounded model checking"},
     {"cache-asserts", NULL, "cache asserts that were already proven correct"}}},
   {"Incremental BMC",
    {{"incremental-bmc", NULL, "incremental loop unwinding verification"},
