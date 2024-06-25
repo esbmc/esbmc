@@ -8,6 +8,8 @@
 
 ESBMC (the Efficient SMT-based Context-Bounded Model Checker) is a mature, permissively licensed open-source context-bounded model checker for verifying single- and multithreaded C/C++, CUDA, CHERI, Kotlin, Python, and Solidity programs. It can automatically verify predefined safety properties (e.g., bounds check, pointer safety, overflow) and user-defined program assertions. In addition, ESBMC supports the Clang compiler as its C/C++/CHERI/CUDA frontend, the Soot framework via Jimple as its Java/Kotlin frontend, the ast2json package as its [Python frontend](./src/python-frontend/README.md), implements the Solidity grammar production rules as its Solidity frontend, and IEEE floating-point arithmetic for various SMT solvers. In addition, ESBMC implements state-of-the-art incremental BMC and *k*-induction proof-rule algorithms based on Satisfiability Modulo Theories (SMT) and Constraint Programming (CP) solvers.
 
+### How to build/install ESBMC
+
 To build ESBMC, please see the [BUILDING](https://github.com/esbmc/esbmc/blob/master/BUILDING.md) file. To get started, we recommend first reading some of the background material/publications to understand exactly what this technique can provide, for example, our SV-COMP papers, which are available [online](https://ssvlab.github.io/esbmc/publications.html).
 
 The canonical public location of ESBMCs source is on GitHub:
@@ -15,6 +17,8 @@ The canonical public location of ESBMCs source is on GitHub:
     https://github.com/esbmc/esbmc
 
 While our main website is [esbmc.org](http://esbmc.org). 
+
+The user can download the latest ESBMC binary for Ubuntu and Windows from the [releases page](https://github.com/esbmc/esbmc/releases).
 
 ### How to use ESBMC
 
