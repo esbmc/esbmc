@@ -18,15 +18,9 @@ ESBMC supports:
 
 ESBMC also implements state-of-the-art incremental BMC and *k*-induction proof-rule algorithms based on Satisfiability Modulo Theories (SMT) and Constraint Programming (CP) solvers.
 
-We provide some background material/publications to help you understand exactly what ESBMC can offer. These are available [online](https://ssvlab.github.io/esbmc/publications.html).
+We provide some background material/publications to help you understand exactly what ESBMC can offer. These are available [online](https://ssvlab.github.io/esbmc/publications.html). You can also check the ESBMC [architecture](https://github.com/esbmc/esbmc/blob/master/ARCHITECTURE.md) for further information about our main components.
 
 Our main website is [esbmc.org](http://esbmc.org). 
-
-### Architecture
-
-The figure below illustrates the current ESBMC architecture. The tool inputs a C/C++/CUDA, Java/Kotlin, Solidity, or CHERI-C program, then converts an abstract syntax tree (AST) into a state transition system called a GOTO program. Its symbolic execution engine unrolls the GOTO program and generates a sequence of static single assignments (SSAs). The SSAs are then converted to an SMT formula, which is satisfiable if and only if the program contains errors.
-
-![esbmc-architecture-v3](https://github.com/esbmc/esbmc/assets/3694109/fe609179-14bc-4f3d-b507-a3b003f732ae)
 
 ### How to build/install ESBMC
 
