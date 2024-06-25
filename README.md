@@ -18,7 +18,7 @@ ESBMC supports:
 
 ESBMC also implements state-of-the-art incremental BMC and *k*-induction proof-rule algorithms based on Satisfiability Modulo Theories (SMT) and Constraint Programming (CP) solvers.
 
-We recommend you read some background material/publications to understand exactly what ESBMC can provide, which are available [online](https://ssvlab.github.io/esbmc/publications.html).
+We provide some background material/publications to help you understand exactly what ESBMC can offer. These are available [online](https://ssvlab.github.io/esbmc/publications.html).
 
 Our main website is [esbmc.org](http://esbmc.org). 
 
