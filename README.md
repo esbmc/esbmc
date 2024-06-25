@@ -112,14 +112,6 @@ In addition, ESBMC can be configured to use the SMTLIB interactive text format w
 
 A limited subset of C++98/03 is supported, too -- a library modeling the STL is also available.
 
-### Awards
-
-* Distinguished Paper Award at ICSE’11
-* Best Paper Award at SBESC’15
-* Most Influential Paper Award at ASE’23
-* Best Tool Paper Award at SBSeg'23
-* 29 awards from international competitions on software verification (SV-COMP) and testing (Test-Comp) 2012-2023 at TACAS/FASE (Strength: Bug Finding and Code Coverage).
-
 ### Tutorials
 
 We provide a short video that explains ESBMC: 
@@ -157,6 +149,14 @@ This course unit introduces students to basic and advanced approaches to formall
 * Lucas C. Cordeiro, Bernd Fischer, João Marques-Silva. [SMT-Based Bounded Model Checking for Embedded ANSI-C Software.](https://ssvlab.github.io/lucasccordeiro/papers/tse2012.pdf) In IEEE Trans. Software Eng. 38(4), pp. 957-974, 2012. [DOI](https://doi.org/10.1109/TSE.2011.59)
 
 * Lucas C. Cordeiro, Bernd Fischer. [Verifying multi-threaded software using smt-based context-bounded model checking.](https://ssvlab.github.io/lucasccordeiro/papers/icse2011.pdf) In ICSE, pp. 331-340, 2011. [DOI](https://doi.org/10.1145/1985793.1985839)
+
+### Awards
+
+* Distinguished Paper Award at ICSE’11
+* Best Paper Award at SBESC’15
+* Most Influential Paper Award at ASE’23
+* Best Tool Paper Award at SBSeg'23
+* 35 awards from international competitions on software verification (SV-COMP) and testing (Test-Comp) 2012-2024 at TACAS/FASE (Strength: Bug Finding and Code Coverage).
 
 ### ESBMC-CHERI Video & Download
 
