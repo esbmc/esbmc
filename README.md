@@ -6,7 +6,15 @@
 ![Build All Solvers](https://github.com/esbmc/esbmc/workflows/Build%20All%20Solvers/badge.svg)
 [![codecov](https://codecov.io/gh/esbmc/esbmc/branch/master/graph/badge.svg)](https://codecov.io/gh/esbmc/esbmc)
 
-ESBMC (the Efficient SMT-based Context-Bounded Model Checker) is a mature, permissively licensed open-source context-bounded model checker for verifying single- and multithreaded C/C++, CUDA, CHERI, Kotlin, Python, and Solidity programs. It can automatically verify predefined safety properties (e.g., bounds check, pointer safety, overflow) and user-defined program assertions. In addition, ESBMC supports the Clang compiler as its C/C++/CHERI/CUDA frontend, the Soot framework via Jimple as its Java/Kotlin frontend, the ast2json package as its [Python frontend](./src/python-frontend/README.md), implements the Solidity grammar production rules as its Solidity frontend, and IEEE floating-point arithmetic for various SMT solvers. In addition, ESBMC implements state-of-the-art incremental BMC and *k*-induction proof-rule algorithms based on Satisfiability Modulo Theories (SMT) and Constraint Programming (CP) solvers.
+ESBMC (the Efficient SMT-based Context-Bounded Model Checker) is a mature, permissively licensed open-source context-bounded model checker for verifying single- and multithreaded C/C++, CUDA, CHERI, Kotlin, Python, and Solidity programs. It can automatically verify predefined safety properties (e.g., bounds check, pointer safety, overflow) and user-defined program assertions. In addition, ESBMC supports: 
+
+- The Clang compiler as its C/C++/CHERI/CUDA frontend;
+- The Soot framework via Jimple as its Java/Kotlin frontend;
+- The ast2json package as its [Python frontend](./src/python-frontend/README.md);
+- Implements the Solidity grammar production rules as its Solidity frontend, and
+- Supports IEEE floating-point arithmetic for various SMT solvers.
+
+In addition, ESBMC implements state-of-the-art incremental BMC and *k*-induction proof-rule algorithms based on Satisfiability Modulo Theories (SMT) and Constraint Programming (CP) solvers.
 
 ### How to build/install ESBMC
 
