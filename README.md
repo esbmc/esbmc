@@ -36,7 +36,7 @@ To compile ESBMC on Ubuntu 24.04 with LLVM 14 and the SMT solver Z3:
 sudo apt install clang-14 llvm-14 clang-tidy-14 python-is-python3 python3 git ccache unzip wget curl bison flex g++-multilib linux-libc-dev libboost-all-dev libz3-dev libclang-14-dev libclang-cpp-dev cmake
 git clone https://github.com/esbmc/esbmc.git
 mkdir build && cd build
-cmake .. -DENABLE_Z3=1
+cmake ../esbmc -DENABLE_Z3=1
 make -j4
 ```
 
