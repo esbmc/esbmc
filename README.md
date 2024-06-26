@@ -18,15 +18,9 @@ ESBMC supports:
 
 ESBMC also implements state-of-the-art incremental BMC and *k*-induction proof-rule algorithms based on Satisfiability Modulo Theories (SMT) and Constraint Programming (CP) solvers.
 
-We provide some background material/publications to help you understand exactly what ESBMC can offer. These are available [online](https://ssvlab.github.io/esbmc/publications.html).
+We provide some background material/publications to help you understand exactly what ESBMC can offer. These are available [online](https://ssvlab.github.io/esbmc/publications.html). You can also check the ESBMC [architecture](https://github.com/esbmc/esbmc/blob/master/ARCHITECTURE.md) for further information about our main components.
 
 Our main website is [esbmc.org](http://esbmc.org). 
-
-### Architecture
-
-The figure below illustrates the current ESBMC architecture. The tool inputs a C/C++/CUDA, Java/Kotlin, Solidity, or CHERI-C program, then converts an abstract syntax tree (AST) into a state transition system called a GOTO program. Its symbolic execution engine unrolls the GOTO program and generates a sequence of static single assignments (SSAs). The SSAs are then converted to an SMT formula, which is satisfiable if and only if the program contains errors.
-
-![esbmc-architecture-v3](https://github.com/esbmc/esbmc/assets/3694109/fe609179-14bc-4f3d-b507-a3b003f732ae)
 
 ### How to build/install ESBMC
 
@@ -190,6 +184,14 @@ A pre-compiled binary for Linux is available in the pre-release
 systems/archs the [BUILDING.md](https://github.com/esbmc/esbmc/blob/cheri-clang/BUILDING.md)
 document explains the necessary installation steps.
 
+# Open source
+
+ESBMC is open-source software mainly distributed under the Apache License 2.0. It contains a significant amount of other people's software. However, please see the COPYING file to explain who owns what and under what terms it is distributed.
+
+We'd be extremely happy to receive contributions to improve ESBMC (under the terms of the Apache License 2.0). Please file a pull request against the public GitHub repo if you'd like to submit anything. General discussion and release announcements will be made via GitHub. Please post an issue on GitHub and contact us about research or collaboration.
+
+Please review the [developer documentation](https://github.com/esbmc/esbmc/blob/master/CONTRIBUTIONS.md) if you want to contribute to ESBMC.
+
 ### Differences from CBMC
 
 ESBMC is a fork of CBMC v2.9 (2008), the C Bounded Model Checker. The primary differences between the two are:
@@ -202,84 +204,8 @@ ESBMC is a fork of CBMC v2.9 (2008), the C Bounded Model Checker. The primary di
 * CBMC implements k-induction, requiring three different calls: to generate the CFG, to annotate the program, and to verify it, whereas ESBMC handles the whole process in a single call. Additionally, CBMC does not have a forward condition to check if all states were reached and relies on a limited loop unwinding.
 * ESBMC adds some additional types to the program's internal representation.
 
-# Open source
-
-ESBMC is open-source software mainly distributed under the Apache License 2.0. It contains a significant amount of other people's software. However, please see the COPYING file to explain who owns what and under what terms it is distributed.
-
-We'd be extremely happy to receive contributions to improve ESBMC (under the terms of the Apache License 2.0). Please file a pull request against the public GitHub repo if you'd like to submit anything. General discussion and release announcements will be made via GitHub. Please post an issue on GitHub and contact us about research or collaboration.
-
-### Getting started
-
-We need a better guide for getting started with ESBMC, although we hope to improve this in the future. Examining some of the benchmarks in the SV-COMP competition (http://sv-comp.sosy-lab.org/) would be a good start, using the ESBMC command line for the relevant competition year.
-
-You can also explore practical examples using the ESBMC tool on the documentation page, which is available at https://ssvlab.github.io/esbmc/documentation.html.
-
-### Contributing to the code base
-
-Here are some steps to contributing to the code base:
-
-  1. Compile and execute esbmc. [Building](https://github.com/esbmc/esbmc/blob/master/BUILDING.md)
-  1. Fork the repository
-  1. Clone the repository git clone git@github.com:YOURNAME/esbmc.git
-  1. Create a branch from the master branch (default branch)
-  1. Make your changes
-  1. Check the formatting with clang-format (use Clang 9)
-  1. Push your changes to your branch
-  1. Create a Pull Request targeting the master branch
-
-Here is an example of preparing a pull request (PR)
-
-
-A) Ensure you are in the `master` branch and your fork is updated.
-
-```
-git checkout master
-git fetch upstream
-git pull --rebase upstream master
-git push origin HEAD:master
-```
-
-Note that if you have not yet set up the `upstream`, you need to type the following command:
-
-```
-git remote add upstream https://github.com/esbmc/esbmc
-```
-
-B) Create a local branch (e.g., `model-pthread-create`) from the `master` branch:
-
-```
-git checkout -b model-pthread-equal --track master
-```
-
-C) Add your changes via commits to the local branch:
-
-```
-git add path-to-file/file.cpp
-git commit -sm "added opertational model for pthread_equal"
-```
-
-Note that you can check your changes via `git status`.
-Note also that every PR should contain at least two test cases
-to check your implementation: one successful and one failed test case.
-
-D) Push your changes in the local branch to the ESBMC repository:
-
-```
-git push origin model-pthread-equal
-```
-
-New contributors can check issues marked with `good first issue` by clicking [here](https://github.com/esbmc/esbmc/contribute).
-
-### Documentation
-
-A limited number of classes have been marked up with doxygen documentation headers. Comments are put in the header files declaring classes and methods. HTML documentation can be generated by running:
-
-    doxygen .doxygen
-
-The output will be in docs/HTML; open index.html to get started.
-
 ### Acknowledgments
 
-ESBMC is a joint project with the Federal University of Amazonas (Brazil), University of Manchester (UK), University of Southampton (UK), and University of Stellenbosch (South Africa).
+ESBMC is a joint project of the Federal University of Amazonas (Brazil), the University of Manchester (UK), the University of Southampton (UK), and the University of Stellenbosch (South Africa).
 
 The ESBMC development was supported by various research funding agencies, including CNPq (Brazil), CAPES (Brazil), FAPEAM (Brazil), EPSRC (UK), Royal Society (UK), British Council (UK), European Commission (Horizon 2020), and companies including ARM, Intel, Motorola Mobility, Nokia Institute of Technology and Samsung. The ESBMC development is currently funded by ARM, EPSRC grants [EP/T026995/1](https://enncore.github.io) and [EP/V000497/1](https://scorch-project.github.io), [Ethereum Foundation](https://blog.ethereum.org/2022/07/29/academic-grants-grantee-announce), [EU H2020 ELEGANT 957286](https://www.elegant-h2020.eu), Intel, Motorola Mobility (through Agreement N° 4/2021), and [Soteria project](https://soteriaresearch.org) awarded by the UK Research and Innovation for the Digital Security by Design (DSbD) Programme.
