@@ -19,7 +19,7 @@ target_link_libraries(crypto_hash PUBLIC ${Boost_LIBRARIES})
 add_library(util_esbmc xml_irep.cpp xml.cpp
         arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp
         expr_util.cpp i2string.cpp location.cpp
-        language_file.cpp mp_arith.cpp namespace.cpp parseoptions.cpp rename.cpp
+        mp_arith.cpp namespace.cpp parseoptions.cpp rename.cpp
         threeval.cpp typecheck.cpp bitvector.cpp parser.cpp replace_symbol.cpp
         string_container.cpp options.cpp c_misc.cpp
         simplify_expr.cpp dstring.cpp simplify_expr2.cpp
@@ -32,8 +32,8 @@ add_library(util_esbmc xml_irep.cpp xml.cpp
         type_byte_size.cpp goto_expr_factory.cpp
         string_constant.cpp c_types.cpp ieee_float.cpp c_qualifiers.cpp
         c_sizeof.cpp c_link.cpp c_typecast.cpp fix_symbol.cpp destructor.cpp
-        c_expr2string.cpp cpp_expr2string.cpp
-        message.cpp
+        c_expr2string.cpp cpp_expr2string.cpp type2name.cpp
+        message.cpp encoding.cpp
         )
 # Boost is needed by anything that touches irep2
 target_include_directories(util_esbmc

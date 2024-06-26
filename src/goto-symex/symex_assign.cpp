@@ -419,7 +419,11 @@ void goto_symext::symex_assign_typecast(
         new_rhs = with2tc(
           from->type,
           new_rhs,
-          constant_string2tc(string_type2tc(from_name[i].size()), from_name[i]),
+          constant_string2tc(
+            array_type2tc(
+              get_uint8_type(), gen_ulong(from_name[i].size() + 1), false),
+            from_name[i],
+            constant_string2t::DEFAULT),
           typecast2tc(from_type[i], member2tc(lhs_type[i], rhs, lhs_name[i])));
       }
 
@@ -462,8 +466,7 @@ void goto_symext::symex_assign_array(
   const index2t &index = to_index2t(lhs);
 
   assert(
-    is_array_type(index.source_value) || is_string_type(index.source_value) ||
-    is_vector_type(index.source_value));
+    is_array_type(index.source_value) || is_vector_type(index.source_value));
 
   // turn
   //   a[i]=e
@@ -523,11 +526,12 @@ void goto_symext::symex_assign_member(
   // into
   //   a'==a WITH [c:=e]
 
-  type2tc str_type = string_type2tc(component_name.as_string().size());
+  type2tc str_type = array_type2tc(
+    get_uint8_type(), gen_ulong(component_name.as_string().size() + 1), false);
   expr2tc new_rhs = with2tc(
     real_lhs->type,
     real_lhs,
-    constant_string2tc(str_type, component_name),
+    constant_string2tc(str_type, component_name, constant_string2t::DEFAULT),
     rhs);
 
   symex_assign_rec(

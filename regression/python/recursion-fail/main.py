@@ -4,8 +4,9 @@ def factorial(n:int) -> int:
     else:
         return n * factorial(n - 1)
 
-result:int = factorial(5)
-assert(result == 120)
+n:int = nondet_int()
+__ESBMC_assume(n > 0);
+__ESBMC_assume(n < 6);
 
-result = factorial(4)
-assert(result == 20) # result == 24
+result:int = factorial(n)
+assert(result != 120)

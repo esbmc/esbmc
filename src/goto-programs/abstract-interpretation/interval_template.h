@@ -23,6 +23,10 @@ public:
 
   interval_templatet() = default;
 
+  explicit interval_templatet(const type2tc &)
+  {
+  }
+
   explicit interval_templatet(const T &x) : lower(x), upper(x)
   {
   }
@@ -33,7 +37,8 @@ public:
 
   /// Bound value
   std::optional<T> lower, upper;
-
+  /// Type to be used for shift operations
+  type2tc type;
   T get_lower() const
   {
     return get(false);
@@ -220,6 +225,19 @@ public:
         upper = *i.upper;
       }
     }
+  }
+
+  // Wether *this \subseteq other
+  bool is_subseteq(const interval_templatet &other) const
+  {
+    if ((!lower && other.lower) || (!upper && other.upper))
+      return false;
+    if (other.lower && *lower < *other.lower)
+      return false;
+    if (other.upper && *upper > *other.upper)
+      return false;
+
+    return true;
   }
 
   virtual void approx_union_with(const interval_templatet &i)
@@ -508,8 +526,6 @@ public:
   static interval_templatet<T> bitnot(const interval_templatet<T> &w)
   {
     interval_templatet<T> result;
-    result.set_lower(-w.get_upper() - 1);
-    result.set_upper(-w.get_lower() - 1);
     return result;
   }
 
@@ -539,13 +555,25 @@ public:
 
   static interval_templatet<T> invert_bool(const interval_templatet<T> &i)
   {
-    if (!i.singleton())
-      return i;
-
-    auto result = i;
-    auto inverted = result.get_lower() == 0 ? 1 : 0;
-    result.set_lower(inverted);
-    result.set_upper(inverted);
+    interval_templatet<T> result;
+    if (!i.contains(0))
+    {
+      // i is always true, return false
+      result.set_lower(0);
+      result.set_upper(0);
+    }
+    else if (i.singleton())
+    {
+      // i is always false, return true
+      result.set_lower(1);
+      result.set_upper(1);
+    }
+    else
+    {
+      // i is a maybe
+      result.set_lower(0);
+      result.set_upper(1);
+    }
     return result;
   }
 

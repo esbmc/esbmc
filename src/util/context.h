@@ -8,7 +8,7 @@
 #include <util/symbol.h>
 #include <util/type.h>
 #ifdef ENABLE_OLD_FRONTEND
-#include <util/message.h>
+#  include <util/message.h>
 #endif
 
 typedef std::unordered_map<irep_idt, symbolt, irep_id_hash> symbolst;
@@ -36,6 +36,7 @@ public:
   }
   ~contextt() = default;
   contextt(const contextt &obj) = delete;
+  contextt(contextt &&) noexcept = default;
 
 #ifdef ENABLE_OLD_FRONTEND
   contextt &operator=(const contextt &rhs)
@@ -56,6 +57,8 @@ public:
 #else
   contextt &operator=(const contextt &rhs) = delete;
 #endif
+
+  contextt &operator=(contextt &&) noexcept = default;
 
   symbol_base_mapt symbol_base_map;
 

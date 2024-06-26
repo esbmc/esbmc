@@ -1,0 +1,9 @@
+CORE
+main.c
+--condition-coverage
+^Reached Conditions:  324
+^Short Circuited Conditions:  1606
+^Total Conditions:  1930
+^Condition Properties - SATISFIED:  178
+^Condition Properties - UNSATISFIED:  146
+^VERIFICATION FAILED$

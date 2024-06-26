@@ -72,13 +72,16 @@ void value_sett::output(std::ostream &out) const
         result = from_expr(ns, identifier, o);
       else
       {
-        // Everything else, display as a triple of <object, offset, type>.
+        // Everything else, display as a tuple of <object, offset, align, type>.
         result = "<" + from_expr(ns, identifier, o) + ", ";
 
-        if (o_it->second.offset_is_set)
-          result += integer2string(o_it->second.offset) + "";
+        const objectt &obj = o_it->second;
+        if (obj.offset_is_set)
+          result += integer2string(obj.offset) + "";
         else
           result += "*";
+
+        result += ", " + std::to_string(obj.offset_alignment);
 
         result += ", " + from_type(ns, identifier, o->type);
 
@@ -224,7 +227,7 @@ void value_sett::get_value_set_rec(
 
 #ifndef NDEBUG
     const type2tc &source_type = idx.source_value->type;
-    assert(is_array_type(source_type) || is_string_type(source_type));
+    assert(is_array_type(source_type));
 #endif
 
     // Attach '[]' to the suffix, identifying the variable tracking all the
@@ -380,6 +383,7 @@ void value_sett::get_value_set_rec(
     switch (side.kind)
     {
     case sideeffect2t::alloca:
+    case sideeffect2t::realloc:
     case sideeffect2t::malloc:
     {
       assert(suffix == "");
@@ -414,7 +418,7 @@ void value_sett::get_value_set_rec(
 
     default:
       log_error("Unexpected side-effect: {}", *expr);
-      abort();
+      throw vsa_not_implemented_exception();
     }
   }
 
@@ -788,7 +792,25 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
     // Any symbol we refer to, store into the destination object map.
     // Given that this is a simple symbol, we can be sure that the offset to
     // it is zero.
-    insert(dest, expr, objectt(true, 0));
+    objectt obj(true, 0);
+
+    if (is_symbol2t(expr))
+    {
+      const symbolt *sym = ns.lookup(to_symbol2t(expr).thename);
+      assert(sym);
+      const irept &a = sym->type.find("alignment");
+      if (a.is_not_nil())
+      {
+        assert(a.is_constant());
+        irep_idt v = static_cast<const exprt &>(a).value();
+        BigInt V = binary2integer(v.as_string(), false);
+        assert(V.is_positive());
+        assert(V <= UINT_MAX);
+        obj.offset_alignment = V.to_uint64();
+      }
+    }
+
+    insert(dest, expr, obj);
     return;
   }
 
@@ -807,8 +829,7 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
     // the source value, and store a reference to all those things.
     const index2t &index = to_index2t(expr);
 
-    assert(
-      is_array_type(index.source_value) || is_string_type(index.source_value));
+    assert(is_array_type(index.source_value));
 
     // Compute the offset introduced by this index.
     BigInt index_offset;
@@ -1255,7 +1276,7 @@ void value_sett::assign_rec(
   {
     assert(
       is_array_type(to_index2t(lhs).source_value) ||
-      is_string_type(to_index2t(lhs).source_value) ||
+      is_vector_type(to_index2t(lhs).source_value) ||
       is_dynamic_object2t(to_index2t(lhs).source_value));
 
     assign_rec(to_index2t(lhs).source_value, values_rhs, "[]" + suffix, true);
@@ -1292,6 +1313,11 @@ void value_sett::assign_rec(
   {
     // Ignored
   }
+  else if (is_invalid2t(lhs))
+  {
+    // Assigning an invalid object, not much we can do
+    return;
+  }
   else if (is_typecast2t(lhs))
   {
     assign_rec(to_typecast2t(lhs).from, values_rhs, suffix, add_to_sets);
@@ -1302,7 +1328,9 @@ void value_sett::assign_rec(
   }
   else
   {
-    throw std::runtime_error("assign NYI: `{}'" + get_expr_id(lhs));
+    log_error("[VSA] assign NYI: `{}'", get_expr_id(lhs));
+    lhs->dump();
+    throw vsa_not_implemented_exception();
   }
 }
 
@@ -1449,7 +1477,7 @@ void value_sett::apply_code(const expr2tc &code)
   {
     std::ostringstream str;
     str << code << "\nvalue_sett: unexpected statement";
-    throw std::runtime_error(str.str());
+    throw vsa_not_implemented_exception();
   }
 }
 

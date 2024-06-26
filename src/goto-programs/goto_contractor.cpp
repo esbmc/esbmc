@@ -1,6 +1,5 @@
 #include <goto-programs/goto_contractor.h>
 #include <goto-programs/abstract-interpretation/interval_domain.h>
-#include <goto-programs/abstract-interpretation/interval_analysis.h>
 
 void goto_contractor(
   goto_functionst &goto_functions,
@@ -57,7 +56,13 @@ void goto_contractort::get_intervals(
         while (it != map.var_map.end())
         {
           auto var_name = to_symbol2t(it->second.getSymbol()).get_symbol_name();
-          auto new_interval = interval_analysis[i_it].get_int_map()[var_name];
+          auto _new_interval = interval_analysis[i_it].intervals->at(var_name);
+          if (_new_interval.index() != 0)
+          {
+            it++;
+            continue;
+          }
+          interval_templatet<BigInt> new_interval = *std::get<0>(_new_interval);
           if (!new_interval.is_top())
           {
             auto lb = new_interval.get_lower().to_int64();
@@ -312,18 +317,18 @@ void goto_contractort::goto_contractor_condition(
           }
 
           interval_analysis(goto_functions, namespacet);
-          auto interval_map = interval_analysis[i_it].get_int_map();
-          auto it = interval_map.begin();
-
-          while (it != interval_map.end())
+          for (const auto &i : *interval_analysis[i_it].intervals)
           {
-            if (it->second.lower)
+            if (i.second.index() != 0)
+              continue;
+
+            const interval_templatet<BigInt> &value = *std::get<0>(i.second);
+            if (value.lower)
               map.update_lb_interval(
-                it->second.get_lower().to_int64(), it->first.as_string());
-            if (it->second.upper)
+                value.get_lower().to_int64(), i.first.as_string());
+            if (value.upper)
               map.update_ub_interval(
-                it->second.get_upper().to_int64(), it->first.as_string());
-            it++;
+                value.get_upper().to_int64(), i.first.as_string());
           }
 
           auto in = contractor.get_inner();
@@ -390,18 +395,20 @@ void goto_contractort::goto_contractor_condition(
 
         //get intervals and convert them to ibex intervals by updating the map
         interval_analysis(goto_functions, namespacet);
-        auto interval_map = interval_analysis[i_it].get_int_map();
-        auto it = interval_map.begin();
-        while (it != interval_map.end())
+        for (const auto &i : *interval_analysis[i_it].intervals)
         {
-          if (it->second.lower)
+          if (i.second.index() != 0)
+            continue;
+
+          const interval_templatet<BigInt> &value = *std::get<0>(i.second);
+          if (value.lower)
             map.update_lb_interval(
-              it->second.get_lower().to_int64(), it->first.as_string());
-          if (it->second.upper)
+              value.get_lower().to_int64(), i.first.as_string());
+          if (value.upper)
             map.update_ub_interval(
-              it->second.get_upper().to_int64(), it->first.as_string());
-          it++;
+              value.get_upper().to_int64(), i.first.as_string());
         }
+
         auto X = map.create_interval_vector();
 
         out->contract(X);
@@ -459,11 +466,10 @@ vart::vart()
 {
 }
 
-void vart::dump()
+void vart::dump() const
 {
   std::ostringstream oss;
-  oss << to_symbol2t(this->getSymbol()).get_symbol_name() << this->getInterval()
-      << "\n";
+  oss << this->var_name << " " << this->getInterval();
   log_status("{}", oss.str());
 }
 
@@ -880,6 +886,7 @@ void expr_to_ibex_parser::parse_error(const expr2tc &expr)
   log_debug("contractor", "{}", oss.str());
 }
 
+#if 0
 void interval_analysis_ibex_contractor::maps_to_domains(
   int_mapt int_map,
   real_mapt real_map)
@@ -888,22 +895,34 @@ void interval_analysis_ibex_contractor::maps_to_domains(
   auto it = int_map.begin();
   while (it != int_map.end())
   {
-    if (map.find(it->first.as_string()) == -1)
+    auto index = map.find(it->first.as_string());
+    if (index == CspMap::NOT_FOUND)
     {
       it++;
       continue;
     }
 
+    auto is_unsigned = is_unsignedbv_type(
+      map.var_map.find(it->first.as_string())->second.getSymbol());
+
     if (it->second.lower)
     {
-      map.update_lb_interval(
-        it->second.get_lower().to_int64(), it->first.as_string());
+      if (is_unsigned)
+        map.update_lb_interval(
+          it->second.get_lower().to_uint64(), it->first.as_string());
+      else
+        map.update_lb_interval(
+          it->second.get_lower().to_int64(), it->first.as_string());
     }
 
     if (it->second.upper)
     {
-      map.update_ub_interval(
-        it->second.get_upper().to_int64(), it->first.as_string());
+      if (is_unsigned)
+        map.update_ub_interval(
+          it->second.get_upper().to_uint64(), it->first.as_string());
+      else
+        map.update_ub_interval(
+          it->second.get_upper().to_int64(), it->first.as_string());
     }
     it++;
   }
@@ -927,15 +946,26 @@ void interval_analysis_ibex_contractor::maps_to_domains(
     std::chrono::duration<double>(std::chrono::steady_clock::now() - t_0)
       .count();
 }
-
+#endif
 void interval_analysis_ibex_contractor::apply_contractor()
 {
   auto t_0 = std::chrono::steady_clock::now();
   auto X = map.create_interval_vector();
   auto c_out = contractor.get_outer();
+  auto Y = X;
+  int i = 5;
 
   c_out->contract(X);
 
+  //Find a fixed point in 5 or fewer iterations
+  while (Y != X && i >= 0)
+  {
+    Y = X;
+    c_out->contract(X);
+    i--;
+  }
+
+  //copy results to map_outer
   map_outer = CspMap(map);
   map_outer.update_intervals(X);
   apply_time =
@@ -943,9 +973,9 @@ void interval_analysis_ibex_contractor::apply_contractor()
       .count();
 }
 
-expr2tc interval_analysis_ibex_contractor::result_of_outer(expr2tc exp)
+expr2tc interval_analysis_ibex_contractor::result_of_outer()
 {
-  expr2tc cond = exp;
+  expr2tc cond = gen_true_expr();
 
   if (map_outer.is_empty_set())
     return gen_false_expr();
@@ -966,48 +996,44 @@ expr2tc interval_analysis_ibex_contractor::result_of_outer(expr2tc exp)
         isinf(var.second.getInterval().ub()))
         continue;
 
-      //if there is a lower bound,
-      if (!isinf(var.second.getInterval().lb()))
+      BigInt upper_limit, lower_limit(0);
+      upper_limit = BigInt::power2(
+        X->type->get_width() - (is_unsignedbv_type(X->type) ? 0 : 1));
+      upper_limit = upper_limit - 1;
+
+      if (is_signedbv_type(X->type))
       {
-        //check if it overflows when cast back to integer
-        long integer;
-        if (
-          (long)var.second.getInterval().lb() > 0 &&
-          var.second.getInterval().lb() < 0)
-          integer = (long)var.second.getInterval().lb() + 1;
+        lower_limit = BigInt::power2(X->type->get_width() - 1);
+        lower_limit = -lower_limit;
+      } //if its unsigned then its just zero
+
+      if (isfinite(var.second.getInterval().lb()))
+      {
+        BigInt integerValue(0);
+
+        if (var.second.getInterval().lb() < lower_limit.to_int64())
+          integerValue = lower_limit;
+        else if (var.second.getInterval().lb() > upper_limit.to_uint64())
+          integerValue = upper_limit;
         else
-          integer = (long)var.second.getInterval().lb();
+          integerValue = (long)ceil(var.second.getInterval().lb());
 
-        auto w = to_symbol2t(X).type->get_width();
-        int is_unsigned = is_unsignedbv_type(X->type) ? 0 : 1;
-        long long type_limit = -pow(2, w - is_unsigned);
-        if (integer < type_limit)
-          integer = type_limit;
-
-        auto lb = create_value_expr(integer, X->type);
+        auto lb = constant_int2tc(X->type, integerValue);
         auto cond1 = greaterthanequal2tc(X, lb);
         cond = and2tc(cond, cond1);
       }
-      if (!isinf(var.second.getInterval().ub()))
+      if (isfinite(var.second.getInterval().ub()))
       {
-        long integerValue;
+        BigInt integerValue(0);
 
-        if (
-          (long)var.second.getInterval().ub() < 0 &&
-          var.second.getInterval().ub() > 0)
-          integerValue = (long)var.second.getInterval().ub() - 1;
+        if (var.second.getInterval().ub() > upper_limit.to_uint64())
+          integerValue = upper_limit;
+        else if (var.second.getInterval().ub() < lower_limit.to_int64())
+          integerValue = lower_limit;
         else
-          integerValue = (long)var.second.getInterval().ub();
+          integerValue = (long)floor(var.second.getInterval().ub());
 
-        //intersect with type limits
-        auto w = to_symbol2t(X).type->get_width();
-        int is_unsigned = is_unsignedbv_type(X->type) ? 0 : 1;
-        double type_limit = pow(2, w - is_unsigned) - 1;
-
-        if (integerValue > type_limit)
-          integerValue = type_limit;
-
-        auto ub = create_value_expr(integerValue, X->type);
+        auto ub = constant_int2tc(X->type, integerValue);
         auto cond2 = lessthanequal2tc(X, ub);
         cond = and2tc(cond, cond2);
       }
@@ -1016,7 +1042,7 @@ expr2tc interval_analysis_ibex_contractor::result_of_outer(expr2tc exp)
   return cond;
 }
 
-void interval_analysis_ibex_contractor::dump()
+void interval_analysis_ibex_contractor::dump(bool is_timed)
 {
   std::ostringstream oss;
   auto number_of_vars = map.size();
@@ -1028,12 +1054,17 @@ void interval_analysis_ibex_contractor::dump()
   oss << "number of variables: " << number_of_vars << "\n";
   oss << "before : " << x1 << " diam: " << x1.diam() << std::endl;
   oss << "after : " << x2 << " diam: " << x2.diam() << std::endl;
-  oss << "Contractor parse time: " << parse_time << "\n";
-  oss << "Contractor maps_to_domains time: " << cpy_time << "\n";
-  oss << "Contractor modularize time: " << mod_time << "\n";
-  oss << "Contractor contract time: " << apply_time << "\n";
+  if (is_timed)
+  {
+    oss << "Contractor parse time: " << parse_time << "\n";
+    oss << "Contractor maps_to_domains time: " << cpy_time << "\n";
+    oss << "Contractor modularize time: " << mod_time << "\n";
+    oss << "Contractor contract time: " << apply_time << "\n";
+  }
   oss << "------------------------";
-  log_status("{}", oss.str());
+  map.dump();
+  map_outer.dump();
+  log_status("{}\n\n", oss.str());
 }
 
 [[maybe_unused]] void interval_analysis_ibex_contractor::modularize_intervals()

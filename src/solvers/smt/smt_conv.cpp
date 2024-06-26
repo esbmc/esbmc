@@ -215,14 +215,6 @@ smt_astt smt_convt::imply_ast(smt_astt a, smt_astt b)
   return mk_implies(a, b);
 }
 
-void smt_convt::set_to(const expr2tc &expr, bool value)
-{
-  smt_astt a = convert_ast(expr);
-  if (value == false)
-    a = invert_ast(a);
-  assert_ast(a);
-}
-
 smt_astt smt_convt::convert_assign(const expr2tc &expr)
 {
   const equality2t &eq = to_equality2t(expr);
@@ -828,6 +820,45 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::equality_id:
   {
+    /* Compare the representations directly.
+     *
+     * This also applies to pointer-typed expressions which are represented as
+     * (object, offset) structs, i.e., two pointers compare equal iff both
+     * members are the same.
+     *
+     * 'offset' is between 0 and the size of the object, both inclusively. This
+     * is in line with what's allowed by C99 and what current GCC assumes
+     * regarding the one-past the end pointer:
+     *
+     *   Two pointers compare equal if and only if both are null pointers, both
+     *   are pointers to the same object (including a pointer to an object and a
+     *   subobject at its beginning) or function, both are pointers to one past
+     *   the last element of the same array object, or one is a pointer to one
+     *   past the end of one array object and the other is a pointer to the
+     *   start of a different array object that happens to immediately follow
+     *   the first array object in the address space.
+     *
+     * It's not strictly what Clang does, though, but de-facto, C compilers do
+     * perform optimizations based on provenance, i.e., "one past the end
+     * pointers cannot alias another object" as soon as it *cannot* be proven
+     * that they do. Sigh. For instance
+     * <https://gcc.gnu.org/bugzilla/show_bug.cgi?id=61502> makes for a "fun"
+     * read illuminating how reasoning works from a certain compiler's
+     * writers' points of view.
+     *
+     * C++ has changed this one-past behaviour in [expr.eq] to "unspecified"
+     * <https://www.open-std.org/jtc1/sc22/wg21/docs/cwg_defects.html#1652>
+     * and C might eventually follow the same path.
+     *
+     * CHERI-C semantics say that only addresses should be compared, but this
+     * might also change in the future, see e.g.
+     * <https://github.com/CTSRD-CHERI/llvm-project/issues/649>.
+     *
+     * TODO: As languages begin to differ in their pointer equality semantics,
+     *       we could move pointer comparisons to symex in order to express
+     *       them properly according to the input language.
+     */
+
     auto eq = to_equality2t(expr);
 
     if (
@@ -1260,16 +1291,6 @@ smt_sortt smt_convt::convert_sort(const type2tc &type)
     unsigned int sw = to_floatbv_type(type).fraction;
     unsigned int ew = to_floatbv_type(type).exponent;
     result = mk_real_fp_sort(ew, sw);
-    break;
-  }
-
-  case type2t::string_id:
-  {
-    const string_type2t &str_type = to_string_type(type);
-    expr2tc width = constant_int2tc(
-      get_uint_type(config.ansi_c.int_width), BigInt(str_type.width));
-    type2tc new_type = array_type2tc(get_uint8_type(), width, false);
-    result = convert_sort(new_type);
     break;
   }
 
@@ -1795,6 +1816,36 @@ smt_astt smt_convt::make_bit_bool(smt_astt a)
   return mk_eq(a, one);
 }
 
+/** Make an n-ary function application.
+ *  Takes a vector of smt_ast's, and creates a single
+ *  function app over all the smt_ast's.
+ */
+template <typename Object, typename Method>
+static smt_astt
+make_n_ary(const Object o, const Method m, const smt_convt::ast_vec &v)
+{
+  assert(!v.empty());
+
+  // Chain these.
+  smt_astt result = v.front();
+  for (std::size_t i = 1; i < v.size(); ++i)
+    result = (o->*m)(result, v[i]);
+
+  return result;
+}
+
+smt_astt smt_convt::make_n_ary_and(const ast_vec &v)
+{
+  return v.empty() ? mk_smt_bool(true) // empty conjunction is true
+                   : make_n_ary(this, &smt_convt::mk_and, v);
+}
+
+smt_astt smt_convt::make_n_ary_or(const ast_vec &v)
+{
+  return v.empty() ? mk_smt_bool(false) // empty disjunction is false
+                   : make_n_ary(this, &smt_convt::mk_or, v);
+}
+
 expr2tc smt_convt::fix_array_idx(const expr2tc &idx, const type2tc &arr_sort)
 {
   if (int_encoding)
@@ -2014,7 +2065,7 @@ smt_astt smt_convt::convert_array_index(const expr2tc &expr)
   }
 
   // Firstly, if it's a string, shortcircuit.
-  if (is_string_type(index.source_value))
+  if (is_constant_string2t(index.source_value))
   {
     smt_astt tmp = convert_ast(src_value);
     return tmp->select(this, newidx);
@@ -2293,6 +2344,7 @@ expr2tc smt_convt::get(const expr2tc &expr)
   case expr2t::address_of_id:
     return res;
 
+  case expr2t::overflow_id:
   case expr2t::pointer_offset_id:
   case expr2t::same_object_id:
   case expr2t::symbol_id:
@@ -2300,7 +2352,14 @@ expr2tc smt_convt::get(const expr2tc &expr)
 
   case expr2t::member_id:
   {
-    if (is_array_type(expr))
+    const member2t &mem = to_member2t(res);
+    expr2tc mem_src = mem.source_value;
+
+    if (is_symbol2t(mem_src) && !is_pointer_type(expr) && !is_struct_type(expr))
+    {
+      return get_by_type(res);
+    }
+    else if (is_array_type(expr))
     {
       if (extracting_from_array_tuple_is_error)
       {
@@ -2311,6 +2370,7 @@ expr2tc smt_convt::get(const expr2tc &expr)
       }
       return expr2tc(); // TODO: ??? This is horrible
     }
+
     simplify(res);
     return res;
   }
@@ -2472,12 +2532,19 @@ expr2tc smt_convt::get_by_type(const expr2tc &expr)
         fmt::underlying(expr->type->type_id));
       abort();
     }
-    else
+    else if (!is_code_type(expr))
     {
       log_warning(
         "Unimplemented type'd expression ({}) in smt get. Returning zero!",
         fmt::underlying(expr->type->type_id));
       return gen_zero(expr->type);
+    }
+    else
+    {
+      log_warning(
+        "Unimplemented type'd expression ({}) in smt get. Returning nil!",
+        fmt::underlying(expr->type->type_id));
+      return expr2tc();
     }
   }
 }

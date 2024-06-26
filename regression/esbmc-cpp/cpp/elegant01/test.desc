@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++14 --function execute --k-induction --force-malloc-success --unwind 6
+
+^VERIFICATION FAILED$

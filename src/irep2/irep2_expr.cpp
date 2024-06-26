@@ -283,26 +283,70 @@ std::string symbol_data::get_symbol_name() const
   }
 }
 
+namespace
+{
+struct constant_string_access
+{
+  const array_type2t &arr;
+  const std::string &s;
+  unsigned w; /* element size in bytes */
+  bool le;
+  size_t n, m; /* array size and value length, in arr.subtype elements */
+
+  explicit constant_string_access(const constant_string2t &e)
+    : arr(to_array_type(e.type)),
+      s(e.value.as_string()),
+      w(arr.subtype->get_width()),
+      le(config.ansi_c.endianess == configt::ansi_ct::IS_LITTLE_ENDIAN),
+      n(to_constant_int2t(arr.array_size).value.to_uint64())
+  {
+    assert(config.ansi_c.endianess != configt::ansi_ct::NO_ENDIANESS);
+    assert(w % 8 == 0);
+    w /= 8;
+    assert(0 < w && w <= 4);
+    assert(s.length() % w == 0);
+    m = s.length() / w;
+  }
+
+  constant_string_access(const constant_string_access &) = delete;
+  constant_string_access &operator=(const constant_string_access &) = delete;
+
+  expr2tc operator[](size_t i) const
+  {
+    if (i >= n) /* not in array */
+      return expr2tc();
+
+    uint32_t c = 0;
+    if (i < m) /* not the '\0' element */
+      for (unsigned j = 0; j < w; j++)
+        c |= (uint32_t)(unsigned char)s[w * i + j] << 8 * (le ? j : w - 1 - j);
+    return gen_long(arr.subtype, c);
+  }
+};
+} // namespace
+
 expr2tc constant_string2t::to_array() const
 {
-  std::vector<expr2tc> contents;
-  unsigned int length = value.as_string().size(), i;
+  constant_string_access csa(*this);
+  std::vector<expr2tc> contents(csa.n);
 
-  type2tc type = get_uint8_type();
+  for (size_t i = 0; i < csa.n; i++)
+    contents[i] = csa[i];
 
-  for (i = 0; i < length; i++)
-    contents.push_back(constant_int2tc(type, BigInt(value.as_string()[i])));
+  expr2tc r = constant_array2tc(type, std::move(contents));
+  return r;
+}
 
-  // Null terminator is implied.
-  contents.push_back(constant_int2tc(type, BigInt(0)));
+size_t constant_string2t::array_size() const
+{
+  return to_constant_int2t(to_array_type(type).array_size).value.to_uint64();
+}
 
-  type2tc len_tp = unsignedbv_type2tc(config.ansi_c.int_width);
-  expr2tc len_val_ref = constant_int2tc(len_tp, BigInt(contents.size()));
-
-  type2tc arr_tp = array_type2tc(type, len_val_ref, false);
-  expr2tc final_val = constant_array2tc(arr_tp, contents);
-
-  return final_val;
+expr2tc constant_string2t::at(size_t i) const
+{
+  constant_string_access csa(*this);
+  expr2tc r = csa[i];
+  return r;
 }
 
 static void assert_type_compat_for_with(const type2tc &a, const type2tc &b)
@@ -334,6 +378,8 @@ static void assert_type_compat_for_with(const type2tc &a, const type2tc &b)
     assert_type_compat_for_with(
       to_pointer_type(a).subtype, to_pointer_type(b).subtype);
   }
+  else if (is_empty_type(a) || is_empty_type(b))
+    return;
   else
     assert(a == b);
 }
@@ -351,12 +397,6 @@ void with2t::assert_consistency() const
     assert(is_bv_type(update_field->type));
     assert_type_compat_for_with(
       to_vector_type(source_value->type).subtype, update_value->type);
-  }
-  else if (is_string_type(source_value))
-  {
-    assert(is_bv_type(update_field->type));
-    assert(is_bv_type(update_value->type));
-    assert(update_value->type->get_width() == config.ansi_c.char_width);
   }
   else
   {

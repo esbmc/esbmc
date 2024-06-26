@@ -100,7 +100,7 @@ execution_statet::execution_statet(
   DFS_traversed[0] = false;
   mon_thread_warning = false;
 
-  thread_cswitch_threshold = 2;
+  thread_cswitch_threshold = (options.get_bool_option("ltl")) ? 3 : 2;
 }
 
 execution_statet::execution_statet(const execution_statet &ex)
@@ -204,12 +204,12 @@ void execution_statet::symex_step(reachability_treet &art)
   if (break_insn != 0 && break_insn == instruction.location_number)
   {
 #ifndef _WIN32
-#if !(defined(__arm__) || defined(__aarch64__))
+#  if !(defined(__arm__) || defined(__aarch64__))
     __asm__("int $3");
-#else
+#  else
     log_error("Can't trap on ARM, sorry");
     abort();
-#endif
+#  endif
 #else
     log_error("Can't trap on windows, sorry");
     abort();
@@ -263,6 +263,7 @@ void execution_statet::symex_step(reachability_treet &art)
       // TODO: we should support verifying memory leaks in multi-threaded C programs.
       assume(gen_false_expr());
       end_thread();
+      interleaving_unviable = true;
     }
     else
     {
@@ -836,7 +837,9 @@ void execution_statet::get_expr_globals(
       name == "c:@__ESBMC_alloc" || name == "c:@__ESBMC_alloc_size" ||
       name == "c:@__ESBMC_is_dynamic" ||
       name == "c:@__ESBMC_blocked_threads_count" ||
-      name.find("c:pthread_lib") != std::string::npos)
+      name.find("c:pthread_lib") != std::string::npos ||
+      name == "c:@__ESBMC_rounding_mode" ||
+      name.find("c:@__ESBMC_pthread_thread") != std::string::npos)
     {
       return;
     }
@@ -1226,7 +1229,7 @@ dfs_execution_statet::~dfs_execution_statet()
 std::shared_ptr<execution_statet> dfs_execution_statet::clone() const
 {
   std::shared_ptr<dfs_execution_statet> d =
-    std::shared_ptr<dfs_execution_statet>(new dfs_execution_statet(*this));
+    std::make_shared<dfs_execution_statet>(*this);
 
   // Duplicate target equation; or if we're encoding at runtime, push a context.
   if (smt_during_symex)
@@ -1250,8 +1253,7 @@ schedule_execution_statet::~schedule_execution_statet()
 std::shared_ptr<execution_statet> schedule_execution_statet::clone() const
 {
   std::shared_ptr<schedule_execution_statet> s =
-    std::shared_ptr<schedule_execution_statet>(
-      new schedule_execution_statet(*this));
+    std::make_shared<schedule_execution_statet>(*this);
 
   // Don't duplicate target equation.
   s->target = target;
@@ -1285,8 +1287,7 @@ execution_statet::state_hashing_level2t::state_hashing_level2t(
 std::shared_ptr<renaming::level2t>
 execution_statet::state_hashing_level2t::clone() const
 {
-  return std::shared_ptr<state_hashing_level2t>(
-    new state_hashing_level2t(*this));
+  return std::make_shared<state_hashing_level2t>(*this);
 }
 
 void execution_statet::state_hashing_level2t::make_assignment(

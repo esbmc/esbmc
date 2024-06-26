@@ -2,7 +2,9 @@
 #define CPROVER_STD_EXPR_H
 
 #include <cassert>
+#include <util/bitvector.h>
 #include <util/expr.h>
+#include <util/mp_arith.h>
 
 class transt : public exprt
 {
@@ -757,6 +759,8 @@ public:
   explicit address_of_exprt(const exprt &op)
     : exprt(exprt::addrof, typet("pointer"))
   {
+    assert(!op.is_constant());
+    assert(op.id() != exprt::addrof);
     type().subtype() = op.type();
     copy_to_operands(op);
   }
@@ -1047,6 +1051,14 @@ public:
   {
     set("#cformat", _cformat);
     set_value(_value);
+  }
+
+  constant_exprt(const BigInt &value, const typet &type)
+    : constant_exprt(
+        integer2binary(value, bv_width(type)),
+        integer2string(value),
+        type)
+  {
   }
 
   inline const irep_idt &get_value() const

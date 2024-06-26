@@ -22,71 +22,73 @@ languaget *new_clang_cpp_language()
   return new clang_cpp_languaget;
 }
 
-void clang_cpp_languaget::force_file_type()
+void clang_cpp_languaget::force_file_type(
+  std::vector<std::string> &compiler_args)
 {
   // C++ standard
-  std::string cppstd = config.options.get_option("cppstd");
+  assert(config.language.lid == language_idt::CPP);
+  const std::string &cppstd = config.language.std;
   if (!cppstd.empty())
-  {
-    auto it = std::find(standards.begin(), standards.end(), cppstd);
-    if (it == standards.end())
-    {
-      log_error("Invalid C++ standard: {}", cppstd);
-      abort();
-    }
-  }
-
-  std::string clangstd = cppstd.empty() ? "-std=c++03" : "-std=c++" + cppstd;
-  compiler_args.push_back(clangstd);
-
-  if (
-    !config.options.get_bool_option("no-abstracted-cpp-includes") &&
-    !config.options.get_bool_option("no-library"))
-  {
-    log_debug(
-      "c++", "Adding CPP includes: {}", esbmct::abstract_cpp_includes());
-    //compiler_args.push_back("-cxx-isystem");
-    //compiler_args.push_back(esbmct::abstract_cpp_includes());
-    // Let the cpp include "overtake" others.
-    // Bear in mind that this is just a workaround to make sure we include the right headers we want,
-    // and to get consistent error signatures in standalone runs and CIs
-    compiler_args.push_back("-I" + esbmct::abstract_cpp_includes());
-    compiler_args.push_back("-I" + esbmct::abstract_cpp_includes() + "/CUDA");
-    compiler_args.push_back("-I" + esbmct::abstract_cpp_includes() + "/Qt");
-    compiler_args.push_back(
-      "-I" + esbmct::abstract_cpp_includes() + "/Qt/QtCore");
-  }
+    compiler_args.emplace_back("-std=" + cppstd);
 
   // Force clang see all files as .cpp
   compiler_args.push_back("-x");
   compiler_args.push_back("c++");
 }
 
-std::string clang_cpp_languaget::internal_additions()
+void clang_cpp_languaget::build_include_args(
+  std::vector<std::string> &compiler_args)
 {
-  std::string intrinsics = "extern \"C\" {\n";
-  intrinsics.append(clang_c_languaget::internal_additions());
-  intrinsics.append("}\n");
+  std::string cppinc;
+  bool do_inc = !config.options.get_bool_option("no-abstracted-cpp-includes") &&
+                !config.options.get_bool_option("no-library");
 
-  // Replace _Bool by bool and return
-  return std::regex_replace(intrinsics, std::regex("_Bool"), "bool");
+  if (do_inc)
+  {
+    cppinc = esbmct::abstract_cpp_includes();
+    log_debug("c++", "Adding CPP includes: {}", cppinc);
+    // Let the cpp include "overtake" others.
+    compiler_args.push_back("-isystem");
+    compiler_args.push_back(cppinc);
+  }
+
+  clang_c_languaget::build_include_args(compiler_args);
+
+  if (do_inc)
+  {
+    /* add include search paths for the default "library" models */
+    compiler_args.push_back("-I" + cppinc + "/CUDA");
+    compiler_args.push_back("-I" + cppinc + "/Qt");
+    compiler_args.push_back("-I" + cppinc + "/Qt/QtCore");
+  }
 }
 
-bool clang_cpp_languaget::typecheck(
-  contextt &context,
-  const std::string &module)
+std::string clang_cpp_languaget::internal_additions()
 {
-  contextt new_context;
+  std::string intrinsics = R"(
+# 1 "esbmc_intrinsics.hh" 1
+extern "C" {
+#pragma push_macro("_Bool")
+#undef _Bool
+#define _Bool bool
+)";
+  intrinsics.append(clang_c_languaget::internal_additions());
+  intrinsics.append(R"(
+#undef _Bool
+#pragma pop_macro("_Bool")
+})");
 
-  clang_cpp_convertert converter(new_context, ASTs, "C++");
+  return intrinsics;
+}
+
+bool clang_cpp_languaget::typecheck(contextt &context)
+{
+  clang_cpp_convertert converter(context, AST, "C++");
   if (converter.convert())
     return true;
 
-  clang_cpp_adjust adjuster(new_context);
+  clang_cpp_adjust adjuster(context);
   if (adjuster.adjust())
-    return true;
-
-  if (c_link(context, new_context, module))
     return true;
 
   return false;

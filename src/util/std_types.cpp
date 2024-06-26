@@ -94,7 +94,13 @@ bool is_reference(const typet &type)
 
 bool is_rvalue_reference(const typet &type)
 {
-  return type.id() == "pointer" && type.get_bool("#reference");
+  return type.id() == "pointer" && type.get_bool("#rvalue_reference");
+}
+
+bool is_lvalue_or_rvalue_reference(const typet &type)
+{
+  return type.id() == "pointer" &&
+         (type.reference() || type.get_bool("#rvalue_reference"));
 }
 
 BigInt signedbv_typet::smallest() const

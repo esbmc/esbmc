@@ -7,9 +7,9 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #ifdef _WIN32
-#include <windows.h>
-#undef small
-#undef ERROR
+#  include <windows.h>
+#  undef small
+#  undef ERROR
 #endif
 
 #include <ansi-c/c_preprocess.h>
@@ -178,9 +178,9 @@ void setup_cpp_defs(const char **defs)
 
 #ifndef _WIN32
 
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <unistd.h>
+#  include <sys/types.h>
+#  include <sys/wait.h>
+#  include <unistd.h>
 
 bool c_preprocess(const std::string &path, std::ostream &outstream, bool is_cpp)
 {
@@ -245,18 +245,18 @@ bool c_preprocess(const std::string &path, std::ostream &outstream, bool is_cpp)
   close(fd);
 
   const char **defs;
-#ifdef __APPLE__
+#  ifdef __APPLE__
   defs = cpp_mac_defs;
-#else
+#  else
   defs = cpp_linux_defs;
-#endif
+#  endif
 
   exit(configure_and_run_cpp(out_file_buf, path, defs, is_cpp));
 }
 
 #else /* __WIN32__ */
 
-#include <io.h>
+#  include <io.h>
 
 bool c_preprocess(const std::string &path, std::ostream &outstream, bool is_cpp)
 {

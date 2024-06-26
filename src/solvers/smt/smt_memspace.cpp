@@ -35,39 +35,27 @@ smt_astt smt_convt::convert_ptr_cmp(
   const expr2tc &templ_expr)
 {
   // Special handling for pointer comparisons (both ops are pointers; otherwise
-  // it's obviously broken). First perform a test as to whether or not the
-  // pointer locations are greater or lower; and only involve the ptr offset
-  // if the ptr objs are the same.
-  type2tc int_type = machine_ptr;
+  // it's obviously broken).
+  assert(is_pointer_type(side1));
+  assert(is_pointer_type(side2));
+  assert(dynamic_cast<const relation_data *>(templ_expr.get()));
 
-  expr2tc ptr_obj1 = pointer_object2tc(int_type, side1);
-  expr2tc ptr_offs1 = pointer_offset2tc(signed_size_type2(), side1);
-  expr2tc ptr_obj2 = pointer_object2tc(int_type, side2);
-  expr2tc ptr_offs2 = pointer_offset2tc(signed_size_type2(), side2);
+  /* Compare just the offsets. This is compatible with both, C and CHERI-C,
+   * because we already asserted that they point to the same object (unless
+   * --no-pointer-relation-check was specified, in which case the user opted
+   * out of sanity anyway). */
 
-  expr2tc addrspacesym =
-    symbol2tc(addr_space_arr_type, get_cur_addrspace_ident());
-  expr2tc obj1_data = index2tc(addr_space_type, addrspacesym, ptr_obj1);
-  expr2tc obj2_data = index2tc(addr_space_type, addrspacesym, ptr_obj2);
-
-  expr2tc obj1_start = member2tc(int_type, obj1_data, irep_idt("start"));
-  expr2tc obj2_start = member2tc(int_type, obj2_data, irep_idt("start"));
-
-  expr2tc start_expr = templ_expr, offs_expr = templ_expr;
-
-  // To ensure we can do this in an operation independant way, we're going to
-  // clone the original comparison expression, and replace its operands with
-  // new values. Works whatever the expr is, so long as it has two operands.
-  *start_expr->get_sub_expr_nc(0) = obj1_start;
-  *start_expr->get_sub_expr_nc(1) = obj2_start;
-  *offs_expr->get_sub_expr_nc(0) = ptr_offs1;
-  *offs_expr->get_sub_expr_nc(1) = ptr_offs2;
-
-  // Those are now boolean type'd relations.
-  expr2tc is_same_obj_expr = equality2tc(ptr_obj1, ptr_obj2);
-
-  expr2tc res = if2tc(offs_expr->type, is_same_obj_expr, offs_expr, start_expr);
-  return convert_ast(res);
+  /* Create a copy of the expression and replace both sides with the respective
+   * typecasted-to-unsigned versions of the offsets. The unsigned comparison is
+   * required because objects could be larger than half the address space, in
+   * which case offsets could flip sign. */
+  type2tc type = get_uint_type(config.ansi_c.address_width);
+  type2tc stype = get_int_type(config.ansi_c.address_width);
+  expr2tc op = templ_expr;
+  relation_data &rel = static_cast<relation_data &>(*op);
+  rel.side_1 = typecast2tc(type, pointer_offset2tc(stype, side1));
+  rel.side_2 = typecast2tc(type, pointer_offset2tc(stype, side2));
+  return convert_ast(op);
 }
 
 smt_astt
@@ -208,6 +196,10 @@ void smt_convt::renumber_symbol_address(
   const symbol2t &sym = to_symbol2t(addr_symbol);
   std::string str = sym.get_symbol_name();
 
+  const typet *t = nullptr;
+  if (const symbolt *s = ns.lookup(sym.thename))
+    t = &s->type;
+
   // Two different approaches if we do or don't have an address-of pointer
   // variable already.
 
@@ -218,7 +210,7 @@ void smt_convt::renumber_symbol_address(
     // object number, and nondeterministically pick the new value.
 
     unsigned int new_obj_num = pointer_logic.back().get_free_obj_num();
-    smt_astt output = init_pointer_obj(new_obj_num, new_size);
+    smt_astt output = init_pointer_obj(new_obj_num, new_size, t);
 
     // Now merge with the old value for all future address-of's
 
@@ -228,7 +220,7 @@ void smt_convt::renumber_symbol_address(
   {
     // Newly bumped pointer. Still needs a new number though.
     unsigned int obj_num = pointer_logic.back().get_free_obj_num();
-    smt_astt output = init_pointer_obj(obj_num, new_size);
+    smt_astt output = init_pointer_obj(obj_num, new_size, t);
 
     // Store in renumbered store.
     renumber_mapt::value_type v(str, output);
@@ -238,7 +230,8 @@ void smt_convt::renumber_symbol_address(
 
 smt_astt smt_convt::convert_identifier_pointer(
   const expr2tc &expr,
-  const std::string &symbol)
+  const std::string &symbol,
+  const typet *type)
 {
   smt_astt a;
   std::string cte, identifier;
@@ -309,7 +302,7 @@ smt_astt smt_convt::convert_identifier_pointer(
       size = constant_int2tc(ptr_loc_type, BigInt(0x10000));
     }
 
-    smt_astt output = init_pointer_obj(obj_num, size);
+    smt_astt output = init_pointer_obj(obj_num, size, type);
     assert_ast(a->eq(this, output));
   }
 
@@ -320,7 +313,10 @@ smt_astt smt_convt::convert_identifier_pointer(
   return a;
 }
 
-smt_astt smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
+smt_astt smt_convt::init_pointer_obj(
+  unsigned int obj_num,
+  const expr2tc &size,
+  const typet *type)
 {
   std::vector<expr2tc> membs;
   const struct_type2t &ptr_struct = to_struct_type(pointer_struct);
@@ -343,26 +339,48 @@ smt_astt smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
   expr2tc start_sym = symbol2tc(ptr_loc_type, start_name);
   expr2tc end_sym = symbol2tc(ptr_loc_type, end_name);
 
-  // Another thing to note is that the end var must be /the size of the obj/
-  // from start. Express this in irep.
-  expr2tc endisequal;
-  expr2tc the_offs;
-  the_offs = typecast2tc(ptr_loc_type, size);
-  expr2tc start_plus_offs = add2tc(ptr_loc_type, start_sym, the_offs);
-  endisequal = equality2tc(start_plus_offs, end_sym);
+  /* The accessible object spans addresses [start, end), including start,
+   * excluding end. The addresses reserved for this object however are
+   * [start, end] including 'end'. The reason is that the "one-past end" pointer
+   * still needs to be assigned to this object. Including one more byte at the
+   * end has several benefits:
+   * - The "one-past end" pointer is assigned to this object, as it should
+   *   according to C, see the comment about pointer equality in convert_ast().
+   * - It avoids the situation that two different objects are laid out
+   *   contiguously in the address space and that an address could legally
+   *   match both objects, which the if-then-else chain in
+   *   convert_typecast_to_ptr() doesn't support.
+   * - Zero-size objects still have one valid address value, so typecasts work.
+   */
+  expr2tc the_size = typecast2tc(ptr_loc_type, size);
+  expr2tc end_value = add2tc(ptr_loc_type, start_sym, the_size);
+  expr2tc endisequal = equality2tc(end_value, end_sym);
 
-  // Assert that start + offs == end
+  // Assert that start + size == end
   assert_expr(endisequal);
 
   // Even better, if we're operating in bitvector mode, it's possible that
   // the solver will try to be clever and arrange the pointer range to cross
   // the end of the address space (ie, wrap around). So, also assert that
-  // end > start
-  // Except when the size is zero, which might not be statically dicoverable
-  expr2tc zero_val = constant_int2tc(the_offs->type, BigInt(0));
-  expr2tc zeroeq = equality2tc(zero_val, the_offs);
-  expr2tc wraparound = greaterthan2tc(end_sym, start_sym);
-  assert_expr(or2tc(zeroeq, wraparound));
+  // end >= start
+  expr2tc no_wraparound = greaterthanequal2tc(end_sym, start_sym);
+  assert_expr(no_wraparound);
+
+  if (type)
+  {
+    const irept &alignment = type->find("alignment");
+    if (alignment.is_not_nil())
+    {
+      expr2tc alignment2;
+      migrate_expr(static_cast<const exprt &>(alignment), alignment2);
+      assert(is_constant_int2t(alignment2));
+      alignment2 = typecast2tc(ptr_loc_type, alignment2);
+      expr2tc zero = gen_zero(ptr_loc_type);
+      expr2tc mod = modulus2tc(ptr_loc_type, start_sym, alignment2);
+      expr2tc mod_is_zero = equality2tc(mod, zero);
+      assert_expr(mod_is_zero);
+    }
+  }
 
   // Generate address space layout constraints.
   finalize_pointer_chain(obj_num);
@@ -411,7 +429,7 @@ void smt_convt::finalize_pointer_chain(unsigned int objnum)
     expr2tc end_j = symbol2tc(inttype, endj.str());
 
     // Formula: (i_end < j_start) || (i_start > j_end)
-    // Previous assertions ensure start < end for all objs.
+    // Previous assertions ensure start <= end for all objs.
     expr2tc lt1 = lessthan2tc(end_i, start_j);
     expr2tc gt1 = greaterthan2tc(start_i, end_j);
     expr2tc no_overlap = or2tc(lt1, gt1);
@@ -463,7 +481,12 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
   if (is_symbol2t(obj.ptr_obj))
   {
     const symbol2t &symbol = to_symbol2t(obj.ptr_obj);
-    return convert_identifier_pointer(obj.ptr_obj, symbol.get_symbol_name());
+
+    const typet *t = nullptr;
+    if (const symbolt *s = ns.lookup(symbol.thename))
+      t = &s->type;
+
+    return convert_identifier_pointer(obj.ptr_obj, symbol.get_symbol_name(), t);
   }
 
   if (is_constant_string2t(obj.ptr_obj))
@@ -477,7 +500,7 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
     // XXX Oh look -- this is vulnerable to the poison null byte.
     std::replace(identifier.begin(), identifier.end(), '\0', '_');
 
-    return convert_identifier_pointer(obj.ptr_obj, identifier);
+    return convert_identifier_pointer(obj.ptr_obj, identifier, nullptr);
   }
 
   if (is_constant_array2t(obj.ptr_obj))
@@ -491,7 +514,7 @@ smt_astt smt_convt::convert_addr_of(const expr2tc &expr)
     static unsigned int constarr_num = 0;
     std::stringstream ss;
     ss << "address_of_arr_const(" << constarr_num++ << ")";
-    return convert_identifier_pointer(obj.ptr_obj, ss.str());
+    return convert_identifier_pointer(obj.ptr_obj, ss.str(), nullptr);
   }
 
   if (is_if2t(obj.ptr_obj))

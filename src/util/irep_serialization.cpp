@@ -81,22 +81,12 @@ void irep_serializationt::reference_convert(
   const irept &irep,
   std::ostream &out)
 {
-  // Do we have this irep already? Horrible complexity here.
-  unsigned int i;
-  for (i = 0; i < ireps_container.ireps_on_write.size(); i++)
-  {
-    if (full_eq(ireps_container.ireps_on_write[i], irep))
-    {
-      // Match, at idx i
-      write_long(out, i);
-      return;
-    }
-  }
-
-  i = ireps_container.ireps_on_write.size();
-  ireps_container.ireps_on_write.push_back(irep);
-  write_long(out, i);
-  write_irep(out, irep);
+  // Do we have this irep already?
+  unsigned i = ireps_container.ireps_on_write.size();
+  auto [it, ins] = ireps_container.ireps_on_write.try_emplace(irep, i);
+  write_long(out, it->second);
+  if (ins)
+    write_irep(out, irep);
 }
 
 void write_long(std::ostream &out, unsigned u)

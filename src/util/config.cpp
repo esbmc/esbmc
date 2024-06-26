@@ -107,6 +107,9 @@ std::string configt::triple::to_string() const
 
 bool configt::set(const cmdlinet &cmdline)
 {
+  if (cmdline.isset("std"))
+    language.std = cmdline.getval("std");
+
   if (cmdline.isset("function"))
     main = cmdline.getval("function");
 
@@ -119,6 +122,9 @@ bool configt::set(const cmdlinet &cmdline)
   if (cmdline.isset("define"))
     ansi_c.defines = cmdline.get_values("define");
 
+  if (cmdline.isset("include-file"))
+    ansi_c.include_files = cmdline.get_values("include-file");
+
   if (cmdline.isset("include"))
     ansi_c.include_paths = cmdline.get_values("include");
 
@@ -129,7 +135,17 @@ bool configt::set(const cmdlinet &cmdline)
     ansi_c.forces = cmdline.get_values("force");
 
   if (cmdline.isset("warning"))
-    ansi_c.warnings = cmdline.get_values("warning");
+    for (const std::string &w : cmdline.get_values("warning"))
+    {
+      if (has_prefix(w, "c,"))
+        for (size_t i = 2, j; i < w.length(); i = j + 1)
+        {
+          j = std::min(w.find(',', i), w.length());
+          ansi_c.frontend_opts.push_back(w.substr(i, j - i));
+        }
+      else
+        ansi_c.warnings.push_back(w);
+    }
 
   if (cmdline.isset("floatbv") && cmdline.isset("fixedbv"))
   {
@@ -315,56 +331,56 @@ std::string configt::this_architecture()
 #ifdef __alpha__
   this_arch = "alpha";
 #elif __thumb__
-#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#  if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
   this_arch = "thumbeb"
-#else
+#  else
   this_arch = "thumb";
-#endif
+#  endif
 #elif __aarch64__
-#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#  if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
   this_arch = "aarch64_be"
-#else
+#  else
   this_arch = "aarch64";
-#endif
+#  endif
 #elif __arm__
-#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+#  if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
   this_arch = "armeb";
-#else
+#  else
   this_arch = "arm";
-#endif
+#  endif
 #elif __mipsel__
-#if _MIPS_SIM == _ABIO32
+#  if _MIPS_SIM == _ABIO32
   this_arch = "mipsel";
-#elif _MIPS_SIM == _ABIN32
+#  elif _MIPS_SIM == _ABIN32
   this_arch = "mipsn32el";
-#else
+#  else
   this_arch = "mips64el";
-#endif
+#  endif
 #elif __mips__
-#if _MIPS_SIM == _ABIO32
+#  if _MIPS_SIM == _ABIO32
   this_arch = "mips";
-#elif _MIPS_SIM == _ABIN32
+#  elif _MIPS_SIM == _ABIN32
   this_arch = "mipsn32";
-#else
+#  else
   this_arch = "mips64";
-#endif
+#  endif
 #elif __powerpc__
-#if defined(__ppc64__) || defined(__PPC64__) || defined(__powerpc64__) ||      \
-  defined(__POWERPC64__)
-#ifdef __LITTLE_ENDIAN__
+#  if defined(__ppc64__) || defined(__PPC64__) || defined(__powerpc64__) ||    \
+    defined(__POWERPC64__)
+#    ifdef __LITTLE_ENDIAN__
   this_arch = "ppc64le";
-#else
+#    else
   this_arch = "ppc64";
-#endif
-#else
+#    endif
+#  else
   this_arch = "powerpc";
-#endif
+#  endif
 #elif __sparc__
-#ifdef __arch64__
+#  ifdef __arch64__
   this_arch = "sparc64";
-#else
+#  else
   this_arch = "sparc";
-#endif
+#  endif
 #elif __ia64__
   this_arch = "ia64";
 #elif __s390x__
@@ -372,11 +388,11 @@ std::string configt::this_architecture()
 #elif __s390__
   this_arch = "s390";
 #elif __x86_64__
-#ifdef __ILP32__
+#  ifdef __ILP32__
   this_arch = "x32"; // variant of x86_64 with 32-bit pointers
-#else
+#  else
   this_arch = "x86_64";
-#endif
+#  endif
 #elif __i386__
   this_arch = "i386";
 #elif _WIN64

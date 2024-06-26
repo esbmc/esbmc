@@ -47,7 +47,11 @@ public:
 #undef dm
 
   // Language the frontend has been parsing
-  language_idt language = language_idt::NONE;
+  struct language_stdt
+  {
+    language_idt lid;
+    std::string std;
+  } language = {language_idt::NONE, ""};
 
   struct ansi_ct
   {
@@ -77,6 +81,13 @@ public:
       return (cheri_concentrate ? 2 : 4) * address_width;
     }
 
+    // alignment of max_align_t (in bytes)
+    unsigned int max_alignment() const noexcept
+    {
+      // 8 for 32-bit, 16 for 64-bit
+      return word_size * 2 / char_width;
+    }
+
     bool char_is_unsigned;
     bool use_fixed_for_float;
 
@@ -102,11 +113,22 @@ public:
 
     triple target;
 
+    /* TODO: make this configurable.
+     *
+     * While it is not, the empty string means that we assume that the given
+     * program uses the same locale as we do ourselves. This is used for
+     * setlocale() in order to interpret string literals, see
+     * string_constantt::mb_value(). Therefore, this gives both, the source and
+     * execution character set. */
+    std::string locale_name;
+
     std::list<std::string> defines;
+    std::list<std::string> include_files;
     std::list<std::string> include_paths;
     std::list<std::string> idirafter_paths;
     std::list<std::string> forces;
     std::list<std::string> warnings;
+    std::vector<std::string> frontend_opts;
 
     typedef enum
     {

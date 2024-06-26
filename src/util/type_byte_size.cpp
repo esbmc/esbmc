@@ -112,10 +112,6 @@ BigInt type_sizet::size_bits(const type2tc &type) const
   case type2t::pointer_id:
     return type->get_width();
 
-  case type2t::string_id:
-    // TODO: Strings of wchar will return the wrong result here
-    return to_string_type(type).width * config.ansi_c.char_width;
-
   case type2t::vector_id:
   case type2t::array_id:
   {
@@ -219,10 +215,6 @@ expr2tc type_sizet::size_bits_expr(const type2tc &type) const
   case type2t::floatbv_id:
   case type2t::pointer_id:
     return bitsize(type->get_width());
-
-  case type2t::string_id:
-    // TODO: Strings of wchar will return the wrong result here
-    return bitsize(to_string_type(type).width * config.ansi_c.char_width);
 
   case type2t::array_id:
   case type2t::vector_id:
@@ -343,10 +335,6 @@ expr2tc type_sizet::pointer_offset_bits(const expr2tc &expr) const
     {
       const array_type2t &arr_type = to_array_type(index.source_value->type);
       sub_size = size_bits_expr(arr_type.subtype);
-    }
-    else if (is_string_type(index.source_value))
-    {
-      sub_size = gen_ulong(64);
     }
     else
     {

@@ -22,12 +22,12 @@ struct simplify_expr_cachet
 public:
   friend class simplify_exprt;
 
-#if 1
+#  if 1
   typedef std::unordered_map<exprt, exprt, irep_full_hash, irep_full_eq>
     containert;
-#else
+#  else
   typedef std::unordered_map<exprt, exprt, irep_hash> containert;
-#endif
+#  endif
 
   containert container_normal, container_no_simpl_const_objects;
 
@@ -2264,7 +2264,7 @@ bool simplify_exprt::simplify_index(index_exprt &expr, bool simpl_const_objects)
     {
       // out of bounds
     }
-    else
+    else if (bv_width(expr.type()) == 8) /* only for char and char8_t strings */
     {
       // terminating zero?
       char v = (i == value.size()) ? 0 : value[i.to_uint64()];

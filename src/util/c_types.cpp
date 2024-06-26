@@ -10,7 +10,7 @@ typet build_float_type(unsigned width)
     fixedbv_typet result;
     result.set_width(width);
     result.set_integer_bits(width / 2);
-    return std::move(result);
+    return result;
   }
   floatbv_typet result;
   result.set_width(width);
@@ -36,7 +36,7 @@ typet build_float_type(unsigned width)
     assert(false);
   }
 
-  return std::move(result);
+  return result;
 }
 
 type2tc build_float_type2(unsigned width)
@@ -150,6 +150,11 @@ type2tc uint128_type2()
   return get_uint_type(128);
 }
 
+typet uint256_type()
+{
+  return unsignedbv_typet(256);
+}
+
 typet long_uint_type()
 {
   return unsignedbv_typet(config.ansi_c.long_int_width);
@@ -210,12 +215,12 @@ typet char32_type()
 
 typet wchar_type()
 {
-  return signedbv_typet(config.ansi_c.int_width);
+  return signedbv_typet(config.ansi_c.wchar_t_width);
 }
 
 typet unsigned_wchar_type()
 {
-  return unsignedbv_typet(config.ansi_c.int_width);
+  return unsignedbv_typet(config.ansi_c.wchar_t_width);
 }
 
 type2tc char_type2()

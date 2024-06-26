@@ -27,7 +27,6 @@ static const char *type_names[] = {
   "signedbv",
   "fixedbv",
   "floatbv",
-  "string",
   "cpp_name"};
 // If this fires, you've added/removed a type id, and need to update the list
 // above (which is ordered according to the enum list)
@@ -228,16 +227,6 @@ unsigned int floatbv_type2t::get_width() const
 unsigned int code_data::get_width() const
 {
   throw symbolic_type_excp();
-}
-
-unsigned int string_type2t::get_width() const
-{
-  return width * 8;
-}
-
-unsigned int string_type2t::get_length() const
-{
-  return width;
 }
 
 const std::vector<type2tc> &struct_union_data::get_structure_members() const

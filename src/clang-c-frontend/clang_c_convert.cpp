@@ -4,10 +4,12 @@ CC_DIAGNOSTIC_PUSH()
 CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
 #include <clang/AST/Attr.h>
 #include <clang/AST/Expr.h>
+#include <clang/AST/ExprCXX.h> /* clang::TypeTraitExpr */
 #include <clang/AST/ParentMapContext.h>
 #include <clang/AST/QualTypeNames.h>
 #include <clang/AST/Type.h>
 #include <clang/Basic/Version.inc>
+#include <clang/Basic/Builtins.h>
 #include <clang/Index/USRGeneration.h>
 #include <clang/Frontend/ASTUnit.h>
 #include <llvm/Support/raw_os_ostream.h>
@@ -29,12 +31,12 @@ CC_DIAGNOSTIC_POP()
 
 clang_c_convertert::clang_c_convertert(
   contextt &_context,
-  std::vector<std::unique_ptr<clang::ASTUnit>> &_ASTs,
+  std::unique_ptr<clang::ASTUnit> &_AST,
   irep_idt _mode)
   : ASTContext(nullptr),
     context(_context),
     ns(context),
-    ASTs(_ASTs),
+    AST(_AST),
     mode(_mode),
     anon_symbol("clang_c_convertert::"),
     current_scope_var_num(1),
@@ -73,12 +75,9 @@ bool clang_c_convertert::convert_builtin_types()
 
 bool clang_c_convertert::convert_top_level_decl()
 {
-  // Iterate through each translation unit and their global symbols, creating
-  // symbols as we go.
-  for (auto const &translation_unit : ASTs)
+  if (AST)
   {
-    // Update ASTContext as it changes for each source file
-    ASTContext = &(*translation_unit).getASTContext();
+    ASTContext = &AST->getASTContext();
 
     // This is the whole translation unit. We don't represent it internally
     exprt dummy_decl;
@@ -115,6 +114,7 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
 
   // Declaration of variables
   case clang::Decl::Var:
+  case clang::Decl::VarTemplateSpecialization:
   {
     const clang::VarDecl &vd = static_cast<const clang::VarDecl &>(decl);
     return get_var(vd, new_expr);
@@ -273,6 +273,23 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   case clang::Decl::Typedef:
     break;
 
+  case clang::Decl::BuiltinTemplate:
+  {
+    // expanded by clang itself
+    const clang::BuiltinTemplateDecl &btd =
+      static_cast<const clang::BuiltinTemplateDecl &>(decl);
+    if (
+      btd.getBuiltinTemplateKind() !=
+      clang::BuiltinTemplateKind::BTK__make_integer_seq)
+    {
+      log_error(
+        "Unsupported builtin template kind id: {}",
+        (int)btd.getBuiltinTemplateKind());
+      abort();
+    }
+
+    break;
+  }
   default:
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
@@ -348,8 +365,7 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
    * b) the type is being referred to under a pointer inside another type
    *    definition and up to this definition has not been defined, yet.
    */
-  clang::RecordDecl *rd_def = rd.getDefinition();
-  if (!rd_def)
+  if (!rd.isCompleteDefinition())
     return false;
 
   /* Don't continue if it's not incomplete; use the .incomplete() flag to avoid
@@ -359,6 +375,9 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   if (!sym->type.incomplete())
     return false;
   sym->type.remove(irept::a_incomplete);
+
+  clang::RecordDecl *rd_def = rd.getDefinition();
+  assert(rd_def);
 
   /* it has a definition, now build the complete type */
   struct_union_typet t(c_tag);
@@ -395,9 +414,6 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
     }
   }
 
-  if (get_struct_union_class_methods_decls(*rd_def, t))
-    return true;
-
   /* We successfully constructed the type of this symbol; replace the
    * symbol with the incomplete type by one with the now-complete type
    * definition.
@@ -407,7 +423,10 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   symbolt symbol = *sym;
   context.erase_symbol(symbol.id);
   symbol.type = t;
-  context.move_symbol_to_context(symbol);
+  sym = context.move_symbol_to_context(symbol);
+
+  if (get_struct_union_class_methods_decls(*rd_def, sym->type))
+    return true;
 
   return false;
 }
@@ -469,6 +488,19 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
         else if (name == "__ESBMC_no_slice")
           no_slice = true;
       }
+      else if (attr->getKind() == clang::attr::Aligned)
+      {
+        const clang::AlignedAttr &aattr =
+          static_cast<const clang::AlignedAttr &>(*attr);
+
+        exprt alignment;
+        if (get_expr(*(aattr.getAlignmentExpr()), alignment))
+          return true;
+
+        t.set("alignment", alignment);
+      }
+      else
+        continue;
     }
   }
 
@@ -498,11 +530,9 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   symbol.file_local = (vd.getStorageClass() == clang::SC_Static) ||
                       (!vd.isExternallyVisible() && !vd.hasGlobalStorage());
 
-  bool aggregate_value_init = is_aggregate_type(vd.getType());
-
   if (
     symbol.static_lifetime && !symbol.is_extern &&
-    (!vd.hasInit() || aggregate_value_init))
+    (!vd.hasInit() || is_aggregate_type(vd.getType())))
   {
     // the type might contains symbolic types,
     // replace them with complete types before generating zero initialization
@@ -556,7 +586,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
       return true;
 
     bool aggregate_without_init =
-      aggregate_value_init &&
+      is_aggregate_type(vd.getType()) &&
       stmt->getStmtClass() == clang::Stmt::CXXConstructExprClass;
 
     added_symbol = context.move_symbol_to_context(symbol);
@@ -581,7 +611,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     code_declt decl(symbol_expr(*added_symbol));
     decl.location() = location_begin;
 
-    if (vd.hasInit())
+    if (vd.hasInit() && !vd.isExceptionVariable())
     {
       exprt val;
       if (get_expr(*vd.getInit(), val))
@@ -794,8 +824,9 @@ bool clang_c_convertert::get_type(
   const clang::QualType &q_type,
   typet &new_type)
 {
-  const clang::Type &the_type = *q_type.getTypePtrOrNull();
-  if (get_type(the_type, new_type))
+  const clang::Type *the_type = q_type.getTypePtrOrNull();
+  assert(the_type);
+  if (get_type(*the_type, new_type))
     return true;
 
   if (q_type.isConstQualified())
@@ -808,7 +839,7 @@ bool clang_c_convertert::get_type(
     new_type.restricted(true);
 
 #ifdef ESBMC_CHERI_CLANG
-  if (the_type.canCarryProvenance(*ASTContext))
+  if (the_type->canCarryProvenance(*ASTContext))
     new_type.can_carry_provenance(true);
 #endif
 
@@ -1039,9 +1070,13 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
 
     std::string id, name;
     get_decl_name(rd, name, id);
-
-    /* record in context if not already there */
-    get_struct_union_class(rd);
+    symbolt *s = context.find_symbol(id);
+    if (!s)
+    {
+      /* record in context if not already there */
+      if (get_struct_union_class(rd))
+        return true;
+    }
 
     /* symbolic type referring to that type */
     new_type = symbol_typet(id);
@@ -1051,7 +1086,30 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
 
   case clang::Type::Enum:
   {
-    new_type = enum_type();
+    const clang::EnumType &ent = static_cast<const clang::EnumType &>(the_type);
+
+    clang::QualType q_type = ent.getDecl()->getIntegerType();
+
+    /* The q_type is nil when the enum is just declared but not defined in the
+     * translation unit. That case should only happen under a pointer like
+     *
+     *   enum E (*f)()
+     *
+     * which should never be dereferencable. Hence, this type won't be used.
+     * Hopefully. As it's not standard C, and because this looks fragile, let's
+     * print a warning.
+     */
+    if (!q_type.getTypePtrOrNull())
+    {
+      log_warning(
+        "No definition attached to enum declaration, this is not standard C. "
+        "Upstream issue <https://github.com/esbmc/esbmc/issues/1794> tracks "
+        "this.");
+      new_type = enum_type();
+    }
+    else if (get_type(q_type, new_type))
+      return true;
+
     break;
   }
 
@@ -1093,7 +1151,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
       static_cast<const clang::LValueReferenceType &>(the_type);
 
     typet sub_type;
-    if (get_type(lvrt.getPointeeTypeAsWritten(), sub_type))
+    if (get_type(lvrt.getPointeeType(), sub_type))
       return true;
 
     if (sub_type.is_struct() || sub_type.is_union())
@@ -1118,7 +1176,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
      *
      * So for a const ref, we need to annotate it here
      */
-    if (lvrt.getPointeeTypeAsWritten().isConstQualified())
+    if (lvrt.getPointeeType().isConstQualified())
       sub_type.cmt_constant(true);
 
     new_type = gen_pointer_type(sub_type);
@@ -1183,11 +1241,11 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
   }
 
 #if CLANG_VERSION_MAJOR < 14
-#define BITINT_TAG clang::Type::ExtInt
-#define BITINT_TYPE clang::ExtIntType
+#  define BITINT_TAG clang::Type::ExtInt
+#  define BITINT_TYPE clang::ExtIntType
 #else
-#define BITINT_TAG clang::Type::BitInt
-#define BITINT_TYPE clang::BitIntType
+#  define BITINT_TAG clang::Type::BitInt
+#  define BITINT_TYPE clang::BitIntType
 #endif
   case BITINT_TAG:
   {
@@ -1381,6 +1439,11 @@ bool clang_c_convertert::get_builtin_type(
     c_type = "__uint128";
     break;
 
+  case clang::BuiltinType::NullPtr:
+    new_type = pointer_type();
+    c_type = "uintptr_t";
+    break;
+
 #ifdef ESBMC_CHERI_CLANG
   case clang::BuiltinType::IntCap:
     new_type = intcap_typet();
@@ -1419,10 +1482,8 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
   switch (stmt.getStmtClass())
   {
-  /*
-       The following enum values are the the expr of a program,
-       defined on the Expr class
-    */
+  /* The following enum values are the the expr of a program,
+   * defined on the Expr class */
 
   // Objects that are implicit defined on the code syntax.
   // One example is the gcc ternary operator, which can be:
@@ -1568,22 +1629,87 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     // Use clang to calculate offsetof
     clang::Expr::EvalResult result;
-    bool res = offset.EvaluateAsInt(result, *ASTContext);
-    if (!res)
+    if (offset.EvaluateAsInt(result, *ASTContext))
     {
-      log_error("Clang could not calculate offset");
-      std::ostringstream oss;
-      llvm::raw_os_ostream ross(oss);
-      offset.dump(ross, *ASTContext);
-      ross.flush();
-      log_error("{}", oss.str());
-      return true;
+      new_expr = constant_exprt(
+        integer2binary(
+          result.Val.getInt().getSExtValue(), bv_width(size_type())),
+        integer2string(result.Val.getInt().getSExtValue()),
+        size_type());
+    }
+    else
+    {
+      /* Clang failed, i.e., a dynamic offsetof, something like
+       * offsetof(struct S, member[idx]). We're building the equivalent of the
+       * manual offsetof() macro definition. Details below. */
+
+      /* TODO: It would be good to put the expression we're constructing here
+       *       into compute_pointer_offset(), e.g., already in the adjuster.
+       *       However, that would require the migrate_namespace_lookup to be
+       *       setup correctly. Modelling it as pointer_offset expression would
+       *       be throwing away the information that the value-set of this
+       *       pointer expression is effectively a singleton with constant
+       *       address zero. */
+
+      unsigned n = offset.getNumComponents();
+      assert(n > 0);
+
+      const clang::TypeSourceInfo *ti = offset.getTypeSourceInfo();
+      const clang::QualType q_type = ti->getType();
+      typet base;
+      if (get_type(q_type, base))
+        return true;
+
+      /* start by building the expression e := *(base *)0 */
+      exprt e = constant_exprt(
+        integer2binary(0, bv_width(size_type())),
+        integer2string(0),
+        size_type());
+      e = typecast_exprt(e, pointer_typet(base));
+      e = dereference_exprt(e, e.type());
+
+      /* process the list comprised of member, index, and base-class accesses */
+      for (unsigned i = 0; i < n; i++)
+      {
+        const clang::OffsetOfNode &o = offset.getComponent(i);
+        switch (o.getKind())
+        {
+        case clang::OffsetOfNode::Array:
+        {
+          const clang::Expr *cidx = offset.getIndexExpr(o.getArrayExprIndex());
+          exprt idx;
+          if (get_expr(*cidx, idx))
+            return true;
+          e = index_exprt(e, idx);
+          break;
+        }
+        case clang::OffsetOfNode::Field:
+        {
+          const clang::FieldDecl *fd = o.getField();
+          exprt comp;
+          if (get_decl(*fd, comp))
+            return true;
+          e = member_exprt(e, comp.name(), comp.type());
+          break;
+        }
+        case clang::OffsetOfNode::Identifier:
+        {
+          const clang::IdentifierInfo *fii = o.getFieldName();
+          e = member_exprt(e, irep_idt(fii->getNameStart()));
+          break;
+        }
+        case clang::OffsetOfNode::Base: /* TODO */
+          log_error("offsetof() on base class members not implemented");
+          abort();
+        }
+      }
+
+      /* finally, the result is (size_t)&e */
+      e = address_of_exprt(e);
+      e = typecast_exprt(e, size_type());
+      new_expr = e;
     }
 
-    new_expr = constant_exprt(
-      integer2binary(result.Val.getInt().getSExtValue(), bv_width(size_type())),
-      integer2string(result.Val.getInt().getSExtValue()),
-      size_type());
     break;
   }
 
@@ -1637,12 +1763,23 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     const clang::Stmt *callee = function_call.getCallee();
 
+#if CLANG_VERSION_MAJOR > 14
+    if (function_call.isCallToStdMove())
+    {
+      if (get_expr(*function_call.getArg(0), new_expr))
+        return true;
+
+      break;
+    }
+#endif
+
     exprt callee_expr;
     if (get_expr(*callee, callee_expr))
       return true;
 
     typet type;
-    if (get_type(function_call.getType(), type))
+    clang::QualType qtype = function_call.getCallReturnType(*ASTContext);
+    if (get_type(qtype, type))
       return true;
 
     side_effect_expr_function_callt call;
@@ -1672,7 +1809,9 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       const auto *e =
         llvm::dyn_cast<clang::EnumConstantDecl>(member.getMemberDecl()))
     {
-      get_enum_value(e, new_expr);
+      if (get_enum_value(e, new_expr))
+        return true;
+
       break;
     }
 
@@ -1805,10 +1944,10 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  case clang::Stmt::CXXNullPtrLiteralExprClass:
   case clang::Stmt::GNUNullExprClass:
   {
-    const clang::GNUNullExpr &gnun =
-      static_cast<const clang::GNUNullExpr &>(stmt);
+    const clang::Expr &gnun = static_cast<const clang::Expr &>(stmt);
 
     typet t;
     if (get_type(gnun.getType(), t))
@@ -2028,6 +2167,21 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           to_union_expr(inits).set_component_name(
             init_union_field->getName().str());
       }
+    }
+    else if (
+      init_stmt.getNumInits() == 0 && init_stmt.getType()->isScalarType())
+    {
+      /* We have a list initializer with no elements.
+       * So per https://en.cppreference.com/w/cpp/language/list_initialization
+       * we perform value-initialization.
+       * > Otherwise, if the braced-init-list has no elements, T is value-initialized.
+       * And per https://en.cppreference.com/w/cpp/language/value_initialization
+       * > The effects of value-initialization are:
+       * > ...
+       * > - Otherwise, the object is zero-initialized.
+       * So we just zero-initialize the object.
+       */
+      inits = gen_zero(t);
     }
     else
     {
@@ -2494,6 +2648,74 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  case clang::Stmt::SourceLocExprClass:
+  {
+    /* From Clang docs: Represents a function call to one of __builtin_LINE(),
+     * __builtin_COLUMN(), __builtin_FUNCTION(), __builtin_FUNCSIG(),
+     * __builtin_FILE(), __builtin_FILE_NAME() or __builtin_source_location().
+     */
+
+    const clang::SourceLocExpr &loc =
+      static_cast<const clang::SourceLocExpr &>(stmt);
+    clang::APValue value = loc.EvaluateInContext(*ASTContext, nullptr);
+
+    /* An APValue represents some constant. For constants derived from source
+     * locations, it could either be a string (file / function name) or an int
+     * (line / column number). */
+
+    switch (value.getKind())
+    {
+    case clang::APValue::LValue:
+    {
+      // This is probably a string constant
+      clang::APValue::LValueBase base = value.getLValueBase();
+      assert(base.is<const clang::Expr *>());
+      const clang::Expr *expr = base.get<const clang::Expr *>();
+      if (get_expr(*expr, new_expr))
+        return true;
+      break;
+    }
+
+    case clang::APValue::Int:
+    {
+      const llvm::APSInt &Int = value.getInt();
+      int width = Int.getBitWidth();
+      assert(width <= 64);
+      int64_t v = Int.getSExtValue();
+      new_expr = constant_exprt(
+        integer2binary(v, width), integer2string(v), signedbv_typet(width));
+      break;
+    }
+
+    /*
+    case clang::APValue::None:
+    case clang::APValue::Indeterminate:
+    case clang::APValue::Float:
+    case clang::APValue::FixedPoint:
+    case clang::APValue::ComplexInt:
+    case clang::APValue::ComplexFloat:
+    case clang::APValue::Vector:
+    case clang::APValue::Array:
+    case clang::APValue::Struct:
+    case clang::APValue::Union:
+    case clang::APValue::AddrLabelDiff:
+    case clang::APValue::MemberPointer:
+    */
+    default:
+      std::ostringstream oss;
+      llvm::raw_os_ostream ross(oss);
+      ross << "Conversion of unsupported value computed by clang for expr: \"";
+      ross << stmt.getStmtClassName() << "\" to expression"
+           << "\n";
+      stmt.dump(ross, *ASTContext);
+      ross.flush();
+      log_error("{}", oss.str());
+      return true;
+    }
+
+    break;
+  }
+
   // A NULL statement, we ignore it. An example is a lost semicolon on
   // the program
   case clang::Stmt::NullStmtClass:
@@ -2503,6 +2725,86 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   case clang::Stmt::MSAsmStmtClass:
     new_expr = code_skipt();
     break;
+
+  /* According to Clang docs:
+   *
+   * A type trait used in the implementation of various C++11 and Library TR1
+   * trait templates.
+   *   __is_pod(int) == true
+   *   __is_enum(std::string) == false
+   *   __is_trivially_constructible(vector<int>, int*, int*)
+   *
+   * But it is also used for __builtin_types_compatible_p(ty1, ty2). */
+  case clang::Stmt::TypeTraitExprClass:
+  {
+    const clang::TypeTraitExpr &tte =
+      static_cast<const clang::TypeTraitExpr &>(stmt);
+
+    if (tte.isValueDependent())
+    {
+      std::ostringstream oss;
+      llvm::raw_os_ostream ross(oss);
+      ross << "Conversion of unsupported value-dependent type-trait expr: \"";
+      ross << stmt.getStmtClassName() << "\" to expression"
+           << "\n";
+      stmt.dump(ross, *ASTContext);
+      ross.flush();
+      log_error("{}", oss.str());
+      return true;
+    }
+
+    typet type;
+    if (get_type(tte.getType(), type))
+      return true;
+
+    assert(
+      type.id() == typet::t_bool || type.id() == typet::t_signedbv ||
+      type.id() == typet::t_unsignedbv);
+
+    if (tte.getValue())
+      new_expr = true_exprt();
+    else
+      new_expr = false_exprt();
+
+    break;
+  }
+
+  /* Clang docs:
+   *
+   * GNU builtin-in function __builtin_choose_expr.
+   *
+   * This AST node is similar to the conditional operator (?:) in C, with the
+   * following exceptions:
+   *
+   * - the test expression must be a integer constant expression.
+   * - the expression returned acts like the chosen subexpression in every
+   *   visible way: the type is the same as that of the chosen subexpression,
+   *   and all predicates (whether it's an l-value, whether it's an integer
+   *   constant expression, etc.) return the same result as for the chosen
+   *   sub-expression.
+   */
+  case clang::Stmt::ChooseExprClass:
+  {
+    const clang::ChooseExpr &cexpr =
+      static_cast<const clang::ChooseExpr &>(stmt);
+
+    if (get_expr(*cexpr.getChosenSubExpr(), new_expr))
+      return true;
+
+    break;
+  }
+
+  case clang::Stmt::AttributedStmtClass:
+  {
+    const clang::AttributedStmt &astmt =
+      static_cast<const clang::AttributedStmt &>(stmt);
+
+    /* ignore attributes for now */
+    if (get_expr(*astmt.getSubStmt(), new_expr))
+      return true;
+
+    break;
+  }
 
   default:
   {
@@ -2522,16 +2824,25 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   return false;
 }
 
-void clang_c_convertert::get_enum_value(
+bool clang_c_convertert::get_enum_value(
   const clang::EnumConstantDecl *e,
   exprt &new_expr)
 {
   assert(e);
-  // For enum constants, we get their value directly
-  new_expr = constant_exprt(
-    integer2binary(e->getInitVal().getSExtValue(), bv_width(int_type())),
-    integer2string(e->getInitVal().getSExtValue()),
-    int_type());
+
+  if (!e->getInitExpr())
+  {
+    new_expr = constant_exprt(
+      integer2binary(e->getInitVal().getSExtValue(), bv_width(int_type())),
+      integer2string(e->getInitVal().getSExtValue()),
+      int_type());
+    return false;
+  }
+
+  if (get_expr(*e->getInitExpr(), new_expr))
+    return true;
+
+  return false;
 }
 
 bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
@@ -2540,7 +2851,9 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
   // to the name
   if (const auto *e = llvm::dyn_cast<clang::EnumConstantDecl>(&d))
   {
-    get_enum_value(e, new_expr);
+    if (get_enum_value(e, new_expr))
+      return true;
+
     return false;
   }
 
@@ -2947,8 +3260,8 @@ bool clang_c_convertert::get_atomic_expr(
   side_effect_expr_function_callt fake_call;
 
   // Get the type
-  code_typet t;
-  if (get_type(atm.getType(), t.return_type()))
+  typet t;
+  if (get_type(atm.getType(), t))
     return true;
   fake_call.type() = t;
 
@@ -3091,7 +3404,6 @@ bool clang_c_convertert::get_atomic_expr(
   if (get_expr(*atm.getPtr(), ptr))
     return true;
 
-  t.arguments().push_back(code_typet::argumentt(ptr.type()));
   fake_call.arguments().push_back(ptr);
 
   // Val1
@@ -3103,7 +3415,6 @@ bool clang_c_convertert::get_atomic_expr(
     if (get_expr(*atm.getVal1(), val1))
       return true;
 
-    t.arguments().push_back(code_typet::argumentt(val1.type()));
     fake_call.arguments().push_back(val1);
   }
 
@@ -3114,7 +3425,6 @@ bool clang_c_convertert::get_atomic_expr(
     if (get_expr(*atm.getVal2(), val2))
       return true;
 
-    t.arguments().push_back(code_typet::argumentt(val2.type()));
     fake_call.arguments().push_back(val2);
   }
 
@@ -3127,7 +3437,6 @@ bool clang_c_convertert::get_atomic_expr(
     if (get_expr(*atm.getWeak(), weak))
       return true;
 
-    t.arguments().push_back(code_typet::argumentt(weak.type()));
     fake_call.arguments().push_back(weak);
   }
 
@@ -3137,7 +3446,6 @@ bool clang_c_convertert::get_atomic_expr(
     if (get_expr(*atm.getOrder(), order))
       return true;
 
-    t.arguments().push_back(code_typet::argumentt(order.type()));
     fake_call.arguments().push_back(order);
   }
 
@@ -3147,7 +3455,6 @@ bool clang_c_convertert::get_atomic_expr(
     if (get_expr(*atm.getOrderFail(), order_fail))
       return true;
 
-    t.arguments().push_back(code_typet::argumentt(order_fail.type()));
     fake_call.arguments().push_back(order_fail);
   }
 
@@ -3213,7 +3520,7 @@ void clang_c_convertert::get_decl_name(
   case clang::Decl::Field:
     if (name.empty())
     {
-      // Anonymous fields, generate a name based on the type
+      // Anonymous fields, generate a name based on the field index
       const clang::FieldDecl &fd = static_cast<const clang::FieldDecl &>(nd);
       name = "__anon_field_" + std::to_string(fd.getFieldIndex());
       id = name;
@@ -3223,7 +3530,7 @@ void clang_c_convertert::get_decl_name(
   case clang::Decl::IndirectField:
     if (name.empty())
     {
-      // Anonymous fields, generate a name based on the type
+      // Anonymous fields, generate a name based on the field index
       const clang::IndirectFieldDecl &fd =
         static_cast<const clang::IndirectFieldDecl &>(nd);
       name = "__anon_indirect_field_" +
@@ -3286,7 +3593,7 @@ void clang_c_convertert::get_decl_name(
   case clang::Decl::Var:
     if (name.empty())
     {
-      // Anonymous variable, generate a name based on the type,
+      // Anonymous variable, generate a name based on the location,
       // see regression union1
       const clang::VarDecl &vd = static_cast<const clang::VarDecl &>(nd);
       locationt location_begin;
@@ -3301,7 +3608,6 @@ void clang_c_convertert::get_decl_name(
       return;
     }
     break;
-
   default:
     if (name.empty())
     {

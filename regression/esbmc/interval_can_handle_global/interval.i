@@ -1,19 +1,22 @@
-c, e = 1;
-a();
+int c, e = 1;
+
 void b();
 void d();
-main() {
+
+int main()
+{
+  // e = [1,1], c = [0,0]
   c = 1;
-  if (c == 1) {
+  if (c == 1)
     b();
-    (*a)();
-  }
+  
   d();
 }
 void b() { 
-int tmp = e;
-e = tmp + 1; }
+  int tmp = e;
+  e = tmp + 1;
+}
 void d() {
   if (e != 1)
-    reach_error();
+    __ESBMC_assert(0, "error");
 }

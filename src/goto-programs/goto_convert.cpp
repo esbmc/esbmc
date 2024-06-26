@@ -330,25 +330,12 @@ void goto_convertt::convert_throw_decl(const exprt &expr, goto_programt &dest)
 
 void goto_convertt::convert_throw(const exprt &expr, goto_programt &dest)
 {
-  // add the THROW_DECL instruction to 'dest'
+  // add the THROW instruction to 'dest'
   goto_programt::targett throw_instruction = dest.add_instruction();
-  codet c("code");
-  c.set_statement("cpp-throw");
-
-  // the THROW instruction is annotated with a list of IDs,
-  // one per target
-  irept::subt &throw_list = c.add("throw_list").get_sub();
-  for (const auto &block : expr.operands())
-  {
-    irept type = irept(block.get("throw_decl_id"));
-
-    // grab the ID and add to THROW_DECL instruction
-    throw_list.emplace_back(type);
-  }
 
   throw_instruction->make_throw();
   throw_instruction->location = expr.location();
-  migrate_expr(c, throw_instruction->code);
+  migrate_expr(expr, throw_instruction->code);
 }
 
 void goto_convertt::convert_catch(const codet &code, goto_programt &dest)
@@ -389,10 +376,6 @@ void goto_convertt::convert_catch(const codet &code, goto_programt &dest)
 
     // grab the ID and add to CATCH instruction
     exception_list.push_back(block.get("exception_id"));
-
-    // Hack for object value passing
-    const_cast<exprt::operandst &>(block.op0().operands())
-      .push_back(gen_zero(block.op0().op0().type()));
 
     convert(block, tmp);
     catch_push_instruction->targets.push_back(tmp.instructions.begin());
@@ -1114,30 +1097,9 @@ void goto_convertt::convert_cpp_delete(const codet &code, goto_programt &dest)
 
   // preserve the call
   goto_programt::targett t_f = dest.add_instruction(OTHER);
-  t_f->code = code_cpp_delete2tc(tmp_op2);
   t_f->location = code.location();
-
-  // now do "delete"
-  exprt valid_expr("valid_object", bool_typet());
-  valid_expr.copy_to_operands(tmp_op);
-
-  // clear alloc bit
-  exprt assign = code_assignt(valid_expr, false_exprt());
-  expr2tc assign2;
-  migrate_expr(assign, assign2);
-  goto_programt::targett t_c = dest.add_instruction(ASSIGN);
-  t_c->code = assign2;
-  t_c->location = code.location();
-
-  exprt deallocated_expr("deallocated_object", bool_typet());
-  deallocated_expr.copy_to_operands(tmp_op);
-
-  //indicate that memory has been deallocated
-  assign = code_assignt(deallocated_expr, true_exprt());
-  migrate_expr(assign, assign2);
-  goto_programt::targett t_d = dest.add_instruction(ASSIGN);
-  t_d->code = assign2;
-  t_d->location = code.location();
+  t_f->code = code.statement() == "cpp_delete" ? code_cpp_delete2tc(tmp_op2)
+                                               : code_cpp_del_array2tc(tmp_op2);
 }
 
 void goto_convertt::convert_assert(const codet &code, goto_programt &dest)
@@ -1870,7 +1832,16 @@ void goto_convertt::convert_ifthenelse(const codet &c, goto_programt &dest)
     convert(to_code(code.op2()), tmp_op2);
 
   exprt tmp_guard = code.op0();
-  remove_sideeffects(tmp_guard, dest);
+
+  // for condition coverage
+  // to keep the guard format
+  if (!(options.get_bool_option("condition-coverage") ||
+        options.get_bool_option("condition-coverage-claims") ||
+        options.get_bool_option("condition-coverage-rm") ||
+        options.get_bool_option("condition-coverage-claims-rm")))
+  {
+    remove_sideeffects(tmp_guard, dest);
+  }
 
   generate_ifthenelse(tmp_guard, tmp_op1, tmp_op2, location, dest);
 }

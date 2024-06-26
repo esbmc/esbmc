@@ -11,7 +11,7 @@ class clang_cpp_convertert : public clang_c_convertert
 public:
   clang_cpp_convertert(
     contextt &_context,
-    std::vector<std::unique_ptr<clang::ASTUnit>> &_ASTs,
+    std::unique_ptr<clang::ASTUnit> &_AST,
     irep_idt _mode);
   virtual ~clang_cpp_convertert() = default;
 
@@ -22,6 +22,11 @@ protected:
   this_mapt this_map;
 
   bool get_decl(const clang::Decl &decl, exprt &new_expr) override;
+
+  void get_decl_name(
+    const clang::NamedDecl &nd,
+    std::string &name,
+    std::string &id) override;
 
   /**
    *  Get reference to a declared variable or function, e.g:
@@ -221,7 +226,7 @@ protected:
    *  - cxxrd: clang AST representing the class/struct we are currently dealing with
    *  - map: this map contains all base class(es) of this class std::map<class_id, pointer to clang AST of base class>
    */
-  void get_base_map(const clang::CXXRecordDecl &cxxrd, base_map &map);
+  bool get_base_map(const clang::CXXRecordDecl &cxxrd, base_map &map);
   /*
    * Check whether we've already got this component in a class type
    * Avoid copying duplicate component from a base class type to the derived class type.
@@ -513,6 +518,13 @@ protected:
    *  md: clang AST representing a C++ method
    */
   bool is_ConstructorOrDestructor(const clang::CXXMethodDecl &md);
+  /*
+   * Check if expr is a temporary object
+   * if not, convert expr to a temporary object
+   * Arguments:
+   *  expr: ESBMC IR to represent Function call
+   */
+  void make_temporary(exprt &expr);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

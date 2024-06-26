@@ -22,30 +22,23 @@ CC_DIAGNOSTIC_POP()
 
 languaget *new_clang_c_language()
 {
-  return new clang_c_languaget();
+  return new clang_c_languaget;
 }
 
-clang_c_languaget::clang_c_languaget()
-{
-  // Build the compile arguments
-  build_compiler_args(clang_headers_path());
+clang_c_languaget::clang_c_languaget() = default;
 
-  if (FILE *f = messaget::state.target("clang", VerbosityLevel::Debug))
+void clang_c_languaget::build_include_args(
+  std::vector<std::string> &compiler_args)
+{
+  if (config.options.get_bool_option("nostdinc"))
   {
-    fprintf(f, "clang invocation:");
-    for (const std::string &s : compiler_args)
-      fprintf(f, " '%s'", s.c_str());
-    fprintf(f, "\n");
+    compiler_args.push_back("-nostdinc");
+    compiler_args.push_back("-ibuiltininc");
   }
-}
 
-void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
-{
-  compiler_args.emplace_back("clang-tool");
+  for (auto const &inc : config.ansi_c.include_paths)
+    compiler_args.push_back("-I" + inc);
 
-  // TODO: Implement a similar way to add opertional models for C++. For the time being,
-  // we are still following the way old ESBMC++ includes these operational models using -I.
-  // See discussions in PR834.
   const std::string *libc_headers = internal_libc_header_dir();
   if (libc_headers)
   {
@@ -53,9 +46,19 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
     compiler_args.push_back(*libc_headers);
   }
 
-  compiler_args.push_back("-isystem");
-  compiler_args.push_back(tmp_dir);
+  compiler_args.push_back("-resource-dir");
+  compiler_args.push_back(clang_resource_dir());
 
+  for (const auto &dir : config.ansi_c.idirafter_paths)
+  {
+    compiler_args.push_back("-idirafter");
+    compiler_args.push_back(dir);
+  }
+}
+
+void clang_c_languaget::build_compiler_args(
+  std::vector<std::string> &compiler_args)
+{
   // Append mode arg
   switch (config.ansi_c.word_size)
   {
@@ -192,63 +195,17 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
   else
     compiler_args.emplace_back("--sysroot=" ESBMC_C2GOTO_SYSROOT);
 
-  if (config.options.get_bool_option("nostdinc"))
+  for (const auto &inc : config.ansi_c.include_files)
   {
-    compiler_args.push_back("-nostdinc");
-    compiler_args.push_back("-ibuiltininc");
+    compiler_args.push_back("-include");
+    compiler_args.push_back(inc);
   }
-
-  for (const auto &dir : config.ansi_c.idirafter_paths)
-  {
-    compiler_args.push_back("-idirafter");
-    compiler_args.push_back(dir);
-  }
-
-  for (auto const &inc : config.ansi_c.include_paths)
-    compiler_args.push_back("-I" + inc);
 
   for (auto const &inc : config.ansi_c.forces)
     compiler_args.push_back("-f" + inc);
 
   for (auto const &inc : config.ansi_c.warnings)
     compiler_args.push_back("-W" + inc);
-
-  compiler_args.emplace_back("-D__builtin_sadd_overflow=__ESBMC_overflow_sadd");
-  compiler_args.emplace_back(
-    "-D__builtin_saddl_overflow=__ESBMC_overflow_saddl");
-  compiler_args.emplace_back(
-    "-D__builtin_saddll_overflow=__ESBMC_overflow_saddll");
-  compiler_args.emplace_back("-D__builtin_uadd_overflow=__ESBMC_overflow_uadd");
-  compiler_args.emplace_back(
-    "-D__builtin_uaddl_overflow=__ESBMC_overflow_uaddl");
-  compiler_args.emplace_back(
-    "-D__builtin_uaddll_overflow=__ESBMC_overflow_uaddll");
-
-  compiler_args.emplace_back("-D__builtin_ssub_overflow=__ESBMC_overflow_ssub");
-  compiler_args.emplace_back(
-    "-D__builtin_ssubl_overflow=__ESBMC_overflow_ssubl");
-  compiler_args.emplace_back(
-    "-D__builtin_ssubll_overflow=__ESBMC_overflow_ssubll");
-  compiler_args.emplace_back("-D__builtin_usub_overflow=__ESBMC_overflow_usub");
-  compiler_args.emplace_back(
-    "-D__builtin_usubl_overflow=__ESBMC_overflow_usubl");
-  compiler_args.emplace_back(
-    "-D__builtin_usubll_overflow=__ESBMC_overflow_usubll");
-
-  compiler_args.emplace_back("-D__builtin_smul_overflow=__ESBMC_overflow_smul");
-  compiler_args.emplace_back(
-    "-D__builtin_smull_overflow=__ESBMC_overflow_smull");
-  compiler_args.emplace_back(
-    "-D__builtin_smulll_overflow=__ESBMC_overflow_smulll");
-  compiler_args.emplace_back("-D__builtin_umul_overflow=__ESBMC_overflow_umul");
-  compiler_args.emplace_back(
-    "-D__builtin_umull_overflow=__ESBMC_overflow_umull");
-  compiler_args.emplace_back(
-    "-D__builtin_umulll_overflow=__ESBMC_overflow_umulll");
-  compiler_args.emplace_back(
-    "-D__sync_fetch_and_add=__ESBMC_sync_fetch_and_add");
-  compiler_args.emplace_back(
-    "-D__builtin_constant_p=__ESBMC_builtin_constant_p");
 
   compiler_args.emplace_back("-D__builtin_memcpy=memcpy");
 
@@ -296,17 +253,30 @@ void clang_c_languaget::build_compiler_args(const std::string &tmp_dir)
   // of __leaf__ attributes that we don't care about
   compiler_args.emplace_back("-Wno-unknown-attributes");
 
+  /* put custom options at the end of the cmdline such that they can override
+   * whatever defaults we put in before. */
+  compiler_args.insert(
+    compiler_args.end(),
+    config.ansi_c.frontend_opts.begin(),
+    config.ansi_c.frontend_opts.end());
+
   // Option to avoid creating a linking command
   compiler_args.emplace_back("-fsyntax-only");
 }
 
-void clang_c_languaget::force_file_type()
+void clang_c_languaget::force_file_type(std::vector<std::string> &compiler_args)
 {
   // Force clang see all files as .c
   // This forces the preprocessor to be called even in preprocessed files
   // which allow us to perform transformations using -D
   compiler_args.push_back("-x");
   compiler_args.push_back("c");
+
+  // C language standard
+  assert(config.language.lid == language_idt::C);
+  const std::string &cstd = config.language.std;
+  if (!cstd.empty())
+    compiler_args.emplace_back("-std=" + cstd);
 }
 
 bool clang_c_languaget::parse(const std::string &path)
@@ -317,42 +287,44 @@ bool clang_c_languaget::parse(const std::string &path)
   if (preprocess(path, o_preprocessed))
     return true;
 
-  // Force the file type, .c for the C frontend and .cpp for the C++ one
-  force_file_type();
-
   // Get compiler arguments and add the file path
-  std::vector<std::string> new_compiler_args(compiler_args);
+  std::vector<std::string> new_compiler_args = compiler_args("clang-tool");
   new_compiler_args.push_back(path);
+
+  if (FILE *f = messaget::state.target("clang", VerbosityLevel::Debug))
+  {
+    fprintf(f, "clang invocation:");
+    for (const std::string &s : new_compiler_args)
+      fprintf(f, " '%s'", s.c_str());
+    fprintf(f, "\n");
+  }
 
   // Get intrinsics
   std::string intrinsics = internal_additions();
 
   // Generate ASTUnit and add to our vector
-  auto AST = buildASTs(intrinsics, new_compiler_args);
-
-  ASTs.push_back(std::move(AST));
+  auto newAST = buildASTs(intrinsics, new_compiler_args);
 
   // Use diagnostics to find errors, rather than the return code.
-  for (auto const &astunit : ASTs)
-    if (astunit->getDiagnostics().hasErrorOccurred())
-      return true;
+  if (newAST->getDiagnostics().hasErrorOccurred())
+    return true;
+
+  if (!AST)
+    AST = move(newAST);
+  else
+    mergeASTs(newAST, AST);
 
   return false;
 }
 
-bool clang_c_languaget::typecheck(contextt &context, const std::string &module)
+bool clang_c_languaget::typecheck(contextt &context)
 {
-  contextt new_context;
-
-  clang_c_convertert converter(new_context, ASTs, "C");
+  clang_c_convertert converter(context, AST, "C");
   if (converter.convert())
     return true;
 
-  clang_c_adjust adjuster(new_context);
+  clang_c_adjust adjuster(context);
   if (adjuster.adjust())
-    return true;
-
-  if (c_link(context, new_context, module))
     return true;
 
   return false;
@@ -360,8 +332,7 @@ bool clang_c_languaget::typecheck(contextt &context, const std::string &module)
 
 void clang_c_languaget::show_parse(std::ostream &)
 {
-  for (auto const &translation_unit : ASTs)
-    (*translation_unit).getASTContext().getTranslationUnitDecl()->dump();
+  AST->getASTContext().getTranslationUnitDecl()->dump();
 }
 
 bool clang_c_languaget::preprocess(const std::string &, std::ostream &)
@@ -391,12 +362,9 @@ _Bool __ESBMC_same_object(const void *, const void *);
 void __ESBMC_yield();
 void __ESBMC_atomic_begin();
 void __ESBMC_atomic_end();
-/** Explicitly initialize a new object */
-void __ESBMC_init_object(void*);
 
-int __ESBMC_abs(int);
-long int __ESBMC_labs(long int);
-long long int __ESBMC_llabs(long long int);
+// Explicitly initialize a new object
+void __ESBMC_init_object(void*);
 
 // pointers
 __UINTPTR_TYPE__ __ESBMC_POINTER_OBJECT(const void *);
@@ -415,7 +383,6 @@ __SIZE_TYPE__ __ESBMC_alloc_size[1];
 // Get object size
 __SIZE_TYPE__ __ESBMC_get_object_size(const void *);
 
-
 _Bool __ESBMC_is_little_endian();
 
 int __ESBMC_rounding_mode = 0;
@@ -426,15 +393,19 @@ void *__ESBMC_memset(void *, int, unsigned int);
  * types tgt and src point to. */
 void __ESBMC_bitcast(void * /* tgt */, void * /* src */);
 
+// Calls goto_symext::add_memory_leak_checks() which adds memory leak checks
+// if it's enabled
 void __ESBMC_memory_leak_checks();
 
-// Forward decs for pthread main thread begin/end hooks. Because they're
+// Forward decls for pthread main thread begin/end hooks. Because they're
 // pulled in from the C library, they need to be declared prior to pulling
 // them in, for type checking.
-void pthread_start_main_hook(void);
-void pthread_end_main_hook(void);
+void __ESBMC_pthread_start_main_hook(void);
+void __ESBMC_pthread_end_main_hook(void);
 
-void __atexit_handler(void);
+// Forward decl of the intrinsic function that calls atexit registered functions.
+// We need this here or it won't be pulled from the C library
+void __ESBMC_atexit_handler(void);
 
 // Forward declarations for nondeterministic types.
 int nondet_int();
@@ -469,52 +440,9 @@ void __VERIFIER_assume(int);
 void __VERIFIER_atomic_begin();
 void __VERIFIER_atomic_end();
 
-_Bool __ESBMC_overflow_sadd(int, int, int *);
-_Bool __ESBMC_overflow_saddl(long int, long int, long int *);
-_Bool __ESBMC_overflow_saddll(long long int, long long int, long long int *);
-_Bool __ESBMC_overflow_uadd(unsigned int, unsigned int, unsigned int *);
-_Bool __ESBMC_overflow_uaddl(unsigned long int, unsigned long int, unsigned long int *);
-_Bool __ESBMC_overflow_uaddll(unsigned long long int, unsigned long long int, unsigned long long int *);
-_Bool __ESBMC_overflow_ssub(int, int, int *);
-_Bool __ESBMC_overflow_ssubl(long int, long int, long int *);
-_Bool __ESBMC_overflow_ssubll(long long int, long long int, long long int *);
-_Bool __ESBMC_overflow_usub(unsigned int, unsigned int, unsigned int *);
-_Bool __ESBMC_overflow_usubl(unsigned long int, unsigned long int, unsigned long int *);
-_Bool __ESBMC_overflow_usubll(unsigned long long int, unsigned long long int, unsigned long long int *);
-_Bool __ESBMC_overflow_smul(int, int, int *);
-_Bool __ESBMC_overflow_smull(long int, long int, long int *);
-_Bool __ESBMC_overflow_smulll(long long int, long long int, long long int *);
-_Bool __ESBMC_overflow_umul(unsigned int, unsigned int, unsigned int *);
-_Bool __ESBMC_overflow_umull(unsigned long int, unsigned long int, unsigned long int *);
-_Bool __ESBMC_overflow_umulll(unsigned long long int, unsigned long long int, unsigned long long int *);
-int __ESBMC_sync_fetch_and_add(int*, int);
-int __ESBMC_builtin_constant_p(int);
-
 /* Causes a verification error when its call is reachable; internal use in math
  * models */
 void __ESBMC_unreachable();
-
-// This is causing problems when using the C++ frontend. It needs to be rewritten
-#define __atomic_load_n(PTR, MO)                                               \
-  __extension__({                                                              \
-    __auto_type __atomic_load_ptr = (PTR);                                     \
-    __typeof__(*__atomic_load_ptr) __atomic_load_tmp;                          \
-    __ESBMC_atomic_load(__atomic_load_ptr, &__atomic_load_tmp, (MO));          \
-    __atomic_load_tmp;                                                         \
-  })
-
-#define __atomic_store_n(PTR, VAL, MO)                                         \
-  __extension__({                                                              \
-    __auto_type __atomic_store_ptr = (PTR);                                    \
-    __typeof__(*__atomic_store_ptr) __atomic_store_tmp = (VAL);                \
-    __ESBMC_atomic_store(__atomic_store_ptr, &__atomic_store_tmp, (MO));       \
-  })
-
-// TODO: implement this similarly to printf
-  #define fscanf __ESBMC_fscanf
-  #define sscanf __ESBMC_sscanf
-
-  #define scanf __ESBMC_scanf
     )";
 
   if (config.ansi_c.cheri)

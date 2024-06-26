@@ -162,6 +162,9 @@ expr2tc goto_symext::symex_mem(
 
   symbol.type.dynamic(true);
 
+  symbol.type.set(
+    "alignment", constant_exprt(config.ansi_c.max_alignment(), size_type()));
+
   symbol.mode = "C";
 
   new_context.add(symbol);
@@ -267,7 +270,7 @@ void goto_symext::track_new_pointer(
 
 void goto_symext::symex_free(const expr2tc &expr)
 {
-  const code_free2t &code = to_code_free2t(expr);
+  const auto &code = static_cast<const code_expression_data &>(*expr);
 
   // Trigger 'free'-mode dereference of this pointer. Should generate various
   // dereference failure callbacks.
@@ -356,7 +359,7 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     return;
   }
 
-  const std::string base_name = new_rhs.bs_name;
+  const std::string &base_name = new_rhs.bs_name;
 
   // get the format string base on the bs_name
   irep_idt fmt;
@@ -447,15 +450,16 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     // this is due to printf_formatter does not handle the char array.
     for (auto &arg : args)
     {
-      if (is_array_type(get_base_object(arg)))
+      const expr2tc &base_expr = get_base_object(arg);
+      if (!is_constant_string2t(base_expr) && is_array_type(base_expr))
       {
         // the current expression "arg" does not hold the value info (might be a bug)
         // thus we need to look it up from the symbol table
-        const expr2tc &base_expr = get_base_object(arg);
         assert(is_symbol2t(base_expr));
-        symbolt s = *ns.lookup(to_symbol2t(base_expr).thename);
+        const symbolt &s = *ns.lookup(to_symbol2t(base_expr).thename);
         exprt dest;
-        array2string(s, dest);
+        if (array2string(s, dest))
+          continue;
         migrate_expr(dest, arg);
       }
     }
@@ -479,20 +483,17 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
   assert(is_symbol2t(func_call.function));
 
   unsigned number_of_format_args, fmt_idx;
-  const std::string func_name =
-    to_symbol2t(func_call.function).thename.as_string();
+  const irep_idt func_name = to_symbol2t(func_call.function).thename;
 
-  if (func_name.find("__ESBMC_scanf") != std::string::npos)
+  if (func_name == "c:@F@scanf")
   {
-    assert(func_call.operands.size() >= 2 && "Wrong __ESBMC_scanf signature");
+    assert(func_call.operands.size() >= 2 && "Wrong scanf signature");
     fmt_idx = 0;
     number_of_format_args = func_call.operands.size() - 1;
   }
-  else if (
-    (func_name.find("__ESBMC_fscanf") != std::string::npos) ||
-    (func_name.find("__ESBMC_sscanf") != std::string::npos))
+  else if (func_name == "c:@F@fscanf" || func_name == "c:@F@sscanf")
   {
-    assert(func_call.operands.size() >= 3 && "Wrong __ESBMC_fscanf signature");
+    assert(func_call.operands.size() >= 3 && "Wrong fscanf/sscanf signature");
     fmt_idx = 1;
     number_of_format_args = func_call.operands.size() - 2;
   }
@@ -538,9 +539,9 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
 
 void goto_symext::symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code)
 {
-  bool do_array;
+  expr2tc size = code.size;
 
-  do_array = (code.kind == sideeffect2t::cpp_new_arr);
+  bool do_array = (code.kind == sideeffect2t::cpp_new_arr);
 
   unsigned int &dynamic_counter = get_dynamic_counter();
   dynamic_counter++;
@@ -584,27 +585,41 @@ void goto_symext::symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code)
 
   cur_state->rename(rhs);
   expr2tc rhs_copy(rhs);
+  expr2tc ptr_rhs(rhs);
 
   symex_assign(code_assign2tc(lhs, rhs), true);
 
-  // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
-  type2tc sym_type = array_type2tc(get_bool_type(), expr2tc(), true);
-  expr2tc sym = symbol2tc(sym_type, "__ESBMC_is_dynamic");
-
-  expr2tc ptr_obj = pointer_object2tc(pointer_type2(), lhs);
-  expr2tc idx = index2tc(get_bool_type(), sym, ptr_obj);
-  expr2tc truth = gen_true_expr();
-
-  symex_assign(code_assign2tc(idx, truth), true);
+  expr2tc ptr_obj = pointer_object2tc(pointer_type2(), ptr_rhs);
+  track_new_pointer(ptr_obj, newtype, size);
 
   dynamic_memory.emplace_back(
     rhs_copy, cur_state->guard, false, symbol.name.as_string());
 }
 
-// XXX - implement as a call to free?
-void goto_symext::symex_cpp_delete(const expr2tc &)
+void goto_symext::symex_cpp_delete(const expr2tc &expr)
 {
-  //bool do_array=code.statement()=="delete[]";
+  const auto &code = static_cast<const code_expression_data &>(*expr);
+
+  expr2tc tmp = code.operand;
+
+  internal_deref_items.clear();
+  expr2tc deref = dereference2tc(get_empty_type(), tmp);
+  dereference(deref, dereferencet::INTERNAL);
+
+  // we need to check the memory deallocation operator:
+  // new and delete, new[] and delete[]
+  bool is_arr = is_array_type(internal_deref_items.front().object->type);
+  bool is_del_arr = is_code_cpp_del_array2t(expr);
+
+  if (is_arr != is_del_arr)
+  {
+    const std::string &msg =
+      "Mismatched memory deallocation operators: " + get_expr_id(expr);
+    claim(gen_false_expr(), msg);
+  }
+
+  // implement delete as a call to free
+  symex_free(expr);
 }
 
 void goto_symext::intrinsic_yield(reachability_treet &art)
@@ -1015,13 +1030,10 @@ static inline expr2tc gen_byte_expression(
    *
    */
 
-  /* Can't set string constants */
-  if (is_string_type(type))
-    return expr2tc();
-
   if (is_pointer_type(type))
     return gen_byte_expression_byte_update(
       type, src, value, num_of_bytes, offset);
+
   expr2tc result = gen_zero(type);
   auto value_downcast = typecast2tc(get_uint8_type(), value);
   auto value_upcast = typecast2tc(
@@ -1303,23 +1315,6 @@ void goto_symext::intrinsic_memset(
   if (ex_state.cur_state->guard.is_false())
     return;
 
-  // Define a local function for translating to calling the unwinding C
-  // implementation of memset
-  auto bump_call = [this, &func_call]() -> void {
-    // We're going to execute a function call, and that's going to mess with
-    // the program counter. Set it back *onto* pointing at this intrinsic, so
-    // symex_function_call calculates the right return address. Misery.
-    cur_state->source.pc--;
-
-    expr2tc newcall = func_call.clone();
-    code_function_call2t &mutable_funccall = to_code_function_call2t(newcall);
-    mutable_funccall.function =
-      symbol2tc(get_empty_type(), "c:@F@__memset_impl");
-    // Execute call
-    symex_function_call(newcall);
-    return;
-  };
-
   /* Get the arguments
    * arg0: ptr to object
    * arg1: int for the new byte value
@@ -1347,7 +1342,7 @@ void goto_symext::intrinsic_memset(
     /* Not sure what to do here, let's rely
        * on the default implementation then */
     log_debug("memset", "Couldn't optimize memset due to precondition");
-    bump_call();
+    bump_call(func_call, "c:@F@__memset_impl");
     return;
   }
 
@@ -1355,7 +1350,7 @@ void goto_symext::intrinsic_memset(
   if (!is_constant_int2t(arg2))
   {
     log_debug("memset", "TODO: simplifier issues :/");
-    bump_call();
+    bump_call(func_call, "c:@F@__memset_impl");
     return;
   }
 
@@ -1378,7 +1373,7 @@ void goto_symext::intrinsic_memset(
     if (!item_object || !item_offset)
     {
       log_debug("memset", "Couldn't get item_object/item_offset");
-      bump_call();
+      bump_call(func_call, "c:@F@__memset_impl");
       return;
     }
 
@@ -1390,7 +1385,7 @@ void goto_symext::intrinsic_memset(
         "memset",
         "Item offset is symbolic: {}",
         to_symbol2t(item_offset).get_symbol_name());
-      bump_call();
+      bump_call(func_call, "c:@F@__memset_impl");
       return;
     }
 
@@ -1427,7 +1422,7 @@ void goto_symext::intrinsic_memset(
        */
       log_debug(
         "memset", "TODO: some simplifications are missing, bumping call");
-      bump_call();
+      bump_call(func_call, "c:@F@__memset_impl");
       return;
     }
 
@@ -1444,7 +1439,7 @@ void goto_symext::intrinsic_memset(
     }
     catch (const array_type2t::dyn_sized_array_excp &)
     {
-      bump_call();
+      bump_call(func_call, "c:@F@__memset_impl");
       return;
     }
 
@@ -1484,7 +1479,7 @@ void goto_symext::intrinsic_memset(
     if (!new_object)
     {
       log_debug("memset", "gen_value_by_byte failed");
-      bump_call();
+      bump_call(func_call, "c:@F@__memset_impl");
       return;
     }
     // 4. Assign the new object
@@ -1613,4 +1608,98 @@ void goto_symext::intrinsic_races_check_dereference(expr2tc &expr)
     else
       migrate_expr(gen_not(deref), expr);
   }
+}
+
+void goto_symext::bump_call(
+  const code_function_call2t &func_call,
+  const std::string &symname)
+{
+  // We're going to execute a function call, and that's going to mess with
+  // the program counter. Set it back *onto* pointing at this intrinsic, so
+  // symex_function_call calculates the right return address. Misery.
+  cur_state->source.pc--;
+
+  expr2tc newcall = func_call.clone();
+  code_function_call2t &mutable_funccall = to_code_function_call2t(newcall);
+  mutable_funccall.function = symbol2tc(get_empty_type(), symname);
+  // Execute call
+  symex_function_call(newcall);
+  return;
+}
+
+// Copied from https://stackoverflow.com/questions/874134/find-out-if-string-ends-with-another-string-in-c
+static inline bool
+ends_with(std::string const &value, std::string const &ending)
+{
+  if (ending.size() > value.size())
+    return false;
+  return std::equal(ending.rbegin(), ending.rend(), value.rbegin());
+}
+
+bool goto_symext::run_builtin(
+  const code_function_call2t &func_call,
+  const std::string &symname)
+{
+  if (
+    has_prefix(symname, "c:@F@__builtin_sadd") ||
+    has_prefix(symname, "c:@F@__builtin_uadd") ||
+    has_prefix(symname, "c:@F@__builtin_ssub") ||
+    has_prefix(symname, "c:@F@__builtin_usub") ||
+    has_prefix(symname, "c:@F@__builtin_smul") ||
+    has_prefix(symname, "c:@F@__builtin_umul"))
+  {
+    assert(ends_with(symname, "_overflow"));
+    assert(func_call.operands.size() == 3);
+
+    const auto &func_type = to_code_type(func_call.function->type);
+    assert(func_type.arguments[0] == func_type.arguments[1]);
+    assert(is_pointer_type(func_type.arguments[2]));
+
+    bool is_mult = has_prefix(symname, "c:@F@__builtin_smul") ||
+                   has_prefix(symname, "c:@F@__builtin_umul");
+    bool is_add = has_prefix(symname, "c:@F@__builtin_sadd") ||
+                  has_prefix(symname, "c:@F@__builtin_uadd");
+    bool is_sub = has_prefix(symname, "c:@F@__builtin_ssub") ||
+                  has_prefix(symname, "c:@F@__builtin_usub");
+
+    expr2tc op;
+    if (is_mult)
+      op = mul2tc(
+        func_type.arguments[0], func_call.operands[0], func_call.operands[1]);
+    else if (is_add)
+      op = add2tc(
+        func_type.arguments[0], func_call.operands[0], func_call.operands[1]);
+    else if (is_sub)
+      op = sub2tc(
+        func_type.arguments[0], func_call.operands[0], func_call.operands[1]);
+    else
+    {
+      log_error("Unknown overflow intrinsics");
+      abort();
+    }
+
+    // Assign result of the two arguments to the dereferenced third argument
+    symex_assign(code_assign2tc(
+      dereference2tc(
+        to_pointer_type(func_call.operands[2]->type).subtype,
+        func_call.operands[2]),
+      op));
+
+    // Perform overflow check and assign it to the return object
+    symex_assign(code_assign2tc(func_call.ret, overflow2tc(op)));
+
+    return true;
+  }
+
+  if (has_prefix(symname, "c:@F@__builtin_constant_p"))
+  {
+    expr2tc op1 = func_call.operands[0];
+    cur_state->rename(op1);
+    symex_assign(code_assign2tc(
+      func_call.ret,
+      is_constant_int2t(op1) ? gen_one(int_type2()) : gen_zero(int_type2())));
+    return true;
+  }
+
+  return false;
 }

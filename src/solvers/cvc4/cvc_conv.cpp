@@ -1286,3 +1286,15 @@ void cvc_smt_ast::dump() const
   a.printAst(oss, 0);
   log_status("{}", oss.str());
 }
+
+void cvc_convt::push_ctx()
+{
+  smt_convt::push_ctx();
+  smt.push();
+}
+
+void cvc_convt::pop_ctx()
+{
+  smt.pop();
+  smt_convt::pop_ctx();
+}

@@ -1,0 +1,4 @@
+CORE
+gh-1592.c
+ -Wno-error=implicit-function-declaration
+^VERIFICATION FAILED$

@@ -206,22 +206,8 @@ public:
 
   smt_astt convert_assign(const expr2tc &expr);
 
-  /** Make an n-ary function application.
-   *  Takes a vector of smt_ast's, and creates a single
-   *  function app over all the smt_ast's.
-   */
-  template <typename Object, typename Method>
-  smt_astt make_n_ary(const Object o, const Method m, const ast_vec &v)
-  {
-    assert(!v.empty());
-
-    // Chain these.
-    smt_astt result = v.front();
-    for (std::size_t i = 1; i < v.size(); ++i)
-      result = (o->*m)(result, v[i]);
-
-    return result;
-  }
+  smt_astt make_n_ary_and(const ast_vec &v);
+  smt_astt make_n_ary_or(const ast_vec &v);
 
   /** Create the inverse of an smt_ast. Equivalent to a 'not' operation.
    *  @param a The ast to invert. Must be boolean sorted.
@@ -555,10 +541,6 @@ public:
   /** @{
    *  @name Internal foo. */
 
-  /** Convert expression and assert that it is true or false, according to the
-   *  value argument */
-  virtual void set_to(const expr2tc &expr, bool value);
-
   /** Create a free variable with the given sort, and a unique name, with the
    *  prefix given in 'tag' */
   virtual smt_astt
@@ -612,11 +594,17 @@ public:
    *  address space juggling required to make a new pointer.
    *  @param expr The symbol2tc expression of this symbol.
    *  @param sym The textual representation of this symbol.
+   *  @param type Optionally a pointer to the type of the symbol in the context.
    *  @return A pointer-typed AST representing the address of this symbol. */
-  smt_astt
-  convert_identifier_pointer(const expr2tc &expr, const std::string &sym);
+  smt_astt convert_identifier_pointer(
+    const expr2tc &expr,
+    const std::string &sym,
+    const typet *type);
 
-  smt_astt init_pointer_obj(unsigned int obj_num, const expr2tc &size);
+  smt_astt init_pointer_obj(
+    unsigned int obj_num,
+    const expr2tc &size,
+    const typet *type);
 
   /** Checks for equality with NaN representation. */
   smt_astt convert_is_nan(const expr2tc &expr);

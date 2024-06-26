@@ -211,7 +211,7 @@ public:
 };
 
 #ifdef NDEBUG
-#define dynamic_cast static_cast
+#  define dynamic_cast static_cast
 #endif
 template <typename T>
 const solver_smt_sort<T> *to_solver_smt_sort(smt_sortt s)
@@ -221,7 +221,7 @@ const solver_smt_sort<T> *to_solver_smt_sort(smt_sortt s)
   return r;
 }
 #ifdef dynamic_cast
-#undef dynamic_cast
+#  undef dynamic_cast
 #endif
 
 #endif /* SOLVERS_SMT_SMT_SORT_H_ */

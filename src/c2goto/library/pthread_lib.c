@@ -56,6 +56,9 @@ void __ESBMC_really_atomic_end(void);
 
 /************************** Linked List Implementation **************************/
 
+/* These internal functions insert_key_value(), search_key() and delete_key()
+ * need to be called in an atomic context. */
+
 typedef struct thread_key
 {
   pthread_t thread;
@@ -66,9 +69,8 @@ typedef struct thread_key
 
 static __ESBMC_thread_key *head = NULL;
 
-int insert_key_value(pthread_key_t key, const void *value)
+static int insert_key_value(pthread_key_t key, const void *value)
 {
-  __ESBMC_atomic_begin();
   __ESBMC_thread_key *l =
     (__ESBMC_thread_key *)__ESBMC_alloca(sizeof(__ESBMC_thread_key));
   if (l == NULL)
@@ -76,27 +78,24 @@ int insert_key_value(pthread_key_t key, const void *value)
   l->thread = __ESBMC_get_thread_id();
   l->key = key;
   l->value = value;
-  l->next = (head == NULL) ? NULL : head;
+  l->next = head;
   head = l;
-  __ESBMC_atomic_end();
   return 0;
 }
 
-__ESBMC_thread_key *search_key(pthread_key_t key)
+static __ESBMC_thread_key *search_key(pthread_key_t key)
 {
 __ESBMC_HIDE:;
-  __ESBMC_atomic_begin();
   __ESBMC_thread_key *l = head;
-  while (l != NULL && l->thread != __ESBMC_get_thread_id())
+  pthread_t thread = __ESBMC_get_thread_id();
+  while (l != NULL && l->thread != thread)
     l = l->next;
-  return ((l == NULL) ? 0 : l);
-  __ESBMC_atomic_end();
+  return l;
 }
 
-int delete_key(__ESBMC_thread_key *l)
+static int delete_key(__ESBMC_thread_key *l)
 {
 __ESBMC_HIDE:;
-  __ESBMC_atomic_begin();
   __ESBMC_thread_key *tmp;
   if (head == NULL)
     return -1;
@@ -110,12 +109,11 @@ __ESBMC_HIDE:;
   else if (l->next != NULL)
     head = l->next;
   return 0;
-  __ESBMC_atomic_end();
 }
 
 /************************** Thread creation and exit **************************/
 
-void pthread_start_main_hook(void)
+void __ESBMC_pthread_start_main_hook(void)
 {
   __ESBMC_atomic_begin();
   __ESBMC_num_total_threads++;
@@ -123,7 +121,7 @@ void pthread_start_main_hook(void)
   __ESBMC_atomic_end();
 }
 
-void pthread_end_main_hook(void)
+void __ESBMC_pthread_end_main_hook(void)
 {
   // We want to be able to access this internal accounting data atomically,
   // but that'll never be permitted by POR, which will see the access and try
@@ -149,7 +147,7 @@ __ESBMC_HIDE:;
     __ESBMC_thread_key *l = search_key(i);
     if (__ESBMC_thread_key_destructors[i] && l->value)
     {
-      __ESBMC_thread_key_destructors[i](&l->value);
+      __ESBMC_thread_key_destructors[i](l->value);
       delete_key(l);
     }
   }

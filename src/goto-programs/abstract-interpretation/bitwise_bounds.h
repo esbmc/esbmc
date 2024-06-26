@@ -987,20 +987,12 @@ INT_X unsigned_2_signed_min_extend(UINT_X a, UINT_X b, UINT_X n)
   return a;
 }
 
-#define IS_UINT(LHS, RHS)                                                      \
-  LHS.get_lower().is_uint64() && LHS.get_upper().is_uint64() &&                \
-    RHS.get_lower().is_uint64() && RHS.get_upper().is_uint64()
-
 #define UINT_FUNC(FUNC, LHS, RHS)                                              \
   FUNC(                                                                        \
     LHS.get_lower().to_uint64(),                                               \
     LHS.get_upper().to_uint64(),                                               \
     RHS.get_lower().to_uint64(),                                               \
     RHS.get_upper().to_uint64())
-
-#define IS_INT(LHS, RHS)                                                       \
-  LHS.get_lower().is_int64() && LHS.get_upper().is_int64() &&                  \
-    RHS.get_lower().is_int64() && RHS.get_upper().is_int64()
 
 #define INT_FUNC(FUNC, LHS, RHS)                                               \
   FUNC(                                                                        \
@@ -1016,12 +1008,14 @@ INT_X unsigned_2_signed_min_extend(UINT_X a, UINT_X b, UINT_X n)
     const interval_templatet<BigInt> &rhs) const                               \
   {                                                                            \
     interval_templatet<BigInt> result;                                         \
-    if (IS_UINT(lhs, rhs))                                                     \
+    if (!lhs.lower || !lhs.upper || !rhs.lower || !rhs.upper)                  \
+      return result;                                                           \
+    if (is_unsignedbv_type(lhs.type) && is_unsignedbv_type(rhs.type))          \
     {                                                                          \
       result.set_lower(UINT_FUNC(MIN_UFUNC, lhs, rhs));                        \
       result.set_upper(UINT_FUNC(MAX_UFUNC, lhs, rhs));                        \
     }                                                                          \
-    else if (IS_INT(lhs, rhs))                                                 \
+    else if (is_signedbv_type(lhs.type) && is_signedbv_type(rhs.type))         \
     {                                                                          \
       result.set_lower(INT_FUNC(MIN_FUNC, lhs, rhs));                          \
       result.set_upper(INT_FUNC(MAX_FUNC, lhs, rhs));                          \
@@ -1066,8 +1060,6 @@ GET_BIT_INTERVALS(
   signed_min_left_shift,
   signed_max_left_shift)
 
-#undef IS_UINT
-#undef IS_INT
 #undef UINT_FUNC
 #undef INT_FUNC
 #undef GET_BIT_INTERVALS

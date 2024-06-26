@@ -1,10 +1,10 @@
 /* Byte order includes, for context switch checkpoint files */
 #ifndef _WIN32
-#include <arpa/inet.h>
-#include <netinet/in.h>
+#  include <arpa/inet.h>
+#  include <netinet/in.h>
 #else
-#include <winsock2.h>
-#undef small // mingw workaround
+#  include <winsock2.h>
+#  undef small // mingw workaround
 #endif
 
 #include <goto-symex/goto_symex.h>
@@ -521,8 +521,7 @@ bool reachability_treet::check_thread_viable(unsigned int tid, bool quiet) const
   return true;
 }
 
-std::shared_ptr<goto_symext::symex_resultt>
-reachability_treet::get_next_formula()
+goto_symext::symex_resultt reachability_treet::get_next_formula()
 {
   assert(execution_states.size() > 0 && "Must setup RT before exploring");
 
@@ -572,8 +571,7 @@ bool reachability_treet::setup_next_formula()
   return reset_to_unexplored_state();
 }
 
-std::shared_ptr<goto_symext::symex_resultt>
-reachability_treet::generate_schedule_formula()
+goto_symext::symex_resultt reachability_treet::generate_schedule_formula()
 {
   int total_states = 0;
   while (has_more_states())
@@ -605,9 +603,8 @@ reachability_treet::generate_schedule_formula()
     go_next_state();
   }
 
-  return std::shared_ptr<goto_symext::symex_resultt>(
-    new goto_symext::symex_resultt(
-      schedule_target, schedule_total_claims, schedule_remaining_claims));
+  return goto_symext::symex_resultt(
+    schedule_target, schedule_total_claims, schedule_remaining_claims);
 }
 
 bool reachability_treet::restore_from_dfs_state(void *)
@@ -657,13 +654,13 @@ abort();
     if (i + 1 < dfs.states.size())
       assert(get_cur_state().get_active_state_number() == it->cur_thread);
 
-#if 0
+#  if 0
     if (get_cur_state().get_active_state().source.pc->location_number !=
         it->location_number) {
 log_error("Interleave at unexpected location when restoring checkpoint").
 abort();
 }
-#endif
+#  endif
   }
 #endif
   return false;

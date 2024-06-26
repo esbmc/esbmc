@@ -465,7 +465,7 @@ array_convt::mk_bounded_array_equality(const array_ast *a1, const array_ast *a2)
     eqs.push_back(a1->array_fields[i]->eq(ctx, a2->array_fields[i]));
   }
 
-  return ctx->make_n_ary(ctx, &smt_convt::mk_and, eqs);
+  return ctx->make_n_ary_and(eqs);
 }
 
 expr2tc
@@ -1042,7 +1042,7 @@ void array_convt::add_array_equality(
     lits.push_back(a1[i]->eq(ctx, a2[i]));
   }
 
-  smt_astt conj = ctx->make_n_ary(ctx, &smt_convt::mk_and, lits);
+  smt_astt conj = ctx->make_n_ary_and(lits);
   assert(result == NULL);
   result = conj;
   return;

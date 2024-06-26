@@ -2,6 +2,7 @@
 #define CPROVER_MODE_H
 
 #include <string>
+#include <memory> /* std::unique_ptr */
 
 /* forward declarations */
 class languaget;
@@ -16,15 +17,8 @@ enum class language_idt : int
   PYTHON,
 };
 
-struct language_desct
-{
-  const char *name;
-  const char *const *filename_extensions;
-};
-
-const language_desct *language_desc(language_idt id);
+const char *language_name(language_idt id);
 language_idt language_id_by_name(const std::string &name);
-language_idt language_id_by_ext(const std::string &ext);
 language_idt language_id_by_path(const std::string &path);
 
 // Table recording details about language modes
@@ -36,7 +30,7 @@ struct mode_table_et
 };
 
 // List of language modes that are going to be supported in the final tool.
-// Must be declared by user of langapi, must end with HAVE_MODE_NULL.
+// Must be declared by user of langapi, must end with LANGAPI_MODE_END.
 
 extern const mode_table_et mode_table[];
 
@@ -83,11 +77,6 @@ languaget *new_python_language();
     language_idt::NONE, NULL                                                   \
   }
 
-int get_mode(language_idt lang);
-int get_mode(const std::string &str);
-int get_mode_filename(const std::string &filename);
-int get_old_frontend_mode(int current_mode);
-
-languaget *new_language(language_idt lang);
+std::unique_ptr<languaget> new_language(language_idt lang);
 
 #endif

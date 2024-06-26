@@ -1048,8 +1048,8 @@ smt_astt z3_convt::tuple_create(const expr2tc &structdef)
 
 smt_astt z3_convt::tuple_fresh(const smt_sort *s, std::string name)
 {
-  const char *n = (name == "") ? nullptr : name.c_str();
-  return new_ast(z3_ctx.constant(n, to_solver_smt_sort<z3::sort>(s)->s), s);
+  return new_ast(
+    z3_ctx.constant(name.c_str(), to_solver_smt_sort<z3::sort>(s)->s), s);
 }
 
 smt_astt
@@ -1098,7 +1098,8 @@ smt_astt z3_convt::tuple_array_create(
     is_constant_int2t(arrtype.array_size) &&
     "array_of sizes should be constant");
 
-  z3::expr output = z3_ctx.constant(nullptr, array_sort);
+  std::string name = mk_fresh_name("z3_convt::tuple_array_create");
+  z3::expr output = z3_ctx.constant(name.c_str(), array_sort);
   for (std::size_t i = 0; i < to_constant_int2t(arrtype.array_size).as_ulong();
        ++i)
   {

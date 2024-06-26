@@ -63,12 +63,13 @@ protected:
   adjust_function_call_arguments(side_effect_expr_function_callt &expr);
   void do_special_functions(side_effect_expr_function_callt &expr);
   void adjust_operands(exprt &expr);
+  virtual void adjust_if(exprt &expr);
 
   /**
    * methods for code (codet) adjustment
    * and other IRs derived from codet
    */
-  void adjust_code(codet &code);
+  virtual void adjust_code(codet &code);
   virtual void adjust_ifthenelse(codet &code);
   virtual void adjust_while(codet &code);
   virtual void adjust_for(codet &code);
@@ -78,12 +79,22 @@ protected:
   // For class instantiation in C++, we need to adjust the side-effect of constructor
   virtual void adjust_decl_block(codet &code);
 
+  exprt is_gcc_polymorphic_builtin(
+    const irep_idt &identifier,
+    const exprt::operandst &arguments);
+
+  code_blockt instantiate_gcc_polymorphic_builtin(
+    const irep_idt &identifier,
+    const symbol_exprt &function_symbol);
+
   /**
    * ancillary methods to support the expr/code adjustments above
    */
   virtual void align_se_function_call_return_type(
     exprt &f_op,
     side_effect_expr_function_callt &expr);
+
+  virtual void adjust_reference(exprt &expr);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_ADJUST_H_ */

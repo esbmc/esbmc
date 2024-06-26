@@ -25,13 +25,6 @@
 // global data, horrible
 unsigned int dereferencet::invalid_counter = 0;
 
-static inline const array_type2t get_arr_type(const expr2tc &expr)
-{
-  return (is_array_type(expr))
-           ? to_array_type(expr->type)
-           : to_array_type(to_constant_string2t(expr).to_array()->type);
-}
-
 // Look for the base of an expression such as &a->b[1];, where all we're doing
 // is performing some pointer arithmetic, rather than actually performing some
 // dereference operation.
@@ -472,7 +465,7 @@ expr2tc dereferencet::dereference(
   if (!is_pointer_type(orig_src))
     src = typecast2tc(pointer_type2tc(get_empty_type()), src);
 
-  type2tc type = to_type;
+  type2tc type = ns.follow(to_type);
 
   // collect objects dest may point to
   value_setst::valuest points_to_set;
@@ -913,7 +906,7 @@ void dereferencet::build_reference_rec(
     flags |= flag_dst_union;
   else if (is_scalar_type(type))
     flags |= flag_dst_scalar;
-  else if (is_array_type(type) || is_string_type(type))
+  else if (is_array_type(type))
   {
     log_error(
       "Can't construct rvalue reference to array type during dereference\n"
@@ -932,7 +925,7 @@ void dereferencet::build_reference_rec(
     flags |= flag_src_union;
   else if (is_scalar_type(value))
     flags |= flag_src_scalar;
-  else if (is_array_type(value) || is_string_type(value))
+  else if (is_array_type(value))
     flags |= flag_src_array;
   else
   {
@@ -1058,6 +1051,8 @@ void dereferencet::build_reference_rec(
       uni_type.members[selected_member_index],
       value,
       uni_type.member_names[selected_member_index]);
+
+    /* type didn't change, it's not an array, so recursion is safe */
     build_reference_rec(value, offset, type, guard, mode, alignment);
     break;
   }
@@ -1077,9 +1072,9 @@ void dereferencet::construct_from_array(
   modet mode,
   unsigned long alignment)
 {
-  assert(is_array_type(value) || is_string_type(value));
+  assert(is_array_type(value));
 
-  const array_type2t arr_type = get_arr_type(value);
+  const array_type2t arr_type = to_array_type(value->type);
   type2tc arr_subtype = arr_type.subtype;
 
   if (is_array_type(arr_subtype))
@@ -1098,15 +1093,6 @@ void dereferencet::construct_from_array(
 
   expr2tc mod = modulus2tc(offset->type, offset, subtype_sz_expr);
   simplify(mod);
-
-  if (is_structure_type(arr_subtype))
-  {
-    value = index2tc(arr_subtype, value, div);
-    build_reference_rec(value, mod, type, guard, mode, alignment);
-    return;
-  }
-
-  assert(is_scalar_type(arr_subtype));
 
   // Two different ways we can access elements
   //  1) Just treat them as an element and select them out, possibly with some
@@ -1516,8 +1502,8 @@ void dereferencet::construct_from_multidir_array(
   unsigned long alignment,
   modet mode)
 {
-  assert(is_array_type(value) || is_string_type(value));
-  const array_type2t arr_type = get_arr_type(value);
+  assert(is_array_type(value));
+  const array_type2t arr_type = to_array_type(value->type);
 
   // Right: any access across the boundary of the outer dimension of this array
   // is an alignment violation as that can possess extra padding.
@@ -1541,7 +1527,7 @@ void dereferencet::construct_from_multidir_array(
   expr2tc mod = modulus2tc(offset->type, offset, subtype_sz);
   simplify(mod);
 
-  build_reference_rec(value, mod, type, guard, mode, alignment);
+  construct_from_array(value, mod, type, guard, mode, alignment);
 }
 
 void dereferencet::construct_struct_ref_from_const_offset_array(
@@ -1934,8 +1920,6 @@ std::vector<expr2tc> dereferencet::extract_bytes(
       base = to_array_type(base).subtype;
     else if (is_vector_type(base))
       base = to_vector_type(base).subtype;
-    else if (is_string_type(base))
-      base = bytetype;
     else
       break;
 
@@ -2127,6 +2111,17 @@ void dereferencet::valid_check(
           guard);
         return;
       }
+
+      /* Writes to globals of const-qualified type are not allowed either. */
+      if (is_write(mode) && sym.static_lifetime && sym.type.cmt_constant())
+      {
+        dereference_failure(
+          "pointer dereference",
+          "write access to const object `" +
+            get_pretty_name(sym.id.as_string()) + "'",
+          guard);
+        return;
+      }
     }
   }
 }
@@ -2140,8 +2135,8 @@ void dereferencet::bounds_check(
   if (options.get_bool_option("no-bounds-check"))
     return;
 
-  assert(is_array_type(expr) || is_string_type(expr));
-  const array_type2t arr_type = get_arr_type(expr);
+  assert(is_array_type(expr));
+  const array_type2t arr_type = to_array_type(expr->type);
 
   if (!arr_type.array_size)
   {
@@ -2163,7 +2158,7 @@ void dereferencet::bounds_check(
 
   expr2tc arrsize;
   if (
-    !is_constant_array2t(expr) &&
+    !is_constant_expr(expr) &&
     has_prefix(
       ns.lookup(to_symbol2t(expr).thename)->id.as_string(), "symex_dynamic::"))
   {

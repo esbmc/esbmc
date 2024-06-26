@@ -26,7 +26,7 @@ typedef struct atexit_key
 
 static __ESBMC_atexit_key *__ESBMC_atexits = NULL;
 
-void __atexit_handler()
+void __ESBMC_atexit_handler()
 {
 __ESBMC_HIDE:;
   // This is here to prevent k-induction from unwind the next loop unnecessarily
@@ -60,7 +60,7 @@ __ESBMC_HIDE:;
 void exit(int status)
 {
 __ESBMC_HIDE:;
-  __atexit_handler();
+  __ESBMC_atexit_handler();
   __ESBMC_memory_leak_checks();
   __ESBMC_assume(0);
 }
@@ -284,12 +284,12 @@ __ESBMC_HIDE:;
 
 int rand(void)
 {
-  return nondet_uint() % RAND_MAX;
+  return nondet_uint() % ((unsigned)RAND_MAX + 1);
 }
 
 long random(void)
 {
-  return nondet_ulong() % RAND_MAX;
+  return nondet_ulong() % ((unsigned)INT32_MAX + 1);
 }
 
 #if 0

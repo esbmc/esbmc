@@ -12,7 +12,9 @@ public:
   explicit wrapped_interval(const type2tc &t)
     : t(t), upper_bound(compute_upper_bound(t))
   {
-    assert(is_signedbv_type(t) || is_unsignedbv_type(t) || is_bool_type(t));
+    assert(
+      is_signedbv_type(t) || is_unsignedbv_type(t) || is_bool_type(t) ||
+      is_pointer_type(t));
 
     lower = 0;
     upper = is_bool_type(t) ? 1 : compute_upper_bound(t) - 1;
@@ -914,18 +916,35 @@ public:
       result.set_lower(0);
       result.set_upper(0);
     }
+    else
+    {
+      result.set_lower(0);
+      result.set_upper(1);
+    }
     return result;
   }
 
   static wrapped_interval invert_bool(const wrapped_interval &i)
   {
-    if (!i.singleton())
-      return i;
-
-    auto result = i;
-    auto inverted = result.get_lower() == 0 ? 1 : 0;
-    result.set_lower(inverted);
-    result.set_upper(inverted);
+    wrapped_interval result(i.t);
+    if (!i.contains(0))
+    {
+      // i is always true, return false
+      result.set_lower(0);
+      result.set_upper(0);
+    }
+    else if (i.singleton())
+    {
+      // i is always false, return true
+      result.set_lower(1);
+      result.set_upper(1);
+    }
+    else
+    {
+      // i is a maybe
+      result.set_lower(0);
+      result.set_upper(1);
+    }
     return result;
   }
 
@@ -935,25 +954,45 @@ public:
     return invert_bool(equality(lhs, rhs));
   }
 
+  /** @brief Computes the minimum and maximum value inside the interval
+
+      Examples (signed char):
+
+      - get_interval_bounds([10, 127]) --> <10, 127>
+      - get_interval_bounds([10, 128]) --> <-128, 127>
+      - get_interval_bounds([10, 255]) --> <-128, 127>
+      - get_interval_bounds([129, 130]) --> <-127, -126>
+      - get_interval_bounds([255, 10]) --> <-1, 10>
+
+      Note: This is not to represent a range interval, wrapped can have holes!
+      From the example: [10, 128] contains both <-128, 127> but it does not contain 9 or -127!
+  */
+  std::pair<BigInt, BigInt> get_interval_bounds() const
+  {
+    BigInt minimum = get_lower();
+    BigInt maximum = get_lower();
+
+    for (const wrapped_interval &w : cut(*this))
+    {
+      BigInt local_min = std::min(w.get_lower(), w.get_upper());
+      BigInt local_max = std::max(w.get_lower(), w.get_upper());
+
+      minimum = std::min(minimum, local_min);
+      maximum = std::max(maximum, local_max);
+    }
+    return std::make_pair(minimum, maximum);
+  }
+
   static wrapped_interval
   less_than(const wrapped_interval &lhs, const wrapped_interval &rhs)
   {
     wrapped_interval result(lhs.t);
-    if (lhs.get_upper() < rhs.get_lower())
-    {
-      result.set_lower(1);
-      result.set_upper(1);
-    }
-    else if (lhs.get_lower() >= rhs.get_upper())
-    {
-      result.set_lower(0);
-      result.set_upper(0);
-    }
-    else
-    {
-      result.set_lower(0);
-      result.set_upper(1);
-    }
+    const std::pair<BigInt, BigInt> lhs_bounds = lhs.get_interval_bounds();
+    const std::pair<BigInt, BigInt> rhs_bounds = rhs.get_interval_bounds();
+
+    result.set_lower(lhs_bounds.second < rhs_bounds.first ? 1 : 0);
+    result.set_upper(lhs_bounds.first >= rhs_bounds.second ? 0 : 1);
+    assert(result.get_lower() <= result.get_upper());
     return result;
   }
 
@@ -961,34 +1000,25 @@ public:
   less_than_equal(const wrapped_interval &lhs, const wrapped_interval &rhs)
   {
     wrapped_interval result(lhs.t);
-    if (lhs.get_upper() <= rhs.get_lower())
-    {
-      result.set_lower(1);
-      result.set_upper(1);
-    }
-    else if (lhs.get_lower() > rhs.get_upper())
-    {
-      result.set_lower(0);
-      result.set_upper(0);
-    }
-    else
-    {
-      result.set_lower(0);
-      result.set_upper(1);
-    }
+    const std::pair<BigInt, BigInt> lhs_bounds = lhs.get_interval_bounds();
+    const std::pair<BigInt, BigInt> rhs_bounds = rhs.get_interval_bounds();
+
+    result.set_lower(lhs_bounds.second <= rhs_bounds.first ? 1 : 0);
+    result.set_upper(lhs_bounds.first > rhs_bounds.second ? 0 : 1);
+    assert(result.get_lower() <= result.get_upper());
     return result;
   }
 
   static wrapped_interval
   greater_than_equal(const wrapped_interval &lhs, const wrapped_interval &rhs)
   {
-    return less_than(rhs, lhs);
+    return less_than_equal(rhs, lhs);
   }
 
   static wrapped_interval
   greater_than(const wrapped_interval &lhs, const wrapped_interval &rhs)
   {
-    return less_than_equal(rhs, lhs);
+    return less_than(rhs, lhs);
   }
 
   wrapped_interval sign_extension(const type2tc &cast) const
@@ -1425,6 +1455,9 @@ protected:
 private:
   static BigInt compute_upper_bound(const type2tc &t)
   {
+    if (is_pointer_type(t))
+      return BigInt::power2(config.ansi_c.address_width);
+
     return BigInt::power2(t->get_width());
   }
 

@@ -79,11 +79,15 @@ char get_char(int digit); //Converter from digit ie 0123456789 to char '0'......
 void rev(char *); //reverse function ;
 #endif
 
+float strtof(const char *__ESBMC_restrict str, char **__ESBMC_restrict endptr);
 double strtod(const char *__ESBMC_restrict str, char **__ESBMC_restrict endptr);
+long double strtold(const char *__ESBMC_restrict str, char **__ESBMC_restrict endptr);
 
 long int strtol(const char *__ESBMC_restrict str, char **__ESBMC_restrict endptr, int base);
+long long int strtoll(const char *__ESBMC_restrict str, char **__ESBMC_restrict endptr, int base);
 
 unsigned long int strtoul(const char *__ESBMC_restrict str, char **__ESBMC_restrict endptr, int base);
+unsigned long long int strtoull(const char *__ESBMC_restrict str, char **__ESBMC_restrict endptr, int base);
 
 char * getenv(const char * name);
 

@@ -1,6 +1,7 @@
 #include <python-frontend/python_language.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_annotation.h>
+#include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <util/message.h>
 #include <util/filesystem.h>
 #include <util/c_expr2string.h>
@@ -20,9 +21,10 @@ extern "C"
 #undef ESBMC_FLAIL
 }
 
+// TODO: Rename this function as it is dumping other files now.
 static const std::string &dump_python_script()
 {
-  // Dump astgen.py into a temporary directory
+  // Dump all Python (.py) files from src/python-frontend into a temporary directory
   static bool dumped = false;
   static auto p =
     file_operations::create_tmp_dir("esbmc-python-astgen-%%%%-%%%%-%%%%");
@@ -30,7 +32,13 @@ static const std::string &dump_python_script()
   {
     dumped = true;
 #define ESBMC_FLAIL(body, size, ...)                                           \
-  std::ofstream(p.path() + "/" #__VA_ARGS__).write(body, size);
+  {                                                                            \
+    fs::path filePath(fs::path(p.path()) / #__VA_ARGS__);                      \
+    fs::path directory = filePath.parent_path();                               \
+    if (!directory.empty() && !fs::exists(directory))                          \
+      fs::create_directories(directory);                                       \
+    std::ofstream(filePath.string()).write(body, size);                        \
+  }
 
 #include <pythonastgen.h>
 #undef ESBMC_FLAIL
@@ -52,7 +60,7 @@ bool python_languaget::parse(const std::string &path)
     return true;
 
   ast_output_dir = dump_python_script();
-  const std::string python_script_path = ast_output_dir + "/astgen.py";
+  const std::string python_script_path = ast_output_dir + "/parser.py";
 
   // Execute python script to generate json file from AST
   std::vector<std::string> args = {python_script_path, path, ast_output_dir};
@@ -69,8 +77,18 @@ bool python_languaget::parse(const std::string &path)
     return true;
   }
 
+  std::stringstream script_path;
+  script_path << ast_output_dir << "/" << script.stem().string() << ".json";
+
   // Parse and generate AST
-  std::ifstream ast_json(ast_output_dir + "/ast.json");
+  std::ifstream ast_json(script_path.str());
+  if (!ast_json.good())
+  {
+    log_error(
+      "<python-parser> {} was not generated\n", script_path.str().c_str());
+    exit(1);
+  }
+
   ast = nlohmann::json::parse(ast_json);
 
   // Add annotation
@@ -89,12 +107,17 @@ bool python_languaget::final(contextt & /*context*/)
   return false;
 }
 
-bool python_languaget::typecheck(
-  contextt &context,
-  const std::string & /*module*/)
+bool python_languaget::typecheck(contextt &context)
 {
   python_converter converter(context, ast);
-  return converter.convert();
+  if (converter.convert())
+    return true;
+
+  clang_cpp_adjust adjuster(context);
+  if (adjuster.adjust())
+    return true;
+
+  return false;
 }
 
 void python_languaget::show_parse(std::ostream &out)

@@ -76,7 +76,7 @@ bool solidity_convertert::convert_string_literal(
       integer2string(string_size),
       int_type()));
   // TODO: Handle null terminator byte
-  string_constantt string(the_value, type);
+  string_constantt string(the_value, type, string_constantt::k_default);
   dest.swap(string);
 
   return false;
@@ -84,7 +84,7 @@ bool solidity_convertert::convert_string_literal(
 
 /**
  * convert hex-string to uint constant
- * @n: the bit width, default 0 (meaning config.ansi_c.int_width)
+ * @n: the bit width, default 256 (unsignedbv_typet(256))
 */
 bool solidity_convertert::convert_hex_literal(
   std::string the_value,
@@ -99,10 +99,7 @@ bool solidity_convertert::convert_hex_literal(
     }
 
   typet type;
-  if (n)
-    type = unsignedbv_typet(n);
-  else
-    type = size_type();
+  type = unsignedbv_typet(n);
 
   // e.g. 0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984
   BigInt hex_addr = string2integer(the_value, 16);

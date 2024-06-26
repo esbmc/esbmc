@@ -2,6 +2,7 @@
 
 #include <util/language.h>
 #include <langapi/mode.h>
+#include <langapi/language_util.h>
 
 #include "show_symbol_table.h"
 
@@ -18,18 +19,7 @@ void show_symbol_table_plain(const namespacet &ns, std::ostream &out)
   out << "\n";
 
   ns.get_context().foreach_operand_in_order([&out, &ns](const symbolt &s) {
-    int mode;
-
-    if (s.mode == "")
-      mode = 0;
-    else
-    {
-      mode = get_mode(id2string(s.mode));
-      if (mode < 0)
-        throw "symbol " + id2string(s.name) + " has unknown mode";
-    }
-
-    std::unique_ptr<languaget> p(mode_table[mode].new_language());
+    std::unique_ptr<languaget> p = language_from_symbol(s);
     std::string type_str, value_str;
 
     if (s.type.is_not_nil())
@@ -41,8 +31,7 @@ void show_symbol_table_plain(const namespacet &ns, std::ostream &out)
     out << "Symbol......: " << s.id << "\n";
     out << "Module......: " << s.module << "\n";
     out << "Base name...: " << s.name << "\n";
-    out << "Mode........: " << s.mode << " (" << mode << ")"
-        << "\n";
+    out << "Mode........: " << s.mode << "\n";
     out << "Type........: " << type_str << "\n";
     out << "Value.......: " << value_str << "\n";
     out << "Flags.......:";

@@ -1,9 +1,9 @@
 #if !defined(__CUDA_DEVICE_RUNTIME_API_H__)
-#define __CUDA_DEVICE_RUNTIME_API_H__
+#  define __CUDA_DEVICE_RUNTIME_API_H__
 
-#if defined(__CUDABE__)
+#  if defined(__CUDABE__)
 
-#if (__CUDA_ARCH__ >= 350) && !defined(__CUDADEVRT_INTERNAL__)
+#    if (__CUDA_ARCH__ >= 350) && !defined(__CUDADEVRT_INTERNAL__)
 struct cudaFuncAttributes;
 
 __device__ __attribute__((nv_weak)) cudaError_t cudaMalloc(void **p, size_t s)
@@ -38,17 +38,18 @@ cudaOccupancyMaxActiveBlocksPerMultiprocessor(
   return cudaErrorUnknown;
 }
 
-#endif /* (__CUDA_ARCH__ >= 350) && !defined(__CUDADEVRT_INTERNAL__) */
+#    endif /* (__CUDA_ARCH__ >= 350) && !defined(__CUDADEVRT_INTERNAL__) */
 
-#else /* defined(__CUDABE__) */
+#  else /* defined(__CUDABE__) */
 
-#if defined(__cplusplus) &&                                                    \
-  defined(__CUDACC__) // Visible to nvcc front-end only
-#if !defined(__CUDA_ARCH__) ||                                                 \
-  (__CUDA_ARCH__ >= 350) // Visible to SM>=3.5 and "__host__ __device__" only
+#    if defined(__cplusplus) &&                                                \
+      defined(__CUDACC__) // Visible to nvcc front-end only
+#      if !defined(__CUDA_ARCH__) ||                                           \
+        (__CUDA_ARCH__ >=                                                      \
+         350) // Visible to SM>=3.5 and "__host__ __device__" only
 
-#include "driver_types.h"
-#include "host_defines.h"
+#        include "driver_types.h"
+#        include "host_defines.h"
 
 extern "C"
 {
@@ -166,9 +167,9 @@ cudaOccupancyMaxActiveBlocksPerMultiprocessor(
   size_t dynamicSmemSize);
 } // namespace
 
-#endif // !defined(__CUDA_ARCH__) || (__CUDA_ARCH__ >= 350)
-#endif // defined(__cplusplus) && defined(__CUDACC__)
+#      endif // !defined(__CUDA_ARCH__) || (__CUDA_ARCH__ >= 350)
+#    endif // defined(__cplusplus) && defined(__CUDACC__)
 
-#endif /* defined(__CUDABE__) */
+#  endif /* defined(__CUDABE__) */
 
 #endif /* !__CUDA_DEVICE_RUNTIME_API_H__ */

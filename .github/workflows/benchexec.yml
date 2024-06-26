@@ -96,7 +96,7 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       operating-system: ubuntu-latest
-      build-flags: '-b Release -e Off'
+      build-flags: '-b Release -e Off -C'
       testing: false     
 
   run-benchexec:
@@ -112,7 +112,7 @@ jobs:
           name: release-ubuntu-latest
           path: ./
       - name: Checkout code
-        uses: actions/checkout@master
+        uses: actions/checkout@v3
         with:
           path: esbmc-src
       - name: Set up the custom runset
@@ -150,7 +150,8 @@ jobs:
           name: esbmc-result
           path: output.zip  
       - name: Checkout code
-        uses: actions/checkout@master
+        if: ${{ inputs.cpachecker == true }}
+        uses: actions/checkout@v3
         with:
           path: esbmc-src      
       - name: Run Validation (Full)

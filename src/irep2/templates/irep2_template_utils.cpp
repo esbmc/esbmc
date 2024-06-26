@@ -24,6 +24,21 @@ std::string type_to_string(const unsigned int &theval, int)
   return std::string(buffer);
 }
 
+std::string type_to_string(const constant_string_data::kindt &theval, int)
+{
+  switch (theval)
+  {
+  case constant_string_data::DEFAULT:
+    return "default";
+  case constant_string_data::WIDE:
+    return "wide";
+  case constant_string_data::UNICODE:
+    return "unicode";
+  }
+  assert(0 && "Unrecognized constant_string_data::kindt enum value");
+  abort();
+}
+
 std::string type_to_string(const symbol_data::renaming_level &theval, int)
 {
   switch (theval)
@@ -157,6 +172,13 @@ bool do_type_cmp(
 }
 
 bool do_type_cmp(
+  const constant_string_data::kindt &side1,
+  const constant_string_data::kindt &side2)
+{
+  return side1 == side2;
+}
+
+bool do_type_cmp(
   const symbol_data::renaming_level &side1,
   const symbol_data::renaming_level &side2)
 {
@@ -257,6 +279,18 @@ int do_type_lt(const unsigned int &side1, const unsigned int &side2)
 int do_type_lt(
   const sideeffect_data::allockind &side1,
   const sideeffect_data::allockind &side2)
+{
+  if (side1 < side2)
+    return -1;
+  else if (side2 < side1)
+    return 1;
+  else
+    return 0;
+}
+
+int do_type_lt(
+  const constant_string_data::kindt &side1,
+  const constant_string_data::kindt &side2)
 {
   if (side1 < side2)
     return -1;
@@ -428,6 +462,16 @@ size_t do_type_crc(const sideeffect_data::allockind &theval)
 }
 
 void do_type_hash(const sideeffect_data::allockind &theval, crypto_hash &hash)
+{
+  hash.ingest((void *)&theval, sizeof(theval));
+}
+
+size_t do_type_crc(const constant_string_data::kindt &theval)
+{
+  return boost::hash<uint8_t>()(theval);
+}
+
+void do_type_hash(const constant_string_data::kindt &theval, crypto_hash &hash)
 {
   hash.ingest((void *)&theval, sizeof(theval));
 }

@@ -3,16 +3,16 @@
 #ifndef _WIN32
 extern "C"
 {
-#include <fcntl.h>
-#include <unistd.h>
+#  include <fcntl.h>
+#  include <unistd.h>
 
-#ifdef HAVE_SENDFILE_ESBMC
-#include <sys/sendfile.h>
-#endif
+#  ifdef HAVE_SENDFILE_ESBMC
+#    include <sys/sendfile.h>
+#  endif
 
-#include <sys/resource.h>
-#include <sys/time.h>
-#include <sys/types.h>
+#  include <sys/resource.h>
+#  include <sys/time.h>
+#  include <sys/types.h>
 }
 #endif
 
@@ -31,6 +31,7 @@ extern "C"
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
+#include <goto-programs/abstract-interpretation/gcse.h>
 #include <goto-programs/loop_numbers.h>
 #include <goto-programs/read_goto_binary.h>
 #include <goto-programs/write_goto_binary.h>
@@ -52,16 +53,28 @@ extern "C"
 #include <util/time_stopping.h>
 
 #ifndef _WIN32
-#include <sys/wait.h>
+#  include <sys/wait.h>
+#  include <execinfo.h>
+#  include <fcntl.h>
 #endif
 
 #ifdef ENABLE_OLD_FRONTEND
-#include <ansi-c/c_preprocess.h>
+#  include <ansi-c/c_preprocess.h>
 #endif
 
 #ifdef ENABLE_GOTO_CONTRACTOR
-#include <goto-programs/goto_contractor.h>
+#  include <goto-programs/goto_contractor.h>
 #endif
+
+#define BT_BUF_SIZE 256
+
+extern "C" const char buildidstring_buf[];
+extern "C" const unsigned int buildidstring_buf_size;
+
+static std::string_view esbmc_version_string()
+{
+  return {buildidstring_buf, buildidstring_buf_size};
+}
 
 enum PROCESS_TYPE
 {
@@ -89,7 +102,47 @@ void timeout_handler(int)
 }
 #endif
 
-extern "C" const char *const esbmc_version_string;
+#ifndef _WIN32
+/* This will produce output on stderr that looks somewhat like this:
+ *   Signal 6, backtrace:
+ *   src/esbmc/esbmc(+0xad52e)[0x556c5dcdb52e]
+ *   /lib64/libc.so.6(+0x39d50)[0x7f7a8f475d50]
+ *   /lib64/libc.so.6(+0x89d9c)[0x7f7a8f4c5d9c]
+ *   /lib64/libc.so.6(raise+0x12)[0x7f7a8f475ca2]
+ *   /lib64/libc.so.6(abort+0xd3)[0x7f7a8f45e4ed]
+ *   src/esbmc/esbmc(+0x62e3e5)[0x556c5e25c3e5]
+ *   src/esbmc/esbmc(+0x61f7f1)[0x556c5e24d7f1]
+ *   [...]
+ *
+ *   Memory map:
+ *   [...]
+ *
+ * The backtrace can be translated into proper function symbols via addr2line,
+ * e.g.
+ *
+ *   cat bt | tr -d '[]' | tr '()' ' ' | grep esbmc | \
+ *   while read f a b; do echo $a | tr -d '+'; done | \
+ *   xargs addr2line -iapfCr -e src/esbmc/esbmc
+ */
+static void segfault_handler(int sig)
+{
+  ::signal(sig, SIG_DFL);
+  void *buffer[BT_BUF_SIZE];
+  int n = backtrace(buffer, BT_BUF_SIZE);
+  dprintf(STDERR_FILENO, "\nSignal %d, backtrace:\n", sig);
+  backtrace_symbols_fd(buffer, n, STDERR_FILENO);
+  int fd = open("/proc/self/maps", O_RDONLY);
+  if (fd != -1)
+  {
+    dprintf(STDERR_FILENO, "\nMemory map:\n");
+    for (ssize_t rd; (rd = read(fd, buffer, sizeof(buffer))) > 0 ||
+                     (rd == -1 && errno == EINTR);)
+      rd = write(STDERR_FILENO, buffer, rd < 0 ? 0 : rd);
+    close(fd);
+  }
+  ::raise(sig);
+}
+#endif
 
 // This transforms a string representation of a time interval
 // written in the form <number><suffix> into seconds.
@@ -242,7 +295,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if (cmdline.isset("git-hash"))
   {
-    log_result("{}", esbmc_version_string);
+    log_result("{}", esbmc_version_string());
     exit(0);
   }
 
@@ -405,12 +458,24 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   }
 #endif
 
+#ifndef _WIN32
+  if (cmdline.isset("segfault-handler"))
+  {
+    signal(SIGSEGV, segfault_handler);
+    signal(SIGABRT, segfault_handler);
+  }
+#endif
+
   // If multi-property is on, we should set result-only and base-case
   if (cmdline.isset("multi-property"))
   {
     options.set_option("result-only", true);
     options.set_option("base-case", true);
   }
+
+  /* compatibility: --cvc maps to --cvc4 */
+  if (cmdline.isset("cvc"))
+    options.set_option("cvc4", true);
 
   config.options = options;
 }
@@ -1126,7 +1191,9 @@ int esbmc_parseoptionst::do_bmc_strategy(
     // k-induction
     if (options.get_bool_option("k-induction"))
     {
-      if (is_base_case_violated(options, goto_functions, k_step).is_true())
+      if (
+        is_base_case_violated(options, goto_functions, k_step).is_true() &&
+        !cmdline.isset("multi-property"))
         return 1;
 
       if (does_forward_condition_hold(options, goto_functions, k_step)
@@ -1156,7 +1223,9 @@ int esbmc_parseoptionst::do_bmc_strategy(
     // incremental-bmc
     if (options.get_bool_option("incremental-bmc"))
     {
-      if (is_base_case_violated(options, goto_functions, k_step).is_true())
+      if (
+        is_base_case_violated(options, goto_functions, k_step).is_true() &&
+        !cmdline.isset("multi-property"))
         return 1;
 
       if (does_forward_condition_hold(options, goto_functions, k_step)
@@ -1493,9 +1562,6 @@ bool esbmc_parseoptionst::create_goto_program(
       return true;
     }
 
-    // Ahem
-    migrate_namespace_lookup = new namespacet(context);
-
     // If the user is providing the GOTO functions, we don't need to parse
     if (cmdline.isset("binary"))
     {
@@ -1536,7 +1602,7 @@ bool esbmc_parseoptionst::create_goto_program(
 bool esbmc_parseoptionst::read_goto_binary(goto_functionst &goto_functions)
 {
   log_progress("Reading GOTO program from file");
-  for (const auto &arg : _cmdline.args)
+  for (const auto &arg : cmdline.args)
   {
     if (::read_goto_binary(arg, context, goto_functions))
     {
@@ -1558,15 +1624,14 @@ bool esbmc_parseoptionst::parse_goto_program(
 {
   try
   {
-    if (parse())
+    if (parse(cmdline))
       return true;
 
     if (cmdline.isset("parse-tree-too") || cmdline.isset("parse-tree-only"))
     {
-      assert(language_files.filemap.size());
-      languaget &language = *language_files.filemap.begin()->second.language;
       std::ostringstream oss;
-      language.show_parse(oss);
+      for (auto &it : langmap)
+        it.second->show_parse(oss);
       log_status("{}", oss.str());
       if (cmdline.isset("parse-tree-only"))
         return true;
@@ -1637,8 +1702,10 @@ bool esbmc_parseoptionst::process_goto_program(
     namespacet ns(context);
 
     bool is_no_remove = cmdline.isset("multi-property") ||
-                        cmdline.isset("goto-coverage") ||
-                        cmdline.isset("goto-coverage-claims");
+                        cmdline.isset("assertion-coverage") ||
+                        cmdline.isset("assertion-coverage-claims") ||
+                        cmdline.isset("condition-coverage") ||
+                        cmdline.isset("condition-coverage-claims");
 
     // Start by removing all no-op instructions and unreachable code
     if (!(cmdline.isset("no-remove-no-op")))
@@ -1646,7 +1713,7 @@ bool esbmc_parseoptionst::process_goto_program(
 
     // We should skip this 'remove-unreachable' removal in goto-cov and multi-property
     // - multi-property wants to find all the bugs in the src code
-    // - goto-coverage wants to find out unreached codes (asserts)
+    // - assertion-coverage wants to find out unreached codes (asserts)
     // - however, the optimisation below will remove codes during the Goto stage
     if (!(cmdline.isset("no-remove-unreachable") || is_no_remove))
       remove_unreachable(goto_functions);
@@ -1662,6 +1729,42 @@ bool esbmc_parseoptionst::process_goto_program(
         goto_inline(goto_functions, options, ns);
       else
         goto_partial_inline(goto_functions, options, ns);
+    }
+
+    if (cmdline.isset("gcse"))
+    {
+      std::shared_ptr<value_set_analysist> vsa =
+        std::make_shared<value_set_analysist>(ns);
+      try
+      {
+        log_status("Computing Value-Set Analysis (VSA)");
+        (*vsa)(goto_functions);
+      }
+      catch (vsa_not_implemented_exception &)
+      {
+        log_warning(
+          "Unable to compute VSA due to incomplete implementation. Some GOTO "
+          "optimizations will be disabled");
+        vsa = nullptr;
+      }
+      catch (type2t::symbolic_type_excp &)
+      {
+        log_warning(
+          "[GOTO] Unable to compute VSA due to symbolic type. Some GOTO "
+          "optimizations will be disabled");
+        vsa = nullptr;
+      }
+
+      if (cmdline.isset("no-library"))
+        log_warning("Using CSE with --no-library might cause huge slowdowns!");
+
+      if (!vsa)
+        log_warning("Could not apply GCSE optimization due to VSA limitation!");
+      else
+      {
+        goto_cse cse(context, vsa);
+        cse.run(goto_functions);
+      }
     }
 
     if (cmdline.isset("interval-analysis") || cmdline.isset("goto-contractor"))
@@ -1699,6 +1802,9 @@ bool esbmc_parseoptionst::process_goto_program(
 
     goto_check(ns, options, goto_functions);
 
+    // add re-evaluations of monitored properties
+    add_property_monitors(goto_functions, ns);
+
     // Once again, remove all unreachable and no-op code that could have been
     // introduced by the above algorithms
     if (!(cmdline.isset("no-remove-no-op")))
@@ -1720,31 +1826,58 @@ bool esbmc_parseoptionst::process_goto_program(
 
       value_set_analysis.update(goto_functions);
     }
-    if (cmdline.isset("add-false-assert"))
-    {
-      goto_coveraget tmp;
-      tmp.add_false_asserts(goto_functions);
-    }
 
     //! goto-cov will also mutate the asserts added by esbmc (e.g. goto-check)
-    if (cmdline.isset("goto-coverage") || cmdline.isset("goto-coverage-claims"))
+    if (
+      cmdline.isset("assertion-coverage") ||
+      cmdline.isset("assertion-coverage-claims"))
     {
-      // for assertion coverage metric
-      options.set_option("make-assert-false", true);
-      // no-simplify, otherwise the coverage will always be 100%
-      // seems that the simplication will remove unreachable claims
-      options.set_option("no-simplify", true);
       // for multi-property
       options.set_option("result-only", true);
       options.set_option("base-case", true);
       options.set_option("multi-property", true);
-      options.set_option("keep-verified-claims", true);
+      options.set_option("keep-verified-claims", false);
+
+      goto_coveraget tmp(ns, goto_functions);
+      tmp.replace_all_asserts_to_guard(gen_false_expr(), true);
+    }
+
+    if (
+      cmdline.isset("condition-coverage") ||
+      cmdline.isset("condition-coverage-claims") ||
+      cmdline.isset("condition-coverage-rm") ||
+      cmdline.isset("condition-coverage-claims-rm"))
+    {
+      // for multi-property
+      options.set_option("result-only", true);
+      options.set_option("base-case", true);
+      options.set_option("multi-property", true);
+      options.set_option("keep-verified-claims", false);
+      // unreachable conditions should be also considered as short-circuited
+
+      //?:
+      // if we do not want expressions like 'if(2 || 3)' get simplified to 'if(1||1)'
+      // we need to enable the options below:
+      //    options.set_option("no-simplify", true);
+      //    options.set_option("no-propagation", true);
+      // however, this will affect the performance, thus they are not enabled by default
+
+      std::string filename = cmdline.args[0];
+      goto_coveraget tmp(ns, goto_functions, filename);
+      tmp.replace_all_asserts_to_guard(gen_true_expr());
+      tmp.gen_cond_cov();
     }
 
     if (options.get_bool_option("make-assert-false"))
     {
-      goto_coveraget tmp;
-      tmp.make_asserts_false(goto_functions);
+      goto_coveraget tmp(ns, goto_functions);
+      tmp.replace_all_asserts_to_guard(gen_false_expr());
+    }
+
+    if (cmdline.isset("add-false-assert"))
+    {
+      goto_coveraget tmp(ns, goto_functions);
+      tmp.add_false_asserts();
     }
   }
 
@@ -1816,6 +1949,12 @@ bool esbmc_parseoptionst::output_goto_program(
         log_error("Failed to generate goto binary file"); // TODO: explain why
         abort();
       };
+      return true;
+    }
+
+    if (cmdline.isset("show-ileave-points"))
+    {
+      print_ileave_points(ns, goto_functions);
       return true;
     }
 
@@ -1913,6 +2052,286 @@ void esbmc_parseoptionst::preprocessing()
   {
     log_error("Out of memory");
   }
+}
+
+void esbmc_parseoptionst::add_property_monitors(
+  goto_functionst &goto_functions,
+  namespacet &ns [[maybe_unused]])
+{
+  std::map<std::string, std::pair<std::set<std::string>, expr2tc>> monitors;
+
+  context.foreach_operand([this, &monitors](const symbolt &s) {
+    if (
+      !has_prefix(s.name, "__ESBMC_property_") ||
+      s.name.as_string().find("$type") != std::string::npos)
+      return;
+
+    // strip prefix "__ESBMC_property_"
+    std::string prop_name = s.name.as_string().substr(17);
+    std::set<std::string> used_syms;
+    expr2tc main_expr = calculate_a_property_monitor(prop_name, used_syms);
+    monitors[prop_name] = std::pair{used_syms, main_expr};
+  });
+
+  if (monitors.size() == 0)
+    return;
+
+  Forall_goto_functions (f_it, goto_functions)
+  {
+    /* do not instrument global entry function */
+    if (f_it->first == "__ESBMC_main")
+      continue;
+
+    /* do also not instrument functions computing the propositions themselves */
+    if (has_prefix(f_it->first, "c:@F@") && has_suffix(f_it->first, "_status"))
+    {
+      const std::string &name = f_it->first.as_string();
+      std::string prop_name = name.substr(5, name.length() - 5 - 7);
+      if (monitors.find(prop_name) != monitors.end())
+        continue;
+    }
+
+    log_debug("ltl", "adding monitor exprs in function {}", f_it->first);
+    goto_functiont &func = f_it->second;
+    goto_programt &prog = func.body;
+    Forall_goto_program_instructions (p_it, prog)
+      add_monitor_exprs(p_it, prog.instructions, monitors);
+  }
+
+  // Find main function; find first function call; insert updates to each
+  // property expression. This makes sure that there isn't inconsistent
+  // initialization of each monitor boolean.
+  goto_functionst::function_mapt::iterator f_it =
+    goto_functions.function_map.find("__ESBMC_main");
+  assert(f_it != goto_functions.function_map.end());
+  std::string main_suffix = "@" + (config.main.empty() ? "main" : config.main);
+  const symbol2t *entry_sym = nullptr;
+  Forall_goto_program_instructions (p_it, f_it->second.body)
+  {
+    /* Find the call to the entry point, usually 'main'. At that point
+     * everything like pthreads, etc., is already set up. */
+    if (p_it->type != FUNCTION_CALL)
+      continue;
+    const code_function_call2t &func_call = to_code_function_call2t(p_it->code);
+    if (!is_symbol2t(func_call.function))
+      continue;
+    const symbol2t &func_sym = to_symbol2t(func_call.function);
+    if (!has_suffix(func_sym.thename, main_suffix))
+      continue;
+
+    /* found it */
+    entry_sym = &func_sym;
+    break;
+  }
+  assert(entry_sym);
+
+  f_it = goto_functions.function_map.find(entry_sym->thename.as_string());
+  assert(f_it != goto_functions.function_map.end());
+
+  goto_programt &body = f_it->second.body;
+  goto_programt::instructionst &insn_list = body.instructions;
+
+  /* insert a call to start the monitor thread and after it also to kill it */
+  goto_programt::instructiont new_insn;
+  new_insn.function = entry_sym->thename;
+
+  expr2tc func_sym = symbol2tc(get_empty_type(), "c:@F@ltl2ba_start_monitor");
+  std::vector<expr2tc> args;
+  new_insn.make_function_call(code_function_call2tc(expr2tc(), func_sym, args));
+  insn_list.insert(insn_list.begin(), new_insn);
+
+  func_sym = symbol2tc(get_empty_type(), "c:@F@ltl2ba_finish_monitor");
+  new_insn.make_function_call(code_function_call2tc(expr2tc(), func_sym, args));
+  // add this call before each 'return' instruction
+  for (auto it = insn_list.begin(); it != insn_list.end(); ++it)
+  {
+    if (it->type != RETURN)
+      continue;
+    insn_list.insert(it, new_insn);
+  }
+}
+
+static void collect_symbol_names(
+  const expr2tc &e,
+  const std::string &prefix,
+  std::set<std::string> &used_syms)
+{
+  if (is_symbol2t(e))
+  {
+    const symbol2t &thesym = to_symbol2t(e);
+    assert(thesym.rlevel == 0);
+    std::string sym = thesym.get_symbol_name();
+
+    used_syms.insert(sym);
+  }
+  else
+  {
+    e->foreach_operand([&prefix, &used_syms](const expr2tc &e) {
+      if (!is_nil_expr(e))
+        collect_symbol_names(e, prefix, used_syms);
+    });
+  }
+}
+
+expr2tc esbmc_parseoptionst::calculate_a_property_monitor(
+  const std::string &name,
+  std::set<std::string> &used_syms) const
+{
+  const symbolt *fn = context.find_symbol("c:@F@" + name + "_status");
+  assert(fn);
+
+  const codet &fn_code = to_code(fn->value);
+  assert(fn_code.get_statement() == "block");
+  assert(fn_code.operands().size() == 1);
+
+  const codet &fn_ret = to_code(fn_code.op0());
+  assert(fn_ret.get_statement() == "return");
+  assert(fn_ret.operands().size() == 1);
+
+  expr2tc new_main_expr;
+  migrate_expr(fn_ret.op0(), new_main_expr);
+
+  collect_symbol_names(new_main_expr, name, used_syms);
+
+  return new_main_expr;
+}
+
+void esbmc_parseoptionst::add_monitor_exprs(
+  goto_programt::targett insn,
+  goto_programt::instructionst &insn_list,
+  const std::map<std::string, std::pair<std::set<std::string>, expr2tc>>
+    &monitors)
+{
+  // We've been handed an instruction, look for assignments to the
+  // symbol we're looking for. When we find one, append a goto instruction that
+  // re-evaluates a proposition expression. Because there can be more than one,
+  // we put re-evaluations in atomic blocks.
+
+  if (!insn->is_assign())
+    return;
+
+  code_assign2t &assign = to_code_assign2t(insn->code);
+
+  // Don't allow propositions about things like the contents of an array and
+  // suchlike.
+  if (!is_symbol2t(assign.target))
+    return;
+
+  symbol2t &sym = to_symbol2t(assign.target);
+
+  // Is this actually an assignment that we're interested in?
+  std::string sym_name = sym.get_symbol_name();
+  std::set<std::pair<std::string, expr2tc>> triggered;
+  for (const auto &[prop, pair] : monitors)
+    if (pair.first.find(sym_name) != pair.first.end())
+      triggered.emplace(prop, pair.second);
+
+  if (triggered.empty())
+    return;
+
+  goto_programt::instructiont new_insn;
+
+  new_insn.type = ATOMIC_BEGIN;
+  new_insn.function = insn->function;
+  insn_list.insert(insn, new_insn);
+
+  insn++;
+
+#if 0
+  new_insn.type = FUNCTION_CALL;
+  expr2tc func_sym =
+    symbol2tc(get_empty_type(), "c:@F@__ESBMC_switch_to_monitor");
+  std::vector<expr2tc> args;
+  new_insn.code = code_function_call2tc(expr2tc(), func_sym, args);
+  new_insn.function = insn->function;
+  insn_list.insert(insn, new_insn);
+#endif
+
+  new_insn.type = ATOMIC_END;
+  new_insn.function = insn->function;
+  insn_list.insert(insn, new_insn);
+}
+
+static unsigned int calc_globals_used(const namespacet &ns, const expr2tc &expr)
+{
+  if (is_nil_expr(expr))
+    return 0;
+
+  if (!is_symbol2t(expr))
+  {
+    unsigned int globals = 0;
+
+    expr->foreach_operand([&globals, &ns](const expr2tc &e) {
+      globals += calc_globals_used(ns, e);
+    });
+
+    return globals;
+  }
+
+  std::string identifier = to_symbol2t(expr).get_symbol_name();
+
+  if (
+    identifier == "NULL" || identifier == "__ESBMC_alloc" ||
+    identifier == "__ESBMC_alloc_size")
+    return 0;
+
+  const symbolt *sym = ns.lookup(identifier);
+  assert(sym);
+  if (sym->static_lifetime || sym->type.is_dynamic_set())
+    return 1;
+
+  return 0;
+}
+
+void esbmc_parseoptionst::print_ileave_points(
+  namespacet &ns,
+  goto_functionst &goto_functions)
+{
+  forall_goto_functions (fit, goto_functions)
+    forall_goto_program_instructions (pit, fit->second.body)
+    {
+      bool print_insn = false;
+
+      switch (pit->type)
+      {
+      case GOTO:
+      case ASSUME:
+      case ASSERT:
+      case ASSIGN:
+        if (calc_globals_used(ns, pit->guard) > 0)
+          print_insn = true;
+        break;
+      case FUNCTION_CALL:
+      {
+        const code_function_call2t &deref_code =
+          to_code_function_call2t(pit->code);
+        if (
+          is_symbol2t(deref_code.function) &&
+          to_symbol2t(deref_code.function).get_symbol_name() ==
+            "c:@F@__ESBMC_yield")
+          print_insn = true;
+        break;
+      }
+      case NO_INSTRUCTION_TYPE:
+      case OTHER:
+      case SKIP:
+      case LOCATION:
+      case END_FUNCTION:
+      case ATOMIC_BEGIN:
+      case ATOMIC_END:
+      case RETURN:
+      case DECL:
+      case DEAD:
+      case THROW:
+      case CATCH:
+      case THROW_DECL:
+      case THROW_DECL_END:
+        break;
+      }
+
+      if (print_insn)
+        pit->output_instruction(ns, pit->function, std::cout);
+    }
 }
 
 // This prints the ESBMC version and a list of CMD options

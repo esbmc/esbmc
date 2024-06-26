@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --multi-property --incremental-bmc
+^VERIFICATION FAILED$

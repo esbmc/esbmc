@@ -1,4 +1,4 @@
 CORE
 tcas_v23_523.c
-
+ -Wno-error=implicit-function-declaration
 ^VERIFICATION FAILED$

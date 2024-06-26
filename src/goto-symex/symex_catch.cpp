@@ -97,6 +97,7 @@ bool goto_symext::symex_throw()
   // a derived object with multiple inheritance
   unsigned old_id_number = -1, new_id_number = 0;
 
+  goto_symex_statet::call_stackt old_stack = cur_state->call_stack;
   for (auto const &it : throw_ref.exception_list)
   {
     // Handle throw declarations
@@ -132,6 +133,9 @@ bool goto_symext::symex_throw()
 
       if (new_id_number < old_id_number)
       {
+        cur_state->call_stack = old_stack;
+        cur_state->guard.make_true();
+
         update_throw_target(except, c_it->second, instruction.code);
         catch_insn = &c_it->second;
         catch_name = c_it->first;
@@ -165,7 +169,7 @@ bool goto_symext::symex_throw()
 
         if (c_it != except->catch_map.end())
         {
-          update_throw_target(except, c_it->second, instruction.code);
+          update_throw_target(except, c_it->second, instruction.code, true);
           catch_insn = &c_it->second;
           catch_name = c_it->first;
         }
@@ -237,7 +241,7 @@ bool goto_symext::unexpected_handler()
     return false;
 
   // We must look on the context if the user included exception lib
-  const symbolt *tmp = ns.lookup("std::unexpected()");
+  const symbolt *tmp = ns.lookup("c:@N@std@F@unexpected#");
   bool is_included = !tmp;
 
   // If it do, we must call the unexpected function:
@@ -252,7 +256,7 @@ bool goto_symext::unexpected_handler()
     // We only call it if the user replaced the default one
     if (
       to_symbol2t(to_code_function_call2t(the_call).function).thename ==
-      "std::default_unexpected()")
+      "c:@N@std@F@default_unexpected#")
       return false;
 
     // Indicate there we're inside the unexpected flow
@@ -271,7 +275,8 @@ bool goto_symext::unexpected_handler()
 void goto_symext::update_throw_target(
   goto_symex_statet::exceptiont *except [[maybe_unused]],
   goto_programt::const_targett target,
-  const expr2tc &code)
+  const expr2tc &code,
+  bool is_ellipsis)
 {
   // Something is going to catch, therefore we need something to be caught.
   // Assign that something to a variable and make records so that it's merged
@@ -286,18 +291,24 @@ void goto_symext::update_throw_target(
   symex_assign(code_assign2tc(thrown_obj, operand));
 
   // Now record that value for future reference.
-  cur_state->rename(thrown_obj);
+  if (!is_pointer_type(target->code->type))
+    cur_state->rename(thrown_obj);
 
   // Target is, as far as I can tell, always a declaration of the variable
   // that the thrown obj ends up in, and is followed by a (blank) assignment
   // to it. So point at the next insn.
-  assert(is_code_decl2t(target->code));
-  target++;
-  assert(is_code_assign2t(target->code));
+  if (!is_ellipsis)
+  {
+    assert(is_code_decl2t(target->code));
+    target++;
+    assert(is_code_assign2t(target->code));
+    // signed int b;
+    // b = NONDET(signed int); move to this line
 
-  // Signal assignment code to fetch the thrown object and rewrite the
-  // assignment, assigning the thrown obj to the local variable.
-  thrown_obj_map.insert_or_assign(target, thrown_obj);
+    // Signal assignment code to fetch the thrown object and rewrite the
+    // assignment, assigning the thrown obj to the local variable.
+    thrown_obj_map.insert_or_assign(target, thrown_obj);
+  }
 
   if (!options.get_bool_option("extended-try-analysis"))
   {

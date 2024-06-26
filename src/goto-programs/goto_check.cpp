@@ -232,7 +232,7 @@ void goto_checkt::overflow_check(
 
   // First, check type.
   const type2tc &type = ns.follow(expr->type);
-  if (config.language == language_idt::SOLIDITY)
+  if (config.language.lid == language_idt::SOLIDITY)
   {
     if (!is_signedbv_type(type) && !is_unsignedbv_type(type))
       return;
@@ -296,12 +296,12 @@ void goto_checkt::input_overflow_check(
 
   unsigned number_of_format_args, fmt_idx;
 
-  if (func_name.find("__ESBMC_scanf") != std::string::npos)
+  if (func_name == "c:@F@scanf")
   {
     fmt_idx = 0;
     number_of_format_args = func_call.operands.size() - 1;
   }
-  else if (func_name.find("__ESBMC_fscanf") != std::string::npos)
+  else if (func_name == "c:@F@fscanf" || func_name == "c:@F@sscanf")
   {
     fmt_idx = 1;
     number_of_format_args = func_call.operands.size() - 2;
@@ -637,13 +637,10 @@ void goto_checkt::bounds_check(
   expr2tc lower = greaterthanequal2tc(the_index, zero);
   add_guarded_claim(lower, name + " lower bound", "array bounds", loc, guard);
 
-  assert(is_array_type(t) || is_string_type(t) || is_vector_type(t));
+  assert(is_array_type(t) || is_vector_type(t));
 
-  const expr2tc &array_size =
-    is_array_type(t) ? to_array_type(t).array_size
-    : is_vector_type(t)
-      ? to_vector_type(t).array_size
-      : constant_int2tc(get_uint32_type(), to_string_type(t).get_length());
+  const expr2tc &array_size = is_array_type(t) ? to_array_type(t).array_size
+                                               : to_vector_type(t).array_size;
 
   // Cast size to index type
   expr2tc casted_size = typecast2tc(the_index->type, array_size);

@@ -133,10 +133,9 @@ void goto_symext::assume(const expr2tc &the_assumption)
     cur_state->guard.make_false();
 }
 
-std::shared_ptr<goto_symext::symex_resultt> goto_symext::get_symex_result()
+goto_symext::symex_resultt goto_symext::get_symex_result()
 {
-  return std::shared_ptr<goto_symext::symex_resultt>(
-    new goto_symext::symex_resultt(target, total_claims, remaining_claims));
+  return goto_symext::symex_resultt(target, total_claims, remaining_claims);
 }
 
 void goto_symext::symex_step(reachability_treet &art)
@@ -168,6 +167,14 @@ void goto_symext::symex_step(reachability_treet &art)
   case END_FUNCTION:
     symex_end_of_function();
 
+    if (!stack_catch.empty())
+    {
+      // Get to the correct try (always the last one)
+      goto_symex_statet::exceptiont *except = &stack_catch.top();
+
+      except->has_throw_decl = false;
+      except->throw_list_set.clear();
+    }
     // Potentially skip to run another function ptr target; if not,
     // continue
     if (!run_next_function_ptr_target(false))
@@ -221,14 +228,24 @@ void goto_symext::symex_step(reachability_treet &art)
           it != thrown_obj_map.end())
       {
         const expr2tc &thrown_obj = it->second;
-        assert(is_symbol2t(thrown_obj));
 
         if (
           is_pointer_type(deref_code.target->type) &&
           !is_pointer_type(thrown_obj->type))
         {
-          expr2tc new_thrown_obj = address_of2tc(thrown_obj->type, thrown_obj);
-          deref_code.source = new_thrown_obj;
+          if (is_constant(thrown_obj))
+          {
+            expr2tc new_target =
+              dereference2tc(thrown_obj->type, deref_code.target);
+            deref_code.target = new_target;
+            deref_code.source = thrown_obj;
+          }
+          else
+          {
+            expr2tc new_thrown_obj =
+              address_of2tc(thrown_obj->type, thrown_obj);
+            deref_code.source = new_thrown_obj;
+          }
         }
         else
           deref_code.source = thrown_obj;
@@ -273,17 +290,38 @@ void goto_symext::symex_step(reachability_treet &art)
         run_intrinsic(call, art, id.as_string());
         return;
       }
+
+      if (id == "c:@F@scanf" || id == "c:@F@sscanf" || id == "c:@F@fscanf")
+      {
+        cur_state->source.pc++;
+
+        auto &ex_state = art.get_cur_state();
+        if (ex_state.cur_state->guard.is_false())
+          return;
+
+        symex_input(call);
+        return;
+      }
     }
 
-    // Don't run a function call if the guard is false.
-    if (!cur_state->guard.is_false())
-    {
-      symex_function_call(deref_code);
-    }
-    else
+    if (cur_state->guard.is_false())
     {
       cur_state->source.pc++;
+      break;
     }
+
+    if (is_symbol2t(call.function))
+    {
+      const irep_idt &id = to_symbol2t(call.function).thename;
+      if (has_prefix(id.as_string(), "c:@F@__builtin"))
+      {
+        cur_state->source.pc++;
+        if (run_builtin(call, id.as_string()))
+          return;
+      }
+    }
+
+    symex_function_call(deref_code);
   }
   break;
 
@@ -397,112 +435,106 @@ void goto_symext::run_intrinsic(
   if (symname == "c:@F@__ESBMC_yield")
   {
     intrinsic_yield(art);
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_switch_to")
+
+  if (symname == "c:@F@__ESBMC_switch_to")
   {
     intrinsic_switch_to(func_call, art);
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_switch_away_from")
+
+  if (symname == "c:@F@__ESBMC_switch_away_from")
   {
     intrinsic_switch_from(art);
+    return;
   }
-  else if (has_prefix(symname, "c:@F@__ESBMC_get_thread_id"))
+
+  if (has_prefix(symname, "c:@F@__ESBMC_get_thread_id"))
   {
     intrinsic_get_thread_id(func_call, art);
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_set_thread_internal_data")
+
+  if (symname == "c:@F@__ESBMC_set_thread_internal_data")
   {
     intrinsic_set_thread_data(func_call, art);
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_get_thread_internal_data")
+
+  if (symname == "c:@F@__ESBMC_get_thread_internal_data")
   {
     intrinsic_get_thread_data(func_call, art);
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_spawn_thread")
+
+  if (symname == "c:@F@__ESBMC_spawn_thread")
   {
     intrinsic_spawn_thread(func_call, art);
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_terminate_thread")
+
+  if (symname == "c:@F@__ESBMC_terminate_thread")
   {
     intrinsic_terminate_thread(art);
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_get_thread_state")
+
+  if (symname == "c:@F@__ESBMC_get_thread_state")
   {
     intrinsic_get_thread_state(func_call, art);
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_really_atomic_begin")
+
+  if (symname == "c:@F@__ESBMC_really_atomic_begin")
   {
     intrinsic_really_atomic_begin(art);
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_really_atomic_end")
+
+  if (symname == "c:@F@__ESBMC_really_atomic_end")
   {
     intrinsic_really_atomic_end(art);
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_switch_to_monitor")
+
+  if (symname == "c:@F@__ESBMC_switch_to_monitor")
   {
     intrinsic_switch_to_monitor(art);
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_switch_from_monitor")
+
+  if (symname == "c:@F@__ESBMC_switch_from_monitor")
   {
     intrinsic_switch_from_monitor(art);
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_register_monitor")
+
+  if (symname == "c:@F@__ESBMC_register_monitor")
   {
     intrinsic_register_monitor(func_call, art);
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_kill_monitor")
+
+  if (symname == "c:@F@__ESBMC_kill_monitor")
   {
     intrinsic_kill_monitor(art);
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_memset")
+
+  if (symname == "c:@F@__ESBMC_memset")
   {
     intrinsic_memset(art, func_call);
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_get_object_size")
+
+  if (symname == "c:@F@__ESBMC_get_object_size")
   {
     intrinsic_get_object_size(func_call, art);
+    return;
   }
-  else if (has_prefix(symname, "c:@F@__ESBMC_overflow"))
-  {
-    bool is_mult = has_prefix(symname, "c:@F@__ESBMC_overflow_smul") ||
-                   has_prefix(symname, "c:@F@__ESBMC_overflow_umul");
-    bool is_add = has_prefix(symname, "c:@F@__ESBMC_overflow_sadd") ||
-                  has_prefix(symname, "c:@F@__ESBMC_overflow_uadd");
-    bool is_sub = has_prefix(symname, "c:@F@__ESBMC_overflow_ssub") ||
-                  has_prefix(symname, "c:@F@__ESBMC_overflow_usub");
 
-    assert(func_call.operands.size() == 3);
-
-    const auto &func_type = to_code_type(func_call.function->type);
-    assert(func_type.arguments[0] == func_type.arguments[1]);
-    assert(is_pointer_type(func_type.arguments[2]));
-
-    expr2tc op;
-    if (is_mult)
-      op = mul2tc(
-        func_type.arguments[0], func_call.operands[0], func_call.operands[1]);
-    else if (is_add)
-      op = add2tc(
-        func_type.arguments[0], func_call.operands[0], func_call.operands[1]);
-    else if (is_sub)
-      op = sub2tc(
-        func_type.arguments[0], func_call.operands[0], func_call.operands[1]);
-    else
-    {
-      assert(0 && "Unknown overflow intrinsics");
-    }
-
-    // Assign result of the two arguments to the dereferenced third argument
-    symex_assign(code_assign2tc(
-      dereference2tc(
-        to_pointer_type(func_call.operands[2]->type).subtype,
-        func_call.operands[2]),
-      op));
-
-    // Perform overflow check and assign it to the return object
-    symex_assign(code_assign2tc(func_call.ret, overflow2tc(op)));
-  }
-  else if (has_prefix(symname, "c:@F@__ESBMC_convertvector"))
+  if (has_prefix(symname, "c:@F@__ESBMC_convertvector"))
   {
     assert(
       func_call.operands.size() == 1 &&
@@ -533,8 +565,10 @@ void goto_symext::run_intrinsic(
     expr2tc ret_ref = func_call.ret;
     dereference(ret_ref, dereferencet::READ);
     symex_assign(code_assign2tc(ret_ref, result), false, cur_state->guard);
+    return;
   }
-  else if (has_prefix(symname, "c:@F@__ESBMC_shufflevector"))
+
+  if (has_prefix(symname, "c:@F@__ESBMC_shufflevector"))
   {
     assert(
       func_call.operands.size() >= 2 &&
@@ -576,8 +610,10 @@ void goto_symext::run_intrinsic(
     expr2tc ret_ref = func_call.ret;
     dereference(ret_ref, dereferencet::READ);
     symex_assign(code_assign2tc(ret_ref, result), false, cur_state->guard);
+    return;
   }
-  else if (has_prefix(symname, "c:@F@__ESBMC_atomic_load"))
+
+  if (has_prefix(symname, "c:@F@__ESBMC_atomic_load"))
   {
     assert(
       func_call.operands.size() == 3 && "Wrong __ESBMC_atomic_load signature");
@@ -591,8 +627,10 @@ void goto_symext::run_intrinsic(
     symex_assign(code_assign2tc(
       dereference2tc(to_pointer_type(ret->type).subtype, ret),
       dereference2tc(to_pointer_type(ptr->type).subtype, ptr)));
+    return;
   }
-  else if (has_prefix(symname, "c:@F@__ESBMC_atomic_store"))
+
+  if (has_prefix(symname, "c:@F@__ESBMC_atomic_store"))
   {
     assert(
       func_call.operands.size() == 3 && "Wrong __ESBMC_atomic_store signature");
@@ -607,13 +645,15 @@ void goto_symext::run_intrinsic(
       dereference2tc(to_pointer_type(ptr->type).subtype, ptr),
       dereference2tc(to_pointer_type(ret->type).subtype, ret)));
   }
-  else if (has_prefix(symname, "c:@F@__ESBMC_is_little_endian"))
+
+  if (has_prefix(symname, "c:@F@__ESBMC_is_little_endian"))
   {
     expr2tc is_little_endian =
       (config.ansi_c.endianess == configt::ansi_ct::IS_LITTLE_ENDIAN)
         ? gen_true_expr()
         : gen_false_expr();
     symex_assign(code_assign2tc(func_call.ret, is_little_endian));
+    return;
   }
   else if (symname == "c:@F@__ESBMC_no_abnormal_memory_leak")
   {
@@ -622,8 +662,10 @@ void goto_symext::run_intrinsic(
         ? gen_true_expr()
         : gen_false_expr();
     symex_assign(code_assign2tc(func_call.ret, no_abnormal_memleak));
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_builtin_constant_p")
+
+  if (symname == "c:@F@__ESBMC_builtin_constant_p")
   {
     assert(
       func_call.operands.size() == 1 &&
@@ -637,25 +679,10 @@ void goto_symext::run_intrinsic(
     symex_assign(code_assign2tc(
       func_call.ret,
       is_constant_int2t(op1) ? gen_one(int_type2()) : gen_zero(int_type2())));
-  }
-  else if (has_prefix(symname, "c:@F@__ESBMC_sync_fetch_and_add"))
-  {
-    // Already modelled in builtin_libs
     return;
   }
-  else if (
-    has_prefix(symname, "c:@F@__ESBMC_scanf") ||
-    has_prefix(symname, "c:@F@__ESBMC_sscanf") ||
-    has_prefix(symname, "c:@F@__ESBMC_fscanf"))
-  {
-    auto &ex_state = art.get_cur_state();
-    if (ex_state.cur_state->guard.is_false())
-      return;
 
-    symex_input(func_call);
-    return;
-  }
-  else if (has_prefix(symname, "c:@F@__ESBMC_init_object"))
+  if (has_prefix(symname, "c:@F@__ESBMC_init_object"))
   {
     assert(
       func_call.operands.size() == 1 && "Wrong __ESBMC_init_object signature");
@@ -705,11 +732,14 @@ void goto_symext::run_intrinsic(
 
     return;
   }
-  else if (has_prefix(symname, "c:@F@__ESBMC_memory_leak_checks"))
+
+  if (has_prefix(symname, "c:@F@__ESBMC_memory_leak_checks"))
   {
     add_memory_leak_checks();
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_bitcast")
+
+  if (symname == "c:@F@__ESBMC_bitcast")
   {
     assert(func_call.operands.size() == 2 && "Wrong __ESBMC_bitcast signature");
     expr2tc tgtptr = func_call.operands[0];
@@ -730,24 +760,35 @@ void goto_symext::run_intrinsic(
 
     symex_assign(
       code_assign2tc(tgt, bitcast2tc(tgt->type, src)), false, cur_state->guard);
+    return;
   }
-  else if (symname == "c:@F@__ESBMC_unreachable")
+
+  if (symname == "c:@F@__ESBMC_unreachable")
   {
     if (options.get_bool_option("enable-unreachability-intrinsic"))
       claim(
         not2tc(cur_state->guard.as_expr()),
         "reachability: unreachable code reached");
+    return;
   }
-  else
+
+  // We simply call these functions
+  if (
+    has_prefix(symname, "c:@F@__ESBMC_pthread_start_main_hook") ||
+    has_prefix(symname, "c:@F@__ESBMC_pthread_end_main_hook") ||
+    has_prefix(symname, "c:@F@__ESBMC_atexit_handler"))
   {
-    log_error(
-      "Function call to non-intrinsic prefixed with __ESBMC (fatal)\n"
-      "The name in question: {}\n"
-      "(NB: the C spec reserves the __ prefix for the compiler and "
-      "environment)",
-      symname);
-    abort();
+    bump_call(func_call, symname);
+    return;
   }
+
+  log_error(
+    "Function call to non-intrinsic prefixed with __ESBMC (fatal)\n"
+    "The name in question: {}\n"
+    "(NB: the C spec reserves the __ prefix for the compiler and "
+    "environment)",
+    symname);
+  abort();
 }
 
 namespace

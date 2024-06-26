@@ -1,9 +1,9 @@
 
 #ifdef __ESBMC_FIXEDBV
 
-#include <math.h>
+#  include <math.h>
 
-#undef sqrt
+#  undef sqrt
 
 /*Returns the square root of n. Note that the function */
 /*Babylonian method*/

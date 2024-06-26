@@ -16,6 +16,7 @@
 #include <util/simplify_expr.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
+#include <util/string_constant.h>
 #include <util/type_byte_size.h>
 
 static const std::string &get_string_constant(const exprt &expr)
@@ -31,7 +32,19 @@ static const std::string &get_string_constant(const exprt &expr)
     abort();
   }
 
-  return expr.op0().op0().value().as_string();
+  const exprt &string = expr.op0().op0();
+  irep_idt v = string.value();
+  if (string.id() == "string-constant")
+    try
+    {
+      v = to_string_constant(string).mb_value();
+    }
+    catch (const string_constantt::mb_conversion_error &e)
+    {
+      log_warning("{}", e.what());
+    }
+
+  return v.as_string();
 }
 
 static void get_alloc_type_rec(const exprt &src, typet &type, exprt &size)
@@ -291,8 +304,6 @@ void goto_convertt::do_cpp_new(
     expr2tc sz_expr = constant_int2tc(size_type2(), sz);
     expr2tc byte_size = mul2tc(size_type2(), alloc_units, sz_expr);
     alloc_size = migrate_expr_back(byte_size);
-
-    const_cast<irept &>(rhs.size_irep()) = alloc_size;
   }
   else
     alloc_size = from_integer(1, size_type());
@@ -306,46 +317,16 @@ void goto_convertt::do_cpp_new(
     simplify(alloc_size);
   }
 
+  exprt new_expr("sideeffect", rhs.type());
+  new_expr.statement(rhs.statement());
+  new_expr.cmt_size(alloc_size);
+  new_expr.location() = rhs.find_location();
+
   // produce new object
   goto_programt::targett t_n = dest.add_instruction(ASSIGN);
-  exprt assign_expr = code_assignt(lhs, rhs);
-  migrate_expr(assign_expr, t_n->code);
+  exprt new_assign = code_assignt(lhs, new_expr);
+  migrate_expr(new_assign, t_n->code);
   t_n->location = rhs.find_location();
-
-  // set up some expressions
-  exprt valid_expr("valid_object", typet("bool"));
-  valid_expr.copy_to_operands(lhs);
-  exprt neg_valid_expr = gen_not(valid_expr);
-
-  exprt pointer_offset_expr("pointer_offset", pointer_type());
-  pointer_offset_expr.copy_to_operands(lhs);
-
-  equality_exprt offset_is_zero_expr(
-    pointer_offset_expr, gen_zero(pointer_type()));
-
-  // first assume that it's available and that it's a dynamic object
-  goto_programt::targett t_a = dest.add_instruction(ASSUME);
-  t_a->location = rhs.find_location();
-  migrate_expr(neg_valid_expr, t_a->guard);
-
-  migrate_expr(valid_expr, t_a->guard);
-  t_a->guard = not2tc(t_a->guard);
-
-  // set size
-  //nec: ex37.c
-  exprt dynamic_size("dynamic_size", size_type());
-  dynamic_size.copy_to_operands(lhs);
-  dynamic_size.location() = rhs.find_location();
-  goto_programt::targett t_s_s = dest.add_instruction(ASSIGN);
-  exprt assign = code_assignt(dynamic_size, alloc_size);
-  migrate_expr(assign, t_s_s->code);
-  t_s_s->location = rhs.find_location();
-
-  // now set alloc bit
-  goto_programt::targett t_s_a = dest.add_instruction(ASSIGN);
-  assign = code_assignt(valid_expr, true_exprt());
-  migrate_expr(assign, t_s_a->code);
-  t_s_a->location = rhs.find_location();
 
   // run initializer
   dest.destructive_append(tmp_initializer);
@@ -379,6 +360,25 @@ void goto_convertt::cpp_new_initializer(
   else
   {
     initializer = (code_expressiont &)rhs.initializer();
+
+    if (!initializer.op0().get_bool("constructor"))
+    {
+      // for auto *p = Foo(3) and int *p = 3
+      // constructor case:  init is Foo(&(*new_object), 3)
+      // other case: init is 3,
+      // we turn "3" into "*new_object = 3"
+      side_effect_exprt assignment("assign");
+      assignment.type() = rhs.type().subtype();
+
+      // the new object
+      exprt new_object("new_object");
+      new_object.set("#lvalue", true);
+      new_object.type() = rhs.type().subtype();
+
+      assignment.move_to_operands(new_object, initializer.op0());
+      initializer.expression() = assignment;
+    }
+
     // XXX jmorse, const-qual misery
     const_cast<exprt &>(rhs).remove("initializer");
   }
@@ -605,10 +605,6 @@ void goto_convertt::do_function_call_symbol(
     a->guard = gen_false_expr();
     a->location = function.location();
     a->location.user_provided(true);
-  }
-  else if (base_name == "printf")
-  {
-    do_printf(lhs, function, arguments, dest, base_name);
   }
   else if (
     (base_name == "__ESBMC_atomic_begin") ||

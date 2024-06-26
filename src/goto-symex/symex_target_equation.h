@@ -78,6 +78,10 @@ public:
     smt_convt::ast_vec &assertions,
     SSA_stept &s);
 
+  void reconstruct_symbolic_expression(expr2tc &expr, bool keep_local_variables)
+    const override;
+  void replace_rec(const SSA_stept &step, expr2tc &e, bool keep_local) const;
+
   class SSA_stept
   {
   public:

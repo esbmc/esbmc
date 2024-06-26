@@ -1,1 +1,17 @@
+
+#pragma once
+
 #include <stdlib.h>
+
+namespace std {
+
+using ::strtol;
+using ::strtoul;
+using ::strtoll;
+using ::strtoull;
+
+using ::strtof;
+using ::strtod;
+using ::strtold;
+
+}

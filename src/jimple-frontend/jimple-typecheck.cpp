@@ -1,7 +1,7 @@
 #include <jimple-frontend/jimple-language.h>
 #include <jimple-frontend/jimple-converter.h>
 
-bool jimple_languaget::typecheck(contextt &context, const std::string &)
+bool jimple_languaget::typecheck(contextt &context)
 {
   log_status("Converting Jimple module {} to GOTO", root.class_name);
 

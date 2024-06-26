@@ -2,10 +2,14 @@ set(Mathsat_MIN_VERSION 5.5.4)
 
 if (DEFINED Mathsat_DIR)
     set(ENABLE_MATHSAT ON)
-endif ()
-
-if (EXISTS $ENV{HOME}/mathsat)
-    set(ENABLE_MATHSAT ON)
+elseif (EXISTS $ENV{HOME}/mathsat)
+  set(ENABLE_MATHSAT ON)
+else()
+  if(ENABLE_MATHSAT AND DOWNLOAD_DEPENDENCIES AND ACADEMIC_BUILD)
+    message("Downloading Mathsat")
+    download_zip_and_extract(MATHSAT ${MATHSAT_URL})
+    set(Mathsat_DIR ${CMAKE_BINARY_DIR}/MATHSAT/${MATHSAT_NAME})
+  endif()
 endif ()
 
 if (ENABLE_MATHSAT)

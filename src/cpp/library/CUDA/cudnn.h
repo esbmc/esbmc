@@ -1,8 +1,8 @@
 #if !defined(__CUDNN_H__)
-#define __CUDNN_H__
+#  define __CUDNN_H__
 
-#include <cstdlib>
-#include <cublas.h>
+#  include <cstdlib>
+#  include <cublas.h>
 
 typedef struct cudnnactivationdescriptor
 {
