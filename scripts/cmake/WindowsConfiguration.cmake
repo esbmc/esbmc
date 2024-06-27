@@ -16,10 +16,8 @@ if (WIN32)
 	set(Python_EXECUTABLE python)
   endif()
   message(STATUS "Found Python: ${Python_EXECUTABLE}")
-  set(LIBGOMP_LIB "-lgomp -ldl")
-  set(OS_FLEX_SMTLIB_FLAGS "--wincompat")
+  set(LIBGOMP_LIB "-lgomp")
   set(OS_X86_INCLUDE_FOLDER "C:/")
-  set(OS_C2GOTO_FLAGS "-D_MSVC")
 
   if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
 	  # There are a LOT of warnings from clang headers
@@ -36,10 +34,22 @@ if (WIN32)
       set(OS_Z3_LIBS "")
   else()
 	  message(AUTHOR_WARNING "${CMAKE_CXX_COMPILER_ID} is not tested in Windows. You may run into issues.")
+      set(OS_Z3_LIBS "")
 	endif()
+
+  if (MINGW)
+	set(OS_C2GOTO_FLAGS "")
+	set(OS_FLEX_SMTLIB_FLAGS "")
+  else()
+	set(OS_C2GOTO_FLAGS "-D_MSVC")
+	set(OS_FLEX_SMTLIB_FLAGS "--wincompat") # only for non-mingw
+  endif()
 
   # Produce static builds in windows
   set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
-  set(Boost_USE_STATIC_LIBS        ON)
+
+  if (BUILD_STATIC)
+	set(Boost_USE_STATIC_LIBS        ON)
+  endif()
 
 endif()

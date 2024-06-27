@@ -62,6 +62,14 @@ if(ENABLE_BOOLECTOR)
 
   target_link_libraries(solvers INTERFACE solverbtor)
 
+  if (WIN32)
+    find_file(BTOR_DLL libbtor2parser.dll HINTS ${Boolector_DIR} PATH_SUFFIXES lib bin)
+    if (NOT BTOR_DLL STREQUAL "BTOR_DLL-NOTFOUND")
+      message(STATUS "Windows will install ${BTOR_DLL}")
+      install(FILES ${BTOR_DLL} DESTINATION bin)
+    endif()
+  endif()
+
   set(ESBMC_ENABLE_boolector 1 PARENT_SCOPE)
   set(ESBMC_AVAILABLE_SOLVERS "${ESBMC_AVAILABLE_SOLVERS} boolector"
       PARENT_SCOPE)
