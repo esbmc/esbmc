@@ -142,6 +142,11 @@ void clang_cpp_adjust::adjust_if(exprt &expr)
   // If the condition is not of boolean type, it must be casted
   gen_typecast(ns, expr.op0(), bool_type());
 
+  const typet &t1 = expr.op1().type();
+  const typet &t2 = expr.op2().type();
+  if (is_number(t1) && is_number(t2) && t1 == t2)
+    return;
+
   // Typecast both the true and false results
   gen_typecast(ns, expr.op1(), expr.type());
   gen_typecast(ns, expr.op2(), expr.type());
