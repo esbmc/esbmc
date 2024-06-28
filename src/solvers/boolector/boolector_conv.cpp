@@ -54,6 +54,9 @@ void boolector_convt::push_ctx()
 
 void boolector_convt::pop_ctx()
 {
+  symtabt::nth_index<1>::type &symtab_levels = symtable.get<1>();
+  symtab_levels.erase(ctx_level);
+
   boolector_pop(btor, 1);
   smt_convt::pop_ctx();
 }
@@ -548,9 +551,9 @@ smt_astt boolector_convt::mk_array_symbol(
 smt_astt
 boolector_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
-  symtable_type::iterator it = symtable.find(name);
+  symtabt::iterator it = symtable.find(name);
   if (it != symtable.end())
-    return it->second;
+    return it->ast;
 
   BoolectorNode *node;
 
@@ -581,7 +584,7 @@ boolector_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 
   smt_astt ast = new_ast(node, s);
 
-  symtable.insert(symtable_type::value_type(name, ast));
+  symtable.emplace(name, ast, ctx_level);
   return ast;
 }
 

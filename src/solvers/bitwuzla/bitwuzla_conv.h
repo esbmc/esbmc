@@ -109,8 +109,7 @@ public:
   BitwuzlaOptions *bitw_options;
   BitwuzlaTermManager *bitw_term_manager;
 
-  typedef std::unordered_map<std::string, smt_astt> symtable_type;
-  symtable_type symtable;
+  symtabt symtable;
 };
 
 #endif /* _ESBMC_SOLVERS_BITWUZLA_BITWUZLA_CONV_H_ */
