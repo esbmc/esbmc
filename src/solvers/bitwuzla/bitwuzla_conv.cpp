@@ -833,8 +833,7 @@ void bitwuzla_convt::dump_smt()
 
 void bitw_smt_ast::dump() const
 {
-  //@TODO: find a replacement
-  //bitwuzla_print_term(a, "smt2", messaget::state.out);
+  log_status("{}", bitwuzla_term_to_string(a));
 }
 
 void bitwuzla_convt::print_model()
