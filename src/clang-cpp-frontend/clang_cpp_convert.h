@@ -218,26 +218,20 @@ protected:
   /*
    * Methods to pull bases in
    */
-  using base_map = std::map<std::string, const clang::CXXRecordDecl &>;
+  using base_names = std::set<std::string>;
   /*
-   * Recursively get the bases for this derived class.
+   * Get the direct non-virtual base class(es) of the class/struct we are currently dealing with.
+   * Get the direct **and** indirect virtual base class(es) of the class/struct we are currently dealing with.
    *
    * Params:
    *  - cxxrd: clang AST representing the class/struct we are currently dealing with
-   *  - map: this map contains all base class(es) of this class std::map<class_id, pointer to clang AST of base class>
+   *  - non_virtual_names: this set contains the names of the direct non-virtual base class(es) of this class
+   *  - virtual_names: this set contains the names of the direct and indirect virtual base class(es) of this class
    */
-  bool get_base_map(const clang::CXXRecordDecl &cxxrd, base_map &map);
-  /*
-   * Check whether we've already got this component in a class type
-   * Avoid copying duplicate component from a base class type to the derived class type.
-   *
-   * Params:
-   *  - component: the component to be copied from a base class to the derived class type
-   *  - type: ESBMC IR representing the derived class type
-   */
-  bool is_duplicate_component(
-    const struct_typet::componentt &component,
-    const struct_union_typet &type);
+  bool get_base_names(
+    const clang::CXXRecordDecl &cxxrd,
+    base_names &non_virtual_names,
+    base_names &virtual_names);
   /*
    * Check whether we've already got this method in a class type
    * Avoid copying duplicate method from a base class type to the derived class type.
@@ -250,14 +244,18 @@ protected:
     const struct_typet::componentt &method,
     const struct_union_typet &type);
   /*
-   * Copy components and methods from base class(es) to the derived class type
+   * Copy components and methods from base class to the derived class type
    * For virtual base class, we only copy it once.
    *
    * Params:
-   *  - map: this map contains all base class(es) of this class std::map<class_id, pointer to clang AST of base class>
+   *  - base_name: name of the base class
    *  - type: ESBMC IR representing the class' type
+   *  - is_virtual_base: whether the base class is virtual
    */
-  void get_base_components_methods(base_map &map, struct_union_typet &type);
+  void get_base_components_methods(
+    const std::string &base_name,
+    struct_union_typet &type,
+    bool is_virtual_base);
 
   /*
    * Methods for virtual tables and virtual pointers

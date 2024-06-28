@@ -388,10 +388,18 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
   {
     if (cxxrd->bases_begin() != cxxrd->bases_end())
     {
-      base_map bases;
-      if (get_base_map(*cxxrd, bases))
+      base_names non_virtual_bases;
+      base_names virtual_bases;
+      if (get_base_names(*cxxrd, non_virtual_bases, virtual_bases))
         return true;
-      get_base_components_methods(bases, type);
+      for (const auto &non_virtual_base : non_virtual_bases)
+      {
+        get_base_components_methods(non_virtual_base, type, false);
+      }
+      for (const auto &virtual_base : virtual_bases)
+      {
+        get_base_components_methods(virtual_base, type, true);
+      }
     }
   }
 
@@ -1714,12 +1722,13 @@ symbolt *clang_cpp_convertert::get_fd_symbol(const clang::FunctionDecl &fd)
   return (context.find_symbol(id));
 }
 
-bool clang_cpp_convertert::get_base_map(
+bool clang_cpp_convertert::get_base_names(
   const clang::CXXRecordDecl &cxxrd,
-  base_map &map)
+  base_names &non_virtual_names,
+  base_names &virtual_names)
 {
   /*
-   * This function gets all the base classes from which we need to get the components/methods
+   * This function gets the direct base classes from which we need to get the components/methods
    */
   for (const clang::CXXBaseSpecifier &base : cxxrd.bases())
   {
@@ -1730,77 +1739,68 @@ bool clang_cpp_convertert::get_base_map(
     if (get_struct_union_class(base_cxxrd))
       return true;
 
-    // recursively get more bases for this `base`
+    // recursively get more **virtual** bases for this `base`
+    base_names ignored;
     if (base_cxxrd.bases_begin() != base_cxxrd.bases_end())
-      if (get_base_map(base_cxxrd, map))
+      if (get_base_names(base_cxxrd, ignored, virtual_names))
         return true;
 
     // get base class id
     std::string class_id, class_name;
     get_decl_name(base_cxxrd, class_name, class_id);
 
-    // avoid adding the same base, e.g. in case of diamond problem
-    if (map.find(class_id) != map.end())
-      continue;
-
-    auto status = map.insert({class_id, base_cxxrd});
-    (void)status;
-    assert(status.second);
+    if (base.isVirtual())
+    {
+      // we don't have to check for duplicate virtual bases because it's a set
+      virtual_names.insert(class_id);
+    }
+    else
+    {
+      // we don't have to check for duplicates, because clang should complain
+      // if there are any duplicate direct non-virtual bases.
+      non_virtual_names.insert(class_id);
+    }
   }
-
   return false;
 }
 
 void clang_cpp_convertert::get_base_components_methods(
-  base_map &map,
-  struct_union_typet &type)
+  const std::string &base_name,
+  struct_union_typet &type,
+  bool is_virtual_base)
 {
   irept::subt &base_ids = type.add("bases").get_sub();
-  for (const auto &base : map)
+
+  // get base class symbol
+  symbolt *s = context.find_symbol(base_name);
+  assert(s);
+  base_ids.emplace_back(s->id);
+
+  const struct_typet &base_type = to_struct_type(s->type);
+
+  // pull components in
+  const struct_typet::componentst &components = base_type.components();
+  for (auto component : components)
   {
-    std::string class_id = base.first;
-
-    // get base class symbol
-    symbolt *s = context.find_symbol(class_id);
-    assert(s);
-    base_ids.emplace_back(s->id);
-
-    const struct_typet &base_type = to_struct_type(s->type);
-
-    // pull components in
-    const struct_typet::componentst &components = base_type.components();
-    for (auto component : components)
-    {
-      // TODO: tweak access specifier
-      component.set("from_base", true);
-      if (!is_duplicate_component(component, type))
-        to_struct_type(type).components().push_back(component);
-    }
-
-    // pull methods in
-    const struct_typet::componentst &methods = base_type.methods();
-    for (auto method : methods)
-    {
-      // TODO: tweak access specifier
-      method.set("from_base", true);
-      if (!is_duplicate_method(method, type))
-        to_struct_type(type).methods().push_back(method);
-    }
+    // Do not add components from virtual base classes, they are added separately
+    if (component.get_bool("from_virtual_base"))
+      continue;
+    // TODO: tweak access specifier
+    component.set("from_base", true);
+    if (is_virtual_base)
+      component.set("from_virtual_base", true);
+    to_struct_type(type).components().push_back(component);
   }
-}
 
-bool clang_cpp_convertert::is_duplicate_component(
-  const struct_typet::componentt &component,
-  const struct_union_typet &type)
-{
-  const struct_typet &stype = to_struct_type(type);
-  const struct_typet::componentst &components = stype.components();
-  for (const auto &existing_component : components)
+  // pull methods in
+  const struct_typet::componentst &methods = base_type.methods();
+  for (auto method : methods)
   {
-    if (component.name() == existing_component.name())
-      return true;
+    // TODO: tweak access specifier
+    method.set("from_base", true);
+    if (!is_duplicate_method(method, type))
+      to_struct_type(type).methods().push_back(method);
   }
-  return false;
 }
 
 bool clang_cpp_convertert::is_duplicate_method(
