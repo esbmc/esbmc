@@ -104,7 +104,7 @@ expr2tc cvc_convt::get_array_elem(
 const std::string cvc_convt::solver_text()
 {
   std::stringstream ss;
-  ss << "CVC " << CVC4::Configuration::getVersionString();
+  ss << "CVC4 " << CVC4::Configuration::getVersionString();
   return ss.str();
 }
 

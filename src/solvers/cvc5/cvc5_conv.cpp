@@ -107,7 +107,7 @@ expr2tc cvc5_convt::get_array_elem(
 const std::string cvc5_convt::solver_text()
 {
   std::stringstream ss;
-  ss << "CVC " << slv.getVersion();
+  ss << "CVC5 " << slv.getVersion();
   return ss.str();
 }
 
