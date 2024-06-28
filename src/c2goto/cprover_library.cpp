@@ -260,7 +260,7 @@ void add_cprover_library(contextt &context, const languaget *language)
     }
   }
 
-  if (c_link(context, store_ctx))
+  if (c_link(context, store_ctx, "<built-in-library>"))
   {
     // Merging failed
     log_error("Failed to merge C library");

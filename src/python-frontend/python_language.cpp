@@ -108,7 +108,7 @@ bool python_languaget::final(contextt &)
   return false;
 }
 
-bool python_languaget::typecheck(contextt &context)
+bool python_languaget::typecheck(contextt &context, const std::string &)
 {
   // Load c models
   add_cprover_library(context, this);

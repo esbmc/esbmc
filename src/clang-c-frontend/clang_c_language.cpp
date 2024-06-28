@@ -317,7 +317,7 @@ bool clang_c_languaget::parse(const std::string &path)
   return false;
 }
 
-bool clang_c_languaget::typecheck(contextt &context)
+bool clang_c_languaget::typecheck(contextt &context, const std::string &)
 {
   clang_c_convertert converter(context, AST, "C");
   if (converter.convert())
