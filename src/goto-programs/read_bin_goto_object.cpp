@@ -11,7 +11,7 @@
 
 #ifdef PYTHON_FRONTEND
 // List of imported clib models
-std::vector<std::string> python_c_models = {"strcmp"};
+std::vector<std::string> python_c_models = {"strncmp"};
 #endif
 
 bool read_bin_goto_object(
