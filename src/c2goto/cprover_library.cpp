@@ -226,9 +226,12 @@ void add_cprover_library(contextt &context, const languaget *c_language)
    * that adds no new symbols. */
 
   new_ctx.foreach_operand(
-    [&context, &store_ctx, &symbol_deps, &to_include](const symbolt &s) {
+    [&context, &store_ctx, &symbol_deps, &to_include, &c_language](
+      const symbolt &s) {
       const symbolt *symbol = context.find_symbol(s.id);
-      if (symbol != nullptr && symbol->value.is_nil())
+      if (
+        c_language->id() == "python" ||
+        (symbol != nullptr && symbol->value.is_nil()))
       {
         store_ctx.add(s);
         ingest_symbol(s.id, symbol_deps, to_include);

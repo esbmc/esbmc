@@ -1,3 +1,7 @@
+if(ENABLE_PYTHON_FRONTEND)
+  add_definitions(-DPYTHON_FRONTEND)
+endif()
+
 add_library(gotoprograms goto_convert.cpp goto_function.cpp goto_main.cpp
   goto_sideeffects.cpp goto_program.cpp goto_check.cpp goto_inline.cpp
   remove_no_op.cpp goto_convert_functions.cpp remove_unreachable.cpp
