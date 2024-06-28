@@ -9,6 +9,11 @@
 
 #define BINARY_VERSION 1
 
+#ifdef PYTHON_FRONTEND
+// List of imported clib models
+std::vector<std::string> python_c_models = {"strcmp"};
+#endif
+
 bool read_bin_goto_object(
   std::istream &in,
   const std::string &filename,
@@ -79,6 +84,17 @@ bool read_bin_goto_object(
         functions.function_map.emplace(symbol.id, goto_functiont());
       functions.function_map.at(symbol.id).type = to_code_type(symbol.type);
     }
+
+#ifdef PYTHON_FRONTEND
+    // Add functions only from python_c_models list
+    auto it = std::find(
+      python_c_models.begin(),
+      python_c_models.end(),
+      symbol.get_function_name().c_str());
+    if (it == python_c_models.end())
+      continue;
+#endif
+
     context.add(symbol);
   }
 
