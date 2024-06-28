@@ -103,14 +103,16 @@ bool python_languaget::parse(const std::string &path)
   return false;
 }
 
-bool python_languaget::final(contextt & context)
+bool python_languaget::final(contextt &)
 {
-  add_cprover_library(context, this);
   return false;
 }
 
 bool python_languaget::typecheck(contextt &context)
 {
+  // Load c models
+  add_cprover_library(context, this);
+
   python_converter converter(context, ast);
   if (converter.convert())
     return true;

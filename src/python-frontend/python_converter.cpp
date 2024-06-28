@@ -326,6 +326,31 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   assert(!op.empty());
 
+  if (op == "Eq" && is_string(lhs.type()) && is_string(rhs.type()))
+  {
+    if (rhs.type() != lhs.type())
+      return gen_boolean(false);
+
+    array_typet &arr_type = static_cast<array_typet &>(lhs.type());
+    BigInt str_size =
+      binary2integer(arr_type.size().value().as_string(), false);
+
+    // call strncmp to compare strings
+    symbolt *strncmp = context.find_symbol("c:@F@strncmp");
+    assert(strncmp);
+    side_effect_expr_function_callt sideeffect;
+    sideeffect.function() = symbol_expr(*strncmp);
+    sideeffect.arguments().push_back(lhs); // passing lhs to strncmp
+    sideeffect.arguments().push_back(rhs); // passing rhs to strncmp
+    sideeffect.arguments().push_back(
+      from_integer(str_size, long_uint_type())); // passing n to strncmp
+    sideeffect.location() = get_location_from_decl(element);
+    sideeffect.type() = int_type();
+
+    lhs = sideeffect;
+    rhs = gen_zero(int_type());
+  }
+
   adjust_statement_types(lhs, rhs);
 
   assert(lhs.type() == rhs.type());
