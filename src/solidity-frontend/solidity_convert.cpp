@@ -1653,6 +1653,7 @@ bool solidity_convertert::get_expr(
   {
     if (expr["referencedDeclaration"] > 0)
     {
+      const nlohmann::json &decl = find_decl_ref(expr["referencedDeclaration"]);
       // for Contract Type Identifier Only
       if (
         expr["typeDescriptions"]["typeString"].get<std::string>().find(
@@ -1660,11 +1661,29 @@ bool solidity_convertert::get_expr(
       {
         // TODO
         log_error("we do not handle contract type identifier for now");
-        return true;
+        if (decl["nodeType"] == "VariableDeclaration")
+        {
+          if (get_var_decl_ref(decl, new_expr))
+            return true;
+        }
+        else if (decl["nodeType"] == "ContractDefinition")
+        {
+          std::string id;
+          id = prefix + decl["name"].get<std::string>();
+
+          if (context.find_symbol(id) == nullptr)
+          {
+            if (get_struct_class(decl))
+              return true;
+          }
+
+          new_expr = symbol_expr(*context.find_symbol(id));
+          break;
+        }
       }
 
       // Soldity uses +ve odd numbers to refer to var or functions declared in the contract
-      const nlohmann::json &decl = find_decl_ref(expr["referencedDeclaration"]);
+      //const nlohmann::json &decl = find_decl_ref(expr["referencedDeclaration"]);
       if (decl == empty_json)
         return true;
 
