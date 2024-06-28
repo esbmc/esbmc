@@ -570,7 +570,14 @@ function_id python_converter::build_function_id(const nlohmann::json &element)
   {
     is_member_function_call = true;
     func_name = func_json["attr"];
-    obj_name = func_json["value"]["id"];
+    if (func_json["value"]["_type"] == "Attribute")
+    {
+      obj_name = func_json["value"]["attr"];
+    }
+    else
+    {
+      obj_name = func_json["value"]["id"];
+    }
     if (
       !is_class(obj_name, ast_json) &&
       json_utils::is_module(obj_name, ast_json))
@@ -639,8 +646,10 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 
     if (element["func"]["_type"] == "Attribute")
     {
-      const std::string &func_value =
-        element["func"]["value"]["id"].get<std::string>();
+      const auto& subelement = element["func"]["value"];
+      const std::string &func_value = subelement["_type"] == "Attribute"
+                                        ? subelement["attr"].get<std::string>()
+                                        : subelement["id"].get<std::string>();
       if (is_class(func_value, ast_json) || is_builtin_type(func_value))
         is_class_method_call = true;
       else if (!json_utils::is_module(func_value, ast_json))
