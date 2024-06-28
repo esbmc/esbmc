@@ -11,7 +11,7 @@ public:
 
   bool final(contextt &context) override;
 
-  bool typecheck(contextt &context) override;
+  bool typecheck(contextt &context, const std::string &module) override;
 
   bool from_expr(
     const exprt &expr,

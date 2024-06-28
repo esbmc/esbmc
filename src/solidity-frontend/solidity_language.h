@@ -17,7 +17,7 @@ public:
 
   bool final(contextt &context) override;
 
-  bool typecheck(contextt &context) override;
+  bool typecheck(contextt &context, const std::string &module) override;
 
   std::string id() const override
   {

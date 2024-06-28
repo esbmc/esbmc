@@ -81,7 +81,7 @@ extern "C" {
   return intrinsics;
 }
 
-bool clang_cpp_languaget::typecheck(contextt &context)
+bool clang_cpp_languaget::typecheck(contextt &context, const std::string &)
 {
   clang_cpp_convertert converter(context, AST, "C++");
   if (converter.convert())
