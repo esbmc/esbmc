@@ -1,18 +1,33 @@
-// SPDX-License-Identifier: GPL-3.0 
-pragma solidity >=0.5.0;
- 
-// Creating a contract
-contract eventExample {
- 
-    // Declaring state variables
-    uint256 public value = 0;
- 
-    // Declaring an event
-    event Increment(address owner);   
- 
-    // Defining a function for logging event 
-    function getValue(uint _a, uint _b) public {
-        emit Increment(msg.sender); 
-        value = _a + _b;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+// 定义子合约 SubContract
+contract SubContract {
+    uint256 public value;
+
+    constructor(uint256 _value) {
+        value = _value;
+    }
+
+    function setValue(uint256 _value) public {
+        value = _value;
+    }
+}
+
+// 定义主合约 MainContract
+contract MainContract {
+    SubContract public subContract;
+
+    constructor(uint256 _initialValue) {
+        // 实例化子合约并传递 _initialValue
+        subContract = new SubContract(_initialValue);
+    }
+
+    function setSubContractValue(uint256 _value) public {
+        subContract.setValue(_value);
+    }
+
+    function getSubContractValue() public view returns (uint256) {
+        return subContract.value();
     }
 }

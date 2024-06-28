@@ -1658,18 +1658,48 @@ bool solidity_convertert::get_expr(
   {
     if (expr["referencedDeclaration"] > 0)
     {
+      const nlohmann::json &decl = find_decl_ref(expr["referencedDeclaration"]);
+      printf(decl["nodeType"].dump().c_str());
+      fflush(stdout);
       // for Contract Type Identifier Only
       if (
         expr["typeDescriptions"]["typeString"].get<std::string>().find(
           "contract") != std::string::npos)
       {
         // TODO
-        log_error("we do not handle contract type identifier for now");
-        return true;
+        log_error("we do not handle contract type identifier for now\n");
+        if (decl["nodeType"] == "VariableDeclaration")
+        {
+          printf(decl["nodeType"].dump().c_str());
+          fflush(stdout);
+          if (get_var_decl_ref(decl, new_expr))
+            return true;
+        }
+        else if (decl["nodeType"] == "ContractDefinition")
+        {
+          std::string id;
+          id = prefix + decl["name"].get<std::string>();
+          printf(expr["referencedDeclaration"].dump().c_str());
+          printf("id: %s\n", id.c_str());
+          fflush(stdout);
+          printf(context.find_symbol(id) == nullptr ? "true\n" : "false\n");
+          fflush(stdout);
+
+          if (context.find_symbol(id) == nullptr)
+          {
+            log_status("ContractDefinition found in the symbol table");
+            if (get_struct_class(decl))
+              return true;
+          }
+
+          new_expr = symbol_expr(*context.find_symbol(id));
+          break;
+        }
+
       }
 
       // Soldity uses +ve odd numbers to refer to var or functions declared in the contract
-      const nlohmann::json &decl = find_decl_ref(expr["referencedDeclaration"]);
+      //const nlohmann::json &decl = find_decl_ref(expr["referencedDeclaration"]);
       if (decl == empty_json)
         return true;
 
@@ -1689,6 +1719,9 @@ bool solidity_convertert::get_expr(
         {
           std::string id;
           id = prefix + "struct " + decl["canonicalName"].get<std::string>();
+          printf(expr["referencedDeclaration"].dump().c_str());
+          printf("id: %s\n", id.c_str());
+          fflush(stdout);
 
           if (context.find_symbol(id) == nullptr)
           {
