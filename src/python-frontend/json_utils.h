@@ -44,6 +44,25 @@ bool is_class(const std::string &name, const JsonType &ast_json)
       if (is_class(name, imported_module_json))
         return true;
     }
+    if (obj["_type"] == "Import")
+    {
+      for (const auto &imported : obj["names"])
+      {
+        std::stringstream module_path;
+        module_path << ast_json["ast_output_dir"].template get<std::string>()
+                    << "/" << imported["name"].template get<std::string>()
+                    << ".json";
+        std::ifstream imported_file(module_path.str());
+        if (!imported_file.is_open())
+          return false;
+
+        JsonType imported_module_json;
+        imported_file >> imported_module_json;
+
+        if (is_class(name, imported_module_json))
+          return true;
+      }
+    }
   }
 
   return false;
