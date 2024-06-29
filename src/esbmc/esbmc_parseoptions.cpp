@@ -337,12 +337,6 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   if (cmdline.isset("compact-trace"))
     options.set_option("no-slice", true);
 
-  if (cmdline.isset("smt-during-symex"))
-  {
-    log_status("Enabling --no-slice due to presence of --smt-during-symex");
-    options.set_option("no-slice", true);
-  }
-
   if (cmdline.isset("smt-thread-guard") || cmdline.isset("smt-symex-guard"))
   {
     if (!cmdline.isset("smt-during-symex"))
