@@ -33,7 +33,7 @@ extern "C"
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 #include <goto-programs/abstract-interpretation/gcse.h>
 #include <goto-programs/loop_numbers.h>
-#include <goto-programs/read_goto_binary.h>
+#include <goto-programs/goto_binary_reader.h>
 #include <goto-programs/write_goto_binary.h>
 #include <goto-programs/remove_no_op.h>
 #include <goto-programs/remove_unreachable.h>
@@ -1602,9 +1602,10 @@ bool esbmc_parseoptionst::create_goto_program(
 bool esbmc_parseoptionst::read_goto_binary(goto_functionst &goto_functions)
 {
   log_progress("Reading GOTO program from file");
+  goto_binary_reader goto_reader;
   for (const auto &arg : cmdline.args)
   {
-    if (::read_goto_binary(arg, context, goto_functions))
+    if (goto_reader.read_goto_binary(arg, context, goto_functions))
     {
       log_error("Failed to open `{}'", arg);
       return true;

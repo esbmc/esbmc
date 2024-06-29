@@ -9,16 +9,12 @@
 
 #define BINARY_VERSION 1
 
-#ifdef PYTHON_FRONTEND
-// List of imported clib models
-std::vector<std::string> python_c_models = {"strncmp"};
-#endif
-
 bool read_bin_goto_object(
   std::istream &in,
   const std::string &filename,
   contextt &context,
-  goto_functionst &functions)
+  std::vector<std::string> &functions,
+  goto_functionst &goto_functions)
 {
   std::ostringstream str;
 
@@ -79,21 +75,21 @@ bool read_bin_goto_object(
       // makes sure there is an empty function
       // for every function symbol and fixes
       // the function types.
-      auto it = functions.function_map.find(symbol.id);
-      if (it == functions.function_map.end())
-        functions.function_map.emplace(symbol.id, goto_functiont());
-      functions.function_map.at(symbol.id).type = to_code_type(symbol.type);
+      auto it = goto_functions.function_map.find(symbol.id);
+      if (it == goto_functions.function_map.end())
+        goto_functions.function_map.emplace(symbol.id, goto_functiont());
+      goto_functions.function_map.at(symbol.id).type =
+        to_code_type(symbol.type);
     }
 
-#ifdef PYTHON_FRONTEND
-    // Add functions only from python_c_models list
-    auto it = std::find(
-      python_c_models.begin(),
-      python_c_models.end(),
-      symbol.get_function_name().c_str());
-    if (it == python_c_models.end())
-      continue;
-#endif
+    // Add functions only from the list
+    if (!functions.empty())
+    {
+      auto it = std::find(
+        functions.begin(), functions.end(), symbol.get_function_name().c_str());
+      if (it == functions.end())
+        continue;
+    }
 
     context.add(symbol);
   }
@@ -106,13 +102,23 @@ bool read_bin_goto_object(
     irept t;
     dstring fname = irepconverter.read_string(in);
     gfconverter.convert(in, t);
-    auto it = functions.function_map.find(fname);
-    if (it == functions.function_map.end())
-      functions.function_map.emplace(fname, goto_functiont());
-    goto_functiont &f = functions.function_map.at(fname);
+    auto it = goto_functions.function_map.find(fname);
+    if (it == goto_functions.function_map.end())
+      goto_functions.function_map.emplace(fname, goto_functiont());
+    goto_functiont &f = goto_functions.function_map.at(fname);
     convert(t, f.body);
     f.body_available = f.body.instructions.size() > 0;
   }
 
   return false;
+}
+
+bool read_bin_goto_object(
+  std::istream &in,
+  const std::string &filename,
+  contextt &context,
+  goto_functionst &goto_functions)
+{
+  std::vector<std::string> empty;
+  return read_bin_goto_object(in, filename, context, empty, goto_functions);
 }
