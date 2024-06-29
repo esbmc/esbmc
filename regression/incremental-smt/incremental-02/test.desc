@@ -1,0 +1,6 @@
+CORE
+main.c
+ --bitwuzla --multi-property  --smt-during-symex  --smt-symex-guard --smt-thread-guard --smt-symex-assert --no-bounds-check --no-pointer-check --no-div-by-zero-check 
+^assertion (y == 10) && (y != 10)$
+^assertion x > y$
+^VERIFICATION FAILED$
