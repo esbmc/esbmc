@@ -13,4 +13,6 @@ assert str1[4] == 'e'
 str3 = str("test")
 assert len(str3) == 4
 
-#assert str3 == "test"
+other = str("test")
+assert str3 == other
+assert other == "test"
