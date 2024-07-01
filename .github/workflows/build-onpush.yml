@@ -9,7 +9,7 @@ jobs:
   testing-tool:
     runs-on: ubuntu-20.04
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v4
     - name: Runs testing tool unit test
       run: cd regression && python3 testing_tool_test.py
 
