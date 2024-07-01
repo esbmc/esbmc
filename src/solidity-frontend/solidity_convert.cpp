@@ -1673,6 +1673,7 @@ bool solidity_convertert::get_expr(
 
           if (context.find_symbol(id) == nullptr)
           {
+            log_status("symbol not found in the context, creating a new one");
             if (get_struct_class(decl))
               return true;
           }
@@ -2021,10 +2022,12 @@ bool solidity_convertert::get_expr(
     const nlohmann::json &callee_expr_json = expr["expression"];
 
     // 0. check if it's a solidity built-in function
+    log_status("check if it's a built-in function:");
     if (
       !get_sol_builtin_ref(expr, new_expr) &&
       !check_intrinsic_function(callee_expr_json))
     {
+      log_status("built-in function");
       // construct call
       typet type = to_code_type(new_expr.type()).return_type();
 
@@ -2054,6 +2057,7 @@ bool solidity_convertert::get_expr(
       new_expr = call;
       break;
     }
+    log_status("not built-in function");
 
     // 1. Get callee expr
     if (
@@ -2061,6 +2065,7 @@ bool solidity_convertert::get_expr(
       callee_expr_json["nodeType"] == "MemberAccess")
     {
       // ContractMemberCall
+      log_status("ContractMemberCall");
 
       const int contract_func_id =
         callee_expr_json["referencedDeclaration"].get<int>();
@@ -2133,15 +2138,18 @@ bool solidity_convertert::get_expr(
     nlohmann::json implicit_cast_expr =
       make_implicit_cast_expr(callee_expr_json, "FunctionToPointerDecay");
     exprt callee_expr;
+    log_error("1111");
     if (get_expr(implicit_cast_expr, callee_expr))
       return true;
 
     // 2. Get type
     // extract from the return_type
+    log_error("2222");
     assert(callee_expr.is_symbol());
     if (expr["kind"] == "structConstructorCall")
     {
       // e.g. Book book = Book('Learn Java', 'TP', 1);
+      log_error("structConstructorCall");
       if (callee_expr.type().id() != irept::id_struct)
         return true;
 

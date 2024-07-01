@@ -1,24 +1,27 @@
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+// SPDX-License-Identifier: GPL-3.0
+pragma solidity >=0.5.0;
 
-contract ExistingContract {
-    function setValue(uint256 _value) public{}
-    function getValue() public view returns (uint256){}
-}
+contract Book {
+    string public title;
+    string public author;
+    uint public book_id;
 
-contract MainContract is ExistingContract  {
-    ExistingContract public existingContract;
-
-    constructor(address _contractAddress) {
-        existingContract = ExistingContract(_contractAddress);
-    }
-
-    function setExistingContractValue(uint256 _value) public {
-        existingContract.setValue(_value);
-    }
-
-    function getExistingContractValue() public view returns (uint256) {
-        return existingContract.getValue();
+    
+    function setDetails(string memory _title, string memory _author, uint _book_id) public {
+        title = _title;
+        author = _author;
+        book_id = _book_id;
     }
 }
 
+contract Base is Book {
+    Book public book;
+
+    function setBook() public {
+        book = new Book();
+        book.setDetails("Learn Java", "TP", 1);
+
+    }
+
+
+}
