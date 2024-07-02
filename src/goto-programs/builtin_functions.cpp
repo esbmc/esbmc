@@ -872,7 +872,7 @@ void goto_convertt::do_function_call_symbol(
       log_error("`{}' expected to have one argument", id2string(base_name));
       abort();
     }
-    
+
     goto_programt::targett t_n = dest.add_instruction(ASSIGN);
 
     exprt deref("dereference", lhs.type());
