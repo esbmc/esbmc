@@ -1126,7 +1126,9 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       // T __builtin_nontemporal_load(T *addr);
       assert(expr.arguments().front().type().is_pointer());
       typet t = to_pointer_type(expr.arguments().front().type()).subtype();
-      assert(t.is_floatbv() || t.is_vector() || t.is_signedbv() || t.is_unsignedbv());
+      assert(
+        t.is_floatbv() || t.is_vector() || t.is_signedbv() ||
+        t.is_unsignedbv());
       expr.type() = t;
     }
   }
