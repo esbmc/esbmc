@@ -608,9 +608,17 @@ bool solidity_convertert::get_var_decl(
     decl.operands().push_back(val);
   }
 
-  // special handle for contract type
+  // special handle for contract-type variable instantiation
   // e.g.
-  //  Base x ==> Base x = new Base();
+  //  Base x ==> Base x = Base();
+  // in Solidity, the contract-type var will not get automatically instantiated
+  // however in c++ (and also the backend of ESBMC), the class-type object will get instantiated
+  // therefore, we manually create a constructor which
+  // - has a empty body
+  // - will not be conflict with the ctor in the src file by any means.
+  // Approach: since there is no pointer in Solidity, we create a ctor like:
+  //   Base(int *p){}
+  // and the object will be instantiated as Base x = Base(nullptr);
   else if (
     SolidityGrammar::get_type_name_t(
       ast_node["typeName"]["typeDescriptions"]) ==
@@ -623,18 +631,12 @@ bool solidity_convertert::get_var_decl(
     const std::string contract_name =
       ast_node["typeName"]["pathNode"]["name"].get<std::string>();
 
-    // 2. add a empty constructor even if there is a constructor already
-    // the idea is to mimic C++
-    if (add_implicit_constructor(contract_name))
-      return true;
-
-    // 3. since the contract type variable has no initial value, i.e. explicit constructor call,
-    // we construct an implicit constructor expression
+    // 2. add a empty constructor to mimic C++ object auto instantiation
     exprt val;
-    if (get_implicit_ctor_ref(val, contract_name))
+    if (get_instantiation_ctor_call(contract_name, val))
       return true;
 
-    // 4. make it to a temporary object
+    // 3. make it to a temporary object
     side_effect_exprt tmp_obj("temporary_object", val.type());
     codet code_expr("expression");
     code_expr.operands().push_back(val);
@@ -642,10 +644,10 @@ bool solidity_convertert::get_var_decl(
     tmp_obj.location() = val.location();
     val.swap(tmp_obj);
 
-    // 5. generate typecast for Solidity contract
+    // 4. generate typecast for Solidity contract
     solidity_gen_typecast(ns, val, t);
 
-    // 6. add constructor call to declaration operands
+    // 5. add constructor call to declaration operands
     added_symbol.value = val;
     decl.operands().push_back(val);
   }
@@ -1000,19 +1002,103 @@ bool solidity_convertert::get_error_definition(const nlohmann::json &ast_node)
 }
 
 // add a empty constructor to the contract
-// Note that the target contract might already contain an explicit ctor
 bool solidity_convertert::add_implicit_constructor(
   const std::string &contract_name)
 {
   std::string name, id;
   name = contract_name;
-  id = get_implict_ctor_call_id(contract_name);
 
+  // do nothing if there is already an explicit or implicit ctor
+  get_ctor_call_id(contract_name, id);
   if (context.find_symbol(id) != nullptr)
     return false;
 
+  // if we reach here, the id must be equal to get_implicit_ctor_id()
   // an implicit constructor is an void empty function
-  return get_default_function(name, id);
+  symbolt dump;
+  return get_default_function(name, id, dump);
+}
+
+bool solidity_convertert::get_instantiation_ctor_call(
+  const std::string &contract_name,
+  exprt &new_expr)
+{
+  // 1. add the ctor symbol
+  std::string name, id;
+  name = contract_name;
+  id = "sol:@C@" + contract_name + "@F@" + contract_name + "#";
+
+  code_typet type;
+  type.return_type() = empty_typet();
+  type.return_type().set("cpp_type", "void");
+
+  locationt location_begin;
+
+  if (current_fileName == "")
+    return true;
+  std::string debug_modulename = current_fileName;
+
+  symbolt symbol;
+  get_default_symbol(symbol, debug_modulename, type, name, id, location_begin);
+
+  symbol.lvalue = true;
+  symbol.is_extern = false;
+  symbol.file_local = false;
+
+  auto &added_symbol = *move_symbol_to_context(symbol);
+
+  code_blockt body_exprt = code_blockt();
+  added_symbol.value = body_exprt;
+  type.make_ellipsis();
+  added_symbol.type = type;
+
+  // add "int* p" to the function param
+  typet param_type = pointer_typet(int_type());
+  auto param = code_typet::argumentt();
+  param.type() = param_type;
+
+  // the name and id can be hard-coded since they will not be referred
+  param.cmt_base_name("p");
+  param.cmt_identifier(
+    "sol:@C@" + contract_name + "@F@" + contract_name + "@p#");
+  param.location() = location_begin;
+
+  symbolt param_symbol;
+  get_default_symbol(
+    param_symbol, debug_modulename, param_type, name, id, location_begin);
+
+  param_symbol.lvalue = true;
+  param_symbol.is_parameter = true;
+  param_symbol.file_local = true;
+
+  move_symbol_to_context(param_symbol);
+
+  // update the param
+  type.arguments().push_back(param);
+  added_symbol.type = type;
+
+  // 2. construct the ctor call
+  side_effect_expr_function_callt call;
+  struct_typet tmp = struct_typet();
+  call.function() = symbol_expr(added_symbol);
+  call.type() = tmp;
+
+  // add parameter: nullptr
+  // 1: constant
+  //   * type: pointer
+  //       * subtype: signedbv
+  //           * width: 32
+  //           * #cpp_type: signed_int
+  //   * value: NULL
+
+  typet null_type = gen_pointer_type(int_type());
+  exprt arg = gen_zero(null_type);
+  call.arguments().push_back(arg);
+
+  call.set("constructor", 1);
+  new_expr = call;
+
+  return false;
 }
 
 bool solidity_convertert::get_access_from_decl(
@@ -1048,7 +1134,6 @@ bool solidity_convertert::get_function_definition(
   const std::string old_functionName = current_functionName;
 
   current_functionDecl = &ast_node;
-  bool is_ctor = false;
   if (
     (*current_functionDecl)["name"].get<std::string>() == "" &&
     (*current_functionDecl).contains("kind") &&
@@ -1070,7 +1155,10 @@ bool solidity_convertert::get_function_definition(
       return true;
   }
   else
+  {
     type.return_type() = empty_typet();
+    type.return_type().set("cpp_type", "void");
+  }
 
   // special handling for tuple:
   // construct a tuple type and a tuple instance
@@ -1117,13 +1205,6 @@ bool solidity_convertert::get_function_definition(
 
   // 11. Convert parameters, if no parameter, assume ellipsis
   //  - Convert params before body as they may get referred by the statement in the body
-  if (is_ctor)
-  {
-    /* need (type *) as first parameter, this is equivalent to the 'this'
-     * pointer in C++ */
-    code_typet::argumentt param(pointer_typet(type.return_type()));
-    type.arguments().push_back(param);
-  }
 
   SolidityGrammar::ParameterListT params =
     SolidityGrammar::get_parameter_list_t(ast_node["parameters"]);
@@ -4640,13 +4721,7 @@ bool solidity_convertert::move_mapping_to_ctor()
 
   // get ctor
   std::string ctor_id;
-
-  // we first try to find the explicit constructor defined in the source file.
-  ctor_id = get_explicit_ctor_call_id(current_contractName);
-  if (ctor_id.empty())
-    // then we try to find the implicit constructor we manually added
-    ctor_id = get_implict_ctor_call_id(current_contractName);
-  if (context.find_symbol(ctor_id) == nullptr)
+  if (get_ctor_call_id(current_contractName, ctor_id))
     return true;
   symbolt &ctor = *context.find_symbol(ctor_id);
 
@@ -5137,7 +5212,26 @@ unsigned int solidity_convertert::add_offset(
   return end_position;
 }
 
-// get the implicit constructor symbol id
+// get the constructor symbol id
+bool solidity_convertert::get_ctor_call_id(
+  const std::string &contract_name,
+  std::string &ctor_id)
+{
+  // we first try to find the explicit constructor defined in the source file.
+  ctor_id = get_explicit_ctor_call_id(contract_name);
+  if (ctor_id.empty())
+    // then we try to find the implicit constructor we manually added
+    ctor_id = get_implict_ctor_call_id(contract_name);
+
+  if (context.find_symbol(ctor_id) == nullptr)
+  {
+    // this means the neither explicit nor implicit constructor is found
+    return true;
+  }
+  return false;
+}
+
+// get the explicit constructor symbol id
 // retrun empty string if no explicit ctor
 std::string
 solidity_convertert::get_explicit_ctor_call_id(const std::string &contract_name)
@@ -5171,7 +5265,8 @@ solidity_convertert::get_explicit_ctor_call_id(const std::string &contract_name)
 std::string
 solidity_convertert::get_implict_ctor_call_id(const std::string &contract_name)
 {
-  return "sol:@C@" + contract_name + "@F@" + contract_name + "#";
+  // for implicit ctor, the id is manually set as 0
+  return "sol:@C@" + contract_name + "@F@" + contract_name + "#0";
 }
 
 std::string
@@ -5929,13 +6024,11 @@ bool solidity_convertert::get_implicit_ctor_ref(
 {
   // to obtain the type info
   std::string name, id;
-
+  name = contract_name;
   id = get_implict_ctor_call_id(contract_name);
   if (context.find_symbol(id) == nullptr)
-  {
-    if (add_implicit_constructor(contract_name))
-      return true;
-  }
+    return true;
+
   const symbolt &s = *context.find_symbol(id);
   typet type = s.type;
 
@@ -5961,20 +6054,12 @@ bool solidity_convertert::get_implicit_ctor_ref(
 */
 bool solidity_convertert::get_default_function(
   const std::string name,
-  const std::string id)
+  const std::string id,
+  symbolt &added_symbol)
 {
-  nlohmann::json ast_node;
-  auto j2 = R"(
-              {
-                "nodeType": "ParameterList",
-                "parameters": []
-              }
-            )"_json;
-  ast_node["returnParameters"] = j2;
-
   code_typet type;
-  if (get_type_description(ast_node["returnParameters"], type.return_type()))
-    return true;
+  type.return_type() = empty_typet();
+  type.return_type().set("cpp_type", "void");
 
   locationt location_begin;
 
@@ -5989,13 +6074,14 @@ bool solidity_convertert::get_default_function(
   symbol.is_extern = false;
   symbol.file_local = false;
 
-  symbolt &added_symbol = *move_symbol_to_context(symbol);
+  auto &sym = *move_symbol_to_context(symbol);
 
   code_blockt body_exprt = code_blockt();
-  added_symbol.value = body_exprt;
-
+  sym.value = body_exprt;
   type.make_ellipsis();
-  added_symbol.type = type;
+  sym.type = type;
+
+  added_symbol = sym;
 
   return false;
 }
@@ -6204,17 +6290,8 @@ bool solidity_convertert::multi_transaction_verification(
 
     // 1.2 construct a constructor function call and move to func_body
     std::string ctor_id;
-    // we first try to find the explicit constructor defined in the source file.
-    ctor_id = get_explicit_ctor_call_id(c_name);
-    if (ctor_id.empty())
-      // then we try to find the implicit constructor we manually added
-      ctor_id = get_implict_ctor_call_id(c_name);
-
-    if (context.find_symbol(ctor_id) == nullptr)
-    {
-      log_error("No constructor found.");
+    if (get_ctor_call_id(c_name, ctor_id))
       return true;
-    }
     const symbolt &constructor = *context.find_symbol(ctor_id);
     code_function_callt call;
     call.location() = constructor.location;
