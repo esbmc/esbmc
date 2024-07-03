@@ -1960,6 +1960,8 @@ bool esbmc_parseoptionst::output_goto_program(
       return true;
     }
 
+    GOTO_CFG_OPTIMIZATIONS::apply_bb_constant_folding(goto_functions);
+
     // Output the GOTO program to the log (and terminate or continue) in
     // a human-readable format
     if (

@@ -48,3 +48,10 @@ public:
   std::unordered_map<std::string, std::vector<std::shared_ptr<basic_block>>>
     basic_blocks;
 };
+
+
+namespace GOTO_CFG_OPTIMIZATIONS
+{
+  void apply_bb_constant_folding(goto_functionst &goto_functions);
+}
+

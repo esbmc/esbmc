@@ -1,3 +1,5 @@
+#include <irep2/irep2_expr.h>
+#include <irep2/irep2_utils.h>
 #include <goto-programs/goto_cfg.h>
 
 goto_cfg::goto_cfg(goto_functionst &goto_functions)
@@ -164,4 +166,103 @@ void goto_cfg::dump_graph() const
     }
     file << "}\n";
   }
+}
+
+void rec_replace_symbols(
+  expr2tc &e,
+  const std::unordered_map<std::string, expr2tc> &constant_expressions)
+{
+  if (!e)
+    return;
+
+  if (is_symbol2t(e))
+  {
+    auto it = constant_expressions.find(to_symbol2t(e).thename.as_string());
+    if (it != constant_expressions.end())
+    {
+      e = it->second;
+      return;
+    }
+  }
+
+  e->Foreach_operand(
+                     [&constant_expressions](expr2tc &e2) { rec_replace_symbols(e2, constant_expressions); });
+
+}
+
+
+void GOTO_CFG_OPTIMIZATIONS::apply_bb_constant_folding(goto_functionst &goto_functions)
+{
+  goto_cfg cfg(goto_functions);
+  for (auto &[function, bbs] : cfg.basic_blocks)
+  {
+    log_status("[CFG] Constant folding in function {}", function);
+    
+    for (auto bb : bbs)
+    {
+      std::unordered_map<std::string , expr2tc> constant_expressions;
+      for (auto it = bb->begin; it != bb->end; it++)
+      {
+        if (it->is_assert() || it->is_assume() || it->is_backwards_goto() || it->is_goto())
+        {
+          // Optimize condition
+          rec_replace_symbols(it->guard, constant_expressions);
+          simplify(it->guard);
+        }
+        else if (it->is_decl())
+        {
+          // Update map
+          constant_expressions.erase(to_code_decl2t(it->code).value.as_string());
+        }
+        else if (it->is_assign())
+        {
+          // Optimize RHS and update map
+          code_assign2t &assign = to_code_assign2t(it->code);
+
+          rec_replace_symbols(assign.source, constant_expressions);
+          simplify(assign.source);
+          if (is_dereference2t(assign.target))
+          {
+            // Just clear until we have a points-to
+            constant_expressions.clear();
+          }
+          else if (is_symbol2t(assign.target))
+          {
+            symbol2t &sym = to_symbol2t(assign.target);
+            if (is_constant(assign.source)) {
+              constant_expressions[sym.thename.as_string()] = assign.source;
+                }
+            else {
+              constant_expressions.erase(sym.thename.as_string());
+}
+          }
+          else
+          {
+            log_warning("[CFG] Unsupported assignment");
+            assign.target->dump();
+          }
+        }
+        else if (it->is_function_call())
+        {
+          // Optimize arguments
+          rec_replace_symbols(it->code, constant_expressions);
+          simplify(it->code);
+           
+        }
+        else if (it->is_return())
+        {
+          // Optimize result
+          rec_replace_symbols(it->code, constant_expressions);
+          simplify(it->code);
+        }
+        else if (it->is_throw() || it->is_catch())
+        {
+          log_error("Constant folding does not support try/cath");
+          abort();
+        }
+      }
+    }
+      
+  }
+  
 }
