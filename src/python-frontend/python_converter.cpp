@@ -226,7 +226,8 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
   typet &lhs_type = lhs.type();
   typet &rhs_type = rhs.type();
 
-  auto update_symbol = [&](exprt &expr) {
+  auto update_symbol = [&](exprt &expr)
+  {
     std::string id = create_symbol_id() + "@" + expr.name().c_str();
     symbolt *s = context.find_symbol(id);
     if (s != nullptr)
@@ -301,7 +302,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   else if (element.contains("value"))
     rhs = get_expr(element["value"]);
 
-  auto to_side_effect_call = [](exprt &expr) {
+  auto to_side_effect_call = [](exprt &expr)
+  {
     side_effect_expr_function_callt side_effect;
     code_function_callt &code = static_cast<code_function_callt &>(expr);
     side_effect.function() = code.function();
@@ -571,13 +573,10 @@ function_id python_converter::build_function_id(const nlohmann::json &element)
     is_member_function_call = true;
     func_name = func_json["attr"];
     if (func_json["value"]["_type"] == "Attribute")
-    {
       obj_name = func_json["value"]["attr"];
-    }
     else
-    {
       obj_name = func_json["value"]["id"];
-    }
+
     if (
       !is_class(obj_name, ast_json) &&
       json_utils::is_module(obj_name, ast_json))
@@ -646,7 +645,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 
     if (element["func"]["_type"] == "Attribute")
     {
-      const auto& subelement = element["func"]["value"];
+      const auto &subelement = element["func"]["value"];
       const std::string &func_value = subelement["_type"] == "Attribute"
                                         ? subelement["attr"].get<std::string>()
                                         : subelement["id"].get<std::string>();
@@ -998,7 +997,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         instance_attr_map[symbol->id.as_string()].insert(attr_name);
       }
 
-      auto is_instance_attr = [&]() -> bool {
+      auto is_instance_attr = [&]() -> bool
+      {
         auto it = instance_attr_map.find(symbol->id.as_string());
         if (it != instance_attr_map.end())
         {
@@ -1098,13 +1098,15 @@ bool python_converter::is_constructor_call(const nlohmann::json &json)
    * rhs corresponds to the name of a class. */
 
   bool is_ctor_call = false;
-  context.foreach_operand([&](const symbolt &s) {
-    if (s.type.id() == "struct" && s.name == func_name)
+  context.foreach_operand(
+    [&](const symbolt &s)
     {
-      is_ctor_call = true;
-      return;
-    }
-  });
+      if (s.type.id() == "struct" && s.name == func_name)
+      {
+        is_ctor_call = true;
+        return;
+      }
+    });
   return is_ctor_call;
 }
 
