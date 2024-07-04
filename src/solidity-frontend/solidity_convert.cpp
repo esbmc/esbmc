@@ -206,12 +206,18 @@ void solidity_convertert::multi_Json_file(nlohmann::json &src_ast_json)
 {
   // This function is used to handle multiple JSON files into a single JSON file
   src_ast_json = src_ast_json_array[0];
+
   // Find the position to insert after "PragmaDirective"
-  auto it = std::find_if(
-    src_ast_json["nodes"].begin(),
-    src_ast_json["nodes"].end(),
-    [](const nlohmann::json &node)
-    { return node["nodeType"] == "PragmaDirective"; });
+  size_t insert_pos = 0;
+  for (size_t i = 0; i < src_ast_json["nodes"].size(); ++i)
+  {
+    if (src_ast_json["nodes"][i]["nodeType"] == "PragmaDirective")
+    {
+      insert_pos = i + 1;
+      break;
+    }
+  }
+
   for (size_t i = 1; i < src_ast_json_array.size(); ++i)
   {
     nlohmann::json &imported_part = src_ast_json_array[i];
@@ -224,7 +230,9 @@ void solidity_convertert::multi_Json_file(nlohmann::json &src_ast_json)
          node["contractKind"] == "interface"))
       {
         // Add the node after "PragmaDirective"
-        it = src_ast_json["nodes"].insert(it + 1, node);
+        src_ast_json["nodes"].insert(
+          src_ast_json["nodes"].begin() + insert_pos, node);
+        ++insert_pos; // Adjust the insert position for the next node
       }
     }
   }
