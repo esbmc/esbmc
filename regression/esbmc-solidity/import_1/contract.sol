@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0
-import "./contract_import.sol";
+import "./contract2.sol";
 pragma solidity >=0.8.0;
 
 

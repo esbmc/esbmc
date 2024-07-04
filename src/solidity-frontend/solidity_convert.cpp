@@ -12,6 +12,7 @@
 #include <regex>
 
 #include <fstream>
+#include <iostream>
 
 solidity_convertert::solidity_convertert(
   contextt &_context,
@@ -204,22 +205,50 @@ bool solidity_convertert::convert()
 
 void solidity_convertert::multi_json_file()
 {
-  // This function is used to handle multiple JSON files into a single JSON file
+  // Import relationship diagram
+  std::unordered_map<std::string, std::unordered_set<std::string>> import_graph;
+  // Path to JSON object mapping
+  std::unordered_map<std::string, nlohmann::json> path_to_json;
+  // Constructing an import relationship diagram
+  for (auto &ast_json : src_ast_json_array)
+  {
+    std::string path = ast_json["absolutePath"];
+    path_to_json[path] = ast_json;
+    std::unordered_set<std::string> imports;
+    // Extract the import path from the ImportDirective node.
+    for (const auto &node : ast_json["nodes"])
+    {
+      if (node["nodeType"] == "ImportDirective")
+      {
+        std::string import_path = node["absolutePath"];
+        imports.insert(import_path);
+      }
+    }
+    import_graph[path] = imports;
+  }
+
+  // Perform topological sorting
+  std::vector<nlohmann::json> sorted_json_files =
+    topologicalSort(import_graph, path_to_json);
+
+  // Update order of src_ast_json_array
+  src_ast_json_array = sorted_json_files;
+
+  // src_ast_json_array[0] means the .sol file that is being verified and not being imported.
   src_ast_json = src_ast_json_array[0];
 
   // The initial part of the nodes in a single AST includes an import information description section
   // and a version description section.This is followed by all the information that needs to be verified.
   // Therefore, the rest of the key nodes need to be inserted sequentially thereafter
-  // ("nodeType": "PragmaDirective"; there is only one in each structure).
-  // So find the position to insert after "PragmaDirective"
+  // It also means before the first ContractDefinition node.
   size_t insert_pos = 0;
   for (size_t i = 0; i < src_ast_json["nodes"].size(); ++i)
   {
-    if (src_ast_json["nodes"][i]["nodeType"] == "PragmaDirective")
+    if (src_ast_json["nodes"][i]["nodeType"] == "ContractDefinition")
     {
-      insert_pos = i + 1;
       break;
     }
+    insert_pos = i + 1;
   }
 
   for (size_t i = 1; i < src_ast_json_array.size(); ++i)
@@ -233,7 +262,7 @@ void solidity_convertert::multi_json_file()
         (node["contractKind"] == "contract" ||
          node["contractKind"] == "interface"))
       {
-        // Add the node after "PragmaDirective"
+        // Add the node before the first ContractDefinition node
         // chose to insert it here instead of at the end because splitting a piece of Solidity code(use import)
         // into multiple files results in the import order of contracts and interfaces in the AST file
         // being reversed compared to the unsplit version.
@@ -243,6 +272,55 @@ void solidity_convertert::multi_json_file()
       }
     }
   }
+}
+
+std::vector<nlohmann::json> solidity_convertert::topologicalSort(
+  std::unordered_map<std::string, std::unordered_set<std::string>> &graph,
+  std::unordered_map<std::string, nlohmann::json> &path_to_json)
+{
+  std::unordered_map<std::string, int> in_degree;
+  std::queue<std::string> zero_in_degree_queue;
+  std::vector<nlohmann::json> sorted_files;
+  //Topological sorting function for sorting files according to import relationships
+  // Calculate the in-degree for each node
+  for (const auto &pair : graph)
+  {
+    if (in_degree.find(pair.first) == in_degree.end())
+    {
+      in_degree[pair.first] = 0;
+    }
+    for (const auto &neighbor : pair.second)
+    {
+      in_degree[neighbor]++;
+    }
+  }
+
+  // Find all the nodes with 0 entry and add them to the queue.
+  for (const auto &pair : in_degree)
+  {
+    if (pair.second == 0)
+    {
+      zero_in_degree_queue.push(pair.first);
+    }
+  }
+  // Process nodes in the queue
+  while (!zero_in_degree_queue.empty())
+  {
+    std::string node = zero_in_degree_queue.front();
+    zero_in_degree_queue.pop();
+    sorted_files.push_back(path_to_json[node]);
+    // Update the in-degree of neighbouring nodes and add the new node with in-degree 0 to the queue
+    for (const auto &neighbor : graph[node])
+    {
+      in_degree[neighbor]--;
+      if (in_degree[neighbor] == 0)
+      {
+        zero_in_degree_queue.push(neighbor);
+      }
+    }
+  }
+
+  return sorted_files;
 }
 
 bool solidity_convertert::convert_ast_nodes(const nlohmann::json &contract_def)
