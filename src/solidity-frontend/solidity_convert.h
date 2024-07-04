@@ -27,7 +27,7 @@ public:
   bool convert();
 
 protected:
-  void multi_Json_file(nlohmann::json &src_ast_json);
+  void multi_json_file();
   bool convert_ast_nodes(const nlohmann::json &contract_def);
 
   // conversion functions
