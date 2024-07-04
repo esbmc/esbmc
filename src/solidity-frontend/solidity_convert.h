@@ -28,6 +28,9 @@ public:
 
 protected:
   void multi_json_file();
+  std::vector<nlohmann::json> topologicalSort(
+    std::unordered_map<std::string, std::unordered_set<std::string>> &graph,
+    std::unordered_map<std::string, nlohmann::json> &path_to_json);
   bool convert_ast_nodes(const nlohmann::json &contract_def);
 
   // conversion functions
