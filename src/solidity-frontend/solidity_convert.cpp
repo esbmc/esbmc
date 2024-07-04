@@ -229,7 +229,7 @@ void solidity_convertert::multi_json_file()
 
   // Perform topological sorting
   std::vector<nlohmann::json> sorted_json_files =
-    topologicalSort(import_graph, path_to_json);
+    topological_sort(import_graph, path_to_json);
 
   // Update order of src_ast_json_array
   src_ast_json_array = sorted_json_files;
@@ -246,9 +246,9 @@ void solidity_convertert::multi_json_file()
   {
     if (src_ast_json["nodes"][i]["nodeType"] == "ContractDefinition")
     {
+      insert_pos = i;
       break;
     }
-    insert_pos = i + 1;
   }
 
   for (size_t i = 1; i < src_ast_json_array.size(); ++i)
@@ -274,7 +274,7 @@ void solidity_convertert::multi_json_file()
   }
 }
 
-std::vector<nlohmann::json> solidity_convertert::topologicalSort(
+std::vector<nlohmann::json> solidity_convertert::topological_sort(
   std::unordered_map<std::string, std::unordered_set<std::string>> &graph,
   std::unordered_map<std::string, nlohmann::json> &path_to_json)
 {
@@ -291,7 +291,11 @@ std::vector<nlohmann::json> solidity_convertert::topologicalSort(
     }
     for (const auto &neighbor : pair.second)
     {
-      in_degree[neighbor]++;
+      if (pair.first != neighbor)
+      {
+        // Ignore the case of importing itself.
+        in_degree[neighbor]++;
+      }
     }
   }
 
@@ -308,14 +312,18 @@ std::vector<nlohmann::json> solidity_convertert::topologicalSort(
   {
     std::string node = zero_in_degree_queue.front();
     zero_in_degree_queue.pop();
+    // add the node's corresponding JSON file to the sorted result
     sorted_files.push_back(path_to_json[node]);
     // Update the in-degree of neighbouring nodes and add the new node with in-degree 0 to the queue
     for (const auto &neighbor : graph[node])
     {
-      in_degree[neighbor]--;
-      if (in_degree[neighbor] == 0)
-      {
-        zero_in_degree_queue.push(neighbor);
+      if (node != neighbor)
+      { // Ignore the case of importing itself.
+        in_degree[neighbor]--;
+        if (in_degree[neighbor] == 0)
+        {
+          zero_in_degree_queue.push(neighbor);
+        }
       }
     }
   }
