@@ -207,9 +207,9 @@ void solidity_convertert::multi_json_file()
   // This function is used to handle multiple JSON files into a single JSON file
   src_ast_json = src_ast_json_array[0];
 
-  // The initial part of the nodes in a single AST includes an import information description section 
+  // The initial part of the nodes in a single AST includes an import information description section
   // and a version description section.This is followed by all the information that needs to be verified.
-  // Therefore, the rest of the key nodes need to be inserted sequentially thereafter 
+  // Therefore, the rest of the key nodes need to be inserted sequentially thereafter
   // ("nodeType": "PragmaDirective"; there is only one in each structure).
   // So find the position to insert after "PragmaDirective"
   size_t insert_pos = 0;
@@ -234,8 +234,8 @@ void solidity_convertert::multi_json_file()
          node["contractKind"] == "interface"))
       {
         // Add the node after "PragmaDirective"
-        // chose to insert it here instead of at the end because splitting a piece of Solidity code(use import) 
-        // into multiple files results in the import order of contracts and interfaces in the AST file 
+        // chose to insert it here instead of at the end because splitting a piece of Solidity code(use import)
+        // into multiple files results in the import order of contracts and interfaces in the AST file
         // being reversed compared to the unsplit version.
         src_ast_json["nodes"].insert(
           src_ast_json["nodes"].begin() + insert_pos, node);
