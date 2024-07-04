@@ -8,8 +8,11 @@ namespace json_utils
 template <typename JsonType>
 JsonType find_class(const JsonType &ast_json, const std::string &class_name)
 {
-  auto it =
-    std::find_if(ast_json.begin(), ast_json.end(), [&](const JsonType &obj) {
+  auto it = std::find_if(
+    ast_json.begin(),
+    ast_json.end(),
+    [&](const JsonType &obj)
+    {
       return obj.contains("_type") && obj["_type"] == "ClassDef" &&
              obj["name"] == class_name;
     });
