@@ -82,8 +82,11 @@ bool solidity_languaget::parse(const std::string &path)
 
   // Process AST json file
   std::ifstream ast_json_file_stream(path);
-  std::string new_line, ast_json_content;
+  std::string new_line;
+  std::vector<nlohmann::json> json_blocks;
+  std::string current_json_block;
 
+  // Skip the initial part until the first ".sol ======="
   while (getline(ast_json_file_stream, new_line))
   {
     if (new_line.find(".sol =======") != std::string::npos)
@@ -91,22 +94,34 @@ bool solidity_languaget::parse(const std::string &path)
       break;
     }
   }
+  // Read and parse each JSON block separately
   while (getline(ast_json_file_stream, new_line))
   {
-    // file pointer continues from "=== *.sol ==="
-    if (new_line.find(".sol =======") == std::string::npos)
+    if (new_line.find(".sol =======") != std::string::npos)
     {
-      ast_json_content = ast_json_content + new_line + "\n";
+      if (!current_json_block.empty())
+      {
+        json_blocks.push_back(nlohmann::json::parse(current_json_block));
+        current_json_block.clear();
+      }
     }
     else
     {
-      assert(!"Unsupported feature: found multiple contracts defined in a single .sol file");
+      current_json_block += new_line + "\n";
     }
   }
 
-  // parse explicitly
-  src_ast_json = nlohmann::json::parse(ast_json_content);
+  // Parse the last JSON block
+  if (!current_json_block.empty())
+  {
+    json_blocks.push_back(nlohmann::json::parse(current_json_block));
+  }
 
+  // Combine all parsed JSON blocks into one JSON array
+  for (const auto &block : json_blocks)
+  {
+    src_ast_json_array.push_back(block);
+  }
   return false;
 }
 
@@ -126,7 +141,7 @@ bool solidity_languaget::typecheck(contextt &context, const std::string &module)
     new_context); // Add ESBMC and TACAS intrinsic symbols to the context
 
   solidity_convertert converter(
-    new_context, src_ast_json, func_name, smart_contract);
+    new_context, src_ast_json_array, func_name, smart_contract);
   if (converter.convert()) // Add Solidity symbols to the context
     return true;
 

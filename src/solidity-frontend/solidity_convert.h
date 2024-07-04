@@ -27,6 +27,7 @@ public:
   bool convert();
 
 protected:
+  void multi_Json_file(nlohmann::json &src_ast_json);
   bool convert_ast_nodes(const nlohmann::json &contract_def);
 
   // conversion functions
@@ -209,7 +210,9 @@ protected:
   contextt &context;
   namespacet ns;
   // json for Solidity AST. Use vector for multiple contracts
-  nlohmann::json &src_ast_json;
+  nlohmann::json src_ast_json_array = nlohmann::json::array();
+  // json for Solidity AST. Use object for single contract
+  nlohmann::json src_ast_json;
   // Solidity function to be verified
   const std::string &sol_func;
   //smart contract source file

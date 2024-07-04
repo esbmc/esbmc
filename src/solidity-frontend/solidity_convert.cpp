@@ -20,7 +20,7 @@ solidity_convertert::solidity_convertert(
   const std::string &_contract_path)
   : context(_context),
     ns(context),
-    src_ast_json(_ast_json),
+    src_ast_json_array(_ast_json),
     sol_func(_sol_func),
     contract_path(_contract_path),
     global_scope_id(0),
@@ -44,6 +44,9 @@ bool solidity_convertert::convert()
   //  1. First, we perform pattern-based verificaiton
   //  2. Then we populate the context with symbols annotated based on the each AST node, and hence prepare for the GOTO conversion.
 
+  // First, we handle the miltipule JSON files(imported files)
+  // The imported files are stored in src_ast_json_array and we merge them into a single JSON file
+  multi_Json_file(src_ast_json);
   if (!src_ast_json.contains(
         "nodes")) // check json file contains AST nodes as Solidity might change
     assert(!"JSON file does not contain any AST nodes");
@@ -197,6 +200,34 @@ bool solidity_convertert::convert()
 
   // otherwise, we verify the target function.
   return false; // 'false' indicates successful completion.
+}
+
+void solidity_convertert::multi_Json_file(nlohmann::json &src_ast_json)
+{
+  // This function is used to handle multiple JSON files into a single JSON file
+  src_ast_json = src_ast_json_array[0];
+  // Find the position to insert after "PragmaDirective"
+  auto it = std::find_if(
+    src_ast_json["nodes"].begin(),
+    src_ast_json["nodes"].end(),
+    [](const nlohmann::json &node)
+    { return node["nodeType"] == "PragmaDirective"; });
+  for (size_t i = 1; i < src_ast_json_array.size(); ++i)
+  {
+    nlohmann::json &imported_part = src_ast_json_array[i];
+    // Traverse nodes in the imported part
+    for (const auto &node : imported_part["nodes"])
+    {
+      if (
+        node["nodeType"] == "ContractDefinition" &&
+        (node["contractKind"] == "contract" ||
+         node["contractKind"] == "interface"))
+      {
+        // Add the node after "PragmaDirective"
+        it = src_ast_json["nodes"].insert(it + 1, node);
+      }
+    }
+  }
 }
 
 bool solidity_convertert::convert_ast_nodes(const nlohmann::json &contract_def)
