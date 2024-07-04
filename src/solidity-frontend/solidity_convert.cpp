@@ -44,9 +44,9 @@ bool solidity_convertert::convert()
   //  1. First, we perform pattern-based verificaiton
   //  2. Then we populate the context with symbols annotated based on the each AST node, and hence prepare for the GOTO conversion.
 
-  // First, we handle the miltipule JSON files(imported files)
+  // First, we handle the multiple JSON files(imported files)
   // The imported files are stored in src_ast_json_array and we merge them into a single JSON file
-  multi_Json_file(src_ast_json);
+  multi_json_file();
   if (!src_ast_json.contains(
         "nodes")) // check json file contains AST nodes as Solidity might change
     assert(!"JSON file does not contain any AST nodes");
@@ -202,7 +202,7 @@ bool solidity_convertert::convert()
   return false; // 'false' indicates successful completion.
 }
 
-void solidity_convertert::multi_Json_file(nlohmann::json &src_ast_json)
+void solidity_convertert::multi_json_file()
 {
   // This function is used to handle multiple JSON files into a single JSON file
   src_ast_json = src_ast_json_array[0];
