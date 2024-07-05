@@ -1739,8 +1739,13 @@ bool esbmc_parseoptionst::process_goto_program(
         std::make_shared<value_set_analysist>(ns);
       try
       {
+        fine_timet algorithm_start = current_time();
         log_status("Computing Value-Set Analysis (VSA)");
         (*vsa)(goto_functions);
+        fine_timet algorithm_stop = current_time();
+        log_status(
+                   "VSA time: {}s",
+                   time2string(algorithm_stop - algorithm_start));
       }
       catch (vsa_not_implemented_exception &)
       {
@@ -1764,8 +1769,12 @@ bool esbmc_parseoptionst::process_goto_program(
         log_warning("Could not apply GCSE optimization due to VSA limitation!");
       else
       {
+        fine_timet algorithm_start = current_time();
         goto_cse cse(context, vsa);
         cse.run(goto_functions);
+        fine_timet algorithm_stop = current_time();
+        log_status("CSE time: {}s",
+                   time2string(algorithm_stop - algorithm_start));
       }
     }
 
