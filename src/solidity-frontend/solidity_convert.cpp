@@ -623,11 +623,7 @@ bool solidity_convertert::get_var_decl(
 
   // 6. add symbol into the context
   // just like clang-c-frontend, we have to add the symbol before converting the initial assignment
-  symbolt added_symbol;
-  if (is_state_var)
-    added_symbol = *move_symbol_to_context(symbol);
-  else
-    added_symbol = symbol;
+  symbolt &added_symbol = *move_symbol_to_context(symbol);
 
   // 7. populate init value if there is any
   code_declt decl(symbol_expr(added_symbol));
@@ -1052,7 +1048,7 @@ bool solidity_convertert::get_instantiation_ctor_call(
   const std::string &contract_name,
   exprt &new_expr)
 {
-  // 1. add the ctor symbol
+  // 1. add the ctor function symbol
   std::string name, id;
   name = contract_name;
   id = "sol:@C@" + contract_name + "@F@" + contract_name + "#";
@@ -4310,6 +4306,7 @@ bool solidity_convertert::get_tuple_definition(const nlohmann::json &ast_node)
   // populate struct type symbol
   symbolt symbol;
   get_default_symbol(symbol, debug_modulename, t, name, id, location_begin);
+  symbol.static_lifetime = true;
   symbolt &added_symbol = *move_symbol_to_context(symbol);
 
   auto &args = ast_node.contains("components")
@@ -4396,6 +4393,7 @@ bool solidity_convertert::get_tuple_instance(
   // populate struct type symbol
   symbolt symbol;
   get_default_symbol(symbol, debug_modulename, t, name, id, location_begin);
+  symbol.static_lifetime = true;
   symbolt &added_symbol = *move_symbol_to_context(symbol);
 
   if (!ast_node.contains("components"))
@@ -4701,6 +4699,8 @@ bool solidity_convertert::get_mapping_definition(
   symbolt symbol;
   get_default_symbol(symbol, debug_modulename, t, name, id, location_begin);
   symbol.is_extern = false;
+  if (is_state_var)
+    symbol.static_lifetime = true;
 
   symbolt &added_symbol = *move_symbol_to_context(symbol);
   exprt mapping_ins = symbol_expr(added_symbol);
@@ -6425,7 +6425,8 @@ bool solidity_convertert::multi_transaction_verification(
       ctor_ins_id,
       ctor_ins_loc);
     ctor_ins_symbol.lvalue = true;
-    ctor_ins_symbol.static_lifetime = true;
+    ctor_ins_symbol.lvalue = true;
+    ctor_ins_symbol.is_extern = false;
 
     symbolt &added_ctor_symbol = *move_symbol_to_context(ctor_ins_symbol);
 
