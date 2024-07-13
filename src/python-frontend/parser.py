@@ -150,11 +150,14 @@ def main():
     for python_file in glob.glob(os.path.join(models_dir, "*.py")):
         filename = os.path.basename(python_file)
         module_name = filename[:-3]
-        if not is_imported_model(module_name):
-            with open(python_file) as model:
-                model_tree = ast.parse(model.read())
-                # Generate JSON from AST for the memory models.
-                generate_ast_json(model_tree, filename, None, output_dir)
+
+        if is_imported_model(module_name):
+            continue;
+
+        with open(python_file) as model:
+            model_tree = ast.parse(model.read())
+            # Generate JSON from AST for the memory models.
+            generate_ast_json(model_tree, filename, None, output_dir)
 
 
 if __name__ == "__main__":
