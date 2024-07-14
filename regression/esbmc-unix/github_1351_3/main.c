@@ -1,5 +1,6 @@
 #include <pthread.h>
 #include <string.h>
+#include <assert.h>
 
 void *readAndExecuteCommands(void *arg) {
   if (strcmp("a", "a"))
