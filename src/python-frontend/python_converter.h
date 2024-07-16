@@ -45,7 +45,7 @@ private:
   bool is_constructor_call(const nlohmann::json &json);
   typet get_typet(const std::string &ast_type, size_t type_size = 0);
   typet get_typet(const nlohmann::json &elem);
-  std::string get_var_type(const std::string& var_name) const;
+  std::string get_var_type(const std::string &var_name) const;
   void get_attributes_from_self(
     const nlohmann::json &method_body,
     struct_typet &clazz);
