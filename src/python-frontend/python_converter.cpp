@@ -326,7 +326,18 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   assert(!op.empty());
 
-  if (op == "Eq" && is_string(lhs.type()) && is_string(rhs.type()))
+  std::string lhs_type = get_var_type(lhs.name().as_string());
+  std::string rhs_type = get_var_type(rhs.name().as_string());
+
+  if (
+    rhs_type.empty() && element.contains("comparators") &&
+    element["comparators"][0].contains("value") &&
+    element["comparators"][0]["value"].is_string())
+  {
+    rhs_type = "str";
+  }
+
+  if (op == "Eq" && lhs_type == "str" && rhs_type == "str")
   {
     if (rhs.type() != lhs.type())
       return gen_boolean(false);
