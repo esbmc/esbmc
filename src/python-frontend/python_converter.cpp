@@ -326,9 +326,11 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   assert(!op.empty());
 
+  // Get LHS and RHS types from variable annotation
   std::string lhs_type = get_var_type(lhs.name().as_string());
   std::string rhs_type = get_var_type(rhs.name().as_string());
 
+  // If RHS is a string literal, like x = "foo", then we determine the type from the JSON value
   if (
     rhs_type.empty() && element.contains("comparators") &&
     element["comparators"][0].contains("value") &&
@@ -669,7 +671,9 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 
     if (is_builtin_type(func_name) || is_consensus_type(func_name))
     {
-      // Replace the function call with a constant value. For example, x = int(1) becomes x = 1
+      /* Calls to initialize variables using built-in type functions such as int(1), str("test"), bool(1)
+       * are converted to simple variable assignments, simplifying the handling of built-in type objects.
+       * For example, x = int(1) becomes x = 1. */
       size_t arg_size = 1;
       const auto &arg = element["args"][0];
 
@@ -722,6 +726,12 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       obj_symbol_id = create_symbol_id() + "@" + caller;
       obj_symbol = context.find_symbol(obj_symbol_id);
 
+      // Handling a function call as a class method call when:
+      // (1) The caller corresponds to a class name, for example: MyClass.foo().
+      // (2) Calling methods of built-in types, such as int.from_bytes()
+      //     All the calls to built-in methods are handled by class methods in operational models.
+      // (3) Calling a instance method from a built-in type object, for example: x.bit_length() when x is an int
+      // If the caller is a class or a built-in type, the following condition detects a class method call.
       if (
         is_class(caller, ast_json) || is_builtin_type(caller) ||
         is_builtin_type(get_var_type(caller)))
