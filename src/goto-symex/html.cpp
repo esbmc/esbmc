@@ -8,6 +8,7 @@
 #include <util/language.h>
 #include <langapi/language_util.h>
 #include <optional>
+#include <filesystem>
 // TODO: Multiple files
 // TODO: Control Trace
 // TODO: Refactor this
@@ -423,7 +424,7 @@ const std::string html_report::generate_head() const
 {
   std::ostringstream head;
   {
-    head << tag_body_str("title", violation_step->pc->location.get_function().as_string());
+    head << tag_body_str("title", "ESBMC report");
     head << clang_bug_report::html_style;
   }  
   return tag_body_str("head", head.str());
@@ -433,7 +434,7 @@ const std::string html_report::generate_body() const
 {
   std::ostringstream body;
   const locationt &location = violation_step->pc->location;
-  const std::string filename{location.get_file().as_string()};
+  const std::string filename{std::filesystem::absolute(location.get_file().as_string()).string()};
   // Bug Summary
   {    
     
