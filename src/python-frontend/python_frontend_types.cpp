@@ -20,6 +20,11 @@ bool is_consensus_func(const std::string &name)
   return consensus_func_to_type.find(name) != consensus_func_to_type.end();
 }
 
+bool is_model_func(const std::string &name)
+{
+  return (name == "ESBMC_range_next_" || name == "ESBMC_range_has_next_");
+}
+
 std::string get_type_from_consensus_func(const std::string &name)
 {
   if (!is_consensus_func(name))

@@ -247,7 +247,7 @@ private:
           is_consensus_func(element["value"]["func"]["id"]))
           type = get_type_from_consensus_func(element["value"]["func"]["id"]);
         // Get type from function return
-        else if (element["value"]["_type"] == "Call")
+        else if (element["value"]["_type"] == "Call" && !is_model_func(element["value"]["func"]["id"]))
         {
           std::string func_name = element["value"]["func"]["id"];
           type = get_function_return_type(func_name, ast_);
