@@ -3723,7 +3723,7 @@ void clang_c_convertert::set_location(
   }
 
   location.set_line(PLoc.getLine());
-  location.set_file(get_filename_from_path(PLoc.getFilename()));
+  location.set_file(PLoc.getFilename());
   location.set_column(PLoc.getColumn());
 
   if (!function_name.empty())
