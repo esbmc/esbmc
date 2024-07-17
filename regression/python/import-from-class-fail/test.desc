@@ -1,4 +1,4 @@
 CORE
 main.py
 
-ERROR: Type undefined for obj2\s*$
+ERROR: Type undefined for:\s*$
