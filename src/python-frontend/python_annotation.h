@@ -125,20 +125,19 @@ private:
     return type;
   }
 
-  std::string get_function_return_type(const std::string &func_name, const Json &ast)
+  std::string
+  get_function_return_type(const std::string &func_name, const Json &ast)
   {
-    std::string return_type("");
     for (const Json &elem : ast["body"])
     {
-      if (elem["_type"] == "FunctionDef" && elem["name"] == func_name)
+      if (
+        elem["_type"] == "FunctionDef" && elem["name"] == func_name &&
+        elem.contains("returns") && !elem["returns"].is_null())
       {
-        if (elem.contains("returns") && !elem["returns"].is_null())
-        {
-         return_type = elem["name"]["returns"]["id"];
-        }
+        return elem["returns"]["id"];
       }
     }
-    return return_type;
+    return std::string();
   }
 
   void add_annotation(Json &body)
@@ -247,12 +246,12 @@ private:
           element["value"]["_type"] == "Call" &&
           is_consensus_func(element["value"]["func"]["id"]))
           type = get_type_from_consensus_func(element["value"]["func"]["id"]);
-        // get type from function_return_type_ann 
+        // Get type from function return
         else if (element["value"]["_type"] == "Call")
         {
           std::string func_name = element["value"]["func"]["id"];
           type = get_function_return_type(func_name, ast_);
-        } 
+        }
         else
           continue;
 
