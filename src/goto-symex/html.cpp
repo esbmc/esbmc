@@ -501,10 +501,8 @@ const std::string html_report::generate_body() const
             oss << "Assumption restriction";
         else if (step.pc->is_assert())
           {
-            if (step.guard)
-              continue;
             std::string comment =
-              (step.comment.empty() ? "Asssertion failure" : step.comment);
+              (step.comment.empty() ? "Asssertion check" : step.comment);
 
             comment[0] = toupper(comment[0]);
             oss << comment;
@@ -522,7 +520,7 @@ const std::string html_report::generate_body() const
         auto &list =
           steps.insert({line, std::list<code_steps>()}).first->second;
 
-        list.push_back(code_steps(++counter, oss.str(), step.is_assume()));
+        list.push_back(code_steps(++counter, oss.str(), step.is_assume() || step.is_assert()));
 
         // Is this step the violation?
         if (step.is_assert() && !step.guard)
