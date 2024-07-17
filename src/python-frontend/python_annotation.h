@@ -245,7 +245,8 @@ private:
         else if (
           value_type == "Call" &&
           is_consensus_func(element["value"]["func"]["id"]))
-          inferred_type = get_type_from_consensus_func(element["value"]["func"]["id"]);
+          inferred_type =
+            get_type_from_consensus_func(element["value"]["func"]["id"]);
 
         // Get type from function return
         else if (
@@ -293,7 +294,8 @@ private:
           {"lineno", target["lineno"]}};
 
         element["end_col_offset"] =
-          element["end_col_offset"].template get<int>() + inferred_type.size() + 1;
+          element["end_col_offset"].template get<int>() + inferred_type.size() +
+          1;
         element["end_lineno"] = element["lineno"];
         element["simple"] = 1;
 
@@ -306,10 +308,11 @@ private:
 
         // Update value fields
         element["value"]["col_offset"] =
-          element["value"]["col_offset"].template get<int>() + inferred_type.size() + 1;
+          element["value"]["col_offset"].template get<int>() +
+          inferred_type.size() + 1;
         element["value"]["end_col_offset"] =
-          element["value"]["end_col_offset"].template get<int>() + inferred_type.size() +
-          1;
+          element["value"]["end_col_offset"].template get<int>() +
+          inferred_type.size() + 1;
 
         /* Adjust column offset node on lines involving function
          * calls with arguments */
@@ -319,8 +322,8 @@ private:
           {
             arg["col_offset"] =
               arg["col_offset"].template get<int>() + inferred_type.size() + 1;
-            arg["end_col_offset"] =
-              arg["end_col_offset"].template get<int>() + inferred_type.size() + 1;
+            arg["end_col_offset"] = arg["end_col_offset"].template get<int>() +
+                                    inferred_type.size() + 1;
           }
         }
         // Adjust column offset in function call node
