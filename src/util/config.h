@@ -157,6 +157,8 @@ public:
 
   // For caching ssa assertions
   assert_db ssa_caching_db;
+
+  std::vector<std::string> args;
 };
 
 extern configt config;
