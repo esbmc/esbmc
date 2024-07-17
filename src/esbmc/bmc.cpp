@@ -140,6 +140,12 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
     generate_testcase("testcase.xml", eq, smt_conv);
   }
 
+  if (options.get_bool_option("generate-html-report"))
+  {
+    // TODO: multi-property
+    generate_html_report(options, "1", ns, goto_trace);
+  }
+
   std::ostringstream oss;
   log_fail("\n[Counterexample]\n");
   show_goto_trace(oss, ns, goto_trace);
