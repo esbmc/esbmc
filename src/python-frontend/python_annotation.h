@@ -257,7 +257,7 @@ private:
 
         if (type.empty())
         {
-          log_status("Type undefined for:\n{}", element.dump(2).c_str());
+          log_error("Type undefined for:\n{}", element.dump(2).c_str());
           abort();
         }
 
