@@ -117,7 +117,7 @@ unsigned goto_symext::argument_assignments(
 
       // Assign value to function argument
       // TODO: Should we hide it (true means hidden)?
-      symex_assign(code_assign2tc(lhs, rhs), true);
+      symex_assign(code_assign2tc(lhs, rhs), false);
     }
   }
 
