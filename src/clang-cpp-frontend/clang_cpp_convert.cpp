@@ -1184,27 +1184,42 @@ bool clang_cpp_convertert::get_function_body(
         /* We can't assign to arrays, dereference() will choke. */
         if (is_array_like(member.type()))
         {
-          const exprt &this_ptr = member.op0();
+          /* Instead, create a constant expression of the class's type, where
+           * each component, except for the one referred to in 'lhs', just is a
+           * member expression into (*this). Then assign this new expression
+           * to (*this). */
+          const exprt &this_ptr = member.op0(); /* the (this) pointer */
           const struct_union_typet &this_type =
             to_struct_union_type(ns.follow(this_ptr.type().subtype()));
-          exprt this_sym = dereference_exprt(this_ptr, this_type);
-          exprt rhs_sym(this_type.is_struct() ? "struct" : "union", this_type);
-          for (const struct_union_typet::componentt &c : this_type.components())
-            if (c.get_name() == member.component_name())
-              rhs_sym.copy_to_operands(rhs);
-            else
-            {
-              member_exprt old(this_sym, c.get_name(), c.type());
-              rhs_sym.move_to_operands(old);
-            }
+          bool is_struct = this_type.is_struct();
+          exprt rhs_sym(is_struct ? "struct" : "union", this_type);
+          if (is_struct)
+          {
+            for (const struct_union_typet::componentt &c :
+                 this_type.components())
+              if (c.get_name() == member.component_name())
+                rhs_sym.move_to_operands(rhs);
+              else
+              {
+                member_exprt old(this_ptr, c.get_name(), c.type());
+                rhs_sym.move_to_operands(old);
+              }
+          }
+          else
+          {
+            /* single initializer for unions */
+            rhs_sym.component_name(member.component_name());
+            rhs_sym.move_to_operands(rhs);
+          }
 
+          exprt this_sym = dereference_exprt(this_ptr, this_type);
           initializer = side_effect_exprt("assign", this_sym.type());
-          initializer.copy_to_operands(this_sym, rhs_sym);
+          initializer.move_to_operands(this_sym, rhs_sym);
         }
         else
         {
           initializer = side_effect_exprt("assign", member.type());
-          initializer.copy_to_operands(member, rhs);
+          initializer.move_to_operands(member, rhs);
         }
       }
       else
