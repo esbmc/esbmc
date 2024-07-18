@@ -464,7 +464,6 @@ const std::string html_report::generate_body() const
     body << fmt::format(clang_bug_report::annotated_source_header_fmt, oss.str());
   }
 
-  // TODO: Get Map of files
   std::set<std::string> files;
   // Counter-Example filtering
   {
@@ -480,7 +479,7 @@ const std::string html_report::generate_body() const
     std::ostringstream oss;
     oss << R"({"1": {)";
     for (const auto line : relevant_lines)
-      oss << fmt::format( "\"{}\": {},", line, 1);
+      oss << fmt::format( "\"{}\": 1,", line);
     oss << "}}";
     body << clang_bug_report::counterexample_filter(oss.str());
     body << clang_bug_report::counterexample_checkbox;
@@ -510,11 +509,18 @@ void html_report::print_file_table(
       while (std::getline(input, line))
         lines.push_back(line);
     }
+    os << fmt::format("<div id=File{}><h4 class=FileName>{}</h4>", file.second, std::filesystem::absolute(file.first).string());
 
     std::unordered_map<size_t, std::list<code_steps>> steps;
     size_t counter = 0;
     for (const auto &step : goto_trace.steps)
+    {
+      if (step.pc->location.get_file().as_string() != file.first)
+
       {
+        counter++;
+        continue;
+      }
         size_t line = atoi(step.pc->location.get_line().c_str());
         std::ostringstream oss;
         if (step.pc->is_assume())
@@ -534,7 +540,13 @@ void html_report::print_file_table(
             if (is_nil_expr(step.value))
               oss << " (assignment removed)";
             else
-              oss << " = " << from_expr(ns, "", step.value);            
+              oss << " = " << from_expr(ns, "", step.value);
+          }
+          else if (step.pc->is_function_call())
+          {
+            oss << "Function argument '";
+            oss << from_expr(ns, "", step.lhs);
+            oss << " = " << from_expr(ns, "", step.value) << "'";
           }
       
         auto &list =
@@ -564,7 +576,7 @@ void html_report::print_file_table(
         os << fmt::format(codeline_fmt, i+1, lines[i].to_html());
       }
     
-    os << "</table>";
+    os << "</table><hr class=divider>";
     // Table end
   
 }
