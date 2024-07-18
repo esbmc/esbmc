@@ -36,13 +36,7 @@ void rw_sett::compute(const exprt &expr)
       assert(expr.operands().size() == 1);
       compute(expr.op0());
     }
-    else if (expr.id() == "=")
-    {
-      assert(expr.operands().size() == 2);
-      read_rec(expr.op0());
-      read_rec(expr.op1());
-    }
-    else if (expr.id() == "notequal")
+    else if (expr.id() == "=" || expr.id() == "notequal")
     {
       assert(expr.operands().size() == 2);
       read_rec(expr.op0());
