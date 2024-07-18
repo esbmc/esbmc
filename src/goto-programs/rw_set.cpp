@@ -7,6 +7,8 @@
 
 void rw_sett::compute(const exprt &expr)
 {
+  const goto_programt::instructiont &instruction = *target;
+
   if (expr.is_code())
   {
     codet code = to_code(expr);
@@ -29,7 +31,7 @@ void rw_sett::compute(const exprt &expr)
       read_rec(code.op0());
     }
   }
-  else
+  else if (instruction.is_goto())
   {
     if (expr.id() == "not")
     {
@@ -82,7 +84,7 @@ void rw_sett::read_write_rec(
         symbol->name == "__ESBMC_alloc_size" || symbol->name == "stdin" ||
         symbol->name == "stdout" || symbol->name == "stderr" ||
         symbol->name == "sys_nerr" || symbol->name == "operator=::ref" ||
-        symbol->name == "this")
+        symbol->name == "this" || symbol->name == "__ESBMC_atexits")
       {
         return; // ignore for now
       }
