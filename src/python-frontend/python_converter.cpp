@@ -339,29 +339,83 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     rhs_type = "str";
   }
 
-  if (op == "Eq" && lhs_type == "str" && rhs_type == "str")
+  if (lhs_type == "str" && rhs_type == "str")
   {
-    if (rhs.type() != lhs.type())
-      return gen_boolean(false);
+    // Strings comparison
+    if (op == "Eq")
+    {
+      if (rhs.type() != lhs.type())
+        return gen_boolean(false);
 
-    array_typet &arr_type = static_cast<array_typet &>(lhs.type());
-    BigInt str_size =
-      binary2integer(arr_type.size().value().as_string(), false);
+      array_typet &arr_type = static_cast<array_typet &>(lhs.type());
+      BigInt str_size =
+        binary2integer(arr_type.size().value().as_string(), false);
 
-    // call strncmp to compare strings
-    symbolt *strncmp = context.find_symbol("c:@F@strncmp");
-    assert(strncmp);
-    side_effect_expr_function_callt sideeffect;
-    sideeffect.function() = symbol_expr(*strncmp);
-    sideeffect.arguments().push_back(lhs); // passing lhs to strncmp
-    sideeffect.arguments().push_back(rhs); // passing rhs to strncmp
-    sideeffect.arguments().push_back(
-      from_integer(str_size, long_uint_type())); // passing n to strncmp
-    sideeffect.location() = get_location_from_decl(element);
-    sideeffect.type() = int_type();
+      // call strncmp to compare strings
+      symbolt *strncmp = context.find_symbol("c:@F@strncmp");
+      assert(strncmp);
+      side_effect_expr_function_callt sideeffect;
+      sideeffect.function() = symbol_expr(*strncmp);
+      sideeffect.arguments().push_back(lhs); // passing lhs to strncmp
+      sideeffect.arguments().push_back(rhs); // passing rhs to strncmp
+      sideeffect.arguments().push_back(
+        from_integer(str_size, long_uint_type())); // passing n to strncmp
+      sideeffect.location() = get_location_from_decl(element);
+      sideeffect.type() = int_type();
 
-    lhs = sideeffect;
-    rhs = gen_zero(int_type());
+      lhs = sideeffect;
+      rhs = gen_zero(int_type());
+    }
+    // Strings concatenation
+    else if (op == "Add")
+    {
+      // ...
+      array_typet lhs_str_type = static_cast<array_typet &>(lhs.type());
+      BigInt lhs_str_size =
+        binary2integer(lhs_str_type.size().value().c_str(), true);
+
+      array_typet rhs_str_type = static_cast<array_typet &>(rhs.type());
+      BigInt rhs_str_size =
+        binary2integer(rhs_str_type.size().value().c_str(), true);
+
+      BigInt concat_str_size = lhs_str_size + rhs_str_size;
+
+      typet t = get_typet("str", concat_str_size.to_uint64());
+//      const std::string &value = lhs.value().as_string();
+
+//      std::vector<uint8_t> string_literal =
+//        std::vector<uint8_t>(std::begin(value), std::end(value));
+
+//      typet &char_type = t.subtype();
+
+      exprt expr = gen_zero(t);
+
+      symbolt* lhs_symbol = context.find_symbol(lhs.identifier());
+      assert(lhs_symbol);
+
+      symbolt* rhs_symbol = context.find_symbol(rhs.identifier());
+      assert(rhs_symbol);
+
+      // Copy LHS elements
+      unsigned int i = 0;
+      for (const exprt &ch : lhs_symbol->value.operands())
+        expr.operands().at(i++) = ch;
+
+      // Copy RHS elements
+      for (const exprt &ch : rhs_symbol->value.operands())
+        expr.operands().at(i++) = ch;
+
+      //      for (uint8_t &ch : string_literal)
+      //      {
+      //        exprt char_value = constant_exprt(
+      //          integer2binary(BigInt(ch), bv_width(char_type)),
+      //          integer2string(BigInt(ch)),
+      //          char_type);
+      //        expr.operands().at(i++) = char_value;
+      //      }
+
+      return expr;
+    }
   }
 
   adjust_statement_types(lhs, rhs);
