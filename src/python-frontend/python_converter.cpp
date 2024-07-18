@@ -1264,25 +1264,26 @@ void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
+  std::string lhs_type("");
   if (ast_node.contains("annotation"))
   {
     // Get type from annotation node
     size_t type_size = get_type_size(ast_node);
-    const auto &annotated_type = ast_node["annotation"]["id"];
-    current_element_type = get_typet(annotated_type, type_size);
+    lhs_type = ast_node["annotation"]["id"];
+    current_element_type = get_typet(lhs_type, type_size);
   }
   else
   {
     // Get type from declaration node
-    const std::string &var_name =
-      ast_node["targets"][0]["id"].get<std::string>();
-    const std::string &var_type = get_var_type(var_name);
-    if (var_type.empty())
+    const std::string &var_name = ast_node["targets"][0]["id"].get<std::string>();
+    lhs_type = get_var_type(var_name);
+
+    if (lhs_type.empty())
     {
       log_error("Type undefined for {}", var_name);
       abort();
     }
-    current_element_type = get_typet(var_type);
+    current_element_type = get_typet(lhs_type);
   }
 
   exprt lhs;
@@ -1361,7 +1362,16 @@ void python_converter::get_var_assign(
   if (has_value && rhs != exprt("_init_undefined"))
   {
     if (lhs_symbol)
+    {
+      if (lhs_type == "str")
+      {
+        array_typet &arr_type = static_cast<array_typet&>(current_element_type);
+        if (std::stoi(arr_type.size().value().as_string()) == 0)
+          lhs_symbol->type = rhs.type();
+      }
+
       lhs_symbol->value = rhs;
+    }
 
     /* If the right-hand side (rhs) of the assignment is a function call, such as: x : int = func()
      * we need to adjust the left-hand side (lhs) of the function call to refer to the lhs of the current assignment.
