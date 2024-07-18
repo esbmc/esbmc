@@ -88,7 +88,7 @@ static const struct buffer
 #endif
 };
 
-static std::vector<std::string> python_c_models = {"strncmp"};
+const static std::vector<std::string> python_c_models = {"strncmp"};
 
 } // namespace
 

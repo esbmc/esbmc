@@ -94,7 +94,7 @@ static struct_typet::componentt build_component(
   return comp;
 }
 
-// Convert Python/AST types to irep2 types
+// Convert Python/AST types to irep types
 typet python_converter::get_typet(const std::string &ast_type, size_t type_size)
 {
   if (ast_type == "float")
@@ -326,7 +326,20 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   assert(!op.empty());
 
-  if (op == "Eq" && is_string(lhs.type()) && is_string(rhs.type()))
+  // Get LHS and RHS types from variable annotation
+  std::string lhs_type = get_var_type(lhs.name().as_string());
+  std::string rhs_type = get_var_type(rhs.name().as_string());
+
+  // If RHS is a string literal, like x = "foo", then we determine the type from the JSON value
+  if (
+    rhs_type.empty() && element.contains("comparators") &&
+    element["comparators"][0].contains("value") &&
+    element["comparators"][0]["value"].is_string())
+  {
+    rhs_type = "str";
+  }
+
+  if (op == "Eq" && lhs_type == "str" && rhs_type == "str")
   {
     if (rhs.type() != lhs.type())
       return gen_boolean(false);
@@ -429,7 +442,7 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
 
 const nlohmann::json python_converter::find_var_decl(
   const std::string &var_name,
-  const nlohmann::json &json)
+  const nlohmann::json &json) const
 {
   for (auto &element : json["body"])
   {
@@ -638,21 +651,6 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   // TODO: Refactor into different classes/functions
   if (element.contains("func") && element["_type"] == "Call")
   {
-    bool is_instance_method_call = false;
-    bool is_class_method_call = false;
-
-    if (element["func"]["_type"] == "Attribute")
-    {
-      const auto &subelement = element["func"]["value"];
-      const std::string &func_value = subelement["_type"] == "Attribute"
-                                        ? subelement["attr"].get<std::string>()
-                                        : subelement["id"].get<std::string>();
-      if (is_class(func_value, ast_json) || is_builtin_type(func_value))
-        is_class_method_call = true;
-      else if (!json_utils::is_module(func_value, ast_json))
-        is_instance_method_call = true;
-    }
-
     function_id func_id = build_function_id(element);
     std::string func_name(func_id.function_name);
 
@@ -660,6 +658,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     std::regex pattern(
       R"(nondet_(int|char|bool|float)|__VERIFIER_nondet_(int|char|bool|float))");
 
+    // Handle non-det functions
     if (std::regex_match(func_name, pattern))
     {
       // Function name pattern: nondet_(type). e.g: nondet_bool(), nondet_int()
@@ -668,6 +667,23 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       exprt rhs = exprt("sideeffect", get_typet(type));
       rhs.statement("nondet");
       return rhs;
+    }
+
+    if (is_builtin_type(func_name) || is_consensus_type(func_name))
+    {
+      /* Calls to initialize variables using built-in type functions such as int(1), str("test"), bool(1)
+       * are converted to simple variable assignments, simplifying the handling of built-in type objects.
+       * For example, x = int(1) becomes x = 1. */
+      size_t arg_size = 1;
+      const auto &arg = element["args"][0];
+
+      if (func_name == "str")
+        arg_size = arg["value"].get<std::string>().size(); // get string length
+
+      typet t = get_typet(func_name, arg_size);
+      exprt expr = get_expr(arg);
+      expr.type() = t;
+      return expr;
     }
 
     locationt location = get_location_from_decl(element);
@@ -680,7 +696,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     {
       if (context.find_symbol(func_symbol_id.c_str()) == nullptr)
       {
-        // Create/init symbol
+        // Create/init __ESBMC_get_object_size symbol
         code_typet code_type;
         if (func_name == "__ESBMC_get_object_size")
         {
@@ -694,19 +710,38 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       }
     }
 
-    if (is_builtin_type(func_name) || is_consensus_type(func_name))
+    bool is_ctor_call = is_constructor_call(element);
+    bool is_instance_method_call = false;
+    bool is_class_method_call = false;
+    symbolt *obj_symbol = nullptr;
+    std::string obj_symbol_id("");
+
+    if (element["func"]["_type"] == "Attribute")
     {
-      // Replace the function call with a constant value. For example, x = int(1) becomes x = 1
-      size_t arg_size = 1;
-      const auto &arg = element["args"][0];
+      const auto &subelement = element["func"]["value"];
+      const std::string &caller = subelement["_type"] == "Attribute"
+                                    ? subelement["attr"].get<std::string>()
+                                    : subelement["id"].get<std::string>();
 
-      if (func_name == "str")
-        arg_size = arg["value"].get<std::string>().size(); // get string length
+      obj_symbol_id = create_symbol_id() + "@" + caller;
+      obj_symbol = context.find_symbol(obj_symbol_id);
 
-      typet t = get_typet(func_name, arg_size);
-      exprt expr = get_expr(arg);
-      expr.type() = t;
-      return expr;
+      // Handling a function call as a class method call when:
+      // (1) The caller corresponds to a class name, for example: MyClass.foo().
+      // (2) Calling methods of built-in types, such as int.from_bytes()
+      //     All the calls to built-in methods are handled by class methods in operational models.
+      // (3) Calling a instance method from a built-in type object, for example: x.bit_length() when x is an int
+      // If the caller is a class or a built-in type, the following condition detects a class method call.
+      if (
+        is_class(caller, ast_json) || is_builtin_type(caller) ||
+        is_builtin_type(get_var_type(caller)))
+      {
+        is_class_method_call = true;
+      }
+      else if (!json_utils::is_module(caller, ast_json))
+      {
+        is_instance_method_call = true;
+      }
     }
 
     const symbolt *func_symbol = context.find_symbol(func_symbol_id.c_str());
@@ -714,8 +749,6 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     // Find function in imported modules
     if (!func_symbol)
       func_symbol = find_function_in_imported_modules(func_symbol_id);
-
-    bool is_ctor_call = is_constructor_call(element);
 
     if (func_symbol == nullptr)
     {
@@ -739,11 +772,9 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         }
         else if (is_instance_method_call)
         {
-          // Update obj attributes from self
-          const std::string &obj_name = element["func"]["value"]["id"];
-          const std::string obj_symbol_id = create_symbol_id() + "@" + obj_name;
-          assert(context.find_symbol(obj_symbol_id));
+          assert(obj_symbol);
 
+          // Update obj attributes from self
           update_instance_from_self(
             get_classname_from_symbol_id(func_symbol->id.as_string()),
             func_name,
@@ -772,17 +803,25 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
     else if (is_instance_method_call)
     {
-      // Self is the obj instance from obj.method() call
-      std::string symbol_id = create_symbol_id() + "@" +
-                              element["func"]["value"]["id"].get<std::string>();
-      symbolt *obj_symbol = context.find_symbol(symbol_id);
       assert(obj_symbol);
+      // Passing object as "self" (first) parameter on instance method calls
       call.arguments().push_back(gen_address_of(symbol_expr(*obj_symbol)));
     }
     else if (is_class_method_call)
     {
+      // Passing a void pointer to the "cls" argument
       typet t = pointer_typet(empty_typet());
       call.arguments().push_back(gen_zero(t));
+
+      // All methods for the int class without parameters acts solely on the encapsulated integer value.
+      // Therefore, we always pass the caller (obj) as a parameter in these functions.
+      // For example, if x is an int instance, x.bit_length() call becomes bit_length(x)
+      if (
+        obj_symbol && get_var_type(obj_symbol->name.as_string()) == "int" &&
+        element["args"].empty())
+      {
+        call.arguments().push_back(symbol_expr(*obj_symbol));
+      }
     }
 
     for (const auto &arg_node : element["args"])
@@ -1147,6 +1186,26 @@ size_t get_type_size(const nlohmann::json &ast_node)
   return type_size;
 }
 
+std::string python_converter::get_var_type(const std::string &var_name) const
+{
+  nlohmann::json ref;
+  // Get variable from current function
+  for (const auto &elem : ast_json["body"])
+  {
+    if (elem["_type"] == "FunctionDef" && elem["name"] == current_func_name)
+      ref = find_var_decl(var_name, elem);
+  }
+
+  // Get variable from global scope
+  if (ref.empty())
+    ref = find_var_decl(var_name, ast_json);
+
+  if (ref.empty())
+    return std::string();
+
+  return ref["annotation"]["id"].get<std::string>();
+}
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -1161,24 +1220,15 @@ void python_converter::get_var_assign(
   else
   {
     // Get type from declaration node
-    std::string var_name = ast_node["targets"][0]["id"].get<std::string>();
-    nlohmann::json ref;
-
-    // Get variable from current function
-    for (const auto &elem : ast_json["body"])
+    const std::string &var_name =
+      ast_node["targets"][0]["id"].get<std::string>();
+    const std::string &var_type = get_var_type(var_name);
+    if (var_type.empty())
     {
-      if (elem["_type"] == "FunctionDef" && elem["name"] == current_func_name)
-        ref = find_var_decl(var_name, elem);
+      log_error("Type undefined for {}", var_name);
+      abort();
     }
-
-    // Get variable from global scope
-    if (ref.empty())
-      ref = find_var_decl(var_name, ast_json);
-
-    assert(!ref.empty());
-
-    current_element_type =
-      get_typet(ref["annotation"]["id"].get<std::string>());
+    current_element_type = get_typet(var_type);
   }
 
   exprt lhs;
