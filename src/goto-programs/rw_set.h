@@ -43,7 +43,7 @@ public:
   typedef std::unordered_map<irep_idt, entryt, irep_id_hash> entriest;
   entriest entries;
 
-  void compute(const codet &code);
+  void compute(const exprt &expr);
 
   rw_sett(
     const namespacet &_ns,
@@ -57,10 +57,10 @@ public:
     const namespacet &_ns,
     value_setst &_value_sets,
     goto_programt::const_targett _target,
-    const codet &code)
+    const exprt &expr)
     : ns(_ns), value_sets(_value_sets), target(_target)
   {
-    compute(code);
+    compute(expr);
   }
 
   void read_rec(const exprt &expr)

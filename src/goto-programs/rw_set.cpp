@@ -5,25 +5,54 @@
 #include <util/namespace.h>
 #include <util/std_expr.h>
 
-void rw_sett::compute(const codet &code)
+void rw_sett::compute(const exprt &expr)
 {
-  const irep_idt &statement = code.get_statement();
+  if (expr.is_code())
+  {
+    codet code = to_code(expr);
+    const irep_idt &statement = code.get_statement();
 
-  if (statement == "assign")
-  {
-    assert(code.operands().size() == 2);
-    assign(code.op0(), code.op1());
+    if (statement == "assign")
+    {
+      assert(code.operands().size() == 2);
+      assign(code.op0(), code.op1());
+    }
+    else if (statement == "printf")
+    {
+      exprt expr = code;
+      Forall_operands (it, expr)
+        read_rec(*it);
+    }
+    else if (statement == "return")
+    {
+      assert(code.operands().size() == 1);
+      read_rec(code.op0());
+    }
   }
-  else if (statement == "printf")
+  else
   {
-    exprt expr = code;
-    Forall_operands (it, expr)
-      read_rec(*it);
-  }
-  else if (statement == "return")
-  {
-    assert(code.operands().size() == 1);
-    read_rec(code.op0());
+    if (expr.id() == "not")
+    {
+      assert(expr.operands().size() == 1);
+      compute(expr.op0());
+    }
+    else if (expr.id() == "=")
+    {
+      assert(expr.operands().size() == 2);
+      read_rec(expr.op0());
+      read_rec(expr.op1());
+    }
+    else if (expr.id() == "notequal")
+    {
+      assert(expr.operands().size() == 2);
+      read_rec(expr.op0());
+      read_rec(expr.op1());
+    }
+    else if (expr.id() == "typecast")
+    {
+      assert(expr.operands().size() == 1);
+      read_rec(expr.op0());
+    }
   }
 }
 

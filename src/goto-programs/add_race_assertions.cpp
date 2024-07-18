@@ -126,11 +126,16 @@ void add_race_assertions(
 
     if (
       (instruction.is_assign() || instruction.is_other() ||
-       instruction.is_return()) &&
+       instruction.is_return() || instruction.is_goto()) &&
       !is_atomic)
     {
-      exprt tmp_expr = migrate_expr_back(instruction.code);
-      rw_sett rw_set(ns, value_sets, i_it, to_code(tmp_expr));
+      exprt tmp_expr;
+      if (instruction.is_goto())
+        tmp_expr = migrate_expr_back(instruction.guard);
+      else
+        tmp_expr = migrate_expr_back(instruction.code);
+
+      rw_sett rw_set(ns, value_sets, i_it, tmp_expr);
 
       if (rw_set.entries.empty())
         continue;
@@ -167,7 +172,7 @@ void add_race_assertions(
       // We need to keep all instructions before the return,
       // so when we process the return we need add the
       // original instruction at the end
-      if (!original_instruction.is_return())
+      if (!original_instruction.is_return() && !original_instruction.is_goto())
       {
         goto_programt::targett t = goto_program.insert(i_it);
 
@@ -210,7 +215,7 @@ void add_race_assertions(
         i_it = ++t;
       }
 
-      if (original_instruction.is_return())
+      if (original_instruction.is_return() || original_instruction.is_goto())
       {
         goto_programt::targett t = goto_program.insert(i_it);
         *t = original_instruction;
