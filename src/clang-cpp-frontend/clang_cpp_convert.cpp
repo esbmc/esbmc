@@ -1149,8 +1149,7 @@ bool clang_cpp_convertert::get_function_body(
         assert(cxxcd.getNumCtorInitializers() == 1);
 
         initializer.set(
-          "#delegating_ctor_this",
-          ftype.arguments().at(0).get("#identifier"));
+          "#delegating_ctor_this", ftype.arguments().at(0).get("#identifier"));
         initializer.set("#delegating_ctor", 1);
         if (get_expr(*init->getInit(), initializer))
           return true;
