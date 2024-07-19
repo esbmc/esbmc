@@ -682,6 +682,7 @@ bool solidity_convertert::get_var_decl(
       ast_node["typeName"]["pathNode"]["name"].get<std::string>();
 
     // 2. add a empty constructor to mimic C++ object auto instantiation
+    // e.g. Base x => Base x = Base(p) where p is a integer pointer
     if (get_instantiation_ctor_call(contract_name, val))
       return true;
 
@@ -853,6 +854,8 @@ bool solidity_convertert::get_struct_class_method(
 bool solidity_convertert::get_noncontract_defition(nlohmann::json &ast_node)
 {
   std::string node_type = (ast_node)["nodeType"].get<std::string>();
+  log_debug(
+    "solidity", "@@@ Expecting non-contract definition, got {}", node_type);
 
   if (node_type == "StructDefinition")
   {
@@ -864,25 +867,28 @@ bool solidity_convertert::get_noncontract_defition(nlohmann::json &ast_node)
     add_enum_member_val(ast_node);
   else if (node_type == "ErrorDefinition")
   {
+    add_empty_body_node(ast_node);
     if (get_error_definition(ast_node))
       return true;
   }
   else if (node_type == "EventDefinition")
   {
-    add_empty_function_body(ast_node);
+    add_empty_body_node(ast_node);
     if (get_function_definition(ast_node))
       return true;
   }
-  else if (node_type == "ContractDefinition")
+  else if (node_type == "ContractDefinition" && ast_node["abstract"] == true)
   {
-    add_empty_function_body(ast_node);
+    // for abstract contract
+    add_empty_body_node(ast_node);
   }
+
   return false;
 }
 
 // add a "body" node to functions within interface && abstract && event
 // the idea is to utilize the function-handling APIs.
-void solidity_convertert::add_empty_function_body(nlohmann::json &ast_node)
+void solidity_convertert::add_empty_body_node(nlohmann::json &ast_node)
 {
   if (ast_node["nodeType"] == "EventDefinition")
   {
@@ -1072,6 +1078,8 @@ void solidity_convertert::get_temporary_object(exprt &call, exprt &new_expr)
   new_expr = call;
 }
 
+// convert the initializaiton of the state variable
+// into the equivalent assignmment in the ctor
 bool solidity_convertert::move_initializer_to_ctor(
   const std::string contract_name,
   std::string ctor_id)
@@ -1173,10 +1181,7 @@ bool solidity_convertert::get_instantiation_ctor_call(
   type.arguments().push_back(param);
   added_symbol.type = type;
 
-  // populate initializer
-  if (move_initializer_to_ctor(contract_name, id))
-    return true;
-
+  // ? we do not need to populate the initializer
   // 2. construct the ctor call
   if (get_constructor_call(contract_name, id, new_expr))
     return true;
@@ -1298,8 +1303,9 @@ bool solidity_convertert::get_function_definition(
   //  - Convert params before body as they may get referred by the statement in the body
 
   // 11.1 add this pointer as the first param
-  get_function_this_pointer_param(
-    current_contractName, id, debug_modulename, location_begin, type);
+  if (ast_node["nodeType"].get<std::string>() != "EventDefinition")
+    get_function_this_pointer_param(
+      current_contractName, id, debug_modulename, location_begin, type);
 
   // 11.2 parse other params
   SolidityGrammar::ParameterListT params =
@@ -2495,7 +2501,23 @@ bool solidity_convertert::get_expr(
 
     const auto &caller_expr_json =
       find_decl_ref(callee_expr_json["referencedDeclaration"].get<int>());
+    std::string node_type = caller_expr_json["nodeType"].get<std::string>();
 
+    // * check if it's a event, error function call
+    if (node_type == "EventDefinition" || node_type == "ErrorDefinition")
+    {
+      if (get_function_call(callee_expr, type, empty_json, expr, call))
+        return true;
+      new_expr = call;
+      break;
+    }
+
+    // * check if it's the funciton inside library node
+    //TODO
+
+    // * we had ruled out all the special cases
+    // * we now confirm it is called by aother contract inside current contract
+    // * func() ==> current_func_this.func(&current_func_this);
     exprt base;
     assert(current_functionDecl);
     if (get_func_decl_this_ref(*current_functionDecl, base))
@@ -2858,6 +2880,16 @@ bool solidity_convertert::get_current_contract_name(
   const nlohmann::json &ast_node,
   std::string &contract_name)
 {
+  // we set it as empty first
+  contract_name = "";
+
+  // implicit constructor
+  if (ast_node.empty())
+  {
+    contract_name = current_contractName;
+    return false;
+  }
+
   // check if it is recorded in the scope_map
   if (ast_node.contains("scope"))
   {
@@ -2874,13 +2906,6 @@ bool solidity_convertert::get_current_contract_name(
         return false;
       }
     }
-  }
-
-  // implicit constructor
-  if (ast_node.empty())
-  {
-    contract_name = current_contractName;
-    return false;
   }
 
   // utilize the find_decl_ref
@@ -5655,18 +5680,11 @@ solidity_convertert::find_decl_ref(int ref_decl_id, std::string &contract_name)
   //! otherwise, assume it is current_contractName
   contract_name = current_contractName;
 
-  if (current_functionDecl != nullptr)
+  if (
+    current_functionDecl != nullptr && (*current_functionDecl).contains("body"))
   {
     // Then search "declarations" in current function scope
     const nlohmann::json &current_func = *current_functionDecl;
-    if (!current_func.contains("body"))
-    {
-      log_error(
-        "Unable to find the corresponding local variable decl. Current "
-        "function "
-        "does not have a function body.");
-      abort();
-    }
 
     // var declaration in local statements
     // bfs visit
