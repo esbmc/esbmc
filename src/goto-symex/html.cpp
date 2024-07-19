@@ -9,6 +9,7 @@
 #include <langapi/language_util.h>
 #include <optional>
 #include <filesystem>
+
 // TODO: Multiple files
 // TODO: Control Trace
 
@@ -374,6 +375,8 @@ public:
   html_report(const goto_tracet &goto_trace, const namespacet &ns);
   void output(std::ostream &oss) const;
 
+  bool show_partial_assertions = false;
+
 protected:
   const std::string generate_head() const;
   const std::string generate_body() const;
@@ -504,7 +507,7 @@ void html_report::print_file_table(
 {
   std::vector<code_lines> lines;
     {
-      std::ifstream input(file.first);
+      std::ifstream input(std::string(file.first));
       std::string line;
       while (std::getline(input, line))
         lines.push_back(line);
@@ -515,6 +518,7 @@ void html_report::print_file_table(
     size_t counter = 0;
     for (const auto &step : goto_trace.steps)
     {
+
       if (step.pc->location.get_file().as_string() != file.first)
 
       {
@@ -525,17 +529,20 @@ void html_report::print_file_table(
         std::ostringstream oss;
         if (step.pc->is_assume())
             oss << "Assumption restriction";
-        else if (step.pc->is_assert())
-          {
+        else if (step.pc->is_assert() || step.is_assert())
+        {
+          if (!show_partial_assertions && step.guard)
+            continue;
+
             std::string comment =
               (step.comment.empty() ? "Asssertion check" : step.comment);
 
             comment[0] = toupper(comment[0]);
             oss << comment;
-            oss << "\n" << from_expr(ns, "", step.pc->guard);
+            //oss << "\n" << from_expr(ns, "", step.pc->guard);
           }
         else if (step.pc->is_assign())
-          {
+        {
             oss << from_expr(ns, "", step.lhs);
             if (is_nil_expr(step.value))
               oss << " (assignment removed)";
@@ -548,11 +555,14 @@ void html_report::print_file_table(
             oss << from_expr(ns, "", step.lhs);
             oss << " = " << from_expr(ns, "", step.value) << "'";
           }
-      
+
+        
         auto &list =
           steps.insert({line, std::list<code_steps>()}).first->second;
 
-        list.push_back(code_steps(++counter, oss.str(), step.is_assume() || step.is_assert()));
+        list.push_back(code_steps(
+          ++counter, oss.str(), step.is_assume() || step.is_assert()));
+
 
         // Is this step the violation?
         if (step.is_assert() && !step.guard)
