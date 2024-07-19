@@ -310,8 +310,7 @@ std::string python_converter::get_operand_type(const nlohmann::json &element)
 
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
-  auto left =
-    (element.contains("left")) ? element["left"] : element["target"];
+  auto left = (element.contains("left")) ? element["left"] : element["target"];
 
   decltype(left) right;
   if (element.contains("right"))
@@ -407,8 +406,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
       unsigned int i = 0;
 
-      auto get_value_from_symbol = [&](const std::string &symbol_id, exprt &e)
-      {
+      auto get_value_from_symbol = [&](const std::string &symbol_id, exprt &e) {
         symbolt *symbol = context.find_symbol(symbol_id);
         assert(symbol);
         // Copy symbol value
@@ -416,8 +414,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
           e.operands().at(i++) = ch;
       };
 
-      auto get_value_from_json = [&](const nlohmann::json &elem, exprt &e)
-      {
+      auto get_value_from_json = [&](const nlohmann::json &elem, exprt &e) {
         const std::string &value = elem["value"].get<std::string>();
         std::vector<uint8_t> string_literal =
           std::vector<uint8_t>(std::begin(value), std::end(value));
