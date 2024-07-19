@@ -310,10 +310,10 @@ std::string python_converter::get_operand_type(const nlohmann::json &element)
 
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
-  const nlohmann::json &left =
+  auto left =
     (element.contains("left")) ? element["left"] : element["target"];
 
-  nlohmann::json right;
+  decltype(left) right;
   if (element.contains("right"))
     right = element["right"];
   else if (element.contains("comparators"))
@@ -406,65 +406,49 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       exprt expr = gen_zero(t);
 
       unsigned int i = 0;
+
+      auto get_value_from_symbol = [&](const std::string &symbol_id, exprt &e)
+      {
+        symbolt *symbol = context.find_symbol(symbol_id);
+        assert(symbol);
+        // Copy symbol value
+        for (const exprt &ch : symbol->value.operands())
+          e.operands().at(i++) = ch;
+      };
+
+      auto get_value_from_json = [&](const nlohmann::json &elem, exprt &e)
+      {
+        const std::string &value = elem["value"].get<std::string>();
+        std::vector<uint8_t> string_literal =
+          std::vector<uint8_t>(std::begin(value), std::end(value));
+
+        typet &char_type = t.subtype();
+
+        // Copy JSON value
+        for (uint8_t &ch : string_literal)
+        {
+          exprt char_value = constant_exprt(
+            integer2binary(BigInt(ch), bv_width(char_type)),
+            integer2string(BigInt(ch)),
+            char_type);
+
+          e.operands().at(i++) = char_value;
+        }
+      };
+
       // If LHS is a variable
       if (left["_type"] == "Name")
-      {
-        symbolt *lhs_symbol = context.find_symbol(lhs.identifier());
-        assert(lhs_symbol);
-
-        // Copy elements from symbol value
-        for (const exprt &ch : lhs_symbol->value.operands())
-          expr.operands().at(i++) = ch;
-      }
+        get_value_from_symbol(lhs.identifier().as_string(), expr);
       // If LHS is a literal
       else if (left["_type"] == "Constant")
-      {
-        const std::string &value = left["value"].get<std::string>();
-        std::vector<uint8_t> string_literal =
-          std::vector<uint8_t>(std::begin(value), std::end(value));
+        get_value_from_json(left, expr);
 
-        typet &char_type = t.subtype();
-
-        // Copy elements from JSON element
-        for (uint8_t &ch : string_literal)
-        {
-          exprt char_value = constant_exprt(
-            integer2binary(BigInt(ch), bv_width(char_type)),
-            integer2string(BigInt(ch)),
-            char_type);
-
-          expr.operands().at(i++) = char_value;
-        }
-      }
-
+      // If RHS is a variable
       if (right["_type"] == "Name")
-      {
-        symbolt *rhs_symbol = context.find_symbol(rhs.identifier());
-        assert(rhs_symbol);
-
-        // Copy RHS elements
-        for (const exprt &ch : rhs_symbol->value.operands())
-          expr.operands().at(i++) = ch;
-      }
+        get_value_from_symbol(rhs.identifier().as_string(), expr);
+      // If RHS is a literal
       else if (right["_type"] == "Constant")
-      {
-        const std::string &value = right["value"].get<std::string>();
-        std::vector<uint8_t> string_literal =
-          std::vector<uint8_t>(std::begin(value), std::end(value));
-
-        typet &char_type = t.subtype();
-
-        // Copy elements from JSON element
-        for (uint8_t &ch : string_literal)
-        {
-          exprt char_value = constant_exprt(
-            integer2binary(BigInt(ch), bv_width(char_type)),
-            integer2string(BigInt(ch)),
-            char_type);
-
-          expr.operands().at(i++) = char_value;
-        }
-      }
+        get_value_from_json(right, expr);
 
       return expr;
     }
