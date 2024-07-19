@@ -1401,6 +1401,13 @@ void python_converter::get_var_assign(
       {
         array_typet &arr_type =
           static_cast<array_typet &>(current_element_type);
+
+        /* When a string is assigned the result of a concatenation, we initially
+         * create the LHS type as a zero-size array: "current_element_type = get_typet(lhs_type, type_size);"
+         * After parsing the RHS, we need to adjust the LHS type size to match
+         * the size of the resulting RHS string.*/
+
+        // If the size of the LHS type is zero, update the LHS type with the type of the RHS.
         if (std::stoi(arr_type.size().value().as_string()) == 0)
           lhs_symbol->type = rhs.type();
       }
