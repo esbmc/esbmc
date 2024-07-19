@@ -285,21 +285,44 @@ std::string python_converter::create_symbol_id() const
   return create_symbol_id(python_filename);
 }
 
+// Get the type of an operand in binary operations
+std::string python_converter::get_operand_type(const nlohmann::json &element)
+{
+  // Operand is a variable
+  if (element["_type"] == "Name")
+    return get_var_type(element["id"]);
+
+  // Operand is a literal
+  if (element["_type"] == "Constant")
+  {
+    const auto &value = element["value"];
+    if (value.is_string())
+      return "str";
+    if (value.is_number_integer() || value.is_number_unsigned())
+      return "int";
+    else if (value.is_boolean())
+      return "bool";
+    else if (value.is_number_float())
+      return "float";
+  }
+  return std::string();
+}
+
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
-  exprt lhs;
-  if (element.contains("left"))
-    lhs = get_expr(element["left"]);
-  else if (element.contains("target"))
-    lhs = get_expr(element["target"]);
+  const nlohmann::json &left =
+    (element.contains("left")) ? element["left"] : element["target"];
 
-  exprt rhs;
+  nlohmann::json right;
   if (element.contains("right"))
-    rhs = get_expr(element["right"]);
+    right = element["right"];
   else if (element.contains("comparators"))
-    rhs = get_expr(element["comparators"][0]);
+    right = element["comparators"][0];
   else if (element.contains("value"))
-    rhs = get_expr(element["value"]);
+    right = element["value"];
+
+  exprt lhs = get_expr(left);
+  exprt rhs = get_expr(right);
 
   auto to_side_effect_call = [](exprt &expr) {
     side_effect_expr_function_callt side_effect;
@@ -327,8 +350,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   assert(!op.empty());
 
   // Get LHS and RHS types from variable annotation
-  std::string lhs_type = get_var_type(lhs.name().as_string());
-  std::string rhs_type = get_var_type(rhs.name().as_string());
+  std::string lhs_type = get_operand_type(left);
+  std::string rhs_type = get_operand_type(right);
 
   // If RHS is a string literal, like x = "foo", then we determine the type from the JSON value
   if (
@@ -369,7 +392,6 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     // Strings concatenation
     else if (op == "Add")
     {
-      // ...
       array_typet lhs_str_type = static_cast<array_typet &>(lhs.type());
       BigInt lhs_str_size =
         binary2integer(lhs_str_type.size().value().c_str(), true);
@@ -381,38 +403,68 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       BigInt concat_str_size = lhs_str_size + rhs_str_size;
 
       typet t = get_typet("str", concat_str_size.to_uint64());
-//      const std::string &value = lhs.value().as_string();
-
-//      std::vector<uint8_t> string_literal =
-//        std::vector<uint8_t>(std::begin(value), std::end(value));
-
-//      typet &char_type = t.subtype();
-
       exprt expr = gen_zero(t);
 
-      symbolt* lhs_symbol = context.find_symbol(lhs.identifier());
-      assert(lhs_symbol);
-
-      symbolt* rhs_symbol = context.find_symbol(rhs.identifier());
-      assert(rhs_symbol);
-
-      // Copy LHS elements
       unsigned int i = 0;
-      for (const exprt &ch : lhs_symbol->value.operands())
-        expr.operands().at(i++) = ch;
+      // If LHS is a variable
+      if (left["_type"] == "Name")
+      {
+        symbolt *lhs_symbol = context.find_symbol(lhs.identifier());
+        assert(lhs_symbol);
 
-      // Copy RHS elements
-      for (const exprt &ch : rhs_symbol->value.operands())
-        expr.operands().at(i++) = ch;
+        // Copy elements from symbol value
+        for (const exprt &ch : lhs_symbol->value.operands())
+          expr.operands().at(i++) = ch;
+      }
+      // If LHS is a literal
+      else if (left["_type"] == "Constant")
+      {
+        const std::string &value = left["value"].get<std::string>();
+        std::vector<uint8_t> string_literal =
+          std::vector<uint8_t>(std::begin(value), std::end(value));
 
-      //      for (uint8_t &ch : string_literal)
-      //      {
-      //        exprt char_value = constant_exprt(
-      //          integer2binary(BigInt(ch), bv_width(char_type)),
-      //          integer2string(BigInt(ch)),
-      //          char_type);
-      //        expr.operands().at(i++) = char_value;
-      //      }
+        typet &char_type = t.subtype();
+
+        // Copy elements from JSON element
+        for (uint8_t &ch : string_literal)
+        {
+          exprt char_value = constant_exprt(
+            integer2binary(BigInt(ch), bv_width(char_type)),
+            integer2string(BigInt(ch)),
+            char_type);
+
+          expr.operands().at(i++) = char_value;
+        }
+      }
+
+      if (right["_type"] == "Name")
+      {
+        symbolt *rhs_symbol = context.find_symbol(rhs.identifier());
+        assert(rhs_symbol);
+
+        // Copy RHS elements
+        for (const exprt &ch : rhs_symbol->value.operands())
+          expr.operands().at(i++) = ch;
+      }
+      else if (right["_type"] == "Constant")
+      {
+        const std::string &value = right["value"].get<std::string>();
+        std::vector<uint8_t> string_literal =
+          std::vector<uint8_t>(std::begin(value), std::end(value));
+
+        typet &char_type = t.subtype();
+
+        // Copy elements from JSON element
+        for (uint8_t &ch : string_literal)
+        {
+          exprt char_value = constant_exprt(
+            integer2binary(BigInt(ch), bv_width(char_type)),
+            integer2string(BigInt(ch)),
+            char_type);
+
+          expr.operands().at(i++) = char_value;
+        }
+      }
 
       return expr;
     }
@@ -1275,7 +1327,8 @@ void python_converter::get_var_assign(
   else
   {
     // Get type from declaration node
-    const std::string &var_name = ast_node["targets"][0]["id"].get<std::string>();
+    const std::string &var_name =
+      ast_node["targets"][0]["id"].get<std::string>();
     lhs_type = get_var_type(var_name);
 
     if (lhs_type.empty())
@@ -1365,7 +1418,8 @@ void python_converter::get_var_assign(
     {
       if (lhs_type == "str")
       {
-        array_typet &arr_type = static_cast<array_typet&>(current_element_type);
+        array_typet &arr_type =
+          static_cast<array_typet &>(current_element_type);
         if (std::stoi(arr_type.size().value().as_string()) == 0)
           lhs_symbol->type = rhs.type();
       }
