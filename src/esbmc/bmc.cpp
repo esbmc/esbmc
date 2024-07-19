@@ -923,6 +923,8 @@ smt_convt::resultt bmct::multi_property_check(
         std::ofstream out(fmt::format("{}-{}", ce_counter++, output_file));
         show_goto_trace(out, ns, goto_trace);
       }
+      if(options.get_bool_option("generate-html-report"))
+        generate_html_report(options, fmt::format("{}", i), ns, goto_trace);
       std::ostringstream oss;
       log_fail("\n[Counterexample]\n");
       show_goto_trace(oss, ns, goto_trace);
