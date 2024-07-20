@@ -281,6 +281,11 @@ public:
     return get_bool(a_need_vptr_init);
   }
 
+  inline bool need_vbotptr_init() const
+  {
+    return get_bool(a_need_vbotptr_init);
+  }
+
   inline const irep_idt &property() const
   {
     return get(a_property);
@@ -972,6 +977,11 @@ public:
     set(a_need_vptr_init, val);
   }
 
+  inline void need_vbotptr_init(bool val)
+  {
+    set(a_need_vbotptr_init, val);
+  }
+
   inline void restricted(bool val)
   {
     set(a_restricted, val);
@@ -1275,6 +1285,12 @@ public:
    * This is used by implicit IR generation in adjuster
    */
   static const irep_idt a_need_vptr_init;
+
+  /*
+   * annotation to indicate whether virtual base offset table pointer (vbotptr) has been initialized in constructor
+   * This is used by implicit IR generation in adjuster
+   */
+  static const irep_idt a_need_vbotptr_init;
 
   static const irep_idt id_address_of, id_and, id_or, id_array, id_bool,
     id_code;

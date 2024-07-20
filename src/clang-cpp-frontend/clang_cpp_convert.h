@@ -269,10 +269,16 @@ protected:
    * Methods for virtual tables and virtual pointers
    *  TODO: add link to wiki page
    */
-  std::string vtable_type_prefix = "virtual_table::";
-  std::string vtable_ptr_suffix = "@vtable_pointer";
+  static inline std::string vbase_offset_type_prefix = "vbase_offset_table::";
+  static inline std::string vtable_type_prefix = "virtual_table::";
+
+  static inline std::string vbase_offset_ptr_suffix = "@vbase_offset_ptr";
+  static inline std::string vtable_ptr_suffix = "@vtable_pointer";
+
   // if a class/struct has vptr component, it needs to be initialized in ctor
   bool has_vptr_component = false;
+  // if a class/struct has vbo_ptr (virtual base offset ptr) component, it needs to be initialized in ctor
+  bool has_vbot_ptr_component = false;
   std::string thunk_prefix = "thunk::";
   using function_switch = std::map<irep_idt, exprt>;
   using switch_table = std::map<irep_idt, function_switch>;

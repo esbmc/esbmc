@@ -77,6 +77,27 @@ public:
   exprt gen_vptr_init_rhs(
     const struct_union_typet::componentt &comp,
     const code_typet &ctor_type);
+  void gen_vbotptr_initializations(symbolt &symbol);
+  /*
+   * generate vbotptr initialization code for constructor:
+   *  this->BLAH@vbase_offset_ptr = vbase_offset_table::BLAH
+   *    where BLAH stands for the constructors' class/struct's name
+   *
+   * Params:
+   *  - comp: vbotptr component as in class' type `components` vector
+   *  - ctor_type: type of the constructor symbol
+   *  - new_code: the code expression for vbotptr initialization
+   */
+  void gen_vbotptr_init_code(
+    const struct_union_typet::componentt &comp,
+    side_effect_exprt &new_code,
+    const code_typet &ctor_type);
+  exprt gen_vbotptr_init_lhs(
+    const struct_union_typet::componentt &comp,
+    const code_typet &ctor_type);
+  exprt gen_vbotptr_init_rhs(
+    const struct_union_typet::componentt &comp,
+    const code_typet &ctor_type);
 
   /**
    * ancillary methods to support the expr/code adjustments above

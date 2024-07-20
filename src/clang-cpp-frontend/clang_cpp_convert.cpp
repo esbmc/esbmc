@@ -400,7 +400,13 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
     base_name_to_first_base_component_map.insert(
       {"tag-" + type.tag().as_string(), 0});
 
-
+    // skip unions as they don't have virtual bases
+    if (!rd.isUnion())
+    {
+      assert(type.is_struct());
+      if (get_struct_class_virtual_base_offsets(*cxxrd, to_struct_type(type)))
+        return true;
+    }
   }
 
   // Parse the fields
@@ -478,6 +484,18 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
       .id(i2string(base_name_to_first_base_component.second));
   }
 
+  if (cxxrd)
+  {
+    if (!rd.isUnion())
+    {
+      assert(type.is_struct());
+      /*
+     * Set up virtual base offset table(vbo) variable symbols
+     * Each vbo is modelled as a struct of char pointers used as offset.
+     */
+      setup_vbo_table_struct_variables(*cxxrd, to_struct_type(type));
+    }
+  }
 
   return false;
 }
@@ -600,6 +618,7 @@ bool clang_cpp_convertert::get_struct_union_class_methods_decls(
   }
 
   has_vptr_component = false;
+  has_vbot_ptr_component = false;
 
   return false;
 }
@@ -1784,10 +1803,11 @@ bool clang_cpp_convertert::annotate_class_method(
     {
       fd_symb->type = component_type;
       /*
-       * we indicate the need for vptr initializations in contructor.
-       * vptr initializations will be added in the adjuster.
+       * we indicate the need for vptr & vbotptr initializations in constructor.
+       * vptr & vbotptr initializations will be added in the adjuster.
        */
       fd_symb->value.need_vptr_init(has_vptr_component);
+      fd_symb->value.need_vbotptr_init(has_vbot_ptr_component);
     }
   }
 

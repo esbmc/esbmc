@@ -20,6 +20,7 @@ void clang_cpp_adjust::adjust_symbol(symbolt &symbol)
    * add implicit code to set each virtual pointer of this
    * class to point to the corresponding virtual table.
    */
+  gen_vbotptr_initializations(symbol);
   gen_vptr_initializations(symbol);
 }
 

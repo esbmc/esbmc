@@ -34,7 +34,9 @@ add_library(util_esbmc xml_irep.cpp xml.cpp
         c_sizeof.cpp c_link.cpp c_typecast.cpp fix_symbol.cpp destructor.cpp
         c_expr2string.cpp cpp_expr2string.cpp type2name.cpp
         message.cpp encoding.cpp
-        )
+        cpp_base_offset.cpp
+        cpp_base_offset.h
+)
 # Boost is needed by anything that touches irep2
 target_include_directories(util_esbmc
         PUBLIC ${CMAKE_BINARY_DIR}/src
