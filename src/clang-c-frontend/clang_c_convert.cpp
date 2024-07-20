@@ -2889,6 +2889,9 @@ bool clang_c_convertert::get_cast_expr(
   const clang::CastExpr &cast,
   exprt &new_expr)
 {
+  assert(
+    cast.path_size() <= 0 || cast.getCastKind() == clang::CK_DerivedToBase ||
+    cast.getCastKind() == clang::CK_UncheckedDerivedToBase);
   exprt expr;
   if (get_expr(*cast.getSubExpr(), expr))
     return true;
@@ -2902,10 +2905,83 @@ bool clang_c_convertert::get_cast_expr(
   case clang::CK_ArrayToPointerDecay:
   case clang::CK_FunctionToPointerDecay:
   case clang::CK_BuiltinFnToFnPtr:
-  case clang::CK_UncheckedDerivedToBase:
     break;
 
+  case clang::CK_UncheckedDerivedToBase:
   case clang::CK_DerivedToBase:
+
+  {
+    log_error(
+      "Cast from {} to {} cast kind {}",
+      cast.getSubExpr()->getType().getAsString(),
+      cast.getType().getAsString(),
+      cast.getCastKindName());
+    assert(cast.path_size() > 0);
+    bool is_reference = false;
+    bool convert_to_pointer = !expr.type().is_pointer();
+    bool convert_intermediate_to_pointer =
+      convert_to_pointer || (expr.type().is_pointer() && type.is_pointer());
+    bool convert_to_object = !type.is_pointer();
+
+    if (convert_to_pointer)
+    {
+      exprt ptr_expr = address_of_exprt(expr);
+      //      ptr_expr.type() = pointer_typet(type);
+      expr.swap(ptr_expr);
+    }
+
+    //    if (
+    //      expr.is_dereference() && expr.operands().size() == 1 &&
+    //      expr.op0().type().reference())
+    //    {
+    //      //      expr = expr.op0();
+    //      expr.swap(expr.op0());
+    //      is_reference = true;
+    //    }
+    typet intermediate_type;
+    for (auto &path : cast.path())
+    {
+      if (path->isVirtual())
+      {
+        log_error("Hello");
+      }
+      log_error("Clang says type in path is {}", path->getType().getAsString());
+      //      log_error(
+      //        "Clang says type in path is ###2 {} ptr type: {}",
+      //        path->getTypeSourceInfo()->getType().getAsString(),
+      //        path->getTypeSourceInfo()->getType()->isPointerType());
+      //      path->getType().dump();
+      //      path->getTypeSourceInfo()->getType().dump();
+      ;
+      if (get_type(path->getType(), intermediate_type))
+        return true;
+      //      if (is_reference)
+      //      {
+      //        typet ptr_type = pointer_typet(intermediate_type);
+      //        ptr_type.set("#reference", intermediate_type.get("#reference"));
+      //        ptr_type.set("#lvalue", intermediate_type.get("#lvalue"));
+      //        ptr_type.swap(intermediate_type);
+      //      }
+      if (!intermediate_type.is_pointer())
+      {
+        typet ptr_type = pointer_typet(intermediate_type);
+        ptr_type.swap(intermediate_type);
+      }
+      log_error(
+        "Intermediate cast from {} to {}", expr.type(), intermediate_type);
+      assert(intermediate_type.is_pointer());
+      assert(expr.type().is_pointer());
+      gen_derived_to_base_typecast(
+        ns, expr, intermediate_type, path->isVirtual());
+    }
+    if (convert_to_object)
+    {
+      exprt deref_expr = dereference_exprt(expr, intermediate_type.subtype());
+      expr.swap(deref_expr);
+    }
+    log_error("Cast finished");
+    break;
+  }
   case clang::CK_Dynamic:
 
   case clang::CK_UserDefinedConversion:

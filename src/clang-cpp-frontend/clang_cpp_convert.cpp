@@ -1869,8 +1869,12 @@ void clang_cpp_convertert::gen_typecast_base_ctor_call(
   assert(s);
   exprt implicit_this_symb = symbol_expr(this_symbol);
 
-  // generate the type casting expr and push it to callee's arguments
-  gen_typecast(ns, implicit_this_symb, base_ctor_this_type);
+  // Technically, the base class could be virtual and we'd have to do a virtual cast (using vbotptr), _but_
+  // we only initialize virtual base classes in the complete object constructor.
+  // This means that we know how the whole object look exactly, so we can
+  // just use the static offset to the virtual base class.
+  gen_derived_to_base_typecast(
+    ns, implicit_this_symb, base_ctor_this_type, false);
   call.arguments().push_back(implicit_this_symb);
 }
 
