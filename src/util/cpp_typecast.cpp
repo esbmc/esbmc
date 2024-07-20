@@ -98,47 +98,6 @@ bool cpp_typecastt::try_virtual_cast(
   const dstring &dest_sub_name,
   const typet &src_type)
 {
-  assert(!src_type.is_symbol());
-  irept virtual_bases_irept = src_type.find("virtual_bases");
-  irept::subt &virtual_bases = virtual_bases_irept.get_sub();
-  if (virtual_bases.empty())
-  {
-    // If src does not have any virtual bases than we can never cast it to dest (at least never virtually).
-    // src == dest should be handled already.
-    return true;
-  }
-
-  size_t count = 0;
-  size_t base_index = 0;
-  for (size_t index = 0; index < virtual_bases.size(); index++)
-  {
-    if (virtual_bases[index].type().tag() == dest_sub_name)
-    {
-      // base_index contains the index of the **first** destination class in the virtual_bases vector.
-      // If there are actually multiple destination classes in the virtual_bases vector, we will abort later.
-      base_index = index;
-      count++;
-    }
-  }
-
-  if (count == 0 || count > 1)
-  {
-    return true;
-  }
-
-  // Get the destination class as it is in the virtual_bases vector.
-  auto dest_base = virtual_bases[base_index];
-
-  // Adjust the pointer by adding the offset
-  // (dest_type*) ((char*)source_pointer + offset)
-  // where `char* offset = source_pointer->vbo_pointer."base_offset_member"`
-
-  int vbase_offset_index = -static_cast<int>(base_index);
-  exprt vbase_offset_index_expr = constant_exprt(
-    integer2binary(vbase_offset_index, bv_width(int_type())),
-    integer2string(vbase_offset_index),
-    int_type());
-
   std::string source_class_id = expr.type().subtype().identifier().as_string();
   std::string dest_class_id = dest_type.subtype().identifier().as_string();
 

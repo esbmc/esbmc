@@ -14,6 +14,7 @@ class CXXConstructExpr;
 class DeclContext;
 class CXXRecordDecl;
 class CXXConstructorDecl;
+class CXXBaseSpecifier;
 } // namespace clang
 
 class clang_cpp_convertert : public clang_c_convertert
@@ -24,6 +25,16 @@ public:
     std::unique_ptr<clang::ASTUnit> &_AST,
     irep_idt _mode);
   virtual ~clang_cpp_convertert() = default;
+
+  /*
+   * Methods for virtual tables and virtual pointers
+   *  TODO: add link to wiki page
+   */
+  static inline std::string vbase_offset_type_prefix = "vbase_offset_table::";
+  static inline std::string vtable_type_prefix = "virtual_table::";
+
+  static inline std::string vbase_offset_ptr_suffix = "@vbase_offset_ptr";
+  static inline std::string vtable_ptr_suffix = "@vtable_pointer";
 
 protected:
   // this_map contains key-value pairs in the form of <method address, <identifier, type>>
@@ -264,16 +275,6 @@ protected:
     const std::string &base_name,
     struct_union_typet &type,
     bool is_virtual_base);
-
-  /*
-   * Methods for virtual tables and virtual pointers
-   *  TODO: add link to wiki page
-   */
-  static inline std::string vbase_offset_type_prefix = "vbase_offset_table::";
-  static inline std::string vtable_type_prefix = "virtual_table::";
-
-  static inline std::string vbase_offset_ptr_suffix = "@vbase_offset_ptr";
-  static inline std::string vtable_ptr_suffix = "@vtable_pointer";
 
   // if a class/struct has vptr component, it needs to be initialized in ctor
   bool has_vptr_component = false;

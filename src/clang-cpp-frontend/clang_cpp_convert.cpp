@@ -392,6 +392,8 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
   {
     for (auto non_virtual_base : cxxrd->bases())
     {
+      if (non_virtual_base.isVirtual())
+        continue;
       assert(!non_virtual_base.isVirtual());
       get_base(
         type, base_name_to_first_base_component_map, non_virtual_base, false);
@@ -509,8 +511,8 @@ void clang_cpp_convertert::get_base(
   get_decl_name(*base.getType()->getAsCXXRecordDecl(), base_name, base_id);
   get_struct_union_class(*base.getType()->getAsCXXRecordDecl());
   base_name_to_first_base_component_map.insert(
-    {base_name, type.components().size()});
-  get_base_components_methods(base_name, type, is_virtual);
+    {base_id, type.components().size()});
+  get_base_components_methods(base_id, type, is_virtual);
   // Add tail padding between bases. Otherwise, pointers to the start of bases could be misaligned.
   add_padding(type, ns);
 
