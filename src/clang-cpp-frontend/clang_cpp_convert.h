@@ -226,22 +226,20 @@ protected:
     const clang::CXXConstructExpr &call);
 
   /*
-   * Methods to pull bases in
-   */
-  using base_names = std::set<std::string>;
-  /*
-   * Get the direct non-virtual base class(es) of the class/struct we are currently dealing with.
-   * Get the direct **and** indirect virtual base class(es) of the class/struct we are currently dealing with.
-   *
+   * Adds a given `base` to `type` and records the index of the first component of this base class in `base_name_to_first_base_component_map`.
    * Params:
-   *  - cxxrd: clang AST representing the class/struct we are currently dealing with
-   *  - non_virtual_names: this set contains the names of the direct non-virtual base class(es) of this class
-   *  - virtual_names: this set contains the names of the direct and indirect virtual base class(es) of this class
+   *  - type: type to which we are adding the base class(es)
+   *  - base_name_to_first_base_component_map: maps from base name to the index of the first component of this base class in `type`
+   *    (this used for calculating the offset of the base class in the derived class)
+   *  - base: the base to add
+   *  - is_virtual: whether the base is virtual
    */
-  bool get_base_names(
-    const clang::CXXRecordDecl &cxxrd,
-    base_names &non_virtual_names,
-    base_names &virtual_names);
+
+  void get_base(
+    struct_union_typet &type,
+    std::map<std::string, size_t> &base_name_to_first_base_component_map,
+    const clang::CXXBaseSpecifier &base,
+    bool is_virtual);
   /*
    * Check whether we've already got this method in a class type
    * Avoid copying duplicate method from a base class type to the derived class type.
@@ -533,6 +531,26 @@ protected:
    *  expr: ESBMC IR to represent Function call
    */
   void make_temporary(exprt &expr);
+  symbolt *check_vbase_offset_type_symbol_existence(const struct_typet &type);
+  symbolt *add_vbase_offset_type_symbol_and_vbase_offset_ptr_if_needed(
+    struct_typet &type,
+    const locationt &loc);
+  symbolt *
+  add_vbase_offset_type_symbol(const locationt &comp, struct_typet &type);
+  void add_vbase_offset_ptr(struct_typet &type);
+  void setup_vbo_table_struct_variables(
+    const clang::CXXRecordDecl &cxxrd,
+    const struct_typet &type);
+  void add_vbo_table_variable_symbols(
+    const clang::CXXRecordDecl &cxxrd,
+    const struct_typet &struct_type);
+  void add_vbase_offset_table_type_entry(
+    struct_typet &type,
+    struct_typet::componentt &comp,
+    symbolt *vbase_offset_table_type_symbol);
+  bool get_struct_class_virtual_base_offsets(
+    const clang::CXXRecordDecl &cxxrd,
+    struct_typet &type);
   bool get_cxx_constructor_is_complete_param(
     const clang::CXXConstructorDecl &cxxcd,
     code_typet::argumentst &params);

@@ -25,6 +25,8 @@ CC_DIAGNOSTIC_POP()
 #include <fmt/core.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/c_types.h>
+#include "clang-c-frontend/padding.h"
+#include "util/i2string.h"
 
 clang_cpp_convertert::clang_cpp_convertert(
   contextt &_context,
@@ -383,24 +385,22 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
 {
   // Note: If a struct is defined inside an extern C, it will be a RecordDecl
 
+  const clang::CXXRecordDecl *cxxrd = llvm::dyn_cast<clang::CXXRecordDecl>(&rd);
   // pull bases in
-  if (auto cxxrd = llvm::dyn_cast<clang::CXXRecordDecl>(&rd))
+  std::map<std::string, size_t> base_name_to_first_base_component_map;
+  if (cxxrd)
   {
-    if (cxxrd->bases_begin() != cxxrd->bases_end())
+    for (auto non_virtual_base : cxxrd->bases())
     {
-      base_names non_virtual_bases;
-      base_names virtual_bases;
-      if (get_base_names(*cxxrd, non_virtual_bases, virtual_bases))
-        return true;
-      for (const auto &non_virtual_base : non_virtual_bases)
-      {
-        get_base_components_methods(non_virtual_base, type, false);
-      }
-      for (const auto &virtual_base : virtual_bases)
-      {
-        get_base_components_methods(virtual_base, type, true);
-      }
+      assert(!non_virtual_base.isVirtual());
+      get_base(
+        type, base_name_to_first_base_component_map, non_virtual_base, false);
     }
+    // The first component of the whole class is always zero
+    base_name_to_first_base_component_map.insert(
+      {"tag-" + type.tag().as_string(), 0});
+
+
   }
 
   // Parse the fields
@@ -424,7 +424,82 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
     type.components().push_back(comp);
   }
 
+  // Add tail padding between own fields of the class and
+  // any virtual bases. Otherwise, pointers to the start of virtual bases could be misaligned.
+  if (cxxrd && cxxrd->getNumVBases() > 0)
+  {
+    add_padding(type, ns);
+  }
+
+  // pull virtual bases in after fields.
+  /* We need to add virtual bases after fields because we need to have consistent
+   * offsets for the fields. If we add virtual bases before fields, the offsets
+   * of the fields will be incorrect.
+   * E.g. consider this:
+   * ```
+   * struct A { int a;};
+   * struct B { int b;};
+   * struct C : A, virtual B { int c;}
+   * struct D : C, virtual B { int d;}
+   * ```
+   * If we have a `C`, the offset of `c` will be 8: we first layout `A` (4 byte) and then `B` (4 byte), so `c` is at offset 8.
+   * This is however wrong. we should first layout `A` (4 byte), then `C`'s own field `c` (4 byte) and then `B` (4 byte), ergo `c` should be at offset 4.
+   * If we don't do this, the offset for `D` will be incorrect:
+   * If we have a `D`, the offset of `c` will be 4: we first layout `C`. We do this by copying the layout of `C`, but ignoring any fields from virtual bases.
+   * Because we ignore `b` from `B`, the offset of `c` will be 4 which is inconsistent with the offset of `c` in `C`.
+   */
+  if (cxxrd)
+  {
+    for (const auto &virtual_base : cxxrd->vbases())
+    {
+      assert(virtual_base.isVirtual());
+      get_base(type, base_name_to_first_base_component_map, virtual_base, true);
+    }
+  }
+
+  // iterate over all fields and re-index all "anon_pad$" fields
+  // to ensure that they are in the correct order
+  for (size_t i = 0; i < type.components().size(); i++)
+  {
+    auto &component = type.components()[i];
+    if (has_prefix(component.get_name(), "anon_pad$"))
+    {
+      std::string index = std::to_string(i);
+      component.set_name("anon_pad$" + index);
+      component.set_pretty_name("anon_pad$" + index);
+    }
+  }
+
+  for (const auto &base_name_to_first_base_component :
+       base_name_to_first_base_component_map)
+  {
+    irept &base_offsets_irept = type.add("base_offsets");
+    base_offsets_irept.add(base_name_to_first_base_component.first)
+      .id(i2string(base_name_to_first_base_component.second));
+  }
+
+
   return false;
+}
+void clang_cpp_convertert::get_base(
+  struct_union_typet &type,
+  std::map<std::string, size_t> &base_name_to_first_base_component_map,
+  const clang::CXXBaseSpecifier &base,
+  bool is_virtual)
+{
+  std::string base_name, base_id;
+  get_decl_name(*base.getType()->getAsCXXRecordDecl(), base_name, base_id);
+  get_struct_union_class(*base.getType()->getAsCXXRecordDecl());
+  base_name_to_first_base_component_map.insert(
+    {base_name, type.components().size()});
+  get_base_components_methods(base_name, type, is_virtual);
+  // Add tail padding between bases. Otherwise, pointers to the start of bases could be misaligned.
+  add_padding(type, ns);
+
+  // get base class symbol
+  symbolt *s = context.find_symbol(base_id);
+  assert(s);
+  type.add("bases").get_sub().emplace_back(s->id);
 }
 
 bool clang_cpp_convertert::get_struct_union_class_methods_decls(
@@ -1818,59 +1893,14 @@ symbolt *clang_cpp_convertert::get_fd_symbol(const clang::FunctionDecl &fd)
   return (context.find_symbol(id));
 }
 
-bool clang_cpp_convertert::get_base_names(
-  const clang::CXXRecordDecl &cxxrd,
-  base_names &non_virtual_names,
-  base_names &virtual_names)
-{
-  /*
-   * This function gets the direct base classes from which we need to get the components/methods
-   */
-  for (const clang::CXXBaseSpecifier &base : cxxrd.bases())
-  {
-    // The base class is always a CXXRecordDecl
-    const clang::CXXRecordDecl &base_cxxrd =
-      *(base.getType().getTypePtr()->getAsCXXRecordDecl());
-
-    if (get_struct_union_class(base_cxxrd))
-      return true;
-
-    // recursively get more **virtual** bases for this `base`
-    base_names ignored;
-    if (base_cxxrd.bases_begin() != base_cxxrd.bases_end())
-      if (get_base_names(base_cxxrd, ignored, virtual_names))
-        return true;
-
-    // get base class id
-    std::string class_id, class_name;
-    get_decl_name(base_cxxrd, class_name, class_id);
-
-    if (base.isVirtual())
-    {
-      // we don't have to check for duplicate virtual bases because it's a set
-      virtual_names.insert(class_id);
-    }
-    else
-    {
-      // we don't have to check for duplicates, because clang should complain
-      // if there are any duplicate direct non-virtual bases.
-      non_virtual_names.insert(class_id);
-    }
-  }
-  return false;
-}
-
 void clang_cpp_convertert::get_base_components_methods(
   const std::string &base_name,
   struct_union_typet &type,
   bool is_virtual_base)
 {
-  irept::subt &base_ids = type.add("bases").get_sub();
-
   // get base class symbol
   symbolt *s = context.find_symbol(base_name);
   assert(s);
-  base_ids.emplace_back(s->id);
 
   const struct_typet &base_type = to_struct_type(s->type);
 
