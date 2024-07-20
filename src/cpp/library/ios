@@ -158,7 +158,6 @@ public:
 
   ios()
   {
-    ios_base();
   }
   virtual ~ios()
   {

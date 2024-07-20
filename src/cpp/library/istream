@@ -14,7 +14,7 @@ public:
   {
   }
 
-  istream() : ios()
+  istream()
   {
     _gcount = 0;
     _filesize = nondet_uint();
@@ -23,7 +23,6 @@ public:
 
   istream(streambuf *sb)
   {
-    ios();
     _gcount = 0;
     _filesize = nondet_uint();
     _filepos = 0;

@@ -37,11 +37,9 @@ class istringstream : public istream
 public:
   explicit istringstream(openmode which = ios_base::in)
   {
-    istream();
   }
   explicit istringstream(const string &str, openmode which = ios_base::in)
   {
-    istream();
   }
   stringbuf *rdbuf() const;
   string str() const;
@@ -183,11 +181,9 @@ class ostringstream : public ostream
 public:
   explicit ostringstream(openmode which = out)
   {
-    ostream();
   }
   explicit ostringstream(const string &str, openmode which = out)
   {
-    ostream();
   }
   stringbuf *rdbuf() const;
   string str() const;

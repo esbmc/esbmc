@@ -111,8 +111,6 @@ public:
 //=====================fstream===================
 fstream::fstream()
 {
-  istream();
-  ostream();
   _fileopen = false;
   _m_filebuf = NULL;
   ostream::_filesize = 0;
@@ -122,8 +120,6 @@ fstream::fstream(
   const char *filename,
   ios_base::openmode mode)
 {
-  istream();
-  ostream();
   _fileopen = false;
   _m_filebuf = NULL;
   ostream::_filepos = 0;
@@ -159,7 +155,6 @@ void fstream::close()
 //===================ofstream============================
 ofstream::ofstream()
 {
-  ostream();
   _fileopen = false;
   _m_filebuf = NULL; //new filebuf;
   ostream::_filesize = 0;
@@ -169,7 +164,6 @@ ofstream::ofstream(
   const char *filename,
   ios_base::openmode mode)
 {
-  ostream();
   _fileopen = false;
   _m_filebuf = NULL; //new filebuf;
   ostream::_filepos = 0;
@@ -204,7 +198,6 @@ void ofstream::close()
 //===================ifstream============================
 ifstream::ifstream()
 {
-  istream();
   _fileopen = false;
   _m_filebuf = NULL; //new filebuf;
   _filesize = 0;
@@ -212,7 +205,6 @@ ifstream::ifstream()
 }
 ifstream::ifstream(const char *filename, ios_base::openmode mode)
 {
-  istream();
   _fileopen = false;
   _m_filebuf = NULL; //new filebuf;
   _filepos = 0;
