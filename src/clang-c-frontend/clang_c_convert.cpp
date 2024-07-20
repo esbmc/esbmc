@@ -3602,13 +3602,6 @@ void clang_c_convertert::get_decl_name(
       name = "__anon_field_" + std::to_string(fd.getFieldIndex());
       id = name;
     }
-    else if (!fd.getParent()->isUnion())
-    {
-      // If the field is not part of a union, we need to prepend the name of
-      // the struct to it
-      name = get_decl_name(*fd.getParent()) + "::" + name;
-      id = name;
-    }
     return;
   }
 
