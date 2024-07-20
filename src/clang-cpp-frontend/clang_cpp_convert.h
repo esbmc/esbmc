@@ -6,6 +6,16 @@
 
 #include <clang-c-frontend/clang_c_convert.h>
 
+// Forward dec, to avoid bringing in clang headers
+namespace clang
+{
+class CXXMethodDecl;
+class CXXConstructExpr;
+class DeclContext;
+class CXXRecordDecl;
+class CXXConstructorDecl;
+} // namespace clang
+
 class clang_cpp_convertert : public clang_c_convertert
 {
 public:
@@ -523,6 +533,9 @@ protected:
    *  expr: ESBMC IR to represent Function call
    */
   void make_temporary(exprt &expr);
+  bool get_cxx_constructor_is_complete_param(
+    const clang::CXXConstructorDecl &cxxcd,
+    code_typet::argumentst &params);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

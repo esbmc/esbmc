@@ -1068,6 +1068,17 @@ bool clang_cpp_convertert::get_constructor_call(
     call.arguments().push_back(single_arg);
   }
 
+  // Init __is_complete based on whether we have call to a complete object constructor or only a
+  // base object constructor.
+  if (new_expr.get_bool("#is_complete_object"))
+  {
+    call.arguments().push_back(gen_boolean(true));
+  }
+  else
+  {
+    call.arguments().push_back(gen_boolean(false));
+  }
+
   call.set("constructor", 1);
 
   if (need_new_obj)
@@ -1144,6 +1155,9 @@ bool clang_cpp_convertert::get_function_body(
       for (auto init : cxxcd.inits())
       {
         exprt initializer;
+        // Assume that the constructor is complete object constructor.
+        // If it is a base initializer, it will be set to false later.
+        initializer.set("#is_complete_object", true);
 
         if (!init->isBaseInitializer())
         {
@@ -1188,8 +1202,30 @@ bool clang_cpp_convertert::get_function_body(
           initializer.derived_this_arg(
             ftype.arguments().at(0).get("#identifier"));
           initializer.base_ctor_derived(true);
+          initializer.set("#is_complete_object", false);
           if (get_expr(*init->getInit(), initializer))
             return true;
+        }
+
+        if (init->isBaseInitializer() && init->isBaseVirtual())
+        {
+          symbolt *s =
+            context.find_symbol(ftype.arguments().back().get("#identifier"));
+          const symbolt &is_complete_symbol = *s;
+          assert(s);
+          exprt is_complete_symbol_expr = symbol_expr(is_complete_symbol);
+
+          /*
+           * if(__is_complete)
+           *   virtual-base-initializer
+           * else
+           *   skip
+           */
+          code_ifthenelset skip_ctor = code_ifthenelset();
+          skip_ctor.cond() = is_complete_symbol_expr;
+          convert_expression_to_code(initializer);
+          skip_ctor.then_case() = to_code(initializer);
+          skip_ctor.swap(initializer);
         }
 
         // Convert to code and insert side-effect in the operands list
@@ -1292,6 +1328,51 @@ bool clang_cpp_convertert::get_function_this_pointer_param(
   return false;
 }
 
+bool clang_cpp_convertert::get_cxx_constructor_is_complete_param(
+  const clang::CXXConstructorDecl &cxxcd,
+  code_typet::argumentst &params)
+{
+  // Parse this pointer
+  code_typet::argumentt is_complete_param;
+  is_complete_param.type() = bool_typet();
+
+  locationt location_begin;
+  get_location_from_decl(cxxcd, location_begin);
+
+  std::string id, name;
+  get_decl_name(cxxcd, name, id);
+
+  name = "__is_complete";
+  id += name;
+
+  is_complete_param.cmt_base_name(name);
+  is_complete_param.cmt_identifier(id);
+
+  // Add '__is_complete' as the last parameter to the list of params
+  params.back() = is_complete_param;
+
+  // If the method is not defined, we don't need to add it's parameter
+  // to the context, they will never be used
+  if (!cxxcd.isDefined())
+    return false;
+
+  symbolt param_symbol;
+  get_default_symbol(
+    param_symbol,
+    get_modulename_from_path(location_begin.file().as_string()),
+    is_complete_param.type(),
+    name,
+    id,
+    location_begin);
+
+  param_symbol.lvalue = true;
+  param_symbol.is_parameter = true;
+  param_symbol.file_local = true;
+
+  context.move_symbol_to_context(param_symbol);
+  return false;
+}
+
 bool clang_cpp_convertert::get_function_params(
   const clang::FunctionDecl &fd,
   code_typet::argumentst &params)
@@ -1307,12 +1388,19 @@ bool clang_cpp_convertert::get_function_params(
   if (!fd.isCXXClassMember() || cxxmd.isStatic())
     return clang_c_convertert::get_function_params(fd, params);
 
+  int num_additional_args = 1; // this pointer
+  auto *cxxcd = llvm::dyn_cast<clang::CXXConstructorDecl>(&fd);
+  if (cxxcd)
+  {
+    num_additional_args++; // __is_complete
+  }
+
   // Add this pointer to first arg
   if (get_function_this_pointer_param(cxxmd, params))
     return true;
 
-  // reserve space for `this' pointer and params
-  params.resize(1 + fd.parameters().size());
+  // reserve space for `this' pointer, params and __is_complete
+  params.resize(num_additional_args + fd.parameters().size());
 
   // TODO: replace the loop with get_function_params
   // Parse other args
@@ -1327,6 +1415,14 @@ bool clang_cpp_convertert::get_function_params(
     // All args are added shifted by one position, because
     // of the this pointer (first arg)
     params[i + 1].swap(param);
+  }
+
+  // Check whether we need to add the __is_complete parameter
+  // Done after the other parameters, because it should be the last one
+  if (cxxcd)
+  {
+    if (get_cxx_constructor_is_complete_param(*cxxcd, params))
+      return true;
   }
 
   return false;
