@@ -9,6 +9,7 @@ BASE_ARGS="\
     -DENABLE_REGRESSION=On \
     -DENABLE_SOLIDITY_FRONTEND=On \
     -DENABLE_JIMPLE_FRONTEND=On \
+    -DENABLE_PYTHON_FRONTEND=On \
     -DCMAKE_INSTALL_PREFIX:PATH=$PWD/release \
 "
 # Must disable old frontend to enable goto contractor. github issue #1110
@@ -85,7 +86,6 @@ ubuntu_setup () {
 
     BASE_ARGS="$BASE_ARGS \
         -DENABLE_OLD_FRONTEND=Off \
-        -DENABLE_PYTHON_FRONTEND=On \
         -DBUILD_STATIC=$STATIC \
     " &&
     SOLVER_FLAGS="$SOLVER_FLAGS \
