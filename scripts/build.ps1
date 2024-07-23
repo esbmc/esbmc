@@ -6,7 +6,7 @@ choco install -y nsis.portable --ignore-checksums &&
 od.exe --version &&
 
 vcpkg.exe integrate install &&
-vcpkg.exe install boost-filesystem:x64-windows-static boost-multiprecision:x64-windows-static boost-date-time:x64-windows-static boost-test:x64-windows-static boost-multi-index:x64-windows-static boost-crc:x64-windows-static boost-property-tree:x64-windows-static boost-uuid:x64-windows-static boost-program-options:x64-windows-static boost-iostreams:x64-windows-static &&
+vcpkg.exe install boost-filesystem:x64-windows-static boost-multiprecision:x64-windows-static boost-date-time:x64-windows-static boost-test:x64-windows-static boost-multi-index:x64-windows-static boost-crc:x64-windows-static boost-property-tree:x64-windows-static boost-bind:x64-windows-static boost-uuid:x64-windows-static boost-program-options:x64-windows-static boost-iostreams:x64-windows-static &&
 
 mkdir build &&
 cd build &&
