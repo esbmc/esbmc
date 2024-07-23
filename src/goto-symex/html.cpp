@@ -17,8 +17,8 @@
 /// clang --analyze -Xclang -analyzer-output=html -o test test.c
 namespace clang_bug_report
 {
-  constexpr std::string_view html_style{
-    R"(<style type="text/css">
+constexpr std::string_view html_style{
+  R"(<style type="text/css">
 body { color:#000000; background-color:#ffffff }
 body { font-family:Helvetica, sans-serif; font-size:10pt }
 h1 { font-size:14pt }
@@ -157,8 +157,8 @@ input.spoilerhider:checked + label + .spoiler{
 }
 </style>)"};
 
-  constexpr std::string_view annotated_source_header_fmt{
-    R"(
+constexpr std::string_view annotated_source_header_fmt{
+  R"(
 <h3>Annotated Source Code</h3>
 <p>Press <a href="#" onclick="toggleHelp(); return false;">'?'</a>
    to see keyboard shortcuts</p>
@@ -177,20 +177,21 @@ input.spoilerhider:checked + label + .spoiler{
 </div>
 )"};
 
-  // NOTE: Removed the "Show arrows"
-  constexpr std::string_view counterexample_checkbox { R"(<form>
+// NOTE: Removed the "Show arrows"
+constexpr std::string_view counterexample_checkbox{R"(<form>
     <input type="checkbox" name="showCounterexample" id="showCounterexample" />
     <label for="showCounterexample">
        Show only relevant lines
     </label>
 </form>)"};
 
-  const std::string counterexample_filter(const std::string_view relevant_lines_js)
-  {
-    std::ostringstream oss;
-    oss << "<script type='text/javascript'>\n";
-    oss << "var relevant_lines = " << relevant_lines_js << ";\n";
-    oss << R"(
+const std::string
+counterexample_filter(const std::string_view relevant_lines_js)
+{
+  std::ostringstream oss;
+  oss << "<script type='text/javascript'>\n";
+  oss << "var relevant_lines = " << relevant_lines_js << ";\n";
+  oss << R"(
 var filterCounterexample = function (hide) {
   var tables = document.getElementsByClassName("code");
   for (var t=0; t<tables.length; t++) {
@@ -238,10 +239,10 @@ document.addEventListener("DOMContentLoaded", function() {
 });
 </script>)";
 
-    return oss.str();
-  }
+  return oss.str();
+}
 
-  constexpr std::string_view keyboard_navigation_js {R"(  
+constexpr std::string_view keyboard_navigation_js{R"(  
 <script type='text/javascript'>
 var digitMatcher = new RegExp("[0-9]+");
 
@@ -367,7 +368,7 @@ window.addEventListener("keydown", function (event) {
 });
 </script>)"};
 
-}
+} // namespace clang_bug_report
 
 class html_report
 {
@@ -380,35 +381,45 @@ public:
 protected:
   const std::string generate_head() const;
   const std::string generate_body() const;
-  const goto_tracet &goto_trace; 
+  const goto_tracet &goto_trace;
 
 private:
   const namespacet &ns;
   std::optional<goto_trace_stept> violation_step;
-  void print_file_table(std::ostream &os, std::pair<const std::string_view, size_t>) const;
+  void print_file_table(
+    std::ostream &os,
+    std::pair<const std::string_view, size_t>) const;
   struct code_lines
   {
-    code_lines(const std::string &content) : content(content) {}
+    code_lines(const std::string &content) : content(content)
+    {
+    }
     const std::string content;
     std::string to_html() const;
   };
 
   struct code_steps
   {
-    code_steps(const size_t step, const std::string &msg, bool is_jump) : step(step), msg(msg), is_jump(is_jump) {}
+    code_steps(const size_t step, const std::string &msg, bool is_jump)
+      : step(step), msg(msg), is_jump(is_jump)
+    {
+    }
     size_t step;
     std::string msg;
     bool is_jump;
     size_t file_id = 1;
     std::string to_html(size_t last) const;
   };
-  
-  static inline const std::string tag_body_str(const std::string_view tag,const std::string_view body) {
+
+  static inline const std::string
+  tag_body_str(const std::string_view tag, const std::string_view body)
+  {
     return fmt::format("<{0}>{1}</{0}>", tag, body);
-  }  
+  }
 };
 
-html_report::html_report(const goto_tracet &goto_trace, const namespacet &ns) : goto_trace(goto_trace), ns(ns)
+html_report::html_report(const goto_tracet &goto_trace, const namespacet &ns)
+  : goto_trace(goto_trace), ns(ns)
 {
   // TODO: C++20 reverse view
   for (const goto_trace_stept &step : goto_trace.steps)
@@ -429,7 +440,7 @@ const std::string html_report::generate_head() const
   {
     head << tag_body_str("title", "ESBMC report");
     head << clang_bug_report::html_style;
-  }  
+  }
   return tag_body_str("head", head.str());
 }
 
@@ -437,14 +448,15 @@ const std::string html_report::generate_body() const
 {
   std::ostringstream body;
   const locationt &location = violation_step->pc->location;
-  const std::string filename{std::filesystem::absolute(location.get_file().as_string()).string()};
+  const std::string filename{
+    std::filesystem::absolute(location.get_file().as_string()).string()};
   // Bug Summary
-  {        
+  {
     const std::string position{fmt::format(
-                                           "function {}, line {}, column {}",
-                                           location.get_function(),
-                                           location.get_line(),
-                                           location.get_column())};
+      "function {}, line {}, column {}",
+      location.get_function(),
+      location.get_line(),
+      location.get_column())};
     std::string violation_str{violation_step->comment};
     if (violation_str.empty())
       violation_str = "Assertion failure";
@@ -452,37 +464,38 @@ const std::string html_report::generate_body() const
     body << "<h3>Bug Summary</h3>";
     body << R"(<table class="simpletable">)";
     body << fmt::format(
-                        R"(<tr><td class="rowname">File:</td><td>{}</td></tr>)", filename);
+      R"(<tr><td class="rowname">File:</td><td>{}</td></tr>)", filename);
     body << fmt::format(
-                        R"(<tr><td class="rowname">Violation:</td><td><a href="#EndPath">{}</a><br />{}</td></tr></table>)",
-                        position,
-                        violation_str);
+      R"(<tr><td class="rowname">Violation:</td><td><a href="#EndPath">{}</a><br />{}</td></tr></table>)",
+      position,
+      violation_str);
   }
-  
+
   // Annoted Source Header
   {
     std::ostringstream oss;
     for (const auto &param : config.args)
       oss << param << " ";
-    body << fmt::format(clang_bug_report::annotated_source_header_fmt, oss.str());
+    body << fmt::format(
+      clang_bug_report::annotated_source_header_fmt, oss.str());
   }
 
   std::set<std::string> files;
   // Counter-Example filtering
   {
-    std::unordered_set<size_t> relevant_lines; 
+    std::unordered_set<size_t> relevant_lines;
     for (const auto &step : goto_trace.steps)
     {
       files.insert(step.pc->location.get_file().as_string());
-        if(!(step.is_assert() && step.guard))
-          relevant_lines.insert(atoi(step.pc->location.get_line().c_str()));
+      if (!(step.is_assert() && step.guard))
+        relevant_lines.insert(atoi(step.pc->location.get_line().c_str()));
     }
 
     // TODO: Every file!
     std::ostringstream oss;
     oss << R"({"1": {)";
     for (const auto line : relevant_lines)
-      oss << fmt::format( "\"{}\": 1,", line);
+      oss << fmt::format("\"{}\": 1,", line);
     oss << "}}";
     body << clang_bug_report::counterexample_filter(oss.str());
     body << clang_bug_report::counterexample_checkbox;
@@ -491,13 +504,12 @@ const std::string html_report::generate_body() const
   // Counter-Example and Arrows
   {
     for (const std::string &file : files)
-      {
+    {
       print_file_table(
         body, {file, 1 + std::distance(files.begin(), files.find(file))});
-      }
-
+    }
   }
-  
+
   return tag_body_str("body", body.str());
 }
 
@@ -506,105 +518,104 @@ void html_report::print_file_table(
   std::pair<const std::string_view, size_t> file) const
 {
   std::vector<code_lines> lines;
+  {
+    std::ifstream input(std::string(file.first));
+    std::string line;
+    while (std::getline(input, line))
+      lines.push_back(line);
+  }
+  os << fmt::format(
+    "<div id=File{}><h4 class=FileName>{}</h4>",
+    file.second,
+    std::filesystem::absolute(file.first).string());
+
+  std::unordered_map<size_t, std::list<code_steps>> steps;
+  size_t counter = 0;
+  for (const auto &step : goto_trace.steps)
+  {
+    if (step.pc->location.get_file().as_string() != file.first)
+
     {
-      std::ifstream input(std::string(file.first));
-      std::string line;
-      while (std::getline(input, line))
-        lines.push_back(line);
+      counter++;
+      continue;
     }
-    os << fmt::format("<div id=File{}><h4 class=FileName>{}</h4>", file.second, std::filesystem::absolute(file.first).string());
-
-    std::unordered_map<size_t, std::list<code_steps>> steps;
-    size_t counter = 0;
-    for (const auto &step : goto_trace.steps)
+    size_t line = atoi(step.pc->location.get_line().c_str());
+    std::ostringstream oss;
+    if (step.pc->is_assume())
+      oss << "Assumption restriction";
+    else if (step.pc->is_assert() || step.is_assert())
     {
-
-      if (step.pc->location.get_file().as_string() != file.first)
-
-      {
-        counter++;
+      if (!show_partial_assertions && step.guard)
         continue;
-      }
-        size_t line = atoi(step.pc->location.get_line().c_str());
-        std::ostringstream oss;
-        if (step.pc->is_assume())
-            oss << "Assumption restriction";
-        else if (step.pc->is_assert() || step.is_assert())
-        {
-          if (!show_partial_assertions && step.guard)
-            continue;
 
-            std::string comment =
-              (step.comment.empty() ? "Asssertion check" : step.comment);
+      std::string comment =
+        (step.comment.empty() ? "Asssertion check" : step.comment);
 
-            comment[0] = toupper(comment[0]);
-            oss << comment;
-            //oss << "\n" << from_expr(ns, "", step.pc->guard);
-          }
-        else if (step.pc->is_assign())
-        {
-            oss << from_expr(ns, "", step.lhs);
-            if (is_nil_expr(step.value))
-              oss << " (assignment removed)";
-            else
-              oss << " = " << from_expr(ns, "", step.value);
-          }
-          else if (step.pc->is_function_call())
-          {
-            oss << "Function argument '";
-            oss << from_expr(ns, "", step.lhs);
-            oss << " = " << from_expr(ns, "", step.value) << "'";
-          }
+      comment[0] = toupper(comment[0]);
+      oss << comment;
+      //oss << "\n" << from_expr(ns, "", step.pc->guard);
+    }
+    else if (step.pc->is_assign())
+    {
+      oss << from_expr(ns, "", step.lhs);
+      if (is_nil_expr(step.value))
+        oss << " (assignment removed)";
+      else
+        oss << " = " << from_expr(ns, "", step.value);
+    }
+    else if (step.pc->is_function_call())
+    {
+      oss << "Function argument '";
+      oss << from_expr(ns, "", step.lhs);
+      oss << " = " << from_expr(ns, "", step.value) << "'";
+    }
 
-        
-        auto &list =
-          steps.insert({line, std::list<code_steps>()}).first->second;
+    auto &list = steps.insert({line, std::list<code_steps>()}).first->second;
 
-        list.push_back(code_steps(
-          ++counter, oss.str(), step.is_assume() || step.is_assert()));
+    list.push_back(
+      code_steps(++counter, oss.str(), step.is_assume() || step.is_assert()));
 
+    // Is this step the violation?
+    if (step.is_assert() && !step.guard)
+      break;
+  }
 
-        // Is this step the violation?
-        if (step.is_assert() && !step.guard)
-          break;
-      }
-
-    // Table begin
-    os << fmt::format(R"(<table class="code" data-fileid="{}">)", file.second);
-    for (size_t i = 0; i < lines.size(); i++)
+  // Table begin
+  os << fmt::format(R"(<table class="code" data-fileid="{}">)", file.second);
+  for (size_t i = 0; i < lines.size(); i++)
+  {
+    const auto &it = steps.find(i);
+    if (it != steps.end())
+    {
+      for (const auto &step : it->second)
       {
-        const auto &it = steps.find(i);
-        if (it != steps.end())
-          {
-            for (const auto &step : it->second)
-              {
-                os << step.to_html(counter);
-              }
-          }
-        constexpr std::string_view codeline_fmt{
-          R"(<tr class="codeline" data-linenumber="{0}"><td class="num" id="LN{0}">{0}</td><td class="line">{1}</td></tr>)"};
-        os << fmt::format(codeline_fmt, i+1, lines[i].to_html());
+        os << step.to_html(counter);
       }
-    
-    os << "</table><hr class=divider>";
-    // Table end
-  
+    }
+    constexpr std::string_view codeline_fmt{
+      R"(<tr class="codeline" data-linenumber="{0}"><td class="num" id="LN{0}">{0}</td><td class="line">{1}</td></tr>)"};
+    os << fmt::format(codeline_fmt, i + 1, lines[i].to_html());
+  }
+
+  os << "</table><hr class=divider>";
+  // Table end
 }
 
 void html_report::output(std::ostream &oss) const
 {
-  std::ostringstream html;  
+  std::ostringstream html;
   html << generate_head();
   html << generate_body();
 
   oss << "<!doctype html>";
-  oss << tag_body_str("html", html.str());  
+  oss << tag_body_str("html", html.str());
 }
 
-void generate_html_report(const optionst &options,
-                          const std::string_view uuid,
-                          const namespacet &ns,
-                          const goto_tracet &goto_trace)
+void generate_html_report(
+  const optionst &options,
+  const std::string_view uuid,
+  const namespacet &ns,
+  const goto_tracet &goto_trace)
 {
   log_status("Generating HTML report for trace: {}", uuid);
   const html_report report(goto_trace, ns);
@@ -628,10 +639,11 @@ std::string html_report::code_lines::to_html() const
 
   std::string output(content);
   for (const auto &word : keywords)
-    {
-      std::regex e(fmt::format("(\\b({}))([^,. ]*)", word));
-      output = std::regex_replace(output,e, fmt::format("<span class='keyword'>{}</span>", word)) ;
-    }  
+  {
+    std::regex e(fmt::format("(\\b({}))([^,. ]*)", word));
+    output = std::regex_replace(
+      output, e, fmt::format("<span class='keyword'>{}</span>", word));
+  }
   return output;
 }
 std::string html_report::code_steps::to_html(size_t last) const
@@ -651,7 +663,8 @@ std::string html_report::code_steps::to_html(size_t last) const
   constexpr std::string_view previous_step_format{
     R"(<td><div class="PathNav"><a href="#{}" title="Previous event ({}) ">&#x2190;</a></div></td>)"};
 
-  const std::string previous_step_str = step != 0 ? fmt::format(previous_step_format, previous_step, step - 1) : "";
+  const std::string previous_step_str =
+    step != 0 ? fmt::format(previous_step_format, previous_step, step - 1) : "";
 
   constexpr std::string_view jump_format{
     R"(<tr><td class="num"></td><td class="line"><div id="Path{0}" class="msg msgControl" style="margin-left:{1}ex"><table class="msgT"><tr><td valign="top"><div class="PathIndex PathIndexControl">{0}</div></td>{2}<td>{3}</td>{4}</tr></table></div></td></tr>)"};
@@ -663,5 +676,11 @@ std::string html_report::code_steps::to_html(size_t last) const
     R"(<tr><td class="num"></td><td class="line"><div id="EndPath" class="msg msgEvent" style="margin-left:{1}ex"><table class="msgT"><tr><td valign="top"><div class="PathIndex PathIndexEvent">{0}</div></td>{2}<td>{3}</td></table></div></td></tr>)"};
 
   std::string format(is_jump ? jump_format : step_format);
-  return fmt::format(step == last ? end_format : format, step,  margin*step + 1, previous_step_str, msg, next_step_str);  
+  return fmt::format(
+    step == last ? end_format : format,
+    step,
+    margin * step + 1,
+    previous_step_str,
+    msg,
+    next_step_str);
 }
