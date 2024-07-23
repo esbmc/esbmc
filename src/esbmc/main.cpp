@@ -9,6 +9,6 @@ int main(int argc, const char **argv)
   esbmc_parseoptionst parseoptions(argc, argv);
   for (int i = 0; i < argc; i++)
     config.args.push_back(argv[i]);
-      
+
   return parseoptions.main();
 }

@@ -142,6 +142,4 @@ void generate_html_report(
   const namespacet &ns,
   const goto_tracet &goto_trace);
 
-
-
 #endif
