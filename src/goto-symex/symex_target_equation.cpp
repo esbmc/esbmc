@@ -71,7 +71,8 @@ void symex_target_equationt::assumption(
   const expr2tc &guard,
   const expr2tc &cond,
   const sourcet &source,
-  unsigned loop_number)
+  unsigned loop_number,
+  const bool sliceable)
 {
   SSA_steps.emplace_back();
   SSA_stept &SSA_step = SSA_steps.back();
@@ -81,6 +82,7 @@ void symex_target_equationt::assumption(
   SSA_step.type = goto_trace_stept::ASSUME;
   SSA_step.source = source;
   SSA_step.loop_number = loop_number;
+  SSA_step.sliceable = sliceable;
 
   if (debug_print)
     debug_print_step(SSA_step);
@@ -104,6 +106,7 @@ void symex_target_equationt::assertion(
   SSA_step.comment = msg;
   SSA_step.stack_trace = stack_trace;
   SSA_step.loop_number = loop_number;
+  SSA_step.sliceable = false;
 
   if (debug_print)
     debug_print_step(SSA_step);

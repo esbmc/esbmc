@@ -126,7 +126,12 @@ void goto_symext::assume(const expr2tc &the_assumption)
 
   // Irritatingly, assumption destroys its expr argument
   expr2tc tmp_guard = cur_state->guard.as_expr();
-  target->assumption(tmp_guard, assumption, cur_state->source, first_loop);
+  target->assumption(
+    tmp_guard,
+    assumption,
+    cur_state->source,
+    first_loop,
+    cur_state->source.pc->sliceable);
 
   // If we're assuming false, make the guard for the following statement false
   if (is_false(the_assumption))

@@ -139,6 +139,9 @@ public:
 
     bool inductive_assertion;
 
+    // for slicer (assumptions only)
+    bool sliceable;
+
     //! is this node a branch target?
     inline bool is_target() const
     {
@@ -154,6 +157,7 @@ public:
       code = expr2tc();
       inductive_step_instruction = false;
       inductive_assertion = false;
+      sliceable = false;
     }
 
     inline void make_goto()
@@ -337,6 +341,7 @@ public:
         type(NO_INSTRUCTION_TYPE),
         inductive_step_instruction(false),
         inductive_assertion(false),
+        sliceable(false),
         location_number(0),
         loop_number(unsigned(0)),
         target_number(unsigned(-1))
@@ -349,6 +354,7 @@ public:
         type(_type),
         inductive_step_instruction(false),
         inductive_assertion(false),
+        sliceable(false),
         location_number(0),
         loop_number(unsigned(0)),
         target_number(unsigned(-1))
@@ -369,6 +375,7 @@ public:
         inductive_step_instruction, instruction.inductive_step_instruction);
       std::swap(inductive_assertion, instruction.inductive_assertion);
       std::swap(instruction.loop_number, loop_number);
+      std::swap(sliceable, instruction.sliceable);
     }
 
     //! A globally unique number to identify a program location.
