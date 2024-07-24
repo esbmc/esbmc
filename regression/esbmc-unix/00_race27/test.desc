@@ -1,0 +1,4 @@
+CORE
+main.c
+--data-races-check --no-assertions --context-bound 4
+^VERIFICATION SUCCESSFUL$
