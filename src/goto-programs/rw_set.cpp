@@ -5,25 +5,50 @@
 #include <util/namespace.h>
 #include <util/std_expr.h>
 
-void rw_sett::compute(const codet &code)
+void rw_sett::compute(const exprt &expr)
 {
-  const irep_idt &statement = code.get_statement();
+  const goto_programt::instructiont &instruction = *target;
 
-  if (statement == "assign")
+  if (expr.is_code())
   {
-    assert(code.operands().size() == 2);
-    assign(code.op0(), code.op1());
+    codet code = to_code(expr);
+    const irep_idt &statement = code.get_statement();
+
+    if (statement == "assign")
+    {
+      assert(code.operands().size() == 2);
+      assign(code.op0(), code.op1());
+    }
+    else if (statement == "printf")
+    {
+      exprt expr = code;
+      Forall_operands (it, expr)
+        read_rec(*it);
+    }
+    else if (statement == "return")
+    {
+      assert(code.operands().size() == 1);
+      read_rec(code.op0());
+    }
   }
-  else if (statement == "printf")
+  else if (instruction.is_goto() || instruction.is_assert())
   {
-    exprt expr = code;
-    Forall_operands (it, expr)
-      read_rec(*it);
-  }
-  else if (statement == "return")
-  {
-    assert(code.operands().size() == 1);
-    read_rec(code.op0());
+    if (expr.id() == "not")
+    {
+      assert(expr.operands().size() == 1);
+      compute(expr.op0());
+    }
+    else if (expr.id() == "=" || expr.id() == "notequal")
+    {
+      assert(expr.operands().size() == 2);
+      read_rec(expr.op0());
+      read_rec(expr.op1());
+    }
+    else if (expr.id() == "typecast")
+    {
+      assert(expr.operands().size() == 1);
+      read_rec(expr.op0());
+    }
   }
 }
 
@@ -59,7 +84,7 @@ void rw_sett::read_write_rec(
         symbol->name == "__ESBMC_alloc_size" || symbol->name == "stdin" ||
         symbol->name == "stdout" || symbol->name == "stderr" ||
         symbol->name == "sys_nerr" || symbol->name == "operator=::ref" ||
-        symbol->name == "this")
+        symbol->name == "this" || symbol->name == "__ESBMC_atexits")
       {
         return; // ignore for now
       }

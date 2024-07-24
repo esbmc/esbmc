@@ -2,9 +2,9 @@
 
 ## Introduction
 
-The python frontend of ESBMC converts a given python code to pass the input python code to the control-flow graph generator in the form of an Abstract Syntax Tree (AST). This is achieved by scanning the given code using the ast2json library available for python.
+The Python frontend of ESBMC converts a given Python code to pass the input Python code to the control-flow graph generator in the form of an Abstract Syntax Tree (AST). This is achieved by scanning the given code using the ast2json library available for Python.
 
-The rest of the ESBMC architecture then handles the conversion of this AST to GOTO statements and SSA (Single Static Assignments), which are then checked for satisfiability by converting them into SMT formulas. This documentation will cover the process of ast2json conversion, and how the given program is converted into an AST.
+The rest of the ESBMC architecture then handles the conversion of this AST to GOTO statements and SSA (Single Static Assignments), which are then checked for satisfiability by converting them into SMT formulas. This documentation will cover the process of ast2json conversion and how the given program is transformed into an AST.
 
 ![esbmc charts.png](./images/conversion_process.png)
 
@@ -12,37 +12,37 @@ The rest of the ESBMC architecture then handles the conversion of this AST to GO
 
 ![esbmc_architecture.png](./images/esbmc_architecture.png)
 
-The entry-point for the frontend is the function that parses the python file. It handles the parsing of a given python code into the AST, the other python scripts and cpp files support the process with functions defined to handle the syntax and programming functions of python.
+The entry-point for the frontend is the function that parses the Python file. It handles the parsing of a given Python code into the AST; the other Python scripts and cpp files support the process with functions defined to handle the syntax and programming functions of Python.
 
 Let us take a detailed look at each step of the process in the sections below with a working example.
 
 ## The parsing process
 
-The parsing function first checks if the python script passed exists in the given file path. If it exists, then it calls a function to dump all supporting files into a temporary output directory, and stores the returned value in a variable which is the path to the output directory.
+The parsing function first checks, if the Python script passed, exists in the given file path. If it exists, it is called a function that dumps all supporting files into a temporary output directory. It stores the returned value in a variable, which is the path to the output directory.
 
-This directory also contains all the other supporting python scripts that helps parse the python file and pre-processors that 
+This directory also contains supporting Python scripts that help parse the Python file and pre-processors.
 
 After the required modules are dumped in the directory, the parser script is executed to generate the .json file from the AST. The resulting .json file is now stored in the temporary directory.
 
-The file is then parsed, and a AST is generated, which is traversed and for each node function, type annotations are added using the other supporting files in the python frontend.
+The file is then parsed, and an AST is generated, which is traversed. For each node function, type annotations are added using the other supporting files on the Python front end.
 
-It ends with the parsing function returning the value false, if everything works as intended.
+It ends with the parsing function returning the value false if everything works as intended.
 
 ## The parser script
 
 The parser python script handles the conversion of the given python script into the .json file by converting it into an abstract syntax tree first.
 
-The two main arguments that are passed on to the file during execution is the python file to be analysed and the path to the output directory.
+The two main arguments passed on to the file during execution are the Python file to be analyzed and the path to the output directory.
 
-The parser also includes the current directory it is in to account for all the process imports that it has to search through. Then, it opens the given python file and converts it into an abstract syntax tree using the function `parse` from the ast library.
+The parser also includes the current directory to account for all the process imports it has to search through. Then, it opens the given Python file and converts it into an abstract syntax tree using the function `parse` from the AST library.
 
 The resulting tree is then subjected to some essential transformations to the loops defined in the program. This process is termed as pre-processing.
 
-after pre-processing, the tree is then traversed where the process imports and type annotations are handled. The AST of the main python file is then converted into a proper json format. Then, the memory models defined in the model directory is also converted into proper json AST file and stored in the temporary output directory.
+After pre-processing, the tree is traversed, where the process imports and type annotations are handled. The AST of the main Python file is then converted into a proper JSON format. Then, the memory models defined in the model directory are converted into proper JSON AST files and stored in the temporary output directory.
 
 The `ast2json.ast2json()` function is used here to convert the python AST. The result is then written into the appropriate .json file.
 
-The function converts any process import nodes in the AST node and generates appropriate json files for the imported elements.
+The function converts any process import nodes in the AST node and generates appropriate JSON files for the imported elements.
 
 ## The preprocessor
 
@@ -50,9 +50,9 @@ The Preprocessor contains definitions for functions that are used to convert the
 
 ## Example
 
-Let us take a simple python code to observe the conversion of the code into AST.
+Let us take a simple Python code to observe the conversion of the code into AST.
 
-Take for example, the python code below,
+Take, for example, the Python code below,
 
 ```
 class MyClass:
