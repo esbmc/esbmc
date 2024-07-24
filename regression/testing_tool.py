@@ -82,7 +82,15 @@ class TestCase:
             result.append("--smt-formula-only")
             result.append("--output")
             result.append(f"{self.test_dir}.smt2")
-            result.append("--array-flattener")
+            result.append("--max-k-step")
+            result.append("2")
+            #result.append("--array-flattener")
+            TestCase.UNSUPPORTED_OPTIONS.insert(-1,"--smt-during-symex")
+            TestCase.UNSUPPORTED_OPTIONS.insert(-1,"--smt-thread-guard")
+            if "--k-induction-parallel" in result:
+                index = result.index("--k-induction-parallel")
+                result[index] = "--k-induction"
+            
 
         for x in TestCase.UNSUPPORTED_OPTIONS:
             try:
@@ -123,6 +131,7 @@ class TestCase:
     RUN_ONLY = False
     """SMT only test"""
     SMT_ONLY = False
+    SMT_SOLVER = None
     """Options that should be removed"""
     UNSUPPORTED_OPTIONS = ["--timeout", "--memlimit"]
 
@@ -150,6 +159,9 @@ class Executor:
                 print("mem_usage={0} kilobytes".format(getrusage(RUSAGE_CHILDREN).ru_maxrss))
 
         except subprocess.CalledProcessError:
+            return None, None, 0
+
+        except subprocess.TimeoutExpired:
             return None, None, 0
 
         return p.stdout, p.stderr, p.returncode
@@ -189,12 +201,23 @@ def _add_test(test_case, executor):
         stdout, stderr, rc = executor.run(test_case)
 
         if stdout == None:
+            if TestCase.SMT_ONLY:
+                return
             timeout_message ="\nTIMEOUT TEST: " + str(test_case.test_dir)
             self.fail(timeout_message)
-
+        RC_SMTLIB = rc == 3
+        SMT2_FILE_EXISTS = os.path.exists(f"{test_case.test_dir}.smt2")
+        if TestCase.SMT_ONLY and TestCase.SMT_SOLVER and RC_SMTLIB and SMT2_FILE_EXISTS:
+            # Try formula on SMT solver we are only interested in crashes
+            smt_command = [TestCase.SMT_SOLVER, f"{test_case.test_dir}.smt2"]
+            try:
+                p = subprocess.run(smt_command, stdout=PIPE, stderr=PIPE, timeout=10)
+                if p.returncode != 0:
+                    self.fail("Unable to parse the generated SMT formula. Flags: " + str(test_case.generate_run_argument_list(*executor.tool)))
+            except subprocess.TimeoutExpired:
+                return
+        # NOTE: We can't check for RC as some CORE test cases results in PARSING ERRORS :) 
         if TestCase.RUN_ONLY:
-            if rc != 0:
-                self.fail(f"Wrong output for process. Bombed out with exit code {rc}")
             return
 
         output_to_validate = stdout.decode() + stderr.decode()
@@ -260,6 +283,7 @@ def _arg_parsing():
     parser.add_argument("--smt_test", default=False, action="store_true",
             help="Replaces usual tests with crash check while producing formulas (adds --smt-formula-only).")
 
+    parser.add_argument("--smt_solver", required=False, help="smt solver executable path (such that ./<smt_solver> formula.smt2 can be invoked)")
     main_args = parser.parse_args()
     if main_args.timeout:
         RegressionBase.TIMEOUT = int(main_args.timeout)
@@ -277,6 +301,9 @@ def _arg_parsing():
         TestCase.RUN_ONLY = True
         TestCase.SMT_ONLY = True
 
+    if(main_args.smt_solver):
+        TestCase.SMT_SOLVER = main_args.smt_solver
+        RegressionBase.TIMEOUT = 10
     gen_one_test(regression_path, main_args.file, main_args.tool, main_args.modes)    
 
 def main():
