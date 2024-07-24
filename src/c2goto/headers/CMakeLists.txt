@@ -2,6 +2,7 @@ set(inputs
            ctype.h
            limits.h
            fenv.h
+           setjmp.h
            stdarg.h
            stdbool.h
            stddef.h

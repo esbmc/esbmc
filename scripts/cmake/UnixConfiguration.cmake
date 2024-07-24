@@ -3,7 +3,7 @@
 if(UNIX AND NOT APPLE)    
     # Linux and BSDs
     message(STATUS "Detected non-apple Unix")
-    set(LIBGOMP_LIB "-lgomp -ldl")
+    set(LIBGOMP_LIB "-lgomp")
     set(OS_FLEX_SMTLIB_FLAGS "")
     set(OS_X86_INCLUDE_FOLDER "/usr/include/${CMAKE_LIBRARY_ARCHITECTURE}")
     set(OS_C2GOTO_FLAGS "")

@@ -411,15 +411,19 @@ std::string configt::this_operating_system()
 {
   std::string this_os;
 
-#ifdef _WIN32
+#if defined(__MINGW32__)
+  this_os = "mingw32";
+#elif defined(__MINGW64__)
+  this_os = "mingw64";
+#elif defined(_WIN32)
   this_os = "windows";
-#elif __APPLE__
+#elif defined(__APPLE__)
   this_os = "macos";
-#elif __FreeBSD__
+#elif defined(__FreeBSD__)
   this_os = "freebsd";
-#elif __linux__
+#elif defined(__linux__)
   this_os = "linux";
-#elif __SVR4
+#elif defined(__SVR4)
   this_os = "solaris";
 #else
   this_os = "unknown";

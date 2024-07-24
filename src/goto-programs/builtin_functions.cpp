@@ -710,7 +710,7 @@ void goto_convertt::do_function_call_symbol(
     t->location.comment(description);
     // we ignore any LHS
   }
-  else if (base_name == "_wassert")
+  else if (base_name == "_assert" || base_name == "_wassert")
   {
     // this is Windows
 
