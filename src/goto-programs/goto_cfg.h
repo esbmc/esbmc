@@ -43,8 +43,23 @@ public:
     std::set<std::shared_ptr<basic_block>> successors;
     std::unordered_set<std::shared_ptr<basic_block>> predecessors;
     terminator_type terminator = terminator_type::OTHER;
+
   };
 
   std::unordered_map<std::string, std::vector<std::shared_ptr<basic_block>>>
     basic_blocks;
+
+  template <class F>
+  void foreach_bb(const std::shared_ptr<basic_block> &start, F) const;
+
+  using Dominator = std::unordered_map<std::shared_ptr<basic_block>, std::unordered_set<std::shared_ptr<basic_block>>>;
+
+  Dominator
+  compute_dominator(const std::shared_ptr<basic_block> &start) const;
+
+  void dump_dominator(const Dominator &dt) const;
+  
 };
+
+
+

@@ -165,3 +165,97 @@ void goto_cfg::dump_graph() const
     file << "}\n";
   }
 }
+
+template <class F>
+void goto_cfg::foreach_bb(
+  const std::shared_ptr<goto_cfg::basic_block> &start,
+  F foo) const
+{
+  std::unordered_set<std::shared_ptr<goto_cfg::basic_block>> visited;
+  std::vector<std::shared_ptr<goto_cfg::basic_block>> to_visit({start});
+
+  while (!to_visit.empty())
+  {
+    const auto &item = to_visit.back();
+    visited.insert(item);
+    to_visit.pop_back();
+    foo(item);
+    for (const auto &next : item->successors)
+      if (!visited.count(next))
+        to_visit.push_back(next);
+  }
+}
+
+goto_cfg::Dominator goto_cfg::compute_dominator(
+  const std::shared_ptr<basic_block> &start) const
+{
+  goto_cfg::Dominator dt;
+
+  // 1. Sets all nodes dominators to TOP
+  
+  std::unordered_set<std::shared_ptr<basic_block>> top;
+  foreach_bb(
+    start, [&top](const std::shared_ptr<basic_block> &n) { top.insert(n); });
+
+  foreach_bb(
+    start, [&dt, &top](const std::shared_ptr<basic_block> &n) { dt[n] = top; });
+
+
+  /*
+    Dom(n) = {n}, if n = start
+             {n} `union` (intersec_pred Dom(p))
+   */
+  dt[start] = std::unordered_set<std::shared_ptr<basic_block>>({start});
+
+  std::vector<std::shared_ptr<goto_cfg::basic_block>> worklist{start};
+  for (const auto &suc : start->successors)
+     worklist.push_back(suc);
+
+  while (!worklist.empty())
+  {    
+    const auto &dominator_node = worklist.back();
+    worklist.pop_back();
+
+    if (dominator_node == start)
+      continue;
+
+    // assert(!dominator_node->predecessors.empty());
+
+    // Get the intersection of all the predecessors
+    std::unordered_set<std::shared_ptr<basic_block>> intersection = top;
+    for (const auto &pred : dominator_node->predecessors)
+    {
+      assert(dt.count(pred));
+      for (const auto &item : top)
+        if (!dt[pred].count(item))
+          intersection.erase(item);
+    }
+
+    // Union of node with its predecessor intersection
+    std::unordered_set<std::shared_ptr<basic_block>> result({dominator_node});
+    for (const auto &item : intersection)
+      result.insert(item);
+
+    // Fix-point?
+    if (dt[dominator_node] != result)
+    {
+      dt[dominator_node] = result;
+      for (const auto &suc : dominator_node->successors)
+          worklist.push_back(suc);
+    }
+  }
+  return dt;
+}
+
+void goto_cfg::dump_dominator(const Dominator &dt) const
+{
+  for (const auto &[node, edges] : dt)
+  {
+    log_status("Node");
+    node->begin->dump();
+
+    log_status("Dominated");
+    for (const auto &edge : edges)
+      edge->begin->dump();
+  }
+}
