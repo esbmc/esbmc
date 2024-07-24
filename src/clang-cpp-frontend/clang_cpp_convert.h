@@ -23,6 +23,9 @@ protected:
 
   bool get_decl(const clang::Decl &decl, exprt &new_expr) override;
 
+  bool
+  get_decl(const clang::Decl &decl, exprt &new_expr, bool only_forward_declare);
+
   void get_decl_name(
     const clang::NamedDecl &nd,
     std::string &name,
@@ -82,6 +85,10 @@ protected:
 
   bool get_struct_union_class(const clang::RecordDecl &rd) override;
 
+  bool get_struct_union_class(
+    const clang::RecordDecl &recordd,
+    bool only_forward_declare) override;
+
   bool get_var(const clang::VarDecl &vd, exprt &new_expr) override;
 
   bool get_struct_union_class_fields(
@@ -108,7 +115,8 @@ protected:
   bool get_template_decl_specialization(
     const SpecializationDecl *D,
     bool DumpExplicitInst,
-    exprt &new_expr);
+    exprt &new_expr,
+    bool OnlyForwardDeclare = false);
 
   bool get_expr(const clang::Stmt &stmt, exprt &new_expr) override;
 
