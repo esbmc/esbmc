@@ -126,11 +126,12 @@ void add_race_assertions(
 
     if (
       (instruction.is_assign() || instruction.is_other() ||
-       instruction.is_return() || instruction.is_goto()) &&
+       instruction.is_return() || instruction.is_goto() ||
+       instruction.is_assert()) &&
       !is_atomic)
     {
       exprt tmp_expr;
-      if (instruction.is_goto())
+      if (instruction.is_goto() || instruction.is_assert())
         tmp_expr = migrate_expr_back(instruction.guard);
       else
         tmp_expr = migrate_expr_back(instruction.code);
