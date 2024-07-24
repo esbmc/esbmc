@@ -44,6 +44,12 @@ void rw_sett::compute(const exprt &expr)
       read_rec(expr.op0());
       read_rec(expr.op1());
     }
+    else if (expr.is_or() || expr.is_and())
+    {
+      assert(expr.operands().size());
+      forall_operands (it, expr)
+        read_rec(*it);
+    }
     else if (expr.id() == "typecast")
     {
       assert(expr.operands().size() == 1);
