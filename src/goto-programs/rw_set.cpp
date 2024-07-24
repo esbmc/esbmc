@@ -33,12 +33,12 @@ void rw_sett::compute(const exprt &expr)
   }
   else if (instruction.is_goto() || instruction.is_assert())
   {
-    if (expr.id() == "not")
+    if (expr.is_not())
     {
       assert(expr.operands().size() == 1);
       compute(expr.op0());
     }
-    else if (expr.id() == "=" || expr.id() == "notequal")
+    else if (expr.id() == "=" || expr.is_notequal())
     {
       assert(expr.operands().size() == 2);
       read_rec(expr.op0());
@@ -50,7 +50,7 @@ void rw_sett::compute(const exprt &expr)
       forall_operands (it, expr)
         read_rec(*it);
     }
-    else if (expr.id() == "typecast")
+    else if (expr.is_typecast())
     {
       assert(expr.operands().size() == 1);
       read_rec(expr.op0());
@@ -73,7 +73,7 @@ void rw_sett::read_write_rec(
   const exprt &original_expr,
   bool dereferenced)
 {
-  if (expr.id() == "symbol" && !expr.has_operands())
+  if (expr.is_symbol() && !expr.has_operands())
   {
     const symbol_exprt &symbol_expr = to_symbol_expr(expr);
 
@@ -112,19 +112,19 @@ void rw_sett::read_write_rec(
     entry.guard = migrate_expr_back(guard.as_expr());
     entry.original_expr = original_expr;
   }
-  else if (expr.id() == "member")
+  else if (expr.is_member())
   {
     assert(expr.operands().size() == 1);
     const std::string &component_name = expr.component_name().as_string();
     read_write_rec(
       expr.op0(), r, w, "." + component_name + suffix, guard, original_expr);
   }
-  else if (expr.id() == "index")
+  else if (expr.is_index())
   {
     assert(expr.operands().size() == 2);
     read_write_rec(expr.op0(), r, w, suffix, guard, expr, dereferenced);
   }
-  else if (expr.id() == "dereference")
+  else if (expr.is_dereference())
   {
     assert(expr.operands().size() == 1);
     read_rec(expr.op0(), guard, original_expr);
