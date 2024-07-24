@@ -31,7 +31,7 @@ void rw_sett::compute(const exprt &expr)
       read_rec(code.op0());
     }
   }
-  else if (instruction.is_goto())
+  else if (instruction.is_goto() || instruction.is_assert())
   {
     if (expr.id() == "not")
     {
