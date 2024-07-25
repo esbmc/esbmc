@@ -541,7 +541,7 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
   }
-  else if (base_name == "__ESBMC_assert")
+  else if (base_name == "__ESBMC_assert" || base_name == "__VERIFIER_assert")
   {
     // 1 argument --> Default assertion
     // 2 arguments --> Normal assertion + MSG
@@ -551,7 +551,9 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
 
-    if (options.get_bool_option("no-assertions"))
+    if (
+      options.get_bool_option("no-assertions") &&
+      base_name != "__VERIFIER_assert")
       return;
 
     goto_programt::targett t = dest.add_instruction(ASSERT);
