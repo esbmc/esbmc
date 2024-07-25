@@ -190,6 +190,7 @@ void add_race_assertions(
         migrate_expr(w_guards.get_assertion(e_it->second), assert);
         t->make_assertion(assert);
         t->location = original_instruction.location;
+        t->location.user_provided(false);
         t->location.comment(e_it->second.get_comment());
         i_it = ++t;
       }
