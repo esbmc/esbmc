@@ -1,5 +1,6 @@
 #include <pthread.h>
 #include <assert.h>
+#include <stdio.h>
 
 int nondet_int();
 int x=0, w=0, z=0;
