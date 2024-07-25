@@ -68,9 +68,9 @@ bool python_languaget::parse(const std::string &path)
   std::vector<std::string> args = {parser_path.string(), path, ast_output_dir};
 
   std::string python_exec("python3");
-  #ifdef _WIN32
-    python_exec = "python";
-  #endif
+#ifdef _WIN32
+  python_exec = "python";
+#endif
 
   // Create a child process to execute Python
   bp::child process(bp::search_path(python_exec), args);
