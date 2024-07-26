@@ -672,6 +672,11 @@ function_id python_converter::build_function_id(const nlohmann::json &element)
     func_name = func_json["attr"];
     if (func_json["value"]["_type"] == "Attribute")
       obj_name = func_json["value"]["attr"];
+    else if (func_json["value"]["_type"] == "Constant")
+    {
+      if (func_json["value"]["value"].is_string())
+        obj_name = "str";
+    }
     else
       obj_name = func_json["value"]["id"];
 
@@ -726,7 +731,8 @@ function_id python_converter::build_function_id(const nlohmann::json &element)
           class_name = obj_node["annotation"]["id"].get<std::string>();
         }
       }
-      func_symbol_id.insert(pos, "@C@" + class_name);
+      if (func_symbol_id.find("@C@") == std::string::npos)
+        func_symbol_id.insert(pos, "@C@" + class_name);
     }
   }
 
@@ -806,9 +812,14 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     if (element["func"]["_type"] == "Attribute")
     {
       const auto &subelement = element["func"]["value"];
-      const std::string &caller = subelement["_type"] == "Attribute"
-                                    ? subelement["attr"].get<std::string>()
-                                    : subelement["id"].get<std::string>();
+
+      std::string caller;
+      if (subelement["_type"] == "Attribute")
+        caller = subelement["attr"].get<std::string>();
+      else if (subelement["_type"] == "Constant")
+        caller = func_id.class_name;
+      else
+        caller = subelement["id"].get<std::string>();
 
       obj_symbol_id = create_symbol_id() + "@" + caller;
       obj_symbol = context.find_symbol(obj_symbol_id);
