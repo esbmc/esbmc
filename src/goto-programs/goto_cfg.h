@@ -43,6 +43,7 @@ public:
     std::set<std::shared_ptr<basic_block>> successors;
     std::unordered_set<std::shared_ptr<basic_block>> predecessors;
     terminator_type terminator = terminator_type::OTHER;
+    int uuid;
   };
 
   std::unordered_map<std::string, std::vector<std::shared_ptr<basic_block>>>
