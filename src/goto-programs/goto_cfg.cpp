@@ -266,3 +266,69 @@ void goto_cfg::Dominator::dump_dominators() const
       edge->begin->dump();
   }
 }
+
+goto_cfg::Dominator::Node goto_cfg::Dominator::idom(const Node &n) const
+{
+  std::vector<Node> sdoms;
+  const auto &n_dominators = dom(n);
+  std::copy_if(
+    n_dominators.begin(),
+    n_dominators.end(),
+    std::back_inserter(sdoms),
+    [&n,this](const auto &item) {return sdom(item,n); });
+
+  for (const Node &n0 : sdoms)
+  {
+    bool valid_result = true;
+    for (const Node &n1 : sdoms)
+    {
+      if (sdom(n0, n1))
+      {
+        valid_result = false;
+        break;
+      }
+    }
+    if (valid_result)
+      return n0;
+  }
+  log_error("[cfg] Unable to compute `idom`");
+  abort();
+}
+
+goto_cfg::Dominator::DomTree goto_cfg::Dominator::dom_tree() const
+{
+  DomTree dt;
+  dt.first = start;
+
+  foreach_bb(
+    start,
+    [this, &dt](const Node &n)
+    {
+      if (n == start)
+        return;
+
+      Node root = idom(n);
+      auto [val, ins] = dt.second.insert({root, std::unordered_set<Node>()});
+      val->second.insert(n);
+    });
+
+  return dt;
+}
+
+void goto_cfg::Dominator::dump_idoms() const
+{
+  DomTree dt = dom_tree();
+
+  log_status("Root: ");
+  dt.first->begin->dump();
+
+  for (const auto &[key, value] : dt.second)
+  {
+    log_status("Node: ");
+    key->begin->dump();
+    log_status("Edges");
+    for (const auto &n : value)
+      n->begin->dump();
+  }
+  
+}
