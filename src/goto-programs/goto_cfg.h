@@ -53,22 +53,21 @@ public:
 
   struct Dominator
   {
+
     using Node = std::shared_ptr<basic_block>;
+    using DomTree = std::pair<Node, std::unordered_map<Node, std::unordered_set<Node>>>;
     const Node &start;
-    Dominator(const Node &start) : start(start) { compute_dominators(); } 
-
-    // Get dominators of a node
-    inline std::unordered_set<Node> dom(std::shared_ptr<basic_block> &node) const
-    {
-      return dominators.at(node);
-    }
-
+    Dominator(const Node &start) : start(start) { compute_dominators(); }
     // Evaluates whether n1 dom n2
-    inline bool dom(Node &n1, Node &n2) const
+    inline bool dom(const Node &n1, const Node &n2) const
     {
       return dom(n2).count(n1);
     }
-    
+    inline bool sdom(const Node &n1, const Node &n2) const
+    {
+      return n1 != n2 && dom(n1,n2);
+    }
+
     // Returns the immediate dominator of n
     Node idom(const Node &n) const;
 
@@ -76,19 +75,23 @@ public:
     std::unordered_set<Node>
     dom_frontier(const Node &node) const;
 
-    std::pair<Node, std::unordered_map<Node, std::unordered_set<Node>>>
+    DomTree
     dom_tree() const;
 
     void dump_dominators() const;
+    void dump_idoms() const;
 
   private:
     void compute_dominators();
     std::unordered_map<
-    std::shared_ptr<basic_block>,
-    std::unordered_set<std::shared_ptr<basic_block>>> dominators;
+      std::shared_ptr<basic_block>,
+      std::unordered_set<std::shared_ptr<basic_block>>>
+      dominators;
+    // Get dominators of a node
+    inline std::unordered_set<Node> dom(const Node &node) const
+    {
+      return dominators.at(node);
+    }
+
   };  
 };
-
-
-
-
