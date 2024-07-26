@@ -1,3 +1,4 @@
+#include "irep2/irep2_expr.h"
 #include <goto-programs/goto_cfg.h>
 
 goto_cfg::goto_cfg(goto_functionst &goto_functions)
@@ -169,7 +170,7 @@ void goto_cfg::dump_graph() const
 template <class F>
 void goto_cfg::foreach_bb(
   const std::shared_ptr<goto_cfg::basic_block> &start,
-  F foo) const
+  F foo) 
 {
   std::unordered_set<std::shared_ptr<goto_cfg::basic_block>> visited;
   std::vector<std::shared_ptr<goto_cfg::basic_block>> to_visit({start});
@@ -186,10 +187,14 @@ void goto_cfg::foreach_bb(
   }
 }
 
-goto_cfg::Dominator goto_cfg::compute_dominator(
-  const std::shared_ptr<basic_block> &start) const
+
+void goto_cfg::Dominator::compute_dominators()
 {
-  goto_cfg::Dominator dt;
+  // Computes dominator of a node
+  std::unordered_map<
+    std::shared_ptr<basic_block>,
+    std::unordered_set<std::shared_ptr<basic_block>>> dt;
+
 
   // 1. Sets all nodes dominators to TOP
   
@@ -244,12 +249,14 @@ goto_cfg::Dominator goto_cfg::compute_dominator(
           worklist.push_back(suc);
     }
   }
-  return dt;
+
+  dominators = dt;
 }
 
-void goto_cfg::dump_dominator(const Dominator &dt) const
+
+void goto_cfg::Dominator::dump_dominators() const
 {
-  for (const auto &[node, edges] : dt)
+  for (const auto &[node, edges] : dominators)
   {
     log_status("Node");
     node->begin->dump();

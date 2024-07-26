@@ -43,23 +43,52 @@ public:
     std::set<std::shared_ptr<basic_block>> successors;
     std::unordered_set<std::shared_ptr<basic_block>> predecessors;
     terminator_type terminator = terminator_type::OTHER;
-
   };
 
   std::unordered_map<std::string, std::vector<std::shared_ptr<basic_block>>>
     basic_blocks;
 
   template <class F>
-  void foreach_bb(const std::shared_ptr<basic_block> &start, F) const;
+   static void foreach_bb(const std::shared_ptr<basic_block> &start, F);
 
-  using Dominator = std::unordered_map<std::shared_ptr<basic_block>, std::unordered_set<std::shared_ptr<basic_block>>>;
+  struct Dominator
+  {
+    using Node = std::shared_ptr<basic_block>;
+    const Node &start;
+    Dominator(const Node &start) : start(start) { compute_dominators(); } 
 
-  Dominator
-  compute_dominator(const std::shared_ptr<basic_block> &start) const;
+    // Get dominators of a node
+    inline std::unordered_set<Node> dom(std::shared_ptr<basic_block> &node) const
+    {
+      return dominators.at(node);
+    }
 
-  void dump_dominator(const Dominator &dt) const;
-  
+    // Evaluates whether n1 dom n2
+    inline bool dom(Node &n1, Node &n2) const
+    {
+      return dom(n2).count(n1);
+    }
+    
+    // Returns the immediate dominator of n
+    Node idom(const Node &n) const;
+
+    // Computes the dominator frontier for node
+    std::unordered_set<Node>
+    dom_frontier(const Node &node) const;
+
+    std::pair<Node, std::unordered_map<Node, std::unordered_set<Node>>>
+    dom_tree() const;
+
+    void dump_dominators() const;
+
+  private:
+    void compute_dominators();
+    std::unordered_map<
+    std::shared_ptr<basic_block>,
+    std::unordered_set<std::shared_ptr<basic_block>>> dominators;
+  };  
 };
+
 
 
 
