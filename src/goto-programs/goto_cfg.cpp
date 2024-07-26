@@ -75,11 +75,13 @@ goto_cfg::goto_cfg(goto_functionst &goto_functions)
     }
 
     // Third pass - identify all the successors/predecessors
+    int counter = 0;
     for (auto &bb : bbs)
     {
       assert(bb->begin != bb->end);
       auto last = bb->end;
       last--;
+      bb->uuid = counter++;
 
       for (const auto &bb2 : bbs)
       {
@@ -319,16 +321,14 @@ void goto_cfg::Dominator::dump_idoms() const
 {
   DomTree dt = dom_tree();
 
-  log_status("Root: ");
-  dt.first->begin->dump();
+  log_status("Root: {}", dt.first->uuid);
+  //  dt.first->begin->dump();
 
   for (const auto &[key, value] : dt.second)
   {
-    log_status("Node: ");
-    key->begin->dump();
+    log_status("Node: {}", key->uuid);
     log_status("Edges");
     for (const auto &n : value)
-      n->begin->dump();
-  }
-  
+      log_status("\t{}", n->uuid);
+  }  
 }
