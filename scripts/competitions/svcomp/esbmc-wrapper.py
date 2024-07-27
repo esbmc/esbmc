@@ -290,7 +290,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
       command_line += "--no-pointer-check --interval-analysis --no-bounds-check --error-label ERROR --goto-unwind --unlimited-goto-unwind "
   elif prop == Property.datarace:
     # TODO: can we do better in case 'concurrency == False'?
-    command_line += "--no-pointer-check --no-bounds-check --data-races-check --no-assertions "
+    command_line += "--no-pointer-check --no-bounds-check --data-races-check "
   else:
     print("Unknown property")
     exit(1)
