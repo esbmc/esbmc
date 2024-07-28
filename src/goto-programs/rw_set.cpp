@@ -30,6 +30,18 @@ void rw_sett::compute(const exprt &expr)
       assert(code.operands().size() == 1);
       read_rec(code.op0());
     }
+    else if (statement == "function_call")
+    {
+      assert(code.operands().size());
+      read_write_rec(code.op0(), false, true, "", guardt(), exprt());
+      // check if the functions is __VERIFIER_assert(!cond)
+      if (code.op1().identifier() == "c:@F@__VERIFIER_assert")
+      {
+        // check the cond, usually has only one arg
+        assert(code.op2().operands().size() == 1);
+        read_rec(code.op2().op0());
+      }
+    }
   }
   else if (instruction.is_goto() || instruction.is_assert())
   {
