@@ -30,6 +30,7 @@ enum class ExpressionType
   LITERAL,
   SUBSCRIPT,
   VARIABLE_REF,
+  LIST,
   UNKNOWN,
 };
 

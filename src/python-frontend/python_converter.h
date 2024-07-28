@@ -38,6 +38,8 @@ private:
   exprt get_literal(const nlohmann::json &element);
   exprt get_block(const nlohmann::json &ast_block);
 
+  bool has_multiple_types(const nlohmann::json &container);
+
   const nlohmann::json
   find_var_decl(const std::string &var_name, const nlohmann::json &json) const;
   void adjust_statement_types(exprt &lhs, exprt &rhs) const;
