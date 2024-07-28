@@ -1329,6 +1329,17 @@ std::string python_converter::get_var_type(const std::string &var_name) const
   return ref["annotation"]["id"].get<std::string>();
 }
 
+typet python_converter::get_list_type(const nlohmann::json &list)
+{
+  if (!has_multiple_types(list)) // All elements have the same type
+  {
+    typet t = get_typet(list[0]["value"]); // Get the first element type
+    return build_array(t, list.size());
+  }
+  log_error("Multiple type lists are not supported yet\n");
+  abort();
+}
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -1339,7 +1350,10 @@ void python_converter::get_var_assign(
     // Get type from annotation node
     size_t type_size = get_type_size(ast_node);
     lhs_type = ast_node["annotation"]["id"];
-    current_element_type = get_typet(lhs_type, type_size);
+    if (lhs_type == "list")
+      current_element_type = get_list_type(ast_node["value"]["elts"]);
+    else
+      current_element_type = get_typet(lhs_type, type_size);
   }
   else
   {
