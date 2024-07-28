@@ -127,7 +127,8 @@ void add_race_assertions(
     if (
       (instruction.is_assign() || instruction.is_other() ||
        instruction.is_return() || instruction.is_goto() ||
-       instruction.is_assert() || instruction.is_function_call()) &&
+       instruction.is_assert() || instruction.is_function_call() ||
+       instruction.is_assume()) &&
       !is_atomic)
     {
       exprt tmp_expr;

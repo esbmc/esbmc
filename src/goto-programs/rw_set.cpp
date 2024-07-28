@@ -34,39 +34,15 @@ void rw_sett::compute(const exprt &expr)
     {
       assert(code.operands().size());
       read_write_rec(code.op0(), false, true, "", guardt(), exprt());
-      // check if the functions is __VERIFIER_assert(!cond)
-      if (code.op1().identifier() == "c:@F@__VERIFIER_assert")
-      {
-        // check the cond, usually has only one arg
-        assert(code.op2().operands().size() == 1);
-        read_rec(code.op2().op0());
-      }
-    }
-  }
-  else if (instruction.is_goto() || instruction.is_assert())
-  {
-    if (expr.is_not())
-    {
-      assert(expr.operands().size() == 1);
-      compute(expr.op0());
-    }
-    else if (expr.id() == "=" || expr.is_notequal())
-    {
-      assert(expr.operands().size() == 2);
-      read_rec(expr.op0());
-      read_rec(expr.op1());
-    }
-    else if (expr.is_or() || expr.is_and())
-    {
-      assert(expr.operands().size());
-      forall_operands (it, expr)
+      // check args of function call
+      Forall_operands (it, code.op2())
         read_rec(*it);
     }
-    else if (expr.is_typecast())
-    {
-      assert(expr.operands().size() == 1);
-      read_rec(expr.op0());
-    }
+  }
+  else if (
+    instruction.is_goto() || instruction.is_assert() || instruction.is_assume())
+  {
+    read_rec(expr);
   }
 }
 
