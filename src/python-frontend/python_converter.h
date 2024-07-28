@@ -49,6 +49,7 @@ private:
   typet get_typet(const std::string &ast_type, size_t type_size = 0);
   typet get_typet(const nlohmann::json &elem);
   std::string get_var_type(const std::string &var_name) const;
+  typet get_list_type(const nlohmann::json &list);
   void get_attributes_from_self(
     const nlohmann::json &method_body,
     struct_typet &clazz);
