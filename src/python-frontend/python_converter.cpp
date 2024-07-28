@@ -204,6 +204,9 @@ static ExpressionType get_expression_type(const nlohmann::json &element)
   if (type == "Subscript")
     return ExpressionType::SUBSCRIPT;
 
+  if (type == "List")
+    return ExpressionType::LIST;
+
   return ExpressionType::UNKNOWN;
 }
 
@@ -764,7 +767,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 
     if (is_builtin_type(func_name) || is_consensus_type(func_name))
     {
-      /* Calls to initialize variables using built-in type functions such as int(1), str("test"), bool(1)
+      /* Calls to initialise variables using built-in type functions such as int(1), str("test"), bool(1)
        * are converted to simple variable assignments, simplifying the handling of built-in type objects.
        * For example, x = int(1) becomes x = 1. */
       size_t arg_size = 1;
@@ -895,7 +898,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     // Add self as first parameter
     if (is_ctor_call)
     {
-      // Self is the lhs
+      // Self is the LHS
       assert(ref_instance);
       call.arguments().push_back(gen_address_of(*ref_instance));
     }
@@ -1027,6 +1030,17 @@ exprt python_converter::get_literal(const nlohmann::json &element)
   abort();
 }
 
+bool python_converter::has_multiple_types(const nlohmann::json &container)
+{
+  typet t = get_typet(container[0]["value"]);
+  for (auto it = container.begin() + 1; it != container.end(); ++it)
+  {
+    if (get_typet((*it)["value"]) != t)
+      return true;
+  }
+  return false;
+}
+
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
   exprt expr;
@@ -1052,6 +1066,15 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   case ExpressionType::LITERAL:
   {
     expr = get_literal(element);
+    break;
+  }
+  case ExpressionType::LIST:
+  {
+    //TODO: Get list size
+    if (!has_multiple_types(element["elts"])) // All elements have the same type
+    {
+      printf("all equal\n");
+    }
     break;
   }
   case ExpressionType::VARIABLE_REF:
@@ -1280,6 +1303,11 @@ size_t get_type_size(const nlohmann::json &ast_node)
     ast_node["value"]["args"][0].contains("value") &&
     ast_node["value"]["args"][0]["value"].is_string())
     type_size = ast_node["value"]["args"][0]["value"].get<std::string>().size();
+  else if (
+    ast_node["value"].contains("_type") && ast_node["value"]["_type"] == "List")
+  {
+    type_size = ast_node["value"]["elts"].size();
+  }
 
   return type_size;
 }

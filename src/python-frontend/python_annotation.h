@@ -180,6 +180,10 @@ private:
         {
           inferred_type = get_type_from_constant(element["value"]);
         }
+        else if (value_type == "List")
+        {
+          inferred_type = "list";
+        }
         else if (
           value_type == "UnaryOp" && element["value"]["operand"]["_type"] ==
                                        "Constant") // Handle negative numbers
