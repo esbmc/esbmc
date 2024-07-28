@@ -94,6 +94,16 @@ static struct_typet::componentt build_component(
   return comp;
 }
 
+static typet build_array(const typet &sub_type, const size_t size)
+{
+  return array_typet(
+    sub_type,
+    constant_exprt(
+      integer2binary(BigInt(size), bv_width(size_type())),
+      integer2string(BigInt(size)),
+      size_type()));
+}
+
 // Convert Python/AST types to irep types
 typet python_converter::get_typet(const std::string &ast_type, size_t type_size)
 {
@@ -113,13 +123,7 @@ typet python_converter::get_typet(const std::string &ast_type, size_t type_size)
   {
     // TODO: Keep "bytes" as signed char instead of "int_type()", and cast to an 8-bit integer in [] operations
     // or consider modelling it with string_constantt.
-    typet t = array_typet(
-      int_type(),
-      constant_exprt(
-        integer2binary(BigInt(type_size), bv_width(size_type())),
-        integer2string(BigInt(type_size)),
-        size_type()));
-    return t;
+    return build_array(int_type(), type_size);
   }
   if (ast_type == "str")
   {
@@ -129,14 +133,7 @@ typet python_converter::get_typet(const std::string &ast_type, size_t type_size)
       type.set("#cpp_type", "char");
       return type;
     }
-
-    typet t = array_typet(
-      char_type(),
-      constant_exprt(
-        integer2binary(BigInt(type_size), bv_width(size_type())),
-        integer2string(BigInt(type_size)),
-        size_type()));
-    return t;
+    return build_array(char_type(), type_size);
   }
   if (is_class(ast_type, ast_json))
     return symbol_typet("tag-" + ast_type);
