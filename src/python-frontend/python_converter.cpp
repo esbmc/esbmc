@@ -1067,11 +1067,11 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   case ExpressionType::LIST:
   {
-    //TODO: Get list size
-    if (!has_multiple_types(element["elts"])) // All elements have the same type
-    {
-      printf("all equal\n");
-    }
+    expr = gen_zero(current_element_type);
+    unsigned int i = 0;
+    for (auto &e : element["elts"])
+      expr.operands().at(i++) = get_literal(e);
+
     break;
   }
   case ExpressionType::VARIABLE_REF:
