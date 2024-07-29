@@ -382,3 +382,30 @@ void goto_cfg::Dominator::DJGraph::DJGraph::dump() const
       log_status("\t->{}", e->uuid);
   }
 }
+
+
+std::unordered_map<goto_cfg::Dominator::Node, size_t>
+goto_cfg::Dominator::get_levels(const DomTree &dt)
+{
+  std::unordered_map<goto_cfg::Dominator::Node, size_t> levels;
+  levels[dt.first] = 0;
+
+  std::set<Node> worklist({dt.first});
+  while (!worklist.empty())
+  {
+    Node current = *worklist.begin();
+    worklist.erase(current);
+    if (!dt.second.count(current))
+      continue;
+    
+    size_t level = levels[current] + 1;
+    for (const auto &nodes : dt.second.at(current))
+    {
+      levels[nodes] = level;
+      worklist.insert(nodes);
+    }
+    
+  }
+
+  return levels;
+}

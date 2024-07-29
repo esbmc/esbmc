@@ -102,6 +102,25 @@ TEST_CASE(
     REQUIRE(visited == nodes);
   }
 
+  SECTION("Dominator Tree Levels")
+  {
+    auto levels = goto_cfg::Dominator::get_levels(dt);
+    const std::array expected{0, 1, 2, 2, 2, 3, 4, 2, 2, 3, 4, 4, 4, 5, 6, 2, 1};
+
+    for (auto [k, v] : dt.second)
+    {
+      CAPTURE(k->uuid);
+      REQUIRE((size_t)expected[k->uuid] == levels[k]);
+      for (const auto &node : v)
+      {
+        CAPTURE(node->uuid);
+        REQUIRE((size_t)expected[node->uuid] == levels[node]);
+      }
+    }
+    
+    
+  }
+
   const goto_cfg::Dominator::DJGraph dj_graph(dt, bb, info);
   SECTION("DJ-GRAPHS")
   {

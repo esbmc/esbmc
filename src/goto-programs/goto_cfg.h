@@ -57,7 +57,9 @@ public:
   {
 
     using Node = std::shared_ptr<basic_block>;
-    using DomTree = std::pair<Node, std::unordered_map<Node, std::unordered_set<Node>>>;
+    using DomTree =
+      std::pair<Node, std::unordered_map<Node, std::unordered_set<Node>>>;
+
     const Node &start;
 
     
@@ -93,6 +95,8 @@ public:
     std::unordered_set<Node> dom_frontier(const T &n) const;
     std::unordered_set<Node>
     iterated_dom_frontier(const std::unordered_set<Node> &n) const;
+
+    static std::unordered_map<Node, size_t> get_levels(const DomTree &dt);
 
     struct DJGraph
     {
