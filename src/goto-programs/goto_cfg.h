@@ -97,6 +97,7 @@ public:
     iterated_dom_frontier(const std::unordered_set<Node> &n) const;
 
     static std::unordered_map<Node, size_t> get_levels(const DomTree &dt);
+    static std::unordered_set<Node> get_subtree(const DomTree &dt, const Node &n);
 
     struct DJGraph
     {

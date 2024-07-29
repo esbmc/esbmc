@@ -409,3 +409,27 @@ goto_cfg::Dominator::get_levels(const DomTree &dt)
 
   return levels;
 }
+
+std::unordered_set<goto_cfg::Dominator::Node>
+goto_cfg::Dominator::get_subtree(const DomTree &dt, const Node &n)
+{
+  std::unordered_set<goto_cfg::Dominator::Node> nodes({n});
+  std::set<goto_cfg::Dominator::Node> worklist({n});
+  
+  while (!worklist.empty())
+  {
+    const Node current = *worklist.begin();
+    worklist.erase(current);
+
+    if (!dt.second.count(current))
+      continue;
+
+    for (const auto &inner : dt.second.at(current))
+    {
+      worklist.insert(inner);
+      nodes.insert(inner);
+    }
+  }
+    
+  return nodes;  
+}

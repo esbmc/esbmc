@@ -117,9 +117,31 @@ TEST_CASE(
         REQUIRE((size_t)expected[node->uuid] == levels[node]);
       }
     }
-    
-    
   }
+
+  SECTION("Dominator Tree Subtrees")
+  {
+    std::shared_ptr<goto_cfg::basic_block> node;
+
+    for (auto [k, v] : dt.second)
+    {
+      if (k->uuid == 3)
+      {
+        node = k;
+        break;
+      }
+    }
+
+    auto subtree = goto_cfg::Dominator::get_subtree(dt, node);
+    const std::unordered_set expected{3, 9, 10, 11, 12, 13, 14};
+
+    REQUIRE(subtree.size() == expected.size());
+
+    for (const auto &s : subtree)
+      REQUIRE(expected.count(s->uuid));
+  }
+
+  
 
   const goto_cfg::Dominator::DJGraph dj_graph(dt, bb, info);
   SECTION("DJ-GRAPHS")
