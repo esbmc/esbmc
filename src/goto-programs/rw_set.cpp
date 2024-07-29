@@ -35,8 +35,12 @@ void rw_sett::compute(const exprt &expr)
       assert(code.operands().size());
       read_write_rec(code.op0(), false, true, "", guardt(), exprt());
       // check args of function call
-      Forall_operands (it, code.op2())
-        read_rec(*it);
+      if (
+        !has_prefix(instruction.location.function(), "ESBMC_execute_kernel") &&
+        !has_prefix(instruction.location.function(), "ESBMC_verify_kernel"))
+        Forall_operands (it, code.op2())
+          if (!(*it).type().is_pointer())
+            read_rec(*it);
     }
   }
   else if (
