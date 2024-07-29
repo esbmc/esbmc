@@ -1,5 +1,6 @@
 #pragma once
 
+#include <optional>
 #include <vector>
 #include <unordered_set>
 #include <unordered_map>
@@ -18,26 +19,26 @@ public:
   goto_cfg(goto_functionst &goto_functions);
 
   /**
-     * @brief Generates a dot file containing the CFG.
-     *
-     * @param filename output file name
-     */
+   * @brief Generates a dot file containing the CFG.
+   *
+   * @param filename output file name
+   */
   void dump_graph() const;
 
   /**
-     * @brief A basic block is a sequence of instructions that has no branches in it.
-     *
-     * It consists of a sequence of instructions until a leader is found.
-     * A leader consists in operations that create a new basic block,
-     * i.e., label, if-goto, return, throw, catch, etc.
-     */
+   * @brief A basic block is a sequence of instructions that has no branches in it.
+   *
+   * It consists of a sequence of instructions until a leader is found.
+   * A leader consists in operations that create a new basic block,
+   * i.e., label, if-goto, return, throw, catch, etc.
+   */
   struct basic_block
   {
     enum class terminator_type
-    {
-      OTHER,
-      IF_GOTO
-    };
+      {
+        OTHER,
+        IF_GOTO
+      };
     goto_programt::instructionst::iterator begin;
     goto_programt::instructionst::iterator end;
     std::set<std::shared_ptr<basic_block>> successors;
@@ -47,10 +48,10 @@ public:
   };
 
   std::unordered_map<std::string, std::vector<std::shared_ptr<basic_block>>>
-    basic_blocks;
+  basic_blocks;
 
   template <class F>
-   static void foreach_bb(const std::shared_ptr<basic_block> &start, F);
+  static void foreach_bb(const std::shared_ptr<basic_block> &start, F);
 
   struct Dominator
   {
@@ -89,20 +90,38 @@ public:
     void dump_idoms() const;
 
     template <class T>
-    std::unordered_set<Node> dom_frontier(const T &n) const;    
-    std::unordered_set<Node> iterated_dom_frontier(const std::unordered_set<Node> &n) const;
+    std::unordered_set<Node> dom_frontier(const T &n) const;
+    std::unordered_set<Node>
+    iterated_dom_frontier(const std::unordered_set<Node> &n) const;
+
+    struct DJGraph
+    {
+      const DomTree &tree;
+      const goto_cfg::Dominator::Node &cfg;
+      DJGraph(const DomTree &tree, const goto_cfg::Dominator::Node &cfg, const goto_cfg::Dominator &dom);
+      using Graph =
+        std::unordered_map<Node, std::unordered_set<Node>>;
+      Graph _graph;
+
+      void dump() const;
+    };
 
   private:
+    
     void compute_dominators();
     std::unordered_map<
       std::shared_ptr<basic_block>,
       std::unordered_set<std::shared_ptr<basic_block>>>
-      dominators;
+    dominators;
     // Get dominators of a node
     inline std::unordered_set<Node> dom(const Node &node) const
     {
       return dominators.at(node);
     }
+
+
+
+    std::optional<std::unique_ptr<DJGraph>> dj;
 
   };  
 };

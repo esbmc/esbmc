@@ -332,3 +332,53 @@ void goto_cfg::Dominator::dump_idoms() const
       log_status("\t{}", n->uuid);
   }  
 }
+
+template <class T>
+std::unordered_set<goto_cfg::Dominator::Node> goto_cfg::Dominator::dom_frontier(const T &n) const
+{
+  assert(dj);
+  std::unordered_set<goto_cfg::Dominator::Node> result;
+  return result;
+}
+
+std::unordered_set<goto_cfg::Dominator::Node>
+goto_cfg::Dominator::iterated_dom_frontier(
+  const std::unordered_set<Node> &n) const
+{
+  assert(dj);
+  std::unordered_set<goto_cfg::Dominator::Node> result;
+  return result;
+}
+
+
+goto_cfg::Dominator::DJGraph::DJGraph(const DomTree &tree, const goto_cfg::Dominator::Node &cfg, const goto_cfg::Dominator &dom) : tree(tree), cfg(cfg)
+{
+  // A DJ-Graph is a graph composed by D-Edges and J-Edges
+  // D-Edges are the edges from the dominator tree
+  // J-Edges are x->y edges from the CFG such that x !sdom y. y is called join node
+
+  // All D-Edges are added
+  _graph = tree.second;
+
+  //Graph j_edges;
+  //std::unordered_set<Node> j_node;
+  auto func = [this, &dom](const Node &x)
+  {
+    auto [val, ins] = _graph.insert({x, std::unordered_set<Node>()});
+    for (const Node &y : x->successors)
+      if (!dom.sdom(x, y))
+        val->second.insert(y);
+  };
+  foreach_bb(cfg, func);
+}
+
+void goto_cfg::Dominator::DJGraph::DJGraph::dump() const
+{
+  log_status("Dumping DJ-Graph");
+  for (const auto &[k, edges] : _graph)
+  {
+    log_status("Node {}", k->uuid);
+    for (const auto &e : edges)
+      log_status("\t->{}", e->uuid);
+  }
+}
