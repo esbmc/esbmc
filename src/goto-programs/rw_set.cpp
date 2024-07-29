@@ -100,7 +100,7 @@ void rw_sett::read_write_rec(
     entry.object = object;
     entry.r = entry.r || r;
     entry.w = entry.w || w;
-    entry.deref = expr.type().is_pointer() && dereferenced;
+    entry.deref = dereferenced;
     entry.guard = migrate_expr_back(guard.as_expr());
     entry.original_expr = original_expr;
   }
@@ -134,12 +134,9 @@ void rw_sett::read_write_rec(
       tmp = expr.op0();
 
     if (tmp.id() == "+")
-    {
-      index_exprt tmp_index(tmp.op0(), tmp.op1(), tmp.type());
-      tmp.swap(tmp_index);
-    }
+      tmp = tmp.op0();
 
-    read_write_rec(tmp, r, w, suffix, guard, original_expr, true);
+    read_write_rec(tmp, r, w, suffix, guard, expr, true);
   }
   else if (expr.is_address_of() || expr.id() == "implicit_address_of")
   {
