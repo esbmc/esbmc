@@ -33,7 +33,7 @@ TEST_CASE(
   "DJ-Graphs",
   "[cfg][ssa]")
 {
-  // SREEDHAR, Vugranam C.; GAO, Guang R. Computing -nodes in linear time using DJ graphs. Journal of Programming Languages, v. 3, p. 191-214, 1995.
+  // SREEDHAR, Vugranam C.; GAO, Guang R. Computing phi-nodes in linear time using DJ graphs. Journal of Programming Languages, v. 3, p. 191-214, 1995.
   // See page 7 for nice pictures
 
   IntGraph graph;
