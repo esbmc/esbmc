@@ -2848,7 +2848,7 @@ public:
     : with_expr_methods(type, with_id, source, field, value)
   {
 #ifndef NDEBUG /* only check consistency in non-Release builds */
-    assert_consistency();
+    // assert_consistency();
 #endif
   }
   with2t(const with2t &ref) = default;

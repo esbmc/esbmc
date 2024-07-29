@@ -20,6 +20,14 @@ public:
     const exprt &original_expr,
     bool deref)
   {
+    if (deref)
+    {
+      irep_idt name = "c:@__ESBMC_races_flag";
+      const symbolt *symbol = context.find_symbol(name);
+
+      return *symbol;
+    }
+
     const irep_idt identifier =
       deref ? "__ESBMC_deref_" + id2string(object) : "tmp_" + id2string(object);
 
@@ -51,6 +59,16 @@ public:
     bool deref)
   {
     exprt expr = symbol_expr(get_guard_symbol(object, original_expr, deref));
+
+    if (deref)
+    {
+      exprt address = address_of_exprt(original_expr);
+      index_exprt index = index_exprt(expr, address, bool_type());
+
+      expr.swap(index);
+
+      return expr;
+    }
 
     if (original_expr.is_index() && expr.type().is_array())
     {
@@ -148,16 +166,13 @@ void add_race_assertions(
       instruction.make_skip();
       i_it++;
 
-      // now add assignments for what is written -- reset
-      forall_rw_set_entries(e_it, rw_set)
       {
         goto_programt::targett t = goto_program.insert(i_it);
+        t->type = FUNCTION_CALL;
+        code_function_callt call;
+        call.function() = symbol_expr(*context.find_symbol("c:@F@__ESBMC_yield"));
 
-        t->type = ASSIGN;
-        code_assignt theassign(
-          w_guards.get_w_guard_expr(e_it->second), false_exprt());
-        migrate_expr(theassign, t->code);
-
+        migrate_expr(call, t->code);
         t->location = original_instruction.location;
         i_it = ++t;
       }
@@ -215,6 +230,20 @@ void add_race_assertions(
         goto_programt::targett t = goto_program.insert(i_it);
 
         *t = ATOMIC_END;
+        i_it = ++t;
+      }
+
+      // now add assignments for what is written -- reset
+      forall_rw_set_entries(e_it, rw_set) if(e_it->second.w)
+      {
+        goto_programt::targett t = goto_program.insert(i_it);
+
+        t->type = ASSIGN;
+        code_assignt theassign(
+          w_guards.get_w_guard_expr(e_it->second), false_exprt());
+        migrate_expr(theassign, t->code);
+
+        t->location = original_instruction.location;
         i_it = ++t;
       }
 
