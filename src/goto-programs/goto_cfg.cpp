@@ -333,11 +333,17 @@ void goto_cfg::Dominator::dump_idoms() const
   }  
 }
 
-template <class T>
-std::unordered_set<goto_cfg::Dominator::Node> goto_cfg::Dominator::dom_frontier(const T &n) const
+std::unordered_set<goto_cfg::Dominator::Node> goto_cfg::Dominator::dom_frontier(const Node &n) const
 {
   assert(dj);
   std::unordered_set<goto_cfg::Dominator::Node> result;
+  const auto levels = get_levels(dj->tree);
+  for (const Node &y : goto_cfg::Dominator::get_subtree(dj->tree, n))
+  {
+    for (const Node &z : dj->_jedges[y])
+      if (levels.at(z) <= levels.at(n))
+        result.insert(z);
+  }
   return result;
 }
 
@@ -359,6 +365,7 @@ goto_cfg::Dominator::DJGraph::DJGraph(const DomTree &tree, const goto_cfg::Domin
 
   // All D-Edges are added
   _graph = tree.second;
+  _dedges = tree.second;
 
   //Graph j_edges;
   //std::unordered_set<Node> j_node;
@@ -368,6 +375,7 @@ goto_cfg::Dominator::DJGraph::DJGraph(const DomTree &tree, const goto_cfg::Domin
     for (const Node &y : x->successors)
       if (!dom.sdom(x, y))
         val->second.insert(y);
+    _jedges[x] = val->second;
   };
   foreach_bb(cfg, func);
 }
