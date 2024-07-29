@@ -56,7 +56,7 @@ TEST_CASE(
   graph[16] = std::unordered_set<int>({}); // END
 
   std::shared_ptr<goto_cfg::basic_block> bb = from_int_graph(graph, 0, 16);
-  const goto_cfg::Dominator info(bb);
+  goto_cfg::Dominator info(bb);
   const auto dt = info.dom_tree();
   SECTION("Dominator Tree")
   {        
@@ -141,9 +141,10 @@ TEST_CASE(
       REQUIRE(expected.count(s->uuid));
   }
 
-  
 
-  const goto_cfg::Dominator::DJGraph dj_graph(dt, bb, info);
+  auto ptr = std::make_shared<goto_cfg::Dominator::DJGraph>(dt, bb, info);
+  auto dj_graph = *ptr;
+  info.dj = ptr;
   SECTION("DJ-GRAPHS")
   {
     const std::array expected{
@@ -182,8 +183,23 @@ TEST_CASE(
     REQUIRE(nodes == visited);
   }
 
-  SECTION("phi-Nodes")
+  SECTION("Dominance Frontier(Node)")
   {
-    
+    std::shared_ptr<goto_cfg::basic_block> node;
+
+    for (auto [k, v] : dt.second)
+    {
+      if (k->uuid == 3)
+      {
+        node = k;
+        break;
+      }
+    }
+
+    auto frontier = info.dom_frontier(node);
+    const std::unordered_set<size_t> expected {3,15};
+    REQUIRE(frontier.size() == 2);
+    for (auto &df : frontier)
+      REQUIRE(expected.count(df->uuid));
   }
 }

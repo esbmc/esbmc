@@ -81,18 +81,13 @@ public:
     // node n1 is the unique node n2 that n2 sdom n1 but does not sdom any other node that sdom n1. 
     Node idom(const Node &n) const;
 
-    // Computes the dominator frontier for node
-    std::unordered_set<Node>
-    dom_frontier(const Node &node) const;
-
     DomTree
     dom_tree() const;
 
     void dump_dominators() const;
     void dump_idoms() const;
 
-    template <class T>
-    std::unordered_set<Node> dom_frontier(const T &n) const;
+    std::unordered_set<Node> dom_frontier(const Node &n) const;
     std::unordered_set<Node>
     iterated_dom_frontier(const std::unordered_set<Node> &n) const;
 
@@ -107,9 +102,16 @@ public:
       using Graph =
         std::unordered_map<Node, std::unordered_set<Node>>;
       Graph _graph;
+      Graph _jedges;
+      Graph _dedges;
+
+      
+      
 
       void dump() const;
     };
+
+    std::shared_ptr<DJGraph> dj;
 
   private:
     
@@ -126,7 +128,7 @@ public:
 
 
 
-    std::optional<std::unique_ptr<DJGraph>> dj;
+    
 
   };  
 };
