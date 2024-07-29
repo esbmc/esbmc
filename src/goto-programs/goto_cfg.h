@@ -88,6 +88,7 @@ public:
     void dump_idoms() const;
 
     std::unordered_set<Node> dom_frontier(const Node &n) const;
+    std::unordered_set<Node> dom_frontier(const std::unordered_set<Node> &nodes) const;
     std::unordered_set<Node>
     iterated_dom_frontier(const std::unordered_set<Node> &n) const;
 
