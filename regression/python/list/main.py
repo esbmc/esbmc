@@ -10,3 +10,7 @@ assert l2[1] == False
 l3 = [1.2, 2.5]
 assert l3[0] == 1.2
 assert l3[1] == 2.5
+
+l4 = ["abc", "def"]
+assert l4[0] == "abc"
+assert l4[1] == "def"

@@ -148,6 +148,8 @@ typet python_converter::get_typet(const nlohmann::json &elem)
     return bool_type();
   else if (elem.is_number_float())
     return float_type();
+  else if (elem.is_string())
+    return build_array(char_type(), elem.get<std::string>().size());
 
   log_error("Invalid type\n");
   abort();
@@ -305,6 +307,17 @@ std::string python_converter::get_operand_type(const nlohmann::json &element)
     else if (value.is_number_float())
       return "float";
   }
+
+  // Operand is a list element
+  if (
+    element["_type"] == "Subscript" &&
+    get_operand_type(element["value"]) == "list")
+  {
+    nlohmann::json list_node =
+      find_var_decl(element["value"]["id"].get<std::string>());
+    return get_operand_type(list_node["value"]["elts"][0]);
+  }
+
   return std::string();
 }
 
@@ -527,7 +540,7 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
   return unary_expr;
 }
 
-const nlohmann::json python_converter::find_var_decl(
+const nlohmann::json python_converter::get_var_node(
   const std::string &var_name,
   const nlohmann::json &json) const
 {
@@ -539,6 +552,25 @@ const nlohmann::json python_converter::find_var_decl(
       return element;
   }
   return nlohmann::json();
+}
+
+const nlohmann::json
+python_converter::find_var_decl(const std::string &var_name) const
+{
+  nlohmann::json ref;
+
+  // Get variable from current function
+  for (const auto &elem : ast_json["body"])
+  {
+    if (elem["_type"] == "FunctionDef" && elem["name"] == current_func_name)
+      ref = get_var_node(var_name, elem);
+  }
+
+  // Get variable from global scope
+  if (ref.empty())
+    ref = get_var_node(var_name, ast_json);
+
+  return ref;
 }
 
 locationt
@@ -724,7 +756,7 @@ function_id python_converter::build_function_id(const nlohmann::json &element)
           class_name = obj_name;
         else
         {
-          auto obj_node = find_var_decl(obj_name, ast_json);
+          auto obj_node = get_var_node(obj_name, ast_json);
           if (obj_node.empty())
             abort();
 
@@ -1311,18 +1343,7 @@ size_t get_type_size(const nlohmann::json &ast_node)
 
 std::string python_converter::get_var_type(const std::string &var_name) const
 {
-  nlohmann::json ref;
-  // Get variable from current function
-  for (const auto &elem : ast_json["body"])
-  {
-    if (elem["_type"] == "FunctionDef" && elem["name"] == current_func_name)
-      ref = find_var_decl(var_name, elem);
-  }
-
-  // Get variable from global scope
-  if (ref.empty())
-    ref = find_var_decl(var_name, ast_json);
-
+  nlohmann::json ref = find_var_decl(var_name);
   if (ref.empty())
     return std::string();
 
@@ -1449,19 +1470,12 @@ void python_converter::get_var_assign(
     {
       if (lhs_type == "str")
       {
-        array_typet &arr_type =
-          static_cast<array_typet &>(current_element_type);
-
         /* When a string is assigned the result of a concatenation, we initially
          * create the LHS type as a zero-size array: "current_element_type = get_typet(lhs_type, type_size);"
          * After parsing the RHS, we need to adjust the LHS type size to match
          * the size of the resulting RHS string.*/
-
-        // If the size of the LHS type is zero, update the LHS type with the type of the RHS.
-        if (std::stoi(arr_type.size().value().as_string()) == 0)
-          lhs_symbol->type = rhs.type();
+        lhs_symbol->type = rhs.type();
       }
-
       lhs_symbol->value = rhs;
     }
 
@@ -1516,7 +1530,7 @@ void python_converter::get_compound_assign(
 {
   // Get type from declaration node
   std::string var_name = ast_node["target"]["id"].get<std::string>();
-  nlohmann::json ref = find_var_decl(var_name, ast_json);
+  nlohmann::json ref = get_var_node(var_name, ast_json);
   assert(!ref.empty());
   current_element_type = get_typet(ref["annotation"]["id"].get<std::string>());
 
