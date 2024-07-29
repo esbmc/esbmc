@@ -252,7 +252,8 @@ void execution_statet::symex_step(reachability_treet &art)
       owning_rt->main_thread_ended = true;
     }
     else if (
-      instruction.function == "c:@F@main" &&
+      (instruction.function == "c:@F@main" ||
+       instruction.function == "c:@F@main#") &&
       !options.get_bool_option("deadlock-check") &&
       !options.get_bool_option("memory-leak-check"))
     {
