@@ -56,10 +56,10 @@ TEST_CASE(
   graph[16] = std::unordered_set<int>({}); // END
 
   std::shared_ptr<goto_cfg::basic_block> bb = from_int_graph(graph, 0, 16);
+  const goto_cfg::Dominator info(bb);
+  const auto dt = info.dom_tree();
   SECTION("Dominator Tree")
-  {    
-    const goto_cfg::Dominator info(bb);
-    const auto dt = info.dom_tree();
+  {        
     REQUIRE(dt.first->uuid == 0);
 
     const std::array expected{
@@ -102,8 +102,43 @@ TEST_CASE(
     REQUIRE(visited == nodes);
   }
 
+  const goto_cfg::Dominator::DJGraph dj_graph(dt, bb, info);
   SECTION("DJ-GRAPHS")
   {
+    const std::array expected{
+      std::unordered_set<int>({1, 16}),
+      std::unordered_set<int>({2, 4, 7, 8, 15, 3}),
+      std::unordered_set<int>({7,4}),
+      std::unordered_set<int>({9}),
+      std::unordered_set<int>({5}),
+      std::unordered_set<int>({6}),
+      std::unordered_set<int>({2,8}),
+      std::unordered_set<int>({8}),
+      std::unordered_set<int>({7,15}),
+      std::unordered_set<int>({10, 11, 12}),
+      std::unordered_set<int>({12}),
+      std::unordered_set<int>({12}),
+      std::unordered_set<int>({13}),
+      std::unordered_set<int>({14,15,3}),
+      std::unordered_set<int>({12}),
+      std::unordered_set<int>({16})};
+
+    std::unordered_set<int> visited;    
+    for (auto [k, v] : dj_graph._graph)
+    {
+      CAPTURE(k->uuid);
+      visited.insert(k->uuid);
+      std::unordered_set<int> actual;
+      for (auto &e : v)
+      {
+        visited.insert(e->uuid);
+        actual.insert(e->uuid);
+      }
+      REQUIRE(actual == expected[k->uuid]);
+    }
+    const std::unordered_set<int> nodes{
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+    REQUIRE(nodes == visited);
   }
 
   SECTION("phi-Nodes")
