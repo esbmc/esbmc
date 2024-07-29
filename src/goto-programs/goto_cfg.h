@@ -58,18 +58,24 @@ public:
     using Node = std::shared_ptr<basic_block>;
     using DomTree = std::pair<Node, std::unordered_map<Node, std::unordered_set<Node>>>;
     const Node &start;
+
+    
     Dominator(const Node &start) : start(start) { compute_dominators(); }
+
     // Evaluates whether n1 dom n2
     inline bool dom(const Node &n1, const Node &n2) const
     {
       return dom(n2).count(n1);
     }
+
+
     inline bool sdom(const Node &n1, const Node &n2) const
     {
       return n1 != n2 && dom(n1,n2);
     }
 
-    // Returns the immediate dominator of n
+    // Returns the immediate dominator of n.  The idom of a
+    // node n1 is the unique node n2 that n2 sdom n1 but does not sdom any other node that sdom n1. 
     Node idom(const Node &n) const;
 
     // Computes the dominator frontier for node
@@ -81,6 +87,10 @@ public:
 
     void dump_dominators() const;
     void dump_idoms() const;
+
+    template <class T>
+    std::unordered_set<Node> dom_frontier(const T &n) const;    
+    std::unordered_set<Node> iterated_dom_frontier(const std::unordered_set<Node> &n) const;
 
   private:
     void compute_dominators();
