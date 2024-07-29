@@ -202,4 +202,28 @@ TEST_CASE(
     for (auto &df : frontier)
       REQUIRE(expected.count(df->uuid));
   }
+
+  SECTION("Iterated Dominance Frontier (set)")
+  {
+    std::unordered_set<std::shared_ptr<goto_cfg::basic_block>> nodes;
+
+    for (auto [k, v] : dt.second)
+    {
+      switch (k->uuid)
+      {
+      case 0:
+      case 5:
+      case 13:
+        nodes.insert(k);
+        break;
+      default:
+        break;
+      }
+    }
+
+    auto frontier = info.iterated_dom_frontier(nodes);
+    const std::unordered_set expected {2,3,4,7,8,12,15,16}; 
+    for (auto &df : frontier)
+      REQUIRE(expected.count(df->uuid));
+  }
 }

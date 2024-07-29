@@ -348,11 +348,34 @@ std::unordered_set<goto_cfg::Dominator::Node> goto_cfg::Dominator::dom_frontier(
 }
 
 std::unordered_set<goto_cfg::Dominator::Node>
+goto_cfg::Dominator::dom_frontier(const std::unordered_set<goto_cfg::Dominator::Node> &nodes) const
+{
+  assert(nodes.size() > 0);
+
+  std::unordered_set<goto_cfg::Dominator::Node> result;
+
+  for (const Node &n : nodes)
+    for (const Node &df : dom_frontier(n))
+      result.insert(df);
+  
+  return result;  
+}
+
+std::unordered_set<goto_cfg::Dominator::Node>
 goto_cfg::Dominator::iterated_dom_frontier(
-  const std::unordered_set<Node> &n) const
+  const std::unordered_set<Node> &nodes) const
 {
   assert(dj);
-  std::unordered_set<goto_cfg::Dominator::Node> result;
+  assert(nodes.size() > 0);
+  std::unordered_set<goto_cfg::Dominator::Node> result = dom_frontier(nodes);
+  std::unordered_set<goto_cfg::Dominator::Node> result2 = dom_frontier(result);
+
+  while (result != result2)
+  {
+    result = result2;
+    result2 = dom_frontier(result);
+  }
+  
   return result;
 }
 
