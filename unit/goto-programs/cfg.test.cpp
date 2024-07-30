@@ -56,7 +56,7 @@ TEST_CASE(
   graph[16] = std::unordered_set<int>({}); // END
 
   std::shared_ptr<goto_cfg::basic_block> bb = from_int_graph(graph, 0, 16);
-  goto_cfg::Dominator info(bb);
+  Dominator info(bb);
   const auto dt = info.dom_tree();
   SECTION("Dominator Tree")
   {        
@@ -104,7 +104,7 @@ TEST_CASE(
 
   SECTION("Dominator Tree Levels")
   {
-    auto levels = goto_cfg::Dominator::get_levels(dt);
+    auto levels = Dominator::get_levels(dt);
     const std::array expected{0, 1, 2, 2, 2, 3, 4, 2, 2, 3, 4, 4, 4, 5, 6, 2, 1};
 
     for (auto [k, v] : dt.second)
@@ -132,7 +132,7 @@ TEST_CASE(
       }
     }
 
-    auto subtree = goto_cfg::Dominator::get_subtree(dt, node);
+    auto subtree = Dominator::get_subtree(dt, node);
     const std::unordered_set expected{3, 9, 10, 11, 12, 13, 14};
 
     REQUIRE(subtree.size() == expected.size());
@@ -142,7 +142,7 @@ TEST_CASE(
   }
 
 
-  auto ptr = std::make_shared<goto_cfg::Dominator::DJGraph>(dt, bb, info);
+  auto ptr = std::make_shared<Dominator::DJGraph>(dt, bb, info);
   auto dj_graph = *ptr;
   info.dj = ptr;
   SECTION("DJ-GRAPHS")
