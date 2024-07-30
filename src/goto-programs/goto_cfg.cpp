@@ -192,6 +192,9 @@ void goto_cfg::foreach_bb(
 
 void Dominator::compute_dominators()
 {
+  // TODO: This algorithm is quadratic, there is a more efficient
+  // version by Lengauer-Tarjan.
+   
   // Computes dominator of a node
   std::unordered_map<
     Node,
@@ -225,8 +228,6 @@ void Dominator::compute_dominators()
 
     if (dominator_node == start)
       continue;
-
-    // assert(!dominator_node->predecessors.empty());
 
     // Get the intersection of all the predecessors
     std::unordered_set<Node> intersection = top;
@@ -303,9 +304,7 @@ void Dominator::dump_idoms() const
   DomTree dt(*this);
 
   log_status("Root: {}", dt.root->uuid);
-  //  dt.first->begin->dump();
-
-  for (const auto &[key, value] : dt.edges)
+   for (const auto &[key, value] : dt.edges)
   {
     log_status("Node: {}", key->uuid);
     log_status("Edges");
@@ -348,6 +347,7 @@ Dominator::iterated_dom_frontier(
 {
   assert(dj);
   assert(nodes.size() > 0);
+  // TODO: There is a linear solution by SREEDHAR using PiggyBanks
   std::unordered_set<Dominator::Node> result = dom_frontier(nodes);
   std::unordered_set<Dominator::Node> result2 = dom_frontier(result);
 
@@ -373,15 +373,8 @@ Dominator::iterated_dom_frontier(
 Dominator::DJGraph::DJGraph(const Dominator::Node &cfg, const Dominator &dom) : tree(dom)
 {
   // A DJ-Graph is a graph composed by D-Edges and J-Edges
-  // D-Edges are the edges from the dominator tree
-  // J-Edges are x->y edges from the CFG such that x !sdom y. y is called join node
-
-  // All D-Edges are added
   _graph = tree.edges;
   _dedges = tree.edges;
-
-  //Graph j_edges;
-  //std::unordered_set<Node> j_node;
   auto func = [this, &dom](const Node &x)
   {
     auto [val, ins] = _graph.insert({x, std::unordered_set<Node>()});
@@ -419,14 +412,12 @@ Dominator::DomTree::get_levels() const
       continue;
     
     size_t level = levels[current] + 1;
-    for (const auto &nodes : edges.at(current))
+    for (const Node &nodes : edges.at(current))
     {
       levels[nodes] = level;
       worklist.insert(nodes);
-    }
-    
+    }    
   }
-
   return levels;
 }
 
@@ -457,7 +448,6 @@ Dominator::DomTree::get_subtree(const Node &n) const
 
 Dominator::DomTree::DomTree(const Dominator &dom) : root(dom.start)
 {
-
   goto_cfg::foreach_bb(
     dom.start,
     [this, &dom](const Node &n)

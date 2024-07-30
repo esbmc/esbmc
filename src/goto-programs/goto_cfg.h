@@ -69,6 +69,10 @@ public:
     /// First node in the CFG
     const Node &start;
 
+    /**
+     * @brief Dominator Tree has the property that a parent dominates its
+     * children
+    */
     struct DomTree
     {
       DomTree(const Dominator &dom);
@@ -79,6 +83,13 @@ public:
       std::unordered_set<Node> get_subtree(const Node &n) const;
     };
 
+
+    /**
+     * @brief DJ-Graph is a graph used to improve the computability of
+     * the domain frontier of the CFG.
+     *
+     * See SREEDHAR, Vugranam C.; GAO, Guang R. Computing phi-nodes in linear time using DJ graphs. Journal of Programming Languages, v. 3, p. 191-214, 1995.
+     */
     struct DJGraph
     {
       const DomTree tree;      
@@ -88,9 +99,14 @@ public:
       
       using Graph =
         std::unordered_map<Node, std::unordered_set<Node>>;
-      Graph _graph;
+
+      /// J-Edges are x->y edges from the CFG such that x !sdom y. y is called join node
       Graph _jedges;
+      /// D-Edges are the edges from the dominator tree
       Graph _dedges;
+      /// The full graph is D-Edges union J-Edges
+      Graph _graph;
+      
       void dump() const;
     };
     
