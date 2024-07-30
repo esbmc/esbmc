@@ -370,10 +370,19 @@ goto_cfg::Dominator::iterated_dom_frontier(
   std::unordered_set<goto_cfg::Dominator::Node> result = dom_frontier(nodes);
   std::unordered_set<goto_cfg::Dominator::Node> result2 = dom_frontier(result);
 
-  while (result != result2)
+  while (1)
   {
     result = result2;
     result2 = dom_frontier(result);
+
+    if (result.size() != result2.size())
+      continue;
+
+    for (const auto &n : result)
+      if (!result2.count(n))
+        continue;
+
+    break;      
   }
   
   return result;

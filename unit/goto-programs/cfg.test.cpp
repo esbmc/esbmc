@@ -149,21 +149,15 @@ TEST_CASE(
   {
     const std::array expected{
       std::unordered_set<int>({1, 16}),
-      std::unordered_set<int>({2, 4, 7, 8, 15, 3}),
-      std::unordered_set<int>({7,4}),
-      std::unordered_set<int>({9}),
-      std::unordered_set<int>({5}),
-      std::unordered_set<int>({6}),
-      std::unordered_set<int>({2,8}),
-      std::unordered_set<int>({8}),
-      std::unordered_set<int>({7,15}),
-      std::unordered_set<int>({10, 11, 12}),
-      std::unordered_set<int>({12}),
-      std::unordered_set<int>({12}),
-      std::unordered_set<int>({13}),
-      std::unordered_set<int>({14,15,3}),
-      std::unordered_set<int>({12}),
-      std::unordered_set<int>({16})};
+        std::unordered_set<int>({2, 4, 7, 8, 15, 3}),
+        std::unordered_set<int>({7, 4}), std::unordered_set<int>({9}),
+        std::unordered_set<int>({5}), std::unordered_set<int>({6}),
+        std::unordered_set<int>({2, 8}), std::unordered_set<int>({8}),
+        std::unordered_set<int>({7, 15}), std::unordered_set<int>({10, 11, 12}),
+        std::unordered_set<int>({12}), std::unordered_set<int>({12}),
+        std::unordered_set<int>({13}), std::unordered_set<int>({14, 15, 3}),
+        std::unordered_set<int>({12}), std::unordered_set<int>({16}),
+    std::unordered_set<int>({})};
 
     std::unordered_set<int> visited;    
     for (auto [k, v] : dj_graph._graph)
@@ -183,7 +177,7 @@ TEST_CASE(
     REQUIRE(nodes == visited);
   }
 
-  SECTION("Dominance Frontier(Node)")
+  SECTION("Dominance Frontier (Node)")
   {
     std::shared_ptr<goto_cfg::basic_block> node;
 
@@ -201,6 +195,56 @@ TEST_CASE(
     REQUIRE(frontier.size() == 2);
     for (auto &df : frontier)
       REQUIRE(expected.count(df->uuid));
+  }
+
+  SECTION("Dominance Frontier (Node 2)")
+  {
+    std::shared_ptr<goto_cfg::basic_block> node;
+
+    for (auto [k, v] : dt.second)
+    {
+      if (k->uuid == 9)
+      {
+        node = k;
+        break;
+      }
+    }
+
+    auto frontier = info.dom_frontier(node);
+    const std::unordered_set<size_t> expected {3,15};
+    REQUIRE(frontier.size() == 2);
+    for (auto &df : frontier)
+      REQUIRE(expected.count(df->uuid));
+  }
+
+  SECTION("Dominance Frontier (Set)")
+  {
+    std::unordered_set<std::shared_ptr<goto_cfg::basic_block>> nodes;
+
+    for (auto [k, v] : dt.second)
+    {
+      switch (k->uuid)
+      {
+      case 3:
+      case 9:
+        nodes.insert(k);
+        break;
+      default:
+        break;
+      }
+    }
+
+    auto frontier = info.dom_frontier(nodes);
+    const std::unordered_set expected{3, 15};
+
+    REQUIRE(frontier.size() == expected.size());
+    
+    for (auto &df : frontier)
+    {
+      CAPTURE(df->uuid);
+      REQUIRE(expected.count(df->uuid));    
+    }
+      
   }
 
   SECTION("Iterated Dominance Frontier (set)")
@@ -225,5 +269,5 @@ TEST_CASE(
     const std::unordered_set expected {2,3,4,7,8,12,15,16}; 
     for (auto &df : frontier)
       REQUIRE(expected.count(df->uuid));
-  }
-}
+   }
+ }
