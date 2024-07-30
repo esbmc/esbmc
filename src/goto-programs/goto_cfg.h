@@ -170,14 +170,18 @@ private:
 
 class ssa_promotion
 {
+  using Node = std::shared_ptr<goto_cfg::basic_block>;
 public:
-  ssa_promotion(goto_cfg &cfg);
+  ssa_promotion(goto_cfg &cfg) : cfg(cfg) {}
 
   void promote();
 
-private:
+protected:
+  void promote_node(const Node& n);
   void insert_phi(const live_analysis &var);
   void rename_phi(const live_analysis &var);
 
+private:
+  goto_cfg &cfg;
   const std::unordered_set<std::string> _skip{"__ESBMC_main"};
 };
