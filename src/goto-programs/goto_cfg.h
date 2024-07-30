@@ -64,12 +64,20 @@ public:
    */
   struct Dominator
   {
-    using Node = std::shared_ptr<goto_cfg::basic_block>;
-    using DomTree =
-      std::pair<Node, std::unordered_map<Node, std::unordered_set<Node>>>;
+  using Node = std::shared_ptr<goto_cfg::basic_block>;
 
+    /// First node in the CFG
     const Node &start;
 
+    struct DomTree
+    {
+      DomTree(const Dominator &dom);
+      const Node &root;
+      std::unordered_map<Node, std::unordered_set<Node>> edges;
+
+      std::unordered_map<Node, size_t> get_levels() const;
+      std::unordered_set<Node> get_subtree(const Node &n) const;      
+    };
     
     Dominator(const Node &start) : start(start) { compute_dominators(); }
 
@@ -78,7 +86,6 @@ public:
     {
       return dom(n2).count(n1);
     }
-
 
     inline bool sdom(const Node &n1, const Node &n2) const
     {
@@ -100,8 +107,6 @@ public:
     std::unordered_set<Node>
     iterated_dom_frontier(const std::unordered_set<Node> &n) const;
 
-    static std::unordered_map<Node, size_t> get_levels(const DomTree &dt);
-    static std::unordered_set<Node> get_subtree(const DomTree &dt, const Node &n);
 
     struct DJGraph
     {
@@ -124,10 +129,10 @@ public:
     std::unordered_map<
       Node,
       std::unordered_set<Node>>
-    dominators;
+    _dominators;
     // Get dominators of a node
     inline std::unordered_set<Node> dom(const Node &node) const
     {
-      return dominators.at(node);
+      return _dominators.at(node);
     }
   };  
