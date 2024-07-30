@@ -57,10 +57,10 @@ TEST_CASE(
 
   std::shared_ptr<goto_cfg::basic_block> bb = from_int_graph(graph, 0, 16);
   Dominator info(bb);
-  const auto dt = info.dom_tree();
+  const Dominator::DomTree dt(info);
   SECTION("Dominator Tree")
   {        
-    REQUIRE(dt.first->uuid == 0);
+    REQUIRE(dt.root->uuid == 0);
 
     const std::array expected{
       std::unordered_set<int>({1, 16}),
@@ -85,7 +85,7 @@ TEST_CASE(
     const std::unordered_set<int> leaves{2, 6, 7,8,15, 14, 10, 11};
 
     std::unordered_set<int> visited;    
-    for (auto [k, v] : dt.second)
+    for (auto [k, v] : dt.edges)
     {
       CAPTURE(k->uuid);
       visited.insert(k->uuid);
@@ -104,10 +104,10 @@ TEST_CASE(
 
   SECTION("Dominator Tree Levels")
   {
-    auto levels = Dominator::get_levels(dt);
+    auto levels = dt.get_levels();
     const std::array expected{0, 1, 2, 2, 2, 3, 4, 2, 2, 3, 4, 4, 4, 5, 6, 2, 1};
 
-    for (auto [k, v] : dt.second)
+    for (auto [k, v] : dt.edges)
     {
       CAPTURE(k->uuid);
       REQUIRE((size_t)expected[k->uuid] == levels[k]);
@@ -123,7 +123,7 @@ TEST_CASE(
   {
     std::shared_ptr<goto_cfg::basic_block> node;
 
-    for (auto [k, v] : dt.second)
+    for (auto [k, v] : dt.edges)
     {
       if (k->uuid == 3)
       {
@@ -132,7 +132,7 @@ TEST_CASE(
       }
     }
 
-    auto subtree = Dominator::get_subtree(dt, node);
+    auto subtree = dt.get_subtree(node);
     const std::unordered_set expected{3, 9, 10, 11, 12, 13, 14};
 
     REQUIRE(subtree.size() == expected.size());
@@ -181,7 +181,7 @@ TEST_CASE(
   {
     std::shared_ptr<goto_cfg::basic_block> node;
 
-    for (auto [k, v] : dt.second)
+    for (auto [k, v] : dt.edges)
     {
       if (k->uuid == 3)
       {
@@ -201,7 +201,7 @@ TEST_CASE(
   {
     std::shared_ptr<goto_cfg::basic_block> node;
 
-    for (auto [k, v] : dt.second)
+    for (auto [k, v] : dt.edges)
     {
       if (k->uuid == 9)
       {
@@ -221,7 +221,7 @@ TEST_CASE(
   {
     std::unordered_set<std::shared_ptr<goto_cfg::basic_block>> nodes;
 
-    for (auto [k, v] : dt.second)
+    for (auto [k, v] : dt.edges)
     {
       switch (k->uuid)
       {
@@ -251,7 +251,7 @@ TEST_CASE(
   {
     std::unordered_set<std::shared_ptr<goto_cfg::basic_block>> nodes;
 
-    for (auto [k, v] : dt.second)
+    for (auto [k, v] : dt.edges)
     {
       switch (k->uuid)
       {
