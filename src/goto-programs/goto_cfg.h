@@ -105,10 +105,6 @@ public:
       Graph _graph;
       Graph _jedges;
       Graph _dedges;
-
-      
-      
-
       void dump() const;
     };
 
