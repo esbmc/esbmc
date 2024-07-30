@@ -370,7 +370,7 @@ Dominator::iterated_dom_frontier(
 }
 
 
-Dominator::DJGraph::DJGraph(const DomTree &tree, const Dominator::Node &cfg, const Dominator &dom) : tree(tree), cfg(cfg)
+Dominator::DJGraph::DJGraph(const Dominator::Node &cfg, const Dominator &dom) : tree(dom)
 {
   // A DJ-Graph is a graph composed by D-Edges and J-Edges
   // D-Edges are the edges from the dominator tree

@@ -142,7 +142,7 @@ TEST_CASE(
   }
 
 
-  auto ptr = std::make_shared<Dominator::DJGraph>(dt, bb, info);
+  auto ptr = std::make_shared<Dominator::DJGraph>(bb, info);
   auto dj_graph = *ptr;
   info.dj = ptr;
   SECTION("DJ-GRAPHS")

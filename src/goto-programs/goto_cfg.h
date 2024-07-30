@@ -76,7 +76,22 @@ public:
       std::unordered_map<Node, std::unordered_set<Node>> edges;
 
       std::unordered_map<Node, size_t> get_levels() const;
-      std::unordered_set<Node> get_subtree(const Node &n) const;      
+      std::unordered_set<Node> get_subtree(const Node &n) const;
+    };
+
+    struct DJGraph
+    {
+      const DomTree tree;      
+      DJGraph(
+         const Dominator::Node &cfg,
+        const Dominator &dom);
+      
+      using Graph =
+        std::unordered_map<Node, std::unordered_set<Node>>;
+      Graph _graph;
+      Graph _jedges;
+      Graph _dedges;
+      void dump() const;
     };
     
     Dominator(const Node &start) : start(start) { compute_dominators(); }
@@ -96,9 +111,6 @@ public:
     // node n1 is the unique node n2 that n2 sdom n1 but does not sdom any other node that sdom n1. 
     Node idom(const Node &n) const;
 
-    DomTree
-    dom_tree() const;
-
     void dump_dominators() const;
     void dump_idoms() const;
 
@@ -106,20 +118,6 @@ public:
     std::unordered_set<Node> dom_frontier(const std::unordered_set<Node> &nodes) const;
     std::unordered_set<Node>
     iterated_dom_frontier(const std::unordered_set<Node> &n) const;
-
-
-    struct DJGraph
-    {
-      const DomTree &tree;
-      const Dominator::Node &cfg;
-      DJGraph(const DomTree &tree, const Dominator::Node &cfg, const Dominator &dom);
-      using Graph =
-        std::unordered_map<Node, std::unordered_set<Node>>;
-      Graph _graph;
-      Graph _jedges;
-      Graph _dedges;
-      void dump() const;
-    };
 
     std::shared_ptr<DJGraph> dj;
 
