@@ -170,6 +170,20 @@ void goto_cfg::dump_graph() const
 }
 
 template <class F>
+void goto_cfg::basic_block::foreach_inst(F f)
+{
+  for (goto_programt::instructionst::iterator start = begin; start != end;
+       start++)
+    f(*start);
+}
+
+template <class F>
+void goto_cfg::basic_block::foreach_bb(F f)
+{
+  goto_cfg::foreach_bb(this, f);
+}
+
+template <class F>
 void goto_cfg::foreach_bb(
   const std::shared_ptr<goto_cfg::basic_block> &start,
   F foo) 
