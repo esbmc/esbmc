@@ -45,6 +45,12 @@ public:
     std::unordered_set<std::shared_ptr<basic_block>> predecessors;
     terminator_type terminator = terminator_type::OTHER;
     int uuid;
+
+    template <class F>
+    void foreach_inst(F);
+
+    template <class F>
+    void foreach_bb(F);
   };
 
   std::unordered_map<std::string, std::vector<std::shared_ptr<basic_block>>>
@@ -149,4 +155,30 @@ public:
     {
       return _dominators.at(node);
     }
-  };  
+  };
+
+  class live_analysis
+  {
+    using Node = std::shared_ptr<goto_cfg::basic_block>;
+  public:
+    live_analysis(const Node &root);
+    inline std::unordered_set<Node> get_live_blocks() const { return _live_blocks; }
+
+  private:
+    void compute_blocks();
+    std::unordered_set<Node> _live_blocks;
+  };
+
+  class ssa_promotion
+  {
+  public:
+    ssa_promotion(goto_cfg &cfg);
+
+    void promote();    
+
+  private:
+    void insert_phi(const live_analysis &var);
+    void rename_phi(const live_analysis &var);
+
+    const std::unordered_set<std::string> _skip{"__ESBMC_main"};
+  };
