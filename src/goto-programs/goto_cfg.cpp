@@ -138,16 +138,12 @@ void goto_cfg::dump_graph() const
       {
         file << "|{<s0>T|<s1>F}}\"];\n";
         auto suc = bbs[t]->successors.begin();
-        file << "BB" << t << ":s0"
-             << " -> "
-             << "BB"
+        file << "BB" << t << ":s0" << " -> " << "BB"
              << std::distance(
                   bbs.begin(), std::find(bbs.begin(), bbs.end(), *suc))
              << ";\n";
         suc++;
-        file << "BB" << t << ":s1"
-             << " -> "
-             << "BB"
+        file << "BB" << t << ":s1" << " -> " << "BB"
              << std::distance(
                   bbs.begin(), std::find(bbs.begin(), bbs.end(), *suc))
              << ";\n";
@@ -157,8 +153,7 @@ void goto_cfg::dump_graph() const
       default:
         file << "}\"];\n";
         for (const auto &suc : bbs[t]->successors)
-          file << "BB" << t << " -> "
-               << "BB"
+          file << "BB" << t << " -> " << "BB"
                << std::distance(
                     bbs.begin(), std::find(bbs.begin(), bbs.end(), suc))
                << ";\n";
@@ -186,7 +181,7 @@ void goto_cfg::basic_block::foreach_bb(F f)
 template <class F>
 void goto_cfg::foreach_bb(
   const std::shared_ptr<goto_cfg::basic_block> &start,
-  F foo) 
+  F foo)
 {
   std::unordered_set<std::shared_ptr<goto_cfg::basic_block>> visited;
   std::vector<std::shared_ptr<goto_cfg::basic_block>> to_visit({start});
@@ -203,27 +198,20 @@ void goto_cfg::foreach_bb(
   }
 }
 
-
 void Dominator::compute_dominators()
 {
   // TODO: This algorithm is quadratic, there is a more efficient
   // version by Lengauer-Tarjan.
-   
-  // Computes dominator of a node
-  std::unordered_map<
-    Node,
-    std::unordered_set<Node>> dt;
 
+  // Computes dominator of a node
+  std::unordered_map<Node, std::unordered_set<Node>> dt;
 
   // 1. Sets all nodes dominators to TOP
-  
+
   std::unordered_set<Node> top;
-  goto_cfg::foreach_bb(
-    start, [&top](const Node &n) { top.insert(n); });
+  goto_cfg::foreach_bb(start, [&top](const Node &n) { top.insert(n); });
 
-  goto_cfg::foreach_bb(
-    start, [&dt, &top](const Node &n) { dt[n] = top; });
-
+  goto_cfg::foreach_bb(start, [&dt, &top](const Node &n) { dt[n] = top; });
 
   /*
     Dom(n) = {n}, if n = start
@@ -233,10 +221,10 @@ void Dominator::compute_dominators()
 
   std::vector<std::shared_ptr<goto_cfg::basic_block>> worklist{start};
   for (const auto &suc : start->successors)
-     worklist.push_back(suc);
+    worklist.push_back(suc);
 
   while (!worklist.empty())
-  {    
+  {
     const auto &dominator_node = worklist.back();
     worklist.pop_back();
 
@@ -263,13 +251,12 @@ void Dominator::compute_dominators()
     {
       dt[dominator_node] = result;
       for (const auto &suc : dominator_node->successors)
-          worklist.push_back(suc);
+        worklist.push_back(suc);
     }
   }
 
   _dominators = dt;
 }
-
 
 void Dominator::dump_dominators() const
 {
@@ -292,7 +279,7 @@ Dominator::Node Dominator::idom(const Node &n) const
     n_dominators.begin(),
     n_dominators.end(),
     std::back_inserter(sdoms),
-    [&n,this](const auto &item) {return sdom(item,n); });
+    [&n, this](const auto &item) { return sdom(item, n); });
 
   for (const Node &n0 : sdoms)
   {
@@ -312,19 +299,18 @@ Dominator::Node Dominator::idom(const Node &n) const
   abort();
 }
 
-
 void Dominator::dump_idoms() const
 {
   DomTree dt(*this);
 
   log_status("Root: {}", dt.root->uuid);
-   for (const auto &[key, value] : dt.edges)
+  for (const auto &[key, value] : dt.edges)
   {
     log_status("Node: {}", key->uuid);
     log_status("Edges");
     for (const auto &n : value)
       log_status("\t{}", n->uuid);
-  }  
+  }
 }
 
 std::unordered_set<Dominator::Node> Dominator::dom_frontier(const Node &n) const
@@ -351,13 +337,12 @@ Dominator::dom_frontier(const std::unordered_set<Dominator::Node> &nodes) const
   for (const Node &n : nodes)
     for (const Node &df : dom_frontier(n))
       result.insert(df);
-  
-  return result;  
+
+  return result;
 }
 
 std::unordered_set<Dominator::Node>
-Dominator::iterated_dom_frontier(
-  const std::unordered_set<Node> &nodes) const
+Dominator::iterated_dom_frontier(const std::unordered_set<Node> &nodes) const
 {
   assert(dj);
   assert(nodes.size() > 0);
@@ -377,14 +362,14 @@ Dominator::iterated_dom_frontier(
       if (!result2.count(n))
         continue;
 
-    break;      
+    break;
   }
-  
+
   return result;
 }
 
-
-Dominator::DJGraph::DJGraph(const Dominator::Node &cfg, const Dominator &dom) : tree(dom)
+Dominator::DJGraph::DJGraph(const Dominator::Node &cfg, const Dominator &dom)
+  : tree(dom)
 {
   // A DJ-Graph is a graph composed by D-Edges and J-Edges
   _graph = tree.edges;
@@ -424,13 +409,13 @@ Dominator::DomTree::get_levels() const
     worklist.erase(current);
     if (!edges.count(current))
       continue;
-    
+
     size_t level = levels[current] + 1;
     for (const Node &nodes : edges.at(current))
     {
       levels[nodes] = level;
       worklist.insert(nodes);
-    }    
+    }
   }
   return levels;
 }
@@ -440,7 +425,7 @@ Dominator::DomTree::get_subtree(const Node &n) const
 {
   std::unordered_set<Dominator::Node> nodes({n});
   std::set<Dominator::Node> worklist({n});
-  
+
   while (!worklist.empty())
   {
     const Node current = *worklist.begin();
@@ -455,10 +440,9 @@ Dominator::DomTree::get_subtree(const Node &n) const
       nodes.insert(inner);
     }
   }
-    
-  return nodes;  
-}
 
+  return nodes;
+}
 
 Dominator::DomTree::DomTree(const Dominator &dom) : root(dom.start)
 {
