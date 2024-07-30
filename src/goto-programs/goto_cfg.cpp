@@ -1,4 +1,5 @@
 #include "irep2/irep2_expr.h"
+#include "std_code.h"
 #include <goto-programs/goto_cfg.h>
 
 goto_cfg::goto_cfg(goto_functionst &goto_functions)
@@ -457,4 +458,48 @@ Dominator::DomTree::DomTree(const Dominator &dom) : root(dom.start)
       auto [val, ins] = edges.insert({root, std::unordered_set<Node>()});
       val->second.insert(n);
     });
+}
+
+void ssa_promotion::promote()
+{
+  // TODO: This should be in parallel
+  for (auto &[k, v] : cfg.basic_blocks)
+  {
+    if (_skip.count(k))
+      continue;
+
+    assert(v.size());
+    promote_node(v[0]);    
+  }
+}
+
+void ssa_promotion::promote_node(const Node &n)
+{
+  auto lambda =
+    [](const goto_programt::instructiont &I)
+  {
+    if (I.is_decl())
+    {
+      log_status("DECL");
+    }
+    else if (I.is_assign())
+    {
+      log_status("ASSIGN");
+    }
+    else
+    {
+      log_status("READ?");
+    }
+  };
+
+  goto_cfg::foreach_bb(
+    n, [&lambda](const Node &bb) { bb->foreach_inst(lambda); });
+
+  // Compute do live analysis blocks for each variable
+
+  // Compute phi-nodes
+
+  // Insert phi-node
+
+  // rename phi-nodes  
 }
