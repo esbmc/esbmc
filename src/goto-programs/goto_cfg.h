@@ -53,10 +53,18 @@ public:
   template <class F>
   static void foreach_bb(const std::shared_ptr<basic_block> &start, F);
 
+};
+
+  /**
+   * @brieft Dominator class to compute all dominator info
+   *
+   * The dominator information is useful to compute featues over the CFG.
+   * For ESBMC, the main purpose here is to be able to compute a DJ-Graph
+   * which can be used for SSA-promotion and loop invariants.
+   */
   struct Dominator
   {
-
-    using Node = std::shared_ptr<basic_block>;
+    using Node = std::shared_ptr<goto_cfg::basic_block>;
     using DomTree =
       std::pair<Node, std::unordered_map<Node, std::unordered_set<Node>>>;
 
@@ -98,8 +106,8 @@ public:
     struct DJGraph
     {
       const DomTree &tree;
-      const goto_cfg::Dominator::Node &cfg;
-      DJGraph(const DomTree &tree, const goto_cfg::Dominator::Node &cfg, const goto_cfg::Dominator &dom);
+      const Dominator::Node &cfg;
+      DJGraph(const DomTree &tree, const Dominator::Node &cfg, const Dominator &dom);
       using Graph =
         std::unordered_map<Node, std::unordered_set<Node>>;
       Graph _graph;
@@ -114,18 +122,12 @@ public:
     
     void compute_dominators();
     std::unordered_map<
-      std::shared_ptr<basic_block>,
-      std::unordered_set<std::shared_ptr<basic_block>>>
+      Node,
+      std::unordered_set<Node>>
     dominators;
     // Get dominators of a node
     inline std::unordered_set<Node> dom(const Node &node) const
     {
       return dominators.at(node);
     }
-
-
-
-    
-
   };  
-};
