@@ -4,23 +4,25 @@
 #include <goto-programs/loop_unroll.h>
 #include <goto-programs/goto_cfg.h>
 
-const mode_table_et mode_table[] = {
-};
+const mode_table_et mode_table[] = {};
 
-using IntGraph = std::unordered_map<int,std::unordered_set<int>>;
-std::shared_ptr<goto_cfg::basic_block> from_int_graph(IntGraph graph, int start, int end)
+using IntGraph = std::unordered_map<int, std::unordered_set<int>>;
+using ReverseGraph =
+  std::unordered_map<int, std::shared_ptr<goto_cfg::basic_block>>;
+std::shared_ptr<goto_cfg::basic_block>
+from_int_graph(IntGraph graph, int start, int end, ReverseGraph &lookup)
 {
   std::map<int, std::shared_ptr<goto_cfg::basic_block>> blocks;
   for (int i = start; i <= end; i++)
   {
     blocks[i] = std::make_shared<goto_cfg::basic_block>();
     blocks[i]->uuid = i;
+    lookup[i] = blocks[i];
   }
   for (int i = start; i <= end; i++)
   {
     for (auto &suc : graph[i])
     {
-
       blocks[i]->successors.insert(blocks[suc]);
       blocks[suc]->predecessors.insert(blocks[i]);
     }
@@ -28,15 +30,59 @@ std::shared_ptr<goto_cfg::basic_block> from_int_graph(IntGraph graph, int start,
   return blocks[start];
 }
 
+TEST_CASE("Live-Analysis", "[cfg][ssa]")
+{
+  // From wikipedia :)
+  IntGraph graph;
+  ReverseGraph lookup;
+  graph[0] = std::unordered_set<int>({1, 2}); // b1
+  graph[1] = std::unordered_set<int>({2});    // b2
+  graph[2] = std::unordered_set<int>({});     // b3
 
-TEST_CASE(
-  "DJ-Graphs",
-  "[cfg][ssa]")
+  auto bb = from_int_graph(graph, 0, 2, lookup);
+
+  // Compute live analysis blocks for each variable
+  using VarDomain = std::string;
+
+  // The set of variables that are used in s before any assignment in the same basic block.
+  gen_kill<VarDomain>::DataflowSet gen;
+  gen.insert({lookup[0], std::set<VarDomain>({})});
+  gen.insert({lookup[1], std::set<VarDomain>({"a", "b"})});
+  gen.insert({lookup[2], std::set<VarDomain>({"b", "d"})});
+
+  // The set of variables that are assigned a value in s
+  gen_kill<VarDomain>::DataflowSet kill;
+  kill.insert({lookup[0], std::set<VarDomain>({"a", "b", "d", "x"})});
+  kill.insert({lookup[1], std::set<VarDomain>({"c", "d"})});
+  kill.insert({lookup[2], std::set<VarDomain>({"c"})});
+
+  gen_kill<VarDomain> live_analysis(bb, gen, kill, false);
+
+  REQUIRE(live_analysis.out[lookup[0]].size() == 3);
+  for (const auto &v : std::array{"a", "b", "d"})
+    REQUIRE(live_analysis.out[lookup[0]].count(v));
+
+  REQUIRE(live_analysis.out[lookup[1]].size() == 2);
+  for (const auto &v : std::array{"b", "d"})
+    REQUIRE(live_analysis.out[lookup[1]].count(v));
+  REQUIRE(live_analysis.out[lookup[2]].size() == 0);
+
+  REQUIRE(live_analysis.in[lookup[0]].size() == 0);
+  REQUIRE(live_analysis.in[lookup[1]].size() == 2);
+  for (const auto &v : std::array{"a", "b"})
+    REQUIRE(live_analysis.in[lookup[1]].count(v));
+  REQUIRE(live_analysis.in[lookup[2]].size() == 2);
+  for (const auto &v : std::array{"b", "d"})
+    REQUIRE(live_analysis.in[lookup[2]].count(v));
+}
+
+TEST_CASE("DJ-Graphs", "[cfg][ssa]")
 {
   // SREEDHAR, Vugranam C.; GAO, Guang R. Computing phi-nodes in linear time using DJ graphs. Journal of Programming Languages, v. 3, p. 191-214, 1995.
   // See page 7 for nice pictures
 
   IntGraph graph;
+  ReverseGraph lookup;
   graph[0] = std::unordered_set<int>({1, 16}); // START
   graph[1] = std::unordered_set<int>({4, 2, 3});
   graph[2] = std::unordered_set<int>({4, 7});
@@ -55,11 +101,12 @@ TEST_CASE(
   graph[15] = std::unordered_set<int>({16});
   graph[16] = std::unordered_set<int>({}); // END
 
-  std::shared_ptr<goto_cfg::basic_block> bb = from_int_graph(graph, 0, 16);
+  std::shared_ptr<goto_cfg::basic_block> bb =
+    from_int_graph(graph, 0, 16, lookup);
   Dominator info(bb);
   const Dominator::DomTree dt(info);
   SECTION("Dominator Tree")
-  {        
+  {
     REQUIRE(dt.root->uuid == 0);
 
     const std::array expected{
@@ -82,9 +129,9 @@ TEST_CASE(
 
     const std::unordered_set<int> nodes{
       0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
-    const std::unordered_set<int> leaves{2, 6, 7,8,15, 14, 10, 11};
+    const std::unordered_set<int> leaves{2, 6, 7, 8, 15, 14, 10, 11};
 
-    std::unordered_set<int> visited;    
+    std::unordered_set<int> visited;
     for (auto [k, v] : dt.edges)
     {
       CAPTURE(k->uuid);
@@ -105,7 +152,8 @@ TEST_CASE(
   SECTION("Dominator Tree Levels")
   {
     auto levels = dt.get_levels();
-    const std::array expected{0, 1, 2, 2, 2, 3, 4, 2, 2, 3, 4, 4, 4, 5, 6, 2, 1};
+    const std::array expected{
+      0, 1, 2, 2, 2, 3, 4, 2, 2, 3, 4, 4, 4, 5, 6, 2, 1};
 
     for (auto [k, v] : dt.edges)
     {
@@ -141,7 +189,6 @@ TEST_CASE(
       REQUIRE(expected.count(s->uuid));
   }
 
-
   auto ptr = std::make_shared<Dominator::DJGraph>(bb, info);
   auto dj_graph = *ptr;
   info.dj = ptr;
@@ -149,17 +196,24 @@ TEST_CASE(
   {
     const std::array expected{
       std::unordered_set<int>({1, 16}),
-        std::unordered_set<int>({2, 4, 7, 8, 15, 3}),
-        std::unordered_set<int>({7, 4}), std::unordered_set<int>({9}),
-        std::unordered_set<int>({5}), std::unordered_set<int>({6}),
-        std::unordered_set<int>({2, 8}), std::unordered_set<int>({8}),
-        std::unordered_set<int>({7, 15}), std::unordered_set<int>({10, 11, 12}),
-        std::unordered_set<int>({12}), std::unordered_set<int>({12}),
-        std::unordered_set<int>({13}), std::unordered_set<int>({14, 15, 3}),
-        std::unordered_set<int>({12}), std::unordered_set<int>({16}),
-    std::unordered_set<int>({})};
+      std::unordered_set<int>({2, 4, 7, 8, 15, 3}),
+      std::unordered_set<int>({7, 4}),
+      std::unordered_set<int>({9}),
+      std::unordered_set<int>({5}),
+      std::unordered_set<int>({6}),
+      std::unordered_set<int>({2, 8}),
+      std::unordered_set<int>({8}),
+      std::unordered_set<int>({7, 15}),
+      std::unordered_set<int>({10, 11, 12}),
+      std::unordered_set<int>({12}),
+      std::unordered_set<int>({12}),
+      std::unordered_set<int>({13}),
+      std::unordered_set<int>({14, 15, 3}),
+      std::unordered_set<int>({12}),
+      std::unordered_set<int>({16}),
+      std::unordered_set<int>({})};
 
-    std::unordered_set<int> visited;    
+    std::unordered_set<int> visited;
     for (auto [k, v] : dj_graph._graph)
     {
       CAPTURE(k->uuid);
@@ -191,7 +245,7 @@ TEST_CASE(
     }
 
     auto frontier = info.dom_frontier(node);
-    const std::unordered_set<size_t> expected {3,15};
+    const std::unordered_set<size_t> expected{3, 15};
     REQUIRE(frontier.size() == 2);
     for (auto &df : frontier)
       REQUIRE(expected.count(df->uuid));
@@ -211,7 +265,7 @@ TEST_CASE(
     }
 
     auto frontier = info.dom_frontier(node);
-    const std::unordered_set<size_t> expected {3,15};
+    const std::unordered_set<size_t> expected{3, 15};
     REQUIRE(frontier.size() == 2);
     for (auto &df : frontier)
       REQUIRE(expected.count(df->uuid));
@@ -238,13 +292,12 @@ TEST_CASE(
     const std::unordered_set expected{3, 15};
 
     REQUIRE(frontier.size() == expected.size());
-    
+
     for (auto &df : frontier)
     {
       CAPTURE(df->uuid);
-      REQUIRE(expected.count(df->uuid));    
+      REQUIRE(expected.count(df->uuid));
     }
-      
   }
 
   SECTION("Iterated Dominance Frontier (set)")
@@ -266,8 +319,8 @@ TEST_CASE(
     }
 
     auto frontier = info.iterated_dom_frontier(nodes);
-    const std::unordered_set expected {2,3,4,7,8,12,15,16}; 
+    const std::unordered_set expected{2, 3, 4, 7, 8, 12, 15, 16};
     for (auto &df : frontier)
       REQUIRE(expected.count(df->uuid));
-   }
- }
+  }
+}
