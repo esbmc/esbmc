@@ -562,6 +562,9 @@ void ssa_promotion::promote_node(const Node &n)
       }
     });
 
+  
+
+  // Compute live analysis blocks for each variable
   using VarDomain = std::string;
 
   // The set of variables that are used in s before any assignment in the same basic block.
@@ -588,27 +591,7 @@ void ssa_promotion::promote_node(const Node &n)
   dataflow_init(gen, useBlocks);
   dataflow_init(kill, defBlocks);
 
-  // Compute live analysis blocks for each variable
   gen_kill<VarDomain> live_analysis(n, gen, kill, false);
-
-  // The in-state of a block is the set of variables that are live at the start of the block.
-  log_status("IN");
-  for (auto [k, v] : live_analysis.in)
-  {
-    k->begin->dump();
-    for (auto &var : v)
-      log_status("{}", var.c_str());
-  }
-
-  // Its out-state is the set of variables that are live at the end of it.
-  log_status("OUT");
-  for (auto [k, v] : live_analysis.out)
-  {
-    k->begin->dump();
-    for (auto &var : v)
-      log_status("{}", var);
-  }
-
   // Compute phi-nodes
 
   // Insert phi-node
@@ -648,7 +631,6 @@ gen_kill<Domain>::gen_kill(
     return;
   }
 
-  log_status("Starting Gen Kill analysis");
   while (!worklist.empty())
   {
     const Node s = *worklist.begin();
@@ -680,6 +662,4 @@ gen_kill<Domain>::gen_kill(
       for (const auto &pred : s->predecessors)
         worklist.insert(pred);
   }
-
-  log_status("Finished Gen Kill analysis");
 }
