@@ -462,44 +462,224 @@ Dominator::DomTree::DomTree(const Dominator &dom) : root(dom.start)
 
 void ssa_promotion::promote()
 {
-  // TODO: This should be in parallel
+  // TODO: The promote_node algorithm works by:
+  // 1. Identify and compute the liveness of each var (read-only)
+  // 2. Insert the phi nodes (affects all instructions)
+  // 3. Rename the phi nodes (affects per var instructions)
+  // We could process 1 and 3 in parallel
   for (auto &[k, v] : cfg.basic_blocks)
   {
     if (_skip.count(k))
       continue;
 
     assert(v.size());
-    promote_node(v[0]);    
+    promote_node(v[0]);
   }
 }
 
 void ssa_promotion::promote_node(const Node &n)
 {
-  auto lambda =
-    [](const goto_programt::instructiont &I)
+  using Instruction = std::shared_ptr<goto_programt::instructiont>;
+  std::unordered_set<std::string> variables;
+  std::unordered_map<std::string, std::unordered_set<Node>> defBlocks;
+  std::unordered_map<std::string, std::unordered_set<Instruction>>
+    defInstructions;
+
+  std::unordered_map<std::string, std::unordered_set<Node>> useBlocks;
+  std::unordered_map<std::string, std::unordered_set<Instruction>>
+    useInstructions;
+
+  auto insert_definition = [&variables, &defBlocks, &defInstructions](
+                             const irep_idt &var,
+                             goto_programt::instructionst::iterator &I,
+                             const Node &bb)
   {
-    if (I.is_decl())
+    const std::string var_name = var.as_string();
+    variables.insert(var_name);
+
+    // TODO: C++20 anonymous var for "ins" :)
+    auto [inst, ins1] =
+      defInstructions.insert({var_name, std::unordered_set<Instruction>()});
+    auto [block, ins2] =
+      defBlocks.insert({var_name, std::unordered_set<Node>()});
+
+    defInstructions[var_name].insert(
+      std::make_shared<goto_programt::instructiont>(*I));
+    defBlocks[var_name].insert(bb);
+  };
+
+  auto insert_use = [&variables, &useBlocks, &useInstructions](
+                      const expr2tc &e,
+                      goto_programt::instructionst::iterator &I,
+                      const Node &bb)
+  {
+    std::unordered_set<expr2tc, irep2_hash> symbols;
+    get_symbols(e, symbols);
+    for (const auto &var : symbols)
     {
-      log_status("DECL");
-    }
-    else if (I.is_assign())
-    {
-      log_status("ASSIGN");
-    }
-    else
-    {
-      log_status("READ?");
+      assert(is_symbol2t(var));
+      const std::string var_name = to_symbol2t(var).thename.as_string();
+      variables.insert(var_name);
+
+      // TODO: C++20 anonymous var for "ins" :)
+      auto [inst, ins1] =
+        useInstructions.insert({var_name, std::unordered_set<Instruction>()});
+      auto [block, ins2] =
+        useBlocks.insert({var_name, std::unordered_set<Node>()});
+
+      useInstructions[var_name].insert(
+        std::make_shared<goto_programt::instructiont>(*I));
+      useBlocks[var_name].insert(bb);
     }
   };
 
   goto_cfg::foreach_bb(
-    n, [&lambda](const Node &bb) { bb->foreach_inst(lambda); });
+    n,
+    [&insert_definition, &insert_use](const Node &bb)
+    {
+      for (goto_programt::instructionst::iterator start = bb->begin;
+           start != bb->end;
+           start++)
+      {
+        if (start->is_decl())
+          insert_definition(to_code_decl2t(start->code).value, start, bb);
+        else if (start->is_assign())
+        {
+          const expr2tc &target = to_code_assign2t(start->code).target;
+          if (is_symbol2t(target))
+            insert_definition(to_symbol2t(target).thename, start, bb);
 
-  // Compute do live analysis blocks for each variable
+          insert_use(to_code_assign2t(start->code).source, start, bb);
+        }
+        else if (start->is_function_call())
+          for (const auto &op : to_code_function_call2t(start->code).operands)
+            insert_use(op, start, bb);
+        else
+        {
+          insert_use(start->code, start, bb);
+          insert_use(start->guard, start, bb);
+        }
+      }
+    });
+
+  using VarDomain = std::string;
+
+  // The set of variables that are used in s before any assignment in the same basic block.
+  gen_kill<VarDomain>::DataflowSet gen;
+  // The set of variables that are assigned a value in s
+  gen_kill<VarDomain>::DataflowSet kill;
+
+  auto dataflow_init =
+    [](
+      gen_kill<VarDomain>::DataflowSet &set,
+      std::unordered_map<std::string, std::unordered_set<Node>> input)
+  {
+    assert(set.empty());
+    for (auto &[k, v] : input)
+    {
+      for (const auto &n : v)
+      {
+        auto [val, ins] = set.insert({n, std::set<VarDomain>()});
+        val->second.insert(k);
+      }
+    }
+  };
+
+  dataflow_init(gen, useBlocks);
+  dataflow_init(kill, defBlocks);
+
+  // Compute live analysis blocks for each variable
+  gen_kill<VarDomain> live_analysis(n, gen, kill, false);
+
+  // The in-state of a block is the set of variables that are live at the start of the block.
+  log_status("IN");
+  for (auto [k, v] : live_analysis.in)
+  {
+    k->begin->dump();
+    for (auto &var : v)
+      log_status("{}", var.c_str());
+  }
+
+  // Its out-state is the set of variables that are live at the end of it.
+  log_status("OUT");
+  for (auto [k, v] : live_analysis.out)
+  {
+    k->begin->dump();
+    for (auto &var : v)
+      log_status("{}", var);
+  }
 
   // Compute phi-nodes
 
   // Insert phi-node
 
-  // rename phi-nodes  
+  // rename phi-nodes
+}
+
+template <class Domain>
+gen_kill<Domain>::gen_kill(
+  const Node &bb,
+  const DataflowSet &gen,
+  const DataflowSet &kill,
+  bool forward,
+  bool confluence_is_union)
+  : forward(forward), confluence_is_union(confluence_is_union)
+{
+  if (forward || !confluence_is_union)
+  {
+    log_error("Gen Kill does not support this configuration yet");
+    abort();
+  }
+  std::set<Node> worklist;
+  goto_cfg::foreach_bb(
+    bb,
+    [&worklist, this](const Node &n)
+    {
+      worklist.insert(n);
+      in.insert({n, std::set<Domain>()});
+      out.insert({n, std::set<Domain>()});
+
+    });
+
+  if (!worklist.size())
+  {
+    log_warning("Something strange is happening with current CFG");
+    bb->begin->dump();
+    return;
+  }
+
+  log_status("Starting Gen Kill analysis");
+  while (!worklist.empty())
+  {
+    const Node s = *worklist.begin();
+    worklist.erase(s);
+
+    // The domain is a lattice, we can just count the elements to check for diffs
+    const size_t in_before = in[s].size();
+    const size_t out_before = out[s].size();
+    
+    for (const auto &pred : s->successors)
+    {
+      for (const auto &pred_in : in[pred])
+        out[s].insert(pred_in);
+    }
+
+    if (gen.count(s))
+      for (const auto &g : gen.at(s))
+        in[s].insert(g);
+
+    for (const auto &l : out[s])
+    {
+      if (kill.count(s) && kill.at(s).count(l))
+        continue;
+
+      in[s].insert(l);
+    }
+
+    if (in[s].size() != in_before || out[s].size() != out_before)
+      for (const auto &pred : s->predecessors)
+        worklist.insert(pred);
+  }
+
+  log_status("Finished Gen Kill analysis");
 }
