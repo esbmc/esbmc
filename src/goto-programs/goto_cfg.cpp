@@ -355,6 +355,7 @@ Dominator::iterated_dom_frontier(const std::unordered_set<Node> &nodes) const
   {
     result = result2;
     result2 = dom_frontier(result);
+    assert(result2.size() >= result.size());
 
     if (result.size() != result2.size())
       continue;
@@ -477,6 +478,38 @@ void ssa_promotion::promote()
   }
 }
 
+
+#if 0
+  // Compute live analysis blocks for each variable
+  using VarDomain = std::string;
+
+  // The set of variables that are used in s before any assignment in the same basic block.
+  gen_kill<VarDomain>::DataflowSet gen;
+  // The set of variables that are assigned a value in s
+  gen_kill<VarDomain>::DataflowSet kill;
+
+  auto dataflow_init =
+    [](
+      gen_kill<VarDomain>::DataflowSet &set,
+      std::unordered_map<std::string, std::unordered_set<Node>> input)
+  {
+    assert(set.empty());
+    for (auto &[k, v] : input)
+    {
+      for (const auto &n : v)
+      {
+        auto [val, ins] = set.insert({n, std::set<VarDomain>()});
+        val->second.insert(k);
+      }
+    }
+  };
+
+  dataflow_init(gen, useBlocks);
+  dataflow_init(kill, defBlocks);
+
+  gen_kill<VarDomain> live_analysis(n, gen, kill, false);
+#endif
+
 void ssa_promotion::promote_node(const Node &n)
 {
   using Instruction = std::shared_ptr<goto_programt::instructiont>;
@@ -508,7 +541,7 @@ void ssa_promotion::promote_node(const Node &n)
     defBlocks[var_name].insert(bb);
   };
 
-  auto insert_use = [&variables, &useBlocks, &useInstructions](
+  auto insert_use = [&variables, &useBlocks, &useInstructions, &defBlocks](
                       const expr2tc &e,
                       goto_programt::instructionst::iterator &I,
                       const Node &bb)
@@ -529,7 +562,10 @@ void ssa_promotion::promote_node(const Node &n)
 
       useInstructions[var_name].insert(
         std::make_shared<goto_programt::instructiont>(*I));
-      useBlocks[var_name].insert(bb);
+
+      // Only consider a use block if the value is used before redefined
+      if(!defBlocks[var_name].count(bb))
+        useBlocks[var_name].insert(bb);
     }
   };
 
@@ -562,41 +598,28 @@ void ssa_promotion::promote_node(const Node &n)
       }
     });
 
-  
-
-  // Compute live analysis blocks for each variable
-  using VarDomain = std::string;
-
-  // The set of variables that are used in s before any assignment in the same basic block.
-  gen_kill<VarDomain>::DataflowSet gen;
-  // The set of variables that are assigned a value in s
-  gen_kill<VarDomain>::DataflowSet kill;
-
-  auto dataflow_init =
-    [](
-      gen_kill<VarDomain>::DataflowSet &set,
-      std::unordered_map<std::string, std::unordered_set<Node>> input)
-  {
-    assert(set.empty());
-    for (auto &[k, v] : input)
-    {
-      for (const auto &n : v)
-      {
-        auto [val, ins] = set.insert({n, std::set<VarDomain>()});
-        val->second.insert(k);
-      }
-    }
-  };
-
-  dataflow_init(gen, useBlocks);
-  dataflow_init(kill, defBlocks);
-
-  gen_kill<VarDomain> live_analysis(n, gen, kill, false);
   // Compute phi-nodes
 
-  // Insert phi-node
+  // TODO: use the f live_analysis :)
 
-  // rename phi-nodes
+  // The phi-nodes are the dominance frontier of the
+  // of the blocks that defines a var
+
+  Dominator info(n);
+  auto ptr = std::make_shared<Dominator::DJGraph>(n, info);
+  auto dj_graph = *ptr;
+  info.dj = ptr; 
+  
+  for (auto &var : variables)
+  {    
+    if (defBlocks[var].empty())
+      continue;
+
+    const auto phinodes = info.dom_frontier(defBlocks[var]);
+    // Insert phi-node
+
+    // rename phi-nodes
+  }
 }
 
 template <class Domain>
