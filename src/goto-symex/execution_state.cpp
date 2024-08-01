@@ -845,20 +845,32 @@ void execution_statet::get_expr_globals(
     }
 
     bool point_to_global = false;
-    if (symbol->type.is_pointer() && symbol->name != "invalid_object")
+    if (
+      symbol->type.is_pointer() && symbol->name != "invalid_object" &&
+      !symbol->static_lifetime)
     {
       expr2tc tmp = expr;
       cur_state->rename(tmp);
+      expr2tc deref = dereference2tc(to_pointer_type(tmp->type).subtype, tmp);
+      value_setst::valuest dest;
+      cur_state->value_set.get_reference_set(deref, dest);
 
-      std::unordered_set<expr2tc, irep2_hash> symbols;
-      get_symbols(tmp, symbols);
-      for (const auto &symbol_expr : symbols)
+      for (const auto &obj : dest)
       {
-        const std::string &n = to_symbol2t(symbol_expr).thename.as_string();
-        const symbolt *s = ns.lookup(n);
-        if (!s)
-          return;
-        point_to_global = s->static_lifetime;
+        if (
+          is_object_descriptor2t(obj) &&
+          is_symbol2t(to_object_descriptor2t(obj).object))
+        {
+          const std::string &n =
+            to_symbol2t(to_object_descriptor2t(obj).object).thename.as_string();
+          const symbolt *s = ns.lookup(n);
+          if (!s)
+            continue;
+          point_to_global = s->static_lifetime || s->type.is_dynamic_set();
+
+          if (point_to_global)
+            break;
+        }
       }
     }
 
