@@ -173,20 +173,21 @@ class ssa_promotion
   using Node = std::shared_ptr<goto_cfg::basic_block>;
 
 public:
-  ssa_promotion(goto_cfg &cfg) : cfg(cfg)
+  ssa_promotion(goto_cfg &cfg, goto_functionst &goto_functions) : cfg(cfg), goto_functions(goto_functions)
   {
   }
 
   void promote();
 
 protected:
-  void promote_node(const Node &n);
+  void promote_node(goto_programt &P, const Node &n);
   void insert_phi(const live_analysis &var);
   void rename_phi(const live_analysis &var);
 
 private:
   std::unordered_set<std::string> collect_symbols();
   goto_cfg &cfg;
+  goto_functionst &goto_functions;
   const std::unordered_set<std::string> _skip{"__ESBMC_main", "__ESBMC_pthread_start_main_hook","__ESBMC_pthread_end_main_hook"};
 };
 

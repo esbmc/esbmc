@@ -4,6 +4,7 @@
 
 goto_cfg::goto_cfg(goto_functionst &goto_functions)
 {
+
   Forall_goto_functions (f_it, goto_functions)
   {
     if (!f_it->second.body_available)
@@ -474,7 +475,7 @@ void ssa_promotion::promote()
       continue;
 
     assert(v.size());
-    promote_node(v[0]);
+    promote_node(goto_functions.function_map[k].body, v[0]);
   }
 }
 
@@ -510,7 +511,7 @@ void ssa_promotion::promote()
   gen_kill<VarDomain> live_analysis(n, gen, kill, false);
 #endif
 
-void ssa_promotion::promote_node(const Node &n)
+void ssa_promotion::promote_node(goto_programt &P,const Node &n)
 {
   using Instruction = std::shared_ptr<goto_programt::instructiont>;
   std::unordered_set<std::string> variables;
@@ -617,6 +618,13 @@ void ssa_promotion::promote_node(const Node &n)
 
     const auto phinodes = info.dom_frontier(defBlocks[var]);
     // Insert phi-node
+    for (const Node& phinode : phinodes)
+    {
+      goto_programt::instructiont phi_instr;
+      phi_instr.make_other();
+      //P.insert_swap(phinode->begin, phi_instr);
+    }
+    
 
     // rename phi-nodes
   }
