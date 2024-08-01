@@ -1,6 +1,7 @@
 #ifndef CPROVER_GOTO_SYMEX_SLICE_H
 #define CPROVER_GOTO_SYMEX_SLICE_H
 
+#include <cstdint>
 #include <goto-symex/symex_target_equation.h>
 #include <util/time_stopping.h>
 #include <util/algorithms.h>
@@ -101,6 +102,8 @@ public:
     fine_timet algorithm_start = current_time();
     for (auto &step : boost::adaptors::reverse(eq))
       run_on_step(step);
+
+    slice_id_operations(eq);
     fine_timet algorithm_stop = current_time();
     log_status(
       "Slicing time: {}s (removed {} assignments)",
@@ -110,9 +113,22 @@ public:
   }
 
   /**
+   * Iterate over all steps of the \eq in order,
+   * replacing ID operations of the form "symbol = symbol".
+   * @param eq
+   */
+  void slice_id_operations(symex_target_equationt::SSA_stepst &eq);
+
+  /**
    * Holds the symbols the current equation depends on.
    */
   std::unordered_set<std::string> depends;
+
+  /**
+   * Holds the array and indexes that the current equation depends on.
+   */
+  std::unordered_map<std::string, std::unordered_set<expr2tc, irep2_hash>>
+    array_depends;
 
   static expr2tc get_nondet_symbol(const expr2tc &expr);
 
@@ -156,6 +172,8 @@ protected:
    */
   template <bool Add>
   bool get_symbols(const expr2tc &expr);
+
+  bool get_array_symbols(const expr2tc &expr);
 
   /**
    * Remove unneeded assumes from the formula
