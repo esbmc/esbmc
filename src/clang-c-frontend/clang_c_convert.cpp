@@ -3664,7 +3664,7 @@ void clang_c_convertert::get_decl_name(
       name =
         getFullyQualifiedName(ASTContext->getTagDeclType(&rd), *ASTContext);
 
-    id = "tag-" + name;
+    id = tag_prefix + name;
     return;
   }
 

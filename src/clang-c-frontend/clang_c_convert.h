@@ -72,6 +72,9 @@ public:
 
   static std::string get_decl_name(const clang::NamedDecl &nd);
 
+  // class symbol id prefix `tag-`
+  static inline std::string tag_prefix = "tag-";
+
 protected:
   clang::ASTContext *ASTContext;
   contextt &context;
@@ -79,9 +82,6 @@ protected:
   std::unique_ptr<clang::ASTUnit> &AST;
   irep_idt mode;
   symbol_generator anon_symbol;
-
-  // class symbol id prefix `tag-`
-  std::string tag_prefix = "tag-";
 
   unsigned int current_scope_var_num;
   /**
