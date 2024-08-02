@@ -39,14 +39,19 @@ BigInt type_sizet::member_offset_bits(
 
   unsigned idx = 0;
   const struct_type2t &thetype = to_struct_type(type);
+  bool found = false;
   for (auto const &it : thetype.members)
   {
     if (thetype.member_names[idx] == member.as_string())
+    {
+      found = true;
       break;
+    }
 
     result += size_bits(it);
     idx++;
   }
+  assert(found);
 
   return result;
 }
