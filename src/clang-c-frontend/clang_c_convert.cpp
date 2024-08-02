@@ -1475,6 +1475,11 @@ bool clang_c_convertert::get_builtin_type(
   return false;
 }
 
+void clang_c_convertert::get_this_expr(typet &, exprt &)
+{
+  // Does nothing for C
+}
+
 bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 {
   locationt location;

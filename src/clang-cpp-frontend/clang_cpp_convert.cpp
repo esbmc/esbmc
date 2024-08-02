@@ -625,6 +625,27 @@ bool clang_cpp_convertert::get_struct_union_class_methods_decls(
   return false;
 }
 
+void clang_cpp_convertert::get_this_expr(
+  typet &expected_this_type,
+  exprt &new_expr)
+{
+  std::size_t address =
+    reinterpret_cast<std::size_t>(current_functionDecl->getFirstDecl());
+
+  this_mapt::iterator it = this_map.find(address);
+  if (it == this_map.end())
+  {
+    log_error(
+      "Pointer `this' for method {} was not added to scope",
+      clang_c_convertert::get_decl_name(*current_functionDecl));
+    abort();
+  }
+
+  assert(expected_this_type == it->second.second);
+
+  new_expr = symbol_exprt(it->second.first, it->second.second);
+}
+
 bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 {
   locationt location;
@@ -932,25 +953,10 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::CXXThisExpr &this_expr =
       static_cast<const clang::CXXThisExpr &>(stmt);
 
-    std::size_t address =
-      reinterpret_cast<std::size_t>(current_functionDecl->getFirstDecl());
-
-    this_mapt::iterator it = this_map.find(address);
-    if (it == this_map.end())
-    {
-      log_error(
-        "Pointer `this' for method {} was not added to scope",
-        clang_c_convertert::get_decl_name(*current_functionDecl));
-      abort();
-    }
-
     typet this_type;
     if (get_type(this_expr.getType(), this_type))
       return true;
-
-    assert(this_type == it->second.second);
-
-    new_expr = symbol_exprt(it->second.first, it->second.second);
+    get_this_expr(this_type, new_expr);
     break;
   }
 

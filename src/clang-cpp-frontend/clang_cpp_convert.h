@@ -561,6 +561,7 @@ protected:
   bool get_cxx_constructor_is_complete_param(
     const clang::CXXConstructorDecl &cxxcd,
     code_typet::argumentst &params);
+  void get_this_expr(typet &expected_this_type, exprt &new_expr) override;
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
