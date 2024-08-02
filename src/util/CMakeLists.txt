@@ -37,7 +37,6 @@ add_library(util_esbmc xml_irep.cpp xml.cpp
         cpp_base_offset.cpp
         cpp_base_offset.h
         cpp_typecast.cpp
-        cpp_typecast.h
 )
 # Boost is needed by anything that touches irep2
 target_include_directories(util_esbmc

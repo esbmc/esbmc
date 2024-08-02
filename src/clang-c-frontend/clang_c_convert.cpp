@@ -2971,8 +2971,8 @@ bool clang_c_convertert::get_cast_expr(
         "Intermediate cast from {} to {}", expr.type(), intermediate_type);
       assert(intermediate_type.is_pointer());
       assert(expr.type().is_pointer());
-      gen_derived_to_base_typecast(
-        ns, expr, intermediate_type, path->isVirtual());
+      cpp_typecast::derived_to_base_typecast(
+        expr, intermediate_type, path->isVirtual(), ns);
     }
     if (convert_to_object)
     {

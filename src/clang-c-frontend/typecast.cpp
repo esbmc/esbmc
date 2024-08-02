@@ -6,17 +6,6 @@
 #include <sstream>
 #include <clang-c-frontend/clang_c_convert.h>
 #include <util/message.h>
-#include "cpp_typecast.h"
-
-void gen_derived_to_base_typecast(
-  const namespacet &ns,
-  exprt &dest,
-  const typet &type,
-  bool is_virtual /*, bool is_unckecked*/)
-{
-  cpp_typecastt cpp_typecast(ns);
-  cpp_typecast.derived_to_base_typecast(dest, type, is_virtual);
-}
 
 void gen_typecast(const namespacet &ns, exprt &dest, const typet &type)
 {
