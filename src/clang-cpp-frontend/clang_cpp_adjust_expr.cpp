@@ -46,6 +46,7 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
       destructor.arguments().push_back(address_of_exprt(new_object));
       expr.set("destructor", destructor);
     }
+    adjust_operands(expr);
   }
   else if (statement == "temporary_object")
   {
@@ -173,8 +174,6 @@ void clang_cpp_adjust::adjust_side_effect_assign(side_effect_exprt &expr)
     exprt &lhs = expr.op0();
     exprt arg = address_of_exprt(lhs);
     exprt base_symbol = arg.op0();
-    assert(base_symbol.op0().id() == "symbol");
-    // TODO: wrap base symbol into dereference if it's a member
     exprt::operandst &arguments = rhs_func_call.arguments();
     arguments.insert(arguments.begin(), arg);
 
