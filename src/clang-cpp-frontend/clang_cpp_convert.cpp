@@ -1195,15 +1195,16 @@ bool clang_cpp_convertert::get_constructor_call(
     call.arguments().push_back(single_arg);
   }
 
-  // Init __is_complete based on whether we have call to a complete object constructor or only a
-  // base object constructor.
-  if (new_expr.get_bool("#is_complete_object"))
+  // Init __is_complete based on whether we have call to a base object constructor or a
+  // complete object constructor.
+  // Basically: __is_complete = !#is_base_object;
+  if (new_expr.get_bool("#is_base_object"))
   {
-    call.arguments().push_back(gen_boolean(true));
+    call.arguments().push_back(gen_boolean(false));
   }
   else
   {
-    call.arguments().push_back(gen_boolean(false));
+    call.arguments().push_back(gen_boolean(true));
   }
 
   call.set("constructor", 1);
@@ -1282,9 +1283,6 @@ bool clang_cpp_convertert::get_function_body(
       for (auto init : cxxcd.inits())
       {
         exprt initializer;
-        // Assume that the constructor is complete object constructor.
-        // If it is a base initializer, it will be set to false later.
-        initializer.set("#is_complete_object", true);
 
         if (!init->isBaseInitializer())
         {
@@ -1336,7 +1334,7 @@ bool clang_cpp_convertert::get_function_body(
           initializer.derived_this_arg(
             ftype.arguments().at(0).get("#identifier"));
           initializer.base_ctor_derived(true);
-          initializer.set("#is_complete_object", false);
+          initializer.set("#is_base_object", true);
           if (get_expr(*init->getInit(), initializer))
             return true;
         }
