@@ -83,7 +83,8 @@ void clang_cpp_adjust::gen_vbotptr_initializations(symbolt &symbol)
 }
 
 void clang_cpp_adjust::gen_vbotptr_init_code(
-  const struct_union_typet::componentt &comp,
+  const struct_union_typet::componentt &vbot_comp,
+  const exprt &base,
   side_effect_exprt &new_code,
   const code_typet &ctor_type)
 {
@@ -94,13 +95,13 @@ void clang_cpp_adjust::gen_vbotptr_init_code(
    */
 
   // 1. set the type
-  new_code.type() = comp.type();
+  new_code.type() = vbot_comp.type();
 
   // 2. LHS: generate the member pointer dereference expression
-  exprt lhs_expr = gen_vbotptr_init_lhs(comp, ctor_type);
+  exprt lhs_expr = gen_vbotptr_init_lhs(vbot_comp, base, ctor_type);
 
   // 3. RHS: generate the address of the target virtual pointer struct
-  exprt rhs_expr = gen_vbotptr_init_rhs(comp, ctor_type);
+  exprt rhs_expr = gen_vbotptr_init_rhs(vbot_comp, ctor_type);
 
   // now push them to the assignment statement code
   new_code.operands().push_back(lhs_expr);
@@ -108,7 +109,8 @@ void clang_cpp_adjust::gen_vbotptr_init_code(
 }
 
 exprt clang_cpp_adjust::gen_vbotptr_init_lhs(
-  const struct_union_typet::componentt &comp,
+  const struct_union_typet::componentt &vbot_comp,
+  const exprt &base,
   const code_typet &ctor_type)
 {
   /*
@@ -119,24 +121,9 @@ exprt clang_cpp_adjust::gen_vbotptr_init_lhs(
 
   exprt lhs_code;
 
-  // get the `this` argument symbol
-  const symbolt *this_symb = namespacet(context).lookup(
-    ctor_type.arguments().at(0).type().subtype().identifier());
-  assert(this_symb);
-
-  // prepare dereference operand
-  exprt deref_operand = symbol_exprt(
-    ctor_type.arguments().at(0).get("#identifier"), this_symb->type);
-
-  // get the reference symbol
-  dereference_exprt this_deref(deref_operand.type());
-  this_deref.operands().resize(0);
-  this_deref.operands().push_back(deref_operand);
-  this_deref.set("#lvalue", true);
-
-  // now we can get the member expr for "this->vbotptr"
-  lhs_code = member_exprt(comp.name(), comp.type());
-  lhs_code.operands().push_back(this_deref);
+  // now we can get the member expr for "base->vptr"
+  assert(!base.type().is_pointer());
+  lhs_code = member_exprt(base, vbot_comp.name(), vbot_comp.type());
   lhs_code.set("#lvalue", true);
 
   return lhs_code;

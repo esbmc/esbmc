@@ -59,20 +59,24 @@ public:
   void gen_vptr_initializations(symbolt &symbol);
   /*
    * generate vptr initialization code for constructor:
-   *  this->BLAH@vtable_ptr = $vtable::BLAH
+   *  base->BLAH@vtable_ptr = $vtable::BLAH
    *    where BLAH stands for the constructors' class/struct's name
+   *    and base could be `this` or `this.foo@data_object.bar@data_object`.
    *
    * Params:
-   *  - comp: vptr component as in class' type `components` vector
+   *  - vptr_comp: vptr component as in class' type `components` vector
+   *  - base: the base of the BLAH@vtable_ptr member expression
    *  - ctor_type: type of the constructor symbol
    *  - new_code: the code expression for vptr initialization
    */
   void gen_vptr_init_code(
-    const struct_union_typet::componentt &comp,
+    const struct_union_typet::componentt &vptr_comp,
+    const exprt &base,
     side_effect_exprt &new_code,
     const code_typet &ctor_type);
   exprt gen_vptr_init_lhs(
-    const struct_union_typet::componentt &comp,
+    const struct_union_typet::componentt &vptr_comp,
+    const exprt &base,
     const code_typet &ctor_type);
   exprt gen_vptr_init_rhs(
     const struct_union_typet::componentt &comp,
@@ -80,20 +84,24 @@ public:
   void gen_vbotptr_initializations(symbolt &symbol);
   /*
    * generate vbotptr initialization code for constructor:
-   *  this->BLAH@vbase_offset_ptr = vbase_offset_table::BLAH
+   *  base->BLAH@vbase_offset_ptr = vbase_offset_table::BLAH
    *    where BLAH stands for the constructors' class/struct's name
+   *    and base could be `this` or `this.foo@data_object.bar@data_object`.
    *
    * Params:
-   *  - comp: vbotptr component as in class' type `components` vector
+   *  - vbot_comp: vbotptr component as in class' type `components` vector
+   *  - base: the base of the BLAH@vbase_offset_ptr member expression
    *  - ctor_type: type of the constructor symbol
    *  - new_code: the code expression for vbotptr initialization
    */
   void gen_vbotptr_init_code(
-    const struct_union_typet::componentt &comp,
+    const struct_union_typet::componentt &vbot_comp,
+    const exprt &base,
     side_effect_exprt &new_code,
     const code_typet &ctor_type);
   exprt gen_vbotptr_init_lhs(
-    const struct_union_typet::componentt &comp,
+    const struct_union_typet::componentt &vbot_comp,
+    const exprt &base,
     const code_typet &ctor_type);
   exprt gen_vbotptr_init_rhs(
     const struct_union_typet::componentt &comp,
