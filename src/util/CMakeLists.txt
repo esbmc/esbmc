@@ -35,7 +35,7 @@ add_library(util_esbmc xml_irep.cpp xml.cpp
         c_expr2string.cpp cpp_expr2string.cpp type2name.cpp
         message.cpp encoding.cpp
         cpp_base_offset.cpp
-        cpp_base_offset.h
+        cpp_data_object.cpp
         cpp_typecast.cpp
 )
 # Boost is needed by anything that touches irep2

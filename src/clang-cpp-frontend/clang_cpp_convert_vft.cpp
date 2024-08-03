@@ -27,6 +27,7 @@ CC_DIAGNOSTIC_POP()
 #include <clang-cpp-frontend/clang_cpp_convert.h>
 #include <util/expr_util.h>
 #include <util/message.h>
+#include "util/cpp_data_object.h"
 
 bool clang_cpp_convertert::get_struct_class_virtual_methods(
   const clang::CXXRecordDecl &cxxrd,
@@ -178,6 +179,10 @@ void clang_cpp_convertert::add_vptr(struct_typet &type)
    *
    * Vptr has the name in the form of `tag-BLAH@vtable_pointer`, where BLAH is the class name.
    */
+  struct_typet &data_object_type = cpp_data_object::get_data_object_type(
+    tag_prefix + type.tag().as_string(), context);
+  assert(has_suffix(
+    data_object_type.tag().as_string(), cpp_data_object::data_object_suffix));
 
   irep_idt vt_name = vtable_type_prefix + tag_prefix + type.tag().as_string();
   // add a virtual-table pointer
@@ -190,7 +195,7 @@ void clang_cpp_convertert::add_vptr(struct_typet &type)
   component.set("is_vtptr", true);
   component.set("access", "public");
   // add to the class' type
-  type.components().push_back(component);
+  data_object_type.components().push_back(component);
 
   has_vptr_component = true;
 }

@@ -27,6 +27,8 @@ CC_DIAGNOSTIC_POP()
 #include <util/c_types.h>
 #include "clang-c-frontend/padding.h"
 #include "util/i2string.h"
+#include "util/cpp_data_object.h"
+#include "util/cpp_typecast.h"
 
 clang_cpp_convertert::clang_cpp_convertert(
   contextt &_context,
@@ -379,36 +381,71 @@ bool clang_cpp_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   return clang_c_convertert::get_struct_union_class(rd);
 }
 
+void clang_cpp_convertert::create_data_object_type(const clang::RecordDecl &rd)
+{
+  std::string id, name;
+  get_decl_name(rd, name, id);
+  name = name + cpp_data_object::data_object_suffix;
+  id = id + cpp_data_object::data_object_suffix;
+
+  locationt location_begin;
+  get_location_from_decl(rd, location_begin);
+
+  symbolt *sym = context.find_symbol(id);
+  assert(!sym);
+  struct_union_typet t(typet::t_struct);
+  t.location() = location_begin;
+  t.tag(name);
+
+  symbolt symbol;
+  get_default_symbol(
+    symbol,
+    get_modulename_from_path(location_begin.file().as_string()),
+    t,
+    name,
+    id,
+    location_begin);
+
+  symbol.is_type = true;
+  sym = context.move_symbol_to_context(symbol);
+  assert(sym->is_type);
+}
+
 bool clang_cpp_convertert::get_struct_union_class_fields(
   const clang::RecordDecl &rd,
   struct_union_typet &type)
 {
   // Note: If a struct is defined inside an extern C, it will be a RecordDecl
-
   const clang::CXXRecordDecl *cxxrd = llvm::dyn_cast<clang::CXXRecordDecl>(&rd);
-  // pull bases in
-  std::map<std::string, size_t> base_name_to_first_base_component_map;
-  if (cxxrd)
+  if (!cxxrd || cxxrd->isCLike())
   {
-    for (auto non_virtual_base : cxxrd->bases())
-    {
-      if (non_virtual_base.isVirtual())
-        continue;
-      assert(!non_virtual_base.isVirtual());
-      get_base(
-        type, base_name_to_first_base_component_map, non_virtual_base, false);
-    }
-    // The first component of the whole class is always zero
-    base_name_to_first_base_component_map.insert(
-      {"tag-" + type.tag().as_string(), 0});
+    return clang_c_convertert::get_struct_union_class_fields(rd, type);
+  }
+  assert(cxxrd);
 
-    // skip unions as they don't have virtual bases
-    if (!rd.isUnion())
-    {
-      assert(type.is_struct());
-      if (get_struct_class_virtual_base_offsets(*cxxrd, to_struct_type(type)))
-        return true;
-    }
+  create_data_object_type(rd);
+  struct_typet &data_object_type = cpp_data_object::get_data_object_type(
+    tag_prefix + type.tag().as_string(), context);
+  typet data_object_symbol_type;
+  cpp_data_object::get_data_object_symbol_type(
+    tag_prefix + type.tag().as_string(), data_object_symbol_type);
+
+  // pull bases in
+
+  for (auto non_virtual_base : cxxrd->bases())
+  {
+    if (non_virtual_base.isVirtual())
+      continue;
+    assert(!non_virtual_base.isVirtual());
+    get_base(type, non_virtual_base, false);
+  }
+
+  // skip unions as they don't have virtual bases
+  if (!rd.isUnion())
+  {
+    assert(type.is_struct());
+    if (get_struct_class_virtual_base_offsets(*cxxrd, to_struct_type(type)))
+      return true;
   }
 
   // Parse the fields
@@ -426,15 +463,22 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
     if (is_field_global_storage(field))
       continue;
 
-    if (annotate_class_field(*field, type, comp))
+    if (annotate_class_field(*field, data_object_type, comp))
       return true;
 
-    type.components().push_back(comp);
+    data_object_type.components().push_back(comp);
   }
+
+  struct_typet::componentt data_object_component;
+  data_object_component.name(data_object_type.tag().as_string());
+  data_object_component.pretty_name(
+    tag_prefix + data_object_type.tag().as_string());
+  data_object_component.type() = data_object_symbol_type;
+  type.components().push_back(data_object_component);
 
   // Add tail padding between own fields of the class and
   // any virtual bases. Otherwise, pointers to the start of virtual bases could be misaligned.
-  if (cxxrd && cxxrd->getNumVBases() > 0)
+  if (cxxrd->getNumVBases() > 0)
   {
     add_padding(type, ns);
   }
@@ -456,63 +500,31 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
    * If we have a `D`, the offset of `c` will be 4: we first layout `C`. We do this by copying the layout of `C`, but ignoring any fields from virtual bases.
    * Because we ignore `b` from `B`, the offset of `c` will be 4 which is inconsistent with the offset of `c` in `C`.
    */
-  if (cxxrd)
-  {
-    for (const auto &virtual_base : cxxrd->vbases())
-    {
-      assert(virtual_base.isVirtual());
-      get_base(type, base_name_to_first_base_component_map, virtual_base, true);
-    }
-  }
 
-  // iterate over all fields and re-index all "anon_pad$" fields
-  // to ensure that they are in the correct order
-  for (size_t i = 0; i < type.components().size(); i++)
+  for (const auto &virtual_base : cxxrd->vbases())
   {
-    auto &component = type.components()[i];
-    if (has_prefix(component.get_name(), "anon_pad$"))
-    {
-      std::string index = std::to_string(i);
-      component.set_name("anon_pad$" + index);
-      component.set_pretty_name("anon_pad$" + index);
-    }
-  }
-
-  for (const auto &base_name_to_first_base_component :
-       base_name_to_first_base_component_map)
-  {
-    irept &base_offsets_irept = type.add("base_offsets");
-    base_offsets_irept.add(base_name_to_first_base_component.first)
-      .id(i2string(base_name_to_first_base_component.second));
-  }
-
-  if (cxxrd)
-  {
-    if (!rd.isUnion())
-    {
-      assert(type.is_struct());
-      /*
-     * Set up virtual base offset table(vbo) variable symbols
-     * Each vbo is modelled as a struct of char pointers used as offset.
-     */
-      setup_vbo_table_struct_variables(*cxxrd, to_struct_type(type));
-    }
+    assert(virtual_base.isVirtual());
+    get_base(type, virtual_base, true);
   }
 
   return false;
 }
 void clang_cpp_convertert::get_base(
   struct_union_typet &type,
-  std::map<std::string, size_t> &base_name_to_first_base_component_map,
   const clang::CXXBaseSpecifier &base,
   bool is_virtual)
 {
+  assert(
+    !has_suffix(type.tag().as_string(), cpp_data_object::data_object_suffix));
   std::string base_name, base_id;
   get_decl_name(*base.getType()->getAsCXXRecordDecl(), base_name, base_id);
   get_struct_union_class(*base.getType()->getAsCXXRecordDecl());
-  base_name_to_first_base_component_map.insert(
-    {base_id, type.components().size()});
-  get_base_components_methods(base_id, type, is_virtual);
+  get_base_components_methods(
+    base_id,
+    base_name,
+    type,
+    is_virtual,
+    !base.getType()->getAsCXXRecordDecl()->isCLike());
   // Add tail padding between bases. Otherwise, pointers to the start of bases could be misaligned.
   add_padding(type, ns);
 
@@ -617,6 +629,19 @@ bool clang_cpp_convertert::get_struct_union_class_methods_decls(
         abort();
       }
     }
+  }
+  if (!cxxrd->isUnion())
+  {
+    assert(type.is_struct());
+    /*
+     * Set up virtual base offset table(vbo) variable symbols
+     * Each vbo is modelled as a struct of char pointers used as offset.
+     * We do this here, because adding virtual methods would cause a vptr to be added to the struct.
+     * This is a problem, because when setting up the vbo, we compute offsets to the base objects and
+     * if we later add a vptr, this offset will be _wrong_. Ideally, we would "lock" the components of a struct
+     * such that we can't add new components after we have computed the offsets or move the offset computation to the adjuster.
+     */
+    setup_vbo_table_struct_variables(*cxxrd, to_struct_type(type));
   }
 
   has_vptr_component = false;
@@ -1270,8 +1295,15 @@ bool clang_cpp_convertert::get_function_body(
             // parsing non-static member initializer
             if (get_decl_ref(*init->getMember(), lhs))
               return true;
+            assert(lhs.is_member());
+            assert(
+              has_suffix(
+                to_member_expr(lhs).struct_op().identifier(), "#this") ||
+              (to_member_expr(lhs).struct_op().is_member() &&
+               has_suffix(
+                 to_member_expr(to_member_expr(lhs).struct_op()).name(),
+                 cpp_data_object::data_object_suffix)));
 
-            build_member_from_component(fd, lhs);
             // set #member_init flag again, as it has been cleared between the first call...
             lhs.set("#member_init", 1);
 
@@ -1926,28 +1958,51 @@ symbolt *clang_cpp_convertert::get_fd_symbol(const clang::FunctionDecl &fd)
 }
 
 void clang_cpp_convertert::get_base_components_methods(
+  const std::string &base_id,
   const std::string &base_name,
-  struct_union_typet &type,
-  bool is_virtual_base)
+  struct_union_typet &struct_type,
+  bool is_virtual_base,
+  bool uses_data_object)
 {
   // get base class symbol
-  symbolt *s = context.find_symbol(base_name);
+  symbolt *s = context.find_symbol(base_id);
   assert(s);
+
+  struct_typet &struct_data_object_type = cpp_data_object::get_data_object_type(
+    tag_prefix + struct_type.tag().as_string(), context);
 
   const struct_typet &base_type = to_struct_type(s->type);
 
   // pull components in
-  const struct_typet::componentst &components = base_type.components();
-  for (auto component : components)
+  struct_typet::componentt base_object_component;
+  if (uses_data_object)
   {
-    // Do not add components from virtual base classes, they are added separately
-    if (component.get_bool("from_virtual_base"))
-      continue;
-    // TODO: tweak access specifier
-    component.set("from_base", true);
-    if (is_virtual_base)
-      component.set("from_virtual_base", true);
-    to_struct_type(type).components().push_back(component);
+    typet base_object_symbol_type;
+    cpp_data_object::get_data_object_symbol_type(
+      base_id, base_object_symbol_type);
+
+    base_object_component.name(base_name + cpp_data_object::data_object_suffix);
+    base_object_component.pretty_name(
+      base_id + cpp_data_object::data_object_suffix);
+    base_object_component.type() = base_object_symbol_type;
+  }
+  else
+  {
+    base_object_component.set("from_base", true);
+    base_object_component.name(base_name);
+    base_object_component.pretty_name(base_id);
+    struct_typet base_type_copy = base_type;
+    get_ref_to_struct_type(base_type_copy);
+    base_object_component.type() = base_type_copy;
+  }
+  if (is_virtual_base)
+  {
+    base_object_component.set("from_virtual_base", true);
+    struct_type.components().push_back(base_object_component);
+  }
+  else
+  {
+    struct_data_object_type.components().push_back(base_object_component);
   }
 
   // pull methods in
@@ -1956,8 +2011,8 @@ void clang_cpp_convertert::get_base_components_methods(
   {
     // TODO: tweak access specifier
     method.set("from_base", true);
-    if (!is_duplicate_method(method, type))
-      to_struct_type(type).methods().push_back(method);
+    if (!is_duplicate_method(method, struct_type))
+      to_struct_type(struct_type).methods().push_back(method);
   }
 }
 

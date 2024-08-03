@@ -123,6 +123,21 @@ public:
     std::vector<irep_idt> &ids,
     bool is_catch = false);
   void get_this_ptr_symbol(const code_typet &ctor_type, exprt &this_ptr);
+  void get_ref_to_data_object(
+    exprt &base,
+    const struct_union_typet::componentt &data_object_comp,
+    exprt &data_object_ref);
+  void handle_components_of_data_object(
+    const code_typet &ctor_type,
+    code_blockt &ctor_body,
+    const struct_union_typet::componentst &components,
+    exprt &base);
+  void handle_components_of_data_object(
+    const code_typet &ctor_type,
+    code_blockt &ctor_body,
+    const struct_union_typet::componentst &components,
+    exprt &base,
+    code_blockt &assignments_block);
 };
 
 #endif /* CLANG_CPP_FRONTEND_CLANG_CPP_ADJUST_H_ */

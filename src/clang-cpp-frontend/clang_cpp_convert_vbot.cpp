@@ -24,6 +24,7 @@ CC_DIAGNOSTIC_POP()
 #include <util/expr_util.h>
 #include "util/c_types.h"
 #include "util/cpp_base_offset.h"
+#include "util/cpp_data_object.h"
 
 bool clang_cpp_convertert::get_struct_class_virtual_base_offsets(
   const clang::CXXRecordDecl &cxxrd,
@@ -96,6 +97,7 @@ symbolt *clang_cpp_convertert::add_vbase_offset_type_symbol(
    *
    *  Vtable type has the id in the form of `vbase_offset_table::tag-BLAH`.
    */
+  assert(!type.tag().empty());
 
   irep_idt vt_name =
     vbase_offset_type_prefix + tag_prefix + type.tag().as_string();
@@ -128,6 +130,10 @@ void clang_cpp_convertert::add_vbase_offset_ptr(struct_typet &type)
    *
    * Vbo_ptr has the name in the form of `tag-BLAH@vbase_offset_ptr`, where BLAH is the class name.
    */
+  struct_typet &data_object_type = cpp_data_object::get_data_object_type(
+    tag_prefix + type.tag().as_string(), context);
+  assert(has_suffix(
+    data_object_type.tag().as_string(), cpp_data_object::data_object_suffix));
 
   irep_idt vbo_name =
     vbase_offset_type_prefix + tag_prefix + type.tag().as_string();
@@ -141,7 +147,7 @@ void clang_cpp_convertert::add_vbase_offset_ptr(struct_typet &type)
   component.set("is_vbot_ptr", true);
   component.set("access", "public");
   // add to the class' type
-  type.components().push_back(component);
+  data_object_type.components().push_back(component);
 
   has_vbot_ptr_component = true;
 }
@@ -231,6 +237,7 @@ void clang_cpp_convertert::add_vbo_table_variable_symbols(
     // This is the base class we are currently dealing with
     std::string base_class_name, base_class_id;
     get_decl_name(*base, base_class_name, base_class_id);
+    assert(!base_class_id.empty());
 
     std::string vbo_symb_type_name = vbase_offset_type_prefix + base_class_id;
     const symbolt *vt_symb_type = ns.lookup(vbo_symb_type_name);

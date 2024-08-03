@@ -28,6 +28,8 @@ CC_DIAGNOSTIC_POP()
 #include <util/mp_arith.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
+#include <util/cpp_data_object.h>
+#include <util/cpp_typecast.h>
 
 clang_c_convertert::clang_c_convertert(
   contextt &_context,
@@ -1832,6 +1834,25 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         if (get_expr(*member.getBase(), base))
           return true;
 
+        const clang::CXXRecordDecl *cxxrd =
+          member.getBase()->getType()->getAsCXXRecordDecl();
+        if (!cxxrd)
+        {
+          cxxrd = member.getBase()->getType()->getPointeeCXXRecordDecl();
+        }
+        if (cxxrd && !cxxrd->isCLike())
+        {
+          std::string name, id;
+          get_decl_name(*cxxrd, name, id);
+          typet data_object_symbol_type;
+          cpp_data_object::get_data_object_symbol_type(
+            id, data_object_symbol_type);
+          exprt data_object_base = member_exprt(
+            base,
+            name + cpp_data_object::data_object_suffix,
+            data_object_symbol_type);
+          base.swap(data_object_base);
+        }
         assert(!comp.name().empty());
         // for MemberExpr referring to struct field (or method in case of C++ class)
         new_expr = member_exprt(base, comp.name(), comp.type());
@@ -2860,6 +2881,59 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
       return true;
 
     return false;
+  }
+
+  if (const auto *fd = llvm::dyn_cast<clang::FieldDecl>(&d))
+  {
+    const auto *cxxrd = llvm::dyn_cast<clang::CXXRecordDecl>(fd->getParent());
+    if (cxxrd)
+    {
+      // Everything else should be a value decl
+      std::string field_name, field_id;
+      get_decl_name(*fd, field_name, field_id);
+
+      typet field_type;
+      if (get_type(fd->getType(), field_type))
+        return true;
+
+      std::string class_name, class_id;
+      get_decl_name(*cxxrd, class_name, class_id);
+
+      typet class_type;
+      if (get_type(*cxxrd->getTypeForDecl(), class_type))
+      {
+        return true;
+      }
+
+      typet this_type = pointer_typet(class_type);
+      exprt this_expr;
+      get_this_expr(this_type, this_expr);
+      exprt base_expr;
+      if (!cxxrd->isCLike())
+      {
+        typet data_object_type;
+        cpp_data_object::get_data_object_symbol_type(
+          class_id, data_object_type);
+        assert(!class_type.is_pointer());
+        exprt data_object_member = member_exprt(
+          this_expr,
+          class_name + cpp_data_object::data_object_suffix,
+          data_object_type);
+        data_object_member.name(
+          class_name + cpp_data_object::data_object_suffix);
+        base_expr.swap(data_object_member);
+      }
+      else
+      {
+        base_expr.swap(this_expr);
+      }
+
+      new_expr = member_exprt(base_expr, field_name, field_type);
+      new_expr.identifier(field_id);
+      new_expr.cmt_lvalue(true);
+      new_expr.name(field_name);
+      return false;
+    }
   }
 
   if (const auto *nd = llvm::dyn_cast<clang::ValueDecl>(&d))

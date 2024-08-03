@@ -27,6 +27,7 @@ CC_DIAGNOSTIC_POP()
 
 #include <clang-cpp-frontend/clang_cpp_convert.h>
 #include <util/expr_util.h>
+#include "util/cpp_data_object.h"
 
 bool clang_cpp_convertert::perform_virtual_dispatch(
   const clang::MemberExpr &member)
@@ -114,9 +115,20 @@ bool clang_cpp_convertert::get_vft_binding_expr_base(
   exprt base;
   if (get_expr(*member.getBase(), base))
     return true;
+  assert(base.type().is_pointer());
+  assert(base.type().subtype().is_not_nil());
+  std::string base_id = base.type().subtype().identifier().as_string();
+  std::string base_name = base_id.substr(tag_prefix.length());
 
-  new_expr = dereference_exprt(base, base.type());
-  new_expr.set("#lvalue", true);
+  typet data_object_symbol_type;
+  cpp_data_object::get_data_object_symbol_type(
+    base_id, data_object_symbol_type);
+  exprt data_object_base = member_exprt(
+    base,
+    base_name + cpp_data_object::data_object_suffix,
+    data_object_symbol_type);
+  data_object_base.set("#lvalue", true);
+  new_expr.swap(data_object_base);
 
   return false;
 }

@@ -1,6 +1,7 @@
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <util/std_expr.h>
 #include "util/expr_util.h"
+#include "util/cpp_data_object.h"
 
 void clang_cpp_adjust::gen_vbotptr_initializations(symbolt &symbol)
 {
@@ -51,20 +52,16 @@ void clang_cpp_adjust::gen_vbotptr_initializations(symbolt &symbol)
   const struct_typet::componentst &components =
     to_struct_type(ctor_class_symb->type).components();
 
+  exprt base;
+  get_this_ptr_symbol(ctor_type, base);
+  assert(base.type().is_pointer());
   // iterate over the `components` and initialize each virtual pointers
   std::vector<codet> assignments;
   code_blockt assignments_block;
-  for (const auto &comp : components)
-  {
-    if (!comp.get_bool("is_vbot_ptr"))
-      continue;
-
-    side_effect_exprt new_code("assign");
-    gen_vbotptr_init_code(comp, new_code, ctor_type);
-    codet code_expr("expression");
-    code_expr.move_to_operands(new_code);
-    assignments_block.copy_to_operands(code_expr);
-  }
+  // iterate over the `components` and initialize each virtual pointers
+  handle_components_of_data_object(
+    ctor_type, ctor_body, components, base, assignments_block);
+  symbol.value.need_vbotptr_init(false);
 
   symbolt *s =
     context.find_symbol(ctor_type.arguments().back().get("#identifier"));
@@ -80,6 +77,53 @@ void clang_cpp_adjust::gen_vbotptr_initializations(symbolt &symbol)
     ctor_body.operands().begin(), assign_vbotptrs_if_complete);
 
   symbol.value.need_vbotptr_init(false);
+}
+
+void clang_cpp_adjust::handle_components_of_data_object(
+  const code_typet &ctor_type,
+  code_blockt &ctor_body,
+  const struct_union_typet::componentst &components,
+  exprt &base,
+  code_blockt &assignments_block)
+{
+  for (const auto &data_object_comp_or_vbotptr_comp : components)
+  {
+    if (data_object_comp_or_vbotptr_comp.get_bool("is_vbot_ptr"))
+    {
+      side_effect_exprt new_code("assign");
+      gen_vbotptr_init_code(
+        data_object_comp_or_vbotptr_comp, base, new_code, ctor_type);
+      codet code_expr("expression");
+      code_expr.move_to_operands(new_code);
+      assignments_block.copy_to_operands(code_expr);
+      return;
+    }
+    else if (has_suffix(
+               data_object_comp_or_vbotptr_comp.name(),
+               cpp_data_object::data_object_suffix))
+    {
+      assert(has_suffix(
+        data_object_comp_or_vbotptr_comp.name(),
+        cpp_data_object::data_object_suffix));
+      assert(data_object_comp_or_vbotptr_comp.type().is_symbol());
+      const typet &data_object_symbol_type =
+        data_object_comp_or_vbotptr_comp.type();
+      symbolt *data_object_symbol =
+        context.find_symbol(data_object_symbol_type.identifier());
+      assert(data_object_symbol);
+
+      exprt new_base;
+      get_ref_to_data_object(base, data_object_comp_or_vbotptr_comp, new_base);
+
+      struct_typet data_object_type = to_struct_type(data_object_symbol->type);
+      handle_components_of_data_object(
+        ctor_type,
+        ctor_body,
+        data_object_type.components(),
+        new_base,
+        assignments_block);
+    }
+  }
 }
 
 void clang_cpp_adjust::gen_vbotptr_init_code(

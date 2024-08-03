@@ -248,7 +248,6 @@ protected:
 
   void get_base(
     struct_union_typet &type,
-    std::map<std::string, size_t> &base_name_to_first_base_component_map,
     const clang::CXXBaseSpecifier &base,
     bool is_virtual);
   /*
@@ -267,14 +266,18 @@ protected:
    * For virtual base class, we only copy it once.
    *
    * Params:
+   *  - base_id: id of the base class
    *  - base_name: name of the base class
-   *  - type: ESBMC IR representing the class' type
+   *  - struct_type: ESBMC IR representing the class' type
    *  - is_virtual_base: whether the base class is virtual
+   *  - uses_data_object: whether the base class uses a data object
    */
   void get_base_components_methods(
+    const std::string &base_id,
     const std::string &base_name,
-    struct_union_typet &type,
-    bool is_virtual_base);
+    struct_union_typet &struct_type,
+    bool is_virtual_base,
+    bool uses_data_object);
 
   // if a class/struct has vptr component, it needs to be initialized in ctor
   bool has_vptr_component = false;
@@ -561,6 +564,7 @@ protected:
   bool get_cxx_constructor_is_complete_param(
     const clang::CXXConstructorDecl &cxxcd,
     code_typet::argumentst &params);
+  void create_data_object_type(const clang::RecordDecl &rd);
   void get_this_expr(typet &expected_this_type, exprt &new_expr) override;
 };
 
