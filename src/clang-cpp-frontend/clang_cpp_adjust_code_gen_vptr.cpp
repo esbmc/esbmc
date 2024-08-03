@@ -52,6 +52,22 @@ void clang_cpp_adjust::gen_vptr_initializations(symbolt &symbol)
 
   // iterate over the `components` and initialize each virtual pointers
   for (const auto &comp : components)
+
+void clang_cpp_adjust::get_this_ptr_symbol(
+  const code_typet &ctor_type,
+  exprt &this_ptr)
+{
+  // get the `this` argument symbol
+  const symbolt *this_symb = namespacet(context).lookup(
+    ctor_type.arguments().at(0).type().subtype().identifier());
+  assert(this_symb);
+  assert(this_symb->type.is_struct());
+
+  // create the `this` pointer expr
+  this_ptr = symbol_exprt(
+    ctor_type.arguments().at(0).get("#identifier"),
+    pointer_typet(this_symb->type));
+}
   {
     if (!comp.get_bool("is_vtptr"))
       continue;

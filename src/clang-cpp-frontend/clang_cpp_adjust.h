@@ -122,6 +122,7 @@ public:
     const std::string &suffix,
     std::vector<irep_idt> &ids,
     bool is_catch = false);
+  void get_this_ptr_symbol(const code_typet &ctor_type, exprt &this_ptr);
 };
 
 #endif /* CLANG_CPP_FRONTEND_CLANG_CPP_ADJUST_H_ */
