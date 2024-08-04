@@ -13,6 +13,7 @@
 #include <nlohmann/json.hpp>
 #include <solidity-frontend/solidity_grammar.h>
 #include <solidity-frontend/pattern_check.h>
+#include <clang-c-frontend/symbolic_types.h>
 
 class solidity_convertert
 {
@@ -42,18 +43,44 @@ protected:
   bool get_var_decl(const nlohmann::json &ast_node, exprt &new_expr);
   bool get_function_definition(const nlohmann::json &ast_node);
   bool get_function_params(const nlohmann::json &pd, exprt &param);
-  bool get_default_function(const std::string name, const std::string id);
+  void get_function_this_pointer_param(
+    const std::string &contract_name,
+    const std::string &ctor_id,
+    const std::string &debug_modulename,
+    const locationt &location_begin,
+    code_typet &type);
+  bool get_default_function(
+    const std::string name,
+    const std::string id,
+    symbolt &added_symbol);
 
   // handle the non-contract definition, including struct/enum/error/event/abstract/...
   bool get_noncontract_defition(nlohmann::json &ast_node);
   bool get_struct_class(const nlohmann::json &ast_node);
   void add_enum_member_val(nlohmann::json &ast_node);
   bool get_error_definition(const nlohmann::json &ast_node);
-  void add_empty_function_body(nlohmann::json &ast_node);
+  void add_empty_body_node(nlohmann::json &ast_node);
 
-  // handle the implicit constructor
-  bool add_implicit_constructor();
+  // handle inheritance
+  void merge_inheritance_ast(
+    nlohmann::json &c_node,
+    const std::string &c_name,
+    std::set<std::string> &merged_list);
+
+  // handle the constructor
+  bool add_implicit_constructor(const std::string &contract_name);
   bool get_implicit_ctor_ref(exprt &new_expr, const std::string &contract_name);
+  bool get_instantiation_ctor_call(
+    const std::string &contract_name,
+    exprt &new_expr);
+  bool move_initializer_to_ctor(
+    const std::string contract_name,
+    std::string ctor_id = "");
+  bool move_inheritance_to_ctor(
+    const std::string contract_name,
+    std::string ctor_id,
+    symbolt &sym);
+
   bool
   get_struct_class_fields(const nlohmann::json &ast_node, struct_typet &type);
   bool
@@ -85,6 +112,8 @@ protected:
     const nlohmann::json literal_type = nullptr);
   bool get_var_decl_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_func_decl_ref(const nlohmann::json &decl, exprt &new_expr);
+  bool get_func_decl_this_ref(const nlohmann::json &decl, exprt &new_expr);
+  bool get_func_decl_this_ref(const std::string &func_id, exprt &new_expr);
   bool get_enum_member_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_esbmc_builtin_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_type_description(const nlohmann::json &type_name, typet &new_type);
@@ -105,7 +134,19 @@ protected:
     const nlohmann::json &ast_node,
     std::string &name,
     std::string &id);
-  bool get_constructor_call(const nlohmann::json &ast_node, exprt &new_expr);
+  bool get_function_call(
+    const exprt &func,
+    const typet &t,
+    const nlohmann::json &decl_ref,
+    const nlohmann::json &epxr,
+    side_effect_expr_function_callt &call);
+  bool
+  get_new_object_ctor_call(const nlohmann::json &ast_node, exprt &new_expr);
+  bool get_new_object_ctor_call(
+    const std::string &contract_name,
+    const std::string &ctor_id,
+    const nlohmann::json param_list,
+    exprt &new_expr);
   bool get_current_contract_name(
     const nlohmann::json &ast_node,
     std::string &contract_name);
@@ -115,6 +156,7 @@ protected:
     const typet &t,
     const locationt &l,
     exprt &new_expr);
+  bool is_library_function(const std::string &id);
   bool get_empty_array_ref(const nlohmann::json &ast_node, exprt &new_expr);
 
   // tuple
@@ -191,8 +233,11 @@ protected:
     std::string id,
     locationt location);
 
-  std::string get_ctor_call_id(const std::string &contract_name);
+  bool get_ctor_call_id(const std::string &contract_name, std::string &ctor_id);
+  std::string get_explicit_ctor_call_id(const std::string &contract_name);
+  std::string get_implict_ctor_call_id(const std::string &contract_name);
   bool get_sol_builtin_ref(const nlohmann::json expr, exprt &new_expr);
+  void get_temporary_object(exprt &call, exprt &new_expr);
 
   // literal conversion functions
   bool convert_integer_literal(
@@ -229,6 +274,11 @@ protected:
   unsigned int current_scope_var_num;
   const nlohmann::json *current_functionDecl;
   const nlohmann::json *current_forStmt;
+  //TODO: store multiple exprt and flatten the block later
+  code_blockt current_blockDecl;
+  // for tuple
+  bool current_lhsDecl;
+  bool current_rhsDecl;
   // Use current level of BinOp type as the "anchor" type for numerical literal conversion:
   // In order to remove the unnecessary implicit IntegralCast. We need type of current level of BinaryOperator.
   // All numeric literals will be implicitly converted to this type. Pop it when finishing the current level of BinaryOperator.
@@ -242,12 +292,18 @@ protected:
   std::string current_fileName;
 
   // Auxiliary data structures:
-  // Mapping from the node 'id' to the exported symbol (i.e. contract, error, ....)
+  // Mapping from the node 'id' to the exported symbol (i.e. contract, error, constant var ....)
   std::unordered_map<int, std::string> exportedSymbolsList;
   // Inheritance Order Record <contract_name, Contract_id>
   std::unordered_map<std::string, std::vector<int>> linearizedBaseList;
   // Store the ast_node["id"] of contract/struct/function/...
   std::unordered_map<int, std::string> scope_map;
+  // Store state variables
+  std::unordered_set<symbolt *> initializers;
+  // For inheritance
+  nlohmann::json ctor_modifier;
+  nlohmann::json base_contracts;
+  bool is_contract_member_access;
 
   static constexpr const char *mode = "C++";
 
