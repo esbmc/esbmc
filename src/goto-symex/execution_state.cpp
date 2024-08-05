@@ -843,9 +843,40 @@ void execution_statet::get_expr_globals(
     {
       return;
     }
+
+    bool point_to_global = false;
     if (
-      (symbol->static_lifetime || symbol->type.is_dynamic_set()) ||
-      symbol->type.is_pointer())
+      symbol->type.is_pointer() && symbol->name != "invalid_object" &&
+      !symbol->static_lifetime)
+    {
+      expr2tc tmp = expr;
+      cur_state->rename(tmp);
+      expr2tc deref = dereference2tc(to_pointer_type(tmp->type).subtype, tmp);
+      value_setst::valuest dest;
+      cur_state->value_set.get_reference_set(deref, dest);
+
+      for (const auto &obj : dest)
+      {
+        if (
+          is_object_descriptor2t(obj) &&
+          is_symbol2t(to_object_descriptor2t(obj).object))
+        {
+          const std::string &n =
+            to_symbol2t(to_object_descriptor2t(obj).object).thename.as_string();
+          const symbolt *s = ns.lookup(n);
+          if (!s)
+            continue;
+          point_to_global = s->static_lifetime || s->type.is_dynamic_set();
+
+          if (point_to_global)
+            break;
+        }
+      }
+    }
+
+    if (
+      symbol->static_lifetime || symbol->type.is_dynamic_set() ||
+      point_to_global)
     {
       std::list<unsigned int> threadId_list;
       auto it_find = art1->vars_map.find(expr);
