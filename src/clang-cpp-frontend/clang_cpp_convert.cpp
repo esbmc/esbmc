@@ -1814,9 +1814,9 @@ bool clang_cpp_convertert::annotate_class_method(
    * The order of annotations matters.
    */
   // annotate parent
-  std::string parent_class_name = getFullyQualifiedName(
-    ASTContext->getTagDeclType(cxxmdd.getParent()), *ASTContext);
-  std::string parent_class_id = tag_prefix + parent_class_name;
+  std::string parent_class_name;
+  std::string parent_class_id;
+  get_decl_name(*cxxmdd.getParent(), parent_class_name, parent_class_id);
   component_type.set("#member_name", parent_class_id);
 
   // annotate ctor and dtor
