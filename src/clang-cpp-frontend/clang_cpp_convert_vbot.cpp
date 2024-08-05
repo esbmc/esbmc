@@ -149,7 +149,7 @@ void clang_cpp_convertert::add_vbase_offset_ptr(struct_typet &type)
   // add to the class' type
   data_object_type.components().push_back(component);
 
-  has_vbot_ptr_component = true;
+  type.set("#has_vbot_ptr_component", true);
 }
 void clang_cpp_convertert::add_vbase_offset_table_type_entry(
   struct_typet &type,

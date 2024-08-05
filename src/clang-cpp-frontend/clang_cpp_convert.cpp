@@ -644,9 +644,6 @@ bool clang_cpp_convertert::get_struct_union_class_methods_decls(
     setup_vbo_table_struct_variables(*cxxrd, to_struct_type(type));
   }
 
-  has_vptr_component = false;
-  has_vbot_ptr_component = false;
-
   return false;
 }
 
@@ -1844,6 +1841,13 @@ bool clang_cpp_convertert::annotate_class_method(
        * we indicate the need for vptr & vbotptr initializations in constructor.
        * vptr & vbotptr initializations will be added in the adjuster.
        */
+      auto parent_class_type_symbol = context.find_symbol(parent_class_id);
+      assert(parent_class_type_symbol);
+      assert(parent_class_type_symbol->is_type);
+      bool has_vptr_component =
+        parent_class_type_symbol->type.get_bool("#has_vptr_component");
+      bool has_vbot_ptr_component =
+        parent_class_type_symbol->type.get_bool("#has_vbot_ptr_component");
       fd_symb->value.need_vptr_init(has_vptr_component);
       fd_symb->value.need_vbotptr_init(has_vbot_ptr_component);
     }

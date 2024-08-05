@@ -197,7 +197,7 @@ void clang_cpp_convertert::add_vptr(struct_typet &type)
   // add to the class' type
   data_object_type.components().push_back(component);
 
-  has_vptr_component = true;
+  type.set("#has_vptr_component", true);
 }
 
 void clang_cpp_convertert::add_vtable_type_entry(

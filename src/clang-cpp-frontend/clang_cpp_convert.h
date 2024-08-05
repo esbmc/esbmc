@@ -279,10 +279,6 @@ protected:
     bool is_virtual_base,
     bool uses_data_object);
 
-  // if a class/struct has vptr component, it needs to be initialized in ctor
-  bool has_vptr_component = false;
-  // if a class/struct has vbo_ptr (virtual base offset ptr) component, it needs to be initialized in ctor
-  bool has_vbot_ptr_component = false;
   std::string thunk_prefix = "thunk::";
   using function_switch = std::map<irep_idt, exprt>;
   using switch_table = std::map<irep_idt, function_switch>;
