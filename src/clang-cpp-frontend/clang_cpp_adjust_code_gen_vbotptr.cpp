@@ -61,7 +61,6 @@ void clang_cpp_adjust::gen_vbotptr_initializations(symbolt &symbol)
   // iterate over the `components` and initialize each virtual pointers
   handle_components_of_data_object(
     ctor_type, ctor_body, components, base, assignments_block);
-  symbol.value.need_vbotptr_init(false);
 
   symbolt *s =
     context.find_symbol(ctor_type.arguments().back().get("#identifier"));
