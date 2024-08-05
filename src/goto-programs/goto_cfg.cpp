@@ -568,34 +568,34 @@ void ssa_promotion::promote_node(goto_programt &P,const Node &n)
       }
     });
 
-  // Compute phi-nodes
-
-  // TODO: use the f live_analysis :)
-
-  // The phi-nodes are the dominance frontier of the
-  // of the blocks that defines a var
-
+  // Compute phi-nodes (dominance frontier of all nodes that defines the variable)
   Dominator info(n);
   auto ptr = std::make_shared<Dominator::DJGraph>(n, info);
   auto dj_graph = *ptr;
   info.dj = ptr; 
   
   for (auto &var : variables)
-  {    
-    if (defBlocks[var].empty())
+  {
+    // Some symbols might come from globals or functions
+    if (defBlocks[var].empty()) 
       continue;
 
     const auto phinodes = info.dom_frontier(defBlocks[var]);
-    // Insert phi-node
+
+    // For each definition, create a symbol:
+    size_t symbol_counter = defInstructions.size() + phinodes.size();
+
+    // Insert phi-nodes
     for (const Node& phinode : phinodes)
     {
       goto_programt::instructiont phi_instr;
       phi_instr.make_other();
+
       //P.insert_swap(phinode->begin, phi_instr);
+
     }
     
-
-    // rename phi-nodes
+    // For each bb, rename to latest use
   }
 }
 
