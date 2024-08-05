@@ -1399,6 +1399,35 @@ public:
   typedef esbmct::expr2t_traits<from_field, upper_field, lower_field> traits;
 };
 
+class phi_data : public expr2t
+{
+public:
+  phi_data(
+    const type2tc &t,
+    expr2t::expr_ids id,
+    const expr2tc &_from,
+    unsigned int _upper,
+    unsigned int _lower)
+    : expr2t(t, id), from(_from), upper(_upper), lower(_lower)
+  {
+  }
+  phi_data(const phi_data &ref) = default;
+
+  expr2tc from;
+  unsigned int upper;
+  unsigned int lower;
+
+  // Type mangling:
+  typedef esbmct::field_traits<expr2tc, phi_data, &phi_data::from>
+    from_field;
+  typedef esbmct::field_traits<unsigned int, phi_data, &phi_data::upper>
+    upper_field;
+  typedef esbmct::field_traits<unsigned int, phi_data, &phi_data::lower>
+    lower_field;
+  typedef esbmct::expr2t_traits<from_field, upper_field, lower_field> traits;
+};
+
+
 // Give everything a typedef name. Use this to construct both the templated
 // expression methods, but also the container class which needs the template
 // parameters too.
@@ -1422,6 +1451,7 @@ public:
 // This can't be replaced by iterating over all expr ids in preprocessing
 // magic because the mapping between top level expr class and it's data holding
 // object isn't regular: the data class depends on /what/ the expression /is/.
+irep_typedefs(phi, phi_data);
 irep_typedefs(constant_int, constant_int_data);
 irep_typedefs(constant_fixedbv, constant_fixedbv_data);
 irep_typedefs(constant_floatbv, constant_floatbv_data);
@@ -3574,6 +3604,25 @@ public:
 
   static std::string field_names[esbmct::num_type_fields];
 };
+
+class phi2t : public phi_expr_methods
+{
+public:
+  phi2t(
+    const type2tc &type,
+    const expr2tc &from,
+    unsigned int upper,
+    unsigned int lower)
+    : phi_expr_methods(type, extract_id, from, upper, lower)
+  {
+  }
+  phi2t(const phi2t &ref) = default;
+
+  expr2tc do_simplify() const override;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
 
 // Same deal as for "type_macros".
 #ifdef NDEBUG
