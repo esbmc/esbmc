@@ -54,7 +54,7 @@ protected:
 #  define CAPTURE_VARIABLE_TYPE clang::ValueDecl
 #endif
   /*
-   *  Map captured variables and this to the non-static members storing their 
+   *  Map captured variables and this to the non-static members storing their
    *  values or references.
    *  Arguments:
    *   is_lambda_operator: the lambda operator is being converted
@@ -291,8 +291,6 @@ protected:
    * Methods for virtual tables and virtual pointers
    *  TODO: add link to wiki page
    */
-  // if a class/struct has vptr component, it needs to be initialized in ctor
-  bool has_vptr_component = false;
   std::string thunk_prefix = "thunk::";
   using function_switch = std::map<irep_idt, exprt>;
   using switch_table = std::map<irep_idt, function_switch>;
