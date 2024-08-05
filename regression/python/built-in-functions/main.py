@@ -1,5 +1,5 @@
 def foo() -> None:
-    a = int(2)
+    a = int(2.1212121212)
     assert a == 2
 
 foo()
