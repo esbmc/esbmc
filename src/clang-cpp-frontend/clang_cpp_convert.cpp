@@ -506,8 +506,6 @@ bool clang_cpp_convertert::get_struct_union_class_methods_decls(
     }
   }
 
-  has_vptr_component = false;
-
   return false;
 }
 
@@ -1933,9 +1931,14 @@ bool clang_cpp_convertert::annotate_class_method(
     {
       fd_symb->type = component_type;
       /*
-       * we indicate the need for vptr initializations in contructor.
+       * we indicate the need for vptr initializations in constructor.
        * vptr initializations will be added in the adjuster.
        */
+      auto parent_class_type_symbol = context.find_symbol(parent_class_id);
+      assert(parent_class_type_symbol);
+      assert(parent_class_type_symbol->is_type);
+      bool has_vptr_component =
+        parent_class_type_symbol->type.get_bool("#has_vptr_component");
       fd_symb->value.need_vptr_init(has_vptr_component);
     }
   }

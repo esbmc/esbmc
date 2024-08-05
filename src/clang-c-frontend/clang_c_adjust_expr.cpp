@@ -609,7 +609,7 @@ void clang_c_adjust::layout_struct_union_type(struct_union_typet &type)
     }
   }
   // 2.1 Handle vtable generation and vptr
-  if (type.get_bool("#needs_vtable"))
+  if (type.get_bool("#has_vptr_component"))
   {
     handle_cpp_struct_vtable_generation(type);
   }

@@ -38,7 +38,7 @@ bool clang_cpp_convertert::get_struct_class_virtual_methods(
   {
     if (!md->isVirtual())
       continue;
-    type.set("#needs_vtable", true);
+    type.set("#has_vptr_component", true);
 
     /*
      * 1. convert this virtual method and add them to class symbol type
