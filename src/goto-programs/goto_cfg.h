@@ -152,22 +152,6 @@ private:
   }
 };
 
-class live_analysis
-{
-  using Node = std::shared_ptr<goto_cfg::basic_block>;
-
-public:
-  live_analysis(const Node &root);
-  inline std::unordered_set<Node> get_live_blocks() const
-  {
-    return _live_blocks;
-  }
-
-private:
-  void compute_blocks();
-  std::unordered_set<Node> _live_blocks;
-};
-
 class ssa_promotion
 {
   using Node = std::shared_ptr<goto_cfg::basic_block>;
@@ -181,33 +165,10 @@ public:
 
 protected:
   void promote_node(goto_programt &P, const Node &n);
-  void insert_phi(const live_analysis &var);
-  void rename_phi(const live_analysis &var);
 
 private:
   std::unordered_set<std::string> collect_symbols();
   goto_cfg &cfg;
   goto_functionst &goto_functions;
   const std::unordered_set<std::string> _skip{"__ESBMC_main", "__ESBMC_pthread_start_main_hook","__ESBMC_pthread_end_main_hook"};
-};
-
-template <class Domain>
-class gen_kill
-{
-public:
-  using Node = std::shared_ptr<goto_cfg::basic_block>;
-  using DataflowSet = std::unordered_map<Node, std::set<Domain>>;
-
-  DataflowSet in;
-  DataflowSet out;
-  const bool forward;
-  const bool confluence_is_union;
-  gen_kill(
-    const Node &bb,
-    const DataflowSet &gen,
-    const DataflowSet &kill,
-    bool forward = true,
-    bool confluence_is_union = true);
-
-
 };

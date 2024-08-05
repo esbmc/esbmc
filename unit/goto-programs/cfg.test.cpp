@@ -30,51 +30,6 @@ from_int_graph(IntGraph graph, int start, int end, ReverseGraph &lookup)
   return blocks[start];
 }
 
-TEST_CASE("Live-Analysis", "[cfg][ssa]")
-{
-  // From wikipedia :)
-  IntGraph graph;
-  ReverseGraph lookup;
-  graph[0] = std::unordered_set<int>({1, 2}); // b1
-  graph[1] = std::unordered_set<int>({2});    // b2
-  graph[2] = std::unordered_set<int>({});     // b3
-
-  auto bb = from_int_graph(graph, 0, 2, lookup);
-
-  // Compute live analysis blocks for each variable
-  using VarDomain = std::string;
-
-  // The set of variables that are used in s before any assignment in the same basic block.
-  gen_kill<VarDomain>::DataflowSet gen;
-  gen.insert({lookup[0], std::set<VarDomain>({})});
-  gen.insert({lookup[1], std::set<VarDomain>({"a", "b"})});
-  gen.insert({lookup[2], std::set<VarDomain>({"b", "d"})});
-
-  // The set of variables that are assigned a value in s
-  gen_kill<VarDomain>::DataflowSet kill;
-  kill.insert({lookup[0], std::set<VarDomain>({"a", "b", "d", "x"})});
-  kill.insert({lookup[1], std::set<VarDomain>({"c", "d"})});
-  kill.insert({lookup[2], std::set<VarDomain>({"c"})});
-
-  gen_kill<VarDomain> live_analysis(bb, gen, kill, false);
-
-  REQUIRE(live_analysis.out[lookup[0]].size() == 3);
-  for (const auto &v : std::array{"a", "b", "d"})
-    REQUIRE(live_analysis.out[lookup[0]].count(v));
-
-  REQUIRE(live_analysis.out[lookup[1]].size() == 2);
-  for (const auto &v : std::array{"b", "d"})
-    REQUIRE(live_analysis.out[lookup[1]].count(v));
-  REQUIRE(live_analysis.out[lookup[2]].size() == 0);
-
-  REQUIRE(live_analysis.in[lookup[0]].size() == 0);
-  REQUIRE(live_analysis.in[lookup[1]].size() == 2);
-  for (const auto &v : std::array{"a", "b"})
-    REQUIRE(live_analysis.in[lookup[1]].count(v));
-  REQUIRE(live_analysis.in[lookup[2]].size() == 2);
-  for (const auto &v : std::array{"b", "d"})
-    REQUIRE(live_analysis.in[lookup[2]].count(v));
-}
 
 TEST_CASE("DJ-Graphs", "[cfg][ssa]")
 {

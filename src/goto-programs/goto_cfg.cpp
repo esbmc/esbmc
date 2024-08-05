@@ -480,37 +480,6 @@ void ssa_promotion::promote()
 }
 
 
-#if 0
-  // Compute live analysis blocks for each variable
-  using VarDomain = std::string;
-
-  // The set of variables that are used in s before any assignment in the same basic block.
-  gen_kill<VarDomain>::DataflowSet gen;
-  // The set of variables that are assigned a value in s
-  gen_kill<VarDomain>::DataflowSet kill;
-
-  auto dataflow_init =
-    [](
-      gen_kill<VarDomain>::DataflowSet &set,
-      std::unordered_map<std::string, std::unordered_set<Node>> input)
-  {
-    assert(set.empty());
-    for (auto &[k, v] : input)
-    {
-      for (const auto &n : v)
-      {
-        auto [val, ins] = set.insert({n, std::set<VarDomain>()});
-        val->second.insert(k);
-      }
-    }
-  };
-
-  dataflow_init(gen, useBlocks);
-  dataflow_init(kill, defBlocks);
-
-  gen_kill<VarDomain> live_analysis(n, gen, kill, false);
-#endif
-
 void ssa_promotion::promote_node(goto_programt &P,const Node &n)
 {
   using Instruction = std::shared_ptr<goto_programt::instructiont>;
@@ -630,67 +599,3 @@ void ssa_promotion::promote_node(goto_programt &P,const Node &n)
   }
 }
 
-template <class Domain>
-gen_kill<Domain>::gen_kill(
-  const Node &bb,
-  const DataflowSet &gen,
-  const DataflowSet &kill,
-  bool forward,
-  bool confluence_is_union)
-  : forward(forward), confluence_is_union(confluence_is_union)
-{
-  if (forward || !confluence_is_union)
-  {
-    log_error("Gen Kill does not support this configuration yet");
-    abort();
-  }
-  std::set<Node> worklist;
-  goto_cfg::foreach_bb(
-    bb,
-    [&worklist, this](const Node &n)
-    {
-      worklist.insert(n);
-      in.insert({n, std::set<Domain>()});
-      out.insert({n, std::set<Domain>()});
-
-    });
-
-  if (!worklist.size())
-  {
-    log_warning("Something strange is happening with current CFG");
-    bb->begin->dump();
-    return;
-  }
-
-  while (!worklist.empty())
-  {
-    const Node s = *worklist.begin();
-    worklist.erase(s);
-
-    // The domain is a lattice, we can just count the elements to check for diffs
-    const size_t in_before = in[s].size();
-    const size_t out_before = out[s].size();
-    
-    for (const auto &pred : s->successors)
-    {
-      for (const auto &pred_in : in[pred])
-        out[s].insert(pred_in);
-    }
-
-    if (gen.count(s))
-      for (const auto &g : gen.at(s))
-        in[s].insert(g);
-
-    for (const auto &l : out[s])
-    {
-      if (kill.count(s) && kill.at(s).count(l))
-        continue;
-
-      in[s].insert(l);
-    }
-
-    if (in[s].size() != in_before || out[s].size() != out_before)
-      for (const auto &pred : s->predecessors)
-        worklist.insert(pred);
-  }
-}

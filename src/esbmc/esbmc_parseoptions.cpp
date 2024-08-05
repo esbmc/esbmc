@@ -1977,7 +1977,7 @@ bool esbmc_parseoptionst::output_goto_program(
     {
       goto_cfg cfg(goto_functions);
       cfg.dump_graph();
-      ssa_promotion ssa(cfg);
+      ssa_promotion ssa(cfg, goto_functions);
       ssa.promote();
       
       return true;
