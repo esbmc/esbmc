@@ -240,6 +240,9 @@ std::string concat2t::field_names[esbmct::num_type_fields] =
   {"forward", "aft", "", "", ""};
 std::string extract2t::field_names[esbmct::num_type_fields] =
   {"from", "upper", "lower", "", ""};
+std::string phi2t::field_names[esbmct::num_type_fields] =
+  {"lhs", "rhs", "lhs_location", "rhs_location", ""};
+
 
 // For CRCing to actually be accurate, expr/type ids mustn't overflow out of
 // a byte. If this happens then a) there are too many exprs, and b) the expr
