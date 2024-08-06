@@ -547,8 +547,8 @@ void ssa_promotion::promote_node(goto_programt &P,const Node &n)
            start != bb->end;
            start++)
       {
-        if (start->is_decl())
-          insert_definition(to_code_decl2t(start->code).value, start, bb);
+        if (start->is_decl());
+          //insert_definition(to_code_decl2t(start->code).value, start, bb);
         else if (start->is_assign())
         {
           const expr2tc &target = to_code_assign2t(start->code).target;
@@ -576,6 +576,8 @@ void ssa_promotion::promote_node(goto_programt &P,const Node &n)
   
   for (auto &var : variables)
   {
+    const type2tc symbol_type = int_type2(); // todo: get symbol
+    
     // Some symbols might come from globals or functions
     if (defBlocks[var].empty()) 
       continue;
@@ -585,17 +587,69 @@ void ssa_promotion::promote_node(goto_programt &P,const Node &n)
     // For each definition, create a symbol:
     size_t symbol_counter = defInstructions.size() + phinodes.size();
 
+    // Lets add all symbols at the beginning
+    std::vector<symbolt*> symbols;
+    for (int i = 0; i < phinodes.size(); i++)
+    {
+      symbolt symbol;
+      symbol.type = migrate_type_back(symbol_type);
+      symbol.id = fmt::format("{}.{}", var, i);
+      symbol.name = symbol.id;
+      symbol.mode = "C"; // todo: get mode
+      symbol.location = n->begin->location;
+
+      symbolt *symbol_in_context = context.move_symbol_to_context(symbol);
+      assert(symbol_in_context != nullptr);
+      symbols.push_back(symbol_in_context);
+
+      goto_programt::instructiont decl;
+      decl.make_decl();
+      decl.code = code_decl2tc(symbol_type, symbol_in_context->id);
+      decl.location = n->begin->location;
+      P.insert_swap(n->begin, decl);
+    }
+    
     // Insert phi-nodes
     for (const Node& phinode : phinodes)
     {
       goto_programt::instructiont phi_instr;
-      phi_instr.make_other();
-
-      //P.insert_swap(phinode->begin, phi_instr);
-
+      phi_instr.make_assignment();
+      phi_instr.location = phinode->begin->location;
+      phi_instr.function = phinode->begin->function;
+      auto phi_symbol = symbol2tc(symbol_type, symbols[0]->id);
+      switch (phinode->predecessors.size())
+      {
+      case 0:
+        log_warning("Not sure what to do");
+        continue;
+      case 1:
+        log_warning("No need for phi");
+        continue;
+      case 2:
+        {
+        log_warning("phi-node");
+        auto lhs = symbol2tc(symbol_type, symbols[0]->id);
+        auto rhs = symbol2tc(symbol_type, symbols[0]->id);
+        auto pred_it = phinode->predecessors.begin();
+        auto lhs_location = (*pred_it)->begin->location_number;
+        pred_it++;
+        
+        auto rhs_location = (*pred_it)->begin->location_number;
+        auto phi_expr =
+          phi2tc(symbol_type, lhs, rhs, lhs_location, rhs_location);
+        phi_instr.code = code_assign2tc(phi_symbol, phi_expr);
+        break;
+        }
+      default:
+        log_warning("Not sure what to do");
+        continue;
+      }
+      P.insert_swap(phinode->begin, phi_instr);
     }
-    
+
     // For each bb, rename to latest use
+
+    // Kill all symbols at the end ?
   }
 }
 
