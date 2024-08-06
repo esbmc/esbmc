@@ -1960,6 +1960,17 @@ bool esbmc_parseoptionst::output_goto_program(
       return true;
     }
 
+    
+    if (cmdline.isset("dump-goto-cfg"))
+    {
+      goto_cfg cfg(goto_functions);
+      cfg.dump_graph();
+      ssa_promotion ssa(cfg, goto_functions, context);
+      ssa.promote();
+      
+      // return true;
+    }
+
     // Output the GOTO program to the log (and terminate or continue) in
     // a human-readable format
     if (
@@ -1973,15 +1984,6 @@ bool esbmc_parseoptionst::output_goto_program(
         return true;
     }
 
-    if (cmdline.isset("dump-goto-cfg"))
-    {
-      goto_cfg cfg(goto_functions);
-      cfg.dump_graph();
-      ssa_promotion ssa(cfg, goto_functions);
-      ssa.promote();
-      
-      return true;
-    }
 
     // Translate the GOTO program to C and output it into the log or
     // a specified output file
