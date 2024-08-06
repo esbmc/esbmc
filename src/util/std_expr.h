@@ -818,6 +818,8 @@ public:
   explicit dereference_exprt(const exprt &op, const typet &tp)
     : exprt(exprt::deref, tp.subtype())
   {
+    assert(tp.is_pointer());
+    assert(tp.subtype().is_not_nil());
     // This constructor copies an exprt to op0.
     // It uses typet's subtype.
     copy_to_operands(op);
