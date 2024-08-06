@@ -1457,7 +1457,6 @@ public:
 // This can't be replaced by iterating over all expr ids in preprocessing
 // magic because the mapping between top level expr class and it's data holding
 // object isn't regular: the data class depends on /what/ the expression /is/.
-irep_typedefs(phi, phi_data);
 irep_typedefs(constant_int, constant_int_data);
 irep_typedefs(constant_fixedbv, constant_fixedbv_data);
 irep_typedefs(constant_floatbv, constant_floatbv_data);
@@ -1560,6 +1559,7 @@ irep_typedefs(popcount, overflow_ops);
 irep_typedefs(bswap, arith_1op);
 irep_typedefs(concat, bit_2ops);
 irep_typedefs(extract, extract_data);
+irep_typedefs(phi, phi_data);
 
 /** Constant integer class.
  *  Records a constant integer of an arbitary precision, signed or unsigned.
@@ -3625,7 +3625,7 @@ public:
   }
   phi2t(const phi2t &ref) = default;
 
-  expr2tc do_simplify() const override;
+  //  expr2tc do_simplify() const override;
 
   static std::string field_names[esbmct::num_type_fields];
 };
