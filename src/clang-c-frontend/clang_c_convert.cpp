@@ -3055,7 +3055,7 @@ bool clang_c_convertert::get_cast_expr(
     }
     if (convert_to_object)
     {
-      exprt deref_expr = dereference_exprt(expr, intermediate_type.subtype());
+      exprt deref_expr = dereference_exprt(expr, intermediate_type);
       expr.swap(deref_expr);
     }
     log_error("Cast finished");
