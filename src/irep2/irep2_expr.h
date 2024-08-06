@@ -1399,34 +1399,40 @@ public:
   typedef esbmct::expr2t_traits<from_field, upper_field, lower_field> traits;
 };
 
+
 class phi_data : public expr2t
 {
 public:
   phi_data(
     const type2tc &t,
     expr2t::expr_ids id,
-    const expr2tc &_from,
-    unsigned int _upper,
-    unsigned int _lower)
-    : expr2t(t, id), from(_from), upper(_upper), lower(_lower)
+    const expr2tc &lhs,
+    const expr2tc &rhs,
+    unsigned int lhs_location,
+    unsigned int rhs_location)
+    : expr2t(t, id), lhs(lhs), rhs(rhs), lhs_location(lhs_location), rhs_location(rhs_location)
   {
   }
   phi_data(const phi_data &ref) = default;
 
-  expr2tc from;
-  unsigned int upper;
-  unsigned int lower;
+  expr2tc lhs;
+  expr2tc rhs;
+  unsigned int lhs_location;
+  unsigned int rhs_location;
 
   // Type mangling:
-  typedef esbmct::field_traits<expr2tc, phi_data, &phi_data::from>
-    from_field;
-  typedef esbmct::field_traits<unsigned int, phi_data, &phi_data::upper>
-    upper_field;
-  typedef esbmct::field_traits<unsigned int, phi_data, &phi_data::lower>
-    lower_field;
-  typedef esbmct::expr2t_traits<from_field, upper_field, lower_field> traits;
-};
+  typedef esbmct::field_traits<expr2tc, phi_data, &phi_data::lhs> lhs_field;
+  typedef esbmct::field_traits<expr2tc, phi_data, &phi_data::rhs> rhs_field;
 
+  typedef esbmct::field_traits<unsigned int, phi_data, &phi_data::lhs_location>
+    lhs_location_field;
+  typedef esbmct::field_traits<unsigned int, phi_data, &phi_data::rhs_location>
+    rhs_location_field;
+
+  typedef esbmct::
+    expr2t_traits<lhs_field, rhs_field, lhs_location_field, rhs_location_field>
+      traits;  
+};
 
 // Give everything a typedef name. Use this to construct both the templated
 // expression methods, but also the container class which needs the template
@@ -3610,10 +3616,11 @@ class phi2t : public phi_expr_methods
 public:
   phi2t(
     const type2tc &type,
-    const expr2tc &from,
-    unsigned int upper,
-    unsigned int lower)
-    : phi_expr_methods(type, extract_id, from, upper, lower)
+    const expr2tc &lhs,
+    const expr2tc &rhs,
+    unsigned int lhs_location,
+    unsigned int rhs_location)
+    : phi_expr_methods(type, phi_id, lhs, rhs, lhs_location, rhs_location)
   {
   }
   phi2t(const phi2t &ref) = default;
