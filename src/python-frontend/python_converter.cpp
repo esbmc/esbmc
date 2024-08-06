@@ -2041,7 +2041,10 @@ bool python_converter::convert()
     }
 
     convert_expression_to_code(call);
-    main_symbol.value.swap(call);
+    convert_expression_to_code(block);
+
+    main_symbol.value.swap(block); // Add class definitions and global variable assignments
+    main_symbol.value.copy_to_operands(call); // Add function call
   }
   else
   {
