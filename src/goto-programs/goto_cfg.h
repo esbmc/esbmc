@@ -172,5 +172,5 @@ private:
   goto_cfg &cfg;
   contextt &context;
   goto_functionst &goto_functions;
-  const std::unordered_set<std::string> _skip{"__ESBMC_main", "__ESBMC_pthread_start_main_hook","__ESBMC_pthread_end_main_hook"};
+  const std::unordered_set<std::string> _skip{"__ESBMC_main", "__ESBMC_pthread_start_main_hook","__ESBMC_pthread_end_main_hook", "c:@F@__ESBMC_atexit_handler"};
 };
