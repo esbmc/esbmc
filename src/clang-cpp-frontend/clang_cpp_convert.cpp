@@ -1129,8 +1129,13 @@ bool clang_cpp_convertert::get_function_body(
     exprt::operandst initializers;
     initializers.reserve(cxxcd.getNumCtorInitializers());
 
-    // Parse the initializers, if any
+    /* State to track initialization of array member initializers. */
+    symbolt *array_init_sym = nullptr; /* temp symbol for array init */
+    /* track whether the temp symbol is up to date. */
+    bool init_sym_uptodate = true;
 
+    // Parse the initializers, if any
+ 
     // `init` type is clang::CXXCtorInitializer
     for (auto init : cxxcd.inits())
     {
@@ -1153,6 +1158,8 @@ bool clang_cpp_convertert::get_function_body(
         initializer.set("#delegating_ctor", 1);
         if (get_expr(*init->getInit(), initializer))
           return true;
+        initializers.push_back(initializer);
+        init_sym_uptodate = false;
       }
       else if (init->isBaseInitializer())
       {
@@ -1162,6 +1169,8 @@ bool clang_cpp_convertert::get_function_body(
         initializer.base_ctor_derived(true);
         if (get_expr(*init->getInit(), initializer))
           return true;
+        initializers.push_back(initializer);
+        init_sym_uptodate = false;
       }
       else if (init->isMemberInitializer())
       {
@@ -1184,42 +1193,75 @@ bool clang_cpp_convertert::get_function_body(
         /* We can't assign to arrays, dereference() will choke. */
         if (is_array_like(member.type()))
         {
-          /* Instead, create a constant expression of the class's type, where
-           * each component, except for the one referred to in 'lhs', just is a
-           * member expression into (*this). Then assign this new expression
-           * to (*this). */
+          /* Instead, introduce a single new symbol 'array_init$' of the class's
+           * type, and encode the following sequence:
+           *
+           *  0. array_init$ = *this;
+           *  1. array_init$.member = rhs;
+           *  2. *this = array_init$;
+           *
+           * Where possible, we leave out instruction 0, i.e., if the previous
+           * initializer already was an array and at the very beginning. This is
+           * tracked via the boolean 'init_sym_uptodate'.
+           *
+           * Step 2. is necessary after each member, because the next
+           * initializer can legally expect previous members obtained via the
+           * (this) pointer to have already been initialized. */
           const exprt &this_ptr = member.op0(); /* the (this) pointer */
           const struct_union_typet &this_type =
             to_struct_union_type(ns.follow(this_ptr.type().subtype()));
-          bool is_struct = this_type.is_struct();
-          exprt rhs_sym(is_struct ? "struct" : "union", this_type);
-          if (is_struct)
+
+          if (!array_init_sym)
           {
-            for (const struct_union_typet::componentt &c :
-                 this_type.components())
-              if (c.get_name() == member.component_name())
-                rhs_sym.move_to_operands(rhs);
-              else
-              {
-                member_exprt old(this_ptr, c.get_name(), c.type());
-                rhs_sym.move_to_operands(old);
-              }
-          }
-          else
-          {
-            /* single initializer for unions */
-            rhs_sym.component_name(member.component_name());
-            rhs_sym.move_to_operands(rhs);
+            symbolt new_symbol;
+            new_symbol.name = "array_init$";
+            new_symbol.id = id2string(this_ptr.identifier()) + "_array_init$";
+            new_symbol.type = this_type;
+            if (context.move(new_symbol, array_init_sym))
+            {
+              log_error(
+                "Duplicate temporary array symbol for initializer in {}",
+                __func__);
+              abort();
+            }
+            assert(array_init_sym);
           }
 
-          exprt this_sym = dereference_exprt(this_ptr, this_type);
+          exprt this_sym = dereference_exprt(this_ptr, this_ptr.type());
+          exprt init_sym = symbol_expr(*array_init_sym);
+
+          if (!init_sym_uptodate)
+          {
+            /* 0. array_init$ = *this; */
+            side_effect_exprt update("assign", this_type);
+            update.copy_to_operands(init_sym, this_sym);
+            initializers.push_back(update);
+            init_sym_uptodate = true;
+          }
+
+          exprt new_member = member;
+          new_member.op0() = init_sym;
+
+          /* 1. array_init$.member = rhs; */
+          initializer = side_effect_exprt("assign", new_member.type());
+          initializer.move_to_operands(new_member, rhs);
+          initializer.location() = new_expr.location();
+          initializers.push_back(initializer);
+
+          /* 2. *this = array_init$; */
           initializer = side_effect_exprt("assign", this_sym.type());
-          initializer.move_to_operands(this_sym, rhs_sym);
+          initializer.move_to_operands(this_sym, init_sym);
+          initializer.location() = new_expr.location();
+          initializers.push_back(initializer);
         }
         else
         {
           initializer = side_effect_exprt("assign", member.type());
+          initializer.set("#member_init", 1);
           initializer.move_to_operands(member, rhs);
+          initializer.location() = new_expr.location();
+          initializers.push_back(initializer);
+          init_sym_uptodate = false;
         }
       }
       else
@@ -1233,13 +1275,20 @@ bool clang_cpp_convertert::get_function_body(
       // t1() : i(2){ }
       // is converted to
       // t1() { this->i = 2; }
-      convert_expression_to_code(initializer);
-      initializers.push_back(initializer);
+      for (exprt &initializer : initializers)
+        convert_expression_to_code(initializer);
     }
 
     // Insert initializers at the beginning of the body
     body.operands().insert(
       body.operands().begin(), initializers.begin(), initializers.end());
+    if (array_init_sym)
+    {
+      /* Need to declare the temp symbol for array initialization if it has
+       * been used. */
+      code_declt init_decl(symbol_expr(*array_init_sym));
+       body.operands().insert(body.operands().begin(), init_decl);
+    }
   }
 
   auto *type = fd.getType().getTypePtr();
