@@ -477,11 +477,34 @@ void ssa_promotion::promote()
     assert(v.size());
     promote_node(goto_functions.function_map[k].body, v[0]);
   }
+  goto_functions.update();
+}
+
+void replace_symbols_in_expr(expr2tc &use, symbolt* symbol,  unsigned last_id_in_bb, const irep_idt var_name)
+{
+  if (!use)
+    return;
+  
+  if (is_phi2t(use))
+    return;
+
+  if (is_symbol2t(use) && to_symbol2t(use).thename == var_name)
+  {
+    use = symbol2tc(use->type, symbol->id);
+    return;
+  }
+
+  use->Foreach_operand([symbol, last_id_in_bb, var_name](expr2tc & e)
+  {
+    replace_symbols_in_expr(e, symbol, last_id_in_bb, var_name);
+  }); 
+  
 }
 
 
 void ssa_promotion::promote_node(goto_programt &P,const Node &n)
 {
+  // Assumption: all declarations initialized through an assignment (which can be nondet)
   using Instruction = std::shared_ptr<goto_programt::instructiont>;
   std::unordered_set<std::string> variables;
   std::unordered_map<std::string, std::unordered_set<Node>> defBlocks;
@@ -585,11 +608,12 @@ void ssa_promotion::promote_node(goto_programt &P,const Node &n)
     const auto phinodes = info.dom_frontier(defBlocks[var]);
 
     // For each definition, create a symbol:
-    size_t symbol_counter = defInstructions.size() + phinodes.size();
+    size_t symbol_counter = defInstructions[var].size() + phinodes.size();
 
     // Lets add all symbols at the beginning
-    std::vector<symbolt*> symbols;
-    for (int i = 0; i < phinodes.size(); i++)
+    std::vector<symbolt *> symbols;
+    std::unordered_map<std::string, unsigned> symbol_to_index;
+    for (int i = 0; i < symbol_counter; i++)
     {
       symbolt symbol;
       symbol.type = migrate_type_back(symbol_type);
@@ -601,6 +625,7 @@ void ssa_promotion::promote_node(goto_programt &P,const Node &n)
       symbolt *symbol_in_context = context.move_symbol_to_context(symbol);
       assert(symbol_in_context != nullptr);
       symbols.push_back(symbol_in_context);
+      symbol_to_index[symbol_in_context->id.as_string()] = i;
 
       goto_programt::instructiont decl;
       decl.make_decl();
@@ -608,46 +633,102 @@ void ssa_promotion::promote_node(goto_programt &P,const Node &n)
       decl.location = n->begin->location;
       P.insert_swap(n->begin, decl);
     }
-    
+
+    unsigned counter = 0;
     // Insert phi-nodes
     for (const Node& phinode : phinodes)
     {
+      if (phinode->predecessors.size() != 2)
+      {
+        log_error(
+          "Constructed a phi-node with a value different than 2. Please check "
+          "the goto-cfg construction and the phinode placement algorithm");
+        abort();
+      }     
       goto_programt::instructiont phi_instr;
       phi_instr.make_assignment();
       phi_instr.location = phinode->begin->location;
       phi_instr.function = phinode->begin->function;
-      auto phi_symbol = symbol2tc(symbol_type, symbols[0]->id);
-      switch (phinode->predecessors.size())
-      {
-      case 0:
-        log_warning("Not sure what to do");
-        continue;
-      case 1:
-        log_warning("No need for phi");
-        continue;
-      case 2:
-        {
-        log_warning("phi-node");
-        auto lhs = symbol2tc(symbol_type, symbols[0]->id);
-        auto rhs = symbol2tc(symbol_type, symbols[0]->id);
-        auto pred_it = phinode->predecessors.begin();
-        auto lhs_location = (*pred_it)->begin->location_number;
-        pred_it++;
-        
-        auto rhs_location = (*pred_it)->begin->location_number;
-        auto phi_expr =
-          phi2tc(symbol_type, lhs, rhs, lhs_location, rhs_location);
-        phi_instr.code = code_assign2tc(phi_symbol, phi_expr);
-        break;
-        }
-      default:
-        log_warning("Not sure what to do");
-        continue;
-      }
+      auto phi_symbol = symbol2tc(symbol_type, symbols[counter++]->id);
+
+      const expr2tc lhs = symbol2tc(symbol_type, symbols[0]->id);
+      const expr2tc rhs = symbol2tc(symbol_type, symbols[0]->id);
+      auto pred_it = phinode->predecessors.begin();
+      const unsigned lhs_location = (*pred_it)->end->location_number;
+      pred_it++;
+      
+      const unsigned rhs_location = (*pred_it)->end->location_number;
+      const expr2tc phi_expr =
+        phi2tc(symbol_type, lhs, rhs, lhs_location, rhs_location);
+      phi_instr.code = code_assign2tc(phi_symbol, phi_expr);
+
       P.insert_swap(phinode->begin, phi_instr);
+      defBlocks[var].insert(phinode);
+      useBlocks[var].insert(phinode);
     }
 
-    // For each bb, rename to latest use
+
+    std::unordered_map<Node, unsigned> last_id_in_bb;
+
+
+    // For each definition rename the symbol.
+    for (auto defBlock : defBlocks[var])
+    {
+      for (auto instruction = defBlock->begin; instruction != defBlock->end; instruction++)
+      {
+        if (!instruction->is_assign())
+          continue;
+
+        const auto code_expr = to_code_assign2t(instruction->code);
+        if (!(is_symbol2t(code_expr.target) &&
+              to_symbol2t(code_expr.target).thename == var))
+          continue;
+        // TODO: assert(code_expr.target->type == symbol_type);
+
+        last_id_in_bb[defBlock] = counter;
+        auto new_symbol = symbol2tc(symbol_type, symbols[counter++]->id);
+        instruction->code = code_assign2tc(new_symbol, code_expr.source);        
+      }
+    }
+
+
+
+    // For each use rename the symbol
+    for (auto useBlock : useBlocks[var])
+    {
+      unsigned current_last_id = 0;
+      for (auto instruction = useBlock->begin; instruction != useBlock->end; instruction++)
+      {
+
+        if (
+          instruction->is_decl() &&
+          to_code_decl2t(instruction->code).value == var)
+           instruction->make_skip();
+        else if (instruction->is_assign())
+        {
+          auto assign = to_code_assign2t(instruction->code);
+          assert(current_last_id <= symbols.size());
+
+          if(!is_phi2t(assign.source))
+            replace_symbols_in_expr(
+              assign.source, symbols[current_last_id], 0, var);
+          else
+          {
+            // TODO set location correctly
+          }
+
+          if (is_symbol2t(assign.target) &&
+                symbol_to_index.count(to_symbol2t(assign.target).thename.as_string()))
+            current_last_id = symbol_to_index.at(
+              to_symbol2t(assign.target).thename.as_string());
+
+          instruction->code = code_assign2tc(assign.target, assign.source);
+        }         
+ 
+      }
+    }
+    
+    
 
     // Kill all symbols at the end ?
   }
