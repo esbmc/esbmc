@@ -183,6 +183,7 @@ protected:
   std::string convert_nondet_bool(const exprt &src, unsigned &precedence);
   std::string convert_object_descriptor(const exprt &src, unsigned &precedence);
   virtual std::string convert_constant(const exprt &src, unsigned &precedence);
+  std::string convert_phi(const exprt &src, unsigned &precedence);
 
   std::string convert_norep(const exprt &src, unsigned &precedence);
 
