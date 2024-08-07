@@ -627,14 +627,17 @@ void ssa_promotion::promote_node(goto_programt &P,const Node &n)
       symbols.push_back(symbol_in_context);
       symbol_to_index[symbol_in_context->id.as_string()] = i;
 
+      
       goto_programt::instructiont decl;
       decl.make_decl();
       decl.code = code_decl2tc(symbol_type, symbol_in_context->id);
       decl.location = n->begin->location;
       P.insert_swap(n->begin, decl);
+      
     }
 
     unsigned counter = 0;
+    std::unordered_map<unsigned, Node> ref_to_nodes; // the cfg locations are no longer reliable
     // Insert phi-nodes
     for (const Node& phinode : phinodes)
     {
@@ -654,10 +657,12 @@ void ssa_promotion::promote_node(goto_programt &P,const Node &n)
       const expr2tc lhs = symbol2tc(symbol_type, symbols[0]->id);
       const expr2tc rhs = symbol2tc(symbol_type, symbols[0]->id);
       auto pred_it = phinode->predecessors.begin();
-      const unsigned lhs_location = (*pred_it)->end->location_number;
+      const unsigned lhs_location = (*pred_it)->begin->location_number;
+      ref_to_nodes[lhs_location] = *pred_it;
       pred_it++;
-      
-      const unsigned rhs_location = (*pred_it)->end->location_number;
+
+      const unsigned rhs_location = (*pred_it)->begin->location_number;
+      ref_to_nodes[rhs_location] = *pred_it;
       const expr2tc phi_expr =
         phi2tc(symbol_type, lhs, rhs, lhs_location, rhs_location);
       phi_instr.code = code_assign2tc(phi_symbol, phi_expr);
@@ -691,7 +696,19 @@ void ssa_promotion::promote_node(goto_programt &P,const Node &n)
       }
     }
 
+    auto get_last_defined = [&last_id_in_bb](const Node n) -> unsigned
+    {
+      if(!last_id_in_bb.count(n))
+        return 0;
+      return last_id_in_bb[n];
+    };
 
+    auto find_location = [&get_last_defined, &ref_to_nodes, &symbols](const Node start, unsigned id) -> symbolt *
+    {
+      // Explore in reverse order:
+      std::vector<Node> worklist{start};
+      return symbols[get_last_defined(ref_to_nodes[id])];
+    };
 
     // For each use rename the symbol
     for (auto useBlock : useBlocks[var])
@@ -715,6 +732,20 @@ void ssa_promotion::promote_node(goto_programt &P,const Node &n)
           else
           {
             // TODO set location correctly
+            auto lhs_symbol = find_location(useBlock, to_phi2t(assign.source).lhs_location);
+            auto rhs_symbol =
+              find_location(useBlock, to_phi2t(assign.source).rhs_location);
+
+            if (!lhs_symbol || !rhs_symbol)
+              continue;
+          
+            to_phi2t(assign.source).lhs = symbol2tc(
+              symbol_type,
+              lhs_symbol->id);
+            to_phi2t(assign.source).rhs = symbol2tc(
+              symbol_type,
+              rhs_symbol->id);
+            
           }
 
           if (is_symbol2t(assign.target) &&
@@ -727,9 +758,6 @@ void ssa_promotion::promote_node(goto_programt &P,const Node &n)
  
       }
     }
-    
-    
-
     // Kill all symbols at the end ?
   }
 }
