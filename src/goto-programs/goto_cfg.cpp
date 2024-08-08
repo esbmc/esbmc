@@ -29,9 +29,13 @@ goto_cfg::goto_cfg(goto_functionst &goto_functions)
         for (const auto &target : i_it->targets)
           leaders.insert(target);
 
-        auto next = i_it;
-        next++;
-        leaders.insert(next);
+        // Is this an IF? 
+        if (!is_true(i_it->guard))
+        {          
+          auto next = i_it;
+          next++;
+          leaders.insert(next);          
+        }
       }
 
       if (i_it->is_return())
@@ -93,7 +97,7 @@ goto_cfg::goto_cfg(goto_functionst &goto_functions)
           bb2->predecessors.insert(bb);
         }
 
-        if (last->is_goto() || last->is_backwards_goto())
+        if ((last->is_goto() || last->is_backwards_goto()) && !is_true(last->guard))
         {
           bb->terminator = basic_block::terminator_type::IF_GOTO;
           for (const auto &target : last->targets)
