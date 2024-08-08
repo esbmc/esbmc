@@ -57,7 +57,7 @@ void clang_c_adjust::adjust_code(codet &code)
        * unused.
        */
       exprt &op = code.op0();
-      if (op.op0().type().is_pointer())
+      if (op.has_operands() && op.op0().type().is_pointer())
         op = address_of_exprt(index_exprt(op, constant_exprt(0, index_type())));
     }
     adjust_operands(code);
