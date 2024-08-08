@@ -1257,7 +1257,6 @@ bool clang_cpp_convertert::get_function_body(
         else
         {
           initializer = side_effect_exprt("assign", member.type());
-          initializer.set("#member_init", 1);
           initializer.move_to_operands(member, rhs);
           initializer.location() = new_expr.location();
           initializers.push_back(initializer);
@@ -1269,15 +1268,10 @@ bool clang_cpp_convertert::get_function_body(
         log_error("Unsupported initializer in {}", __func__);
         abort();
       }
-
-      // Convert to code and insert side-effect in the operands list
-      // Essentially we convert an initializer to assignment, e.g:
-      // t1() : i(2){ }
-      // is converted to
-      // t1() { this->i = 2; }
-      for (exprt &initializer : initializers)
-        convert_expression_to_code(initializer);
     }
+
+    for (exprt &initializer : initializers)
+      convert_expression_to_code(initializer);
 
     // Insert initializers at the beginning of the body
     body.operands().insert(
