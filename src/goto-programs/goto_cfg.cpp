@@ -1,3 +1,4 @@
+#include "c_types.h"
 #include "irep2/irep2_expr.h"
 #include "std_code.h"
 #include <goto-programs/goto_cfg.h>
@@ -581,8 +582,8 @@ void ssa_promotion::promote_node(goto_programt &P,const Node &n)
       useInstructions[var_name].insert(
         std::make_shared<goto_programt::instructiont>(*I));
 
-      // Only consider a use block if the value is used before redefined
-      if(!defBlocks[var_name].count(bb))
+      // TODO: Only consider a use block if the value is used before redefined
+      //if(!defBlocks[var_name].count(bb))
         useBlocks[var_name].insert(bb);
     }
   };
@@ -682,12 +683,25 @@ void ssa_promotion::promote_node(goto_programt &P,const Node &n)
       const expr2tc lhs = symbol2tc(symbol_type, symbols[0]->id);
       const expr2tc rhs = symbol2tc(symbol_type, symbols[0]->id);
       auto pred_it = phinode->predecessors.begin();
-      const unsigned lhs_location = (*pred_it)->begin->location_number;
-      ref_to_nodes[lhs_location] = *pred_it;
+
+
+      unsigned lhs_location = 0;
+      unsigned rhs_location = 0;
+
+      {
+        auto before_end = (*pred_it)->end;
+        before_end--;
+        lhs_location = atoi(before_end->location.get_line().c_str());
+        ref_to_nodes[lhs_location] = *pred_it;
+      }
       pred_it++;
 
-      const unsigned rhs_location = (*pred_it)->begin->location_number;
-      ref_to_nodes[rhs_location] = *pred_it;
+      {
+        auto before_end = (*pred_it)->end;
+        before_end--;
+        rhs_location = atoi(before_end->location.get_line().c_str());
+        ref_to_nodes[rhs_location] = *pred_it;
+      }
       const expr2tc phi_expr =
         phi2tc(symbol_type, lhs, rhs, lhs_location, rhs_location);
       phi_instr.code = code_assign2tc(phi_symbol, phi_expr);
@@ -705,7 +719,7 @@ void ssa_promotion::promote_node(goto_programt &P,const Node &n)
     for (auto defBlock : defBlocks[var])
     {
       for (auto instruction = defBlock->begin; instruction != defBlock->end; instruction++)
-      {
+      { 
         if (!instruction->is_assign())
           continue;
 
@@ -723,15 +737,29 @@ void ssa_promotion::promote_node(goto_programt &P,const Node &n)
 
     auto get_last_defined = [&last_id_in_bb](const Node n) -> unsigned
     {
-      if(!last_id_in_bb.count(n))
-        return 0;
-      return last_id_in_bb[n];
+      // Back search
+      std::set<Node> visited;
+      std::vector<Node> worklist{n};
+      while (!worklist.empty())
+      {
+        const Node item = worklist.back();
+        worklist.pop_back();
+
+        if (!visited.insert(item).second)
+          continue;
+
+        if(last_id_in_bb.count(item))
+          return last_id_in_bb[item];
+
+        for (auto &pred : item->predecessors)
+          worklist.push_back(pred);
+      }
+      log_error("Could not find when variable was last defined");
+      abort();      
     };
 
     auto find_location = [&get_last_defined, &ref_to_nodes, &symbols](const Node start, unsigned id) -> symbolt *
     {
-      // Explore in reverse order:
-      std::vector<Node> worklist{start};
       return symbols[get_last_defined(ref_to_nodes[id])];
     };
 
@@ -745,7 +773,12 @@ void ssa_promotion::promote_node(goto_programt &P,const Node &n)
         if (
           instruction->is_decl() &&
           to_code_decl2t(instruction->code).value == var)
-           instruction->make_skip();
+        {
+          //          abort();
+          instruction->make_skip();
+          instruction->code = code_skip2tc(int_type2());
+        }
+           
         else if (instruction->is_assign())
         {
           auto assign = to_code_assign2t(instruction->code);
@@ -763,24 +796,34 @@ void ssa_promotion::promote_node(goto_programt &P,const Node &n)
 
             if (!lhs_symbol || !rhs_symbol)
               continue;
+
+            if (!has_prefix(to_symbol2t(assign.target).thename.as_string(), var))
+              continue;
+
+            assert(has_prefix(lhs_symbol->id, var));
+            assert(has_prefix(rhs_symbol->id, var));
           
             to_phi2t(assign.source).lhs = symbol2tc(
               symbol_type,
               lhs_symbol->id);
             to_phi2t(assign.source).rhs = symbol2tc(
               symbol_type,
-              rhs_symbol->id);
-            
+              rhs_symbol->id);            
           }
-
           if (is_symbol2t(assign.target) &&
                 symbol_to_index.count(to_symbol2t(assign.target).thename.as_string()))
             current_last_id = symbol_to_index.at(
               to_symbol2t(assign.target).thename.as_string());
 
           instruction->code = code_assign2tc(assign.target, assign.source);
-        }         
- 
+        }
+        else
+        {
+          replace_symbols_in_expr(
+            instruction->code, symbols[current_last_id], 0, var);
+          replace_symbols_in_expr(
+              instruction->guard, symbols[current_last_id], 0, var);
+        }       
       }
     }
     // Kill all symbols at the end ?
