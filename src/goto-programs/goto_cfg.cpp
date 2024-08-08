@@ -29,13 +29,9 @@ goto_cfg::goto_cfg(goto_functionst &goto_functions)
         for (const auto &target : i_it->targets)
           leaders.insert(target);
 
-        // Is this an IF? 
-        if (!is_true(i_it->guard))
-        {          
-          auto next = i_it;
-          next++;
-          leaders.insert(next);          
-        }
+        auto next = i_it;
+        next++;
+        leaders.insert(next);          
       }
 
       if (i_it->is_return())
@@ -91,13 +87,23 @@ goto_cfg::goto_cfg(goto_functionst &goto_functions)
 
       for (const auto &bb2 : bbs)
       {
+        const bool is_goto = last->is_goto() || last->is_backwards_goto();
+        const bool is_trivial_goto = is_goto && is_true(last->guard);
         if (bb2->begin == bb->end)
         {
-          bb->successors.insert(bb2);
-          bb2->predecessors.insert(bb);
+          if (is_trivial_goto)
+          {
+            bb->successors.erase(bb2);
+            bb2->predecessors.erase(bb);
+          }
+          else
+          {
+            bb->successors.insert(bb2);
+            bb2->predecessors.insert(bb);
+          }
         }
 
-        if ((last->is_goto() || last->is_backwards_goto()) && !is_true(last->guard))
+        if (is_goto)
         {
           bb->terminator = basic_block::terminator_type::IF_GOTO;
           for (const auto &target : last->targets)
@@ -142,17 +148,32 @@ void goto_cfg::dump_graph() const
       {
       case basic_block::terminator_type::IF_GOTO:
       {
-        file << "|{<s0>T|<s1>F}}\"];\n";
-        auto suc = bbs[t]->successors.begin();
-        file << "BB" << t << ":s0" << " -> " << "BB"
-             << std::distance(
-                  bbs.begin(), std::find(bbs.begin(), bbs.end(), *suc))
-             << ";\n";
-        suc++;
-        file << "BB" << t << ":s1" << " -> " << "BB"
-             << std::distance(
-                  bbs.begin(), std::find(bbs.begin(), bbs.end(), *suc))
-             << ";\n";
+        if (bbs[t]->successors.size() == 1)
+        {
+          file << "}\"];\n";
+          for (const auto &suc : bbs[t]->successors)
+            file << "BB" << t << " -> " << "BB"
+                 << std::distance(
+                                  bbs.begin(), std::find(bbs.begin(), bbs.end(), suc))
+                 << ";\n";
+          break;
+        }
+        else
+          {
+            file << "|{<s0>T|<s1>F}}\"];\n";
+            auto suc = bbs[t]->successors.begin();
+            file << "BB" << t << ":s0" << " -> " << "BB"
+                 << std::distance(
+                                  bbs.begin(), std::find(bbs.begin(), bbs.end(), *suc))
+                 << ";\n";
+            suc++;
+            file << "BB" << t << ":s1"
+                 << " -> "
+                 << "BB"
+                 << std::distance(
+                                  bbs.begin(), std::find(bbs.begin(), bbs.end(), *suc))
+                 << ";\n";
+          }
       }
       break;
 
