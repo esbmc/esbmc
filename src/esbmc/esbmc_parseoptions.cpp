@@ -1961,14 +1961,20 @@ bool esbmc_parseoptionst::output_goto_program(
     }
 
     
+    if (cmdline.isset("goto-ssa-promotion"))
+    {
+      goto_cfg cfg(goto_functions);
+      ssa_promotion ssa(cfg, goto_functions, context);
+      ssa.promote();
+      goto_functions.update();
+      remove_no_op(goto_functions);
+    }
+    
     if (cmdline.isset("dump-goto-cfg"))
     {
       goto_cfg cfg(goto_functions);
       cfg.dump_graph();
-      ssa_promotion ssa(cfg, goto_functions, context);
-      ssa.promote();
-      
-      // return true;
+      return true;
     }
 
     // Output the GOTO program to the log (and terminate or continue) in
