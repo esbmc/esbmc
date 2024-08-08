@@ -1,5 +1,5 @@
 #include <util/location.h>
-
+#include <util/crypto_hash.h>
 std::string locationt::as_string() const
 {
   std::string dest;
@@ -45,4 +45,18 @@ std::ostream &operator<<(std::ostream &out, const locationt &location)
   out << location.as_string();
 
   return out;
+}
+
+std::string locationt::sha1() const
+{
+  crypto_hash hash;
+  const int line = atoi(get_line().c_str());
+  const int column = atoi(get_column().c_str());
+  
+  hash.ingest(&line, sizeof(int));  
+  hash.ingest(&column, sizeof(int));
+
+  hash.fin();
+
+  return hash.to_string();
 }

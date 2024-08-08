@@ -57,6 +57,8 @@ public:
   {
     this->function(function);
   }
+
+  std::string sha1() const;
 };
 
 std::ostream &operator<<(std::ostream &out, const locationt &location);
