@@ -1881,6 +1881,17 @@ bool esbmc_parseoptionst::process_goto_program(
       goto_coveraget tmp(ns, goto_functions);
       tmp.add_false_asserts();
     }
+
+    // From here on all changes should take phi-nodes into account
+    if (cmdline.isset("goto-ssa-promotion"))
+    {
+      goto_cfg cfg(goto_functions);
+      ssa_promotion ssa(cfg, goto_functions, context);
+      ssa.promote();
+      goto_functions.update();
+      remove_no_op(goto_functions);
+    }
+    
   }
 
   catch (const char *e)
@@ -1961,14 +1972,6 @@ bool esbmc_parseoptionst::output_goto_program(
     }
 
     
-    if (cmdline.isset("goto-ssa-promotion"))
-    {
-      goto_cfg cfg(goto_functions);
-      ssa_promotion ssa(cfg, goto_functions, context);
-      ssa.promote();
-      goto_functions.update();
-      remove_no_op(goto_functions);
-    }
     
     if (cmdline.isset("dump-goto-cfg"))
     {
