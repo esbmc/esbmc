@@ -1135,7 +1135,7 @@ bool clang_cpp_convertert::get_function_body(
     bool init_sym_uptodate = true;
 
     // Parse the initializers, if any
- 
+
     // `init` type is clang::CXXCtorInitializer
     for (auto init : cxxcd.inits())
     {
@@ -1287,7 +1287,7 @@ bool clang_cpp_convertert::get_function_body(
       /* Need to declare the temp symbol for array initialization if it has
        * been used. */
       code_declt init_decl(symbol_expr(*array_init_sym));
-       body.operands().insert(body.operands().begin(), init_decl);
+      body.operands().insert(body.operands().begin(), init_decl);
     }
   }
 
