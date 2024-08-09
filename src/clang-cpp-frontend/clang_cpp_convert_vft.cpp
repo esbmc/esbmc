@@ -360,8 +360,6 @@ void clang_cpp_convertert::add_thunk_method_arguments(symbolt &thunk_func_symb)
     code_typet::argumentt &arg = args[i];
     irep_idt base_name = arg.get_base_name();
 
-    assert(base_name != "");
-
     symbolt arg_symb;
     arg_symb.id = thunk_func_symb.id.as_string() + "::" + base_name.as_string();
     arg_symb.name = base_name;
