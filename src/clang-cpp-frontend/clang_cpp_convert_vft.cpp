@@ -107,17 +107,41 @@ static bool is_pure_virtual(const clang::CXXMethodDecl &md)
 #endif
 }
 
+/**
+ * @brief Returns the ultimate overridden method for a given CXXMethodDecl.
+ *
+ * This function traverses the overridden methods of the provided CXXMethodDecl
+ * and returns the **unique** ultimate overridden method.
+ *
+ * @param method The CXXMethodDecl to find the ultimate overridden method for.
+ * @return The unique ultimate overridden CXXMethodDecl.
+ */
+static const clang::CXXMethodDecl *
+get_ultimate_overridden_method(const clang::CXXMethodDecl *method)
+{
+  const clang::CXXMethodDecl *current_method = method;
+  while (current_method->size_overridden_methods() == 1)
+  {
+    current_method = *current_method->overridden_methods().begin();
+  }
+  return current_method;
+}
+
 bool clang_cpp_convertert::annotate_virtual_overriding_methods(
   const clang::CXXMethodDecl &md,
   struct_typet::componentt &comp)
 {
-  std::string method_id, method_name;
-  get_decl_name(md, method_name, method_id);
+  const clang::CXXMethodDecl *ultimate_overridden_method =
+    get_ultimate_overridden_method(&md);
+  std::string overridden_method_id, overridden_method_name;
+  get_decl_name(
+    *ultimate_overridden_method, overridden_method_name, overridden_method_id);
+  std::string virtual_name = overridden_method_id;
 
   comp.type().set("#is_virtual", true);
-  comp.type().set("#virtual_name", method_name);
+  comp.type().set("#virtual_name", virtual_name);
   comp.set("is_virtual", true);
-  comp.set("virtual_name", method_name);
+  comp.set("virtual_name", virtual_name);
 
   if (is_pure_virtual(md))
     comp.set("is_pure_virtual", true);
