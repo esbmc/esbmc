@@ -531,17 +531,19 @@ void clang_cpp_convertert::build_vtable_map(
       vtable_value_map[class_id]; // switch_map = switch_table
     exprt e = symbol_exprt(method.get_name(), code_type);
 
+    dstring virtual_name = method.get("virtual_name");
+    assert(!virtual_name.empty());
     if (method.get_bool("is_pure_virtual"))
     {
       pointer_typet pointer_type(code_type);
       e = gen_zero(pointer_type);
       assert(e.is_not_nil());
-      value_map[method.get("virtual_name")] = e;
+      value_map[virtual_name] = e;
     }
     else
     {
       address_of_exprt address(e);
-      value_map[method.get("virtual_name")] = address;
+      value_map[virtual_name] = address;
     }
   }
 }
