@@ -115,8 +115,6 @@ bool clang_cpp_convertert::annotate_virtual_overriding_methods(
   std::string method_id, method_name;
   get_decl_name(md, method_name, method_id);
 
-  comp.type().set("#is_virtual", true);
-  comp.type().set("#virtual_name", method_name);
   comp.set("is_virtual", true);
   comp.set("virtual_name", method_name);
 
