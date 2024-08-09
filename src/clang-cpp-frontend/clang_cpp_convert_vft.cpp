@@ -138,8 +138,6 @@ bool clang_cpp_convertert::annotate_virtual_overriding_methods(
     *ultimate_overridden_method, overridden_method_name, overridden_method_id);
   std::string virtual_name = overridden_method_id;
 
-  comp.type().set("#is_virtual", true);
-  comp.type().set("#virtual_name", virtual_name);
   comp.set("is_virtual", true);
   comp.set("virtual_name", virtual_name);
 
