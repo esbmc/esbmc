@@ -141,7 +141,8 @@ protected:
     std::string &name,
     exprt &param);
 
-  virtual bool get_struct_union_class(const clang::RecordDecl &recordd);
+  virtual bool
+  get_struct_union_class(const clang::RecordDecl &recordd, bool complete);
 
   /*
    * Get class fields of the type `clang::Decl::Field`
@@ -169,9 +170,11 @@ protected:
     const clang::RecordDecl &recordd,
     typet &type);
 
-  virtual bool get_type(const clang::QualType &type, typet &new_type);
+  virtual bool
+  get_type(const clang::QualType &type, typet &new_type, bool complete);
 
-  virtual bool get_type(const clang::Type &the_type, typet &new_type);
+  virtual bool
+  get_type(const clang::Type &the_type, typet &new_type, bool complete);
 
   void get_ref_to_struct_type(typet &type);
 
