@@ -417,7 +417,7 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
 {
   // Note: If a struct is defined inside an extern C, it will be a RecordDecl
   const clang::CXXRecordDecl *cxxrd = llvm::dyn_cast<clang::CXXRecordDecl>(&rd);
-  if (!cxxrd || cxxrd->isCLike())
+  if (!cxxrd /* || cxxrd->isCLike()*/)
   {
     return clang_c_convertert::get_struct_union_class_fields(rd, type);
   }
@@ -524,7 +524,7 @@ void clang_cpp_convertert::get_base(
     base_name,
     type,
     is_virtual,
-    !base.getType()->getAsCXXRecordDecl()->isCLike());
+    true /* !base.getType()->getAsCXXRecordDecl()->isCLike()*/);
   // Add tail padding between bases. Otherwise, pointers to the start of bases could be misaligned.
   add_padding(type, ns);
 

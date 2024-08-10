@@ -1840,7 +1840,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         {
           cxxrd = member.getBase()->getType()->getPointeeCXXRecordDecl();
         }
-        if (cxxrd && !cxxrd->isCLike())
+        if (cxxrd /*&& !cxxrd->isCLike()*/)
         {
           std::string name, id;
           get_decl_name(*cxxrd, name, id);
@@ -2909,24 +2909,22 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
       exprt this_expr;
       get_this_expr(this_type, this_expr);
       exprt base_expr;
-      if (!cxxrd->isCLike())
-      {
-        typet data_object_type;
-        cpp_data_object::get_data_object_symbol_type(
-          class_id, data_object_type);
-        assert(!class_type.is_pointer());
-        exprt data_object_member = member_exprt(
-          this_expr,
-          class_name + cpp_data_object::data_object_suffix,
-          data_object_type);
-        data_object_member.name(
-          class_name + cpp_data_object::data_object_suffix);
-        base_expr.swap(data_object_member);
-      }
-      else
-      {
-        base_expr.swap(this_expr);
-      }
+      //      if (!cxxrd->isCLike())
+      //      {
+      typet data_object_type;
+      cpp_data_object::get_data_object_symbol_type(class_id, data_object_type);
+      assert(!class_type.is_pointer());
+      exprt data_object_member = member_exprt(
+        this_expr,
+        class_name + cpp_data_object::data_object_suffix,
+        data_object_type);
+      data_object_member.name(class_name + cpp_data_object::data_object_suffix);
+      base_expr.swap(data_object_member);
+      //      }
+      //      else
+      //      {
+      //        base_expr.swap(this_expr);
+      //      }
 
       new_expr = member_exprt(base_expr, field_name, field_type);
       new_expr.identifier(field_id);
