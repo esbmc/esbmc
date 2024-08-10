@@ -1078,21 +1078,15 @@ bool clang_c_convertert::get_type(
 
     std::string id, name;
     get_decl_name(rd, name, id);
-    symbolt *s = context.find_symbol(id);
-    if (!s)
-    {
-      /* record in context if not already there */
-      if (get_struct_union_class(rd, complete))
-        return true;
 
-      //      if(get_struct_union_class(rd, complete))
-      //        return true;
-      //
-      //      if(complete)
-      //        new_type = context.find_symbol(id)->type;
-      //      else
-      //        new_type = symbol_typet(id);
-    }
+    if (get_struct_union_class(rd, complete))
+      return true;
+
+    if (complete)
+      new_type = context.find_symbol(id)->type;
+    else
+      new_type = symbol_typet(id);
+
     /* symbolic type referring to that type */
     new_type = symbol_typet(id);
 
