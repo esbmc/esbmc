@@ -1112,6 +1112,16 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  case clang::Stmt::CXXNoexceptExprClass:
+  {
+    const clang::CXXNoexceptExpr &cxxnoexcept =
+      static_cast<const clang::CXXNoexceptExpr &>(stmt);
+
+    bool value = cxxnoexcept.getValue();
+    new_expr = gen_boolean(value);
+    break;
+  }
+
   default:
     if (clang_c_convertert::get_expr(stmt, new_expr))
       return true;
