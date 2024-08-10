@@ -27,10 +27,20 @@ const std::string &clang_c_languaget::clang_resource_dir()
   {
     std::string path = tmp.path() + "/include";
     boost::filesystem::create_directories(path);
+#  define CONCAT_(x, y) x##y
+#  define CONCAT(x, y) CONCAT_(x, y)
+#  define unique_out CONCAT(out, __LINE__)
 #  define ESBMC_FLAIL(body, size, ...)                                         \
-    std::ofstream(path + "/" #__VA_ARGS__).write(body, size);
+    auto unique_out = std::ofstream(path + "/" #__VA_ARGS__);                  \
+    unique_out.write(body, size);                                              \
+    if (!unique_out.good())                                                    \
+      abort();
 #  include <headers/cheaders.h>
 #  undef ESBMC_FLAIL
+#  undef unique_out
+#  undef CONCAT
+#  undef CONCAT_
+
     dumped = true;
   }
   return tmp.path();
