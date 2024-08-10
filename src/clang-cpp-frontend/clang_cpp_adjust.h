@@ -98,14 +98,16 @@ public:
     const struct_union_typet::componentt &vbot_comp,
     const exprt &base,
     side_effect_exprt &new_code,
-    const code_typet &ctor_type);
+    const code_typet &ctor_type,
+    std::vector<std::string> id_path_to_base);
   exprt gen_vbotptr_init_lhs(
     const struct_union_typet::componentt &vbot_comp,
     const exprt &base,
     const code_typet &ctor_type);
   exprt gen_vbotptr_init_rhs(
     const struct_union_typet::componentt &comp,
-    const code_typet &ctor_type);
+    const code_typet &ctor_type,
+    std::vector<std::string> id_path_to_base);
 
   /**
    * ancillary methods to support the expr/code adjustments above
@@ -137,7 +139,8 @@ public:
     code_blockt &ctor_body,
     const struct_union_typet::componentst &components,
     exprt &base,
-    code_blockt &assignments_block);
+    code_blockt &assignments_block,
+    std::vector<std::string> id_path_to_base);
 };
 
 #endif /* CLANG_CPP_FRONTEND_CLANG_CPP_ADJUST_H_ */

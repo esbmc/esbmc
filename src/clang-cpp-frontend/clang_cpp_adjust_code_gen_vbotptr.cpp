@@ -2,6 +2,7 @@
 #include <util/std_expr.h>
 #include "util/expr_util.h"
 #include "util/cpp_data_object.h"
+#include "clang_cpp_convert.h"
 
 void clang_cpp_adjust::gen_vbotptr_initializations(symbolt &symbol)
 {
@@ -59,8 +60,9 @@ void clang_cpp_adjust::gen_vbotptr_initializations(symbolt &symbol)
   std::vector<codet> assignments;
   code_blockt assignments_block;
   // iterate over the `components` and initialize each virtual pointers
+  std::vector<std::string> id_path_to_base;
   handle_components_of_data_object(
-    ctor_type, ctor_body, components, base, assignments_block);
+    ctor_type, ctor_body, components, base, assignments_block, id_path_to_base);
 
   symbolt *s =
     context.find_symbol(ctor_type.arguments().back().get("#identifier"));
@@ -83,7 +85,8 @@ void clang_cpp_adjust::handle_components_of_data_object(
   code_blockt &ctor_body,
   const struct_union_typet::componentst &components,
   exprt &base,
-  code_blockt &assignments_block)
+  code_blockt &assignments_block,
+  std::vector<std::string> id_path_to_base)
 {
   for (const auto &data_object_comp_or_vbotptr_comp : components)
   {
@@ -91,7 +94,11 @@ void clang_cpp_adjust::handle_components_of_data_object(
     {
       side_effect_exprt new_code("assign");
       gen_vbotptr_init_code(
-        data_object_comp_or_vbotptr_comp, base, new_code, ctor_type);
+        data_object_comp_or_vbotptr_comp,
+        base,
+        new_code,
+        ctor_type,
+        id_path_to_base);
       codet code_expr("expression");
       code_expr.move_to_operands(new_code);
       assignments_block.copy_to_operands(code_expr);
@@ -111,6 +118,17 @@ void clang_cpp_adjust::handle_components_of_data_object(
         context.find_symbol(data_object_symbol_type.identifier());
       assert(data_object_symbol);
 
+      assert(data_object_comp_or_vbotptr_comp.type().is_symbol());
+      std::vector<std::string> id_path_to_base_copy = id_path_to_base;
+      id_path_to_base_copy.push_back(
+        data_object_comp_or_vbotptr_comp.type().identifier().as_string().substr(
+          0,
+          data_object_comp_or_vbotptr_comp.type()
+              .identifier()
+              .as_string()
+              .size() -
+            strlen(cpp_data_object::data_object_suffix.c_str())));
+
       exprt new_base;
       get_ref_to_data_object(base, data_object_comp_or_vbotptr_comp, new_base);
 
@@ -120,7 +138,8 @@ void clang_cpp_adjust::handle_components_of_data_object(
         ctor_body,
         data_object_type.components(),
         new_base,
-        assignments_block);
+        assignments_block,
+        id_path_to_base_copy);
     }
   }
 }
@@ -129,7 +148,8 @@ void clang_cpp_adjust::gen_vbotptr_init_code(
   const struct_union_typet::componentt &vbot_comp,
   const exprt &base,
   side_effect_exprt &new_code,
-  const code_typet &ctor_type)
+  const code_typet &ctor_type,
+  std::vector<std::string> id_path_to_base)
 {
   /*
    * Generate the statement to assign each vbotptr the corresponding
@@ -144,7 +164,7 @@ void clang_cpp_adjust::gen_vbotptr_init_code(
   exprt lhs_expr = gen_vbotptr_init_lhs(vbot_comp, base, ctor_type);
 
   // 3. RHS: generate the address of the target virtual pointer struct
-  exprt rhs_expr = gen_vbotptr_init_rhs(vbot_comp, ctor_type);
+  exprt rhs_expr = gen_vbotptr_init_rhs(vbot_comp, ctor_type, id_path_to_base);
 
   // now push them to the assignment statement code
   new_code.operands().push_back(lhs_expr);
@@ -174,7 +194,8 @@ exprt clang_cpp_adjust::gen_vbotptr_init_lhs(
 
 exprt clang_cpp_adjust::gen_vbotptr_init_rhs(
   const struct_union_typet::componentt &comp,
-  const code_typet &ctor_type)
+  const code_typet &ctor_type,
+  std::vector<std::string> id_path_to_base)
 {
   /*
    * Generate the RHS expression for virtual pointer initialization,
@@ -185,8 +206,20 @@ exprt clang_cpp_adjust::gen_vbotptr_init_rhs(
   exprt rhs_code;
 
   // get the corresponding vtable variable symbol
-  std::string vtable_var_id = comp.type().subtype().identifier().as_string() +
-                              "@" + ctor_type.get("#member_name").as_string();
+  std::string vtable_var_id = clang_cpp_convertert::vbase_offset_type_prefix;
+  for (auto it = id_path_to_base.rbegin(); it != id_path_to_base.rend(); ++it)
+  {
+    vtable_var_id += *it;
+    if (it != id_path_to_base.rend() - 1)
+    {
+      vtable_var_id += "@";
+    }
+  }
+  assert(id_path_to_base.at(0) == ctor_type.get("#member_name").as_string());
+  if (id_path_to_base.size() == 1)
+  {
+    vtable_var_id += "@" + id_path_to_base.at(0);
+  }
   const symbolt *vtable_var_symb = namespacet(context).lookup(vtable_var_id);
   assert(vtable_var_symb);
 
