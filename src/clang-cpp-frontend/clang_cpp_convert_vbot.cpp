@@ -195,15 +195,13 @@ void clang_cpp_convertert::add_vbo_table_variable_symbols(
 
   // Find all bases that have a virtual base themselves
   std::set<const clang::CXXRecordDecl *> bases_with_vbases;
-  cxxrd.forallBases(
-    [&bases_with_vbases](const clang::CXXRecordDecl *base)
+  cxxrd.forallBases([&bases_with_vbases](const clang::CXXRecordDecl *base) {
+    if (base->getNumVBases() > 0)
     {
-      if (base->getNumVBases() > 0)
-      {
-        bases_with_vbases.insert(base);
-      }
-      return true;
-    });
+      bases_with_vbases.insert(base);
+    }
+    return true;
+  });
   // This class also has a vbase even if itself is not a base.
   bases_with_vbases.insert(&cxxrd);
 
@@ -212,14 +210,14 @@ void clang_cpp_convertert::add_vbo_table_variable_symbols(
     clang::CXXBasePaths paths;
     cxxrd.lookupInBases(
       [&base](
-        const clang::CXXBaseSpecifier *specifier, clang::CXXBasePath &path)
-      { return specifier->getType()->getAsCXXRecordDecl() == base; },
+        const clang::CXXBaseSpecifier *specifier, clang::CXXBasePath &path) {
+        return specifier->getType()->getAsCXXRecordDecl() == base;
+      },
       paths);
     bool seen = false;
     cxxrd.lookupInBases(
       [&base, &seen](
-        const clang::CXXBaseSpecifier *specifier, clang::CXXBasePath &path)
-      {
+        const clang::CXXBaseSpecifier *specifier, clang::CXXBasePath &path) {
         assert(path.size() > 0);
         if (seen)
           return false;
