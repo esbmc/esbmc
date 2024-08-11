@@ -850,7 +850,9 @@ void execution_statet::get_expr_globals(
       !symbol->static_lifetime)
     {
       expr2tc tmp = expr;
+      /* Rename it so that it can be dereferenced in current state */
       cur_state->rename(tmp);
+      /* Collect all the objects pointed to by the pointer */
       expr2tc deref = dereference2tc(to_pointer_type(tmp->type).subtype, tmp);
       value_setst::valuest dest;
       cur_state->value_set.get_reference_set(deref, dest);
@@ -867,7 +869,7 @@ void execution_statet::get_expr_globals(
           if (!s)
             continue;
           point_to_global = s->static_lifetime || s->type.is_dynamic_set();
-
+          /* Stop when the global symbol is found */
           if (point_to_global)
             break;
         }
