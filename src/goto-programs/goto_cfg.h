@@ -61,6 +61,8 @@ public:
   static void foreach_bb(const std::shared_ptr<basic_block> &start, F);
 };
 
+using CFGNode = std::shared_ptr<goto_cfg::basic_block>;
+
 /**
    * @brieft Dominator class to compute all dominator info
    *
@@ -70,10 +72,8 @@ public:
    */
 struct Dominator
 {
-  using Node = std::shared_ptr<goto_cfg::basic_block>;
-
   /// First node in the CFG
-  const Node &start;
+  const CFGNode &start;
 
   /**
      * @brief Dominator Tree has the property that a parent dominates its
@@ -82,11 +82,11 @@ struct Dominator
   struct DomTree
   {
     DomTree(const Dominator &dom);
-    const Node &root;
-    std::unordered_map<Node, std::unordered_set<Node>> edges;
+    const CFGNode &root;
+    std::unordered_map<CFGNode, std::unordered_set<CFGNode>> edges;
 
-    std::unordered_map<Node, size_t> get_levels() const;
-    std::unordered_set<Node> get_subtree(const Node &n) const;
+    std::unordered_map<CFGNode, size_t> get_levels() const;
+    std::unordered_set<CFGNode> get_subtree(const CFGNode &n) const;
   };
 
   /**
@@ -98,9 +98,9 @@ struct Dominator
   struct DJGraph
   {
     const DomTree tree;
-    DJGraph(const Dominator::Node &cfg, const Dominator &dom);
+    DJGraph(const CFGNode &cfg, const Dominator &dom);
 
-    using Graph = std::unordered_map<Node, std::unordered_set<Node>>;
+    using Graph = std::unordered_map<CFGNode, std::unordered_set<CFGNode>>;
 
     /// J-Edges are x->y edges from the CFG such that x !sdom y. y is called join node
     Graph _jedges;
@@ -112,42 +112,43 @@ struct Dominator
     void dump() const;
   };
 
-  Dominator(const Node &start) : start(start)
+  Dominator(const CFGNode &start) : start(start)
   {
     compute_dominators();
+    dj = std::make_shared<Dominator::DJGraph>(start, *this); 
   }
 
   // Evaluates whether n1 dom n2
-  inline bool dom(const Node &n1, const Node &n2) const
+  inline bool dom(const CFGNode &n1, const CFGNode &n2) const
   {
     return dom(n2).count(n1);
   }
 
-  inline bool sdom(const Node &n1, const Node &n2) const
+  inline bool sdom(const CFGNode &n1, const CFGNode &n2) const
   {
     return n1 != n2 && dom(n1, n2);
   }
 
   // Returns the immediate dominator of n.  The idom of a
   // node n1 is the unique node n2 that n2 sdom n1 but does not sdom any other node that sdom n1.
-  Node idom(const Node &n) const;
+  CFGNode idom(const CFGNode &n) const;
 
   void dump_dominators() const;
   void dump_idoms() const;
 
-  std::unordered_set<Node> dom_frontier(const Node &n) const;
-  std::unordered_set<Node>
-  dom_frontier(const std::unordered_set<Node> &nodes) const;
-  std::unordered_set<Node>
-  iterated_dom_frontier(const std::unordered_set<Node> &n) const;
+  std::unordered_set<CFGNode> dom_frontier(const CFGNode &n) const;
+  std::unordered_set<CFGNode>
+  dom_frontier(const std::unordered_set<CFGNode> &nodes) const;
+  std::unordered_set<CFGNode>
+  iterated_dom_frontier(const std::unordered_set<CFGNode> &n) const;
 
   std::shared_ptr<DJGraph> dj;
 
 private:
   void compute_dominators();
-  std::unordered_map<Node, std::unordered_set<Node>> _dominators;
+  std::unordered_map<CFGNode, std::unordered_set<CFGNode>> _dominators;
   // Get dominators of a node
-  inline std::unordered_set<Node> dom(const Node &node) const
+  inline std::unordered_set<CFGNode> dom(const CFGNode &node) const
   {
     return _dominators.at(node);
   }
@@ -155,8 +156,6 @@ private:
 
 class ssa_promotion
 {
-  using Node = std::shared_ptr<goto_cfg::basic_block>;
-
 public:
   ssa_promotion(goto_cfg &cfg, goto_functionst &goto_functions, contextt &context) : cfg(cfg), goto_functions(goto_functions), context(context)
   {
@@ -165,7 +164,7 @@ public:
   void promote();
 
 protected:
-  void promote_node(goto_programt &P, const Node &n);
+  void promote_node(goto_programt &P, const CFGNode &n);
 
 private:
   std::unordered_set<std::string> collect_symbols();

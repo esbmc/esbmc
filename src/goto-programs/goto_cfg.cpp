@@ -5,7 +5,6 @@
 
 goto_cfg::goto_cfg(goto_functionst &goto_functions)
 {
-
   Forall_goto_functions (f_it, goto_functions)
   {
     if (!f_it->second.body_available)
@@ -232,20 +231,20 @@ void Dominator::compute_dominators()
   // version by Lengauer-Tarjan.
 
   // Computes dominator of a node
-  std::unordered_map<Node, std::unordered_set<Node>> dt;
+  std::unordered_map<CFGNode, std::unordered_set<CFGNode>> dt;
 
   // 1. Sets all nodes dominators to TOP
 
-  std::unordered_set<Node> top;
-  goto_cfg::foreach_bb(start, [&top](const Node &n) { top.insert(n); });
+  std::unordered_set<CFGNode> top;
+  goto_cfg::foreach_bb(start, [&top](const CFGNode &n) { top.insert(n); });
 
-  goto_cfg::foreach_bb(start, [&dt, &top](const Node &n) { dt[n] = top; });
+  goto_cfg::foreach_bb(start, [&dt, &top](const CFGNode &n) { dt[n] = top; });
 
   /*
     Dom(n) = {n}, if n = start
              {n} `union` (intersec_pred Dom(p))
    */
-  dt[start] = std::unordered_set<Node>({start});
+  dt[start] = std::unordered_set<CFGNode>({start});
 
   std::vector<std::shared_ptr<goto_cfg::basic_block>> worklist{start};
   for (const auto &suc : start->successors)
@@ -260,7 +259,7 @@ void Dominator::compute_dominators()
       continue;
 
     // Get the intersection of all the predecessors
-    std::unordered_set<Node> intersection = top;
+    std::unordered_set<CFGNode> intersection = top;
     for (const auto &pred : dominator_node->predecessors)
     {
       assert(dt.count(pred));
@@ -270,7 +269,7 @@ void Dominator::compute_dominators()
     }
 
     // Union of node with its predecessor intersection
-    std::unordered_set<Node> result({dominator_node});
+    std::unordered_set<CFGNode> result({dominator_node});
     for (const auto &item : intersection)
       result.insert(item);
 
@@ -290,7 +289,7 @@ void Dominator::dump_dominators() const
 {
   for (const auto &[node, edges] : _dominators)
   {
-    log_status("Node");
+    log_status("CFGNode");
     node->begin->dump();
 
     log_status("Dominated");
@@ -299,9 +298,9 @@ void Dominator::dump_dominators() const
   }
 }
 
-Dominator::Node Dominator::idom(const Node &n) const
+CFGNode Dominator::idom(const CFGNode &n) const
 {
-  std::vector<Node> sdoms;
+  std::vector<CFGNode> sdoms;
   const auto &n_dominators = dom(n);
   std::copy_if(
     n_dominators.begin(),
@@ -309,10 +308,10 @@ Dominator::Node Dominator::idom(const Node &n) const
     std::back_inserter(sdoms),
     [&n, this](const auto &item) { return sdom(item, n); });
 
-  for (const Node &n0 : sdoms)
+  for (const CFGNode &n0 : sdoms)
   {
     bool valid_result = true;
-    for (const Node &n1 : sdoms)
+    for (const CFGNode &n1 : sdoms)
     {
       if (sdom(n0, n1))
       {
@@ -334,49 +333,49 @@ void Dominator::dump_idoms() const
   log_status("Root: {}", dt.root->uuid);
   for (const auto &[key, value] : dt.edges)
   {
-    log_status("Node: {}", key->uuid);
+    log_status("CFGNode: {}", key->uuid);
     log_status("Edges");
     for (const auto &n : value)
       log_status("\t{}", n->uuid);
   }
 }
 
-std::unordered_set<Dominator::Node> Dominator::dom_frontier(const Node &n) const
+std::unordered_set<CFGNode> Dominator::dom_frontier(const CFGNode &n) const
 {
   assert(dj);
-  std::unordered_set<Dominator::Node> result;
+  std::unordered_set<CFGNode> result;
   const auto levels = dj->tree.get_levels();
-  for (const Node &y : dj->tree.get_subtree(n))
+  for (const CFGNode &y : dj->tree.get_subtree(n))
   {
-    for (const Node &z : dj->_jedges[y])
+    for (const CFGNode &z : dj->_jedges[y])
       if (levels.at(z) <= levels.at(n))
         result.insert(z);
   }
   return result;
 }
 
-std::unordered_set<Dominator::Node>
-Dominator::dom_frontier(const std::unordered_set<Dominator::Node> &nodes) const
+std::unordered_set<CFGNode>
+Dominator::dom_frontier(const std::unordered_set<CFGNode> &nodes) const
 {
   assert(nodes.size() > 0);
 
-  std::unordered_set<Dominator::Node> result;
+  std::unordered_set<CFGNode> result;
 
-  for (const Node &n : nodes)
-    for (const Node &df : dom_frontier(n))
+  for (const CFGNode &n : nodes)
+    for (const CFGNode &df : dom_frontier(n))
       result.insert(df);
 
   return result;
 }
 
-std::unordered_set<Dominator::Node>
-Dominator::iterated_dom_frontier(const std::unordered_set<Node> &nodes) const
+std::unordered_set<CFGNode>
+Dominator::iterated_dom_frontier(const std::unordered_set<CFGNode> &nodes) const
 {
   assert(dj);
   assert(nodes.size() > 0);
   // TODO: There is a linear solution by SREEDHAR using PiggyBanks
-  std::unordered_set<Dominator::Node> result = dom_frontier(nodes);
-  std::unordered_set<Dominator::Node> result2 = dom_frontier(result);
+  std::unordered_set<CFGNode> result = dom_frontier(nodes);
+  std::unordered_set<CFGNode> result2 = dom_frontier(result);
 
   while (1)
   {
@@ -397,16 +396,16 @@ Dominator::iterated_dom_frontier(const std::unordered_set<Node> &nodes) const
   return result;
 }
 
-Dominator::DJGraph::DJGraph(const Dominator::Node &cfg, const Dominator &dom)
+Dominator::DJGraph::DJGraph(const CFGNode &cfg, const Dominator &dom)
   : tree(dom)
 {
   // A DJ-Graph is a graph composed by D-Edges and J-Edges
   _graph = tree.edges;
   _dedges = tree.edges;
-  auto func = [this, &dom](const Node &x)
+  auto func = [this, &dom](const CFGNode &x)
   {
-    auto [val, ins] = _graph.insert({x, std::unordered_set<Node>()});
-    for (const Node &y : x->successors)
+    auto [val, ins] = _graph.insert({x, std::unordered_set<CFGNode>()});
+    for (const CFGNode &y : x->successors)
       if (!dom.sdom(x, y))
         val->second.insert(y);
     _jedges[x] = val->second;
@@ -419,28 +418,28 @@ void Dominator::DJGraph::DJGraph::dump() const
   log_status("Dumping DJ-Graph");
   for (const auto &[k, edges] : _graph)
   {
-    log_status("Node {}", k->uuid);
+    log_status("CFGNode {}", k->uuid);
     for (const auto &e : edges)
       log_status("\t->{}", e->uuid);
   }
 }
 
-std::unordered_map<Dominator::Node, size_t>
+std::unordered_map<CFGNode, size_t>
 Dominator::DomTree::get_levels() const
 {
-  std::unordered_map<Dominator::Node, size_t> levels;
+  std::unordered_map<CFGNode, size_t> levels;
   levels[root] = 0;
 
-  std::set<Node> worklist({root});
+  std::set<CFGNode> worklist({root});
   while (!worklist.empty())
   {
-    Node current = *worklist.begin();
+    CFGNode current = *worklist.begin();
     worklist.erase(current);
     if (!edges.count(current))
       continue;
 
     size_t level = levels[current] + 1;
-    for (const Node &nodes : edges.at(current))
+    for (const CFGNode &nodes : edges.at(current))
     {
       levels[nodes] = level;
       worklist.insert(nodes);
@@ -449,15 +448,15 @@ Dominator::DomTree::get_levels() const
   return levels;
 }
 
-std::unordered_set<Dominator::Node>
-Dominator::DomTree::get_subtree(const Node &n) const
+std::unordered_set<CFGNode>
+Dominator::DomTree::get_subtree(const CFGNode &n) const
 {
-  std::unordered_set<Dominator::Node> nodes({n});
-  std::set<Dominator::Node> worklist({n});
+  std::unordered_set<CFGNode> nodes({n});
+  std::set<CFGNode> worklist({n});
 
   while (!worklist.empty())
   {
-    const Node current = *worklist.begin();
+    const CFGNode current = *worklist.begin();
     worklist.erase(current);
 
     if (!edges.count(current))
@@ -477,13 +476,13 @@ Dominator::DomTree::DomTree(const Dominator &dom) : root(dom.start)
 {
   goto_cfg::foreach_bb(
     dom.start,
-    [this, &dom](const Node &n)
+    [this, &dom](const CFGNode &n)
     {
       if (n == root)
         return;
 
-      Node root = dom.idom(n);
-      auto [val, ins] = edges.insert({root, std::unordered_set<Node>()});
+      CFGNode root = dom.idom(n);
+      auto [val, ins] = edges.insert({root, std::unordered_set<CFGNode>()});
       val->second.insert(n);
     });
 }
@@ -528,23 +527,23 @@ void replace_symbols_in_expr(expr2tc &use, symbolt* symbol,  unsigned last_id_in
 }
 
 
-void ssa_promotion::promote_node(goto_programt &P,const Node &n)
+void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
 {
   // Assumption: all declarations initialized through an assignment (which can be nondet)
   using Instruction = std::shared_ptr<goto_programt::instructiont>;
   std::unordered_set<std::string> variables;
-  std::unordered_map<std::string, std::unordered_set<Node>> defBlocks;
+  std::unordered_map<std::string, std::unordered_set<CFGNode>> defBlocks;
   std::unordered_map<std::string, std::unordered_set<Instruction>>
     defInstructions;
 
-  std::unordered_map<std::string, std::unordered_set<Node>> useBlocks;
+  std::unordered_map<std::string, std::unordered_set<CFGNode>> useBlocks;
   std::unordered_map<std::string, std::unordered_set<Instruction>>
     useInstructions;
 
   auto insert_definition = [&variables, &defBlocks, &defInstructions](
                              const irep_idt &var,
                              goto_programt::instructionst::iterator &I,
-                             const Node &bb)
+                             const CFGNode &bb)
   {
     const std::string var_name = var.as_string();
     variables.insert(var_name);
@@ -553,7 +552,7 @@ void ssa_promotion::promote_node(goto_programt &P,const Node &n)
     auto [inst, ins1] =
       defInstructions.insert({var_name, std::unordered_set<Instruction>()});
     auto [block, ins2] =
-      defBlocks.insert({var_name, std::unordered_set<Node>()});
+      defBlocks.insert({var_name, std::unordered_set<CFGNode>()});
 
     defInstructions[var_name].insert(
       std::make_shared<goto_programt::instructiont>(*I));
@@ -563,7 +562,7 @@ void ssa_promotion::promote_node(goto_programt &P,const Node &n)
   auto insert_use = [&variables, &useBlocks, &useInstructions, &defBlocks](
                       const expr2tc &e,
                       goto_programt::instructionst::iterator &I,
-                      const Node &bb)
+                      const CFGNode &bb)
   {
     std::unordered_set<expr2tc, irep2_hash> symbols;
     get_symbols(e, symbols);
@@ -577,7 +576,7 @@ void ssa_promotion::promote_node(goto_programt &P,const Node &n)
       auto [inst, ins1] =
         useInstructions.insert({var_name, std::unordered_set<Instruction>()});
       auto [block, ins2] =
-        useBlocks.insert({var_name, std::unordered_set<Node>()});
+        useBlocks.insert({var_name, std::unordered_set<CFGNode>()});
 
       useInstructions[var_name].insert(
         std::make_shared<goto_programt::instructiont>(*I));
@@ -590,7 +589,7 @@ void ssa_promotion::promote_node(goto_programt &P,const Node &n)
 
   goto_cfg::foreach_bb(
     n,
-    [&insert_definition, &insert_use](const Node &bb)
+    [&insert_definition, &insert_use](const CFGNode &bb)
     {
       for (goto_programt::instructionst::iterator start = bb->begin;
            start != bb->end;
@@ -619,9 +618,6 @@ void ssa_promotion::promote_node(goto_programt &P,const Node &n)
 
   // Compute phi-nodes (dominance frontier of all nodes that defines the variable)
   Dominator info(n);
-  auto ptr = std::make_shared<Dominator::DJGraph>(n, info);
-  auto dj_graph = *ptr;
-  info.dj = ptr; 
   
   for (auto &var : variables)
   {
@@ -663,9 +659,9 @@ void ssa_promotion::promote_node(goto_programt &P,const Node &n)
     }
 
     unsigned counter = 0;
-    std::unordered_map<unsigned, Node> ref_to_nodes; // the cfg locations are no longer reliable
+    std::unordered_map<unsigned, CFGNode> ref_to_nodes; // the cfg locations are no longer reliable
     // Insert phi-nodes
-    for (const Node& phinode : phinodes)
+    for (const CFGNode& phinode : phinodes)
     {
       if (phinode->predecessors.size() != 2)
       {
@@ -712,7 +708,7 @@ void ssa_promotion::promote_node(goto_programt &P,const Node &n)
     }
 
 
-    std::unordered_map<Node, unsigned> last_id_in_bb;
+    std::unordered_map<CFGNode, unsigned> last_id_in_bb;
 
 
     // For each definition rename the symbol.
@@ -735,14 +731,14 @@ void ssa_promotion::promote_node(goto_programt &P,const Node &n)
       }
     }
 
-    auto get_last_defined = [&last_id_in_bb](const Node n) -> unsigned
+    auto get_last_defined = [&last_id_in_bb](const CFGNode n) -> unsigned
     {
       // Back search
-      std::set<Node> visited;
-      std::vector<Node> worklist{n};
+      std::set<CFGNode> visited;
+      std::vector<CFGNode> worklist{n};
       while (!worklist.empty())
       {
-        const Node item = worklist.back();
+        const CFGNode item = worklist.back();
         worklist.pop_back();
 
         if (!visited.insert(item).second)
@@ -758,7 +754,7 @@ void ssa_promotion::promote_node(goto_programt &P,const Node &n)
       abort();      
     };
 
-    auto find_location = [&get_last_defined, &ref_to_nodes, &symbols](const Node start, unsigned id) -> symbolt *
+    auto find_location = [&get_last_defined, &ref_to_nodes, &symbols](const CFGNode start, unsigned id) -> symbolt *
     {
       return symbols[get_last_defined(ref_to_nodes[id])];
     };
