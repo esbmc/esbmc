@@ -529,8 +529,8 @@ void replace_symbols_in_expr(expr2tc &use, symbolt* symbol,  unsigned last_id_in
 
 void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
 {
-  // Assumption: all declarations initialized through an assignment (which can be nondet)
   using Instruction = std::shared_ptr<goto_programt::instructiont>;
+  
   std::unordered_set<std::string> variables;
   std::unordered_map<std::string, std::unordered_set<CFGNode>> defBlocks;
   std::unordered_map<std::string, std::unordered_set<Instruction>>
@@ -540,7 +540,19 @@ void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
   std::unordered_map<std::string, std::unordered_set<Instruction>>
     useInstructions;
 
-  auto insert_definition = [&variables, &defBlocks, &defInstructions](
+  Dominator dom(n);
+
+  /**
+   * Promoting a node to SSA means adding all the phi-nodes for each promotoble
+   * variable. It consists in:
+   *
+   * 1. Identifying information for all variables in the function: name, type, definitions, uses.
+   * 2. Compute the phi-nodes.
+   * 3. Rename all uses and definitions. This consists in numbering the variables accordingly and fixing the
+   *    phi-node connections
+   */
+  
+  const auto insert_definition = [&variables, &defBlocks, &defInstructions](
                              const irep_idt &var,
                              goto_programt::instructionst::iterator &I,
                              const CFGNode &bb)
@@ -548,18 +560,16 @@ void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
     const std::string var_name = var.as_string();
     variables.insert(var_name);
 
-    // TODO: C++20 anonymous var for "ins" :)
-    auto [inst, ins1] =
-      defInstructions.insert({var_name, std::unordered_set<Instruction>()});
-    auto [block, ins2] =
-      defBlocks.insert({var_name, std::unordered_set<CFGNode>()});
+    // TODO: Is there a better way to check whether this was initialized?
+    defInstructions.insert({var_name, std::unordered_set<Instruction>()});
+    defBlocks.insert({var_name, std::unordered_set<CFGNode>()});
 
     defInstructions[var_name].insert(
       std::make_shared<goto_programt::instructiont>(*I));
     defBlocks[var_name].insert(bb);
   };
 
-  auto insert_use = [&variables, &useBlocks, &useInstructions, &defBlocks](
+  const auto insert_use = [&variables, &useBlocks, &useInstructions](
                       const expr2tc &e,
                       goto_programt::instructionst::iterator &I,
                       const CFGNode &bb)
@@ -572,18 +582,15 @@ void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
       const std::string var_name = to_symbol2t(var).thename.as_string();
       variables.insert(var_name);
 
-      // TODO: C++20 anonymous var for "ins" :)
-      auto [inst, ins1] =
-        useInstructions.insert({var_name, std::unordered_set<Instruction>()});
-      auto [block, ins2] =
-        useBlocks.insert({var_name, std::unordered_set<CFGNode>()});
+      // TODO: Is there a better way to check whether this was initialized?
+      useInstructions.insert({var_name, std::unordered_set<Instruction>()});
+      useBlocks.insert({var_name, std::unordered_set<CFGNode>()});
 
       useInstructions[var_name].insert(
         std::make_shared<goto_programt::instructiont>(*I));
 
-      // TODO: Only consider a use block if the value is used before redefined
-      //if(!defBlocks[var_name].count(bb))
-        useBlocks[var_name].insert(bb);
+      // TODO: Only consider a use block if the value is used before redefined (this can optimize step 2 if we use live analysis)     
+      useBlocks[var_name].insert(bb);
     }
   };
 
@@ -616,26 +623,20 @@ void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
       }
     });
 
-  // Compute phi-nodes (dominance frontier of all nodes that defines the variable)
-  Dominator info(n);
-  
-  for (auto &var : variables)
+
+  // TODO: This could be a method
+  for (const std::string &var : variables)
   {
-    const type2tc symbol_type = int_type2(); // todo: get symbol
-    
     // Some symbols might come from globals or functions
     if (defBlocks[var].empty()) 
       continue;
-
-    const auto phinodes = info.dom_frontier(defBlocks[var]);
-
-    // For each definition, create a symbol:
-    size_t symbol_counter = defInstructions[var].size() + phinodes.size();
+    const type2tc symbol_type = int_type2(); // TODO: get symbol
+    const auto phinodes = dom.dom_frontier(defBlocks[var]);
 
     // Lets add all symbols at the beginning
     std::vector<symbolt *> symbols;
     std::unordered_map<std::string, unsigned> symbol_to_index;
-    for (int i = 0; i < symbol_counter; i++)
+    for (size_t i = 0; i < defInstructions[var].size() + phinodes.size(); i++)
     {
       symbolt symbol;
       symbol.type = migrate_type_back(symbol_type);
@@ -649,13 +650,11 @@ void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
       symbols.push_back(symbol_in_context);
       symbol_to_index[symbol_in_context->id.as_string()] = i;
 
-      
       goto_programt::instructiont decl;
       decl.make_decl();
       decl.code = code_decl2tc(symbol_type, symbol_in_context->id);
       decl.location = n->begin->location;
       P.insert_swap(n->begin, decl);
-      
     }
 
     unsigned counter = 0;
@@ -679,7 +678,6 @@ void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
       const expr2tc lhs = symbol2tc(symbol_type, symbols[0]->id);
       const expr2tc rhs = symbol2tc(symbol_type, symbols[0]->id);
       auto pred_it = phinode->predecessors.begin();
-
 
       unsigned lhs_location = 0;
       unsigned rhs_location = 0;
@@ -822,7 +820,6 @@ void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
         }       
       }
     }
-    // Kill all symbols at the end ?
+    // No need to kill the new symbols as they are always memsafe
   }
 }
-
