@@ -1122,6 +1122,37 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  case clang::Stmt::LambdaExprClass:
+  {
+    const clang::LambdaExpr &lambda_expr =
+      static_cast<const clang::LambdaExpr &>(stmt);
+
+    if (lambda_expr.capture_size() > 0)
+    {
+      log_error("ESBMC does not support lambdas with captures for now");
+      return true;
+    }
+
+    get_struct_union_class(*lambda_expr.getLambdaClass(), true);
+
+    // Construct a new object of the lambda class
+    typet lambda_class_type;
+    if (get_type(
+          *lambda_expr.getLambdaClass()->getTypeForDecl(),
+          lambda_class_type,
+          true))
+      return true;
+    new_expr = gen_zero(pointer_typet(lambda_class_type));
+    // Generating a null pointer only works as long as we don't have captures
+    // When we want to add support for captures, we have to probably call
+    // the lambda class constructor here
+    // See https://cppinsights.io/ which is a great tool to see how lambdas
+    // are translated to C++ code
+
+    break;
+  }
+
+
   default:
     if (clang_c_convertert::get_expr(stmt, new_expr))
       return true;
