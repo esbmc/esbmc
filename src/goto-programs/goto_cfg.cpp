@@ -1,5 +1,6 @@
 #include "c_types.h"
 #include "irep2/irep2_expr.h"
+#include "irep2/irep2_utils.h"
 #include "std_code.h"
 #include <goto-programs/goto_cfg.h>
 
@@ -522,23 +523,104 @@ void replace_symbols_in_expr(expr2tc &use, symbolt* symbol,  unsigned last_id_in
   use->Foreach_operand([symbol, last_id_in_bb, var_name](expr2tc & e)
   {
     replace_symbols_in_expr(e, symbol, last_id_in_bb, var_name);
-  }); 
-  
+  });
+}
+
+std::unordered_map<std::string, ssa_promotion::symbol_information>
+ssa_promotion::extract_symbol_information(const CFGNode &start) const
+{
+  std::unordered_map<std::string, symbol_information> symbol_map;
+  std::unordered_set<std::string> unpromotable_symbols;
+
+  const auto insert_definition = [&symbol_map](
+                                   const irep_idt &var,
+                                   goto_programt::instructionst::iterator &I,
+                                   const CFGNode &bb)
+  {
+    assert(symbol_map.count(var.as_string()));
+    symbol_information &sym = symbol_map[var.as_string()];
+
+    sym.def_blocks.insert(bb);
+    sym.def_instructions.insert(std::make_shared<goto_programt::instructiont>(*I));
+  };
+
+  const auto insert_use = [&symbol_map, &unpromotable_symbols](
+                            const expr2tc &e,
+                            goto_programt::instructionst::iterator &I,
+                            const CFGNode &bb)
+  {
+    std::unordered_set<expr2tc, irep2_hash> symbols;
+    get_addr_symbols(e, symbols);
+    for (const expr2tc &sym_expr : symbols)
+    {
+      assert(is_symbol2t(var));
+      const symbol2t &symbol = to_symbol2t(sym_expr);
+      unpromotable_symbols.insert(symbol.thename.as_string());
+    }
+    
+    symbols.clear();
+    get_symbols(e, symbols);
+    for (const expr2tc &sym_expr : symbols)
+    {
+      assert(is_symbol2t(var));
+      const symbol2t &symbol = to_symbol2t(sym_expr);
+      assert(symbol_map.count(symbol.thename.as_string()));
+      symbol_information &sym = symbol_map[symbol.thename.as_string()];
+
+      // TODO: When using live analysis, only consider a use-block if the value is used before redefined
+      sym.use_blocks.insert(bb);
+      sym.use_instructions.insert(
+        std::make_shared<goto_programt::instructiont>(*I));
+    }
+  };
+
+  goto_cfg::foreach_bb(
+    start,
+    [&insert_definition, &insert_use, &symbol_map](const CFGNode &bb)
+    {
+      for (goto_programt::instructionst::iterator it = bb->begin;
+           it != bb->end;
+           it++)
+      {
+        if (it->is_decl())
+        {
+          symbol_information info;
+          const code_decl2t &decl = to_code_decl2t(it->code);
+          info.type = decl.type;
+          symbol_map.insert({decl.value.as_string(), info});
+          // TODO: I am assuming that all declarations are followed by
+          //       an init assignment.
+        }
+          
+        else if (it->is_assign())
+        {
+          const expr2tc &target = to_code_assign2t(it->code).target;
+          if (is_symbol2t(target))
+            insert_definition(to_symbol2t(target).thename, it, bb);
+
+          insert_use(to_code_assign2t(it->code).source, it, bb);
+        }
+        else if (it->is_function_call())
+          for (const auto &op : to_code_function_call2t(it->code).operands)
+            insert_use(op, it, bb);
+        else
+        {
+          insert_use(it->code, it, bb);
+          insert_use(it->guard, it, bb);
+        }
+      }
+    });
+
+  // TODO: filter unpromotable
+  // TODO: add mode
+
+
+  return symbol_map;
 }
 
 
 void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
 {
-  using Instruction = std::shared_ptr<goto_programt::instructiont>;
-  
-  std::unordered_set<std::string> variables;
-  std::unordered_map<std::string, std::unordered_set<CFGNode>> defBlocks;
-  std::unordered_map<std::string, std::unordered_set<Instruction>>
-    defInstructions;
-
-  std::unordered_map<std::string, std::unordered_set<CFGNode>> useBlocks;
-  std::unordered_map<std::string, std::unordered_set<Instruction>>
-    useInstructions;
 
   Dominator dom(n);
 
@@ -551,98 +633,31 @@ void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
    * 3. Rename all uses and definitions. This consists in numbering the variables accordingly and fixing the
    *    phi-node connections
    */
-  
-  const auto insert_definition = [&variables, &defBlocks, &defInstructions](
-                             const irep_idt &var,
-                             goto_programt::instructionst::iterator &I,
-                             const CFGNode &bb)
-  {
-    const std::string var_name = var.as_string();
-    variables.insert(var_name);
 
-    // TODO: Is there a better way to check whether this was initialized?
-    defInstructions.insert({var_name, std::unordered_set<Instruction>()});
-    defBlocks.insert({var_name, std::unordered_set<CFGNode>()});
-
-    defInstructions[var_name].insert(
-      std::make_shared<goto_programt::instructiont>(*I));
-    defBlocks[var_name].insert(bb);
-  };
-
-  const auto insert_use = [&variables, &useBlocks, &useInstructions](
-                      const expr2tc &e,
-                      goto_programt::instructionst::iterator &I,
-                      const CFGNode &bb)
-  {
-    std::unordered_set<expr2tc, irep2_hash> symbols;
-    get_symbols(e, symbols);
-    for (const auto &var : symbols)
-    {
-      assert(is_symbol2t(var));
-      const std::string var_name = to_symbol2t(var).thename.as_string();
-      variables.insert(var_name);
-
-      // TODO: Is there a better way to check whether this was initialized?
-      useInstructions.insert({var_name, std::unordered_set<Instruction>()});
-      useBlocks.insert({var_name, std::unordered_set<CFGNode>()});
-
-      useInstructions[var_name].insert(
-        std::make_shared<goto_programt::instructiont>(*I));
-
-      // TODO: Only consider a use block if the value is used before redefined (this can optimize step 2 if we use live analysis)     
-      useBlocks[var_name].insert(bb);
-    }
-  };
-
-  goto_cfg::foreach_bb(
-    n,
-    [&insert_definition, &insert_use](const CFGNode &bb)
-    {
-      for (goto_programt::instructionst::iterator start = bb->begin;
-           start != bb->end;
-           start++)
-      {
-        if (start->is_decl());
-          //insert_definition(to_code_decl2t(start->code).value, start, bb);
-        else if (start->is_assign())
-        {
-          const expr2tc &target = to_code_assign2t(start->code).target;
-          if (is_symbol2t(target))
-            insert_definition(to_symbol2t(target).thename, start, bb);
-
-          insert_use(to_code_assign2t(start->code).source, start, bb);
-        }
-        else if (start->is_function_call())
-          for (const auto &op : to_code_function_call2t(start->code).operands)
-            insert_use(op, start, bb);
-        else
-        {
-          insert_use(start->code, start, bb);
-          insert_use(start->guard, start, bb);
-        }
-      }
-    });
-
+  auto symbol_map = extract_symbol_information(n);
 
   // TODO: This could be a method
-  for (const std::string &var : variables)
-  {
+  for (auto &[var,info] : symbol_map)
+  {    
     // Some symbols might come from globals or functions
-    if (defBlocks[var].empty()) 
+    if (info.def_blocks.empty() || !info.type)
+    {
+      log_warning("Could not promote {}", var);
       continue;
-    const type2tc symbol_type = int_type2(); // TODO: get symbol
-    const auto phinodes = dom.dom_frontier(defBlocks[var]);
+    }
+    
+    const auto phinodes = dom.dom_frontier(info.def_blocks);
 
     // Lets add all symbols at the beginning
     std::vector<symbolt *> symbols;
     std::unordered_map<std::string, unsigned> symbol_to_index;
-    for (size_t i = 0; i < defInstructions[var].size() + phinodes.size(); i++)
+    for (size_t i = 0; i < info.def_instructions.size() + phinodes.size(); i++)
     {
       symbolt symbol;
-      symbol.type = migrate_type_back(symbol_type);
+      symbol.type = migrate_type_back(info.type);
       symbol.id = fmt::format("{}.{}", var, i);
       symbol.name = symbol.id;
-      symbol.mode = "C"; // todo: get mode
+      symbol.mode = "C"; // TODO: get mode
       symbol.location = n->begin->location;
 
       symbolt *symbol_in_context = context.move_symbol_to_context(symbol);
@@ -652,7 +667,7 @@ void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
 
       goto_programt::instructiont decl;
       decl.make_decl();
-      decl.code = code_decl2tc(symbol_type, symbol_in_context->id);
+      decl.code = code_decl2tc(info.type, symbol_in_context->id);
       decl.location = n->begin->location;
       P.insert_swap(n->begin, decl);
     }
@@ -673,10 +688,10 @@ void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
       phi_instr.make_assignment();
       phi_instr.location = phinode->begin->location;
       phi_instr.function = phinode->begin->function;
-      auto phi_symbol = symbol2tc(symbol_type, symbols[counter++]->id);
+      auto phi_symbol = symbol2tc(info.type, symbols[counter++]->id);
 
-      const expr2tc lhs = symbol2tc(symbol_type, symbols[0]->id);
-      const expr2tc rhs = symbol2tc(symbol_type, symbols[0]->id);
+      const expr2tc lhs = symbol2tc(info.type, symbols[0]->id);
+      const expr2tc rhs = symbol2tc(info.type, symbols[0]->id);
       auto pred_it = phinode->predecessors.begin();
 
       unsigned lhs_location = 0;
@@ -697,12 +712,12 @@ void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
         ref_to_nodes[rhs_location] = *pred_it;
       }
       const expr2tc phi_expr =
-        phi2tc(symbol_type, lhs, rhs, lhs_location, rhs_location);
+        phi2tc(info.type, lhs, rhs, lhs_location, rhs_location);
       phi_instr.code = code_assign2tc(phi_symbol, phi_expr);
 
       P.insert_swap(phinode->begin, phi_instr);
-      defBlocks[var].insert(phinode);
-      useBlocks[var].insert(phinode);
+      info.def_blocks.insert(phinode);
+      info.use_blocks.insert(phinode);
     }
 
 
@@ -710,7 +725,7 @@ void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
 
 
     // For each definition rename the symbol.
-    for (auto defBlock : defBlocks[var])
+    for (auto defBlock : info.def_blocks)
     {
       for (auto instruction = defBlock->begin; instruction != defBlock->end; instruction++)
       { 
@@ -724,7 +739,7 @@ void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
         // TODO: assert(code_expr.target->type == symbol_type);
 
         last_id_in_bb[defBlock] = counter;
-        auto new_symbol = symbol2tc(symbol_type, symbols[counter++]->id);
+        auto new_symbol = symbol2tc(info.type, symbols[counter++]->id);
         instruction->code = code_assign2tc(new_symbol, code_expr.source);        
       }
     }
@@ -758,7 +773,7 @@ void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
     };
 
     // For each use rename the symbol
-    for (auto useBlock : useBlocks[var])
+    for (auto useBlock : info.use_blocks)
     {
       unsigned current_last_id = 0;
       for (auto instruction = useBlock->begin; instruction != useBlock->end; instruction++)
@@ -798,10 +813,10 @@ void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
             assert(has_prefix(rhs_symbol->id, var));
           
             to_phi2t(assign.source).lhs = symbol2tc(
-              symbol_type,
+              info.type,
               lhs_symbol->id);
             to_phi2t(assign.source).rhs = symbol2tc(
-              symbol_type,
+              info.type,
               rhs_symbol->id);            
           }
           if (is_symbol2t(assign.target) &&

@@ -160,15 +160,13 @@ class ssa_promotion
 public:
   ssa_promotion(goto_cfg &cfg, goto_functionst &goto_functions, contextt &context) : cfg(cfg), goto_functions(goto_functions), context(context) {};
 
-  
+
   void promote();
 
-protected:
-  void promote_node(goto_programt &P, const CFGNode &n);
-
-  struct SymbolInformation
+  struct symbol_information
   {
     using Instruction = std::shared_ptr<goto_programt::instructiont>;
+
     type2tc type;
     std::string mode;
     std::unordered_set<CFGNode> def_blocks;
@@ -176,8 +174,15 @@ protected:
     std::unordered_set<Instruction> def_instructions;
     std::unordered_set<Instruction> use_instructions;
 
-    symbolt* add_to_context(contextt &ctx, const locationt loc, size_t id) const;
+    symbolt *
+    add_to_context(contextt &ctx, const locationt loc, size_t id) const;    
   };
+
+protected:
+  void promote_node(goto_programt &P, const CFGNode &n);
+  std::unordered_map<std::string, symbol_information> extract_symbol_information(const CFGNode &n) const;
+
+  
 
 private:
   std::unordered_set<std::string> collect_symbols();
