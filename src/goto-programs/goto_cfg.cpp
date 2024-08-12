@@ -537,7 +537,9 @@ ssa_promotion::extract_symbol_information(const CFGNode &start) const
                                    goto_programt::instructionst::iterator &I,
                                    const CFGNode &bb)
   {
-    assert(symbol_map.count(var.as_string()));
+    // Are we dealing with a global?
+    if(!symbol_map.count(var.as_string()))
+      return;;
     symbol_information &sym = symbol_map[var.as_string()];
 
     sym.def_blocks.insert(bb);
@@ -553,7 +555,7 @@ ssa_promotion::extract_symbol_information(const CFGNode &start) const
     get_addr_symbols(e, symbols);
     for (const expr2tc &sym_expr : symbols)
     {
-      assert(is_symbol2t(var));
+      assert(is_symbol2t(sym_expr));
       const symbol2t &symbol = to_symbol2t(sym_expr);
       unpromotable_symbols.insert(symbol.thename.as_string());
     }
@@ -562,7 +564,7 @@ ssa_promotion::extract_symbol_information(const CFGNode &start) const
     get_symbols(e, symbols);
     for (const expr2tc &sym_expr : symbols)
     {
-      assert(is_symbol2t(var));
+      assert(is_symbol2t(sym_expr));
       const symbol2t &symbol = to_symbol2t(sym_expr);
       assert(symbol_map.count(symbol.thename.as_string()));
       symbol_information &sym = symbol_map[symbol.thename.as_string()];
@@ -596,7 +598,7 @@ ssa_promotion::extract_symbol_information(const CFGNode &start) const
         {
           const expr2tc &target = to_code_assign2t(it->code).target;
           if (is_symbol2t(target))
-            insert_definition(to_symbol2t(target).thename, it, bb);
+            insert_definition(to_symbol2t(target).thename, it, bb);  
 
           insert_use(to_code_assign2t(it->code).source, it, bb);
         }
@@ -611,10 +613,11 @@ ssa_promotion::extract_symbol_information(const CFGNode &start) const
       }
     });
 
-  // TODO: filter unpromotable
-  // TODO: add mode
+  for (auto symbol : unpromotable_symbols)
+    symbol_map.erase(symbol);
 
-
+  // TODO: Technically, not all address uses needs to be avoided
+  // TODO: Some memsets/memcpy could be replaced with values
   return symbol_map;
 }
 
@@ -636,7 +639,6 @@ void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
 
   auto symbol_map = extract_symbol_information(n);
 
-  // TODO: This could be a method
   for (auto &[var,info] : symbol_map)
   {    
     // Some symbols might come from globals or functions
@@ -719,10 +721,7 @@ void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
       info.def_blocks.insert(phinode);
       info.use_blocks.insert(phinode);
     }
-
-
     std::unordered_map<CFGNode, unsigned> last_id_in_bb;
-
 
     // For each definition rename the symbol.
     for (auto defBlock : info.def_blocks)
@@ -736,7 +735,6 @@ void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
         if (!(is_symbol2t(code_expr.target) &&
               to_symbol2t(code_expr.target).thename == var))
           continue;
-        // TODO: assert(code_expr.target->type == symbol_type);
 
         last_id_in_bb[defBlock] = counter;
         auto new_symbol = symbol2tc(info.type, symbols[counter++]->id);
