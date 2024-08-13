@@ -50,6 +50,19 @@ public:
   void adjust_reference(exprt &expr) override;
   void adjust_new(exprt &expr);
   void adjust_cpp_member(member_exprt &expr);
+
+  /**
+   * Adjusts a C++ pseudo-destructor call expression.
+   *
+   * This method is responsible for handling adjustments specific to
+   * pseudo-destructor calls in C++ code. The converter has
+   * generated a function call to the pseudo-destructor, but there
+   * is nothing to actually call. Instead, only the base object of
+   * the destructor call is evaluted.
+   *
+   * @param expr The expression representing the pseudo-destructor call
+   */
+  void adjust_cpp_pseudo_destructor_call(exprt &expr);
   void adjust_if(exprt &expr) override;
   void adjust_side_effect_throw(side_effect_exprt &expr);
 
