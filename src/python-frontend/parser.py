@@ -1,5 +1,15 @@
-import ast
 import sys
+
+# Detect the Python version
+PY3 = sys.version_info[0] == 3
+
+if not PY3:
+    print("Python version: {}.{}.{}".format(sys.version_info.major, sys.version_info.minor, sys.version_info.micro))
+    print("ERROR: Please ensure Python 3 is available in your environment.")
+    sys.exit(2)
+
+
+import ast
 import importlib.util
 import json
 import os
@@ -23,11 +33,12 @@ def import_module_by_name(module_name):
         module = importlib.import_module(module_name)
         return module
     except ImportError:
-        print(f"Error: Module '{module_name}' not found.")
-        print(f"Please install it with: pip3 install {module_name}")
+        print("Error: Module '{}' not found.".format(module_name))
+        print("Please install it with: pip3 install {}".format(module_name))
         sys.exit(1)
 
-def encode_bytes(value: bytes) -> str:
+
+def encode_bytes(value):
     return base64.b64encode(value).decode('ascii')
 
 def add_type_annotation(node):
@@ -103,14 +114,15 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir):
     ast_json["ast_output_dir"] = output_dir
 
     # Construct JSON filename
-    json_filename = os.path.join(output_dir, f"{os.path.basename(python_filename[:-3])}.json")
+    json_filename = os.path.join(output_dir, "{}.json".format(os.path.basename(python_filename[:-3])))
+
 
     # Write AST JSON to file
     try:
         with open(json_filename, "w") as json_file:
             json.dump(ast_json, json_file, indent=4, ensure_ascii=False)
     except Exception as e:
-        print(f"Error writing JSON file: {e}")
+        print("Error writing JSON file: {}".format(e))
 
 
 def main():
