@@ -85,6 +85,7 @@ endif()
 # list of C++98/03 test suites
 set(REGRESSIONS_CPP03 esbmc-cpp/cpp
                       esbmc-cpp/cbmc
+                      esbmc-cpp/destructors
                       esbmc-cpp/polymorphism_bringup
                       esbmc-cpp/inheritance_bringup
                       esbmc-cpp/bug_fixes

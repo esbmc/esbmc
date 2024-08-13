@@ -63,6 +63,12 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
   {
     adjust_side_effect_throw(expr);
   }
+  else if (
+    statement == "function_call" && expr.operands().size() == 2 &&
+    expr.op0().id() == "cpp-pseudo-destructor")
+  {
+    adjust_cpp_pseudo_destructor_call(expr);
+  }
   else
     clang_c_adjust::adjust_side_effect(expr);
 }
@@ -103,6 +109,22 @@ void clang_cpp_adjust::adjust_member(member_exprt &expr)
   {
     adjust_cpp_member(expr);
   }
+}
+
+void clang_cpp_adjust::adjust_cpp_pseudo_destructor_call(exprt &expr)
+{
+  // We have a call to a pseudo destructor.
+  // However, there is nothing to actually call for a pseudo destructor.
+  // Instead, all a pseudo destructor does is to evaluate the base expression.
+  assert(expr.operands().size() == 2);
+
+  exprt &pseudo_destructor = expr.op0();
+  assert(pseudo_destructor.is_not_nil());
+  assert(pseudo_destructor.operands().size() == 1);
+  exprt &destructor_base = pseudo_destructor.op0();
+
+  expr = destructor_base;
+  adjust_expr(expr);
 }
 
 void clang_cpp_adjust::adjust_cpp_member(member_exprt &expr)

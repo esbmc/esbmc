@@ -946,7 +946,14 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
   case clang::Stmt::CXXPseudoDestructorExprClass:
   {
-    new_expr = exprt("pseudo_destructor");
+    const clang::CXXPseudoDestructorExpr &cxxpd =
+      static_cast<const clang::CXXPseudoDestructorExpr &>(stmt);
+    // A pseudo-destructor expression has no run-time semantics beyond evaluating the base expression.
+    exprt base;
+    if (get_expr(*cxxpd.getBase(), base))
+      return true;
+    new_expr = exprt("cpp-pseudo-destructor");
+    new_expr.move_to_operands(base);
     break;
   }
 
