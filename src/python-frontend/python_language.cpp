@@ -67,10 +67,7 @@ bool python_languaget::parse(const std::string &path)
   // Execute python script to generate json file from AST
   std::vector<std::string> args = {parser_path.string(), path, ast_output_dir};
 
-  std::string python_exec("python3");
-#ifdef _WIN32
-  python_exec = "python";
-#endif
+  std::string python_exec("python");
 
   // Create a child process to execute Python
   bp::child process(bp::search_path(python_exec), args);
@@ -78,11 +75,9 @@ bool python_languaget::parse(const std::string &path)
   // Wait for execution
   process.wait();
 
+  // parser.py execution failed
   if (process.exit_code())
-  {
-    log_error("Python execution failed");
-    return true;
-  }
+    exit(process.exit_code());
 
   std::stringstream script_path;
   script_path << ast_output_dir << "/" << script.stem().string() << ".json";
