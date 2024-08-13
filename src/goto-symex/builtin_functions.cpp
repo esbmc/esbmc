@@ -1042,8 +1042,8 @@ static inline expr2tc gen_byte_expression(
 
   expr2tc mask = gen_zero(type);
 
-  const auto eight = constant_int2tc(int_type2(), BigInt(8));
-  const auto one = constant_int2tc(int_type2(), BigInt(1));
+  const auto eight = constant_int2tc(type, BigInt(8));
+  const auto one = constant_int2tc(type, BigInt(1));
   for (unsigned i = 0; i < num_of_bytes; i++)
   {
     result = shl2tc(type, result, eight);
