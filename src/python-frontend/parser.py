@@ -6,7 +6,7 @@ PY3 = sys.version_info[0] == 3
 if not PY3:
     print("Python version: {}.{}.{}".format(sys.version_info.major, sys.version_info.minor, sys.version_info.micro))
     print("ERROR: Please ensure Python 3 is available in your environment.")
-    sys.exit(2)
+    sys.exit(1)
 
 
 import ast
@@ -27,15 +27,23 @@ def is_imported_model(module_name):
     models = ["math"]
     return module_name in models
 
+def is_unsupported_module(module_name):
+    unsuported_modules = ["os"]
+    return module_name in unsuported_modules
+
 
 def import_module_by_name(module_name):
+    if is_unsupported_module(module_name):
+        print("ERROR: \"import {}\" is not supported".format(module_name))
+        sys.exit(3)
+
     try:
         module = importlib.import_module(module_name)
         return module
     except ImportError:
-        print("Error: Module '{}' not found.".format(module_name))
+        print("ERROR: Module '{}' not found.".format(module_name))
         print("Please install it with: pip3 install {}".format(module_name))
-        sys.exit(1)
+        sys.exit(4)
 
 
 def encode_bytes(value):
