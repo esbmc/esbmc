@@ -64,10 +64,13 @@ bool python_languaget::parse(const std::string &path)
   fs::path parser_path(ast_output_dir);
   parser_path /= "parser.py";
 
-  // Execute python script to generate json file from AST
+  // Execute Python script to generate JSON file from AST
   std::vector<std::string> args = {parser_path.string(), path, ast_output_dir};
 
-  std::string python_exec("python");
+  // Get Python interpreter path informed by the user
+  std::string python_exec = config.options.get_option("python");
+  if (python_exec.empty())
+    python_exec = "python";
 
   // Create a child process to execute Python
   bp::child process(bp::search_path(python_exec), args);
