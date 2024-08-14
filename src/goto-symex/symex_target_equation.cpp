@@ -13,7 +13,7 @@ void symex_target_equationt::debug_print_step(const SSA_stept &step) const
 {
   std::ostringstream oss;
   step.output(ns, oss);
-  log_debug("ssa", "{}", oss.str());
+  log_debug("ssa: {}", oss.str());
 }
 
 void symex_target_equationt::assignment(
