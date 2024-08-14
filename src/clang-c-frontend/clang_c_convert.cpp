@@ -2150,8 +2150,17 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       inits = gen_zero(t);
 
       unsigned int num = init_stmt.getNumInits();
-      for (unsigned int i = 0, j = 0; (i < inits.operands().size() && j < num);
-           ++i)
+      const clang::CXXRecordDecl *cxxrd =
+        init_stmt.getType()->getAsCXXRecordDecl();
+      cxxrd = cxxrd ? cxxrd : init_stmt.getType()->getPointeeCXXRecordDecl();
+      assert(
+        !cxxrd ||
+        has_suffix(
+          inits.op0().type().tag(), cpp_data_object::data_object_suffix));
+      assert(!cxxrd || inits.op0().is_not_nil());
+      std::vector<exprt> &operands =
+        cxxrd ? inits.op0().operands() : inits.operands();
+      for (unsigned int i = 0, j = 0; (i < operands.size() && j < num); ++i)
       {
         const struct_union_typet::componentt *c = nullptr;
         if (t.is_struct())
@@ -2175,7 +2184,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         else
           elem_type = to_vector_type(t).subtype();
         gen_typecast(ns, init, elem_type);
-        inits.operands().at(i) = init;
+        operands.at(i) = init;
       }
     }
     else if (t.is_union())
