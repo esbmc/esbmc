@@ -1891,7 +1891,6 @@ bool esbmc_parseoptionst::process_goto_program(
       goto_functions.update();
       remove_no_op(goto_functions);
     }
-    
   }
 
   catch (const char *e)
@@ -1971,8 +1970,6 @@ bool esbmc_parseoptionst::output_goto_program(
       return true;
     }
 
-    
-    
     if (cmdline.isset("dump-goto-cfg"))
     {
       goto_cfg cfg(goto_functions);
@@ -1992,7 +1989,6 @@ bool esbmc_parseoptionst::output_goto_program(
       if (cmdline.isset("goto-functions-only"))
         return true;
     }
-
 
     // Translate the GOTO program to C and output it into the log or
     // a specified output file

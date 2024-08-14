@@ -2732,7 +2732,7 @@ std::string c_expr2stringt::convert(const exprt &src, unsigned &precedence)
     return convert_extract(src);
 
   else if (src.id() == "phi")
-    return convert_phi(src, precedence);    
+    return convert_phi(src, precedence);
 
   // no C language expression for internal representation
   return convert_norep(src, precedence);
@@ -2760,9 +2760,7 @@ c_type2string(const typet &type, const namespacet &ns, unsigned flags)
   return c_expr2string.convert(type);
 }
 
-std::string c_expr2stringt::convert_phi(
-  const exprt &src,
-  unsigned &)
+std::string c_expr2stringt::convert_phi(const exprt &src, unsigned &)
 {
   std::string result = "phi(";
 

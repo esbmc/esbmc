@@ -266,7 +266,6 @@ bool do_type_cmp(const locationt &side1, const locationt &side2)
   return side1.hash() == side2.hash();
 }
 
-
 int do_type_lt(const bool &side1, const bool &side2)
 {
   if (side1 < side2)
@@ -439,10 +438,9 @@ int do_type_lt(const expr2t::expr_ids &, const expr2t::expr_ids &)
 }
 
 int do_type_lt(const locationt &, const locationt &)
-{  
+{
   return 0; // Dummy field comparison
 }
-
 
 size_t do_type_crc(const bool &theval)
 {

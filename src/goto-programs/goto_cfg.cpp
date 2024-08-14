@@ -31,7 +31,7 @@ goto_cfg::goto_cfg(goto_functionst &goto_functions)
 
         auto next = i_it;
         next++;
-        leaders.insert(next);          
+        leaders.insert(next);
       }
 
       if (i_it->is_return())
@@ -152,35 +152,39 @@ void goto_cfg::dump_graph() const
         {
           file << "}\"];\n";
           for (const auto &suc : bbs[t]->successors)
-            file << "BB" << t << " -> " << "BB"
+            file << "BB" << t << " -> "
+                 << "BB"
                  << std::distance(
-                                  bbs.begin(), std::find(bbs.begin(), bbs.end(), suc))
+                      bbs.begin(), std::find(bbs.begin(), bbs.end(), suc))
                  << ";\n";
           break;
         }
         else
-          {
-            file << "|{<s0>T|<s1>F}}\"];\n";
-            auto suc = bbs[t]->successors.begin();
-            file << "BB" << t << ":s0" << " -> " << "BB"
-                 << std::distance(
-                                  bbs.begin(), std::find(bbs.begin(), bbs.end(), *suc))
-                 << ";\n";
-            suc++;
-            file << "BB" << t << ":s1"
-                 << " -> "
-                 << "BB"
-                 << std::distance(
-                                  bbs.begin(), std::find(bbs.begin(), bbs.end(), *suc))
-                 << ";\n";
-          }
+        {
+          file << "|{<s0>T|<s1>F}}\"];\n";
+          auto suc = bbs[t]->successors.begin();
+          file << "BB" << t << ":s0"
+               << " -> "
+               << "BB"
+               << std::distance(
+                    bbs.begin(), std::find(bbs.begin(), bbs.end(), *suc))
+               << ";\n";
+          suc++;
+          file << "BB" << t << ":s1"
+               << " -> "
+               << "BB"
+               << std::distance(
+                    bbs.begin(), std::find(bbs.begin(), bbs.end(), *suc))
+               << ";\n";
+        }
       }
       break;
 
       default:
         file << "}\"];\n";
         for (const auto &suc : bbs[t]->successors)
-          file << "BB" << t << " -> " << "BB"
+          file << "BB" << t << " -> "
+               << "BB"
                << std::distance(
                     bbs.begin(), std::find(bbs.begin(), bbs.end(), suc))
                << ";\n";
@@ -402,8 +406,7 @@ Dominator::DJGraph::DJGraph(const CFGNode &cfg, const Dominator &dom)
   // A DJ-Graph is a graph composed by D-Edges and J-Edges
   _graph = tree.edges;
   _dedges = tree.edges;
-  auto func = [this, &dom](const CFGNode &x)
-  {
+  auto func = [this, &dom](const CFGNode &x) {
     auto [val, ins] = _graph.insert({x, std::unordered_set<CFGNode>()});
     for (const CFGNode &y : x->successors)
       if (!dom.sdom(x, y))
@@ -424,8 +427,7 @@ void Dominator::DJGraph::DJGraph::dump() const
   }
 }
 
-std::unordered_map<CFGNode, size_t>
-Dominator::DomTree::get_levels() const
+std::unordered_map<CFGNode, size_t> Dominator::DomTree::get_levels() const
 {
   std::unordered_map<CFGNode, size_t> levels;
   levels[root] = 0;
@@ -474,17 +476,14 @@ Dominator::DomTree::get_subtree(const CFGNode &n) const
 
 Dominator::DomTree::DomTree(const Dominator &dom) : root(dom.start)
 {
-  goto_cfg::foreach_bb(
-    dom.start,
-    [this, &dom](const CFGNode &n)
-    {
-      if (n == root)
-        return;
+  goto_cfg::foreach_bb(dom.start, [this, &dom](const CFGNode &n) {
+    if (n == root)
+      return;
 
-      CFGNode root = dom.idom(n);
-      auto [val, ins] = edges.insert({root, std::unordered_set<CFGNode>()});
-      val->second.insert(n);
-    });
+    CFGNode root = dom.idom(n);
+    auto [val, ins] = edges.insert({root, std::unordered_set<CFGNode>()});
+    val->second.insert(n);
+  });
 }
 
 void ssa_promotion::promote()
@@ -505,11 +504,15 @@ void ssa_promotion::promote()
   goto_functions.update();
 }
 
-void replace_symbols_in_expr(expr2tc &use, symbolt* symbol,  unsigned last_id_in_bb, const irep_idt var_name)
+void replace_symbols_in_expr(
+  expr2tc &use,
+  symbolt *symbol,
+  unsigned last_id_in_bb,
+  const irep_idt var_name)
 {
   if (!use)
     return;
-  
+
   if (is_phi2t(use))
     return;
 
@@ -519,8 +522,7 @@ void replace_symbols_in_expr(expr2tc &use, symbolt* symbol,  unsigned last_id_in
     return;
   }
 
-  use->Foreach_operand([symbol, last_id_in_bb, var_name](expr2tc & e)
-  {
+  use->Foreach_operand([symbol, last_id_in_bb, var_name](expr2tc &e) {
     replace_symbols_in_expr(e, symbol, last_id_in_bb, var_name);
   });
 }
@@ -534,22 +536,22 @@ ssa_promotion::extract_symbol_information(const CFGNode &start) const
   const auto insert_definition = [&symbol_map](
                                    const irep_idt &var,
                                    goto_programt::instructionst::iterator &I,
-                                   const CFGNode &bb)
-  {
+                                   const CFGNode &bb) {
     // Are we dealing with a global?
-    if(!symbol_map.count(var.as_string()))
-      return;;
+    if (!symbol_map.count(var.as_string()))
+      return;
+    ;
     symbol_information &sym = symbol_map[var.as_string()];
 
     sym.def_blocks.insert(bb);
-    sym.def_instructions.insert(std::make_shared<goto_programt::instructiont>(*I));
+    sym.def_instructions.insert(
+      std::make_shared<goto_programt::instructiont>(*I));
   };
 
   const auto insert_use = [&symbol_map, &unpromotable_symbols](
                             const expr2tc &e,
                             goto_programt::instructionst::iterator &I,
-                            const CFGNode &bb)
-  {
+                            const CFGNode &bb) {
     std::unordered_set<expr2tc, irep2_hash> symbols;
     get_addr_symbols(e, symbols);
     for (const expr2tc &sym_expr : symbols)
@@ -558,7 +560,7 @@ ssa_promotion::extract_symbol_information(const CFGNode &start) const
       const symbol2t &symbol = to_symbol2t(sym_expr);
       unpromotable_symbols.insert(symbol.thename.as_string());
     }
-    
+
     symbols.clear();
     get_symbols(e, symbols);
     for (const expr2tc &sym_expr : symbols)
@@ -577,10 +579,8 @@ ssa_promotion::extract_symbol_information(const CFGNode &start) const
 
   goto_cfg::foreach_bb(
     start,
-    [this, &insert_definition, &insert_use, &symbol_map](const CFGNode &bb)
-    {
-      for (goto_programt::instructionst::iterator it = bb->begin;
-           it != bb->end;
+    [this, &insert_definition, &insert_use, &symbol_map](const CFGNode &bb) {
+      for (goto_programt::instructionst::iterator it = bb->begin; it != bb->end;
            it++)
       {
         if (it->is_decl())
@@ -589,19 +589,19 @@ ssa_promotion::extract_symbol_information(const CFGNode &start) const
           const code_decl2t &decl = to_code_decl2t(it->code);
           info.type = decl.type;
           symbol_map.insert({decl.value.as_string(), info});
-          const symbolt * const symbol = context.find_symbol(decl.value);
+          const symbolt *const symbol = context.find_symbol(decl.value);
           assert(symbol != nullptr);
           info.mode = symbol->mode.as_string();
-          
+
           // TODO: I am assuming that all declarations are followed by
           //       an init assignment. So decls definitions are useless
         }
-          
+
         else if (it->is_assign())
         {
           const expr2tc &target = to_code_assign2t(it->code).target;
           if (is_symbol2t(target))
-            insert_definition(to_symbol2t(target).thename, it, bb);  
+            insert_definition(to_symbol2t(target).thename, it, bb);
 
           insert_use(to_code_assign2t(it->code).source, it, bb);
         }
@@ -624,10 +624,8 @@ ssa_promotion::extract_symbol_information(const CFGNode &start) const
   return symbol_map;
 }
 
-
-void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
+void ssa_promotion::promote_node(goto_programt &P, const CFGNode &n)
 {
-
   Dominator dom(n);
 
   /**
@@ -642,15 +640,15 @@ void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
 
   auto symbol_map = extract_symbol_information(n);
 
-  for (auto &[var,info] : symbol_map)
-  {    
+  for (auto &[var, info] : symbol_map)
+  {
     // Some symbols might come from globals or functions
     if (info.def_blocks.empty() || !info.type)
     {
       log_warning("Could not promote {}", var);
       continue;
     }
-    
+
     const auto phinodes = dom.dom_frontier(info.def_blocks);
 
     // Lets add all symbols at the beginning
@@ -678,9 +676,10 @@ void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
     }
 
     unsigned counter = 0;
-    std::unordered_map<size_t, CFGNode> ref_to_nodes; // the cfg locations are no longer reliable
+    std::unordered_map<size_t, CFGNode>
+      ref_to_nodes; // the cfg locations are no longer reliable
     // Insert phi-nodes
-    for (const CFGNode& phinode : phinodes)
+    for (const CFGNode &phinode : phinodes)
     {
       if (phinode->predecessors.size() != 2)
       {
@@ -688,7 +687,7 @@ void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
           "Constructed a phi-node with a value different than 2. Please check "
           "the goto-cfg construction and the phinode placement algorithm");
         abort();
-      }     
+      }
       goto_programt::instructiont phi_instr;
       phi_instr.make_assignment();
       phi_instr.location = phinode->begin->location;
@@ -729,8 +728,9 @@ void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
     // For each definition rename the symbol.
     for (auto defBlock : info.def_blocks)
     {
-      for (auto instruction = defBlock->begin; instruction != defBlock->end; instruction++)
-      { 
+      for (auto instruction = defBlock->begin; instruction != defBlock->end;
+           instruction++)
+      {
         if (!instruction->is_assign())
           continue;
 
@@ -741,12 +741,11 @@ void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
 
         last_id_in_bb[defBlock] = counter;
         auto new_symbol = symbol2tc(info.type, symbols[counter++]->id);
-        instruction->code = code_assign2tc(new_symbol, code_expr.source);        
+        instruction->code = code_assign2tc(new_symbol, code_expr.source);
       }
     }
 
-    auto get_last_defined = [&last_id_in_bb](const CFGNode n) -> unsigned
-    {
+    auto get_last_defined = [&last_id_in_bb](const CFGNode n) -> unsigned {
       // Back search
       std::set<CFGNode> visited;
       std::vector<CFGNode> worklist{n};
@@ -758,18 +757,18 @@ void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
         if (!visited.insert(item).second)
           continue;
 
-        if(last_id_in_bb.count(item))
+        if (last_id_in_bb.count(item))
           return last_id_in_bb[item];
 
         for (auto &pred : item->predecessors)
           worklist.push_back(pred);
       }
       log_error("Could not find when variable was last defined");
-      abort();      
+      abort();
     };
 
-    auto find_location = [&get_last_defined, &ref_to_nodes, &symbols](const CFGNode start, unsigned id) -> symbolt *
-    {
+    auto find_location = [&get_last_defined, &ref_to_nodes, &symbols](
+                           const CFGNode start, unsigned id) -> symbolt * {
       return symbols[get_last_defined(ref_to_nodes[id])];
     };
 
@@ -777,9 +776,9 @@ void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
     for (auto useBlock : info.use_blocks)
     {
       unsigned current_last_id = 0;
-      for (auto instruction = useBlock->begin; instruction != useBlock->end; instruction++)
+      for (auto instruction = useBlock->begin; instruction != useBlock->end;
+           instruction++)
       {
-
         if (
           instruction->is_decl() &&
           to_code_decl2t(instruction->code).value == var)
@@ -787,40 +786,40 @@ void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
           instruction->make_skip();
           instruction->code = code_skip2tc(int_type2());
         }
-           
+
         else if (instruction->is_assign())
         {
           auto assign = to_code_assign2t(instruction->code);
           assert(current_last_id <= symbols.size());
 
-          if(!is_phi2t(assign.source))
+          if (!is_phi2t(assign.source))
             replace_symbols_in_expr(
               assign.source, symbols[current_last_id], 0, var);
           else
           {
             // TODO set location correctly
-            auto lhs_symbol = find_location(useBlock, to_phi2t(assign.source).lhs_location.hash());
-            auto rhs_symbol =
-              find_location(useBlock, to_phi2t(assign.source).rhs_location.hash());
+            auto lhs_symbol = find_location(
+              useBlock, to_phi2t(assign.source).lhs_location.hash());
+            auto rhs_symbol = find_location(
+              useBlock, to_phi2t(assign.source).rhs_location.hash());
 
             if (!lhs_symbol || !rhs_symbol)
               continue;
 
-            if (!has_prefix(to_symbol2t(assign.target).thename.as_string(), var))
+            if (!has_prefix(
+                  to_symbol2t(assign.target).thename.as_string(), var))
               continue;
 
             assert(has_prefix(lhs_symbol->id, var));
             assert(has_prefix(rhs_symbol->id, var));
-          
-            to_phi2t(assign.source).lhs = symbol2tc(
-              info.type,
-              lhs_symbol->id);
-            to_phi2t(assign.source).rhs = symbol2tc(
-              info.type,
-              rhs_symbol->id);            
+
+            to_phi2t(assign.source).lhs = symbol2tc(info.type, lhs_symbol->id);
+            to_phi2t(assign.source).rhs = symbol2tc(info.type, rhs_symbol->id);
           }
-          if (is_symbol2t(assign.target) &&
-                symbol_to_index.count(to_symbol2t(assign.target).thename.as_string()))
+          if (
+            is_symbol2t(assign.target) &&
+            symbol_to_index.count(
+              to_symbol2t(assign.target).thename.as_string()))
             current_last_id = symbol_to_index.at(
               to_symbol2t(assign.target).thename.as_string());
 
@@ -831,8 +830,8 @@ void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
           replace_symbols_in_expr(
             instruction->code, symbols[current_last_id], 0, var);
           replace_symbols_in_expr(
-              instruction->guard, symbols[current_last_id], 0, var);
-        }       
+            instruction->guard, symbols[current_last_id], 0, var);
+        }
       }
     }
     // No need to kill the new symbols as they are always memsafe

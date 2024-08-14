@@ -30,7 +30,6 @@ from_int_graph(IntGraph graph, int start, int end, ReverseGraph &lookup)
   return blocks[start];
 }
 
-
 TEST_CASE("DJ-Graphs", "[cfg][ssa]")
 {
   // SREEDHAR, Vugranam C.; GAO, Guang R. Computing phi-nodes in linear time using DJ graphs. Journal of Programming Languages, v. 3, p. 191-214, 1995.

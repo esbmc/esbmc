@@ -116,7 +116,7 @@ struct Dominator
   Dominator(const CFGNode &start) : start(start)
   {
     compute_dominators();
-    dj = std::make_shared<Dominator::DJGraph>(start, *this); 
+    dj = std::make_shared<Dominator::DJGraph>(start, *this);
   }
 
   // Evaluates whether n1 dom n2
@@ -158,8 +158,11 @@ private:
 class ssa_promotion
 {
 public:
-  ssa_promotion(goto_cfg &cfg, goto_functionst &goto_functions, contextt &context) : cfg(cfg), goto_functions(goto_functions), context(context) {};
-
+  ssa_promotion(
+    goto_cfg &cfg,
+    goto_functionst &goto_functions,
+    contextt &context)
+    : cfg(cfg), goto_functions(goto_functions), context(context){};
 
   void promote();
 
@@ -175,19 +178,22 @@ public:
     std::unordered_set<Instruction> use_instructions;
 
     symbolt *
-    add_to_context(contextt &ctx, const locationt loc, size_t id) const;    
+    add_to_context(contextt &ctx, const locationt loc, size_t id) const;
   };
 
 protected:
   void promote_node(goto_programt &P, const CFGNode &n);
-  std::unordered_map<std::string, symbol_information> extract_symbol_information(const CFGNode &n) const;
-
-  
+  std::unordered_map<std::string, symbol_information>
+  extract_symbol_information(const CFGNode &n) const;
 
 private:
   std::unordered_set<std::string> collect_symbols();
   goto_cfg &cfg;
   goto_functionst &goto_functions;
   contextt &context;
-  const std::unordered_set<std::string> _skip{"__ESBMC_main", "__ESBMC_pthread_start_main_hook","__ESBMC_pthread_end_main_hook", "c:@F@__ESBMC_atexit_handler"};
+  const std::unordered_set<std::string> _skip{
+    "__ESBMC_main",
+    "__ESBMC_pthread_start_main_hook",
+    "__ESBMC_pthread_end_main_hook",
+    "c:@F@__ESBMC_atexit_handler"};
 };

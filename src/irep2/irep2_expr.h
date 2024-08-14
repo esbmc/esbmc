@@ -1399,7 +1399,6 @@ public:
   typedef esbmct::expr2t_traits<from_field, upper_field, lower_field> traits;
 };
 
-
 class phi_data : public expr2t
 {
 public:
@@ -1410,7 +1409,11 @@ public:
     const expr2tc &rhs,
     locationt lhs_location,
     locationt rhs_location)
-    : expr2t(t, id), lhs(lhs), rhs(rhs), lhs_location(lhs_location), rhs_location(rhs_location)
+    : expr2t(t, id),
+      lhs(lhs),
+      rhs(rhs),
+      lhs_location(lhs_location),
+      rhs_location(rhs_location)
   {
   }
   phi_data(const phi_data &ref) = default;
@@ -1431,7 +1434,7 @@ public:
 
   typedef esbmct::
     expr2t_traits<lhs_field, rhs_field, lhs_location_field, rhs_location_field>
-      traits;  
+      traits;
 };
 
 // Give everything a typedef name. Use this to construct both the templated
@@ -3626,7 +3629,6 @@ public:
   phi2t(const phi2t &ref) = default;
   static std::string field_names[esbmct::num_type_fields];
 };
-
 
 // Same deal as for "type_macros".
 #ifdef NDEBUG

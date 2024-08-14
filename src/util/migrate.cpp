@@ -3046,13 +3046,13 @@ exprt migrate_expr_back(const expr2tc &ref)
     const phi2t &ref2 = to_phi2t(ref);
     exprt codeexpr("phi", migrate_type_back(ref2.type));
     implies_exprt imp1(
-                       constant_exprt(atoi(ref2.lhs_location.get_line().c_str()), uint_type()),
+      constant_exprt(atoi(ref2.lhs_location.get_line().c_str()), uint_type()),
       symbol_exprt(to_symbol2t(ref2.lhs).thename));
 
     implies_exprt imp2(
-                       constant_exprt(atoi(ref2.rhs_location.get_line().c_str()), uint_type()),
+      constant_exprt(atoi(ref2.rhs_location.get_line().c_str()), uint_type()),
       symbol_exprt(to_symbol2t(ref2.rhs).thename));
-    
+
     // TODO: add a phi at irep
     codeexpr.copy_to_operands(imp1, imp2);
     return codeexpr;

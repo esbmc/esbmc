@@ -734,5 +734,4 @@ inline void get_addr_symbols(
     [&symbols](const expr2tc &e) -> void { get_addr_symbols(e, symbols); });
 }
 
-
 #endif /* UTIL_IREP2_UTILS_H_ */

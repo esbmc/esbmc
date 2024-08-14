@@ -52,8 +52,8 @@ std::string locationt::sha1() const
   crypto_hash hash;
   const int line = atoi(get_line().c_str());
   const int column = atoi(get_column().c_str());
-  
-  hash.ingest(&line, sizeof(int));  
+
+  hash.ingest(&line, sizeof(int));
   hash.ingest(&column, sizeof(int));
 
   hash.fin();
@@ -66,8 +66,8 @@ size_t locationt::hash() const
   crypto_hash hash;
   const int line = atoi(get_line().c_str());
   const int column = atoi(get_column().c_str());
-  
-  hash.ingest(&line, sizeof(int));  
+
+  hash.ingest(&line, sizeof(int));
   hash.ingest(&column, sizeof(int));
 
   hash.fin();
