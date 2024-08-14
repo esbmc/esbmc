@@ -1408,8 +1408,8 @@ public:
     expr2t::expr_ids id,
     const expr2tc &lhs,
     const expr2tc &rhs,
-    unsigned int lhs_location,
-    unsigned int rhs_location)
+    locationt lhs_location,
+    locationt rhs_location)
     : expr2t(t, id), lhs(lhs), rhs(rhs), lhs_location(lhs_location), rhs_location(rhs_location)
   {
   }
@@ -1417,16 +1417,16 @@ public:
 
   expr2tc lhs;
   expr2tc rhs;
-  unsigned int lhs_location;
-  unsigned int rhs_location;
+  locationt lhs_location;
+  locationt rhs_location;
 
   // Type mangling:
   typedef esbmct::field_traits<expr2tc, phi_data, &phi_data::lhs> lhs_field;
   typedef esbmct::field_traits<expr2tc, phi_data, &phi_data::rhs> rhs_field;
 
-  typedef esbmct::field_traits<unsigned int, phi_data, &phi_data::lhs_location>
+  typedef esbmct::field_traits<locationt, phi_data, &phi_data::lhs_location>
     lhs_location_field;
-  typedef esbmct::field_traits<unsigned int, phi_data, &phi_data::rhs_location>
+  typedef esbmct::field_traits<locationt, phi_data, &phi_data::rhs_location>
     rhs_location_field;
 
   typedef esbmct::
@@ -3618,15 +3618,12 @@ public:
     const type2tc &type,
     const expr2tc &lhs,
     const expr2tc &rhs,
-    unsigned int lhs_location,
-    unsigned int rhs_location)
+    locationt lhs_location,
+    locationt rhs_location)
     : phi_expr_methods(type, phi_id, lhs, rhs, lhs_location, rhs_location)
   {
   }
   phi2t(const phi2t &ref) = default;
-
-  //  expr2tc do_simplify() const override;
-
   static std::string field_names[esbmct::num_type_fields];
 };
 

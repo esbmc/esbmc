@@ -59,6 +59,7 @@ public:
   }
 
   std::string sha1() const;
+  size_t hash() const;
 };
 
 std::ostream &operator<<(std::ostream &out, const locationt &location);

@@ -1,7 +1,6 @@
 #include "c_types.h"
 #include "irep2/irep2_expr.h"
 #include "irep2/irep2_utils.h"
-#include "std_code.h"
 #include <goto-programs/goto_cfg.h>
 
 goto_cfg::goto_cfg(goto_functionst &goto_functions)
@@ -578,7 +577,7 @@ ssa_promotion::extract_symbol_information(const CFGNode &start) const
 
   goto_cfg::foreach_bb(
     start,
-    [&insert_definition, &insert_use, &symbol_map](const CFGNode &bb)
+    [this, &insert_definition, &insert_use, &symbol_map](const CFGNode &bb)
     {
       for (goto_programt::instructionst::iterator it = bb->begin;
            it != bb->end;
@@ -590,8 +589,12 @@ ssa_promotion::extract_symbol_information(const CFGNode &start) const
           const code_decl2t &decl = to_code_decl2t(it->code);
           info.type = decl.type;
           symbol_map.insert({decl.value.as_string(), info});
+          const symbolt * const symbol = context.find_symbol(decl.value);
+          assert(symbol != nullptr);
+          info.mode = symbol->mode.as_string();
+          
           // TODO: I am assuming that all declarations are followed by
-          //       an init assignment.
+          //       an init assignment. So decls definitions are useless
         }
           
         else if (it->is_assign())
@@ -675,7 +678,7 @@ void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
     }
 
     unsigned counter = 0;
-    std::unordered_map<unsigned, CFGNode> ref_to_nodes; // the cfg locations are no longer reliable
+    std::unordered_map<size_t, CFGNode> ref_to_nodes; // the cfg locations are no longer reliable
     // Insert phi-nodes
     for (const CFGNode& phinode : phinodes)
     {
@@ -696,22 +699,22 @@ void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
       const expr2tc rhs = symbol2tc(info.type, symbols[0]->id);
       auto pred_it = phinode->predecessors.begin();
 
-      unsigned lhs_location = 0;
-      unsigned rhs_location = 0;
+      locationt lhs_location;
+      locationt rhs_location;
 
       {
         auto before_end = (*pred_it)->end;
         before_end--;
-        lhs_location = atoi(before_end->location.get_line().c_str());
-        ref_to_nodes[lhs_location] = *pred_it;
+        lhs_location = before_end->location;
+        ref_to_nodes[lhs_location.hash()] = *pred_it;
       }
       pred_it++;
 
       {
         auto before_end = (*pred_it)->end;
         before_end--;
-        rhs_location = atoi(before_end->location.get_line().c_str());
-        ref_to_nodes[rhs_location] = *pred_it;
+        rhs_location = before_end->location;
+        ref_to_nodes[rhs_location.hash()] = *pred_it;
       }
       const expr2tc phi_expr =
         phi2tc(info.type, lhs, rhs, lhs_location, rhs_location);
@@ -781,7 +784,6 @@ void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
           instruction->is_decl() &&
           to_code_decl2t(instruction->code).value == var)
         {
-          //          abort();
           instruction->make_skip();
           instruction->code = code_skip2tc(int_type2());
         }
@@ -797,9 +799,9 @@ void ssa_promotion::promote_node(goto_programt &P,const CFGNode &n)
           else
           {
             // TODO set location correctly
-            auto lhs_symbol = find_location(useBlock, to_phi2t(assign.source).lhs_location);
+            auto lhs_symbol = find_location(useBlock, to_phi2t(assign.source).lhs_location.hash());
             auto rhs_symbol =
-              find_location(useBlock, to_phi2t(assign.source).rhs_location);
+              find_location(useBlock, to_phi2t(assign.source).rhs_location.hash());
 
             if (!lhs_symbol || !rhs_symbol)
               continue;
