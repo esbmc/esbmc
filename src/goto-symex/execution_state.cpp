@@ -492,8 +492,9 @@ void execution_statet::preserve_last_paths()
   // Add the current path to the set of paths to be preserved. Don't do this
   // if the current guard is false, though.
   if (!ls.guard.is_false() || !is_cur_state_guard_false(ls.guard.as_expr()))
+  {
     pp.push_back(std::make_pair(ls.source.pc, goto_statet(ls)));
-
+  }
   // Now then -- was it a goto? And did we actually branch to it? Detect this
   // by examining how the guard has changed: if there's no change, then the
   // GOTO condition must have evaluated to false.
@@ -726,8 +727,8 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
 
   unsigned int thread_nr = threads_state.size();
   new_state.source.thread_nr = thread_nr;
-  new_state.global_guard = cur_state->guard;
   new_state.guard = cur_state->guard;
+  new_state.global_guard.make_true();
   new_state.global_guard.add(get_guard_identifier());
   threads_state.push_back(new_state);
   preserved_paths.emplace_back();
