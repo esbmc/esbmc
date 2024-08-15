@@ -63,12 +63,6 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
   {
     adjust_side_effect_throw(expr);
   }
-  else if (
-    statement == "function_call" && expr.operands().size() == 2 &&
-    expr.op0().id() == "cpp-pseudo-destructor")
-  {
-    adjust_cpp_pseudo_destructor_call(expr);
-  }
   else
     clang_c_adjust::adjust_side_effect(expr);
 }
@@ -415,4 +409,16 @@ void clang_cpp_adjust::convert_exception_id(
   std::string cpp_type = type.get("#cpp_type").as_string();
   if (!cpp_type.empty())
     ids.emplace_back(cpp_type + suffix);
+}
+void clang_cpp_adjust::adjust_side_effect_function_call(
+  side_effect_expr_function_callt &expr)
+{
+  if (expr.operands().size() == 2 && expr.op0().id() == "cpp-pseudo-destructor")
+  {
+    adjust_cpp_pseudo_destructor_call(expr);
+  }
+  else
+  {
+    clang_c_adjust::adjust_side_effect_function_call(expr);
+  }
 }
