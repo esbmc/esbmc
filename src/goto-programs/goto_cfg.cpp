@@ -768,7 +768,7 @@ void ssa_promotion::promote_node(goto_programt &P, const CFGNode &n)
     };
 
     auto find_location = [&get_last_defined, &ref_to_nodes, &symbols](
-                           const CFGNode start, unsigned id) -> symbolt * {
+                           const CFGNode , unsigned id) -> symbolt * {
       return symbols[get_last_defined(ref_to_nodes[id])];
     };
 
