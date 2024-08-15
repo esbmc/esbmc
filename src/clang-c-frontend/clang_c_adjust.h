@@ -42,7 +42,8 @@ protected:
    */
   void adjust_expr(exprt &expr);
   void adjust_side_effect_assignment(exprt &expr);
-  void adjust_side_effect_function_call(side_effect_expr_function_callt &expr);
+  virtual void
+  adjust_side_effect_function_call(side_effect_expr_function_callt &expr);
   void adjust_side_effect_statement_expression(side_effect_exprt &expr);
   virtual void adjust_member(member_exprt &expr);
   void adjust_expr_binary_arithmetic(exprt &expr);
