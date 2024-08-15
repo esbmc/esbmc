@@ -57,10 +57,11 @@ const struct group_opt_templ all_cmd_options[] = {
      "show value-set analysis during symbolic execution"}}},
 #ifdef ENABLE_PYTHON_FRONTEND
   {"Python frontend",
-   {{"python",
-	 boost::program_options::value<std::string>()->value_name("path"),
-	 "Python interpreter binary to use (searched in $PATH; default: python)"},
-    }},
+   {
+     {"python",
+      boost::program_options::value<std::string>()->value_name("path"),
+      "Python interpreter binary to use (searched in $PATH; default: python)"},
+   }},
 #endif
 #ifdef ENABLE_SOLIDITY_FRONTEND
   {"Solidity frontend",

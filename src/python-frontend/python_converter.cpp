@@ -527,7 +527,9 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
 {
   typet type = current_element_type;
-  if (element["operand"].contains("value") && element["operand"]["_type"] == "Constant")
+  if (
+    element["operand"].contains("value") &&
+    element["operand"]["_type"] == "Constant")
     type = get_typet(element["operand"]["value"]);
 
   exprt unary_expr(
@@ -2043,7 +2045,8 @@ bool python_converter::convert()
     convert_expression_to_code(call);
     convert_expression_to_code(block);
 
-    main_symbol.value.swap(block); // Add class definitions and global variable assignments
+    main_symbol.value.swap(
+      block); // Add class definitions and global variable assignments
     main_symbol.value.copy_to_operands(call); // Add function call
   }
   else
