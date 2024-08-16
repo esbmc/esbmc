@@ -410,6 +410,7 @@ void clang_cpp_adjust::convert_exception_id(
   if (!cpp_type.empty())
     ids.emplace_back(cpp_type + suffix);
 }
+
 void clang_cpp_adjust::adjust_side_effect_function_call(
   side_effect_expr_function_callt &expr)
 {
