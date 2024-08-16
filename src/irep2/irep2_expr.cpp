@@ -371,15 +371,15 @@ static void assert_type_compat_for_with(const type2tc &a, const type2tc &b)
     assert(at.ret_type == bt.ret_type);
     /* don't compare argument names, they could be empty on one side */
     assert(at.ellipsis == bt.ellipsis);
-  }
+  }  
+  else if (is_empty_type(a) || is_empty_type(b))
+    return;
   else if (is_pointer_type(a))
   {
     assert(is_pointer_type(b));
     assert_type_compat_for_with(
       to_pointer_type(a).subtype, to_pointer_type(b).subtype);
   }
-  else if (is_empty_type(a) || is_empty_type(b))
-    return;
   else
     assert(a == b);
 }
