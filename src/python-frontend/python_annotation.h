@@ -114,7 +114,13 @@ private:
       // If the LHS of the binary operation is a variable, its type is retrieved
       if (lhs["_type"] == "Name")
       {
+        // Retrieve the type from the variable declaration within the current function body
         Json left_op = find_annotated_assign(lhs["id"], body["body"]);
+
+        // If not found in the function body, try to retrieve it from the function arguments
+        if (left_op.empty() && body.contains("args"))
+          left_op = find_annotated_assign(lhs["id"], body["args"]["args"]);
+
         if (!left_op.empty())
           type = left_op["annotation"]["id"];
       }
