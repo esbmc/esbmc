@@ -492,9 +492,8 @@ void execution_statet::preserve_last_paths()
   // Add the current path to the set of paths to be preserved. Don't do this
   // if the current guard is false, though.
   if (!ls.guard.is_false() || !is_cur_state_guard_false(ls.guard.as_expr()))
-  {
     pp.push_back(std::make_pair(ls.source.pc, goto_statet(ls)));
-  }
+
   // Now then -- was it a goto? And did we actually branch to it? Detect this
   // by examining how the guard has changed: if there's no change, then the
   // GOTO condition must have evaluated to false.
