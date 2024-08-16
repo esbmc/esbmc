@@ -541,7 +541,7 @@ ssa_promotion::extract_symbol_information(const CFGNode &start) const
                                    const CFGNode &bb) {
     // Are we dealing with a global?
     if (!symbol_map.count(var.as_string()))
-      return;    
+      return;
     symbol_information &sym = symbol_map[var.as_string()];
 
     sym.def_blocks.insert(bb);
