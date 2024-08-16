@@ -4,7 +4,7 @@ def foo() -> None:
 
 foo()
 
-x = int(1)
+x = int(1.11111)
 assert x == 1
 
 y = bool(True)

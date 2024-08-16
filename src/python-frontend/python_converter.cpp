@@ -803,12 +803,20 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
        * For example, x = int(1) becomes x = 1. */
       size_t arg_size = 1;
       const auto &arg = element["args"][0];
+	
+      nlohmann::json temp_arg = arg;
 
+      if (func_name == "int" && arg["value"].is_number())
+      {
+        double arg_value = arg["value"].get<double>();
+        temp_arg["value"] = static_cast<int>(arg_value);  // Truncate value in the copy
+      }
+      
       if (func_name == "str")
         arg_size = arg["value"].get<std::string>().size(); // get string length
 
       typet t = get_typet(func_name, arg_size);
-      exprt expr = get_expr(arg);
+      exprt expr = get_expr(temp_arg);
       expr.type() = t;
       return expr;
     }
