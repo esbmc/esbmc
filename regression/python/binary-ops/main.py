@@ -12,3 +12,10 @@ bitand = 1 & 0
 bitxor = 3 ^ 1
 bitlsh = 2 << 1
 bitrsh = 2 >> 1
+
+
+def add_nums(x:int, y:int) -> int:
+  z = x + y
+  return z
+
+assert add_nums(1,2) == 3
