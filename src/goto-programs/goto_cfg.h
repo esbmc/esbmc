@@ -46,7 +46,7 @@ public:
     std::set<std::shared_ptr<basic_block>> successors;
     std::unordered_set<std::shared_ptr<basic_block>> predecessors;
     terminator_type terminator = terminator_type::OTHER;
-    int uuid;
+    size_t uuid;
 
     template <class F>
     void foreach_inst(F);

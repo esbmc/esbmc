@@ -77,7 +77,7 @@ goto_cfg::goto_cfg(goto_functionst &goto_functions)
     }
 
     // Third pass - identify all the successors/predecessors
-    int counter = 0;
+    size_t counter = 0;
     for (auto &bb : bbs)
     {
       assert(bb->begin != bb->end);
@@ -87,6 +87,8 @@ goto_cfg::goto_cfg(goto_functionst &goto_functions)
 
       for (const auto &bb2 : bbs)
       {
+        // We need to check whether the GOTO comes from an IF TRUE
+        // and remove one of the locations
         const bool is_goto = last->is_goto() || last->is_backwards_goto();
         const bool is_trivial_goto = is_goto && is_true(last->guard);
         if (bb2->begin == bb->end)
@@ -216,7 +218,7 @@ void goto_cfg::foreach_bb(
 {
   std::unordered_set<std::shared_ptr<goto_cfg::basic_block>> visited;
   std::vector<std::shared_ptr<goto_cfg::basic_block>> to_visit({start});
-
+  // BFS to apply function in all nodes. We don't care if we miss dead code.
   while (!to_visit.empty())
   {
     const auto &item = to_visit.back();
@@ -539,8 +541,7 @@ ssa_promotion::extract_symbol_information(const CFGNode &start) const
                                    const CFGNode &bb) {
     // Are we dealing with a global?
     if (!symbol_map.count(var.as_string()))
-      return;
-    ;
+      return;    
     symbol_information &sym = symbol_map[var.as_string()];
 
     sym.def_blocks.insert(bb);

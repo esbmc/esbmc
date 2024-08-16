@@ -1882,11 +1882,12 @@ bool esbmc_parseoptionst::process_goto_program(
       tmp.add_false_asserts();
     }
 
-    // From here on all changes should take phi-nodes into account
+    // From here on all changes should update phi-nodes locations when needed
     if (cmdline.isset("goto-ssa-promotion"))
     {
       goto_cfg cfg(goto_functions);
       ssa_promotion ssa(cfg, goto_functions, context);
+      // Adds phi-nodes at GOTO level
       ssa.promote();
       goto_functions.update();
       remove_no_op(goto_functions);
