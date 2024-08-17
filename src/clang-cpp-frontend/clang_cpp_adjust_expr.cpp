@@ -103,6 +103,22 @@ void clang_cpp_adjust::adjust_member(member_exprt &expr)
   }
 }
 
+void clang_cpp_adjust::adjust_cpp_pseudo_destructor_call(exprt &expr)
+{
+  // We have a call to a pseudo destructor.
+  // However, there is nothing to actually call for a pseudo destructor.
+  // Instead, all a pseudo destructor does is to evaluate the base expression.
+  assert(expr.operands().size() == 2);
+
+  exprt &pseudo_destructor = expr.op0();
+  assert(pseudo_destructor.is_not_nil());
+  assert(pseudo_destructor.operands().size() == 1);
+  exprt &destructor_base = pseudo_destructor.op0();
+
+  expr = destructor_base;
+  adjust_expr(expr);
+}
+
 void clang_cpp_adjust::adjust_cpp_member(member_exprt &expr)
 {
   /*
@@ -393,4 +409,17 @@ void clang_cpp_adjust::convert_exception_id(
   std::string cpp_type = type.get("#cpp_type").as_string();
   if (!cpp_type.empty())
     ids.emplace_back(cpp_type + suffix);
+}
+
+void clang_cpp_adjust::adjust_side_effect_function_call(
+  side_effect_expr_function_callt &expr)
+{
+  if (expr.operands().size() == 2 && expr.op0().id() == "cpp-pseudo-destructor")
+  {
+    adjust_cpp_pseudo_destructor_call(expr);
+  }
+  else
+  {
+    clang_c_adjust::adjust_side_effect_function_call(expr);
+  }
 }
