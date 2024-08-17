@@ -680,6 +680,7 @@ void goto_symext::intrinsic_set_thread_data(
   expr2tc threadid = call.operands[0];
   expr2tc startdata = call.operands[1];
 
+  // TODO: remove this global guard
   state.global_guard.add(cur_state->guard.as_expr());
   state.rename(threadid);
   state.rename(startdata);
@@ -1042,8 +1043,8 @@ static inline expr2tc gen_byte_expression(
 
   expr2tc mask = gen_zero(type);
 
-  const auto eight = constant_int2tc(int_type2(), BigInt(8));
-  const auto one = constant_int2tc(int_type2(), BigInt(1));
+  const auto eight = constant_int2tc(type, BigInt(8));
+  const auto one = constant_int2tc(type, BigInt(1));
   for (unsigned i = 0; i < num_of_bytes; i++)
   {
     result = shl2tc(type, result, eight);

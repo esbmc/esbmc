@@ -24,6 +24,7 @@ if(ESBMC_CHERI_CLANG)
     GIT_REPOSITORY https://github.com/CTSRD-CHERI/cheri-compressed-cap.git)
   FetchContent_GetProperties(cheri_compressed_cap)
   if(NOT cheri_compressed_cap_POPULATED)
+    set(HAVE_UBSAN FALSE CACHE INTERNAL "")
     FetchContent_Populate(cheri_compressed_cap)
     add_subdirectory(${cheri_compressed_cap_SOURCE_DIR}
                      ${cheri_compressed_cap_BINARY_DIR}
