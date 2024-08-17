@@ -87,6 +87,7 @@ set(REGRESSIONS_CPP03 esbmc-cpp/cpp
                       esbmc-cpp/cbmc
                       esbmc-cpp/destructors
                       esbmc-cpp/polymorphism_bringup
+                      esbmc-cpp/polymorphism_bringup_overload
                       esbmc-cpp/inheritance_bringup
                       esbmc-cpp/bug_fixes
                       esbmc-cpp/OM_sanity_checks
