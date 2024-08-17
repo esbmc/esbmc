@@ -31,3 +31,7 @@ assert Derived.data == 2  # Asserting that the derived class has its own 'data' 
 
 c: int = obj.bar()  # Testing the overridden 'bar' method in the derived class
 assert c == 2  # Asserting that the overridden 'bar' method returns the expected value (2)
+
+
+class MyFloat(float):
+  pass

@@ -1777,6 +1777,12 @@ void python_converter::get_class_definition(
   for (auto &base_class : class_node["bases"])
   {
     const std::string &base_class_name = base_class["id"].get<std::string>();
+    /* TODO: Define OMs for built-in type classes.
+     * This will allow us to add their definitions to the context
+     * inherit from them, and extend their functionality. */
+    if (is_builtin_type(base_class_name) || is_consensus_type(base_class_name))
+      continue;
+
     // Get class definition from symbols table
     symbolt *class_symbol = context.find_symbol("tag-" + base_class_name);
     if (!class_symbol)
