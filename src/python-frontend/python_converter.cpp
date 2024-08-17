@@ -806,7 +806,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 
       if (func_name == "str")
         arg_size = arg["value"].get<std::string>().size(); // get string length
-      
+
       else if (func_name == "int" && arg["value"].is_number_float())
       {
         double arg_value = arg["value"].get<double>();
