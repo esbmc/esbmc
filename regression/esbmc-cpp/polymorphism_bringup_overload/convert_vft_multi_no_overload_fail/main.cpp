@@ -110,5 +110,5 @@ int main()
   Middle f;
   Middle *fptr = &f;
   assert(fptr->d() == 25);
-  assert(fptr->d(nullptr) == 24);
+  assert(fptr->d(nullptr) == 24000);
 }
