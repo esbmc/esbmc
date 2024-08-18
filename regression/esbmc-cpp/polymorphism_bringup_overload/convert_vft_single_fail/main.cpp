@@ -29,5 +29,5 @@ int main()
 
   Middle m;
   Middle *mptr = &m;
-  assert(mptr->d(nullptr) == 24);
+  assert(mptr->d(nullptr) == 24000);
 }
