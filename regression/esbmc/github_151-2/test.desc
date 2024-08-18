@@ -1,4 +1,4 @@
 CORE
 gh-151-2.c
-
+-fsigned-char
 ^VERIFICATION SUCCESSFUL$

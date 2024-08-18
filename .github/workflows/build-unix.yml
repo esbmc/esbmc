@@ -17,6 +17,8 @@ on:
 
 jobs:
   build:
+    env:
+      ESBMC_SYSROOT32_aarch64_unknown_linux: /usr/arm-linux-gnueabihf
     name: Build ESBMC (${{ inputs.operating-system }})
     runs-on: ${{ inputs.operating-system }}
     steps:
