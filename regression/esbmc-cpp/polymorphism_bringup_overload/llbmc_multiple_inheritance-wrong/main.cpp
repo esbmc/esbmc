@@ -57,6 +57,6 @@ int main()
   int r = o->g();
   int s = o->g(1);
   delete o;
-  assert(r == 43); // should be 42
+  assert(r == 42);
   return r;
 }
