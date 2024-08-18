@@ -27,5 +27,5 @@ int main()
   assert(cptr->d() == 11);
   assert(cptr->d(1) == 12);
   assert(cptr->d(1.0f) == 13);
-  assert(cptr->d(nullptr) == 14);
+  assert(cptr->d(nullptr) == 1400);
 }

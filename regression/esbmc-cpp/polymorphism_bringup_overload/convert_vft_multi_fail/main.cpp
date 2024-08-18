@@ -101,5 +101,5 @@ int main()
   assert(eptr->d() == 41);
   assert(eptr->d(1) == 42);
   assert(eptr->d(1.0f) == 42);
-  assert(eptr->d(nullptr) == 44);
+  assert(eptr->d(nullptr) == 4400);
 }
