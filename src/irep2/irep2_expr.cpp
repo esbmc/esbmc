@@ -81,6 +81,7 @@ static const char *expr_names[] = {
   "NULL-object",
   "dereference",
   "valid_object",
+  "races_check",  
   "deallocated_obj",
   "dynamic_size",
   "sideeffect",

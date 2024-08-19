@@ -1491,6 +1491,7 @@ irep_typedefs(null_object, expr2t);
 irep_typedefs(dynamic_object, dynamic_object_data);
 irep_typedefs(dereference, dereference_data);
 irep_typedefs(valid_object, object_ops);
+irep_typedefs(races_check, object_ops);
 irep_typedefs(deallocated_obj, object_ops);
 irep_typedefs(dynamic_size, object_ops);
 irep_typedefs(sideeffect, sideeffect_data);
@@ -3088,6 +3089,18 @@ public:
   {
   }
   valid_object2t(const valid_object2t &ref) = default;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class races_check2t : public races_check_expr_methods
+{
+public:
+  races_check2t(const expr2tc &operand)
+    : races_check_expr_methods(get_bool_type(), races_check_id, operand)
+  {
+  }
+  races_check2t(const races_check2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
