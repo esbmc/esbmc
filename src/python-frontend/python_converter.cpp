@@ -527,7 +527,9 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
 {
   typet type = current_element_type;
-  if (element["operand"].contains("value"))
+  if (
+    element["operand"].contains("value") &&
+    element["operand"]["_type"] == "Constant")
     type = get_typet(element["operand"]["value"]);
 
   exprt unary_expr(
@@ -800,10 +802,16 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
        * are converted to simple variable assignments, simplifying the handling of built-in type objects.
        * For example, x = int(1) becomes x = 1. */
       size_t arg_size = 1;
-      const auto &arg = element["args"][0];
+      auto arg = element["args"][0];
 
       if (func_name == "str")
         arg_size = arg["value"].get<std::string>().size(); // get string length
+
+      else if (func_name == "int" && arg["value"].is_number_float())
+      {
+        double arg_value = arg["value"].get<double>();
+        arg["value"] = static_cast<int>(arg_value);
+      }
 
       typet t = get_typet(func_name, arg_size);
       exprt expr = get_expr(arg);
@@ -1769,6 +1777,12 @@ void python_converter::get_class_definition(
   for (auto &base_class : class_node["bases"])
   {
     const std::string &base_class_name = base_class["id"].get<std::string>();
+    /* TODO: Define OMs for built-in type classes.
+     * This will allow us to add their definitions to the context
+     * inherit from them, and extend their functionality. */
+    if (is_builtin_type(base_class_name) || is_consensus_type(base_class_name))
+      continue;
+
     // Get class definition from symbols table
     symbolt *class_symbol = context.find_symbol("tag-" + base_class_name);
     if (!class_symbol)
@@ -2041,7 +2055,11 @@ bool python_converter::convert()
     }
 
     convert_expression_to_code(call);
-    main_symbol.value.swap(call);
+    convert_expression_to_code(block);
+
+    main_symbol.value.swap(
+      block); // Add class definitions and global variable assignments
+    main_symbol.value.copy_to_operands(call); // Add function call
   }
   else
   {

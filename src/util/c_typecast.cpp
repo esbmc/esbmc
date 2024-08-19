@@ -717,7 +717,7 @@ void c_typecastt::implicit_typecast_followed(
       return; // ok
     }
 
-    if (src_type.id() == "struct")
+    if (src_type.is_struct() || src_type.is_union())
     {
       // We got a case to convert derived class object to base base class pointer, e.g.:
       //  Convert from `derived_obj` to `(Base*)&derived_obj`
