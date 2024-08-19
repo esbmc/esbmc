@@ -521,8 +521,10 @@ void html_report::print_file_table(
   {
     std::ifstream input(std::string(file.first));
     std::string line;
-    while (std::getline(input, line))
-      lines.push_back(line);
+    while (std::getline(input, line)) {
+      code_lines code_line(line);
+      lines.push_back(code_line);
+    }
   }
   os << fmt::format(
     "<div id=File{}><h4 class=FileName>{}</h4>",
