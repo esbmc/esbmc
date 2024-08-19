@@ -639,7 +639,8 @@ std::string html_report::code_lines::to_html() const
   std::string output(content);
   for (const auto &word : keywords)
   {
-    std::regex e(fmt::format("(\\b({}))(\\b)(?=[^\"]*(\"[^\"]*\"[^\"]*)*$)", word));
+    std::regex e(
+      fmt::format("(\\b({}))(\\b)(?=[^\"]*(\"[^\"]*\"[^\"]*)*$)", word));
     output = std::regex_replace(
       output, e, fmt::format("<span class='keyword'>{}</span>", word));
   }
