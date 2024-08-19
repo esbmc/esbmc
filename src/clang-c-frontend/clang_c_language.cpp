@@ -380,9 +380,6 @@ _Bool __ESBMC_is_dynamic[1];
 __attribute__((annotate("__ESBMC_inf_size")))
 __SIZE_TYPE__ __ESBMC_alloc_size[1];
 
-__attribute__((annotate("__ESBMC_inf_size")))
-_Bool __ESBMC_races_flag[1];
-
 // Get object size
 __SIZE_TYPE__ __ESBMC_get_object_size(const void *);
 
