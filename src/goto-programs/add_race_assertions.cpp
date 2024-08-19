@@ -20,13 +20,14 @@ public:
     const exprt &original_expr,
     bool deref)
   {
-    if (deref)
-    {
-      irep_idt name = "c:@__ESBMC_races_flag";
-      const symbolt *symbol = context.find_symbol(name);
+    // if (deref)
+    // {
+    //   irep_idt name = "__ESBMC_races_check";
+    //   const symbolt *symbol = context.find_symbol(name);
+    //   assert(symbol);
 
-      return *symbol;
-    }
+    //   return *symbol;
+    // }
 
     const irep_idt identifier =
       deref ? "__ESBMC_deref_" + id2string(object) : "tmp_" + id2string(object);
@@ -58,18 +59,16 @@ public:
     const exprt &original_expr,
     bool deref)
   {
-    exprt expr = symbol_expr(get_guard_symbol(object, original_expr, deref));
-
     if (deref)
     {
       exprt address = address_of_exprt(original_expr);
-      index_exprt index = index_exprt(expr, address, bool_type());
+      exprt check("races_check", typet("bool"));
+      check.copy_to_operands(address);
 
-      expr.swap(index);
-
-      return expr;
+      return check;
     }
 
+    exprt expr = symbol_expr(get_guard_symbol(object, original_expr, deref));
     if (original_expr.is_index() && expr.type().is_array())
     {
       index_exprt full_expr = to_index_expr(original_expr);
@@ -97,17 +96,28 @@ public:
       get_guard_symbol_expr(entry.object, entry.original_expr, entry.deref));
   }
 
-  void add_initialization(goto_programt &goto_program) const;
+  void add_initialization(goto_programt &goto_program);
 
 protected:
   contextt &context;
 };
 
-void w_guardst::add_initialization(goto_programt &goto_program) const
+void w_guardst::add_initialization(goto_programt &goto_program)
 {
   goto_programt::targett t = goto_program.instructions.begin();
   const namespacet ns(context);
 
+  type2tc arrayt = array_type2tc(get_bool_type(), expr2tc(), true);
+  const irep_idt identifier = "__ESBMC_races_flag";
+  w_guards.push_back(identifier);
+  symbolt new_symbol;
+  new_symbol.id = identifier;
+  new_symbol.name = identifier;
+  new_symbol.type = migrate_type_back(arrayt);
+  new_symbol.static_lifetime = true;
+  new_symbol.value.make_false();
+  context.move_symbol_to_context(new_symbol);
+  
   for (const auto &w_guard : w_guards)
   {
     const symbolt &s = *ns.lookup(w_guard);
