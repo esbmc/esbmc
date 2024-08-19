@@ -521,7 +521,8 @@ void html_report::print_file_table(
   {
     std::ifstream input(std::string(file.first));
     std::string line;
-    while (std::getline(input, line)) {
+    while (std::getline(input, line))
+    {
       code_lines code_line(line);
       lines.push_back(code_line);
     }
