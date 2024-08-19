@@ -143,7 +143,7 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
   if (options.get_bool_option("generate-html-report"))
   {
     // TODO: multi-property
-    generate_html_report(options, "1", ns, goto_trace);
+    generate_html_report("1", ns, goto_trace);
   }
 
   std::ostringstream oss;
@@ -924,7 +924,7 @@ smt_convt::resultt bmct::multi_property_check(
         show_goto_trace(out, ns, goto_trace);
       }
       if (options.get_bool_option("generate-html-report"))
-        generate_html_report(options, fmt::format("{}", i), ns, goto_trace);
+        generate_html_report(fmt::format("{}", i), ns, goto_trace);
       std::ostringstream oss;
       log_fail("\n[Counterexample]\n");
       show_goto_trace(oss, ns, goto_trace);
