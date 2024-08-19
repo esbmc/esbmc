@@ -391,7 +391,7 @@ private:
     std::pair<const std::string_view, size_t>) const;
   struct code_lines
   {
-    code_lines(const std::string &content) : content(content)
+    explicit code_lines(const std::string &content) : content(content)
     {
     }
     const std::string content;
@@ -612,7 +612,6 @@ void html_report::output(std::ostream &oss) const
 }
 
 void generate_html_report(
-  const optionst &options,
   const std::string_view uuid,
   const namespacet &ns,
   const goto_tracet &goto_trace)
@@ -640,7 +639,7 @@ std::string html_report::code_lines::to_html() const
   std::string output(content);
   for (const auto &word : keywords)
   {
-    std::regex e(fmt::format("(\\b({}))([^,. ]*)", word));
+    std::regex e(fmt::format("(\\b({}))(\\b)(?=[^\"]*(\"[^\"]*\"[^\"]*)*$)", word));
     output = std::regex_replace(
       output, e, fmt::format("<span class='keyword'>{}</span>", word));
   }

@@ -137,7 +137,6 @@ void counterexample_value(
   const expr2tc &value);
 
 void generate_html_report(
-  const optionst &options,
   const std::string_view uuid,
   const namespacet &ns,
   const goto_tracet &goto_trace);
