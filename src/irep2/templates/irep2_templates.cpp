@@ -175,7 +175,7 @@ std::string dereference2t::field_names[esbmct::num_type_fields] =
 std::string valid_object2t::field_names[esbmct::num_type_fields] =
   {"value", "", "", "", ""};
 std::string races_check2t::field_names[esbmct::num_type_fields] =
-  {"value", "", "", "", ""};  
+  {"value", "", "", "", ""};
 std::string deallocated_obj2t::field_names[esbmct::num_type_fields] =
   {"value", "", "", "", ""};
 std::string dynamic_size2t::field_names[esbmct::num_type_fields] =

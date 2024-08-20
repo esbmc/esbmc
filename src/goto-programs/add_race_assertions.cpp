@@ -15,10 +15,8 @@ public:
 
   std::list<irep_idt> w_guards;
 
-  const symbolt &get_guard_symbol(
-    const irep_idt &object,
-    const exprt &original_expr,
-    bool deref)
+  const symbolt &
+  get_guard_symbol(const irep_idt &object, const exprt &original_expr)
   {
     const irep_idt identifier = "tmp_" + id2string(object);
 
@@ -57,7 +55,7 @@ public:
       return check;
     }
 
-    exprt expr = symbol_expr(get_guard_symbol(object, original_expr, deref));
+    exprt expr = symbol_expr(get_guard_symbol(object, original_expr));
     if (original_expr.is_index() && expr.type().is_array())
     {
       index_exprt full_expr = to_index_expr(original_expr);
@@ -106,7 +104,7 @@ void w_guardst::add_initialization(goto_programt &goto_program)
   new_symbol.static_lifetime = true;
   new_symbol.value.make_false();
   context.move_symbol_to_context(new_symbol);
-  
+
   for (const auto &w_guard : w_guards)
   {
     const symbolt &s = *ns.lookup(w_guard);
@@ -169,7 +167,8 @@ void add_race_assertions(
         goto_programt::targett t = goto_program.insert(i_it);
         t->type = FUNCTION_CALL;
         code_function_callt call;
-        call.function() = symbol_expr(*context.find_symbol("c:@F@__ESBMC_yield"));
+        call.function() =
+          symbol_expr(*context.find_symbol("c:@F@__ESBMC_yield"));
 
         migrate_expr(call, t->code);
         t->location = original_instruction.location;
@@ -233,7 +232,7 @@ void add_race_assertions(
       }
 
       // now add assignments for what is written -- reset
-      forall_rw_set_entries(e_it, rw_set) if(e_it->second.w)
+      forall_rw_set_entries(e_it, rw_set) if (e_it->second.w)
       {
         goto_programt::targett t = goto_program.insert(i_it);
 

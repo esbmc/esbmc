@@ -834,7 +834,7 @@ protected:
    *  These irep_idts contain the names of the arrays being used to store data
    *  modelling what pointers are active, which are freed, and so forth. They
    *  can change between C and C++, unfortunately. */
-  irep_idt valid_ptr_arr_name, alloc_size_arr_name, dyn_info_arr_name, races_check_flag;
+  irep_idt valid_ptr_arr_name, alloc_size_arr_name, dyn_info_arr_name;
   /** List of all allocated objects.
    *  Used to track what we should level memory-leak-assertions against when the
    *  program execution has finished */
