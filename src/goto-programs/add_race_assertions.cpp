@@ -20,24 +20,13 @@ public:
     const exprt &original_expr,
     bool deref)
   {
-    // if (deref)
-    // {
-    //   irep_idt name = "__ESBMC_races_check";
-    //   const symbolt *symbol = context.find_symbol(name);
-    //   assert(symbol);
-
-    //   return *symbol;
-    // }
-
-    const irep_idt identifier =
-      deref ? "__ESBMC_deref_" + id2string(object) : "tmp_" + id2string(object);
+    const irep_idt identifier = "tmp_" + id2string(object);
 
     const symbolt *s = context.find_symbol(identifier);
     if (s != nullptr)
       return *s;
 
-    if (!deref)
-      w_guards.push_back(identifier);
+    w_guards.push_back(identifier);
 
     type2tc index = array_type2tc(get_bool_type(), expr2tc(), true);
 
@@ -108,7 +97,7 @@ void w_guardst::add_initialization(goto_programt &goto_program)
   const namespacet ns(context);
 
   type2tc arrayt = array_type2tc(get_bool_type(), expr2tc(), true);
-  const irep_idt identifier = "__ESBMC_races_flag";
+  const irep_idt identifier = "c:@F@__ESBMC_races_flag";
   w_guards.push_back(identifier);
   symbolt new_symbol;
   new_symbol.id = identifier;
