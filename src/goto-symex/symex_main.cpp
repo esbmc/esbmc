@@ -419,10 +419,10 @@ void goto_symext::symex_assert()
   expr2tc tmp = instruction.guard;
   replace_nondet(tmp);
 
-  intrinsic_races_check_dereference(tmp);
-
   dereference(tmp, dereferencet::READ);
   replace_dynamic_allocation(tmp);
+
+  replace_races_check(tmp);
 
   claim(tmp, msg);
 }

@@ -157,12 +157,12 @@ void goto_symext::symex_assign(
   replace_nondet(lhs);
   replace_nondet(rhs);
 
-  intrinsic_races_check_dereference(lhs);
-
   dereference(lhs, dereferencet::WRITE);
   dereference(rhs, dereferencet::READ);
   replace_dynamic_allocation(lhs);
   replace_dynamic_allocation(rhs);
+
+  replace_races_check(lhs);
 
   // printf expression that has lhs
   if (is_code_printf2t(rhs))

@@ -474,7 +474,7 @@ protected:
     reachability_treet &art);
 
   /* Handles dereferencing between threads and is used only in data race checks. **/
-  void intrinsic_races_check_dereference(expr2tc &expr);
+  void replace_races_check(expr2tc &expr);
 
   /** Walk back up stack frame looking for exception handler. */
   bool symex_throw();
@@ -834,7 +834,7 @@ protected:
    *  These irep_idts contain the names of the arrays being used to store data
    *  modelling what pointers are active, which are freed, and so forth. They
    *  can change between C and C++, unfortunately. */
-  irep_idt valid_ptr_arr_name, alloc_size_arr_name, dyn_info_arr_name;
+  irep_idt valid_ptr_arr_name, alloc_size_arr_name, dyn_info_arr_name, races_check_flag;
   /** List of all allocated objects.
    *  Used to track what we should level memory-leak-assertions against when the
    *  program execution has finished */
