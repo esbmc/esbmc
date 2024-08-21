@@ -24,6 +24,9 @@ Our main website is [esbmc.org](http://esbmc.org).
 
 ### How to build/install ESBMC
 
+
+#### Ubuntu 24.04
+
 To compile ESBMC on Ubuntu 24.04 with LLVM 14 and the SMT solver Z3:
 
 ````
@@ -34,6 +37,19 @@ mkdir build && cd build
 cmake ../esbmc -DENABLE_Z3=1
 make -j4
 ````
+
+#### Fedora 40
+
+To compile ESBMC on Fedora 40 with the latest version of LLVM and the SMT solver Z3:
+
+```sh
+# Warning, the --allowerasing parameter will also remove incompatible packages to the packages specified below
+sudo dnf install --best --allowerasing "@Development Tools" clang llvm llvm-devel clang-tools-extra python3 git ccache unzip wget curl bison flex gcc-c++ glibc-devel glibc-devel.i686 boost-devel boost-devel.i686 z3-devel clang-devel clang-devel.i686 cmake zlib-devel libffi-devel libstdc++-devel libstdc++-devel.i686
+
+cmake ../ -DENABLE_Z3=1 -DZ3_DIR=/usr/include/z3
+
+make -j4
+```
 
 To build ESBMC with other operating systems and SMT solvers, please see the [BUILDING](https://github.com/esbmc/esbmc/blob/master/BUILDING.md) file. 
 
