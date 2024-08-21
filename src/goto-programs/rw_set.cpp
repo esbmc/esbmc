@@ -34,6 +34,7 @@ void rw_sett::compute(const exprt &expr)
     {
       assert(code.operands().size());
       read_write_rec(code.op0(), false, true, "", guardt(), nil_exprt());
+      read_write_rec(code.op1(), false, true, "", guardt(), nil_exprt());
       // check args of function call
       if (
         !has_prefix(instruction.location.function(), "ESBMC_execute_kernel") &&
@@ -100,9 +101,9 @@ void rw_sett::read_write_rec(
     entry.object = object;
     entry.r = entry.r || r;
     entry.w = entry.w || w;
-    entry.deref = dereferenced;
+    entry.deref = dereferenced || expr.type().is_pointer();
     entry.guard = migrate_expr_back(guard.as_expr());
-    entry.original_expr = original_expr;
+    entry.original_expr = original_expr.is_nil()? expr : original_expr;
   }
   else if (expr.is_member())
   {
