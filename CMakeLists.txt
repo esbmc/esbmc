@@ -21,6 +21,8 @@ set (ESBMC_AVAILABLE_SOLVERS "smtlib")
 # Configuration                 #
 #################################
 
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
 # Adds custom modules from ESBMC and default Options
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/scripts/cmake/")
 
