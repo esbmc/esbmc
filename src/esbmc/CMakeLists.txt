@@ -45,6 +45,6 @@ message("Looking at ${CVC_LINK_DIR}")
 target_link_libraries(esbmc ${OLD_FRONTEND_TARGETS} ${SOLIDITY_FRONTEND_TARGETS} ${PYTHON_FRONTEND_TARGETS}
                             ${GOTO_CONTRACTOR_TARGETS} ${JIMPLE_FRONTEND_TARGETS} ${JIMPLE_FRONTEND_TARGETS}
                             clangcfrontend clangcppfrontend filesystem symex pointeranalysis langapi util_esbmc bigint
-                            solvers clibs gotoalgorithms cache ${Boost_LIBRARIES} goto2c m stdc++)
+                            solvers clibs gotoalgorithms cache ${Boost_LIBRARIES} goto2c ${OS_INCLUDE_LIBS})
 target_link_directories(esbmc PUBLIC "${CVC_LINK_DIR}")
 install(TARGETS esbmc DESTINATION bin)
