@@ -1634,12 +1634,10 @@ void goto_symext::replace_races_check(expr2tc &expr)
     // replace with __ESBMC_races_flag[address_of(var)]
     const races_check2t &obj = to_races_check2t(expr);
 
-    expr2tc ptr_addr = address_of2tc(pointer_type2(), obj.value);
-
     expr2tc flag;
     migrate_expr(symbol_expr(*ns.lookup("c:@F@__ESBMC_races_flag")), flag);
 
-    expr2tc index_expr = index2tc(get_bool_type(), flag, ptr_addr);
+    expr2tc index_expr = index2tc(get_bool_type(), flag, obj.value);
     expr = index_expr;
   }
 }

@@ -48,8 +48,9 @@ public:
   {
     if (deref)
     {
+      exprt address = address_of_exprt(original_expr);
       exprt check("races_check", typet("bool"));
-      check.copy_to_operands(original_expr);
+      check.move_to_operands(address);
 
       return check;
     }
