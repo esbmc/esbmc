@@ -33,7 +33,7 @@ void rw_sett::compute(const exprt &expr)
     else if (statement == "function_call")
     {
       assert(code.operands().size());
-      read_write_rec(code.op0(), false, true, "", guardt(), exprt());
+      read_write_rec(code.op0(), false, true, "", guardt(), nil_exprt());
       // check args of function call
       if (
         !has_prefix(instruction.location.function(), "ESBMC_execute_kernel") &&
@@ -53,7 +53,7 @@ void rw_sett::compute(const exprt &expr)
 void rw_sett::assign(const exprt &lhs, const exprt &rhs)
 {
   read_rec(rhs);
-  read_write_rec(lhs, false, true, "", guardt(), exprt());
+  read_write_rec(lhs, false, true, "", guardt(), nil_exprt());
 }
 
 void rw_sett::read_write_rec(
@@ -109,7 +109,7 @@ void rw_sett::read_write_rec(
     assert(expr.operands().size() == 1);
     const std::string &component_name = expr.component_name().as_string();
     read_write_rec(
-      expr.op0(), r, w, "." + component_name + suffix, guard, original_expr);
+      expr.op0(), r, w, "." + component_name + suffix, guard, expr);
   }
   else if (expr.is_index())
   {
@@ -136,7 +136,10 @@ void rw_sett::read_write_rec(
     if (tmp.id() == "+")
       tmp = tmp.op0();
 
-    read_write_rec(tmp, r, w, suffix, guard, expr, true);
+    if (original_expr.is_member())
+      read_write_rec(tmp, r, w, suffix, guard, original_expr, true);
+    else
+      read_write_rec(tmp, r, w, suffix, guard, expr, true);
   }
   else if (expr.is_address_of() || expr.id() == "implicit_address_of")
   {
