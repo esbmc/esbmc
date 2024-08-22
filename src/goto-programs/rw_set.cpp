@@ -108,21 +108,27 @@ void rw_sett::read_write_rec(
   {
     assert(expr.operands().size() == 1);
     const std::string &component_name = expr.component_name().as_string();
-    exprt tmp = original_expr.is_nil()? expr : original_expr;
+    exprt tmp = original_expr.is_nil() ? expr : original_expr;
 
     read_write_rec(
-      expr.op0(), r, w, "." + component_name + suffix, guard, tmp, dereferenced);
+      expr.op0(),
+      r,
+      w,
+      "." + component_name + suffix,
+      guard,
+      tmp,
+      dereferenced);
   }
   else if (expr.is_index())
   {
     assert(expr.operands().size() == 2);
-    exprt tmp = original_expr.is_nil()? expr : original_expr;
+    exprt tmp = original_expr.is_nil() ? expr : original_expr;
     read_write_rec(expr.op0(), r, w, suffix, guard, tmp, dereferenced);
   }
   else if (expr.is_dereference())
   {
     assert(expr.operands().size() == 1);
-    exprt tmp = original_expr.is_nil()? expr : original_expr;
+    exprt tmp = original_expr.is_nil() ? expr : original_expr;
 
     read_write_rec(expr.op0(), r, w, suffix, guard, tmp, true);
   }
@@ -139,12 +145,14 @@ void rw_sett::read_write_rec(
     expr2tc tmp_expr;
     migrate_expr(expr.op0(), tmp_expr);
     true_guard.add(tmp_expr);
-    read_write_rec(expr.op1(), r, w, suffix, true_guard, original_expr, dereferenced);
+    read_write_rec(
+      expr.op1(), r, w, suffix, true_guard, original_expr, dereferenced);
 
     guardt false_guard(guard);
     migrate_expr(gen_not(expr.op0()), tmp_expr);
     false_guard.add(tmp_expr);
-    read_write_rec(expr.op2(), r, w, suffix, false_guard, original_expr, dereferenced);
+    read_write_rec(
+      expr.op2(), r, w, suffix, false_guard, original_expr, dereferenced);
   }
   else
   {
