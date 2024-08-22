@@ -17,6 +17,7 @@ enum class StatementType
   IMPORT,
   BREAK,
   CONTINUE,
+  RAISE,
   UNKNOWN,
 };
 

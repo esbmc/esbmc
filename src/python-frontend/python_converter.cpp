@@ -42,7 +42,8 @@ static const std::unordered_map<std::string, StatementType> statement_map = {
   {"Break", StatementType::BREAK},
   {"Continue", StatementType::CONTINUE},
   {"ImportFrom", StatementType::IMPORT},
-  {"Import", StatementType::IMPORT}};
+  {"Import", StatementType::IMPORT},
+  {"Raise", StatementType::RAISE}};
 
 static bool is_relational_op(const std::string &op)
 {
@@ -1918,12 +1919,14 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       block.move_to_operands(continue_expr);
       break;
     }
-    /* "https://docs.python.org/3/tutorial/controlflow.html: "The pass statement does nothing.
-     *  It can be used when a statement is required syntactically but the program requires no action." */
+    /* "https://docs.python.org/3/tutorial/controlflow.html:
+     * "The pass statement does nothing. It can be used when a statement
+     *  is required syntactically but the program requires no action." */
     case StatementType::PASS:
-      break;
     // Imports are handled by parser.py so we can just ignore here.
     case StatementType::IMPORT:
+    // TODO: Raises are ignored for now. Handling case to avoid calling abort() on default.
+    case StatementType::RAISE:
       break;
     case StatementType::UNKNOWN:
     default:
