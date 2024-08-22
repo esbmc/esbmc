@@ -1,3 +1,4 @@
+#include "std_expr.h"
 #include <util/c_types.h>
 #include <util/config.h>
 #include <irep2/irep2_utils.h>
@@ -3039,6 +3040,22 @@ exprt migrate_expr_back(const expr2tc &ref)
     exprt back("bitcast", migrate_type_back(ref2.type));
     back.copy_to_operands(migrate_expr_back(ref2.from));
     return back;
+  }
+  case expr2t::phi_id:
+  {
+    const phi2t &ref2 = to_phi2t(ref);
+    exprt codeexpr("phi", migrate_type_back(ref2.type));
+    implies_exprt imp1(
+      constant_exprt(atoi(ref2.lhs_location.get_line().c_str()), uint_type()),
+      symbol_exprt(to_symbol2t(ref2.lhs).thename));
+
+    implies_exprt imp2(
+      constant_exprt(atoi(ref2.rhs_location.get_line().c_str()), uint_type()),
+      symbol_exprt(to_symbol2t(ref2.rhs).thename));
+
+    // TODO: add a phi at irep
+    codeexpr.copy_to_operands(imp1, imp2);
+    return codeexpr;
   }
   default:
 

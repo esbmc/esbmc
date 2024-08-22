@@ -1881,6 +1881,17 @@ bool esbmc_parseoptionst::process_goto_program(
       goto_coveraget tmp(ns, goto_functions);
       tmp.add_false_asserts();
     }
+
+    // From here on all changes should update phi-nodes locations when needed
+    if (cmdline.isset("goto-ssa-promotion"))
+    {
+      goto_cfg cfg(goto_functions);
+      ssa_promotion ssa(cfg, goto_functions, context);
+      // Adds phi-nodes at GOTO level
+      ssa.promote();
+      goto_functions.update();
+      remove_no_op(goto_functions);
+    }
   }
 
   catch (const char *e)
@@ -1960,6 +1971,13 @@ bool esbmc_parseoptionst::output_goto_program(
       return true;
     }
 
+    if (cmdline.isset("dump-goto-cfg"))
+    {
+      goto_cfg cfg(goto_functions);
+      cfg.dump_graph();
+      return true;
+    }
+
     // Output the GOTO program to the log (and terminate or continue) in
     // a human-readable format
     if (
@@ -1971,13 +1989,6 @@ bool esbmc_parseoptionst::output_goto_program(
       log_status("{}", oss.str());
       if (cmdline.isset("goto-functions-only"))
         return true;
-    }
-
-    if (cmdline.isset("dump-goto-cfg"))
-    {
-      goto_cfg cfg(goto_functions);
-      cfg.dump_graph();
-      return true;
     }
 
     // Translate the GOTO program to C and output it into the log or

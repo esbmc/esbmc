@@ -38,6 +38,8 @@ std::string type_to_string(const type2tc &theval, int indent);
 
 std::string type_to_string(const irep_idt &theval, int);
 
+std::string type_to_string(const locationt &theval, int);
+
 bool do_type_cmp(const bool &side1, const bool &side2);
 
 bool do_type_cmp(const unsigned int &side1, const unsigned int &side2);
@@ -82,6 +84,8 @@ bool do_type_cmp(const type2t::type_ids &, const type2t::type_ids &);
 
 bool do_type_cmp(const expr2t::expr_ids &, const expr2t::expr_ids &);
 
+bool do_type_cmp(const locationt &, const locationt &);
+
 int do_type_lt(const bool &side1, const bool &side2);
 
 int do_type_lt(const unsigned int &side1, const unsigned int &side2);
@@ -124,6 +128,8 @@ int do_type_lt(const irep_idt &side1, const irep_idt &side2);
 int do_type_lt(const type2t::type_ids &, const type2t::type_ids &);
 
 int do_type_lt(const expr2t::expr_ids &, const expr2t::expr_ids &);
+
+int do_type_lt(const locationt &, const locationt &);
 
 size_t do_type_crc(const bool &theval);
 
@@ -188,3 +194,7 @@ void do_type_hash(const type2t::type_ids &, crypto_hash &);
 size_t do_type_crc(const expr2t::expr_ids &i);
 
 void do_type_hash(const expr2t::expr_ids &, crypto_hash &);
+
+size_t do_type_crc(const locationt &i);
+
+void do_type_hash(const locationt &, crypto_hash &);

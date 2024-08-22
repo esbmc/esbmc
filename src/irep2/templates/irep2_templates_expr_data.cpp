@@ -53,3 +53,4 @@ expr_typedefs2(code_cpp_throw, code_cpp_throw_data);
 expr_typedefs2(code_cpp_throw_decl, code_cpp_throw_decl_data);
 expr_typedefs1(code_cpp_throw_decl_end, code_cpp_throw_decl_data);
 expr_typedefs3(extract, extract_data);
+expr_typedefs4(phi, phi_data);

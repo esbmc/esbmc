@@ -1,6 +1,7 @@
 #ifndef UTIL_IREP2_UTILS_H_
 #define UTIL_IREP2_UTILS_H_
 
+#include "irep2/irep2.h"
 #include <util/c_types.h>
 
 #include <irep2/irep2_expr.h>
@@ -710,6 +711,27 @@ inline void get_symbols(
 
   expr->foreach_operand(
     [&symbols](const expr2tc &e) -> void { get_symbols(e, symbols); });
+}
+
+/// Iterate over all addr_of expressions in an expr, filling a set of symbols
+inline void get_addr_symbols(
+  const expr2tc &expr,
+  std::unordered_set<expr2tc, irep2_hash> &symbols)
+{
+  if (is_nil_expr(expr))
+    return;
+
+  if (is_address_of2t(expr))
+  {
+    const expr2tc &op = to_address_of2t(expr).ptr_obj;
+    if (is_symbol2t(op))
+    {
+      symbol2t s = to_symbol2t(op);
+      symbols.insert(op);
+    }
+  }
+  expr->foreach_operand(
+    [&symbols](const expr2tc &e) -> void { get_addr_symbols(e, symbols); });
 }
 
 #endif /* UTIL_IREP2_UTILS_H_ */
