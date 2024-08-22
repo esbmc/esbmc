@@ -554,6 +554,16 @@ const nlohmann::json python_converter::get_var_node(
       element["target"]["id"] == var_name)
       return element;
   }
+
+  if (json.contains("args"))
+  {
+    for (auto &arg : json["args"]["args"])
+    {
+      if (arg["arg"] == var_name)
+        return arg;
+    }
+  }
+
   return nlohmann::json();
 }
 
@@ -705,12 +715,20 @@ function_id python_converter::build_function_id(const nlohmann::json &element)
   {
     is_member_function_call = true;
     func_name = func_json["attr"];
+
     if (func_json["value"]["_type"] == "Attribute")
       obj_name = func_json["value"]["attr"];
     else if (func_json["value"]["_type"] == "Constant")
     {
       if (func_json["value"]["value"].is_string())
         obj_name = "str";
+    }
+    else if (func_json["value"]["_type"] == "BinOp")
+    {
+      std::string lhs_type = get_operand_type(func_json["value"]["left"]);
+      std::string rhs_type = get_operand_type(func_json["value"]["right"]);
+      assert(lhs_type == rhs_type);
+      obj_name = lhs_type;
     }
     else
       obj_name = func_json["value"]["id"];
@@ -857,7 +875,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       std::string caller;
       if (subelement["_type"] == "Attribute")
         caller = subelement["attr"].get<std::string>();
-      else if (subelement["_type"] == "Constant")
+      else if (
+        subelement["_type"] == "Constant" || subelement["_type"] == "BinOp")
         caller = func_id.class_name;
       else
         caller = subelement["id"].get<std::string>();
@@ -960,6 +979,11 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         element["args"].empty())
       {
         call.arguments().push_back(symbol_expr(*obj_symbol));
+      }
+      else if (element["func"]["value"]["_type"] == "BinOp")
+      {
+        // Handling function call from binary expressions like: (x+1).bit_length()
+        call.arguments().push_back(get_expr(element["func"]["value"]));
       }
     }
 
