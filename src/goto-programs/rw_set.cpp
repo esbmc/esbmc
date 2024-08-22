@@ -108,38 +108,23 @@ void rw_sett::read_write_rec(
   {
     assert(expr.operands().size() == 1);
     const std::string &component_name = expr.component_name().as_string();
+    exprt tmp = original_expr.is_nil()? expr : original_expr;
+
     read_write_rec(
-      expr.op0(), r, w, "." + component_name + suffix, guard, expr);
+      expr.op0(), r, w, "." + component_name + suffix, guard, tmp, dereferenced);
   }
   else if (expr.is_index())
   {
     assert(expr.operands().size() == 2);
-    read_write_rec(expr.op0(), r, w, suffix, guard, expr, dereferenced);
+    exprt tmp = original_expr.is_nil()? expr : original_expr;
+    read_write_rec(expr.op0(), r, w, suffix, guard, tmp, dereferenced);
   }
   else if (expr.is_dereference())
   {
     assert(expr.operands().size() == 1);
-    read_rec(expr.op0(), guard, original_expr);
+    exprt tmp = original_expr.is_nil()? expr : original_expr;
 
-    expr2tc tmp_expr;
-    migrate_expr(expr, tmp_expr);
-    dereference(target, tmp_expr, ns, value_sets);
-    exprt tmp = migrate_expr_back(tmp_expr);
-
-    // If dereferencing fails, then we revert the variable
-    // and we will attempt dereferencing in symex
-    if (
-      has_prefix(id2string(tmp.identifier()), "symex::invalid_object") ||
-      id2string(tmp.identifier()) == "")
-      tmp = expr.op0();
-
-    if (tmp.id() == "+")
-      tmp = tmp.op0();
-
-    if (original_expr.is_member())
-      read_write_rec(tmp, r, w, suffix, guard, original_expr, true);
-    else
-      read_write_rec(tmp, r, w, suffix, guard, expr, true);
+    read_write_rec(expr.op0(), r, w, suffix, guard, tmp, true);
   }
   else if (expr.is_address_of() || expr.id() == "implicit_address_of")
   {
@@ -154,16 +139,16 @@ void rw_sett::read_write_rec(
     expr2tc tmp_expr;
     migrate_expr(expr.op0(), tmp_expr);
     true_guard.add(tmp_expr);
-    read_write_rec(expr.op1(), r, w, suffix, true_guard, original_expr);
+    read_write_rec(expr.op1(), r, w, suffix, true_guard, original_expr, dereferenced);
 
     guardt false_guard(guard);
     migrate_expr(gen_not(expr.op0()), tmp_expr);
     false_guard.add(tmp_expr);
-    read_write_rec(expr.op2(), r, w, suffix, false_guard, original_expr);
+    read_write_rec(expr.op2(), r, w, suffix, false_guard, original_expr, dereferenced);
   }
   else
   {
     forall_operands (it, expr)
-      read_write_rec(*it, r, w, suffix, guard, original_expr);
+      read_write_rec(*it, r, w, suffix, guard, original_expr, dereferenced);
   }
 }
