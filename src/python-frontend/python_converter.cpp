@@ -314,8 +314,8 @@ std::string python_converter::get_operand_type(const nlohmann::json &element)
     element["_type"] == "Subscript" &&
     get_operand_type(element["value"]) == "list")
   {
-    nlohmann::json list_node =
-      find_var_decl(element["value"]["id"].get<std::string>(), current_func_name, ast_json);
+    nlohmann::json list_node = find_var_decl(
+      element["value"]["id"].get<std::string>(), current_func_name, ast_json);
     return get_operand_type(list_node["value"]["elts"][0]);
   }
 
@@ -734,7 +734,8 @@ function_id python_converter::build_function_id(const nlohmann::json &element)
           class_name = obj_name;
         else
         {
-          auto obj_node = /*get_var_node(obj_name, ast_json)*/find_var_decl(obj_name, current_func_name, ast_json);
+          auto obj_node = /*get_var_node(obj_name, ast_json)*/ find_var_decl(
+            obj_name, current_func_name, ast_json);
           if (obj_node.empty())
             abort();
 
