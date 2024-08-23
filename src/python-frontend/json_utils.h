@@ -81,4 +81,46 @@ JsonType find_function(const JsonType &json, const std::string &func_name)
   return JsonType();
 }
 
+template <typename JsonType>
+const JsonType get_var_node(const std::string &var_name, const JsonType &scope)
+{
+  for (auto &element : scope["body"])
+  {
+    if (
+      element["_type"] == "AnnAssign" && element["target"].contains("id") &&
+      element["target"]["id"] == var_name)
+      return element;
+  }
+
+  if (scope.contains("args"))
+  {
+    for (auto &arg : scope["args"]["args"])
+    {
+      if (arg["arg"] == var_name)
+        return arg;
+    }
+  }
+
+  return JsonType();
+}
+
+template <typename JsonType>
+const JsonType
+find_var_decl(const std::string &var_name, const std::string &function, const JsonType& ast)
+{
+  JsonType ref;
+
+  for (const auto &elem : ast["body"])
+  {
+    if (elem["_type"] == "FunctionDef" && elem["name"] == function)
+      ref = get_var_node(var_name, elem);
+  }
+
+  // Get variable from global scope
+  if (ref.empty())
+    ref = get_var_node(var_name, ast);
+
+  return ref;
+}
+
 } // namespace json_utils

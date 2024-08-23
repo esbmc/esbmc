@@ -39,12 +39,6 @@ private:
   exprt get_block(const nlohmann::json &ast_block);
 
   bool has_multiple_types(const nlohmann::json &container);
-
-  const nlohmann::json
-  get_var_node(const std::string &var_name, const nlohmann::json &json) const;
-
-  const nlohmann::json find_var_decl(const std::string &var_name) const;
-
   void adjust_statement_types(exprt &lhs, exprt &rhs) const;
   std::string create_symbol_id() const;
   std::string create_symbol_id(const std::string &filename) const;
