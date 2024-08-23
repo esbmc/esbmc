@@ -315,7 +315,7 @@ std::string python_converter::get_operand_type(const nlohmann::json &element)
     get_operand_type(element["value"]) == "list")
   {
     nlohmann::json list_node =
-      find_var_decl(element["value"]["id"].get<std::string>());
+      find_var_decl(element["value"]["id"].get<std::string>(), current_func_name, ast_json);
     return get_operand_type(list_node["value"]["elts"][0]);
   }
 
@@ -543,49 +543,6 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
   return unary_expr;
 }
 
-const nlohmann::json python_converter::get_var_node(
-  const std::string &var_name,
-  const nlohmann::json &json) const
-{
-  for (auto &element : json["body"])
-  {
-    if (
-      element["_type"] == "AnnAssign" && element["target"].contains("id") &&
-      element["target"]["id"] == var_name)
-      return element;
-  }
-
-  if (json.contains("args"))
-  {
-    for (auto &arg : json["args"]["args"])
-    {
-      if (arg["arg"] == var_name)
-        return arg;
-    }
-  }
-
-  return nlohmann::json();
-}
-
-const nlohmann::json
-python_converter::find_var_decl(const std::string &var_name) const
-{
-  nlohmann::json ref;
-
-  // Get variable from current function
-  for (const auto &elem : ast_json["body"])
-  {
-    if (elem["_type"] == "FunctionDef" && elem["name"] == current_func_name)
-      ref = get_var_node(var_name, elem);
-  }
-
-  // Get variable from global scope
-  if (ref.empty())
-    ref = get_var_node(var_name, ast_json);
-
-  return ref;
-}
-
 locationt
 python_converter::get_location_from_decl(const nlohmann::json &ast_node)
 {
@@ -777,7 +734,7 @@ function_id python_converter::build_function_id(const nlohmann::json &element)
           class_name = obj_name;
         else
         {
-          auto obj_node = get_var_node(obj_name, ast_json);
+          auto obj_node = /*get_var_node(obj_name, ast_json)*/find_var_decl(obj_name, current_func_name, ast_json);
           if (obj_node.empty())
             abort();
 
@@ -1376,7 +1333,7 @@ size_t get_type_size(const nlohmann::json &ast_node)
 
 std::string python_converter::get_var_type(const std::string &var_name) const
 {
-  nlohmann::json ref = find_var_decl(var_name);
+  nlohmann::json ref = find_var_decl(var_name, current_func_name, ast_json);
   if (ref.empty())
     return std::string();
 
