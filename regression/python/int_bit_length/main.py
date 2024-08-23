@@ -1,16 +1,20 @@
-x = int(0)
-assert x.bit_length() == 0
+a = int(0)
+assert a.bit_length() == 0
 
-y = int(16)
-assert y.bit_length() == 5
+b = int(16)
+assert b.bit_length() == 5
 
-z = int(255)
-assert z.bit_length() == 8
+c = int(255)
+assert c.bit_length() == 8
 
-x = 5
-assert (x-1).bit_length() == 3
+d = 5
+assert (d-1).bit_length() == 3
 
 
-def foo(a: int) -> int:
-  return int((a - 1).bit_length())
+def foo(x: int) -> int:
+  return int((x - 1).bit_length())
 
+
+e = int(5)
+f = e.bit_length()
+assert f == 3
