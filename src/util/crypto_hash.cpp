@@ -26,8 +26,15 @@ bool crypto_hash::operator<(const crypto_hash &h2) const
 std::string crypto_hash::to_string() const
 {
   std::ostringstream buf;
-  for (unsigned int i : hash)
+#if BOOST_VERSION >= 108600
+  for (HashType c : hash)
+  {
+    buf << std::hex << std::setfill('0') << std::setw(2) << static_cast<int>(c);
+  }
+#else
+  for (HashType i : hash)
     buf << std::hex << std::setfill('0') << std::setw(8) << i;
+#endif
 
   return buf.str();
 }
