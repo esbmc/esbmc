@@ -83,6 +83,14 @@ private:
     }
   }
 
+  std::string get_current_func_name()
+  {
+    if (!current_func)
+      return std::string();
+
+    return (*current_func)["name"];
+  }
+
   std::string get_type_from_constant(const Json &element)
   {
     if (element.contains("esbmc_type_annotation"))
@@ -277,10 +285,30 @@ private:
           inferred_type = got_type;
       }
 
+      // Get type from top-level functions
       else if (
-        value_type == "Call" && !is_model_func(element["value"]["func"]["id"]))
+        value_type == "Call" && element["value"]["func"]["_type"] == "Name" &&
+        !is_model_func(element["value"]["func"]["id"]))
       {
         inferred_type = get_type_from_call(element);
+      }
+
+      // Get type from methods
+      else if (
+        value_type == "Call" &&
+        element["value"]["func"]["_type"] == "Attribute")
+      {
+        const std::string &obj = element["value"]["func"]["value"]["id"];
+        Json obj_node =
+          json_utils::find_var_decl(obj, get_current_func_name(), ast_);
+
+        assert(!obj_node.empty());
+
+        const std::string &obj_type =
+          obj_node["annotation"]["id"].template get<std::string>();
+
+        if (is_builtin_type(obj_type))
+          inferred_type = obj_type;
       }
       else
         continue;

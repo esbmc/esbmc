@@ -105,15 +105,20 @@ const JsonType get_var_node(const std::string &var_name, const JsonType &scope)
 }
 
 template <typename JsonType>
-const JsonType
-find_var_decl(const std::string &var_name, const std::string &function, const JsonType& ast)
+const JsonType find_var_decl(
+  const std::string &var_name,
+  const std::string &function,
+  const JsonType &ast)
 {
   JsonType ref;
 
-  for (const auto &elem : ast["body"])
+  if (!function.empty())
   {
-    if (elem["_type"] == "FunctionDef" && elem["name"] == function)
-      ref = get_var_node(var_name, elem);
+    for (const auto &elem : ast["body"])
+    {
+      if (elem["_type"] == "FunctionDef" && elem["name"] == function)
+        ref = get_var_node(var_name, elem);
+    }
   }
 
   // Get variable from global scope
