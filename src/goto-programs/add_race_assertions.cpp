@@ -48,6 +48,9 @@ public:
   {
     if (deref)
     {
+      // introduce a new expression: RACE_CHECK(&x)
+      // its operand is the address of the variable
+      // which we will replace during symbolic execution.
       exprt address = address_of_exprt(original_expr);
       exprt check("races_check", typet("bool"));
       check.move_to_operands(address);
@@ -94,6 +97,8 @@ void w_guardst::add_initialization(goto_programt &goto_program)
   goto_programt::targett t = goto_program.instructions.begin();
   const namespacet ns(context);
 
+  // introduce new infinite array: __ESBMC_races_flag[]
+  // initialize it to zero: ARRAY_OF(0)
   type2tc arrayt = array_type2tc(get_bool_type(), expr2tc(), true);
   const irep_idt identifier = "c:@F@__ESBMC_races_flag";
   w_guards.push_back(identifier);
@@ -176,8 +181,9 @@ void add_race_assertions(
       }
 
       // Avoid adding too much thread interleaving by using atomic block
+      // yield();
+      // atomic {Assert tmp_A == 0; tmp_A = 1; A = n;}
       // tmp_A = 0;
-      // atomic {A = n; Assert tmp_A == 0; tmp_A = 1;}
       // See https://github.com/esbmc/esbmc/pull/1544
       goto_programt::targett t = goto_program.insert(i_it);
       *t = ATOMIC_BEGIN;
@@ -232,6 +238,8 @@ void add_race_assertions(
       }
 
       // now add assignments for what is written -- reset
+      // only write operations need to be reset:
+      // tmp_A = 0;
       forall_rw_set_entries(e_it, rw_set) if (e_it->second.w)
       {
         goto_programt::targett t = goto_program.insert(i_it);

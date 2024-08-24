@@ -1624,6 +1624,8 @@ void goto_symext::replace_races_check(expr2tc &expr)
   if (!options.get_bool_option("data-races-check"))
     return;
 
+  // replace RACE_CHECK(&x) with __ESBMC_races_flag[&x]
+  // recursion is needed for this case: !RACE_CHECK(&x)
   expr->Foreach_operand([this](expr2tc &e) {
     if (!is_nil_expr(e))
       replace_races_check(e);

@@ -2724,7 +2724,9 @@ exprt migrate_expr_back(const expr2tc &ref)
   case expr2t::races_check_id:
   {
     const races_check2t &ref2 = to_races_check2t(ref);
+    // bool type
     typet thetype = migrate_type_back(ref->type);
+    // op0 is address of variable
     exprt op0 = migrate_expr_back(ref2.value);
     exprt theexpr("races_check", thetype);
     theexpr.copy_to_operands(op0);
