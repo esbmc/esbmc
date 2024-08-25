@@ -1,4 +1,4 @@
 CORE
 main.c
 --condition-coverage-vb
-^VERIFICATION FAILED$
+^VERIFICATION SUCCESSFUL$
