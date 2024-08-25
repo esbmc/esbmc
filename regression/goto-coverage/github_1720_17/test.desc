@@ -1,6 +1,6 @@
 CORE
 main.c
---condition-coverage --no-simplify
+--condition-coverage --no-cov-asserts--no-simplify
 ^Reached Conditions:  8
 ^Short Circuited Conditions:  0
 ^Total Conditions:  8

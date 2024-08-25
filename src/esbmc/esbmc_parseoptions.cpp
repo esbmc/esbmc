@@ -1843,6 +1843,9 @@ bool esbmc_parseoptionst::process_goto_program(
       options.set_option("keep-verified-claims", false);
       options.set_option("no-pointer-check", true);
 
+      // for re-do remove-sideeffects
+      options.set_option("goto-instrumented", false);
+
       goto_coveraget tmp(ns, goto_functions);
       tmp.replace_all_asserts_to_guard(gen_false_expr(), true);
     }
@@ -1864,6 +1867,9 @@ bool esbmc_parseoptionst::process_goto_program(
       options.set_option("no-pointer-check", true);
       // unreachable conditions should be also considered as short-circuited
 
+      // for re-do remove-sideeffects
+      options.set_option("goto-instrumented", false);
+
       //?:
       // if we do not want expressions like 'if(2 || 3)' get simplified to 'if(1||1)'
       // we need to enable the options below:
@@ -1873,8 +1879,15 @@ bool esbmc_parseoptionst::process_goto_program(
 
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);
-      tmp.replace_all_asserts_to_guard(gen_true_expr());
+
+      // if we do not want to count the guard in the assertions
+      if (cmdline.isset("no-cov-asserts"))
+        tmp.replace_all_asserts_to_guard(gen_true_expr());
       tmp.gen_cond_cov();
+
+      // redo conversion to remove_sideeffect
+      goto_coverage_rm temp(context, options, goto_functions);
+      temp.remove_sideeffect();
     }
 
     if (options.get_bool_option("make-assert-false"))

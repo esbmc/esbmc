@@ -9,7 +9,7 @@ std::string goto_coveraget::get_filename_from_path(std::string path)
 }
 
 void goto_coveraget::replace_all_asserts_to_guard(
-  expr2tc guard,
+  const expr2tc &guard,
   bool is_instrumentation)
 {
   Forall_goto_functions (f_it, goto_functions)
@@ -18,19 +18,25 @@ void goto_coveraget::replace_all_asserts_to_guard(
       goto_programt &goto_program = f_it->second.body;
       Forall_goto_program_instructions (it, goto_program)
       {
-        const expr2tc old_guard = it->guard;
         if (it->is_assert())
-        {
-          it->guard = guard;
-          if (is_instrumentation)
-            it->location.property("instrumented assertion");
-          else
-            it->location.property("assertion");
-          it->location.comment(from_expr(ns, "", old_guard));
-          it->location.user_provided(true);
-        }
+          replace_assert_to_guard(guard, it, is_instrumentation);
       }
     }
+}
+
+void goto_coveraget::replace_assert_to_guard(
+  const expr2tc &guard,
+  goto_programt::instructiont::targett &it,
+  bool is_instrumentation)
+{
+  const expr2tc old_guard = it->guard;
+  it->guard = guard;
+  if (is_instrumentation)
+    it->location.property("instrumented assertion");
+  else
+    it->location.property("replaced assertion");
+  it->location.comment(from_expr(ns, "", old_guard));
+  it->location.user_provided(true);
 }
 
 void goto_coveraget::add_false_asserts()
@@ -178,8 +184,22 @@ void goto_coveraget::gen_cond_cov()
         if (location_pool.count(cur_filename) == 0)
           continue;
 
+        // e.g. assert(a == 1);
+        if (
+          it->is_assert() &&
+          it->location.property().as_string() != "replaced assertion")
+        {
+          exprt guard = migrate_expr_back(it->guard);
+          guard = handle_single_guard(guard);
+          exprt pre_cond = nil_exprt();
+          pre_cond.location() = it->location;
+          gen_cond_cov_assert(guard, pre_cond, goto_program, it);
+          // after adding the instrumentation, we convert it to constatn_true
+          replace_assert_to_guard(gen_true_expr(), it, false);
+        }
+
         // e.g. IF !(a > 1) THEN GOTO 3
-        if (!is_true(it->guard) && it->is_goto())
+        else if (it->is_goto() && !is_true(it->guard))
         {
           // e.g.
           //    GOTO 2;
@@ -192,11 +212,14 @@ void goto_coveraget::gen_cond_cov()
           guard = handle_single_guard(guard);
 
           exprt pre_cond = nil_exprt();
+          pre_cond.location() = it->location;
           gen_cond_cov_assert(guard, pre_cond, goto_program, it);
         }
         target_num = -1;
       }
     }
+  // recalculate line number/ target number
+  goto_functions.update();
 }
 
 /*
@@ -232,8 +255,9 @@ void goto_coveraget::gen_cond_cov_assert(
     gen_cond_cov_assert(ptr.op0(), pre_cond, goto_program, it);
 
     // update pre-condition: pre_cond && op0
-    pre_cond =
-      pre_cond.is_nil() ? ptr.op0() : gen_and_expr(pre_cond, ptr.op0());
+    pre_cond = pre_cond.is_nil()
+                 ? ptr.op0()
+                 : gen_and_expr(pre_cond, ptr.op0(), it->location);
 
     // go rhs
     gen_cond_cov_assert(ptr.op1(), pre_cond, goto_program, it);
@@ -244,9 +268,10 @@ void goto_coveraget::gen_cond_cov_assert(
     gen_cond_cov_assert(ptr.op0(), pre_cond, goto_program, it);
 
     // update pre-condition: !(pre_cond && op0)
-    pre_cond =
-      pre_cond.is_nil() ? ptr.op0() : gen_and_expr(pre_cond, ptr.op0());
-    pre_cond = gen_not_expr(pre_cond);
+    pre_cond = pre_cond.is_nil()
+                 ? ptr.op0()
+                 : gen_and_expr(pre_cond, ptr.op0(), it->location);
+    pre_cond = gen_not_expr(pre_cond, it->location);
 
     // go rhs
     gen_cond_cov_assert(ptr.op1(), pre_cond, goto_program, it);
@@ -257,16 +282,18 @@ void goto_coveraget::gen_cond_cov_assert(
     gen_cond_cov_assert(ptr.op0(), pre_cond, goto_program, it);
 
     // update pre-condition: pre_cond && op0
-    exprt pre_cond_1 =
-      pre_cond.is_nil() ? ptr.op0() : gen_and_expr(pre_cond, ptr.op0());
+    exprt pre_cond_1 = pre_cond.is_nil()
+                         ? ptr.op0()
+                         : gen_and_expr(pre_cond, ptr.op0(), it->location);
 
     // go mid
     gen_cond_cov_assert(ptr.op1(), pre_cond_1, goto_program, it);
 
     // update pre-condition: pre_cond && !op0
-    exprt not_expr = gen_not_expr(ptr.op0());
-    exprt pre_cond_2 =
-      pre_cond.is_nil() ? not_expr : gen_and_expr(pre_cond, not_expr);
+    exprt not_expr = gen_not_expr(ptr.op0(), it->location);
+    exprt pre_cond_2 = pre_cond.is_nil()
+                         ? not_expr
+                         : gen_and_expr(pre_cond, not_expr, it->location);
 
     // go right
     gen_cond_cov_assert(ptr.op2(), pre_cond_2, goto_program, it);
@@ -283,7 +310,8 @@ void goto_coveraget::add_cond_cov_assert(
   goto_programt::instructiont::targett &it)
 {
   expr2tc guard;
-  exprt cond = pre_cond.is_nil() ? expr : gen_and_expr(pre_cond, expr);
+  exprt cond =
+    pre_cond.is_nil() ? expr : gen_and_expr(pre_cond, expr, it->location);
   migrate_expr(cond, guard);
 
   // e.g. assert(!(a==1));  // a==1
@@ -333,42 +361,58 @@ void goto_coveraget::add_cond_cov_assert(
   }
 
   // reversal
-  exprt not_expr = gen_not_expr(expr);
-  cond = pre_cond.is_nil() ? not_expr : gen_and_expr(pre_cond, not_expr);
+  exprt not_expr = gen_not_expr(expr, it->location);
+  cond = pre_cond.is_nil() ? not_expr
+                           : gen_and_expr(pre_cond, not_expr, it->location);
   migrate_expr(cond, guard);
 
-  idf = from_expr(ns, "", gen_not_expr(expr));
+  idf = from_expr(ns, "", gen_not_expr(expr, it->location));
   make_not(guard);
   insert_assert(goto_program, it, guard, idf);
 }
 
-exprt goto_coveraget::gen_no_eq_expr(const exprt &lhs, const exprt &rhs)
+exprt goto_coveraget::gen_not_eq_expr(
+  const exprt &lhs,
+  const exprt &rhs,
+  const locationt &loc)
 {
+  assert(loc.is_not_nil());
   exprt not_eq_expr = exprt("notequal", bool_type());
   exprt _lhs = lhs;
   if (lhs.type() != rhs.type())
   {
     _lhs = typecast_exprt(lhs, rhs.type());
+    _lhs.location() = lhs.location();
   }
   not_eq_expr.operands().emplace_back(_lhs);
   not_eq_expr.operands().emplace_back(rhs);
+  not_eq_expr.location() = loc;
   return not_eq_expr;
 }
 
-exprt goto_coveraget::gen_and_expr(const exprt &lhs, const exprt &rhs)
+exprt goto_coveraget::gen_and_expr(
+  const exprt &lhs,
+  const exprt &rhs,
+  const locationt &loc)
 {
+  assert(loc.is_not_nil());
   exprt join_expr = exprt(exprt::id_and, bool_type());
-  exprt _lhs = typecast_exprt(lhs, bool_type());
-  exprt _rhs = typecast_exprt(rhs, bool_type());
+  exprt _lhs = lhs.type().is_bool() ? lhs : typecast_exprt(lhs, bool_type());
+  _lhs.location() = lhs.location();
+  exprt _rhs = rhs.type().is_bool() ? rhs : typecast_exprt(rhs, bool_type());
+  _rhs.location() = rhs.location();
   join_expr.operands().emplace_back(_lhs);
   join_expr.operands().emplace_back(_rhs);
+  join_expr.location() = loc;
   return join_expr;
 }
 
-exprt goto_coveraget::gen_not_expr(const exprt &expr)
+exprt goto_coveraget::gen_not_expr(const exprt &expr, const locationt &loc)
 {
+  assert(loc.is_not_nil());
   exprt not_expr = exprt(exprt::id_not, bool_type());
   not_expr.operands().emplace_back(expr);
+  not_expr.location() = loc;
   return not_expr;
 }
 
@@ -381,7 +425,8 @@ exprt goto_coveraget::handle_single_guard(exprt &expr)
   if (expr.operands().size() == 0)
   {
     exprt false_expr = false_exprt();
-    return gen_no_eq_expr(expr, false_expr);
+    false_expr.location() = expr.location();
+    return gen_not_eq_expr(expr, false_expr, expr.location());
   }
   else if (expr.operands().size() == 1)
   {
@@ -416,7 +461,8 @@ exprt goto_coveraget::handle_single_guard(exprt &expr)
       else
       {
         exprt false_expr = false_exprt();
-        return gen_no_eq_expr(expr, false_expr);
+        false_expr.location() = expr.location();
+        return gen_not_eq_expr(expr, false_expr, expr.location());
       }
     }
     else
@@ -452,7 +498,11 @@ exprt goto_coveraget::handle_single_guard(exprt &expr)
     {
       expr.op1() = handle_single_guard(expr.op1());
       if (expr.op1().type() != expr.type())
+      {
+        locationt loc = expr.op1().location();
         expr.op1() = typecast_exprt(expr.op1(), expr.type());
+        expr.op1().location() = loc;
+      }
     }
 
     if (!(expr.op2().id() == irept::id_constant &&
@@ -461,7 +511,11 @@ exprt goto_coveraget::handle_single_guard(exprt &expr)
     {
       expr.op2() = handle_single_guard(expr.op2());
       if (expr.op2().type() != expr.type())
+      {
+        locationt loc = expr.op1().location();
         expr.op2() = typecast_exprt(expr.op2(), expr.type());
+        expr.op2().location() = loc;
+      }
     }
   }
 
