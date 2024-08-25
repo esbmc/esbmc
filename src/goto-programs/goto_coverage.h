@@ -1,4 +1,5 @@
 #include <goto-programs/goto_functions.h>
+#include <goto-programs/goto_convert_class.h>
 #include <goto-programs/loop_unroll.h>
 #include <langapi/language_util.h>
 #include <unordered_set>
@@ -38,17 +39,24 @@ public:
     const std::string &idf);
 
   // replace every assertion to a specific guard
-  void
-  replace_all_asserts_to_guard(expr2tc guard, bool is_instrumentation = false);
+  void replace_all_asserts_to_guard(
+    const expr2tc &guard,
+    bool is_instrumentation = false);
+  // replace an assertion to a specific guard
+  void replace_assert_to_guard(
+    const expr2tc &guard,
+    goto_programt::instructiont::targett &it,
+    bool is_instrumentation);
 
   // convert every assertion to an assert(1)
   void make_asserts_true(bool is_instrumentation);
 
   // condition cov
   void gen_cond_cov();
-  exprt gen_no_eq_expr(const exprt &lhs, const exprt &rhs);
-  exprt gen_and_expr(const exprt &lhs, const exprt &rhs);
-  exprt gen_not_expr(const exprt &expr);
+  exprt
+  gen_not_eq_expr(const exprt &lhs, const exprt &rhs, const locationt &loc);
+  exprt gen_and_expr(const exprt &lhs, const exprt &rhs, const locationt &loc);
+  exprt gen_not_expr(const exprt &expr, const locationt &loc);
   int get_total_instrument() const;
   int get_total_assert_instance() const;
   std::set<std::pair<std::string, std::string>> get_total_cond_assert() const;
@@ -72,4 +80,19 @@ protected:
   goto_functionst &goto_functions;
   std::string filename;
   int target_num;
+};
+
+class goto_coverage_rm : goto_convertt
+{
+public:
+  goto_coverage_rm(
+    contextt &_context,
+    optionst &_options,
+    goto_functionst &goto_functions)
+    : goto_convertt(_context, _options), goto_functions(goto_functions)
+  {
+    options.set_option("goto-instrumented", true);
+  }
+  void remove_sideeffect();
+  goto_functionst &goto_functions;
 };

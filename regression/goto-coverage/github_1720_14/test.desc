@@ -1,6 +1,6 @@
 CORE
 main.c
---condition-coverage
+--condition-coverage --no-cov-asserts
 ^Reached Conditions:  2
 ^Short Circuited Conditions:  4
 ^Total Conditions:  6
