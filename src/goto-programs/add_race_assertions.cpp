@@ -46,7 +46,7 @@ public:
     const exprt &original_expr,
     bool deref)
   {
-    if (deref)
+    if (deref || original_expr.is_member())
     {
       // introduce a new expression: RACE_CHECK(&x)
       // its operand is the address of the variable
