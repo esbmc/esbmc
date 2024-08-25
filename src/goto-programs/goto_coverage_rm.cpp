@@ -25,9 +25,6 @@ void goto_coverage_rm::remove_sideeffect()
 
           goto_program.destructive_insert(it, tmp_program);
           migrate_expr(guard, temp_guard);
-log_status("begin");
-          goto_program.dump();
-          log_status("end");
         }
       }
     }
