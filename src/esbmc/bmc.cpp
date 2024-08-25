@@ -965,8 +965,8 @@ smt_convt::resultt bmct::multi_property_check(
         log_fail("\n[Counterexample]\n");
         show_goto_trace(oss, ns, goto_trace);
         log_result("{}", oss.str());
-        final_result = result;
       }
+      final_result = result;
 
       // Update fail-fast-counter
       fail_fast_cnt++;

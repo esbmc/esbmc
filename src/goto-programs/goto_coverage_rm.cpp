@@ -11,6 +11,7 @@ void goto_coverage_rm::remove_sideeffect()
     {
       goto_programt &goto_program = f_it->second.body;
 
+      // temporary storage for the result of remove_sideeffects
       goto_programt tmp_program;
       Forall_goto_program_instructions (it, goto_program)
       {
@@ -23,11 +24,13 @@ void goto_coverage_rm::remove_sideeffect()
           exprt guard = migrate_expr_back(temp_guard);
           remove_sideeffects(guard, tmp_program);
 
+          // insert before it
           goto_program.destructive_insert(it, tmp_program);
           migrate_expr(guard, temp_guard);
         }
       }
     }
   }
+  // re-calculation as we might have newly inserted instructions
   goto_functions.update();
 }
