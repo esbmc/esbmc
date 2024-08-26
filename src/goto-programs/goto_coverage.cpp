@@ -183,19 +183,40 @@ void goto_coveraget::gen_cond_cov()
           get_filename_from_path(it->location.file().as_string());
         if (location_pool.count(cur_filename) == 0)
           continue;
+        /* 
+          Places that could contains condition
+          1. GOTO:          if (x == 1);
+          2. ASSIGN:        int x = y && z;
+          3. ASSERT
+          4. ASSUME
+          5. FUNCTION_CALL  test((signed int)(x != y));
+          6. RETURN         return x && y;
+          7. Other          1?2?3:4
+          The issue is that, the sideeffects have been removed 
+          thus the condition might have been split or modified.
+
+          For assert, assume and goto, we know it contains GUARD
+          For others, we need to convert the code back to expr and
+          check there operands.
+        */
 
         // e.g. assert(a == 1);
         if (
-          it->is_assert() &&
-          it->location.property().as_string() != "replaced assertion")
+          it->is_assume() ||
+          (it->is_assert() &&
+           it->location.property().as_string() != "replaced assertion"))
         {
-          exprt guard = migrate_expr_back(it->guard);
-          guard = handle_single_guard(guard);
-          exprt pre_cond = nil_exprt();
-          pre_cond.location() = it->location;
-          gen_cond_cov_assert(guard, pre_cond, goto_program, it);
-          // after adding the instrumentation, we convert it to constatn_true
-          replace_assert_to_guard(gen_true_expr(), it, false);
+          auto &_guard = it->guard;
+          if (!is_nil_expr(_guard))
+          {
+            exprt guard = migrate_expr_back(_guard);
+            guard = handle_single_guard(guard);
+            exprt pre_cond = nil_exprt();
+            pre_cond.location() = it->location;
+            gen_cond_cov_assert(guard, pre_cond, goto_program, it);
+            // after adding the instrumentation, we convert it to constatn_true
+            replace_assert_to_guard(gen_true_expr(), it, false);
+          }
         }
 
         // e.g. IF !(a > 1) THEN GOTO 3
@@ -215,6 +236,57 @@ void goto_coveraget::gen_cond_cov()
           pre_cond.location() = it->location;
           gen_cond_cov_assert(guard, pre_cond, goto_program, it);
         }
+
+        else if (it->is_assign())
+        {
+          const code_assign2t &expr = to_code_assign2t(it->code);
+          const expr2tc &_rhs = expr.source;
+          if (!is_nil_expr(_rhs))
+          {
+            exprt rhs = migrate_expr_back(_rhs);
+            handle_operands_guard(rhs, goto_program, it);
+          }
+        }
+        else if (it->is_other())
+        {
+          if (is_code_expression2t(it->code))
+          {
+            const auto &code_expression = to_code_expression2t(it->code);
+            const auto &_other = code_expression.operand;
+            if (!is_nil_expr(_other))
+            {
+              exprt other = migrate_expr_back(_other);
+              handle_operands_guard(other, goto_program, it);
+            }
+          }
+        }
+        else if (it->is_return())
+        {
+          const code_return2t &code_ret = to_code_return2t(it->code);
+          const auto &_ret = code_ret.operand;
+          if (!is_nil_expr(_ret))
+          {
+            exprt ret = migrate_expr_back(_ret);
+            handle_operands_guard(ret, goto_program, it);
+          }
+        }
+
+        else if (it->is_function_call())
+        {
+          const code_function_call2t &code_func =
+            to_code_function_call2t(it->code);
+          const auto &_func = code_func.operands;
+          for (const expr2tc &op : code_func.operands)
+          {
+            if (!is_nil_expr(op))
+            {
+              exprt func = migrate_expr_back(op);
+              handle_operands_guard(func, goto_program, it);
+            }
+          }
+        }
+
+        // reset target number
         target_num = -1;
       }
     }
@@ -521,4 +593,43 @@ exprt goto_coveraget::handle_single_guard(exprt &expr)
 
   // fall through
   return expr;
+}
+
+/*
+  for OTHER, ASSIGN, FUNCTION_CALL..
+  whose operands might contain conditions
+  we handle guards for each boolean sub-operands.
+*/
+void goto_coveraget::handle_operands_guard(
+  exprt &expr,
+  goto_programt &goto_program,
+  goto_programt::instructiont::targett &it)
+{
+  if (expr.has_operands())
+  {
+    auto &ops = expr.operands();
+    exprt pre_cond = nil_exprt();
+    pre_cond.location() = it->location;
+
+    if (ops.size() == 1)
+    {
+      // e.g. RETURN ++(x&&y);
+      handle_operands_guard(expr.op0(), goto_program, it);
+    }
+    else if (ops.size() == 2)
+    {
+      if (expr.id() == exprt::id_and || expr.id() == exprt::id_or)
+      {
+        Forall_operands (it, expr)
+          *it = handle_single_guard(*it);
+      }
+      gen_cond_cov_assert(expr, pre_cond, goto_program, it);
+    }
+    else
+    {
+      // this could only be tenary boolean
+      expr = handle_single_guard(expr);
+      gen_cond_cov_assert(expr, pre_cond, goto_program, it);
+    }
+  }
 }
