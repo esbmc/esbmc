@@ -1,10 +1,10 @@
 CORE
 main.c
---condition-coverage-vb
-^Reached Conditions:  8
+--condition-coverage
+^Reached Conditions:  98
 ^Short Circuited Conditions:  0
-^Total Conditions:  8
-^Condition Properties - SATISFIED:  4
-^Condition Properties - UNSATISFIED:  4
-^Condition Coverage: 50%
+^Total Conditions:  98
+^Condition Properties - SATISFIED:  98
+^Condition Properties - UNSATISFIED:  0
+^Condition Coverage: 100%
 ^VERIFICATION FAILED$
