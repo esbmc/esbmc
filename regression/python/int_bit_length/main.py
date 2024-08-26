@@ -18,3 +18,6 @@ def foo(x: int) -> int:
 e = int(5)
 f = e.bit_length()
 assert f == 3
+
+g = e.bit_length() - 1
+assert g == 2
