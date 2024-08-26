@@ -144,6 +144,8 @@ private:
       }
       else if (lhs["_type"] == "Constant")
         type = get_type_from_constant(lhs);
+      else if (lhs["_type"] == "Call" && lhs["func"]["_type"] == "Attribute")
+        type = get_type_from_method(lhs);
     }
 
     return type;
@@ -229,6 +231,25 @@ private:
     return "";
   }
 
+  std::string get_type_from_method(const Json &call)
+  {
+    std::string type("");
+
+    const std::string &obj = call["func"]["value"]["id"];
+    Json obj_node =
+      json_utils::find_var_decl(obj, get_current_func_name(), ast_);
+
+    assert(!obj_node.empty());
+
+    const std::string &obj_type =
+      obj_node["annotation"]["id"].template get<std::string>();
+
+    if (is_builtin_type(obj_type))
+      type = obj_type;
+
+    return type;
+  }
+
   void add_annotation(Json &body)
   {
     for (auto &element : body["body"])
@@ -298,17 +319,7 @@ private:
         value_type == "Call" &&
         element["value"]["func"]["_type"] == "Attribute")
       {
-        const std::string &obj = element["value"]["func"]["value"]["id"];
-        Json obj_node =
-          json_utils::find_var_decl(obj, get_current_func_name(), ast_);
-
-        assert(!obj_node.empty());
-
-        const std::string &obj_type =
-          obj_node["annotation"]["id"].template get<std::string>();
-
-        if (is_builtin_type(obj_type))
-          inferred_type = obj_type;
+        inferred_type = get_type_from_method(element["value"]);
       }
       else
         continue;
