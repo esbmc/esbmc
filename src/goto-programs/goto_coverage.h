@@ -65,6 +65,10 @@ public:
 protected:
   // turn a OP b OP c into a list a, b, c
   exprt handle_single_guard(exprt &guard);
+  void handle_operands_guard(
+    exprt &expr,
+    goto_programt &goto_program,
+    goto_programt::instructiont::targett &it);
   void add_cond_cov_assert(
     const exprt &top_ptr,
     const exprt &pre_cond,
