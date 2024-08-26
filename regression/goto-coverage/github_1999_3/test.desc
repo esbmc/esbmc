@@ -1,6 +1,6 @@
 CORE
 main.c
---condition-coverage--claims-vb
+--condition-coverage-claims-vb
 ^Reached Conditions:  2
 ^Short Circuited Conditions:  0
 ^Total Conditions:  2
