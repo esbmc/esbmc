@@ -275,7 +275,6 @@ void goto_coveraget::gen_cond_cov()
         {
           const code_function_call2t &code_func =
             to_code_function_call2t(it->code);
-          const auto &_func = code_func.operands;
           for (const expr2tc &op : code_func.operands)
           {
             if (!is_nil_expr(op))
