@@ -28,3 +28,12 @@ std::string symbol_id::to_string() const
 
   return ss.str();
 }
+
+void symbol_id::clear()
+{
+  filename_.clear();
+  classname_.clear();
+  function_name_.clear();
+  object_.clear();
+  attribute_.clear();
+}

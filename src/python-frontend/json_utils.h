@@ -82,9 +82,9 @@ JsonType find_function(const JsonType &json, const std::string &func_name)
 }
 
 template <typename JsonType>
-const JsonType get_var_node(const std::string &var_name, const JsonType &scope)
+const JsonType get_var_node(const std::string &var_name, const JsonType &block)
 {
-  for (auto &element : scope["body"])
+  for (auto &element : block["body"])
   {
     if (
       element["_type"] == "AnnAssign" && element["target"].contains("id") &&
@@ -92,9 +92,9 @@ const JsonType get_var_node(const std::string &var_name, const JsonType &scope)
       return element;
   }
 
-  if (scope.contains("args"))
+  if (block.contains("args"))
   {
-    for (auto &arg : scope["args"]["args"])
+    for (auto &arg : block["args"]["args"])
     {
       if (arg["arg"] == var_name)
         return arg;
