@@ -230,8 +230,7 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
   typet &lhs_type = lhs.type();
   typet &rhs_type = rhs.type();
 
-  auto update_symbol = [&](exprt &expr)
-  {
+  auto update_symbol = [&](exprt &expr) {
     symbol_id sid = create_symbol_id();
     sid.set_object(expr.name().c_str());
     symbolt *s = context.find_symbol(sid.to_string());
@@ -272,26 +271,6 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
         update_symbol(lhs);
     }
   }
-}
-
-std::string
-python_converter::create_symbol_id2(const std::string &filename) const
-{
-  std::stringstream symbol_id;
-  symbol_id << "py:" << filename;
-
-  if (!current_class_name.empty())
-    symbol_id << "@C@" << current_class_name;
-
-  if (!current_func_name.empty())
-    symbol_id << "@F@" << current_func_name;
-
-  return symbol_id.str();
-}
-
-std::string python_converter::create_symbol_id2() const
-{
-  return create_symbol_id2(python_filename);
 }
 
 symbol_id python_converter::create_symbol_id(const std::string &filename) const

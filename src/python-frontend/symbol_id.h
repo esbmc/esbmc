@@ -40,13 +40,7 @@ public:
     return function_name_;
   }
 
-  void clear() {
-    filename_.clear();
-    classname_.clear();
-    function_name_.clear();
-    object_.clear();
-    attribute_.clear();
-  }
+  void clear();
 
   std::string to_string() const;
 
