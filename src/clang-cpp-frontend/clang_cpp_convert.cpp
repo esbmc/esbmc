@@ -758,7 +758,8 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       return true;
 
     typet type;
-    if (get_type(member_call.getType(), type, true))
+    clang::QualType qtype = member_call.getCallReturnType(*ASTContext);
+    if (get_type(qtype, type, true))
       return true;
 
     side_effect_expr_function_callt call;
