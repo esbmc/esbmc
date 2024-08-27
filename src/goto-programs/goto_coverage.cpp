@@ -508,7 +508,7 @@ exprt goto_coveraget::handle_single_guard(exprt &expr)
 
     if (expr.id() == exprt::typecast)
     {
-      // specail handling for tenary condition
+      // specail handling for ternary condition
       bool has_sub_if = false;
       exprt sub = expr;
       auto op0_ptr = expr.operands().begin();
@@ -626,7 +626,7 @@ void goto_coveraget::handle_operands_guard(
     }
     else
     {
-      // this could only be tenary boolean
+      // this could only be ternary boolean
       expr = handle_single_guard(expr);
       gen_cond_cov_assert(expr, pre_cond, goto_program, it);
     }

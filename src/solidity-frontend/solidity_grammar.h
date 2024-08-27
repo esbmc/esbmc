@@ -301,7 +301,7 @@ enum ExpressionT
   UO_Not,     // ~
   UO_LNot,    // !
 
-  //TenaryOperator
+  //ternaryOperator
   ConditionalOperatorClass, // ?...:...
 
   // rule identifier
