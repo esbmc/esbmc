@@ -1,6 +1,7 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/json_utils.h>
 #include <python_frontend_types.h>
+#include <python-frontend/symbol_id.h>
 #include <ansi-c/convert_float_literal.h>
 #include <util/std_code.h>
 #include <util/c_types.h>
@@ -229,9 +230,12 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
   typet &lhs_type = lhs.type();
   typet &rhs_type = rhs.type();
 
-  auto update_symbol = [&](exprt &expr) {
-    std::string id = create_symbol_id() + "@" + expr.name().c_str();
-    symbolt *s = context.find_symbol(id);
+  auto update_symbol = [&](exprt &expr)
+  {
+    symbol_id sid = create_symbol_id();
+    sid.set_object(expr.name().c_str());
+    symbolt *s = context.find_symbol(sid.to_string());
+
     if (s != nullptr)
     {
       s->type = expr.type();
@@ -257,19 +261,21 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
     {
       // Update rhs symbol value to match with new type
       rhs_type = lhs_type;
-      update_symbol(rhs);
+      if (rhs.is_symbol())
+        update_symbol(rhs);
     }
     else
     {
       // Update lhs symbol value to match with new type
       lhs_type = rhs_type;
-      update_symbol(lhs);
+      if (lhs.is_symbol())
+        update_symbol(lhs);
     }
   }
 }
 
 std::string
-python_converter::create_symbol_id(const std::string &filename) const
+python_converter::create_symbol_id2(const std::string &filename) const
 {
   std::stringstream symbol_id;
   symbol_id << "py:" << filename;
@@ -283,9 +289,19 @@ python_converter::create_symbol_id(const std::string &filename) const
   return symbol_id.str();
 }
 
-std::string python_converter::create_symbol_id() const
+std::string python_converter::create_symbol_id2() const
 {
-  return create_symbol_id(python_filename);
+  return create_symbol_id2(python_filename);
+}
+
+symbol_id python_converter::create_symbol_id(const std::string &filename) const
+{
+  return symbol_id(filename, current_class_name, current_func_name);
+}
+
+symbol_id python_converter::create_symbol_id() const
+{
+  return symbol_id(python_filename, current_class_name, current_func_name);
 }
 
 // Get the type of an operand in binary operations
@@ -664,7 +680,8 @@ function_id python_converter::build_function_id(const nlohmann::json &element)
   const nlohmann::json &func_json = element["func"];
   const std::string &func_type = func_json["_type"];
   std::string func_name, obj_name, class_name;
-  std::string func_symbol_id = create_symbol_id();
+
+  symbol_id func_symbol_id = create_symbol_id();
 
   if (func_type == "Name")
     func_name = func_json["id"];
@@ -672,6 +689,7 @@ function_id python_converter::build_function_id(const nlohmann::json &element)
   {
     is_member_function_call = true;
     func_name = func_json["attr"];
+    func_symbol_id.set_function(func_name);
 
     if (func_json["value"]["_type"] == "Attribute")
       obj_name = func_json["value"]["attr"];
@@ -703,26 +721,30 @@ function_id python_converter::build_function_id(const nlohmann::json &element)
   if (func_name == "len")
   {
     func_name = __ESBMC_get_object_size;
-    func_symbol_id = "c:@F@" + __ESBMC_get_object_size;
+    func_symbol_id.clear();
+    func_symbol_id.set_prefix("c:");
+    func_symbol_id.set_function(func_name);
   }
   else if (is_builtin_type(obj_name))
   {
     class_name = obj_name;
-    std::stringstream ss;
-    ss << "py:" + python_filename + "@C@" + class_name + "@F@" + func_name;
-    func_symbol_id = ss.str();
+    func_symbol_id = symbol_id(python_filename, class_name, func_name);
   }
   else if (func_name == __ESBMC_assume || func_name == __VERIFIER_assume)
-    func_symbol_id = func_name;
-  else if (func_symbol_id.find("@F@") == std::string::npos)
-    func_symbol_id += "@F@" + func_name;
+  {
+    func_symbol_id.clear();
+    func_symbol_id.set_function(func_name);
+  }
+  else if (func_symbol_id.get_function().empty())
+    func_symbol_id.set_function(func_name);
 
   bool is_ctor_call = is_constructor_call(element);
 
   // Insert class name in the symbol id
   if (is_ctor_call || is_member_function_call)
   {
-    std::size_t pos = func_symbol_id.rfind("@F@");
+    std::size_t pos = func_symbol_id.to_string().rfind("@F@");
+
     if (pos != std::string::npos)
     {
       if (is_ctor_call)
@@ -734,20 +756,18 @@ function_id python_converter::build_function_id(const nlohmann::json &element)
           class_name = obj_name;
         else
         {
-          auto obj_node = /*get_var_node(obj_name, ast_json)*/ find_var_decl(
-            obj_name, current_func_name, ast_json);
+          auto obj_node = find_var_decl(obj_name, current_func_name, ast_json);
           if (obj_node.empty())
             abort();
 
           class_name = obj_node["annotation"]["id"].get<std::string>();
         }
       }
-      if (func_symbol_id.find("@C@") == std::string::npos)
-        func_symbol_id.insert(pos, "@C@" + class_name);
+      func_symbol_id.set_class(class_name);
     }
   }
 
-  return {func_name, func_symbol_id, class_name};
+  return {func_name, func_symbol_id.to_string(), class_name};
 }
 
 exprt python_converter::get_function_call(const nlohmann::json &element)
@@ -824,7 +844,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     bool is_instance_method_call = false;
     bool is_class_method_call = false;
     symbolt *obj_symbol = nullptr;
-    std::string obj_symbol_id("");
+    symbol_id obj_symbol_id = create_symbol_id();
 
     if (element["func"]["_type"] == "Attribute")
     {
@@ -839,8 +859,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       else
         caller = subelement["id"].get<std::string>();
 
-      obj_symbol_id = create_symbol_id() + "@" + caller;
-      obj_symbol = context.find_symbol(obj_symbol_id);
+      obj_symbol_id.set_object(caller);
+      obj_symbol = context.find_symbol(obj_symbol_id.to_string());
 
       // Handling a function call as a class method call when:
       // (1) The caller corresponds to a class name, for example: MyClass.foo().
@@ -894,7 +914,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
           update_instance_from_self(
             get_classname_from_symbol_id(func_symbol->id.as_string()),
             func_name,
-            obj_symbol_id);
+            obj_symbol_id.to_string());
         }
       }
       else
@@ -1118,18 +1138,22 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
     assert(!var_name.empty());
 
-    std::string symbol_id = create_symbol_id() + std::string("@") + var_name;
+    symbol_id sid = create_symbol_id();
+    sid.set_object(var_name);
 
     if (element.contains("attr") && is_class_attr)
-      symbol_id += "@" + element["attr"].get<std::string>();
+      sid.set_attribute(element["attr"].get<std::string>());
 
-    symbolt *symbol = context.find_symbol(symbol_id);
+    symbolt *symbol = context.find_symbol(sid.to_string());
+
     if (!symbol)
     {
-      symbol = find_symbol_in_global_scope(symbol_id);
+      std::string symbol_str = sid.to_string();
+      symbol = find_symbol_in_global_scope(symbol_str);
+
       if (!symbol)
       {
-        log_error("Symbol not found: {}\n", symbol_id.c_str());
+        log_error("Symbol not found: {}\n", sid.to_string());
         abort();
       }
     }
@@ -1201,9 +1225,11 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       else
       {
         // All class attributes are static symbols with ids in the format: filename@C@classname@varname
-        symbol_id = "py:" + python_filename + "@C@" + obj_type_name.substr(4) +
-                    "@" + attr_name;
-        symbolt *class_attr_symbol = context.find_symbol(symbol_id);
+        sid.set_function("");
+        sid.set_class(obj_type_name.substr(4));
+        sid.set_object(attr_name);
+        symbolt *class_attr_symbol = context.find_symbol(sid.to_string());
+
         if (!class_attr_symbol)
         {
           log_error("Attribute {} not found\n", attr_name);
@@ -1290,10 +1316,11 @@ void python_converter::update_instance_from_self(
   const std::string &func_name,
   const std::string &obj_symbol_id)
 {
-  std::string self_id =
-    create_symbol_id() + "@C@" + class_name + "@F@" + func_name + "@self";
+  symbol_id sid(python_filename, class_name, func_name);
+  sid.set_object("self");
 
-  auto self_instance = instance_attr_map.find(self_id);
+  auto self_instance = instance_attr_map.find(sid.to_string());
+
   if (self_instance != instance_attr_map.end())
   {
     std::set<std::string> &attr_list = instance_attr_map[obj_symbol_id];
@@ -1385,11 +1412,12 @@ void python_converter::get_var_assign(
   exprt lhs;
   symbolt *lhs_symbol = nullptr;
   locationt location_begin;
+  symbol_id id = create_symbol_id();
 
   if (ast_node["_type"] == "AnnAssign")
   {
     // Id and name
-    std::string name, id;
+    std::string name;
     auto target = ast_node["target"];
     if (!target.is_null())
     {
@@ -1398,10 +1426,10 @@ void python_converter::get_var_assign(
       else if (target["_type"] == "Attribute")
         name = target["attr"];
 
-      id = create_symbol_id() + "@" + name;
+      id.set_object(name);
     }
 
-    assert(!name.empty() && !id.empty());
+    assert(!name.empty());
 
     // Location
     location_begin = get_location_from_decl(ast_node["target"]);
@@ -1411,7 +1439,7 @@ void python_converter::get_var_assign(
 
     // Create/init symbol
     symbolt symbol = create_symbol(
-      module_name, name, id, location_begin, current_element_type);
+      module_name, name, id.to_string(), location_begin, current_element_type);
     symbol.lvalue = true;
     symbol.static_lifetime = false;
     symbol.file_local = true;
@@ -1431,8 +1459,8 @@ void python_converter::get_var_assign(
   else if (ast_node["_type"] == "Assign")
   {
     const std::string &name = ast_node["targets"][0]["id"].get<std::string>();
-    std::string symbol_id = create_symbol_id() + "@" + name;
-    lhs_symbol = context.find_symbol(symbol_id);
+    id.set_object(name);
+    lhs_symbol = context.find_symbol(id.to_string());
     assert(lhs_symbol);
     lhs = symbol_expr(*lhs_symbol);
   }
@@ -1643,7 +1671,8 @@ void python_converter::get_function_definition(
     type.return_type() = ctor_type;
   }
 
-  std::string id = create_symbol_id();
+  symbol_id id = create_symbol_id();
+
   std::string module_name =
     python_filename.substr(0, python_filename.find_last_of("."));
 
@@ -1672,7 +1701,7 @@ void python_converter::get_function_definition(
     arg.cmt_base_name(arg_name);
 
     // Argument id
-    std::string arg_id = id + "@" + arg_name;
+    std::string arg_id = id.to_string() + "@" + arg_name;
     arg.cmt_identifier(arg_id);
 
     // Location
@@ -1694,8 +1723,8 @@ void python_converter::get_function_definition(
   }
 
   // Create symbol
-  symbolt symbol =
-    create_symbol(module_name, current_func_name, id, location, type);
+  symbolt symbol = create_symbol(
+    module_name, current_func_name, id.to_string(), location, type);
   symbol.lvalue = true;
   symbol.is_extern = false;
   symbol.file_local = false;
@@ -1795,7 +1824,8 @@ void python_converter::get_class_definition(
       get_function_definition(class_member);
 
       exprt added_method =
-        symbol_expr(*context.find_symbol(create_symbol_id()));
+        symbol_expr(*context.find_symbol(create_symbol_id().to_string()));
+
       struct_typet::componentt method(added_method.name(), added_method.type());
       clazz.methods().push_back(method);
       current_func_name.clear();
@@ -1804,11 +1834,14 @@ void python_converter::get_class_definition(
     else if (class_member["_type"] == "AnnAssign")
     {
       get_var_assign(class_member, target_block);
-      symbolt *class_attr_symbol = context.find_symbol(
-        create_symbol_id() + "@" +
-        class_member["target"]["id"].get<std::string>());
+
+      symbol_id sid = create_symbol_id();
+      sid.set_object(class_member["target"]["id"].get<std::string>());
+      symbolt *class_attr_symbol = context.find_symbol(sid.to_string());
+
       if (!class_attr_symbol)
         abort();
+
       class_attr_symbol->static_lifetime = true;
     }
   }
@@ -2015,11 +2048,13 @@ bool python_converter::convert()
     get_function_definition(function_node);
 
     // Get function symbol
-    std::string symbol_id = create_symbol_id() + "@F@" + function;
-    symbolt *symbol = context.find_symbol(symbol_id);
+    symbol_id sid = create_symbol_id();
+    sid.set_function(function);
+    symbolt *symbol = context.find_symbol(sid.to_string());
+
     if (!symbol)
     {
-      log_error("Symbol \"{}\" not found\n", symbol_id.c_str());
+      log_error("Symbol \"{}\" not found\n", sid.to_string());
       return true;
     }
 

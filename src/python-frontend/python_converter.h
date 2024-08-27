@@ -10,6 +10,7 @@
 class codet;
 class struct_typet;
 class function_id;
+class symbol_id;
 
 class python_converter
 {
@@ -40,8 +41,10 @@ private:
 
   bool has_multiple_types(const nlohmann::json &container);
   void adjust_statement_types(exprt &lhs, exprt &rhs) const;
-  std::string create_symbol_id() const;
-  std::string create_symbol_id(const std::string &filename) const;
+  std::string create_symbol_id2() const;
+  std::string create_symbol_id2(const std::string &filename) const;
+  symbol_id create_symbol_id() const;
+  symbol_id create_symbol_id(const std::string &filename) const;
   bool is_constructor_call(const nlohmann::json &json);
   typet get_typet(const std::string &ast_type, size_t type_size = 0);
   typet get_typet(const nlohmann::json &elem);

@@ -30,9 +30,22 @@ public:
     function_name_ = func;
   }
 
+  void set_prefix(const std::string &prefix)
+  {
+    prefix_ = prefix;
+  }
+
   const std::string &get_function() const
   {
     return function_name_;
+  }
+
+  void clear() {
+    filename_.clear();
+    classname_.clear();
+    function_name_.clear();
+    object_.clear();
+    attribute_.clear();
   }
 
   std::string to_string() const;
@@ -45,4 +58,5 @@ private:
   std::string function_name_ = "";
   std::string object_ = "";
   std::string attribute_ = "";
+  std::string prefix_ = "py:";
 };
