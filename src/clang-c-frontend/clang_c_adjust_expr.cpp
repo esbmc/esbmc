@@ -237,6 +237,8 @@ void clang_c_adjust::adjust_side_effect(side_effect_exprt &expr)
       adjust_side_effect_statement_expression(expr);
     else if (statement == "gcc_conditional_expression")
     {
+      gen_typecast(ns, expr.op0(), expr.type());
+      gen_typecast(ns, expr.op1(), expr.type());
     }
     else if (statement == "nondet")
     {
