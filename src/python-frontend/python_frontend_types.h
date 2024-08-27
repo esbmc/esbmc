@@ -35,12 +35,6 @@ enum class ExpressionType
   UNKNOWN,
 };
 
-struct function_id
-{
-  std::string function_name;
-  std::string symbol_id;
-  std::string class_name;
-};
 
 bool is_builtin_type(const std::string &name);
 

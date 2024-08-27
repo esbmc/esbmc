@@ -40,6 +40,11 @@ public:
     return function_name_;
   }
 
+  const std::string &get_class() const
+  {
+    return classname_;
+  }
+
   void clear();
 
   std::string to_string() const;
