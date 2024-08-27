@@ -1358,7 +1358,8 @@ void clang_c_adjust::adjust_if(exprt &expr)
 
   // Typecast both the true and false results
   // If the types are inconsistent
-  gen_typecast_arithmetic(ns, expr.op1(), expr.op2());
+  gen_typecast(ns, expr.op1(), expr.type());
+  gen_typecast(ns, expr.op2(), expr.type());
 }
 
 void clang_c_adjust::align_se_function_call_return_type(

@@ -64,7 +64,7 @@ protected:
   adjust_function_call_arguments(side_effect_expr_function_callt &expr);
   void do_special_functions(side_effect_expr_function_callt &expr);
   void adjust_operands(exprt &expr);
-  virtual void adjust_if(exprt &expr);
+  void adjust_if(exprt &expr);
 
   /**
    * methods for code (codet) adjustment
