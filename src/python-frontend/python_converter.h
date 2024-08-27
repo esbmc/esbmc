@@ -34,7 +34,6 @@ private:
   exprt get_binary_operator_expr(const nlohmann::json &element);
   exprt get_logical_operator_expr(const nlohmann::json &element);
   exprt get_conditional_stm(const nlohmann::json &ast_node);
-  function_id build_function_id(const nlohmann::json &element);
   exprt get_function_call(const nlohmann::json &ast_block);
   exprt get_literal(const nlohmann::json &element);
   exprt get_block(const nlohmann::json &ast_block);
@@ -42,6 +41,7 @@ private:
   bool has_multiple_types(const nlohmann::json &container);
   void adjust_statement_types(exprt &lhs, exprt &rhs) const;
 
+  symbol_id build_function_id(const nlohmann::json &element);
   symbol_id create_symbol_id() const;
   symbol_id create_symbol_id(const std::string &filename) const;
 

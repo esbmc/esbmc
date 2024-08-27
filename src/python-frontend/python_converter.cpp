@@ -649,7 +649,7 @@ std::string python_converter::get_classname_from_symbol_id(
   return class_name;
 }
 
-function_id python_converter::build_function_id(const nlohmann::json &element)
+symbol_id python_converter::build_function_id(const nlohmann::json &element)
 {
   const std::string __ESBMC_get_object_size = "__ESBMC_get_object_size";
   const std::string __ESBMC_assume = "__ESBMC_assume";
@@ -668,14 +668,16 @@ function_id python_converter::build_function_id(const nlohmann::json &element)
   {
     is_member_function_call = true;
     func_name = func_json["attr"];
-    func_symbol_id.set_function(func_name);
 
     if (func_json["value"]["_type"] == "Attribute")
-      obj_name = func_json["value"]["attr"];
-    else if (func_json["value"]["_type"] == "Constant")
     {
-      if (func_json["value"]["value"].is_string())
-        obj_name = "str";
+      obj_name = func_json["value"]["attr"];
+    }
+    else if (
+      func_json["value"]["_type"] == "Constant" &&
+      func_json["value"]["value"].is_string())
+    {
+      obj_name = "str";
     }
     else if (func_json["value"]["_type"] == "BinOp")
     {
@@ -702,7 +704,6 @@ function_id python_converter::build_function_id(const nlohmann::json &element)
     func_name = __ESBMC_get_object_size;
     func_symbol_id.clear();
     func_symbol_id.set_prefix("c:");
-    func_symbol_id.set_function(func_name);
   }
   else if (is_builtin_type(obj_name))
   {
@@ -712,41 +713,32 @@ function_id python_converter::build_function_id(const nlohmann::json &element)
   else if (func_name == __ESBMC_assume || func_name == __VERIFIER_assume)
   {
     func_symbol_id.clear();
-    func_symbol_id.set_function(func_name);
   }
-  else if (func_symbol_id.get_function().empty())
-    func_symbol_id.set_function(func_name);
-
-  bool is_ctor_call = is_constructor_call(element);
 
   // Insert class name in the symbol id
-  if (is_ctor_call || is_member_function_call)
+  if (is_constructor_call(element))
+    class_name = func_name;
+  else if (is_member_function_call)
   {
-    std::size_t pos = func_symbol_id.to_string().rfind("@F@");
-
-    if (pos != std::string::npos)
+    if (is_builtin_type(obj_name) || is_class(obj_name, ast_json))
+      class_name = obj_name;
+    else
     {
-      if (is_ctor_call)
-        class_name = func_name;
-      else if (is_member_function_call)
-      {
-        assert(!obj_name.empty());
-        if (is_builtin_type(obj_name) || is_class(obj_name, ast_json))
-          class_name = obj_name;
-        else
-        {
-          auto obj_node = find_var_decl(obj_name, current_func_name, ast_json);
-          if (obj_node.empty())
-            abort();
+      auto obj_node = find_var_decl(obj_name, current_func_name, ast_json);
 
-          class_name = obj_node["annotation"]["id"].get<std::string>();
-        }
-      }
-      func_symbol_id.set_class(class_name);
+      if (obj_node.empty())
+        abort();
+
+      class_name = obj_node["annotation"]["id"].get<std::string>();
     }
   }
 
-  return {func_name, func_symbol_id.to_string(), class_name};
+  if (!class_name.empty())
+    func_symbol_id.set_class(class_name);
+
+  func_symbol_id.set_function(func_name);
+
+  return func_symbol_id;
 }
 
 exprt python_converter::get_function_call(const nlohmann::json &element)
@@ -754,8 +746,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   // TODO: Refactor into different classes/functions
   if (element.contains("func") && element["_type"] == "Call")
   {
-    function_id func_id = build_function_id(element);
-    std::string func_name(func_id.function_name);
+    symbol_id func_id = build_function_id(element);
+    const std::string &func_name = func_id.get_function();
 
     // nondet_X() functions restricted to basic types supported in Python
     std::regex pattern(
@@ -796,7 +788,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
 
     locationt location = get_location_from_decl(element);
-    const std::string func_symbol_id(func_id.symbol_id);
+    const std::string &func_symbol_id = func_id.to_string();
     assert(!func_symbol_id.empty());
 
     if (
@@ -834,7 +826,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         caller = subelement["attr"].get<std::string>();
       else if (
         subelement["_type"] == "Constant" || subelement["_type"] == "BinOp")
-        caller = func_id.class_name;
+        caller = func_id.get_class();
       else
         caller = subelement["id"].get<std::string>();
 
@@ -870,10 +862,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       if (is_ctor_call || is_instance_method_call)
       {
         // Get method from a base class when it is not defined in the current class
-        const std::string class_name(func_id.class_name);
-
         func_symbol = find_function_in_base_classes(
-          class_name, func_symbol_id, func_name, is_ctor_call);
+          func_id.get_class(), func_symbol_id, func_name, is_ctor_call);
 
         if (is_ctor_call)
         {
@@ -1372,20 +1362,6 @@ void python_converter::get_var_assign(
       current_element_type = get_list_type(ast_node["value"]["elts"]);
     else
       current_element_type = get_typet(lhs_type, type_size);
-  }
-  else
-  {
-    // Get type from declaration node
-    const std::string &var_name =
-      ast_node["targets"][0]["id"].get<std::string>();
-    lhs_type = get_var_type(var_name);
-
-    if (lhs_type.empty())
-    {
-      log_error("Type undefined for {}", var_name);
-      abort();
-    }
-    current_element_type = get_typet(lhs_type);
   }
 
   exprt lhs;
