@@ -12,7 +12,7 @@ symbol_id::symbol_id(
 std::string symbol_id::to_string() const
 {
   std::stringstream ss;
-  ss << "py:" << filename_;
+  ss << prefix_ << filename_;
 
   if (!classname_.empty())
     ss << "@C@" << classname_;
