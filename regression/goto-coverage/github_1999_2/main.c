@@ -1,5 +1,5 @@
 
-
+#include <assert.h>
 void main()
 {
     int bAllDifferent;
