@@ -737,19 +737,7 @@ void goto_convertt::do_function_call_symbol(
   else if (base_name == "operator new")
   {
     assert(arguments.size() == 1);
-
-    // Change it into a cpp_new expression
-    side_effect_exprt new_function("cpp_new");
-    new_function.add("#location") = function.cmt_location();
-    new_function.add("sizeof") = arguments.front();
-
-    // Set return type, a allocated pointer
-    // XXX jmorse, const-qual misery
-    new_function.type() = pointer_typet(
-      static_cast<const typet &>(arguments.front().c_sizeof_type()));
-    new_function.type().add("#location") = function.cmt_location();
-
-    do_cpp_new(lhs, new_function, dest);
+    do_malloc(lhs, function, arguments, dest);
   }
   else if (base_name == "__ESBMC_va_arg")
   {
