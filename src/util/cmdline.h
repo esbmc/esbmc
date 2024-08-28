@@ -44,6 +44,10 @@ public:
   ~cmdlinet();
   typedef std::map<std::string, std::list<std::string>> options_mapt;
   options_mapt options_map;
+
+private:
+  std::string get_config_file_location() const;
+  std::string expand_path_string(std::string path) const;
 };
 
 #endif
