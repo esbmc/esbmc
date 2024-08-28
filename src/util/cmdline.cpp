@@ -159,8 +159,23 @@ std::string cmdlinet::get_config_file_location() const
   const auto envloc = std::getenv("ESBMC_CONFIG_FILE");
   if (envloc)
   {
-    std::string config_path(envloc);
-    config_path = this->expand_path_string(config_path);
+    const std::string config_path =
+      this->expand_path_string(std::string(envloc));
+    if (std::filesystem::exists(config_path))
+    {
+      return config_path;
+    }
+  }
+  else
+  {
+    // Load default config file if it exists.
+#ifdef WIN32
+#  define DEFAULT_CONFIG_PATH "%userprofile%\\esbmc.toml"
+#else
+#  define DEFAULT_CONFIG_PATH "~/.config/esbmc.toml"
+#endif
+    const std::string config_path =
+      this->expand_path_string(DEFAULT_CONFIG_PATH);
     if (std::filesystem::exists(config_path))
     {
       return config_path;
