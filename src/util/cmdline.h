@@ -47,7 +47,7 @@ public:
 
 private:
   std::string get_config_file_location() const;
-  std::string expand_path_string(std::string path) const;
+  std::string expand_user(std::string const path) const;
 };
 
 #endif

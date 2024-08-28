@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <sstream>
 
 #include <util/cmdline.h>
@@ -148,9 +149,24 @@ const char *cmdlinet::getval(const char *option) const
   return value->second.front().c_str();
 }
 
-std::string cmdlinet::expand_path_string(std::string path) const
+std::string cmdlinet::expand_user(std::string const path) const
 {
-  return path;
+#ifdef WIN32
+#  define HOME_ENV_NAME "USERPROFILE"
+#else
+#  define HOME_ENV_NAME "HOME"
+#endif
+
+  std::string result = std::string(path);
+
+  // Case ~
+  const std::optional<std::string> home_path = std::getenv(HOME_ENV_NAME);
+  if (!result.empty() && result[0] == '~' && home_path)
+  {
+    result.replace(0, 1, home_path.value());
+  }
+
+  return result;
 }
 
 // Will return empty string if invalid.
@@ -159,8 +175,7 @@ std::string cmdlinet::get_config_file_location() const
   const auto envloc = std::getenv("ESBMC_CONFIG_FILE");
   if (envloc)
   {
-    const std::string config_path =
-      this->expand_path_string(std::string(envloc));
+    const std::string config_path = this->expand_user(std::string(envloc));
     if (std::filesystem::exists(config_path))
     {
       return config_path;
@@ -174,8 +189,7 @@ std::string cmdlinet::get_config_file_location() const
 #else
 #  define DEFAULT_CONFIG_PATH "~/.config/esbmc.toml"
 #endif
-    const std::string config_path =
-      this->expand_path_string(DEFAULT_CONFIG_PATH);
+    const std::string config_path = this->expand_user(DEFAULT_CONFIG_PATH);
     if (std::filesystem::exists(config_path))
     {
       return config_path;
