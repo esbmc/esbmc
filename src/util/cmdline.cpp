@@ -1,5 +1,8 @@
+#include <boost/program_options/parsers.hpp>
 #include <cassert>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <sstream>
 
 #include <util/cmdline.h>
@@ -145,6 +148,27 @@ const char *cmdlinet::getval(const char *option) const
   return value->second.front().c_str();
 }
 
+std::string cmdlinet::expand_path_string(std::string path) const
+{
+  return path;
+}
+
+// Will return empty string if invalid.
+std::string cmdlinet::get_config_file_location() const
+{
+  const auto envloc = std::getenv("ESBMC_CONFIG_FILE");
+  if (envloc)
+  {
+    std::string config_path(envloc);
+    config_path = this->expand_path_string(config_path);
+    if (std::filesystem::exists(config_path))
+    {
+      return config_path;
+    }
+  }
+  return "";
+}
+
 bool cmdlinet::parse(
   int argc,
   const char **argv,
@@ -195,12 +219,33 @@ bool cmdlinet::parse(
   p.add("input-file", -1);
   try
   {
+    // Load env
     boost::program_options::store(
       boost::program_options::command_line_parser(
         simple_shell_unescape(getenv("ESBMC_OPTS"), "ESBMC_OPTS"))
         .options(all_cmdline_options)
         .run(),
       vm);
+    // Load config file
+    const auto config_path = this->get_config_file_location();
+    if (!config_path.empty())
+    {
+      std::ifstream file(config_path);
+      if (file)
+      {
+        log_status("Reading config file: {}", config_path);
+      }
+      else
+      {
+        log_error("Could not read config file: {}", config_path);
+        return false;
+      }
+      boost::program_options::store(
+        boost::program_options::parse_config_file(
+          file, all_cmdline_options, false),
+        vm);
+    }
+    // Load commandline parameters
     boost::program_options::store(
       boost::program_options::command_line_parser(argc, argv)
         .options(all_cmdline_options)
