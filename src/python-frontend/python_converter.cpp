@@ -763,7 +763,9 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
         func_name = obj_type;
     }
 
-    if (!is_builtin_type(func_name) && !is_consensus_type(func_name))
+    if (
+      !is_builtin_type(func_name) && !is_consensus_type(func_name) &&
+      !is_consensus_func(func_name))
     {
       const auto &func_node = find_function(ast_json["body"], func_name);
       assert(!func_node.empty());
@@ -1963,7 +1965,7 @@ bool python_converter::convert()
     // Load operational models -----
     const std::string &ast_output_dir =
       ast_json["ast_output_dir"].get<std::string>();
-    std::list<std::string> model_files = {"range", "int"};
+    std::list<std::string> model_files = {"range", "int", "consensus"};
     is_loading_models = true;
 
     for (const auto &file : model_files)
