@@ -149,7 +149,20 @@ template <typename Integer>
 double modf(Integer num, double *iptr);
  */
 
-using ::__builtin_isnan;
+bool isnan(float x)
+{
+  return __builtin_isnan(x);
+}
+
+bool isnan(double x)
+{
+  return __builtin_isnan(x);
+}
+
+bool isnan(long double x)
+{
+  return __builtin_isnan(x);
+}
 
 #undef CIMPORT1
 #undef CIMPORT2
