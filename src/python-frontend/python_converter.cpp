@@ -111,7 +111,7 @@ typet python_converter::get_typet(const std::string &ast_type, size_t type_size)
 {
   if (ast_type == "float")
     return double_type();
-  if (ast_type == "int")
+  if (ast_type == "int" || ast_type == "GeneralizedIndex")
     /* FIXME: We need to map 'int' to another irep type that provides unlimited precision
 	https://docs.python.org/3/library/stdtypes.html#numeric-types-int-float-complex */
     return int_type();
