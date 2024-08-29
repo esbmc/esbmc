@@ -11,7 +11,8 @@ bool is_consensus_type(const std::string &name)
 {
   return (
     name == "uint64" || name == "uint256" || name == "Epoch" ||
-    name == "Gwei" || name == "BLSFieldElement" || name == "Slot");
+    name == "Gwei" || name == "BLSFieldElement" || name == "Slot" ||
+    name == "GeneralizedIndex");
 }
 
 std::map<std::string, std::string> consensus_func_to_type = {
