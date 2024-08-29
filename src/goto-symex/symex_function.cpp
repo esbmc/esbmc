@@ -117,7 +117,12 @@ unsigned goto_symext::argument_assignments(
 
       // Assign value to function argument
       // TODO: Should we hide it (true means hidden)?
-      symex_assign(code_assign2tc(lhs, rhs), false);
+      if (options.get_bool_option("generate-html-report")) {
+        symex_assign(code_assign2tc(lhs, rhs), false);
+      }
+      else {
+        symex_assign(code_assign2tc(lhs, rhs), true);
+      }
     }
   }
 

@@ -10,6 +10,7 @@
 #include <util/migrate.h>
 #include <vector>
 #include <string_view>
+
 class goto_trace_stept
 {
 public:

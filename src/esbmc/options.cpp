@@ -97,8 +97,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"warning,W",
      boost::program_options::value<std::vector<std::string>>(),
      "enable specific frontend warnings, disable with \"no-\" prefix, or pass "
-     "options directly to the C/C++ frontends with the form "
-     "-Wc,OPT1,OPT2,..."},
+     "options directly to the C/C++ frontends with the form -Wc,OPT1,OPT2,..."},
     {"std",
      boost::program_options::value<std::string>()->value_name("version"),
      "set C/C++ standard version"},
