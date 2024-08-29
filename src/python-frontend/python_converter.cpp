@@ -743,229 +743,251 @@ symbol_id python_converter::build_function_id(const nlohmann::json &element)
 
 exprt python_converter::get_function_call(const nlohmann::json &element)
 {
-  // TODO: Refactor into different classes/functions
-  if (element.contains("func") && element["_type"] == "Call")
+  if (!element.contains("func") || element["_type"] != "Call")
   {
-    symbol_id func_id = build_function_id(element);
-    const std::string &func_name = func_id.get_function();
-
-    // nondet_X() functions restricted to basic types supported in Python
-    std::regex pattern(
-      R"(nondet_(int|char|bool|float)|__VERIFIER_nondet_(int|char|bool|float))");
-
-    // Handle non-det functions
-    if (std::regex_match(func_name, pattern))
-    {
-      // Function name pattern: nondet_(type). e.g: nondet_bool(), nondet_int()
-      size_t underscore_pos = func_name.rfind("_");
-      std::string type = func_name.substr(underscore_pos + 1);
-      exprt rhs = exprt("sideeffect", get_typet(type));
-      rhs.statement("nondet");
-      return rhs;
-    }
-
-    if (is_builtin_type(func_name) || is_consensus_type(func_name))
-    {
-      /* Calls to initialise variables using built-in type functions such as int(1), str("test"), bool(1)
-       * are converted to simple variable assignments, simplifying the handling of built-in type objects.
-       * For example, x = int(1) becomes x = 1. */
-      size_t arg_size = 1;
-      auto arg = element["args"][0];
-
-      if (func_name == "str")
-        arg_size = arg["value"].get<std::string>().size(); // get string length
-
-      else if (func_name == "int" && arg["value"].is_number_float())
-      {
-        double arg_value = arg["value"].get<double>();
-        arg["value"] = static_cast<int>(arg_value);
-      }
-
-      typet t = get_typet(func_name, arg_size);
-      exprt expr = get_expr(arg);
-      expr.type() = t;
-      return expr;
-    }
-
-    locationt location = get_location_from_decl(element);
-    const std::string &func_symbol_id = func_id.to_string();
-    assert(!func_symbol_id.empty());
-
-    if (
-      func_name == "__ESBMC_assume" || func_name == "__VERIFIER_assume" ||
-      func_name == "__ESBMC_get_object_size")
-    {
-      if (context.find_symbol(func_symbol_id.c_str()) == nullptr)
-      {
-        // Create/init __ESBMC_get_object_size symbol
-        code_typet code_type;
-        if (func_name == "__ESBMC_get_object_size")
-        {
-          code_type.return_type() = int_type();
-          code_type.arguments().push_back(pointer_typet(empty_typet()));
-        }
-
-        symbolt symbol = create_symbol(
-          python_filename, func_name, func_symbol_id, location, code_type);
-        context.add(symbol);
-      }
-    }
-
-    bool is_ctor_call = is_constructor_call(element);
-    bool is_instance_method_call = false;
-    bool is_class_method_call = false;
-    symbolt *obj_symbol = nullptr;
-    symbol_id obj_symbol_id = create_symbol_id();
-
-    if (element["func"]["_type"] == "Attribute")
-    {
-      const auto &subelement = element["func"]["value"];
-
-      std::string caller;
-      if (subelement["_type"] == "Attribute")
-        caller = subelement["attr"].get<std::string>();
-      else if (
-        subelement["_type"] == "Constant" || subelement["_type"] == "BinOp")
-        caller = func_id.get_class();
-      else
-        caller = subelement["id"].get<std::string>();
-
-      obj_symbol_id.set_object(caller);
-      obj_symbol = context.find_symbol(obj_symbol_id.to_string());
-
-      // Handling a function call as a class method call when:
-      // (1) The caller corresponds to a class name, for example: MyClass.foo().
-      // (2) Calling methods of built-in types, such as int.from_bytes()
-      //     All the calls to built-in methods are handled by class methods in operational models.
-      // (3) Calling a instance method from a built-in type object, for example: x.bit_length() when x is an int
-      // If the caller is a class or a built-in type, the following condition detects a class method call.
-      if (
-        is_class(caller, ast_json) || is_builtin_type(caller) ||
-        is_builtin_type(get_var_type(caller)))
-      {
-        is_class_method_call = true;
-      }
-      else if (!json_utils::is_module(caller, ast_json))
-      {
-        is_instance_method_call = true;
-      }
-    }
-
-    const symbolt *func_symbol = context.find_symbol(func_symbol_id.c_str());
-
-    // Find function in imported modules
-    if (!func_symbol)
-      func_symbol = find_function_in_imported_modules(func_symbol_id);
-
-    if (func_symbol == nullptr)
-    {
-      if (is_ctor_call || is_instance_method_call)
-      {
-        // Get method from a base class when it is not defined in the current class
-        func_symbol = find_function_in_base_classes(
-          func_id.get_class(), func_symbol_id, func_name, is_ctor_call);
-
-        if (is_ctor_call)
-        {
-          if (!func_symbol)
-          {
-            // If __init__() is not defined for the class and bases,
-            // an assignment (x = MyClass()) is converted to a declaration (x:MyClass) in get_var_assign().
-            return exprt("_init_undefined");
-          }
-          base_ctor_called = true;
-        }
-        else if (is_instance_method_call)
-        {
-          assert(obj_symbol);
-
-          // Update obj attributes from self
-          update_instance_from_self(
-            get_classname_from_symbol_id(func_symbol->id.as_string()),
-            func_name,
-            obj_symbol_id.to_string());
-        }
-      }
-      else
-      {
-        log_warning("Undefined function: {}", func_name.c_str());
-        return exprt();
-      }
-    }
-
-    code_function_callt call;
-    call.location() = location;
-    call.function() = symbol_expr(*func_symbol);
-    const typet &return_type = to_code_type(func_symbol->type).return_type();
-    call.type() = return_type;
-
-    // Add self as first parameter
-    if (is_ctor_call)
-    {
-      // Self is the LHS
-      assert(ref_instance);
-      call.arguments().push_back(gen_address_of(*ref_instance));
-    }
-    else if (is_instance_method_call)
-    {
-      assert(obj_symbol);
-      // Passing object as "self" (first) parameter on instance method calls
-      call.arguments().push_back(gen_address_of(symbol_expr(*obj_symbol)));
-    }
-    else if (is_class_method_call)
-    {
-      // Passing a void pointer to the "cls" argument
-      typet t = pointer_typet(empty_typet());
-      call.arguments().push_back(gen_zero(t));
-
-      // All methods for the int class without parameters acts solely on the encapsulated integer value.
-      // Therefore, we always pass the caller (obj) as a parameter in these functions.
-      // For example, if x is an int instance, x.bit_length() call becomes bit_length(x)
-      if (
-        obj_symbol && get_var_type(obj_symbol->name.as_string()) == "int" &&
-        element["args"].empty())
-      {
-        call.arguments().push_back(symbol_expr(*obj_symbol));
-      }
-      else if (element["func"]["value"]["_type"] == "BinOp")
-      {
-        // Handling function call from binary expressions like: (x+1).bit_length()
-        call.arguments().push_back(get_expr(element["func"]["value"]));
-      }
-    }
-
-    for (const auto &arg_node : element["args"])
-    {
-      exprt arg = get_expr(arg_node);
-      if (func_name == "__ESBMC_get_object_size")
-      {
-        c_typecastt c_typecast(ns);
-        c_typecast.implicit_typecast(arg, pointer_typet(empty_typet()));
-      }
-
-      // All array function arguments (e.g. bytes type) are handled as pointers.
-      if (arg.type().is_array())
-        call.arguments().push_back(address_of_exprt(arg));
-      else
-        call.arguments().push_back(arg);
-    }
-
-    if (func_name == "__ESBMC_get_object_size")
-    {
-      side_effect_expr_function_callt sideeffect;
-      sideeffect.function() = call.function();
-      sideeffect.arguments() = call.arguments();
-      sideeffect.location() = call.location();
-      sideeffect.type() =
-        static_cast<const typet &>(call.function().type().return_type());
-      return sideeffect;
-    }
-
-    return call;
+    log_error("Invalid function call");
+    abort();
   }
 
-  log_error("Invalid function call");
-  abort();
+  const std::string function = config.options.get_option("function");
+  if (!function.empty() && !is_loading_models)
+  {
+    std::string func_name("");
+    if (element["func"]["_type"] == "Name")
+      func_name = element["func"]["id"];
+    else if (element["func"]["_type"] == "Attribute")
+    {
+      func_name = element["func"]["value"]["id"];
+      const std::string &obj_type = get_var_type(func_name);
+      if (!obj_type.empty())
+        func_name = obj_type;
+    }
+
+    if (!is_builtin_type(func_name) && !is_consensus_type(func_name))
+    {
+      const auto &func_node = find_function(ast_json["body"], func_name);
+      assert(!func_node.empty());
+      get_function_definition(func_node);
+    }
+  }
+
+  // TODO: Refactor into different classes/functions
+  symbol_id func_id = build_function_id(element);
+  const std::string &func_name = func_id.get_function();
+
+  // nondet_X() functions restricted to basic types supported in Python
+  std::regex pattern(
+    R"(nondet_(int|char|bool|float)|__VERIFIER_nondet_(int|char|bool|float))");
+
+  // Handle non-det functions
+  if (std::regex_match(func_name, pattern))
+  {
+    // Function name pattern: nondet_(type). e.g: nondet_bool(), nondet_int()
+    size_t underscore_pos = func_name.rfind("_");
+    std::string type = func_name.substr(underscore_pos + 1);
+    exprt rhs = exprt("sideeffect", get_typet(type));
+    rhs.statement("nondet");
+    return rhs;
+  }
+
+  if (is_builtin_type(func_name) || is_consensus_type(func_name))
+  {
+    /* Calls to initialise variables using built-in type functions such as int(1), str("test"), bool(1)
+       * are converted to simple variable assignments, simplifying the handling of built-in type objects.
+       * For example, x = int(1) becomes x = 1. */
+    size_t arg_size = 1;
+    auto arg = element["args"][0];
+
+    if (func_name == "str")
+      arg_size = arg["value"].get<std::string>().size(); // get string length
+
+    else if (func_name == "int" && arg["value"].is_number_float())
+    {
+      double arg_value = arg["value"].get<double>();
+      arg["value"] = static_cast<int>(arg_value);
+    }
+
+    typet t = get_typet(func_name, arg_size);
+    exprt expr = get_expr(arg);
+    expr.type() = t;
+    return expr;
+  }
+
+  locationt location = get_location_from_decl(element);
+  const std::string &func_symbol_id = func_id.to_string();
+  assert(!func_symbol_id.empty());
+
+  if (
+    func_name == "__ESBMC_assume" || func_name == "__VERIFIER_assume" ||
+    func_name == "__ESBMC_get_object_size")
+  {
+    if (context.find_symbol(func_symbol_id.c_str()) == nullptr)
+    {
+      // Create/init __ESBMC_get_object_size symbol
+      code_typet code_type;
+      if (func_name == "__ESBMC_get_object_size")
+      {
+        code_type.return_type() = int_type();
+        code_type.arguments().push_back(pointer_typet(empty_typet()));
+      }
+
+      symbolt symbol = create_symbol(
+        python_filename, func_name, func_symbol_id, location, code_type);
+      context.add(symbol);
+    }
+  }
+
+  bool is_ctor_call = is_constructor_call(element);
+  bool is_instance_method_call = false;
+  bool is_class_method_call = false;
+  symbolt *obj_symbol = nullptr;
+  symbol_id obj_symbol_id = create_symbol_id();
+
+  if (element["func"]["_type"] == "Attribute")
+  {
+    const auto &subelement = element["func"]["value"];
+
+    std::string caller;
+    if (subelement["_type"] == "Attribute")
+      caller = subelement["attr"].get<std::string>();
+    else if (
+      subelement["_type"] == "Constant" || subelement["_type"] == "BinOp")
+      caller = func_id.get_class();
+    else
+      caller = subelement["id"].get<std::string>();
+
+    obj_symbol_id.set_object(caller);
+    obj_symbol = context.find_symbol(obj_symbol_id.to_string());
+
+    // Handling a function call as a class method call when:
+    // (1) The caller corresponds to a class name, for example: MyClass.foo().
+    // (2) Calling methods of built-in types, such as int.from_bytes()
+    //     All the calls to built-in methods are handled by class methods in operational models.
+    // (3) Calling a instance method from a built-in type object, for example: x.bit_length() when x is an int
+    // If the caller is a class or a built-in type, the following condition detects a class method call.
+    if (
+      is_class(caller, ast_json) || is_builtin_type(caller) ||
+      is_builtin_type(get_var_type(caller)))
+    {
+      is_class_method_call = true;
+    }
+    else if (!json_utils::is_module(caller, ast_json))
+    {
+      is_instance_method_call = true;
+    }
+  }
+
+  const symbolt *func_symbol = context.find_symbol(func_symbol_id.c_str());
+
+  // Find function in imported modules
+  if (!func_symbol)
+    func_symbol = find_function_in_imported_modules(func_symbol_id);
+
+  if (func_symbol == nullptr)
+  {
+    if (is_ctor_call || is_instance_method_call)
+    {
+      // Get method from a base class when it is not defined in the current class
+      func_symbol = find_function_in_base_classes(
+        func_id.get_class(), func_symbol_id, func_name, is_ctor_call);
+
+      if (is_ctor_call)
+      {
+        if (!func_symbol)
+        {
+          // If __init__() is not defined for the class and bases,
+          // an assignment (x = MyClass()) is converted to a declaration (x:MyClass) in get_var_assign().
+          return exprt("_init_undefined");
+        }
+        base_ctor_called = true;
+      }
+      else if (is_instance_method_call)
+      {
+        assert(obj_symbol);
+
+        // Update obj attributes from self
+        update_instance_from_self(
+          get_classname_from_symbol_id(func_symbol->id.as_string()),
+          func_name,
+          obj_symbol_id.to_string());
+      }
+    }
+    else
+    {
+      log_warning("Undefined function: {}", func_name.c_str());
+      return exprt();
+    }
+  }
+
+  code_function_callt call;
+  call.location() = location;
+  call.function() = symbol_expr(*func_symbol);
+  const typet &return_type = to_code_type(func_symbol->type).return_type();
+  call.type() = return_type;
+
+  // Add self as first parameter
+  if (is_ctor_call)
+  {
+    // Self is the LHS
+    assert(ref_instance);
+    call.arguments().push_back(gen_address_of(*ref_instance));
+  }
+  else if (is_instance_method_call)
+  {
+    assert(obj_symbol);
+    // Passing object as "self" (first) parameter on instance method calls
+    call.arguments().push_back(gen_address_of(symbol_expr(*obj_symbol)));
+  }
+  else if (is_class_method_call)
+  {
+    // Passing a void pointer to the "cls" argument
+    typet t = pointer_typet(empty_typet());
+    call.arguments().push_back(gen_zero(t));
+
+    // All methods for the int class without parameters acts solely on the encapsulated integer value.
+    // Therefore, we always pass the caller (obj) as a parameter in these functions.
+    // For example, if x is an int instance, x.bit_length() call becomes bit_length(x)
+    if (
+      obj_symbol && get_var_type(obj_symbol->name.as_string()) == "int" &&
+      element["args"].empty())
+    {
+      call.arguments().push_back(symbol_expr(*obj_symbol));
+    }
+    else if (element["func"]["value"]["_type"] == "BinOp")
+    {
+      // Handling function call from binary expressions like: (x+1).bit_length()
+      call.arguments().push_back(get_expr(element["func"]["value"]));
+    }
+  }
+
+  for (const auto &arg_node : element["args"])
+  {
+    exprt arg = get_expr(arg_node);
+    if (func_name == "__ESBMC_get_object_size")
+    {
+      c_typecastt c_typecast(ns);
+      c_typecast.implicit_typecast(arg, pointer_typet(empty_typet()));
+    }
+
+    // All array function arguments (e.g. bytes type) are handled as pointers.
+    if (arg.type().is_array())
+      call.arguments().push_back(address_of_exprt(arg));
+    else
+      call.arguments().push_back(arg);
+  }
+
+  if (func_name == "__ESBMC_get_object_size")
+  {
+    side_effect_expr_function_callt sideeffect;
+    sideeffect.function() = call.function();
+    sideeffect.arguments() = call.arguments();
+    sideeffect.location() = call.location();
+    sideeffect.type() =
+      static_cast<const typet &>(call.function().type().return_type());
+    return sideeffect;
+  }
+
+  return call;
 }
 
 exprt python_converter::get_literal(const nlohmann::json &element)
@@ -1942,6 +1964,7 @@ bool python_converter::convert()
     const std::string &ast_output_dir =
       ast_json["ast_output_dir"].get<std::string>();
     std::list<std::string> model_files = {"range", "int"};
+    is_loading_models = true;
 
     for (const auto &file : model_files)
     {
@@ -1961,6 +1984,7 @@ bool python_converter::convert()
       // Add imported code to main symbol
       main_symbol.value.swap(model_code);
     }
+    is_loading_models = false;
   }
 
   // Handle --function option
