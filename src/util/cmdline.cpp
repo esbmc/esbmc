@@ -3,7 +3,6 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
-#include <optional>
 #include <sstream>
 
 #include <util/cmdline.h>
@@ -162,15 +161,13 @@ std::string cmdlinet::expand_user(std::string const path) const
   // Case ~
   const std::optional<std::string> home_path = std::getenv(HOME_ENV_NAME);
   if (!result.empty() && result[0] == '~' && home_path)
-  {
     result.replace(0, 1, home_path.value());
-  }
 
   return result;
 }
 
 // Will return empty string if invalid.
-std::string cmdlinet::get_config_file_location() const
+std::optional<std::string> cmdlinet::get_config_file_location() const
 {
   const auto envloc = std::getenv("ESBMC_CONFIG_FILE");
   if (envloc)
@@ -195,7 +192,7 @@ std::string cmdlinet::get_config_file_location() const
       return config_path;
     }
   }
-  return "";
+  return std::nullopt;
 }
 
 bool cmdlinet::parse(
@@ -257,9 +254,10 @@ bool cmdlinet::parse(
       vm);
     // Load config file
     const auto config_path = this->get_config_file_location();
-    if (!config_path.empty())
+    if (config_path && !config_path->empty())
     {
-      std::ifstream file(config_path);
+      std::ifstream file(config_path.value());
+      // File path provided is invalid.
       if (file)
       {
         log_status("Reading config file: {}", config_path);
