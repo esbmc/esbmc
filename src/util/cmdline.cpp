@@ -260,11 +260,11 @@ bool cmdlinet::parse(
       // File path provided is invalid.
       if (file)
       {
-        log_status("Reading config file: {}", config_path);
+        log_status("Reading config file: {}", config_path.value());
       }
       else
       {
-        log_error("Could not read config file: {}", config_path);
+        log_error("Could not read config file: {}", config_path.value());
         return false;
       }
       boost::program_options::store(
