@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <optional>
 #include <boost/program_options.hpp>
 
 /* WORKAROUND: On *BSD macOS the include of some system headers
@@ -46,7 +47,7 @@ public:
   options_mapt options_map;
 
 private:
-  std::string get_config_file_location() const;
+  std::optional<std::string> get_config_file_location() const;
   std::string expand_user(std::string const path) const;
 };
 
