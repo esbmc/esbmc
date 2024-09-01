@@ -65,7 +65,6 @@ public:
    * @param expr The expression representing the pseudo-destructor call
    */
   void adjust_cpp_pseudo_destructor_call(exprt &expr);
-  void adjust_if(exprt &expr) override;
   void adjust_side_effect_throw(side_effect_exprt &expr);
 
   /**

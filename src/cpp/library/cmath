@@ -149,6 +149,8 @@ template <typename Integer>
 double modf(Integer num, double *iptr);
  */
 
+using ::__builtin_isnan;
+
 #undef CIMPORT1
 #undef CIMPORT2
 
