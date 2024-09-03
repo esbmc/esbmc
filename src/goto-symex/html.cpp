@@ -373,10 +373,14 @@ window.addEventListener("keydown", function (event) {
 class html_report
 {
 public:
-  html_report(const goto_tracet &goto_trace, const namespacet &ns, const char **argv, const int argc);
+  html_report(
+    const goto_tracet &goto_trace,
+    const namespacet &ns,
+    const char **argv,
+    const int argc);
   void output(std::ostream &oss) const;
 
-  const int cmd_argc; 
+  const int cmd_argc;
   const char **cmd_argv;
   bool show_partial_assertions = false;
 
@@ -420,7 +424,11 @@ private:
   }
 };
 
-html_report::html_report(const goto_tracet &goto_trace, const namespacet &ns, const char **argv, const int argc)
+html_report::html_report(
+  const goto_tracet &goto_trace,
+  const namespacet &ns,
+  const char **argv,
+  const int argc)
   : goto_trace(goto_trace), ns(ns), cmd_argv(argv), cmd_argc(argc)
 {
   // TODO: C++20 reverse view

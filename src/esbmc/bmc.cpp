@@ -42,8 +42,17 @@
 #include <atomic>
 #include <goto-symex/witnesses.h>
 
-bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context, const char **argv, const int argc)
-  : options(opts), context(_context), ns(context), cmd_argv(argv), cmd_argc(argc)
+bmct::bmct(
+  goto_functionst &funcs,
+  optionst &opts,
+  contextt &_context,
+  const char **argv,
+  const int argc)
+  : options(opts),
+    context(_context),
+    ns(context),
+    cmd_argv(argv),
+    cmd_argc(argc)
 {
   interleaving_number = 0;
   interleaving_failed = 0;
@@ -924,7 +933,8 @@ smt_convt::resultt bmct::multi_property_check(
         show_goto_trace(out, ns, goto_trace);
       }
       if (options.get_bool_option("generate-html-report"))
-        generate_html_report(fmt::format("{}", i), ns, goto_trace, cmd_argv, cmd_argc);
+        generate_html_report(
+          fmt::format("{}", i), ns, goto_trace, cmd_argv, cmd_argc);
       std::ostringstream oss;
       log_fail("\n[Counterexample]\n");
       show_goto_trace(oss, ns, goto_trace);
