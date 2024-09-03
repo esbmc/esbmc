@@ -16,8 +16,10 @@
 class bmct
 {
 public:
-  bmct(goto_functionst &funcs, optionst &opts, contextt &_context);
+  bmct(goto_functionst &funcs, optionst &opts, contextt &_context, const char **argv, const int argc);
 
+  const int cmd_argc;
+  const char **cmd_argv;
   optionst &options;
   enum ltl_res
   {

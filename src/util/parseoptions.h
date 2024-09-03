@@ -15,6 +15,8 @@ public:
     int argc,
     const char **argv);
 
+  const int cmd_argc;
+  const char **cmd_argv;
   cmdlinet cmdline;
   virtual void help();
   virtual int doit() = 0;
