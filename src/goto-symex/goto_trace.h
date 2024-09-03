@@ -140,6 +140,8 @@ void counterexample_value(
 void generate_html_report(
   const std::string_view uuid,
   const namespacet &ns,
-  const goto_tracet &goto_trace);
+  const goto_tracet &goto_trace,
+  const char **argv,
+  const int argc);
 
 #endif

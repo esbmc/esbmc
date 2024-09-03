@@ -14,7 +14,7 @@ parseoptions_baset::parseoptions_baset(
   const struct group_opt_templ *opts,
   int argc,
   const char **argv)
-  : executable_path(argv[0])
+  : executable_path(argv[0]), cmd_argv(argv), cmd_argc(argc)
 {
   exception_occured = cmdline.parse(argc, argv, opts);
 }

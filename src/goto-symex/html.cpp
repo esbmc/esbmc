@@ -373,9 +373,11 @@ window.addEventListener("keydown", function (event) {
 class html_report
 {
 public:
-  html_report(const goto_tracet &goto_trace, const namespacet &ns);
+  html_report(const goto_tracet &goto_trace, const namespacet &ns, const char **argv, const int argc);
   void output(std::ostream &oss) const;
 
+  const int cmd_argc; 
+  const char **cmd_argv;
   bool show_partial_assertions = false;
 
 protected:
@@ -418,8 +420,8 @@ private:
   }
 };
 
-html_report::html_report(const goto_tracet &goto_trace, const namespacet &ns)
-  : goto_trace(goto_trace), ns(ns)
+html_report::html_report(const goto_tracet &goto_trace, const namespacet &ns, const char **argv, const int argc)
+  : goto_trace(goto_trace), ns(ns), cmd_argv(argv), cmd_argc(argc)
 {
   // TODO: C++20 reverse view
   for (const goto_trace_stept &step : goto_trace.steps)
@@ -474,8 +476,8 @@ const std::string html_report::generate_body() const
   // Annoted Source Header
   {
     std::ostringstream oss;
-    for (const auto &param : config.args)
-      oss << param << " ";
+    for (int i = 0; i < cmd_argc; ++i)
+      oss << cmd_argv[i] << " ";
     body << fmt::format(
       clang_bug_report::annotated_source_header_fmt, oss.str());
   }
@@ -617,10 +619,12 @@ void html_report::output(std::ostream &oss) const
 void generate_html_report(
   const std::string_view uuid,
   const namespacet &ns,
-  const goto_tracet &goto_trace)
+  const goto_tracet &goto_trace,
+  const char **argv,
+  const int argc)
 {
   log_status("Generating HTML report for trace: {}", uuid);
-  const html_report report(goto_trace, ns);
+  const html_report report(goto_trace, ns, argv, argc);
 
   std::ofstream html(fmt::format("report-{}.html", uuid));
   report.output(html);
