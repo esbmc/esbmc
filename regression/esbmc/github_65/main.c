@@ -7,7 +7,7 @@ const float *pc = (const float []){1e0, 1e1, 1e2}; // read-only compound literal
  
 int main(void)
 {
-    int n = 2, *p = &n;
+    int n = 10, *p = &n;
     p = (int [2]){*p}; // creates an unnamed automatic array of type int[2]
                        // initializes the first element to the value formerly held in *p
                        // initializes the second element to zero
