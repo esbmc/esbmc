@@ -10,6 +10,55 @@ clang_cpp_adjust::clang_cpp_adjust(contextt &_context)
 {
 }
 
+void clang_cpp_adjust::gen_implicit_union_copy_move_constructor(symbolt &symbol)
+{
+  if (!symbol.type.is_code())
+    return;
+
+  code_typet &ctor_type = to_code_type(symbol.type);
+
+  if (
+    ctor_type.return_type().id() != "constructor" ||
+    !ctor_type.return_type().get_bool("#implicit_union_copy_move_constructor"))
+    return;
+
+  if (symbol.value.is_not_nil())
+  {
+    code_blockt &ctor_body = to_code_block(to_code(symbol.value));
+    assert(
+      ctor_body.operands().size() == 1 &&
+      ctor_body.op0().statement() ==
+        "throw_decl"); // just a sanity check that we don't accidentally change any clang generated body in the future
+  }
+  else
+  {
+    code_blockt ctor_body;
+    symbol.value = ctor_body;
+  }
+  code_blockt &ctor_body = to_code_block(to_code(symbol.value));
+  /* https://en.cppreference.com/w/cpp/language/copy_constructor#Implicitly-defined_copy_constructor
+   * > If the implicitly-declared copy constructor is not deleted, it is defined (that is, a function body is generated and compiled)
+   * > by the compiler if odr-used or needed for constant evaluation(since C++11).
+   * > **For union types, the implicitly-defined copy constructor copies the object representation (as by std::memmove).**
+   * We don't call std::memmove here, we should be able to just assign the union.
+   * (The wording is similar for https://en.cppreference.com/w/cpp/language/move_constructor#Implicitly-defined_move_constructor)
+   */
+
+  code_assignt copy_ctor_assign;
+  auto this_argument = ctor_type.arguments().at(0);
+  auto this_copy_ref_argument = ctor_type.arguments().at(1);
+  exprt lhs = dereference_exprt(
+    symbol_exprt(this_argument.cmt_identifier(), this_argument.type()),
+    this_argument.type());
+  exprt rhs = symbol_exprt(
+    this_copy_ref_argument.cmt_identifier(), this_copy_ref_argument.type());
+  copy_ctor_assign.lhs() = lhs;
+  copy_ctor_assign.rhs() = rhs;
+  copy_ctor_assign.location() = ctor_body.location();
+  adjust_assign(copy_ctor_assign);
+  ctor_body.operands().push_back(copy_ctor_assign);
+}
+
 void clang_cpp_adjust::adjust_symbol(symbolt &symbol)
 {
   clang_c_adjust::adjust_symbol(symbol);
@@ -22,6 +71,7 @@ void clang_cpp_adjust::adjust_symbol(symbolt &symbol)
    */
   gen_vbotptr_initializations(symbol);
   gen_vptr_initializations(symbol);
+  gen_implicit_union_copy_move_constructor(symbol);
 }
 
 void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
