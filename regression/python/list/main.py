@@ -14,3 +14,8 @@ assert l3[1] == 2.5
 l4 = ["abc", "def"]
 assert l4[0] == "abc"
 assert l4[1] == "def"
+
+def make_list() -> list[int]:
+    l5 = [1,2,3]
+    return l5
+

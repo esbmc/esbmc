@@ -1611,12 +1611,24 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   return code;
 }
 
+const nlohmann::json &get_return_statement(const nlohmann::json &function)
+{
+  for (const auto &stmt : function["body"])
+  {
+    if (get_statement_type(stmt) == StatementType::RETURN)
+      return stmt;
+  }
+  log_error(
+    "Function {} has no return statement", function["name"].get<std::string>());
+  abort();
+}
+
 void python_converter::get_function_definition(
   const nlohmann::json &function_node)
 {
   // Function return type
   code_typet type;
-  nlohmann::json return_node = function_node["returns"];
+  const nlohmann::json& return_node = function_node["returns"];
   if (return_node.contains("id"))
   {
     type.return_type() = get_typet(return_node["id"].get<std::string>());
@@ -1626,6 +1638,17 @@ void python_converter::get_function_definition(
     (return_node.contains("value") && return_node["value"].is_null()))
   {
     type.return_type() = empty_typet();
+  }
+  else if (
+    return_node.contains("value") && return_node["value"]["_type"] == "Name")
+  {
+    // Get type from return statement
+    const auto &return_stmt = get_return_statement(function_node);
+    const auto &return_var = find_var_decl(
+      return_stmt["value"]["id"].get<std::string>(),
+      function_node["name"].get<std::string>(),
+      ast_json);
+    type.return_type() = get_list_type(return_var["value"]["elts"]);
   }
   else
   {
