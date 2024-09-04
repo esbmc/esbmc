@@ -1713,6 +1713,8 @@ bool clang_cpp_convertert::annotate_class_method(
   {
     // annotate ctor and dtor return type
     annotate_ctor_dtor_rtn_type(cxxmdd, component_type.return_type());
+    annotate_implicit_copy_move_ctor_union(
+      cxxmdd, component_type.return_type());
 
     /*
      * We also have a `component` in class type representing the ctor/dtor.
@@ -1939,19 +1941,20 @@ bool clang_cpp_convertert::is_duplicate_method(
   return false;
 }
 
-void clang_cpp_convertert::annotate_cpyctor(
+void clang_cpp_convertert::annotate_implicit_copy_move_ctor_union(
   const clang::CXXMethodDecl &cxxmdd,
-  typet &rtn_type)
+  typet &ctor_return_type)
 {
-  if (is_cpyctor(cxxmdd))
-    rtn_type.set("#copy_cons", true);
+  if (
+    is_copy_or_move_ctor(cxxmdd) && cxxmdd.isImplicit() &&
+    cxxmdd.getParent()->isUnion())
+    ctor_return_type.set("#implicit_union_copy_move_constructor", true);
 }
 
-bool clang_cpp_convertert::is_cpyctor(const clang::DeclContext &dcxt)
+bool clang_cpp_convertert::is_copy_or_move_ctor(const clang::DeclContext &dcxt)
 {
   if (const auto *ctor = llvm::dyn_cast<clang::CXXConstructorDecl>(&dcxt))
-    if (ctor->isCopyConstructor())
-      return true;
+    return ctor->isCopyOrMoveConstructor();
 
   return false;
 }
@@ -1973,7 +1976,6 @@ void clang_cpp_convertert::annotate_ctor_dtor_rtn_type(
                            ? "destructor"
                            : "constructor";
   typet tmp_rtn_type(mark_rtn);
-  annotate_cpyctor(cxxmdd, tmp_rtn_type);
   rtn_type = tmp_rtn_type;
 }
 

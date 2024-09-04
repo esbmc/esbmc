@@ -107,6 +107,15 @@ public:
     const std::string &suffix,
     std::vector<irep_idt> &ids,
     bool is_catch = false);
+
+  /**
+   * Generates an implicit copy and move constructor for a symbol if it is a union.
+   * Clang does not generate copy and move constructors for unions, so we
+   * need to generate one ourselves.
+   *
+   * @param symbol The symbol for which the implicit copy and move constructor is generated.
+   */
+  void gen_implicit_union_copy_move_constructor(symbolt &symbol);
 };
 
 #endif /* CLANG_CPP_FRONTEND_CLANG_CPP_ADJUST_H_ */
