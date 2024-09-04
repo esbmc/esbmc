@@ -160,7 +160,10 @@ private:
         elem["_type"] == "FunctionDef" && elem["name"] == func_name &&
         elem.contains("returns") && !elem["returns"].is_null())
       {
-        return elem["returns"]["id"];
+        if (elem["returns"]["_type"] == "Subscript")
+          return elem["returns"]["value"]["id"];
+        else
+          return elem["returns"]["id"];
       }
     }
     return std::string();

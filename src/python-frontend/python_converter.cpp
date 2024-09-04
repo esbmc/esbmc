@@ -1372,6 +1372,18 @@ typet python_converter::get_list_type(const nlohmann::json &list)
   abort();
 }
 
+const nlohmann::json &get_return_statement(const nlohmann::json &function)
+{
+  for (const auto &stmt : function["body"])
+  {
+    if (get_statement_type(stmt) == StatementType::RETURN)
+      return stmt;
+  }
+  log_error(
+    "Function {} has no return statement", function["name"].get<std::string>());
+  abort();
+}
+
 void python_converter::get_var_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
@@ -1383,7 +1395,19 @@ void python_converter::get_var_assign(
     size_t type_size = get_type_size(ast_node);
     lhs_type = ast_node["annotation"]["id"];
     if (lhs_type == "list")
-      current_element_type = get_list_type(ast_node["value"]["elts"]);
+    {
+      if (ast_node["value"]["_type"] == "List")
+        current_element_type = get_list_type(ast_node["value"]["elts"]);
+      else if (ast_node["value"]["_type"] == "Call")
+      {
+        symbol_id sid = create_symbol_id();
+        sid.set_function(ast_node["value"]["func"]["id"]);
+        symbolt *func_symbol = context.find_symbol(sid.to_string());
+        assert(func_symbol);
+        current_element_type =
+          static_cast<code_typet &>(func_symbol->type).return_type();
+      }
+    }
     else
       current_element_type = get_typet(lhs_type, type_size);
   }
@@ -1609,18 +1633,6 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
     code.copy_to_operands(else_expr);
 
   return code;
-}
-
-const nlohmann::json &get_return_statement(const nlohmann::json &function)
-{
-  for (const auto &stmt : function["body"])
-  {
-    if (get_statement_type(stmt) == StatementType::RETURN)
-      return stmt;
-  }
-  log_error(
-    "Function {} has no return statement", function["name"].get<std::string>());
-  abort();
 }
 
 void python_converter::get_function_definition(
