@@ -175,7 +175,8 @@ protected:
    *  cxxmdd: clang AST node representing the constructor we are dealing with
    *  rtn_type: the corresponding return type node
    */
-  void annotate_implicit_copy_move_ctor_union(const clang::CXXMethodDecl &cxxmdd,
+  void annotate_implicit_copy_move_ctor_union(
+    const clang::CXXMethodDecl &cxxmdd,
     typet &ctor_return_type);
   /*
    * Flag return type in ctor or dtor, e.g.
