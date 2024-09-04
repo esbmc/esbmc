@@ -19,3 +19,4 @@ def make_list() -> list[int]:
     l5 = [1,2,3]
     return l5
 
+l6 = make_list()
