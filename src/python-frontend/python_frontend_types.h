@@ -35,7 +35,6 @@ enum class ExpressionType
   UNKNOWN,
 };
 
-
 bool is_builtin_type(const std::string &name);
 
 // TODO: Add a compilation flag or move it to a specific implementation
