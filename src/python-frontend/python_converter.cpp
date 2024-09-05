@@ -139,7 +139,34 @@ typet python_converter::get_typet(const std::string &ast_type, size_t type_size)
   }
   if (is_class(ast_type, ast_json))
     return symbol_typet("tag-" + ast_type);
+
   return empty_typet();
+}
+
+std::string type_to_string(const typet &t)
+{
+  if (t == double_type())
+    return "float";
+  if (t == int_type())
+    return "int";
+  if (t == long_long_uint_type())
+    return "uint64";
+  if (t == bool_type())
+    return "bool";
+  if (t == uint256_type())
+    return "uint256";
+  if (t.is_array())
+  {
+    const array_typet& arr_type = static_cast<const array_typet &>(t);
+    if (arr_type.subtype() == char_type())
+      return "str";
+    if (arr_type.subtype() == int_type())
+      return "bytes";
+    if (arr_type.subtype().is_array())
+      return type_to_string(arr_type.subtype());
+  }
+
+  return "";
 }
 
 typet python_converter::get_typet(const nlohmann::json &elem)
@@ -311,7 +338,9 @@ std::string python_converter::get_operand_type(const nlohmann::json &element)
   {
     nlohmann::json list_node = find_var_decl(
       element["value"]["id"].get<std::string>(), current_func_name, ast_json);
-    return get_operand_type(list_node["value"]["elts"][0]);
+
+    array_typet list_type = get_list_type(list_node["value"]);
+    return type_to_string(list_type.subtype());
   }
 
   return std::string();
@@ -1361,15 +1390,30 @@ std::string python_converter::get_var_type(const std::string &var_name) const
   return ref["annotation"]["id"].get<std::string>();
 }
 
-typet python_converter::get_list_type(const nlohmann::json &list)
+typet python_converter::get_list_type(const nlohmann::json &list_value)
 {
-  if (!has_multiple_types(list)) // All elements have the same type
+  if (list_value["_type"] == "List") // Get list value type from elements
   {
-    typet t = get_typet(list[0]["value"]); // Get the first element type
-    return build_array(t, list.size());
+	const nlohmann::json& elts = list_value["elts"];
+    if (!has_multiple_types(elts)) // All elements have the same type
+    {
+      typet t = get_typet(elts[0]["value"]); // Get the first element type
+      return build_array(t, elts.size());
+    }
+    log_error("Multiple type lists are not supported yet\n");
+    abort();
   }
-  log_error("Multiple type lists are not supported yet\n");
-  abort();
+
+  if (list_value["_type"] == "Call") // Get list type from function return type
+  {
+    symbol_id sid = create_symbol_id();
+    sid.set_function(list_value["func"]["id"]);
+    symbolt *func_symbol = context.find_symbol(sid.to_string());
+    assert(func_symbol);
+    return static_cast<code_typet &>(func_symbol->type).return_type();
+  }
+
+  return typet();
 }
 
 const nlohmann::json &get_return_statement(const nlohmann::json &function)
@@ -1395,19 +1439,7 @@ void python_converter::get_var_assign(
     size_t type_size = get_type_size(ast_node);
     lhs_type = ast_node["annotation"]["id"];
     if (lhs_type == "list")
-    {
-      if (ast_node["value"]["_type"] == "List")
-        current_element_type = get_list_type(ast_node["value"]["elts"]);
-      else if (ast_node["value"]["_type"] == "Call")
-      {
-        symbol_id sid = create_symbol_id();
-        sid.set_function(ast_node["value"]["func"]["id"]);
-        symbolt *func_symbol = context.find_symbol(sid.to_string());
-        assert(func_symbol);
-        current_element_type =
-          static_cast<code_typet &>(func_symbol->type).return_type();
-      }
-    }
+      current_element_type = get_list_type(ast_node["value"]);
     else
       current_element_type = get_typet(lhs_type, type_size);
   }
@@ -1660,7 +1692,7 @@ void python_converter::get_function_definition(
       return_stmt["value"]["id"].get<std::string>(),
       function_node["name"].get<std::string>(),
       ast_json);
-    type.return_type() = get_list_type(return_var["value"]["elts"]);
+    type.return_type() = get_list_type(return_var["value"]);
   }
   else
   {

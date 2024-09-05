@@ -20,3 +20,6 @@ def make_list() -> list[int]:
     return l5
 
 l6 = make_list()
+assert l6[0] == 1
+assert l6[1] == 2
+assert l6[2] == 3
