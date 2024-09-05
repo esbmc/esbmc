@@ -82,7 +82,7 @@ private:
   exprt *ref_instance;
   bool is_converting_lhs = false;
   bool is_converting_rhs = false;
-  bool is_loading_models =  false;
+  bool is_loading_models = false;
   bool base_ctor_called = false;
 
   // Map object to list of instance attributes

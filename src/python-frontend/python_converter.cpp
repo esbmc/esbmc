@@ -157,7 +157,7 @@ std::string type_to_string(const typet &t)
     return "uint256";
   if (t.is_array())
   {
-    const array_typet& arr_type = static_cast<const array_typet &>(t);
+    const array_typet &arr_type = static_cast<const array_typet &>(t);
     if (arr_type.subtype() == char_type())
       return "str";
     if (arr_type.subtype() == int_type())
@@ -1394,7 +1394,7 @@ typet python_converter::get_list_type(const nlohmann::json &list_value)
 {
   if (list_value["_type"] == "List") // Get list value type from elements
   {
-	const nlohmann::json& elts = list_value["elts"];
+    const nlohmann::json &elts = list_value["elts"];
     if (!has_multiple_types(elts)) // All elements have the same type
     {
       typet t = get_typet(elts[0]["value"]); // Get the first element type
@@ -1672,7 +1672,7 @@ void python_converter::get_function_definition(
 {
   // Function return type
   code_typet type;
-  const nlohmann::json& return_node = function_node["returns"];
+  const nlohmann::json &return_node = function_node["returns"];
   if (return_node.contains("id"))
   {
     type.return_type() = get_typet(return_node["id"].get<std::string>());
