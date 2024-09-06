@@ -14,7 +14,7 @@ public:
     const struct group_opt_templ *opts,
     int argc,
     const char **argv);
-  
+
   cmdlinet cmdline;
   virtual void help();
   virtual int doit() = 0;
