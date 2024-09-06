@@ -77,12 +77,14 @@ private:
   typet current_element_type;
   std::string python_filename;
   const nlohmann::json &ast_json;
+  nlohmann::json imported_module_json;
   std::string current_func_name;
   std::string current_class_name;
   exprt *ref_instance;
   bool is_converting_lhs = false;
   bool is_converting_rhs = false;
   bool is_loading_models = false;
+  bool is_importing_module = false;
   bool base_ctor_called = false;
 
   // Map object to list of instance attributes

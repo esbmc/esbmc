@@ -2,6 +2,7 @@
 #include <python-frontend/json_utils.h>
 #include <python_frontend_types.h>
 #include <python-frontend/symbol_id.h>
+#include <python-frontend/python_module.h>
 #include <ansi-c/convert_float_literal.h>
 #include <util/std_code.h>
 #include <util/c_types.h>
@@ -627,7 +628,7 @@ symbolt *python_converter::find_function_in_imported_modules(
 {
   for (const auto &obj : ast_json["body"])
   {
-    if (obj["_type"] == "ImportFrom")
+    if (obj["_type"] == "ImportFrom" || obj["_type"] == "Import")
     {
       std::regex pattern("py:(.*?)@");
       std::string imported_symbol = std::regex_replace(
@@ -1407,8 +1408,15 @@ typet python_converter::get_list_type(const nlohmann::json &list_value)
   if (list_value["_type"] == "Call") // Get list type from function return type
   {
     symbol_id sid = create_symbol_id();
-    sid.set_function(list_value["func"]["id"]);
+    if (list_value["func"]["_type"] == "Attribute")
+      sid.set_function(list_value["func"]["attr"]);
+    else
+      sid.set_function(list_value["func"]["id"]);
+
     symbolt *func_symbol = context.find_symbol(sid.to_string());
+    if (!func_symbol)
+      func_symbol = find_function_in_imported_modules(sid.to_string());
+
     assert(func_symbol);
     return static_cast<code_typet &>(func_symbol->type).return_type();
   }
@@ -1437,7 +1445,11 @@ void python_converter::get_var_assign(
   {
     // Get type from annotation node
     size_t type_size = get_type_size(ast_node);
-    lhs_type = ast_node["annotation"]["id"];
+    if (ast_node["annotation"]["_type"] == "Subscript")
+      lhs_type = ast_node["annotation"]["value"]["id"];
+    else
+      lhs_type = ast_node["annotation"]["id"];
+
     if (lhs_type == "list")
       current_element_type = get_list_type(ast_node["value"]);
     else
@@ -1688,10 +1700,12 @@ void python_converter::get_function_definition(
   {
     // Get type from return statement
     const auto &return_stmt = get_return_statement(function_node);
+    const auto &json = (is_importing_module) ? imported_module_json : ast_json;
     const auto &return_var = find_var_decl(
       return_stmt["value"]["id"].get<std::string>(),
       function_node["name"].get<std::string>(),
-      ast_json);
+      json);
+    assert(!return_var.empty());
     type.return_type() = get_list_type(return_var["value"]);
   }
   else
@@ -2131,11 +2145,13 @@ bool python_converter::convert()
   }
   else
   {
+    std::string main_python_filename = python_filename;
     // Convert imported modules
     for (const auto &elem : ast_json["body"])
     {
       if (elem["_type"] == "ImportFrom" || elem["_type"] == "Import")
       {
+        is_importing_module = true;
         const std::string &module_name = (elem["_type"] == "ImportFrom")
                                            ? elem["module"]
                                            : elem["names"][0]["name"];
@@ -2143,7 +2159,6 @@ bool python_converter::convert()
         module_path << ast_json["ast_output_dir"].get<std::string>() << "/"
                     << module_name << ".json";
         std::ifstream imported_file(module_path.str());
-        nlohmann::json imported_module_json;
         imported_file >> imported_module_json;
 
         python_filename = imported_module_json["filename"].get<std::string>();
@@ -2154,8 +2169,12 @@ bool python_converter::convert()
 
         // Add imported code to main symbol
         main_symbol.value.swap(imported_code);
+        imported_module_json.clear();
       }
     }
+
+    is_importing_module = false;
+    python_filename = main_python_filename;
 
     // Convert main statements
     exprt main_block = get_block(ast_json["body"]);

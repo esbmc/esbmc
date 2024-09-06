@@ -1,3 +1,8 @@
-from os import listdir
+# from os import listdir
+#
+# listdir()
 
-listdir()
+import os
+
+path = "/"
+items = os.listdir(path)
