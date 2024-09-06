@@ -16,7 +16,10 @@
 #include <regex>
 #include <unordered_map>
 
+#include <boost/filesystem.hpp>
+
 using namespace json_utils;
+namespace fs = boost::filesystem;
 
 static const std::unordered_map<std::string, std::string> operator_map = {
   {"Add", "+"},         {"Sub", "-"},          {"Mult", "*"},
@@ -2024,6 +2027,28 @@ python_converter::python_converter(
 {
 }
 
+void append_models_from_directory(std::list<std::string>& file_list, const std::string& dir_path) {
+    fs::path directory(dir_path);
+
+    // Checks if the directory exists
+    if (!fs::exists(directory) || !fs::is_directory(directory)) {
+        log_error("Directory does not exist or is not a directory: {}", dir_path);
+        return;
+    }
+
+    // Iterates over the files in the directory
+    for (fs::directory_iterator it(directory), end_it; it != end_it; ++it)
+    {
+      if (fs::is_regular_file(*it) && it->path().extension() == ".json")
+      {
+        std::string file_name =
+          directory.filename().string() + "/" +
+          it->path().stem().string(); // File name without the extension
+        file_list.push_back(file_name);
+      }
+    }
+}
+
 bool python_converter::convert()
 {
   code_typet main_type;
@@ -2045,12 +2070,17 @@ bool python_converter::convert()
     const std::string &ast_output_dir =
       ast_json["ast_output_dir"].get<std::string>();
     std::list<std::string> model_files = {"range", "int", "consensus"};
+    std::list<std::string> model_folders = {"os"};
+
+    for (const auto &folder : model_folders)
+    {
+      append_models_from_directory(model_files, ast_output_dir + "/" + folder);
+    }
+
     is_loading_models = true;
 
     for (const auto &file : model_files)
     {
-      log_progress("Loading model: {}", file + ".py");
-
       std::stringstream model_path;
       model_path << ast_output_dir << "/" << file << ".json";
 

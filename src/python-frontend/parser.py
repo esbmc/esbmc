@@ -58,7 +58,7 @@ def add_type_annotation(node):
         value_node.encoded_bytes = encode_bytes(value_node.value)
 
 
-def process_imports(node, output_dir):
+def process_imports(node, output_dir, imported_modules):
     """
     Process import statements in the AST node.
 
@@ -73,6 +73,9 @@ def process_imports(node, output_dir):
     else: #ImportFrom
         module_name = node.module
         imported_elements = node.names
+
+    # Adds the imported module to tracking
+    imported_modules.append(module_name)
 
     # Check if module is available/installed
     if is_imported_model(module_name):
@@ -124,6 +127,9 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir):
     # Construct JSON filename
     json_filename = os.path.join(output_dir, "{}.json".format(os.path.basename(python_filename[:-3])))
 
+    json_dir = os.path.dirname(json_filename)
+    if not os.path.exists(json_dir):
+        os.makedirs(json_dir)
 
     # Write AST JSON to file
     try:
@@ -133,6 +139,46 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir):
         print("Error writing JSON file: {}".format(e))
 
 
+def detect_and_process_submodules(node, imported_modules, output_dir):
+    """
+    Detects the usage of submodules in the AST and processes them.
+
+    Parameters:
+        - node: The AST node to process for submodules.
+        - imported_modules: List tracking imported modules.
+        - output_dir: The directory to save the generated JSON files.
+    """
+    if isinstance(node, ast.Attribute):
+        # Check if the base is an imported module
+        value = node.value
+        if isinstance(value, ast.Name):
+            module_name = value.id
+            if (not is_imported_model(module_name)) :
+                return
+
+            submodule_name = node.attr
+            full_module_name = f"{module_name}.{submodule_name}"
+
+            if module_name in imported_modules:
+
+                # Process the submodule like an import
+                module = import_module_by_name(full_module_name)
+
+                if module:
+                    if is_imported_model(module_name):
+                        models_dir = os.path.join(output_dir, "models")
+                        filename = os.path.join(models_dir, module_name + "/" + submodule_name + ".py")
+                    else:
+                        filename = module.__file__
+
+                    try:
+                        with open(filename, "r") as source:
+                            tree = ast.parse(source.read())
+                            generate_ast_json(tree, filename, None, output_dir + "/" + module_name)
+                    except UnicodeDecodeError:
+                        pass
+
+
 def main():
     check_usage()
     filename = sys.argv[1]
@@ -140,6 +186,7 @@ def main():
 
     # Include the current directory for import search
     sys.path.append(os.path.dirname(filename))
+    sys.path.append(output_dir)
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -152,13 +199,19 @@ def main():
     preprocessor = Preprocessor()
     tree = preprocessor.visit(tree)
 
+    # Tracking of imported modules
+    imported_modules = []
+
     for node in ast.walk(tree):
         if isinstance(node, (ast.Import, ast.ImportFrom)):
             # Handle imports
-            process_imports(node, output_dir)
+            process_imports(node, output_dir, imported_modules)
         elif isinstance(node, ast.Assign):
             # Add type annotation on assignments
             add_type_annotation(node)
+        elif isinstance(node, ast.Attribute):
+            # Detect and process submodule usage
+            detect_and_process_submodules(node, imported_modules, output_dir)
 
     # Generate JSON from AST for the main file.
     generate_ast_json(tree, filename, None, output_dir)

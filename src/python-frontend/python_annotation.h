@@ -235,11 +235,19 @@ private:
     return "";
   }
 
+  std::string get_object_name(const Json &call)
+  {
+    if (call["value"]["_type"] == "Attribute")
+      return get_object_name(call["value"]);
+
+    return call["value"]["id"];
+  }
+
   std::string get_type_from_method(const Json &call)
   {
     std::string type("");
 
-    const std::string &obj = call["func"]["value"]["id"];
+    const std::string &obj = get_object_name(call["func"]);
 
     python_module pm(obj);
     if (pm.is_standard_module())

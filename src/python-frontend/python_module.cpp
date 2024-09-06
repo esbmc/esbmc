@@ -5,7 +5,8 @@ static const std::unordered_map<std::string, std::string> function_returns_map =
   {{"popen", "None"},
    {"listdir", "list"},
    {"makdirs", "None"},
-   {"remove", "None"}};
+   {"remove", "None"},
+   {"exists", "bool"}};
 
 python_module::python_module(const std::string &module_name)
   : module_name_(module_name)
