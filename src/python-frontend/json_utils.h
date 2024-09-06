@@ -3,6 +3,8 @@
 #include <string>
 #include <fstream>
 
+#define DUMP_OBJECT(obj) printf("%s\n", (obj).dump(2).c_str())
+
 namespace json_utils
 {
 template <typename JsonType>
