@@ -2,6 +2,7 @@
 
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_frontend_types.h>
+#include <python-frontend/python_module.h>
 #include <util/message.h>
 
 #include <string>
@@ -239,6 +240,11 @@ private:
     std::string type("");
 
     const std::string &obj = call["func"]["value"]["id"];
+
+    python_module pm(obj);
+    if (pm.is_standard_module())
+      return pm.get_function_return(call["func"]["attr"]);
+
     Json obj_node =
       json_utils::find_var_decl(obj, get_current_func_name(), ast_);
 
