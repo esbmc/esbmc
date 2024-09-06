@@ -623,7 +623,7 @@ symbolt *python_converter::find_function_in_base_classes(
   return func;
 }
 
-symbolt *python_converter::find_function_in_imported_modules(
+symbolt *python_converter::find_symbol_in_imported_modules(
   const std::string &symbol_id) const
 {
   for (const auto &obj : ast_json["body"])
@@ -913,7 +913,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 
   // Find function in imported modules
   if (!func_symbol)
-    func_symbol = find_function_in_imported_modules(func_symbol_id);
+    func_symbol = find_symbol_in_imported_modules(func_symbol_id);
 
   if (func_symbol == nullptr)
   {
@@ -1167,18 +1167,16 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     if (element.contains("attr") && is_class_attr)
       sid.set_attribute(element["attr"].get<std::string>());
 
-    symbolt *symbol = context.find_symbol(sid.to_string());
+    std::string sid_str = sid.to_string();
 
-    if (!symbol)
+    symbolt *symbol = nullptr;
+    if (
+      !(symbol = context.find_symbol(sid_str)) &&
+      !(symbol = find_symbol_in_global_scope(sid_str)) &&
+      !(symbol = find_symbol_in_imported_modules(sid_str)))
     {
-      std::string symbol_str = sid.to_string();
-      symbol = find_symbol_in_global_scope(symbol_str);
-
-      if (!symbol)
-      {
-        log_error("Symbol not found: {}\n", sid.to_string());
-        abort();
-      }
+      log_error("Symbol not found: {}\n", sid_str);
+      abort();
     }
 
     expr = symbol_expr(*symbol);
@@ -1415,7 +1413,7 @@ typet python_converter::get_list_type(const nlohmann::json &list_value)
 
     symbolt *func_symbol = context.find_symbol(sid.to_string());
     if (!func_symbol)
-      func_symbol = find_function_in_imported_modules(sid.to_string());
+      func_symbol = find_symbol_in_imported_modules(sid.to_string());
 
     assert(func_symbol);
     return static_cast<code_typet &>(func_symbol->type).return_type();
