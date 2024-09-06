@@ -482,7 +482,8 @@ const std::string html_report::generate_body() const
   // Annoted Source Header
   {
     std::ostringstream oss;
-    for (const auto &item : opt_map) {
+    for (const auto &item : opt_map)
+    {
       oss << item.first << " ";
       for (const std::string &value : item.second)
         oss << value << " ";
