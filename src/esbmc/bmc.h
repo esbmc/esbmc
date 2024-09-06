@@ -12,6 +12,7 @@
 #include <solvers/solve.h>
 #include <util/options.h>
 #include <util/algorithms.h>
+#include <util/cmdline.h>
 
 class bmct
 {
@@ -19,13 +20,11 @@ public:
   bmct(
     goto_functionst &funcs,
     optionst &opts,
-    contextt &_context,
-    const char **argv,
-    const int argc);
+    const cmdlinet::options_mapt &option_map,
+    contextt &_context);
 
-  const int cmd_argc;
-  const char **cmd_argv;
   optionst &options;
+  const cmdlinet::options_mapt &opt_map;
   enum ltl_res
   {
     ltl_res_good,

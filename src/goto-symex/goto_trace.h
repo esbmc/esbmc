@@ -8,6 +8,7 @@
 #include <map>
 #include <irep2/irep2.h>
 #include <util/migrate.h>
+#include <util/cmdline.h>
 #include <vector>
 #include <string_view>
 
@@ -141,7 +142,6 @@ void generate_html_report(
   const std::string_view uuid,
   const namespacet &ns,
   const goto_tracet &goto_trace,
-  const char **argv,
-  const int argc);
+  const cmdlinet::options_mapt &options_map);
 
 #endif
