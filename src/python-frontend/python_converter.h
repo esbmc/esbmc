@@ -61,7 +61,7 @@ private:
     bool is_ctor) const;
 
   symbolt *
-  find_function_in_imported_modules(const std::string &symbol_id) const;
+  find_symbol_in_imported_modules(const std::string &symbol_id) const;
 
   symbolt *find_symbol_in_global_scope(std::string &symbol_id) const;
 
