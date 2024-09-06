@@ -9,6 +9,7 @@
 #include <langapi/language_util.h>
 #include <optional>
 #include <filesystem>
+#include <util/cmdline.h>
 
 // TODO: Multiple files
 // TODO: Control Trace
@@ -376,12 +377,9 @@ public:
   html_report(
     const goto_tracet &goto_trace,
     const namespacet &ns,
-    const char **argv,
-    const int argc);
+    const cmdlinet::options_mapt &options_map);
   void output(std::ostream &oss) const;
 
-  const int cmd_argc;
-  const char **cmd_argv;
   bool show_partial_assertions = false;
 
 protected:
@@ -391,6 +389,7 @@ protected:
 
 private:
   const namespacet &ns;
+  const cmdlinet::options_mapt &opt_map;
   std::optional<goto_trace_stept> violation_step;
   void print_file_table(
     std::ostream &os,
@@ -427,9 +426,8 @@ private:
 html_report::html_report(
   const goto_tracet &goto_trace,
   const namespacet &ns,
-  const char **argv,
-  const int argc)
-  : goto_trace(goto_trace), ns(ns), cmd_argv(argv), cmd_argc(argc)
+  const cmdlinet::options_mapt &options_map)
+  : goto_trace(goto_trace), ns(ns), opt_map(options_map)
 {
   // TODO: C++20 reverse view
   for (const goto_trace_stept &step : goto_trace.steps)
@@ -484,8 +482,11 @@ const std::string html_report::generate_body() const
   // Annoted Source Header
   {
     std::ostringstream oss;
-    for (int i = 0; i < cmd_argc; ++i)
-      oss << cmd_argv[i] << " ";
+    for (const auto &item : opt_map) {
+      oss << item.first << " ";
+      for (const std::string &value : item.second)
+        oss << value << " ";
+    }
     body << fmt::format(
       clang_bug_report::annotated_source_header_fmt, oss.str());
   }
@@ -628,11 +629,10 @@ void generate_html_report(
   const std::string_view uuid,
   const namespacet &ns,
   const goto_tracet &goto_trace,
-  const char **argv,
-  const int argc)
+  const cmdlinet::options_mapt &options_map)
 {
   log_status("Generating HTML report for trace: {}", uuid);
-  const html_report report(goto_trace, ns, argv, argc);
+  const html_report report(goto_trace, ns, options_map);
 
   std::ofstream html(fmt::format("report-{}.html", uuid));
   report.output(html);

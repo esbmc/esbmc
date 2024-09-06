@@ -588,7 +588,7 @@ int esbmc_parseoptionst::doit()
 
   // If no strategy is chosen, just rely on the simplifier
   // and the flags set through CMD
-  bmct bmc(goto_functions, options, context, cmd_argv, cmd_argc);
+  bmct bmc(goto_functions, options, cmdline.options_map, context);
   return do_bmc(bmc);
 }
 
@@ -928,7 +928,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // 2. It couldn't find a bug
     for (BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
     {
-      bmct bmc(goto_functions, options, context, cmd_argv, cmd_argc);
+      bmct bmc(goto_functions, options, cmdline.options_map, context);
       bmc.options.set_option("unwind", integer2string(k_step));
 
       log_status("Checking base case, k = {:d}\n", k_step);
@@ -1032,7 +1032,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // 2. It couldn't find a proof
     for (BigInt k_step = 2; k_step <= max_k_step; k_step += k_step_inc)
     {
-      bmct bmc(goto_functions, options, context, cmd_argv, cmd_argc);
+      bmct bmc(goto_functions, options, cmdline.options_map, context);
       bmc.options.set_option("unwind", integer2string(k_step));
 
       log_status("Checking forward condition, k = {:d}", k_step);
@@ -1099,7 +1099,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // 2. It couldn't find a proof
     for (BigInt k_step = 2; k_step <= max_k_step; k_step += k_step_inc)
     {
-      bmct bmc(goto_functions, options, context, cmd_argv, cmd_argc);
+      bmct bmc(goto_functions, options, cmdline.options_map, context);
 
       bmc.options.set_option("unwind", integer2string(k_step));
 
@@ -1270,7 +1270,7 @@ tvt esbmc_parseoptionst::is_base_case_violated(
   options.set_option("partial-loops", false);
   options.set_option("unwind", integer2string(k_step));
 
-  bmct bmc(goto_functions, options, context, cmd_argv, cmd_argc);
+  bmct bmc(goto_functions, options, cmdline.options_map, context);
 
   log_status("Checking base case, k = {:d}", k_step);
   switch (do_bmc(bmc))
@@ -1329,7 +1329,7 @@ tvt esbmc_parseoptionst::does_forward_condition_hold(
   options.set_option("no-assertions", true);
   options.set_option("unwind", integer2string(k_step));
 
-  bmct bmc(goto_functions, options, context, cmd_argv, cmd_argc);
+  bmct bmc(goto_functions, options, cmdline.options_map, context);
 
   log_progress("Checking forward condition, k = {:d}", k_step);
   auto res = do_bmc(bmc);
@@ -1396,7 +1396,7 @@ tvt esbmc_parseoptionst::is_inductive_step_violated(
   options.set_option("partial-loops", true);
   options.set_option("unwind", integer2string(k_step));
 
-  bmct bmc(goto_functions, options, context, cmd_argv, cmd_argc);
+  bmct bmc(goto_functions, options, cmdline.options_map, context);
 
   log_progress("Checking inductive step, k = {:d}", k_step);
   switch (do_bmc(bmc))

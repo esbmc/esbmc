@@ -45,14 +45,12 @@
 bmct::bmct(
   goto_functionst &funcs,
   optionst &opts,
-  contextt &_context,
-  const char **argv,
-  const int argc)
+  const cmdlinet::options_mapt &option_map,
+  contextt &_context)
   : options(opts),
+    opt_map(option_map),
     context(_context),
-    ns(context),
-    cmd_argv(argv),
-    cmd_argc(argc)
+    ns(context)
 {
   interleaving_number = 0;
   interleaving_failed = 0;
@@ -152,7 +150,7 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
   if (options.get_bool_option("generate-html-report"))
   {
     // TODO: multi-property
-    generate_html_report("1", ns, goto_trace, cmd_argv, cmd_argc);
+    generate_html_report("1", ns, goto_trace, opt_map);
   }
 
   std::ostringstream oss;
@@ -934,7 +932,7 @@ smt_convt::resultt bmct::multi_property_check(
       }
       if (options.get_bool_option("generate-html-report"))
         generate_html_report(
-          fmt::format("{}", i), ns, goto_trace, cmd_argv, cmd_argc);
+          fmt::format("{}", i), ns, goto_trace, opt_map);
       std::ostringstream oss;
       log_fail("\n[Counterexample]\n");
       show_goto_trace(oss, ns, goto_trace);
