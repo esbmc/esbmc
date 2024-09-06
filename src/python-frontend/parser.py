@@ -24,11 +24,11 @@ def check_usage():
         sys.exit(2)
 
 def is_imported_model(module_name):
-    models = ["math"]
+    models = ["math", "os"]
     return module_name in models
 
 def is_unsupported_module(module_name):
-    unsuported_modules = ["os"]
+    unsuported_modules = ["blah"]
     return module_name in unsuported_modules
 
 
