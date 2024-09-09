@@ -2,3 +2,7 @@
 
 def exists(path:str) -> bool:
     return False
+
+def basename(path:str) -> str:
+    bname:str = ""
+    return bname
