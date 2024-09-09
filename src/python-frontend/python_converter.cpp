@@ -2041,9 +2041,7 @@ void python_converter::append_models_from_directory(
 
   // Checks if the directory exists
   if (!fs::exists(directory) || !fs::is_directory(directory))
-  {
     return;
-  }
 
   // Iterates over the files in the directory
   for (fs::directory_iterator it(directory), end_it; it != end_it; ++it)
