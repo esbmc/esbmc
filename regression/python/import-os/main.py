@@ -1,4 +1,7 @@
 import os
+from os import listdir
 
-file = "test"
-exists = os.path.exists(file)
+folder = "test"
+
+listdir(folder)
+exists = os.path.exists(folder)
