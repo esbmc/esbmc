@@ -1,7 +1,8 @@
 import os
 from os import listdir
 
-folder = "test"
+p = "/foo/bar/"
 
-listdir(folder)
-exists = os.path.exists(folder)
+listdir(p)
+exists = os.path.exists(p)
+base = os.path.basename(p)
