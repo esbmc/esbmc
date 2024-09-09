@@ -45,9 +45,8 @@
 bmct::bmct(
   goto_functionst &funcs,
   optionst &opts,
-  const cmdlinet::options_mapt &option_map,
   contextt &_context)
-  : options(opts), opt_map(option_map), context(_context), ns(context)
+  : options(opts), context(_context), ns(context)
 {
   interleaving_number = 0;
   interleaving_failed = 0;
@@ -144,11 +143,9 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
     generate_testcase("testcase.xml", eq, smt_conv);
   }
 
+  // TODO: multi-property
   if (options.get_bool_option("generate-html-report"))
-  {
-    // TODO: multi-property
-    generate_html_report("1", ns, goto_trace, opt_map);
-  }
+    generate_html_report("1", ns, goto_trace, options);
 
   std::ostringstream oss;
   log_fail("\n[Counterexample]\n");
@@ -927,8 +924,10 @@ smt_convt::resultt bmct::multi_property_check(
         std::ofstream out(fmt::format("{}-{}", ce_counter++, output_file));
         show_goto_trace(out, ns, goto_trace);
       }
+
       if (options.get_bool_option("generate-html-report"))
-        generate_html_report(fmt::format("{}", i), ns, goto_trace, opt_map);
+        generate_html_report(fmt::format("{}", i), ns, goto_trace, options);
+
       std::ostringstream oss;
       log_fail("\n[Counterexample]\n");
       show_goto_trace(oss, ns, goto_trace);
