@@ -72,10 +72,15 @@ private:
 
   std::string get_classname_from_symbol_id(const std::string &symbol_id) const;
 
+  void append_models_from_directory(std::list<std::string>& file_list, const std::string& dir_path);
+
+  bool is_imported_module(const std::string& module_name);
+
   contextt &context;
   namespacet ns;
   typet current_element_type;
-  std::string python_filename;
+  std::string main_python_file;
+  std::string current_python_file;
   const nlohmann::json &ast_json;
   nlohmann::json imported_module_json;
   std::string current_func_name;
