@@ -60,8 +60,7 @@ private:
     std::string method_name,
     bool is_ctor) const;
 
-  symbolt *
-  find_symbol_in_imported_modules(const std::string &symbol_id) const;
+  symbolt *find_symbol_in_imported_modules(const std::string &symbol_id) const;
 
   symbolt *find_symbol_in_global_scope(std::string &symbol_id) const;
 
@@ -72,9 +71,11 @@ private:
 
   std::string get_classname_from_symbol_id(const std::string &symbol_id) const;
 
-  void append_models_from_directory(std::list<std::string>& file_list, const std::string& dir_path);
+  void append_models_from_directory(
+    std::list<std::string> &file_list,
+    const std::string &dir_path);
 
-  bool is_imported_module(const std::string& module_name);
+  bool is_imported_module(const std::string &module_name);
 
   contextt &context;
   namespacet ns;
