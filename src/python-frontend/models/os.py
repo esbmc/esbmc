@@ -1,4 +1,4 @@
-# Stubs for os module - operating system interfaces 
+# Stubs for os module - operating system interfaces
 
 def popen(path: str) -> None:
     pass
