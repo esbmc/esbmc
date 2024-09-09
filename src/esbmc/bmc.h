@@ -21,11 +21,9 @@ public:
   bmct(
     goto_functionst &funcs,
     optionst &opts,
-    const cmdlinet::options_mapt &option_map,
     contextt &_context);
 
   optionst &options;
-  const cmdlinet::options_mapt &opt_map;
   enum ltl_res
   {
     ltl_res_good,
