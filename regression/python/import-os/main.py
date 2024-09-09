@@ -1,3 +1,4 @@
 import os
 
-exists = os.path.exists("test")
+file = "test"
+exists = os.path.exists(file)

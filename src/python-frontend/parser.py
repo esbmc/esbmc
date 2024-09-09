@@ -186,7 +186,6 @@ def main():
 
     # Include the current directory for import search
     sys.path.append(os.path.dirname(filename))
-    sys.path.append(output_dir)
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)

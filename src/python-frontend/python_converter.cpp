@@ -311,7 +311,7 @@ symbol_id python_converter::create_symbol_id(const std::string &filename) const
 
 symbol_id python_converter::create_symbol_id() const
 {
-  return symbol_id(python_filename, current_class_name, current_func_name);
+  return symbol_id(current_python_file, current_class_name, current_func_name);
 }
 
 // Get the type of an operand in binary operations
@@ -581,7 +581,7 @@ python_converter::get_location_from_decl(const nlohmann::json &ast_node)
   if (ast_node.contains("col_offset"))
     location.set_column(ast_node["col_offset"].get<int>());
 
-  location.set_file(python_filename.c_str());
+  location.set_file(current_python_file.c_str());
   location.set_function(current_func_name);
   return location;
 }
@@ -682,6 +682,14 @@ std::string python_converter::get_classname_from_symbol_id(
   return class_name;
 }
 
+bool python_converter::is_imported_module(const std::string &module_name)
+{
+  if (imported_modules.find(module_name) != imported_modules.end())
+    return true;
+
+  return json_utils::is_module(module_name, ast_json);
+}
+
 symbol_id python_converter::build_function_id(const nlohmann::json &element)
 {
   const std::string __ESBMC_get_object_size = "__ESBMC_get_object_size";
@@ -722,9 +730,7 @@ symbol_id python_converter::build_function_id(const nlohmann::json &element)
     else
       obj_name = func_json["value"]["id"];
 
-    if (
-      !is_class(obj_name, ast_json) &&
-      json_utils::is_module(obj_name, ast_json))
+    if (!is_class(obj_name, ast_json) && is_imported_module(obj_name))
     {
       func_symbol_id = create_symbol_id(imported_modules[obj_name]);
       is_member_function_call = false;
@@ -741,7 +747,7 @@ symbol_id python_converter::build_function_id(const nlohmann::json &element)
   else if (is_builtin_type(obj_name))
   {
     class_name = obj_name;
-    func_symbol_id = symbol_id(python_filename, class_name, func_name);
+    func_symbol_id = symbol_id(current_python_file, class_name, func_name);
   }
   else if (func_name == __ESBMC_assume || func_name == __VERIFIER_assume)
   {
@@ -867,7 +873,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       }
 
       symbolt symbol = create_symbol(
-        python_filename, func_name, func_symbol_id, location, code_type);
+        current_python_file, func_name, func_symbol_id, location, code_type);
       context.add(symbol);
     }
   }
@@ -906,7 +912,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     {
       is_class_method_call = true;
     }
-    else if (!json_utils::is_module(caller, ast_json))
+    else if (!is_imported_module(caller))
     {
       is_instance_method_call = true;
     }
@@ -1340,7 +1346,7 @@ void python_converter::update_instance_from_self(
   const std::string &func_name,
   const std::string &obj_symbol_id)
 {
-  symbol_id sid(python_filename, class_name, func_name);
+  symbol_id sid(current_python_file, class_name, func_name);
   sid.set_object("self");
 
   auto self_instance = instance_attr_map.find(sid.to_string());
@@ -1735,7 +1741,7 @@ void python_converter::get_function_definition(
   symbol_id id = create_symbol_id();
 
   std::string module_name =
-    python_filename.substr(0, python_filename.find_last_of("."));
+    current_python_file.substr(0, current_python_file.find_last_of("."));
 
   // Iterate over function arguments
   for (const nlohmann::json &element : function_node["args"]["args"])
@@ -2027,26 +2033,31 @@ python_converter::python_converter(
 {
 }
 
-void append_models_from_directory(std::list<std::string>& file_list, const std::string& dir_path) {
-    fs::path directory(dir_path);
+void python_converter::append_models_from_directory(
+  std::list<std::string> &file_list,
+  const std::string &dir_path)
+{
+  fs::path directory(dir_path);
 
-    // Checks if the directory exists
-    if (!fs::exists(directory) || !fs::is_directory(directory)) {
-        log_error("Directory does not exist or is not a directory: {}", dir_path);
-        return;
-    }
+  // Checks if the directory exists
+  if (!fs::exists(directory) || !fs::is_directory(directory))
+  {
+    return;
+  }
 
-    // Iterates over the files in the directory
-    for (fs::directory_iterator it(directory), end_it; it != end_it; ++it)
+  // Iterates over the files in the directory
+  for (fs::directory_iterator it(directory), end_it; it != end_it; ++it)
+  {
+    if (fs::is_regular_file(*it) && it->path().extension() == ".json")
     {
-      if (fs::is_regular_file(*it) && it->path().extension() == ".json")
-      {
-        std::string file_name =
-          directory.filename().string() + "/" +
-          it->path().stem().string(); // File name without the extension
-        file_list.push_back(file_name);
-      }
+      std::string file_name =
+        directory.filename().string() + "/" +
+        it->path().stem().string(); // File name without the extension
+      file_list.push_back(file_name);
+
+      imported_modules[it->path().stem().string()] = it->path().string();
     }
+  }
 }
 
 bool python_converter::convert()
@@ -2062,7 +2073,8 @@ bool python_converter::convert()
   main_symbol.is_extern = false;
   main_symbol.file_local = false;
 
-  python_filename = ast_json["filename"].get<std::string>();
+  main_python_file = ast_json["filename"].get<std::string>();
+  current_python_file = main_python_file;
 
   if (!config.options.get_bool_option("no-library"))
   {
@@ -2089,11 +2101,20 @@ bool python_converter::convert()
       model_file >> model_json;
       model_file.close();
 
+      size_t pos = file.rfind("/");
+      if (pos != std::string::npos)
+      {
+        std::string filename = file.substr(pos + 1);
+        if (imported_modules.find(filename) != imported_modules.end())
+          current_python_file = imported_modules[filename];
+      }
+
       exprt model_code = get_block(model_json["body"]);
       convert_expression_to_code(model_code);
 
       // Add imported code to main symbol
       main_symbol.value.swap(model_code);
+      current_python_file = main_python_file;
     }
     is_loading_models = false;
   }
@@ -2173,7 +2194,6 @@ bool python_converter::convert()
   }
   else
   {
-    std::string main_python_filename = python_filename;
     // Convert imported modules
     for (const auto &elem : ast_json["body"])
     {
@@ -2189,8 +2209,9 @@ bool python_converter::convert()
         std::ifstream imported_file(module_path.str());
         imported_file >> imported_module_json;
 
-        python_filename = imported_module_json["filename"].get<std::string>();
-        imported_modules.emplace(module_name, python_filename);
+        current_python_file =
+          imported_module_json["filename"].get<std::string>();
+        imported_modules.emplace(module_name, current_python_file);
 
         exprt imported_code = get_block(imported_module_json["body"]);
         convert_expression_to_code(imported_code);
@@ -2202,7 +2223,7 @@ bool python_converter::convert()
     }
 
     is_importing_module = false;
-    python_filename = main_python_filename;
+    current_python_file = main_python_file;
 
     // Convert main statements
     exprt main_block = get_block(ast_json["body"]);
