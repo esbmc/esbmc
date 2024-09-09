@@ -5,7 +5,7 @@
 class python_module
 {
 public:
-  python_module(const std::string& module_name);
+  python_module(const std::string &module_name);
 
   bool is_standard_module() const;
 
