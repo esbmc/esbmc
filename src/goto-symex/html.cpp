@@ -1,15 +1,15 @@
-#include "util/message.h"
+#include <filesystem>
 #include <fstream>
 #include <goto-symex/goto_trace.h>
+#include <langapi/language_util.h>
+#include <list>
+#include <optional>
 #include <ostream>
 #include <sstream>
 #include <unordered_map>
-#include <list>
 #include <util/language.h>
-#include <langapi/language_util.h>
-#include <optional>
-#include <filesystem>
-#include <util/cmdline.h>
+#include <util/message.h>
+#include <util/options.h>
 
 // TODO: Multiple files
 // TODO: Control Trace
