@@ -212,7 +212,7 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     {
       return EnumTypeName;
     }
-    else if (typeIdentifier.find("t_contract$") != std::string::npos)
+    else if (typeIdentifier.compare(0, 11, "t_contract$") == 0)
     {
       return ContractTypeName;
     }
@@ -710,10 +710,8 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
   {
     if (expr["expression"]["nodeType"] == "NewExpression")
       return NewExpression;
-    if (
-      expr["expression"]["nodeType"] == "ElementaryTypeNameExpression" &&
-      expr["kind"] == "typeConversion")
-      return ElementaryTypeNameExpression;
+    if (expr["kind"] == "typeConversion")
+      return TypeConversionExpression;
     return CallExprClass;
   }
   else if (expr["nodeType"] == "MemberAccess")
@@ -989,7 +987,7 @@ const char *expression_to_str(ExpressionT type)
     ENUM_TO_STR(StructMemberCall)
     ENUM_TO_STR(EnumMemberCall)
     ENUM_TO_STR(BuiltinMemberCall)
-    ENUM_TO_STR(ElementaryTypeNameExpression)
+    ENUM_TO_STR(TypeConversionExpression)
     ENUM_TO_STR(NullExpr)
     ENUM_TO_STR(ExpressionTError)
   default:

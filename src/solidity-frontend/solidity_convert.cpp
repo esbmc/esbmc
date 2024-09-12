@@ -3724,7 +3724,7 @@ bool solidity_convertert::get_expr(
     {
       symbolt sym;
       std::string name =
-        "tmp_" + call.name().as_string() + std::to_string(aux_counter);
+        "sol_tmp_" + call.name().as_string() + std::to_string(aux_counter);
       ++aux_counter;
       std::string c_name =
         context.find_symbol(call.type().identifier())->name.as_string();
@@ -3860,7 +3860,7 @@ bool solidity_convertert::get_expr(
       SolidityGrammar::get_expression_t(callee_expr_json);
     switch (_type)
     {
-    case SolidityGrammar::ElementaryTypeNameExpression:
+    case SolidityGrammar::TypeConversionExpression:
     {
       // get base
       exprt base;
@@ -3933,7 +3933,7 @@ bool solidity_convertert::get_expr(
       return true;
     break;
   }
-  case SolidityGrammar::ExpressionT::ElementaryTypeNameExpression:
+  case SolidityGrammar::ExpressionT::TypeConversionExpression:
   {
     // perform type conversion
     // e.g.
@@ -3955,6 +3955,90 @@ bool solidity_convertert::get_expr(
     // 2. get target type
     if (get_type_description(conv_expr["typeDescriptions"], type))
       return true;
+
+    // special: Base x = Base(_addr);
+    if (type.get("#sol_type").as_string() == "CONTRACT")
+    {
+      assert(
+        from_expr.type().get("#sol_type").as_string().find("ADDRESS") !=
+        std::string::npos);
+      // Base x = Base(_addr);
+      // =>
+      // Base tmp = new Base(); //static
+      // // if the address is not the same, it need a new 'new'
+      // // this stands for another contract
+      // if(tmp._addr != _addr)
+      // {
+      //   tmp = new Base();
+      //   tmp._addr = _addr;
+      // }
+      // x = tmp; // x is reference type Base&
+      if (current_functionDecl)
+      {
+        std::string c_name =
+          context.find_symbol(type.identifier())->name.as_string();
+        std::string ctor_id;
+        if (get_ctor_call_id(c_name, ctor_id))
+          return true;
+
+        // Base tmp = new Base();
+        exprt call;
+        if (get_new_object_ctor_call(c_name, ctor_id, empty_json, call))
+          return true;
+
+        symbolt sym;
+        std::string name =
+          "sol_tmp_" + call.name().as_string() + std::to_string(aux_counter);
+        ++aux_counter;
+        std::string id = "sol:@C@" + c_name + "@" + name;
+        get_default_symbol(sym, "C++", type, name, id, call.location());
+        sym.static_lifetime = true;
+        sym.file_local = true;
+        symbolt &added_symbol = *move_symbol_to_context(sym);
+        added_symbol.value = call;
+
+        // get address
+        std::string addr_id = "sol:@C@" + c_name + "@address";
+        if (context.find_symbol(addr_id) == nullptr)
+        {
+          log_error("cannot find address symbol");
+          return true;
+        }
+        exprt tmp = symbol_expr(added_symbol);
+        exprt _addr = symbol_expr(*context.find_symbol(addr_id));
+        exprt tmp_1_mem = member_exprt(tmp, _addr.name(), _addr.type());
+
+        exprt guard = exprt("notequal", bool_type());
+        guard.operands().push_back(tmp_1_mem);
+        guard.operands().push_back(from_expr);
+
+        // populate body
+        code_blockt if_body = code_blockt();
+
+        // tmp = new Base();
+        exprt _assign1 = side_effect_exprt("assign", type);
+        _assign1.operands().push_back(tmp);
+        _assign1.operands().push_back(call);
+        convert_expression_to_code(_assign1);
+        if_body.move_to_operands(_assign1);
+
+        // tmp.addres = _addr
+        exprt _assign2 = side_effect_exprt("assign", type);
+        _assign2.operands().push_back(tmp_1_mem);
+        _assign2.operands().push_back(from_expr);
+        convert_expression_to_code(_assign2);
+        if_body.move_to_operands(_assign2);
+
+        codet if_expr("ifthenelse");
+        if_expr.copy_to_operands(guard, if_body);
+
+        current_frontBlockDecl.operands().push_back(if_expr);
+
+        //  x = tmp;
+        new_expr = tmp;
+        return false;
+      }
+    }
 
     // 3. generate the type casting expr
     convert_type_expr(ns, from_expr, type);
@@ -5231,6 +5315,11 @@ bool solidity_convertert::get_type_description(
   if (type_name.contains("typeString"))
     typeString = type_name["typeString"].get<std::string>();
 
+  log_debug(
+    "solidity",
+    "\t\t@@@ got type name {}",
+    SolidityGrammar::type_name_to_str(type));
+
   switch (type)
   {
   case SolidityGrammar::TypeNameT::ElementaryTypeName:
@@ -5425,7 +5514,9 @@ bool solidity_convertert::get_type_description(
     new_json["typeIdentifier"] = new_typeIdentifier;
     new_json["typeString"] = new_typeString;
 
-    get_elementary_type_name(new_json, new_type);
+    // get_elementary_type_name(new_json, new_type);
+    if (get_type_description(new_json, new_type))
+      return true;
 
     break;
   }

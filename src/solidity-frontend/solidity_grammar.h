@@ -349,7 +349,7 @@ enum ExpressionT
   AddressMemberCall,
 
   // Type Converion
-  ElementaryTypeNameExpression,
+  TypeConversionExpression,
 
   // Struct Member Access
   StructMemberCall,
