@@ -23,14 +23,14 @@ jobs:
     needs: [build]
     steps:
       - name: Download Linux Build
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@master
         with:
-          name: release-ubuntu-latest
+          name: 'release-ubuntu-latest--b Release -e Off'
           path: ./linux-release
       - name: Create Linux Release file
         run: zip -r esbmc-linux.zip ./linux-release
       - name: Download Windows Build
-        uses: actions/download-artifact@v2
+        uses: actions/download-artifact@master
         with:
           name: release-windows-latest
           path: ./windows-release
