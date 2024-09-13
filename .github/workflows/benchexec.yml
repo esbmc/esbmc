@@ -107,9 +107,9 @@ jobs:
       - name: Setup SV-Benchmarks version
         run: cd $HOME/sv-benchmarks && git fetch --all --tags && git checkout ${{ inputs.svbenchmarks }}
       - name: Download Linux Build
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@master
         with:
-          name: release-ubuntu-latest
+          name: 'release-ubuntu-latest--b Release -e Off -C'
           path: ./
       - name: Checkout code
         uses: actions/checkout@v3
@@ -145,7 +145,7 @@ jobs:
         run: mv $HOME/output.zip ./output.zip      
       - name: Debug Info
         run: ls
-      - uses: actions/upload-artifact@v1
+      - uses: actions/upload-artifact@master
         with:
           name: esbmc-result
           path: output.zip  
@@ -169,7 +169,7 @@ jobs:
       - name: Show summary (CPAChecker)
         if: ${{ inputs.cpachecker == true }}
         run: tail $HOME/witness-output/*results*.txt
-      - uses: actions/upload-artifact@v1
+      - uses: actions/upload-artifact@master
         if: ${{ inputs.cpachecker == true }}
         with:
           name: witness-result
