@@ -293,9 +293,7 @@ const struct group_opt_templ all_cmd_options[] = {
      "disable return value optimization to compute the stack size"}}},
 
   {"Incremental SMT",
-   {{"smt-during-symex",
-     NULL,
-     "enable incremental SMT solving"},
+   {{"smt-during-symex", NULL, "enable incremental SMT solving"},
     {"smt-thread-guard",
      NULL,
      "check the thread guard during thread exploration"},
