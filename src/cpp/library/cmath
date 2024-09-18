@@ -149,22 +149,28 @@ template <typename Integer>
 double modf(Integer num, double *iptr);
  */
 
-bool isnan(float x)
-{
-  return __builtin_isnan(x);
-}
+#undef isnan
+#undef isnormal
 
-bool isnan(double x)
-{
-  return __builtin_isnan(x);
-}
+#define CIMPORT3(name)                                                         \
+  bool name(float x)                                                           \
+  {                                                                            \
+    return __builtin_##name(x);                                                \
+  }                                                                            \
+  bool name(double x)                                                          \
+  {                                                                            \
+    return __builtin_##name(x);                                                \
+  }                                                                            \
+  bool name(long double x)                                                     \
+  {                                                                            \
+    return __builtin_##name(x);                                                \
+  }                                                                            \
 
-bool isnan(long double x)
-{
-  return __builtin_isnan(x);
-}
+CIMPORT3(isnan);
+CIMPORT3(isnormal);
 
 #undef CIMPORT1
 #undef CIMPORT2
+#undef CIMPORT3
 
 } // namespace std
