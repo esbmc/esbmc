@@ -1707,9 +1707,7 @@ bool esbmc_parseoptionst::process_goto_program(
                         cmdline.isset("assertion-coverage") ||
                         cmdline.isset("assertion-coverage-claims") ||
                         cmdline.isset("condition-coverage") ||
-                        cmdline.isset("condition-coverage-claims") ||
-                        cmdline.isset("condition-coverage-vb") ||
-                        cmdline.isset("condition-coverage-claims-vb");
+                        cmdline.isset("condition-coverage-claims");
 
     // Start by removing all no-op instructions and unreachable code
     if (!(cmdline.isset("no-remove-no-op")))
@@ -1854,9 +1852,7 @@ bool esbmc_parseoptionst::process_goto_program(
       cmdline.isset("condition-coverage") ||
       cmdline.isset("condition-coverage-claims") ||
       cmdline.isset("condition-coverage-rm") ||
-      cmdline.isset("condition-coverage-claims-rm") ||
-      cmdline.isset("condition-coverage-vb") ||
-      cmdline.isset("condition-coverage-claims-vb"))
+      cmdline.isset("condition-coverage-claims-rm"))
     {
       // for multi-property
       options.set_option("result-only", true);
@@ -2090,17 +2086,17 @@ void esbmc_parseoptionst::add_property_monitors(
   std::map<std::string, std::pair<std::set<std::string>, expr2tc>> monitors;
 
   context.foreach_operand([this, &monitors](const symbolt &s) {
-    if (
-      !has_prefix(s.name, "__ESBMC_property_") ||
-      s.name.as_string().find("$type") != std::string::npos)
-      return;
+      if (
+        !has_prefix(s.name, "__ESBMC_property_") ||
+        s.name.as_string().find("$type") != std::string::npos)
+        return;
 
-    // strip prefix "__ESBMC_property_"
-    std::string prop_name = s.name.as_string().substr(17);
-    std::set<std::string> used_syms;
-    expr2tc main_expr = calculate_a_property_monitor(prop_name, used_syms);
-    monitors[prop_name] = std::pair{used_syms, main_expr};
-  });
+      // strip prefix "__ESBMC_property_"
+      std::string prop_name = s.name.as_string().substr(17);
+      std::set<std::string> used_syms;
+      expr2tc main_expr = calculate_a_property_monitor(prop_name, used_syms);
+      monitors[prop_name] = std::pair{used_syms, main_expr};
+    });
 
   if (monitors.size() == 0)
     return;
@@ -2196,9 +2192,9 @@ static void collect_symbol_names(
   else
   {
     e->foreach_operand([&prefix, &used_syms](const expr2tc &e) {
-      if (!is_nil_expr(e))
-        collect_symbol_names(e, prefix, used_syms);
-    });
+        if (!is_nil_expr(e))
+          collect_symbol_names(e, prefix, used_syms);
+      });
   }
 }
 
