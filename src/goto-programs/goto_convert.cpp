@@ -1839,7 +1839,9 @@ void goto_convertt::convert_ifthenelse(const codet &c, goto_programt &dest)
   if (!(options.get_bool_option("condition-coverage") ||
         options.get_bool_option("condition-coverage-claims") ||
         options.get_bool_option("condition-coverage-rm") ||
-        options.get_bool_option("condition-coverage-claims-rm")))
+        options.get_bool_option("condition-coverage-claims-rm") ||
+        options.get_bool_option("condition-coverage-vb") ||
+        options.get_bool_option("condition-coverage-claims-vb")))
   {
     remove_sideeffects(tmp_guard, dest);
   }
