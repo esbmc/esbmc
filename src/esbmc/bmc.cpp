@@ -801,10 +801,15 @@ smt_convt::resultt bmct::multi_property_check(
   std::unordered_multiset<std::string> reached_mul_claims;
   bool is_assert_cov = options.get_bool_option("assertion-coverage") ||
                        options.get_bool_option("assertion-coverage-claims");
+  // this might be extended to assert cond
+  bool is_vb = options.get_bool_option("condition-coverage-vb") ||
+               options.get_bool_option("condition-coverage-claims-vb");
   bool is_cond_cov = options.get_bool_option("condition-coverage") ||
                      options.get_bool_option("condition-coverage-claims") ||
                      options.get_bool_option("condition-coverage-rm") ||
-                     options.get_bool_option("condition-coverage-claims-rm");
+                     options.get_bool_option("condition-coverage-claims-rm") ||
+                     options.get_bool_option("condition-coverage-vb") ||
+                     options.get_bool_option("condition-coverage-claims-vb");
   bool is_keep_verified = options.get_bool_option("keep-verified-claims");
   bool is_clear_verified = (options.get_bool_option("k-induction") ||
                             options.get_bool_option("incremental-bmc") ||
@@ -815,6 +820,13 @@ smt_convt::resultt bmct::multi_property_check(
   const bool is_fail_fast = !fail_fast.empty() ? true : false;
   const int fail_fast_limit = is_fail_fast ? stoi(fail_fast) : 0;
   int fail_fast_cnt = 0;
+
+  // for cond-vb
+  goto_coveraget temp(ns, symex->goto_functions);
+  const std::set<std::pair<std::string, std::string>> &total_cond =
+    is_vb && is_cond_cov ? temp.get_total_cond_assert()
+                         : std::set<std::pair<std::string, std::string>>();
+
   if (is_fail_fast && fail_fast_limit < 0)
   {
     log_error("the value of multi-fail-fast should be positive!");
@@ -846,6 +858,8 @@ smt_convt::resultt bmct::multi_property_check(
                        &reached_mul_claims,
                        &is_assert_cov,
                        &is_cond_cov,
+                       &is_vb,
+                       &total_cond,
                        &is_keep_verified,
                        &is_clear_verified,
                        &is_fail_fast,
@@ -920,20 +934,39 @@ smt_convt::resultt bmct::multi_property_check(
       else
         reached_claims.emplace(cmt_loc);
 
-      // Generate Output
-      std::string output_file = options.get_option("cex-output");
-      if (output_file != "")
+      // for verbose output of cond coverage
+      if (is_vb)
       {
-        std::ofstream out(fmt::format("{}-{}", ce_counter++, output_file));
-        show_goto_trace(out, ns, goto_trace);
+        auto current_pair = std::make_pair(claim.claim_msg, claim.claim_loc);
+        if (total_cond.count(current_pair))
+        {
+          if (options.get_bool_option("condition-coverage-claims-vb"))
+          {
+            log_status("\n  {} : SATISFIED", cmt_loc);
+          }
+          log_result(
+            "Current Condition Coverage: {}%\n",
+            reached_claims.size() * 100.0 / total_cond.size());
+        }
       }
-      if (options.get_bool_option("generate-html-report"))
-        generate_html_report(fmt::format("{}", i), ns, goto_trace, opt_map);
-      std::ostringstream oss;
-      log_fail("\n[Counterexample]\n");
-      show_goto_trace(oss, ns, goto_trace);
-      log_result("{}", oss.str());
-      final_result = result;
+
+      else
+      {
+        // Generate Output
+        std::string output_file = options.get_option("cex-output");
+        if (output_file != "")
+        {
+          std::ofstream out(fmt::format("{}-{}", ce_counter++, output_file));
+          show_goto_trace(out, ns, goto_trace);
+        }
+        if (options.get_bool_option("generate-html-report"))
+          generate_html_report(fmt::format("{}", i), ns, goto_trace, opt_map);
+        std::ostringstream oss;
+        log_fail("\n[Counterexample]\n");
+        show_goto_trace(oss, ns, goto_trace);
+        log_result("{}", oss.str());
+        final_result = result;
+      }
 
       // Update fail-fast-counter
       fail_fast_cnt++;
@@ -956,6 +989,20 @@ smt_convt::resultt bmct::multi_property_check(
             }
           }
         }
+      }
+    }
+    else if (is_vb && result == smt_convt::P_UNSATISFIABLE)
+    {
+      auto current_pair = std::make_pair(claim.claim_msg, claim.claim_loc);
+      if (total_cond.count(current_pair))
+      {
+        if (options.get_bool_option("condition-coverage-claims-vb"))
+        {
+          log_status("\n  {} : UNSATISFIED", cmt_loc);
+        }
+        log_result(
+          "Current Condition Coverage: {}%\n",
+          reached_claims.size() * 100.0 / total_cond.size());
       }
     }
   };
