@@ -478,7 +478,35 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "enable value-set analysis for pointers and add assumes to the "
      "program"}}},
-
+  {"Coverage options",
+   {
+     {"assertion-coverage", NULL, "shows the coverage of assertion statements"},
+     {"assertion-coverage-claims",
+      NULL,
+      "enable assertion-coverage and shows all reached claims"},
+     {"condition-coverage",
+      NULL,
+      "this activates --multi-property, "
+      "deactivates --keep-verified-claims, and "
+      "shows the coverage of condition statements"},
+     {"condition-coverage-claims",
+      NULL,
+      "enable condition-coverage and shows the instrumented claims"},
+     {"condition-coverage-rm",
+      NULL,
+      "use '--condition-coverage' while disable "
+      "'--no-remove-unreachable'"},
+     {"condition-coverage-claims-rm",
+      NULL,
+      "use '--condition-coverage-claims' while disable "
+      "'--no-remove-unreachable'"},
+     {"no-cov-asserts", NULL, "does not count the guard in the assertions"},
+     {"add-false-assert",
+      NULL,
+      "insert a false assertion at the beginning of each function/branch and "
+      "the end of each function"},
+     {"make-assert-false", NULL, "convert every assertion to false"},
+   }},
   {"DEBUG options",
    {
      // Print commit hash for current binary
@@ -521,37 +549,6 @@ const struct group_opt_templ all_cmd_options[] = {
      // transition to. Useful again for trying to replicate a particular context
      // switch order, or quickly explore what's reachable.
      {"interactive-ileaves", NULL, ""},
-     {"add-false-assert",
-      NULL,
-      "insert a false assertion at the beginning of each function/branch and "
-      "the end of each function"},
-     {"make-assert-false", NULL, "convert every assertion to false"},
-     {"assertion-coverage-claims",
-      NULL,
-      "enable assertion-coverage and shows all reached claims"},
-     {"condition-coverage",
-      NULL,
-      "this activates --multi-property, "
-      "deactivates --keep-verified-claims, and "
-      "shows the coverage of condition statements"},
-     {"condition-coverage-claims",
-      NULL,
-      "enable condition-coverage and shows the instrumented claims"},
-     {"condition-coverage-rm",
-      NULL,
-      "use '--condition-coverage' while disable "
-      "'--no-remove-unreachable'"},
-     {"condition-coverage-claims-rm",
-      NULL,
-      "use '--condition-coverage-claims' while disable "
-      "'--no-remove-unreachable'"},
-     {"condition-coverage-vb",
-      NULL,
-      "the runtime verbose output of condition-coverage"},
-     {"condition-coverage-claims-vb",
-      NULL,
-      "the runtime verbose output of condition-coverage-claims"},
-     {"no-cov-asserts", NULL, "does not count the guard in the assertions"},
      {"segfault-handler", NULL, "print stacktrace on segmentation fault"},
    }},
   {"end", {{"", NULL, "end of options"}}},

@@ -802,14 +802,12 @@ smt_convt::resultt bmct::multi_property_check(
   bool is_assert_cov = options.get_bool_option("assertion-coverage") ||
                        options.get_bool_option("assertion-coverage-claims");
   // this might be extended to assert cond
-  bool is_vb = options.get_bool_option("condition-coverage-vb") ||
-               options.get_bool_option("condition-coverage-claims-vb");
+  bool is_vb = messaget::state.modules["coverage"] != VerbosityLevel::None;
+
   bool is_cond_cov = options.get_bool_option("condition-coverage") ||
                      options.get_bool_option("condition-coverage-claims") ||
                      options.get_bool_option("condition-coverage-rm") ||
-                     options.get_bool_option("condition-coverage-claims-rm") ||
-                     options.get_bool_option("condition-coverage-vb") ||
-                     options.get_bool_option("condition-coverage-claims-vb");
+                     options.get_bool_option("condition-coverage-claims-rm");
   bool is_keep_verified = options.get_bool_option("keep-verified-claims");
   bool is_clear_verified = (options.get_bool_option("k-induction") ||
                             options.get_bool_option("incremental-bmc") ||
@@ -940,10 +938,15 @@ smt_convt::resultt bmct::multi_property_check(
         auto current_pair = std::make_pair(claim.claim_msg, claim.claim_loc);
         if (total_cond.count(current_pair))
         {
-          if (options.get_bool_option("condition-coverage-claims-vb"))
+          if (
+            options.get_bool_option("condition-coverage-claims") ||
+            options.get_bool_option("condition-coverage-claims-rm"))
           {
+            // show claims
             log_status("\n  {} : SATISFIED", cmt_loc);
           }
+
+          // show coverage data
           log_result(
             "Current Condition Coverage: {}%\n",
             reached_claims.size() * 100.0 / total_cond.size());
@@ -996,7 +999,9 @@ smt_convt::resultt bmct::multi_property_check(
       auto current_pair = std::make_pair(claim.claim_msg, claim.claim_loc);
       if (total_cond.count(current_pair))
       {
-        if (options.get_bool_option("condition-coverage-claims-vb"))
+        if (
+          options.get_bool_option("condition-coverage-claims") ||
+          options.get_bool_option("condition-coverage-claims-rm"))
         {
           log_status("\n  {} : UNSATISFIED", cmt_loc);
         }

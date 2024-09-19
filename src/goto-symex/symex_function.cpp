@@ -542,9 +542,7 @@ void goto_symext::pop_frame()
     (options.get_bool_option("condition-coverage") ||
      options.get_bool_option("condition-coverage-claims") ||
      options.get_bool_option("condition-coverage-rm") ||
-     options.get_bool_option("condition-coverage-claims-rm") ||
-     (options.get_bool_option("condition-coverage-vb")) ||
-     (options.get_bool_option("condition-coverage-claims-vb"))) &&
+     options.get_bool_option("condition-coverage-claims-rm")) &&
     cur_state->call_stack.back().goto_state_map.size() != 0)
   {
     //TODO: temporary fix for the condition coverage
@@ -608,11 +606,11 @@ void goto_symext::symex_return(const expr2tc &code)
   if (stack_limit > 0 && no_return_value_opt)
   {
     code->foreach_operand([this](const expr2tc &e) {
-      // check whether the stack size has been reached.
-      claim(
-        (cur_state->top().process_stack_size(e, stack_limit)),
-        "Stack limit property was violated");
-    });
+        // check whether the stack size has been reached.
+        claim(
+          (cur_state->top().process_stack_size(e, stack_limit)),
+          "Stack limit property was violated");
+      });
   }
 
   // kill this one
