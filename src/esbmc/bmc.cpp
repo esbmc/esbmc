@@ -613,7 +613,7 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 
     fine_timet symex_stop = current_time();
 
-    eq = std::dynamic_pointer_cast<symex_target_equationt>(result.target);
+    eq = std::dynamic_pointer_cast<symex_target_equationt>(solver_result.target);
 
     log_status(
       "Symex completed in: {}s ({} assignments)",
@@ -640,8 +640,8 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 
     log_status(
       "Generated {} VCC(s), {} remaining after simplification ({} assignments)",
-      result.total_claims,
-      result.remaining_claims,
+      solver_result.total_claims,
+      solver_result.remaining_claims,
       BigInt(eq->SSA_steps.size()) - ignored);
 
     if (options.get_bool_option("document-subgoals"))
@@ -658,7 +658,7 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       return smt_convt::P_SMTLIB;
     }
 
-    if (result.remaining_claims == 0)
+    if (solver_result.remaining_claims == 0)
     {
       if (options.get_bool_option("smt-formula-only"))
       {
@@ -693,7 +693,7 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     if (
       options.get_bool_option("multi-property") &&
       options.get_bool_option("base-case"))
-      return multi_property_check(*eq, result.remaining_claims);
+      return multi_property_check(*eq, solver_result.remaining_claims);
 
     return run_decision_procedure(*runtime_solver, *eq);
   }
@@ -765,7 +765,7 @@ int bmct::ltl_run_thread(symex_target_equationt &equation) const
             break;
           }
 
-    switch (result)
+    switch (solver_result)
     {
     case smt_convt::P_SATISFIABLE:
       return check;
@@ -801,10 +801,8 @@ smt_convt::resultt bmct::multi_property_check(
   std::unordered_multiset<std::string> reached_mul_claims;
   bool is_assert_cov = options.get_bool_option("assertion-coverage") ||
                        options.get_bool_option("assertion-coverage-claims");
-  // this might be extended to assert cond
-  // is_vb: enable verbose output coverage info
-  // By enabling this, we will output the coverage information when handling each instrumentation assertion
-  // It is helpful when the program is too large and ESBMC cannot finish, we can still get some info about the coverage
+  // is_vb: enable verbose output coverage info if the option "--verbosity coverage:N" is set, where N should larger than 0
+  // By enabling this, we will output the coverage information when handling each instrumentation assertion. It is helpful when the program is too large and ESBMC cannot finish, we can still get some info about the coverage
   bool is_vb = messaget::state.modules["coverage"] != VerbosityLevel::None;
 
   bool is_cond_cov = options.get_bool_option("condition-coverage") ||
@@ -976,7 +974,7 @@ smt_convt::resultt bmct::multi_property_check(
         show_goto_trace(oss, ns, goto_trace);
         log_result("{}", oss.str());
       }
-      final_result = result;
+      final_result = solver_result;
 
       // Update fail-fast-counter
       fail_fast_cnt++;
