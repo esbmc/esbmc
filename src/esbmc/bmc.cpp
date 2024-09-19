@@ -607,8 +607,8 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
   fine_timet symex_start = current_time();
   try
   {
-    goto_symext::symex_resultt result = options.get_bool_option("schedule")
-                                          ? symex->generate_schedule_formula()
+    goto_symext::symex_resultt solver_result =
+      options.get_bool_option("schedule") ? symex->generate_schedule_formula()
                                           : symex->get_next_formula();
 
     fine_timet symex_stop = current_time();
@@ -743,13 +743,13 @@ int bmct::ltl_run_thread(symex_target_equationt &equation) const
           num_asserts++;
       }
 
-    smt_convt::resultt result = smt_convt::P_UNSATISFIABLE;
+    smt_convt::resultt solver_result = smt_convt::P_UNSATISFIABLE;
     log_status("Checking for {}", which);
     if (num_asserts != 0)
     {
       std::unique_ptr<smt_convt> smt_conv(create_solver("", ns, options));
-      result = run_decision_procedure(*smt_conv, equation);
-      if (result == smt_convt::P_SATISFIABLE)
+      solver_result = run_decision_procedure(*smt_conv, equation);
+      if (solver_result == smt_convt::P_SATISFIABLE)
         log_status("Found trace satisfying {}", which);
     }
     else
@@ -802,6 +802,9 @@ smt_convt::resultt bmct::multi_property_check(
   bool is_assert_cov = options.get_bool_option("assertion-coverage") ||
                        options.get_bool_option("assertion-coverage-claims");
   // this might be extended to assert cond
+  // is_vb: enable verbose output coverage info
+  // By enabling this, we will output the coverage information when handling each instrumentation assertion
+  // It is helpful when the program is too large and ESBMC cannot finish, we can still get some info about the coverage
   bool is_vb = messaget::state.modules["coverage"] != VerbosityLevel::None;
 
   bool is_cond_cov = options.get_bool_option("condition-coverage") ||
@@ -819,11 +822,15 @@ smt_convt::resultt bmct::multi_property_check(
   const int fail_fast_limit = is_fail_fast ? stoi(fail_fast) : 0;
   int fail_fast_cnt = 0;
 
-  // for cond-vb
-  goto_coveraget temp(ns, symex->goto_functions);
-  const std::set<std::pair<std::string, std::string>> &total_cond =
-    is_vb && is_cond_cov ? temp.get_total_cond_assert()
-                         : std::set<std::pair<std::string, std::string>>();
+  // for condition coverage verbose output
+  // total_cond: the combination of assertion's guard and location, which is used to identify each assertion in multi-property checking.
+  // Create a goto_coveraget object to handle coverage-related tasks
+  goto_coveraget coverage_handler(ns, symex->goto_functions);
+
+  // Conditionally get the total conditional assertions if both is_vb and is_cond_cov are true
+  const auto &total_cond = (is_vb && is_cond_cov)
+                             ? coverage_handler.get_total_cond_assert()
+                             : std::set<std::pair<std::string, std::string>>();
 
   if (is_fail_fast && fail_fast_limit < 0)
   {
@@ -911,11 +918,11 @@ smt_convt::resultt bmct::multi_property_check(
       runtime_solver->solver_text());
 
     // Save current instance
-    smt_convt::resultt result =
+    smt_convt::resultt solver_result =
       run_decision_procedure(*runtime_solver, local_eq);
 
     // If an assertion instance is verified to be violated
-    if (result == smt_convt::P_SATISFIABLE)
+    if (solver_result == smt_convt::P_SATISFIABLE)
     {
       bool is_compact_trace = true;
       if (
@@ -994,7 +1001,7 @@ smt_convt::resultt bmct::multi_property_check(
         }
       }
     }
-    else if (is_vb && result == smt_convt::P_UNSATISFIABLE)
+    else if (is_vb && solver_result == smt_convt::P_UNSATISFIABLE)
     {
       auto current_pair = std::make_pair(claim.claim_msg, claim.claim_loc);
       if (total_cond.count(current_pair))

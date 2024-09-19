@@ -1882,6 +1882,8 @@ bool esbmc_parseoptionst::process_goto_program(
       tmp.gen_cond_cov();
 
       // redo conversion to remove_sideeffect
+      // Due to that we deliberately skip some of the sideeffects removal process when generating the Goto program. 
+      // This is to keep the condition/guards format and avoid introducing auxiliary variables, which will affect the coverage calculation.
       goto_coverage_rm temp(context, options, goto_functions);
       temp.remove_sideeffect();
     }

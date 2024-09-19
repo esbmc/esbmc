@@ -8,6 +8,10 @@ std::string goto_coveraget::get_filename_from_path(std::string path)
   return path;
 }
 
+/*
+  replace the old_condition of all assertions
+  to the new condition(guard)
+*/
 void goto_coveraget::replace_all_asserts_to_guard(
   const expr2tc &guard,
   bool is_instrumentation)
@@ -24,6 +28,10 @@ void goto_coveraget::replace_all_asserts_to_guard(
     }
 }
 
+/*
+  replace the old_condition of a specific assertion
+  to the new condition(guard)
+*/
 void goto_coveraget::replace_assert_to_guard(
   const expr2tc &guard,
   goto_programt::instructiont::targett &it,
@@ -237,6 +245,7 @@ void goto_coveraget::gen_cond_cov()
           gen_cond_cov_assert(guard, pre_cond, goto_program, it);
         }
 
+        // e.g. bool x = (a>b);
         else if (it->is_assign())
         {
           const code_assign2t &expr = to_code_assign2t(it->code);
@@ -247,6 +256,8 @@ void goto_coveraget::gen_cond_cov()
             handle_operands_guard(rhs, goto_program, it);
           }
         }
+
+        // a>b;
         else if (it->is_other())
         {
           if (is_code_expression2t(it->code))
@@ -260,6 +271,8 @@ void goto_coveraget::gen_cond_cov()
             }
           }
         }
+
+        // e.g. RETURN a>b;
         else if (it->is_return())
         {
           const code_return2t &code_ret = to_code_return2t(it->code);
@@ -271,6 +284,7 @@ void goto_coveraget::gen_cond_cov()
           }
         }
 
+        // e.g. func(a>b);
         else if (it->is_function_call())
         {
           const code_function_call2t &code_func =
@@ -595,7 +609,7 @@ exprt goto_coveraget::handle_single_guard(exprt &expr)
 }
 
 /*
-  for OTHER, ASSIGN, FUNCTION_CALL..
+  add condition instrumentation for OTHER, ASSIGN, FUNCTION_CALL..
   whose operands might contain conditions
   we handle guards for each boolean sub-operands.
 */
