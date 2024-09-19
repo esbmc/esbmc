@@ -54,17 +54,20 @@ bool optionst::get_option(const std::string &option, std::string &value) const
 void optionst::cmdline(cmdlinet &cmds)
 {
   // Pump command line options into options list
-  for (auto &it : cmds.vm)
+  for (const auto &it : cmds.vm)
   {
-    std::string option_name = it.first;
+    const auto option_name = it.first;
     if (cmds.isset(option_name.c_str()) && !it.second.defaulted())
     {
-      const char *value = cmds.getval(option_name.c_str());
-      bool hasArgument = *value != 0;
-      if (hasArgument)
-        set_option(option_name, value);
-      else
+      std::string value_str;
+      for (const auto &value : cmds.get_values(option_name.c_str()))
+        if (!value.empty())
+          value_str.append(value).append(" ");
+
+      if (value_str.empty())
         set_option(option_name, true);
+      else
+        set_option(option_name, value_str);
     }
   }
 }
