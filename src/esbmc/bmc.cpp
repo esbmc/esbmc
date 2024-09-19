@@ -613,7 +613,8 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 
     fine_timet symex_stop = current_time();
 
-    eq = std::dynamic_pointer_cast<symex_target_equationt>(solver_result.target);
+    eq =
+      std::dynamic_pointer_cast<symex_target_equationt>(solver_result.target);
 
     log_status(
       "Symex completed in: {}s ({} assignments)",
