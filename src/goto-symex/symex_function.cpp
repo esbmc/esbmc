@@ -606,11 +606,11 @@ void goto_symext::symex_return(const expr2tc &code)
   if (stack_limit > 0 && no_return_value_opt)
   {
     code->foreach_operand([this](const expr2tc &e) {
-        // check whether the stack size has been reached.
-        claim(
-          (cur_state->top().process_stack_size(e, stack_limit)),
-          "Stack limit property was violated");
-      });
+      // check whether the stack size has been reached.
+      claim(
+        (cur_state->top().process_stack_size(e, stack_limit)),
+        "Stack limit property was violated");
+    });
   }
 
   // kill this one
