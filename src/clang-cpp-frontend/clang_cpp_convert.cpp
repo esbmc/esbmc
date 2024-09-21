@@ -1012,6 +1012,36 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  case clang::Stmt::CXXStdInitializerListExprClass:
+  {
+    const clang::CXXStdInitializerListExpr &cxxstdinit =
+      static_cast<const clang::CXXStdInitializerListExpr &>(stmt);
+
+    exprt list;
+    if (get_expr(*cxxstdinit.getSubExpr(), list))
+      return true;
+
+    exprt size = static_cast<const exprt &>(list.type().subtype().size_irep());
+
+    typet t;
+    if (get_type(*cxxstdinit.getType(), t))
+      return true;
+
+    const struct_union_typet &this_type = to_struct_union_type(ns.follow(t));
+    exprt sym("struct", this_type);
+
+    // { ._M_array=&list[0], ._M_len=size }
+    sym.move_to_operands(list);
+    sym.move_to_operands(size);
+
+    // Implicit construction of a std::initializer_list<T> object
+    // from an array temporary within list-initialization
+    // Therefore the AST does not call the constructor
+    new_expr = sym;
+
+    break;
+  }
+
   default:
     if (clang_c_convertert::get_expr(stmt, new_expr))
       return true;
