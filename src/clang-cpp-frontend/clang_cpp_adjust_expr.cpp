@@ -95,6 +95,7 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
       destructor.arguments().push_back(address_of_exprt(new_object));
       expr.set("destructor", destructor);
     }
+    adjust_operands(expr);
   }
   else if (statement == "temporary_object")
   {
