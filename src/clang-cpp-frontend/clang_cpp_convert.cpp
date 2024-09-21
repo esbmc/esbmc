@@ -1180,73 +1180,32 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
   case clang::Stmt::CXXStdInitializerListExprClass:
   {
-    const clang::CXXStdInitializerListExpr &initlist =
+    const clang::CXXStdInitializerListExpr &cxxstdinit =
       static_cast<const clang::CXXStdInitializerListExpr &>(stmt);
 
-    // Find the constructor that takes two args
-    const clang::CXXConstructorDecl *target_ctor;
-    for (const auto *ctor : initlist.getType()->getAsCXXRecordDecl()->ctors())
-    {
-      if (ctor->getNumParams() == 2)
-      {
-        // Process the constructor that takes two arguments
-        target_ctor = ctor;
-        break;
-      }
-    }
-
-    typet type;
-    if (get_type(initlist.getType(), type, true))
+    exprt list;
+    if (get_expr(*cxxstdinit.getSubExpr(), list))
       return true;
 
-    clang::Expr *one_expr = const_cast<clang::Expr *>(initlist.getSubExpr());
-    auto array_size =
-      ASTContext->getAsConstantArrayType(initlist.getSubExpr()->getType())
-        ->getSize();
-    auto array_size_expr = clang::IntegerLiteral::Create(
-      *ASTContext,
-      array_size,
-      ASTContext->getSizeType(),
-      initlist.getSubExpr()->getExprLoc());
+    exprt size = static_cast<const exprt &>(list.type().subtype().size_irep());
 
-    clang::Expr *one_expr_s[2] = {one_expr, array_size_expr};
-    //    one_expr_s[0]= const_cast<clang::Expr *>(initlist.getSubExpr());
-    //    one_expr_s[1]= const_cast<clang::Expr *>(initlist.getSubExpr());
-    clang::ArrayRef<clang::Expr *> array = llvm::ArrayRef(one_expr_s, 2);
-    typet full_type = migrate_type_back(migrate_type(type));
-    exprt zero_expr = gen_zero(ns.follow(type));
-    clang::InitListExpr init_list = clang::InitListExpr(
-      *ASTContext, initlist.getBeginLoc(), array, initlist.getEndLoc());
-    init_list.setType(initlist.getType());
-
-    //    exprt lol;
-    if (get_expr(init_list, new_expr))
+    typet t;
+    if (get_type(*cxxstdinit.getType(), t, true))
       return true;
-    //
-    //    exprt initializer;
-    //    if (get_expr(*initlist.getSubExpr(), initializer))
-    //      return true;
-    //
-    //    new_expr = initializer;
-    // TODO: won't work, because clang does not provide a ctor for us...
-    // Instead have to directly initialize the fields, which could be annoying, due to data_objects, but get_field_ref should hopefully help :)
-    clang::CXXConstructExpr *cxxc = clang::CXXConstructExpr::Create(
-      *ASTContext,
-      initlist.getType(),
-      initlist.getSubExpr()->getExprLoc(),
-      const_cast<clang::CXXConstructorDecl *>(target_ctor),
-      false,
-      array,
-      false,
-      false,
-      false,
-      false,
-      clang::CXXConstructExpr::ConstructionKind::CK_Complete,
-      initlist.getSubExpr()->getSourceRange());
-    //    if (get_constructor_call(*cxxc, new_expr))
-    //      return true;
+
+    const struct_union_typet &this_type = to_struct_union_type(ns.follow(t));
+    exprt sym("struct", this_type);
+
+    // { ._M_array=&list[0], ._M_len=size }
+    sym.move_to_operands(list);
+    sym.move_to_operands(size);
+
+    // Implicit construction of a std::initializer_list<T> object
+    // from an array temporary within list-initialization
+    // Therefore the AST does not call the constructor
+    new_expr = sym;
+
     break;
-    // TODO: Broken garbage potentially
   }
 
   case clang::Stmt::CXXInheritedCtorInitExprClass:

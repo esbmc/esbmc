@@ -5,6 +5,8 @@
 #include <assert.h>
 
 #include "stdexcept"
+#include <initializer_list>
+
 #include <utility> /* std::move */
 #include <new> /* placement-new */
 
@@ -189,6 +191,15 @@ public:
     _size = x._size;
     for (int i = 0; i < _size; i++)
       buf[i] = x.buf[i];
+    _capacity = _size;
+  }
+
+  vector(std::initializer_list<T> init) :_size(0), _capacity(1)
+  {
+    buf = new T[init.size()];
+    _size = init.size();
+    for (int i = 0; i < _size; i++)
+      buf[i] = *(init.begin() + i);
     _capacity = _size;
   }
 
