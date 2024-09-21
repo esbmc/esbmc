@@ -5,10 +5,12 @@
 #include <assert.h>
 
 #include "stdexcept"
-#include <initializer_list>
 
 #include <utility> /* std::move */
 #include <new> /* placement-new */
+#if __cplusplus >= 201103L
+# include <initializer_list>
+#endif
 
 #define VECTOR_CAPACITY 500
 
@@ -194,6 +196,7 @@ public:
     _capacity = _size;
   }
 
+#if __cplusplus >= 201103L
   vector(std::initializer_list<T> init) :_size(0), _capacity(1)
   {
     buf = new T[init.size()];
@@ -202,6 +205,7 @@ public:
       buf[i] = *(init.begin() + i);
     _capacity = _size;
   }
+#endif
 
   vector &operator=(const vector &x)
   {
