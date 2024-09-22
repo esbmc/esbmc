@@ -34,7 +34,7 @@ sudo apt update
 sudo apt-get install -y clang-14 llvm-14 clang-tidy-14 python-is-python3 python3 git ccache unzip wget curl bison flex g++-multilib linux-libc-dev libboost-all-dev libz3-dev libclang-14-dev libclang-cpp-dev cmake
 git clone https://github.com/esbmc/esbmc.git
 mkdir build && cd build
-cmake ../esbmc -DENABLE_Z3=1
+cmake .. -DENABLE_Z3=1
 make -j4
 ````
 
@@ -46,7 +46,7 @@ To compile ESBMC on Fedora 40 with the latest version of LLVM and the SMT solver
 # Warning, the --allowerasing parameter will also remove incompatible packages to the packages specified below
 sudo dnf install --best --allowerasing "@Development Tools" clang llvm llvm-devel clang-tools-extra python3 git ccache unzip wget curl bison flex gcc-c++ glibc-devel glibc-devel.i686 boost-devel boost-devel.i686 z3-devel clang-devel clang-devel.i686 cmake zlib-devel libffi-devel libstdc++-devel libstdc++-devel.i686
 
-cmake ../ -DENABLE_Z3=1 -DZ3_DIR=/usr/include/z3
+cmake .. -DENABLE_Z3=1 -DZ3_DIR=/usr/include/z3
 
 make -j4
 ```
@@ -83,7 +83,9 @@ Here, ESBMC is invoked as follows:
 $esbmc file.c --k-induction
 ````
 
-Where `file.c` is the C program to be checked, and --k-induction selects the k-induction proof rule. The user can choose the SMT solver, property, and verification strategy. For this particular C program, ESBMC provides the following output as the verification result:
+Where `file.c` is the C program to be checked, and --k-induction selects the k-induction proof rule. The user can choose the SMT solver, property, and verification strategy. Note that you need math.h installed on your system, especially if you run a release version. build-essential typically covers math.h.
+
+For this particular C program, ESBMC provides the following output as the verification result:
 
 ````
 *** Checking inductive step
