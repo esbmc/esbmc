@@ -83,6 +83,7 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
   }
   else if (statement == "cpp_delete" || statement == "cpp_delete[]")
   {
+    adjust_operands(expr);
     // adjust side effect node to explicitly call class destructor
     // e.g. the adjustment here will add the following instruction in GOTO:
     // FUNCTION_CALL:  ~t2(&(*p))
@@ -95,7 +96,6 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
       destructor.arguments().push_back(address_of_exprt(new_object));
       expr.set("destructor", destructor);
     }
-    adjust_operands(expr);
   }
   else if (statement == "temporary_object")
   {
