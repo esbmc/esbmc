@@ -185,12 +185,12 @@ This course unit introduces students to basic and advanced approaches to formall
 
 ### Awards
 
-* Distinguished Paper Award at ICSE’11
-* Best Paper Award at SBESC’15
+* 35 awards from international competitions on software verification (SV-COMP) and testing (Test-Comp) 2012-2024 at TACAS/FASE (Strength: Bug Finding and Code Coverage).
 * Most Influential Paper Award at ASE’23
 * Best Tool Paper Award at SBSeg'23
-* 35 awards from international competitions on software verification (SV-COMP) and testing (Test-Comp) 2012-2024 at TACAS/FASE (Strength: Bug Finding and Code Coverage).
-
+* Best Paper Award at SBESC’15
+* Distinguished Paper Award at ICSE’11
+   
 ### ESBMC-CHERI Video & Download
 
 This [video](https://youtu.be/CsWHnmU4UMs) describes how to obtain, build and run ESBMC-CHERI on an example.
