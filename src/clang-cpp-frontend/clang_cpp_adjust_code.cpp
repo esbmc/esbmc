@@ -152,27 +152,6 @@ void clang_cpp_adjust::adjust_for(codet &code)
     code_block.move_to_operands(decl_block, code);
     code.swap(code_block);
   }
-  else if (code.op0().get_bool("for_range"))
-  {
-    clang_c_adjust::adjust_for(code);
-    // speaial case: for (int num : arr)
-    // it has several inits: __range1 = &arr[0]
-    // __begin1 = (&(*__range1)[0])
-    // __end1 = &(*__range1)[0] + size
-    codet decls = to_code(code.op0());
-
-    code_blockt code_block;
-    Forall_operands (it, decls)
-    {
-      adjust_expr(*it);
-      codet &code_decl = to_code(*it);
-
-      code_block.move_to_operands(code_decl);
-    }
-
-    code_block.move_to_operands(code.op1());
-    code.swap(code_block);
-  }
   else
     clang_c_adjust::adjust_for(code);
 }
