@@ -22,6 +22,8 @@ Release Notes of the ESBMC model checker
 - Avoided forced switching in the built-in library to enhance performance in multithreading scenarios (#2025).
 - Improved race condition detection, including using the address for race checking and handling __VERIFIER_assert (#1995, #1953).
 - Optimized pointer analysis for global reads and writes (#1958).
+** Coverage Analysis
+- Update Condition Coverage Calculation Strategy (#1999).
 * Bug Fixes:
 ** Build & Compilation:
 - Resolved unused variables in the build process (#2031).
