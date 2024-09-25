@@ -4,6 +4,7 @@ Release Notes of the ESBMC model checker
 * New Features and Improvements:
 ** Python Frontend:
 - Enhanced type inference and fixed indexing issues (#2017, #2002).
+- Handling single-type lists (#1957).
 - Supported additional Python built-in functions like int.bit_length() and string concatenation (#1935, #1941).
 - Fixed handling of Python process creation on Windows (#1950).
 - Enforced Python 3 compatibility (#1983).
