@@ -1259,6 +1259,75 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  case clang::Stmt::CXXForRangeStmtClass:
+  {
+    const clang::CXXForRangeStmt &cxxfor =
+      static_cast<const clang::CXXForRangeStmt &>(stmt);
+
+    codet decls;
+    const clang::Stmt *init_stmt = cxxfor.getInit();
+    if (init_stmt)
+    {
+      exprt init;
+      if (get_expr(*init_stmt, init))
+        return true;
+
+      decls.move_to_operands(init);
+    }
+
+    exprt cond;
+    if (get_expr(*cxxfor.getCond(), cond))
+      return true;
+
+    codet inc = code_skipt();
+    const clang::Stmt *inc_stmt = cxxfor.getInc();
+    if (inc_stmt)
+      if (get_expr(*inc_stmt, inc))
+        return true;
+    convert_expression_to_code(inc);
+
+    exprt range;
+    if (get_expr(*cxxfor.getRangeStmt(), range))
+      return true;
+
+    exprt begin;
+    if (get_expr(*cxxfor.getBeginStmt(), begin))
+      return true;
+
+    exprt end;
+    if (get_expr(*cxxfor.getEndStmt(), end))
+      return true;
+
+    decls.move_to_operands(range, begin, end);
+    convert_expression_to_code(decls);
+    decls.set("for_range", 1);
+
+    codet body = code_skipt();
+    const clang::Stmt *body_stmt = cxxfor.getBody();
+    if (body_stmt)
+      if (get_expr(*body_stmt, body))
+        return true;
+
+    const clang::Stmt *loop_var = cxxfor.getLoopVarStmt();
+    exprt loop;
+    if (loop_var)
+      if (get_expr(*loop_var, loop))
+        return true;
+
+    codet::operandst &ops = body.operands();
+    ops.insert(ops.begin(), loop);
+    convert_expression_to_code(body);
+
+    code_fort code_for;
+    code_for.init() = decls;
+    code_for.cond() = cond;
+    code_for.iter() = inc;
+    code_for.body() = body;
+
+    new_expr = code_for;
+    break;
+  }
+
   default:
     if (clang_c_convertert::get_expr(stmt, new_expr))
       return true;
