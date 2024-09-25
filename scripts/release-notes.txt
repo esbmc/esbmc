@@ -1,5 +1,50 @@
 Release Notes of the ESBMC model checker
 
+*** Version 7.7
+* New Features and Improvements:
+** Python Frontend:
+- Enhanced type inference and fixed indexing issues (#2017, #2002).
+- Supported additional Python built-in functions like int.bit_length() and string concatenation (#1935, #1941).
+- Fixed handling of Python process creation on Windows (#1950).
+- Enforced Python 3 compatibility (#1983).
+** Clang C++ Frontend:
+- Added support for CXXStdInitializerList and list constructors in vectors (#2039).
+- Introduced support for std::isnormal function (#2032).
+- Updated support for isnan function and operational models (#2009, #2008).
+- Resolved issues with implicit copy and move constructors in unions (#2016).
+- Fixed return types for CXXMemberCalls and improved lambda function support (#2003, #1971).
+- Improved support for pseudo destructors and array type initialization (#1975, #1968).
+** Solidity Frontend:
+- Supported Solidity import statements (#1927, #1926).
+- Enhanced contract type variables and mapping data structures (#1917, #1867).
+- Introduced support for Solidity event keywords (#1872).
+** Concurrency:
+- Avoided forced switching in the built-in library to enhance performance in multithreading scenarios (#2025).
+- Improved race condition detection, including using the address for race checking and handling __VERIFIER_assert (#1995, #1953).
+- Optimized pointer analysis for global reads and writes (#1958).
+* Bug Fixes:
+** Build & Compilation:
+- Resolved unused variables in the build process (#2031).
+- Fixed various Fedora build issues and updated build instructions (#1994).
+- Fixed CHERI build errors and updated CHERI build instructions (#1984, #1974).
+- Addressed Python process creation issues on Windows platforms (#1950).
+** Concurrency:
+- Fixed forced switching in built-in libraries for multithreading (#2025).
+- Adjusted race checking for GOTO instructions and symbolic execution (#1995, #1940).
+** Frontend Enhancements:
+- Corrected implicit copy/move constructor bodies in the Clang C++ frontend (#2016).
+- Updated operational models for mathematical functions (#2009, #2008).
+** Miscellaneous Fixes:
+- Fixed README documentation (#2038).
+- Addressed issues with HTML reports (#2019).
+- Updated and fixed CI/CD actions for release automation (#2027, #2026).
+** CI/CD Improvements:
+- Updated benchexec and upload artifact actions (#2026, #2023).
+- Addressed release action issues for smoother deployment (#2027).
+** Documentation:
+- Fixed and updated BUILDING.md with instructions for Yices and CVC5 (#1855, #1852).
+- Added Python frontend documentation (#1880).
+
 *** Version 7.6.1
 * Clang C/C++ Frontend
 - Interpret option -Wc,OPT1,OPT2,... as passing OPT1 OPT2 ... to the clang frontend directly (#1840) 
