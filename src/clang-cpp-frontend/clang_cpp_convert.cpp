@@ -1264,7 +1264,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::CXXForRangeStmt &cxxfor =
       static_cast<const clang::CXXForRangeStmt &>(stmt);
 
-    codet decls;
+    codet decls("decl-block");
     const clang::Stmt *init_stmt = cxxfor.getInit();
     if (init_stmt)
     {
@@ -1272,7 +1272,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       if (get_expr(*init_stmt, init))
         return true;
 
-      decls.move_to_operands(init);
+      decls.move_to_operands(init.op0());
     }
 
     exprt cond;
@@ -1298,9 +1298,10 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (get_expr(*cxxfor.getEndStmt(), end))
       return true;
 
-    decls.move_to_operands(range, begin, end);
+    // The corresponding decls are taken from
+    // decl-blocks and integrated in the one decl-block
+    decls.move_to_operands(range.op0(), begin.op0(), end.op0());
     convert_expression_to_code(decls);
-    decls.set("for_range", 1);
 
     codet body = code_skipt();
     const clang::Stmt *body_stmt = cxxfor.getBody();
