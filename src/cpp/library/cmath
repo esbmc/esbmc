@@ -6,11 +6,12 @@
  * there. But we don't want theirs... */
 #define _GLIBCXX_INCLUDE_NEXT_C_HEADERS
 #if __has_include(<sys/_types.h>) /* FreeBSD nonsense about __char{16,32}_t */
-#include <sys/_types.h>
+#  include <sys/_types.h>
 #endif
 
 /* delegates to math.h in the C++ headers */
 #include <math.h>
+#include <type_traits>
 
 namespace std
 {
@@ -164,10 +165,34 @@ double modf(Integer num, double *iptr);
   bool name(long double x)                                                     \
   {                                                                            \
     return __builtin_##name(x);                                                \
-  }                                                                            \
+  }
 
 CIMPORT3(isnan);
 CIMPORT3(isnormal);
+
+#undef trunc
+#undef truncf
+#undef truncl
+
+using ::trunc;
+using ::truncf;
+using ::truncl;
+
+float trunc(float x)
+{
+  return __builtin_truncf(x);
+}
+
+long double trunc(long double x)
+{
+  return __builtin_truncl(x);
+}
+
+template <typename T>
+typename std::enable_if<std::is_integral<T>::value, double>::type trunc(T x)
+{
+  return __builtin_trunc(x);
+}
 
 #undef CIMPORT1
 #undef CIMPORT2
