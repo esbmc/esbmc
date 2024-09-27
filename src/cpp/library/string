@@ -3,6 +3,7 @@
 
 #include "definitions.h"
 #include "cstring"
+#include "cstdio"
 #include "cassert"
 #include "iostream"
 
@@ -1259,7 +1260,7 @@ char string::at(size_t pos) const
     //throw out_of_range();
     __ESBMC_assert(0, "string append failed, out_of_range");
   }
-  
+
   return this->str[pos];
 }
 
@@ -1307,7 +1308,7 @@ __ESBMC_HIDE:
   this->_size = strlen(s);
   this->str = new char[this->_size + 1];
   strcpy(this->str, s); // Copy the contents of s to str
-  return *this; // Return a reference to the modified string object
+  return *this;         // Return a reference to the modified string object
 }
 
 string &string::operator=(char s)
@@ -1683,13 +1684,13 @@ __ESBMC_HIDE:
 
 size_t string::find(char c, size_t pos) const
 {
-  __ESBMC_HIDE:
+__ESBMC_HIDE:
   __ESBMC_assert(pos < this->length(), "string overflow");
 
   for (size_t i = pos; i < this->length(); i++)
     if (this->str[i] == c)
       return i; // Return the index if character found
-  
+
   return npos; // Return npos if character not found
 }
 
@@ -3222,6 +3223,75 @@ __ESBMC_HIDE:
 
 istream &getline(istream &is, string &str, char delim);
 istream &getline(istream &is, string &str);
+
+/* 
+ * TODO: Model the to_string
+ * Fix the incorrect buffer value
+ * Extend goto_symext::symex_printf
+ * Ref: https://en.cppreference.com/w/cpp/string/basic_string/to_string
+ */
+inline string to_string(int value)
+{
+  char buffer[50];
+  sprintf(buffer, "%d", value);
+  return string(buffer);
+}
+
+inline string to_string(long value)
+{
+  char buffer[50];
+  sprintf(buffer, "%ld", value);
+  return string(buffer);
+}
+
+inline string to_string(long long value)
+{
+  char buffer[50];
+  sprintf(buffer, "%lld", value);
+  return string(buffer);
+}
+
+inline string to_string(unsigned value)
+{
+  char buffer[50];
+  sprintf(buffer, "%u", value);
+  return string(buffer);
+}
+
+std::string to_string(unsigned long value)
+{
+  char buffer[50];
+  sprintf(buffer, "%lu", value);
+  return string(buffer);
+}
+
+std::string to_string(unsigned long long value)
+{
+  char buffer[50];
+  sprintf(buffer, "%llu", value);
+  return string(buffer);
+}
+
+std::string to_string(float value)
+{
+  char buffer[50];
+  sprintf(buffer, "%f", value);
+  return string(buffer);
+}
+
+std::string to_string(double value)
+{
+  char buffer[50];
+  sprintf(buffer, "%f", value);
+  return string(buffer);
+}
+
+std::string to_string(long double value)
+{
+  char buffer[50];
+  sprintf(buffer, "%Lf", value);
+  return string(buffer);
+}
 
 } // namespace std
 #endif
