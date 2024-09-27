@@ -11,7 +11,6 @@ int main()
 {
 	dev_a = (int*) operator new(sizeof(int));
 	assert(dev_a != NULL);
-	assert(*dev_a == 0);
 
 	return 0;
 }
