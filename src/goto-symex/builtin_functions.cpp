@@ -560,8 +560,11 @@ void goto_symext::symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code)
   type2tc renamedtype2 =
     migrate_type(ns.follow(migrate_type_back(ptr_ref.subtype)));
 
+  type2tc renamedtype =
+    is_empty_type(renamedtype2) ? ns.follow(code.alloctype) : renamedtype2;
+
   type2tc newtype = do_array
-                      ? type2tc(array_type2tc(renamedtype2, code.size, false))
+                      ? type2tc(array_type2tc(renamedtype, code.size, false))
                       : renamedtype2;
 
   symbol.type = migrate_type_back(newtype);
@@ -575,7 +578,7 @@ void goto_symext::symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code)
   if (do_array)
   {
     expr2tc sym = symbol2tc(newtype, symbol.id);
-    expr2tc idx = index2tc(renamedtype2, sym, gen_ulong(0));
+    expr2tc idx = index2tc(renamedtype, sym, gen_ulong(0));
     rhs_ptr_obj = idx;
   }
   else
