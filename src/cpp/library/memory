@@ -90,6 +90,73 @@ copy(InputIterator first, InputIterator last, ForwardIterator result)
   return result;
 }
 
+#if __cplusplus >= 201103L // Check if C++11 or later is being used
+template <class T>
+class unique_ptr
+{
+  T *ptr;
+
+public:
+  explicit unique_ptr(T *p = nullptr) : ptr(p)
+  {
+  }
+
+  unique_ptr(const unique_ptr &) = delete;
+  unique_ptr &operator=(const unique_ptr &) = delete;
+
+  unique_ptr(unique_ptr &&other) noexcept : ptr(other.ptr)
+  {
+    other.ptr = nullptr;
+  }
+
+  unique_ptr &operator=(unique_ptr &&other) noexcept
+  {
+    if (this != &other)
+    {
+      delete ptr;
+      ptr = other.ptr;
+      other.ptr = nullptr;
+    }
+    return *this;
+  }
+
+  ~unique_ptr()
+  {
+    delete ptr;
+  }
+
+  T *operator->() const
+  {
+    return ptr;
+  }
+
+  T &operator*() const
+  {
+    return *ptr;
+  }
+
+  T *release()
+  {
+    T *temp = ptr;
+    ptr = nullptr;
+    return temp;
+  }
+
+  void reset(T *p = nullptr)
+  {
+    if (ptr != p)
+    {
+      delete ptr;
+      ptr = p;
+    }
+  }
+
+  T *get() const
+  {
+    return ptr;
+  }
+};
+#endif
 #if 0
 template <class OutputIterator, class T>
 class raw_storage_iterator :
