@@ -180,18 +180,18 @@ using ::truncl;
 
 float trunc(float x)
 {
-  return __builtin_truncf(x);
+  return ::truncf(x);
 }
 
 long double trunc(long double x)
 {
-  return __builtin_truncl(x);
+  return ::truncl(x);
 }
 
 template <typename T>
 typename std::enable_if<std::is_integral<T>::value, double>::type trunc(T x)
 {
-  return __builtin_trunc(x);
+  return ::trunc(x);
 }
 
 #undef CIMPORT1
