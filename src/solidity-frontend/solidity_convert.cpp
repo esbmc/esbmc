@@ -598,12 +598,46 @@ bool solidity_convertert::get_var_decl(
     current_typeName = old_typeName;
   }
 
+  bool is_interface = false;
   bool has_init =
-    (ast_node.contains("value") || ast_node.contains("initialValue"));
-
+      (ast_node.contains("value") || ast_node.contains("initialValue"));
+  
   // special handling for contract type
   if (t.get("#sol_type") == "CONTRACT")
   {
+    // 0. if it's interface, overwrite
+    std::string tgt_c_name = t.identifier().as_string().substr(4);
+
+    for (auto i = exportedSymbolsList.begin(); i != exportedSymbolsList.end();
+         i++)
+    {
+      std::string c_name  = i->second;
+      if (c_name == tgt_c_name)
+      {
+        auto decl = find_decl_ref(i->first);
+        if(decl.contains("contractKind") && decl["contractKind"] == "interface")
+        {
+          is_interface = true;
+          // serach inheritance
+          for(auto j = linearizedBaseList.begin(); j!=linearizedBaseList.end();j++ )
+          {
+
+            if(j->first == tgt_c_name || j->first == current_contractName)
+              continue;
+            
+            if(std::count((j->second).begin(), (j->second).end(), i->first))
+            {
+              // get itself
+              t = symbol_typet(prefix + exportedSymbolsList[j->second[0]]);
+              t.set("#sol_type", "CONTRACT");
+              break;
+            }
+          }
+        }
+        else
+          break;
+      }
+    }
     // 1. uninitialized contract var
     // if (t.identifier().as_string() == prefix + current_contractName)
     // {
@@ -617,6 +651,7 @@ bool solidity_convertert::get_var_decl(
     // }
 
     // 2. convert contract type to lvalue reference type
+
     if (has_init)
     {
       t = gen_pointer_type(t);
@@ -1597,20 +1632,25 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
   get_library_function_call(
     "nondet_uint", "c:@F@nondet_uint", uint_type(), l, _ndt_uint);
 
-  // get_unique_address(this)
-  side_effect_expr_function_callt _addr;
+
+  side_effect_expr_function_callt _ndt_bool;
   get_library_function_call(
-    "get_unique_address",
-    "c:@F@get_unique_address",
-    unsignedbv_typet(160),
-    l,
-    _addr);
+    "nondet_bool", "c:@F@nondet_bool", bool_type(), l, _ndt_bool);
+
+  // // get_unique_address(this)
+  // side_effect_expr_function_callt _addr;
+  // get_library_function_call(
+  //   "get_unique_address",
+  //   "c:@F@get_unique_address",
+  //   unsignedbv_typet(160),
+  //   l,
+  //   _addr);
 
   exprt this_ptr;
   std::string ctor_id;
   get_ctor_call_id(contract_name, ctor_id);
   get_func_decl_this_ref(ctor_id, this_ptr);
-  _addr.arguments().push_back(this_ptr);
+  //addr.arguments().push_back(this_ptr);
 
   // codehash
   get_builtin_symbol(
@@ -1636,7 +1676,7 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
     sol_prefix + "address",
     unsignedbv_typet(160),
     l,
-    _addr,
+    _ndt_uint,
     contract_name);
   // is_trusted
   get_builtin_symbol(
@@ -1644,7 +1684,7 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
     sol_prefix + "is_trusted",
     bool_type(),
     l,
-    _addr,
+    _ndt_bool,
     contract_name);
 
   return false;
@@ -1681,6 +1721,7 @@ bool solidity_convertert::move_initializer_to_ctor(
       "solidity",
       "\t@@@ initializing symbol {} in the constructor",
       i->name.as_string());
+
     assert(i->value.id() != "nil");
 
     if (i->type.id() == typet::id_empty)
@@ -3254,6 +3295,7 @@ bool solidity_convertert::get_expr(
         return true;
       }
       }
+
       // ContractMemberCall
       // - x.setAddress();
       // - x.address();
@@ -3268,7 +3310,7 @@ bool solidity_convertert::get_expr(
         caller_expr_json["referencedDeclaration"].get<int>();
       const nlohmann::json &base_expr_json =
         find_decl_ref(contract_var_id); // contract
-
+      
       const int member_id =
         callee_expr_json["referencedDeclaration"].get<int>();
       const nlohmann::json &member_decl_ref =
@@ -3336,10 +3378,13 @@ bool solidity_convertert::get_expr(
 
       is_contract_member_access = false;
       exprt copy = new_expr;
-
+      
+      irep_idt __id = base.identifier();
+      if(context.find_symbol(base.identifier()) == nullptr)
+        __id = base.type().subtype().identifier();
       std::string c_name =
-        context.find_symbol(base.identifier())->name.as_string();
-      external_transaction_verification(expr, copy, new_expr, c_name);
+        context.find_symbol(__id)->name.as_string();
+      external_transaction_verification(expr, base, copy, new_expr, c_name);
 
       break;
     }
@@ -3745,7 +3790,7 @@ bool solidity_convertert::get_expr(
 
       if (context.find_symbol(t_id) == nullptr)
       {
-        log_error("cannot get is_trusted symbol");
+        log_error("cannot get is_trusted symbol {}", t_id);
         return true;
       }
       exprt trust = symbol_expr(*context.find_symbol(t_id));
@@ -3868,11 +3913,21 @@ bool solidity_convertert::get_expr(
         return true;
 
       assert(base.id() != irept::id_typecast);
-      auto c_id = base.type().identifier();
-      if (context.find_symbol(c_id) == nullptr)
+
+      typet s_type = base.type();
+      auto c_id = s_type.identifier();
+      while (context.find_symbol(c_id) == nullptr)
       {
-        log_error("cannot find symbol {}", c_id);
-        return true;
+        if (s_type.has_subtype())
+        {
+          s_type = s_type.subtype();
+          c_id = s_type.identifier();
+        }
+        else
+        {
+          log_error("cannot find symbol {}", c_id);
+          return true;
+        }
       }
       std::string bs_c_name = context.find_symbol(c_id)->name.as_string();
 
@@ -3898,7 +3953,8 @@ bool solidity_convertert::get_expr(
         exprt comp = symbol_expr(*context.find_symbol(mem_id));
         exprt member = member_exprt(base, comp.name(), comp.type());
 
-        external_transaction_verification(expr, member, new_expr, bs_c_name);
+        external_transaction_verification(
+          expr, base, member, new_expr, bs_c_name);
       }
 
       break;
@@ -7951,7 +8007,9 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
   dest = code_blockt();
 
   // call designated "initialization" functions
-  context.foreach_operand_in_order([&dest](const symbolt &s) {
+  context.foreach_operand_in_order(
+    [&dest](const symbolt &s)
+    {
       if (s.type.initialization() && s.type.is_code())
       {
         code_function_callt function_call;
@@ -8231,6 +8289,27 @@ bool solidity_convertert::multi_transaction_verification(
           then_expr))
       return true;
 
+    // populate params
+    if (func.type().is_code())
+    {
+      unsigned int cnt = 0;
+      for (auto &arg : to_code_type(func.type()).arguments())
+      {
+        typet sub_type = arg.type();
+        std::string sub_name = "sol_tmp_" + std::to_string(aux_counter);
+        ++aux_counter;
+        std::string sub_id = "sol:@C@" + current_contractName + "@" + sub_name;
+        symbolt sub_sym;
+        locationt loc;
+        get_default_symbol(sub_sym, "C++", sub_type, sub_name, sub_id, loc);
+        sub_sym.static_lifetime = true;
+        sub_sym.lvalue = true;
+        auto &_added = *move_symbol_to_context(sub_sym);
+        then_expr.arguments().at(cnt) = symbol_expr(_added);
+        ++cnt;
+      }
+    }
+
     // set &__ESBMC_tmp as the first argument
     // which overwrite the this pointer
     then_expr.arguments().at(0) = contract_var;
@@ -8260,9 +8339,12 @@ bool solidity_convertert::multi_transaction_verification(
   code_while.body() = while_body;
 
   // move to "sol_main"
-  func_body.move_to_operands(code_while);
+  //func_body.move_to_operands(code_while);
+  func_body = while_body;
+  for (auto op : while_body.operands())
+    func_body.move_to_operands(op);
 
-  // 3. add "sol_main" to symbol table
+  // 3. add "sol_main_i" to symbol table
   symbolt new_symbol;
   code_typet main_type;
   typet e_type = empty_typet();
@@ -8287,12 +8369,40 @@ bool solidity_convertert::multi_transaction_verification(
   new_symbol.file_local = false;
 
   symbolt &added_symbol = *context.move_symbol_to_context(new_symbol);
-
-  // no params
   main_type.make_ellipsis();
-
   added_symbol.type = main_type;
   added_symbol.value = func_body;
+
+  // sol_main_i_unit
+  symbolt new_symbol2;
+  code_typet main_type2;
+  typet e_type2 = empty_typet();
+  e_type2.set("cpp_type", "void");
+  main_type2.return_type() = e_type2;
+  const std::string sol_name2 = "sol_main_" + contractName + "_unit";
+  const std::string sol_id2 = "sol:@C@" + contractName + "@F@" + sol_name2;
+  const symbolt &_contract2 = *context.find_symbol(prefix + contractName);
+  new_symbol2.location = _contract.location;
+  std::string debug_modulename2 =
+    get_modulename_from_path(_contract.location.file().as_string());
+  get_default_symbol(
+    new_symbol2,
+    debug_modulename2,
+    main_type2,
+    sol_name2,
+    sol_id2,
+    _contract2.location);
+
+  new_symbol2.lvalue = true;
+  new_symbol2.is_extern = false;
+  new_symbol2.file_local = false;
+
+  symbolt &added_symbol2 = *context.move_symbol_to_context(new_symbol2);
+
+  // no params
+  main_type2.make_ellipsis();
+  added_symbol2.type = main_type2;
+  added_symbol2.value = while_body;
 
   // 4. set "sol_main" as main function
   // this will be overwrite in multi-contract mode.
@@ -8458,6 +8568,7 @@ bool solidity_convertert::multi_contract_verification()
 */
 void solidity_convertert::external_transaction_verification(
   const nlohmann::json &json,
+  const exprt &base,
   const exprt &expr,
   exprt &new_expr,
   const std::string bs_contract_name)
@@ -8493,8 +8604,8 @@ void solidity_convertert::external_transaction_verification(
   side_effect_expr_function_callt sol_main_call;
   locationt sol_loc = new_expr.location();
   get_library_function_call(
-    "sol_main_" + contract_name,
-    "sol:@F@sol_main_" + contract_name,
+    "sol_main_" + contract_name + "_unit",
+    "sol:@C@" + contract_name + "@F@sol_main_" + contract_name + "_unit",
     empty_typet(),
     sol_loc,
     sol_main_call);
@@ -8517,7 +8628,7 @@ void solidity_convertert::external_transaction_verification(
 
   // if we reach here, it means the code is not annotated
   comprehensive_verification(
-    trusted_expr, untrusted_expr, bs_contract_name, new_expr);
+    trusted_expr, untrusted_expr, base, bs_contract_name, new_expr);
 }
 
 /* For low level call
@@ -8552,8 +8663,8 @@ void solidity_convertert::external_transaction_verification(
   side_effect_expr_function_callt sol_main_call;
   locationt sol_loc;
   get_library_function_call(
-    "sol_main_" + contract_name,
-    "sol:@F@sol_main_" + contract_name,
+    "sol_main_" + contract_name + "_unit",
+    "sol:@C@" + contract_name + "@F@sol_main_" + contract_name + "_unit",
     empty_typet(),
     sol_loc,
     sol_main_call);
@@ -8574,7 +8685,7 @@ void solidity_convertert::external_transaction_verification(
   // for call/delegatecall/staticcall
   // we need to know if it's calling a function via function signature
   bool is_base_contract_known = bs_contract_name.empty() ? false : true;
-
+  exprt base = nil_exprt();
   // for trusted: known_func_call
   if (f_name.find("call") != std::string::npos)
   {
@@ -8598,7 +8709,6 @@ void solidity_convertert::external_transaction_verification(
         (func_json["visibility"] == "public" ||
          func_json["visibility"] == "external"))
       {
-        exprt base;
         if (get_expr(json["expression"]["arguments"][0], base))
           abort();
 
@@ -8639,7 +8749,6 @@ void solidity_convertert::external_transaction_verification(
         (func_json["visibility"] == "public" ||
          func_json["visibility"] == "external"))
       {
-        exprt base;
         if (get_expr(json["expression"]["arguments"][0], base))
           abort();
         // TODO: do new
@@ -8799,12 +8908,13 @@ void solidity_convertert::external_transaction_verification(
   is_low_trust = -1;
 
   comprehensive_verification(
-    trusted_expr, untrusted_expr, bs_contract_name, new_expr);
+    trusted_expr, untrusted_expr, base, bs_contract_name, new_expr);
 }
 
 void solidity_convertert::comprehensive_verification(
   exprt &trusted_expr,
   exprt &untrusted_expr,
+  const exprt &base,
   const std::string &bs_contract_name,
   exprt &new_expr)
 {
@@ -8813,22 +8923,43 @@ void solidity_convertert::comprehensive_verification(
 
   // get trusted flag
   // TODO: fixme! this is incorrect if it's annotated.
-  assert(current_functionDecl);
-  exprt this_expr;
-  if (get_func_decl_this_ref(*current_functionDecl, this_expr))
-  {
-    log_error("cannot get this pointer");
-    abort();
-  }
-  std::string t_id = "sol:@C@" + bs_contract_name + "@is_trusted";
 
-  if (context.find_symbol(t_id) == nullptr)
+  exprt trust_flg;
+  if (base.is_nil())
   {
-    log_error("cannot get is_trusted symbol");
-    abort();
+    const symbolt &guard = *context.find_symbol("c:@F@nondet_bool");
+    side_effect_expr_function_callt guard_expr;
+    get_library_function_call(
+      "nondet_bool",
+      "c:@F@nondet_bool",
+      guard.type,
+      guard.location,
+      guard_expr);
+    trust_flg = guard_expr;
   }
-  exprt trust_flg = symbol_expr(*context.find_symbol(t_id));
-  trust_flg = member_exprt(this_expr, trust_flg.name(), trust_flg.type());
+  else
+  {
+    std::string t_id = "sol:@C@" + bs_contract_name + "@is_trusted";
+    //std::string t_id = "sol:@is_trusted";
+    if (context.find_symbol(t_id) == nullptr)
+    {
+      // symbolt sym;
+      // locationt loc;
+      // get_default_symbol(sym, "C++", bool_type(), "is_trusted", "sol:@is_trusted",loc);
+      // sym.static_lifetime = true;
+      // sym.file_local = true;
+
+      //
+
+      // auto & _add = *move_symbol_to_context(sym);
+      // _add.value = guard_expr;
+
+      log_error("cannot get is_trusted symbol {}", t_id);
+      abort();
+    }
+    trust_flg = symbol_expr(*context.find_symbol(t_id));
+    trust_flg = member_exprt(base, trust_flg.name(), trust_flg.type());
+  }
 
   // if-then-else
   codet if_expr("ifthenelse");

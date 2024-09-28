@@ -263,6 +263,7 @@ protected:
   bool multi_contract_verification();
   void external_transaction_verification(
     const nlohmann::json &json,
+    const exprt &base,
     const exprt &expr,
     exprt &new_expr,
     const std::string c_name);
@@ -274,6 +275,7 @@ protected:
   void comprehensive_verification(
     exprt &trusted_expr,
     exprt &untrusted_expr,
+    const exprt &base,
     const std::string &c_name,
     exprt &new_expr);
 
