@@ -96,7 +96,7 @@ protected:
     const std::string contract_name,
     std::string ctor_id,
     symbolt &sym);
-  bool is_low_level_call(std::string name);
+  bool is_low_level_call(const std::string &name);
 
   bool
   get_struct_class_fields(const nlohmann::json &ast_node, struct_typet &type);
@@ -133,6 +133,8 @@ protected:
     const nlohmann::json literal_type = nullptr);
   bool get_var_decl_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_func_decl_ref(const nlohmann::json &decl, exprt &new_expr);
+  const nlohmann::json &
+  get_func_decl_ref(const std::string &c_name, const std::string &f_name);
   bool get_func_decl_this_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_func_decl_this_ref(const std::string &func_id, exprt &new_expr);
   bool get_enum_member_ref(const nlohmann::json &decl, exprt &new_expr);
@@ -260,16 +262,18 @@ protected:
   bool multi_transaction_verification(const std::string &contractName);
   bool multi_contract_verification();
   void external_transaction_verification(
+    const nlohmann::json &json,
     const exprt &expr,
     exprt &new_expr,
     const std::string c_name);
   void external_transaction_verification(
-    const nlohmann::json &expr,
+    const nlohmann::json &json,
+    const nlohmann::json &args,
     exprt &new_expr,
     const std::string c_name = "");
   void comprehensive_verification(
-    const exprt &trusted_expr,
-    const exprt &untrusted_expr,
+    exprt &trusted_expr,
+    exprt &untrusted_expr,
     const std::string &c_name,
     exprt &new_expr);
 
@@ -279,6 +283,7 @@ protected:
   const nlohmann::json &find_decl_ref(int ref_decl_id);
   const nlohmann::json &
   find_decl_ref(int ref_decl_id, std::string &contract_name);
+
   const nlohmann::json &find_constructor_ref(int ref_decl_id);
   void convert_expression_to_code(exprt &expr);
   bool check_intrinsic_function(const nlohmann::json &ast_node);
