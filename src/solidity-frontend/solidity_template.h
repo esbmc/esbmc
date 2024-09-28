@@ -108,8 +108,43 @@ const std::string sol_byte = R"(
 void byte_concat();
 )";
 
-const std::string sol_funcs =
-  blockhash + gasleft + sol_abi + sol_math + sol_string + sol_byte;
+const std::string sol_address = R"(
+void addr_transfer(uint256_t ether, uint256_t balance)
+{
+  __ESBMC_assume(balance < ether);
+}
+
+bool addr_send(uint256_t ether, uint256_t balance)
+{
+  if(balance < ether)
+    return false;
+  return true;
+}
+
+bool addr_call()
+{
+  return nondet_bool();
+}
+
+bool addr_delegatecall()
+{
+  return nondet_bool();
+}
+
+bool addr_staticcall()
+{
+  return nondet_bool();
+}
+
+bool addr_callcodecall()
+{
+  return nondet_bool();
+}
+
+)";
+
+const std::string sol_funcs = blockhash + gasleft + sol_abi + sol_math +
+                              sol_string + sol_byte + sol_address;
 
 /// data structure
 
@@ -370,7 +405,54 @@ uint256_t str2int(const char *str)
 }
 )";
 
-const std::string sol_ext_library = sol_str2hex;
+// get unique random address
+const std::string sol_uqAddr = R"(
+// define a relatively large array
+static const unsigned int max_addr_obj_size = 50;
+address_t sol_addr_array[max_addr_obj_size];
+void *sol_obj_array[max_addr_obj_size];
+unsigned sol_max_cnt = 0;
+
+int get_addr_array_idx(address_t tgt)
+{
+  for (unsigned int i = 0; i < sol_max_cnt; i++)
+  {
+    if ((address_t)sol_addr_array[i] == (address_t)tgt)
+      return i;
+  }
+  return -1;
+}
+void *get_obj(address_t addr)
+{
+  void *ptr = NULL;
+  int idx = get_addr_array_idx(addr);
+  if (idx == -1)
+    // this means it's not previously stored
+    return NULL;
+  else
+    return sol_obj_array[idx];
+}
+void update_addr_obj(address_t addr, void *obj)
+{
+  sol_addr_array[sol_max_cnt] = addr;
+  sol_obj_array[sol_max_cnt] = obj;
+  ++sol_max_cnt;
+  if (sol_max_cnt >= 50)
+    assert(0);
+}
+address_t get_unique_address(void *obj)
+{
+  address_t tmp;
+  do
+  {
+    tmp = nondet_long();
+  } while (get_addr_array_idx(tmp) != -1);
+  update_addr_obj(tmp, obj);
+  return tmp;
+}
+)";
+
+const std::string sol_ext_library = sol_str2hex + sol_uqAddr;
 
 const std::string sol_c_library = "extern \"C\" {" + sol_typedef + sol_vars +
                                   sol_funcs + sol_mapping + sol_array +

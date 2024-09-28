@@ -74,7 +74,11 @@ const struct group_opt_templ all_cmd_options[] = {
     {"no-visibility",
      NULL,
      "force to verify every function, even it's an unreachable "
-     "internal/private function"}}},
+     "internal/private function"},
+    {"comprehensive",
+     NULL,
+     "simulate the behavoiur of external calls in both trusted and untrusted "
+     "situation"}}},
 #endif
   {"Frontend",
    {{"include,I",

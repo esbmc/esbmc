@@ -194,12 +194,15 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     {
       return StructTypeName;
     }
+    else if (typeIdentifier.compare(0, 9, "t_address") == 0)
+    {
+      return AddressTypeName;
+    }
     else if (
       uint_string_to_type_map.count(typeString) ||
       int_string_to_type_map.count(typeString) || typeString == "bool" ||
       typeString == "string" || typeString.find("literal_string") == 0 ||
       typeString == "string storage ref" || typeString == "string memory" ||
-      typeString == "address payable" || typeString == "address" ||
       typeString.compare(0, 5, "bytes") == 0)
     {
       // For state var declaration,
@@ -279,6 +282,7 @@ const char *type_name_to_str(TypeNameT type)
     ENUM_TO_STR(ArrayTypeName)
     ENUM_TO_STR(DynArrayTypeName)
     ENUM_TO_STR(ContractTypeName)
+    ENUM_TO_STR(AddressTypeName)
     ENUM_TO_STR(TypeConversionName)
     ENUM_TO_STR(EnumTypeName)
     ENUM_TO_STR(StructTypeName)
@@ -698,6 +702,10 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
   {
     return Mapping;
   }
+  else if (expr["nodeType"] == "FunctionCallOptions")
+  {
+    return CallOptionsExprClass;
+  }
   else if (expr["nodeType"] == "FunctionCall")
   {
     if (expr["expression"]["nodeType"] == "NewExpression")
@@ -713,17 +721,22 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
     assert(expr.contains("expression"));
     SolidityGrammar::TypeNameT type_name =
       get_type_name_t(expr["expression"]["typeDescriptions"]);
+
     if (type_name == SolidityGrammar::TypeNameT::StructTypeName)
       return StructMemberCall;
     else if (type_name == SolidityGrammar::TypeNameT::EnumTypeName)
       return EnumMemberCall;
     else if (type_name == SolidityGrammar::TypeNameT::ContractTypeName)
       return ContractMemberCall;
+    else if (type_name == SolidityGrammar::TypeNameT::AddressTypeName)
+      return AddressMemberCall;
     else
+    {
       //TODO Assume it's a builtin member
       // due to that the BuiltinTypeName cannot cover all the builtin member
       // e.g. string.concat ==> TypeConversionName
       return BuiltinMemberCall;
+    }
   }
   else if (expr["nodeType"] == "ImplicitCastExprClass")
   {
@@ -967,10 +980,12 @@ const char *expression_to_str(ExpressionT type)
     ENUM_TO_STR(Tuple)
     ENUM_TO_STR(Mapping)
     ENUM_TO_STR(CallExprClass)
+    ENUM_TO_STR(CallOptionsExprClass)
     ENUM_TO_STR(ImplicitCastExprClass)
     ENUM_TO_STR(IndexAccess)
     ENUM_TO_STR(NewExpression)
     ENUM_TO_STR(ContractMemberCall)
+    ENUM_TO_STR(AddressMemberCall)
     ENUM_TO_STR(StructMemberCall)
     ENUM_TO_STR(EnumMemberCall)
     ENUM_TO_STR(BuiltinMemberCall)

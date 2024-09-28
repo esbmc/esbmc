@@ -22,7 +22,8 @@ public:
     contextt &_context,
     nlohmann::json &_ast_json,
     const std::string &_sol_func,
-    const std::string &_contract_path);
+    const std::string &_contract_path,
+    bool comprehensive);
   virtual ~solidity_convertert() = default;
 
   bool convert();
@@ -69,12 +70,25 @@ protected:
     const std::string &c_name,
     std::set<std::string> &merged_list);
 
+  // auxiliary funcitons
   // handle the constructor
+  bool get_constructor(
+    const nlohmann::json &ast_node,
+    const std::string &contract_name);
   bool add_implicit_constructor(const std::string &contract_name);
   bool get_implicit_ctor_ref(exprt &new_expr, const std::string &contract_name);
   bool get_instantiation_ctor_call(
     const std::string &contract_name,
     exprt &new_expr);
+  // handle external call
+  void get_builtin_symbol(
+    const std::string name,
+    const std::string id,
+    const typet t,
+    const locationt &l,
+    const exprt &val,
+    const std::string c_name = "");
+  bool add_auxiliary_members(const std::string contract_name);
   bool move_initializer_to_ctor(
     const std::string contract_name,
     std::string ctor_id = "");
@@ -82,6 +96,7 @@ protected:
     const std::string contract_name,
     std::string ctor_id,
     symbolt &sym);
+  bool is_low_level_call(std::string name);
 
   bool
   get_struct_class_fields(const nlohmann::json &ast_node, struct_typet &type);
@@ -244,6 +259,19 @@ protected:
   symbolt *move_symbol_to_context(symbolt &symbol);
   bool multi_transaction_verification(const std::string &contractName);
   bool multi_contract_verification();
+  void external_transaction_verification(
+    const exprt &expr,
+    exprt &new_expr,
+    const std::string c_name);
+  void external_transaction_verification(
+    const nlohmann::json &expr,
+    exprt &new_expr,
+    const std::string c_name = "");
+  void comprehensive_verification(
+    const exprt &trusted_expr,
+    const exprt &untrusted_expr,
+    const std::string &c_name,
+    exprt &new_expr);
 
   // auxiliary functions
   std::string get_modulename_from_path(std::string path);
@@ -309,6 +337,7 @@ protected:
   const std::string &sol_func;
   //smart contract source file
   const std::string &contract_path;
+  bool comprehensive;
 
   std::string absolute_path;
   std::string contract_contents = "";
@@ -320,7 +349,8 @@ protected:
   const nlohmann::json *current_forStmt;
   const nlohmann::json *current_typeName;
   //TODO: store multiple exprt and flatten the block later
-  code_blockt current_blockDecl;
+  code_blockt current_frontBlockDecl;
+  code_blockt current_backBlockDecl;
   // for tuple
   bool current_lhsDecl;
   bool current_rhsDecl;
@@ -372,6 +402,9 @@ protected:
 
   // for auxiliary var name
   int aux_counter;
+
+  // for low level call trusted mode
+  int is_low_trust;
 
 private:
   bool get_elementary_type_name_uint(
