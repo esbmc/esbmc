@@ -118,7 +118,8 @@ set(REGRESSIONS_CPP11 esbmc-cpp11/cpp
                       )
 
 # list of C++14 test suites
-set(REGRESSIONS_CPP14 esbmc-cpp14/template)
+set(REGRESSIONS_CPP14 esbmc-cpp14/template
+                      esbmc-cpp14/deduced-return-type)
 
 # NOTE: In order to make the best of the concurrency set sort the tests from the slowest to fastest.
 if(APPLE)

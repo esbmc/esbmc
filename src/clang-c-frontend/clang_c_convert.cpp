@@ -644,6 +644,14 @@ bool clang_c_convertert::get_function(
       return false;
   }
 
+  // per https://eel.is/c++draft/dcl.spec.auto#general-14 return types of template functions are
+  // only deduced when they are instantiated (i.e. used).
+  // We skip those functions as they are unused anyway and the rest of esbmc can't handle undeduced types.
+  if (fd.getReturnType()->isUndeducedType() && !fd.isUsed(true))
+  {
+    return false;
+  }
+
   // Save old_functionDecl, to be restored at the end of this method
   const clang::FunctionDecl *old_functionDecl = current_functionDecl;
   current_functionDecl = &fd;
@@ -1258,6 +1266,7 @@ bool clang_c_convertert::get_type(
   {
     const clang::AutoType &at = static_cast<const clang::AutoType &>(the_type);
 
+    assert(at.isDeduced());
     if (get_type(at.desugar(), new_type, true))
       return true;
 
