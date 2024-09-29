@@ -54,6 +54,19 @@ typename std::remove_reference<T>::type &&move(T &&t) noexcept
 {
   return static_cast<typename std::remove_reference<T>::type &&>(t);
 }
+
+template <typename T>
+T&& forward(typename remove_reference<T>::type& t) noexcept
+{
+  return static_cast<T&&>(t);
+}
+
+template <typename T>
+T&& forward(typename remove_reference<T>::type&& t) noexcept
+{
+  static_assert(!std::is_lvalue_reference<T>::value, "T must not be an lvalue reference");
+  return static_cast<T&&>(t);
+}
 #endif
 
 } // namespace std
