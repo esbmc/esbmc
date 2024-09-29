@@ -1764,7 +1764,9 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::Stmt *callee = function_call.getCallee();
 
 #if CLANG_VERSION_MAJOR > 14
-    if (function_call.isCallToStdMove())
+    if (
+      function_call.isCallToStdMove() ||
+      function_call.getBuiltinCallee() == clang::Builtin::BIforward)
     {
       if (get_expr(*function_call.getArg(0), new_expr))
         return true;
