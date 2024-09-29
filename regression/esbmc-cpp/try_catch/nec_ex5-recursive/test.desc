@@ -1,5 +1,5 @@
-KNOWNBUG
+CORE
 main.cpp
---unwind 2 --no-unwinding-assertions --error-label ERROR --depth 200 --timeout 900
+--unwind 2 --no-unwinding-assertions --error-label ERROR --depth 125 --timeout 900
 
 ^VERIFICATION FAILED$
