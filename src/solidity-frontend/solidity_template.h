@@ -37,7 +37,7 @@ typedef unsigned _ExtInt(160) address_t;
 // the value of these variables need to be set to rand afterwards
 const std::string sol_msg = R"(
 uint256_t msg_data;
-address_t msg_sender;
+address_t msg_sender = (address_t)0;
 __uint32_t msg_sig;
 uint256_t msg_value;
 )";
@@ -68,7 +68,11 @@ uint256_t blockhash();
 )";
 
 const std::string gasleft = R"(
-uint256_t gasleft();
+uint256_t sol_gas = 100; // relatively large
+uint256_t gasleft()
+{
+  return sol_gas;
+}
 )";
 
 const std::string sol_abi = R"(
@@ -407,11 +411,12 @@ uint256_t str2int(const char *str)
 
 // get unique random address
 const std::string sol_uqAddr = R"(
-// define a relatively large array
+// compromise:
+// - define a relatively large array
 static const unsigned int max_addr_obj_size = 50;
-address_t sol_addr_array[max_addr_obj_size];
-void *sol_obj_array[max_addr_obj_size];
-unsigned sol_max_cnt = 0;
+static address_t sol_addr_array[max_addr_obj_size];
+static void *sol_obj_array[max_addr_obj_size];
+static unsigned sol_max_cnt = 0;
 
 int get_addr_array_idx(address_t tgt)
 {
@@ -424,7 +429,6 @@ int get_addr_array_idx(address_t tgt)
 }
 void *get_obj(address_t addr)
 {
-  void *ptr = NULL;
   int idx = get_addr_array_idx(addr);
   if (idx == -1)
     // this means it's not previously stored
@@ -434,14 +438,16 @@ void *get_obj(address_t addr)
 }
 void update_addr_obj(address_t addr, void *obj)
 {
+  __ESBMC_assume(obj != NULL);
   sol_addr_array[sol_max_cnt] = addr;
   sol_obj_array[sol_max_cnt] = obj;
   ++sol_max_cnt;
-  if (sol_max_cnt >= 50)
+  if (sol_max_cnt >= max_addr_obj_size)
     assert(0);
 }
 address_t get_unique_address(void *obj)
 {
+  __ESBMC_assume(obj != NULL);
   address_t tmp;
   do
   {

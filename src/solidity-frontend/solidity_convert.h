@@ -23,7 +23,7 @@ public:
     nlohmann::json &_ast_json,
     const std::string &_sol_func,
     const std::string &_contract_path,
-    bool comprehensive);
+    bool trust_mode);
   virtual ~solidity_convertert() = default;
 
   bool convert();
@@ -272,12 +272,9 @@ protected:
     const nlohmann::json &args,
     exprt &new_expr,
     const std::string c_name = "");
-  void comprehensive_verification(
-    exprt &trusted_expr,
-    exprt &untrusted_expr,
-    const exprt &base,
-    const std::string &c_name,
-    exprt &new_expr);
+  void extend_extcall_modelling(
+    const std::string &c_contract_name,
+    const locationt &sol_loc);
 
   // auxiliary functions
   std::string get_modulename_from_path(std::string path);
@@ -344,7 +341,7 @@ protected:
   const std::string &sol_func;
   //smart contract source file
   const std::string &contract_path;
-  bool comprehensive;
+  bool trust_mode;
 
   std::string absolute_path;
   std::string contract_contents = "";

@@ -33,11 +33,11 @@ solidity_languaget::solidity_languaget()
   }
   smart_contract = sol;
 
-  const std::string cp = config.options.get_option("comprehensive");
+  const std::string cp = config.options.get_option("untrusted");
   if (cp.empty())
-    comprehensive = false;
+    trust_mode = true;
   else
-    comprehensive = true;
+    trust_mode = false;
 }
 
 std::string solidity_languaget::get_temp_file()
@@ -147,7 +147,7 @@ bool solidity_languaget::typecheck(contextt &context, const std::string &module)
     new_context); // Add ESBMC and TACAS intrinsic symbols to the context
 
   solidity_convertert converter(
-    new_context, src_ast_json_array, func_name, smart_contract, comprehensive);
+    new_context, src_ast_json_array, func_name, smart_contract, trust_mode);
   if (converter.convert()) // Add Solidity symbols to the context
     return true;
 
