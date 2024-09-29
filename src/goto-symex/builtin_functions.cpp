@@ -611,16 +611,18 @@ void goto_symext::symex_cpp_delete(const expr2tc &expr)
 
   // we need to check the memory deallocation operator:
   // new and delete, new[] and delete[]
-  bool is_arr = is_array_type(internal_deref_items.front().object->type);
-  bool is_del_arr = is_code_cpp_del_array2t(expr);
-
-  if (is_arr != is_del_arr)
+  if (internal_deref_items.size())
   {
-    const std::string &msg =
-      "Mismatched memory deallocation operators: " + get_expr_id(expr);
-    claim(gen_false_expr(), msg);
-  }
+    bool is_arr = is_array_type(internal_deref_items.front().object->type);
+    bool is_del_arr = is_code_cpp_del_array2t(expr);
 
+    if (is_arr != is_del_arr)
+    {
+      const std::string &msg =
+        "Mismatched memory deallocation operators: " + get_expr_id(expr);
+      claim(gen_false_expr(), msg);
+    }
+  }
   // implement delete as a call to free
   symex_free(expr);
 }
