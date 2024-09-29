@@ -3,6 +3,7 @@
 
 #include "cstddef"
 #include "iterator"
+#include "utility"
 
 #if 0
 template<class T> class allocator {
@@ -91,20 +92,32 @@ copy(InputIterator first, InputIterator last, ForwardIterator result)
 }
 
 #if __cplusplus >= 201103L // Check if C++11 or later is being used
+
 template <class T>
+struct default_delete
+{
+  void operator()(T *ptr) const
+  {
+    delete ptr;
+  }
+};
+
+template <class T, class D = default_delete<T>>
 class unique_ptr
 {
   T *ptr;
+  D deleter;
 
 public:
-  explicit unique_ptr(T *p = nullptr) : ptr(p)
+  explicit unique_ptr(T *p = nullptr, D del = D()) : ptr(p), deleter(del)
   {
   }
 
   unique_ptr(const unique_ptr &) = delete;
   unique_ptr &operator=(const unique_ptr &) = delete;
 
-  unique_ptr(unique_ptr &&other) noexcept : ptr(other.ptr)
+  unique_ptr(unique_ptr &&other) noexcept
+    : ptr(other.ptr), deleter(std::move(other.deleter))
   {
     other.ptr = nullptr;
   }
@@ -113,17 +126,22 @@ public:
   {
     if (this != &other)
     {
-      delete ptr;
+      deleter(ptr);
+
       ptr = other.ptr;
+      deleter = std::move(other.deleter);
       other.ptr = nullptr;
     }
     return *this;
   }
 
+#if 0
+  // TODO: fix remove goto sideeffect
   ~unique_ptr()
   {
-    delete ptr;
+    deleter(ptr);
   }
+#endif
 
   T *operator->() const
   {
@@ -146,7 +164,7 @@ public:
   {
     if (ptr != p)
     {
-      delete ptr;
+      deleter(ptr);
       ptr = p;
     }
   }
@@ -155,8 +173,81 @@ public:
   {
     return ptr;
   }
+
+  D &get_deleter()
+  {
+    return deleter;
+  }
+
+  const D &get_deleter() const
+  {
+    return deleter;
+  }
 };
+
+template <class T, class D>
+bool operator==(const unique_ptr<T, D> &x, std::nullptr_t) noexcept
+{
+  return x.get() == nullptr;
+}
+
+template <class T, class D>
+bool operator==(std::nullptr_t, const unique_ptr<T, D> &x) noexcept
+{
+  return x.get() == nullptr;
+}
+
+template <class T, class D>
+bool operator!=(const unique_ptr<T, D> &x, std::nullptr_t) noexcept
+{
+  return x.get() != nullptr;
+}
+
+template <class T, class D>
+bool operator!=(std::nullptr_t, const unique_ptr<T, D> &x) noexcept
+{
+  return x.get() != nullptr;
+}
+
+template <class T, class D>
+bool operator==(const unique_ptr<T, D> &x, const T *ptr) noexcept
+{
+  return x.get() == ptr;
+}
+
+template <class T, class D>
+bool operator!=(const unique_ptr<T, D> &x, const T *ptr) noexcept
+{
+  return x.get() != ptr;
+}
+
+template <class T, class D>
+bool operator==(const T *ptr, const unique_ptr<T, D> &x) noexcept
+{
+  return x.get() == ptr;
+}
+
+template <class T, class D>
+bool operator!=(const T *ptr, const unique_ptr<T, D> &x) noexcept
+{
+  return x.get() != ptr;
+}
 #endif
+
+#if __cplusplus >= 201402L
+template <class T, class... Args>
+unique_ptr<T> make_unique(Args &&...args)
+{
+  return unique_ptr<T>(new T(std::forward<Args>(args)...));
+}
+
+template <class T>
+unique_ptr<T> make_unique(std::size_t size)
+{
+  return unique_ptr<T>(new typename std::remove_extent<T>::type[size]());
+}
+#endif
+
 #if 0
 template <class OutputIterator, class T>
 class raw_storage_iterator :
