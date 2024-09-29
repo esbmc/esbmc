@@ -118,7 +118,9 @@ set(REGRESSIONS_CPP11 esbmc-cpp11/cpp
                       )
 
 # list of C++14 test suites
-set(REGRESSIONS_CPP14 esbmc-cpp14/template)
+set(REGRESSIONS_CPP14 esbmc-cpp14/cpp
+                      esbmc-cpp14/template   
+                      )
 
 # list of C++20 test suites
 set(REGRESSIONS_CPP20 esbmc-cpp20/cpp)
