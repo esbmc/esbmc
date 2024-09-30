@@ -7,6 +7,7 @@
 
 #include <util/cmdline.h>
 #include <util/message.h>
+#include <util/config_file.h>
 
 /* Parses 's' according to a simple interpretation of shell rules, taking only
  * whitespace and the characters ', " and \ into account. */
@@ -264,13 +265,11 @@ bool cmdlinet::parse(
       }
       else
       {
-        log_error("Could not read config file: {}", config_path.value());
+        log_error("Config file does not exist: {}", config_path.value());
         return false;
       }
       boost::program_options::store(
-        boost::program_options::parse_config_file(
-          file, all_cmdline_options, false),
-        vm);
+        parse_toml_file(file, all_cmdline_options, false), vm);
     }
     // Load commandline parameters
     boost::program_options::store(
