@@ -28,6 +28,7 @@ public:
   virtual ~solidity_convertert() = default;
 
   bool convert();
+  static bool is_low_level_call(const std::string &name);
 
 protected:
   void multi_json_file();
@@ -70,6 +71,7 @@ protected:
     nlohmann::json &c_node,
     const std::string &c_name,
     std::set<std::string> &merged_list);
+  bool get_contract_definition(const std::string &c_name);
 
   // auxiliary funcitons
   // handle the constructor
@@ -105,7 +107,6 @@ protected:
     const std::string contract_name,
     std::string ctor_id,
     symbolt &sym);
-  bool is_low_level_call(const std::string &name);
 
   bool
   get_struct_class_fields(const nlohmann::json &ast_node, struct_typet &type);
@@ -319,10 +320,26 @@ protected:
     const std::string &bs_contract_name,
     const std::string &tgt_f_name,
     exprt &trusted_expr);
-  void delegatecall_modelling();
-  void call_modelling();
-  void transfer_modelling();
-  void send_modelling();
+  void delegatecall_modelling(
+    const exprt &base,
+    const std::string &bs_contract_name,
+    const std::string &tgt_f_name,
+    exprt &trusted_expr);
+  void call_modelling(
+    const exprt &base,
+    const std::string &bs_contract_name,
+    const std::string &tgt_f_name,
+    exprt &trusted_expr);
+  void transfer_modelling(
+    const exprt &ethers,
+    const exprt &base,
+    const std::string &bs_contract_name,
+    exprt &trusted_expr);
+  void send_modelling(
+    const exprt &ethers,
+    const exprt &base,
+    const std::string &bs_contract_name,
+    exprt &trusted_expr);
   void get_low_level_harness(
     const typet &struct_type,
     const exprt &base,

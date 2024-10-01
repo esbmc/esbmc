@@ -1,5 +1,6 @@
 #include <fmt/core.h>
 #include <solidity-frontend/solidity_grammar.h>
+#include <solidity-frontend/solidity_convert.h>
 #include <set>
 #include <util/message.h>
 
@@ -728,6 +729,10 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
     else if (type_name == SolidityGrammar::TypeNameT::ContractTypeName)
       return ContractMemberCall;
     else if (type_name == SolidityGrammar::TypeNameT::AddressTypeName)
+      return AddressMemberCall;
+    else if (
+      expr["expression"].contains("memberName") &&
+      solidity_convertert::is_low_level_call(expr["expression"]["memberName"]))
       return AddressMemberCall;
     else
     {
