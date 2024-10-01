@@ -3,11 +3,21 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <sstream>
 
+#include <stdexcept>
 #include <util/cmdline.h>
 #include <util/message.h>
 #include <util/config_file.h>
+
+#ifdef WIN32
+#  define HOME_ENV_NAME "USERPROFILE"
+#  define DEFAULT_CONFIG_PATH "%userprofile%\\esbmc.toml"
+#else
+#  define HOME_ENV_NAME "HOME"
+#  define DEFAULT_CONFIG_PATH "~/.config/esbmc.toml"
+#endif
 
 /* Parses 's' according to a simple interpretation of shell rules, taking only
  * whitespace and the characters ', " and \ into account. */
@@ -151,12 +161,6 @@ const char *cmdlinet::getval(const char *option) const
 
 std::string cmdlinet::expand_user(std::string const path) const
 {
-#ifdef WIN32
-#  define HOME_ENV_NAME "USERPROFILE"
-#else
-#  define HOME_ENV_NAME "HOME"
-#endif
-
   std::string result = std::string(path);
 
   // Case ~
@@ -167,31 +171,33 @@ std::string cmdlinet::expand_user(std::string const path) const
   return result;
 }
 
-// Will return empty string if invalid.
+// Returns the config file path if it is located, if config files should not be
+// loaded returns a std::nullopt. If a wrong file location is specified, then a
+// std::runtime_error is thrown.
 std::optional<std::string> cmdlinet::get_config_file_location() const
 {
   const auto envloc = std::getenv("ESBMC_CONFIG_FILE");
   if (envloc)
   {
-    const std::string config_path = this->expand_user(std::string(envloc));
+    // Disabled Case: Check if empty string, in which case we don't return anything.
+    const std::string envloc_str = std::string(envloc);
+    if (envloc_str.empty())
+    {
+      return std::nullopt;
+    }
+    // Load the config file
+    const std::string config_path = this->expand_user(envloc_str);
     if (std::filesystem::exists(config_path))
     {
       return config_path;
     }
+    throw std::runtime_error("file not found: " + config_path);
   }
-  else
+  // Load default config file if it exists.
+  const std::string config_path = this->expand_user(DEFAULT_CONFIG_PATH);
+  if (std::filesystem::exists(config_path))
   {
-    // Load default config file if it exists.
-#ifdef WIN32
-#  define DEFAULT_CONFIG_PATH "%userprofile%\\esbmc.toml"
-#else
-#  define DEFAULT_CONFIG_PATH "~/.config/esbmc.toml"
-#endif
-    const std::string config_path = this->expand_user(DEFAULT_CONFIG_PATH);
-    if (std::filesystem::exists(config_path))
-    {
-      return config_path;
-    }
+    return config_path;
   }
   return std::nullopt;
 }
@@ -253,10 +259,23 @@ bool cmdlinet::parse(
         .options(all_cmdline_options)
         .run(),
       vm);
-    // Load config file
-    const auto config_path = this->get_config_file_location();
-    if (config_path && !config_path->empty())
+
+    // Check if config file should be loaded, and get location.
+    std::optional<std::string> config_path;
+    try
     {
+      config_path = this->get_config_file_location();
+    }
+    catch (std::exception e)
+    {
+      log_error("Error while loading config file: {}", config_path.value());
+      return false;
+    }
+
+    // Load config file
+    if (config_path)
+    {
+      // Read config file.
       std::ifstream file(config_path.value());
       // File path provided is invalid.
       if (file)
@@ -265,12 +284,14 @@ bool cmdlinet::parse(
       }
       else
       {
-        log_error("Config file does not exist: {}", config_path.value());
+        log_error("Error while reading config file: {}", config_path.value());
         return false;
       }
+
       boost::program_options::store(
         parse_toml_file(file, all_cmdline_options, false), vm);
     }
+
     // Load commandline parameters
     boost::program_options::store(
       boost::program_options::command_line_parser(argc, argv)
