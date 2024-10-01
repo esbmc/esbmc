@@ -289,18 +289,11 @@ void goto_convertt::do_cpp_new(
 
   // grab initializer
   goto_programt tmp_initializer;
-  if (!rhs.get_bool("op_new"))
-    cpp_new_initializer(lhs, rhs, tmp_initializer);
+  cpp_new_initializer(lhs, rhs, tmp_initializer);
 
   exprt alloc_size;
-  exprt alloc_type;
 
-  if (rhs.get_bool("op_new"))
-  {
-    alloc_type = static_cast<const exprt &>(rhs.find("alloctype"));
-    alloc_size = static_cast<const exprt &>(rhs.size_irep());
-  }
-  else if (rhs.statement() == "cpp_new[]")
+  if (rhs.statement() == "cpp_new[]")
   {
     alloc_size = static_cast<const exprt &>(rhs.size_irep());
     if (alloc_size.type() != size_type())
@@ -333,7 +326,6 @@ void goto_convertt::do_cpp_new(
   exprt new_expr("sideeffect", rhs.type());
   new_expr.statement(rhs.statement());
   new_expr.cmt_size(alloc_size);
-  new_expr.cmt_type(alloc_type);
   new_expr.location() = rhs.find_location();
 
   // produce new object
@@ -752,16 +744,10 @@ void goto_convertt::do_function_call_symbol(
   {
     assert(arguments.size() == 1);
 
-    typet alloc_type;
-    exprt alloc_size;
-    get_alloc_type(arguments[0], alloc_type, alloc_size);
-
     // Change it into a cpp_new expression
-    side_effect_exprt new_function("cpp_new[]");
+    side_effect_exprt new_function("cpp_new");
     new_function.add("#location") = function.cmt_location();
-    new_function.add("size") = arguments.front();
-    new_function.add("alloctype") = alloc_type;
-    new_function.set("op_new", true);
+    new_function.add("sizeof") = arguments.front();
 
     // Set return type, a allocated pointer
     // XXX jmorse, const-qual misery
