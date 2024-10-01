@@ -1,18 +1,16 @@
 #include "config_file.h"
 
 #include <boost/program_options/option.hpp>
-#include <stdexcept>
 #include <string>
 #include <set>
-#include <format>
+#include <fmt/core.h>
 
-#include "fmt/color.h"
 #include "lib/toml.hpp"
-#include "util/message.h"
 
 // Define this because we cant use log_debug due to this being too early in init.
 #define DEBUG_MSG 0
 #if DEBUG_MSG
+#  include "util/message.h"
 #  define LOG_MSG(fmt, values...) log_status(fmt, values)
 #else
 #  define LOG_MSG(fmt, values...)
