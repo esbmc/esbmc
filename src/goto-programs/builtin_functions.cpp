@@ -289,7 +289,8 @@ void goto_convertt::do_cpp_new(
 
   // grab initializer
   goto_programt tmp_initializer;
-  cpp_new_initializer(lhs, rhs, tmp_initializer);
+  if (!rhs.get_bool("op_new"))
+    cpp_new_initializer(lhs, rhs, tmp_initializer);
 
   exprt alloc_size;
   exprt alloc_type;
@@ -351,17 +352,11 @@ void goto_convertt::cpp_new_initializer(
   goto_programt &dest)
 {
   // grab initializer
-  code_expressiont initializer = (code_expressiont &)rhs.initializer();
+  code_expressiont initializer;
 
-  if (initializer.is_nil())
-    return;
-
-  if (!initializer.op0().get_bool("constructor"))
+  if (rhs.initializer().is_nil())
   {
-    // for auto *p = Foo(3) and int *p = 3
-    // constructor case:  init is Foo(&(*new_object), 3)
-    // other case: init is 3,
-    // we turn "3" into "*new_object = 3"
+    // Initialize with default value
     side_effect_exprt assignment("assign");
     assignment.type() = rhs.type().subtype();
 
@@ -370,26 +365,54 @@ void goto_convertt::cpp_new_initializer(
     new_object.set("#lvalue", true);
     new_object.type() = rhs.type().subtype();
 
-    assignment.move_to_operands(new_object, initializer.op0());
+    // Default value is zero
+    exprt default_value = gen_zero(rhs.type().subtype());
+
+    assignment.move_to_operands(new_object, default_value);
     initializer.expression() = assignment;
   }
-
-  // XXX jmorse, const-qual misery
-  const_cast<exprt &>(rhs).remove("initializer");
-
-  if (rhs.statement() == "cpp_new[]")
-  {
-    // build loop
-  }
-  else if (rhs.statement() == "cpp_new")
-  {
-    exprt deref_new("dereference", rhs.type().subtype());
-    deref_new.copy_to_operands(lhs);
-    replace_new_object(deref_new, initializer);
-    convert(to_code(initializer), dest);
-  }
   else
-    assert(0);
+  {
+    initializer = (code_expressiont &)rhs.initializer();
+
+    if (!initializer.op0().get_bool("constructor"))
+    {
+      // for auto *p = Foo(3) and int *p = 3
+      // constructor case:  init is Foo(&(*new_object), 3)
+      // other case: init is 3,
+      // we turn "3" into "*new_object = 3"
+      side_effect_exprt assignment("assign");
+      assignment.type() = rhs.type().subtype();
+
+      // the new object
+      exprt new_object("new_object");
+      new_object.set("#lvalue", true);
+      new_object.type() = rhs.type().subtype();
+
+      assignment.move_to_operands(new_object, initializer.op0());
+      initializer.expression() = assignment;
+    }
+
+    // XXX jmorse, const-qual misery
+    const_cast<exprt &>(rhs).remove("initializer");
+  }
+
+  if (initializer.is_not_nil())
+  {
+    if (rhs.statement() == "cpp_new[]")
+    {
+      // build loop
+    }
+    else if (rhs.statement() == "cpp_new")
+    {
+      exprt deref_new("dereference", rhs.type().subtype());
+      deref_new.copy_to_operands(lhs);
+      replace_new_object(deref_new, initializer);
+      convert(to_code(initializer), dest);
+    }
+    else
+      assert(0);
+  }
 }
 
 void goto_convertt::do_exit(
