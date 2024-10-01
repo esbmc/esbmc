@@ -733,7 +733,7 @@ void goto_convertt::do_function_call_symbol(
     exprt alloc_size;
     get_alloc_type(arguments[0], alloc_type, alloc_size);
 
-    // Change it into a cpp_new[] expression
+    // Change it into a cpp_new expression
     side_effect_exprt new_function("cpp_new[]");
     new_function.add("#location") = function.cmt_location();
     new_function.add("size") = arguments.front();
