@@ -110,6 +110,26 @@ Solution found by the inductive step (k = 2)
 
 We refer the user to our [documentation webpage](https://ssvlab.github.io/esbmc/documentation.html) for further examples of the ESBMC's features.
 
+### Using Config Files
+
+ESBMC supports specifying options through TOML formatted config files. In order to use a config file, export an environment variable:
+
+```sh
+export ESBMC_CONFIG_FILE="path/to/config.toml"
+```
+
+If no environment file is specified, then the default locations will be checked:
+
+* Windows: `%userprofile%\esbmc.toml`
+* UNIX: `~/.config/esbmc.toml`
+
+If nothing is found then nothing is loaded. If you set the environment variable to
+the empty string then it disables the entire config file loading process.
+
+```sh
+export ESBMC_CONFIG_FILE=""
+```
+
 ### Features
 
 ESBMC detects errors in software by simulating a finite prefix of the program execution with all possible inputs. Classes of implementation errors that can be detected include:
