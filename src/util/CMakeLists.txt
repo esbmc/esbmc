@@ -40,6 +40,7 @@ target_include_directories(util_esbmc
         PUBLIC ${CMAKE_BINARY_DIR}/src
         PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}
         PUBLIC ${Boost_INCLUDE_DIRS}
+        lib
         )
 
 target_link_libraries(util_esbmc PUBLIC irep2 fmt::fmt ${Boost_LIBRARIES})
