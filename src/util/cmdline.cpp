@@ -7,6 +7,7 @@
 #include <sstream>
 
 #include <stdexcept>
+#include <string>
 #include <util/cmdline.h>
 #include <util/message.h>
 #include <util/config_file.h>
@@ -168,7 +169,7 @@ std::string cmdlinet::expand_user(std::string const path) const
   if (!result.empty() && result[0] == '~' && home_path)
     result.replace(0, 1, home_path.value());
 
-  return result;
+  return std::filesystem::absolute(result).string();
 }
 
 // Returns the config file path if it is located, if config files should not be
