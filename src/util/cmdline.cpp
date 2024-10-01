@@ -269,8 +269,8 @@ bool cmdlinet::parse(
     }
     catch (std::runtime_error &e)
     {
-      log_error("Error while loading config file: {}", e.what());
-      return false;
+      throw std::runtime_error(
+        "Error while loading config file: " + std::string(e.what()));
     }
 
     // Load config file
@@ -281,10 +281,11 @@ bool cmdlinet::parse(
       // File path provided is invalid.
       if (!file)
       {
-        log_error("Error while reading config file: {}", config_path.value());
-        return false;
+        throw std::runtime_error(
+          "Error while reading config file: " + config_path.value());
       }
 
+      // Load config file
       boost::program_options::store(
         parse_toml_file(file, all_cmdline_options, false), vm);
     }
