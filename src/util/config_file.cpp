@@ -3,9 +3,8 @@
 #include <string>
 #include <set>
 
-template <class charT>
-boost::program_options::basic_parsed_options<charT> parse_toml_file(
-  std::basic_istream<charT> &is,
+boost::program_options::basic_parsed_options<char> parse_toml_file(
+  std::basic_istream<char> &is,
   const boost::program_options::options_description &desc,
   bool allow_unregistered)
 {
@@ -30,10 +29,10 @@ boost::program_options::basic_parsed_options<charT> parse_toml_file(
   boost::program_options::parsed_options result(&desc);
   copy(
     // TODO Replace this with TOML
-    boost::program_options::detail::basic_config_file_iterator<charT>(
+    boost::program_options::detail::basic_config_file_iterator<char>(
       is, allowed_options, allow_unregistered),
-    boost::program_options::detail::basic_config_file_iterator<charT>(),
+    boost::program_options::detail::basic_config_file_iterator<char>(),
     back_inserter(result.options));
   // Convert char strings into desired type.
-  return boost::program_options::basic_parsed_options<charT>(result);
+  return boost::program_options::basic_parsed_options<char>(result);
 }
