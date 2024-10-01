@@ -266,9 +266,9 @@ bool cmdlinet::parse(
     {
       config_path = this->get_config_file_location();
     }
-    catch (std::exception e)
+    catch (std::runtime_error &e)
     {
-      log_error("Error while loading config file: {}", config_path.value());
+      log_error("Error while loading config file: {}", e.what());
       return false;
     }
 
@@ -278,11 +278,7 @@ bool cmdlinet::parse(
       // Read config file.
       std::ifstream file(config_path.value());
       // File path provided is invalid.
-      if (file)
-      {
-        log_status("Reading config file: {}", config_path.value());
-      }
-      else
+      if (!file)
       {
         log_error("Error while reading config file: {}", config_path.value());
         return false;
