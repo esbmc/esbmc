@@ -326,17 +326,16 @@ protected:
     const std::string &tgt_f_name,
     exprt &trusted_expr);
   void call_modelling(
+    const bool has_arguments,
     const exprt &base,
     const std::string &bs_contract_name,
     const std::string &tgt_f_name,
     exprt &trusted_expr);
   void transfer_modelling(
-    const exprt &ethers,
     const exprt &base,
     const std::string &bs_contract_name,
     exprt &trusted_expr);
   void send_modelling(
-    const exprt &ethers,
     const exprt &base,
     const std::string &bs_contract_name,
     exprt &trusted_expr);
@@ -350,6 +349,7 @@ protected:
     const exprt &new_base,
     const nlohmann::json &json,
     side_effect_expr_function_callt &_call);
+  void change_balance(const std::string cname, const exprt &value);
 
   // auxiliary functions
   std::string get_modulename_from_path(std::string path);

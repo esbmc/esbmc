@@ -39,7 +39,7 @@ const std::string sol_msg = R"(
 uint256_t msg_data;
 address_t msg_sender = (address_t)0;
 __uint32_t msg_sig;
-uint256_t msg_value;
+uint256_t msg_value = (uint256_t)1;
 )";
 
 const std::string sol_tx = R"(
@@ -475,6 +475,16 @@ bool cmp_cname(const char* c_1, const char* c_2)
     return true;
   else
     return false;
+}
+
+uint256_t update_balance(uint256_t balance, uint256_t val)
+{
+  val = val + (uint256_t)1;
+  if(balance >= val)
+    balance -= val;
+  else
+    balance = (uint256_t)0;
+  return balance;
 }
 )";
 

@@ -1683,11 +1683,13 @@ void solidity_convertert::get_builtin_symbol(
   const exprt &val,
   const std::string c_name)
 {
-  symbolt sym;
-  get_default_symbol(sym, "C++", t, name, id, l);
   // skip if it's already in the symbol table
   if (context.find_symbol(id) != nullptr)
     return;
+
+  symbolt sym;
+  get_default_symbol(sym, "C++", t, name, id, l);
+
   auto &added_sym = *move_symbol_to_context(sym);
   added_sym.value = val;
   initializers.push_back(&added_sym);
@@ -3380,10 +3382,23 @@ bool solidity_convertert::get_expr(
     // TODO: handle the ether transfer
 
     nlohmann::json args = nullptr;
-    if (expr.contains("arguments"))
+    if (literal_type != nullptr && literal_type != empty_json)
+      args = literal_type;
+    else if (expr.contains("arguments"))
       args = expr["arguments"];
     if (get_expr(callee_expr_json, args, new_expr))
       return true;
+
+    // do ether transfer
+    //!TODO: fixme
+    if (expr.contains("options") && expr["options"].size() > 0)
+    {
+      exprt ethers;
+      if (get_expr(
+            expr["options"][0], expr["options"][0]["typeDescriptions"], ethers))
+        return true;
+      change_balance(current_contractName, ethers);
+    }
 
     break;
   }
@@ -3418,6 +3433,17 @@ bool solidity_convertert::get_expr(
         break;
       }
       }
+    }
+
+    if (
+      callee_expr_json.contains("nodeType") &&
+      callee_expr_json["nodeType"] == "FunctionCallOptions")
+    {
+      nlohmann::json tmp_literal =
+        expr.contains("arguments") ? expr["arguments"] : empty_json;
+      if (get_expr(callee_expr_json, tmp_literal, new_expr))
+        return true;
+      break;
     }
 
     // * we first do special cases handling
@@ -3616,6 +3642,8 @@ bool solidity_convertert::get_expr(
     exprt callee_expr;
     if (get_expr(implicit_cast_expr, callee_expr))
       return true;
+
+    log_status("{}", callee_expr);
 
     // * check if it's a struct call
     assert(callee_expr.is_symbol());
@@ -4176,8 +4204,8 @@ bool solidity_convertert::get_expr(
 
         if (context.find_symbol(mem_id) == nullptr)
         {
-          log_error("cannot find builtin members");
-          return true;
+          if (add_auxiliary_members(current_contractName))
+            return true;
         }
 
         exprt comp = symbol_expr(*context.find_symbol(mem_id));
@@ -9279,6 +9307,53 @@ void solidity_convertert::extend_extcall_modelling(
 }
 
 /**
+ * val++; // to reflect gas
+ * if(this_bal> val)
+ *   this_bal -= val
+ * else
+ *   this_bal = 0;
+ */
+void solidity_convertert::change_balance(
+  const std::string cname,
+  const exprt &value)
+{
+  // get balance
+  std::string id = "sol:@C@" + cname + "@balance";
+  if (context.find_symbol(id) == nullptr)
+  {
+    log_error("cannot find balance");
+    abort();
+  }
+  exprt bal = symbol_expr(*context.find_symbol(id));
+
+  exprt this_expr;
+  assert(current_functionDecl);
+  if (get_func_decl_this_ref(*current_functionDecl, this_expr))
+  {
+    log_error("cannot get this pointer");
+    abort();
+  }
+  exprt this_bal = member_exprt(this_expr, bal.name(), bal.type());
+
+  side_effect_expr_function_callt _update_balance;
+  typet t = unsignedbv_typet(256);
+  get_library_function_call(
+    "update_balance",
+    "c:@F@update_balance",
+    t,
+    this_bal.location(),
+    _update_balance);
+  _update_balance.arguments().push_back(this_bal);
+  _update_balance.arguments().push_back(value);
+
+  exprt _assign = side_effect_exprt("assign", t);
+  _assign.copy_to_operands(this_bal, _update_balance);
+
+  convert_expression_to_code(_assign);
+  current_frontBlockDecl.operands().push_back(_assign);
+}
+
+/**
  * Base(x).func
  * @new_bs_contract_name: base
  * @new_base: x
@@ -9395,6 +9470,7 @@ void solidity_convertert::get_low_level_harness(
 }
 
 void solidity_convertert::call_modelling(
+  const bool has_arguments,
   const exprt &base,
   const std::string &bs_contract_name,
   const std::string &tgt_f_name,
@@ -9403,6 +9479,107 @@ void solidity_convertert::call_modelling(
   log_debug("solidity", "\t@@@ modelling call");
   bool is_base_contract_known = bs_contract_name.empty() ? false : true;
   bool is_target_function_known = tgt_f_name.empty() ? false : true;
+  bool is_payable_fbck = false;
+
+  if (is_base_contract_known)
+  {
+    log_debug("solidity", "base contract {}", bs_contract_name);
+    std::string struct_id;
+    typet struct_type;
+    struct_id = prefix + bs_contract_name;
+    if (context.find_symbol(struct_id) == nullptr)
+    {
+      // this means we have not parse this contract yet
+      if (get_contract_definition(bs_contract_name))
+        abort();
+    }
+    struct_type = to_struct_type(context.find_symbol(struct_id)->type);
+    if (is_target_function_known)
+    {
+      // address(x).func(); => x.func();
+      auto func_json = get_func_decl_ref(bs_contract_name, tgt_f_name);
+      side_effect_expr_function_callt _call;
+
+      //TODO: check payable
+      get_low_level_memcall(bs_contract_name, base, func_json, _call);
+
+      trusted_expr = _call;
+      return;
+    }
+    else
+    {
+      if (has_arguments)
+      {
+        symbolt _harness;
+        get_low_level_harness(struct_type, base, bs_contract_name, _harness);
+
+        // do function call
+        side_effect_expr_function_callt _call;
+        code_typet type;
+        type.return_type() = unsignedbv_typet(256);
+        _call.function() = symbol_expr(_harness);
+        _call.type() = type;
+        _call.location() = base.location();
+        _call.arguments().push_back(address_of_exprt(base));
+
+        trusted_expr = _call;
+        return;
+      }
+      else
+      {
+        // plain ether transfer
+        for (const auto &func : to_struct_type(struct_type).methods())
+        {
+          if (func.name() == "fallback")
+          {
+            is_payable_fbck = func.get("#is_payable") == "1";
+          }
+        }
+
+        if (!is_payable_fbck)
+        {
+          trusted_expr = nil_exprt();
+        }
+        else
+        {
+          nlohmann::json func_json =
+            get_func_decl_ref(bs_contract_name, "fallback");
+          assert(!func_json.is_null());
+          side_effect_expr_function_callt _call;
+          get_low_level_memcall(bs_contract_name, base, func_json, _call);
+
+          trusted_expr = _call;
+          return;
+        }
+      }
+    }
+  }
+  else
+  {
+    if (is_target_function_known)
+    {
+      for (std::string cname : contract_namelist)
+      {
+        if (cname == current_contractName)
+          continue;
+
+        auto &methods =
+          to_struct_type(context.find_symbol(prefix + cname)->type).methods();
+        for (auto &func : methods)
+        {
+          if (func.name().as_string() == tgt_f_name)
+          {
+            auto func_json = get_func_decl_ref(cname, tgt_f_name);
+            side_effect_expr_function_callt _call;
+            get_low_level_memcall(cname, base, func_json, _call);
+
+            trusted_expr = _call;
+            return;
+          }
+        }
+      }
+    }
+  }
 }
 
 void solidity_convertert::staticcall_modelling(
@@ -9479,7 +9656,7 @@ void solidity_convertert::staticcall_modelling(
       _call.function() = symbol_expr(_harness);
       _call.type() = type;
       _call.location() = base.location();
-      _call.arguments().push_back(base);
+      _call.arguments().push_back(address_of_exprt(base));
 
       trusted_expr = _call;
       return;
@@ -9608,7 +9785,7 @@ void solidity_convertert::delegatecall_modelling(
       _call.function() = symbol_expr(_harness);
       _call.type() = type;
       _call.location() = base.location();
-      _call.arguments().push_back(base);
+      _call.arguments().push_back(address_of_exprt(base));
 
       trusted_expr = _call;
       return;
@@ -9674,7 +9851,6 @@ void solidity_convertert::delegatecall_modelling(
  * @base: x
  */
 void solidity_convertert::transfer_modelling(
-  const exprt &ethers,
   const exprt &base,
   const std::string &bs_contract_name,
   exprt &trusted_expr)
@@ -9702,7 +9878,6 @@ void solidity_convertert::transfer_modelling(
 
     for (const auto &func : to_struct_type(struct_type).methods())
     {
-      log_status("{}", func.to_string());
       if (func.name() == "receive")
       {
         is_payable_recv = func.get("#is_payable") == "1";
@@ -9777,7 +9952,6 @@ void solidity_convertert::transfer_modelling(
 }
 
 void solidity_convertert::send_modelling(
-  const exprt &ethers,
   const exprt &base,
   const std::string &bs_contract_name,
   exprt &trusted_expr)
@@ -10011,6 +10185,7 @@ void solidity_convertert::external_transaction_verification_low(
   log_debug("solidity", "constructing low level external call verification");
   exprt trusted_expr = nil_exprt();
   exprt untrusted_expr;
+  exprt ethers;
 
   std::string contract_name;
   if (get_current_contract_name(json, contract_name))
@@ -10048,12 +10223,21 @@ void solidity_convertert::external_transaction_verification_low(
   {
     std::string signature;
     std::string tgt_f_name;
-    if (args != nullptr && args.size() > 0 && args[0].contains("arguments"))
+    bool is_args_null = false;
+    if (args == nullptr)
+      is_args_null = true;
+
+    if (!is_args_null && args.size() > 0 && args[0].contains("arguments"))
     {
       signature = args[0]["arguments"][0]["value"].get<std::string>();
-      auto pos = signature.find_first_of("(");
-      tgt_f_name = signature.substr(0, pos);
-      log_debug("solidity", "signature function name: {}", tgt_f_name);
+      if (signature.empty())
+        is_args_null = true;
+      else
+      {
+        auto pos = signature.find_first_of("(");
+        tgt_f_name = signature.substr(0, pos);
+        log_debug("solidity", "signature function name: {}", tgt_f_name);
+      }
     }
 
     if (f_name == "call")
@@ -10097,7 +10281,8 @@ void solidity_convertert::external_transaction_verification_low(
 
       //   trusted_expr = _call;
       // }
-      call_modelling(base, bs_contract_name, tgt_f_name, trusted_expr);
+      call_modelling(
+        !is_args_null, base, bs_contract_name, tgt_f_name, trusted_expr);
     }
     else if (f_name == "staticcall")
     {
@@ -10110,18 +10295,17 @@ void solidity_convertert::external_transaction_verification_low(
   }
   else
   {
-    exprt ethers;
     // assert(args.contains("typeDescriptions"));
     // if (get_expr(args, args["typeDescriptions"], ethers))
     //   abort();
 
     if (f_name == "transfer")
     {
-      transfer_modelling(ethers, base, bs_contract_name, trusted_expr);
+      transfer_modelling(base, bs_contract_name, trusted_expr);
     }
     else if (f_name == "send")
     {
-      send_modelling(ethers, base, bs_contract_name, trusted_expr);
+      send_modelling(base, bs_contract_name, trusted_expr);
     }
   }
 
@@ -10148,8 +10332,13 @@ void solidity_convertert::external_transaction_verification_low(
 
   if (trust_mode)
   {
-    // default or labbel as trusted
     extend_extcall_modelling(current_contractName, sol_loc);
+    if (f_name == "transfer" || f_name == "send")
+    {
+      if (get_expr(args[0], args[0]["typeDescriptions"], ethers))
+        abort();
+      change_balance(contract_name, ethers);
+    }
     new_expr = trusted_expr;
     return;
   }
