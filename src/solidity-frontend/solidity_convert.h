@@ -10,6 +10,7 @@
 #include <util/namespace.h>
 #include <util/std_types.h>
 #include <util/std_code.h>
+#include <util/string_constant.h>
 #include <nlohmann/json.hpp>
 #include <solidity-frontend/solidity_grammar.h>
 #include <solidity-frontend/pattern_check.h>
@@ -89,6 +90,14 @@ protected:
     const exprt &val,
     const std::string c_name = "");
   bool add_auxiliary_members(const std::string contract_name);
+  bool set_addr_cname_mapping(
+    const std::string &cname,
+    const exprt &base_this_ptr,
+    exprt &new_expr);
+  void get_addr_expr(
+    const std::string &cname,
+    const exprt &this_ptr,
+    exprt &new_expr);
   bool move_initializer_to_ctor(
     const std::string contract_name,
     std::string ctor_id = "");
@@ -207,6 +216,8 @@ protected:
   bool is_library_function(const std::string &id);
   bool get_empty_array_ref(const nlohmann::json &ast_node, exprt &new_expr);
   void get_aux_array_name(std::string &aux_name, std::string &aux_id);
+  void get_aux_var(std::string &aux_name, std::string &aux_id);
+  void get_aux_function(std::string &aux_name, std::string &aux_id);
   void get_aux_array(const exprt &src_expr, exprt &new_expr);
 
   // tuple
@@ -259,22 +270,69 @@ protected:
   std::string get_src_from_json(const nlohmann::json &ast_node);
 
   symbolt *move_symbol_to_context(symbolt &symbol);
+  bool get_new_temporary_obj(
+    const std::string &c_name,
+    const std::string &name,
+    const std::string &id,
+    const locationt &loc,
+    symbolt &added,
+    codet &decl);
   bool multi_transaction_verification(const std::string &contractName);
   bool multi_contract_verification();
-  void external_transaction_verification(
+  void external_transaction_verification_high(
     const nlohmann::json &json,
     const exprt &base,
     const exprt &expr,
     exprt &new_expr,
     const std::string c_name);
-  void external_transaction_verification(
+  void external_transaction_verification_low(
     const nlohmann::json &json,
     const nlohmann::json &args,
+    exprt &new_expr);
+  void external_transaction_verification_low(
+    const nlohmann::json &json,
+    const nlohmann::json &args,
+    const exprt &base,
     exprt &new_expr,
-    const std::string c_name = "");
+    const std::string c_name);
   void extend_extcall_modelling(
     const std::string &c_contract_name,
     const locationt &sol_loc);
+  bool arbitrary_modelling(
+    const std::string &contract_name,
+    const struct_typet::componentst &methods,
+    const exprt &base,
+    codet &body);
+  bool arbitrary_modelling2(
+    const std::string &contract_name,
+    const struct_typet::componentst &methods,
+    const exprt &base,
+    codet &body,
+    bool is_payable);
+  bool memcall_ext_modelling(
+    const nlohmann::json &json,
+    const nlohmann::json &args,
+    const exprt &base,
+    exprt &new_expr);
+  void staticcall_modelling(
+    const exprt &base,
+    const std::string &bs_contract_name,
+    const std::string &tgt_f_name,
+    exprt &trusted_expr);
+  void delegatecall_modelling();
+  void call_modelling();
+  void transfer_modelling();
+  void send_modelling();
+  void get_low_level_harness(
+    const typet &struct_type,
+    const exprt &base,
+    const std::string &bs_contract_name,
+    symbolt &_harness);
+  void get_low_level_memcall(
+    const std::string new_bs_contract_name,
+    const exprt &new_base,
+    const nlohmann::json &json,
+    side_effect_expr_function_callt &_call);
 
   // auxiliary functions
   std::string get_modulename_from_path(std::string path);
@@ -375,6 +433,8 @@ protected:
   std::unordered_map<int, std::string> exportedSymbolsList;
   // Inheritance Order Record <contract_name, Contract_id>
   std::unordered_map<std::string, std::vector<int>> linearizedBaseList;
+  // all contract name, including abstract/interface(?)
+  std::unordered_set<std::string> contract_namelist;
   // Store the ast_node["id"] of contract/struct/function/...
   std::unordered_map<int, std::string> scope_map;
   // Store state variables
@@ -406,9 +466,6 @@ protected:
 
   // for auxiliary var name
   int aux_counter;
-
-  // for low level call trusted mode
-  int is_low_trust;
 
 private:
   bool get_elementary_type_name_uint(

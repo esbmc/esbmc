@@ -416,6 +416,7 @@ const std::string sol_uqAddr = R"(
 static const unsigned int max_addr_obj_size = 50;
 static address_t sol_addr_array[max_addr_obj_size];
 static void *sol_obj_array[max_addr_obj_size];
+static char* sol_cname_array[max_addr_obj_size];
 static unsigned sol_max_cnt = 0;
 
 int get_addr_array_idx(address_t tgt)
@@ -455,6 +456,25 @@ address_t get_unique_address(void *obj)
   } while (get_addr_array_idx(tmp) != -1);
   update_addr_obj(tmp, obj);
   return tmp;
+}
+void set_cname_array(address_t _addr, char* cname)
+{
+  int tmp = get_addr_array_idx(_addr);
+  assert(tmp != -1);
+  sol_cname_array[tmp] = cname;
+}
+const char * get_cname(address_t _addr)
+{
+  int tmp = get_addr_array_idx(_addr);
+  assert(tmp != -1);
+  return sol_cname_array[tmp];
+}
+bool cmp_cname(const char* c_1, const char* c_2)
+{
+  if(strcmp(c_1, c_2) == 0)
+    return true;
+  else
+    return false;
 }
 )";
 
