@@ -130,6 +130,23 @@ the empty string then it disables the entire config file loading process.
 export ESBMC_CONFIG_FILE=""
 ```
 
+An example of a config file:
+
+```toml
+interval-analysis = true
+goto-unwind = true
+unlimited-goto-unwind = true
+k-induction = true
+state-hashing = true
+add-symex-value-sets = true
+k-step = 2
+floatbv = true
+unlimited-k-steps = false
+max-k-step = 100
+memory-leak-check = true
+context-bound = 2
+```
+
 ### Features
 
 ESBMC detects errors in software by simulating a finite prefix of the program execution with all possible inputs. Classes of implementation errors that can be detected include:
