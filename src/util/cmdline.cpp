@@ -173,8 +173,8 @@ std::string cmdlinet::expand_user(std::string const path) const
 }
 
 // Returns the config file path if it is located, if config files should not be
-// loaded returns a std::nullopt. If a wrong file location is specified, then a
-// std::runtime_error is thrown.
+// loaded returns a std::nullopt. If a wrong file location is specified, then an
+// empty string is returned
 std::optional<std::string> cmdlinet::get_config_file_location() const
 {
   const auto envloc = std::getenv("ESBMC_CONFIG_FILE");
@@ -183,23 +183,21 @@ std::optional<std::string> cmdlinet::get_config_file_location() const
     // Disabled Case: Check if empty string, in which case we don't return anything.
     const std::string envloc_str = std::string(envloc);
     if (envloc_str.empty())
-    {
       return std::nullopt;
-    }
+
     // Load the config file
     const std::string config_path = this->expand_user(envloc_str);
     if (std::filesystem::exists(config_path))
-    {
       return config_path;
-    }
-    throw std::runtime_error("file not found: " + config_path);
+
+    // Wrong file returned.
+    return "";
   }
   // Load default config file if it exists.
   const std::string config_path = this->expand_user(DEFAULT_CONFIG_PATH);
   if (std::filesystem::exists(config_path))
-  {
     return config_path;
-  }
+
   return std::nullopt;
 }
 
@@ -261,28 +259,27 @@ bool cmdlinet::parse(
         .run(),
       vm);
 
-    // Check if config file should be loaded, and get location.
-    std::optional<std::string> config_path;
-    try
-    {
-      config_path = this->get_config_file_location();
-    }
-    catch (std::runtime_error &e)
-    {
-      throw std::runtime_error(
-        "Error while loading config file: " + std::string(e.what()));
-    }
+    // Config file: Check if config file should be loaded, and get location.
+    std::optional<std::string> config_path = this->get_config_file_location();
 
     // Load config file
     if (config_path)
     {
+      // Check if config path provided is invalid.
+      if (config_path->compare("") == 0)
+      {
+        const auto envloc = std::getenv("ESBMC_CONFIG_FILE");
+        log_error("Config: File not found: {}", envloc);
+        return true;
+      }
+
       // Read config file.
       std::ifstream file(config_path.value());
       // File path provided is invalid.
       if (!file)
       {
-        throw std::runtime_error(
-          "Error while reading config file: " + config_path.value());
+        log_error("Error while reading config file: {}", config_path.value());
+        return true;
       }
 
       // Load config file
