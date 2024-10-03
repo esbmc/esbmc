@@ -13,7 +13,7 @@ import time
 import shlex
 import subprocess
 
-if sys.platform.startswith('linux'):
+if sys.platform.startswith("linux"):
     from resource import *
 
 #####################
@@ -42,22 +42,24 @@ FAIL_MODES = ["KNOWNBUG"]
 # Bring up a single benchmark
 BENCHMARK_BRINGUP = False
 
+
 class TestCase:
     """This class is responsible to:
-       (a) parse and validate test descriptions.
-       (b) hold functions to manipulate and generate commands with test case"""
+    (a) parse and validate test descriptions.
+    (b) hold functions to manipulate and generate commands with test case"""
 
     def _initialize_test_case(self):
         """Reads test description and initialize this object"""
         with open(os.path.join(self.test_dir, "test.desc")) as fp:
             # First line - TEST MODE
             self.test_mode = fp.readline().strip()
-            assert self.test_mode in SUPPORTED_TEST_MODES, str(
-                self.test_mode) + " is not supported"
+            assert self.test_mode in SUPPORTED_TEST_MODES, (
+                str(self.test_mode) + " is not supported"
+            )
 
             # Second line - Test file
             self.test_file = fp.readline().strip()
-            assert os.path.exists(self.test_dir + '/' + self.test_file)
+            assert os.path.exists(self.test_dir + "/" + self.test_file)
 
             # Third line - Arguments of executable
             self.test_args = fp.readline().strip()
@@ -67,7 +69,6 @@ class TestCase:
             self.test_regex = []
             for line in fp:
                 self.test_regex.append(line.strip())
-
 
     def generate_run_argument_list(self, *tool):
         """Generates run command list to be used in Popen"""
@@ -90,12 +91,12 @@ class TestCase:
                 result.pop(index)
                 result.pop(index)
             except ValueError:
-                pass    
+                pass
 
         return result
 
     def __str__(self):
-        return f'[{self.name}]: {self.test_dir}, {self.test_mode}'
+        return f"[{self.name}]: {self.test_dir}, {self.test_mode}"
 
     def __init__(self, test_dir: str, name: str):
         assert os.path.exists(test_dir)
@@ -110,14 +111,13 @@ class TestCase:
     def save_test(self):
         """Replaces original test with the current configuration"""
         test_desc_path = os.path.join(self.test_dir, "test.desc")
-        assert(os.path.isfile(test_desc_path))
-        with open(test_desc_path, 'w') as f:
+        assert os.path.isfile(test_desc_path)
+        with open(test_desc_path, "w") as f:
             f.write(f"{self.test_mode}\n")
             f.write(f"{self.test_file}\n")
             f.write(f"{self.test_args}\n")
             for re in self.test_regex:
                 f.write(f"{re}\n")
-
 
     """Ignore regex and only check for crashes"""
     RUN_ONLY = False
@@ -125,7 +125,6 @@ class TestCase:
     SMT_ONLY = False
     """Options that should be removed"""
     UNSUPPORTED_OPTIONS = ["--timeout", "--memlimit"]
-
 
 
 class Executor:
@@ -139,15 +138,25 @@ class Executor:
 
         try:
             # use subprocess.run because we want to wait for the subprocess to finish
-            p = subprocess.run(cmd, stdout=PIPE, stderr=PIPE, timeout=self.timeout);
+            p = subprocess.run(
+                cmd,
+                stdout=PIPE,
+                stderr=PIPE,
+                timeout=self.timeout,
+                env=dict(os.environ, ESBMC_CONFIG_FILE=""),
+            )
 
             # get the RSS (resident set size) of the subprocess that just terminated.
             # Save the output in a tmp.log and then use the command below
             # to get the total maximum RSS:
             #   egrep "mem_usage=[0-9]+" tmp.log -o | cut -d'=' -f2 | paste -sd+ - | bc
             # see https://docs.python.org/3/library/resource.html for more details
-            if sys.platform.startswith('linux'):
-                print("mem_usage={0} kilobytes".format(getrusage(RUSAGE_CHILDREN).ru_maxrss))
+            if sys.platform.startswith("linux"):
+                print(
+                    "mem_usage={0} kilobytes".format(
+                        getrusage(RUSAGE_CHILDREN).ru_maxrss
+                    )
+                )
 
         except subprocess.CalledProcessError:
             return None, None, 0
@@ -159,14 +168,14 @@ def get_test_objects(base_dir: str):
     """Generates a TestCase from a list of files"""
     assert os.path.exists(base_dir)
     listdir = os.listdir(base_dir)
-    directories = [x for x in listdir if os.path.isdir(
-        os.path.join(base_dir, x))]
-    tests = [TestCase(os.path.join(base_dir, x), x)
-             for x in directories]
+    directories = [x for x in listdir if os.path.isdir(os.path.join(base_dir, x))]
+    tests = [TestCase(os.path.join(base_dir, x), x) for x in directories]
     return tests
+
 
 class RegressionBase(unittest.TestCase):
     """Base class to use for test generation"""
+
     longMessage = True
 
     FAIL_WITH_WORD: str = None
@@ -178,9 +187,10 @@ class RegressionBase(unittest.TestCase):
     def tearDown(self):
         t = time.time() - self.startTime
         if RegressionBase.TIMEOUT and t >= RegressionBase.TIMEOUT:
-            print('TIMEOUT')
+            print("TIMEOUT")
         else:
-            print('%.3f' %  t)
+            print("%.3f" % t)
+
 
 def _add_test(test_case, executor):
     """This method returns a function that defines a test"""
@@ -189,7 +199,7 @@ def _add_test(test_case, executor):
         stdout, stderr, rc = executor.run(test_case)
 
         if stdout == None:
-            timeout_message ="\nTIMEOUT TEST: " + str(test_case.test_dir)
+            timeout_message = "\nTIMEOUT TEST: " + str(test_case.test_dir)
             self.fail(timeout_message)
 
         if TestCase.RUN_ONLY:
@@ -198,19 +208,26 @@ def _add_test(test_case, executor):
             return
 
         output_to_validate = stdout.decode() + stderr.decode()
-        error_message_prefix = "\nTEST: " + \
-            str(test_case.test_dir) + "\nEXPECTED TO FIND: " + \
-            str(test_case.test_regex) + "\n\nPROGRAM OUTPUT\n"
-        error_message = output_to_validate + "\n\nARGUMENTS: " + \
-            str(test_case.generate_run_argument_list(*executor.tool))
+        error_message_prefix = (
+            "\nTEST: "
+            + str(test_case.test_dir)
+            + "\nEXPECTED TO FIND: "
+            + str(test_case.test_regex)
+            + "\n\nPROGRAM OUTPUT\n"
+        )
+        error_message = (
+            output_to_validate
+            + "\n\nARGUMENTS: "
+            + str(test_case.generate_run_argument_list(*executor.tool))
+        )
 
-        if(BENCHMARK_BRINGUP):
-            if os.environ.get('LOG_DIR') is None:
-                raise RuntimeError('environment variable LOG_DIR is not defined')
-            assert os.path.isdir(os.environ['LOG_DIR'])
-            destination = os.environ['LOG_DIR'] + '/' + test_case.name
-            f=open(destination, 'a')
-            f.write("ESBMC args: " + test_case.test_args + '\n\n')
+        if BENCHMARK_BRINGUP:
+            if os.environ.get("LOG_DIR") is None:
+                raise RuntimeError("environment variable LOG_DIR is not defined")
+            assert os.path.isdir(os.environ["LOG_DIR"])
+            destination = os.environ["LOG_DIR"] + "/" + test_case.name
+            f = open(destination, "a")
+            f.write("ESBMC args: " + test_case.test_args + "\n\n")
             f.write(output_to_validate)
             f.close()
 
@@ -230,6 +247,7 @@ def _add_test(test_case, executor):
                     self.fail(error_message_prefix + error_message)
             else:
                 self.fail(error_message_prefix + error_message)
+
     return test
 
 
@@ -239,51 +257,69 @@ def gen_one_test(base_dir: str, test: str, executor_path: str, modes):
     if test_case.test_mode not in modes:
         exit(10)
     test_func = _add_test(test_case, executor)
-    setattr(RegressionBase, 'test_{0}'.format(test_case.name), test_func)
+    setattr(RegressionBase, "test_{0}".format(test_case.name), test_func)
 
 
 def _arg_parsing():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--tool", required=False, help="tool executable path + optional args")
+    parser.add_argument(
+        "--tool", required=False, help="tool executable path + optional args"
+    )
     parser.add_argument("--timeout", required=False, help="timeout value")
-    parser.add_argument('--modes', nargs='+', help="a list of modes that are supported")
-    parser.add_argument("--regression", required=False,
-                        help="regression suite path")
-    parser.add_argument("--mode", required=False, help="tests to be executed [CORE, "
-                                                      "KNOWNBUG, FUTURE, THOROUGH")
+    parser.add_argument("--modes", nargs="+", help="a list of modes that are supported")
+    parser.add_argument("--regression", required=False, help="regression suite path")
+    parser.add_argument(
+        "--mode",
+        required=False,
+        help="tests to be executed [CORE, " "KNOWNBUG, FUTURE, THOROUGH",
+    )
     parser.add_argument("--file", required=False, help="specific test to be executed")
-    parser.add_argument("--mark_knownbug_with_word", required=False,
-                        help="If test fails with word then mark it as a knownbug")
-    parser.add_argument("--benchbringup", default=False, action="store_true",
-            help="Flag to run a specific benchmark and collect logs in Github workflow")
+    parser.add_argument(
+        "--mark_knownbug_with_word",
+        required=False,
+        help="If test fails with word then mark it as a knownbug",
+    )
+    parser.add_argument(
+        "--benchbringup",
+        default=False,
+        action="store_true",
+        help="Flag to run a specific benchmark and collect logs in Github workflow",
+    )
 
-    parser.add_argument("--smt_test", default=False, action="store_true",
-            help="Replaces usual tests with crash check while producing formulas (adds --smt-formula-only).")
+    parser.add_argument(
+        "--smt_test",
+        default=False,
+        action="store_true",
+        help="Replaces usual tests with crash check while producing formulas (adds --smt-formula-only).",
+    )
 
     main_args = parser.parse_args()
     if main_args.timeout:
         RegressionBase.TIMEOUT = int(main_args.timeout)
     RegressionBase.FAIL_WITH_WORD = main_args.mark_knownbug_with_word
 
-    regression_path = os.path.join(os.path.dirname(os.path.relpath(__file__)),
-                                   main_args.regression)
+    regression_path = os.path.join(
+        os.path.dirname(os.path.relpath(__file__)), main_args.regression
+    )
 
     global BENCHMARK_BRINGUP
-    if(main_args.benchbringup):
+    if main_args.benchbringup:
         BENCHMARK_BRINGUP = True
 
-    if(main_args.smt_test):
+    if main_args.smt_test:
         print("Checking SMT generation only")
         TestCase.RUN_ONLY = True
         TestCase.SMT_ONLY = True
 
-    gen_one_test(regression_path, main_args.file, main_args.tool, main_args.modes)    
+    gen_one_test(regression_path, main_args.file, main_args.tool, main_args.modes)
+
 
 def main():
     _arg_parsing()
     suite = unittest.TestLoader().loadTestsFromTestCase(RegressionBase)
     # run all test cases
     unittest.main(argv=[sys.argv[0], "-v"])
+
 
 if __name__ == "__main__":
     main()
@@ -306,7 +342,7 @@ TEST_SUITES = [
     "cuda/Supported_long_time",
     "cuda/benchmarks",
     "cvc",
-    "esbmc",    
+    "esbmc",
     "esbmc-cpp/algorithm",
     "esbmc-cpp/bug_fixes",
     "esbmc-cpp/cbmc",
@@ -355,6 +391,7 @@ TEST_SUITES = [
     "goto-coverage",
 ]
 
+
 def apply_transform_over_tests(functor):
     # Always double check TEST_SUITE variable!
     script_dir_path = os.path.dirname(os.path.relpath(__file__))
@@ -363,6 +400,6 @@ def apply_transform_over_tests(functor):
         for test_case in test_cases:
             functor(test_case)
 
+
 def print_test(test: TestCase):
     print(str(test))
-
