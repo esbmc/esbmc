@@ -17,7 +17,7 @@ on:
       svbenchmarks:
         description: 'Git branch, tag, or commit of SV-Benchmarks to use'
         required: true
-        default: 'svcomp23'      	
+        default: 'svcomp24'      	
       mode:
         type: choice
         description: Benchexec run mode
@@ -29,12 +29,12 @@ on:
         type: choice
         description: Run-set to use (be sure to set mode to "RunSet")
         options:
-        - SV-COMP23_unreach-call
-        - SV-COMP23_no-data-race
-        - SV-COMP23_valid-memcleanup
-        - SV-COMP23_valid-memsafety
-        - SV-COMP23_termination
-        - SV-COMP23_no-overflow
+        - SV-COMP24_unreach-call
+        - SV-COMP24_no-data-race
+        - SV-COMP24_valid-memcleanup
+        - SV-COMP24_valid-memsafety
+        - SV-COMP24_termination
+        - SV-COMP24_no-overflow
         - Custom
       task:
         type: choice
@@ -53,6 +53,8 @@ on:
         - ReachSafety-XCSP
         - ReachSafety-Combinations
         - ReachSafety-Hardware
+	- ReachSafety-Hardness
+	- ReachSafety-Fuzzle
         - ConcurrencySafety-Main
         - ConcurrencySafety-MemSafety
         - ConcurrencySafety-NoOverflows
@@ -75,7 +77,6 @@ on:
         - SoftwareSystems-DeviceDriversLinux64-ReachSafety
         - SoftwareSystems-DeviceDriversLinux64-MemSafety
         - SoftwareSystems-DeviceDriversLinux64Large-ReachSafety
-        - SoftwareSystems-DeviceDriversLinux64-MemSafety
         - SoftwareSystems-uthash-ReachSafety
         - SoftwareSystems-uthash-MemSafety
         - SoftwareSystems-uthash-NoOverflows
