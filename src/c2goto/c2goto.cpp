@@ -1,5 +1,5 @@
+#include <cstdlib>
 #include <fstream>
-#include <memory>
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/write_goto_binary.h>
 #include <langapi/language_ui.h>
@@ -8,6 +8,7 @@
 #include <util/config.h>
 #include <irep2/irep2.h>
 #include <util/parseoptions.h>
+#include <stdlib.h>
 
 const struct group_opt_templ c2goto_options[] = {
   {"Basic Usage",
@@ -101,6 +102,9 @@ public:
 
 int main(int argc, const char **argv)
 {
+  // Disable config loading because it interferes with C2GOTO program.
+  char env[] = "ESBMC_CONFIG_FILE=";
+  putenv(env);
   c2goto_parseopt parseopt(argc, argv);
   return parseopt.main();
 }
