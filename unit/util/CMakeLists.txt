@@ -1,3 +1,4 @@
+new_unit_test(config_file_test "config_file_test.cpp" "util_esbmc;irep2;bigint")
 new_unit_test(xmltest "xml.test.cpp" "util_esbmc;irep2;bigint")
 new_unit_test(stdexprtest "std_expr.test.cpp" "util_esbmc;irep2;bigint")
 new_unit_test(symboltest "symbol.test.cpp" "util_esbmc;irep2;bigint")
