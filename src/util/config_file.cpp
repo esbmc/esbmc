@@ -1,20 +1,12 @@
 #include "config_file.h"
 
 #include <boost/program_options/option.hpp>
+#include <stdexcept>
 #include <string>
 #include <set>
 #include <fmt/core.h>
 
 #include "lib/toml.hpp"
-
-// Define this because we cant use log_debug due to this being too early in init.
-#define DEBUG_MSG 0
-#if DEBUG_MSG
-#  include "util/message.h"
-#  define LOG_MSG(fmt, values...) log_status(fmt, values)
-#else
-#  define LOG_MSG(fmt, values...)
-#endif
 
 static const std::string toml_type_to_string(const toml::node &node)
 {
@@ -54,8 +46,7 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
   }
   catch (const toml::parse_error &err)
   {
-    LOG_MSG("Config: error parsing TOML file: %s", err.what());
-    throw err;
+    throw std::runtime_error(fmt::format("Config: error parsing TOML file: {}", err.what()));
   }
 
   // Get all the long option names and use those as allowed options.
@@ -93,7 +84,6 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
         const auto option = boost::program_options::option(
           key_name, std::vector<std::string>(1, value));
         result.options.push_back(option);
-        LOG_MSG("Config: Parsed option: {} {}", key_name, value);
         break;
       }
       case toml::node_type::boolean:
@@ -106,7 +96,6 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
           const auto option = boost::program_options::option(
             key_name, std::vector<std::string>(1, ""));
         }
-        LOG_MSG("Config: Parsed boolean option: {} {}", key_name, value);
         break;
       }
       // Not supported types currently.
@@ -134,7 +123,7 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
       const bool is_in = allowed_options.find(key) != allowed_options.end();
       if (!is_in)
       {
-        throw std::runtime_error(fmt::format("Config: Invalid key: {}", key));
+        throw std::runtime_error(fmt::format("Config: Invalid key: {}\n", key));
       }
     }
   }
