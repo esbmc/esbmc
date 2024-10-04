@@ -53,8 +53,8 @@ on:
         - ReachSafety-XCSP
         - ReachSafety-Combinations
         - ReachSafety-Hardware
-	- ReachSafety-Hardness
-	- ReachSafety-Fuzzle
+        - ReachSafety-Hardness
+        - ReachSafety-Fuzzle
         - ConcurrencySafety-Main
         - ConcurrencySafety-MemSafety
         - ConcurrencySafety-NoOverflows
