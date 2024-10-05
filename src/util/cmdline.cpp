@@ -284,7 +284,7 @@ bool cmdlinet::parse(
 
       // Load config file
       boost::program_options::store(
-        parse_toml_file(file, all_cmdline_options, false), vm);
+        parse_toml_file(file, all_cmdline_options), vm);
     }
 
     // Load commandline parameters

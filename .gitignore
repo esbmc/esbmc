@@ -20,3 +20,6 @@ __pycache__
 tags
 .cache
 release
+
+# custom init scripts
+init.sh
