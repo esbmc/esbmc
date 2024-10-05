@@ -36,8 +36,7 @@ static const std::string toml_type_to_string(const toml::node &node)
 
 boost::program_options::basic_parsed_options<char> parse_toml_file(
   std::basic_istream<char> &is,
-  const boost::program_options::options_description &desc,
-  bool allow_unregistered)
+  const boost::program_options::options_description &desc)
 {
   toml::table tbl;
   try
@@ -46,7 +45,8 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
   }
   catch (const toml::parse_error &err)
   {
-    throw std::runtime_error(fmt::format("Config: error parsing TOML file: {}", err.what()));
+    throw std::runtime_error(
+      fmt::format("Config: error parsing TOML file: {}", err.what()));
   }
 
   // Get all the long option names and use those as allowed options.
@@ -76,10 +76,27 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
       switch (value_node->type())
       {
       case toml::node_type::string:
+      {
+        const auto value = value_node->as_string()->get();
+        // For some reason takes it in as an array of values.
+        const auto option = boost::program_options::option(
+          key_name, std::vector<std::string>(1, value));
+        result.options.push_back(option);
+        break;
+      }
       case toml::node_type::integer:
-      case toml::node_type::floating_point:
       {
         const auto value = std::to_string(value_node->as_integer()->get());
+        // For some reason takes it in as an array of values.
+        const auto option = boost::program_options::option(
+          key_name, std::vector<std::string>(1, value));
+        result.options.push_back(option);
+        break;
+      }
+      case toml::node_type::floating_point:
+      {
+        const auto value =
+          std::to_string(value_node->as_floating_point()->get());
         // For some reason takes it in as an array of values.
         const auto option = boost::program_options::option(
           key_name, std::vector<std::string>(1, value));
@@ -91,10 +108,13 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
         const auto value = value_node->as_boolean()->get();
         // Boolean flags are handled in this codebase as flags, so only add if
         // true. For context: cmdlinet::isset
+        // Also they are added as blank strings!
         if (value)
         {
           const auto option = boost::program_options::option(
             key_name, std::vector<std::string>(1, ""));
+
+          result.options.push_back(option);
         }
         break;
       }
@@ -111,20 +131,6 @@ boost::program_options::basic_parsed_options<char> parse_toml_file(
           toml_type_to_string(*value_node)));
         break;
       };
-    }
-  }
-
-  if (!allow_unregistered)
-  {
-    // Check for additional options.
-    for (auto node = tbl.cbegin(); node != tbl.cend(); ++node)
-    {
-      const auto key = std::string(node->first.str());
-      const bool is_in = allowed_options.find(key) != allowed_options.end();
-      if (!is_in)
-      {
-        throw std::runtime_error(fmt::format("Config: Invalid key: {}\n", key));
-      }
     }
   }
 
