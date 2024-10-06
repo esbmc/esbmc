@@ -1197,6 +1197,8 @@ smt_convt::resultt bmct::multi_property_check(
   else if (is_branch_cov)
   {
     goto_coveraget tmp(ns, symex->goto_functions);
+    //! Might got incorrect total number when using --k-induction
+    //! due to that the symex->goto_functions has been simplified
     const int total = tmp.get_total_instrument();
     // this also included the non-unwinding-assertions
     // which is not what we want
