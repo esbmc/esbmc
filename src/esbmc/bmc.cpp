@@ -824,16 +824,21 @@ smt_convt::resultt bmct::multi_property_check(
   std::unordered_set<std::string> reached_claims;
   // For coverage info
   std::unordered_multiset<std::string> reached_mul_claims;
+  // "Assertion Cov"
   bool is_assert_cov = options.get_bool_option("assertion-coverage") ||
                        options.get_bool_option("assertion-coverage-claims");
+  // "Condition Cov"
   // is_vb: enable verbose output coverage info if the option "--verbosity coverage:N" is set, where N should larger than 0
   // By enabling this, we will output the coverage information when handling each instrumentation assertion. It is helpful when the program is too large and ESBMC cannot finish, we can still get some info about the coverage
   bool is_vb = messaget::state.modules["coverage"] != VerbosityLevel::None;
-
   bool is_cond_cov = options.get_bool_option("condition-coverage") ||
                      options.get_bool_option("condition-coverage-claims") ||
                      options.get_bool_option("condition-coverage-rm") ||
                      options.get_bool_option("condition-coverage-claims-rm");
+  // "Branch Cov"
+  bool is_branch_cov = options.get_bool_option("branch-coverage") ||
+                       options.get_bool_option("branch-coverage-claims");
+
   bool is_keep_verified = options.get_bool_option("keep-verified-claims");
   bool is_clear_verified = (options.get_bool_option("k-induction") ||
                             options.get_bool_option("incremental-bmc") ||
@@ -887,6 +892,7 @@ smt_convt::resultt bmct::multi_property_check(
                        &is_assert_cov,
                        &is_cond_cov,
                        &is_vb,
+                       &is_branch_cov,
                        &total_cond,
                        &is_keep_verified,
                        &is_clear_verified,
@@ -901,7 +907,7 @@ smt_convt::resultt bmct::multi_property_check(
     symex_target_equationt local_eq = eq;
 
     // Set up the current claim and disable slice info output
-    bool is_goto_cov = is_assert_cov || is_cond_cov;
+    bool is_goto_cov = is_assert_cov || is_cond_cov || is_branch_cov;
     claim_slicer claim(i, false, is_goto_cov, ns);
     claim.run(local_eq.SSA_steps);
 
@@ -1186,6 +1192,38 @@ smt_convt::resultt bmct::multi_property_check(
         "Condition Coverage: {}%", sat_instance * 100.0 / total_instance);
     else
       log_result("Condition Coverage: 0%");
+  }
+
+  else if (is_branch_cov)
+  {
+    goto_coveraget tmp(ns, symex->goto_functions);
+    const int total = tmp.get_total_instrument();
+    // this also included the non-unwinding-assertions
+    // which is not what we want
+    const int tracked_instance = reached_claims.size();
+    if (total)
+    {
+      log_success("\n[Coverage]\n");
+      // The total assertion instances include the assert inside the source file, the unwinding asserts, the claims inserted during the goto-check and so on.
+      log_result("Function Entry Points & Branches : {}", total);
+      log_result("Reached : {}", tracked_instance);
+    }
+
+    // show claims
+    if (options.get_bool_option("branch-coverage-claims"))
+    {
+      // reached claims:
+      for (const auto &claim : reached_claims)
+      {
+        log_status("  {}", claim);
+      }
+    }
+
+    if (total != 0)
+      log_result(
+        "Branch Coverage: {}%", tracked_instance * 100.0 / total);
+    else
+      log_result("Branch Instances Coverage: 0%");
   }
   return final_result;
 }

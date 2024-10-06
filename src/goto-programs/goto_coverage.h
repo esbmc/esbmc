@@ -24,7 +24,7 @@ public:
   // - at the beginning of each GOTO program
   // - at the beginning of each branch body
   // - before each END_FUNCTION statement
-  void add_false_asserts();
+  void branch_coverage();
 
   void insert_assert(
     goto_programt &goto_program,
@@ -52,15 +52,19 @@ public:
   void make_asserts_true(bool is_instrumentation);
 
   // condition cov
-  void gen_cond_cov();
+  void condition_coverage();
   exprt
   gen_not_eq_expr(const exprt &lhs, const exprt &rhs, const locationt &loc);
   exprt gen_and_expr(const exprt &lhs, const exprt &rhs, const locationt &loc);
   exprt gen_not_expr(const exprt &expr, const locationt &loc);
+  expr2tc gen_not_expr(const expr2tc &expr);
   int get_total_instrument() const;
   int get_total_assert_instance() const;
   std::set<std::pair<std::string, std::string>> get_total_cond_assert() const;
   std::string get_filename_from_path(std::string path);
+  void update_goto_target(
+    goto_programt &goto_program,
+    goto_programt::instructiont::targett &it);
 
 protected:
   // turn a OP b OP c into a list a, b, c
@@ -82,7 +86,12 @@ protected:
 
   namespacet ns;
   goto_functionst &goto_functions;
+
+  // we need to skip the conditions within the built-in library
+  // while kepping the file manually included by user
+  // this filter, however, is unsound.. E.g. if the src filename is the same as the biuilt in library name
   std::string filename;
+
   int target_num;
 };
 

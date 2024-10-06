@@ -16,12 +16,23 @@ void goto_coveraget::replace_all_asserts_to_guard(
   const expr2tc &guard,
   bool is_instrumentation)
 {
+  std::unordered_set<std::string> location_pool = {};
+  // cmdline.arg[0]
+  location_pool.insert(get_filename_from_path(filename));
+  for (auto const &inc : config.ansi_c.include_files)
+    location_pool.insert(get_filename_from_path(inc));
+
   Forall_goto_functions (f_it, goto_functions)
     if (f_it->second.body_available && f_it->first != "__ESBMC_main")
     {
       goto_programt &goto_program = f_it->second.body;
+      std::string cur_filename;
       Forall_goto_program_instructions (it, goto_program)
       {
+        cur_filename = get_filename_from_path(it->location.file().as_string());
+        if (location_pool.count(cur_filename) == 0)
+          continue;
+
         if (it->is_assert())
           replace_assert_to_guard(guard, it, is_instrumentation);
       }
@@ -47,32 +58,77 @@ void goto_coveraget::replace_assert_to_guard(
   it->location.user_provided(true);
 }
 
-void goto_coveraget::add_false_asserts()
+/*
+Branch coverage applies to any control structure that can alter the flow of execution, including:
+- if-else
+- switch-case
+- Loops (for, while, do-while)
+- try-catch-finally (not in c)
+- Early exits (return, break, continue)
+The goal of branch coverage is to ensure that all possible execution paths in the program are tested.
+
+The CBMC extend it to the entry of the function. So we will do the same.
+
+
+Algo:
+  1. convert assertions to true
+  2. add false assertion add the begining of the function and the branch()
+*/
+void goto_coveraget::branch_coverage()
 {
   log_progress("Adding false assertions...");
+  std::unordered_set<std::string> location_pool = {};
+  // cmdline.arg[0]
+  location_pool.insert(get_filename_from_path(filename));
+  for (auto const &inc : config.ansi_c.include_files)
+    location_pool.insert(get_filename_from_path(inc));
+
   Forall_goto_functions (f_it, goto_functions)
     if (f_it->second.body_available && f_it->first != "__ESBMC_main")
     {
       goto_programt &goto_program = f_it->second.body;
+      std::string cur_filename;
+      bool flg = true;
+
       Forall_goto_program_instructions (it, goto_program)
       {
-        if (it->is_end_function())
+        cur_filename = get_filename_from_path(it->location.file().as_string());
+        // skip if it's not the verifying files
+        // probably a library
+        if (location_pool.count(cur_filename) == 0)
+          break;
+
+        if (flg)
         {
-          // insert an assert(0) as instrumentation BEFORE each instruction
+          // add a false assert in the begining
+          // to check if the function is entered.
           insert_assert(goto_program, it, gen_false_expr());
-          continue;
+          flg = false;
         }
 
-        if ((!is_true(it->guard) && it->is_goto()) || it->is_target())
+        // convert assertions to true
+        if (
+          it->is_assert() &&
+          it->location.property().as_string() != "replaced assertion" &&
+          it->location.property().as_string() != "instrumented assertion")
+          replace_assert_to_guard(gen_true_expr(), it, false);
+
+        // e.g. IF !(a > 1) THEN GOTO 3
+        else if (it->is_goto() && !is_true(it->guard))
         {
-          it++; // add an assertion behind the instruciton
-          insert_assert(goto_program, it, gen_false_expr());
-          continue;
+          if (it->is_target())
+            target_num = it->target_number;
+          // assert(!(a > 1));
+          // assert(a > 1);
+          insert_assert(goto_program, it, it->guard);
+
+          update_goto_target(goto_program, it);
+
+          insert_assert(goto_program, it, gen_not_expr(it->guard));
         }
       }
 
-      goto_programt::targett it = goto_program.instructions.begin();
-      insert_assert(goto_program, it, gen_false_expr());
+      flg = true;
     }
 }
 
@@ -170,7 +226,7 @@ goto_coveraget::get_total_cond_assert() const
     if(a>1)
   then run multi-property
 */
-void goto_coveraget::gen_cond_cov()
+void goto_coveraget::condition_coverage()
 {
   // we need to skip the conditions within the built-in library
   // while kepping the file manually included by user
@@ -185,10 +241,10 @@ void goto_coveraget::gen_cond_cov()
     if (f_it->second.body_available && f_it->first != "__ESBMC_main")
     {
       goto_programt &goto_program = f_it->second.body;
+      std::string cur_filename;
       Forall_goto_program_instructions (it, goto_program)
       {
-        const std::string cur_filename =
-          get_filename_from_path(it->location.file().as_string());
+        cur_filename = get_filename_from_path(it->location.file().as_string());
         if (location_pool.count(cur_filename) == 0)
           continue;
         /* 
@@ -408,42 +464,8 @@ void goto_coveraget::add_cond_cov_assert(
   // insert assert
   insert_assert(goto_program, it, guard, idf);
 
-  if (target_num != -1)
-  {
-    // update target
-    std::vector<goto_programt::instructiont::targett> tgt_list;
-    Forall_goto_program_instructions (itt, goto_program)
-    {
-      //! assume only one target
-      if (
-        itt->is_goto() && itt->has_target() &&
-        itt->get_target()->target_number == (unsigned)target_num)
-      {
-        tgt_list.push_back(itt);
-      }
-    }
-
-    if (!tgt_list.empty())
-    {
-      //! do not change the order
-      // 1. rm original tgt_num
-      it->target_number = -1;
-
-      // 2. add tgt_num to the instrumentation  (x: ASSERT)
-      --it;
-      it->target_number = target_num;
-
-      // 3. update src (GOTO x)
-      for (auto &itt : tgt_list)
-        itt->set_target(it);
-
-      // 4. reset
-      ++it;
-    }
-
-    // reset
-    target_num = -1;
-  }
+  // update target number
+  update_goto_target(goto_program, it);
 
   // reversal
   exprt not_expr = gen_not_expr(expr, it->location);
@@ -499,6 +521,66 @@ exprt goto_coveraget::gen_not_expr(const exprt &expr, const locationt &loc)
   not_expr.operands().emplace_back(expr);
   not_expr.location() = loc;
   return not_expr;
+}
+
+expr2tc goto_coveraget::gen_not_expr(const expr2tc &guard)
+{
+  exprt _guard = migrate_expr_back(guard);
+  exprt not_guard = gen_not_expr(_guard, _guard.location());
+  expr2tc _guard2;
+  migrate_expr(not_guard, _guard2);
+  return _guard2;
+}
+
+/*
+  for adding assertions
+  convert
+     assert(0);
+  1: IF(...)
+  to
+  1: assert(0);
+     IF(...)
+*/
+void goto_coveraget::update_goto_target(
+  goto_programt &goto_program,
+  goto_programt::instructiont::targett &it)
+{
+  if (target_num != -1)
+  {
+    // update target
+    std::vector<goto_programt::instructiont::targett> tgt_list;
+    Forall_goto_program_instructions (itt, goto_program)
+    {
+      //! assume only one target
+      if (
+        itt->is_goto() && itt->has_target() &&
+        itt->get_target()->target_number == (unsigned)target_num)
+      {
+        tgt_list.push_back(itt);
+      }
+    }
+
+    if (!tgt_list.empty())
+    {
+      //! do not change the order
+      // 1. rm original tgt_num
+      it->target_number = -1;
+
+      // 2. add tgt_num to the instrumentation  (x: ASSERT)
+      --it;
+      it->target_number = target_num;
+
+      // 3. update src (GOTO x)
+      for (auto &itt : tgt_list)
+        itt->set_target(it);
+
+      // 4. reset
+      ++it;
+    }
+
+    // reset
+    target_num = -1;
+  }
 }
 
 /*
