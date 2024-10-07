@@ -1222,8 +1222,7 @@ smt_convt::resultt bmct::multi_property_check(
     }
 
     if (total != 0)
-      log_result(
-        "Branch Coverage: {}%", tracked_instance * 100.0 / total);
+      log_result("Branch Coverage: {}%", tracked_instance * 100.0 / total);
     else
       log_result("Branch Instances Coverage: 0%");
   }
