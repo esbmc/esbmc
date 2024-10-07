@@ -801,12 +801,8 @@ void value_sett::get_reference_set_rec(const expr2tc &expr, object_mapt &dest)
       const irept &a = sym->type.find("alignment");
       if (a.is_not_nil())
       {
-        expr2tc temp;
-        migrate_expr(static_cast<const exprt &>(a), temp);
-        simplify(temp);
-        auto temp2 = migrate_expr_back(temp);
-        assert(temp2.is_constant());
-        irep_idt v = temp2.value();
+        assert(a.is_constant());
+        irep_idt v = static_cast<const exprt &>(a).value();
         BigInt V = binary2integer(v.as_string(), false);
         assert(V.is_positive());
         assert(V <= UINT_MAX);
