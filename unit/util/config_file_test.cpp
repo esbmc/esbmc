@@ -15,9 +15,12 @@ struct TestFixture
   {
     namespace po = boost::program_options;
     desc = new boost::program_options::options_description("Allowed options");
-    desc->add_options()("floatbv,b", po::value<bool>()->default_value(false), "Use floatbv")(
+    desc->add_options()(
+      "floatbv,b", po::value<bool>()->default_value(false), "Use floatbv")(
       "unlimited-k-steps,s", po::value<std::string>(), "Use unlimited k-steps")(
-      "context-bound,c", po::value<int>()->default_value(2), "Bound by x context")(
+      "context-bound,c",
+      po::value<int>()->default_value(2),
+      "Bound by x context")(
       "name,v", po::value<std::string>()->default_value("test"), "name");
   }
 
@@ -33,7 +36,11 @@ std::string const right_conf_file =
   "context-bound = 2\n"
   "name = '999'";
 
-void check_option(boost::program_options::option option, std::string key, std::string value) {
+void check_option(
+  boost::program_options::option option,
+  std::string key,
+  std::string value)
+{
   INFO("key: " << key << " value: " << value);
   REQUIRE(option.string_key == key);
   REQUIRE(option.value[0] == value);
