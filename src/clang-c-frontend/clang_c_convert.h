@@ -41,6 +41,7 @@ class TagDecl;
 class FieldDecl;
 class MemberExpr;
 class EnumConstantDecl;
+class APValue;
 } // namespace clang
 
 std::string
@@ -309,6 +310,8 @@ protected:
   virtual bool is_fd_virtual_or_overriding(const clang::FunctionDecl &fd);
 
   virtual bool is_aggregate_type(const clang::QualType &q_type);
+
+  bool get_APValue_expr(const clang::APValue &value, exprt &new_expr);
 
   /*
    * Function to check whether a MemberExpr references to a static variable

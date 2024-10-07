@@ -2252,8 +2252,17 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::ConstantExpr &c =
       static_cast<const clang::ConstantExpr &>(stmt);
 
-    if (get_expr(*c.getSubExpr(), new_expr))
-      return true;
+    if (c.hasAPValueResult())
+    {
+      clang::APValue value = c.getAPValueResult();
+      if (get_APValue_expr(value, new_expr))
+        return true;
+    }
+    else
+    {
+      if (get_expr(*c.getSubExpr(), new_expr))
+        return true;
+    }
 
     break;
   }
@@ -2673,55 +2682,8 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
      * locations, it could either be a string (file / function name) or an int
      * (line / column number). */
 
-    switch (value.getKind())
-    {
-    case clang::APValue::LValue:
-    {
-      // This is probably a string constant
-      clang::APValue::LValueBase base = value.getLValueBase();
-      assert(base.is<const clang::Expr *>());
-      const clang::Expr *expr = base.get<const clang::Expr *>();
-      if (get_expr(*expr, new_expr))
-        return true;
-      break;
-    }
-
-    case clang::APValue::Int:
-    {
-      const llvm::APSInt &Int = value.getInt();
-      int width = Int.getBitWidth();
-      assert(width <= 64);
-      int64_t v = Int.getSExtValue();
-      new_expr = constant_exprt(
-        integer2binary(v, width), integer2string(v), signedbv_typet(width));
-      break;
-    }
-
-    /*
-    case clang::APValue::None:
-    case clang::APValue::Indeterminate:
-    case clang::APValue::Float:
-    case clang::APValue::FixedPoint:
-    case clang::APValue::ComplexInt:
-    case clang::APValue::ComplexFloat:
-    case clang::APValue::Vector:
-    case clang::APValue::Array:
-    case clang::APValue::Struct:
-    case clang::APValue::Union:
-    case clang::APValue::AddrLabelDiff:
-    case clang::APValue::MemberPointer:
-    */
-    default:
-      std::ostringstream oss;
-      llvm::raw_os_ostream ross(oss);
-      ross << "Conversion of unsupported value computed by clang for expr: \"";
-      ross << stmt.getStmtClassName() << "\" to expression"
-           << "\n";
-      stmt.dump(ross, *ASTContext);
-      ross.flush();
-      log_error("{}", oss.str());
+    if (get_APValue_expr(value, new_expr))
       return true;
-    }
 
     break;
   }
@@ -3918,6 +3880,61 @@ bool clang_c_convertert::is_member_decl_static(const clang::MemberExpr &member)
     const clang::VarDecl &vd =
       static_cast<const clang::VarDecl &>(*member.getMemberDecl());
     return (vd.getStorageClass() == clang::SC_Static) || vd.hasGlobalStorage();
+  }
+
+  return false;
+}
+
+bool clang_c_convertert::get_APValue_expr(
+  const clang::APValue &value,
+  exprt &new_expr)
+{
+  switch (value.getKind())
+  {
+  case clang::APValue::LValue:
+  {
+    // This is probably a string constant
+    clang::APValue::LValueBase base = value.getLValueBase();
+    assert(base.is<const clang::Expr *>());
+    const clang::Expr *expr = base.get<const clang::Expr *>();
+    if (get_expr(*expr, new_expr))
+      return true;
+    break;
+  }
+
+  case clang::APValue::Int:
+  {
+    const llvm::APSInt &Int = value.getInt();
+    int width = Int.getBitWidth();
+    assert(width <= 64);
+    int64_t v = Int.getSExtValue();
+    new_expr = constant_exprt(
+      integer2binary(v, width), integer2string(v), signedbv_typet(width));
+    break;
+  }
+
+  /*
+    case clang::APValue::None:
+    case clang::APValue::Indeterminate:
+    case clang::APValue::Float:
+    case clang::APValue::FixedPoint:
+    case clang::APValue::ComplexInt:
+    case clang::APValue::ComplexFloat:
+    case clang::APValue::Vector:
+    case clang::APValue::Array:
+    case clang::APValue::Struct:
+    case clang::APValue::Union:
+    case clang::APValue::AddrLabelDiff:
+    case clang::APValue::MemberPointer:
+    */
+  default:
+    log_error("Unsupported APValue expression");
+    std::ostringstream oss;
+    llvm::raw_os_ostream ross(oss);
+    value.dump(ross, *ASTContext);
+    ross.flush();
+    log_error("{}", oss.str());
+    return true;
   }
 
   return false;
