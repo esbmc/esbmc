@@ -20,11 +20,8 @@ public:
   {
     target_num = -1;
   };
-  // add an assert(0)
-  // - at the beginning of each GOTO program
-  // - at the beginning of each branch body
-  // - before each END_FUNCTION statement
   void branch_coverage();
+  void assertion_coverage();
 
   void insert_assert(
     goto_programt &goto_program,
@@ -65,6 +62,9 @@ public:
   void update_goto_target(
     goto_programt &goto_program,
     goto_programt::instructiont::targett &it);
+
+  // total branch_cov instrumentation
+  static int total_branch;
 
 protected:
   // turn a OP b OP c into a list a, b, c

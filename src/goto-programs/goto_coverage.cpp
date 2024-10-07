@@ -1,5 +1,7 @@
 #include <goto-programs/goto_coverage.h>
 
+int goto_coveraget::total_branch = 0;
+
 std::string goto_coveraget::get_filename_from_path(std::string path)
 {
   if (path.find_last_of('/') != std::string::npos)
@@ -59,6 +61,15 @@ void goto_coveraget::replace_assert_to_guard(
 }
 
 /*
+Algo:
+- convert all assertions to false and enable multi-property
+*/
+void goto_coveraget::assertion_coverage()
+{
+  replace_all_asserts_to_guard(gen_false_expr(), true);
+}
+
+/*
 Branch coverage applies to any control structure that can alter the flow of execution, including:
 - if-else
 - switch-case
@@ -77,6 +88,8 @@ Algo:
 void goto_coveraget::branch_coverage()
 {
   log_progress("Adding false assertions...");
+  total_branch = 0;
+
   std::unordered_set<std::string> location_pool = {};
   // cmdline.arg[0]
   location_pool.insert(get_filename_from_path(filename));
@@ -130,6 +143,10 @@ void goto_coveraget::branch_coverage()
 
       flg = true;
     }
+
+  // fix for branch coverage with kind/incr
+  // It seems in kind/incr, the goto_functions used during the BMC is simplified and incomplete
+  total_branch = get_total_instrument();
 }
 
 void goto_coveraget::insert_assert(
