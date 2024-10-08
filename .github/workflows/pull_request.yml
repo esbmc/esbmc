@@ -49,7 +49,7 @@ jobs:
     name: ARM64 linux build
     with:
       operating-system: ARM64
-      build-flags: '-b DebugOpt -S OFF -B OFF'
+      build-flags: '-b DebugOpt -S OFF -B OFF -c 13'
       testing: false
 
   build-macos-arm:
