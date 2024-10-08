@@ -145,10 +145,7 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
   }
 
   if (options.get_bool_option("generate-html-report"))
-  {
-    // TODO: multi-property
     generate_html_report("1", ns, goto_trace, opt_map);
-  }
 
   std::ostringstream oss;
   log_fail("\n[Counterexample]\n");
@@ -317,10 +314,15 @@ void bmct::report_trace(
 }
 
 void bmct::report_multi_property_trace(
-  smt_convt::resultt &res,
+  const smt_convt::resultt &res,
+  const std::unique_ptr<smt_convt> &solver,
+  const symex_target_equationt &local_eq,
+  const size_t ce_counter,
+  const goto_tracet &goto_trace,
   const std::string &msg)
 {
-  assert(options.get_bool_option("base-case"));
+  if (options.get_bool_option("result-only"))
+    return;
 
   switch (res)
   {
@@ -330,9 +332,29 @@ void bmct::report_multi_property_trace(
     break;
 
   case smt_convt::P_SATISFIABLE:
-    // SAT means that we found a error!
-    log_fail("Claim '{}' fails", msg);
+  {
+    std::string output_file = options.get_option("cex-output");
+    if (output_file != "")
+    {
+      std::ofstream out(fmt::format("{}-{}", ce_counter, output_file));
+      show_goto_trace(out, ns, goto_trace);
+    }
+
+    if (options.get_bool_option("generate-testcase"))
+    {
+      generate_testcase_metadata();
+      generate_testcase(
+        "testcase-" + std::to_string(ce_counter) + ".xml", local_eq, *solver);
+    }
+    if (options.get_bool_option("generate-html-report"))
+      generate_html_report(std::to_string(ce_counter), ns, goto_trace, opt_map);
+
+    std::ostringstream oss;
+    log_fail("\n[Counterexample]\n");
+    show_goto_trace(oss, ns, goto_trace);
+    log_result("{}", oss.str());
     break;
+  }
 
   default:
     log_fail("Claim '{}' could not be solved", msg);
@@ -406,7 +428,9 @@ smt_convt::resultt bmct::start_bmc()
 {
   std::shared_ptr<symex_target_equationt> eq;
   smt_convt::resultt res = run(eq);
-  report_trace(res, *eq);
+  if (!options.get_bool_option("multi-property"))
+    // multi-property trace are outputed during the run(eq)
+    report_trace(res, *eq);
   report_result(res);
   return res;
 }
@@ -794,7 +818,7 @@ smt_convt::resultt bmct::multi_property_check(
 
   // Initial values
   smt_convt::resultt final_result = smt_convt::P_UNSATISFIABLE;
-  std::atomic_size_t ce_counter = 0;
+  size_t ce_counter = 0;
   std::unordered_set<size_t> jobs;
   std::mutex result_mutex;
   std::unordered_set<std::string> reached_claims;
@@ -958,24 +982,21 @@ smt_convt::resultt bmct::multi_property_check(
             reached_claims.size() * 100.0 / total_cond.size());
         }
       }
-
       else
       {
         // Generate Output
-        std::string output_file = options.get_option("cex-output");
-        if (output_file != "")
-        {
-          std::ofstream out(fmt::format("{}-{}", ce_counter++, output_file));
-          show_goto_trace(out, ns, goto_trace);
-        }
-        if (options.get_bool_option("generate-html-report"))
-          generate_html_report(fmt::format("{}", i), ns, goto_trace, opt_map);
-        std::ostringstream oss;
-        log_fail("\n[Counterexample]\n");
-        show_goto_trace(oss, ns, goto_trace);
-        log_result("{}", oss.str());
+        report_multi_property_trace(
+          final_result,
+          runtime_solver,
+          local_eq,
+          ce_counter,
+          goto_trace,
+          claim.claim_msg);
       }
       final_result = solver_result;
+
+      // update cex number
+      ++ce_counter;
 
       // Update fail-fast-counter
       fail_fast_cnt++;

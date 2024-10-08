@@ -67,8 +67,13 @@ protected:
   virtual void
   report_trace(smt_convt::resultt &res, const symex_target_equationt &eq);
 
-  virtual void
-  report_multi_property_trace(smt_convt::resultt &res, const std::string &msg);
+  virtual void report_multi_property_trace(
+    const smt_convt::resultt &res,
+    const std::unique_ptr<smt_convt> &solver,
+    const symex_target_equationt &local_eq,
+    const size_t ce_counter,
+    const goto_tracet &goto_trace,
+    const std::string &msg);
 
   virtual void report_result(smt_convt::resultt &res);
 
