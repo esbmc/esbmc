@@ -1198,10 +1198,10 @@ smt_convt::resultt bmct::multi_property_check(
   {
     //! Might got incorrect total number when using --k-induction
     //! due to that the symex->goto_functions has been simplified
-    const int total = goto_coveraget::total_branch;
+    const size_t total = goto_coveraget::total_branch;
     // this also included the non-unwinding-assertions
     // which is not what we want
-    const int tracked_instance = reached_claims.size();
+    const size_t tracked_instance = reached_claims.size();
     if (total)
     {
       log_success("\n[Coverage]\n");
@@ -1215,9 +1215,7 @@ smt_convt::resultt bmct::multi_property_check(
     {
       // reached claims:
       for (const auto &claim : reached_claims)
-      {
         log_status("  {}", claim);
-      }
     }
 
     if (total != 0)
