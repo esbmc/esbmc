@@ -171,7 +171,6 @@ void goto_coveraget::insert_assert(
 {
   goto_programt::instructiont instruction;
   instruction.make_assertion(guard);
-  instruction.inductive_step_instruction = config.options.is_kind();
   instruction.location = it->location;
   instruction.function = it->function;
   instruction.location.property("instrumented assertion");
