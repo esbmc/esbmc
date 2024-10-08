@@ -1,6 +1,6 @@
 #include <goto-programs/goto_coverage.h>
 
-int goto_coveraget::total_branch = 0;
+size_t goto_coveraget::total_branch = 0;
 
 std::string goto_coveraget::get_filename_from_path(std::string path)
 {
@@ -19,7 +19,6 @@ void goto_coveraget::replace_all_asserts_to_guard(
   bool is_instrumentation)
 {
   std::unordered_set<std::string> location_pool = {};
-  // cmdline.arg[0]
   location_pool.insert(get_filename_from_path(filename));
   for (auto const &inc : config.ansi_c.include_files)
     location_pool.insert(get_filename_from_path(inc));
@@ -78,7 +77,7 @@ Branch coverage applies to any control structure that can alter the flow of exec
 - Early exits (return, break, continue)
 The goal of branch coverage is to ensure that all possible execution paths in the program are tested.
 
-The CBMC extend it to the entry of the function. So we will do the same.
+The CBMC extends it to the entry of the function. So we will do the same.
 
 
 Algo:
@@ -96,6 +95,7 @@ void goto_coveraget::branch_coverage()
   for (auto const &inc : config.ansi_c.include_files)
     location_pool.insert(get_filename_from_path(inc));
 
+  std::unordered_set<int> catch_tgt_list;
   Forall_goto_functions (f_it, goto_functions)
     if (f_it->second.body_available && f_it->first != "__ESBMC_main")
     {
@@ -109,7 +109,7 @@ void goto_coveraget::branch_coverage()
         // skip if it's not the verifying files
         // probably a library
         if (location_pool.count(cur_filename) == 0)
-          break;
+          continue;
 
         if (flg)
         {
@@ -565,19 +565,32 @@ void goto_coveraget::update_goto_target(
   if (target_num != -1)
   {
     // update target
-    std::vector<goto_programt::instructiont::targett> tgt_list;
+    std::vector<goto_programt::instructiont::targett> goto_tgt_list;
+    std::vector<goto_programt::instructiont::targetst::iterator> catch_tgt_list;
+
     Forall_goto_program_instructions (itt, goto_program)
     {
-      //! assume only one target
       if (
         itt->is_goto() && itt->has_target() &&
         itt->get_target()->target_number == (unsigned)target_num)
       {
-        tgt_list.push_back(itt);
+        goto_tgt_list.emplace_back(itt);
+      }
+
+      if (itt->is_catch() && itt->has_target())
+      {
+        for (goto_programt::instructiont::targetst::iterator i =
+               itt->targets.begin();
+             i != itt->targets.end();
+             ++i)
+        {
+          if ((*i)->target_number == (unsigned)target_num)
+            catch_tgt_list.emplace_back(i);
+        }
       }
     }
 
-    if (!tgt_list.empty())
+    if (!goto_tgt_list.empty())
     {
       //! do not change the order
       // 1. rm original tgt_num
@@ -588,8 +601,27 @@ void goto_coveraget::update_goto_target(
       it->target_number = target_num;
 
       // 3. update src (GOTO x)
-      for (auto &itt : tgt_list)
+      for (auto &itt : goto_tgt_list)
         itt->set_target(it);
+
+      // 4. reset
+      ++it;
+    }
+
+    if (!catch_tgt_list.empty())
+    {
+      //! do not change the order
+      // 1. rm original tgt_num
+      it->target_number = -1;
+
+      // 2. add tgt_num to the instrumentation  (x: ASSERT)
+      --it;
+      it->target_number = target_num;
+
+      // 3. update src
+      for (auto &itt : catch_tgt_list)
+        // set target
+        *itt = it;
 
       // 4. reset
       ++it;

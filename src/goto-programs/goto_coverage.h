@@ -64,7 +64,7 @@ public:
     goto_programt::instructiont::targett &it);
 
   // total branch_cov instrumentation
-  static int total_branch;
+  static size_t total_branch;
 
 protected:
   // turn a OP b OP c into a list a, b, c
