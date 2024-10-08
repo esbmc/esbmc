@@ -59,9 +59,6 @@ public:
   int get_total_assert_instance() const;
   std::set<std::pair<std::string, std::string>> get_total_cond_assert() const;
   std::string get_filename_from_path(std::string path);
-  void update_goto_target(
-    goto_programt &goto_program,
-    goto_programt::instructiont::targett &it);
 
   // total branch_cov instrumentation
   static size_t total_branch;

@@ -134,9 +134,6 @@ void goto_coveraget::branch_coverage()
           // assert(!(a > 1));
           // assert(a > 1);
           insert_assert(goto_program, it, it->guard);
-
-          update_goto_target(goto_program, it);
-
           insert_assert(goto_program, it, gen_not_expr(it->guard));
         }
       }
@@ -157,20 +154,31 @@ void goto_coveraget::insert_assert(
   insert_assert(goto_program, it, guard, from_expr(ns, "", guard));
 }
 
+/*
+  convert
+    1: DECL x   <--- it
+    ASSIGN X 1
+  to
+    1: ASSERT(guard);
+    DECL x      <--- it
+    ASSIGN X 1  
+*/
 void goto_coveraget::insert_assert(
   goto_programt &goto_program,
   goto_programt::targett &it,
   const expr2tc &guard,
   const std::string &idf)
 {
-  goto_programt::targett t = goto_program.insert(it);
-  t->type = ASSERT;
-  t->guard = guard;
-  t->location = it->location;
-  t->location.property("instrumented assertion");
-  t->location.comment(idf);
-  t->location.user_provided(true);
-  it = ++t;
+  goto_programt::instructiont instruction;
+  instruction.make_assertion(guard);
+  instruction.inductive_step_instruction = config.options.is_kind();
+  instruction.location = it->location;
+  instruction.function = it->function;
+  instruction.location.property("instrumented assertion");
+  instruction.location.comment(idf);
+  instruction.location.user_provided(true);
+  goto_program.insert_swap(it++, instruction);
+  it--;
 }
 
 int goto_coveraget::get_total_instrument() const
@@ -481,9 +489,6 @@ void goto_coveraget::add_cond_cov_assert(
   // insert assert
   insert_assert(goto_program, it, guard, idf);
 
-  // update target number
-  update_goto_target(goto_program, it);
-
   // reversal
   exprt not_expr = gen_not_expr(expr, it->location);
   cond = pre_cond.is_nil() ? not_expr
@@ -547,89 +552,6 @@ expr2tc goto_coveraget::gen_not_expr(const expr2tc &guard)
   expr2tc _guard2;
   migrate_expr(not_guard, _guard2);
   return _guard2;
-}
-
-/*
-  for adding assertions
-  convert
-     assert(0);
-  1: IF(...)
-  to
-  1: assert(0);
-     IF(...)
-*/
-void goto_coveraget::update_goto_target(
-  goto_programt &goto_program,
-  goto_programt::instructiont::targett &it)
-{
-  if (target_num != -1)
-  {
-    // update target
-    std::vector<goto_programt::instructiont::targett> goto_tgt_list;
-    std::vector<goto_programt::instructiont::targetst::iterator> catch_tgt_list;
-
-    Forall_goto_program_instructions (itt, goto_program)
-    {
-      if (
-        itt->is_goto() && itt->has_target() &&
-        itt->get_target()->target_number == (unsigned)target_num)
-      {
-        goto_tgt_list.emplace_back(itt);
-      }
-
-      if (itt->is_catch() && itt->has_target())
-      {
-        for (goto_programt::instructiont::targetst::iterator i =
-               itt->targets.begin();
-             i != itt->targets.end();
-             ++i)
-        {
-          if ((*i)->target_number == (unsigned)target_num)
-            catch_tgt_list.emplace_back(i);
-        }
-      }
-    }
-
-    if (!goto_tgt_list.empty())
-    {
-      //! do not change the order
-      // 1. rm original tgt_num
-      it->target_number = -1;
-
-      // 2. add tgt_num to the instrumentation  (x: ASSERT)
-      --it;
-      it->target_number = target_num;
-
-      // 3. update src (GOTO x)
-      for (auto &itt : goto_tgt_list)
-        itt->set_target(it);
-
-      // 4. reset
-      ++it;
-    }
-
-    if (!catch_tgt_list.empty())
-    {
-      //! do not change the order
-      // 1. rm original tgt_num
-      it->target_number = -1;
-
-      // 2. add tgt_num to the instrumentation  (x: ASSERT)
-      --it;
-      it->target_number = target_num;
-
-      // 3. update src
-      for (auto &itt : catch_tgt_list)
-        // set target
-        *itt = it;
-
-      // 4. reset
-      ++it;
-    }
-
-    // reset
-    target_num = -1;
-  }
 }
 
 /*
