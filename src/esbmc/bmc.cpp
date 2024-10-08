@@ -986,7 +986,7 @@ smt_convt::resultt bmct::multi_property_check(
       {
         // Generate Output
         report_multi_property_trace(
-          final_result,
+          solver_result,
           runtime_solver,
           local_eq,
           ce_counter,
