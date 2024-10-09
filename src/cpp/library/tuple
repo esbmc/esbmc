@@ -1,0 +1,163 @@
+#pragma once
+
+#include <type_traits>
+#include "cstddef"
+
+namespace std
+{
+#if __cplusplus >= 201103L
+template <typename... Types>
+class tuple;
+
+template <>
+class tuple<>
+{
+public:
+  tuple() = default;
+  void swap(tuple<> &)
+  {
+  }
+};
+
+template <typename Head, typename... Tail>
+class tuple<Head, Tail...>
+{
+public:
+  Head head;
+  tuple<Tail...> tail;
+
+  // Default constructor
+  tuple() = default;
+
+  // Constructor
+  tuple(const Head &head, const Tail &...tail) : head(head), tail(tail...)
+  {
+  }
+
+  // Copy constructor
+  tuple(const tuple &other) : head(other.head), tail(other.tail)
+  {
+  }
+
+  tuple &operator=(const tuple &other)
+  {
+    if (this != &other)
+    {
+      this->head = other.head;
+      this->tail = other.tail;
+    }
+    return *this;
+  }
+
+  void swap(tuple &other)
+  {
+    Head temp = this->head;
+    this->head = other.head;
+    other.head = temp;
+    this->tail.swap(other.tail);
+  }
+};
+
+template <std::size_t I, typename Tuple>
+struct tuple_element;
+
+template <typename Head, typename... Tail>
+struct tuple_element<0, tuple<Head, Tail...>>
+{
+  using type = Head;
+};
+
+template <std::size_t I, typename Head, typename... Tail>
+struct tuple_element<I, tuple<Head, Tail...>>
+{
+  using type = typename tuple_element<I - 1, tuple<Tail...>>::type;
+};
+
+template <typename Tuple>
+struct tuple_size;
+
+template <typename... Types>
+struct tuple_size<tuple<Types...>>
+  : std::integral_constant<std::size_t, sizeof...(Types)>
+{
+};
+
+template <std::size_t I, typename... Types>
+typename tuple_element<I, tuple<Types...>>::type &
+get(tuple<Types...> &t) noexcept
+{
+  if constexpr (I == 0)
+    return t.head;
+  else
+    return get<I - 1>(t.tail);
+}
+
+template <std::size_t I, typename... Types>
+const typename tuple_element<I, tuple<Types...>>::type &
+get(const tuple<Types...> &t) noexcept
+{
+  if constexpr (I == 0)
+    return t.head;
+  else
+    return get<I - 1>(t.tail);
+}
+
+// operator==
+template <typename... T1, typename... T2>
+constexpr bool operator==(const tuple<T1...> &lhs, const tuple<T2...> &rhs)
+{
+  return (std::get<0>(lhs) == std::get<0>(rhs)) && (lhs.tail == rhs.tail);
+}
+
+template <>
+constexpr bool operator==(const tuple<> &, const tuple<> &)
+{
+  return true;
+}
+
+// operator!=
+template <typename... T1, typename... T2>
+constexpr bool operator!=(const tuple<T1...> &lhs, const tuple<T2...> &rhs)
+{
+  return !(lhs == rhs);
+}
+
+// operator<
+template <typename... T1, typename... T2>
+constexpr bool operator<(const tuple<T1...> &lhs, const tuple<T2...> &rhs)
+{
+  if (std::get<0>(lhs) < std::get<0>(rhs))
+    return true;
+  if (std::get<0>(lhs) > std::get<0>(rhs))
+    return false;
+  return lhs.tail < rhs.tail;
+}
+
+template <>
+constexpr bool operator<(const tuple<> &, const tuple<> &)
+{
+  return false;
+}
+
+// operator<=
+template <typename... T1, typename... T2>
+constexpr bool operator<=(const tuple<T1...> &lhs, const tuple<T2...> &rhs)
+{
+  return !(rhs < lhs);
+}
+
+// operator>
+template <typename... T1, typename... T2>
+constexpr bool operator>(const tuple<T1...> &lhs, const tuple<T2...> &rhs)
+{
+  return rhs < lhs;
+}
+
+// operator>=
+template <typename... T1, typename... T2>
+constexpr bool operator>=(const tuple<T1...> &lhs, const tuple<T2...> &rhs)
+{
+  return !(lhs < rhs);
+}
+#endif
+} // namespace std
