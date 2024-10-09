@@ -160,4 +160,5 @@ constexpr bool operator>=(const tuple<T1...> &lhs, const tuple<T2...> &rhs)
   return !(lhs < rhs);
 }
 #endif
+
 } // namespace std
