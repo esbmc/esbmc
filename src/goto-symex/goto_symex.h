@@ -399,11 +399,9 @@ protected:
    *  This looks through a set of builtin functions that are implemented in
    *  ESBMC, and calls the appropriate one.
    *  @param call Function call being performed.
-   *  @param symname Name of builtin we're calling.
    *  @return true if we handled the builtin
    */
-  bool
-  run_builtin(const code_function_call2t &call, const std::string &symname);
+  bool run_builtin(code_function_call2t &call);
 
   /** Perform yield; forces a context switch point. */
   void intrinsic_yield(reachability_treet &arg);
