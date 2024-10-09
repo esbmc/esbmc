@@ -1,558 +1,79 @@
-# The python frontend
+# ESBMC Python Front-end
 
-## Introduction
+## Overview
 
-The Python frontend of ESBMC converts a given Python code to pass the input Python code to the control-flow graph generator in the form of an Abstract Syntax Tree (AST). This is achieved by scanning the given code using the ast2json library available for Python.
+The Python frontend handles the conversion of Python code into an internal representation, which is then translated into the GOTO language. This process includes three key steps:
 
-The rest of the ESBMC architecture then handles the conversion of this AST to GOTO statements and SSA (Single Static Assignments), which are then checked for satisfiability by converting them into SMT formulas. This documentation will cover the process of ast2json conversion and how the given program is transformed into an AST.
+1. Generating an Abstract Syntax Tree (AST) in JSON format.
+2. Annotating the AST with type information.
+3. Translating Python statements into a set of symbols in the irep format.
 
-![esbmc charts.png](./images/conversion_process.png)
+The ESBMC backend finalizes the conversion by performing symbolic execution on the GOTO program, producing instructions in Single Static Assignment (SSA) form.
+Following symbolic execution, we generate a first-order logic formula which is then discharged by an SMT solver. </br></br>
 
-## The frontend workflow
+<p align="center">
+  <img src="./images/arch.png" alt="ESBMC Architecture" width="65%" />
+</p>
 
-![esbmc_architecture.png](./images/esbmc_architecture.png)
+<p align="center"><em>Python Front-end Architecture</em></p>
 
-The entry-point for the frontend is the function that parses the Python file. It handles the parsing of a given Python code into the AST; the other Python scripts and cpp files support the process with functions defined to handle the syntax and programming functions of Python.
 
-Let us take a detailed look at each step of the process in the sections below with a working example.
+## AST Generation
 
-## The parsing process
+The translation of Python code starts by parsing .py files into an AST. This is achieved using the [ast](https://docs.python.org/3/library/ast.html) and [ast2json](https://pypi.org/project/ast2json/) modules, which generate the AST in JSON format. The process runs alongside the Python interpreter, producing a JSON file for each Python file, including imported modules.
 
-The parsing function first checks, if the Python script passed, exists in the given file path. If it exists, it is called a function that dumps all supporting files into a temporary output directory. It stores the returned value in a variable, which is the path to the output directory.
+The main advantage of this approach is that it utilizes a native Python module, ensuring adherence to the language.
 
-This directory also contains supporting Python scripts that help parse the Python file and pre-processors.
+## Type Annotation
 
-After the required modules are dumped in the directory, the parser script is executed to generate the .json file from the AST. The resulting .json file is now stored in the temporary directory.
+After generating the AST, we add JSON nodes with type information. [PEP 484](https://peps.python.org/pep-0484/) introduced an optional type system, allowing developers to annotate variables using the format **`var-name:type`**.
 
-The file is then parsed, and an AST is generated, which is traversed. For each node function, type annotations are added using the other supporting files on the Python front end.
+Our method involves traversing the AST and replacing assignments with their corresponding type-annotated nodes. The figure below shows the representation for <code>x:int = 10</code>.
 
-It ends with the parsing function returning the value false if everything works as intended.
-
-## The parser script
-
-The parser python script handles the conversion of the given python script into the .json file by converting it into an abstract syntax tree first.
-
-The two main arguments passed on to the file during execution are the Python file to be analyzed and the path to the output directory.
-
-The parser also includes the current directory to account for all the process imports it has to search through. Then, it opens the given Python file and converts it into an abstract syntax tree using the function `parse` from the AST library.
-
-The resulting tree is then subjected to some essential transformations to the loops defined in the program. This process is termed as pre-processing.
-
-After pre-processing, the tree is traversed, where the process imports and type annotations are handled. The AST of the main Python file is then converted into a proper JSON format. Then, the memory models defined in the model directory are converted into proper JSON AST files and stored in the temporary output directory.
-
-The `ast2json.ast2json()` function is used here to convert the python AST. The result is then written into the appropriate .json file.
-
-The function converts any process import nodes in the AST node and generates appropriate JSON files for the imported elements.
-
-## The preprocessor
-
-The Preprocessor contains definitions for functions that are used to convert the for loops detected in the tree to be converted into while loops, with the proper conversion of conditions for the loop iterations.
-
-## Example
-
-Let us take a simple Python code to observe the conversion of the code into AST.
-
-Take, for example, the Python code below,
-
-```
-class MyClass:
-    @classmethod
-    def my_method(cls) -> int:
-        return 1
-
-assert MyClass.my_method() == 2
-
-```
-
-The esbmc converts the following code to first an AST :
-
-```
-Module(
-    body=[
-        ClassDef(
-            name='MyClass',
-            bases=[],
-            keywords=[],
-            body=[
-                FunctionDef(
-                    name='my_method',
-                    args=arguments(
-                        posonlyargs=[],
-                        args=[
-                            arg(
-                                arg='cls',
-                                lineno=3,
-                                col_offset=18,
-                                end_lineno=3,
-                                end_col_offset=21)],
-                        kwonlyargs=[],
-                        kw_defaults=[],
-                        defaults=[]),
-                    body=[
-                        Return(
-                            value=Constant(
-                                value=1,
-                                lineno=4,
-                                col_offset=15,
-                                end_lineno=4,
-                                end_col_offset=16),
-                            lineno=4,
-                            col_offset=8,
-                            end_lineno=4,
-                            end_col_offset=16)],
-                    decorator_list=[
-                        Name(
-                            id='classmethod',
-                            ctx=Load(),
-                            lineno=2,
-                            col_offset=5,
-                            end_lineno=2,
-                            end_col_offset=16)],
-                    returns=Name(
-                        id='int',
-                        ctx=Load(),
-                        lineno=3,
-                        col_offset=26,
-                        end_lineno=3,
-                        end_col_offset=29),
-                    lineno=3,
-                    col_offset=4,
-                    end_lineno=4,
-                    end_col_offset=16)],
-            decorator_list=[],
-            lineno=1,
-            col_offset=0,
-            end_lineno=4,
-            end_col_offset=16),
-        Assert(
-            test=Compare(
-                left=Call(
-                    func=Attribute(
-                        value=Name(
-                            id='MyClass',
-                            ctx=Load(),
-                            lineno=6,
-                            col_offset=7,
-                            end_lineno=6,
-                            end_col_offset=14),
-                        attr='my_method',
-                        ctx=Load(),
-                        lineno=6,
-                        col_offset=7,
-                        end_lineno=6,
-                        end_col_offset=24),
-                    args=[],
-                    keywords=[],
-                    lineno=6,
-                    col_offset=7,
-                    end_lineno=6,
-                    end_col_offset=26),
-                ops=[
-                    Eq()],
-                comparators=[
-                    Constant(
-                        value=2,
-                        lineno=6,
-                        col_offset=30,
-                        end_lineno=6,
-                        end_col_offset=31)],
-                lineno=6,
-                col_offset=7,
-                end_lineno=6,
-                end_col_offset=31),
-            lineno=6,
-            col_offset=0,
-            end_lineno=6,
-            end_col_offset=31)],
-    type_ignores=[])
-    
-```
-
-Then after pre-processing :
-
-```
-Module(
-    body=[
-        ClassDef(
-            name='MyClass',
-            bases=[],
-            keywords=[],
-            body=[
-                FunctionDef(
-                    name='my_method',
-                    args=arguments(
-                        posonlyargs=[],
-                        args=[
-                            arg(
-                                arg='cls',
-                                lineno=3,
-                                col_offset=18,
-                                end_lineno=3,
-                                end_col_offset=21)],
-                        kwonlyargs=[],
-                        kw_defaults=[],
-                        defaults=[]),
-                    body=[
-                        Return(
-                            value=Constant(
-                                value=1,
-                                lineno=4,
-                                col_offset=15,
-                                end_lineno=4,
-                                end_col_offset=16),
-                            lineno=4,
-                            col_offset=8,
-                            end_lineno=4,
-                            end_col_offset=16)],
-                    decorator_list=[
-                        Name(
-                            id='classmethod',
-                            ctx=Load(),
-                            lineno=2,
-                            col_offset=5,
-                            end_lineno=2,
-                            end_col_offset=16)],
-                    returns=Name(
-                        id='int',
-                        ctx=Load(),
-                        lineno=3,
-                        col_offset=26,
-                        end_lineno=3,
-                        end_col_offset=29),
-                    lineno=3,
-                    col_offset=4,
-                    end_lineno=4,
-                    end_col_offset=16)],
-            decorator_list=[],
-            lineno=1,
-            col_offset=0,
-            end_lineno=4,
-            end_col_offset=16),
-        Assert(
-            test=Compare(
-                left=Call(
-                    func=Attribute(
-                        value=Name(
-                            id='MyClass',
-                            ctx=Load(),
-                            lineno=6,
-                            col_offset=7,
-                            end_lineno=6,
-                            end_col_offset=14),
-                        attr='my_method',
-                        ctx=Load(),
-                        lineno=6,
-                        col_offset=7,
-                        end_lineno=6,
-                        end_col_offset=24),
-                    args=[],
-                    keywords=[],
-                    lineno=6,
-                    col_offset=7,
-                    end_lineno=6,
-                    end_col_offset=26),
-                ops=[
-                    Eq()],
-                comparators=[
-                    Constant(
-                        value=2,
-                        lineno=6,
-                        col_offset=30,
-                        end_lineno=6,
-                        end_col_offset=31)],
-                lineno=6,
-                col_offset=7,
-                end_lineno=6,
-                end_col_offset=31),
-            lineno=6,
-            col_offset=0,
-            end_lineno=6,
-            end_col_offset=31)],
-    type_ignores=[])
-    
-```
-
-Finally, after converting it into JSON format, we get :
-
-```
+```json
 {
-    "_type": "Module",
-    "body": [
-        {
-            "_type": "FunctionDef",
-            "args": {
-                "_type": "arguments",
-                "args": [
-                    {
-                        "_type": "arg",
-                        "annotation": {
-                            "_type": "Name",
-                            "col_offset": 28,
-                            "ctx": {
-                                "_type": "Load"
-                            },
-                            "end_col_offset": 31,
-                            "end_lineno": 1,
-                            "id": "int",
-                            "lineno": 1
-                        },
-                        "arg": "curr",
-                        "col_offset": 22,
-                        "end_col_offset": 31,
-                        "end_lineno": 1,
-                        "lineno": 1,
-                        "type_comment": null
-                    },
-                    {
-                        "_type": "arg",
-                        "annotation": {
-                            "_type": "Name",
-                            "col_offset": 39,
-                            "ctx": {
-                                "_type": "Load"
-                            },
-                            "end_col_offset": 42,
-                            "end_lineno": 1,
-                            "id": "int",
-                            "lineno": 1
-                        },
-                        "arg": "step",
-                        "col_offset": 33,
-                        "end_col_offset": 42,
-                        "end_lineno": 1,
-                        "lineno": 1,
-                        "type_comment": null
-                    }
-                ],
-                "defaults": [],
-                "kw_defaults": [],
-                "kwarg": null,
-                "kwonlyargs": [],
-                "posonlyargs": [],
-                "vararg": null
-            },
-            "body": [
-                {
-                    "_type": "Return",
-                    "col_offset": 2,
-                    "end_col_offset": 20,
-                    "end_lineno": 2,
-                    "lineno": 2,
-                    "value": {
-                        "_type": "BinOp",
-                        "col_offset": 9,
-                        "end_col_offset": 20,
-                        "end_lineno": 2,
-                        "left": {
-                            "_type": "Name",
-                            "col_offset": 9,
-                            "ctx": {
-                                "_type": "Load"
-                            },
-                            "end_col_offset": 13,
-                            "end_lineno": 2,
-                            "id": "curr",
-                            "lineno": 2
-                        },
-                        "lineno": 2,
-                        "op": {
-                            "_type": "Add"
-                        },
-                        "right": {
-                            "_type": "Name",
-                            "col_offset": 16,
-                            "ctx": {
-                                "_type": "Load"
-                            },
-                            "end_col_offset": 20,
-                            "end_lineno": 2,
-                            "id": "step",
-                            "lineno": 2
-                        }
-                    }
-                }
-            ],
-            "col_offset": 0,
-            "decorator_list": [],
-            "end_col_offset": 20,
-            "end_lineno": 2,
-            "lineno": 1,
-            "name": "ESBMC_range_next_",
-            "returns": {
-                "_type": "Name",
-                "col_offset": 47,
-                "ctx": {
-                    "_type": "Load"
-                },
-                "end_col_offset": 50,
-                "end_lineno": 1,
-                "id": "int",
-                "lineno": 1
-            },
-            "type_comment": null
+    "_type": "AnnAssign",
+    "annotation": {
+        "_type": "Name",
+        "col_offset": 2,
+        "ctx": {
+            "_type": "Load"
         },
-        {
-            "_type": "FunctionDef",
-            "args": {
-                "_type": "arguments",
-                "args": [
-                    {
-                        "_type": "arg",
-                        "annotation": {
-                            "_type": "Name",
-                            "col_offset": 32,
-                            "ctx": {
-                                "_type": "Load"
-                            },
-                            "end_col_offset": 35,
-                            "end_lineno": 4,
-                            "id": "int",
-                            "lineno": 4
-                        },
-                        "arg": "curr",
-                        "col_offset": 26,
-                        "end_col_offset": 35,
-                        "end_lineno": 4,
-                        "lineno": 4,
-                        "type_comment": null
-                    },
-                    {
-                        "_type": "arg",
-                        "annotation": {
-                            "_type": "Name",
-                            "col_offset": 42,
-                            "ctx": {
-                                "_type": "Load"
-                            },
-                            "end_col_offset": 45,
-                            "end_lineno": 4,
-                            "id": "int",
-                            "lineno": 4
-                        },
-                        "arg": "end",
-                        "col_offset": 37,
-                        "end_col_offset": 45,
-                        "end_lineno": 4,
-                        "lineno": 4,
-                        "type_comment": null
-                    },
-                    {
-                        "_type": "arg",
-                        "annotation": {
-                            "_type": "Name",
-                            "col_offset": 53,
-                            "ctx": {
-                                "_type": "Load"
-                            },
-                            "end_col_offset": 56,
-                            "end_lineno": 4,
-                            "id": "int",
-                            "lineno": 4
-                        },
-                        "arg": "step",
-                        "col_offset": 47,
-                        "end_col_offset": 56,
-                        "end_lineno": 4,
-                        "lineno": 4,
-                        "type_comment": null
-                    }
-                ],
-                "defaults": [],
-                "kw_defaults": [],
-                "kwarg": null,
-                "kwonlyargs": [],
-                "posonlyargs": [],
-                "vararg": null
-            },
-            "body": [
-                {
-                    "_type": "Return",
-                    "col_offset": 2,
-                    "end_col_offset": 27,
-                    "end_lineno": 5,
-                    "lineno": 5,
-                    "value": {
-                        "_type": "Compare",
-                        "col_offset": 9,
-                        "comparators": [
-                            {
-                                "_type": "Name",
-                                "col_offset": 24,
-                                "ctx": {
-                                    "_type": "Load"
-                                },
-                                "end_col_offset": 27,
-                                "end_lineno": 5,
-                                "id": "end",
-                                "lineno": 5
-                            }
-                        ],
-                        "end_col_offset": 27,
-                        "end_lineno": 5,
-                        "left": {
-                            "_type": "BinOp",
-                            "col_offset": 9,
-                            "end_col_offset": 20,
-                            "end_lineno": 5,
-                            "left": {
-                                "_type": "Name",
-                                "col_offset": 9,
-                                "ctx": {
-                                    "_type": "Load"
-                                },
-                                "end_col_offset": 13,
-                                "end_lineno": 5,
-                                "id": "curr",
-                                "lineno": 5
-                            },
-                            "lineno": 5,
-                            "op": {
-                                "_type": "Add"
-                            },
-                            "right": {
-                                "_type": "Name",
-                                "col_offset": 16,
-                                "ctx": {
-                                    "_type": "Load"
-                                },
-                                "end_col_offset": 20,
-                                "end_lineno": 5,
-                                "id": "step",
-                                "lineno": 5
-                            }
-                        },
-                        "lineno": 5,
-                        "ops": [
-                            {
-                                "_type": "LtE"
-                            }
-                        ]
-                    }
-                }
-            ],
-            "col_offset": 0,
-            "decorator_list": [],
-            "end_col_offset": 27,
-            "end_lineno": 5,
-            "lineno": 4,
-            "name": "ESBMC_range_has_next_",
-            "returns": {
-                "_type": "Name",
-                "col_offset": 61,
-                "ctx": {
-                    "_type": "Load"
-                },
-                "end_col_offset": 65,
-                "end_lineno": 4,
-                "id": "bool",
-                "lineno": 4
-            },
-            "type_comment": null
-        }
-    ],
-    "type_ignores": [],
-    "filename": "range.py",
-    "ast_output_dir": "/tmp/esbmc-python-astgen-c047-b83c-a705"
+        "end_col_offset": 5,
+        "end_lineno": 1,
+        "id": "int",
+        "lineno": 1
+    },
+    "target": {
+        "_type": "Name",
+        "col_offset": 0,
+        "ctx": {
+            "_type": "Store"
+        },
+        "end_col_offset": 1,
+        "end_lineno": 1,
+        "id": "x",
+        "lineno": 1
+    },
+    "value": {
+        "_type": "Constant",
+        "col_offset": 8,
+        "end_col_offset": 10,
+        "end_lineno": 1,
+        "kind": null,
+        "lineno": 1,
+        "n": 10,
+        "s": 10,
+        "value": 10
+    }
 }
-
 ```
+
+Currently, we can infer type from constants, variables with inferred or pre-annotated types, binary expressions, and class instances.
+
+
+## Symbol Table Generation
+The final step in the frontend involves converting the annotated JSON AST into a symbol table using our C++ irep API. This API enables the creation of a control-flow graph (CFG) from the program, allowing us to model constructs such as assignments, expressions, conditionals, loops, functions and classes. The resulting information is stored in a context structure, which serves as the input for the GOTO conversion process.
+
+## References
+For more information about our frontend, please refer to our ISSTA 2024 [tool paper](https://dl.acm.org/doi/abs/10.1145/3650212.3685304).
