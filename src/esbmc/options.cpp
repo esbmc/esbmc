@@ -505,6 +505,10 @@ const struct group_opt_templ all_cmd_options[] = {
      {"branch-coverage-claims",
       NULL,
       "enable branch-coverage and shows all reached claims"},
+      {"branch-function-coverage", NULL, "shows the coverage of branch and function entry"},
+     {"branch-function-coverage-claims",
+      NULL,
+      "enable branch-coverage-ext and shows all reached claims"},
    }},
   {"DEBUG options",
    {
