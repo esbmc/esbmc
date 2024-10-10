@@ -1,6 +1,6 @@
 CORE
 main.c
---branch-coverage --unwind 2 --no-unwinding-assertions
+--branch-function-coverage --unwind 2 --no-unwinding-assertions
 ^Function Entry Points & Branches : 3
 ^Reached : 2
 ^VERIFICATION FAILED$

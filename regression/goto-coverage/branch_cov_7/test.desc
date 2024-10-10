@@ -1,0 +1,7 @@
+CORE
+main.c
+--branch-coverage-claims --unwind 3 --no-unwinding-assertions --interval-analysis
+^Branches : 8
+^Reached : 7
+^Branch Coverage: 87.5%
+^VERIFICATION FAILED$

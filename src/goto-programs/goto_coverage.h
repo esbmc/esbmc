@@ -20,8 +20,9 @@ public:
   {
     target_num = -1;
   };
-  void branch_coverage();
   void assertion_coverage();
+  void branch_coverage();
+  void branch_function_coverage();
 
   void insert_assert(
     goto_programt &goto_program,
@@ -60,8 +61,9 @@ public:
   std::set<std::pair<std::string, std::string>> get_total_cond_assert() const;
   std::string get_filename_from_path(std::string path);
 
-  // total branch_cov instrumentation
+  // total numbers of instrumentation
   static size_t total_branch;
+  static std::set<std::pair<std::string, std::string>> total_cond;
 
 protected:
   // turn a OP b OP c into a list a, b, c
