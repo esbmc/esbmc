@@ -838,6 +838,9 @@ smt_convt::resultt bmct::multi_property_check(
   // "Branch Cov"
   bool is_branch_cov = options.get_bool_option("branch-coverage") ||
                        options.get_bool_option("branch-coverage-claims");
+  bool is_branch_func_cov =
+    options.get_bool_option("branch-function-coverage") ||
+    options.get_bool_option("branch-function-coverage-claims");
 
   bool is_keep_verified = options.get_bool_option("keep-verified-claims");
   bool is_clear_verified = (options.get_bool_option("k-induction") ||
@@ -893,6 +896,7 @@ smt_convt::resultt bmct::multi_property_check(
                        &is_cond_cov,
                        &is_vb,
                        &is_branch_cov,
+                       &is_branch_func_cov,
                        &total_cond,
                        &is_keep_verified,
                        &is_clear_verified,
@@ -907,7 +911,8 @@ smt_convt::resultt bmct::multi_property_check(
     symex_target_equationt local_eq = eq;
 
     // Set up the current claim and disable slice info output
-    bool is_goto_cov = is_assert_cov || is_cond_cov || is_branch_cov;
+    bool is_goto_cov =
+      is_assert_cov || is_cond_cov || is_branch_cov || is_branch_func_cov;
     claim_slicer claim(i, false, is_goto_cov, ns);
     claim.run(local_eq.SSA_steps);
 
@@ -1091,10 +1096,9 @@ smt_convt::resultt bmct::multi_property_check(
     // not all the claims are cond-cov instrumentations
     // thus we need to skip the irrelevant claims
     // when comparing 'total_cond_assert' and 'reached_claims'
-    goto_coveraget tmp(ns, symex->goto_functions);
     const std::set<std::pair<std::string, std::string>> &total_cond_assert =
-      tmp.get_total_cond_assert();
-    size_t total_instance = total_cond_assert.size();
+      goto_coveraget::total_cond;
+    const size_t total_instance = total_cond_assert.size();
     size_t reached_instance = 0;
     size_t short_circuit_instance = 0;
     size_t sat_instance = 0;
@@ -1196,6 +1200,34 @@ smt_convt::resultt bmct::multi_property_check(
 
   else if (is_branch_cov)
   {
+    const size_t total = goto_coveraget::total_branch;
+    // this also included the non-unwinding-assertions
+    // which is not what we want
+    const size_t tracked_instance = reached_claims.size();
+    if (total)
+    {
+      log_success("\n[Coverage]\n");
+      // The total assertion instances include the assert inside the source file, the unwinding asserts, the claims inserted during the goto-check and so on.
+      log_result("Branches : {}", total);
+      log_result("Reached : {}", tracked_instance);
+    }
+
+    // show claims
+    if (options.get_bool_option("branch-coverage-claims"))
+    {
+      // reached claims:
+      for (const auto &claim : reached_claims)
+        log_status("  {}", claim);
+    }
+
+    if (total != 0)
+      log_result("Branch Coverage: {}%", tracked_instance * 100.0 / total);
+    else
+      log_result("Branch Coverage: 0%");
+  }
+
+  else if (is_branch_func_cov)
+  {
     //! Might got incorrect total number when using --k-induction
     //! due to that the symex->goto_functions has been simplified
     const size_t total = goto_coveraget::total_branch;
@@ -1211,7 +1243,7 @@ smt_convt::resultt bmct::multi_property_check(
     }
 
     // show claims
-    if (options.get_bool_option("branch-coverage-claims"))
+    if (options.get_bool_option("branch-function-coverage-claims"))
     {
       // reached claims:
       for (const auto &claim : reached_claims)
@@ -1221,7 +1253,7 @@ smt_convt::resultt bmct::multi_property_check(
     if (total != 0)
       log_result("Branch Coverage: {}%", tracked_instance * 100.0 / total);
     else
-      log_result("Branch Instances Coverage: 0%");
+      log_result("Branch Coverage: 0%");
   }
   return final_result;
 }

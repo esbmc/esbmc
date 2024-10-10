@@ -1,6 +1,6 @@
 CORE
 main.c
---branch-coverage --goto-unwind --k-induction 
+--branch-function-coverage --goto-unwind --k-induction 
 ^Function Entry Points & Branches : 8
 ^Reached : 5
 ^Branch Coverage: 62.5%
