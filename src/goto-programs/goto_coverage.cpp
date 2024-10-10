@@ -1,6 +1,7 @@
 #include <goto-programs/goto_coverage.h>
 
 size_t goto_coveraget::total_branch = 0;
+std::set<std::pair<std::string, std::string>> goto_coveraget::total_cond;
 
 std::string goto_coveraget::get_filename_from_path(std::string path)
 {
@@ -84,7 +85,7 @@ Algo:
   1. convert assertions to true
   2. add false assertion add the begining of the function and the branch()
 */
-void goto_coveraget::branch_coverage()
+void goto_coveraget::branch_function_coverage()
 {
   log_progress("Adding false assertions...");
   total_branch = 0;
@@ -144,6 +145,61 @@ void goto_coveraget::branch_coverage()
   // fix for branch coverage with kind/incr
   // It seems in kind/incr, the goto_functions used during the BMC is simplified and incomplete
   total_branch = get_total_instrument();
+
+  // avoid Assertion `call_stack.back().goto_state_map.size() == 0' failed
+  goto_functions.update();
+}
+
+void goto_coveraget::branch_coverage()
+{
+  log_progress("Adding false assertions...");
+  total_branch = 0;
+
+  std::unordered_set<std::string> location_pool = {};
+  // cmdline.arg[0]
+  location_pool.insert(get_filename_from_path(filename));
+  for (auto const &inc : config.ansi_c.include_files)
+    location_pool.insert(get_filename_from_path(inc));
+
+  std::unordered_set<int> catch_tgt_list;
+  Forall_goto_functions (f_it, goto_functions)
+    if (f_it->second.body_available && f_it->first != "__ESBMC_main")
+    {
+      goto_programt &goto_program = f_it->second.body;
+      std::string cur_filename;
+
+      Forall_goto_program_instructions (it, goto_program)
+      {
+        cur_filename = get_filename_from_path(it->location.file().as_string());
+        // skip if it's not the verifying files
+        // probably a library
+        if (location_pool.count(cur_filename) == 0)
+          continue;
+
+        // convert assertions to true
+        if (
+          it->is_assert() &&
+          it->location.property().as_string() != "replaced assertion" &&
+          it->location.property().as_string() != "instrumented assertion")
+          replace_assert_to_guard(gen_true_expr(), it, false);
+
+        // e.g. IF !(a > 1) THEN GOTO 3
+        else if (it->is_goto() && !is_true(it->guard))
+        {
+          if (it->is_target())
+            target_num = it->target_number;
+          // assert(!(a > 1));
+          // assert(a > 1);
+          insert_assert(goto_program, it, it->guard);
+          insert_assert(goto_program, it, gen_not_expr(it->guard));
+        }
+      }
+    }
+
+  total_branch = get_total_instrument();
+
+  // avoid Assertion `call_stack.back().goto_state_map.size() == 0' failed
+  goto_functions.update();
 }
 
 void goto_coveraget::insert_assert(
@@ -255,6 +311,8 @@ void goto_coveraget::condition_coverage()
   // we need to skip the conditions within the built-in library
   // while kepping the file manually included by user
   // this filter, however, is unsound.. E.g. if the src filename is the same as the biuilt in library name
+  total_cond = {{}};
+
   std::unordered_set<std::string> location_pool = {};
   // cmdline.arg[0]
   location_pool.insert(get_filename_from_path(filename));
@@ -383,6 +441,9 @@ void goto_coveraget::condition_coverage()
         target_num = -1;
       }
     }
+
+  total_cond = get_total_cond_assert();
+
   // recalculate line number/ target number
   goto_functions.update();
 }

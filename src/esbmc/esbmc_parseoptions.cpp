@@ -1708,7 +1708,9 @@ bool esbmc_parseoptionst::process_goto_program(
                         cmdline.isset("condition-coverage") ||
                         cmdline.isset("condition-coverage-claims") ||
                         cmdline.isset("branch-coverage") ||
-                        cmdline.isset("branch-coverage-claims");
+                        cmdline.isset("branch-coverage-claims") ||
+                        cmdline.isset("branch-function-coverage") ||
+                        cmdline.isset("branch-function-coverage-claims");
 
     // Start by removing all no-op instructions and unreachable code
     if (!(cmdline.isset("no-remove-no-op")))
@@ -1841,9 +1843,6 @@ bool esbmc_parseoptionst::process_goto_program(
       options.set_option("keep-verified-claims", false);
       options.set_option("no-pointer-check", true);
 
-      // for re-do remove-sideeffects
-      options.set_option("goto-instrumented", false);
-
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);
       tmp.assertion_coverage();
@@ -1893,21 +1892,28 @@ bool esbmc_parseoptionst::process_goto_program(
       cmdline.isset("branch-coverage-claims"))
     {
       // for multi-property
-      options.set_option("result-only", true);
       options.set_option("base-case", true);
       options.set_option("multi-property", true);
       options.set_option("keep-verified-claims", false);
       options.set_option("no-pointer-check", true);
 
-      // for re-do remove-sideeffects
-      options.set_option("goto-instrumented", false);
-
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);
       tmp.branch_coverage();
+    }
+    if (
+      cmdline.isset("branch-function-coverage") ||
+      cmdline.isset("branch-function-coverage-claims"))
+    {
+      // for multi-property
+      options.set_option("base-case", true);
+      options.set_option("multi-property", true);
+      options.set_option("keep-verified-claims", false);
+      options.set_option("no-pointer-check", true);
 
-      // avoid Assertion `call_stack.back().goto_state_map.size() == 0' failed
-      goto_functions.update();
+      std::string filename = cmdline.args[0];
+      goto_coveraget tmp(ns, goto_functions, filename);
+      tmp.branch_function_coverage();
     }
   }
 
@@ -2098,17 +2104,17 @@ void esbmc_parseoptionst::add_property_monitors(
   std::map<std::string, std::pair<std::set<std::string>, expr2tc>> monitors;
 
   context.foreach_operand([this, &monitors](const symbolt &s) {
-    if (
-      !has_prefix(s.name, "__ESBMC_property_") ||
-      s.name.as_string().find("$type") != std::string::npos)
-      return;
+      if (
+        !has_prefix(s.name, "__ESBMC_property_") ||
+        s.name.as_string().find("$type") != std::string::npos)
+        return;
 
-    // strip prefix "__ESBMC_property_"
-    std::string prop_name = s.name.as_string().substr(17);
-    std::set<std::string> used_syms;
-    expr2tc main_expr = calculate_a_property_monitor(prop_name, used_syms);
-    monitors[prop_name] = std::pair{used_syms, main_expr};
-  });
+      // strip prefix "__ESBMC_property_"
+      std::string prop_name = s.name.as_string().substr(17);
+      std::set<std::string> used_syms;
+      expr2tc main_expr = calculate_a_property_monitor(prop_name, used_syms);
+      monitors[prop_name] = std::pair{used_syms, main_expr};
+    });
 
   if (monitors.size() == 0)
     return;
@@ -2204,9 +2210,9 @@ static void collect_symbol_names(
   else
   {
     e->foreach_operand([&prefix, &used_syms](const expr2tc &e) {
-      if (!is_nil_expr(e))
-        collect_symbol_names(e, prefix, used_syms);
-    });
+        if (!is_nil_expr(e))
+          collect_symbol_names(e, prefix, used_syms);
+      });
   }
 }
 
