@@ -2255,14 +2255,12 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (c.hasAPValueResult())
     {
       clang::APValue value = c.getAPValueResult();
-      if (get_APValue_expr(value, new_expr))
-        return true;
+      if (!get_APValue_expr(value, new_expr))
+        break;
     }
-    else
-    {
-      if (get_expr(*c.getSubExpr(), new_expr))
-        return true;
-    }
+
+    if (get_expr(*c.getSubExpr(), new_expr))
+      return true;
 
     break;
   }
