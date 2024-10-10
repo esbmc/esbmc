@@ -112,7 +112,7 @@ We refer the user to our [documentation webpage](https://ssvlab.github.io/esbmc/
 
 ### Using Config Files
 
-ESBMC supports specifying options through TOML formatted config files. In order to use a config file, export an environment variable:
+ESBMC supports specifying options through TOML formatted config files. To use a config file, export an environment variable:
 
 ```sh
 export ESBMC_CONFIG_FILE="path/to/config.toml"
@@ -123,8 +123,8 @@ If no environment file is specified, then the default locations will be checked:
 * Windows: `%userprofile%\esbmc.toml`
 * UNIX: `~/.config/esbmc.toml`
 
-If nothing is found then nothing is loaded. If you set the environment variable to
-the empty string then it disables the entire config file loading process.
+If nothing is found, then nothing is loaded. If you set the environment variable to
+the empty string, then it disables the entire config file loading process.
 
 ```sh
 export ESBMC_CONFIG_FILE=""
