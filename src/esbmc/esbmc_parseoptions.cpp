@@ -1653,7 +1653,7 @@ bool esbmc_parseoptionst::parse_goto_program(
       show_symbol_table_plain(oss);
       log_status("{}", oss.str());
       if (cmdline.isset("symbol-table-only"))
-        return true;
+        exit(0);
     }
 
     log_progress("Generating GOTO Program");
@@ -1998,7 +1998,7 @@ bool esbmc_parseoptionst::output_goto_program(
       goto_functions.output(ns, oss);
       log_status("{}", oss.str());
       if (cmdline.isset("goto-functions-only"))
-        return true;
+        exit(0);
     }
 
     if (cmdline.isset("dump-goto-cfg"))
