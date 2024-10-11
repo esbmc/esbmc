@@ -1,0 +1,6 @@
+KNOWNBUG
+main.cpp
+--branch-coverage-claims --unwind 3 --no-unwinding-assertions
+^Branches : 6
+^Reached : 5
+^VERIFICATION FAILED$
