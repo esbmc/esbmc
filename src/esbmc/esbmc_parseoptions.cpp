@@ -1635,7 +1635,7 @@ bool esbmc_parseoptionst::parse_goto_program(
         it.second->show_parse(oss);
       log_status("{}", oss.str());
       if (cmdline.isset("parse-tree-only"))
-        return true;
+        exit(0);
     }
 
     // Typecheking (old frontend) or adjust (clang frontend)
