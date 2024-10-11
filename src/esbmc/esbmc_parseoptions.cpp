@@ -684,6 +684,9 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
   // Get the increment
   unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
 
+  // Get the start of the base-case
+  unsigned k_step_base = strtoul(cmdline.getval("base-k-step"), nullptr, 10);
+
   // All processes were created successfully
   switch (process_type)
   {
@@ -925,7 +928,8 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // Run bmc and only send results in two occasions:
     // 1. A bug was found, we send the step where it was found
     // 2. It couldn't find a bug
-    for (BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
+    for (BigInt k_step = k_step_base; k_step <= max_k_step;
+         k_step += k_step_inc)
     {
       bmct bmc(goto_functions, options, cmdline.options_map, context);
       bmc.options.set_option("unwind", integer2string(k_step));
@@ -1029,7 +1033,8 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // Run bmc and only send results in two occasions:
     // 1. A proof was found, we send the step where it was found
     // 2. It couldn't find a proof
-    for (BigInt k_step = 2; k_step <= max_k_step; k_step += k_step_inc)
+    for (BigInt k_step = k_step_base + 1; k_step <= max_k_step;
+         k_step += k_step_inc)
     {
       bmct bmc(goto_functions, options, cmdline.options_map, context);
       bmc.options.set_option("unwind", integer2string(k_step));
@@ -1096,7 +1101,8 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // Run bmc and only send results in two occasions:
     // 1. A proof was found, we send the step where it was found
     // 2. It couldn't find a proof
-    for (BigInt k_step = 2; k_step <= max_k_step; k_step += k_step_inc)
+    for (BigInt k_step = k_step_base + 1; k_step <= max_k_step;
+         k_step += k_step_inc)
     {
       bmct bmc(goto_functions, options, cmdline.options_map, context);
 
@@ -1185,8 +1191,11 @@ int esbmc_parseoptionst::do_bmc_strategy(
   // Get the increment
   unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
 
+  // Get the start of the base-case
+  unsigned k_step_base = strtoul(cmdline.getval("base-k-step"), nullptr, 10);
+
   // Trying all bounds from 1 to "max_k_step" in "k_step_inc"
-  for (BigInt k_step = 1; k_step <= max_k_step; k_step += k_step_inc)
+  for (BigInt k_step = k_step_base; k_step <= max_k_step; k_step += k_step_inc)
   {
     // k-induction
     if (options.get_bool_option("k-induction"))
@@ -2104,17 +2113,17 @@ void esbmc_parseoptionst::add_property_monitors(
   std::map<std::string, std::pair<std::set<std::string>, expr2tc>> monitors;
 
   context.foreach_operand([this, &monitors](const symbolt &s) {
-    if (
-      !has_prefix(s.name, "__ESBMC_property_") ||
-      s.name.as_string().find("$type") != std::string::npos)
-      return;
+      if (
+        !has_prefix(s.name, "__ESBMC_property_") ||
+        s.name.as_string().find("$type") != std::string::npos)
+        return;
 
-    // strip prefix "__ESBMC_property_"
-    std::string prop_name = s.name.as_string().substr(17);
-    std::set<std::string> used_syms;
-    expr2tc main_expr = calculate_a_property_monitor(prop_name, used_syms);
-    monitors[prop_name] = std::pair{used_syms, main_expr};
-  });
+      // strip prefix "__ESBMC_property_"
+      std::string prop_name = s.name.as_string().substr(17);
+      std::set<std::string> used_syms;
+      expr2tc main_expr = calculate_a_property_monitor(prop_name, used_syms);
+      monitors[prop_name] = std::pair{used_syms, main_expr};
+    });
 
   if (monitors.size() == 0)
     return;
@@ -2210,9 +2219,9 @@ static void collect_symbol_names(
   else
   {
     e->foreach_operand([&prefix, &used_syms](const expr2tc &e) {
-      if (!is_nil_expr(e))
-        collect_symbol_names(e, prefix, used_syms);
-    });
+        if (!is_nil_expr(e))
+          collect_symbol_names(e, prefix, used_syms);
+      });
   }
 }
 
