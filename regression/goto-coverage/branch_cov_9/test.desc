@@ -1,0 +1,6 @@
+CORE
+main.c
+--branch-coverage-claims --unwind 3 --no-unwinding-assertions
+^Branches : 12
+^Reached : 11
+^VERIFICATION FAILED$
