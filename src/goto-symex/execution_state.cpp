@@ -935,9 +935,8 @@ void execution_statet::get_expr_globals(
     }
   }
 
-  expr->foreach_operand([this, &globals_list, &ns](const expr2tc &e) {
-    get_expr_globals(ns, e, globals_list);
-  });
+  expr->foreach_operand([this, &globals_list, &ns](const expr2tc &e)
+                        { get_expr_globals(ns, e, globals_list); });
 }
 
 bool execution_statet::check_mpor_dependancy(unsigned int j, unsigned int l)
@@ -946,35 +945,52 @@ bool execution_statet::check_mpor_dependancy(unsigned int j, unsigned int l)
   assert(j < threads_state.size());
   assert(l < threads_state.size());
 
-  // Rules given on page 13 of MPOR paper, although they don't appear to
-  // distinguish which thread is which correctly. Essentially, check that
-  // the write(s) of the previous transition (l) don't intersect with this
-  // transitions (j) reads or writes; and that the previous transitions reads
-  // don't intersect with this transitions write(s).
+  auto extract_symbol_names = [](const std::set<expr2tc> &symbols)
+  {
+    std::unordered_set<std::string> symbol_names;
+    for (const auto &symbol : symbols)
+    {
+      std::string name = to_symbol2t(symbol).thename.as_string();
+      // skip ESBMC symbols, as they make threads 
+      if (
+        !has_prefix(name, "c:@__ESBMC_") &&
+        !has_prefix(
+          name,
+          "c:@F@pthread_trampoline"))
+        symbol_names.insert(name);
+    }
+    return symbol_names;
+  };
 
-  // Double write intersection
-  for (std::set<expr2tc>::const_iterator it = thread_last_writes[j].begin();
-       it != thread_last_writes[j].end();
-       it++)
-    if (thread_last_writes[l].find(*it) != thread_last_writes[l].end())
-      return true;
+  // Get the last writes and reads for both the active and previous threads
+  std::unordered_set<std::string> active_last_writes =
+    extract_symbol_names(thread_last_writes[j]);
+  std::unordered_set<std::string> active_last_reads =
+    extract_symbol_names(thread_last_reads[j]);
+  std::unordered_set<std::string> previous_last_writes =
+    extract_symbol_names(thread_last_writes[l]);
+  std::unordered_set<std::string> previous_last_reads =
+    extract_symbol_names(thread_last_reads[l]);
 
-  // This read what that wrote intersection
-  for (std::set<expr2tc>::const_iterator it = thread_last_reads[j].begin();
-       it != thread_last_reads[j].end();
-       it++)
-    if (thread_last_writes[l].find(*it) != thread_last_writes[l].end())
-      return true;
+  // Check for write-write and write-read dependencies
+  for (const auto &last_write : active_last_writes)
+  {
+    //std::cout << "last write: " << last_write << std::endl;
+    if (
+      previous_last_writes.find(last_write) != previous_last_writes.end() ||
+      previous_last_reads.find(last_write) != previous_last_reads.end())
+      return true; // Dependency found
+  }
 
-  // We wrote what that reads intersection
-  for (std::set<expr2tc>::const_iterator it = thread_last_writes[j].begin();
-       it != thread_last_writes[j].end();
-       it++)
-    if (thread_last_reads[l].find(*it) != thread_last_reads[l].end())
-      return true;
+  // Check for read-write dependencies
+  for (const auto &last_read : active_last_reads)
+  {
+    //std::cout << "last read: " << last_read << std::endl;
+    if (previous_last_writes.find(last_read) != previous_last_writes.end())
+      return true; // Dependency found
+  }
 
-  // No check for read-read intersection, it doesn't affect anything
-  return false;
+  return false; // No dependency found
 }
 
 void execution_statet::calculate_mpor_constraints()
@@ -1152,8 +1168,7 @@ void execution_statet::print_stack_traces(unsigned int indent) const
   for (it = threads_state.begin(); it != threads_state.end(); it++)
   {
     std::ostringstream oss;
-    oss << spaces << "Thread " << i++ << ":"
-        << "\n";
+    oss << spaces << "Thread " << i++ << ":" << "\n";
     it->print_stack_trace(indent + 2, oss);
     oss << "\n";
     log_status("{}", oss.str());
