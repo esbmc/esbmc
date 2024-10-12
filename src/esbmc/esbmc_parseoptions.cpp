@@ -1635,7 +1635,7 @@ bool esbmc_parseoptionst::parse_goto_program(
         it.second->show_parse(oss);
       log_status("{}", oss.str());
       if (cmdline.isset("parse-tree-only"))
-        return true;
+        exit(0);
     }
 
     // Typecheking (old frontend) or adjust (clang frontend)
@@ -1653,7 +1653,7 @@ bool esbmc_parseoptionst::parse_goto_program(
       show_symbol_table_plain(oss);
       log_status("{}", oss.str());
       if (cmdline.isset("symbol-table-only"))
-        return true;
+        exit(0);
     }
 
     log_progress("Generating GOTO Program");
@@ -1708,7 +1708,9 @@ bool esbmc_parseoptionst::process_goto_program(
                         cmdline.isset("condition-coverage") ||
                         cmdline.isset("condition-coverage-claims") ||
                         cmdline.isset("branch-coverage") ||
-                        cmdline.isset("branch-coverage-claims");
+                        cmdline.isset("branch-coverage-claims") ||
+                        cmdline.isset("branch-function-coverage") ||
+                        cmdline.isset("branch-function-coverage-claims");
 
     // Start by removing all no-op instructions and unreachable code
     if (!(cmdline.isset("no-remove-no-op")))
@@ -1841,9 +1843,6 @@ bool esbmc_parseoptionst::process_goto_program(
       options.set_option("keep-verified-claims", false);
       options.set_option("no-pointer-check", true);
 
-      // for re-do remove-sideeffects
-      options.set_option("goto-instrumented", false);
-
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);
       tmp.assertion_coverage();
@@ -1893,21 +1892,28 @@ bool esbmc_parseoptionst::process_goto_program(
       cmdline.isset("branch-coverage-claims"))
     {
       // for multi-property
-      options.set_option("result-only", true);
       options.set_option("base-case", true);
       options.set_option("multi-property", true);
       options.set_option("keep-verified-claims", false);
       options.set_option("no-pointer-check", true);
 
-      // for re-do remove-sideeffects
-      options.set_option("goto-instrumented", false);
-
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);
       tmp.branch_coverage();
+    }
+    if (
+      cmdline.isset("branch-function-coverage") ||
+      cmdline.isset("branch-function-coverage-claims"))
+    {
+      // for multi-property
+      options.set_option("base-case", true);
+      options.set_option("multi-property", true);
+      options.set_option("keep-verified-claims", false);
+      options.set_option("no-pointer-check", true);
 
-      // avoid Assertion `call_stack.back().goto_state_map.size() == 0' failed
-      goto_functions.update();
+      std::string filename = cmdline.args[0];
+      goto_coveraget tmp(ns, goto_functions, filename);
+      tmp.branch_function_coverage();
     }
   }
 
@@ -1998,7 +2004,7 @@ bool esbmc_parseoptionst::output_goto_program(
       goto_functions.output(ns, oss);
       log_status("{}", oss.str());
       if (cmdline.isset("goto-functions-only"))
-        return true;
+        exit(0);
     }
 
     if (cmdline.isset("dump-goto-cfg"))
