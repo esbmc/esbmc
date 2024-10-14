@@ -364,11 +364,23 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     // Get the increment
     unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
 
+    // Get the start of the base-case, default 1
+    unsigned k_step_base = strtoul(cmdline.getval("base-k-step"), nullptr, 10);
+
     // check whether k-step is greater than max-k-step
     if (k_step_inc >= max_k_step)
     {
       log_error(
         "Please specify --k-step smaller than max-k-step if you want "
+        "to use incremental verification.");
+      abort();
+    }
+
+    // check whether k_step_inc is greater than max-k-step
+    if (k_step_base >= max_k_step)
+    {
+      log_error(
+        "Please specify --base-k-step smaller than max-k-step if you want "
         "to use incremental verification.");
       abort();
     }
@@ -684,8 +696,15 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
   // Get the increment
   unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
 
-  // Get the start of the base-case
+  // Get the start of the base-case, default 1
   unsigned k_step_base = strtoul(cmdline.getval("base-k-step"), nullptr, 10);
+  if (k_step_base >= max_k_step)
+  {
+    log_error(
+      "Please specify --base-k-step smaller than max-k-step if you want "
+      "to use incremental verification.");
+    abort();
+  }
 
   // All processes were created successfully
   switch (process_type)
@@ -1191,8 +1210,15 @@ int esbmc_parseoptionst::do_bmc_strategy(
   // Get the increment
   unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
 
-  // Get the start of the base-case
+  // Get the start of the base-case, default 1
   unsigned k_step_base = strtoul(cmdline.getval("base-k-step"), nullptr, 10);
+  if (k_step_base >= max_k_step)
+  {
+    log_error(
+      "Please specify --base-k-step smaller than max-k-step if you want "
+      "to use incremental verification.");
+    abort();
+  }
 
   // Trying all bounds from 1 to "max_k_step" in "k_step_inc"
   for (BigInt k_step = k_step_base; k_step <= max_k_step; k_step += k_step_inc)
