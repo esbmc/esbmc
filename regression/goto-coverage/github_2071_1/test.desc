@@ -1,0 +1,7 @@
+CORE
+main.c
+--condition-coverage --k-induction --goto-unwind --base-k-step 2 --no-unwinding-assertions
+^Reached Conditions:  36
+^Short Circuited Conditions:  2
+^Total Conditions:  38
+^VERIFICATION FAILED$
