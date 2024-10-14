@@ -57,6 +57,11 @@ bool is_no_op(
         // something like (void)0
         return true;
       }
+      else if (is_constant_expr(expr))
+      {
+        // something like other 0;
+        return true;
+      }
     }
 
     return false;
