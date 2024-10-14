@@ -1,0 +1,6 @@
+CORE
+main.c
+--branch-coverage --k-induction --goto-unwind --base-k-step 2
+^Branches : 12
+^Reached : 11
+^VERIFICATION FAILED$
