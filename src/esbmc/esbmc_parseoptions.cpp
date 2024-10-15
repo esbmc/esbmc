@@ -1878,6 +1878,10 @@ bool esbmc_parseoptionst::process_goto_program(
       options.set_option("keep-verified-claims", false);
       options.set_option("no-pointer-check", true);
 
+      // enable '--no-unwinding-assertions' if '--unwind' is enabled
+      if (cmdline.isset("unwind"))
+        options.set_option("no-unwinding-assertions", true);
+
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);
       tmp.assertion_coverage();
@@ -1896,6 +1900,10 @@ bool esbmc_parseoptionst::process_goto_program(
       // prevent adding property checking assertions during SymEx
       options.set_option("no-pointer-check", true);
       // unreachable conditions should be also considered as short-circuited
+
+      // enable '--no-unwinding-assertions' if '--unwind' is enabled
+      if (cmdline.isset("unwind"))
+        options.set_option("no-unwinding-assertions", true);
 
       // for re-do remove-sideeffects
       options.set_option("goto-instrumented", false);
@@ -1932,6 +1940,10 @@ bool esbmc_parseoptionst::process_goto_program(
       options.set_option("keep-verified-claims", false);
       options.set_option("no-pointer-check", true);
 
+      // enable '--no-unwinding-assertions' if '--unwind' is enabled
+      if (cmdline.isset("unwind"))
+        options.set_option("no-unwinding-assertions", true);
+
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);
       tmp.branch_coverage();
@@ -1945,6 +1957,10 @@ bool esbmc_parseoptionst::process_goto_program(
       options.set_option("multi-property", true);
       options.set_option("keep-verified-claims", false);
       options.set_option("no-pointer-check", true);
+
+      // enable '--no-unwinding-assertions' if '--unwind' is enabled
+      if (cmdline.isset("unwind"))
+        options.set_option("no-unwinding-assertions", true);
 
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);

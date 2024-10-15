@@ -1,0 +1,7 @@
+CORE
+main.c
+--unwind 1 --assertion-coverage
+^Total Asserts: 2
+^Reached Assertion Instances: 2
+^Total Assertion Instances: 6
+^VERIFICATION FAILED$
