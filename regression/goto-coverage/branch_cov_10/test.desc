@@ -1,7 +1,7 @@
 CORE
 main.cpp
 --branch-coverage-claims --unwind 3 --no-unwinding-assertions
-^Branches : 10
-^Reached : 3
-^Branch Coverage: 30%
-^VERIFICATION FAILED$
+^Branches : 4
+^Reached : 0
+^Branch Coverage: 0%
+^VERIFICATION SUCCESSFUL$
