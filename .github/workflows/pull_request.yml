@@ -32,7 +32,7 @@ jobs:
     uses: ./.github/workflows/build-unix.yml
     name: static llvm-16 DebugOpt
     with:
-      operating-system: ubuntu-latest
+      operating-system: ubuntu-22.04
       build-flags: '-b DebugOpt -e On'
       testing: true
 
@@ -66,7 +66,7 @@ jobs:
     name: dyn. llvm-13 DebugOpt
     uses: ./.github/workflows/build-unix.yml
     with:
-      operating-system: ubuntu-latest
+      operating-system: ubuntu-22.04
       build-flags: '-b DebugOpt -e On -S OFF -c 13'
       testing: true
 
