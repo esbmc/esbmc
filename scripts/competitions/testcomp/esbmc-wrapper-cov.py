@@ -298,3 +298,15 @@ result = verify(strategy, category_property, concurrency, esbmc_dargs)
 print (get_result_string(result))
 
 createTestZipFile()
+
+"""
+Usage:
+  # run
+  ./esbmc-wrapper-cov.py -s kinduction -p ./properties/coverage-branches.prp test.c
+
+  # output
+  test-suite.zip
+  
+  # validate
+  testcov --no-isolation --test-suite ./test-suite.zip test.c
+"""
