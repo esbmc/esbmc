@@ -41,7 +41,7 @@ def createTestZipFile():
     matched_files.append("metadata.xml")
     
     zip_files(matched_files, "test-suite.zip")
-
+    #? Do we need to delete files after being zipped?
 
 class Result:
     success = 1
@@ -165,7 +165,7 @@ def check_if_benchmark_contains_pthread(benchmark):
   return False
 
 
-def get_command_line(strat, prop, arch, benchmark, dargs, esbmc_ci):
+def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
   command_line = esbmc_path + dargs
 
   # Add benchmark
@@ -217,9 +217,9 @@ def get_command_line(strat, prop, arch, benchmark, dargs, esbmc_ci):
   return command_line
 
 
-def verify(strat, prop, concurrency, dargs, esbmc_ci):
+def verify(strat, prop, concurrency, dargs):
   # Get command line
-  esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
+  esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency, dargs)
 
   # Call ESBMC
   output = run(esbmc_command_line)
@@ -247,7 +247,6 @@ property_file = args.propertyfile
 benchmark = args.benchmark
 strategy = args.strategy
 concurrency = args.concurrency
-esbmc_ci = args.ci
 
 if version:
   print(do_exec(esbmc_path + "--version").decode()[6:].strip()),
@@ -288,7 +287,7 @@ else:
     print ("Unsupported Property")
     exit(1)
 
-result = verify(strategy, category_property, False)
+result = verify(strategy, category_property, concurrency, esbmc_dargs)
 print (get_result_string(result))
 
 createTestZipFile()
