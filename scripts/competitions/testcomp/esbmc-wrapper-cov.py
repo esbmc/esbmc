@@ -186,9 +186,9 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
 
   # Special case for termination, it runs regardless of the strategy
   if prop == Property.coverage:
-    command_line += "--goto-unwind --unlimited-goto-unwind --base-k-step 5 --no-bounds-check --no-pointer-check"
-    command_line += "--branch-coverage"
-    command_line += "--generate-testcase"
+    command_line += "--goto-unwind --base-k-step 5 --no-bounds-check --no-pointer-check --quiet "
+    command_line += "--branch-coverage "
+    command_line += "--generate-testcase "
   elif prop == Property.reach:
     command_line += "--enable-unreachability-intrinsic "
     if concurrency:
