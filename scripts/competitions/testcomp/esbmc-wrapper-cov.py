@@ -28,6 +28,8 @@ def createTestZipFile():
     1. get file list
     2. zip
     """
+    zip_filename = "test-suite.zip"
+    
     # Define the pattern for matching "testcase-{i}.xml"
     pattern = re.compile(r"testcase-\d+\.xml")
     
@@ -40,8 +42,14 @@ def createTestZipFile():
     # Add metadata.xml
     matched_files.append("metadata.xml")
     
-    zip_files(matched_files, "test-suite.zip")
-    #? Do we need to delete files after being zipped?
+    # Create Zip file
+    zip_files(matched_files, zip_filename)
+    
+    #? delete files after being zipped
+    # If we keep runing the experiment in the same directory then we must delete them
+    for file_name in matched_files:
+        if os.path.isfile(file_name) and file_name != zip_filename: 
+            os.remove(file_name) 
 
 class Result:
     success = 1
@@ -50,7 +58,6 @@ class Result:
     err_memout = 4
     force_fp_mode = 5
     unknown = 6
-    fail_memcleanup = 12
 
     @staticmethod
     def is_fail(res):
