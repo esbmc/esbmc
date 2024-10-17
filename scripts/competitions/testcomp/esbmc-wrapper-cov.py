@@ -8,48 +8,36 @@ import time
 import sys
 import resource
 import re
-import zipfile
 
 # Start time for this script
 start_time = time.time()
 
-def zip_files(file_list, output_zip):
-    with zipfile.ZipFile(output_zip, 'w') as zipf:
-        for file in file_list:
-            if os.path.isfile(file):  # Check if the file exists
-                zipf.write(file, os.path.basename(file))  # Write the file to the zip
-            else:
-                print(f"File {file} does not exist.")
-    print(f"Files zipped into {output_zip}")
 
-def createTestZipFile():
+def createTestDir():
     """
-    Pack a metadata.xml and one or multiple testcase-n.xml into a zip file called test-suite.zip
-    1. get file list
-    2. zip
+    1. Create a folder in current directory, called "test-suite/"
+    2. Move all *.xml files into this folder using os.rename
     """
-    zip_filename = "test-suite.zip"
+    # Define the folder name
+    test_dir = 'test-suite'
     
-    # Define the pattern for matching "testcase-{i}.xml"
-    pattern = re.compile(r"testcase-\d+\.xml")
+    # Check if the folder already exists, if not, create it
+    if not os.path.exists(test_dir):
+        os.makedirs(test_dir)
     
-    # List all files in the current directory
-    files = os.listdir('.')
+    # Get the current working directory
+    current_dir = os.getcwd()
     
-    # Filter files that match the pattern
-    matched_files = [file for file in files if pattern.match(file)]
-    
-    # Add metadata.xml
-    matched_files.append("metadata.xml")
-    
-    # Create Zip file
-    zip_files(matched_files, zip_filename)
-    
-    #? delete files after being zipped
-    # If we keep runing the experiment in the same directory then we must delete them
-    for file_name in matched_files:
-        if os.path.isfile(file_name) and file_name != zip_filename: 
-            os.remove(file_name) 
+    # Loop through all files in the current directory
+    for file_name in os.listdir(current_dir):
+        # Check if the file has an .xml extension
+        if file_name.endswith('.xml'):
+            # Create full file path
+            full_file_name = os.path.join(current_dir, file_name)
+            new_location = os.path.join(test_dir, file_name)
+            
+            # Move the file by renaming its path
+            os.rename(full_file_name, new_location)
 
 class Result:
     success = 1
@@ -172,7 +160,7 @@ def check_if_benchmark_contains_pthread(benchmark):
   return False
 
 
-def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
+def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, coverage):
   command_line = esbmc_path + dargs
 
   # Add benchmark
@@ -194,10 +182,13 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
   # Special case for termination, it runs regardless of the strategy
   if prop == Property.coverage:
     command_line += "--goto-unwind --base-k-step 5 --no-bounds-check --no-pointer-check --quiet "
-    command_line += "--branch-coverage "
     command_line += "--generate-testcase "
+    if coverage == "branch":
+      command_line += "--branch-coverage "
+    elif coverage == "condition":
+      command_line += "--condition-coverage-rm --no-cov-asserts "
   elif prop == Property.reach:
-    command_line += "--enable-unreachability-intrinsic "
+    command_line += "--base-k-step 5 --enable-unreachability-intrinsic "
     if concurrency:
       command_line += "--no-pointer-check --no-bounds-check "
     else:
@@ -224,9 +215,9 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
   return command_line
 
 
-def verify(strat, prop, concurrency, dargs):
+def verify(strat, prop, concurrency, dargs, coverage):
   # Get command line
-  esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency, dargs)
+  esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency, dargs, coverage)
 
   # Call ESBMC
   output = run(esbmc_command_line)
@@ -244,7 +235,7 @@ parser.add_argument("benchmark", nargs='?', help="Path to the benchmark")
 parser.add_argument("-s", "--strategy", help="ESBMC's strategy", choices=["kinduction", "falsi", "incr", "fixed"], default="fixed")
 parser.add_argument("-c", "--concurrency", help="Set concurrency flags", action='store_true')
 parser.add_argument("-n", "--dry-run", help="do not actually run ESBMC, just print the command", action='store_true')
-parser.add_argument("--ci", help="run this wrapper with special options for the CI (internal use)", action='store_true')
+parser.add_argument("-o","--coverage", help="run in coverage mode",  choices=["branch", "condition"])
 
 args = parser.parse_args()
 
@@ -254,6 +245,7 @@ property_file = args.propertyfile
 benchmark = args.benchmark
 strategy = args.strategy
 concurrency = args.concurrency
+coverage = args.coverage
 
 if version:
   print(do_exec(esbmc_path + "--version").decode()[6:].strip()),
@@ -294,10 +286,10 @@ else:
     print ("Unsupported Property")
     exit(1)
 
-result = verify(strategy, category_property, concurrency, esbmc_dargs)
+result = verify(strategy, category_property, concurrency, esbmc_dargs, coverage)
 print (get_result_string(result))
 
-createTestZipFile()
+createTestDir()
 
 """
 Usage:
