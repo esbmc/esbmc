@@ -1066,7 +1066,13 @@ smt_convt::resultt bmct::multi_property_check(
       log_success("\n[Coverage]\n");
       // The total assertion instances include the assert inside the source file, the unwinding asserts, the claims inserted during the goto-check and so on.
       log_result("Total Asserts: {}", total);
-      log_result("Total Assertion Instances: {}", total_instance);
+      if (total_instance >= tracked_instance)
+        log_result("Total Assertion Instances: {}", total_instance);
+      else
+        // this could be
+        // 1. the loop is too large that we cannot goto-uwnind it
+        // 2. the loop is somewhat non-deterministic that we cannot run goto-unwind
+        log_result("Total Assertion Instances: unknown / non-deterministic");
       log_result("Reached Assertion Instances: {}", tracked_instance);
     }
 
@@ -1081,9 +1087,14 @@ smt_convt::resultt bmct::multi_property_check(
     }
 
     if (total_instance != 0)
-      log_result(
-        "Assertion Instances Coverage: {}%",
-        tracked_instance * 100.0 / total_instance);
+    {
+      if (total_instance >= tracked_instance)
+        log_result(
+          "Assertion Instances Coverage: {}%",
+          tracked_instance * 100.0 / total_instance);
+      else
+        log_result("Assertion Instances Coverage Unknown");
+    }
     else
       log_result("Assertion Instances Coverage: 0%");
   }
