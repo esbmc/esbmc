@@ -15,14 +15,23 @@ start_time = time.time()
 
 def createTestDir():
     """
-    1. Create a folder in current directory, called "test-suite/"
+    1. Check if "test-suite/" folder exists.
+        - If it exists, clear its contents.
+        - If it doesn't, create it.
     2. Move all *.xml files into this folder using os.rename
     """
     # Define the folder name
     test_dir = 'test-suite'
     
-    # Check if the folder already exists, if not, create it
-    if not os.path.exists(test_dir):
+    # Check if the folder already exists
+    if os.path.exists(test_dir):
+        # If it exists, clear its contents (delete all files inside)
+        for file_name in os.listdir(test_dir):
+            file_path = os.path.join(test_dir, file_name)
+            if os.path.isfile(file_path):
+                os.remove(file_path)
+    else:
+        # If it doesn't exist, create the folder
         os.makedirs(test_dir)
     
     # Get the current working directory
@@ -297,7 +306,7 @@ Usage:
   ./esbmc-wrapper-cov.py -s kinduction -p ./properties/coverage-branches.prp test.c
 
   # output
-  test-suite.zip
+  test-suite/
   
   # validate
   testcov --no-isolation --test-suite ./test-suite.zip test.c
