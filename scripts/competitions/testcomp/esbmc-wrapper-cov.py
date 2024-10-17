@@ -24,20 +24,21 @@ def zip_files(file_list, output_zip):
 
 def createTestZipFile():
     """
-    Pack a metadata.xml and one or multiple testcase-n.xml into a zip file called test-suite.zip
+    Pack a metadata.xml and one or multiple testcase{-n}.xml into a zip file called test-suite.zip
     1. get file list
     2. zip
     """
     zip_filename = "test-suite.zip"
     
-    # Define the pattern for matching "testcase-{i}.xml"
-    pattern = re.compile(r"testcase-\d+\.xml")
+    # Define the pattern for matching "testcase-{i}.xml"(cov) or "testcase.xml"(reach)
+    pattern1 = re.compile(r"testcase-\d+\.xml")
+    pattern2 = re.compile(r"testcase.xml")
     
     # List all files in the current directory
     files = os.listdir('.')
     
     # Filter files that match the pattern
-    matched_files = [file for file in files if pattern.match(file)]
+    matched_files = [file for file in files if pattern1.match(file) or pattern2.match(file)]
     
     # Add metadata.xml
     matched_files.append("metadata.xml")
@@ -172,7 +173,7 @@ def check_if_benchmark_contains_pthread(benchmark):
   return False
 
 
-def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
+def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, coverage):
   command_line = esbmc_path + dargs
 
   # Add benchmark
@@ -194,10 +195,13 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
   # Special case for termination, it runs regardless of the strategy
   if prop == Property.coverage:
     command_line += "--goto-unwind --base-k-step 5 --no-bounds-check --no-pointer-check --quiet "
-    command_line += "--branch-coverage "
     command_line += "--generate-testcase "
+    if coverage == "branch":
+      command_line += "--branch-coverage "
+    elif coverage == "condition":
+      command_line += "--condition-coverage-rm --no-cov-asserts "
   elif prop == Property.reach:
-    command_line += "--enable-unreachability-intrinsic "
+    command_line += "--base-k-step 5 --enable-unreachability-intrinsic "
     if concurrency:
       command_line += "--no-pointer-check --no-bounds-check "
     else:
@@ -224,9 +228,9 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs):
   return command_line
 
 
-def verify(strat, prop, concurrency, dargs):
+def verify(strat, prop, concurrency, dargs, coverage):
   # Get command line
-  esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency, dargs)
+  esbmc_command_line = get_command_line(strat, prop, arch, benchmark, concurrency, dargs, coverage)
 
   # Call ESBMC
   output = run(esbmc_command_line)
@@ -244,7 +248,7 @@ parser.add_argument("benchmark", nargs='?', help="Path to the benchmark")
 parser.add_argument("-s", "--strategy", help="ESBMC's strategy", choices=["kinduction", "falsi", "incr", "fixed"], default="fixed")
 parser.add_argument("-c", "--concurrency", help="Set concurrency flags", action='store_true')
 parser.add_argument("-n", "--dry-run", help="do not actually run ESBMC, just print the command", action='store_true')
-parser.add_argument("--ci", help="run this wrapper with special options for the CI (internal use)", action='store_true')
+parser.add_argument("-o","--coverage", help="run in coverage mode",  choices=["branch", "condition"])
 
 args = parser.parse_args()
 
@@ -254,6 +258,7 @@ property_file = args.propertyfile
 benchmark = args.benchmark
 strategy = args.strategy
 concurrency = args.concurrency
+coverage = args.coverage
 
 if version:
   print(do_exec(esbmc_path + "--version").decode()[6:].strip()),
@@ -294,7 +299,7 @@ else:
     print ("Unsupported Property")
     exit(1)
 
-result = verify(strategy, category_property, concurrency, esbmc_dargs)
+result = verify(strategy, category_property, concurrency, esbmc_dargs, coverage)
 print (get_result_string(result))
 
 createTestZipFile()
