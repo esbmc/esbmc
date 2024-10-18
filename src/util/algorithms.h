@@ -61,6 +61,10 @@ public:
   }
 
   bool run(goto_functionst &) override;
+  void setTarget(const std::string &_tgt)
+  {
+    target_function = _tgt;
+  }
 
 protected:
   virtual bool runOnFunction(std::pair<const dstring, goto_functiont> &F);
@@ -69,6 +73,7 @@ protected:
   {
     return false;
   }
+  std::string target_function = "";
 
 private:
   unsigned number_of_functions = 0;
