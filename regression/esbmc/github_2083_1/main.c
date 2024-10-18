@@ -3,8 +3,7 @@
 void foo(unsigned int x)
 {
 	x++;
-	if ((10 * x - 1) == 1001)
-		assert(0);
+	assert(x > 3);
 }
 
 int main()
