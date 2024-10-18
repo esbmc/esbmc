@@ -21,6 +21,18 @@ Our main website is [esbmc.org](http://esbmc.org).
 
 ### How to build/install ESBMC
 
+#### Mac OS X
+
+ESBMC works fine on ARM64 (M1/M2/M3/M4) Macs, however the compile option for GOTO_SYSROOT needs to be changed. Note that make -j8 can be increased to -j32 on faster Macs.
+````
+brew install z3
+brew install bison
+
+git clone https://github.com/esbmc/esbmc.git
+mkdir build && cd build
+cmake .. -DENABLE_Z3=1 -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
+make -j8
+````
 
 #### Ubuntu 24.04
 
