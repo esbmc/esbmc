@@ -23,8 +23,6 @@ bool assign_params_as_non_det::runOnFunction(
     E.g. func(int x, bool y) {...}
     =>
     func(int x, bool y)  { x = nondet_int(); y = nondet_bool(); ...}
-
-    Front insert, order does not matter
   */
   goto_programt &goto_program = F.second.body;
   auto it = (goto_program).instructions.begin();
@@ -54,6 +52,7 @@ bool assign_params_as_non_det::runOnFunction(
 
     // insert
     goto_program.insert_swap(it++, *assignment);
+    --it;
   }
 
   goto_program.update();
