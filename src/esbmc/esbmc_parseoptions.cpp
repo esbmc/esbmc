@@ -41,6 +41,7 @@ extern "C"
 #include <goto-programs/show_claims.h>
 #include <goto-programs/loop_unroll.h>
 #include <goto-programs/mark_decl_as_non_det.h>
+#include <goto-programs/assign_params_as_non_det.h>
 #include <goto2c/goto2c.h>
 #include <util/irep.h>
 #include <langapi/languages.h>
@@ -554,6 +555,13 @@ int esbmc_parseoptionst::doit()
     // Explicitly marking all declared variables as "nondet"
     goto_preprocess_algorithms.emplace_back(
       std::make_unique<mark_decl_as_non_det>(context));
+
+    if (cmdline.isset("function"))
+    {
+      // assign parameters to "nondet"
+      goto_preprocess_algorithms.emplace_back(
+        std::make_unique<assign_params_as_non_det>(context));
+    }
   }
 
   // Run this before the main flow. This method performs its own
@@ -1760,7 +1768,11 @@ bool esbmc_parseoptionst::process_goto_program(
 
     // Apply all the initialized algorithms
     for (auto &algorithm : goto_preprocess_algorithms)
+    {
+      if (cmdline.isset("function"))
+        algorithm->setTarget(cmdline.getval("function"));
       algorithm->run(goto_functions);
+    }
 
     // do partial inlining
     if (!cmdline.isset("no-inlining"))
@@ -2155,17 +2167,17 @@ void esbmc_parseoptionst::add_property_monitors(
   std::map<std::string, std::pair<std::set<std::string>, expr2tc>> monitors;
 
   context.foreach_operand([this, &monitors](const symbolt &s) {
-    if (
-      !has_prefix(s.name, "__ESBMC_property_") ||
-      s.name.as_string().find("$type") != std::string::npos)
-      return;
+      if (
+        !has_prefix(s.name, "__ESBMC_property_") ||
+        s.name.as_string().find("$type") != std::string::npos)
+        return;
 
-    // strip prefix "__ESBMC_property_"
-    std::string prop_name = s.name.as_string().substr(17);
-    std::set<std::string> used_syms;
-    expr2tc main_expr = calculate_a_property_monitor(prop_name, used_syms);
-    monitors[prop_name] = std::pair{used_syms, main_expr};
-  });
+      // strip prefix "__ESBMC_property_"
+      std::string prop_name = s.name.as_string().substr(17);
+      std::set<std::string> used_syms;
+      expr2tc main_expr = calculate_a_property_monitor(prop_name, used_syms);
+      monitors[prop_name] = std::pair{used_syms, main_expr};
+    });
 
   if (monitors.size() == 0)
     return;
@@ -2261,9 +2273,9 @@ static void collect_symbol_names(
   else
   {
     e->foreach_operand([&prefix, &used_syms](const expr2tc &e) {
-      if (!is_nil_expr(e))
-        collect_symbol_names(e, prefix, used_syms);
-    });
+        if (!is_nil_expr(e))
+          collect_symbol_names(e, prefix, used_syms);
+      });
   }
 }
 
