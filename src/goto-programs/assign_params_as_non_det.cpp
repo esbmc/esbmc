@@ -43,7 +43,6 @@ bool assign_params_as_non_det::runOnFunction(
     // assignment
     goto_programt tmp;
     goto_programt::targett assignment = tmp.add_instruction(ASSIGN);
-    assignment->location = it->location;
     assignment->function = it->location.get_function();
 
     code_assignt code_assign(lhs, rhs);
