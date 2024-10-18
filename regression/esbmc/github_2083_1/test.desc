@@ -2,6 +2,6 @@ CORE
 main.c
 --function foo
 
-\bx = 3435973936\b
-\bx = 3435973937\b
+\bx = 0\b
+\bx = 1\b
 ^VERIFICATION FAILED$
