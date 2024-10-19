@@ -26,6 +26,7 @@ bool assign_params_as_non_det::runOnFunction(
   */
   goto_programt &goto_program = F.second.body;
   auto it = (goto_program).instructions.begin();
+  locationt l = context.find_symbol(F.first)->location;
 
   for (const auto &arg : t.arguments())
   {
@@ -38,11 +39,12 @@ bool assign_params_as_non_det::runOnFunction(
     // rhs
     exprt rhs = exprt("sideeffect", lhs.type());
     rhs.statement("nondet");
-    rhs.location() = it->location;
+    rhs.location() = l;
 
     // assignment
     goto_programt tmp;
     goto_programt::targett assignment = tmp.add_instruction(ASSIGN);
+    assignment->location = l;
     assignment->function = it->location.get_function();
 
     code_assignt code_assign(lhs, rhs);
