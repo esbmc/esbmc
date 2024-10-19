@@ -41,6 +41,7 @@ extern "C"
 #include <goto-programs/show_claims.h>
 #include <goto-programs/loop_unroll.h>
 #include <goto-programs/mark_decl_as_non_det.h>
+#include <goto-programs/assign_params_as_non_det.h>
 #include <goto2c/goto2c.h>
 #include <util/irep.h>
 #include <langapi/languages.h>
@@ -554,6 +555,13 @@ int esbmc_parseoptionst::doit()
     // Explicitly marking all declared variables as "nondet"
     goto_preprocess_algorithms.emplace_back(
       std::make_unique<mark_decl_as_non_det>(context));
+
+    if (cmdline.isset("function"))
+    {
+      // assign parameters to "nondet"
+      goto_preprocess_algorithms.emplace_back(
+        std::make_unique<assign_params_as_non_det>(context));
+    }
   }
 
   // Run this before the main flow. This method performs its own
@@ -1760,7 +1768,11 @@ bool esbmc_parseoptionst::process_goto_program(
 
     // Apply all the initialized algorithms
     for (auto &algorithm : goto_preprocess_algorithms)
+    {
+      if (cmdline.isset("function"))
+        algorithm->setTarget(cmdline.getval("function"));
       algorithm->run(goto_functions);
+    }
 
     // do partial inlining
     if (!cmdline.isset("no-inlining"))
