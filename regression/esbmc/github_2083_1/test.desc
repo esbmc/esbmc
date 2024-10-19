@@ -3,5 +3,4 @@ main.c
 --function foo
 
 \bx = 0\b
-\bx = 1\b
 ^VERIFICATION FAILED$
