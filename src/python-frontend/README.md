@@ -9,7 +9,7 @@ The Python frontend handles the conversion of Python code into an internal repre
 3. Translating Python statements into a set of symbols in the irep format.
 
 The ESBMC backend finalizes the conversion by performing symbolic execution on the GOTO program, producing instructions in Single Static Assignment (SSA) form.
-Following symbolic execution, we generate a first-order logic formula which is then discharged by an SMT solver. </br></br>
+Following symbolic execution, we generate a first-order logic formula, which an SMT solver discharges. </br></br>
 
 <p align="center">
   <img src="./images/arch.png" alt="ESBMC Architecture" width="65%" />
@@ -69,11 +69,11 @@ Our method involves traversing the AST and replacing assignments with their corr
 }
 ```
 
-Currently, we can infer type from constants, variables with inferred or pre-annotated types, binary expressions, and class instances.
+We can infer type from constants, variables with inferred or pre-annotated types, binary expressions, and class instances.
 
 
 ## Symbol Table Generation
-The final step in the frontend involves converting the annotated JSON AST into a symbol table using our C++ irep API. This API enables the creation of a control-flow graph (CFG) from the program, allowing us to model constructs such as assignments, expressions, conditionals, loops, functions and classes. The resulting information is stored in a context structure, which serves as the input for the GOTO conversion process.
+The final step in the frontend involves converting the annotated JSON AST into a symbol table using our C++ irep API. This API enables the creation of a control-flow graph (CFG) from the program, allowing us to model constructs such as assignments, expressions, conditionals, loops, functions, and classes. The resulting information is stored in a context structure, which serves as the input for the GOTO conversion process.
 
 ## References
 For more information about our frontend, please refer to our ISSTA 2024 [tool paper](https://dl.acm.org/doi/abs/10.1145/3650212.3685304).
