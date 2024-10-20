@@ -23,7 +23,7 @@ Our main website is [esbmc.org](http://esbmc.org).
 
 #### Mac OS X
 
-ESBMC works fine on ARM64 (M1/M2/M3/M4) Macs, however the compile option for GOTO_SYSROOT needs to be changed. Note that make -j8 can be increased to -j32 on faster Macs.
+ESBMC works fine on ARM64 (M1/M2/M3/M4) Macs, assuming you have installed the MAC OS Dev tools. However, the compile option for GOTO_SYSROOT needs to be changed. Note that make -j8 can be increased to -j32 on faster Macs.
 ````
 brew install z3
 brew install bison
