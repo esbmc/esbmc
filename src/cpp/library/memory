@@ -135,13 +135,10 @@ public:
     return *this;
   }
 
-#if 0
-  // TODO: fix remove goto sideeffect
   ~unique_ptr()
   {
     deleter(ptr);
   }
-#endif
 
   T *operator->() const
   {

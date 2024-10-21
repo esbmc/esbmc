@@ -1,5 +1,5 @@
 CORE
 main.cpp
---unwind 2 --no-unwinding-assertions --error-label ERROR --depth 250 --timeout 900
+--unwind 2 --no-unwinding-assertions --error-label ERROR --depth 425 --no-pointer-check --no-bounds-check --timeout 900
 
 ^VERIFICATION FAILED$
