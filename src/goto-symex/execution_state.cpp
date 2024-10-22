@@ -1111,7 +1111,34 @@ bool execution_statet::has_cswitch_point_occured() const
   if (
     thread_last_reads[active_thread].size() != 0 ||
     thread_last_writes[active_thread].size() != 0)
-    return true;
+  {
+    // Although mutex could be global, we don't perform context switch for it.
+    for (auto &a : thread_last_writes[active_thread])
+    {
+      if (is_struct_type(a))
+      {
+        const struct_type2t &structtype = to_struct_type(a->type);
+        if (!has_prefix(
+              structtype.name, "struct __anon_typedef_pthread_mutex_t"))
+          return true;
+      }
+      else
+        return true;
+    }
+    for (auto &a : thread_last_reads[active_thread])
+    {
+      if (is_struct_type(a))
+      {
+        const struct_type2t &structtype = to_struct_type(a->type);
+        if (!has_prefix(
+              structtype.name, "struct __anon_typedef_pthread_mutex_t"))
+          return true;
+      }
+      else
+        return true;
+    }
+    return false;
+  }
 
   return false;
 }
