@@ -346,6 +346,11 @@ void value_sett::get_value_set_rec(
         else
           insert(dest, unknown2tc(original_type), BigInt(0));
       }
+      else if (is_constant_union2t(expr))
+      {
+        constant_union2t cu = to_constant_union2t(expr);
+        get_value_set_rec(cu.datatype_members[0], dest, suffix, original_type);
+      }
     }
     else
     {
