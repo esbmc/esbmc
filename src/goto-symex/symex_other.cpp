@@ -128,7 +128,7 @@ void goto_symext::symex_dead(const expr2tc code)
   cur_state->top().level1.get_ident_name(l1_sym);
 
   // Call free on alloca'd objects
-  if (identifier.as_string().find("return_value$_alloca") != std::string::npos)
+  if (identifier.as_string().find("return_value$_alloca$") != std::string::npos)
     symex_free(code_free2tc(l1_sym));
 
   // Erase from level 1 propagation
