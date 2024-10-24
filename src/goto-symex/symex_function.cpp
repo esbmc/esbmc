@@ -518,7 +518,7 @@ void goto_symext::pop_frame()
 
     // Call free on alloca'd objects
     if (
-      it.base_name.as_string().find("return_value$_alloca") !=
+      it.base_name.as_string().find("return_value$_alloca$") !=
       std::string::npos)
       symex_free(code_free2tc(l1_sym));
 
