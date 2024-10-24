@@ -125,6 +125,7 @@ public:
     std::vector<expr2tc> m)
     : constant_datatype_data(t, id, std::move(m)), init_field(init_field)
   {
+    assert(m.size() <= 1);
   }
   constant_union_data(const constant_union_data &) = default;
 
