@@ -61,8 +61,8 @@ if(WIN32)
   set(DEFAULT_LLVM_URL "https://gitlab.com/Anthonysdu/llvm11/-/raw/main/llvm+clang+lld-11.0.0-x86_64-windows-msvc-release-mt.zip")
   set(DEFAULT_LLVM_NAME "llvm+clang+lld-11.0.0-x86_64-windows-msvc-release-mt")
 
-  set(DEFAULT_Z3_URL "https://github.com/Z3Prover/z3/releases/download/z3-4.12.6/z3-4.12.6-x64-win.zip")
-  set(DEFAULT_Z3_NAME z3-4.12.6-x64-win)
+  set(DEFAULT_Z3_URL "https://github.com/Z3Prover/z3/releases/download/z3-4.13.3/z3-4.13.3-x64-win.zip")
+  set(DEFAULT_Z3_NAME z3-4.13.3-x64-win)
 
   set(MATHSAT_URL "https://mathsat.fbk.eu/download.php?file=mathsat-5.6.10-win64-msvc.zip")
   set(MATHSAT_NAME "mathsat-5.6.10-win64-msvc")
@@ -70,8 +70,8 @@ else()
   set(DEFAULT_LLVM_URL "https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.0/clang+llvm-16.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz")
   set(DEFAULT_LLVM_NAME "clang+llvm-16.0.0-x86_64-linux-gnu-ubuntu-18.04")
 
-  set(DEFAULT_Z3_URL "https://github.com/Z3Prover/z3/releases/download/z3-4.12.6/z3-4.12.6-x64-glibc-2.35.zip")
-  set(DEFAULT_Z3_NAME z3-4.12.6-x64-glibc-2.35)
+  set(DEFAULT_Z3_URL "https://github.com/Z3Prover/z3/releases/download/z3-4.13.3/z3-4.13.3-x64-glibc-2.35.zip")
+  set(DEFAULT_Z3_NAME z3-4.13.3-x64-glibc-2.35)
 
   set(MATHSAT_URL "https://mathsat.fbk.eu/download.php?file=mathsat-5.6.10-linux-x86_64.tar.gz")
   set(MATHSAT_NAME "mathsat-5.6.10-linux-x86_64")
