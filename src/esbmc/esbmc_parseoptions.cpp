@@ -490,6 +490,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   if (cmdline.isset("cvc"))
     options.set_option("cvc4", true);
 
+  if (cmdline.isset("log-message"))
+    options.set_option("log-message", true);
+
   config.options = options;
 }
 
