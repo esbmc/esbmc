@@ -42,6 +42,11 @@ elseif (DEFINED ESBMC_CHERI AND NOT ESBMC_CHERI AND ESBMC_CHERI_CLANG)
   unset(ESBMC_CHERI_CLANG_MORELLO)
 endif()
 
+if (${LLVM_VERSION_MAJOR} GREATER ${MAX_SUPPORTED_LLVM_VERSION_MAJOR})
+  message(WARNING "LLVM version ${LLVM_VERSION_MAJOR} is greater than maximum "
+                  "supported (${MAX_SUPPORTED_LLVM_VERSION_MAJOR})")
+endif()
+
 if (${LLVM_VERSION_MAJOR} LESS 11)
   message(FATAL_ERROR "Could not find LLVM/Clang >= 11.0 at all: please specify with -DLLVM_DIR/-DClang_DIR")
 else()
