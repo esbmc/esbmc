@@ -1112,6 +1112,53 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  case clang::Stmt::ArrayInitLoopExprClass:
+  {
+    const clang::ArrayInitLoopExpr &aile =
+      static_cast<const clang::ArrayInitLoopExpr &>(stmt);
+
+    exprt common;
+    if (get_expr(*aile.getCommonExpr(), common))
+      return true;
+
+    exprt init;
+    if (get_expr(*aile.getSubExpr(), init))
+      return true;
+
+    index_exprt ind = to_index_expr(init);
+
+    const llvm::APInt &Int = aile.getArraySize();
+    exprt inits("constant", common.type());
+    // { ref->arr[0], ref->arr[1], ... ,ref->arr[i]}
+    for (unsigned int i = 0; i < Int.getSExtValue(); ++i)
+    {
+      exprt new_index = constant_exprt(
+        integer2binary(i, bv_width(ind.index().type())),
+        integer2string(i),
+        ind.index().type());
+      
+      ind.index() = new_index;
+      inits.copy_to_operands(ind);
+    }
+    new_expr = inits;
+
+    break;
+  }
+
+  case clang::Stmt::ArrayInitIndexExprClass:
+  {
+    const clang::ArrayInitIndexExpr &aiie =
+      static_cast<const clang::ArrayInitIndexExpr &>(stmt);
+
+    typet t;
+    if (get_type(aiie.getType(), t))
+      return true;
+
+    new_expr = gen_zero(t);
+
+    break;
+  }
+
   default:
     if (clang_c_convertert::get_expr(stmt, new_expr))
       return true;
