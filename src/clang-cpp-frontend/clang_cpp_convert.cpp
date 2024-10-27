@@ -1136,7 +1136,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         integer2binary(i, bv_width(ind.index().type())),
         integer2string(i),
         ind.index().type());
-      
+
       ind.index() = new_index;
       inits.copy_to_operands(ind);
     }
