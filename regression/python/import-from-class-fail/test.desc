@@ -1,4 +1,4 @@
 CORE
 main.py
 
-ERROR: Type undefined for:\s*$
+ERROR: Type inference failed*

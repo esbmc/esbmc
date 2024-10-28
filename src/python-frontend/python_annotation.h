@@ -210,8 +210,13 @@ private:
 
     if (rhs_node.empty())
     {
-      log_error("Variable {} not found.", rhs_var_name.c_str());
-      abort();
+      const auto &lineno = element["lineno"].template get<int>();
+
+      std::ostringstream oss;
+      oss << "Type inference failed at line " << lineno;
+      oss << ". Variable " << rhs_var_name << " not found";
+
+      throw std::runtime_error(oss.str());
     }
 
     return rhs_node["annotation"]["id"];
@@ -343,8 +348,13 @@ private:
 
       if (inferred_type.empty())
       {
-        log_error("Type undefined for:\n{}", element.dump(2).c_str());
-        abort();
+        const auto &lineno = element["lineno"].template get<int>();
+
+        std::ostringstream oss;
+        oss << "Type inference failed for "
+            << stmt_type.template get<std::string>() << " at line " << lineno;
+
+        throw std::runtime_error(oss.str());
       }
 
       update_assignment_node(element, inferred_type);

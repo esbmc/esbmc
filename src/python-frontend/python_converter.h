@@ -16,7 +16,7 @@ class python_converter
 {
 public:
   python_converter(contextt &_context, const nlohmann::json &ast);
-  bool convert();
+  void convert();
 
 private:
   void get_var_assign(const nlohmann::json &ast_node, codet &target_block);
