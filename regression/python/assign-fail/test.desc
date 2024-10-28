@@ -1,4 +1,4 @@
 CORE
 main.py
 
-ERROR: Variable q not found.
+ERROR: Type inference failed at line 1. Variable q not found
