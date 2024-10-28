@@ -69,6 +69,7 @@ The user can also download the latest ESBMC binary for Ubuntu and Windows from t
 As an illustrative example to show some of the ESBMC features, consider the following C code:
 
 ````C
+#include <assert.h>
 #include <math.h>
 int main() {
   unsigned int N = nondet_uint();
