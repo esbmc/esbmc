@@ -1128,9 +1128,10 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     index_exprt ind = to_index_expr(init);
 
     const llvm::APInt &Int = aile.getArraySize();
+    std::size_t size = Int.getSExtValue();
     exprt inits("constant", common.type());
     // { ref->arr[0], ref->arr[1], ... ,ref->arr[i]}
-    for (unsigned int i = 0; i < Int.getSExtValue(); ++i)
+    for (std::size_t i = 0; i < size; ++i)
     {
       exprt new_index = constant_exprt(
         integer2binary(i, bv_width(ind.index().type())),
