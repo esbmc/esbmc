@@ -490,6 +490,22 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   if (cmdline.isset("cvc"))
     options.set_option("cvc4", true);
 
+  if (
+    cmdline.isset("no-standard-checks") ||
+    options.get_bool_option("no-standard-checks"))
+  {
+    options.set_option("no-pointer-check", true);
+    options.set_option("no-div-by-zero-check", true);
+    options.set_option("no-pointer-relation-check", true);
+    options.set_option("no-unlimited-scanf-check", true);
+    options.set_option("no-vla-size-check", true);
+    options.set_option("no-align-check", true);
+    options.set_option("no-bounds-check", true);
+    //?
+    // options.set_option("no-abnormal-memory-leak", true);
+    // options.set_option("no-reachable-memory-leak", true);
+  }
+
   config.options = options;
 }
 
@@ -1888,7 +1904,7 @@ bool esbmc_parseoptionst::process_goto_program(
       options.set_option("base-case", true);
       options.set_option("multi-property", true);
       options.set_option("keep-verified-claims", false);
-      options.set_option("no-pointer-check", true);
+      options.set_option("no-standard-checks", true);
 
       // enable '--no-unwinding-assertions' if '--unwind' is enabled
       if (cmdline.isset("unwind"))
@@ -1910,7 +1926,7 @@ bool esbmc_parseoptionst::process_goto_program(
       options.set_option("multi-property", true);
       options.set_option("keep-verified-claims", false);
       // prevent adding property checking assertions during SymEx
-      options.set_option("no-pointer-check", true);
+      options.set_option("no-standard-checks", true);
       // unreachable conditions should be also considered as short-circuited
 
       // enable '--no-unwinding-assertions' if '--unwind' is enabled
@@ -1968,7 +1984,7 @@ bool esbmc_parseoptionst::process_goto_program(
       options.set_option("base-case", true);
       options.set_option("multi-property", true);
       options.set_option("keep-verified-claims", false);
-      options.set_option("no-pointer-check", true);
+      options.set_option("no-standard-checks", true);
 
       // enable '--no-unwinding-assertions' if '--unwind' is enabled
       if (cmdline.isset("unwind"))
@@ -2167,17 +2183,17 @@ void esbmc_parseoptionst::add_property_monitors(
   std::map<std::string, std::pair<std::set<std::string>, expr2tc>> monitors;
 
   context.foreach_operand([this, &monitors](const symbolt &s) {
-    if (
-      !has_prefix(s.name, "__ESBMC_property_") ||
-      s.name.as_string().find("$type") != std::string::npos)
-      return;
+      if (
+        !has_prefix(s.name, "__ESBMC_property_") ||
+        s.name.as_string().find("$type") != std::string::npos)
+        return;
 
-    // strip prefix "__ESBMC_property_"
-    std::string prop_name = s.name.as_string().substr(17);
-    std::set<std::string> used_syms;
-    expr2tc main_expr = calculate_a_property_monitor(prop_name, used_syms);
-    monitors[prop_name] = std::pair{used_syms, main_expr};
-  });
+      // strip prefix "__ESBMC_property_"
+      std::string prop_name = s.name.as_string().substr(17);
+      std::set<std::string> used_syms;
+      expr2tc main_expr = calculate_a_property_monitor(prop_name, used_syms);
+      monitors[prop_name] = std::pair{used_syms, main_expr};
+    });
 
   if (monitors.size() == 0)
     return;
@@ -2273,9 +2289,9 @@ static void collect_symbol_names(
   else
   {
     e->foreach_operand([&prefix, &used_syms](const expr2tc &e) {
-      if (!is_nil_expr(e))
-        collect_symbol_names(e, prefix, used_syms);
-    });
+        if (!is_nil_expr(e))
+          collect_symbol_names(e, prefix, used_syms);
+      });
   }
 }
 
