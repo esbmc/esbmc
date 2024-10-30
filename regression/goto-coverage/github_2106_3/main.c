@@ -1,21 +1,16 @@
-#include <stdbool.h>
-
-int a[20];
-
-bool foo(int il)
+int foo(int a, int b)
 {
-    return a[1];
+  if(a>0)
+    printf("a>0\n");
+  else if(b == 2)
+    printf("b == 2\n");
+  return a + b;
 }
 
 int main()
 {
-    int il;
-    for (il = 0; foo(il) && il < 10; ++il)
-    {
-    }
-    // if(1 && 2 && 3 && 4);
-
-    for (il = 0; il < 10 && foo(il); ++il)
-    {
-    }
+  int x = nondet_int();
+  int y = nondet_int();
+  assert(foo(x,y) == 10);
+  return 0;
 }
