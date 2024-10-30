@@ -1,3 +1,6 @@
+#include <stdio.h>
+#include <assert.h>
+
 int foo(int a, int b)
 {
   if(a>0)
