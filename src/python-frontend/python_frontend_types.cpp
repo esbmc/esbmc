@@ -25,7 +25,9 @@ bool is_consensus_func(const std::string &name)
 
 bool is_model_func(const std::string &name)
 {
-  return (name == "ESBMC_range_next_" || name == "ESBMC_range_has_next_");
+  return (
+    name == "ESBMC_range_next_" || name == "ESBMC_range_has_next_" ||
+    name == "bit_length" || name == "from_bytes" || name == "to_bytes");
 }
 
 std::string get_type_from_consensus_func(const std::string &name)

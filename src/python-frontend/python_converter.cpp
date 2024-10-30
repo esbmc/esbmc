@@ -787,22 +787,18 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   }
 
   const std::string function = config.options.get_option("function");
+  // To verify a specific function, it is necessary to load the definitions of functions it calls.
   if (!function.empty() && !is_loading_models)
   {
     std::string func_name("");
     if (element["func"]["_type"] == "Name")
       func_name = element["func"]["id"];
     else if (element["func"]["_type"] == "Attribute")
-    {
-      func_name = element["func"]["value"]["id"];
-      const std::string &obj_type = get_var_type(func_name);
-      if (!obj_type.empty())
-        func_name = obj_type;
-    }
+      func_name = element["func"]["attr"];
 
     if (
       !is_builtin_type(func_name) && !is_consensus_type(func_name) &&
-      !is_consensus_func(func_name))
+      !is_consensus_func(func_name) && !is_model_func(func_name))
     {
       const auto &func_node = find_function(ast_json["body"], func_name);
       assert(!func_node.empty());
