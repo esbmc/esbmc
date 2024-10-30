@@ -27,6 +27,10 @@ void goto_coveraget::replace_all_asserts_to_guard(
   Forall_goto_functions (f_it, goto_functions)
     if (f_it->second.body_available && f_it->first != "__ESBMC_main")
     {
+      // "--function" mode
+      if (target_function != "" && !is_target_func(f_it->first))
+        continue;
+
       goto_programt &goto_program = f_it->second.body;
       std::string cur_filename;
       Forall_goto_program_instructions (it, goto_program)
@@ -100,6 +104,10 @@ void goto_coveraget::branch_function_coverage()
   Forall_goto_functions (f_it, goto_functions)
     if (f_it->second.body_available && f_it->first != "__ESBMC_main")
     {
+      // "--function" mode
+      if (target_function != "" && !is_target_func(f_it->first))
+        continue;
+
       goto_programt &goto_program = f_it->second.body;
       std::string cur_filename;
       bool flg = true;
@@ -165,6 +173,10 @@ void goto_coveraget::branch_coverage()
   Forall_goto_functions (f_it, goto_functions)
     if (f_it->second.body_available && f_it->first != "__ESBMC_main")
     {
+      // "--function" mode
+      if (target_function != "" && !is_target_func(f_it->first))
+        continue;
+
       goto_programt &goto_program = f_it->second.body;
       std::string cur_filename;
 
@@ -242,6 +254,10 @@ int goto_coveraget::get_total_instrument() const
   forall_goto_functions (f_it, goto_functions)
     if (f_it->second.body_available && f_it->first != "__ESBMC_main")
     {
+      // speed up
+      if (target_function != "" && !is_target_func(f_it->first))
+        continue;
+
       const goto_programt &goto_program = f_it->second.body;
       forall_goto_program_instructions (it, goto_program)
       {
@@ -276,6 +292,9 @@ goto_coveraget::get_total_cond_assert() const
   {
     if (f_it->second.body_available && f_it->first != "__ESBMC_main")
     {
+      if (target_function != "" && !is_target_func(f_it->first))
+        continue;
+
       const goto_programt &goto_program = f_it->second.body;
       forall_goto_program_instructions (it, goto_program)
       {
@@ -322,6 +341,10 @@ void goto_coveraget::condition_coverage()
   Forall_goto_functions (f_it, goto_functions)
     if (f_it->second.body_available && f_it->first != "__ESBMC_main")
     {
+      // "--function" mode
+      if (target_function != "" && !is_target_func(f_it->first))
+        continue;
+
       goto_programt &goto_program = f_it->second.body;
       std::string cur_filename;
       Forall_goto_program_instructions (it, goto_program)
@@ -758,4 +781,26 @@ void goto_coveraget::handle_operands_guard(
       gen_cond_cov_assert(expr, pre_cond, goto_program, it);
     }
   }
+}
+
+// set the target function from "--function"
+void goto_coveraget::set_target(const std::string &_tgt)
+{
+  target_function = _tgt;
+}
+
+// check if it's the target function
+bool goto_coveraget::is_target_func(const irep_idt &f) const
+{
+  if (ns.lookup(f) == nullptr)
+  {
+    log_error("Cannot find target function");
+    abort();
+  }
+
+  exprt symbol = symbol_expr(*ns.lookup(f));
+  if (symbol.name().as_string() != target_function)
+    return false;
+
+  return true;
 }
