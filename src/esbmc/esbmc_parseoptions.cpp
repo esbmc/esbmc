@@ -490,22 +490,6 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   if (cmdline.isset("cvc"))
     options.set_option("cvc4", true);
 
-  if (
-    cmdline.isset("no-standard-checks") ||
-    options.get_bool_option("no-standard-checks"))
-  {
-    options.set_option("no-pointer-check", true);
-    options.set_option("no-div-by-zero-check", true);
-    options.set_option("no-pointer-relation-check", true);
-    options.set_option("no-unlimited-scanf-check", true);
-    options.set_option("no-vla-size-check", true);
-    options.set_option("no-align-check", true);
-    options.set_option("no-bounds-check", true);
-    //?
-    // options.set_option("no-abnormal-memory-leak", true);
-    // options.set_option("no-reachable-memory-leak", true);
-  }
-
   config.options = options;
 }
 
@@ -1771,6 +1755,23 @@ bool esbmc_parseoptionst::process_goto_program(
                         cmdline.isset("branch-function-coverage") ||
                         cmdline.isset("branch-function-coverage-claims");
 
+    // this should be before goto_check()
+    if (
+      cmdline.isset("no-standard-checks") ||
+      options.get_bool_option("no-standard-checks"))
+    {
+      options.set_option("no-pointer-check", true);
+      options.set_option("no-div-by-zero-check", true);
+      options.set_option("no-pointer-relation-check", true);
+      options.set_option("no-unlimited-scanf-check", true);
+      options.set_option("no-vla-size-check", true);
+      options.set_option("no-align-check", true);
+      options.set_option("no-bounds-check", true);
+      //?
+      // options.set_option("no-abnormal-memory-leak", true);
+      // options.set_option("no-reachable-memory-leak", true);
+    }
+
     // Start by removing all no-op instructions and unreachable code
     if (!(cmdline.isset("no-remove-no-op")))
       remove_no_op(goto_functions);
@@ -2191,7 +2192,9 @@ void esbmc_parseoptionst::add_property_monitors(
 {
   std::map<std::string, std::pair<std::set<std::string>, expr2tc>> monitors;
 
-  context.foreach_operand([this, &monitors](const symbolt &s) {
+  context.foreach_operand(
+    [this, &monitors](const symbolt &s)
+    {
       if (
         !has_prefix(s.name, "__ESBMC_property_") ||
         s.name.as_string().find("$type") != std::string::npos)
@@ -2297,7 +2300,9 @@ static void collect_symbol_names(
   }
   else
   {
-    e->foreach_operand([&prefix, &used_syms](const expr2tc &e) {
+    e->foreach_operand(
+      [&prefix, &used_syms](const expr2tc &e)
+      {
         if (!is_nil_expr(e))
           collect_symbol_names(e, prefix, used_syms);
       });
@@ -2392,9 +2397,8 @@ static unsigned int calc_globals_used(const namespacet &ns, const expr2tc &expr)
   {
     unsigned int globals = 0;
 
-    expr->foreach_operand([&globals, &ns](const expr2tc &e) {
-      globals += calc_globals_used(ns, e);
-    });
+    expr->foreach_operand([&globals, &ns](const expr2tc &e)
+                          { globals += calc_globals_used(ns, e); });
 
     return globals;
   }
