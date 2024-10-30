@@ -1,4 +1,4 @@
 CORE
 main.py
 
-ERROR: Type inference failed*
+ERROR: Function "MyClass" not found.

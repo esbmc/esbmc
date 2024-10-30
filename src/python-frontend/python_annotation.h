@@ -155,19 +155,33 @@ private:
   std::string
   get_function_return_type(const std::string &func_name, const Json &ast)
   {
+    // Get type from nondet_<type> functions
+    if (func_name.find("nondet_") == 0)
+    {
+      size_t last_underscore_pos = func_name.find_last_of('_');
+      if (last_underscore_pos != std::string::npos)
+      {
+        // Return the substring from the position after the last underscore to the end
+        return func_name.substr(last_underscore_pos + 1);
+      }
+    }
+
     for (const Json &elem : ast["body"])
     {
-      if (
-        elem["_type"] == "FunctionDef" && elem["name"] == func_name &&
-        elem.contains("returns") && !elem["returns"].is_null())
+      if (elem["_type"] == "FunctionDef" && elem["name"] == func_name)
       {
+        if (!elem.contains("returns") || elem["returns"].is_null())
+          throw std::runtime_error(
+            "All functions must include type annotations for parameters and "
+            "return types.");
+
         if (elem["returns"]["_type"] == "Subscript")
           return elem["returns"]["value"]["id"];
         else
           return elem["returns"]["id"];
       }
     }
-    return std::string();
+    throw std::runtime_error("Function \"" + func_name + "\" not found.");
   }
 
   std::string get_type_from_lhs(const std::string &id, Json &body)
