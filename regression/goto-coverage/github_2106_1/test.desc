@@ -1,6 +1,6 @@
 CORE
 main.c
---condition-coverage --k-induction --base-k-step 3  
+--condition-coverage --k-induction --base-k-step 3 --no-standard-checks
 ^Reached Conditions:  6
 ^Short Circuited Conditions:  6
 ^Total Conditions:  12
