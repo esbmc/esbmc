@@ -1756,7 +1756,7 @@ bool esbmc_parseoptionst::process_goto_program(
                         cmdline.isset("branch-function-coverage-claims");
 
     // this should be before goto_check()
-    if (is_coverage ||
+    if (
       cmdline.isset("no-standard-checks") ||
       options.get_bool_option("no-standard-checks"))
     {
@@ -1905,7 +1905,7 @@ bool esbmc_parseoptionst::process_goto_program(
       options.set_option("base-case", true);
       options.set_option("multi-property", true);
       options.set_option("keep-verified-claims", false);
-      options.set_option("no-standard-checks", true);
+      options.set_option("no-pointer-check", true);
 
       // enable '--no-unwinding-assertions' if '--unwind' is enabled
       if (cmdline.isset("unwind"))
@@ -1930,7 +1930,7 @@ bool esbmc_parseoptionst::process_goto_program(
       options.set_option("multi-property", true);
       options.set_option("keep-verified-claims", false);
       // prevent adding property checking assertions during SymEx
-      options.set_option("no-standard-checks", true);
+      options.set_option("no-pointer-check", true);
       // unreachable conditions should be also considered as short-circuited
 
       // enable '--no-unwinding-assertions' if '--unwind' is enabled
@@ -1994,7 +1994,7 @@ bool esbmc_parseoptionst::process_goto_program(
       options.set_option("base-case", true);
       options.set_option("multi-property", true);
       options.set_option("keep-verified-claims", false);
-      options.set_option("no-standard-checks", true);
+      options.set_option("no-pointer-check", true);
 
       // enable '--no-unwinding-assertions' if '--unwind' is enabled
       if (cmdline.isset("unwind"))
