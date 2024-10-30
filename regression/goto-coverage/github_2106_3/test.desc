@@ -1,5 +1,7 @@
 CORE
 main.c
- --condition-coverage-claims --no-cov-asserts --unwind 10 
-^Short Circuited Conditions:  2
+--condition-coverage --k-induction --base-k-step 3 --function foo
+^Reached Conditions:  4
+^Short Circuited Conditions:  0
+^Total Conditions:  4
 ^VERIFICATION FAILED$

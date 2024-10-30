@@ -1,21 +1,51 @@
-#include <stdbool.h>
+#include <assert.h>
+#include <stdlib.h>
 
-int a[20];
-
-bool foo(int il)
+int y()
 {
-    return a[1];
+    int f = rand();
+    while (f)
+        return 2;
+}
+
+int x()
+{
+    int f = rand();
+    if (f)
+    {
+        return 1;
+    }
+    else if (f == 2)
+    {
+        return 0;
+    }
+    else
+    {
+    }
+    x();
+    return 2;
 }
 
 int main()
 {
-    int il;
-    for (il = 0; foo(il) && il < 10; ++il)
+    int a, b;
+    int f = a > b; // rand();
+    if (f)
     {
+        f = x();
     }
-    // if(1 && 2 && 3 && 4);
+    else
+    {
+        f = x();
+    }
 
-    for (il = 0; il < 10 && foo(il); ++il)
+    while (a != b)
     {
+        for (int i = 0; i < 10; i++)
+        {
+        }
+        a = b;
     }
+
+    f = 2;
 }
