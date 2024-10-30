@@ -1912,6 +1912,9 @@ bool esbmc_parseoptionst::process_goto_program(
 
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);
+      // for function mode
+      if (cmdline.isset("function"))
+        tmp.set_target(cmdline.getval("function"));
       tmp.assertion_coverage();
     }
 
@@ -1945,6 +1948,9 @@ bool esbmc_parseoptionst::process_goto_program(
 
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);
+      // for function mode
+      if (cmdline.isset("function"))
+        tmp.set_target(cmdline.getval("function"));
 
       // if we do not want to count the guard in the assertions
       if (cmdline.isset("no-cov-asserts"))
@@ -1974,6 +1980,9 @@ bool esbmc_parseoptionst::process_goto_program(
 
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);
+      // for function mode
+      if (cmdline.isset("function"))
+        tmp.set_target(cmdline.getval("function"));
       tmp.branch_coverage();
     }
     if (
