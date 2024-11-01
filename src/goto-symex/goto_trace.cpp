@@ -367,6 +367,8 @@ void show_goto_trace(
 {
   unsigned prev_step_nr = 0;
   bool first_step = true;
+  
+  out << "<TEST CASE LOG> ===== Beginning Test Case Trace =====\n";
 
   for (const auto &step : goto_trace.steps)
   {
@@ -375,52 +377,57 @@ void show_goto_trace(
     case goto_trace_stept::ASSERT:
       if (!step.guard)
       {
-        show_state_header(out, step, step.pc->location, step.step_nr);
-        out << "Violated property:"
-            << "\n";
-        if (!step.pc->location.is_nil())
-          out << "  " << step.pc->location << "\n";
+        out << "<TEST CASE LOG> ASSERTION VIOLATION\n";
+        if (!step.pc->location.is_nil()) {
+          out << "<TEST CASE LOG> Location: " << step.pc->location << "\n";
+          out << "<TEST CASE LOG> Line: " << step.pc->location.get_line() << "\n";
+        }
+        
+        out << "<TEST CASE LOG> Property: " << step.comment << "\n";
+        
+        if (step.pc->is_assert())
+          out << "<TEST CASE LOG> Assertion: " << from_expr(ns, "", step.pc->guard) << "\n";
+
         if (config.options.get_bool_option("show-stacktrace"))
         {
-          // Print stack trace
-          out << "Stack trace:" << std::endl;
+          out << "<TEST CASE LOG> Stack trace:\n";
           for (const auto &it : step.stack_trace)
           {
             if (it.src == nullptr)
-              out << "  " << it.function.as_string() << std::endl;
+              out << "<TEST CASE LOG>   " << it.function.as_string() << "\n";
             else
             {
-              out << "  " << it.function.as_string();
+              out << "<TEST CASE LOG>   " << it.function.as_string();
               if (it.src->pc->location.is_not_nil())
-                out << " at " << it.src->pc->location << std::endl;
+                out << " at " << it.src->pc->location 
+                    << " (Line: " << it.src->pc->location.get_line() << ")\n";
               else
-                out << std::endl;
+                out << "\n";
             }
           }
         }
-
-        out << "  " << step.comment << "\n";
-
-        if (step.pc->is_assert())
-          out << "  " << from_expr(ns, "", step.pc->guard) << "\n";
-
-        // Having printed a property violation, don't print more steps.
         return;
       }
       break;
 
     case goto_trace_stept::ASSIGNMENT:
-      if (
-        step.pc->is_assign() || step.pc->is_return() ||
-        (step.pc->is_other() && is_nil_expr(step.lhs)) ||
-        step.pc->is_function_call())
+      if (step.pc->is_assign() || step.pc->is_return() ||
+          (step.pc->is_other() && is_nil_expr(step.lhs)) ||
+          step.pc->is_function_call())
       {
         if (prev_step_nr != step.step_nr || first_step)
         {
           first_step = false;
           prev_step_nr = step.step_nr;
-          show_state_header(out, step, step.pc->location, step.step_nr);
+          out << "<TEST CASE LOG> Step " << step.step_nr;
+          if (!step.pc->location.is_nil()) {
+            out << " at " << step.pc->location;
+            out << " (Line: " << step.pc->location.get_line() << ")";
+          }
+          out << " Thread " << step.thread_nr << "\n";
         }
+        
+        out << "<TEST CASE LOG> Assignment: ";
         counterexample_value(out, ns, step.lhs, step.value);
       }
       break;
@@ -428,6 +435,11 @@ void show_goto_trace(
     case goto_trace_stept::OUTPUT:
     {
       printf_formattert printf_formatter;
+      out << "<TEST CASE LOG> Program output";
+      if (!step.pc->location.is_nil())
+        out << " at line " << step.pc->location.get_line() << ": ";
+      else
+        out << ": ";
       printf_formatter(step.format_string, step.output_args);
       printf_formatter.print(out);
       out << "\n";
@@ -435,17 +447,29 @@ void show_goto_trace(
     }
 
     case goto_trace_stept::RENUMBER:
-      out << "Renumbered pointer to ";
+      out << "<TEST CASE LOG> Pointer renumbering";
+      if (!step.pc->location.is_nil())
+        out << " at line " << step.pc->location.get_line() << ": ";
+      else
+        out << ": ";
       counterexample_value(out, ns, step.lhs, step.value);
       break;
 
     case goto_trace_stept::ASSUME:
+      out << "<TEST CASE LOG> Assumption";
+      if (!step.pc->location.is_nil())
+        out << " at line " << step.pc->location.get_line() << ": "
+            << step.pc->location << "\n";
+      break;
+
     case goto_trace_stept::SKIP:
-      // Something deliberately ignored
+      // Skip without logging
       break;
 
     default:
       assert(false);
     }
   }
+  
+  out << "<TEST CASE LOG> ===== End of Test Case Trace =====\n";
 }
