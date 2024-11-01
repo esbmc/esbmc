@@ -367,11 +367,27 @@ void show_goto_trace(
 {
   unsigned prev_step_nr = 0;
   bool first_step = true;
+  std::string prev_line;
   
   out << "<TEST CASE LOG> ===== Beginning Test Case Trace =====\n";
+  out << "<TEST CASE LOG> Showing all lines traversed:\n";
 
   for (const auto &step : goto_trace.steps)
   {
+    // First log the current line being traversed if it's different from previous
+    if (!step.pc->location.is_nil())
+    {
+      std::string current_line = step.pc->location.get_line().as_string();
+      if (current_line != prev_line)
+      {
+        out << "<TEST CASE LOG> Traversed line " << current_line 
+            << " in " << step.pc->location.get_file() 
+            << " (" << step.pc->location.get_function() << ")\n";
+        prev_line = current_line;
+      }
+    }
+
+    // Then continue with the regular trace logging
     switch (step.type)
     {
     case goto_trace_stept::ASSERT:
@@ -463,7 +479,7 @@ void show_goto_trace(
       break;
 
     case goto_trace_stept::SKIP:
-      // Skip without logging
+      // Even for skips, show the line if it's different
       break;
 
     default:
@@ -473,3 +489,5 @@ void show_goto_trace(
   
   out << "<TEST CASE LOG> ===== End of Test Case Trace =====\n";
 }
+
+// End of file
