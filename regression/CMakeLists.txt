@@ -5,6 +5,13 @@ enable_testing()
 find_package(Python)
 # TODO: Use add dependency
 
+if(ENABLE_PYTHON_FRONTEND)
+# Install Jira package with pip before running tests (needed by regression/python/try-fail)
+execute_process(
+    COMMAND ${Python_EXECUTABLE} -m pip install jira
+)
+endif()
+
 set(ESBMC_REGRESSION_TOOL "${CMAKE_CURRENT_SOURCE_DIR}/testing_tool.py")
 
 if(BENCHBRINGUP)
