@@ -15,6 +15,10 @@
 #include <stack>
 #include <set>
 #include <map>
+#include <nlohmann/json.hpp>
+
+
+using json = nlohmann::json;
 
 void goto_tracet::output(const class namespacet &ns, std::ostream &out) const
 {
@@ -370,24 +374,36 @@ void show_goto_trace(
   const namespacet &ns,
   const goto_tracet &goto_trace)
 {
+  using json = nlohmann::json;
+
   unsigned prev_step_nr = 0;
   bool first_step = true;
   std::string prev_line = "";
   std::map<std::string, std::string> variable_values;
   std::set<std::string> functions_called;
   
-  // Load source file contents if available
+  // JSON data structure
+  json test_data;
+  test_data["type"] = "coverage_report";
+  test_data["timestamp"] = std::time(nullptr);
+  test_data["files"] = json::object();
+  test_data["execution_path"] = json::array();
+  test_data["variables"] = json::object();
+  test_data["functions"] = json::array();
+  
+  // Load source files and track coverage
   std::map<std::string, std::vector<std::string>> source_files;
+  std::map<std::string, std::set<int>> covered_lines;
   std::set<std::string> files_to_load;
   
-  // First collect all files we need
+  // Collect files
   for (const auto &step : goto_trace.steps) {
     if (!step.pc->location.is_nil()) {
       files_to_load.insert(step.pc->location.get_file().as_string());
     }
   }
   
-  // Load each file's contents
+  // Load file contents and initialize coverage tracking
   for (const auto& file : files_to_load) {
     std::ifstream source_file(file);
     if (source_file.is_open()) {
@@ -397,334 +413,210 @@ void show_goto_trace(
         lines.push_back(line);
       }
       source_files[file] = lines;
+      
+      test_data["files"][file] = {
+        {"total_lines", lines.size()},
+        {"covered_lines", json::array()},
+        {"source", lines},
+        {"coverage", json::array()}
+      };
     }
   }
 
-  out << "<TEST CASE LOG> ===== Starting Trace for " 
-      << (goto_trace.steps.empty() ? "unknown" : goto_trace.steps.front().pc->location.get_file().as_string())
-      << " =====\n";
-  
-  // Original counterexample format with added TEST CASE LOG markers
+  // Process trace steps
   for (const auto &step : goto_trace.steps)
   {
-    // Track function calls
-    if (step.pc->is_function_call() && !step.pc->location.is_nil()) {
-      std::string func_name = step.pc->location.get_function().as_string();
-      functions_called.insert(func_name);
-      out << "<TEST CASE LOG> FUNCTION CALL: " << func_name 
-          << " at line " << step.pc->location.get_line().as_string();
-      
-      // Add source code if available
-      if (!step.pc->location.is_nil()) {
-        std::string current_file = step.pc->location.get_file().as_string();
-        if (source_files.find(current_file) != source_files.end()) {
-          int line_num = std::stoi(step.pc->location.get_line().as_string());
-          if (line_num > 0 && line_num <= static_cast<int>(source_files[current_file].size())) {
-            out << "\n<TEST CASE LOG>   Source: " << source_files[current_file][line_num - 1];
-          }
-        }
-      }
-      out << "\n";
-    }
-
-    // Declare current_file outside switch
-    std::string current_file;
+    json step_data;
+    step_data["type"] = "step";
+    
     if (!step.pc->location.is_nil()) {
-      current_file = step.pc->location.get_file().as_string();
+      std::string current_file = step.pc->location.get_file().as_string();
+      std::string current_line = step.pc->location.get_line().as_string();
+      int line_num = std::stoi(current_line);
+      
+      // Track covered lines
+      covered_lines[current_file].insert(line_num);
+      if (test_data["files"].contains(current_file)) {
+        test_data["files"][current_file]["covered_lines"].push_back(line_num);
+      }
+      
+      step_data["file"] = current_file;
+      step_data["line"] = line_num;
+      step_data["function"] = step.pc->location.get_function().as_string();
     }
 
+    // Handle all possible step types
     switch (step.type)
     {
     case goto_trace_stept::ASSERT:
-      if (!step.guard)
       {
-        show_state_header(out, step, step.pc->location, step.step_nr);
-        out << "<TEST CASE LOG> ASSERTION VIOLATION at line " 
-            << step.pc->location.get_line().as_string();
-        
-        // Add source code for assertion
-        if (!step.pc->location.is_nil() && 
-            source_files.find(current_file) != source_files.end()) {
-          int line_num = std::stoi(step.pc->location.get_line().as_string());
-          if (line_num > 0 && line_num <= static_cast<int>(source_files[current_file].size())) {
-            out << "\n<TEST CASE LOG>   Source: " << source_files[current_file][line_num - 1];
-          }
+        step_data["category"] = "assertion";
+        step_data["passed"] = step.guard;
+        if (!step.guard) {
+          step_data["violation"] = {
+            {"property", step.comment},
+            {"assertion", from_expr(ns, "", step.pc->guard)}
+          };
         }
-        out << "\n";
-
-        out << "Violated property:"
-            << "\n";
-        if (!step.pc->location.is_nil()) {
-          out << "  " << step.pc->location << "\n";
-          out << "<TEST CASE LOG> Location: " << step.pc->location << "\n";
-        }
-        
-        if (config.options.get_bool_option("show-stacktrace"))
-        {
-          out << "Stack trace:" << std::endl;
-          out << "<TEST CASE LOG> Stack trace:\n";
-          for (const auto &it : step.stack_trace)
-          {
-            if (it.src == nullptr) {
-              out << "  " << it.function.as_string() << std::endl;
-              out << "<TEST CASE LOG>   " << it.function.as_string() << "\n";
-            }
-            else
-            {
-              out << "  " << it.function.as_string();
-              out << "<TEST CASE LOG>   " << it.function.as_string();
-              if (it.src->pc->location.is_not_nil()) {
-                out << " at " << it.src->pc->location << std::endl;
-                out << " at line " << it.src->pc->location.get_line().as_string() << "\n";
-              }
-              else
-                out << std::endl;
-            }
-          }
-        }
-
-        out << "  " << step.comment << "\n";
-        out << "<TEST CASE LOG> Property: " << step.comment << "\n";
-
-        if (step.pc->is_assert()) {
-          out << "  " << from_expr(ns, "", step.pc->guard) << "\n";
-          out << "<TEST CASE LOG> Assertion: " << from_expr(ns, "", step.pc->guard) << "\n";
-        }
-      } else {
-        out << "<TEST CASE LOG> SUCCESSFUL ASSERTION at line " 
-            << step.pc->location.get_line().as_string() << ": " 
-            << from_expr(ns, "", step.pc->guard);
-        
-        // Add source code for successful assertion
-        if (!step.pc->location.is_nil() && 
-            source_files.find(current_file) != source_files.end()) {
-          int line_num = std::stoi(step.pc->location.get_line().as_string());
-          if (line_num > 0 && line_num <= static_cast<int>(source_files[current_file].size())) {
-            out << "\n<TEST CASE LOG>   Source: " << source_files[current_file][line_num - 1];
-          }
-        }
-        out << "\n";
       }
       break;
 
     case goto_trace_stept::ASSIGNMENT:
-      if (step.pc->is_assign() || step.pc->is_return() ||
-          (step.pc->is_other() && is_nil_expr(step.lhs)) ||
-          step.pc->is_function_call())
       {
-        if (prev_step_nr != step.step_nr || first_step)
+        if (step.pc->is_assign() || step.pc->is_return() ||
+            (step.pc->is_other() && is_nil_expr(step.lhs)) ||
+            step.pc->is_function_call())
         {
-          first_step = false;
-          prev_step_nr = step.step_nr;
-          show_state_header(out, step, step.pc->location, step.step_nr);
-        }
-        
-        if (!is_nil_expr(step.lhs) && is_symbol2t(step.lhs)) {
-          const symbol2t &sym = to_symbol2t(step.lhs);
-          std::string var_name = sym.thename.as_string();
-          std::string value = from_expr(ns, "", step.value);
-          variable_values[var_name] = value;
-          
-          out << "<TEST CASE LOG> ASSIGNMENT at line " 
-              << step.pc->location.get_line().as_string() 
-              << ": " << var_name << " = " << value;
-          
-          // Add source code for assignment
-          if (!step.pc->location.is_nil() && 
-              source_files.find(current_file) != source_files.end()) {
-            int line_num = std::stoi(step.pc->location.get_line().as_string());
-            if (line_num > 0 && line_num <= static_cast<int>(source_files[current_file].size())) {
-              out << "\n<TEST CASE LOG>   Source: " << source_files[current_file][line_num - 1];
-            }
+          step_data["category"] = "assignment";
+          if (!is_nil_expr(step.lhs) && is_symbol2t(step.lhs)) {
+            const symbol2t &sym = to_symbol2t(step.lhs);
+            std::string var_name = sym.thename.as_string();
+            std::string value = from_expr(ns, "", step.value);
+            
+            step_data["variable"] = var_name;
+            step_data["value"] = value;
+            
+            test_data["variables"][var_name] = value;
           }
-          out << "\n";
         }
-        counterexample_value(out, ns, step.lhs, step.value);
       }
       break;
 
     case goto_trace_stept::OUTPUT:
-    {
-      out << "<TEST CASE LOG> OUTPUT at line " << step.pc->location.get_line().as_string() << ": ";
-      printf_formattert printf_formatter;
-      printf_formatter(step.format_string, step.output_args);
-      printf_formatter.print(out);
-      
-      // Add source code for output
-      if (!step.pc->location.is_nil() && 
-          source_files.find(current_file) != source_files.end()) {
-        int line_num = std::stoi(step.pc->location.get_line().as_string());
-        if (line_num > 0 && line_num <= static_cast<int>(source_files[current_file].size())) {
-          out << "\n<TEST CASE LOG>   Source: " << source_files[current_file][line_num - 1];
-        }
+      {
+        step_data["category"] = "output";
+        printf_formattert printf_formatter;
+        printf_formatter(step.format_string, step.output_args);
+        std::ostringstream output_stream;
+        printf_formatter.print(output_stream);
+        step_data["output"] = output_stream.str();
       }
-      out << "\n";
-      break;
-    }
-
-    case goto_trace_stept::RENUMBER:
-      out << "<TEST CASE LOG> POINTER RENUMBERING at line " 
-          << step.pc->location.get_line().as_string() << ": ";
-      out << "Renumbered pointer to ";
-      counterexample_value(out, ns, step.lhs, step.value);
       break;
 
     case goto_trace_stept::ASSUME:
-      out << "<TEST CASE LOG> ASSUME at line " << step.pc->location.get_line().as_string() 
-          << ": " << from_expr(ns, "", step.pc->guard);
-      
-      // Add source code for assume
-      if (!step.pc->location.is_nil() && 
-          source_files.find(current_file) != source_files.end()) {
-        int line_num = std::stoi(step.pc->location.get_line().as_string());
-        if (line_num > 0 && line_num <= static_cast<int>(source_files[current_file].size())) {
-          out << "\n<TEST CASE LOG>   Source: " << source_files[current_file][line_num - 1];
-        }
+      {
+        step_data["category"] = "assume";
+        step_data["condition"] = from_expr(ns, "", step.pc->guard);
       }
-      out << "\n";
       break;
 
     case goto_trace_stept::SKIP:
+      {
+        step_data["category"] = "skip";
+      }
+      break;
+
+    case goto_trace_stept::RENUMBER:
+      {
+        step_data["category"] = "renumber";
+        if (!is_nil_expr(step.lhs)) {
+          step_data["variable"] = from_expr(ns, "", step.lhs);
+          step_data["value"] = from_expr(ns, "", step.value);
+        }
+      }
       break;
 
     default:
-      assert(false);
+      step_data["category"] = "unknown";
       break;
     }
+
+    test_data["execution_path"].push_back(step_data);
   }
 
-  // Generate Mocha test case
-  out << "\n<TEST CASE LOG> ===== Mocha Test Case =====\n";
-  out << "<TEST CASE LOG> const assert = require('assert');\n";
-  
-  std::string main_function = goto_trace.steps.empty() ? "main" : 
-    goto_trace.steps.front().pc->location.get_function().as_string();
-  
-  out << "<TEST CASE LOG> describe('" << main_function << "', function() {\n";
-  out << "<TEST CASE LOG>   it('should verify specified properties', function() {\n";
-
-  // Output variable initializations
-  for (const auto& [var, value] : variable_values) {
-    if (var.find("__ESBMC_") == std::string::npos) {
-      out << "<TEST CASE LOG>     let " << var << " = " << value << ";\n";
-    }
-  }
-
-  // Output function calls and assertions
-  for (const auto &step : goto_trace.steps) {
-    if (!step.pc->location.is_nil()) {
-      out << "<TEST CASE LOG>     // Line " << step.pc->location.get_line().as_string();
-      
-      // Add source code in comments
-      std::string current_file = step.pc->location.get_file().as_string();
-      if (source_files.find(current_file) != source_files.end()) {
-        int line_num = std::stoi(step.pc->location.get_line().as_string());
-        if (line_num > 0 && line_num <= static_cast<int>(source_files[current_file].size())) {
-          out << " - " << source_files[current_file][line_num - 1];
-        }
-      }
-      out << "\n";
-    }
-
-    if (step.type == goto_trace_stept::ASSERT) {
-      if (!step.guard) {
-        out << "<TEST CASE LOG>     // Expected assertion failure\n";
-        out << "<TEST CASE LOG>     assert.throws(() => {\n";
-        out << "<TEST CASE LOG>       " << from_expr(ns, "", step.pc->guard) << "\n";
-        out << "<TEST CASE LOG>     });\n";
-      } else {
-        out << "<TEST CASE LOG>     assert(" << from_expr(ns, "", step.pc->guard) << ");\n";
+  // Calculate coverage statistics
+  for (auto& [file, file_data] : test_data["files"].items()) {
+    std::vector<int> coverage_array(file_data["total_lines"].get<int>(), 0);
+    for (const auto& line : covered_lines[file]) {
+      if (line > 0 && line <= static_cast<int>(coverage_array.size())) {
+        coverage_array[line - 1] = 1;
       }
     }
-  }
-
-  out << "<TEST CASE LOG>   });\n";
-  out << "<TEST CASE LOG> });\n";
-
-  // Output test case summary with source code
-  out << "\n<TEST CASE LOG> ===== Test Case Summary =====\n";
-  if (!goto_trace.steps.empty()) {
-    out << "<TEST CASE LOG> File: " 
-        << goto_trace.steps.front().pc->location.get_file().as_string() << "\n";
-  }
-  
-  out << "<TEST CASE LOG> Functions called:\n";
-  for (const auto& func : functions_called) {
-    out << "<TEST CASE LOG>   - " << func << "\n";
-  }
-
-  out << "<TEST CASE LOG> Variables tracked:\n";
-  for (const auto& [var, value] : variable_values) {
-    if (var.find("__ESBMC_") == std::string::npos) {
-      out << "<TEST CASE LOG>   - " << var << " (final value: " << value << ")\n";
-    }
-  }
-
-  // Output execution path with source code
-  out << "<TEST CASE LOG> Execution path with source code:\n";
-  for (const auto &step : goto_trace.steps) {
-    if (!step.pc->location.is_nil()) {
-      std::string current_line = step.pc->location.get_line().as_string();
-      std::string current_file = step.pc->location.get_file().as_string();
-      
-      if (current_line != prev_line) {
-        out << "<TEST CASE LOG>   Line " << current_line 
-            << " in " << step.pc->location.get_function().as_string();
-        
-        // Add source code
-        if (source_files.find(current_file) != source_files.end()) {
-          int line_num = std::stoi(current_line);
-          if (line_num > 0 && line_num <= static_cast<int>(source_files[current_file].size())) {
-            out << "\n<TEST CASE LOG>   Source: " << source_files[current_file][line_num - 1];
-          }
-        }
-        out << "\n";
-        prev_line = current_line;
-      }
-    }
-  }
-
-  // Add source code coverage summary
-  out << "\n<TEST CASE LOG> ===== Source Code Coverage =====\n";
-  for (const auto& [file, lines] : source_files) {
-    std::set<int> covered_lines;
-    for (const auto &step : goto_trace.steps) {
-      if (!step.pc->location.is_nil() && 
-          step.pc->location.get_file().as_string() == file) {
-covered_lines.insert(std::stoi(step.pc->location.get_line().as_string()));
-      }
-    }
+    file_data["coverage"] = coverage_array;
     
-    out << "<TEST CASE LOG> File: " << file << "\n";
-    out << "<TEST CASE LOG> Lines covered:\n";
-    for (int line_num : covered_lines) {
-      if (line_num > 0 && line_num <= static_cast<int>(lines.size())) {
-        out << "<TEST CASE LOG>   " << line_num << ": " 
-            << lines[line_num - 1] << "\n";
-      }
+    double coverage_percent = 0.0;
+    if (file_data["total_lines"].get<int>() > 0) {
+      coverage_percent = (static_cast<double>(covered_lines[file].size()) * 100.0) / 
+                        static_cast<double>(file_data["total_lines"].get<int>());
     }
-
-    // Add percentage of coverage
-    if (!lines.empty()) {
-      double coverage_percent = (covered_lines.size() * 100.0) / lines.size();
-      out << "<TEST CASE LOG> Coverage: " << std::fixed << std::setprecision(2) 
-          << coverage_percent << "% ("
-          << covered_lines.size() << "/" << lines.size() << " lines)\n";
-    }
+    file_data["coverage_percentage"] = coverage_percent;
   }
 
-  // Final summary
-  out << "\n<TEST CASE LOG> ===== Verification Summary =====\n";
-  if (!goto_trace.steps.empty()) {
-    out << "<TEST CASE LOG> Start line: " 
-        << goto_trace.steps.front().pc->location.get_line().as_string() << "\n";
-    out << "<TEST CASE LOG> End line: " 
-        << goto_trace.steps.back().pc->location.get_line().as_string() << "\n";
-  }
-  out << "<TEST CASE LOG> Total steps: " << goto_trace.steps.size() << "\n";
-  out << "<TEST CASE LOG> Functions traversed: " << functions_called.size() << "\n";
-  out << "<TEST CASE LOG> Variables modified: " << variable_values.size() << "\n";
+  // Write JSON output to file
+  std::ofstream json_out("tests.json");
+  json_out << std::setw(2) << test_data << std::endl;
 
-  out << "<TEST CASE LOG> ===== End Test Case =====\n";
+  // Generate HTML coverage report
+  std::ofstream html_out("coverage_report.html");
+  html_out << R"(
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Code Coverage Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    .covered { background-color: #90EE90; }
+    .uncovered { background-color: #FFB6C6; }
+    .line-number { 
+      color: #666; 
+      padding-right: 10px; 
+      user-select: none;
+      border-right: 1px solid #ddd;
+      margin-right: 10px;
+      display: inline-block;
+      width: 40px;
+      text-align: right;
+    }
+    pre { margin: 0; padding: 10px; background: #f5f5f5; }
+    .file-header { 
+      background: #eee; 
+      padding: 15px; 
+      margin: 20px 0 10px 0;
+      border-radius: 5px;
+    }
+    .line { padding: 2px 0; }
+    .line:hover { background-color: rgba(0,0,0,0.05); }
+    .coverage-bar {
+      height: 20px;
+      background: #FFB6C6;
+      margin: 10px 0;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .coverage-fill {
+      height: 100%;
+      background: #90EE90;
+    }
+  </style>
+</head>
+<body>
+  <h1>Code Coverage Report</h1>
+)";
+
+  for (const auto& [file, file_data] : test_data["files"].items()) {
+    html_out << "<div class='file-header'>\n";
+    html_out << "<h2>File: " << file << "</h2>\n";
+    double coverage_pct = file_data["coverage_percentage"].get<double>();
+    html_out << "<p>Coverage: " << std::fixed << std::setprecision(2) 
+             << coverage_pct << "%</p>\n";
+    html_out << "<div class='coverage-bar'><div class='coverage-fill' style='width: "
+             << coverage_pct << "%'></div></div>\n";
+    html_out << "</div>\n<pre>\n";
+
+    const auto& coverage = file_data["coverage"];
+    const auto& source = file_data["source"];
+    
+    for (size_t i = 0; i < source.size(); i++) {
+      std::string line_class = coverage[i].get<int>() ? "covered" : "uncovered";
+      html_out << "<div class='line " << line_class << "'>"
+               << "<span class='line-number'>" << (i + 1) << "</span>"
+               << source[i].get<std::string>() 
+               << "</div>\n";
+    }
+    html_out << "</pre>\n";
+  }
+
+  html_out << "</body></html>\n";
 }
+
 // End of file
