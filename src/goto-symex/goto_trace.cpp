@@ -367,33 +367,58 @@ void show_goto_trace(
 {
   unsigned prev_step_nr = 0;
   bool first_step = true;
-  std::string prev_line;
+  std::string prev_line = "";  // Initialize as empty string
+  std::map<std::string, std::string> variable_values;
+  std::set<std::string> functions_called;
+
+  out << "<TEST CASE LOG> ===== Starting Trace for " 
+      << (goto_trace.steps.empty() ? "unknown" : goto_trace.steps.front().pc->location.get_file().as_string())
+      << " =====\n";
   
-  // Start with original counterexample format
+  // Original counterexample format with added TEST CASE LOG markers
   for (const auto &step : goto_trace.steps)
   {
+    // Track function calls
+    if (step.pc->is_function_call() && !step.pc->location.is_nil()) {
+      std::string func_name = step.pc->location.get_function().as_string();
+      functions_called.insert(func_name);
+      out << "<TEST CASE LOG> FUNCTION CALL: " << func_name 
+          << " at line " << step.pc->location.get_line().as_string() << "\n";
+    }
+
     switch (step.type)
     {
     case goto_trace_stept::ASSERT:
       if (!step.guard)
       {
         show_state_header(out, step, step.pc->location, step.step_nr);
+        out << "<TEST CASE LOG> ASSERTION VIOLATION at line " 
+            << step.pc->location.get_line().as_string() << "\n";
         out << "Violated property:"
             << "\n";
-        if (!step.pc->location.is_nil())
+        if (!step.pc->location.is_nil()) {
           out << "  " << step.pc->location << "\n";
+          out << "<TEST CASE LOG> Location: " << step.pc->location << "\n";
+        }
+        
         if (config.options.get_bool_option("show-stacktrace"))
         {
           out << "Stack trace:" << std::endl;
+          out << "<TEST CASE LOG> Stack trace:\n";
           for (const auto &it : step.stack_trace)
           {
-            if (it.src == nullptr)
+            if (it.src == nullptr) {
               out << "  " << it.function.as_string() << std::endl;
+              out << "<TEST CASE LOG>   " << it.function.as_string() << "\n";
+            }
             else
             {
               out << "  " << it.function.as_string();
-              if (it.src->pc->location.is_not_nil())
+              out << "<TEST CASE LOG>   " << it.function.as_string();
+              if (it.src->pc->location.is_not_nil()) {
                 out << " at " << it.src->pc->location << std::endl;
+                out << " at line " << it.src->pc->location.get_line().as_string() << "\n";
+              }
               else
                 out << std::endl;
             }
@@ -401,11 +426,16 @@ void show_goto_trace(
         }
 
         out << "  " << step.comment << "\n";
+        out << "<TEST CASE LOG> Property: " << step.comment << "\n";
 
-        if (step.pc->is_assert())
+        if (step.pc->is_assert()) {
           out << "  " << from_expr(ns, "", step.pc->guard) << "\n";
-
-        return;
+          out << "<TEST CASE LOG> Assertion: " << from_expr(ns, "", step.pc->guard) << "\n";
+        }
+      } else {
+        out << "<TEST CASE LOG> SUCCESSFUL ASSERTION at line " 
+            << step.pc->location.get_line().as_string() << ": " 
+            << from_expr(ns, "", step.pc->guard) << "\n";
       }
       break;
 
@@ -420,12 +450,23 @@ void show_goto_trace(
           prev_step_nr = step.step_nr;
           show_state_header(out, step, step.pc->location, step.step_nr);
         }
+        
+        if (!is_nil_expr(step.lhs) && is_symbol2t(step.lhs)) {
+          const symbol2t &sym = to_symbol2t(step.lhs);
+          std::string var_name = sym.thename.as_string();
+          std::string value = from_expr(ns, "", step.value);
+          variable_values[var_name] = value;
+          
+          out << "<TEST CASE LOG> ASSIGNMENT at line " << step.pc->location.get_line().as_string() 
+              << ": " << var_name << " = " << value << "\n";
+        }
         counterexample_value(out, ns, step.lhs, step.value);
       }
       break;
 
     case goto_trace_stept::OUTPUT:
     {
+      out << "<TEST CASE LOG> OUTPUT at line " << step.pc->location.get_line().as_string() << ": ";
       printf_formattert printf_formatter;
       printf_formatter(step.format_string, step.output_args);
       printf_formatter.print(out);
@@ -434,12 +475,18 @@ void show_goto_trace(
     }
 
     case goto_trace_stept::RENUMBER:
+      out << "<TEST CASE LOG> POINTER RENUMBERING at line " << step.pc->location.get_line().as_string() << ": ";
       out << "Renumbered pointer to ";
       counterexample_value(out, ns, step.lhs, step.value);
       break;
 
     case goto_trace_stept::ASSUME:
+      out << "<TEST CASE LOG> ASSUME at line " << step.pc->location.get_line().as_string() 
+          << ": " << from_expr(ns, "", step.pc->guard) << "\n";
+      break;
+      
     case goto_trace_stept::SKIP:
+      // Skip without logging
       break;
 
     default:
@@ -447,7 +494,7 @@ void show_goto_trace(
     }
   }
 
-  // Now add the new test case logging and verification info
+  // Generate Mocha test case
   out << "\n<TEST CASE LOG> ===== Mocha Test Case =====\n";
   out << "<TEST CASE LOG> const assert = require('assert');\n";
   
@@ -457,85 +504,64 @@ void show_goto_trace(
   out << "<TEST CASE LOG> describe('" << main_function << "', function() {\n";
   out << "<TEST CASE LOG>   it('should verify specified properties', function() {\n";
 
-  // Track variables and their states
-  std::map<std::string, std::string> variable_values;
-  
-  for (const auto &step : goto_trace.steps)
-  {
-    if (!step.pc->location.is_nil())
-    {
-      out << "<TEST CASE LOG>     // Line " << step.pc->location.get_line() << "\n";
+  // Output variable initializations
+  for (const auto& [var, value] : variable_values) {
+    if (var.find("__ESBMC_") == std::string::npos) {
+      out << "<TEST CASE LOG>     let " << var << " = " << value << ";\n";
+    }
+  }
+
+  // Output function calls and assertions
+  for (const auto &step : goto_trace.steps) {
+    if (!step.pc->location.is_nil()) {
+      out << "<TEST CASE LOG>     // Line " << step.pc->location.get_line().as_string() << "\n";
     }
 
-    switch (step.type)
-    {
-    case goto_trace_stept::ASSERT:
-      if (!step.guard)
-      {
-        out << "<TEST CASE LOG>     // Assertion failure\n";
+    if (step.type == goto_trace_stept::ASSERT) {
+      if (!step.guard) {
+        out << "<TEST CASE LOG>     // Expected assertion failure\n";
         out << "<TEST CASE LOG>     assert.throws(() => {\n";
         out << "<TEST CASE LOG>       " << from_expr(ns, "", step.pc->guard) << "\n";
         out << "<TEST CASE LOG>     });\n";
-      }
-      else
-      {
+      } else {
         out << "<TEST CASE LOG>     assert(" << from_expr(ns, "", step.pc->guard) << ");\n";
       }
-      break;
-
-    case goto_trace_stept::ASSIGNMENT:
-      if (!is_nil_expr(step.lhs) && is_symbol2t(step.lhs))
-      {
-        const symbol2t &sym = to_symbol2t(step.lhs);
-        std::string var_name = sym.thename.as_string();
-        std::string value = from_expr(ns, "", step.value);
-        
-        if (var_name.find("__ESBMC_") == std::string::npos)
-        {
-          if (variable_values.find(var_name) == variable_values.end())
-          {
-            out << "<TEST CASE LOG>     let " << var_name << " = " << value << ";\n";
-          }
-          else
-          {
-            out << "<TEST CASE LOG>     " << var_name << " = " << value << ";\n";
-          }
-          out << "<TEST CASE LOG>     assert.equal(" << var_name << ", " << value << ");\n";
-          variable_values[var_name] = value;
-        }
-      }
-      break;
-
-    case goto_trace_stept::OUTPUT:
-      {
-        out << "<TEST CASE LOG>     console.log('";
-        printf_formattert printf_formatter;
-        printf_formatter(step.format_string, step.output_args);
-        printf_formatter.print(out);
-        out << "');\n";
-      }
-      break;
-
-    case goto_trace_stept::ASSUME:
-      out << "<TEST CASE LOG>     // Assumption\n";
-      out << "<TEST CASE LOG>     assert(" << from_expr(ns, "", step.pc->guard) << ");\n";
-      break;
-
-    default:
-      break;
     }
   }
 
   out << "<TEST CASE LOG>   });\n";
   out << "<TEST CASE LOG> });\n";
-  
-  // Summary section
+
+  // Output test case summary
   out << "\n<TEST CASE LOG> ===== Test Case Summary =====\n";
-  out << "<TEST CASE LOG> Variables tracked:\n";
-  for (const auto& [var, value] : variable_values)
-  {
-    out << "<TEST CASE LOG>   - " << var << " (final value: " << value << ")\n";
+  out << "<TEST CASE LOG> File: " 
+      << goto_trace.steps.front().pc->location.get_file().as_string() << "\n";
+  
+  out << "<TEST CASE LOG> Functions called:\n";
+  for (const auto& func : functions_called) {
+    out << "<TEST CASE LOG>   - " << func << "\n";
   }
+
+  out << "<TEST CASE LOG> Variables tracked:\n";
+  for (const auto& [var, value] : variable_values) {
+    if (var.find("__ESBMC_") == std::string::npos) {
+      out << "<TEST CASE LOG>   - " << var << " (final value: " << value << ")\n";
+    }
+  }
+
+  // Output execution path
+  out << "<TEST CASE LOG> Execution path:\n";
+  for (const auto &step : goto_trace.steps) {
+    if (!step.pc->location.is_nil()) {
+      std::string current_line = step.pc->location.get_line().as_string();
+      if (current_line != prev_line) {
+        out << "<TEST CASE LOG>   Line " << current_line 
+            << " in " << step.pc->location.get_function().as_string() << "\n";
+        prev_line = current_line;
+      }
+    }
+  }
+
   out << "<TEST CASE LOG> ===== End Test Case =====\n";
 }
 
