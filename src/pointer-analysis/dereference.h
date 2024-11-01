@@ -112,6 +112,8 @@ public:
     const std::string &msg,
     const guardt &guard) = 0;
 
+  virtual void dereference_assume(const guardt &guard) = 0;
+
   /** Fetch the set of values that the given pointer variable can point at.
    *  @param expr Pointer symbol to get the value set of.
    *  @param value_set A value set to store the output of this call into.
