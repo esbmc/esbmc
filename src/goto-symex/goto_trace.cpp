@@ -369,6 +369,7 @@ void correctness_graphml_goto_trace(
   graph.generate_graphml(options);
 }
 
+
 void show_goto_trace(
   std::ostream &out,
   const namespacet &ns,
@@ -393,10 +394,10 @@ void show_goto_trace(
   
   // Load source files and track coverage
   std::map<std::string, std::vector<std::string>> source_files;
-  std::map<std::string, std::set<int>> covered_lines;
+  std::map<std::string, std::set<std::string>> covered_lines;
   std::set<std::string> files_to_load;
   
-  // Collect files
+  // First collect all files we need
   for (const auto &step : goto_trace.steps) {
     if (!step.pc->location.is_nil()) {
       files_to_load.insert(step.pc->location.get_file().as_string());
@@ -418,7 +419,8 @@ void show_goto_trace(
         {"total_lines", lines.size()},
         {"covered_lines", json::array()},
         {"source", lines},
-        {"coverage", json::array()}
+        {"coverage", json::object()},
+        {"functions", json::object()}
       };
     }
   }
@@ -432,20 +434,41 @@ void show_goto_trace(
     if (!step.pc->location.is_nil()) {
       std::string current_file = step.pc->location.get_file().as_string();
       std::string current_line = step.pc->location.get_line().as_string();
-      int line_num = std::stoi(current_line);
+      std::string current_function = step.pc->location.get_function().as_string();
       
-      // Track covered lines
-      covered_lines[current_file].insert(line_num);
+      // Create unique location identifier
+      std::string location_id = current_function + ":" + current_line;
+      
+      // Track covered lines with function context
+      covered_lines[current_file].insert(location_id);
+      
       if (test_data["files"].contains(current_file)) {
-        test_data["files"][current_file]["covered_lines"].push_back(line_num);
+        // Initialize function in coverage data if not exists
+        if (!test_data["files"][current_file]["functions"].contains(current_function)) {
+          test_data["files"][current_file]["functions"][current_function] = {
+            {"lines", json::array()},
+            {"first_line", current_line},
+            {"coverage", json::object()}
+          };
+        }
+        
+        // Add coverage information
+        test_data["files"][current_file]["coverage"][current_line] = {
+          {"covered", true},
+          {"function", current_function}
+        };
+        
+        // Add to function's covered lines
+        if (!test_data["files"][current_file]["functions"][current_function]["coverage"].contains(current_line)) {
+          test_data["files"][current_file]["functions"][current_function]["coverage"][current_line] = true;
+        }
       }
       
       step_data["file"] = current_file;
-      step_data["line"] = line_num;
-      step_data["function"] = step.pc->location.get_function().as_string();
+      step_data["line"] = std::stoi(current_line);
+      step_data["function"] = current_function;
     }
 
-    // Handle all possible step types
     switch (step.type)
     {
     case goto_trace_stept::ASSERT:
@@ -526,19 +549,41 @@ void show_goto_trace(
 
   // Calculate coverage statistics
   for (auto& [file, file_data] : test_data["files"].items()) {
-    std::vector<int> coverage_array(file_data["total_lines"].get<int>(), 0);
-    for (const auto& line : covered_lines[file]) {
-      if (line > 0 && line <= static_cast<int>(coverage_array.size())) {
-        coverage_array[line - 1] = 1;
+    int total_lines = file_data["total_lines"].get<int>();
+    json coverage_info = json::object();
+    
+    // Initialize coverage for all lines
+    for (int i = 1; i <= total_lines; i++) {
+      std::string line_num = std::to_string(i);
+      coverage_info[line_num] = {
+        {"covered", false},
+        {"function", ""}
+      };
+    }
+    
+    // Update with actual coverage
+    for (const auto& [line, info] : file_data["coverage"].items()) {
+      coverage_info[line] = info;
+    }
+    
+    file_data["coverage"] = coverage_info;
+    
+    // Calculate function-level coverage
+    for (auto& [func_name, func_data] : file_data["functions"].items()) {
+      int func_covered_lines = func_data["coverage"].size();
+      func_data["coverage_percentage"] = func_covered_lines > 0 ? 100.0 : 0.0;
+    }
+    
+    // Calculate file-level coverage percentage
+    int covered_count = 0;
+    for (const auto& [line, info] : coverage_info.items()) {
+      if (info["covered"].get<bool>()) {
+        covered_count++;
       }
     }
-    file_data["coverage"] = coverage_array;
     
-    double coverage_percent = 0.0;
-    if (file_data["total_lines"].get<int>() > 0) {
-      coverage_percent = (static_cast<double>(covered_lines[file].size()) * 100.0) / 
-                        static_cast<double>(file_data["total_lines"].get<int>());
-    }
+    double coverage_percent = total_lines > 0 ? 
+      (static_cast<double>(covered_count) * 100.0) / static_cast<double>(total_lines) : 0.0;
     file_data["coverage_percentage"] = coverage_percent;
   }
 
@@ -554,7 +599,12 @@ void show_goto_trace(
 <head>
   <title>Code Coverage Report</title>
   <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
+    body { 
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      margin: 0;
+      padding: 20px;
+      background-color: #f5f5f5;
+    }
     .covered { background-color: #90EE90; }
     .uncovered { background-color: #FFB6C6; }
     .line-number { 
@@ -567,15 +617,31 @@ void show_goto_trace(
       width: 40px;
       text-align: right;
     }
-    pre { margin: 0; padding: 10px; background: #f5f5f5; }
+    pre { 
+      margin: 0; 
+      padding: 10px; 
+      background: #fff;
+      border-radius: 5px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
     .file-header { 
-      background: #eee; 
+      background: #fff; 
       padding: 15px; 
       margin: 20px 0 10px 0;
       border-radius: 5px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     }
-    .line { padding: 2px 0; }
-    .line:hover { background-color: rgba(0,0,0,0.05); }
+    .file-header h2 {
+      margin: 0 0 10px 0;
+      color: #333;
+    }
+    .line { 
+      padding: 2px 0;
+      font-family: monospace;
+    }
+    .line:hover { 
+      background-color: rgba(0,0,0,0.05);
+    }
     .coverage-bar {
       height: 20px;
       background: #FFB6C6;
@@ -586,6 +652,18 @@ void show_goto_trace(
     .coverage-fill {
       height: 100%;
       background: #90EE90;
+      transition: width 0.3s ease;
+    }
+    .function-coverage {
+      margin-top: 10px;
+      padding: 10px;
+      background: #f8f8f8;
+      border-radius: 5px;
+    }
+    h1 {
+      color: #333;
+      text-align: center;
+      margin-bottom: 30px;
     }
   </style>
 </head>
@@ -601,15 +679,31 @@ void show_goto_trace(
              << coverage_pct << "%</p>\n";
     html_out << "<div class='coverage-bar'><div class='coverage-fill' style='width: "
              << coverage_pct << "%'></div></div>\n";
+    
+    // Add function coverage information
+    html_out << "<div class='function-coverage'>\n";
+    html_out << "<h3>Function Coverage:</h3>\n";
+    for (const auto& [func_name, func_data] : file_data["functions"].items()) {
+      html_out << "<p>" << func_name << ": " 
+               << func_data["coverage"].size() << " lines covered</p>\n";
+    }
+    html_out << "</div>\n";
+    
     html_out << "</div>\n<pre>\n";
 
     const auto& coverage = file_data["coverage"];
     const auto& source = file_data["source"];
     
     for (size_t i = 0; i < source.size(); i++) {
-      std::string line_class = coverage[i].get<int>() ? "covered" : "uncovered";
+      std::string line_num = std::to_string(i + 1);
+      bool is_covered = false;
+      if (coverage.contains(line_num)) {
+        is_covered = coverage[line_num]["covered"].get<bool>();
+      }
+      
+      std::string line_class = is_covered ? "covered" : "uncovered";
       html_out << "<div class='line " << line_class << "'>"
-               << "<span class='line-number'>" << (i + 1) << "</span>"
+               << "<span class='line-number'>" << line_num << "</span>"
                << source[i].get<std::string>() 
                << "</div>\n";
     }
