@@ -369,150 +369,173 @@ void show_goto_trace(
   bool first_step = true;
   std::string prev_line;
   
-  // Enhanced metadata collection
-  struct VerificationMetadata {
-    std::string first_line, last_line, first_file, last_file, main_function;
-    std::set<std::string> functions_called;
-    std::map<std::string, std::string> inputs;
-    std::map<std::string, std::vector<std::pair<std::string, std::string>>> variable_states;
-    std::set<std::string> conditions_evaluated;
-    std::vector<std::string> successful_assertions;
-    bool has_loops = false;
-    bool has_recursion = false;
-    std::set<std::string> accessed_files;
-    std::map<std::string, int> thread_interactions;
-  } metadata;
-  
-  // First collect metadata
-  if (!goto_trace.steps.empty()) {
-    const auto& first_step = goto_trace.steps.front();
-    const auto& last_step = goto_trace.steps.back();
-    if (!first_step.pc->location.is_nil()) {
-      metadata.first_line = first_step.pc->location.get_line().as_string();
-      metadata.first_file = first_step.pc->location.get_file().as_string();
-      metadata.main_function = first_step.pc->location.get_function().as_string();
-    }
-    if (!last_step.pc->location.is_nil()) {
-      metadata.last_line = last_step.pc->location.get_line().as_string();
-      metadata.last_file = last_step.pc->location.get_file().as_string();
-    }
-  }
-
-  // Output Mocha test structure
-  out << "<TEST CASE LOG> ===== Mocha Test Case =====\n";
-  out << "<TEST CASE LOG> const assert = require('assert');\n";
-  out << "<TEST CASE LOG> describe('" << metadata.main_function << "', function() {\n";
-  out << "<TEST CASE LOG>   it('should verify path from line " << metadata.first_line 
-      << " to " << metadata.last_line << "', function() {\n";
-  out << "<TEST CASE LOG>     // Test setup\n";
-
-  // Process trace
+  // Start with original counterexample format
   for (const auto &step : goto_trace.steps)
   {
     switch (step.type)
     {
     case goto_trace_stept::ASSERT:
+      if (!step.guard)
+      {
+        show_state_header(out, step, step.pc->location, step.step_nr);
+        out << "Violated property:"
+            << "\n";
+        if (!step.pc->location.is_nil())
+          out << "  " << step.pc->location << "\n";
+        if (config.options.get_bool_option("show-stacktrace"))
+        {
+          out << "Stack trace:" << std::endl;
+          for (const auto &it : step.stack_trace)
+          {
+            if (it.src == nullptr)
+              out << "  " << it.function.as_string() << std::endl;
+            else
+            {
+              out << "  " << it.function.as_string();
+              if (it.src->pc->location.is_not_nil())
+                out << " at " << it.src->pc->location << std::endl;
+              else
+                out << std::endl;
+            }
+          }
+        }
+
+        out << "  " << step.comment << "\n";
+
+        if (step.pc->is_assert())
+          out << "  " << from_expr(ns, "", step.pc->guard) << "\n";
+
+        return;
+      }
+      break;
+
+    case goto_trace_stept::ASSIGNMENT:
+      if (step.pc->is_assign() || step.pc->is_return() ||
+          (step.pc->is_other() && is_nil_expr(step.lhs)) ||
+          step.pc->is_function_call())
+      {
+        if (prev_step_nr != step.step_nr || first_step)
+        {
+          first_step = false;
+          prev_step_nr = step.step_nr;
+          show_state_header(out, step, step.pc->location, step.step_nr);
+        }
+        counterexample_value(out, ns, step.lhs, step.value);
+      }
+      break;
+
+    case goto_trace_stept::OUTPUT:
     {
-      if (step.guard) {
-        metadata.successful_assertions.push_back(from_expr(ns, "", step.pc->guard));
-        out << "<TEST CASE LOG>     // Successful assertion\n";
-        out << "<TEST CASE LOG>     assert(" << from_expr(ns, "", step.pc->guard) << ");\n";
-      }
-      else {
-        out << "<TEST CASE LOG>     // Failed assertion\n";
-        out << "<TEST CASE LOG>     // assert.throws(() => {\n";
-        out << "<TEST CASE LOG>     //   " << from_expr(ns, "", step.pc->guard) << "\n";
-        out << "<TEST CASE LOG>     // });\n";
-      }
+      printf_formattert printf_formatter;
+      printf_formatter(step.format_string, step.output_args);
+      printf_formatter.print(out);
+      out << "\n";
       break;
     }
 
-    case goto_trace_stept::ASSIGNMENT:
+    case goto_trace_stept::RENUMBER:
+      out << "Renumbered pointer to ";
+      counterexample_value(out, ns, step.lhs, step.value);
+      break;
+
+    case goto_trace_stept::ASSUME:
+    case goto_trace_stept::SKIP:
+      break;
+
+    default:
+      assert(false);
+    }
+  }
+
+  // Now add the new test case logging and verification info
+  out << "\n<TEST CASE LOG> ===== Mocha Test Case =====\n";
+  out << "<TEST CASE LOG> const assert = require('assert');\n";
+  
+  std::string main_function = goto_trace.steps.empty() ? "main" : 
+    goto_trace.steps.front().pc->location.get_function().as_string();
+  
+  out << "<TEST CASE LOG> describe('" << main_function << "', function() {\n";
+  out << "<TEST CASE LOG>   it('should verify specified properties', function() {\n";
+
+  // Track variables and their states
+  std::map<std::string, std::string> variable_values;
+  
+  for (const auto &step : goto_trace.steps)
+  {
+    if (!step.pc->location.is_nil())
     {
+      out << "<TEST CASE LOG>     // Line " << step.pc->location.get_line() << "\n";
+    }
+
+    switch (step.type)
+    {
+    case goto_trace_stept::ASSERT:
+      if (!step.guard)
+      {
+        out << "<TEST CASE LOG>     // Assertion failure\n";
+        out << "<TEST CASE LOG>     assert.throws(() => {\n";
+        out << "<TEST CASE LOG>       " << from_expr(ns, "", step.pc->guard) << "\n";
+        out << "<TEST CASE LOG>     });\n";
+      }
+      else
+      {
+        out << "<TEST CASE LOG>     assert(" << from_expr(ns, "", step.pc->guard) << ");\n";
+      }
+      break;
+
+    case goto_trace_stept::ASSIGNMENT:
       if (!is_nil_expr(step.lhs) && is_symbol2t(step.lhs))
       {
         const symbol2t &sym = to_symbol2t(step.lhs);
         std::string var_name = sym.thename.as_string();
         std::string value = from_expr(ns, "", step.value);
-        std::string line_num = step.pc->location.get_line().as_string();
-
-        if (var_name.find("__ESBMC_") == std::string::npos) {
-          // Track initial values for test setup
-          if (metadata.inputs.find(var_name) == metadata.inputs.end()) {
-            metadata.inputs[var_name] = value;
-            out << "<TEST CASE LOG>     let " << var_name << " = " << value << "; // Initial value\n";
-          } else {
-            out << "<TEST CASE LOG>     " << var_name << " = " << value << "; // Updated at line " << line_num << "\n";
-            out << "<TEST CASE LOG>     assert.equal(" << var_name << ", " << value << ");\n";
+        
+        if (var_name.find("__ESBMC_") == std::string::npos)
+        {
+          if (variable_values.find(var_name) == variable_values.end())
+          {
+            out << "<TEST CASE LOG>     let " << var_name << " = " << value << ";\n";
           }
-          metadata.variable_states[var_name].push_back(std::make_pair(line_num, value));
+          else
+          {
+            out << "<TEST CASE LOG>     " << var_name << " = " << value << ";\n";
+          }
+          out << "<TEST CASE LOG>     assert.equal(" << var_name << ", " << value << ");\n";
+          variable_values[var_name] = value;
         }
       }
       break;
-    }
 
     case goto_trace_stept::OUTPUT:
-    {
-      out << "<TEST CASE LOG>     // Program output at line " << step.pc->location.get_line() << "\n";
-      out << "<TEST CASE LOG>     console.log('";
-      printf_formattert printf_formatter;
-      printf_formatter(step.format_string, step.output_args);
-      printf_formatter.print(out);
-      out << "');\n";
+      {
+        out << "<TEST CASE LOG>     console.log('";
+        printf_formattert printf_formatter;
+        printf_formatter(step.format_string, step.output_args);
+        printf_formatter.print(out);
+        out << "');\n";
+      }
       break;
-    }
 
     case goto_trace_stept::ASSUME:
-      out << "<TEST CASE LOG>     // Assumption at line " << step.pc->location.get_line() << "\n";
+      out << "<TEST CASE LOG>     // Assumption\n";
       out << "<TEST CASE LOG>     assert(" << from_expr(ns, "", step.pc->guard) << ");\n";
-      break;
-
-    case goto_trace_stept::SKIP:
-    case goto_trace_stept::RENUMBER:
-      // Skip these
       break;
 
     default:
       break;
     }
-
-    // Track function calls for test structure
-    if (step.pc->is_function_call()) {
-      std::string func_name = step.pc->location.get_function().as_string();
-      metadata.functions_called.insert(func_name);
-      out << "<TEST CASE LOG>     // Function call: " << func_name << "\n";
-    }
   }
 
-  // Close Mocha test structure
   out << "<TEST CASE LOG>   });\n";
-  out << "<TEST CASE LOG> });\n\n";
-
-  // Output detailed verification information
-  out << "<TEST CASE LOG> ===== Test Case Details =====\n";
-  out << "<TEST CASE LOG> Test Prerequisites:\n";
-  for (const auto& [var, value] : metadata.inputs) {
-    out << "<TEST CASE LOG>   - Initialize " << var << " = " << value << "\n";
+  out << "<TEST CASE LOG> });\n";
+  
+  // Summary section
+  out << "\n<TEST CASE LOG> ===== Test Case Summary =====\n";
+  out << "<TEST CASE LOG> Variables tracked:\n";
+  for (const auto& [var, value] : variable_values)
+  {
+    out << "<TEST CASE LOG>   - " << var << " (final value: " << value << ")\n";
   }
-
-  out << "\n<TEST CASE LOG> Function Coverage:\n";
-  for (const auto& func : metadata.functions_called) {
-    out << "<TEST CASE LOG>   - " << func << "\n";
-  }
-
-  out << "\n<TEST CASE LOG> Variable State Changes:\n";
-  for (const auto& [var, states] : metadata.variable_states) {
-    out << "<TEST CASE LOG>   " << var << ":\n";
-    for (const auto& [line, value] : states) {
-      out << "<TEST CASE LOG>     Line " << line << ": " << value << "\n";
-    }
-  }
-
-  out << "\n<TEST CASE LOG> Assertions:\n";
-  for (const auto& assertion : metadata.successful_assertions) {
-    out << "<TEST CASE LOG>   - Verified: " << assertion << "\n";
-  }
-
   out << "<TEST CASE LOG> ===== End Test Case =====\n";
 }
 
