@@ -11,14 +11,17 @@ template <class Json>
 class python_annotation
 {
 public:
-  python_annotation(Json &ast) : ast_(ast), current_func(nullptr)
+  python_annotation(Json &ast)
+    : ast_(ast), current_func(nullptr), current_line_(0)
   {
+    python_filename_ = ast_["filename"].template get<std::string>();
   }
 
   void add_type_annotation()
   {
     // Add type annotations to global scope variables
     annotate_global_scope();
+    current_line_ = 0;
 
     // Add type annotation to all functions and class methods
     for (Json &element : ast_["body"])
@@ -40,6 +43,7 @@ public:
   {
     // Add type annotations to global scope variables
     annotate_global_scope();
+    current_line_ = 0;
 
     for (Json &elem : ast_["body"])
     {
@@ -181,7 +185,12 @@ private:
           return elem["returns"]["id"];
       }
     }
-    throw std::runtime_error("Function \"" + func_name + "\" not found.");
+
+    std::ostringstream oss;
+    oss << "Function \"" << func_name << "\" not found (" << python_filename_
+        << " line " << current_line_ << ")";
+
+    throw std::runtime_error(oss.str());
   }
 
   std::string get_type_from_lhs(const std::string &id, Json &body)
@@ -290,6 +299,9 @@ private:
   {
     for (auto &element : body["body"])
     {
+      if (element.contains("lineno"))
+        current_line_ = element["lineno"].template get<int>();
+
       auto &stmt_type = element["_type"];
 
       if (stmt_type == "If" || stmt_type == "While")
@@ -362,11 +374,9 @@ private:
 
       if (inferred_type.empty())
       {
-        const auto &lineno = element["lineno"].template get<int>();
-
         std::ostringstream oss;
         oss << "Type inference failed for "
-            << stmt_type.template get<std::string>() << " at line " << lineno;
+            << stmt_type.template get<std::string>() << " at line " << current_line_;
 
         throw std::runtime_error(oss.str());
       }
@@ -480,4 +490,6 @@ private:
 
   Json &ast_;
   Json *current_func;
+  int current_line_;
+  std::string python_filename_;
 };
