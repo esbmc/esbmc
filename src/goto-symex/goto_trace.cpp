@@ -10,6 +10,11 @@
 #include <util/arith_tools.h>
 #include <util/std_types.h>
 #include <ostream>
+#include <iomanip>
+#include <fstream>
+#include <stack>
+#include <set>
+#include <map>
 
 void goto_tracet::output(const class namespacet &ns, std::ostream &out) const
 {
@@ -367,9 +372,33 @@ void show_goto_trace(
 {
   unsigned prev_step_nr = 0;
   bool first_step = true;
-  std::string prev_line = "";  // Initialize as empty string
+  std::string prev_line = "";
   std::map<std::string, std::string> variable_values;
   std::set<std::string> functions_called;
+  
+  // Load source file contents if available
+  std::map<std::string, std::vector<std::string>> source_files;
+  std::set<std::string> files_to_load;
+  
+  // First collect all files we need
+  for (const auto &step : goto_trace.steps) {
+    if (!step.pc->location.is_nil()) {
+      files_to_load.insert(step.pc->location.get_file().as_string());
+    }
+  }
+  
+  // Load each file's contents
+  for (const auto& file : files_to_load) {
+    std::ifstream source_file(file);
+    if (source_file.is_open()) {
+      std::vector<std::string> lines;
+      std::string line;
+      while (std::getline(source_file, line)) {
+        lines.push_back(line);
+      }
+      source_files[file] = lines;
+    }
+  }
 
   out << "<TEST CASE LOG> ===== Starting Trace for " 
       << (goto_trace.steps.empty() ? "unknown" : goto_trace.steps.front().pc->location.get_file().as_string())
@@ -383,7 +412,25 @@ void show_goto_trace(
       std::string func_name = step.pc->location.get_function().as_string();
       functions_called.insert(func_name);
       out << "<TEST CASE LOG> FUNCTION CALL: " << func_name 
-          << " at line " << step.pc->location.get_line().as_string() << "\n";
+          << " at line " << step.pc->location.get_line().as_string();
+      
+      // Add source code if available
+      if (!step.pc->location.is_nil()) {
+        std::string current_file = step.pc->location.get_file().as_string();
+        if (source_files.find(current_file) != source_files.end()) {
+          int line_num = std::stoi(step.pc->location.get_line().as_string());
+          if (line_num > 0 && line_num <= static_cast<int>(source_files[current_file].size())) {
+            out << "\n<TEST CASE LOG>   Source: " << source_files[current_file][line_num - 1];
+          }
+        }
+      }
+      out << "\n";
+    }
+
+    // Declare current_file outside switch
+    std::string current_file;
+    if (!step.pc->location.is_nil()) {
+      current_file = step.pc->location.get_file().as_string();
     }
 
     switch (step.type)
@@ -393,7 +440,18 @@ void show_goto_trace(
       {
         show_state_header(out, step, step.pc->location, step.step_nr);
         out << "<TEST CASE LOG> ASSERTION VIOLATION at line " 
-            << step.pc->location.get_line().as_string() << "\n";
+            << step.pc->location.get_line().as_string();
+        
+        // Add source code for assertion
+        if (!step.pc->location.is_nil() && 
+            source_files.find(current_file) != source_files.end()) {
+          int line_num = std::stoi(step.pc->location.get_line().as_string());
+          if (line_num > 0 && line_num <= static_cast<int>(source_files[current_file].size())) {
+            out << "\n<TEST CASE LOG>   Source: " << source_files[current_file][line_num - 1];
+          }
+        }
+        out << "\n";
+
         out << "Violated property:"
             << "\n";
         if (!step.pc->location.is_nil()) {
@@ -435,7 +493,17 @@ void show_goto_trace(
       } else {
         out << "<TEST CASE LOG> SUCCESSFUL ASSERTION at line " 
             << step.pc->location.get_line().as_string() << ": " 
-            << from_expr(ns, "", step.pc->guard) << "\n";
+            << from_expr(ns, "", step.pc->guard);
+        
+        // Add source code for successful assertion
+        if (!step.pc->location.is_nil() && 
+            source_files.find(current_file) != source_files.end()) {
+          int line_num = std::stoi(step.pc->location.get_line().as_string());
+          if (line_num > 0 && line_num <= static_cast<int>(source_files[current_file].size())) {
+            out << "\n<TEST CASE LOG>   Source: " << source_files[current_file][line_num - 1];
+          }
+        }
+        out << "\n";
       }
       break;
 
@@ -457,8 +525,19 @@ void show_goto_trace(
           std::string value = from_expr(ns, "", step.value);
           variable_values[var_name] = value;
           
-          out << "<TEST CASE LOG> ASSIGNMENT at line " << step.pc->location.get_line().as_string() 
-              << ": " << var_name << " = " << value << "\n";
+          out << "<TEST CASE LOG> ASSIGNMENT at line " 
+              << step.pc->location.get_line().as_string() 
+              << ": " << var_name << " = " << value;
+          
+          // Add source code for assignment
+          if (!step.pc->location.is_nil() && 
+              source_files.find(current_file) != source_files.end()) {
+            int line_num = std::stoi(step.pc->location.get_line().as_string());
+            if (line_num > 0 && line_num <= static_cast<int>(source_files[current_file].size())) {
+              out << "\n<TEST CASE LOG>   Source: " << source_files[current_file][line_num - 1];
+            }
+          }
+          out << "\n";
         }
         counterexample_value(out, ns, step.lhs, step.value);
       }
@@ -470,27 +549,47 @@ void show_goto_trace(
       printf_formattert printf_formatter;
       printf_formatter(step.format_string, step.output_args);
       printf_formatter.print(out);
+      
+      // Add source code for output
+      if (!step.pc->location.is_nil() && 
+          source_files.find(current_file) != source_files.end()) {
+        int line_num = std::stoi(step.pc->location.get_line().as_string());
+        if (line_num > 0 && line_num <= static_cast<int>(source_files[current_file].size())) {
+          out << "\n<TEST CASE LOG>   Source: " << source_files[current_file][line_num - 1];
+        }
+      }
       out << "\n";
       break;
     }
 
     case goto_trace_stept::RENUMBER:
-      out << "<TEST CASE LOG> POINTER RENUMBERING at line " << step.pc->location.get_line().as_string() << ": ";
+      out << "<TEST CASE LOG> POINTER RENUMBERING at line " 
+          << step.pc->location.get_line().as_string() << ": ";
       out << "Renumbered pointer to ";
       counterexample_value(out, ns, step.lhs, step.value);
       break;
 
     case goto_trace_stept::ASSUME:
       out << "<TEST CASE LOG> ASSUME at line " << step.pc->location.get_line().as_string() 
-          << ": " << from_expr(ns, "", step.pc->guard) << "\n";
-      break;
+          << ": " << from_expr(ns, "", step.pc->guard);
       
+      // Add source code for assume
+      if (!step.pc->location.is_nil() && 
+          source_files.find(current_file) != source_files.end()) {
+        int line_num = std::stoi(step.pc->location.get_line().as_string());
+        if (line_num > 0 && line_num <= static_cast<int>(source_files[current_file].size())) {
+          out << "\n<TEST CASE LOG>   Source: " << source_files[current_file][line_num - 1];
+        }
+      }
+      out << "\n";
+      break;
+
     case goto_trace_stept::SKIP:
-      // Skip without logging
       break;
 
     default:
       assert(false);
+      break;
     }
   }
 
@@ -514,7 +613,17 @@ void show_goto_trace(
   // Output function calls and assertions
   for (const auto &step : goto_trace.steps) {
     if (!step.pc->location.is_nil()) {
-      out << "<TEST CASE LOG>     // Line " << step.pc->location.get_line().as_string() << "\n";
+      out << "<TEST CASE LOG>     // Line " << step.pc->location.get_line().as_string();
+      
+      // Add source code in comments
+      std::string current_file = step.pc->location.get_file().as_string();
+      if (source_files.find(current_file) != source_files.end()) {
+        int line_num = std::stoi(step.pc->location.get_line().as_string());
+        if (line_num > 0 && line_num <= static_cast<int>(source_files[current_file].size())) {
+          out << " - " << source_files[current_file][line_num - 1];
+        }
+      }
+      out << "\n";
     }
 
     if (step.type == goto_trace_stept::ASSERT) {
@@ -532,10 +641,12 @@ void show_goto_trace(
   out << "<TEST CASE LOG>   });\n";
   out << "<TEST CASE LOG> });\n";
 
-  // Output test case summary
+  // Output test case summary with source code
   out << "\n<TEST CASE LOG> ===== Test Case Summary =====\n";
-  out << "<TEST CASE LOG> File: " 
-      << goto_trace.steps.front().pc->location.get_file().as_string() << "\n";
+  if (!goto_trace.steps.empty()) {
+    out << "<TEST CASE LOG> File: " 
+        << goto_trace.steps.front().pc->location.get_file().as_string() << "\n";
+  }
   
   out << "<TEST CASE LOG> Functions called:\n";
   for (const auto& func : functions_called) {
@@ -549,20 +660,71 @@ void show_goto_trace(
     }
   }
 
-  // Output execution path
-  out << "<TEST CASE LOG> Execution path:\n";
+  // Output execution path with source code
+  out << "<TEST CASE LOG> Execution path with source code:\n";
   for (const auto &step : goto_trace.steps) {
     if (!step.pc->location.is_nil()) {
       std::string current_line = step.pc->location.get_line().as_string();
+      std::string current_file = step.pc->location.get_file().as_string();
+      
       if (current_line != prev_line) {
         out << "<TEST CASE LOG>   Line " << current_line 
-            << " in " << step.pc->location.get_function().as_string() << "\n";
+            << " in " << step.pc->location.get_function().as_string();
+        
+        // Add source code
+        if (source_files.find(current_file) != source_files.end()) {
+          int line_num = std::stoi(current_line);
+          if (line_num > 0 && line_num <= static_cast<int>(source_files[current_file].size())) {
+            out << "\n<TEST CASE LOG>   Source: " << source_files[current_file][line_num - 1];
+          }
+        }
+        out << "\n";
         prev_line = current_line;
       }
     }
   }
 
+  // Add source code coverage summary
+  out << "\n<TEST CASE LOG> ===== Source Code Coverage =====\n";
+  for (const auto& [file, lines] : source_files) {
+    std::set<int> covered_lines;
+    for (const auto &step : goto_trace.steps) {
+      if (!step.pc->location.is_nil() && 
+          step.pc->location.get_file().as_string() == file) {
+covered_lines.insert(std::stoi(step.pc->location.get_line().as_string()));
+      }
+    }
+    
+    out << "<TEST CASE LOG> File: " << file << "\n";
+    out << "<TEST CASE LOG> Lines covered:\n";
+    for (int line_num : covered_lines) {
+      if (line_num > 0 && line_num <= static_cast<int>(lines.size())) {
+        out << "<TEST CASE LOG>   " << line_num << ": " 
+            << lines[line_num - 1] << "\n";
+      }
+    }
+
+    // Add percentage of coverage
+    if (!lines.empty()) {
+      double coverage_percent = (covered_lines.size() * 100.0) / lines.size();
+      out << "<TEST CASE LOG> Coverage: " << std::fixed << std::setprecision(2) 
+          << coverage_percent << "% ("
+          << covered_lines.size() << "/" << lines.size() << " lines)\n";
+    }
+  }
+
+  // Final summary
+  out << "\n<TEST CASE LOG> ===== Verification Summary =====\n";
+  if (!goto_trace.steps.empty()) {
+    out << "<TEST CASE LOG> Start line: " 
+        << goto_trace.steps.front().pc->location.get_line().as_string() << "\n";
+    out << "<TEST CASE LOG> End line: " 
+        << goto_trace.steps.back().pc->location.get_line().as_string() << "\n";
+  }
+  out << "<TEST CASE LOG> Total steps: " << goto_trace.steps.size() << "\n";
+  out << "<TEST CASE LOG> Functions traversed: " << functions_called.size() << "\n";
+  out << "<TEST CASE LOG> Variables modified: " << variable_values.size() << "\n";
+
   out << "<TEST CASE LOG> ===== End Test Case =====\n";
 }
-
 // End of file
