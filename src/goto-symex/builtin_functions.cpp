@@ -305,7 +305,10 @@ void goto_symext::symex_free(const expr2tc &expr)
       expr2tc offset = item.offset;
       expr2tc eq = equality2tc(offset, gen_ulong(0));
       g.guard_expr(eq);
-      claim(eq, "Operand of free must have zero pointer offset");
+      if (options.get_bool_option("conv-assert-to-assume"))
+        assume(eq);
+      else
+        claim(eq, "Operand of free must have zero pointer offset");
 
       // Check if we are not freeing an dynamic object allocated using alloca
       for (auto const &a : allocad)
@@ -327,7 +330,10 @@ void goto_symext::symex_free(const expr2tc &expr)
         {
           expr2tc noteq = notequal2tc(alloc_obj, item.object);
           g.guard_expr(noteq);
-          claim(noteq, "dereference failure: invalid pointer freed");
+          if (options.get_bool_option("conv-assert-to-assume"))
+            assume(noteq);
+          else
+            claim(noteq, "dereference failure: invalid pointer freed");
         }
       }
     }

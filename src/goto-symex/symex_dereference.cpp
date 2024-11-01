@@ -15,6 +15,13 @@ void symex_dereference_statet::dereference_failure(
   goto_symex.claim(not2tc(g), "dereference failure: " + msg);
 }
 
+void symex_dereference_statet::dereference_assume(const guardt &guard)
+{
+  expr2tc g = guard.as_expr();
+  goto_symex.replace_dynamic_allocation(g);
+  goto_symex.assume(not2tc(g));
+}
+
 bool symex_dereference_statet::has_failed_symbol(
   const expr2tc &expr,
   const symbolt *&symbol)

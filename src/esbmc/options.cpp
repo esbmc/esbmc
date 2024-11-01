@@ -362,7 +362,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"enable-unreachability-intrinsic",
      NULL,
      "enable the functionality of the __ESBMC_unreachable() intrinsic, which "
-     "results in a verification failure when its call is reachable"}}},
+     "results in a verification failure when its call is reachable"},
+    {"conv-assert-to-assume",
+     NULL,
+     "convert assertions for bounds and pointer checks into assumptions"}}},
   {"k-induction",
    {{"base-case", NULL, "check the base case"},
     {"forward-condition", NULL, "check the forward condition"},

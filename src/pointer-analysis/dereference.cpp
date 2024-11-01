@@ -1869,7 +1869,12 @@ void dereferencet::dereference_failure(
 {
   // This just wraps dereference failure in a no-pointer-check check.
   if (!options.get_bool_option("no-pointer-check") && !block_assertions)
-    dereference_callback.dereference_failure(error_class, error_name, guard);
+  {
+    if (options.get_bool_option("conv-assert-to-assume"))
+      dereference_callback.dereference_assume(guard);
+    else
+      dereference_callback.dereference_failure(error_class, error_name, guard);
+  }
 }
 
 void dereferencet::bad_base_type_failure(
