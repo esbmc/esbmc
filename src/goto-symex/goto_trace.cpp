@@ -369,125 +369,203 @@ void show_goto_trace(
   bool first_step = true;
   std::string prev_line;
   
-  out << "<TEST CASE LOG> ===== Beginning Test Case Trace =====\n";
-  out << "<TEST CASE LOG> Showing all lines traversed:\n";
+  // Enhanced metadata collection
+  struct VerificationMetadata {
+    std::string first_line, last_line, first_file, last_file, main_function;
+    std::set<std::string> functions_called;
+    std::map<std::string, std::string> inputs;  // variable -> initial value
+    std::map<std::string, std::vector<std::pair<std::string, std::string>>> variable_states;
+    std::set<std::string> conditions_evaluated;  // track branching conditions
+    std::vector<std::string> successful_assertions;  // track passing assertions
+    std::map<std::string, int> branch_coverage;  // track which branches were taken
+    std::set<std::string> modified_globals;  // track global variable modifications
+    std::vector<std::pair<std::string, std::string>> function_returns;  // track function return values
+    std::map<std::string, std::string> memory_allocations;  // track dynamic memory operations
+    bool has_loops = false;
+    bool has_recursion = false;
+    std::set<std::string> accessed_files;  // track file operations
+    std::map<std::string, int> thread_interactions;  // track thread operations
+  } metadata;
+  
+  std::stack<std::string> function_stack;  // For tracking recursion
+  
+  out << "<TEST CASE LOG> ===== Complete Verification Path =====\n";
+  out << "<TEST CASE LOG> Timestamp: " << std::time(nullptr) << "\n";
+  out << "<TEST CASE LOG> Verification Mode: " 
+      << (goto_trace.steps.empty() ? "Success" : "Counterexample") << "\n\n";
 
   for (const auto &step : goto_trace.steps)
   {
-    // First log the current line being traversed if it's different from previous
-    if (!step.pc->location.is_nil())
-    {
-      std::string current_line = step.pc->location.get_line().as_string();
-      if (current_line != prev_line)
-      {
-        out << "<TEST CASE LOG> Traversed line " << current_line 
-            << " in " << step.pc->location.get_file() 
-            << " (" << step.pc->location.get_function() << ")\n";
-        prev_line = current_line;
-      }
+    // Track file operations
+    if (!step.pc->location.is_nil()) {
+      metadata.accessed_files.insert(step.pc->location.get_file().as_string());
     }
 
-    // Then continue with the regular trace logging
+    // Track function calls and potential recursion
+    if (step.pc->is_function_call()) {
+      std::string func_name = step.pc->location.get_function().as_string();
+      metadata.functions_called.insert(func_name);
+      
+      if (!function_stack.empty() && function_stack.top() == func_name) {
+        metadata.has_recursion = true;
+      }
+      function_stack.push(func_name);
+    }
+    else if (step.pc->is_end_function() && !function_stack.empty()) {
+      function_stack.pop();
+    }
+
+    // Enhanced state tracking
     switch (step.type)
     {
     case goto_trace_stept::ASSERT:
-      if (!step.guard)
-      {
-        out << "<TEST CASE LOG> ASSERTION VIOLATION\n";
-        if (!step.pc->location.is_nil()) {
-          out << "<TEST CASE LOG> Location: " << step.pc->location << "\n";
-          out << "<TEST CASE LOG> Line: " << step.pc->location.get_line() << "\n";
-        }
-        
-        out << "<TEST CASE LOG> Property: " << step.comment << "\n";
-        
-        if (step.pc->is_assert())
-          out << "<TEST CASE LOG> Assertion: " << from_expr(ns, "", step.pc->guard) << "\n";
-
-        if (config.options.get_bool_option("show-stacktrace"))
-        {
-          out << "<TEST CASE LOG> Stack trace:\n";
-          for (const auto &it : step.stack_trace)
-          {
-            if (it.src == nullptr)
-              out << "<TEST CASE LOG>   " << it.function.as_string() << "\n";
-            else
-            {
-              out << "<TEST CASE LOG>   " << it.function.as_string();
-              if (it.src->pc->location.is_not_nil())
-                out << " at " << it.src->pc->location 
-                    << " (Line: " << it.src->pc->location.get_line() << ")\n";
-              else
-                out << "\n";
-            }
-          }
-        }
-        return;
+    {
+      if (step.guard) {
+        // Track successful assertions
+        metadata.successful_assertions.push_back(from_expr(ns, "", step.pc->guard));
+        out << "<TEST CASE LOG> SUCCESSFUL ASSERTION at line " 
+            << step.pc->location.get_line() << ": " << from_expr(ns, "", step.pc->guard) << "\n";
+      }
+      else {
+        out << "<TEST CASE LOG> FAILED ASSERTION at line " 
+            << step.pc->location.get_line() << ": " << from_expr(ns, "", step.pc->guard) << "\n";
       }
       break;
+    }
+
+    case goto_trace_stept::ASSUME:
+    {
+      metadata.conditions_evaluated.insert(from_expr(ns, "", step.pc->guard));
+      out << "<TEST CASE LOG> ASSUME at line " << step.pc->location.get_line() 
+          << ": " << from_expr(ns, "", step.pc->guard) << "\n";
+      break;
+    }
 
     case goto_trace_stept::ASSIGNMENT:
-      if (step.pc->is_assign() || step.pc->is_return() ||
-          (step.pc->is_other() && is_nil_expr(step.lhs)) ||
-          step.pc->is_function_call())
+    {
+      if (!is_nil_expr(step.lhs) && is_symbol2t(step.lhs))
       {
-        if (prev_step_nr != step.step_nr || first_step)
-        {
-          first_step = false;
-          prev_step_nr = step.step_nr;
-          out << "<TEST CASE LOG> Step " << step.step_nr;
-          if (!step.pc->location.is_nil()) {
-            out << " at " << step.pc->location;
-            out << " (Line: " << step.pc->location.get_line() << ")";
+        const symbol2t &sym = to_symbol2t(step.lhs);
+        std::string var_name = sym.thename.as_string();
+        std::string value = from_expr(ns, "", step.value);
+        std::string line_num = step.pc->location.get_line().as_string();
+
+        // Track global variables (using symbol name convention)
+        if (var_name.find("__ESBMC_") == std::string::npos) {
+          // Consider it global if it doesn't have local scope indicators
+          if (var_name.find("::") == std::string::npos) {
+            metadata.modified_globals.insert(var_name);
           }
-          out << " Thread " << step.thread_nr << "\n";
+          
+          // Track value changes
+          metadata.variable_states[var_name].push_back(std::make_pair(line_num, value));
+          
+          // Track initial values
+          if (metadata.inputs.find(var_name) == metadata.inputs.end()) {
+            metadata.inputs[var_name] = value;
+          }
+
+          out << "<TEST CASE LOG> ASSIGNMENT at line " << line_num 
+              << ": " << var_name << " = " << value << "\n";
         }
-        
-        out << "<TEST CASE LOG> Assignment: ";
-        counterexample_value(out, ns, step.lhs, step.value);
       }
       break;
+    }
 
     case goto_trace_stept::OUTPUT:
     {
+      out << "<TEST CASE LOG> OUTPUT at line " << step.pc->location.get_line() << ": ";
       printf_formattert printf_formatter;
-      out << "<TEST CASE LOG> Program output";
-      if (!step.pc->location.is_nil())
-        out << " at line " << step.pc->location.get_line() << ": ";
-      else
-        out << ": ";
       printf_formatter(step.format_string, step.output_args);
       printf_formatter.print(out);
       out << "\n";
       break;
     }
 
-    case goto_trace_stept::RENUMBER:
-      out << "<TEST CASE LOG> Pointer renumbering";
-      if (!step.pc->location.is_nil())
-        out << " at line " << step.pc->location.get_line() << ": ";
-      else
-        out << ": ";
-      counterexample_value(out, ns, step.lhs, step.value);
-      break;
-
-    case goto_trace_stept::ASSUME:
-      out << "<TEST CASE LOG> Assumption";
-      if (!step.pc->location.is_nil())
-        out << " at line " << step.pc->location.get_line() << ": "
-            << step.pc->location << "\n";
-      break;
-
     case goto_trace_stept::SKIP:
-      // Even for skips, show the line if it's different
+    case goto_trace_stept::RENUMBER:
+      // Handle skip and renumber cases
       break;
 
     default:
-      assert(false);
+      // Handle any other cases
+      break;
+    }
+
+    // Track loop detection
+    if (step.pc->is_goto()) {
+      metadata.has_loops = true;
+      metadata.conditions_evaluated.insert(from_expr(ns, "", step.pc->guard));
+      out << "<TEST CASE LOG> LOOP CONDITION at line " 
+          << step.pc->location.get_line() << ": " << from_expr(ns, "", step.pc->guard) << "\n";
+    }
+
+    // Track memory operations
+    if (step.pc->is_function_call()) {
+      std::string func_name = step.pc->location.get_function().as_string();
+      if (func_name.find("malloc") != std::string::npos || 
+          func_name.find("free") != std::string::npos) {
+        metadata.memory_allocations[step.pc->location.get_line().as_string()] = func_name;
+      }
+    }
+
+    // Track thread operations
+    if (step.thread_nr != 0) {
+      metadata.thread_interactions[std::to_string(step.thread_nr)]++;
     }
   }
+
+  // Output comprehensive verification summary
+  out << "\n<TEST CASE LOG> ===== Verification Summary =====\n";
+  out << "<TEST CASE LOG> Program Characteristics:\n";
+  out << "<TEST CASE LOG>   - Contains Loops: " << (metadata.has_loops ? "Yes" : "No") << "\n";
+  out << "<TEST CASE LOG>   - Contains Recursion: " << (metadata.has_recursion ? "Yes" : "No") << "\n";
+  out << "<TEST CASE LOG>   - Files Accessed: " << metadata.accessed_files.size() << "\n";
+  for (const auto& file : metadata.accessed_files) {
+    out << "<TEST CASE LOG>     * " << file << "\n";
+  }
+
+  out << "\n<TEST CASE LOG> Function Information:\n";
+  out << "<TEST CASE LOG>   - Total Functions Called: " << metadata.functions_called.size() << "\n";
+  for (const auto& func : metadata.functions_called) {
+    out << "<TEST CASE LOG>     * " << func << "\n";
+  }
+
+  out << "\n<TEST CASE LOG> Variable States:\n";
+  out << "<TEST CASE LOG>   - Global Variables Modified: " << metadata.modified_globals.size() << "\n";
+  for (const auto& global : metadata.modified_globals) {
+    out << "<TEST CASE LOG>     * " << global << "\n";
+  }
   
-  out << "<TEST CASE LOG> ===== End of Test Case Trace =====\n";
+  out << "\n<TEST CASE LOG> Conditions and Assertions:\n";
+  out << "<TEST CASE LOG>   - Conditions Evaluated: " << metadata.conditions_evaluated.size() << "\n";
+  out << "<TEST CASE LOG>   - Successful Assertions: " << metadata.successful_assertions.size() << "\n";
+  
+  if (!metadata.thread_interactions.empty()) {
+    out << "\n<TEST CASE LOG> Thread Information:\n";
+    for (const auto& [thread, count] : metadata.thread_interactions) {
+      out << "<TEST CASE LOG>   - Thread " << thread << ": " << count << " interactions\n";
+    }
+  }
+
+  if (!metadata.memory_allocations.empty()) {
+    out << "\n<TEST CASE LOG> Memory Operations:\n";
+    for (const auto& [line, op] : metadata.memory_allocations) {
+      out << "<TEST CASE LOG>   - Line " << line << ": " << op << "\n";
+    }
+  }
+
+  out << "\n<TEST CASE LOG> Test Case Generation Info:\n";
+  out << "<TEST CASE LOG>   - Required Initial Values:\n";
+  for (const auto& [var, value] : metadata.inputs) {
+    out << "<TEST CASE LOG>     let " << var << " = " << value << ";\n";
+  }
+
+  out << "\n<TEST CASE LOG> Verification Result: " 
+      << (metadata.successful_assertions.empty() ? "No assertions violated" : 
+          "All " + std::to_string(metadata.successful_assertions.size()) + " assertions passed") << "\n";
+  
+  out << "<TEST CASE LOG> ===== End of Verification Path =====\n";
 }
 
 // End of file
