@@ -388,41 +388,55 @@ void show_goto_trace(
       {"overall_stats", json::object()}
     };
     
-    // Track coverage data
-    std::map<std::string, std::map<std::string, json>> file_coverage;
+    // First pass: collect function boundaries and initialize coverage data
+    std::map<std::string, std::map<std::string, std::pair<int, int>>> function_bounds;
+    std::map<std::string, std::set<int>> file_lines;
     
-    // First pass: collect file and function metadata
     for (const auto &step : goto_trace.steps) {
       if (!step.pc->location.is_nil()) {
         std::string file = step.pc->location.get_file().as_string();
+        std::string line = step.pc->location.get_line().as_string();
         std::string function = step.pc->location.get_function().as_string();
         
-        if (!file.empty()) {
-          if (file_coverage.find(file) == file_coverage.end()) {
-            file_coverage[file] = {
-              {"total_lines", json(86)},  // Hardcoded for now, we should get this from source
-              {"covered_lines", json::object()},
-              {"functions", json::object()},
-              {"potential_lines", json::array()}
-            };
-            
-            // Add all potential lines for the function
-            for (int i = 40; i <= 86; i++) {  // Hardcoded range for handleRunplanEvent
-              file_coverage[file]["potential_lines"].push_back(i);
-            }
+        if (!file.empty() && !line.empty() && !function.empty()) {
+          int line_num = std::stoi(line);
+          file_lines[file].insert(line_num);
+          
+          if (function_bounds.find(file) == function_bounds.end()) {
+            function_bounds[file] = std::map<std::string, std::pair<int, int>>();
           }
           
-          if (!function.empty()) {
-            if (!file_coverage[file]["functions"].contains(function)) {
-              file_coverage[file]["functions"][function] = {
-                {"start_line", 40},  // Hardcoded for handleRunplanEvent
-                {"end_line", 86},    // Hardcoded for handleRunplanEvent
-                {"covered_lines", json::object()},
-                {"hits", 0}
-              };
-            }
+          if (function_bounds[file].find(function) == function_bounds[file].end()) {
+            function_bounds[file][function] = std::make_pair(line_num, line_num);
+          } else {
+            auto& bounds = function_bounds[file][function];
+            bounds.first = std::min(bounds.first, line_num);
+            bounds.second = std::max(bounds.second, line_num);
           }
         }
+      }
+    }
+    
+    // Initialize coverage data structures with discovered boundaries
+    for (const auto& [file, functions] : function_bounds) {
+      test_data["coverage"]["files"][file] = {
+        {"functions", json::object()},
+        {"covered_lines", json::object()},
+        {"file_bounds", {
+          {"start_line", file_lines[file].empty() ? 0 : *file_lines[file].begin()},
+          {"end_line", file_lines[file].empty() ? 0 : *file_lines[file].rbegin()}
+        }}
+      };
+      
+      for (const auto& [func_name, bounds] : functions) {
+        test_data["coverage"]["files"][file]["functions"][func_name] = {
+          {"bounds", {
+            {"start_line", bounds.first},
+            {"end_line", bounds.second}
+          }},
+          {"covered_lines", json::object()},
+          {"hits", 0}
+        };
       }
     }
     
@@ -440,27 +454,28 @@ void show_goto_trace(
         step_data["function"] = function;
         
         if (!file.empty() && !line.empty()) {
+          auto& file_coverage = test_data["coverage"]["files"][file];
+          
           // Track line coverage
-          if (!file_coverage[file]["covered_lines"].contains(line)) {
-            file_coverage[file]["covered_lines"][line] = {
+          if (!file_coverage["covered_lines"].contains(line)) {
+            file_coverage["covered_lines"][line] = {
               {"hits", 1},
               {"function", function},
               {"covered", true}
             };
           } else {
-            file_coverage[file]["covered_lines"][line]["hits"] = 
-              file_coverage[file]["covered_lines"][line]["hits"].get<int>() + 1;
+            file_coverage["covered_lines"][line]["hits"] = 
+              file_coverage["covered_lines"][line]["hits"].get<int>() + 1;
           }
           
           // Track function coverage
-          if (!function.empty()) {
-            auto& func_data = file_coverage[file]["functions"][function];
+          if (!function.empty() && file_coverage["functions"].contains(function)) {
+            auto& func_data = file_coverage["functions"][function];
             func_data["hits"] = func_data["hits"].get<int>() + 1;
             func_data["covered_lines"][line] = true;
           }
         }
         
-        // Original counterexample handling
         switch(step.type) {
           case goto_trace_stept::ASSERT:
             if(!step.guard) {
@@ -514,34 +529,45 @@ void show_goto_trace(
       test_data["steps"].push_back(step_data);
     }
     
-    // Process coverage data for output
-    for (const auto& [file, file_data] : file_coverage) {
-      auto& coverage_out = test_data["coverage"]["files"][file];
+    // Calculate coverage statistics and identify uncovered lines
+    for (auto& [file, file_data] : test_data["coverage"]["files"].items()) {
+      int start_line = file_data["file_bounds"]["start_line"].get<int>();
+      int end_line = file_data["file_bounds"]["end_line"].get<int>();
       
-      // Copy basic data
-      coverage_out["total_lines"] = file_data.at("total_lines");
-      coverage_out["potential_lines"] = file_data.at("potential_lines");
-      coverage_out["covered_lines"] = file_data.at("covered_lines");
-      coverage_out["functions"] = file_data.at("functions");
-      
-      // Calculate coverage percentage
-      size_t total_lines = file_data.at("total_lines").get<size_t>();
-      size_t covered_lines = file_data.at("covered_lines").size();
-      double coverage_percent = total_lines > 0 ? 
-        (static_cast<double>(covered_lines) * 100.0) / static_cast<double>(total_lines) : 0.0;
-      
-      coverage_out["coverage_percentage"] = coverage_percent;
-      coverage_out["total_covered_lines"] = covered_lines;
-      
-      // Add uncovered lines
       json uncovered_lines = json::array();
-      for (int i = 40; i <= 86; i++) {  // Hardcoded range for handleRunplanEvent
+      for (int i = start_line; i <= end_line; i++) {
         std::string line_str = std::to_string(i);
-        if (!file_data.at("covered_lines").contains(line_str)) {
+        if (!file_data["covered_lines"].contains(line_str)) {
           uncovered_lines.push_back(i);
         }
       }
-      coverage_out["uncovered_lines"] = uncovered_lines;
+      file_data["uncovered_lines"] = uncovered_lines;
+      
+      size_t total_lines = end_line - start_line + 1;
+      size_t covered_lines = file_data["covered_lines"].size();
+      double coverage_percent = total_lines > 0 ? 
+        (static_cast<double>(covered_lines) * 100.0) / static_cast<double>(total_lines) : 0.0;
+      
+      file_data["coverage_stats"] = {
+        {"total_lines", total_lines},
+        {"covered_lines", covered_lines},
+        {"coverage_percentage", coverage_percent}
+      };
+      
+      // Calculate function-level coverage
+      for (auto& [func_name, func_data] : file_data["functions"].items()) {
+        int func_start = func_data["bounds"]["start_line"].get<int>();
+        int func_end = func_data["bounds"]["end_line"].get<int>();
+        size_t func_total_lines = func_end - func_start + 1;
+        size_t func_covered_lines = func_data["covered_lines"].size();
+        
+        func_data["coverage_stats"] = {
+          {"total_lines", func_total_lines},
+          {"covered_lines", func_covered_lines},
+          {"coverage_percentage", func_total_lines > 0 ?
+            (static_cast<double>(func_covered_lines) * 100.0) / static_cast<double>(func_total_lines) : 0.0}
+        };
+      }
     }
     
     std::ofstream json_out("tests.json");
