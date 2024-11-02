@@ -35,45 +35,7 @@ void goto_trace_stept::dump() const
 
 void goto_trace_stept::track_coverage(goto_tracet const& trace) const 
 {
-  // Don't do anything if we don't have valid program counter
-  if (pc == goto_programt::const_targett()) {
-    return;
-  }
-
-  try {
-    const locationt& loc = pc->location;
-    if (loc.is_nil()) {
-      return;
-    }
-
-    // Get file and line info
-    irep_idt file = loc.get_file();
-    irep_idt line = loc.get_line();
-
-    if (file.empty() || line.empty()) {
-      return;
-    }
-
-    // Convert to string only once
-    std::string file_str = id2string(file);
-    
-    // Try to convert line number
-    int line_num = 0;
-    try {
-      line_num = std::stoi(id2string(line));
-      if (line_num <= 0) {
-        return;
-      }
-    } catch (...) {
-      return;
-    }
-
-    // Single atomic operation to update coverage
-    const_cast<goto_tracet&>(trace).coverage_data[file_str].covered_lines.insert(line_num);
-
-  } catch (...) {
-    return;
-  }
+  
 }
 
 void goto_trace_stept::output(const namespacet &ns, std::ostream &out) const
