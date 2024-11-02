@@ -15,7 +15,10 @@ class symbol_id;
 class python_converter
 {
 public:
-  python_converter(contextt &_context, const nlohmann::json &ast);
+  python_converter(
+    contextt &_context,
+    const nlohmann::json &ast,
+    const std::vector<nlohmann::json> &filtered_global_elements);
   void convert();
 
 private:
@@ -97,4 +100,5 @@ private:
   std::unordered_map<std::string, std::set<std::string>> instance_attr_map;
   // Map imported modules to their corresponding paths
   std::unordered_map<std::string, std::string> imported_modules;
+  const std::vector<nlohmann::json> &filtered_global_elements_;
 };

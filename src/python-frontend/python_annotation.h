@@ -41,14 +41,18 @@ public:
 
   void add_type_annotation(const std::string &func_name)
   {
-    // Add type annotations to global scope variables
-    annotate_global_scope();
     current_line_ = 0;
 
     for (Json &elem : ast_["body"])
     {
       if (elem["_type"] == "FunctionDef" && elem["name"] == func_name)
       {
+        filter_global_elements(elem["body"]);
+        // Add type annotations to global scope variables
+        if (!referenced_global_elements.empty())
+          annotate_global_scope();
+        filter_global_elements_ = false;
+
         // Add annotation to a specific function
         annotate_function(elem);
         return;
@@ -56,7 +60,70 @@ public:
     }
   }
 
+  const std::vector<Json> &get_referenced_global_elements() const
+  {
+    return referenced_global_elements;
+  }
+
 private:
+  /* Get the global elements referred by a function */
+  void filter_global_elements(const Json &node)
+  {
+    // Checks if the current node is a variable identifier
+    if (
+      node.contains("_type") && node["_type"] == "Name" && node.contains("id"))
+    {
+      Json var = json_utils::find_var_decl(
+        node["id"].template get<std::string>(), "", ast_);
+      if (!var.empty())
+        referenced_global_elements.push_back(var);
+    }
+
+    if (
+      node.contains("_type") && node["_type"] == "Call" &&
+      node.contains("func") && node["func"]["_type"] == "Name")
+    {
+      Json clazz = json_utils::find_class(ast_["body"], node["func"]["id"]);
+      if (!clazz.empty())
+        referenced_global_elements.push_back(clazz);
+      else
+      {
+        const auto &func_name = node["func"]["id"];
+        if (!is_builtin_type(func_name))
+        {
+          try
+          {
+            const auto &func_node =
+              json_utils::find_function(ast_["body"], func_name);
+            filter_global_elements(func_node);
+          }
+          catch (std::runtime_error &)
+          {
+          }
+        }
+      }
+    }
+
+    // Recursively iterates through all fields of the node if it is an object
+    if (node.is_object())
+    {
+      for (auto it = node.begin(); it != node.end(); ++it)
+      {
+        filter_global_elements(it.value());
+      }
+    }
+
+    // Iterates over the elements if the current node is an array
+    else if (node.is_array())
+    {
+      for (const auto &element : node)
+      {
+        filter_global_elements(element);
+      }
+    }
+    filter_global_elements_ = true;
+  }
+
   void annotate_global_scope()
   {
     add_annotation(ast_);
@@ -299,6 +366,16 @@ private:
   {
     for (auto &element : body["body"])
     {
+      auto itr = std::find(
+        referenced_global_elements.begin(),
+        referenced_global_elements.end(),
+        element);
+
+      if (filter_global_elements_ && itr == referenced_global_elements.end())
+      {
+        continue;
+      }
+
       if (element.contains("lineno"))
         current_line_ = element["lineno"].template get<int>();
 
@@ -308,6 +385,21 @@ private:
       {
         add_annotation(element);
         continue;
+      }
+
+      const std::string function_flag = config.options.get_option("function");
+      if (!function_flag.empty())
+      {
+        if (
+          stmt_type == "Expr" && element.contains("value") &&
+          element["value"]["_type"] == "Call" &&
+          element["value"]["func"]["_type"] == "Name")
+        {
+          auto& func_node =
+            json_utils::find_function(ast_["body"], element["value"]["func"]["id"]);
+          if (!func_node.empty())
+            add_annotation(func_node);
+        }
       }
 
       if (stmt_type != "Assign" || !element["type_comment"].is_null())
@@ -376,12 +468,15 @@ private:
       {
         std::ostringstream oss;
         oss << "Type inference failed for "
-            << stmt_type.template get<std::string>() << " at line " << current_line_;
+            << stmt_type.template get<std::string>() << " at line "
+            << current_line_;
 
         throw std::runtime_error(oss.str());
       }
 
       update_assignment_node(element, inferred_type);
+      if (itr != referenced_global_elements.end())
+        *itr = element;
     }
   }
 
@@ -492,4 +587,6 @@ private:
   Json *current_func;
   int current_line_;
   std::string python_filename_;
+  bool filter_global_elements_ = false;
+  std::vector<Json> referenced_global_elements;
 };
