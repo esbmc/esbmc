@@ -35,7 +35,7 @@ void goto_trace_stept::dump() const
 
 void goto_trace_stept::track_coverage(goto_tracet const& trace) const 
 {
-  
+  return;
 }
 
 void goto_trace_stept::output(const namespacet &ns, std::ostream &out) const
