@@ -643,9 +643,6 @@ void add_coverage_to_json(
   test_entry["status"] = "unknown";
   test_entry["coverage"] = {{"files", json::object()}};
   
-  std::map<std::string, std::map<int, int>> line_hits;
-  std::set<std::pair<std::string, int>> violations;
-
   // Track source code on first run
   if(first_write) {
     for(const auto &step : goto_trace.steps) {
@@ -664,8 +661,12 @@ void add_coverage_to_json(
     }
   }
 
-  // Process steps and track navigation
+  std::map<std::string, std::map<int, int>> line_hits;
+  std::set<std::pair<std::string, int>> violations;
   size_t step_count = 0;
+  bool found_violation = false;
+
+  // Process steps with navigation
   for(const auto &step : goto_trace.steps)
   {
     if(step.pc != goto_programt::const_targett() && !step.pc->location.is_nil())
@@ -681,33 +682,65 @@ void add_coverage_to_json(
           // Track line hits
           line_hits[file][line]++;
 
-          // Track violations
-          if(step.type == goto_trace_stept::ASSERT && !step.guard) {
-            violations.insert({file, line});
-            test_entry["status"] = "violation";
-          }
-
           // Add step info with navigation
           json step_data;
+          step_data["id"] = fmt::format("Path{}", step_count);
           step_data["file"] = file;
           step_data["line"] = line_str;
           step_data["function"] = function;
           step_data["step_number"] = step_count;
-          
+
           // Add navigation info
           if(step_count > 0) {
-            step_data["previous_step"] = step_count - 1;
+            step_data["previous"] = {
+              {"id", fmt::format("Path{}", step_count - 1)},
+              {"step", step_count - 1}
+            };
           }
           if(step_count < goto_trace.steps.size() - 1) {
-            step_data["next_step"] = step_count + 1;
+            step_data["next"] = {
+              {"id", fmt::format("Path{}", step_count + 1)},
+              {"step", step_count + 1}
+            };
           }
 
-          if(step.type == goto_trace_stept::ASSERT && !step.guard) {
-            step_data["assertion"] = {
-              {"violated", true},
-              {"comment", step.comment},
-              {"guard", from_expr(ns, "", step.pc->guard)}
-            };
+          // Add step type and message
+          if(step.pc->is_assume()) {
+            step_data["type"] = "assume";
+            step_data["message"] = "Assumption restriction";
+          }
+          else if(step.pc->is_assert() || step.is_assert()) {
+            step_data["type"] = "assert";
+            if(!step.guard) {
+              step_data["type"] = "violation";
+              step_data["message"] = step.comment.empty() ? "Assertion check" : step.comment;
+              found_violation = true;
+              violations.insert({file, line});
+              test_entry["status"] = "violation";
+              step_data["assertion"] = {
+                {"violated", true},
+                {"comment", step.comment},
+                {"guard", from_expr(ns, "", step.pc->guard)}
+              };
+            }
+          }
+          else if(step.pc->is_assign()) {
+            step_data["type"] = "assignment";
+            std::string msg = from_expr(ns, "", step.lhs);
+            if(is_nil_expr(step.value)) {
+              msg += " (assignment removed)";
+            } else {
+              msg += " = " + from_expr(ns, "", step.value);
+            }
+            step_data["message"] = msg;
+          }
+          else if(step.pc->is_function_call()) {
+            step_data["type"] = "function_call";
+            step_data["message"] = fmt::format(
+              "Function argument '{}' = '{}'",
+              from_expr(ns, "", step.lhs),
+              from_expr(ns, "", step.value)
+            );
           }
 
           test_entry["steps"].push_back(step_data);
@@ -717,6 +750,16 @@ void add_coverage_to_json(
         continue;
       }
     }
+  }
+
+  // Add end path for final step
+  if(step_count > 0) {
+    json last_step = test_entry["steps"].back();
+    last_step["id"] = "EndPath";
+    if(last_step.contains("next")) {
+      last_step.erase("next");
+    }
+    test_entry["steps"].back() = last_step;
   }
 
   // Build coverage data
