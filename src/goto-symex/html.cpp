@@ -734,11 +734,11 @@ void generate_html_report(
   const goto_tracet &goto_trace,
   const cmdlinet::options_mapt &options_map)
 {
-  log_status("Generating HTML report for trace: {}", uuid);
-  const html_report report(goto_trace, ns, options_map);
+  // log_status("Generating HTML report for trace: {}", uuid);
+  // const html_report report(goto_trace, ns, options_map);
 
-  std::ofstream html(fmt::format("report-{}.html", uuid));
-  report.output(html);
+  // std::ofstream html(fmt::format("report-{}.html", uuid));
+  // report.output(html);
   // Add this trace's coverage to the aggregated JSON
   add_coverage_to_json(goto_trace, ns);
 }
