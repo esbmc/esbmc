@@ -432,46 +432,43 @@ void show_goto_trace(
     for (const auto &step : goto_trace.steps) {
       json step_data;
       
-      // IMPORTANT: Need to validate pc before using it
-      if (!step.pc.is_nil()) {  // Check if pc is valid first
+      // Check if pc is valid
+      if (step.pc != goto_programt::const_targett() && step.pc->location.is_nil() == false) {
         const locationt &loc = step.pc->location;
-        if (!loc.is_nil()) {
-          // Now safely try to get coverage info
+        try {
           irep_idt file_id = loc.get_file();
           irep_idt line_id = loc.get_line();
           
           if (!file_id.empty() && !line_id.empty()) {
-            try {
-              std::string file = id2string(file_id);
-              std::string line_str = id2string(line_id);
-              int line = std::stoi(line_str);
-              if (line > 0) {
-                line_hits[file].insert(line);
-              }
-              
-              step_data["file"] = file;
-              step_data["line"] = line_str;
-              step_data["function"] = id2string(loc.get_function());
-            } catch (...) {
-              // Skip if any string conversion fails
-            }
-          }
-
-          // Now process the step type
-          if (step.type == goto_trace_stept::ASSERT && !step.guard) {
-            found_violation = true;
-            out << "\n[Counterexample]\n";
-            out << "Violation at: " << loc << "\n";
-            if (!step.comment.empty()) {
-              out << "Reason: " << step.comment << "\n";
+            std::string file = id2string(file_id);
+            std::string line_str = id2string(line_id);
+            int line = std::stoi(line_str);
+            if (line > 0) {
+              line_hits[file].insert(line);
             }
             
-            step_data["assertion"] = {
-              {"violated", true},
-              {"comment", step.comment},
-              {"guard", from_expr(ns, "", step.pc->guard)}
-            };
+            step_data["file"] = file;
+            step_data["line"] = line_str;
+            step_data["function"] = id2string(loc.get_function());
+
+            // Process step type
+            if (step.type == goto_trace_stept::ASSERT && !step.guard) {
+              found_violation = true;
+              out << "\n[Counterexample]\n";
+              out << "Violation at: " << loc << "\n";
+              if (!step.comment.empty()) {
+                out << "Reason: " << step.comment << "\n";
+              }
+              
+              step_data["assertion"] = {
+                {"violated", true},
+                {"comment", step.comment},
+                {"guard", from_expr(ns, "", step.pc->guard)}
+              };
+            }
           }
+        } catch (...) {
+          continue;
         }
       }
       
