@@ -147,6 +147,9 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
   if (options.get_bool_option("generate-html-report"))
     generate_html_report("1", ns, goto_trace, opt_map);
 
+  if (options.get_bool_option("generate-json-report"))
+    generate_json_report("1", ns, goto_trace, opt_map);
+
   std::ostringstream oss;
   log_fail("\n[Counterexample]\n");
   show_goto_trace(oss, ns, goto_trace);
@@ -348,6 +351,10 @@ void bmct::report_multi_property_trace(
     }
     if (options.get_bool_option("generate-html-report"))
       generate_html_report(std::to_string(ce_counter), ns, goto_trace, opt_map);
+
+    if (options.get_bool_option("generate-json-report"))
+      generate_json_report(std::to_string(ce_counter), ns, goto_trace, opt_map);
+
 
     std::ostringstream oss;
     log_fail("\n[Counterexample]\n");
