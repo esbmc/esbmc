@@ -426,46 +426,68 @@ void show_goto_trace(
     test_data["status"] = "unknown";
     test_data["coverage"] = {{"files", json::object()}};
     
-    std::map<std::string, std::set<int>> line_hits;
+    std::map<std::string, std::map<std::string, std::set<int>>> function_lines;
+    std::string current_function;
+    int function_start_line = 0;
+    int function_end_line = 0;
 
-    // Process execution steps
+    // First pass - collect all function lines
     for (const auto &step : goto_trace.steps) {
-      json step_data;
-      
-      // Check if pc is valid
       if (step.pc != goto_programt::const_targett() && step.pc->location.is_nil() == false) {
         const locationt &loc = step.pc->location;
         try {
-          irep_idt file_id = loc.get_file();
-          irep_idt line_id = loc.get_line();
+          std::string file = id2string(loc.get_file());
+          std::string line_str = id2string(loc.get_line());
+          std::string function = id2string(loc.get_function());
           
-          if (!file_id.empty() && !line_id.empty()) {
-            std::string file = id2string(file_id);
-            std::string line_str = id2string(line_id);
+          if (!file.empty() && !line_str.empty()) {
             int line = std::stoi(line_str);
             if (line > 0) {
-              line_hits[file].insert(line);
+              if (!function.empty()) {
+                // Track function bounds
+                if (function != current_function) {
+                  current_function = function;
+                  function_start_line = line;
+                }
+                function_end_line = std::max(function_end_line, line);
+                function_lines[file][function].insert(line);
+              }
+            }
+          }
+        } catch (...) {
+          continue;
+        }
+      }
+    }
+
+    // Second pass - process steps and build output
+    for (const auto &step : goto_trace.steps) {
+      json step_data;
+      
+      if (step.pc != goto_programt::const_targett() && step.pc->location.is_nil() == false) {
+        const locationt &loc = step.pc->location;
+        try {
+          std::string file = id2string(loc.get_file());
+          std::string line_str = id2string(loc.get_line());
+          std::string function = id2string(loc.get_function());
+          
+          step_data["file"] = file;
+          step_data["line"] = line_str;
+          step_data["function"] = function;
+
+          if (step.type == goto_trace_stept::ASSERT && !step.guard) {
+            found_violation = true;
+            out << "\n[Counterexample]\n";
+            out << "Violation at: " << loc << "\n";
+            if (!step.comment.empty()) {
+              out << "Reason: " << step.comment << "\n";
             }
             
-            step_data["file"] = file;
-            step_data["line"] = line_str;
-            step_data["function"] = id2string(loc.get_function());
-
-            // Process step type
-            if (step.type == goto_trace_stept::ASSERT && !step.guard) {
-              found_violation = true;
-              out << "\n[Counterexample]\n";
-              out << "Violation at: " << loc << "\n";
-              if (!step.comment.empty()) {
-                out << "Reason: " << step.comment << "\n";
-              }
-              
-              step_data["assertion"] = {
-                {"violated", true},
-                {"comment", step.comment},
-                {"guard", from_expr(ns, "", step.pc->guard)}
-              };
-            }
+            step_data["assertion"] = {
+              {"violated", true},
+              {"comment", step.comment},
+              {"guard", from_expr(ns, "", step.pc->guard)}
+            };
           }
         } catch (...) {
           continue;
@@ -477,20 +499,24 @@ void show_goto_trace(
       }
     }
 
-    // Add coverage data
-    for (const auto& [file, lines] : line_hits) {
+    // Build coverage data including function scope
+    for (const auto& [file, functions] : function_lines) {
       json file_coverage;
       file_coverage["covered_lines"] = json::object();
       
-      for (int line : lines) {
-        file_coverage["covered_lines"][std::to_string(line)] = {
-          {"covered", true},
-          {"hits", 1}
-        };
+      for (const auto& [function_name, lines] : functions) {
+        // Add all lines in the function's range
+        for (int line : lines) {
+          file_coverage["covered_lines"][std::to_string(line)] = {
+            {"covered", true},
+            {"hits", 1},
+            {"function", function_name}
+          };
+        }
       }
       
       file_coverage["coverage_stats"] = {
-        {"covered_lines", lines.size()}
+        {"covered_lines", file_coverage["covered_lines"].size()}
       };
       
       test_data["coverage"]["files"][file] = file_coverage;
