@@ -816,7 +816,7 @@ void add_coverage_to_json(
 
   // Append new test and write
   all_tests.push_back(test_entry);
-  std::ofstream json_out("tests.json");
+  std::ofstream json_out("report.json");
   if(json_out.is_open()) {
     json_out << std::setw(2) << all_tests << std::endl;
     first_write = false;
