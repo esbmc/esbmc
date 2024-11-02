@@ -35,45 +35,43 @@ void goto_trace_stept::dump() const
 
 void goto_trace_stept::track_coverage(goto_tracet const& trace) const 
 {
-  try {
-    // Basic validity check for program counter
-    if (pc == goto_programt::const_targett()) {
-      return;
-    }
+  // Don't do anything if we don't have valid program counter
+  if (pc == goto_programt::const_targett()) {
+    return;
+  }
 
-    // Get location safely
+  try {
     const locationt& loc = pc->location;
     if (loc.is_nil()) {
       return;
     }
 
-    // Get basic location info
-    std::string file_str = loc.get_file().as_string();
-    std::string line_str = loc.get_line().as_string();
-    
-    // Basic validation
-    if (file_str.empty() || line_str.empty()) {
+    // Get file and line info
+    irep_idt file = loc.get_file();
+    irep_idt line = loc.get_line();
+
+    if (file.empty() || line.empty()) {
       return;
     }
 
-    // Simple line number conversion
+    // Convert to string only once
+    std::string file_str = id2string(file);
+    
+    // Try to convert line number
     int line_num = 0;
     try {
-      line_num = std::stoi(line_str);
+      line_num = std::stoi(id2string(line));
+      if (line_num <= 0) {
+        return;
+      }
     } catch (...) {
       return;
     }
 
-    if (line_num <= 0) {
-      return;
-    }
+    // Single atomic operation to update coverage
+    const_cast<goto_tracet&>(trace).coverage_data[file_str].covered_lines.insert(line_num);
 
-    // Update only essential coverage data
-    auto& file_coverage = const_cast<goto_tracet&>(trace).coverage_data[file_str];
-    file_coverage.name = file_str;
-    file_coverage.covered_lines.insert(line_num);
   } catch (...) {
-    // Fail silently
     return;
   }
 }
