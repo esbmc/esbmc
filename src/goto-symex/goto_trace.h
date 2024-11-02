@@ -12,6 +12,25 @@
 #include <vector>
 #include <string_view>
 
+struct function_coveraget {
+  std::string name;
+  std::string file;
+  int start_line;
+  int end_line;
+  std::set<int> covered_lines;
+  std::map<int, int> line_hits;
+
+  function_coveraget() : start_line(0), end_line(0) {}
+};
+
+struct file_coveraget {
+  std::string name;
+  std::map<std::string, function_coveraget> functions;
+  std::set<int> covered_lines;
+};
+
+// Forward declare goto_tracet
+class goto_tracet;
 
 class goto_trace_stept
 {
@@ -81,6 +100,8 @@ public:
   std::string format_string;
   std::list<expr2tc> output_args;
 
+  void track_coverage(goto_tracet& trace) const;
+
   void output(const class namespacet &ns, std::ostream &out) const;
   void dump() const;
 
@@ -94,8 +115,12 @@ class goto_tracet
 public:
   typedef std::list<goto_trace_stept> stepst;
   typedef std::map<std::string, std::string, std::less<std::string>> mid;
-  stepst steps;
+  // stepst steps;
   std::string mode;
+  std::vector<goto_trace_stept> steps;
+  mutable std::map<std::string, file_coveraget> coverage_data;
+
+  void update_coverage(const goto_trace_stept& step) const;
 
   void clear()
   {

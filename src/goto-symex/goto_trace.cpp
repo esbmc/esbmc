@@ -17,8 +17,8 @@
 #include <map>
 #include <nlohmann/json.hpp>
 
-
 using json = nlohmann::json;
+
 
 void goto_tracet::output(const class namespacet &ns, std::ostream &out) const
 {
@@ -31,6 +31,41 @@ void goto_trace_stept::dump() const
   std::ostringstream oss;
   output(*migrate_namespace_lookup, oss);
   log_debug("goto-trace", "{}", oss.str());
+}
+
+// Add this to goto_trace_stept
+void goto_trace_stept::track_coverage(goto_tracet& trace) const {
+  if (!pc->location.is_nil()) {
+    std::string file = pc->location.get_file().as_string();
+    std::string function = pc->location.get_function().as_string();
+    std::string line = pc->location.get_line().as_string();
+    
+    if (!file.empty() && !line.empty()) {
+      int line_num = std::stoi(line);
+      
+      // Track file coverage
+      auto& file_coverage = trace.coverage_data[file];
+      file_coverage.name = file;
+      file_coverage.covered_lines.insert(line_num);
+      
+      // Track function coverage
+      if (!function.empty()) {
+        auto& func_coverage = file_coverage.functions[function];
+        func_coverage.name = function;
+        func_coverage.file = file;
+        func_coverage.covered_lines.insert(line_num);
+        func_coverage.line_hits[line_num]++;
+        
+        // Update function bounds
+        if (func_coverage.start_line == 0 || line_num < func_coverage.start_line) {
+          func_coverage.start_line = line_num;
+        }
+        if (line_num > func_coverage.end_line) {
+          func_coverage.end_line = line_num;
+        }
+      }
+    }
+  }
 }
 
 void goto_trace_stept::output(const namespacet &ns, std::ostream &out) const
@@ -369,6 +404,41 @@ void correctness_graphml_goto_trace(
   graph.generate_graphml(options);
 }
 
+void goto_tracet::update_coverage(const goto_trace_stept& step) const 
+{
+  if (!step.pc->location.is_nil()) {
+    std::string file = step.pc->location.get_file().as_string();
+    std::string function = step.pc->location.get_function().as_string();
+    std::string line = step.pc->location.get_line().as_string();
+    
+    if (!file.empty() && !line.empty()) {
+      int line_num = std::stoi(line);
+      
+      // Track file coverage
+      auto& file_coverage = coverage_data[file];
+      file_coverage.name = file;
+      file_coverage.covered_lines.insert(line_num);
+      
+      // Track function coverage
+      if (!function.empty()) {
+        auto& func_coverage = file_coverage.functions[function];
+        func_coverage.name = function;
+        func_coverage.file = file;
+        func_coverage.covered_lines.insert(line_num);
+        func_coverage.line_hits[line_num]++;
+        
+        // Update function bounds
+        if (func_coverage.start_line == 0 || line_num < func_coverage.start_line) {
+          func_coverage.start_line = line_num;
+        }
+        if (line_num > func_coverage.end_line) {
+          func_coverage.end_line = line_num;
+        }
+      }
+    }
+  }
+}
+
 void show_goto_trace(
   std::ostream &out,
   const namespacet &ns,
@@ -377,165 +447,95 @@ void show_goto_trace(
   using json = nlohmann::json;
   
   try {
-    // Print counterexample header first if there are any steps
-    if (!goto_trace.steps.empty()) {
-      out << "\n[Counterexample]\n";
-    }
-    
-    json test_data;
-    test_data["steps"] = json::array();
-    test_data["status"] = "unknown";
-    test_data["coverage"] = {
-      {"files", json::object()},
-      {"functions", json::object()},
-      {"overall_stats", json::object()}
-    };
-
     bool found_violation = false;
-    
-    // First collect all files and try to read their contents
-    std::map<std::string, std::vector<std::string>> source_files;
-    std::map<std::string, std::map<std::string, std::pair<int, int>>> function_bounds;
-    std::set<std::string> processed_files;
-    
+    json test_data;
+
+    // Process trace steps first to collect coverage
     for (const auto &step : goto_trace.steps) {
-      if (!step.pc->location.is_nil()) {
-        std::string file = step.pc->location.get_file().as_string();
-        std::string function = step.pc->location.get_function().as_string();
+      goto_trace.update_coverage(step);
+      
+      if (step.type == goto_trace_stept::ASSERT && !step.guard) {
+        found_violation = true;
+      }
+    }
+
+    // Now create the JSON report
+    test_data["status"] = found_violation ? "violation" : "success";
+    
+    if (found_violation) {
+      out << "\n[Counterexample]\n";
+    } else {
+      out << "\n[Verification Successful]\n";
+    }
+
+    // Process coverage data
+    json coverage;
+    coverage["files"] = json::object();
+    
+    for (const auto& [file, file_cov] : goto_trace.coverage_data) {
+      json file_data;
+      file_data["functions"] = json::object();
+      
+      for (const auto& [func_name, func_cov] : file_cov.functions) {
+        json func_data;
+        func_data["bounds"] = {
+          {"start_line", func_cov.start_line},
+          {"end_line", func_cov.end_line}
+        };
         
-        if (!file.empty() && processed_files.find(file) == processed_files.end()) {
-          processed_files.insert(file);
-          std::ifstream source_file(file);
-          if (source_file.is_open()) {
-            std::vector<std::string> lines;
-            std::string line;
-            int line_num = 1;
-            bool in_function = false;
-            std::string current_function;
-            int function_start = 0;
-            int brace_count = 0;
-            
-            while (std::getline(source_file, line)) {
-              lines.push_back(line);
-              
-              // More robust function boundary detection
-              if (line.find(function + "(") != std::string::npos && 
-                  line.find(";") == std::string::npos) {  // Function definition
-                in_function = true;
-                current_function = function;
-                function_start = line_num;
-                brace_count = 0;
-              }
-              
-              // Count braces for better function end detection
-              if (in_function) {
-                for (char c : line) {
-                  if (c == '{') brace_count++;
-                  if (c == '}') brace_count--;
-                }
-                
-                if (brace_count == 0 && function_start != line_num) {
-                  // End of function
-                  if (function_bounds[file].find(current_function) == function_bounds[file].end()) {
-                    function_bounds[file][current_function] = std::make_pair(function_start, line_num);
-                  }
-                  in_function = false;
-                }
-              }
-              line_num++;
-            }
-            source_files[file] = lines;
+        // Track all lines in function range
+        json covered_lines = json::array();
+        json uncovered_lines = json::array();
+        
+        for (int i = func_cov.start_line; i <= func_cov.end_line; i++) {
+          if (func_cov.covered_lines.find(i) != func_cov.covered_lines.end()) {
+            auto hit_it = func_cov.line_hits.find(i);
+            int hits = hit_it != func_cov.line_hits.end() ? hit_it->second : 0;
+            covered_lines.push_back({
+              {"line", i},
+              {"hits", hits}
+            });
+          } else {
+            uncovered_lines.push_back(i);
           }
         }
-      }
-    }
-    
-    // Initialize coverage data with file contents
-    for (const auto& [file, lines] : source_files) {
-      test_data["coverage"]["files"][file] = {
-        {"total_lines", lines.size()},
-        {"source", lines},
-        {"covered_lines", json::object()},
-        {"functions", json::object()},
-        {"all_lines", json::array()}
-      };
-      
-      // Initialize all possible lines
-      for (size_t i = 0; i < lines.size(); i++) {
-        test_data["coverage"]["files"][file]["all_lines"].push_back(i + 1);
-      }
-      
-      // Initialize function boundaries
-      for (const auto& [func_name, bounds] : function_bounds[file]) {
-        test_data["coverage"]["files"][file]["functions"][func_name] = {
-          {"bounds", {
-            {"start_line", bounds.first},
-            {"end_line", bounds.second}
-          }},
-          {"covered_lines", json::object()},
-          {"hits", 0}
+        
+        func_data["covered_lines"] = covered_lines;
+        func_data["uncovered_lines"] = uncovered_lines;
+        
+        double coverage_percent = (static_cast<double>(func_cov.covered_lines.size()) * 100.0) / 
+                                (func_cov.end_line - func_cov.start_line + 1);
+        
+        func_data["coverage_stats"] = {
+          {"total_lines", func_cov.end_line - func_cov.start_line + 1},
+          {"covered_lines", func_cov.covered_lines.size()},
+          {"coverage_percentage", coverage_percent}
         };
+        
+        file_data["functions"][func_name] = func_data;
       }
+      
+      coverage["files"][file] = file_data;
     }
     
-    // Process trace steps
+    test_data["coverage"] = coverage;
+
+    // Add verification steps
+    test_data["steps"] = json::array();
     for (const auto &step : goto_trace.steps) {
       json step_data;
       
       if (!step.pc->location.is_nil()) {
-        std::string file = step.pc->location.get_file().as_string();
-        std::string line = step.pc->location.get_line().as_string();
-        std::string function = step.pc->location.get_function().as_string();
-        
-        step_data["file"] = file;
-        step_data["line"] = line;
-        step_data["function"] = function;
-        
-        if (!file.empty() && !line.empty()) {
-          auto& file_coverage = test_data["coverage"]["files"][file];
-          
-          // Track line coverage
-          if (!file_coverage["covered_lines"].contains(line)) {
-            file_coverage["covered_lines"][line] = {
-              {"hits", 1},
-              {"function", function},
-              {"covered", true},
-              {"step_type", std::to_string(step.type)}
-            };
-          } else {
-            file_coverage["covered_lines"][line]["hits"] = 
-              file_coverage["covered_lines"][line]["hits"].get<int>() + 1;
-          }
-          
-          // Track function coverage
-          if (!function.empty() && file_coverage["functions"].contains(function)) {
-            auto& func_data = file_coverage["functions"][function];
-            func_data["hits"] = func_data["hits"].get<int>() + 1;
-            func_data["covered_lines"][line] = true;
-          }
-        }
+        step_data["file"] = step.pc->location.get_file().as_string();
+        step_data["line"] = step.pc->location.get_line().as_string();
+        step_data["function"] = step.pc->location.get_function().as_string();
         
         switch(step.type) {
           case goto_trace_stept::ASSERT:
             if(!step.guard) {
-              found_violation = true;
-              out << "Violated property:\n";
-              if(!step.pc->location.is_nil()) {
-                out << "  " << step.pc->location << "\n";
-              }
-              if(!step.comment.empty()) 
-                out << "  " << step.comment << "\n";
-              if(step.pc->is_assert())
-                out << "  " << from_expr(ns, "", step.pc->guard) << "\n";
-              
               step_data["assertion"] = {
                 {"violated", true},
                 {"comment", step.comment},
-                {"guard", from_expr(ns, "", step.pc->guard)}
-              };
-            } else {
-              step_data["assertion"] = {
-                {"violated", false},
                 {"guard", from_expr(ns, "", step.pc->guard)}
               };
             }
@@ -544,9 +544,6 @@ void show_goto_trace(
           case goto_trace_stept::ASSIGNMENT:
             if(!is_nil_expr(step.lhs) && is_symbol2t(step.lhs)) {
               const symbol2t &symbol = to_symbol2t(step.lhs);
-              out << "  " << symbol.thename 
-                  << " = " << from_expr(ns, "", step.value) << "\n";
-              
               step_data["assignment"] = {
                 {"variable", symbol.thename.as_string()},
                 {"value", from_expr(ns, "", step.value)}
@@ -560,8 +557,6 @@ void show_goto_trace(
               printf_formatter(step.format_string, step.output_args);
               std::ostringstream oss;
               printf_formatter.print(oss);
-              out << "  " << oss.str() << "\n";
-              
               step_data["output"] = oss.str();
             }
             break;
@@ -572,97 +567,27 @@ void show_goto_trace(
             };
             break;
 
-          default:
+          case goto_trace_stept::SKIP:
+          case goto_trace_stept::RENUMBER:
             step_data["type"] = "other";
+            break;
+
+          default:
+            step_data["type"] = "unknown";
             break;
         }
       }
       
       test_data["steps"].push_back(step_data);
     }
-    
-    // Set final status
-    test_data["status"] = found_violation ? "violation" : "success";
-    
-    // Calculate coverage statistics
-    size_t total_covered = 0;
-    size_t total_lines = 0;
-    
-    for (auto& [file, file_data] : test_data["coverage"]["files"].items()) {
-      // Get actual function lines for more accurate coverage
-      std::set<int> function_lines;
-      for (const auto& [func_name, func_data] : file_data["functions"].items()) {
-        int start = func_data["bounds"]["start_line"].get<int>();
-        int end = func_data["bounds"]["end_line"].get<int>();
-        for (int i = start; i <= end; i++) {
-          function_lines.insert(i);
-        }
-      }
-      
-      json uncovered_lines = json::array();
-      json covered_lines = json::array();
-      
-      for (int line : function_lines) {
-        std::string line_str = std::to_string(line);
-        if (file_data["covered_lines"].contains(line_str)) {
-          covered_lines.push_back(line);
-        } else {
-          uncovered_lines.push_back(line);
-        }
-      }
-      
-      file_data["uncovered_lines"] = uncovered_lines;
-      file_data["covered_lines_list"] = covered_lines;
-      
-      size_t covered_count = file_data["covered_lines"].size();
-      total_covered += covered_count;
-      total_lines += function_lines.size();
-      
-      double coverage_percent = function_lines.size() > 0 ? 
-        (static_cast<double>(covered_count) * 100.0) / static_cast<double>(function_lines.size()) : 0.0;
-      
-      file_data["coverage_stats"] = {
-        {"total_lines", file_data["total_lines"]},
-        {"function_lines", function_lines.size()},
-        {"covered_lines", covered_count},
-        {"coverage_percentage", coverage_percent}
-      };
-      
-      // Calculate function-level coverage
-      for (auto& [func_name, func_data] : file_data["functions"].items()) {
-        int func_start = func_data["bounds"]["start_line"].get<int>();
-        int func_end = func_data["bounds"]["end_line"].get<int>();
-        size_t func_total_lines = func_end - func_start + 1;
-        size_t func_covered_lines = func_data["covered_lines"].size();
-        
-        std::vector<int> func_uncovered;
-        for (int i = func_start; i <= func_end; i++) {
-          if (!func_data["covered_lines"].contains(std::to_string(i))) {
-            func_uncovered.push_back(i);
-          }
-        }
-        
-        func_data["uncovered_lines"] = func_uncovered;
-        func_data["coverage_stats"] = {
-          {"total_lines", func_total_lines},
-          {"covered_lines", func_covered_lines},
-          {"coverage_percentage", func_total_lines > 0 ?
-            (static_cast<double>(func_covered_lines) * 100.0) / static_cast<double>(func_total_lines) : 0.0}
-        };
-      }
-    }
-    
-    // Add overall statistics
-    test_data["coverage"]["overall_stats"] = {
-      {"total_files", test_data["coverage"]["files"].size()},
-      {"total_lines", total_lines},
-      {"total_covered_lines", total_covered},
-      {"overall_coverage_percentage", total_lines > 0 ?
-        (static_cast<double>(total_covered) * 100.0) / static_cast<double>(total_lines) : 0.0}
-    };
-    
+
     std::ofstream json_out("tests.json");
     json_out << std::setw(2) << test_data << std::endl;
+    
+    // Output original format for compatibility
+    for (const auto &step : goto_trace.steps) {
+      step.output(ns, out);
+    }
     
   } catch (const std::exception& e) {
     out << "Error: " << e.what() << "\n";
