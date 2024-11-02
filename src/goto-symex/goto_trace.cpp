@@ -425,13 +425,29 @@ void show_goto_trace(
     test_data["steps"] = json::array();
     test_data["status"] = "unknown";
 
+    // Track covered lines per file
+    std::map<std::string, std::set<int>> covered_lines;
+
     // Process execution steps while looking for violations
     for (const auto &step : goto_trace.steps) {
       json step_data;
       
       if (step.pc != goto_programt::const_targett() && !step.pc->location.is_nil()) {
-        step_data["file"] = step.pc->location.get_file().as_string();
-        step_data["line"] = step.pc->location.get_line().as_string();
+        std::string file = step.pc->location.get_file().as_string();
+        std::string line_str = step.pc->location.get_line().as_string();
+
+        // Track line coverage
+        if (!file.empty() && !line_str.empty()) {
+          try {
+            int line = std::stoi(line_str);
+            covered_lines[file].insert(line);
+          } catch (...) {
+            // Skip invalid line numbers
+          }
+        }
+
+        step_data["file"] = file;
+        step_data["line"] = line_str;
         step_data["function"] = step.pc->location.get_function().as_string();
         
         switch(step.type) {
@@ -494,6 +510,32 @@ void show_goto_trace(
       }
     }
 
+    // Add coverage data to output
+    json coverage;
+    coverage["files"] = json::object();
+    
+    for (const auto& [file, lines] : covered_lines) {
+        json file_data;
+        file_data["covered_lines"] = json::object();
+        
+        for (int line : lines) {
+            file_data["covered_lines"][std::to_string(line)] = {
+                {"covered", true},
+                {"hits", 1},
+                {"step_type", "0"}  // Default step type
+            };
+        }
+        
+        file_data["coverage_stats"] = {
+            {"covered_lines", lines.size()},
+            {"total_lines", 0},  // Would need source file parsing to get this
+            {"coverage_percentage", 0.0}  // Calculate if total lines is available
+        };
+        
+        coverage["files"][file] = file_data;
+    }
+
+    test_data["coverage"] = coverage;
     test_data["status"] = found_violation ? "violation" : "success";
 
     // Write JSON output
