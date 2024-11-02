@@ -36,65 +36,102 @@ void goto_trace_stept::dump() const
 void goto_trace_stept::track_coverage(goto_tracet const& trace) const 
 {
   try {
-    if (pc == goto_programt::const_targett()) {  // Check if iterator is default-constructed
+    // Check if iterator is valid by comparing to an empty/default iterator
+    if (pc == goto_programt::const_targett()) {
       return;
     }
 
-    if (pc->location.is_nil()) {  // Now check the location
+    const locationt& loc = pc->location;
+    if (loc.is_nil()) {
       return;
     }
 
-    auto file = pc->location.get_file();
-    auto line = pc->location.get_line();
-    auto function = pc->location.get_function();
+    // Safely get location information
+    irep_idt file_id = loc.get_file();
+    irep_idt line_id = loc.get_line();
+    irep_idt function_id = loc.get_function();
+
+    // Convert to strings with validation
+    std::string file_str;
+    std::string line_str;
+    std::string function_str;
     
-    if (file.empty() || line.empty()) {
+    try {
+      if (!file_id.empty()) {
+        file_str = id2string(file_id);
+      }
+      if (!line_id.empty()) {
+        line_str = id2string(line_id);
+      }
+      if (!function_id.empty()) {
+        function_str = id2string(function_id);
+      }
+    } catch (...) {
       return;
     }
 
-    std::string file_str = file.as_string();
-    std::string line_str = line.as_string();
-    std::string function_str = function.as_string();
-    
+    // Validate required fields
     if (file_str.empty() || line_str.empty()) {
       return;
     }
 
+    // Safely convert line number
     int line_num = 0;
     try {
       line_num = std::stoi(line_str);
       if (line_num <= 0) {
         return;
       }
-    } catch (...) {
+    } catch (const std::exception&) {
       return;
     }
-    
-    auto& file_coverage = const_cast<goto_tracet&>(trace).coverage_data[file_str];
-    file_coverage.name = file_str;
-    file_coverage.covered_lines.insert(line_num);
-    
-    if (!function_str.empty()) {
-      auto& func_coverage = file_coverage.functions[function_str];
-      func_coverage.name = function_str;
-      func_coverage.file = file_str;
-      func_coverage.covered_lines.insert(line_num);
+
+    // Safely update coverage data
+    try {
+      auto& file_coverage = const_cast<goto_tracet&>(trace).coverage_data[file_str];
       
-      try {
-        func_coverage.line_hits[line_num]++;
-      } catch (...) {
-        func_coverage.line_hits[line_num] = 1;
+      // Update file coverage
+      if (!file_str.empty()) {
+        file_coverage.name = file_str;
+        file_coverage.covered_lines.insert(line_num);
       }
-      
-      if (func_coverage.start_line == 0 || line_num < func_coverage.start_line) {
-        func_coverage.start_line = line_num;
+
+      // Update function coverage if function information is available
+      if (!function_str.empty()) {
+        auto& func_coverage = file_coverage.functions[function_str];
+        
+        // Basic function info
+        func_coverage.name = function_str;
+        func_coverage.file = file_str;
+        
+        // Update line coverage
+        func_coverage.covered_lines.insert(line_num);
+        
+        // Safely increment hit count
+        try {
+          auto hit_it = func_coverage.line_hits.find(line_num);
+          if (hit_it != func_coverage.line_hits.end()) {
+            hit_it->second++;
+          } else {
+            func_coverage.line_hits[line_num] = 1;
+          }
+        } catch (...) {
+          func_coverage.line_hits[line_num] = 1;
+        }
+
+        // Update function bounds
+        if (func_coverage.start_line == 0 || 
+            (line_num > 0 && line_num < func_coverage.start_line)) {
+          func_coverage.start_line = line_num;
+        }
+        if (line_num > func_coverage.end_line) {
+          func_coverage.end_line = line_num;
+        }
       }
-      if (line_num > func_coverage.end_line) {
-        func_coverage.end_line = line_num;
-      }
+    } catch (const std::exception&) {
+      return;
     }
   } catch (...) {
-    // Silently fail rather than crash
     return;
   }
 }
