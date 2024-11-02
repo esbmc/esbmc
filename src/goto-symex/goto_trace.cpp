@@ -36,9 +36,9 @@ void goto_trace_stept::dump() const
 void goto_trace_stept::track_coverage(goto_tracet const& trace) const 
 {
   try {
-    // if (!pc) {  // Basic iterator validity check
-    //   return;
-    // }
+    if (pc == goto_programt::const_targett()) {  // Check if iterator is default-constructed
+      return;
+    }
 
     if (pc->location.is_nil()) {  // Now check the location
       return;
