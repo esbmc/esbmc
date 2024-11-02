@@ -420,94 +420,94 @@ void show_goto_trace(
       return;
     }
 
+    bool found_violation = false;
     json test_data;
     test_data["steps"] = json::array();
     test_data["status"] = "unknown";
-    test_data["coverage"] = {{"files", json::object()}};
-    
-    // Track all violations and their lines
-    std::map<std::string, std::map<int, int>> file_lines;
-    std::set<std::pair<std::string, int>> violations;
 
-    // First pass - collect violations
+    // Process steps
     for (const auto &step : goto_trace.steps) {
-      if (step.pc != goto_programt::const_targett() && step.pc->location.is_nil() == false) {
-        try {
-          const locationt &loc = step.pc->location;
-          std::string file = id2string(loc.get_file());
-          std::string line_str = id2string(loc.get_line());
-          int line = std::stoi(line_str);
-
-          if (!file.empty() && line > 0) {
-            file_lines[file][line]++;
-
-            if (step.type == goto_trace_stept::ASSERT && !step.guard) {
-              violations.insert({file, line});
-            }
-
-            json step_data;
-            step_data["file"] = file;
-            step_data["line"] = line_str;
-            step_data["function"] = id2string(loc.get_function());
-
-            if (step.type == goto_trace_stept::ASSERT && !step.guard) {
+      json step_data;
+      
+      if (step.pc != goto_programt::const_targett() && !step.pc->location.is_nil()) {
+        const locationt &loc = step.pc->location;
+        
+        step_data["file"] = loc.get_file().as_string();
+        step_data["line"] = loc.get_line().as_string();
+        step_data["function"] = loc.get_function().as_string();
+        
+        switch(step.type) {
+          case goto_trace_stept::ASSERT:
+            if(!step.guard) {
+              found_violation = true;
+              out << "\n[Counterexample]\n";
+              out << "Violation at: " << loc << "\n";
+              if (!step.comment.empty()) {
+                out << "Reason: " << step.comment << "\n";
+              }
+              
               step_data["assertion"] = {
                 {"violated", true},
                 {"comment", step.comment},
                 {"guard", from_expr(ns, "", step.pc->guard)}
               };
             }
+            break;
 
-            test_data["steps"].push_back(step_data);
-          }
-        } catch (...) {
-          continue;
+          case goto_trace_stept::ASSIGNMENT:
+            if(!is_nil_expr(step.lhs) && is_symbol2t(step.lhs)) {
+              const symbol2t &symbol = to_symbol2t(step.lhs);
+              step_data["assignment"] = {
+                {"variable", symbol.thename.as_string()},
+                {"value", from_expr(ns, "", step.value)}
+              };
+            }
+            break;
+
+          case goto_trace_stept::OUTPUT:
+            if(!step.output_args.empty()) {
+              printf_formattert printf_formatter;
+              printf_formatter(step.format_string, step.output_args);
+              std::ostringstream oss;
+              printf_formatter.print(oss);
+              step_data["output"] = oss.str();
+            }
+            break;
+
+          case goto_trace_stept::ASSUME:
+            step_data["assume"] = {
+              {"condition", from_expr(ns, "", step.pc->guard)}
+            };
+            break;
+
+          case goto_trace_stept::SKIP:
+          case goto_trace_stept::RENUMBER:
+            step_data["type"] = "other";
+            break;
+
+          default:
+            step_data["type"] = "unknown";
+            break;
         }
       }
-    }
-
-    // Build coverage data including violations
-    for (const auto& [current_file, lines] : file_lines) {
-      json file_coverage;
-      file_coverage["covered_lines"] = json::object();
-
-      // Add all covered lines
-      for (const auto& [line, hits] : lines) {
-        std::string line_str = std::to_string(line);
-        bool is_violation = violations.find({current_file, line}) != violations.end();
-
-        file_coverage["covered_lines"][line_str] = {
-          {"covered", true},
-          {"hits", hits},
-          {"type", is_violation ? "violation" : "execution"},
-          {"function", "handleRunplanEvent"}  // We know it's this function from the trace
-        };
+      
+      if (!step_data.empty()) {
+        test_data["steps"].push_back(step_data);
       }
-
-      const std::string& file_ref = current_file; // Create a reference for the lambda
-      file_coverage["coverage_stats"] = {
-        {"covered_lines", lines.size()},
-        {"total_hits", std::accumulate(lines.begin(), lines.end(), 0,
-          [](int sum, const auto& p) { return sum + p.second; })},
-        {"violations", std::count_if(lines.begin(), lines.end(),
-          [&violations, &file_ref](const auto& p) { 
-            return violations.find({file_ref, p.first}) != violations.end(); 
-          })}
-      };
-
-      test_data["coverage"]["files"][current_file] = file_coverage;
     }
 
-    test_data["status"] = "violation";  // We know there are violations from the trace
+    test_data["status"] = found_violation ? "violation" : "success";
 
     // Write JSON output
-    // std::ofstream json_out("tests.json");
-    // if (json_out.is_open()) {
-    //   json_out << std::setw(2) << test_data << std::endl;
-    // }
+    std::ofstream json_out("tests.json");
+    if (json_out.is_open()) {
+      json_out << std::setw(2) << test_data << std::endl;
+    }
     
+  } catch (const std::exception& e) {
+    out << "Error processing trace: " << e.what() << "\n";
   } catch (...) {
-    out << "Error occurred while processing trace\n";
+    out << "Unknown error occurred while processing trace\n";
   }
 }
 
