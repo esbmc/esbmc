@@ -100,7 +100,7 @@ public:
   std::string format_string;
   std::list<expr2tc> output_args;
 
-  void track_coverage(goto_tracet& trace) const;
+  void track_coverage(goto_tracet const& trace) const;
 
   void output(const class namespacet &ns, std::ostream &out) const;
   void dump() const;
