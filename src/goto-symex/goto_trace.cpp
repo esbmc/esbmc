@@ -36,102 +36,44 @@ void goto_trace_stept::dump() const
 void goto_trace_stept::track_coverage(goto_tracet const& trace) const 
 {
   try {
-    // Check if iterator is valid by comparing to an empty/default iterator
+    // Basic validity check for program counter
     if (pc == goto_programt::const_targett()) {
       return;
     }
 
+    // Get location safely
     const locationt& loc = pc->location;
     if (loc.is_nil()) {
       return;
     }
 
-    // Safely get location information
-    irep_idt file_id = loc.get_file();
-    irep_idt line_id = loc.get_line();
-    irep_idt function_id = loc.get_function();
-
-    // Convert to strings with validation
-    std::string file_str;
-    std::string line_str;
-    std::string function_str;
+    // Get basic location info
+    std::string file_str = loc.get_file().as_string();
+    std::string line_str = loc.get_line().as_string();
     
-    try {
-      if (!file_id.empty()) {
-        file_str = id2string(file_id);
-      }
-      if (!line_id.empty()) {
-        line_str = id2string(line_id);
-      }
-      if (!function_id.empty()) {
-        function_str = id2string(function_id);
-      }
-    } catch (...) {
-      return;
-    }
-
-    // Validate required fields
+    // Basic validation
     if (file_str.empty() || line_str.empty()) {
       return;
     }
 
-    // Safely convert line number
+    // Simple line number conversion
     int line_num = 0;
     try {
       line_num = std::stoi(line_str);
-      if (line_num <= 0) {
-        return;
-      }
-    } catch (const std::exception&) {
+    } catch (...) {
       return;
     }
 
-    // Safely update coverage data
-    try {
-      auto& file_coverage = const_cast<goto_tracet&>(trace).coverage_data[file_str];
-      
-      // Update file coverage
-      if (!file_str.empty()) {
-        file_coverage.name = file_str;
-        file_coverage.covered_lines.insert(line_num);
-      }
-
-      // Update function coverage if function information is available
-      if (!function_str.empty()) {
-        auto& func_coverage = file_coverage.functions[function_str];
-        
-        // Basic function info
-        func_coverage.name = function_str;
-        func_coverage.file = file_str;
-        
-        // Update line coverage
-        func_coverage.covered_lines.insert(line_num);
-        
-        // Safely increment hit count
-        try {
-          auto hit_it = func_coverage.line_hits.find(line_num);
-          if (hit_it != func_coverage.line_hits.end()) {
-            hit_it->second++;
-          } else {
-            func_coverage.line_hits[line_num] = 1;
-          }
-        } catch (...) {
-          func_coverage.line_hits[line_num] = 1;
-        }
-
-        // Update function bounds
-        if (func_coverage.start_line == 0 || 
-            (line_num > 0 && line_num < func_coverage.start_line)) {
-          func_coverage.start_line = line_num;
-        }
-        if (line_num > func_coverage.end_line) {
-          func_coverage.end_line = line_num;
-        }
-      }
-    } catch (const std::exception&) {
+    if (line_num <= 0) {
       return;
     }
+
+    // Update only essential coverage data
+    auto& file_coverage = const_cast<goto_tracet&>(trace).coverage_data[file_str];
+    file_coverage.name = file_str;
+    file_coverage.covered_lines.insert(line_num);
   } catch (...) {
+    // Fail silently
     return;
   }
 }
