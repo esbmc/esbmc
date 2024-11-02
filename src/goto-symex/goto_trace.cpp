@@ -374,24 +374,46 @@ void show_goto_trace(
   const namespacet &ns,
   const goto_tracet &goto_trace)
 {
-  using json = nlohmann::json;
-
+  out << "Starting trace output with " << goto_trace.steps.size() << " steps...\n";
+  
   try {
-    // JSON data structure for coverage
+    using json = nlohmann::json;
     json test_data;
+    
+    // Basic initialization
     test_data["type"] = "coverage_report";
     test_data["timestamp"] = std::time(nullptr);
     test_data["execution_path"] = json::array();
     test_data["files"] = json::object();
-
-    // Load source files and initialize coverage data
+    
     std::map<std::string, std::vector<std::string>> source_files;
     
-    // Safely collect files
-    for (const auto &step : goto_trace.steps) {
-      if (!step.pc->location.is_nil()) {
+    out << "Starting step processing...\n";
+    
+    // Process steps
+    size_t step_count = 0;
+    for (const auto &step : goto_trace.steps)
+    {
+      step_count++;
+      out << "\nProcessing step " << step_count << " of type " << static_cast<int>(step.type) << "\n";
+      
+      try {
+        if (step.pc->location.is_nil()) {
+          out << "Step has nil location, skipping...\n";
+          continue;
+        }
+        
         std::string current_file = step.pc->location.get_file().as_string();
-        if (!current_file.empty() && source_files.find(current_file) == source_files.end()) {
+        out << "File: " << current_file << "\n";
+        
+        if (current_file.empty()) {
+          out << "Empty file name, skipping...\n";
+          continue;
+        }
+        
+        // Load source file if not already loaded
+        if (source_files.find(current_file) == source_files.end()) {
+          out << "Loading new source file: " << current_file << "\n";
           std::ifstream source_file(current_file);
           if (source_file.is_open()) {
             std::vector<std::string> lines;
@@ -400,149 +422,79 @@ void show_goto_trace(
               lines.push_back(line);
             }
             source_files[current_file] = lines;
+            out << "Loaded " << lines.size() << " lines from " << current_file << "\n";
             
-            // Initialize coverage data
-            json coverage_data = json::object();
-            for (size_t i = 0; i < lines.size(); i++) {
-              coverage_data[std::to_string(i + 1)] = {
-                {"covered", false},
-                {"function", ""},
-                {"hits", 0}
-              };
-            }
-            
+            // Initialize file data in JSON
             test_data["files"][current_file] = {
               {"total_lines", lines.size()},
               {"source", lines},
-              {"coverage", coverage_data},
+              {"coverage", json::object()},
               {"functions", json::object()}
             };
+          } else {
+            out << "Failed to open source file: " << current_file << "\n";
           }
         }
-      }
-    }
-
-    // Process steps safely
-    for (const auto &step : goto_trace.steps)
-    {
-      if (step.pc->location.is_nil())
-        continue;
-
-      try {
-        json step_data;
-        std::string current_file = step.pc->location.get_file().as_string();
+        
         std::string current_line = step.pc->location.get_line().as_string();
-        std::string current_function = step.pc->location.get_function().as_string();
-
-        if (current_file.empty() || current_line.empty())
-          continue;
-
-        int line_num = 0;
-        try {
-          line_num = std::stoi(current_line);
-        } catch (...) {
-          continue;
-        }
-
-        step_data["file"] = current_file;
-        step_data["line"] = line_num;
-        step_data["function"] = current_function;
-
-        // Safely update coverage
-        if (test_data["files"].contains(current_file)) {
-          auto& file_data = test_data["files"][current_file];
-          std::string line_str = std::to_string(line_num);
+        out << "Line: " << current_line << "\n";
+        
+        if (!current_line.empty()) {
+          std::string current_function = step.pc->location.get_function().as_string();
+          out << "Function: " << current_function << "\n";
           
-          if (file_data["coverage"].contains(line_str)) {
-            auto& line_coverage = file_data["coverage"][line_str];
-            line_coverage["covered"] = true;
-            line_coverage["function"] = current_function;
-            line_coverage["hits"] = line_coverage["hits"].get<int>() + 1;
-
-            // Track function coverage
+          try {
+            int line_num = std::stoi(current_line);
+            auto& file_data = test_data["files"][current_file];
+            
+            // Update coverage data
+            file_data["coverage"][current_line] = {
+              {"covered", true},
+              {"function", current_function},
+              {"hits", file_data["coverage"].contains(current_line) ? 
+                file_data["coverage"][current_line]["hits"].get<int>() + 1 : 1}
+            };
+            
+            // Update function data
             if (!current_function.empty()) {
               if (!file_data["functions"].contains(current_function)) {
                 file_data["functions"][current_function] = {
-                  {"first_line", line_str},
                   {"covered_lines", json::array()},
                   {"hits", 0}
                 };
               }
-              
               auto& func_data = file_data["functions"][current_function];
               func_data["hits"] = func_data["hits"].get<int>() + 1;
               
               // Add line to covered lines if not already present
               auto& covered_lines = func_data["covered_lines"];
-              if (std::find(covered_lines.begin(), covered_lines.end(), line_str) == covered_lines.end()) {
-                covered_lines.push_back(line_str);
+              if (std::find(covered_lines.begin(), covered_lines.end(), current_line) == covered_lines.end()) {
+                covered_lines.push_back(current_line);
               }
             }
+          } catch (const std::exception& e) {
+            out << "Error processing line number: " << e.what() << "\n";
           }
         }
-
-        // Process step type
-        switch (step.type)
-        {
-        case goto_trace_stept::ASSERT:
-          step_data["type"] = "assertion";
-          step_data["passed"] = step.guard;
-          if (!step.guard) {
-            step_data["comment"] = step.comment;
-            if (step.pc->is_assert())
-              step_data["assertion"] = from_expr(ns, "", step.pc->guard);
-          }
-          break;
-
-        case goto_trace_stept::ASSIGNMENT:
-          if (!is_nil_expr(step.lhs) && is_symbol2t(step.lhs)) {
-            const symbol2t &sym = to_symbol2t(step.lhs);
-            step_data["type"] = "assignment";
-            step_data["variable"] = sym.thename.as_string();
-            step_data["value"] = from_expr(ns, "", step.value);
-          }
-          break;
-
-        case goto_trace_stept::OUTPUT:
-          step_data["type"] = "output";
-          try {
-            printf_formattert printf_formatter;
-            printf_formatter(step.format_string, step.output_args);
-            std::ostringstream output_stream;
-            printf_formatter.print(output_stream);
-            step_data["output"] = output_stream.str();
-          } catch (...) {
-            step_data["output"] = "Error formatting output";
-          }
-          break;
-
-        case goto_trace_stept::ASSUME:
-          step_data["type"] = "assume";
-          step_data["condition"] = from_expr(ns, "", step.pc->guard);
-          break;
-
-        default:
-          step_data["type"] = "unknown";
-          break;
-        }
-
-        test_data["execution_path"].push_back(step_data);
+        
+      } catch (const std::exception& e) {
+        out << "Exception processing step: " << e.what() << "\n";
       } catch (...) {
-        continue; // Skip problematic steps
+        out << "Unknown exception processing step\n";
       }
     }
-
+    
+    out << "Calculating coverage statistics...\n";
+    
     // Calculate coverage statistics
     for (auto& [file, file_data] : test_data["files"].items()) {
       try {
-        size_t covered_lines = 0;
         size_t total_lines = file_data["total_lines"].get<size_t>();
+        size_t covered_lines = 0;
         
-        if (file_data.contains("coverage")) {
-          for (const auto& [line_num, coverage] : file_data["coverage"].items()) {
-            if (coverage.contains("covered") && coverage["covered"].get<bool>()) {
-              covered_lines++;
-            }
+        for (const auto& [line, coverage] : file_data["coverage"].items()) {
+          if (coverage["covered"].get<bool>()) {
+            covered_lines++;
           }
         }
         
@@ -551,145 +503,54 @@ void show_goto_trace(
         
         file_data["coverage_percentage"] = coverage_percent;
         file_data["covered_lines_count"] = covered_lines;
-      } catch (...) {
-        continue;
+        
+        out << "File " << file << " coverage: " << coverage_percent << "% ("
+            << covered_lines << "/" << total_lines << " lines)\n";
+            
+      } catch (const std::exception& e) {
+        out << "Error calculating coverage for file " << file << ": " << e.what() << "\n";
       }
     }
-
+    
+    out << "Writing JSON output...\n";
+    
     // Write JSON output
     std::ofstream json_out("tests.json");
     if (json_out.is_open()) {
       json_out << std::setw(2) << test_data << std::endl;
+      out << "JSON file written successfully\n";
+    } else {
+      out << "Failed to open JSON output file\n";
     }
-
-    // Generate HTML report
-    std::ofstream html_out("coverage_report.html");
-    if (html_out.is_open()) {
-      html_out << R"(
-<!DOCTYPE html>
-<html>
-<head>
-  <title>Code Coverage Report</title>
-  <style>
-    body { 
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
-      margin: 20px;
-      background-color: #f8f9fa;
-    }
-    .covered { background-color: #90EE90; }
-    .uncovered { background-color: #FFB6C6; }
-    .line-number { 
-      color: #666; 
-      padding-right: 10px; 
-      user-select: none;
-      display: inline-block;
-      width: 40px;
-      text-align: right;
-      border-right: 1px solid #ddd;
-      margin-right: 10px;
-    }
-    pre { 
-      margin: 0; 
-      padding: 10px; 
-      background: white;
-      border-radius: 5px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    .file-header { 
-      background: white; 
-      padding: 20px;
-      margin: 20px 0;
-      border-radius: 5px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    .coverage-bar { 
-      height: 20px;
-      background: #FFB6C6;
-      margin: 10px 0;
-      border-radius: 10px;
-      overflow: hidden;
-    }
-    .coverage-fill { 
-      height: 100%;
-      background: #90EE90;
-      transition: width 0.3s ease;
-    }
-    .line { padding: 2px 5px; }
-    .line:hover { background-color: rgba(0,0,0,0.05); }
-    .hits { 
-      float: right;
-      color: #666;
-      font-size: 0.9em;
-    }
-  </style>
-</head>
-<body>
-  <h1>Code Coverage Report</h1>
-)";
-
-      for (const auto& [file, file_data] : test_data["files"].items()) {
-        html_out << "<div class='file-header'>\n";
-        html_out << "<h2>File: " << file << "</h2>\n";
-        double coverage_pct = file_data["coverage_percentage"].get<double>();
-        size_t covered = file_data["covered_lines_count"].get<size_t>();
-        size_t total = file_data["total_lines"].get<size_t>();
-        
-        html_out << "<p>Coverage: " << std::fixed << std::setprecision(2) 
-                 << coverage_pct << "% (" << covered << "/" << total << " lines)</p>\n";
-        html_out << "<div class='coverage-bar'><div class='coverage-fill' style='width: "
-                 << coverage_pct << "%'></div></div>\n";
-        
-        // Function coverage
-        if (file_data.contains("functions") && !file_data["functions"].empty()) {
-          html_out << "<div class='function-coverage'>\n";
-          html_out << "<h3>Function Coverage:</h3>\n";
-          for (const auto& [func_name, func_data] : file_data["functions"].items()) {
-            html_out << "<p>" << func_name << ": " 
-                     << func_data["covered_lines"].size() << " lines covered "
-                     << "(hit " << func_data["hits"].get<int>() << " times)</p>\n";
-          }
-          html_out << "</div>\n";
-        }
-        
-        html_out << "</div>\n<pre>\n";
-
-        const auto& coverage = file_data["coverage"];
-        const auto& source = file_data["source"];
-        
-        for (size_t i = 0; i < source.size(); i++) {
-          std::string line_num = std::to_string(i + 1);
-          bool is_covered = false;
-          int hits = 0;
-          
-          if (coverage.contains(line_num)) {
-            const auto& line_coverage = coverage[line_num];
-            is_covered = line_coverage["covered"].get<bool>();
-            hits = line_coverage["hits"].get<int>();
-          }
-          
-          std::string line_class = is_covered ? "covered" : "uncovered";
-          html_out << "<div class='line " << line_class << "'>"
-                   << "<span class='line-number'>" << line_num << "</span>"
-                   << source[i].get<std::string>();
-          if (hits > 0) {
-            html_out << "<span class='hits'>(" << hits << " hits)</span>";
-          }
-          html_out << "</div>\n";
-        }
-        html_out << "</pre>\n";
-      }
-
-      html_out << "</body></html>\n";
-    }
-
+    
+    out << "Writing original trace format...\n";
+    
     // Output original format
-    for (const auto &step : goto_trace.steps)
-      step.output(ns, out);
-
+    for (const auto &step : goto_trace.steps) {
+      try {
+        step.output(ns, out);
+      } catch (const std::exception& e) {
+        out << "Exception in original trace output: " << e.what() << "\n";
+      } catch (...) {
+        out << "Unknown exception in original trace output\n";
+      }
+    }
+    
+    out << "Trace output completed successfully\n";
+    
+  } catch (const std::exception& e) {
+    out << "Top-level exception: " << e.what() << "\n";
+    
+    // Attempt original output on error
+    for (const auto &step : goto_trace.steps) {
+      try {
+        step.output(ns, out);
+      } catch (...) {
+        out << "Failed to output step in error handler\n";
+      }
+    }
   } catch (...) {
-    // If anything fails, at least try to output the original format
-    for (const auto &step : goto_trace.steps)
-      step.output(ns, out);
+    out << "Unknown top-level exception\n";
   }
 }
 
