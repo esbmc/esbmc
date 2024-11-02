@@ -374,183 +374,77 @@ void show_goto_trace(
   const namespacet &ns,
   const goto_tracet &goto_trace)
 {
-  out << "Starting trace output with " << goto_trace.steps.size() << " steps...\n";
+  using json = nlohmann::json;
   
   try {
-    using json = nlohmann::json;
+    out << "\n[Counterexample]\n";
+    
     json test_data;
+    test_data["steps"] = json::array();
+    test_data["counterexample"] = json::object();
     
-    // Basic initialization
-    test_data["type"] = "coverage_report";
-    test_data["timestamp"] = std::time(nullptr);
-    test_data["execution_path"] = json::array();
-    test_data["files"] = json::object();
-    
-    std::map<std::string, std::vector<std::string>> source_files;
-    
-    out << "Starting step processing...\n";
-    
-    // Process steps
-    size_t step_count = 0;
-    for (const auto &step : goto_trace.steps)
-    {
-      step_count++;
-      out << "\nProcessing step " << step_count << " of type " << static_cast<int>(step.type) << "\n";
-      
-      try {
-        if (step.pc->location.is_nil()) {
-          out << "Step has nil location, skipping...\n";
-          continue;
-        }
-        
-        std::string current_file = step.pc->location.get_file().as_string();
-        out << "File: " << current_file << "\n";
-        
-        if (current_file.empty()) {
-          out << "Empty file name, skipping...\n";
-          continue;
-        }
-        
-        // Load source file if not already loaded
-        if (source_files.find(current_file) == source_files.end()) {
-          out << "Loading new source file: " << current_file << "\n";
-          std::ifstream source_file(current_file);
-          if (source_file.is_open()) {
-            std::vector<std::string> lines;
-            std::string line;
-            while (std::getline(source_file, line)) {
-              lines.push_back(line);
-            }
-            source_files[current_file] = lines;
-            out << "Loaded " << lines.size() << " lines from " << current_file << "\n";
-            
-            // Initialize file data in JSON
-            test_data["files"][current_file] = {
-              {"total_lines", lines.size()},
-              {"source", lines},
-              {"coverage", json::object()},
-              {"functions", json::object()}
-            };
-          } else {
-            out << "Failed to open source file: " << current_file << "\n";
-          }
-        }
-        
-        std::string current_line = step.pc->location.get_line().as_string();
-        out << "Line: " << current_line << "\n";
-        
-        if (!current_line.empty()) {
-          std::string current_function = step.pc->location.get_function().as_string();
-          out << "Function: " << current_function << "\n";
-          
-          try {
-            int line_num = std::stoi(current_line);
-            auto& file_data = test_data["files"][current_file];
-            
-            // Update coverage data
-            file_data["coverage"][current_line] = {
-              {"covered", true},
-              {"function", current_function},
-              {"hits", file_data["coverage"].contains(current_line) ? 
-                file_data["coverage"][current_line]["hits"].get<int>() + 1 : 1}
-            };
-            
-            // Update function data
-            if (!current_function.empty()) {
-              if (!file_data["functions"].contains(current_function)) {
-                file_data["functions"][current_function] = {
-                  {"covered_lines", json::array()},
-                  {"hits", 0}
-                };
-              }
-              auto& func_data = file_data["functions"][current_function];
-              func_data["hits"] = func_data["hits"].get<int>() + 1;
-              
-              // Add line to covered lines if not already present
-              auto& covered_lines = func_data["covered_lines"];
-              if (std::find(covered_lines.begin(), covered_lines.end(), current_line) == covered_lines.end()) {
-                covered_lines.push_back(current_line);
-              }
-            }
-          } catch (const std::exception& e) {
-            out << "Error processing line number: " << e.what() << "\n";
-          }
-        }
-        
-      } catch (const std::exception& e) {
-        out << "Exception processing step: " << e.what() << "\n";
-      } catch (...) {
-        out << "Unknown exception processing step\n";
-      }
-    }
-    
-    out << "Calculating coverage statistics...\n";
-    
-    // Calculate coverage statistics
-    for (auto& [file, file_data] : test_data["files"].items()) {
-      try {
-        size_t total_lines = file_data["total_lines"].get<size_t>();
-        size_t covered_lines = 0;
-        
-        for (const auto& [line, coverage] : file_data["coverage"].items()) {
-          if (coverage["covered"].get<bool>()) {
-            covered_lines++;
-          }
-        }
-        
-        double coverage_percent = total_lines > 0 ? 
-          (static_cast<double>(covered_lines) * 100.0) / static_cast<double>(total_lines) : 0.0;
-        
-        file_data["coverage_percentage"] = coverage_percent;
-        file_data["covered_lines_count"] = covered_lines;
-        
-        out << "File " << file << " coverage: " << coverage_percent << "% ("
-            << covered_lines << "/" << total_lines << " lines)\n";
-            
-      } catch (const std::exception& e) {
-        out << "Error calculating coverage for file " << file << ": " << e.what() << "\n";
-      }
-    }
-    
-    out << "Writing JSON output...\n";
-    
-    // Write JSON output
-    std::ofstream json_out("tests.json");
-    if (json_out.is_open()) {
-      json_out << std::setw(2) << test_data << std::endl;
-      out << "JSON file written successfully\n";
-    } else {
-      out << "Failed to open JSON output file\n";
-    }
-    
-    out << "Writing original trace format...\n";
-    
-    // Output original format
     for (const auto &step : goto_trace.steps) {
-      try {
-        step.output(ns, out);
-      } catch (const std::exception& e) {
-        out << "Exception in original trace output: " << e.what() << "\n";
-      } catch (...) {
-        out << "Unknown exception in original trace output\n";
+      json step_data;
+      
+      if (!step.pc->location.is_nil()) {
+        step_data["file"] = step.pc->location.get_file().as_string();
+        step_data["line"] = step.pc->location.get_line().as_string();
+        step_data["function"] = step.pc->location.get_function().as_string();
+        
+        switch(step.type) {
+          case goto_trace_stept::ASSERT:
+            if(!step.guard) {
+              out << "Violated property:\n";
+              if(!step.pc->location.is_nil()) {
+                out << "  " << step.pc->location << "\n";
+              }
+              if(!step.comment.empty()) 
+                out << "  " << step.comment << "\n";
+              if(step.pc->is_assert())
+                out << "  " << from_expr(ns, "", step.pc->guard) << "\n";
+            }
+            break;
+
+          case goto_trace_stept::ASSIGNMENT:
+            if(!is_nil_expr(step.lhs) && is_symbol2t(step.lhs)) {
+              const symbol2t &symbol = to_symbol2t(step.lhs);
+              out << "  " << symbol.thename 
+                  << " = " << from_expr(ns, "", step.value) << "\n";
+              
+              step_data["assignment"] = {
+                {"variable", symbol.thename.as_string()},
+                {"value", from_expr(ns, "", step.value)}
+              };
+            }
+            break;
+
+          case goto_trace_stept::OUTPUT:
+            if(!step.output_args.empty()) {
+              printf_formattert printf_formatter;
+              printf_formatter(step.format_string, step.output_args);
+              std::ostringstream oss;
+              printf_formatter.print(oss);
+              out << "  " << oss.str() << "\n";
+              
+              step_data["output"] = oss.str();
+            }
+            break;
+
+          default:
+            break;
+        }
       }
+      
+      test_data["steps"].push_back(step_data);
     }
     
-    out << "Trace output completed successfully\n";
+    std::ofstream json_out("tests.json");
+    json_out << std::setw(2) << test_data << std::endl;
     
   } catch (const std::exception& e) {
-    out << "Top-level exception: " << e.what() << "\n";
-    
-    // Attempt original output on error
-    for (const auto &step : goto_trace.steps) {
-      try {
-        step.output(ns, out);
-      } catch (...) {
-        out << "Failed to output step in error handler\n";
-      }
-    }
+    out << "Error: " << e.what() << "\n";
   } catch (...) {
-    out << "Unknown top-level exception\n";
+    out << "Unknown error occurred\n";
   }
 }
 
