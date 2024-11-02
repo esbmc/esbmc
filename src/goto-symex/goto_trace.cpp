@@ -428,81 +428,50 @@ void show_goto_trace(
     
     std::map<std::string, std::set<int>> line_hits;
 
-    // Process execution steps while looking for violations
+    // Process execution steps
     for (const auto &step : goto_trace.steps) {
       json step_data;
       
-      if (step.pc != goto_programt::const_targett() && !step.pc->location.is_nil()) {
-        // Track line coverage
-        try {
-          std::string file = step.pc->location.get_file().as_string();
-          std::string line_str = step.pc->location.get_line().as_string();
-          if (!file.empty() && !line_str.empty()) {
-            int line = std::stoi(line_str);
-            if (line > 0) {
-              line_hits[file].insert(line);
-            }
-          }
-        } catch (...) {
-          // Skip invalid line numbers
-        }
-
-        step_data["file"] = step.pc->location.get_file().as_string();
-        step_data["line"] = step.pc->location.get_line().as_string();
-        step_data["function"] = step.pc->location.get_function().as_string();
-        
-        switch(step.type) {
-          case goto_trace_stept::ASSERT:
-            if(!step.guard) {
-              found_violation = true;
-              out << "\n[Counterexample]\n";
-              out << "Violation at: " << step.pc->location << "\n";
-              if (!step.comment.empty()) {
-                out << "Reason: " << step.comment << "\n";
+      // IMPORTANT: Need to validate pc before using it
+      if (!step.pc.is_nil()) {  // Check if pc is valid first
+        const locationt &loc = step.pc->location;
+        if (!loc.is_nil()) {
+          // Now safely try to get coverage info
+          irep_idt file_id = loc.get_file();
+          irep_idt line_id = loc.get_line();
+          
+          if (!file_id.empty() && !line_id.empty()) {
+            try {
+              std::string file = id2string(file_id);
+              std::string line_str = id2string(line_id);
+              int line = std::stoi(line_str);
+              if (line > 0) {
+                line_hits[file].insert(line);
               }
               
-              step_data["assertion"] = {
-                {"violated", true},
-                {"comment", step.comment},
-                {"guard", from_expr(ns, "", step.pc->guard)}
-              };
+              step_data["file"] = file;
+              step_data["line"] = line_str;
+              step_data["function"] = id2string(loc.get_function());
+            } catch (...) {
+              // Skip if any string conversion fails
             }
-            break;
+          }
 
-          case goto_trace_stept::ASSIGNMENT:
-            if(!is_nil_expr(step.lhs) && is_symbol2t(step.lhs)) {
-              const symbol2t &symbol = to_symbol2t(step.lhs);
-              step_data["assignment"] = {
-                {"variable", symbol.thename.as_string()},
-                {"value", from_expr(ns, "", step.value)}
-              };
+          // Now process the step type
+          if (step.type == goto_trace_stept::ASSERT && !step.guard) {
+            found_violation = true;
+            out << "\n[Counterexample]\n";
+            out << "Violation at: " << loc << "\n";
+            if (!step.comment.empty()) {
+              out << "Reason: " << step.comment << "\n";
             }
-            break;
-
-          case goto_trace_stept::OUTPUT:
-            if(!step.output_args.empty()) {
-              printf_formattert printf_formatter;
-              printf_formatter(step.format_string, step.output_args);
-              std::ostringstream oss;
-              printf_formatter.print(oss);
-              step_data["output"] = oss.str();
-            }
-            break;
-
-          case goto_trace_stept::ASSUME:
-            step_data["assume"] = {
-              {"condition", from_expr(ns, "", step.pc->guard)}
+            
+            step_data["assertion"] = {
+              {"violated", true},
+              {"comment", step.comment},
+              {"guard", from_expr(ns, "", step.pc->guard)}
             };
-            break;
-
-          case goto_trace_stept::SKIP:
-          case goto_trace_stept::RENUMBER:
-            step_data["type"] = "other";
-            break;
-
-          default:
-            step_data["type"] = "unknown";
-            break;
+          }
         }
       }
       
@@ -533,30 +502,13 @@ void show_goto_trace(
     test_data["status"] = found_violation ? "violation" : "success";
 
     // Write JSON output
-    try {
-      std::ofstream json_out("tests.json");
-      if (json_out.is_open()) {
-        json_out << std::setw(2) << test_data << std::endl;
-      }
-    } catch (...) {
-      out << "Failed to write tests.json\n";
-    }
-
-    // Output original format for violations
-    if (found_violation) {
-      for (const auto &step : goto_trace.steps) {
-        try {
-          step.output(ns, out);
-        } catch (...) {
-          continue;
-        }
-      }
+    std::ofstream json_out("tests.json");
+    if (json_out.is_open()) {
+      json_out << std::setw(2) << test_data << std::endl;
     }
     
-  } catch (const std::exception& e) {
-    out << "Error processing trace: " << e.what() << "\n";
   } catch (...) {
-    out << "Unknown error occurred while processing trace\n";
+    out << "Error occurred while processing trace\n";
   }
 }
 
