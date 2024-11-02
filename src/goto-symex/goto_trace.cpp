@@ -382,15 +382,76 @@ void show_goto_trace(
     json test_data;
     test_data["steps"] = json::array();
     test_data["counterexample"] = json::object();
+    test_data["coverage"] = {
+      {"files", json::object()},
+      {"functions", json::object()},
+      {"overall_stats", json::object()}
+    };
+    
+    // Track unique combinations of file, function, and line
+    std::map<std::string, std::set<std::string>> file_lines;
+    std::map<std::string, std::set<std::string>> function_lines;
     
     for (const auto &step : goto_trace.steps) {
       json step_data;
       
       if (!step.pc->location.is_nil()) {
-        step_data["file"] = step.pc->location.get_file().as_string();
-        step_data["line"] = step.pc->location.get_line().as_string();
-        step_data["function"] = step.pc->location.get_function().as_string();
+        std::string file = step.pc->location.get_file().as_string();
+        std::string line = step.pc->location.get_line().as_string();
+        std::string function = step.pc->location.get_function().as_string();
         
+        step_data["file"] = file;
+        step_data["line"] = line;
+        step_data["function"] = function;
+        
+        // Track coverage data
+        if (!file.empty() && !line.empty()) {
+          // Track file coverage
+          if (!test_data["coverage"]["files"].contains(file)) {
+            test_data["coverage"]["files"][file] = {
+              {"covered_lines", json::array()},
+              {"hits", json::object()},
+              {"functions", json::object()}
+            };
+          }
+          
+          auto& file_coverage = test_data["coverage"]["files"][file];
+          
+          // Track line hits
+          if (!file_coverage["hits"].contains(line)) {
+            file_coverage["hits"][line] = 1;
+            file_lines[file].insert(line);
+            file_coverage["covered_lines"].push_back(line);
+          } else {
+            file_coverage["hits"][line] = file_coverage["hits"][line].get<int>() + 1;
+          }
+          
+          // Track function coverage
+          if (!function.empty()) {
+            if (!file_coverage["functions"].contains(function)) {
+              file_coverage["functions"][function] = {
+                {"covered_lines", json::array()},
+                {"hits", 1},
+                {"lines", json::object()}
+              };
+              function_lines[function] = std::set<std::string>();
+            } else {
+              file_coverage["functions"][function]["hits"] = 
+                file_coverage["functions"][function]["hits"].get<int>() + 1;
+            }
+            
+            auto& func_coverage = file_coverage["functions"][function];
+            if (!func_coverage["lines"].contains(line)) {
+              func_coverage["lines"][line] = 1;
+              function_lines[function].insert(line);
+              func_coverage["covered_lines"].push_back(line);
+            } else {
+              func_coverage["lines"][line] = func_coverage["lines"][line].get<int>() + 1;
+            }
+          }
+        }
+        
+        // Original counterexample handling
         switch(step.type) {
           case goto_trace_stept::ASSERT:
             if(!step.guard) {
@@ -402,6 +463,12 @@ void show_goto_trace(
                 out << "  " << step.comment << "\n";
               if(step.pc->is_assert())
                 out << "  " << from_expr(ns, "", step.pc->guard) << "\n";
+              
+              step_data["assertion"] = {
+                {"violated", true},
+                {"comment", step.comment},
+                {"guard", from_expr(ns, "", step.pc->guard)}
+              };
             }
             break;
 
@@ -437,6 +504,47 @@ void show_goto_trace(
       
       test_data["steps"].push_back(step_data);
     }
+    
+    // Calculate overall statistics
+    size_t total_lines_covered = 0;
+    size_t total_functions_covered = 0;
+    
+    for (const auto& [file, lines] : file_lines) {
+      total_lines_covered += lines.size();
+      
+      auto& file_coverage = test_data["coverage"]["files"][file];
+      file_coverage["total_covered_lines"] = lines.size();
+      
+      // Sort covered lines for better readability
+      std::vector<int> sorted_lines;
+      for (const auto& line : lines) {
+        sorted_lines.push_back(std::stoi(line));
+      }
+      std::sort(sorted_lines.begin(), sorted_lines.end());
+      file_coverage["sorted_covered_lines"] = sorted_lines;
+    }
+    
+    for (const auto& [function, lines] : function_lines) {
+      total_functions_covered++;
+      test_data["coverage"]["functions"][function] = {
+        {"covered_lines", lines.size()},
+        {"lines", json::array()}
+      };
+      
+      // Sort lines for this function
+      std::vector<int> sorted_lines;
+      for (const auto& line : lines) {
+        sorted_lines.push_back(std::stoi(line));
+      }
+      std::sort(sorted_lines.begin(), sorted_lines.end());
+      test_data["coverage"]["functions"][function]["lines"] = sorted_lines;
+    }
+    
+    test_data["coverage"]["overall_stats"] = {
+      {"total_files", file_lines.size()},
+      {"total_functions", function_lines.size()},
+      {"total_lines_covered", total_lines_covered}
+    };
     
     std::ofstream json_out("tests.json");
     json_out << std::setw(2) << test_data << std::endl;
