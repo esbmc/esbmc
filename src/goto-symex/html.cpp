@@ -16,6 +16,8 @@
 using json = nlohmann::json;
 
 static json tests_json;  // Static to maintain state across multiple report generations
+static bool first_write = true;
+static std::map<std::string, std::vector<std::string>> source_files;
 
 // TODO: Multiple files
 // TODO: Control Trace
@@ -632,7 +634,6 @@ void html_report::output(std::ostream &oss) const
   oss << tag_body_str("html", html.str());
 }
 
-// Add this function to process coverage for a single trace
 void add_coverage_to_json(
   const goto_tracet &goto_trace,
   const namespacet &ns)
@@ -645,7 +646,26 @@ void add_coverage_to_json(
   std::map<std::string, std::map<int, int>> line_hits;
   std::set<std::pair<std::string, int>> violations;
 
-  // Collect line coverage and violations
+  // Track source code on first run
+  if(first_write) {
+    for(const auto &step : goto_trace.steps) {
+      if(step.pc != goto_programt::const_targett() && !step.pc->location.is_nil()) {
+        std::string file = id2string(step.pc->location.get_file());
+        if(!file.empty() && source_files.find(file) == source_files.end()) {
+          std::vector<std::string> lines;
+          std::ifstream input(file);
+          std::string line;
+          while(std::getline(input, line)) {
+            lines.push_back(line);
+          }
+          source_files[file] = lines;
+        }
+      }
+    }
+  }
+
+  // Process steps and track navigation
+  size_t step_count = 0;
   for(const auto &step : goto_trace.steps)
   {
     if(step.pc != goto_programt::const_targett() && !step.pc->location.is_nil())
@@ -667,11 +687,20 @@ void add_coverage_to_json(
             test_entry["status"] = "violation";
           }
 
-          // Add step info
+          // Add step info with navigation
           json step_data;
           step_data["file"] = file;
           step_data["line"] = line_str;
           step_data["function"] = function;
+          step_data["step_number"] = step_count;
+          
+          // Add navigation info
+          if(step_count > 0) {
+            step_data["previous_step"] = step_count - 1;
+          }
+          if(step_count < goto_trace.steps.size() - 1) {
+            step_data["next_step"] = step_count + 1;
+          }
 
           if(step.type == goto_trace_stept::ASSERT && !step.guard) {
             step_data["assertion"] = {
@@ -682,6 +711,7 @@ void add_coverage_to_json(
           }
 
           test_entry["steps"].push_back(step_data);
+          step_count++;
         }
       } catch(...) {
         continue;
@@ -714,17 +744,39 @@ void add_coverage_to_json(
     test_entry["coverage"]["files"][file] = file_coverage;
   }
 
-  // Merge this test into the global tests array
-  if(tests_json.empty()) {
-    tests_json = json::array({test_entry});
-  } else {
-    tests_json.push_back(test_entry);
+  // Add source code on first write
+  if(first_write) {
+    json source_data;
+    for(const auto& [file, lines] : source_files) {
+      source_data[file] = lines;
+    }
+    test_entry["source_files"] = source_data;
   }
 
-  // Write updated JSON output
+  // Read existing JSON if not first write
+  json all_tests;
+  if(!first_write) {
+    try {
+      std::ifstream input("tests.json");
+      if(input.is_open()) {
+        all_tests = json::array();
+        input >> all_tests;
+      } else {
+        all_tests = json::array();
+      }
+    } catch(...) {
+      all_tests = json::array();
+    }
+  } else {
+    all_tests = json::array();
+  }
+
+  // Append new test and write
+  all_tests.push_back(test_entry);
   std::ofstream json_out("tests.json");
   if(json_out.is_open()) {
-    json_out << std::setw(2) << tests_json << std::endl;
+    json_out << std::setw(2) << all_tests << std::endl;
+    first_write = false;
   }
 }
 
