@@ -424,100 +424,12 @@ void show_goto_trace(
     json test_data;
     test_data["steps"] = json::array();
     test_data["status"] = "unknown";
-    test_data["coverage"] = {
-      {"files", json::object()},
-      {"functions", json::object()},
-      {"overall_stats", json::object()}
-    };
 
-    // First process all steps
-    for (const auto& step : goto_trace.steps) {
-      try {
-        step.track_coverage(goto_trace);
-        
-        if (step.type == goto_trace_stept::ASSERT && !step.guard) {
-          found_violation = true;
-          out << "\n[Counterexample]\n";
-          if (!step.pc->location.is_nil()) {
-            out << "Violation at: " << step.pc->location << "\n";
-          }
-          if (!step.comment.empty()) {
-            out << "Reason: " << step.comment << "\n";
-          }
-        }
-      } catch (...) {
-        continue;
-      }
-    }
-
-    // Process coverage data
-    json coverage;
-    coverage["files"] = json::object();
-    
-    try {
-      for (const auto& [file, file_cov] : goto_trace.coverage_data) {
-        json file_data;
-        file_data["functions"] = json::object();
-        
-        for (const auto& [func_name, func_cov] : file_cov.functions) {
-          if (func_name.empty() || func_cov.start_line <= 0) {
-            continue;
-          }
-
-          json func_data;
-          func_data["bounds"] = {
-            {"start_line", func_cov.start_line},
-            {"end_line", func_cov.end_line}
-          };
-          
-          // Track lines
-          json covered_lines = json::array();
-          json uncovered_lines = json::array();
-          
-          for (int i = func_cov.start_line; i <= func_cov.end_line; i++) {
-            try {
-              if (func_cov.covered_lines.find(i) != func_cov.covered_lines.end()) {
-                auto hit_it = func_cov.line_hits.find(i);
-                covered_lines.push_back({
-                  {"line", i},
-                  {"hits", hit_it != func_cov.line_hits.end() ? hit_it->second : 0}
-                });
-              } else {
-                uncovered_lines.push_back(i);
-              }
-            } catch (...) {
-              continue;
-            }
-          }
-          
-          func_data["covered_lines"] = covered_lines;
-          func_data["uncovered_lines"] = uncovered_lines;
-          
-          size_t total_lines = func_cov.end_line - func_cov.start_line + 1;
-          if (total_lines > 0) {
-            double coverage_percent = (static_cast<double>(func_cov.covered_lines.size()) * 100.0) / 
-                                   static_cast<double>(total_lines);
-            func_data["coverage_stats"] = {
-              {"total_lines", total_lines},
-              {"covered_lines", func_cov.covered_lines.size()},
-              {"coverage_percentage", coverage_percent}
-            };
-          }
-          
-          file_data["functions"][func_name] = func_data;
-        }
-        
-        coverage["files"][file] = file_data;
-      }
-    } catch (...) {
-      coverage["files"] = json::object();
-    }
-
-    // Process execution steps
+    // Process execution steps while looking for violations
     for (const auto &step : goto_trace.steps) {
       json step_data;
       
-      if (!step.pc->location.is_nil()) {
+      if (step.pc != goto_programt::const_targett() && !step.pc->location.is_nil()) {
         step_data["file"] = step.pc->location.get_file().as_string();
         step_data["line"] = step.pc->location.get_line().as_string();
         step_data["function"] = step.pc->location.get_function().as_string();
@@ -525,6 +437,13 @@ void show_goto_trace(
         switch(step.type) {
           case goto_trace_stept::ASSERT:
             if(!step.guard) {
+              found_violation = true;
+              out << "\n[Counterexample]\n";
+              out << "Violation at: " << step.pc->location << "\n";
+              if (!step.comment.empty()) {
+                out << "Reason: " << step.comment << "\n";
+              }
+              
               step_data["assertion"] = {
                 {"violated", true},
                 {"comment", step.comment},
@@ -570,10 +489,11 @@ void show_goto_trace(
         }
       }
       
-      test_data["steps"].push_back(step_data);
+      if (!step_data.empty()) {
+        test_data["steps"].push_back(step_data);
+      }
     }
 
-    test_data["coverage"] = coverage;
     test_data["status"] = found_violation ? "violation" : "success";
 
     // Write JSON output
@@ -586,7 +506,7 @@ void show_goto_trace(
       out << "Failed to write tests.json\n";
     }
 
-    // Output original format
+    // Output original format for violations
     if (found_violation) {
       for (const auto &step : goto_trace.steps) {
         try {
