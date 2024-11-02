@@ -426,32 +426,29 @@ void show_goto_trace(
     test_data["status"] = "unknown";
     test_data["coverage"] = {{"files", json::object()}};
     
-    std::map<std::string, std::map<std::string, std::set<int>>> function_lines;
-    std::string current_function;
-    int function_start_line = 0;
-    int function_end_line = 0;
+    struct FuncInfo {
+        int start_line = std::numeric_limits<int>::max();
+        int end_line = 0;
+        std::set<int> executed_lines;
+    };
+    std::map<std::string, std::map<std::string, FuncInfo>> function_info;
 
-    // First pass - collect all function lines
+    // First pass - find function bounds and executed lines
     for (const auto &step : goto_trace.steps) {
       if (step.pc != goto_programt::const_targett() && step.pc->location.is_nil() == false) {
-        const locationt &loc = step.pc->location;
         try {
+          const locationt &loc = step.pc->location;
           std::string file = id2string(loc.get_file());
           std::string line_str = id2string(loc.get_line());
           std::string function = id2string(loc.get_function());
           
-          if (!file.empty() && !line_str.empty()) {
+          if (!file.empty() && !line_str.empty() && !function.empty()) {
             int line = std::stoi(line_str);
             if (line > 0) {
-              if (!function.empty()) {
-                // Track function bounds
-                if (function != current_function) {
-                  current_function = function;
-                  function_start_line = line;
-                }
-                function_end_line = std::max(function_end_line, line);
-                function_lines[file][function].insert(line);
-              }
+              auto& func = function_info[file][function];
+              func.start_line = std::min(func.start_line, line);
+              func.end_line = std::max(func.end_line, line);
+              func.executed_lines.insert(line);
             }
           }
         } catch (...) {
@@ -460,7 +457,32 @@ void show_goto_trace(
       }
     }
 
-    // Second pass - process steps and build output
+    // Build coverage data
+    for (const auto& [file, functions] : function_info) {
+      json file_coverage;
+      file_coverage["covered_lines"] = json::object();
+      
+      for (const auto& [function_name, func_info] : functions) {
+        // Add all lines in the function's range
+        for (int line = func_info.start_line; line <= func_info.end_line; line++) {
+          bool is_executed = func_info.executed_lines.count(line) > 0;
+          file_coverage["covered_lines"][std::to_string(line)] = {
+            {"covered", is_executed},
+            {"hits", is_executed ? 1 : 0},
+            {"function", function_name}
+          };
+        }
+      }
+      
+      // Add overall stats
+      file_coverage["coverage_stats"] = {
+        {"covered_lines", file_coverage["covered_lines"].size()}
+      };
+      
+      test_data["coverage"]["files"][file] = file_coverage;
+    }
+
+    // Process steps
     for (const auto &step : goto_trace.steps) {
       json step_data;
       
@@ -497,29 +519,6 @@ void show_goto_trace(
       if (!step_data.empty()) {
         test_data["steps"].push_back(step_data);
       }
-    }
-
-    // Build coverage data including function scope
-    for (const auto& [file, functions] : function_lines) {
-      json file_coverage;
-      file_coverage["covered_lines"] = json::object();
-      
-      for (const auto& [function_name, lines] : functions) {
-        // Add all lines in the function's range
-        for (int line : lines) {
-          file_coverage["covered_lines"][std::to_string(line)] = {
-            {"covered", true},
-            {"hits", 1},
-            {"function", function_name}
-          };
-        }
-      }
-      
-      file_coverage["coverage_stats"] = {
-        {"covered_lines", file_coverage["covered_lines"].size()}
-      };
-      
-      test_data["coverage"]["files"][file] = file_coverage;
     }
 
     test_data["status"] = found_violation ? "violation" : "success";
