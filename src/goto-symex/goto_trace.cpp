@@ -501,10 +501,10 @@ void show_goto_trace(
     test_data["status"] = "violation";  // We know there are violations from the trace
 
     // Write JSON output
-    std::ofstream json_out("tests.json");
-    if (json_out.is_open()) {
-      json_out << std::setw(2) << test_data << std::endl;
-    }
+    // std::ofstream json_out("tests.json");
+    // if (json_out.is_open()) {
+    //   json_out << std::setw(2) << test_data << std::endl;
+    // }
     
   } catch (...) {
     out << "Error occurred while processing trace\n";

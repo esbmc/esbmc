@@ -11,6 +11,12 @@
 #include <filesystem>
 #include <util/cmdline.h>
 
+// Add these declarations at top after includes
+#include <nlohmann/json.hpp>
+using json = nlohmann::json;
+
+static json tests_json;  // Static to maintain state across multiple report generations
+
 // TODO: Multiple files
 // TODO: Control Trace
 
@@ -626,6 +632,102 @@ void html_report::output(std::ostream &oss) const
   oss << tag_body_str("html", html.str());
 }
 
+// Add this function to process coverage for a single trace
+void add_coverage_to_json(
+  const goto_tracet &goto_trace,
+  const namespacet &ns)
+{
+  json test_entry;
+  test_entry["steps"] = json::array();
+  test_entry["status"] = "unknown";
+  test_entry["coverage"] = {{"files", json::object()}};
+  
+  std::map<std::string, std::map<int, int>> line_hits;
+  std::set<std::pair<std::string, int>> violations;
+
+  // Collect line coverage and violations
+  for(const auto &step : goto_trace.steps)
+  {
+    if(step.pc != goto_programt::const_targett() && !step.pc->location.is_nil())
+    {
+      try {
+        const locationt &loc = step.pc->location;
+        std::string file = id2string(loc.get_file());
+        std::string line_str = id2string(loc.get_line());
+        std::string function = id2string(loc.get_function());
+        int line = std::stoi(line_str);
+
+        if(!file.empty() && line > 0) {
+          // Track line hits
+          line_hits[file][line]++;
+
+          // Track violations
+          if(step.type == goto_trace_stept::ASSERT && !step.guard) {
+            violations.insert({file, line});
+            test_entry["status"] = "violation";
+          }
+
+          // Add step info
+          json step_data;
+          step_data["file"] = file;
+          step_data["line"] = line_str;
+          step_data["function"] = function;
+
+          if(step.type == goto_trace_stept::ASSERT && !step.guard) {
+            step_data["assertion"] = {
+              {"violated", true},
+              {"comment", step.comment},
+              {"guard", from_expr(ns, "", step.pc->guard)}
+            };
+          }
+
+          test_entry["steps"].push_back(step_data);
+        }
+      } catch(...) {
+        continue;
+      }
+    }
+  }
+
+  // Build coverage data
+  for(const auto& [file, lines] : line_hits) {
+    json file_coverage;
+    file_coverage["covered_lines"] = json::object();
+
+    for(const auto& [line, hits] : lines) {
+      std::string line_str = std::to_string(line);
+      bool is_violation = violations.find({file, line}) != violations.end();
+
+      file_coverage["covered_lines"][line_str] = {
+        {"covered", true},
+        {"hits", hits},
+        {"type", is_violation ? "violation" : "execution"}
+      };
+    }
+
+    file_coverage["coverage_stats"] = {
+      {"covered_lines", lines.size()},
+      {"total_hits", std::accumulate(lines.begin(), lines.end(), 0,
+        [](int sum, const auto& p) { return sum + p.second; })}
+    };
+
+    test_entry["coverage"]["files"][file] = file_coverage;
+  }
+
+  // Merge this test into the global tests array
+  if(tests_json.empty()) {
+    tests_json = json::array({test_entry});
+  } else {
+    tests_json.push_back(test_entry);
+  }
+
+  // Write updated JSON output
+  std::ofstream json_out("tests.json");
+  if(json_out.is_open()) {
+    json_out << std::setw(2) << tests_json << std::endl;
+  }
+}
+
 void generate_html_report(
   const std::string_view uuid,
   const namespacet &ns,
@@ -637,6 +739,8 @@ void generate_html_report(
 
   std::ofstream html(fmt::format("report-{}.html", uuid));
   report.output(html);
+  // Add this trace's coverage to the aggregated JSON
+  add_coverage_to_json(goto_trace, ns);
 }
 
 #include <regex>
