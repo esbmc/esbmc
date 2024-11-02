@@ -421,9 +421,9 @@ void show_goto_trace(
     }
 
     bool found_violation = false;
-    json test_data;
-    test_data["steps"] = json::array();
-    test_data["status"] = "unknown";
+    // json test_data;
+    // test_data["steps"] = json::array();
+    // test_data["status"] = "unknown";
 
     // Process steps
     for (const auto &step : goto_trace.steps) {
@@ -491,18 +491,18 @@ void show_goto_trace(
         }
       }
       
-      if (!step_data.empty()) {
-        test_data["steps"].push_back(step_data);
-      }
+      // if (!step_data.empty()) {
+      //   test_data["steps"].push_back(step_data);
+      // }
     }
 
-    test_data["status"] = found_violation ? "violation" : "success";
+    // test_data["status"] = found_violation ? "violation" : "success";
 
-    // Write JSON output
-    std::ofstream json_out("tests.json");
-    if (json_out.is_open()) {
-      json_out << std::setw(2) << test_data << std::endl;
-    }
+    // // Write JSON output
+    // std::ofstream json_out("tests.json");
+    // if (json_out.is_open()) {
+    //   json_out << std::setw(2) << test_data << std::endl;
+    // }
     
   } catch (const std::exception& e) {
     out << "Error processing trace: " << e.what() << "\n";
