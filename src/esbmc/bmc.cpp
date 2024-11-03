@@ -759,11 +759,17 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       result = run_decision_procedure(*runtime_solver, *eq);
     }
 
-    if(options.get_bool_option("generate-json-report") && eq && runtime_solver && 
-      result == smt_convt::resultt::P_SATISFIABLE) {
-      goto_tracet goto_trace;
-      build_goto_trace(*eq, *runtime_solver, goto_trace, true);
-      generate_json_report("execution", ns, goto_trace, opt_map);
+    // Only generate JSON report if we have a valid model
+    if(result == smt_convt::P_SATISFIABLE &&
+       options.get_bool_option("generate-json-report") && 
+       eq && runtime_solver) {
+      try {
+        goto_tracet goto_trace;
+        build_goto_trace(*eq, *runtime_solver, goto_trace, true);
+        generate_json_report("execution", ns, goto_trace, opt_map);
+      } catch (...) {
+        log_error("Failed to generate JSON report");
+      }
     }
 
     return result;
