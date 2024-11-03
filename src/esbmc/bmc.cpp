@@ -753,19 +753,17 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       result = run_decision_procedure(*runtime_solver, *eq);
     }
 
-    if(options.get_bool_option("generate-json-report") && eq) {
-        if(result == smt_convt::P_SATISFIABLE && runtime_solver) {
-          // Only build trace when we have a model (SAT case)
-          goto_tracet goto_trace;
-          build_goto_trace(*eq, *runtime_solver, goto_trace, true);
-          generate_json_report("violation", ns, goto_trace, opt_map);
-        }
-        else if(result == smt_convt::P_UNSATISFIABLE) {
-          // For UNSAT case, just report the verification status
-          generate_json_report("success", ns, goto_tracet(), opt_map);
-        }
-        // Skip report generation for error cases or SMTLIB output
+   // Skip JSON generation if multi-property since it handles its own reports
+    if(!options.get_bool_option("multi-property") && 
+        options.get_bool_option("generate-json-report") && 
+        eq) {
+      // Only generate trace for SAT case
+      if(result == smt_convt::P_SATISFIABLE && runtime_solver) {
+        goto_tracet goto_trace;
+        build_goto_trace(*eq, *runtime_solver, goto_trace, true);
+        generate_json_report("violation", ns, goto_trace, opt_map);
       }
+    }
 
     return result;
     
