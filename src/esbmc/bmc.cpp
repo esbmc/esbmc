@@ -112,8 +112,8 @@ void bmct::successful_trace()
   }
   //  build_goto_trace(eq, smt_conv, goto_trace, is_compact_trace);
 
-   if (options.get_bool_option("generate-json-report"))
-    generate_json_report("1", ns, goto_trace, opt_map);
+  //  if (options.get_bool_option("generate-json-report"))
+    // generate_json_report("1", ns, goto_trace, opt_map);
 }
 
 void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
@@ -752,6 +752,7 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     } else {
       result = run_decision_procedure(*runtime_solver, *eq);
     }
+    return result;
     
   }
 
