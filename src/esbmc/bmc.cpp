@@ -512,11 +512,11 @@ smt_convt::resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
       log_warning("No LTL traces seen, apparently");
   }
 
-  if(options.get_bool_option("generate-json-report") && eq && runtime_solver) {
-    goto_tracet goto_trace;
-    build_goto_trace(*eq, *runtime_solver, goto_trace, true);
-    generate_json_report("final", ns, goto_trace, opt_map);
-  }
+  // if(options.get_bool_option("generate-json-report") && eq && runtime_solver) {
+  //   goto_tracet goto_trace;
+  //   build_goto_trace(*eq, *runtime_solver, goto_trace, true);
+  //   generate_json_report("final", ns, goto_trace, opt_map);
+  // }
 
   return interleaving_failed > 0 ? smt_convt::P_SATISFIABLE : res;
 }
