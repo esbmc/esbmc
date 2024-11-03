@@ -671,16 +671,7 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 
     // Add this here
     // Add guards to prevent segfault
-    if(options.get_bool_option("generate-json-report") && eq) {
-      if (!runtime_solver) {
-        runtime_solver = std::unique_ptr<smt_convt>(create_solver("", ns, options));
-      }
-      if (runtime_solver) {
-        goto_tracet goto_trace;
-        build_goto_trace(*eq, *runtime_solver, goto_trace, true);
-        generate_json_report("execution", ns, goto_trace, opt_map);
-      }
-    }
+   
     if (options.get_bool_option("double-assign-check"))
       eq->check_for_duplicate_assigns();
 
@@ -751,20 +742,39 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
         std::unique_ptr<smt_convt>(create_solver("", ns, options));
     }
 
-    if(options.get_bool_option("generate-json-report") && 
-       !options.get_bool_option("multi-property") && 
-       runtime_solver && eq) {
-      goto_tracet goto_trace;
-      build_goto_trace(*eq, *runtime_solver, goto_trace, true);
-      generate_json_report("base", ns, goto_trace, opt_map);
+    // if(options.get_bool_option("generate-json-report") && 
+    //    !options.get_bool_option("multi-property") && 
+    //    runtime_solver && eq) {
+    //   goto_tracet goto_trace;
+    //   build_goto_trace(*eq, *runtime_solver, goto_trace, true);
+    //   generate_json_report("base", ns, goto_trace, opt_map);
+    // }
+
+    // Run the solver first
+    smt_convt::resultt result;
+    if (options.get_bool_option("multi-property") && 
+        options.get_bool_option("base-case")) {
+      result = multi_property_check(*eq, solver_result.remaining_claims);
+    } else {
+      result = run_decision_procedure(*runtime_solver, *eq);
     }
 
-    if (
-      options.get_bool_option("multi-property") &&
-      options.get_bool_option("base-case"))
-      return multi_property_check(*eq, solver_result.remaining_claims);
+    if(options.get_bool_option("generate-json-report") && eq && runtime_solver) {
+      goto_tracet goto_trace;
+      build_goto_trace(*eq, *runtime_solver, goto_trace, true);
+      generate_json_report("execution", ns, goto_trace, opt_map);
+    }
 
-    return run_decision_procedure(*runtime_solver, *eq);
+    return result;
+
+    // if (
+    //   options.get_bool_option("multi-property") &&
+    //   options.get_bool_option("base-case"))
+    //   return multi_property_check(*eq, solver_result.remaining_claims);
+
+    // return run_decision_procedure(*runtime_solver, *eq);
+
+    
   }
 
   catch (std::string &error_str)
