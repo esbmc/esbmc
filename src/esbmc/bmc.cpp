@@ -110,6 +110,8 @@ void bmct::successful_trace()
     /* build_successful_goto_trace(eq, ns, goto_trace); */
     correctness_graphml_goto_trace(options, ns, goto_trace);
   }
+  //  build_goto_trace(eq, smt_conv, goto_trace, is_compact_trace);
+
    if (options.get_bool_option("generate-json-report"))
     generate_json_report("1", ns, goto_trace, opt_map);
 }
@@ -290,6 +292,12 @@ void bmct::report_trace(
   bool is = options.get_bool_option("inductive-step");
   bool term = options.get_bool_option("termination");
   bool show_cex = options.get_bool_option("show-cex");
+
+  if(options.get_bool_option("generate-json-report") && !options.get_bool_option("multi-property")) {
+      goto_tracet goto_trace;
+      build_goto_trace(eq, *runtime_solver, goto_trace, true);
+      generate_json_report("base", ns, goto_trace, opt_map);
+    }
 
   switch (res)
   {
@@ -504,6 +512,12 @@ smt_convt::resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
       log_warning("No LTL traces seen, apparently");
   }
 
+  if(options.get_bool_option("generate-json-report") && !options.get_bool_option("multi-property")) {
+      goto_tracet goto_trace;
+      build_goto_trace(*eq, *runtime_solver, goto_trace, true);
+      generate_json_report("base", ns, goto_trace, opt_map);
+    }
+
   return interleaving_failed > 0 ? smt_convt::P_SATISFIABLE : res;
 }
 
@@ -655,6 +669,13 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       time2string(symex_stop - symex_start),
       eq->SSA_steps.size());
 
+    // Add this here
+    if(options.get_bool_option("generate-json-report")) {
+      goto_tracet goto_trace;
+      build_goto_trace(*eq, *runtime_solver, goto_trace, true);
+      generate_json_report("execution", ns, goto_trace, opt_map);
+    }
+
     if (options.get_bool_option("double-assign-check"))
       eq->check_for_duplicate_assigns();
 
@@ -723,6 +744,12 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     {
       runtime_solver =
         std::unique_ptr<smt_convt>(create_solver("", ns, options));
+    }
+
+    if(options.get_bool_option("generate-json-report") && !options.get_bool_option("multi-property")) {
+      goto_tracet goto_trace;
+      build_goto_trace(*eq, *runtime_solver, goto_trace, true);
+      generate_json_report("base", ns, goto_trace, opt_map);
     }
 
     if (

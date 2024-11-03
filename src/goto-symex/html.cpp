@@ -723,34 +723,23 @@ std::string html_report::code_steps::to_html(size_t last) const
     msg,
     next_step_str);
 }
+
 void add_coverage_to_json(
   const goto_tracet &goto_trace,
   const namespacet &ns)
 {
   json test_entry;
   test_entry["steps"] = json::array();
-  test_entry["status"] = "unknown";
+  test_entry["status"] = "unknown";  // We'll determine this from the steps
   test_entry["coverage"] = {{"files", json::object()}};
   
-  // Track source code on first run
-  if(first_write) {
-    for(const auto &step : goto_trace.steps) {
-      if(step.pc != goto_programt::const_targett() && !step.pc->location.is_nil()) {
-        std::string file = id2string(step.pc->location.get_file());
-        if(!file.empty() && source_files.find(file) == source_files.end()) {
-          const auto& lines = html_report::get_file_lines(file);
-          source_files[file] = std::vector<std::string>(lines.begin(), lines.end());
-        }
-      }
-    }
-  }
-
+  // Track all line hits, not just violations
   std::map<std::string, std::map<int, int>> line_hits;
   std::set<std::pair<std::string, int>> violations;
   size_t step_count = 0;
   bool found_violation = false;
 
-  // Process steps with navigation
+  // Process all steps to track execution
   for(const auto &step : goto_trace.steps)
   {
     if(step.pc != goto_programt::const_targett() && !step.pc->location.is_nil())
@@ -763,53 +752,43 @@ void add_coverage_to_json(
         int line = std::stoi(line_str);
 
         if(!file.empty() && line > 0) {
-          // Track line hits
+          // Track all line hits
           line_hits[file][line]++;
 
-          // Add step info with navigation
+          // Track violations separately
+          if(step.is_assert() && !step.guard) {
+            violations.insert({file, line});
+            found_violation = true;
+          }
+
+          // Add step info
           json step_data;
-          step_data["id"] = fmt::format("Path{}", step_count);
-          step_data["file"] = file;
+          step_data["file"] = file; 
           step_data["line"] = line_str;
           step_data["function"] = function;
-          step_data["step_number"] = step_count;
-
-          // Add navigation info
-          if(step_count > 0) {
-            step_data["previous"] = {
-              {"id", fmt::format("Path{}", step_count - 1)},
-              {"step", step_count - 1}
-            };
-          }
-          if(step_count < goto_trace.steps.size() - 1) {
-            step_data["next"] = {
-              {"id", fmt::format("Path{}", step_count + 1)},
-              {"step", step_count + 1}
-            };
-          }
-
-          // Add step type and message
-          if(step.pc->is_assume()) {
-            step_data["type"] = "assume";
-            step_data["message"] = "Assumption restriction";
-          }
-          else if(step.pc->is_assert() || step.is_assert()) {
-            step_data["type"] = "assert";
+          step_data["step_number"] = step_count++;
+          
+          // Add step type and details
+          if(step.is_assert()) {
             if(!step.guard) {
               step_data["type"] = "violation";
               step_data["message"] = step.comment.empty() ? "Assertion check" : step.comment;
-              found_violation = true;
-              violations.insert({file, line});
               test_entry["status"] = "violation";
               step_data["assertion"] = {
                 {"violated", true},
                 {"comment", step.comment},
                 {"guard", from_expr(ns, "", step.pc->guard)}
               };
+            } else {
+              step_data["type"] = "assert";
             }
           }
-          else if(step.pc->is_assign()) {
-            step_data["type"] = "assignment";
+          else if(step.is_assume()) {
+            step_data["type"] = "assume";
+            step_data["message"] = "Assumption restriction";
+          }
+          else if(step.is_assignment()) {
+            step_data["type"] = "assignment"; 
             std::string msg = from_expr(ns, "", step.lhs);
             if(is_nil_expr(step.value)) {
               msg += " (assignment removed)";
@@ -823,12 +802,13 @@ void add_coverage_to_json(
             step_data["message"] = fmt::format(
               "Function argument '{}' = '{}'",
               from_expr(ns, "", step.lhs),
-              from_expr(ns, "", step.value)
-            );
+              from_expr(ns, "", step.value));
+          }
+          else {
+            step_data["type"] = "other";
           }
 
           test_entry["steps"].push_back(step_data);
-          step_count++;
         }
       } catch(...) {
         continue;
@@ -836,17 +816,12 @@ void add_coverage_to_json(
     }
   }
 
-  // Add end path for final step
-  if(step_count > 0) {
-    json last_step = test_entry["steps"].back();
-    last_step["id"] = "EndPath";
-    if(last_step.contains("next")) {
-      last_step.erase("next");
-    }
-    test_entry["steps"].back() = last_step;
+  // If we haven't found a violation, mark as success
+  if(!found_violation && test_entry["status"] == "unknown") {
+    test_entry["status"] = "success";
   }
 
-  // Build coverage data
+  // Build coverage data for all executed lines
   for(const auto& [file, lines] : line_hits) {
     json file_coverage;
     file_coverage["covered_lines"] = json::object();
@@ -871,8 +846,16 @@ void add_coverage_to_json(
     test_entry["coverage"]["files"][file] = file_coverage;
   }
 
-  // Add source code on first write
+  // Track source code on first write
   if(first_write) {
+    for(const auto& [file, lines] : line_hits) {
+      if(source_files.find(file) == source_files.end()) {
+        const auto& file_lines = html_report::get_file_lines(file);
+        source_files[file] = std::vector<std::string>(file_lines.begin(), file_lines.end());
+      }
+    }
+    
+    // Add source files to JSON
     json source_data;
     for(const auto& [file, lines] : source_files) {
       source_data[file] = lines;
@@ -886,7 +869,6 @@ void add_coverage_to_json(
     try {
       std::ifstream input("report.json");
       if(input.is_open()) {
-        all_tests = json::array();
         input >> all_tests;
       } else {
         all_tests = json::array();
@@ -922,7 +904,7 @@ void generate_html_report(
 
 void generate_json_report(
   const std::string_view uuid,
-  const namespacet &ns,
+  const namespacet &ns, 
   const goto_tracet &goto_trace,
   const cmdlinet::options_mapt &options_map)
 {
