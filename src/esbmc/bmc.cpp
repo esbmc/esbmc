@@ -752,6 +752,29 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     } else {
       result = run_decision_procedure(*runtime_solver, *eq);
     }
+
+    // Generate JSON report based on solver result
+    if(options.get_bool_option("generate-json-report") && eq && runtime_solver) {
+      switch(result) {
+        case smt_convt::P_SATISFIABLE: {
+          // Found a violation
+          goto_tracet goto_trace;
+          build_goto_trace(*eq, *runtime_solver, goto_trace, true);
+          generate_json_report("violation", ns, goto_trace, opt_map);
+          break;
+        }
+        case smt_convt::P_UNSATISFIABLE: {
+          // Property holds
+          goto_tracet goto_trace;
+          build_goto_trace(*eq, *runtime_solver, goto_trace, true);
+          generate_json_report("success", ns, goto_trace, opt_map);
+          break;
+        }
+        default:
+          // Don't generate report for other cases (ERROR, SMTLIB)
+          break;
+      }
+    }
     return result;
     
   }
