@@ -753,20 +753,24 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       result = run_decision_procedure(*runtime_solver, *eq);
     }
 
-    // // Only generate JSON report if we have a valid model
-    // if(runtime_solver->get_bool(true_value)) {  // Additional check
-    //   try {
-    //     goto_tracet goto_trace;
-    //     build_goto_trace(*eq, *runtime_solver, goto_trace, true);
-    //     generate_json_report("execution", ns, goto_trace, opt_map);
-    //   } catch (const char *err) {
-    //     log_error("Failed to generate JSON report: {}", err);
-    //   } catch (const std::string &err) {
-    //     log_error("Failed to generate JSON report: {}", err);
-    //   } catch (...) {
-    //     log_error("Failed to generate JSON report: unknown error");
-    //   }
-    // }
+    if(result == smt_convt::P_SATISFIABLE && 
+     options.get_bool_option("generate-json-report") && 
+     eq && runtime_solver) {
+    try {
+      bool has_model = runtime_solver->dec_solve() == smt_convt::P_SATISFIABLE;
+      if(has_model) {
+        goto_tracet goto_trace;
+        build_goto_trace(*eq, *runtime_solver, goto_trace, true);
+        generate_json_report("execution", ns, goto_trace, opt_map);
+      }
+    } catch (const char *err) {
+      log_error("Failed to generate JSON report: {}", err);
+    } catch (const std::string &err) {
+      log_error("Failed to generate JSON report: {}", err);
+    } catch (...) {
+      log_error("Failed to generate JSON report: unknown error");
+    }
+  }
 
     return result;
 
