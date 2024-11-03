@@ -293,11 +293,11 @@ void bmct::report_trace(
   bool term = options.get_bool_option("termination");
   bool show_cex = options.get_bool_option("show-cex");
 
-  if(options.get_bool_option("generate-json-report") && !options.get_bool_option("multi-property")) {
-      goto_tracet goto_trace;
-      build_goto_trace(eq, *runtime_solver, goto_trace, true);
-      generate_json_report("base", ns, goto_trace, opt_map);
-    }
+  if(options.get_bool_option("generate-json-report") && runtime_solver) {
+    goto_tracet goto_trace;
+    build_goto_trace(eq, *runtime_solver, goto_trace, true);
+    generate_json_report("trace", ns, goto_trace, opt_map);
+  }
 
   switch (res)
   {
@@ -512,11 +512,11 @@ smt_convt::resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
       log_warning("No LTL traces seen, apparently");
   }
 
-  if(options.get_bool_option("generate-json-report") && !options.get_bool_option("multi-property")) {
-      goto_tracet goto_trace;
-      build_goto_trace(*eq, *runtime_solver, goto_trace, true);
-      generate_json_report("base", ns, goto_trace, opt_map);
-    }
+  if(options.get_bool_option("generate-json-report") && eq && runtime_solver) {
+    goto_tracet goto_trace;
+    build_goto_trace(*eq, *runtime_solver, goto_trace, true);
+    generate_json_report("final", ns, goto_trace, opt_map);
+  }
 
   return interleaving_failed > 0 ? smt_convt::P_SATISFIABLE : res;
 }
@@ -670,12 +670,17 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       eq->SSA_steps.size());
 
     // Add this here
-    if(options.get_bool_option("generate-json-report")) {
-      goto_tracet goto_trace;
-      build_goto_trace(*eq, *runtime_solver, goto_trace, true);
-      generate_json_report("execution", ns, goto_trace, opt_map);
+    // Add guards to prevent segfault
+    if(options.get_bool_option("generate-json-report") && eq) {
+      if (!runtime_solver) {
+        runtime_solver = std::unique_ptr<smt_convt>(create_solver("", ns, options));
+      }
+      if (runtime_solver) {
+        goto_tracet goto_trace;
+        build_goto_trace(*eq, *runtime_solver, goto_trace, true);
+        generate_json_report("execution", ns, goto_trace, opt_map);
+      }
     }
-
     if (options.get_bool_option("double-assign-check"))
       eq->check_for_duplicate_assigns();
 
@@ -746,7 +751,9 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
         std::unique_ptr<smt_convt>(create_solver("", ns, options));
     }
 
-    if(options.get_bool_option("generate-json-report") && !options.get_bool_option("multi-property")) {
+    if(options.get_bool_option("generate-json-report") && 
+       !options.get_bool_option("multi-property") && 
+       runtime_solver && eq) {
       goto_tracet goto_trace;
       build_goto_trace(*eq, *runtime_solver, goto_trace, true);
       generate_json_report("base", ns, goto_trace, opt_map);
