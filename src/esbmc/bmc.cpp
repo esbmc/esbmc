@@ -102,13 +102,16 @@ void bmct::successful_trace()
     return;
 
   std::string witness_output = options.get_option("witness-output");
+  goto_tracet goto_trace;
+
   if (witness_output != "")
   {
-    goto_tracet goto_trace;
     log_progress("Building successful trace");
     /* build_successful_goto_trace(eq, ns, goto_trace); */
     correctness_graphml_goto_trace(options, ns, goto_trace);
   }
+   if (options.get_bool_option("generate-json-report"))
+    generate_json_report("1", ns, goto_trace, opt_map);
 }
 
 void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
