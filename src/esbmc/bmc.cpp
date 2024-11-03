@@ -293,11 +293,11 @@ void bmct::report_trace(
   bool term = options.get_bool_option("termination");
   bool show_cex = options.get_bool_option("show-cex");
 
-  if(options.get_bool_option("generate-json-report") && runtime_solver) {
-    goto_tracet goto_trace;
-    build_goto_trace(eq, *runtime_solver, goto_trace, true);
-    generate_json_report("trace", ns, goto_trace, opt_map);
-  }
+  // if(options.get_bool_option("generate-json-report") && runtime_solver) {
+  //   goto_tracet goto_trace;
+  //   build_goto_trace(eq, *runtime_solver, goto_trace, true);
+  //   generate_json_report("trace", ns, goto_trace, opt_map);
+  // }
 
   switch (res)
   {
