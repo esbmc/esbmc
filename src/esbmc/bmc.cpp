@@ -755,26 +755,20 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
 
     // Generate JSON report based on solver result
     if(options.get_bool_option("generate-json-report") && eq && runtime_solver) {
-      switch(result) {
-        case smt_convt::P_SATISFIABLE: {
-          // Found a violation
-          goto_tracet goto_trace;
-          build_goto_trace(*eq, *runtime_solver, goto_trace, true);
-          generate_json_report("violation", ns, goto_trace, opt_map);
-          break;
-        }
-        case smt_convt::P_UNSATISFIABLE: {
-          // Property holds
-          goto_tracet goto_trace;
-          build_goto_trace(*eq, *runtime_solver, goto_trace, true);
-          generate_json_report("success", ns, goto_trace, opt_map);
-          break;
-        }
-        default:
-          // Don't generate report for other cases (ERROR, SMTLIB)
-          break;
+      if(result == smt_convt::P_SATISFIABLE) {
+        // Only build trace when we have a model (SAT case)
+        goto_tracet goto_trace;
+        build_goto_trace(*eq, *runtime_solver, goto_trace, true);
+        generate_json_report("violation", ns, goto_trace, opt_map);
+      }
+      // For UNSAT, we can still generate a report but without a trace
+      else if(result == smt_convt::P_UNSATISFIABLE) {
+        // Perhaps create a simpler report without trace info
+        goto_tracet empty_trace;
+        generate_json_report("success", ns, empty_trace, opt_map);
       }
     }
+
     return result;
     
   }
