@@ -758,13 +758,35 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
      options.get_bool_option("generate-json-report") && 
      eq && runtime_solver) {
     try {
-      goto_tracet goto_trace;
-      build_goto_trace(*eq, *runtime_solver, goto_trace, true);
-      generate_json_report("execution", ns, goto_trace, opt_map);
+      // First check if we can actually get assignments
+      bool can_get_assignments = false;
+      try {
+        // Try to get any assignment to verify solver state
+        for(const auto& step : eq->SSA_steps) {
+          if(step.is_assignment() && !step.ignore) {
+            runtime_solver->l_get(step.cond_ast);  // Changed to l_get
+            can_get_assignments = true;
+            break;
+          }
+        }
+      } catch(...) {
+        can_get_assignments = false;
+      }
+
+      if(can_get_assignments) {
+        goto_tracet goto_trace;
+        build_goto_trace(*eq, *runtime_solver, goto_trace, true);
+        generate_json_report("execution", ns, goto_trace, opt_map);
+      } else {
+        log_warning("Skipping JSON report generation - cannot get assignments from solver");
+      }
+    } catch (const char* msg) {
+      log_error("Failed to generate JSON report: {}", msg);
+    } catch (const std::string& msg) {
+      log_error("Failed to generate JSON report: {}", msg);
     } catch (...) {
-      log_error("Failed to generate JSON report");
+      log_error("Failed to generate JSON report: unknown error");
     }
-  
   }
 
     return result;
