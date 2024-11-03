@@ -155,6 +155,9 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
   if (options.get_bool_option("generate-json-report"))
     generate_json_report("1", ns, goto_trace, opt_map);
 
+  // if (options.get_bool_option("generate-json-report"))
+  //   generate_json_report("1", ns, goto_trace, opt_map);
+
   std::ostringstream oss;
   log_fail("\n[Counterexample]\n");
   show_goto_trace(oss, ns, goto_trace);
@@ -365,7 +368,6 @@ void bmct::report_multi_property_trace(
 
     if (options.get_bool_option("generate-json-report"))
       generate_json_report(std::to_string(ce_counter), ns, goto_trace, opt_map);
-
 
     std::ostringstream oss;
     log_fail("\n[Counterexample]\n");
@@ -742,14 +744,6 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
         std::unique_ptr<smt_convt>(create_solver("", ns, options));
     }
 
-    // if(options.get_bool_option("generate-json-report") && 
-    //    !options.get_bool_option("multi-property") && 
-    //    runtime_solver && eq) {
-    //   goto_tracet goto_trace;
-    //   build_goto_trace(*eq, *runtime_solver, goto_trace, true);
-    //   generate_json_report("base", ns, goto_trace, opt_map);
-    // }
-
     // Run the solver first
     smt_convt::resultt result;
     if (options.get_bool_option("multi-property") && 
@@ -759,18 +753,20 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
       result = run_decision_procedure(*runtime_solver, *eq);
     }
 
-    // Only generate JSON report if we have a valid model
-    if(result == smt_convt::P_SATISFIABLE &&
-       options.get_bool_option("generate-json-report") && 
-       eq && runtime_solver) {
-      try {
-        goto_tracet goto_trace;
-        build_goto_trace(*eq, *runtime_solver, goto_trace, true);
-        generate_json_report("execution", ns, goto_trace, opt_map);
-      } catch (...) {
-        log_error("Failed to generate JSON report");
-      }
-    }
+    // // Only generate JSON report if we have a valid model
+    // if(runtime_solver->get_bool(true_value)) {  // Additional check
+    //   try {
+    //     goto_tracet goto_trace;
+    //     build_goto_trace(*eq, *runtime_solver, goto_trace, true);
+    //     generate_json_report("execution", ns, goto_trace, opt_map);
+    //   } catch (const char *err) {
+    //     log_error("Failed to generate JSON report: {}", err);
+    //   } catch (const std::string &err) {
+    //     log_error("Failed to generate JSON report: {}", err);
+    //   } catch (...) {
+    //     log_error("Failed to generate JSON report: unknown error");
+    //   }
+    // }
 
     return result;
 
