@@ -736,10 +736,38 @@ void add_coverage_to_json(
   // Track all line hits, not just violations
   std::map<std::string, std::map<int, int>> line_hits;
   std::set<std::pair<std::string, int>> violations;
+  std::set<std::string> all_referenced_files;
   size_t step_count = 0;
   bool found_violation = false;
 
-  // Process all steps to track execution
+  // First pass - collect all referenced files
+  for(const auto &step : goto_trace.steps)
+  {
+    if(step.pc != goto_programt::const_targett() && !step.pc->location.is_nil())
+    {
+      try {
+        const locationt &loc = step.pc->location;
+        std::string file = id2string(loc.get_file());
+        
+        // Include all non-empty files, including headers
+        if(!file.empty()) {
+          all_referenced_files.insert(file);
+
+          // If it's a header file, also add the corresponding .h file
+          std::string header_file = file;
+          if(header_file.find(".c") != std::string::npos) {
+            header_file.replace(header_file.find(".c"), 2, ".h");
+            all_referenced_files.insert(header_file);
+          }
+        }
+      } catch(...) {
+        continue;
+      }
+    }
+  }
+
+  // Rest of the code remains the same...
+  // Second pass - process all steps to track execution
   for(const auto &step : goto_trace.steps)
   {
     if(step.pc != goto_programt::const_targett() && !step.pc->location.is_nil())
@@ -751,7 +779,7 @@ void add_coverage_to_json(
         std::string function = id2string(loc.get_function());
         int line = std::stoi(line_str);
 
-        if(!file.empty() && line > 0) {
+        if(line > 0) {  // Only filter invalid line numbers
           // Track all line hits
           line_hits[file][line]++;
 
@@ -821,37 +849,51 @@ void add_coverage_to_json(
     test_entry["status"] = "success";
   }
 
-  // Build coverage data for all executed lines
-  for(const auto& [file, lines] : line_hits) {
+  // Build coverage data for all files including headers
+  for(const auto& file : all_referenced_files) {
     json file_coverage;
     file_coverage["covered_lines"] = json::object();
 
-    for(const auto& [line, hits] : lines) {
-      std::string line_str = std::to_string(line);
-      bool is_violation = violations.find({file, line}) != violations.end();
+    // Add coverage data if we have hits for this file
+    if(line_hits.find(file) != line_hits.end()) {
+      for(const auto& [line, hits] : line_hits[file]) {
+        std::string line_str = std::to_string(line);
+        bool is_violation = violations.find({file, line}) != violations.end();
 
-      file_coverage["covered_lines"][line_str] = {
-        {"covered", true},
-        {"hits", hits},
-        {"type", is_violation ? "violation" : "execution"}
+        file_coverage["covered_lines"][line_str] = {
+          {"covered", true},
+          {"hits", hits},
+          {"type", is_violation ? "violation" : "execution"}
+        };
+      }
+
+      file_coverage["coverage_stats"] = {
+        {"covered_lines", line_hits[file].size()},
+        {"total_hits", std::accumulate(line_hits[file].begin(), line_hits[file].end(), 0,
+          [](int sum, const auto& p) { return sum + p.second; })}
+      };
+    } else {
+      // Add empty coverage stats for files without hits
+      file_coverage["coverage_stats"] = {
+        {"covered_lines", 0},
+        {"total_hits", 0}
       };
     }
-
-    file_coverage["coverage_stats"] = {
-      {"covered_lines", lines.size()},
-      {"total_hits", std::accumulate(lines.begin(), lines.end(), 0,
-        [](int sum, const auto& p) { return sum + p.second; })}
-    };
 
     test_entry["coverage"]["files"][file] = file_coverage;
   }
 
   // Track source code on first write
   if(first_write) {
-    for(const auto& [file, lines] : line_hits) {
+    for(const auto& file : all_referenced_files) {
       if(source_files.find(file) == source_files.end()) {
-        const auto& file_lines = html_report::get_file_lines(file);
-        source_files[file] = std::vector<std::string>(file_lines.begin(), file_lines.end());
+        try {
+          const auto& file_lines = html_report::get_file_lines(file);
+          source_files[file] = std::vector<std::string>(file_lines.begin(), file_lines.end());
+        } catch(...) {
+          // If we can't read the file, store empty content
+          source_files[file] = std::vector<std::string>();
+        }
       }
     }
     
