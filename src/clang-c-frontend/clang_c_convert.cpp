@@ -2884,6 +2884,7 @@ bool clang_c_convertert::get_cast_expr(
     break;
 
   case clang::CK_DerivedToBase:
+  case clang::CK_BaseToDerived:
   case clang::CK_Dynamic:
 
   case clang::CK_UserDefinedConversion:
