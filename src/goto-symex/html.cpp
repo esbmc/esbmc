@@ -737,25 +737,29 @@ std::string html_report::code_steps::to_html(size_t last) const
 }
 
 std::string resolve_header_path(const std::string& header, const std::string& base_path) {
-    // First try relative to the current file
+    // Try relative to the current file
     std::filesystem::path local_path = std::filesystem::path(base_path) / header;
     if (std::filesystem::exists(local_path)) {
-        return std::filesystem::canonical(local_path).string();
-    }
-    
-    // Try system include paths
-    for (const auto& include_path : include_paths) {
-        std::filesystem::path sys_path = std::filesystem::path(include_path) / header;
-        if (std::filesystem::exists(sys_path)) {
-            return std::filesystem::canonical(sys_path).string();
+        std::string resolved = std::filesystem::canonical(local_path).string();
+        // Only skip if it's in /usr
+        if (resolved.find("/usr/") != 0) {
+            return resolved;
         }
     }
     
-    return header; // Return original if not found
+    // If header is absolute path and not in /usr, return it
+    if (header[0] == '/' && header.find("/usr/") != 0) {
+        if (std::filesystem::exists(header)) {
+            return std::filesystem::canonical(header).string();
+        }
+    }
+    
+    return ""; // Return empty if not found or is in /usr
 }
 
 std::set<std::string> find_included_headers(const std::string& file_path, std::set<std::string>& processed_files) {
-    if (processed_files.find(file_path) != processed_files.end()) {
+    if (processed_files.find(file_path) != processed_files.end() || 
+        file_path.find("/usr/") == 0) { // Only skip /usr paths
         return {};
     }
     processed_files.insert(file_path);
@@ -768,20 +772,23 @@ std::set<std::string> find_included_headers(const std::string& file_path, std::s
         return headers;
     }
 
-    std::regex include_pattern(R"(#\s*include\s*[<"]([^>"]+)[>"])");
+    std::regex include_pattern(R"(#\s*include\s*([<"])([\w./]+)[>"])");
     
     while (std::getline(source_file, line)) {
         std::smatch match;
         if (std::regex_search(line, match, include_pattern)) {
-            std::string header = match[1].str();
+            std::string header = match[2].str();
             
             // Resolve header path
-            header = resolve_header_path(header, std::filesystem::path(file_path).parent_path().string());
-            headers.insert(header);
+            std::string resolved_path = resolve_header_path(header, 
+                std::filesystem::path(file_path).parent_path().string());
             
-            // Recursively process this header if it exists and isn't a system header
-            if (std::filesystem::exists(header)) {
-                auto nested_headers = find_included_headers(header, processed_files);
+            // Only process if it's a valid path and not in /usr
+            if (!resolved_path.empty()) {
+                headers.insert(resolved_path);
+                
+                // Recursively process this header
+                auto nested_headers = find_included_headers(resolved_path, processed_files);
                 headers.insert(nested_headers.begin(), nested_headers.end());
             }
         }
@@ -794,204 +801,205 @@ void add_coverage_to_json(
   const goto_tracet &goto_trace,
   const namespacet &ns)
 {
-  json test_entry;
-  test_entry["steps"] = json::array();
-  test_entry["status"] = "unknown";  // We'll determine this from the steps
-  test_entry["coverage"] = {{"files", json::object()}};
-  
-  // Track all line hits, not just violations
-  std::map<std::string, std::map<int, int>> line_hits;
-  std::set<std::pair<std::string, int>> violations;
-  std::set<std::string> all_referenced_files;
-  std::set<std::string> processed_files;  // For tracking processed headers
-  size_t step_count = 0;
-  bool found_violation = false;
-
-  // First pass - collect all referenced files and their headers
-  for(const auto &step : goto_trace.steps)
-  {
-    if(step.pc != goto_programt::const_targett() && !step.pc->location.is_nil())
-    {
-      try {
-        const locationt &loc = step.pc->location;
-        std::string file = id2string(loc.get_file());
-        
-        if(!file.empty()) {
-          // Add the source file
-          all_referenced_files.insert(file);
-          
-          // Find and add all included headers
-          auto included_headers = find_included_headers(file, processed_files);
-          all_referenced_files.insert(included_headers.begin(), included_headers.end());
-        }
-      } catch(...) {
-        continue;
-      }
-    }
-  }
-
-  // Process all steps to track execution
-  for(const auto &step : goto_trace.steps)
-  {
-    if(step.pc != goto_programt::const_targett() && !step.pc->location.is_nil())
-    {
-      try {
-        const locationt &loc = step.pc->location;
-        std::string file = id2string(loc.get_file());
-        std::string line_str = id2string(loc.get_line());
-        std::string function = id2string(loc.get_function());
-        int line = std::stoi(line_str);
-
-        if(line > 0) {  // Only filter invalid line numbers
-          // Track all line hits
-          line_hits[file][line]++;
-
-          // Track violations separately
-          if(step.is_assert() && !step.guard) {
-            violations.insert({file, line});
-            found_violation = true;
-          }
-
-          // Add step info
-          json step_data;
-          step_data["file"] = file; 
-          step_data["line"] = line_str;
-          step_data["function"] = function;
-          step_data["step_number"] = step_count++;
-          
-          // Add step type and details
-          if(step.is_assert()) {
-            if(!step.guard) {
-              step_data["type"] = "violation";
-              step_data["message"] = step.comment.empty() ? "Assertion check" : step.comment;
-              test_entry["status"] = "violation";
-              step_data["assertion"] = {
-                {"violated", true},
-                {"comment", step.comment},
-                {"guard", from_expr(ns, "", step.pc->guard)}
-              };
-            } else {
-              step_data["type"] = "assert";
-            }
-          }
-          else if(step.is_assume()) {
-            step_data["type"] = "assume";
-            step_data["message"] = "Assumption restriction";
-          }
-          else if(step.is_assignment()) {
-            step_data["type"] = "assignment"; 
-            std::string msg = from_expr(ns, "", step.lhs);
-            if(is_nil_expr(step.value)) {
-              msg += " (assignment removed)";
-            } else {
-              msg += " = " + from_expr(ns, "", step.value);
-            }
-            step_data["message"] = msg;
-          }
-          else if(step.pc->is_function_call()) {
-            step_data["type"] = "function_call";
-            step_data["message"] = fmt::format(
-              "Function argument '{}' = '{}'",
-              from_expr(ns, "", step.lhs),
-              from_expr(ns, "", step.value));
-          }
-          else {
-            step_data["type"] = "other";
-          }
-
-          test_entry["steps"].push_back(step_data);
-        }
-      } catch(...) {
-        continue;
-      }
-    }
-  }
-
-  // If we haven't found a violation, mark as success
-  if(!found_violation && test_entry["status"] == "unknown") {
-    test_entry["status"] = "success";
-  }
-
-  // Build coverage data for all files including headers
-  for(const auto& file : all_referenced_files) {
-    json file_coverage;
-    file_coverage["covered_lines"] = json::object();
-
-    // Add coverage data if we have hits for this file
-    if(line_hits.find(file) != line_hits.end()) {
-      for(const auto& [line, hits] : line_hits[file]) {
-        std::string line_str = std::to_string(line);
-        bool is_violation = violations.find({file, line}) != violations.end();
-
-        file_coverage["covered_lines"][line_str] = {
-          {"covered", true},
-          {"hits", hits},
-          {"type", is_violation ? "violation" : "execution"}
-        };
-      }
-
-      file_coverage["coverage_stats"] = {
-        {"covered_lines", line_hits[file].size()},
-        {"total_hits", std::accumulate(line_hits[file].begin(), line_hits[file].end(), 0,
-          [](int sum, const auto& p) { return sum + p.second; })}
-      };
-    } else {
-      // Add empty coverage stats for files without hits
-      file_coverage["coverage_stats"] = {
-        {"covered_lines", 0},
-        {"total_hits", 0}
-      };
-    }
-
-    test_entry["coverage"]["files"][file] = file_coverage;
-  }
-
-  // Track source code on first write
-  if(first_write) {
-    for(const auto& file : all_referenced_files) {
-      if(source_files.find(file) == source_files.end()) {
-        try {
-          const auto& file_lines = html_report::get_file_lines(file);
-          source_files[file] = std::vector<std::string>(file_lines.begin(), file_lines.end());
-        } catch(...) {
-          // If we can't read the file, store empty content
-          source_files[file] = std::vector<std::string>();
-        }
-      }
-    }
+    json test_entry;
+    test_entry["steps"] = json::array();
+    test_entry["status"] = "unknown";
+    test_entry["coverage"] = {{"files", json::object()}};
     
-    // Add source files to JSON
-    json source_data;
-    for(const auto& [file, lines] : source_files) {
-      source_data[file] = lines;
-    }
-    test_entry["source_files"] = source_data;
-  }
+    std::map<std::string, std::map<int, int>> line_hits;
+    std::set<std::pair<std::string, int>> violations;
+    std::set<std::string> all_referenced_files;
+    std::set<std::string> processed_files;
+    size_t step_count = 0;
+    bool found_violation = false;
 
-  // Read existing JSON if not first write
-  json all_tests;
-  if(!first_write) {
-    try {
-      std::ifstream input("report.json");
-      if(input.is_open()) {
-        input >> all_tests;
-      } else {
+    // First pass - collect all referenced files and their headers
+    for(const auto &step : goto_trace.steps)
+    {
+        if(step.pc != goto_programt::const_targett() && !step.pc->location.is_nil())
+        {
+            try {
+                const locationt &loc = step.pc->location;
+                std::string file = id2string(loc.get_file());
+                
+                if(!file.empty() && file.find("/usr/") != 0) { // Only skip /usr paths
+                    // Add the source file
+                    all_referenced_files.insert(file);
+                    
+                    // Find and add all included headers
+                    auto included_headers = find_included_headers(file, processed_files);
+                    all_referenced_files.insert(included_headers.begin(), included_headers.end());
+                }
+            } catch(...) {
+                continue;
+            }
+        }
+    }
+
+    // Process all steps to track execution
+    for(const auto &step : goto_trace.steps)
+    {
+        if(step.pc != goto_programt::const_targett() && !step.pc->location.is_nil())
+        {
+            try {
+                const locationt &loc = step.pc->location;
+                std::string file = id2string(loc.get_file());
+                if (file.find("/usr/") == 0) continue; // Skip /usr paths
+                
+                std::string line_str = id2string(loc.get_line());
+                std::string function = id2string(loc.get_function());
+                int line = std::stoi(line_str);
+
+                if(line > 0) {
+                    // Track all line hits
+                    line_hits[file][line]++;
+
+                    // Track violations separately
+                    if(step.is_assert() && !step.guard) {
+                        violations.insert({file, line});
+                        found_violation = true;
+                    }
+
+                    // Add step info
+                    json step_data;
+                    step_data["file"] = file; 
+                    step_data["line"] = line_str;
+                    step_data["function"] = function;
+                    step_data["step_number"] = step_count++;
+                    
+                    // Add step type and details
+                    if(step.is_assert()) {
+                        if(!step.guard) {
+                            step_data["type"] = "violation";
+                            step_data["message"] = step.comment.empty() ? "Assertion check" : step.comment;
+                            test_entry["status"] = "violation";
+                            step_data["assertion"] = {
+                                {"violated", true},
+                                {"comment", step.comment},
+                                {"guard", from_expr(ns, "", step.pc->guard)}
+                            };
+                        } else {
+                            step_data["type"] = "assert";
+                        }
+                    }
+                    else if(step.is_assume()) {
+                        step_data["type"] = "assume";
+                        step_data["message"] = "Assumption restriction";
+                    }
+                    else if(step.is_assignment()) {
+                        step_data["type"] = "assignment"; 
+                        std::string msg = from_expr(ns, "", step.lhs);
+                        if(is_nil_expr(step.value)) {
+                            msg += " (assignment removed)";
+                        } else {
+                            msg += " = " + from_expr(ns, "", step.value);
+                        }
+                        step_data["message"] = msg;
+                    }
+                    else if(step.pc->is_function_call()) {
+                        step_data["type"] = "function_call";
+                        step_data["message"] = fmt::format(
+                            "Function argument '{}' = '{}'",
+                            from_expr(ns, "", step.lhs),
+                            from_expr(ns, "", step.value));
+                    }
+                    else {
+                        step_data["type"] = "other";
+                    }
+
+                    test_entry["steps"].push_back(step_data);
+                }
+            } catch(...) {
+                continue;
+            }
+        }
+    }
+
+    // If we haven't found a violation, mark as success
+    if(!found_violation && test_entry["status"] == "unknown") {
+        test_entry["status"] = "success";
+    }
+
+    // Build coverage data for all files including headers (except /usr)
+    for(const auto& file : all_referenced_files) {
+        if (file.find("/usr/") == 0) continue; // Skip /usr paths
+        
+        json file_coverage;
+        file_coverage["covered_lines"] = json::object();
+
+        if(line_hits.find(file) != line_hits.end()) {
+            for(const auto& [line, hits] : line_hits[file]) {
+                std::string line_str = std::to_string(line);
+                bool is_violation = violations.find({file, line}) != violations.end();
+
+                file_coverage["covered_lines"][line_str] = {
+                    {"covered", true},
+                    {"hits", hits},
+                    {"type", is_violation ? "violation" : "execution"}
+                };
+            }
+
+            file_coverage["coverage_stats"] = {
+                {"covered_lines", line_hits[file].size()},
+                {"total_hits", std::accumulate(line_hits[file].begin(), line_hits[file].end(), 0,
+                    [](int sum, const auto& p) { return sum + p.second; })}
+            };
+        } else {
+            file_coverage["coverage_stats"] = {
+                {"covered_lines", 0},
+                {"total_hits", 0}
+            };
+        }
+
+        test_entry["coverage"]["files"][file] = file_coverage;
+    }
+
+    // Track source code on first write
+    if(first_write) {
+        for(const auto& file : all_referenced_files) {
+            if (file.find("/usr/") == 0) continue; // Skip /usr paths
+            
+            if(source_files.find(file) == source_files.end()) {
+                try {
+                    const auto& file_lines = html_report::get_file_lines(file);
+                    source_files[file] = std::vector<std::string>(file_lines.begin(), file_lines.end());
+                } catch(...) {
+                    source_files[file] = std::vector<std::string>();
+                }
+            }
+        }
+        
+        json source_data;
+        for(const auto& [file, lines] : source_files) {
+            source_data[file] = lines;
+        }
+        test_entry["source_files"] = source_data;
+    }
+
+    // Read existing JSON if not first write
+    json all_tests;
+    if(!first_write) {
+        try {
+            std::ifstream input("report.json");
+            if(input.is_open()) {
+                input >> all_tests;
+            } else {
+                all_tests = json::array();
+            }
+        } catch(...) {
+            all_tests = json::array();
+        }
+    } else {
         all_tests = json::array();
-      }
-    } catch(...) {
-      all_tests = json::array();
     }
-  } else {
-    all_tests = json::array();
-  }
 
-  // Append new test and write
-  all_tests.push_back(test_entry);
-  std::ofstream json_out("report.json");
-  if(json_out.is_open()) {
-    json_out << std::setw(2) << all_tests << std::endl;
-    first_write = false;
-  }
+    // Append new test and write
+    all_tests.push_back(test_entry);
+    std::ofstream json_out("report.json");
+    if(json_out.is_open()) {
+        json_out << std::setw(2) << all_tests << std::endl;
+        first_write = false;
+    }
 }
 
 void generate_html_report(
