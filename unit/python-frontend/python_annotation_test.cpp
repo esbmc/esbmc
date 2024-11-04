@@ -3,6 +3,7 @@
 
 #include <catch2/catch.hpp>
 #include <python-frontend/python_annotation.h>
+#include <python-frontend/global_scope.h>
 #include <nlohmann/json.hpp>
 
 TEST_CASE("Add type annotation")
@@ -104,7 +105,8 @@ TEST_CASE("Add type annotation")
     nlohmann::json expected_output;
     output_data >> expected_output;
 
-    python_annotation<nlohmann::json> ann(input_json);
+    global_scope gs;
+    python_annotation<nlohmann::json> ann(input_json, gs);
     ann.add_type_annotation();
 
     REQUIRE(input_json == expected_output);
@@ -280,7 +282,8 @@ TEST_CASE("Add type annotation")
     nlohmann::json expected_output;
     output_data >> expected_output;
 
-    python_annotation<nlohmann::json> ann(input_json);
+    global_scope gs;
+    python_annotation<nlohmann::json> ann(input_json, gs);
     ann.add_type_annotation();
 
     REQUIRE(input_json == expected_output);
@@ -449,7 +452,8 @@ TEST_CASE("Add type annotation")
     nlohmann::json expected_output;
     output_data >> expected_output;
 
-    python_annotation<nlohmann::json> ann(input_json);
+    global_scope gs;
+    python_annotation<nlohmann::json> ann(input_json, gs);
     ann.add_type_annotation();
 
     REQUIRE(input_json == expected_output);
@@ -660,7 +664,8 @@ TEST_CASE("Add type annotation")
     nlohmann::json expected_output;
     output_data >> expected_output;
 
-    python_annotation<nlohmann::json> ann(input_json);
+    global_scope gs;
+    python_annotation<nlohmann::json> ann(input_json, gs);
     ann.add_type_annotation();
 
     REQUIRE(input_json == expected_output);
@@ -1043,7 +1048,8 @@ TEST_CASE("Add type annotation")
     nlohmann::json expected_output;
     output_data >> expected_output;
 
-    python_annotation<nlohmann::json> ann(input_json);
+    global_scope gs;
+    python_annotation<nlohmann::json> ann(input_json, gs);
     ann.add_type_annotation();
 
     REQUIRE(input_json.dump(2) == expected_output.dump(2));
@@ -1188,7 +1194,8 @@ TEST_CASE("Add type annotation")
     nlohmann::json expected_output;
     output_data >> expected_output;
 
-    python_annotation<nlohmann::json> ann(input_json);
+    global_scope gs;
+    python_annotation<nlohmann::json> ann(input_json, gs);
     ann.add_type_annotation();
 
     REQUIRE(input_json == expected_output);

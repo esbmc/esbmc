@@ -1,5 +1,6 @@
 #pragma once
 
+#include <python-frontend/global_scope.h>
 #include <util/context.h>
 #include <util/namespace.h>
 #include <nlohmann/json.hpp>
@@ -18,7 +19,7 @@ public:
   python_converter(
     contextt &_context,
     const nlohmann::json &ast,
-    const std::vector<nlohmann::json> &filtered_global_elements);
+    const global_scope &gs);
   void convert();
 
 private:
@@ -86,6 +87,7 @@ private:
   std::string main_python_file;
   std::string current_python_file;
   const nlohmann::json &ast_json;
+  const global_scope &global_scope_;
   nlohmann::json imported_module_json;
   std::string current_func_name;
   std::string current_class_name;
@@ -100,5 +102,4 @@ private:
   std::unordered_map<std::string, std::set<std::string>> instance_attr_map;
   // Map imported modules to their corresponding paths
   std::unordered_map<std::string, std::string> imported_modules;
-  const std::vector<nlohmann::json> &filtered_global_elements_;
 };

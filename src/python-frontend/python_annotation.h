@@ -3,6 +3,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_frontend_types.h>
 #include <python-frontend/python_module.h>
+#include <python-frontend/global_scope.h>
 #include <util/message.h>
 
 #include <string>
@@ -11,8 +12,8 @@ template <class Json>
 class python_annotation
 {
 public:
-  python_annotation(Json &ast)
-    : ast_(ast), current_func(nullptr), current_line_(0)
+  python_annotation(Json &ast, global_scope &gs)
+    : ast_(ast), gs_(gs), current_func(nullptr), current_line_(0)
   {
     python_filename_ = ast_["filename"].template get<std::string>();
   }
@@ -47,7 +48,7 @@ public:
     {
       if (elem["_type"] == "FunctionDef" && elem["name"] == func_name)
       {
-        filter_global_elements(elem["body"]);
+        get_global_elements(elem["body"]);
         // Add type annotations to global scope variables
         if (!referenced_global_elements.empty())
           annotate_global_scope();
@@ -60,32 +61,35 @@ public:
     }
   }
 
-  const std::vector<Json> &get_referenced_global_elements() const
-  {
-    return referenced_global_elements;
-  }
-
 private:
-  /* Get the global elements referred by a function */
-  void filter_global_elements(const Json &node)
+  /* Get the global elements referenced by a function */
+  void get_global_elements(const Json &node)
   {
     // Checks if the current node is a variable identifier
     if (
       node.contains("_type") && node["_type"] == "Name" && node.contains("id"))
     {
-      Json var = json_utils::find_var_decl(
-        node["id"].template get<std::string>(), "", ast_);
-      if (!var.empty())
-        referenced_global_elements.push_back(var);
+      const std::string &var_name = node["id"];
+      Json var_node = json_utils::find_var_decl(var_name, "", ast_);
+      if (!var_node.empty())
+      {
+        gs_.add_variable(var_name);
+        referenced_global_elements.push_back(var_node);
+      }
     }
 
     if (
       node.contains("_type") && node["_type"] == "Call" &&
       node.contains("func") && node["func"]["_type"] == "Name")
     {
-      Json clazz = json_utils::find_class(ast_["body"], node["func"]["id"]);
-      if (!clazz.empty())
-        referenced_global_elements.push_back(clazz);
+      const std::string &class_name = node["func"]["id"];
+      // Checks if the current node is a constructor call
+      Json class_node = json_utils::find_class(ast_["body"], class_name);
+      if (!class_node.empty())
+      {
+        gs_.add_class(class_name);
+        referenced_global_elements.push_back(class_node);
+      }
       else
       {
         const auto &func_name = node["func"]["id"];
@@ -95,7 +99,7 @@ private:
           {
             const auto &func_node =
               json_utils::find_function(ast_["body"], func_name);
-            filter_global_elements(func_node);
+            get_global_elements(func_node);
           }
           catch (std::runtime_error &)
           {
@@ -108,18 +112,14 @@ private:
     if (node.is_object())
     {
       for (auto it = node.begin(); it != node.end(); ++it)
-      {
-        filter_global_elements(it.value());
-      }
+        get_global_elements(it.value());
     }
 
     // Iterates over the elements if the current node is an array
     else if (node.is_array())
     {
       for (const auto &element : node)
-      {
-        filter_global_elements(element);
-      }
+        get_global_elements(element);
     }
     filter_global_elements_ = true;
   }
@@ -372,9 +372,7 @@ private:
         element);
 
       if (filter_global_elements_ && itr == referenced_global_elements.end())
-      {
         continue;
-      }
 
       if (element.contains("lineno"))
         current_line_ = element["lineno"].template get<int>();
@@ -395,8 +393,8 @@ private:
           element["value"]["_type"] == "Call" &&
           element["value"]["func"]["_type"] == "Name")
         {
-          auto& func_node =
-            json_utils::find_function(ast_["body"], element["value"]["func"]["id"]);
+          auto &func_node = json_utils::find_function(
+            ast_["body"], element["value"]["func"]["id"]);
           if (!func_node.empty())
             add_annotation(func_node);
         }
@@ -584,6 +582,7 @@ private:
   }
 
   Json &ast_;
+  global_scope &gs_;
   Json *current_func;
   int current_line_;
   std::string python_filename_;

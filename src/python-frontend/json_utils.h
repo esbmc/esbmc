@@ -84,7 +84,7 @@ JsonType find_function(const JsonType &json, const std::string &func_name)
 }
 
 template <typename JsonType>
-JsonType& find_function(JsonType &json, const std::string &func_name)
+JsonType &find_function(JsonType &json, const std::string &func_name)
 {
   for (auto &elem : json)
   {

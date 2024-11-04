@@ -1,6 +1,7 @@
 #include <python-frontend/python_language.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_annotation.h>
+#include <python-frontend/global_scope.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <util/message.h>
 #include <util/filesystem.h>
@@ -96,6 +97,22 @@ bool python_languaget::parse(const std::string &path)
 
   ast = nlohmann::json::parse(ast_json);
 
+  try
+  {
+    // Add type information
+    python_annotation<nlohmann::json> ann(ast, global_scope_);
+    const std::string function = config.options.get_option("function");
+    if (!function.empty())
+      ann.add_type_annotation(function);
+    else
+      ann.add_type_annotation();
+  }
+  catch (const std::runtime_error &e)
+  {
+    log_error("{}", e.what());
+    exit(-1);
+  }
+
   return false;
 }
 
@@ -106,28 +123,19 @@ bool python_languaget::final(contextt &)
 
 bool python_languaget::typecheck(contextt &context, const std::string &)
 {
+  // Load c models
+  add_cprover_library(context, this);
+
   try
   {
-    // Add type information
-    python_annotation<nlohmann::json> ann(ast);
-    const std::string function = config.options.get_option("function");
-    if (!function.empty())
-      ann.add_type_annotation(function);
-    else
-      ann.add_type_annotation();
-
-    // Load c models
-    add_cprover_library(context, this);
-
     // Generate symbol table
-    python_converter converter(
-      context, ast, ann.get_referenced_global_elements());
+    python_converter converter(context, ast, global_scope_);
     converter.convert();
   }
   catch (const std::runtime_error &e)
   {
     log_error("{}", e.what());
-    exit(-1);
+    exit(-2);
   }
 
   clang_cpp_adjust adjuster(context);
@@ -158,7 +166,7 @@ void python_languaget::show_parse(std::ostream &out)
     }
   }
   log_error("Function {} not found.\n", function.c_str());
-  exit(-2);
+  exit(-3);
 }
 
 bool python_languaget::from_expr(

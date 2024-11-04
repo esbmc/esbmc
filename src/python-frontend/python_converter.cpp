@@ -2035,14 +2035,14 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
 python_converter::python_converter(
   contextt &_context,
   const nlohmann::json &ast,
-  const std::vector<nlohmann::json> &filtered_global_elements)
+  const global_scope &gs)
   : context(_context),
     ns(_context),
     ast_json(ast),
+    global_scope_(gs),
     current_func_name(""),
     current_class_name(""),
-    ref_instance(nullptr),
-    filtered_global_elements_(filtered_global_elements)
+    ref_instance(nullptr)
 {
 }
 
@@ -2154,20 +2154,20 @@ void python_converter::convert()
       throw std::runtime_error("Function " + function + " not found");
     }
 
-    // Convert all variables from global scope and class definitions
     code_blockt block;
-    for (const auto &elem : filtered_global_elements_)
+    // Convert classes referenced by the function
+    for (const auto &clazz : global_scope_.classes())
     {
-      StatementType type = get_statement_type(elem);
-      if (type == StatementType::VARIABLE_ASSIGN)
-      {
-        get_var_assign(elem, block);
-      }
-      else if (type == StatementType::CLASS_DEFINITION)
-      {
-        get_class_definition(elem, block);
-        current_class_name.clear();
-      }
+      const auto &class_node = find_class(ast_json["body"], clazz);
+      get_class_definition(class_node, block);
+      current_class_name.clear();
+    }
+
+    // Convert only the global variables referenced by the function
+    for (const auto &global_var : global_scope_.variables())
+    {
+      const auto &var_node = find_var_decl(global_var, "", ast_json);
+      get_var_assign(var_node, block);
     }
 
     // Convert function arguments types
