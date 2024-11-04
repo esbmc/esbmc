@@ -1,6 +1,7 @@
 #pragma once
 
 #include <type_traits>
+#include "utility"
 #include "cstddef"
 
 namespace std
@@ -181,7 +182,7 @@ constexpr // since C++14
   tuple<unwrap_decay_t<Types>...>
   make_tuple(Types &&...args)
 {
-  return std::tuple<unwrap_decay_t<Types>...>(std::forward<Types>(args)...);
+  return tuple<unwrap_decay_t<Types>...>(std::forward<Types>(args)...);
 }
 
 #endif
