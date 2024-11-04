@@ -17,6 +17,7 @@
 #include <set>
 #include <vector>
 #include <numeric>
+#include <iostream>
 
 using json = nlohmann::json;
 
@@ -866,6 +867,20 @@ void add_coverage_to_json(
                     step_data["line"] = line_str;
                     step_data["function"] = function;
                     step_data["step_number"] = step_count++;
+
+                    // Add right before the if-else chain for type checking
+                    std::cout << "Step info for " << function << ":" << std::endl;
+                    std::cout << "is_function_call: " << step.pc->is_function_call() << std::endl;
+                    std::cout << "is_assignment: " << step.is_assignment() << std::endl;
+                    std::cout << "is_assert: " << step.is_assert() << std::endl;
+                    std::cout << "is_assume: " << step.is_assume() << std::endl;
+
+                    // Print the instruction type directly
+                    std::cout << "Instruction type: " << step.pc->type << std::endl;
+
+                    // And let's see the actual code being executed
+                    std::cout << "Code: " << from_expr(ns, "", step.pc->code) << std::endl;
+                    std::cout << "Full location: " << step.pc->location << std::endl;
                     
                     // Add step type and details
                     if(step.is_assert()) {
@@ -896,7 +911,8 @@ void add_coverage_to_json(
                         }
                         step_data["message"] = msg;
                     }
-                    else if(step.pc->is_function_call()) {
+                    else if(step.pc->is_function_call() || 
+                            (step.pc->type == goto_program_instruction_typet::FUNCTION_CALL)) {
                         step_data["type"] = "function_call";
                         step_data["message"] = fmt::format(
                             "Function argument '{}' = '{}'",
