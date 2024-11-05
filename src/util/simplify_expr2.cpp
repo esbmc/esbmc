@@ -889,6 +889,13 @@ expr2tc member2t::do_simplify() const
     }
 
     return s;
+  } 
+  else if (is_with2t(source_value)) {
+    expr2tc src = try_simplification(source_value);
+    const with2t &with = to_with2t(src);
+    if(member == to_constant_string2t(with.update_field).value)
+      return with.update_value;
+    return expr2tc();   
   }
 
   return expr2tc();
