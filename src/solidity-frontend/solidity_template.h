@@ -64,11 +64,17 @@ const std::string sol_vars = sol_msg + sol_tx + sol_block;
 // if the function does not currently have an actual implement,
 // leave the params empty.
 const std::string blockhash = R"(
-uint256_t blockhash();
+uint256_t blockhash(uint256_t x)
+{
+  return x;
+}
 )";
 
 const std::string gasleft = R"(
-uint256_t gasleft();
+uint256_t gasleft()
+{
+  return nondet_uint();
+}
 )";
 
 const std::string sol_abi = R"(
@@ -90,22 +96,44 @@ uint256_t mulmod(uint256_t x, uint256_t y, uint256_t k)
 	return (x * y) % k;
 }
 
-uint256_t keccak256();
-uint256_t sha256();
-address_t ripemd160();
-address_t ecrecover();
+uint256_t keccak256(uint256_t x)
+{
+  return  x;
+}
+
+uint256_t sha256(uint256_t x)
+{
+  return x;
+}
+address_t ripemd160(uint256_t x)
+{
+  // UNSAT abstraction
+  return address_t(x);
+}
+address_t ecrecover(uint256_t hash, unsigned int v, uint256_t r, uint256_t s)
+{
+  return address_t(hash);
+}
 )";
 
 const std::string sol_string = R"(
 char* string_concat(char *x, char *y)
 {
-	strcat(x, y);
+	strncat(x, y, 256);
 	return x;
 }
 )";
 
 const std::string sol_byte = R"(
-void byte_concat();
+char *u256toa(uint256_t value);
+uint256_t str2int(const char *str);
+uint256_t byte_concat(uint256_t x, uint256_t y)
+{
+  char *s1 = u256toa(x);
+  char *s2 = u256toa(y);
+  strncat(s1, s2, 256);
+  return str2int(s1);
+}
 )";
 
 const std::string sol_funcs =
@@ -393,7 +421,7 @@ void *arrcpy(void *from_array, size_t from_size, size_t size_of)
 
 /// external library
 // itoa
-/* 
+
 const std::string sol_itoa = R"(
 char get_char(int digit)
 {
@@ -473,7 +501,6 @@ char *u256toa(uint256_t value)
 	return str;
 }
 )";
-*/
 
 // string2hex
 const std::string sol_str2hex = R"(
@@ -551,7 +578,7 @@ uint256_t str2int(const char *str)
 }
 )";
 
-const std::string sol_ext_library = sol_str2hex;
+const std::string sol_ext_library = sol_itoa + sol_str2hex;
 
 const std::string sol_c_library = "extern \"C\" {" + sol_typedef + sol_vars +
                                   sol_funcs + sol_mapping + sol_array +
