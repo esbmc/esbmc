@@ -368,9 +368,7 @@ unsigned int symex_target_equationt::clear_assertions()
 
   for (SSA_stepst::iterator it = SSA_steps.begin(); it != SSA_steps.end(); it++)
   {
-    bool user_provided =
-      smt_during_symex ? it->source.pc->location.user_provided() : false;
-    if (it->type == goto_trace_stept::ASSERT && !user_provided)
+    if (it->type == goto_trace_stept::ASSERT && !smt_during_symex)
     {
       SSA_stepst::iterator it2 = it;
       it--;
