@@ -25,6 +25,7 @@ public:
     debug_print = config.options.get_bool_option("symex-ssa-trace");
     ssa_trace = config.options.get_bool_option("ssa-trace");
     ssa_smt_trace = config.options.get_bool_option("ssa-smt-trace");
+    smt_during_symex = config.options.get_bool_option("smt-during-symex");
   }
 
   // assignment to a variable - must be symbol
@@ -208,6 +209,7 @@ protected:
   bool debug_print;
   bool ssa_trace;
   bool ssa_smt_trace;
+  bool smt_during_symex;
 
 private:
   void debug_print_step(const SSA_stept &step) const;
