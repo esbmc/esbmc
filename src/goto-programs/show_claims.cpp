@@ -28,6 +28,7 @@ void show_claims(
         from_expr(ns, identifier, instruction.guard));
     }
 
+#ifdef ENABLE_JIMPLE_FRONTEND
     // In jimple asserts are modelled as throws (and try/catch is not really supported)
     if (instruction.is_throw())
     {
@@ -38,6 +39,7 @@ void show_claims(
         instruction.location,
         "exception: assertion failed");
     }
+#endif
   }
 }
 
