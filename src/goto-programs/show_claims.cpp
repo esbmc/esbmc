@@ -27,20 +27,6 @@ void show_claims(
         description,
         from_expr(ns, identifier, instruction.guard));
     }
-
-#ifdef ENABLE_JIMPLE_FRONTEND
-    // In jimple asserts are modelled as throws (and try/catch is not really supported)
-    if (instruction.is_throw())
-    {
-      count++;
-      log_status(
-        "Claim {}:\n  {}\n  {}\n  {}\n",
-        count,
-        instruction.location,
-        "assertion",
-        from_expr(ns, identifier, instruction.guard));
-    }
-#endif
   }
 }
 
