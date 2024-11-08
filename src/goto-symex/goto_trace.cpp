@@ -365,8 +365,8 @@ void show_goto_trace(
   const namespacet &ns,
   const goto_tracet &goto_trace)
 {
-  unsigned prev_step_nr = 0;
-  bool first_step = true;
+  // unsigned prev_step_nr = 0;
+  // bool first_step = true;
 
   for (const auto &step : goto_trace.steps)
   {
@@ -415,12 +415,13 @@ void show_goto_trace(
         (step.pc->is_other() && is_nil_expr(step.lhs)) ||
         step.pc->is_function_call())
       {
-        if (prev_step_nr != step.step_nr || first_step)
-        {
-          first_step = false;
-          prev_step_nr = step.step_nr;
+        // Maybe design an option to enable verbose output of the trace
+        // if (prev_step_nr != step.step_nr || first_step)
+        // {
+        //   first_step = false;
+        //   prev_step_nr = step.step_nr;
           show_state_header(out, step, step.pc->location, step.step_nr);
-        }
+        // }
         counterexample_value(out, ns, step.lhs, step.value);
       }
       break;

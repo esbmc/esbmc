@@ -138,6 +138,11 @@ void goto_coveraget::branch_function_coverage()
         // e.g. IF !(a > 1) THEN GOTO 3
         else if (it->is_goto() && !is_true(it->guard))
         {
+          exprt guard = migrate_expr_back(it->guard);
+          if (!guard.is_not() && target_function != "")
+            // this stands for the auxiliary condition we added for function mode.
+            continue;
+
           if (it->is_target())
             target_num = it->target_number;
           // assert(!(a > 1));
@@ -198,6 +203,11 @@ void goto_coveraget::branch_coverage()
         // e.g. IF !(a > 1) THEN GOTO 3
         else if (it->is_goto() && !is_true(it->guard))
         {
+          exprt guard = migrate_expr_back(it->guard);
+          if (!guard.is_not() && target_function != "")
+            // this stands for the auxiliary condition we added for function mode.
+            continue;
+
           if (it->is_target())
             target_num = it->target_number;
           // assert(!(a > 1));
@@ -399,6 +409,11 @@ void goto_coveraget::condition_coverage()
 
           // preprocessing: if(true) ==> if(true == true)
           exprt guard = migrate_expr_back(it->guard);
+
+          if (!guard.is_not() && target_function != "")
+            // this stands for the auxiliary condition we added for function mode.
+            continue;
+
           guard = handle_single_guard(guard);
 
           exprt pre_cond = nil_exprt();

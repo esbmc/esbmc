@@ -21,4 +21,9 @@ protected:
   contextt &context;
   virtual bool
   runOnFunction(std::pair<const dstring, goto_functiont> &F) override;
+  symbolt *get_default_symbol(
+    typet type,
+    std::string name,
+    std::string id,
+    locationt location);
 };
