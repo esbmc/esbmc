@@ -890,28 +890,27 @@ expr2tc member2t::do_simplify() const
 
     return s;
   }
-else if (is_with2t(source_value)) 
-{
-  // Simplify the initial source value
-  auto current_source = try_simplification(source_value);
-
-  // Traverse through nested 'with' expressions
-  while (is_with2t(current_source)) 
+  else if (is_with2t(source_value))
   {
-    const auto &with = to_with2t(current_source);
+    auto current_source = source_value;
 
-    // Check if the member matches the update field
-    if (member == to_constant_string2t(with.update_field).value)
-      return with.update_value;
+    // Traverse through nested 'with' expressions
+    while (is_with2t(current_source))
+    {
+      const auto &with = to_with2t(current_source);
 
-    // Move to the next source value in the chain
-    current_source = try_simplification(with.source_value);
+      // Check if the member matches the update field
+      if (member == to_constant_string2t(with.update_field).value)
+        return with.update_value;
+
+      // Move to the next source value in the chain
+      current_source = with.source_value;
+    }
+
+    // If no match is found, return an empty expression
+    return expr2tc();
   }
 
-  // If no match is found, return an empty expression
-  return expr2tc();
-}
-  
   return expr2tc();
 }
 
