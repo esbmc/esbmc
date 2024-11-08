@@ -66,8 +66,7 @@ bool assign_params_as_non_det::runOnFunction(
       // }
 
       // lhs = null;
-      exprt zero_rhs = exprt("sideeffect", lhs.type());
-      zero_rhs.statement("nondet");
+      exprt zero_rhs = gen_zero(lhs.type());
       zero_rhs.location() = l;
 
       // assignment
