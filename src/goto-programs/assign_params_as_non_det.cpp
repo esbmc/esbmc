@@ -39,6 +39,12 @@ bool assign_params_as_non_det::runOnFunction(
   if (!F.second.body_available)
     return false; // Empty function
 
+  /*
+    Foreach parameter, create an assignment to nondet value and insert in the front
+    E.g. func(int x, bool y) {...}
+    =>
+    func(int x, bool y)  { x = nondet_int(); y = nondet_bool(); ...}
+  */
   goto_programt &goto_program = F.second.body;
   auto it = (goto_program).instructions.begin();
   locationt l = context.find_symbol(F.first)->location;
@@ -62,6 +68,7 @@ bool assign_params_as_non_det::runOnFunction(
       // {
       //   int temp2;
       //   temp2 = nondet();
+      //   assume(temp2 != 0);
       //   lhs = &temp2;
       // }
 
@@ -164,9 +171,18 @@ bool assign_params_as_non_det::runOnFunction(
       expr2tc new_assign_expr;
       migrate_expr(code_assign, new_assign_expr);
       assignment->code = new_assign_expr;
-
-      // insert
       goto_program.insert_swap(it++, *assignment);
+      --it;
+
+      // do assume
+      exprt n_lhs = typecast_exprt(symbol_expr(*new_sym), bool_type());
+      expr2tc n_guard;
+      migrate_expr(n_lhs, n_guard);
+      goto_programt::instructiont instruction;
+      instruction.make_assumption(n_guard);
+      instruction.location = l;
+      instruction.function = it->location.get_function();
+      goto_program.insert_swap(it++, instruction);
       --it;
 
       // do assignment => lhs = &_temp
@@ -205,7 +221,9 @@ bool assign_params_as_non_det::runOnFunction(
       --it;
       --it;
       --it;
+      --it;
       goto_program.insert_swap(it++, *if_statement);
+      ++it;
       ++it;
       ++it;
       goto_program.compute_target_numbers();

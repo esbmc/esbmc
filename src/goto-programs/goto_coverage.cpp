@@ -389,6 +389,10 @@ void goto_coveraget::condition_coverage()
           if (!is_nil_expr(_guard))
           {
             exprt guard = migrate_expr_back(_guard);
+            if (!guard.is_not() && target_function != "")
+              // this stands for the auxiliary condition we added for function mode.
+              continue;
+
             guard = handle_single_guard(guard);
             exprt pre_cond = nil_exprt();
             pre_cond.location() = it->location;
