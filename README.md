@@ -27,10 +27,13 @@ ESBMC works fine on ARM64 (M1/M2/M3/M4) Macs, assuming you have installed the MA
 ````
 brew install z3
 brew install bison
+brew install clang
+brew install llvm
 
 git clone https://github.com/esbmc/esbmc.git
 mkdir build && cd build
-cmake .. -DENABLE_Z3=1 -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
+cmake .. -DENABLE_Z3=1 -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -DLLVM_DIR=/opt/homebrew/opt/llvm/lib/cmake/llvm -DClang_DIR=/opt/homebrew/opt/llvm/lib/cmake/clang
+
 make -j8
 ````
 
