@@ -131,7 +131,7 @@ json serialize_value(const namespacet& ns, const expr2tc& expr, std::set<std::st
     }
 
     try {
-        std::cout << "\nDEBUG: Serializing value of type: " << type_id_to_string(expr->type->type_id) << std::endl;
+        // std::cout << "\nDEBUG: Serializing value of type: " << type_id_to_string(expr->type->type_id) << std::endl;
         
         if(is_pointer_type(expr->type)) {
             const pointer_type2t& ptr_type = to_pointer_type(expr->type);
@@ -155,7 +155,7 @@ json serialize_value(const namespacet& ns, const expr2tc& expr, std::set<std::st
                     };
                 }
             } catch(const std::runtime_error& e) {
-                std::cout << "DEBUG: Dereference failed: " << e.what() << std::endl;
+                // std::cout << "DEBUG: Dereference failed: " << e.what() << std::endl;
             }
             
             return {
@@ -194,7 +194,8 @@ json serialize_value(const namespacet& ns, const expr2tc& expr, std::set<std::st
         }
     }
     catch(const std::runtime_error& e) {
-        std::cout << "DEBUG: Serialization error: " << e.what() << std::endl;
+        // std::cout << "DEBUG: Serialization error: " << e.what() << std::endl;
+        log_status("DEBUG: Serialization error: {}", e.what());
         return nullptr;
     }
 }
