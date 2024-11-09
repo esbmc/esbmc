@@ -248,7 +248,7 @@ bool reachability_treet::reset_to_unexplored_state()
   if (execution_states.size() > 0)
     cur_state_it++;
 
-  if (execution_states.size() != 0 && !smt_during_symex)
+  if (execution_states.size() && !smt_during_symex)
   {
     // When backtracking, erase all the assertions from the equation before
     // continuing forwards. They've all already been checked, in the trace we
@@ -264,7 +264,7 @@ bool reachability_treet::reset_to_unexplored_state()
     (*cur_state_it)->remaining_claims -= num_asserts;
   }
 
-  return execution_states.size() != 0;
+  return execution_states.size();
 }
 
 void reachability_treet::go_next_state()
