@@ -900,7 +900,9 @@ expr2tc member2t::do_simplify() const
       const auto &with = to_with2t(current_source);
 
       // Check if the member matches the update field
-      if (member == to_constant_string2t(with.update_field).value)
+      if (
+        is_constant_string2t(with.update_field) &&
+        member == to_constant_string2t(with.update_field).value)
         return with.update_value;
 
       // Move to the next source value in the chain

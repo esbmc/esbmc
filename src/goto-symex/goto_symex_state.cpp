@@ -149,6 +149,7 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
     bool noconst = true;
 
     expr->foreach_operand([this, &noconst](const expr2tc &e) {
+      // Omit with2t from constant struct/union for the moment
       if (noconst && (!constant_propagation(e) || is_with2t(e)))
         noconst = false;
     });
