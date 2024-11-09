@@ -46,40 +46,6 @@ namespace {
         }
     }
 
-    std::string get_type_name(const type2tc& type) {
-        if(is_struct_type(type)) {
-            const struct_type2t& struct_type = to_struct_type(type);
-            return "struct:" + id2string(struct_type.name);
-        }
-        else if(is_pointer_type(type)) {
-            return "pointer";
-        }
-        else if(is_array_type(type)) {
-            return "array";
-        }
-        else if(is_bool_type(type)) {
-            return "bool";
-        }
-        else if(is_code_type(type)) {
-            return "function";
-        }
-        else if(is_union_type(type)) {
-            return "union";
-        }
-        else if(is_fixedbv_type(type)) {
-            return "float";
-        }
-        else if(is_unsignedbv_type(type)) {
-            return "unsigned";
-        }
-        else if(is_signedbv_type(type)) {
-            return "signed";
-        }
-        else {
-            return "unknown";
-        }
-    }
-
     std::set<std::string> find_included_headers(const std::string& file_path, std::set<std::string>& processed_files) {
         if (processed_files.find(file_path) != processed_files.end() || 
             starts_with(std::filesystem::path(file_path).string(), "/usr/")) {
