@@ -29,9 +29,14 @@ bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
     // check whether the assertion holds
     tvt res = rte->ask_solver_question(question);
     // we don't add this assertion to the resulting logical formula
+    // However, we add it as an assumption to reduce the solver time
     if (res.is_true())
+    {
+      // convert assertion into an assumption
+      assume(expr);
       // incremental verification succeeded
       return true;
+    }
     // this assertion evaluates to false via incremental SMT solving
     if (res.is_false())
     {
