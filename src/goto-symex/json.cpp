@@ -413,8 +413,7 @@ namespace {
 void generate_json_report(
     const std::string_view uuid,
     const namespacet& ns, 
-    const goto_tracet& goto_trace,
-    const cmdlinet::options_mapt& options_map)
+    const goto_tracet& goto_trace)
 {
     log_status("Generating JSON report for trace: {}", uuid);
     add_coverage_to_json(goto_trace, ns);
