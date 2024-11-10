@@ -126,8 +126,8 @@ bool solidity_convertert::convert()
     {
       current_contractName = (*itr)["name"].get<std::string>();
 
-      // poplulate linearizedBaseList
-      // this is esstinally the calling order of the constructor
+      // populate linearizedBaseList
+      // this is essentially the calling order of the constructor
       for (const auto &id : (*itr)["linearizedBaseContracts"].items())
         linearizedBaseList[current_contractName].push_back(
           id.value().get<int>());
@@ -165,7 +165,7 @@ bool solidity_convertert::convert()
       if (convert_ast_nodes(*itr))
         return true; // 'true' indicates something goes wrong.
 
-      // add implicit construcor function
+      // add implicit constructor function
       if (add_implicit_constructor())
         return true;
 
@@ -314,7 +314,7 @@ std::vector<nlohmann::json> solidity_convertert::topological_sort(
     zero_in_degree_queue.pop();
     // add the node's corresponding JSON file to the sorted result
     sorted_files.push_back(path_to_json[node]);
-    // Update the in-degree of neighbouring nodes and add the new node with in-degree 0 to the queue
+    // Update the in-degree of neighboring nodes and add the new node with in-degree 0 to the queue
     for (const auto &neighbor : graph[node])
     {
       if (node != neighbor)
@@ -377,7 +377,7 @@ bool solidity_convertert::get_non_function_decl(
   SolidityGrammar::ContractBodyElementT type =
     SolidityGrammar::get_contract_body_element_t(ast_node);
 
-  // based on each element as in Solidty grammar "rule contract-body-element"
+  // based on each element as in Solidity grammar "rule contract-body-element"
   switch (type)
   {
   case SolidityGrammar::ContractBodyElementT::VarDecl:
@@ -412,7 +412,7 @@ bool solidity_convertert::get_function_decl(const nlohmann::json &ast_node)
   SolidityGrammar::ContractBodyElementT type =
     SolidityGrammar::get_contract_body_element_t(ast_node);
 
-  // based on each element as in Solidty grammar "rule contract-body-element"
+  // based on each element as in Solidity grammar "rule contract-body-element"
   switch (type)
   {
   case SolidityGrammar::ContractBodyElementT::FunctionDef:
@@ -481,7 +481,7 @@ bool solidity_convertert::get_var_decl(
   typet t;
   // VariableDeclaration node contains both "typeName" and "typeDescriptions".
   // However, ExpressionStatement node just contains "typeDescriptions".
-  // For consistensy, we use ["typeName"]["typeDescriptions"] as in state-variable-declaration
+  // For consistency, we use ["typeName"]["typeDescriptions"] as in state-variable-declaration
   // to improve the re-usability of get_type* function, when dealing with non-array var decls.
   // For array, do NOT use ["typeName"]. Otherwise, it will cause problem
   // when populating typet in get_cast
@@ -616,7 +616,7 @@ bool solidity_convertert::get_var_decl(
       ast_node["typeName"]["typeDescriptions"]) ==
     SolidityGrammar::ContractTypeName)
   {
-    // 1. get constract name
+    // 1. get contract name
     assert(
       ast_node["typeName"]["nodeType"].get<std::string>() ==
       "UserDefinedTypeName");
@@ -831,7 +831,7 @@ bool solidity_convertert::get_noncontract_defition(nlohmann::json &ast_node)
   return false;
 }
 
-// add a "body" node to funcitons within interfacae && abstract && event
+// add a "body" node to functions within interface && abstract && event
 // the idea is to utilize the function-handling APIs.
 void solidity_convertert::add_empty_function_body(nlohmann::json &ast_node)
 {
@@ -1048,7 +1048,7 @@ bool solidity_convertert::get_function_definition(
     (*current_functionDecl).contains("kind") &&
     (*current_functionDecl)["kind"] == "constructor")
   {
-    // for construcotr
+    // for constructor
     is_ctor = true;
     if (get_current_contract_name(*current_functionDecl, current_functionName))
       return true;
@@ -1080,7 +1080,7 @@ bool solidity_convertert::get_function_definition(
 
   // 5. Check fd.isVariadic(), fd.isInlined()
   //  Skipped since Solidity does not support variadic (optional args) or inline function.
-  //  Actually "inline" doesn not make sense in Solidity
+  //  Actually "inline" does not make sense in Solidity.
 
   // 6. Populate "locationt location_begin"
   locationt location_begin;
@@ -1109,7 +1109,7 @@ bool solidity_convertert::get_function_definition(
   // 10. Add symbol into the context
   symbolt &added_symbol = *move_symbol_to_context(symbol);
 
-  // 11. Convert parameters, if no parameter, assume ellipis
+  // 11. Convert parameters, if no parameter, assume ellipsis
   //  - Convert params before body as they may get referred by the statement in the body
   if (is_ctor)
   {
@@ -1147,7 +1147,7 @@ bool solidity_convertert::get_function_definition(
 
   // 12. Convert body and embed the body into the same symbol
   // skip for 'unimplemented' functions which has no body,
-  // e.g. asbstract/interface, the symbol value would be left as unset
+  // e.g. abstract/interface, the symbol value would be left as unset
   if (
     ast_node.contains("body") ||
     (ast_node.contains("implemented") && ast_node["implemented"] == true))
@@ -1334,7 +1334,7 @@ bool solidity_convertert::get_statement(
     codet decls("decl-block");
     unsigned ctr = 0;
     // N.B. Although Solidity AST JSON uses "declarations": [],
-    // the size of this array is alway 1!
+    // the size of this array is always 1!
     // A second declaration will become another stmt in "statements" array
     // e.g. "statements" : [
     //  {"declarations": [], "id": 1}
@@ -1374,7 +1374,7 @@ bool solidity_convertert::get_statement(
     }
 
     // 1. get return type
-    // TODO: Fixme! Assumptions:
+    // TODO: FIXME! Assumptions:
     //  a). It's "return <expr>;" not "return;"
     //  b). <expr> is pointing to a DeclRefExpr, we need to wrap it in an ImplicitCastExpr as a subexpr
     //  c). For multiple return type, the return statement represented as a tuple expression using a components field.
@@ -1469,7 +1469,7 @@ bool solidity_convertert::get_statement(
 
         for (size_t i = 0; i < ls; i++)
         {
-          // lop: struct member call (e.g. tupleA.men0)
+          // lop: struct member call (e.g. tupleA.mem0)
           exprt lop;
           if (get_tuple_member_call(
                 lhs.identifier(),
@@ -1477,7 +1477,7 @@ bool solidity_convertert::get_statement(
                 lop))
             return true;
 
-          // rop: struct member call (e.g. tupleB.men0)
+          // rop: struct member call (e.g. tupleB.mem0)
           exprt rop;
           if (get_tuple_member_call(
                 rhs.identifier(),
@@ -1729,7 +1729,7 @@ bool solidity_convertert::get_expr(const nlohmann::json &expr, exprt &new_expr)
      * !Always check if the expression is a Literal before calling get_expr
      * !Unless you are 100% sure it will not be a constant
      * 
-     * This function is called throught two paths:
+     * This function is called through two paths:
      * 1. get_non_function_decl => get_var_decl => get_expr
      * 2. get_non_function_decl => get_function_definition => get_statement => get_expr
      * 
@@ -1795,7 +1795,7 @@ bool solidity_convertert::get_expr(
         return true;
       }
 
-      // Soldity uses +ve odd numbers to refer to var or functions declared in the contract
+      // Solidity uses +ve odd numbers to refer to var or functions declared in the contract
       const nlohmann::json &decl = find_decl_ref(expr["referencedDeclaration"]);
       if (decl == empty_json)
         return true;
@@ -1858,7 +1858,7 @@ bool solidity_convertert::get_expr(
     }
     else
     {
-      // Soldity uses -ve odd numbers to refer to built-in var or functions that
+      // Solidity uses -ve odd numbers to refer to built-in var or functions that
       // are NOT declared in the contract
       if (get_esbmc_builtin_ref(expr, new_expr))
         return true;
@@ -2072,7 +2072,7 @@ bool solidity_convertert::get_expr(
         ? any potential scope issue?
 
       case 2:
-        1. when parsing the funciton definition, if the returnParam > 1
+        1. when parsing the function definition, if the returnParam > 1
            make the function return void instead, and create a struct type
         2. when parsing the return statement, if the return value is a tuple,
            create a struct type instance, do assignments,  and return empty;
@@ -2269,7 +2269,7 @@ bool solidity_convertert::get_expr(
       const nlohmann::json members = struct_ref["members"];
       const nlohmann::json args = expr["arguments"];
 
-      // popluate components
+      // populate components
       for (size_t i = 0; i < inits.operands().size() && i < args.size(); i++)
       {
         exprt init;
@@ -2288,7 +2288,7 @@ bool solidity_convertert::get_expr(
       break;
     }
 
-    // funciton call expr
+    // function call expr
     assert(callee_expr.type().is_code());
     typet type = to_code_type(callee_expr.type()).return_type();
 
@@ -2575,7 +2575,7 @@ bool solidity_convertert::get_expr(
     // 4. (?)internal property: tx.origin, msg.sender, ...
 
     // Function symbol id is sol:@C@referenced_function_contract_name@F@function_name#referenced_function_id
-    // Using referencedDeclaration will point us to the original declared function. This works even for inherited function and overrided functions.
+    // Using referencedDeclaration will point us to the original declared function. This works even for inherited function and overridden functions.
     assert(expr.contains("expression"));
     const nlohmann::json callee_expr_json = expr["expression"];
 
@@ -2797,7 +2797,7 @@ bool solidity_convertert::get_binary_operator_expr(
 
   // special handling for mapping set value
   // for any mapping index access, we will initially return as map_get
-  // here, we further identidy it as map_get or map_set
+  // here, we further identity it as map_get or map_set
   std::string op_str = SolidityGrammar::expression_to_str(opcode);
   if (
     lhs.type().get("#sol_type").as_string() == "MAP_GET" &&
@@ -2964,7 +2964,7 @@ bool solidity_convertert::get_binary_operator_expr(
         // do #3 #4
         while (i < ls && j < rs)
         {
-          // construct assignemnt
+          // construct assignment
           exprt lcomp = to_struct_type(lhs.type()).components().at(i);
           exprt rcomp = to_struct_type(rhs.type()).components().at(j);
           exprt lop = lhs.operands().at(i);
@@ -3209,7 +3209,7 @@ bool solidity_convertert::get_binary_operator_expr(
       //    data1 = "test"; data2 = 0x74657374; // "test"
       //    assert(data1 == data2); // true
       // Do type conversion before the bswap
-      // the arguement of bswap should only be int/uint type, not string
+      // the argument of bswap should only be int/uint type, not string
       // e.g. data1 == "test", it should not be bswap("test")
       // instead it should be bswap(0x74657374)
       // this may overwrite the lhs & rhs.
@@ -3647,7 +3647,7 @@ bool solidity_convertert::get_esbmc_builtin_ref(
   // manually unrolled recursion here
   // type config for Builtin && Int
   typet type;
-  // Creat a new code_typet, parse the return_type and copy the code_typet to typet
+  // Create a new code_typet, parse the return_type and copy the code_typet to typet
   code_typet convert_type;
   typet return_type;
   if (
@@ -3697,7 +3697,7 @@ bool solidity_convertert::get_sol_builtin_ref(
   {
     //  e.g. gasleft() <=> c:@F@gasleft
     if (expr["expression"]["nodeType"].get<std::string>() != "Identifier")
-      // this means it's not a builtin funciton
+      // this means it's not a builtin function
       return true;
 
     std::string name = expr["expression"]["name"].get<std::string>();
@@ -3864,7 +3864,7 @@ bool solidity_convertert::get_type_description(
     //      func(){ data = [1,2,3]; data = new uint[](10); }
     //    and
     //      data.pop(); data.push();
-    //    Idealy, this should be set as a vector_type.
+    //    Ideally, this should be set as a vector_type.
     exprt size_expr;
 
     if (type_name.contains("sizeExpr"))
@@ -3992,7 +3992,7 @@ bool solidity_convertert::get_type_description(
     int cnt = 1;
     std::string token;
 
-    // extract the seconde string
+    // extract the second string
     while (cnt >= 0)
     {
       if (typeString.find(delimiter) == std::string::npos)
@@ -4072,7 +4072,7 @@ bool solidity_convertert::get_func_decl_ref_type(
 {
   // For FunctionToPointer decay:
   // Get type when we make a function call:
-  //  - FunnctionNoProto: x = nondet()
+  //  - FunctionNoProto: x = nondet()
   //  - FunctionProto:    z = add(x, y)
   // Similar to the function get_type_description()
   SolidityGrammar::FunctionDeclRefT type =
@@ -4302,7 +4302,7 @@ bool solidity_convertert::get_tuple_instance(
   // populate initial value
   // e.g. (1,2) ==> Tuple tuple = Tuple(1,2);
   //! since there is no tuple type variable in solidity
-  // we can just convert it as inital value instead of assignment
+  // we can just convert it as initial value instead of assignment
   //? should we set the default value as zero?
 
   exprt inits = gen_zero(t);
@@ -4589,7 +4589,7 @@ bool solidity_convertert::get_mapping_definition(
   std::string debug_modulename =
     get_modulename_from_path(location_begin.file().as_string());
 
-  // populate symbool
+  // populate symbol
   symbolt symbol;
   get_default_symbol(symbol, debug_modulename, t, name, id, location_begin);
   symbol.is_extern = false;
@@ -5184,7 +5184,7 @@ void solidity_convertert::get_location_from_decl(
 {
   location.set_line(get_line_number(ast_node));
   location.set_file(
-    absolute_path); // assume absolute_path is the name of the contrace file, since we ran solc in the same directory
+    absolute_path); // assume absolute_path is the name of the contract file, since we ran solc in the same directory
 
   // To annotate local declaration within a function
   if (
@@ -5207,11 +5207,11 @@ void solidity_convertert::get_start_location_from_stmt(
   if (current_functionDecl)
     function_name = current_functionName;
 
-  // The src manager of Solidity AST JSON is too encryptic.
+  // The src manager of Solidity AST JSON is too cryptic.
   // For the time being we are setting it to "1".
   location.set_line(get_line_number(ast_node));
   location.set_file(
-    absolute_path); // assume absolute_path is the name of the contrace file, since we ran solc in the same directory
+    absolute_path); // assume absolute_path is the name of the contract file, since we ran solc in the same directory
 
   if (!function_name.empty())
     location.set_function(function_name);
@@ -5226,11 +5226,11 @@ void solidity_convertert::get_final_location_from_stmt(
   if (current_functionDecl)
     function_name = current_functionName;
 
-  // The src manager of Solidity AST JSON is too encryptic.
+  // The src manager of Solidity AST JSON is too cryptic.
   // For the time being we are setting it to "1".
   location.set_line(get_line_number(ast_node, true));
   location.set_file(
-    absolute_path); // assume absolute_path is the name of the contrace file, since we ran solc in the same directory
+    absolute_path); // assume absolute_path is the name of the contract file, since we ran solc in the same directory
 
   if (!function_name.empty())
     location.set_function(function_name);
@@ -5265,7 +5265,7 @@ const nlohmann::json &solidity_convertert::find_decl_ref(int ref_decl_id)
 const nlohmann::json &
 solidity_convertert::find_decl_ref(int ref_decl_id, std::string &contract_name)
 {
-  //TODO: Clean up this funciton. Such a mess...
+  //TODO: Clean up this function. Such a mess...
 
   if (ref_decl_id < 0)
   {
@@ -5472,7 +5472,7 @@ solidity_convertert::find_decl_ref(int ref_decl_id, std::string &contract_name)
   return empty_json;
 }
 
-// return construcor node
+// return constructor node
 const nlohmann::json &solidity_convertert::find_constructor_ref(int ref_decl_id)
 {
   nlohmann::json &nodes = src_ast_json["nodes"];
@@ -6073,7 +6073,7 @@ bool solidity_convertert::get_empty_array_ref(
 
   symbolt &added_symbol = *move_symbol_to_context(symbol);
 
-  // Poplulate default value
+  // Populate default value
   if (size.value().as_string() != "" && size.value().as_string() != "0")
   {
     added_symbol.value = gen_zero(arr_type);
@@ -6300,7 +6300,7 @@ bool solidity_convertert::multi_transaction_verification(
 
 /*
   This function perform multi-transaction verification on each contract in isolation.
-  To do so, we construct nondetered switch_case;
+  To do so, we construct non-determined switch_case;
 */
 bool solidity_convertert::multi_contract_verification()
 {

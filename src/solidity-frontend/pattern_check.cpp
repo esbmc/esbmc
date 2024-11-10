@@ -106,7 +106,7 @@ void pattern_checker::check_require_call(const nlohmann::json &expr)
 
 void pattern_checker::check_require_argument(const nlohmann::json &call_args)
 {
-  // This function is used to check the authorization argument of require() funciton
+  // This function is used to check the authorization argument of require() function
   const nlohmann::json &arg_expr = call_args[0];
 
   // look for BinaryOperation "=="

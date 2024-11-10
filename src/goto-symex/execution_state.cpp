@@ -85,9 +85,9 @@ execution_statet::execution_statet(
   // Initial mpor tracking.
   thread_last_reads.emplace_back();
   thread_last_writes.emplace_back();
-  // One thread with one dependancy relation.
-  dependancy_chain.emplace_back();
-  dependancy_chain.back().push_back(0);
+  // One thread with one dependency relation.
+  dependency_chain.emplace_back();
+  dependency_chain.back().push_back(0);
   mpor_says_no = false;
 
   cswitch_forced = false;
@@ -161,7 +161,7 @@ execution_statet &execution_statet::operator=(const execution_statet &ex)
 
   thread_last_reads = ex.thread_last_reads;
   thread_last_writes = ex.thread_last_writes;
-  dependancy_chain = ex.dependancy_chain;
+  dependency_chain = ex.dependency_chain;
   mpor_says_no = ex.mpor_says_no;
   cswitch_forced = ex.cswitch_forced;
 
@@ -515,7 +515,7 @@ void execution_statet::preserve_last_paths()
     // the guard of the to-be-merged state is identical to the pre-goto guard,
     // meaning that the GOTO we executed had an unconditionally-true guard.
     // Second where the current-path guard plus the to-be-merged guard is equal
-    // to the pre-goto guard: in that case, these can only be the two descendent
+    // to the pre-goto guard: in that case, these can only be the two descendant
     // paths from the pre-goto state.
     const goto_statet *tomerge = nullptr;
     for (const goto_statet &gs : statelist)
@@ -750,17 +750,17 @@ unsigned int execution_statet::add_thread(const goto_programt *prog)
   // Update MPOR tracking data with newly initialized thread
   thread_last_reads.emplace_back();
   thread_last_writes.emplace_back();
-  // Unfortunately as each thread has a depenancy relation with every other
+  // Unfortunately as each thread has a dependency relation with every other
   // thread we have to do a lot of work to initialize a new one. And initially
   // all relations are '0', no transitions yet.
-  for (auto &it : dependancy_chain)
+  for (auto &it : dependency_chain)
   {
     it.push_back(0);
   }
-  // And the new threads dependancies,
-  dependancy_chain.emplace_back();
-  for (unsigned int i = 0; i < dependancy_chain.size(); i++)
-    dependancy_chain.back().push_back(0);
+  // And the new threads dependencies,
+  dependency_chain.emplace_back();
+  for (unsigned int i = 0; i < dependency_chain.size(); i++)
+    dependency_chain.back().push_back(0);
 
   // While we've recorded the new thread as starting in the designated program,
   // it might not run immediately, thus must have it's path preserved:
@@ -940,7 +940,7 @@ void execution_statet::get_expr_globals(
   });
 }
 
-bool execution_statet::check_mpor_dependancy(unsigned int j, unsigned int l)
+bool execution_statet::check_mpor_dependency(unsigned int j, unsigned int l)
   const
 {
   assert(j < threads_state.size());
@@ -989,10 +989,10 @@ void execution_statet::calculate_mpor_constraints()
   //    0 that the thread hasn't run yet.
   //    1 that there is a dependency between these threads.
   //
-  //  dependancy_chain contains the state from the previous transition taken;
+  //  dependency_chain contains the state from the previous transition taken;
   //  here we update it to reflect the latest transition, and make a decision
   //  about progress later.
-  std::vector<std::vector<int>> new_dep_chain = dependancy_chain;
+  std::vector<std::vector<int>> new_dep_chain = dependency_chain;
 
   // Start new dependency chain for this thread. Default to there being no
   // relation.
@@ -1009,7 +1009,7 @@ void execution_statet::calculate_mpor_constraints()
     if (j == active_thread)
       continue;
 
-    if (dependancy_chain[j][active_thread] == 0)
+    if (dependency_chain[j][active_thread] == 0)
     {
       // This thread hasn't been run; continue not having been run.
       new_dep_chain[j][active_thread] = 0;
@@ -1025,11 +1025,11 @@ void execution_statet::calculate_mpor_constraints()
 
       for (unsigned int l = 0; l < new_dep_chain.size(); l++)
       {
-        if (dependancy_chain[j][l] != 1)
+        if (dependency_chain[j][l] != 1)
           continue; // No dependency relation here
 
         // Now check for variable dependency.
-        if (!check_mpor_dependancy(active_thread, l))
+        if (!check_mpor_dependency(active_thread, l))
           continue;
 
         res = 1;
@@ -1043,7 +1043,7 @@ void execution_statet::calculate_mpor_constraints()
   }
 
   // For /all other relations/, just propagate the dependency it already has.
-  // Achieved by initial duplication of dependancy_chain.
+  // Achieved by initial duplication of dependency_chain.
 
   // Voila, new dependency chain.
 
@@ -1065,7 +1065,7 @@ void execution_statet::calculate_mpor_constraints()
     bool dep_exists = false;
     for (unsigned int l = 0; l < active_thread; l++)
     {
-      if (dependancy_chain[j][l] == 1)
+      if (dependency_chain[j][l] == 1)
         dep_exists = true;
     }
 
@@ -1078,7 +1078,7 @@ void execution_statet::calculate_mpor_constraints()
 
   mpor_says_no = !can_run;
 
-  dependancy_chain = new_dep_chain;
+  dependency_chain = new_dep_chain;
 }
 
 bool execution_statet::has_cswitch_point_occured() const

@@ -245,7 +245,7 @@ bool *map_get_bool(map_bool_t *m, const char *key)
 unsigned map_hash(const char *str)
 {
 	unsigned hash = 5381;
-	// avoid derefencing null ptr
+	// avoid dereferencing null ptr
 	if (str != NULL)
 		while (*str)
 		{

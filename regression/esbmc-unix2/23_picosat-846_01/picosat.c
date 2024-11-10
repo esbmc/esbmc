@@ -4712,11 +4712,11 @@ static void
 flbcp (void)
 {
 #ifdef STATS
-  unsigned long long propagaions_before_bcp = propagations;
+  unsigned long long propagations_before_bcp = propagations;
 #endif
   bcp ();
 #ifdef STATS
-  flprops += propagations - propagaions_before_bcp;
+  flprops += propagations - propagations_before_bcp;
 #endif
 }
 

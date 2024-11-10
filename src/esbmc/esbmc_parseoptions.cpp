@@ -933,7 +933,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       }
     }
 
-    // Couldn't find a bug or a proof for the current deepth
+    // Couldn't find a bug or a proof for the current depth
     log_fail("\nVERIFICATION UNKNOWN");
     return false;
   }
@@ -1199,7 +1199,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 //  3) Falsification
 //  4) k-induction
 //
-// Applying a strategy in this context means solving a paticular sequence
+// Applying a strategy in this context means solving a particular sequence
 // of decision problems from the list below for the given unwinding bound k:
 //
 //  - Base case             (see "is_base_case_violated")
@@ -1207,7 +1207,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 //  - Inductive step        (see "is_inductive_step_violated")
 //
 // \param options - options for setting the verification strategy
-// and conrolling symbolic execution
+// and controlling symbolic execution
 // \param goto_functions - GOTO program under verification
 int esbmc_parseoptionst::do_bmc_strategy(
   optionst &options,
@@ -1684,7 +1684,7 @@ bool esbmc_parseoptionst::parse_goto_program(
         exit(0);
     }
 
-    // Typecheking (old frontend) or adjust (clang frontend)
+    // Typechecking (old frontend) or adjust (clang frontend)
     if (typecheck())
       return true;
     if (final())
@@ -1782,7 +1782,7 @@ bool esbmc_parseoptionst::process_goto_program(
     // We should skip this 'remove-unreachable' removal in goto-cov and multi-property
     // - multi-property wants to find all the bugs in the src code
     // - assertion-coverage wants to find out unreached codes (asserts)
-    // - however, the optimisation below will remove codes during the Goto stage
+    // - however, the optimization below will remove codes during the Goto stage
     if (!(cmdline.isset("no-remove-unreachable") || is_mul || is_coverage))
       remove_unreachable(goto_functions);
 

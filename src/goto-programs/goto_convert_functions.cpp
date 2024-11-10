@@ -138,7 +138,7 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
   if (targets.has_return_value)
     add_return(f, end_location);
 
-  // Wrap the body of functions name __VERIFIER_atomic_* with atomic_bengin
+  // Wrap the body of functions name __VERIFIER_atomic_* with atomic_begin
   // and atomic_end
   if (
     !f.body.instructions.empty() &&
@@ -268,7 +268,7 @@ void goto_convert_functionst::rename_types(
       // It should also never happen, but with C++ code it does, because methods
       // are part of the type, and methods can take a full struct/object as a
       // parameter, not just a reference/pointer. So, that's a legitimate place
-      // where we have this recursive symbol dependancy situation.
+      // where we have this recursive symbol dependency situation.
       // The workaround to this is to just ignore it, and hope that it doesn't
       // become a problem in the future.
       return;

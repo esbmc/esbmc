@@ -490,8 +490,8 @@ void goto_convertt::do_function_call_symbol(
       "Function `{}' type mismatch: expected code", id2string(identifier));
   }
 
-  // If the symbol is not nil, i.e., the user defined the expected behaviour of
-  // the builtin function, we should honour the user function and call it
+  // If the symbol is not nil, i.e., the user defined the expected behavior of
+  // the builtin function, we should honor the user function and call it
   if (symbol->value.is_not_nil())
   {
     // insert function call

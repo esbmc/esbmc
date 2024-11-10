@@ -338,7 +338,7 @@ enum ExpressionT
   // i.e. x.caller();
   ContractMemberCall,
 
-  // Type Converion
+  // Type Conversion
   ElementaryTypeNameExpression,
 
   // Struct Member Access

@@ -158,7 +158,7 @@ static bool rebalance_associative_tree(
   // try to simplify all of their contents, then try to reconfigure into another
   // set of operations.
   // There's great scope for making this /much/ more efficient via passing modes
-  // and vectors downwards, but lets not prematurely optimise. All this is
+  // and vectors downwards, but lets not prematurely optimize. All this is
   // faster than stringly stuff.
 
   // Extract immediate operands
@@ -1379,7 +1379,7 @@ static expr2tc do_bit_munge_operation(
      * not representable. */
 
     /* Evaluating shifts with the shift amount >= 64 on (u)int64_t is undefined
-     * behaviour in C++, we should avoid doing that during simplification. */
+     * behavior in C++, we should avoid doing that during simplification. */
     can_eval &= !is_shift || br < 64;
     if (can_eval)
     {
