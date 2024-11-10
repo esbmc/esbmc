@@ -328,8 +328,8 @@ goto_coveraget::get_total_cond_assert() const
 void goto_coveraget::condition_coverage()
 {
   // we need to skip the conditions within the built-in library
-  // while kepping the file manually included by user
-  // this filter, however, is unsound.. E.g. if the src filename is the same as the biuilt in library name
+  // while keeping the file manually included by user
+  // this filter, however, is unsound.. E.g. if the src filename is the same as the builtin library name
   total_cond = {{}};
 
   std::unordered_set<std::string> location_pool = {};
@@ -361,7 +361,7 @@ void goto_coveraget::condition_coverage()
           5. FUNCTION_CALL  test((signed int)(x != y));
           6. RETURN         return x && y;
           7. Other          1?2?3:4
-          The issue is that, the sideeffects have been removed 
+          The issue is that, the side-effects have been removed 
           thus the condition might have been split or modified.
 
           For assert, assume and goto, we know it contains GUARD
@@ -383,7 +383,7 @@ void goto_coveraget::condition_coverage()
             exprt pre_cond = nil_exprt();
             pre_cond.location() = it->location;
             gen_cond_cov_assert(guard, pre_cond, goto_program, it);
-            // after adding the instrumentation, we convert it to constatn_true
+            // after adding the instrumentation, we convert it to constant_true
             replace_assert_to_guard(gen_true_expr(), it, false);
           }
         }
@@ -565,7 +565,7 @@ void goto_coveraget::add_cond_cov_assert(
 
   // e.g. assert(!(a==1));  // a==1
   // the idf is used as the claim_msg
-  // note that it's difference from the acutal guard.
+  // note that it's difference from the actual guard.
   std::string idf = from_expr(ns, "", expr);
   make_not(guard);
 
@@ -658,7 +658,7 @@ exprt goto_coveraget::handle_single_guard(exprt &expr)
 
     if (expr.id() == exprt::typecast)
     {
-      // specail handling for ternary condition
+      // special handling for ternary condition
       bool has_sub_if = false;
       exprt sub = expr;
       auto op0_ptr = expr.operands().begin();
