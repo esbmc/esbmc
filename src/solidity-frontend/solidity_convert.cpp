@@ -42,7 +42,7 @@ solidity_convertert::solidity_convertert(
 bool solidity_convertert::convert()
 {
   // This function consists of two parts:
-  //  1. First, we perform pattern-based verificaiton
+  //  1. First, we perform pattern-based verification
   //  2. Then we populate the context with symbols annotated based on the each AST node, and hence prepare for the GOTO conversion.
 
   // First, we handle the multiple JSON files(imported files)
@@ -238,8 +238,8 @@ void solidity_convertert::multi_json_file()
   src_ast_json = src_ast_json_array[0];
 
   // The initial part of the nodes in a single AST includes an import information description section
-  // and a version description section.This is followed by all the information that needs to be verified.
-  // Therefore, the rest of the key nodes need to be inserted sequentially thereafter
+  // and a version description section. This is followed by all the information that needs to be verified.
+  // Therefore, the rest of the key nodes need to be inserted sequentially thereafter.
   // It also means before the first ContractDefinition node.
   size_t insert_pos = 0;
   for (size_t i = 0; i < src_ast_json["nodes"].size(); ++i)
@@ -263,7 +263,7 @@ void solidity_convertert::multi_json_file()
          node["contractKind"] == "interface"))
       {
         // Add the node before the first ContractDefinition node
-        // chose to insert it here instead of at the end because splitting a piece of Solidity code(use import)
+        // choose to insert it here instead of at the end because splitting a piece of Solidity code(use import)
         // into multiple files results in the import order of contracts and interfaces in the AST file
         // being reversed compared to the unsplit version.
         src_ast_json["nodes"].insert(
@@ -1374,7 +1374,7 @@ bool solidity_convertert::get_statement(
     }
 
     // 1. get return type
-    // TODO: Fix me! Assumptions:
+    // TODO: Fixme! Assumptions:
     //  a). It's "return <expr>;" not "return;"
     //  b). <expr> is pointing to a DeclRefExpr, we need to wrap it in an ImplicitCastExpr as a subexpr
     //  c). For multiple return type, the return statement represented as a tuple expression using a components field.

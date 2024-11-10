@@ -117,7 +117,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"all-claims", NULL, "keep all claims"},
     {"keep-verified-claims",
      NULL,
-     "do not skip verified claims in multi-property verificaiton"},
+     "do not skip verified claims in multi-property verification"},
     {"show-loops", NULL, "show the loops in the program"},
     {"show-claims", NULL, "only show claims"},
     {"show-vcc", NULL, "show the verification conditions"},
