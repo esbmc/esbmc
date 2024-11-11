@@ -1,5 +1,5 @@
 CORE
 main.c
---condition-coverage --unwind 2 --function handleRunplanEvent --z3 --no-standard-check
+--condition-coverage --unwind 2 --function handleRunplanEvent --z3 --no-standard-check --no-simplify
 ^Total Conditions:  8
 ^VERIFICATION FAILED$
