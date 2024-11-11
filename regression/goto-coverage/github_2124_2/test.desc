@@ -1,0 +1,7 @@
+CORE
+main.c
+--condition-coverage --unwind 2 --function handleRunplanEvent --z3 --no-standard-check
+^Condition Properties - SATISFIED:  3
+^Condition Properties - UNSATISFIED:  1
+^Condition Coverage: 37.5%
+^VERIFICATION FAILED$

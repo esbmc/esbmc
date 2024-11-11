@@ -57,7 +57,8 @@ bool assign_params_as_non_det::runOnFunction(
       return false; // Not expected
     exprt lhs = symbol_expr(*context.find_symbol(_id));
 
-    if (lhs.type().is_pointer())
+    typet l_t = lhs.type();
+    if (l_t.is_pointer() && l_t.subtype() != empty_typet())
     {
       // e.g. int* lhs;
       // to
@@ -73,7 +74,7 @@ bool assign_params_as_non_det::runOnFunction(
       // }
 
       // lhs = null;
-      exprt zero_rhs = gen_zero(lhs.type());
+      exprt zero_rhs = gen_zero(l_t);
       zero_rhs.location() = l;
 
       // assignment
@@ -94,7 +95,7 @@ bool assign_params_as_non_det::runOnFunction(
       --it;
 
       // get subType() => int
-      typet subt = lhs.type().subtype();
+      typet subt = l_t.subtype();
       // if it's symbol, get the original type
       if (subt.is_symbol())
         subt = context.find_symbol(subt.identifier())->type;
@@ -231,7 +232,7 @@ bool assign_params_as_non_det::runOnFunction(
     else
     {
       // rhs
-      exprt rhs = exprt("sideeffect", lhs.type());
+      exprt rhs = exprt("sideeffect", l_t);
       rhs.statement("nondet");
       rhs.location() = l;
 
