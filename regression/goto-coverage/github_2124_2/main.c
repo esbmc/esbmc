@@ -1,75 +1,6 @@
-#ifndef IRRIGATION_SCHEDULE_H
-#  define IRRIGATION_SCHEDULE_H
 
-#  include <stdbool.h>
-#  include <time.h>
-#  include <string.h>
-#  include <stdlib.h>
-#  include <stdio.h>
-#  include <math.h>
-#  include <stdarg.h>
 
-#  define MAX_STRING_LENGTH 256
-#  define MAX_ZONES 16
-#  define MAX_EVENTS 100
-#  define SECONDS_IN_MINUTE 60
-
-// Basic device and session structs - defined first as they're used throughout
-typedef struct
-{
-  char duid[MAX_STRING_LENGTH];
-  // duid = nondet_char();
-  char client_id[MAX_STRING_LENGTH];
-  char location_id[MAX_STRING_LENGTH];
-  char device_type[MAX_STRING_LENGTH];
-  char federated_identity[MAX_STRING_LENGTH];
-  time_t user_presence_exp;
-} DeviceRecord;
-
-typedef struct
-{
-  char event[MAX_STRING_LENGTH];
-  char zoneId[MAX_STRING_LENGTH];
-  char ts[MAX_STRING_LENGTH];
-  int duration;
-  int seqNum;
-  int durMod;
-} RunPlanStep;
-
-typedef struct
-{
-  char event[MAX_STRING_LENGTH];
-  char scheduleId[MAX_STRING_LENGTH];
-  char zoneId[MAX_STRING_LENGTH];
-  char ts[MAX_STRING_LENGTH];
-  int durMod;
-  int seqNum;
-} RunPlanEvent;
-
-typedef struct
-{
-  char id[MAX_STRING_LENGTH];
-  char name[MAX_STRING_LENGTH];
-  char type[MAX_STRING_LENGTH];
-  char firmware_id[MAX_STRING_LENGTH];
-  char client_id[MAX_STRING_LENGTH];
-  bool water_sense;
-  bool ignore_skip_reason;
-  struct
-  {
-    char zone_uid[MAX_STRING_LENGTH];
-    int duration;
-    int client_id;
-  } zones[MAX_ZONES];
-  int num_zones;
-  bool cycle_soak;
-  int estimated_runtime;
-  struct
-  {
-    char start_at[9];
-    char end_before[9];
-  } preferred_time;
-} IrrigationScheduleRecord;
+#include "main.h"
 
 void handleRunplanEvent(
   DeviceRecord *device,
@@ -130,4 +61,8 @@ void handleRunplanEvent(
 
   free(runplanListStep);
   free(schedule);
+}
+
+int main()
+{
 }
