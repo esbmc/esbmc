@@ -1,102 +1,102 @@
 CORE
 main.cpp
 --bitwuzla --unwind 1
-^State 1 file main\.cpp line 9 column 3 function main thread 0
+^State 1 file .*main\.cpp line 9 column 3 function main thread 0
 ^----------------------------------------------------
 ^  finite_float = 1\.123400e\+0f \(00111111 10001111 11001011 10010010\)
 ^
-^State 2 file main\.cpp line 10 column 3 function main thread 0
+^State 2 file .*main\.cpp line 10 column 3 function main thread 0
 ^----------------------------------------------------
 ^  infinite_float = \+INFINITY \(01111111 10000000 00000000 00000000\)
 ^
-^State 3 file main\.cpp line 11 column 3 function main thread 0
+^State 3 file .*main\.cpp line 11 column 3 function main thread 0
 ^----------------------------------------------------
 ^  nan_float = \+NAN \(01111111 10000000 00000000 00000001\)
 ^
-^State 4 file main\.cpp line 13 column 3 function main thread 0
+^State 4 file .*main\.cpp line 13 column 3 function main thread 0
 ^----------------------------------------------------
 ^  finite_double = 1\.123400e\+0 \(00111111 11110001 11111001 01110010 01000111 01000101 00111000 11101111\)
 ^
-^State 5 file main\.cpp line 14 column 3 function main thread 0
+^State 5 file .*main\.cpp line 14 column 3 function main thread 0
 ^----------------------------------------------------
 ^  infinite_double = \+INFINITY \(01111111 11110000 00000000 00000000 00000000 00000000 00000000 00000000\)
 ^
-^State 6 file main\.cpp line 15 column 3 function main thread 0
+^State 6 file .*main\.cpp line 15 column 3 function main thread 0
 ^----------------------------------------------------
 ^  nan_double = \+NAN \(01111111 11110000 00000000 00000000 00000000 00000000 00000000 00000001\)
 ^
-^State 7 file main\.cpp line 17 column 3 function main thread 0
+^State 7 file .*main\.cpp line 17 column 3 function main thread 0
 ^----------------------------------------------------
 ^  char_1 = 97 \(01100001\)
 ^
-^State 8 file main\.cpp line 18 column 3 function main thread 0
+^State 8 file .*main\.cpp line 18 column 3 function main thread 0
 ^----------------------------------------------------
 ^  char_2 = 127 \(01111111\)
 ^
-^State 9 file main\.cpp line 19 column 3 function main thread 0
+^State 9 file .*main\.cpp line 19 column 3 function main thread 0
 ^----------------------------------------------------
 ^  short_1 = 1 \(00000000 00000001\)
 ^
-^State 10 file main\.cpp line 20 column 3 function main thread 0
+^State 10 file .*main\.cpp line 20 column 3 function main thread 0
 ^----------------------------------------------------
 ^  short_2 = 32767 \(01111111 11111111\)
 ^
-^State 11 file main\.cpp line 21 column 3 function main thread 0
+^State 11 file .*main\.cpp line 21 column 3 function main thread 0
 ^----------------------------------------------------
 ^  int_1 = 1 \(00000000 00000000 00000000 00000001\)
 ^
-^State 12 file main\.cpp line 22 column 3 function main thread 0
+^State 12 file .*main\.cpp line 22 column 3 function main thread 0
 ^----------------------------------------------------
 ^  int_2 = 2147483647 \(01111111 11111111 11111111 11111111\)
 ^
-^State 13 file main\.cpp line 23 column 3 function main thread 0
+^State 13 file .*main\.cpp line 23 column 3 function main thread 0
 ^----------------------------------------------------
 ^  long_long_1 = 1 \(00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000001\)
 ^
-^State 14 file main\.cpp line 24 column 3 function main thread 0
+^State 14 file .*main\.cpp line 24 column 3 function main thread 0
 ^----------------------------------------------------
 ^  long_long_2 = 9223372036854775807 \(01111111 11111111 11111111 11111111 11111111 11111111 11111111 11111111\)
 ^
-^State 15 file main\.cpp line 25 column 3 function main thread 0
+^State 15 file .*main\.cpp line 25 column 3 function main thread 0
 ^----------------------------------------------------
 ^  uchar_1 = 1 \(00000001\)
 ^
-^State 16 file main\.cpp line 26 column 3 function main thread 0
+^State 16 file .*main\.cpp line 26 column 3 function main thread 0
 ^----------------------------------------------------
 ^  uchar_2 = 255 \(11111111\)
 ^
-^State 17 file main\.cpp line 27 column 3 function main thread 0
+^State 17 file .*main\.cpp line 27 column 3 function main thread 0
 ^----------------------------------------------------
 ^  ushort_1 = 1 \(00000000 00000001\)
 ^
-^State 18 file main\.cpp line 28 column 3 function main thread 0
+^State 18 file .*main\.cpp line 28 column 3 function main thread 0
 ^----------------------------------------------------
 ^  ushort_2 = 65535 \(11111111 11111111\)
 ^
-^State 19 file main\.cpp line 29 column 3 function main thread 0
+^State 19 file .*main\.cpp line 29 column 3 function main thread 0
 ^----------------------------------------------------
 ^  uint_1 = 1 \(00000000 00000000 00000000 00000001\)
 ^
-^State 20 file main\.cpp line 30 column 3 function main thread 0
+^State 20 file .*main\.cpp line 30 column 3 function main thread 0
 ^----------------------------------------------------
 ^  uint_2 = 4294967295 \(11111111 11111111 11111111 11111111\)
 ^
-^State 21 file main\.cpp line 31 column 3 function main thread 0
+^State 21 file .*main\.cpp line 31 column 3 function main thread 0
 ^----------------------------------------------------
 ^  ulong_long_1 = 1 \(00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000001\)
 ^
-^State 22 file main\.cpp line 32 column 3 function main thread 0
+^State 22 file .*main\.cpp line 32 column 3 function main thread 0
 ^----------------------------------------------------
 ^  ulong_long_2 = 0xFFFFFFFFFFFFFFFF \(11111111 11111111 11111111 11111111 11111111 11111111 11111111 11111111\)
 ^
-^State 45 file main\.cpp line 57 column 18 function main thread 0
+^State 45 file .*main\.cpp line 57 column 18 function main thread 0
 ^----------------------------------------------------
 ^  main_min = 1\.123400e\+0f \(00111111 10001111 11001011 10010010\)
 ^
-^State 47 file main\.cpp line 3 column 3 function Contains thread 0
+^State 47 file .*main\.cpp line 3 column 3 function Contains thread 0
 ^----------------------------------------------------
 ^Violated property:
-^  file main\.cpp line 3 column 3 function Contains
+^  file .*main\.cpp line 3 column 3 function Contains
 ^  unwinding assertion loop 2
 ^
 ^

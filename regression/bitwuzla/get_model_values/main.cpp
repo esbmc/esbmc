@@ -55,9 +55,9 @@ int main()
   __ESBMC_assume(ulong_long_2 == 0xffffffffffffffffULL);
 
   __ESBMC_assume(main_min = finite_float);
-  int bar = finite_float + infinite_float + nan_float +
-            finite_double + infinite_double + nan_double +
-            char_1 + char_2 + short_1 + short_2 + int_1 + int_2 + long_long_1 + long_long_2 +
-            uchar_1 + uchar_2 + ushort_1 + ushort_2 + uint_1 + uint_2 + ulong_long_1 + ulong_long_2;
+  int bar = finite_float + infinite_float + nan_float + finite_double +
+            infinite_double + nan_double + char_1 + char_2 + short_1 + short_2 +
+            int_1 + int_2 + long_long_1 + long_long_2 + uchar_1 + uchar_2 +
+            ushort_1 + ushort_2 + uint_1 + uint_2 + ulong_long_1 + ulong_long_2;
   Contains(bar);
 }
