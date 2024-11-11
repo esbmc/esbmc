@@ -161,7 +161,7 @@ namespace {
                     }
                 }
                 catch(const std::runtime_error& e) {
-                    log_status("Serialization error: {}", e.what());
+                    log_error("Serialization error: {}", e.what());
                     return nullptr;
                 }
             }
@@ -300,7 +300,7 @@ namespace {
                         test_entry["steps"].push_back(step_data);
                     }
                 } catch(std::exception& e) {
-                    log_status("Error processing step: {}", e.what());
+                    log_error("Error processing step: {}", e.what());
                     continue;
                 }
             }
@@ -361,7 +361,7 @@ namespace {
                     input >> existing;
                     return existing;
                 } catch(json::parse_error& e) {
-                    log_status("Error parsing existing report.json: {}", e.what());
+                    log_error("Error parsing existing report.json: {}", e.what());
                 }
             }
             return json::array();
@@ -388,7 +388,7 @@ namespace {
         // Write updated JSON
         std::ofstream json_out("report.json");
         if(!json_out.is_open()) {
-            log_status("Error: Could not open report.json for writing");
+            log_error("Error: Could not open report.json for writing");
             return;
         }
         json_out << std::setw(2) << all_tests << std::endl;
