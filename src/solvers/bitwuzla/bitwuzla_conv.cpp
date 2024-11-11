@@ -838,8 +838,70 @@ void bitw_smt_ast::dump() const
 
 void bitwuzla_convt::print_model()
 {
-  // TODO: requires more work! See porting manual!
-  //bitwuzla_print_model(bitw, "smt2", messaget::state.out);
+  log_warning(
+    "Bitwuzla model printing is experimental and does not guarantee correct "
+    "results.");
+  // TODO: We use `symbtable` to get all symbols, because there does not seem to
+  // be a way to get all symbols from Bitwuzla. This is not ideal, because
+  // I have no idea whether ignoring the `level` field, which is also part of
+  // an entry in `symbtable`, is correct. However, it seems to work for now.
+  for (const auto &entry : symtable)
+  {
+    smt_astt term = entry.ast;
+    BitwuzlaSort sort =
+      bitwuzla_term_get_sort(to_solver_smt_ast<bitw_smt_ast>(term)->a);
+    fprintf(
+      messaget::state.out,
+      "(define-fun %s (",
+      bitwuzla_term_get_symbol(to_solver_smt_ast<bitw_smt_ast>(term)->a));
+    if (bitwuzla_sort_is_fun(sort))
+    {
+      BitwuzlaTerm value =
+        bitwuzla_get_value(bitw, to_solver_smt_ast<bitw_smt_ast>(term)->a);
+      size_t size;
+      BitwuzlaTerm *children = bitwuzla_term_get_children(value, &size);
+      assert(size == 2);
+      while (bitwuzla_term_get_kind(children[1]) == BITWUZLA_KIND_LAMBDA)
+      {
+        assert(bitwuzla_term_is_var(children[0]));
+        fprintf(
+          messaget::state.out,
+          "(%s %s) ",
+          bitwuzla_term_to_string(children[0]),
+          bitwuzla_sort_to_string(bitwuzla_term_get_sort(children[0])));
+        value = children[1];
+        children = bitwuzla_term_get_children(value, &size);
+      }
+      assert(bitwuzla_term_is_var(children[0]));
+      // Note: The returned string of bitwuzla_term_to_string and
+      //       bitwuzla_sort_to_string does not have to be freed, but is only
+      //       valid until the next call to the respective function. Thus we
+      //       split printing into separate printf calls so that none of these
+      //       functions is called more than once in one printf call.
+      //       Alternatively, we could also first get and copy the strings, use
+      //       a single printf call, and then free the copied strings.
+      fprintf(
+        messaget::state.out,
+        "(%s %s))",
+        bitwuzla_term_to_string(children[0]),
+        bitwuzla_sort_to_string(bitwuzla_term_get_sort(children[0])));
+      fprintf(
+        messaget::state.out,
+        " %s",
+        bitwuzla_sort_to_string(bitwuzla_sort_fun_get_codomain(sort)));
+      fprintf(
+        messaget::state.out, " %s)\n", bitwuzla_term_to_string(children[1]));
+    }
+    else
+    {
+      fprintf(
+        messaget::state.out,
+        ") %s %s)\n",
+        bitwuzla_sort_to_string(sort),
+        bitwuzla_term_to_string(
+          bitwuzla_get_value(bitw, to_solver_smt_ast<bitw_smt_ast>(term)->a)));
+    }
+  }
 }
 
 smt_sortt bitwuzla_convt::mk_bool_sort()
