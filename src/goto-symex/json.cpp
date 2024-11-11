@@ -16,6 +16,11 @@ namespace {
                str.compare(0, prefix.size(), prefix) == 0;
     }
 
+    // Helper function to check if a path is a system path
+    bool is_system_path(const std::string& path) {
+        return starts_with(std::filesystem::path(path).string(), "/usr/");
+    }
+
     // Helper function to read file lines
     std::vector<std::string> read_file_lines(const std::string& filename) {
         std::vector<std::string> lines;
@@ -47,8 +52,7 @@ namespace {
     }
 
     std::set<std::string> find_included_headers(const std::string& file_path, std::set<std::string>& processed_files) {
-        if (processed_files.find(file_path) != processed_files.end() || 
-            starts_with(std::filesystem::path(file_path).string(), "/usr/")) {
+        if (processed_files.find(file_path) != processed_files.end() || is_system_path(file_path)) {
             return {};
         }
         processed_files.insert(file_path);
@@ -72,7 +76,7 @@ namespace {
                 std::filesystem::path local_path = std::filesystem::path(file_path).parent_path() / header;
                 if (std::filesystem::exists(local_path)) {
                     auto resolved_path = std::filesystem::canonical(local_path).string();
-                    if (!starts_with(resolved_path, "/usr/")) {
+                    if (!is_system_path(resolved_path)) {
                         headers.insert(resolved_path);
                         auto nested_headers = find_included_headers(resolved_path, processed_files);
                         headers.insert(nested_headers.begin(), nested_headers.end());
@@ -84,87 +88,103 @@ namespace {
         return headers;
     }
 
-    json serialize_value(const namespacet& ns, const expr2tc& expr, std::set<std::string>& seen) {
-        if(is_nil_expr(expr)) {
-            return nullptr;
-        }
-
-        try {
-            if(is_pointer_type(expr->type)) {
-                const pointer_type2t& ptr_type = to_pointer_type(expr->type);
-                std::string addr_str = from_expr(ns, "", expr);
-                
-                if(!seen.insert(addr_str).second) {
-                    return {
-                        {"__type", "pointer"},
-                        {"address", addr_str},
-                        {"circular", true}
-                    };
+    // Improved value serialization with seen set now inside method
+    json serialize_value(const namespacet& ns, const expr2tc& expr) {
+        class ValueSerializer {
+            std::set<std::string> seen;
+            const namespacet& ns;
+            
+            json serialize_impl(const expr2tc& expr) {
+                if(is_nil_expr(expr)) {
+                    return nullptr;
                 }
-                
+
                 try {
-                    expr2tc deref_expr = dereference2tc(ptr_type.subtype, expr);
-                    if(!is_nil_expr(deref_expr)) {
+                    if(is_pointer_type(expr->type)) {
+                        const pointer_type2t& ptr_type = to_pointer_type(expr->type);
+                        std::string addr_str = from_expr(ns, "", expr);
+                        
+                        if(!seen.insert(addr_str).second) {
+                            return {
+                                {"__type", "pointer"},
+                                {"address", addr_str},
+                                {"circular", true}
+                            };
+                        }
+                        
+                        try {
+                            expr2tc deref_expr = dereference2tc(ptr_type.subtype, expr);
+                            if(!is_nil_expr(deref_expr)) {
+                                return {
+                                    {"__type", "pointer"},
+                                    {"address", addr_str},
+                                    {"value", serialize_impl(deref_expr)}
+                                };
+                            }
+                        } catch(const std::runtime_error&) {
+                            // Ignore dereference errors
+                        }
+                        
                         return {
                             {"__type", "pointer"},
                             {"address", addr_str},
-                            {"value", serialize_value(ns, deref_expr, seen)}
+                            {"value", nullptr}
                         };
                     }
-                } catch(const std::runtime_error&) {
-                    // Ignore dereference errors
-                }
-                
-                return {
-                    {"__type", "pointer"},
-                    {"address", addr_str},
-                    {"value", nullptr}
-                };
-            }
-            else if(is_struct_type(expr->type)) {
-                const struct_type2t& struct_type = to_struct_type(expr->type);
-                
-                json struct_data = json::object();
-                struct_data["__type"] = "struct";
-                struct_data["name"] = id2string(struct_type.name);
-                struct_data["members"] = json::object();
-                
-                for(size_t i = 0; i < struct_type.members.size(); i++) {
-                    const irep_idt& member_name = struct_type.member_names[i];
-                    
-                    try {
-                        expr2tc member_expr = member2tc(
-                            struct_type.members[i],
-                            expr,
-                            member_name
-                        );
-                        struct_data["members"][id2string(member_name)] = 
-                            serialize_value(ns, member_expr, seen);
-                    } catch(const std::runtime_error&) {
-                        struct_data["members"][id2string(member_name)] = nullptr;
+                    else if(is_struct_type(expr->type)) {
+                        const struct_type2t& struct_type = to_struct_type(expr->type);
+                        
+                        json struct_data = json::object();
+                        struct_data["__type"] = "struct";
+                        struct_data["name"] = id2string(struct_type.name);
+                        struct_data["members"] = json::object();
+                        
+                        for(size_t i = 0; i < struct_type.members.size(); i++) {
+                            const irep_idt& member_name = struct_type.member_names[i];
+                            
+                            try {
+                                expr2tc member_expr = member2tc(
+                                    struct_type.members[i],
+                                    expr,
+                                    member_name
+                                );
+                                struct_data["members"][id2string(member_name)] = 
+                                    serialize_impl(member_expr);
+                            } catch(const std::runtime_error&) {
+                                struct_data["members"][id2string(member_name)] = nullptr;
+                            }
+                        }
+                        return struct_data;
+                    }
+                    else {
+                        return from_expr(ns, "", expr);
                     }
                 }
-                return struct_data;
+                catch(const std::runtime_error& e) {
+                    log_status("Serialization error: {}", e.what());
+                    return nullptr;
+                }
             }
-            else {
-                return from_expr(ns, "", expr);
+
+        public:
+            explicit ValueSerializer(const namespacet& ns) : ns(ns) {}
+            
+            json serialize(const expr2tc& expr) {
+                return serialize_impl(expr);
             }
-        }
-        catch(const std::runtime_error& e) {
-            log_status("Serialization error: {}", e.what());
-            return nullptr;
-        }
+        };
+        
+        return ValueSerializer(ns).serialize(expr);
     }
 
     json get_assignment_json(const namespacet& ns, const expr2tc& lhs, const expr2tc& value) {
-        std::set<std::string> seen;
         json assignment;
         
         assignment["lhs"] = from_expr(ns, "", lhs);
         assignment["lhs_type"] = type_id_to_string(lhs->type->type_id);
         
         if(!is_nil_expr(value)) {
-            assignment["rhs"] = serialize_value(ns, value, seen);
+            assignment["rhs"] = serialize_value(ns, value);
             assignment["rhs_type"] = type_id_to_string(value->type->type_id);
         } else {
             assignment["rhs"] = nullptr;
@@ -198,7 +218,7 @@ namespace {
                 const locationt& loc = step.pc->location;
                 std::string file = id2string(loc.get_file());
                 
-                if(!file.empty() && !starts_with(file, "/usr/")) {
+                if(!file.empty() && !is_system_path(file)) {
                     all_referenced_files.insert(file);
                     auto included_headers = find_included_headers(file, processed_files);
                     all_referenced_files.insert(included_headers.begin(), included_headers.end());
@@ -212,7 +232,7 @@ namespace {
                 const locationt& loc = step.pc->location;
                 std::string file = id2string(loc.get_file());
                 
-                if(starts_with(file, "/usr/")) 
+                if(is_system_path(file)) 
                     continue;
                 
                 std::string line_str = id2string(loc.get_line());
@@ -258,21 +278,19 @@ namespace {
 
                             if(!initial_state_captured && processed_vars.find(var_name) == processed_vars.end()) {
                                 processed_vars.insert(var_name);
-                                std::set<std::string> seen_values;
                                 json value_info = {
                                     {"name", var_name},
                                     {"type", type_id_to_string(step.lhs->type->type_id)},
-                                    {"value", serialize_value(ns, step.value, seen_values)}
+                                    {"value", serialize_value(ns, step.value)}
                                 };
                                 initial_values[var_name] = value_info;
                             }
                         }
                         else if(step.pc->is_function_call()) {
                             step_data["type"] = "function_call";
-                            std::set<std::string> seen_args;
                             step_data["function_call"] = {
                                 {"argument", from_expr(ns, "", step.lhs)},
-                                {"value", serialize_value(ns, step.value, seen_args)}
+                                {"value", serialize_value(ns, step.value)}
                             };
                         }
                         else {
@@ -300,7 +318,7 @@ namespace {
 
         // Build coverage data
         for(const auto& file : all_referenced_files) {
-            if(starts_with(file, "/usr/")) 
+            if(is_system_path(file)) 
                 continue;
             
             json file_coverage;
@@ -335,6 +353,7 @@ namespace {
 
         // Read existing JSON and append new test
         json all_tests = []() {
+            // TODO: Allow diff filename for report
             std::ifstream input("report.json");
             if(input.is_open()) {
                 try {
@@ -352,13 +371,13 @@ namespace {
         if(all_tests.empty()) {
             json source_data;
             for(const auto& file : all_referenced_files) {
-                if(!starts_with(file, "/usr/")) {
+                if(!is_system_path(file)) {
                     try {
                         source_data[file] = read_file_lines(file);
                     } catch(std::exception& e) {
                         log_status("Error reading file {}: {}", file, e.what());
                         source_data[file] = std::vector<std::string>();
-                        }
+                    }
                 }
             }
             test_entry["source_files"] = source_data;
