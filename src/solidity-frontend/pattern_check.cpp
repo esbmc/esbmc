@@ -94,7 +94,7 @@ void pattern_checker::check_require_call(const nlohmann::json &expr)
     {
       const nlohmann::json &call_args = expr["arguments"];
       // Search for tx.origin in BinaryOperation (==) as used in require(tx.origin == <VarDeclReference>)
-      // There should be just one argument, the BinaryOpration expression.
+      // There should be just one argument, the BinaryOperation expression.
       // Checking 1 argument as in require(<leftExpr> == <rightExpr>)
       if (call_args.size() == 1)
       {
@@ -115,7 +115,7 @@ void pattern_checker::check_require_argument(const nlohmann::json &call_args)
     if (arg_expr["operator"].get<std::string>() == "==")
     {
       const nlohmann::json &left_expr = arg_expr["leftExpression"];
-      // Search for "tx", "." and "origin". First, confirm the nodeType is MemeberAccess
+      // Search for "tx", "." and "origin". First, confirm the nodeType is MemberAccess
       // If the nodeType was NOT MemberAccess, accessing "memberName" would throw an exception !
       if (
         left_expr["nodeType"].get<std::string>() ==
