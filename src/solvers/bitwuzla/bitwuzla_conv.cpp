@@ -715,7 +715,7 @@ BigInt bitwuzla_convt::get_bv(smt_astt a, bool is_signed)
 {
   const bitw_smt_ast *ast = to_solver_smt_ast<bitw_smt_ast>(a);
   const char *result =
-    bitwuzla_term_to_string(bitwuzla_get_value(bitw, ast->a));
+    bitwuzla_term_value_get_str(bitwuzla_get_value(bitw, ast->a));
   BigInt val = binary2integer(result, is_signed);
   return val;
 }
