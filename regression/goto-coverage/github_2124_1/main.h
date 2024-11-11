@@ -248,7 +248,7 @@ typedef struct {
 } shadowState;
 
 // Function declarations
-void handleRunplanEvent(DeviceRecord* device, RunPlanEvent* events, int num_events);
+void handleRunplanEvent(DeviceRecord* device, void* events, int num_events);
 void handleSessionEvent(DeviceRecord* device, void* events, int num_events);
 void handleShadowUpdate(DeviceRecord* device, void* current, void* previous);
 void estimateScheduleRun(const char* duid, IrrigationScheduleRecord* schedule);
