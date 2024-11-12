@@ -139,7 +139,7 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       is_symbol2t(with.source_value) && is_struct_type(with.source_value) &&
       is_constant_expr(with.update_value))
       return true;
-      
+
     return false;
   }
 
