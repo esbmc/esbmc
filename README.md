@@ -67,6 +67,18 @@ To build ESBMC with other operating systems and SMT solvers, please see the [BUI
 
 The user can also download the latest ESBMC binary for Ubuntu and Windows from the [releases page](https://github.com/esbmc/esbmc/releases).
 
+#### FreeBSD
+
+ESBMC should compile just fine in FreeBSD as long as the 32-bits libraries were enabled
+
+```sh
+pkg install git cmake python3 z3 bison flex boost-all
+wget https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.0/clang+llvm-16.0.0-amd64-unknown-freebsd13.tar.xz && mv clang16
+mkdir build && cd build
+cmake .. -DLLVM_DIR=../clang16 -DClang_DIR=../clang16
+make -j4
+```
+
 ### How to use ESBMC
 
 As an illustrative example to show some of the ESBMC features, consider the following C code:
