@@ -512,7 +512,7 @@ public:
     : array_type_methods(array_id, _subtype, size, inf)
   {
     // If we can simplify the array size, do so
-    // XXX, this is probably massively inefficient. Some kind of boundry in
+    // XXX, this is probably massively inefficient. Some kind of boundary in
     // the checking process should exist to eliminate this requirement.
     if (!is_nil_expr(size))
     {
@@ -578,7 +578,7 @@ public:
     : vector_type_methods(vector_id, _subtype, size, false)
   {
     // If we can simplify the array size, do so
-    // XXX, this is probably massively inefficient. Some kind of boundry in
+    // XXX, this is probably massively inefficient. Some kind of boundary in
     // the checking process should exist to eliminate this requirement.
     if (!is_nil_expr(size))
     {

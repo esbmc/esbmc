@@ -143,7 +143,7 @@ void goto_inlinet::replace_return(
         assignment->location = it->location;
         assignment->function = it->location.get_function();
 
-        assert(constrain.is_nil()); // bp_constrain gumpf reomved
+        assert(constrain.is_nil()); // bp_constrain gumpf removed
 
         dest.insert_swap(it, *assignment);
         it++;

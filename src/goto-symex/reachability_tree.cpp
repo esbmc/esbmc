@@ -385,7 +385,7 @@ bool reachability_treet::dfs_position::write_to_file(
     i += 7;
     i >>= 3;
 
-    assert(i != 0); // Always at least one thread in _existance_.
+    assert(i != 0); // Always at least one thread in _existence_.
     if (fwrite(buffer, i, 1, f) != 1)
       goto fail;
   }

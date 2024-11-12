@@ -89,7 +89,7 @@ typet goto2ct::get_base_type(typet type, namespacet ns)
   return type;
 }
 
-// This method recursivelly iterates through all members of the given
+// This method recursively iterates through all members of the given
 // struct/union "type" and builds a list "sorted_types" of all
 // struct/union types appearing in "type" in the order where each
 // successive element does not feature a struct/union member whose
@@ -139,7 +139,7 @@ void goto2ct::sort_compound_types(namespacet &ns, std::list<typet> &types)
 // them into separate lists/tables for easier/quicker access.
 void goto2ct::extract_symbol_tables()
 {
-  // Going throught the symbol table
+  // Going through the symbol table
   ns.get_context().foreach_operand_in_order([this](const symbolt &s) {
     // Skipping everything that appears in "esbmc_intrinsics.h"
     // or with an empty location.
@@ -181,7 +181,7 @@ void goto2ct::extract_symbol_tables()
 
 // This methods tries to resolve one step in the chains of initializers.
 //
-// In other words, the following "two-step" initializtion
+// In other words, the following "two-step" initialization
 // (which is also illegal in C, but allowed in GOTO programs
 // that ESBMC produces):
 //
@@ -399,8 +399,8 @@ void goto2ct::assign_scope_ids(goto_programt &goto_program)
 // constructs like (int) i = (int) i + 1, which come from adjusting
 // expressions like i += 1.
 //
-// 2) The variables initialisers are converted into assignments
-// by the GOTO converter, and they become sintactically invalid
+// 2) The variables initializers are converted into assignments
+// by the GOTO converter, and they become syntactically invalid
 // assignments in C syntax.
 void goto2ct::adjust_invalid_assignment_rec(
   goto_programt::instructionst &new_instructions,

@@ -9,7 +9,7 @@ int main()
    unsigned int passes = 0; // number of passes
    unsigned int failures = 0; // number of failures
    //unsigned int studentCounter = 1; // student counter
-   unsigned int studentCounter{ 1 }; // student counter initialised using C++11 list initialisation
+   unsigned int studentCounter{ 1 }; // student counter initialized using C++11 list initialization
 
    // process 10 students using counter-controlled loop
    while ( studentCounter <= 10 )

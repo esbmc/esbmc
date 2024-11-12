@@ -28,13 +28,13 @@ int main()
     // copy assignment copies data from nums1 to nums2
     nums2 = nums1;
  
-    std::cout << "After assigment:\n"; 
+    std::cout << "After assignment:\n"; 
     display_sizes(nums1, nums2, nums3);
  
     // move assignment moves data from nums1 to nums3,
     // modifying both nums1 and nums3
     //nums3 = move(nums1);
  
-    std::cout << "After move assigment:\n"; 
+    std::cout << "After move assignment:\n"; 
     display_sizes(nums1, nums2, nums3);
 }

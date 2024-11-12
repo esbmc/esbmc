@@ -1894,7 +1894,7 @@ void c_typecheck_baset::typecheck_side_effect_assignment(exprt &expr)
   exprt &op0 = expr.op0();
   exprt &op1 = expr.op1();
 
-  // se if we have a typecast on the LHS
+  // see if we have a typecast on the LHS
   if (op0.id() == "typecast")
   {
     assert(op0.operands().size() == 1);

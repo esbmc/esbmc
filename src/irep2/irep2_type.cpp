@@ -127,7 +127,7 @@ void type2t::hash(crypto_hash &hash) const
 
 unsigned int bool_type2t::get_width() const
 {
-  // For the purpose of the byte representating memory model
+  // For the purpose of the byte representing memory model
   return 8;
 }
 

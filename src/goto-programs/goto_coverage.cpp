@@ -87,7 +87,7 @@ The CBMC extends it to the entry of the function. So we will do the same.
 
 Algo:
   1. convert assertions to true
-  2. add false assertion add the begining of the function and the branch()
+  2. add false assertion add the beginning of the function and the branch()
 */
 void goto_coveraget::branch_function_coverage()
 {
@@ -122,7 +122,7 @@ void goto_coveraget::branch_function_coverage()
 
         if (flg)
         {
-          // add a false assert in the begining
+          // add a false assert in the beginning
           // to check if the function is entered.
           insert_assert(goto_program, it, gen_false_expr());
           flg = false;
@@ -277,7 +277,7 @@ int goto_coveraget::get_total_instrument() const
 // run the algorithm on the copy of the original goto program
 int goto_coveraget::get_total_assert_instance() const
 {
-  // 1. execute goto uniwnd
+  // 1. execute goto unwind
   bounded_loop_unroller unwind_loops;
   unwind_loops.run(goto_functions);
   // 2. calculate the number of assertion instance

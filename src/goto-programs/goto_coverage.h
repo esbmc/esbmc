@@ -90,8 +90,8 @@ protected:
   goto_functionst &goto_functions;
 
   // we need to skip the conditions within the built-in library
-  // while kepping the file manually included by user
-  // this filter, however, is unsound.. E.g. if the src filename is the same as the biuilt in library name
+  // while keeping the file manually included by user
+  // this filter, however, is unsound.. E.g. if the src filename is the same as the builtin library name
   std::string filename;
 
   int target_num;

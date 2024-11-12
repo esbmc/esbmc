@@ -68,9 +68,9 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   {
     array_type2t arr = to_array_type(expr->type);
 
-    // Don't permit const propagaion of infinite-size arrays. They're going to
+    // Don't permit const propagation of infinite-size arrays. They're going to
     // be special modelling arrays that require special handling either at SMT
-    // or some other level, so attempting to optimse them is a Bad Plan (TM).
+    // or some other level, so attempting to optimize them is a Bad Plan (TM).
     if (arr.size_is_infinite)
       return false;
 

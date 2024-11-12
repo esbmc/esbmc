@@ -368,7 +368,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     {
       smt_sortt sort = convert_sort(expr->type);
 
-      // Don't honour inifinite sized array initializers. Modelling only.
+      // Don't honor inifinite sized array initializers. Modelling only.
       // If we have an array of tuples and no tuple support, use tuple_fresh.
       // Otherwise, mk_fresh.
       if (is_tuple_ast_type(arr.subtype))
@@ -846,7 +846,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
      * read illuminating how reasoning works from a certain compiler's
      * writers' points of view.
      *
-     * C++ has changed this one-past behaviour in [expr.eq] to "unspecified"
+     * C++ has changed this one-past behavior in [expr.eq] to "unspecified"
      * <https://www.open-std.org/jtc1/sc22/wg21/docs/cwg_defects.html#1652>
      * and C might eventually follow the same path.
      *
@@ -2652,7 +2652,7 @@ smt_astt smt_convt::convert_array_of_prep(const expr2tc &expr)
 
   // So: we have an array_of, that we have to convert into a bunch of stores.
   // However, it might be a nested array. If that's the case, then we're
-  // guarenteed to have another array_of in the initializer which we can flatten
+  // guaranteed to have another array_of in the initializer which we can flatten
   // to a single array of whatever's at the bottom of the array_of. Or, it's
   // a constant_array, in which case we can just copy the contents.
   if (is_array_type(arrtype.subtype))
@@ -2835,7 +2835,7 @@ void smt_convt::rewrite_ptrs_to_structs(type2tc &type)
   type->Foreach_subtype(delegate);
 }
 
-// Default behaviours for SMT AST's
+// Default behaviors for SMT AST's
 
 void smt_ast::assign(smt_convt *ctx, smt_astt sym) const
 {

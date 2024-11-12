@@ -186,11 +186,11 @@ Release Notes of the ESBMC model checker
 - Integers (signed and unsigned) and floats are converted from one to another correctly now (#1638).
 * Concurrency
 - Fixed monolithic partial order-reduction (#1633)
-- Optimise the efficiency of data race detection (#1544).
+- Optimize the efficiency of data race detection (#1544).
 - Support for "printf" for data races check (#1477).
 - Take cur_state->guard into account for creating a new thread (#1463).
 - Fixing dereference in data-races check (#1460).
-- Optimise index races check (#1456).
+- Optimize index races check (#1456).
 * Operational models
 - Add libm musl float OMs used in svcomp24 (#1601).
 - Fix range of rand() and random() to include upper endpoint (#1596).

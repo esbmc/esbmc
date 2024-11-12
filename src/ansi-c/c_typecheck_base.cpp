@@ -74,7 +74,7 @@ void c_typecheck_baset::typecheck_symbol(symbolt &symbol)
   }
   else if (symbol.is_extern && !final_type.is_code())
   {
-    // variables mared as "extern" go into the global namespace
+    // variables marked as "extern" go into the global namespace
     // and have static lifetime
     new_name = root_name;
     symbol.static_lifetime = true;

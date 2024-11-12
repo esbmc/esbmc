@@ -119,7 +119,7 @@ void goto_checkt::div_by_zero_check(
 
   assert(is_div2t(expr) || is_modulus2t(expr));
 
-  // add divison by zero subgoal
+  // add division by zero subgoal
   expr2tc side_2;
   if (is_div2t(expr))
     side_2 = to_div2t(expr).side_2;
@@ -513,8 +513,8 @@ void goto_checkt::shift_check(
 
   add_guarded_claim(
     ub_check,
-    "undefined behaviour on shift operation " + get_expr_id(expr),
-    "undef-behaviour",
+    "undefined behavior on shift operation " + get_expr_id(expr),
+    "undef-behavior",
     loc,
     guard);
 }
@@ -630,7 +630,7 @@ void goto_checkt::bounds_check(
     "array bounds violated: " + array_name(ns, ind.source_value);
   const expr2tc &the_index = ind.index;
 
-  // Lower bound access should be greather than zero
+  // Lower bound access should be greater than zero
   expr2tc zero = gen_zero(the_index->type);
   assert(!is_nil_expr(zero));
 
@@ -809,7 +809,7 @@ void goto_checkt::check_rec(
   case expr2t::ieee_mul_id:
   case expr2t::ieee_div_id:
   {
-    // No division by zero for ieee_div, as it's defined behaviour
+    // No division by zero for ieee_div, as it's defined behavior
     float_overflow_check(expr, guard, loc);
     nan_check(expr, guard, loc);
     break;

@@ -343,7 +343,7 @@ const struct group_opt_templ all_cmd_options[] = {
      "enable arithmetic over- and underflow check for unsigned integers"},
     {"ub-shift-check",
      NULL,
-     "enable undefined behaviour check on shift operations"},
+     "enable undefined behavior check on shift operations"},
     {"struct-fields-check",
      NULL,
      "enable over-sized read checks for struct fields"},
@@ -529,7 +529,7 @@ const struct group_opt_templ all_cmd_options[] = {
    {
      // Print commit hash for current binary
      {"git-hash", NULL, ""},
-     // Check if there is two or more assingments to the same SSA instruction
+     // Check if there is two or more assignments to the same SSA instruction
      {"double-assign-check", NULL, ""},
      {"no-pointer-relation-check",
       NULL,

@@ -89,7 +89,7 @@ void goto_convertt::remove_sideeffects(
 
       if (expr.is_and())
       {
-        // We need to reacord the location of the newly generated expression
+        // We need to record the location of the newly generated expression
         exprt false_expr = false_exprt();
         false_expr.location() = op.location();
         if_exprt if_e(op, tmp, false_expr);
@@ -98,7 +98,7 @@ void goto_convertt::remove_sideeffects(
       }
       else // ID_or
       {
-        // We need to reacord the location of the newly generated expression
+        // We need to record the location of the newly generated expression
         exprt true_expr = true_exprt();
         true_expr.location() = op.location();
         if_exprt if_e(op, true_expr, tmp);
@@ -685,7 +685,7 @@ void goto_convertt::remove_post(
 //    ...
 //  However, if the return value of function "foo()" is never
 //  used in the program, or the return type <type> of "foo()"
-//  is void, the same code is tranformed to:
+//  is void, the same code is transformed to:
 //    ...
 //    foo();
 //    a = b;

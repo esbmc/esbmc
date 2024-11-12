@@ -51,7 +51,7 @@ static void internal_additions(std::string &code)
     "int __ESBMC_rounding_mode = 0;\n"
     "_Bool __ESBMC_floatbv_mode();\n"
 
-    // Forward decs for pthread main thread begin/end hooks. Because they're
+    // Forward decls for pthread main thread begin/end hooks. Because they're
     // pulled in from the C library, they need to be declared prior to pulling
     // them in, for type checking.
     "void __ESBMC_pthread_start_main_hook(void);\n"
