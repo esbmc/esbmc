@@ -136,9 +136,10 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
     const with2t &with = to_with2t(expr);
     // For now, we focus on propagating constants for structs only.
     if (
-      is_struct_type(with.source_value) && is_constant_expr(with.update_value))
+      is_symbol2t(with.source_value) && is_struct_type(with.source_value) &&
+      is_constant_expr(with.update_value))
       return true;
-
+      
     return false;
   }
 
@@ -149,11 +150,9 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
     bool noconst = true;
 
     expr->foreach_operand([this, &noconst](const expr2tc &e) {
-      // Omit with2t from constant struct/union for the moment
-      if (noconst && (!constant_propagation(e) || is_with2t(e)))
+      if (noconst && !constant_propagation(e))
         noconst = false;
     });
-
     return noconst;
   }
 
