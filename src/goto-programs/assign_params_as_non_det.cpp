@@ -60,18 +60,24 @@ bool assign_params_as_non_det::runOnFunction(
     typet l_t = lhs.type();
     if (l_t.is_pointer() && l_t.subtype() != empty_typet())
     {
-      // e.g. int* lhs;
-      // to
-      // lhs = null;
-      // bool temp;
-      // temp = nondet();
-      // if(temp)
-      // {
-      //   int temp2;
-      //   temp2 = nondet();
-      //   assume(temp2 != 0);
-      //   lhs = &temp2;
-      // }
+      /*
+        e.g. int* lhs;
+        to
+        lhs = null;
+        bool temp;
+        temp = nondet();
+        if(temp)
+        {
+          int temp2;
+          temp2 = nondet();
+          assume(temp2 != 0);
+          lhs = &temp2;
+        }
+        
+        During this process we create two auxiliary variable. One for the boolean flag, and one for the object.
+        - We need to consider the situation where pointers can be null, thus we put the assignment under an if-statement
+        - If the flag (`temp`) is true, we create an object (`temp2`) and assign its address to the pointer.
+      */
 
       // lhs = null;
       exprt zero_rhs = gen_zero(l_t);
@@ -218,12 +224,22 @@ bool assign_params_as_non_det::runOnFunction(
       if_statement->make_goto(it);
       if_statement->guard = guard;
 
-      // insert
+      /* insert      
+       Instrument_1
+       Instrument_2  <-- we want to insert a statement before here
+       Instrument_3
+       Instrument_4  
+       Origin_1        <-- 'it' is currently here
+      */
       --it;
       --it;
       --it;
       --it;
       goto_program.insert_swap(it++, *if_statement);
+
+      /* reset
+        After insertion, reset the pointer `it`'s position to the `origin_1`
+      */
       ++it;
       ++it;
       ++it;
