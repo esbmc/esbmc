@@ -997,30 +997,18 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           *lambda_expr.getLambdaClass()->getTypeForDecl(), lambda_class_type))
       return true;
 
-    if (lambda_expr.capture_size())
+    const struct_union_typet &this_type =
+      to_struct_union_type(ns.follow(lambda_class_type));
+    exprt sym("struct", this_type);
+    for (const auto &it : lambda_expr.capture_inits())
     {
-      const struct_union_typet &this_type =
-        to_struct_union_type(ns.follow(lambda_class_type));
-      exprt sym("struct", this_type);
-      for (auto it = lambda_expr.capture_init_begin();
-           it != lambda_expr.capture_init_end();
-           ++it)
-      {
-        exprt init;
-        if (get_expr(**it, init))
-          return true;
+      exprt init;
+      if (get_expr(*it, init))
+        return true;
 
-        sym.move_to_operands(init);
-      }
-      new_expr = sym;
+      sym.move_to_operands(init);
     }
-    else
-      new_expr = gen_zero(pointer_typet(lambda_class_type));
-    // Generating a null pointer only works as long as we don't have captures
-    // When we want to add support for captures, we have to probably call
-    // the lambda class constructor here
-    // See https://cppinsights.io/ which is a great tool to see how lambdas
-    // are translated to C++ code
+    new_expr = sym;
 
     break;
   }
