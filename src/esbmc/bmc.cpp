@@ -908,8 +908,7 @@ smt_convt::resultt bmct::multi_property_check(
                        &is_clear_verified,
                        &is_fail_fast,
                        &fail_fast_limit,
-                       &fail_fast_cnt](const size_t &i)
-  {
+                       &fail_fast_cnt](const size_t &i) {
     //"multi-fail-fast n": stop after first n SATs found.
     if (is_fail_fast && fail_fast_cnt >= fail_fast_limit)
       return;
