@@ -680,8 +680,12 @@ void execution_statet::execute_guard()
   // pre-goto thread guard that we stored at that time. This is so that the
   // thread we context switch to gets the guard of that context switch happening
   // rather than the guard of either branch of the GOTO.
-  if (pre_goto_guard.is_false())
-    parent_guard = pre_goto_guard.as_expr();
+  if (!pre_goto_guard.is_true())
+  {
+    guardt tmp = pre_goto_guard;
+    tmp |= threads_state[last_active_thread].guard;
+    parent_guard = tmp.as_expr();
+  }
   else
     parent_guard = threads_state[last_active_thread].guard.as_expr();
 
