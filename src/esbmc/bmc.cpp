@@ -940,8 +940,11 @@ smt_convt::resultt bmct::multi_property_check(
       return;
 
     // Slice
-    symex_slicet slicer(options);
-    slicer.run(local_eq.SSA_steps);
+    if (!options.get_bool_option("no-slice"))
+    {
+      symex_slicet slicer(options);
+      slicer.run(local_eq.SSA_steps);
+    }
 
     if (options.get_bool_option("ssa-features-dump"))
     {
