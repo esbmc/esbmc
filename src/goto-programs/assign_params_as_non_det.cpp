@@ -58,29 +58,52 @@ bool assign_params_as_non_det::runOnFunction(
     exprt lhs = symbol_expr(*context.find_symbol(_id));
 
     typet l_t = lhs.type();
+
+    // rhs
+    exprt rhs = exprt("sideeffect", l_t);
+    rhs.statement("nondet");
+    rhs.location() = l;
+
+    // assignment
+    goto_programt tmp;
+    goto_programt::targett assignment = tmp.add_instruction(ASSIGN);
+    assignment->location = l;
+    assignment->function = it->location.get_function();
+
+    code_assignt code_assign(lhs, rhs);
+    code_assign.location() = it->location;
+    expr2tc new_assign_expr;
+    migrate_expr(code_assign, new_assign_expr);
+    assignment->code = new_assign_expr;
+
+    // insert
+    goto_program.insert_swap(it++, *assignment);
+    --it;
+
+    // special handling for non-void pointer
     if (l_t.is_pointer() && l_t.subtype() != empty_typet())
     {
       /*
         e.g. int* lhs;
         to
-        lhs = null;
-        bool temp;
-        temp = nondet();
-        if(temp)
+        bool lhs#temp_bool;
+        lhs#temp_bool = nondet();
+        if(lhs#temp_bool)
         {
-          int temp2;
-          temp2 = nondet();
-          assume(temp2 != 0);
-          lhs = &temp2;
+          int lhs#temp;
+          lhs#temp = nondet();
+          assume(lhs#temp != 0);
+          lhs = &lhs#temp;
         }
         
         During this process we create two auxiliary variable. One for the boolean flag, and one for the object.
         - We need to consider the situation where pointers can be null, thus we put the assignment under an if-statement
-        - If the flag (`temp`) is true, we create an object (`temp2`) and assign its address to the pointer.
+        - If the flag (`lhs#temp_bool`) is true, we create an object (`lhs#temp`) and assign its address to the pointer.
       */
 
       // lhs = null;
-      exprt zero_rhs = gen_zero(l_t);
+      exprt zero_rhs = exprt("sideeffect", l_t);
+      zero_rhs.statement("nondet");
       zero_rhs.location() = l;
 
       // assignment
@@ -244,29 +267,6 @@ bool assign_params_as_non_det::runOnFunction(
       ++it;
       ++it;
       goto_program.compute_target_numbers();
-    }
-    else
-    {
-      // rhs
-      exprt rhs = exprt("sideeffect", l_t);
-      rhs.statement("nondet");
-      rhs.location() = l;
-
-      // assignment
-      goto_programt tmp;
-      goto_programt::targett assignment = tmp.add_instruction(ASSIGN);
-      assignment->location = l;
-      assignment->function = it->location.get_function();
-
-      code_assignt code_assign(lhs, rhs);
-      code_assign.location() = it->location;
-      expr2tc new_assign_expr;
-      migrate_expr(code_assign, new_assign_expr);
-      assignment->code = new_assign_expr;
-
-      // insert
-      goto_program.insert_swap(it++, *assignment);
-      --it;
     }
   }
 
