@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.c
 --deadlock-check --context-bound 11
 ^VERIFICATION FAILED$
