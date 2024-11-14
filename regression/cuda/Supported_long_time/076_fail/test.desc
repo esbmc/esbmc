@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 main.cu
 --unwind 9 --force-malloc-success --state-hashing --context-bound 2
 
