@@ -694,14 +694,6 @@ void execution_statet::execute_guard()
   // evaluating a particular interleaving early right now.
   if (is_false(parent_guard) || is_cur_state_guard_false(parent_guard))
   {
-    if (active_thread != last_active_thread)
-    {
-      target->assumption(
-        guardt().as_expr(),
-        threads_state[last_active_thread].guard.as_expr(),
-        get_active_state().source,
-        first_loop);
-    }
     cur_state->guard.make_false();
     return;
   }
