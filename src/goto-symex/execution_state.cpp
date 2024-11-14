@@ -675,15 +675,27 @@ void execution_statet::execute_guard()
   expr2tc guard_expr = get_guard_identifier();
   expr2tc parent_guard;
 
-  // Parent guard of this context switch - if a assign/claim/assume, just use
-  // the current thread guard. However if we just executed a goto, use the
-  // pre-goto thread guard that we stored at that time. This is so that the
-  // thread we context switch to gets the guard of that context switch happening
-  // rather than the guard of either branch of the GOTO.
+  // Check if the `pre_goto_guard` condition is false.
   if (pre_goto_guard.is_false())
-    parent_guard = pre_goto_guard.as_expr();
+  {
+    // If `pre_goto_guard` is false, create a temporary guard (`tmp`) 
+    // that combines `pre_goto_guard` with the guard of the last active thread.
+    guardt tmp = pre_goto_guard;
+
+    // Use the OR operator to merge `pre_goto_guard` with the guard of the
+    // last active thread, stored in `threads_state[last_active_thread].guard`.
+    tmp |= threads_state[last_active_thread].guard;
+
+    // Assign the resulting combined expression to `parent_guard`.
+    parent_guard = tmp.as_expr();
+  }
   else
+  {
+    // If `pre_goto_guard` is not false, assign the guard of the last active thread
+    // directly to `parent_guard` without any modifications.
     parent_guard = threads_state[last_active_thread].guard.as_expr();
+  }
+
 
   // If we simplified the global guard expr to false, write that to thread
   // guards, not the symbolic guard name. This is the only way to bail out of
