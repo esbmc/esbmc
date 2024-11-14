@@ -80,7 +80,9 @@ bool assign_params_as_non_det::runOnFunction(
     goto_program.insert_swap(it++, *assignment);
     --it;
 
-    // special handling for non-void pointer
+    // additional handling for non-void pointer
+    // so the pointer can point to an array (decay), which is covered above
+    // also, the pointer can point to an object/variable, which is covered below
     if (l_t.is_pointer() && l_t.subtype() != empty_typet())
     {
       /*
@@ -88,7 +90,7 @@ bool assign_params_as_non_det::runOnFunction(
         to
         bool lhs#temp_bool;
         lhs#temp_bool = nondet();
-        if(lhs#temp_bool)
+        if(!lhs#temp_bool)
         {
           int lhs#temp;
           lhs#temp = nondet();
@@ -211,6 +213,8 @@ bool assign_params_as_non_det::runOnFunction(
       goto_programt::instructiont instruction;
       instruction.make_assumption(n_guard);
       instruction.location = l;
+      instruction.location.property(
+        "skipped"); // we do not calculate this condition/branch
       instruction.function = it->location.get_function();
       goto_program.insert_swap(it++, instruction);
       --it;
@@ -235,17 +239,21 @@ bool assign_params_as_non_det::runOnFunction(
       // create if statement => if(nondet_bool()) lhs = &_temp;
       //! hack: we do not do reverse !(nondet_bool)
       //! such that this condition will not be counted in the goto_coverage
-      expr2tc guard;
-      migrate_expr(symbol_expr(*new_sym2), guard);
+      expr2tc not_guard;
+      migrate_expr(symbol_expr(*new_sym2), not_guard);
+      // make not: !lhs#temp_bool
+      make_not(not_guard);
 
       // inser if statement to the goto program
       goto_programt tmp4;
       goto_programt::targett if_statement = tmp4.add_instruction();
       if_statement->location = l;
+      if_statement->location.property(
+        "skipped"); // we do not calculate this condition/branch
       if_statement->function = it->location.get_function();
 
       if_statement->make_goto(it);
-      if_statement->guard = guard;
+      if_statement->guard = not_guard;
 
       /* insert      
        Instrument_1

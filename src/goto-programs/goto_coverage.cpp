@@ -128,6 +128,10 @@ void goto_coveraget::branch_function_coverage()
           flg = false;
         }
 
+        if (it->location.property().as_string() == "skipped")
+          // this stands for the auxiliary condition/branch we added.
+          continue;
+
         // convert assertions to true
         if (
           it->is_assert() &&
@@ -139,9 +143,6 @@ void goto_coveraget::branch_function_coverage()
         else if (it->is_goto() && !is_true(it->guard))
         {
           exprt guard = migrate_expr_back(it->guard);
-          if (!guard.is_not() && target_function != "")
-            // this stands for the auxiliary condition we added for function mode.
-            continue;
 
           if (it->is_target())
             target_num = it->target_number;
@@ -193,6 +194,10 @@ void goto_coveraget::branch_coverage()
         if (location_pool.count(cur_filename) == 0)
           continue;
 
+        if (it->location.property().as_string() == "skipped")
+          // this stands for the auxiliary condition/branch we added.
+          continue;
+
         // convert assertions to true
         if (
           it->is_assert() &&
@@ -203,11 +208,6 @@ void goto_coveraget::branch_coverage()
         // e.g. IF !(a > 1) THEN GOTO 3
         else if (it->is_goto() && !is_true(it->guard))
         {
-          exprt guard = migrate_expr_back(it->guard);
-          if (!guard.is_not() && target_function != "")
-            // this stands for the auxiliary condition we added for function mode.
-            continue;
-
           if (it->is_target())
             target_num = it->target_number;
           // assert(!(a > 1));
@@ -362,6 +362,11 @@ void goto_coveraget::condition_coverage()
         cur_filename = get_filename_from_path(it->location.file().as_string());
         if (location_pool.count(cur_filename) == 0)
           continue;
+
+        if (it->location.property().as_string() == "skipped")
+          // this stands for the auxiliary condition/branch we added.
+          continue;
+
         /* 
           Places that could contains condition
           1. GOTO:          if (x == 1);
@@ -389,10 +394,6 @@ void goto_coveraget::condition_coverage()
           if (!is_nil_expr(_guard))
           {
             exprt guard = migrate_expr_back(_guard);
-            if (!guard.is_not() && target_function != "")
-              // this stands for the auxiliary condition we added for function mode.
-              continue;
-
             guard = handle_single_guard(guard);
             exprt pre_cond = nil_exprt();
             pre_cond.location() = it->location;
@@ -413,11 +414,6 @@ void goto_coveraget::condition_coverage()
 
           // preprocessing: if(true) ==> if(true == true)
           exprt guard = migrate_expr_back(it->guard);
-
-          if (!guard.is_not() && target_function != "")
-            // this stands for the auxiliary condition we added for function mode.
-            continue;
-
           guard = handle_single_guard(guard);
 
           exprt pre_cond = nil_exprt();
