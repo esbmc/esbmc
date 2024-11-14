@@ -128,6 +128,10 @@ void goto_coveraget::branch_function_coverage()
           flg = false;
         }
 
+        if (it->location.property().as_string() == "skipped")
+          // this stands for the auxiliary condition/branch we added.
+          continue;
+
         // convert assertions to true
         if (
           it->is_assert() &&
@@ -138,6 +142,8 @@ void goto_coveraget::branch_function_coverage()
         // e.g. IF !(a > 1) THEN GOTO 3
         else if (it->is_goto() && !is_true(it->guard))
         {
+          exprt guard = migrate_expr_back(it->guard);
+
           if (it->is_target())
             target_num = it->target_number;
           // assert(!(a > 1));
@@ -186,6 +192,10 @@ void goto_coveraget::branch_coverage()
         // skip if it's not the verifying files
         // probably a library
         if (location_pool.count(cur_filename) == 0)
+          continue;
+
+        if (it->location.property().as_string() == "skipped")
+          // this stands for the auxiliary condition/branch we added.
           continue;
 
         // convert assertions to true
@@ -352,6 +362,11 @@ void goto_coveraget::condition_coverage()
         cur_filename = get_filename_from_path(it->location.file().as_string());
         if (location_pool.count(cur_filename) == 0)
           continue;
+
+        if (it->location.property().as_string() == "skipped")
+          // this stands for the auxiliary condition/branch we added.
+          continue;
+
         /* 
           Places that could contains condition
           1. GOTO:          if (x == 1);
