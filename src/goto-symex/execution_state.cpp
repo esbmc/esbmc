@@ -678,7 +678,7 @@ void execution_statet::execute_guard()
   // Check if the `pre_goto_guard` condition is false.
   if (pre_goto_guard.is_false())
   {
-    // If `pre_goto_guard` is false, create a temporary guard (`tmp`) 
+    // If `pre_goto_guard` is false, create a temporary guard (`tmp`)
     // that combines `pre_goto_guard` with the guard of the last active thread.
     guardt tmp = pre_goto_guard;
 
@@ -695,7 +695,6 @@ void execution_statet::execute_guard()
     // directly to `parent_guard` without any modifications.
     parent_guard = threads_state[last_active_thread].guard.as_expr();
   }
-
 
   // If we simplified the global guard expr to false, write that to thread
   // guards, not the symbolic guard name. This is the only way to bail out of
