@@ -53,7 +53,7 @@ The user can also download the latest ESBMC binary for Ubuntu and Windows from t
 
 #### FreeBSD
 
-ESBMC should compile just fine in FreeBSD as long as the 32-bits libraries were enabled
+ESBMC should compile just fine in FreeBSD as long as the 32-bit libraries are enabled
 
 ```sh
 pkg install git cmake python3 z3 bison flex boost-all
@@ -79,7 +79,7 @@ cmake .. -DENABLE_Z3=1 -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs
 make -j8
 ````
 
-However, ESBMC is not as stable as the Linux version. Hence, we recommend using AMD64 via docker for optimal performance, until full compatibility is achieved. Sample docker compose and dockerfiles follow:
+We recommend using AMD64 via docker for optimal performance. Sample docker-compose and docker files follow:
 
 DockerFile sample:
 
