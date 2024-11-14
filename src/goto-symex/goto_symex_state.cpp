@@ -132,7 +132,18 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   // FIXME: actually benchmark this and look at timing results, it may be
   // important benchmarks (i.e. TACAS) work better with some propagation
   if (is_with2t(expr))
+  {
+    const with2t &with = to_with2t(expr);
+    // For now, we focus on propagating constants for structs only.
+    // TODO: enable other type will regress performance, need a TC
+    // to reproduce
+    if (
+      is_symbol2t(with.source_value) && is_struct_type(with.source_value) &&
+      is_constant_expr(with.update_value))
+      return true;
+
     return false;
+  }
 
   if (
     is_constant_struct2t(expr) || is_constant_union2t(expr) ||
@@ -144,7 +155,6 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       if (noconst && !constant_propagation(e))
         noconst = false;
     });
-
     return noconst;
   }
 
