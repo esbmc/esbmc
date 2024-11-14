@@ -623,9 +623,9 @@ bool hasChanged(shadowState* ss, const char* (*getter)(const ShadowReportedState
 time_t dateToTs(const char* date_str) {
     struct tm tm = {0};
     // Expected format: "YYYY-MM-DD HH:MM:SS"
-    if (strptime(date_str, "%Y-%m-%d %H:%M:%S", &tm) == NULL) {
-        return 0;
-    }
+    //if (strptime(date_str, "%Y-%m-%d %H:%M:%S", &tm) == NULL) {
+    //    return 0;
+    //}
     return mktime(&tm);
 }
 
