@@ -23,7 +23,7 @@ Our main website is [esbmc.org](http://esbmc.org).
 
 #### Mac OS X
 
-ESBMC works fine on ARM64 (M1/M2/M3/M4) Macs, assuming you have installed the MAC OS Dev tools. However, the compile option for GOTO_SYSROOT needs to be changed. Note that make -j8 can be increased to -j32 on faster Macs.
+ESBMC works to some extent on ARM64 (M1/M2/M3/M4) Macs, assuming you have installed the MAC OS Dev tools. However, the compile option for GOTO_SYSROOT needs to be changed. Note that make -j8 can be increased to -j32 on faster Macs.
 ````
 brew install z3
 brew install bison
@@ -36,6 +36,57 @@ cmake .. -DENABLE_Z3=1 -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs
 
 make -j8
 ````
+
+However, ESBMC is not as stable as the Linux version. Hence, we recommend using AMD64 via docker for optimal performance, until full compatibility is achieved. Sample docker compose and dockerfiles follow:
+
+DockerFile sample:
+
+````
+FROM node:18-slim
+
+# Install dependencies for ESBMC and other build tools
+RUN apt-get update && apt-get install -y \
+    clang-14 \
+    llvm-14 \
+    clang-tidy-14 \
+    python-is-python3 \
+    python3 \
+    git \
+    ccache \
+    unzip \
+    wget \
+    curl \
+    bison \
+    flex \
+    g++-multilib \
+    linux-libc-dev \
+    libboost-all-dev \
+    libz3-dev \
+    libclang-14-dev \
+    libclang-cpp-dev \
+    cmake \
+    && rm -rf /var/lib/apt/lists/*
+
+# Keep container running with tail -f /dev/null
+CMD ["bash", "-c", "tail -f /dev/null"]
+````
+
+Docker compose file:
+````
+version: '3.8'
+services:
+  esbmc:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile  # Assuming your Dockerfile is named `Dockerfile`
+    tty: true
+    stdin_open: true
+````
+The linux/amd64 line is very important, to virtualize amd64. Now do docker-compose up --build. You can then follow the linux instructions. Make -j16 works well on M2 mac's and beyond.
+
+
+
 
 #### Ubuntu 24.04
 
