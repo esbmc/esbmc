@@ -190,7 +190,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, coverage)
 
   # Special case for termination, it runs regardless of the strategy
   if prop == Property.coverage:
-    command_line += "--unlimited-goto-unwind --base-k-step 5 --no-standard-checks --quiet "
+    command_line += "--base-k-step 5 --no-standard-checks --quiet "
     command_line += "--generate-testcase "
     if coverage == "branch":
       command_line += "--branch-coverage "
