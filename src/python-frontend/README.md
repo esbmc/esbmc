@@ -6,7 +6,7 @@ The Python frontend handles the conversion of Python code into an internal repre
 
 1. Generating an Abstract Syntax Tree (AST) in JSON format.
 2. Annotating the AST with type information.
-3. Translating Python statements into a set of symbols in the irep format.
+3. Translating Python statements into a set of symbols in the Intermediate Representation (IRep) format.
 
 The ESBMC backend finalizes the conversion by performing symbolic execution on the GOTO program, producing instructions in Single Static Assignment (SSA) form.
 Following symbolic execution, we generate a first-order logic formula, which an SMT solver discharges. </br></br>
@@ -22,7 +22,7 @@ Following symbolic execution, we generate a first-order logic formula, which an 
 
 The translation of Python code starts by parsing .py files into an AST. This is achieved using the [ast](https://docs.python.org/3/library/ast.html) and [ast2json](https://pypi.org/project/ast2json/) modules, which generate the AST in JSON format. The process runs alongside the Python interpreter, producing a JSON file for each Python file, including imported modules.
 
-The main advantage of this approach is that it utilizes a native Python module, ensuring adherence to the language.
+This approach's main advantage is that it utilizes a native Python module, ensuring adherence to the language.
 
 ## Type Annotation
 
@@ -73,7 +73,7 @@ We can infer type from constants, variables with inferred or pre-annotated types
 
 
 ## Symbol Table Generation
-The final step in the frontend involves converting the annotated JSON AST into a symbol table using our C++ irep API. This API enables the creation of a control-flow graph (CFG) from the program, allowing us to model constructs such as assignments, expressions, conditionals, loops, functions, and classes. The resulting information is stored in a context structure, which serves as the input for the GOTO conversion process.
+The final step in the frontend involves converting the annotated JSON AST into a symbol table using our C++ IRep API. This API enables the creation of a control-flow graph (CFG) from the program, allowing us to model constructs such as assignments, expressions, conditionals, loops, functions, and classes. The resulting information is stored in a context structure, which serves as the input for the GOTO conversion process.
 
 ## References
 For more information about our frontend, please refer to our ISSTA 2024 [tool paper](https://dl.acm.org/doi/abs/10.1145/3650212.3685304).
