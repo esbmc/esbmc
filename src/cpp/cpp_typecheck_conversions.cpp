@@ -727,7 +727,7 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
     else if (expr.id() == "symbol")
     {
       // Can't blindly cast aggregate / composite types. NB: Nothing here
-      // actually appears to look up any custom convertors.
+      // actually appears to look up any custom converters.
       if (
         expr.type().id() == "array" || expr.type().id() == "struct" ||
         expr.type().id() == "union")
@@ -1031,7 +1031,7 @@ bool cpp_typecheckt::reference_binding(
   if (!type.subtype().cmt_constant() || type.subtype().cmt_volatile())
     return false;
 
-  // TODO: hanlde the case for implicit parameters
+  // TODO: handle the case for implicit parameters
   if (!type.subtype().cmt_constant() && !expr.cmt_lvalue())
     return false;
 

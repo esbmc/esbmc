@@ -43,7 +43,9 @@ const struct group_opt_templ all_cmd_options[] = {
    {{"quiet",
      NULL,
      "do not print unwinding information during symbolic execution"},
-    {"compact-trace", NULL, ""},
+    {"compact-trace",
+     NULL,
+     "enable --no-slice while not printing the ESBMC's internal symbol"},
     {"symex-trace", NULL, "print instructions during symbolic execution"},
     {"ssa-trace", NULL, "print SSA during SMT encoding"},
     {"ssa-smt-trace", NULL, "print generated SMT during SMT encoding"},
@@ -117,7 +119,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"all-claims", NULL, "keep all claims"},
     {"keep-verified-claims",
      NULL,
-     "do not skip verified claims in multi-property verificaiton"},
+     "do not skip verified claims in multi-property verification"},
     {"show-loops", NULL, "show the loops in the program"},
     {"show-claims", NULL, "only show claims"},
     {"show-vcc", NULL, "show the verification conditions"},
@@ -164,6 +166,9 @@ const struct group_opt_templ all_cmd_options[] = {
     {"generate-html-report",
      NULL,
      "if a violation is found, generates a HTML report"},
+    {"generate-json-report",
+     NULL,
+     "if a violation is found, generates a JSON report"},
     {"old-frontend",
      NULL,
      "parse source files using our old frontend {deprecated},"},
@@ -229,7 +234,8 @@ const struct group_opt_templ all_cmd_options[] = {
     {"goto-unwind", NULL, "unroll bounded loops at goto level"},
     {"unlimited-goto-unwind",
      NULL,
-     "do not unroll bounded loops at goto level"},
+     "do not unroll bounded loops at goto level (need to enable "
+     "--goto-unwind)"},
     {"slice-assumes", NULL, "remove unused assume statements"},
     {"extended-try-analysis", NULL, ""},
     {"skip-bmc", NULL, "do not perform bounded model checking"},
@@ -340,7 +346,7 @@ const struct group_opt_templ all_cmd_options[] = {
      "enable arithmetic over- and underflow check for unsigned integers"},
     {"ub-shift-check",
      NULL,
-     "enable undefined behaviour check on shift operations"},
+     "enable undefined behavior check on shift operations"},
     {"struct-fields-check",
      NULL,
      "enable over-sized read checks for struct fields"},
@@ -526,7 +532,7 @@ const struct group_opt_templ all_cmd_options[] = {
    {
      // Print commit hash for current binary
      {"git-hash", NULL, ""},
-     // Check if there is two or more assingments to the same SSA instruction
+     // Check if there is two or more assignments to the same SSA instruction
      {"double-assign-check", NULL, ""},
      {"no-pointer-relation-check",
       NULL,

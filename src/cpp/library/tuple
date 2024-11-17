@@ -1,6 +1,7 @@
 #pragma once
 
 #include <type_traits>
+#include "utility"
 #include "cstddef"
 
 namespace std
@@ -159,6 +160,31 @@ constexpr bool operator>=(const tuple<T1...> &lhs, const tuple<T2...> &rhs)
 {
   return !(lhs < rhs);
 }
+
+template <class T>
+struct unwrap_refwrapper
+{
+  using type = T;
+};
+
+template <class T>
+struct unwrap_refwrapper<std::reference_wrapper<T>>
+{
+  using type = T &;
+};
+
+template <class T>
+using unwrap_decay_t =
+  typename unwrap_refwrapper<typename std::decay<T>::type>::type;
+
+template <class... Types>
+constexpr // since C++14
+  tuple<unwrap_decay_t<Types>...>
+  make_tuple(Types &&...args)
+{
+  return tuple<unwrap_decay_t<Types>...>(std::forward<Types>(args)...);
+}
+
 #endif
 
 } // namespace std

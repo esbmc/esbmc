@@ -147,6 +147,9 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
   if (options.get_bool_option("generate-html-report"))
     generate_html_report("1", ns, goto_trace, opt_map);
 
+  if (options.get_bool_option("generate-json-report"))
+    generate_json_report("1", ns, goto_trace);
+
   std::ostringstream oss;
   log_fail("\n[Counterexample]\n");
   show_goto_trace(oss, ns, goto_trace);
@@ -349,6 +352,9 @@ void bmct::report_multi_property_trace(
     if (options.get_bool_option("generate-html-report"))
       generate_html_report(std::to_string(ce_counter), ns, goto_trace, opt_map);
 
+    if (options.get_bool_option("generate-json-report"))
+      generate_json_report(std::to_string(ce_counter), ns, goto_trace);
+
     std::ostringstream oss;
     log_fail("\n[Counterexample]\n");
     show_goto_trace(oss, ns, goto_trace);
@@ -429,7 +435,7 @@ smt_convt::resultt bmct::start_bmc()
   std::shared_ptr<symex_target_equationt> eq;
   smt_convt::resultt res = run(eq);
   if (!options.get_bool_option("multi-property"))
-    // multi-property trace are outputed during the run(eq)
+    // multi-property traces are output during the run(eq)
     report_trace(res, *eq);
   report_result(res);
   return res;
@@ -501,7 +507,7 @@ void bmct::bidirectional_search(
   smt_convt &smt_conv,
   const symex_target_equationt &eq)
 {
-  // We should only analyse the inductive step's cex and we're running
+  // We should only analyze the inductive step's cex and we're running
   // in k-induction mode
   if (!(options.get_bool_option("inductive-step") &&
         options.get_bool_option("k-induction")))
@@ -934,8 +940,11 @@ smt_convt::resultt bmct::multi_property_check(
       return;
 
     // Slice
-    symex_slicet slicer(options);
-    slicer.run(local_eq.SSA_steps);
+    if (!options.get_bool_option("no-slice"))
+    {
+      symex_slicet slicer(options);
+      slicer.run(local_eq.SSA_steps);
+    }
 
     if (options.get_bool_option("ssa-features-dump"))
     {
@@ -1070,7 +1079,7 @@ smt_convt::resultt bmct::multi_property_check(
         log_result("Total Assertion Instances: {}", total_instance);
       else
         // this could be
-        // 1. the loop is too large that we cannot goto-uwnind it
+        // 1. the loop is too large that we cannot goto-unwind it
         // 2. the loop is somewhat non-deterministic that we cannot run goto-unwind
         log_result("Total Assertion Instances: unknown / non-deterministic");
       log_result("Reached Assertion Instances: {}", tracked_instance);
@@ -1176,7 +1185,7 @@ smt_convt::resultt bmct::multi_property_check(
       }
     }
 
-    // the remain unreached instrumentaion are regarded as short-circuited
+    // the remain unreached instrumentations are regarded as short-circuited
     //! the reached_claims might not be empty (due to unwinding assertions)
     short_circuit_instance = total_cond_assert_cpy.size();
 

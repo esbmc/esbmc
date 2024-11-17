@@ -240,7 +240,7 @@ void goto_contractort::insert_assume_at(
 {
   /// Here we build an assume instruction with a conjunction of multiple conditions.
   /// We start with a true expression and add other conditions with and2tc
-  /// eventually, we will have somthing like: true and x>0 and x<10
+  /// eventually, we will have something like: true and x>0 and x<10
   expr2tc cond = gen_true_expr();
   for (auto const &var : map.var_map)
   {
@@ -344,7 +344,7 @@ void goto_contractort::goto_contractor_condition(
           auto goto_target = i_it->get_target();
           goto_target--;
 
-          if (goto_target->is_goto()) //tarrget-1 is goto and
+          if (goto_target->is_goto()) //target-1 is goto and
           {
             if (!goto_target->is_backwards_goto())
             {

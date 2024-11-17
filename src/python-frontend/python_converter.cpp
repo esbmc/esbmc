@@ -512,7 +512,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   bin_expr.copy_to_operands(lhs, rhs);
 
   // floor division (//) operation corresponds to an int division with floor rounding
-  // So we need to emulate this behaviour here:
+  // So we need to emulate this behavior here:
   // int result = (num/div) - (num%div != 0 && ((num < 0) ^ (den<0)) ? 1 : 0)
   // e.g.: -5//2 equals to -3, and 5//2 equals to 2
   if (op == "FloorDiv")
@@ -1080,7 +1080,7 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     typet &char_type = t.subtype();
     exprt expr = gen_zero(t);
 
-    // Initialise array
+    // Initialize array
     unsigned int i = 0;
     for (uint8_t &ch : string_literal)
     {

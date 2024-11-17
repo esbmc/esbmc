@@ -40,6 +40,7 @@ reachability_treet::reachability_treet(
   directed_interleavings = options.get_bool_option("direct-interleavings");
   interactive_ileaves = options.get_bool_option("interactive-ileaves");
   schedule = options.get_bool_option("schedule");
+  smt_during_symex = options.get_bool_option("smt-during-symex");
   por = !options.get_bool_option("no-por");
   main_thread_ended = false;
   target_template = std::move(target);
@@ -247,7 +248,7 @@ bool reachability_treet::reset_to_unexplored_state()
   if (execution_states.size() > 0)
     cur_state_it++;
 
-  if (execution_states.size() != 0)
+  if (execution_states.size() && !smt_during_symex)
   {
     // When backtracking, erase all the assertions from the equation before
     // continuing forwards. They've all already been checked, in the trace we
@@ -263,7 +264,7 @@ bool reachability_treet::reset_to_unexplored_state()
     (*cur_state_it)->remaining_claims -= num_asserts;
   }
 
-  return execution_states.size() != 0;
+  return execution_states.size();
 }
 
 void reachability_treet::go_next_state()
@@ -384,7 +385,7 @@ bool reachability_treet::dfs_position::write_to_file(
     i += 7;
     i >>= 3;
 
-    assert(i != 0); // Always at least one thread in _existance_.
+    assert(i != 0); // Always at least one thread in _existence_.
     if (fwrite(buffer, i, 1, f) != 1)
       goto fail;
   }

@@ -724,7 +724,7 @@ void array_convt::join_array_indexes()
     }
   } while (modified);
 
-  // Right -- now join all ther indexes. This can be optimised, but not now.
+  // Right -- now join all ther indexes. This can be optimized, but not now.
   for (arrid = 0; arrid < array_updates.size(); arrid++)
   {
     auto const &arrset = array_relations[arrid];
@@ -793,7 +793,7 @@ void array_convt::add_new_indexes()
     re_execute.push_back(true);
     start_pos.push_back(expr_index_map[arrid].size());
 
-    // We're guarenteed that each of these indexes are _new_ to this array.
+    // We're guaranteed that each of these indexes are _new_ to this array.
     // Enumerate them, giving them a location in the expr_index_map.
     // NB: if, actually they're not new, insert will fail, safely
     index_map_containert &idx_map = expr_index_map[arrid];
@@ -837,7 +837,7 @@ void array_convt::add_new_indexes()
     array_update_vect &array_values = array_valuation[arrid];
     smt_sortt subtype = array_subtypes[arrid];
 
-    // Fill inital values with either free variables or the initialiser
+    // Fill inital values with either free variables or the initializer
     array_of_val_containert::nth_index<0>::type &array_num_idx =
       array_of_vals.get<0>();
     auto it = array_num_idx.find(arrid);
@@ -911,7 +911,7 @@ void array_convt::apply_new_selects()
   // (through execute_new_updates).
   // That then leaves new selects that apply to previously encoded array
   // values. We can just pick those straight out of the array valuation vector.
-  // This could be optimised, but not now.
+  // This could be optimized, but not now.
 
   for (unsigned int arrid = 0; arrid < array_selects.size(); arrid++)
   {

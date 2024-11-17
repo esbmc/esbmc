@@ -365,7 +365,7 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
      to_symbol2t(func_ptr).thename.as_string().find("$object") !=
        std::string::npos))
   {
-    // Emit warning; perform no function call behaviour. Increment PC
+    // Emit warning; perform no function call behavior. Increment PC
     // XXX jmorse - no location information any more.
     log_status(
       "No target candidate for function call {}",

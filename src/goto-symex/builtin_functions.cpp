@@ -1280,7 +1280,7 @@ static inline expr2tc gen_value_by_byte(
 /**
  * @brief This function will try to initialize the object pointed by
  * the address in a smarter way, minimizing the number of assignments.
- * This is intend to optimize the behaviour of a memset operation:
+ * This is intend to optimize the behavior of a memset operation:
  *
  * memset(void* ptr, int value, size_t num_of_bytes)
  *

@@ -124,6 +124,7 @@ set(REGRESSIONS_CPP11 esbmc-cpp11/cpp
                       esbmc-cpp11/template
                       esbmc-cpp11/tuple
                       esbmc-cpp11/array
+                      esbmc-cpp11/lambda
                       )
 
 # list of C++14 test suites

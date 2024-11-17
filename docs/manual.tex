@@ -21,7 +21,7 @@
 
 This ``manual'' is supposed to be an introduction to how the ESBMC model
 checkers internals are arranged and operate. It is not supposed to be a
-comprehensive piece of documentation on the exact behaviour of particular
+comprehensive piece of documentation on the exact behavior of particular
 functions or facilities; nor will it ever, ever be up to date. Exact
 documentation on a particular function or method should be written in
 doxygen in headers; this documentation can be built to HTML by executing
@@ -114,7 +114,7 @@ program-too & Like program-only, but don't exit, instead continue
 verification.\\
 \hline
 function & Specify function to begin execution at. If function takes arguments,
-horrible undefined behaviour occurs.\\
+horrible undefined behavior occurs.\\
 \hline
 preprocess & Run the input source files through preprocessing, write the output
 to stdout, then exit. Useful for debugging.\\
@@ -126,7 +126,7 @@ false, and we end up always exploring to the top of the unwind bound.\\
 unwind & Takes integer parameter. Specifies the general unwind bound to apply
 to all loops in the program.\\
 \hline
-unwindset & Takes string parameter, a comma seperate list of loopidnum:bound
+unwindset & Takes string parameter, a comma separate list of loopidnum:bound
 pairs. Allows exact specification of a loop bound for a particular loop, see
 the show-loops option.\\
 \hline
@@ -509,7 +509,7 @@ of variable.
 of variable.
 \end{description}
 
-All behaviours of GOTO programs are described by lists of these instructions.
+All behaviors of GOTO programs are described by lists of these instructions.
 Additional annotations are stored with each instruction, for example the
 \url{function} and \url{location} fields identify where in the source
 files the instruction came from. The \url{targets} list contains a list
@@ -595,7 +595,7 @@ in the map indicates that the variable may be pointed at. The
 \url{value_sett::objectt} object records whether the offset into the
 variable that is pointed at is nondeterministic or constant; and if fixed,
 then what the offset is. (NB: the actual implementation of this stores
-\url{symbol} ireps as the map keys. To optimise this, it uses a (global)
+\url{symbol} ireps as the map keys. To optimize this, it uses a (global)
 pooling technique to assign each irep an ID number; see the
 \url{value_sett::object_numbering} object. The ID number is then used
 as the key into the \url{value_sett::entryt} map).
@@ -634,7 +634,7 @@ course of the current code path. The variables it tracks are also ``L1 renamed''
 
 It is speculated that the static analysis can be removed, and assertions
 encoded on-the-fly when dereferences occur during symbolic execution. While
-this might be a valid optimisation, the TACAS13 performance figures indicate
+this might be a valid optimization, the TACAS13 performance figures indicate
 that execution time is dominated by symex, rather than the pointer
 analysis\footnote{660 seconds ``GOTO processing'' compared to 20,000 seconds
 ``BMC time''}.
@@ -825,7 +825,7 @@ overrides a number of methods and injects logic for discovering when
 multithreading operations must occur. The logic in this class only relates
 to operations on the program state rather than interleaving exploration.
 It stores a set of thread state objects, of class
-\url{goto_symex_statet}, while some specialised information is broken out
+\url{goto_symex_statet}, while some specialized information is broken out
 into \url{execution_statet} for easy accessibility (such as what threads
 are still running, atomic blocks, startup parameters). Global program state
 is also stored here as a \url{value_sett} object to track pointer value
@@ -1463,8 +1463,8 @@ things.
 As defined by the C standard, ESBMC has a concept of naming scopes. Variables
 declared in one scope are not necessarily accessible from another. The substance
 of this is that any variable declared receives a symbol name that contains
-a series of double-colon (::) seperated components that specify its scope. All
-symbols start with ``c::'' to seperate program symbols from any internal
+a series of double-colon (::) separated components that specify its scope. All
+symbols start with ``c::'' to separate program symbols from any internal
 ESBMC modelling variables. From there, if the symbol is of internal linkage
 (i.e. declared ``static'') it has the name of the C file it originated as
 the next scope component. Then follows the global name of the symbol, i.e.
@@ -1526,7 +1526,7 @@ The frequent complication that can occur along the way is a type mistmatch.
 If we are selecting an integer out of some structure, but the pointer object
 can point at a wide range of variables, we will end up with an expression
 that attempts to select an integer out of, say, a float, or across a struct
-boundry. When this happens we can perform some limited type coercion, but
+boundary. When this happens we can perform some limited type coercion, but
 will fall back to creating a \url{byte_extract} irep if that fails. A
 \url{byte_extract} irep represents the operation of extracting a particular
 type of data from some incompatible object, at a particular offset. Rather than
