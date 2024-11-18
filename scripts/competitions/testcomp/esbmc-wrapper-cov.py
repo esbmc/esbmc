@@ -155,7 +155,7 @@ esbmc_path = "./esbmc "
 
 # ESBMC default commands: this is the same for every submission
 esbmc_dargs = "--no-div-by-zero-check --force-malloc-success --state-hashing --add-symex-value-sets "
-esbmc_dargs += "--no-align-check --k-step 2 --floatbv --unlimited-k-steps "
+esbmc_dargs += "--no-align-check --k-step 3 --floatbv --unlimited-k-steps "
 
 # <https://github.com/esbmc/esbmc/pull/1190#issuecomment-1637047028>
 esbmc_dargs += "--no-vla-size-check "
@@ -190,12 +190,12 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, coverage)
 
   # Special case for termination, it runs regardless of the strategy
   if prop == Property.coverage:
-    command_line += "--base-k-step 5 --no-bounds-check --no-pointer-check --quiet --no-standard-checks "
+    command_line += "--no-bounds-check --no-pointer-check --quiet --no-standard-checks "
     command_line += "--generate-testcase "
     if coverage == "branch":
-      command_line += "--branch-coverage "
+      command_line += "--base-k-step 2 --branch-coverage "
     elif coverage == "condition":
-      command_line += "--condition-coverage-rm --no-cov-asserts "
+      command_line += "--base-k-step 5 --branch-coverage " # "--condition-coverage-rm --no-cov-asserts "
   elif prop == Property.reach:
     command_line += "--base-k-step 5 --enable-unreachability-intrinsic "
     if concurrency:
