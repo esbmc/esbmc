@@ -321,7 +321,7 @@ void goto_symext::symex_step(reachability_treet &art)
       if (has_prefix(id.as_string(), "c:@F@__builtin"))
       {
         cur_state->source.pc++;
-        if (run_builtin(call, id.as_string()))
+        if (run_builtin(call))
           return;
       }
     }
