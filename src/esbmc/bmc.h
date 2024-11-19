@@ -47,6 +47,8 @@ protected:
 
   std::unique_ptr<smt_convt> runtime_solver;
   std::unique_ptr<reachability_treet> symex;
+  mutable std::atomic<bool> keep_alive_running;
+  mutable std::atomic<int> keep_alive_interval;
 
   virtual smt_convt::resultt
   run_decision_procedure(smt_convt &smt_conv, symex_target_equationt &eq) const;
@@ -54,6 +56,7 @@ protected:
   virtual void show_program(const symex_target_equationt &eq);
   virtual void report_success();
   virtual void report_failure();
+  virtual void keep_alive_function() const;
 
   virtual void
   error_trace(smt_convt &smt_conv, const symex_target_equationt &eq);
