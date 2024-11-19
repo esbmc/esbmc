@@ -2906,6 +2906,9 @@ bool clang_c_convertert::get_cast_expr(
   case clang::CK_LValueToRValue:
   case clang::CK_LValueBitCast:
 
+  case clang::CK_AtomicToNonAtomic:
+  case clang::CK_NonAtomicToAtomic:
+
   case clang::CK_PointerToBoolean:
   case clang::CK_PointerToIntegral:
     gen_typecast(ns, expr, type);
