@@ -577,8 +577,7 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
   }
-  else if (
-     base_name == "TDXFV_NONDET_custom_type" {
+  else if (base_name == "TDXFV_NONDET_custom_type") {
     log_error("ESBMC does not support this function");
     abort();
   }
