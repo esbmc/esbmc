@@ -493,6 +493,13 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   if (cmdline.isset("log-message"))
     options.set_option("log-message", true);
 
+  if (cmdline.isset("keep_alive_running"))
+    options.set_option("keep_alive_running", true);
+
+  if (cmdline.isset("keep-alive-interval"))
+    options.set_option(
+      "keep-alive-interval", cmdline.getval("keep-alive-interval"));
+
   config.options = options;
 }
 

@@ -180,10 +180,39 @@ void bmct::generate_smt_from_equation(
     "Encoding to solver time: {}s", time2string(encode_stop - encode_start));
 }
 
+void bmct::keep_alive_function() const
+{
+  fine_timet start_time = current_time();
+  while (keep_alive_running)
+  {
+    std::this_thread::sleep_for(std::chrono::seconds(keep_alive_interval));
+    if (!keep_alive_running)
+      break;
+
+    fine_timet alive_current = current_time();
+    // output runtime
+    log_status(
+      "Solver is still solving... Total Time: {}s",
+      time2string(alive_current - start_time));
+  }
+}
+
 smt_convt::resultt bmct::run_decision_procedure(
   smt_convt &smt_conv,
   symex_target_equationt &eq) const
 {
+  if (options.get_bool_option("enable-keep-alive"))
+  {
+    keep_alive_running = true;
+    keep_alive_interval =
+      atoi(options.get_option("keep-alive-interval").c_str());
+
+    if (keep_alive_interval <= 0)
+      keep_alive_interval = 60; // Default interval to 60 seconds
+
+    std::thread([this]() { keep_alive_function(); }).detach();
+  }
+
   generate_smt_from_equation(smt_conv, eq);
 
   if (
@@ -200,6 +229,7 @@ smt_convt::resultt bmct::run_decision_procedure(
   fine_timet sat_start = current_time();
   smt_convt::resultt dec_result = smt_conv.dec_solve();
   fine_timet sat_stop = current_time();
+  keep_alive_running = false;
 
   // output runtime
   log_status(
@@ -412,9 +442,9 @@ void bmct::report_result(smt_convt::resultt &res)
     }
     break;
 
-  // Return failure if we didn't actually check anything, we just emitted the
-  // test information to an SMTLIB formatted file. Causes esbmc to quit
-  // immediately (with no error reported)
+    // Return failure if we didn't actually check anything, we just emitted the
+    // test information to an SMTLIB formatted file. Causes esbmc to quit
+    // immediately (with no error reported)
   case smt_convt::P_SMTLIB:
     return;
 
