@@ -13,6 +13,7 @@
 #include <util/options.h>
 #include <util/algorithms.h>
 #include <util/cmdline.h>
+#include <atomic>
 
 class bmct
 {
