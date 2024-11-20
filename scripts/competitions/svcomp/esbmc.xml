@@ -75,6 +75,12 @@
     <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
   </tasks>
 
+  <tasks name="SoftwareSystems-Intel-TDX-Module">
+    <includesfile>$HOME/sv-benchmarks/c/SoftwareSystems-Intel-TDX-Module.set</includesfile>
+    <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
+  </tasks>
+  
+
   <tasks name="SoftwareSystems-AWS-C-Common-ReachSafety">
     <includesfile>$HOME/sv-benchmarks/c/SoftwareSystems-AWS-C-Common-ReachSafety.set</includesfile>
     <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>

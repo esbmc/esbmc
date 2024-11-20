@@ -67,6 +67,7 @@ on:
         - MemSafety-LinkedLists
         - MemSafety-Other
         - MemSafety-Juliet
+        - SoftwareSystems-Intel-TDX-Module
         - SoftwareSystems-AWS-C-Common-ReachSafety
         - SoftwareSystems-BusyBox-ReachSafety
         - SoftwareSystems-BusyBox-MemSafety
