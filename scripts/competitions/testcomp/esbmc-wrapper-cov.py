@@ -190,7 +190,8 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, coverage)
 
   # Special case for termination, it runs regardless of the strategy
   if prop == Property.coverage:
-    command_line += "--base-k-step 5 --no-bounds-check --no-pointer-check --quiet --no-standard-checks "
+    command_line += "--base-k-step 2 --no-bounds-check --no-pointer-check --quiet --no-standard-checks "
+    command_line += "-Wno-incompatible-pointer-types -Wno-int-conversion "
     command_line += "--generate-testcase "
     if coverage == "branch":
       command_line += "--branch-coverage "
