@@ -299,6 +299,16 @@ void value_sett::get_value_set_rec(
     // to).
     const address_of2t &addrof = to_address_of2t(expr);
     get_reference_set(addrof.ptr_obj, dest);
+
+    // @rafael, we *also* need to check the values of such references as
+    // we might be dealing with the address of a pointer :)
+    // See GitHub #2153
+    // NOTE: THIS COMPLETELY BREAKS CPP, do not merge
+    for (const auto &it1 : dest)
+    {
+      const expr2tc &object = object_numbering[it1.first];
+      get_value_set_rec(object, dest, suffix, original_type);
+    }
     return;
   }
 
