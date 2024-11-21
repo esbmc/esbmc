@@ -479,6 +479,13 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
   if (get_type(vd.getType(), t))
     return true;
 
+  clang::VarDecl::TLSKind kind = vd.getTLSKind();
+  if (kind != clang::VarDecl::TLS_None)
+  {
+    log_error("ESBMC currently does not support thread-local storage");
+    return true;
+  }
+
   // Check if we annotated it to have an infinity size
   bool no_slice = false;
   if (vd.hasAttrs())
