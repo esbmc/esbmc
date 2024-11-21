@@ -8,7 +8,8 @@
 #include <assert.h>
 
 #undef errno
-extern _Thread_local int errno;
+// TODO: fix Thread-Local Storage _Thread_local
+extern int errno;
 
 #undef exit
 #undef abort

@@ -4,7 +4,8 @@
 #include <errno.h>
 
 #undef errno
-extern _Thread_local int errno;
+// TODO: fix Thread-Local Storage _Thread_local
+extern int errno;
 
 #define NEXTAFTER(suff, dbl, ui)                                               \
   dbl nextafter##suff(dbl x, dbl y)                                            \
