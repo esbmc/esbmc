@@ -1234,7 +1234,8 @@ void goto_symext::add_memory_leak_checks()
     // is described by a separate "allocation_guard".
     // (see "symex_mem" method in "goto-symex/builtin_functions.cpp").
     expr2tc cond = implies2tc(when, eq);
-
+    if (no_memory_cleanup_check)
+      cond = when;
     replace_dynamic_allocation(cond);
     cur_state->rename(cond);
     claim(
