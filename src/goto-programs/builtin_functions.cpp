@@ -490,9 +490,11 @@ void goto_convertt::do_function_call_symbol(
       "Function `{}' type mismatch: expected code", id2string(identifier));
   }
 
+  std::string base_name = symbol->name.as_string();
+
   // If the symbol is not nil, i.e., the user defined the expected behavior of
   // the builtin function, we should honor the user function and call it
-  if (symbol->value.is_not_nil())
+  if (symbol->value.is_not_nil() && base_name != "TDXFV_NONDET_custom_type")
   {
     // insert function call
     code_function_callt function_call;
@@ -504,8 +506,6 @@ void goto_convertt::do_function_call_symbol(
     copy(function_call, FUNCTION_CALL, dest);
     return;
   }
-
-  std::string base_name = symbol->name.as_string();
 
   bool is_assume =
     (base_name == "__ESBMC_assume") || (base_name == "__VERIFIER_assume");
@@ -577,10 +577,13 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
   }
-  else if (base_name == "TDXFV_NONDET_custom_type") {
+#if 0
+  else if (base_name == "TDXFV_NONDET_custom_type")
+  {
     log_error("ESBMC does not support this function");
     abort();
   }
+#endif
   else if (
     base_name == "__VERIFIER_error" || base_name == "reach_error" ||
     base_name == "__builtin_unreachable")
