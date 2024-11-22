@@ -222,7 +222,7 @@ def get_result_string(the_result):
   exit(0)
 
 # strings
-esbmc_path = "./esbmc "
+esbmc_path = "esbmc "
 
 # ESBMC default commands: this is the same for every submission
 esbmc_dargs = "--no-div-by-zero-check --force-malloc-success --state-hashing --add-symex-value-sets "
@@ -252,11 +252,11 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
   else:
     command_line += "--64 "
 
-  concurrency = ((prop in (Property.reach, Property.datarace)) and
+  concurrency = ((prop in (Property.reach, Property.datarace, Property.memory)) and
                  check_if_benchmark_contains_pthread(benchmark))
 
   if concurrency:
-    command_line += " --no-por --context-bound 2 "
+    command_line += " --no-por --context-bound 3 "
     #command_line += "--no-slice " # TODO: Witness validation is only working without slicing
 
   # Add witness arg
