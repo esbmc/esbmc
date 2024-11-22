@@ -881,6 +881,9 @@ protected:
   /** Flag as to whether we're pruning the objects from the memory leak check
    *  that are still reachable via global pointers. Corresponds to the option
    *  --no-reachable-memory-leak */
+  bool no_memory_cleanup_check;
+  /** Flag to disable memory cleanup check
+   */
   bool no_reachable_memleak;
   /** Flag as to whether we're checking user assertions. Corresponds to
    *  the option --no-assertions */
@@ -909,9 +912,6 @@ protected:
   /** Set of dereference state records; this field is used as a mailbox between
    *  the dereference code and the caller, who will inspect the contents after
    *  a call to dereference (in INTERNAL mode) completes. */
-  bool no_memory_cleanup_check;
-  /** Flag to disable memory cleanup check
-   */
   std::list<dereference_callbackt::internal_item> internal_deref_items;
 
   friend void build_goto_symex_classes();
