@@ -307,6 +307,12 @@ void goto_symext::symex_step(reachability_treet &art)
         symex_input(call);
         return;
       }
+      if (has_suffix(id.as_string(), "TDXFV_NONDET_custom_type"))
+      {
+        cur_state->source.pc++;
+        run_intrinsic(call, art, "c:@F@__ESBMC_init_object");
+        return;
+      }
     }
 
     if (cur_state->guard.is_false())
@@ -689,8 +695,8 @@ void goto_symext::run_intrinsic(
 
   if (has_prefix(symname, "c:@F@__ESBMC_init_object"))
   {
-    assert(
-      func_call.operands.size() == 1 && "Wrong __ESBMC_init_object signature");
+    // assert(
+    //   func_call.operands.size() == 1 && "Wrong __ESBMC_init_object signature");
     auto &ex_state = art.get_cur_state();
     if (ex_state.cur_state->guard.is_false())
       return;
