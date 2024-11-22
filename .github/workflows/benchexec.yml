@@ -17,7 +17,7 @@ on:
       svbenchmarks:
         description: 'Git branch, tag, or commit of SV-Benchmarks to use'
         required: true
-        default: 'svcomp24'      	
+        default: 'main'      	
       mode:
         type: choice
         description: Benchexec run mode
@@ -29,12 +29,12 @@ on:
         type: choice
         description: Run-set to use (be sure to set mode to "RunSet")
         options:
-        - SV-COMP24_unreach-call
-        - SV-COMP24_no-data-race
-        - SV-COMP24_valid-memcleanup
-        - SV-COMP24_valid-memsafety
-        - SV-COMP24_termination
-        - SV-COMP24_no-overflow
+        - SV-COMP25_unreach-call
+        - SV-COMP25_no-data-race
+        - SV-COMP25_valid-memcleanup
+        - SV-COMP25_valid-memsafety
+        - SV-COMP25_termination
+        - SV-COMP25_no-overflow
         - Custom
       task:
         type: choice
@@ -56,35 +56,36 @@ on:
         - ReachSafety-Hardness
         - ReachSafety-Fuzzle
         - ConcurrencySafety-Main
-        - ConcurrencySafety-MemSafety
-        - ConcurrencySafety-NoOverflows
+        - SoftwareSystems-AWS-C-Common-ReachSafety
+        - SoftwareSystems-DeviceDriversLinux64-ReachSafety
+        - SoftwareSystems-DeviceDriversLinux64Large-ReachSafety
+        - SoftwareSystems-Other-ReachSafety
+        - SoftwareSystems-uthash-ReachSafety
+        - SoftwareSystems-Intel-TDX-Module-ReachSafety
         - NoDataRace-Main
-        - NoOverflows-Main
-        - NoOverflows-Juliet
         - MemSafety-MemCleanup
+        - SoftwareSystems-uthash-MemCleanup
         - MemSafety-Arrays
         - MemSafety-Heap
         - MemSafety-LinkedLists
         - MemSafety-Other
         - MemSafety-Juliet
-        - SoftwareSystems-AWS-C-Common-ReachSafety
-        - SoftwareSystems-BusyBox-ReachSafety
-        - SoftwareSystems-BusyBox-MemSafety
-        - SoftwareSystems-BusyBox-NoOverflows
-        - SoftwareSystems-coreutils-ReachSafety
         - SoftwareSystems-coreutils-MemSafety
-        - SoftwareSystems-coreutils-NoOverflows
-        - SoftwareSystems-DeviceDriversLinux64-ReachSafety
         - SoftwareSystems-DeviceDriversLinux64-MemSafety
-        - SoftwareSystems-DeviceDriversLinux64Large-ReachSafety
-        - SoftwareSystems-uthash-ReachSafety
+        - SoftwareSystems-Other-MemSafety
         - SoftwareSystems-uthash-MemSafety
+        - ConcurrencySafety-MemSafety
+        - NoOverflows-Main
+        - NoOverflows-Juliet
+        - SoftwareSystems-BusyBox-NoOverflows
+        - SoftwareSystems-coreutils-NoOverflows
         - SoftwareSystems-uthash-NoOverflows
-        - SoftwareSystems-OpenBSD-MemSafety
+        - ConcurrencySafety-NoOverflows
         - Termination-BitVectors
         - Termination-MainControlFlow
         - Termination-MainHeap
         - Termination-Other
+        - SoftwareSystems-DeviceDriversLinux64-Termination
       cpachecker:
             description: "Run CPAChecker for violation witness validation"
             required: true
