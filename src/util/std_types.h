@@ -216,7 +216,7 @@ extern inline const struct_union_typet &to_struct_union_type(const typet &type)
 {
   assert(
     type.id() == typet::t_struct || type.id() == typet::t_union ||
-    type.id() == typet::t_class);
+    type.id() == typet::t_class || type.id() == "incomplete_struct");
   return static_cast<const struct_union_typet &>(type);
 }
 
@@ -224,7 +224,7 @@ extern inline struct_union_typet &to_struct_union_type(typet &type)
 {
   assert(
     type.id() == typet::t_struct || type.id() == typet::t_union ||
-    type.id() == typet::t_class);
+    type.id() == typet::t_class || type.id() == "incomplete_struct");
   return static_cast<struct_union_typet &>(type);
 }
 
