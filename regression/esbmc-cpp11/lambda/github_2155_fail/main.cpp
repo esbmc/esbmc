@@ -1,3 +1,5 @@
+#include <cassert>
+
 class classA
 {
 public:
@@ -24,6 +26,7 @@ public:
 int main()
 {
   classB obj;
-  obj.foo();
+  assert(obj.foo() == false);
+
   return 0;
 }
