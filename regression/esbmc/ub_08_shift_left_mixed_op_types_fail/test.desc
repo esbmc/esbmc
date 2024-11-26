@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.cpp
 --ub-shift-check --no-slice --no-simplify --multi-property --unwind 1
 Violated property:
