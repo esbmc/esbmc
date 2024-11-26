@@ -33,6 +33,11 @@ void show_symbol_table_plain(const namespacet &ns, std::ostream &out)
     out << "Base name...: " << s.name << "\n";
     out << "Mode........: " << s.mode << "\n";
     out << "Type........: " << type_str << "\n";
+    if (s.type.is_struct())
+    {
+      out << "Components..: " << to_struct_type(s.type).pretty(0) << "\n";
+    }
+
     out << "Value.......: " << value_str << "\n";
     out << "Flags.......:";
 
