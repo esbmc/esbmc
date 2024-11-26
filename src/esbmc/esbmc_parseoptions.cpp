@@ -349,7 +349,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     cmdline.isset("smt-thread-guard") || cmdline.isset("smt-symex-guard") ||
     cmdline.isset("smt-symex-assert"))
   {
-    log_status("Enabling --smt-during-symex to use features that involve encoding SMT during symex");
+    log_status(
+      "Enabling --smt-during-symex to use features that involve encoding SMT "
+      "during symex");
     options.set_option("smt-during-symex", true);
   }
 
