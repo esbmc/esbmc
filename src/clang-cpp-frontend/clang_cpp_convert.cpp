@@ -997,9 +997,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           *lambda_expr.getLambdaClass()->getTypeForDecl(), lambda_class_type))
       return true;
 
-    const struct_union_typet &this_type =
-      to_struct_union_type(ns.follow(lambda_class_type));
-    exprt sym("struct", this_type);
+    exprt sym("struct", lambda_class_type);
     for (const auto &it : lambda_expr.capture_inits())
     {
       exprt init;
