@@ -1336,13 +1336,23 @@ bool clang_cpp_convertert::get_function_body(
 
         if (!init->isBaseInitializer())
         {
-          if (init->isMemberInitializer())
+          // parsing non-static member initializer
+          if (init->isAnyMemberInitializer())
           {
+            exprt this_expr;
+            get_this_expr(ftype.arguments().at(0).type(), this_expr);
             exprt lhs;
             lhs.set("#member_init", 1);
-            // parsing non-static member initializer
-            if (get_decl_ref(*init->getMember(), lhs))
-              return true;
+            if (init->isMemberInitializer())
+            {
+              if (get_field_ref(*init->getMember(), lhs, this_expr))
+                return true;
+            }
+            else if (init->isIndirectMemberInitializer())
+            {
+              if (get_field_ref(*init->getIndirectMember(), lhs, this_expr))
+                return true;
+            }
             assert(lhs.is_member());
             assert(
               has_suffix(
@@ -1701,6 +1711,112 @@ bool clang_cpp_convertert::get_template_decl(
       return true;
 
   return false;
+}
+
+bool clang_cpp_convertert::get_field_ref(
+  const clang::ValueDecl &vd,
+  exprt &new_expr,
+  exprt &base)
+{
+  if (const auto *fd = llvm::dyn_cast<clang::FieldDecl>(&vd))
+  {
+    const auto *cxxrd = llvm::dyn_cast<clang::CXXRecordDecl>(fd->getParent());
+    if (cxxrd)
+    {
+      // Everything else should be a value decl
+      std::string field_name, field_id;
+      get_decl_name(*fd, field_name, field_id);
+
+      typet field_type;
+      if (get_type(fd->getType(), field_type, true))
+        return true;
+
+      std::string class_name, class_id;
+      get_decl_name(*cxxrd, class_name, class_id);
+
+      typet class_type;
+      if (get_type(*cxxrd->getTypeForDecl(), class_type, true))
+      {
+        return true;
+      }
+
+      exprt base_expr;
+      if (!cxxrd->isCLike() && !cxxrd->isUnion())
+      {
+        typet data_object_type;
+        cpp_data_object::get_data_object_symbol_type(
+          class_id, data_object_type);
+        assert(!class_type.is_pointer());
+        exprt data_object_member = member_exprt(
+          base,
+          class_name + cpp_data_object::data_object_suffix,
+          data_object_type);
+        data_object_member.name(
+          class_name + cpp_data_object::data_object_suffix);
+        base_expr.swap(data_object_member);
+      }
+      else
+      {
+        base_expr.swap(base);
+      }
+
+      new_expr = member_exprt(base_expr, field_name, field_type);
+      new_expr.identifier(field_id);
+      new_expr.cmt_lvalue(true);
+      new_expr.name(field_name);
+      return false;
+    }
+    else
+    {
+      std::ostringstream oss;
+      llvm::raw_os_ostream ross(oss);
+      ross << "Conversion of unsupported non c++ clang field ref: \"";
+      ross << vd.getDeclKindName() << "\" to expression"
+           << "\n";
+      vd.dump(ross);
+      ross.flush();
+      log_error("{}", oss.str());
+      return true;
+    }
+  }
+  else if (const auto *ifd = llvm::dyn_cast<clang::IndirectFieldDecl>(&vd))
+  {
+    std::string name, id;
+    get_decl_name(*ifd, name, id);
+
+    typet type;
+    if (get_type(ifd->getType(), type, true))
+      return true;
+
+    // Indirect fields can be nested, so we need to follow the chain
+    exprt ref_to_containing_field;
+    for (auto chain_element : ifd->chain())
+    {
+      auto containing_field = clang::dyn_cast<clang::ValueDecl>(chain_element);
+      assert(containing_field);
+
+      if (get_field_ref(*containing_field, ref_to_containing_field, base))
+        return true;
+      ref_to_containing_field.dump();
+      base = ref_to_containing_field;
+    }
+
+    ref_to_containing_field.dump();
+    new_expr.swap(ref_to_containing_field);
+    return false;
+  }
+  else
+  {
+    std::ostringstream oss;
+    llvm::raw_os_ostream ross(oss);
+    ross << "Conversion of unsupported clang field ref: \"";
+    ross << vd.getDeclKindName() << "\" to expression"
+         << "\n";
+    vd.dump(ross);
+    ross.flush();
+    log_error("{}", oss.str());
+    return true;
+  }
 }
 
 bool clang_cpp_convertert::get_decl_ref(
