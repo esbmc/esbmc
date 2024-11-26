@@ -327,7 +327,7 @@ protected:
  * @param expected_this_type The expected type of the `this` pointer for validation.
  * @param this_expr The expression object where the `this` expression will be stored.
  */
-  virtual void get_this_expr(typet &expected_this_type, exprt &this_expr);
+  virtual void get_this_expr(const typet &expected_this_type, exprt &this_expr);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

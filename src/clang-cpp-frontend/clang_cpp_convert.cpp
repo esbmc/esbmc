@@ -652,7 +652,7 @@ bool clang_cpp_convertert::get_struct_union_class_methods_decls(
 }
 
 void clang_cpp_convertert::get_this_expr(
-  typet &expected_this_type,
+  const typet &expected_this_type,
   exprt &new_expr)
 {
   std::size_t address =

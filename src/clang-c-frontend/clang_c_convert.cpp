@@ -1508,7 +1508,7 @@ bool clang_c_convertert::get_builtin_type(
   return false;
 }
 
-void clang_c_convertert::get_this_expr(typet &, exprt &)
+void clang_c_convertert::get_this_expr(const typet &, exprt &)
 {
   // Does nothing for C
 }

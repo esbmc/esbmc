@@ -566,7 +566,7 @@ protected:
     const clang::CXXConstructorDecl &cxxcd,
     code_typet::argumentst &params);
   void create_data_object_type(const clang::RecordDecl &rd);
-  void get_this_expr(typet &expected_this_type, exprt &new_expr) override;
+  void get_this_expr(const typet &expected_this_type, exprt &new_expr) override;
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
