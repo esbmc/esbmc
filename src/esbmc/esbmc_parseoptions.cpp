@@ -345,7 +345,7 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("no-slice", true);
   }
 
-  if (cmdline.isset("smt-thread-guard") || cmdline.isset("smt-symex-guard"))
+  if (cmdline.isset("smt-thread-guard") || cmdline.isset("smt-symex-guard") || cmdline.isset("smt-symex-assert"))
   {
     if (!cmdline.isset("smt-during-symex"))
     {
