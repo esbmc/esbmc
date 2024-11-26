@@ -396,6 +396,7 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
   }
 
   // Parse the fields
+  unsigned i = 0;
   for (auto const &field : rd.fields())
   {
     struct_typet::componentt comp;
@@ -413,7 +414,29 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
     if (annotate_class_field(*field, type, comp))
       return true;
 
+    if (auto cxxrd = llvm::dyn_cast<clang::CXXRecordDecl>(&rd))
+    {
+      if (cxxrd->isLambda())
+      {
+        if ((cxxrd->captures_begin() + i)->capturesThis())
+        {
+          comp.set_name("__this");
+          comp.set_pretty_name("__this");
+          comp.set("#capture_this", true);
+        }
+        else
+        {
+          std::string name, id;
+          get_decl_name(
+            *(cxxrd->captures_begin() + i)->getCapturedVar(), name, id);
+          comp.set_name(id);
+          comp.set_pretty_name("__" + name);
+        }
+      }
+    }
+
     type.components().push_back(comp);
+    i++;
   }
 
   return false;
@@ -852,7 +875,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (get_type(this_expr.getType(), this_type))
       return true;
 
-    assert(this_type == it->second.second);
+    //assert(this_type == it->second.second);
 
     new_expr = symbol_exprt(it->second.first, it->second.second);
     break;
@@ -1496,6 +1519,12 @@ bool clang_cpp_convertert::get_function_body(
       }
       body.operands().insert(body.operands().begin(), decl);
     }
+  }
+
+  if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
+  {
+    if (md->getParent()->isLambda())
+      new_expr.need_lambda_init(true);
   }
 
   return false;

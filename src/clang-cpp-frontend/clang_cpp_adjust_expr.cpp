@@ -59,6 +59,45 @@ void clang_cpp_adjust::gen_implicit_union_copy_move_constructor(symbolt &symbol)
   ctor_body.operands().push_back(copy_ctor_assign);
 }
 
+void clang_cpp_adjust::gen_lambda_operator(symbolt &symbol)
+{
+  if (!symbol.value.need_lambda_init())
+    return;
+
+  code_typet &type = to_code_type(symbol.type);
+  code_blockt &body = to_code_block(to_code(symbol.value));
+
+  exprt this_ptr = symbol_exprt(
+    type.arguments().at(0).get("#identifier"), type.arguments()[0].type());
+
+  const typet &class_symb = ns.follow(type.arguments()[0].type().subtype());
+
+  const struct_typet::componentst &components =
+    to_struct_type(class_symb).components();
+
+  for (const auto &c : components)
+  {
+    if (c.get_bool("#capture_this"))
+    {
+      // this->__this->data
+      exprt deref = dereference_exprt(this_ptr, this_ptr.type());
+      exprt dest = member_exprt(deref, c.get_name(), c.type());
+      exprt memderef = dereference_exprt(dest, dest.type());
+
+      replace_capture_this(memderef, body);
+    }
+  }
+}
+
+void clang_cpp_adjust::replace_capture_this(const exprt &expr, exprt &dest)
+{
+  if (dest.is_dereference())
+    dest = expr;
+  else
+    Forall_operands (it, dest)
+      replace_capture_this(expr, *it);
+}
+
 void clang_cpp_adjust::adjust_symbol(symbolt &symbol)
 {
   clang_c_adjust::adjust_symbol(symbol);
@@ -71,6 +110,7 @@ void clang_cpp_adjust::adjust_symbol(symbolt &symbol)
    */
   gen_vptr_initializations(symbol);
   gen_implicit_union_copy_move_constructor(symbol);
+  gen_lambda_operator(symbol);
 }
 
 void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
@@ -151,7 +191,27 @@ void clang_cpp_adjust::adjust_member(member_exprt &expr)
   if (expr.type().is_code() && !expr.get_string("component_name").empty())
   {
     adjust_cpp_member(expr);
+    //return;
   }
+
+  // if (expr.op0().type().get_bool("#constant"))
+  // {
+  //   typet t = ns.follow(expr.op0().type());
+
+  //   irep_idt name;
+  //   typet at;
+  //   for (const auto &c : to_struct_union_type(t).components())
+  //   {
+  //     if (c.get_pretty_name() == "__this")
+  //     {
+  //       name = c.get_name();
+  //       at = c.type();
+  //       break;
+  //     }
+  //   }
+  //   member_exprt tmp = member_exprt(expr.op0(), name, at);
+  //   expr.op0() = dereference_exprt(tmp, tmp.type());
+  // }
 }
 
 void clang_cpp_adjust::adjust_cpp_pseudo_destructor_call(exprt &expr)
