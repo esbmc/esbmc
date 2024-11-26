@@ -349,13 +349,8 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     cmdline.isset("smt-thread-guard") || cmdline.isset("smt-symex-guard") ||
     cmdline.isset("smt-symex-assert"))
   {
-    if (!cmdline.isset("smt-during-symex"))
-    {
-      log_error(
-        "Please explicitly specify --smt-during-symex if you want "
-        "to use features that involve encoding SMT during symex");
-      abort();
-    }
+    log_status("Enabling --smt-during-symex to use features that involve encoding SMT during symex");
+    options.set_option("smt-during-symex", true);
   }
 
   // check the user's parameters to run incremental verification
