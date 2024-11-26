@@ -4,6 +4,7 @@
 #include "util/std_types.h"
 #include "util/namespace.h"
 #include <string>
+#include <utility>
 
 /**
  * @class cpp_data_object
@@ -68,6 +69,23 @@ public:
   static void get_data_object_symbol_type(
     const std::string &class_name,
     typet &data_object_symbol_type);
+
+  /**
+   * @brief Retrieves the type that contains the specified data object component.
+   * For non-virtual bases, the containing type is the data object type for `type`.
+   * For virtual bases, the containing type is `type` itself.
+   * E.g. Searching for "B" (non-virtual base) in the type "C" would return {C\@data_object, B\@data_object}
+   * while searching for "A" (virtual base) in the type "C" would return {C, A\@data_object}.
+   * @param type the struct type to search for the data object.
+   * @param data_object_name the name of the data object component to search for without `\@data_object`.
+   * @param ns used resolve symbol types.
+   * @return a pair containing the type that contains the data object and the data object component.
+   */
+  static std::pair<const typet &, struct_union_typet::componentt>
+  get_data_object(
+    const typet &type,
+    const dstring &data_object_name,
+    const namespacet &ns);
 };
 
 #endif //ESBMC_CPP_DATA_OBJECT_H

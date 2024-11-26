@@ -25,3 +25,48 @@ void cpp_data_object::get_data_object_symbol_type(
   assert(symbol_type.is_symbol());
   data_object_symbol_type = symbol_type;
 }
+std::pair<const typet &, struct_union_typet::componentt>
+cpp_data_object::get_data_object(
+  const typet &type,
+  const dstring &data_object_name,
+  const namespacet &ns)
+{
+  struct_typet struct_type = to_struct_type(type);
+  bool found = false;
+  for (const auto &component : struct_type.components())
+  {
+    if (!has_suffix(component.name(), cpp_data_object::data_object_suffix))
+    {
+      continue;
+    }
+    const dstring &own_data_object_name = component.name();
+    const typet &data_object_type = component.type();
+    if (
+      own_data_object_name ==
+      type.tag().as_string() + cpp_data_object::data_object_suffix)
+    {
+      // This is the data object for `type` itself that contains all non-virtual base data objects
+      // Recurse to find the component in the data object
+      const struct_typet &data_object_type_followed =
+        to_struct_type(ns.follow(data_object_type));
+      for (const auto &comp : data_object_type_followed.components())
+      {
+        if (
+          (comp.name() == data_object_name.as_string() +
+                            cpp_data_object::data_object_suffix) ||
+          (comp.name() == data_object_name && comp.get_bool("#is_c_like")))
+        {
+          return {data_object_type_followed, comp};
+        }
+      }
+    }
+    else if (
+      own_data_object_name ==
+      data_object_name.as_string() + cpp_data_object::data_object_suffix)
+    {
+      // This is the data object for a virtual base
+      return {type, component};
+    }
+  }
+  abort();
+}
