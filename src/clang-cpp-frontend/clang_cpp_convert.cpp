@@ -420,7 +420,6 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
       {
         if ((cxxrd->captures_begin() + i)->capturesThis())
         {
-          comp.set_name("__this");
           comp.set_pretty_name("__this");
           comp.set("#capture_this", true);
         }
@@ -429,7 +428,6 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
           std::string name, id;
           get_decl_name(
             *(cxxrd->captures_begin() + i)->getCapturedVar(), name, id);
-          comp.set_name(id);
           comp.set_pretty_name("__" + name);
         }
       }
@@ -870,12 +868,6 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         clang_c_convertert::get_decl_name(*current_functionDecl));
       abort();
     }
-
-    typet this_type;
-    if (get_type(this_expr.getType(), this_type))
-      return true;
-
-    //assert(this_type == it->second.second);
 
     new_expr = symbol_exprt(it->second.first, it->second.second);
     break;

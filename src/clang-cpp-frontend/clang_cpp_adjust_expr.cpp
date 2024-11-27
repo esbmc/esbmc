@@ -65,6 +65,10 @@ void clang_cpp_adjust::gen_lambda_operator(symbolt &symbol)
     return;
 
   code_typet &type = to_code_type(symbol.type);
+
+  if (type.return_type().id() == "constructor")
+    return;
+
   code_blockt &body = to_code_block(to_code(symbol.value));
 
   exprt this_ptr = symbol_exprt(
@@ -82,7 +86,8 @@ void clang_cpp_adjust::gen_lambda_operator(symbolt &symbol)
       // this->__this->data
       exprt deref = dereference_exprt(this_ptr, this_ptr.type());
       exprt dest = member_exprt(deref, c.get_name(), c.type());
-      exprt memderef = dereference_exprt(dest, dest.type());
+      exprt memderef =
+        dest.type().is_pointer() ? dereference_exprt(dest, dest.type()) : dest;
 
       replace_capture_this(memderef, body);
     }
@@ -191,27 +196,7 @@ void clang_cpp_adjust::adjust_member(member_exprt &expr)
   if (expr.type().is_code() && !expr.get_string("component_name").empty())
   {
     adjust_cpp_member(expr);
-    //return;
   }
-
-  // if (expr.op0().type().get_bool("#constant"))
-  // {
-  //   typet t = ns.follow(expr.op0().type());
-
-  //   irep_idt name;
-  //   typet at;
-  //   for (const auto &c : to_struct_union_type(t).components())
-  //   {
-  //     if (c.get_pretty_name() == "__this")
-  //     {
-  //       name = c.get_name();
-  //       at = c.type();
-  //       break;
-  //     }
-  //   }
-  //   member_exprt tmp = member_exprt(expr.op0(), name, at);
-  //   expr.op0() = dereference_exprt(tmp, tmp.type());
-  // }
 }
 
 void clang_cpp_adjust::adjust_cpp_pseudo_destructor_call(exprt &expr)
