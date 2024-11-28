@@ -414,6 +414,8 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
     if (annotate_class_field(*field, type, comp))
       return true;
 
+    // Tag the components in the lambda to
+    // find capture this and other var names
     if (auto cxxrd = llvm::dyn_cast<clang::CXXRecordDecl>(&rd))
     {
       if (cxxrd->isLambda())
@@ -854,9 +856,6 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
   case clang::Stmt::CXXThisExprClass:
   {
-    const clang::CXXThisExpr &this_expr =
-      static_cast<const clang::CXXThisExpr &>(stmt);
-
     std::size_t address =
       reinterpret_cast<std::size_t>(current_functionDecl->getFirstDecl());
 
@@ -1513,6 +1512,8 @@ bool clang_cpp_convertert::get_function_body(
     }
   }
 
+  // Mark the member functions of the lambda class
+  // in order to adjust the body function later
   if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
   {
     if (md->getParent()->isLambda())

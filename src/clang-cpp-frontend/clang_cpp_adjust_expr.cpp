@@ -72,7 +72,7 @@ void clang_cpp_adjust::gen_lambda_operator(symbolt &symbol)
   code_blockt &body = to_code_block(to_code(symbol.value));
 
   exprt this_ptr = symbol_exprt(
-    type.arguments().at(0).get("#identifier"), type.arguments()[0].type());
+    type.arguments()[0].get("#identifier"), type.arguments()[0].type());
 
   const typet &class_symb = ns.follow(type.arguments()[0].type().subtype());
 
@@ -83,7 +83,10 @@ void clang_cpp_adjust::gen_lambda_operator(symbolt &symbol)
   {
     if (c.get_bool("#capture_this"))
     {
-      // this->__this->data
+      // the clang declares the original variable (this->data)
+      // releace 'this->data' with 'this->__this->data'
+      // which this = this ptr of lambda and
+      // __this = capture this
       exprt deref = dereference_exprt(this_ptr, this_ptr.type());
       exprt dest = member_exprt(deref, c.get_name(), c.type());
       exprt memderef =
