@@ -794,6 +794,10 @@ protected:
    *  @return Reference to global nondet object counter.
    */
   virtual unsigned int &get_nondet_counter() = 0;
+  /**
+   *  Incrementally check the assumption.
+   */
+  bool is_assume_false(const expr2tc &assumption);
 
   // Members
 

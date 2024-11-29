@@ -1,0 +1,4 @@
+CORE
+main.c
+--no-por --smt-symex-assume
+^VERIFICATION FAILED$
