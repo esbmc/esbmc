@@ -59,6 +59,53 @@ void clang_cpp_adjust::gen_implicit_union_copy_move_constructor(symbolt &symbol)
   ctor_body.operands().push_back(copy_ctor_assign);
 }
 
+void clang_cpp_adjust::gen_lambda_operator(symbolt &symbol)
+{
+  if (!symbol.value.need_lambda_init())
+    return;
+
+  code_typet &type = to_code_type(symbol.type);
+
+  if (type.return_type().id() == "constructor")
+    return;
+
+  code_blockt &body = to_code_block(to_code(symbol.value));
+
+  exprt this_ptr = symbol_exprt(
+    type.arguments()[0].get("#identifier"), type.arguments()[0].type());
+
+  const typet &class_symb = ns.follow(type.arguments()[0].type().subtype());
+
+  const struct_typet::componentst &components =
+    to_struct_type(class_symb).components();
+
+  for (const auto &c : components)
+  {
+    if (c.get_bool("#capture_this"))
+    {
+      // the clang declares the original variable (this->data)
+      // releace 'this->data' with 'this->__this->data'
+      // which this = this ptr of lambda and
+      // __this = capture this
+      exprt deref = dereference_exprt(this_ptr, this_ptr.type());
+      exprt dest = member_exprt(deref, c.get_name(), c.type());
+      exprt memderef =
+        dest.type().is_pointer() ? dereference_exprt(dest, dest.type()) : dest;
+
+      replace_capture_this(memderef, body);
+    }
+  }
+}
+
+void clang_cpp_adjust::replace_capture_this(const exprt &expr, exprt &dest)
+{
+  if (dest.is_dereference())
+    dest = expr;
+  else
+    Forall_operands (it, dest)
+      replace_capture_this(expr, *it);
+}
+
 void clang_cpp_adjust::adjust_symbol(symbolt &symbol)
 {
   clang_c_adjust::adjust_symbol(symbol);
@@ -71,6 +118,7 @@ void clang_cpp_adjust::adjust_symbol(symbolt &symbol)
    */
   gen_vptr_initializations(symbol);
   gen_implicit_union_copy_move_constructor(symbol);
+  gen_lambda_operator(symbol);
 }
 
 void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)

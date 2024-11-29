@@ -116,6 +116,10 @@ public:
    * @param symbol The symbol for which the implicit copy and move constructor is generated.
    */
   void gen_implicit_union_copy_move_constructor(symbolt &symbol);
+
+  void gen_lambda_operator(symbolt &symbol);
+
+  void replace_capture_this(const exprt &expr, exprt &dest);
 };
 
 #endif /* CLANG_CPP_FRONTEND_CLANG_CPP_ADJUST_H_ */
