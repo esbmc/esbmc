@@ -281,11 +281,6 @@ public:
     return get_bool(a_need_vptr_init);
   }
 
-  inline bool need_lambda_init() const
-  {
-    return get_bool(a_need_lambda_init);
-  }
-
   inline const irep_idt &property() const
   {
     return get(a_property);
@@ -977,11 +972,6 @@ public:
     set(a_need_vptr_init, val);
   }
 
-  inline void need_lambda_init(bool val)
-  {
-    set(a_need_lambda_init, val);
-  }
-
   inline void restricted(bool val)
   {
     set(a_restricted, val);
@@ -1284,7 +1274,7 @@ public:
    * annotation to indicate whether virtual pointer(vptr) has been initialized in contrustor
    * This is used by implicit IR generation in adjuster
    */
-  static const irep_idt a_need_vptr_init, a_need_lambda_init;
+  static const irep_idt a_need_vptr_init;
 
   static const irep_idt id_address_of, id_and, id_or, id_array, id_bool,
     id_code;
