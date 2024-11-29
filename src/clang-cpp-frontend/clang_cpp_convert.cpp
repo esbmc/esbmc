@@ -396,7 +396,6 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
   }
 
   // Parse the fields
-  unsigned i = 0;
   for (auto const &field : rd.fields())
   {
     struct_typet::componentt comp;
@@ -414,29 +413,7 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
     if (annotate_class_field(*field, type, comp))
       return true;
 
-    // Tag the components in the lambda to
-    // find capture this and other var names
-    if (auto cxxrd = llvm::dyn_cast<clang::CXXRecordDecl>(&rd))
-    {
-      if (cxxrd->isLambda())
-      {
-        if ((cxxrd->captures_begin() + i)->capturesThis())
-        {
-          comp.set_pretty_name("__this");
-          comp.set("#capture_this", true);
-        }
-        else
-        {
-          std::string name, id;
-          get_decl_name(
-            *(cxxrd->captures_begin() + i)->getCapturedVar(), name, id);
-          comp.set_pretty_name("__" + name);
-        }
-      }
-    }
-
     type.components().push_back(comp);
-    i++;
   }
 
   return false;
@@ -856,6 +833,9 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
   case clang::Stmt::CXXThisExprClass:
   {
+    const clang::CXXThisExpr &this_expr =
+      static_cast<const clang::CXXThisExpr &>(stmt);
+
     std::size_t address =
       reinterpret_cast<std::size_t>(current_functionDecl->getFirstDecl());
 
@@ -867,6 +847,12 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         clang_c_convertert::get_decl_name(*current_functionDecl));
       abort();
     }
+
+    typet this_type;
+    if (get_type(this_expr.getType(), this_type))
+      return true;
+
+    assert(this_type == it->second.second);
 
     new_expr = symbol_exprt(it->second.first, it->second.second);
     break;
@@ -1510,14 +1496,6 @@ bool clang_cpp_convertert::get_function_body(
       }
       body.operands().insert(body.operands().begin(), decl);
     }
-  }
-
-  // Mark the member functions of the lambda class
-  // in order to adjust the body function later
-  if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
-  {
-    if (md->getParent()->isLambda())
-      new_expr.need_lambda_init(true);
   }
 
   return false;
