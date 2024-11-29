@@ -130,6 +130,7 @@ set(REGRESSIONS_CPP11 esbmc-cpp11/cpp
 # list of C++14 test suites
 set(REGRESSIONS_CPP14 esbmc-cpp14/cpp
                       esbmc-cpp14/deduced-return-type
+                      esbmc-cpp14/lambda
                       esbmc-cpp14/template
                       )
 
