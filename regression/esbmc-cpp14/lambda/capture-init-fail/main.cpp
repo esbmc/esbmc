@@ -18,14 +18,14 @@ int main()
   };
 
   auto lambda_with_capture_init_3 = [&, bar = 11]() {
-    y++;
+    y = y + 1;
     assert(x == 421);
     assert(y == 21);
     assert(bar == 111);
   };
 
   auto lambda_with_capture_init_4 = [&x, &y, bar = 11]() {
-    y++;
+    y = y + 1;
     assert(x == 421);
     assert(y == 31);
     assert(bar == 111);

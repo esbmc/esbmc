@@ -16,13 +16,13 @@ int main()
   };
 
   auto lambda_with_capture_3 = [&]() {
-    y++;
+    y = y + 1;
     assert(x == 42);
     assert(y == 2);
   };
 
   auto lambda_with_capture_4 = [&x, &y]() {
-    y++;
+    y = y + 1;
     assert(x == 42);
     assert(y == 3);
   };
