@@ -1519,9 +1519,15 @@ bool clang_cpp_convertert::get_function_body(
   {
     if (md->getParent()->getLambdaCallOperator() == md)
     {
+#if CLANG_VERSION_MAJOR <= 15
+#  define CAPTURE_VARIABLE_TYPE clang::VarDecl
+#else
+#  define CAPTURE_VARIABLE_TYPE clang::ValueDecl
+#endif
       new_expr.set("#lambda_call_operator", true);
       irept &lambda_capture_fields = new_expr.add("#lambda_capture_fields");
-      llvm::DenseMap<const clang::ValueDecl *, clang::FieldDecl *> captures{};
+      llvm::DenseMap<const CAPTURE_VARIABLE_TYPE *, clang::FieldDecl *>
+        captures{};
       clang::FieldDecl *thisCapture{};
       md->getParent()->getCaptureFields(captures, thisCapture);
       for (auto &capture : captures)
