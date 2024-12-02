@@ -134,6 +134,9 @@ set(REGRESSIONS_CPP14 esbmc-cpp14/cpp
                       esbmc-cpp14/template
                       )
 
+# list of C++17 test suites
+set(REGRESSIONS_CPP17 esbmc-cpp17/lambda)
+
 # list of C++20 test suites
 set(REGRESSIONS_CPP20 esbmc-cpp20/cpp)
 
@@ -206,6 +209,7 @@ else()
                     ${REGRESSIONS_Z3}
                     incremental-smt
                     ${REGRESSIONS_CPP20}
+                    ${REGRESSIONS_CPP17}
                     ${REGRESSIONS_CPP14}
                     ${REGRESSIONS_CPP11}
                     ${REGRESSIONS_CPP03}

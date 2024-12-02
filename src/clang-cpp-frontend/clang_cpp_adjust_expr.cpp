@@ -59,55 +59,45 @@ void clang_cpp_adjust::gen_implicit_union_copy_move_constructor(symbolt &symbol)
   ctor_body.operands().push_back(copy_ctor_assign);
 }
 
-void clang_cpp_adjust::gen_lambda_operator(symbolt &symbol)
+void clang_cpp_adjust::replace_lambda_capture_fields(
+  const irept &lambda_capture_fields,
+  exprt &op)
 {
-  if (!symbol.value.need_lambda_init())
-    return;
-
-  code_typet &type = to_code_type(symbol.type);
-
-  if (type.return_type().id() == "constructor")
-    return;
-
-  code_blockt &body = to_code_block(to_code(symbol.value));
-
-  exprt this_ptr = symbol_exprt(
-    type.arguments()[0].get("#identifier"), type.arguments()[0].type());
-
-  const typet &class_symb = ns.follow(type.arguments()[0].type().subtype());
-
-  const struct_typet::componentst &components =
-    to_struct_type(class_symb).components();
-
-  for (const auto &c : components)
+  if (op.is_symbol())
   {
-    if (c.get_bool("#capture_this"))
-    {
-      // the clang declares the original variable (this->data)
-      // releace 'this->data' with 'this->__this->data'
-      // which this = this ptr of lambda and
-      // __this = capture this
-      exprt deref = dereference_exprt(this_ptr, this_ptr.type());
-      exprt dest = member_exprt(deref, c.get_name(), c.type());
-      exprt memderef =
-        dest.type().is_pointer() ? dereference_exprt(dest, dest.type()) : dest;
-
-      replace_capture_this(memderef, body);
-    }
+    irept replacement_symbol = lambda_capture_fields.find(op.identifier());
+    if (replacement_symbol.is_not_nil())
+      op.swap(replacement_symbol);
+  }
+  else
+  {
+    Forall_operands (subop, op)
+      replace_lambda_capture_fields(lambda_capture_fields, *subop);
   }
 }
 
-void clang_cpp_adjust::replace_capture_this(const exprt &expr, exprt &dest)
+void clang_cpp_adjust::adjust_lambda_call_operator(symbolt &symbolt)
 {
-  if (dest.is_dereference())
-    dest = expr;
-  else
-    Forall_operands (it, dest)
-      replace_capture_this(expr, *it);
+  if (!symbolt.value.get_bool("#lambda_call_operator"))
+    return;
+  code_blockt &body = to_code_block(to_code(symbolt.value));
+  const auto &lambda_capture_fields =
+    symbolt.value.find("#lambda_capture_fields");
+  replace_lambda_capture_fields(lambda_capture_fields, body);
 }
 
 void clang_cpp_adjust::adjust_symbol(symbolt &symbol)
 {
+  /* Adjusting the symbol beforehand, changes the body which confuses our replacement logic in `adjust_lambda_call_operator`
+   * E.g. the struct/base in a member expression `this->a` (inside a lambda) is replaced by a deref if it is a pointer.
+   * So we then have a deref with type `bar` that has `this` as an operand (with type `bar*`) which then causes problems,
+   * because we only replace symbols and not derefs. So we would replace `this` with `lambda_this->captured_this` and the final result would be
+   * `lambda_this->captured_this->a`. This is wrong if we captured `this` by value, because then `captured_this` is of type `bar` and not `bar*`.
+   * We have to adjust the body afterward anyway because the original AST doesn't model capturing a variable (e.g. `int x`) by ref as
+   * a reference. The reference is added only after replacing the captures with the fields.
+   * Therefore, we adjust the symbol after adjusting the lambda call operator.
+   */
+  adjust_lambda_call_operator(symbol);
   clang_c_adjust::adjust_symbol(symbol);
 
   /*
@@ -118,7 +108,6 @@ void clang_cpp_adjust::adjust_symbol(symbolt &symbol)
    */
   gen_vptr_initializations(symbol);
   gen_implicit_union_copy_move_constructor(symbol);
-  gen_lambda_operator(symbol);
 }
 
 void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)

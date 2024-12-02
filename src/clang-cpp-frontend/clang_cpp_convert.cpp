@@ -396,7 +396,6 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
   }
 
   // Parse the fields
-  unsigned i = 0;
   for (auto const &field : rd.fields())
   {
     struct_typet::componentt comp;
@@ -414,29 +413,7 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
     if (annotate_class_field(*field, type, comp))
       return true;
 
-    // Tag the components in the lambda to
-    // find capture this and other var names
-    if (auto cxxrd = llvm::dyn_cast<clang::CXXRecordDecl>(&rd))
-    {
-      if (cxxrd->isLambda())
-      {
-        if ((cxxrd->captures_begin() + i)->capturesThis())
-        {
-          comp.set_pretty_name("__this");
-          comp.set("#capture_this", true);
-        }
-        else
-        {
-          std::string name, id;
-          get_decl_name(
-            *(cxxrd->captures_begin() + i)->getCapturedVar(), name, id);
-          comp.set_pretty_name("__" + name);
-        }
-      }
-    }
-
     type.components().push_back(comp);
-    i++;
   }
 
   return false;
@@ -856,6 +833,9 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
   case clang::Stmt::CXXThisExprClass:
   {
+    const clang::CXXThisExpr &this_expr =
+      static_cast<const clang::CXXThisExpr &>(stmt);
+
     std::size_t address =
       reinterpret_cast<std::size_t>(current_functionDecl->getFirstDecl());
 
@@ -867,6 +847,17 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         clang_c_convertert::get_decl_name(*current_functionDecl));
       abort();
     }
+
+    typet this_type;
+    if (get_type(this_expr.getType(), this_type))
+      return true;
+
+    // In a lambda `CXXThisExpr` refers to the captured `this` pointer, while the `this_map` refers to
+    // the `this` pointer of the lambda closure type. This causes a mismatch, so ignore the type check in this case.
+    assert(
+      this_type == it->second.second || current_functionDecl->getParent()
+                                          ->getOuterLexicalRecordContext()
+                                          ->isLambda());
 
     new_expr = symbol_exprt(it->second.first, it->second.second);
     break;
@@ -1012,13 +1003,23 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       return true;
 
     exprt sym("struct", lambda_class_type);
+    // both `captures` (via `capture_begin`) and `capture_inits` have hopefully the same size and order
+    auto capture = lambda_expr.capture_begin();
     for (const auto &it : lambda_expr.capture_inits())
     {
+      assert(capture != lambda_expr.capture_end());
       exprt init;
       if (get_expr(*it, init))
         return true;
 
+      if (capture->getCaptureKind() == clang::LambdaCaptureKind::LCK_ByRef)
+      {
+        // If the capture is by reference, we need to pass the address
+        init = address_of_exprt(init);
+        // (`this` can also be captured by ref, but it's already a pointer)
+      }
       sym.move_to_operands(init);
+      capture++;
     }
     new_expr = sym;
 
@@ -1512,12 +1513,41 @@ bool clang_cpp_convertert::get_function_body(
     }
   }
 
-  // Mark the member functions of the lambda class
+  // Mark the `operator()` function of the lambda class
   // in order to adjust the body function later
   if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
   {
-    if (md->getParent()->isLambda())
-      new_expr.need_lambda_init(true);
+    if (md->getParent()->getLambdaCallOperator() == md)
+    {
+#if CLANG_VERSION_MAJOR <= 15
+#  define CAPTURE_VARIABLE_TYPE clang::VarDecl
+#else
+#  define CAPTURE_VARIABLE_TYPE clang::ValueDecl
+#endif
+      new_expr.set("#lambda_call_operator", true);
+      irept &lambda_capture_fields = new_expr.add("#lambda_capture_fields");
+      llvm::DenseMap<const CAPTURE_VARIABLE_TYPE *, clang::FieldDecl *>
+        captures{};
+      clang::FieldDecl *thisCapture{};
+      md->getParent()->getCaptureFields(captures, thisCapture);
+      for (auto &capture : captures)
+      {
+        std::string captured_var_id, ignored;
+        get_decl_name(*capture.first, ignored, captured_var_id);
+        exprt ref_to_captured_var;
+        get_decl(*capture.second, ref_to_captured_var);
+        build_member_from_component(fd, ref_to_captured_var);
+        lambda_capture_fields.set(captured_var_id, ref_to_captured_var);
+      }
+      if (thisCapture)
+      {
+        exprt ref_to_captured_this;
+        get_decl(*thisCapture, ref_to_captured_this);
+        build_member_from_component(fd, ref_to_captured_this);
+        dstring lambda_this_id = ref_to_captured_this.op0().identifier();
+        lambda_capture_fields.set(lambda_this_id, ref_to_captured_this);
+      }
+    }
   }
 
   return false;
