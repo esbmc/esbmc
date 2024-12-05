@@ -881,6 +881,9 @@ protected:
   /** Flag as to whether we're pruning the objects from the memory leak check
    *  that are still reachable via global pointers. Corresponds to the option
    *  --no-reachable-memory-leak */
+  bool no_memory_cleanup_check;
+  /** Flag to disable memory cleanup check
+   */
   bool no_reachable_memleak;
   /** Flag as to whether we're checking user assertions. Corresponds to
    *  the option --no-assertions */
