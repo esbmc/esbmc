@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--ub-shift-check --no-slice --no-simplify --unwind 1
+^VERIFICATION SUCCESSFUL
