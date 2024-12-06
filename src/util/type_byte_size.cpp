@@ -143,7 +143,7 @@ BigInt type_sizet::size_bits(const type2tc &type) const
     // At the end of that, the tests above should have rounded accumulated size
     // up to a size that contains the required trailing padding for array
     // allocation alignment.
-    return accumulated_size;
+    return accumulated_size == 0 ? 1 : accumulated_size;
   }
 
   case type2t::union_id:

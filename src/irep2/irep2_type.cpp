@@ -200,7 +200,7 @@ unsigned int struct_type2t::get_width() const
   for (it = members.begin(); it != members.end(); it++)
     width += (*it)->get_width();
 
-  return width;
+  return width == 0 ? 1 : width;
 }
 
 unsigned int union_type2t::get_width() const

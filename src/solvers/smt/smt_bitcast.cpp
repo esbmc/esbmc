@@ -94,6 +94,9 @@ static expr2tc flatten_to_bitvector(const expr2tc &new_expr)
 
     size_t sz = structtype.members.size();
 
+    if (sz == 0)
+      return constant_int2tc(get_uint_type(0), BigInt(0));
+
     // Iterate over each member and flatten them
 
     auto extract = [&](size_t i) {
