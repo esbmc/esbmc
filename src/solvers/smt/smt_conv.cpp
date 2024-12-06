@@ -2563,6 +2563,7 @@ expr2tc smt_convt::get_array(const type2tc &type, smt_astt array)
   array_type2t ar = to_array_type(flat_type);
   expr2tc arr_size;
   if (type == flat_type)
+    // avoid handelling the flattend multidimensional arrays
     arr_size = to_array_type(flat_type).array_size;
   else
     arr_size = constant_int2tc(index_type2(), BigInt(1ULL << w));
