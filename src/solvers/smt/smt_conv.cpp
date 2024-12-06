@@ -2561,9 +2561,10 @@ expr2tc smt_convt::get_array(const type2tc &type, smt_astt array)
 
   const type2tc flat_type = flatten_array_type(type);
   array_type2t ar = to_array_type(flat_type);
+
   expr2tc arr_size;
-  if (type == flat_type)
-    // avoid handelling the flattend multidimensional arrays
+  if (type == flat_type && !ar.size_is_infinite)
+    // avoid handelling the flattend multidimensional and malloc arrays(assume size is infinite)
     arr_size = to_array_type(flat_type).array_size;
   else
     arr_size = constant_int2tc(index_type2(), BigInt(1ULL << w));
