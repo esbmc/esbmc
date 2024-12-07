@@ -504,7 +504,6 @@ void value_sett::get_value_set_rec(
   {
     const byte_update2t &bu = to_byte_update2t(expr);
     get_value_set_rec(bu.source_value, dest, suffix, original_type);
-    get_value_set_rec(bu.update_value, dest, suffix, original_type);
     return;
   }
 
@@ -534,20 +533,6 @@ void value_sett::get_value_set_rec(
 
       expr2tc tmp = null_object2tc(ptr_ref.subtype);
       insert(dest, tmp, BigInt(0));
-      return;
-    }
-
-    if (
-      has_prefix(sym.thename, "nondet$symex::nondet") && is_pointer_type(expr))
-    {
-      for (const auto &value : values)
-        for (const auto &it : value.second.object_map)
-        {
-          const expr2tc &object = object_numbering[it.first];
-          if (is_invalid2t(object) || is_null_object2t(object))
-            continue;
-          //insert(dest, object, BigInt(0));
-        }
       return;
     }
 
@@ -1151,8 +1136,7 @@ void value_sett::assign(
       else if (is_constant_array2t(rhs) || is_constant_expr(rhs))
       {
         rhs->foreach_operand(
-          [this, &add_to_sets, &lhs_index](const expr2tc &e)
-          {
+          [this, &add_to_sets, &lhs_index](const expr2tc &e) {
             assign(lhs_index, e, add_to_sets);
             add_to_sets = true;
           });

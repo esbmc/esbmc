@@ -510,7 +510,7 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   smt_astt is_inv = mk_and(obj_eq, offs_eq);
 
   smt_astt imp = mk_implies(not_matched, is_inv);
-  //assert_ast(imp);
+  assert_ast(imp);
 
   return output;
 }
