@@ -2559,14 +2559,31 @@ expr2tc smt_convt::get_array(const type2tc &type, smt_astt array)
   if (w > 10)
     w = 10;
 
-  array_type2t ar = to_array_type(flatten_array_type(type));
-  expr2tc arr_size = constant_int2tc(index_type2(), BigInt(1ULL << w));
+  const type2tc flat_type = flatten_array_type(type);
+  array_type2t ar = to_array_type(flat_type);
+
+  expr2tc arr_size;
+  if (type == flat_type && !ar.size_is_infinite)
+    // avoid handelling the flattend multidimensional and malloc arrays(assume size is infinite)
+    arr_size = to_array_type(flat_type).array_size;
+  else
+    arr_size = constant_int2tc(index_type2(), BigInt(1ULL << w));
+
   type2tc arr_type = array_type2tc(ar.subtype, arr_size, false);
   std::vector<expr2tc> fields;
 
   bool uses_tuple_api = is_tuple_array_ast_type(type);
 
-  for (size_t i = 0; i < (1ULL << w); i++)
+  BigInt elem_size;
+  if (is_constant_int2t(arr_size))
+  {
+    elem_size = to_constant_int2t(arr_size).value;
+    assert(elem_size.is_uint64());
+  }
+  else
+    elem_size = BigInt(1ULL << w);
+
+  for (size_t i = 0; i < elem_size; i++)
   {
     expr2tc elem;
     if (uses_tuple_api)
