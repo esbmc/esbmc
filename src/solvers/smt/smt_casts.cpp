@@ -505,6 +505,33 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   smt_astt inv_obj = id;
   smt_astt inv_offs = offs;
 
+  if (is_byte_update2t(cast.from))
+  {
+    // byte_update(nondet_sym, offset, update) special handling is needed
+    // in this case cause the nondet pointer cannot match any address
+    // Assign obj of int_to_ptr to nondet pointer obj
+    byte_update2t bu = to_byte_update2t(cast.from);
+    bitcast2t bc = to_bitcast2t(bu.source_value);
+    smt_astt sym = convert_ast(bc.from);
+    smt_astt obj = sym->project(this, 0);
+    inv_obj = obj;
+
+    expr2tc obj_num = pointer_object2tc(ptraddr_type2(), bc.from);
+    expr2tc from_addr = index2tc(
+      addr_space_type,
+      symbol2tc(addr_space_arr_type, get_cur_addrspace_ident()),
+      obj_num);
+
+    // calculate the offset of byte_update: target - addr_start(nondet poiner obj)
+    const struct_type2t &addr_space = to_struct_type(addr_space_type);
+    expr2tc from_start =
+      member2tc(addr_space.members[0], from_addr, addr_space.member_names[0]);
+
+    smt_astt addr_start = convert_ast(from_start);
+    inv_offs =
+      int_encoding ? mk_sub(target, addr_start) : mk_bvsub(target, addr_start);
+  }
+
   smt_astt obj_eq = inv_obj->eq(this, output_obj);
   smt_astt offs_eq = inv_offs->eq(this, output_offs);
   smt_astt is_inv = mk_and(obj_eq, offs_eq);
