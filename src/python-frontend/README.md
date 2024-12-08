@@ -104,8 +104,8 @@ Below is an overview of ESBMC-Python key capabilities:
 - **Imports**: Handles import styles and validates their usage.
 
 ### Additional Capabilities
-- **Numeric and Binary Types**: Supports computation and manipulation of numeric types (e.g., integers, floats) and binary types (e.g., bytes).
-- **Built-in Functions**: Verifies Python's built-in functions, such as `len` and `range`.
+- **Numeric and Binary Types**: Supports manipulation of numeric types (e.g., integers, floats) and binary types (e.g., bytes).
+- **Built-in Functions**: Supports Python's built-in functions, such as `len` and `range`.
 
 ## References
 For more information about our frontend, please refer to our ISSTA 2024 [tool paper](https://dl.acm.org/doi/abs/10.1145/3650212.3685304).
