@@ -202,6 +202,7 @@ void execution_statet::symex_step(reachability_treet &art)
 
   merge_gotos();
 
+  // If current state guard is false, it shouldn't perform further context switch. 
   if (!state.guard.is_false() || !is_cur_state_guard_false(state.guard.as_expr()))
     interleaving_unviable = false;
   else
@@ -707,6 +708,7 @@ void execution_statet::execute_guard()
   // evaluating a particular interleaving early right now.
   if (is_false(parent_guard) || is_cur_state_guard_false(parent_guard))
   {
+    // A context switch happens, add last thread state guard to assumption.
     if (active_thread != last_active_thread)
     {
       target->assumption(
