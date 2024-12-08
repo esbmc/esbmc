@@ -93,19 +93,19 @@ Below is an overview of ESBMC-Python key capabilities:
 ### Data Types and Structures
 - **Dynamic Typing**: Accommodates Python's dynamic typing in variable assignments.
 - **Data Structures**: Supports operations on Python's built-in data structures, such as lists and strings, including concatenation and bounds checks.
-- **Bytes and Integers**: Verifies bytes operations and integer properties, such as conversions and bit length.
+- **Bytes and Integers**: Supports bytes and integer operations, such as conversions and bit length.
 ### Error Handling and Assertions
 - **Assertions**: Supports `assert` statements for program verification.
 - **Assumptions**: Supports `assume` statements for specifying assumptions for verification.
 
-### Advanced Features
+### Additional Capabilities
 - **Nondeterministic Variables**: Models nondeterminism to explore multiple execution paths.
 - **Recursion**: Supports and verifies recursive functions.
 - **Imports**: Handles import styles and validates their usage.
-
-### Additional Capabilities
-- **Numeric and Binary Types**: Supports manipulation of numeric types (e.g., integers, floats) and binary types (e.g., bytes).
+- **Numeric Types**: Supports manipulation of numeric types (e.g., bytes, integers, floats).
 - **Built-in Functions**: Supports Python's built-in functions, such as `len` and `range`.
+- **Verification properties**: Division-by-zero, indexing errors, arithmetic overflow, and user-defined assertions.
+
 
 ## References
 For more information about our frontend, please refer to our ISSTA 2024 [tool paper](https://dl.acm.org/doi/abs/10.1145/3650212.3685304).
