@@ -202,10 +202,10 @@ void execution_statet::symex_step(reachability_treet &art)
 
   merge_gotos();
 
-  if (state.guard.is_false() || is_cur_state_guard_false(state.guard.as_expr()))
-    interleaving_unviable = true;
-  else
+  if (!state.guard.is_false() || !is_cur_state_guard_false(state.guard.as_expr()))
     interleaving_unviable = false;
+  else
+    interleaving_unviable = true;
 
   if (break_insn != 0 && break_insn == instruction.location_number)
   {
