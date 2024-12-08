@@ -201,6 +201,14 @@ void execution_statet::symex_step(reachability_treet &art)
   last_insn = &instruction;
 
   merge_gotos();
+
+  // If current state guard is false, it shouldn't perform further context switch.
+  if (
+    !state.guard.is_false() || !is_cur_state_guard_false(state.guard.as_expr()))
+    interleaving_unviable = false;
+  else
+    interleaving_unviable = true;
+
   if (break_insn != 0 && break_insn == instruction.location_number)
   {
 #ifndef _WIN32
@@ -701,6 +709,15 @@ void execution_statet::execute_guard()
   // evaluating a particular interleaving early right now.
   if (is_false(parent_guard) || is_cur_state_guard_false(parent_guard))
   {
+    // A context switch happens, add last thread state guard to assumption.
+    if (active_thread != last_active_thread)
+    {
+      target->assumption(
+        guardt().as_expr(),
+        parent_guard,
+        get_active_state().source,
+        first_loop);
+    }
     cur_state->guard.make_false();
     return;
   }
@@ -715,15 +732,6 @@ void execution_statet::execute_guard()
   if (active_thread != last_active_thread)
     target->assumption(
       guardt().as_expr(), parent_guard, get_active_state().source, first_loop);
-  // Check to see whether or not the state guard is false, indicating we've
-  // found an unviable interleaving. However don't do this if we didn't
-  // /actually/ switch between threads, because it's acceptable to have a
-  // context switch point in a branch where the guard is false (it just isn't
-  // acceptable to permit switching).
-  if (
-    last_active_thread != active_thread &&
-    is_cur_state_guard_false(threads_state[active_thread].guard.as_expr()))
-    interleaving_unviable = true;
 }
 
 unsigned int execution_statet::add_thread(const goto_programt *prog)

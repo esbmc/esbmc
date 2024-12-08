@@ -563,7 +563,9 @@ goto_symext::symex_resultt reachability_treet::get_next_formula()
 
     next_thread_id = decide_ileave_direction(get_cur_state());
 
-    if (get_cur_state().interleaving_unviable)
+    if (
+      get_cur_state().interleaving_unviable &&
+      next_thread_id != get_cur_state().active_thread)
       break;
     create_next_state();
 
