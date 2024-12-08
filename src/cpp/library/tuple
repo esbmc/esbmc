@@ -40,6 +40,17 @@ public:
   {
   }
 
+  template <
+    typename UHead,
+    typename... UTail,
+    typename = std::enable_if_t<
+      std::is_convertible<UHead, Head>::value &&
+      (... && std::is_convertible<UTail, Tail>::value)>>
+  tuple(const tuple<UHead, UTail...> &other)
+    : head(other.head), tail(other.tail)
+  {
+  }
+
   tuple &operator=(const tuple &other)
   {
     if (this != &other)
