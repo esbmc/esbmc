@@ -81,7 +81,7 @@ Below is an overview of ESBMC-Python key capabilities:
 
 ### Basic Constructs
 - **Control Structures**: Supports conditional statements (`if-else`) and loops (`for`, `while`).
-- **Arithmetic and Binary Operations**: Includes standard arithmetic operations (e.g., addition, subtraction, multiplication, division) and binary operations (e.g., AND, OR, XOR) for mathematical and low-level computations.
+- **Arithmetic**: Includes standard arithmetic operations (e.g., addition, subtraction, multiplication, division).
 - **Logical Operations**: Supports logical constructs (e.g., `AND`, `OR`, `NOT`).
 
 ### Functions and Methods
