@@ -75,35 +75,35 @@ We can infer type from constants, variables with inferred or pre-annotated types
 ## Symbol Table Generation
 The final step in the frontend involves converting the annotated JSON AST into a symbol table using our C++ IRep API. This API enables the creation of a control-flow graph (CFG) from the program, allowing us to model constructs such as assignments, expressions, conditionals, loops, functions, and classes. The resulting information is stored in a context structure, which serves as the input for the GOTO conversion process.
 
-# Features Supported by ESBMC-Python
+## Features Supported by ESBMC-Python
 
 Below is an overview of ESBMC-Python key capabilities:
 
-## Basic Programming Constructs
+### Basic Constructs
 - **Control Structures**: Supports conditional statements (`if-else`) and loops (`for`, `while`).
 - **Arithmetic and Binary Operations**: Includes standard arithmetic operations (e.g., addition, subtraction, multiplication, division) and binary operations (e.g., AND, OR, XOR) for mathematical and low-level computations.
 - **Logical Operations**: Supports logical constructs (e.g., `AND`, `OR`, `NOT`).
 
-## Functions and Methods
+### Functions and Methods
 - **Function Handling**: This allows for defining, calling, and verifying functions, including parameter passing and return values.
 - **Annotations**: Supports type annotations.
-## Object-Oriented Programming
+### Object-Oriented Programming
 - **Classes**: Supports class definitions, methods, and attributes.
 - **Inheritance**: Handles inheritance and verifies scenarios involving inheritance issues.
-## Data Types and Structures
+### Data Types and Structures
 - **Dynamic Typing**: Accommodates Python's dynamic typing in variable assignments.
 - **Data Structures**: Supports operations on Python's built-in data structures, such as lists and strings, including concatenation and bounds checks.
 - **Bytes and Integers**: Verifies bytes operations and integer properties, such as conversions and bit length.
-## Error Handling and Assertions
+### Error Handling and Assertions
 - **Assertions**: Supports `assert` statements for program verification.
 - **Assumptions**: Supports `assume` statements for specifying assumptions for verification.
 
-## Advanced Features
+### Advanced Features
 - **Nondeterministic Variables**: Models nondeterminism to explore multiple execution paths.
 - **Recursion**: Supports and verifies recursive functions.
 - **Imports**: Handles import styles and validates their usage.
 
-## Additional Capabilities
+### Additional Capabilities
 - **Numeric and Binary Types**: Supports computation and manipulation of numeric types (e.g., integers, floats) and binary types (e.g., bytes).
 - **Built-in Functions**: Verifies Python's built-in functions, such as `len` and `range`.
 
