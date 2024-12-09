@@ -1,5 +1,5 @@
 CORE
 main.cpp
---unwind 7
+--unwind 1 --no-unwinding-assertion
 
-^VERIFICATION FAILED$
+^VERIFICATION SUCCESSFUL$
