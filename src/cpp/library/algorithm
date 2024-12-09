@@ -2293,46 +2293,30 @@ void pop_heap(RanIt first, RanIt last, Pr pred)
 template <class RanIt>
 void make_heap(RanIt first, RanIt last)
 {
-  int n = 0;
-  RanIt t = first;
-  while (t++ != last)
-    n++;
-  int i = n / 2;
-  int parent, child;
-  t = last;
-  for (int j = 0; j < n / 2; j++)
+  auto n = last - first;
+
+  for (int i = (n / 2) - 1; i >= 0; --i)
   {
-    if (i > 0)
+    int parent = i;
+    auto value = *(first + parent);
+    while (1)
     {
-      i--;
-      *t = *(first + i);
-    }
-    else
-    {
-      n--;
-      if (n == 0)
-      {
-        return;
-      }
-      *t = *(first + n);
-      *(first + n) = *first;
-    }
-    parent = i;
-    child = i * 2 + 1;
-    while (child < n)
-    {
-      if ((child + 1 < n) && (*(first + child + 1) > *(first + child)))
-        child++;
-      if (*(first + child) > *t)
+      int child = 2 * parent + 1;
+      if (child >= n)
+        break;
+
+      if (child + 1 < n && *(first + child + 1) > *(first + child))
+        ++child;
+
+      if (*(first + child) > value)
       {
         *(first + parent) = *(first + child);
         parent = child;
-        child = parent * 2 + 1;
       }
       else
         break;
     }
-    *(first + parent) = *t;
+    *(first + parent) = value;
   }
 }
 
