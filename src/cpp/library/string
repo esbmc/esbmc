@@ -1875,7 +1875,7 @@ __ESBMC_HIDE:
     two[k] = this->str[i];
   }
   int totalLen = s.length() + len;
-  this->str = new char[totalLen];
+  this->str = new char[totalLen + 1];
   this->_size = totalLen;
 
   for (i = 0; i < lenOne - 1; i++)
