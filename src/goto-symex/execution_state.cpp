@@ -972,8 +972,7 @@ bool execution_statet::check_mpor_dependency(unsigned int j, unsigned int l)
   assert(j < threads_state.size());
   assert(l < threads_state.size());
 
-  auto extract_symbol_names = [](const std::set<expr2tc> &symbols)
-  {
+  auto extract_symbol_names = [](const std::set<expr2tc> &symbols) {
     std::unordered_set<std::string> symbol_names;
     for (const auto &symbol : symbols)
     {
