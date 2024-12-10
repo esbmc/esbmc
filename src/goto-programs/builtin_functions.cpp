@@ -566,8 +566,10 @@ void goto_convertt::do_function_call_symbol(
     goto_programt::targett t = dest.add_instruction(ASSERT);
     migrate_expr(arguments[0], t->guard);
 
-    std::string description = "ESBMC assertion";
-    if (arguments.size() != 1)
+    std::string description;
+    if (arguments.size() == 1)
+      description = "ESBMC assertion";
+    else
       get_string_constant(arguments[1], description);
 
     t->location = function.location();
