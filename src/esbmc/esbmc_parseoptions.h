@@ -54,17 +54,17 @@ protected:
   tvt is_base_case_violated(
     optionst &options,
     goto_functionst &goto_functions,
-    const BigInt &k_step);
+    const uint64_t &k_step);
 
   tvt does_forward_condition_hold(
     optionst &options,
     goto_functionst &goto_functions,
-    const BigInt &k_step);
+    const uint64_t &k_step);
 
   tvt is_inductive_step_violated(
     optionst &options,
     goto_functionst &goto_functions,
-    const BigInt &k_step);
+    const uint64_t &k_step);
 
   bool read_goto_binary(goto_functionst &goto_functions);
 

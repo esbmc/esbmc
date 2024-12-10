@@ -359,20 +359,20 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   if (!cmdline.isset("unlimited-k-steps"))
   {
     // Get max number of iterations
-    BigInt max_k_step = strtoul(cmdline.getval("max-k-step"), nullptr, 10);
+    uint64_t max_k_step = strtoul(cmdline.getval("max-k-step"), nullptr, 10);
 
     // Get the increment
-    unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
+    uint64_t k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
 
     // Get the start of the base-case, default 1
-    unsigned k_step_base = strtoul(cmdline.getval("base-k-step"), nullptr, 10);
+    uint64_t k_step_base = strtoul(cmdline.getval("base-k-step"), nullptr, 10);
 
     // check whether k-step is greater than max-k-step
     if (k_step_inc >= max_k_step)
     {
       log_error(
-        "Please specify --k-step smaller than max-k-step if you want "
-        "to use incremental verification.");
+        "Please specify --k-step smaller than max-k-step if you want to use "
+        "incremental verification.");
       abort();
     }
 
@@ -707,15 +707,15 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
   }
 
   // Get max number of iterations
-  BigInt max_k_step = cmdline.isset("unlimited-k-steps")
-                        ? UINT_MAX
-                        : strtoul(cmdline.getval("max-k-step"), nullptr, 10);
+  uint64_t max_k_step = cmdline.isset("unlimited-k-steps")
+                          ? UINT_MAX
+                          : strtoul(cmdline.getval("max-k-step"), nullptr, 10);
 
   // Get the increment
-  unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
+  uint64_t k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
 
   // Get the start of the base-case, default 1
-  unsigned k_step_base = strtoul(cmdline.getval("base-k-step"), nullptr, 10);
+  uint64_t k_step_base = strtoul(cmdline.getval("base-k-step"), nullptr, 10);
   if (k_step_base >= max_k_step)
   {
     log_error(
@@ -735,8 +735,8 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
     struct resultt a_result;
     bool bc_finished = false, fc_finished = false, is_finished = false;
-    BigInt bc_solution = max_k_step, fc_solution = max_k_step,
-           is_solution = max_k_step;
+    uint64_t bc_solution = max_k_step, fc_solution = max_k_step,
+             is_solution = max_k_step;
 
     // Keep reading until we find an answer
     while (!(bc_finished && fc_finished && is_finished))
@@ -865,7 +865,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         // Struct to keep the result
         struct resultt r = {process_type, 0};
 
-        r.k = fc_solution.to_uint64();
+        r.k = fc_solution;
 
         // Write result
         auto const len = write(backward_pipe[1], &r, sizeof(r));
@@ -887,7 +887,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         // Struct to keep the result
         struct resultt r = {process_type, 0};
 
-        r.k = is_solution.to_uint64();
+        r.k = is_solution;
 
         // Write result
         auto const len = write(backward_pipe[1], &r, sizeof(r));
@@ -965,7 +965,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // Run bmc and only send results in two occasions:
     // 1. A bug was found, we send the step where it was found
     // 2. It couldn't find a bug
-    for (BigInt k_step = k_step_base; k_step <= max_k_step;
+    for (uint64_t k_step = k_step_base; k_step <= max_k_step;
          k_step += k_step_inc)
     {
       bmct bmc(goto_functions, options, cmdline.options_map, context);
@@ -987,7 +987,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       // Send information to parent if no bug was found
       if (res == smt_convt::P_SATISFIABLE)
       {
-        r.k = k_step.to_uint64();
+        r.k = k_step;
 
         // Write result
         auto const len = write(forward_pipe[1], &r, sizeof(r));
@@ -1070,7 +1070,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // Run bmc and only send results in two occasions:
     // 1. A proof was found, we send the step where it was found
     // 2. It couldn't find a proof
-    for (BigInt k_step = k_step_base + 1; k_step <= max_k_step;
+    for (uint64_t k_step = k_step_base + 1; k_step <= max_k_step;
          k_step += k_step_inc)
     {
       bmct bmc(goto_functions, options, cmdline.options_map, context);
@@ -1095,7 +1095,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       // Send information to parent if no bug was found
       if (res == smt_convt::P_UNSATISFIABLE)
       {
-        r.k = k_step.to_uint64();
+        r.k = k_step;
 
         // Write result
         auto const len = write(forward_pipe[1], &r, sizeof(r));
@@ -1138,7 +1138,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // Run bmc and only send results in two occasions:
     // 1. A proof was found, we send the step where it was found
     // 2. It couldn't find a proof
-    for (BigInt k_step = k_step_base + 1; k_step <= max_k_step;
+    for (uint64_t k_step = k_step_base + 1; k_step <= max_k_step;
          k_step += k_step_inc)
     {
       bmct bmc(goto_functions, options, cmdline.options_map, context);
@@ -1164,7 +1164,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       // Send information to parent if no bug was found
       if (res == smt_convt::P_UNSATISFIABLE)
       {
-        r.k = k_step.to_uint64();
+        r.k = k_step;
 
         // Write result
         auto const len = write(forward_pipe[1], &r, sizeof(r));
@@ -1219,9 +1219,9 @@ int esbmc_parseoptionst::do_bmc_strategy(
   goto_functionst &goto_functions)
 {
   // Get max number of iterations
-  BigInt max_k_step = cmdline.isset("unlimited-k-steps")
-                        ? UINT_MAX
-                        : strtoul(cmdline.getval("max-k-step"), nullptr, 10);
+  uint64_t max_k_step = cmdline.isset("unlimited-k-steps")
+                          ? UINT_MAX
+                          : strtoul(cmdline.getval("max-k-step"), nullptr, 10);
 
   // Get the increment
   unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
@@ -1237,7 +1237,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
   }
 
   // Trying all bounds from 1 to "max_k_step" in "k_step_inc"
-  for (BigInt k_step = k_step_base; k_step <= max_k_step; k_step += k_step_inc)
+  for (uint64_t k_step = k_step_base; k_step <= max_k_step;
+       k_step += k_step_inc)
   {
     // k-induction
     if (options.get_bool_option("k-induction"))
@@ -1311,7 +1312,7 @@ int esbmc_parseoptionst::do_bmc_strategy(
 tvt esbmc_parseoptionst::is_base_case_violated(
   optionst &options,
   goto_functionst &goto_functions,
-  const BigInt &k_step)
+  const uint64_t &k_step)
 {
   options.set_option("base-case", true);
   options.set_option("forward-condition", false);
@@ -1360,7 +1361,7 @@ tvt esbmc_parseoptionst::is_base_case_violated(
 tvt esbmc_parseoptionst::does_forward_condition_hold(
   optionst &options,
   goto_functionst &goto_functions,
-  const BigInt &k_step)
+  const uint64_t &k_step)
 {
   if (options.get_bool_option("disable-forward-condition"))
     return tvt(tvt::TV_UNKNOWN);
@@ -1429,14 +1430,12 @@ tvt esbmc_parseoptionst::does_forward_condition_hold(
 tvt esbmc_parseoptionst::is_inductive_step_violated(
   optionst &options,
   goto_functionst &goto_functions,
-  const BigInt &k_step)
+  const uint64_t &k_step)
 {
   if (options.get_bool_option("disable-inductive-step"))
     return tvt(tvt::TV_UNKNOWN);
 
-  if (
-    strtoul(cmdline.getval("max-inductive-step"), nullptr, 10) <
-    k_step.to_uint64())
+  if (strtoul(cmdline.getval("max-inductive-step"), nullptr, 10) < k_step)
     return tvt(tvt::TV_UNKNOWN);
 
   options.set_option("base-case", false);
@@ -2200,18 +2199,20 @@ void esbmc_parseoptionst::add_property_monitors(
 {
   std::map<std::string, std::pair<std::set<std::string>, expr2tc>> monitors;
 
-  context.foreach_operand([this, &monitors](const symbolt &s) {
-    if (
-      !has_prefix(s.name, "__ESBMC_property_") ||
-      s.name.as_string().find("$type") != std::string::npos)
-      return;
+  context.foreach_operand(
+    [this, &monitors](const symbolt &s)
+    {
+      if (
+        !has_prefix(s.name, "__ESBMC_property_") ||
+        s.name.as_string().find("$type") != std::string::npos)
+        return;
 
-    // strip prefix "__ESBMC_property_"
-    std::string prop_name = s.name.as_string().substr(17);
-    std::set<std::string> used_syms;
-    expr2tc main_expr = calculate_a_property_monitor(prop_name, used_syms);
-    monitors[prop_name] = std::pair{used_syms, main_expr};
-  });
+      // strip prefix "__ESBMC_property_"
+      std::string prop_name = s.name.as_string().substr(17);
+      std::set<std::string> used_syms;
+      expr2tc main_expr = calculate_a_property_monitor(prop_name, used_syms);
+      monitors[prop_name] = std::pair{used_syms, main_expr};
+    });
 
   if (monitors.size() == 0)
     return;
@@ -2306,10 +2307,12 @@ static void collect_symbol_names(
   }
   else
   {
-    e->foreach_operand([&prefix, &used_syms](const expr2tc &e) {
-      if (!is_nil_expr(e))
-        collect_symbol_names(e, prefix, used_syms);
-    });
+    e->foreach_operand(
+      [&prefix, &used_syms](const expr2tc &e)
+      {
+        if (!is_nil_expr(e))
+          collect_symbol_names(e, prefix, used_syms);
+      });
   }
 }
 
@@ -2401,9 +2404,8 @@ static unsigned int calc_globals_used(const namespacet &ns, const expr2tc &expr)
   {
     unsigned int globals = 0;
 
-    expr->foreach_operand([&globals, &ns](const expr2tc &e) {
-      globals += calc_globals_used(ns, e);
-    });
+    expr->foreach_operand([&globals, &ns](const expr2tc &e)
+                          { globals += calc_globals_used(ns, e); });
 
     return globals;
   }
