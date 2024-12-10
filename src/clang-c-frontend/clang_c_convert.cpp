@@ -182,7 +182,7 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
       comp.type().width(integer2string(result.Val.getInt().getSExtValue()));
       comp.type().set("#bitfield", true);
       comp.type().subtype() = t;
-#if LLVM_VERSION_MAJOR > 16
+#if LLVM_VERSION_MAJOR > 18
       comp.set_is_unnamed_bitfield(fd.isUnnamedBitField());
 #else
       comp.set_is_unnamed_bitfield(fd.isUnnamedBitfield());
@@ -220,7 +220,7 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
       comp.type().width(width.cformat());
       comp.type().set("#bitfield", true);
       comp.type().subtype() = t;
-#if LLVM_VERSION_MAJOR > 16
+#if LLVM_VERSION_MAJOR > 18
       comp.set_is_unnamed_bitfield(fd.getAnonField()->isUnnamedBitField());
 #else
       comp.set_is_unnamed_bitfield(fd.getAnonField()->isUnnamedBitfield());
