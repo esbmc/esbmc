@@ -379,7 +379,7 @@ void bmct::report_multi_property_trace(
         "testcase-" + std::to_string(ce_counter) + ".xml", local_eq, *solver);
     }
     if (options.get_bool_option("generate-html-report"))
-      generate_html_report(std::to_string(ce_counter), ns, goto_trace, opt_map);
+      generate_html_report(std::to_string(ce_counter), ns, goto_trace, options);
 
     if (options.get_bool_option("generate-json-report"))
       generate_json_report(std::to_string(ce_counter), ns, goto_trace);
