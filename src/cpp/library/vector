@@ -126,9 +126,9 @@ public:
   // construct:
   explicit vector() : _size(0), _capacity(1)
   {
-    buf = new T[1];
+    buf = new T[10];
     _size = 0;
-    _capacity = 1;
+    _capacity = 10;
   }
 
   explicit vector(iterator t1, iterator t2) : _size(0)

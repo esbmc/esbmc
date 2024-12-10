@@ -302,7 +302,7 @@ void goto_convertt::do_cpp_new(
     remove_sideeffects(alloc_size, dest);
 
     // jmorse: multiply alloc size by size of subtype.
-    type2tc subtype = migrate_type(rhs.type());
+    type2tc subtype = migrate_type(ns.follow(rhs.type().subtype()));
     expr2tc alloc_units;
     migrate_expr(alloc_size, alloc_units);
 
