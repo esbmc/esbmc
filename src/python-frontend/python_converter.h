@@ -1,5 +1,6 @@
 #pragma once
 
+#include <python-frontend/global_scope.h>
 #include <util/context.h>
 #include <util/namespace.h>
 #include <nlohmann/json.hpp>
@@ -15,8 +16,11 @@ class symbol_id;
 class python_converter
 {
 public:
-  python_converter(contextt &_context, const nlohmann::json &ast);
-  bool convert();
+  python_converter(
+    contextt &_context,
+    const nlohmann::json &ast,
+    const global_scope &gs);
+  void convert();
 
 private:
   void get_var_assign(const nlohmann::json &ast_node, codet &target_block);
@@ -83,6 +87,7 @@ private:
   std::string main_python_file;
   std::string current_python_file;
   const nlohmann::json &ast_json;
+  const global_scope &global_scope_;
   nlohmann::json imported_module_json;
   std::string current_func_name;
   std::string current_class_name;

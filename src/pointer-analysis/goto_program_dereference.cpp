@@ -68,6 +68,30 @@ void goto_program_dereferencet::dereference_failure(
   }
 }
 
+void goto_program_dereferencet::dereference_assume(const guardt &guard)
+{
+  expr2tc guard_expr = guard.as_expr();
+
+  if (assumptions.insert(guard_expr).second)
+  {
+    guard_expr = not2tc(guard_expr);
+
+    // first try simplifier on it
+    if (!options.get_bool_option("no-simplify"))
+    {
+      base_type(guard_expr, ns);
+      simplify(guard_expr);
+    }
+
+    if (!is_true(guard_expr))
+    {
+      goto_programt::targett t = new_code.add_instruction(ASSUME);
+      t->guard = guard_expr;
+      t->location = dereference_location;
+    }
+  }
+}
+
 void goto_program_dereferencet::get_value_set(
   const expr2tc &expr,
   value_setst::valuest &dest)

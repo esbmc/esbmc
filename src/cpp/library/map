@@ -4,6 +4,9 @@
 #include "utility"
 #include "vector"
 #include "functional"
+#if __cplusplus >= 201103L
+# include <initializer_list>
+#endif
 
 #define MAP_SIZE 15
 
@@ -424,7 +427,7 @@ namespace std {
 		value_compare value_comp() const; //{
 		//return value_compare(Compare());
 		//}
-#if 0
+#  if 0
 		// modifiers:
 		pair<iterator,bool> insert ( const value_type& x );
 		iterator insert ( iterator position, const value_type& x );
@@ -456,11 +459,11 @@ namespace std {
 		bool operator >= (const map<Key,T,Compare>&) const;
 		bool operator <= (const map<Key,T,Compare>&) const;
 
-#endif
+#  endif
 	};
 #endif
 
-template <class Key, class T, class Compare = less<Key> >
+template <class Key, class T, class Compare = less<Key>>
 class map
 {
 public:
@@ -752,6 +755,17 @@ public:
     {
       this->_key[i] = x._key[i];
       this->_value[i] = x._value[i];
+    }
+  }
+
+  map(std::initializer_list<value_type> list)
+  {
+    this->_size = list.size();
+    auto begin = list.begin();
+    for (size_type i = 0; i < _size; ++i)
+    {
+      this->_key[i] = (begin + i)->first;
+      this->_value[i] = (begin + i)->second;
     }
   }
 
@@ -1363,7 +1377,7 @@ public:
 #endif
 };
 
-template <class Key, class T, class Compare = less<Key> >
+template <class Key, class T, class Compare = less<Key>>
 class multimap
 {
 public:

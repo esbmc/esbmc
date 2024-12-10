@@ -182,7 +182,11 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
       comp.type().width(integer2string(result.Val.getInt().getSExtValue()));
       comp.type().set("#bitfield", true);
       comp.type().subtype() = t;
+#if LLVM_VERSION_MAJOR > 16
+      comp.set_is_unnamed_bitfield(fd.isUnnamedBitField());
+#else
       comp.set_is_unnamed_bitfield(fd.isUnnamedBitfield());
+#endif
     }
 
     // set location
@@ -216,7 +220,11 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
       comp.type().width(width.cformat());
       comp.type().set("#bitfield", true);
       comp.type().subtype() = t;
+#if LLVM_VERSION_MAJOR > 16
+      comp.set_is_unnamed_bitfield(fd.getAnonField()->isUnnamedBitField());
+#else
       comp.set_is_unnamed_bitfield(fd.getAnonField()->isUnnamedBitfield());
+#endif
     }
 
     new_expr.swap(comp);
@@ -2876,6 +2884,7 @@ bool clang_c_convertert::get_cast_expr(
     break;
 
   case clang::CK_DerivedToBase:
+  case clang::CK_BaseToDerived:
   case clang::CK_Dynamic:
 
   case clang::CK_UserDefinedConversion:

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <util/language.h>
+#include <python-frontend/global_scope.h>
 
 #include <nlohmann/json.hpp>
 
@@ -42,6 +43,7 @@ public:
 private:
   std::string ast_output_dir;
   nlohmann::json ast;
+  global_scope global_scope_;
 };
 
 languaget *new_python_language();

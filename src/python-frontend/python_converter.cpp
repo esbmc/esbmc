@@ -184,8 +184,7 @@ typet python_converter::get_typet(const nlohmann::json &elem)
   else if (elem.is_string())
     return build_array(char_type(), elem.get<std::string>().size());
 
-  log_error("Invalid type\n");
-  abort();
+  throw std::runtime_error("Invalid type");
 }
 
 static symbolt create_symbol(
@@ -513,7 +512,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   bin_expr.copy_to_operands(lhs, rhs);
 
   // floor division (//) operation corresponds to an int division with floor rounding
-  // So we need to emulate this behaviour here:
+  // So we need to emulate this behavior here:
   // int result = (num/div) - (num%div != 0 && ((num < 0) ^ (den<0)) ? 1 : 0)
   // e.g.: -5//2 equals to -3, and 5//2 equals to 2
   if (op == "FloorDiv")
@@ -766,7 +765,7 @@ symbol_id python_converter::build_function_id(const nlohmann::json &element)
       auto obj_node = find_var_decl(obj_name, current_func_name, ast_json);
 
       if (obj_node.empty())
-        abort();
+        throw std::runtime_error("Class name not found");
 
       class_name = obj_node["annotation"]["id"].get<std::string>();
     }
@@ -784,27 +783,23 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 {
   if (!element.contains("func") || element["_type"] != "Call")
   {
-    log_error("Invalid function call");
-    abort();
+    throw std::runtime_error("Invalid function call");
   }
 
   const std::string function = config.options.get_option("function");
+  // To verify a specific function, it is necessary to load the definitions of functions it calls.
   if (!function.empty() && !is_loading_models)
   {
     std::string func_name("");
     if (element["func"]["_type"] == "Name")
       func_name = element["func"]["id"];
     else if (element["func"]["_type"] == "Attribute")
-    {
-      func_name = element["func"]["value"]["id"];
-      const std::string &obj_type = get_var_type(func_name);
-      if (!obj_type.empty())
-        func_name = obj_type;
-    }
+      func_name = element["func"]["attr"];
 
     if (
       !is_builtin_type(func_name) && !is_consensus_type(func_name) &&
-      !is_consensus_func(func_name))
+      !is_consensus_func(func_name) && !is_model_func(func_name) &&
+      !is_class(func_name, ast_json))
     {
       const auto &func_node = find_function(ast_json["body"], func_name);
       assert(!func_node.empty());
@@ -1085,7 +1080,7 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     typet &char_type = t.subtype();
     exprt expr = gen_zero(t);
 
-    // Initialise array
+    // Initialize array
     unsigned int i = 0;
     for (uint8_t &ch : string_literal)
     {
@@ -1098,8 +1093,7 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     return expr;
   }
 
-  log_error("Unsupported literal: {}\n", value.get<std::string>());
-  abort();
+  throw std::runtime_error("Unsupported literal " + value.get<std::string>());
 }
 
 bool python_converter::has_multiple_types(const nlohmann::json &container)
@@ -1184,8 +1178,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       !(symbol = find_symbol_in_global_scope(sid_str)) &&
       !(symbol = find_symbol_in_imported_modules(sid_str)))
     {
-      log_error("Symbol not found: {}\n", sid_str);
-      abort();
+      throw std::runtime_error("Symbol " + sid_str + " not found");
     }
 
     expr = symbol_expr(*symbol);
@@ -1209,8 +1202,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       symbolt *class_symbol = context.find_symbol(obj_type_name);
       if (!class_symbol)
       {
-        log_error("Class not found: {}\n", obj_type_name);
-        abort();
+        throw std::runtime_error("Class \"" + obj_type_name + "\" not found");
       }
 
       struct_typet &class_type =
@@ -1262,8 +1254,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
         if (!class_attr_symbol)
         {
-          log_error("Attribute {} not found\n", attr_name);
-          abort();
+          throw std::runtime_error("Attribute \"" + attr_name + "\" not found");
         }
         expr = symbol_expr(*class_attr_symbol);
       }
@@ -1304,10 +1295,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   default:
   {
+    const auto &lineno = element["lineno"].template get<int>();
+    std::ostringstream oss;
+    oss << "Unsupported expression ";
     if (element.contains("_type"))
-      log_error(
-        "Unsupported expression type: {}", element["_type"].get<std::string>());
-    abort();
+      oss << element["_type"].get<std::string>();
+
+    oss << " at line " << lineno;
+    throw std::runtime_error(oss.str());
   }
   }
 
@@ -1408,8 +1403,7 @@ typet python_converter::get_list_type(const nlohmann::json &list_value)
       typet t = get_typet(elts[0]["value"]); // Get the first element type
       return build_array(t, elts.size());
     }
-    log_error("Multiple type lists are not supported yet\n");
-    abort();
+    throw std::runtime_error("Multiple type lists are not supported yet");
   }
 
   if (list_value["_type"] == "Call") // Get list type from function return type
@@ -1438,9 +1432,10 @@ const nlohmann::json &get_return_statement(const nlohmann::json &function)
     if (get_statement_type(stmt) == StatementType::RETURN)
       return stmt;
   }
-  log_error(
-    "Function {} has no return statement", function["name"].get<std::string>());
-  abort();
+
+  throw std::runtime_error(
+    "Function " + function["name"].get<std::string>() +
+    "has no return statement");
 }
 
 void python_converter::get_var_assign(
@@ -1515,7 +1510,10 @@ void python_converter::get_var_assign(
     const std::string &name = ast_node["targets"][0]["id"].get<std::string>();
     id.set_object(name);
     lhs_symbol = context.find_symbol(id.to_string());
-    assert(lhs_symbol);
+
+    if (!lhs_symbol)
+      throw std::runtime_error("Type undefined for \"" + name + "\"");
+
     lhs = symbol_expr(*lhs_symbol);
   }
 
@@ -1717,8 +1715,7 @@ void python_converter::get_function_definition(
   }
   else
   {
-    log_error("Return type undefined\n");
-    abort();
+    throw std::runtime_error("Return type undefined");
   }
 
   // Copy caller function name
@@ -1866,9 +1863,9 @@ void python_converter::get_class_definition(
     symbolt *class_symbol = context.find_symbol("tag-" + base_class_name);
     if (!class_symbol)
     {
-      log_error("Base class not found: {}\n", base_class_name);
-      abort();
+      throw std::runtime_error("Base class not found: " + base_class_name);
     }
+
     struct_typet &class_type = static_cast<struct_typet &>(class_symbol->type);
     for (const auto &component : class_type.components())
       clazz.components().emplace_back(component);
@@ -1900,6 +1897,21 @@ void python_converter::get_class_definition(
     // Process class attributes
     else if (class_member["_type"] == "AnnAssign")
     {
+      /* Ensure the attribute's type is defined by checking for its symbol.
+       * If the symbol for the type is not found, attempt to locate
+       * the class definition in the AST and convert it if available. */
+      const std::string &class_name = class_member["annotation"]["id"];
+      if (!context.find_symbol("tag-" + class_name))
+      {
+        const auto &class_node = find_class(ast_json["body"], class_name);
+        if (!class_node.empty())
+        {
+          std::string current_class = current_class_name;
+          get_class_definition(class_node, target_block);
+          current_class_name = current_class;
+        }
+      }
+
       get_var_assign(class_member, target_block);
 
       symbol_id sid = create_symbol_id();
@@ -1907,7 +1919,7 @@ void python_converter::get_class_definition(
       symbolt *class_attr_symbol = context.find_symbol(sid.to_string());
 
       if (!class_attr_symbol)
-        abort();
+        throw std::runtime_error("Class attribute not found");
 
       class_attr_symbol->static_lifetime = true;
     }
@@ -2012,9 +2024,8 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       break;
     case StatementType::UNKNOWN:
     default:
-      log_error(
-        "Unsupported statement: {}", element["_type"].get<std::string>());
-      abort();
+      throw std::runtime_error(
+        element["_type"].get<std::string>() + " statements are not supported");
     }
   }
 
@@ -2023,10 +2034,12 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
 
 python_converter::python_converter(
   contextt &_context,
-  const nlohmann::json &ast)
+  const nlohmann::json &ast,
+  const global_scope &gs)
   : context(_context),
     ns(_context),
     ast_json(ast),
+    global_scope_(gs),
     current_func_name(""),
     current_class_name(""),
     ref_instance(nullptr)
@@ -2058,7 +2071,7 @@ void python_converter::append_models_from_directory(
   }
 }
 
-bool python_converter::convert()
+void python_converter::convert()
 {
   code_typet main_type;
   main_type.return_type() = empty_typet();
@@ -2138,19 +2151,31 @@ bool python_converter::convert()
 
     if (function_node.empty())
     {
-      log_error("Function \"{}\" not found\n", function);
-      return true;
+      throw std::runtime_error("Function " + function + " not found");
     }
 
-    // Convert all variables from global scope and class definitions
     code_blockt block;
-    for (const auto &elem : ast_json["body"])
+    // Convert classes referenced by the function
+    for (const auto &clazz : global_scope_.classes())
     {
-      StatementType type = get_statement_type(elem);
-      if (type == StatementType::VARIABLE_ASSIGN)
-        get_var_assign(elem, block);
-      else if (type == StatementType::CLASS_DEFINITION)
-        get_class_definition(elem, block);
+      const auto &class_node = find_class(ast_json["body"], clazz);
+      get_class_definition(class_node, block);
+      current_class_name.clear();
+    }
+
+    // Convert only the global variables referenced by the function
+    for (const auto &global_var : global_scope_.variables())
+    {
+      const auto &var_node = find_var_decl(global_var, "", ast_json);
+      get_var_assign(var_node, block);
+    }
+
+    // Convert function arguments types
+    for (const auto &arg : function_node["args"]["args"])
+    {
+      auto node = find_class(ast_json["body"], arg["annotation"]["id"]);
+      if (!node.empty())
+        get_class_definition(node, block);
     }
 
     // Convert a single function
@@ -2163,8 +2188,7 @@ bool python_converter::convert()
 
     if (!symbol)
     {
-      log_error("Symbol \"{}\" not found\n", sid.to_string());
-      return true;
+      throw std::runtime_error("Symbol " + sid.to_string() + " not found");
     }
 
     // Create function call
@@ -2235,9 +2259,7 @@ bool python_converter::convert()
 
   if (context.move(main_symbol))
   {
-    log_error("main already defined by another language module");
-    return true;
+    throw std::runtime_error(
+      "The main function is already defined in another module");
   }
-
-  return false;
 }

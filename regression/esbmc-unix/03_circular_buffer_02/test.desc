@@ -1,4 +1,4 @@
 CORE
 main.c
---context-bound 3
+--context-bound 3 --no-por
 ^VERIFICATION FAILED$

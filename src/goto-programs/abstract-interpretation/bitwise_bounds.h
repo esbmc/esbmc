@@ -835,7 +835,7 @@ INT_X unsigned_2_signed_max_truncate(UINT_X a, UINT_X b, UINT_X n)
   if ((b & sign_bit) == 0)
     return unsigned_2_signed(b, n);
 
-  // if we are forced to return a negative number, try to maximise it
+  // if we are forced to return a negative number, try to maximize it
   if (alternate_b >= a && alternate_b <= b)
     return unsigned_2_signed(alternate_b, n);
 

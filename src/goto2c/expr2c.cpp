@@ -169,7 +169,7 @@ std::string expr2ct::convert_rec(
     // we rely on the "#cpp_type" field which contains a string
     // representation of the corresponding type in the original
     // program. If "#cpp_type" is not empty, we try to use
-    // this information first, and only resort to infering the type name
+    // this information first, and only resort to inferring the type name
     // from its width otherwise.
     std::string cpp_type = src.get("#cpp_type").as_string();
     if (!cpp_type.empty() && width % 8 == 0)
@@ -270,7 +270,7 @@ std::string expr2ct::convert_rec(
     {
       // Can cast "src.subtype()" to "code_typet"
       const code_typet type = to_code_type(src.subtype());
-      // Buidling the resulting string
+      // Building the resulting string
       std::string dest = "";
       // Starting with the function parameters
       dest += "(";
@@ -354,7 +354,7 @@ std::string expr2ct::convert_rec(
     // This is a function declaration.
     // Can cast "src" to "code_typet"
     const code_typet type = to_code_type(src);
-    // Buidling the resulting string
+    // Building the resulting string
     std::string dest = "";
     // Starting with the function parameters
     dest += "(";
@@ -1065,10 +1065,10 @@ std::string expr2ct::convert_union(const exprt &src, unsigned &precedence)
 
   if (operands.size() == 1)
   {
-    // Fedor: The following assert is triggered if the initialised
+    // Fedor: The following assert is triggered if the initialized
     // member of the union is an anonymous struct/union, which
     // is perfectly legal. So we intercept this scenario and go
-    // straight into converting the initialiser.
+    // straight into converting the initializer.
     if (init.empty())
       return convert(src.op0());
 

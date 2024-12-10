@@ -125,7 +125,13 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir):
     ast_json["ast_output_dir"] = output_dir
 
     # Construct JSON filename
-    json_filename = os.path.join(output_dir, "{}.json".format(os.path.basename(python_filename[:-3])))
+    if python_filename.endswith('__init__.py'):
+        # Use the parent directory name instead of the filename
+        dir_name = os.path.basename(os.path.dirname(python_filename))
+        json_filename = os.path.join(output_dir, f"{dir_name}.json")
+    else:
+        # Otherwise, use the filename without the '.py' extension
+        json_filename = os.path.join(output_dir, f"{os.path.basename(python_filename[:-3])}.json")
 
     json_dir = os.path.dirname(json_filename)
     if not os.path.exists(json_dir):

@@ -3,6 +3,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_frontend_types.h>
 #include <python-frontend/python_module.h>
+#include <python-frontend/global_scope.h>
 #include <util/message.h>
 
 #include <string>
@@ -11,14 +12,17 @@ template <class Json>
 class python_annotation
 {
 public:
-  python_annotation(Json &ast) : ast_(ast), current_func(nullptr)
+  python_annotation(Json &ast, global_scope &gs)
+    : ast_(ast), gs_(gs), current_func(nullptr), current_line_(0)
   {
+    python_filename_ = ast_["filename"].template get<std::string>();
   }
 
   void add_type_annotation()
   {
     // Add type annotations to global scope variables
     annotate_global_scope();
+    current_line_ = 0;
 
     // Add type annotation to all functions and class methods
     for (Json &element : ast_["body"])
@@ -38,13 +42,18 @@ public:
 
   void add_type_annotation(const std::string &func_name)
   {
-    // Add type annotations to global scope variables
-    annotate_global_scope();
+    current_line_ = 0;
 
     for (Json &elem : ast_["body"])
     {
       if (elem["_type"] == "FunctionDef" && elem["name"] == func_name)
       {
+        get_global_elements(elem["body"]);
+        // Add type annotations to global scope variables
+        if (!referenced_global_elements.empty())
+          annotate_global_scope();
+        filter_global_elements_ = false;
+
         // Add annotation to a specific function
         annotate_function(elem);
         return;
@@ -53,6 +62,68 @@ public:
   }
 
 private:
+  /* Get the global elements referenced by a function */
+  void get_global_elements(const Json &node)
+  {
+    // Checks if the current node is a variable identifier
+    if (
+      node.contains("_type") && node["_type"] == "Name" && node.contains("id"))
+    {
+      const std::string &var_name = node["id"];
+      Json var_node = json_utils::find_var_decl(var_name, "", ast_);
+      if (!var_node.empty())
+      {
+        gs_.add_variable(var_name);
+        referenced_global_elements.push_back(var_node);
+      }
+    }
+
+    if (
+      node.contains("_type") && node["_type"] == "Call" &&
+      node.contains("func") && node["func"]["_type"] == "Name")
+    {
+      const std::string &class_name = node["func"]["id"];
+      // Checks if the current node is a constructor call
+      Json class_node = json_utils::find_class(ast_["body"], class_name);
+      if (!class_node.empty())
+      {
+        gs_.add_class(class_name);
+        referenced_global_elements.push_back(class_node);
+      }
+      else
+      {
+        const auto &func_name = node["func"]["id"];
+        if (!is_builtin_type(func_name))
+        {
+          try
+          {
+            const auto &func_node =
+              json_utils::find_function(ast_["body"], func_name);
+            get_global_elements(func_node);
+          }
+          catch (std::runtime_error &)
+          {
+          }
+        }
+      }
+    }
+
+    // Recursively iterates through all fields of the node if it is an object
+    if (node.is_object())
+    {
+      for (auto it = node.begin(); it != node.end(); ++it)
+        get_global_elements(it.value());
+    }
+
+    // Iterates over the elements if the current node is an array
+    else if (node.is_array())
+    {
+      for (const auto &element : node)
+        get_global_elements(element);
+    }
+    filter_global_elements_ = true;
+  }
+
   void annotate_global_scope()
   {
     add_annotation(ast_);
@@ -155,19 +226,38 @@ private:
   std::string
   get_function_return_type(const std::string &func_name, const Json &ast)
   {
+    // Get type from nondet_<type> functions
+    if (func_name.find("nondet_") == 0)
+    {
+      size_t last_underscore_pos = func_name.find_last_of('_');
+      if (last_underscore_pos != std::string::npos)
+      {
+        // Return the substring from the position after the last underscore to the end
+        return func_name.substr(last_underscore_pos + 1);
+      }
+    }
+
     for (const Json &elem : ast["body"])
     {
-      if (
-        elem["_type"] == "FunctionDef" && elem["name"] == func_name &&
-        elem.contains("returns") && !elem["returns"].is_null())
+      if (elem["_type"] == "FunctionDef" && elem["name"] == func_name)
       {
+        if (!elem.contains("returns") || elem["returns"].is_null())
+          throw std::runtime_error(
+            "All functions must include type annotations for parameters and "
+            "return types.");
+
         if (elem["returns"]["_type"] == "Subscript")
           return elem["returns"]["value"]["id"];
         else
           return elem["returns"]["id"];
       }
     }
-    return std::string();
+
+    std::ostringstream oss;
+    oss << "Function \"" << func_name << "\" not found (" << python_filename_
+        << " line " << current_line_ << ")";
+
+    throw std::runtime_error(oss.str());
   }
 
   std::string get_type_from_lhs(const std::string &id, Json &body)
@@ -210,8 +300,13 @@ private:
 
     if (rhs_node.empty())
     {
-      log_error("Variable {} not found.", rhs_var_name.c_str());
-      abort();
+      const auto &lineno = element["lineno"].template get<int>();
+
+      std::ostringstream oss;
+      oss << "Type inference failed at line " << lineno;
+      oss << ". Variable " << rhs_var_name << " not found";
+
+      throw std::runtime_error(oss.str());
     }
 
     return rhs_node["annotation"]["id"];
@@ -271,12 +366,38 @@ private:
   {
     for (auto &element : body["body"])
     {
+      auto itr = std::find(
+        referenced_global_elements.begin(),
+        referenced_global_elements.end(),
+        element);
+
+      if (filter_global_elements_ && itr == referenced_global_elements.end())
+        continue;
+
+      if (element.contains("lineno"))
+        current_line_ = element["lineno"].template get<int>();
+
       auto &stmt_type = element["_type"];
 
       if (stmt_type == "If" || stmt_type == "While")
       {
         add_annotation(element);
         continue;
+      }
+
+      const std::string function_flag = config.options.get_option("function");
+      if (!function_flag.empty())
+      {
+        if (
+          stmt_type == "Expr" && element.contains("value") &&
+          element["value"]["_type"] == "Call" &&
+          element["value"]["func"]["_type"] == "Name")
+        {
+          auto &func_node = json_utils::find_function(
+            ast_["body"], element["value"]["func"]["id"]);
+          if (!func_node.empty())
+            add_annotation(func_node);
+        }
       }
 
       if (stmt_type != "Assign" || !element["type_comment"].is_null())
@@ -343,11 +464,17 @@ private:
 
       if (inferred_type.empty())
       {
-        log_error("Type undefined for:\n{}", element.dump(2).c_str());
-        abort();
+        std::ostringstream oss;
+        oss << "Type inference failed for "
+            << stmt_type.template get<std::string>() << " at line "
+            << current_line_;
+
+        throw std::runtime_error(oss.str());
       }
 
       update_assignment_node(element, inferred_type);
+      if (itr != referenced_global_elements.end())
+        *itr = element;
     }
   }
 
@@ -455,5 +582,10 @@ private:
   }
 
   Json &ast_;
+  global_scope &gs_;
   Json *current_func;
+  int current_line_;
+  std::string python_filename_;
+  bool filter_global_elements_ = false;
+  std::vector<Json> referenced_global_elements;
 };

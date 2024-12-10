@@ -14,6 +14,9 @@ Maintainers:
 #include <fmt/format.h>
 #include <fmt/color.h>
 #include <util/message/format.h>
+#include <ctime>
+#include <chrono>
+#include <iomanip>
 
 /**
  * @brief Verbosity refers to the max level
@@ -70,10 +73,18 @@ struct messaget
       FILE *f = target(mod, lvl);
       if (!f)
         return false;
+      if (config.options.get_bool_option("log-message"))
+      {
+        std::time_t currentTime = std::chrono::system_clock::to_time_t(
+          std::chrono::system_clock::now());
+        std::string timeStr =
+          (std::ostringstream{}
+           << std::put_time(std::localtime(&currentTime), "%Y-%m-%d %H:%M:%S"))
+            .str();
+        fmt::print(f, "[{}] File: {}, Line: {} ", timeStr, file, line);
+      }
       println(f, lvl, format, fmt::make_format_args(args...));
       return true;
-      (void)file;
-      (void)line;
     }
   } state = {VerbosityLevel::Status, {}, stderr};
 };

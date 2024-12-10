@@ -479,7 +479,7 @@ const std::string html_report::generate_body() const
       violation_str);
   }
 
-  // Annoted Source Header
+  // Annotated Source Header
   {
     std::ostringstream oss;
     for (const auto &item : opt_map)

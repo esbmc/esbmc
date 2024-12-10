@@ -137,11 +137,11 @@ bool value_sett::make_union(const value_sett::valuest &new_values, bool keepnew)
   {
     valuest::iterator it2 = values.find(new_value.first);
 
-    // If the new variable isnt in this' set,
+    // If the new variable isn't in this set
     if (it2 == values.end())
     {
       // We always track these when merging value sets, as these store data
-      // that's transfered back and forth between function calls. So, the
+      // that's transferred back and forth between function calls. So, the
       // variables not existing in the state we're merging into is irrelevant.
       if (
         has_prefix(
@@ -156,7 +156,7 @@ bool value_sett::make_union(const value_sett::valuest &new_values, bool keepnew)
       continue;
     }
 
-    // The variable was in this' set, merge the values.
+    // The variable was in this set, merge the values.
     entryt &e = it2->second;
     const entryt &new_e = new_value.second;
 
@@ -346,6 +346,11 @@ void value_sett::get_value_set_rec(
         else
           insert(dest, unknown2tc(original_type), BigInt(0));
       }
+      else if (is_constant_union2t(expr))
+      {
+        constant_union2t cu = to_constant_union2t(expr);
+        get_value_set_rec(cu.datatype_members[0], dest, suffix, original_type);
+      }
     }
     else
     {
@@ -515,7 +520,7 @@ void value_sett::get_value_set_rec(
   if (is_symbol2t(expr))
   {
     // This is a symbol, and if it's a pointer then this expression might
-    // evalutate to what it points at. So, return this symbols value set.
+    // evaluate to what it points at. So, return this symbols value set.
     const symbol2t &sym = to_symbol2t(expr);
 
     // If it's null however, create a null_object2t with the appropriate type.
@@ -1024,7 +1029,7 @@ void value_sett::assign(
 
   if (is_if2t(rhs))
   {
-    // If the rhs could be either side of this if, perform the assigment of
+    // If the rhs could be either side of this if, perform the assignment of
     // either side. In case it refers to itself, assign to a temporary first,
     // then assign back.
     const if2t &ifref = to_if2t(rhs);

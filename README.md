@@ -21,19 +21,6 @@ Our main website is [esbmc.org](http://esbmc.org).
 
 ### How to build/install ESBMC
 
-#### Mac OS X
-
-ESBMC works fine on ARM64 (M1/M2/M3/M4) Macs, assuming you have installed the MAC OS Dev tools. However, the compile option for GOTO_SYSROOT needs to be changed. Note that make -j8 can be increased to -j32 on faster Macs.
-````
-brew install z3
-brew install bison
-
-git clone https://github.com/esbmc/esbmc.git
-mkdir build && cd build
-cmake .. -DENABLE_Z3=1 -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
-make -j8
-````
-
 #### Ubuntu 24.04
 
 To compile ESBMC on Ubuntu 24.04 with LLVM 14 and the SMT solver Z3:
@@ -64,11 +51,88 @@ To build ESBMC with other operating systems and SMT solvers, please see the [BUI
 
 The user can also download the latest ESBMC binary for Ubuntu and Windows from the [releases page](https://github.com/esbmc/esbmc/releases).
 
+#### FreeBSD
+
+ESBMC should compile just fine in FreeBSD as long as the 32-bit libraries are enabled
+
+```sh
+pkg install git cmake python3 z3 bison flex boost-all
+wget https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.0/clang+llvm-16.0.0-amd64-unknown-freebsd13.tar.xz && mv clang16
+mkdir build && cd build
+cmake .. -DLLVM_DIR=../clang16 -DClang_DIR=../clang16
+make -j4
+```
+
+#### Mac OS X
+
+ESBMC works to some extent on ARM64 (M1/M2/M3/M4) Macs, assuming you have installed the MAC OS Dev tools. However, the compile option for GOTO_SYSROOT needs to be changed. Note that make -j8 can be increased to -j32 on faster Macs.
+````
+brew install z3
+brew install bison
+brew install clang
+brew install llvm
+
+git clone https://github.com/esbmc/esbmc.git
+mkdir build && cd build
+cmake .. -DENABLE_Z3=1 -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -DLLVM_DIR=/opt/homebrew/opt/llvm/lib/cmake/llvm -DClang_DIR=/opt/homebrew/opt/llvm/lib/cmake/clang
+
+make -j8
+````
+
+We recommend using AMD64 via docker for optimal performance. Sample docker-compose and docker files follow:
+
+DockerFile sample:
+
+````
+FROM node:18-slim
+
+# Install dependencies for ESBMC and other build tools
+RUN apt-get update && apt-get install -y \
+    clang-14 \
+    llvm-14 \
+    clang-tidy-14 \
+    python-is-python3 \
+    python3 \
+    git \
+    ccache \
+    unzip \
+    wget \
+    curl \
+    bison \
+    flex \
+    g++-multilib \
+    linux-libc-dev \
+    libboost-all-dev \
+    libz3-dev \
+    libclang-14-dev \
+    libclang-cpp-dev \
+    cmake \
+    && rm -rf /var/lib/apt/lists/*
+
+# Keep container running with tail -f /dev/null
+CMD ["bash", "-c", "tail -f /dev/null"]
+````
+
+Docker compose file:
+````
+version: '3.8'
+services:
+  esbmc:
+    platform: linux/amd64
+    build:
+      context: .
+      dockerfile: Dockerfile  # Assuming your Dockerfile is named `Dockerfile`
+    tty: true
+    stdin_open: true
+````
+The linux/amd64 line is very important, to virtualize amd64. Now do docker-compose up --build. You can then follow the linux instructions. Make -j16 works well on M2 mac's and beyond.
+
 ### How to use ESBMC
 
 As an illustrative example to show some of the ESBMC features, consider the following C code:
 
 ````C
+#include <assert.h>
 #include <math.h>
 int main() {
   unsigned int N = nondet_uint();
@@ -181,7 +245,7 @@ Concurrent software (using the pthread API) is verified by explicitly exploring 
 By default, ESBMC performs a "lazy" depth-first search of interleavings -- it can also encode (explicitly) all interleavings into a single SMT formula.
 
 Many SMT solvers are currently supported:
- * Z3 4.8+
+ * Z3 4.13+
  * Bitwuzla
  * Boolector 3.0+
  * MathSAT

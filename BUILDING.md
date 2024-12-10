@@ -20,8 +20,8 @@ Before starting, note that ESBMC is mainly distributed under the terms of the [A
 | CVC5      | no       | 1.1.2           |
 | MathSAT   | no       | 5.5.4           |
 | Yices     | no       | 2.6.4           |
-| Z3        | no       | 4.8.9           |
-| Bitwuzla  | no       | 0.5.0           |
+| Z3        | no       | 4.13.3          |
+| Bitwuzla  | no       | 0.6.1           |
 
 The version requirements are stable but can change between releases.
 
@@ -255,7 +255,7 @@ We have wrapped the entire build and setup of Z3 in the following command:
 
 ```
 Linux:
-wget https://github.com/Z3Prover/z3/releases/download/z3-4.8.9/z3-4.8.9-x64-ubuntu-16.04.zip && unzip z3-4.8.9-x64-ubuntu-16.04.zip && mv z3-4.8.9-x64-ubuntu-16.04 z3
+wget https://github.com/Z3Prover/z3/releases/download/z3-4.13.3/z3-4.13.3-x64-glibc-2.35.zip && unzip z3-4.13.3-x64-glibc-2.35.zip && mv z3-4.13.3-x64-glibc-2.35 z3
 
 macOS:
 brew install z3
@@ -275,7 +275,7 @@ We have wrapped the entire build and setup of Bitwuzla in the following command:
 
 ```
 Linux/macOS:
-git clone --depth=1 --branch=0.5.0 https://github.com/bitwuzla/bitwuzla.git && cd bitwuzla && ./configure.py --prefix $PWD/../bitwuzla-release && cd build && meson install
+git clone --depth=1 --branch=0.6.1 https://github.com/bitwuzla/bitwuzla.git && cd bitwuzla && ./configure.py --prefix $PWD/../bitwuzla-release && cd build && meson install
 ```
 
 For more details on Bitwuzla, please refer to [its Github](https://github.com/bitwuzla/bitwuzla).

@@ -380,7 +380,7 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
     migrate_expr(symbol_expr(symbol), lhs);
     expr2tc new_lhs = lhs;
 
-    // Again, specifiy which l1 data object we're going to make the assignment
+    // Again, specify which l1 data object we're going to make the assignment
     // to.
     renaming::level2t::rename_to_record(new_lhs, variable);
 

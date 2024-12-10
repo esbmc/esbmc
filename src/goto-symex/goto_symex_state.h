@@ -18,7 +18,7 @@
 #include <irep2/irep2.h>
 #include <vector>
 
-class execution_statet; // foward dec
+class execution_statet; // forward decl
 
 /**
  *  Class for storing a particular threads state.
@@ -350,7 +350,7 @@ public:
 
   /**
    *  Perform renaming of contents of an address_of operation.
-   *  This requires different behaviour, because what we really want is a
+   *  This requires different behavior, because what we really want is a
    *  pointer to a global variable or l1 variable on the stack, or a heap
    *  object. So, don't perform second level of renaming in this function.
    *  @param expr Expression to rename contents of.
@@ -440,7 +440,7 @@ public:
   symex_targett::sourcet source;
   /** Counter for how many times a particular variable has been declared:
    *  becomes the l1 renaming number in renamed variables. Used to be a counter
-   *  for each function invocation, but the existance of decl insns makes l1
+   *  for each function invocation, but the existence of decl insns makes l1
    *  re-naming out of step with function invocations. */
   std::map<irep_idt, unsigned> variable_instance_nums;
   /** Record of how many loop unwinds we've performed. For each target in the

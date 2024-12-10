@@ -345,15 +345,14 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("no-slice", true);
   }
 
-  if (cmdline.isset("smt-thread-guard") || cmdline.isset("smt-symex-guard"))
+  if (
+    cmdline.isset("smt-thread-guard") || cmdline.isset("smt-symex-guard") ||
+    cmdline.isset("smt-symex-assert") || cmdline.isset("smt-symex-assume"))
   {
-    if (!cmdline.isset("smt-during-symex"))
-    {
-      log_error(
-        "Please explicitly specify --smt-during-symex if you want "
-        "to use features that involve encoding SMT during symex");
-      abort();
-    }
+    log_status(
+      "Enabling --smt-during-symex to use features that involve encoding SMT "
+      "during symex");
+    options.set_option("smt-during-symex", true);
   }
 
   // check the user's parameters to run incremental verification
@@ -489,6 +488,16 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   /* compatibility: --cvc maps to --cvc4 */
   if (cmdline.isset("cvc"))
     options.set_option("cvc4", true);
+
+  if (cmdline.isset("log-message"))
+    options.set_option("log-message", true);
+
+  if (cmdline.isset("keep_alive_running"))
+    options.set_option("keep_alive_running", true);
+
+  if (cmdline.isset("keep-alive-interval"))
+    options.set_option(
+      "keep-alive-interval", cmdline.getval("keep-alive-interval"));
 
   config.options = options;
 }
@@ -930,7 +939,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       }
     }
 
-    // Couldn't find a bug or a proof for the current deepth
+    // Couldn't find a bug or a proof for the current depth
     log_fail("\nVERIFICATION UNKNOWN");
     return false;
   }
@@ -1196,7 +1205,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 //  3) Falsification
 //  4) k-induction
 //
-// Applying a strategy in this context means solving a paticular sequence
+// Applying a strategy in this context means solving a particular sequence
 // of decision problems from the list below for the given unwinding bound k:
 //
 //  - Base case             (see "is_base_case_violated")
@@ -1204,7 +1213,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 //  - Inductive step        (see "is_inductive_step_violated")
 //
 // \param options - options for setting the verification strategy
-// and conrolling symbolic execution
+// and controlling symbolic execution
 // \param goto_functions - GOTO program under verification
 int esbmc_parseoptionst::do_bmc_strategy(
   optionst &options,
@@ -1681,7 +1690,7 @@ bool esbmc_parseoptionst::parse_goto_program(
         exit(0);
     }
 
-    // Typecheking (old frontend) or adjust (clang frontend)
+    // Typechecking (old frontend) or adjust (clang frontend)
     if (typecheck())
       return true;
     if (final())
@@ -1745,15 +1754,32 @@ bool esbmc_parseoptionst::process_goto_program(
   {
     namespacet ns(context);
 
-    bool is_no_remove = cmdline.isset("multi-property") ||
-                        cmdline.isset("assertion-coverage") ||
-                        cmdline.isset("assertion-coverage-claims") ||
-                        cmdline.isset("condition-coverage") ||
-                        cmdline.isset("condition-coverage-claims") ||
-                        cmdline.isset("branch-coverage") ||
-                        cmdline.isset("branch-coverage-claims") ||
-                        cmdline.isset("branch-function-coverage") ||
-                        cmdline.isset("branch-function-coverage-claims");
+    bool is_mul = cmdline.isset("multi-property");
+    bool is_coverage = cmdline.isset("assertion-coverage") ||
+                       cmdline.isset("assertion-coverage-claims") ||
+                       cmdline.isset("condition-coverage") ||
+                       cmdline.isset("condition-coverage-claims") ||
+                       cmdline.isset("branch-coverage") ||
+                       cmdline.isset("branch-coverage-claims") ||
+                       cmdline.isset("branch-function-coverage") ||
+                       cmdline.isset("branch-function-coverage-claims");
+
+    // this should be before goto_check()
+    if (
+      cmdline.isset("no-standard-checks") ||
+      options.get_bool_option("no-standard-checks"))
+    {
+      options.set_option("no-pointer-check", true);
+      options.set_option("no-div-by-zero-check", true);
+      options.set_option("no-pointer-relation-check", true);
+      options.set_option("no-unlimited-scanf-check", true);
+      options.set_option("no-vla-size-check", true);
+      options.set_option("no-align-check", true);
+      options.set_option("no-bounds-check", true);
+      //?
+      // options.set_option("no-abnormal-memory-leak", true);
+      // options.set_option("no-reachable-memory-leak", true);
+    }
 
     // Start by removing all no-op instructions and unreachable code
     if (!(cmdline.isset("no-remove-no-op")))
@@ -1762,8 +1788,8 @@ bool esbmc_parseoptionst::process_goto_program(
     // We should skip this 'remove-unreachable' removal in goto-cov and multi-property
     // - multi-property wants to find all the bugs in the src code
     // - assertion-coverage wants to find out unreached codes (asserts)
-    // - however, the optimisation below will remove codes during the Goto stage
-    if (!(cmdline.isset("no-remove-unreachable") || is_no_remove))
+    // - however, the optimization below will remove codes during the Goto stage
+    if (!(cmdline.isset("no-remove-unreachable") || is_mul || is_coverage))
       remove_unreachable(goto_functions);
 
     // Apply all the initialized algorithms
@@ -1862,7 +1888,7 @@ bool esbmc_parseoptionst::process_goto_program(
     if (!(cmdline.isset("no-remove-no-op")))
       remove_no_op(goto_functions);
 
-    if (!(cmdline.isset("no-remove-unreachable") || is_no_remove))
+    if (!(cmdline.isset("no-remove-unreachable") || is_mul || is_coverage))
       remove_unreachable(goto_functions);
 
     goto_functions.update();
@@ -1896,6 +1922,9 @@ bool esbmc_parseoptionst::process_goto_program(
 
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);
+      // for function mode
+      if (cmdline.isset("function"))
+        tmp.set_target(cmdline.getval("function"));
       tmp.assertion_coverage();
     }
 
@@ -1929,6 +1958,9 @@ bool esbmc_parseoptionst::process_goto_program(
 
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);
+      // for function mode
+      if (cmdline.isset("function"))
+        tmp.set_target(cmdline.getval("function"));
 
       // if we do not want to count the guard in the assertions
       if (cmdline.isset("no-cov-asserts"))
@@ -1958,6 +1990,9 @@ bool esbmc_parseoptionst::process_goto_program(
 
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);
+      // for function mode
+      if (cmdline.isset("function"))
+        tmp.set_target(cmdline.getval("function"));
       tmp.branch_coverage();
     }
     if (

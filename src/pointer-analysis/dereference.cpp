@@ -220,7 +220,7 @@ void dereferencet::dereference_guard_expr(
     expr->Foreach_operand([this, &guard, &expr](expr2tc &op) {
       assert(is_bool_type(op));
 
-      // Handle any derererences in this operand
+      // Handle any dereferences in this operand
       if (has_dereference(op))
         dereference_expr(op, guard, dereferencet::READ);
 
@@ -1507,7 +1507,7 @@ void dereferencet::construct_from_multidir_array(
 
   // Right: any access across the boundary of the outer dimension of this array
   // is an alignment violation as that can possess extra padding.
-  // So, divide the offset by size of the inner dimention, make an index2t, and
+  // So, divide the offset by size of the inner dimension, make an index2t, and
   // construct a reference to that.
   expr2tc subtype_sz = type_byte_size_bits_expr(arr_type.subtype);
   if (subtype_sz->type != offset->type)
@@ -1627,7 +1627,7 @@ void dereferencet::construct_struct_ref_from_const_offset(
       {
         // It's this field. However, zero sized structs may have conspired
         // to make life miserable: we might be creating a reference to one,
-        // or there might be one preceeding the desired struct.
+        // or there might be one preceding the desired struct.
 
         // Zero sized struct and we don't want one,
         if (size == 0 && type_size != 0)
@@ -1869,7 +1869,12 @@ void dereferencet::dereference_failure(
 {
   // This just wraps dereference failure in a no-pointer-check check.
   if (!options.get_bool_option("no-pointer-check") && !block_assertions)
-    dereference_callback.dereference_failure(error_class, error_name, guard);
+  {
+    if (options.get_bool_option("conv-assert-to-assume"))
+      dereference_callback.dereference_assume(guard);
+    else
+      dereference_callback.dereference_failure(error_class, error_name, guard);
+  }
 }
 
 void dereferencet::bad_base_type_failure(
@@ -1963,7 +1968,7 @@ expr2tc dereferencet::stitch_together_from_byte_array(
   assert(num_bytes != 0);
 
   // We are composing a larger data type out of bytes -- we must consider
-  // what byte order we are giong to stitch it together out of.
+  // what byte order we are going to stitch it together out of.
   expr2tc accuml;
   if (is_big_endian)
   {
@@ -2176,7 +2181,7 @@ void dereferencet::bounds_check(
   {
     // Calculate size from type.
 
-    // Dance around getting the array type normalised.
+    // Dance around getting the array type normalized.
     type2tc new_string_type;
 
     // XXX -- arrays were assigned names, but we're skipping that for the moment
@@ -2274,7 +2279,7 @@ void dereferencet::check_data_obj_access(
   expr2tc access_sz_e = gen_long(offset->type, access_sz);
 
   // Only erroneous thing we check for right now is that the offset is out of
-  // bounds, misaligned access happense elsewhere. The highest byte read is at
+  // bounds, misaligned access happens elsewhere. The highest byte read is at
   // offset+access_sz-1, so check fail if the (offset+access_sz) > data_sz.
   // Lower bound not checked, instead we just treat everything as unsigned,
   // which has the same effect.
@@ -2346,7 +2351,7 @@ unsigned int dereferencet::compute_num_bytes_to_extract(
 {
   // We need to calculate the correct number of bytes to extract.
   // This is so that we do not miss any bits in case there are
-  // bitfields lying on the border of two neighbouring bytes
+  // bitfields lying on the border of two neighboring bytes
   // (e.g., |ooooooox|xooooooo|).
   //
   // By default we assume that the "offset" is aligned to 8 bits.

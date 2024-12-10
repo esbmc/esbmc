@@ -700,7 +700,7 @@ void goto_symext::symex_assign_extract(
   assert(rhs->type->get_width() == lhs->type->get_width());
 
   // We need to: read the rest of the bitfield and reconstruct it. Extract
-  // and concats are probably the best approach for the solver to optimise for.
+  // and concats are probably the best approach for the solver to optimize for.
   unsigned int bitblob_width = ex.from->type->get_width();
   expr2tc top_part;
   if (ex.upper != bitblob_width - 1)

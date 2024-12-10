@@ -5,6 +5,13 @@ enable_testing()
 find_package(Python)
 # TODO: Use add dependency
 
+if(ENABLE_PYTHON_FRONTEND)
+# Install Jira package with pip before running tests (needed by regression/python/try-fail)
+execute_process(
+    COMMAND ${Python_EXECUTABLE} -m pip install jira
+)
+endif()
+
 set(ESBMC_REGRESSION_TOOL "${CMAKE_CURRENT_SOURCE_DIR}/testing_tool.py")
 
 if(BENCHBRINGUP)
@@ -117,13 +124,18 @@ set(REGRESSIONS_CPP11 esbmc-cpp11/cpp
                       esbmc-cpp11/template
                       esbmc-cpp11/tuple
                       esbmc-cpp11/array
+                      esbmc-cpp11/lambda
                       )
 
 # list of C++14 test suites
 set(REGRESSIONS_CPP14 esbmc-cpp14/cpp
                       esbmc-cpp14/deduced-return-type
+                      esbmc-cpp14/lambda
                       esbmc-cpp14/template
                       )
+
+# list of C++17 test suites
+set(REGRESSIONS_CPP17 esbmc-cpp17/lambda)
 
 # list of C++20 test suites
 set(REGRESSIONS_CPP20 esbmc-cpp20/cpp)
@@ -197,6 +209,7 @@ else()
                     ${REGRESSIONS_Z3}
                     incremental-smt
                     ${REGRESSIONS_CPP20}
+                    ${REGRESSIONS_CPP17}
                     ${REGRESSIONS_CPP14}
                     ${REGRESSIONS_CPP11}
                     ${REGRESSIONS_CPP03}

@@ -60,10 +60,13 @@ public:
   int get_total_assert_instance() const;
   std::set<std::pair<std::string, std::string>> get_total_cond_assert() const;
   std::string get_filename_from_path(std::string path);
+  void set_target(const std::string &_tgt);
+  bool is_target_func(const irep_idt &f) const;
 
   // total numbers of instrumentation
   static size_t total_branch;
   static std::set<std::pair<std::string, std::string>> total_cond;
+  std::string target_function = "";
 
 protected:
   // turn a OP b OP c into a list a, b, c
@@ -87,8 +90,8 @@ protected:
   goto_functionst &goto_functions;
 
   // we need to skip the conditions within the built-in library
-  // while kepping the file manually included by user
-  // this filter, however, is unsound.. E.g. if the src filename is the same as the biuilt in library name
+  // while keeping the file manually included by user
+  // this filter, however, is unsound.. E.g. if the src filename is the same as the builtin library name
   std::string filename;
 
   int target_num;

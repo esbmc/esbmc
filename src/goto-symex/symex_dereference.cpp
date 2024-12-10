@@ -15,6 +15,13 @@ void symex_dereference_statet::dereference_failure(
   goto_symex.claim(not2tc(g), "dereference failure: " + msg);
 }
 
+void symex_dereference_statet::dereference_assume(const guardt &guard)
+{
+  expr2tc g = guard.as_expr();
+  goto_symex.replace_dynamic_allocation(g);
+  goto_symex.assume(not2tc(g));
+}
+
 bool symex_dereference_statet::has_failed_symbol(
   const expr2tc &expr,
   const symbolt *&symbol)
@@ -184,7 +191,7 @@ void goto_symext::dereference(expr2tc &expr, dereferencet::modet mode)
 
     assert(is_pointer_type(tmp));
     std::list<expr2tc> dummy;
-    // Dereference to byte type, because it's guarenteed to succeed.
+    // Dereference to byte type, because it's guaranteed to succeed.
     tmp = dereference2tc(get_uint8_type(), tmp);
 
     dereference.dereference_expr(tmp, guard, dereferencet::FREE);

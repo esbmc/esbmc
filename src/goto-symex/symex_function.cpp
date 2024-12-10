@@ -365,7 +365,7 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
      to_symbol2t(func_ptr).thename.as_string().find("$object") !=
        std::string::npos))
   {
-    // Emit warning; perform no function call behaviour. Increment PC
+    // Emit warning; perform no function call behavior. Increment PC
     // XXX jmorse - no location information any more.
     log_status(
       "No target candidate for function call {}",
@@ -518,7 +518,7 @@ void goto_symext::pop_frame()
 
     // Call free on alloca'd objects
     if (
-      it.base_name.as_string().find("return_value$_alloca") !=
+      it.base_name.as_string().find("return_value$_alloca$") !=
       std::string::npos)
       symex_free(code_free2tc(l1_sym));
 

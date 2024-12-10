@@ -58,7 +58,7 @@ public:
   static bool
     enable_interval_arithmetic; /// Enable simplification for arithmetic operators
   static bool
-    enable_interval_bitwise_arithmetic; /// Enable simplfication for bitwise opeations
+    enable_interval_bitwise_arithmetic; /// Enable simplification for bitwise operations
   static bool
     enable_modular_intervals; /// Make a modular operation after every assignment
   static bool
@@ -75,7 +75,7 @@ public:
   static bool enable_ibex_contractor; /// Use ibex contractor
   // Widening options
   static unsigned
-    fixpoint_limit; /// Sets a limit for number of iteartions before widening
+    fixpoint_limit; /// Sets a limit for number of iterations before widening
   static bool
     widening_under_approximate_bound; /// Whether to considers overflows for Integers
   static bool

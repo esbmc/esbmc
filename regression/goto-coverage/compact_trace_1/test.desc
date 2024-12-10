@@ -1,0 +1,6 @@
+CORE
+main.c
+--branch-coverage --compact-trace
+\ba = 1\b
+\bb = 2\b
+^VERIFICATION FAILED$

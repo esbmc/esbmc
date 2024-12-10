@@ -794,6 +794,10 @@ protected:
    *  @return Reference to global nondet object counter.
    */
   virtual unsigned int &get_nondet_counter() = 0;
+  /**
+   *  Incrementally check the assumption.
+   */
+  bool is_assume_false(const expr2tc &assumption);
 
   // Members
 
@@ -928,6 +932,8 @@ protected:
     const std::string &property,
     const std::string &msg,
     const guardt &guard) override;
+
+  void dereference_assume(const guardt &guard) override;
 
   void
   get_value_set(const expr2tc &expr, value_setst::valuest &value_set) override;

@@ -162,7 +162,7 @@
   BOOST_PP_LIST_NIL))))))))))))))
 // clang-format on
 
-// Even crazier forward decs,
+// Even crazier forward decls,
 namespace esbmct
 {
 template <typename... Args>
@@ -182,7 +182,7 @@ class constant_vector2t;
  *  crucially it ensures that the only way to get a non-const reference or
  *  pointer is via the get() method, which call the detach() method.
  *
- *  This exists to ensure that we honour the model set forth by the old string
+ *  This exists to ensure that we honor the model set forth by the old string
  *  based internal representation - specifically, that if you performed a const
  *  operation on an irept (fetching data) then the contained piece of data
  *  could continue to be shared between numerous data structures, for example
@@ -1036,9 +1036,9 @@ public:
   typedef expr2t base2t;
 };
 
-// "Specialisation" for expr kinds where the type is derived, like boolean
+// "Specialization" for expr kinds where the type is derived, like boolean
 // typed exprs. Should actually become a more structured expr2t_traits
-// that can be specialised in this way, at a later date. Might want to
+// that can be specialized in this way, at a later date. Might want to
 // move the presumed type down to the _data class at that time too.
 template <typename... Args>
 class expr2t_traits_notype

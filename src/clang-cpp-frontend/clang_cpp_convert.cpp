@@ -852,7 +852,12 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (get_type(this_expr.getType(), this_type))
       return true;
 
-    assert(this_type == it->second.second);
+    // In a lambda `CXXThisExpr` refers to the captured `this` pointer, while the `this_map` refers to
+    // the `this` pointer of the lambda closure type. This causes a mismatch, so ignore the type check in this case.
+    assert(
+      this_type == it->second.second || current_functionDecl->getParent()
+                                          ->getOuterLexicalRecordContext()
+                                          ->isLambda());
 
     new_expr = symbol_exprt(it->second.first, it->second.second);
     break;
@@ -989,12 +994,6 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::LambdaExpr &lambda_expr =
       static_cast<const clang::LambdaExpr &>(stmt);
 
-    if (lambda_expr.capture_size() > 0)
-    {
-      log_error("ESBMC does not support lambdas with captures for now");
-      return true;
-    }
-
     get_struct_union_class(*lambda_expr.getLambdaClass());
 
     // Construct a new object of the lambda class
@@ -1002,12 +1001,27 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (get_type(
           *lambda_expr.getLambdaClass()->getTypeForDecl(), lambda_class_type))
       return true;
-    new_expr = gen_zero(pointer_typet(lambda_class_type));
-    // Generating a null pointer only works as long as we don't have captures
-    // When we want to add support for captures, we have to probably call
-    // the lambda class constructor here
-    // See https://cppinsights.io/ which is a great tool to see how lambdas
-    // are translated to C++ code
+
+    exprt sym("struct", lambda_class_type);
+    // both `captures` (via `capture_begin`) and `capture_inits` have hopefully the same size and order
+    auto capture = lambda_expr.capture_begin();
+    for (const auto &it : lambda_expr.capture_inits())
+    {
+      assert(capture != lambda_expr.capture_end());
+      exprt init;
+      if (get_expr(*it, init))
+        return true;
+
+      if (capture->getCaptureKind() == clang::LambdaCaptureKind::LCK_ByRef)
+      {
+        // If the capture is by reference, we need to pass the address
+        init = address_of_exprt(init);
+        // (`this` can also be captured by ref, but it's already a pointer)
+      }
+      sym.move_to_operands(init);
+      capture++;
+    }
+    new_expr = sym;
 
     break;
   }
@@ -1109,6 +1123,54 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     code_for.body() = body;
 
     new_expr = code_for;
+    break;
+  }
+
+  case clang::Stmt::ArrayInitLoopExprClass:
+  {
+    const clang::ArrayInitLoopExpr &aile =
+      static_cast<const clang::ArrayInitLoopExpr &>(stmt);
+
+    exprt common;
+    if (get_expr(*aile.getCommonExpr(), common))
+      return true;
+
+    exprt init;
+    if (get_expr(*aile.getSubExpr(), init))
+      return true;
+
+    index_exprt ind = to_index_expr(init);
+
+    const llvm::APInt &Int = aile.getArraySize();
+    std::size_t size = Int.getSExtValue();
+    exprt inits("constant", common.type());
+    // { ref->arr[0], ref->arr[1], ... ,ref->arr[i]}
+    for (std::size_t i = 0; i < size; ++i)
+    {
+      exprt new_index = constant_exprt(
+        integer2binary(i, bv_width(ind.index().type())),
+        integer2string(i),
+        ind.index().type());
+
+      ind.index() = new_index;
+      inits.copy_to_operands(ind);
+    }
+    new_expr = inits;
+
+    break;
+  }
+
+  case clang::Stmt::ArrayInitIndexExprClass:
+  {
+    const clang::ArrayInitIndexExpr &aiie =
+      static_cast<const clang::ArrayInitIndexExpr &>(stmt);
+
+    typet t;
+    if (get_type(aiie.getType(), t))
+      return true;
+
+    new_expr = gen_zero(t);
+
     break;
   }
 
@@ -1448,6 +1510,43 @@ bool clang_cpp_convertert::get_function_body(
         decl.move_to_operands(tmp);
       }
       body.operands().insert(body.operands().begin(), decl);
+    }
+  }
+
+  // Mark the `operator()` function of the lambda class
+  // in order to adjust the body function later
+  if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
+  {
+    if (md->getParent()->getLambdaCallOperator() == md)
+    {
+#if CLANG_VERSION_MAJOR <= 15
+#  define CAPTURE_VARIABLE_TYPE clang::VarDecl
+#else
+#  define CAPTURE_VARIABLE_TYPE clang::ValueDecl
+#endif
+      new_expr.set("#lambda_call_operator", true);
+      irept &lambda_capture_fields = new_expr.add("#lambda_capture_fields");
+      llvm::DenseMap<const CAPTURE_VARIABLE_TYPE *, clang::FieldDecl *>
+        captures{};
+      clang::FieldDecl *thisCapture{};
+      md->getParent()->getCaptureFields(captures, thisCapture);
+      for (auto &capture : captures)
+      {
+        std::string captured_var_id, ignored;
+        get_decl_name(*capture.first, ignored, captured_var_id);
+        exprt ref_to_captured_var;
+        get_decl(*capture.second, ref_to_captured_var);
+        build_member_from_component(fd, ref_to_captured_var);
+        lambda_capture_fields.set(captured_var_id, ref_to_captured_var);
+      }
+      if (thisCapture)
+      {
+        exprt ref_to_captured_this;
+        get_decl(*thisCapture, ref_to_captured_this);
+        build_member_from_component(fd, ref_to_captured_this);
+        dstring lambda_this_id = ref_to_captured_this.op0().identifier();
+        lambda_capture_fields.set(lambda_this_id, ref_to_captured_this);
+      }
     }
   }
 

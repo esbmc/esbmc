@@ -6,7 +6,7 @@
 #include <util/base_type.h>
 #include <util/c_types.h>
 
-/* An optimisation of the tuple flattening technique found in smt_tuple_sym.cpp,
+/* An optimization of the tuple flattening technique found in smt_tuple_sym.cpp,
  * where we separate out tuple elements into their own variables without any
  * name mangling, and avoid un-necessary operations on elements when the tuple
  * is manipulated.
