@@ -42,10 +42,7 @@
 #include <atomic>
 #include <goto-symex/witnesses.h>
 
-bmct::bmct(
-  goto_functionst &funcs,
-  optionst &opts,
-  contextt &_context)
+bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   : options(opts), context(_context), ns(context)
 {
   interleaving_number = 0;

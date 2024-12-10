@@ -18,10 +18,7 @@
 class bmct
 {
 public:
-  bmct(
-    goto_functionst &funcs,
-    optionst &opts,
-    contextt &_context);
+  bmct(goto_functionst &funcs, optionst &opts, contextt &_context);
 
   optionst &options;
   enum ltl_res
