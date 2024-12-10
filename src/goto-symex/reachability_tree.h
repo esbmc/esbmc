@@ -357,6 +357,8 @@ protected:
   bool interactive_ileaves;
   /** Are we using the --schedule scheduling method? */
   bool schedule;
+  /** Are we using the --smt-during-symex method? */
+  bool smt_during_symex;
 
   /* Map to store the expression and thread ID,
    * which that expression belongs to. */
