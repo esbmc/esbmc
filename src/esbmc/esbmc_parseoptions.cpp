@@ -628,7 +628,8 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 #ifdef _WIN32
   log_error("Windows does not support parallel kind");
   abort();
-#else
+#endif
+
   // Pipes for communication between processes
   int forward_pipe[2], backward_pipe[2];
 
@@ -1189,8 +1190,6 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
   default:
     assert(0 && "Unknown process type.");
   }
-
-#endif
 
   return 0;
 }
