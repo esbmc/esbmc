@@ -479,7 +479,7 @@ void add_coverage_to_json(const goto_tracet &goto_trace, const namespacet &ns)
   std::ofstream json_out("report.json");
   if (!json_out.is_open())
   {
-    log_error("Error: Could not open report.json for writing");
+    log_error("Could not open report.json for writing");
     return;
   }
   json_out << std::setw(2) << all_tests << std::endl;
