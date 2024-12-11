@@ -277,7 +277,7 @@ void execution_statet::symex_step(reachability_treet &art)
     else
     {
       // Fall through to base class
-      goto_symext::symex_step(art);
+      goto_symext::symex_step();
     }
     break;
   case ATOMIC_BEGIN:
@@ -367,7 +367,7 @@ void execution_statet::symex_step(reachability_treet &art)
     break;
   }
   default:
-    goto_symext::symex_step(art);
+    goto_symext::symex_step();
   }
 }
 

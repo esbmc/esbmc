@@ -167,7 +167,7 @@ goto_symext::symex_resultt goto_symext::get_symex_result()
   return goto_symext::symex_resultt(target, total_claims, remaining_claims);
 }
 
-void goto_symext::symex_step(reachability_treet &art)
+void goto_symext::symex_step()
 {
   assert(!cur_state->call_stack.empty());
 

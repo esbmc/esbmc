@@ -134,7 +134,7 @@ public:
    *  this.
    *  @param art Reachability tree we're working with.
    */
-  virtual void symex_step(reachability_treet &art);
+  virtual void symex_step();
 
   /**
    *  Perform accounting checks / assertions at end of a program run.
