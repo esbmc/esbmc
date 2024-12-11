@@ -1833,38 +1833,8 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       break;
     }
 
-    if (!perform_virtual_dispatch(member))
-    {
-      exprt comp;
-      if (get_decl(*member.getMemberDecl(), comp))
-        return true;
-
-      if (!is_member_decl_static(member))
-      {
-        exprt base;
-        if (get_expr(*member.getBase(), base))
-          return true;
-
-        assert(!comp.name().empty());
-        // for MemberExpr referring to struct field (or method in case of C++ class)
-        new_expr = member_exprt(base, comp.name(), comp.type());
-      }
-      else
-      {
-        // for static members, use the member decl symbol directly
-        // without making a member_exprt, e.g.
-        // If the member_exprt refers to a class static member, then
-        // replace "OBJECT.MyStatic = 1" with "MyStatic = 1;"
-        assert(comp.statement() == "decl");
-        assert(comp.op0().is_symbol());
-        new_expr = comp.op0();
-      }
-    }
-    else
-    {
-      if (get_vft_binding_expr(member, new_expr))
-        return true;
-    }
+    if (get_member_expr(member, new_expr))
+      return true;
 
     break;
   }
@@ -3440,6 +3410,39 @@ bool clang_c_convertert::get_atomic_expr(
   fake_call.function() = symbol_exprt("c:@F@" + name, t);
   fake_call.function().name(name);
   new_expr.swap(fake_call);
+  return false;
+}
+
+bool clang_c_convertert::get_member_expr(
+  const clang::MemberExpr &memb,
+  exprt &new_expr)
+{
+  typet comp_type;
+  if (get_type(*memb.getMemberDecl()->getType(), comp_type))
+    return true;
+
+  std::string id, name;
+  get_decl_name(*memb.getMemberDecl(), name, id);
+
+  if (!is_member_decl_static(memb))
+  {
+    exprt base;
+    if (get_expr(*memb.getBase(), base))
+      return true;
+
+    assert(!id.empty());
+    // for MemberExpr referring to struct field (or method in case of C++ class)
+    new_expr = member_exprt(base, id, comp_type);
+  }
+  else
+  {
+    // for static members, use the member decl symbol directly
+    // without making a member_exprt, e.g.
+    // If the member_exprt refers to a class static member, then
+    // replace "OBJECT.MyStatic = 1" with "MyStatic = 1;"
+    new_expr = symbol_exprt(id, comp_type);
+    new_expr.name(name);
+  }
   return false;
 }
 

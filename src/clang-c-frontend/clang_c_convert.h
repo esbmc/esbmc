@@ -196,6 +196,8 @@ protected:
 
   bool get_atomic_expr(const clang::AtomicExpr &atm, exprt &new_expr);
 
+  virtual bool get_member_expr(const clang::MemberExpr &memb,exprt &new_expr);
+
   bool get_cast_expr(const clang::CastExpr &cast, exprt &new_expr);
 
   void get_default_symbol(
