@@ -196,7 +196,7 @@ public:
    *  a thread being created, and so forth.
    *  @param art reachability_treet we're operating with (defunct?)
    */
-  void symex_step(reachability_treet &art) override;
+  void symex_step(reachability_treet &art);
 
   /**
    *  Symbolically assign a value.
