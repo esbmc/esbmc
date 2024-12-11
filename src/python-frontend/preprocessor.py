@@ -4,7 +4,8 @@ class Preprocessor(ast.NodeTransformer):
     def __init__(self):
         # Initialize with an empty target name
         self.target_name = ""
-
+        self.functionDefaults = {}
+        self.functionParams = {}
     # for-range statements such as:
     #
     #   for x in range(1, 5, 1):
@@ -128,3 +129,14 @@ class Preprocessor(ast.NodeTransformer):
                 node.args[1] = ast.NameConstant(value=False)
         self.generic_visit(node)
         return node
+    
+    def visit_FunctionDef(self, node):
+        self.functionParams[node.name] = [i.arg for i in node.args.args]
+        if len(node.args.defaults) < 1: 
+            self.generic_visit(node)
+            return node
+        for i in range(1,len(node.args.defaults)+1):
+            self.functionDefaults[(node.name,node.args.args[-i].arg)] = node.args.defaults[-i].value
+        self.generic_visit(node)
+        return node
+        
