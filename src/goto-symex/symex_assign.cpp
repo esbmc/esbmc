@@ -36,6 +36,7 @@ goto_symext::goto_symext(
     depth_limit(atol(options.get_option("depth").c_str())),
     break_insn(atol(options.get_option("break-at").c_str())),
     memory_leak_check(options.get_bool_option("memory-leak-check")),
+    no_memory_cleanup_check(options.get_bool_option("no-memory-cleanup-check")),
     no_reachable_memleak(options.get_bool_option("no-reachable-memory-leak")),
     no_assertions(options.get_bool_option("no-assertions")),
     no_simplify(options.get_bool_option("no-simplify")),
@@ -96,6 +97,7 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
   depth_limit = sym.depth_limit;
   break_insn = sym.break_insn;
   memory_leak_check = sym.memory_leak_check;
+  no_memory_cleanup_check = sym.no_memory_cleanup_check;
   no_reachable_memleak = sym.no_reachable_memleak;
   no_assertions = sym.no_assertions;
   no_simplify = sym.no_simplify;
