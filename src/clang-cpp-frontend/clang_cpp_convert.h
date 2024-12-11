@@ -528,7 +528,7 @@ protected:
    */
   void make_temporary(exprt &expr);
 
-  bool get_member_expr(const clang::MemberExpr &memb,exprt &new_expr) override;
+  bool get_member_expr(const clang::MemberExpr &memb, exprt &new_expr) override;
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */
