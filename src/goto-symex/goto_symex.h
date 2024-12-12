@@ -134,7 +134,7 @@ public:
    *  this.
    *  @param art Reachability tree we're working with.
    */
-  virtual void symex_step();
+  virtual void symex_step(reachability_treet &art);
 
   /**
    *  Perform accounting checks / assertions at end of a program run.
@@ -910,7 +910,10 @@ protected:
    *  the dereference code and the caller, who will inspect the contents after
    *  a call to dereference (in INTERNAL mode) completes. */
   std::list<dereference_callbackt::internal_item> internal_deref_items;
-
+  /** Analyze the shared varables in a function call, this is because an argumemt
+   *  may be renamed to constant bool in symex_function_call_code(), while we need
+   *  to get the information for context switch.*/ 
+  virtual void analyze_args(const expr2tc &expr) = 0;
   friend void build_goto_symex_classes();
 };
 

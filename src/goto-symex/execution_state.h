@@ -196,7 +196,7 @@ public:
    *  a thread being created, and so forth.
    *  @param art reachability_treet we're operating with (defunct?)
    */
-  void symex_step(reachability_treet &art);
+  void symex_step(reachability_treet &art) override;
 
   /**
    *  Symbolically assign a value.
@@ -489,6 +489,11 @@ public:
   /** Makr registered monitor thread as ended. Designed to be used by ltl2ba
    *  produced code when the monitor is to be ended. */
   void kill_monitor_thread();
+
+  /** Analyze the shared varables in a function call, this is because an argumemt
+   *  may be renamed to constant bool in symex_function_call_code(), while we need
+   *  to get the information for context switch.*/ 
+  void analyze_args(const expr2tc &expr) override;
 
 public:
   /** Pointer to reachability_treet that owns this ex_state */

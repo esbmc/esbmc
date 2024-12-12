@@ -277,7 +277,7 @@ void execution_statet::symex_step(reachability_treet &art)
     else
     {
       // Fall through to base class
-      goto_symext::symex_step();
+      goto_symext::symex_step(art);
     }
     break;
   case ATOMIC_BEGIN:
@@ -301,73 +301,8 @@ void execution_statet::symex_step(reachability_treet &art)
     }
     state.source.pc++;
     break;
-  case FUNCTION_CALL:
-  {
-    expr2tc deref_code = instruction.code;
-    replace_nondet(deref_code);
-
-    code_function_call2t &call = to_code_function_call2t(deref_code);
-
-    if (!is_nil_expr(call.ret))
-    {
-      dereference(call.ret, dereferencet::WRITE);
-    }
-
-    replace_dynamic_allocation(deref_code);
-
-    for (auto &operand : call.operands)
-      if (!is_nil_expr(operand))
-        dereference(operand, dereferencet::READ);
-
-    // Always run intrinsics, whether guard is false or not. This is due to the
-    // unfortunate circumstance where a thread starts with false guard due to
-    // decision taken in another thread in this trace. In that case the
-    // terminate intrinsic _has_ to run, or we explode.
-    if (is_symbol2t(call.function))
-    {
-      const irep_idt &id = to_symbol2t(call.function).thename;
-      if (has_prefix(id.as_string(), "c:@F@__ESBMC"))
-      {
-        cur_state->source.pc++;
-        run_intrinsic(call, art, id.as_string());
-        return;
-      }
-
-      if (id == "c:@F@scanf" || id == "c:@F@sscanf" || id == "c:@F@fscanf")
-      {
-        cur_state->source.pc++;
-
-        auto &ex_state = art.get_cur_state();
-        if (ex_state.cur_state->guard.is_false())
-          return;
-
-        symex_input(call);
-        return;
-      }
-    }
-
-    if (cur_state->guard.is_false())
-    {
-      cur_state->source.pc++;
-      break;
-    }
-
-    if (is_symbol2t(call.function))
-    {
-      const irep_idt &id = to_symbol2t(call.function).thename;
-      if (has_prefix(id.as_string(), "c:@F@__builtin"))
-      {
-        cur_state->source.pc++;
-        if (run_builtin(call, id.as_string()))
-          return;
-      }
-    }
-    symex_function_call(deref_code);
-    analyze_read(deref_code);
-    break;
-  }
   default:
-    goto_symext::symex_step();
+    goto_symext::symex_step(art);
   }
 }
 
@@ -888,6 +823,12 @@ void execution_statet::analyze_read(const expr2tc &code)
     thread_last_reads[active_thread].insert(
       global_reads.begin(), global_reads.end());
   }
+}
+
+void execution_statet::analyze_args(const expr2tc &expr)
+{
+  if (threads_state.size() >= thread_cswitch_threshold)
+    analyze_read(expr);
 }
 
 void execution_statet::get_expr_globals(
