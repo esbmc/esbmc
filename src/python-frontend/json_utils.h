@@ -2,6 +2,8 @@
 
 #include <string>
 #include <fstream>
+#include <sstream>
+#include <algorithm>
 
 #define DUMP_OBJECT(obj) printf("%s\n", (obj).dump(2).c_str())
 
@@ -92,6 +94,39 @@ JsonType &find_function(JsonType &json, const std::string &func_name)
       return elem;
   }
   throw std::runtime_error("Function " + func_name + " not found\n");
+}
+
+template <typename JsonType>
+JsonType &find_imported_function(JsonType &ast, const std::string &func_name)
+{
+  for (auto &node : ast["body"])
+  {
+    if (node["_type"] == "ImportFrom" || node["_type"] == "Import")
+    {
+      for (const auto &name : node["names"])
+        if (name["name"] == func_name)
+          return node;
+    }
+  }
+  throw std::runtime_error("Function " + func_name + " not found\n");
+}
+
+template <typename JsonType>
+const std::string
+get_object_alias(const JsonType &ast, const std::string &obj_name)
+{
+  for (auto &node : ast["body"])
+  {
+    if (node["_type"] == "ImportFrom" || node["_type"] == "Import")
+    {
+      for (const auto &name : node["names"])
+      {
+        if (name["_type"] == "alias" && name["asname"] == obj_name)
+          return name["name"];
+      }
+    }
+  }
+  return obj_name;
 }
 
 template <typename JsonType>
