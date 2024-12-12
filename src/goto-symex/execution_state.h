@@ -492,7 +492,7 @@ public:
 
   /** Analyze the shared varables in a function call, this is because an argumemt
    *  may be renamed to constant bool in symex_function_call_code(), while we need
-   *  to get the information for context switch.*/ 
+   *  to get the information for context switch.*/
   void analyze_args(const expr2tc &expr) override;
 
 public:

@@ -912,7 +912,7 @@ protected:
   std::list<dereference_callbackt::internal_item> internal_deref_items;
   /** Analyze the shared varables in a function call, this is because an argumemt
    *  may be renamed to constant bool in symex_function_call_code(), while we need
-   *  to get the information for context switch.*/ 
+   *  to get the information for context switch.*/
   virtual void analyze_args(const expr2tc &expr) = 0;
   friend void build_goto_symex_classes();
 };
