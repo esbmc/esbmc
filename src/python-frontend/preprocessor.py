@@ -127,8 +127,21 @@ class Preprocessor(ast.NodeTransformer):
                 node.args[1] = ast.NameConstant(value=True)
             else:
                 node.args[1] = ast.NameConstant(value=False)
+
+        functionName = node.func.id
+        expectedArgs = self.functionParams[functionName]
+
+        # return early if correct no. or too many parameters or if function doesn't have default parameters
+        if len(node.args) >= len(expectedArgs) or (functionName, expectedArgs[-1]) not in self.functionDefaults:
+            self.generic_visit(node)
+            return node
+        
+        # append defaults 
+        for i in range(len(node.args),len(expectedArgs)):
+            node.args.append(ast.Constant(value = self.functionDefaults[(functionName, expectedArgs[i])]))
+
         self.generic_visit(node)
-        return node
+        return node # transformed node
     
     def visit_FunctionDef(self, node):
         self.functionParams[node.name] = [i.arg for i in node.args.args]
