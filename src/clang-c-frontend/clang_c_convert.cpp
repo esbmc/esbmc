@@ -156,32 +156,9 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     struct_union_typet::componentt comp(id, name, t);
     if (fd.isBitField())
     {
-      /* According to the C standard, the bitfield width shall be an integer
-       * constant expression (C11 6.7.2.1/4), which the compiler can evaluate
-       * (C11 6.6/2) */
-      clang::Expr::EvalResult result;
-      if (!fd.getBitWidth()->EvaluateAsInt(result, *ASTContext))
-      {
-        log_error("Clang could not calculate bitfield width");
-        std::ostringstream oss;
-        llvm::raw_os_ostream ross(oss);
-        fd.getBitWidth()->dump(ross, *ASTContext);
-        ross.flush();
-        log_error("{}", oss.str());
-        return true;
-      }
-
-      /* TODO: remove this recursive call. `width` is not used. However, there
-       * are side-effects that cause re-ordering in the GOTO for pthread_lib.c
-       * and that also negatively affect Boolector run times, see #764. These
-       * should be investigated before removing it. */
-      exprt width;
-      if (get_expr(*fd.getBitWidth(), width))
+      if (get_bitfield_type(fd, t, comp.type()))
         return true;
 
-      comp.type().width(integer2string(result.Val.getInt().getSExtValue()));
-      comp.type().set("#bitfield", true);
-      comp.type().subtype() = t;
 #if LLVM_VERSION_MAJOR > 18
       comp.set_is_unnamed_bitfield(fd.isUnnamedBitField());
 #else
@@ -1488,6 +1465,40 @@ bool clang_c_convertert::get_builtin_type(
   }
 
   new_type.set("#cpp_type", c_type);
+  return false;
+}
+
+bool clang_c_convertert::get_bitfield_type(
+  const clang::FieldDecl &fd,
+  const typet &orig_type,
+  typet &new_type)
+{
+  /* According to the C standard, the bitfield width shall be an integer
+   * constant expression (C11 6.7.2.1/4), which the compiler can evaluate
+   * (C11 6.6/2) */
+  clang::Expr::EvalResult result;
+  if (!fd.getBitWidth()->EvaluateAsInt(result, *ASTContext))
+  {
+    log_error("Clang could not calculate bitfield width");
+    std::ostringstream oss;
+    llvm::raw_os_ostream ross(oss);
+    fd.getBitWidth()->dump(ross, *ASTContext);
+    ross.flush();
+    log_error("{}", oss.str());
+    return true;
+  }
+
+  /* TODO: remove this recursive call. `width` is not used. However, there
+       * are side-effects that cause re-ordering in the GOTO for pthread_lib.c
+       * and that also negatively affect Boolector run times, see #764. These
+       * should be investigated before removing it. */
+  exprt width;
+  if (get_expr(*fd.getBitWidth(), width))
+    return true;
+
+  new_type = unsignedbv_typet(result.Val.getInt().getSExtValue());
+  new_type.set("#bitfield", true);
+  new_type.subtype() = orig_type;
   return false;
 }
 
@@ -3423,34 +3434,9 @@ bool clang_c_convertert::get_member_expr(
 
   if (const auto *bitfield = memb.getSourceBitField())
   {
-    /* According to the C standard, the bitfield width shall be an integer
-       * constant expression (C11 6.7.2.1/4), which the compiler can evaluate
-       * (C11 6.6/2) */
-    clang::Expr::EvalResult result;
-    if (!bitfield->getBitWidth()->EvaluateAsInt(result, *ASTContext))
-    {
-      log_error("Clang could not calculate bitfield width");
-      std::ostringstream oss;
-      llvm::raw_os_ostream ross(oss);
-      bitfield->getBitWidth()->dump(ross, *ASTContext);
-      ross.flush();
-      log_error("{}", oss.str());
+    typet bitfield_type;
+    if (get_bitfield_type(*bitfield, comp_type, bitfield_type))
       return true;
-    }
-
-    /* TODO: remove this recursive call. `width` is not used. However, there
-       * are side-effects that cause re-ordering in the GOTO for pthread_lib.c
-       * and that also negatively affect Boolector run times, see #764. These
-       * should be investigated before removing it. */
-    exprt width;
-    if (get_expr(*bitfield->getBitWidth(), width))
-      return true;
-
-    typet bitfield_type = comp_type;
-    bitfield_type.width(integer2string(result.Val.getInt().getSExtValue()));
-    bitfield_type.set("#bitfield", true);
-    bitfield_type.subtype() = comp_type;
-
     comp_type.swap(bitfield_type);
   }
 

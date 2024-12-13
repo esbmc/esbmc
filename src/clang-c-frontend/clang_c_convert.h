@@ -178,6 +178,11 @@ protected:
 
   bool get_builtin_type(const clang::BuiltinType &bt, typet &new_type);
 
+  bool get_bitfield_type(
+    const clang::FieldDecl &,
+    const typet &orig_type,
+    typet &new_type);
+
   virtual bool get_expr(const clang::Stmt &stmt, exprt &new_expr);
 
   bool get_enum_value(const clang::EnumConstantDecl *e, exprt &new_expr);
