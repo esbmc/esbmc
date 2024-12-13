@@ -1496,7 +1496,8 @@ bool clang_c_convertert::get_bitfield_type(
   if (get_expr(*fd.getBitWidth(), width))
     return true;
 
-  new_type = unsignedbv_typet(result.Val.getInt().getSExtValue());
+  new_type = orig_type;
+  new_type.width(result.Val.getInt().getSExtValue());
   new_type.set("#bitfield", true);
   new_type.subtype() = orig_type;
   return false;
