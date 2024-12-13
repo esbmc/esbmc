@@ -3421,6 +3421,39 @@ bool clang_c_convertert::get_member_expr(
   if (get_type(*memb.getMemberDecl()->getType(), comp_type))
     return true;
 
+  if (const auto *bitfield = memb.getSourceBitField())
+  {
+    /* According to the C standard, the bitfield width shall be an integer
+       * constant expression (C11 6.7.2.1/4), which the compiler can evaluate
+       * (C11 6.6/2) */
+    clang::Expr::EvalResult result;
+    if (!bitfield->getBitWidth()->EvaluateAsInt(result, *ASTContext))
+    {
+      log_error("Clang could not calculate bitfield width");
+      std::ostringstream oss;
+      llvm::raw_os_ostream ross(oss);
+      bitfield->getBitWidth()->dump(ross, *ASTContext);
+      ross.flush();
+      log_error("{}", oss.str());
+      return true;
+    }
+
+    /* TODO: remove this recursive call. `width` is not used. However, there
+       * are side-effects that cause re-ordering in the GOTO for pthread_lib.c
+       * and that also negatively affect Boolector run times, see #764. These
+       * should be investigated before removing it. */
+    exprt width;
+    if (get_expr(*bitfield->getBitWidth(), width))
+      return true;
+
+    typet bitfield_type = comp_type;
+    bitfield_type.width(integer2string(result.Val.getInt().getSExtValue()));
+    bitfield_type.set("#bitfield", true);
+    bitfield_type.subtype() = comp_type;
+
+    comp_type.swap(bitfield_type);
+  }
+
   std::string id, name;
   get_decl_name(*memb.getMemberDecl(), name, id);
 
