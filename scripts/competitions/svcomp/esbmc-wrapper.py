@@ -252,11 +252,11 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
   else:
     command_line += "--64 "
 
-  concurrency = ((prop in (Property.reach, Property.datarace)) and
+  concurrency = ((prop in (Property.reach, Property.datarace, Property.memory)) and
                  check_if_benchmark_contains_pthread(benchmark))
 
   if concurrency:
-    command_line += " --no-por --context-bound 2 "
+    command_line += " --no-por --context-bound 3 "
     #command_line += "--no-slice " # TODO: Witness validation is only working without slicing
 
   # Add witness arg
@@ -272,7 +272,10 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
   if prop == Property.overflow:
     command_line += "--no-pointer-check --no-bounds-check --overflow-check --no-assertions "
   elif prop == Property.memory:
-    command_line += "--memory-leak-check --no-reachable-memory-leak --no-assertions "
+    if not concurrency:
+      command_line += "--memory-leak-check --no-reachable-memory-leak --no-assertions "
+    else:
+      command_line += "--memory-leak-check --no-memory-cleanup-check --no-assertions "
     # It seems SV-COMP doesn't want to check for memleaks on abort()
     # see also <https://github.com/esbmc/esbmc/issues/1259>
     command_line += "--no-abnormal-memory-leak "
