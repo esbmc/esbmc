@@ -1973,13 +1973,10 @@ bool clang_cpp_convertert::get_member_expr(
   const clang::MemberExpr &memb,
   exprt &new_expr)
 {
-  if (!perform_virtual_dispatch(memb))
-    return clang_c_convertert::get_member_expr(memb, new_expr);
+  if (perform_virtual_dispatch(memb))
+    return get_vft_binding_expr(memb, new_expr);
 
-  if (get_vft_binding_expr(memb, new_expr))
-    return true;
-
-  return false;
+  return clang_c_convertert::get_member_expr(memb, new_expr);
 }
 
 void clang_cpp_convertert::gen_typecast_base_ctor_call(
