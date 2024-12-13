@@ -825,6 +825,12 @@ void execution_statet::analyze_read(const expr2tc &code)
   }
 }
 
+void execution_statet::analyze_args(const expr2tc &expr)
+{
+  if (threads_state.size() >= thread_cswitch_threshold)
+    analyze_read(expr);
+}
+
 void execution_statet::get_expr_globals(
   const namespacet &ns,
   const expr2tc &expr,
