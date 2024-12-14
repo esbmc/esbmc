@@ -178,6 +178,11 @@ protected:
 
   bool get_builtin_type(const clang::BuiltinType &bt, typet &new_type);
 
+  bool get_bitfield_type(
+    const clang::FieldDecl &,
+    const typet &orig_type,
+    typet &new_type);
+
   virtual bool get_expr(const clang::Stmt &stmt, exprt &new_expr);
 
   bool get_enum_value(const clang::EnumConstantDecl *e, exprt &new_expr);
@@ -195,6 +200,8 @@ protected:
   get_unary_operator_expr(const clang::UnaryOperator &uniop, exprt &new_expr);
 
   bool get_atomic_expr(const clang::AtomicExpr &atm, exprt &new_expr);
+
+  virtual bool get_member_expr(const clang::MemberExpr &memb, exprt &new_expr);
 
   bool get_cast_expr(const clang::CastExpr &cast, exprt &new_expr);
 
