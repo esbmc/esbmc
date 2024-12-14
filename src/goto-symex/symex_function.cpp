@@ -251,7 +251,10 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   // read the arguments -- before the locality renaming
   std::vector<expr2tc> arguments = call.operands;
   for (auto &argument : arguments)
+  {
+    analyze_args(argument);
     cur_state->rename(argument);
+  }
 
   // Rename the return value to level1, identifying the data object / storage
   // to which the return value should be written. This is important in the case
