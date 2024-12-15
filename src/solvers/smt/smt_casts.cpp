@@ -507,22 +507,26 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
 
   if (is_byte_update2t(cast.from))
   {
-    // byte_update(nondet_sym, offset, update) special handling is needed
-    // in this case cause the nondet pointer cannot match any address
-    // Assign obj of int_to_ptr to nondet pointer obj
+    // Handle byte_update(nondet_sym, offset, update) case
+    // The nondet pointer cannot match any address.
+    // Assign the object of int_to_ptr to the nondet pointer's object.
     byte_update2t bu = to_byte_update2t(cast.from);
     bitcast2t bc = to_bitcast2t(bu.source_value);
     smt_astt sym = convert_ast(bc.from);
+
+    // Convert symbolic representation and project the object
     smt_astt obj = sym->project(this, 0);
     inv_obj = obj;
 
+    // Derive the numeric representation of the pointer object
+    // Access the current address space using obj_num as an index
     expr2tc obj_num = pointer_object2tc(ptraddr_type2(), bc.from);
     expr2tc from_addr = index2tc(
       addr_space_type,
       symbol2tc(addr_space_arr_type, get_cur_addrspace_ident()),
       obj_num);
 
-    // calculate the offset of byte_update: target - addr_start(nondet poiner obj)
+    // Compute the offset between target and the start address
     const struct_type2t &addr_space = to_struct_type(addr_space_type);
     expr2tc from_start =
       member2tc(addr_space.members[0], from_addr, addr_space.member_names[0]);
