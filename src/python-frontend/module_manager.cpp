@@ -1,6 +1,7 @@
 #include <python-frontend/module_manager.h>
 #include <python-frontend/module.h>
 #include <python-frontend/json_utils.h>
+#include <util/message.h>
 
 #include <nlohmann/json.hpp>
 
@@ -22,38 +23,53 @@ std::shared_ptr<module> create_module(const fs::path &json_path)
 
   auto md = std::make_shared<module>(json_path.stem().string());
 
-  nlohmann::json ast;
-  json_file >> ast;
-  json_file.close();
-
-  for (const auto &node : ast["body"])
+  try
   {
-    if (node["_type"] == "FunctionDef")
+    nlohmann::json ast;
+    json_file >> ast;
+    json_file.close();
+
+    for (const auto &node : ast["body"])
     {
-      function f;
-      f.name_ = node["name"];
+      if (node["_type"] == "FunctionDef")
+      {
+        function f;
+        f.name_ = node["name"];
 
-      if (node["returns"].is_null())
-        continue;
+        if (node["returns"].is_null())
+          continue;
 
-      if (node["returns"]["_type"] == "Subscript")
-        f.return_type_ = node["returns"]["value"]["id"];
-      else if (
-        node["returns"].contains("value") && node["returns"]["value"].is_null())
-        f.return_type_ = "None";
-      else
-        f.return_type_ = node["returns"]["id"];
+        if (node["returns"]["_type"] == "Subscript")
+          f.return_type_ = node["returns"]["value"]["id"];
+        else if (
+          node["returns"].contains("value") &&
+          node["returns"]["value"].is_null())
+          f.return_type_ = "None";
+        else
+          f.return_type_ = node["returns"]["id"];
 
-      md->add_function(f);
+        md->add_function(f);
+      }
     }
-  }
 
-  return md;
+    return md;
+  }
+  catch (const nlohmann::json::parse_error &e)
+  {
+    // Catches JSON parsing errors (e.g., invalid JSON content)
+    log_error("Error parsing the JSON: {}", e.what());
+    return nullptr;
+  }
+  catch (const std::exception &e)
+  {
+    log_error("Unknown error: {}", e.what());
+    return nullptr;
+  }
 }
 
 void module_manager::load_directory(
   const fs::path &current_path,
-  std::shared_ptr<module> parent_module)
+  ModulePtr parent_module)
 {
   for (const auto &entry : fs::directory_iterator(current_path))
   {
@@ -177,7 +193,7 @@ static std::vector<std::string> split(const std::string &str, char delimiter)
   return tokens;
 }
 
-std::shared_ptr<module> get_module_recursive(
+ModulePtr get_module_recursive(
   const std::vector<std::string> &parts,
   const ModulesList &current_modules)
 {
@@ -206,8 +222,7 @@ std::shared_ptr<module> get_module_recursive(
   return nullptr; // Return nullptr if the module is not found
 }
 
-const std::shared_ptr<module>
-module_manager::get_module(const std::string &module_name) const
+const ModulePtr module_manager::get_module(const std::string &module_name) const
 {
   std::vector<std::string> parts = split(module_name, '.');
   return get_module_recursive(parts, modules_);

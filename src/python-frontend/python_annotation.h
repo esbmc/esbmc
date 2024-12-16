@@ -18,7 +18,8 @@ public:
   {
     python_filename_ = ast_["filename"].template get<std::string>();
     if (ast_.contains("ast_output_dir"))
-      mm_ = module_manager::create(ast_["ast_output_dir"], python_filename_);
+      module_manager_ =
+        module_manager::create(ast_["ast_output_dir"], python_filename_);
   }
 
   void add_type_annotation()
@@ -259,11 +260,11 @@ private:
     // Get type from imported functions
     try
     {
-      if (mm_)
+      if (module_manager_)
       {
         const auto &import_node =
           json_utils::find_imported_function(ast_, func_name);
-        auto module = mm_->get_module(import_node["module"]);
+        auto module = module_manager_->get_module(import_node["module"]);
         return module->get_function(func_name).return_type_;
       }
     }
@@ -406,9 +407,9 @@ private:
     const std::string &obj = get_object_name(call["func"], std::string());
 
     // Get type from imported module
-    if (mm_)
+    if (module_manager_)
     {
-      auto module = mm_->get_module(obj);
+      auto module = module_manager_->get_module(obj);
       if (module)
         return module->get_function(call["func"]["attr"]).return_type_;
     }
@@ -649,7 +650,7 @@ private:
 
   Json &ast_;
   global_scope &gs_;
-  std::shared_ptr<module_manager> mm_;
+  std::shared_ptr<module_manager> module_manager_;
   Json *current_func;
   int current_line_;
   std::string python_filename_;

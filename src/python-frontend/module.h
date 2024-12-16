@@ -8,7 +8,25 @@ struct function
 {
   std::string name_;
   std::string return_type_;
+
+  bool operator==(const function &other) const
+  {
+    return name_ == other.name_;
+  }
 };
+
+struct function_hash
+{
+  std::size_t operator()(const function &f) const
+  {
+    return std::hash<std::string>()(f.name_);
+  }
+};
+
+using FunctionsList = std::unordered_set<function, function_hash>;
+/* Keeping submodules as shared_ptr since ownership needs to be shared in
+ * module_manager::get_module_from_dir */
+using SubmodulesList = std::unordered_set<std::shared_ptr<module>>;
 
 class module
 {
@@ -24,15 +42,12 @@ public:
 
   void add_function(const function &func)
   {
-    functions_.push_back(func);
+    functions_.insert(func);
   }
 
-  void add_functions(const std::vector<function> &other_functions)
+  void add_functions(const FunctionsList &other_functions)
   {
-    std::copy(
-      other_functions.begin(),
-      other_functions.end(),
-      std::back_inserter(functions_));
+    functions_.insert(other_functions.begin(), other_functions.end());
   }
 
   void add_submodule(const std::shared_ptr<module> mod)
@@ -53,18 +68,18 @@ public:
     return {};
   }
 
-  const std::vector<function> &functions() const
+  const FunctionsList &functions() const
   {
     return functions_;
   }
 
-  const std::unordered_set<std::shared_ptr<module>> &submodules() const
+  const SubmodulesList &submodules() const
   {
     return submodules_;
   }
 
 private:
   std::string name_;
-  std::vector<function> functions_;
-  std::unordered_set<std::shared_ptr<module>> submodules_;
+  FunctionsList functions_;
+  SubmodulesList submodules_;
 };
