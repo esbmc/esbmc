@@ -955,8 +955,9 @@ void execution_statet::get_expr_globals(
     }
   }
 
-  expr->foreach_operand([this, &globals_list, &ns](const expr2tc &e)
-                        { get_expr_globals(ns, e, globals_list); });
+  expr->foreach_operand([this, &globals_list, &ns](const expr2tc &e) {
+    get_expr_globals(ns, e, globals_list);
+  });
 }
 
 bool execution_statet::check_mpor_dependency(unsigned int j, unsigned int l)
@@ -1115,9 +1116,9 @@ bool execution_statet::has_cswitch_point_occured() const
       const std::list<unsigned int> &thread_ids = art1->vars_map[expr];
 
       if (std::any_of(
-            thread_ids.begin(),
-            thread_ids.end(),
-            [&](unsigned int thread_id) { return thread_id != active_thread; }))
+            thread_ids.begin(), thread_ids.end(), [&](unsigned int thread_id) {
+              return thread_id != active_thread;
+            }))
       {
         return true;
       }
