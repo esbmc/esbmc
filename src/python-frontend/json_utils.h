@@ -97,9 +97,10 @@ JsonType &find_function(JsonType &json, const std::string &func_name)
 }
 
 template <typename JsonType>
-JsonType &find_imported_function(JsonType &ast, const std::string &func_name)
+const JsonType &
+find_imported_function(const JsonType &ast, const std::string &func_name)
 {
-  for (auto &node : ast["body"])
+  for (const auto &node : ast["body"])
   {
     if (node["_type"] == "ImportFrom" || node["_type"] == "Import")
     {
