@@ -416,7 +416,8 @@ private:
     Json obj_node =
       json_utils::find_var_decl(obj, get_current_func_name(), ast_);
 
-    assert(!obj_node.empty());
+    if (obj_node.empty())
+      throw std::runtime_error("Object \"" + obj + "\" not found.");
 
     const std::string &obj_type =
       obj_node["annotation"]["id"].template get<std::string>();
