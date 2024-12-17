@@ -35,6 +35,7 @@ on:
         - SV-COMP25_valid-memsafety
         - SV-COMP25_termination
         - SV-COMP25_no-overflow
+        - SV-COMP25_ConcurrencySafety
         - Custom
       task:
         type: choice
