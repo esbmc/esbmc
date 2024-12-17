@@ -121,6 +121,9 @@ jobs:
       - name: Set up the custom runset
         if: ${{ inputs.mode == 'RunSet' && inputs.runset == 'Custom' }}
         run: cp ./esbmc-src/scripts/competitions/svcomp/custom-reach.set $HOME/sv-benchmarks/c/ && mv ./esbmc-src/scripts/competitions/svcomp/custom.xml ./esbmc-src/scripts/competitions/svcomp/esbmc.xml
+      - name: Set up the Concurrency runset
+        if: ${{ inputs.mode == 'RunSet' && inputs.runset == 'SV-COMP25_ConcurrencySafety' }}
+        run: mv ./esbmc-src/scripts/competitions/svcomp/ConcurrencySafety.xml ./esbmc-src/scripts/competitions/svcomp/esbmc.xml
       - name: Run Benchexec (Full)
         if: ${{ inputs.mode == 'Full' }}
         run: ./esbmc-src/scripts/benchexec.sh -f
