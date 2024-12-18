@@ -1,0 +1,39 @@
+<?xml version="1.0"?>
+<!DOCTYPE benchmark PUBLIC "+//IDN sosy-lab.org//DTD BenchExec benchmark 1.9//EN" "https://www.sosy-lab.org/benchexec/benchmark-2.3.dtd">
+<benchmark tool="esbmc" timelimit="15 min" memlimit="6 GB" cpuCores="1">
+
+<require cpuModel="Intel Xeon E3-1230 v5 @ 3.40 GHz"/>
+
+  <resultfiles>**/*.graphml</resultfiles>
+  
+  <option name="-s">kinduction</option>
+
+  <rundefinition name="SV-COMP25_unreach-call">
+    <tasks name="ConcurrencySafety-Main">
+      <includesfile>$HOME/sv-benchmarks/c/Concurrency.set</includesfile>
+      <propertyfile>$HOME/sv-benchmarks/c/properties/unreach-call.prp</propertyfile>
+    </tasks>
+  </rundefinition>
+
+  <rundefinition name="SV-COMP25_no-data-race">
+    <tasks name="NoDataRace-Main">
+      <includesfile>$HOME/sv-benchmarks/c/Concurrency.set</includesfile>
+      <propertyfile>$HOME/sv-benchmarks/c/properties/no-data-race.prp</propertyfile>
+    </tasks>
+  </rundefinition>
+
+  <rundefinition name="SV-COMP25_valid-memsafety">
+    <tasks name="ConcurrencySafety-MemSafety">
+      <includesfile>$HOME/sv-benchmarks/c/Concurrency.set</includesfile>
+      <propertyfile>$HOME/sv-benchmarks/c/properties/valid-memsafety.prp</propertyfile>
+    </tasks>
+  </rundefinition>
+
+  <rundefinition name="SV-COMP25_no-overflow">
+    <tasks name="ConcurrencySafety-NoOverflows">
+      <includesfile>$HOME/sv-benchmarks/c/Concurrency.set</includesfile>
+      <propertyfile>$HOME/sv-benchmarks/c/properties/no-overflow.prp</propertyfile>
+    </tasks>
+  </rundefinition>
+
+</benchmark>
