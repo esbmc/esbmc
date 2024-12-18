@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <!DOCTYPE benchmark PUBLIC "+//IDN sosy-lab.org//DTD BenchExec benchmark 1.9//EN" "https://www.sosy-lab.org/benchexec/benchmark-2.3.dtd">
-<benchmark tool="esbmc" timelimit="15 min" memlimit="6 GB" cpuCores="2">
+<benchmark tool="esbmc" timelimit="15 min" memlimit="6 GB" cpuCores="1">
 
 <require cpuModel="Intel Xeon E3-1230 v5 @ 3.40 GHz"/>
 
