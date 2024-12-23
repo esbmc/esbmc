@@ -83,7 +83,6 @@ protected:
   irep_idt mode;
   symbol_generator anon_symbol;
 
-  unsigned int current_scope_var_num;
   /**
    *  During get_expr(), which also transforms blocks/scopes, this represents
    *  the latest opened blocks from the top-level. A nullptr 'current_block'

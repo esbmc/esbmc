@@ -41,7 +41,6 @@ clang_c_convertert::clang_c_convertert(
     AST(_AST),
     mode(_mode),
     anon_symbol("clang_c_convertert::"),
-    current_scope_var_num(1),
     current_block(nullptr),
     sm(nullptr),
     current_functionDecl(nullptr)
@@ -658,10 +657,6 @@ bool clang_c_convertert::get_function(
 
   // TODO: use fd.isMain to flag and check the flag on clang_c_adjust_expr
   // to saner way to add argc/argv/envp
-
-  // Set initial variable name, it will be used for variables' name
-  // This will be reset every time a function is parsed
-  current_scope_var_num = 1;
 
   // Build function's type
   code_typet type;
