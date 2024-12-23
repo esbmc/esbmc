@@ -327,6 +327,9 @@ protected:
  * @param this_expr The expression object where the `this` expression will be stored.
  */
   virtual void get_this_expr(const typet &expected_this_type, exprt &this_expr);
+
+  std::string
+  getFullyQualifiedName(const clang::QualType &t, const clang::ASTContext &c);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

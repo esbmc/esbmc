@@ -3671,7 +3671,9 @@ void clang_c_convertert::get_default_symbol(
 std::string clang_c_convertert::get_decl_name(const clang::NamedDecl &nd)
 {
   if (const clang::IdentifierInfo *identifier = nd.getIdentifier())
+  {
     return identifier->getName().str();
+  }
 
   std::string name;
   llvm::raw_string_ostream rso(name);
@@ -3679,15 +3681,22 @@ std::string clang_c_convertert::get_decl_name(const clang::NamedDecl &nd)
   return rso.str();
 }
 
-std::string
-getFullyQualifiedName(const clang::QualType &t, const clang::ASTContext &c)
+std::string clang_c_convertert::getFullyQualifiedName(
+  const clang::QualType &t,
+  const clang::ASTContext &c)
 {
+  std::string id_suffix;
+  if (const clang::TagDecl *td = t->getAsTagDecl())
+    id_suffix = "@" + std::to_string(td->getID());
+
   clang::PrintingPolicy Policy(c.getPrintingPolicy());
   Policy.SuppressScope = false;
   Policy.AnonymousTagLocations = true;
   Policy.PolishForDeclaration = true;
   Policy.SuppressUnwrittenScope = true;
-  return clang::TypeName::getFullyQualifiedName(t, c, Policy);
+  std::string fully_qualified_name =
+    clang::TypeName::getFullyQualifiedName(t, c, Policy);
+  return fully_qualified_name + id_suffix;
 }
 
 void clang_c_convertert::get_decl_name(
