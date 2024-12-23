@@ -1646,21 +1646,16 @@ void clang_cpp_convertert::name_param_and_continue(
   const clang::DeclContext *dcxt = pd.getParentFunctionOrMethod();
   if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(dcxt))
   {
-    if (
-      (is_CopyOrMoveOperator(*md) && md->isImplicit()) ||
-      (is_ConstructorOrDestructor(*md) && is_defaulted_ctor(*md)))
-    {
-      get_decl_name(*md, name, id);
+    get_decl_name(*md, name, id);
 
-      // name would be just `ref` and id would be "<cpyctor_id>::ref"
-      name = name + "::" + constref_suffix;
-      id = id + "::" + constref_suffix;
+    // name would be just `foo::index` and id would be "<foo_id>::index"
+    name = name + "::" + std::to_string(pd.getFunctionScopeIndex());
+    id = id + "::" + std::to_string(pd.getFunctionScopeIndex());
 
-      // sync param name
-      param.cmt_base_name(name);
-      param.identifier(id);
-      param.name(name);
-    }
+    // sync param name
+    param.cmt_base_name(name);
+    param.identifier(id);
+    param.name(name);
   }
 }
 
