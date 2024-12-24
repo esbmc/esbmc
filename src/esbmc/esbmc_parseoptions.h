@@ -92,6 +92,9 @@ protected:
   std::vector<std::unique_ptr<goto_functions_algorithm>>
     goto_preprocess_algorithms;
 
+  // coverage mode
+  bool is_coverage;
+
 private:
   void close_file(FILE *f)
   {

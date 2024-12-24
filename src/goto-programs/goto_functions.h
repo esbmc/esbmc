@@ -45,8 +45,8 @@ public:
 
   // For coverage
   // Store and pass the coverage data in incr/kind mode
-  std::unordered_set<std::string> reached_claims;
-  std::unordered_multiset<std::string> reached_mul_claims;
+  static std::unordered_set<std::string> reached_claims;
+  static std::unordered_multiset<std::string> reached_mul_claims;
 
   void clear()
   {

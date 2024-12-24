@@ -97,14 +97,16 @@ protected:
     const goto_tracet &goto_trace,
     const std::string &msg);
 
-  void report_coverage(
-    const std::unordered_set<std::string> &reached_claims,
-    const std::unordered_multiset<std::string> &reached_mul_claims);
   void report_coverage_verbose(
     const claim_slicer &claim,
     const std::string &claim_sig,
     const std::unordered_set<std::string> &reached_claims,
     const std::unordered_multiset<std::string> &reached_mul_claims);
 };
+
+void report_coverage(
+  const optionst &options,
+  const std::unordered_set<std::string> &reached_claims,
+  const std::unordered_multiset<std::string> &reached_mul_claims);
 
 #endif

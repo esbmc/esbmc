@@ -40,6 +40,9 @@
 #include <atomic>
 #include <goto-symex/witnesses.h>
 
+std::unordered_set<std::string> goto_functionst::reached_claims;
+std::unordered_multiset<std::string> goto_functionst::reached_mul_claims;
+
 bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   : options(opts), context(_context), ns(context)
 {
@@ -416,7 +419,8 @@ void bmct::report_multi_property_trace(
   }
 }
 
-void bmct::report_coverage(
+void report_coverage(
+  const optionst &options,
   const std::unordered_set<std::string> &reached_claims,
   const std::unordered_multiset<std::string> &reached_mul_claims)
 {
@@ -1320,7 +1324,7 @@ smt_convt::resultt bmct::multi_property_check(
   // For coverage
   if (!bs && !fc && !is)
     // We assume it's fixed bound unwinding
-    report_coverage(reached_claims, reached_mul_claims);
+    report_coverage(options, reached_claims, reached_mul_claims);
 
   return final_result;
 }
