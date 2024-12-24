@@ -2,7 +2,7 @@
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <util/c_sizeof.h>
 #include <util/c_types.h>
-#include <util/destructor.h>
+#include <goto-programs/destructor.h>
 #include <util/expr_util.h>
 
 clang_cpp_adjust::clang_cpp_adjust(contextt &_context)
@@ -87,8 +87,8 @@ void clang_cpp_adjust::adjust_side_effect(side_effect_exprt &expr)
     // adjust side effect node to explicitly call class destructor
     // e.g. the adjustment here will add the following instruction in GOTO:
     // FUNCTION_CALL:  ~t2(&(*p))
-    code_function_callt destructor = get_destructor(ns, expr.type());
-    if (destructor.is_not_nil())
+    code_function_callt destructor;
+    if (get_destructor(ns, expr.type(), destructor))
     {
       exprt new_object("new_object", expr.type());
       new_object.cmt_lvalue(true);
