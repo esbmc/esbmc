@@ -932,15 +932,6 @@ void generate_testcase(
       else if (is_constant_bool2t(new_rhs))
         test_case << fmt::format(
           "<input>{}</input>\n", to_constant_bool2t(new_rhs).value ? "1" : "0");
-
-      else
-      {
-        log_error(
-          "Could not convert the symbol into test "
-          "input");
-        new_rhs->dump();
-        abort();
-      }
     }
   };
   for (auto const &SSA_step : target.SSA_steps)

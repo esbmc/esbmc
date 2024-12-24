@@ -970,7 +970,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       bmct bmc(goto_functions, options, context);
       bmc.options.set_option("unwind", integer2string(k_step));
 
-      log_status("Checking base case, k = {:d}\n", k_step);
+      log_progress("Checking base case, k = {:d}\n", k_step);
 
       // If an exception was thrown, we should abort the process
       int res = smt_convt::P_ERROR;
@@ -1244,19 +1244,22 @@ int esbmc_parseoptionst::do_bmc_strategy(
     // k-induction
     if (options.get_bool_option("k-induction"))
     {
+      bool is_bcv = is_base_case_violated(options, goto_functions, k_step).is_true();
       if (
-        is_base_case_violated(options, goto_functions, k_step).is_true() &&
-        !cmdline.isset("multi-property"))
+        is_bcv &&
+        !cmdline.isset("multi-property") && !options.get_bool_option("multi-property"))
         return 1;
 
-      if (does_forward_condition_hold(options, goto_functions, k_step)
+      // if the property is proven violated in the bs, it's unnecessary to further run fw and is 
+      // this will make the trace looks cleaner yet might lead to an extra round to terminate the verification 
+      if (!is_bcv && does_forward_condition_hold(options, goto_functions, k_step)
             .is_false())
         return 0;
 
       // Don't run inductive step for k_step == 1
       if (k_step > 1)
       {
-        if (is_inductive_step_violated(options, goto_functions, k_step)
+        if (!is_bcv && is_inductive_step_violated(options, goto_functions, k_step)
               .is_false())
           return 0;
       }
@@ -1275,13 +1278,14 @@ int esbmc_parseoptionst::do_bmc_strategy(
     }
     // incremental-bmc
     if (options.get_bool_option("incremental-bmc"))
-    {
+    { 
+      bool is_bcv = is_base_case_violated(options, goto_functions, k_step).is_true();
       if (
-        is_base_case_violated(options, goto_functions, k_step).is_true() &&
-        !cmdline.isset("multi-property"))
+        is_bcv &&
+        !cmdline.isset("multi-property") && !options.get_bool_option("multi-property"))
         return 1;
 
-      if (does_forward_condition_hold(options, goto_functions, k_step)
+      if (!is_bcv && does_forward_condition_hold(options, goto_functions, k_step)
             .is_false())
         return 0;
     }
@@ -1324,7 +1328,7 @@ tvt esbmc_parseoptionst::is_base_case_violated(
 
   bmct bmc(goto_functions, options, context);
 
-  log_status("Checking base case, k = {:d}", k_step);
+  log_progress("Checking base case, k = {:d}", k_step);
   switch (do_bmc(bmc))
   {
   case smt_convt::P_UNSATISFIABLE:
