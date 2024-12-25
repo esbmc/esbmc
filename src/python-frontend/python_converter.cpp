@@ -2,7 +2,6 @@
 #include <python-frontend/json_utils.h>
 #include <python_frontend_types.h>
 #include <python-frontend/symbol_id.h>
-#include <python-frontend/python_module.h>
 #include <ansi-c/convert_float_literal.h>
 #include <util/std_code.h>
 #include <util/c_types.h>
@@ -729,6 +728,8 @@ symbol_id python_converter::build_function_id(const nlohmann::json &element)
     else
       obj_name = func_json["value"]["id"];
 
+    obj_name = json_utils::get_object_alias(ast_json, obj_name);
+
     if (!is_class(obj_name, ast_json) && is_imported_module(obj_name))
     {
       func_symbol_id = create_symbol_id(imported_modules[obj_name]);
@@ -765,7 +766,7 @@ symbol_id python_converter::build_function_id(const nlohmann::json &element)
       auto obj_node = find_var_decl(obj_name, current_func_name, ast_json);
 
       if (obj_node.empty())
-        throw std::runtime_error("Class name not found");
+        throw std::runtime_error("Class " + obj_name + " not found");
 
       class_name = obj_node["annotation"]["id"].get<std::string>();
     }
@@ -891,6 +892,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       caller = func_id.get_class();
     else
       caller = subelement["id"].get<std::string>();
+
+    caller = json_utils::get_object_alias(ast_json, caller);
 
     obj_symbol_id.set_object(caller);
     obj_symbol = context.find_symbol(obj_symbol_id.to_string());
