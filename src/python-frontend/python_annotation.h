@@ -2,8 +2,9 @@
 
 #include <python-frontend/json_utils.h>
 #include <python-frontend/python_frontend_types.h>
-#include <python-frontend/python_module.h>
 #include <python-frontend/global_scope.h>
+#include <python-frontend/module_manager.h>
+#include <python-frontend/module.h>
 #include <util/message.h>
 
 #include <string>
@@ -16,6 +17,9 @@ public:
     : ast_(ast), gs_(gs), current_func(nullptr), current_line_(0)
   {
     python_filename_ = ast_["filename"].template get<std::string>();
+    if (ast_.contains("ast_output_dir"))
+      module_manager_ =
+        module_manager::create(ast_["ast_output_dir"], python_filename_);
   }
 
   void add_type_annotation()
@@ -253,6 +257,21 @@ private:
       }
     }
 
+    // Get type from imported functions
+    try
+    {
+      if (module_manager_)
+      {
+        const auto &import_node =
+          json_utils::find_imported_function(ast_, func_name);
+        auto module = module_manager_->get_module(import_node["module"]);
+        return module->get_function(func_name).return_type_;
+      }
+    }
+    catch (std::runtime_error &)
+    {
+    }
+
     std::ostringstream oss;
     oss << "Function \"" << func_name << "\" not found (" << python_filename_
         << " line " << current_line_ << ")";
@@ -330,28 +349,76 @@ private:
     return "";
   }
 
-  std::string get_object_name(const Json &call)
+  std::string invert_substrings(const std::string &input)
+  {
+    std::vector<std::string> substrings;
+    std::string token;
+    std::istringstream stream(input);
+
+    // Split the string using "." as the delimiter
+    while (std::getline(stream, token, '.'))
+    {
+      substrings.push_back(token);
+    }
+
+    // Reverse the order of the substrings
+    std::reverse(substrings.begin(), substrings.end());
+
+    // Rebuild the string with "." between the reversed substrings
+    std::string result;
+    for (size_t i = 0; i < substrings.size(); ++i)
+    {
+      if (i != 0)
+      {
+        result += "."; // Add the dot separator
+      }
+      result += substrings[i];
+    }
+
+    return result;
+  }
+
+  std::string get_object_name(const Json &call, const std::string &prefix)
   {
     if (call["value"]["_type"] == "Attribute")
-      return get_object_name(call["value"]);
+    {
+      std::string append = call["value"]["attr"].template get<std::string>();
+      if (!prefix.empty())
+        append = prefix + std::string(".") + append;
 
-    return call["value"]["id"];
+      return get_object_name(call["value"], append);
+    }
+    std::string obj_name("");
+    if (!prefix.empty())
+    {
+      obj_name = prefix + std::string(".");
+    }
+    obj_name += call["value"]["id"].template get<std::string>();
+    if (obj_name.find('.') != std::string::npos)
+      obj_name = invert_substrings(obj_name);
+
+    return json_utils::get_object_alias(ast_, obj_name);
   }
 
   std::string get_type_from_method(const Json &call)
   {
     std::string type("");
 
-    const std::string &obj = get_object_name(call["func"]);
+    const std::string &obj = get_object_name(call["func"], std::string());
 
-    python_module pm(obj);
-    if (pm.is_standard_module())
-      return pm.get_function_return(call["func"]["attr"]);
+    // Get type from imported module
+    if (module_manager_)
+    {
+      auto module = module_manager_->get_module(obj);
+      if (module)
+        return module->get_function(call["func"]["attr"]).return_type_;
+    }
 
     Json obj_node =
       json_utils::find_var_decl(obj, get_current_func_name(), ast_);
 
-    assert(!obj_node.empty());
+    if (obj_node.empty())
+      throw std::runtime_error("Object \"" + obj + "\" not found.");
 
     const std::string &obj_type =
       obj_node["annotation"]["id"].template get<std::string>();
@@ -583,6 +650,7 @@ private:
 
   Json &ast_;
   global_scope &gs_;
+  std::shared_ptr<module_manager> module_manager_;
   Json *current_func;
   int current_line_;
   std::string python_filename_;
