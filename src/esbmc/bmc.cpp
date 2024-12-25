@@ -368,7 +368,7 @@ void bmct::clear_verified_claims(
         if (
           instruction.is_assert() &&
           instruction.location.as_string() == claim.claim_loc &&
-          instruction.location.comment().as_string() == claim.claim_msg) 
+          instruction.location.comment().as_string() == claim.claim_msg)
         {
           instruction.make_skip();
           break;
@@ -379,7 +379,7 @@ void bmct::clear_verified_claims(
         if (
           instruction.is_assert() &&
           instruction.location.as_string() == claim.claim_loc &&
-          from_expr(ns, "", instruction.guard) == claim.claim_msg) 
+          from_expr(ns, "", instruction.guard) == claim.claim_msg)
         {
           instruction.make_skip();
           break;
@@ -1310,8 +1310,7 @@ smt_convt::resultt bmct::multi_property_check(
                        &fail_fast_cnt,
                        &bs,
                        &fc,
-                       &is](const size_t &i)
-  {
+                       &is](const size_t &i) {
     //"multi-fail-fast n": stop after first n SATs found.
     if (is_fail_fast && fail_fast_cnt >= fail_fast_limit)
       return;
