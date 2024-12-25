@@ -709,10 +709,8 @@ void bmct::report_coverage_verbose(
   }
   else
   {
-    size_t totals;
     if (is_assert_cov)
     {
-      totals = goto_coveraget::total_assert;
       const size_t total_instance = goto_coveraget::total_assert_ins;
       const size_t tracked_instance = reached_mul_claims.size();
 
@@ -733,7 +731,7 @@ void bmct::report_coverage_verbose(
     }
     else if (is_branch_cov)
     {
-      totals = goto_coveraget::total_branch;
+      size_t totals = goto_coveraget::total_branch;
       const int tracked_instance = reached_claims.size();
       // show claims
       if (options.get_bool_option("branch-coverage-claims"))
@@ -750,7 +748,7 @@ void bmct::report_coverage_verbose(
     }
     else if (is_branch_func_cov)
     {
-      totals = goto_coveraget::total_func_branch;
+      size_t totals = goto_coveraget::total_func_branch;
       const int tracked_instance = reached_claims.size();
       // show claims
       if (options.get_bool_option("branch-function-coverage-claims"))
