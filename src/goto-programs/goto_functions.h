@@ -43,10 +43,11 @@ public:
   typedef std::map<irep_idt, goto_functiont> function_mapt;
   function_mapt function_map;
 
-  // For coverage
+  // For coverage and multi-property
   // Store and pass the coverage data in incr/kind mode
   static std::unordered_set<std::string> reached_claims;
   static std::unordered_multiset<std::string> reached_mul_claims;
+  static std::unordered_set<std::string> verified_claims;
 
   void clear()
   {

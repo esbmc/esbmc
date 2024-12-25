@@ -42,6 +42,7 @@
 
 std::unordered_set<std::string> goto_functionst::reached_claims;
 std::unordered_multiset<std::string> goto_functionst::reached_mul_claims;
+std::unordered_set<std::string> goto_functionst::verified_claims;
 
 bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   : options(opts), context(_context), ns(context)
@@ -348,20 +349,41 @@ void bmct::report_trace(
   Whenever an error_trace or successful_trace is reported
   we finish reasoning this claims, thereby converting it to SKIP
 */
-void bmct::clear_verified_claims(const claim_slicer &claim)
+void bmct::clear_verified_claims(
+  const claim_slicer &claim,
+  const bool &is_goto_cov)
 {
+  // first record that we have verified it
+  std::string claim_sig = claim.claim_msg + "\t" + claim.claim_loc;
+  symex->goto_functions.verified_claims.emplace(claim_sig);
+
+  auto temp = symex->goto_functions;
+  // then remove it by converting to SKIP
   for (auto &it : symex->goto_functions.function_map)
   {
     for (auto &instruction : it.second.body.instructions)
     {
-      if (
-        instruction.is_assert() &&
-        from_expr(ns, "", instruction.guard) == claim.claim_msg &&
-        instruction.location.as_string() == claim.claim_loc)
+      if (is_goto_cov)
       {
-        // convert ASSERT to SKIP
-        instruction.make_skip();
-        break;
+        if (
+          instruction.is_assert() &&
+          instruction.location.as_string() == claim.claim_loc &&
+          instruction.location.comment().as_string() == claim.claim_msg) 
+        {
+          instruction.make_skip();
+          break;
+        }
+      }
+      else
+      {
+        if (
+          instruction.is_assert() &&
+          instruction.location.as_string() == claim.claim_loc &&
+          from_expr(ns, "", instruction.guard) == claim.claim_msg) 
+        {
+          instruction.make_skip();
+          break;
+        }
       }
     }
   }
@@ -421,7 +443,7 @@ void bmct::report_multi_property_trace(
 
 void report_coverage(
   const optionst &options,
-  const std::unordered_set<std::string> &reached_claims,
+  std::unordered_set<std::string> &reached_claims,
   const std::unordered_multiset<std::string> &reached_mul_claims)
 {
   bool is_assert_cov = options.get_bool_option("assertion-coverage") ||
@@ -506,12 +528,12 @@ void report_coverage(
     {
       std::string claim_msg = claim_pair.first;
       std::string claim_loc = claim_pair.second;
-      std::string claim = claim_msg + "\t" + claim_loc;
-      if (reached_claims.count(claim))
+      std::string claim_sig = claim_msg + "\t" + claim_loc;
+      if (reached_claims.count(claim_sig))
       {
         // show sat claims
         if (cond_show_claims)
-          log_status("  {} : SATISFIED", claim);
+          log_status("  {} : SATISFIED", claim_sig);
 
         // update counter +=2
         // as we handle ass and !ass at the same time
@@ -521,7 +543,7 @@ void report_coverage(
         ++sat_instance;
 
         // prevent double count
-        // reached_claims.erase(claim);
+        reached_claims.erase(claim_sig);
         total_cond_assert_cpy.erase(claim_pair);
 
         // reversal: obtain !ass
@@ -531,25 +553,25 @@ void report_coverage(
           claim_msg = claim_msg.substr(2, claim_msg.length() - 3);
         else
           claim_msg = "!(" + claim_msg + ")";
-        std::string r_claim = claim_msg + "\t" + claim_loc;
+        std::string r_claim_sig = claim_msg + "\t" + claim_loc;
 
-        if (reached_claims.count(r_claim))
+        if (reached_claims.count(r_claim_sig))
         {
           ++sat_instance;
           if (cond_show_claims)
-            log_result("  {} : SATISFIED", r_claim);
+            log_result("  {} : SATISFIED", r_claim_sig);
         }
         else
         {
           ++unsat_instance;
           if (cond_show_claims)
-            log_result("  {} : UNSATISFIED", r_claim);
+            log_result("  {} : UNSATISFIED", r_claim_sig);
         }
 
         // prevent double count
         // e.g if( a ==0 && a == 0)
         // we only count a==0 and !(a==0) once
-        // reached_claims.erase(r_claim);
+        reached_claims.erase(r_claim_sig);
         std::pair<std::string, std::string> _pair =
           std::make_pair(claim_msg, claim_loc);
         total_cond_assert_cpy.erase(_pair);
@@ -568,8 +590,8 @@ void report_coverage(
       {
         std::string claim_msg = claim_pair.first;
         std::string claim_loc = claim_pair.second;
-        std::string claim = claim_msg + "\t" + claim_loc;
-        log_result("  {}", claim);
+        std::string claim_sig = claim_msg + "\t" + claim_loc;
+        log_result("  {}", claim_sig);
       }
     }
 
@@ -648,32 +670,107 @@ void report_coverage(
   }
 }
 
-// output coverage information whenever an instrumented assertion is found violated.
+// Output coverage information whenever an instrumented assertion is found violated.
+// It is helpful when the program is too large and ESBMC cannot finish, we can still get some info about the coverage
 void bmct::report_coverage_verbose(
   const claim_slicer &claim,
   const std::string &claim_sig,
+  const bool &is_assert_cov,
+  const bool &is_cond_cov,
+  const bool &is_branch_cov,
+  const bool &is_branch_func_cov,
   const std::unordered_set<std::string> &reached_claims,
   const std::unordered_multiset<std::string> &reached_mul_claims)
 {
   // for condition coverage verbose output
   // total_cond: the combination of assertion's guard and location, which is used to identify each assertion in multi-property checking.
-  auto total_cond = goto_coveraget::total_cond;
+
   auto current_pair = std::make_pair(claim.claim_msg, claim.claim_loc);
 
-  if (total_cond.count(current_pair))
+  if (is_cond_cov)
   {
-    if (
-      options.get_bool_option("condition-coverage-claims") ||
-      options.get_bool_option("condition-coverage-claims-rm"))
-    {
-      // show claims
-      log_status("\n  {} : SATISFIED", claim_sig);
-    }
+    auto total_cond = goto_coveraget::total_cond;
 
-    // show coverage data
-    log_result(
-      "Current Condition Coverage: {}%\n",
-      reached_claims.size() * 100.0 / total_cond.size());
+    if (total_cond.count(current_pair))
+    {
+      if (
+        options.get_bool_option("condition-coverage-claims") ||
+        options.get_bool_option("condition-coverage-claims-rm"))
+      {
+        // show claims
+        log_status("\n  {} : SATISFIED", claim_sig);
+      }
+
+      // show coverage data
+      log_result(
+        "Current Condition Coverage: {}%\n",
+        reached_claims.size() * 100.0 / total_cond.size());
+    }
+  }
+  else
+  {
+    size_t totals;
+    if (is_assert_cov)
+    {
+      totals = goto_coveraget::total_assert;
+      const size_t total_instance = goto_coveraget::total_assert_ins;
+      const size_t tracked_instance = reached_mul_claims.size();
+
+      if (options.get_bool_option("assertion-coverage-claims"))
+      {
+        for (const auto &claim : reached_mul_claims)
+          log_status("  {}", claim);
+      }
+      if (total_instance != 0)
+      {
+        if (total_instance >= tracked_instance)
+          log_result(
+            "Assertion Instances Coverage: {}%",
+            tracked_instance * 100.0 / total_instance);
+        else
+          log_result("Assertion Instances Coverage: 0%");
+      }
+    }
+    else if (is_branch_cov)
+    {
+      totals = goto_coveraget::total_branch;
+      const int tracked_instance = reached_claims.size();
+      // show claims
+      if (options.get_bool_option("branch-coverage-claims"))
+      {
+        // reached claims:
+        for (const auto &claim : reached_claims)
+          log_status("  {}", claim);
+      }
+
+      if (totals != 0)
+        log_result("Branch Coverage: {}%", tracked_instance * 100.0 / totals);
+      else
+        log_result("Branch Coverage: 0%");
+    }
+    else if (is_branch_func_cov)
+    {
+      totals = goto_coveraget::total_func_branch;
+      const int tracked_instance = reached_claims.size();
+      // show claims
+      if (options.get_bool_option("branch-function-coverage-claims"))
+      {
+        // reached claims:
+        for (const auto &claim : reached_claims)
+          log_status("  {}", claim);
+      }
+
+      if (totals != 0)
+        log_result(
+          "Branch Function Coverage: {}%", tracked_instance * 100.0 / totals);
+      else
+        log_result("Branch Function Coverage: 0%");
+    }
+    else
+    {
+      log_error("Unsupported coverage metrics");
+      abort();
+    }
   }
 }
 
@@ -1140,13 +1237,11 @@ smt_convt::resultt bmct::multi_property_check(
   // For coverage info
   auto &reached_claims = symex->goto_functions.reached_claims;
   auto &reached_mul_claims = symex->goto_functions.reached_mul_claims;
+  auto &verified_claims = symex->goto_functions.verified_claims;
   // "Assertion Cov"
   bool is_assert_cov = options.get_bool_option("assertion-coverage") ||
                        options.get_bool_option("assertion-coverage-claims");
   // "Condition Cov"
-  // is_vb: enable verbose output coverage info if the option "--verbosity coverage:N" is set, where N should larger than 0
-  // By enabling this, we will output the coverage information when handling each instrumentation assertion. It is helpful when the program is too large and ESBMC cannot finish, we can still get some info about the coverage
-  bool is_vb = messaget::state.modules["coverage"] != VerbosityLevel::None;
   bool is_cond_cov = options.get_bool_option("condition-coverage") ||
                      options.get_bool_option("condition-coverage-claims") ||
                      options.get_bool_option("condition-coverage-rm") ||
@@ -1157,6 +1252,10 @@ smt_convt::resultt bmct::multi_property_check(
   bool is_branch_func_cov =
     options.get_bool_option("branch-function-coverage") ||
     options.get_bool_option("branch-function-coverage-claims");
+
+  // is_vb: enable verbose output coverage info if the option "--verbosity coverage:N" is set, where N should larger than 0
+  // By enabling this, we will output the coverage information when handling each instrumentation assertion.
+  bool is_vb = messaget::state.modules["coverage"] != VerbosityLevel::None;
 
   // For incr/kind in multi-property
   bool is_keep_verified = options.get_bool_option("keep-verified-claims");
@@ -1199,6 +1298,7 @@ smt_convt::resultt bmct::multi_property_check(
                        &result_mutex,
                        &reached_claims,
                        &reached_mul_claims,
+                       &verified_claims,
                        &is_assert_cov,
                        &is_cond_cov,
                        &is_vb,
@@ -1210,7 +1310,8 @@ smt_convt::resultt bmct::multi_property_check(
                        &fail_fast_cnt,
                        &bs,
                        &fc,
-                       &is](const size_t &i) {
+                       &is](const size_t &i)
+  {
     //"multi-fail-fast n": stop after first n SATs found.
     if (is_fail_fast && fail_fast_cnt >= fail_fast_limit)
       return;
@@ -1238,8 +1339,18 @@ smt_convt::resultt bmct::multi_property_check(
     if (is_assert_cov && is_verified)
       // insert to the multiset before skipping the verification process
       reached_mul_claims.emplace(claim_sig);
+
+    if (verified_claims.count(claim_sig))
+    {
+      clear_verified_claims(claim, is_goto_cov);
+      is_verified = true;
+    }
+
+    // skip if we have already verified
     if (is_verified && !is_keep_verified)
+    {
       return;
+    }
 
     // Slice
     if (!options.get_bool_option("no-slice"))
@@ -1287,7 +1398,14 @@ smt_convt::resultt bmct::multi_property_check(
       // for verbose output of cond coverage
       if (is_vb)
         report_coverage_verbose(
-          claim, claim_sig, reached_claims, reached_mul_claims);
+          claim,
+          claim_sig,
+          is_assert_cov,
+          is_cond_cov,
+          is_branch_cov,
+          is_branch_func_cov,
+          reached_claims,
+          reached_mul_claims);
       else
         report_multi_property_trace(
           solver_result,
@@ -1308,21 +1426,22 @@ smt_convt::resultt bmct::multi_property_check(
       // for kind && incr: remove verified claims
       // whenever we find a property violation, we remove the claim
       if (!is_keep_verified && (bs || fc || is))
-        clear_verified_claims(claim);
+        clear_verified_claims(claim, is_goto_cov);
     }
     else if (solver_result == smt_convt::P_UNSATISFIABLE)
       // for kind && incr: remove verified claims
       // when we find a property proven correct in
       // either forward condition or inductive step
       if (!is_keep_verified && !bs)
-        clear_verified_claims(claim);
+        clear_verified_claims(claim, is_goto_cov);
   };
 
   std::for_each(std::begin(jobs), std::end(jobs), job_function);
 
-  // For coverage
-  if (!bs && !fc && !is)
-    // We assume it's fixed bound unwinding
+  // For coverage with fixed bound unwinding
+  if (
+    bs && !fc && !is && !options.get_bool_option("k-induction") &&
+    !options.get_bool_option("incremental-bmc"))
     report_coverage(options, reached_claims, reached_mul_claims);
 
   return final_result;

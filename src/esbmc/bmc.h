@@ -87,7 +87,7 @@ protected:
     symex_target_equationt &eq) const;
 
   // for multi-property
-  void clear_verified_claims(const claim_slicer &claim);
+  void clear_verified_claims(const claim_slicer &claim, const bool & is_goto_cov);
 
   virtual void report_multi_property_trace(
     const smt_convt::resultt &res,
@@ -100,13 +100,17 @@ protected:
   void report_coverage_verbose(
     const claim_slicer &claim,
     const std::string &claim_sig,
+    const bool &is_assert_cov,
+    const bool &is_cond_cov,
+    const bool &is_branch_cov,
+    const bool &is_branch_func_cov,
     const std::unordered_set<std::string> &reached_claims,
     const std::unordered_multiset<std::string> &reached_mul_claims);
 };
 
 void report_coverage(
   const optionst &options,
-  const std::unordered_set<std::string> &reached_claims,
+  std::unordered_set<std::string> &reached_claims,
   const std::unordered_multiset<std::string> &reached_mul_claims);
 
 #endif
