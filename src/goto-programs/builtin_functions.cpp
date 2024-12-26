@@ -777,24 +777,10 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
 
-    exprt list_arg = make_va_list(arguments[0]);
-
-    {
-      side_effect_exprt rhs("va_arg", list_arg.type());
-      rhs.copy_to_operands(list_arg);
-      rhs.set("va_arg_type", to_code_type(function.type()).return_type());
-      goto_programt::targett t1 = dest.add_instruction(ASSIGN);
-      exprt assign_expr = code_assignt(list_arg, rhs);
-      migrate_expr(assign_expr, t1->code);
-      t1->location = function.location();
-    }
-
     if (lhs.is_not_nil())
     {
-      typet t = pointer_typet();
-      t.subtype() = lhs.type();
-      dereference_exprt rhs(lhs.type());
-      rhs.op0() = typecast_exprt(list_arg, t);
+      side_effect_exprt rhs("va_arg", lhs.type());
+      rhs.copy_to_operands(gen_zero(lhs.type()));
       rhs.location() = function.location();
       goto_programt::targett t2 = dest.add_instruction(ASSIGN);
       exprt assign_expr = code_assignt(lhs, rhs);
@@ -873,6 +859,30 @@ void goto_convertt::do_function_call_symbol(
       exprt assign_expr = code_assignt(dest_expr, gen_zero(dest_expr.type()));
       migrate_expr(assign_expr, t->code);
       t->location = function.location();
+    }
+  }
+  else if (base_name == "__builtin_va_start")
+  {
+    // For Clang fontend, no assignment is needed
+    // just check the type
+    exprt dest_expr = make_va_list(arguments[0]);
+
+    if (!is_lvalue(dest_expr))
+    {
+      log_error("va_start argument expected to be lvalue");
+      abort();
+    }
+  }
+  else if (base_name == "__builtin_va_end")
+  {
+    // For Clang fontend, no assignment is needed,
+    // goto_symex implements VA
+    exprt dest_expr = make_va_list(arguments[0]);
+
+    if (!is_lvalue(dest_expr))
+    {
+      log_error("va_end argument expected to be lvalue");
+      abort();
     }
   }
   // Nontemporal means "do not cache please" (https://lwn.net/Articles/255364/)
