@@ -228,12 +228,12 @@ void show_goto_trace_gui(
 void show_state_header(
   std::ostream &out,
   const goto_trace_stept &state,
-  const locationt &location,
   unsigned step_nr)
 {
   out << "\n";
   out << "State " << step_nr;
-  out << " " << location << " thread " << state.thread_nr << "\n";
+  out << " " << state.pc->location << " thread " << state.thread_nr
+      << " location number " << state.pc->location_number << "\n";
   out << "----------------------------------------------------"
       << "\n";
 }
@@ -375,7 +375,7 @@ void show_goto_trace(
     case goto_trace_stept::ASSERT:
       if (!step.guard)
       {
-        show_state_header(out, step, step.pc->location, step.step_nr);
+        show_state_header(out, step, step.step_nr);
         out << "Violated property:"
             << "\n";
         if (!step.pc->location.is_nil())
@@ -419,7 +419,7 @@ void show_goto_trace(
         {
           first_step = false;
           prev_step_nr = step.step_nr;
-          show_state_header(out, step, step.pc->location, step.step_nr);
+          show_state_header(out, step, step.step_nr);
         }
         counterexample_value(out, ns, step.lhs, step.value);
       }
