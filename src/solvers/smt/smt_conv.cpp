@@ -2361,14 +2361,7 @@ expr2tc smt_convt::get(const expr2tc &expr)
     }
     else if (is_array_type(expr))
     {
-      if (extracting_from_array_tuple_is_error)
-      {
-        log_error(
-          "Fetching array elements inside tuples currently "
-          "unimplemented, sorry");
-        abort();
-      }
-      return expr2tc(); // TODO: ??? This is horrible
+      return get_by_type(res);
     }
 
     simplify(res);
