@@ -148,6 +148,7 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   case clang::Decl::VarTemplatePartialSpecialization:
   case clang::Decl::Using:
   case clang::Decl::UsingShadow:
+  case clang::Decl::ConstructorUsingShadow:
   case clang::Decl::UsingDirective:
   case clang::Decl::TypeAlias:
   case clang::Decl::NamespaceAlias:
