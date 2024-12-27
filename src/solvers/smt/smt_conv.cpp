@@ -368,7 +368,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     {
       smt_sortt sort = convert_sort(expr->type);
 
-      // Don't honour inifinite sized array initializers. Modelling only.
+      // Don't honor inifinite sized array initializers. Modelling only.
       // If we have an array of tuples and no tuple support, use tuple_fresh.
       // Otherwise, mk_fresh.
       if (is_tuple_ast_type(arr.subtype))
@@ -846,7 +846,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
      * read illuminating how reasoning works from a certain compiler's
      * writers' points of view.
      *
-     * C++ has changed this one-past behaviour in [expr.eq] to "unspecified"
+     * C++ has changed this one-past behavior in [expr.eq] to "unspecified"
      * <https://www.open-std.org/jtc1/sc22/wg21/docs/cwg_defects.html#1652>
      * and C might eventually follow the same path.
      *
@@ -2559,14 +2559,31 @@ expr2tc smt_convt::get_array(const type2tc &type, smt_astt array)
   if (w > 10)
     w = 10;
 
-  array_type2t ar = to_array_type(flatten_array_type(type));
-  expr2tc arr_size = constant_int2tc(index_type2(), BigInt(1ULL << w));
+  const type2tc flat_type = flatten_array_type(type);
+  array_type2t ar = to_array_type(flat_type);
+
+  expr2tc arr_size;
+  if (type == flat_type && !ar.size_is_infinite)
+    // avoid handelling the flattend multidimensional and malloc arrays(assume size is infinite)
+    arr_size = to_array_type(flat_type).array_size;
+  else
+    arr_size = constant_int2tc(index_type2(), BigInt(1ULL << w));
+
   type2tc arr_type = array_type2tc(ar.subtype, arr_size, false);
   std::vector<expr2tc> fields;
 
   bool uses_tuple_api = is_tuple_array_ast_type(type);
 
-  for (size_t i = 0; i < (1ULL << w); i++)
+  BigInt elem_size;
+  if (is_constant_int2t(arr_size))
+  {
+    elem_size = to_constant_int2t(arr_size).value;
+    assert(elem_size.is_uint64());
+  }
+  else
+    elem_size = BigInt(1ULL << w);
+
+  for (size_t i = 0; i < elem_size; i++)
   {
     expr2tc elem;
     if (uses_tuple_api)
@@ -2652,7 +2669,7 @@ smt_astt smt_convt::convert_array_of_prep(const expr2tc &expr)
 
   // So: we have an array_of, that we have to convert into a bunch of stores.
   // However, it might be a nested array. If that's the case, then we're
-  // guarenteed to have another array_of in the initializer which we can flatten
+  // guaranteed to have another array_of in the initializer which we can flatten
   // to a single array of whatever's at the bottom of the array_of. Or, it's
   // a constant_array, in which case we can just copy the contents.
   if (is_array_type(arrtype.subtype))
@@ -2835,7 +2852,7 @@ void smt_convt::rewrite_ptrs_to_structs(type2tc &type)
   type->Foreach_subtype(delegate);
 }
 
-// Default behaviours for SMT AST's
+// Default behaviors for SMT AST's
 
 void smt_ast::assign(smt_convt *ctx, smt_astt sym) const
 {

@@ -59,8 +59,45 @@ void clang_cpp_adjust::gen_implicit_union_copy_move_constructor(symbolt &symbol)
   ctor_body.operands().push_back(copy_ctor_assign);
 }
 
+void clang_cpp_adjust::replace_lambda_capture_fields(
+  const irept &lambda_capture_fields,
+  exprt &op)
+{
+  if (op.is_symbol())
+  {
+    irept replacement_symbol = lambda_capture_fields.find(op.identifier());
+    if (replacement_symbol.is_not_nil())
+      op.swap(replacement_symbol);
+  }
+  else
+  {
+    Forall_operands (subop, op)
+      replace_lambda_capture_fields(lambda_capture_fields, *subop);
+  }
+}
+
+void clang_cpp_adjust::adjust_lambda_call_operator(symbolt &symbolt)
+{
+  if (!symbolt.value.get_bool("#lambda_call_operator"))
+    return;
+  code_blockt &body = to_code_block(to_code(symbolt.value));
+  const auto &lambda_capture_fields =
+    symbolt.value.find("#lambda_capture_fields");
+  replace_lambda_capture_fields(lambda_capture_fields, body);
+}
+
 void clang_cpp_adjust::adjust_symbol(symbolt &symbol)
 {
+  /* Adjusting the symbol beforehand, changes the body which confuses our replacement logic in `adjust_lambda_call_operator`
+   * E.g. the struct/base in a member expression `this->a` (inside a lambda) is replaced by a deref if it is a pointer.
+   * So we then have a deref with type `bar` that has `this` as an operand (with type `bar*`) which then causes problems,
+   * because we only replace symbols and not derefs. So we would replace `this` with `lambda_this->captured_this` and the final result would be
+   * `lambda_this->captured_this->a`. This is wrong if we captured `this` by value, because then `captured_this` is of type `bar` and not `bar*`.
+   * We have to adjust the body afterward anyway because the original AST doesn't model capturing a variable (e.g. `int x`) by ref as
+   * a reference. The reference is added only after replacing the captures with the fields.
+   * Therefore, we adjust the symbol after adjusting the lambda call operator.
+   */
+  adjust_lambda_call_operator(symbol);
   clang_c_adjust::adjust_symbol(symbol);
 
   /*

@@ -90,7 +90,7 @@ smt_astt smt_tuple_node_flattener::tuple_array_create(
   smt_sortt sort = ctx->convert_sort(array_type);
   smt_sortt subtype = ctx->convert_sort(get_array_subtype(array_type));
 
-  // Optimise the creation of a const array.
+  // Optimize the creation of a const array.
   if (const_array)
     return array_conv.convert_array_of_wsort(
       inputargs[0], domain->get_data_width(), sort);
@@ -186,10 +186,9 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
           "sorry");
         abort();
       }
-      log_warning(
-        "Fetching array elements inside tuples currently unimplemented, "
-        "returning empty expression...");
-      res = expr2tc();
+
+      // this will eventually jump to get_array()
+      res = ctx->get_by_ast(it, tuple->elements[i]);
     }
     else
     {

@@ -119,7 +119,7 @@ void goto_checkt::div_by_zero_check(
 
   assert(is_div2t(expr) || is_modulus2t(expr));
 
-  // add divison by zero subgoal
+  // add division by zero subgoal
   expr2tc side_2;
   if (is_div2t(expr))
     side_2 = to_div2t(expr).side_2;
@@ -489,16 +489,30 @@ void goto_checkt::shift_check(
   assert(is_lshr2t(expr) || is_ashr2t(expr) || is_shl2t(expr));
 
   auto right_op = (*expr->get_sub_expr(1));
+  auto right_op_type = right_op->type;
 
-  expr2tc zero = gen_zero(right_op->type);
+  expr2tc zero = gen_zero(right_op_type);
   assert(!is_nil_expr(zero));
 
   expr2tc right_op_non_negative = greaterthanequal2tc(right_op, zero);
 
   auto left_op = (*expr->get_sub_expr(0));
   auto left_op_type = left_op->type;
+  // Use right_op_type as the type of the expression, because otherwise we could
+  // get a signedness mismatch in the lessthan2tc below
   expr2tc left_op_type_size =
-    constant_int2tc(left_op_type, BigInt(left_op_type->get_width()));
+    constant_int2tc(right_op_type, BigInt(left_op_type->get_width()));
+#ifndef NDEBUG
+  // Be paranoid and verify that the size is the same regardless of which type we're using for the
+  // constant. In theory, we could have different signedness or width, but in practice
+  // those differences should not be relevant as the relevant numbers e.g. 32 or 64 can't
+  // cause wraparound issues.
+  expr2tc check2 = (equality2tc(
+    constant_int2tc(left_op_type, BigInt(left_op_type->get_width())),
+    constant_int2tc(right_op_type, BigInt(left_op_type->get_width()))));
+  simplify(check2);
+  assert(is_true(check2));
+#endif
 
   expr2tc right_op_size_check = lessthan2tc(right_op, left_op_type_size);
 
@@ -513,8 +527,8 @@ void goto_checkt::shift_check(
 
   add_guarded_claim(
     ub_check,
-    "undefined behaviour on shift operation " + get_expr_id(expr),
-    "undef-behaviour",
+    "undefined behavior on shift operation " + get_expr_id(expr),
+    "undef-behavior",
     loc,
     guard);
 }
@@ -630,7 +644,7 @@ void goto_checkt::bounds_check(
     "array bounds violated: " + array_name(ns, ind.source_value);
   const expr2tc &the_index = ind.index;
 
-  // Lower bound access should be greather than zero
+  // Lower bound access should be greater than zero
   expr2tc zero = gen_zero(the_index->type);
   assert(!is_nil_expr(zero));
 
@@ -809,7 +823,7 @@ void goto_checkt::check_rec(
   case expr2t::ieee_mul_id:
   case expr2t::ieee_div_id:
   {
-    // No division by zero for ieee_div, as it's defined behaviour
+    // No division by zero for ieee_div, as it's defined behavior
     float_overflow_check(expr, guard, loc);
     nan_check(expr, guard, loc);
     break;

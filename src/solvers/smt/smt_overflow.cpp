@@ -10,8 +10,6 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
   const arith_2ops &opers = static_cast<const arith_2ops &>(*overflow.operand);
 
   expr2tc zero = gen_zero(opers.side_1->type);
-  expr2tc op1neg = lessthan2tc(opers.side_1, zero);
-  expr2tc op2neg = lessthan2tc(opers.side_2, zero);
 
   // Guess whether we're performing a signed or unsigned comparison.
   bool is_signed =

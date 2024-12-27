@@ -2,6 +2,8 @@
 
 #include <string>
 #include <fstream>
+#include <sstream>
+#include <algorithm>
 
 #define DUMP_OBJECT(obj) printf("%s\n", (obj).dump(2).c_str())
 
@@ -84,6 +86,51 @@ JsonType find_function(const JsonType &json, const std::string &func_name)
 }
 
 template <typename JsonType>
+JsonType &find_function(JsonType &json, const std::string &func_name)
+{
+  for (auto &elem : json)
+  {
+    if (elem["_type"] == "FunctionDef" && elem["name"] == func_name)
+      return elem;
+  }
+  throw std::runtime_error("Function " + func_name + " not found\n");
+}
+
+template <typename JsonType>
+const JsonType &
+find_imported_function(const JsonType &ast, const std::string &func_name)
+{
+  for (const auto &node : ast["body"])
+  {
+    if (node["_type"] == "ImportFrom" || node["_type"] == "Import")
+    {
+      for (const auto &name : node["names"])
+        if (name["name"] == func_name)
+          return node;
+    }
+  }
+  throw std::runtime_error("Function " + func_name + " not found\n");
+}
+
+template <typename JsonType>
+const std::string
+get_object_alias(const JsonType &ast, const std::string &obj_name)
+{
+  for (auto &node : ast["body"])
+  {
+    if (node["_type"] == "ImportFrom" || node["_type"] == "Import")
+    {
+      for (const auto &name : node["names"])
+      {
+        if (name["_type"] == "alias" && name["asname"] == obj_name)
+          return name["name"];
+      }
+    }
+  }
+  return obj_name;
+}
+
+template <typename JsonType>
 const JsonType get_var_node(const std::string &var_name, const JsonType &block)
 {
   for (auto &element : block["body"])
@@ -91,6 +138,12 @@ const JsonType get_var_node(const std::string &var_name, const JsonType &block)
     if (
       element["_type"] == "AnnAssign" && element["target"].contains("id") &&
       element["target"]["id"] == var_name)
+      return element;
+
+    if (
+      element["_type"] == "Assign" &&
+      element["targets"][0]["_type"] == "Name" &&
+      element["targets"][0]["id"] == var_name)
       return element;
   }
 

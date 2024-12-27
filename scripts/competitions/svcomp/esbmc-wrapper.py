@@ -252,7 +252,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
   else:
     command_line += "--64 "
 
-  concurrency = ((prop in (Property.reach, Property.datarace)) and
+  concurrency = ((prop in (Property.reach, Property.datarace, Property.overflow, Property.memory)) and
                  check_if_benchmark_contains_pthread(benchmark))
 
   if concurrency:

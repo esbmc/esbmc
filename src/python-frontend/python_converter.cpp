@@ -2,7 +2,6 @@
 #include <python-frontend/json_utils.h>
 #include <python_frontend_types.h>
 #include <python-frontend/symbol_id.h>
-#include <python-frontend/python_module.h>
 #include <ansi-c/convert_float_literal.h>
 #include <util/std_code.h>
 #include <util/c_types.h>
@@ -512,7 +511,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   bin_expr.copy_to_operands(lhs, rhs);
 
   // floor division (//) operation corresponds to an int division with floor rounding
-  // So we need to emulate this behaviour here:
+  // So we need to emulate this behavior here:
   // int result = (num/div) - (num%div != 0 && ((num < 0) ^ (den<0)) ? 1 : 0)
   // e.g.: -5//2 equals to -3, and 5//2 equals to 2
   if (op == "FloorDiv")
@@ -729,6 +728,8 @@ symbol_id python_converter::build_function_id(const nlohmann::json &element)
     else
       obj_name = func_json["value"]["id"];
 
+    obj_name = json_utils::get_object_alias(ast_json, obj_name);
+
     if (!is_class(obj_name, ast_json) && is_imported_module(obj_name))
     {
       func_symbol_id = create_symbol_id(imported_modules[obj_name]);
@@ -765,7 +766,7 @@ symbol_id python_converter::build_function_id(const nlohmann::json &element)
       auto obj_node = find_var_decl(obj_name, current_func_name, ast_json);
 
       if (obj_node.empty())
-        throw std::runtime_error("Class name not found");
+        throw std::runtime_error("Class " + obj_name + " not found");
 
       class_name = obj_node["annotation"]["id"].get<std::string>();
     }
@@ -798,7 +799,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 
     if (
       !is_builtin_type(func_name) && !is_consensus_type(func_name) &&
-      !is_consensus_func(func_name) && !is_model_func(func_name))
+      !is_consensus_func(func_name) && !is_model_func(func_name) &&
+      !is_class(func_name, ast_json))
     {
       const auto &func_node = find_function(ast_json["body"], func_name);
       assert(!func_node.empty());
@@ -890,6 +892,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       caller = func_id.get_class();
     else
       caller = subelement["id"].get<std::string>();
+
+    caller = json_utils::get_object_alias(ast_json, caller);
 
     obj_symbol_id.set_object(caller);
     obj_symbol = context.find_symbol(obj_symbol_id.to_string());
@@ -1079,7 +1083,7 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     typet &char_type = t.subtype();
     exprt expr = gen_zero(t);
 
-    // Initialise array
+    // Initialize array
     unsigned int i = 0;
     for (uint8_t &ch : string_literal)
     {
@@ -1433,7 +1437,7 @@ const nlohmann::json &get_return_statement(const nlohmann::json &function)
   }
 
   throw std::runtime_error(
-    "Function" + function["name"].get<std::string>() +
+    "Function " + function["name"].get<std::string>() +
     "has no return statement");
 }
 
@@ -1896,6 +1900,21 @@ void python_converter::get_class_definition(
     // Process class attributes
     else if (class_member["_type"] == "AnnAssign")
     {
+      /* Ensure the attribute's type is defined by checking for its symbol.
+       * If the symbol for the type is not found, attempt to locate
+       * the class definition in the AST and convert it if available. */
+      const std::string &class_name = class_member["annotation"]["id"];
+      if (!context.find_symbol("tag-" + class_name))
+      {
+        const auto &class_node = find_class(ast_json["body"], class_name);
+        if (!class_node.empty())
+        {
+          std::string current_class = current_class_name;
+          get_class_definition(class_node, target_block);
+          current_class_name = current_class;
+        }
+      }
+
       get_var_assign(class_member, target_block);
 
       symbol_id sid = create_symbol_id();
@@ -2018,10 +2037,12 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
 
 python_converter::python_converter(
   contextt &_context,
-  const nlohmann::json &ast)
+  const nlohmann::json &ast,
+  const global_scope &gs)
   : context(_context),
     ns(_context),
     ast_json(ast),
+    global_scope_(gs),
     current_func_name(""),
     current_class_name(""),
     ref_instance(nullptr)
@@ -2136,15 +2157,28 @@ void python_converter::convert()
       throw std::runtime_error("Function " + function + " not found");
     }
 
-    // Convert all variables from global scope and class definitions
     code_blockt block;
-    for (const auto &elem : ast_json["body"])
+    // Convert classes referenced by the function
+    for (const auto &clazz : global_scope_.classes())
     {
-      StatementType type = get_statement_type(elem);
-      if (type == StatementType::VARIABLE_ASSIGN)
-        get_var_assign(elem, block);
-      else if (type == StatementType::CLASS_DEFINITION)
-        get_class_definition(elem, block);
+      const auto &class_node = find_class(ast_json["body"], clazz);
+      get_class_definition(class_node, block);
+      current_class_name.clear();
+    }
+
+    // Convert only the global variables referenced by the function
+    for (const auto &global_var : global_scope_.variables())
+    {
+      const auto &var_node = find_var_decl(global_var, "", ast_json);
+      get_var_assign(var_node, block);
+    }
+
+    // Convert function arguments types
+    for (const auto &arg : function_node["args"]["args"])
+    {
+      auto node = find_class(ast_json["body"], arg["annotation"]["id"]);
+      if (!node.empty())
+        get_class_definition(node, block);
     }
 
     // Convert a single function

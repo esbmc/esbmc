@@ -345,35 +345,34 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("no-slice", true);
   }
 
-  if (cmdline.isset("smt-thread-guard") || cmdline.isset("smt-symex-guard"))
+  if (
+    cmdline.isset("smt-thread-guard") || cmdline.isset("smt-symex-guard") ||
+    cmdline.isset("smt-symex-assert") || cmdline.isset("smt-symex-assume"))
   {
-    if (!cmdline.isset("smt-during-symex"))
-    {
-      log_error(
-        "Please explicitly specify --smt-during-symex if you want "
-        "to use features that involve encoding SMT during symex");
-      abort();
-    }
+    log_status(
+      "Enabling --smt-during-symex to use features that involve encoding SMT "
+      "during symex");
+    options.set_option("smt-during-symex", true);
   }
 
   // check the user's parameters to run incremental verification
   if (!cmdline.isset("unlimited-k-steps"))
   {
     // Get max number of iterations
-    BigInt max_k_step = strtoul(cmdline.getval("max-k-step"), nullptr, 10);
+    uint64_t max_k_step = strtoul(cmdline.getval("max-k-step"), nullptr, 10);
 
     // Get the increment
-    unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
+    uint64_t k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
 
     // Get the start of the base-case, default 1
-    unsigned k_step_base = strtoul(cmdline.getval("base-k-step"), nullptr, 10);
+    uint64_t k_step_base = strtoul(cmdline.getval("base-k-step"), nullptr, 10);
 
     // check whether k-step is greater than max-k-step
     if (k_step_inc >= max_k_step)
     {
       log_error(
-        "Please specify --k-step smaller than max-k-step if you want "
-        "to use incremental verification.");
+        "Please specify --k-step smaller than max-k-step if you want to use "
+        "incremental verification.");
       abort();
     }
 
@@ -489,6 +488,16 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   /* compatibility: --cvc maps to --cvc4 */
   if (cmdline.isset("cvc"))
     options.set_option("cvc4", true);
+
+  if (cmdline.isset("log-message"))
+    options.set_option("log-message", true);
+
+  if (cmdline.isset("keep_alive_running"))
+    options.set_option("keep_alive_running", true);
+
+  if (cmdline.isset("keep-alive-interval"))
+    options.set_option(
+      "keep-alive-interval", cmdline.getval("keep-alive-interval"));
 
   config.options = options;
 }
@@ -607,7 +616,7 @@ int esbmc_parseoptionst::doit()
 
   // If no strategy is chosen, just rely on the simplifier
   // and the flags set through CMD
-  bmct bmc(goto_functions, options, cmdline.options_map, context);
+  bmct bmc(goto_functions, options, context);
   return do_bmc(bmc);
 }
 
@@ -697,15 +706,15 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
   }
 
   // Get max number of iterations
-  BigInt max_k_step = cmdline.isset("unlimited-k-steps")
-                        ? UINT_MAX
-                        : strtoul(cmdline.getval("max-k-step"), nullptr, 10);
+  uint64_t max_k_step = cmdline.isset("unlimited-k-steps")
+                          ? UINT_MAX
+                          : strtoul(cmdline.getval("max-k-step"), nullptr, 10);
 
   // Get the increment
-  unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
+  uint64_t k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
 
   // Get the start of the base-case, default 1
-  unsigned k_step_base = strtoul(cmdline.getval("base-k-step"), nullptr, 10);
+  uint64_t k_step_base = strtoul(cmdline.getval("base-k-step"), nullptr, 10);
   if (k_step_base >= max_k_step)
   {
     log_error(
@@ -725,8 +734,8 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 
     struct resultt a_result;
     bool bc_finished = false, fc_finished = false, is_finished = false;
-    BigInt bc_solution = max_k_step, fc_solution = max_k_step,
-           is_solution = max_k_step;
+    uint64_t bc_solution = max_k_step, fc_solution = max_k_step,
+             is_solution = max_k_step;
 
     // Keep reading until we find an answer
     while (!(bc_finished && fc_finished && is_finished))
@@ -855,7 +864,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         // Struct to keep the result
         struct resultt r = {process_type, 0};
 
-        r.k = fc_solution.to_uint64();
+        r.k = fc_solution;
 
         // Write result
         auto const len = write(backward_pipe[1], &r, sizeof(r));
@@ -877,7 +886,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
         // Struct to keep the result
         struct resultt r = {process_type, 0};
 
-        r.k = is_solution.to_uint64();
+        r.k = is_solution;
 
         // Write result
         auto const len = write(backward_pipe[1], &r, sizeof(r));
@@ -930,7 +939,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       }
     }
 
-    // Couldn't find a bug or a proof for the current deepth
+    // Couldn't find a bug or a proof for the current depth
     log_fail("\nVERIFICATION UNKNOWN");
     return false;
   }
@@ -955,10 +964,10 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // Run bmc and only send results in two occasions:
     // 1. A bug was found, we send the step where it was found
     // 2. It couldn't find a bug
-    for (BigInt k_step = k_step_base; k_step <= max_k_step;
+    for (uint64_t k_step = k_step_base; k_step <= max_k_step;
          k_step += k_step_inc)
     {
-      bmct bmc(goto_functions, options, cmdline.options_map, context);
+      bmct bmc(goto_functions, options, context);
       bmc.options.set_option("unwind", integer2string(k_step));
 
       log_status("Checking base case, k = {:d}\n", k_step);
@@ -977,7 +986,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       // Send information to parent if no bug was found
       if (res == smt_convt::P_SATISFIABLE)
       {
-        r.k = k_step.to_uint64();
+        r.k = k_step;
 
         // Write result
         auto const len = write(forward_pipe[1], &r, sizeof(r));
@@ -1060,10 +1069,10 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // Run bmc and only send results in two occasions:
     // 1. A proof was found, we send the step where it was found
     // 2. It couldn't find a proof
-    for (BigInt k_step = k_step_base + 1; k_step <= max_k_step;
+    for (uint64_t k_step = k_step_base + 1; k_step <= max_k_step;
          k_step += k_step_inc)
     {
-      bmct bmc(goto_functions, options, cmdline.options_map, context);
+      bmct bmc(goto_functions, options, context);
       bmc.options.set_option("unwind", integer2string(k_step));
 
       log_status("Checking forward condition, k = {:d}", k_step);
@@ -1085,7 +1094,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       // Send information to parent if no bug was found
       if (res == smt_convt::P_UNSATISFIABLE)
       {
-        r.k = k_step.to_uint64();
+        r.k = k_step;
 
         // Write result
         auto const len = write(forward_pipe[1], &r, sizeof(r));
@@ -1128,10 +1137,10 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
     // Run bmc and only send results in two occasions:
     // 1. A proof was found, we send the step where it was found
     // 2. It couldn't find a proof
-    for (BigInt k_step = k_step_base + 1; k_step <= max_k_step;
+    for (uint64_t k_step = k_step_base + 1; k_step <= max_k_step;
          k_step += k_step_inc)
     {
-      bmct bmc(goto_functions, options, cmdline.options_map, context);
+      bmct bmc(goto_functions, options, context);
 
       bmc.options.set_option("unwind", integer2string(k_step));
 
@@ -1154,7 +1163,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       // Send information to parent if no bug was found
       if (res == smt_convt::P_UNSATISFIABLE)
       {
-        r.k = k_step.to_uint64();
+        r.k = k_step;
 
         // Write result
         auto const len = write(forward_pipe[1], &r, sizeof(r));
@@ -1196,7 +1205,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 //  3) Falsification
 //  4) k-induction
 //
-// Applying a strategy in this context means solving a paticular sequence
+// Applying a strategy in this context means solving a particular sequence
 // of decision problems from the list below for the given unwinding bound k:
 //
 //  - Base case             (see "is_base_case_violated")
@@ -1204,16 +1213,16 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
 //  - Inductive step        (see "is_inductive_step_violated")
 //
 // \param options - options for setting the verification strategy
-// and conrolling symbolic execution
+// and controlling symbolic execution
 // \param goto_functions - GOTO program under verification
 int esbmc_parseoptionst::do_bmc_strategy(
   optionst &options,
   goto_functionst &goto_functions)
 {
   // Get max number of iterations
-  BigInt max_k_step = cmdline.isset("unlimited-k-steps")
-                        ? UINT_MAX
-                        : strtoul(cmdline.getval("max-k-step"), nullptr, 10);
+  uint64_t max_k_step = cmdline.isset("unlimited-k-steps")
+                          ? UINT_MAX
+                          : strtoul(cmdline.getval("max-k-step"), nullptr, 10);
 
   // Get the increment
   unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
@@ -1229,7 +1238,8 @@ int esbmc_parseoptionst::do_bmc_strategy(
   }
 
   // Trying all bounds from 1 to "max_k_step" in "k_step_inc"
-  for (BigInt k_step = k_step_base; k_step <= max_k_step; k_step += k_step_inc)
+  for (uint64_t k_step = k_step_base; k_step <= max_k_step;
+       k_step += k_step_inc)
   {
     // k-induction
     if (options.get_bool_option("k-induction"))
@@ -1303,7 +1313,7 @@ int esbmc_parseoptionst::do_bmc_strategy(
 tvt esbmc_parseoptionst::is_base_case_violated(
   optionst &options,
   goto_functionst &goto_functions,
-  const BigInt &k_step)
+  const uint64_t &k_step)
 {
   options.set_option("base-case", true);
   options.set_option("forward-condition", false);
@@ -1312,7 +1322,7 @@ tvt esbmc_parseoptionst::is_base_case_violated(
   options.set_option("partial-loops", false);
   options.set_option("unwind", integer2string(k_step));
 
-  bmct bmc(goto_functions, options, cmdline.options_map, context);
+  bmct bmc(goto_functions, options, context);
 
   log_status("Checking base case, k = {:d}", k_step);
   switch (do_bmc(bmc))
@@ -1352,7 +1362,7 @@ tvt esbmc_parseoptionst::is_base_case_violated(
 tvt esbmc_parseoptionst::does_forward_condition_hold(
   optionst &options,
   goto_functionst &goto_functions,
-  const BigInt &k_step)
+  const uint64_t &k_step)
 {
   if (options.get_bool_option("disable-forward-condition"))
     return tvt(tvt::TV_UNKNOWN);
@@ -1371,7 +1381,7 @@ tvt esbmc_parseoptionst::does_forward_condition_hold(
   options.set_option("no-assertions", true);
   options.set_option("unwind", integer2string(k_step));
 
-  bmct bmc(goto_functions, options, cmdline.options_map, context);
+  bmct bmc(goto_functions, options, context);
 
   log_progress("Checking forward condition, k = {:d}", k_step);
   auto res = do_bmc(bmc);
@@ -1421,14 +1431,12 @@ tvt esbmc_parseoptionst::does_forward_condition_hold(
 tvt esbmc_parseoptionst::is_inductive_step_violated(
   optionst &options,
   goto_functionst &goto_functions,
-  const BigInt &k_step)
+  const uint64_t &k_step)
 {
   if (options.get_bool_option("disable-inductive-step"))
     return tvt(tvt::TV_UNKNOWN);
 
-  if (
-    strtoul(cmdline.getval("max-inductive-step"), nullptr, 10) <
-    k_step.to_uint64())
+  if (strtoul(cmdline.getval("max-inductive-step"), nullptr, 10) < k_step)
     return tvt(tvt::TV_UNKNOWN);
 
   options.set_option("base-case", false);
@@ -1438,7 +1446,7 @@ tvt esbmc_parseoptionst::is_inductive_step_violated(
   options.set_option("partial-loops", true);
   options.set_option("unwind", integer2string(k_step));
 
-  bmct bmc(goto_functions, options, cmdline.options_map, context);
+  bmct bmc(goto_functions, options, context);
 
   log_progress("Checking inductive step, k = {:d}", k_step);
   switch (do_bmc(bmc))
@@ -1681,7 +1689,7 @@ bool esbmc_parseoptionst::parse_goto_program(
         exit(0);
     }
 
-    // Typecheking (old frontend) or adjust (clang frontend)
+    // Typechecking (old frontend) or adjust (clang frontend)
     if (typecheck())
       return true;
     if (final())
@@ -1779,7 +1787,7 @@ bool esbmc_parseoptionst::process_goto_program(
     // We should skip this 'remove-unreachable' removal in goto-cov and multi-property
     // - multi-property wants to find all the bugs in the src code
     // - assertion-coverage wants to find out unreached codes (asserts)
-    // - however, the optimisation below will remove codes during the Goto stage
+    // - however, the optimization below will remove codes during the Goto stage
     if (!(cmdline.isset("no-remove-unreachable") || is_mul || is_coverage))
       remove_unreachable(goto_functions);
 

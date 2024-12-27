@@ -564,10 +564,10 @@ public:
 
   /** Flatten pointer arithmetic. When faced with an addition or subtraction
    *  between a pointer and some integer or other pointer, perform whatever
-   *  multiplications or casting is requried to honour the C semantics of
+   *  multiplications or casting is requried to honor the C semantics of
    *  pointer arith. */
   smt_astt convert_pointer_arith(const expr2tc &expr, const type2tc &t);
-  /** Compare two pointers. This attempts to optimise cases where we can avoid
+  /** Compare two pointers. This attempts to optimize cases where we can avoid
    *  comparing the integer representation of a pointer, as that's hugely
    *  inefficient sometimes (and gets bitblasted).
    *  @param expr First pointer to compare

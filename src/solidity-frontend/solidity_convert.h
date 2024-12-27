@@ -232,7 +232,7 @@ protected:
   // Use current level of BinOp type as the "anchor" type for numerical literal conversion:
   // In order to remove the unnecessary implicit IntegralCast. We need type of current level of BinaryOperator.
   // All numeric literals will be implicitly converted to this type. Pop it when finishing the current level of BinaryOperator.
-  // TODO: find a better way to deal with implicit type casting if it's not able to cope with compelx rules
+  // TODO: find a better way to deal with implicit type casting if it's not able to cope with complex rules
   std::stack<const nlohmann::json *> current_BinOp_type;
   std::string current_functionName;
 

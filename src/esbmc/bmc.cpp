@@ -42,12 +42,8 @@
 #include <atomic>
 #include <goto-symex/witnesses.h>
 
-bmct::bmct(
-  goto_functionst &funcs,
-  optionst &opts,
-  const cmdlinet::options_mapt &option_map,
-  contextt &_context)
-  : options(opts), opt_map(option_map), context(_context), ns(context)
+bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
+  : options(opts), context(_context), ns(context)
 {
   interleaving_number = 0;
   interleaving_failed = 0;
@@ -145,7 +141,10 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
   }
 
   if (options.get_bool_option("generate-html-report"))
-    generate_html_report("1", ns, goto_trace, opt_map);
+    generate_html_report("1", ns, goto_trace, options);
+
+  if (options.get_bool_option("generate-json-report"))
+    generate_json_report("1", ns, goto_trace);
 
   std::ostringstream oss;
   log_fail("\n[Counterexample]\n");
@@ -177,10 +176,39 @@ void bmct::generate_smt_from_equation(
     "Encoding to solver time: {}s", time2string(encode_stop - encode_start));
 }
 
+void bmct::keep_alive_function() const
+{
+  fine_timet start_time = current_time();
+  while (keep_alive_running)
+  {
+    std::this_thread::sleep_for(std::chrono::seconds(keep_alive_interval));
+    if (!keep_alive_running)
+      break;
+
+    fine_timet alive_current = current_time();
+    // output runtime
+    log_status(
+      "Solver is still solving... Total Time: {}s",
+      time2string(alive_current - start_time));
+  }
+}
+
 smt_convt::resultt bmct::run_decision_procedure(
   smt_convt &smt_conv,
   symex_target_equationt &eq) const
 {
+  if (options.get_bool_option("enable-keep-alive"))
+  {
+    keep_alive_running = true;
+    keep_alive_interval =
+      atoi(options.get_option("keep-alive-interval").c_str());
+
+    if (keep_alive_interval <= 0)
+      keep_alive_interval = 60; // Default interval to 60 seconds
+
+    std::thread([this]() { keep_alive_function(); }).detach();
+  }
+
   generate_smt_from_equation(smt_conv, eq);
 
   if (
@@ -197,6 +225,7 @@ smt_convt::resultt bmct::run_decision_procedure(
   fine_timet sat_start = current_time();
   smt_convt::resultt dec_result = smt_conv.dec_solve();
   fine_timet sat_stop = current_time();
+  keep_alive_running = false;
 
   // output runtime
   log_status(
@@ -347,7 +376,10 @@ void bmct::report_multi_property_trace(
         "testcase-" + std::to_string(ce_counter) + ".xml", local_eq, *solver);
     }
     if (options.get_bool_option("generate-html-report"))
-      generate_html_report(std::to_string(ce_counter), ns, goto_trace, opt_map);
+      generate_html_report(std::to_string(ce_counter), ns, goto_trace, options);
+
+    if (options.get_bool_option("generate-json-report"))
+      generate_json_report(std::to_string(ce_counter), ns, goto_trace);
 
     std::ostringstream oss;
     log_fail("\n[Counterexample]\n");
@@ -406,9 +438,9 @@ void bmct::report_result(smt_convt::resultt &res)
     }
     break;
 
-  // Return failure if we didn't actually check anything, we just emitted the
-  // test information to an SMTLIB formatted file. Causes esbmc to quit
-  // immediately (with no error reported)
+    // Return failure if we didn't actually check anything, we just emitted the
+    // test information to an SMTLIB formatted file. Causes esbmc to quit
+    // immediately (with no error reported)
   case smt_convt::P_SMTLIB:
     return;
 
@@ -429,7 +461,7 @@ smt_convt::resultt bmct::start_bmc()
   std::shared_ptr<symex_target_equationt> eq;
   smt_convt::resultt res = run(eq);
   if (!options.get_bool_option("multi-property"))
-    // multi-property trace are outputed during the run(eq)
+    // multi-property traces are output during the run(eq)
     report_trace(res, *eq);
   report_result(res);
   return res;
@@ -501,7 +533,7 @@ void bmct::bidirectional_search(
   smt_convt &smt_conv,
   const symex_target_equationt &eq)
 {
-  // We should only analyse the inductive step's cex and we're running
+  // We should only analyze the inductive step's cex and we're running
   // in k-induction mode
   if (!(options.get_bool_option("inductive-step") &&
         options.get_bool_option("k-induction")))
@@ -934,8 +966,11 @@ smt_convt::resultt bmct::multi_property_check(
       return;
 
     // Slice
-    symex_slicet slicer(options);
-    slicer.run(local_eq.SSA_steps);
+    if (!options.get_bool_option("no-slice"))
+    {
+      symex_slicet slicer(options);
+      slicer.run(local_eq.SSA_steps);
+    }
 
     if (options.get_bool_option("ssa-features-dump"))
     {
@@ -1070,7 +1105,7 @@ smt_convt::resultt bmct::multi_property_check(
         log_result("Total Assertion Instances: {}", total_instance);
       else
         // this could be
-        // 1. the loop is too large that we cannot goto-uwnind it
+        // 1. the loop is too large that we cannot goto-unwind it
         // 2. the loop is somewhat non-deterministic that we cannot run goto-unwind
         log_result("Total Assertion Instances: unknown / non-deterministic");
       log_result("Reached Assertion Instances: {}", tracked_instance);
@@ -1176,7 +1211,7 @@ smt_convt::resultt bmct::multi_property_check(
       }
     }
 
-    // the remain unreached instrumentaion are regarded as short-circuited
+    // the remain unreached instrumentations are regarded as short-circuited
     //! the reached_claims might not be empty (due to unwinding assertions)
     short_circuit_instance = total_cond_assert_cpy.size();
 

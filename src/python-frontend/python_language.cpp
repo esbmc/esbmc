@@ -1,6 +1,7 @@
 #include <python-frontend/python_language.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_annotation.h>
+#include <python-frontend/global_scope.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <util/message.h>
 #include <util/filesystem.h>
@@ -96,10 +97,10 @@ bool python_languaget::parse(const std::string &path)
 
   ast = nlohmann::json::parse(ast_json);
 
-  // Add annotation
   try
   {
-    python_annotation<nlohmann::json> ann(ast);
+    // Add type information
+    python_annotation<nlohmann::json> ann(ast, global_scope_);
     const std::string function = config.options.get_option("function");
     if (!function.empty())
       ann.add_type_annotation(function);
@@ -127,10 +128,11 @@ bool python_languaget::typecheck(contextt &context, const std::string &)
 
   try
   {
-    python_converter converter(context, ast);
+    // Generate symbol table
+    python_converter converter(context, ast, global_scope_);
     converter.convert();
   }
-  catch (std::runtime_error &e)
+  catch (const std::runtime_error &e)
   {
     log_error("{}", e.what());
     exit(-2);

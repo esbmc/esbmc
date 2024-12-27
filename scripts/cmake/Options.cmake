@@ -48,7 +48,7 @@ option(ENABLE_FUZZER "Add fuzzing targets (default: OFF)" OFF)
 option(ENABLE_CLANG_TIDY "Activate clang tidy analysis (default: OFF)" OFF)
 option(ENABLE_CSMITH "Add csmith Tests (default: OFF) (depends: ENABLE_REGRESSION)" OFF)
 option(BENCHBRINGUP "Run a user-specified benchmark in Github workflow" OFF)
-option(DOWNLOAD_DEPENDENCIES "Download and build dpendencies if needed (default: OFF)" OFF)
+option(DOWNLOAD_DEPENDENCIES "Download and build dependencies if needed (default: OFF)" OFF)
 option(ACADEMIC_BUILD "Check and Enable libs that available only in Academic builds (default: OFF)" OFF)
 option(ESBMC_SVCOMP "Enable an SV-COMP build of ESBMC (default: OFF)" OFF)
 

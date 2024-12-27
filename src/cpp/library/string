@@ -1087,6 +1087,38 @@ __ESBMC_HIDE:
   return false;
 }
 
+bool operator>(const string &lhs, const string &rhs)
+{
+__ESBMC_HIDE:
+  __ESBMC_assert(
+    lhs.str != NULL, "The first parameter must to be different than NULL");
+  __ESBMC_assert(
+    rhs.str != NULL, "The second parameter must to be different than NULL");
+  int i;
+  for (i = 0; (lhs.str[i] != '\0') && (rhs.str[i] != '\0'); i++)
+  {
+    if (lhs.str[i] > rhs.str[i])
+      return true;
+  }
+  return false;
+}
+
+bool operator<(const string &lhs, const string &rhs)
+{
+__ESBMC_HIDE:
+  __ESBMC_assert(
+    lhs.str != NULL, "The first parameter must to be different than NULL");
+  __ESBMC_assert(
+    rhs.str != NULL, "The second parameter must to be different than NULL");
+  int i;
+  for (i = 0; (lhs.str[i] != '\0') && (rhs.str[i] != '\0'); i++)
+  {
+    if (lhs.str[i] < rhs.str[i])
+      return true;
+  }
+  return false;
+}
+
 bool operator>(const char *lhs, string &rhs)
 {
 __ESBMC_HIDE:
@@ -1843,7 +1875,7 @@ __ESBMC_HIDE:
     two[k] = this->str[i];
   }
   int totalLen = s.length() + len;
-  this->str = new char[totalLen];
+  this->str = new char[totalLen + 1];
   this->_size = totalLen;
 
   for (i = 0; i < lenOne - 1; i++)

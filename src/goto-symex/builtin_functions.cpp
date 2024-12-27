@@ -305,7 +305,10 @@ void goto_symext::symex_free(const expr2tc &expr)
       expr2tc offset = item.offset;
       expr2tc eq = equality2tc(offset, gen_ulong(0));
       g.guard_expr(eq);
-      claim(eq, "Operand of free must have zero pointer offset");
+      if (options.get_bool_option("conv-assert-to-assume"))
+        assume(eq);
+      else
+        claim(eq, "Operand of free must have zero pointer offset");
 
       // Check if we are not freeing an dynamic object allocated using alloca
       for (auto const &a : allocad)
@@ -327,7 +330,10 @@ void goto_symext::symex_free(const expr2tc &expr)
         {
           expr2tc noteq = notequal2tc(alloc_obj, item.object);
           g.guard_expr(noteq);
-          claim(noteq, "dereference failure: invalid pointer freed");
+          if (options.get_bool_option("conv-assert-to-assume"))
+            assume(noteq);
+          else
+            claim(noteq, "dereference failure: invalid pointer freed");
         }
       }
     }
@@ -1274,7 +1280,7 @@ static inline expr2tc gen_value_by_byte(
 /**
  * @brief This function will try to initialize the object pointed by
  * the address in a smarter way, minimizing the number of assignments.
- * This is intend to optimize the behaviour of a memset operation:
+ * This is intend to optimize the behavior of a memset operation:
  *
  * memset(void* ptr, int value, size_t num_of_bytes)
  *

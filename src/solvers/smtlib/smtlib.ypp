@@ -77,7 +77,7 @@ sexpr *smtlib_output = NULL;
 
 /* Types */
 
-%type <text> error_behaviour reason_unknown info_response_arg
+%type <text> error_behavior reason_unknown info_response_arg
 %type <str> symbol
 %type <str_vec> symbol_list_empt
 %type <sexpr_list> sexpr_list info_response_list
@@ -395,7 +395,7 @@ gen_response: TOK_KW_UNSUPPORTED
            free($3);
          }
 
-error_behaviour: TOK_KW_IMMEXIT | TOK_KW_CONEXECUTION
+error_behavior: TOK_KW_IMMEXIT | TOK_KW_CONEXECUTION
 
 reason_unknown: TOK_KW_MEMOUT | TOK_KW_INCOMPLETE
 
@@ -418,7 +418,7 @@ status: TOK_KW_SAT
            free($1);
          }
 
-info_response_arg: error_behaviour | reason_unknown
+info_response_arg: error_behavior | reason_unknown
 
 info_response: attribute
        | TOK_KEYWORD info_response_arg
