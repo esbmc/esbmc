@@ -252,11 +252,11 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
   else:
     command_line += "--64 "
 
-  concurrency = ((prop in (Property.reach, Property.datarace, Property.memory)) and
+  concurrency = ((prop in (Property.reach, Property.datarace, Property.overflow, Property.memory)) and
                  check_if_benchmark_contains_pthread(benchmark))
 
   if concurrency:
-    command_line += " --no-por --context-bound 3 "
+    command_line += " --no-por --context-bound 2 "
     #command_line += "--no-slice " # TODO: Witness validation is only working without slicing
 
   # Add witness arg
