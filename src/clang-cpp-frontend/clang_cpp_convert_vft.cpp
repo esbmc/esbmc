@@ -576,6 +576,70 @@ void clang_cpp_convertert::build_vtable_map(
   }
 }
 
+static bool is_subclass_of(
+  const dstring subname,
+  const dstring &supername,
+  const namespacet &ns)
+{
+  const symbolt *symbol = ns.lookup(subname);
+  if (symbol)
+  {
+    // look at the list of bases; see if one of the basenames is equal to the supername or whether the basename
+    // is a subclass of the supername
+    forall_irep (it, symbol->type.find("bases").get_sub())
+    {
+      dstring basename = it->id();
+      if (basename == supername)
+      {
+        return true;
+      }
+      if (is_subclass_of(basename, supername, ns))
+      {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * @brief Check if `sub` is a subtype of `super` in the context of code/function types.
+ * This means that we take into account covariant return types.
+ *
+ * @param sub The sub type.
+ * @param super The super type.
+ * @param ns Namespace to resolve symbols.
+ * @return True if sub is a subtype of super, false otherwise.
+ */
+static bool
+is_code_sub_type(const typet &sub, const typet &super, const namespacet &ns)
+{
+  assert(sub.is_code() && super.is_code());
+  if (sub == super)
+    return true;
+
+  const code_typet &sub_code = to_code_type(sub);
+  const code_typet &super_code = to_code_type(super);
+
+  if (sub_code.arguments().size() != super_code.arguments().size())
+    return false;
+
+  for (unsigned i = 0; i < sub_code.arguments().size(); i++)
+    if (sub_code.arguments()[i].type() != super_code.arguments()[i].type())
+      return false;
+
+  if (sub_code.return_type() == super_code.return_type())
+    return true;
+  // if the return types are different, this is only okay if both are pointers and the sub is a subtype of the super
+  return sub_code.return_type().is_pointer() &&
+         super_code.return_type().is_pointer() &&
+         is_subclass_of(
+           sub_code.return_type().subtype().identifier(),
+           super_code.return_type().subtype().identifier(),
+           ns);
+}
+
 void clang_cpp_convertert::add_vtable_variable_symbols(
   const clang::CXXRecordDecl &cxxrd,
   const struct_typet &type,
@@ -623,7 +687,11 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
         switch_map.find(compo.get("virtual_name").as_string());
       assert(cit2 != switch_map.end());
       const exprt &value = cit2->second;
-      assert(value.type() == compo.type());
+      // value.type() must be a subtype of compo.type()
+      assert(value.type().is_pointer());
+      assert(compo.type().is_pointer());
+      assert(
+        is_code_sub_type(value.type().subtype(), compo.type().subtype(), ns));
       values.operands().push_back(value);
     }
     vt_symb_var.value = values;
