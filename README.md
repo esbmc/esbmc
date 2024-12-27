@@ -24,7 +24,9 @@ Our main website is [esbmc.org](http://esbmc.org).
 #### Mac OS X
 
 ESBMC works fine on ARM64 (M1/M2/M3/M4) Macs, assuming you have installed the MAC OS Dev tools. However, the compile option for GOTO_SYSROOT needs to be changed. Note that make -j8 can be increased to -j32 on faster Macs.
-````
+
+##### Execution for Mac with apple chips
+````sh
 brew install z3
 brew install bison
 
@@ -32,6 +34,24 @@ git clone https://github.com/esbmc/esbmc.git
 mkdir build && cd build
 cmake .. -DENABLE_Z3=1 -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
 make -j8
+````
+
+##### Execution for Mac with Intel chips
+````sh
+brew install z3
+brew install bison
+brew install boost
+brew install llvm
+
+git clone https://github.com/esbmc/esbmc.git
+mkdir build && cd build
+
+# replace path_llvm with the path of llvm, e.g. "/usr/local/opt/llvm"  vous pouvez l'obtenir avec cette commende "brew --prefix llvm"
+
+cmake .. -DCMAKE_PREFIX_PATH="{path_llvm}" -DENABLE_Z3=1 -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
+make -j8
+sudo make install
+esbmc --version
 ````
 
 #### Ubuntu 24.04
