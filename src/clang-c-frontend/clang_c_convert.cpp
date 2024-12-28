@@ -1876,6 +1876,10 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         if (get_expr(*member.getBase(), base))
           return true;
 
+        typet ignored;
+        if (get_type(member.getBase()->getType(), ignored, true))
+          return true;
+
         const clang::CXXRecordDecl *cxxrd =
           member.getBase()->getType()->getAsCXXRecordDecl();
         if (!cxxrd)
