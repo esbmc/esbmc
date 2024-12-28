@@ -1653,32 +1653,32 @@ bool clang_cpp_convertert::get_template_decl_specialization(
   bool DumpExplicitInst,
   exprt &new_expr)
 {
-  //  for (auto const *redecl_with_bad_type : D->redecls())
-  //  {
-  //    auto *redecl = llvm::dyn_cast<SpecializationDecl>(redecl_with_bad_type);
-  //    if (!redecl)
-  //    {
-  //      assert(
-  //        llvm::isa<clang::CXXRecordDecl>(redecl_with_bad_type) &&
-  //        "expected an injected-class-name");
-  //      continue;
-  //    }
-  //
-  //    switch (redecl->getTemplateSpecializationKind())
-  //    {
-  //    case clang::TSK_ExplicitInstantiationDeclaration:
-  //    case clang::TSK_ExplicitInstantiationDefinition:
-  //    case clang::TSK_ExplicitSpecialization:
-  //      if (!DumpExplicitInst)
-  //        break;
-  //      // Fall through.
-  //    case clang::TSK_Undeclared:
-  //    case clang::TSK_ImplicitInstantiation:
-  //      if (get_decl(*redecl, new_expr))
-  //        return true;
-  //      break;
-  //    }
-  //  }
+  for (auto const *redecl_with_bad_type : D->redecls())
+  {
+    auto *redecl = llvm::dyn_cast<SpecializationDecl>(redecl_with_bad_type);
+    if (!redecl)
+    {
+      assert(
+        llvm::isa<clang::CXXRecordDecl>(redecl_with_bad_type) &&
+        "expected an injected-class-name");
+      continue;
+    }
+
+    switch (redecl->getTemplateSpecializationKind())
+    {
+    case clang::TSK_ExplicitInstantiationDeclaration:
+    case clang::TSK_ExplicitInstantiationDefinition:
+    case clang::TSK_ExplicitSpecialization:
+      if (!DumpExplicitInst)
+        break;
+      // Fall through.
+    case clang::TSK_Undeclared:
+    case clang::TSK_ImplicitInstantiation:
+      if (get_decl(*redecl, new_expr))
+        return true;
+      break;
+    }
+  }
 
   return false;
 }
