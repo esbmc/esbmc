@@ -1886,7 +1886,7 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         {
           cxxrd = member.getBase()->getType()->getPointeeCXXRecordDecl();
         }
-        if (cxxrd /*&& !cxxrd->isCLike()*/)
+        if (cxxrd && !cxxrd->isCLike() && !cxxrd->isUnion())
         {
           std::string name, id;
           get_decl_name(*cxxrd, name, id);
@@ -2192,19 +2192,26 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       const clang::CXXRecordDecl *cxxrd =
         init_stmt.getType()->getAsCXXRecordDecl();
       cxxrd = cxxrd ? cxxrd : init_stmt.getType()->getPointeeCXXRecordDecl();
+      bool uses_data_object = cxxrd && !cxxrd->isCLike();
       assert(
-        !cxxrd ||
+        !uses_data_object ||
         has_suffix(
           inits.op0().type().tag(), cpp_data_object::data_object_suffix));
-      assert(!cxxrd || inits.op0().is_not_nil());
+      assert(!uses_data_object || inits.op0().is_not_nil());
       std::vector<exprt> &operands =
-        cxxrd ? inits.op0().operands() : inits.operands();
+        uses_data_object ? inits.op0().operands() : inits.operands();
       for (unsigned int i = 0, j = 0; (i < operands.size() && j < num); ++i)
       {
         const struct_union_typet::componentt *c = nullptr;
         if (t.is_struct())
         {
-          c = &to_struct_union_type(t).components()[i];
+          struct_union_typet::componentst &target_components =
+            uses_data_object
+              ? to_struct_union_type(
+                  to_struct_union_type(t).components().at(0).type())
+                  .components()
+              : to_struct_union_type(t).components();
+          c = &target_components.at(i);
           assert(!c->get_is_padding());
           if (c->get_is_unnamed_bitfield())
             continue;
@@ -2214,6 +2221,11 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
         exprt init;
         if (get_expr(*init_stmt.getInit(j++), init))
           return true;
+        if (has_suffix(
+              operands.at(i).type().tag(), cpp_data_object::data_object_suffix))
+        {
+          init = init.op0();
+        }
 
         typet elem_type;
         if (t.is_struct())

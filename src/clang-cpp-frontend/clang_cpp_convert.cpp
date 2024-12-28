@@ -396,32 +396,41 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
 {
   // Note: If a struct is defined inside an extern C, it will be a RecordDecl
   const clang::CXXRecordDecl *cxxrd = llvm::dyn_cast<clang::CXXRecordDecl>(&rd);
-  if (!cxxrd /* || cxxrd->isCLike()*/)
+  if (!cxxrd || cxxrd->isCLike())
   {
+    type.set("#is_c_like", true);
     return clang_c_convertert::get_struct_union_class_fields(rd, type);
   }
   assert(cxxrd);
-
-  create_data_object_type(rd);
-  struct_typet &data_object_type = cpp_data_object::get_data_object_type(
-    tag_prefix + type.tag().as_string(), context);
-  typet data_object_symbol_type;
-  cpp_data_object::get_data_object_symbol_type(
-    tag_prefix + type.tag().as_string(), data_object_symbol_type);
-
-  // pull bases in
-
-  for (auto non_virtual_base : cxxrd->bases())
+  struct_union_typet *target_object_type = &type;
+  if (!cxxrd->isUnion())
   {
-    if (non_virtual_base.isVirtual())
-      continue;
-    assert(!non_virtual_base.isVirtual());
-    get_base(type, non_virtual_base, false);
-  }
+    create_data_object_type(rd);
+    struct_typet &data_object_type = cpp_data_object::get_data_object_type(
+      tag_prefix + type.tag().as_string(), context);
+    typet data_object_symbol_type;
+    cpp_data_object::get_data_object_symbol_type(
+      tag_prefix + type.tag().as_string(), data_object_symbol_type);
 
-  // skip unions as they don't have virtual bases
-  if (!rd.isUnion())
-  {
+    target_object_type = &data_object_type;
+
+    struct_typet::componentt data_object_component;
+    data_object_component.name(data_object_type.tag().as_string());
+    data_object_component.pretty_name(
+      tag_prefix + data_object_type.tag().as_string());
+    data_object_component.type() = data_object_symbol_type;
+    type.components().push_back(data_object_component);
+
+    // pull bases in
+
+    for (auto non_virtual_base : cxxrd->bases())
+    {
+      if (non_virtual_base.isVirtual())
+        continue;
+      assert(!non_virtual_base.isVirtual());
+      get_base(type, non_virtual_base, false);
+    }
+
     assert(type.is_struct());
     if (get_struct_class_virtual_base_offsets(*cxxrd, to_struct_type(type)))
       return true;
@@ -442,18 +451,11 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
     if (is_field_global_storage(field))
       continue;
 
-    if (annotate_class_field(*field, data_object_type, comp))
+    if (annotate_class_field(*field, *target_object_type, comp))
       return true;
 
-    data_object_type.components().push_back(comp);
+    target_object_type->components().push_back(comp);
   }
-
-  struct_typet::componentt data_object_component;
-  data_object_component.name(data_object_type.tag().as_string());
-  data_object_component.pretty_name(
-    tag_prefix + data_object_type.tag().as_string());
-  data_object_component.type() = data_object_symbol_type;
-  type.components().push_back(data_object_component);
 
   // Add tail padding between own fields of the class and
   // any virtual bases. Otherwise, pointers to the start of virtual bases could be misaligned.
@@ -503,7 +505,7 @@ void clang_cpp_convertert::get_base(
     base_name,
     type,
     is_virtual,
-    true /* !base.getType()->getAsCXXRecordDecl()->isCLike()*/);
+    !base.getType()->getAsCXXRecordDecl()->isCLike());
   // Add tail padding between bases. Otherwise, pointers to the start of bases could be misaligned.
   add_padding(type, ns);
 
@@ -2132,6 +2134,7 @@ void clang_cpp_convertert::get_base_components_methods(
   else
   {
     base_object_component.set("from_base", true);
+    base_object_component.set("#is_c_like", true);
     base_object_component.name(base_name);
     base_object_component.pretty_name(base_id);
     struct_typet base_type_copy = base_type;
