@@ -18,5 +18,6 @@ int iscntrl(int c);
 int ispunct(int c);
 int isprint(int c);
 int isgraph(int c);
+int isblank(int c);
 
 __ESBMC_C_CPP_END
