@@ -2908,6 +2908,20 @@ bool clang_c_convertert::get_enum_value(
 
 bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
 {
+  // Pull in the decl we are referring to if not already existing. Templates and references to functions might otherwise not be resolved.
+  if (auto fd = llvm::dyn_cast<clang::FunctionDecl>(&d))
+  {
+    std::string name, id;
+    get_decl_name(*fd, name, id);
+    symbolt *s = context.find_symbol(id);
+    if (!s)
+    {
+      exprt ignored;
+      if (get_decl(d, ignored))
+        return true;
+    }
+  }
+
   // Special case for Enums, we return the constant instead of a reference
   // to the name
   if (const auto *e = llvm::dyn_cast<clang::EnumConstantDecl>(&d))
