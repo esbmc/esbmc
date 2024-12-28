@@ -1115,8 +1115,21 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::CXXTypeidExpr &cxxtid =
       static_cast<const clang::CXXTypeidExpr &>(stmt);
 
-    if (get_expr(*cxxtid.getExprOperand(), new_expr))
-      return true;
+    // Type operands are mocked for now
+    log_warning(
+      "ESBMC does not support typeid expressions yet. Mocking them for now.");
+    if (cxxtid.isTypeOperand())
+    {
+      typet type;
+      if (get_type(cxxtid.getType(), type, true))
+        return true;
+      new_expr = gen_zero(ns.follow(type));
+    }
+    else
+    {
+      if (get_expr(*cxxtid.getExprOperand(), new_expr))
+        return true;
+    }
 
     break;
   }
