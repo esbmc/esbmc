@@ -117,18 +117,6 @@ protected:
     const clang::RecordDecl &rd,
     typet &type) override;
 
-  /*
-   * Deal with ClassTemplateDecl or FunctionTemplateDecl or
-   * a class or function template declaration respectively.
-   * For C++14 and above, this function might be extended to deal
-   * with VarTemplateDecl for variable template.
-  */
-  template <typename TemplateDecl>
-  bool get_template_decl(
-    const TemplateDecl &D,
-    bool DumpExplicitInst,
-    exprt &new_expr);
-
   template <typename SpecializationDecl>
   bool get_template_decl_specialization(
     const SpecializationDecl *D,

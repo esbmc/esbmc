@@ -93,26 +93,6 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     break;
   }
 
-  case clang::Decl::FunctionTemplate:
-  {
-    const clang::FunctionTemplateDecl &fd =
-      static_cast<const clang::FunctionTemplateDecl &>(decl);
-
-    if (get_template_decl(&fd, true, new_expr))
-      return true;
-    break;
-  }
-
-  case clang::Decl::ClassTemplate:
-  {
-    const clang::ClassTemplateDecl &cd =
-      static_cast<const clang::ClassTemplateDecl &>(decl);
-
-    if (get_template_decl(&cd, false, new_expr))
-      return true;
-    break;
-  }
-
   case clang::Decl::ClassTemplateSpecialization:
   {
     const clang::ClassTemplateSpecializationDecl &cd =
@@ -123,15 +103,6 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     break;
   }
 
-  case clang::Decl::VarTemplate:
-  {
-    const clang::VarTemplateDecl &vd =
-      static_cast<const clang::VarTemplateDecl &>(decl);
-
-    if (get_template_decl(&vd, false, new_expr))
-      return true;
-    break;
-  }
 
   case clang::Decl::Friend:
   {
@@ -156,6 +127,9 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   case clang::Decl::UnresolvedUsingValue:
   case clang::Decl::UnresolvedUsingTypename:
   case clang::Decl::TypeAliasTemplate:
+  case clang::Decl::VarTemplate:
+  case clang::Decl::ClassTemplate:
+  case clang::Decl::FunctionTemplate:
     break;
 
   default:
@@ -1705,19 +1679,6 @@ bool clang_cpp_convertert::get_template_decl_specialization(
   //      break;
   //    }
   //  }
-
-  return false;
-}
-
-template <typename TemplateDecl>
-bool clang_cpp_convertert::get_template_decl(
-  const TemplateDecl &D,
-  bool DumpExplicitInst,
-  exprt &new_expr)
-{
-  for (auto *Child : D->specializations())
-    if (get_template_decl_specialization(Child, DumpExplicitInst, new_expr))
-      return true;
 
   return false;
 }
