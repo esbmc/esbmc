@@ -1,5 +1,6 @@
 
 #include <istream>
+#include <iostream>
 
 std::ios & g(std::ios &i)
 {
@@ -61,3 +62,6 @@ void f(std::istream &is)
 	is >> ld;
 }
 
+int main() {
+  f(std::cin);
+}
