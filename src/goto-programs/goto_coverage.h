@@ -64,8 +64,12 @@ public:
   bool is_target_func(const irep_idt &f) const;
 
   // total numbers of instrumentation
-  static size_t total_branch;
+  static size_t total_assert;
+  static size_t total_assert_ins;
   static std::set<std::pair<std::string, std::string>> total_cond;
+  static size_t total_branch;
+  static size_t total_func_branch;
+
   std::string target_function = "";
 
 protected:
