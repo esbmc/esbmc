@@ -1794,6 +1794,22 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::CallExpr &function_call =
       static_cast<const clang::CallExpr &>(stmt);
 
+    const clang::FunctionDecl *callee_decl = function_call.getDirectCallee();
+    // callee_decl can be null if the called function is a builtin
+    if (callee_decl)
+    {
+      std::string function_name, function_id;
+      get_decl_name(*callee_decl, function_name, function_id);
+
+      symbolt *function_symbol = context.find_symbol(function_id);
+      if (!function_symbol)
+      {
+        exprt ignored;
+        if (get_decl(*callee_decl, ignored))
+          return true;
+      }
+    }
+
     const clang::Stmt *callee = function_call.getCallee();
 
 #if CLANG_VERSION_MAJOR > 14
