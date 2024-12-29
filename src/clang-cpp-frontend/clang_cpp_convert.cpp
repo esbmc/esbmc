@@ -436,6 +436,7 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
       return true;
   }
 
+  bool added_a_field = false;
   // Parse the fields
   for (auto const &field : rd.fields())
   {
@@ -454,6 +455,15 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
     if (annotate_class_field(*field, *target_object_type, comp))
       return true;
 
+    target_object_type->components().push_back(comp);
+    added_a_field = true;
+  }
+  if (!added_a_field)
+  {
+    // If we didn't add any fields, we need to add a dummy field to make sure the struct is not empty
+    struct_typet::componentt comp;
+    comp.type() = char_type();
+    comp.name("dummy_field");
     target_object_type->components().push_back(comp);
   }
 
