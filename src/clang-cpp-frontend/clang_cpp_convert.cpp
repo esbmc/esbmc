@@ -345,6 +345,8 @@ bool clang_cpp_convertert::get_method(
 
   if (annotate_class_method(md, new_expr))
     return true;
+  if (get_struct_union_class(*md.getParent(), true))
+    return true;
 
   return false;
 }
