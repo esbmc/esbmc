@@ -1,5 +1,5 @@
 CORE
 gcc-36566.c
 --function fun3 --no-pointer-check
-^WARNING: not checking alignment .* packed struct struct S$
+^WARNING: not checking alignment .* packed struct struct S@\d+$
 ^VERIFICATION SUCCESSFUL$
