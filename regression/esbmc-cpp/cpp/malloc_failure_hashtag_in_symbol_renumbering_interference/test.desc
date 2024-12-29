@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--unwind 10 --timeout 900 --force-malloc-success
+^VERIFICATION SUCCESSFUL$

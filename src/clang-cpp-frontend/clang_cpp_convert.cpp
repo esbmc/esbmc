@@ -204,6 +204,22 @@ void clang_cpp_convertert::get_decl_name(
   if (!clang::index::generateUSRForDecl(&nd, DeclUSR))
   {
     id = DeclUSR.str().str() + id_suffix;
+    auto replaceStringInPlace = [](
+                                  std::string &subject,
+                                  const std::string &search,
+                                  const std::string &replace) {
+      size_t pos = 0;
+      while ((pos = subject.find(search, pos)) != std::string::npos)
+      {
+        subject.replace(pos, search.length(), replace);
+        pos += replace.length();
+      }
+    };
+    replaceStringInPlace(id, "#", "_wtf_hashtag_");
+    if (id.find("#") != std::string::npos)
+    {
+      log_error("Yo wtf, in c mode also: {}", id);
+    }
     return;
   }
 
