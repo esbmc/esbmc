@@ -1,4 +1,4 @@
 CORE
 main.c
---unwind 1 --depth 100 --no-pointer-check --no-bounds-check
+--unwind 1 --no-pointer-check --no-bounds-check
 ^VERIFICATION FAILED$
