@@ -1178,6 +1178,87 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     break;
   }
 
+  case clang::Stmt::CXXStdInitializerListExprClass:
+  {
+    const clang::CXXStdInitializerListExpr &initlist =
+      static_cast<const clang::CXXStdInitializerListExpr &>(stmt);
+
+    initlist.getType()->getAsCXXRecordDecl()->dump();
+    // Find the constructor that takes two args
+    const clang::CXXConstructorDecl *target_ctor;
+    for (const auto *ctor : initlist.getType()->getAsCXXRecordDecl()->ctors())
+    {
+      if (ctor->getNumParams() == 2)
+      {
+        // Process the constructor that takes two arguments
+        target_ctor = ctor;
+        break;
+      }
+    }
+
+    typet type;
+    if (get_type(initlist.getType(), type, true))
+      return true;
+
+    clang::Expr *one_expr = const_cast<clang::Expr *>(initlist.getSubExpr());
+    auto array_size =
+      ASTContext->getAsConstantArrayType(initlist.getSubExpr()->getType())
+        ->getSize();
+    auto array_size_expr = clang::IntegerLiteral::Create(
+      *ASTContext,
+      array_size,
+      ASTContext->getSizeType(),
+      initlist.getSubExpr()->getExprLoc());
+
+    clang::Expr *one_expr_s[2] = {one_expr, array_size_expr};
+    //    one_expr_s[0]= const_cast<clang::Expr *>(initlist.getSubExpr());
+    //    one_expr_s[1]= const_cast<clang::Expr *>(initlist.getSubExpr());
+    clang::ArrayRef<clang::Expr *> array = llvm::ArrayRef(one_expr_s, 2);
+    typet full_type = migrate_type_back(migrate_type(type));
+    exprt zero_expr = gen_zero(ns.follow(type));
+    clang::InitListExpr init_list = clang::InitListExpr(
+      *ASTContext, initlist.getBeginLoc(), array, initlist.getEndLoc());
+    init_list.setType(initlist.getType());
+
+    //    exprt lol;
+    if (get_expr(init_list, new_expr))
+      return true;
+    //
+    //    exprt initializer;
+    //    if (get_expr(*initlist.getSubExpr(), initializer))
+    //      return true;
+    //
+    //    new_expr = initializer;
+    // TODO: won't work, because clang does not provide a ctor for us...
+    // Instead have to directly initialize the fields, which could be annoying, due to data_objects, but get_field_ref should hopefully help :)
+    clang::CXXConstructExpr *cxxc = clang::CXXConstructExpr::Create(
+      *ASTContext,
+      initlist.getType(),
+      initlist.getSubExpr()->getExprLoc(),
+      const_cast<clang::CXXConstructorDecl *>(target_ctor),
+      false,
+      array,
+      false,
+      false,
+      false,
+      false,
+      clang::CXXConstructExpr::ConstructionKind::CK_Complete,
+      initlist.getSubExpr()->getSourceRange());
+    //    if (get_constructor_call(*cxxc, new_expr))
+    //      return true;
+    break;
+    // TODO: Broken garbage potentially
+  }
+
+  case clang::Stmt::CXXInheritedCtorInitExprClass:
+  {
+    const clang::CXXInheritedCtorInitExpr &cxxinheritedctorinit =
+      static_cast<const clang::CXXInheritedCtorInitExpr &>(stmt);
+
+    if (get_constructor_call2(cxxinheritedctorinit, new_expr))
+      return true;
+    break;
+  }
 
   default:
     if (clang_c_convertert::get_expr(stmt, new_expr))
@@ -1274,6 +1355,93 @@ bool clang_cpp_convertert::get_constructor_call(
   {
     call.arguments().push_back(gen_boolean(true));
   }
+
+  call.set("constructor", 1);
+
+  if (need_new_obj)
+    make_temporary(call);
+
+  new_expr.swap(call);
+
+  return false;
+}
+
+bool clang_cpp_convertert::get_constructor_call2(
+  const clang::CXXInheritedCtorInitExpr &cxxInheritedCtorInitExpr,
+  exprt &new_expr)
+{
+  // Get constructor call
+  exprt callee_decl;
+  if (get_decl_ref(*cxxInheritedCtorInitExpr.getConstructor(), callee_decl))
+    return true;
+
+  // Get type
+  typet type;
+  if (get_type(cxxInheritedCtorInitExpr.getType(), type, true))
+    return true;
+
+  side_effect_expr_function_callt call;
+  call.function() = callee_decl;
+  call.type() = type;
+
+  // TODO: Investigate when it's possible to avoid the temporary object in even more cases
+
+  // Try to get the object that this constructor is constructing
+
+  // Calling base constructor from derived constructor
+  bool need_new_obj = false;
+
+  if (new_expr.base_ctor_derived())
+    gen_typecast_base_ctor_call(callee_decl, call, new_expr);
+  else if (new_expr.get_bool("#member_init"))
+  {
+    /*
+    struct A {A(int _a){}}; struct B {A a; B(int _a) : a(_a) {}};
+    In this case, use members to construct the object directly
+    */
+  }
+  else if (new_expr.get_bool("#delegating_ctor"))
+  {
+    // get symbol for this
+    symbolt *s = context.find_symbol(new_expr.get("#delegating_ctor_this"));
+    const symbolt &this_symbol = *s;
+    assert(s);
+    exprt implicit_this_symb = symbol_expr(this_symbol);
+
+    call.arguments().push_back(implicit_this_symb);
+  }
+  else
+  {
+    exprt this_object = exprt("new_object");
+    this_object.set("#lvalue", true);
+    this_object.type() = type;
+
+    /* first parameter is address to the object to be constructed */
+    address_of_exprt tmp_expr(this_object);
+    call.arguments().push_back(tmp_expr);
+
+    need_new_obj = true;
+  }
+
+  auto parents = ASTContext->getParents(cxxInheritedCtorInitExpr);
+  auto cxxcd = parents[0].get<clang::CXXConstructorDecl>();
+  assert(cxxcd);
+
+  // Do args
+  for (clang::ParmVarDecl *arg : cxxcd->parameters())
+  {
+    exprt single_arg;
+    if (get_decl_ref(*arg, single_arg))
+      return true;
+
+    call.arguments().push_back(single_arg);
+  }
+
+  // Init __is_complete based on whether we have call to a base object constructor or a
+  // complete object constructor.
+  call.arguments().push_back(gen_boolean(
+    cxxInheritedCtorInitExpr.getConstructionKind() ==
+    clang::CXXConstructExpr::ConstructionKind::CK_Complete));
 
   call.set("constructor", 1);
 

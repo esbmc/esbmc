@@ -16,6 +16,7 @@ class CXXRecordDecl;
 class CXXConstructorDecl;
 class CXXBaseSpecifier;
 class ValueDecl;
+class CXXInheritedCtorInitExpr;
 class CXXBasePath;
 } // namespace clang
 
@@ -558,6 +559,9 @@ protected:
   void create_data_object_type(const clang::RecordDecl &rd);
   void get_this_expr(const typet &expected_this_type, exprt &new_expr) override;
   bool get_field_ref(const clang::ValueDecl &vd, exprt &new_expr, exprt &base);
+  bool get_constructor_call2(
+    const clang::CXXInheritedCtorInitExpr &cxxInheritedCtorInitExpr,
+    exprt &new_expr);
   void handle_base_with_path(
     const struct_typet &type,
     const std::string &class_id,
