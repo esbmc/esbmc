@@ -453,8 +453,9 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   // Technically C doesn't allow for any variable to hold an invalid pointer,
   // except through initialization.
 
-  smt_sortt s = convert_sort(cast.type);
-  smt_astt output = mk_fresh(s, "smt_convt::int_to_ptr");
+  std::string newname = mk_fresh_name("smt_convt::int_to_ptr");
+  expr2tc sym = symbol2tc(cast.type, newname);
+  smt_astt output = convert_ast(sym);
   smt_astt output_obj = output->project(this, 0);
   smt_astt output_offs = output->project(this, 1);
   if (config.ansi_c.cheri)
@@ -507,20 +508,9 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
 
   if (is_byte_update2t(cast.from))
   {
-    // Handle byte_update(nondet_sym, offset, update) case
-    // The nondet pointer cannot match any address.
-    // Assign the object of int_to_ptr to the nondet pointer's object.
-    byte_update2t bu = to_byte_update2t(cast.from);
-    bitcast2t bc = to_bitcast2t(bu.source_value);
-    smt_astt sym = convert_ast(bc.from);
-
-    // Convert symbolic representation and project the object
-    smt_astt obj = sym->project(this, 0);
-    inv_obj = obj;
-
     // Derive the numeric representation of the pointer object
     // Access the current address space using obj_num as an index
-    expr2tc obj_num = pointer_object2tc(ptraddr_type2(), bc.from);
+    expr2tc obj_num = pointer_object2tc(ptraddr_type2(), sym);
     expr2tc from_addr = index2tc(
       addr_space_type,
       symbol2tc(addr_space_arr_type, get_cur_addrspace_ident()),
@@ -531,9 +521,17 @@ smt_astt smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
     expr2tc from_start =
       member2tc(addr_space.members[0], from_addr, addr_space.member_names[0]);
 
-    smt_astt addr_start = convert_ast(from_start);
-    inv_offs =
-      int_encoding ? mk_sub(target, addr_start) : mk_bvsub(target, addr_start);
+    expr2tc offs =
+      pointer_offset2tc(get_int_type(config.ansi_c.address_width), sym);
+    expr2tc address = add2tc(ptraddr_type2(), from_start, offs);
+
+    smt_astt addr = convert_ast(address);
+
+    smt_astt addr_eq = addr->eq(this, target);
+    smt_astt imp = mk_implies(not_matched, addr_eq);
+
+    assert_ast(imp);
+    return output;
   }
 
   smt_astt obj_eq = inv_obj->eq(this, output_obj);
