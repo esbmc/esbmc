@@ -103,7 +103,6 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     break;
   }
 
-
   case clang::Decl::Friend:
   {
     const clang::FriendDecl &fd = static_cast<const clang::FriendDecl &>(decl);
@@ -1168,7 +1167,8 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           lambda_class_type,
           true))
       return true;
-    new_expr = gen_zero(pointer_typet(lambda_class_type));
+    side_effect_exprt tmp_obj("temporary_object", lambda_class_type);
+    new_expr = tmp_obj;
     // Generating a null pointer only works as long as we don't have captures
     // When we want to add support for captures, we have to probably call
     // the lambda class constructor here
