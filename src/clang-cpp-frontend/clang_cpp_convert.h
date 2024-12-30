@@ -16,6 +16,7 @@ class CXXRecordDecl;
 class CXXConstructorDecl;
 class CXXBaseSpecifier;
 class ValueDecl;
+class CXXBasePath;
 } // namespace clang
 
 class clang_cpp_convertert : public clang_c_convertert
@@ -557,6 +558,11 @@ protected:
   void create_data_object_type(const clang::RecordDecl &rd);
   void get_this_expr(const typet &expected_this_type, exprt &new_expr) override;
   bool get_field_ref(const clang::ValueDecl &vd, exprt &new_expr, exprt &base);
+  void handle_base_with_path(
+    const struct_typet &type,
+    const std::string &class_id,
+    const clang::CXXRecordDecl &base,
+    const clang::CXXBasePath &path);
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

@@ -202,8 +202,6 @@ void clang_cpp_convertert::add_vbo_table_variable_symbols(
     }
     return true;
   });
-  // This class also has a vbase even if itself is not a base.
-  bases_with_vbases.insert(&cxxrd);
 
   for (const auto &base : bases_with_vbases)
   {
@@ -214,106 +212,123 @@ void clang_cpp_convertert::add_vbo_table_variable_symbols(
         return specifier->getType()->getAsCXXRecordDecl() == base;
       },
       paths);
-    bool seen = false;
-    cxxrd.lookupInBases(
-      [&base, &seen](
-        const clang::CXXBaseSpecifier *specifier, clang::CXXBasePath &path) {
-        assert(path.size() > 0);
-        if (seen)
-          return false;
-        seen = path.front().Class == base;
-        return path.front().Class == base;
-      },
-      paths);
     for (const auto &path : paths)
+      handle_base_with_path(type, class_id, *base, path);
+  }
+
+  // This class also has a vbase even if itself is not a base.
+  assert(cxxrd.getNumVBases() > 0);
+  // The path to the class itself is empty
+  clang::CXXBasePath path_to_class = clang::CXXBasePath();
+  handle_base_with_path(type, class_id, cxxrd, path_to_class);
+}
+void clang_cpp_convertert::handle_base_with_path(
+  const struct_typet &type,
+  const std::string &class_id,
+  const clang::CXXRecordDecl &base,
+  const clang::CXXBasePath &path)
+{
+  std::string base_path_id;
+  std::string base_class_name, base_class_id;
+  {
+    // This is the base class we are currently dealing with
+
+    get_decl_name(base, base_class_name, base_class_id);
+    assert(!base_class_id.empty());
+
+    base_path_id += base_class_id;
+    for (auto it = path.rbegin(); it != path.rend(); ++it)
     {
-      std::string base_path_id;
-      std::string base_class_name, base_class_id;
+      // Ignore the last element in the path as its id is equal to the class_id
+      if (std::next(it) == path.rend())
+        break;
+      const auto &specifier = *it;
+      const clang::CXXRecordDecl *vb_rd = specifier.Class;
+      std::string decl_id, decl_name;
+      get_decl_name(*vb_rd, decl_name, decl_id);
+      base_path_id += "@";
+      base_path_id += decl_id;
+    }
+
+    base_path_id += "@";
+    base_path_id += class_id;
+  }
+
+  std::string vbo_symb_type_name = vbase_offset_type_prefix + base_class_id;
+  const symbolt *vt_symb_type = ns.lookup(vbo_symb_type_name);
+  assert(vt_symb_type);
+
+  symbolt vbot_symb_var;
+  vbot_symb_var.id = vbase_offset_type_prefix + base_path_id;
+  vbot_symb_var.name = vbase_offset_type_prefix + base_path_id;
+  vbot_symb_var.mode = mode;
+  vbot_symb_var.module =
+    get_modulename_from_path(type.location().file().as_string());
+  vbot_symb_var.location = vt_symb_type->location;
+  vbot_symb_var.type = symbol_typet(vt_symb_type->id);
+  vbot_symb_var.lvalue = true;
+  vbot_symb_var.static_lifetime = true;
+
+  // add vtable variable symbols
+  const struct_typet &vbot_type = to_struct_type(vt_symb_type->type);
+  exprt values("struct", symbol_typet(vt_symb_type->id));
+  for (const auto &compo : vbot_type.components())
+  {
+    exprt offset;
+    if (cpp_base_offset::offset_to_base(compo.name(), type, offset, ns))
+    {
+      log_error(
+        "Failed to calculate offset to virtual base {} for class {}",
+        compo.name(),
+        class_id);
+      abort();
+    }
+    exprt other_offset = gen_zero(size_type());
+    for (const auto &path_element : path)
+    {
+      exprt summand;
+      const clang::CXXRecordDecl *sub_object =
+        path_element.Base->getType()->getAsCXXRecordDecl();
+      typet sub_object_enclosing_type;
+      if (get_type(
+            *path_element.Class->getTypeForDecl(),
+            sub_object_enclosing_type,
+            true))
       {
-        // This is the base class we are currently dealing with
-
-        get_decl_name(*base, base_class_name, base_class_id);
-        assert(!base_class_id.empty());
-
-        base_path_id += base_class_id;
-        for (auto it = path.rbegin(); it != path.rend(); ++it)
-        {
-          const auto &specifier = *it;
-          const clang::CXXRecordDecl *vb_rd = specifier.Class;
-          std::string decl_id, decl_name;
-          get_decl_name(*vb_rd, decl_name, decl_id);
-          base_path_id += "@";
-          base_path_id += decl_id;
-        }
+        log_error("Failed to get type for class {}", class_id);
+        abort();
       }
-
-      std::string vbo_symb_type_name = vbase_offset_type_prefix + base_class_id;
-      const symbolt *vt_symb_type = ns.lookup(vbo_symb_type_name);
-      assert(vt_symb_type);
-
-      symbolt vbot_symb_var;
-      vbot_symb_var.id = vbase_offset_type_prefix + base_path_id;
-      vbot_symb_var.name = vbase_offset_type_prefix + base_path_id;
-      vbot_symb_var.mode = mode;
-      vbot_symb_var.module =
-        get_modulename_from_path(type.location().file().as_string());
-      vbot_symb_var.location = vt_symb_type->location;
-      vbot_symb_var.type = symbol_typet(vt_symb_type->id);
-      vbot_symb_var.lvalue = true;
-      vbot_symb_var.static_lifetime = true;
-
-      // add vtable variable symbols
-      const struct_typet &vbot_type = to_struct_type(vt_symb_type->type);
-      exprt values("struct", symbol_typet(vt_symb_type->id));
-      for (const auto &compo : vbot_type.components())
-      {
-        exprt offset;
-        if (cpp_base_offset::offset_to_base(compo.name(), type, offset, ns))
-        {
-          log_error(
-            "Failed to calculate offset to virtual base {} for class {}",
-            compo.name(),
-            class_id);
-          abort();
-        }
-        exprt other_offset = gen_zero(size_type());
-        for (const auto &path_element : path)
-        {
-          exprt summand;
-          const clang::CXXRecordDecl *vb_rd = path_element.Class;
-          std::string decl_id, decl_name;
-          get_decl_name(*vb_rd, decl_name, decl_id);
-          // TODO: I would have thought that "type" should be set to the
-          // type denoted by vb_rd?
-          if (cpp_base_offset::offset_to_base(decl_name, type, summand, ns))
-          {
-            log_error(
-              "Failed to calculate offset to virtual base {} for class {}",
-              decl_name,
-              class_id);
-            abort();
-          }
-          other_offset = plus_exprt(other_offset, summand);
-        }
-        simplify(other_offset);
-
-        exprt value = minus_exprt(offset, other_offset);
-        value.type() = size_type();
-        assert(value.type() == compo.type());
-        values.operands().push_back(value);
-      }
-      vbot_symb_var.value = values;
-
-      if (context.move(vbot_symb_var))
+      sub_object_enclosing_type = ns.follow(sub_object_enclosing_type);
+      std::string decl_id, decl_name;
+      get_decl_name(*sub_object, decl_name, decl_id);
+      if (cpp_base_offset::offset_to_base(
+            decl_name, sub_object_enclosing_type, summand, ns))
       {
         log_error(
-          "Failed to add virtual base offset table variable symbol {} for "
-          "class "
-          "{}",
-          vbot_symb_var.id,
+          "Failed to calculate offset to virtual base {} for class {}",
+          decl_name,
           class_id);
         abort();
       }
+      other_offset = plus_exprt(other_offset, summand);
     }
+    simplify(other_offset);
+
+    exprt value = minus_exprt(offset, other_offset);
+    value.type() = size_type();
+    assert(value.type() == compo.type());
+    values.operands().push_back(value);
+  }
+  vbot_symb_var.value = values;
+
+  if (context.move(vbot_symb_var))
+  {
+    log_error(
+      "Failed to add virtual base offset table variable symbol {} for "
+      "class "
+      "{}",
+      vbot_symb_var.id,
+      class_id);
+    abort();
   }
 }
