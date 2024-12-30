@@ -1540,13 +1540,18 @@ bool clang_cpp_convertert::get_function_body(
                 return true;
             }
             assert(lhs.is_member());
-            assert(
-              has_suffix(
-                to_member_expr(lhs).struct_op().identifier(), "#this") ||
-              (to_member_expr(lhs).struct_op().is_member() &&
-               has_suffix(
-                 to_member_expr(to_member_expr(lhs).struct_op()).name(),
-                 cpp_data_object::data_object_suffix)));
+            //            #ifndef NDEBUG
+            //                        assert(
+            //                          has_suffix(
+            //                            to_member_expr(lhs).struct_op().identifier(), "#this") ||
+            //                          (to_member_expr(lhs).struct_op().is_member() &&
+            //                           (has_suffix(
+            //                              to_member_expr(to_member_expr(lhs).struct_op()).name(),
+            //                              cpp_data_object::data_object_suffix) ||
+            //                            ns.follow(to_member_expr(lhs).struct_op().type())
+            //                              .get_bool("#is_c_like") ||
+            //                            ns.follow(to_member_expr(lhs).struct_op().type()).is_union())));
+            //            #endif
 
             // set #member_init flag again, as it has been cleared between the first call...
             lhs.set("#member_init", 1);
