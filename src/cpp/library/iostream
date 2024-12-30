@@ -27,9 +27,13 @@ public:
 };
 
 // Declaration of standard input/output streams
-extern istream cin;
-extern ostream cout;
-extern ostream cerr;
+//extern istream cin;
+//extern ostream cout;
+//extern ostream cerr;
+
+static istream cin;
+static ostream cout;
+static ostream cerr;
 
 // Definition of standard end-of-line character
 const char endl = '\n';
