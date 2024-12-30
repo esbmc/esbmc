@@ -5,6 +5,7 @@
 #include <langapi/language_util.h>
 
 #include "show_symbol_table.h"
+#include "type_byte_size.h"
 
 void show_symbol_table_xml_ui()
 {
@@ -35,7 +36,10 @@ void show_symbol_table_plain(const namespacet &ns, std::ostream &out)
     out << "Type........: " << type_str << "\n";
     if (s.type.is_struct())
     {
-      out << "Components..: " << to_struct_type(s.type).pretty(0) << "\n";
+      struct_union_typet struct_type = to_struct_type(s.type);
+      out << "Size........: " << type_byte_size(migrate_type(struct_type), &ns)
+          << "\n";
+      out << "Components..: " << struct_type.pretty(0) << "\n";
     }
 
     out << "Value.......: " << value_str << "\n";
