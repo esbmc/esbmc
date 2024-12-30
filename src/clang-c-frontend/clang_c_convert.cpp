@@ -30,6 +30,7 @@ CC_DIAGNOSTIC_POP()
 #include <util/std_expr.h>
 #include <util/cpp_data_object.h>
 #include <util/cpp_typecast.h>
+#include "cpp_base_offset.h"
 
 clang_c_convertert::clang_c_convertert(
   contextt &_context,
@@ -2996,6 +2997,35 @@ bool clang_c_convertert::get_cast_expr(
   const clang::CastExpr &cast,
   exprt &new_expr)
 {
+  if (cast.getCastKind() == clang::CK_BaseToDerived)
+  {
+    exprt expr;
+    if (get_expr(*cast.getSubExpr(), expr))
+      return true;
+    typet derived_type;
+    if (get_type(cast.getType(), derived_type, true))
+      return true;
+    typet base_type;
+    if (get_type(cast.getSubExpr()->getType(), base_type, true))
+      return true;
+    exprt offset;
+    assert(base_type.is_pointer());
+    assert(base_type.subtype().is_symbol());
+    assert(derived_type.is_pointer());
+    cpp_base_offset::offset_to_base(
+      base_type.subtype().identifier().as_string().substr(tag_prefix.length()),
+      ns.follow(derived_type.subtype()),
+      offset,
+      ns);
+    if (offset.value() == gen_zero(size_type()).value())
+    {
+      gen_typecast(ns, expr, derived_type);
+      new_expr = expr;
+      return false;
+    }
+    log_error("Offset to base is not zero, currently not handled");
+    return true;
+  }
   assert(
     cast.path_size() <= 0 || cast.getCastKind() == clang::CK_DerivedToBase ||
     cast.getCastKind() == clang::CK_UncheckedDerivedToBase);
@@ -3018,64 +3048,33 @@ bool clang_c_convertert::get_cast_expr(
   case clang::CK_DerivedToBase:
 
   {
-    log_error(
-      "Cast from {} to {} cast kind {}",
-      cast.getSubExpr()->getType().getAsString(),
-      cast.getType().getAsString(),
-      cast.getCastKindName());
+    typet ignored;
+    if (get_type(cast.getSubExpr()->getType(), ignored, true))
+      return true;
+    if (
+      cast.getSubExpr()->getType()->isPointerType() &&
+      get_type(cast.getSubExpr()->getType()->getPointeeType(), ignored, true))
+      return true;
     assert(cast.path_size() > 0);
-    bool is_reference = false;
     bool convert_to_pointer = !expr.type().is_pointer();
-    bool convert_intermediate_to_pointer =
-      convert_to_pointer || (expr.type().is_pointer() && type.is_pointer());
     bool convert_to_object = !type.is_pointer();
 
     if (convert_to_pointer)
     {
       exprt ptr_expr = address_of_exprt(expr);
-      //      ptr_expr.type() = pointer_typet(type);
       expr.swap(ptr_expr);
     }
 
-    //    if (
-    //      expr.is_dereference() && expr.operands().size() == 1 &&
-    //      expr.op0().type().reference())
-    //    {
-    //      //      expr = expr.op0();
-    //      expr.swap(expr.op0());
-    //      is_reference = true;
-    //    }
     typet intermediate_type;
     for (auto &path : cast.path())
     {
-      if (path->isVirtual())
-      {
-        log_error("Hello");
-      }
-      log_error("Clang says type in path is {}", path->getType().getAsString());
-      //      log_error(
-      //        "Clang says type in path is ###2 {} ptr type: {}",
-      //        path->getTypeSourceInfo()->getType().getAsString(),
-      //        path->getTypeSourceInfo()->getType()->isPointerType());
-      //      path->getType().dump();
-      //      path->getTypeSourceInfo()->getType().dump();
-      ;
       if (get_type(path->getType(), intermediate_type, true))
         return true;
-      //      if (is_reference)
-      //      {
-      //        typet ptr_type = pointer_typet(intermediate_type);
-      //        ptr_type.set("#reference", intermediate_type.get("#reference"));
-      //        ptr_type.set("#lvalue", intermediate_type.get("#lvalue"));
-      //        ptr_type.swap(intermediate_type);
-      //      }
       if (!intermediate_type.is_pointer())
       {
         typet ptr_type = pointer_typet(intermediate_type);
         ptr_type.swap(intermediate_type);
       }
-      log_error(
-        "Intermediate cast from {} to {}", expr.type(), intermediate_type);
       assert(intermediate_type.is_pointer());
       assert(expr.type().is_pointer());
       cpp_typecast::derived_to_base_typecast(
@@ -3086,7 +3085,6 @@ bool clang_c_convertert::get_cast_expr(
       exprt deref_expr = dereference_exprt(expr, intermediate_type);
       expr.swap(deref_expr);
     }
-    log_error("Cast finished");
     break;
   }
   case clang::CK_Dynamic:
