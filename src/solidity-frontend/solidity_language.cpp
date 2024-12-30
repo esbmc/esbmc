@@ -42,21 +42,18 @@ std::string solidity_languaget::get_temp_file()
   static std::once_flag flag;
   static std::string p;
 
-  std::call_once(
-    flag,
-    [&]()
+  std::call_once(flag, [&]() {
+    p = file_operations::create_tmp_dir("esbmc_solidity_temp-%%%%-%%%%-%%%%")
+          .path();
+    boost::filesystem::create_directories(p);
+    p += "/temp.c";
+    std::ofstream f(p);
+    if (!f)
     {
-      p = file_operations::create_tmp_dir("esbmc_solidity_temp-%%%%-%%%%-%%%%")
-            .path();
-      boost::filesystem::create_directories(p);
-      p += "/temp.c";
-      std::ofstream f(p);
-      if (!f)
-      {
-        throw std::runtime_error("Failed to create temp file");
-      }
-      f << temp_c_file();
-    });
+      throw std::runtime_error("Failed to create temp file");
+    }
+    f << temp_c_file();
+  });
 
   return p;
 }
