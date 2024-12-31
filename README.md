@@ -290,6 +290,8 @@ This course unit introduces students to basic and advanced approaches to formall
 
 ### Selected Publications
 
+* Pirzada, M., Bhayat, A., Cordeiro, L., Reger, G. [LLM-Generated Invariants for Bounded Model Checking Without Loop Unrolling](https://doi.org/10.1145/3691620.3695512). In 39th IEEE/ACM International Conference on Automated Software Engineering (ASE), pp. 1395-1407, 2024. [DOI](https://doi.org/10.1145/3691620.3695512) [Presentation](https://ssvlab.github.io/lucasccordeiro/talks/ase2024_slides.pdf)
+
 * Yiannis Charalambous, Norbert Tihanyi, Ridhi Jain, Youcheng Sun, Mohamed Amine Ferrag, Lucas C. Cordeiro. [A New Era in Software Security: Towards Self-Healing Software via Large Language Models and Formal Verification](https://arxiv.org/pdf/2305.14752.pdf). Technical Report, CoRR abs/2305.14752, 2023. [DOI](https://doi.org/10.48550/arXiv.2305.14752)
   
 * Rafael Menezes, Daniel Moura, Helena Cavalcante, Rosiane de Freitas, Lucas C. Cordeiro . [ESBMC-Jimple: verifying Kotlin programs via jimple intermediate representation](https://dl.acm.org/doi/abs/10.1145/3533767.3543294) In ISSTA'22, pp. 777-780, 2022. [DOI](https://doi.org/10.1145/3533767.3543294)
@@ -314,6 +316,7 @@ This course unit introduces students to basic and advanced approaches to formall
 
 ### Awards
 
+* Distinguished Paper Award at ASE'24
 * 35 awards from international competitions on software verification (SV-COMP) and testing (Test-Comp) 2012-2024 at TACAS/FASE (Strength: Bug Finding and Code Coverage).
 * Most Influential Paper Award at ASE’23
 * Best Tool Paper Award at SBSeg'23
