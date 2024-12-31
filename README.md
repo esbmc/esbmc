@@ -66,7 +66,7 @@ make -j4
 
 #### Mac OS X
 
-ESBMC works to some extent on ARM64 (M1/M2/M3/M4) Macs, assuming you have installed the MAC OS Dev tools. However, the compile option for GOTO_SYSROOT needs to be changed. Note that make -j8 can be increased to -j32 on faster Macs.
+ESBMC can compile on ARM64 (M1/M2/M3/M4) Macs. However, it does not work reliably beyond compilation. You need to install the latest MAC OS Dev tools. However, the compile option for GOTO_SYSROOT needs to be changed. Note that make -j8 can be increased to -j32 on faster Macs.
 ````
 brew install z3
 brew install bison
@@ -81,7 +81,7 @@ cmake .. -DENABLE_Z3=1 -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs
 make -j8
 ````
 
-We recommend using AMD64 via docker for optimal performance. Sample docker-compose and docker files follow:
+We recommend using AMD64 via docker for a fully working version. Sample docker-compose and docker files follow:
 
 DockerFile sample:
 
