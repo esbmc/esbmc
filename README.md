@@ -76,12 +76,29 @@ brew install llvm
 git clone https://github.com/esbmc/esbmc.git
 cd esbmc
 mkdir build && cd build
+
+````
+
+##### Execution for Mac with Apple chips
+````sh
 cmake .. -DENABLE_Z3=1 -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -DLLVM_DIR=/opt/homebrew/opt/llvm/lib/cmake/llvm -DClang_DIR=/opt/homebrew/opt/llvm/lib/cmake/clang
 
 make -j8
+
+We recommend using AMD64 via docker for a fully working version. Sample docker-compose and docker files follow below.
+
 ````
 
-We recommend using AMD64 via docker for a fully working version. Sample docker-compose and docker files follow:
+##### Execution for Mac with Intel chips
+````sh
+
+# replace path_llvm with the path of llvm, e.g. "/usr/local/opt/llvm"  you can get it with this command "brew --prefix llvm"
+
+cmake .. -DCMAKE_PREFIX_PATH="{path_llvm}" -DENABLE_Z3=1 -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
+make -j8
+sudo make install
+esbmc --version
+````
 
 DockerFile sample:
 
