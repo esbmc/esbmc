@@ -29,6 +29,7 @@ To compile ESBMC on Ubuntu 24.04 with LLVM 14 and the SMT solver Z3:
 sudo apt update
 sudo apt-get install -y clang-14 llvm-14 clang-tidy-14 python-is-python3 python3 git ccache unzip wget curl bison flex g++-multilib linux-libc-dev libboost-all-dev libz3-dev libclang-14-dev libclang-cpp-dev cmake
 git clone https://github.com/esbmc/esbmc.git
+cd esbmc
 mkdir build && cd build
 cmake .. -DENABLE_Z3=1
 make -j4
@@ -65,7 +66,7 @@ make -j4
 
 #### Mac OS X
 
-ESBMC works to some extent on ARM64 (M1/M2/M3/M4) Macs, assuming you have installed the MAC OS Dev tools. However, the compile option for GOTO_SYSROOT needs to be changed. Note that make -j8 can be increased to -j32 on faster Macs.
+ESBMC can compile on ARM64 (M1/M2/M3/M4) Macs. However, it does not work reliably beyond compilation. You need to install the latest MAC OS Dev tools. However, the compile option for GOTO_SYSROOT needs to be changed. Note that make -j8 can be increased to -j32 on faster Macs.
 ````
 brew install z3
 brew install bison
@@ -73,6 +74,7 @@ brew install clang
 brew install llvm
 
 git clone https://github.com/esbmc/esbmc.git
+cd esbmc
 mkdir build && cd build
 
 ````
@@ -82,6 +84,9 @@ mkdir build && cd build
 cmake .. -DENABLE_Z3=1 -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -DLLVM_DIR=/opt/homebrew/opt/llvm/lib/cmake/llvm -DClang_DIR=/opt/homebrew/opt/llvm/lib/cmake/clang
 
 make -j8
+
+We recommend using AMD64 via docker for a fully working version. Sample docker-compose and docker files follow below.
+
 ````
 
 ##### Execution for Mac with Intel chips
@@ -94,8 +99,6 @@ make -j8
 sudo make install
 esbmc --version
 ````
-
-We recommend using AMD64 via docker for optimal performance. Sample docker-compose and docker files follow:
 
 DockerFile sample:
 

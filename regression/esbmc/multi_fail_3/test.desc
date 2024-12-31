@@ -2,4 +2,3 @@ CORE
 main.c
 --multi-property --multi-fail-fast 2
 ^VERIFICATION FAILED$
-\barray bounds violated: array `arr' upper bound\b

@@ -970,7 +970,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       bmct bmc(goto_functions, options, context);
       bmc.options.set_option("unwind", integer2string(k_step));
 
-      log_status("Checking base case, k = {:d}\n", k_step);
+      log_progress("Checking base case, k = {:d}\n", k_step);
 
       // If an exception was thrown, we should abort the process
       int res = smt_convt::P_ERROR;
@@ -1244,21 +1244,41 @@ int esbmc_parseoptionst::do_bmc_strategy(
     // k-induction
     if (options.get_bool_option("k-induction"))
     {
+      bool is_bcv =
+        is_base_case_violated(options, goto_functions, k_step).is_true();
       if (
-        is_base_case_violated(options, goto_functions, k_step).is_true() &&
-        !cmdline.isset("multi-property"))
+        is_bcv && !cmdline.isset("multi-property") &&
+        !options.get_bool_option("multi-property"))
         return 1;
 
-      if (does_forward_condition_hold(options, goto_functions, k_step)
-            .is_false())
+      // if the property is proven violated in the bs, it's unnecessary to further run fw and is
+      // this will make the trace looks cleaner yet might lead to an extra round to terminate the verification
+      if (
+        !is_bcv &&
+        does_forward_condition_hold(options, goto_functions, k_step).is_false())
+      {
+        if (is_coverage)
+          report_coverage(
+            options,
+            goto_functions.reached_claims,
+            goto_functions.reached_mul_claims);
         return 0;
+      }
 
       // Don't run inductive step for k_step == 1
       if (k_step > 1)
       {
-        if (is_inductive_step_violated(options, goto_functions, k_step)
-              .is_false())
+        if (
+          !is_bcv && is_inductive_step_violated(options, goto_functions, k_step)
+                       .is_false())
+        {
+          if (is_coverage)
+            report_coverage(
+              options,
+              goto_functions.reached_claims,
+              goto_functions.reached_mul_claims);
           return 0;
+        }
       }
     }
     // termination
@@ -1276,14 +1296,24 @@ int esbmc_parseoptionst::do_bmc_strategy(
     // incremental-bmc
     if (options.get_bool_option("incremental-bmc"))
     {
+      bool is_bcv =
+        is_base_case_violated(options, goto_functions, k_step).is_true();
       if (
-        is_base_case_violated(options, goto_functions, k_step).is_true() &&
-        !cmdline.isset("multi-property"))
+        is_bcv && !cmdline.isset("multi-property") &&
+        !options.get_bool_option("multi-property"))
         return 1;
 
-      if (does_forward_condition_hold(options, goto_functions, k_step)
-            .is_false())
+      if (
+        !is_bcv &&
+        does_forward_condition_hold(options, goto_functions, k_step).is_false())
+      {
+        if (is_coverage)
+          report_coverage(
+            options,
+            goto_functions.reached_claims,
+            goto_functions.reached_mul_claims);
         return 0;
+      }
     }
     // falsification
     if (options.get_bool_option("falsification"))
@@ -1295,6 +1325,12 @@ int esbmc_parseoptionst::do_bmc_strategy(
 
   log_status("Unable to prove or falsify the program, giving up.");
   log_fail("VERIFICATION UNKNOWN");
+
+  if (is_coverage)
+    report_coverage(
+      options,
+      goto_functions.reached_claims,
+      goto_functions.reached_mul_claims);
   return 0;
 }
 
@@ -1324,7 +1360,7 @@ tvt esbmc_parseoptionst::is_base_case_violated(
 
   bmct bmc(goto_functions, options, context);
 
-  log_status("Checking base case, k = {:d}", k_step);
+  log_progress("Checking base case, k = {:d}", k_step);
   switch (do_bmc(bmc))
   {
   case smt_convt::P_UNSATISFIABLE:
@@ -1754,14 +1790,16 @@ bool esbmc_parseoptionst::process_goto_program(
     namespacet ns(context);
 
     bool is_mul = cmdline.isset("multi-property");
-    bool is_coverage = cmdline.isset("assertion-coverage") ||
-                       cmdline.isset("assertion-coverage-claims") ||
-                       cmdline.isset("condition-coverage") ||
-                       cmdline.isset("condition-coverage-claims") ||
-                       cmdline.isset("branch-coverage") ||
-                       cmdline.isset("branch-coverage-claims") ||
-                       cmdline.isset("branch-function-coverage") ||
-                       cmdline.isset("branch-function-coverage-claims");
+    is_coverage = cmdline.isset("assertion-coverage") ||
+                  cmdline.isset("assertion-coverage-claims") ||
+                  cmdline.isset("condition-coverage") ||
+                  cmdline.isset("condition-coverage-claims") ||
+                  cmdline.isset("condition-coverage-rm") ||
+                  cmdline.isset("condition-coverage-claims-rm") ||
+                  cmdline.isset("branch-coverage") ||
+                  cmdline.isset("branch-coverage-claims") ||
+                  cmdline.isset("branch-function-coverage") ||
+                  cmdline.isset("branch-function-coverage-claims");
 
     // this should be before goto_check()
     if (
@@ -1788,7 +1826,10 @@ bool esbmc_parseoptionst::process_goto_program(
     // - multi-property wants to find all the bugs in the src code
     // - assertion-coverage wants to find out unreached codes (asserts)
     // - however, the optimization below will remove codes during the Goto stage
-    if (!(cmdline.isset("no-remove-unreachable") || is_mul || is_coverage))
+    if (
+      !(cmdline.isset("no-remove-unreachable") || is_mul || is_coverage) ||
+      cmdline.isset("condition-coverage-rm") ||
+      cmdline.isset("condition-coverage-claims-rm"))
       remove_unreachable(goto_functions);
 
     // Apply all the initialized algorithms

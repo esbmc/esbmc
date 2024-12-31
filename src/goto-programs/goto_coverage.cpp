@@ -1,7 +1,10 @@
 #include <goto-programs/goto_coverage.h>
 
-size_t goto_coveraget::total_branch = 0;
+size_t goto_coveraget::total_assert = 0;
+size_t goto_coveraget::total_assert_ins = 0;
 std::set<std::pair<std::string, std::string>> goto_coveraget::total_cond;
+size_t goto_coveraget::total_branch = 0;
+size_t goto_coveraget::total_func_branch = 0;
 
 std::string goto_coveraget::get_filename_from_path(std::string path)
 {
@@ -71,6 +74,8 @@ Algo:
 void goto_coveraget::assertion_coverage()
 {
   replace_all_asserts_to_guard(gen_false_expr(), true);
+  total_assert = get_total_instrument();
+  total_assert_ins = get_total_assert_instance();
 }
 
 /*
@@ -92,7 +97,7 @@ Algo:
 void goto_coveraget::branch_function_coverage()
 {
   log_progress("Adding false assertions...");
-  total_branch = 0;
+  total_func_branch = 0;
 
   std::unordered_set<std::string> location_pool = {};
   // cmdline.arg[0]
@@ -158,7 +163,7 @@ void goto_coveraget::branch_function_coverage()
 
   // fix for branch coverage with kind/incr
   // It seems in kind/incr, the goto_functions used during the BMC is simplified and incomplete
-  total_branch = get_total_instrument();
+  total_func_branch = get_total_instrument();
 
   // avoid Assertion `call_stack.back().goto_state_map.size() == 0' failed
   goto_functions.update();
