@@ -1400,6 +1400,7 @@ bool clang_c_convertert::get_builtin_type(
     c_type = "signed_long_long";
     break;
 
+  case clang::BuiltinType::Float16:
   case clang::BuiltinType::Half:
     new_type = half_float_type();
     c_type = "_Float16";
