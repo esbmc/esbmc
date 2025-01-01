@@ -85,7 +85,7 @@ cmake .. -DENABLE_Z3=1 -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs
 
 make -j8
 
-We recommend using AMD64 via docker for a fully working version. Sample docker-compose and docker files follow below.
+# We recommend using AMD64 via docker for a fully supported version. Sample docker-compose and docker files follow below.
 
 ````
 
@@ -201,6 +201,20 @@ Solution found by the inductive step (k = 2)
 ````
 
 We refer the user to our [documentation webpage](https://ssvlab.github.io/esbmc/documentation.html) for further examples of the ESBMC's features.
+
+### Using the Boolector Solver
+
+Boolector is a fast solver and is recommended. To install Boolector, use the following one line command:
+
+```
+git clone --depth=1 --branch=3.2.3 https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j9 && make install && cd .. && cd ..
+```
+Now rerun cmake,
+
+```
+cmake .. -DENABLE_Z3=1 -DENABLE_BOOLECTOR=1 -DBoolector_DIR=<the folder you ran the above command from>/boolector-release
+```
+
 
 ### Using Config Files
 
