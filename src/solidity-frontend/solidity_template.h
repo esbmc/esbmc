@@ -19,6 +19,7 @@ const std::string sol_header = R"(
 #include <string>
 #include <cstdbool>
 #include <cassert>
+#include <map>
 )";
 
 /*
@@ -584,7 +585,7 @@ const std::string sol_c_library = "extern \"C\" {" + sol_typedef + sol_vars +
                                   sol_funcs + sol_mapping + sol_array +
                                   sol_ext_library + "}";
 
-// For C++
+// C++
 const std::string sol_cpp_string = R"(
 const std::string empty_str = "";
 void _streq(std::string &str1, std::string str2)
@@ -602,7 +603,11 @@ const char* _tochar(std::string str)
 }
 )";
 
-const std::string sol_cpp_library = sol_cpp_string;
+const std::string sol_signature = R"(
+//TODO
+)";
+
+const std::string sol_cpp_library = sol_cpp_string + sol_signature;
 
 // combination
 const std::string sol_library = sol_header + sol_c_library + sol_cpp_library;
