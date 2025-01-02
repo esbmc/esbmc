@@ -59,33 +59,6 @@ void clang_cpp_adjust::gen_implicit_union_copy_move_constructor(symbolt &symbol)
   ctor_body.operands().push_back(copy_ctor_assign);
 }
 
-void clang_cpp_adjust::replace_lambda_capture_fields(
-  const irept &lambda_capture_fields,
-  exprt &op)
-{
-  if (op.is_symbol())
-  {
-    irept replacement_symbol = lambda_capture_fields.find(op.identifier());
-    if (replacement_symbol.is_not_nil())
-      op.swap(replacement_symbol);
-  }
-  else
-  {
-    Forall_operands (subop, op)
-      replace_lambda_capture_fields(lambda_capture_fields, *subop);
-  }
-}
-
-void clang_cpp_adjust::adjust_lambda_call_operator(symbolt &symbolt)
-{
-  if (!symbolt.value.get_bool("#lambda_call_operator"))
-    return;
-  code_blockt &body = to_code_block(to_code(symbolt.value));
-  const auto &lambda_capture_fields =
-    symbolt.value.find("#lambda_capture_fields");
-  replace_lambda_capture_fields(lambda_capture_fields, body);
-}
-
 void clang_cpp_adjust::adjust_symbol(symbolt &symbol)
 {
   /* Adjusting the symbol beforehand, changes the body which confuses our replacement logic in `adjust_lambda_call_operator`
@@ -97,7 +70,6 @@ void clang_cpp_adjust::adjust_symbol(symbolt &symbol)
    * a reference. The reference is added only after replacing the captures with the fields.
    * Therefore, we adjust the symbol after adjusting the lambda call operator.
    */
-  adjust_lambda_call_operator(symbol);
   clang_c_adjust::adjust_symbol(symbol);
 
   /*
