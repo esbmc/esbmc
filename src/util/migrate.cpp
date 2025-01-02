@@ -1,3 +1,5 @@
+#include "goto-programs/goto_binary_reader.h"
+#include "irep2/irep2_expr.h"
 #include <util/c_types.h>
 #include <util/config.h>
 #include <irep2/irep2_utils.h>
@@ -1818,6 +1820,29 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     unsigned int lower = atoi(expr.get("lower").as_string().c_str());
     new_expr_ref = extract2tc(type, theop, upper, lower);
   }
+  else if (expr.id() == "object_size")
+  {
+    assert(expr.operands().size() == 1);
+    type = migrate_type(expr.type());
+    // We don't care for now. Return max value
+    type->dump();
+    new_expr_ref = constant_int2tc(type, BigInt(-1));
+  }
+  else if (expr.id() == "overflow_result-+")
+  {
+    // Overflow_result : {result = op0 + op1, overflowed = overflow(op0 + op1)}
+    type = migrate_type(expr.type());
+    assert(expr.operands().size() == 2);
+    expr2tc op0, op1;
+    convert_operand_pair(expr, op0, op1);
+    expr2tc add = add2tc(op0->type, op0, op1); // XXX type?
+
+    std::vector<expr2tc> members;
+    members.push_back(add2tc(op0->type, op0, op1));
+    members.push_back(overflow2tc(add2tc(op0->type, op0, op1)));
+    new_expr_ref = constant_struct2tc(type, members);
+  }
+
   else
   {
     log_error("{}\nmigrate expr failed", expr);
