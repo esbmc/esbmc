@@ -66,46 +66,27 @@ make -j4
 
 #### Mac OS X
 
-ESBMC can compile on ARM64 (M1/M2/M3/M4) Macs. However, it does not work reliably beyond compilation. You need to install the latest MAC OS Dev tools. However, the compile option for GOTO_SYSROOT needs to be changed. Note that make -j8 can be increased to -j32 on faster Macs.
-````
-brew install z3
-brew install bison
-brew install clang
-brew install llvm
+M1/M2/M3/M4 Macs are now supported.
 
-git clone https://github.com/esbmc/esbmc.git
-cd esbmc
-mkdir build && cd build
+Given the common elements of OS X, run the script. It runs on both ARM and Intel macs. You do need homebrew installed.
+It creates the build folder, installs the boolector solver, and makes esbmc available globally.
+```
+ ./build-esbmc-mac.sh
+```
 
-````
+The raw command is given here for reference
 
-##### Execution for Mac with Apple chips
-````sh
-cmake .. -DENABLE_Z3=1 -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -DLLVM_DIR=/opt/homebrew/opt/llvm/lib/cmake/llvm -DClang_DIR=/opt/homebrew/opt/llvm/lib/cmake/clang
-
+```
+cmake .. -DZ3_DIR=/opt/homebrew/Cellar/z3/4.13.4 -DENABLE_Z3=1 -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -DLLVM_DIR=/opt/homebrew/opt/llvm/lib/cmake/llvm -DClang_DIR=/opt/homebrew/opt/llvm/lib/cmake/clang
 make -j8
+make install
+```
+#### We recommend using AMD64 via docker for a fully supported version on Mac OS X. We will soon remove this as native installations on Mac OS X ARM work well too. Sample docker-compose and docker files follow below.
 
-# We recommend using AMD64 via docker for a fully supported version. Sample docker-compose and docker files follow below.
-
-````
-
-##### Execution for Mac with Intel chips
-````sh
-
-# replace path_llvm with the path of llvm, e.g. "/usr/local/opt/llvm"  you can get it with this command "brew --prefix llvm"
-
-cmake .. -DCMAKE_PREFIX_PATH="{path_llvm}" -DENABLE_Z3=1 -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk
-make -j8
-sudo make install
-esbmc --version
-````
-
-DockerFile sample:
-
-````
+```
 FROM node:18-slim
 
-# Install dependencies for ESBMC and other build tools
+## Install dependencies for ESBMC and other build tools
 RUN apt-get update && apt-get install -y \
     clang-14 \
     llvm-14 \
