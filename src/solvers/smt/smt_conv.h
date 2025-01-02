@@ -131,10 +131,6 @@ class smt_convt;
 class smt_convt
 {
 public:
-  /* NOTE: I've made this horrible so we remember that there is an
-   * even uglier implementation that just returns an empty
-   * look at where this variable is used for more info :) */
-  bool extracting_from_array_tuple_is_error = false;
   /** Shorthand for a vector of smt_ast's */
   typedef std::vector<smt_astt> ast_vec;
 
