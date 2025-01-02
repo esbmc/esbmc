@@ -48,6 +48,15 @@ protected:
     const clang::CXXConstructExpr &constructor_call,
     exprt &new_expr);
 
+#if CLANG_VERSION_MAJOR <= 15
+#  define CAPTURE_VARIABLE_TYPE clang::VarDecl
+#else
+#  define CAPTURE_VARIABLE_TYPE clang::ValueDecl
+#endif
+  bool is_lambda_operator = false;
+  llvm::DenseMap<const CAPTURE_VARIABLE_TYPE *, clang::FieldDecl *> captures{};
+  clang::FieldDecl *thisCapture{};
+
   bool get_function_body(
     const clang::FunctionDecl &fd,
     exprt &new_expr,
