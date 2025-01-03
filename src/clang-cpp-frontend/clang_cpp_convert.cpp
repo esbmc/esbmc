@@ -1729,13 +1729,9 @@ bool clang_cpp_convertert::get_decl_ref(
     if (const auto *valueDecl = llvm::dyn_cast<clang::ValueDecl>(&decl))
       if (auto it = captures.find(valueDecl); it != captures.end())
       {
-        // Avoid infinite recursion
-        is_lambda_operator = false;
-        new_expr.set("#member_init", true);
-        if (get_decl_ref(*it->second, new_expr))
+        if (get_decl(*it->second, new_expr))
           return true;
         build_member_from_component(*current_functionDecl, new_expr);
-        is_lambda_operator = true;
         return false;
       }
   }
