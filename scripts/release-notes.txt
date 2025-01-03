@@ -1,5 +1,50 @@
 Release Notes of the ESBMC model checker
 
+*** Version 7.8
+
+This release introduces several significant improvements, feature enhancements, bug fixes, and updates to improve the functionality and usability of ESBMC. Below is a detailed breakdown of the changes:
+
+* New Features
+** Build Support for macOS:
+- Added build instructions for macOS M1 and Intel architectures (#2217, #2216, #2213).
+- Updated README files to reflect new macOS build compatibility (#2213, #2089).
+** SMT Solver Enhancements:
+- Support for extracting arrays from tuples in SMT (#2215).
+- Updated Bitwuzla SMT solver from v0.6.1 to v0.7.0 for improved performance (#2199).
+- Fixed pointer typecast issues in SMT backends for byte updates (#2197).
+** Concurrency Improvements:
+- Adjusted concurrency flags for memory leak and overflow checks (#2206).
+- Read global variables directly from function calls in concurrency checks (#2192).
+- Fixed interleavings and guards for better thread scheduling (#2185).
+- Introduced a new thread scheduling policy (#2178).
+** C and C++ Verification Enhancements:
+- Added support for clang built-in float16 types (#2214).
+- Support for clang::__builtin_va_* operations in C verification (#2207).
+- Fixed allocation size calculations in C++ new operations (#2187).
+- Enhanced lambda captures for C++14 (#2170).
+- Supported std::make_tuple, std::forward, and other C++ standard functions (#2051, #2118).
+** Python Frontend Updates:
+- Improved handling of module aliases during verification (#2196).
+- Enhanced error messages and documentation for Python (#2107, #2086).
+* Fixes and Improvements
+** Verification Process:
+- Improved constant propagation handling (#2128).
+- Addressed robustness issues in alloca handling during symbolic execution (#2095).
+- Enhanced handling of array initialization loops in C++ verification (#2101).
+** Build and Compilation:
+- Fixed compatibility with newer Clang versions (Clang 18 and Clang 19) (#2189, #2099).
+- Updated CI to include static builds with LLVM 16 as the default (#2062).
+** Coverage and Benchmarks:
+- Enabled assertion coverage in function mode (#2106).
+- Added benchmarks for SV-COMP 2025 (#2158).
+- Improved branch coverage support (#2056).
+* Miscellaneous:
+- Hardened utility functions like binary2integer for reliability (#2132).
+- Added JSON generation for test reports and refined HTML reports (#2127).
+- Updated concurrency benchmark inclusion in BenchExec runs (#2201).
+* Acknowledgments
+This release would not have been possible without the contributions from the community and team members, including but not limited to @ssshivaji, @intrigus-lgtm, @XLiZHI, @ChenfengWei0, @Anthonysdu, and @brcfarias. Thank you for your continued support and efforts to enhance ESBMC.
+
 *** Version 7.7
 * New Features and Improvements:
 ** Python Frontend:
