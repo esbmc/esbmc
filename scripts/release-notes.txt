@@ -43,7 +43,7 @@ This release introduces several significant improvements, feature enhancements, 
 - Added JSON generation for test reports and refined HTML reports (#2127).
 - Updated concurrency benchmark inclusion in BenchExec runs (#2201).
 * Acknowledgments
-This release would not have been possible without the contributions from the community and team members, including but not limited to @ssshivaji, @intrigus-lgtm, @XLiZHI, @ChenfengWei0, @Anthonysdu, and @brcfarias. Thank you for your continued support and efforts to enhance ESBMC.
+This release would not have been possible without the contributions from the community and team members, including but not limited to @ssshivaji, @intrigus-lgtm, @XLiZHI, @ChenfengWei0, @Anthonysdu, @mikhailramalho, and @brcfarias. Thank you for your continued support and efforts to enhance ESBMC.
 
 *** Version 7.7
 * New Features and Improvements:
