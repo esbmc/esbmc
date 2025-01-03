@@ -53,6 +53,15 @@ protected:
 #else
 #  define CAPTURE_VARIABLE_TYPE clang::ValueDecl
 #endif
+  /*
+   *  Map captured variables and this to the non-static members storing their 
+   *  values or references.
+   *  Arguments:
+   *   is_lambda_operator: the lambda operator is being converted
+   *   captures: populated with the mapping from captured variables to the
+   *             corresponding fields.
+   *   thisCapture:	the field declaration for the This capture.
+   */
   bool is_lambda_operator = false;
   llvm::DenseMap<const CAPTURE_VARIABLE_TYPE *, clang::FieldDecl *> captures{};
   clang::FieldDecl *thisCapture{};

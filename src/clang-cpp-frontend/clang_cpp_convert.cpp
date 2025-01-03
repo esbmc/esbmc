@@ -857,7 +857,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
                                           ->getOuterLexicalRecordContext()
                                           ->isLambda());
 
-    if (is_lambda_operator)
+    if (is_lambda_operator && thisCapture)
     {
       // Replace This pointer in the lambda operator
       get_decl(*thisCapture, new_expr);
@@ -1307,6 +1307,8 @@ bool clang_cpp_convertert::get_function_body(
   if (!fd.hasBody())
     return false;
 
+  // Retrieve the mapping between captured variables
+  // and the members that store their values or references
   if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
   {
     if (md->getParent()->getLambdaCallOperator() == md)
