@@ -13,6 +13,7 @@ fi
 read -p "Do you want to build the Python frontend? [Y/n]: " use_python
 use_python=${use_python:-Y}  # Default to Y if user just hits enter
 
+
 read -p "Do you want to install the recommended Boolector solver? [Y/n]: " use_boolector
 use_boolector=${use_boolector:-Y}  # Default to Y if user just hits enter
 
@@ -85,6 +86,7 @@ fi
 # Run cmake with all arguments
 cmake .. "${CMAKE_ARGS[@]}"
 
+
 echo "Running make..."
 make -j${CPU_COUNT}
 
@@ -99,3 +101,4 @@ if [[ $use_python =~ ^[Yy]$ ]]; then
     echo "source esbmc-venv/bin/activate"
     echo "Then you can use ESBMC with Python files"
 fi
+
