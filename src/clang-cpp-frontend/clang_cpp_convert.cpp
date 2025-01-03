@@ -1183,7 +1183,6 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::CXXStdInitializerListExpr &initlist =
       static_cast<const clang::CXXStdInitializerListExpr &>(stmt);
 
-    initlist.getType()->getAsCXXRecordDecl()->dump();
     // Find the constructor that takes two args
     const clang::CXXConstructorDecl *target_ctor;
     for (const auto *ctor : initlist.getType()->getAsCXXRecordDecl()->ctors())
@@ -1970,11 +1969,9 @@ bool clang_cpp_convertert::get_field_ref(
 
       if (get_field_ref(*containing_field, ref_to_containing_field, base))
         return true;
-      ref_to_containing_field.dump();
       base = ref_to_containing_field;
     }
 
-    ref_to_containing_field.dump();
     new_expr.swap(ref_to_containing_field);
     return false;
   }
