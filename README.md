@@ -69,7 +69,8 @@ make -j4
 M1/M2/M3/M4 Macs are now supported.
 
 Given the common elements of OS X, run the script. It runs on both ARM and Intel macs. You do need homebrew installed.
-It creates the build folder, installs the boolector solver, and makes esbmc available globally.
+It creates the build folder, installs the boolector solver, and makes esbmc available globally. The script supports building the python frontend as well. Note that the python frontend is quite early in the support for python.
+
 ```
  ./build-esbmc-mac.sh
 ```
