@@ -1728,7 +1728,7 @@ bool clang_cpp_convertert::get_decl_ref(
   {
     // Replace decl in the lambda operator with FieldDecl
     // x = 1 convert into this->_x = 1;
-    if (const auto *valueDecl = llvm::dyn_cast<clang::ValueDecl>(&decl))
+    if (const auto *valueDecl = llvm::dyn_cast<CAPTURE_VARIABLE_TYPE>(&decl))
       if (auto it = captures.find(valueDecl); it != captures.end())
       {
         if (get_decl(*it->second, new_expr))
