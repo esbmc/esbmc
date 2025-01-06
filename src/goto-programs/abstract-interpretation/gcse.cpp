@@ -138,6 +138,18 @@ void cse_domaint::make_expression_available(const expr2tc &E)
     return;
   }
 
+  // ESBMC requires that an overflow2t contains an operator as a sub-expression.
+  // This means that we can't cache the sub-expressions into an intermediate
+  // var.
+  // However, we can do the GCSE in the operands of the nested operator.
+  if (is_overflow2t(E))
+  {
+    expr2tc operand = to_overflow2t(E).operand;
+    operand->Foreach_operand([this](expr2tc &op)
+                             { make_expression_available(op); });
+    return;
+  }
+
   if (is_if2t(E))
   {
     make_expression_available(to_if2t(E).cond);
