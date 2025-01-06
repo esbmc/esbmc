@@ -145,8 +145,8 @@ void cse_domaint::make_expression_available(const expr2tc &E)
   if (is_overflow2t(E))
   {
     expr2tc operand = to_overflow2t(E).operand;
-    operand->Foreach_operand([this](expr2tc &op)
-                             { make_expression_available(op); });
+    operand->Foreach_operand(
+      [this](expr2tc &op) { make_expression_available(op); });
     return;
   }
 
