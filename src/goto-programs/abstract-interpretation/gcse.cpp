@@ -168,8 +168,8 @@ void cse_domaint::make_expression_available(const expr2tc &E)
   if (!added.second)
     return;
   // Let's recursively make it available!
-  E->foreach_operand([this](const expr2tc &e)
-                     { make_expression_available(e); });
+  E->foreach_operand(
+    [this](const expr2tc &e) { make_expression_available(e); });
 
   // TODO: LHS members should always be recomputed
   if (is_with2t(E) || is_member2t(E) || is_dereference2t(E) || is_index2t(E))
