@@ -172,7 +172,7 @@ void cse_domaint::make_expression_available(const expr2tc &E)
     [this](const expr2tc &e) { make_expression_available(e); });
 
   // TODO: LHS members should always be recomputed
-  if (is_with2t(E) || is_member2t(E) || is_dereference2t(E))
+  if (is_with2t(E) || is_member2t(E) || is_dereference2t(E) || is_index2t(E))
     available_expressions.erase(E);
 }
 
