@@ -554,7 +554,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     exprt cond("and", bool_type());
     cond.move_to_operands(
       bin_expr); // bin_expr compares left and comparators[0]
-    for (size_t i = 0; i < element["comparators"].size(); i += 2)
+    for (size_t i = 0; i + 1 < element["comparators"].size(); i += 2)
     {
       std::string op(element["ops"][i + 1]["_type"].get<std::string>());
       exprt logical_expr(get_op(op, bool_type()), bool_type());
