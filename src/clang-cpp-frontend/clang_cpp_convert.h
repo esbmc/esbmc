@@ -62,9 +62,28 @@ protected:
    *             corresponding fields.
    *   thisCapture:	the field declaration for the This capture.
    */
-  bool is_lambda_operator = false;
-  llvm::DenseMap<const CAPTURE_VARIABLE_TYPE *, clang::FieldDecl *> captures{};
-  clang::FieldDecl *thisCapture{};
+  typedef llvm::DenseMap<const CAPTURE_VARIABLE_TYPE *, clang::FieldDecl *>
+    field_mapt;
+  typedef std::
+    unordered_map<std::size_t, std::pair<field_mapt, clang::FieldDecl *>>
+      cap_mapt;
+  cap_mapt cap_map;
+
+  bool is_lambda() const
+  {
+    if (!current_functionDecl)
+      return false;
+
+    if (
+      const auto *methodDecl =
+        llvm::dyn_cast<clang::CXXMethodDecl>(current_functionDecl))
+    {
+      const auto *parent = methodDecl->getParent();
+      if (parent && parent->isLambda())
+        return true;
+    }
+    return false;
+  }
 
   bool get_function_body(
     const clang::FunctionDecl &fd,

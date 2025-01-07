@@ -852,16 +852,23 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (get_type(this_expr.getType(), this_type))
       return true;
 
-    assert(
-      this_type == it->second.second || current_functionDecl->getParent()
-                                          ->getOuterLexicalRecordContext()
-                                          ->isLambda());
+    // In a lambda `CXXThisExpr` refers to the captured `this` pointer,
+    // while the `this_map` refers to the `this` pointer of the lambda closure type.
+    // This causes a mismatch, so ignore the type check in this case.
+    assert(this_type == it->second.second || is_lambda());
 
-    if (is_lambda_operator && thisCapture)
+    if (is_lambda())
     {
-      // Replace This pointer in the lambda operator
-      get_decl(*thisCapture, new_expr);
-      build_member_from_component(*current_functionDecl, new_expr);
+      if (auto it = cap_map.find(address); it != cap_map.end())
+      {
+        // Replace This pointer in the lambda operator
+        assert(it->second.second);
+        get_decl(*it->second.second, new_expr);
+        build_member_from_component(*current_functionDecl, new_expr);
+        // special case: gen address of when capturing *this
+        if (!new_expr.type().is_pointer())
+          new_expr = gen_address_of(new_expr);
+      }
     }
     else
       new_expr = symbol_exprt(it->second.first, it->second.second);
@@ -1313,16 +1320,19 @@ bool clang_cpp_convertert::get_function_body(
   {
     if (md->getParent()->getLambdaCallOperator() == md)
     {
+      field_mapt captures;
+      clang::FieldDecl *thisCapture{};
       md->getParent()->getCaptureFields(captures, thisCapture);
-      is_lambda_operator = true;
+
+      std::size_t address = reinterpret_cast<std::size_t>(md->getFirstDecl());
+      cap_map[address] =
+        std::pair<field_mapt, clang::FieldDecl *>(captures, thisCapture);
     }
   }
 
   // Parse body
   if (clang_c_convertert::get_function_body(fd, new_expr, ftype))
     return true;
-
-  is_lambda_operator = false;
 
   if (new_expr.statement() != "block")
     return false;
@@ -1724,14 +1734,18 @@ bool clang_cpp_convertert::get_decl_ref(
   const clang::Decl &decl,
   exprt &new_expr)
 {
-  if (is_lambda_operator)
+  if (is_lambda())
   {
+    std::size_t address =
+      reinterpret_cast<std::size_t>(current_functionDecl->getFirstDecl());
     // Replace decl in the lambda operator with FieldDecl
     // x = 1 convert into this->_x = 1;
-    if (const auto *valueDecl = llvm::dyn_cast<CAPTURE_VARIABLE_TYPE>(&decl))
-      if (auto it = captures.find(valueDecl); it != captures.end())
+    if (auto it = cap_map.find(address); it != cap_map.end())
+      if (auto it1 =
+            it->second.first.find(llvm::dyn_cast<CAPTURE_VARIABLE_TYPE>(&decl));
+          it1 != it->second.first.end())
       {
-        if (get_decl(*it->second, new_expr))
+        if (get_decl(*it1->second, new_expr))
           return true;
         build_member_from_component(*current_functionDecl, new_expr);
         return false;
