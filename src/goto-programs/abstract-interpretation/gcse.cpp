@@ -303,6 +303,17 @@ void goto_cse::replace_max_sub_expr(
   if (is_constant(e) || is_symbol2t(e))
     return;
 
+  // NOTE: See `make_expression_available`.
+  if (is_overflow2t(e))
+  {
+    expr2tc operand = to_overflow2t(e).operand;
+    operand->Foreach_operand(
+      [this, &expr2symbol, &to, &matched_expressions](expr2tc &op) {
+        replace_max_sub_expr(op, expr2symbol, to, matched_expressions);
+      });
+    return;
+  }
+
   auto common = expr2symbol.find(e);
   if (common != expr2symbol.end())
   {
