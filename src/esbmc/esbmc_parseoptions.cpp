@@ -1872,6 +1872,14 @@ bool esbmc_parseoptionst::process_goto_program(
           "optimizations will be disabled");
         vsa = nullptr;
       }
+      catch (const std::string &e)
+      {
+        log_warning(
+          "[GOTO] Unable to compute VSA due to: {}. Some GOTO "
+          "optimizations will be disabled",
+          e);
+        vsa = nullptr;
+      }
 
       if (cmdline.isset("no-library"))
         log_warning("Using CSE with --no-library might cause huge slowdowns!");
