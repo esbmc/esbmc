@@ -1025,9 +1025,12 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       if (get_expr(*it, init))
         return true;
 
-      if (capture->getCaptureKind() == clang::LambdaCaptureKind::LCK_ByRef)
+      if (
+        capture->getCaptureKind() == clang::LambdaCaptureKind::LCK_ByRef &&
+        !init.type().is_pointer())
       {
-        // If the capture is by reference, we need to pass the address
+        // If a pointer variable is captured, then the reference captures the 
+        // pointer itself otherwise we need to pass the address
         init = address_of_exprt(init);
         // (`this` can also be captured by ref, but it's already a pointer)
       }
