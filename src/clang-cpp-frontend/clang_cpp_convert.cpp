@@ -1025,12 +1025,9 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       if (get_expr(*it, init))
         return true;
 
-      if (
-        capture->getCaptureKind() == clang::LambdaCaptureKind::LCK_ByRef &&
-        !init.type().is_pointer())
+      if (capture->getCaptureKind() == clang::LambdaCaptureKind::LCK_ByRef)
       {
-        // If a pointer variable is captured, then the reference captures the
-        // pointer itself otherwise we need to pass the address
+        // If the capture is by reference, we need to pass the address
         init = address_of_exprt(init);
         // (`this` can also be captured by ref, but it's already a pointer)
       }
@@ -1748,9 +1745,15 @@ bool clang_cpp_convertert::get_decl_ref(
             it->second.first.find(llvm::dyn_cast<CAPTURE_VARIABLE_TYPE>(&decl));
           it1 != it->second.first.end())
       {
+        typet t;
+        if (get_type(it1->first->getType(), t))
+          return true;
+
         if (get_decl(*it1->second, new_expr))
           return true;
         build_member_from_component(*current_functionDecl, new_expr);
+
+        gen_typecast(ns, new_expr, t);
         return false;
       }
   }
