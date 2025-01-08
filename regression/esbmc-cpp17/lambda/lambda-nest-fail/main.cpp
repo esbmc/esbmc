@@ -42,7 +42,25 @@ public:
       innerLambda();
     };
     outerLambda();
-    assert(y == 20);  //should change to 25
+    assert(y == 20); //should change to 25
+  }
+
+  void testLambdaPointerCapture()
+  {
+    int x = 10, y = 20, z = 30;
+    int *xp = &x, *yp = &y, *zp = &z;
+    auto outerLambda = [xp, &yp, zp]()
+    {
+      *yp += 5;
+      auto innerLambda = [xp, &yp, zp]()
+      {
+        assert(*xp == 10);
+        assert(*yp == 25);
+        assert(*zp == 30);
+      };
+      innerLambda();
+    };
+    outerLambda();
   }
 
   void testLambdaCaptureThisByReference()
@@ -68,6 +86,7 @@ int main()
 
   obj.testLambdaMixedCapture();
   obj.testLambdaCaptureNested();
+  obj.testLambdaPointerCapture();
   obj.testLambdaCaptureThisByReference();
   return 0;
 }
