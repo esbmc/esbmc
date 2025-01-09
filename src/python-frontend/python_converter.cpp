@@ -406,6 +406,10 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     // Strings comparison
     if (op == "Eq")
     {
+      // Ensure the types of both operands are array types
+      if (!lhs.type().is_array() || !rhs.type().is_array())
+        log_error("Operands must be of array type for string comparison");
+
       if (rhs.type() != lhs.type())
         return gen_boolean(false);
 
