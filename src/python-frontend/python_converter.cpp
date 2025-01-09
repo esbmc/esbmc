@@ -410,7 +410,14 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       if (!lhs.type().is_array() || !rhs.type().is_array())
         log_error("Operands must be of array type for string comparison");
 
-      if (rhs.type() != lhs.type())
+      array_typet &lhs_arr_type = static_cast<array_typet &>(lhs.type());
+      array_typet &rhs_arr_type = static_cast<array_typet &>(rhs.type());
+
+      BigInt lhs_size = binary2integer(lhs_arr_type.size().value().as_string(), false);
+      BigInt rhs_size = binary2integer(rhs_arr_type.size().value().as_string(), false);
+
+      // Ensure sizes match; if not, the strings can't be equal
+      if (lhs_size != rhs_size)
         return gen_boolean(false);
 
       array_typet &arr_type = static_cast<array_typet &>(lhs.type());
