@@ -58,4 +58,14 @@ extern _Thread_local int errno;
 NEXTAFTER(, double, uint64_t)
 NEXTAFTER(f, float, uint32_t)
 
+double __esbmc_builtin_nextafter(double x, double y)
+{
+  return nextafter(x, y);
+}
+
+float __esbmc_builtin_nextafterf(float x, float y)
+{
+  return nextafterf(x, y);
+}
+
 #undef NEXTAFTER

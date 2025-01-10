@@ -209,6 +209,9 @@ void clang_c_languaget::build_compiler_args(
 
   compiler_args.emplace_back("-D__builtin_memcpy=__esbmc_builtin_memcpy");
   compiler_args.emplace_back("-D__builtin_memmove=__esbmc_builtin_memmove");
+  compiler_args.emplace_back("-D__builtin_nextafter=__esbmc_builtin_nextafter");
+  compiler_args.emplace_back(
+    "-D__builtin_nextafterf=__esbmc_builtin_nextafterf");
 
   compiler_args.emplace_back("-D__ESBMC_alloca=__builtin_alloca");
 
@@ -448,6 +451,10 @@ void __ESBMC_unreachable();
 /* Used to implement the `__builtin`s for memcpy and memmove */
 void *__esbmc_builtin_memcpy(void *, const void *, __SIZE_TYPE__);
 void *__esbmc_builtin_memmove(void *, const void *, __SIZE_TYPE__);
+
+/* Used to implement the `__builtin`s for nextafter and nextafterf */
+double __esbmc_builtin_nextafter(double, double);
+float __esbmc_builtin_nextafterf(float, float);
     )";
 
   if (config.ansi_c.cheri)
