@@ -7,10 +7,10 @@ In this example, verification without GCSE fails due to an out-of-memory error o
 However, with GCSE enabled, the verification completes SUCCESSFULLY in just 1 second.
 
 To run the program without GCSE:
-    bin/esbmc GCSE_example.c 
+    bin/esbmc GCSE_real_example.c 
 
 To run the program with GCSE:
-    bin/esbmc GCSE_example.c --gcse
+    bin/esbmc GCSE_real_example.c --gcse
 */
 
 
