@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--unwind 10 --timeout 900
+WARNING: no body for function foo
+^VERIFICATION FAILED$
