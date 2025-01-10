@@ -401,12 +401,15 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   {
     if (op == "Eq")
     {
-      array_typet &lhs_arr_type = static_cast<array_typet &>(lhs.type());
-      array_typet &rhs_arr_type = static_cast<array_typet &>(rhs.type());
-      
-      exprt eq("=", bool_type());
-      eq.copy_to_operands(lhs, rhs);
-      return eq;
+      // Compare full string arrays directly
+      exprt str_eq("=", bool_type());
+      // Take address of full array on LHS
+      address_of_exprt lhs_addr(lhs);
+      // Take address of first element on RHS since that's how it's passed
+      index_exprt rhs_idx(rhs, from_integer(0, int_type()));
+      address_of_exprt rhs_addr(rhs_idx);
+      str_eq.copy_to_operands(lhs_addr, rhs_addr);
+      return str_eq;
     }
     else if (op == "Add")
     {
@@ -577,8 +580,15 @@ symbolt *python_converter::find_function_in_base_classes(
         std::string("@C@" + current_class + "@F@" + current_func_name).length(),
         std::string("@C@" + base_class + "@F@" + method_name));
 
-      if ((func = context.find_symbol(sym_id.c_str())))
+      func = context.find_symbol(sym_id.c_str());
+      if (func) {
         return func;
+      }
+      // Try looking up in base classes recursively
+      func = find_function_in_base_classes(base_class, sym_id, method_name, is_ctor);
+      if (func) {
+        return func;
+      }
 
       current_class = base_class;
     }
@@ -1138,13 +1148,27 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
     std::string sid_str = sid.to_string();
 
-    symbolt *symbol = nullptr;
-    if (
-      !(symbol = context.find_symbol(sid_str)) &&
-      !(symbol = find_symbol_in_global_scope(sid_str)) &&
-      !(symbol = find_symbol_in_imported_modules(sid_str)))
-    {
-      throw std::runtime_error("Symbol " + sid_str + " not found");
+    symbolt *symbol = context.find_symbol(sid_str);
+    if (!symbol) {
+      symbol = find_symbol_in_global_scope(sid_str);
+    }
+    if (!symbol) {
+      symbol = find_symbol_in_imported_modules(sid_str);
+    }
+    if (!symbol) {
+      // Try to find in base classes if this is a class member
+      std::string class_name = get_classname_from_symbol_id(sid_str);
+      if (!class_name.empty()) {
+        symbol = find_function_in_base_classes(
+          class_name, sid_str, "", false);
+      }
+    }
+    if (!symbol) {
+      throw std::runtime_error("Symbol " + sid_str + " not found in:\n" +
+        "- Current context\n" +
+        "- Global scope\n" + 
+        "- Imported modules\n" +
+        "- Base classes");
     }
 
     expr = symbol_expr(*symbol);
