@@ -1870,6 +1870,48 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     members.push_back(overflow2tc(add2tc(op0->type, op0, op1)));
     new_expr_ref = constant_struct2tc(type, members);
   }
+  else if (expr.id() == "overflow_result--")
+  {
+    // Overflow_result : {result = op0 + op1, overflowed = overflow(op0 + op1)}
+    type = migrate_type(expr.type());
+    assert(expr.operands().size() == 2);
+    expr2tc op0, op1;
+    convert_operand_pair(expr, op0, op1);
+    expr2tc add = sub2tc(op0->type, op0, op1); // XXX type?
+
+    std::vector<expr2tc> members;
+    members.push_back(sub2tc(op0->type, op0, op1));
+    members.push_back(overflow2tc(sub2tc(op0->type, op0, op1)));
+    new_expr_ref = constant_struct2tc(type, members);
+  }
+  else if (expr.id() == "overflow_result-shr")
+  {
+    // Overflow_result : {result = op0 + op1, overflowed = overflow(op0 + op1)}
+    type = migrate_type(expr.type());
+    assert(expr.operands().size() == 2);
+    expr2tc op0, op1;
+    convert_operand_pair(expr, op0, op1);
+    expr2tc add = ashr2tc(op0->type, op0, op1); // XXX type?
+
+    std::vector<expr2tc> members;
+    members.push_back(ashr2tc(op0->type, op0, op1));
+    members.push_back(overflow2tc(ashr2tc(op0->type, op0, op1)));
+    new_expr_ref = constant_struct2tc(type, members);
+  }
+  else if (expr.id() == "overflow_result-*")
+  {
+    // Overflow_result : {result = op0 + op1, overflowed = overflow(op0 + op1)}
+    type = migrate_type(expr.type());
+    assert(expr.operands().size() == 2);
+    expr2tc op0, op1;
+    convert_operand_pair(expr, op0, op1);
+    expr2tc add = mul2tc(op0->type, op0, op1); // XXX type?
+
+    std::vector<expr2tc> members;
+    members.push_back(mul2tc(op0->type, op0, op1));
+    members.push_back(overflow2tc(mul2tc(op0->type, op0, op1)));
+    new_expr_ref = constant_struct2tc(type, members);
+  }
   else
   {
     log_error("{}\nmigrate expr failed", expr);
