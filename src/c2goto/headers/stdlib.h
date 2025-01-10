@@ -1,6 +1,10 @@
+#ifndef __ESBMC_HEADERS_STDLIB_H_
+#define __ESBMC_HEADERS_STDLIB_H_
 
-#pragma once
+#ifdef __clang__
+#include_next <stdlib.h>
 
+#else
 #include <__esbmc/stddefs.h>
 
 #include <stddef.h> /* size_t */
@@ -106,3 +110,8 @@ long random(void);
 void srand(unsigned int s);
 
 __ESBMC_C_CPP_END
+
+
+#endif /* !defined(__clang__) */
+
+#endif /* __ESBMC_HEADERS_STDLIB_H_ */
