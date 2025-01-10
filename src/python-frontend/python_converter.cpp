@@ -390,9 +390,10 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   std::string lhs_type = get_operand_type(left);
   std::string rhs_type = get_operand_type(right);
 
-  if (rhs_type.empty() && element.contains("comparators") &&
-      element["comparators"][0].contains("value") &&
-      element["comparators"][0]["value"].is_string())
+  if (
+    rhs_type.empty() && element.contains("comparators") &&
+    element["comparators"][0].contains("value") &&
+    element["comparators"][0]["value"].is_string())
   {
     rhs_type = "str";
   }
@@ -414,10 +415,12 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     else if (op == "Add")
     {
       array_typet lhs_str_type = static_cast<array_typet &>(lhs.type());
-      BigInt lhs_str_size = binary2integer(lhs_str_type.size().value().c_str(), true);
+      BigInt lhs_str_size =
+        binary2integer(lhs_str_type.size().value().c_str(), true);
 
       array_typet rhs_str_type = static_cast<array_typet &>(rhs.type());
-      BigInt rhs_str_size = binary2integer(rhs_str_type.size().value().c_str(), true);
+      BigInt rhs_str_size =
+        binary2integer(rhs_str_type.size().value().c_str(), true);
 
       BigInt concat_str_size = lhs_str_size + rhs_str_size;
 
@@ -428,14 +431,16 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
       auto get_value_from_symbol = [&](const std::string &symbol_id, exprt &e) {
         symbolt *symbol = context.find_symbol(symbol_id);
-        if(!symbol) return;
+        if (!symbol)
+          return;
         for (const exprt &ch : symbol->value.operands())
-          if(i < e.operands().size())
+          if (i < e.operands().size())
             e.operands().at(i++) = ch;
       };
 
       auto get_value_from_json = [&](const nlohmann::json &elem, exprt &e) {
-        if(!elem.contains("value") || !elem["value"].is_string()) return;
+        if (!elem.contains("value") || !elem["value"].is_string())
+          return;
         const std::string &value = elem["value"].get<std::string>();
         std::vector<uint8_t> string_literal =
           std::vector<uint8_t>(std::begin(value), std::end(value));
@@ -444,7 +449,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
         for (uint8_t &ch : string_literal)
         {
-          if(i >= e.operands().size()) break;
+          if (i >= e.operands().size())
+            break;
           exprt char_value = constant_exprt(
             integer2binary(BigInt(ch), bv_width(char_type)),
             integer2string(BigInt(ch)),
@@ -581,12 +587,15 @@ symbolt *python_converter::find_function_in_base_classes(
         std::string("@C@" + base_class + "@F@" + method_name));
 
       func = context.find_symbol(sym_id.c_str());
-      if (func) {
+      if (func)
+      {
         return func;
       }
       // Try looking up in base classes recursively
-      func = find_function_in_base_classes(base_class, sym_id, method_name, is_ctor);
-      if (func) {
+      func =
+        find_function_in_base_classes(base_class, sym_id, method_name, is_ctor);
+      if (func)
+      {
         return func;
       }
 
@@ -1149,26 +1158,28 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     std::string sid_str = sid.to_string();
 
     symbolt *symbol = context.find_symbol(sid_str);
-    if (!symbol) {
+    if (!symbol)
+    {
       symbol = find_symbol_in_global_scope(sid_str);
     }
-    if (!symbol) {
+    if (!symbol)
+    {
       symbol = find_symbol_in_imported_modules(sid_str);
     }
-    if (!symbol) {
+    if (!symbol)
+    {
       // Try to find in base classes if this is a class member
       std::string class_name = get_classname_from_symbol_id(sid_str);
-      if (!class_name.empty()) {
-        symbol = find_function_in_base_classes(
-          class_name, sid_str, "", false);
+      if (!class_name.empty())
+      {
+        symbol = find_function_in_base_classes(class_name, sid_str, "", false);
       }
     }
-    if (!symbol) {
-      throw std::runtime_error("Symbol " + sid_str + " not found in:\n" +
-        "- Current context\n" +
-        "- Global scope\n" + 
-        "- Imported modules\n" +
-        "- Base classes");
+    if (!symbol)
+    {
+      throw std::runtime_error(
+        "Symbol " + sid_str + " not found in:\n" + "- Current context\n" +
+        "- Global scope\n" + "- Imported modules\n" + "- Base classes");
     }
 
     expr = symbol_expr(*symbol);
@@ -1536,13 +1547,13 @@ void python_converter::get_var_assign(
         exprt string_content = rhs;
         // Create new array with same size
         exprt new_array = gen_zero(rhs_type);
-        
+
         // Copy each character value
-        for(unsigned i = 0; i < rhs.operands().size(); i++)
+        for (unsigned i = 0; i < rhs.operands().size(); i++)
         {
           new_array.operands()[i] = rhs.operands()[i];
         }
-        
+
         rhs = new_array;
         lhs_symbol->type = rhs_type;
       }
@@ -1684,27 +1695,36 @@ void python_converter::get_function_definition(
   // Function return type
   code_typet type;
   const nlohmann::json &return_node = function_node["returns"];
-  if (return_node.contains("id") && return_node["id"].get<std::string>() == "str")
+  if (
+    return_node.contains("id") && return_node["id"].get<std::string>() == "str")
   {
     // For string return types, properly set the array size
     const auto &return_stmt = get_return_statement(function_node);
-    if(return_stmt["value"]["_type"] == "Name") {
+    if (return_stmt["value"]["_type"] == "Name")
+    {
       // Get size from function argument
-      for(const auto& arg : function_node["args"]["args"]) {
-        if(arg["arg"].get<std::string>() == return_stmt["value"]["id"].get<std::string>()) {
+      for (const auto &arg : function_node["args"]["args"])
+      {
+        if (
+          arg["arg"].get<std::string>() ==
+          return_stmt["value"]["id"].get<std::string>())
+        {
           // Copy same size as input argument for function like f(x: str) -> str
           size_t arg_size = 3; // Default if not found
-          if(return_stmt["value"]["value"].is_string()) {
+          if (return_stmt["value"]["value"].is_string())
+          {
             arg_size = return_stmt["value"]["value"].get<std::string>().size();
           }
           type.return_type() = get_typet("str", arg_size);
           break;
         }
       }
-    } else if(return_stmt["value"]["_type"] == "Constant") {
+    }
+    else if (return_stmt["value"]["_type"] == "Constant")
+    {
       // Get size directly from string literal
-      type.return_type() = get_typet("str", 
-        return_stmt["value"]["value"].get<std::string>().size());
+      type.return_type() = get_typet(
+        "str", return_stmt["value"]["value"].get<std::string>().size());
     }
   }
   else if (return_node.contains("id"))
@@ -2044,8 +2064,6 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
 
   return block;
 }
-
-
 
 python_converter::python_converter(
   contextt &_context,
