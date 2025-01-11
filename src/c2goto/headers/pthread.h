@@ -653,6 +653,11 @@ extern int pthread_cond_broadcast (pthread_cond_t *__cond);
 extern int pthread_cond_wait (pthread_cond_t *__restrict __cond,
 			      pthread_mutex_t *__restrict __mutex);
 
+extern int pthread_cond_clockwait(pthread_cond_t *__restrict cond,
+                                  pthread_mutex_t *__restrict mutex,
+                                  __clockid_t clock_id, const struct
+                                  timespec *__restrict abstime);
+
 /* Wait for condition variable COND to be signaled or broadcast until
    ABSTIME.  MUTEX is assumed to be locked before.  ABSTIME is an
    absolute time specification; zero is the beginning of the epoch
