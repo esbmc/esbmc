@@ -15,7 +15,7 @@ ESBMC supports:
 
 ESBMC also implements state-of-the-art incremental BMC and *k*-induction proof-rule algorithms based on Satisfiability Modulo Theories (SMT) and Constraint Programming (CP) solvers.
 
-We provide some background material/publications to help you understand exactly what ESBMC can offer. These are available [online](https://ssvlab.github.io/esbmc/publications.html). You can also check the ESBMC [architecture](https://github.com/esbmc/esbmc/blob/master/ARCHITECTURE.md) for further information about our main components.
+We provide some background material/publications to help you understand exactly what ESBMC can offer. These are available [online](https://ssvlab.github.io/esbmc/publications.html). For further information about our main components, you can also check the ESBMC [architecture](https://github.com/esbmc/esbmc/blob/master/ARCHITECTURE.md).
 
 Our main website is [esbmc.org](http://esbmc.org). 
 
@@ -69,13 +69,13 @@ make -j4
 M1/M2/M3/M4 Macs are now supported.
 
 Given the common elements of OS X, run the script. It runs on both ARM and Intel macs. You do need homebrew installed.
-It creates the build folder, installs the boolector solver, and makes esbmc available globally. The script supports building the python frontend as well. Note that the python frontend is quite early in the support for python.
+It creates the build folder, installs the Boolector SMT solver, and makes esbmc available globally. The script supports building the Python frontend as well. Note that the Python frontend is quite early in the support for Python.
 
 ```
  ./build-esbmc-mac.sh
 ```
 
-The raw command is given here for reference
+The raw command is given here for reference.
 
 ```
 cmake .. -DZ3_DIR=/opt/homebrew/Cellar/z3/4.13.4 -DENABLE_Z3=1 -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -DLLVM_DIR=/opt/homebrew/opt/llvm/lib/cmake/llvm -DClang_DIR=/opt/homebrew/opt/llvm/lib/cmake/clang
@@ -252,7 +252,7 @@ ESBMC detects errors in software by simulating a finite prefix of the program ex
  * Memory leaks
 
 Concurrent software (using the pthread API) is verified by explicitly exploring interleavings, producing one symbolic execution per interleaving. By default, pointer-safety, array-out-of-bounds, division-by-zero, and user-specified assertions will be checked for; one can also specify options to check concurrent programs for:
- * Deadlock (only on pthread mutexes and convars)
+ * Deadlock (only on pthread mutexes and conditional variables)
  * Data races (i.e., competing writes)
  * Atomicity violations at visible assignments
  * Lock acquisition ordering
@@ -332,7 +332,7 @@ document explains the necessary installation steps.
 
 ESBMC is open-source software mainly distributed under the Apache License 2.0. It contains a significant amount of other people's software. However, please take a look at the COPYING file to explain who owns what and under what terms it is distributed.
 
-We'd be extremely happy to receive contributions to improve ESBMC (under the terms of the Apache License 2.0). If you'd like to submit anything, please file a pull request against the public GitHub repo. General discussion and release announcements will be made via GitHub. Please post an issue on GitHub and contact us about research or collaboration.
+We'd be extremely happy to receive contributions to improve ESBMC (under the terms of the Apache License 2.0). Please file a pull request against the public GitHub repo if you'd like to submit anything. General discussion and release announcements will be made via GitHub. Please post an issue on GitHub and contact us about research or collaboration.
 
 Please review the [developer documentation](https://github.com/esbmc/esbmc/blob/master/CONTRIBUTIONS.md) if you want to contribute to ESBMC.
 
