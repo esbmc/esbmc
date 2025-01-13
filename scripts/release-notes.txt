@@ -1,5 +1,19 @@
 Release Notes of the ESBMC model checker
 
+*** Version 7.8.1
+
+This is the ESBMC version used at the FSE'25 submission:
+
+- Feature/build mac (#2219)
+- GCSE now only caches overflow inner operands (#2221)
+- Only replace inner expressions for overflow in GCSE (#2227)
+- Handling chained comparisons in Python (#2228)
+- GCSE now resets index2t (#2230)
+- Force update of tags in benchexec action (#2234)
+- Added new catch exception for GCSE (#2233)
+- Improve the adjustment of capture variables (#2222)
+
+
 *** Version 7.8
 
 This release introduces several significant improvements, feature enhancements, bug fixes, and updates to improve the functionality and usability of ESBMC. Below is a detailed breakdown of the changes:
