@@ -1,4 +1,3 @@
-#include <iostream>
 #include <cctype> // For isblank
 #include <cassert> // For assert
 
@@ -8,12 +7,7 @@ void test_isblank_failure() {
 }
 
 int main() {
-    try {
-        test_isblank_failure();
-    } catch (...) {
-        std::cerr << "Test failed as expected: isblank('a') is not blank" << std::endl;
-        return 1; // Indicate failure
-    }
+    test_isblank_failure();
     return 0; // Indicate success
 }
 

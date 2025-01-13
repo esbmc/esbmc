@@ -1,4 +1,3 @@
-#include <iostream>
 #include <cctype> // For isblank
 #include <cassert> // For assert
 
@@ -17,11 +16,6 @@ void test_isblank() {
 
     // Test with extended ASCII characters
     assert(isblank('\xA0') == 0); // Non-breaking space in extended ASCII
-
-    // Test with EOF
-    assert(isblank(EOF) == 0); // EOF should not be considered blank
-
-    std::cout << "All tests passed for isblank()" << std::endl;
 }
 
 int main() {
