@@ -934,7 +934,7 @@ const nlohmann::json &get_return_statement(const nlohmann::json &function)
 
   throw std::runtime_error(
     "Function " + function["name"].get<std::string>() +
-    "has no return statement");
+    " has no return statement");
 }
 
 void python_converter::get_var_assign(
