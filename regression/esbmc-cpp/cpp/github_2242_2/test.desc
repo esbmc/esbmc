@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--no-abstracted-cpp-includes
+^VERIFICATION FAILED$
