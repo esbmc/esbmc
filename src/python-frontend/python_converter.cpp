@@ -703,6 +703,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   case ExpressionType::LIST:
   {
+    exprt zero = gen_zero(size_type());
+    exprt &list_size = static_cast<array_typet &>(current_element_type).size();
+    if (list_size == zero)
+    {
+      current_element_type = type_handler_.build_array(
+        current_element_type.subtype(), element["elts"].size());
+    }
+
     expr = gen_zero(current_element_type);
     unsigned int i = 0;
     for (auto &e : element["elts"])
@@ -1038,7 +1046,7 @@ void python_converter::get_var_assign(
   {
     if (lhs_symbol)
     {
-      if (lhs_type == "str")
+      if (lhs_type == "str" || lhs_type == "list")
       {
         /* When a string is assigned the result of a concatenation, we initially
          * create the LHS type as a zero-size array: "current_element_type = get_typet(lhs_type, type_size);"
