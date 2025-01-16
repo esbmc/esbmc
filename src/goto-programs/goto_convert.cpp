@@ -12,6 +12,7 @@
 #include <util/prefix.h>
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>
+#include <iostream>
 
 static bool is_empty(const goto_programt &goto_program)
 {
@@ -1168,6 +1169,7 @@ void goto_convertt::convert_assume(const codet &code, goto_programt &dest)
   t->location = code.location();
 }
 
+// --------------Original For Loop Code------------------------------------
 void goto_convertt::convert_for(const codet &code, goto_programt &dest)
 {
   if (code.operands().size() != 4)
@@ -1176,37 +1178,37 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
     abort();
   }
 
+  exprt tmp = code.op1();
+  const exprt *cond = &tmp;
+  const locationt &location = code.location();
+
+  bool mark_loop_head = true;
+
+  if(cond->has_operands()){
+    const exprt& op = cond->op0();
+    if(strcmp(op.name().c_str(), "__ESBMC_atexits") == 0 ){
+      // hack, this is some ESBMC internal loop
+      // we don't want to mark it as a loop for the purpose of invariant gen
+      mark_loop_head = false;
+    }
+  }
+
   // turn for(A; c; B) { P } into
   //  A; while(c) { P; B; }
   //-----------------------------
   //    A;
-  // u: sideeffects in c
   // v: if(!c) goto z;
   // w: P;
   // x: B;               <-- continue target
-  // y: goto u;
+  // y: goto v
   // z: ;                <-- break target
 
   // A;
   if (code.op0().is_not_nil())
     convert(to_code(code.op0()), dest);
 
-  exprt tmp = code.op1();
-
-  exprt cond = tmp;
-  goto_programt sideeffects;
-
-  remove_sideeffects(cond, sideeffects);
-
   // save break/continue targets
   break_continue_targetst old_targets(targets);
-
-  // do the u label
-  goto_programt::targett u = sideeffects.instructions.begin();
-
-  // do the v label
-  goto_programt tmp_v;
-  goto_programt::targett v = tmp_v.add_instruction();
 
   // do the z label
   goto_programt tmp_z;
@@ -1226,35 +1228,47 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
     convert(to_code(code.op2()), tmp_x);
   }
 
+# if 0
   // optimize the v label
   if (sideeffects.instructions.empty())
     u = v;
+#endif
 
   // set the targets
   targets.set_break(z);
   targets.set_continue(tmp_x.instructions.begin());
 
   // v: if(!c) goto z;
+
+#if 0
   v->make_goto(z);
   expr2tc tmp_cond;
   migrate_expr(cond, tmp_cond);
   tmp_cond = not2tc(tmp_cond);
   v->guard = tmp_cond;
   v->location = code.location();
+#endif
+
+  goto_programt tmp_branch;
+  generate_conditional_branch(gen_not(*cond), z, location, tmp_branch, mark_loop_head);
+
+  // do the v label
+  goto_programt::targett v = tmp_branch.instructions.begin();
+
+  // do the y label
+  goto_programt tmp_y;
+  goto_programt::targett y = tmp_y.add_instruction();
+
+  // y: if(c) goto v;
+  y->make_goto(v);
+  y->guard = gen_true_expr();
+  y->location = code.location();
 
   // do the w label
   goto_programt tmp_w;
   convert(to_code(code.op3()), tmp_w);
 
-  // y: goto u;
-  goto_programt tmp_y;
-  goto_programt::targett y = tmp_y.add_instruction();
-  y->make_goto(u);
-  y->guard = gen_true_expr();
-  y->location = code.location();
-
-  dest.destructive_append(sideeffects);
-  dest.destructive_append(tmp_v);
+  dest.destructive_append(tmp_branch);
   dest.destructive_append(tmp_w);
   dest.destructive_append(tmp_x);
   dest.destructive_append(tmp_y);
@@ -1271,6 +1285,7 @@ void goto_convertt::convert_while(const codet &code, goto_programt &dest)
     log_error("while takes two operands");
     abort();
   }
+  // std::cout<<code.pretty()<<std::endl;
 
   exprt tmp = code.op0();
   const exprt *cond = &tmp;
