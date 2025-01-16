@@ -1,5 +1,5 @@
 #!/bin/bash
-
+cd ..
 # Check if Homebrew is installed
 if ! command -v brew &> /dev/null; then
     echo "Error: Homebrew is not installed!"
@@ -101,4 +101,3 @@ if [[ $use_python =~ ^[Yy]$ ]]; then
     echo "source esbmc-venv/bin/activate"
     echo "Then you can use ESBMC with Python files"
 fi
-
