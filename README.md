@@ -42,9 +42,10 @@ To compile ESBMC on Fedora 40 with the latest version of LLVM and the SMT solver
 ```sh
 # Warning, the --allowerasing parameter will also remove incompatible packages to the packages specified below
 sudo dnf install --best --allowerasing "@Development Tools" clang llvm llvm-devel clang-tools-extra python3 git ccache unzip wget curl bison flex gcc-c++ glibc-devel glibc-devel.i686 boost-devel boost-devel.i686 z3-devel clang-devel clang-devel.i686 cmake zlib-devel libffi-devel libstdc++-devel libstdc++-devel.i686
-
+git clone https://github.com/esbmc/esbmc.git
+cd esbmc
+mkdir build && cd build
 cmake .. -DENABLE_Z3=1 -DZ3_DIR=/usr/include/z3
-
 make -j4
 ```
 
