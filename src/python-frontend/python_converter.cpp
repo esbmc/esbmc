@@ -2,6 +2,7 @@
 #include <python-frontend/json_utils.h>
 #include <python_frontend_types.h>
 #include <python-frontend/symbol_id.h>
+#include <python-frontend/function_call_expr.h>
 #include <ansi-c/convert_float_literal.h>
 #include <util/std_code.h>
 #include <util/c_types.h>
@@ -99,99 +100,12 @@ static struct_typet::componentt build_component(
   return comp;
 }
 
-static typet build_array(const typet &sub_type, const size_t size)
-{
-  return array_typet(
-    sub_type,
-    constant_exprt(
-      integer2binary(BigInt(size), bv_width(size_type())),
-      integer2string(BigInt(size)),
-      size_type()));
-}
-
-// Convert Python/AST types to irep types
-typet python_converter::get_typet(const std::string &ast_type, size_t type_size)
-{
-  if (ast_type == "float")
-    return double_type();
-  if (ast_type == "int" || ast_type == "GeneralizedIndex")
-    /* FIXME: We need to map 'int' to another irep type that provides unlimited precision
-	https://docs.python.org/3/library/stdtypes.html#numeric-types-int-float-complex */
-    return int_type();
-  if (ast_type == "uint64" || ast_type == "Epoch" || ast_type == "Slot")
-    return long_long_uint_type();
-  if (ast_type == "bool")
-    return bool_type();
-  if (ast_type == "uint256" || ast_type == "BLSFieldElement")
-    return uint256_type();
-  if (ast_type == "bytes")
-  {
-    // TODO: Keep "bytes" as signed char instead of "int_type()", and cast to an 8-bit integer in [] operations
-    // or consider modelling it with string_constantt.
-    return build_array(int_type(), type_size);
-  }
-  if (ast_type == "str")
-  {
-    if (type_size == 1)
-    {
-      typet type = char_type();
-      type.set("#cpp_type", "char");
-      return type;
-    }
-    return build_array(char_type(), type_size);
-  }
-  if (is_class(ast_type, ast_json))
-    return symbol_typet("tag-" + ast_type);
-
-  return empty_typet();
-}
-
-std::string type_to_string(const typet &t)
-{
-  if (t == double_type())
-    return "float";
-  if (t == int_type())
-    return "int";
-  if (t == long_long_uint_type())
-    return "uint64";
-  if (t == bool_type())
-    return "bool";
-  if (t == uint256_type())
-    return "uint256";
-  if (t.is_array())
-  {
-    const array_typet &arr_type = static_cast<const array_typet &>(t);
-    if (arr_type.subtype() == char_type())
-      return "str";
-    if (arr_type.subtype() == int_type())
-      return "bytes";
-    if (arr_type.subtype().is_array())
-      return type_to_string(arr_type.subtype());
-  }
-
-  return "";
-}
-
-typet python_converter::get_typet(const nlohmann::json &elem)
-{
-  if (elem.is_number_integer() || elem.is_number_unsigned())
-    return int_type();
-  else if (elem.is_boolean())
-    return bool_type();
-  else if (elem.is_number_float())
-    return float_type();
-  else if (elem.is_string())
-    return build_array(char_type(), elem.get<std::string>().size());
-
-  throw std::runtime_error("Invalid type");
-}
-
-static symbolt create_symbol(
+symbolt python_converter::create_symbol(
   const std::string &module,
   const std::string &name,
   const std::string &id,
   const locationt &location,
-  const typet &type)
+  const typet &type) const
 {
   symbolt symbol;
   symbol.mode = "Python";
@@ -262,7 +176,7 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
   auto update_symbol = [&](exprt &expr) {
     symbol_id sid = create_symbol_id();
     sid.set_object(expr.name().c_str());
-    symbolt *s = context.find_symbol(sid.to_string());
+    symbolt *s = symbol_table_.find_symbol(sid.to_string());
 
     if (s != nullptr)
     {
@@ -304,48 +218,13 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
 
 symbol_id python_converter::create_symbol_id(const std::string &filename) const
 {
-  return symbol_id(filename, current_class_name, current_func_name);
+  return symbol_id(filename, current_class_name_, current_func_name_);
 }
 
 symbol_id python_converter::create_symbol_id() const
 {
-  return symbol_id(current_python_file, current_class_name, current_func_name);
-}
-
-// Get the type of an operand in binary operations
-std::string python_converter::get_operand_type(const nlohmann::json &element)
-{
-  // Operand is a variable
-  if (element["_type"] == "Name")
-    return get_var_type(element["id"]);
-
-  // Operand is a literal
-  if (element["_type"] == "Constant")
-  {
-    const auto &value = element["value"];
-    if (value.is_string())
-      return "str";
-    if (value.is_number_integer() || value.is_number_unsigned())
-      return "int";
-    else if (value.is_boolean())
-      return "bool";
-    else if (value.is_number_float())
-      return "float";
-  }
-
-  // Operand is a list element
-  if (
-    element["_type"] == "Subscript" &&
-    get_operand_type(element["value"]) == "list")
-  {
-    nlohmann::json list_node = find_var_decl(
-      element["value"]["id"].get<std::string>(), current_func_name, ast_json);
-
-    array_typet list_type = get_list_type(list_node["value"]);
-    return type_to_string(list_type.subtype());
-  }
-
-  return std::string();
+  return symbol_id(
+    current_python_file, current_class_name_, current_func_name_);
 }
 
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
@@ -389,8 +268,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   assert(!op.empty());
 
   // Get LHS and RHS types from variable annotation
-  std::string lhs_type = get_operand_type(left);
-  std::string rhs_type = get_operand_type(right);
+  std::string lhs_type = type_handler_.get_operand_type(left);
+  std::string rhs_type = type_handler_.get_operand_type(right);
 
   // If RHS is a string literal, like x = "foo", then we determine the type from the JSON value
   if (
@@ -414,7 +293,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
         binary2integer(arr_type.size().value().as_string(), false);
 
       // call strncmp to compare strings
-      symbolt *strncmp = context.find_symbol("c:@F@strncmp");
+      symbolt *strncmp = symbol_table_.find_symbol("c:@F@strncmp");
       assert(strncmp);
       side_effect_expr_function_callt sideeffect;
       sideeffect.function() = symbol_expr(*strncmp);
@@ -441,13 +320,13 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
       BigInt concat_str_size = lhs_str_size + rhs_str_size;
 
-      typet t = get_typet("str", concat_str_size.to_uint64());
+      typet t = type_handler_.get_typet("str", concat_str_size.to_uint64());
       exprt expr = gen_zero(t);
 
       unsigned int i = 0;
 
       auto get_value_from_symbol = [&](const std::string &symbol_id, exprt &e) {
-        symbolt *symbol = context.find_symbol(symbol_id);
+        symbolt *symbol = symbol_table_.find_symbol(symbol_id);
         assert(symbol);
         // Copy symbol value
         for (const exprt &ch : symbol->value.operands())
@@ -577,7 +456,7 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
   if (
     element["operand"].contains("value") &&
     element["operand"]["_type"] == "Constant")
-    type = get_typet(element["operand"]["value"]);
+    type = type_handler_.get_typet(element["operand"]["value"]);
 
   exprt unary_expr(
     get_op(element["op"]["_type"].get<std::string>(), type), type);
@@ -600,7 +479,7 @@ python_converter::get_location_from_decl(const nlohmann::json &ast_node)
     location.set_column(ast_node["col_offset"].get<int>());
 
   location.set_file(current_python_file.c_str());
-  location.set_function(current_func_name);
+  location.set_function(current_func_name_);
   return location;
 }
 
@@ -634,7 +513,7 @@ symbolt *python_converter::find_function_in_base_classes(
         std::string("@C@" + current_class + "@F@" + current_func_name).length(),
         std::string("@C@" + base_class + "@F@" + method_name));
 
-      if ((func = context.find_symbol(sym_id.c_str())))
+      if ((func = symbol_table_.find_symbol(sym_id.c_str())))
         return func;
 
       current_class = base_class;
@@ -644,8 +523,8 @@ symbolt *python_converter::find_function_in_base_classes(
   return func;
 }
 
-symbolt *python_converter::find_symbol_in_imported_modules(
-  const std::string &symbol_id) const
+symbolt *
+python_converter::find_imported_symbol(const std::string &symbol_id) const
 {
   for (const auto &obj : ast_json["body"])
   {
@@ -655,7 +534,9 @@ symbolt *python_converter::find_symbol_in_imported_modules(
       std::string imported_symbol = std::regex_replace(
         symbol_id, pattern, "py:" + obj["full_path"].get<std::string>() + "@");
 
-      if (symbolt *func_symbol = context.find_symbol(imported_symbol.c_str()))
+      if (
+        symbolt *func_symbol =
+          symbol_table_.find_symbol(imported_symbol.c_str()))
         return func_symbol;
     }
   }
@@ -679,7 +560,7 @@ python_converter::find_symbol_in_global_scope(std::string &symbol_id) const
   if (func_start_pos != std::string::npos)
     symbol_id.erase(func_start_pos, func_end_pos - func_start_pos);
 
-  return context.find_symbol(symbol_id);
+  return symbol_table_.find_symbol(symbol_id);
 }
 
 std::string python_converter::get_classname_from_symbol_id(
@@ -700,104 +581,12 @@ std::string python_converter::get_classname_from_symbol_id(
   return class_name;
 }
 
-bool python_converter::is_imported_module(const std::string &module_name)
+bool python_converter::is_imported_module(const std::string &module_name) const
 {
   if (imported_modules.find(module_name) != imported_modules.end())
     return true;
 
   return json_utils::is_module(module_name, ast_json);
-}
-
-symbol_id python_converter::build_function_id(const nlohmann::json &element)
-{
-  const std::string __ESBMC_get_object_size = "__ESBMC_get_object_size";
-  const std::string __ESBMC_assume = "__ESBMC_assume";
-  const std::string __VERIFIER_assume = "__VERIFIER_assume";
-
-  bool is_member_function_call = false;
-  const nlohmann::json &func_json = element["func"];
-  const std::string &func_type = func_json["_type"];
-  std::string func_name, obj_name, class_name;
-
-  symbol_id func_symbol_id = create_symbol_id();
-
-  if (func_type == "Name")
-    func_name = func_json["id"];
-  else if (func_type == "Attribute") // Handling obj_name.func_name() calls
-  {
-    is_member_function_call = true;
-    func_name = func_json["attr"];
-
-    if (func_json["value"]["_type"] == "Attribute")
-    {
-      obj_name = func_json["value"]["attr"];
-    }
-    else if (
-      func_json["value"]["_type"] == "Constant" &&
-      func_json["value"]["value"].is_string())
-    {
-      obj_name = "str";
-    }
-    else if (func_json["value"]["_type"] == "BinOp")
-    {
-      std::string lhs_type = get_operand_type(func_json["value"]["left"]);
-      std::string rhs_type = get_operand_type(func_json["value"]["right"]);
-      assert(lhs_type == rhs_type);
-      obj_name = lhs_type;
-    }
-    else
-      obj_name = func_json["value"]["id"];
-
-    obj_name = json_utils::get_object_alias(ast_json, obj_name);
-
-    if (!is_class(obj_name, ast_json) && is_imported_module(obj_name))
-    {
-      func_symbol_id = create_symbol_id(imported_modules[obj_name]);
-      is_member_function_call = false;
-    }
-  }
-
-  // build symbol_id
-  if (func_name == "len")
-  {
-    func_name = __ESBMC_get_object_size;
-    func_symbol_id.clear();
-    func_symbol_id.set_prefix("c:");
-  }
-  else if (is_builtin_type(obj_name))
-  {
-    class_name = obj_name;
-    func_symbol_id = symbol_id(current_python_file, class_name, func_name);
-  }
-  else if (func_name == __ESBMC_assume || func_name == __VERIFIER_assume)
-  {
-    func_symbol_id.clear();
-  }
-
-  // Insert class name in the symbol id
-  if (is_constructor_call(element))
-    class_name = func_name;
-  else if (is_member_function_call)
-  {
-    if (is_builtin_type(obj_name) || is_class(obj_name, ast_json))
-      class_name = obj_name;
-    else
-    {
-      auto obj_node = find_var_decl(obj_name, current_func_name, ast_json);
-
-      if (obj_node.empty())
-        throw std::runtime_error("Class " + obj_name + " not found");
-
-      class_name = obj_node["annotation"]["id"].get<std::string>();
-    }
-  }
-
-  if (!class_name.empty())
-    func_symbol_id.set_class(class_name);
-
-  func_symbol_id.set_function(func_name);
-
-  return func_symbol_id;
 }
 
 exprt python_converter::get_function_call(const nlohmann::json &element)
@@ -828,225 +617,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
   }
 
-  // TODO: Refactor into different classes/functions
-  symbol_id func_id = build_function_id(element);
-  const std::string &func_name = func_id.get_function();
-
-  // nondet_X() functions restricted to basic types supported in Python
-  std::regex pattern(
-    R"(nondet_(int|char|bool|float)|__VERIFIER_nondet_(int|char|bool|float))");
-
-  // Handle non-det functions
-  if (std::regex_match(func_name, pattern))
-  {
-    // Function name pattern: nondet_(type). e.g: nondet_bool(), nondet_int()
-    size_t underscore_pos = func_name.rfind("_");
-    std::string type = func_name.substr(underscore_pos + 1);
-    exprt rhs = exprt("sideeffect", get_typet(type));
-    rhs.statement("nondet");
-    return rhs;
-  }
-
-  if (is_builtin_type(func_name) || is_consensus_type(func_name))
-  {
-    /* Calls to initialise variables using built-in type functions such as int(1), str("test"), bool(1)
-       * are converted to simple variable assignments, simplifying the handling of built-in type objects.
-       * For example, x = int(1) becomes x = 1. */
-    size_t arg_size = 1;
-    auto arg = element["args"][0];
-
-    if (func_name == "str")
-      arg_size = arg["value"].get<std::string>().size(); // get string length
-
-    else if (func_name == "int" && arg["value"].is_number_float())
-    {
-      double arg_value = arg["value"].get<double>();
-      arg["value"] = static_cast<int>(arg_value);
-    }
-
-    typet t = get_typet(func_name, arg_size);
-    exprt expr = get_expr(arg);
-    expr.type() = t;
-    return expr;
-  }
-
-  locationt location = get_location_from_decl(element);
-  const std::string &func_symbol_id = func_id.to_string();
-  assert(!func_symbol_id.empty());
-
-  if (
-    func_name == "__ESBMC_assume" || func_name == "__VERIFIER_assume" ||
-    func_name == "__ESBMC_get_object_size")
-  {
-    if (context.find_symbol(func_symbol_id.c_str()) == nullptr)
-    {
-      // Create/init __ESBMC_get_object_size symbol
-      code_typet code_type;
-      if (func_name == "__ESBMC_get_object_size")
-      {
-        code_type.return_type() = int_type();
-        code_type.arguments().push_back(pointer_typet(empty_typet()));
-      }
-
-      symbolt symbol = create_symbol(
-        current_python_file, func_name, func_symbol_id, location, code_type);
-      context.add(symbol);
-    }
-  }
-
-  bool is_ctor_call = is_constructor_call(element);
-  bool is_instance_method_call = false;
-  bool is_class_method_call = false;
-  symbolt *obj_symbol = nullptr;
-  symbol_id obj_symbol_id = create_symbol_id();
-
-  if (element["func"]["_type"] == "Attribute")
-  {
-    const auto &subelement = element["func"]["value"];
-
-    std::string caller;
-    if (subelement["_type"] == "Attribute")
-      caller = subelement["attr"].get<std::string>();
-    else if (
-      subelement["_type"] == "Constant" || subelement["_type"] == "BinOp")
-      caller = func_id.get_class();
-    else
-      caller = subelement["id"].get<std::string>();
-
-    caller = json_utils::get_object_alias(ast_json, caller);
-
-    obj_symbol_id.set_object(caller);
-    obj_symbol = context.find_symbol(obj_symbol_id.to_string());
-
-    // Handling a function call as a class method call when:
-    // (1) The caller corresponds to a class name, for example: MyClass.foo().
-    // (2) Calling methods of built-in types, such as int.from_bytes()
-    //     All the calls to built-in methods are handled by class methods in operational models.
-    // (3) Calling a instance method from a built-in type object, for example: x.bit_length() when x is an int
-    // If the caller is a class or a built-in type, the following condition detects a class method call.
-    if (
-      is_class(caller, ast_json) || is_builtin_type(caller) ||
-      is_builtin_type(get_var_type(caller)))
-    {
-      is_class_method_call = true;
-    }
-    else if (!is_imported_module(caller))
-    {
-      is_instance_method_call = true;
-    }
-  }
-
-  const symbolt *func_symbol = context.find_symbol(func_symbol_id.c_str());
-
-  // Find function in imported modules
-  if (!func_symbol)
-    func_symbol = find_symbol_in_imported_modules(func_symbol_id);
-
-  if (func_symbol == nullptr)
-  {
-    if (is_ctor_call || is_instance_method_call)
-    {
-      // Get method from a base class when it is not defined in the current class
-      func_symbol = find_function_in_base_classes(
-        func_id.get_class(), func_symbol_id, func_name, is_ctor_call);
-
-      if (is_ctor_call)
-      {
-        if (!func_symbol)
-        {
-          // If __init__() is not defined for the class and bases,
-          // an assignment (x = MyClass()) is converted to a declaration (x:MyClass) in get_var_assign().
-          return exprt("_init_undefined");
-        }
-        base_ctor_called = true;
-      }
-      else if (is_instance_method_call)
-      {
-        assert(obj_symbol);
-
-        // Update obj attributes from self
-        update_instance_from_self(
-          get_classname_from_symbol_id(func_symbol->id.as_string()),
-          func_name,
-          obj_symbol_id.to_string());
-      }
-    }
-    else
-    {
-      log_warning("Undefined function: {}", func_name.c_str());
-      return exprt();
-    }
-  }
-
-  code_function_callt call;
-  call.location() = location;
-  call.function() = symbol_expr(*func_symbol);
-  const typet &return_type = to_code_type(func_symbol->type).return_type();
-  call.type() = return_type;
-
-  // Add self as first parameter
-  if (is_ctor_call)
-  {
-    // Self is the LHS
-    assert(ref_instance);
-    call.arguments().push_back(gen_address_of(*ref_instance));
-  }
-  else if (is_instance_method_call)
-  {
-    assert(obj_symbol);
-    // Passing object as "self" (first) parameter on instance method calls
-    call.arguments().push_back(gen_address_of(symbol_expr(*obj_symbol)));
-  }
-  else if (is_class_method_call)
-  {
-    // Passing a void pointer to the "cls" argument
-    typet t = pointer_typet(empty_typet());
-    call.arguments().push_back(gen_zero(t));
-
-    // All methods for the int class without parameters acts solely on the encapsulated integer value.
-    // Therefore, we always pass the caller (obj) as a parameter in these functions.
-    // For example, if x is an int instance, x.bit_length() call becomes bit_length(x)
-    if (
-      obj_symbol && get_var_type(obj_symbol->name.as_string()) == "int" &&
-      element["args"].empty())
-    {
-      call.arguments().push_back(symbol_expr(*obj_symbol));
-    }
-    else if (element["func"]["value"]["_type"] == "BinOp")
-    {
-      // Handling function call from binary expressions like: (x+1).bit_length()
-      call.arguments().push_back(get_expr(element["func"]["value"]));
-    }
-  }
-
-  for (const auto &arg_node : element["args"])
-  {
-    exprt arg = get_expr(arg_node);
-    if (func_name == "__ESBMC_get_object_size")
-    {
-      c_typecastt c_typecast(ns);
-      c_typecast.implicit_typecast(arg, pointer_typet(empty_typet()));
-    }
-
-    // All array function arguments (e.g. bytes type) are handled as pointers.
-    if (arg.type().is_array())
-      call.arguments().push_back(address_of_exprt(arg));
-    else
-      call.arguments().push_back(arg);
-  }
-
-  if (func_name == "__ESBMC_get_object_size")
-  {
-    side_effect_expr_function_callt sideeffect;
-    sideeffect.function() = call.function();
-    sideeffect.arguments() = call.arguments();
-    sideeffect.location() = call.location();
-    sideeffect.type() =
-      static_cast<const typet &>(call.function().type().return_type());
-    return sideeffect;
-  }
-
-  return call;
+  function_call_expr call(element, *this);
+  return call.build();
 }
 
 exprt python_converter::get_literal(const nlohmann::json &element)
@@ -1073,7 +645,7 @@ exprt python_converter::get_literal(const nlohmann::json &element)
   if (value.is_string() && value.get<std::string>().size() == 1)
   {
     const std::string &str = value.get<std::string>();
-    typet t = get_typet("str", str.size());
+    typet t = type_handler_.get_typet("str", str.size());
     return from_integer(str[0], t);
   }
 
@@ -1095,7 +667,7 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     }
     else // string literals
     {
-      t = get_typet("str", value.get<std::string>().size());
+      t = type_handler_.get_typet("str", value.get<std::string>().size());
       const std::string &value = element["value"].get<std::string>();
       string_literal = std::vector<uint8_t>(std::begin(value), std::end(value));
     }
@@ -1117,17 +689,6 @@ exprt python_converter::get_literal(const nlohmann::json &element)
   }
 
   throw std::runtime_error("Unsupported literal " + value.get<std::string>());
-}
-
-bool python_converter::has_multiple_types(const nlohmann::json &container)
-{
-  typet t = get_typet(container[0]["value"]);
-  for (auto it = container.begin() + 1; it != container.end(); ++it)
-  {
-    if (get_typet((*it)["value"]) != t)
-      return true;
-  }
-  return false;
 }
 
 exprt python_converter::get_expr(const nlohmann::json &element)
@@ -1197,9 +758,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
     symbolt *symbol = nullptr;
     if (
-      !(symbol = context.find_symbol(sid_str)) &&
+      !(symbol = symbol_table_.find_symbol(sid_str)) &&
       !(symbol = find_symbol_in_global_scope(sid_str)) &&
-      !(symbol = find_symbol_in_imported_modules(sid_str)))
+      !(symbol = find_imported_symbol(sid_str)))
     {
       throw std::runtime_error("Symbol " + sid_str + " not found");
     }
@@ -1222,7 +783,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       }
 
       // Get class definition from symbols table
-      symbolt *class_symbol = context.find_symbol(obj_type_name);
+      symbolt *class_symbol = symbol_table_.find_symbol(obj_type_name);
       if (!class_symbol)
       {
         throw std::runtime_error("Class \"" + obj_type_name + "\" not found");
@@ -1273,7 +834,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         sid.set_function("");
         sid.set_class(obj_type_name.substr(4));
         sid.set_object(attr_name);
-        symbolt *class_attr_symbol = context.find_symbol(sid.to_string());
+        symbolt *class_attr_symbol = symbol_table_.find_symbol(sid.to_string());
 
         if (!class_attr_symbol)
         {
@@ -1332,33 +893,6 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   return expr;
 }
 
-bool python_converter::is_constructor_call(const nlohmann::json &json)
-{
-  if (
-    !json.contains("_type") || json["_type"] != "Call" ||
-    !json["func"].contains("id"))
-    return false;
-
-  const std::string &func_name = json["func"]["id"];
-
-  if (is_builtin_type(func_name))
-    return false;
-
-  /* f:Foo = Foo()
-   * The statement is a constructor call if the function call on the
-   * rhs corresponds to the name of a class. */
-
-  bool is_ctor_call = false;
-  context.foreach_operand([&](const symbolt &s) {
-    if (s.type.id() == "struct" && s.name == func_name)
-    {
-      is_ctor_call = true;
-      return;
-    }
-  });
-  return is_ctor_call;
-}
-
 void python_converter::update_instance_from_self(
   const std::string &class_name,
   const std::string &func_name,
@@ -1407,47 +941,6 @@ size_t get_type_size(const nlohmann::json &ast_node)
   return type_size;
 }
 
-std::string python_converter::get_var_type(const std::string &var_name) const
-{
-  nlohmann::json ref = find_var_decl(var_name, current_func_name, ast_json);
-  if (ref.empty())
-    return std::string();
-
-  return ref["annotation"]["id"].get<std::string>();
-}
-
-typet python_converter::get_list_type(const nlohmann::json &list_value)
-{
-  if (list_value["_type"] == "List") // Get list value type from elements
-  {
-    const nlohmann::json &elts = list_value["elts"];
-    if (!has_multiple_types(elts)) // All elements have the same type
-    {
-      typet t = get_typet(elts[0]["value"]); // Get the first element type
-      return build_array(t, elts.size());
-    }
-    throw std::runtime_error("Multiple type lists are not supported yet");
-  }
-
-  if (list_value["_type"] == "Call") // Get list type from function return type
-  {
-    symbol_id sid = create_symbol_id();
-    if (list_value["func"]["_type"] == "Attribute")
-      sid.set_function(list_value["func"]["attr"]);
-    else
-      sid.set_function(list_value["func"]["id"]);
-
-    symbolt *func_symbol = context.find_symbol(sid.to_string());
-    if (!func_symbol)
-      func_symbol = find_symbol_in_imported_modules(sid.to_string());
-
-    assert(func_symbol);
-    return static_cast<code_typet &>(func_symbol->type).return_type();
-  }
-
-  return typet();
-}
-
 const nlohmann::json &get_return_statement(const nlohmann::json &function)
 {
   for (const auto &stmt : function["body"])
@@ -1476,9 +969,9 @@ void python_converter::get_var_assign(
       lhs_type = ast_node["annotation"]["id"];
 
     if (lhs_type == "list")
-      current_element_type = get_list_type(ast_node["value"]);
+      current_element_type = type_handler_.get_list_type(ast_node["value"]);
     else
-      current_element_type = get_typet(lhs_type, type_size);
+      current_element_type = type_handler_.get_typet(lhs_type, type_size);
   }
 
   exprt lhs;
@@ -1526,13 +1019,13 @@ void python_converter::get_var_assign(
       lhs = symbol_expr(symbol); // lhs is a simple variable
 
     lhs.location() = location_begin;
-    lhs_symbol = context.move_symbol_to_context(symbol);
+    lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
   }
   else if (ast_node["_type"] == "Assign")
   {
     const std::string &name = ast_node["targets"][0]["id"].get<std::string>();
     id.set_object(name);
-    lhs_symbol = context.find_symbol(id.to_string());
+    lhs_symbol = symbol_table_.find_symbol(id.to_string());
 
     if (!lhs_symbol)
       throw std::runtime_error("Type undefined for \"" + name + "\"");
@@ -1540,7 +1033,7 @@ void python_converter::get_var_assign(
     lhs = symbol_expr(*lhs_symbol);
   }
 
-  bool is_ctor_call = is_constructor_call(ast_node["value"]);
+  bool is_ctor_call = type_handler_.is_constructor_call(ast_node["value"]);
 
   if (is_ctor_call)
     ref_instance = &lhs;
@@ -1626,7 +1119,8 @@ void python_converter::get_compound_assign(
   std::string var_name = ast_node["target"]["id"].get<std::string>();
   nlohmann::json ref = get_var_node(var_name, ast_json);
   assert(!ref.empty());
-  current_element_type = get_typet(ref["annotation"]["id"].get<std::string>());
+  current_element_type =
+    type_handler_.get_typet(ref["annotation"]["id"].get<std::string>());
 
   exprt lhs = get_expr(ast_node["target"]);
   exprt rhs = get_binary_operator_expr(ast_node);
@@ -1715,7 +1209,8 @@ void python_converter::get_function_definition(
   const nlohmann::json &return_node = function_node["returns"];
   if (return_node.contains("id"))
   {
-    type.return_type() = get_typet(return_node["id"].get<std::string>());
+    type.return_type() =
+      type_handler_.get_typet(return_node["id"].get<std::string>());
   }
   else if (
     return_node.is_null() ||
@@ -1734,7 +1229,7 @@ void python_converter::get_function_definition(
       function_node["name"].get<std::string>(),
       json);
     assert(!return_var.empty());
-    type.return_type() = get_list_type(return_var["value"]);
+    type.return_type() = type_handler_.get_list_type(return_var["value"]);
   }
   else
   {
@@ -1742,18 +1237,18 @@ void python_converter::get_function_definition(
   }
 
   // Copy caller function name
-  const std::string caller_func_name = current_func_name;
+  const std::string caller_func_name = current_func_name_;
 
   // Function location
   locationt location = get_location_from_decl(function_node);
 
   current_element_type = type.return_type();
-  current_func_name = function_node["name"].get<std::string>();
+  current_func_name_ = function_node["name"].get<std::string>();
 
   // __init__() is renamed to Classname()
-  if (current_func_name == "__init__")
+  if (current_func_name_ == "__init__")
   {
-    current_func_name = current_class_name;
+    current_func_name_ = current_class_name_;
     typet ctor_type("constructor");
     type.return_type() = ctor_type;
   }
@@ -1771,11 +1266,12 @@ void python_converter::get_function_definition(
     // Argument type
     typet arg_type;
     if (arg_name == "self")
-      arg_type = gen_pointer_type(get_typet(current_class_name));
+      arg_type = gen_pointer_type(type_handler_.get_typet(current_class_name_));
     else if (arg_name == "cls")
       arg_type = pointer_typet(empty_typet());
     else
-      arg_type = get_typet(element["annotation"]["id"].get<std::string>());
+      arg_type =
+        type_handler_.get_typet(element["annotation"]["id"].get<std::string>());
 
     if (arg_type.is_array())
       arg_type = gen_pointer_type(arg_type.subtype());
@@ -1798,7 +1294,7 @@ void python_converter::get_function_definition(
     // Push arg
     type.arguments().push_back(arg);
 
-    // Create and add symbol to context
+    // Create and add symbol to symbol_table_
     symbolt param_symbol = create_symbol(
       location.get_file().as_string(), arg_name, arg_id, location, arg_type);
     param_symbol.lvalue = true;
@@ -1806,24 +1302,24 @@ void python_converter::get_function_definition(
     param_symbol.file_local = true;
     param_symbol.static_lifetime = false;
     param_symbol.is_extern = false;
-    context.add(param_symbol);
+    symbol_table_.add(param_symbol);
   }
 
   // Create symbol
   symbolt symbol = create_symbol(
-    module_name, current_func_name, id.to_string(), location, type);
+    module_name, current_func_name_, id.to_string(), location, type);
   symbol.lvalue = true;
   symbol.is_extern = false;
   symbol.file_local = false;
 
-  symbolt *added_symbol = context.move_symbol_to_context(symbol);
+  symbolt *added_symbol = symbol_table_.move_symbol_to_context(symbol);
 
   // Function body
   exprt function_body = get_block(function_node["body"]);
   added_symbol->value = function_body;
 
   // Restore caller function name
-  current_func_name = caller_func_name;
+  current_func_name_ = caller_func_name;
 }
 
 void python_converter::get_attributes_from_self(
@@ -1837,9 +1333,10 @@ void python_converter::get_attributes_from_self(
       stmt["target"]["value"]["id"] == "self")
     {
       std::string attr_name = stmt["target"]["attr"];
-      typet type = get_typet(stmt["annotation"]["id"].get<std::string>());
+      typet type =
+        type_handler_.get_typet(stmt["annotation"]["id"].get<std::string>());
       struct_typet::componentt comp =
-        build_component(current_class_name, attr_name, type);
+        build_component(current_class_name_, attr_name, type);
 
       auto &class_components = clazz.components();
       if (
@@ -1855,11 +1352,11 @@ void python_converter::get_class_definition(
   codet &target_block)
 {
   struct_typet clazz;
-  current_class_name = class_node["name"].get<std::string>();
-  clazz.tag(current_class_name);
-  std::string id = "tag-" + current_class_name;
+  current_class_name_ = class_node["name"].get<std::string>();
+  clazz.tag(current_class_name_);
+  std::string id = "tag-" + current_class_name_;
 
-  if (context.find_symbol(id) != nullptr)
+  if (symbol_table_.find_symbol(id) != nullptr)
     return;
 
   locationt location_begin = get_location_from_decl(class_node);
@@ -1867,23 +1364,23 @@ void python_converter::get_class_definition(
 
   // Add class to symbol table
   symbolt symbol =
-    create_symbol(module_name, current_class_name, id, location_begin, clazz);
+    create_symbol(module_name, current_class_name_, id, location_begin, clazz);
   symbol.is_type = true;
 
-  symbolt *added_symbol = context.move_symbol_to_context(symbol);
+  symbolt *added_symbol = symbol_table_.move_symbol_to_context(symbol);
 
   // Iterate over base classes
   for (auto &base_class : class_node["bases"])
   {
     const std::string &base_class_name = base_class["id"].get<std::string>();
     /* TODO: Define OMs for built-in type classes.
-     * This will allow us to add their definitions to the context
+     * This will allow us to add their definitions to the symbol_table_
      * inherit from them, and extend their functionality. */
     if (is_builtin_type(base_class_name) || is_consensus_type(base_class_name))
       continue;
 
     // Get class definition from symbols table
-    symbolt *class_symbol = context.find_symbol("tag-" + base_class_name);
+    symbolt *class_symbol = symbol_table_.find_symbol("tag-" + base_class_name);
     if (!class_symbol)
     {
       throw std::runtime_error("Base class not found: " + base_class_name);
@@ -1905,17 +1402,17 @@ void python_converter::get_class_definition(
 
       std::string method_name = class_member["name"].get<std::string>();
       if (method_name == "__init__")
-        method_name = current_class_name;
+        method_name = current_class_name_;
 
-      current_func_name = method_name;
+      current_func_name_ = method_name;
       get_function_definition(class_member);
 
       exprt added_method =
-        symbol_expr(*context.find_symbol(create_symbol_id().to_string()));
+        symbol_expr(*symbol_table_.find_symbol(create_symbol_id().to_string()));
 
       struct_typet::componentt method(added_method.name(), added_method.type());
       clazz.methods().push_back(method);
-      current_func_name.clear();
+      current_func_name_.clear();
     }
     // Process class attributes
     else if (class_member["_type"] == "AnnAssign")
@@ -1924,14 +1421,14 @@ void python_converter::get_class_definition(
        * If the symbol for the type is not found, attempt to locate
        * the class definition in the AST and convert it if available. */
       const std::string &class_name = class_member["annotation"]["id"];
-      if (!context.find_symbol("tag-" + class_name))
+      if (!symbol_table_.find_symbol("tag-" + class_name))
       {
         const auto &class_node = find_class(ast_json["body"], class_name);
         if (!class_node.empty())
         {
-          std::string current_class = current_class_name;
+          std::string current_class = current_class_name_;
           get_class_definition(class_node, target_block);
-          current_class_name = current_class;
+          current_class_name_ = current_class;
         }
       }
 
@@ -1939,7 +1436,7 @@ void python_converter::get_class_definition(
 
       symbol_id sid = create_symbol_id();
       sid.set_object(class_member["target"]["id"].get<std::string>());
-      symbolt *class_attr_symbol = context.find_symbol(sid.to_string());
+      symbolt *class_attr_symbol = symbol_table_.find_symbol(sid.to_string());
 
       if (!class_attr_symbol)
         throw std::runtime_error("Class attribute not found");
@@ -1948,7 +1445,7 @@ void python_converter::get_class_definition(
     }
   }
   added_symbol->type = clazz;
-  current_class_name.clear();
+  current_class_name_.clear();
 }
 
 void python_converter::get_return_statements(
@@ -2059,12 +1556,13 @@ python_converter::python_converter(
   contextt &_context,
   const nlohmann::json &ast,
   const global_scope &gs)
-  : context(_context),
-    ns(_context),
+  : symbol_table_(_context),
     ast_json(ast),
     global_scope_(gs),
-    current_func_name(""),
-    current_class_name(""),
+    type_handler_(*this),
+    ns(_context),
+    current_func_name_(""),
+    current_class_name_(""),
     ref_instance(nullptr)
 {
 }
@@ -2183,7 +1681,7 @@ void python_converter::convert()
     {
       const auto &class_node = find_class(ast_json["body"], clazz);
       get_class_definition(class_node, block);
-      current_class_name.clear();
+      current_class_name_.clear();
     }
 
     // Convert only the global variables referenced by the function
@@ -2207,7 +1705,7 @@ void python_converter::convert()
     // Get function symbol
     symbol_id sid = create_symbol_id();
     sid.set_function(function);
-    symbolt *symbol = context.find_symbol(sid.to_string());
+    symbolt *symbol = symbol_table_.find_symbol(sid.to_string());
 
     if (!symbol)
     {
@@ -2280,7 +1778,7 @@ void python_converter::convert()
       main_symbol.value.swap(main_code);
   }
 
-  if (context.move(main_symbol))
+  if (symbol_table_.move(main_symbol))
   {
     throw std::runtime_error(
       "The main function is already defined in another module");
