@@ -37,3 +37,20 @@ jobs:
     - name: Run tests
       if: ${{ inputs.testing == true }}
       run: cd build/ && ctest -j4 --output-on-failure --progress .
+
+  depends:
+    runs-on: ${{ inputs.operating-system }}
+    name: Try esbmc without deps
+    needs: build
+    steps:
+      - name: Download Linux Build
+        uses: actions/download-artifact@v4
+        with:
+          name: release-${{ inputs.operating-system }}-${{ inputs.build-flags }}
+          path: ./
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          path: esbmc-src    
+      - name: Check files
+        run: ls
