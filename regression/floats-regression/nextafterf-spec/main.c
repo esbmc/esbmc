@@ -19,23 +19,23 @@ int main()
   __ESBMC_assume(!isnan(z));
   float a = nondet_float();
 
-  if(isless(x, y))
+  if (isless(x, y))
   { /* there is no double 'a' between x and z */
     assert(isnan(a) || islessequal(a, x) || islessequal(z, a));
     __ESBMC_assume(islessequal(z, a)); /* assume z <= a */
   }
-  if(isgreater(x, y))
+  if (isgreater(x, y))
   { /* there is no double 'a' between x and z */
     assert(isnan(a) || islessequal(a, z) || islessequal(x, a));
     __ESBMC_assume(islessequal(a, z)); /* assume z >= a */
   }
-  if(x == y)
+  if (x == y)
     assert(x == z);
-  if(isfinite(x))
+  if (isfinite(x))
   { /* |z| not finite -> |a| = inf and they have the same sign */
     assert(isfinite(z) || (isinf(a) && isinf(a) == isinf(z)));
   }
-  if(isfinite(x) && !isfinite(z))
+  if (isfinite(x) && !isfinite(z))
   {
     /* This is part of nextafter's behaviour, but w/o a model of
      * feraiseexcept() and fetestexcept() we cannot prove it, yet.
@@ -43,7 +43,7 @@ int main()
      */
     assert(errno == ERANGE);
   }
-  if(islessgreater(x, y) && isfinite(z) && !isnormal(z))
+  if (islessgreater(x, y) && isfinite(z) && !isnormal(z))
   {
     /* This is part of nextafter's behaviour, but w/o a model of
      * feraiseexcept() and fetestexcept() we cannot prove it, yet.
@@ -51,8 +51,6 @@ int main()
      */
     assert(errno == ERANGE);
   }
-  if(isinf(x))
-    assert(isinf(z) == isinf(x));
 
   /* This is part of nextafter's behaviour, but w/o a model of
    * feraiseexcept() and fetestexcept() we cannot prove it, yet.
