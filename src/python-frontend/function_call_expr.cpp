@@ -1,7 +1,7 @@
 #include <python-frontend/function_call_expr.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/type_handler.h>
-#include <python-frontend/python_frontend_types.h>
+#include <python-frontend/type_utils.h>
 #include <python-frontend/json_utils.h>
 #include <util/c_typecast.h>
 #include <util/expr_util.h>
@@ -89,8 +89,9 @@ void function_call_expr::get_function_type()
     // (3) Calling a instance method from a built-in type object, for example: x.bit_length() when x is an int
     // If the caller is a class or a built-in type, the following condition detects a class method call.
     if (
-      is_class(caller, converter_.ast()) || is_builtin_type(caller) ||
-      is_builtin_type(type_handler_.get_var_type(caller)))
+      is_class(caller, converter_.ast()) ||
+      type_utils::is_builtin_type(caller) ||
+      type_utils::is_builtin_type(type_handler_.get_var_type(caller)))
     {
       function_type_ = FunctionType::ClassMethod;
     }
@@ -176,7 +177,7 @@ void function_call_expr::build_function_id()
     function_id_.clear();
     function_id_.set_prefix("c:");
   }
-  else if (is_builtin_type(obj_name))
+  else if (type_utils::is_builtin_type(obj_name))
   {
     class_name = obj_name;
     function_id_ = symbol_id(python_file, class_name, func_name);
@@ -193,7 +194,7 @@ void function_call_expr::build_function_id()
   }
   else if (is_member_function_call)
   {
-    if (is_builtin_type(obj_name) || is_class(obj_name, ast))
+    if (type_utils::is_builtin_type(obj_name) || is_class(obj_name, ast))
     {
       class_name = obj_name;
     }
@@ -298,7 +299,9 @@ exprt function_call_expr::build()
   /* Calls to initialise variables using built-in type functions such as int(1), str("test"), bool(1)
    * are converted to simple variable assignments, simplifying the handling of built-in type objects.
    * For example, x = int(1) becomes x = 1. */
-  if (is_builtin_type(func_name) || is_consensus_type(func_name))
+  if (
+    type_utils::is_builtin_type(func_name) ||
+    type_utils::is_consensus_type(func_name))
   {
     return build_constant_from_arg();
   }

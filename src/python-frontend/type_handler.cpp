@@ -1,6 +1,6 @@
 #include <python-frontend/type_handler.h>
 #include <python-frontend/json_utils.h>
-#include <python-frontend/python_frontend_types.h>
+#include <python-frontend/type_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/symbol_id.h>
 #include <util/context.h>
@@ -19,7 +19,7 @@ bool type_handler::is_constructor_call(const nlohmann::json &json) const
 
   const std::string &func_name = json["func"]["id"];
 
-  if (is_builtin_type(func_name))
+  if (type_utils::is_builtin_type(func_name))
     return false;
 
   /* The statement is a constructor call if the function call on the

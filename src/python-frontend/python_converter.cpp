@@ -1,6 +1,6 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/json_utils.h>
-#include <python_frontend_types.h>
+#include <python-frontend/type_utils.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/function_call_expr.h>
 #include <ansi-c/convert_float_literal.h>
@@ -607,9 +607,10 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       func_name = element["func"]["attr"];
 
     if (
-      !is_builtin_type(func_name) && !is_consensus_type(func_name) &&
-      !is_consensus_func(func_name) && !is_model_func(func_name) &&
-      !is_class(func_name, ast_json))
+      !type_utils::is_builtin_type(func_name) &&
+      !type_utils::is_consensus_type(func_name) &&
+      !type_utils::is_consensus_func(func_name) &&
+      !type_utils::is_model_func(func_name) && !is_class(func_name, ast_json))
     {
       const auto &func_node = find_function(ast_json["body"], func_name);
       assert(!func_node.empty());
@@ -1376,7 +1377,9 @@ void python_converter::get_class_definition(
     /* TODO: Define OMs for built-in type classes.
      * This will allow us to add their definitions to the symbol_table_
      * inherit from them, and extend their functionality. */
-    if (is_builtin_type(base_class_name) || is_consensus_type(base_class_name))
+    if (
+      type_utils::is_builtin_type(base_class_name) ||
+      type_utils::is_consensus_type(base_class_name))
       continue;
 
     // Get class definition from symbols table

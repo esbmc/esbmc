@@ -14,7 +14,6 @@ add_library(pythonfrontend STATIC
             python_language.cpp
             python_converter.cpp
             pythonastgen.c
-            python_frontend_types.cpp
             module_manager.cpp
             symbol_id.cpp
             type_handler.cpp
