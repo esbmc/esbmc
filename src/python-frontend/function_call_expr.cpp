@@ -6,6 +6,7 @@
 #include <util/c_typecast.h>
 #include <util/expr_util.h>
 #include <util/message.h>
+#include <util/string_constant.h>
 #include <regex>
 
 using namespace json_utils;
@@ -426,7 +427,16 @@ exprt function_call_expr::build()
 
     // All array function arguments (e.g. bytes type) are handled as pointers.
     if (arg.type().is_array())
+    {
+      if (arg_node["_type"] == "Constant" && arg_node["value"].is_string())
+      {
+        arg = string_constantt(
+          arg_node["value"].get<std::string>(),
+          arg.type(),
+          string_constantt::k_default);
+      }
       call.arguments().push_back(address_of_exprt(arg));
+    }
     else
       call.arguments().push_back(arg);
   }
