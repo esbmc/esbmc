@@ -140,8 +140,6 @@ private:
     const std::string &func_name,
     const std::string &obj_symbol_id);
 
-  std::string get_classname_from_symbol_id(const std::string &symbol_id) const;
-
   void append_models_from_directory(
     std::list<std::string> &file_list,
     const std::string &dir_path);

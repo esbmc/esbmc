@@ -563,24 +563,6 @@ python_converter::find_symbol_in_global_scope(std::string &symbol_id) const
   return symbol_table_.find_symbol(symbol_id);
 }
 
-std::string python_converter::get_classname_from_symbol_id(
-  const std::string &symbol_id) const
-{
-  // This function might return "Base" for a symbol_id as: py:main.py@C@Base@F@foo@self
-
-  std::string class_name;
-  size_t class_pos = symbol_id.find("@C@");
-  size_t func_pos = symbol_id.find("@F@");
-
-  if (class_pos != std::string::npos && func_pos != std::string::npos)
-  {
-    size_t length = func_pos - (class_pos + 3); // "+3" to ignore "@C@"
-    // Extract substring between "@C@" and "@F@"
-    class_name = symbol_id.substr(class_pos + 3, length);
-  }
-  return class_name;
-}
-
 bool python_converter::is_imported_module(const std::string &module_name) const
 {
   if (imported_modules.find(module_name) != imported_modules.end())
