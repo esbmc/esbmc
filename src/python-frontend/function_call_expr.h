@@ -46,6 +46,11 @@ private:
   bool is_len_call() const;
 
   /*
+   * Checks if a NumPy function is being invoked.
+   */
+  bool is_numpy_call() const;
+
+  /*
    * Creates an expression for a non-deterministic function call.
    */
   exprt build_nondet_call() const;

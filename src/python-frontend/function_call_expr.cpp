@@ -287,8 +287,20 @@ std::string function_call_expr::get_object_name() const
   return json_utils::get_object_alias(converter_.ast(), obj_name);
 }
 
+bool function_call_expr::is_numpy_call() const
+{
+  const std::string &filename = function_id_.get_filename();
+  const std::string &suffix = "/models/numpy.py";
+
+  return (filename.rfind(suffix) == (filename.size() - suffix.size()));
+}
+
 exprt function_call_expr::build()
 {
+  if (is_numpy_call()) {
+	  printf("is numpy call\n");
+  }
+
   // Handle non-det functions
   if (is_nondet_call())
   {

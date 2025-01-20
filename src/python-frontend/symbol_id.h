@@ -47,6 +47,11 @@ public:
     return classname_;
   }
 
+  const std::string &get_filename() const
+  {
+    return filename_;
+  }
+
   void clear();
 
   std::string to_string() const;
