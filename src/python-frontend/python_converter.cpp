@@ -1211,8 +1211,13 @@ void python_converter::get_function_definition(
       return_stmt["value"]["id"].get<std::string>(),
       function_node["name"].get<std::string>(),
       json);
+
     assert(!return_var.empty());
-    type.return_type() = type_handler_.get_list_type(return_var["value"]);
+
+    if (return_var["_type"] == "arg")
+      type.return_type() = type_handler_.get_list_type(return_var);
+    else
+      type.return_type() = type_handler_.get_list_type(return_var["value"]);
   }
   else
   {
@@ -1253,8 +1258,13 @@ void python_converter::get_function_definition(
     else if (arg_name == "cls")
       arg_type = pointer_typet(empty_typet());
     else
-      arg_type =
-        type_handler_.get_typet(element["annotation"]["id"].get<std::string>());
+    {
+      if (element["annotation"]["_type"] == "Subscript")
+        arg_type = type_handler_.get_list_type(element);
+      else
+        arg_type = type_handler_.get_typet(
+          element["annotation"]["id"].get<std::string>());
+    }
 
     if (arg_type.is_array())
       arg_type = gen_pointer_type(arg_type.subtype());
