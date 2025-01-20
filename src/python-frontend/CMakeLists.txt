@@ -14,9 +14,10 @@ add_library(pythonfrontend STATIC
             python_language.cpp
             python_converter.cpp
             pythonastgen.c
-            python_frontend_types.cpp
             module_manager.cpp
             symbol_id.cpp
+            type_handler.cpp
+            function_call_expr.cpp
             ${CMAKE_SOURCE_DIR}/src/ansi-c/parse_float.cpp
             ${CMAKE_SOURCE_DIR}/src/ansi-c/convert_float_literal.cpp)
 
