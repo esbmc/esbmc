@@ -18,6 +18,7 @@ add_library(pythonfrontend STATIC
             symbol_id.cpp
             type_handler.cpp
             function_call_expr.cpp
+            function_call_builder.cpp
             ${CMAKE_SOURCE_DIR}/src/ansi-c/parse_float.cpp
             ${CMAKE_SOURCE_DIR}/src/ansi-c/convert_float_literal.cpp)
 

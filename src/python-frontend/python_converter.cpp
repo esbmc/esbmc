@@ -2,7 +2,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/type_utils.h>
 #include <python-frontend/symbol_id.h>
-#include <python-frontend/function_call_expr.h>
+#include <python-frontend/function_call_builder.h>
 #include <ansi-c/convert_float_literal.h>
 #include <util/std_code.h>
 #include <util/c_types.h>
@@ -600,8 +600,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
   }
 
-  function_call_expr call(element, *this);
-  return call.build();
+  function_call_builder call_builder(*this);
+  return call_builder.build(element);
 }
 
 exprt python_converter::get_literal(const nlohmann::json &element)
