@@ -287,24 +287,8 @@ std::string function_call_expr::get_object_name() const
   return json_utils::get_object_alias(converter_.ast(), obj_name);
 }
 
-bool function_call_expr::is_numpy_call() const
+exprt function_call_expr::get()
 {
-  const std::string &filename = function_id_.get_filename();
-  const std::string &suffix = "/models/numpy.py";
-
-  return (filename.rfind(suffix) == (filename.size() - suffix.size()));
-}
-
-exprt function_call_expr::build()
-{
-  // Handle NumPy functions
-  if (is_numpy_call() && function_id_.get_function() == "array")
-  {
-    // Starting with one-dimensional arrays;
-    exprt array = converter_.get_expr(call_["args"][0]);
-    return array;
-  }
-
   // Handle non-det functions
   if (is_nondet_call())
   {

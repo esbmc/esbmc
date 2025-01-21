@@ -13,5 +13,5 @@ public:
   exprt build(const nlohmann::json &call) const;
 
 private:
-  python_converter& converter_;
+  python_converter &converter_;
 };

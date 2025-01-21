@@ -22,7 +22,12 @@ public:
   /*
    * Converts the function from the AST into an exprt.
    */
-  exprt build();
+  exprt get();
+
+  const symbol_id &get_function_id() const
+  {
+    return function_id_;
+  }
 
 private:
   /*
@@ -44,11 +49,6 @@ private:
    * Checks if the Python len() function is being invoked.
    */
   bool is_len_call() const;
-
-  /*
-   * Checks if a NumPy function is being invoked.
-   */
-  bool is_numpy_call() const;
 
   /*
    * Creates an expression for a non-deterministic function call.
