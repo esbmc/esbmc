@@ -707,8 +707,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     exprt &list_size = static_cast<array_typet &>(current_element_type).size();
     if (list_size == zero)
     {
-      current_element_type = type_handler_.build_array(
-        current_element_type.subtype(), element["elts"].size());
+      typet t = type_handler_.get_typet(element["elts"][0]["value"]);
+      current_element_type =
+        type_handler_.build_array(t, element["elts"].size());
     }
 
     expr = gen_zero(current_element_type);
@@ -1053,6 +1054,7 @@ void python_converter::get_var_assign(
          * After parsing the RHS, we need to adjust the LHS type size to match
          * the size of the resulting RHS string.*/
         lhs_symbol->type = rhs.type();
+        lhs.type() = rhs.type();
       }
       lhs_symbol->value = rhs;
     }

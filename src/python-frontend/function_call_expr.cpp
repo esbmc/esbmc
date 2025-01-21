@@ -297,8 +297,12 @@ bool function_call_expr::is_numpy_call() const
 
 exprt function_call_expr::build()
 {
-  if (is_numpy_call()) {
-	  printf("is numpy call\n");
+  // Handle NumPy functions
+  if (is_numpy_call() && function_id_.get_function() == "array")
+  {
+    // Starting with one-dimensional arrays;
+    exprt array = converter_.get_expr(call_["args"][0]);
+    return array;
   }
 
   // Handle non-det functions
