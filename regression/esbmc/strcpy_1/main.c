@@ -4,7 +4,7 @@
 
 void test_strcpy() {
     char *source=NULL;
-    char destination[50];  // Make sure destination has enough space
+    char destination[50];
 
     // Copy source string to destination
     strcpy(destination, source);
