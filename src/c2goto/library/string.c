@@ -26,11 +26,7 @@
 char *strcpy(char *dst, const char *src)
 {
 __ESBMC_HIDE:;
-<<<<<<< HEAD
   // Ensure src pointer is non-null
-=======
-  // Ensure pointers are non-null
->>>>>>> 27318d0aa ([OM] simplfied strcpy function)
   if (src == NULL)
     return NULL;
 
