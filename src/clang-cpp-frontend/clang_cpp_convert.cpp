@@ -1193,17 +1193,26 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (get_type(*cxxstdinit.getType(), t, true))
       return true;
 
-    const struct_union_typet &this_type = to_struct_union_type(ns.follow(t));
-    exprt sym("struct", this_type);
+    const struct_union_typet &initializer_list_type =
+      to_struct_union_type(ns.follow(t));
 
-    // { ._M_array=&list[0], ._M_len=size }
-    sym.move_to_operands(list);
-    sym.move_to_operands(size);
+    const struct_union_typet &data_object_type =
+      cpp_data_object::get_data_object_type(
+        tag_prefix + initializer_list_type.tag().as_string(), context);
+    exprt data_object("struct", data_object_type);
+
+    // data_object{ ._M_array=&list[0], ._M_len=size }
+    data_object.move_to_operands(list);
+    data_object.move_to_operands(size);
+
+    // new_expr = initializer_list{ data_object{ ._M_array=&list[0], ._M_len=size } }
+    exprt initializer_list("struct", initializer_list_type);
+    initializer_list.move_to_operands(data_object);
 
     // Implicit construction of a std::initializer_list<T> object
     // from an array temporary within list-initialization
     // Therefore the AST does not call the constructor
-    new_expr = sym;
+    new_expr = initializer_list;
 
     break;
   }
