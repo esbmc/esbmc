@@ -25,6 +25,7 @@
 
 char *strcpy(char *dst, const char *src)
 {
+__ESBMC_HIDE:;
   // Ensure pointers are non-null
   __ESBMC_assume(dst != NULL && src != NULL);
 
