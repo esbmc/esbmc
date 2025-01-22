@@ -27,8 +27,14 @@ char *strcpy(char *dst, const char *src)
 {
 __ESBMC_HIDE:;
   char *cp = dst;
-  while ((*cp++ = *src++))
-    ;
+  while (1)
+  {
+    *cp = *src;
+    if (*src == '\0')
+      break;
+    ++cp;
+    ++src;
+  }
   return dst;
 }
 

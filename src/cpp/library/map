@@ -790,6 +790,7 @@ public:
           return this->_value[i];
         }
         //if(x < this->_key[i]){
+#if 0
         if (key_compare()((Key &)x, this->_key[i]))
         {
           int j;
@@ -815,6 +816,7 @@ public:
           this->_key[this->_size + 1] = Key();
           return this->_value[i];
         }
+#endif
       }
       this->_size++;
       this->_key[s] = x;
@@ -1215,6 +1217,7 @@ public:
           return it;
         }
         //if(x < this->_key[i]){
+#if 0
         if (key_compare()((Key &)x, this->_key[i]))
         {
           int j;
@@ -1240,6 +1243,7 @@ public:
           return it;
         }
         it++;
+#endif
       }
       this->_size++;
       this->_key[s] = x;
