@@ -600,8 +600,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
   }
 
-  function_call_builder call_builder(*this);
-  return call_builder.build(element);
+  function_call_builder call_builder(*this, element);
+  return call_builder.build();
 }
 
 exprt python_converter::get_literal(const nlohmann::json &element)

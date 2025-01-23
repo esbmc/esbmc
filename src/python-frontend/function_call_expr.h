@@ -14,10 +14,15 @@ enum class FunctionType
   FreeFunction,
 };
 
+class symbol_id;
+
 class function_call_expr
 {
 public:
-  function_call_expr(const nlohmann::json &call, python_converter &converter);
+  function_call_expr(
+    const symbol_id &function_id,
+    const nlohmann::json &call,
+    python_converter &converter);
 
   /*
    * Converts the function from the AST into an exprt.
@@ -30,25 +35,10 @@ public:
   }
 
 private:
-  /*
-   * Extracts information from the call to populate the function_id attribute.
-   */
-  void build_function_id();
-
   /**
    * Determines whether a non-deterministic function is being invoked.
    */
   bool is_nondet_call() const;
-
-  /*
-   * Checks if assume (__ESBMC_assume or __VERIFIER_assume) function is being invoked.
-   */
-  bool is_assume_call() const;
-
-  /*
-   * Checks if the Python len() function is being invoked.
-   */
-  bool is_len_call() const;
 
   /*
    * Creates an expression for a non-deterministic function call.
@@ -70,9 +60,9 @@ private:
    */
   std::string get_object_name() const;
 
+  symbol_id function_id_;
   const nlohmann::json &call_;
   python_converter &converter_;
   const type_handler &type_handler_;
-  symbol_id function_id_;
   FunctionType function_type_;
 };
