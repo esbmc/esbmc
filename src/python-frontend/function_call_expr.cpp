@@ -262,11 +262,6 @@ exprt function_call_expr::get()
   for (const auto &arg_node : call_["args"])
   {
     exprt arg = converter_.get_expr(arg_node);
-    //    if (is_len_call())
-    //    {
-    //      c_typecastt c_typecast(converter_.name_space());
-    //      c_typecast.implicit_typecast(arg, pointer_typet(empty_typet()));
-    //    }
 
     // All array function arguments (e.g. bytes type) are handled as pointers.
     if (arg.type().is_array())
@@ -283,17 +278,6 @@ exprt function_call_expr::get()
     else
       call.arguments().push_back(arg);
   }
-
-  //  if (is_len_call())
-  //  {
-  //    side_effect_expr_function_callt sideeffect;
-  //    sideeffect.function() = call.function();
-  //    sideeffect.arguments() = call.arguments();
-  //    sideeffect.location() = call.location();
-  //    sideeffect.type() =
-  //      static_cast<const typet &>(call.function().type().return_type());
-  //    return sideeffect;
-  //  }
 
   return call;
 }
