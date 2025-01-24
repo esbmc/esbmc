@@ -152,6 +152,14 @@ bool type_handler::has_multiple_types(const nlohmann::json &container) const
 
 typet type_handler::get_list_type(const nlohmann::json &list_value) const
 {
+  if (list_value["_type"] == "arg" && list_value.contains("annotation"))
+  {
+    assert(list_value["annotation"]["value"]["id"] == "list");
+    typet t =
+      get_typet(list_value["annotation"]["slice"]["id"].get<std::string>());
+    return build_array(t, 0);
+  }
+
   if (list_value["_type"] == "List") // Get list value type from elements
   {
     const nlohmann::json &elts = list_value["elts"];
