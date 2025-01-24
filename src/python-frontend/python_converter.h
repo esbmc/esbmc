@@ -86,6 +86,7 @@ public:
 
 private:
   friend class function_call_expr;
+  friend class numpy_call_expr;
   friend class function_call_builder;
 
   void get_var_assign(const nlohmann::json &ast_node, codet &target_block);

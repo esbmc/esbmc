@@ -1,5 +1,6 @@
 #include <python-frontend/function_call_builder.h>
 #include <python-frontend/function_call_expr.h>
+#include <python-frontend/numpy_call_expr.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/json_utils.h>
@@ -185,12 +186,10 @@ exprt function_call_builder::build() const
   }
 
   // Handle NumPy functions
-  if (is_numpy_call(function_id) && function_id.get_function() == "array")
+  if (is_numpy_call(function_id))
   {
-    // Get array from function arguments
-    // TODO: Add support for multidimensional arrays
-    exprt array = converter_.get_expr(call_["args"][0]);
-    return array;
+    numpy_call_expr numpy_call(function_id, call_, converter_);
+    return numpy_call.get();
   }
 
   function_call_expr call_expr(function_id, call_, converter_);
