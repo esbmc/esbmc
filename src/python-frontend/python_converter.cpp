@@ -705,17 +705,23 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   {
     exprt zero = gen_zero(size_type());
     exprt &list_size = static_cast<array_typet &>(current_element_type).size();
+    typet list_type = type_handler_.get_list_type(element);
+
     if (list_size == zero)
     {
-      typet t = type_handler_.get_typet(element["elts"][0]["value"]);
-      current_element_type =
-        type_handler_.build_array(t, element["elts"].size());
+      current_element_type = list_type;
     }
 
-    expr = gen_zero(current_element_type);
+    expr = gen_zero(list_type);
+
     unsigned int i = 0;
     for (auto &e : element["elts"])
-      expr.operands().at(i++) = get_literal(e);
+    {
+      if (e["_type"] == "List")
+        expr.operands().at(i++) = get_expr(e);
+      else
+        expr.operands().at(i++) = get_literal(e);
+    }
 
     break;
   }
