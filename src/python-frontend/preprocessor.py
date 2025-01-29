@@ -141,17 +141,24 @@ class Preprocessor(ast.NodeTransformer):
         # add keyword arguments to function call
         for i in node.keywords:
             if i.arg in keywords:
-                raise SyntaxError(f"Keyword argument repeated:{i.arg}",(self.module_name,i.lineno,i.col_offset,""))
+                raise SyntaxError(f"Keyword argument repeated:{node.name}",(self.module_name,i.lineno,i.col_offset,""))
             keywords[i.arg] = i.value
 
         # return early if correct no. or too many parameters 
-        if len(node.args) >= len(expectedArgs) or (functionName, expectedArgs[-1]) not in self.functionDefaults:
+        if len(node.args) >= len(expectedArgs):
             self.generic_visit(node)
             return node
 
         # append defaults 
         for i in range(len(node.args),len(expectedArgs)):
-            node.args.append(ast.Constant(value = self.functionDefaults[(functionName, expectedArgs[i])]))
+            if expectedArgs[i] in keywords:
+                node.args.append(keywords[expectedArgs[i]])
+            elif (functionName, expectedArgs[i]) in self.functionDefaults:
+                node.args.append(ast.Constant(value = self.functionDefaults[(functionName, expectedArgs[i])]))
+            else:
+                print("File ", self.module_name, "line", node.lineno)
+                raise TypeError(f"{functionName}() missing required positional arg:{expectedArgs[i]}")
+
 
         self.generic_visit(node)
         return node # transformed node
