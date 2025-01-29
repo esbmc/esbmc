@@ -129,6 +129,12 @@ class Preprocessor(ast.NodeTransformer):
                 node.args[1] = ast.NameConstant(value=False)
 
         functionName = node.func.id
+
+        # if preprocessor doesn't have function definition return
+        if functionName not in self.functionParams:
+            self.generic_visit(node)
+            return node
+        
         expectedArgs = self.functionParams[functionName]
 
         # return early if correct no. or too many parameters or if function doesn't have default parameters
