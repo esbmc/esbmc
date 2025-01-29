@@ -1,11 +1,12 @@
 import ast
 
 class Preprocessor(ast.NodeTransformer):
-    def __init__(self):
+    def __init__(self,module_name):
         # Initialize with an empty target name
         self.target_name = ""
         self.functionDefaults = {}
         self.functionParams = {}
+        self.module_name = module_name # for errors
     # for-range statements such as:
     #
     #   for x in range(1, 5, 1):
@@ -136,12 +137,18 @@ class Preprocessor(ast.NodeTransformer):
             return node
         
         expectedArgs = self.functionParams[functionName]
+        keywords = {}
+        # add keyword arguments to function call
+        for i in node.keywords:
+            if i.arg in keywords:
+                raise SyntaxError(f"Keyword argument repeated:{i.arg}",(self.module_name,i.lineno,i.col_offset,""))
+            keywords[i.arg] = i.value
 
-        # return early if correct no. or too many parameters or if function doesn't have default parameters
+        # return early if correct no. or too many parameters 
         if len(node.args) >= len(expectedArgs) or (functionName, expectedArgs[-1]) not in self.functionDefaults:
             self.generic_visit(node)
             return node
-        
+
         # append defaults 
         for i in range(len(node.args),len(expectedArgs)):
             node.args.append(ast.Constant(value = self.functionDefaults[(functionName, expectedArgs[i])]))
@@ -150,12 +157,17 @@ class Preprocessor(ast.NodeTransformer):
         return node # transformed node
     
     def visit_FunctionDef(self, node):
+        # Preserve order of parameters
         self.functionParams[node.name] = [i.arg for i in node.args.args]
+
+        # escape early if no defaults defined
         if len(node.args.defaults) < 1: 
             self.generic_visit(node)
             return node
+        
+        # add defaults to dictionary with tuple key (function name, parameter name)
         for i in range(1,len(node.args.defaults)+1):
-            self.functionDefaults[(node.name,node.args.args[-i].arg)] = node.args.defaults[-i].value
+            self.functionDefaults[(node.name, node.args.args[-i].arg)] = node.args.defaults[-i].value
         self.generic_visit(node)
         return node
         
