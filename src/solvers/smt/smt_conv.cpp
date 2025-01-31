@@ -1254,21 +1254,24 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     break;
   }
   case expr2t::forall_id:
+  case expr2t::exists_id:
   {
     // TODO: technically the forall could be a list of symbols
     // TODO: how to support other assertions inside it? e.g., buffer-overflow, arithmetic-overflow, etc...
-    const forall2t &f = to_forall2t(expr);
+    const auto &quantifier = dynamic_cast<const logic_2ops &>(*expr);
+
     expr2tc symbol;
 
     // We only want expressions of typecast(address_of(symbol)).
     if (
-      is_typecast2t(f.side_1) && is_address_of2t(to_typecast2t(f.side_1).from))
-      symbol = to_address_of2t(to_typecast2t(f.side_1).from).ptr_obj;
+      is_typecast2t(quantifier.side_1) &&
+      is_address_of2t(to_typecast2t(quantifier.side_1).from))
+      symbol = to_address_of2t(to_typecast2t(quantifier.side_1).from).ptr_obj;
 
     if (!is_symbol2t(symbol))
     {
       log_error("Can only use quantifiers with one symbol");
-      f.dump();
+      quantifier.dump();
       abort();
     }
 
@@ -1287,10 +1290,13 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
      */
 
     std::string name = get_last_name_from_body(
-      to_symbol2t(symbol).thename.as_string(), f.side_2);
+      to_symbol2t(symbol).thename.as_string(), quantifier.side_2);
 
-    a =
-      mk_quantifier(true, {name}, {convert_ast(symbol)}, convert_ast(f.side_2));
+    a = mk_quantifier(
+      is_forall2t(expr),
+      {name},
+      {convert_ast(symbol)},
+      convert_ast(quantifier.side_2));
 
     break;
   }

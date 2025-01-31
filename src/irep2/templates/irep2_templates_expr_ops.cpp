@@ -1,5 +1,6 @@
 #include <irep2/irep2_templates_expr.h>
 
+expr_typedefs2(exists, logic_2ops);
 expr_typedefs2(forall, logic_2ops);
 expr_typedefs1(not, bool_1op);
 expr_typedefs2(and, logic_2ops);

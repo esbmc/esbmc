@@ -1826,6 +1826,14 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_expr(expr.op1(), args[1]);
     new_expr_ref = forall2tc(type, args[0], args[1]);
   }
+  else if (expr.id() == "exists")
+  {
+    type = migrate_type(expr.type());
+    expr2tc args[2];
+    migrate_expr(expr.op0(), args[0]);
+    migrate_expr(expr.op1(), args[1]);
+    new_expr_ref = exists2tc(type, args[0], args[1]);
+  }
   else
   {
     log_error("{}\nmigrate expr failed", expr);
@@ -3069,6 +3077,14 @@ exprt migrate_expr_back(const expr2tc &ref)
   {
     const forall2t &ref2 = to_forall2t(ref);
     exprt back("forall", migrate_type_back(ref2.type));
+    back.copy_to_operands(migrate_expr_back(ref2.side_1));
+    back.copy_to_operands(migrate_expr_back(ref2.side_2));
+    return back;
+  }
+  case expr2t::exists_id:
+  {
+    const exists2t &ref2 = to_exists2t(ref);
+    exprt back("exists", migrate_type_back(ref2.type));
     back.copy_to_operands(migrate_expr_back(ref2.side_1));
     back.copy_to_operands(migrate_expr_back(ref2.side_2));
     return back;

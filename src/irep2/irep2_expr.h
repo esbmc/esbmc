@@ -1527,6 +1527,19 @@ irep_typedefs(bswap, arith_1op);
 irep_typedefs(concat, bit_2ops);
 irep_typedefs(extract, extract_data);
 irep_typedefs(forall, logic_2ops);
+irep_typedefs(exists, logic_2ops);
+
+class exists2t : public exists_expr_methods
+{
+public:
+  exists2t(const type2tc &type, const expr2tc &sym, const expr2tc &predicate)
+    : exists_expr_methods(type, exists_id, sym, predicate)
+  {
+  }
+  exists2t(const exists2t &ref) = default;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
 
 class forall2t : public forall_expr_methods
 {

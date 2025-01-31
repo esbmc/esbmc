@@ -523,7 +523,8 @@ void goto_convertt::do_function_call_symbol(
     if (lhs.is_nil())
       return;
 
-    exprt rhs = exprt("forall", typet("bool"));
+    exprt rhs =
+      exprt(base_name == "__ESBMC_forall" ? "forall" : "exists", typet("bool"));
     rhs.copy_to_operands(arguments[0]);
     rhs.copy_to_operands(arguments[1]);
 
