@@ -1280,6 +1280,10 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
      * bound variables.
      *
      * This might cause some name clashing.
+     *
+     * TODO: A better solution would be to:
+     * 1. Transform the expressions to get a list of values. forall ({x0, x1, ...}, body)
+     * 2. This should allow the symex to do the proper renaming
      */
 
     std::string name = get_last_name_from_body(
