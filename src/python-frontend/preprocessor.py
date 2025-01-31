@@ -128,7 +128,7 @@ class Preprocessor(ast.NodeTransformer):
                 node.args[1] = ast.NameConstant(value=True)
             else:
                 node.args[1] = ast.NameConstant(value=False)
-                
+
         # if not a function or preprocessor doesn't have function definition return
         if isinstance(node.func,ast.Attribute) or node.func.id not in self.functionParams:
             self.generic_visit(node)
@@ -140,7 +140,7 @@ class Preprocessor(ast.NodeTransformer):
         # add keyword arguments to function call
         for i in node.keywords:
             if i.arg in keywords:
-                raise SyntaxError(f"Keyword argument repeated:{node.name}",(self.module_name,i.lineno,i.col_offset,""))
+                raise SyntaxError(f"Keyword argument repeated:{i.arg}",(self.module_name,i.lineno,i.col_offset,""))
             keywords[i.arg] = i.value
 
         # return early if correct no. or too many parameters 
@@ -156,7 +156,7 @@ class Preprocessor(ast.NodeTransformer):
                 node.args.append(ast.Constant(value = self.functionDefaults[(functionName, expectedArgs[i])]))
             else:
                 print("File ", self.module_name, "line", node.lineno)
-                raise TypeError(f"{functionName}() missing required positional arg:{expectedArgs[i]}")
+                raise TypeError(f"There is an error in your code\nline {node.lineno}, in {self.module_name}, {functionName}() missing required positional argument: '{expectedArgs[i]}'")
 
 
         self.generic_visit(node)
