@@ -135,17 +135,57 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
     return float_type();
   else if (elem.is_string())
     return build_array(char_type(), elem.get<std::string>().size());
+  else if (elem.is_object() && elem.contains("value"))
+    return get_typet(elem["value"]);
+  else if (elem.is_array())
+  {
+    typet subtype = get_typet(elem[0]);
+    return build_array(subtype, elem.size());
+  }
 
   throw std::runtime_error("Invalid type");
 }
 
 bool type_handler::has_multiple_types(const nlohmann::json &container) const
 {
-  typet t = get_typet(container[0]["value"]);
-  for (auto it = container.begin() + 1; it != container.end(); ++it)
+  if (container.empty())
+    return false;
+
+  // Determine the type of the first element
+  typet t;
+  if (container[0]["_type"] == "List")
   {
-    if (get_typet((*it)["value"]) != t)
+    // Check the type of elements within the sublist
+    if (has_multiple_types(container[0]["elts"]))
       return true;
+
+    // Get the type of the elements in the sublist
+    t = get_typet(container[0]["elts"][0]["value"]);
+  }
+  else
+  {
+    // Get the type of the first element if it is not a sublist
+    t = get_typet(container[0]["value"]);
+  }
+
+  for (const auto &element : container)
+  {
+    if (element["_type"] == "List")
+    {
+      // Check the consistency of the sublist
+      if (has_multiple_types(element["elts"]))
+        return true;
+
+      // Compare the type of internal elements in the sublist with the type `t`
+      if (get_typet(element["elts"][0]["value"]) != t)
+        return true;
+    }
+    else
+    {
+      // Compare the type of the current element with `t`
+      if (get_typet(element["value"]) != t)
+        return true;
+    }
   }
   return false;
 }
@@ -163,10 +203,19 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
   if (list_value["_type"] == "List") // Get list value type from elements
   {
     const nlohmann::json &elts = list_value["elts"];
+
     if (!has_multiple_types(elts)) // All elements have the same type
     {
-      typet t = get_typet(elts[0]["value"]); // Get the first element type
-      return build_array(t, elts.size());
+      typet subtype;
+
+      if (elts[0]["_type"] == "Constant") // One-dimensional list
+        // Retrieve the type of the first element
+        subtype = get_typet(elts[0]["value"]);
+      else // Multi-dimensional list
+        // Get sub-array type
+        subtype = get_typet(elts[0]["elts"]);
+
+      return build_array(subtype, elts.size());
     }
     throw std::runtime_error("Multiple type lists are not supported yet");
   }

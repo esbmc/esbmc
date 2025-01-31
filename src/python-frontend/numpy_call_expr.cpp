@@ -11,14 +11,36 @@ numpy_call_expr::numpy_call_expr(
 {
 }
 
+template <typename T>
+auto create_list(int size, T default_value)
+{
+  nlohmann::json list;
+  list["_type"] = "List";
+  for (int i = 0; i < size; ++i)
+  {
+    list["elts"].push_back({{"_type", "Constant"}, {"value", default_value}});
+  }
+  return list;
+}
+
 exprt numpy_call_expr::get()
 {
-  if (function_id_.get_function() == "array")
+  static const std::unordered_map<std::string, float> numpy_functions = {
+    {"zeros", 0.0}, {"ones", 1.0}};
+
+  const std::string &function = function_id_.get_function();
+
+  if (function == "array")
   {
-    // Get array from function arguments
-    // TODO: Add support for multidimensional arrays
-    exprt array = converter_.get_expr(call_["args"][0]);
-    return array;
+    return converter_.get_expr(call_["args"][0]);
   }
-  throw std::runtime_error("Unsupported NumPy function call");
+
+  auto it = numpy_functions.find(function);
+  if (it != numpy_functions.end())
+  {
+    auto list = create_list(call_["args"][0]["value"].get<int>(), it->second);
+    return converter_.get_expr(list);
+  }
+
+  throw std::runtime_error("Unsupported NumPy function call: " + function);
 }
