@@ -573,9 +573,6 @@ int esbmc_parseoptionst::doit()
     }
   }
 
-  if(cmdline.isset("k-induction"))
-    return doit_k_induction();
-
   // Run this before the main flow. This method performs its own
   // parsing and preprocessing.
   // This is an old implementation of parallel k-induction algorithm.
@@ -621,6 +618,145 @@ int esbmc_parseoptionst::doit()
   // and the flags set through CMD
   bmct bmc(goto_functions, options, context);
   return do_bmc(bmc);
+}
+
+// This method iteratively applies one of the verification strategies
+// for different unwinding bounds up to the specified maximum depth.
+//
+// ESBMC features 4 verification strategies:
+//
+//  1) Incremental
+//  2) Termination
+//  3) Falsification
+//  4) k-induction
+//
+// Applying a strategy in this context means solving a particular sequence
+// of decision problems from the list below for the given unwinding bound k:
+//
+//  - Base case             (see "is_base_case_violated")
+//  - Forward condition     (see "does_forward_condition_hold")
+//  - Inductive step        (see "is_inductive_step_violated")
+//
+// \param options - options for setting the verification strategy
+// and controlling symbolic execution
+// \param goto_functions - GOTO program under verification
+int esbmc_parseoptionst::do_bmc_strategy(
+  optionst &options,
+  goto_functionst &goto_functions)
+{
+  // Get max number of iterations
+  uint64_t max_k_step = cmdline.isset("unlimited-k-steps")
+                          ? UINT_MAX
+                          : strtoul(cmdline.getval("max-k-step"), nullptr, 10);
+
+  // Get the increment
+  unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
+
+  // Get the start of the base-case, default 1
+  unsigned k_step_base = strtoul(cmdline.getval("base-k-step"), nullptr, 10);
+  if (k_step_base >= max_k_step)
+  {
+    log_error(
+      "Please specify --base-k-step smaller than max-k-step if you want "
+      "to use incremental verification.");
+    abort();
+  }
+
+  // Trying all bounds from 1 to "max_k_step" in "k_step_inc"
+  for (uint64_t k_step = k_step_base; k_step <= max_k_step;
+       k_step += k_step_inc)
+  {
+    // k-induction
+    if (options.get_bool_option("k-induction"))
+    {
+      bool is_bcv =
+        is_base_case_violated(options, goto_functions, k_step).is_true();
+      if (
+        is_bcv && !cmdline.isset("multi-property") &&
+        !options.get_bool_option("multi-property"))
+        return 1;
+
+      // if the property is proven violated in the bs, it's unnecessary to further run fw and is
+      // this will make the trace looks cleaner yet might lead to an extra round to terminate the verification
+      if (
+        !is_bcv &&
+        does_forward_condition_hold(options, goto_functions, k_step).is_false())
+      {
+        if (is_coverage)
+          report_coverage(
+            options,
+            goto_functions.reached_claims,
+            goto_functions.reached_mul_claims);
+        return 0;
+      }
+
+      // Don't run inductive step for k_step == 1
+      if (k_step > 1)
+      {
+        if (
+          !is_bcv && is_inductive_step_violated(options, goto_functions, k_step)
+                       .is_false())
+        {
+          if (is_coverage)
+            report_coverage(
+              options,
+              goto_functions.reached_claims,
+              goto_functions.reached_mul_claims);
+          return 0;
+        }
+      }
+    }
+    // termination
+    if (options.get_bool_option("termination"))
+    {
+      if (does_forward_condition_hold(options, goto_functions, k_step)
+            .is_false())
+        return 0;
+
+      /* Disable this for now as it is causing more than 100 errors on SV-COMP
+      if(!is_inductive_step_violated(options, goto_functions, k_step))
+        return false;
+      */
+    }
+    // incremental-bmc
+    if (options.get_bool_option("incremental-bmc"))
+    {
+      bool is_bcv =
+        is_base_case_violated(options, goto_functions, k_step).is_true();
+      if (
+        is_bcv && !cmdline.isset("multi-property") &&
+        !options.get_bool_option("multi-property"))
+        return 1;
+
+      if (
+        !is_bcv &&
+        does_forward_condition_hold(options, goto_functions, k_step).is_false())
+      {
+        if (is_coverage)
+          report_coverage(
+            options,
+            goto_functions.reached_claims,
+            goto_functions.reached_mul_claims);
+        return 0;
+      }
+    }
+    // falsification
+    if (options.get_bool_option("falsification"))
+    {
+      if (is_base_case_violated(options, goto_functions, k_step).is_true())
+        return 1;
+    }
+  }
+
+  log_status("Unable to prove or falsify the program, giving up.");
+  log_fail("VERIFICATION UNKNOWN");
+
+  if (is_coverage)
+    report_coverage(
+      options,
+      goto_functions.reached_claims,
+      goto_functions.reached_mul_claims);
+  return 0;
 }
 
 // This is the parallel version of k-induction algorithm.
@@ -1198,123 +1334,6 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
   return 0;
 }
 
-int esbmc_parseoptionst::doit_k_induction()
-{
-  // Get max number of iterations
-  uint64_t max_k_step = cmdline.isset("unlimited-k-steps")
-                          ? UINT_MAX
-                          : strtoul(cmdline.getval("max-k-step"), nullptr, 10);
-
-  // Get the increment
-  unsigned k_step_inc = strtoul(cmdline.getval("k-step"), nullptr, 10);
-
-  // Get the start of the base-case, default 1
-  unsigned k_step_base = strtoul(cmdline.getval("base-k-step"), nullptr, 10);
-  if (k_step_base >= max_k_step)
-  {
-    log_error(
-      "Please specify --base-k-step smaller than max-k-step if you want "
-      "to use incremental verification.");
-    abort();
-  }
-
-  // Trying all bounds from 1 to "max_k_step" in "k_step_inc"
-  for (uint64_t k_step = k_step_base; k_step <= max_k_step;
-       k_step += k_step_inc)
-  {
-    // k-induction
-    if (options.get_bool_option("k-induction"))
-    {
-      bool is_bcv =
-        is_base_case_violated(options, goto_functions, k_step).is_true();
-      if (
-        is_bcv && !cmdline.isset("multi-property") &&
-        !options.get_bool_option("multi-property"))
-        return 1;
-
-      // if the property is proven violated in the bs, it's unnecessary to further run fw and is
-      // this will make the trace looks cleaner yet might lead to an extra round to terminate the verification
-      if (
-        !is_bcv &&
-        does_forward_condition_hold(options, goto_functions, k_step).is_false())
-      {
-        if (is_coverage)
-          report_coverage(
-            options,
-            goto_functions.reached_claims,
-            goto_functions.reached_mul_claims);
-        return 0;
-      }
-
-      // Don't run inductive step for k_step == 1
-      if (k_step > 1)
-      {
-        if (
-          !is_bcv && is_inductive_step_violated(options, goto_functions, k_step)
-                       .is_false())
-        {
-          if (is_coverage)
-            report_coverage(
-              options,
-              goto_functions.reached_claims,
-              goto_functions.reached_mul_claims);
-          return 0;
-        }
-      }
-    }
-    // termination
-    if (options.get_bool_option("termination"))
-    {
-      if (does_forward_condition_hold(options, goto_functions, k_step)
-            .is_false())
-        return 0;
-
-      /* Disable this for now as it is causing more than 100 errors on SV-COMP
-      if(!is_inductive_step_violated(options, goto_functions, k_step))
-        return false;
-      */
-    }
-    // incremental-bmc
-    if (options.get_bool_option("incremental-bmc"))
-    {
-      bool is_bcv =
-        is_base_case_violated(options, goto_functions, k_step).is_true();
-      if (
-        is_bcv && !cmdline.isset("multi-property") &&
-        !options.get_bool_option("multi-property"))
-        return 1;
-
-      if (
-        !is_bcv &&
-        does_forward_condition_hold(options, goto_functions, k_step).is_false())
-      {
-        if (is_coverage)
-          report_coverage(
-            options,
-            goto_functions.reached_claims,
-            goto_functions.reached_mul_claims);
-        return 0;
-      }
-    }
-    // falsification
-    if (options.get_bool_option("falsification"))
-    {
-      if (is_base_case_violated(options, goto_functions, k_step).is_true())
-        return 1;
-    }
-  }
-
-  log_status("Unable to prove or falsify the program, giving up.");
-  log_fail("VERIFICATION UNKNOWN");
-
-  if (is_coverage)
-    report_coverage(
-      options,
-      goto_functions.reached_claims,
-      goto_functions.reached_mul_claims);
-  return 0;
-}
-
 // This checks whether "there is a set of inputs that reaches and violates
 // an assertion when all the loops in the verified program are unwound up to
 // the given bound k".
@@ -1573,61 +1592,7 @@ bool esbmc_parseoptionst::get_goto_program(
     fine_timet create_start = current_time();
     if (create_goto_program(options, goto_functions))
       return true;
-    }
-
-    // Ahem
-    migrate_namespace_lookup = new namespacet(context);
-
-    // If the user is providing the GOTO functions, we don't need to parse
-    if(cmdline.isset("binary"))
-    {
-      log_status("Reading GOTO program from file");
-
-      if(read_goto_binary(goto_functions))
-        return true;
-    }
-    else
-    {
-      // Parsing
-      if(parse())
-        return true;
-
-      if(cmdline.isset("parse-tree-too") || cmdline.isset("parse-tree-only"))
-      {
-        assert(language_files.filemap.size());
-        languaget &language = *language_files.filemap.begin()->second.language;
-        std::ostringstream oss;
-        language.show_parse(oss);
-        log_status("{}", oss.str());
-        if(cmdline.isset("parse-tree-only"))
-          return true;
-      }
-
-      // Typecheking (old frontend) or adjust (clang frontend)
-      if(typecheck())
-        return true;
-      if(final())
-        return true;
-
-      // we no longer need any parse trees or language files
-      clear_parse();
-
-      if(
-        cmdline.isset("symbol-table-too") || cmdline.isset("symbol-table-only"))
-      {
-        std::ostringstream oss;
-        show_symbol_table_plain(oss);
-        log_status("{}", oss.str());
-        if(cmdline.isset("symbol-table-only"))
-          return true;
-      }
-
-      log_status("Generating GOTO Program");
- 
-      goto_convert(context, options, goto_functions);
-    }
-
-    fine_timet parse_stop = current_time();
+    fine_timet create_stop = current_time();
     log_status(
       "GOTO program creation time: {}s",
       time2string(create_stop - create_start));
@@ -1935,7 +1900,8 @@ bool esbmc_parseoptionst::process_goto_program(
 
     if (
       cmdline.isset("inductive-step") || cmdline.isset("k-induction") ||
-      cmdline.isset("k-induction-parallel") || cmdline.isset("vampire-for-loops"))
+      cmdline.isset("k-induction-parallel") ||
+      cmdline.isset("vampire-for-loops"))
 
     {
       // Always remove skips before doing k-induction.
@@ -2285,18 +2251,20 @@ void esbmc_parseoptionst::add_property_monitors(
 {
   std::map<std::string, std::pair<std::set<std::string>, expr2tc>> monitors;
 
-  context.foreach_operand([this, &monitors](const symbolt &s) {
-    if (
-      !has_prefix(s.name, "__ESBMC_property_") ||
-      s.name.as_string().find("$type") != std::string::npos)
-      return;
+  context.foreach_operand(
+    [this, &monitors](const symbolt &s)
+    {
+      if (
+        !has_prefix(s.name, "__ESBMC_property_") ||
+        s.name.as_string().find("$type") != std::string::npos)
+        return;
 
-    // strip prefix "__ESBMC_property_"
-    std::string prop_name = s.name.as_string().substr(17);
-    std::set<std::string> used_syms;
-    expr2tc main_expr = calculate_a_property_monitor(prop_name, used_syms);
-    monitors[prop_name] = std::pair{used_syms, main_expr};
-  });
+      // strip prefix "__ESBMC_property_"
+      std::string prop_name = s.name.as_string().substr(17);
+      std::set<std::string> used_syms;
+      expr2tc main_expr = calculate_a_property_monitor(prop_name, used_syms);
+      monitors[prop_name] = std::pair{used_syms, main_expr};
+    });
 
   if (monitors.size() == 0)
     return;
@@ -2391,10 +2359,12 @@ static void collect_symbol_names(
   }
   else
   {
-    e->foreach_operand([&prefix, &used_syms](const expr2tc &e) {
-      if (!is_nil_expr(e))
-        collect_symbol_names(e, prefix, used_syms);
-    });
+    e->foreach_operand(
+      [&prefix, &used_syms](const expr2tc &e)
+      {
+        if (!is_nil_expr(e))
+          collect_symbol_names(e, prefix, used_syms);
+      });
   }
 }
 
@@ -2486,9 +2456,8 @@ static unsigned int calc_globals_used(const namespacet &ns, const expr2tc &expr)
   {
     unsigned int globals = 0;
 
-    expr->foreach_operand([&globals, &ns](const expr2tc &e) {
-      globals += calc_globals_used(ns, e);
-    });
+    expr->foreach_operand([&globals, &ns](const expr2tc &e)
+                          { globals += calc_globals_used(ns, e); });
 
     return globals;
   }

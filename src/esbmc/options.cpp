@@ -19,9 +19,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"goto-functions-too", NULL, "show goto program and verify"},
     {"dump-goto-cfg",
      NULL,
-     "create a file for each function with the associated CFG in DOT format"},
+     "create a file for each function with the associated CFG in DOT "
+     "format"},
     {"program-only", NULL, "only show program expression"},
-    {"program-too", NULL, "show program expression and verify"}, 
+    {"program-too", NULL, "show program expression and verify"},
     {"ssa-symbol-table", NULL, "show symbol table along with SSA"},
     {"ssa-guards", NULL, ""},
     {"ssa-sliced", NULL, "print the sliced SSAs"},
@@ -71,7 +72,8 @@ const struct group_opt_templ all_cmd_options[] = {
    {
      {"python",
       boost::program_options::value<std::string>()->value_name("path"),
-      "Python interpreter binary to use (searched in $PATH; default: python)"},
+      "Python interpreter binary to use (searched in $PATH; default: "
+      "python)"},
    }},
 #endif
 #ifdef ENABLE_SOLIDITY_FRONTEND
@@ -107,8 +109,10 @@ const struct group_opt_templ all_cmd_options[] = {
      "define preprocessor macro"},
     {"warning,W",
      boost::program_options::value<std::vector<std::string>>(),
-     "enable specific frontend warnings, disable with \"no-\" prefix, or pass "
-     "options directly to the C/C++ frontends with the form -Wc,OPT1,OPT2,..."},
+     "enable specific frontend warnings, disable with \"no-\" prefix, or "
+     "pass "
+     "options directly to the C/C++ frontends with the form "
+     "-Wc,OPT1,OPT2,..."},
     {"std",
      boost::program_options::value<std::string>()->value_name("version"),
      "set C/C++ standard version"},
@@ -162,7 +166,8 @@ const struct group_opt_templ all_cmd_options[] = {
      "redirects every message into a file (no stdout/stderr)"},
     {"witness-output",
      boost::program_options::value<std::string>()->value_name("{ path | - }"),
-     "generate the verification result witness in GraphML format; use '-' for "
+     "generate the verification result witness in GraphML format; use '-' "
+     "for "
      "output to stdout"},
     {"witness-producer", boost::program_options::value<std::string>(), ""},
     {"witness-programfile", boost::program_options::value<std::string>(), ""},
@@ -281,7 +286,8 @@ const struct group_opt_templ all_cmd_options[] = {
     },
     {"non-supported-models-as-zero",
      NULL,
-     "if ESBMC can't extract a type/expression from the solver, then the value "
+     "if ESBMC can't extract a type/expression from the solver, then the "
+     "value "
      "will be set to zero"},
     {"smtlib-solver-prog",
 
@@ -341,7 +347,8 @@ const struct group_opt_templ all_cmd_options[] = {
      "space"},
     {"no-abnormal-memory-leak",
      NULL,
-     "affects --memory-leak-check; if both are enabled, the check for memory "
+     "affects --memory-leak-check; if both are enabled, the check for "
+     "memory "
      "leaks is only performed for normal termination, that is, not for "
      "abort()"},
     {"no-reachable-memory-leak",
@@ -376,7 +383,8 @@ const struct group_opt_templ all_cmd_options[] = {
     {"malloc-zero-is-null", NULL, "force malloc(0) to return NULL"},
     {"enable-unreachability-intrinsic",
      NULL,
-     "enable the functionality of the __ESBMC_unreachable() intrinsic, which "
+     "enable the functionality of the __ESBMC_unreachable() intrinsic, "
+     "which "
      "results in a verification failure when its call is reachable"},
     {"conv-assert-to-assume",
      NULL,
@@ -386,18 +394,20 @@ const struct group_opt_templ all_cmd_options[] = {
     {"forward-condition", NULL, "check the forward condition"},
     {"inductive-step", NULL, "check the inductive step"},
     {"k-induction", NULL, "prove by k-induction "},
-    {"vampire-for-loops", NULL, "Use Vampire to replace loops with invariants during symex "},    
+    {"vampire-for-loops",
+     NULL,
+     "Use Vampire to replace loops with invariants during symex "},
     {"goto-contractor",
      NULL,
-     "enable contractor-based interval refinements on goto level on asserts"},
+     "enable contractor-based interval refinements on goto level on "
+     "asserts"},
     {"goto-contractor-condition",
      NULL,
      "enable contractor-based interval refinements on goto level on "
      "conditions"},
-     "enable contractor-based interval refinements on goto level"},
     {"vampire-path",
      boost::program_options::value<std::string>()->value_name("vampire-path"),
-     "path to Vampire executable"},          
+     "path to Vampire executable"},
     {"k-induction-parallel",
      NULL,
      "prove by k-induction, running each step on a separate process"},
