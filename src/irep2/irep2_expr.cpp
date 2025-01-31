@@ -440,8 +440,7 @@ arith_2ops::arith_2ops(
 #ifndef NDEBUG /* only check consistency in non-Release builds */
   bool p1 = is_pointer_type(v1);
   bool p2 = is_pointer_type(v2);
-  auto is_bv_type = [](const type2tc &t)
-  {
+  auto is_bv_type = [](const type2tc &t) {
     return t->type_id == type2t::unsignedbv_id ||
            t->type_id == type2t::signedbv_id;
   };
