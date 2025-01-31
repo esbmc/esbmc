@@ -1,3 +1,4 @@
+#include "irep2/irep2_expr.h"
 #include <iomanip>
 #include <set>
 #include <solvers/prop/literal.h>
@@ -177,6 +178,27 @@ void smt_convt::push_ctx()
   ctx_level++;
 }
 
+std::string
+get_last_name_from_body(const std::string original, const expr2tc body)
+{
+  if (is_symbol2t(body))
+  {
+    if (to_symbol2t(body).thename.as_string() == original)
+      return to_symbol2t(body).get_symbol_name();
+    return "";
+  }
+
+  std::string result = "";
+  body->foreach_operand(
+    [&original, &result](expr2tc e)
+    {
+      if (result == "")
+        result = get_last_name_from_body(original, e);
+    });
+
+  return result;
+}
+
 void smt_convt::pop_ctx()
 {
   // Erase everything in caches added in the current context level. Everything
@@ -305,8 +327,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     // Convert all the arguments and store them in 'args'.
     unsigned int i = 0;
-    expr->foreach_operand(
-      [this, &args, &i](const expr2tc &e) { args[i++] = convert_ast(e); });
+    expr->foreach_operand([this, &args, &i](const expr2tc &e)
+                          { args[i++] = convert_ast(e); });
   }
   }
 
@@ -1229,6 +1251,43 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     */
     const code_comma2t &cm = to_code_comma2t(expr);
     a = convert_ast(cm.side_2);
+    break;
+  }
+  case expr2t::forall_id:
+  {
+    // TODO: technically the forall could be a list of symbols
+    // TODO: how to support other assertions inside it? e.g., buffer-overflow, arithmetic-overflow, etc...
+    const forall2t &f = to_forall2t(expr);
+    expr2tc symbol;
+
+    // We only want expressions of typecast(address_of(symbol)).
+    if (
+      is_typecast2t(f.side_1) && is_address_of2t(to_typecast2t(f.side_1).from))
+      symbol = to_address_of2t(to_typecast2t(f.side_1).from).ptr_obj;
+
+    if (!is_symbol2t(symbol))
+    {
+      log_error("Can only use quantifiers with one symbol");
+      f.dump();
+      abort();
+    }
+
+    /* Tricky problem to solve here:
+     * We need the name of the variable, but ESBMC uses different
+     * names for when a symbol is called by reference than by value.
+     *
+     * I am not sure how to fix this besides checking the body for the
+     * bound variables.
+     *
+     * This might cause some name clashing.
+     */
+
+    std::string name = get_last_name_from_body(
+      to_symbol2t(symbol).thename.as_string(), f.side_2);
+
+    a =
+      mk_quantifier(true, {name}, {convert_ast(symbol)}, convert_ast(f.side_2));
+
     break;
   }
   default:
@@ -2402,26 +2461,30 @@ expr2tc smt_convt::get(const expr2tc &expr)
     if (!is_nil_expr(arr_size) && is_symbol2t(arr_size))
       arr_size = get(arr_size);
 
-    res->type->Foreach_subtype([this](type2tc &t) {
-      if (!is_array_type(t))
-        return;
+    res->type->Foreach_subtype(
+      [this](type2tc &t)
+      {
+        if (!is_array_type(t))
+          return;
 
-      expr2tc &arr_size = to_array_type(t).array_size;
-      if (!is_nil_expr(arr_size) && is_symbol2t(arr_size))
-        arr_size = get(arr_size);
-    });
+        expr2tc &arr_size = to_array_type(t).array_size;
+        if (!is_nil_expr(arr_size) && is_symbol2t(arr_size))
+          arr_size = get(arr_size);
+      });
   }
 
   // Recurse on operands
   bool have_all = true;
-  res->Foreach_operand([this, &have_all](expr2tc &e) {
-    expr2tc new_e;
-    if (e)
-      new_e = get(e);
-    e = new_e;
-    if (!e)
-      have_all = false;
-  });
+  res->Foreach_operand(
+    [this, &have_all](expr2tc &e)
+    {
+      expr2tc new_e;
+      if (e)
+        new_e = get(e);
+      e = new_e;
+      if (!e)
+        have_all = false;
+    });
 
   // And simplify
   if (have_all)

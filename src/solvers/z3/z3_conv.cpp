@@ -1695,3 +1695,36 @@ smt_astt z3_convt::mk_smt_fpbv_abs(smt_astt op)
       z3_ctx, Z3_mk_fpa_abs(z3_ctx, to_solver_smt_ast<z3_smt_ast>(op)->a)),
     op->sort);
 }
+
+smt_astt z3_convt::mk_quantifier(
+  bool is_forall,
+  std::vector<std::string> names,
+  std::vector<smt_astt> asts,
+  smt_astt body)
+{
+  assert(names.size() == asts.size());
+
+  std::vector<Z3_symbol> symbols;
+  std::vector<Z3_sort> sorts;
+
+  for (unsigned i = 0; i < names.size(); i++)
+  {
+    asts[i]->dump();
+    symbols.push_back(Z3_mk_string_symbol(z3_ctx, names[i].c_str()));
+    sorts.push_back(to_solver_smt_ast<z3_smt_ast>(asts[i])->a.get_sort());
+  }
+
+  return new_ast(
+    z3::to_expr(
+      z3_ctx,
+      Z3_mk_forall(
+        z3_ctx,
+        0,
+        0,
+        NULL,
+        symbols.size(),
+        sorts.data(),
+        symbols.data(),
+        to_solver_smt_ast<z3_smt_ast>(body)->a)),
+    body->sort);
+}

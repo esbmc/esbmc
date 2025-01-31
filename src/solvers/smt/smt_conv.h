@@ -330,6 +330,24 @@ public:
   virtual smt_astt mk_real2int(smt_astt a);
   virtual smt_astt mk_int2real(smt_astt a);
   virtual smt_astt mk_isint(smt_astt a);
+  virtual smt_astt mk_quantifier(
+    bool is_forall,
+    std::vector<std::string> names,
+    std::vector<smt_astt> sorts,
+    smt_astt body)
+  {
+    (void)is_forall;
+    (void)names;
+    (void)sorts;
+    (void)body;
+    abort();
+  }
+  virtual smt_astt mk_exists(smt_astt symbols, smt_astt body)
+  {
+    (void)symbols;
+    (void)body;
+    abort();
+  }
 
   /** Create an integer or SBV/UBV sort */
   smt_sortt mk_int_bv_sort(std::size_t width)
