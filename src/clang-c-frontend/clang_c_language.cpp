@@ -441,6 +441,9 @@ void __VERIFIER_atomic_end();
 /* Causes a verification error when its call is reachable; internal use in math
  * models */
 void __ESBMC_unreachable();
+// Quantifiers
+_Bool __ESBMC_forall(void*, _Bool);
+_Bool __ESBMC_exists(void*, _Bool);
     )";
 
   if (config.ansi_c.cheri)
