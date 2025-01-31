@@ -1717,8 +1717,9 @@ smt_astt z3_convt::mk_quantifier(
   return new_ast(
     z3::to_expr(
       z3_ctx,
-      Z3_mk_forall(
+      Z3_mk_quantifier(
         z3_ctx,
+        is_forall,
         0,
         0,
         NULL,
