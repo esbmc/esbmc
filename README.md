@@ -287,11 +287,11 @@ This course unit introduces students to basic and advanced approaches to formall
 
 ### Selected Publications
 
+* Yiannis Charalambous, Norbert Tihanyi, Ridhi Jain, Youcheng Sun, Mohamed Amine Ferrag, Lucas C. Cordeiro. [A New Era in Software Security: Towards Self-Healing Software via Large Language Models and Formal Verification](https://arxiv.org/pdf/2305.14752.pdf). 6th ACM/IEEE International Conference on Automation of Software Test (AST), 2025. [DOI](https://doi.org/10.48550/arXiv.2305.14752)
+  
 * Farias, B., Menezes, R., de Lima Filho, E., Sun, Y., Cordeiro, L.: [ESBMC-Python: A Bounded Model Checker for Python Programs](https://doi.org/10.1145/3650212.3685304). In ISSTA 2024: Proceedings of the 33rd ACM SIGSOFT International Symposium on Software Testing and Analysis (ISSTA), pp. 1836-184, 2024. [DOI](https://doi.org/10.1145/3650212.3685304) [Presentation](https://ssvlab.github.io/lucasccordeiro/talks/issta2024_slides_1.pdf)
 
 * Pirzada, M., Bhayat, A., Cordeiro, L., Reger, G. [LLM-Generated Invariants for Bounded Model Checking Without Loop Unrolling](https://doi.org/10.1145/3691620.3695512). In 39th IEEE/ACM International Conference on Automated Software Engineering (ASE), pp. 1395-1407, 2024. [DOI](https://doi.org/10.1145/3691620.3695512) [Presentation](https://ssvlab.github.io/lucasccordeiro/talks/ase2024_slides.pdf)
-
-* Yiannis Charalambous, Norbert Tihanyi, Ridhi Jain, Youcheng Sun, Mohamed Amine Ferrag, Lucas C. Cordeiro. [A New Era in Software Security: Towards Self-Healing Software via Large Language Models and Formal Verification](https://arxiv.org/pdf/2305.14752.pdf). Technical Report, CoRR abs/2305.14752, 2023. [DOI](https://doi.org/10.48550/arXiv.2305.14752)
   
 * Rafael Menezes, Daniel Moura, Helena Cavalcante, Rosiane de Freitas, Lucas C. Cordeiro . [ESBMC-Jimple: verifying Kotlin programs via jimple intermediate representation](https://dl.acm.org/doi/abs/10.1145/3533767.3543294) In ISSTA'22, pp. 777-780, 2022. [DOI](https://doi.org/10.1145/3533767.3543294)
 
