@@ -142,7 +142,8 @@
   BOOST_PP_LIST_CONS(signbit,                                                  \
   BOOST_PP_LIST_CONS(concat,                                                   \
   BOOST_PP_LIST_CONS(extract,                                                  \
-  BOOST_PP_LIST_NIL)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+  BOOST_PP_LIST_CONS(forall,                                                  \
+  BOOST_PP_LIST_NIL))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
 
 #define ESBMC_LIST_OF_TYPES                                                    \
   BOOST_PP_LIST_CONS(bool,                                                     \

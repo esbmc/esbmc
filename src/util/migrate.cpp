@@ -1818,6 +1818,14 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     unsigned int lower = atoi(expr.get("lower").as_string().c_str());
     new_expr_ref = extract2tc(type, theop, upper, lower);
   }
+  else if (expr.id() == "forall")
+  {
+    type = migrate_type(expr.type());
+    expr2tc args[2];
+    migrate_expr(expr.op0(), args[0]);
+    migrate_expr(expr.op1(), args[1]);
+    new_expr_ref = forall2tc(type, args[0], args[1]);
+  }
   else
   {
     log_error("{}\nmigrate expr failed", expr);
@@ -3055,6 +3063,14 @@ exprt migrate_expr_back(const expr2tc &ref)
     const bitcast2t &ref2 = to_bitcast2t(ref);
     exprt back("bitcast", migrate_type_back(ref2.type));
     back.copy_to_operands(migrate_expr_back(ref2.from));
+    return back;
+  }
+  case expr2t::forall_id:
+  {
+    const forall2t &ref2 = to_forall2t(ref);
+    exprt back("forall", migrate_type_back(ref2.type));
+    back.copy_to_operands(migrate_expr_back(ref2.side_1));
+    back.copy_to_operands(migrate_expr_back(ref2.side_2));
     return back;
   }
   default:
