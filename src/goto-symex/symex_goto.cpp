@@ -70,42 +70,50 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
 
   assert(!instruction.targets.empty());
 
-  if(instruction.is_break){
+  if (instruction.is_break)
+  {
     // TODO
   }
 
-  if(instruction.is_loop_head){
+  if (instruction.is_loop_head)
+  {
     assert(options.get_bool_option("vampire-for-loops"));
     assert(forward);
 
     // get the newest loop_inv_prover object
     // we add one of these each time we hit a loop
     // and pop off once we finish processing the loop
-    auto& inv_prover = loop_inv_provers.back();
+    auto &inv_prover = loop_inv_provers.back();
 
-    if(!inv_prover.hit_loop_head()){
+    if (!inv_prover.hit_loop_head())
+    {
       nested_loop_depth++;
-      if(nested_loop_depth > loop_inv_provers.size()){
+      if (nested_loop_depth > loop_inv_provers.size())
+      {
         // Have a loop with no candidates invariants declared before it
-        log_error("No invariant was asserted for loop at location: {}. Aborting", cur_state->source.pc->location.as_string());
+        log_error(
+          "No invariant was asserted for loop at location: {}. Aborting",
+          cur_state->source.pc->location.as_string());
         abort();
       }
       // first time we hit this loop
       inv_prover.get_hypotheses(cur_state);
       inv_prover.update_loop_head_hit();
       cur_state->source.pc++;
-      return;      
-    } else {   
+      return;
+    }
+    else
+    {
       // second time we hit the loop, try and prove invariants
       // first we get the conclusions
       inv_prover.get_conclusions(cur_state);
       inv_prover.do_step_cases();
-      inv_prover.add_proven_invariants(this); 
-      // this is super confusing. Not sure how existing code works at all 
+      inv_prover.add_proven_invariants(this);
+      // this is super confusing. Not sure how existing code works at all
       // here we deal with partial correctness. We do not prove that loop terminates,
-      // but assume that it does. Since we assume termination we can assume the negation of 
+      // but assume that it does. Since we assume termination we can assume the negation of
       // the loop guard (note that new_guard is already negated. This happened in the conversion to GOTO)
-      assume(new_guard);    
+      assume(new_guard);
       // dealt with loop, pop of the stack
       loop_inv_provers.pop_back();
 
@@ -146,7 +154,9 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
     ++unwind;
 
     // when running with vampire-for-loops we always unwind exactly once
-    if(!options.get_bool_option("vampire-for-loops") && get_unwind(cur_state->source, unwind))
+    if (
+      !options.get_bool_option("vampire-for-loops") &&
+      get_unwind(cur_state->source, unwind))
     {
       loop_bound_exceeded(new_guard);
 
@@ -456,7 +466,7 @@ void goto_symext::loop_bound_exceeded(const expr2tc &guard)
   expr2tc negated_cond = guard;
   make_not(negated_cond);
 
-  if(!no_unwinding_assertions && !options.get_bool_option("vampire-for-loops"))
+  if (!no_unwinding_assertions && !options.get_bool_option("vampire-for-loops"))
   {
     // generate unwinding assertion
     claim(negated_cond, "unwinding assertion loop " + i2string(loop_number));

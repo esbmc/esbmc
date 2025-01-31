@@ -76,11 +76,11 @@ public:
   public:
     loop_inv_provert(
       const namespacet &_ns,
-      const goto_programt::instructiont& i, 
+      const goto_programt::instructiont &i,
       std::shared_ptr<symex_targett> t,
       std::string loop_loc)
       : loop_head_hit(false),
-        ns(_ns), 
+        ns(_ns),
         inv_instruction(i),
         loop_location(loop_loc)
     {
@@ -89,13 +89,19 @@ public:
 
     void do_base_cases(goto_symex_statet *cur_state);
     void do_step_cases();
-    void add_proven_invariants(goto_symext* parent);
+    void add_proven_invariants(goto_symext *parent);
 
     void get_hypotheses(goto_symex_statet *cur_state);
     void get_conclusions(goto_symex_statet *cur_state);
 
-    bool hit_loop_head(){ return loop_head_hit; }
-    void update_loop_head_hit(){ loop_head_hit = true; }
+    bool hit_loop_head()
+    {
+      return loop_head_hit;
+    }
+    void update_loop_head_hit()
+    {
+      loop_head_hit = true;
+    }
 
   private:
     // used to record whether we have hit the head once or twice
@@ -103,12 +109,12 @@ public:
     guardt pre_loop_guard;
     std::shared_ptr<vampire_equationt> target;
     const namespacet &ns;
-    const goto_programt::instructiont& inv_instruction;
+    const goto_programt::instructiont &inv_instruction;
     std::string loop_location;
     std::vector<expr2tc> invs_passed_base_case;
     std::vector<expr2tc> induction_hypotheses;
-    std::vector<expr2tc> conclusions; 
-    std::vector<bool>    invariants_proven;
+    std::vector<expr2tc> conclusions;
+    std::vector<bool> invariants_proven;
   };
 
   friend class symex_dereference_statet;
@@ -268,7 +274,6 @@ protected:
    *  @return Return whether verification succeeded.
    */
   bool check_incremental(const expr2tc &expr, const std::string &msg);
-
 
   bool check_with_vampire(const expr2tc &expr);
 

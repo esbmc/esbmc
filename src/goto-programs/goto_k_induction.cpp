@@ -212,10 +212,11 @@ void goto_k_inductiont::make_nondet_assign(
     t->location = loop_head->location;
   }
 
-  if(config.options.get_bool_option("vampire-for-loops")){
+  if (config.options.get_bool_option("vampire-for-loops"))
+  {
     auto const &non_modified_loop_vars = loop.get_unmodified_loop_vars();
 
-    for(auto const &lhs : non_modified_loop_vars)
+    for (auto const &lhs : non_modified_loop_vars)
     {
       expr2tc rhs = gen_nondet(lhs->type);
 

@@ -14,8 +14,8 @@
 #include <fstream>
 
 #ifndef _WIN32
-#include <unistd.h>
-#include <signal.h>
+#  include <unistd.h>
+#  include <signal.h>
 #endif
 
 // clang-format off
@@ -179,16 +179,15 @@ void smtlib_convt::dump_smt()
 }
 
 smtlib_convt::file_emitter::file_emitter(const std::string &path)
-  : out_stream(nullptr),
-   _path(path)
+  : out_stream(nullptr), _path(path)
 {
   // We may be being instructed to just output to a file.
-  if(path == "")
+  if (path == "")
     return;
 
   // Open a file, do nothing else.
   out_stream = fopen(path.c_str(), "w");
-  if(!out_stream)
+  if (!out_stream)
   {
     log_error("Failed to open \"{}\": {}", path, strerror(errno));
     abort();
@@ -197,14 +196,14 @@ smtlib_convt::file_emitter::file_emitter(const std::string &path)
 
 smtlib_convt::file_emitter::~file_emitter() noexcept
 {
-  if(out_stream)
+  if (out_stream)
     fclose(out_stream);
 }
 
 void smtlib_convt::file_emitter::clear()
 {
   // close current outstream
-  fclose(out_stream);  
+  fclose(out_stream);
   // open it again
   out_stream = fopen(_path.c_str(), "w");
 }
@@ -214,11 +213,13 @@ std::string smtlib_convt::file_emitter::get_file_contents()
   fclose(out_stream);
 
   std::ifstream in_file(_path);
-  std::string file_contents((std::istreambuf_iterator<char>(in_file)), std::istreambuf_iterator<char>());
+  std::string file_contents(
+    (std::istreambuf_iterator<char>(in_file)),
+    std::istreambuf_iterator<char>());
 
   // Close the file in C++
   in_file.close();
-  
+
   // removes contents
   out_stream = fopen(_path.c_str(), "w");
 
@@ -227,13 +228,13 @@ std::string smtlib_convt::file_emitter::get_file_contents()
 
 void smtlib_convt::file_emitter::output_content(std::string cont)
 {
-  emit("%s", cont.c_str()); 
+  emit("%s", cont.c_str());
 }
 
 smtlib_convt::process_emitter::process_emitter(const std::string &cmd)
   : out_stream(nullptr), in_stream(nullptr), org_sigpipe_handler(nullptr)
 {
-  if(cmd == "")
+  if (cmd == "")
     return;
 
   // Setup: open a pipe to the smtlib solver. There seems to be no standard C++
@@ -390,14 +391,16 @@ smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
     emit_proc(_options.get_option("smtlib-solver-prog")),
     emit_opt_output(_options.get_option("output"))
 {
-  bool int_encoding   =  options.get_bool_option("int-encoding");
-  vamp_for_loops =  options.get_bool_option("vampire-for-loops"); 
+  bool int_encoding = options.get_bool_option("int-encoding");
+  vamp_for_loops = options.get_bool_option("vampire-for-loops");
 
-  if(vamp_for_loops){
+  if (vamp_for_loops)
+  {
     vampire_sym_table.push_back(map_tablet());
   }
 
-  std::string logic = int_encoding ? (vamp_for_loops ?  "AUFLIRA" : "QF_AUFLIRA") : "QF_AUFBV";
+  std::string logic =
+    int_encoding ? (vamp_for_loops ? "AUFLIRA" : "QF_AUFLIRA") : "QF_AUFBV";
 
   emit("%s", "(set-option :produce-models true)\n");
   emit("(set-logic %s)\n", logic.c_str());
@@ -406,23 +409,25 @@ smtlib_convt::smtlib_convt(const namespacet &_ns, const optionst &_options)
 
 void smtlib_convt::clear()
 {
-  if(emit_opt_output)
+  if (emit_opt_output)
     emit_opt_output.clear();
 }
 
 std::string smtlib_convt::get_file_contents()
 {
-  if(emit_opt_output){
+  if (emit_opt_output)
+  {
     return emit_opt_output.get_file_contents();
   }
   return "";
 }
 
-void smtlib_convt::output_content(std::string& cont)
+void smtlib_convt::output_content(std::string &cont)
 {
-  if(emit_opt_output){
+  if (emit_opt_output)
+  {
     emit_opt_output.output_content(cont);
-  }  
+  }
 }
 
 smtlib_convt::~smtlib_convt()
@@ -551,7 +556,6 @@ unsigned int smtlib_convt::emit_ast(
     // Continue.
   }
 
-
   if (auto it = temp_symbols.find(ast); it != temp_symbols.end())
   {
     output = it->second;
@@ -564,14 +568,18 @@ unsigned int smtlib_convt::emit_ast(
   ss << "?x" << tempnum;
   std::string tempname = ss.str();
 
-  bool quantified = ast->kind == SMT_FUNC_FORALL  || ast->kind == SMT_FUNC_EXISTS;
+  bool quantified =
+    ast->kind == SMT_FUNC_FORALL || ast->kind == SMT_FUNC_EXISTS;
 
   temp_symbols.emplace(ast, tempname);
 
-  if(!quantified){
-    for(unsigned long int i = 0; i < ast->args.size(); i++)
+  if (!quantified)
+  {
+    for (unsigned long int i = 0; i < ast->args.size(); i++)
       brace_level += emit_ast(
-        static_cast<const smtlib_smt_ast *>(ast->args[i]), args[i], temp_symbols);
+        static_cast<const smtlib_smt_ast *>(ast->args[i]),
+        args[i],
+        temp_symbols);
   }
 
   // Emit a let, assigning the result of this AST func to the sym.
@@ -589,21 +597,25 @@ unsigned int smtlib_convt::emit_ast(
   else
   {
     emit("%s", smt_func_name_table[ast->kind]);
-  } 
- 
-  if(quantified){
+  }
+
+  if (quantified)
+  {
     std::string bound_var;
-    emit_terminal_ast(static_cast<const smtlib_smt_ast *>(ast->args[0]), bound_var);  
+    emit_terminal_ast(
+      static_cast<const smtlib_smt_ast *>(ast->args[0]), bound_var);
     // have to treat quantified formulas differently to avoid leaking of bound vars
     emit(" %s", "((");
     emit("%s ", bound_var.c_str());
-    emit("%s",  sort_to_string(ast->args[0]->sort).c_str() );
+    emit("%s", sort_to_string(ast->args[0]->sort).c_str());
     emit("%s ", "))\n");
-    
+
     emit_ast(static_cast<const smtlib_smt_ast *>(ast->args[1]));
-  } else {
+  }
+  else
+  {
     // Its operands
-    for(unsigned long int i = 0; i < ast->args.size(); i++)
+    for (unsigned long int i = 0; i < ast->args.size(); i++)
       emit(" %s", args[i].c_str());
   }
 
@@ -954,29 +966,30 @@ smt_astt smtlib_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   smtlib_smt_ast *a = new smtlib_smt_ast(this, s, SMT_FUNC_SYMBOL);
   a->symname = name;
 
-
-  if(vamp_for_loops){
-
+  if (vamp_for_loops)
+  {
     auto it = vampire_sym_table.back().find(name);
-  
-    if(it != vampire_sym_table.back().end())
-      return a;  
 
-  } else {
-
+    if (it != vampire_sym_table.back().end())
+      return a;
+  }
+  else
+  {
     symbol_tablet::iterator it = symbol_table.find(name);
 
-    if(it != symbol_table.end())
+    if (it != symbol_table.end())
       return a;
-
   }
 
   // Record the type of this symbol
   struct symbol_table_rec record = {name, ctx_level, s};
 
-  if(vamp_for_loops){
+  if (vamp_for_loops)
+  {
     vampire_sym_table.back().insert({name, record});
-  } else {
+  }
+  else
+  {
     symbol_table.insert(record);
   }
 
@@ -1075,11 +1088,10 @@ void smtlib_convt::push_ctx()
   smt_convt::push_ctx();
 
   // Note: Why is this an issue for vampire?
-  if(!vamp_for_loops)
+  if (!vamp_for_loops)
     emit("%s", "(push 1)\n");
   else
     vampire_sym_table.push_back(map_tablet());
-
 }
 
 smt_astt smtlib_convt::mk_add(smt_astt a, smt_astt b)
@@ -1361,8 +1373,7 @@ smt_astt smtlib_convt::mk_implies(smt_astt a, smt_astt b)
 smt_astt smtlib_convt::mk_forall(smt_astt a, smt_astt b)
 {
   assert(b->sort->id == SMT_SORT_BOOL);
-  smtlib_smt_ast *ast =
-    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_FORALL);
+  smtlib_smt_ast *ast = new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_FORALL);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1371,8 +1382,7 @@ smt_astt smtlib_convt::mk_forall(smt_astt a, smt_astt b)
 smt_astt smtlib_convt::mk_exists(smt_astt a, smt_astt b)
 {
   assert(b->sort->id == SMT_SORT_BOOL);
-  smtlib_smt_ast *ast =
-    new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_EXISTS);
+  smtlib_smt_ast *ast = new smtlib_smt_ast(this, boolean_sort, SMT_FUNC_EXISTS);
   ast->args.push_back(a);
   ast->args.push_back(b);
   return ast;
@@ -1601,13 +1611,16 @@ smt_astt smtlib_convt::mk_isint(smt_astt a)
 void smtlib_convt::pop_ctx()
 {
   // Why is this an issue for vampire?
-  if(!options.get_bool_option("vampire-for-loops"))
+  if (!options.get_bool_option("vampire-for-loops"))
     emit("%s", "(pop 1)\n");
 
   // Wipe this level of symbol table.
-  if(vamp_for_loops){
+  if (vamp_for_loops)
+  {
     vampire_sym_table.pop_back();
-  } else {
+  }
+  else
+  {
     symbol_tablet::nth_index<1>::type &syms_numindex = symbol_table.get<1>();
     syms_numindex.erase(ctx_level);
   }

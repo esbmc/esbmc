@@ -187,7 +187,7 @@ public:
   const std::string solver_text() override;
 
   void clear();
-  void output_content(std::string& cont);
+  void output_content(std::string &cont);
   std::string get_file_contents();
 
   smt_astt mk_add(smt_astt a, smt_astt b) override;

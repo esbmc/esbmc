@@ -489,12 +489,10 @@ void runtime_encoded_equationt::pop_ctx()
   assumpt_chain.pop_back();
 }
 
-vampire_equationt::vampire_equationt(
-  const namespacet &_ns,
-  smt_convt &_conv)
+vampire_equationt::vampire_equationt(const namespacet &_ns, smt_convt &_conv)
   : symex_target_equationt(_ns)
 {
-  conv = dynamic_cast<smtlib_convt*>(&_conv);
+  conv = dynamic_cast<smtlib_convt *>(&_conv);
 
   cvt_progress = SSA_steps.end();
 
@@ -504,10 +502,9 @@ vampire_equationt::vampire_equationt(
   SMT_formulas.push_back(preamble);
 }
 
-
 void vampire_equationt::push_ctx()
 {
-  SMT_formulas.push_back(vampire_equationt::preamble);  
+  SMT_formulas.push_back(vampire_equationt::preamble);
   scoped_end_points.push_back(cvt_progress);
 
   conv->push_ctx();
@@ -518,7 +515,7 @@ void vampire_equationt::pop_ctx()
   SSA_stepst::iterator it = scoped_end_points.back();
   cvt_progress = it;
 
-  if(SSA_steps.size() != 0)
+  if (SSA_steps.size() != 0)
     ++it;
 
   SSA_steps.erase(it, SSA_steps.end());
@@ -529,8 +526,8 @@ void vampire_equationt::pop_ctx()
 }
 
 void vampire_equationt::update_formula()
-{ 
-  if(SSA_steps.size() == 0)
+{
+  if (SSA_steps.size() == 0)
     return;
 
   conv->clear();
@@ -542,14 +539,14 @@ void vampire_equationt::update_formula()
   // * We're at the start of running, in which case cvt_progress == end
   // * We're in the middle, but nothing is left to push, so run_it + 1 == end
   // * We're in the middle, and there's more to convert.
-  if(run_it == SSA_steps.end())
+  if (run_it == SSA_steps.end())
   {
     run_it = SSA_steps.begin();
   }
   else
   {
     run_it++;
-    if(run_it == SSA_steps.end())
+    if (run_it == SSA_steps.end())
     {
       // There is in fact, nothing to do
       return;
@@ -558,9 +555,8 @@ void vampire_equationt::update_formula()
   }
 
   // Now iterate from the start insn to convert, to the end of the list.
-  for(; run_it != SSA_steps.end(); ++run_it)
-    convert_internal_step(
-      *conv, assumpt_ast, assertions, *run_it);
+  for (; run_it != SSA_steps.end(); ++run_it)
+    convert_internal_step(*conv, assumpt_ast, assertions, *run_it);
 
   run_it--;
   cvt_progress = run_it;
@@ -569,12 +565,13 @@ void vampire_equationt::update_formula()
   // or any other assumptions
   conv->assert_ast(assumpt_ast);
 
-  if(!assertions.empty()){
+  if (!assertions.empty())
+  {
     log_error("When running in Vampire mode, there should be no assertions");
     abort();
   }
 
-  std::string& str = SMT_formulas.back();
+  std::string &str = SMT_formulas.back();
 
   str.append(conv->get_file_contents());
 }
@@ -588,53 +585,65 @@ void vampire_equationt::assert_fact(const expr2tc &question)
 void vampire_equationt::assert_top_formula()
 {
   // get text from list and output to file
-  std::string& formula = SMT_formulas.back();
+  std::string &formula = SMT_formulas.back();
   conv->clear();
   conv->output_content(formula);
 }
 
 bool vampire_equationt::solve(bool noisy)
-{ 
+{
   // pop open Vampire, solve and get answer
   conv->flush();
- 
+
   std::string currentDir = std::filesystem::current_path().string();
   std::string run_str;
   std::string input_file_name = config.options.get_option("output");
-  
+
   std::string vampire_exec = config.options.get_option("vampire-path");
 
-  if(vampire_exec != ""){
+  if (vampire_exec != "")
+  {
     run_str = vampire_exec;
-  } else {
-    log_error("Unable to find Vampire executable. Try setting option vampire-path");
+  }
+  else
+  {
+    log_error(
+      "Unable to find Vampire executable. Try setting option vampire-path");
     // what should this be?
     return false;
   }
 
-  run_str += " --ignore_unrecognized_logic on --mode portfolio --schedule smtcomp -t 20 " + currentDir + "/" + input_file_name;
+  run_str +=
+    " --ignore_unrecognized_logic on --mode portfolio --schedule smtcomp -t "
+    "20 " +
+    currentDir + "/" + input_file_name;
 
   std::array<char, 128> buffer;
   std::string result;
-  std::unique_ptr<FILE, decltype(&pclose)> pipe(popen(run_str.c_str(), "r"), pclose);
-  if (!pipe) {
+  std::unique_ptr<FILE, decltype(&pclose)> pipe(
+    popen(run_str.c_str(), "r"), pclose);
+  if (!pipe)
+  {
     log_error("unable to run Vampire");
     return false;
   }
 
-  while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr) {
+  while (fgets(buffer.data(), buffer.size(), pipe.get()) != nullptr)
+  {
     result += buffer.data();
   }
 
-  if(noisy){
+  if (noisy)
+  {
     std::cout << result << std::endl;
   }
 
   size_t pos1 = result.find("status Unsatisfiable");
   size_t pos2 = result.find("unsat"); // when running in smtcomp mode
-  if (pos1 != std::string::npos || pos2 != std::string::npos){
+  if (pos1 != std::string::npos || pos2 != std::string::npos)
+  {
     return true;
-  }    
+  }
 
   return false;
 }
@@ -649,12 +658,10 @@ std::shared_ptr<symex_targett> vampire_equationt::clone() const
     SSA_steps.size() == 0 &&
     "vampire_equationt shouldn't be "
     "cloned when it contains data");
-  auto nthis = std::shared_ptr<vampire_equationt>(
-    new vampire_equationt(*this));
-  nthis->cvt_progress = nthis->SSA_steps.end();  
+  auto nthis = std::shared_ptr<vampire_equationt>(new vampire_equationt(*this));
+  nthis->cvt_progress = nthis->SSA_steps.end();
   return nthis;
 }
-
 
 void runtime_encoded_equationt::convert(smt_convt &smt_conv)
 {

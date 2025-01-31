@@ -27,25 +27,25 @@
 typedef enum
 {
   NO_INSTRUCTION_TYPE = 0,
-  GOTO = 1,           // branch, possibly guarded
-  ASSUME = 2,         // non-failing guarded self loop
-  ASSERT = 3,         // assertions
-  OTHER = 4,          // anything else
-  SKIP = 5,           // just advance the PC
-  LOCATION = 8,       // semantically like SKIP
-  END_FUNCTION = 9,   // exit point of a function
-  ATOMIC_BEGIN = 10,  // marks a block without interleavings
-  ATOMIC_END = 11,    // end of a block without interleavings
-  RETURN = 12,        // return from a function
-  ASSIGN = 13,        // assignment lhs:=rhs
-  DECL = 14,          // declare a local variable
-  DEAD = 15,          // marks the end-of-live of a local variable
-  FUNCTION_CALL = 16, // call a function
-  THROW = 17,         // throw an exception
-  CATCH = 18,         // catch an exception
-  THROW_DECL = 19,    // list of throws that a function can throw
-  THROW_DECL_END = 20,// end of throw declaration
-  INVARIANT = 21      // purported invariants (similar to assert)
+  GOTO = 1,            // branch, possibly guarded
+  ASSUME = 2,          // non-failing guarded self loop
+  ASSERT = 3,          // assertions
+  OTHER = 4,           // anything else
+  SKIP = 5,            // just advance the PC
+  LOCATION = 8,        // semantically like SKIP
+  END_FUNCTION = 9,    // exit point of a function
+  ATOMIC_BEGIN = 10,   // marks a block without interleavings
+  ATOMIC_END = 11,     // end of a block without interleavings
+  RETURN = 12,         // return from a function
+  ASSIGN = 13,         // assignment lhs:=rhs
+  DECL = 14,           // declare a local variable
+  DEAD = 15,           // marks the end-of-live of a local variable
+  FUNCTION_CALL = 16,  // call a function
+  THROW = 17,          // throw an exception
+  CATCH = 18,          // catch an exception
+  THROW_DECL = 19,     // list of throws that a function can throw
+  THROW_DECL_END = 20, // end of throw declaration
+  INVARIANT = 21       // purported invariants (similar to assert)
 } goto_program_instruction_typet;
 
 std::ostream &operator<<(std::ostream &, goto_program_instruction_typet);
@@ -145,10 +145,10 @@ public:
     bool inductive_assertion;
 
     // for vampire loop replacement
-  
+
     bool is_loop_head;
     bool is_break;
- 
+
     //! is this node a branch target?
     inline bool is_target() const
     {
@@ -396,15 +396,17 @@ public:
       std::swap(instruction.loop_number, loop_number);
     }
 
-    void add_invariant(expr2tc inv){
+    void add_invariant(expr2tc inv)
+    {
       assert(is_invariant());
       invariants.push_back(inv);
     }
 
-    std::list<expr2tc>& get_invariants(){
+    std::list<expr2tc> &get_invariants()
+    {
       return invariants;
     }
- 
+
     //! A globally unique number to identify a program location.
     //! It's guaranteed to be ordered in program order within
     //! one goto_program.

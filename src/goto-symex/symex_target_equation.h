@@ -181,7 +181,8 @@ public:
     return it;
   }
 
-  unsigned steps_size() {
+  unsigned steps_size()
+  {
     return SSA_steps.size();
   }
 
@@ -268,7 +269,7 @@ public:
 
   SSA_stepst::iterator cvt_progress;
 
-  smtlib_convt* conv;
+  smtlib_convt *conv;
 };
 
 extern inline bool operator<(

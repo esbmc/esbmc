@@ -308,7 +308,7 @@ public:
   virtual smt_astt mk_bvand(smt_astt a, smt_astt b);
   virtual smt_astt mk_implies(smt_astt a, smt_astt b);
   virtual smt_astt mk_forall(smt_astt a, smt_astt b);
-  virtual smt_astt mk_exists(smt_astt a, smt_astt b);  
+  virtual smt_astt mk_exists(smt_astt a, smt_astt b);
   virtual smt_astt mk_xor(smt_astt a, smt_astt b);
   virtual smt_astt mk_or(smt_astt a, smt_astt b);
   virtual smt_astt mk_and(smt_astt a, smt_astt b);
@@ -765,9 +765,8 @@ public:
         std::greater<unsigned int>>>>
     smt_cachet;
 
-
   typedef std::map<const expr2tc, smt_cache_entryt> map_cachet;
-  typedef std::vector<map_cachet> vampire_cachet;  
+  typedef std::vector<map_cachet> vampire_cachet;
 
   typedef std::unordered_map<type2tc, smt_sortt, type2_hash> smt_sort_cachet;
 

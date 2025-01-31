@@ -736,17 +736,19 @@ void goto_convertt::remove_function_call(
     assert(symbol);
 
     auto name = id2string(symbol->name);
-    if(name == "__forall" || name == "__exists"){
+    if (name == "__forall" || name == "__exists")
+    {
       // super inelegant
       auto arg = expr.op1().op0();
 
-      if(arg.id() == "symbol"){
+      if (arg.id() == "symbol")
+      {
         return;
       }
 
       arg = arg.op0().op0();
       expr.op1().op0() = arg;
-  
+
       // don't want to squish these
       return;
     }

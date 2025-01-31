@@ -40,7 +40,7 @@ public:
   virtual ~c_expr2stringt() = default;
 
   virtual std::string convert(const typet &src);
-  //  virtual std::string convert(const codet &src);  
+  //  virtual std::string convert(const codet &src);
   virtual std::string convert(const exprt &src);
 
   void get_shorthands(const exprt &expr);
