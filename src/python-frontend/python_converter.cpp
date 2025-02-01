@@ -282,6 +282,25 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   if (lhs_type == "str" && rhs_type == "str")
   {
+    auto ensure_array = [&](exprt &expr) {
+      // Single-character are treated as constants.
+      // Therefore, we need to create a temporary array of size one,
+      // to ensure a valid address for C-string models.
+      if (!expr.type().is_array())
+      {
+        typet t = type_handler_.build_array(expr.type(), 1);
+        exprt arr = gen_zero(t);
+        arr.operands().at(0) = expr;
+        expr = arr;
+      }
+    };
+
+    ensure_array(rhs);
+    ensure_array(lhs);
+
+    assert(lhs.type().is_array());
+    assert(rhs.type().is_array());
+
     // Strings comparison
     if (op == "Eq")
     {
