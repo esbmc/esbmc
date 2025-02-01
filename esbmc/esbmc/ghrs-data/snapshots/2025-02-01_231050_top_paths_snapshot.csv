@@ -1,0 +1,11 @@
+url_path,views_total,views_unique
+/esbmc/esbmc,443,114
+/esbmc/esbmc/pulls,81,8
+/esbmc/esbmc/issues,76,16
+/esbmc/esbmc/commits/master,36,5
+/esbmc/esbmc/pull/2258,36,3
+/esbmc/esbmc/tree/master/regression/floats,36,1
+/esbmc/esbmc/tree/master/src,31,12
+/esbmc/esbmc/compare/master...brcfarias:esbmc:python-frontend,29,3
+/esbmc/esbmc/actions,26,7
+/esbmc/esbmc/pull/2253,23,4
