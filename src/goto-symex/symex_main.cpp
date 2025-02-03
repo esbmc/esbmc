@@ -344,9 +344,11 @@ void goto_symext::symex_step(reachability_treet &art)
       const irep_idt &id = to_symbol2t(call.function).thename;
       if (has_prefix(id.as_string(), "c:@F@__builtin"))
       {
-        cur_state->source.pc++;
         if (run_builtin(call, id.as_string()))
+        {
+          cur_state->source.pc++;
           return;
+        }
       }
     }
 
