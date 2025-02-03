@@ -155,8 +155,9 @@ class Preprocessor(ast.NodeTransformer):
             elif (functionName, expectedArgs[i]) in self.functionDefaults:
                 node.args.append(ast.Constant(value = self.functionDefaults[(functionName, expectedArgs[i])]))
             else:
-                print("File ", self.module_name, "line", node.lineno)
-                raise TypeError(f"There is an error in your code\nline {node.lineno}, in {self.module_name}, {functionName}() missing required positional argument: '{expectedArgs[i]}'")
+                # print("File ", self.module_name, "line", node.lineno)
+                # raise TypeError(f"There is an error in your code\nline {node.lineno}, in {self.module_name}, {functionName}() missing required positional argument: '{expectedArgs[i]}'") # TODO break rather than raise so solver gives nicer message
+                break # breaking should mean not enough arguments, solver should reject
 
 
         self.generic_visit(node)
