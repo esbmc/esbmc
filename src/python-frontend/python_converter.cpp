@@ -2,7 +2,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/type_utils.h>
 #include <python-frontend/symbol_id.h>
-#include <python-frontend/function_call_expr.h>
+#include <python-frontend/function_call_builder.h>
 #include <ansi-c/convert_float_literal.h>
 #include <util/std_code.h>
 #include <util/c_types.h>
@@ -282,6 +282,25 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   if (lhs_type == "str" && rhs_type == "str")
   {
+    auto ensure_array = [&](exprt &expr) {
+      // Single-character are treated as constants.
+      // Therefore, we need to create a temporary array of size one,
+      // to ensure a valid address for C-string models.
+      if (!expr.type().is_array())
+      {
+        typet t = type_handler_.build_array(expr.type(), 1);
+        exprt arr = gen_zero(t);
+        arr.operands().at(0) = expr;
+        expr = arr;
+      }
+    };
+
+    ensure_array(rhs);
+    ensure_array(lhs);
+
+    assert(lhs.type().is_array());
+    assert(rhs.type().is_array());
+
     // Strings comparison
     if (op == "Eq")
     {
@@ -600,8 +619,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     }
   }
 
-  function_call_expr call(element, *this);
-  return call.build();
+  function_call_builder call_builder(*this, element);
+  return call_builder.build();
 }
 
 exprt python_converter::get_literal(const nlohmann::json &element)
@@ -703,10 +722,25 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   case ExpressionType::LIST:
   {
-    expr = gen_zero(current_element_type);
+    exprt zero = gen_zero(size_type());
+    exprt &list_size = static_cast<array_typet &>(current_element_type).size();
+    typet list_type = type_handler_.get_list_type(element);
+
+    if (list_size == zero)
+    {
+      current_element_type = list_type;
+    }
+
+    expr = gen_zero(list_type);
+
     unsigned int i = 0;
     for (auto &e : element["elts"])
-      expr.operands().at(i++) = get_literal(e);
+    {
+      if (e["_type"] == "List")
+        expr.operands().at(i++) = get_expr(e);
+      else
+        expr.operands().at(i++) = get_literal(e);
+    }
 
     break;
   }
@@ -934,7 +968,7 @@ const nlohmann::json &get_return_statement(const nlohmann::json &function)
 
   throw std::runtime_error(
     "Function " + function["name"].get<std::string>() +
-    "has no return statement");
+    " has no return statement");
 }
 
 void python_converter::get_var_assign(
@@ -1038,13 +1072,14 @@ void python_converter::get_var_assign(
   {
     if (lhs_symbol)
     {
-      if (lhs_type == "str")
+      if (lhs_type == "str" || lhs_type == "list")
       {
         /* When a string is assigned the result of a concatenation, we initially
          * create the LHS type as a zero-size array: "current_element_type = get_typet(lhs_type, type_size);"
          * After parsing the RHS, we need to adjust the LHS type size to match
          * the size of the resulting RHS string.*/
         lhs_symbol->type = rhs.type();
+        lhs.type() = rhs.type();
       }
       lhs_symbol->value = rhs;
     }
@@ -1211,8 +1246,13 @@ void python_converter::get_function_definition(
       return_stmt["value"]["id"].get<std::string>(),
       function_node["name"].get<std::string>(),
       json);
+
     assert(!return_var.empty());
-    type.return_type() = type_handler_.get_list_type(return_var["value"]);
+
+    if (return_var["_type"] == "arg")
+      type.return_type() = type_handler_.get_list_type(return_var);
+    else
+      type.return_type() = type_handler_.get_list_type(return_var["value"]);
   }
   else
   {
@@ -1253,8 +1293,13 @@ void python_converter::get_function_definition(
     else if (arg_name == "cls")
       arg_type = pointer_typet(empty_typet());
     else
-      arg_type =
-        type_handler_.get_typet(element["annotation"]["id"].get<std::string>());
+    {
+      if (element["annotation"]["_type"] == "Subscript")
+        arg_type = type_handler_.get_list_type(element);
+      else
+        arg_type = type_handler_.get_typet(
+          element["annotation"]["id"].get<std::string>());
+    }
 
     if (arg_type.is_array())
       arg_type = gen_pointer_type(arg_type.subtype());

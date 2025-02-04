@@ -11,47 +11,17 @@
 
 using namespace json_utils;
 
-const std::string kGetObjectSize = "__ESBMC_get_object_size";
-const std::string kEsbmcAssume = "__ESBMC_assume";
-const std::string kVerifierAssume = "__VERIFIER_assume";
-
 function_call_expr::function_call_expr(
+  const symbol_id &function_id,
   const nlohmann::json &call,
   python_converter &converter)
-  : call_(call),
+  : function_id_(function_id),
+    call_(call),
     converter_(converter),
     type_handler_(converter.get_type_handler()),
     function_type_(FunctionType::FreeFunction)
 {
-  build_function_id();
-
   get_function_type();
-
-  // Add assume and len functions to symbol table
-  if (is_assume_call() || is_len_call())
-  {
-    const auto &symbol_table = converter_.symbol_table();
-    const std::string &func_symbol_id = function_id_.to_string();
-
-    if (symbol_table.find_symbol(func_symbol_id.c_str()) == nullptr)
-    {
-      code_typet code_type;
-      if (is_len_call())
-      {
-        code_type.return_type() = int_type();
-        code_type.arguments().push_back(pointer_typet(empty_typet()));
-      }
-
-      const std::string &python_file = converter_.python_file();
-      const std::string &func_name = function_id_.get_function();
-      locationt location = converter_.get_location_from_decl(call_);
-
-      symbolt symbol = converter_.create_symbol(
-        python_file, func_name, func_symbol_id, location, code_type);
-
-      converter_.add_symbol(symbol);
-    }
-  }
 }
 
 static std::string get_classname_from_symbol_id(const std::string &symbol_id)
@@ -103,139 +73,12 @@ void function_call_expr::get_function_type()
   }
 }
 
-void function_call_expr::build_function_id()
-{
-  const std::string &python_file = converter_.python_file();
-  const std::string &current_class_name = converter_.current_classname();
-  const std::string &current_function_name = converter_.current_function_name();
-  const auto &ast = converter_.ast();
-
-  bool is_member_function_call = false;
-
-  const auto &func_json = call_["func"];
-
-  const std::string &func_type = func_json["_type"];
-
-  std::string func_name, obj_name, class_name;
-
-  function_id_ =
-    symbol_id(python_file, current_class_name, current_function_name);
-
-  if (func_type == "Name")
-  {
-    func_name = func_json["id"];
-  }
-  else if (func_type == "Attribute") // Handling obj_name.func_name() calls
-  {
-    is_member_function_call = true;
-    func_name = func_json["attr"];
-
-    // Get object name
-    if (func_json["value"]["_type"] == "Attribute")
-    {
-      obj_name = func_json["value"]["attr"];
-    }
-    else if (
-      func_json["value"]["_type"] == "Constant" &&
-      func_json["value"]["value"].is_string())
-    {
-      obj_name = "str";
-    }
-    else if (func_json["value"]["_type"] == "BinOp")
-    {
-      std::string lhs_type =
-        type_handler_.get_operand_type(func_json["value"]["left"]);
-
-      std::string rhs_type =
-        type_handler_.get_operand_type(func_json["value"]["right"]);
-
-      assert(lhs_type == rhs_type);
-
-      obj_name = lhs_type;
-    }
-    else
-    {
-      obj_name = func_json["value"]["id"];
-    }
-
-    obj_name = get_object_alias(ast, obj_name);
-
-    if (!is_class(obj_name, ast) && converter_.is_imported_module(obj_name))
-    {
-      const auto &module_path = converter_.get_imported_module_path(obj_name);
-
-      function_id_ =
-        symbol_id(module_path, current_class_name, current_function_name);
-
-      is_member_function_call = false;
-    }
-  }
-
-  // build symbol_id
-  if (func_name == "len")
-  {
-    func_name = kGetObjectSize;
-    function_id_.clear();
-    function_id_.set_prefix("c:");
-  }
-  else if (type_utils::is_builtin_type(obj_name))
-  {
-    class_name = obj_name;
-    function_id_ = symbol_id(python_file, class_name, func_name);
-  }
-  else if (is_assume_call())
-  {
-    function_id_.clear();
-  }
-
-  // Insert class name in the symbol id
-  if (type_handler_.is_constructor_call(call_))
-  {
-    class_name = func_name;
-  }
-  else if (is_member_function_call)
-  {
-    if (type_utils::is_builtin_type(obj_name) || is_class(obj_name, ast))
-    {
-      class_name = obj_name;
-    }
-    else
-    {
-      auto obj_node = find_var_decl(obj_name, current_function_name, ast);
-
-      if (obj_node.empty())
-        throw std::runtime_error("Class " + obj_name + " not found");
-
-      class_name = obj_node["annotation"]["id"].get<std::string>();
-    }
-  }
-
-  if (!class_name.empty())
-  {
-    function_id_.set_class(class_name);
-  }
-
-  function_id_.set_function(func_name);
-}
-
 bool function_call_expr::is_nondet_call() const
 {
   std::regex pattern(
     R"(nondet_(int|char|bool|float)|__VERIFIER_nondet_(int|char|bool|float))");
 
   return std::regex_match(function_id_.get_function(), pattern);
-}
-
-bool function_call_expr::is_assume_call() const
-{
-  const std::string &func_name = function_id_.get_function();
-  return (func_name == kEsbmcAssume || func_name == kVerifierAssume);
-}
-
-bool function_call_expr::is_len_call() const
-{
-  const std::string &func_name = function_id_.get_function();
-  return func_name == kGetObjectSize;
 }
 
 exprt function_call_expr::build_nondet_call() const
@@ -287,7 +130,7 @@ std::string function_call_expr::get_object_name() const
   return json_utils::get_object_alias(converter_.ast(), obj_name);
 }
 
-exprt function_call_expr::build()
+exprt function_call_expr::get()
 {
   // Handle non-det functions
   if (is_nondet_call())
@@ -419,11 +262,6 @@ exprt function_call_expr::build()
   for (const auto &arg_node : call_["args"])
   {
     exprt arg = converter_.get_expr(arg_node);
-    if (is_len_call())
-    {
-      c_typecastt c_typecast(converter_.name_space());
-      c_typecast.implicit_typecast(arg, pointer_typet(empty_typet()));
-    }
 
     // All array function arguments (e.g. bytes type) are handled as pointers.
     if (arg.type().is_array())
@@ -439,17 +277,6 @@ exprt function_call_expr::build()
     }
     else
       call.arguments().push_back(arg);
-  }
-
-  if (is_len_call())
-  {
-    side_effect_expr_function_callt sideeffect;
-    sideeffect.function() = call.function();
-    sideeffect.arguments() = call.arguments();
-    sideeffect.location() = call.location();
-    sideeffect.type() =
-      static_cast<const typet &>(call.function().type().return_type());
-    return sideeffect;
   }
 
   return call;

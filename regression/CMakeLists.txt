@@ -81,6 +81,7 @@ if(ENABLE_JIMPLE_FRONTEND)
 endif()
 if(ENABLE_PYTHON_FRONTEND)
     set(REGRESSIONS_PYTHON python)
+    set(REGRESSIONS_NUMPY numpy)
 endif()
 
 if(ESBMC_CHERI_CLANG)
@@ -165,6 +166,7 @@ if(APPLE)
                     extensions
                     ${REGRESSIONS_CHERI}
                     ${REGRESSIONS_PYTHON}
+                    ${REGRESSIONS_NUMPY}
                     ltl
        )
 elseif(WIN32)
@@ -220,6 +222,7 @@ else()
                     linux
                     ${REGRESSIONS_CHERI}
                     ${REGRESSIONS_PYTHON}
+                    ${REGRESSIONS_NUMPY}
                     ltl
                     goto-coverage
        )

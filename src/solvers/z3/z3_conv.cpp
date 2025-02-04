@@ -1331,9 +1331,9 @@ void z3_convt::print_smt_formulae(std::ostream &dest)
   // Add solver specific declarations as well.
   dest << "(set-info :smt-lib-version 2.6)\n";
   dest << "(set-option :produce-models true)\n";
-  dest << "; Asserts from ESMBC starts\n";
+  dest << "; Asserts from ESBMC starts\n";
   dest << smt_formula; // All VCC conditions in SMTLIB format.
-  dest << "; Asserts from ESMBC ends\n";
+  dest << "; Asserts from ESBMC ends\n";
   dest << "(get-model)\n";
   dest << "(exit)\n";
   log_status(

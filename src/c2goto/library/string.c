@@ -27,8 +27,7 @@ char *strcpy(char *dst, const char *src)
 {
 __ESBMC_HIDE:;
   // Ensure src pointer is non-null
-  if (src == NULL)
-    return dst;
+  __ESBMC_assert(src != NULL, "Source pointer is null");
 
   // Constant propagation-friendly loop
   for (size_t i = 0;; ++i)

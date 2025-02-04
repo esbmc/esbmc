@@ -97,10 +97,23 @@ CIMPORT1(log)
 CIMPORT1(log10)
 CIMPORT1(floor)
 CIMPORT1(ceil)
-CIMPORT2(pow)
 CIMPORT1(sqrt)
 CIMPORT2(fmod)
 CIMPORT1(round)
+
+using ::pow;
+#if !defined(__MATHCALL_VEC)
+using ::powf;
+using ::powl;
+inline float pow(float a, float b)
+{
+  return ::powf(a, b);
+}
+inline long double pow(long double a, long double b)
+{
+  return ::powl(a, b);
+}
+#endif
 
 using ::frexp;
 using ::frexpf;

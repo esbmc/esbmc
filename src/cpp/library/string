@@ -6,6 +6,7 @@
 #include "cstdio"
 #include "cassert"
 #include "iostream"
+#include "cstdlib"
 
 size_t npos;
 
@@ -3323,6 +3324,30 @@ std::string to_string(long double value)
   char buffer[50];
   sprintf(buffer, "%Lf", value);
   return string(buffer);
+}
+
+int stoi(const std::string &str, size_t *pos = 0, int base = 10)
+{
+  const char *c_str = str.c_str();
+
+  char *endptr;
+  long result = std::strtol(c_str, &endptr, base);
+
+  __ESBMC_assert(endptr != c_str, "No digits in input string");
+
+  return static_cast<int>(result);
+}
+
+float stof(const std::string &str, size_t *pos = 0)
+{
+  const char *c_str = str.c_str();
+
+  char *endptr;
+  float result = std::strtof(c_str, &endptr);
+
+  __ESBMC_assert(endptr != c_str, "No digits in input string");
+
+  return result;
 }
 
 } // namespace std

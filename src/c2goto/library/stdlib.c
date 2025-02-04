@@ -4,6 +4,7 @@
 #include <limits.h>
 #include <errno.h>
 #include <stdint.h> /* uintptr_t */
+#include <math.h>
 
 #include <assert.h>
 
@@ -152,6 +153,75 @@ __ESBMC_HIDE:;
     *endptr = (char *)str;
 
   return sign * result;
+}
+
+float strtof(const char *str, char **endptr)
+{
+__ESBMC_HIDE:;
+  float result = 0.0f;
+  int sign = 1;
+  float decimal_factor = 0.1f;
+
+  while (isspace(*str))
+    str++;
+
+  if (*str == '-')
+  {
+    sign = -1;
+    str++;
+  }
+  else if (*str == '+')
+  {
+    str++;
+  }
+
+  while (isdigit(*str))
+  {
+    result = result * 10 + (*str - '0');
+    str++;
+  }
+
+  if (*str == '.')
+  {
+    str++;
+    while (isdigit(*str))
+    {
+      result += (*str - '0') * decimal_factor;
+      decimal_factor /= 10;
+      str++;
+    }
+  }
+
+  if (*str == 'e' || *str == 'E')
+  {
+    str++;
+    int exp_sign = 1;
+    if (*str == '-')
+    {
+      exp_sign = -1;
+      str++;
+    }
+    else if (*str == '+')
+    {
+      str++;
+    }
+
+    int exponent = 0;
+    while (isdigit(*str))
+    {
+      exponent = exponent * 10 + (*str - '0');
+      str++;
+    }
+
+    result *= pow(10, exp_sign * exponent);
+  }
+
+  result *= sign;
+
+  if (endptr != NULL)
+    *endptr = (char *)str;
+
+  return result;
 }
 
 /* one plus the numeric value, rest is zero */
