@@ -581,15 +581,15 @@ struct DivModtor
     std::function<constant_type &(expr2tc &)> get_value)
   {
     // Are we dividing by a multiplication of the same value?
-    if(is_mul2t(op1))
+    if (is_mul2t(op1))
     {
-      if((to_mul2t(op1).side_1 == op2))
+      if ((to_mul2t(op1).side_1 == op2))
       {
         log_debug("[Divtor] Simplifying a*b/a = b");
         return to_mul2t(op1).side_2;
       }
 
-      if((to_mul2t(op1).side_2 == op2))
+      if ((to_mul2t(op1).side_2 == op2))
       {
         log_debug("[Divtor] Simplifying b*a/a = b");
         return to_mul2t(op2).side_1;

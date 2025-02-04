@@ -15,60 +15,60 @@ expr2tc symex_dereference_statet::constant_propagation(expr2tc &expr)
     // as we don't update the TYPE of the char array allocated
     // If in the future we start propagating WITH for alloc and alloc_size
     // we might be able to deal with it
-    for(auto x : goto_symex.cur_state->realloc_map)
+    for (auto x : goto_symex.cur_state->realloc_map)
     {
       auto index = x.first;
       /* At this point, ESBMC will have already renamed the address. 
            * We need to do the same for the realloc map index
            */
       goto_symex.cur_state->rename_address(index);
-      if(index == e)
+      if (index == e)
         return 0; // gave up, can't get the reallocation size
     }
     try
     {
       return e->type->get_width() / 8;
     }
-    catch(...)
+    catch (...)
     {
       return 0;
     }
   };
 
   auto deref_symbol = [this](expr2tc &e) -> expr2tc {
-    if(!is_symbol2t(e))
+    if (!is_symbol2t(e))
       return expr2tc();
     goto_symex.internal_deref_items.clear();
     dereference2tc deref(get_empty_type(), e);
     goto_symex.dereference(deref, dereferencet::INTERNAL);
-    if(goto_symex.internal_deref_items.size() != 1)
+    if (goto_symex.internal_deref_items.size() != 1)
       return expr2tc();
 
     return (goto_symex.internal_deref_items.begin())->object;
   };
 
-  if(is_equality2t(expr))
+  if (is_equality2t(expr))
   {
     equality2t &eq = to_equality2t(expr);
-    if(
+    if (
       !is_symbol2t(eq.side_1) && !is_symbol2t(eq.side_2) &&
       (to_symbol2t(eq.side_2).thename.as_string() != "INVALID"))
       return expr;
 
     auto symbol = deref_symbol(eq.side_1);
-    if(!symbol)
+    if (!symbol)
       return expr;
 
     return gen_false_expr();
   }
 
-  if(is_index2t(expr))
+  if (is_index2t(expr))
   {
     // Are we trying to get the object size?
     index2t &i = to_index2t(expr);
-    if(is_symbol2t(i.source_value))
+    if (is_symbol2t(i.source_value))
     {
-      if(to_symbol2t(i.source_value).thename == "c:@__ESBMC_alloc_size")
+      if (to_symbol2t(i.source_value).thename == "c:@__ESBMC_alloc_size")
       {
         auto value = i.source_value;
         auto ptr =
@@ -79,25 +79,25 @@ expr2tc symex_dereference_statet::constant_propagation(expr2tc &expr)
         return size ? constant_int2tc(expr->type, BigInt(size)) : expr;
       }
 
-      if(to_symbol2t(i.source_value).thename == "c:@__ESBMC_is_dynamic")
+      if (to_symbol2t(i.source_value).thename == "c:@__ESBMC_is_dynamic")
       {
         auto symbol = deref_symbol(to_pointer_object2t(i.index).ptr_obj);
-        if(!symbol)
+        if (!symbol)
           return expr;
 
-        if(has_prefix(to_symbol2t(symbol).thename.as_string(), "dynamic_"))
+        if (has_prefix(to_symbol2t(symbol).thename.as_string(), "dynamic_"))
           return expr;
 
         return gen_false_expr();
       }
 
-      if(to_symbol2t(i.source_value).thename == "c:@__ESBMC_alloc")
+      if (to_symbol2t(i.source_value).thename == "c:@__ESBMC_alloc")
       {
         auto symbol = deref_symbol(to_pointer_object2t(i.index).ptr_obj);
-        if(!symbol)
+        if (!symbol)
           return expr;
 
-        if(has_prefix(to_symbol2t(symbol).thename.as_string(), "dynamic_"))
+        if (has_prefix(to_symbol2t(symbol).thename.as_string(), "dynamic_"))
           return expr;
 
         return gen_true_expr();
@@ -107,30 +107,30 @@ expr2tc symex_dereference_statet::constant_propagation(expr2tc &expr)
     }
   }
 
-  if(is_same_object2t(expr))
+  if (is_same_object2t(expr))
   {
     //   Most of times this just do some basic arithmetic to check if we are
     //   still inside the object bounds e.g. same-object(&sym + 5,  &ptr)
     same_object2t &obj = to_same_object2t(expr);
 
     // Case 1: same-object(&ptr[0] + 5,  &ptr)
-    if(is_add2t(obj.side_1) && is_address_of2t(obj.side_2))
+    if (is_add2t(obj.side_1) && is_address_of2t(obj.side_2))
     {
       auto origin = to_address_of2t(obj.side_2).ptr_obj;
       auto size = size_type(origin);
-      if(!size)
+      if (!size)
         return expr;
 
       auto symbol = to_add2t(obj.side_1).side_1;
 
-      if(!is_constant_int2t(to_add2t(obj.side_1).side_2))
+      if (!is_constant_int2t(to_add2t(obj.side_1).side_2))
         return expr;
 
       auto add = to_constant_int2t(to_add2t(obj.side_1).side_2).value;
 
       goto_symex.cur_state->rename(symbol);
       // At this moment, sym is replaced with (type*)(&ptr[0])
-      if(
+      if (
         !is_typecast2t(symbol) ||
         !is_address_of2t(to_typecast2t(symbol).from) ||
         !is_index2t(to_address_of2t(to_typecast2t(symbol).from).ptr_obj))
@@ -139,34 +139,34 @@ expr2tc symex_dereference_statet::constant_propagation(expr2tc &expr)
       index2t &i =
         to_index2t(to_address_of2t(to_typecast2t(symbol).from).ptr_obj);
 
-      if(!is_constant_int2t(i.index) || !is_symbol2t(i.source_value))
+      if (!is_constant_int2t(i.index) || !is_symbol2t(i.source_value))
         return expr;
 
       // Is the ref equal?
-      if(origin != i.source_value)
+      if (origin != i.source_value)
         return expr;
 
       // It should be OK to continue now :)
       // index + add_side_2 < size
       auto total = to_constant_int2t(i.index).value + add;
-      if(total < size)
+      if (total < size)
         return gen_true_expr();
       return gen_false_expr();
     }
 
     // Case 2: !(SAME-OBJECT(symbol, &dynamic_1_value)
-    if(is_symbol2t(obj.side_1) && is_address_of2t(obj.side_2))
+    if (is_symbol2t(obj.side_1) && is_address_of2t(obj.side_2))
     {
       auto symbol = deref_symbol(obj.side_1);
-      if(!symbol)
+      if (!symbol)
         return expr;
 
       auto origin = to_address_of2t(obj.side_2).ptr_obj;
       auto size = size_type(origin);
-      if(!size)
+      if (!size)
         return expr;
 
-      if(origin == symbol)
+      if (origin == symbol)
       {
         return gen_true_expr();
       }
