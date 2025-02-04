@@ -8,7 +8,8 @@
 
 expr2tc symex_dereference_statet::constant_propagation(expr2tc &expr)
 {
-  auto size_type = [this](expr2tc &e) -> unsigned {
+  auto size_type = [this](expr2tc &e) -> unsigned
+  {
     // Lets's check whether this symbol was reallocated
     // this is important because now we need to be able to check the entire
     // symbolic expression of alloc_size to know what is the actual size
@@ -35,11 +36,12 @@ expr2tc symex_dereference_statet::constant_propagation(expr2tc &expr)
     }
   };
 
-  auto deref_symbol = [this](expr2tc &e) -> expr2tc {
+  auto deref_symbol = [this](expr2tc &e) -> expr2tc
+  {
     if (!is_symbol2t(e))
       return expr2tc();
     goto_symex.internal_deref_items.clear();
-    dereference2tc deref(get_empty_type(), e);
+    auto deref = dereference2tc(get_empty_type(), e);
     goto_symex.dereference(deref, dereferencet::INTERNAL);
     if (goto_symex.internal_deref_items.size() != 1)
       return expr2tc();
@@ -172,7 +174,7 @@ expr2tc symex_dereference_statet::constant_propagation(expr2tc &expr)
       }
       else
       {
-        log_debug("Could not simplify! {} != {}", *origin, *symbol);
+        log_debug(nullptr, "Could not simplify! {} != {}", *origin, *symbol);
         return gen_false_expr();
       }
     }
