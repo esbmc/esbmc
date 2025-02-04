@@ -73,15 +73,13 @@ expr2tc expr2t::simplify() const
     // An operand has been changed; clone ourselves and update.
     expr2tc new_us = clone();
     std::list<expr2tc>::iterator it2 = newoperands.begin();
-    new_us->Foreach_operand(
-      [&it2](expr2tc &e)
-      {
-        if (!*it2)
-          ; // No change in operand;
-        else
-          e = *it2; // Operand changed; overwrite with new one.
-        it2++;
-      });
+    new_us->Foreach_operand([&it2](expr2tc &e) {
+      if (!*it2)
+        ; // No change in operand;
+      else
+        e = *it2; // Operand changed; overwrite with new one.
+      it2++;
+    });
 
     // Finally, attempt simplification again.
     expr2tc tmp = new_us->do_simplify();
@@ -134,8 +132,8 @@ static void fetch_ops_from_this_type(
 {
   if (expr->expr_id == id)
   {
-    expr->foreach_operand([&ops, id](const expr2tc &e)
-                          { fetch_ops_from_this_type(ops, id, e); });
+    expr->foreach_operand(
+      [&ops, id](const expr2tc &e) { fetch_ops_from_this_type(ops, id, e); });
   }
   else
   {
@@ -164,8 +162,9 @@ static bool rebalance_associative_tree(
   // faster than stringly stuff.
 
   // Extract immediate operands
-  expr.foreach_operand([&ops, &expr](const expr2tc &e)
-                       { fetch_ops_from_this_type(ops, expr.expr_id, e); });
+  expr.foreach_operand([&ops, &expr](const expr2tc &e) {
+    fetch_ops_from_this_type(ops, expr.expr_id, e);
+  });
 
   // Are there enough constant values in there?
   unsigned int const_values = 0;
@@ -295,10 +294,11 @@ static expr2tc simplify_arith_2ops(
   if (is_vector_type(type))
   {
     std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &))&is_constant_int2t;
+      (bool (*)(const expr2tc &)) & is_constant_int2t;
 
-    std::function<BigInt &(expr2tc &)> get_value = [](expr2tc &c) -> BigInt &
-    { return to_constant_int2t(c).value; };
+    std::function<BigInt &(expr2tc &)> get_value = [](expr2tc &c) -> BigInt & {
+      return to_constant_int2t(c).value;
+    };
 
     simpl_res = TFunctor<BigInt>::simplify(
       simplied_side_1, simplied_side_2, is_constant, get_value);
@@ -306,10 +306,11 @@ static expr2tc simplify_arith_2ops(
   else if (is_bv_type(simplied_side_1) || is_bv_type(simplied_side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &))&is_constant_int2t;
+      (bool (*)(const expr2tc &)) & is_constant_int2t;
 
-    std::function<BigInt &(expr2tc &)> get_value = [](expr2tc &c) -> BigInt &
-    { return to_constant_int2t(c).value; };
+    std::function<BigInt &(expr2tc &)> get_value = [](expr2tc &c) -> BigInt & {
+      return to_constant_int2t(c).value;
+    };
 
     simpl_res = TFunctor<BigInt>::simplify(
       simplied_side_1, simplied_side_2, is_constant, get_value);
@@ -325,7 +326,7 @@ static expr2tc simplify_arith_2ops(
   else if (is_fixedbv_type(simplied_side_1) || is_fixedbv_type(simplied_side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &))&is_constant_fixedbv2t;
+      (bool (*)(const expr2tc &)) & is_constant_fixedbv2t;
 
     std::function<fixedbvt &(expr2tc &)> get_value =
       [](expr2tc &c) -> fixedbvt & { return to_constant_fixedbv2t(c).value; };
@@ -336,10 +337,11 @@ static expr2tc simplify_arith_2ops(
   else if (is_bool_type(simplied_side_1) || is_bool_type(simplied_side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &))&is_constant_bool2t;
+      (bool (*)(const expr2tc &)) & is_constant_bool2t;
 
-    std::function<bool &(expr2tc &)> get_value = [](expr2tc &c) -> bool &
-    { return to_constant_bool2t(c).value; };
+    std::function<bool &(expr2tc &)> get_value = [](expr2tc &c) -> bool & {
+      return to_constant_bool2t(c).value;
+    };
 
     simpl_res = TFunctor<bool>::simplify(
       simplied_side_1, simplied_side_2, is_constant, get_value);
@@ -362,8 +364,9 @@ struct Addtor
     // Is a vector operation ? Apply the op
     if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      auto op = [](type2tc t, expr2tc e1, expr2tc e2)
-      { return add2tc(t, e1, e2); };
+      auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+        return add2tc(t, e1, e2);
+      };
       return distribute_vector_operation(op, op1, op2);
     }
 
@@ -438,8 +441,7 @@ expr2tc add2t::do_simplify() const
 
   // Attempt associative simplification
   std::function<expr2tc(const expr2tc &arg1, const expr2tc &arg2)> add_wrapper =
-    [](const expr2tc &arg1, const expr2tc &arg2) -> expr2tc
-  {
+    [](const expr2tc &arg1, const expr2tc &arg2) -> expr2tc {
     expr2tc a = arg1, b = arg2;
     type2tc t = common_arith_op2_type(a, b);
     return add2tc(t, a, b);
@@ -460,8 +462,9 @@ struct Subtor
     // Is a vector operation ? Apply the op
     if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      auto op = [](type2tc t, expr2tc e1, expr2tc e2)
-      { return sub2tc(t, e1, e2); };
+      auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+        return sub2tc(t, e1, e2);
+      };
       return distribute_vector_operation(op, op1, op2);
     }
 
@@ -514,8 +517,9 @@ struct Multor
     // Is a vector operation ? Apply the op
     if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      auto op = [](type2tc t, expr2tc e1, expr2tc e2)
-      { return mul2tc(t, e1, e2); };
+      auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+        return mul2tc(t, e1, e2);
+      };
       return distribute_vector_operation(op, op1, op2);
     }
 
@@ -594,8 +598,7 @@ struct DivModtor
     // Is a vector operation ? Apply the op
     if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      auto op = [](type2tc t, expr2tc e1, expr2tc e2)
-      {
+      auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
         if constexpr (Div)
           return div2tc(t, e1, e2);
         else
@@ -1141,10 +1144,11 @@ static expr2tc simplify_logic_2ops(
   if (is_bv_type(simplied_side_1) || is_bv_type(simplied_side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &))&is_constant_int2t;
+      (bool (*)(const expr2tc &)) & is_constant_int2t;
 
-    std::function<BigInt &(expr2tc &)> get_value = [](expr2tc &c) -> BigInt &
-    { return to_constant_int2t(c).value; };
+    std::function<BigInt &(expr2tc &)> get_value = [](expr2tc &c) -> BigInt & {
+      return to_constant_int2t(c).value;
+    };
 
     simpl_res = TFunctor<BigInt>::simplify(
       simplied_side_1, simplied_side_2, is_constant, get_value);
@@ -1152,7 +1156,7 @@ static expr2tc simplify_logic_2ops(
   else if (is_fixedbv_type(simplied_side_1) || is_fixedbv_type(simplied_side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &))&is_constant_fixedbv2t;
+      (bool (*)(const expr2tc &)) & is_constant_fixedbv2t;
 
     std::function<fixedbvt &(expr2tc &)> get_value =
       [](expr2tc &c) -> fixedbvt & { return to_constant_fixedbv2t(c).value; };
@@ -1163,11 +1167,12 @@ static expr2tc simplify_logic_2ops(
   else if (is_floatbv_type(simplied_side_1) || is_floatbv_type(simplied_side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &))&is_constant_floatbv2t;
+      (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
 
     std::function<ieee_floatt &(expr2tc &)> get_value =
-      [](expr2tc &c) -> ieee_floatt &
-    { return to_constant_floatbv2t(c).value; };
+      [](expr2tc &c) -> ieee_floatt & {
+      return to_constant_floatbv2t(c).value;
+    };
 
     simpl_res = TFunctor<ieee_floatt>::simplify(
       simplied_side_1, simplied_side_2, is_constant, get_value);
@@ -1175,10 +1180,11 @@ static expr2tc simplify_logic_2ops(
   else if (is_bool_type(simplied_side_1) || is_bool_type(simplied_side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &))&is_constant_bool2t;
+      (bool (*)(const expr2tc &)) & is_constant_bool2t;
 
-    std::function<bool &(expr2tc &)> get_value = [](expr2tc &c) -> bool &
-    { return to_constant_bool2t(c).value; };
+    std::function<bool &(expr2tc &)> get_value = [](expr2tc &c) -> bool & {
+      return to_constant_bool2t(c).value;
+    };
 
     simpl_res = TFunctor<bool>::simplify(
       simplied_side_1, simplied_side_2, is_constant, get_value);
@@ -1456,8 +1462,9 @@ expr2tc bitand2t::do_simplify() const
   // Is a vector operation ? Apply the op
   if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
-    auto op = [](type2tc t, expr2tc e1, expr2tc e2)
-    { return bitand2tc(t, e1, e2); };
+    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+      return bitand2tc(t, e1, e2);
+    };
     return distribute_vector_operation(op, side_1, side_2);
   }
 
@@ -1471,8 +1478,9 @@ expr2tc bitor2t::do_simplify() const
   // Is a vector operation ? Apply the op
   if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
-    auto op = [](type2tc t, expr2tc e1, expr2tc e2)
-    { return bitor2tc(t, e1, e2); };
+    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+      return bitor2tc(t, e1, e2);
+    };
     return distribute_vector_operation(op, side_1, side_2);
   }
 
@@ -1486,8 +1494,9 @@ expr2tc bitxor2t::do_simplify() const
   // Is a vector operation ? Apply the op
   if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
-    auto op = [](type2tc t, expr2tc e1, expr2tc e2)
-    { return bitxor2tc(t, e1, e2); };
+    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+      return bitxor2tc(t, e1, e2);
+    };
     return distribute_vector_operation(op, side_1, side_2);
   }
 
@@ -1501,8 +1510,9 @@ expr2tc bitnand2t::do_simplify() const
   // Is a vector operation ? Apply the op
   if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
-    auto op = [](type2tc t, expr2tc e1, expr2tc e2)
-    { return bitnand2tc(t, e1, e2); };
+    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+      return bitnand2tc(t, e1, e2);
+    };
     return distribute_vector_operation(op, side_1, side_2);
   }
 
@@ -1516,8 +1526,9 @@ expr2tc bitnor2t::do_simplify() const
   // Is a vector operation ? Apply the op
   if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
-    auto op = [](type2tc t, expr2tc e1, expr2tc e2)
-    { return bitnor2tc(t, e1, e2); };
+    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+      return bitnor2tc(t, e1, e2);
+    };
     return distribute_vector_operation(op, side_1, side_2);
   }
 
@@ -1531,8 +1542,9 @@ expr2tc bitnxor2t::do_simplify() const
   // Is a vector operation ? Apply the op
   if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
-    auto op = [](type2tc t, expr2tc e1, expr2tc e2)
-    { return bitnxor2tc(t, e1, e2); };
+    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+      return bitnxor2tc(t, e1, e2);
+    };
     return distribute_vector_operation(op, side_1, side_2);
   }
 
@@ -1563,8 +1575,9 @@ expr2tc shl2t::do_simplify() const
 
   if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
-    auto op = [](type2tc t, expr2tc e1, expr2tc e2)
-    { return shl2tc(t, e1, e2); };
+    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+      return shl2tc(t, e1, e2);
+    };
     return distribute_vector_operation(op, side_1, side_2);
   }
 
@@ -1577,8 +1590,9 @@ expr2tc lshr2t::do_simplify() const
 
   if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
-    auto op = [](type2tc t, expr2tc e1, expr2tc e2)
-    { return lshr2tc(t, e1, e2); };
+    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+      return lshr2tc(t, e1, e2);
+    };
     return distribute_vector_operation(op, side_1, side_2);
   }
 
@@ -1587,8 +1601,7 @@ expr2tc lshr2t::do_simplify() const
 
 expr2tc ashr2t::do_simplify() const
 {
-  auto op = [](uint64_t op1, uint64_t op2)
-  {
+  auto op = [](uint64_t op1, uint64_t op2) {
     /* simulating the arithmetic right shift in C++ requires LHS to be signed */
     return (int64_t)op1 >> op2;
   };
@@ -1596,8 +1609,9 @@ expr2tc ashr2t::do_simplify() const
   // Is a vector operation ? Apply the op
   if (is_constant_vector2t(side_1) || is_constant_vector2t(side_2))
   {
-    auto op = [](type2tc t, expr2tc e1, expr2tc e2)
-    { return ashr2tc(t, e1, e2); };
+    auto op = [](type2tc t, expr2tc e1, expr2tc e2) {
+      return ashr2tc(t, e1, e2);
+    };
     return distribute_vector_operation(op, side_1, side_2);
   }
 
@@ -1907,10 +1921,11 @@ static expr2tc simplify_relations(
   if (is_bv_type(simplied_side_1) || is_bv_type(simplied_side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &))&is_constant_int2t;
+      (bool (*)(const expr2tc &)) & is_constant_int2t;
 
-    std::function<BigInt &(expr2tc &)> get_value = [](expr2tc &c) -> BigInt &
-    { return to_constant_int2t(c).value; };
+    std::function<BigInt &(expr2tc &)> get_value = [](expr2tc &c) -> BigInt & {
+      return to_constant_int2t(c).value;
+    };
 
     simpl_res = TFunctor<BigInt &>::simplify(
       simplied_side_1, simplied_side_2, is_constant, get_value);
@@ -1918,7 +1933,7 @@ static expr2tc simplify_relations(
   else if (is_fixedbv_type(simplied_side_1) || is_fixedbv_type(simplied_side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &))&is_constant_fixedbv2t;
+      (bool (*)(const expr2tc &)) & is_constant_fixedbv2t;
 
     std::function<fixedbvt &(expr2tc &)> get_value =
       [](expr2tc &c) -> fixedbvt & { return to_constant_fixedbv2t(c).value; };
@@ -1929,11 +1944,12 @@ static expr2tc simplify_relations(
   else if (is_floatbv_type(simplied_side_1) || is_floatbv_type(simplied_side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &))&is_constant_floatbv2t;
+      (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
 
     std::function<ieee_floatt &(expr2tc &)> get_value =
-      [](expr2tc &c) -> ieee_floatt &
-    { return to_constant_floatbv2t(c).value; };
+      [](expr2tc &c) -> ieee_floatt & {
+      return to_constant_floatbv2t(c).value;
+    };
 
     simpl_res = TFunctor<ieee_floatt &>::simplify(
       simplied_side_1, simplied_side_2, is_constant, get_value);
@@ -1941,8 +1957,7 @@ static expr2tc simplify_relations(
   else if (is_pointer_type(simplied_side_1) || is_pointer_type(simplied_side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
-      [&](const expr2tc &t) -> bool
-    {
+      [&](const expr2tc &t) -> bool {
       if (is_pointer_type(t) && is_symbol2t(t))
       {
         symbol2t s = to_symbol2t(t);
@@ -1952,8 +1967,9 @@ static expr2tc simplify_relations(
       return false;
     };
 
-    std::function<int(expr2tc &)> get_value = [](expr2tc &) -> int
-    { return 0xbadbeef; };
+    std::function<int(expr2tc &)> get_value = [](expr2tc &) -> int {
+      return 0xbadbeef;
+    };
 
     simpl_res = TFunctor<int>::simplify(
       simplied_side_1, simplied_side_2, is_constant, get_value);
@@ -1986,11 +2002,12 @@ static expr2tc simplify_floatbv_relations(
     if (is_floatbv_type(simplied_side_1) || is_floatbv_type(simplied_side_2))
     {
       std::function<bool(const expr2tc &)> is_constant =
-        (bool (*)(const expr2tc &))&is_constant_floatbv2t;
+        (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
 
       std::function<ieee_floatt &(expr2tc &)> get_value =
-        [](expr2tc &c) -> ieee_floatt &
-      { return to_constant_floatbv2t(c).value; };
+        [](expr2tc &c) -> ieee_floatt & {
+        return to_constant_floatbv2t(c).value;
+      };
 
       simpl_res = TFunctor<ieee_floatt>::simplify(
         simplied_side_1, simplied_side_2, is_constant, get_value);
@@ -2053,8 +2070,9 @@ struct Equalitytor
     // Is a vector operation ? Apply the op
     if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      auto op = [](type2tc, expr2tc e1, expr2tc e2)
-      { return equality2tc(e1, e2); };
+      auto op = [](type2tc, expr2tc e1, expr2tc e2) {
+        return equality2tc(e1, e2);
+      };
       return distribute_vector_operation(op, op1, op2);
     }
 
@@ -2671,11 +2689,12 @@ static expr2tc simplify_floatbv_2ops(
   if (is_vector_type(type))
   {
     std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &))&is_constant_floatbv2t;
+      (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
 
     std::function<ieee_floatt &(expr2tc &)> get_value =
-      [](expr2tc &c) -> ieee_floatt &
-    { return to_constant_floatbv2t(c).value; };
+      [](expr2tc &c) -> ieee_floatt & {
+      return to_constant_floatbv2t(c).value;
+    };
 
     simpl_res = TFunctor<ieee_floatt>::simplify(
       simplied_side_1, simplied_side_2, rounding_mode, is_constant, get_value);
@@ -2683,11 +2702,12 @@ static expr2tc simplify_floatbv_2ops(
   else if (is_floatbv_type(simplied_side_1) || is_floatbv_type(simplied_side_2))
   {
     std::function<bool(const expr2tc &)> is_constant =
-      (bool (*)(const expr2tc &))&is_constant_floatbv2t;
+      (bool (*)(const expr2tc &)) & is_constant_floatbv2t;
 
     std::function<ieee_floatt &(expr2tc &)> get_value =
-      [](expr2tc &c) -> ieee_floatt &
-    { return to_constant_floatbv2t(c).value; };
+      [](expr2tc &c) -> ieee_floatt & {
+      return to_constant_floatbv2t(c).value;
+    };
 
     simpl_res = TFunctor<ieee_floatt>::simplify(
       simplied_side_1, simplied_side_2, rounding_mode, is_constant, get_value);
@@ -2711,8 +2731,9 @@ struct IEEE_addtor
     // Is a vector operation ? Apply the op
     if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      auto op = [rm](type2tc t, expr2tc e1, expr2tc e2)
-      { return ieee_add2tc(t, e1, e2, rm); };
+      auto op = [rm](type2tc t, expr2tc e1, expr2tc e2) {
+        return ieee_add2tc(t, e1, e2, rm);
+      };
       return distribute_vector_operation(op, op1, op2);
     }
 
@@ -2756,8 +2777,9 @@ struct IEEE_subtor
     // Is a vector operation ? Apply the op
     if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      auto op = [rm](type2tc t, expr2tc e1, expr2tc e2)
-      { return ieee_sub2tc(t, e1, e2, rm); };
+      auto op = [rm](type2tc t, expr2tc e1, expr2tc e2) {
+        return ieee_sub2tc(t, e1, e2, rm);
+      };
       return distribute_vector_operation(op, op1, op2);
     }
     // Two constants? Simplify to result of the subtraction
@@ -2800,8 +2822,9 @@ struct IEEE_multor
     // Is a vector operation ? Apply the op
     if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      auto op = [rm](type2tc t, expr2tc e1, expr2tc e2)
-      { return ieee_mul2tc(t, e1, e2, rm); };
+      auto op = [rm](type2tc t, expr2tc e1, expr2tc e2) {
+        return ieee_mul2tc(t, e1, e2, rm);
+      };
       return distribute_vector_operation(op, op1, op2);
     }
 
@@ -2844,8 +2867,9 @@ struct IEEE_divtor
   {
     if (is_constant_vector2t(op1) || is_constant_vector2t(op2))
     {
-      auto op = [rm](type2tc t, expr2tc e1, expr2tc e2)
-      { return ieee_div2tc(t, e1, e2, rm); };
+      auto op = [rm](type2tc t, expr2tc e1, expr2tc e2) {
+        return ieee_div2tc(t, e1, e2, rm);
+      };
       return distribute_vector_operation(op, op1, op2);
     }
     // Two constants? Simplify to result of the division
