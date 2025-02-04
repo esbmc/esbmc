@@ -160,7 +160,6 @@ float strtof(const char *str, char **endptr)
 __ESBMC_HIDE:;
   float result = 0.0f;
   int sign = 1;
-  _Bool has_decimal = 0;
   float decimal_factor = 0.1f;
 
   while (isspace(*str))
@@ -185,7 +184,6 @@ __ESBMC_HIDE:;
   if (*str == '.')
   {
     str++;
-    has_decimal = 1;
     while (isdigit(*str))
     {
       result += (*str - '0') * decimal_factor;
