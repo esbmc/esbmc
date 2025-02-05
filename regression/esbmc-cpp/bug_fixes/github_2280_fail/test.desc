@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--unwind 3
+
+^VERIFICATION FAILED$
