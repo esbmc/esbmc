@@ -5,11 +5,11 @@
 
 int main()
 {
-#if __has_builtin(__builtin_memcpy)
+#if __has_builtin(__builtin_strcpy)
   const char src[9] = "testing!";
   char dest[9] = {'A'};
-  __builtin_memcpy(dest + 1, src + 1, 9 - 1);
-  assert(dest[0] == 't'); // should be 'A'
+  __builtin_strcpy(dest + 1, src + 1);
+  assert(dest[0] == 'A');
   assert(dest[1] == 'e');
   assert(dest[2] == 's');
   assert(dest[3] == 't');
@@ -19,7 +19,5 @@ int main()
   assert(dest[7] == '!');
   assert(dest[8] == '\0');
   return 0;
-#else
-  __ESBMC_assert(0, "This test requires __builtin_memcpy support");
 #endif
 }

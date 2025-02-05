@@ -1,7 +1,11 @@
 #include <assert.h>
+#ifndef __has_builtin        // Optional of course.
+#  define __has_builtin(x) 0 // Compatibility with non-clang compilers.
+#endif
 
 int main()
 {
+#if __has_builtin(__builtin_memcpy)
   const char src[9] = "testing!";
   char dest[9] = {'A'};
   __builtin_memcpy(dest + 1, src + 1, 9 - 1);
@@ -15,4 +19,5 @@ int main()
   assert(dest[7] == '!');
   assert(dest[8] == '\0');
   return 0;
+#endif
 }

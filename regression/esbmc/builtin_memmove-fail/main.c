@@ -1,7 +1,11 @@
 #include <assert.h>
+#ifndef __has_builtin        // Optional of course.
+#  define __has_builtin(x) 0 // Compatibility with non-clang compilers.
+#endif
 
 int main()
 {
+#if __has_builtin(__builtin_memmove)
   char buffer[14] = "Hello, World!";
 
   // Overlapping src and dest pointers
@@ -24,4 +28,7 @@ int main()
   assert(buffer[13] == '\0');
 
   return 0;
+#else
+  __ESBMC_assert(0, "This test requires __builtin_memmove support");
+#endif
 }
