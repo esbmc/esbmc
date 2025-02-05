@@ -207,8 +207,6 @@ void clang_c_languaget::build_compiler_args(
   for (auto const &inc : config.ansi_c.warnings)
     compiler_args.push_back("-W" + inc);
 
-  compiler_args.emplace_back("-D__builtin_memcpy=memcpy");
-
   compiler_args.emplace_back("-D__ESBMC_alloca=__builtin_alloca");
 
   // Ignore ctype defined by the system
