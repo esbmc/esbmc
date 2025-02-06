@@ -1506,7 +1506,6 @@ public:
   template <class Predicate>
   void unique(Predicate pred)
   {
-    __ESBMC_assert(pred != NULL, "The parameter must be different than NULL.");
     size_type i;
     size_type j = 0;
     size_type _limit = this->_size;
