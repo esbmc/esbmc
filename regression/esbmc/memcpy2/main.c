@@ -2,8 +2,8 @@
 #include <string.h>
 
 void test_memcpy_null() {
-    char *src = NULL;
-    char dest[10];
+    char *src = "Hello";
+    char dest[5];
 
      memcpy(dest, src, 5);  
 
