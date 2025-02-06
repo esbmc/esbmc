@@ -28,5 +28,7 @@ void *memset(void *s, int c, size_t n);
 void *memmove(void *dest, const void *src, size_t n);
 int memcmp(const void *s1, const void *s2, size_t n);
 void *memchr(const void *buf, int ch, size_t n);
+size_t strxfrm (char *__ESBMC_restrict dst, const char *__ESBMC_restrict src, size_t n);
+int strcoll (const char *s1, const char *s2);
 
 __ESBMC_C_CPP_END
