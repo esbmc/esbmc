@@ -179,14 +179,6 @@ expr2tc smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
     }
     else if (is_array_type(it))
     {
-      if (is_fetching_from_array_an_error)
-      {
-        log_error(
-          "Fetching array elements inside tuples currently unimplemented, "
-          "sorry");
-        abort();
-      }
-
       // this will eventually jump to get_array()
       res = ctx->get_by_ast(it, tuple->elements[i]);
     }
