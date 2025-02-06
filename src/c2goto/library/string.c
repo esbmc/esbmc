@@ -266,15 +266,32 @@ __ESBMC_HIDE:;
   return cpy;
 }
 
+#include <stddef.h>
+#include <stdio.h>
+#include <assert.h>
+
 void *memcpy(void *dst, const void *src, size_t n)
 {
-__ESBMC_HIDE:;
-  char *cdst = dst;
-  const char *csrc = src;
-  for (size_t i = 0; i < n; i++)
-    cdst[i] = csrc[i];
-  return dst;
+  // NULL pointer check
+  __ESBMC_assert(dst != NULL, "Destination pointer is NULL.");
+  __ESBMC_assert(src != NULL, "Source pointer is NULL.");
+    
+  char *cdst = (char *)dst;
+  const char *csrc = (const char *)src;
+
+  // Overlapping memory check
+  __ESBMC_assert(!(csrc < cdst && csrc + n > cdst) &&
+                 !(cdst < csrc && cdst + n > csrc),
+                 "Overlapping memory detected in memcpy.");
+
+    // Standard memcpy behavior
+    for (size_t i = 0; i < n; i++) {
+        cdst[i] = csrc[i];
+    }
+
+    return dst;
 }
+
 
 void *__memset_impl(void *s, int c, size_t n)
 {
