@@ -4,6 +4,8 @@
 #include <limits.h>
 #include <errno.h>
 #include <stdint.h> /* uintptr_t */
+#include <math.h>
+#include <stdbool.h>
 
 #include <assert.h>
 
@@ -154,6 +156,75 @@ __ESBMC_HIDE:;
   return sign * result;
 }
 
+float strtof(const char *str, char **endptr)
+{
+__ESBMC_HIDE:;
+  float result = 0.0f;
+  int sign = 1;
+  float decimal_factor = 0.1f;
+
+  while (isspace(*str))
+    str++;
+
+  if (*str == '-')
+  {
+    sign = -1;
+    str++;
+  }
+  else if (*str == '+')
+  {
+    str++;
+  }
+
+  while (isdigit(*str))
+  {
+    result = result * 10 + (*str - '0');
+    str++;
+  }
+
+  if (*str == '.')
+  {
+    str++;
+    while (isdigit(*str))
+    {
+      result += (*str - '0') * decimal_factor;
+      decimal_factor /= 10;
+      str++;
+    }
+  }
+
+  if (*str == 'e' || *str == 'E')
+  {
+    str++;
+    int exp_sign = 1;
+    if (*str == '-')
+    {
+      exp_sign = -1;
+      str++;
+    }
+    else if (*str == '+')
+    {
+      str++;
+    }
+
+    int exponent = 0;
+    while (isdigit(*str))
+    {
+      exponent = exponent * 10 + (*str - '0');
+      str++;
+    }
+
+    result *= pow(10, exp_sign * exponent);
+  }
+
+  result *= sign;
+
+  if (endptr != NULL)
+    *endptr = (char *)str;
+
+  return result;
+}
+
 /* one plus the numeric value, rest is zero */
 static const unsigned char ATOI_MAP[256] = {
   ['0'] = 1,
@@ -299,45 +370,48 @@ void srand (unsigned int s)
 }
 #endif
 
-#if 0
-char get_char(int digit) {
-	char charstr[] = "0123456789ABCDEF";
-	return charstr[digit];
+void rev(char *p)
+{
+  char *q = &p[strlen(p) - 1];
+  char *r = p;
+  for (; q > r; q--, r++)
+  {
+    char s = *q;
+    *q = *r;
+    *r = s;
+  }
 }
 
-void rev(char *p) {
-	char *q = &p[strlen(p) - 1];
-	char *r = p;
-	for (; q > r; q--, r++) {
-		char s = *q;
-		*q = *r;
-		*r = s;
-	}
-}
+char *itoa(int value, char *str, int base)
+{
+  int count = 0;
+  bool flag = true;
+  if (value < 0 && base == 10)
+  {
+    flag = false;
+    value = -value;
+  }
 
-char * itoa(int value, char * str, int base) {
-	int count = 0;
-	bool flag = true;
-	if (value < 0 && base == 10) {
-		flag = false;
-	}
-	while (value != 0) {
-		int dig = value % base;
-		value -= dig;
-		value /= base;
+  if (value == 0)
+    str[count++] = '0';
 
-		if (flag == true)
-			str[count] = get_char(dig);
-		else
-			str[count] = get_char(-dig);
-		count++;
-	}
-	if (flag == false) {
-		str[count] = '-';
-		count++;
-	}
-	str[count] = 0;
-	rev(str);
-	return str;
+  while (value != 0)
+  {
+    int dig = value % base;
+    if (dig < 10)
+      str[count++] = '0' + dig;
+    else
+      str[count++] = 'a' + (dig - 10);
+
+    value /= base;
+  }
+
+  if (!flag)
+    str[count++] = '-';
+
+  str[count] = '\0';
+
+  rev(str);
+
+  return str;
 }
-#endif

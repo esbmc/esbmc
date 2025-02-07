@@ -1,10 +1,10 @@
 #pragma once
 
 #include <python-frontend/json_utils.h>
-#include <python-frontend/python_frontend_types.h>
 #include <python-frontend/global_scope.h>
 #include <python-frontend/module_manager.h>
 #include <python-frontend/module.h>
+#include <python-frontend/type_utils.h>
 #include <util/message.h>
 
 #include <string>
@@ -97,7 +97,7 @@ private:
       else
       {
         const auto &func_name = node["func"]["id"];
-        if (!is_builtin_type(func_name))
+        if (!type_utils::is_builtin_type(func_name))
         {
           try
           {
@@ -336,14 +336,15 @@ private:
     const std::string &func_id = element["value"]["func"]["id"];
 
     if (
-      json_utils::is_class<Json>(func_id, ast_) || is_builtin_type(func_id) ||
-      is_consensus_type(func_id))
+      json_utils::is_class<Json>(func_id, ast_) ||
+      type_utils::is_builtin_type(func_id) ||
+      type_utils::is_consensus_type(func_id))
       return func_id;
 
-    if (is_consensus_func(func_id))
-      return get_type_from_consensus_func(func_id);
+    if (type_utils::is_consensus_func(func_id))
+      return type_utils::get_type_from_consensus_func(func_id);
 
-    if (!is_model_func(func_id))
+    if (!type_utils::is_model_func(func_id))
       return get_function_return_type(func_id, ast_);
 
     return "";
@@ -423,7 +424,7 @@ private:
     const std::string &obj_type =
       obj_node["annotation"]["id"].template get<std::string>();
 
-    if (is_builtin_type(obj_type))
+    if (type_utils::is_builtin_type(obj_type))
       type = obj_type;
 
     return type;
@@ -514,7 +515,7 @@ private:
       // Get type from top-level functions
       else if (
         value_type == "Call" && element["value"]["func"]["_type"] == "Name" &&
-        !is_model_func(element["value"]["func"]["id"]))
+        !type_utils::is_model_func(element["value"]["func"]["id"]))
       {
         inferred_type = get_type_from_call(element);
       }

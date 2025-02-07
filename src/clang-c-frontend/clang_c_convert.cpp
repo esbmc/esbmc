@@ -28,6 +28,7 @@ CC_DIAGNOSTIC_POP()
 #include <util/mp_arith.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
+#include <boost/algorithm/string/replace.hpp>
 
 clang_c_convertert::clang_c_convertert(
   contextt &_context,
@@ -2823,6 +2824,7 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
     // Everything else should be a value decl
     std::string name, id;
     get_decl_name(*nd, name, id);
+    rewrite_builtin_ref(d, name, id);
 
     typet type;
     if (get_type(nd->getType(), type))
@@ -2844,6 +2846,32 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
   ross.flush();
   log_error("{}", oss.str());
   return true;
+}
+void clang_c_convertert::rewrite_builtin_ref(
+  const clang::Decl &d,
+  std::string &name,
+  std::string &id) const
+{
+  static const std::list<std::string> builtins_to_rewrite = {
+    "__builtin_malloc",
+    "__builtin_memcpy",
+    "__builtin_memmove",
+    "__builtin_strcpy",
+    "__builtin_free",
+    "__builtin_strlen",
+  };
+  if (const auto *fd = llvm::dyn_cast<clang::FunctionDecl>(&d))
+  {
+    unsigned builtin_id = fd->getBuiltinID();
+    if (
+      builtin_id && ASTContext->BuiltinInfo.isLibFunction(builtin_id) &&
+      std::find(builtins_to_rewrite.begin(), builtins_to_rewrite.end(), name) !=
+        builtins_to_rewrite.end())
+    {
+      boost::replace_all(name, "__builtin_", "");
+      boost::replace_all(id, "__builtin_", "");
+    }
+  }
 }
 
 bool clang_c_convertert::get_cast_expr(
