@@ -12,7 +12,7 @@ numpy_call_expr::numpy_call_expr(
 }
 
 template <typename T>
-auto create_list(int size, T default_value)
+static auto create_list(int size, T default_value)
 {
   nlohmann::json list;
   list["_type"] = "List";
@@ -21,6 +21,26 @@ auto create_list(int size, T default_value)
     list["elts"].push_back({{"_type", "Constant"}, {"value", default_value}});
   }
   return list;
+}
+
+template <typename T>
+static auto create_binary_op(const std::string &op, T lhs, T rhs)
+{
+  nlohmann::json bin_op = {
+    {"_type", "BinOp"},
+    {"left", {{"_type", "Constant"}, {"value", lhs}}},
+    {"op", {{"_type", op}}},
+    {"right", {{"_type", "Constant"}, {"value", rhs}}}};
+
+  return bin_op;
+}
+
+bool numpy_call_expr::is_math_function() const
+{
+  const std::string &function = function_id_.get_function();
+  return (function == "add") || (function == "subtract") ||
+         (function == "multiply") || (function == "divide") ||
+         (function == "power");
 }
 
 exprt numpy_call_expr::get()
@@ -40,6 +60,13 @@ exprt numpy_call_expr::get()
   {
     auto list = create_list(call_["args"][0]["value"].get<int>(), it->second);
     return converter_.get_expr(list);
+  }
+
+  if (is_math_function())
+  {
+    auto bin_op = create_binary_op(
+      function, call_["args"][0]["value"], call_["args"][1]["value"]);
+    return converter_.get_expr(bin_op);
   }
 
   throw std::runtime_error("Unsupported NumPy function call: " + function);

@@ -16,6 +16,8 @@ public:
 
   exprt get();
 
+  bool is_math_function() const;
+
 private:
   const symbol_id &function_id_;
   const nlohmann::json &call_;

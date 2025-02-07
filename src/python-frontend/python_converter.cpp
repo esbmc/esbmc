@@ -12,6 +12,7 @@
 #include <util/message.h>
 #include <util/encoding.h>
 
+#include <algorithm>
 #include <fstream>
 #include <regex>
 #include <unordered_map>
@@ -22,14 +23,15 @@ using namespace json_utils;
 namespace fs = boost::filesystem;
 
 static const std::unordered_map<std::string, std::string> operator_map = {
-  {"Add", "+"},         {"Sub", "-"},          {"Mult", "*"},
-  {"Div", "/"},         {"Mod", "mod"},        {"BitOr", "bitor"},
-  {"FloorDiv", "/"},    {"BitAnd", "bitand"},  {"BitXor", "bitxor"},
-  {"Invert", "bitnot"}, {"LShift", "shl"},     {"RShift", "ashr"},
-  {"USub", "unary-"},   {"Eq", "="},           {"Lt", "<"},
-  {"LtE", "<="},        {"NotEq", "notequal"}, {"Gt", ">"},
-  {"GtE", ">="},        {"And", "and"},        {"Or", "or"},
-  {"Not", "not"},
+  {"add", "+"},         {"sub", "-"},          {"subtract", "-"},
+  {"mult", "*"},        {"multiply", "*"},     {"div", "/"},
+  {"divide", "/"},      {"mod", "mod"},        {"bitor", "bitor"},
+  {"floordiv", "/"},    {"bitand", "bitand"},  {"bitxor", "bitxor"},
+  {"invert", "bitnot"}, {"lshift", "shl"},     {"rshift", "ashr"},
+  {"usub", "unary-"},   {"eq", "="},           {"lt", "<"},
+  {"lte", "<="},        {"noteq", "notequal"}, {"gt", ">"},
+  {"gte", ">="},        {"and", "and"},        {"or", "or"},
+  {"not", "not"},
 };
 
 static const std::unordered_map<std::string, StatementType> statement_map = {
@@ -69,19 +71,26 @@ static StatementType get_statement_type(const nlohmann::json &element)
 // Convert Python/AST to irep2 operations
 static std::string get_op(const std::string &op, const typet &type)
 {
+  std::string lower_op = op;
+
+  std::transform(
+    lower_op.begin(), lower_op.end(), lower_op.begin(), [](unsigned char c) {
+      return std::tolower(c);
+    });
+
   if (type.is_floatbv())
   {
-    if (op == "Add")
+    if (lower_op == "add")
       return "ieee_add";
-    if (op == "Sub")
+    if (lower_op == "sub" || lower_op == "subtract")
       return "ieee_sub";
-    if (op == "Mult")
+    if (lower_op == "mult" || lower_op == "multiply")
       return "ieee_mul";
-    if (op == "Div")
+    if (lower_op == "div" || lower_op == "divide")
       return "ieee_div";
   }
 
-  auto it = operator_map.find(op);
+  auto it = operator_map.find(lower_op);
   if (it != operator_map.end())
   {
     return it->second;
@@ -194,7 +203,19 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
     }
   };
 
-  if (lhs_type.width() != rhs_type.width())
+  // Promote int to float
+  if (
+    lhs_type.is_floatbv() && rhs.is_constant() &&
+    (rhs_type.is_signedbv() || rhs_type.is_unsignedbv()))
+  {
+    // Convert RHS to float
+    BigInt value(
+      binary2integer(rhs.value().as_string(), rhs.type().is_signedbv()));
+    std::string rhs_float = std::to_string(value.to_int64()) + ".0";
+    convert_float_literal(rhs_float, rhs);
+    update_symbol(rhs);
+  }
+  else if (lhs_type.width() != rhs_type.width())
   {
     int lhs_type_width = std::stoi(lhs_type.width().c_str());
     int rhs_type_width = std::stoi(rhs_type.width().c_str());
@@ -394,7 +415,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   assert(lhs.type() == rhs.type());
 
   // Replace ** operation with the resultant constant.
-  if (op == "Pow")
+  if (op == "Pow" || op == "power")
   {
     BigInt base(
       binary2integer(lhs.value().as_string(), lhs.type().is_signedbv()));
