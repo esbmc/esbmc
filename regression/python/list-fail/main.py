@@ -1,2 +1,9 @@
-x = [1,2,3]
-assert x[0] == 0
+basket = ['Apple', 'Bun', 'Cola']
+
+basket.append('Damson')
+
+assert basket[3] == 'Damson'
+
+basket.pop()
+
+assert basket[3] == 'Damson'
