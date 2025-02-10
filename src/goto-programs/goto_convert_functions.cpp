@@ -349,7 +349,14 @@ void goto_convert_functionst::wallop_type(
 
   // Iterate over our dependancies ensuring they're resolved.
   for (const auto &dep : deps)
+  {
+    // In C++ we have to avoid circular dependencies
+    // Break out of it when we get stuck in an endless loop
+    if (sname == dep)
+      return;
+
     wallop_type(dep, typenames, sname);
+  }
 
   // And finally perform renaming.
   symbolt *s = context.find_symbol(name);
