@@ -17,7 +17,7 @@ const mode_table_et mode_table[] = {
   LANGAPI_MODE_CLANG_CPP,
   LANGAPI_MODE_END}; // This is the simplest way to have this
 
-void goto_factory::create_file_from_istream(
+void goto_factory::create_file_from(
   std::istream &c_inputstream,
   std::string filename)
 {
@@ -39,9 +39,7 @@ void goto_factory::create_file_from_istream(
   output.close();
 }
 
-void goto_factory::create_file_from_string(
-  std::string &str,
-  std::string filename)
+void goto_factory::create_file_from(std::string &str, std::string filename)
 {
   std::ofstream output(filename); // Change this for C++
   if (!output.good())
@@ -84,70 +82,38 @@ void goto_factory::config_environment(
 
 program goto_factory::get_goto_functions(
   std::istream &c_file,
-  goto_factory::Architecture arch)
+  goto_factory::Architecture arch,
+  const std::string &test_name)
 {
-  /*
-     * 1. Create an tmp file from istream
-     * 2. Parse the file using clang-frontend
-     * 3. Return the result
-     */
-
-  // Create tmp file
   std::string filename(
     file_operations::get_unique_tmp_path("esbmc-test-%%%%%%"));
-  filename += "/test.c";
+  filename += "/" + test_name;
   log_status("Creating {}", filename);
-  goto_factory::create_file_from_istream(c_file, filename);
+  goto_factory::create_file_from(c_file, filename);
 
-  cmdlinet cmd = goto_factory::get_default_cmdline(filename);
-  optionst opts = goto_factory::get_default_options(cmd);
-
-  goto_factory::config_environment(arch, cmd, opts);
-  return goto_factory::get_goto_functions(cmd, opts);
+  return goto_factory::get_goto_functions_internal(filename, arch);
 }
 
 program goto_factory::get_goto_functions(
   std::string &str,
-  goto_factory::Architecture arch)
+  goto_factory::Architecture arch,
+  const std::string &test_name)
 {
-  /*
-     * 1. Create an tmp file from istream
-     * 2. Parse the file using clang-frontend
-     * 3. Return the result
-     */
-
-  // Create tmp file
   std::string filename(
     file_operations::get_unique_tmp_path("esbmc-test-%%%%%%"));
-  filename += "/test.c";
-  goto_factory::create_file_from_string(str, filename);
+  filename += "/" + test_name;
+  goto_factory::create_file_from(str, filename);
 
+  return goto_factory::get_goto_functions_internal(filename, arch);
+}
+
+program goto_factory::get_goto_functions_internal(
+  const std::string &filename,
+  goto_factory::Architecture arch)
+{
   cmdlinet cmd = goto_factory::get_default_cmdline(filename);
   optionst opts = goto_factory::get_default_options(cmd);
 
-  goto_factory::config_environment(arch, cmd, opts);
-  return goto_factory::get_goto_functions(cmd, opts);
-}
-
-program goto_factory::get_goto_functions(
-  std::istream &c_file,
-  cmdlinet &cmd,
-  optionst &opts,
-  goto_factory::Architecture arch)
-{
-  /*
-     * 1. Create an tmp file from istream
-     * 2. Parse the file using clang-frontend
-     * 3. Return the result
-     */
-
-  // Create tmp file
-
-  // Create tmp file
-  std::string filename(
-    file_operations::get_unique_tmp_path("esbmc-test-%%%%%%"));
-  filename += "/test.c";
-  goto_factory::create_file_from_istream(c_file, filename);
   goto_factory::config_environment(arch, cmd, opts);
   return goto_factory::get_goto_functions(cmd, opts);
 }
