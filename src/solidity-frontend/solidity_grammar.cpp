@@ -144,7 +144,7 @@ const char *contract_body_element_to_str(ContractBodyElementT type)
 // rule type-name
 TypeNameT get_type_name_t(const nlohmann::json &type_name)
 {
-  // Solidity AST node has duplicate descriptions: ["typeName"]["typeDescriptions"] and ["typeDescriptions"]
+  // Solidity AST node has duplicate descrptions: ["typeName"]["typeDescriptions"] and ["typeDescriptions"]
   //! Order matters
 
   if (type_name.contains("typeString"))
