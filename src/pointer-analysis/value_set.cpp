@@ -596,19 +596,19 @@ void value_sett::get_value_set_rec(
      * valid, which is currently unsupported.
      */
     auto op_contains_valid_address = [this](value_sett::object_mapt o) -> bool {
-      for(const auto &it : o)
+      for (const auto &it : o)
       {
         auto expr = object_numbering[it.first];
-        if(is_symbol2t(expr) || is_constant_string2t(expr))
+        if (is_symbol2t(expr) || is_constant_string2t(expr))
           return true;
       }
 
       return false;
     };
 
-    if(!op_contains_valid_address(op0_set))
+    if (!op_contains_valid_address(op0_set))
       op0_set.clear();
-    if(!op_contains_valid_address(op1_set))
+    if (!op_contains_valid_address(op1_set))
       op1_set.clear();
 
     /* TODO: The case that both, op0_set and op1_set, are non-empty is not
