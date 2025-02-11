@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.cpp
-baseplus.cpp commission.cpp employee.cpp hourly.cpp salaried.cpp --unwind 10 --no-unwinding-assertions --timeout 900
+baseplus.cpp commission.cpp employee.cpp hourly.cpp salaried.cpp --unwind 12 --no-unwinding-assertions --timeout 900
 ^VERIFICATION FAILED$
