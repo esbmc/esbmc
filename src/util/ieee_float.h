@@ -15,7 +15,7 @@ public:
   BigInt bias() const;
 
   ieee_float_spect(const floatbv_typet &type);
-  ieee_float_spect(const floatbv_type2tc &type);
+  ieee_float_spect(const floatbv_type2t &type);
 
   ieee_float_spect() : f(0), e(0)
   {
@@ -30,7 +30,8 @@ public:
     return f + e + 1;
   }
 
-  const floatbv_type2tc get_type() const;
+  /* that's a floatbv_type2t */
+  type2tc get_type() const;
 
   BigInt max_exponent() const;
   BigInt max_fraction() const;
@@ -156,7 +157,7 @@ public:
   // set to next representable number towards plus infinity
   void increment(bool distinguish_zero = false)
   {
-    if(is_zero() && get_sign() && distinguish_zero)
+    if (is_zero() && get_sign() && distinguish_zero)
       negate();
     else
       next_representable(true);
@@ -165,7 +166,7 @@ public:
   // set to previous representable number towards minus infinity
   void decrement(bool distinguish_zero = false)
   {
-    if(is_zero() && !get_sign() && distinguish_zero)
+    if (is_zero() && !get_sign() && distinguish_zero)
       negate();
     else
       next_representable(false);
@@ -198,7 +199,7 @@ public:
 
   bool is_finite() const
   {
-    return !(infinity_flag && NaN_flag);
+    return !infinity_flag && !NaN_flag;
   }
 
   bool is_normal() const;
@@ -264,6 +265,9 @@ public:
   ieee_floatt &operator*=(const ieee_floatt &other);
   ieee_floatt &operator+=(const ieee_floatt &other);
   ieee_floatt &operator-=(const ieee_floatt &other);
+
+  friend ieee_floatt operator+(const ieee_floatt &lhs, const ieee_floatt &rhs);
+  friend ieee_floatt operator-(const ieee_floatt &lhs, const ieee_floatt &rhs);
 
   ieee_floatt &operator-();
 

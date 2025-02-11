@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --contract Base --incremental-bmc
+^VERIFICATION FAILED$

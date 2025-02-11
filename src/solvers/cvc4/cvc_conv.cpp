@@ -35,10 +35,10 @@ smt_convt::resultt cvc_convt::dec_solve()
   pre_solve();
 
   CVC4::Result r = smt.checkSat();
-  if(r.isSat())
+  if (r.isSat())
     return P_SATISFIABLE;
 
-  if(r.isUnknown())
+  if (r.isUnknown())
     return P_ERROR;
 
   return P_UNSATISFIABLE;
@@ -58,13 +58,15 @@ ieee_floatt cvc_convt::get_fpbv(smt_astt a)
   CVC4::FloatingPoint foo = e.getConst<CVC4::FloatingPoint>();
 
   ieee_floatt number(ieee_float_spect(
-    a->sort->get_significand_width(), a->sort->get_exponent_width()));
+    /* in mk_bvfp_sort() we added +1 for the sign bit */
+    a->sort->get_significand_width() - 1,
+    a->sort->get_exponent_width()));
 
-  if(foo.isNaN())
+  if (foo.isNaN())
     number.make_NaN();
-  else if(foo.isInfinite())
+  else if (foo.isInfinite())
   {
-    if(foo.isPositive())
+    if (foo.isPositive())
       number.make_plus_infinity();
     else
       number.make_minus_infinity();
@@ -102,7 +104,7 @@ expr2tc cvc_convt::get_array_elem(
 const std::string cvc_convt::solver_text()
 {
   std::stringstream ss;
-  ss << "CVC " << CVC4::Configuration::getVersionString();
+  ss << "CVC4 " << CVC4::Configuration::getVersionString();
   return ss.str();
 }
 
@@ -587,6 +589,7 @@ smt_astt cvc_convt::mk_bvadd(smt_astt a, smt_astt b)
 {
   assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
   assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
+  assert(a->sort->get_data_width() == b->sort->get_data_width());
   return new_ast(
     em.mkExpr(
       CVC4::kind::BITVECTOR_PLUS,
@@ -1054,7 +1057,7 @@ smt_astt cvc_convt::mk_smt_fpbv_nan(bool sgn, unsigned ew, unsigned sw)
       s->get_exponent_width(), s->get_significand_width()))),
     s);
 
-  if(sgn)
+  if (sgn)
     the_nan = fp_convt::mk_smt_fpbv_neg(the_nan);
 
   return the_nan;
@@ -1075,7 +1078,7 @@ smt_astt cvc_convt::mk_smt_fpbv_rm(ieee_floatt::rounding_modet rm)
 {
   smt_sortt s = mk_fpbv_rm_sort();
 
-  switch(rm)
+  switch (rm)
   {
   case ieee_floatt::ROUND_TO_EVEN:
     return new_ast(em.mkConst(CVC4::RoundingMode::roundNearestTiesToEven), s);
@@ -1096,9 +1099,12 @@ smt_astt cvc_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
 {
   std::size_t w = s->get_data_width();
 
-  // Seems we can't make negative bitvectors; so just pull the value out and
-  // assume CVC is going to cut the top off correctly.
-  CVC4::BitVector bv = CVC4::BitVector(w, theint.to_uint64());
+  CVC4::BitVector bv;
+  if (theint.is_negative() || !theint.is_uint64())
+    bv = CVC4::BitVector(integer2binary(theint, w), 2);
+  else
+    bv = CVC4::BitVector(w, theint.to_uint64());
+
   CVC4::Expr e = em.mkConst(bv);
   return new_ast(e, s);
 }
@@ -1122,7 +1128,7 @@ smt_astt cvc_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
   // Standard arrangement: if we already have the name, return the expression
   // from the symbol table. If not, time for a new name.
-  if(sym_tab.isBound(name))
+  if (sym_tab.isBound(name))
   {
     CVC4::Expr e = sym_tab.lookup(name);
     return new_ast(e, s);
@@ -1138,7 +1144,7 @@ smt_astt cvc_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 smt_astt cvc_convt::mk_extract(smt_astt a, unsigned int high, unsigned int low)
 {
   // If it's a floatbv, convert it to bv
-  if(a->sort->id == SMT_SORT_FPBV)
+  if (a->sort->id == SMT_SORT_FPBV)
     a = mk_from_fp_to_bv(a);
 
   auto const *ca = to_solver_smt_ast<cvc_smt_ast>(a);
@@ -1270,14 +1276,26 @@ void cvc_convt::dump_smt()
 {
   std::ostringstream oss;
   auto const &assertions = smt.getAssertions();
-  for(auto const &a : assertions)
+  for (auto const &a : assertions)
     a.printAst(oss, 0);
-  log_debug("{}", oss.str());
+  log_debug("cvc4", "{}", oss.str());
 }
 
 void cvc_smt_ast::dump() const
 {
   std::ostringstream oss;
   a.printAst(oss, 0);
-  log_debug("{}", oss.str());
+  log_status("{}", oss.str());
+}
+
+void cvc_convt::push_ctx()
+{
+  smt_convt::push_ctx();
+  smt.push();
+}
+
+void cvc_convt::pop_ctx()
+{
+  smt.pop();
+  smt_convt::pop_ctx();
 }

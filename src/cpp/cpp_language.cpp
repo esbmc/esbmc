@@ -13,7 +13,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp/cpp_language.h>
 #include <cpp/cpp_parser.h>
 #include <cpp/cpp_typecheck.h>
-#include <clang-cpp-frontend/expr2cpp.h>
+#include <util/cpp_expr2string.h>
 #include <cstring>
 #include <fstream>
 #include <sstream>
@@ -23,19 +23,19 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 bool cpp_languaget::preprocess(const std::string &path, std::ostream &outstream)
 {
-  if(path == "")
+  if (path == "")
     return c_preprocess("", outstream, true);
 
   // check extension
 
   const char *ext = strrchr(path.c_str(), '.');
-  if(ext != nullptr && std::string(ext) == ".ipp")
+  if (ext != nullptr && std::string(ext) == ".ipp")
   {
     std::ifstream infile(path.c_str());
 
     char ch;
 
-    while(infile.read(&ch, 1))
+    while (infile.read(&ch, 1))
       outstream << ch;
 
     return false;
@@ -95,11 +95,11 @@ void cpp_languaget::internal_additions(std::ostream &out)
   out << "long double __ESBMC_fabsl(long double x);" << std::endl;
   out << "float __ESBMC_fabsf(float x);" << std::endl;
 
-  // Forward decs for pthread main thread begin/end hooks. Because they're
+  // Forward decls for pthread main thread begin/end hooks. Because they're
   // pulled in from the C library, they need to be declared prior to pulling
   // them in, for type checking.
-  out << "void pthread_start_main_hook(void);" << std::endl;
-  out << "void pthread_end_main_hook(void);" << std::endl;
+  out << "void __ESBMC_pthread_start_main_hook(void);" << std::endl;
+  out << "void __ESBMC_pthread_end_main_hook(void);" << std::endl;
 
   // GCC stuff
   out << GCC_BUILTIN_HEADERS;
@@ -139,7 +139,7 @@ bool cpp_languaget::parse(const std::string &path)
 
   internal_additions(o_preprocessed);
 
-  if(preprocess(path, o_preprocessed))
+  if (preprocess(path, o_preprocessed))
     return true;
 
   std::istringstream i_preprocessed(o_preprocessed.str());
@@ -151,7 +151,7 @@ bool cpp_languaget::parse(const std::string &path)
   cpp_parser.in = &i_preprocessed;
   cpp_parser.grammar = cpp_parsert::LANGUAGE;
 
-  if(config.ansi_c.target.is_windows_abi())
+  if (config.ansi_c.target.is_windows_abi())
     cpp_parser.mode = cpp_parsert::MSC;
   else
     cpp_parser.mode = cpp_parsert::GCC;
@@ -173,7 +173,7 @@ bool cpp_languaget::typecheck(contextt &context, const std::string &module)
 {
   contextt new_context;
 
-  if(cpp_typecheck(cpp_parse_tree, new_context, module))
+  if (cpp_typecheck(cpp_parse_tree, new_context, module))
     return true;
 
   return c_link(context, new_context, module);
@@ -181,9 +181,9 @@ bool cpp_languaget::typecheck(contextt &context, const std::string &module)
 
 bool cpp_languaget::final(contextt &context)
 {
-  if(cpp_final(context))
+  if (cpp_final(context))
     return true;
-  if(c_main(context, "main"))
+  if (c_main(context, "main"))
     return true;
 
   return false;
@@ -191,45 +191,46 @@ bool cpp_languaget::final(contextt &context)
 
 void cpp_languaget::show_parse(std::ostream &out)
 {
-  for(cpp_parse_treet::itemst::const_iterator it = cpp_parse_tree.items.begin();
-      it != cpp_parse_tree.items.end();
-      it++)
+  for (cpp_parse_treet::itemst::const_iterator it =
+         cpp_parse_tree.items.begin();
+       it != cpp_parse_tree.items.end();
+       it++)
     show_parse(out, *it);
 }
 
 void cpp_languaget::show_parse(std::ostream &out, const cpp_itemt &item)
 {
-  if(item.is_linkage_spec())
+  if (item.is_linkage_spec())
   {
     const cpp_linkage_spect &linkage_spec = item.get_linkage_spec();
 
-    for(const auto &it : linkage_spec.items())
+    for (const auto &it : linkage_spec.items())
       show_parse(out, it);
 
     out << std::endl;
   }
-  else if(item.is_namespace_spec())
+  else if (item.is_namespace_spec())
   {
     const cpp_namespace_spect &namespace_spec = item.get_namespace_spec();
 
     out << "NAMESPACE " << namespace_spec.get_namespace() << ":" << std::endl;
 
-    for(const auto &it : namespace_spec.items())
+    for (const auto &it : namespace_spec.items())
       show_parse(out, it);
 
     out << std::endl;
   }
-  else if(item.is_using())
+  else if (item.is_using())
   {
     const cpp_usingt &cpp_using = item.get_using();
 
     out << "USING ";
-    if(cpp_using.get_namespace())
+    if (cpp_using.get_namespace())
       out << "NAMESPACE ";
     out << cpp_using.name() << std::endl;
     out << std::endl;
   }
-  else if(item.is_declaration())
+  else if (item.is_declaration())
   {
     item.get_declaration().output(out);
   }
@@ -245,17 +246,19 @@ languaget *new_cpp_language()
 bool cpp_languaget::from_expr(
   const exprt &expr,
   std::string &code,
-  const namespacet &ns)
+  const namespacet &ns,
+  unsigned flags)
 {
-  code = expr2cpp(expr, ns);
+  code = cpp_expr2string(expr, ns, flags);
   return false;
 }
 
 bool cpp_languaget::from_type(
   const typet &type,
   std::string &code,
-  const namespacet &ns)
+  const namespacet &ns,
+  unsigned flags)
 {
-  code = type2cpp(type, ns);
+  code = cpp_type2string(type, ns, flags);
   return false;
 }

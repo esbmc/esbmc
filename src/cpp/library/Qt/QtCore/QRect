@@ -8,8 +8,9 @@ Date:
 
 \*******************************************************************/
 
-class QRect {
+class QRect
+{
 public:
-	QRect();
-	~QRect();
+  QRect();
+  ~QRect();
 };

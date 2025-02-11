@@ -1,0 +1,5 @@
+CORE
+gh-1548-lit.c
+
+^VERIFICATION FAILED$
+\bdereference failure: write access to string constant

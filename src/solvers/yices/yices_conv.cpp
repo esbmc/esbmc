@@ -11,10 +11,10 @@
 // using the old names for the non-binary version. (This is a design decision).
 
 #if __YICES_VERSION > 2 || (__YICES_VERSION == 2 && __YICES_VERSION_MAJOR >= 3)
-#define yices_bvxor yices_bvxor2
-#define yices_bvconcat yices_bvconcat2
-#define yices_bvand yices_bvand2
-#define yices_bvor yices_bvor2
+#  define yices_bvxor yices_bvxor2
+#  define yices_bvconcat yices_bvconcat2
+#  define yices_bvand yices_bvand2
+#  define yices_bvor yices_bvor2
 #endif
 
 #define new_ast new_solver_ast<yices_smt_ast>
@@ -41,7 +41,7 @@ yices_convt::yices_convt(const namespacet &ns, const optionst &options)
   yices_clear_error();
 
   ctx_config_t *config = yices_new_config();
-  if(options.get_bool_option("int-encoding"))
+  if (options.get_bool_option("int-encoding"))
     yices_default_config_for_logic(config, "QF_AUFLIRA");
   else
     yices_default_config_for_logic(config, "QF_AUFBV");
@@ -62,9 +62,9 @@ void yices_convt::push_ctx()
   smt_convt::push_ctx();
   int32_t res = yices_push(yices_ctx);
 
-  if(res != 0)
+  if (res != 0)
   {
-    yices_print_error(messaget::state.err);
+    yices_print_error(messaget::state.out);
     log_error("Error pushing yices context");
     abort();
   }
@@ -74,9 +74,9 @@ void yices_convt::pop_ctx()
 {
   int32_t res = yices_pop(yices_ctx);
 
-  if(res != 0)
+  if (res != 0)
   {
-    yices_print_error(messaget::state.err);
+    yices_print_error(messaget::state.out);
     log_error("Error poping yices context");
     abort();
   }
@@ -89,10 +89,10 @@ smt_convt::resultt yices_convt::dec_solve()
   pre_solve();
 
   smt_status_t result = yices_check_context(yices_ctx, nullptr);
-  if(result == STATUS_SAT)
+  if (result == STATUS_SAT)
     return smt_convt::P_SATISFIABLE;
 
-  if(result == STATUS_UNSAT)
+  if (result == STATUS_UNSAT)
     return smt_convt::P_UNSATISFIABLE;
 
   return smt_convt::P_ERROR;
@@ -584,14 +584,14 @@ smt_astt yices_convt::mk_bvsge(smt_astt a, smt_astt b)
 smt_astt yices_convt::mk_eq(smt_astt a, smt_astt b)
 {
   assert(a->sort->get_data_width() == b->sort->get_data_width());
-  if(a->sort->id == SMT_SORT_BOOL || a->sort->id == SMT_SORT_STRUCT)
+  if (a->sort->id == SMT_SORT_BOOL || a->sort->id == SMT_SORT_STRUCT)
     return new_ast(
       yices_eq(
         to_solver_smt_ast<yices_smt_ast>(a)->a,
         to_solver_smt_ast<yices_smt_ast>(b)->a),
       boolean_sort);
 
-  if(int_encoding)
+  if (int_encoding)
     return new_ast(
       yices_arith_eq_atom(
         to_solver_smt_ast<yices_smt_ast>(a)->a,
@@ -608,14 +608,14 @@ smt_astt yices_convt::mk_eq(smt_astt a, smt_astt b)
 smt_astt yices_convt::mk_neq(smt_astt a, smt_astt b)
 {
   assert(a->sort->get_data_width() == b->sort->get_data_width());
-  if(a->sort->id == SMT_SORT_BOOL || a->sort->id == SMT_SORT_STRUCT)
+  if (a->sort->id == SMT_SORT_BOOL || a->sort->id == SMT_SORT_STRUCT)
     return new_ast(
       yices_neq(
         to_solver_smt_ast<yices_smt_ast>(a)->a,
         to_solver_smt_ast<yices_smt_ast>(b)->a),
       boolean_sort);
 
-  if(int_encoding)
+  if (int_encoding)
     return new_ast(
       yices_arith_neq_atom(
         to_solver_smt_ast<yices_smt_ast>(a)->a,
@@ -681,14 +681,25 @@ smt_astt yices_convt::mk_smt_real(const std::string &str)
 smt_astt yices_convt::mk_smt_bv(const BigInt &theint, smt_sortt s)
 {
   std::size_t w = s->get_data_width();
-  term_t term = yices_bvconst_uint64(w, theint.to_int64());
+  term_t term;
+
+  if (theint.is_int64())
+    term = yices_bvconst_int64(w, theint.to_int64());
+  else if (theint.is_uint64())
+    term = yices_bvconst_uint64(w, theint.to_uint64());
+  else
+  {
+    std::string bits = integer2binary(theint, w);
+    term = yices_parse_bvbin(bits.c_str());
+  }
+
   return new_ast(term, s);
 }
 
 smt_astt yices_convt::mk_smt_bool(bool val)
 {
   smt_sortt s = boolean_sort;
-  if(val)
+  if (val)
     return new_ast(yices_true(), s);
   else
     return new_ast(yices_false(), s);
@@ -698,13 +709,13 @@ smt_astt yices_convt::mk_smt_symbol(const std::string &name, smt_sortt s)
 {
   // Is this term already in the symbol table?
   term_t term = yices_get_term_by_name(name.c_str());
-  if(term == NULL_TERM)
+  if (term == NULL_TERM)
   {
     // No: create a new one.
     term = yices_new_uninterpreted_term(to_solver_smt_sort<type_t>(s)->s);
 
     // If that wasn't the error term, set it's name.
-    if(term != NULL_TERM)
+    if (term != NULL_TERM)
       yices_set_term_name(term, name.c_str());
   }
 
@@ -784,7 +795,7 @@ bool yices_convt::get_bool(smt_astt a)
 {
   int32_t val;
   const yices_smt_ast *ast = to_solver_smt_ast<yices_smt_ast>(a);
-  if(yices_get_bool_value(yices_get_model(yices_ctx, 1), ast->a, &val))
+  if (yices_get_bool_value(yices_get_model(yices_ctx, 1), ast->a, &val))
   {
     log_error("Can't get boolean value from Yices");
     abort();
@@ -798,7 +809,7 @@ BigInt yices_convt::get_bv(smt_astt a, bool is_signed)
   const yices_smt_ast *ast = to_solver_smt_ast<yices_smt_ast>(a);
 
   int64_t val = 0;
-  if(int_encoding)
+  if (int_encoding)
   {
     yices_get_int64_value(yices_get_model(yices_ctx, 1), ast->a, &val);
     return BigInt(val);
@@ -810,7 +821,7 @@ BigInt yices_convt::get_bv(smt_astt a, bool is_signed)
   yices_get_bv_value(yices_get_model(yices_ctx, 1), ast->a, data);
 
   std::string s;
-  for(unsigned i = 0; i < width; i++)
+  for (unsigned i = 0; i < width; i++)
     s.append(std::to_string(data[width - i - 1]));
 
   delete[] data;
@@ -826,7 +837,7 @@ expr2tc yices_convt::get_array_elem(
   // Construct a term accessing that element, and get_bv it.
   const yices_smt_ast *ast = to_solver_smt_ast<yices_smt_ast>(array);
   term_t idx;
-  if(int_encoding)
+  if (int_encoding)
   {
     idx = yices_int64(index);
   }
@@ -841,9 +852,17 @@ expr2tc yices_convt::get_array_elem(
   return get_by_ast(subtype, container);
 }
 
+expr2tc yices_convt::tuple_get_array_elem(
+  smt_astt array,
+  uint64_t index,
+  const type2tc &subtype)
+{
+  return get_array_elem(array, index, get_flattened_array_subtype(subtype));
+}
+
 void yices_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
 {
-  if(sort->id == SMT_SORT_ARRAY)
+  if (sort->id == SMT_SORT_ARRAY)
   {
     // Perform assign semantics, of this to the given sym
     const yices_smt_ast *ast = to_solver_smt_ast<yices_smt_ast>(sym);
@@ -874,7 +893,7 @@ smt_astt yices_smt_ast::update(
   unsigned int idx,
   expr2tc idx_expr) const
 {
-  if(sort->id == SMT_SORT_ARRAY)
+  if (sort->id == SMT_SORT_ARRAY)
     return smt_ast::update(ctx, value, idx, idx_expr);
 
   // Otherwise, it's a struct
@@ -890,7 +909,7 @@ smt_sortt yices_convt::mk_struct_sort(const type2tc &type)
 {
   // Exactly the same as a normal yices sort, ish.
 
-  if(is_array_type(type))
+  if (is_array_type(type))
   {
     const array_type2t &arrtype = to_array_type(type);
     smt_sortt subtypesort = convert_sort(arrtype.subtype);
@@ -900,7 +919,7 @@ smt_sortt yices_convt::mk_struct_sort(const type2tc &type)
 
   std::vector<type_t> sorts;
   const struct_union_data &def = get_type_def(type);
-  for(auto const &it : def.members)
+  for (auto const &it : def.members)
   {
     smt_sortt s = convert_sort(it);
     sorts.push_back(to_solver_smt_sort<type_t>(s)->s);
@@ -917,7 +936,7 @@ smt_astt yices_convt::tuple_create(const expr2tc &structdef)
   const struct_union_data &type = get_type_def(strct.type);
 
   std::vector<term_t> terms;
-  for(auto const &it : strct.datatype_members)
+  for (auto const &it : strct.datatype_members)
   {
     smt_astt a = convert_ast(it);
     const yices_smt_ast *yast = to_solver_smt_ast<yices_smt_ast>(a);
@@ -950,10 +969,10 @@ smt_astt yices_convt::tuple_array_create(
   std::string name = mk_fresh_name("yices_convt::tuple_array_create");
   smt_astt a = tuple_fresh(sort, name);
 
-  if(const_array)
+  if (const_array)
   {
     smt_astt init = inputargs[0];
-    for(unsigned int i = 0; i < sz; i++)
+    for (unsigned int i = 0; i < sz; i++)
     {
       a = a->update(this, init, i);
     }
@@ -963,7 +982,7 @@ smt_astt yices_convt::tuple_array_create(
   else
   {
     // Repeatedly store operands into this.
-    for(unsigned int i = 0; i < sz; i++)
+    for (unsigned int i = 0; i < sz; i++)
     {
       a = a->update(this, inputargs[i], i);
     }
@@ -993,7 +1012,7 @@ smt_astt yices_convt::tuple_array_of(
   // Now repeatedly store Things into it
   unsigned int elems =
     to_constant_int2t(array_domain_to_width(domtype)).value.to_uint64();
-  for(unsigned int i = 0; i < elems; i++)
+  for (unsigned int i = 0; i < elems; i++)
   {
     term_t idxterm =
       int_encoding ? yices_int64(i) : yices_bvconst_uint64(domain_width, i);
@@ -1020,7 +1039,7 @@ expr2tc yices_convt::tuple_get(const type2tc &type, smt_astt sym)
 {
   const struct_union_data &strct = get_type_def(type);
 
-  if(is_pointer_type(type))
+  if (is_pointer_type(type))
   {
     // Pointer have two fields, a base address and an offset, so we just
     // need to get the two numbers and call the pointer API
@@ -1042,11 +1061,11 @@ expr2tc yices_convt::tuple_get(const type2tc &type, smt_astt sym)
   }
 
   // Otherwise, run through all fields and despatch to 'get_by_ast' again.
-  constant_struct2tc outstruct(type, std::vector<expr2tc>());
+  std::vector<expr2tc> outmem;
   unsigned int i = 0;
-  for(auto const &it : strct.members)
+  for (auto const &it : strct.members)
   {
-    outstruct->datatype_members.push_back(smt_convt::get_by_ast(
+    outmem.push_back(smt_convt::get_by_ast(
       it,
       new_ast(
         yices_select(1 + i, to_solver_smt_ast<yices_smt_ast>(sym)->a),
@@ -1054,14 +1073,14 @@ expr2tc yices_convt::tuple_get(const type2tc &type, smt_astt sym)
     i++;
   }
 
-  return outstruct;
+  return constant_struct2tc(type, std::move(outmem));
 }
 
 expr2tc yices_convt::tuple_get(const expr2tc &expr)
 {
   const struct_union_data &strct = get_type_def(expr->type);
 
-  if(is_pointer_type(expr->type))
+  if (is_pointer_type(expr->type))
   {
     // Pointer have two fields, a base address and an offset, so we just
     // need to get the two numbers and call the pointer API
@@ -1085,16 +1104,16 @@ expr2tc yices_convt::tuple_get(const expr2tc &expr)
   }
 
   // Otherwise, run through all fields and despatch to 'get' again.
-  constant_struct2tc outstruct(expr->type, std::vector<expr2tc>());
+  std::vector<expr2tc> outmem;
   unsigned int i = 0;
-  for(auto const &it : strct.members)
+  for (auto const &it : strct.members)
   {
-    member2tc memb(it, expr, strct.member_names[i]);
-    outstruct->datatype_members.push_back(get(memb));
+    expr2tc memb = member2tc(it, expr, strct.member_names[i]);
+    outmem.push_back(get(memb));
     i++;
   }
 
-  return outstruct;
+  return constant_struct2tc(expr->type, std::move(outmem));
 }
 
 void yices_convt::print_model()

@@ -23,7 +23,7 @@ public:
     std::pair<typename numberst::const_iterator, bool> result =
       numbers.insert(std::pair<T, unsigned>(a, num));
 
-    if(result.second) // inserted?
+    if (result.second) // inserted?
     {
       next_obj_num++;
       vec[num] = a;
@@ -37,7 +37,7 @@ public:
   {
     typename numberst::const_iterator it = numbers.find(a);
 
-    if(it == numbers.end())
+    if (it == numbers.end())
       return true;
 
     n = it->second;
@@ -89,7 +89,7 @@ public:
     std::pair<typename numberst::const_iterator, bool> result =
       numbers.insert(std::pair<T, unsigned>(a, num));
 
-    if(result.second) // inserted?
+    if (result.second) // inserted?
     {
       vec[num] = a;
       assert(vec.size() == numbers.size());
@@ -102,7 +102,7 @@ public:
   {
     typename numberst::const_iterator it = numbers.find(a);
 
-    if(it == numbers.end())
+    if (it == numbers.end())
       return true;
 
     n = it->second;

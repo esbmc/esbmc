@@ -21,8 +21,8 @@ std::string pretty_print_func(unsigned int indent, std::string ident, T obj)
   std::string indentstr = indent_str_irep2(indent);
   std::string exprstr = std::move(ident);
 
-  for(list_of_memberst::const_iterator it = memb.begin(); it != memb.end();
-      it++)
+  for (list_of_memberst::const_iterator it = memb.begin(); it != memb.end();
+       it++)
   {
     exprstr += "\n" + indentstr + "* " + it->first + " : " + it->second;
   }
@@ -80,7 +80,7 @@ inline bool is_scalar_type(const expr2tc &e)
 
 inline bool is_multi_dimensional_array(const type2tc &t)
 {
-  if(is_array_type(t))
+  if (is_array_type(t))
     return is_array_type(to_array_type(t).subtype);
 
   return false;
@@ -89,6 +89,47 @@ inline bool is_multi_dimensional_array(const type2tc &t)
 inline bool is_multi_dimensional_array(const expr2tc &e)
 {
   return is_multi_dimensional_array(e->type);
+}
+
+inline bool contains_symbol_expr(const expr2tc &e)
+{
+  if (is_symbol2t(e))
+    return true;
+
+  bool r = false;
+  e->foreach_operand(
+    [&r](const expr2tc &f) { r = r || contains_symbol_expr(f); });
+  return r;
+}
+
+inline bool is_sym_sized_array_type(const type2tc &t)
+{
+  if (!is_array_type(t))
+    return false;
+  const array_type2t &a = to_array_type(t);
+  if (!a.array_size)
+    return false;
+  return contains_symbol_expr(a.array_size);
+}
+
+inline bool is_byte_type(const type2tc &t)
+{
+  return is_bv_type(t) && t->get_width() == 8;
+}
+
+inline bool is_byte_type(const expr2tc &e)
+{
+  return is_byte_type(e->type);
+}
+
+inline bool is_byte_array(const type2tc &t)
+{
+  return is_array_type(t) && is_byte_type(to_array_type(t).subtype);
+}
+
+inline bool is_byte_array(const expr2tc &e)
+{
+  return is_byte_array(e->type);
 }
 
 inline bool is_constant_number(const expr2tc &t)
@@ -101,16 +142,23 @@ inline bool is_constant_number(const expr2tc &t)
 
 inline bool is_constant_expr(const expr2tc &t)
 {
-  return t->expr_id == expr2t::constant_int_id ||
-         t->expr_id == expr2t::constant_fixedbv_id ||
-         t->expr_id == expr2t::constant_floatbv_id ||
-         t->expr_id == expr2t::constant_bool_id ||
-         t->expr_id == expr2t::constant_string_id ||
+  return is_constant_number(t) || t->expr_id == expr2t::constant_string_id ||
          t->expr_id == expr2t::constant_struct_id ||
          t->expr_id == expr2t::constant_union_id ||
          t->expr_id == expr2t::constant_array_id ||
          t->expr_id == expr2t::constant_array_of_id ||
          t->expr_id == expr2t::constant_vector_id;
+}
+
+inline bool is_constant(const expr2tc &t)
+{
+  if (is_pointer_type(t) && is_symbol2t(t))
+  {
+    symbol2t s = to_symbol2t(t);
+    if (s.thename == "NULL")
+      return true;
+  }
+  return is_constant_expr(t);
 }
 
 inline bool is_structure_type(const type2tc &t)
@@ -149,17 +197,17 @@ inline bool is_comp_expr(const expr2tc &expr)
  */
 inline bool is_true(const expr2tc &expr)
 {
-  if(is_constant_bool2t(expr) && to_constant_bool2t(expr).value)
+  if (is_constant_bool2t(expr) && to_constant_bool2t(expr).value)
     return true;
 
-  if(is_constant_int2t(expr) && !to_constant_int2t(expr).value.is_zero())
+  if (is_constant_int2t(expr) && !to_constant_int2t(expr).value.is_zero())
     return true;
 
-  if(
+  if (
     is_constant_floatbv2t(expr) && !to_constant_floatbv2t(expr).value.is_zero())
     return true;
 
-  if(
+  if (
     is_constant_fixedbv2t(expr) && !to_constant_fixedbv2t(expr).value.is_zero())
     return true;
 
@@ -174,16 +222,18 @@ inline bool is_true(const expr2tc &expr)
  */
 inline bool is_false(const expr2tc &expr)
 {
-  if(is_constant_bool2t(expr) && !to_constant_bool2t(expr).value)
+  if (is_constant_bool2t(expr) && !to_constant_bool2t(expr).value)
     return true;
 
-  if(is_constant_int2t(expr) && to_constant_int2t(expr).value.is_zero())
+  if (is_constant_int2t(expr) && to_constant_int2t(expr).value.is_zero())
     return true;
 
-  if(is_constant_floatbv2t(expr) && to_constant_floatbv2t(expr).value.is_zero())
+  if (
+    is_constant_floatbv2t(expr) && to_constant_floatbv2t(expr).value.is_zero())
     return true;
 
-  if(is_constant_fixedbv2t(expr) && to_constant_fixedbv2t(expr).value.is_zero())
+  if (
+    is_constant_fixedbv2t(expr) && to_constant_fixedbv2t(expr).value.is_zero())
     return true;
 
   return false;
@@ -191,20 +241,34 @@ inline bool is_false(const expr2tc &expr)
 
 inline expr2tc gen_true_expr()
 {
-  static constant_bool2tc c(true);
+  static expr2tc c = constant_bool2tc(true);
   return c;
 }
 
 inline expr2tc gen_false_expr()
 {
-  static constant_bool2tc c(false);
+  static expr2tc c = constant_bool2tc(false);
   return c;
+}
+
+inline expr2tc gen_long(const type2tc &type, BigInt val)
+{
+  return constant_int2tc(type, std::move(val));
+}
+
+inline expr2tc gen_ulong(BigInt v)
+{
+  return constant_int2tc(get_uint_type(config.ansi_c.word_size), std::move(v));
 }
 
 inline expr2tc gen_ulong(unsigned long val)
 {
-  constant_int2tc v(get_uint_type(config.ansi_c.word_size), BigInt(val));
-  return v;
+  return gen_ulong(BigInt(val));
+}
+
+inline expr2tc gen_slong(signed long val)
+{
+  return constant_int2tc(get_int_type(config.ansi_c.word_size), BigInt(val));
 }
 
 inline const type2tc &get_array_subtype(const type2tc &type)
@@ -220,7 +284,7 @@ inline const type2tc &get_vector_subtype(const type2tc &type)
 inline const type2tc &get_base_array_subtype(const type2tc &type)
 {
   const auto &subtype = to_array_type(type).subtype;
-  if(is_array_type(subtype))
+  if (is_array_type(subtype))
     return get_base_array_subtype(subtype);
 
   return subtype;
@@ -229,7 +293,7 @@ inline const type2tc &get_base_array_subtype(const type2tc &type)
 inline bool simplify(expr2tc &expr)
 {
   expr2tc tmp = expr->simplify();
-  if(!is_nil_expr(tmp))
+  if (!is_nil_expr(tmp))
   {
     expr = tmp;
     return true;
@@ -240,20 +304,20 @@ inline bool simplify(expr2tc &expr)
 
 inline void make_not(expr2tc &expr)
 {
-  if(is_true(expr))
+  if (is_true(expr))
   {
     expr = gen_false_expr();
     return;
   }
 
-  if(is_false(expr))
+  if (is_false(expr))
   {
     expr = gen_true_expr();
     return;
   }
 
   expr2tc new_expr;
-  if(is_not2t(expr))
+  if (is_not2t(expr))
     new_expr = to_not2t(expr).value;
   else
     new_expr = not2tc(expr);
@@ -263,12 +327,24 @@ inline void make_not(expr2tc &expr)
 
 inline expr2tc conjunction(std::vector<expr2tc> cs)
 {
-  if(cs.empty())
+  if (cs.empty())
     return gen_true_expr();
 
   expr2tc res = cs[0];
-  for(std::size_t i = 1; i < cs.size(); ++i)
+  for (std::size_t i = 1; i < cs.size(); ++i)
     res = and2tc(res, cs[i]);
+
+  return res;
+}
+
+inline expr2tc disjunction(std::vector<expr2tc> cs)
+{
+  if (cs.empty())
+    return gen_true_expr();
+
+  expr2tc res = cs[0];
+  for (std::size_t i = 1; i < cs.size(); ++i)
+    res = or2tc(res, cs[i]);
 
   return res;
 }
@@ -286,7 +362,7 @@ inline expr2tc gen_nondet(const type2tc &type)
 
 inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)
 {
-  switch(type->type_id)
+  switch (type->type_id)
   {
   case type2t::bool_id:
     return gen_false_expr();
@@ -309,7 +385,7 @@ inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)
     auto s = to_constant_int2t(vec_type.array_size);
 
     std::vector<expr2tc> members;
-    for(long int i = 0; i < s.as_long(); i++)
+    for (long int i = 0; i < s.as_long(); i++)
       members.push_back(
         gen_zero(to_vector_type(type).subtype, array_as_array_of));
 
@@ -317,7 +393,7 @@ inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)
   }
   case type2t::array_id:
   {
-    if(array_as_array_of)
+    if (array_as_array_of)
       return constant_array_of2tc(type, gen_zero(to_array_type(type).subtype));
 
     auto arr_type = to_array_type(type);
@@ -326,7 +402,7 @@ inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)
     auto s = to_constant_int2t(arr_type.array_size);
 
     std::vector<expr2tc> members;
-    for(long int i = 0; i < s.as_long(); i++)
+    for (long int i = 0; i < s.as_long(); i++)
       members.push_back(
         gen_zero(to_array_type(type).subtype, array_as_array_of));
 
@@ -341,7 +417,7 @@ inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)
     auto struct_type = to_struct_type(type);
 
     std::vector<expr2tc> members;
-    for(auto const &member_type : struct_type.members)
+    for (auto const &member_type : struct_type.members)
       members.push_back(gen_zero(member_type, array_as_array_of));
 
     return constant_struct2tc(type, members);
@@ -368,7 +444,7 @@ inline expr2tc gen_zero(const type2tc &type, bool array_as_array_of = false)
 
 inline expr2tc gen_one(const type2tc &type)
 {
-  switch(type->type_id)
+  switch (type->type_id)
   {
   case type2t::bool_id:
     return gen_true_expr();
@@ -430,18 +506,18 @@ inline expr2tc distribute_vector_operation(Func func, expr2tc op1, expr2tc op2)
    * { add(op1[0], op2[0]), add(op1[1], op2[1]), ...}
    * {2,3,4,5}
    */
-  if(is_constant_vector2t(op1) && is_constant_vector2t(op2))
+  if (is_constant_vector2t(op1) && is_constant_vector2t(op2))
   {
-    constant_vector2tc vec1(op1);
-    constant_vector2tc vec2(op2);
-    for(size_t i = 0; i < vec1->datatype_members.size(); i++)
+    std::vector<expr2tc> members = to_constant_vector2t(op1).datatype_members;
+    const constant_vector2t *vec2 = &to_constant_vector2t(op2);
+    for (size_t i = 0; i < members.size(); i++)
     {
-      auto &A = vec1->datatype_members[i];
+      auto &A = members[i];
       auto &B = vec2->datatype_members[i];
       auto new_op = func(A->type, A, B);
-      vec1->datatype_members[i] = new_op;
+      members[i] = new_op;
     }
-    return vec1;
+    return constant_vector2tc(op1->type, std::move(members));
   }
   /*
    * If only one of the operator is a vector, then the result
@@ -463,8 +539,9 @@ inline expr2tc distribute_vector_operation(Func func, expr2tc op1, expr2tc op2)
   {
     bool is_op1_vec = is_constant_vector2t(op1);
     expr2tc c = !is_op1_vec ? op1 : op2;
-    constant_vector2tc vector(is_op1_vec ? op1 : op2);
-    for(auto &datatype_member : vector->datatype_members)
+    expr2tc v = is_op1_vec ? op1 : op2;
+    std::vector<expr2tc> members = to_constant_vector2t(v).datatype_members;
+    for (auto &datatype_member : members)
     {
       auto &op = datatype_member;
       auto e1 = is_op1_vec ? op : c;
@@ -472,7 +549,7 @@ inline expr2tc distribute_vector_operation(Func func, expr2tc op1, expr2tc op2)
       auto new_op = func(op->type, e1, e2);
       datatype_member = new_op->do_simplify();
     }
-    return vector;
+    return constant_vector2tc(v->type, std::move(members));
   }
 }
 
@@ -536,13 +613,13 @@ inline expr2tc distribute_vector_operation(
    * { add(op1[0], 1), add(op1[1], 1), ...}
    * {2,3,4,5}
    */
-  for(size_t i = 0; i < to_constant_int2t(vector_length).as_ulong(); i++)
+  for (size_t i = 0; i < to_constant_int2t(vector_length).as_ulong(); i++)
   {
     BigInt position(i);
     type2tc vector_type =
       to_vector_type(is_vector_type(op1->type) ? op1->type : op2->type).subtype;
     expr2tc local_op1 = op1;
-    if(is_vector_type(op1->type))
+    if (is_vector_type(op1->type))
     {
       local_op1 = index2tc(
         to_vector_type(op1->type).subtype,
@@ -551,7 +628,7 @@ inline expr2tc distribute_vector_operation(
     }
 
     expr2tc local_op2 = op2;
-    if(op2 && is_vector_type(op2->type))
+    if (op2 && is_vector_type(op2->type))
     {
       local_op2 = index2tc(
         to_vector_type(op2->type).subtype,
@@ -560,7 +637,7 @@ inline expr2tc distribute_vector_operation(
     }
 
     expr2tc to_add;
-    switch(id)
+    switch (id)
     {
     case expr2t::neg_id:
       to_add = neg2tc(vector_type, local_op1);
@@ -614,6 +691,25 @@ inline expr2tc distribute_vector_operation(
     to_constant_vector2t(result).datatype_members[i] = to_add;
   }
   return result;
+}
+
+inline void get_symbols(
+  const expr2tc &expr,
+  std::unordered_set<expr2tc, irep2_hash> &symbols)
+{
+  if (is_nil_expr(expr))
+    return;
+
+  if (is_symbol2t(expr))
+  {
+    symbol2t s = to_symbol2t(expr);
+    if (s.thename.as_string().find("__ESBMC_") != std::string::npos)
+      return;
+    symbols.insert(expr);
+  }
+
+  expr->foreach_operand(
+    [&symbols](const expr2tc &e) -> void { get_symbols(e, symbols); });
 }
 
 #endif /* UTIL_IREP2_UTILS_H_ */

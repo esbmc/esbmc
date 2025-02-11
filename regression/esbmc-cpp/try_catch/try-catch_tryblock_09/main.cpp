@@ -1,6 +1,7 @@
 #include<cassert>
 
 int main()
+{
 try {
   throw 5;
   return 0;
@@ -8,4 +9,4 @@ try {
 catch (int) {
   return -1;
 }
-
+}

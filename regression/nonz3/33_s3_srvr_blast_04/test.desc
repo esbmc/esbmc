@@ -1,4 +1,4 @@
 CORE
 main.c
---unwind 1 --no-bounds-check --no-pointer-check --no-div-by-zero-check --error-label ERROR
+--unwind 1 --no-bounds-check --no-pointer-check --no-div-by-zero-check --error-label ERROR -Wno-error=int-conversion -Wno-error=implicit-function-declaration
 ^VERIFICATION FAILED$

@@ -19,12 +19,12 @@ void cpp_typecheckt::convert_initializer(symbolt &symbol)
 {
   // this is needed for template arguments that are types
 
-  if(symbol.is_type)
+  if (symbol.is_type)
   {
-    if(symbol.value.is_nil())
+    if (symbol.value.is_nil())
       return;
 
-    if(symbol.value.id() != "type")
+    if (symbol.value.id() != "type")
     {
       err_location(symbol.location);
       str << "expected type as initializer for `" << symbol.name << "'";
@@ -37,17 +37,17 @@ void cpp_typecheckt::convert_initializer(symbolt &symbol)
   }
 
   // do we have an initializer?
-  if(symbol.value.is_nil())
+  if (symbol.value.is_nil())
   {
     // do we need one?
-    if(is_reference(symbol.type))
+    if (is_reference(symbol.type))
     {
       err_location(symbol.location);
       str << "`" << symbol.name
           << "' is declared as reference but is not initialized";
       throw 0;
     }
-    if(symbol.type.id() == "incomplete_array")
+    if (symbol.type.id() == "incomplete_array")
     {
       err_location(symbol.location);
       str << "storage size of `" << symbol.name << "' isn't know";
@@ -60,14 +60,14 @@ void cpp_typecheckt::convert_initializer(symbolt &symbol)
 
   // we do have an initializer
 
-  if(is_reference(symbol.type))
+  if (is_reference(symbol.type))
   {
     typecheck_expr(symbol.value);
     reference_initializer(symbol.value, symbol.type);
   }
-  else if(cpp_is_pod(symbol.type))
+  else if (cpp_is_pod(symbol.type))
   {
-    if(
+    if (
       symbol.type.id() == "pointer" && symbol.type.subtype().id() == "code" &&
       symbol.value.id() == "address_of" &&
       symbol.value.op0().id() == "cpp-name")
@@ -81,13 +81,13 @@ void cpp_typecheckt::convert_initializer(symbolt &symbol)
 
       const code_typet &code_type = to_code_type(symbol.type.subtype());
 
-      for(const auto &ait : code_type.arguments())
+      for (const auto &ait : code_type.arguments())
       {
         exprt new_object("new_object");
         new_object.set("#lvalue", true);
         new_object.type() = ait.type();
 
-        if(ait.cmt_base_name() == "this")
+        if (ait.cmt_base_name() == "this")
         {
           fargs.has_object = true;
           new_object.type() = ait.type().subtype();
@@ -103,11 +103,11 @@ void cpp_typecheckt::convert_initializer(symbolt &symbol)
 
       assert(symbol.type.subtype() == resolved_expr.type());
 
-      if(resolved_expr.id() == "symbol")
+      if (resolved_expr.id() == "symbol")
       {
         symbol.value = address_of_exprt(resolved_expr);
       }
-      else if(resolved_expr.id() == "member")
+      else if (resolved_expr.id() == "member")
       {
         symbol.value = address_of_exprt(
           symbol_expr(*lookup(resolved_expr.component_name())));
@@ -117,7 +117,7 @@ void cpp_typecheckt::convert_initializer(symbolt &symbol)
       else
         assert(false);
 
-      if(symbol.type != symbol.value.type())
+      if (symbol.type != symbol.value.type())
       {
         err_location(symbol.location);
         str << "conversion from `" << to_string(symbol.value.type()) << "' to `"
@@ -130,7 +130,7 @@ void cpp_typecheckt::convert_initializer(symbolt &symbol)
 
     typecheck_expr(symbol.value);
 
-    if(
+    if (
       symbol.value.type().id() == "incomplete_array" ||
       symbol.value.id() == "string-constant")
     {
@@ -141,7 +141,7 @@ void cpp_typecheckt::convert_initializer(symbolt &symbol)
 
     simplify_exprt simplify;
     exprt tmp_value = symbol.value;
-    if(!simplify.simplify(tmp_value))
+    if (!simplify.simplify(tmp_value))
       symbol.value.swap(tmp_value);
   }
   else
@@ -165,21 +165,21 @@ void cpp_typecheckt::zero_initializer(
 {
   const typet &final_type = follow(type);
 
-  if(final_type.id() == "struct")
+  if (final_type.id() == "struct")
   {
     std::list<codet> lst;
 
-    forall_irep(cit, final_type.components().get_sub())
+    forall_irep (cit, final_type.components().get_sub())
     {
       const exprt &component = static_cast<const exprt &>(*cit);
 
-      if(component.type().id() == "code")
+      if (component.type().id() == "code")
         continue;
 
-      if(component.is_type())
+      if (component.is_type())
         continue;
 
-      if(component.get_bool("is_static"))
+      if (component.get_bool("is_static"))
         continue;
 
       exprt member("member");
@@ -190,9 +190,9 @@ void cpp_typecheckt::zero_initializer(
       zero_initializer(member, component.type(), location, ops);
     }
   }
-  else if(final_type.id() == "array")
+  else if (final_type.id() == "array")
   {
-    if(cpp_is_pod(final_type.subtype()))
+    if (cpp_is_pod(final_type.subtype()))
     {
       exprt value;
       c_typecheck_baset::zero_initializer(value, final_type);
@@ -211,7 +211,7 @@ void cpp_typecheckt::zero_initializer(
       const array_typet &array_type = to_array_type(type);
       const exprt &size_expr = array_type.size();
 
-      if(size_expr.id() == "infinity")
+      if (size_expr.id() == "infinity")
         return; // don't initialize
 
       BigInt size;
@@ -223,7 +223,7 @@ void cpp_typecheckt::zero_initializer(
       assert(size >= 0);
 
       exprt::operandst empty_operands;
-      for(BigInt i = 0; i < size; ++i)
+      for (BigInt i = 0; i < size; ++i)
       {
         exprt index("index");
         index.copy_to_operands(object, from_integer(i, int_type()));
@@ -231,20 +231,20 @@ void cpp_typecheckt::zero_initializer(
       }
     }
   }
-  else if(final_type.id() == "union")
+  else if (final_type.id() == "union")
   {
     // Select the largest component
     BigInt comp_size = 0;
 
     exprt comp = nil_exprt();
 
-    forall_irep(it, final_type.components().get_sub())
+    forall_irep (it, final_type.components().get_sub())
     {
       const exprt &component = static_cast<const exprt &>(*it);
 
       assert(component.type().is_not_nil());
 
-      if(component.type().id() == "code")
+      if (component.type().id() == "code")
         continue;
 
       exprt exs = c_sizeof(component.type(), *this);
@@ -255,14 +255,14 @@ void cpp_typecheckt::zero_initializer(
       assert(to_int);
 #endif
 
-      if(size > comp_size)
+      if (size > comp_size)
       {
         comp_size = size;
         comp = component;
       }
     }
 
-    if(comp_size > 0)
+    if (comp_size > 0)
     {
       irept name("name");
       name.identifier(comp.base_name());
@@ -277,7 +277,7 @@ void cpp_typecheckt::zero_initializer(
       zero_initializer(member, comp.type(), location, ops);
     }
   }
-  else if(final_type.id() == "c_enum")
+  else if (final_type.id() == "c_enum")
   {
     typet enum_type("unsignedbv");
     enum_type.add("width") = final_type.find("width");
@@ -298,7 +298,7 @@ void cpp_typecheckt::zero_initializer(
     typecheck_code(assign);
     ops.push_back(assign);
   }
-  else if(
+  else if (
     final_type.id() == "incomplete_struct" ||
     final_type.id() == "incomplete_union")
   {

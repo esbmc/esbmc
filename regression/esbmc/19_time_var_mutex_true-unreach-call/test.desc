@@ -1,4 +1,4 @@
-THOROUGH
+CORE
 main.c
---error-label ERROR --context-bound 7
+--error-label ERROR --context-bound 2
 ^VERIFICATION SUCCESSFUL$

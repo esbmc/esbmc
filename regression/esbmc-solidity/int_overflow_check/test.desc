@@ -1,4 +1,4 @@
 CORE
 contract.solast
---function test --contract contract.sol --overflow-check
+--function test --sol contract.sol --overflow-check
 ^VERIFICATION FAILED$

@@ -2,10 +2,10 @@
 #include "../../fstream"
 
 typedef float qreal;
-typedef const char * qApp;
+typedef const char *qApp;
 
-#define SIGNAL(a)   qFlagLocation("2"#a)
-#define SLOT(a)     qFlagLocation("1"#a)
+#define SIGNAL(a) qFlagLocation("2" #a)
+#define SLOT(a) qFlagLocation("1" #a)
 #define emit
 #define animatedtiles
 #define signals public
@@ -22,104 +22,192 @@ typedef const char * qApp;
 #define setPos
 #endif
 
-enum CacheMode{ NoCache, ItemCoordinateCache, DeviceCoordinateCache };
-
-const char *qFlagLocation(const char *method){}
-
-namespace Qt{
-	enum GlobalColor{ white, lightGray, darkGray };
-	enum PenStyle{ NoPen };
-	enum KeepAspectRatio{};
-	enum AspectRatioMode{ IgnoreAspectRatio };
-	enum Orientation{ Horizontal, Vertical };
-	enum AlignmentFlag{};
+enum CacheMode
+{
+  NoCache,
+  ItemCoordinateCache,
+  DeviceCoordinateCache
 };
 
+const char *qFlagLocation(const char *method)
+{
+}
+
+namespace Qt
+{
+enum GlobalColor
+{
+  white,
+  lightGray,
+  darkGray
+};
+enum PenStyle
+{
+  NoPen
+};
+enum KeepAspectRatio
+{
+};
+enum AspectRatioMode
+{
+  IgnoreAspectRatio
+};
+enum Orientation
+{
+  Horizontal,
+  Vertical
+};
+enum AlignmentFlag
+{
+};
+}; // namespace Qt
+
 void update();
-void setAcceptHoverEvents ( bool enabled );
-void Q_INIT_RESOURCE ();
-qreal cos( double x );
-qreal sin( double x );
+void setAcceptHoverEvents(bool enabled);
+void Q_INIT_RESOURCE();
+qreal cos(double x);
+qreal sin(double x);
 int qrand();
 template <class T>
-	QT_TRANSLATE_NOOP ( T context, const char* sourceText );
+QT_TRANSLATE_NOOP(T context, const char *sourceText);
 
 class QString
 {
-	std::string str;
+  std::string str;
+
 public:
-	QString (){}
-	QString ( const char * unicode ){
-		__ESBMC_assert(unicode != NULL, "Invalid string");
-	}
-	std::string	toStdString () const{}
-	~QString (){}
+  QString()
+  {
+  }
+  QString(const char *unicode)
+  {
+    __ESBMC_assert(unicode != NULL, "Invalid string");
+  }
+  std::string toStdString() const
+  {
+  }
+  ~QString()
+  {
+  }
 };
 
-QString fromUtf8 ( const char * str, int size = -1 ){}
+QString fromUtf8(const char *str, int size = -1)
+{
+}
 
 class QColor
 {
 public:
-	QColor();
+  QColor();
 };
 
-class QSize{
+class QSize
+{
 public:
-    QSize();
+  QSize();
 };
 
-class QLayout{
+class QLayout
+{
 public:
-	QLayout (){}
+  QLayout()
+  {
+  }
 };
 
-class QWidget{
+class QWidget
+{
 public:
-	QWidget(){}
-	QWidget( QWidget* ){}
-	void setLayout ( QLayout * layout ){}
-	void setLayout ( void * layout ){}
-	void show (){}
-	void setWindowTitle ( const char* str ){}
-	void setParent ( QWidget * parent ){}
-	void setWindowTitle ( const QString & ){}
-	void resize ( int w, int h ){
-		__ESBMC_assert(w >= 0, "First parameter must be greater or equal than zero.");
-		__ESBMC_assert(h >= 0, "Second parameter must be greater or equal than zero.");
-	}
+  QWidget()
+  {
+  }
+  QWidget(QWidget *)
+  {
+  }
+  void setLayout(QLayout *layout)
+  {
+  }
+  void setLayout(void *layout)
+  {
+  }
+  void show()
+  {
+  }
+  void setWindowTitle(const char *str)
+  {
+  }
+  void setParent(QWidget *parent)
+  {
+  }
+  void setWindowTitle(const QString &)
+  {
+  }
+  void resize(int w, int h)
+  {
+    __ESBMC_assert(
+      w >= 0, "First parameter must be greater or equal than zero.");
+    __ESBMC_assert(
+      h >= 0, "Second parameter must be greater or equal than zero.");
+  }
 };
 
-class QPushButton{
+class QPushButton
+{
 public:
-	QPushButton ( QWidget * parent = 0 ){}
-	QPushButton ( const QString & text, QWidget * parent = 0 ){}
+  QPushButton(QWidget *parent = 0)
+  {
+  }
+  QPushButton(const QString &text, QWidget *parent = 0)
+  {
+  }
 };
 
 class QTimer
 {
 public:
-	QTimer(){}
-	void start ( int i ){
-		__ESBMC_assert(i >= 0, "Time specified invalid.");
-	}
-	void setSingleShot ( bool b );
+  QTimer()
+  {
+  }
+  void start(int i)
+  {
+    __ESBMC_assert(i >= 0, "Time specified invalid.");
+  }
+  void setSingleShot(bool b);
 };
 
-class QLCDNumber : public QWidget{
+class QLCDNumber : public QWidget
+{
 public:
-	QLCDNumber(){}
-	void display ( QString s ){}
-	void setFixedSize ( int x, int y ){}
+  QLCDNumber()
+  {
+  }
+  void display(QString s)
+  {
+  }
+  void setFixedSize(int x, int y)
+  {
+  }
 };
 
 class QObject
 {
 public:
-	QObject ( QObject * parent = 0 ){}
-	~QObject (){}
-	static bool connect(QPushButton *, const char *, const char *, const char *){}
-	static bool connect( QTimer* spin, const char* str_f, QLCDNumber* slider, const char* str_l ){}
+  QObject(QObject *parent = 0)
+  {
+  }
+  ~QObject()
+  {
+  }
+  static bool connect(QPushButton *, const char *, const char *, const char *)
+  {
+  }
+  static bool connect(
+    QTimer *spin,
+    const char *str_f,
+    QLCDNumber *slider,
+    const char *str_l)
+  {
+  }
 
 #if 0	
 	static bool connect(const QObject *sender, const char *signal,
@@ -135,332 +223,490 @@ public:
 #endif
         ){}
 #endif
-
 };
 
 class QPointF
 {
 public:
-	QPointF();
-	QPointF( qreal x, qreal y );
+  QPointF();
+  QPointF(qreal x, qreal y);
 };
 
-bool fexists(const char* filename){
-	std::ifstream file(filename);
-	return file.is_open();
+bool fexists(const char *filename)
+{
+  std::ifstream file(filename);
+  return file.is_open();
 }
 
 class QPixmap
 {
 public:
-	QPixmap (){}
-	QPixmap ( int width, int height ){}
-	QPixmap ( const char * xpm ){
-		__ESBMC_assert(fexists(xpm),"invalid file");
-	}
-	int width () const;
-	int height () const;
+  QPixmap()
+  {
+  }
+  QPixmap(int width, int height)
+  {
+  }
+  QPixmap(const char *xpm)
+  {
+    __ESBMC_assert(fexists(xpm), "invalid file");
+  }
+  int width() const;
+  int height() const;
 };
 
 class QGraphicsItem
 {
 public:
-	QGraphicsItem ( QGraphicsItem * parent = 0 );
-	void setCacheMode ( CacheMode mode, const QSize & logicalCacheSize = QSize() );
-	void setZValue ( qreal z );
-	void setPos ( qreal x, qreal y );
-	void scale ( double x, double y ) const;
-	~QGraphicsItem ();
+  QGraphicsItem(QGraphicsItem *parent = 0);
+  void setCacheMode(CacheMode mode, const QSize &logicalCacheSize = QSize());
+  void setZValue(qreal z);
+  void setPos(qreal x, qreal y);
+  void scale(double x, double y) const;
+  ~QGraphicsItem();
 };
 
-void setCacheMode ( QGraphicsItem::CacheMode mode, const QSize & logicalCacheSize = QSize() );
+void setCacheMode(
+  QGraphicsItem::CacheMode mode,
+  const QSize &logicalCacheSize = QSize());
 
 class QGraphicsPixmapItem : public QGraphicsItem
 {
 public:
-	QGraphicsPixmapItem ( const QPixmap pixmap ){}
-	~QGraphicsPixmapItem ();
-	void	setPixmap ( const QPixmap & pixmap ){}
-	void setOffset (int x, int y){}
+  QGraphicsPixmapItem(const QPixmap pixmap)
+  {
+  }
+  ~QGraphicsPixmapItem();
+  void setPixmap(const QPixmap &pixmap)
+  {
+  }
+  void setOffset(int x, int y)
+  {
+  }
 };
 
 class QGraphicsWidget : public QWidget, public QGraphicsItem
 {
 public:
-	QGraphicsWidget();
-	QGraphicsWidget( QGraphicsItem* );
+  QGraphicsWidget();
+  QGraphicsWidget(QGraphicsItem *);
 };
 
 class QRectF
 {
 public:
-	QRectF();
-	QRectF(int a, int b, int c, int d);
-	QPointF topLeft();
-	QPointF bottomRight();
-	QRectF adjusted ( qreal dx1, qreal dy1, qreal dx2, qreal dy2 ) const;
-	~QRectF();
+  QRectF();
+  QRectF(int a, int b, int c, int d);
+  QPointF topLeft();
+  QPointF bottomRight();
+  QRectF adjusted(qreal dx1, qreal dy1, qreal dx2, qreal dy2) const;
+  ~QRectF();
 };
 
 class QPainterPath
 {
 public:
-	QPainterPath();
-	void addEllipse ( const QRectF & boundingRectangle );
+  QPainterPath();
+  void addEllipse(const QRectF &boundingRectangle);
 };
 
 class QBrush
 {
 public:
-	QBrush();
+  QBrush();
 };
 
 class QStyle
 {
 public:
-	enum StateFlag{ State_Sunken, State_MouseOver };
-	QStyle();
-	int state;
+  enum StateFlag
+  {
+    State_Sunken,
+    State_MouseOver
+  };
+  QStyle();
+  int state;
 };
 
 class QStyleOptionGraphicsItem : public QStyle
 {
 public:
-	QStyleOptionGraphicsItem();
+  QStyleOptionGraphicsItem();
 };
 
 class QGraphicsSceneMouseEvent
 {
 public:
-	QGraphicsSceneMouseEvent();
+  QGraphicsSceneMouseEvent();
 };
 
 class QGradient : public QColor
 {
 public:
-	QGradient();
+  QGradient();
 };
 class QLinearGradient : public QGradient
 {
 public:
-	QLinearGradient();
-	QLinearGradient ( const QPointF & start, const QPointF & finalStop );
-	void  setColorAt ( int y, Qt::GlobalColor color);
+  QLinearGradient();
+  QLinearGradient(const QPointF &start, const QPointF &finalStop);
+  void setColorAt(int y, Qt::GlobalColor color);
 };
 
 class QPainter
 {
 public:
-	enum RenderHint{ Antialiasing, SmoothPixmapTransform };
-	QPainter();
-	void setPen ( Qt::GlobalColor color );
-	void setPen ( Qt::PenStyle pen );
-	void setBrush ( const QLinearGradient & brush );
-	void drawEllipse ( const QRectF & rectangle );
-	void translate ( qreal dx, qreal dy );
-	void drawPixmap ( const QRectF & target, const QPixmap & pixmap, const QRectF & source );
-	void drawPixmap ( int target, int x, const QPixmap & pixmap );
+  enum RenderHint
+  {
+    Antialiasing,
+    SmoothPixmapTransform
+  };
+  QPainter();
+  void setPen(Qt::GlobalColor color);
+  void setPen(Qt::PenStyle pen);
+  void setBrush(const QLinearGradient &brush);
+  void drawEllipse(const QRectF &rectangle);
+  void translate(qreal dx, qreal dy);
+  void
+  drawPixmap(const QRectF &target, const QPixmap &pixmap, const QRectF &source);
+  void drawPixmap(int target, int x, const QPixmap &pixmap);
 };
 
 class QResizeEvent
 {
 public:
-	QResizeEvent();
+  QResizeEvent();
 };
 
 class QGraphicsScene : public QGraphicsItem
 {
 public:
-	QGraphicsScene();
-	QGraphicsScene( int a, int b, int c, int d );
-	void addItem ( QGraphicsItem * item );
+  QGraphicsScene();
+  QGraphicsScene(int a, int b, int c, int d);
+  void addItem(QGraphicsItem *item);
 };
 
 class QGraphicsView
 {
 public:
-	enum ViewportUpdateMode{ BoundingRectViewportUpdate };
-	enum CacheModeFlag{ CacheBackground, CacheNone };
-	QGraphicsView();
-	QGraphicsView( QGraphicsScene* );
-	void resizeEvent ( QResizeEvent * event );
-	void fitInView ( const QRectF & rect, Qt::KeepAspectRatio keepAspectRatio );
-	void setWindowTitle ( const QString & title );
-	void setViewportUpdateMode ( ViewportUpdateMode mode );
-	void setBackgroundBrush ( const QPixmap & pixmap );
-	void setCacheMode ( CacheModeFlag mode );
-	void setRenderHints ( int hints );
-	void show();
+  enum ViewportUpdateMode
+  {
+    BoundingRectViewportUpdate
+  };
+  enum CacheModeFlag
+  {
+    CacheBackground,
+    CacheNone
+  };
+  QGraphicsView();
+  QGraphicsView(QGraphicsScene *);
+  void resizeEvent(QResizeEvent *event);
+  void fitInView(const QRectF &rect, Qt::KeepAspectRatio keepAspectRatio);
+  void setWindowTitle(const QString &title);
+  void setViewportUpdateMode(ViewportUpdateMode mode);
+  void setBackgroundBrush(const QPixmap &pixmap);
+  void setCacheMode(CacheModeFlag mode);
+  void setRenderHints(int hints);
+  void show();
 };
 
-QRectF	sceneRect () const;
-void	setSceneRect ( const QRectF & rect );
-void	setSceneRect ( qreal x, qreal y, qreal w, qreal h );
+QRectF sceneRect() const;
+void setSceneRect(const QRectF &rect);
+void setSceneRect(qreal x, qreal y, qreal w, qreal h);
 
-class QApplication{
-public:
-	QApplication( int & argc, char ** argv ){
-		__ESBMC_assert(argc > 0, "invalid parameter");
-	}
-	int exec(){}
-};
-
-template<class T> class QList
+class QApplication
 {
 public:
-	QList (){}
-	void operator<< ( T );
-	int count () const;
-	const T & at ( int i ) const;
-	T &	operator[] ( int i );
-	~QList (){}
+  QApplication(int &argc, char **argv)
+  {
+    __ESBMC_assert(argc > 0, "invalid parameter");
+  }
+  int exec()
+  {
+  }
+};
+
+template <class T>
+class QList
+{
+public:
+  QList()
+  {
+  }
+  void operator<<(T);
+  int count() const;
+  const T &at(int i) const;
+  T &operator[](int i);
+  ~QList()
+  {
+  }
 };
 
 class QGraphicsRectItem : public QGraphicsItem
 {
 public:
-	QGraphicsRectItem();
+  QGraphicsRectItem();
 };
 
 class QAbstractState
 {
 public:
-	QAbstractState(){}
+  QAbstractState()
+  {
+  }
 };
 
 class QEasingCurve
 {
 public:
-	enum Type{ InOutBack };
-	QEasingCurve(){}
+  enum Type
+  {
+    InOutBack
+  };
+  QEasingCurve()
+  {
+  }
 };
 
 class QPropertyAnimation
 {
 public:
-	QPropertyAnimation(){}
-	QPropertyAnimation( QObject* target, char* propertyName ){}
-	void setDuration( int i ){}
-	void setEasingCurve ( QEasingCurve::Type easing );
+  QPropertyAnimation()
+  {
+  }
+  QPropertyAnimation(QObject *target, char *propertyName)
+  {
+  }
+  void setDuration(int i)
+  {
+  }
+  void setEasingCurve(QEasingCurve::Type easing);
 };
 
 class QParallelAnimationGroup
 {
 public:
-	QParallelAnimationGroup(){}
-	void addAnimation ( QPropertyAnimation * animation );
+  QParallelAnimationGroup()
+  {
+  }
+  void addAnimation(QPropertyAnimation *animation);
 };
 
 class QAbstractTransition
 {
 public:
-	QAbstractTransition(){}
-	void addAnimation ( QParallelAnimationGroup * animation );
+  QAbstractTransition()
+  {
+  }
+  void addAnimation(QParallelAnimationGroup *animation);
 };
 
 class QState
 {
 public:
-	QState();
-	QState( QState* );
-	void assignProperty ( QObject * object, char * name, QPointF value );
-	void setInitialState ( QState * state );
-	QAbstractTransition * addTransition ( QGraphicsWidget * target, const char* signal, QState* state );
-	QAbstractTransition * addTransition ( QTimer * target, const char* signal, QState* state );
+  QState();
+  QState(QState *);
+  void assignProperty(QObject *object, char *name, QPointF value);
+  void setInitialState(QState *state);
+  QAbstractTransition *
+  addTransition(QGraphicsWidget *target, const char *signal, QState *state);
+  QAbstractTransition *
+  addTransition(QTimer *target, const char *signal, QState *state);
 };
 
 class QStateMachine
 {
 public:
-	QStateMachine(){}
-	void addState ( QState * state );
-	void setInitialState ( QState * state );
-	void start();
+  QStateMachine()
+  {
+  }
+  void addState(QState *state);
+  void setInitialState(QState *state);
+  void start();
 };
 
 int pressed();
 int timeout();
 //void SIGNAL ( int signal );
 
-class QTextEdit{
+class QTextEdit
+{
 public:
-	QTextEdit ( QWidget * parent = 0 ){}
-	QTextEdit ( const QString & text, QWidget * parent = 0 ){}
-	~QTextEdit (){}
+  QTextEdit(QWidget *parent = 0)
+  {
+  }
+  QTextEdit(const QString &text, QWidget *parent = 0)
+  {
+  }
+  ~QTextEdit()
+  {
+  }
 };
 
-int clicked ( bool checked = false ){}
+int clicked(bool checked = false)
+{
+}
 
-class QLabel{
+class QLabel
+{
 public:
-	QLabel( char* label ){
-		__ESBMC_assert(label != NULL, "Invalid string");
-	}
-	void show(){}
+  QLabel(char *label)
+  {
+    __ESBMC_assert(label != NULL, "Invalid string");
+  }
+  void show()
+  {
+  }
 };
 
-class QDialog{
+class QDialog
+{
 public:
-	QDialog();
-	~QDialog();
+  QDialog();
+  ~QDialog();
 };
 
-class QSpinBox{
+class QSpinBox
+{
 public:
-	QSpinBox(){}
-	void setRange ( int minimum, int maximum ){}
+  QSpinBox()
+  {
+  }
+  void setRange(int minimum, int maximum)
+  {
+  }
 };
 
-class QSlider : public QSpinBox{
+class QSlider : public QSpinBox
+{
 public:
-	QSlider(){}
-	QSlider ( Qt::Orientation orientation, QWidget * parent = 0 ){}
-	void setValue ( int val ){}
+  QSlider()
+  {
+  }
+  QSlider(Qt::Orientation orientation, QWidget *parent = 0)
+  {
+  }
+  void setValue(int val)
+  {
+  }
 };
 
-class QGridLayout{
+class QGridLayout
+{
 public:
-	QGridLayout(){}
-	void addWidget ( QLabel* widget, int fromRow, int fromColumn, int rowSpan, int columnSpan ){}
-	void addWidget ( QSpinBox* widget, int fromRow, int fromColumn, int rowSpan, int columnSpan ){}
+  QGridLayout()
+  {
+  }
+  void addWidget(
+    QLabel *widget,
+    int fromRow,
+    int fromColumn,
+    int rowSpan,
+    int columnSpan)
+  {
+  }
+  void addWidget(
+    QSpinBox *widget,
+    int fromRow,
+    int fromColumn,
+    int rowSpan,
+    int columnSpan)
+  {
+  }
 };
 
-class QHBoxLayout{
+class QHBoxLayout
+{
 public:
-	QHBoxLayout(){}
-	QHBoxLayout	addWidget ( QTextEdit * w ){}
-	QHBoxLayout	addWidget ( QPushButton * w ){}
+  QHBoxLayout()
+  {
+  }
+  QHBoxLayout addWidget(QTextEdit *w)
+  {
+  }
+  QHBoxLayout addWidget(QPushButton *w)
+  {
+  }
 };
 
-class QVBoxLayout{
+class QVBoxLayout
+{
 public:
-	QVBoxLayout (){}
-	QVBoxLayout ( QWidget * parent ){}
-	~QVBoxLayout (){}
-	QVBoxLayout	addWidget ( QTextEdit * w ){}
-	QVBoxLayout	addWidget ( QPushButton * w ){}
-	void addLayout ( QLayout * layout, int stretch = 0 ){}
-	void addLayout ( QGridLayout * layout, int stretch = 0 ){}
-	void addLayout ( QHBoxLayout * layout, int stretch = 0 ){}
+  QVBoxLayout()
+  {
+  }
+  QVBoxLayout(QWidget *parent)
+  {
+  }
+  ~QVBoxLayout()
+  {
+  }
+  QVBoxLayout addWidget(QTextEdit *w)
+  {
+  }
+  QVBoxLayout addWidget(QPushButton *w)
+  {
+  }
+  void addLayout(QLayout *layout, int stretch = 0)
+  {
+  }
+  void addLayout(QGridLayout *layout, int stretch = 0)
+  {
+  }
+  void addLayout(QHBoxLayout *layout, int stretch = 0)
+  {
+  }
 };
 
-class QTime{
+class QTime
+{
 public:
-	QTime(){}
-	QTime ( int h, int m, int s = 0, int ms = 0 ){}
-	QTime addSecs ( int s ) const{}
-	int minute () const{}
-	int second () const{}
-	bool setHMS ( int h, int m, int s, int ms = 0 ){}
-	QString toString () const{}
+  QTime()
+  {
+  }
+  QTime(int h, int m, int s = 0, int ms = 0)
+  {
+  }
+  QTime addSecs(int s) const
+  {
+  }
+  int minute() const
+  {
+  }
+  int second() const
+  {
+  }
+  bool setHMS(int h, int m, int s, int ms = 0)
+  {
+  }
+  QString toString() const
+  {
+  }
 };
 
-void connect( QSpinBox* spin, const char* str_f, QSlider* slider, const char* str_l );
-void connect( QSlider* spin, const char* str_f, QSpinBox* slider, const char* str_l );
-void connect( QPushButton* spin, const char* str_f, QWidget* slider, const char* str_l );
+void connect(
+  QSpinBox *spin,
+  const char *str_f,
+  QSlider *slider,
+  const char *str_l);
+void connect(
+  QSlider *spin,
+  const char *str_f,
+  QSpinBox *slider,
+  const char *str_l);
+void connect(
+  QPushButton *spin,
+  const char *str_f,
+  QWidget *slider,
+  const char *str_l);
 
-class QMainWindow : public QWidget{
+class QMainWindow : public QWidget
+{
 public:
-	QMainWindow(){}
-	void setCentralWidget ( QWidget * widget ){}
+  QMainWindow()
+  {
+  }
+  void setCentralWidget(QWidget *widget)
+  {
+  }
 };

@@ -32,7 +32,7 @@
  *  variablea free variable. These are recorded by calling methods in the
  *  dereference_callbackt object. Assertions can be disabled with the
  *  --no-pointer-check and --no-align-check options, but code modelled then
- *  relies on undefined behaviour.
+ *  relies on undefined behavior.
  *
  *  There are four steps to the dereferencing process:
  *   1) Interpretation of the expression surrounding the dereference. The
@@ -64,7 +64,7 @@
  *  The value set tracking code also maintains a 'minimum alignment' piece of
  *  data when the offset is nondeterministic, guarenteeing that the offset used
  *  will be aligned to at least that many bytes. This allows for reducing the
- *  number of behaviours we have to support when dereferencing, particularly
+ *  number of behaviors we have to support when dereferencing, particularly
  *  useful when accessing array elements.
  *
  *  The majority of code is in the reference building stuff. It would be aimless
@@ -91,7 +91,7 @@
 /** Class providing interface to value set tracking code.
  *  This class allows dereference code to get more data out of the environment
  *  in which it is dereferencing, fetching the set of values that a pointer
- *  points at, and also encoding any asertions that occur regarding the validity
+ *  points at, and also encoding any assertions that occur regarding the validity
  *  of the dereference.
  */
 class dereference_callbackt
@@ -100,7 +100,7 @@ public:
   virtual ~dereference_callbackt() = default;
 
   /** Encode a dereference failure assertion. If a dereference does, or can
-   *  trigger undefined or illegal behaviour, then this method is called to
+   *  trigger undefined or illegal behavior, then this method is called to
    *  record it so that it can be asserted against.
    *  @param property Classification of the assertion being violated.
    *  @param msg Description of the reason for this assertion.
@@ -111,6 +111,8 @@ public:
     const std::string &property,
     const std::string &msg,
     const guardt &guard) = 0;
+
+  virtual void dereference_assume(const guardt &guard) = 0;
 
   /** Fetch the set of values that the given pointer variable can point at.
    *  @param expr Pointer symbol to get the value set of.
@@ -125,7 +127,7 @@ public:
   has_failed_symbol(const expr2tc &expr, const symbolt *&symbol) = 0;
 
   /** Optionally rename the given expression. This exists to provide potential
-   *  optimisation expansion in the future, it isn't currently used by anything.
+   *  optimization expansion in the future, it isn't currently used by anything.
    *  @param expr An expression to be renamed
    */
   virtual void rename(expr2tc &expr [[maybe_unused]])
@@ -260,7 +262,7 @@ public:
     const expr2tc &extra_offset);
 
   /** Does the given expression have a dereference in it somewhere?
-   *  @param expr The expression to check for existance of a dereference.
+   *  @param expr The expression to check for existence of a dereference.
    *  @return True when the given expression does have a dereference.
    */
   bool has_dereference(const expr2tc &expr) const;
@@ -403,22 +405,17 @@ private:
     const type2tc &type,
     const guardt &guard);
   void valid_check(const expr2tc &expr, const guardt &guard, modet mode);
-  std::vector<expr2tc> extract_bytes_from_array(
-    const expr2tc &array,
-    unsigned int bytes,
-    const expr2tc &offset);
-  std::vector<expr2tc> extract_bytes_from_scalar(
+  std::vector<expr2tc> extract_bytes(
     const expr2tc &object,
     unsigned int bytes,
-    const expr2tc &offset);
+    const expr2tc &offset) const;
   expr2tc stitch_together_from_byte_array(
     unsigned int num_bytes,
     const std::vector<expr2tc> &bytes);
   expr2tc stitch_together_from_byte_array(
     const type2tc &type,
     const expr2tc &byte_array,
-    expr2tc offset_bits,
-    const guardt &guard);
+    expr2tc offset_bits);
   void dereference_failure(
     const std::string &error_class,
     const std::string &error_name,
@@ -442,10 +439,8 @@ private:
     const type2tc &type,
     const guardt &guard,
     modet mode);
-  void check_alignment(
-    unsigned long minwidth,
-    const expr2tc &&offset,
-    const guardt &guard);
+  void
+  check_alignment(BigInt minwidth, const expr2tc &offset, const guardt &guard);
   unsigned int static compute_num_bytes_to_extract(
     const expr2tc offset,
     unsigned long num_bits);
@@ -504,7 +499,8 @@ private:
     expr2tc &value,
     const expr2tc &offs,
     const type2tc &type,
-    const guardt &guard);
+    const guardt &guard,
+    modet mode);
   void construct_struct_ref_from_dyn_offset(
     expr2tc &value,
     const expr2tc &offs,

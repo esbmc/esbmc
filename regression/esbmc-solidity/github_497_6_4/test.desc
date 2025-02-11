@@ -1,4 +1,4 @@
 CORE
 MyContract_satisfiability_4.solast
---function func_sat --contract MyContract_satisfiability_4.sol
+--function func_sat --sol MyContract_satisfiability_4.sol
 ^VERIFICATION SUCCESSFUL$

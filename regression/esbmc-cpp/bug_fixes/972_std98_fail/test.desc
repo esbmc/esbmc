@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++98
+
+^ERROR: PARSING ERROR$

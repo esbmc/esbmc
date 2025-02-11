@@ -13,11 +13,11 @@ if(ENABLE_CSMITH)
     # --float: enable floats
     # --no-math64: disable 64-bit math ops
     set(CSMITH_DEFAULT_ARGS "--inline-function --paranoid --float --no-math64")
-    set(CSMITH_TIMEOUT 1000)
+    set(CSMITH_TIMEOUT 30)
 
     # DEFAULT ESBMC ARGS
     set(CSMITH_ESBMC_DEFAULT_ARGS "-I${CSMITH_INC}")
-    set(CSMITH_ESBMC_TIMEOUT 60)
+    set(CSMITH_ESBMC_TIMEOUT 10)
 
     assert_variable_is_defined(ESBMC_BIN)
     # Creates a csmith target
@@ -32,9 +32,9 @@ if(ENABLE_CSMITH)
     endfunction()
     
     # incremental: default sv-comp arguments
-    create_csmith_test(incremental "${CSMITH_ESBMC_DEFAULT_ARGS} --incremental-bmc --no-div-by-zero-check --force-malloc-success --state-hashing --no-align-check --k-step 2 --floatbv --unlimited-k-steps --context-bound 3 --32 --no-pointer-check --no-bounds-check --interval-analysis")
+    create_csmith_test(incremental "${CSMITH_ESBMC_DEFAULT_ARGS} --incremental-bmc --no-div-by-zero-check --force-malloc-success --state-hashing --no-align-check --k-step 2 --floatbv --unlimited-k-steps --context-bound 3 --32 --no-pointer-check --no-bounds-check --interval-analysis ")
     # k-induction: default sv-comp arguments
-    create_csmith_test(kind "${CSMITH_ESBMC_DEFAULT_ARGS} --k-induction --no-div-by-zero-check --force-malloc-success --state-hashing --no-align-check --k-step 2 --floatbv --unlimited-k-steps --context-bound 3 --32 --no-pointer-check --no-bounds-check --interval-analysis")
+    create_csmith_test(kind "${CSMITH_ESBMC_DEFAULT_ARGS} --k-induction --no-div-by-zero-check --force-malloc-success --state-hashing --no-align-check --k-step 2 --floatbv --unlimited-k-steps --context-bound 3 --32 --no-pointer-check --no-bounds-check --interval-analysis ")
     # k-induction-parallel: default sv-comp arguments
-    create_csmith_test(kind-parallel "${CSMITH_ESBMC_DEFAULT_ARGS} --k-induction-parallel --no-div-by-zero-check --force-malloc-success --state-hashing --no-align-check --k-step 2 --floatbv --unlimited-k-steps --context-bound 3 --32 --no-pointer-check --no-bounds-check --interval-analysis")
+    create_csmith_test(kind-parallel "${CSMITH_ESBMC_DEFAULT_ARGS} --k-induction-parallel --no-div-by-zero-check --force-malloc-success --state-hashing --no-align-check --k-step 2 --floatbv --unlimited-k-steps --context-bound 3 --32 --no-pointer-check --no-bounds-check --interval-analysis ")
 endif()

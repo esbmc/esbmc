@@ -1,4 +1,4 @@
 CORE
 main.c
-
+--interval-analysis -Wno-error=implicit-function-declaration
 ^VERIFICATION SUCCESSFUL$

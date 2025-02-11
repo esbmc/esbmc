@@ -1,0 +1,4 @@
+CORE
+mul.solast
+--function func_array_loop --sol mul.sol
+^VERIFICATION FAILED$

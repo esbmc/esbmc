@@ -1,4 +1,4 @@
 CORE
 contract.solast
---function test --contract constract.sol
+--function test --sol contract.sol
 ^VERIFICATION SUCCESSFUL$

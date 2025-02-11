@@ -1,0 +1,4 @@
+CORE
+main.c
+--condition-coverage-claims --no-cov-asserts
+^VERIFICATION FAILED$

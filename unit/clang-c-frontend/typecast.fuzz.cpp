@@ -31,7 +31,9 @@ namespace
 {
 void gen_typecast_to_union(exprt &dest, const typet &type)
 {
-  clang_c_convertert::gen_typecast_to_union(dest, type);
+  contextt ctx;
+  namespacet ns(ctx);
+  clang_c_convertert::gen_typecast_to_union(ns, dest, type);
 }
 } // namespace
 
@@ -49,11 +51,11 @@ void test_to_union(const int *Data, size_t Size)
   Builtin_Type bt_error = (Builtin_Type)(Data[1]);
 
   // Don't need to worry with upper bound (libFuzzer)
-  for(size_t i = 2; i < Size - 1; i++)
+  for (size_t i = 2; i < Size - 1; i++)
   {
-    if(Data[i] == Data[1])
+    if (Data[i] == Data[1])
       continue;
-    if(!added_check && (Data[i] == Data[0] || i > (size_t)rand_index))
+    if (!added_check && (Data[i] == Data[0] || i > (size_t)rand_index))
     {
       t.components().push_back(component_check);
       added_check = true;
@@ -67,7 +69,7 @@ void test_to_union(const int *Data, size_t Size)
 
   // It could happen that Data[1] until Data[-1]
   // are the same, so it would never add the check
-  if(!added_check)
+  if (!added_check)
     return;
 
   typet builtin;
@@ -89,7 +91,7 @@ void test_to_union(const int *Data, size_t Size)
     // This shouldn't be reached
     assert(0);
   }
-  catch(const std::domain_error &)
+  catch (const std::domain_error &)
   {
     // OK
     return;
@@ -98,11 +100,12 @@ void test_to_union(const int *Data, size_t Size)
 
 extern "C" int LLVMFuzzerTestOneInput(const int *Data, size_t Size)
 {
-  if(Size < 5 || Size > 100 || (Data[0] == Data[1]))
+  if (Size < 5 || Size > 100 || (Data[0] == Data[1]))
     return 0;
-  for(size_t i = 0; i < Size; i++)
+  for (size_t i = 0; i < Size; i++)
   {
-    if(Data[i] <= (int)Builtin_Type::Void || Data[i] >= (int)Builtin_Type::Last)
+    if (
+      Data[i] <= (int)Builtin_Type::Void || Data[i] >= (int)Builtin_Type::Last)
     {
       return 0;
     }

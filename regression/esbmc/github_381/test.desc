@@ -1,4 +1,4 @@
 CORE
 main.c
 --overflow-check
-main.c line 7 function main$
+main.c line 7 column 3 function main$

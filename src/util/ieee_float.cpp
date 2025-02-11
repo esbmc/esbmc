@@ -3,6 +3,7 @@
 #include <util/arith_tools.h>
 #include <util/ieee_float.h>
 #include <util/std_types.h>
+#include <goto-programs/abstract-interpretation/interval_template.h>
 
 BigInt ieee_float_spect::bias() const
 {
@@ -36,16 +37,16 @@ ieee_float_spect::ieee_float_spect(const floatbv_typet &type)
   e = width - f - 1;
 }
 
-ieee_float_spect::ieee_float_spect(const floatbv_type2tc &type)
+ieee_float_spect::ieee_float_spect(const floatbv_type2t &type)
 {
-  unsigned width = type->get_width();
-  f = type->fraction;
+  unsigned width = type.get_width();
+  f = type.fraction;
   assert(f != 0);
   assert(f < width);
   e = width - f - 1;
 }
 
-const floatbv_type2tc ieee_float_spect::get_type() const
+type2tc ieee_float_spect::get_type() const
 {
   return floatbv_type2tc(f, e);
 }
@@ -86,7 +87,7 @@ std::string ieee_floatt::format(const format_spect &format_spec) const
 {
   std::string result;
 
-  switch(format_spec.style)
+  switch (format_spec.style)
   {
   case format_spect::DECIMAL:
     result += to_string_decimal(format_spec.precision);
@@ -102,16 +103,16 @@ std::string ieee_floatt::format(const format_spect &format_spec) const
     BigInt _exponent, _fraction;
     extract_base10(_fraction, _exponent);
 
-    if(_exponent >= 0)
+    if (_exponent >= 0)
     {
-      if(base10_digits(_fraction) + _exponent >= format_spec.precision)
+      if (base10_digits(_fraction) + _exponent >= format_spec.precision)
         result += to_string_scientific(format_spec.precision);
       else
         result += to_string_decimal(format_spec.precision);
     }
     else // _exponent<0
     {
-      if(true) //base10_digits(fraction)+_exponent<-4)
+      if (true) //base10_digits(fraction)+_exponent<-4)
         result += to_string_scientific(format_spec.precision);
       else
         result += to_string_decimal(format_spec.precision);
@@ -120,7 +121,7 @@ std::string ieee_floatt::format(const format_spect &format_spec) const
   break;
   }
 
-  while(result.size() < format_spec.min_width)
+  while (result.size() < format_spec.min_width)
     result = " " + result;
 
   return result;
@@ -131,7 +132,7 @@ BigInt ieee_floatt::base10_digits(const BigInt &src)
   BigInt tmp = src;
   assert(tmp >= 0);
   BigInt result = 0;
-  while(tmp != 0)
+  while (tmp != 0)
   {
     ++result;
     tmp /= 10;
@@ -143,26 +144,26 @@ std::string ieee_floatt::to_string_decimal(unsigned precision) const
 {
   std::string result;
 
-  if(sign_flag)
+  if (sign_flag)
     result += '-';
 
-  if((NaN_flag || infinity_flag) && !sign_flag)
+  if ((NaN_flag || infinity_flag) && !sign_flag)
     result += '+';
 
   // special cases
-  if(NaN_flag)
-    result += "NaN";
-  else if(infinity_flag)
-    result += "inf";
-  else if(is_zero())
+  if (NaN_flag)
+    result += "NAN";
+  else if (infinity_flag)
+    result += "INFINITY";
+  else if (is_zero())
   {
     result += '0';
 
     // add zeros, if needed
-    if(precision > 0)
+    if (precision > 0)
     {
       result += '.';
-      for(unsigned i = 0; i < precision; i++)
+      for (unsigned i = 0; i < precision; i++)
         result += '0';
     }
   }
@@ -172,13 +173,13 @@ std::string ieee_floatt::to_string_decimal(unsigned precision) const
     extract_base2(_fraction, _exponent);
 
     // convert to base 10
-    if(_exponent >= 0)
+    if (_exponent >= 0)
     {
       result += integer2string(_fraction * power(2, _exponent));
-      if(precision > 0)
+      if (precision > 0)
       {
         result += '.';
-        for(unsigned i = 0; i < precision; i++)
+        for (unsigned i = 0; i < precision; i++)
           result += '0';
       }
     }
@@ -190,13 +191,13 @@ std::string ieee_floatt::to_string_decimal(unsigned precision) const
       _fraction *= power(5, position);
 
       // apply rounding
-      if(position > precision)
+      if (position > precision)
       {
         BigInt r = power(10, position - precision);
         BigInt remainder = _fraction % r;
         _fraction /= r;
         // not sure if this is the right kind of rounding here
-        if(remainder >= r / 2)
+        if (remainder >= r / 2)
           ++_fraction;
         position = precision;
       }
@@ -204,14 +205,14 @@ std::string ieee_floatt::to_string_decimal(unsigned precision) const
       std::string tmp = integer2string(_fraction);
 
       // pad with zeros, if needed
-      while(BigInt(tmp.size()) <= position)
+      while (BigInt(tmp.size()) <= position)
         tmp = "0" + tmp;
 
       std::size_t dot = tmp.size() - position.to_uint64();
       result += std::string(tmp, 0, dot) + '.';
       result += std::string(tmp, dot, std::string::npos);
 
-      for(BigInt i = position; i < precision; ++i)
+      for (BigInt i = position; i < precision; ++i)
         result += '0';
     }
   }
@@ -223,26 +224,26 @@ std::string ieee_floatt::to_string_scientific(unsigned precision) const
 {
   std::string result;
 
-  if(sign_flag)
+  if (sign_flag)
     result += '-';
 
-  if((NaN_flag || infinity_flag) && !sign_flag)
+  if ((NaN_flag || infinity_flag) && !sign_flag)
     result += '+';
 
   // special cases
-  if(NaN_flag)
+  if (NaN_flag)
     result += "NaN";
-  else if(infinity_flag)
+  else if (infinity_flag)
     result += "inf";
-  else if(is_zero())
+  else if (is_zero())
   {
     result += '0';
 
     // add zeros, if needed
-    if(precision > 0)
+    if (precision > 0)
     {
       result += '.';
-      for(unsigned i = 0; i < precision; i++)
+      for (unsigned i = 0; i < precision; i++)
         result += '0';
     }
 
@@ -255,7 +256,7 @@ std::string ieee_floatt::to_string_scientific(unsigned precision) const
 
     // C99 appears to say that conversion to decimal should
     // use the currently selected IEEE rounding mode.
-    if(base10_digits(_fraction) > precision + 1)
+    if (base10_digits(_fraction) > precision + 1)
     {
       // re-align
       BigInt distance = base10_digits(_fraction) - (precision + 1);
@@ -264,12 +265,12 @@ std::string ieee_floatt::to_string_scientific(unsigned precision) const
       _fraction /= p;
       _exponent += distance;
 
-      if(remainder == p / 2)
+      if (remainder == p / 2)
       {
         // need to do rounding mode here
         ++_fraction;
       }
-      else if(remainder > p / 2)
+      else if (remainder > p / 2)
         ++_fraction;
     }
 
@@ -281,11 +282,11 @@ std::string ieee_floatt::to_string_scientific(unsigned precision) const
     result += decimals[0];
 
     // Now add dot and further zeros, if needed.
-    if(precision > 0)
+    if (precision > 0)
     {
       result += '.';
 
-      while(decimals.size() < precision + 1)
+      while (decimals.size() < precision + 1)
         decimals += '0';
 
       result += decimals.substr(1, precision);
@@ -297,7 +298,7 @@ std::string ieee_floatt::to_string_scientific(unsigned precision) const
     std::string exponent_str =
       integer2string(base10_digits(_fraction) + _exponent - 1);
 
-    if(exponent_str.size() > 0 && exponent_str[0] != '-')
+    if (exponent_str.size() > 0 && exponent_str[0] != '-')
       result += '+';
 
     result += exponent_str;
@@ -327,21 +328,21 @@ void ieee_floatt::unpack(const BigInt &i)
   }
 
   // NaN?
-  if(exponent == spec.max_exponent() && fraction != 0)
+  if (exponent == spec.max_exponent() && fraction != 0)
   {
     make_NaN();
   }
-  else if(exponent == spec.max_exponent() && fraction == 0) // Infinity
+  else if (exponent == spec.max_exponent() && fraction == 0) // Infinity
   {
     NaN_flag = false;
     infinity_flag = true;
   }
-  else if(exponent == 0 && fraction == 0) // zero
+  else if (exponent == 0 && fraction == 0) // zero
   {
     NaN_flag = false;
     infinity_flag = false;
   }
-  else if(exponent == 0) // denormal?
+  else if (exponent == 0) // denormal?
   {
     NaN_flag = false;
     infinity_flag = false;
@@ -358,7 +359,7 @@ void ieee_floatt::unpack(const BigInt &i)
 
 bool ieee_floatt::is_normal() const
 {
-  return fraction >= power(2, spec.f);
+  return !NaN_flag && fraction >= power(2, spec.f);
 }
 
 BigInt ieee_floatt::pack() const
@@ -366,22 +367,22 @@ BigInt ieee_floatt::pack() const
   BigInt result = 0;
 
   // sign bit
-  if(sign_flag)
+  if (sign_flag)
     result += power(2, spec.e + spec.f);
 
-  if(NaN_flag)
+  if (NaN_flag)
   {
     result += power(2, spec.f) * spec.max_exponent();
     result += 1;
   }
-  else if(infinity_flag)
+  else if (infinity_flag)
   {
     result += power(2, spec.f) * spec.max_exponent();
   }
-  else if(fraction == 0 && exponent == 0)
+  else if (fraction == 0 && exponent == 0)
   {
   }
-  else if(is_normal()) // normal?
+  else if (is_normal()) // normal?
   {
     // fraction -- need to hide hidden bit
     result += fraction - power(2, spec.f); // hidden bit
@@ -400,7 +401,7 @@ BigInt ieee_floatt::pack() const
 
 void ieee_floatt::extract_base2(BigInt &_fraction, BigInt &_exponent) const
 {
-  if(is_zero() || is_NaN() || is_infinity())
+  if (is_zero() || is_NaN() || is_infinity())
   {
     _fraction = _exponent = 0;
     return;
@@ -412,7 +413,7 @@ void ieee_floatt::extract_base2(BigInt &_fraction, BigInt &_exponent) const
   _exponent -= spec.f;
 
   // try to integer-ize
-  while((_fraction % 2) == 0)
+  while ((_fraction % 2) == 0)
   {
     _fraction /= 2;
     ++_exponent;
@@ -421,7 +422,7 @@ void ieee_floatt::extract_base2(BigInt &_fraction, BigInt &_exponent) const
 
 void ieee_floatt::extract_base10(BigInt &_fraction, BigInt &_exponent) const
 {
-  if(is_zero() || is_NaN() || is_infinity())
+  if (is_zero() || is_NaN() || is_infinity())
   {
     _fraction = _exponent = 0;
     return;
@@ -434,7 +435,7 @@ void ieee_floatt::extract_base10(BigInt &_fraction, BigInt &_exponent) const
   _exponent -= spec.f;
 
   // now make it base 10
-  if(_exponent >= 0)
+  if (_exponent >= 0)
   {
     _fraction *= power(2, _exponent);
     _exponent = 0;
@@ -446,7 +447,7 @@ void ieee_floatt::extract_base10(BigInt &_fraction, BigInt &_exponent) const
   }
 
   // try to re-normalize
-  while((_fraction % 10) == 0)
+  while ((_fraction % 10) == 0)
   {
     _fraction /= 10;
     ++_exponent;
@@ -457,7 +458,7 @@ void ieee_floatt::build(const BigInt &_fraction, const BigInt &_exponent)
 {
   sign_flag = _fraction < 0;
   fraction = _fraction;
-  if(sign_flag)
+  if (sign_flag)
     fraction = -fraction;
   exponent = _exponent;
   exponent += spec.f;
@@ -469,12 +470,12 @@ void ieee_floatt::from_base10(const BigInt &_fraction, const BigInt &_exponent)
   NaN_flag = infinity_flag = false;
   sign_flag = _fraction < 0;
   fraction = _fraction;
-  if(sign_flag)
+  if (sign_flag)
     fraction = -fraction;
   exponent = spec.f;
   exponent += _exponent;
 
-  if(_exponent < 0)
+  if (_exponent < 0)
   {
     // bring to max. precision
     BigInt e_power = power(2, spec.e);
@@ -482,7 +483,7 @@ void ieee_floatt::from_base10(const BigInt &_fraction, const BigInt &_exponent)
     exponent -= e_power;
     fraction /= power(5, -_exponent);
   }
-  else if(_exponent > 0)
+  else if (_exponent > 0)
   {
     // fix base
     fraction *= power(5, _exponent);
@@ -502,7 +503,7 @@ void ieee_floatt::from_integer(const BigInt &i)
 void ieee_floatt::align()
 {
   // NaN?
-  if(NaN_flag)
+  if (NaN_flag)
   {
     fraction = 0;
     exponent = 0;
@@ -511,14 +512,14 @@ void ieee_floatt::align()
   }
 
   // do sign
-  if(fraction < 0)
+  if (fraction < 0)
   {
     sign_flag = !sign_flag;
     fraction = -fraction;
   }
 
   // zero?
-  if(fraction == 0)
+  if (fraction == 0)
   {
     exponent = 0;
     return;
@@ -532,14 +533,14 @@ void ieee_floatt::align()
   unsigned lowPower2 = fraction.floorPow2();
   BigInt exponent_offset = 0;
 
-  if(lowPower2 < spec.f) // too small
+  if (lowPower2 < spec.f) // too small
   {
     exponent_offset -= (spec.f - lowPower2);
 
     assert(fraction * power(2, (spec.f - lowPower2)) >= f_power);
     assert(fraction * power(2, (spec.f - lowPower2)) < f_power_next);
   }
-  else if(lowPower2 > spec.f) // too large
+  else if (lowPower2 > spec.f) // too large
   {
     exponent_offset += (lowPower2 - spec.f);
 
@@ -548,12 +549,11 @@ void ieee_floatt::align()
   }
 
   BigInt biased_exponent = exponent + exponent_offset + spec.bias();
-
   // exponent too large (infinity)?
-  if(biased_exponent >= spec.max_exponent())
+  if (biased_exponent >= spec.max_exponent())
   {
     // we need to consider the rounding mode here
-    switch(rounding_mode)
+    switch (rounding_mode)
     {
     case UNKNOWN:
     case NONDETERMINISTIC:
@@ -563,7 +563,7 @@ void ieee_floatt::align()
 
     case ROUND_TO_MINUS_INF:
       // the result of the rounding is never larger than the argument
-      if(sign_flag)
+      if (sign_flag)
         infinity_flag = true;
       else
         make_fltmax();
@@ -571,7 +571,7 @@ void ieee_floatt::align()
 
     case ROUND_TO_PLUS_INF:
       // the result of the rounding is never smaller than the argument
-      if(sign_flag)
+      if (sign_flag)
       {
         make_fltmax();
         sign_flag = true; // restore sign
@@ -581,7 +581,7 @@ void ieee_floatt::align()
       break;
 
     case ROUND_TO_ZERO:
-      if(sign_flag)
+      if (sign_flag)
       {
         make_fltmax();
         sign_flag = true; // restore sign
@@ -595,7 +595,7 @@ void ieee_floatt::align()
 
     return; // done
   }
-  if(biased_exponent <= 0) // exponent too small?
+  if (biased_exponent <= 0) // exponent too small?
   {
     // produce a denormal (or zero)
     BigInt new_exponent = BigInt(1) - spec.bias();
@@ -604,26 +604,26 @@ void ieee_floatt::align()
 
   exponent += exponent_offset;
 
-  if(exponent_offset > 0)
+  if (exponent_offset > 0)
   {
     divide_and_round(fraction, power(2, exponent_offset));
 
     // rounding might make the fraction too big!
-    if(fraction == f_power_next)
+    if (fraction == f_power_next)
     {
       fraction = f_power;
       ++exponent;
     }
   }
-  else if(exponent_offset < 0)
+  else if (exponent_offset < 0)
     fraction *= power(2, -exponent_offset);
 
-  if(fraction == 0)
+  if (fraction == 0)
     exponent = 0;
 
   // Update flags
   // if the exponent is all 1, than this is either an infinity or a NaN
-  if(exponent == (spec.bias() + 1))
+  if (exponent == (spec.bias() + 1))
   {
     // Infinity if fraction is all 0
     infinity_flag = (fraction == (spec.max_fraction() + 1));
@@ -638,24 +638,24 @@ void ieee_floatt::divide_and_round(BigInt &fraction, const BigInt &factor)
   BigInt remainder = fraction % factor;
   fraction /= factor;
 
-  if(remainder != 0)
+  if (remainder != 0)
   {
-    switch(rounding_mode)
+    switch (rounding_mode)
     {
     case ROUND_TO_EVEN:
     {
       BigInt factor_middle = factor / 2;
-      if(remainder < factor_middle)
+      if (remainder < factor_middle)
       {
         // crop
       }
-      else if(remainder > factor_middle)
+      else if (remainder > factor_middle)
       {
         ++fraction;
       }
       else // exactly in the middle -- go to even
       {
-        if((fraction % 2) != 0)
+        if ((fraction % 2) != 0)
           ++fraction;
       }
     }
@@ -666,12 +666,12 @@ void ieee_floatt::divide_and_round(BigInt &fraction, const BigInt &factor)
       break;
 
     case ROUND_TO_MINUS_INF:
-      if(sign_flag)
+      if (sign_flag)
         ++fraction;
       break;
 
     case ROUND_TO_PLUS_INF:
-      if(!sign_flag)
+      if (!sign_flag)
         ++fraction;
       break;
 
@@ -693,36 +693,36 @@ ieee_floatt &ieee_floatt::operator/=(const ieee_floatt &other)
   assert(other.spec.f == spec.f);
 
   // NaN/x = NaN
-  if(NaN_flag)
+  if (NaN_flag)
     return *this;
 
   // x/Nan = NaN
-  if(other.NaN_flag)
+  if (other.NaN_flag)
   {
     make_NaN();
     return *this;
   }
 
   // 0/0 = NaN
-  if(is_zero() && other.is_zero())
+  if (is_zero() && other.is_zero())
   {
     make_NaN();
     return *this;
   }
 
   // x/0 = +-inf
-  if(other.is_zero())
+  if (other.is_zero())
   {
     infinity_flag = true;
-    if(other.sign_flag)
+    if (other.sign_flag)
       negate();
     return *this;
   }
 
   // x/inf = NaN
-  if(other.infinity_flag)
+  if (other.infinity_flag)
   {
-    if(infinity_flag)
+    if (infinity_flag)
     {
       make_NaN();
       return *this;
@@ -732,14 +732,14 @@ ieee_floatt &ieee_floatt::operator/=(const ieee_floatt &other)
     make_zero();
     sign_flag = old_sign;
 
-    if(other.sign_flag)
+    if (other.sign_flag)
       negate();
 
     return *this;
   } // inf/x = inf
-  if(infinity_flag)
+  if (infinity_flag)
   {
-    if(other.sign_flag)
+    if (other.sign_flag)
       negate();
     return *this;
   }
@@ -753,7 +753,7 @@ ieee_floatt &ieee_floatt::operator/=(const ieee_floatt &other)
 
   fraction /= other.fraction;
 
-  if(other.sign_flag)
+  if (other.sign_flag)
     negate();
 
   align();
@@ -765,21 +765,21 @@ ieee_floatt &ieee_floatt::operator*=(const ieee_floatt &other)
 {
   assert(other.spec.f == spec.f);
 
-  if(other.NaN_flag)
+  if (other.NaN_flag)
     make_NaN();
-  if(NaN_flag)
+  if (NaN_flag)
     return *this;
 
-  if(infinity_flag || other.infinity_flag)
+  if (infinity_flag || other.infinity_flag)
   {
-    if(is_zero() || other.is_zero())
+    if (is_zero() || other.is_zero())
     {
       // special case Inf * 0 is NaN
       make_NaN();
       return *this;
     }
 
-    if(other.sign_flag)
+    if (other.sign_flag)
       negate();
     infinity_flag = true;
     return *this;
@@ -789,7 +789,7 @@ ieee_floatt &ieee_floatt::operator*=(const ieee_floatt &other)
   exponent -= spec.f;
   fraction *= other.fraction;
 
-  if(other.sign_flag)
+  if (other.sign_flag)
     negate();
 
   align();
@@ -803,21 +803,21 @@ ieee_floatt &ieee_floatt::operator+=(const ieee_floatt &other)
 
   assert(_other.spec == spec);
 
-  if(other.NaN_flag)
+  if (other.NaN_flag)
     make_NaN();
-  if(NaN_flag)
+  if (NaN_flag)
     return *this;
 
-  if(infinity_flag && other.infinity_flag)
+  if (infinity_flag && other.infinity_flag)
   {
-    if(sign_flag == other.sign_flag)
+    if (sign_flag == other.sign_flag)
       return *this;
     make_NaN();
     return *this;
   }
-  if(infinity_flag)
+  if (infinity_flag)
     return *this;
-  else if(other.infinity_flag)
+  else if (other.infinity_flag)
   {
     infinity_flag = true;
     sign_flag = other.sign_flag;
@@ -825,12 +825,12 @@ ieee_floatt &ieee_floatt::operator+=(const ieee_floatt &other)
   }
 
   // 0 + 0 needs special treatment for the signs
-  if(is_zero() && other.is_zero())
+  if (is_zero() && other.is_zero())
   {
-    if(get_sign() == other.get_sign())
+    if (get_sign() == other.get_sign())
       return *this;
 
-    if(rounding_mode == ROUND_TO_MINUS_INF)
+    if (rounding_mode == ROUND_TO_MINUS_INF)
     {
       set_sign(true);
       return *this;
@@ -841,12 +841,12 @@ ieee_floatt &ieee_floatt::operator+=(const ieee_floatt &other)
   }
 
   // get smaller exponent
-  if(_other.exponent < exponent)
+  if (_other.exponent < exponent)
   {
     fraction *= power(2, exponent - _other.exponent);
     exponent = _other.exponent;
   }
-  else if(exponent < _other.exponent)
+  else if (exponent < _other.exponent)
   {
     _other.fraction *= power(2, _other.exponent - exponent);
     _other.exponent = exponent;
@@ -854,17 +854,17 @@ ieee_floatt &ieee_floatt::operator+=(const ieee_floatt &other)
 
   assert(exponent == _other.exponent);
 
-  if(sign_flag)
+  if (sign_flag)
     fraction.negate();
-  if(_other.sign_flag)
+  if (_other.sign_flag)
     _other.fraction.negate();
 
   fraction += _other.fraction;
 
   // on zero, retain original sign
-  if(fraction == 0)
+  if (fraction == 0)
   {
-    if(rounding_mode == ROUND_TO_MINUS_INF)
+    if (rounding_mode == ROUND_TO_MINUS_INF)
       sign_flag = true;
     else
       sign_flag = false;
@@ -872,7 +872,7 @@ ieee_floatt &ieee_floatt::operator+=(const ieee_floatt &other)
   else // fraction!=0
   {
     sign_flag = (fraction < 0);
-    if(sign_flag)
+    if (sign_flag)
       fraction.negate();
   }
 
@@ -888,6 +888,20 @@ ieee_floatt &ieee_floatt::operator-=(const ieee_floatt &other)
   return (*this) += _other;
 }
 
+ieee_floatt operator+(const ieee_floatt &lhs, const ieee_floatt &rhs)
+{
+  ieee_floatt copy(lhs);
+  copy += rhs;
+  return copy;
+}
+
+ieee_floatt operator-(const ieee_floatt &lhs, const ieee_floatt &rhs)
+{
+  ieee_floatt copy(lhs);
+  copy -= rhs;
+  return copy;
+}
+
 ieee_floatt &ieee_floatt::operator-()
 {
   this->negate();
@@ -896,45 +910,45 @@ ieee_floatt &ieee_floatt::operator-()
 
 bool operator<(const ieee_floatt &a, const ieee_floatt &b)
 {
-  if(a.NaN_flag || b.NaN_flag)
+  if (a.NaN_flag || b.NaN_flag)
     return false;
 
   // check zero
-  if(a.is_zero() && b.is_zero())
+  if (a.is_zero() && b.is_zero())
     return false;
 
   // check sign
-  if(a.is_zero())
+  if (a.is_zero())
     return !b.sign_flag;
-  if(b.is_zero())
+  if (b.is_zero())
     return a.sign_flag;
 
   // check sign
-  if(a.sign_flag != b.sign_flag)
+  if (a.sign_flag != b.sign_flag)
     return a.sign_flag;
 
   // handle infinity
-  if(a.infinity_flag)
+  if (a.infinity_flag)
   {
-    if(b.infinity_flag)
+    if (b.infinity_flag)
       return false;
 
     return a.sign_flag;
   }
-  else if(b.infinity_flag)
+  else if (b.infinity_flag)
     return !a.sign_flag;
 
   // check exponent
-  if(a.exponent != b.exponent)
+  if (a.exponent != b.exponent)
   {
-    if(a.sign_flag) // both negative
+    if (a.sign_flag) // both negative
       return a.exponent > b.exponent;
 
     return a.exponent < b.exponent;
   }
 
   // check significand
-  if(a.sign_flag) // both negative
+  if (a.sign_flag) // both negative
     return a.fraction > b.fraction;
 
   return a.fraction < b.fraction;
@@ -942,17 +956,17 @@ bool operator<(const ieee_floatt &a, const ieee_floatt &b)
 
 bool operator<=(const ieee_floatt &a, const ieee_floatt &b)
 {
-  if(a.NaN_flag || b.NaN_flag)
+  if (a.NaN_flag || b.NaN_flag)
     return false;
 
   // check zero
-  if(a.is_zero() && b.is_zero())
+  if (a.is_zero() && b.is_zero())
     return true;
 
-  if(a.infinity_flag && b.infinity_flag && a.sign_flag == b.sign_flag)
+  if (a.infinity_flag && b.infinity_flag && a.sign_flag == b.sign_flag)
     return true;
 
-  if(
+  if (
     !a.infinity_flag && !b.infinity_flag && a.sign_flag == b.sign_flag &&
     a.exponent == b.exponent && a.fraction == b.fraction)
     return true;
@@ -973,19 +987,19 @@ bool operator>=(const ieee_floatt &a, const ieee_floatt &b)
 bool operator==(const ieee_floatt &a, const ieee_floatt &b)
 {
   // If one is NaN, it's always false
-  if(a.NaN_flag || b.NaN_flag)
+  if (a.NaN_flag || b.NaN_flag)
     return false;
 
   // Compare infs
-  if(a.infinity_flag && b.infinity_flag && (a.sign_flag == b.sign_flag))
+  if (a.infinity_flag && b.infinity_flag && (a.sign_flag == b.sign_flag))
     return true;
 
   // If one is Nan, it's always false
-  if(a.infinity_flag || b.infinity_flag)
+  if (a.infinity_flag || b.infinity_flag)
     return false;
 
   // Zeros are always equal, despite their sign
-  if(a.is_zero() && b.is_zero())
+  if (a.is_zero() && b.is_zero())
     return true;
 
   assert(a.spec == b.spec);
@@ -1044,11 +1058,11 @@ void ieee_floatt::change_spec(const ieee_float_spect &dest_spec)
   BigInt _exponent = exponent - spec.f;
   BigInt _fraction = fraction;
 
-  if(sign_flag)
+  if (sign_flag)
     _fraction.negate();
 
   spec = dest_spec;
-  if(_fraction == 0)
+  if (_fraction == 0)
   {
     // We have a zero. It stays a zero.
     // Don't call build to preserve sign.
@@ -1065,7 +1079,7 @@ void ieee_floatt::from_expr(const constant_exprt &expr)
 
 BigInt ieee_floatt::to_integer() const
 {
-  if(NaN_flag || infinity_flag || is_zero())
+  if (NaN_flag || infinity_flag || is_zero())
     return 0;
 
   BigInt result = fraction;
@@ -1073,12 +1087,12 @@ BigInt ieee_floatt::to_integer() const
   BigInt new_exponent = exponent - spec.f;
 
   // if the exponent is negative, divide
-  if(new_exponent < 0)
+  if (new_exponent < 0)
     result /= power(2, -new_exponent);
   else
     result *= power(2, new_exponent); // otherwise, multiply
 
-  if(sign_flag)
+  if (sign_flag)
     result.negate();
 
   return result;
@@ -1168,20 +1182,20 @@ double ieee_floatt::to_double() const
   union
   {
     double f;
-    unsigned int i;
+    unsigned long long i;
   } a;
 
-  if(infinity_flag)
+  if (infinity_flag)
   {
-    if(sign_flag)
+    if (sign_flag)
       return -std::numeric_limits<double>::infinity();
 
     return std::numeric_limits<double>::infinity();
   }
 
-  if(NaN_flag)
+  if (NaN_flag)
   {
-    if(sign_flag)
+    if (sign_flag)
       return -std::numeric_limits<double>::quiet_NaN();
 
     return std::numeric_limits<double>::quiet_NaN();
@@ -1196,7 +1210,7 @@ double ieee_floatt::to_double() const
 
 float ieee_floatt::to_float() const
 {
-  if(sizeof(unsigned) != sizeof(float))
+  if (sizeof(unsigned) != sizeof(float))
   {
     throw "ieee_floatt::to_float not supported on this architecture";
   }
@@ -1207,17 +1221,17 @@ float ieee_floatt::to_float() const
     unsigned int i;
   } a;
 
-  if(infinity_flag)
+  if (infinity_flag)
   {
-    if(sign_flag)
+    if (sign_flag)
       return -std::numeric_limits<float>::infinity();
 
     return std::numeric_limits<float>::infinity();
   }
 
-  if(NaN_flag)
+  if (NaN_flag)
   {
-    if(sign_flag)
+    if (sign_flag)
       return -std::numeric_limits<float>::quiet_NaN();
 
     return std::numeric_limits<float>::quiet_NaN();
@@ -1232,12 +1246,12 @@ float ieee_floatt::to_float() const
 
 void ieee_floatt::next_representable(bool greater)
 {
-  if(is_NaN())
+  if (is_NaN())
     return;
 
   bool old_sign = get_sign();
 
-  if(is_zero())
+  if (is_zero())
   {
     unpack(1);
     set_sign(!greater);
@@ -1245,9 +1259,9 @@ void ieee_floatt::next_representable(bool greater)
     return;
   }
 
-  if(is_infinity())
+  if (is_infinity())
   {
-    if(get_sign() == greater)
+    if (get_sign() == greater)
     {
       make_fltmax();
       set_sign(old_sign);
@@ -1256,16 +1270,16 @@ void ieee_floatt::next_representable(bool greater)
   }
 
   bool dir;
-  if(greater)
+  if (greater)
   {
-    if(get_sign())
+    if (get_sign())
       dir = false;
     else
       dir = true;
   }
   else
   {
-    if(get_sign())
+    if (get_sign())
       dir = true;
     else
       dir = false;
@@ -1274,7 +1288,7 @@ void ieee_floatt::next_representable(bool greater)
   set_sign(false);
 
   BigInt old = pack();
-  if(dir)
+  if (dir)
     ++old;
   else
     --old;

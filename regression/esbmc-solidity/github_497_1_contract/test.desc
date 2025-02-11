@@ -1,0 +1,4 @@
+CORE
+MyContract_TxOrigin.solast
+--sol MyContract_TxOrigin.sol --contract TxOriginVictim 
+.*Found vulnerability SWC-115.*

@@ -1,18 +1,19 @@
+#include <util/compiler_defs.h>
 #ifndef CLANG_C_FRONTEND_AST_ESBMC_ACTION_H_
-#define CLANG_C_FRONTEND_AST_ESBMC_ACTION_H_
+#  define CLANG_C_FRONTEND_AST_ESBMC_ACTION_H_
 
+#  include <util/compiler_defs.h>
 // Remove warnings from Clang headers
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wstrict-aliasing"
-#pragma GCC diagnostic ignored "-Wunused-parameter"
-#include <clang/Frontend/CompilerInstance.h>
-#include <clang/Frontend/FrontendActions.h>
-#include <clang/Lex/Preprocessor.h>
-#pragma GCC diagnostic pop
-#include <string>
+CC_DIAGNOSTIC_PUSH()
+CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
+#  include <clang/Frontend/CompilerInstance.h>
+#  include <clang/Frontend/FrontendActions.h>
+#  include <clang/Lex/Preprocessor.h>
+CC_DIAGNOSTIC_POP()
+#  include <string>
 
-#define __STDC_LIMIT_MACROS
-#define __STDC_FORMAT_MACROS
+#  define __STDC_LIMIT_MACROS
+#  define __STDC_FORMAT_MACROS
 
 class esbmc_action : public clang::ASTFrontendAction
 {

@@ -1,0 +1,4 @@
+CORE
+main.c
+--fixedbv --no-slice --z3 -Wno-error=implicit-function-declaration
+^VERIFICATION SUCCESSFUL$

@@ -1,51 +1,52 @@
-/*******************************************************************
- Module:
-
- Author: Felipe Rodrigues
-
- Date: September 2012
-
- \*******************************************************************/
-
 #ifndef STL_EXCEPTION
 #define STL_EXCEPTION
 
 #include "definitions.h"
 
-namespace std {
-
-const char* message;
+namespace std
+{
 
 typedef void (*terminate_handler)();
 typedef void (*unexpected_handler)();
 
-bool uncaught_exception() throw ();
+bool uncaught_exception() throw();
 
 // Default terminate function: calls abort
-void default_terminate() throw ()
+void default_terminate() throw()
 {
   __ESBMC_assert(0, "Aborted");
   // Allow now further execution.
   __ESBMC_assume(0);
 }
 
+// Default terminate function for unexpected: calls abort
+// A quick workaround model for "throw"
+void default_terminate_unexpected_exception() throw()
+{
+  __ESBMC_assert(0, "Aborted - unexpected exceptions");
+  // Allow now further execution.
+  __ESBMC_assume(0);
+}
+
 // Default unexpected function: calls terminate
-void default_unexpected() throw ()
+void default_unexpected() throw()
 {
   default_terminate();
 }
 
-terminate_handler terminate_pf=default_terminate;
-unexpected_handler unexpected_pf=default_unexpected;
+terminate_handler terminate_pf = default_terminate;
+unexpected_handler unexpected_pf = default_unexpected;
 
-terminate_handler set_terminate(terminate_handler f) throw ()
+terminate_handler set_terminate(terminate_handler f) throw()
 {
-  terminate_pf=f;
+  terminate_pf = f;
+  return terminate_pf;
 }
 
-unexpected_handler set_unexpected(unexpected_handler f) throw ()
+unexpected_handler set_unexpected(unexpected_handler f) throw()
 {
-  unexpected_pf=f;
+  unexpected_pf = f;
+  return unexpected_pf;
 }
 
 // Model for unexpected function: calls the current
@@ -53,48 +54,56 @@ unexpected_handler set_unexpected(unexpected_handler f) throw ()
 void unexpected()
 {
   unexpected_pf();
-  throw;
+  // TODO: For the time being, we use a terminate function as a workaround.
+  //   probably should rethrow the exception and just use throw.
+  default_terminate_unexpected_exception();
 }
 
 // Model for terminate function: calls the current
 // terminate handler function
-void terminate()
+void terminate() throw()
 {
   terminate_pf();
 }
 
-class exception {
+class exception
+{
 public:
-  exception() throw () {};
-  exception(const exception&) throw () {};
+  exception() throw(){};
+  exception(const exception &) throw(){};
 
-  exception& operator=(const exception&) throw ();
+  exception &operator=(const exception &) throw();
 
-  virtual ~exception() throw () {}
+  virtual ~exception()
+  {
+  }
 
-  virtual const char* what() const throw () {
+  virtual const char *what() const throw()
+  {
     /**
      *Returns a null terminated character sequence containing a generic description of the exception.
      *Both the wording of such description and the character width are implementation-defined.
-     *source: http://www.cplusplus.com/reference/std/exception/exception/
+     *source: https://cplusplus.com/reference/exception/exception/what/
      **/
-    return (const char*) message;
+    return "std::exception";
   }
 };
 
 /** If an %exception is thrown which is not listed in a function's
  *  %exception specification, one of these may be thrown.
  **/
-class bad_exception: public exception {
+class bad_exception : public exception
+{
 public:
-  bad_exception() {}
-
-  virtual ~bad_exception() {}
-
-  virtual const char* what() const {
-    return (const char*) message;
+  bad_exception() throw()
+  {
+  }
+  bad_exception &operator=(const bad_exception &other) throw();
+  virtual const char *what() const throw()
+  {
+    return "std::bad_exception";
   }
 };
-}
+} // namespace std
 
 #endif

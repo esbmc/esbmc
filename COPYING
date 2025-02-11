@@ -21,15 +21,16 @@ library, you're unable to distribute the results due to conflicting licenses.
 ~
 
 To briefly summarise each solver:
-  Boolector: Some versions are academic-free with restricted commercial use,
-    some versions are distributed as GPL3.
+  Boolector: MIT license, minimum version 3.2.2.
+  Bitwzula: MIT license, minimum version smtcomp-2021.
   CVC4: BSD 3-clause, however some builds incorporate software under different
     licenses.
+  IBEX-lib: GNU Lesser General Public License.
   MathSAT: Academic free, non-commercial.
   Yices: Personal use, non-commercial. Recently released GPL3.
-  Z3: MIT license
+  Z3: MIT license, minimum version 4.8.9.
 
-In all circumstances you should refer to the specific license of the solver you
+In all circumstances, you should refer to the specific license of the solver you
 are using.
 
 ~

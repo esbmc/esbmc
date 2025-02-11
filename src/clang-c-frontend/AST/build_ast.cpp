@@ -1,7 +1,8 @@
+#include <util/compiler_defs.h>
 // Remove warnings from Clang headers
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wstrict-aliasing"
-#pragma GCC diagnostic ignored "-Wunused-parameter"
+CC_DIAGNOSTIC_PUSH()
+CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
+#include <clang/AST/ASTImporter.h>
 #include <clang/Basic/Version.inc>
 #include <clang/Driver/Compilation.h>
 #include <clang/Driver/Driver.h>
@@ -14,9 +15,13 @@
 #include <clang/Lex/PreprocessorOptions.h>
 #include <clang/Tooling/Tooling.h>
 #include <llvm/Option/ArgList.h>
-#include <llvm/Support/Host.h>
+#if CLANG_VERSION_MAJOR < 16
+#  include <llvm/Support/Host.h>
+#else
+#  include <llvm/TargetParser/Host.h>
+#endif
 #include <llvm/Support/Path.h>
-#pragma GCC diagnostic pop
+CC_DIAGNOSTIC_POP()
 
 #include <clang-c-frontend/AST/build_ast.h>
 #include <clang-c-frontend/AST/esbmc_action.h>
@@ -69,7 +74,7 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
     new clang::DiagnosticOptions();
 
   std::vector<const char *> Argv;
-  for(const std::string &Str : compiler_args)
+  for (const std::string &Str : compiler_args)
     Argv.push_back(Str.c_str());
   const char *const BinaryName = Argv[0];
 
@@ -96,7 +101,7 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
   // Since the input might only be virtual, don't check whether it exists.
   Driver->setCheckInputsExist(false);
   const std::unique_ptr<clang::driver::Compilation> Compilation(
-    Driver->BuildCompilation(llvm::makeArrayRef(Argv)));
+    Driver->BuildCompilation(llvm::ArrayRef<const char *>(Argv)));
 
   const clang::driver::JobList &Jobs = Compilation->getJobs();
   assert(Jobs.size() == 1);
@@ -107,7 +112,7 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
     clang::tooling::newInvocation(Diagnostics, *CC1Args, BinaryName));
 
   // Show the invocation, with -v.
-  if(Invocation->getHeaderSearchOpts().Verbose)
+  if (Invocation->getHeaderSearchOpts().Verbose)
   {
     llvm::errs() << "clang Invocation:\n";
     Compilation->getJobs().Print(llvm::errs(), "\n", true);
@@ -128,7 +133,37 @@ std::unique_ptr<clang::ASTUnit> buildASTs(
 
   // The action is only used locally, we can delete it now
   // See: https://clang.llvm.org/doxygen/ASTUnit_8cpp_source.html#l01510
-  delete(action);
+  delete (action);
 
   return unit;
+}
+
+void mergeASTs(
+  const std::unique_ptr<clang::ASTUnit> &FromUnit,
+  std::unique_ptr<clang::ASTUnit> &ToUnit)
+{
+  // Call enableSourceFileDiagnostics on the
+  // ASTUnit objects to get diagnostics.
+  FromUnit->enableSourceFileDiagnostics();
+  ToUnit->enableSourceFileDiagnostics();
+
+  clang::ASTImporter Importer(
+    ToUnit->getASTContext(),
+    ToUnit->getFileManager(),
+    FromUnit->getASTContext(),
+    FromUnit->getFileManager(),
+    false);
+
+  Importer.setODRHandling(clang::ASTImporter::ODRHandlingType::Liberal);
+
+  for (auto decl : FromUnit->getASTContext().getTranslationUnitDecl()->decls())
+  {
+    llvm::Expected<clang::Decl *> ImportedOrErr = Importer.Import(decl);
+    if (!ImportedOrErr)
+    {
+      llvm::Error Err = ImportedOrErr.takeError();
+      llvm::errs() << "Error: " << Err << "\n";
+      consumeError(std::move(Err));
+    }
+  }
 }

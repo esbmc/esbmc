@@ -30,34 +30,34 @@ void goto_convertt::do_function_call(
 
   exprt::operandst new_arguments = arguments;
 
-  if(!new_lhs.is_nil())
+  if (!new_lhs.is_nil())
   {
     remove_sideeffects(new_lhs, dest);
   }
 
   remove_sideeffects(new_function, dest);
 
-  Forall_expr(it, new_arguments)
+  Forall_expr (it, new_arguments)
   {
     remove_sideeffects(*it, dest);
   }
 
   // split on the function
-  if(
+  if (
     new_function.id() == "dereference" ||
     new_function.id() == "implicit_dereference")
   {
     do_function_call_dereference(new_lhs, new_function, new_arguments, dest);
   }
-  else if(new_function.id() == "if")
+  else if (new_function.id() == "if")
   {
     do_function_call_if(new_lhs, new_function, new_arguments, dest);
   }
-  else if(new_function.id() == "symbol")
+  else if (new_function.id() == "symbol")
   {
     do_function_call_symbol(new_lhs, new_function, new_arguments, dest);
   }
-  else if(new_function.id() == "NULL-object")
+  else if (new_function.id() == "NULL-object")
   {
   }
   else
@@ -73,7 +73,7 @@ void goto_convertt::do_function_call_if(
   const exprt::operandst &arguments,
   goto_programt &dest)
 {
-  if(function.operands().size() != 3)
+  if (function.operands().size() != 3)
   {
     log_error("if expects three operands");
     abort();
@@ -108,7 +108,7 @@ void goto_convertt::do_function_call_if(
 
   do_function_call(lhs, function.op2(), arguments, tmp_y);
 
-  if(tmp_y.instructions.empty())
+  if (tmp_y.instructions.empty())
     y = tmp_y.add_instruction(SKIP);
   else
     y = tmp_y.instructions.begin();
@@ -120,7 +120,7 @@ void goto_convertt::do_function_call_if(
   v->location = function.op0().location();
 
   unsigned int globals = get_expr_number_globals(v->guard);
-  if(globals > 1)
+  if (globals > 1)
   {
     exprt tmp = migrate_expr_back(v->guard);
     break_globals2assignments(tmp, tmp_v, lhs.location());
@@ -131,7 +131,7 @@ void goto_convertt::do_function_call_if(
 
   do_function_call(lhs, function.op1(), arguments, tmp_w);
 
-  if(tmp_w.instructions.empty())
+  if (tmp_w.instructions.empty())
     tmp_w.add_instruction(SKIP);
 
   // x: goto z;
@@ -166,14 +166,14 @@ void goto_functionst::dump() const
 {
   std::ostringstream oss;
   output(*migrate_namespace_lookup, oss);
-  log_debug("{}", oss.str());
+  log_status("{}", oss.str());
 }
 
 void goto_functionst::output(const namespacet &ns, std::ostream &out) const
 {
-  for(const auto &it : function_map)
+  for (const auto &it : function_map)
   {
-    if(it.second.body_available)
+    if (it.second.body_available)
     {
       out << "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^"
           << "\n";
@@ -191,20 +191,20 @@ void goto_functionst::output(const namespacet &ns, std::ostream &out) const
 void goto_functionst::compute_location_numbers()
 {
   unsigned nr = 0;
-  for(auto &it : function_map)
+  for (auto &it : function_map)
     it.second.body.compute_location_numbers(nr);
 }
 
 void goto_functionst::compute_target_numbers()
 {
-  for(auto &it : function_map)
+  for (auto &it : function_map)
     it.second.body.compute_target_numbers();
 }
 
 void goto_functionst::compute_loop_numbers()
 {
   unsigned nr = 1;
-  for(auto &it : function_map)
+  for (auto &it : function_map)
     it.second.body.compute_loop_numbers(nr);
 }
 
@@ -217,10 +217,10 @@ void get_local_identifiers(
   const code_typet::argumentst &arguments = goto_function.type.arguments();
 
   // add parameters
-  for(const auto &param : arguments)
+  for (const auto &param : arguments)
   {
     const irep_idt &identifier = param.get_identifier();
-    if(identifier != "")
+    if (identifier != "")
       dest.insert(identifier);
   }
 }

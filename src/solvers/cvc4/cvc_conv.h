@@ -27,6 +27,8 @@ public:
   expr2tc get_array_elem(smt_astt array, uint64_t index, const type2tc &subtype)
     override;
 
+  void push_ctx() override;
+  void pop_ctx() override;
   // SMT-abstraction migration:
   smt_astt mk_add(smt_astt a, smt_astt b) override;
   smt_astt mk_bvadd(smt_astt a, smt_astt b) override;

@@ -27,7 +27,6 @@ static const char *type_names[] = {
   "signedbv",
   "fixedbv",
   "floatbv",
-  "string",
   "cpp_name"};
 // If this fires, you've added/removed a type id, and need to update the list
 // above (which is ordered according to the enum list)
@@ -47,8 +46,7 @@ std::string get_type_id(const type2t &type)
   return std::string(type_names[type.type_id]);
 }
 
-type2t::type2t(type_ids id)
-  : std::enable_shared_from_this<type2t>(), type_id(id), crc_val(0)
+type2t::type2t(type_ids id) : type_id(id), crc_val(0)
 {
 }
 
@@ -65,9 +63,9 @@ bool type2t::operator!=(const type2t &ref) const
 bool type2t::operator<(const type2t &ref) const
 {
   int tmp = type2t::lt(ref);
-  if(tmp < 0)
+  if (tmp < 0)
     return true;
-  else if(tmp > 0)
+  else if (tmp > 0)
     return false;
   else
     return (lt(ref) < 0);
@@ -76,7 +74,7 @@ bool type2t::operator<(const type2t &ref) const
 int type2t::ltchecked(const type2t &ref) const
 {
   int tmp = type2t::lt(ref);
-  if(tmp != 0)
+  if (tmp != 0)
     return tmp;
 
   return lt(ref);
@@ -84,7 +82,7 @@ int type2t::ltchecked(const type2t &ref) const
 
 bool type2t::cmpchecked(const type2t &ref) const
 {
-  if(type_id == ref.type_id)
+  if (type_id == ref.type_id)
     return cmp(ref);
 
   return false;
@@ -92,9 +90,9 @@ bool type2t::cmpchecked(const type2t &ref) const
 
 int type2t::lt(const type2t &ref) const
 {
-  if(type_id < ref.type_id)
+  if (type_id < ref.type_id)
     return -1;
-  if(type_id > ref.type_id)
+  if (type_id > ref.type_id)
     return 1;
   return 0;
 }
@@ -129,7 +127,7 @@ void type2t::hash(crypto_hash &hash) const
 
 unsigned int bool_type2t::get_width() const
 {
-  // For the purpose of the byte representating memory model
+  // For the purpose of the byte representing memory model
   return 8;
 }
 
@@ -142,10 +140,10 @@ unsigned int array_type2t::get_width() const
 {
   // Two edge cases: the array can have infinite size, or it can have a dynamic
   // size that's determined by the solver.
-  if(size_is_infinite)
+  if (size_is_infinite)
     throw inf_sized_array_excp();
 
-  if(array_size->expr_id != expr2t::constant_int_id)
+  if (array_size->expr_id != expr2t::constant_int_id)
     throw dyn_sized_array_excp(array_size);
 
   // Otherwise, we can multiply the size of the subtype by the number of elements.
@@ -175,7 +173,8 @@ unsigned int vector_type2t::get_width() const
 
 unsigned int pointer_type2t::get_width() const
 {
-  return config.ansi_c.pointer_width;
+  /* CHERI-TODO: take into account whether we can-carry-provenance. */
+  return config.ansi_c.pointer_width();
 }
 
 unsigned int empty_type2t::get_width() const
@@ -185,14 +184,12 @@ unsigned int empty_type2t::get_width() const
 
 unsigned int symbol_type2t::get_width() const
 {
-  assert(0 && "Fetching width of symbol type - invalid operation");
-  abort();
+  throw symbolic_type_excp();
 }
 
 unsigned int cpp_name_type2t::get_width() const
 {
-  assert(0 && "Fetching width of cpp_name type - invalid operation");
-  abort();
+  throw symbolic_type_excp();
 }
 
 unsigned int struct_type2t::get_width() const
@@ -200,7 +197,7 @@ unsigned int struct_type2t::get_width() const
   // Iterate over members accumulating width.
   std::vector<type2tc>::const_iterator it;
   unsigned int width = 0;
-  for(it = members.begin(); it != members.end(); it++)
+  for (it = members.begin(); it != members.end(); it++)
     width += (*it)->get_width();
 
   return width;
@@ -211,7 +208,7 @@ unsigned int union_type2t::get_width() const
   // Iterate over members accumulating width.
   std::vector<type2tc>::const_iterator it;
   unsigned int width = 0;
-  for(it = members.begin(); it != members.end(); it++)
+  for (it = members.begin(); it != members.end(); it++)
     width = std::max(width, (*it)->get_width());
 
   return width;
@@ -230,16 +227,6 @@ unsigned int floatbv_type2t::get_width() const
 unsigned int code_data::get_width() const
 {
   throw symbolic_type_excp();
-}
-
-unsigned int string_type2t::get_width() const
-{
-  return width * 8;
-}
-
-unsigned int string_type2t::get_length() const
-{
-  return width;
 }
 
 const std::vector<type2tc> &struct_union_data::get_structure_members() const
@@ -261,9 +248,9 @@ const irep_idt &struct_union_data::get_structure_name() const
 unsigned int struct_union_data::get_component_number(const irep_idt &comp) const
 {
   unsigned int i = 0, count = 0, pos = 0;
-  for(auto const &it : member_names)
+  for (auto const &it : member_names)
   {
-    if(it == comp)
+    if (it == comp)
     {
       pos = i;
       ++count;
@@ -271,10 +258,10 @@ unsigned int struct_union_data::get_component_number(const irep_idt &comp) const
     i++;
   }
 
-  if(count == 1)
+  if (count == 1)
     return pos;
 
-  if(!count)
+  if (!count)
   {
     log_error(
       "Looking up index of nonexistant member \"{}\" in struct/union \"{}\"",
@@ -282,10 +269,10 @@ unsigned int struct_union_data::get_component_number(const irep_idt &comp) const
       name);
     abort();
   }
-  else if(count > 1)
+  else if (count > 1)
   {
     log_error(
-      "Name \"{}\" matches more than one member\" in struct/union \"{}\"",
+      "Name \"{}\" matches more than one member in struct/union \"{}\"",
       comp,
       name);
     abort();

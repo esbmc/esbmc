@@ -21,31 +21,23 @@ on:
 
 jobs:
   build-linux:
-    name: Build Linux Release
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+    name: Build ESBMC (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 720 # 12h
-    container: rafaelsamenezes/esbmc-ci:clang11
     steps:
-      - name: Small test
-        run: echo ${{ github.event.inputs.timeout }}
-      - name: Checkout code
-        uses: actions/checkout@master
-      - run: apt update  # Only for Docker jobs
-      - name: ccache
-        uses: hendrikmuhs/ccache-action@v1.2
-      - name: Fix dubious ownership
-        run: git config --global --add safe.directory /__w/esbmc/esbmc
       - name: Confirm the benchmark
         run: echo ${{ github.event.inputs.benchmark }}
-      - name: Configure CMake
+      - uses: actions/checkout@v4
+      - name: Build ESBMC
         env:
           TEST_TIMEOUT: ${{ inputs.timeout }}
           BENCHMARK_TO_RUN: ${{ inputs.benchmark }}
           LOG_DIR: ${{ inputs.logdirectory }}
-        run: mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -GNinja -DClang_DIR=/workspace/clang -DLLVM_DIR=/workspace/clang -DBUILD_STATIC=On -DBoolector_DIR=/workspace/boolector-release -DZ3_DIR=/workspace/z3 -DENABLE_YICES=On -DYices_DIR=/workspace/yices -DCVC4_DIR=/workspace/cvc4 -DGMP_DIR=/workspace/gmp -DBitwuzla_DIR=/workspace/bitwuzla-release -DENABLE_REGRESSION=On -DBENCHBRINGUP=On
-      - name: Build ESBMC
-        run: cd build && cmake --build .
-      - uses: actions/upload-artifact@v1
+        run: ./scripts/build.sh -b Release -r On
+      - uses: actions/upload-artifact@v4
         with:
           name: release-linux
           path: ./build/src/esbmc/esbmc
@@ -55,7 +47,7 @@ jobs:
           ESBMC_OPTS: ${{ inputs.options }}
           LOG_DIR: ${{ inputs.logdirectory }}
         run: cd build/ && ctest -j4 --output-on-failure --progress .
-      - uses: actions/upload-artifact@v2
+      - uses: actions/upload-artifact@v4
         with:
           name: benchmark-logs
           path: ./build/regression/${{ inputs.logdirectory }}

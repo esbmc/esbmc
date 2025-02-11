@@ -12,8 +12,12 @@ namespace SolidityGrammar
 // rule contract-body-element
 enum ContractBodyElementT
 {
-  StateVarDecl = 0, // rule state-variable-declaration
-  FunctionDef,      // rule function-definition
+  VarDecl = 0, // rule variable-declaration
+  FunctionDef, // rule function-definition
+  StructDef,   // rule struct-definition
+  EnumDef,     // rule enum-definition
+  ErrorDef,    // rule error-definition
+  EventDef,    // rule event-definition
   ContractBodyElementTError
 };
 ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element);
@@ -39,6 +43,27 @@ enum TypeNameT
 
   // dynamic array type
   DynArrayTypeName,
+
+  // contract type
+  ContractTypeName,
+
+  // typecast
+  TypeConversionName,
+
+  // enum
+  EnumTypeName,
+
+  // struct
+  StructTypeName,
+
+  // tuple
+  TupleTypeName,
+
+  // mapping
+  MappingTypeName,
+
+  // built-in member
+  BuiltinTypeName,
 
   TypeNameTError
 };
@@ -120,12 +145,49 @@ enum ElementaryTypeNameT
   // rule bool
   BOOL,
 
-  // TODO: rule address
-  // TODO: rule address payable
+  // rule address
+  ADDRESS,
+  ADDRESS_PAYABLE,
+
   // rule string
   STRING,
   STRING_LITERAL,
-  // TODO: rule bytes
+
+  // rule bytes
+  BYTES,
+  BYTES1,
+  BYTES2,
+  BYTES3,
+  BYTES4,
+  BYTES5,
+  BYTES6,
+  BYTES7,
+  BYTES8,
+  BYTES9,
+  BYTES10,
+  BYTES11,
+  BYTES12,
+  BYTES13,
+  BYTES14,
+  BYTES15,
+  BYTES16,
+  BYTES17,
+  BYTES18,
+  BYTES19,
+  BYTES20,
+  BYTES21,
+  BYTES22,
+  BYTES23,
+  BYTES24,
+  BYTES25,
+  BYTES26,
+  BYTES27,
+  BYTES28,
+  BYTES29,
+  BYTES30,
+  BYTES31,
+  BYTES32,
+
   // TODO: rule signed-integer-type
   // TODO: rule e
   // TODO: fixed-bytes
@@ -139,12 +201,14 @@ unsigned int uint_type_name_to_size(ElementaryTypeNameT);
 
 unsigned int uint_type_name_to_size(ElementaryTypeNameT);
 unsigned int int_type_name_to_size(ElementaryTypeNameT);
+unsigned int bytesn_type_name_to_size(ElementaryTypeNameT);
 
 // rule parameter-list
 enum ParameterListT
 {
   EMPTY = 0, // In Solidity, "void" means an empty parameter list
-  NONEMPTY,
+  ONE_PARAM,
+  MORE_THAN_ONE_PARAM,
   ParameterListTError
 };
 ParameterListT get_parameter_list_t(const nlohmann::json &type_name);
@@ -154,6 +218,10 @@ const char *parameter_list_to_str(ParameterListT type);
 enum BlockT
 {
   Statement = 0,
+  BlockForStatement,
+  BlockIfStatement,
+  BlockWhileStatement,
+  BlockExpressionStatement,
   UncheckedBlock,
   BlockTError
 };
@@ -170,7 +238,11 @@ enum StatementT
   ForStatement,          // rule for-statement
   IfStatement,           // rule if-statement
   WhileStatement,
-  StatementTError
+  StatementTError,
+  ContinueStatement, // rule continue
+  BreakStatement,    // rule break
+  RevertStatement,   // rule revert
+  EmitStatement      // rule emit
 };
 StatementT get_statement_t(const nlohmann::json &stmt);
 const char *statement_to_str(StatementT type);
@@ -179,6 +251,7 @@ const char *statement_to_str(StatementT type);
 //  - Skipped since it just contains 1 type: "expression + ;"
 
 // rule expression
+// these are used to identify the type of the expression
 enum ExpressionT
 {
   // BinaryOperator
@@ -187,24 +260,61 @@ enum ExpressionT
   BO_Assign, // =
   BO_Add,    // +
   BO_Sub,    // -
-  BO_GT,     // >
-  BO_LT,     // <
-  BO_NE,     // !=
-  BO_EQ,     // ==
+  BO_Mul,    // *
+  BO_Div,    // /
   BO_Rem,    // %
-  BO_LAnd,   // &&
+
+  BO_Shl, // <<
+  BO_Shr, // >>
+  BO_And, // &
+  BO_Xor, // ^
+  BO_Or,  // |
+
+  BO_GT,   // >
+  BO_LT,   // <
+  BO_GE,   // >=
+  BO_LE,   // <=
+  BO_NE,   // !=
+  BO_EQ,   // ==
+  BO_LAnd, // &&
+  BO_LOr,  // ||
+
+  BO_AddAssign, // +=
+  BO_SubAssign, // -=
+  BO_MulAssign, // *=
+  BO_DivAssign, // /=
+  BO_RemAssign, // %=
+  BO_ShlAssign, // <<=
+  BO_ShrAssign, // >>=
+  BO_AndAssign, // &=
+  BO_XorAssign, // ^=
+  BO_OrAssign,  // |=
+  BO_Pow,       // **
 
   // UnaryOperator
   UnaryOperatorClass,
-  UO_PreDec,
-  UO_PreInc,
-  UO_Minus,
+  UO_PreDec,  // --
+  UO_PreInc,  // ++
+  UO_PostDec, // --
+  UO_PostInc, // ++
+  UO_Minus,   // -
+  UO_Not,     // ~
+  UO_LNot,    // !
+
+  //ternaryOperator
+  ConditionalOperatorClass, // ?...:...
 
   // rule identifier
   DeclRefExprClass,
 
   // rule literal
   Literal,
+
+  // rule Tuple
+  Tuple,
+
+  // rule Mapping
+  Mapping,
 
   // FunctionCall
   CallExprClass,
@@ -217,6 +327,31 @@ enum ExpressionT
   // equivalent to clang::Stmt::ArraySubscriptExprClass
   // Solidity does NOT provide such rule
   IndexAccess,
+
+  // Create a temporary object by keywords 'ew'
+  // equivalent to clang::Stmt::CXXTemporaryObjectExprClass
+  // i.e. Base x = new Base(args);
+  NewExpression,
+
+  // Call member functions
+  // equivalent toclang::Stmt::CXXMemberCallExprClass
+  // i.e. x.caller();
+  ContractMemberCall,
+
+  // Type Conversion
+  ElementaryTypeNameExpression,
+
+  // Struct Member Access
+  StructMemberCall,
+
+  // Enum Member Access
+  EnumMemberCall,
+
+  // Built-in Member Access
+  BuiltinMemberCall,
+
+  // Null Expression
+  NullExpr,
 
   ExpressionTError
 };
@@ -263,6 +398,25 @@ enum ImplicitCastTypeT
 };
 ImplicitCastTypeT get_implicit_cast_type_t(std::string cast);
 const char *implicit_cast_type_to_str(ImplicitCastTypeT type);
+
+// the function visibility
+enum VisibilityT
+{
+  // any contract and account can call
+  PublicT,
+
+  // only inside the contract that defines the function
+  PrivateT,
+
+  // only other contracts and accounts can call
+  ExternalT,
+
+  // only inside contract that inherits an internal function
+  InternalT,
+
+  UnknownT
+};
+VisibilityT get_access_t(const nlohmann::json &ast_node);
 
 }; // namespace SolidityGrammar
 

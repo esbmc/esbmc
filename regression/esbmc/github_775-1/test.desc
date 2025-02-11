@@ -1,0 +1,4 @@
+CORE
+gh-775-1.c
+--32 --force-malloc-success
+^VERIFICATION FAILED$

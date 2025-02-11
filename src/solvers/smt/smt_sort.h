@@ -94,7 +94,7 @@ public:
 
   size_t get_data_width() const
   {
-    if(id == SMT_SORT_ARRAY)
+    if (id == SMT_SORT_ARRAY)
       return data_width * range_sort->data_width;
     return data_width;
   }
@@ -211,15 +211,17 @@ public:
 };
 
 #ifdef NDEBUG
-#define dynamic_cast static_cast
+#  define dynamic_cast static_cast
 #endif
 template <typename T>
 const solver_smt_sort<T> *to_solver_smt_sort(smt_sortt s)
 {
-  return dynamic_cast<const solver_smt_sort<T> *>(s);
+  const solver_smt_sort<T> *r = dynamic_cast<const solver_smt_sort<T> *>(s);
+  assert(r);
+  return r;
 }
 #ifdef dynamic_cast
-#undef dynamic_cast
+#  undef dynamic_cast
 #endif
 
 #endif /* SOLVERS_SMT_SMT_SORT_H_ */

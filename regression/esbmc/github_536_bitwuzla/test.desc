@@ -1,4 +1,0 @@
-THOROUGH
-main.c
---smt-model --bitwuzla
-^VERIFICATION FAILED$

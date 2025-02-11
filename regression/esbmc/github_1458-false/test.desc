@@ -1,0 +1,4 @@
+CORE
+memset.c
+
+^VERIFICATION FAILED$

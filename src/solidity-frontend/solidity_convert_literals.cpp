@@ -14,11 +14,8 @@ bool solidity_convertert::convert_integer_literal(
   exprt &dest)
 {
   typet type;
-  if(get_type_description(integer_literal, type))
+  if (get_type_description(integer_literal, type))
     return true;
-
-  assert(
-    type.is_unsignedbv() || type.is_signedbv()); // for "_x=100", false || true
 
   exprt the_val;
   // extract the value: unsigned
@@ -38,18 +35,18 @@ bool solidity_convertert::convert_bool_literal(
   exprt &dest)
 {
   typet type;
-  if(get_type_description(bool_literal, type))
+  if (get_type_description(bool_literal, type))
     return true;
 
   assert(type.is_bool());
 
-  if(the_value == "true")
+  if (the_value == "true")
   {
     dest = true_exprt();
     return false;
   }
 
-  if(the_value == "false")
+  if (the_value == "false")
   {
     dest = false_exprt();
     return false;
@@ -79,11 +76,41 @@ bool solidity_convertert::convert_string_literal(
       integer2string(string_size),
       int_type()));
   // TODO: Handle null terminator byte
-  string_constantt string(the_value, type);
+  string_constantt string(the_value, type, string_constantt::k_default);
   dest.swap(string);
 
   return false;
 }
+
+/**
+ * convert hex-string to uint constant
+ * @n: the bit width, default 256 (unsignedbv_typet(256))
+*/
+bool solidity_convertert::convert_hex_literal(
+  std::string the_value,
+  exprt &dest,
+  const int n)
+{
+  // remove "0x" prefix
+  if (the_value.length() >= 2)
+    if (the_value.substr(0, 2) == "0x")
+    {
+      the_value.erase(0, 2);
+    }
+
+  typet type;
+  type = unsignedbv_typet(n);
+
+  // e.g. 0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984
+  BigInt hex_addr = string2integer(the_value, 16);
+  exprt the_val;
+  the_val = constant_exprt(
+    integer2binary(hex_addr, bv_width(type)), integer2string(hex_addr), type);
+
+  dest.swap(the_val);
+  return false;
+}
+
 // TODO: Float literal.
 //    - Note: Currently Solidity does NOT support floating point data types or fp arithmetic.
 //      Everything is done in fixed-point arithmetic as of Solidity compiler v0.8.6.

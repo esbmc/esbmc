@@ -15,15 +15,15 @@ void unescape_string(const std::string &src, std::string &dest)
   dest = "";
   dest.reserve(src.size());
 
-  for(unsigned i = 0; i < src.size(); i++)
+  for (unsigned i = 0; i < src.size(); i++)
   {
     char ch = src[i];
 
-    if(ch == '\\')
+    if (ch == '\\')
     {
       i++;
       ch = src[i];
-      switch(ch)
+      switch (ch)
       {
       case '\\':
         dest += ch;
@@ -61,7 +61,7 @@ void unescape_string(const std::string &src, std::string &dest)
 
         {
           std::string hex;
-          while(isxdigit(src[i]))
+          while (isxdigit(src[i]))
           {
             i++;
             hex += src[i];
@@ -77,11 +77,11 @@ void unescape_string(const std::string &src, std::string &dest)
         break;
 
       default:
-        if(isdigit(ch)) // octal
+        if (isdigit(ch)) // octal
         {
           std::string octal;
 
-          while(isdigit(src[i]))
+          while (isdigit(src[i]))
           {
             octal += src[i];
             i++;

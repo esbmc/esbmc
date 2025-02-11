@@ -17,18 +17,20 @@ typedef dstring irep_namet;
 typedef dstring_hash irep_id_hash;
 
 #define forall_irep(it, irep)                                                  \
-  for(irept::subt::const_iterator it = (irep).begin(); it != (irep).end(); it++)
+  for (irept::subt::const_iterator it = (irep).begin(); it != (irep).end();    \
+       it++)
 
 #define Forall_irep(it, irep)                                                  \
-  for(irept::subt::iterator it = (irep).begin(); it != (irep).end(); it++)
+  for (irept::subt::iterator it = (irep).begin(); it != (irep).end(); it++)
 
 #define forall_named_irep(it, irep)                                            \
-  for(irept::named_subt::const_iterator it = (irep).begin();                   \
-      it != (irep).end();                                                      \
-      it++)
+  for (irept::named_subt::const_iterator it = (irep).begin();                  \
+       it != (irep).end();                                                     \
+       it++)
 
 #define Forall_named_irep(it, irep)                                            \
-  for(irept::named_subt::iterator it = (irep).begin(); it != (irep).end(); it++)
+  for (irept::named_subt::iterator it = (irep).begin(); it != (irep).end();    \
+       it++)
 
 class typet;
 
@@ -61,7 +63,7 @@ public:
 
   inline irept(const irept &irep) : data(irep.data)
   {
-    if(data != nullptr)
+    if (data != nullptr)
     {
       assert(data->ref_count != 0);
       data->ref_count++;
@@ -74,7 +76,7 @@ public:
     assert(&irep != this); // check if we assign to ourselves
     tmp = data;
     data = irep.data;
-    if(data != nullptr)
+    if (data != nullptr)
       data->ref_count++;
     remove_ref(tmp);
     return *this;
@@ -262,6 +264,21 @@ public:
   inline const irep_idt &pretty_name() const
   {
     return get(a_pretty_name);
+  }
+
+  inline const irep_idt &derived_this_arg() const
+  {
+    return get(a_derived_this_arg);
+  }
+
+  inline bool base_ctor_derived() const
+  {
+    return get_bool(a_base_ctor_derived);
+  }
+
+  inline bool need_vptr_init() const
+  {
+    return get_bool(a_need_vptr_init);
   }
 
   inline const irep_idt &property() const
@@ -940,6 +957,21 @@ public:
     set(a_pretty_name, val);
   }
 
+  inline void derived_this_arg(const irep_idt &val)
+  {
+    set(a_derived_this_arg, val);
+  }
+
+  inline void base_ctor_derived(bool val)
+  {
+    set(a_base_ctor_derived, val);
+  }
+
+  inline void need_vptr_init(bool val)
+  {
+    set(a_need_vptr_init, val);
+  }
+
   inline void restricted(bool val)
   {
     set(a_restricted, val);
@@ -1063,6 +1095,10 @@ public:
   inline bool is_code() const
   {
     return id() == id_code;
+  }
+  inline bool is_function_call() const
+  {
+    return is_code() && statement() == "function_call";
   }
   inline bool is_constant() const
   {
@@ -1232,6 +1268,13 @@ public:
   static const irep_idt a_end_location, a_guard, a_label, a_lhs, a_location;
   static const irep_idt a_object_type, a_cmt_size, a_cmt, a_type_id;
   static const irep_idt a_cmt_type;
+  // annotation for typecasting derived class `this` to base class type
+  static const irep_idt a_derived_this_arg, a_base_ctor_derived;
+  /*
+   * annotation to indicate whether virtual pointer(vptr) has been initialized in contrustor
+   * This is used by implicit IR generation in adjuster
+   */
+  static const irep_idt a_need_vptr_init;
 
   static const irep_idt id_address_of, id_and, id_or, id_array, id_bool,
     id_code;

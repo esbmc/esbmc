@@ -1,0 +1,4 @@
+CORE
+main.c
+--smt-during-symex --smt-symex-guard --cvc
+^VERIFICATION FAILED$

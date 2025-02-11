@@ -1,77 +1,190 @@
-name: Run Benchexec (SV-Comp)
+name: Run Benchexec
 on:
   workflow_dispatch:
     inputs:
-      strategy:
-        description: 'Which Strategy to use? (incr, kinduction, falsi). THIS IS BEING IGNORED!'
-        required: true
-        default: 'incr'
       timeout:
         description: 'Timeout for each benchmarks (in seconds)'
         required: true
-        default: '10'
-      num_of_threads:
-        description: 'How many benchexec threads should be used (values higher than 10 may cause it to hang)'
-        required: true
-        default: '10'  
+        default: '30'
       options:
         description: 'Command-line flags to pass via ESBMC_OPTS'
         required: false
         default: ''
-
+      output:
+        description: 'File output name (to keep the logs)'
+        required: false
+        default: ''
+      svbenchmarks:
+        description: 'Git branch, tag, or commit of SV-Benchmarks to use'
+        required: true
+        default: 'main'      	
+      mode:
+        type: choice
+        description: Benchexec run mode
+        options:
+        - Full
+        - Task
+        - RunSet
+      runset:
+        type: choice
+        description: Run-set to use (be sure to set mode to "RunSet")
+        options:
+        - SV-COMP25_unreach-call
+        - SV-COMP25_no-data-race
+        - SV-COMP25_valid-memcleanup
+        - SV-COMP25_valid-memsafety
+        - SV-COMP25_termination
+        - SV-COMP25_no-overflow
+        - SV-COMP25_ConcurrencySafety
+        - Custom
+      task:
+        type: choice
+        description: Task to use Run-set to use (be sure to set mode to "Task")
+        options:
+        - ReachSafety-Arrays
+        - ReachSafety-BitVectors
+        - ReachSafety-ControlFlow
+        - ReachSafety-ECA
+        - ReachSafety-Floats
+        - ReachSafety-Heap
+        - ReachSafety-Loops
+        - ReachSafety-ProductLines
+        - ReachSafety-Recursive
+        - ReachSafety-Sequentialized
+        - ReachSafety-XCSP
+        - ReachSafety-Combinations
+        - ReachSafety-Hardware
+        - ReachSafety-Hardness
+        - ReachSafety-Fuzzle
+        - ConcurrencySafety-Main
+        - SoftwareSystems-AWS-C-Common-ReachSafety
+        - SoftwareSystems-DeviceDriversLinux64-ReachSafety
+        - SoftwareSystems-DeviceDriversLinux64Large-ReachSafety
+        - SoftwareSystems-Other-ReachSafety
+        - SoftwareSystems-uthash-ReachSafety
+        - SoftwareSystems-Intel-TDX-Module-ReachSafety
+        - NoDataRace-Main
+        - MemSafety-MemCleanup
+        - SoftwareSystems-uthash-MemCleanup
+        - MemSafety-Arrays
+        - MemSafety-Heap
+        - MemSafety-LinkedLists
+        - MemSafety-Other
+        - MemSafety-Juliet
+        - SoftwareSystems-coreutils-MemSafety
+        - SoftwareSystems-DeviceDriversLinux64-MemSafety
+        - SoftwareSystems-Other-MemSafety
+        - SoftwareSystems-uthash-MemSafety
+        - ConcurrencySafety-MemSafety
+        - NoOverflows-Main
+        - NoOverflows-Juliet
+        - SoftwareSystems-BusyBox-NoOverflows
+        - SoftwareSystems-coreutils-NoOverflows
+        - SoftwareSystems-uthash-NoOverflows
+        - ConcurrencySafety-NoOverflows
+        - Termination-BitVectors
+        - Termination-MainControlFlow
+        - Termination-MainHeap
+        - Termination-Other
+        - SoftwareSystems-DeviceDriversLinux64-Termination
+      cpachecker:
+            description: "Run CPAChecker for violation witness validation"
+            required: true
+            type: boolean
 
 jobs:
-  build-linux:
-    name: Build Linux Release
-    runs-on: ubuntu-latest
-    container: rafaelsamenezes/esbmc-ci:clang11
-    steps:
-      - name: Small test
-        run: echo ${{ github.event.inputs.timeout }}
-      - name: Checkout code
-        uses: actions/checkout@master
-      - run: apt update  # Only for Docker jobs
-      - name: ccache
-        uses: hendrikmuhs/ccache-action@v1.2
-      - name: Fix dubious ownership
-        run: git config --global --add safe.directory /__w/esbmc/esbmc
-      - name: Configure CMake
-        run: mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -GNinja -DClang_DIR=/workspace/clang -DLLVM_DIR=/workspace/clang -DBUILD_STATIC=On -DBoolector_DIR=/workspace/boolector-release -DZ3_DIR=/workspace/z3
-      - name: Build ESBMC
-        run: cd build && cmake --build .
-      - uses: actions/upload-artifact@v1
-        with:
-          name: release-linux
-          path: ./build/src/esbmc/esbmc
+
+
+  build-unix:
+    uses: ./.github/workflows/build.yml
+    with:
+      operating-system: ubuntu-22.04
+      build-flags: '-b Release -e Off -C'
+      testing: false     
 
   run-benchexec:
     runs-on: ['self-hosted', 'Linux', 'x64', 'benchexec']
-    timeout-minutes: 6000
-    needs: build-linux
+    timeout-minutes: 12000
+    needs: build-unix
     steps:
+      - name: Setup SV-Benchmarks version
+        run: cd $HOME/sv-benchmarks && git fetch --all --tags --force && git checkout ${{ inputs.svbenchmarks }} && if [ "${{ inputs.svbenchmarks }}" == "main" ]; then git reset --hard origin/main; fi
       - name: Download Linux Build
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v4
         with:
-          name: release-linux
+          name: 'release-ubuntu-22.04--b Release -e Off -C'
           path: ./
-      - name: Run Benchexec
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          path: esbmc-src
+      - name: Set up the custom runset
+        if: ${{ inputs.mode == 'RunSet' && inputs.runset == 'Custom' }}
+        run: cp ./esbmc-src/scripts/competitions/svcomp/custom-reach.set $HOME/sv-benchmarks/c/ && mv ./esbmc-src/scripts/competitions/svcomp/custom.xml ./esbmc-src/scripts/competitions/svcomp/esbmc.xml
+      - name: Set up the Concurrency runset
+        if: ${{ inputs.mode == 'RunSet' && inputs.runset == 'SV-COMP25_ConcurrencySafety' }}
+        run: mv ./esbmc-src/scripts/competitions/svcomp/ConcurrencySafety.xml ./esbmc-src/scripts/competitions/svcomp/esbmc.xml
+      - name: Run Benchexec (Full)
+        if: ${{ inputs.mode == 'Full' }}
+        run: ./esbmc-src/scripts/benchexec.sh -f
         env:
           TIMEOUT: ${{ inputs.timeout }}
           ESBMC_OPTS: ${{ inputs.options }}
-          NUM_OF_THREADS: ${{ inputs.num_of_threads }}
-
-        run: |
-          rm -rf $HOME/output-action $HOME/output
-          mkdir $HOME/output-action
-          mkdir $HOME/output
-          cp ./esbmc $HOME/output-action
-          cd $HOME/output-action
-          cp $HOME/esbmc-wrapper.py .
-          cp $HOME/esbmc-kind.xml .
-          chmod +x ./esbmc
-          benchexec -o ../output/ -N $NUM_OF_THREADS ./esbmc-kind.xml --read-only-dir / --overlay-dir /home  -T ${{ github.event.inputs.timeout }} --no-container
-          zip -r run-output.zip ../output
-      - uses: actions/upload-artifact@v1
+      - name: Run Benchexec (ConcurrencyRunSet)
+        if: ${{ inputs.mode == 'RunSet' && inputs.runset == 'SV-COMP25_ConcurrencySafety' }}
+        run: ./esbmc-src/scripts/benchexec.sh -f
+        env:
+          TIMEOUT: ${{ inputs.timeout }}
+          ESBMC_OPTS: ${{ inputs.options }}
+      - name: Run Benchexec (RunSet)
+        if: ${{ inputs.mode == 'RunSet'  && inputs.runset != 'SV-COMP25_ConcurrencySafety'}}
+        run: ./esbmc-src/scripts/benchexec.sh -r ${{ inputs.runset }}
+        env:
+          TIMEOUT: ${{ inputs.timeout }}
+          ESBMC_OPTS: ${{ inputs.options }}
+      - name: Run Benchexec (Task)
+        if: ${{ inputs.mode == 'Task' }}
+        run: ./esbmc-src/scripts/benchexec.sh -t ${{ inputs.task }}
+        env:
+          TIMEOUT: ${{ inputs.timeout }}
+          ESBMC_OPTS: ${{ inputs.options }}
+      - name: Show summary (ESBMC)
+        run: tail $HOME/esbmc-output/*results*.txt
+      - name: Save logs
+        if: ${{ inputs.output != '' }}
+        run: cp $HOME/output.zip $HOME/${{ inputs.output }}
+      - name: Move output
+        run: mv $HOME/output.zip ./output.zip      
+      - name: Debug Info
+        run: ls
+      - uses: actions/upload-artifact@v4
         with:
-          name: benchexec-result
-          path: /home/vm/output-action/run-output.zip
+          name: esbmc-result
+          path: output.zip  
+      - name: Checkout code
+        if: ${{ inputs.cpachecker == true }}
+        uses: actions/checkout@v4
+        with:
+          path: esbmc-src      
+      - name: Run Validation (Full)
+        if: ${{ inputs.cpachecker == true && inputs.mode == 'Full' }}
+        run: ./esbmc-src/scripts/witness.sh -f
+      - name: Run Validation (RunSet)
+        if: ${{ inputs.cpachecker == true && inputs.mode == 'RunSet' }}
+        run: ./esbmc-src/scripts/witness.sh -r ${{ inputs.runset }}
+      - name: Run Validation (Task)
+        if: ${{ inputs.cpachecker == true && inputs.mode == 'Task' }}
+        run: ./esbmc-src/scripts/witness.sh -t ${{ inputs.task }}
+      - name: Move output
+        if: ${{ inputs.cpachecker == true }}
+        run: mv $HOME/witness-output.zip ./witness-output.zip      
+      - name: Show summary (CPAChecker)
+        if: ${{ inputs.cpachecker == true }}
+        run: tail $HOME/witness-output/*results*.txt
+      - uses: actions/upload-artifact@v4
+        if: ${{ inputs.cpachecker == true }}
+        with:
+          name: witness-result
+          path: witness-output.zip
+
+      

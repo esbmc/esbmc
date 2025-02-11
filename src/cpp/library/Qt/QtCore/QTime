@@ -8,8 +8,9 @@ Date:
 
 \*******************************************************************/
 
-class QTime {
+class QTime
+{
 public:
-	QTime();
-	~QTime();
+  QTime();
+  ~QTime();
 };

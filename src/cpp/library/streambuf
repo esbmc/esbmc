@@ -1,90 +1,152 @@
 #ifndef STL_STREAMBUF
 #define STL_STREAMBUF
 
+#include "OM_compiler_defs.h"
 #include "definitions.h"
-//#include "ios"
 #include "cstdio"
 
 namespace std
 {
 
-class locale{};
+/* forward declaration */
+class locale;
 
-class streambuf{
+template <typename>
+struct char_traits;
 
-	typedef int streampos;
-	typedef int streamoff;
-	typedef int openmode;
-	typedef int seekdir;
+/* References:
+ * - https://cplusplus.com/reference/streambuf/
+ * - https://cplusplus.com/reference/streambuf/streambuf/
+ *
+ * Some design rationales:
+ *  In our OMs, `streambuf' appears to be an abstract class, to be extended by other I/O stream classes (e.g. fstream and sstream).
+ *  The APIs provided by this OM appears to be "just enough" to verify the test cases in our regression suite.
+ *  However, this OM does NOT provide 100% coverage of the actual C++ streambuf library. Some APIs are not included here.
+ *  We probably need to add the missing APIs on-demand when we start to verify real-world C++ programs.
+ */
+class streambuf
+{
+  typedef int streampos;
+  typedef int streamoff;
+  typedef int openmode;
+  typedef int seekdir;
 
-	static const openmode in     =  1L << 3;
-	static const openmode out    =  1L << 4;
+  static const openmode in = 1L << 3;
+  static const openmode out = 1L << 4;
+
 public:
-//  Locales
-	locale pubimbue ( const locale & loc );
-	locale getloc ( ) const;
+  //  Locales
+  locale pubimbue(const locale &loc);
+  locale getloc() const;
 
-//  Buffer management and positioning:
-	streambuf* pubsetbuf ( char* s, streamsize n );
-	streampos pubseekoff ( streamoff off, seekdir way, openmode which = in | out );
-	streampos pubseekpos ( streampos pos, openmode which = in | out );
-	int pubsync ( );
+  //  Buffer management and positioning:
+  streambuf *pubsetbuf(char *s, streamsize n);
+  streampos pubseekoff(streamoff off, seekdir way, openmode which = in | out);
+  streampos pubseekpos(streampos pos, openmode which = in | out);
+  int pubsync();
 
-//  Input functions (get):
-	streamsize in_avail ( );
-	int snextc ( );
-	int sbumpc ( );
-	int sgetc ( );
-	streamsize sgetn ( char * s, streamsize n );
-	int sputbackc ( char c );
-	int sungetc ( );
+  //  Input functions (get):
+  streamsize in_avail();
+  int snextc();
+  int sbumpc();
+  int sgetc();
+  streamsize sgetn(char *s, streamsize n);
+  int sputbackc(char c);
+  int sungetc();
 
-//  Output functions (put):
-	int sputc ( char c );
-	streamsize sputn ( const char * s, streamsize n );
+  //  Output functions (put):
+  int sputc(char c);
+  streamsize sputn(const char *s, streamsize n);
 
-//Protected member functions
+  //Protected member functions
 protected:
-	streambuf ( );
-	virtual ~streambuf ( ){}
+  streambuf();
+  virtual ~streambuf()
+  {
+  }
 
-//	Input sequence (get):
-	char * eback ( ) const;
-	char * gptr ( ) const;
-	char * egptr ( ) const;
-	void gbump ( int n );
-	void setg ( char* gbeg, char* gnext, char* gend );
+  //	Input sequence (get):
+  char *eback() const;
+  char *gptr() const;
+  char *egptr() const;
+  void gbump(int n);
+  void setg(char *gbeg, char *gnext, char *gend);
 
-//	Output sequence (put):
-	char * pbase ( ) const;
-	char * pptr ( ) const;
-	char * epptr ( ) const;
-	void pbump ( int n );
-	void setp ( char* pbeg, char* pend );
+  //	Output sequence (put):
+  char *pbase() const;
+  char *pptr() const;
+  char *epptr() const;
+  void pbump(int n);
+  void setp(char *pbeg, char *pend);
 
-//Virtual protected member functions
-//	Locales
-	virtual void imbue ( const locale & loc ){}
+  //Virtual protected member functions
+  //	Locales
+  virtual void imbue(const locale &loc)
+  {
+  }
 
-//	Buffer management and positioning:
-	virtual streambuf * setbuf ( char * s, streamsize n );
-	virtual streampos seekoff ( streamoff off, seekdir way, openmode which = in | out );
-	virtual streampos seekpos ( streampos sp, openmode which = in | out );
-	virtual int sync ( );
+  /*
+ * Ignore missing returns for some non-void non-pure virtual functions:
+ *  It's difficult to decide what needs to be returned at the time of adding this comment.
+ *  They seem worked fine in ESBMC-v2.1 and managed to verify the C++ programs in our regression suite.
+ *  So I just suppressed these warnings from Clang for the time being.
+ *
+ *  TODO: When we start to verify real-world C++ programs, we might need to properly model their returns.
+ */
+  CC_DIAGNOSTIC_PUSH()
+  CC_DIAGNOSTIC_IGNORE_OM_LLVM_CHECKS()
+  //	Buffer management and positioning:
+  virtual streambuf *setbuf(char *s, streamsize n)
+  {
+  }
+  virtual streampos
+  seekoff(streamoff off, seekdir way, openmode which = in | out)
+  {
+  }
+  virtual streampos seekpos(streampos sp, openmode which = in | out)
+  {
+  }
+  virtual int sync()
+  {
+  }
 
-//	Input functions (get):
-	virtual streamsize showmanyc ( );
-	virtual streamsize xsgetn ( char * s, streamsize n );
-	virtual int underflow ( );
-	virtual int uflow ( );
-	virtual int pbackfail ( int c = EOF );
+  //	Input functions (get):
+  virtual streamsize showmanyc()
+  {
+  }
+  virtual streamsize xsgetn(char *s, streamsize n)
+  {
+  }
+  virtual int underflow()
+  {
+  }
+  virtual int uflow()
+  {
+  }
+  virtual int pbackfail(int c = EOF)
+  {
+  }
 
-//	Output functions (put):
-	virtual streamsize xsputn ( const char * s, streamsize n );
-	virtual int overflow ( int c = EOF );
-
-
+  //	Output functions (put):
+  virtual streamsize xsputn(const char *s, streamsize n)
+  {
+  }
+  virtual int overflow(int c = EOF)
+  {
+  }
+  CC_DIAGNOSTIC_POP()
 };
-}
+
+template <typename CharT, typename Traits = char_traits<CharT> >
+class istreambuf_iterator
+{
+};
+
+template <typename CharT, typename Traits = char_traits<CharT> >
+class ostreambuf_iterator
+{
+};
+
+} // namespace std
 
 #endif

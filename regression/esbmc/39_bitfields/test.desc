@@ -1,4 +1,4 @@
 CORE
 bitfields.c
-
+ -Wno-error=implicit-function-declaration
 ^VERIFICATION SUCCESSFUL$

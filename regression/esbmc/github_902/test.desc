@@ -1,0 +1,4 @@
+KNOWNBUG
+main.c
+file1.c
+^VERIFICATION FAILED$

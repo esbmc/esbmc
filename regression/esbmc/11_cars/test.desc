@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.c
---unwind 3 --no-unwinding-assertions
+--unwind 3 --no-unwinding-assertions -Wno-error=implicit-function-declaration
 ^VERIFICATION SUCCESSFUL$

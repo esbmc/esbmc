@@ -7,7 +7,7 @@ void optionst::set_option(const std::string &option, const std::string &value)
   std::pair<option_mapt::iterator, bool> result =
     option_map.insert(option_mapt::value_type(option, value));
 
-  if(!result.second)
+  if (!result.second)
     result.first->second = value;
 }
 
@@ -36,26 +36,34 @@ const std::string optionst::get_option(const std::string &option) const
   std::map<std::string, std::string>::const_iterator it =
     option_map.find(option);
 
-  if(it != option_map.end())
+  if (it != option_map.end())
     return it->second;
 
   return "";
 }
 
+bool optionst::get_option(const std::string &option, std::string &value) const
+{
+  auto it = option_map.find(option);
+  if (it == option_map.end())
+    return false;
+  value = it->second;
+  return true;
+}
+
 void optionst::cmdline(cmdlinet &cmds)
 {
   // Pump command line options into options list
-  for(auto &it : cmds.vm)
+  for (const auto &it : cmds.vm)
   {
-    std::string option_name = it.first;
-    if(cmds.isset(option_name.c_str()) && !it.second.defaulted())
+    const auto option_name = it.first;
+    if (cmds.isset(option_name.c_str()) && !it.second.defaulted())
     {
-      const char *value = cmds.getval(option_name.c_str());
-      bool hasArgument = *value != 0;
-      if(hasArgument)
-        set_option(option_name, value);
-      else
-        set_option(option_name, true);
+      for (const auto &value : cmds.get_values(option_name.c_str()))
+        if (value.empty())
+          set_option(option_name, true);
+        else
+          set_option(option_name, value);
     }
   }
 }

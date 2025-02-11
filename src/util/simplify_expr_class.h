@@ -9,21 +9,21 @@
 #include <util/threeval.h>
 
 #define forall_value_list(it, value_list)                                      \
-  for(simplify_exprt::value_listt::const_iterator it = (value_list).begin();   \
-      it != (value_list).end();                                                \
-      it++)
+  for (simplify_exprt::value_listt::const_iterator it = (value_list).begin();  \
+       it != (value_list).end();                                               \
+       it++)
 
 class simplify_exprt
 {
 public:
   bool do_simplify_if;
 
-  bool simplify_typecast(exprt &expr);
+  bool simplify_typecast(exprt &expr, bool simpl_const_objects);
   bool simplify_concatenation(exprt &expr);
   bool simplify_multiplication(exprt &expr);
   bool simplify_division(exprt &expr);
   bool simplify_modulo(exprt &expr);
-  bool simplify_addition_substraction(exprt &expr);
+  bool simplify_addition_substraction(exprt &expr, bool simpl_const_objects);
   bool simplify_shifts(exprt &expr);
   bool simplify_bitwise(exprt &expr);
   bool simplify_if_implies(
@@ -34,26 +34,31 @@ public:
   bool simplify_if_recursive(exprt &expr, const exprt &cond, bool truth);
   bool simplify_if_conj(exprt &expr, const exprt &cond);
   bool simplify_if_disj(exprt &expr, const exprt &cond);
-  bool simplify_if_branch(exprt &trueexpr, exprt &falseexpr, const exprt &cond);
-  bool simplify_if_cond(exprt &expr);
+  bool simplify_if_branch(
+    exprt &trueexpr,
+    exprt &falseexpr,
+    const exprt &cond,
+    bool simpl_const_objects);
+  bool simplify_if_cond(exprt &expr, bool simpl_const_objects);
   bool simplify_if(exprt &expr);
   bool simplify_switch(exprt &expr);
   bool simplify_bitnot(exprt &expr);
-  bool simplify_not(exprt &expr);
-  bool simplify_boolean(exprt &expr);
-  bool simplify_inequality(exprt &expr);
-  bool simplify_inequality_constant(exprt &expr);
-  bool simplify_inequality_not_constant(exprt &expr);
-  bool simplify_relation(exprt &expr);
+  bool simplify_not(exprt &expr, bool simpl_const_objects);
+  bool simplify_boolean(exprt &expr, bool simpl_const_objects);
+  bool simplify_inequality(exprt &expr, bool simpl_const_objects);
+  bool simplify_inequality_constant(exprt &expr, bool simpl_const_objects);
+  bool simplify_inequality_not_constant(exprt &expr, bool simpl_const_objects);
+  bool simplify_relation(exprt &expr, bool simpl_const_objects);
   bool simplify_ieee_float_relation(exprt &expr);
   bool simplify_with(exprt &expr);
-  bool simplify_index(index_exprt &expr);
+  bool simplify_index(index_exprt &expr, bool simpl_const_objects);
   bool simplify_member(member_exprt &expr);
   bool simplify_pointer_object(exprt &expr);
   bool simplify_dynamic_size(exprt &expr);
   bool simplify_is_dynamic_object(exprt &expr);
   bool simplify_same_object(exprt &expr);
   bool simplify_valid_object(exprt &expr);
+  bool simplify_races_check(exprt &expr);
   bool simplify_object(exprt &expr);
   static tvt objects_equal(const exprt &a, const exprt &b);
   static tvt objects_equal_address_of(const exprt &a, const exprt &b);
@@ -61,16 +66,19 @@ public:
   bool simplify_unary_minus(exprt &expr);
   bool simplify_dereference(exprt &expr);
   bool simplify_address_of(exprt &expr);
-  bool simplify_pointer_offset(exprt &expr);
+  bool simplify_pointer_offset(exprt &expr, bool simpl_const_objects);
   bool eliminate_common_addends(exprt &op0, exprt &op1);
-  exprt pointer_offset(const exprt &expr, const typet &type);
+  exprt pointer_offset(
+    const exprt &expr,
+    const typet &type,
+    bool simpl_const_objects);
 
-  virtual bool simplify_node(exprt &expr);
-  virtual bool simplify_rec(exprt &expr);
+  virtual bool simplify_node(exprt &expr, bool simpl_const_objects);
+  virtual bool simplify_rec(exprt &expr, bool simpl_const_objects);
 
   virtual bool simplify(exprt &expr)
   {
-    return simplify_rec(expr);
+    return simplify_rec(expr, true);
   }
 
   virtual ~simplify_exprt() = default;

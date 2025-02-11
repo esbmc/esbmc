@@ -6,7 +6,7 @@
 #include <util/base_type.h>
 #include <util/c_types.h>
 
-/* An optimisation of the tuple flattening technique found in smt_tuple_sym.cpp,
+/* An optimization of the tuple flattening technique found in smt_tuple_sym.cpp,
  * where we separate out tuple elements into their own variables without any
  * name mangling, and avoid un-necessary operations on elements when the tuple
  * is manipulated.
@@ -15,7 +15,7 @@
 
 void tuple_node_smt_ast::make_free(smt_convt *ctx)
 {
-  if(elements.size() != 0)
+  if (elements.size() != 0)
     return;
 
   const struct_union_data &strct = ctx->get_type_def(sort->get_tuple_type());
@@ -23,22 +23,23 @@ void tuple_node_smt_ast::make_free(smt_convt *ctx)
   elements.resize(strct.members.size());
 
   unsigned int i = 0;
-  for(auto const &it : strct.members)
+  for (auto const &it : strct.members)
   {
     smt_sortt newsort = ctx->convert_sort(it);
     std::string fieldname = name + "." + strct.member_names[i].as_string();
 
-    if(is_tuple_ast_type(it))
+    if (is_tuple_ast_type(it))
     {
       elements[i] = ctx->tuple_api->tuple_fresh(newsort, fieldname);
     }
-    else if(is_tuple_array_ast_type(it))
+    else if (is_tuple_array_ast_type(it))
     {
       std::string newname = ctx->mk_fresh_name(fieldname);
-      smt_sortt subsort = ctx->convert_sort(get_array_subtype(it));
+      smt_sortt subsort =
+        ctx->convert_sort(ctx->get_flattened_array_subtype(it));
       elements[i] = flat.array_conv.mk_array_symbol(newname, newsort, subsort);
     }
-    else if(is_array_type(it))
+    else if (is_array_type(it))
     {
       elements[i] = ctx->mk_fresh(
         newsort, fieldname, ctx->convert_sort(get_array_subtype(it)));
@@ -74,7 +75,7 @@ tuple_node_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
   result_sym->elements.resize(data.members.size());
 
   // Iterate through each field and encode an ite.
-  for(unsigned int i = 0; i < data.members.size(); i++)
+  for (unsigned int i = 0; i < data.members.size(); i++)
   {
     smt_astt truepart = true_val->project(ctx, i);
     smt_astt falsepart = false_val->project(ctx, i);
@@ -117,8 +118,10 @@ smt_astt tuple_node_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   smt_convt::ast_vec eqs;
   eqs.reserve(data.members.size());
 
+  assert(sort->get_tuple_type() == other->sort->get_tuple_type());
+
   // Iterate through each field and encode an equality.
-  for(unsigned int i = 0; i < data.members.size(); i++)
+  for (unsigned int i = 0; i < data.members.size(); i++)
   {
     smt_astt side1 = ta->project(ctx, i);
     smt_astt side2 = tb->project(ctx, i);
@@ -126,7 +129,7 @@ smt_astt tuple_node_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   }
 
   // Create an ast representing the fact that all the members are equal.
-  return ctx->make_n_ary(ctx, &smt_convt::mk_and, eqs);
+  return ctx->make_n_ary_and(eqs);
 }
 
 smt_astt tuple_node_smt_ast::update(

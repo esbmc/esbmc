@@ -1,5 +1,6 @@
 
 #include <boost/filesystem.hpp>
+#include <boost/filesystem/operations.hpp>
 #include <c2goto/cprover_library.h>
 #include <fstream>
 #include <util/language.h>
@@ -25,7 +26,7 @@ static class
 
   const std::string &base_path()
   {
-    if(base.path() == "")
+    if (base.path() == "")
       base = file_operations::create_tmp_dir();
     return base.path();
   }
@@ -45,15 +46,21 @@ static class
 public:
   const std::string &header_dir()
   {
-    if(headers == "")
+    if (headers == "")
     {
       using namespace boost::filesystem;
       headers = base_path() + "/headers";
       create_directory(headers);
+      create_directory(headers + "/__esbmc");
       create_directory(headers + "/bits");
       create_directory(headers + "/sys");
       create_directory(headers + "/sys/_types");
       create_directory(headers + "/sys/_pthread");
+      create_directory(headers + "/ubuntu20.04");
+      create_directory(headers + "/ubuntu20.04/kernel_5.15.0-76");
+      create_directory(headers + "/ubuntu20.04/kernel_5.15.0-76/include");
+      create_directory(headers + "/ubuntu20.04/kernel_5.15.0-76/include/linux");
+      create_directory(headers + "/ubuntu20.04/kernel_5.15.0-76/include/asm");
 #define ESBMC_FLAIL(body, size, ...)                                           \
   std::ofstream(headers + "/" #__VA_ARGS__).write(body, size);
 #include <headers/libc_hdr.h>
@@ -65,7 +72,7 @@ public:
   template <typename F>
   void foreach_libc_libm(F &&f)
   {
-    if(libc == "")
+    if (libc == "")
     {
       using namespace boost::filesystem;
       libc = base_path() + "/library";
@@ -90,19 +97,38 @@ const std::string *internal_libc_header_dir()
            : &internal_libc.header_dir();
 }
 
+/* copy of clang_c_convertert::get_filename_from_path(); TODO: unify */
+static std::string get_filename_from_path(std::string path)
+{
+  if (path.find_last_of('/') != std::string::npos)
+    return path.substr(path.find_last_of('/') + 1);
+
+  return path;
+}
+
 void add_bundled_library_sources(contextt &context, const languaget &c_language)
 {
   /* First extract headers (if not already done) */
-  if(internal_libc_header_dir())
+  if (internal_libc_header_dir())
+  {
+    bool skip_fenv = false;
+#ifdef ESBMC_CHERI_CLANG_MORELLO
+    /* Morello is hard-float, which has an incompatible <fenv.h> */
+    skip_fenv = config.ansi_c.cheri != configt::ansi_ct::CHERI_OFF;
+#endif
+
     /* Next, extract (if not already done) and process every libc/libm file. */
     internal_libc.foreach_libc_libm([&](const std::string &path) {
+      if (skip_fenv && get_filename_from_path(path) == "fenv.c")
+        return;
       languaget *l = c_language.new_language();
-      log_status("file " + path + ": Parsing");
-      if(l->parse(path) || l->typecheck(context, path))
+      log_status("file {}: Parsing", path);
+      if (l->parse(path) || l->typecheck(context, path))
       {
-        log_error("error processing internal libc source " + path);
+        log_error("error processing internal libc source {}", path);
         abort();
       }
       delete l;
     });
+  }
 }

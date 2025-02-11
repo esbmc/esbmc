@@ -1,0 +1,22 @@
+# For a quick check-up on dev branch pushes, giving early warning or good news.
+name: Early warning on push
+
+on: [push]
+
+jobs:
+
+  # Check testing tool suite
+  testing-tool:
+    runs-on: ubuntu-20.04
+    steps:
+    - uses: actions/checkout@v4
+    - name: Runs testing tool unit test
+      run: cd regression && python3 testing_tool_test.py
+
+  # just run the linux job
+  build-unix:
+    uses: ./.github/workflows/build-unix.yml
+    with:
+      operating-system: ubuntu-22.04
+      build-flags: '-b Debug'
+      testing: true

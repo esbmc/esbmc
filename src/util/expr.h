@@ -5,30 +5,30 @@
 #include <util/type.h>
 
 #define forall_operands(it, expr)                                              \
-  if((expr).has_operands())                                                    \
-    for(exprt::operandst::const_iterator it = (expr).operands().begin();       \
-        it != (expr).operands().end();                                         \
-        it++)
+  if ((expr).has_operands())                                                   \
+    for (exprt::operandst::const_iterator it = (expr).operands().begin();      \
+         it != (expr).operands().end();                                        \
+         it++)
 
 #define Forall_operands(it, expr)                                              \
-  if((expr).has_operands())                                                    \
-    for(exprt::operandst::iterator it = (expr).operands().begin();             \
-        it != (expr).operands().end();                                         \
-        it++)
+  if ((expr).has_operands())                                                   \
+    for (exprt::operandst::iterator it = (expr).operands().begin();            \
+         it != (expr).operands().end();                                        \
+         it++)
 
 #define forall_expr(it, expr)                                                  \
-  for(exprt::operandst::const_iterator it = (expr).begin();                    \
-      it != (expr).end();                                                      \
-      it++)
+  for (exprt::operandst::const_iterator it = (expr).begin();                   \
+       it != (expr).end();                                                     \
+       it++)
 
 #define Forall_expr(it, expr)                                                  \
-  for(exprt::operandst::iterator it = (expr).begin(); it != (expr).end(); it++)
+  for (exprt::operandst::iterator it = (expr).begin(); it != (expr).end(); it++)
 
 #define forall_expr_list(it, expr)                                             \
-  for(expr_listt::const_iterator it = (expr).begin(); it != (expr).end(); it++)
+  for (expr_listt::const_iterator it = (expr).begin(); it != (expr).end(); it++)
 
 #define Forall_expr_list(it, expr)                                             \
-  for(expr_listt::iterator it = (expr).begin(); it != (expr).end(); it++)
+  for (expr_listt::iterator it = (expr).begin(); it != (expr).end(); it++)
 
 class exprt : public irept
 {

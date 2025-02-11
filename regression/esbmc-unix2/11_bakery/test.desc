@@ -1,4 +1,4 @@
 CORE
 bakery.c
---no-unwinding-assertions --unwind 100
+--no-unwinding-assertions --unwind 100 --context-bound 2 -Wno-error=implicit-function-declaration
 ^VERIFICATION SUCCESSFUL$

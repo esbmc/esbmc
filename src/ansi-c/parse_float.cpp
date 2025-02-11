@@ -29,7 +29,7 @@ void parse_float(
 
   // is this hex?
 
-  if(src.size() >= 2 && src[0] == '0' && tolower(src[1]) == 'x')
+  if (src.size() >= 2 && src[0] == '0' && tolower(src[1]) == 'x')
   {
     // skip the 0x
     p += 2;
@@ -37,35 +37,35 @@ void parse_float(
     exponent_base = 2;
 
     // get whole number part
-    while(*p != '.' && *p != 0 && *p != 'p' && *p != 'P')
+    while (*p != '.' && *p != 0 && *p != 'p' && *p != 'P')
     {
       str_whole_number += *p;
       p++;
     }
 
     // skip dot
-    if(*p == '.')
+    if (*p == '.')
       p++;
 
     // get fraction part
-    while(*p != 0 && *p != 'p' && *p != 'P')
+    while (*p != 0 && *p != 'p' && *p != 'P')
     {
       str_fraction_part += *p;
       p++;
     }
 
     // skip P
-    if(*p == 'p' || *p == 'P')
+    if (*p == 'p' || *p == 'P')
       p++;
 
     // skip +
-    if(*p == '+')
+    if (*p == '+')
       p++;
 
     // get exponent
-    while(*p != 0 && *p != 'f' && *p != 'F' && *p != 'l' && *p != 'L' &&
-          *p != 'w' && *p != 'W' && *p != 'q' && *p != 'Q' && *p != 'd' &&
-          *p != 'D')
+    while (*p != 0 && *p != 'f' && *p != 'F' && *p != 'l' && *p != 'L' &&
+           *p != 'w' && *p != 'W' && *p != 'q' && *p != 'Q' && *p != 'd' &&
+           *p != 'D')
     {
       str_exponent += *p;
       p++;
@@ -77,12 +77,12 @@ void parse_float(
     // rational number; the digit sequence in the exponent part is
     // interpreted as a decimal integer.
 
-    if(str_number.empty())
+    if (str_number.empty())
       significand = 0;
     else
       significand = string2integer(str_number, 16); // hex
 
-    if(str_exponent.empty())
+    if (str_exponent.empty())
       exponent = 0;
     else
       exponent = string2integer(str_exponent, 10); // decimal
@@ -93,41 +93,41 @@ void parse_float(
   else
   {
     // get whole number part
-    while(*p != '.' && *p != 0 && *p != 'e' && *p != 'E' && *p != 'f' &&
-          *p != 'F' && *p != 'l' && *p != 'L' && *p != 'w' && *p != 'W' &&
-          *p != 'q' && *p != 'Q' && *p != 'd' && *p != 'D' && *p != 'i' &&
-          *p != 'I' && *p != 'j' && *p != 'J')
+    while (*p != '.' && *p != 0 && *p != 'e' && *p != 'E' && *p != 'f' &&
+           *p != 'F' && *p != 'l' && *p != 'L' && *p != 'w' && *p != 'W' &&
+           *p != 'q' && *p != 'Q' && *p != 'd' && *p != 'D' && *p != 'i' &&
+           *p != 'I' && *p != 'j' && *p != 'J')
     {
       str_whole_number += *p;
       p++;
     }
 
     // skip dot
-    if(*p == '.')
+    if (*p == '.')
       p++;
 
     // get fraction part
-    while(*p != 0 && *p != 'e' && *p != 'E' && *p != 'f' && *p != 'F' &&
-          *p != 'l' && *p != 'L' && *p != 'w' && *p != 'W' && *p != 'q' &&
-          *p != 'Q' && *p != 'd' && *p != 'D' && *p != 'i' && *p != 'I' &&
-          *p != 'j' && *p != 'J')
+    while (*p != 0 && *p != 'e' && *p != 'E' && *p != 'f' && *p != 'F' &&
+           *p != 'l' && *p != 'L' && *p != 'w' && *p != 'W' && *p != 'q' &&
+           *p != 'Q' && *p != 'd' && *p != 'D' && *p != 'i' && *p != 'I' &&
+           *p != 'j' && *p != 'J')
     {
       str_fraction_part += *p;
       p++;
     }
 
     // skip E
-    if(*p == 'e' || *p == 'E')
+    if (*p == 'e' || *p == 'E')
       p++;
 
     // skip +
-    if(*p == '+')
+    if (*p == '+')
       p++;
 
     // get exponent
-    while(*p != 0 && *p != 'f' && *p != 'F' && *p != 'l' && *p != 'L' &&
-          *p != 'w' && *p != 'W' && *p != 'q' && *p != 'Q' && *p != 'd' &&
-          *p != 'D' && *p != 'i' && *p != 'I' && *p != 'j' && *p != 'J')
+    while (*p != 0 && *p != 'f' && *p != 'F' && *p != 'l' && *p != 'L' &&
+           *p != 'w' && *p != 'W' && *p != 'q' && *p != 'Q' && *p != 'd' &&
+           *p != 'D' && *p != 'i' && *p != 'I' && *p != 'j' && *p != 'J')
     {
       str_exponent += *p;
       p++;
@@ -135,12 +135,12 @@ void parse_float(
 
     std::string str_number = str_whole_number + str_fraction_part;
 
-    if(str_number.empty())
+    if (str_number.empty())
       significand = 0;
     else
       significand = string2integer(str_number, 10);
 
-    if(str_exponent.empty())
+    if (str_exponent.empty())
       exponent = 0;
     else
       exponent = string2integer(str_exponent, 10);
@@ -152,11 +152,11 @@ void parse_float(
   // get flags
   is_float = is_long = false;
 
-  while(*p != 0)
+  while (*p != 0)
   {
-    if(*p == 'f' || *p == 'F')
+    if (*p == 'f' || *p == 'F')
       is_float = true;
-    else if(*p == 'l' || *p == 'L')
+    else if (*p == 'l' || *p == 'L')
       is_long = true;
 
     p++;

@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 void ansi_c_typecheckt::typecheck()
 {
-  for(auto &declaration : parse_tree.declarations)
+  for (auto &declaration : parse_tree.declarations)
   {
     symbolt symbol;
     declaration.to_symbol(symbol);

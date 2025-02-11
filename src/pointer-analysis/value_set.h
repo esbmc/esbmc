@@ -102,7 +102,7 @@ public:
 
     objectt(bool offset_set, unsigned int operand)
     {
-      if(offset_set)
+      if (offset_set)
       {
         offset_is_set = true;
         offset = BigInt(operand);
@@ -156,7 +156,7 @@ public:
   public:
     ~object_map_dt()
     {
-      for(auto const &it : themap)
+      for (auto const &it : themap)
         value_sett::obj_numbering_deref(it.first);
     }
 
@@ -169,7 +169,7 @@ public:
     object_map_dt(const object_map_dt &ref)
     {
       *this = ref;
-      for(auto const &it : themap)
+      for (auto const &it : themap)
         value_sett::obj_numbering_ref(it.first);
     }
     typedef object_mapt::const_iterator const_iterator;
@@ -177,7 +177,7 @@ public:
 
     objectt &operator[](unsigned i)
     {
-      if(themap.find(i) == themap.end())
+      if (themap.find(i) == themap.end())
         value_sett::obj_numbering_ref(i);
       return themap[i];
     }
@@ -264,11 +264,11 @@ public:
 
     // Null objects are allowed to have symbol types. What alignment to give?
     // Pick 8 bytes, as that's a) word aligned, b) double/uint64_t aligned.
-    if(is_null_object2t(e))
+    if (is_null_object2t(e))
       return 8;
 
     assert(!is_symbol_type(t));
-    if(is_array_type(t))
+    if (is_array_type(t))
     {
       const array_type2t &arr = to_array_type(t);
       return type_byte_size_default(arr.subtype, 8).to_uint64();
@@ -280,11 +280,11 @@ public:
   inline unsigned int offset2align(const expr2tc &e, const BigInt &m) const
   {
     unsigned int nat_align = get_natural_alignment(e);
-    if(m == 0)
+    if (m == 0)
     {
       return nat_align;
     }
-    if((m % nat_align) == 0)
+    if ((m % nat_align) == 0)
     {
       return nat_align;
     }
@@ -296,10 +296,10 @@ public:
       // Repeatedly decrease the word size by powers of two, and test to see
       // whether the offset meets that alignment. This will always succeed
       // and exit the loop when the alignment reaches 1.
-      if((m % max_align) == 0)
+      if ((m % max_align) == 0)
         return max_align;
       max_align /= 2;
-    } while(true);
+    } while (true);
   }
 
   /** Convert an object map element to an expression. Formulates either an
@@ -316,7 +316,7 @@ public:
       dest.insert(object_mapt::value_type(it->first, it->second));
 
     // If element already existed, overwrite.
-    if(res.second)
+    if (res.second)
       res.first->second = it->second;
   }
 
@@ -350,7 +350,7 @@ public:
   bool insert(object_mapt &dest, unsigned n, const objectt &object) const
   {
     object_mapt::const_iterator it = dest.find(n);
-    if(it == dest.end())
+    if (it == dest.end())
     {
       // new
       dest.insert(object_mapt::value_type(n, object));
@@ -361,13 +361,13 @@ public:
     objectt &old = it2->second;
     const expr2tc &expr_obj = object_numbering[n];
 
-    if(old.offset_is_set && object.offset_is_set)
+    if (old.offset_is_set && object.offset_is_set)
     {
-      if(old.offset == object.offset)
+      if (old.offset == object.offset)
         return false;
 
       // Merge the tracking for two offsets; take the minimum alignment
-      // guarenteed by them.
+      // guaranteed by them.
       unsigned long old_align = offset2align(expr_obj, old.offset);
       unsigned long new_align = offset2align(expr_obj, object.offset);
       old.offset_is_set = false;
@@ -375,10 +375,10 @@ public:
       return true;
     }
 
-    if(!old.offset_is_set)
+    if (!old.offset_is_set)
     {
       unsigned int oldalign = old.offset_alignment;
-      if(!object.offset_is_set)
+      if (!object.offset_is_set)
       {
         // Both object offsets not set; update alignment to minimum of the two
         old.offset_alignment =
@@ -483,7 +483,7 @@ public:
   /** Add a value set for each variable in the given list. */
   void add_vars(const std::list<entryt> &vars)
   {
-    for(const auto &var : vars)
+    for (const auto &var : vars)
       add_var(var);
   }
 
@@ -559,7 +559,12 @@ public:
    */
   void get_reference_set(const expr2tc &expr, value_setst::valuest &dest) const;
 
-protected:
+  /** "Internal" get_value_set method. Just the same as the other get_value_set
+   *  method, but collects into an object_mapt instead of a list of exprs.
+   *  @param expr The expression to evaluate the value set of.
+   *  @param dest Destination value set object map to store the result into. */
+  void get_value_set(const expr2tc &expr, object_mapt &dest) const;
+
   /** Recursive body of get_value_set.
    *  @param expr Expression to interpret and fetch value set for
    *  @param dest Destination object map to store pointed-at records in.
@@ -587,6 +592,7 @@ protected:
     const type2tc &original_type,
     bool under_deref = true) const;
 
+protected:
   // Like get_value_set_rec, but dedicated to walking through the ireps that
   // are produced by pointer deref byte stitching
   void get_byte_stitching_value_set(
@@ -594,12 +600,6 @@ protected:
     object_mapt &dest,
     const std::string &suffix,
     const type2tc &original_type) const;
-
-  /** Internal get_value_set method. Just the same as the other get_value_set
-   *  method, but collects into an object_mapt instead of a list of exprs.
-   *  @param expr The expression to evaluate the value set of.
-   *  @param dest Destination value set object map to store the result into. */
-  void get_value_set(const expr2tc &expr, object_mapt &dest) const;
 
   /** Internal get_reference_set method. Just the same as the other
    *  get_reference_set method, but collects into an object_mapt instead of a
@@ -667,6 +667,12 @@ public:
 
   irep_idt xchg_name;
   unsigned long xchg_num;
+};
+
+// Exceptions
+
+class vsa_not_implemented_exception
+{
 };
 
 #endif

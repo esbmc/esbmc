@@ -1,4 +1,0 @@
-THOROUGH
-main.c
---ir --cvc
-^VERIFICATION SUCCESSFUL$

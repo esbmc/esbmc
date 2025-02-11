@@ -11,7 +11,7 @@ public:
     : solver_smt_ast<term_t>(ctx, _t, _s)
   {
     // Detect term errors
-    if(a == NULL_TERM)
+    if (a == NULL_TERM)
     {
       yices_print_error(stderr);
       log_error("Error creating yices term");
@@ -21,7 +21,7 @@ public:
   ~yices_smt_ast() override = default;
 
   // Provide assign semantics for arrays. While yices will swallow array
-  // equalities, it appears to silently not honour them? From observation.
+  // equalities, it appears to silently not honor them? From observation.
   void assign(smt_convt *ctx, smt_astt sym) const override;
 
   smt_astt project(smt_convt *ctx, unsigned int elem) const override;
@@ -143,6 +143,9 @@ public:
   smt_astt mk_tuple_array_symbol(const expr2tc &expr) override;
   expr2tc tuple_get(const expr2tc &expr) override;
   expr2tc tuple_get(const type2tc &type, smt_astt a) override;
+
+  expr2tc
+  tuple_get_array_elem(smt_astt array, uint64_t index, const type2tc &subtype);
 
   bool get_bool(smt_astt a) override;
   BigInt get_bv(smt_astt a, bool is_signed) override;

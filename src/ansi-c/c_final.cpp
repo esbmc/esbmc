@@ -12,42 +12,42 @@ Author: Daniel Kroening, kroening@kroening.com
 void c_finalize_expression(const contextt &context, exprt &expr)
 {
   std::ostringstream str;
-  if(expr.id() == "symbol")
+  if (expr.id() == "symbol")
   {
-    if(expr.type().id() == "incomplete_array")
+    if (expr.type().id() == "incomplete_array")
     {
       const symbolt *s = context.find_symbol(expr.identifier());
 
-      if(s == nullptr)
+      if (s == nullptr)
       {
         str << "failed to find symbol " << expr.identifier();
-        log_error(str.str());
+        log_error("{}", str.str());
         throw 0;
       }
 
       const symbolt &symbol = *s;
 
-      if(symbol.type.is_array())
+      if (symbol.type.is_array())
         expr.type() = symbol.type;
-      else if(symbol.type.id() == "incomplete_array")
+      else if (symbol.type.id() == "incomplete_array")
       {
         symbol.location.dump();
         str << "symbol `" << symbol.name << "' has incomplete type";
-        log_error(str.str());
+        log_error("{}", str.str());
         throw 0;
       }
       else
       {
         symbol.location.dump();
         str << "symbol `" << symbol.name << "' has unexpected type";
-        log_error(str.str());
+        log_error("{}", str.str());
         throw 0;
       }
     }
   }
 
-  if(expr.has_operands())
-    Forall_operands(it, expr)
+  if (expr.has_operands())
+    Forall_operands (it, expr)
       c_finalize_expression(context, *it);
 }
 
@@ -58,14 +58,14 @@ bool c_final(contextt &context)
   try
   {
     context.Foreach_operand([&context](symbolt &s) {
-      if(s.mode == "C")
+      if (s.mode == "C")
       {
         c_finalize_expression(context, s.value);
       }
     });
   }
 
-  catch(int e)
+  catch (int e)
   {
     return true;
   }

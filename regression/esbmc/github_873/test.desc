@@ -1,0 +1,4 @@
+CORE
+main.c
+--no-slice --incremental-bmc
+^VERIFICATION FAILED$

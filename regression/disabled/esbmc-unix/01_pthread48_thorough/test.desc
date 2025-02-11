@@ -1,0 +1,4 @@
+THOROUGH
+main.c
+--force-malloc-success --unwind 3
+^VERIFICATION SUCCESSFUL$

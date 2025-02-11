@@ -1,0 +1,4 @@
+CORE
+char32-lit.c
+--no-simplify
+^VERIFICATION SUCCESSFUL$

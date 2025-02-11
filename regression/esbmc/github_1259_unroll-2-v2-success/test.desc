@@ -1,0 +1,4 @@
+CORE
+unroll-2-v2.wvr.c
+--no-div-by-zero-check --force-malloc-success --state-hashing --add-symex-value-sets --no-align-check --k-step 2 --floatbv --unlimited-k-steps -D'__builtin_unreachable()' --no-vla-size-check --32  --memory-leak-check --no-assertions --incremental-bmc --no-abnormal-memory-leak
+^VERIFICATION SUCCESSFUL$

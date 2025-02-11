@@ -2,9 +2,10 @@
 #include <util/namespace.h>
 #include <irep2/irep2.h>
 #include <langapi/language_util.h>
-#include <goto_trace.h>
+#include <goto-symex/goto_trace.h>
 #include <string>
 #include <regex>
+#include <big-int/bigint.hh>
 
 typedef boost::property_tree::ptree xmlnodet;
 
@@ -13,7 +14,7 @@ typedef boost::property_tree::ptree xmlnodet;
 class nodet
 {
 private:
-  static short int _id;
+  static BigInt _id;
 
 public:
   std::string id;
@@ -25,15 +26,15 @@ public:
   std::string invariant_scope;
   nodet(void)
   {
-    id = "N" + std::to_string(_id);
-    _id++;
+    id = "N" + integer2string(_id);
+    _id += 1;
   }
 };
 
 class edget
 {
 private:
-  static short int _id;
+  static BigInt _id;
 
 public:
   std::string id;
@@ -54,15 +55,15 @@ public:
   nodet *to_node;
   edget(void)
   {
-    id = "E" + std::to_string(_id);
-    _id++;
+    id = "E" + integer2string(_id);
+    _id += 1;
     from_node = NULL;
     to_node = NULL;
   }
   edget(nodet *from_node, nodet *to_node)
   {
-    id = "E" + std::to_string(_id);
-    _id++;
+    id = "E" + integer2string(_id);
+    _id += 1;
     this->from_node = from_node;
     this->to_node = to_node;
   }
@@ -173,3 +174,11 @@ int generate_sha1_hash_for_file(const char *path, std::string &output);
  */
 std::string
 get_invariant(std::string verified_file, BigInt line_number, optionst &options);
+
+/// This generates test-cases as described in: https://gitlab.com/sosy-lab/test-comp/test-format/-/tree/main/
+#include <goto-symex/symex_target_equation.h>
+void generate_testcase_metadata();
+void generate_testcase(
+  const std::string &file_name,
+  const symex_target_equationt &target,
+  smt_convt &smt_conv);

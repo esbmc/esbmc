@@ -24,7 +24,7 @@ template <typename Extract>
 static expr2tc concat_tree(size_t start, size_t n, const Extract &extract)
 {
   assert(n);
-  if(n == 1)
+  if (n == 1)
     return extract(start);
 
   /* here, n > 1: recursively build 2 sub-expressions to concatenate, both of
@@ -48,15 +48,17 @@ static expr2tc concat_tree(size_t start, size_t n, const Extract &extract)
 
 static expr2tc flatten_to_bitvector(const expr2tc &new_expr)
 {
-  // Easy case, no need to concat anything
-  if(is_number_type(new_expr))
+  // Easy cases, no need to concat anything
+
+  /* keep this condition in sync with concat2t's assumptions */
+  if (is_unsignedbv_type(new_expr))
     return new_expr;
 
-  if(is_pointer_type(new_expr))
+  if (is_number_type(new_expr) || is_pointer_type(new_expr))
     return bitcast2tc(get_uint_type(new_expr->type->get_width()), new_expr);
 
   // If it is an array, concat every element into a big bitvector
-  if(is_array_type(new_expr))
+  if (is_array_type(new_expr))
   {
     // Assume only fixed-size arrays
     const array_type2t &arraytype = to_array_type(new_expr->type);
@@ -81,12 +83,12 @@ static expr2tc flatten_to_bitvector(const expr2tc &new_expr)
     return concat_tree(0, sz, extract);
   }
 
-  if(new_expr->type->get_width() == 0)
+  if (new_expr->type->get_width() == 0)
     return constant_int2tc(get_uint_type(0), BigInt(0));
 
   // If it is a struct, concat all members into a big bitvector
   // TODO: this is similar to concat array elements, should we merge them?
-  if(is_struct_type(new_expr))
+  if (is_struct_type(new_expr))
   {
     const struct_type2t &structtype = to_struct_type(new_expr->type);
 
@@ -105,7 +107,7 @@ static expr2tc flatten_to_bitvector(const expr2tc &new_expr)
     return concat_tree(0, sz, extract);
   }
 
-  if(is_union_type(new_expr))
+  if (is_union_type(new_expr))
   {
     size_t sz = type_byte_size_bits(new_expr->type).to_uint64();
     return extract2tc(get_uint_type(sz), new_expr, sz - 1, 0);
@@ -125,54 +127,62 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
   const type2tc &to_type = to_bitcast2t(expr).type;
 
   // Converts to floating-point
-  if(is_floatbv_type(to_type))
+  if (is_floatbv_type(to_type))
   {
     expr2tc new_from = from;
 
     // Converting from struct/array to fp, we simply convert it to bv and use
     // the bv to fp method to do the job for us
-    if(is_struct_type(new_from) || is_array_type(new_from))
+    if (is_struct_type(new_from) || is_array_type(new_from))
       new_from = flatten_to_bitvector(new_from);
 
     // from bitvectors should go through the fp api
-    if(is_bv_type(new_from) || is_union_type(new_from))
+    if (is_bv_type(new_from) || is_union_type(new_from))
       return fp_api->mk_from_bv_to_fp(
         convert_ast(new_from), convert_sort(to_type));
   }
-  else if(is_bv_type(to_type))
+  else if (is_fixedbv_type(to_type))
   {
-    if(is_floatbv_type(from))
-      return fp_api->mk_from_fp_to_bv(convert_ast(from));
-
-    if(is_struct_type(from) || is_array_type(from))
-      return convert_ast(flatten_to_bitvector(from));
-
-    if(is_union_type(from))
+    if (is_bv_type(from))
       return convert_ast(from);
   }
-  else if(is_struct_type(to_type))
+  else if (is_bv_type(to_type))
+  {
+    if (is_floatbv_type(from))
+      return fp_api->mk_from_fp_to_bv(convert_ast(from));
+
+    if (is_fixedbv_type(from))
+      return convert_ast(from);
+
+    if (is_struct_type(from) || is_array_type(from))
+      return convert_ast(flatten_to_bitvector(from));
+
+    if (is_union_type(from))
+      return convert_ast(from);
+  }
+  else if (is_struct_type(to_type))
   {
     expr2tc new_from = from;
 
     // Converting from fp to struct, we simply convert the fp to bv and use
     // the bv to struct method to do the job for us
-    if(is_floatbv_type(new_from))
+    if (is_floatbv_type(new_from))
       new_from =
         bitcast2tc(get_uint_type(new_from->type->get_width()), new_from);
 
     // Converting from array to struct, we convert it to bv and use the bv to
     // struct method to do the job for us
-    if(is_array_type(new_from))
+    if (is_array_type(new_from))
       new_from = flatten_to_bitvector(new_from);
 
-    if(is_bv_type(new_from) || is_union_type(new_from))
+    if (is_bv_type(new_from) || is_union_type(new_from))
     {
       const struct_type2t &structtype = to_struct_type(to_type);
 
       // We have to reconstruct the struct from the bitvector, so do it
       // by extracting the offsets+size of each member from the bitvector
       std::vector<expr2tc> fields;
-      for(unsigned int i = 0; i < structtype.members.size(); i++)
+      for (unsigned int i = 0; i < structtype.members.size(); i++)
       {
         unsigned int offset =
           member_offset_bits(to_type, structtype.member_names[i]).to_uint64();
@@ -186,51 +196,45 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
       return convert_ast(constant_struct2tc(to_type, fields));
     }
   }
-  else if(is_union_type(to_type))
+  else if (is_union_type(to_type))
   {
-    if(is_bv_type(from))
+    if (is_bv_type(from))
       return convert_ast(from);
   }
-  else if(is_array_type(to_type))
+  else if (is_array_type(to_type))
   {
     expr2tc new_from = from;
 
-    if(is_floatbv_type(new_from))
+    if (is_floatbv_type(new_from))
       new_from =
         bitcast2tc(get_uint_type(new_from->type->get_width()), new_from);
 
     // Converting from struct to array, we convert it to bv and use the bv to
     // struct method to do the job for us
-    if(is_struct_type(new_from))
+    if (is_struct_type(new_from))
       new_from = flatten_to_bitvector(new_from);
 
-    if(is_bv_type(new_from) || is_union_type(new_from))
+    if (is_bv_type(new_from) || is_union_type(new_from))
     {
-      // TODO: handle multidimensional arrays
-      assert(
-        !is_multi_dimensional_array(to_type) &&
-        "Bitcasting to multidimensional arrays is not supported for now\n");
-
       array_type2t arr_type = to_array_type(to_type);
       type2tc subtype = arr_type.subtype;
 
+      unsigned int sz = subtype->get_width();
       // We shouldn't have any bit left behind
-      assert(new_from->type->get_width() % subtype->get_width() == 0);
-      unsigned int num_el = new_from->type->get_width() / subtype->get_width();
+      assert(new_from->type->get_width() % sz == 0);
+      unsigned int num_el = new_from->type->get_width() / sz;
 
-      std::vector<expr2tc> elems;
-      for(unsigned int i = 0; i < num_el; ++i)
+      std::vector<expr2tc> elems(num_el);
+      type2tc uint_subtype = get_uint_type(sz);
+      for (unsigned int i = 0; i < num_el; ++i)
       {
-        unsigned int sz = subtype->get_width();
         unsigned int offset = i * sz;
-        expr2tc tmp = extract2tc(
-          get_uint_type(subtype->get_width()),
-          new_from,
-          offset + sz - 1,
-          offset);
-        elems.push_back(bitcast2tc(subtype, tmp));
+        elems[i] = bitcast2tc(
+          subtype, extract2tc(uint_subtype, new_from, offset + sz - 1, offset));
       }
 
+      /* In case to_type is a multi-dimensional array type, the constant_array2t
+       * expression will get flattened by convert_ast(). */
       return convert_ast(constant_array2tc(to_type, elems));
     }
   }

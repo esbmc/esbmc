@@ -14,10 +14,10 @@ void c_typecheck_baset::add_argc_argv(const symbolt &main_symbol)
 {
   const irept &arguments = main_symbol.type.arguments();
 
-  if(arguments.get_sub().size() == 0)
+  if (arguments.get_sub().size() == 0)
     return;
 
-  if(arguments.get_sub().size() != 2 && arguments.get_sub().size() != 3)
+  if (arguments.get_sub().size() != 2 && arguments.get_sub().size() != 3)
   {
     err_location(main_symbol.location);
     throw "main expected to have no or two or three arguments";
@@ -37,7 +37,7 @@ void c_typecheck_baset::add_argc_argv(const symbolt &main_symbol)
     argc_symbol.static_lifetime = true;
     argc_symbol.lvalue = true;
 
-    if(
+    if (
       argc_symbol.type.id() != "signedbv" &&
       argc_symbol.type.id() != "unsignedbv")
     {
@@ -51,7 +51,7 @@ void c_typecheck_baset::add_argc_argv(const symbolt &main_symbol)
   }
 
   {
-    if(op1.type().id() != "pointer" || op1.type().subtype().id() != "pointer")
+    if (op1.type().id() != "pointer" || op1.type().subtype().id() != "pointer")
     {
       err_location(main_symbol.location);
       str << "argv argument expected to be pointer-to-pointer type, "
@@ -84,7 +84,7 @@ void c_typecheck_baset::add_argc_argv(const symbolt &main_symbol)
     move_symbol(argv_symbol, argv_new_symbol);
   }
 
-  if(arguments.get_sub().size() == 3)
+  if (arguments.get_sub().size() == 3)
   {
     symbolt envp_symbol;
     envp_symbol.name = "envp";
@@ -100,7 +100,7 @@ void c_typecheck_baset::add_argc_argv(const symbolt &main_symbol)
     envp_size_symbol.static_lifetime = true;
     move_symbol(envp_size_symbol, envp_new_size_symbol);
 
-    if(envp_symbol.type.id() != "pointer")
+    if (envp_symbol.type.id() != "pointer")
     {
       err_location(main_symbol.location);
       str << "envp argument expected to be pointer type, but got `"

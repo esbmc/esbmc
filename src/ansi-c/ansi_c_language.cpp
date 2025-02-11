@@ -15,7 +15,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <ansi-c/c_preprocess.h>
 #include <ansi-c/gcc_builtin_headers.h>
 #include <ansi-c/trans_unit.h>
-#include <clang-c-frontend/expr2c.h>
+#include <util/c_expr2string.h>
 #include <cstring>
 #include <fstream>
 #include <sstream>
@@ -51,11 +51,11 @@ static void internal_additions(std::string &code)
     "int __ESBMC_rounding_mode = 0;\n"
     "_Bool __ESBMC_floatbv_mode();\n"
 
-    // Forward decs for pthread main thread begin/end hooks. Because they're
+    // Forward decls for pthread main thread begin/end hooks. Because they're
     // pulled in from the C library, they need to be declared prior to pulling
     // them in, for type checking.
-    "void pthread_start_main_hook(void);\n"
-    "void pthread_end_main_hook(void);\n"
+    "void __ESBMC_pthread_start_main_hook(void);\n"
+    "void __ESBMC_pthread_end_main_hook(void);\n"
 
     // Forward declarations for nondeterministic types.
     "int nondet_int();\n"
@@ -137,7 +137,7 @@ bool ansi_c_languaget::parse(const std::string &path)
 
   std::ostringstream o_preprocessed;
 
-  if(preprocess(path, o_preprocessed))
+  if (preprocess(path, o_preprocessed))
     return true;
 
   std::istringstream i_preprocessed(o_preprocessed.str());
@@ -154,7 +154,7 @@ bool ansi_c_languaget::parse(const std::string &path)
   //ansi_c_parser.set_message_handler(&message_handler);
   ansi_c_parser.grammar = ansi_c_parsert::LANGUAGE;
 
-  if(config.ansi_c.target.is_windows_abi())
+  if (config.ansi_c.target.is_windows_abi())
     ansi_c_parser.mode = ansi_c_parsert::MSC;
   else
     ansi_c_parser.mode = ansi_c_parsert::GCC;
@@ -163,7 +163,7 @@ bool ansi_c_languaget::parse(const std::string &path)
 
   bool result = ansi_c_parser.parse();
 
-  if(!result)
+  if (!result)
   {
     ansi_c_parser.line_no = 0;
     ansi_c_parser.filename = path;
@@ -183,15 +183,15 @@ bool ansi_c_languaget::parse(const std::string &path)
 
 bool ansi_c_languaget::typecheck(contextt &context, const std::string &module)
 {
-  if(ansi_c_convert(parse_tree, module))
+  if (ansi_c_convert(parse_tree, module))
     return true;
 
   contextt new_context;
 
-  if(ansi_c_typecheck(parse_tree, new_context, module))
+  if (ansi_c_typecheck(parse_tree, new_context, module))
     return true;
 
-  if(c_link(context, new_context, module))
+  if (c_link(context, new_context, module))
     return true;
 
   return false;
@@ -199,9 +199,9 @@ bool ansi_c_languaget::typecheck(contextt &context, const std::string &module)
 
 bool ansi_c_languaget::final(contextt &context)
 {
-  if(c_final(context))
+  if (c_final(context))
     return true;
-  if(c_main(context, "main"))
+  if (c_main(context, "main"))
     return true;
 
   return false;
@@ -220,18 +220,20 @@ languaget *new_ansi_c_language()
 bool ansi_c_languaget::from_expr(
   const exprt &expr,
   std::string &code,
-  const namespacet &ns)
+  const namespacet &ns,
+  unsigned flags)
 {
-  code = expr2c(expr, ns);
+  code = c_expr2string(expr, ns, flags);
   return false;
 }
 
 bool ansi_c_languaget::from_type(
   const typet &type,
   std::string &code,
-  const namespacet &ns)
+  const namespacet &ns,
+  unsigned flags)
 {
-  code = type2c(type, ns);
+  code = c_type2string(type, ns, flags);
   return false;
 }
 

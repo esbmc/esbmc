@@ -8,8 +8,9 @@ Date:
 
 \*******************************************************************/
 
-class QDesktopWidget {
+class QDesktopWidget
+{
 public:
-	QDesktopWidget();
-	~QDesktopWidget();
+  QDesktopWidget();
+  ~QDesktopWidget();
 };

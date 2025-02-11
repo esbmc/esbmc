@@ -22,9 +22,10 @@ SCENARIO("the loop unroller detects bounded loops", "[algorithms]")
   GIVEN("An empty goto-functions")
   {
     std::istringstream empty("");
-    auto goto_function = goto_factory::get_goto_functions(empty);
+    program P = goto_factory::get_goto_functions(empty);
+    auto &goto_function = P.functions;
     unsigned functions = 0;
-    Forall_goto_functions(it, goto_function)
+    Forall_goto_functions (it, goto_function)
     {
       functions++;
     }
@@ -32,12 +33,13 @@ SCENARIO("the loop unroller detects bounded loops", "[algorithms]")
   }
   GIVEN("A loopless goto-functions")
   {
-    std::istringstream program(
+    std::istringstream src(
       "int main() {"
       "int a = nondet_int();"
       "return a;"
       "}");
-    auto goto_functions = goto_factory::get_goto_functions(program);
+    program P = goto_factory::get_goto_functions(src);
+    auto &goto_functions = P.functions;
 
     bounded_loop_unroller unwind_loops;
     unwind_loops.run(goto_functions);
@@ -47,12 +49,13 @@ SCENARIO("the loop unroller detects bounded loops", "[algorithms]")
   }
   GIVEN("An unbounded loop")
   {
-    std::istringstream program(
+    std::istringstream src(
       "int main() {"
       "while(1) __ESBMC_assert(1,\"\");"
       "return 0;"
       "}");
-    auto goto_functions = goto_factory::get_goto_functions(program);
+    program P = goto_factory::get_goto_functions(src);
+    auto &goto_functions = P.functions;
     bounded_loop_unroller unwind_loops;
     unwind_loops.run(goto_functions);
 
@@ -62,13 +65,14 @@ SCENARIO("the loop unroller detects bounded loops", "[algorithms]")
   }
   GIVEN("A bounded crescent-for loop without control-flow")
   {
-    std::istringstream program(
+    std::istringstream src(
       "int main() { "
       "  int a; "
       "  for(int i = 0; i < 5; i++) a = i; "
       "  return 0; "
       "}");
-    auto goto_functions = goto_factory::get_goto_functions(program);
+    program P = goto_factory::get_goto_functions(src);
+    auto &goto_functions = P.functions;
     bounded_loop_unroller unwind_loops;
     unwind_loops.run(goto_functions);
 
@@ -78,14 +82,15 @@ SCENARIO("the loop unroller detects bounded loops", "[algorithms]")
   }
   GIVEN("A bounded incremental-for loop with control-flow")
   {
-    std::istringstream program(
+    std::istringstream src(
       "int main() { "
       "  int a; "
       "  for(int i = 0; i < 5; i++) "
       "    if(i == 2) a = 3;"
       "  return 0; "
       "}");
-    auto goto_functions = goto_factory::get_goto_functions(program);
+    program P = goto_factory::get_goto_functions(src);
+    auto &goto_functions = P.functions;
     bounded_loop_unroller unwind_loops;
     unwind_loops.run(goto_functions);
 
@@ -95,14 +100,15 @@ SCENARIO("the loop unroller detects bounded loops", "[algorithms]")
   }
   GIVEN("A bounded incremental-for loop with inner-loop")
   {
-    std::istringstream program(
+    std::istringstream src(
       "int main() { "
       "  int a; "
       "  for(int i = 0; i < 5; i++) "
       "    for(int j = 0; j < 4; j++) a = 4;"
       "  return 0; "
       "}");
-    auto goto_functions = goto_factory::get_goto_functions(program);
+    program P = goto_factory::get_goto_functions(src);
+    auto &goto_functions = P.functions;
     bounded_loop_unroller unwind_loops;
     unwind_loops.run(goto_functions);
 

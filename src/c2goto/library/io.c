@@ -1,5 +1,5 @@
 #ifdef _MINGW
-#define _MT /* Don't define putchar/getc/getchar for us */
+#  define _MT /* Don't define putchar/getc/getchar for us */
 #endif
 
 #include <stdio.h>
@@ -7,13 +7,13 @@
 #include <sys/types.h>
 
 #ifdef _MSVC
-#include <BaseTsd.h>
-#define ssize_t SSIZE_T
+#  include <BaseTsd.h>
+#  define ssize_t SSIZE_T
 #endif
 
 #ifdef _MINGW
-#undef feof
-#undef ferror
+#  undef feof
+#  undef ferror
 #endif
 
 #undef putchar
@@ -38,7 +38,7 @@ __ESBMC_HIDE:;
   _Bool error;
   int ret;
   printf("%s\n", s);
-  if(error)
+  if (error)
     ret = -1;
   else
     __ESBMC_assume(ret >= 0);
@@ -60,12 +60,12 @@ __ESBMC_HIDE:;
   size_t size = nondet_uint();
 
   // add non-deterministic characters to str
-  for(i = 0; i < size; i++)
+  for (i = 0; i < size; i++)
   {
     // produce the non-deterministic character
     char character = nondet_char();
     // if the newline character is found, it is not copied into str
-    if(character == '\n')
+    if (character == '\n')
     {
       // append a terminating '\0' to the current position and return
       str[i] = '\0';
@@ -84,14 +84,21 @@ __ESBMC_HIDE:;
 FILE *fopen(const char *filename, const char *m)
 {
 __ESBMC_HIDE:;
+#if __ESBMC_SVCOMP
+  FILE *f = (void *)1;
+#else
   FILE *f = malloc(sizeof(FILE));
+#endif
   return f;
 }
 
 int fclose(FILE *stream)
 {
 __ESBMC_HIDE:;
+#if __ESBMC_SVCOMP
+#else
   free(stream);
+#endif
   return nondet_int();
 }
 
@@ -118,17 +125,17 @@ __ESBMC_HIDE:;
     "the pointer to a file object must be a valid argument");
 
   //do nothing, report error
-  if(size < 2)
+  if (size < 2)
     return NULL;
 
   int i = 0;
   // add non-deterministic characters to str
-  for(i = 0; i <= (size - 1); i++)
+  for (i = 0; i <= (size - 1); i++)
   {
     // produce non-deterministic character
     int character = getc(stream);
     // stop if we get a new line character or an EOF
-    if(character == '\n')
+    if (character == '\n')
     {
       // A newline character makes fgets stop reading,
       // but it is considered a valid character by the function
@@ -137,7 +144,7 @@ __ESBMC_HIDE:;
       early_termination = 1;
       break;
     }
-    else if(character == EOF)
+    else if (character == EOF)
     {
       // we end the loop based on non-determinism
       early_termination = 1;
@@ -149,10 +156,10 @@ __ESBMC_HIDE:;
 
   // has the loop terminated before filling in all positions?
   // note that the loop can stop at any iteration
-  if(early_termination)
+  if (early_termination)
   {
     // didn't we reach the total buffer size?
-    if(i < (size - 1))
+    if (i < (size - 1))
     {
       // append a terminating '\0' to the next position and return
       str[++i] = '\0';
@@ -174,7 +181,7 @@ __ESBMC_HIDE:;
   size_t i;
   __ESBMC_assume(nread <= nitems);
 
-  for(i = 0; i < bytes; i++)
+  for (i = 0; i < bytes; i++)
     ((char *)ptr)[i] = nondet_char();
 
   return nread;
@@ -223,7 +230,7 @@ __ESBMC_HIDE:;
   size_t i;
   __ESBMC_assume(nread <= nbyte);
 
-  for(i = 0; i < nbyte; i++)
+  for (i = 0; i < nbyte; i++)
     ((char *)buf)[i] = nondet_char();
 
   return nread;

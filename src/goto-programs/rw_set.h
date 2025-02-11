@@ -13,8 +13,9 @@ public:
   struct entryt
   {
     irep_idt object;
-    bool r, w;
+    bool r, w, deref;
     exprt guard;
+    exprt original_expr;
 
     entryt() : r(false), w(false), guard(true_exprt())
     {
@@ -28,7 +29,7 @@ public:
     std::string get_comment() const
     {
       std::string result;
-      if(w)
+      if (w)
         result = "W/W";
       else
         result = "R/W";
@@ -42,7 +43,7 @@ public:
   typedef std::unordered_map<irep_idt, entryt, irep_id_hash> entriest;
   entriest entries;
 
-  void compute(const codet &code);
+  void compute(const exprt &expr);
 
   rw_sett(
     const namespacet &_ns,
@@ -56,20 +57,21 @@ public:
     const namespacet &_ns,
     value_setst &_value_sets,
     goto_programt::const_targett _target,
-    const codet &code)
+    const exprt &expr)
     : ns(_ns), value_sets(_value_sets), target(_target)
   {
-    compute(code);
+    compute(expr);
   }
 
-  void read(const exprt &expr)
+  void read_rec(const exprt &expr)
   {
-    read_write_rec(expr, true, false, "", guardt());
+    read_write_rec(expr, true, false, "", guardt(), nil_exprt());
   }
 
-  void read(const exprt &expr, const guardt &guard)
+  void
+  read_rec(const exprt &expr, const guardt &guard, const exprt &original_expr)
   {
-    read_write_rec(expr, true, false, "", guard);
+    read_write_rec(expr, true, false, "", guard, original_expr);
   }
 
 protected:
@@ -84,12 +86,14 @@ protected:
     bool r,
     bool w,
     const std::string &suffix,
-    const guardt &guard);
+    const guardt &guard,
+    const exprt &original_expr,
+    bool dereferenced = false);
 };
 
 #define forall_rw_set_entries(it, rw_set)                                      \
-  for(rw_sett::entriest::const_iterator it = (rw_set).entries.begin();         \
-      it != (rw_set).entries.end();                                            \
-      it++)
+  for (rw_sett::entriest::const_iterator it = (rw_set).entries.begin();        \
+       it != (rw_set).entries.end();                                           \
+       it++)
 
 #endif

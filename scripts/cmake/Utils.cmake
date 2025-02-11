@@ -1,13 +1,8 @@
 # Module to utilities used throughout the project
 
-
 set(ESBMC_BIN "${CMAKE_BINARY_DIR}/src/esbmc/esbmc")
 if(WIN32)
     set(ESBMC_BIN "${CMAKE_INSTALL_PREFIX}/bin/esbmc.exe")
-elseif(APPLE)
-    set(MACOS_ESBMC_WRAPPER "#!/bin/sh\n${ESBMC_BIN} --sysroot ${C2GOTO_SYSROOT} $@")
-    file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/macos-wrapper.sh ${MACOS_ESBMC_WRAPPER})
-    set(ESBMC_BIN "${CMAKE_CURRENT_BINARY_DIR}/macos-wrapper.sh")
 endif()
 
 # Assert that a variable is defined
@@ -39,12 +34,16 @@ function(mangle output_c dir)
   # optional 1-parameter keywords to this function
   set(kw1 MACRO            # sets flail.py --macro parameter to the given argument
           ACC_HEADERS_INTO # generates a header that #include-s all generated headers
+          RECURSIVE        # Recursively explores all subdirectories of the path
           WILDCARD         # globs ${dir}/${MANGLE_WILDCARD} instead of using the unparsed arguments as filenames under ${dir}
           PREFIX           # sets flail.py --prefix parameter to the given argument
      )
   cmake_parse_arguments(MANGLE "${kw0}" "${kw1}" "" ${ARGN})
 
-  if (MANGLE_WILDCARD)
+  if(MANGLE_RECURSIVE)
+    set(single_file_desc "${MANGLE_WILDCARD} in ${dir}/ (recursively)")
+    file(GLOB_RECURSE inputs RELATIVE ${dir} CONFIGURE_DEPENDS ${MANGLE_UNPARSED_ARGUMENTS} "${dir}/${MANGLE_WILDCARD}")
+  elseif(MANGLE_WILDCARD)
     set(single_file_desc "${MANGLE_WILDCARD} in ${dir}/")
     file(GLOB inputs RELATIVE ${dir} CONFIGURE_DEPENDS ${dir}/${MANGLE_WILDCARD} ${MANGLE_UNPARSED_ARGUMENTS})
   else()
@@ -111,13 +110,27 @@ endfunction()
 function(download_zip_and_extract ID URL)
   # TODO: might be a good idea to add sha1 checks
   if(NOT EXISTS ${CMAKE_BINARY_DIR}/${ID}.zip)
-    message(STATUS "Downloading ${ID}")
+    message(STATUS "Downloading ${ID} from ${URL}")
     file(DOWNLOAD ${URL} ${CMAKE_BINARY_DIR}/${ID}.zip SHOW_PROGRESS)
   endif()
 
   if(NOT EXISTS ${CMAKE_BINARY_DIR}/${ID})
-    message(STATUS "Extracting ${ID}") 
+    message(STATUS "Extracting ${ID}")
     file(ARCHIVE_EXTRACT INPUT ${CMAKE_BINARY_DIR}/${ID}.zip DESTINATION ${CMAKE_BINARY_DIR}/${ID})
+  endif()
+
+endfunction()
+
+function(download_tar_zip_and_extract ID URL)
+  # TODO: might be a good idea to add sha1 checks
+  if(NOT EXISTS ${CMAKE_BINARY_DIR}/${ID}.tar.xz)
+    message(STATUS "Downloading ${ID} from ${URL}")
+    file(DOWNLOAD ${URL} ${CMAKE_BINARY_DIR}/${ID}.tar.xz SHOW_PROGRESS)
+  endif()
+
+  if(NOT EXISTS ${CMAKE_BINARY_DIR}/${ID})
+    message(STATUS "Extracting ${ID}") 
+    file(ARCHIVE_EXTRACT INPUT ${CMAKE_BINARY_DIR}/${ID}.tar.xz DESTINATION ${CMAKE_BINARY_DIR}/${ID})
   endif()
 
 endfunction()

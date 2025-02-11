@@ -51,7 +51,7 @@ public:
   virtual smt_astt eq(smt_convt *ctx, smt_astt other) const;
 
   /** Abstractly produce an assign. Defaults to being an equality, however
-   *  for some special cases up to the backend, there may be optimisations made
+   *  for some special cases up to the backend, there may be optimizations made
    *  for array or tuple assigns, and so forth.
    *  @param ctx SMT context to do the assignment in.
    *  @param sym Symbol to assign to
@@ -63,7 +63,7 @@ public:
    *  @param value Value to insert into the updated field
    *  @param idx Array index or tuple field
    *  @param idx_expr If an array, expression representing the index
-   *  @return AST of this' type, representing the update */
+   *  @return AST of this type, representing the update */
   virtual smt_astt update(
     smt_convt *ctx,
     smt_astt value,
@@ -84,7 +84,7 @@ public:
 
   virtual void dump() const
   {
-    log_debug("Chosen solver doesn't support printing the AST\n");
+    log_status("Chosen solver doesn't support printing the AST\n");
   }
 };
 
@@ -102,15 +102,17 @@ public:
 };
 
 #ifdef NDEBUG
-#define dynamic_cast static_cast
+#  define dynamic_cast static_cast
 #endif
 template <typename derived_class>
 const derived_class *to_solver_smt_ast(smt_astt s)
 {
-  return dynamic_cast<const derived_class *>(s);
+  const derived_class *r = dynamic_cast<const derived_class *>(s);
+  assert(r);
+  return r;
 }
 #ifdef dynamic_cast
-#undef dynamic_cast
+#  undef dynamic_cast
 #endif
 
 #endif /* SOLVERS_SMT_SMT_AST_H_ */

@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --contract caller --k-induction --overflow-check
+^VERIFICATION FAILED$

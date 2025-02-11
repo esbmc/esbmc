@@ -9,9 +9,10 @@ void cpp_typecheckt::do_virtual_table(const symbolt &symbol)
   std::map<irep_idt, std::map<irep_idt, exprt>> vt_value_maps;
 
   const struct_typet &struct_type = to_struct_type(symbol.type);
-  for(const auto &compo : struct_type.components())
+  // the `components` contains not only fields, but also methods
+  for (const auto &compo : struct_type.components())
   {
-    if(!compo.get_bool("is_virtual"))
+    if (!compo.get_bool("is_virtual"))
       continue;
 
     const code_typet &code_type = to_code_type(compo.type());
@@ -26,7 +27,7 @@ void cpp_typecheckt::do_virtual_table(const symbolt &symbol)
 
     exprt e = symbol_exprt(compo.get_name(), code_type);
 
-    if(compo.get_bool("is_pure_virtual"))
+    if (compo.get_bool("is_pure_virtual"))
     {
       pointer_typet pointer_type(code_type);
       e = gen_zero(pointer_type);
@@ -41,10 +42,10 @@ void cpp_typecheckt::do_virtual_table(const symbolt &symbol)
   }
 
   // create virtual-table symbol variables
-  for(std::map<irep_idt, std::map<irep_idt, exprt>>::const_iterator cit =
-        vt_value_maps.begin();
-      cit != vt_value_maps.end();
-      cit++)
+  for (std::map<irep_idt, std::map<irep_idt, exprt>>::const_iterator cit =
+         vt_value_maps.begin();
+       cit != vt_value_maps.end();
+       cit++)
   {
     const std::map<irep_idt, exprt> &value_map = cit->second;
 
@@ -66,7 +67,7 @@ void cpp_typecheckt::do_virtual_table(const symbolt &symbol)
     // do the values
     const struct_typet &vt_type = to_struct_type(vt_symb_type.type);
     exprt values("struct", symbol_typet(vt_symb_type.id));
-    for(const auto &compo : vt_type.components())
+    for (const auto &compo : vt_type.components())
     {
       std::map<irep_idt, exprt>::const_iterator cit2 =
         value_map.find(compo.base_name());

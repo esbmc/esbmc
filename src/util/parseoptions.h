@@ -4,6 +4,7 @@
 
 #include <string>
 #include <util/cmdline.h>
+#include <util/message.h>
 #include <boost/filesystem.hpp>
 
 class parseoptions_baset
@@ -19,6 +20,8 @@ public:
   virtual int doit() = 0;
   virtual int main();
   virtual ~parseoptions_baset() = default;
+
+  void set_verbosity_msg(VerbosityLevel def = VerbosityLevel::Status);
 
 protected:
   // Path to esbmc binary

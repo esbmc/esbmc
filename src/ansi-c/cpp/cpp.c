@@ -2197,7 +2197,7 @@ getsymtab(const usch *str)
 
 /*
  * Do symbol lookup in a patricia tree.
- * Only do full string matching, no pointer optimisations.
+ * Only do full string matching, no pointer optimizations.
  */
 struct symtab *
 lookup(const usch *key, int enterf)

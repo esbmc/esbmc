@@ -1,4 +1,4 @@
 CORE
 main.c
---context-bound 3 --32
+--context-bound 3 --32 --incremental-bmc --force-malloc-success
 ^VERIFICATION FAILED$

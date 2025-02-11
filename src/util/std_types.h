@@ -200,6 +200,16 @@ public:
 
   unsigned component_number(const irep_idt &component_name) const;
   typet component_type(const irep_idt &component_name) const;
+
+  const componentst &methods() const
+  {
+    return (const componentst &)(find(a_methods).get_sub());
+  }
+
+  componentst &methods()
+  {
+    return (componentst &)(add(a_methods).get_sub());
+  }
 };
 
 extern inline const struct_union_typet &to_struct_union_type(const typet &type)
@@ -226,16 +236,6 @@ public:
   }
 
   bool is_prefix_of(const struct_typet &other) const;
-
-  const componentst &methods() const
-  {
-    return (const componentst &)(find(a_methods).get_sub());
-  }
-
-  componentst &methods()
-  {
-    return (componentst &)(add(a_methods).get_sub());
-  }
 };
 
 extern inline const struct_typet &to_struct_type(const typet &type)
@@ -279,9 +279,18 @@ extern inline union_typet &to_union_type(typet &type)
 class code_typet : public typet
 {
 public:
+  class argumentt;
+  typedef std::vector<argumentt> argumentst;
+
   code_typet()
   {
     id(t_code);
+  }
+
+  code_typet(argumentst _parameters, typet _return_type) : typet(t_code)
+  {
+    arguments().swap(_parameters);
+    return_type().swap(_return_type);
   }
 
   class argumentt : public exprt
@@ -340,8 +349,6 @@ public:
   {
     add(a_arguments).ellipsis(true);
   }
-
-  typedef std::vector<argumentt> argumentst;
 
   const typet &return_type() const
   {
@@ -442,6 +449,27 @@ public:
   }
 };
 
+/// \brief Cast a typet to a \ref pointer_typet
+///
+/// This is an unchecked conversion. \a type must be known to be \ref
+/// pointer_typet. Will fail with a precondition violation if type
+/// doesn't match.
+///
+/// \param type: Source type.
+/// \return Object of type \ref pointer_typet.
+inline const pointer_typet &to_pointer_type(const typet &type)
+{
+  assert(type.id() == "pointer");
+  return static_cast<const pointer_typet &>(type);
+}
+
+/// \copydoc to_pointer_type(const typet &)
+inline pointer_typet &to_pointer_type(typet &type)
+{
+  assert(type.id() == "pointer");
+  return static_cast<pointer_typet &>(type);
+}
+
 class reference_typet : public pointer_typet
 {
 public:
@@ -453,6 +481,7 @@ public:
 
 bool is_reference(const typet &type);
 bool is_rvalue_reference(const typet &type);
+bool is_lvalue_or_rvalue_reference(const typet &type);
 
 class bv_typet : public typet
 {
@@ -625,22 +654,6 @@ public:
 
 const floatbv_typet &to_floatbv_type(const typet &type);
 
-class string_typet : public typet
-{
-public:
-  string_typet() : typet(t_string)
-  {
-  }
-
-  friend const string_typet &to_string_type(const typet &type)
-  {
-    assert(type.id() == t_string);
-    return static_cast<const string_typet &>(type);
-  }
-};
-
-const string_typet &to_string_type(const typet &type);
-
 /**
  * @brief This type maps the vectors
  *
@@ -683,4 +696,21 @@ inline const vector_typet &to_vector_type(const typet &type)
   assert(type.id() == typet::t_vector);
   return static_cast<const vector_typet &>(type);
 }
+
+class intcap_typet : public typet
+{
+public:
+  intcap_typet() : typet(t_intcap)
+  {
+  }
+};
+
+class uintcap_typet : public typet
+{
+public:
+  uintcap_typet() : typet(t_uintcap)
+  {
+  }
+};
+
 #endif

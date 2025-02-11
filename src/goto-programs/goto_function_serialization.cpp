@@ -5,7 +5,7 @@ void goto_function_serializationt::convert(
   const goto_functiont &function,
   std::ostream &out)
 {
-  if(function.body_available)
+  if (function.body_available)
     gpconverter.convert(function.body, out);
 }
 

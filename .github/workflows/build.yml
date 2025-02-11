@@ -1,166 +1,49 @@
-name: Build All Solvers
+name: Build ESBMC
 
-on: [push, pull_request]
+on:
+    # Sadly, there is no way to share the inputs between workflow_dispatch and workflow_call
+    workflow_dispatch:
+      inputs:
+        operating-system:
+            description: "Targeted OS (e.g. ubuntu-latest, windows-latest)"
+            required: true
+            type: string
+        build-flags:
+            description: "Flags to be passed to build.sh script"
+            required: true
+            type: string
+        testing:
+            description: "Whether to run tests (regression) for this build"
+            required: true
+            type: boolean
+    workflow_call:
+      inputs:
+        operating-system:
+            description: "Targeted OS (e.g. ubuntu-latest, windows-latest)"
+            required: true
+            type: string
+        build-flags:
+            description: "Flags to be passed to build.sh script"
+            required: true
+            type: string
+        testing:
+            description: "Whether to run tests (regression) for this build"
+            required: true
+            type: boolean
 
 jobs:
-
-  # Check testing tool suite
-  testing-tool:
-    runs-on: ubuntu-20.04
-    steps:
-    - uses: actions/checkout@v2
-    - name: Runs testing tool unit test
-      run: cd regression && python3 testing_tool_test.py
-
-  fast-tests:
-    name: Run unit and fuzz targets
-    runs-on: ubuntu-latest
-    container: rafaelsamenezes/esbmc-ci:clang11
-    steps:
-    - uses: actions/checkout@v2
-    - run: apt update  # Only for Docker jobs
-    - name: ccache
-      uses: hendrikmuhs/ccache-action@v1.2
-    - name: Fix dubious ownership
-      run: git config --global --add safe.directory /__w/esbmc/esbmc
-    - name: Configure CMake
-      run: mkdir build && cd build && CC=/workspace/clang/bin/clang CXX=/workspace/clang/bin/clang++ cmake .. -GNinja -DBUILD_TESTING=On -DENABLE_FUZZER=On -DClang_DIR=/workspace/clang -DLLVM_DIR=/workspace/clang
-    - name: Build ESBMC without solvers
-      run: cd build && ninja
-    - name: Run tests
-      run: cd build && ninja test
-
-  clang-tidy:
-    name: Run clang-tidy
-    runs-on: ubuntu-latest
-    container: rafaelsamenezes/esbmc-ci:clang11
-    steps:
-    - uses: actions/checkout@v2
-    - run: apt update  # Only for Docker jobs
-    - name: ccache
-      uses: hendrikmuhs/ccache-action@v1.2
-    - name: Fix dubious ownership
-      run: git config --global --add safe.directory /__w/esbmc/esbmc
-    - name: Configure CMake
-      run: mkdir build && cd build && CC=/workspace/clang/bin/clang CXX=/workspace/clang/bin/clang++ cmake .. -GNinja -DENABLE_CLANG_TIDY=On -DClang_DIR=/workspace/clang -DLLVM_DIR=/workspace/clang
-    - name: Run tests
-      run: cd build && ninja || echo "fail" # TODO: Eventually this will be removed
-
-  build-linux:
-    name: Build ESBMC with all Solvers (Linux)
-    runs-on: ubuntu-latest
-    container: rafaelsamenezes/esbmc-ci:clang11
-    steps:
-    - uses: actions/checkout@v2
-    - run: apt update  # Only for Docker jobs
-    - name: ccache
-      uses: hendrikmuhs/ccache-action@v1.2
-    - name: Fix dubious ownership
-      run: git config --global --add safe.directory /__w/esbmc/esbmc
-    - name: Configure CMake
-      run: mkdir build && cd build && cmake .. -GNinja -DENABLE_WERROR=On -DENABLE_CSMITH=On -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DClang_DIR=/workspace/clang -DLLVM_DIR=/workspace/clang -DBUILD_STATIC=On -DBoolector_DIR=/workspace/boolector-release -DZ3_DIR=/workspace/z3 -DENABLE_YICES=On -DYices_DIR=/workspace/yices -DCVC4_DIR=/workspace/cvc4 -DGMP_DIR=/workspace/gmp -DBitwuzla_DIR=/workspace/bitwuzla-release -DENABLE_GOTO_CONTRACTOR=ON -DIBEX_DIR=/workspace/ibex -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release -DCMAKE_BUILD_TYPE=Debug -DENABLE_SOLIDITY_FRONTEND=On -DENABLE_OLD_FRONTEND=On -DENABLE_JIMPLE_FRONTEND=On
-    - name: Build ESBMC
-      run: cd build && cmake --build . && ninja install
-    - uses: actions/upload-artifact@v1
-      with:
-        name: release-linux
-        path: ./release
-    - name: Run tests
-      run: cd build/ && ctest -j4 --output-on-failure --progress .
-    - uses: actions/upload-artifact@v2 # We shouldn't throw errors for now
-      with:
-        name: csmith-linux
-        path: ./build/csmith-error
-        if-no-files-found: ignore
-
-  build-macos:
-    name: Build ESBMC with all Solvers (macOS)
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-java@v1
-        with:
-          java-version: '9.0.4'
-      - name: Install Dependencies
-        run: brew install gmp csmith cmake boost ninja python3 automake bison flex && pip3 install PySMT toml
-      - name: Download Clang 11
-        run: wget https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/clang+llvm-11.0.0-x86_64-apple-darwin.tar.xz
-      - name: Extract Clang 11
-        run: tar xf clang+llvm-11.0.0-x86_64-apple-darwin.tar.xz && mv clang+llvm-11.0.0-x86_64-apple-darwin clang
-      - name: Setup boolector
-        run: git clone --depth=1 --branch=3.2.2 https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j4 && make install
-      - name: Setup Z3
-        run: brew install z3
-      - name: Get current folder and files
-        run: pwd && ls
-      - name: Configure CMake
-        run: mkdir build && cd build && cmake .. -GNinja -DENABLE_WERROR=On -DENABLE_CSMITH=On -DBUILD_TESTING=On -DENABLE_REGRESSION=On -DBUILD_STATIC=Off -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3 -DC2GOTO_SYSROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -DCMAKE_INSTALL_PREFIX:PATH=$PWD/../release -DCMAKE_BUILD_TYPE=Debug -DENABLE_SOLIDITY_FRONTEND=On -DENABLE_JIMPLE_FRONTEND=On
-      - name: Build ESBMC
-        run: cd build && cmake --build . && cmake --install .
-      - uses: actions/upload-artifact@v1
-        with:
-          name: release-macos
-          path: ./release
-      - name: Run tests
-        run: cd build/ && chmod +x macos-wrapper.sh && ctest -j4 --output-on-failure --progress .
-      - uses: actions/upload-artifact@v2 # We shouldn't throw errors for now
-        with:
-          name: csmith-macos
-          path: ./build/csmith-error
-          if-no-files-found: ignore
+  build-unix:
+    if: ${{ !startsWith(inputs.operating-system, 'windows-') }}
+    uses: ./.github/workflows/build-unix.yml
+    with:
+      operating-system: ${{ inputs.operating-system }}
+      build-flags: ${{ inputs.build-flags }}
+      testing: ${{ inputs.testing }}
 
   build-windows:
-    name: Build ESBMC with Z3 (Windows)
-    runs-on: windows-latest
-    steps:
-    - name: Set up Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: 3.8
-    - name: check python
-      run: python --version
-    - name: Make git use LF only
-      run: |
-        git config --system core.autocrlf false
-        git config --system core.eol lf
-    - uses: actions/checkout@v2
-    - name: Install dependencies (flex, bison, od)
-      run: |
-        Write-Host "Set TLS1.2"
-        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor "Tls12"
-        choco install -y nsis.portable winflexbison --ignore-checksums
-    - name: Check if od is on path
-      run: od.exe --version
-    - name: Update vcpkg
-      run: |
-        vcpkg.exe update
-        cd C:/vcpkg
-        git.exe pull
-        .\bootstrap-vcpkg.bat
-    - name: vcpkg integrate
-      run: vcpkg.exe integrate install
-    - name: Install Boost
-      run: vcpkg.exe install boost-filesystem:x64-Windows boost-date-time:x64-windows boost-test:x64-windows boost-multi-index:x64-windows boost-crc:x64-windows boost-property-tree:x64-windows boost-uuid:x64-windows boost-program-options:x64-windows boost-iostreams:x64-windows
-    - name: Prepare Environment
-      run: .\scripts\configure_environment.ps1
-    - name: Check environment
-      run: |
-        ls C:\vcpkg\installed\x64-windows\bin\
-        ls C:\Deps
-    - name: Configure CMake
-      run: |
-        mkdir build
-        cd build
-        cmake.exe .. -A x64 -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -DENABLE_REGRESSION=On -DBUILD_TESTING=On -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBOOST_DLL_FILE="C:/deps/boost_filesystem-vc143-mt-x64-1_80.dll;C:/deps/boost_program_options-vc143-mt-x64-1_80.dll" -DCMAKE_INSTALL_PREFIX:PATH=C:/deps/esbmc -DENABLE_SOLIDITY_FRONTEND=On -DENABLE_JIMPLE_FRONTEND=On -DDOWNLOAD_WINDOWS_DEPENDENCIES=On
-    - name: Build ESBMC
-      run: |
-        cd build
-        cmake --build . --target INSTALL  --config RelWithDebInfo
-    - uses: actions/upload-artifact@v1
-      with:
-          name: release-windows
-          path: C:/deps/esbmc
-    - name: Run Tests
-      run: |
-        cd build
-        ctest -j4 --output-on-failure --progress . -C RelWithDebInfo
+    if: ${{ startsWith(inputs.operating-system, 'windows-') }}
+    uses: ./.github/workflows/build-windows.yml
+    with:
+      operating-system: ${{ inputs.operating-system }}
+      build-flags: ${{ inputs.build-flags }}
+      testing: ${{ inputs.testing }}

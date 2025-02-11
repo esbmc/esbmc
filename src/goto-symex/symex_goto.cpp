@@ -23,21 +23,21 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   bool new_guard_false = (is_false(new_guard) || cur_state->guard.is_false());
   bool new_guard_true = is_true(new_guard);
 
-  if(!new_guard_false && options.get_bool_option("smt-symex-guard"))
+  if (!new_guard_false && options.get_bool_option("smt-symex-guard"))
   {
     auto rte = std::dynamic_pointer_cast<runtime_encoded_equationt>(target);
 
-    equality2tc question(gen_true_expr(), new_guard);
+    expr2tc question = equality2tc(gen_true_expr(), new_guard);
     try
     {
       tvt res = rte->ask_solver_question(question);
 
-      if(res.is_false())
+      if (res.is_false())
         new_guard_false = true;
-      else if(res.is_true())
+      else if (res.is_true())
         new_guard_true = true;
     }
-    catch(runtime_encoded_equationt::dual_unsat_exception &e)
+    catch (runtime_encoded_equationt::dual_unsat_exception &e)
     {
       // Assumptions mean that the guard is never satisfiable as true or false,
       // basically means we've assume'd away the possibility of hitting this
@@ -51,15 +51,15 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   bool forward =
     cur_state->source.pc->location_number < goto_target->location_number;
 
-  if(new_guard_false)
+  if (new_guard_false)
   {
     // reset unwinding counter
-    if(instruction.is_backwards_goto())
+    if (instruction.is_backwards_goto())
     {
       cur_state->loop_iterations[instruction.loop_number] = 0;
 
       // Reset loop counter
-      if(instruction.loop_number == first_loop)
+      if (instruction.loop_number == first_loop)
         first_loop = 0;
     }
 
@@ -71,20 +71,20 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   assert(!instruction.targets.empty());
 
   // we only do deterministic gotos for now
-  if(instruction.targets.size() != 1)
+  if (instruction.targets.size() != 1)
     throw "no support for non-deterministic gotos";
 
   // backwards?
-  if(!forward)
+  if (!forward)
   {
-    if(goto_target == cur_state->source.pc)
+    if (goto_target == cur_state->source.pc)
     {
       assert(
         cur_state->source.pc->location_number == goto_target->location_number);
 
       // generate assume(false) or a suitable negation if this
       // instruction is a conditional goto
-      if(new_guard_true)
+      if (new_guard_true)
         assume(gen_false_expr());
       else
       {
@@ -100,7 +100,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
     BigInt &unwind = cur_state->loop_iterations[instruction.loop_number];
     ++unwind;
 
-    if(get_unwind(cur_state->source, unwind))
+    if (get_unwind(cur_state->source, unwind))
     {
       loop_bound_exceeded(new_guard);
 
@@ -111,13 +111,13 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
       cur_state->source.pc++;
 
       // Reset loop counter
-      if(instruction.loop_number == first_loop)
+      if (instruction.loop_number == first_loop)
         first_loop = 0;
 
       return;
     }
 
-    if(new_guard_true)
+    if (new_guard_true)
     {
       cur_state->source.pc = goto_target;
       return; // nothing else to do
@@ -126,7 +126,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
 
   goto_programt::const_targett new_state_pc, state_pc;
 
-  if(forward)
+  if (forward)
   {
     new_state_pc = goto_target; // goto target instruction
     state_pc = cur_state->source.pc;
@@ -148,7 +148,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   goto_state_list.emplace_back(*cur_state);
 
   // adjust guards
-  if(new_guard_true)
+  if (new_guard_true)
   {
     cur_state->guard.make_false();
   }
@@ -159,7 +159,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
     // produce new guard symbol
     expr2tc guard_expr;
 
-    if(
+    if (
       is_symbol2t(new_guard) ||
       (is_not2t(new_guard) && is_symbol2t(to_not2t(new_guard).value)))
     {
@@ -186,17 +186,17 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
         true,
         first_loop);
 
-      if(is_constant_expr(new_rhs))
+      if (is_constant_expr(new_rhs))
         guard_expr = new_rhs;
 
       guard_expr = not2tc(guard_expr);
       do_simplify(guard_expr);
     }
 
-    not2tc not_guard_expr(guard_expr);
+    expr2tc not_guard_expr = not2tc(guard_expr);
     do_simplify(not_guard_expr);
 
-    if(forward)
+    if (forward)
     {
       new_state.guard.add(guard_expr);
       cur_state->guard.add(not_guard_expr);
@@ -222,22 +222,23 @@ static inline guardt merge_state_guards(
   // impossible. Therefore we only integrate it when to do so simplifies the
   // state guard.
 
-  // This function can trash either state's guards, since goto_state is dying
-  // and state's guard will shortly be overwritten.
-  if(
+  // In CBMC this function can trash either state's guards, since goto_state is
+  // dying and state's guard will shortly be overwritten. However, we still use
+  // either state's guard, so keep them intact.
+  if (
     (!goto_state.guard.is_false() && !state.guard.is_false()) ||
     state.guard.disjunction_may_simplify(goto_state.guard))
   {
     state.guard |= goto_state.guard;
-    return std::move(state.guard);
+    return state.guard;
   }
-  else if(state.guard.is_false() && !goto_state.guard.is_false())
+  else if (state.guard.is_false() && !goto_state.guard.is_false())
   {
-    return std::move(goto_state.guard);
+    return goto_state.guard;
   }
   else
   {
-    return std::move(state.guard);
+    return state.guard;
   }
 }
 
@@ -249,14 +250,14 @@ void goto_symext::merge_gotos()
   statet::goto_state_mapt::iterator state_map_it =
     frame.goto_state_map.find(cur_state->source.pc);
 
-  if(state_map_it == frame.goto_state_map.end())
+  if (state_map_it == frame.goto_state_map.end())
     return; // nothing to do
 
   // we need to merge
   statet::goto_state_listt &state_list = state_map_it->second;
 
-  for(auto list_it = state_list.rbegin(); list_it != state_list.rend();
-      list_it++)
+  for (auto list_it = state_list.rbegin(); list_it != state_list.rend();
+       list_it++)
   {
     statet::goto_statet &goto_state = *list_it;
 
@@ -264,7 +265,7 @@ void goto_symext::merge_gotos()
     // goto_state over it below.
     guardt new_guard = merge_state_guards(goto_state, *cur_state);
 
-    if(!goto_state.guard.is_false())
+    if (!goto_state.guard.is_false())
     {
       // do SSA phi functions
       phi_function(goto_state);
@@ -287,7 +288,7 @@ void goto_symext::merge_gotos()
 
 void goto_symext::merge_locality(const statet::goto_statet &src)
 {
-  if(cur_state->guard.is_false())
+  if (cur_state->guard.is_false())
   {
     cur_state->top().local_variables = src.local_variables;
     return;
@@ -299,7 +300,7 @@ void goto_symext::merge_locality(const statet::goto_statet &src)
 
 void goto_symext::merge_value_sets(const statet::goto_statet &src)
 {
-  if(cur_state->guard.is_false())
+  if (cur_state->guard.is_false())
   {
     cur_state->value_set = src.value_set;
     return;
@@ -310,18 +311,16 @@ void goto_symext::merge_value_sets(const statet::goto_statet &src)
 
 void goto_symext::phi_function(const statet::goto_statet &goto_state)
 {
-  if(goto_state.guard.is_false() && cur_state->guard.is_false())
+  if (goto_state.guard.is_false() && cur_state->guard.is_false())
     return;
 
   // go over all variables to see what changed
-  std::set<renaming::level2t::name_record> variables;
-  cur_state->level2.get_variables(variables);
+  const auto &variables = cur_state->level2.current_names;
 
-  std::set<renaming::level2t::name_record> goto_variables;
-  goto_state.level2.get_variables(goto_variables);
+  const auto &goto_variables = goto_state.level2.current_names;
 
   guardt tmp_guard;
-  if(
+  if (
     !variables.empty() && !cur_state->guard.is_false() &&
     !goto_state.guard.is_false())
   {
@@ -331,22 +330,22 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
     tmp_guard -= cur_state->guard;
   }
 
-  for(const auto &variable : variables)
+  for (const auto &[variable, _] : variables)
   {
-    if(
+    if (
       goto_state.level2.current_number(variable) ==
       cur_state->level2.current_number(variable))
       continue; // not changed
 
-    if(variable.base_name == guard_identifier_s)
+    if (variable.base_name == guard_identifier_s)
       continue; // just a guard
 
-    if(has_prefix(variable.base_name.as_string(), "symex::invalid_object"))
+    if (has_prefix(variable.base_name.as_string(), "symex::invalid_object"))
       continue;
 
     // If the variable was deleted in this branch, don't create an assignment
     // for it
-    if(goto_variables.find(variable) == goto_variables.end())
+    if (goto_variables.find(variable) == goto_variables.end())
       continue;
 
     // changed!
@@ -365,11 +364,11 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
     // variable not in the current scope, thus we need to directly specify
     // which l1 variable we're dealing with.
     goto_state.level2.rename(goto_state_rhs);
-    if(cur_state->guard.is_false())
+    if (cur_state->guard.is_false())
       rhs = goto_state_rhs;
 
     cur_state->level2.rename(cur_state_rhs);
-    if(goto_state.guard.is_false())
+    if (goto_state.guard.is_false())
       rhs = cur_state_rhs;
     else
     {
@@ -381,7 +380,7 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
     migrate_expr(symbol_expr(symbol), lhs);
     expr2tc new_lhs = lhs;
 
-    // Again, specifiy which l1 data object we're going to make the assignment
+    // Again, specify which l1 data object we're going to make the assignment
     // to.
     renaming::level2t::rename_to_record(new_lhs, variable);
 
@@ -404,18 +403,18 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
 
 void goto_symext::loop_bound_exceeded(const expr2tc &guard)
 {
-  if(partial_loops && !config.options.get_bool_option("termination"))
+  if (partial_loops && !config.options.get_bool_option("termination"))
     return;
 
-  const irep_idt &loop_id = cur_state->source.pc->location.loopid();
+  unsigned loop_number = cur_state->source.pc->loop_number;
 
   expr2tc negated_cond = guard;
   make_not(negated_cond);
 
-  if(!no_unwinding_assertions)
+  if (!no_unwinding_assertions)
   {
     // generate unwinding assertion
-    claim(negated_cond, "unwinding assertion loop " + id2string(loop_id));
+    claim(negated_cond, "unwinding assertion loop " + i2string(loop_number));
   }
   else
   {
@@ -437,22 +436,19 @@ bool goto_symext::get_unwind(
   unsigned id = source.pc->loop_number;
   BigInt this_loop_max_unwind = max_unwind;
 
-  if(unwind_set.count(id) != 0)
+  if (unwind_set.count(id) != 0)
     this_loop_max_unwind = unwind_set[id];
 
   bool stop_unwind =
     this_loop_max_unwind != 0 && unwind >= this_loop_max_unwind;
-  if(!options.get_bool_option("quiet"))
+  if (!options.get_bool_option("quiet"))
   {
     log_status(
-      stop_unwind ? "Not unwinding "
-                  : "Unwinding "
-                    "loop {} {} {} {} {}",
+      "{} loop {} iteration {}   {}",
+      stop_unwind ? "Not unwinding" : "Unwinding",
       i2string(cur_state->source.pc->loop_number),
-      " iteration ",
       integer2string(unwind),
-      " ",
-      cur_state->source.pc->location.as_string());
+      cur_state->source.pc->location);
   }
 
   return stop_unwind;

@@ -35,7 +35,7 @@ public:
 
   bool is_root(unsigned a) const
   {
-    if(a >= size())
+    if (a >= size())
       return true;
     return nodes[a].root;
   }
@@ -52,22 +52,22 @@ public:
 
   unsigned count(unsigned a) const
   {
-    if(a >= size())
+    if (a >= size())
       return 1;
     return nodes[find(a)].count;
   }
 
   void check_index(unsigned a)
   {
-    if(a >= size())
+    if (a >= size())
       resize(a + 1);
   }
 
   unsigned count_roots() const
   {
     unsigned c = 0;
-    for(auto node : nodes)
-      if(node.root)
+    for (auto node : nodes)
+      if (node.root)
         c++;
     return c;
   }
@@ -135,7 +135,7 @@ public:
   {
     unsigned n = subt::number(a);
 
-    if(n >= uuf.size())
+    if (n >= uuf.size())
       uuf.resize(this->size());
 
     assert(uuf.size() == this->size());

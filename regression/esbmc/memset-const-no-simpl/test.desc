@@ -1,0 +1,4 @@
+CORE
+memset-const.c
+--no-simplify --unwind 8
+^VERIFICATION FAILED$

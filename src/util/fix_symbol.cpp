@@ -3,7 +3,7 @@
 void fix_symbolt::fix_symbol(symbolt &symbol)
 {
   type_mapt::const_iterator it = type_map.find(symbol.id);
-  if(it != type_map.end())
+  if (it != type_map.end())
     symbol.id = it->second.id();
 
   replace(symbol.type);
@@ -12,8 +12,9 @@ void fix_symbolt::fix_symbol(symbolt &symbol)
 
 void fix_symbolt::fix_context(contextt &context)
 {
-  for(type_mapt::const_iterator t_it = type_map.begin(); t_it != type_map.end();
-      t_it++)
+  for (type_mapt::const_iterator t_it = type_map.begin();
+       t_it != type_map.end();
+       t_it++)
   {
     symbolt *symb = context.find_symbol(t_it->first);
     assert(symb != nullptr);

@@ -1,5 +1,0 @@
-CORE
-main.c
---verbosity 9 --cache-asserts --incremental-bmc --unlimited-k-steps
-\bCache hits: 50\b
-^VERIFICATION SUCCESSFUL$

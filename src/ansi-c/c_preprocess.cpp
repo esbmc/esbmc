@@ -7,9 +7,9 @@ Author: Daniel Kroening, kroening@kroening.com
 \*******************************************************************/
 
 #ifdef _WIN32
-#include <windows.h>
-#undef small
-#undef ERROR
+#  include <windows.h>
+#  undef small
+#  undef ERROR
 #endif
 
 #include <ansi-c/c_preprocess.h>
@@ -19,7 +19,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <fstream>
 #include <util/config.h>
 #include <util/i2string.h>
-
+#include <clang-cpp-frontend/esbmc_internal_cpp.h>
 extern "C"
 {
 #include <cpp/iface.h>
@@ -169,7 +169,7 @@ int configure_and_run_cpp(
 
 void setup_cpp_defs(const char **defs)
 {
-  while(*defs != nullptr)
+  while (*defs != nullptr)
   {
     record_define(*defs);
     defs++;
@@ -178,9 +178,9 @@ void setup_cpp_defs(const char **defs)
 
 #ifndef _WIN32
 
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <unistd.h>
+#  include <sys/types.h>
+#  include <sys/wait.h>
+#  include <unistd.h>
 
 bool c_preprocess(const std::string &path, std::ostream &outstream, bool is_cpp)
 {
@@ -191,7 +191,7 @@ bool c_preprocess(const std::string &path, std::ostream &outstream, bool is_cpp)
 
   sprintf(out_file_buf, "/tmp/ESBMC_XXXXXX");
   fd = mkstemp(out_file_buf);
-  if(fd < 0)
+  if (fd < 0)
   {
     log_error("Couldn't open preprocessing output file");
     return true;
@@ -200,23 +200,23 @@ bool c_preprocess(const std::string &path, std::ostream &outstream, bool is_cpp)
 
   sprintf(stderr_file_buf, "/tmp/ESBMC_XXXXXX");
   fd = mkstemp(stderr_file_buf);
-  if(fd < 0)
+  if (fd < 0)
   {
     log_error("Couldn't open preprocessing stderr file");
     return true;
   }
 
   pid = fork();
-  if(pid != 0)
+  if (pid != 0)
   {
     close(fd);
 
     // Loop around this, because while under gdb, macs for some reason receive
     // a lot of EINTRs without restarting the syscall. Hmm.
     pid_t foo;
-    while((foo = waitpid(pid, &status, 0)) == -1 && errno == EINTR)
+    while ((foo = waitpid(pid, &status, 0)) == -1 && errno == EINTR)
       ;
-    if((foo) < 0)
+    if ((foo) < 0)
     {
       log_error("Failed to wait for preprocessing process");
       return true;
@@ -224,14 +224,14 @@ bool c_preprocess(const std::string &path, std::ostream &outstream, bool is_cpp)
 
     std::ifstream stderr_input(stderr_file_buf);
     str << stderr_input.rdbuf();
-    log_status(str.str());
+    log_status("{}", str.str());
 
     std::ifstream output_input(out_file_buf);
     outstream << output_input.rdbuf();
 
     unlink(stderr_file_buf);
     unlink(out_file_buf);
-    if(!WIFEXITED(status) || WEXITSTATUS(status) != 0)
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
     {
       log_error("Preprocessing failed");
       return true;
@@ -245,32 +245,32 @@ bool c_preprocess(const std::string &path, std::ostream &outstream, bool is_cpp)
   close(fd);
 
   const char **defs;
-#ifdef __APPLE__
+#  ifdef __APPLE__
   defs = cpp_mac_defs;
-#else
+#  else
   defs = cpp_linux_defs;
-#endif
+#  endif
 
   exit(configure_and_run_cpp(out_file_buf, path, defs, is_cpp));
 }
 
 #else /* __WIN32__ */
 
-#include <io.h>
+#  include <io.h>
 
 bool c_preprocess(const std::string &path, std::ostream &outstream, bool is_cpp)
 {
   int err, ret;
   char out_file_buf[288], tmpdir[256];
 
-  // For Windows, we can't fork and run the preprocessor in a seperate process.
+  // For Windows, we can't fork and run the preprocessor in a separate process.
   // Instead, just run it within the existing ESBMC process.
 
   GetTempPath(sizeof(tmpdir), tmpdir);
   GetTempFileName(tmpdir, "bmc", 0, out_file_buf);
 
   ret = configure_and_run_cpp(out_file_buf, path, cpp_windows_defs, is_cpp);
-  if(ret != 0)
+  if (ret != 0)
   {
     log_error("Preprocessor returned an error");
     return true;
@@ -296,11 +296,11 @@ int configure_and_run_cpp(
 {
   int ret;
 
-  if(config.ansi_c.word_size == 16)
+  if (config.ansi_c.word_size == 16)
     setup_cpp_defs(cpp_defines_16);
-  else if(config.ansi_c.word_size == 32)
+  else if (config.ansi_c.word_size == 32)
     setup_cpp_defs(cpp_defines_32);
-  else if(config.ansi_c.word_size == 64)
+  else if (config.ansi_c.word_size == 64)
     setup_cpp_defs(cpp_defines_64);
   else
     std::cerr << "Bad word size " << config.ansi_c.word_size << std::endl;
@@ -309,17 +309,17 @@ int configure_and_run_cpp(
   setup_cpp_defs(platform_defs);
   setup_cpp_defs(cpp_ansic_defs);
 
-  if(is_cpp)
+  if (is_cpp)
     setup_cpp_defs(cpp_cpp_defs);
 
-  if(config.options.get_bool_option("deadlock-check"))
+  if (config.options.get_bool_option("deadlock-check"))
   {
     record_define("pthread_mutex_lock=pthread_mutex_lock_check");
     record_define("pthread_mutex_unlock=pthread_mutex_unlock_check");
     record_define("pthread_cond_wait=pthread_cond_wait_check");
     record_define("pthread_join=pthread_join_switch");
   }
-  else if(config.options.get_bool_option("lock-order-check"))
+  else if (config.options.get_bool_option("lock-order-check"))
   {
     record_define("pthread_join=pthread_join_noswitch");
     record_define("pthread_mutex_lock=pthread_mutex_lock_nocheck");
@@ -334,16 +334,18 @@ int configure_and_run_cpp(
     record_define("pthread_cond_wait=pthread_cond_wait_nocheck");
   }
 
-  for(auto const &it : config.ansi_c.defines)
+  for (auto const &it : config.ansi_c.defines)
     record_define(it.c_str());
 
-  for(auto const &it : config.ansi_c.include_paths)
+  for (auto const &it : config.ansi_c.include_paths)
     record_include(it.c_str());
 
+  if (is_cpp)
+    record_include(esbmct::abstract_cpp_includes().c_str());
   record_include("/usr/include");
   record_builtin_macros();
 
-  if(open_output_file(out_file_buf) < 0)
+  if (open_output_file(out_file_buf) < 0)
   {
     perror("cpp couldn't open output file");
     exit(1);

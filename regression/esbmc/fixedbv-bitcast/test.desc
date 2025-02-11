@@ -1,0 +1,4 @@
+CORE
+fixedbv.c
+--fixedbv -Wno-error=implicit-function-declaration
+^VERIFICATION SUCCESSFUL$

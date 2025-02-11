@@ -1,0 +1,5 @@
+CORE
+main.cu
+--unwind 3 --context-bound 2 --force-malloc-success --state-hashing
+
+^VERIFICATION SUCCESSFUL$

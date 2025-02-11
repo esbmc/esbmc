@@ -6,6 +6,7 @@
 #include <util/algorithms.h>
 #include <util/options.h>
 #include <boost/range/adaptor/reversed.hpp>
+#include <langapi/language_util.h>
 
 /* Base interface */
 class slicer : public ssa_step_algorithm
@@ -37,6 +38,38 @@ public:
 };
 
 /**
+ * Claim slicer: remove every other claim of the formula
+ * with the exception of the one to keep.
+ */
+class claim_slicer : public slicer
+{
+public:
+  explicit claim_slicer(
+    const size_t claim_to_keep,
+    bool show_slice_info,
+    bool is_goto_cov,
+    namespacet &ns)
+    : claim_to_keep(claim_to_keep),
+      show_slice_info(show_slice_info),
+      is_goto_cov(is_goto_cov),
+      ns(ns)
+  {
+    if (!claim_to_keep)
+    {
+      log_error("All the claims start from 1 (use --show-claims)");
+      abort();
+    }
+  };
+  bool run(symex_target_equationt::SSA_stepst &) override;
+  size_t claim_to_keep;
+  std::string claim_msg;
+  std::string claim_loc;
+  bool show_slice_info;
+  bool is_goto_cov;
+  namespacet ns;
+};
+
+/**
  * @brief Class for the symex-slicer, this slicer is to be executed
  * on SSA formula in order to remove every symbol that does not depends
  * on it
@@ -49,7 +82,8 @@ class symex_slicet : public slicer
 {
 public:
   explicit symex_slicet(const optionst &options)
-    : slice_assumes(options.get_bool_option("slice-assumes"))
+    : slice_assumes(options.get_bool_option("slice-assumes")),
+      slice_nondet(!options.get_bool_option("generate-testcase"))
   {
   }
 
@@ -63,9 +97,14 @@ public:
    */
   bool run(symex_target_equationt::SSA_stepst &eq) override
   {
+    sliced = 0;
     fine_timet algorithm_start = current_time();
-    for(auto &step : boost::adaptors::reverse(eq))
+    for (auto &step : boost::adaptors::reverse(eq))
+    {
+      if (step.ignore)
+        continue;
       run_on_step(step);
+    }
     fine_timet algorithm_stop = current_time();
     log_status(
       "Slicing time: {}s (removed {} assignments)",
@@ -78,6 +117,8 @@ public:
    * Holds the symbols the current equation depends on.
    */
   std::unordered_set<std::string> depends;
+
+  static expr2tc get_nondet_symbol(const expr2tc &expr);
 
   /**
    * Marks SSA_steps to be ignored which have no effects on the target equation,
@@ -106,6 +147,8 @@ public:
 protected:
   /// whether assumes should be sliced
   const bool slice_assumes;
+  /// Whether we should slice nondet symbols
+  const bool slice_nondet;
 
   /**
    * Recursively explores the operands of an expression \expr

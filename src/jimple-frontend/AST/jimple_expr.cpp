@@ -45,7 +45,7 @@ exprt jimple_symbol::to_exprt(
 std::shared_ptr<jimple_expr> jimple_expr::get_expression(const json &j)
 {
   std::string expr_type;
-  if(!j.contains("expr_type"))
+  if (!j.contains("expr_type"))
   {
     jimple_constant c;
     c.setValue("0");
@@ -56,102 +56,102 @@ std::shared_ptr<jimple_expr> jimple_expr::get_expression(const json &j)
 
   // TODO: hashmap, the standard is not stable enough yet
   // It is still a work in progress in the parser: https://github.com/rafaelsamenezes/jimple_parser
-  if(expr_type == "constant")
+  if (expr_type == "constant")
   {
     jimple_constant c;
     c.from_json(j);
     return std::make_shared<jimple_constant>(c);
   }
 
-  if(expr_type == "string_constant")
+  if (expr_type == "string_constant")
   {
     jimple_constant c;
     return std::make_shared<jimple_constant>(c);
   }
 
-  if(expr_type == "class_reference")
+  if (expr_type == "class_reference")
   {
     jimple_constant c("-1");
     return std::make_shared<jimple_constant>(c);
   }
 
-  if(expr_type == "symbol")
+  if (expr_type == "symbol")
   {
     jimple_symbol c;
     c.from_json(j);
     return std::make_shared<jimple_symbol>(c);
   }
 
-  if(expr_type == "static_invoke")
+  if (expr_type == "static_invoke")
   {
     jimple_expr_invoke c;
     c.from_json(j);
     return std::make_shared<jimple_expr_invoke>(c);
   }
 
-  if(expr_type == "virtual_invoke")
+  if (expr_type == "virtual_invoke")
   {
     jimple_virtual_invoke c;
     c.from_json(j);
     return std::make_shared<jimple_virtual_invoke>(c);
   }
 
-  if(expr_type == "binop")
+  if (expr_type == "binop")
   {
     jimple_binop c;
     c.from_json(j);
     return std::make_shared<jimple_binop>(c);
   }
 
-  if(expr_type == "cast")
+  if (expr_type == "cast")
   {
     jimple_cast c;
     c.from_json(j);
     return std::make_shared<jimple_cast>(c);
   }
 
-  if(expr_type == "lengthof")
+  if (expr_type == "lengthof")
   {
     jimple_lengthof c;
     c.from_json(j);
     return std::make_shared<jimple_lengthof>(c);
   }
 
-  if(expr_type == "newarray")
+  if (expr_type == "newarray")
   {
     jimple_newarray c;
     c.from_json(j);
     return std::make_shared<jimple_newarray>(c);
   }
 
-  if(expr_type == "new")
+  if (expr_type == "new")
   {
     jimple_new c;
     c.from_json(j);
     return std::make_shared<jimple_new>(c);
   }
 
-  if(expr_type == "array_index")
+  if (expr_type == "array_index")
   {
     jimple_deref c;
     c.from_json(j);
     return std::make_shared<jimple_deref>(c);
   }
 
-  if(expr_type == "nondet")
+  if (expr_type == "nondet")
   {
     jimple_nondet c;
     return std::make_shared<jimple_nondet>(c);
   }
 
-  if(expr_type == "static_member")
+  if (expr_type == "static_member")
   {
     jimple_static_member c;
     c.from_json(j.at("signature"));
     return std::make_shared<jimple_static_member>(c);
   }
 
-  if(expr_type == "local_member")
+  if (expr_type == "local_member")
   {
     jimple_virtual_member c;
     c.from_json(j);
@@ -166,7 +166,7 @@ void jimple_binop::from_json(const json &j)
 {
   j.at("operator").get_to(binop);
   // TODO, make hashmap for each operator
-  if(binop == "==")
+  if (binop == "==")
     binop = "=";
   lhs = get_expression(j.at("lhs"));
   rhs = get_expression(j.at("rhs"));
@@ -258,16 +258,16 @@ void jimple_expr_invoke::from_json(const json &j)
   lhs = nil_exprt();
   j.at("base_class").get_to(base_class);
   j.at("method").get_to(method);
-  for(auto x : j.at("parameters"))
+  for (auto x : j.at("parameters"))
   {
     parameters.push_back(std::move(jimple_expr::get_expression(x)));
   }
   method += "_" + get_hash_name();
 
   // TODO: Move intrinsics to backend
-  if(base_class == "java.lang.Integer" && method == "valueOf_1")
+  if (base_class == "java.lang.Integer" && method == "valueOf_1")
   {
-    log_debug("Got an intrinsic call to valueOf int");
+    log_debug("jimple", "Got an intrinsic call to valueOf int");
     is_intrinsic_method = true;
   }
 }
@@ -278,25 +278,25 @@ exprt jimple_expr_invoke::to_exprt(
   const std::string &function_name) const
 {
   // TODO: Move intrinsics to backend
-  if(base_class == "kotlin.jvm.internal.Intrinsics")
+  if (base_class == "kotlin.jvm.internal.Intrinsics")
   {
     code_skipt skip;
     return skip;
   }
 
   // TODO: Move intrinsics to backend
-  if(base_class == "java.lang.Runtime")
+  if (base_class == "java.lang.Runtime")
   {
     code_skipt skip;
     return skip;
   }
 
   // TODO: Move intrinsics to backend
-  if(base_class == "java.lang.Integer" && method == "valueOf_1")
+  if (base_class == "java.lang.Integer" && method == "valueOf_1")
     // This would be called with valueOf(2), valueOf(42), etc...
     return parameters[0]->to_exprt(ctx, class_name, function_name);
 
-  if(is_nondet_call())
+  if (is_nondet_call())
   {
     jimple_nondet nondet(method);
     return nondet.to_exprt(ctx, class_name, function_name);
@@ -309,16 +309,16 @@ exprt jimple_expr_invoke::to_exprt(
   oss << base_class << ":" << method;
 
   auto symbol = ctx.find_symbol(oss.str());
-  if(!symbol)
+  if (!symbol)
   {
     log_error("Could not find symbol {}", oss.str());
     abort();
   }
   call.function() = symbol_expr(*symbol);
-  if(!lhs.is_nil())
+  if (!lhs.is_nil())
     call.lhs() = lhs;
 
-  for(long unsigned int i = 0; i < parameters.size(); i++)
+  for (long unsigned int i = 0; i < parameters.size(); i++)
   {
     // Just adding the arguments should be enough to set the parameters
     auto parameter_expr =
@@ -342,7 +342,7 @@ void jimple_virtual_invoke::from_json(const json &j)
   j.at("base_class").get_to(base_class);
   j.at("method").get_to(method);
   j.at("name").get_to(variable);
-  for(auto x : j.at("parameters"))
+  for (auto x : j.at("parameters"))
   {
     parameters.push_back(std::move(jimple_expr::get_expression(x)));
   }
@@ -355,27 +355,27 @@ exprt jimple_virtual_invoke::to_exprt(
   const std::string &function_name) const
 {
   // TODO: Move intrinsics to backend
-  if(base_class == "kotlin.jvm.internal.Intrinsics")
+  if (base_class == "kotlin.jvm.internal.Intrinsics")
   {
     code_skipt skip;
     return skip;
   }
 
   // TODO: Move intrinsics to backend
-  if(base_class == "java.lang.Runtime")
+  if (base_class == "java.lang.Runtime")
   {
     code_skipt skip;
     return skip;
   }
 
   // TODO: Move intrinsics to backend
-  if(base_class == "java.lang.Class")
+  if (base_class == "java.lang.Class")
   {
     code_skipt skip;
     return skip;
   }
 
-  if(is_nondet_call())
+  if (is_nondet_call())
   {
     jimple_nondet nondet(method);
     return nondet.to_exprt(ctx, class_name, function_name);
@@ -389,12 +389,12 @@ exprt jimple_virtual_invoke::to_exprt(
 
   auto symbol = ctx.find_symbol(oss.str());
   call.function() = symbol_expr(*symbol);
-  if(!lhs.is_nil())
+  if (!lhs.is_nil())
   {
     call.lhs() = lhs;
   }
 
-  if(variable != "")
+  if (variable != "")
   {
     // Let's add @THIS
     auto this_expression =
@@ -406,7 +406,7 @@ exprt jimple_virtual_invoke::to_exprt(
     block.operands().push_back(assign);
   }
 
-  for(long unsigned int i = 0; i < parameters.size(); i++)
+  for (long unsigned int i = 0; i < parameters.size(); i++)
   {
     // Just adding the arguments should be enough to set the parameters
     auto parameter_expr =
@@ -438,10 +438,10 @@ exprt jimple_newarray::to_exprt(
   typet alloc_type = base_type.is_pointer() ? base_type.subtype() : base_type;
   exprt alloc_size = size->to_exprt(ctx, class_name, function_name);
 
-  if(alloc_size.is_nil())
+  if (alloc_size.is_nil())
     alloc_size = from_integer(1, uint_type());
 
-  if(alloc_type.is_nil())
+  if (alloc_type.is_nil())
     alloc_type = char_type();
 
   // Create a function call for allocation
@@ -455,7 +455,7 @@ exprt jimple_newarray::to_exprt(
   // LHS of call is the tmp var
   call.lhs() = symbol_expr(tmp_added_symbol);
   int type_width = 64;
-  if(!(base_type.is_pointer() && base_type.subtype().is_pointer()))
+  if (!(base_type.is_pointer() && base_type.subtype().is_pointer()))
   {
     auto to_convert =
       base_type.is_pointer() ? base_type.subtype().width() : base_type.width();
@@ -534,13 +534,13 @@ exprt jimple_static_member::to_exprt(
 {
   auto result = gen_zero(type->to_typet(ctx));
   // HACK: For now I will set some intrinsics directly (this should go to SYMEX)
-  if(from == "kotlin._Assertions" && field == "ENABLED")
+  if (from == "kotlin._Assertions" && field == "ENABLED")
   {
     result.make_true();
     return result;
   }
 
-  if(from == "Main" && field == "$assertionsDisabled")
+  if (from == "Main" && field == "$assertionsDisabled")
   {
     result.make_false();
     return result;
@@ -553,7 +553,7 @@ exprt jimple_static_member::to_exprt(
   symbolt &s = *ctx.find_symbol(symbol_name);
   member_exprt op(symbol_expr(s), "tag-" + field, s.type);
   exprt &base = op.struct_op();
-  if(base.type().is_pointer())
+  if (base.type().is_pointer())
   {
     exprt deref("dereference");
     deref.type() = base.type().subtype();
@@ -586,7 +586,7 @@ exprt jimple_virtual_member::to_exprt(
   symbolt &s = *ctx.find_symbol(symbol_name);
   member_exprt op(symbol_expr(s), "tag-" + field, type->to_typet(ctx));
   exprt &base = op.struct_op();
-  if(base.type().is_pointer())
+  if (base.type().is_pointer())
   {
     exprt deref("dereference");
     deref.type() = base.type().subtype();

@@ -20,7 +20,7 @@ static void init_variable(codet &dest, const symbolt &sym)
 {
   const exprt &value = sym.value;
 
-  if(value.is_nil())
+  if (value.is_nil())
     return;
 
   assert(!value.type().is_code());
@@ -40,13 +40,13 @@ void static_lifetime_init(const contextt &context, codet &dest)
 
   // Do assignments based on "value".
   context.foreach_operand_in_order([&dest](const symbolt &s) {
-    if(s.static_lifetime)
+    if (s.static_lifetime)
       init_variable(dest, s);
   });
 
   // call designated "initialization" functions
   context.foreach_operand_in_order([&dest](const symbolt &s) {
-    if(s.type.initialization() && s.type.is_code())
+    if (s.type.initialization() && s.type.is_code())
     {
       code_function_callt function_call;
       function_call.function() = symbol_expr(s);
@@ -64,31 +64,31 @@ bool c_main(contextt &context, const std::string &standard_main)
 
   std::list<irep_idt> matches;
 
-  forall_symbol_base_map(it, context.symbol_base_map, themain)
+  forall_symbol_base_map (it, context.symbol_base_map, themain)
   {
     // look it up
     symbolt *s = context.find_symbol(it->second);
 
-    if(s == nullptr)
+    if (s == nullptr)
       continue;
 
-    if(s->type.is_code())
+    if (s->type.is_code())
       matches.push_back(it->second);
   }
 
-  if(matches.empty())
+  if (matches.empty())
   {
-    log_error("main symbol `" + themain + "' not found");
+    log_error("main symbol `{}' not found", themain);
     return true; // give up
   }
 
-  if(matches.size() >= 2)
+  if (matches.size() >= 2)
   {
-    if(matches.size() == 2)
-      log_error("warning: main symbol `" + themain + "' is ambiguous");
+    if (matches.size() == 2)
+      log_error("warning: main symbol `{}' is ambiguous", themain);
     else
     {
-      log_error("main symbol `" + themain + " is ambiguous");
+      log_error("main symbol `{} is ambiguous", themain);
       return true;
     }
   }
@@ -97,13 +97,13 @@ bool c_main(contextt &context, const std::string &standard_main)
 
   // look it up
   symbolt *s = context.find_symbol(main_symbol);
-  if(s == nullptr)
+  if (s == nullptr)
     return false; // give up, no main
 
   const symbolt &symbol = *s;
 
   // check if it has a body
-  if(symbol.value.is_nil())
+  if (symbol.value.is_nil())
     return false; // give up
 
   codet init_code;
@@ -121,13 +121,13 @@ bool c_main(contextt &context, const std::string &standard_main)
   const code_typet::argumentst &arguments =
     to_code_type(symbol.type).arguments();
 
-  if(symbol.id == standard_main)
+  if (symbol.id == standard_main)
   {
-    if(arguments.size() == 0)
+    if (arguments.size() == 0)
     {
       // ok
     }
-    else if(arguments.size() == 2 || arguments.size() == 3)
+    else if (arguments.size() == 2 || arguments.size() == 3)
     {
       namespacet ns(context);
 
@@ -151,9 +151,9 @@ bool c_main(contextt &context, const std::string &standard_main)
         // assume argc is at most MAX-1
         BigInt max;
 
-        if(argc_symbol.type.id() == "signedbv")
+        if (argc_symbol.type.id() == "signedbv")
           max = power(2, atoi(argc_symbol.type.width().c_str()) - 1) - 1;
-        else if(argc_symbol.type.id() == "unsignedbv")
+        else if (argc_symbol.type.id() == "unsignedbv")
           max = power(2, atoi(argc_symbol.type.width().c_str())) - 1;
         else
           assert(false);
@@ -169,15 +169,15 @@ bool c_main(contextt &context, const std::string &standard_main)
         init_code.move_to_operands(assumption);
       }
 
-      if(arguments.size() == 3)
+      if (arguments.size() == 3)
       {
         const symbolt &envp_size_symbol = *ns.lookup("envp_size'");
         // assume envp_size is at most MAX-1
         BigInt max;
 
-        if(envp_size_symbol.type.id() == "signedbv")
+        if (envp_size_symbol.type.id() == "signedbv")
           max = power(2, atoi(envp_size_symbol.type.width().c_str()) - 1) - 1;
-        else if(envp_size_symbol.type.id() == "unsignedbv")
+        else if (envp_size_symbol.type.id() == "unsignedbv")
           max = power(2, atoi(envp_size_symbol.type.width().c_str())) - 1;
         else
           assert(false);
@@ -209,7 +209,7 @@ bool c_main(contextt &context, const std::string &standard_main)
         init_code.copy_to_operands(code_assignt(index_expr, null));
       }
 
-      if(arguments.size() == 3)
+      if (arguments.size() == 3)
       {
         const symbolt &envp_symbol = *ns.lookup("envp'");
         const symbolt &envp_size_symbol = *ns.lookup("envp_size'");
@@ -238,7 +238,7 @@ bool c_main(contextt &context, const std::string &standard_main)
       {
         exprt::operandst &operands = call.arguments();
 
-        if(arguments.size() == 3)
+        if (arguments.size() == 3)
           operands.resize(3);
         else
           operands.resize(2);
@@ -264,7 +264,7 @@ bool c_main(contextt &context, const std::string &standard_main)
         }
 
         // do we need envp?
-        if(arguments.size() == 3)
+        if (arguments.size() == 3)
         {
           const symbolt &envp_symbol = *ns.lookup("envp'");
           exprt &op2 = operands[2];
@@ -294,10 +294,11 @@ bool c_main(contextt &context, const std::string &standard_main)
 
   code_function_callt thread_start_call;
   thread_start_call.location() = symbol.location;
-  thread_start_call.function() = symbol_exprt("pthread_start_main_hook");
+  thread_start_call.function() =
+    symbol_exprt("__ESBMC_pthread_start_main_hook");
   code_function_callt thread_end_call;
   thread_end_call.location() = symbol.location;
-  thread_end_call.function() = symbol_exprt("pthread_end_main_hook");
+  thread_end_call.function() = symbol_exprt("__ESBMC_pthread_end_main_hook");
 
   init_code.move_to_operands(thread_start_call);
   init_code.move_to_operands(call);
@@ -314,7 +315,7 @@ bool c_main(contextt &context, const std::string &standard_main)
   new_symbol.type.swap(main_type);
   new_symbol.value.swap(init_code);
 
-  if(context.move(new_symbol))
+  if (context.move(new_symbol))
   {
     log_error("main already defined by another language module");
     return true;

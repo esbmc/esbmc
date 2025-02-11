@@ -1,0 +1,843 @@
+JSON AST (compact format):
+
+
+======= function_overload.sol =======
+{
+  "absolutePath": "function_overload.sol",
+  "exportedSymbols":
+  {
+    "A":
+    [
+      10
+    ],
+    "B":
+    [
+      19
+    ],
+    "C":
+    [
+      56
+    ]
+  },
+  "id": 57,
+  "license": "GPL-3.0",
+  "nodeType": "SourceUnit",
+  "nodes":
+  [
+    {
+      "id": 1,
+      "literals":
+      [
+        "solidity",
+        ">=",
+        "0.5",
+        ".0"
+      ],
+      "nodeType": "PragmaDirective",
+      "src": "90:24:0"
+    },
+    {
+      "abstract": false,
+      "baseContracts": [],
+      "canonicalName": "A",
+      "contractDependencies": [],
+      "contractKind": "contract",
+      "fullyImplemented": true,
+      "id": 10,
+      "linearizedBaseContracts":
+      [
+        10
+      ],
+      "name": "A",
+      "nameLocation": "125:1:0",
+      "nodeType": "ContractDefinition",
+      "nodes":
+      [
+        {
+          "body":
+          {
+            "id": 8,
+            "nodeType": "Block",
+            "src": "180:26:0",
+            "statements":
+            [
+              {
+                "expression":
+                {
+                  "hexValue": "3231",
+                  "id": 6,
+                  "isConstant": false,
+                  "isLValue": false,
+                  "isPure": true,
+                  "kind": "number",
+                  "lValueRequested": false,
+                  "nodeType": "Literal",
+                  "src": "197:2:0",
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_rational_21_by_1",
+                    "typeString": "int_const 21"
+                  },
+                  "value": "21"
+                },
+                "functionReturnParameters": 5,
+                "id": 7,
+                "nodeType": "Return",
+                "src": "190:9:0"
+              }
+            ]
+          },
+          "functionSelector": "3f7eb0fe",
+          "id": 9,
+          "implemented": true,
+          "kind": "function",
+          "modifiers": [],
+          "name": "func_1",
+          "nameLocation": "143:6:0",
+          "nodeType": "FunctionDefinition",
+          "parameters":
+          {
+            "id": 2,
+            "nodeType": "ParameterList",
+            "parameters": [],
+            "src": "149:2:0"
+          },
+          "returnParameters":
+          {
+            "id": 5,
+            "nodeType": "ParameterList",
+            "parameters":
+            [
+              {
+                "constant": false,
+                "id": 4,
+                "mutability": "mutable",
+                "name": "",
+                "nameLocation": "-1:-1:-1",
+                "nodeType": "VariableDeclaration",
+                "scope": 9,
+                "src": "173:5:0",
+                "stateVariable": false,
+                "storageLocation": "default",
+                "typeDescriptions":
+                {
+                  "typeIdentifier": "t_uint8",
+                  "typeString": "uint8"
+                },
+                "typeName":
+                {
+                  "id": 3,
+                  "name": "uint8",
+                  "nodeType": "ElementaryTypeName",
+                  "src": "173:5:0",
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_uint8",
+                    "typeString": "uint8"
+                  }
+                },
+                "visibility": "internal"
+              }
+            ],
+            "src": "172:7:0"
+          },
+          "scope": 10,
+          "src": "134:72:0",
+          "stateMutability": "pure",
+          "virtual": false,
+          "visibility": "public"
+        }
+      ],
+      "scope": 57,
+      "src": "116:92:0",
+      "usedErrors": []
+    },
+    {
+      "abstract": false,
+      "baseContracts": [],
+      "canonicalName": "B",
+      "contractDependencies": [],
+      "contractKind": "contract",
+      "fullyImplemented": true,
+      "id": 19,
+      "linearizedBaseContracts":
+      [
+        19
+      ],
+      "name": "B",
+      "nameLocation": "219:1:0",
+      "nodeType": "ContractDefinition",
+      "nodes":
+      [
+        {
+          "body":
+          {
+            "id": 17,
+            "nodeType": "Block",
+            "src": "273:26:0",
+            "statements":
+            [
+              {
+                "expression":
+                {
+                  "hexValue": "3432",
+                  "id": 15,
+                  "isConstant": false,
+                  "isLValue": false,
+                  "isPure": true,
+                  "kind": "number",
+                  "lValueRequested": false,
+                  "nodeType": "Literal",
+                  "src": "290:2:0",
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_rational_42_by_1",
+                    "typeString": "int_const 42"
+                  },
+                  "value": "42"
+                },
+                "functionReturnParameters": 14,
+                "id": 16,
+                "nodeType": "Return",
+                "src": "283:9:0"
+              }
+            ]
+          },
+          "functionSelector": "3f7eb0fe",
+          "id": 18,
+          "implemented": true,
+          "kind": "function",
+          "modifiers": [],
+          "name": "func_1",
+          "nameLocation": "236:6:0",
+          "nodeType": "FunctionDefinition",
+          "parameters":
+          {
+            "id": 11,
+            "nodeType": "ParameterList",
+            "parameters": [],
+            "src": "242:2:0"
+          },
+          "returnParameters":
+          {
+            "id": 14,
+            "nodeType": "ParameterList",
+            "parameters":
+            [
+              {
+                "constant": false,
+                "id": 13,
+                "mutability": "mutable",
+                "name": "",
+                "nameLocation": "-1:-1:-1",
+                "nodeType": "VariableDeclaration",
+                "scope": 18,
+                "src": "266:5:0",
+                "stateVariable": false,
+                "storageLocation": "default",
+                "typeDescriptions":
+                {
+                  "typeIdentifier": "t_uint8",
+                  "typeString": "uint8"
+                },
+                "typeName":
+                {
+                  "id": 12,
+                  "name": "uint8",
+                  "nodeType": "ElementaryTypeName",
+                  "src": "266:5:0",
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_uint8",
+                    "typeString": "uint8"
+                  }
+                },
+                "visibility": "internal"
+              }
+            ],
+            "src": "265:7:0"
+          },
+          "scope": 19,
+          "src": "227:72:0",
+          "stateMutability": "pure",
+          "virtual": false,
+          "visibility": "public"
+        }
+      ],
+      "scope": 57,
+      "src": "210:91:0",
+      "usedErrors": []
+    },
+    {
+      "abstract": false,
+      "baseContracts": [],
+      "canonicalName": "C",
+      "contractDependencies":
+      [
+        10,
+        19
+      ],
+      "contractKind": "contract",
+      "fullyImplemented": true,
+      "id": 56,
+      "linearizedBaseContracts":
+      [
+        56
+      ],
+      "name": "C",
+      "nameLocation": "312:1:0",
+      "nodeType": "ContractDefinition",
+      "nodes":
+      [
+        {
+          "body":
+          {
+            "id": 54,
+            "nodeType": "Block",
+            "src": "352:157:0",
+            "statements":
+            [
+              {
+                "assignments":
+                [
+                  24
+                ],
+                "declarations":
+                [
+                  {
+                    "constant": false,
+                    "id": 24,
+                    "mutability": "mutable",
+                    "name": "contract_A",
+                    "nameLocation": "364:10:0",
+                    "nodeType": "VariableDeclaration",
+                    "scope": 54,
+                    "src": "362:12:0",
+                    "stateVariable": false,
+                    "storageLocation": "default",
+                    "typeDescriptions":
+                    {
+                      "typeIdentifier": "t_contract$_A_$10",
+                      "typeString": "contract A"
+                    },
+                    "typeName":
+                    {
+                      "id": 23,
+                      "nodeType": "UserDefinedTypeName",
+                      "pathNode":
+                      {
+                        "id": 22,
+                        "name": "A",
+                        "nameLocations":
+                        [
+                          "362:1:0"
+                        ],
+                        "nodeType": "IdentifierPath",
+                        "referencedDeclaration": 10,
+                        "src": "362:1:0"
+                      },
+                      "referencedDeclaration": 10,
+                      "src": "362:1:0",
+                      "typeDescriptions":
+                      {
+                        "typeIdentifier": "t_contract$_A_$10",
+                        "typeString": "contract A"
+                      }
+                    },
+                    "visibility": "internal"
+                  }
+                ],
+                "id": 29,
+                "initialValue":
+                {
+                  "arguments": [],
+                  "expression":
+                  {
+                    "argumentTypes": [],
+                    "id": 27,
+                    "isConstant": false,
+                    "isLValue": false,
+                    "isPure": false,
+                    "lValueRequested": false,
+                    "nodeType": "NewExpression",
+                    "src": "377:5:0",
+                    "typeDescriptions":
+                    {
+                      "typeIdentifier": "t_function_creation_nonpayable$__$returns$_t_contract$_A_$10_$",
+                      "typeString": "function () returns (contract A)"
+                    },
+                    "typeName":
+                    {
+                      "id": 26,
+                      "nodeType": "UserDefinedTypeName",
+                      "pathNode":
+                      {
+                        "id": 25,
+                        "name": "A",
+                        "nameLocations":
+                        [
+                          "381:1:0"
+                        ],
+                        "nodeType": "IdentifierPath",
+                        "referencedDeclaration": 10,
+                        "src": "381:1:0"
+                      },
+                      "referencedDeclaration": 10,
+                      "src": "381:1:0",
+                      "typeDescriptions":
+                      {
+                        "typeIdentifier": "t_contract$_A_$10",
+                        "typeString": "contract A"
+                      }
+                    }
+                  },
+                  "id": 28,
+                  "isConstant": false,
+                  "isLValue": false,
+                  "isPure": false,
+                  "kind": "functionCall",
+                  "lValueRequested": false,
+                  "nameLocations": [],
+                  "names": [],
+                  "nodeType": "FunctionCall",
+                  "src": "377:7:0",
+                  "tryCall": false,
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_contract$_A_$10",
+                    "typeString": "contract A"
+                  }
+                },
+                "nodeType": "VariableDeclarationStatement",
+                "src": "362:22:0"
+              },
+              {
+                "assignments":
+                [
+                  32
+                ],
+                "declarations":
+                [
+                  {
+                    "constant": false,
+                    "id": 32,
+                    "mutability": "mutable",
+                    "name": "contract_B",
+                    "nameLocation": "396:10:0",
+                    "nodeType": "VariableDeclaration",
+                    "scope": 54,
+                    "src": "394:12:0",
+                    "stateVariable": false,
+                    "storageLocation": "default",
+                    "typeDescriptions":
+                    {
+                      "typeIdentifier": "t_contract$_B_$19",
+                      "typeString": "contract B"
+                    },
+                    "typeName":
+                    {
+                      "id": 31,
+                      "nodeType": "UserDefinedTypeName",
+                      "pathNode":
+                      {
+                        "id": 30,
+                        "name": "B",
+                        "nameLocations":
+                        [
+                          "394:1:0"
+                        ],
+                        "nodeType": "IdentifierPath",
+                        "referencedDeclaration": 19,
+                        "src": "394:1:0"
+                      },
+                      "referencedDeclaration": 19,
+                      "src": "394:1:0",
+                      "typeDescriptions":
+                      {
+                        "typeIdentifier": "t_contract$_B_$19",
+                        "typeString": "contract B"
+                      }
+                    },
+                    "visibility": "internal"
+                  }
+                ],
+                "id": 37,
+                "initialValue":
+                {
+                  "arguments": [],
+                  "expression":
+                  {
+                    "argumentTypes": [],
+                    "id": 35,
+                    "isConstant": false,
+                    "isLValue": false,
+                    "isPure": false,
+                    "lValueRequested": false,
+                    "nodeType": "NewExpression",
+                    "src": "409:5:0",
+                    "typeDescriptions":
+                    {
+                      "typeIdentifier": "t_function_creation_nonpayable$__$returns$_t_contract$_B_$19_$",
+                      "typeString": "function () returns (contract B)"
+                    },
+                    "typeName":
+                    {
+                      "id": 34,
+                      "nodeType": "UserDefinedTypeName",
+                      "pathNode":
+                      {
+                        "id": 33,
+                        "name": "B",
+                        "nameLocations":
+                        [
+                          "413:1:0"
+                        ],
+                        "nodeType": "IdentifierPath",
+                        "referencedDeclaration": 19,
+                        "src": "413:1:0"
+                      },
+                      "referencedDeclaration": 19,
+                      "src": "413:1:0",
+                      "typeDescriptions":
+                      {
+                        "typeIdentifier": "t_contract$_B_$19",
+                        "typeString": "contract B"
+                      }
+                    }
+                  },
+                  "id": 36,
+                  "isConstant": false,
+                  "isLValue": false,
+                  "isPure": false,
+                  "kind": "functionCall",
+                  "lValueRequested": false,
+                  "nameLocations": [],
+                  "names": [],
+                  "nodeType": "FunctionCall",
+                  "src": "409:7:0",
+                  "tryCall": false,
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_contract$_B_$19",
+                    "typeString": "contract B"
+                  }
+                },
+                "nodeType": "VariableDeclarationStatement",
+                "src": "394:22:0"
+              },
+              {
+                "expression":
+                {
+                  "arguments":
+                  [
+                    {
+                      "commonType":
+                      {
+                        "typeIdentifier": "t_uint8",
+                        "typeString": "uint8"
+                      },
+                      "id": 43,
+                      "isConstant": false,
+                      "isLValue": false,
+                      "isPure": false,
+                      "lValueRequested": false,
+                      "leftExpression":
+                      {
+                        "arguments": [],
+                        "expression":
+                        {
+                          "argumentTypes": [],
+                          "expression":
+                          {
+                            "id": 39,
+                            "name": "contract_A",
+                            "nodeType": "Identifier",
+                            "overloadedDeclarations": [],
+                            "referencedDeclaration": 24,
+                            "src": "433:10:0",
+                            "typeDescriptions":
+                            {
+                              "typeIdentifier": "t_contract$_A_$10",
+                              "typeString": "contract A"
+                            }
+                          },
+                          "id": 40,
+                          "isConstant": false,
+                          "isLValue": false,
+                          "isPure": false,
+                          "lValueRequested": false,
+                          "memberLocation": "444:6:0",
+                          "memberName": "func_1",
+                          "nodeType": "MemberAccess",
+                          "referencedDeclaration": 9,
+                          "src": "433:17:0",
+                          "typeDescriptions":
+                          {
+                            "typeIdentifier": "t_function_external_pure$__$returns$_t_uint8_$",
+                            "typeString": "function () pure external returns (uint8)"
+                          }
+                        },
+                        "id": 41,
+                        "isConstant": false,
+                        "isLValue": false,
+                        "isPure": false,
+                        "kind": "functionCall",
+                        "lValueRequested": false,
+                        "nameLocations": [],
+                        "names": [],
+                        "nodeType": "FunctionCall",
+                        "src": "433:19:0",
+                        "tryCall": false,
+                        "typeDescriptions":
+                        {
+                          "typeIdentifier": "t_uint8",
+                          "typeString": "uint8"
+                        }
+                      },
+                      "nodeType": "BinaryOperation",
+                      "operator": "==",
+                      "rightExpression":
+                      {
+                        "hexValue": "3231",
+                        "id": 42,
+                        "isConstant": false,
+                        "isLValue": false,
+                        "isPure": true,
+                        "kind": "number",
+                        "lValueRequested": false,
+                        "nodeType": "Literal",
+                        "src": "456:2:0",
+                        "typeDescriptions":
+                        {
+                          "typeIdentifier": "t_rational_21_by_1",
+                          "typeString": "int_const 21"
+                        },
+                        "value": "21"
+                      },
+                      "src": "433:25:0",
+                      "typeDescriptions":
+                      {
+                        "typeIdentifier": "t_bool",
+                        "typeString": "bool"
+                      }
+                    }
+                  ],
+                  "expression":
+                  {
+                    "argumentTypes":
+                    [
+                      {
+                        "typeIdentifier": "t_bool",
+                        "typeString": "bool"
+                      }
+                    ],
+                    "id": 38,
+                    "name": "assert",
+                    "nodeType": "Identifier",
+                    "overloadedDeclarations": [],
+                    "referencedDeclaration": -3,
+                    "src": "426:6:0",
+                    "typeDescriptions":
+                    {
+                      "typeIdentifier": "t_function_assert_pure$_t_bool_$returns$__$",
+                      "typeString": "function (bool) pure"
+                    }
+                  },
+                  "id": 44,
+                  "isConstant": false,
+                  "isLValue": false,
+                  "isPure": false,
+                  "kind": "functionCall",
+                  "lValueRequested": false,
+                  "nameLocations": [],
+                  "names": [],
+                  "nodeType": "FunctionCall",
+                  "src": "426:33:0",
+                  "tryCall": false,
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_tuple$__$",
+                    "typeString": "tuple()"
+                  }
+                },
+                "id": 45,
+                "nodeType": "ExpressionStatement",
+                "src": "426:33:0"
+              },
+              {
+                "expression":
+                {
+                  "arguments":
+                  [
+                    {
+                      "commonType":
+                      {
+                        "typeIdentifier": "t_uint8",
+                        "typeString": "uint8"
+                      },
+                      "id": 51,
+                      "isConstant": false,
+                      "isLValue": false,
+                      "isPure": false,
+                      "lValueRequested": false,
+                      "leftExpression":
+                      {
+                        "arguments": [],
+                        "expression":
+                        {
+                          "argumentTypes": [],
+                          "expression":
+                          {
+                            "id": 47,
+                            "name": "contract_B",
+                            "nodeType": "Identifier",
+                            "overloadedDeclarations": [],
+                            "referencedDeclaration": 32,
+                            "src": "476:10:0",
+                            "typeDescriptions":
+                            {
+                              "typeIdentifier": "t_contract$_B_$19",
+                              "typeString": "contract B"
+                            }
+                          },
+                          "id": 48,
+                          "isConstant": false,
+                          "isLValue": false,
+                          "isPure": false,
+                          "lValueRequested": false,
+                          "memberLocation": "487:6:0",
+                          "memberName": "func_1",
+                          "nodeType": "MemberAccess",
+                          "referencedDeclaration": 18,
+                          "src": "476:17:0",
+                          "typeDescriptions":
+                          {
+                            "typeIdentifier": "t_function_external_pure$__$returns$_t_uint8_$",
+                            "typeString": "function () pure external returns (uint8)"
+                          }
+                        },
+                        "id": 49,
+                        "isConstant": false,
+                        "isLValue": false,
+                        "isPure": false,
+                        "kind": "functionCall",
+                        "lValueRequested": false,
+                        "nameLocations": [],
+                        "names": [],
+                        "nodeType": "FunctionCall",
+                        "src": "476:19:0",
+                        "tryCall": false,
+                        "typeDescriptions":
+                        {
+                          "typeIdentifier": "t_uint8",
+                          "typeString": "uint8"
+                        }
+                      },
+                      "nodeType": "BinaryOperation",
+                      "operator": "==",
+                      "rightExpression":
+                      {
+                        "hexValue": "3432",
+                        "id": 50,
+                        "isConstant": false,
+                        "isLValue": false,
+                        "isPure": true,
+                        "kind": "number",
+                        "lValueRequested": false,
+                        "nodeType": "Literal",
+                        "src": "499:2:0",
+                        "typeDescriptions":
+                        {
+                          "typeIdentifier": "t_rational_42_by_1",
+                          "typeString": "int_const 42"
+                        },
+                        "value": "42"
+                      },
+                      "src": "476:25:0",
+                      "typeDescriptions":
+                      {
+                        "typeIdentifier": "t_bool",
+                        "typeString": "bool"
+                      }
+                    }
+                  ],
+                  "expression":
+                  {
+                    "argumentTypes":
+                    [
+                      {
+                        "typeIdentifier": "t_bool",
+                        "typeString": "bool"
+                      }
+                    ],
+                    "id": 46,
+                    "name": "assert",
+                    "nodeType": "Identifier",
+                    "overloadedDeclarations": [],
+                    "referencedDeclaration": -3,
+                    "src": "469:6:0",
+                    "typeDescriptions":
+                    {
+                      "typeIdentifier": "t_function_assert_pure$_t_bool_$returns$__$",
+                      "typeString": "function (bool) pure"
+                    }
+                  },
+                  "id": 52,
+                  "isConstant": false,
+                  "isLValue": false,
+                  "isPure": false,
+                  "kind": "functionCall",
+                  "lValueRequested": false,
+                  "nameLocations": [],
+                  "names": [],
+                  "nodeType": "FunctionCall",
+                  "src": "469:33:0",
+                  "tryCall": false,
+                  "typeDescriptions":
+                  {
+                    "typeIdentifier": "t_tuple$__$",
+                    "typeString": "tuple()"
+                  }
+                },
+                "id": 53,
+                "nodeType": "ExpressionStatement",
+                "src": "469:33:0"
+              }
+            ]
+          },
+          "functionSelector": "51ca081b",
+          "id": 55,
+          "implemented": true,
+          "kind": "function",
+          "modifiers": [],
+          "name": "test_overload",
+          "nameLocation": "329:13:0",
+          "nodeType": "FunctionDefinition",
+          "parameters":
+          {
+            "id": 20,
+            "nodeType": "ParameterList",
+            "parameters": [],
+            "src": "342:2:0"
+          },
+          "returnParameters":
+          {
+            "id": 21,
+            "nodeType": "ParameterList",
+            "parameters": [],
+            "src": "352:0:0"
+          },
+          "scope": 56,
+          "src": "320:189:0",
+          "stateMutability": "nonpayable",
+          "virtual": false,
+          "visibility": "public"
+        }
+      ],
+      "scope": 57,
+      "src": "303:208:0",
+      "usedErrors": []
+    }
+  ],
+  "src": "90:421:0"
+}

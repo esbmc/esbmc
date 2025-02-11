@@ -1,0 +1,4 @@
+CORE
+main.c
+--no-simplify --k-induction
+^VERIFICATION SUCCESSFUL$

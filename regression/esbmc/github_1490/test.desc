@@ -1,0 +1,4 @@
+CORE
+main.c
+ -Wno-error=implicit-function-declaration
+State 4 file .* line 9 column 3 function main thread 0

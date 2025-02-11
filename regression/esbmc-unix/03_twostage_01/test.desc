@@ -1,4 +1,4 @@
 CORE
 main.c
---no-slice --context-bound 3 --32
+--no-slice --context-bound 3 --32 --incremental-bmc --force-malloc-success
 ^VERIFICATION FAILED$

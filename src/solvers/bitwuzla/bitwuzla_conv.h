@@ -8,13 +8,13 @@
 
 extern "C"
 {
-#include <bitwuzla/bitwuzla.h>
+#include <bitwuzla/c/bitwuzla.h>
 }
 
-class bitw_smt_ast : public solver_smt_ast<BitwuzlaTerm *>
+class bitw_smt_ast : public solver_smt_ast<BitwuzlaTerm>
 {
 public:
-  using solver_smt_ast<BitwuzlaTerm *>::solver_smt_ast;
+  using solver_smt_ast<BitwuzlaTerm>::solver_smt_ast;
   ~bitw_smt_ast() override = default;
 
   void dump() const override;
@@ -106,9 +106,10 @@ public:
 
   // Members
   Bitwuzla *bitw;
+  BitwuzlaOptions *bitw_options;
+  BitwuzlaTermManager *bitw_term_manager;
 
-  typedef std::unordered_map<std::string, smt_astt> symtable_type;
-  symtable_type symtable;
+  symtabt symtable;
 };
 
 #endif /* _ESBMC_SOLVERS_BITWUZLA_BITWUZLA_CONV_H_ */

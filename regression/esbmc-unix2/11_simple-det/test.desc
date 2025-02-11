@@ -1,4 +1,4 @@
 CORE
 simple-det.c
---unwind 10
+--unwind 10 --context-bound 2 -Wno-error=implicit-function-declaration -Wno-error=incompatible-function-pointer-types
 ^VERIFICATION SUCCESSFUL$

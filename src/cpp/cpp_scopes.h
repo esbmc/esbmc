@@ -74,7 +74,7 @@ public:
   cpp_idt &get_id(const irep_idt &identifier)
   {
     id_mapt::const_iterator it = id_map.find(identifier);
-    if(it == id_map.end())
+    if (it == id_map.end())
       throw "id `" + id2string(identifier) + "' not found";
     return *(it->second);
   }
@@ -111,7 +111,7 @@ public:
   // move up to next global scope
   void go_to_global_scope()
   {
-    while(!current_scope().is_global_scope())
+    while (!current_scope().is_global_scope())
     {
       current_scope_ptr = &current_scope().get_parent();
       assert(current_scope_ptr != nullptr);

@@ -1,0 +1,4 @@
+CORE
+function_overload.solast
+--function test_overload --sol function_overload.sol
+^VERIFICATION SUCCESSFUL$

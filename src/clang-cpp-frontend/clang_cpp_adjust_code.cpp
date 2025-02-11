@@ -1,8 +1,8 @@
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 
-void convert_expression_to_code(exprt &expr)
+void clang_cpp_adjust::convert_expression_to_code(exprt &expr)
 {
-  if(expr.is_code())
+  if (expr.is_code())
     return;
 
   codet code("expression");
@@ -12,12 +12,28 @@ void convert_expression_to_code(exprt &expr)
   expr.swap(code);
 }
 
+void clang_cpp_adjust::adjust_code(codet &code)
+{
+  const irep_idt &statement = code.statement();
+
+  if (statement == "cpp-catch")
+  {
+    adjust_catch(code);
+  }
+  else if (statement == "throw_decl")
+  {
+    adjust_throw_decl(code);
+  }
+  else
+    clang_c_adjust::adjust_code(code);
+}
+
 void clang_cpp_adjust::adjust_ifthenelse(codet &code)
 {
   // In addition to the C syntax, C++ also allows a declaration
   // as condition. E.g.,
   // if(void *p=...) ...
-  if(code.op0().is_code())
+  if (code.op0().is_code())
   {
     codet decl_block = to_code(code.op0());
 
@@ -47,7 +63,7 @@ void clang_cpp_adjust::adjust_while(codet &code)
   // In addition to the C syntax, C++ also allows a declaration
   // as condition. E.g.,
   // while(void *p=...) ...
-  if(code.op0().is_code())
+  if (code.op0().is_code())
   {
     codet decl_block = to_code(code.op0());
 
@@ -77,7 +93,7 @@ void clang_cpp_adjust::adjust_switch(codet &code)
   // In addition to the C syntax, C++ also allows a declaration
   // as condition. E.g.,
   // switch(int i=...) ...
-  if(code.op0().is_code())
+  if (code.op0().is_code())
   {
     codet decl_block = to_code(code.op0());
 
@@ -107,7 +123,7 @@ void clang_cpp_adjust::adjust_for(codet &code)
   // In addition to the C syntax, C++ also allows a declaration
   // as condition. E.g.,
   // for( ; int i=...; ) ...
-  if(code.op1().is_code())
+  if (code.op1().is_code())
   {
     codet decl_block = to_code(code.op1());
 
@@ -144,57 +160,51 @@ void clang_cpp_adjust::adjust_decl_block(codet &code)
 {
   codet new_block("decl-block");
 
-  Forall_operands(it, code)
+  Forall_operands (it, code)
   {
-    if(it->is_code() && (it->statement() == "skip"))
+    if (it->is_code() && it->statement() == "skip")
       continue;
 
+    adjust_expr(*it);
     code_declt &code_decl = to_code_decl(to_code(*it));
-
-    if(code_decl.operands().size() == 2)
-    {
-      exprt &rhs = code_decl.rhs();
-      exprt &lhs = code_decl.lhs();
-      if(
-        rhs.id() == "sideeffect" && rhs.statement() == "function_call" &&
-        rhs.get_bool("constructor"))
-      {
-        // turn struct BLAH bleh = BLAH() into two instructions:
-        // struct BLAH bleh;
-        // BLAH(&bleh);
-
-        // First, create new decl without rhs
-        code_declt object(code_decl.lhs());
-        new_block.copy_to_operands(object);
-
-        // Get rhs
-        side_effect_expr_function_callt &init =
-          to_side_effect_expr_function_call(rhs);
-
-        // Get lhs
-        init.arguments().push_back(address_of_exprt(code_decl.lhs()));
-
-        // Now convert the side_effect into an expression
-        convert_expression_to_code(init);
-
-        // and copy to new_block
-        new_block.copy_to_operands(init);
-
-        continue;
-      }
-
-      if(lhs.type().get_bool("#reference"))
-      {
-        // adjust rhs to address_off:
-        // `int &r = g;` is turned into `int &r = &g;`
-        exprt result_expr = exprt("address_of", rhs.type());
-        result_expr.copy_to_operands(rhs.op0());
-        rhs.swap(result_expr);
-      }
-    }
 
     new_block.copy_to_operands(code_decl);
   }
 
   code.swap(new_block);
+}
+
+void clang_cpp_adjust::adjust_catch(codet &code)
+{
+  codet::operandst &operands = code.operands();
+  // adjust try block
+  adjust_expr(operands[0]);
+
+  // First operand is always the try block, skip it
+  for (auto it = ++operands.begin(); it != operands.end(); it++)
+  {
+    // The following operands are the catchs
+    adjust_expr(*it);
+    code_blockt &block = to_code_block(to_code(*it));
+
+    std::vector<irep_idt> ids;
+    convert_exception_id(block.type(), "", ids);
+
+    block.type() = code_typet();
+    block.set("exception_id", ids.front());
+  }
+}
+
+void clang_cpp_adjust::adjust_throw_decl(codet &code)
+{
+  codet::operandst &operands = code.operands();
+
+  for (auto &op : operands)
+  {
+    std::vector<irep_idt> ids;
+    convert_exception_id(op.type(), "", ids);
+
+    op.type() = code_typet();
+    op.set("throw_decl_id", ids.front());
+  }
 }

@@ -8,8 +8,9 @@ Date:
 
 \*******************************************************************/
 
-class QGraphicsSceneMouseEvent {
+class QGraphicsSceneMouseEvent
+{
 public:
-	QGraphicsSceneMouseEvent();
-	~QGraphicsSceneMouseEvent();
+  QGraphicsSceneMouseEvent();
+  ~QGraphicsSceneMouseEvent();
 };

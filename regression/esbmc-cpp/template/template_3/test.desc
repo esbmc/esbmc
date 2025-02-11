@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--unwind 10 --no-unwinding-assertions -I /__w/esbmc/esbmc/src/cpp/library/ --timeout 900
+^VERIFICATION SUCCESSFUL$

@@ -5,31 +5,31 @@
 
 bool to_integer(const exprt &expr, BigInt &int_value)
 {
-  if(!expr.is_constant())
+  if (!expr.is_constant())
     return true;
 
   const std::string &value = expr.value().as_string();
   const irep_idt &type_id = expr.type().id();
 
-  if(type_id == "pointer")
+  if (type_id == "pointer")
   {
-    if(value == "NULL")
+    if (value == "NULL")
     {
       int_value = 0;
       return false;
     }
   }
-  else if(type_id == "c_enum" || type_id == "symbol")
+  else if (type_id == "c_enum" || type_id == "symbol")
   {
     int_value = string2integer(value);
     return false;
   }
-  else if(type_id == "unsignedbv")
+  else if (type_id == "unsignedbv")
   {
     int_value = binary2integer(value, false);
     return false;
   }
-  else if(type_id == "signedbv")
+  else if (type_id == "signedbv")
   {
     int_value = binary2integer(value, true);
     return false;
@@ -48,19 +48,19 @@ exprt from_integer(const BigInt &int_value, const typet &type)
 
   const irep_idt &type_id = type.id();
 
-  if(type_id == "unsignedbv" || type_id == "signedbv")
+  if (type_id == "unsignedbv" || type_id == "signedbv")
   {
     expr.value(integer2binary(int_value, bv_width(type)));
     return expr;
   }
-  if(type_id == "bool")
+  if (type_id == "bool")
   {
-    if(int_value == 0)
+    if (int_value == 0)
     {
       expr.make_false();
       return expr;
     }
-    if(int_value == 1)
+    if (int_value == 1)
     {
       expr.make_true();
       return expr;
@@ -73,7 +73,7 @@ exprt from_integer(const BigInt &int_value, const typet &type)
 
 expr2tc from_integer(const BigInt &int_value, const type2tc &type)
 {
-  switch(type->type_id)
+  switch (type->type_id)
   {
   case type2t::bool_id:
     return !int_value.is_zero() ? gen_true_expr() : gen_false_expr();
@@ -84,17 +84,17 @@ expr2tc from_integer(const BigInt &int_value, const type2tc &type)
 
   case type2t::fixedbv_id:
   {
-    constant_fixedbv2tc f(fixedbvt(fixedbv_spect(
+    expr2tc f = constant_fixedbv2tc(fixedbvt(fixedbv_spect(
       to_fixedbv_type(type).width, to_fixedbv_type(type).integer_bits)));
-    f->value.from_integer(int_value);
+    to_constant_fixedbv2t(f).value.from_integer(int_value);
     return f;
   }
 
   case type2t::floatbv_id:
   {
-    constant_floatbv2tc f(ieee_floatt(ieee_float_spect(
+    expr2tc f = constant_floatbv2tc(ieee_floatt(ieee_float_spect(
       to_floatbv_type(type).fraction, to_floatbv_type(type).exponent)));
-    f->value.from_integer(int_value);
+    to_constant_floatbv2t(f).value.from_integer(int_value);
     return f;
   }
   default:
@@ -106,13 +106,13 @@ BigInt power(const BigInt &base, const BigInt &exponent)
 {
   assert(exponent >= 0);
 
-  if(exponent == 0)
+  if (exponent == 0)
     return 1;
 
   BigInt result(base);
   BigInt count(exponent - 1);
 
-  while(count != 0)
+  while (count != 0)
   {
     result *= base;
     --count;
@@ -125,7 +125,7 @@ BigInt power(const BigInt &base, const BigInt &exponent)
 BigInt address_bits(const BigInt &size)
 {
   BigInt result, x = 2;
-  for(result = 1; x < size; result += 1, x *= 2)
+  for (result = 1; x < size; result += 1, x *= 2)
     ;
 
   return result;

@@ -1,15 +1,1 @@
-/*******************************************************************
- Module:
-
- Author: Felipe Rodrigues
-
- Date: September 2012
-
- \*******************************************************************/
-
-#ifndef STL_CERRNO
-#define STL_CERRNO
-
 #include <errno.h>
-
-#endif

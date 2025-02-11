@@ -11,7 +11,7 @@ void *t1(void *arg)
 void *t2(void *arg)
 {
   int y;
-  if (y==0) x=y;
+  if (y==1) x=y;
 }
 
 int main()

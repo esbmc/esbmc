@@ -18,7 +18,7 @@
 #include <irep2/irep2.h>
 #include <vector>
 
-class execution_statet; // foward dec
+class execution_statet; // forward decl
 
 /**
  *  Class for storing a particular threads state.
@@ -166,7 +166,7 @@ public:
      *  can point at, and that need to have calls set up to and executed. This
      *  member contains an iterator to the first goto instruction in the target
      *  and the target symbol name. */
-    std::list<std::pair<goto_programt::const_targett, symbol2tc>>
+    std::list<std::pair<goto_programt::const_targett, expr2tc>>
       cur_function_ptr_targets;
     /** Instruction where function pointer calls should seem to originate
      *  from. */
@@ -183,10 +183,9 @@ public:
      * Process a block adding the width of each symbol into the stack length
      * @param expr Expr to search for symbols.
      * @param stack_limit to limit size for stack.
-     * @return Constrain the stack limit.
+     * @return Constrain the stack limit (lessthanequal2t)
      */
-    lessthanequal2tc
-    process_stack_size(const expr2tc &expr, unsigned long stack_limit);
+    expr2tc process_stack_size(const expr2tc &expr, unsigned long stack_limit);
 
     /**
      * Decrease the stack frame size when the variables go out of scope
@@ -351,7 +350,7 @@ public:
 
   /**
    *  Perform renaming of contents of an address_of operation.
-   *  This requires different behaviour, because what we really want is a
+   *  This requires different behavior, because what we really want is a
    *  pointer to a global variable or l1 variable on the stack, or a heap
    *  object. So, don't perform second level of renaming in this function.
    *  @param expr Expression to rename contents of.
@@ -441,7 +440,7 @@ public:
   symex_targett::sourcet source;
   /** Counter for how many times a particular variable has been declared:
    *  becomes the l1 renaming number in renamed variables. Used to be a counter
-   *  for each function invocation, but the existance of decl insns makes l1
+   *  for each function invocation, but the existence of decl insns makes l1
    *  re-naming out of step with function invocations. */
   std::map<irep_idt, unsigned> variable_instance_nums;
   /** Record of how many loop unwinds we've performed. For each target in the

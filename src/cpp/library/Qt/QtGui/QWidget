@@ -10,9 +10,16 @@
 #include "../QtCore/QObject"
 #include "QLayout"
 
-class QWidget : public QObject {
+class QWidget : public QObject
+{
 public:
-void	setLayout ( QLayout * layout ){}
-void	setLayout ( void * layout ){}
-void	show (){}
+  void setLayout(QLayout *layout)
+  {
+  }
+  void setLayout(void *layout)
+  {
+  }
+  void show()
+  {
+  }
 };

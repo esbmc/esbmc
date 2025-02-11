@@ -1,0 +1,4 @@
+CORE
+test_abort.c
+--function func1 --no-slice
+^VERIFICATION SUCCESSFUL$

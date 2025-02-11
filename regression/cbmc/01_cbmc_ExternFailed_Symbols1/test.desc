@@ -1,4 +1,4 @@
 CORE
 main.c
- --no-pointer-check
+ --no-pointer-check -Wno-error=implicit-function-declaration
 ^VERIFICATION FAILED$

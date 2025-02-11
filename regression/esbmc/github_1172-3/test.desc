@@ -1,0 +1,5 @@
+CORE
+gh-1172-2.c
+--unwind 1 --overflow --no-unwinding-assertions
+^VERIFICATION FAILED$
+\bdivision by zero\b

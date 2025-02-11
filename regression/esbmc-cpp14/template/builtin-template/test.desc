@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--std c++14 --no-abstracted-cpp-includes
+
+^VERIFICATION SUCCESSFUL$

@@ -1,0 +1,4 @@
+THOROUGH
+main.c
+--unwind 2 --no-unwinding-assertions --data-races-check
+^VERIFICATION FAILED$

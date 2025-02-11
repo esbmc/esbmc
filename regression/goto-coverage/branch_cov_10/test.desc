@@ -1,0 +1,7 @@
+CORE
+main.cpp
+--branch-coverage-claims --unwind 3 --no-unwinding-assertions
+^Branches : 4
+^Reached : 0
+^Branch Coverage: 0%
+^VERIFICATION SUCCESSFUL$

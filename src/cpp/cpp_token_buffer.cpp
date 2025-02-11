@@ -16,7 +16,7 @@ int cpp_token_buffert::LookAhead(unsigned offset)
 
   offset += current_pos;
 
-  while(offset >= token_vector.size())
+  while (offset >= token_vector.size())
     read_token();
 
   return token_vector[offset]->kind;
@@ -26,7 +26,7 @@ int cpp_token_buffert::GetToken(cpp_tokent &token)
 {
   assert(current_pos <= token_vector.size());
 
-  if(token_vector.size() == current_pos)
+  if (token_vector.size() == current_pos)
     read_token();
 
   token = *token_vector[current_pos];
@@ -40,7 +40,7 @@ int cpp_token_buffert::GetToken()
 {
   assert(current_pos <= token_vector.size());
 
-  if(token_vector.size() == current_pos)
+  if (token_vector.size() == current_pos)
     read_token();
 
   int kind = token_vector[current_pos]->kind;
@@ -56,7 +56,7 @@ int cpp_token_buffert::LookAhead(unsigned offset, cpp_tokent &token)
 
   offset += current_pos;
 
-  while(offset >= token_vector.size())
+  while (offset >= token_vector.size())
     read_token();
 
   token = *token_vector[offset];

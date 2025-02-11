@@ -1,0 +1,44 @@
+cff-version: 1.2.0
+message: "If you cite ESBMC >= 7.0 please cite us as below."
+authors:
+    - family-names: "Sá Menezes"
+      given-names: Rafael
+      orcid: https://orcid.org/0000-0002-6102-4343
+    - family-names: Aldughaim
+      given-names: Mohannad
+      orcid: https://orcid.org/0000-0003-1708-1399
+    - family-names: Farias
+      given-names: Bruno
+      orcid: https://orcid.org/0009-0002-5124-8607
+    - family-names: Li
+      given-names: Xianzhiyu
+    - family-names: Manino
+      given-names: Edoardo
+      orcid: https://orcid.org/0000-0003-0028-5440
+    - family-names: Shmarov
+      given-names: Fedor
+      orcid: https://orcid.org/0000-0002-3848-451X
+    - family-names: Song
+      given-names: Kunjian
+    - family-names: Brauße
+      given-names: Franz
+      orcid: https://orcid.org/0000-0002-2386-7489
+    - family-names: "R. Gadelha"
+      given-names: Mikhail
+      orcid: https://orcid.org/0000-0001-6540-6587
+    - family-names: Tihanyi
+      given-names: Norbert
+      orcid: https://orcid.org/0000-0002-9002-5935
+    - family-names: Korovin
+      given-names: Konstantin
+      orcid: https://orcid.org/0000-0002-0740-621X
+    - family-names: Cordeiro
+      given-names: "Lucas C."
+      orcid: https://orcid.org/0000-0002-6235-4272
+title: "ESBMC: 7.4: Harnessing the Power of Intervals"
+license: "Apache 2.0"
+license-url: "https://github.com/esbmc/esbmc/blob/master/COPYING"
+repository-code: "https://github.com/esbmc/esbmc"
+type: software
+version: 7.4
+date-released: 2024

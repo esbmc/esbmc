@@ -8,7 +8,8 @@ Date: November 2012
 
 \*******************************************************************/
 
-class QSizeF{
+class QSizeF
+{
 public:
-    QSizeF();
+  QSizeF();
 };

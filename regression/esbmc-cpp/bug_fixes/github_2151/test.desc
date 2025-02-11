@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--unwind 1 --no-unwinding-assertion
+
+^VERIFICATION SUCCESSFUL$

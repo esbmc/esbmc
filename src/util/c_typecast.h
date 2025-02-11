@@ -48,7 +48,8 @@ bool c_implicit_typecast_arithmetic(
 class c_typecastt
 {
 public:
-  c_typecastt(const namespacet &_ns) : ns(_ns)
+  c_typecastt(const namespacet &_ns)
+    : ns(_ns), no_simplify(config.options.get_bool_option("no-simplify"))
   {
   }
 
@@ -71,6 +72,7 @@ public:
 
 protected:
   const namespacet &ns;
+  bool no_simplify;
 
   enum c_typet
   {

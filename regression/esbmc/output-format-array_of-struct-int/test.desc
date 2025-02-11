@@ -1,0 +1,6 @@
+CORE
+main.c
+--witness-output - --compact-trace -Wno-error=implicit-function-declaration
+^VERIFICATION FAILED$
+\bA = \{ \{ \.x\s*=\s*0 \} \}
+>A = \{ \{ \.x=0, \.y=0 \}, \{ \.x=0, \.y=0 \} \};</data>

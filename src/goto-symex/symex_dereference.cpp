@@ -15,14 +15,21 @@ void symex_dereference_statet::dereference_failure(
   goto_symex.claim(not2tc(g), "dereference failure: " + msg);
 }
 
+void symex_dereference_statet::dereference_assume(const guardt &guard)
+{
+  expr2tc g = guard.as_expr();
+  goto_symex.replace_dynamic_allocation(g);
+  goto_symex.assume(not2tc(g));
+}
+
 bool symex_dereference_statet::has_failed_symbol(
   const expr2tc &expr,
   const symbolt *&symbol)
 {
-  if(is_symbol2t(expr))
+  if (is_symbol2t(expr))
   {
     // Null and invalid name lookups will fail.
-    if(
+    if (
       to_symbol2t(expr).thename == "NULL" ||
       to_symbol2t(expr).thename == "INVALID")
       return false;
@@ -32,11 +39,11 @@ bool symex_dereference_statet::has_failed_symbol(
 
     const irep_idt &failed_symbol = ptr_symbol.type.failed_symbol();
 
-    if(failed_symbol == "")
+    if (failed_symbol == "")
       return false;
 
     const symbolt *s = goto_symex.ns.lookup(failed_symbol);
-    if(!s)
+    if (!s)
       return false;
     symbol = s;
     return true;
@@ -53,53 +60,53 @@ void symex_dereference_statet::get_value_set(
   state.value_set.get_value_set(expr, value_set);
 
   // add value set objects during the symbolic execution.
-  if(
+  if (
     goto_symex.options.get_bool_option("add-symex-value-sets") &&
     goto_symex.options.get_bool_option("inductive-step"))
   {
     // check whether we have a set of objects.
-    if(value_set.empty())
+    if (value_set.empty())
       return;
 
-    if(is_pointer_type(expr))
+    if (is_pointer_type(expr))
     {
       // we will accumulate the objects that the pointer points to.
       expr2tc or_accuml;
 
       // add each object to the resulting assume statement.
-      for(auto it = value_set.begin(); it != value_set.end(); ++it)
+      for (auto it = value_set.begin(); it != value_set.end(); ++it)
       {
         // note that the set of objects are always encoded as object_descriptor.
-        if(!is_object_descriptor2t(*it))
+        if (!is_object_descriptor2t(*it))
           return;
 
         // convert the object descriptor to extract its address later for comparison.
         const object_descriptor2t &obj = to_object_descriptor2t(*it);
 
         // if the object offset is unknown, we should not guess its offset.
-        if(is_unknown2t(obj.offset))
+        if (is_unknown2t(obj.offset))
           return;
 
         // check whether they are the same object.
         // this will produce expression like SAME-OBJECT(ptr, NULL)
         // or SAME-OBJECT(ptr, &x + offset).
         expr2tc obj_ptr;
-        if(is_null_object2t(obj.object))
+        if (is_null_object2t(obj.object))
         {
           // create NULL pointer type in case the object is a NULL-object
-          type2tc nullptrtype = type2tc(new pointer_type2t(expr->type));
+          type2tc nullptrtype = pointer_type2tc(expr->type);
           obj_ptr = symbol2tc(nullptrtype, "NULL");
         }
         else
           obj_ptr = add2tc(
             expr->type, address_of2tc(expr->type, obj.object), obj.offset);
 
-        same_object2tc eq = same_object2tc(expr, obj_ptr);
+        expr2tc eq = same_object2tc(expr, obj_ptr);
 
         // note that the pointer could point to any of the accumulated objects.
         // However, if we have just one element, our or_accuml should store just that single element.
         // Otherwise, we will accumulate the expression.
-        if(it == value_set.begin())
+        if (it == value_set.begin())
           or_accuml = eq;
         else
           or_accuml = or2tc(or_accuml, eq);
@@ -129,7 +136,7 @@ bool symex_dereference_statet::is_live_variable(const expr2tc &symbol)
 
   // NB, symbols shouldn't hit this point with no renaming (i.e. level0),
   // this should eventually be asserted.
-  if(
+  if (
     to_symbol2t(sym).rlevel == symbol2t::level0 ||
     to_symbol2t(sym).rlevel == symbol2t::level1_global ||
     to_symbol2t(sym).rlevel == symbol2t::level2_global)
@@ -151,12 +158,12 @@ bool symex_dereference_statet::is_live_variable(const expr2tc &symbol)
   //  has now expired, it's an invalid pointer. Look up the stack frames
   // currently active the corresponding thread to see whether there are any
   // records for the lexical variable that have this activation record.
-  for(auto it = state.call_stack.rbegin(); it != state.call_stack.rend(); it++)
+  for (auto it = state.call_stack.rbegin(); it != state.call_stack.rend(); it++)
   {
     // Get the last l1 renamed symbol
     auto const &name = renaming::level2t::name_record(to_symbol2t(sym));
     auto const &local_vars = it->local_variables;
-    if(local_vars.find(name) != local_vars.end())
+    if (local_vars.find(name) != local_vars.end())
       return true;
   }
 
@@ -176,15 +183,15 @@ void goto_symext::dereference(expr2tc &expr, dereferencet::modet mode)
   cur_state->top().level1.rename(expr);
 
   guardt guard;
-  if(is_free(mode))
+  if (is_free(mode))
   {
     expr2tc tmp = expr;
-    while(is_typecast2t(tmp))
+    while (is_typecast2t(tmp))
       tmp = to_typecast2t(tmp).from;
 
     assert(is_pointer_type(tmp));
     std::list<expr2tc> dummy;
-    // Dereference to byte type, because it's guarenteed to succeed.
+    // Dereference to byte type, because it's guaranteed to succeed.
     tmp = dereference2tc(get_uint8_type(), tmp);
 
     dereference.dereference_expr(tmp, guard, dereferencet::FREE);

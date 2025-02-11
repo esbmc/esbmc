@@ -13,9 +13,9 @@
 class pattern_checker
 {
   // There are two types of vulnerabilities:
-  //  - pattern-based vulnerability (e.g. Authoriation via TxOrigin)
+  //  - pattern-based vulnerability (e.g. Authorization via TxOrigin)
   //  - reasoning-based vulnerability (e.g. array out-of-bound access)
-  // This class implements the detection of pattern-based vulnerbaility.
+  // This class implements the detection of pattern-based vulnerability.
   // The reasoning-based vulnerability is handled by ESBMC verification pipeline.
 public:
   pattern_checker(
@@ -23,8 +23,8 @@ public:
     const std::string &_target_func);
   virtual ~pattern_checker() = default;
 
-  bool do_pattern_check();
-  bool start_pattern_based_check(const nlohmann::json &func);
+  void do_pattern_check();
+  void start_pattern_based_check(const nlohmann::json &func);
 
   // Authorization through Tx origin
   void check_authorization_through_tx_origin(const nlohmann::json &func);

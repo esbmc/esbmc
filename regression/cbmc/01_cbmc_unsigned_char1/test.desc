@@ -1,4 +1,4 @@
 CORE
 main.c
--funsigned-char
+-funsigned-char -Wno-error=implicit-function-declaration
 ^VERIFICATION SUCCESSFUL$

@@ -1,5 +1,4 @@
 CORE
 main.c
---no-slice
+--no-slice -Wno-error=implicit-function-declaration
 ^VERIFICATION FAILED$
---

@@ -54,7 +54,6 @@
 //
 // You may however use and modify this without restriction.
 
-
 class BigInt
 {
 public:
@@ -241,20 +240,22 @@ public:
 
   BigInt &negate()
   {
-    if(!is_zero())
+    if (!is_zero())
       positive = !positive;
     return *this;
   }
-  BigInt operator-() const
+
+  friend BigInt operator-(BigInt b)
   {
-    return BigInt(*this).negate();
+    b.negate();
+    return b;
   }
 
 #define IN_PLACE_OPERATOR(TYPE)                                                \
-  BigInt &operator+=(TYPE);                                              \
-  BigInt &operator-=(TYPE);                                              \
-  BigInt &operator*=(TYPE);                                              \
-  BigInt &operator/=(TYPE);                                              \
+  BigInt &operator+=(TYPE);                                                    \
+  BigInt &operator-=(TYPE);                                                    \
+  BigInt &operator*=(TYPE);                                                    \
+  BigInt &operator/=(TYPE);                                                    \
   BigInt &operator%=(TYPE);
 
   IN_PLACE_OPERATOR(const BigInt &)
@@ -299,16 +300,27 @@ public:
     return operator-=(1);
   } // predecrement
 
-  static void
-  div(BigInt const &, BigInt const &, BigInt &quot, BigInt &rem);
+  static void div(BigInt const &, BigInt const &, BigInt &quot, BigInt &rem);
 
   // Returns the largest x such that 2^x <= abs() or 0 if input is 0
   // Not part of original BigInt.
   unsigned floorPow2() const;
 
-  // Sets the number to the power of two given by the exponent
   // Not part of original BigInt.
-  void setPower2(unsigned exponent);
+  static BigInt power2(unsigned n)
+  {
+    BigInt b;
+    b.setPower2(n);
+    return b;
+  }
+
+  // Not part of original BigInt.
+  static BigInt power2m1(unsigned n)
+  {
+    BigInt b = power2(n);
+    --b;
+    return b;
+  }
 
   void swap(BigInt &other)
   {
@@ -317,6 +329,11 @@ public:
     std::swap(other.digit, digit);
     std::swap(other.positive, positive);
   }
+
+private:
+  // Sets the number to the power of two given by the exponent
+  // Not part of original BigInt.
+  void setPower2(unsigned exponent);
 };
 
 // Binary arithmetic operators

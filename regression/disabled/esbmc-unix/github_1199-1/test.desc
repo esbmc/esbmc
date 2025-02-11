@@ -1,0 +1,4 @@
+CORE
+32_1_cilled_ok_nondet_linux-3.4-32_1-drivers--net--phy--spi_ks8995.ko-ldv_main0_sequence_infinite_withcheck_stateful.cil.out.i
+--no-div-by-zero-check --force-malloc-success --state-hashing --add-symex-value-sets --no-align-check --k-step 2 --floatbv --unlimited-k-steps -D'__builtin_unreachable()' --64  --no-pointer-check --no-bounds-check --interval-analysis --error-label ERROR --goto-unwind --unlimited-goto-unwind --k-induction --max-inductive-step 3
+^VERIFICATION SUCCESSFUL$

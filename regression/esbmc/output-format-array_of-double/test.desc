@@ -1,0 +1,6 @@
+CORE
+main.c
+--witness-output - --compact-trace -Wno-error=implicit-function-declaration
+^VERIFICATION FAILED$
+\bA = \{ 0\.000000 \}
+>A\b.*\b0\.0000000000000000\b

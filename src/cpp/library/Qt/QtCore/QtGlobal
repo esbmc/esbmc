@@ -8,8 +8,9 @@ Date:
 
 \*******************************************************************/
 
-class QtGlobal {
+class QtGlobal
+{
 public:
-	QtGlobal();
-	~QtGlobal();
+  QtGlobal();
+  ~QtGlobal();
 };

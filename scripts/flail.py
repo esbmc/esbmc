@@ -123,6 +123,7 @@ class Flail:
         return self.prefix + (obj.name.replace('.hs', '_buf')
                                       .replace('.h', '_buf')
                                       .replace('.c', '_buf')
+                                      .replace('.py', '_buf')
                                       .replace('.goto', '_buf')
                                       .replace('.txt', '_buf')
                                       .replace('buildidobj', 'buildidstring')
@@ -204,6 +205,7 @@ def parse_args(argv):
 
 def main():
     args = parse_args(sys.argv)
+    os.makedirs(os.path.dirname(args.output), exist_ok=True)
     with open(args.output, 'w') as output:
         header = None
         if args.header:

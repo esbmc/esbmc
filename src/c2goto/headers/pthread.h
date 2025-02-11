@@ -17,11 +17,16 @@
    Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA
    02111-1307 USA.  */
 
-#ifndef _PTHREAD_H
-#define _PTHREAD_H	1
+#pragma once
+
+#include <__esbmc/stddefs.h>
 
 #include <stddef.h>
 #include <stdint.h>
+
+#include <sched.h>
+
+__ESBMC_C_CPP_BEGIN
 
 #ifndef _MSVC
 #define NULL 0
@@ -57,7 +62,7 @@ typedef union
 } pthread_mutexattr_t;
 
 
-typedef struct
+typedef struct pthread_cond_t
 {
   int __lock;
   unsigned int __futex;
@@ -116,14 +121,14 @@ typedef union
 } pthread_barrierattr_t;
 #endif
 
+struct sched_param
+{
+   int __sched_priority;
+};
 
 #if __WORDSIZE == 32
 /* Extra attributes for the cleanup functions.  */
 # define __cleanup_fct_attribute __attribute__ ((__regparm__ (1)))
-#endif
-
-#ifdef __cplusplus
-extern "C" {
 #endif
 
 /* Detach state.  */
@@ -795,8 +800,4 @@ __NTH (pthread_equal (pthread_t __thread1, pthread_t __thread2))
 }
 #endif
 
-#ifdef __cplusplus
-}
-#endif
-
-#endif	/* pthread.h */
+__ESBMC_C_CPP_END

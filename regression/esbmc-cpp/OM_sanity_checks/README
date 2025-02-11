@@ -1,0 +1,8 @@
+Test suite to perform sanity checks on ESBMC's OMs for C++ verification. It works in two-ways:
+1. Make sure the code changes in an ESBMC's OM doesn't generate PARSE ERRORs
+2. Make sure the code changes in clang-cpp frontend doesn't affect the parsing of ESBMC's OMs
+
+Eeach TC corresponds to one ESBMC C++ OM.
+
+Pass criteria:
+  - No parse errors and got "VERIFICATION SUCCESSFUL"

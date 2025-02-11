@@ -8,19 +8,19 @@ bool typecheckt::typecheck_main()
     typecheck();
   }
 
-  catch(int e)
+  catch (int e)
   {
     log_error("{}", e);
     abort();
   }
 
-  catch(const char *e)
+  catch (const char *e)
   {
     log_error("{}", e);
     abort();
   }
 
-  catch(const std::string &e)
+  catch (const std::string &e)
   {
     log_error("{}", e);
     abort();

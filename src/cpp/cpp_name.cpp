@@ -12,15 +12,15 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 void cpp_namet::convert(std::string &identifier, std::string &base_name) const
 {
-  forall_irep(it, get_sub())
+  forall_irep (it, get_sub())
   {
     const irep_idt id = it->id();
 
     std::string name_component;
 
-    if(id == "name")
+    if (id == "name")
       name_component = it->get_string("identifier");
-    else if(id == "template_args")
+    else if (id == "template_args")
     {
       std::stringstream ss;
       ss << location() << std::endl;
@@ -32,7 +32,7 @@ void cpp_namet::convert(std::string &identifier, std::string &base_name) const
 
     identifier += name_component;
 
-    if(id == "::")
+    if (id == "::")
       base_name = "";
     else
       base_name += name_component;
@@ -43,11 +43,11 @@ std::string cpp_namet::to_string() const
 {
   std::string str;
 
-  forall_irep(it, get_sub())
+  forall_irep (it, get_sub())
   {
-    if(it->id() == "::")
+    if (it->id() == "::")
       str += it->id_string();
-    else if(it->id() == "template_args")
+    else if (it->id() == "template_args")
       str += "<...>";
     else
       str += it->get_string("identifier");

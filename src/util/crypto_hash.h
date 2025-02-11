@@ -4,20 +4,28 @@
 #include <memory>
 #include <string>
 
+#if BOOST_VERSION >= 108600
+#  define HASH_SIZE 20
+using HashType = unsigned char;
+#else
+#  define HASH_SIZE 5
+using HashType = unsigned int;
+#endif
+
 class crypto_hash_private;
 
 class crypto_hash
 {
 public:
   std::shared_ptr<crypto_hash_private> p_crypto;
-  unsigned int hash[5];
+  HashType hash[HASH_SIZE];
 
   bool operator<(const crypto_hash &h2) const;
 
   size_t to_size_t() const
   {
     size_t result = hash[0];
-    for(int i = 1; i < 5; i++)
+    for (int i = 1; i < HASH_SIZE; i++)
       // Do we care about overlaps?
       result ^= hash[i];
     return result;

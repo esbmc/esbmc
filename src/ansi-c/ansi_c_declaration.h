@@ -160,7 +160,7 @@ public:
     symbol.file_local = get_is_static() || symbol.is_macro ||
                         (!get_is_global() && !get_is_extern() && !is_code);
 
-    if(get_is_inline())
+    if (get_is_inline())
       symbol.type.inlined(true);
   }
 };

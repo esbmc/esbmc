@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --contract MyContract --unwind 20 --no-unwinding-assertions
+^VERIFICATION FAILED$

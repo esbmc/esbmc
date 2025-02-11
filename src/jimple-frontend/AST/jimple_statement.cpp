@@ -42,7 +42,7 @@ exprt jimple_return::to_exprt(
   // TODO: jimple return with support to other returns
   typet return_type = empty_typet();
   code_returnt ret_expr;
-  if(expr)
+  if (expr)
   {
     auto return_value = expr->to_exprt(ctx, class_name, function_name);
     ret_expr.op0() = return_value;
@@ -57,14 +57,14 @@ std::string jimple_return::to_string() const
 }
 void jimple_return::from_json(const json &j)
 {
-  if(j.contains("value"))
+  if (j.contains("value"))
     expr = jimple_expr::get_expression(j.at("value"));
 }
 std::string jimple_label::to_string() const
 {
   std::ostringstream oss;
   oss << "Label: " << this->label;
-  for(auto member : this->members->members)
+  for (auto member : this->members->members)
     oss << "\n\t\t\t" << member->to_string();
   return oss.str();
 }
@@ -79,7 +79,7 @@ exprt jimple_label::to_exprt(
   c_label.set_label(label);
 
   code_blockt block;
-  for(auto member : members->members)
+  for (auto member : members->members)
   {
     block.operands().push_back(
       std::move(member->to_exprt(ctx, class_name, function_name)));
@@ -138,7 +138,7 @@ exprt jimple_assignment::to_exprt(
   const std::string &function_name) const
 {
   //TODO: Remove this hack
-  if(is_skip)
+  if (is_skip)
   {
     code_skipt skip;
     return skip;
@@ -147,14 +147,14 @@ exprt jimple_assignment::to_exprt(
   auto lhs_handle = lhs->to_exprt(ctx, class_name, function_name);
 
   auto dyn_expr = std::dynamic_pointer_cast<jimple_expr_invoke>(rhs);
-  if(dyn_expr && !dyn_expr->is_nondet_call() && !dyn_expr->is_intrinsic_method)
+  if (dyn_expr && !dyn_expr->is_nondet_call() && !dyn_expr->is_intrinsic_method)
   {
     dyn_expr->set_lhs(lhs_handle);
     return rhs->to_exprt(ctx, class_name, function_name);
   }
 
   auto dyn2_expr = std::dynamic_pointer_cast<jimple_virtual_invoke>(rhs);
-  if(dyn2_expr && !dyn2_expr->is_nondet_call())
+  if (dyn2_expr && !dyn2_expr->is_nondet_call())
   {
     dyn2_expr->set_lhs(lhs_handle);
     return rhs->to_exprt(ctx, class_name, function_name);
@@ -325,9 +325,9 @@ void jimple_invoke::from_json(const json &j)
 {
   j.at("base_class").get_to(base_class);
   j.at("method").get_to(method);
-  if(j.contains("variable"))
+  if (j.contains("variable"))
     j.at("variable").get_to(variable);
-  for(auto x : j.at("parameters"))
+  for (auto x : j.at("parameters"))
   {
     parameters.push_back(std::move(jimple_expr::get_expression(x)));
   }
@@ -340,41 +340,41 @@ exprt jimple_invoke::to_exprt(
   const std::string &function_name) const
 {
   // TODO: Move intrinsics to backend
-  if(base_class == "kotlin.jvm.internal.Intrinsics")
+  if (base_class == "kotlin.jvm.internal.Intrinsics")
   {
     code_skipt skip;
     return skip;
   }
 
   // TODO: Move intrinsics to backend
-  if(base_class == "java.lang.Runtime")
+  if (base_class == "java.lang.Runtime")
   {
     code_skipt skip;
     return skip;
   }
 
   // Don't care for the default object constructor
-  if(base_class == "java.lang.Object")
+  if (base_class == "java.lang.Object")
   {
     code_skipt skip;
     return skip;
   }
 
   // Don't care for Random
-  if(base_class == "java.util.Random")
+  if (base_class == "java.util.Random")
   {
     code_skipt skip;
     return skip;
   }
 
   // Don't care for Random
-  if(base_class == "java.lang.String")
+  if (base_class == "java.lang.String")
   {
     code_skipt skip;
     return skip;
   }
 
-  if(base_class == "java.lang.AssertionError")
+  if (base_class == "java.lang.AssertionError")
   {
     code_skipt skip;
     return skip;
@@ -388,7 +388,7 @@ exprt jimple_invoke::to_exprt(
   auto symbol = ctx.find_symbol(oss.str());
   call.function() = symbol_expr(*symbol);
 
-  if(variable != "")
+  if (variable != "")
   {
     // Let's add @THIS
     auto this_expression =
@@ -400,7 +400,7 @@ exprt jimple_invoke::to_exprt(
     block.operands().push_back(assign);
   }
 
-  for(unsigned long int i = 0; i < parameters.size(); i++)
+  for (unsigned long int i = 0; i < parameters.size(); i++)
   {
     // Just adding the arguments should be enough to set the parameters
     auto parameter_expr =
@@ -431,13 +431,16 @@ void jimple_throw::from_json(const json &j)
 }
 
 exprt jimple_throw::to_exprt(
-  contextt &ctx,
-  const std::string &class_name,
-  const std::string &function_name) const
+  contextt &,
+  const std::string &,
+  const std::string &) const
 {
   codet p = codet("cpp-throw");
-  //TODO: throw
-  auto to_add = expr->to_exprt(ctx, class_name, function_name);
-  p.move_to_operands(to_add);
+  // TODO: throw
+  // Since the implementation of Throw isn't complete,
+  // the expression shouldn't be used.
+
+  // auto to_add = expr->to_exprt(ctx, class_name, function_name);
+  // p.move_to_operands(to_add);
   return p;
 }

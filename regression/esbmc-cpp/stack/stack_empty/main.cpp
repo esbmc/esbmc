@@ -7,7 +7,6 @@ using namespace std;
 int main ()
 {
   stack<int> mystack;
-  stack<int>::iterator it, it2;
 
   int sum (0);
 

@@ -22,12 +22,12 @@
 
 static inline bool is_unbounded_array(const smt_sort *s)
 {
-  if(s->id != SMT_SORT_ARRAY)
+  if (s->id != SMT_SORT_ARRAY)
     return false;
 
   // This is either really large, or unbounded thus leading to a
   // config.ansi_c.int_width sized domain. Either way, not a normal one.
-  if(s->get_domain_width() > 10)
+  if (s->get_domain_width() > 10)
     return true;
 
   return false;
@@ -35,11 +35,11 @@ static inline bool is_unbounded_array(const smt_sort *s)
 
 class array_convt;
 
+class array_ast;
+
 class array_ast : public smt_ast
 {
 public:
-#define array_downcast(x) static_cast<const array_ast *>(x)
-
   array_ast(array_convt *actx, smt_convt *ctx, const smt_sort *_s)
     : smt_ast(ctx, _s), symname(""), array_ctx(actx)
   {
@@ -73,8 +73,8 @@ public:
 
   void dump() const override
   {
-    log_debug("name: {}", symname);
-    for(auto const &e : array_fields)
+    log_status("name: {}", symname);
+    for (auto const &e : array_fields)
       e->dump();
   }
 
@@ -86,6 +86,17 @@ public:
 
   array_convt *array_ctx;
 };
+
+#ifdef NDEBUG
+#  define array_downcast(x) static_cast<const array_ast *>(x)
+#else
+static inline const array_ast *array_downcast(const smt_ast *x)
+{
+  const array_ast *a = dynamic_cast<const array_ast *>(x);
+  assert(a);
+  return a;
+}
+#endif
 
 class array_convt : public array_iface
 {

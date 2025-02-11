@@ -1,0 +1,4 @@
+CORE
+b.c
+a.c
+^VERIFICATION FAILED$

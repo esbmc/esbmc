@@ -8,9 +8,13 @@ Author: Felipe Rodrigues
 
 #include "QAbstractAnimation"
 
-class QPropertyAnimation{
+class QPropertyAnimation
+{
 public:
-	QPropertyAnimation(){}
-	~QPropertyAnimation(){}
+  QPropertyAnimation()
+  {
+  }
+  ~QPropertyAnimation()
+  {
+  }
 };
-

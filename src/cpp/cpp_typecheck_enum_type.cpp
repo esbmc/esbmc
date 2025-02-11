@@ -24,16 +24,16 @@ void cpp_typecheckt::typecheck_enum_body(symbolt &enum_symbol)
 
   BigInt i = 0;
 
-  Forall_irep(it, components)
+  Forall_irep (it, components)
   {
     const irep_idt &name = it->name();
 
-    if(it->find("value").is_not_nil())
+    if (it->find("value").is_not_nil())
     {
       exprt &value = static_cast<exprt &>(it->add("value"));
       typecheck_expr(value);
       make_constant_index(value);
-      if(to_integer(value, i))
+      if (to_integer(value, i))
         throw "failed to produce integer for enum";
     }
 
@@ -53,7 +53,7 @@ void cpp_typecheckt::typecheck_enum_body(symbolt &enum_symbol)
     symbol.is_macro = true;
 
     symbolt *new_symbol;
-    if(context.move(symbol, new_symbol))
+    if (context.move(symbol, new_symbol))
       throw "cpp_typecheckt::typecheck_enum_body: context.move() failed";
 
     cpp_idt &scope_identifier = cpp_scopes.put_into_scope(*new_symbol);
@@ -80,7 +80,7 @@ void cpp_typecheckt::typecheck_enum_type(typet &type)
   bool anonymous = base_name.empty();
   bool tag_only_declaration = enum_type.get_tag_only_declaration();
 
-  if(anonymous)
+  if (anonymous)
     base_name = "#anon" + i2string(anon_counter++);
 
   cpp_scopet &dest_scope = tag_scope(base_name, has_body, tag_only_declaration);
@@ -91,13 +91,13 @@ void cpp_typecheckt::typecheck_enum_type(typet &type)
 
   symbolt *previous_symbol = context.find_symbol(symbol_name);
 
-  if(previous_symbol != nullptr)
+  if (previous_symbol != nullptr)
   {
     // we do!
 
     symbolt &symbol = *previous_symbol;
 
-    if(has_body)
+    if (has_body)
     {
       err_location(type);
       str << "error: enum symbol `" << base_name << "' declared previously"
@@ -107,7 +107,7 @@ void cpp_typecheckt::typecheck_enum_type(typet &type)
       throw 0;
     }
   }
-  else if(has_body)
+  else if (has_body)
   {
     std::string pretty_name = cpp_scopes.current_scope().prefix + base_name;
 
@@ -125,7 +125,7 @@ void cpp_typecheckt::typecheck_enum_type(typet &type)
 
     // move early, must be visible before doing body
     symbolt *new_symbol;
-    if(context.move(symbol, new_symbol))
+    if (context.move(symbol, new_symbol))
       throw "cpp_typecheckt::typecheck_enum_type: context.move() failed";
 
     // put into scope

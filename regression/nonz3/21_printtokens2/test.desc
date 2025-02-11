@@ -1,4 +1,4 @@
 CORE
 main.c
---partial-loops --unwind 1 --32
+--partial-loops --unwind 1 --32 -Wno-error=implicit-int
 ^VERIFICATION FAILED$

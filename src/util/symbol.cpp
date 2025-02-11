@@ -53,24 +53,24 @@ void symbolt::show(std::ostream &out) const
   out << "Module......: " << module << "\n";
   out << "Mode........: " << mode << " (" << mode << ")"
       << "\n";
-  if(type.is_not_nil())
+  if (type.is_not_nil())
     out << "Type........: " << type.pretty(4) << "\n";
-  if(value.is_not_nil())
+  if (value.is_not_nil())
     out << "Value.......: " << value.pretty(4) << "\n";
 
   out << "Flags.......:";
 
-  if(lvalue)
+  if (lvalue)
     out << " lvalue";
-  if(static_lifetime)
+  if (static_lifetime)
     out << " static_lifetime";
-  if(file_local)
+  if (file_local)
     out << " file_local";
-  if(is_type)
+  if (is_type)
     out << " type";
-  if(is_extern)
+  if (is_extern)
     out << " extern";
-  if(is_macro)
+  if (is_macro)
     out << " macro";
 
   out << "\n";
@@ -96,19 +96,19 @@ void symbolt::to_irep(irept &dest) const
   dest.base_name(name);
   dest.mode(mode);
 
-  if(is_type)
+  if (is_type)
     dest.is_type(true);
-  if(is_macro)
+  if (is_macro)
     dest.is_macro(true);
-  if(is_parameter)
+  if (is_parameter)
     dest.is_parameter(true);
-  if(lvalue)
+  if (lvalue)
     dest.lvalue(true);
-  if(static_lifetime)
+  if (static_lifetime)
     dest.static_lifetime(true);
-  if(file_local)
+  if (file_local)
     dest.file_local(true);
-  if(is_extern)
+  if (is_extern)
     dest.is_extern(true);
 }
 
@@ -130,4 +130,33 @@ void symbolt::from_irep(const irept &src)
   static_lifetime = src.static_lifetime();
   file_local = src.file_local();
   is_extern = src.is_extern();
+}
+
+irep_idt symbolt::get_function_name() const
+{
+  irep_idt func_name = location.get_function();
+  if (!func_name.empty())
+    return func_name;
+
+  const std::string &symbol_id = id.as_string();
+
+  // Find the position of "F@"
+  size_t posF = symbol_id.find("F@");
+
+  if (posF == std::string::npos)
+    return ""; // Return an empty string if "F@" is not found
+
+  posF += 2; // Advance beyond "F@"
+
+  // Find the position of the last '@'
+  size_t posLastAt = symbol_id.rfind('@');
+
+  // Check if there is an '@' after the function name (e.g.: c:string.c@1290@F@strcmp@c1)
+  if (posLastAt != std::string::npos && posLastAt > posF)
+    return symbol_id.substr(
+      posF,
+      posLastAt - posF); // Extract the content between "F@" and the last '@'
+
+  return symbol_id.substr(
+    posF); // If there is no '@' after the function name (e.g: c:string.c@1290@F@strcmp), return from "F@"
 }

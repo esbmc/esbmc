@@ -14,9 +14,19 @@
 #define HAVE_SENDFILE_ESBMC "@HAVE_SENDFILE_ESBMC@"
 #endif
 
+#define ESBMC_C2GOTO_SYSROOT "@C2GOTO_SYSROOT@"
+
 #cmakedefine ESBMC_BUNDLE_LIBC 1
 #cmakedefine ESBMC_CLANG_HEADER_DIR "@ESBMC_CLANG_HEADER_DIR@"
 #cmakedefine ESBMC_CLANG_HEADERS_BUNDLED 1
+
+#cmakedefine ESBMC_CHERI_CLANG 1
+#cmakedefine ESBMC_CHERI_CLANG_MORELLO 1
+
+#cmakedefine ESBMC_CHERI_HYBRID_SYSROOT "@ESBMC_CHERI_HYBRID_SYSROOT@"
+#cmakedefine ESBMC_CHERI_PURECAP_SYSROOT "@ESBMC_CHERI_PURECAP_SYSROOT@"
+
+#cmakedefine ESBMC_SVCOMP 1
 
 /* Define to 1 if you have the <unistd.h> header file. */
 #cmakedefine HAVE_UNISTD 1

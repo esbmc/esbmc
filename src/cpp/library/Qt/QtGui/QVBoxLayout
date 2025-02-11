@@ -10,11 +10,22 @@
 #include "QTextEdit"
 #include "QPushButton"
 
-class QVBoxLayout : public QLayout {
+class QVBoxLayout : public QLayout
+{
 public:
-	QVBoxLayout (){}
-	QVBoxLayout ( QWidget * parent ){}
-	~QVBoxLayout (){}
-	QVBoxLayout	addWidget ( QTextEdit * w ){}
-	QVBoxLayout	addWidget ( QPushButton * w ){}
+  QVBoxLayout()
+  {
+  }
+  QVBoxLayout(QWidget *parent)
+  {
+  }
+  ~QVBoxLayout()
+  {
+  }
+  QVBoxLayout addWidget(QTextEdit *w)
+  {
+  }
+  QVBoxLayout addWidget(QPushButton *w)
+  {
+  }
 };

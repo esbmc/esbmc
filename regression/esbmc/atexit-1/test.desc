@@ -1,0 +1,4 @@
+CORE
+main.c
+--memory-leak-check --force-malloc-success --incremental-bmc --no-simplify -Wno-error=implicit-function-declaration
+^VERIFICATION FAILED$

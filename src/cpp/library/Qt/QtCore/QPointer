@@ -6,7 +6,12 @@ Author: Felipe Rodrigues
 
 \*******************************************************************/
 
-class QPointer{
-	QPointer(){}
-	~QPointer(){}
+class QPointer
+{
+  QPointer()
+  {
+  }
+  ~QPointer()
+  {
+  }
 };

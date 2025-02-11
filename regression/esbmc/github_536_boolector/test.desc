@@ -1,4 +1,4 @@
 THOROUGH
 main.c
---smt-model --boolector
+--smt-model --boolector -Wno-error=implicit-function-declaration
 ^VERIFICATION FAILED$

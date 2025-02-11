@@ -10,36 +10,36 @@
 void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
 {
   expr->Foreach_operand([this](expr2tc &e) {
-    if(!is_nil_expr(e))
+    if (!is_nil_expr(e))
       default_replace_dynamic_allocation(e);
   });
 
-  if(is_valid_object2t(expr))
+  if (is_valid_object2t(expr))
   {
     /* alloc */
     // replace with CPROVER_alloc[POINTER_OBJECT(...)]
     const valid_object2t &obj = to_valid_object2t(expr);
 
-    pointer_object2tc obj_expr(pointer_type2(), obj.value);
+    expr2tc obj_expr = pointer_object2tc(pointer_type2(), obj.value);
 
     expr2tc alloc_arr_2;
     migrate_expr(symbol_expr(*ns.lookup(valid_ptr_arr_name)), alloc_arr_2);
 
-    index2tc index_expr(get_bool_type(), alloc_arr_2, obj_expr);
+    expr2tc index_expr = index2tc(get_bool_type(), alloc_arr_2, obj_expr);
     expr = index_expr;
   }
-  else if(is_invalid_pointer2t(expr))
+  else if (is_invalid_pointer2t(expr))
   {
     /* (!valid /\ dynamic) \/ invalid */
     const invalid_pointer2t &ptr = to_invalid_pointer2t(expr);
 
-    pointer_object2tc obj_expr(pointer_type2(), ptr.ptr_obj);
+    expr2tc obj_expr = pointer_object2tc(pointer_type2(), ptr.ptr_obj);
 
     expr2tc alloc_arr_2;
     migrate_expr(symbol_expr(*ns.lookup(valid_ptr_arr_name)), alloc_arr_2);
 
-    index2tc index_expr(get_bool_type(), alloc_arr_2, obj_expr);
-    not2tc notindex(index_expr);
+    expr2tc index_expr = index2tc(get_bool_type(), alloc_arr_2, obj_expr);
+    expr2tc notindex = not2tc(index_expr);
 
     // XXXjmorse - currently we don't correctly track the fact that stack
     // objects change validity as the program progresses, and the solver is
@@ -51,51 +51,51 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
     expr2tc sym_2;
     migrate_expr(symbol_expr(*ns.lookup(dyn_info_arr_name)), sym_2);
 
-    pointer_object2tc ptr_obj(pointer_type2(), ptr.ptr_obj);
-    index2tc is_dyn(get_bool_type(), sym_2, ptr_obj);
+    expr2tc ptr_obj = pointer_object2tc(pointer_type2(), ptr.ptr_obj);
+    expr2tc is_dyn = index2tc(get_bool_type(), sym_2, ptr_obj);
 
     // Catch free pointers: don't allow anything to be pointer object 1, the
     // invalid pointer.
-    type2tc ptr_type = type2tc(new pointer_type2t(get_empty_type()));
-    symbol2tc invalid_object(ptr_type, "INVALID");
-    equality2tc isinvalid(ptr.ptr_obj, invalid_object);
+    type2tc ptr_type = pointer_type2tc(get_empty_type());
+    expr2tc invalid_object = symbol2tc(ptr_type, "INVALID");
+    expr2tc isinvalid = equality2tc(ptr.ptr_obj, invalid_object);
 
-    and2tc is_not_bad_ptr(notindex, is_dyn);
-    or2tc is_valid_ptr(is_not_bad_ptr, isinvalid);
+    expr2tc is_not_bad_ptr = and2tc(notindex, is_dyn);
+    expr2tc is_valid_ptr = or2tc(is_not_bad_ptr, isinvalid);
 
     expr = is_valid_ptr;
   }
-  else if(is_deallocated_obj2t(expr))
+  else if (is_deallocated_obj2t(expr))
   {
     /* !alloc */
     // replace with CPROVER_alloc[POINTER_OBJECT(...)]
     const deallocated_obj2t &obj = to_deallocated_obj2t(expr);
 
-    pointer_object2tc obj_expr(pointer_type2(), obj.value);
+    expr2tc obj_expr = pointer_object2tc(pointer_type2(), obj.value);
 
     expr2tc alloc_arr_2;
     migrate_expr(symbol_expr(*ns.lookup(valid_ptr_arr_name)), alloc_arr_2);
 
-    if(is_symbol2t(obj.value))
+    if (is_symbol2t(obj.value))
       expr = index2tc(get_bool_type(), alloc_arr_2, obj_expr);
     else
     {
-      index2tc index_expr(get_bool_type(), alloc_arr_2, obj_expr);
+      expr2tc index_expr = index2tc(get_bool_type(), alloc_arr_2, obj_expr);
       expr = not2tc(index_expr);
     }
   }
-  else if(is_dynamic_size2t(expr))
+  else if (is_dynamic_size2t(expr))
   {
     // replace with CPROVER_alloc_size[POINTER_OBJECT(...)]
     //nec: ex37.c
     const dynamic_size2t &size = to_dynamic_size2t(expr);
 
-    pointer_object2tc obj_expr(pointer_type2(), size.value);
+    expr2tc obj_expr = pointer_object2tc(pointer_type2(), size.value);
 
     expr2tc alloc_arr_2;
     migrate_expr(symbol_expr(*ns.lookup(alloc_size_arr_name)), alloc_arr_2);
 
-    index2tc index_expr(uint_type2(), alloc_arr_2, obj_expr);
+    expr2tc index_expr = index2tc(size_type2(), alloc_arr_2, obj_expr);
     expr = index_expr;
   }
 }

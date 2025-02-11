@@ -1,125 +1,224 @@
-/*******************************************************************
- Module:
-
- Author: Felipe Rodrigues
-
- Date: September 2012
-
- \*******************************************************************/
-
 #ifndef STL_STDEXCEPT
 #define STL_STDEXCEPT
 
 #include "definitions.h"
 #include "exception"
+#include "new"
+#include <string>
+#include <cstring> /* strlen(), memcpy() */
+#include <cstdlib> /* malloc(), free() */
 
-namespace std {
+namespace std
+{
 
-struct runtime_error: public exception
+class __refcnted_cstr {
+protected:
+  struct refcnted {
+    size_t refcnt;
+    char cstr[];
+  } *ptr;
+
+public:
+  __refcnted_cstr() throw() : ptr(NULL) {}
+
+  __refcnted_cstr(const char *cstr)
+  {
+    size_t n = strlen(cstr);
+    ptr = (refcnted *)malloc(sizeof(*ptr) + n + 1);
+    if (!ptr)
+      throw std::bad_alloc();
+    ptr->refcnt = 1;
+    memcpy(ptr->cstr, cstr, n + 1);
+  }
+
+  __refcnted_cstr(const __refcnted_cstr &o) throw()
+  : ptr(o.ptr)
+  {
+    if (ptr)
+      ptr->refcnt++;
+  }
+
+  ~__refcnted_cstr() throw()
+  {
+    if (ptr && !--ptr->refcnt)
+      free(ptr);
+  }
+
+  __refcnted_cstr & operator=(const __refcnted_cstr &o) throw()
+  {
+    if (this != &o)
+    {
+      this->~__refcnted_cstr();
+      new (this) __refcnted_cstr(o);
+    }
+    return *this;
+  }
+
+  const char * get(const char *def) const throw()
+  {
+    return ptr ? ptr->cstr : def;
+  }
+};
+
+class runtime_error : public exception
+{
+  __refcnted_cstr msg;
+
+public:
+  runtime_error()
+  {
+  }
+
+  explicit runtime_error(const string &what_arg) : msg(what_arg.c_str())
+  {
+  }
+
+  explicit runtime_error(const char *what_arg) : msg(what_arg)
+  {
+  }
+
+  virtual const char *what() const throw()
+  {
+    return msg.get("std::runtime_error");
+  }
+};
+
+class range_error : public runtime_error
 {
 public:
-  runtime_error() {}
-
-  runtime_error(const char* what_arg)
+  explicit range_error()
   {
-    message = (char *) what_arg;
+  }
+
+  explicit range_error(const string &what_arg) : runtime_error(what_arg)
+  {
+  }
+
+  explicit range_error(const char *what_arg) : runtime_error(what_arg)
+  {
   }
 };
 
-class range_error: public runtime_error
+class overflow_error : public runtime_error
 {
 public:
-  explicit range_error() {}
-
-  explicit range_error(const char* what_arg)
+  explicit overflow_error()
   {
-    message = (char *) what_arg;
+  }
+
+  explicit overflow_error(const string &what_arg) : runtime_error(what_arg)
+  {
+  }
+
+  explicit overflow_error(const char *what_arg) : runtime_error(what_arg)
+  {
   }
 };
 
-class overflow_error: public runtime_error
+class underflow_error : public runtime_error
 {
 public:
-  explicit overflow_error() {}
-
-  explicit overflow_error(const char* what_arg)
+  explicit underflow_error()
   {
-    message = (char *) what_arg;
+  }
+
+  explicit underflow_error(const string &what_arg)
+    : runtime_error(what_arg)
+  {
+  }
+
+  explicit underflow_error(const char *what_arg) : runtime_error(what_arg)
+  {
   }
 };
 
-class underflow_error: public runtime_error {
+class logic_error : public exception
+{
+  __refcnted_cstr msg;
+
 public:
-  explicit underflow_error() {}
-
-  explicit underflow_error(const char* what_arg)
+  explicit logic_error()
   {
-    message = (char *) what_arg;
+  }
+
+  explicit logic_error(const string &what_arg) : msg(what_arg.c_str())
+  {
+  }
+
+  explicit logic_error(const char *what_arg) : msg(what_arg)
+  {
+  }
+
+  virtual const char * what() const throw()
+  {
+    return msg.get("std::logic_error");
   }
 };
 
-class logic_error: public exception
+class domain_error : public logic_error
 {
 public:
-  explicit logic_error() {}
-
-  explicit logic_error(const char* what_arg)
+  explicit domain_error()
   {
-    message = (char *) what_arg;
   }
-  virtual ~logic_error() {
+
+  explicit domain_error(const string &what_arg) : logic_error(what_arg)
+  {
+  }
+
+  explicit domain_error(const char *what_arg) : logic_error(what_arg)
+  {
   }
 };
 
-class domain_error: public logic_error
+class invalid_argument : public logic_error
 {
 public:
-  explicit domain_error() {}
-
-  explicit domain_error(const char* what_arg)
+  explicit invalid_argument()
   {
-    message = (char *) what_arg;
+  }
+
+  explicit invalid_argument(const string &what_arg) : logic_error(what_arg)
+  {
+  }
+
+  explicit invalid_argument(const char *what_arg) : logic_error(what_arg)
+  {
   }
 };
 
-class invalid_argument: public logic_error
+class length_error : public logic_error
 {
 public:
-  explicit invalid_argument() {}
-
-  explicit invalid_argument(const char* what_arg)
+  explicit length_error()
   {
-    message = (char *) what_arg;
+  }
+
+  explicit length_error(const string &what_arg) : logic_error(what_arg)
+  {
+  }
+
+  explicit length_error(const char *what_arg) : logic_error(what_arg)
+  {
   }
 };
 
-class length_error: public logic_error
+class out_of_range : public logic_error
 {
 public:
-  explicit length_error() {}
-
-  explicit length_error(const char* what_arg)
+  explicit out_of_range()
   {
-    message = (char *) what_arg;
   }
 
-  virtual ~length_error() {}
-
-};
-
-class out_of_range: public logic_error
-{
-public:
-  explicit out_of_range() {}
-
-  explicit out_of_range(const char* what_arg)
+  explicit out_of_range(const string &what_arg) : logic_error(what_arg)
   {
-    message = (char *) what_arg;
   }
 
-  virtual ~out_of_range() {}
+  explicit out_of_range(const char *what_arg) : logic_error(what_arg)
+  {
+  }
 };
 
-}
+} // namespace std
 
 #endif

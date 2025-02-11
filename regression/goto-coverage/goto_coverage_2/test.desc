@@ -1,0 +1,4 @@
+CORE
+main.c
+--multi-property --assertion-coverage
+^VERIFICATION FAILED$

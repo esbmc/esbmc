@@ -1,5 +1,4 @@
-KNOWNBUG
+CORE
 main.c
-
+--32 -Wno-error=implicit-function-declaration
 ^VERIFICATION SUCCESSFUL$
---

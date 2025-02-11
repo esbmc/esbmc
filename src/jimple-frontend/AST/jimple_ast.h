@@ -5,6 +5,7 @@
 #include <util/context.h>
 #include <util/std_types.h>
 #include <util/c_types.h>
+#include <util/message.h>
 #include <nlohmann/json.hpp>
 
 // For json parsing
@@ -22,7 +23,7 @@ public:
    */
   void dump() const
   {
-    log_debug("{}", this->to_string());
+    log_debug("jimple", "{}", this->to_string());
   }
 
   /**
@@ -199,7 +200,7 @@ protected:
   {
     locationt l;
     l.set_file(module + ".jimple");
-    if(!function_name.empty())
+    if (!function_name.empty())
       l.set_function(function_name);
     return l;
   }

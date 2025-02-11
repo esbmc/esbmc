@@ -1,0 +1,4 @@
+THOROUGH
+main.c
+--ir --cvc --std=gnu89
+^VERIFICATION FAILED$

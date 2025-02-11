@@ -1,0 +1,5 @@
+CORE
+gh-60.c
+--unwind 1 --no-unwinding-assertions
+^VERIFICATION FAILED$
+!overflow

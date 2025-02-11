@@ -1,0 +1,4 @@
+CORE
+main.c
+--no-slice --z3 -Wno-error=implicit-int -Wno-error=incompatible-function-pointer-types -Wno-error=int-conversion
+^VERIFICATION FAILED$

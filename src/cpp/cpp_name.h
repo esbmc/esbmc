@@ -20,7 +20,7 @@ public:
 
   const locationt &location() const
   {
-    if(get_sub().empty())
+    if (get_sub().empty())
       return static_cast<const locationt &>(get_nil_irep());
 
     return static_cast<const locationt &>(get_sub().front().find("#location"));
@@ -30,7 +30,7 @@ public:
 
   bool is_operator() const
   {
-    if(get_sub().empty())
+    if (get_sub().empty())
       return false;
     return get_sub().front().id() == "operator";
   }
@@ -42,8 +42,8 @@ public:
 
   bool is_qualified() const
   {
-    forall_irep(it, get_sub())
-      if(it->id() == "::")
+    forall_irep (it, get_sub())
+      if (it->id() == "::")
         return true;
     return false;
   }
@@ -55,8 +55,8 @@ public:
 
   bool has_template_args() const
   {
-    forall_irep(it, get_sub())
-      if(it->id() == "template_args")
+    forall_irep (it, get_sub())
+      if (it->id() == "template_args")
         return true;
 
     return false;

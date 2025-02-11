@@ -29,7 +29,7 @@ void cpp_typecheckt::convert(cpp_usingt &cpp_using)
 
   bool using_directive = cpp_using.get_namespace();
 
-  if(id_set.empty())
+  if (id_set.empty())
   {
     err_location(cpp_using.name().location());
     str << "using " << (using_directive ? "namespace" : "identifier") << " `"
@@ -40,7 +40,7 @@ void cpp_typecheckt::convert(cpp_usingt &cpp_using)
   // go back to where we used to be
   save_scope.restore();
 
-  for(auto it : id_set)
+  for (auto it : id_set)
   {
     cpp_scopes.current_scope().using_set.insert(it);
   }

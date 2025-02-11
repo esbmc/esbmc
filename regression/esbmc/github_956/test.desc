@@ -1,0 +1,5 @@
+THOROUGH
+main.cpp
+ --timeout 900
+
+^VERIFICATION SUCCESSFUL$

@@ -14,7 +14,7 @@ void ansi_c_parsert::scopet::print(std::ostream &out) const
 {
   out << "Prefix: " << prefix << std::endl;
 
-  for(const auto &n_it : name_map)
+  for (const auto &n_it : name_map)
   {
     out << "  ID: " << n_it.first << " CLASS: " << n_it.second.id_class
         << std::endl;
@@ -25,11 +25,12 @@ ansi_c_id_classt ansi_c_parsert::lookup(std::string &name, bool tag) const
 {
   const std::string scope_name = tag ? "tag-" + name : name;
 
-  for(scopest::const_reverse_iterator it = scopes.rbegin(); it != scopes.rend();
-      it++)
+  for (scopest::const_reverse_iterator it = scopes.rbegin();
+       it != scopes.rend();
+       it++)
   {
     scopet::name_mapt::const_iterator n_it = it->name_map.find(scope_name);
-    if(n_it != it->name_map.end())
+    if (n_it != it->name_map.end())
     {
       name = it->prefix + scope_name;
       return n_it->second.id_class;
@@ -51,23 +52,23 @@ static void insert_base_type(typet &dest, const typet &base_type)
 {
   typet *p = &dest;
 
-  while(true)
+  while (true)
   {
     typet &t = *p;
 
-    if(t.is_nil() || t.id() == "")
+    if (t.is_nil() || t.id() == "")
     {
       t = base_type;
       break;
     }
-    if(t.id() == "merged_type")
+    if (t.id() == "merged_type")
     {
       assert(!t.subtypes().empty());
       // Is this the final point in this chain of types? It could be either a
       // further {pointer,array,incomplete_array} or some qualifier. If the
       // former, descend further; if not, insert type here.
       p = &(t.subtypes().back());
-      if(
+      if (
         p->id() != "pointer" && p->id() != "merged_type" && !p->is_array() &&
         p->id() != "incomplete_array")
       {
@@ -92,47 +93,47 @@ void ansi_c_parsert::convert_declarator(
   // form of ireps named {declarator,code,array,incomplete_array} with
   // identifier subtypes.
 
-  if(declarator.is_decl_ident_set() && declarator.id() != "symbol")
+  if (declarator.is_decl_ident_set() && declarator.id() != "symbol")
   {
     identifier = declarator.decl_ident();
     declarator.remove("decl_ident");
 
-    if(declarator.id() == "merged_type")
+    if (declarator.id() == "merged_type")
       insert_base_type((typet &)declarator, type);
     else
       insert_base_type((typet &)((typet &)declarator).subtype(), type);
 
     // Plain variables type is the "declarator" subtype. For code/arrays etc,
     // the fact that it's "code" or an array makes a difference.
-    if(declarator.id() == "declarator")
+    if (declarator.id() == "declarator")
       declarator = (exprt &)((typet &)declarator).subtype();
     // else: leave it as it was.
     return;
   }
 
   // walk down subtype until we hit nil or symbol
-  while(true)
+  while (true)
   {
     typet &t = *p;
 
-    if(t.id() == "symbol")
+    if (t.id() == "symbol")
     {
       identifier = t;
       t = type;
       break;
     }
-    if(t.id() == "")
+    if (t.id() == "")
     {
-      log_status("D: " + declarator.pretty());
+      log_status("D: {}", declarator.pretty());
       assert(0);
     }
-    else if(t.is_nil())
+    else if (t.is_nil())
     {
       identifier.make_nil();
       t = type;
       break;
     }
-    else if(t.id() == "merged_type")
+    else if (t.id() == "merged_type")
     {
       assert(!t.subtypes().empty());
       p = &(t.subtypes().back());
@@ -162,22 +163,22 @@ void ansi_c_parsert::new_declaration(
 
   const std::string scope_name = is_tag ? "tag-" + base_name : base_name;
 
-  if(is_tag)
+  if (is_tag)
     final_type.tag(base_name);
 
   std::string name;
 
-  if(base_name != "")
+  if (base_name != "")
   {
     name = current_scope().prefix + scope_name;
 
-    if(put_into_scope)
+    if (put_into_scope)
     {
       // see if already in scope
       scopet::name_mapt::const_iterator n_it =
         current_scope().name_map.find(scope_name);
 
-      if(n_it == current_scope().name_map.end())
+      if (n_it == current_scope().name_map.end())
       {
         // add to scope
         current_scope().name_map[scope_name].id_class = id_class;
@@ -202,17 +203,17 @@ void ansi_c_parsert::new_declaration(
 
 ansi_c_id_classt ansi_c_parsert::get_class(const typet &type)
 {
-  if(type.id() == "typedef")
+  if (type.id() == "typedef")
     return ANSI_C_TYPEDEF;
-  if(type.id() == "struct" || type.id() == "union" || type.id() == "c_enum")
+  if (type.id() == "struct" || type.id() == "union" || type.id() == "c_enum")
     return ANSI_C_TAG;
-  else if(type.id() == "merged_type")
+  else if (type.id() == "merged_type")
   {
-    forall_subtypes(it, type)
-      if(get_class(*it) == ANSI_C_TYPEDEF)
+    forall_subtypes (it, type)
+      if (get_class(*it) == ANSI_C_TYPEDEF)
         return ANSI_C_TYPEDEF;
   }
-  else if(type.has_subtype())
+  else if (type.has_subtype())
     return get_class(type.subtype());
 
   return ANSI_C_SYMBOL;

@@ -1,0 +1,99 @@
+
+#pragma once
+
+#include <cstddef> /* size_t */
+#include <cstdint> /* SIZE_MAX */
+#include <cstring>
+#include <algorithm> /* std::swap, std::min */
+
+namespace std
+{
+class string_view
+{
+  const char *str;
+  size_t len;
+
+public:
+  using value_type = char;
+  using pointer = value_type *;
+  using const_pointer = const value_type *;
+  using reference = value_type &;
+  using const_reference = const value_type &;
+  using const_iterator = const_pointer;
+  using iterator = pointer;
+  using size_type = size_t;
+  using difference_type = ptrdiff_t;
+
+  static constexpr size_t npos = size_t(-1);
+
+  // Constructors
+  string_view() : len(0) {}
+  string_view(const char *str) : str(str), len(strlen(str)) {}
+  string_view(const char *str, size_t len) : str(str), len(len) {}
+
+  // Iterators
+  const_iterator begin() const noexcept { return str; }
+  const_iterator cbegin() const noexcept { return str; }
+  const_iterator end() const noexcept { return str + len; }
+  const_iterator cend() const noexcept { return str + len; }
+
+  // Capacity
+  size_t size() const noexcept { return len; }
+  size_t length() const noexcept { return len; }
+  size_t max_size() const noexcept { return SIZE_MAX; }
+  bool empty() const noexcept { return len == 0; }
+
+  // Element access
+  const char &operator[](size_t pos) const { return str[pos]; }
+  const char &at(size_t pos) const;
+  const char &front() const { return *str; }
+  const char &back() const { return str[len-1]; }
+  const char *data() const noexcept { return str; }
+
+  // Modifiers
+  void remove_prefix(size_t n) { str += n; }
+  void remove_suffix(size_t n) { len -= n; }
+  void swap(string_view &sv) noexcept
+  {
+    using std::swap;
+    swap(str, sv.str);
+    swap(len, sv.len);
+  }
+
+  // Operations
+  size_t copy(char *dest, size_t count, size_t pos = 0) const
+  {
+    size_t n = std::min(count, len - pos);
+    memcpy(dest, str + pos, n);
+    return n;
+  }
+  string_view substr(size_t pos = 0, size_t count = npos) const
+  {
+    return { str + pos, std::min(count, len - pos) };
+  }
+  int compare(string_view sv) const noexcept
+  {
+    int r = memcmp(str, sv.str, std::min(len, sv.len));
+    if (r)
+      return r;
+    if (len < sv.len)
+      return -1;
+    if (len > sv.len)
+      return +1;
+    return 0;
+  }
+  bool starts_with(string_view sv) const;
+  bool ends_with(string_view sv) const;
+  size_t find(string_view sv, size_t pos = 0) const;
+  size_t find_first_of(string_view sv, size_t pos = 0) const;
+  size_t find_first_not_of(string_view sv, size_t pos = 0) const;
+
+  // Non-member functions
+  friend bool operator==(string_view lhs, string_view rhs) { return lhs.compare(rhs) == 0; }
+  friend bool operator!=(string_view lhs, string_view rhs) { return lhs.compare(rhs) != 0; }
+  friend bool operator<(string_view lhs, string_view rhs) { return lhs.compare(rhs) < 0; }
+  friend bool operator<=(string_view lhs, string_view rhs) { return lhs.compare(rhs) <= 0; }
+  friend bool operator>(string_view lhs, string_view rhs) { return lhs.compare(rhs) > 0; }
+  friend bool operator>=(string_view lhs, string_view rhs) { return lhs.compare(rhs) >= 0; }
+};
+} // namespace std

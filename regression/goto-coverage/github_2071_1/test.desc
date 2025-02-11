@@ -1,0 +1,7 @@
+CORE
+main.c
+--condition-coverage --k-induction --base-k-step 2 --no-standard-checks
+^Reached Conditions:  16
+^Short Circuited Conditions:  2
+^Total Conditions:  18
+^VERIFICATION FAILED$

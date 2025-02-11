@@ -1,4 +1,4 @@
 CORE
 main.c
---no-por
+--no-por -Wno-error=implicit-function-declaration -Wno-error=int-conversion
 ^VERIFICATION FAILED$

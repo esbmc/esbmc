@@ -1,174 +1,51 @@
-on:
-  push:
-    # Sequence of patterns matched against refs/tags
-    tags:
-    - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
-
 name: Upload Release Asset
+on:
+  schedule:
+    #      M H - - D => 06:00 of Monday 
+  - cron: '0 6 * * 1'
+  workflow_dispatch:
 
 jobs:
-  build-linux:
-    name: Build Linux Release
-    runs-on: ubuntu-latest
-    container: rafaelsamenezes/esbmc-ci:clang11
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@master
-      - run: apt update  # Only for Docker jobs
-      - name: ccache
-        uses: hendrikmuhs/ccache-action@v1.2
-      - name: Fix dubious ownership
-        run: git config --global --add safe.directory /__w/esbmc/esbmc
-      - name: Configure CMake
-        run: mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -GNinja -DClang_DIR=/workspace/clang -DLLVM_DIR=/workspace/clang -DBUILD_STATIC=On -DBoolector_DIR=/workspace/boolector-release -DZ3_DIR=/workspace/z3 -DENABLE_JIMPLE_FRONTEND=On -DENABLE_SOLIDITY_FRONTEND=On
-      - name: Build ESBMC
-        run: cd build && cmake --build . && cpack && mv ESBMC-*.sh ESBMC-Linux.sh
-      - uses: actions/upload-artifact@v1
-        with:
-          name: release-linux
-          path: ./build/ESBMC-Linux.sh
 
-
-  build-macos:
-    name: Build Darwin Release
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v2
-      - name: Install Dependencies
-        run: brew install gmp csmith cmake boost ninja python3 automake bison flex && pip3 install PySMT toml
-      - name: Download Clang 11
-        run: wget https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/clang+llvm-11.0.0-x86_64-apple-darwin.tar.xz
-      - name: Extract Clang 11
-        run: tar xf clang+llvm-11.0.0-x86_64-apple-darwin.tar.xz && mv clang+llvm-11.0.0-x86_64-apple-darwin clang
-      - name: Setup boolector
-        run: git clone --depth=1 --branch=3.2.2 https://github.com/boolector/boolector && cd boolector && ./contrib/setup-lingeling.sh && ./contrib/setup-btor2tools.sh && ./configure.sh --prefix $PWD/../boolector-release && cd build && make -j4 && make install
-      - name: Setup Z3
-        run: brew install z3
-      - name: Get current folder and files
-        run: pwd && ls
-      - name: Configure CMake
-        run: mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=RelWithDebInfo -GNinja -DClang_DIR=$PWD/../clang -DLLVM_DIR=$PWD/../clang -DBoolector_DIR=$PWD/../boolector-release -DZ3_DIR=$PWD/../z3 -DC2GOTO_SYSROOT=/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk -DENABLE_SOLIDITY_FRONTEND=On -DBUILD_STATIC=Off -DENABLE_JIMPLE_FRONTEND=On
-      - name: Build ESBMC
-        run: cd build && cmake --build . && cpack && mv ESBMC-*.sh ESBMC-Darwin.sh
-      - uses: actions/upload-artifact@v1
-        with:
-          name: release-darwin
-          path: ./build/ESBMC-Darwin.sh
-
-  build-windows:
-    name: Build Windows Release
-    runs-on: windows-latest
-    steps:
-    - name: Set up Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: 3.8
-    - name: check python
-      run: python --version
-    - name: Make git use LF only
-      run: |
-        git config --system core.autocrlf false
-        git config --system core.eol lf
-    - uses: actions/checkout@v2
-    - name: Install dependencies (flex, bison, od)
-      run: |
-        Write-Host "Set TLS1.2"
-        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor "Tls12"
-        choco install -y nsis.portable winflexbison --ignore-checksums
-    - name: Check if od is on path
-      run: od.exe --version
-    - name: Update vcpkg
-      run: |
-        vcpkg.exe update
-        cd C:/vcpkg
-        git.exe pull
-        .\bootstrap-vcpkg.bat
-    - name: vcpkg integrate
-      run: vcpkg.exe integrate install
-    - name: Install Boost
-      run: vcpkg.exe install boost-filesystem:x64-Windows boost-date-time:x64-windows boost-test:x64-windows boost-multi-index:x64-windows boost-crc:x64-windows boost-property-tree:x64-windows boost-uuid:x64-windows boost-program-options:x64-windows boost-iostreams:x64-windows
-    - name: Prepare Environment
-      run: .\scripts\configure_environment.ps1
-    - name: Check environment
-      run: |
-        ls C:\vcpkg\installed\x64-windows\bin\
-        ls C:\Deps
-    - name: Configure CMake
-      run: |
-        mkdir build
-        cd build
-        cmake.exe .. -A x64 -DCMAKE_TOOLCHAIN_FILE=C:\vcpkg\scripts\buildsystems\vcpkg.cmake -DENABLE_REGRESSION=On -DBUILD_TESTING=On -DCMAKE_BUILD_TYPE=RelWithDebInfo -DBOOST_DLL_FILE="C:/deps/boost_filesystem-vc143-mt-x64-1_80.dll;C:/deps/boost_program_options-vc143-mt-x64-1_80.dll" -DCMAKE_INSTALL_PREFIX:PATH=C:/deps/esbmc -DENABLE_SOLIDITY_FRONTEND=On -DENABLE_JIMPLE_FRONTEND=On -DDOWNLOAD_WINDOWS_DEPENDENCIES=On
-    - name: Build ESBMC
-      run: |
-        cd build
-        cmake --build . --target INSTALL --config RelWithDebInfo
-        cpack -G ZIP -C RelWithDebInfo
-        mv ESBMC-*.zip ESBMC-Windows.zip
-    - uses: actions/upload-artifact@v1
-      with:
-          name: release-windows
-          path: ./build/ESBMC-Windows.zip
-
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, windows-latest]
+    uses: ./.github/workflows/build.yml
+    with:
+      operating-system: ${{ matrix.os }}
+      build-flags: '-b RelWithDebInfo -e Off'
+      testing: false
 
   create-release:
     name: Upload Release Asset
     runs-on: ubuntu-20.04
-    needs: [build-linux, build-macos, build-windows]
+    needs: [build]
     steps:
       - name: Download Linux Build
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v4
         with:
-          name: release-linux
-          path: ./
-      - name: Download Macos Build
-        uses: actions/download-artifact@v1
-        with:
-          name: release-darwin
-          path: ./
+          name: 'release-ubuntu-22.04--b RelWithDebInfo -e Off'
+          path: ./linux-release
+      - name: Create Linux Release file
+        run: zip -r esbmc-linux.zip ./linux-release
       - name: Download Windows Build
-        uses: actions/download-artifact@v1
+        uses: actions/download-artifact@v4
         with:
-          name: release-windows
-          path: ./
+          name: release-windows-latest
+          path: ./windows-release
+      - name: Create Windows Release file
+        run: zip -r esbmc-windows.zip ./windows-release        
       - name: Get files
         run: ls
-      - name: Create Release
-        id: create_release
-        uses: actions/create-release@v1.0.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Do the release
+        uses: softprops/action-gh-release@master
         with:
-          tag_name: ${{ github.ref }}
-          release_name: Release ${{ github.ref }}
-          draft: false
-          prerelease: false
-      - name: Upload Release Asset (Linux)
-        id: upload-release-asset-linux
-        uses: actions/upload-release-asset@v1.0.1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./ESBMC-Linux.sh
-          asset_name: ESBMC-Linux.sh
-          asset_content_type: text/x-shellscript
-      - name: Upload Release Asset (Darwin)
-        id: upload-release-asset-macos
-        uses: actions/upload-release-asset@v1.0.1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./ESBMC-Darwin.sh
-          asset_name: ESBMC-Darwin.sh
-          asset_content_type: text/x-shellscript
-      - name: Upload Release Asset (Windows)
-        id: upload-release-asset-windows
-        uses: actions/upload-release-asset@v1.0.1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./ESBMC-Windows.zip
-          asset_name: ESBMC-Windows.zip
-          asset_content_type: application/zip
+          name: 'ESBMC nightly'
+          body: 'This is an automated nightly release of ESBMC.'
+          tag_name: nightly-${{ github.sha }}
+          target_commitish: ${{ github.sha }}
+          prerelease: true
+          files: |
+            esbmc-linux.zip
+            esbmc-windows.zip

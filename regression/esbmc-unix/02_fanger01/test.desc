@@ -1,4 +1,4 @@
 CORE
 main.c
---no-unwinding-assertions --unwind 3 --context-bound 1
+--no-unwinding-assertions --unwind 3 --context-bound 1 -Wno-error=implicit-function-declaration
 ^VERIFICATION SUCCESSFUL$

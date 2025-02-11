@@ -11,8 +11,6 @@ typedef const tuple_node_smt_ast *tuple_node_smt_astt;
 class smt_tuple_node_flattener : public tuple_iface
 {
 public:
-  // TODO: Same as the other variable. The current implementation is not good
-  bool is_fetching_from_array_an_error = false;
   smt_tuple_node_flattener(smt_convt *_ctx, const namespacet &_ns)
     : ctx(_ctx), ns(_ns), array_conv(_ctx)
   {
@@ -28,6 +26,11 @@ public:
   expr2tc tuple_get(const type2tc &type, smt_astt a) override;
 
   expr2tc tuple_get_rec(tuple_node_smt_astt tuple);
+
+  expr2tc tuple_get_array_elem(
+    smt_astt array,
+    uint64_t index,
+    const type2tc &subtype) override;
 
   smt_astt mk_tuple_array_symbol(const expr2tc &expr) override;
   smt_astt tuple_array_of(const expr2tc &init_value, unsigned long domain_width)

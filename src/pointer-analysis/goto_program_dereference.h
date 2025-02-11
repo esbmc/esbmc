@@ -49,6 +49,8 @@ protected:
     const std::string &msg,
     const guardt &guard) override;
 
+  void dereference_assume(const guardt &guard) override;
+
   bool is_live_variable(const expr2tc &sym) override
   {
     (void)sym;
@@ -71,6 +73,7 @@ protected:
   goto_programt::const_targett current_target;
 
   std::set<expr2tc> assertions;
+  std::set<expr2tc> assumptions;
   goto_programt new_code;
 };
 
@@ -78,31 +81,6 @@ void dereference(
   goto_programt::const_targett target,
   expr2tc &expr,
   const namespacet &ns,
-  value_setst &value_sets);
-
-void remove_pointers(
-  goto_programt &goto_program,
-  contextt &context,
-  const optionst &options,
-  value_setst &value_sets);
-
-void remove_pointers(
-  goto_functionst &goto_functions,
-  contextt &context,
-  const optionst &options,
-  value_setst &value_sets);
-
-void pointer_checks(
-  goto_programt &goto_program,
-  const namespacet &ns,
-  const optionst &options,
-  value_setst &value_sets);
-
-void pointer_checks(
-  goto_functionst &goto_functions,
-  const namespacet &ns,
-  contextt &context,
-  const optionst &options,
   value_setst &value_sets);
 
 #endif

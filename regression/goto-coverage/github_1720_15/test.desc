@@ -1,0 +1,7 @@
+CORE
+main.c
+--condition-coverage --no-cov-asserts --unwind 10 --no-unwinding-assertions
+^Reached Conditions:  6
+^Short Circuited Conditions:  0
+^Condition Coverage: 50%
+^VERIFICATION FAILED$

@@ -1,5 +1,5 @@
 CORE
 main.c
 --function fun2 --no-pointer-check
-^WARNING: not checking alignment .* packed struct P$
+^WARNING: not checking alignment .* packed struct .*P.*$
 ^VERIFICATION SUCCESSFUL$

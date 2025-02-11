@@ -9,7 +9,6 @@ Author: Felipe Rodrigues
 class QGraphicsItem
 {
 public:
-	QGraphicsItem ( QGraphicsItem * parent = 0 );
-	~QGraphicsItem ();
+  QGraphicsItem(QGraphicsItem *parent = 0);
+  ~QGraphicsItem();
 };
-

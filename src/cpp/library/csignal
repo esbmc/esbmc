@@ -1,12 +1,3 @@
-/*******************************************************************
- Module:
-
- Author: Felipe Rodrigues
-
- Date: Feb 2012
-
- \*******************************************************************/
-
 #ifndef STL_CSIGNAL
 #define STL_CSIGNAL
 
@@ -14,32 +5,32 @@
 
 typedef void (*sighandler)(int);
 
-sighandler vector[16];
+sighandler __sighandlers[16];
 
-void signal(int sig, sighandler func) {
+void signal(int sig, sighandler func)
+{
+  __ESBMC_assert(
+    (sig == 2) || (sig == 6) || (sig == 8) || (sig == 4) || (sig == 11) ||
+      (sig == 15),
+    "Signal must be equal to defined at lib csignal");
 
-	__ESBMC_assert(
-			(sig == 2) || (sig == 6) || (sig == 8) || (sig == 4) || (sig == 11)
-					|| (sig == 15),
-			"Signal must be equal to defined at lib csignal");
-
-	vector[sig] = func;
+  __sighandlers[sig] = func;
 }
 
-int raise(int sig) {
+int raise(int sig)
+{
+  __ESBMC_assert(
+    (sig == 2) || (sig == 6) || (sig == 8) || (sig == 4) || (sig == 11) ||
+      (sig == 15),
+    "Signal must be equal to defined at lib csignal");
 
-	__ESBMC_assert(
-			(sig == 2) || (sig == 6) || (sig == 8) || (sig == 4) || (sig == 11)
-					|| (sig == 15),
-			"Signal must be equal to defined at lib csignal");
+  if (__sighandlers[sig] != 0)
+  {
+    __sighandlers[sig](sig);
+    return 0;
+  }
 
-	if (vector[sig] != 0) {
-		void *ret;
-		(*(vector[sig]))(sig);
-		return 0;
-	}
-
-	return nondet_uint();
+  return nondet_uint();
 }
 
 #endif

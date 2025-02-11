@@ -9,7 +9,7 @@ void get_new_name(symbolt &symbol, const namespacet &ns)
 
 void get_new_name(irep_idt &new_name, const namespacet &ns)
 {
-  if(!ns.lookup(new_name))
+  if (!ns.lookup(new_name))
     return;
 
   std::string prefix = id2string(new_name) + "_";

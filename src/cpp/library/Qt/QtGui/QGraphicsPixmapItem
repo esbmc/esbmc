@@ -12,9 +12,11 @@ Author: Felipe Rodrigues
 class QGraphicsPixmapItem : public QGraphicsItem
 {
 public:
-	QGraphicsPixmapItem ( QGraphicsItem * parent = 0 ){}
-	~QGraphicsPixmapItem ();
-	void	setPixmap ( const QPixmap & pixmap ){}
+  QGraphicsPixmapItem(QGraphicsItem *parent = 0)
+  {
+  }
+  ~QGraphicsPixmapItem();
+  void setPixmap(const QPixmap &pixmap)
+  {
+  }
 };
-
-

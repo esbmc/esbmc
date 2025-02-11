@@ -8,13 +8,13 @@ namespace std
 {
 //Parameterized manipulators
 
-smanip setiosflags ( ios_base::fmtflags mask );
-smanip resetiosflags ( ios_base::fmtflags mask );
-smanip setbase ( int base );
-smanip setfill ( char c );
-smanip setprecision ( int n );
-smanip setw ( int n );
+smanip setiosflags(ios_base::fmtflags mask);
+smanip resetiosflags(ios_base::fmtflags mask);
+smanip setbase(int base);
+smanip setfill(char c);
+smanip setprecision(int n);
+smanip setw(int n);
 
-}
+} // namespace std
 
 #endif

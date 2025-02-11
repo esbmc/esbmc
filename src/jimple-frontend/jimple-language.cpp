@@ -22,7 +22,8 @@ bool jimple_languaget::final(contextt &context)
 bool jimple_languaget::from_type(
   const typet &,
   std::string &,
-  const namespacet &)
+  const namespacet &,
+  unsigned)
 {
   // TODO
   assert(!"Not implemented yet");
@@ -32,18 +33,26 @@ bool jimple_languaget::from_type(
 bool jimple_languaget::from_expr(
   const exprt &,
   std::string &,
-  const namespacet &)
+  const namespacet &,
+  unsigned)
 {
   // TODO
   assert(!"Not implemented yet");
   return false;
 }
 
+unsigned jimple_languaget::default_flags(presentationt) const
+{
+  // TODO
+  assert(!"Not implemented yet");
+  return 0;
+}
+
 static inline void init_variable(codet &dest, const symbolt &sym)
 {
   const exprt &value = sym.value;
 
-  if(value.is_nil())
+  if (value.is_nil())
     return;
 
   assert(!value.type().is_code());
@@ -63,13 +72,13 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
 
   // Do assignments based on "value".
   context.foreach_operand_in_order([&dest](const symbolt &s) {
-    if(s.static_lifetime)
+    if (s.static_lifetime)
       init_variable(dest, s);
   });
 
   // call designated "initialization" functions
   context.foreach_operand_in_order([&dest](const symbolt &s) {
-    if(s.type.initialization() && s.type.is_code())
+    if (s.type.initialization() && s.type.is_code())
     {
       code_function_callt function_call;
       function_call.function() = symbol_expr(s);
@@ -107,7 +116,7 @@ void jimple_languaget::add_intrinsics(contextt &context)
   add_global_static_variable(context, type1, "__ESBMC_deallocated");
   add_global_static_variable(context, type1, "__ESBMC_is_dynamic");
 
-  auto type2 = array_typet(uint_type(), exprt("infinity"));
+  auto type2 = array_typet(size_type(), exprt("infinity"));
   add_global_static_variable(context, type2, "__ESBMC_alloc_size");
 
   add_global_static_variable(context, int_type(), "__ESBMC_rounding_mode");
@@ -123,25 +132,25 @@ void jimple_languaget::setup_main(contextt &context)
   // find main symbol
   std::list<irep_idt> matches;
 
-  forall_symbol_base_map(it, context.symbol_base_map, main)
+  forall_symbol_base_map (it, context.symbol_base_map, main)
   {
     // look it up
     symbolt *s = context.find_symbol(it->second);
 
-    if(s == nullptr)
+    if (s == nullptr)
       continue;
 
-    if(s->type.is_code())
+    if (s->type.is_code())
       matches.push_back(it->second);
   }
-  if(matches.empty())
+  if (matches.empty())
     abort();
 
   main_symbol = matches.front();
 
   // look it up
   symbolt *s = context.find_symbol(main_symbol);
-  if(s == nullptr)
+  if (s == nullptr)
   {
     log_error("No main method");
     abort();
@@ -150,7 +159,7 @@ void jimple_languaget::setup_main(contextt &context)
 
   const symbolt &symbol = *s;
   // check if it has a body
-  if(symbol.value.is_nil())
+  if (symbol.value.is_nil())
   {
     log_error("Empty body for main");
     abort();
@@ -186,7 +195,7 @@ void jimple_languaget::setup_main(contextt &context)
   new_symbol.type.swap(main_type);
   new_symbol.value.swap(init_code);
 
-  if(context.move(new_symbol))
+  if (context.move(new_symbol))
   {
     log_error("main already defined by another language module");
     return;

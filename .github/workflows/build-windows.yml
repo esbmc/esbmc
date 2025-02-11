@@ -1,0 +1,50 @@
+
+on:
+  workflow_call:
+    inputs:
+      operating-system:
+        description: "Targeted OS (e.g. ubuntu-latest, windows-latest)"
+        required: true
+        type: string
+      build-flags:
+        description: "Flags to be passed to build.sh script"
+        required: true
+        type: string
+      testing:
+        description: "Whether to run tests (regression) for this build"
+        required: true
+        type: boolean
+
+jobs:
+  build:
+    name: Build ESBMC (${{ inputs.operating-system }})
+    runs-on: ${{ inputs.operating-system }}
+    steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: 3.9
+    - name: check python
+      run: python --version
+    - name: Update vcpkg
+      run: |
+        vcpkg.exe update
+        cd C:/vcpkg
+        git.exe pull
+        .\bootstrap-vcpkg.bat
+    - name: Make git use LF only
+      run: |
+        git config --system core.autocrlf false
+        git config --system core.eol lf
+    - uses: actions/checkout@v4
+    - name: Configure ESBMC
+      run: ./scripts/build.ps1
+    - uses: actions/upload-artifact@v4
+      with:
+        name: release-windows-latest
+        path: C:/deps/esbmc
+    - name: Run Tests
+      if: ${{ inputs.testing == true }}
+      run: |
+        cd build
+        ctest -j4 --output-on-failure --progress . -C RelWithDebInfo

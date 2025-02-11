@@ -1,4 +1,4 @@
 KNOWNBUG
 main.c
---unwind 3 --32
-^VERIFICATION FAILED$
+--incremental-bmc
+^VERIFICATION FAILED$ .*

@@ -3,7 +3,8 @@ add_subdirectory(AST)
 
 add_library(clangcfrontend_stuff clang_c_language.cpp clang_c_convert.cpp
             clang_c_main.cpp clang_c_adjust_expr.cpp typecast.cpp clang_c_adjust_code.cpp
-            clang_c_convert_literals.cpp clang_headers.cpp expr2c.cpp padding.cpp)
+            clang_c_convert_literals.cpp clang_headers.cpp padding.cpp symbolic_types.cpp
+            clang_c_adjust_polymorphic_functions.cpp)
 target_include_directories(clangcfrontend_stuff
     PRIVATE ${CMAKE_BINARY_DIR}/src
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}

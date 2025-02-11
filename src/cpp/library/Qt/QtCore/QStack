@@ -11,49 +11,51 @@
 
 #define QSTACK_CAPACITY 20
 
-  template<class T> class QStack
+template <class T>
+class QStack
+{
+  T buf[QSTACK_CAPACITY];
+  int _top = 0;
+
+public:
+  QStack() : _top(0)
   {
-    T buf[QSTACK_CAPACITY];
-    int _top=0;
-
-	public:
-
-	QStack ():_top(0){}
-	~QStack ();
-   void dec_top ( )
-   {
-     _top--;
-   }
-   void inc_top ( )
-   {
-     _top++;
-   }
-   int get_top ( )
-   {
-     return _top;
-   }
-   bool empty ( ) const
-   {
-     return (_top==0) ? true : false; 
-   }
-	T pop()
-	{
-     __ESBMC_assert(_top>0, "stack underflow");
-     dec_top();
-   }
-	void push( const T & t )
-   {
-     __ESBMC_assert(0 <= _top, "invalid top");
-     __ESBMC_assert(_top < QSTACK_CAPACITY, "stack overflow");
-     buf[get_top()] = t;
-     inc_top();
-   }
-	T& top()
-	{
-     assert(!empty());
-     return buf[_top-1];
-   }
-	const T &	top () const;
-  };
+  }
+  ~QStack();
+  void dec_top()
+  {
+    _top--;
+  }
+  void inc_top()
+  {
+    _top++;
+  }
+  int get_top()
+  {
+    return _top;
+  }
+  bool empty() const
+  {
+    return (_top == 0) ? true : false;
+  }
+  T pop()
+  {
+    __ESBMC_assert(_top > 0, "stack underflow");
+    dec_top();
+  }
+  void push(const T &t)
+  {
+    __ESBMC_assert(0 <= _top, "invalid top");
+    __ESBMC_assert(_top < QSTACK_CAPACITY, "stack overflow");
+    buf[get_top()] = t;
+    inc_top();
+  }
+  T &top()
+  {
+    assert(!empty());
+    return buf[_top - 1];
+  }
+  const T &top() const;
+};
 
 #endif

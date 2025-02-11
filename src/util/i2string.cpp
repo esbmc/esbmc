@@ -1,12 +1,12 @@
 #define USE_SPRINTF
 
 #ifdef USE_SPRINTF
-#include <cstdio>
-#include <cstring>
-#include <util/i2string.h>
+#  include <cstdio>
+#  include <cstring>
+#  include <util/i2string.h>
 #else
-#include <sstream>
-#include <util/i2string.h>
+#  include <sstream>
+#  include <util/i2string.h>
 #endif
 
 std::string i2string(int i)

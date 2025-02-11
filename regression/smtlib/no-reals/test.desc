@@ -1,0 +1,4 @@
+CORE
+vnew2.c
+--smt-during-symex --unwind 2 --ir --smtlib --output -
+^\(declare-fun \|__ESBMC_ptr_obj_start_0\| \(\) Int\)$

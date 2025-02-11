@@ -80,7 +80,7 @@ public:
 
   cpp_idt &insert(const irep_idt &base_name)
   {
-    if(use_parent)
+    if (use_parent)
     {
       assert(!parents.empty());
       cpp_idt &new_id = get_parent().insert(base_name);

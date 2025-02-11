@@ -1,0 +1,4 @@
+CORE
+main.c
+--force-malloc-success --data-races-check
+^VERIFICATION SUCCESSFUL$

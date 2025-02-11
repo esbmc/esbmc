@@ -24,7 +24,7 @@ void cpp_scopest::get_ids(
 {
   id_set.clear();
 
-  if(current_only)
+  if (current_only)
   {
     current_scope().lookup(base_name, id_set);
     return;
@@ -41,7 +41,7 @@ void cpp_scopest::get_ids(
 {
   id_set.clear();
 
-  if(current_only)
+  if (current_only)
   {
     current_scope().lookup(base_name, id_class, id_set);
     return;
@@ -59,10 +59,10 @@ cpp_idt &cpp_scopest::put_into_scope(
   assert(!symbol.name.empty());
 
   // functions are also scopes
-  if(symbol.type.id() == "code")
+  if (symbol.type.id() == "code")
   {
     cpp_scopest::id_mapt::iterator id_it = id_map.find(symbol.id);
-    if(id_it == id_map.end())
+    if (id_it == id_map.end())
     {
       irep_idt block_base_name(std::string("$block:") + symbol.name.c_str());
       cpp_idt &id = scope.insert(block_base_name);
@@ -74,7 +74,7 @@ cpp_idt &cpp_scopest::put_into_scope(
     }
   }
 
-  if(is_friend)
+  if (is_friend)
   {
     cpp_save_scopet saved_scope(*this);
     go_to(scope);
@@ -83,7 +83,7 @@ cpp_idt &cpp_scopest::put_into_scope(
     cpp_idt &id = current_scope().insert(symbol.name);
     id.identifier = symbol.id;
     id.id_class = cpp_idt::SYMBOL;
-    if(id_map.find(symbol.id) == id_map.end())
+    if (id_map.find(symbol.id) == id_map.end())
       id_map[symbol.id] = &id;
     return id;
   }
@@ -91,7 +91,7 @@ cpp_idt &cpp_scopest::put_into_scope(
   cpp_idt &id = scope.insert(symbol.name);
   id.identifier = symbol.id;
   id.id_class = cpp_idt::SYMBOL;
-  if(id_map.find(symbol.id) == id_map.end())
+  if (id_map.find(symbol.id) == id_map.end())
     id_map[symbol.id] = &id;
   return id;
 }
@@ -105,5 +105,5 @@ void cpp_scopest::print_current(std::ostream &out) const
     scope->print_fields(out);
     out << std::endl;
     scope = &scope->get_parent();
-  } while(!scope->is_root_scope());
+  } while (!scope->is_root_scope());
 }

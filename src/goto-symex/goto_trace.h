@@ -8,7 +8,9 @@
 #include <map>
 #include <irep2/irep2.h>
 #include <util/migrate.h>
+#include <util/cmdline.h>
 #include <vector>
+#include <string_view>
 
 class goto_trace_stept
 {
@@ -135,5 +137,16 @@ void counterexample_value(
   const namespacet &ns,
   const expr2tc &identifier,
   const expr2tc &value);
+
+void generate_html_report(
+  const std::string_view uuid,
+  const namespacet &ns,
+  const goto_tracet &goto_trace,
+  const optionst &options);
+
+void generate_json_report(
+  const std::string_view uuid,
+  const namespacet &ns,
+  const goto_tracet &goto_trace);
 
 #endif

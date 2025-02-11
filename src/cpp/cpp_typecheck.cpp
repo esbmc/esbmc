@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include <cpp/cpp_convert_type.h>
 #include <cpp/cpp_declarator.h>
 #include <cpp/cpp_typecheck.h>
-#include <clang-cpp-frontend/expr2cpp.h>
+#include <util/cpp_expr2string.h>
 #include <util/arith_tools.h>
 #include <util/c_typecast.h>
 #include <util/expr_util.h>
@@ -31,12 +31,12 @@ const struct_typet &cpp_typecheckt::this_struct_type()
 
 std::string cpp_typecheckt::to_string(const exprt &expr)
 {
-  return expr2cpp(expr, *this);
+  return cpp_expr2string(expr, *this);
 }
 
 std::string cpp_typecheckt::to_string(const typet &type)
 {
-  return type2cpp(type, *this);
+  return cpp_type2string(type, *this);
 }
 
 void cpp_typecheckt::convert(cpp_itemt &item)
@@ -45,13 +45,13 @@ void cpp_typecheckt::convert(cpp_itemt &item)
   // the conversion modifies the originial cpp_itemt
   // dumping cpp_itemt contents before and after conversion give different results
 
-  if(item.is_declaration())
+  if (item.is_declaration())
     convert(to_cpp_declaration(item));
-  else if(item.is_linkage_spec())
+  else if (item.is_linkage_spec())
     convert(item.get_linkage_spec());
-  else if(item.is_namespace_spec())
+  else if (item.is_namespace_spec())
     convert(item.get_namespace_spec());
-  else if(item.is_using())
+  else if (item.is_using())
     convert(item.get_using());
   else
   {
@@ -65,7 +65,7 @@ void cpp_typecheckt::typecheck()
   // default linkage is C++
   current_mode = "C++";
 
-  for(auto &item : cpp_parse_tree.items)
+  for (auto &item : cpp_parse_tree.items)
     convert(item);
 
   static_initialization();
@@ -93,33 +93,33 @@ void cpp_typecheckt::static_initialization()
 
   // first do zero initialization
   context.foreach_operand([this, &block_sini](const symbolt &s) {
-    if(!s.static_lifetime || s.mode != current_mode)
+    if (!s.static_lifetime || s.mode != current_mode)
       return;
 
     // it has a non-code initializer already?
-    if(s.value.is_not_nil() && s.value.id() != "code")
+    if (s.value.is_not_nil() && s.value.id() != "code")
       return;
 
     // it's a declaration only
-    if(s.is_extern)
+    if (s.is_extern)
       return;
 
-    if(!s.lvalue)
+    if (!s.lvalue)
       return;
 
     zero_initializer(
       cpp_symbol_expr(s), s.type, s.location, block_sini.operands());
   });
 
-  while(!dinis.empty())
+  while (!dinis.empty())
   {
     symbolt &symbol = *context.find_symbol(dinis.front());
     dinis.pop_front();
 
-    if(symbol.is_extern)
+    if (symbol.is_extern)
       continue;
 
-    if(symbol.mode != current_mode)
+    if (symbol.mode != current_mode)
       continue;
 
     assert(symbol.static_lifetime);
@@ -128,9 +128,9 @@ void cpp_typecheckt::static_initialization()
 
     exprt symexpr = cpp_symbol_expr(symbol);
 
-    if(symbol.value.is_not_nil())
+    if (symbol.value.is_not_nil())
     {
-      if(!cpp_is_pod(symbol.type))
+      if (!cpp_is_pod(symbol.type))
       {
         block_dini.move_to_operands(symbol.value);
       }
@@ -144,7 +144,7 @@ void cpp_typecheckt::static_initialization()
         code.copy_to_operands(symbexpr, symbol.value);
         code.location() = symbol.location;
 
-        if(symbol.value.id() == "constant")
+        if (symbol.value.id() == "constant")
           block_sini.move_to_operands(code);
         else
           block_dini.move_to_operands(code);
@@ -161,7 +161,7 @@ void cpp_typecheckt::static_initialization()
 
       codet call = cpp_constructor(locationt(), symexpr, ops);
 
-      if(call.is_not_nil())
+      if (call.is_not_nil())
         block_dini.move_to_operands(call);
     }
   }
@@ -198,16 +198,16 @@ void cpp_typecheckt::do_not_typechecked()
     std::vector<symbolt *> to_typecheck_list;
 
     context.Foreach_operand([&to_typecheck_list](symbolt &s) {
-      if(s.value.id() == "cpp_not_typechecked" && s.value.get_bool("is_used"))
+      if (s.value.id() == "cpp_not_typechecked" && s.value.get_bool("is_used"))
       {
         assert(s.type.is_code());
         to_typecheck_list.push_back(&s);
       }
     });
 
-    for(symbolt *sym : to_typecheck_list)
+    for (symbolt *sym : to_typecheck_list)
     {
-      if(sym->name == "operator=")
+      if (sym->name == "operator=")
       {
         cpp_declaratort declarator;
         declarator.location() = sym->location;
@@ -217,7 +217,7 @@ void cpp_typecheckt::do_not_typechecked()
         convert_function(*sym);
         cont = true;
       }
-      else if(sym->value.operands().size() == 1)
+      else if (sym->value.operands().size() == 1)
       {
         exprt tmp = sym->value.operands()[0];
         sym->value.swap(tmp);
@@ -227,10 +227,10 @@ void cpp_typecheckt::do_not_typechecked()
       else
         assert(0); // Don't know what to do!
     }
-  } while(cont);
+  } while (cont);
 
   context.Foreach_operand([](symbolt &s) {
-    if(s.value.id() == "cpp_not_typechecked")
+    if (s.value.id() == "cpp_not_typechecked")
       s.value.make_nil();
   });
 }
@@ -238,12 +238,12 @@ void cpp_typecheckt::do_not_typechecked()
 void cpp_typecheckt::clean_up()
 {
   context.Foreach_operand([this](symbolt &s) {
-    if(s.type.get_bool("is_template"))
+    if (s.type.get_bool("is_template"))
     {
       context.erase_symbol(s.id);
       return;
     }
-    if(s.type.is_struct() || s.type.is_union())
+    if (s.type.is_struct() || s.type.is_union())
     {
       struct_typet &struct_type = to_struct_type(s.type);
 
@@ -256,13 +256,13 @@ void cpp_typecheckt::clean_up()
 
       function_members.reserve(components.size());
 
-      for(const auto &component : components)
+      for (const auto &component : components)
       {
-        if(component.get_bool("is_static") || component.is_type())
+        if (component.get_bool("is_static") || component.is_type())
         {
           // skip it
         }
-        else if(component.type().id() == "code")
+        else if (component.type().id() == "code")
         {
           function_members.push_back(component);
         }

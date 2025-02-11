@@ -2,19 +2,20 @@
 #define CPROVER_GOTO_FUNCTIONS_H
 
 #define Forall_goto_functions(it, functions)                                   \
-  for(goto_functionst::function_mapt::iterator it =                            \
-        (functions).function_map.begin();                                      \
-      it != (functions).function_map.end();                                    \
-      it++)
+  for (goto_functionst::function_mapt::iterator it =                           \
+         (functions).function_map.begin();                                     \
+       it != (functions).function_map.end();                                   \
+       it++)
 
 #define forall_goto_functions(it, functions)                                   \
-  for(goto_functionst::function_mapt::const_iterator it =                      \
-        (functions).function_map.begin();                                      \
-      it != (functions).function_map.end();                                    \
-      it++)
+  for (goto_functionst::function_mapt::const_iterator it =                     \
+         (functions).function_map.begin();                                     \
+       it != (functions).function_map.end();                                   \
+       it++)
 
 #include <goto-programs/goto_program.h>
 #include <util/std_types.h>
+#include <util/options.h>
 
 class goto_functiont
 {
@@ -41,6 +42,12 @@ class goto_functionst
 public:
   typedef std::map<irep_idt, goto_functiont> function_mapt;
   function_mapt function_map;
+
+  // For coverage and multi-property
+  // Store and pass the coverage data in incr/kind mode
+  static std::unordered_set<std::string> reached_claims;
+  static std::unordered_multiset<std::string> reached_mul_claims;
+  static std::unordered_set<std::string> verified_claims;
 
   void clear()
   {

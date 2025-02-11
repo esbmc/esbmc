@@ -1,4 +1,4 @@
 CORE
 main.c
---16 
+--16  -Wno-error=implicit-function-declaration
 ^VERIFICATION SUCCESSFUL$

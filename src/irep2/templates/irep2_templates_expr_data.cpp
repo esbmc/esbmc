@@ -9,7 +9,7 @@ expr_typedefs1(constant_array, constant_datatype_data);
 expr_typedefs1(constant_vector, constant_datatype_data);
 expr_typedefs1(constant_bool, constant_bool_data);
 expr_typedefs1(constant_array_of, constant_array_of_data);
-expr_typedefs1(constant_string, constant_string_data);
+expr_typedefs2(constant_string, constant_string_data);
 expr_typedefs6(symbol, symbol_data);
 expr_typedefs2(nearbyint, typecast_data);
 expr_typedefs2(typecast, typecast_data);

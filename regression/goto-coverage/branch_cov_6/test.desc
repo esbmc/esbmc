@@ -1,0 +1,6 @@
+CORE
+main.c
+--branch-function-coverage --unlimited-goto-unwind --k-induction
+^Function Entry Points & Branches : 542
+^Reached : 3
+^VERIFICATION FAILED$

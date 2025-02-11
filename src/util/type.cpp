@@ -35,8 +35,10 @@ irep_idt typet::t_array = dstring("array");
 irep_idt typet::t_pointer = dstring("pointer");
 irep_idt typet::t_reference = dstring("#reference");
 irep_idt typet::t_bv = dstring("bv");
-irep_idt typet::t_string = dstring("string");
 irep_idt typet::t_vector = dstring("vector");
+
+irep_idt typet::t_intcap = dstring("intcap");
+irep_idt typet::t_uintcap = dstring("uintcap");
 
 irep_idt typet::a_identifier = dstring("identifier");
 irep_idt typet::a_name = dstring("name");
@@ -52,3 +54,4 @@ irep_idt typet::a_f = dstring("f");
 irep_idt typet::f_subtype = dstring("subtype");
 irep_idt typet::f_subtypes = dstring("subtypes");
 irep_idt typet::f_location = dstring("#location");
+irep_idt typet::f_can_carry_provenance = dstring("can_carry_provenance");

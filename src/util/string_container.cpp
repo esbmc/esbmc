@@ -9,7 +9,7 @@ string_ptrt::string_ptrt(const char *_s) : s(_s), len(strlen(_s))
 
 bool string_ptrt::operator==(const string_ptrt &other) const
 {
-  if(len != other.len)
+  if (len != other.len)
     return false;
 
   return len == 0 || memcmp(s, other.s, len) == 0;
@@ -21,7 +21,7 @@ unsigned string_containert::get(const char *s)
 
   hash_tablet::iterator it = hash_table.find(string_ptr);
 
-  if(it != hash_table.end())
+  if (it != hash_table.end())
     return it->second;
 
   size_t r = hash_table.size();
@@ -44,7 +44,7 @@ unsigned string_containert::get(const std::string &s)
 
   hash_tablet::iterator it = hash_table.find(string_ptr);
 
-  if(it != hash_table.end())
+  if (it != hash_table.end())
     return it->second;
 
   size_t r = hash_table.size();

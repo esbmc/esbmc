@@ -1,0 +1,6 @@
+CORE
+main.cu
+--unwind 9 --force-malloc-success  
+
+^VERIFICATION SUCCESSFUL$
+

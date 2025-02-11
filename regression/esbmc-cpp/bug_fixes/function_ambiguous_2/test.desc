@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--function add --class overflow --overflow-check
+^VERIFICATION FAILED$

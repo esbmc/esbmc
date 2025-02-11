@@ -6,21 +6,21 @@
 
 std::string format_constantt::operator()(const expr2tc &expr)
 {
-  if(is_constant_expr(expr))
+  if (is_constant_expr(expr))
   {
-    if(is_unsignedbv_type(expr))
+    if (is_unsignedbv_type(expr))
       return i2string(to_constant_int2t(expr).as_ulong());
 
-    if(is_signedbv_type(expr))
+    if (is_signedbv_type(expr))
       return i2string(to_constant_int2t(expr).as_long());
 
-    if(is_fixedbv_type(expr))
+    if (is_fixedbv_type(expr))
       return fixedbvt(to_constant_fixedbv2t(expr).value).format(*this);
 
-    if(is_floatbv_type(expr))
+    if (is_floatbv_type(expr))
       return ieee_floatt(to_constant_floatbv2t(expr).value).format(*this);
 
-    if(is_string_type(expr))
+    if (is_constant_string2t(expr))
       return to_constant_string2t(expr).value.as_string();
   }
 

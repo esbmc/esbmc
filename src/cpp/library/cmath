@@ -1,243 +1,214 @@
-/*******************************************************************
- Module:
 
- Author: Felipe Rodrigues and Mikhail Ramalho
+#pragma once
 
- Date:
-
- \*******************************************************************/
-
-#ifndef STL_CMATH
-#define STL_CMATH
-
-#include "definitions.h"
-
-float sqrt(float n) {
-    	__ESBMC_assert(n >= 0, "The number must be greater or equal than 0");
-    	float x = n;
-    	float y = 1;
-    	float e = 1; /* e decides the accuracy level*/
-    	int i = 0;
-    	while(i++ < 15) //Change this line to increase precision
-    	{
-          	x = (x + y)/2.0;
-        	y = n/x;
-    	}
-    	return x;
-}
-
-
-float sqrt(int n) {
-	__ESBMC_assert(n >= 0, "The number must be greater or equal than 0");
-	return nondet_int();
-}
-
-double sqrt(double n) {
-    	__ESBMC_assert(n >= 0, "The number must be greater or equal than 0");
-    	double x = n;
-    	double y = 1;
-    	double e = 1; /* e decides the accuracy level*/
-    	int i = 0;
-    	while(i++ < 15) //Change this line to increase precision
-    	{
-          	x = (x + y)/2.0;
-        	y = n/x;
-    	}
-    	return x;
-}
-
-unsigned sqrt(unsigned x) {
-	__ESBMC_assert(x >= 0, "The number must be greater or equal than 0");
-	return nondet_unsigned();
-}
-
-float exp(float n) {
-	// model: buffer overflow check.
-	return nondet_float();
-}
-
-double exp(double x) {
-	// model: buffer overflow check.
-	return nondet_double();
-}
-
-float pow(float base, float exponent) {
-	// model: buffer overflow check
-	// model: base negative and exponent is not a integer value
-	__ESBMC_assert( (base != 0) || (exponent >= 0) , "base zero and exponent is negative");
-	return nondet_float();
-}
-
-double pow(double base, double exponent) {
-	// model: buffer overflow check
-	// model: base negative and exponent is not a integer value
-	__ESBMC_assert( (base != 0) || (exponent >= 0) , "base zero and exponent is negative");
-	return nondet_double();
-}
-
-double pow(double base, int exponent) {
-	// model: buffer overflow check
-	// model: base negative and exponent is not a integer value
-	__ESBMC_assert( (base != 0) || (exponent >= 0) , "base zero and exponent is negative");
-	return nondet_double();
-}
-
-float log(float n) {
-	__ESBMC_assert(n >= 0, "The number must be greater or equal than 0");
-	return nondet_float();
-}
-
-double log(double n) {
-	__ESBMC_assert(n >= 0, "The number must be greater or equal than 0");
-	return nondet_double();
-}
-
-double log10(double n) {
-	__ESBMC_assert(n >= 0, "The number must be greater or equal than 0");
-	return nondet_double();
-}
-
-float log10(float n) {
-	__ESBMC_assert(n >= 0, "The number must be greater or equal than 0");
-	return nondet_float();
-}
-
-float fabs(float n) {
-	return nondet_float();
-}
-
-double fabs(double x) {
-	return nondet_double();
-}
-
-float ceil(float n) {
-	return nondet_float();
-}
-
-double ceil(double x) {
-	return nondet_double();
-}
-
-float floor(float n) {
-	return nondet_float();
-}
-
-double floor(double x) {
-	return nondet_double();
-}
-
-float fmod(float numerator, float denominator) {
-	__ESBMC_assert(denominator != 0, "The number must not be equal to 0");
-	return nondet_float();
-}
-
-double fmod(double numerator, double denominator) {
-	__ESBMC_assert(denominator != 0, "The number must not be equal to 0");
-	return nondet_double();
-}
-
-float sin(float n) {
-	return nondet_float();
-}
-
-double sin(double x) {
-	return nondet_double();
-}
-
-double sinh(double x) {
-	return nondet_double();
-}
-
-float sinh(float x) {
-	return nondet_float();
-}
-
-float cos(float n) {
-	return nondet_float();
-}
-
-double cosh(double x) {
-	return nondet_double();
-}
-
-float cosh(float x) {
-	return nondet_float();
-}
-
-float tan(float n) {
-	return nondet_float();
-}
-
-double tan(double x) {
-	return nondet_double();
-}
-
-double tanh(double x) {
-	return nondet_double();
-}
-
-float tanh(float x) {
-	return nondet_float();
-}
-
-int abs(int n) {
-	return nondet_int();
-}
-
-double acos(double x) {
-	return nondet_double();
-}
-
-float acos(float x) {
-	return nondet_float();
-}
-
-double asin(double x) {
-	return nondet_double();
-}
-
-float asin(float x) {
-	return nondet_float();
-}
-
-double atan(double x) {
-	return nondet_double();
-}
-
-float atan(float x) {
-	return nondet_float();
-}
-
-double atan2(double y, double x) {
-	return nondet_double();
-}
-
-float atan2(float y, float x) {
-	return nondet_float();
-}
-
-double frexp(double x, int * exp) {
-	return nondet_double();
-}
-
-float frexp(float x, int * exp) {
-	return nondet_float();
-}
-
-double ldexp(double x, int exp) {
-	return nondet_double();
-}
-
-float ldexp(float x, int exp) {
-	return nondet_float();
-}
-
-double modf(double x, double * intpart) {
-	return nondet_double();
-}
-
-float modf(float x, float * intpart) {
-	return nondet_float();
-}
-
+/* while we don't have our own <math.h> work around the fact that libstdc++'s
+ * <math.h> does #include <cmath> and expects all the std::* functions to be
+ * there. But we don't want theirs... */
+#define _GLIBCXX_INCLUDE_NEXT_C_HEADERS
+#if __has_include(<sys/_types.h>) /* FreeBSD nonsense about __char{16,32}_t */
+#  include <sys/_types.h>
 #endif
+
+/* delegates to math.h in the C++ headers */
+#include <math.h>
+#include <type_traits>
+
+namespace std
+{
+
+inline float abs(float num)
+{
+  return ::fabsf(num);
+}
+inline double abs(double num)
+{
+  return ::fabs(num);
+}
+inline long double abs(long double num)
+{
+  return ::fabsl(num);
+}
+
+using ::fabs;
+using ::fabsf;
+using ::fabsl;
+
+/* TODO: also declare these in <cstdlib> */
+inline float fabs(float num)
+{
+  return ::fabsf(num);
+}
+inline long double fabs(long double num)
+{
+  return ::fabsl(num);
+}
+
+/* TODO:
+template <typename Integer>
+double fabs(Integer num);
+ */
+
+#define CIMPORT1(name)                                                         \
+  using ::name##f;                                                             \
+  using ::name;                                                                \
+  using ::name##l;                                                             \
+  inline float name(float num)                                                 \
+  {                                                                            \
+    return ::name##f(num);                                                     \
+  }                                                                            \
+  inline long double name(long double num)                                     \
+  {                                                                            \
+    return ::name##l(num);                                                     \
+  }                                                                            \
+  /* TODO: \
+	template <typename Integer> \
+	double name(Integer num); \
+	 */
+
+#define CIMPORT2(name)                                                         \
+  using ::name##f;                                                             \
+  using ::name;                                                                \
+  using ::name##l;                                                             \
+  inline float name(float a, float b)                                          \
+  {                                                                            \
+    return ::name##f(a, b);                                                    \
+  }                                                                            \
+  inline long double name(long double a, long double b)                        \
+  {                                                                            \
+    return ::name##l(a, b);                                                    \
+  }                                                                            \
+  /* TODO: \
+	template <typename Integer> \
+	double name(Integer num); \
+	 */
+
+CIMPORT1(acos)
+CIMPORT1(asin)
+CIMPORT1(atan)
+CIMPORT2(atan2)
+CIMPORT1(cos)
+CIMPORT1(sin)
+CIMPORT1(tan)
+CIMPORT1(cosh)
+CIMPORT1(sinh)
+CIMPORT1(tanh)
+CIMPORT1(exp)
+CIMPORT1(log)
+CIMPORT1(log10)
+CIMPORT1(floor)
+CIMPORT1(ceil)
+CIMPORT1(sqrt)
+CIMPORT2(fmod)
+CIMPORT1(round)
+
+using ::pow;
+#if !defined(__MATHCALL_VEC)
+using ::powf;
+using ::powl;
+inline float pow(float a, float b)
+{
+  return ::powf(a, b);
+}
+inline long double pow(long double a, long double b)
+{
+  return ::powl(a, b);
+}
+#endif
+
+using ::frexp;
+using ::frexpf;
+using ::frexpl;
+inline float frexp(float num, int *exp)
+{
+  return ::frexpf(num, exp);
+}
+inline long double frexp(long double num, int *exp)
+{
+  return ::frexpl(num, exp);
+}
+/* TODO:
+template <typename Integer>
+double frexp(Integer num, int *exp);
+ */
+
+using ::ldexp;
+using ::ldexpf;
+using ::ldexpl;
+inline float ldexp(float num, int exp)
+{
+  return ::ldexpf(num, exp);
+}
+inline long double ldexp(long double num, int exp)
+{
+  return ::ldexpl(num, exp);
+}
+/* TODO:
+template <typename Integer>
+double ldexp(Integer num, int exp);
+ */
+
+using ::modf;
+using ::modff;
+using ::modfl;
+inline float modf(float num, float *iptr)
+{
+  return ::modff(num, iptr);
+}
+inline long double modf(long double num, long double *iptr)
+{
+  return ::modfl(num, iptr);
+}
+/* TODO:
+template <typename Integer>
+double modf(Integer num, double *iptr);
+ */
+
+#undef isnan
+#undef isnormal
+
+#define CIMPORT3(name)                                                         \
+  bool name(float x)                                                           \
+  {                                                                            \
+    return __builtin_##name(x);                                                \
+  }                                                                            \
+  bool name(double x)                                                          \
+  {                                                                            \
+    return __builtin_##name(x);                                                \
+  }                                                                            \
+  bool name(long double x)                                                     \
+  {                                                                            \
+    return __builtin_##name(x);                                                \
+  }
+
+CIMPORT3(isnan);
+CIMPORT3(isnormal);
+
+#undef trunc
+#undef truncf
+#undef truncl
+
+using ::trunc;
+using ::truncf;
+using ::truncl;
+
+float trunc(float x)
+{
+  return ::truncf(x);
+}
+
+long double trunc(long double x)
+{
+  return ::truncl(x);
+}
+
+template <typename T>
+typename std::enable_if<std::is_integral<T>::value, double>::type trunc(T x)
+{
+  return ::trunc(x);
+}
+
+#undef CIMPORT1
+#undef CIMPORT2
+#undef CIMPORT3
+
+} // namespace std

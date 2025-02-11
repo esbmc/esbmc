@@ -1,4 +1,4 @@
 CORE
 main.c
---unwind 4 --no-unwinding-assertions --no-library
+--unwind 4 --no-unwinding-assertions --no-library -Wno-error=implicit-int
 ^VERIFICATION SUCCESSFUL$

@@ -12,8 +12,11 @@ Maintainers:
 
 #include <cstdio>
 #include <fmt/format.h>
+#include <fmt/color.h>
 #include <util/message/format.h>
-#include <util/location.h>
+#include <ctime>
+#include <chrono>
+#include <iomanip>
 
 /**
  * @brief Verbosity refers to the max level
@@ -33,80 +36,125 @@ enum class VerbosityLevel : char
   Warning,  // warnings are printend
   Result,   // results of the analysis (including CE)
   Progress, // progress notifications
+  Success,  // verification success/claim holds
+  Fail,     // verification/claim fails
   Status,   // all kinds of things esbmc is doing that may be useful to the user
   Debug     // messages that are only useful if you need to debug.
 };
 
 struct messaget
 {
-  static inline class
+  static inline class statet
   {
-    template <typename... Args>
-    static void println(FILE *f, VerbosityLevel lvl, Args &&...args)
-    {
-      if(lvl == VerbosityLevel::Error)
-        fmt::print(f, "ERROR: ");
-      fmt::print(f, std::forward<Args>(args)...);
-      fmt::print(f, "\n");
-    }
+    static void println(
+      FILE *f,
+      VerbosityLevel lvl,
+      fmt::string_view format,
+      fmt::format_args args);
 
   public:
     VerbosityLevel verbosity;
+    std::unordered_map<std::string, VerbosityLevel> modules;
     FILE *out;
-    FILE *err;
 
-    FILE *target(VerbosityLevel lvl) const
-    {
-      return lvl > verbosity                ? nullptr
-             : lvl == VerbosityLevel::Error ? err
-                                            : out;
-    }
+    FILE *target(const char *mod, VerbosityLevel lvl) const;
 
-    void set_flushln() const
-    {
-/* Win32 interprets _IOLBF as _IOFBF (and then chokes on size=0) */
-#if !defined(_WIN32) || defined(_WIN64) || defined(__CYGWIN__)
-      setvbuf(out, NULL, _IOLBF, 0);
-      setvbuf(err, NULL, _IOLBF, 0);
-#endif
-    }
+    void set_flushln() const;
 
     template <typename... Args>
-    bool logln(VerbosityLevel lvl, Args &&...args) const
+    bool logln(
+      const char *mod,
+      VerbosityLevel lvl,
+      const char *file,
+      int line,
+      fmt::format_string<Args...> format,
+      Args &&...args) const
     {
-      FILE *f = target(lvl);
-      if(!f)
+      FILE *f = target(mod, lvl);
+      if (!f)
         return false;
-      println(f, lvl, std::forward<Args>(args)...);
+      if (config.options.get_bool_option("log-message"))
+      {
+        std::time_t currentTime = std::chrono::system_clock::to_time_t(
+          std::chrono::system_clock::now());
+        std::string timeStr =
+          (std::ostringstream{}
+           << std::put_time(std::localtime(&currentTime), "%Y-%m-%d %H:%M:%S"))
+            .str();
+        fmt::print(f, "[{}] File: {}, Line: {} ", timeStr, file, line);
+      }
+      println(f, lvl, format, fmt::make_format_args(args...));
       return true;
     }
-  } state = {VerbosityLevel::Status, stdout, stderr};
+  } state = {VerbosityLevel::Status, {}, stderr};
 };
 
-static inline void
-print(VerbosityLevel lvl, std::string_view msg, const locationt &)
-{
-  messaget::state.logln(lvl, "{}", msg);
-}
-
-// Macro to generate log functions
-#define log_message(name, verbosity)                                           \
-  template <typename... Args>                                                  \
-  static inline void log_##name(std::string_view fmt, Args &&...args)          \
-  {                                                                            \
-    messaget::state.logln(verbosity, fmt, std::forward<Args>(args)...);        \
-  }
-
-log_message(error, VerbosityLevel::Error);
-log_message(result, VerbosityLevel::Result);
-log_message(warning, VerbosityLevel::Warning);
-log_message(progress, VerbosityLevel::Progress);
-log_message(status, VerbosityLevel::Status);
-log_message(debug, VerbosityLevel::Debug);
-
-#undef log_message
+#define log_error(fmt, ...)                                                    \
+  messaget::state.logln(                                                       \
+    nullptr,                                                                   \
+    VerbosityLevel::Error,                                                     \
+    __FILE__,                                                                  \
+    __LINE__,                                                                  \
+    FMT_STRING(fmt),                                                           \
+    ##__VA_ARGS__)
+#define log_result(fmt, ...)                                                   \
+  messaget::state.logln(                                                       \
+    nullptr,                                                                   \
+    VerbosityLevel::Result,                                                    \
+    __FILE__,                                                                  \
+    __LINE__,                                                                  \
+    FMT_STRING(fmt),                                                           \
+    ##__VA_ARGS__)
+#define log_warning(fmt, ...)                                                  \
+  messaget::state.logln(                                                       \
+    nullptr,                                                                   \
+    VerbosityLevel::Warning,                                                   \
+    __FILE__,                                                                  \
+    __LINE__,                                                                  \
+    FMT_STRING(fmt),                                                           \
+    ##__VA_ARGS__)
+#define log_progress(fmt, ...)                                                 \
+  messaget::state.logln(                                                       \
+    nullptr,                                                                   \
+    VerbosityLevel::Progress,                                                  \
+    __FILE__,                                                                  \
+    __LINE__,                                                                  \
+    FMT_STRING(fmt),                                                           \
+    ##__VA_ARGS__)
+#define log_success(fmt, ...)                                                  \
+  messaget::state.logln(                                                       \
+    nullptr,                                                                   \
+    VerbosityLevel::Success,                                                   \
+    __FILE__,                                                                  \
+    __LINE__,                                                                  \
+    FMT_STRING(fmt),                                                           \
+    ##__VA_ARGS__)
+#define log_fail(fmt, ...)                                                     \
+  messaget::state.logln(                                                       \
+    nullptr,                                                                   \
+    VerbosityLevel::Fail,                                                      \
+    __FILE__,                                                                  \
+    __LINE__,                                                                  \
+    FMT_STRING(fmt),                                                           \
+    ##__VA_ARGS__)
+#define log_status(fmt, ...)                                                   \
+  messaget::state.logln(                                                       \
+    nullptr,                                                                   \
+    VerbosityLevel::Status,                                                    \
+    __FILE__,                                                                  \
+    __LINE__,                                                                  \
+    FMT_STRING(fmt),                                                           \
+    ##__VA_ARGS__)
+#define log_debug(mod, fmt, ...)                                               \
+  messaget::state.logln(                                                       \
+    mod,                                                                       \
+    VerbosityLevel::Debug,                                                     \
+    __FILE__,                                                                  \
+    __LINE__,                                                                  \
+    FMT_STRING(fmt),                                                           \
+    ##__VA_ARGS__)
 
 // TODO: Eventually this will be removed
 #ifdef ENABLE_OLD_FRONTEND
-#define err_location(E) (E).location().dump()
+#  define err_location(E) (E).location().dump()
 #endif

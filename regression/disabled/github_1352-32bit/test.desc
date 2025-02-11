@@ -1,0 +1,5 @@
+THOROUGH
+gh-1352.c
+--unwind 1 --no-unwinding-assertion --force-malloc-success --32 --bitwuzla
+^VERIFICATION FAILED$
+\bdereference failure: array bounds violated\b

@@ -5,7 +5,7 @@ void convert_claims(
   const std::list<std::string> &claims,
   std::set<unsigned> &unsigned_claims)
 {
-  for(const auto &claim : claims)
+  for (const auto &claim : claims)
     unsigned_claims.insert(atoi(claim.c_str()));
 }
 
@@ -14,13 +14,13 @@ void set_claims(
   const std::set<unsigned> &claims,
   unsigned &count)
 {
-  for(auto &instruction : goto_program.instructions)
+  for (auto &instruction : goto_program.instructions)
   {
-    if(instruction.is_assert())
+    if (instruction.is_assert())
     {
       count++;
 
-      if(claims.find(count) == claims.end())
+      if (claims.find(count) == claims.end())
         instruction.make_skip();
     }
   }
@@ -34,7 +34,7 @@ void set_claims(
 
   convert_claims(claims, unsigned_claims);
 
-  if(unsigned_claims.empty())
+  if (unsigned_claims.empty())
     return;
 
   unsigned count = 0;
@@ -43,7 +43,7 @@ void set_claims(
 
   unsigned largest = *(--unsigned_claims.end());
 
-  if(count < largest)
+  if (count < largest)
     throw "claim " + i2string(largest) + " not found";
 }
 
@@ -54,18 +54,18 @@ void set_claims(
   std::set<unsigned> unsigned_claims;
   convert_claims(claims, unsigned_claims);
 
-  if(unsigned_claims.empty())
+  if (unsigned_claims.empty())
     return;
 
   unsigned count = 0;
-  for(auto &it : goto_functions.function_map)
+  for (auto &it : goto_functions.function_map)
   {
-    if(!it.second.body.empty())
+    if (!it.second.body.empty())
       set_claims(it.second.body, unsigned_claims, count);
   }
 
   unsigned largest = *(--unsigned_claims.end());
 
-  if(count < largest)
+  if (count < largest)
     throw "claim " + i2string(largest) + " not found";
 }

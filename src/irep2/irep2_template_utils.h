@@ -16,6 +16,8 @@ std::string type_to_string(const sideeffect_data::allockind &data, int);
 
 std::string type_to_string(const unsigned int &theval, int);
 
+std::string type_to_string(const constant_string_data::kindt &theval, int);
+
 std::string type_to_string(const symbol_data::renaming_level &theval, int);
 
 std::string type_to_string(const BigInt &theint, int);
@@ -43,6 +45,10 @@ bool do_type_cmp(const unsigned int &side1, const unsigned int &side2);
 bool do_type_cmp(
   const sideeffect_data::allockind &side1,
   const sideeffect_data::allockind &side2);
+
+bool do_type_cmp(
+  const constant_string_data::kindt &side1,
+  const constant_string_data::kindt &side2);
 
 bool do_type_cmp(
   const symbol_data::renaming_level &side1,
@@ -83,6 +89,10 @@ int do_type_lt(const unsigned int &side1, const unsigned int &side2);
 int do_type_lt(
   const sideeffect_data::allockind &side1,
   const sideeffect_data::allockind &side2);
+
+int do_type_lt(
+  const constant_string_data::kindt &side1,
+  const constant_string_data::kindt &side2);
 
 int do_type_lt(
   const symbol_data::renaming_level &side1,
@@ -126,6 +136,10 @@ void do_type_hash(const unsigned int &theval, crypto_hash &hash);
 size_t do_type_crc(const sideeffect_data::allockind &theval);
 
 void do_type_hash(const sideeffect_data::allockind &theval, crypto_hash &hash);
+
+size_t do_type_crc(const constant_string_data::kindt &theval);
+
+void do_type_hash(const constant_string_data::kindt &theval, crypto_hash &hash);
 
 size_t do_type_crc(const symbol_data::renaming_level &theval);
 

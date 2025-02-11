@@ -17,11 +17,11 @@ std::string translation_unit(const std::string &path)
   std::string::size_type pos;
 
   pos = unit.find_last_of("/\\");
-  if(pos != std::string::npos)
+  if (pos != std::string::npos)
     unit = std::string(unit, pos + 1);
 
   pos = unit.find_last_of('.');
-  if(pos != std::string::npos)
+  if (pos != std::string::npos)
     unit = std::string(unit, 0, pos);
 
   return unit;

@@ -1,0 +1,4 @@
+THOROUGH
+main.c
+--overflow-check --64
+^VERIFICATION FAILED$

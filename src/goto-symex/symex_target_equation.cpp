@@ -13,7 +13,7 @@ void symex_target_equationt::debug_print_step(const SSA_stept &step) const
 {
   std::ostringstream oss;
   step.output(ns, oss);
-  log_debug("{}", oss.str());
+  log_debug("ssa", "{}", oss.str());
 }
 
 void symex_target_equationt::assignment(
@@ -44,7 +44,7 @@ void symex_target_equationt::assignment(
   SSA_step.stack_trace = stack_trace;
   SSA_step.loop_number = loop_number;
 
-  if(debug_print)
+  if (debug_print)
     debug_print_step(SSA_step);
 }
 
@@ -63,7 +63,7 @@ void symex_target_equationt::output(
   SSA_step.output_args = args;
   SSA_step.format_string = fmt;
 
-  if(debug_print)
+  if (debug_print)
     debug_print_step(SSA_step);
 }
 
@@ -82,7 +82,7 @@ void symex_target_equationt::assumption(
   SSA_step.source = source;
   SSA_step.loop_number = loop_number;
 
-  if(debug_print)
+  if (debug_print)
     debug_print_step(SSA_step);
 }
 
@@ -105,7 +105,7 @@ void symex_target_equationt::assertion(
   SSA_step.stack_trace = stack_trace;
   SSA_step.loop_number = loop_number;
 
-  if(debug_print)
+  if (debug_print)
     debug_print_step(SSA_step);
 }
 
@@ -126,7 +126,7 @@ void symex_target_equationt::renumber(
   SSA_step.type = goto_trace_stept::RENUMBER;
   SSA_step.source = source;
 
-  if(debug_print)
+  if (debug_print)
     debug_print_step(SSA_step);
 }
 
@@ -135,12 +135,11 @@ void symex_target_equationt::convert(smt_convt &smt_conv)
   smt_convt::ast_vec assertions;
   smt_astt assumpt_ast = smt_conv.convert_ast(gen_true_expr());
 
-  for(auto &SSA_step : SSA_steps)
+  for (auto &SSA_step : SSA_steps)
     convert_internal_step(smt_conv, assumpt_ast, assertions, SSA_step);
 
-  if(!assertions.empty())
-    smt_conv.assert_ast(
-      smt_conv.make_n_ary(&smt_conv, &smt_convt::mk_or, assertions));
+  if (!assertions.empty())
+    smt_conv.assert_ast(smt_conv.make_n_ary_or(assertions));
 }
 
 void symex_target_equationt::convert_internal_step(
@@ -153,14 +152,14 @@ void symex_target_equationt::convert_internal_step(
   smt_astt true_val = smt_conv.convert_ast(gen_true_expr());
   smt_astt false_val = smt_conv.convert_ast(gen_false_expr());
 
-  if(step.ignore)
+  if (step.ignore)
   {
     step.cond_ast = true_val;
     step.guard_ast = false_val;
     return;
   }
 
-  if(ssa_trace)
+  if (ssa_trace)
   {
     std::ostringstream oss;
     step.output(ns, oss);
@@ -169,68 +168,68 @@ void symex_target_equationt::convert_internal_step(
 
   step.guard_ast = smt_conv.convert_ast(step.guard);
 
-  if(step.is_assume() || step.is_assert())
+  if (step.is_assume() || step.is_assert())
   {
     expr2tc tmp(step.cond);
     step.cond_ast = smt_conv.convert_ast(tmp);
 
-    if(ssa_smt_trace)
+    if (ssa_smt_trace)
     {
       step.cond_ast->dump();
     }
   }
-  else if(step.is_assignment())
+  else if (step.is_assignment())
   {
     smt_astt assign = smt_conv.convert_assign(step.cond);
-    if(ssa_smt_trace)
+    if (ssa_smt_trace)
     {
       assign->dump();
     }
   }
-  else if(step.is_output())
+  else if (step.is_output())
   {
-    for(std::list<expr2tc>::const_iterator o_it = step.output_args.begin();
-        o_it != step.output_args.end();
-        o_it++)
+    for (std::list<expr2tc>::const_iterator o_it = step.output_args.begin();
+         o_it != step.output_args.end();
+         o_it++)
     {
       const expr2tc &tmp = *o_it;
-      if(is_constant_expr(tmp) || is_constant_string2t(tmp))
+      if (is_constant_expr(tmp) || is_constant_string2t(tmp))
         step.converted_output_args.push_back(tmp);
       else
       {
-        symbol2tc sym(tmp->type, "symex::output::" + i2string(output_count++));
-        equality2tc eq(sym, tmp);
-        smt_conv.set_to(eq, true);
+        expr2tc sym =
+          symbol2tc(tmp->type, "symex::output::" + i2string(output_count++));
+        expr2tc eq = equality2tc(sym, tmp);
+        smt_astt assign = smt_conv.convert_assign(eq);
+        if (ssa_smt_trace)
+          assign->dump();
         step.converted_output_args.push_back(sym);
       }
     }
   }
-  else if(step.is_renumber())
+  else if (step.is_renumber())
   {
     smt_conv.renumber_symbol_address(step.guard, step.lhs, step.rhs);
   }
-  else if(!step.is_skip())
+  else if (!step.is_skip())
   {
     assert(0 && "Unexpected SSA step type in conversion");
   }
 
-  if(step.is_assert())
+  if (step.is_assert())
   {
     step.cond_ast = smt_conv.imply_ast(assumpt_ast, step.cond_ast);
     assertions.push_back(smt_conv.invert_ast(step.cond_ast));
   }
-  else if(step.is_assume())
+  else if (step.is_assume())
   {
-    smt_convt::ast_vec v;
-    v.push_back(assumpt_ast);
-    v.push_back(step.cond_ast);
-    assumpt_ast = smt_conv.make_n_ary(&smt_conv, &smt_convt::mk_and, v);
+    assumpt_ast = smt_conv.mk_and(assumpt_ast, step.cond_ast);
   }
 }
 
 void symex_target_equationt::output(std::ostream &out) const
 {
-  for(const auto &SSA_step : SSA_steps)
+  for (const auto &SSA_step : SSA_steps)
   {
     SSA_step.output(ns, out);
     out << "--------------"
@@ -241,7 +240,7 @@ void symex_target_equationt::output(std::ostream &out) const
 void symex_target_equationt::short_output(std::ostream &out, bool show_ignored)
   const
 {
-  for(const auto &SSA_step : SSA_steps)
+  for (const auto &SSA_step : SSA_steps)
   {
     SSA_step.short_output(ns, out, show_ignored);
   }
@@ -251,24 +250,24 @@ void symex_target_equationt::SSA_stept::dump() const
 {
   std::ostringstream oss;
   output(*migrate_namespace_lookup, oss);
-  log_debug("{}", oss.str());
+  log_status("{}", oss.str());
 }
 
 void symex_target_equationt::SSA_stept::output(
   const namespacet &ns,
   std::ostream &out) const
 {
-  if(source.is_set)
+  if (source.is_set)
   {
     out << "Thread " << source.thread_nr;
 
-    if(source.pc->location.is_not_nil())
+    if (source.pc->location.is_not_nil())
       out << " " << source.pc->location << "\n";
     else
       out << "\n";
   }
 
-  switch(type)
+  switch (type)
   {
   case goto_trace_stept::ASSERT:
     out << "ASSERT"
@@ -289,16 +288,17 @@ void symex_target_equationt::SSA_stept::output(
     break;
 
   default:
-    assert(false);
+    assert(
+      type == goto_trace_stept::SKIP && config.options.get_bool_option("ltl"));
   }
 
-  if(is_assert() || is_assume() || is_assignment())
+  if (is_assert() || is_assume() || is_assignment())
     out << from_expr(ns, "", migrate_expr_back(cond)) << "\n";
 
-  if(is_assert())
+  if (is_assert())
     out << comment << "\n";
 
-  if(config.options.get_bool_option("ssa-guards"))
+  if (config.options.get_bool_option("ssa-guards"))
     out << "Guard: " << from_expr(ns, "", migrate_expr_back(guard)) << "\n";
 }
 
@@ -307,11 +307,11 @@ void symex_target_equationt::SSA_stept::short_output(
   std::ostream &out,
   bool show_ignored) const
 {
-  if((is_assignment() || is_assert() || is_assume()) && show_ignored == ignore)
+  if ((is_assignment() || is_assert() || is_assume()) && show_ignored == ignore)
   {
     out << from_expr(ns, "", cond) << "\n";
   }
-  else if(is_renumber())
+  else if (is_renumber())
   {
     out << "renumber: " << from_expr(ns, "", lhs) << "\n";
   }
@@ -337,10 +337,10 @@ void symex_target_equationt::check_for_duplicate_assigns() const
   std::map<std::string, unsigned int> countmap;
   unsigned int i = 0;
 
-  for(const auto &SSA_step : SSA_steps)
+  for (const auto &SSA_step : SSA_steps)
   {
     i++;
-    if(!SSA_step.is_assignment())
+    if (!SSA_step.is_assignment())
       continue;
 
     const equality2t &ref = to_equality2t(SSA_step.cond);
@@ -348,11 +348,12 @@ void symex_target_equationt::check_for_duplicate_assigns() const
     countmap[sym.get_symbol_name()]++;
   }
 
-  for(std::map<std::string, unsigned int>::const_iterator it = countmap.begin();
-      it != countmap.end();
-      it++)
+  for (std::map<std::string, unsigned int>::const_iterator it =
+         countmap.begin();
+       it != countmap.end();
+       it++)
   {
-    if(it->second != 1)
+    if (it->second != 1)
     {
       log_status("Symbol \"{}\" appears {} times", it->first, it->second);
     }
@@ -365,9 +366,9 @@ unsigned int symex_target_equationt::clear_assertions()
 {
   unsigned int num_asserts = 0;
 
-  for(SSA_stepst::iterator it = SSA_steps.begin(); it != SSA_steps.end(); it++)
+  for (SSA_stepst::iterator it = SSA_steps.begin(); it != SSA_steps.end(); it++)
   {
-    if(it->type == goto_trace_stept::ASSERT)
+    if (it->type == goto_trace_stept::ASSERT)
     {
       SSA_stepst::iterator it2 = it;
       it--;
@@ -377,6 +378,41 @@ unsigned int symex_target_equationt::clear_assertions()
   }
 
   return num_asserts;
+}
+
+// To be used by reconstruct_symbolic_expression
+void symex_target_equationt::replace_rec(
+  const SSA_stept &step,
+  expr2tc &e,
+  bool keep_local) const
+{
+  assert(step.is_assignment());
+  if (is_symbol2t(e))
+  {
+    const std::string lhs_name = to_symbol2t(step.lhs).get_symbol_name();
+    if (keep_local && lhs_name.find("goto_symex::") == std::string::npos)
+      return;
+
+    if (lhs_name == to_symbol2t(e).get_symbol_name())
+      e = step.rhs;
+  }
+
+  e->Foreach_operand([&step, &keep_local, this](expr2tc &inner) {
+    replace_rec(step, inner, keep_local);
+  });
+}
+
+void symex_target_equationt::reconstruct_symbolic_expression(
+  expr2tc &expr,
+  bool keep_local_variables) const
+{
+  for (auto rit = SSA_steps.rbegin(); rit != SSA_steps.rend(); rit++)
+  {
+    if (!rit->is_assignment())
+      continue;
+
+    replace_rec(*rit, expr, keep_local_variables);
+  }
 }
 
 runtime_encoded_equationt::runtime_encoded_equationt(
@@ -391,7 +427,7 @@ runtime_encoded_equationt::runtime_encoded_equationt(
 
 void runtime_encoded_equationt::flush_latest_instructions()
 {
-  if(SSA_steps.size() == 0)
+  if (SSA_steps.size() == 0)
     return;
 
   SSA_stepst::iterator run_it = cvt_progress;
@@ -399,14 +435,14 @@ void runtime_encoded_equationt::flush_latest_instructions()
   // * We're at the start of running, in which case cvt_progress == end
   // * We're in the middle, but nothing is left to push, so run_it + 1 == end
   // * We're in the middle, and there's more to convert.
-  if(run_it == SSA_steps.end())
+  if (run_it == SSA_steps.end())
   {
     run_it = SSA_steps.begin();
   }
   else
   {
     run_it++;
-    if(run_it == SSA_steps.end())
+    if (run_it == SSA_steps.end())
     {
       // There is in fact, nothing to do
       return;
@@ -416,7 +452,7 @@ void runtime_encoded_equationt::flush_latest_instructions()
   }
 
   // Now iterate from the start insn to convert, to the end of the list.
-  for(; run_it != SSA_steps.end(); ++run_it)
+  for (; run_it != SSA_steps.end(); ++run_it)
     convert_internal_step(
       conv, assumpt_chain.back(), assert_vec_list.back(), *run_it);
 
@@ -440,7 +476,7 @@ void runtime_encoded_equationt::pop_ctx()
   SSA_stepst::iterator it = scoped_end_points.back();
   cvt_progress = it;
 
-  if(SSA_steps.size() != 0)
+  if (SSA_steps.size() != 0)
     ++it;
 
   SSA_steps.erase(it, SSA_steps.end());
@@ -460,9 +496,8 @@ void runtime_encoded_equationt::convert(smt_convt &smt_conv)
   flush_latest_instructions();
 
   // Finally, we also want to assert the set of assertions.
-  if(!assert_vec_list.back().empty())
-    smt_conv.assert_ast(smt_conv.make_n_ary(
-      &smt_conv, &smt_convt::mk_or, assert_vec_list.back()));
+  if (!assert_vec_list.back().empty())
+    smt_conv.assert_ast(smt_conv.make_n_ary_or(assert_vec_list.back()));
 }
 
 std::shared_ptr<symex_targett> runtime_encoded_equationt::clone() const
@@ -514,25 +549,25 @@ tvt runtime_encoded_equationt::ask_solver_question(const expr2tc &question)
   pop_ctx();
 
   // So; which result?
-  if(
+  if (
     res1 == smt_convt::P_ERROR || res1 == smt_convt::P_SMTLIB ||
     res2 == smt_convt::P_ERROR || res2 == smt_convt::P_SMTLIB)
   {
     log_error("Solver returned error while asking question");
     abort();
   }
-  else if(res1 == smt_convt::P_SATISFIABLE && res2 == smt_convt::P_SATISFIABLE)
+  else if (res1 == smt_convt::P_SATISFIABLE && res2 == smt_convt::P_SATISFIABLE)
   {
     // Both ways are satisfiable; result is unknown.
     final_res = tvt(tvt::TV_UNKNOWN);
   }
-  else if(
+  else if (
     res1 == smt_convt::P_SATISFIABLE && res2 == smt_convt::P_UNSATISFIABLE)
   {
     // Truth of question is satisfiable; other not; so we're true.
     final_res = tvt(tvt::TV_TRUE);
   }
-  else if(
+  else if (
     res1 == smt_convt::P_UNSATISFIABLE && res2 == smt_convt::P_SATISFIABLE)
   {
     // Truth is unsat, false is sat, proposition is false

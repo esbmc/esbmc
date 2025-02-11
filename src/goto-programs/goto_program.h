@@ -12,16 +12,16 @@
 #include <util/std_code.h>
 
 #define forall_goto_program_instructions(it, program)                          \
-  for(goto_programt::instructionst::const_iterator it =                        \
-        (program).instructions.begin();                                        \
-      it != (program).instructions.end();                                      \
-      it++)
+  for (goto_programt::instructionst::const_iterator it =                       \
+         (program).instructions.begin();                                       \
+       it != (program).instructions.end();                                     \
+       it++)
 
 #define Forall_goto_program_instructions(it, program)                          \
-  for(goto_programt::instructionst::iterator it =                              \
-        (program).instructions.begin();                                        \
-      it != (program).instructions.end();                                      \
-      it++)
+  for (goto_programt::instructionst::iterator it =                             \
+         (program).instructions.begin();                                       \
+       it != (program).instructions.end();                                     \
+       it++)
 
 typedef enum
 {
@@ -383,14 +383,21 @@ public:
     //! This is -1 if it's not a target.
     unsigned target_number;
 
+    //! Id of the scope within which a variable is declared (i.e., DECL).
+    //! It does not have a lot of meaning for other types of instructions.
+    unsigned int scope_id = 0;
+
+    //! Id of the parent scope for the current "scope_id".
+    unsigned int parent_scope_id = 0;
+
     //! Returns true if the instruction is a backwards branch.
     bool is_backwards_goto() const
     {
-      if(!is_goto())
+      if (!is_goto())
         return false;
 
-      for(auto target : targets)
-        if(target->location_number <= location_number)
+      for (auto target : targets)
+        if (target->location_number <= location_number)
           return true;
 
       return false;
@@ -398,10 +405,10 @@ public:
 
     bool operator<(const class instructiont i1) const
     {
-      if(function < i1.function)
+      if (function < i1.function)
         return true;
 
-      if(location_number < i1.location_number)
+      if (location_number < i1.location_number)
         return true;
 
       return false;
@@ -426,8 +433,6 @@ public:
   //! The list of instructions in the goto program
   instructionst instructions;
 
-  void get_successors(targett target, targetst &successors);
-
   void get_successors(const_targett target, const_targetst &successors) const;
 
   /// Insertion that preserves jumps to "target".
@@ -451,7 +456,7 @@ public:
   void insert_swap(targett target, goto_programt &p)
   {
     assert(target != instructions.end());
-    if(p.instructions.empty())
+    if (p.instructions.empty())
       return;
     insert_swap(target, p.instructions.front());
     auto next = std::next(target);
@@ -522,9 +527,9 @@ public:
   /// named functions.
   void update_instructions_function(const irep_idt &function_id)
   {
-    for(auto &instruction : instructions)
+    for (auto &instruction : instructions)
     {
-      if(instruction.function.empty())
+      if (instruction.function.empty())
       {
         instruction.function = function_id;
       }
@@ -537,7 +542,7 @@ public:
   //! Compute location numbers
   void compute_location_numbers(unsigned &nr)
   {
-    for(auto &instruction : instructions)
+    for (auto &instruction : instructions)
       instruction.location_number = nr++;
   }
 
@@ -581,43 +586,9 @@ public:
   //! Copy a full goto program, preserving targets
   void copy_from(const goto_programt &src);
 
-  //! Does the goto program have an assertion?
-  bool has_assertion() const;
-
   typedef std::set<irep_idt> decl_identifierst;
   /// get the variables in decl statements
   void get_decl_identifiers(decl_identifierst &decl_identifiers) const;
-
-  // Template for extracting instructions /from/ a goto program, to a type
-  // abstract something else.
-  template <
-    typename OutList,
-    typename ListAppender,
-    typename OutElem,
-    typename SetAttrObj,
-    typename SetAttrNil>
-  void extract_instructions(
-    OutList &list,
-    ListAppender listappend,
-    SetAttrObj setattrobj,
-    SetAttrNil setattrnil) const;
-
-  // Template for extracting instructions /from/ a type abstract something,
-  // to a goto program.
-  template <
-    typename InList,
-    typename InElem,
-    typename FetchElem,
-    typename ElemToInsn,
-    typename GetAttr,
-    typename IsAttrNil>
-  void inject_instructions(
-    InList list,
-    unsigned int len,
-    FetchElem fetchelem,
-    ElemToInsn elemtoinsn,
-    GetAttr getattr,
-    IsAttrNil isattrnil);
 };
 
 bool operator<(

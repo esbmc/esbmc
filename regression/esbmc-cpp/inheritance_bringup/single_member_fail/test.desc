@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--unwind 10 --no-unwinding-assertions --verbosity 10
+
+^VERIFICATION FAILED$

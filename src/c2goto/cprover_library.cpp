@@ -3,7 +3,8 @@
 #include <c2goto/cprover_library.h>
 #include <cstdlib>
 #include <fstream>
-#include <goto-programs/read_goto_binary.h>
+#include <goto-programs/goto_binary_reader.h>
+#include <goto-programs/goto_functions.h>
 #include <util/c_link.h>
 #include <util/config.h>
 #include <util/language.h>
@@ -19,27 +20,76 @@ extern "C"
   extern const uint8_t clib64_fp_buf[];
   extern const unsigned int clib32_fp_buf_size;
   extern const unsigned int clib64_fp_buf_size;
+
+  extern const uint8_t clib32_cherih_buf[];
+  extern const uint8_t clib64_cherih_buf[];
+  extern const unsigned int clib32_cherih_buf_size;
+  extern const unsigned int clib64_cherih_buf_size;
+
+  extern const uint8_t clib32_fp_cherih_buf[];
+  extern const uint8_t clib64_fp_cherih_buf[];
+  extern const unsigned int clib32_fp_cherih_buf_size;
+  extern const unsigned int clib64_fp_cherih_buf_size;
+
+  extern const uint8_t clib32_cherip_buf[];
+  extern const uint8_t clib64_cherip_buf[];
+  extern const unsigned int clib32_cherip_buf_size;
+  extern const unsigned int clib64_cherip_buf_size;
+
+  extern const uint8_t clib32_fp_cherip_buf[];
+  extern const uint8_t clib64_fp_cherip_buf[];
+  extern const unsigned int clib32_fp_cherip_buf_size;
+  extern const unsigned int clib64_fp_cherip_buf_size;
 }
 
 namespace
 {
-/* [floatbv ? 1 : 0][wordsz == 64 ? 1 : 0] */
+/* [cheri][floatbv ? 1 : 0][wordsz == 64 ? 1 : 0] */
 static const struct buffer
 {
   const uint8_t *start;
   size_t size;
-} clibs[2][2] = {
+} clibs[3][2][2] = {
 #ifdef ESBMC_BUNDLE_LIBC
   {
-    {&clib32_buf[0], clib32_buf_size},
-    {&clib64_buf[0], clib64_buf_size},
+    {
+      {&clib32_buf[0], clib32_buf_size},
+      {&clib64_buf[0], clib64_buf_size},
+    },
+    {
+      {&clib32_fp_buf[0], clib32_fp_buf_size},
+      {&clib64_fp_buf[0], clib64_fp_buf_size},
+    },
   },
   {
-    {&clib32_fp_buf[0], clib32_fp_buf_size},
-    {&clib64_fp_buf[0], clib64_fp_buf_size},
+#  ifdef ESBMC_CHERI_HYBRID_SYSROOT
+    {
+      {NULL, 0}, // {&clib32_cherih_buf[0], clib32_cherih_buf_size},
+      {&clib64_cherih_buf[0], clib64_cherih_buf_size},
+    },
+    {
+      {NULL, 0}, // {&clib32_fp_cherih_buf[0], clib32_fp_cherih_buf_size},
+      {&clib64_fp_cherih_buf[0], clib64_fp_cherih_buf_size},
+    },
+#  endif
+  },
+  {
+#  ifdef ESBMC_CHERI_PURECAP_SYSROOT
+    {
+      {NULL, 0}, // {&clib32_cherip_buf[0], clib32_cherip_buf_size},
+      {&clib64_cherip_buf[0], clib64_cherip_buf_size},
+    },
+    {
+      {NULL, 0}, // {&clib32_fp_cherip_buf[0], clib32_fp_cherip_buf_size},
+      {&clib64_fp_cherip_buf[0], clib64_fp_cherip_buf_size},
+    },
+#  endif
   },
 #endif
 };
+
+const static std::vector<std::string> python_c_models = {"strncmp"};
+
 } // namespace
 
 static void generate_symbol_deps(
@@ -49,22 +99,22 @@ static void generate_symbol_deps(
 {
   std::pair<irep_idt, irep_idt> type;
 
-  if(irep.id() == "symbol")
+  if (irep.id() == "symbol")
   {
     type = std::pair<irep_idt, irep_idt>(name, irep.identifier());
     deps.insert(type);
     return;
   }
 
-  forall_irep(irep_it, irep.get_sub())
+  forall_irep (irep_it, irep.get_sub())
   {
-    if(irep_it->id() == "symbol")
+    if (irep_it->id() == "symbol")
     {
       type = std::pair<irep_idt, irep_idt>(name, irep_it->identifier());
       deps.insert(type);
       generate_symbol_deps(name, *irep_it, deps);
     }
-    else if(irep_it->id() == "argument")
+    else if (irep_it->id() == "argument")
     {
       type = std::pair<irep_idt, irep_idt>(name, irep_it->cmt_identifier());
       deps.insert(type);
@@ -75,14 +125,14 @@ static void generate_symbol_deps(
     }
   }
 
-  forall_named_irep(irep_it, irep.get_named_sub())
+  forall_named_irep (irep_it, irep.get_named_sub())
   {
-    if(irep_it->second.id() == "symbol")
+    if (irep_it->second.id() == "symbol")
     {
       type = std::pair<irep_idt, irep_idt>(name, irep_it->second.identifier());
       deps.insert(type);
     }
-    else if(irep_it->second.id() == "argument")
+    else if (irep_it->second.id() == "argument")
     {
       type =
         std::pair<irep_idt, irep_idt>(name, irep_it->second.cmt_identifier());
@@ -107,18 +157,18 @@ static void ingest_symbol(
   std::multimap<irep_idt, irep_idt>::const_iterator it;
 
   range = deps.equal_range(name);
-  if(range.first == range.second)
+  if (range.first == range.second)
     return;
 
-  for(it = range.first; it != range.second; it++)
+  for (it = range.first; it != range.second; it++)
     to_include.push_back(it->second);
 
   deps.erase(name);
 }
 
-void add_cprover_library(contextt &context, const languaget *c_language)
+void add_cprover_library(contextt &context, const languaget *language)
 {
-  if(config.ansi_c.lib == configt::ansi_ct::libt::LIB_NONE)
+  if (config.ansi_c.lib == configt::ansi_ct::libt::LIB_NONE)
     return;
 
   contextt new_ctx, store_ctx;
@@ -127,12 +177,11 @@ void add_cprover_library(contextt &context, const languaget *c_language)
   std::list<irep_idt> to_include;
   const buffer *clib;
 
-  switch(config.ansi_c.word_size)
+  switch (config.ansi_c.word_size)
   {
   case 16:
     log_warning(
-      "Warning: this version of ESBMC does not have a C library "
-      "for 16 bit machines");
+      "this version of ESBMC does not have a C library for 16 bit machines");
     return;
   case 32:
   case 64:
@@ -142,18 +191,24 @@ void add_cprover_library(contextt &context, const languaget *c_language)
     abort();
   }
 
-  clib =
-    &clibs[!config.ansi_c.use_fixed_for_float][config.ansi_c.word_size == 64];
+  clib = &clibs[config.ansi_c.cheri][!config.ansi_c.use_fixed_for_float]
+               [config.ansi_c.word_size == 64];
 
-  if(clib->size == 0)
+  if (clib->size == 0)
   {
-    if(c_language)
-      return add_bundled_library_sources(context, *c_language);
-    log_error("error: Zero-lengthed internal C library");
+    if (language)
+      return add_bundled_library_sources(context, *language);
+    log_error("Zero-lengthed internal C library");
     abort();
   }
 
-  if(read_goto_binary_array(clib->start, clib->size, new_ctx, goto_functions))
+  goto_binary_reader goto_reader;
+
+  if (language && language->id() == "python")
+    goto_reader.set_functions_to_read(python_c_models);
+
+  if (goto_reader.read_goto_binary_array(
+        clib->start, clib->size, new_ctx, goto_functions))
     abort();
 
   new_ctx.foreach_operand([&symbol_deps](const symbolt &s) {
@@ -181,28 +236,31 @@ void add_cprover_library(contextt &context, const languaget *c_language)
    * that adds no new symbols. */
 
   new_ctx.foreach_operand(
-    [&context, &store_ctx, &symbol_deps, &to_include](const symbolt &s) {
+    [&context, &store_ctx, &symbol_deps, &to_include, &language](
+      const symbolt &s) {
       const symbolt *symbol = context.find_symbol(s.id);
-      if(symbol != nullptr && symbol->value.is_nil())
+      if (
+        (language && language->id() == "python") ||
+        (symbol != nullptr && symbol->value.is_nil()))
       {
         store_ctx.add(s);
         ingest_symbol(s.id, symbol_deps, to_include);
       }
     });
 
-  for(std::list<irep_idt>::const_iterator nameit = to_include.begin();
-      nameit != to_include.end();
-      nameit++)
+  for (std::list<irep_idt>::const_iterator nameit = to_include.begin();
+       nameit != to_include.end();
+       nameit++)
   {
     symbolt *s = new_ctx.find_symbol(*nameit);
-    if(s != nullptr)
+    if (s != nullptr)
     {
       store_ctx.add(*s);
       ingest_symbol(*nameit, symbol_deps, to_include);
     }
   }
 
-  if(c_link(context, store_ctx, "<built-in-library>"))
+  if (c_link(context, store_ctx, "<built-in-library>"))
   {
     // Merging failed
     log_error("Failed to merge C library");

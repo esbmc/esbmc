@@ -19,14 +19,14 @@ void cpp_typecheckt::typecheck_compound_bases(struct_typet &type)
 
   irept::subt &bases_irep = type.add("bases").get_sub();
 
-  Forall_irep(base_it, bases_irep)
+  Forall_irep (base_it, bases_irep)
   {
     const cpp_namet &name = to_cpp_name(base_it->find("name"));
 
     exprt base_symbol_expr =
       resolve(name, cpp_typecheck_resolvet::TYPE, cpp_typecheck_fargst());
 
-    if(
+    if (
       base_symbol_expr.id() != "type" ||
       base_symbol_expr.type().id() != "symbol")
     {
@@ -37,7 +37,7 @@ void cpp_typecheckt::typecheck_compound_bases(struct_typet &type)
 
     const symbolt &base_symbol = *lookup(base_symbol_expr.type());
 
-    if(
+    if (
       base_symbol.type.id() == "incomplete_struct" ||
       base_symbol.type.id() == "incomplete_class")
     {
@@ -45,7 +45,7 @@ void cpp_typecheckt::typecheck_compound_bases(struct_typet &type)
       str << "base type is incomplete";
       throw 0;
     }
-    if(base_symbol.type.id() != "struct")
+    if (base_symbol.type.id() != "struct")
     {
       err_location(name.location());
       str << "expected struct or class as base, but got `"
@@ -56,13 +56,13 @@ void cpp_typecheckt::typecheck_compound_bases(struct_typet &type)
     bool virtual_base = base_it->get_bool("virtual");
     irep_idt class_access = base_it->get("protection");
 
-    if(class_access == "")
+    if (class_access == "")
       class_access = default_class_access;
 
     base_symbol_expr.id("base");
     base_symbol_expr.set("access", class_access);
 
-    if(virtual_base)
+    if (virtual_base)
       base_symbol_expr.set("virtual", true);
 
     base_it->swap(base_symbol_expr);
@@ -76,7 +76,7 @@ void cpp_typecheckt::typecheck_compound_bases(struct_typet &type)
       base_struct_type, class_access, type, bases, vbases, virtual_base);
   }
 
-  if(!vbases.empty())
+  if (!vbases.empty())
   {
     // add a flag to determine
     // if this is the most-derived-object
@@ -105,20 +105,20 @@ void cpp_typecheckt::add_base_components(
 {
   const irep_idt &from_name = from.name();
 
-  if(is_virtual && vbases.find(from_name) != vbases.end())
+  if (is_virtual && vbases.find(from_name) != vbases.end())
     return;
 
   //source: http://msdn.microsoft.com/en-us/library/wcz57btd.aspx
-  if(bases.find(from_name) != bases.end())
+  if (bases.find(from_name) != bases.end())
   {
     err_location(to);
 
     static bool flag = false;
     std::string derived_classes;
 
-    forall_irep(it, to.find("bases").get_sub())
+    forall_irep (it, to.find("bases").get_sub())
     {
-      if(flag)
+      if (flag)
         derived_classes += ", ";
       else
         flag = true;
@@ -138,17 +138,17 @@ void cpp_typecheckt::add_base_components(
 
   bases.insert(from_name);
 
-  if(is_virtual)
+  if (is_virtual)
     vbases.insert(from_name);
 
   // look at the the parents of the base type
-  forall_irep(it, from.find("bases").get_sub())
+  forall_irep (it, from.find("bases").get_sub())
   {
     irep_idt sub_access = it->get("access");
 
-    if(access == "private")
+    if (access == "private")
       sub_access = "private";
-    else if(access == "protected" && sub_access != "private")
+    else if (access == "protected" && sub_access != "private")
       sub_access = "protected";
 
     const symbolt &symb = *lookup(it->type().identifier());
@@ -164,9 +164,9 @@ void cpp_typecheckt::add_base_components(
   const struct_typet::componentst &src_c = from.components();
   struct_typet::componentst &dest_c = to.components();
 
-  for(const auto &it : src_c)
+  for (const auto &it : src_c)
   {
-    if(it.get_bool("from_base"))
+    if (it.get_bool("from_base"))
       continue;
 
     // copy the component
@@ -178,21 +178,21 @@ void cpp_typecheckt::add_base_components(
 
     irep_idt comp_access = component.get_access();
 
-    if(access == "public")
+    if (access == "public")
     {
-      if(comp_access == "private")
+      if (comp_access == "private")
         component.set_access("noaccess");
     }
-    else if(access == "protected")
+    else if (access == "protected")
     {
-      if(comp_access == "private")
+      if (comp_access == "private")
         component.set_access("noaccess");
       else
         component.set_access("private");
     }
-    else if(access == "private")
+    else if (access == "private")
     {
-      if(comp_access == "noaccess" || comp_access == "private")
+      if (comp_access == "noaccess" || comp_access == "private")
         component.set_access("noaccess");
       else
         component.set_access("private");

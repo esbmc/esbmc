@@ -1,0 +1,4 @@
+CORE
+incomplete.c
+incomplete-lib.c
+^VERIFICATION SUCCESSFUL$

@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--function D --sol contract.sol
+^VERIFICATION FAILED$

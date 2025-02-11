@@ -13,7 +13,7 @@ unsigned renaming::level2t::current_number(const expr2tc &symbol) const
 unsigned renaming::level2t::current_number(const name_record &symbol) const
 {
   current_namest::const_iterator it = current_names.find(symbol);
-  if(it == current_names.end())
+  if (it == current_names.end())
     return 0;
   return it->second.count;
 }
@@ -21,7 +21,7 @@ unsigned renaming::level2t::current_number(const name_record &symbol) const
 unsigned int renaming::level1t::current_number(const irep_idt &name) const
 {
   current_namest::const_iterator it = current_names.find(name_record(name));
-  if(it == current_names.end())
+  if (it == current_names.end())
     return 0;
   return it->second;
 }
@@ -33,7 +33,7 @@ void renaming::level1t::get_ident_name(expr2tc &sym) const
   current_namest::const_iterator it =
     current_names.find(name_record(to_symbol2t(sym)));
 
-  if(it == current_names.end())
+  if (it == current_names.end())
   {
     // can not find; it's a global symbol.
     symbol.rlevel = symbol2t::level1_global;
@@ -55,7 +55,7 @@ void renaming::level2t::get_ident_name(expr2tc &sym) const
     (symbol.rlevel == symbol2t::level1) ? symbol2t::level2
                                         : symbol2t::level2_global;
 
-  if(it == current_names.end())
+  if (it == current_names.end())
   {
     // Un-numbered so far.
     symbol.rlevel = lev;
@@ -73,22 +73,22 @@ void renaming::level1t::rename(expr2tc &expr)
 {
   // rename all the symbols with their last known value
 
-  if(is_nil_expr(expr))
+  if (is_nil_expr(expr))
     return;
 
-  if(is_symbol2t(expr))
+  if (is_symbol2t(expr))
   {
     symbol2t &sym = to_symbol2t(expr);
 
     // first see if it's already an l1 name
 
-    if(sym.rlevel != symbol2t::level0)
+    if (sym.rlevel != symbol2t::level0)
       return;
 
     const current_namest::const_iterator it =
       current_names.find(name_record(sym));
 
-    if(it != current_names.end())
+    if (it != current_names.end())
     {
       expr = symbol2tc(
         sym.type, sym.thename, symbol2t::level1, it->second, 0, thread_id, 0);
@@ -99,7 +99,7 @@ void renaming::level1t::rename(expr2tc &expr)
       to_symbol2t(expr).rlevel = symbol2t::level1_global;
     }
   }
-  else if(is_address_of2t(expr))
+  else if (is_address_of2t(expr))
   {
     rename(to_address_of2t(expr).ptr_obj);
   }
@@ -113,39 +113,39 @@ void renaming::level1t::rename(expr2tc &expr)
 void renaming::level2t::rename(expr2tc &expr)
 {
   // rename all the symbols with their last known value
-  if(is_nil_expr(expr))
+  if (is_nil_expr(expr))
     return;
 
-  if(is_symbol2t(expr))
+  if (is_symbol2t(expr))
   {
     symbol2t &sym = to_symbol2t(expr);
 
     // first see if it's already an l2 name
 
-    if(sym.rlevel == symbol2t::level2 || sym.rlevel == symbol2t::level2_global)
+    if (sym.rlevel == symbol2t::level2 || sym.rlevel == symbol2t::level2_global)
       return;
 
-    if(sym.thename == "NULL")
+    if (sym.thename == "NULL")
       return;
-    if(sym.thename == "INVALID")
+    if (sym.thename == "INVALID")
       return;
-    if(has_prefix(sym.thename.as_string(), "nondet$"))
+    if (has_prefix(sym.thename.as_string(), "nondet$"))
       return;
 
     const current_namest::const_iterator it =
       current_names.find(name_record(sym));
 
-    if(it != current_names.end())
+    if (it != current_names.end())
     {
       // Is this a global symbol? Gets renamed differently.
       symbol2t::renaming_level lev;
-      if(
+      if (
         sym.rlevel == symbol2t::level0 || sym.rlevel == symbol2t::level1_global)
         lev = symbol2t::level2_global;
       else
         lev = symbol2t::level2;
 
-      if(!is_nil_expr(it->second.constant))
+      if (!is_nil_expr(it->second.constant))
         expr = it->second.constant; // sym is now invalid reference
       else
         expr = symbol2tc(
@@ -160,7 +160,7 @@ void renaming::level2t::rename(expr2tc &expr)
     else
     {
       symbol2t::renaming_level lev;
-      if(
+      if (
         sym.rlevel == symbol2t::level0 || sym.rlevel == symbol2t::level1_global)
         lev = symbol2t::level2_global;
       else
@@ -170,7 +170,7 @@ void renaming::level2t::rename(expr2tc &expr)
         sym.type, sym.thename, lev, sym.level1_num, 0, sym.thread_num, 0);
     }
   }
-  else if(is_address_of2t(expr))
+  else if (is_address_of2t(expr))
   {
     // do nothing
   }
@@ -202,31 +202,31 @@ void renaming::renaming_levelt::get_original_name(
   expr2tc &expr,
   symbol2t::renaming_level lev)
 {
-  if(is_nil_expr(expr))
+  if (is_nil_expr(expr))
     return;
 
   expr->Foreach_operand(
     [&lev](expr2tc &e) { renaming_levelt::get_original_name(e, lev); });
 
-  if(!is_symbol2t(expr))
+  if (!is_symbol2t(expr))
     return;
 
   symbol2t &sym = to_symbol2t(expr);
 
   // Rename level2_global down to level1_global, not level1
-  if(lev == symbol2t::level1 && sym.rlevel == symbol2t::level2_global)
+  if (lev == symbol2t::level1 && sym.rlevel == symbol2t::level2_global)
     lev = symbol2t::level1_global;
   // level1 and level1_global are equivalent.
-  else if(lev == symbol2t::level1 && sym.rlevel == symbol2t::level1_global)
+  else if (lev == symbol2t::level1 && sym.rlevel == symbol2t::level1_global)
     return;
 
   // Can't rename any lower,
-  if(sym.rlevel == symbol2t::level0)
+  if (sym.rlevel == symbol2t::level0)
     return;
 
   // Wipe out some data with default values and set renaming level to whatever
   // was requested.
-  switch(lev)
+  switch (lev)
   {
   case symbol2t::level1:
   case symbol2t::level1_global:
@@ -244,31 +244,31 @@ void renaming::renaming_levelt::get_original_name(
     return;
 
   default:
-    log_error("get_original_nameing to invalid level {}", lev);
+    log_error("get_original_nameing to invalid level {}", fmt::underlying(lev));
     abort();
   }
 }
 
 void renaming::level1t::print(std::ostream &out) const
 {
-  for(const auto &current_name : current_names)
+  for (const auto &current_name : current_names)
     out << current_name.first.base_name << " --> "
         << "thread " << thread_id << " count " << current_name.second << "\n";
 }
 
 void renaming::level2t::print(std::ostream &out) const
 {
-  for(const auto &current_name : current_names)
+  for (const auto &current_name : current_names)
   {
     out << current_name.first.base_name;
 
-    if(current_name.first.lev == symbol2t::level1)
+    if (current_name.first.lev == symbol2t::level1)
       out << "?" << current_name.first.l1_num << "!"
           << current_name.first.t_num;
 
     out << " --> ";
 
-    if(!is_nil_expr(current_name.second.constant))
+    if (!is_nil_expr(current_name.second.constant))
     {
       out << from_expr(
                *migrate_namespace_lookup, "", current_name.second.constant)
@@ -287,7 +287,7 @@ void renaming::level2t::dump() const
 {
   std::ostringstream oss;
   print(oss);
-  log_debug("{}", oss.str());
+  log_debug("rename", "{}", oss.str());
 }
 
 void renaming::level2t::make_assignment(
@@ -300,7 +300,7 @@ void renaming::level2t::make_assignment(
     to_symbol2t(lhs_symbol).rlevel == symbol2t::level1_global);
   valuet &entry = current_names[name_record(to_symbol2t(lhs_symbol))];
 
-  // This'll update entry beneath our feet; could reengineer it in the future.
+  // This'll update entry beneath our feet; could re-engineer it in the future.
   rename(lhs_symbol, entry.count + 1);
 
   symbol2t &symbol = to_symbol2t(lhs_symbol);

@@ -13,5 +13,5 @@ Date: November 2012
 class QStringList
 {
 public:
-	QStringList();
+  QStringList();
 };

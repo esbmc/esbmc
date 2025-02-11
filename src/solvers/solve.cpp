@@ -13,12 +13,15 @@ solver_creator create_new_z3_solver;
 solver_creator create_new_minisat_solver;
 solver_creator create_new_boolector_solver;
 solver_creator create_new_cvc_solver;
+solver_creator create_new_cvc5_solver;
 solver_creator create_new_mathsat_solver;
 solver_creator create_new_yices_solver;
 solver_creator create_new_bitwuzla_solver;
 
 static const std::unordered_map<std::string, solver_creator *> esbmc_solvers = {
+#ifdef SMTLIB
   {"smtlib", create_new_smtlib_solver},
+#endif
 #ifdef Z3
   {"z3", create_new_z3_solver},
 #endif
@@ -29,7 +32,10 @@ static const std::unordered_map<std::string, solver_creator *> esbmc_solvers = {
   {"boolector", create_new_boolector_solver},
 #endif
 #ifdef USECVC
-  {"cvc", create_new_cvc_solver},
+  {"cvc4", create_new_cvc_solver},
+#endif
+#ifdef USECVC5
+  {"cvc5", create_new_cvc5_solver},
 #endif
 #ifdef MATHSAT
   {"mathsat", create_new_mathsat_solver},
@@ -47,7 +53,8 @@ static const std::string all_solvers[] = {
   "z3",
   "minisat",
   "boolector",
-  "cvc",
+  "cvc4",
+  "cvc5",
   "mathsat",
   "yices",
   "bitwuzla"};
@@ -59,9 +66,9 @@ static std::string pick_default_solver()
   return "boolector";
 #else
   // Pick whatever's first in the list except for the smtlib solver
-  for(const std::string &name : all_solvers)
+  for (const std::string &name : all_solvers)
   {
-    if(name == "smtlib" || !esbmc_solvers.count(name))
+    if (name == "smtlib" || !esbmc_solvers.count(name))
       continue;
     log_status("No solver specified; defaulting to {}", name);
     return name;
@@ -76,13 +83,13 @@ static std::string pick_default_solver()
 static solver_creator &
 pick_solver(std::string &solver_name, const optionst &options)
 {
-  if(solver_name == "")
+  if (solver_name == "")
   {
     // Pick one based on options.
-    for(const std::string &name : all_solvers)
-      if(options.get_bool_option(name))
+    for (const std::string &name : all_solvers)
+      if (options.get_bool_option(name))
       {
-        if(solver_name != "")
+        if (solver_name != "")
         {
           log_error("Please only specify one solver");
           abort();
@@ -92,14 +99,14 @@ pick_solver(std::string &solver_name, const optionst &options)
       }
   }
 
-  if(solver_name == "")
+  if (solver_name == "")
     solver_name = options.get_option("default-solver");
 
-  if(solver_name == "")
+  if (solver_name == "")
     solver_name = pick_default_solver();
 
   auto it = esbmc_solvers.find(solver_name);
-  if(it != esbmc_solvers.end())
+  if (it != esbmc_solvers.end())
     return *it->second;
 
   log_error(
@@ -127,13 +134,13 @@ smt_convt *create_solver(
 
   // Pick a tuple flattener to use. If the solver has native support, and no
   // options were given, use that by default
-  if(tuple_api != nullptr && !node_flat && !sym_flat)
+  if (tuple_api != nullptr && !node_flat && !sym_flat)
     ctx->set_tuple_iface(tuple_api);
   // Use the node flattener if specified
-  else if(node_flat)
+  else if (node_flat)
     ctx->set_tuple_iface(new smt_tuple_node_flattener(ctx, ns));
   // Use the symbol flattener if specified
-  else if(sym_flat)
+  else if (sym_flat)
     ctx->set_tuple_iface(new smt_tuple_sym_flattener(ctx, ns));
   // Default: node flattener
   else
@@ -142,14 +149,14 @@ smt_convt *create_solver(
   // Pick an array flattener to use. Again, pick the solver native one by
   // default, or the one specified, or if none of the above then use the built
   // in arrays -> to BV flattener.
-  if(array_api != nullptr && !array_flat)
+  if (array_api != nullptr && !array_flat)
     ctx->set_array_iface(array_api);
-  else if(array_flat)
+  else if (array_flat)
     ctx->set_array_iface(new array_convt(ctx));
   else
     ctx->set_array_iface(new array_convt(ctx));
 
-  if(fp_api == nullptr || fp_to_bv)
+  if (fp_api == nullptr || fp_to_bv)
     ctx->set_fp_conv(new fp_convt(ctx));
   else
     ctx->set_fp_conv(fp_api);

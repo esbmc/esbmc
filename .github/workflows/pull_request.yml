@@ -1,0 +1,106 @@
+name: PR
+
+on: [pull_request]
+
+jobs:
+
+  # Check testing tool suite
+  testing-tool:
+    runs-on: ubuntu-20.04
+    steps:
+    - uses: actions/checkout@v4
+    - name: Runs testing tool unit test
+      run: cd regression && python3 testing_tool_test.py
+ 
+  # Build developer doc
+  build-developer-doc:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Set up Git repository
+      uses: actions/checkout@v4
+    - name: Compile LaTeX document
+      uses: xu-cheng/latex-action@v2
+      with:
+        root_file: docs/manual.tex
+    - name: Upload PDF file
+      uses: actions/upload-artifact@v4
+      with:
+        name: Developer-Manual
+        path: manual.pdf    
+
+  build-ubuntu:
+    uses: ./.github/workflows/build-unix.yml
+    name: static llvm-16 DebugOpt
+    with:
+      operating-system: ubuntu-22.04
+      build-flags: '-b DebugOpt -e On'
+      testing: true
+
+  build-windows:
+    uses: ./.github/workflows/build-windows.yml
+    name: static llvm-11 DebugOpt
+    with:
+      operating-system: windows-latest
+      build-flags: '-b DebugOpt -e On'
+      testing: true
+
+  build-arm:
+    uses: ./.github/workflows/build-unix.yml
+    name: ARM64 linux build
+    with:
+      operating-system: ARM64
+      build-flags: '-b DebugOpt -S OFF -B OFF -c 13'
+      testing: false
+
+  build-macos-arm:
+    uses: ./.github/workflows/build-unix.yml
+    name: arm64 darwin build
+    with:
+      operating-system: macos-latest
+      build-flags: '-c 15'
+      testing: false
+
+    # Check project with clang-format
+  code-style:
+    name: Check C/C++ code-style
+    runs-on: ubuntu-20.04
+    permissions:
+      # Give the default GITHUB_TOKEN write permission to commit and push the
+      # added or changed files to the repository.
+      contents: write
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install Dependencies
+      run: sudo apt-get update && sudo apt-get install libtinfo-dev
+    - name: Download Clang 11
+      run: wget https://github.com/llvm/llvm-project/releases/download/llvmorg-11.0.0/clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz
+    - name: Extract Clang 11
+      run: tar xf clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04.tar.xz && mv clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04 clang
+    - name: Run clang-format (src)
+      run: find src -iname *.h -o -iname *.c -o -iname *.cpp -o -iname *.hpp -iname *.hh | grep -v src/ansi-c/cpp | grep -v src/clang-c-frontend/headers/ | grep -v src/c2goto/library/libm/musl | xargs ./clang/bin/clang-format -style=file -i -fallback-style=none
+    - name: Run clang-format (tests)
+      run: find unit -iname *.h -o -iname *.c -o -iname *.cpp -o -iname *.hpp -iname *.hh  | xargs ./clang/bin/clang-format -style=file -i -fallback-style=none
+    - name: Delete downloaded Clang 11
+      run: rm -rf clang*
+    # Commit all changed files back to the repository
+    - uses: stefanzweifel/git-auto-commit-action@v5
+      if: ${{ ! startsWith(github.head_ref, 'fb/') }}
+    - name: Throws error if changes were made
+      run: git diff --exit-code --ignore-cr-at-eol
+      if: ${{ startsWith(github.head_ref, 'fb/') }}
+
+  cmake-lint:
+    name: Check CMake modules
+    runs-on: ubuntu-20.04
+    continue-on-error: true # TODO: Eventually this will be removed
+    steps:
+    - uses: actions/checkout@v4
+    - name: Set up Python 3.9
+      uses: actions/setup-python@v5
+      with:
+        python-version: 3.9
+    - name: Install cmakelint
+      run: pip install cmakelint
+    - name: Run CMake Lint
+      run: find . -iname *.cmake -o -iname CMakeLists.txt | grep -v build | xargs cmakelint || echo "failure"
+

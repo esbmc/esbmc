@@ -1,0 +1,4 @@
+CORE
+test.c
+--unwind 200 --std gnu89
+^VERIFICATION SUCCESSFUL$

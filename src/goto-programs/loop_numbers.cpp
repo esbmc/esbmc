@@ -7,19 +7,19 @@
 
 void show_loop_numbers(const goto_programt &goto_program)
 {
-  for(const auto &instruction : goto_program.instructions)
+  for (const auto &instruction : goto_program.instructions)
   {
-    if(instruction.is_backwards_goto())
+    if (instruction.is_backwards_goto())
     {
       unsigned loop_id = instruction.loop_number;
 
-      log_debug("Loop {}:\n {}\n", loop_id, instruction.location);
+      log_status("goto-loop Loop {}:\n {}\n", loop_id, instruction.location);
     }
   }
 }
 
 void show_loop_numbers(const goto_functionst &goto_functions)
 {
-  for(const auto &it : goto_functions.function_map)
+  for (const auto &it : goto_functions.function_map)
     show_loop_numbers(it.second.body);
 }

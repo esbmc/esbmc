@@ -131,10 +131,6 @@ class smt_convt;
 class smt_convt
 {
 public:
-  /* NOTE: I've made this horrible so we remember that there is an
-   * even uglier implementation that just returns an empty
-   * look at where this variable is used for more info :) */
-  bool extracting_from_array_tuple_is_error = false;
   /** Shorthand for a vector of smt_ast's */
   typedef std::vector<smt_astt> ast_vec;
 
@@ -206,22 +202,8 @@ public:
 
   smt_astt convert_assign(const expr2tc &expr);
 
-  /** Make an n-ary function application.
-   *  Takes a vector of smt_ast's, and creates a single
-   *  function app over all the smt_ast's.
-   */
-  template <typename Object, typename Method>
-  smt_astt make_n_ary(const Object o, const Method m, const ast_vec &v)
-  {
-    assert(!v.empty());
-
-    // Chain these.
-    smt_astt result = v.front();
-    for(std::size_t i = 1; i < v.size(); ++i)
-      result = (o->*m)(result, v[i]);
-
-    return result;
-  }
+  smt_astt make_n_ary_and(const ast_vec &v);
+  smt_astt make_n_ary_or(const ast_vec &v);
 
   /** Create the inverse of an smt_ast. Equivalent to a 'not' operation.
    *  @param a The ast to invert. Must be boolean sorted.
@@ -352,10 +334,10 @@ public:
   /** Create an integer or SBV/UBV sort */
   smt_sortt mk_int_bv_sort(std::size_t width)
   {
-    if(int_encoding)
+    if (int_encoding)
       return mk_int_sort();
 
-    if(width == 0)
+    if (width == 0)
       width = 1;
 
     return mk_bv_sort(width);
@@ -364,10 +346,10 @@ public:
   /** Create an real or floating-point/fixed-point sort */
   smt_sortt mk_real_fp_sort(std::size_t ew, std::size_t sw)
   {
-    if(int_encoding)
+    if (int_encoding)
       return mk_real_sort();
 
-    if(config.ansi_c.use_fixed_for_float)
+    if (config.ansi_c.use_fixed_for_float)
       return mk_fbv_sort(ew + sw);
 
     return fp_api->mk_fpbv_sort(ew, sw);
@@ -555,10 +537,6 @@ public:
   /** @{
    *  @name Internal foo. */
 
-  /** Convert expression and assert that it is true or false, according to the
-   *  value argument */
-  virtual void set_to(const expr2tc &expr, bool value);
-
   /** Create a free variable with the given sort, and a unique name, with the
    *  prefix given in 'tag' */
   virtual smt_astt
@@ -582,10 +560,10 @@ public:
 
   /** Flatten pointer arithmetic. When faced with an addition or subtraction
    *  between a pointer and some integer or other pointer, perform whatever
-   *  multiplications or casting is requried to honour the C semantics of
+   *  multiplications or casting is requried to honor the C semantics of
    *  pointer arith. */
   smt_astt convert_pointer_arith(const expr2tc &expr, const type2tc &t);
-  /** Compare two pointers. This attempts to optimise cases where we can avoid
+  /** Compare two pointers. This attempts to optimize cases where we can avoid
    *  comparing the integer representation of a pointer, as that's hugely
    *  inefficient sometimes (and gets bitblasted).
    *  @param expr First pointer to compare
@@ -612,11 +590,17 @@ public:
    *  address space juggling required to make a new pointer.
    *  @param expr The symbol2tc expression of this symbol.
    *  @param sym The textual representation of this symbol.
+   *  @param type Optionally a pointer to the type of the symbol in the context.
    *  @return A pointer-typed AST representing the address of this symbol. */
-  smt_astt
-  convert_identifier_pointer(const expr2tc &expr, const std::string &sym);
+  smt_astt convert_identifier_pointer(
+    const expr2tc &expr,
+    const std::string &sym,
+    const typet *type);
 
-  smt_astt init_pointer_obj(unsigned int obj_num, const expr2tc &size);
+  smt_astt init_pointer_obj(
+    unsigned int obj_num,
+    const expr2tc &size,
+    const typet *type);
 
   /** Checks for equality with NaN representation. */
   smt_astt convert_is_nan(const expr2tc &expr);
@@ -711,15 +695,6 @@ public:
   /** Given an array index, extract the lower n bits of it, where n is the
    *  bitwidth of the array domain. */
   expr2tc fix_array_idx(const expr2tc &idx, const type2tc &array_type);
-  /** Convert the size of an array to its bit width. Essential log2 with
-   *  some rounding. */
-  unsigned long size_to_bit_width(unsigned long sz);
-  /** Given an array type, calculate the domain bitwidth it should have. For
-   *  nondeterministically or infinite sized arrays, this defaults to the
-   *  machine integer width. */
-  unsigned long calculate_array_domain_width(const array_type2t &arr);
-  /** Given an array type, create a type2tc representing its domain. */
-  type2tc make_array_domain_type(const array_type2t &arr);
   /** For a multi-dimensional array, convert the type into a single dimension
    *  array. This works by concatenating the domain widths together into one
    *  large domain. */
@@ -760,6 +735,7 @@ public:
   // Ours:
   /** Given an array expression, attempt to extract its valuation from the
    *  solver model, computing a constant_array2tc by calling get_array_elem. */
+  expr2tc get_array(const type2tc &type, smt_astt array);
   expr2tc get_array(const expr2tc &expr);
 
   void delete_all_asts();
@@ -803,7 +779,7 @@ public:
   std::list<pointer_logict> pointer_logic;
   /** Constant struct representing the implementation of the pointer type --
    *  i.e., the struct type that pointers get translated to. */
-  struct_type2tc pointer_struct;
+  type2tc pointer_struct;
   /** The type of the machine integer that can store a pointer. */
   type2tc machine_ptr;
   /** Sort for booleans. For fast access. */
@@ -835,13 +811,17 @@ public:
   std::list<unsigned int> addr_space_sym_num;
   /** Type of the address space allocation records. Currently a start address
    *  integer and an end address integer. */
-  struct_type2tc addr_space_type;
+  type2tc addr_space_type;
   /** Type of the array of address space allocation records. */
-  array_type2tc addr_space_arr_type;
+  type2tc addr_space_arr_type;
   /** List of address space allocation sizes. A map from the object number to
    *  the nubmer of bytes allocated. In a list to support pushing and
    *  popping. */
   std::list<std::map<unsigned, unsigned>> addr_space_data;
+
+  /** Holds the `__ESBMC_alloc` symbol convert_terminal() was last invoked with.
+   */
+  expr2tc current_valid_objects_sym;
 
   // XXX - push-pop will break here.
   typedef std::map<std::string, smt_astt> renumber_mapt;
@@ -864,11 +844,43 @@ public:
   smt_astt int_shift_op_array;
 };
 
+/** Given an array type, create a type2tc representing its domain. */
+type2tc make_array_domain_type(const array_type2t &arr);
+
+/** Given an array type, calculate the domain bitwidth it should have. For
+ *  nondeterministically or infinite sized arrays, this defaults to the
+ *  machine integer width. */
+unsigned long calculate_array_domain_width(const array_type2t &arr);
+
 // Define here to enable inlining
 inline smt_ast::smt_ast(smt_convt *ctx, smt_sortt s) : sort(s), context(ctx)
 {
   assert(sort != nullptr);
   ctx->live_asts.push_back(this);
 }
+
+/* Type for push/pop-aware symbol table cache, required by some solvers */
+
+struct symtab_entryt
+{
+  std::string val;
+  smt_astt ast;
+  unsigned int level;
+
+  symtab_entryt(std::string val, smt_astt ast, unsigned int level)
+    : val(std::move(val)), ast(ast), level(level)
+  {
+  }
+};
+
+typedef boost::multi_index_container<
+  symtab_entryt,
+  boost::multi_index::indexed_by<
+    boost::multi_index::hashed_unique<
+      BOOST_MULTI_INDEX_MEMBER(symtab_entryt, std::string, val)>,
+    boost::multi_index::ordered_non_unique<
+      BOOST_MULTI_INDEX_MEMBER(symtab_entryt, unsigned int, level),
+      std::greater<unsigned int>>>>
+  symtabt;
 
 #endif /* _ESBMC_PROP_SMT_SMT_CONV_H_ */

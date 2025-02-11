@@ -1,4 +1,4 @@
 CORE
 main.c
---no-slice
+--no-slice --no-por
 ^VERIFICATION FAILED$

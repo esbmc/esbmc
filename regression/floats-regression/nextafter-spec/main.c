@@ -37,7 +37,7 @@ int main()
   }
   if(isfinite(x) && !isfinite(z))
   {
-    /* This is part of nextafter's behaviour, but w/o a model of
+    /* This is part of nextafter's behavior, but w/o a model of
      * feraiseexcept() and fetestexcept() we cannot prove it, yet.
     assert(fetestexcept(FE_OVERFLOW));
      */
@@ -45,7 +45,7 @@ int main()
   }
   if(islessgreater(x, y) && isfinite(z) && !isnormal(z))
   {
-    /* This is part of nextafter's behaviour, but w/o a model of
+    /* This is part of nextafter's behavior, but w/o a model of
      * feraiseexcept() and fetestexcept() we cannot prove it, yet.
     assert(fetestexcept(FE_UNDERFLOW));
      */
@@ -54,7 +54,7 @@ int main()
   if(isinf(x))
     assert(isinf(z) == isinf(x));
 
-  /* This is part of nextafter's behaviour, but w/o a model of
+  /* This is part of nextafter's behavior, but w/o a model of
    * feraiseexcept() and fetestexcept() we cannot prove it, yet.
   assert(!fetestexcept(FE_UNDERFLOW) || !fetestexcept(FE_OVERFLOW));
    */

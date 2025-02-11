@@ -1,0 +1,39 @@
+
+on:
+  workflow_call:
+    inputs:
+      operating-system:
+        description: "Targeted OS (e.g. ubuntu-latest, windows-latest)"
+        required: true
+        type: string
+      build-flags:
+        description: "Flags to be passed to build.sh script"
+        required: true
+        type: string
+      testing:
+        description: "Whether to run tests (regression) for this build"
+        required: true
+        type: boolean
+
+jobs:
+  build:
+    name: Build ESBMC (${{ inputs.operating-system }})
+    runs-on: ${{ inputs.operating-system }}
+    steps:
+    - uses: actions/checkout@v4
+    - name: Add apt.llvm.org repository
+      run: |
+        wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc &&
+        source /etc/os-release &&
+        sudo add-apt-repository -y "deb http://apt.llvm.org/${UBUNTU_CODENAME}/ llvm-toolchain-${UBUNTU_CODENAME}-16 main" &&
+        sudo apt-get update
+      if: ${{ startsWith(inputs.operating-system, 'ubuntu-') }}
+    - name: Build ESBMC
+      run: ./scripts/build.sh ${{ inputs.build-flags }}
+    - uses: actions/upload-artifact@v4
+      with:
+        name: release-${{ inputs.operating-system }}-${{ inputs.build-flags }}
+        path: ./release
+    - name: Run tests
+      if: ${{ inputs.testing == true }}
+      run: cd build/ && ctest -j4 --output-on-failure --progress .

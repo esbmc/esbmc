@@ -24,7 +24,7 @@ public:
   virtual ~renaming_levelt() = default;
   //  protected:
   //  XXX: should leave protected enabled, but g++ 5.4 on ubuntu 16.04 does not
-  //  appear to honour the following friend directive?
+  //  appear to honor the following friend directive?
   static void get_original_name(expr2tc &expr, symbol2t::renaming_level lev);
   friend void build_goto_symex_classes();
 };
@@ -53,9 +53,9 @@ public:
 
     int compare(const name_record &ref) const
     {
-      if(base_name.get_no() < ref.base_name.get_no())
+      if (base_name.get_no() < ref.base_name.get_no())
         return -1;
-      if(base_name.get_no() > ref.base_name.get_no())
+      if (base_name.get_no() > ref.base_name.get_no())
         return 1;
 
       return 0;
@@ -63,14 +63,14 @@ public:
 
     bool operator<(const name_record &ref) const
     {
-      if(compare(ref) == -1)
+      if (compare(ref) == -1)
         return true;
       return false;
     }
 
     bool operator==(const name_record &ref) const
     {
-      if(compare(ref) == 0)
+      if (compare(ref) == 0)
         return true;
       return false;
     }
@@ -156,29 +156,29 @@ public:
 
     int compare(const name_record &ref) const
     {
-      if(hash < ref.hash)
+      if (hash < ref.hash)
         return -1;
-      if(hash > ref.hash)
+      if (hash > ref.hash)
         return 1;
 
-      if(base_name < ref.base_name)
+      if (base_name < ref.base_name)
         return -1;
-      if(ref.base_name < base_name)
+      if (ref.base_name < base_name)
         return 1;
 
-      if(lev < ref.lev)
+      if (lev < ref.lev)
         return -1;
-      if(lev > ref.lev)
+      if (lev > ref.lev)
         return 1;
 
-      if(l1_num < ref.l1_num)
+      if (l1_num < ref.l1_num)
         return -1;
-      if(l1_num > ref.l1_num)
+      if (l1_num > ref.l1_num)
         return 1;
 
-      if(t_num < ref.t_num)
+      if (t_num < ref.t_num)
         return -1;
-      if(t_num > ref.t_num)
+      if (t_num > ref.t_num)
         return 1;
 
       return 0;
@@ -186,14 +186,14 @@ public:
 
     bool operator<(const name_record &ref) const
     {
-      if(compare(ref) == -1)
+      if (compare(ref) == -1)
         return true;
       return false;
     }
 
     bool operator==(const name_record &ref) const
     {
-      if(compare(ref) == 0)
+      if (compare(ref) == 0)
         return true;
       return false;
     }
@@ -255,14 +255,6 @@ public:
     {
     }
   };
-
-  void get_variables(std::set<name_record> &vars) const
-  {
-    for(const auto &current_name : current_names)
-    {
-      vars.insert(current_name.first);
-    }
-  }
 
   unsigned current_number(const expr2tc &sym) const;
   unsigned current_number(const name_record &rec) const;

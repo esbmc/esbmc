@@ -26,9 +26,20 @@
 char *strcpy(char *dst, const char *src)
 {
 __ESBMC_HIDE:;
-  char *cp = dst;
-  while((*cp++ = *src++))
-    ;
+  // Ensure src pointer is non-null
+  __ESBMC_assert(src != NULL, "Source pointer is null");
+
+  // Constant propagation-friendly loop
+  for (size_t i = 0;; ++i)
+  {
+    // Copy each character including the null terminator
+    dst[i] = src[i];
+
+    // Break when null terminator is copied
+    if (src[i] == '\0')
+      break;
+  }
+
   return dst;
 }
 
@@ -37,11 +48,11 @@ char *strncpy(char *dst, const char *src, size_t n)
 __ESBMC_HIDE:;
   char *start = dst;
 
-  while(n && (*dst++ = *src++))
+  while (n && (*dst++ = *src++))
     n--;
 
-  if(n)
-    while(--n)
+  if (n)
+    while (--n)
       *dst++ = '\0';
 
   return start;
@@ -59,12 +70,12 @@ char *strncat(char *dst, const char *src, size_t n)
 __ESBMC_HIDE:;
   char *start = dst;
 
-  while(*dst++)
+  while (*dst++)
     ;
   dst--;
 
-  while(n--)
-    if(!(*dst++ = *src++))
+  while (n--)
+    if (!(*dst++ = *src++))
       return start;
 
   *dst = '\0';
@@ -75,7 +86,7 @@ size_t strlen(const char *s)
 {
 __ESBMC_HIDE:;
   size_t len = 0;
-  while(s[len] != 0)
+  while (s[len] != 0)
     len++;
   return len;
 }
@@ -91,9 +102,9 @@ __ESBMC_HIDE:;
   {
     c1 = (unsigned char)*s1++;
     c2 = (unsigned char)*s2++;
-    if(c1 == '\0')
+    if (c1 == '\0')
       return c1 - c2;
-  } while(c1 == c2);
+  } while (c1 == c2);
 
   return c1 - c2;
 }
@@ -108,25 +119,25 @@ __ESBMC_HIDE:;
     ch1 = s1[i];
     ch2 = s2[i];
 
-    if(ch1 == ch2)
+    if (ch1 == ch2)
     {
     }
-    else if(ch1 < ch2)
+    else if (ch1 < ch2)
       return -1;
     else
       return 1;
 
     i++;
-  } while(ch1 != 0 && ch2 != 0 && i < n);
+  } while (ch1 != 0 && ch2 != 0 && i < n);
   return 0;
 }
 
 char *strchr(const char *s, int ch)
 {
 __ESBMC_HIDE:;
-  while(*s && *s != (char)ch)
+  while (*s && *s != (char)ch)
     s++;
-  if(*s == (char)ch)
+  if (*s == (char)ch)
     return (char *)s;
   return NULL;
 }
@@ -140,11 +151,11 @@ __ESBMC_HIDE:;
 
   /* Since strchr is fast, we use it rather than the obvious loop.  */
 
-  if(c == '\0')
+  if (c == '\0')
     return strchr(s, '\0');
 
   found = NULL;
-  while((p = strchr(s, c)) != NULL)
+  while ((p = strchr(s, c)) != NULL)
   {
     found = p;
     s = p + 1;
@@ -160,12 +171,12 @@ __ESBMC_HIDE:;
   const char *a;
   size_t count = 0;
 
-  for(p = s; *p != '\0'; ++p)
+  for (p = s; *p != '\0'; ++p)
   {
-    for(a = accept; *a != '\0'; ++a)
-      if(*p == *a)
+    for (a = accept; *a != '\0'; ++a)
+      if (*p == *a)
         break;
-    if(*a == '\0')
+    if (*a == '\0')
       return count;
     else
       ++count;
@@ -179,8 +190,8 @@ size_t strcspn(const char *s, const char *reject)
 __ESBMC_HIDE:;
   size_t count = 0;
 
-  while(*s != '\0')
-    if(strchr(reject, *s++) == NULL)
+  while (*s != '\0')
+    if (strchr(reject, *s++) == NULL)
       ++count;
     else
       return count;
@@ -191,11 +202,11 @@ __ESBMC_HIDE:;
 char *strpbrk(const char *s, const char *accept)
 {
 __ESBMC_HIDE:;
-  while(*s != '\0')
+  while (*s != '\0')
   {
     const char *a = accept;
-    while(*a != '\0')
-      if(*a++ == *s)
+    while (*a != '\0')
+      if (*a++ == *s)
         return (char *)s;
     ++s;
   }
@@ -209,17 +220,17 @@ __ESBMC_HIDE:;
   char *cp = (char *)str1;
   char *s1, *s2;
 
-  if(!*str2)
+  if (!*str2)
     return (char *)str1;
 
-  while(*cp)
+  while (*cp)
   {
     s1 = cp;
     s2 = (char *)str2;
 
-    while(*s1 && *s2 && !(*s1 - *s2))
+    while (*s1 && *s2 && !(*s1 - *s2))
       s1++, s2++;
-    if(!*s2)
+    if (!*s2)
       return cp;
     cp++;
   }
@@ -231,13 +242,13 @@ char *strtok(char *str, const char *delim)
 {
 __ESBMC_HIDE:;
   static char *p = 0;
-  if(str)
+  if (str)
     p = str;
-  else if(!p)
+  else if (!p)
     return 0;
   str = p + strspn(p, delim);
   p = str + strcspn(str, delim);
-  if(p == str)
+  if (p == str)
     return p = 0;
   p = *p ? *p = 0, p + 1 : 0;
   return str;
@@ -249,7 +260,7 @@ __ESBMC_HIDE:;
   size_t bufsz;
   bufsz = (strlen(str) + 1);
   char *cpy = (char *)malloc(bufsz * sizeof(char));
-  if(cpy == ((void *)0))
+  if (cpy == ((void *)0))
     return 0;
   strcpy(cpy, str);
   return cpy;
@@ -260,7 +271,7 @@ void *memcpy(void *dst, const void *src, size_t n)
 __ESBMC_HIDE:;
   char *cdst = dst;
   const char *csrc = src;
-  for(size_t i = 0; i < n; i++)
+  for (size_t i = 0; i < n; i++)
     cdst[i] = csrc[i];
   return dst;
 }
@@ -269,7 +280,7 @@ void *__memset_impl(void *s, int c, size_t n)
 {
 __ESBMC_HIDE:;
   char *sp = s;
-  for(size_t i = 0; i < n; i++)
+  for (size_t i = 0; i < n; i++)
     sp[i] = c;
   return s;
 }
@@ -287,14 +298,14 @@ void *memmove(void *dest, const void *src, size_t n)
 __ESBMC_HIDE:;
   char *cdest = dest;
   const char *csrc = src;
-  if(dest - src >= n)
+  if (dest - src >= n)
   {
-    for(size_t i = 0; i < n; i++)
+    for (size_t i = 0; i < n; i++)
       cdest[i] = csrc[i];
   }
   else
   {
-    for(size_t i = n; i > 0; i--)
+    for (size_t i = n; i > 0; i--)
       cdest[i - 1] = csrc[i - 1];
   }
   return dest;
@@ -305,10 +316,10 @@ int memcmp(const void *s1, const void *s2, size_t n)
 __ESBMC_HIDE:;
   int res = 0;
   const unsigned char *sc1 = s1, *sc2 = s2;
-  for(; n != 0; n--)
+  for (; n != 0; n--)
   {
     res = (*sc1++) - (*sc2++);
-    if(res != 0)
+    if (res != 0)
       return res;
   }
   return res;
@@ -316,7 +327,7 @@ __ESBMC_HIDE:;
 
 void *memchr(const void *buf, int ch, size_t n)
 {
-  while(n && (*(unsigned char *)buf != (unsigned char)ch))
+  while (n && (*(unsigned char *)buf != (unsigned char)ch))
   {
     buf = (unsigned char *)buf + 1;
     n--;
