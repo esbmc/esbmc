@@ -349,14 +349,7 @@ void goto_convert_functionst::wallop_type(
 
   // Iterate over our dependancies ensuring they're resolved.
   for (const auto &dep : deps)
-  {
-    // In C++ we have to avoid circular dependencies
-    // Break out of it when we get stuck in an endless loop
-    if (sname == dep)
-      return;
-
     wallop_type(dep, typenames, sname);
-  }
 
   // And finally perform renaming.
   symbolt *s = context.find_symbol(name);
@@ -394,8 +387,16 @@ void goto_convert_functionst::thrash_type_symbols()
     }
   });
 
-  for (auto &it : typenames)
-    it.second.erase(it.first);
+  std::vector<std::map<irep_idt, std::set<irep_idt>>::iterator> to_remove;
+  for (auto it = typenames.begin(); it != typenames.end(); it++)
+  {
+    it->second.erase(it->first);
+    if (has_circular_dependency(it->first, typenames, it->first))
+      to_remove.push_back(it);
+  }
+
+  for (auto &it : to_remove)
+    it->second.clear();
 
   // Now, repeatedly rename all types. When we encounter a type that contains
   // unresolved symbols, resolve it first, then include it into this type.
@@ -410,4 +411,35 @@ void goto_convert_functionst::thrash_type_symbols()
     rename_types(s.type, s, s.id);
     rename_exprs(s.value, s, s.id);
   });
+
+ // Rename again for recursive symbol
+  context.Foreach_operand([this](symbolt &s) {
+    rename_types(s.type, s, s.id);
+    rename_exprs(s.value, s, s.id);
+  });
+}
+
+bool goto_convert_functionst::has_circular_dependency(
+  irep_idt name,
+  typename_mapt &typenames,
+  const irep_idt &sname)
+{
+  // The purpose of this method is to filter out
+  // circular dependencies e.g., A->B->C->D->A
+  typename_mapt::iterator it = typenames.find(name);
+  assert(it != typenames.end());
+  std::set<irep_idt> &deps = it->second;
+
+  for (const auto &dep : deps)
+  {
+    // In C++ we have to avoid circular dependencies
+    // Break out of it when we get stuck in an endless loop
+    if (sname == dep)
+      return true;
+
+    if (has_circular_dependency(dep, typenames, sname))
+      return true;
+  }
+
+  return false;
 }

@@ -19,6 +19,10 @@ public:
   void goto_convert();
   void convert_function(symbolt &symbol);
   void thrash_type_symbols();
+  bool has_circular_dependency(
+    irep_idt name,
+    typename_mapt &typenames,
+    const irep_idt &sname);
   void collect_type(const irept &type, typename_sett &set);
   void collect_expr(const irept &expr, typename_sett &set);
   void
