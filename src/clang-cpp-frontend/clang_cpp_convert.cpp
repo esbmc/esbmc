@@ -99,16 +99,6 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     break;
   }
 
-  case clang::Decl::ClassTemplate:
-  {
-    const clang::ClassTemplateDecl &cd =
-      static_cast<const clang::ClassTemplateDecl &>(decl);
-
-    if (get_template_decl(&cd, false, new_expr))
-      return true;
-    break;
-  }
-
   case clang::Decl::ClassTemplateSpecialization:
   {
     const clang::ClassTemplateSpecializationDecl &cd =
@@ -140,6 +130,7 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   }
 
   // We can ignore any these declarations
+  case clang::Decl::ClassTemplate:
   case clang::Decl::ClassTemplatePartialSpecialization:
   case clang::Decl::VarTemplatePartialSpecialization:
   case clang::Decl::Using:
