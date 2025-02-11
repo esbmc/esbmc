@@ -597,7 +597,7 @@ std::string _tostr(const char* ptr)
 {
   return std::string(ptr);
 }
-const char* _tochar(std::string str)
+const char* _tochar(const std::string& str)
 {
   return str.c_str();
 }

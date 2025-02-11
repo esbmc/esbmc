@@ -28,10 +28,12 @@ public:
   bool convert();
 
 protected:
-  void multi_json_file();
+  void merge_multi_files();
   std::vector<nlohmann::json> topological_sort(
     std::unordered_map<std::string, std::unordered_set<std::string>> &graph,
     std::unordered_map<std::string, nlohmann::json> &path_to_json);
+  void contract_precheck();
+  void populate_auxilary_vars();
   bool convert_ast_nodes(const nlohmann::json &contract_def);
 
   // conversion functions
@@ -124,6 +126,7 @@ protected:
     const nlohmann::json literal_type = nullptr);
   bool get_var_decl_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_func_decl_ref(const nlohmann::json &decl, exprt &new_expr);
+  bool get_func_decl_ref(const std::string &func_id, nlohmann::json &decl_ref);
   bool get_func_decl_this_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_func_decl_this_ref(const std::string &func_id, exprt &new_expr);
   bool get_enum_member_ref(const nlohmann::json &decl, exprt &new_expr);
@@ -150,7 +153,13 @@ protected:
     const nlohmann::json &decl,
     std::string &name,
     std::string &id);
-  bool get_function_call(
+  bool get_non_library_function_call(
+    const exprt &func,
+    const typet &t,
+    const nlohmann::json &decl_ref,
+    const nlohmann::json &epxr,
+    side_effect_expr_function_callt &call);
+  bool get_ctor_call(
     const exprt &func,
     const typet &t,
     const nlohmann::json &decl_ref,
@@ -166,7 +175,12 @@ protected:
   bool get_current_contract_name(
     const nlohmann::json &ast_node,
     std::string &contract_name);
-  void get_library_function_call(
+  bool get_library_function_call(
+    const exprt &func,
+    const typet &t,
+    const nlohmann::json &caller,
+    side_effect_expr_function_callt &call);
+  void get_library_function_call_no_params(
     const std::string &func_name,
     const std::string &func_id,
     const typet &t,
@@ -259,6 +273,7 @@ protected:
   const nlohmann::json &
   find_decl_ref(int ref_decl_id, std::string &contract_name);
   const nlohmann::json &find_constructor_ref(int ref_decl_id);
+  const nlohmann::json &find_constructor_ref(const std::string &contract_name);
   void convert_expression_to_code(exprt &expr);
   bool check_intrinsic_function(const nlohmann::json &ast_node);
   nlohmann::json make_implicit_cast_expr(
@@ -348,13 +363,16 @@ protected:
   std::unordered_map<int, std::string> exportedSymbolsList;
   // Inheritance Order Record <contract_name, Contract_id>
   std::unordered_map<std::string, std::vector<int>> linearizedBaseList;
+  // contract name list
+  std::unordered_map<int, std::string> contractNamesList;
   // Store the ast_node["id"] of contract/struct/function/...
   std::unordered_map<int, std::string> scope_map;
   // Store state variables
   std::vector<symbolt *> initializers;
   // For inheritance
   const nlohmann::json *ctor_modifier;
-  const nlohmann::json *base_contracts;
+  const nlohmann::json *based_contracts;
+  // This should be set to true when handling a new-object, member call of contract A while parsing contract B
   bool is_contract_member_access;
 
   static constexpr const char *mode = "C++";
@@ -367,10 +385,6 @@ protected:
   // dealing with the implicit constructor call
   // this is to avoid reference to stack memory associated with local variable returned
   const nlohmann::json empty_json;
-
-  // this block stores the map_init function calls and
-  // will merge to the constructor later on
-  code_blockt map_init_block;
 
   // --function
   std::string tgt_func;
