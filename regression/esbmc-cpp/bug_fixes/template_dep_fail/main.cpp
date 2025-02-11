@@ -27,5 +27,5 @@ public:
 int main()
 {
   i obj;
-  assert(obj.h.f.foo(obj).a == 1);
+  assert(obj.h.f.foo(obj).a != 1);
 }
