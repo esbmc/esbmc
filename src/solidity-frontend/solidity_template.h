@@ -248,7 +248,7 @@ char get_char(int digit)
     char charstr[] = "0123456789ABCDEF";
     return charstr[digit];
 }
-void rev(char *p)
+void sol_rev(char *p)
 {
 	char *q = &p[strlen(p) - 1];
 	char *r = p;
@@ -294,7 +294,7 @@ char *i256toa(int256_t value)
 		count++;
 	}
 	str[count] = 0;
-	rev(str);
+	sol_rev(str);
 	return str;
 }
 
@@ -317,7 +317,7 @@ char *u256toa(uint256_t value)
 		count++;
 	}
 	str[count] = 0;
-	rev(str);
+	sol_rev(str);
 	return str;
 }
 )";
