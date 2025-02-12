@@ -1421,7 +1421,6 @@ bool clang_c_convertert::get_builtin_type(
 
   case clang::BuiltinType::Float16:
   case clang::BuiltinType::Half:
-  case clang::BuiltinType::Float16:
   case clang::BuiltinType::BFloat16:
     new_type = half_float_type();
     c_type = "_Float16";
