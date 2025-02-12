@@ -1,4 +1,4 @@
 CORE
 main.py
 
-^SyntaxError$
+^SyntaxError: Keyword argument repeated:x$
