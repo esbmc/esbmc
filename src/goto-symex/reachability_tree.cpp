@@ -162,32 +162,42 @@ bool reachability_treet::step_next_state()
 unsigned int
 reachability_treet::decide_ileave_direction(execution_statet &ex_state)
 {
-  unsigned int tid = 0, user_tid = 0;
+  auto is_thread_schedulable = [&](int tid) {
+    return check_thread_viable(tid, true) && ex_state.dfs_explore_thread(tid);
+  };
 
+  signed int tid = 0, user_tid = 0;
+
+  // Get thread ID from user if interactive mode is enabled
+  tid = get_cur_state().active_thread + 1;
   if (interactive_ileaves)
   {
     tid = get_ileave_direction_from_user();
     user_tid = tid;
   }
 
-  for (; tid < ex_state.threads_state.size(); tid++)
+  // Try finding a schedulable thread in the forward direction
+  for (; tid < (int)ex_state.threads_state.size(); ++tid)
   {
-    /* For all threads: */
-    if (!check_thread_viable(tid, true))
-      continue;
-
-    if (!ex_state.dfs_explore_thread(tid))
-      continue;
-
-#if 0
-    //apply static partial-order reduction
-    if (por && !ex_state.is_thread_mpor_schedulable(tid))
-      continue;
-#endif
-
-    break;
+    if (is_thread_schedulable(tid))
+      break;
   }
 
+  // If no thread was found, search in the reverse direction
+  if (tid == (int)ex_state.threads_state.size())
+  {
+    for (tid = get_cur_state().active_thread; tid >= 0; --tid)
+    {
+      if (is_thread_schedulable(tid))
+        break;
+    }
+  }
+
+  // If no valid thread is found, set tid to the size of threads_state
+  if (tid < 0)
+    tid = ex_state.threads_state.size();
+
+  // Validate user choice in interactive mode
   if (interactive_ileaves && tid != user_tid)
   {
     log_error("Ileave code selected different thread from user choice");
@@ -248,7 +258,7 @@ bool reachability_treet::reset_to_unexplored_state()
   if (execution_states.size() > 0)
     cur_state_it++;
 
-  if (execution_states.size() != 0 && !smt_during_symex)
+  if (execution_states.size() && !smt_during_symex)
   {
     // When backtracking, erase all the assertions from the equation before
     // continuing forwards. They've all already been checked, in the trace we
@@ -264,7 +274,7 @@ bool reachability_treet::reset_to_unexplored_state()
     (*cur_state_it)->remaining_claims -= num_asserts;
   }
 
-  return execution_states.size() != 0;
+  return execution_states.size();
 }
 
 void reachability_treet::go_next_state()
@@ -385,7 +395,7 @@ bool reachability_treet::dfs_position::write_to_file(
     i += 7;
     i >>= 3;
 
-    assert(i != 0); // Always at least one thread in _existance_.
+    assert(i != 0); // Always at least one thread in _existence_.
     if (fwrite(buffer, i, 1, f) != 1)
       goto fail;
   }
@@ -553,7 +563,9 @@ goto_symext::symex_resultt reachability_treet::get_next_formula()
 
     next_thread_id = decide_ileave_direction(get_cur_state());
 
-    if (get_cur_state().interleaving_unviable)
+    if (
+      get_cur_state().interleaving_unviable &&
+      next_thread_id != get_cur_state().active_thread)
       break;
     create_next_state();
 

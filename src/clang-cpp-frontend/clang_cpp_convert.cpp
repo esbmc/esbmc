@@ -852,9 +852,27 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (get_type(this_expr.getType(), this_type))
       return true;
 
-    assert(this_type == it->second.second);
+    // In a lambda `CXXThisExpr` refers to the captured `this` pointer,
+    // while the `this_map` refers to the `this` pointer of the lambda closure type.
+    // This causes a mismatch, so ignore the type check in this case.
+    assert(this_type == it->second.second || is_lambda());
 
-    new_expr = symbol_exprt(it->second.first, it->second.second);
+    if (is_lambda())
+    {
+      if (auto it = cap_map.find(address); it != cap_map.end())
+      {
+        // Replace This pointer in the lambda operator
+        assert(it->second.second);
+        get_decl(*it->second.second, new_expr);
+        build_member_from_component(*current_functionDecl, new_expr);
+        // special case: gen address of when capturing *this
+        if (!new_expr.type().is_pointer())
+          new_expr = gen_address_of(new_expr);
+      }
+    }
+    else
+      new_expr = symbol_exprt(it->second.first, it->second.second);
+
     break;
   }
 
@@ -989,12 +1007,6 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::LambdaExpr &lambda_expr =
       static_cast<const clang::LambdaExpr &>(stmt);
 
-    if (lambda_expr.capture_size() > 0)
-    {
-      log_error("ESBMC does not support lambdas with captures for now");
-      return true;
-    }
-
     get_struct_union_class(*lambda_expr.getLambdaClass());
 
     // Construct a new object of the lambda class
@@ -1002,12 +1014,27 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (get_type(
           *lambda_expr.getLambdaClass()->getTypeForDecl(), lambda_class_type))
       return true;
-    new_expr = gen_zero(pointer_typet(lambda_class_type));
-    // Generating a null pointer only works as long as we don't have captures
-    // When we want to add support for captures, we have to probably call
-    // the lambda class constructor here
-    // See https://cppinsights.io/ which is a great tool to see how lambdas
-    // are translated to C++ code
+
+    exprt sym("struct", lambda_class_type);
+    // both `captures` (via `capture_begin`) and `capture_inits` have hopefully the same size and order
+    auto capture = lambda_expr.capture_begin();
+    for (const auto &it : lambda_expr.capture_inits())
+    {
+      assert(capture != lambda_expr.capture_end());
+      exprt init;
+      if (get_expr(*it, init))
+        return true;
+
+      if (capture->getCaptureKind() == clang::LambdaCaptureKind::LCK_ByRef)
+      {
+        // If the capture is by reference, we need to pass the address
+        init = address_of_exprt(init);
+        // (`this` can also be captured by ref, but it's already a pointer)
+      }
+      sym.move_to_operands(init);
+      capture++;
+    }
+    new_expr = sym;
 
     break;
   }
@@ -1286,6 +1313,22 @@ bool clang_cpp_convertert::get_function_body(
   // do nothing if function body doesn't exist
   if (!fd.hasBody())
     return false;
+
+  // Retrieve the mapping between captured variables
+  // and the members that store their values or references
+  if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
+  {
+    if (md->getParent()->getLambdaCallOperator() == md)
+    {
+      field_mapt captures;
+      clang::FieldDecl *thisCapture{};
+      md->getParent()->getCaptureFields(captures, thisCapture);
+
+      std::size_t address = reinterpret_cast<std::size_t>(md->getFirstDecl());
+      cap_map[address] =
+        std::pair<field_mapt, clang::FieldDecl *>(captures, thisCapture);
+    }
+  }
 
   // Parse body
   if (clang_c_convertert::get_function_body(fd, new_expr, ftype))
@@ -1691,6 +1734,29 @@ bool clang_cpp_convertert::get_decl_ref(
   const clang::Decl &decl,
   exprt &new_expr)
 {
+  if (is_lambda())
+  {
+    std::size_t address =
+      reinterpret_cast<std::size_t>(current_functionDecl->getFirstDecl());
+    // Replace decl in the lambda operator with FieldDecl
+    // x = 1 convert into this->_x = 1;
+    if (auto it = cap_map.find(address); it != cap_map.end())
+      if (auto it1 =
+            it->second.first.find(llvm::dyn_cast<CAPTURE_VARIABLE_TYPE>(&decl));
+          it1 != it->second.first.end())
+      {
+        typet t;
+        if (get_type(it1->first->getType(), t))
+          return true;
+
+        if (get_decl(*it1->second, new_expr))
+          return true;
+        build_member_from_component(*current_functionDecl, new_expr);
+
+        gen_typecast(ns, new_expr, t);
+        return false;
+      }
+  }
   std::string name, id;
   typet type;
   /**
@@ -1916,6 +1982,16 @@ bool clang_cpp_convertert::annotate_class_method(
       to_code(new_expr).remove("statement");
 
   return false;
+}
+
+bool clang_cpp_convertert::get_member_expr(
+  const clang::MemberExpr &memb,
+  exprt &new_expr)
+{
+  if (perform_virtual_dispatch(memb))
+    return get_vft_binding_expr(memb, new_expr);
+
+  return clang_c_convertert::get_member_expr(memb, new_expr);
 }
 
 void clang_cpp_convertert::gen_typecast_base_ctor_call(

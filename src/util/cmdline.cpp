@@ -150,13 +150,9 @@ const char *cmdlinet::getval(const char *option) const
 {
   cmdlinet::options_mapt::const_iterator value = options_map.find(option);
   if (value == options_map.end())
-  {
     return (const char *)nullptr;
-  }
   if (value->second.empty())
-  {
     return (const char *)nullptr;
-  }
   return value->second.front().c_str();
 }
 

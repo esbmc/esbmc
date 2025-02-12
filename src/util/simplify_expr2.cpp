@@ -158,7 +158,7 @@ static bool rebalance_associative_tree(
   // try to simplify all of their contents, then try to reconfigure into another
   // set of operations.
   // There's great scope for making this /much/ more efficient via passing modes
-  // and vectors downwards, but lets not prematurely optimise. All this is
+  // and vectors downwards, but lets not prematurely optimize. All this is
   // faster than stringly stuff.
 
   // Extract immediate operands
@@ -890,6 +890,28 @@ expr2tc member2t::do_simplify() const
 
     return s;
   }
+  else if (is_with2t(source_value))
+  {
+    auto current_source = source_value;
+
+    // Traverse through nested 'with' expressions
+    while (is_with2t(current_source))
+    {
+      const auto &with = to_with2t(current_source);
+
+      // Check if the member matches the update field
+      if (
+        is_constant_string2t(with.update_field) &&
+        member == to_constant_string2t(with.update_field).value)
+        return with.update_value;
+
+      // Move to the next source value in the chain
+      current_source = with.source_value;
+    }
+
+    // If no match is found, return an empty expression
+    return expr2tc();
+  }
 
   return expr2tc();
 }
@@ -1379,7 +1401,7 @@ static expr2tc do_bit_munge_operation(
      * not representable. */
 
     /* Evaluating shifts with the shift amount >= 64 on (u)int64_t is undefined
-     * behaviour in C++, we should avoid doing that during simplification. */
+     * behavior in C++, we should avoid doing that during simplification. */
     can_eval &= !is_shift || br < 64;
     if (can_eval)
     {

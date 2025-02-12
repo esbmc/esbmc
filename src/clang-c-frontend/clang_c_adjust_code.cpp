@@ -86,7 +86,7 @@ void clang_c_adjust::adjust_decl(codet &code)
   // Check type
   adjust_type(code.op0().type());
 
-  // Create typecast on assingments, if needed
+  // Create typecast on assignments, if needed
   gen_typecast(ns, code.op1(), code.op0().type());
 }
 
@@ -149,6 +149,6 @@ void clang_c_adjust::adjust_assign(codet &code)
 {
   adjust_operands(code);
 
-  // Create typecast on assingments, if needed
+  // Create typecast on assignments, if needed
   gen_typecast(ns, code.op1(), code.op0().type());
 }

@@ -24,7 +24,7 @@ def check_usage():
         sys.exit(2)
 
 def is_imported_model(module_name):
-    models = ["math", "os"]
+    models = ["math", "os", "numpy"]
     return module_name in models
 
 def is_unsupported_module(module_name):
@@ -190,7 +190,7 @@ def main():
     filename = sys.argv[1]
     output_dir = sys.argv[2]
 
-    # Include the current directory for import search
+    # Add the script directory to the import search path
     sys.path.append(os.path.dirname(filename))
 
     if not os.path.exists(output_dir):

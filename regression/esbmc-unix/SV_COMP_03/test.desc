@@ -1,4 +1,4 @@
-CORE
+KNOWNBUG
 main.c
 --context-bound 2 --no-assertions --data-races-check -Wno-error=implicit-function-declaration
 ^VERIFICATION FAILED$

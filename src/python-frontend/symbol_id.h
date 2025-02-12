@@ -10,6 +10,8 @@ public:
     const std::string &clazz,
     const std::string &function);
 
+  symbol_id() = default;
+
   void set_object(const std::string &obj)
   {
     object_ = obj;
@@ -45,13 +47,16 @@ public:
     return classname_;
   }
 
+  const std::string &get_filename() const
+  {
+    return filename_;
+  }
+
   void clear();
 
   std::string to_string() const;
 
 private:
-  symbol_id() = delete;
-
   std::string filename_;
   std::string classname_ = "";
   std::string function_name_ = "";

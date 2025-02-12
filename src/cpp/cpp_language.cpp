@@ -95,7 +95,7 @@ void cpp_languaget::internal_additions(std::ostream &out)
   out << "long double __ESBMC_fabsl(long double x);" << std::endl;
   out << "float __ESBMC_fabsf(float x);" << std::endl;
 
-  // Forward decs for pthread main thread begin/end hooks. Because they're
+  // Forward decls for pthread main thread begin/end hooks. Because they're
   // pulled in from the C library, they need to be declared prior to pulling
   // them in, for type checking.
   out << "void __ESBMC_pthread_start_main_hook(void);" << std::endl;

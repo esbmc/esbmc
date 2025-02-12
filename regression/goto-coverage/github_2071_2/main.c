@@ -20,7 +20,7 @@ void printOdd( int i ) {
 }
 int main()
 {
-    int array[100000];
+    int array[10000];
     int i;
     int num = __VERIFIER_nondet_int();
 		

@@ -17,7 +17,7 @@ on:
       svbenchmarks:
         description: 'Git branch, tag, or commit of SV-Benchmarks to use'
         required: true
-        default: 'svcomp24'      	
+        default: 'main'      	
       mode:
         type: choice
         description: Benchexec run mode
@@ -29,12 +29,13 @@ on:
         type: choice
         description: Run-set to use (be sure to set mode to "RunSet")
         options:
-        - SV-COMP24_unreach-call
-        - SV-COMP24_no-data-race
-        - SV-COMP24_valid-memcleanup
-        - SV-COMP24_valid-memsafety
-        - SV-COMP24_termination
-        - SV-COMP24_no-overflow
+        - SV-COMP25_unreach-call
+        - SV-COMP25_no-data-race
+        - SV-COMP25_valid-memcleanup
+        - SV-COMP25_valid-memsafety
+        - SV-COMP25_termination
+        - SV-COMP25_no-overflow
+        - SV-COMP25_ConcurrencySafety
         - Custom
       task:
         type: choice
@@ -56,35 +57,36 @@ on:
         - ReachSafety-Hardness
         - ReachSafety-Fuzzle
         - ConcurrencySafety-Main
-        - ConcurrencySafety-MemSafety
-        - ConcurrencySafety-NoOverflows
+        - SoftwareSystems-AWS-C-Common-ReachSafety
+        - SoftwareSystems-DeviceDriversLinux64-ReachSafety
+        - SoftwareSystems-DeviceDriversLinux64Large-ReachSafety
+        - SoftwareSystems-Other-ReachSafety
+        - SoftwareSystems-uthash-ReachSafety
+        - SoftwareSystems-Intel-TDX-Module-ReachSafety
         - NoDataRace-Main
-        - NoOverflows-Main
-        - NoOverflows-Juliet
         - MemSafety-MemCleanup
+        - SoftwareSystems-uthash-MemCleanup
         - MemSafety-Arrays
         - MemSafety-Heap
         - MemSafety-LinkedLists
         - MemSafety-Other
         - MemSafety-Juliet
-        - SoftwareSystems-AWS-C-Common-ReachSafety
-        - SoftwareSystems-BusyBox-ReachSafety
-        - SoftwareSystems-BusyBox-MemSafety
-        - SoftwareSystems-BusyBox-NoOverflows
-        - SoftwareSystems-coreutils-ReachSafety
         - SoftwareSystems-coreutils-MemSafety
-        - SoftwareSystems-coreutils-NoOverflows
-        - SoftwareSystems-DeviceDriversLinux64-ReachSafety
         - SoftwareSystems-DeviceDriversLinux64-MemSafety
-        - SoftwareSystems-DeviceDriversLinux64Large-ReachSafety
-        - SoftwareSystems-uthash-ReachSafety
+        - SoftwareSystems-Other-MemSafety
         - SoftwareSystems-uthash-MemSafety
+        - ConcurrencySafety-MemSafety
+        - NoOverflows-Main
+        - NoOverflows-Juliet
+        - SoftwareSystems-BusyBox-NoOverflows
+        - SoftwareSystems-coreutils-NoOverflows
         - SoftwareSystems-uthash-NoOverflows
-        - SoftwareSystems-OpenBSD-MemSafety
+        - ConcurrencySafety-NoOverflows
         - Termination-BitVectors
         - Termination-MainControlFlow
         - Termination-MainHeap
         - Termination-Other
+        - SoftwareSystems-DeviceDriversLinux64-Termination
       cpachecker:
             description: "Run CPAChecker for violation witness validation"
             required: true
@@ -106,7 +108,7 @@ jobs:
     needs: build-unix
     steps:
       - name: Setup SV-Benchmarks version
-        run: cd $HOME/sv-benchmarks && git fetch --all --tags && git checkout ${{ inputs.svbenchmarks }}
+        run: cd $HOME/sv-benchmarks && git fetch --all --tags --force && git checkout ${{ inputs.svbenchmarks }} && if [ "${{ inputs.svbenchmarks }}" == "main" ]; then git reset --hard origin/main; fi
       - name: Download Linux Build
         uses: actions/download-artifact@v4
         with:
@@ -119,14 +121,23 @@ jobs:
       - name: Set up the custom runset
         if: ${{ inputs.mode == 'RunSet' && inputs.runset == 'Custom' }}
         run: cp ./esbmc-src/scripts/competitions/svcomp/custom-reach.set $HOME/sv-benchmarks/c/ && mv ./esbmc-src/scripts/competitions/svcomp/custom.xml ./esbmc-src/scripts/competitions/svcomp/esbmc.xml
+      - name: Set up the Concurrency runset
+        if: ${{ inputs.mode == 'RunSet' && inputs.runset == 'SV-COMP25_ConcurrencySafety' }}
+        run: mv ./esbmc-src/scripts/competitions/svcomp/ConcurrencySafety.xml ./esbmc-src/scripts/competitions/svcomp/esbmc.xml
       - name: Run Benchexec (Full)
         if: ${{ inputs.mode == 'Full' }}
         run: ./esbmc-src/scripts/benchexec.sh -f
         env:
           TIMEOUT: ${{ inputs.timeout }}
           ESBMC_OPTS: ${{ inputs.options }}
+      - name: Run Benchexec (ConcurrencyRunSet)
+        if: ${{ inputs.mode == 'RunSet' && inputs.runset == 'SV-COMP25_ConcurrencySafety' }}
+        run: ./esbmc-src/scripts/benchexec.sh -f
+        env:
+          TIMEOUT: ${{ inputs.timeout }}
+          ESBMC_OPTS: ${{ inputs.options }}
       - name: Run Benchexec (RunSet)
-        if: ${{ inputs.mode == 'RunSet' }}
+        if: ${{ inputs.mode == 'RunSet'  && inputs.runset != 'SV-COMP25_ConcurrencySafety'}}
         run: ./esbmc-src/scripts/benchexec.sh -r ${{ inputs.runset }}
         env:
           TIMEOUT: ${{ inputs.timeout }}

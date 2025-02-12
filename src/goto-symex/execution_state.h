@@ -398,10 +398,10 @@ public:
    *  accessed by the last transition of thread j and the last transition of
    *  thread l.
    *  @param j Most recently executed thread id
-   *  @param l Other thread id to check dependancy with
-   *  @return True if scheduling dependancy exists between threads j and l
+   *  @param l Other thread id to check dependency with
+   *  @return True if scheduling dependency exists between threads j and l
    */
-  bool check_mpor_dependancy(unsigned int j, unsigned int l) const;
+  bool check_mpor_dependency(unsigned int j, unsigned int l) const;
 
   /**
    *  Calculate MPOR schedulable threads. I.E. what threads we can schedule
@@ -490,6 +490,11 @@ public:
    *  produced code when the monitor is to be ended. */
   void kill_monitor_thread();
 
+  /** Analyze the shared varables in a function call, this is because an argumemt
+   *  may be renamed to constant bool in symex_function_call_code(), while we need
+   *  to get the information for context switch.*/
+  void analyze_args(const expr2tc &expr) override;
+
 public:
   /** Pointer to reachability_treet that owns this ex_state */
   reachability_treet *owning_rt;
@@ -557,7 +562,7 @@ public:
   bool mon_thread_warning;
   /** Minimum number of threads to exist to consider a context switch.
    *  In certain special cases, such as LTL checking, various pieces of
-   *  code and information are bunged into seperate threads which aren't
+   *  code and information are bunged into separate threads which aren't
    *  necessarily scheduled. In these cases we don't want to consider
    *  cswitches, because even though they're not taken, they'll heavily
    *  inflate memory size.
@@ -577,8 +582,8 @@ protected:
    *  data that could have storage in C. */
   std::vector<std::set<expr2tc>> thread_last_writes;
   /** Dependancy chain for POR calculations. In mpor paper, DCij elements map
-   *  to dependancy_chain[i][j] here. */
-  std::vector<std::vector<int>> dependancy_chain;
+   *  to dependency_chain[i][j] here. */
+  std::vector<std::vector<int>> dependency_chain;
   /** MPOR scheduling outcome. If we've just taken a transition that MPOR
    *  rejects, this becomes true. For various reasons, we can't tell whether or
    *  not MPOR rejects a transition in advance. */

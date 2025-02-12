@@ -2,7 +2,7 @@ CORE
 main.c
 --assertion-coverage --unwind 1 --no-unwinding-assertions
 ^Total Asserts: 2
-^Reached Assertion Instances: 1
+^Reached Assertion Instances: 4
 ^Total Assertion Instances: 4
-^Assertion Instances Coverage: 25%
+^Assertion Instances Coverage: 100%
 ^VERIFICATION FAILED$

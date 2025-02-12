@@ -251,7 +251,10 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   // read the arguments -- before the locality renaming
   std::vector<expr2tc> arguments = call.operands;
   for (auto &argument : arguments)
+  {
+    analyze_args(argument);
     cur_state->rename(argument);
+  }
 
   // Rename the return value to level1, identifying the data object / storage
   // to which the return value should be written. This is important in the case
@@ -365,7 +368,7 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
      to_symbol2t(func_ptr).thename.as_string().find("$object") !=
        std::string::npos))
   {
-    // Emit warning; perform no function call behaviour. Increment PC
+    // Emit warning; perform no function call behavior. Increment PC
     // XXX jmorse - no location information any more.
     log_status(
       "No target candidate for function call {}",

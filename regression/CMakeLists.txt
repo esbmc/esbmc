@@ -81,6 +81,7 @@ if(ENABLE_JIMPLE_FRONTEND)
 endif()
 if(ENABLE_PYTHON_FRONTEND)
     set(REGRESSIONS_PYTHON python)
+    set(REGRESSIONS_NUMPY numpy)
 endif()
 
 if(ESBMC_CHERI_CLANG)
@@ -124,13 +125,18 @@ set(REGRESSIONS_CPP11 esbmc-cpp11/cpp
                       esbmc-cpp11/template
                       esbmc-cpp11/tuple
                       esbmc-cpp11/array
+                      esbmc-cpp11/lambda
                       )
 
 # list of C++14 test suites
 set(REGRESSIONS_CPP14 esbmc-cpp14/cpp
                       esbmc-cpp14/deduced-return-type
+                      esbmc-cpp14/lambda
                       esbmc-cpp14/template
                       )
+
+# list of C++17 test suites
+set(REGRESSIONS_CPP17 esbmc-cpp17/lambda)
 
 # list of C++20 test suites
 set(REGRESSIONS_CPP20 esbmc-cpp20/cpp)
@@ -160,6 +166,7 @@ if(APPLE)
                     extensions
                     ${REGRESSIONS_CHERI}
                     ${REGRESSIONS_PYTHON}
+                    ${REGRESSIONS_NUMPY}
                     ltl
        )
 elseif(WIN32)
@@ -204,6 +211,7 @@ else()
                     ${REGRESSIONS_Z3}
                     incremental-smt
                     ${REGRESSIONS_CPP20}
+                    ${REGRESSIONS_CPP17}
                     ${REGRESSIONS_CPP14}
                     ${REGRESSIONS_CPP11}
                     ${REGRESSIONS_CPP03}
@@ -214,6 +222,7 @@ else()
                     linux
                     ${REGRESSIONS_CHERI}
                     ${REGRESSIONS_PYTHON}
+                    ${REGRESSIONS_NUMPY}
                     ltl
                     goto-coverage
        )

@@ -1,15 +1,8 @@
-#include "util/message.h"
-#include <fstream>
+#include <filesystem>
 #include <goto-symex/goto_trace.h>
-#include <ostream>
-#include <sstream>
-#include <unordered_map>
-#include <list>
-#include <util/language.h>
 #include <langapi/language_util.h>
 #include <optional>
-#include <filesystem>
-#include <util/cmdline.h>
+#include <regex>
 
 // TODO: Multiple files
 // TODO: Control Trace
@@ -377,7 +370,7 @@ public:
   html_report(
     const goto_tracet &goto_trace,
     const namespacet &ns,
-    const cmdlinet::options_mapt &options_map);
+    const optionst &options);
   void output(std::ostream &oss) const;
 
   bool show_partial_assertions = false;
@@ -389,7 +382,7 @@ protected:
 
 private:
   const namespacet &ns;
-  const cmdlinet::options_mapt &opt_map;
+  const optionst &options;
   std::optional<goto_trace_stept> violation_step;
   void print_file_table(
     std::ostream &os,
@@ -426,8 +419,8 @@ private:
 html_report::html_report(
   const goto_tracet &goto_trace,
   const namespacet &ns,
-  const cmdlinet::options_mapt &options_map)
-  : goto_trace(goto_trace), ns(ns), opt_map(options_map)
+  const optionst &_options)
+  : goto_trace(goto_trace), ns(ns), options(_options)
 {
   // TODO: C++20 reverse view
   for (const goto_trace_stept &step : goto_trace.steps)
@@ -479,15 +472,20 @@ const std::string html_report::generate_body() const
       violation_str);
   }
 
-  // Annoted Source Header
+  // Annotated Source Header
   {
     std::ostringstream oss;
-    for (const auto &item : opt_map)
+    std::string input_file_str;
+
+    oss << "esbmc ";
+    for (const auto &item : options.option_map)
     {
-      oss << item.first << " ";
-      for (const std::string &value : item.second)
-        oss << value << " ";
+      if (item.first == "input-file")
+        input_file_str.append(item.second);
+      else
+        oss << "--" << item.first << "=" << item.second << " ";
     }
+    oss << input_file_str;
     body << fmt::format(
       clang_bug_report::annotated_source_header_fmt, oss.str());
   }
@@ -630,16 +628,15 @@ void generate_html_report(
   const std::string_view uuid,
   const namespacet &ns,
   const goto_tracet &goto_trace,
-  const cmdlinet::options_mapt &options_map)
+  const optionst &options)
 {
   log_status("Generating HTML report for trace: {}", uuid);
-  const html_report report(goto_trace, ns, options_map);
+  const html_report report(goto_trace, ns, options);
 
   std::ofstream html(fmt::format("report-{}.html", uuid));
   report.output(html);
 }
 
-#include <regex>
 std::string html_report::code_lines::to_html() const
 {
   // TODO: C++23 has constexpr for regex

@@ -12,7 +12,7 @@
 // definitions. If you'd like to add another type - don't. Vast tracts of code
 // only expect the types below, it's be extremely difficult to hack new ones in.
 
-// Start of definitions for expressions. Forward decs,
+// Start of definitions for expressions. Forward decls
 
 // Iterate, in the preprocessor, over all expr ids and produce a forward
 // class declaration for them
@@ -3013,7 +3013,7 @@ public:
 };
 
 /** Record invalid data value. Exclusively for use in pointer analysis to record
- *  the fact that what we point at is guarenteed to be invalid or nonexistant.
+ *  the fact that what we point at is guaranteed to be invalid or nonexistant.
  *  @extends expr2t */
 class invalid2t : public invalid_expr_methods
 {

@@ -191,7 +191,7 @@ void goto_symext::dereference(expr2tc &expr, dereferencet::modet mode)
 
     assert(is_pointer_type(tmp));
     std::list<expr2tc> dummy;
-    // Dereference to byte type, because it's guarenteed to succeed.
+    // Dereference to byte type, because it's guaranteed to succeed.
     tmp = dereference2tc(get_uint8_type(), tmp);
 
     dereference.dereference_expr(tmp, guard, dereferencet::FREE);

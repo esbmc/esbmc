@@ -189,7 +189,7 @@ bool configt::set(const cmdlinet &cmdline)
   if (ansi_c.cheri)
   {
     log_error(
-      "This build of ESBMC does not have CHERI support, can't honour "
+      "This build of ESBMC does not have CHERI support, can't honor "
       "'--cheri'.");
     abort();
   }

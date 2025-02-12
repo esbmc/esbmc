@@ -150,7 +150,7 @@ interval_domaint::get_interval_from_const(const expr2tc &e) const
 
   auto real_value = to_constant_floatbv2t(e).value;
 
-  // Health check, is the convertion to double ok? See #1037
+  // Health check, is the conversion to double ok? See #1037
   if (!real_value.is_normal() || real_value.is_zero())
   {
     if (real_value.is_double())
@@ -810,7 +810,7 @@ expr2tc interval_domaint::make_expression_helper(const expr2tc &symbol) const
 
   // Some intervals can be beyond what the type can hold
   // e.g., [-infinity,256] for an unsigned char.
-  // Althugh this is expected (when modular intervals are off)
+  // Although this is expected (when modular intervals are off)
   // We still need to deal with the out-of-bounds when generating
   // the expressions, as 256 would be converted to 0.
   T type_interval = generate_modular_interval<T>(src);
@@ -1258,7 +1258,7 @@ void interval_domaint::havoc_rec(const expr2tc &expr)
   }
   else if (is_symbol2t(expr) || is_code_decl2t(expr))
   {
-    // Reset the interval domain if it is being reasigned (-infinity, +infinity).
+    // Reset the interval domain if it is being reassigned (-infinity, +infinity).
     irep_idt identifier = is_symbol2t(expr) ? to_symbol2t(expr).thename
                                             : to_code_decl2t(expr).value;
     if (intervals->count(identifier))

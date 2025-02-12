@@ -1,7 +1,10 @@
 #include <goto-programs/goto_coverage.h>
 
-size_t goto_coveraget::total_branch = 0;
+size_t goto_coveraget::total_assert = 0;
+size_t goto_coveraget::total_assert_ins = 0;
 std::set<std::pair<std::string, std::string>> goto_coveraget::total_cond;
+size_t goto_coveraget::total_branch = 0;
+size_t goto_coveraget::total_func_branch = 0;
 
 std::string goto_coveraget::get_filename_from_path(std::string path)
 {
@@ -71,6 +74,8 @@ Algo:
 void goto_coveraget::assertion_coverage()
 {
   replace_all_asserts_to_guard(gen_false_expr(), true);
+  total_assert = get_total_instrument();
+  total_assert_ins = get_total_assert_instance();
 }
 
 /*
@@ -87,12 +92,12 @@ The CBMC extends it to the entry of the function. So we will do the same.
 
 Algo:
   1. convert assertions to true
-  2. add false assertion add the begining of the function and the branch()
+  2. add false assertion add the beginning of the function and the branch()
 */
 void goto_coveraget::branch_function_coverage()
 {
   log_progress("Adding false assertions...");
-  total_branch = 0;
+  total_func_branch = 0;
 
   std::unordered_set<std::string> location_pool = {};
   // cmdline.arg[0]
@@ -122,11 +127,15 @@ void goto_coveraget::branch_function_coverage()
 
         if (flg)
         {
-          // add a false assert in the begining
+          // add a false assert in the beginning
           // to check if the function is entered.
           insert_assert(goto_program, it, gen_false_expr());
           flg = false;
         }
+
+        if (it->location.property().as_string() == "skipped")
+          // this stands for the auxiliary condition/branch we added.
+          continue;
 
         // convert assertions to true
         if (
@@ -138,6 +147,8 @@ void goto_coveraget::branch_function_coverage()
         // e.g. IF !(a > 1) THEN GOTO 3
         else if (it->is_goto() && !is_true(it->guard))
         {
+          exprt guard = migrate_expr_back(it->guard);
+
           if (it->is_target())
             target_num = it->target_number;
           // assert(!(a > 1));
@@ -152,7 +163,7 @@ void goto_coveraget::branch_function_coverage()
 
   // fix for branch coverage with kind/incr
   // It seems in kind/incr, the goto_functions used during the BMC is simplified and incomplete
-  total_branch = get_total_instrument();
+  total_func_branch = get_total_instrument();
 
   // avoid Assertion `call_stack.back().goto_state_map.size() == 0' failed
   goto_functions.update();
@@ -186,6 +197,10 @@ void goto_coveraget::branch_coverage()
         // skip if it's not the verifying files
         // probably a library
         if (location_pool.count(cur_filename) == 0)
+          continue;
+
+        if (it->location.property().as_string() == "skipped")
+          // this stands for the auxiliary condition/branch we added.
           continue;
 
         // convert assertions to true
@@ -277,7 +292,7 @@ int goto_coveraget::get_total_instrument() const
 // run the algorithm on the copy of the original goto program
 int goto_coveraget::get_total_assert_instance() const
 {
-  // 1. execute goto uniwnd
+  // 1. execute goto unwind
   bounded_loop_unroller unwind_loops;
   unwind_loops.run(goto_functions);
   // 2. calculate the number of assertion instance
@@ -328,8 +343,8 @@ goto_coveraget::get_total_cond_assert() const
 void goto_coveraget::condition_coverage()
 {
   // we need to skip the conditions within the built-in library
-  // while kepping the file manually included by user
-  // this filter, however, is unsound.. E.g. if the src filename is the same as the biuilt in library name
+  // while keeping the file manually included by user
+  // this filter, however, is unsound.. E.g. if the src filename is the same as the builtin library name
   total_cond = {{}};
 
   std::unordered_set<std::string> location_pool = {};
@@ -352,6 +367,11 @@ void goto_coveraget::condition_coverage()
         cur_filename = get_filename_from_path(it->location.file().as_string());
         if (location_pool.count(cur_filename) == 0)
           continue;
+
+        if (it->location.property().as_string() == "skipped")
+          // this stands for the auxiliary condition/branch we added.
+          continue;
+
         /* 
           Places that could contains condition
           1. GOTO:          if (x == 1);
@@ -361,7 +381,7 @@ void goto_coveraget::condition_coverage()
           5. FUNCTION_CALL  test((signed int)(x != y));
           6. RETURN         return x && y;
           7. Other          1?2?3:4
-          The issue is that, the sideeffects have been removed 
+          The issue is that, the side-effects have been removed 
           thus the condition might have been split or modified.
 
           For assert, assume and goto, we know it contains GUARD
@@ -383,7 +403,7 @@ void goto_coveraget::condition_coverage()
             exprt pre_cond = nil_exprt();
             pre_cond.location() = it->location;
             gen_cond_cov_assert(guard, pre_cond, goto_program, it);
-            // after adding the instrumentation, we convert it to constatn_true
+            // after adding the instrumentation, we convert it to constant_true
             replace_assert_to_guard(gen_true_expr(), it, false);
           }
         }
@@ -565,7 +585,7 @@ void goto_coveraget::add_cond_cov_assert(
 
   // e.g. assert(!(a==1));  // a==1
   // the idf is used as the claim_msg
-  // note that it's difference from the acutal guard.
+  // note that it's difference from the actual guard.
   std::string idf = from_expr(ns, "", expr);
   make_not(guard);
 
@@ -658,7 +678,7 @@ exprt goto_coveraget::handle_single_guard(exprt &expr)
 
     if (expr.id() == exprt::typecast)
     {
-      // specail handling for ternary condition
+      // special handling for ternary condition
       bool has_sub_if = false;
       exprt sub = expr;
       auto op0_ptr = expr.operands().begin();

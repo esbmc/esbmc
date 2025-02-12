@@ -48,6 +48,43 @@ protected:
     const clang::CXXConstructExpr &constructor_call,
     exprt &new_expr);
 
+#if CLANG_VERSION_MAJOR <= 15
+#  define CAPTURE_VARIABLE_TYPE clang::VarDecl
+#else
+#  define CAPTURE_VARIABLE_TYPE clang::ValueDecl
+#endif
+  /*
+   *  Map captured variables and this to the non-static members storing their 
+   *  values or references.
+   *  Arguments:
+   *   is_lambda_operator: the lambda operator is being converted
+   *   captures: populated with the mapping from captured variables to the
+   *             corresponding fields.
+   *   thisCapture:	the field declaration for the This capture.
+   */
+  typedef llvm::DenseMap<const CAPTURE_VARIABLE_TYPE *, clang::FieldDecl *>
+    field_mapt;
+  typedef std::
+    unordered_map<std::size_t, std::pair<field_mapt, clang::FieldDecl *>>
+      cap_mapt;
+  cap_mapt cap_map;
+
+  bool is_lambda() const
+  {
+    if (!current_functionDecl)
+      return false;
+
+    if (
+      const auto *methodDecl =
+        llvm::dyn_cast<clang::CXXMethodDecl>(current_functionDecl))
+    {
+      const auto *parent = methodDecl->getParent();
+      if (parent && parent->isLambda())
+        return true;
+    }
+    return false;
+  }
+
   bool get_function_body(
     const clang::FunctionDecl &fd,
     exprt &new_expr,
@@ -527,6 +564,8 @@ protected:
    *  expr: ESBMC IR to represent Function call
    */
   void make_temporary(exprt &expr);
+
+  bool get_member_expr(const clang::MemberExpr &memb, exprt &new_expr) override;
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

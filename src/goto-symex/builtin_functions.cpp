@@ -889,29 +889,14 @@ void goto_symext::intrinsic_kill_monitor(reachability_treet &art)
   ex_state.kill_monitor_thread();
 }
 
-void goto_symext::symex_va_arg(const expr2tc &lhs, const sideeffect2t &code)
+void goto_symext::symex_va_arg(
+  const expr2tc &lhs,
+  const sideeffect2t &code [[maybe_unused]])
 {
-  // Get symbol
-  expr2tc symbol = code.operand;
-  assert(is_symbol2t(symbol));
-
-  // to allow constant propagation
-  cur_state->rename(symbol);
-  do_simplify(symbol);
-
-  expr2tc next_symbol = symbol;
-  if (is_typecast2t(next_symbol))
-    next_symbol = to_typecast2t(symbol).from;
-
-  if (is_address_of2t(next_symbol))
-    next_symbol = to_address_of2t(next_symbol).ptr_obj;
-
-  assert(is_symbol2t(next_symbol));
-  irep_idt id = to_symbol2t(next_symbol).thename;
   std::string base =
     id2string(cur_state->top().function_identifier) + "::va_arg";
 
-  id = base + std::to_string(cur_state->top().va_index++);
+  irep_idt id = base + std::to_string(cur_state->top().va_index++);
 
   expr2tc va_rhs;
 
@@ -923,7 +908,6 @@ void goto_symext::symex_va_arg(const expr2tc &lhs, const sideeffect2t &code)
     va_rhs = symbol2tc(symbol_type, s->id);
     cur_state->top().level1.get_ident_name(va_rhs);
 
-    va_rhs = address_of2tc(symbol_type, va_rhs);
     va_rhs = typecast2tc(lhs->type, va_rhs);
   }
   else
@@ -1280,7 +1264,7 @@ static inline expr2tc gen_value_by_byte(
 /**
  * @brief This function will try to initialize the object pointed by
  * the address in a smarter way, minimizing the number of assignments.
- * This is intend to optimize the behaviour of a memset operation:
+ * This is intend to optimize the behavior of a memset operation:
  *
  * memset(void* ptr, int value, size_t num_of_bytes)
  *

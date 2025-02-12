@@ -19,17 +19,20 @@
 #include <util/string_constant.h>
 #include <util/type_byte_size.h>
 
-static const std::string &get_string_constant(const exprt &expr)
+static void get_string_constant(const exprt &expr, std::string &the_string)
 {
   if (expr.id() == "typecast" && expr.operands().size() == 1)
-    return get_string_constant(expr.op0());
+  {
+    get_string_constant(expr.op0(), the_string);
+    return;
+  }
 
   if (
     !expr.is_address_of() || expr.operands().size() != 1 ||
     !expr.op0().is_index() || expr.op0().operands().size() != 2)
   {
-    log_error("expected string constant, but got:\n{}", expr);
-    abort();
+    log_warning("expected string constant, but got:\n{}", expr);
+    return;
   }
 
   const exprt &string = expr.op0().op0();
@@ -44,7 +47,7 @@ static const std::string &get_string_constant(const exprt &expr)
       log_warning("{}", e.what());
     }
 
-  return v.as_string();
+  the_string.append(v.as_string());
 }
 
 static void get_alloc_type_rec(const exprt &src, typet &type, exprt &size)
@@ -302,7 +305,7 @@ void goto_convertt::do_cpp_new(
     remove_sideeffects(alloc_size, dest);
 
     // jmorse: multiply alloc size by size of subtype.
-    type2tc subtype = migrate_type(rhs.type());
+    type2tc subtype = migrate_type(ns.follow(rhs.type().subtype()));
     expr2tc alloc_units;
     migrate_expr(alloc_size, alloc_units);
 
@@ -490,8 +493,8 @@ void goto_convertt::do_function_call_symbol(
       "Function `{}' type mismatch: expected code", id2string(identifier));
   }
 
-  // If the symbol is not nil, i.e., the user defined the expected behaviour of
-  // the builtin function, we should honour the user function and call it
+  // If the symbol is not nil, i.e., the user defined the expected behavior of
+  // the builtin function, we should honor the user function and call it
   if (symbol->value.is_not_nil())
   {
     // insert function call
@@ -563,9 +566,12 @@ void goto_convertt::do_function_call_symbol(
     goto_programt::targett t = dest.add_instruction(ASSERT);
     migrate_expr(arguments[0], t->guard);
 
-    const std::string &description = arguments.size() == 1
-                                       ? "ESBMC assertion"
-                                       : get_string_constant(arguments[1]);
+    std::string description;
+    if (arguments.size() == 1)
+      description = "ESBMC assertion";
+    else
+      get_string_constant(arguments[1], description);
+
     t->location = function.location();
     t->location.user_provided(true);
     t->location.property("assertion");
@@ -678,8 +684,8 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
 
-    const irep_idt description =
-      "assertion " + id2string(get_string_constant(arguments[0]));
+    std::string description = "assertion ";
+    get_string_constant(arguments[0], description);
 
     if (options.get_bool_option("no-assertions"))
       return;
@@ -702,8 +708,8 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
 
-    const irep_idt description =
-      "assertion " + id2string(get_string_constant(arguments[3]));
+    std::string description = "assertion ";
+    get_string_constant(arguments[3], description);
 
     if (options.get_bool_option("no-assertions"))
       return;
@@ -726,8 +732,8 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
 
-    const std::string description =
-      "assertion " + get_string_constant(arguments[0]);
+    std::string description = "assertion ";
+    get_string_constant(arguments[0], description);
 
     if (options.get_bool_option("no-assertions"))
       return;
@@ -771,24 +777,10 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
 
-    exprt list_arg = make_va_list(arguments[0]);
-
-    {
-      side_effect_exprt rhs("va_arg", list_arg.type());
-      rhs.copy_to_operands(list_arg);
-      rhs.set("va_arg_type", to_code_type(function.type()).return_type());
-      goto_programt::targett t1 = dest.add_instruction(ASSIGN);
-      exprt assign_expr = code_assignt(list_arg, rhs);
-      migrate_expr(assign_expr, t1->code);
-      t1->location = function.location();
-    }
-
     if (lhs.is_not_nil())
     {
-      typet t = pointer_typet();
-      t.subtype() = lhs.type();
-      dereference_exprt rhs(lhs.type());
-      rhs.op0() = typecast_exprt(list_arg, t);
+      side_effect_exprt rhs("va_arg", lhs.type());
+      rhs.copy_to_operands(gen_zero(lhs.type()));
       rhs.location() = function.location();
       goto_programt::targett t2 = dest.add_instruction(ASSIGN);
       exprt assign_expr = code_assignt(lhs, rhs);
@@ -867,6 +859,30 @@ void goto_convertt::do_function_call_symbol(
       exprt assign_expr = code_assignt(dest_expr, gen_zero(dest_expr.type()));
       migrate_expr(assign_expr, t->code);
       t->location = function.location();
+    }
+  }
+  else if (base_name == "__builtin_va_start")
+  {
+    // For Clang fontend, no assignment is needed
+    // just check the type
+    exprt dest_expr = make_va_list(arguments[0]);
+
+    if (!is_lvalue(dest_expr))
+    {
+      log_error("va_start argument expected to be lvalue");
+      abort();
+    }
+  }
+  else if (base_name == "__builtin_va_end")
+  {
+    // For Clang fontend, no assignment is needed,
+    // goto_symex implements VA
+    exprt dest_expr = make_va_list(arguments[0]);
+
+    if (!is_lvalue(dest_expr))
+    {
+      log_error("va_end argument expected to be lvalue");
+      abort();
     }
   }
   // Nontemporal means "do not cache please" (https://lwn.net/Articles/255364/)

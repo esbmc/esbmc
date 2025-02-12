@@ -6,8 +6,10 @@
 #include "cstdio"
 #include "cassert"
 #include "iostream"
+#include "cstdlib"
 
 size_t npos;
+extern "C" void itoa(int value, char *str, int base);
 
 namespace std
 {
@@ -1875,7 +1877,7 @@ __ESBMC_HIDE:
     two[k] = this->str[i];
   }
   int totalLen = s.length() + len;
-  this->str = new char[totalLen];
+  this->str = new char[totalLen + 1];
   this->_size = totalLen;
 
   for (i = 0; i < lenOne - 1; i++)
@@ -3256,73 +3258,91 @@ __ESBMC_HIDE:
 istream &getline(istream &is, string &str, char delim);
 istream &getline(istream &is, string &str);
 
-/* 
- * TODO: Model the to_string
- * Fix the incorrect buffer value
- * Extend goto_symext::symex_printf
- * Ref: https://en.cppreference.com/w/cpp/string/basic_string/to_string
- */
-inline string to_string(int value)
+std::string to_string(int value)
 {
   char buffer[50];
-  sprintf(buffer, "%d", value);
+  itoa(value, buffer, 10);
   return string(buffer);
 }
 
-inline string to_string(long value)
+std::string to_string(long value)
 {
   char buffer[50];
-  sprintf(buffer, "%ld", value);
+  itoa(value, buffer, 10);
   return string(buffer);
 }
 
-inline string to_string(long long value)
+std::string to_string(long long value)
 {
   char buffer[50];
-  sprintf(buffer, "%lld", value);
+  itoa(value, buffer, 10);
   return string(buffer);
 }
 
-inline string to_string(unsigned value)
+std::string to_string(unsigned value)
 {
   char buffer[50];
-  sprintf(buffer, "%u", value);
+  itoa(value, buffer, 10);
   return string(buffer);
 }
 
 std::string to_string(unsigned long value)
 {
   char buffer[50];
-  sprintf(buffer, "%lu", value);
+  itoa(value, buffer, 10);
   return string(buffer);
 }
 
 std::string to_string(unsigned long long value)
 {
   char buffer[50];
-  sprintf(buffer, "%llu", value);
+  itoa(value, buffer, 10);
   return string(buffer);
 }
 
 std::string to_string(float value)
 {
   char buffer[50];
-  sprintf(buffer, "%f", value);
+  itoa(value, buffer, 10);
   return string(buffer);
 }
 
 std::string to_string(double value)
 {
   char buffer[50];
-  sprintf(buffer, "%f", value);
+  itoa(value, buffer, 10);
   return string(buffer);
 }
 
 std::string to_string(long double value)
 {
   char buffer[50];
-  sprintf(buffer, "%Lf", value);
+  itoa(value, buffer, 10);
   return string(buffer);
+}
+
+int stoi(const std::string &str, size_t *pos = 0, int base = 10)
+{
+  const char *c_str = str.c_str();
+
+  char *endptr;
+  long result = std::strtol(c_str, &endptr, base);
+
+  __ESBMC_assert(endptr != c_str, "No digits in input string");
+
+  return static_cast<int>(result);
+}
+
+float stof(const std::string &str, size_t *pos = 0)
+{
+  const char *c_str = str.c_str();
+
+  char *endptr;
+  float result = std::strtof(c_str, &endptr);
+
+  __ESBMC_assert(endptr != c_str, "No digits in input string");
+
+  return result;
 }
 
 } // namespace std
