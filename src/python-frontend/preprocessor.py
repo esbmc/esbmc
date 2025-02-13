@@ -133,7 +133,7 @@ class Preprocessor(ast.NodeTransformer):
         if isinstance(node.func,ast.Attribute) or node.func.id not in self.functionParams:
             self.generic_visit(node)
             return node
-        
+
         functionName = node.func.id
         expectedArgs = self.functionParams[functionName]
         keywords = {}
@@ -143,12 +143,12 @@ class Preprocessor(ast.NodeTransformer):
                 raise SyntaxError(f"Keyword argument repeated:{i.arg}",(self.module_name,i.lineno,i.col_offset,""))
             keywords[i.arg] = i.value
 
-        # return early if correct no. or too many parameters 
+        # return early if correct no. or too many parameters
         if len(node.args) >= len(expectedArgs):
             self.generic_visit(node)
             return node
 
-        # append defaults 
+        # append defaults
         for i in range(len(node.args),len(expectedArgs)):
             if expectedArgs[i] in keywords:
                 node.args.append(keywords[expectedArgs[i]])
@@ -168,13 +168,12 @@ class Preprocessor(ast.NodeTransformer):
         self.functionParams[node.name] = [i.arg for i in node.args.args]
 
         # escape early if no defaults defined
-        if len(node.args.defaults) < 1: 
+        if len(node.args.defaults) < 1:
             self.generic_visit(node)
             return node
-        
+
         # add defaults to dictionary with tuple key (function name, parameter name)
         for i in range(1,len(node.args.defaults)+1):
             self.functionDefaults[(node.name, node.args.args[-i].arg)] = node.args.defaults[-i].value
         self.generic_visit(node)
         return node
-        
