@@ -201,7 +201,7 @@ def main():
         tree = ast.parse(source.read())
 
     # Apply AST transformations
-    preprocessor = Preprocessor()
+    preprocessor = Preprocessor(filename)
     tree = preprocessor.visit(tree)
 
     # Tracking of imported modules
