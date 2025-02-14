@@ -162,7 +162,7 @@ class Preprocessor(ast.NodeTransformer):
 
         self.generic_visit(node)
         return node # transformed node
-    
+
     def visit_FunctionDef(self, node):
         # Preserve order of parameters
         self.functionParams[node.name] = [i.arg for i in node.args.args]
