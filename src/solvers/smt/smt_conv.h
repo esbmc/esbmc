@@ -307,6 +307,8 @@ public:
   virtual smt_astt mk_bvor(smt_astt a, smt_astt b);
   virtual smt_astt mk_bvand(smt_astt a, smt_astt b);
   virtual smt_astt mk_implies(smt_astt a, smt_astt b);
+  virtual smt_astt mk_forall(smt_astt a, smt_astt b);
+  virtual smt_astt mk_exists(smt_astt a, smt_astt b);
   virtual smt_astt mk_xor(smt_astt a, smt_astt b);
   virtual smt_astt mk_or(smt_astt a, smt_astt b);
   virtual smt_astt mk_and(smt_astt a, smt_astt b);
@@ -763,6 +765,9 @@ public:
         std::greater<unsigned int>>>>
     smt_cachet;
 
+  typedef std::map<const expr2tc, smt_cache_entryt> map_cachet;
+  typedef std::vector<map_cachet> vampire_cachet;
+
   typedef std::unordered_map<type2tc, smt_sortt, type2_hash> smt_sort_cachet;
 
   // Members
@@ -771,6 +776,8 @@ public:
 
   /** A cache mapping expressions to converted SMT ASTs. */
   smt_cachet smt_cache;
+
+  vampire_cachet vampire_cache;
   /** A cache of converted type2tc's to smt sorts */
   smt_sort_cachet sort_cache;
   /** Pointer_logict object, which contains some code for formatting how
@@ -786,6 +793,8 @@ public:
   smt_sortt boolean_sort;
   /** Whether we are encoding expressions in integer mode or not. */
   bool int_encoding;
+
+  bool vamp_encoding;
   /** A namespace containing all the types in the program. Used to resolve the
    *  rare case where we're doing some pointer arithmetic and need to have the
    *  concrete type of a pointer. */

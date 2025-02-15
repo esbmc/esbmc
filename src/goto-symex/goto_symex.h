@@ -4,6 +4,7 @@
 #include <goto-programs/goto_functions.h>
 #include <goto-symex/goto_symex_state.h>
 #include <goto-symex/symex_target.h>
+#include <goto-symex/symex_target_equation.h>
 #include <map>
 #include <pointer-analysis/dereference.h>
 #include <stack>
@@ -68,6 +69,52 @@ public:
     bool auto_deallocd;
     /** The object name */
     std::string name;
+  };
+
+  class loop_inv_provert
+  {
+  public:
+    loop_inv_provert(
+      const namespacet &_ns,
+      const goto_programt::instructiont &i,
+      std::shared_ptr<symex_targett> t,
+      std::string loop_loc)
+      : loop_head_hit(false),
+        ns(_ns),
+        inv_instruction(i),
+        loop_location(loop_loc)
+    {
+      target = std::dynamic_pointer_cast<vampire_equationt>(t);
+    }
+
+    void do_base_cases(goto_symex_statet *cur_state);
+    void do_step_cases();
+    void add_proven_invariants(goto_symext *parent);
+
+    void get_hypotheses(goto_symex_statet *cur_state);
+    void get_conclusions(goto_symex_statet *cur_state);
+
+    bool hit_loop_head()
+    {
+      return loop_head_hit;
+    }
+    void update_loop_head_hit()
+    {
+      loop_head_hit = true;
+    }
+
+  private:
+    // used to record whether we have hit the head once or twice
+    bool loop_head_hit;
+    guardt pre_loop_guard;
+    std::shared_ptr<vampire_equationt> target;
+    const namespacet &ns;
+    const goto_programt::instructiont &inv_instruction;
+    std::string loop_location;
+    std::vector<expr2tc> invs_passed_base_case;
+    std::vector<expr2tc> induction_hypotheses;
+    std::vector<expr2tc> conclusions;
+    std::vector<bool> invariants_proven;
   };
 
   friend class symex_dereference_statet;
@@ -216,12 +263,19 @@ protected:
   void symex_assert();
 
   /**
+   *  Interpret an INVARIANT instruction.
+   */
+  void symex_invariant();
+
+  /**
    *  Perform incremental SMT solving for assert and assume statements.
    *  @param expr Expression that must be checked.
    *  @param msg Textual message explaining assertion.
    *  @return Return whether verification succeeded.
    */
   bool check_incremental(const expr2tc &expr, const std::string &msg);
+
+  bool check_with_vampire(const expr2tc &expr);
 
   /**
    *  Perform an assertion.
@@ -910,10 +964,14 @@ protected:
    *  the dereference code and the caller, who will inspect the contents after
    *  a call to dereference (in INTERNAL mode) completes. */
   std::list<dereference_callbackt::internal_item> internal_deref_items;
+
   /** Analyze the shared varables in a function call, this is because an argumemt
    *  may be renamed to constant bool in symex_function_call_code(), while we need
    *  to get the information for context switch.*/
   virtual void analyze_args(const expr2tc &expr) = 0;
+
+  unsigned nested_loop_depth;
+  std::vector<loop_inv_provert> loop_inv_provers;
   friend void build_goto_symex_classes();
 };
 
