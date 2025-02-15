@@ -596,9 +596,14 @@ bool solidity_convertert::get_var_decl(
   if (get_var_decl_name(ast_node, name, id))
     return true;
 
-  // skip if we have already populated the var symbol
+  // if we have already populated the var symbol, we do not need to re-parse
+  // however, we need to return the symbol info
   if (context.find_symbol(id) != nullptr)
+  {
+    log_debug("solidity", "Found parsed symbol, skip parsing");
+    new_expr = symbol_expr(*context.find_symbol(id));
     return false;
+  }
 
   // 3. populate location
   locationt location_begin;
@@ -643,7 +648,6 @@ bool solidity_convertert::get_var_decl(
 
   // 7. populate init value if there is any
   code_declt decl(symbol_expr(added_symbol));
-
   // special handling for array/dynarray
   std::string t_sol_type = t.get("#sol_type").as_string();
   exprt val;
@@ -847,7 +851,8 @@ bool solidity_convertert::get_var_decl(
   else if (mapping)
   {
     // mapping(string => uint) test;
-    // => int256* x = calloc(50, sizeof(int256));
+    // => int256* test = calloc(50, sizeof(int256));
+    //TODO: FIXME. Currently the infinite array is not well-supported in C++, so we set it as a relatively large array.
 
     // construct calloc call
     side_effect_expr_function_callt calc_call;
@@ -891,12 +896,16 @@ bool solidity_convertert::get_var_decl(
   // we have already set it as zero value
   if (is_state_var && !is_inherited)
   {
-    initializers.move_to_operands(decl);
+    // the initializer will clear its elements, so we populate the copy instead of origins
+    exprt dump = decl;
+    initializers.move_to_operands(dump);
   }
 
   decl.location() = location_begin;
   new_expr = decl;
 
+  log_debug(
+    "solidity", "Finish parsing symbol {}", added_symbol.name.as_string());
   return false;
 }
 
@@ -904,6 +913,7 @@ bool solidity_convertert::get_var_decl(
 // The contract can be regarded as the class in C++, converting to a struct
 bool solidity_convertert::get_struct_class(const nlohmann::json &struct_def)
 {
+  log_debug("solidity", "Parsing struct/contract class");
   // 1. populate name, id
   std::string id, name;
   struct_typet t = struct_typet();
@@ -1597,6 +1607,8 @@ bool solidity_convertert::get_constructor(
   const nlohmann::json &ast_node,
   const std::string &contract_name)
 {
+  log_debug("solidity", "Parsing Constructor...");
+
   // check if we could find a explicit constructor
   nlohmann::json ast_nodes = ast_node["nodes"];
   for (nlohmann::json::iterator itr = ast_nodes.begin(); itr != ast_nodes.end();
@@ -1669,7 +1681,7 @@ bool solidity_convertert::move_initializer_to_ctor(
 {
   log_debug(
     "solidity",
-    "@@@ Moving initialization of the state variable to the constructor");
+    "@@@ Moving initialization of the state variable to the constructor.");
 
   if (ctor_id.empty())
   {
@@ -4769,7 +4781,12 @@ bool solidity_convertert::get_var_decl_ref(
       exprt map;
       if (get_var_decl(decl, map))
         return true;
-      assert(to_code(map).operands().size() >= 1);
+
+      if (to_code(map).operands().size() < 1)
+      {
+        log_error("Unexpected mapping structure, got {}", map.to_string());
+        abort();
+      }
       type = to_code(map).op0().type();
     }
     else
