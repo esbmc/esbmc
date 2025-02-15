@@ -434,9 +434,8 @@ void goto_convert_functionst::thrash_type_symbols()
   // incomplete. Make the dependencies complete, then include them into this type.
   // This means that we recurse to whatever depth of nested types the user
   // has. With at least a meg of stack, I doubt that's really a problem.
-  std::map<irep_idt, std::set<irep_idt>>::iterator it;
-  for (it = typenames.begin(); it != typenames.end(); it++)
-    ensure_type_is_complete(it->first, typenames, it->first);
+  for (const auto &[type_name, dependencies] : typenames)
+    ensure_type_is_complete(type_name, typenames, type_name);
 
   // And now all the types are complete, rename types in all existing code.
   context.Foreach_operand([this](symbolt &s) {
