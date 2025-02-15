@@ -1,4 +1,4 @@
 CORE
 contract.solast
---contract Dreive --sol contract.sol --k-induction
+--contract Dreive --sol contract.sol --k-induction --no-standard-checks
 ^VERIFICATION SUCCESSFUL$

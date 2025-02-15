@@ -586,6 +586,16 @@ int esbmc_parseoptionst::doit()
   optionst options;
   get_command_line_options(options);
 
+  // for solidity
+  if (cmdline.isset("sol"))
+  {
+    // set default options
+    options.set_option(
+      "no-pointer-check", true); // there is no pointer in solidity
+    options.set_option("no-align-check", true); // no need to check alignment in solidity
+    options.set_option("force-malloc-success", true); // for calloc in the 'newexpression'
+  }
+
   // Create and preprocess a GOTO program
   if (get_goto_program(options, goto_functions))
     return 6;

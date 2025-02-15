@@ -211,6 +211,11 @@ protected:
   bool get_empty_array_ref(const nlohmann::json &ast_node, exprt &new_expr);
   void get_aux_array_name(std::string &aux_name, std::string &aux_id);
   void get_aux_array(const exprt &src_expr, exprt &new_expr);
+  void get_size_expr(const exprt &rhs, exprt &size_expr);
+  void store_update_dyn_array(
+    const exprt &dyn_arr,
+    const exprt &size_expr,
+    exprt &store_call);
 
   // tuple
   bool get_tuple_definition(const nlohmann::json &ast_node);
@@ -368,7 +373,7 @@ protected:
   // Store the ast_node["id"] of contract/struct/function/...
   std::unordered_map<int, std::string> scope_map;
   // Store state variables
-  std::vector<symbolt *> initializers;
+  code_blockt initializers;
   // For inheritance
   const nlohmann::json *ctor_modifier;
   const nlohmann::json *based_contracts;

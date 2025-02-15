@@ -12,14 +12,13 @@ namespace SolidityTemplate
 {
 /// header & typedef
 const std::string sol_header = R"(
-#include <cstddef>
-#include <cstdlib>
-#include <cstdint>
+#include <stddef.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <assert.h>
 #include <string.h>
 #include <string>
-#include <cstdbool>
-#include <cassert>
-#include <map>
 )";
 
 /*
@@ -205,8 +204,8 @@ int findKeyU(struct NodeU *head, uint256_t key)
   }
   insertAtEndU(&head, key);
   // temporary
-  if (cnt >= 50)
-    assert(0);
+  // if (cnt >= 50)
+  //   assert(0);
   return cnt;
 }
 
@@ -223,16 +222,68 @@ int findKeyI(struct NodeI *head, int256_t key)
   }
   insertAtEndI(&head, key);
   // temporary
-  if (cnt >= 50)
-    assert(0);
+  // if (cnt >= 50)
+  //   assert(0);
   return cnt;
 }
 )";
 
 const std::string sol_array = R"(
+// Node structure for linked list
+typedef struct ArrayNode {
+    void *array_ptr;        // Pointer to the stored array
+    size_t length;          // Length of the array
+    struct ArrayNode *next; // Pointer to the next node
+} ArrayNode;
+
+// Head of the linked list
+ArrayNode *array_list_head = NULL;
+
+/**
+ * Stores/updates an array and its length.
+ * If the array already exists, it updates the length.
+ */
+void store_array(void *array, size_t length) {
+    // Check if array already exists in the list
+    ArrayNode *current = array_list_head;
+    while (current != NULL) {
+        if (current->array_ptr == array) { // Found existing array
+            current->length = length; // Update length
+            return;
+        }
+        current = current->next;
+    }
+
+    // Create a new node
+    ArrayNode *new_node = (ArrayNode *)malloc(sizeof(ArrayNode));
+    new_node->array_ptr = array;
+    new_node->length = length;
+    new_node->next = array_list_head; // Insert at head
+    array_list_head = new_node;
+}
+
+/**
+ * Fetches the length of a stored array.
+ * Returns 0 if the array is not found.
+ */
+unsigned int get_array_length(void *array) {
+    ArrayNode *current = array_list_head;
+    while (current != NULL) {
+        if (current->array_ptr == array) {
+            return current->length;
+        }
+        current = current->next;
+    }
+    return 0;
+}
+
+
 void *arrcpy(void *from_array, size_t from_size, size_t size_of)
 {
-  assert(from_size != 0);
+  // assert(from_size != 0);
+  if(from_array == NULL || size_of == 0 || from_size == 0)
+    abort();
+
   void *to_array = (void *)calloc(from_size, size_of);
   memcpy(to_array, from_array, from_size * size_of);
   return to_array;

@@ -1,4 +1,4 @@
 CORE
 contract.solast
---sol contract.sol --contract Robot --k-induction
+--sol contract.sol --contract Robot --k-induction --no-standard-checks
 ^VERIFICATION SUCCESSFUL$

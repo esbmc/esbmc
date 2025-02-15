@@ -2,16 +2,16 @@
 pragma solidity ^0.8.0;
 
 contract test {
-    int[] public data1;
+    int16[] public data1;
 
     function testArray() public {
 
-        int[] memory ac;
-        ac = new int[](10);
+        int16[] memory ac;
+        ac = new int16[](10);
         ac[1] = 1;
         data1 = ac;
         
-        data1 = [int(-60), 70, -80, 90, -100, -120, 140];
+        data1 = [int16(-60), 70, -80, 90, -100, -120, 140];
         assert(data1[1] == 1);
     }
 }
