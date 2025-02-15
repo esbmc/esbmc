@@ -1,14 +1,44 @@
 import numpy as np
 
-a = np.multiply(2.0, 4.0)
-assert a == 8.0
+result_1 = np.multiply(2.0, 4.0)
+assert result_1 == 8.0
 
-b = np.multiply([3,4],[1,3])
-assert b[0] == 3
-assert b[1] == 12
+result_2 = np.multiply(3, 5)
+assert result_2 == 15
+
+result_3 = np.multiply(2.5, 4.0)
+assert result_3 == 10.0
+
+result_4 = np.multiply(6, 0)
+assert result_4 == 0
+
+result_5 = np.multiply(0, 0)
+assert result_5 == 0
+
+result_6 = np.multiply(-3, 4)
+assert result_6 == -12
+
+result_7 = np.multiply(-2.0, -5.0)
+assert result_7 == 10.0
+
+result_8 = np.multiply(-7, 3.5)
+assert result_8 == -24.5
+
+result_9 = np.multiply(-1, -1)
+assert result_9 == 1
+
+result_10 = np.multiply(1, 1)
+assert result_10 == 1
+
+result_11 = np.multiply(9, -2)
+assert result_11 == -18
+
+result_12 = np.multiply([3,4],[1,3])
+assert result_12[0] == 3
+assert result_12[1] == 12
 
 c = np.array([5,4])
 d = np.array([2,2])
-e = np.multiply(c, d)
-assert e[0] == 10
-assert e[1] == 8
+result_13 = np.multiply(c, d)
+assert result_13[0] == 10
+assert result_13[1] == 8
