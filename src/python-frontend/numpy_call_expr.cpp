@@ -27,16 +27,40 @@ numpy_call_expr::~numpy_call_expr()
   converter_.build_static_lists = false;
 }
 
+static double extract_value(const nlohmann::json &arg)
+{
+    if (!arg.contains("_type"))
+    {
+        throw std::runtime_error("Invalid JSON: missing _type");
+    }
+
+    if (arg["_type"] == "UnaryOp")
+    {
+        if (!arg.contains("operand") || !arg["operand"].contains("value"))
+        {
+            throw std::runtime_error("Invalid UnaryOp: missing operand/value");
+        }
+        return -arg["operand"]["value"].get<double>();
+    }
+
+    if (!arg.contains("value"))
+    {
+        throw std::runtime_error("Invalid JSON: missing value");
+    }
+
+    return arg["value"].get<double>();
+}
+
 template <typename T>
 static auto create_list(int size, T default_value)
 {
-  nlohmann::json list;
-  list["_type"] = "List";
-  for (int i = 0; i < size; ++i)
-  {
-    list["elts"].push_back({{"_type", "Constant"}, {"value", default_value}});
-  }
-  return list;
+    nlohmann::json list;
+    list["_type"] = "List";
+    for (int i = 0; i < size; ++i)
+    {
+        list["elts"].push_back({{"_type", "Constant"}, {"value", default_value}});
+    }
+    return list;
 }
 
 template <typename T>
@@ -77,7 +101,7 @@ static auto create_binary_op(
     {"op", {{"_type", op}}},
     {"right", right}};
 
-  return bin_op;
+    return bin_op;
 }
 
 bool numpy_call_expr::is_math_function() const
@@ -652,5 +676,9 @@ exprt numpy_call_expr::get()
     return expr;
   }
 
-  throw std::runtime_error("Unsupported NumPy function call: " + function);
+      auto bin_op = create_binary_op(function, lhs, rhs);
+      return converter_.get_expr(bin_op);
+    }
+
+    throw std::runtime_error("Unsupported NumPy function call: " + function);
 }
