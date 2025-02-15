@@ -425,9 +425,6 @@ void goto_convert_functionst::thrash_type_symbols()
     }
   });
 
-  for (auto &it : typenames)
-    it.second.erase(it.first);
-
   // Now, repeatedly rename all types until they are all complete.
   // When we encounter a type that depends on unresolved symbols the type is
   // incomplete. Make the dependencies complete, then include them into this type.
