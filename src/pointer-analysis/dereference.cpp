@@ -1100,7 +1100,6 @@ void dereferencet::construct_from_array(
     build_reference_rec(value, mod, type, guard, mode, alignment);
     return;
   }
-  
   assert(is_scalar_type(arr_subtype));
 
   // Two different ways we can access elements
