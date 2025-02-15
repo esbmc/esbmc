@@ -81,6 +81,7 @@ protected:
   bool get_instantiation_ctor_call(
     const std::string &contract_name,
     exprt &new_expr);
+  void move_to_initializer(const exprt & expr);
   bool move_initializer_to_ctor(
     const std::string contract_name,
     std::string ctor_id = "");

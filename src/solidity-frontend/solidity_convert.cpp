@@ -721,7 +721,7 @@ bool solidity_convertert::get_var_decl(
     if (is_state_var && !is_inherited)
     {
       // move to ctor initializer
-      initializers.move_to_operands(func_call);
+      move_to_initializer(func_call);
     }
     else
       current_blockDecl.move_to_operands(func_call);
@@ -758,7 +758,7 @@ bool solidity_convertert::get_var_decl(
       if (is_state_var && !is_inherited)
       {
         // move to ctor initializer
-        initializers.move_to_operands(func_call);
+        move_to_initializer(func_call);
       }
       else
         current_blockDecl.move_to_operands(func_call);
@@ -803,7 +803,7 @@ bool solidity_convertert::get_var_decl(
       if (is_state_var && !is_inherited)
       {
         // move to ctor initializer
-        initializers.move_to_operands(func_call);
+        move_to_initializer(func_call);
       }
       else
         current_blockDecl.move_to_operands(func_call);
@@ -895,11 +895,7 @@ bool solidity_convertert::get_var_decl(
   // note that for the state variables that do not have initializer
   // we have already set it as zero value
   if (is_state_var && !is_inherited)
-  {
-    // the initializer will clear its elements, so we populate the copy instead of origins
-    exprt dump = decl;
-    initializers.move_to_operands(dump);
-  }
+    move_to_initializer(decl);
 
   decl.location() = location_begin;
   new_expr = decl;
@@ -1671,6 +1667,13 @@ void solidity_convertert::get_temporary_object(exprt &call, exprt &new_expr)
   tmp_obj.location() = call.location();
   call.swap(tmp_obj);
   new_expr = call;
+}
+
+// Normally, we would expect expr to be a code_declt expression
+void solidity_convertert::move_to_initializer(const exprt &expr)
+{
+  // the initializer will clear its elements, so we populate the copy instead of origins
+  initializers.copy_to_operands(expr);
 }
 
 // convert the initialization of the state variable
@@ -5890,6 +5893,7 @@ bool solidity_convertert::get_mapping_key_expr(
   tmp_expr.pretty_name(name);
   new_expr = tmp_expr;
 
+  // update contract-class symbol
   struct_typet::componentt comp;
   comp.swap(tmp_expr);
   comp.id("component");
@@ -5899,7 +5903,8 @@ bool solidity_convertert::get_mapping_key_expr(
   to_struct_type(struct_sym.type).components().push_back(comp);
 
   // move it to the initialize list
-  initializers.move_to_operands(tmp_expr);
+  code_declt decl(new_expr);
+  move_to_initializer(decl);
 
   return false;
 }
