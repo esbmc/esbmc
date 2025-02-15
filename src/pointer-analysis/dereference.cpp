@@ -1094,6 +1094,15 @@ void dereferencet::construct_from_array(
   expr2tc mod = modulus2tc(offset->type, offset, subtype_sz_expr);
   simplify(mod);
 
+  if (is_structure_type(arr_subtype))
+  {
+    value = index2tc(arr_subtype, value, div);
+    build_reference_rec(value, mod, type, guard, mode, alignment);
+    return;
+  }
+  
+  assert(is_scalar_type(arr_subtype));
+
   // Two different ways we can access elements
   //  1) Just treat them as an element and select them out, possibly with some
   //     byte extracts applied to it
