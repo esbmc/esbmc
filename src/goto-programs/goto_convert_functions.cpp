@@ -393,7 +393,6 @@ void goto_convert_functionst::ensure_type_is_complete(
   symbolt *s = context.find_symbol(name);
   rename_types(s->type, *s, sname);
   assert(is_complete_type(s->type));
-  deps.clear();
 }
 
 void goto_convert_functionst::thrash_type_symbols()
@@ -434,8 +433,11 @@ void goto_convert_functionst::thrash_type_symbols()
   // incomplete. Make the dependencies complete, then include them into this type.
   // This means that we recurse to whatever depth of nested types the user
   // has. With at least a meg of stack, I doubt that's really a problem.
-  for (const auto &[type_name, dependencies] : typenames)
+  for (auto &[type_name, dependencies] : typenames)
+  {
     ensure_type_is_complete(type_name, typenames, type_name);
+    dependencies.clear();
+  }
 
   // And now all the types are complete, rename types in all existing code.
   context.Foreach_operand([this](symbolt &s) {
