@@ -335,7 +335,40 @@ void goto_convert_functionst::rename_exprs(
     rename_exprs(it->second, cur_name_sym, sname);
 }
 
-void goto_convert_functionst::wallop_type(
+/**
+ * Return true if the type is complete, that is, its size is known.
+ * The size of an infinitely sized array is considered known while the size of
+ * a symbolic type (symbolt) is considered unknown.
+ *
+ * @param type The type to check
+ * @return True if the type is complete, false otherwise
+ */
+static bool is_complete_type(const typet &type)
+{
+  if (type.is_struct() || type.is_union())
+  {
+    const struct_union_typet &su = to_struct_union_type(type);
+    return std::all_of(
+      su.components().begin(),
+      su.components().end(),
+      [](const struct_union_typet::componentt &c) {
+        return is_complete_type(c.type());
+      });
+  }
+  if (
+    type.is_signedbv() || type.is_unsignedbv() || type.is_fixedbv() ||
+    type.is_floatbv() || type.is_pointer() || type.is_bool())
+  {
+    return true;
+  }
+  if (type.is_array())
+  {
+    return is_complete_type(to_array_type(type).subtype());
+  }
+  return false;
+}
+
+void goto_convert_functionst::ensure_type_is_complete(
   irep_idt name,
   typename_mapt &typenames,
   const irep_idt &sname)
@@ -347,13 +380,19 @@ void goto_convert_functionst::wallop_type(
   if (deps.size() == 0)
     return;
 
-  // Iterate over our dependancies ensuring they're resolved.
+  // Iterate over our dependencies ensuring they are complete.
   for (const auto &dep : deps)
-    wallop_type(dep, typenames, sname);
+  {
+    const symbolt *s = context.find_symbol(dep);
+    assert(s->is_type);
+    if (!is_complete_type(s->type))
+      ensure_type_is_complete(dep, typenames, sname);
+  }
 
   // And finally perform renaming.
   symbolt *s = context.find_symbol(name);
   rename_types(s->type, *s, sname);
+  assert(is_complete_type(s->type));
   deps.clear();
 }
 
@@ -390,15 +429,16 @@ void goto_convert_functionst::thrash_type_symbols()
   for (auto &it : typenames)
     it.second.erase(it.first);
 
-  // Now, repeatedly rename all types. When we encounter a type that contains
-  // unresolved symbols, resolve it first, then include it into this type.
+  // Now, repeatedly rename all types until they are all complete.
+  // When we encounter a type that depends on unresolved symbols the type is
+  // incomplete. Make the dependencies complete, then include them into this type.
   // This means that we recurse to whatever depth of nested types the user
   // has. With at least a meg of stack, I doubt that's really a problem.
   std::map<irep_idt, std::set<irep_idt>>::iterator it;
   for (it = typenames.begin(); it != typenames.end(); it++)
-    wallop_type(it->first, typenames, it->first);
+    ensure_type_is_complete(it->first, typenames, it->first);
 
-  // And now all the types have a fixed form, rename types in all existing code.
+  // And now all the types are complete, rename types in all existing code.
   context.Foreach_operand([this](symbolt &s) {
     rename_types(s.type, s, s.id);
     rename_exprs(s.value, s, s.id);

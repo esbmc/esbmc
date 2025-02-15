@@ -25,8 +25,10 @@ public:
   rename_types(irept &type, const symbolt &cur_name_sym, const irep_idt &sname);
   void
   rename_exprs(irept &expr, const symbolt &cur_name_sym, const irep_idt &sname);
-  void
-  wallop_type(irep_idt name, typename_mapt &typenames, const irep_idt &sname);
+  void ensure_type_is_complete(
+    irep_idt name,
+    typename_mapt &typenames,
+    const irep_idt &sname);
 
   goto_convert_functionst(
     contextt &_context,
