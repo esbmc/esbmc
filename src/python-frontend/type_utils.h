@@ -71,7 +71,7 @@ public:
     return (
       name == "ESBMC_range_next_" || name == "ESBMC_range_has_next_" ||
       name == "bit_length" || name == "from_bytes" || name == "to_bytes" ||
-      name == "randint");
+      name == "randint" || name == "random");
   }
 
 private:
