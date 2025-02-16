@@ -1094,7 +1094,7 @@ void dereferencet::construct_from_array(
   expr2tc mod = modulus2tc(offset->type, offset, subtype_sz_expr);
   simplify(mod);
 
-  // If an array contains structs, the dereferencing process 
+  // If an array contains structs, the dereferencing process
   // accesses the indexed structure and resolves nested fields.
   if (is_structure_type(arr_subtype))
   {
@@ -1102,7 +1102,7 @@ void dereferencet::construct_from_array(
     build_reference_rec(value, mod, type, guard, mode, alignment);
     return;
   }
-  // prevent unexpected behaviors when handling non-structure 
+  // prevent unexpected behaviors when handling non-structure
   // and non-scalar types
   assert(is_scalar_type(arr_subtype));
 
