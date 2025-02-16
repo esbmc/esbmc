@@ -177,31 +177,32 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
   return logical_expr;
 }
 
+void python_converter::update_symbol(const exprt &expr) const
+{
+  symbol_id sid = create_symbol_id();
+  sid.set_object(expr.name().c_str());
+  symbolt *sym = symbol_table_.find_symbol(sid.to_string());
+
+  if (sym != nullptr)
+  {
+    sym->type = expr.type();
+    sym->value.type() = expr.type();
+
+    if (
+      sym->value.is_constant() ||
+      (sym->value.is_signedbv() || sym->value.is_unsignedbv()))
+    {
+      exprt new_value = from_integer(
+        std::stoll(sym->value.value().c_str(), nullptr, 2), expr.type());
+      sym->value = new_value;
+    }
+  }
+}
+
 void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
 {
   typet &lhs_type = lhs.type();
   typet &rhs_type = rhs.type();
-
-  auto update_symbol = [&](exprt &expr) {
-    symbol_id sid = create_symbol_id();
-    sid.set_object(expr.name().c_str());
-    symbolt *s = symbol_table_.find_symbol(sid.to_string());
-
-    if (s != nullptr)
-    {
-      s->type = expr.type();
-      s->value.type() = expr.type();
-
-      if (
-        s->value.is_constant() ||
-        (s->value.is_signedbv() || s->value.is_unsignedbv()))
-      {
-        exprt new_value =
-          from_integer(std::stoi(s->value.value().c_str()), expr.type());
-        s->value = new_value;
-      }
-    }
-  };
 
   // Promote int to float
   if (
@@ -217,8 +218,8 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
   }
   else if (lhs_type.width() != rhs_type.width())
   {
-    int lhs_type_width = std::stoi(lhs_type.width().c_str());
-    int rhs_type_width = std::stoi(rhs_type.width().c_str());
+    auto lhs_type_width = std::stoi(lhs_type.width().c_str());
+    auto rhs_type_width = std::stoi(rhs_type.width().c_str());
 
     if (lhs_type_width > rhs_type_width)
     {
@@ -409,10 +410,6 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       return expr;
     }
   }
-
-  adjust_statement_types(lhs, rhs);
-
-  assert(lhs.type() == rhs.type());
 
   // Replace ** operation with the resultant constant.
   if (op == "Pow" || op == "power")
@@ -650,7 +647,7 @@ exprt python_converter::get_literal(const nlohmann::json &element)
 
   // integer literals
   if (value.is_number_integer())
-    return from_integer(value.get<int>(), int_type());
+    return from_integer(value.get<long long>(), long_long_int_type());
 
   // bool literals
   if (value.is_boolean())
@@ -1073,8 +1070,7 @@ void python_converter::get_var_assign(
 
   bool is_ctor_call = type_handler_.is_constructor_call(ast_node["value"]);
 
-  if (is_ctor_call)
-    ref_instance = &lhs;
+  current_lhs = &lhs;
 
   is_converting_lhs = false;
 
@@ -1147,7 +1143,7 @@ void python_converter::get_var_assign(
     target_block.copy_to_operands(decl);
   }
 
-  ref_instance = nullptr;
+  current_lhs = nullptr;
 }
 
 void python_converter::get_compound_assign(
@@ -1554,6 +1550,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       exprt test = get_expr(element["test"]);
       code_assertt assert_code;
       assert_code.assertion() = test;
+      assert_code.location() = get_location_from_decl(element);
       block.move_to_operands(assert_code);
       break;
     }
@@ -1614,7 +1611,7 @@ python_converter::python_converter(
     ns(_context),
     current_func_name_(""),
     current_class_name_(""),
-    ref_instance(nullptr)
+    current_lhs(nullptr)
 {
 }
 
