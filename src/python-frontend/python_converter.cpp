@@ -1664,7 +1664,7 @@ void python_converter::convert()
     // Load operational models -----
     const std::string &ast_output_dir =
       ast_json["ast_output_dir"].get<std::string>();
-    std::list<std::string> model_files = {"range", "int", "consensus"};
+    std::list<std::string> model_files = {"range", "int", "consensus", "random"};
     std::list<std::string> model_folders = {"os"};
 
     for (const auto &folder : model_folders)
