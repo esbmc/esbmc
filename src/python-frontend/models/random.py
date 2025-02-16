@@ -1,4 +1,5 @@
-# Stubs for random module
+# Stubs for random module.
+# See https://docs.python.org/3/library/random.html
 class random:
     @classmethod
     def randint(a:int, b:int) -> int:
