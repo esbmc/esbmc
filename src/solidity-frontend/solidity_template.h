@@ -28,9 +28,17 @@ const std::string sol_header = R"(
   address == address_t
 */
 const std::string sol_typedef = R"(
-typedef _ExtInt(256) int256_t;
-typedef unsigned _ExtInt(256) uint256_t;
-typedef unsigned _ExtInt(160) address_t;
+#if defined(__clang__)  // Ensure we are using Clang
+    #if __clang_major__ >= 15
+        #define BIGINT(bits) _BitInt(bits)
+    #else
+        #define BIGINT(bits) _ExtInt(bits)
+    #endif
+#endif
+
+typedef BIGINT(256) int256_t;
+typedef unsigned BIGINT(256) uint256_t;
+typedef unsigned BIGINT(160) address_t;
 )";
 
 /// Variables
