@@ -3861,7 +3861,6 @@ bool solidity_convertert::get_current_contract_name(
   // we set it as empty first
   contract_name = "";
 
-  assert(!current_contractName.empty());
   if (!is_contract_member_access)
   {
     contract_name = current_contractName;
