@@ -3029,7 +3029,11 @@ bool solidity_convertert::get_expr(
     //        - swap: (x, y) = (y, x)
     //        - constant: (1, 2)
 
-    assert(expr.contains("components"));
+    if(!expr.contains("components"))
+    {
+      log_error("Unexpected ast json structure, expecting component");
+      abort();
+    }
     SolidityGrammar::TypeNameT type =
       SolidityGrammar::get_type_name_t(expr["typeDescriptions"]);
 
@@ -3154,13 +3158,12 @@ bool solidity_convertert::get_expr(
 
         // we do not create struct-tuple instance for lhs
         code_blockt _block;
-        exprt op;
+        exprt op = nil_exprt();
         for (auto i : expr["components"])
         {
-          if (get_expr(i, i["typeDescriptions"], op))
+          if (i.contains("typeDescriptions") && get_expr(i, i["typeDescriptions"], op))
             return true;
-          if (op.is_nil())
-            continue;
+
           _block.operands().push_back(op);
         }
         new_expr = _block;
@@ -4137,8 +4140,9 @@ bool solidity_convertert::get_binary_operator_expr(
         //      null <=> tuple2.mem0
         //         x <=> tuple2.mem1
         exprt lop = lhs.operands().at(i);
-        if (!lop.is_nil() && assigned_symbol.count(lop))
-          // e.g. (x,x) = (1, 2); assert(x==1) hold
+        if(lop.is_nil() || assigned_symbol.count(lop))
+          // e.g. (,y) = (1,2)
+          // or   (x,x) = (1, 2); assert(x==1) hold
           // we skip the variable that has been assigned
           continue;
         assigned_symbol.insert(lop);
@@ -5516,8 +5520,11 @@ bool solidity_convertert::get_array_to_pointer_type(
   return false;
 }
 
+// parse a tuple to struct
 bool solidity_convertert::get_tuple_definition(const nlohmann::json &ast_node)
 {
+  log_debug("solidity", "\t@@@ Parsing tuple...");
+
   struct_typet t = struct_typet();
 
   // get name/id:
