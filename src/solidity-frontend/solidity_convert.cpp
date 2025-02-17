@@ -2532,7 +2532,11 @@ bool solidity_convertert::get_statement(
 
         size_t ls = to_struct_type(lhs.type()).components().size();
         size_t rs = to_struct_type(rhs.type()).components().size();
-        assert(ls == rs);
+        if (ls != rs)
+        {
+          log_error("Unexpected tuple structure");
+          abort();
+        }
 
         for (size_t i = 0; i < ls; i++)
         {
@@ -4156,7 +4160,7 @@ bool solidity_convertert::get_binary_operator_expr(
     else if (rt_sol == "ARRAY" || rt_sol == "ARRAY_LITERAL")
     {
       if (rt_sol == "ARRAY_LITERAL")
-        // construct aux_array
+        // construct aux_array while adding padding
         // e.g. data1 = [1,2] ==> data1 = aux_array$1
         convert_type_expr(ns, rhs, lt);
 
@@ -7749,14 +7753,14 @@ void solidity_convertert::convert_type_expr(
       unsigned z_src_size = std::stoul(src_size, nullptr);
 
       // get lhs array size
-      std::string dest_size;
-      if (dest_sol_type == "ARRAY")
+      std::string dest_size = dest_type.get("#sol_array_size").as_string();
+      if (dest_size.empty())
       {
-        dest_size = dest_type.get("#sol_array_size").as_string();
-        assert(!dest_size.empty());
-      }
-      else
-      {
+        if (dest_sol_type == "ARRAY")
+        {
+          log_error("Unexpected empty-length fixed array");
+          abort();
+        }
         // the dynamic array does not have a fixed length
         // therefore set it as the rhs length
         dest_size = src_size;
@@ -7799,6 +7803,8 @@ void solidity_convertert::convert_type_expr(
       // allow fall-through
       if (src_expr.id() == irept::id_array)
       {
+        log_debug("solidity", "\t@@@ Populating zero elements to array");
+
         // e.g. uint[3] x = [1] ==> uint[3] x == [1,0,0]
         unsigned s_size = src_expr.operands().size();
         if (s_size != z_src_size)
@@ -7827,6 +7833,9 @@ void solidity_convertert::convert_type_expr(
           // reset size
           assert(src_expr.type().is_array());
           to_array_type(src_expr.type()).size() = dest_array_size;
+
+          // update "#sol_array_size"
+          src_expr.type().set("#sol_array_size", dest_size);
         }
       }
 
