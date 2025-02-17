@@ -13,7 +13,7 @@ contract A {
     // int* zzzz = calloc(2,1);
     uint8[] zzzz = [1, 2]; // memcpy(zzzz, tmp2, 2);
 
-    function int8_call() public virtual returns (uint8[2] memory) {
+    function int8_call() public virtual  {
         uint8[2] memory a; // int *a = calloc(2,1);
 
         z = [0]; // int tmp3[2] = {0,1}
@@ -24,6 +24,5 @@ contract A {
         assert(a[1] == 0);
         a[0] = 21;
         a[1] = 42;
-        return a;
     }
 }

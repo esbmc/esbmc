@@ -590,12 +590,9 @@ int esbmc_parseoptionst::doit()
   if (cmdline.isset("sol"))
   {
     // set default options
-    options.set_option(
-      "no-pointer-check", true); // there is no pointer in solidity
-    options.set_option("no-pointer-relation-check", true);
     options.set_option("no-align-check", true); // no need to check alignment in solidity
+    options.set_option("no-unlimited-scanf-check", true);
     options.set_option("force-malloc-success", true); // for calloc in the 'newexpression'
-    options.set_option("fixedbv", true); // no floating point in solidity
   }
 
   // Create and preprocess a GOTO program
