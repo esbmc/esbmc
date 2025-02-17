@@ -499,6 +499,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option(
       "keep-alive-interval", cmdline.getval("keep-alive-interval"));
 
+  if (cmdline.isset("override-return-annotation"))
+    options.set_option("override-return-annotation", true);
+
   config.options = options;
 }
 
