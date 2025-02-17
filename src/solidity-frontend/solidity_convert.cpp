@@ -3029,7 +3029,7 @@ bool solidity_convertert::get_expr(
     //        - swap: (x, y) = (y, x)
     //        - constant: (1, 2)
 
-    if(!expr.contains("components"))
+    if (!expr.contains("components"))
     {
       log_error("Unexpected ast json structure, expecting component");
       abort();
@@ -3161,7 +3161,9 @@ bool solidity_convertert::get_expr(
         exprt op = nil_exprt();
         for (auto i : expr["components"])
         {
-          if (i.contains("typeDescriptions") && get_expr(i, i["typeDescriptions"], op))
+          if (
+            i.contains("typeDescriptions") &&
+            get_expr(i, i["typeDescriptions"], op))
             return true;
 
           _block.operands().push_back(op);
@@ -4140,7 +4142,7 @@ bool solidity_convertert::get_binary_operator_expr(
         //      null <=> tuple2.mem0
         //         x <=> tuple2.mem1
         exprt lop = lhs.operands().at(i);
-        if(lop.is_nil() || assigned_symbol.count(lop))
+        if (lop.is_nil() || assigned_symbol.count(lop))
           // e.g. (,y) = (1,2)
           // or   (x,x) = (1, 2); assert(x==1) hold
           // we skip the variable that has been assigned
@@ -7867,16 +7869,14 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
   dest = code_blockt();
 
   // call designated "initialization" functions
-  context.foreach_operand_in_order(
-    [&dest](const symbolt &s)
+  context.foreach_operand_in_order([&dest](const symbolt &s) {
+    if (s.type.initialization() && s.type.is_code())
     {
-      if (s.type.initialization() && s.type.is_code())
-      {
-        code_function_callt function_call;
-        function_call.function() = symbol_expr(s);
-        dest.move_to_operands(function_call);
-      }
-    });
+      code_function_callt function_call;
+      function_call.function() = symbol_expr(s);
+      dest.move_to_operands(function_call);
+    }
+  });
 }
 
 void solidity_convertert::get_aux_array_name(
