@@ -1539,6 +1539,25 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     const clang::Decl &dcl = static_cast<const clang::Decl &>(*decl.getDecl());
 
+    // pull in the type that is used to qualify the decl. This is needed so that
+    // `C<0>::f()` where `C<0>` is a template specialization and `f` is a static member function
+    // works correctly when `C<0>::f` is the only use of `C<0>`.
+    // When parsing the template `C` we do not parse the specializations, so there
+    // is no other code that could parse the type of `C<0>`.
+    // (Yes, clang allows us to get all specializations of a template, but that leads to other problems.
+    // See #1782 or #2284)
+
+    if (const auto nns = decl.getQualifier())
+    {
+      if (const auto type = nns->getAsType())
+      {
+        assert(!nns->isDependent());
+        typet ignored;
+        if (get_type(*type, ignored))
+          return true;
+      }
+    }
+
     if (get_decl_ref(dcl, new_expr))
       return true;
 
