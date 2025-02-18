@@ -511,7 +511,7 @@ void goto_convertt::do_function_call_symbol(
 
   std::string base_name = symbol->name.as_string();
 
-  // Quantifiers
+  // Quantifiers passthrough. Converts function calls into forall or exists expr
   if (base_name == "__ESBMC_forall" || base_name == "__ESBMC_exists")
   {
     if (arguments.size() != 2)
