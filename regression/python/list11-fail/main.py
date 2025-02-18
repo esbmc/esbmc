@@ -2,7 +2,7 @@ import random
 
 def secure_choice(seq: list[int]) -> int:
     assert(len(seq) > 0)
-    idx = nondet_uint()
+    idx = nondet_int()
     __ESBMC_assume(idx >= 0 and idx < len(seq))
     return seq[idx]
 
