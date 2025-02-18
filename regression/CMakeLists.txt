@@ -136,7 +136,9 @@ set(REGRESSIONS_CPP14 esbmc-cpp14/cpp
                       )
 
 # list of C++17 test suites
-set(REGRESSIONS_CPP17 esbmc-cpp17/lambda)
+set(REGRESSIONS_CPP17 esbmc-cpp17/cpp
+                      esbmc-cpp17/lambda
+                      )
 
 # list of C++20 test suites
 set(REGRESSIONS_CPP20 esbmc-cpp20/cpp)

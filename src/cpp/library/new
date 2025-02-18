@@ -23,6 +23,24 @@ namespace std
 class bad_alloc : public exception
 {
 public:
-  virtual const char * what() const throw() { return "std::bad_alloc"; }
+  virtual const char *what() const throw()
+  {
+    return "std::bad_alloc";
+  }
 };
-}
+
+#if __cplusplus >= 201703L
+enum class align_val_t : std::size_t
+{
+  align_1 = 1,
+  align_2 = 2,
+  align_4 = 4,
+  align_8 = 8,
+  align_16 = 16,
+  align_32 = 32,
+  align_64 = 64,
+  align_128 = 128,
+};
+#endif
+
+} // namespace std
