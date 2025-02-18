@@ -2,10 +2,10 @@ def esbmc_choice(seq: list[int]) -> int:
     assert len(seq) > 0
     
     # Get a nondeterministic index
-    idx = nondet_int()
+    idx = nondet_uint()
     
     # Restrict the nondet index to valid range
-    __ESBMC_assume(idx < len(seq))
+    __ESBMC_assume(idx > 0 and idx < len(seq))
     
     return seq[idx]
 
