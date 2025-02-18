@@ -3787,7 +3787,7 @@ bool solidity_convertert::get_expr(
       return true;
     break;
   }
-  case SolidityGrammar::ExpressionT::ElementaryTypeNameExpression:
+  case SolidityGrammar::ExpressionT::TypeConversionExpression:
   {
     // perform type conversion
     // e.g.
@@ -5270,7 +5270,7 @@ bool solidity_convertert::get_type_description(
     // e.g.
     // uint32 a = 0x432178;
     // uint16 b = uint16(a); // b will be 0x2178 now
-    // "nodeType": "ElementaryTypeNameExpression",
+    // "nodeType": "TypeConversionExpression",
     //             "src": "155:6:0",
     //             "typeDescriptions": {
     //                 "typeIdentifier": "t_type$_t_uint16_$",
