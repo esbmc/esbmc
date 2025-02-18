@@ -22,10 +22,12 @@ public:
     contextt &_context,
     nlohmann::json &_ast_json,
     const std::string &_sol_func,
-    const std::string &_contract_path);
+    const std::string &_contract_path,
+    const bool _is_bound);
   virtual ~solidity_convertert() = default;
 
   bool convert();
+  static bool is_low_level_call(const std::string &name);
 
 protected:
   void merge_multi_files();
@@ -399,6 +401,9 @@ protected:
 
   // for auxiliary var name
   int aux_counter;
+
+  // bound setting
+  bool is_bound;
 
 private:
   bool get_elementary_type_name_uint(
