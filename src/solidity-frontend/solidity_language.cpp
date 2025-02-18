@@ -32,6 +32,12 @@ solidity_languaget::solidity_languaget()
     abort();
   }
   smart_contract = sol;
+
+  const std::string unbound = config.options.get_option("unbound");
+  if (unbound.empty())
+    is_bound = false;
+  else
+    is_bound = true;
 }
 
 std::string solidity_languaget::get_temp_file()
@@ -141,7 +147,7 @@ bool solidity_languaget::typecheck(contextt &context, const std::string &module)
     new_context); // Add ESBMC and TACAS intrinsic symbols to the context
 
   solidity_convertert converter(
-    new_context, src_ast_json_array, func_name, smart_contract);
+    new_context, src_ast_json_array, func_name, smart_contract, is_bound);
   if (converter.convert()) // Add Solidity symbols to the context
     return true;
 
