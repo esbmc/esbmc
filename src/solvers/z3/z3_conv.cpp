@@ -1709,7 +1709,6 @@ smt_astt z3_convt::mk_quantifier(
 
   for (unsigned i = 0; i < names.size(); i++)
   {
-    asts[i]->dump();
     symbols.push_back(Z3_mk_string_symbol(z3_ctx, names[i].c_str()));
     sorts.push_back(to_solver_smt_ast<z3_smt_ast>(asts[i])->a.get_sort());
   }

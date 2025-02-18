@@ -178,23 +178,18 @@ void smt_convt::push_ctx()
   ctx_level++;
 }
 
-std::string
-get_last_name_from_body(const std::string original, const expr2tc body)
+/* Iterate over "body" expression looking for symbols with the same name
+   as lhs. Then, replaces it. */
+void replace_name_in_body(const expr2tc &lhs, expr2tc &body)
 {
+  assert(is_symbol2t(lhs));
   if (is_symbol2t(body))
   {
-    if (to_symbol2t(body).thename.as_string() == original)
-      return to_symbol2t(body).get_symbol_name();
-    return "";
+    if (to_symbol2t(body).thename == to_symbol2t(lhs).thename)
+      body = lhs;
+    return;
   }
-
-  std::string result = "";
-  body->foreach_operand([&original, &result](expr2tc e) {
-    if (result == "")
-      result = get_last_name_from_body(original, e);
-  });
-
-  return result;
+  body->Foreach_operand([lhs](expr2tc e) { replace_name_in_body(lhs, e); });
 }
 
 void smt_convt::pop_ctx()
@@ -325,8 +320,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     // Convert all the arguments and store them in 'args'.
     unsigned int i = 0;
-    expr->foreach_operand(
-      [this, &args, &i](const expr2tc &e) { args[i++] = convert_ast(e); });
+    expr->foreach_operand([this, &args, &i](const expr2tc &e)
+                          { args[i++] = convert_ast(e); });
   }
   }
 
@@ -1256,46 +1251,51 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     // TODO: technically the forall could be a list of symbols
     // TODO: how to support other assertions inside it? e.g., buffer-overflow, arithmetic-overflow, etc...
-    const auto &quantifier = dynamic_cast<const logic_2ops &>(*expr);
-
     expr2tc symbol;
+    expr2tc predicate;
+
+    if (is_forall2t(expr))
+    {
+      symbol = to_forall2t(expr).side_1;
+      predicate = to_forall2t(expr).side_2;
+    }
+    else
+    {
+      symbol = to_exists2t(expr).side_1;
+      predicate = to_exists2t(expr).side_2;
+    }
 
     // We only want expressions of typecast(address_of(symbol)).
-    if (
-      is_typecast2t(quantifier.side_1) &&
-      is_address_of2t(to_typecast2t(quantifier.side_1).from))
-      symbol = to_address_of2t(to_typecast2t(quantifier.side_1).from).ptr_obj;
+    if (is_typecast2t(symbol) && is_address_of2t(to_typecast2t(symbol).from))
+      symbol = to_address_of2t(to_typecast2t(symbol).from).ptr_obj;
 
     if (!is_symbol2t(symbol))
     {
       log_error("Can only use quantifiers with one symbol");
-      quantifier.dump();
+      expr->dump();
       abort();
     }
 
-    /* Tricky problem to solve here:
-     * We need the name of the variable, but ESBMC uses different
-     * names for when a symbol is called by reference than by value.
+    /* A bit of spaghetti here: the RHS might have different names due to SSA magic.
+     * int i = 0;
+     * i = 1;
+     * forall(&i . i + 1 > i)
      *
-     * I am not sure how to fix this besides checking the body for the
-     * bound variables.
+     * We are mixing references and values so "i" has different meanings:
+     * i0 = 0
+     * i1 = 1
+     * forall(address-of(i), i1 + 1 > i1)
      *
-     * This might cause some name clashing.
-     *
-     * TODO: A better solution would be to:
-     * 1. Transform the expressions to get a list of values. forall ({x0, x1, ...}, body)
-     * 2. This should allow the symex to do the proper renaming
+     * We actually want to adapt the forall RHS to use the same name from LHS
      */
 
-    std::string name = get_last_name_from_body(
-      to_symbol2t(symbol).thename.as_string(), quantifier.side_2);
-
+    replace_name_in_body(symbol, predicate);
+    // FIXME: I don't know how to obtain the string "&0#1" yet.
     a = mk_quantifier(
       is_forall2t(expr),
-      {name},
+      {to_symbol2t(symbol).get_symbol_name() + "&0#1"},
       {convert_ast(symbol)},
-      convert_ast(quantifier.side_2));
-
+      convert_ast(predicate));
     break;
   }
   default:
@@ -2469,26 +2469,30 @@ expr2tc smt_convt::get(const expr2tc &expr)
     if (!is_nil_expr(arr_size) && is_symbol2t(arr_size))
       arr_size = get(arr_size);
 
-    res->type->Foreach_subtype([this](type2tc &t) {
-      if (!is_array_type(t))
-        return;
+    res->type->Foreach_subtype(
+      [this](type2tc &t)
+      {
+        if (!is_array_type(t))
+          return;
 
-      expr2tc &arr_size = to_array_type(t).array_size;
-      if (!is_nil_expr(arr_size) && is_symbol2t(arr_size))
-        arr_size = get(arr_size);
-    });
+        expr2tc &arr_size = to_array_type(t).array_size;
+        if (!is_nil_expr(arr_size) && is_symbol2t(arr_size))
+          arr_size = get(arr_size);
+      });
   }
 
   // Recurse on operands
   bool have_all = true;
-  res->Foreach_operand([this, &have_all](expr2tc &e) {
-    expr2tc new_e;
-    if (e)
-      new_e = get(e);
-    e = new_e;
-    if (!e)
-      have_all = false;
-  });
+  res->Foreach_operand(
+    [this, &have_all](expr2tc &e)
+    {
+      expr2tc new_e;
+      if (e)
+        new_e = get(e);
+      e = new_e;
+      if (!e)
+        have_all = false;
+    });
 
   // And simplify
   if (have_all)
