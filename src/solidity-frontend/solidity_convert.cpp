@@ -18,7 +18,8 @@ solidity_convertert::solidity_convertert(
   contextt &_context,
   nlohmann::json &_ast_json,
   const std::string &_sol_func,
-  const std::string &_contract_path)
+  const std::string &_contract_path,
+  const bool _is_bound)
   : context(_context),
     ns(context),
     src_ast_json_array(_ast_json),
@@ -41,7 +42,8 @@ solidity_convertert::solidity_convertert(
     is_contract_member_access(false),
     tgt_func(config.options.get_option("function")),
     tgt_cnt(config.options.get_option("contract")),
-    aux_counter(0)
+    aux_counter(0),
+    is_bound(_is_bound)
 {
   std::ifstream in(_contract_path);
   contract_contents.assign(
@@ -7868,14 +7870,16 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
   dest = code_blockt();
 
   // call designated "initialization" functions
-  context.foreach_operand_in_order([&dest](const symbolt &s) {
-    if (s.type.initialization() && s.type.is_code())
+  context.foreach_operand_in_order(
+    [&dest](const symbolt &s)
     {
-      code_function_callt function_call;
-      function_call.function() = symbol_expr(s);
-      dest.move_to_operands(function_call);
-    }
-  });
+      if (s.type.initialization() && s.type.is_code())
+      {
+        code_function_callt function_call;
+        function_call.function() = symbol_expr(s);
+        dest.move_to_operands(function_call);
+      }
+    });
 }
 
 void solidity_convertert::get_aux_array_name(
@@ -8415,5 +8419,15 @@ bool solidity_convertert::multi_contract_verification()
   added_symbol.type = main_type;
   added_symbol.value = func_body;
   config.main = sol_name;
+  return false;
+}
+
+bool solidity_convertert::is_low_level_call(const std::string &name)
+{
+  std::set<std::string> llc_set = {
+    "call", "delegatecall", "staticcall", "callcode", "transfer", "send"};
+  if (llc_set.count(name) != 0)
+    return true;
+
   return false;
 }
