@@ -97,7 +97,9 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
     /* FIXME: We need to map 'int' to another irep type that provides unlimited precision
   	https://docs.python.org/3/library/stdtypes.html#numeric-types-int-float-complex */
     return long_long_int_type();
-  if (ast_type == "uint64" || ast_type == "Epoch" || ast_type == "Slot")
+  if (
+    ast_type == "uint" || ast_type == "uint64" || ast_type == "Epoch" ||
+    ast_type == "Slot")
     return long_long_uint_type();
   if (ast_type == "bool")
     return bool_type();
