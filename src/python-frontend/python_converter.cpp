@@ -422,8 +422,25 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     return pow_expr;
   }
 
+  // Determine the result type of the binary operation:
+  // If it's a relational operation (e.g., <, >, ==), the result is a boolean type.
+  // Otherwise, it inherits the type of the left-hand side (lhs).
   typet type = (is_relational_op(op)) ? bool_type() : lhs.type();
+
+  // Create a binary expression node with the determined type.
   exprt bin_expr(get_op(op, type), type);
+
+  // Handle type promotion for mixed signed/unsigned comparisons:
+  // If lhs is unsigned and rhs is signed, convert rhs to match lhs's type.
+  // This prevents signed-unsigned comparison issues.
+  if (lhs.type().is_unsignedbv() && rhs.type().is_signedbv())
+  {
+    exprt result("typecast", lhs.type());
+    result.copy_to_operands(rhs);
+    rhs = result;
+  }
+
+  // Add lhs and rhs as operands to the binary expression.
   bin_expr.copy_to_operands(lhs, rhs);
 
   // floor division (//) operation corresponds to an int division with floor rounding

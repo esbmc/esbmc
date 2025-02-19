@@ -76,7 +76,7 @@ void function_call_expr::get_function_type()
 bool function_call_expr::is_nondet_call() const
 {
   std::regex pattern(
-    R"(nondet_(int|uint|char|bool|float)|__VERIFIER_nondet_(int|uint|char|bool|float))");
+    R"(nondet_(int|char|bool|float)|__VERIFIER_nondet_(int|char|bool|float))");
 
   return std::regex_match(function_id_.get_function(), pattern);
 }
