@@ -807,6 +807,9 @@ public:
   /* Options contain all the parameters set by the user to run ESBMC */
   const optionst &options;
 
+  size_t quantifier_counter =
+    0; /// Value used to track how many quantifier symbols were created
+
   bool ptr_foo_inited;
 
   smt_astt null_ptr_ast;

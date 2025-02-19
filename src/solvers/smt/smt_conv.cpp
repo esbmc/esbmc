@@ -1297,7 +1297,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
      * Some solvers have direct support (Z3) but we may do ourselfes
      */
 
-    const expr2tc bound_symbol = symbol2tc(symbol->type, "esbmc_quantifier");
+    const expr2tc bound_symbol = symbol2tc(
+      symbol->type, fmt::format("__ESBMC_quantifier_{}", quantifier_counter++));
     replace_name_in_body(symbol, bound_symbol, predicate);
     a = mk_quantifier(
       is_forall2t(expr), {convert_ast(bound_symbol)}, convert_ast(predicate));
