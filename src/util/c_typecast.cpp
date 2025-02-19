@@ -872,6 +872,17 @@ void c_typecastt::do_typecast(exprt &dest, const typet &type)
 
   if (dest_type.is_array() || dest_type.is_incomplete_array())
   {
+    if (dest.id() == "if")
+    {
+      // Special case: if expression
+      // To typecast the if expression, we need to apply the operations: true and false
+      dest.type() = type;
+
+      do_typecast(dest.op1(), type);
+      do_typecast(dest.op2(), type);
+      return;
+    }
+
     index_exprt index;
     index.array() = dest;
     index.index() = gen_zero(index_type());
