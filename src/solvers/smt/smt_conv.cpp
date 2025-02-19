@@ -180,16 +180,22 @@ void smt_convt::push_ctx()
 
 /* Iterate over "body" expression looking for symbols with the same name
    as lhs. Then, replaces it. */
-void replace_name_in_body(const expr2tc &lhs, expr2tc &body)
+void replace_name_in_body(
+  const expr2tc &lhs,
+  const expr2tc &replacement,
+  expr2tc &body)
 {
+  // TODO: lhs and replacement should be a list of pairs to deal with multiple symbols
   assert(is_symbol2t(lhs));
   if (is_symbol2t(body))
   {
     if (to_symbol2t(body).thename == to_symbol2t(lhs).thename)
-      body = lhs;
+      body = replacement;
+
     return;
   }
-  body->Foreach_operand([lhs](expr2tc e) { replace_name_in_body(lhs, e); });
+  body->Foreach_operand([lhs, replacement](expr2tc &e)
+                        { replace_name_in_body(lhs, replacement, e); });
 }
 
 void smt_convt::pop_ctx()
@@ -320,8 +326,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     // Convert all the arguments and store them in 'args'.
     unsigned int i = 0;
-    expr->foreach_operand(
-      [this, &args, &i](const expr2tc &e) { args[i++] = convert_ast(e); });
+    expr->foreach_operand([this, &args, &i](const expr2tc &e)
+                          { args[i++] = convert_ast(e); });
   }
   }
 
@@ -1286,16 +1292,14 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
      * i1 = 1
      * forall(address-of(i), i1 + 1 > i1)
      *
-     * We actually want to adapt the forall RHS to use the same name from LHS
+     * Even worse though, we need to create a new function (smt) for all bounded symbols
+     * Some solvers have direct support (Z3) but we may do ourselfes
      */
 
-    replace_name_in_body(symbol, predicate);
-    // FIXME: I don't know how to obtain the string "&0#1" yet.
+    const expr2tc bound_symbol = symbol2tc(symbol->type, "esbmc_quantifier");
+    replace_name_in_body(symbol, bound_symbol, predicate);
     a = mk_quantifier(
-      is_forall2t(expr),
-      {to_symbol2t(symbol).get_symbol_name() + "&0#1"},
-      {convert_ast(symbol)},
-      convert_ast(predicate));
+      is_forall2t(expr), {convert_ast(bound_symbol)}, convert_ast(predicate));
     break;
   }
   default:
@@ -2469,26 +2473,30 @@ expr2tc smt_convt::get(const expr2tc &expr)
     if (!is_nil_expr(arr_size) && is_symbol2t(arr_size))
       arr_size = get(arr_size);
 
-    res->type->Foreach_subtype([this](type2tc &t) {
-      if (!is_array_type(t))
-        return;
+    res->type->Foreach_subtype(
+      [this](type2tc &t)
+      {
+        if (!is_array_type(t))
+          return;
 
-      expr2tc &arr_size = to_array_type(t).array_size;
-      if (!is_nil_expr(arr_size) && is_symbol2t(arr_size))
-        arr_size = get(arr_size);
-    });
+        expr2tc &arr_size = to_array_type(t).array_size;
+        if (!is_nil_expr(arr_size) && is_symbol2t(arr_size))
+          arr_size = get(arr_size);
+      });
   }
 
   // Recurse on operands
   bool have_all = true;
-  res->Foreach_operand([this, &have_all](expr2tc &e) {
-    expr2tc new_e;
-    if (e)
-      new_e = get(e);
-    e = new_e;
-    if (!e)
-      have_all = false;
-  });
+  res->Foreach_operand(
+    [this, &have_all](expr2tc &e)
+    {
+      expr2tc new_e;
+      if (e)
+        new_e = get(e);
+      e = new_e;
+      if (!e)
+        have_all = false;
+    });
 
   // And simplify
   if (have_all)

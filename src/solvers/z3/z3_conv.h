@@ -205,9 +205,8 @@ public:
   void print_model() override;
   smt_astt mk_quantifier(
     bool is_forall,
-    std::vector<std::string> names,
-    std::vector<smt_astt> sorts,
-    smt_astt body) override;
+    std::vector<smt_astt> lhs,
+    smt_astt rhs) override;
 
 private:
   void print_smt_formulae(std::ostream &dest);

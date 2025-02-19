@@ -330,16 +330,12 @@ public:
   virtual smt_astt mk_real2int(smt_astt a);
   virtual smt_astt mk_int2real(smt_astt a);
   virtual smt_astt mk_isint(smt_astt a);
-  virtual smt_astt mk_quantifier(
-    bool is_forall,
-    std::vector<std::string> names,
-    std::vector<smt_astt> sorts,
-    smt_astt body)
+  virtual smt_astt
+  mk_quantifier(bool is_forall, std::vector<smt_astt> lhs, smt_astt rhs)
   {
     (void)is_forall;
-    (void)names;
-    (void)sorts;
-    (void)body;
+    (void)lhs;
+    (void)rhs;
     abort();
   }
   virtual smt_astt mk_exists(smt_astt symbols, smt_astt body)
