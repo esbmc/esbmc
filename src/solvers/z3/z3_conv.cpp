@@ -1702,29 +1702,16 @@ smt_astt z3_convt::mk_quantifier(
   std::vector<smt_astt> asts,
   smt_astt body)
 {
-  assert(names.size() == asts.size());
-
-  std::vector<Z3_symbol> symbols;
-  std::vector<Z3_sort> sorts;
-
-  for (unsigned i = 0; i < names.size(); i++)
-  {
-    symbols.push_back(Z3_mk_string_symbol(z3_ctx, names[i].c_str()));
-    sorts.push_back(to_solver_smt_ast<z3_smt_ast>(asts[i])->a.get_sort());
-  }
+  if (is_forall)
+    return new_ast(
+      z3::forall(
+        to_solver_smt_ast<z3_smt_ast>(asts[0])->a,
+        to_solver_smt_ast<z3_smt_ast>(body)->a),
+      body->sort);
 
   return new_ast(
-    z3::to_expr(
-      z3_ctx,
-      Z3_mk_quantifier(
-        z3_ctx,
-        is_forall,
-        0,
-        0,
-        NULL,
-        symbols.size(),
-        sorts.data(),
-        symbols.data(),
-        to_solver_smt_ast<z3_smt_ast>(body)->a)),
+    z3::exists(
+      to_solver_smt_ast<z3_smt_ast>(asts[0])->a,
+      to_solver_smt_ast<z3_smt_ast>(body)->a),
     body->sort);
 }
