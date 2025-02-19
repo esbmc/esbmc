@@ -1,4 +1,4 @@
 CORE
-main
+main.c
 --z3
 ^VERIFICATION SUCCESSFUL$
