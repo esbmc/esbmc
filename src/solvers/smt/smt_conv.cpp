@@ -1256,6 +1256,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   case expr2t::forall_id:
   case expr2t::exists_id:
   {
+    // TODO: We should detect (and forbid) recursive calls to any quantifier (eg., forall i . forall j. i < j).
     // TODO: technically the forall could be a list of symbols
     // TODO: how to support other assertions inside it? e.g., buffer-overflow, arithmetic-overflow, etc...
     expr2tc symbol;
