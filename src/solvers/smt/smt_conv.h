@@ -338,12 +338,6 @@ public:
     (void)rhs;
     abort();
   }
-  virtual smt_astt mk_exists(smt_astt symbols, smt_astt body)
-  {
-    (void)symbols;
-    (void)body;
-    abort();
-  }
 
   /** Create an integer or SBV/UBV sort */
   smt_sortt mk_int_bv_sort(std::size_t width)
