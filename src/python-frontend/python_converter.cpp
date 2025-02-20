@@ -1259,34 +1259,51 @@ void python_converter::get_function_definition(
   // Function return type
   code_typet type;
   const nlohmann::json &return_node = function_node["returns"];
-  if (return_node.contains("id"))
-  {
-    type.return_type() =
-      type_handler_.get_typet(return_node["id"].get<std::string>());
-  }
-  else if (
+
+  if (
     return_node.is_null() ||
-    (return_node.contains("value") && return_node["value"].is_null()))
+    (return_node["_type"] == "Constant" && return_node["value"].is_null()))
   {
     type.return_type() = empty_typet();
   }
-  else if (
-    return_node.contains("value") && return_node["value"]["_type"] == "Name")
+  else if (return_node.contains("id") || return_node["_type"] == "Subscript")
   {
-    // Get type from return statement
-    const auto &return_stmt = get_return_statement(function_node);
-    const auto &json = (is_importing_module) ? imported_module_json : ast_json;
-    const auto &return_var = find_var_decl(
-      return_stmt["value"]["id"].get<std::string>(),
-      function_node["name"].get<std::string>(),
-      json);
+    const nlohmann::json &return_type = (return_node["_type"] == "Subscript")
+                                          ? return_node["value"]["id"]
+                                          : return_node["id"];
+    if (return_type == "list")
+    {
+      const auto &return_stmt = get_return_statement(function_node);
+      if (
+        return_stmt["value"]["_type"] == "Name" ||
+        return_stmt["value"]["_type"] == "Subscript")
+      {
+        const std::string &var_name =
+          (return_stmt["value"]["_type"].get<std::string>() == "Subscript")
+            ? return_stmt["value"]["value"]["id"].get<std::string>()
+            : return_stmt["value"]["id"].get<std::string>();
 
-    assert(!return_var.empty());
+        const auto &return_var = get_var_node(var_name, function_node);
 
-    if (return_var["_type"] == "arg")
-      type.return_type() = type_handler_.get_list_type(return_var);
+        assert(!return_var.empty());
+
+        if (return_var["_type"] == "arg")
+        {
+          if (return_stmt["value"]["_type"] == "Subscript")
+            type.return_type() = type_handler_.get_typet(
+              return_var["annotation"]["slice"]["id"].get<std::string>());
+          else
+            type.return_type() = type_handler_.get_list_type(return_var);
+        }
+        else
+          type.return_type() = type_handler_.get_list_type(return_var["value"]);
+      }
+    }
     else
-      type.return_type() = type_handler_.get_list_type(return_var["value"]);
+    {
+      type.return_type() =
+        type_handler_.get_typet(return_node["id"].get<std::string>());
+    }
   }
   else
   {
@@ -1328,6 +1345,13 @@ void python_converter::get_function_definition(
       arg_type = pointer_typet(empty_typet());
     else
     {
+      if (!element.contains("annotation") || element["annotation"].is_null())
+      {
+        throw std::runtime_error(
+          "All parameters in function \"" + current_func_name_ +
+          "\" must be type annotated");
+      }
+
       if (element["annotation"]["_type"] == "Subscript")
         arg_type = type_handler_.get_list_type(element);
       else
