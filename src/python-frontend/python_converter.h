@@ -127,6 +127,8 @@ private:
 
   symbol_id create_symbol_id(const std::string &filename) const;
 
+  exprt compute_math_expr(const exprt &expr) const;
+
   void get_attributes_from_self(
     const nlohmann::json &method_body,
     struct_typet &clazz);

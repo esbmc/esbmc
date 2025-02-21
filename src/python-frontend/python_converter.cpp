@@ -249,6 +249,51 @@ symbol_id python_converter::create_symbol_id() const
     current_python_file, current_class_name_, current_func_name_);
 }
 
+exprt python_converter::compute_math_expr(const exprt &expr) const
+{
+  auto resolve_symbol = [this](const exprt &operand) -> exprt {
+    if (operand.is_symbol())
+    {
+      symbolt *s = symbol_table_.find_symbol(operand.identifier());
+      assert(s && "Symbol not found in symbol table");
+      return s->value;
+    }
+    return operand;
+  };
+
+  // Resolve operands
+  const exprt lhs = resolve_symbol(expr.operands().at(0));
+  const exprt rhs = resolve_symbol(expr.operands().at(1));
+
+  // Convert to BigInt
+  const BigInt op1 =
+    binary2integer(lhs.value().as_string(), lhs.type().is_signedbv());
+  const BigInt op2 =
+    binary2integer(rhs.value().as_string(), rhs.type().is_signedbv());
+
+  // Perform the math operation
+  BigInt result;
+  if (expr.id() == "+")
+    result = op1 + op2;
+  else if (expr.id() == "-")
+    result = op1 - op2;
+  else if (expr.id() == "*")
+    result = op1 * op2;
+  else if (expr.id() == "/")
+    result = op1 / op2;
+  else
+    throw std::runtime_error("Unsupported math operation");
+
+  // Return the result as a constant expression
+  return constant_exprt(result, lhs.type());
+}
+
+inline bool is_math_expr(const exprt &expr)
+{
+  const std::string &id = expr.id().as_string();
+  return id == "+" || id == "-" || id == "*" || id == "/";
+}
+
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
   auto left = (element.contains("left")) ? element["left"] : element["target"];
@@ -414,6 +459,24 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   // Replace ** operation with the resultant constant.
   if (op == "Pow" || op == "power")
   {
+    if (lhs.is_symbol())
+    {
+      symbolt *s = symbol_table_.find_symbol(lhs.identifier());
+      assert(s);
+      if (!s->value.value().empty())
+        lhs = s->value;
+    }
+    if (rhs.is_symbol())
+    {
+      symbolt *s = symbol_table_.find_symbol(rhs.identifier());
+      assert(s);
+      if (!s->value.value().empty())
+        rhs = s->value;
+    }
+    else if (is_math_expr(rhs))
+    {
+      rhs = compute_math_expr(rhs);
+    }
     BigInt base(
       binary2integer(lhs.value().as_string(), lhs.type().is_signedbv()));
     BigInt exp(
