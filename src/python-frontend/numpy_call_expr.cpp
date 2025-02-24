@@ -2,14 +2,8 @@
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/python_converter.h>
 #include <util/expr.h>
-<<<<<<< HEAD
 #include <util/c_types.h>
 #include <util/message.h>
-=======
-#include <variant>
-
-using value_type = std::variant<int, double>;
->>>>>>> 1e043dacf ([python-frontend][numpy] Handle mixed int/double operations correctly)
 
 numpy_call_expr::numpy_call_expr(
   const symbol_id &function_id,
@@ -19,80 +13,60 @@ numpy_call_expr::numpy_call_expr(
 {
 }
 
-static value_type extract_value(const nlohmann::json &arg)
+static double extract_value(const nlohmann::json &arg)
 {
-    if (!arg.contains("_type"))
+  if (!arg.contains("_type"))
+  {
+    throw std::runtime_error("Invalid JSON: missing _type");
+  }
+
+  if (arg["_type"] == "UnaryOp")
+  {
+    if (!arg.contains("operand") || !arg["operand"].contains("value"))
     {
-        throw std::runtime_error("Invalid JSON: missing _type");
+      throw std::runtime_error("Invalid UnaryOp: missing operand/value");
     }
+    return -arg["operand"]["value"].get<double>();
+  }
 
-    if (arg["_type"] == "UnaryOp")
-    {
-        if (!arg.contains("operand") || !arg["operand"].contains("value"))
-        {
-            throw std::runtime_error("Invalid UnaryOp: missing operand/value");
-        }
-        auto operand = arg["operand"]["value"];
+  if (!arg.contains("value"))
+  {
+    throw std::runtime_error("Invalid JSON: missing value");
+  }
 
-        if (operand.is_number_integer())
-        {
-            return -operand.get<int>();
-        }
-        else if (operand.is_number_float())
-        {
-            return -operand.get<double>();
-        }
-    }
-
-    if (!arg.contains("value"))
-    {
-        throw std::runtime_error("Invalid JSON: missing value");
-    }
-
-    auto value = arg["value"];
-
-    if (value.is_number_integer())
-    {
-        return value.get<int>();
-    }
-    else if (value.is_number_float())
-    {
-        return value.get<double>();
-    }
-
-    throw std::runtime_error("Unknown numeric type in JSON");
+  return arg["value"].get<double>();
 }
 
 template <typename T>
 static auto create_list(int size, T default_value)
 {
-    nlohmann::json list;
-    list["_type"] = "List";
-    for (int i = 0; i < size; ++i)
-    {
-        list["elts"].push_back({{"_type", "Constant"}, {"value", default_value}});
-    }
-    return list;
+  nlohmann::json list;
+  list["_type"] = "List";
+  for (int i = 0; i < size; ++i)
+  {
+    list["elts"].push_back({{"_type", "Constant"}, {"value", default_value}});
+  }
+  return list;
 }
 
 template <typename T>
 static auto create_binary_op(const std::string &op, T lhs, T rhs)
 {
-    nlohmann::json bin_op = {
-        {"_type", "BinOp"},
-        {"left", {{"_type", "Constant"}, {"value", lhs}}},
-        {"op", {{"_type", op}}},
-        {"right", {{"_type", "Constant"}, {"value", rhs}}}};
+  nlohmann::json bin_op = {
+    {"_type", "BinOp"},
+    {"left", {{"_type", "Constant"}, {"value", lhs}}},
+    {"op", {{"_type", op}}},
+    {"right", {{"_type", "Constant"}, {"value", rhs}}}};
 
-    return bin_op;
+  return bin_op;
 }
 
 bool numpy_call_expr::is_math_function() const
 {
-    const std::string &function = function_id_.get_function();
-    return (function == "add") || (function == "subtract") ||
-           (function == "multiply") || (function == "divide") ||
-           (function == "power");
+  const std::string &function = function_id_.get_function();
+  return (function == "add") || (function == "subtract") ||
+         (function == "multiply") || (function == "divide") ||
+         (function == "power");
 }
 
 std::string numpy_call_expr::get_dtype() const
@@ -165,10 +139,10 @@ typet numpy_call_expr::get_typet_from_dtype() const
 
 exprt numpy_call_expr::get() const
 {
-    static const std::unordered_map<std::string, float> numpy_functions = {
-        {"zeros", 0.0}, {"ones", 1.0}};
+  static const std::unordered_map<std::string, float> numpy_functions = {
+    {"zeros", 0.0}, {"ones", 1.0}};
 
-    const std::string &function = function_id_.get_function();
+  const std::string &function = function_id_.get_function();
 
   // Create array from numpy.array()
   if (function == "array")
@@ -187,8 +161,10 @@ exprt numpy_call_expr::get() const
   // Handle math function calls
   if (is_math_function())
   {
-    auto bin_op = create_binary_op(
-      function, call_["args"][0]["value"], call_["args"][1]["value"]);
+    auto lhs = extract_value(call_["args"][0]);
+    auto rhs = extract_value(call_["args"][1]);
+
+    auto bin_op = create_binary_op(function, lhs, rhs);
 
     exprt e = converter_.get_expr(bin_op);
 
@@ -198,11 +174,9 @@ exprt numpy_call_expr::get() const
       typet t = get_typet_from_dtype();
       if (converter_.current_lhs)
       {
-        // Update variable (lhs)
         converter_.current_lhs->type() = t;
         converter_.update_symbol(*converter_.current_lhs);
 
-        // Update rhs expression
         e.type() = converter_.current_lhs->type();
         if (!e.operands().empty())
         {
@@ -233,37 +207,8 @@ exprt numpy_call_expr::get() const
       }
     }
 
-    auto it = numpy_functions.find(function);
-    if (it != numpy_functions.end())
-    {
-        auto list = create_list(call_["args"][0]["value"].get<int>(), it->second);
-        return converter_.get_expr(list);
-    }
+    return e;
+  }
 
-    if (is_math_function())
-    {
-        auto lhs = extract_value(call_["args"][0]);
-        auto rhs = extract_value(call_["args"][1]);
-
-        auto result = std::visit(
-            [&](auto l, auto r) -> nlohmann::json {
-                using LType = decltype(l);
-                using RType = decltype(r);
-
-                if constexpr (std::is_same_v<LType, int> && std::is_same_v<RType, int>)
-                {
-                    return create_binary_op(function, l, r);
-                }
-
-                auto left = std::holds_alternative<int>(lhs) ? static_cast<double>(std::get<int>(lhs)) : std::get<double>(lhs);
-                auto right = std::holds_alternative<int>(rhs) ? static_cast<double>(std::get<int>(rhs)) : std::get<double>(rhs);
-                
-                return create_binary_op(function, left, right);
-            },
-            lhs, rhs);
-
-        return converter_.get_expr(result);
-    }
-
-    throw std::runtime_error("Unsupported NumPy function call: " + function);
+  throw std::runtime_error("Unsupported NumPy function call: " + function);
 }
