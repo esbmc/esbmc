@@ -33,16 +33,12 @@ numpy_call_expr::~numpy_call_expr()
 static value_type extract_value(const nlohmann::json &arg)
 {
   if (!arg.contains("_type"))
-  {
     throw std::runtime_error("Invalid JSON: missing _type");
-  }
 
   if (arg["_type"] == "UnaryOp")
   {
     if (!arg.contains("operand") || !arg["operand"].contains("value"))
-    {
       throw std::runtime_error("Invalid UnaryOp: missing operand/value");
-    }
     auto operand = arg["operand"]["value"];
 
     if (operand.is_number_integer())
@@ -56,9 +52,7 @@ static value_type extract_value(const nlohmann::json &arg)
   }
 
   if (!arg.contains("value"))
-  {
     throw std::runtime_error("Invalid JSON: missing value");
-  }
 
   auto value = arg["value"];
 
@@ -149,9 +143,7 @@ std::string numpy_call_expr::get_dtype() const
     for (const auto &kw : call_["keywords"])
     {
       if (kw["_type"] == "keyword" && kw["arg"] == "dtype")
-      {
         return kw["value"]["attr"];
-      }
     }
   }
   return {};
@@ -177,12 +169,18 @@ size_t numpy_call_expr::get_dtype_size() const
   {
     auto it = dtype_sizes.find(dtype);
     if (it != dtype_sizes.end())
-    {
       return it->second * 8;
-    }
     throw std::runtime_error("Unsupported dtype value: " + dtype);
   }
   return 0;
+}
+
+static size_t count_effective_bits(const std::string &binary)
+{
+  size_t first_one = binary.find('1');
+  if (first_one == std::string::npos)
+    return 1;
+  return binary.size() - first_one;
 }
 
 typet numpy_call_expr::get_typet_from_dtype() const
@@ -280,9 +278,13 @@ T get_constant_value(const nlohmann::json &node)
     T val = node["operand"]["value"].get<T>();
 
     if (op_type == "USub")
+    {
       return -val;
+    }
     else if (op_type == "UAdd")
+    {
       return val;
+    }
     else
     {
       log_error("get_constant_value: Unsupported unary operator '{}'", op_type);
@@ -641,38 +643,9 @@ exprt numpy_call_expr::get()
   // Handle math function calls
   if (is_math_function())
   {
-<<<<<<< HEAD
     broadcast_check(call_["args"]);
-=======
-    auto lhs = extract_value(call_["args"][0]);
-    auto rhs = extract_value(call_["args"][1]);
-
-<<<<<<< HEAD
-    auto bin_op = create_binary_op(function, lhs, rhs);
->>>>>>> 399cfbbe1 ([python-frontend][numpy] update in suport to number negative)
 
     exprt expr = create_expr_from_call();
-=======
-    // Performs binary operation with support for int and double
-    auto result = std::visit(
-        [&](auto l, auto r) -> nlohmann::json {
-            using LType = decltype(l);
-            using RType = decltype(r);
-
-            if constexpr (std::is_same_v<LType, int64_t> && std::is_same_v<RType, int64_t>)
-            {
-                return create_binary_op(function, l, r);
-            }
-
-            double left = std::holds_alternative<int64_t>(lhs) ? static_cast<double>(std::get<int64_t>(lhs)) : std::get<double>(lhs);
-            double right = std::holds_alternative<int64_t>(rhs) ? static_cast<double>(std::get<int64_t>(rhs)) : std::get<double>(rhs);
-
-            return create_binary_op(function, left, right);
-        },
-        lhs, rhs);
-
-    exprt e = converter_.get_expr(result);
->>>>>>> edeaafe76 ([python-frontend][numpy] Updated in operations with number)
 
     auto dtype_size(get_dtype_size());
     if (dtype_size)
@@ -680,45 +653,30 @@ exprt numpy_call_expr::get()
       typet t = get_typet_from_dtype();
       if (converter_.current_lhs)
       {
+        // Update variable (lhs)
         converter_.current_lhs->type() = t;
         converter_.update_symbol(*converter_.current_lhs);
 
-<<<<<<< HEAD
         // Update rhs expression
         expr.type() = converter_.current_lhs->type();
-=======
-        e.type() = converter_.current_lhs->type();
-        if (!e.operands().empty())
-        {
-          e.operands().at(0).type() = e.type();
-          e.operands().at(1).type() = e.type();
-        }
->>>>>>> 399cfbbe1 ([python-frontend][numpy] update in suport to number negative)
 
-<<<<<<< HEAD
         // Update all operands' types safely
         for (auto &operand : expr.operands())
           operand.type() = expr.type();
 
         std::string value_str = expr.value().as_string();
         size_t value_size = count_effective_bits(value_str);
-=======
-        std::string dtype = get_dtype();
-        auto final_value = std::visit([](auto v) -> double { return v; }, lhs) + std::visit([](auto v) -> double { return v; }, rhs);
->>>>>>> edeaafe76 ([python-frontend][numpy] Updated in operations with number)
 
-        if (dtype.find("int") != std::string::npos)
+        if (value_size > dtype_size)
         {
-          int64_t mask = (1LL << dtype_size) - 1;
-          final_value = static_cast<int64_t>(final_value) & mask;
-
-          if (dtype[0] != 'u' && (static_cast<int64_t>(final_value) >> (dtype_size - 1)) & 1)
-          {
-            final_value -= (1LL << dtype_size);
-          }
+          log_warning(
+            "{}:{}: Integer overflow detected in {}() call. Consider using a "
+            "larger integer type.",
+            converter_.current_python_file,
+            call_["end_lineno"].get<int>(),
+            function_id_.get_function());
         }
 
-<<<<<<< HEAD
         if (!expr.value().empty())
         {
           auto length = value_str.length();
@@ -727,55 +685,11 @@ exprt numpy_call_expr::get()
           expr.set(
             "#cformat", std::to_string(std::stoll(value_str, nullptr, 2)));
         }
-=======
-        e.set("#cformat", std::to_string(final_value));
->>>>>>> edeaafe76 ([python-frontend][numpy] Updated in operations with number)
       }
     }
 
-<<<<<<< HEAD
-<<<<<<< HEAD
     return expr;
-  }
-=======
-    auto it = numpy_functions.find(function);
-    if (it != numpy_functions.end())
-    {
-        auto list = create_list(call_["args"][0]["value"].get<int>(), it->second);
-        return converter_.get_expr(list);
-    }
->>>>>>> b1a1714b0 ([python-frontend][numpy] Handle mixed int/double operations correctly)
-
-    if (is_math_function())
-    {
-        auto lhs = extract_value(call_["args"][0]);
-        auto rhs = extract_value(call_["args"][1]);
-
-        auto result = std::visit(
-            [&](auto l, auto r) -> nlohmann::json {
-                using LType = decltype(l);
-                using RType = decltype(r);
-
-                if constexpr (std::is_same_v<LType, int> && std::is_same_v<RType, int>)
-                {
-                    return create_binary_op(function, l, r);
-                }
-
-                auto left = std::holds_alternative<int>(lhs) ? static_cast<double>(std::get<int>(lhs)) : std::get<double>(lhs);
-                auto right = std::holds_alternative<int>(rhs) ? static_cast<double>(std::get<int>(rhs)) : std::get<double>(rhs);
-
-                return create_binary_op(function, left, right);
-            },
-            lhs, rhs);
-
-        return converter_.get_expr(result);
-    }
-
-    throw std::runtime_error("Unsupported NumPy function call: " + function);
-=======
-    return e;
   }
 
   throw std::runtime_error("Unsupported NumPy function call: " + function);
->>>>>>> 399cfbbe1 ([python-frontend][numpy] update in suport to number negative)
 }
