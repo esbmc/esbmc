@@ -1,6 +1,5 @@
 import numpy as np
 
-<<<<<<< HEAD
 x = 2
 y = 3
 z = np.add(x,y)
@@ -24,7 +23,7 @@ assert f[1] == 6
 g = np.add([1,2],[3,4])
 assert g[0] == 4
 assert g[1] == 6
-=======
+
 result_1 = np.add(1.0, 4.0)
 assert result_1 == 5.0
 
@@ -50,7 +49,7 @@ result_8 = np.add(-3.5, -2)
 assert result_8 == -5.5
 
 result_9 = np.add(1, -2)
-assert result_9 == -1 
+assert result_9 == -1
 
 result_10 = np.add(1.0, -2.00)
 assert result_10 == -1.00
@@ -74,8 +73,10 @@ result_16 = np.add(5, 0)
 assert result_16 == 5
 
 result_17 = np.add(-5.0, 0)
-assert result_17 == -5.0 
+assert result_17 == -5.0
 
 result_18 = np.add(0, 0.0)
 assert result_18 == 0.0
->>>>>>> 190bcb6c0 ([regression] Fixed test cases for binary functions in the numpy module of the Python frontend)
+
+result_19 = np.add(127, 1, dtype=np.int8)
+assert result_19 == -128
