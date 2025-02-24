@@ -58,6 +58,14 @@ protected:
     const std::string name,
     const std::string id,
     symbolt &added_symbol);
+  bool get_unbound_funccall(
+    const std::string contractName,
+    code_function_callt &call);
+  void get_static_contract_instance_name(
+    const std::string c_name,
+    std::string &name,
+    std::string &id);
+  void get_static_contract_instance(const std::string c_name, symbolt &sym);
 
   // handle the non-contract definition, including struct/enum/error/event/abstract/...
   bool get_noncontract_defition(nlohmann::json &ast_node);
@@ -312,6 +320,7 @@ protected:
   std::string get_implict_ctor_call_id(const std::string &contract_name);
   bool get_sol_builtin_ref(const nlohmann::json expr, exprt &new_expr);
   void get_temporary_object(exprt &call, exprt &new_expr);
+  bool get_unbound_function(const std::string &c_name, symbolt &sym);
 
   // literal conversion functions
   bool convert_integer_literal(
@@ -349,8 +358,8 @@ protected:
   const nlohmann::json *current_functionDecl;
   const nlohmann::json *current_forStmt;
   const nlohmann::json *current_typeName;
-  //TODO: store multiple exprt and flatten the block later
-  code_blockt current_blockDecl;
+  // store multiple exprt and flatten the block later
+  code_blockt current_backBlockDecl;
   // for tuple
   bool current_lhsDecl;
   bool current_rhsDecl;
