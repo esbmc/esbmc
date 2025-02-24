@@ -195,9 +195,9 @@ exprt python_math::handle_power(exprt lhs, exprt rhs)
   if (exponent < 0)
   {
     log_warning(
-      "ESBMC-Python does not support power expressions with negative "
-      "exponents, treating as symbolic");
-    return from_integer(1, lhs.type());
+      "Handling negative exponents via pow() and returning a floating-point "
+      "value");
+    return handle_power_symbolic(lhs, rhs);
   }
 
   // Handle special cases first
