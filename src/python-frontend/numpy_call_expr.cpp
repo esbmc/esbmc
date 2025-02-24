@@ -226,6 +226,13 @@ exprt numpy_call_expr::get() const
           {
             final_value -= (1LL << dtype_size);
           }
+        
+        log_warning(
+          "{}:{}: Integer overflow detected in {}() call. Consider using a "
+          "larger integer type.",
+          converter_.current_python_file,
+          call_["end_lineno"].get<int>(),
+          function_id_.get_function());
         }
 
         e.set("#cformat", std::to_string(final_value));
