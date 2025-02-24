@@ -4,6 +4,9 @@
 #include <util/expr.h>
 #include <util/c_types.h>
 #include <util/message.h>
+#include <variant>
+
+using value_type = std::variant<int64_t, double>;
 
 numpy_call_expr::numpy_call_expr(
   const symbol_id &function_id,
@@ -13,7 +16,8 @@ numpy_call_expr::numpy_call_expr(
 {
 }
 
-static double extract_value(const nlohmann::json &arg)
+// Extracts numerical values ​​from JSON, supporting int and double
+static value_type extract_value(const nlohmann::json &arg)
 {
   if (!arg.contains("_type"))
   {
@@ -26,7 +30,16 @@ static double extract_value(const nlohmann::json &arg)
     {
       throw std::runtime_error("Invalid UnaryOp: missing operand/value");
     }
-    return -arg["operand"]["value"].get<double>();
+    auto operand = arg["operand"]["value"];
+
+    if (operand.is_number_integer())
+    {
+      return -operand.get<int64_t>();
+    }
+    else if (operand.is_number_float())
+    {
+      return -operand.get<double>();
+    }
   }
 
   if (!arg.contains("value"))
@@ -34,7 +47,18 @@ static double extract_value(const nlohmann::json &arg)
     throw std::runtime_error("Invalid JSON: missing value");
   }
 
-  return arg["value"].get<double>();
+  auto value = arg["value"];
+
+  if (value.is_number_integer())
+  {
+    return value.get<int64_t>();
+  }
+  else if (value.is_number_float())
+  {
+    return value.get<double>();
+  }
+
+  throw std::runtime_error("Unknown numeric type in JSON");
 }
 
 template <typename T>
@@ -112,16 +136,6 @@ size_t numpy_call_expr::get_dtype_size() const
   return 0;
 }
 
-size_t count_effective_bits(const std::string &binary)
-{
-  size_t first_one = binary.find('1');
-  if (first_one == std::string::npos)
-  {
-    return 1;
-  }
-  return binary.size() - first_one;
-}
-
 typet numpy_call_expr::get_typet_from_dtype() const
 {
   std::string dtype = get_dtype();
@@ -164,9 +178,25 @@ exprt numpy_call_expr::get() const
     auto lhs = extract_value(call_["args"][0]);
     auto rhs = extract_value(call_["args"][1]);
 
-    auto bin_op = create_binary_op(function, lhs, rhs);
+    // Performs binary operation with support for int and double
+    auto result = std::visit(
+        [&](auto l, auto r) -> nlohmann::json {
+            using LType = decltype(l);
+            using RType = decltype(r);
 
-    exprt e = converter_.get_expr(bin_op);
+            if constexpr (std::is_same_v<LType, int64_t> && std::is_same_v<RType, int64_t>)
+            {
+                return create_binary_op(function, l, r);
+            }
+
+            double left = std::holds_alternative<int64_t>(lhs) ? static_cast<double>(std::get<int64_t>(lhs)) : std::get<double>(lhs);
+            double right = std::holds_alternative<int64_t>(rhs) ? static_cast<double>(std::get<int64_t>(rhs)) : std::get<double>(rhs);
+
+            return create_binary_op(function, left, right);
+        },
+        lhs, rhs);
+
+    exprt e = converter_.get_expr(result);
 
     auto dtype_size(get_dtype_size());
     if (dtype_size)
@@ -184,26 +214,21 @@ exprt numpy_call_expr::get() const
           e.operands().at(1).type() = e.type();
         }
 
-        std::string value_str = e.value().as_string();
-        size_t value_size = count_effective_bits(value_str);
+        std::string dtype = get_dtype();
+        auto final_value = std::visit([](auto v) -> double { return v; }, lhs) + std::visit([](auto v) -> double { return v; }, rhs);
 
-        if (value_size > dtype_size)
+        if (dtype.find("int") != std::string::npos)
         {
-          log_warning(
-            "{}:{}: Integer overflow detected in {}() call. Consider using a "
-            "larger integer type.",
-            converter_.current_python_file,
-            call_["end_lineno"].get<int>(),
-            function_id_.get_function());
+          int64_t mask = (1LL << dtype_size) - 1;
+          final_value = static_cast<int64_t>(final_value) & mask;
+
+          if (dtype[0] != 'u' && (static_cast<int64_t>(final_value) >> (dtype_size - 1)) & 1)
+          {
+            final_value -= (1LL << dtype_size);
+          }
         }
 
-        if (!e.value().empty())
-        {
-          auto length = value_str.length();
-          e.value(value_str.substr(length - dtype_size));
-          value_str = e.value().as_string();
-          e.set("#cformat", std::to_string(std::stoll(value_str, nullptr, 2)));
-        }
+        e.set("#cformat", std::to_string(final_value));
       }
     }
 

@@ -53,3 +53,6 @@ assert result_17 == -5.0
 
 result_18 = np.add(0, 0.0)
 assert result_18 == 0.0
+
+result_19 = np.add(127, 1, dtype=np.int8)
+assert result_19 == -128

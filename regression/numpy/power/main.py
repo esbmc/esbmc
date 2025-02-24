@@ -8,3 +8,6 @@ assert result2 == 0.5
 
 result3 = np.power(-2, 3)
 assert result3 == -8
+
+result4 = np.power(2,7, dtype=np.int8)
+assert result4 == -128
