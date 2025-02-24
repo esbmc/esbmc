@@ -31,65 +31,46 @@ numpy_call_expr::~numpy_call_expr()
   converter_.build_static_lists = false;
 }
 
-static value_type extract_value(const nlohmann::json &arg)
+static double extract_value(const nlohmann::json &arg)
 {
-    if (!arg.contains("_type"))
+  if (!arg.contains("_type"))
+  {
+    throw std::runtime_error("Invalid JSON: missing _type");
+  }
+
+  if (arg["_type"] == "UnaryOp")
+  {
+    if (!arg.contains("operand") || !arg["operand"].contains("value"))
     {
-        throw std::runtime_error("Invalid JSON: missing _type");
+      throw std::runtime_error("Invalid UnaryOp: missing operand/value");
     }
+    return -arg["operand"]["value"].get<double>();
+  }
 
-    if (arg["_type"] == "UnaryOp")
-    {
-        if (!arg.contains("operand") || !arg["operand"].contains("value"))
-        {
-            throw std::runtime_error("Invalid UnaryOp: missing operand/value");
-        }
-        auto operand = arg["operand"]["value"];
+  if (!arg.contains("value"))
+  {
+    throw std::runtime_error("Invalid JSON: missing value");
+  }
 
-        if (operand.is_number_integer())
-        {
-            return -operand.get<int>();
-        }
-        else if (operand.is_number_float())
-        {
-            return -operand.get<double>();
-        }
-    }
-
-    if (!arg.contains("value"))
-    {
-        throw std::runtime_error("Invalid JSON: missing value");
-    }
-
-    auto value = arg["value"];
-
-    if (value.is_number_integer())
-    {
-        return value.get<int>();
-    }
-    else if (value.is_number_float())
-    {
-        return value.get<double>();
-    }
-
-    throw std::runtime_error("Unknown numeric type in JSON");
+  return arg["value"].get<double>();
 }
 
 template <typename T>
 static auto create_list(int size, T default_value)
 {
-    nlohmann::json list;
-    list["_type"] = "List";
-    for (int i = 0; i < size; ++i)
-    {
-        list["elts"].push_back({{"_type", "Constant"}, {"value", default_value}});
-    }
-    return list;
+  nlohmann::json list;
+  list["_type"] = "List";
+  for (int i = 0; i < size; ++i)
+  {
+    list["elts"].push_back({{"_type", "Constant"}, {"value", default_value}});
+  }
+  return list;
 }
 
 template <typename T>
 static auto create_list(const std::vector<T> &vector)
 {
+<<<<<<< HEAD
   nlohmann::json list;
   list["_type"] = "List";
   for (const auto &v : vector)
@@ -124,13 +105,21 @@ static auto create_binary_op(
     {"left", left},
     {"op", {{"_type", op}}},
     {"right", right}};
+=======
+  nlohmann::json bin_op = {
+    {"_type", "BinOp"},
+    {"left", {{"_type", "Constant"}, {"value", lhs}}},
+    {"op", {{"_type", op}}},
+    {"right", {{"_type", "Constant"}, {"value", rhs}}}};
+>>>>>>> 399cfbbe1 ([python-frontend][numpy] update in suport to number negative)
 
-    return bin_op;
+  return bin_op;
 }
 
 bool numpy_call_expr::is_math_function() const
 {
   const std::string &function = function_id_.get_function();
+<<<<<<< HEAD
   return function == "add" || function == "subtract" ||
          function == "multiply" ||
          (function == "divide" || function == "power" || function == "ceil" ||
@@ -141,6 +130,11 @@ bool numpy_call_expr::is_math_function() const
          function == "arccos" || function == "copysign" ||
          function == "arctan" || function == "dot" || function == "transpose" ||
          function == "det" || function == "matmul";
+=======
+  return (function == "add") || (function == "subtract") ||
+         (function == "multiply") || (function == "divide") ||
+         (function == "power");
+>>>>>>> 399cfbbe1 ([python-frontend][numpy] update in suport to number negative)
 }
 
 std::string numpy_call_expr::get_dtype() const
@@ -217,6 +211,7 @@ bool is_broadcastable(
   const std::vector<int> &shape1,
   const std::vector<int> &shape2)
 {
+<<<<<<< HEAD
   int s1 = shape1.size() - 1;
   int s2 = shape2.size() - 1;
 
@@ -616,6 +611,11 @@ exprt numpy_call_expr::create_expr_from_call()
 
 exprt numpy_call_expr::get()
 {
+=======
+  static const std::unordered_map<std::string, float> numpy_functions = {
+    {"zeros", 0.0}, {"ones", 1.0}};
+
+>>>>>>> 399cfbbe1 ([python-frontend][numpy] update in suport to number negative)
   const std::string &function = function_id_.get_function();
 
   // Create array from numpy.array()
@@ -652,7 +652,14 @@ exprt numpy_call_expr::get()
   // Handle math function calls
   if (is_math_function())
   {
+<<<<<<< HEAD
     broadcast_check(call_["args"]);
+=======
+    auto lhs = extract_value(call_["args"][0]);
+    auto rhs = extract_value(call_["args"][1]);
+
+    auto bin_op = create_binary_op(function, lhs, rhs);
+>>>>>>> 399cfbbe1 ([python-frontend][numpy] update in suport to number negative)
 
     exprt expr = create_expr_from_call();
 
@@ -662,12 +669,20 @@ exprt numpy_call_expr::get()
       typet t = get_typet_from_dtype();
       if (converter_.current_lhs)
       {
-        // Update variable (lhs)
         converter_.current_lhs->type() = t;
         converter_.update_symbol(*converter_.current_lhs);
 
+<<<<<<< HEAD
         // Update rhs expression
         expr.type() = converter_.current_lhs->type();
+=======
+        e.type() = converter_.current_lhs->type();
+        if (!e.operands().empty())
+        {
+          e.operands().at(0).type() = e.type();
+          e.operands().at(1).type() = e.type();
+        }
+>>>>>>> 399cfbbe1 ([python-frontend][numpy] update in suport to number negative)
 
         // Update all operands' types safely
         for (auto &operand : expr.operands())
@@ -697,6 +712,7 @@ exprt numpy_call_expr::get()
       }
     }
 
+<<<<<<< HEAD
 <<<<<<< HEAD
     return expr;
   }
@@ -735,4 +751,10 @@ exprt numpy_call_expr::get()
     }
 
     throw std::runtime_error("Unsupported NumPy function call: " + function);
+=======
+    return e;
+  }
+
+  throw std::runtime_error("Unsupported NumPy function call: " + function);
+>>>>>>> 399cfbbe1 ([python-frontend][numpy] update in suport to number negative)
 }
