@@ -656,24 +656,34 @@ python_converter::find_imported_symbol(const std::string &symbol_id) const
   return nullptr;
 }
 
-symbolt *
-python_converter::find_symbol_in_global_scope(std::string &symbol_id) const
+symbolt *python_converter::find_symbol(const std::string &symbol_id) const
+{
+  if (symbolt *symbol = symbol_table_.find_symbol(symbol_id))
+    return symbol;
+  if (symbolt *symbol = find_symbol_in_global_scope(symbol_id))
+    return symbol;
+  return find_imported_symbol(symbol_id);
+}
+
+symbolt *python_converter::find_symbol_in_global_scope(
+  const std::string &symbol_id) const
 {
   std::size_t class_start_pos = symbol_id.find("@C@");
   std::size_t func_start_pos = symbol_id.find("@F@");
+  std::string sid = symbol_id;
 
   // Remove class name from symbol
   if (class_start_pos != std::string::npos)
-    symbol_id.erase(class_start_pos, func_start_pos - class_start_pos);
+    sid.erase(class_start_pos, func_start_pos - class_start_pos);
 
-  func_start_pos = symbol_id.find("@F@");
-  std::size_t func_end_pos = symbol_id.rfind("@");
+  func_start_pos = sid.find("@F@");
+  std::size_t func_end_pos = sid.rfind("@");
 
   // Remove function name from symbol
   if (func_start_pos != std::string::npos)
-    symbol_id.erase(func_start_pos, func_end_pos - func_start_pos);
+    sid.erase(func_start_pos, func_end_pos - func_start_pos);
 
-  return symbol_table_.find_symbol(symbol_id);
+  return symbol_table_.find_symbol(sid);
 }
 
 bool python_converter::is_imported_module(const std::string &module_name) const
@@ -868,10 +878,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     std::string sid_str = sid.to_string();
 
     symbolt *symbol = nullptr;
-    if (
-      !(symbol = symbol_table_.find_symbol(sid_str)) &&
-      !(symbol = find_symbol_in_global_scope(sid_str)) &&
-      !(symbol = find_imported_symbol(sid_str)))
+    if (!(symbol = find_symbol(sid_str)))
     {
       throw std::runtime_error("Symbol " + sid_str + " not found");
     }

@@ -234,10 +234,7 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
     else
       sid.set_function(list_value["func"]["id"]);
 
-    symbolt *func_symbol =
-      converter_.symbol_table().find_symbol(sid.to_string());
-    if (!func_symbol)
-      func_symbol = converter_.find_imported_symbol(sid.to_string());
+    symbolt *func_symbol = converter_.find_symbol(sid.to_string());
 
     assert(func_symbol);
     return static_cast<code_typet &>(func_symbol->type).return_type();
