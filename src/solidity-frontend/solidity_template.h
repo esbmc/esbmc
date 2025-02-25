@@ -144,8 +144,44 @@ uint256_t byte_concat(uint256_t x, uint256_t y)
 }
 )";
 
+const std::string sol_address = R"(
+  void addr_transfer(uint256_t ether, uint256_t balance)
+  {
+    __ESBMC_assume(balance < ether);
+  }
+  
+  bool addr_send(uint256_t ether, uint256_t balance)
+  {
+    if(balance < ether)
+      return false;
+    return true;
+  }
+  
+  bool addr_call()
+  {
+    return nondet_bool();
+  }
+  
+  bool addr_delegatecall()
+  {
+    return nondet_bool();
+  }
+  
+  bool addr_staticcall()
+  {
+    return nondet_bool();
+  }
+  
+  bool addr_callcodecall()
+  {
+    return nondet_bool();
+  }
+  
+  )";
+  
+
 const std::string sol_funcs =
-  blockhash + gasleft + sol_abi + sol_math + sol_string + sol_byte;
+  blockhash + gasleft + sol_abi + sol_math + sol_string + sol_byte + sol_address;
 
 /// data structure
 
@@ -457,7 +493,87 @@ uint256_t str2int(const char *str)
 }
 )";
 
-const std::string sol_ext_library = sol_itoa + sol_str2hex;
+// get unique random address
+const std::string sol_uqAddr = R"(
+// compromise:
+// - define a relatively large array
+static const unsigned int max_addr_obj_size = 50;
+static address_t sol_addr_array[max_addr_obj_size];
+static void *sol_obj_array[max_addr_obj_size];
+static char* sol_cname_array[max_addr_obj_size];
+static unsigned sol_max_cnt = 0;
+
+int get_addr_array_idx(address_t tgt)
+{
+  for (unsigned int i = 0; i < sol_max_cnt; i++)
+  {
+    if ((address_t)sol_addr_array[i] == (address_t)tgt)
+      return i;
+  }
+  return -1;
+}
+void *get_obj(address_t addr)
+{
+  int idx = get_addr_array_idx(addr);
+  if (idx == -1)
+    // this means it's not previously stored
+    return NULL;
+  else
+    return sol_obj_array[idx];
+}
+void update_addr_obj(address_t addr, void *obj)
+{
+  __ESBMC_assume(obj != NULL);
+  sol_addr_array[sol_max_cnt] = addr;
+  sol_obj_array[sol_max_cnt] = obj;
+  ++sol_max_cnt;
+  if (sol_max_cnt >= max_addr_obj_size)
+    assert(0);
+}
+address_t get_unique_address(void *obj)
+{
+  __ESBMC_assume(obj != NULL);
+  address_t tmp;
+  do
+  {
+    tmp = nondet_long();
+  } while (get_addr_array_idx(tmp) != -1);
+  update_addr_obj(tmp, obj);
+  return tmp;
+}
+void set_cname_array(address_t _addr, char* cname)
+{
+  int tmp = get_addr_array_idx(_addr);
+  // assert(tmp != -1);
+  sol_cname_array[tmp] = cname;
+}
+const char * get_cname(address_t _addr)
+{
+  int tmp = get_addr_array_idx(_addr);
+  // assert(tmp != -1);
+  return sol_cname_array[tmp];
+}
+bool cmp_cname(const char* c_1, const char* c_2)
+{
+  if(strcmp(c_1, c_2) == 0)
+    return true;
+  else
+    return false;
+}
+
+uint256_t update_balance(uint256_t balance, uint256_t val)
+{
+  val = val + (uint256_t)1;
+  if(balance >= val)
+    balance -= val;
+  else
+    balance = (uint256_t)0;
+  return balance;
+}
+)";
+
+
+const std::string sol_ext_library = sol_itoa + sol_str2hex + sol_uqAddr;
 
 const std::string sol_c_library = "extern \"C\" {" + sol_typedef + sol_vars +
                                   sol_funcs + sol_mapping + sol_array +
