@@ -174,6 +174,7 @@ class Preprocessor(ast.NodeTransformer):
 
         # add defaults to dictionary with tuple key (function name, parameter name)
         for i in range(1,len(node.args.defaults)+1):
-            self.functionDefaults[(node.name, node.args.args[-i].arg)] = node.args.defaults[-i].value
+            if isinstance(node.args.defaults[-i],ast.Constant):
+                self.functionDefaults[(node.name, node.args.args[-i].arg)] = node.args.defaults[-i].value
         self.generic_visit(node)
         return node
