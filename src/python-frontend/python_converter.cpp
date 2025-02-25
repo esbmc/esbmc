@@ -482,7 +482,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     BigInt exp(
       binary2integer(rhs.value().as_string(), rhs.type().is_signedbv()));
     constant_exprt pow_expr(power(base, exp), lhs.type());
-    return pow_expr;
+    return std::move(pow_expr);
   }
 
   // Determine the result type of the binary operation:
@@ -1172,7 +1172,7 @@ void python_converter::get_var_assign(
   {
     if (lhs_symbol)
     {
-      if (lhs_type == "str" || lhs_type == "list")
+      if (lhs_type == "str" || lhs_type == "list" || rhs.type().is_array())
       {
         /* When a string is assigned the result of a concatenation, we initially
          * create the LHS type as a zero-size array: "current_element_type = get_typet(lhs_type, type_size);"
@@ -1316,7 +1316,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   if (!else_expr.id_string().empty())
     code.copy_to_operands(else_expr);
 
-  return code;
+  return std::move(code);
 }
 
 void python_converter::get_function_definition(
@@ -1706,7 +1706,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     }
   }
 
-  return block;
+  return std::move(block);
 }
 
 python_converter::python_converter(

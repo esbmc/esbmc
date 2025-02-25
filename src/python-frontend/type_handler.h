@@ -39,6 +39,8 @@ public:
    */
   typet build_array(const typet &sub_type, const size_t size) const;
 
+  std::vector<int> get_array_type_shape(const typet &array_type) const;
+
   /*
    * Creates a typet based on a Python type.
    * @param ast_type The name of the Python type (e.g., "int", "str").

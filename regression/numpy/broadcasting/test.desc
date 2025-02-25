@@ -1,0 +1,4 @@
+CORE
+main.py
+
+ERROR: operands could not be broadcast together with shapes.*

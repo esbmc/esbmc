@@ -275,5 +275,5 @@ exprt function_call_expr::get()
       call.arguments().push_back(arg);
   }
 
-  return call;
+  return std::move(call);
 }

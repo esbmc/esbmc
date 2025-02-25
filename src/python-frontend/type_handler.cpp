@@ -87,6 +87,24 @@ typet type_handler::build_array(const typet &sub_type, const size_t size) const
       size_type()));
 }
 
+std::vector<int> type_handler::get_array_type_shape(const typet &type) const
+{
+  // If the type is not an array, return an empty shape.
+  if (!type.is_array())
+    return {};
+
+  // Since type is an array, cast it to array_typet.
+  const auto &arr_type = static_cast<const array_typet &>(type);
+  std::vector<int> shape{
+    std::stoi(arr_type.size().value().as_string(), nullptr, 2)};
+
+  // Recursively append dimensions from the subtype.
+  auto sub_shape = get_array_type_shape(type.subtype());
+  shape.insert(shape.end(), sub_shape.begin(), sub_shape.end());
+
+  return shape;
+}
+
 // Convert Python/AST types to irep types
 typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   const
