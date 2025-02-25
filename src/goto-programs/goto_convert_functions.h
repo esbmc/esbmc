@@ -18,17 +18,36 @@ public:
 
   void goto_convert();
   void convert_function(symbolt &symbol);
+
+  /**
+   * Ensure that the given type is complete, that is, has a known size. This is done by recursively following
+   * symbol types and replacing them with the value of the referenced type.
+   *
+   * @param type the type to ensure is complete
+   * @return true if the type was changed (i.e., it was incomplete and now is complete)
+   * @return false if the type was already complete
+   */
+  bool ensure_type_is_complete(typet &type);
+  /**
+   * Ensure that all types in the context are complete which are not marked as incomplete.
+   * Then replace all symbol types that are not pointers to symbols with the type they reference.
+   */
   void thrash_type_symbols();
-  void collect_type(const irept &type, typename_sett &set);
-  void collect_expr(const irept &expr, typename_sett &set);
-  void
-  rename_types(irept &type, const symbolt &cur_name_sym, const irep_idt &sname);
-  void
-  rename_exprs(irept &expr, const symbolt &cur_name_sym, const irep_idt &sname);
-  void ensure_type_is_complete(
-    irep_idt name,
-    typename_mapt &typenames,
-    const irep_idt &sname);
+  /**
+   * Visit the given irept and collect all symbol types that are not pointers to symbols.
+   *
+   * @param irept_val the irept to visit
+   * @param to_replace the set of irept pointers to replace
+   */
+  void visit_irept(irept &irept_val, std::set<irept *> &to_replace);
+  /**
+   * Called for every type and subtype of a symbol. If the type is a symbol, it is added to the set of
+   * types to replace.
+   *
+   * @param type the type to visit
+   * @param to_replace the set of irept pointers to replace
+   */
+  void visit_sub_type(irept &type, std::set<irept *> &to_replace);
 
   goto_convert_functionst(
     contextt &_context,

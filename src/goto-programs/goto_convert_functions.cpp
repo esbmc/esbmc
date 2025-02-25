@@ -10,6 +10,8 @@
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>
 
+#define IMPLIES(a, b) (!(a) || (b))
+
 goto_convert_functionst::goto_convert_functionst(
   contextt &_context,
   optionst &_options,
@@ -186,259 +188,122 @@ void goto_convert(
   goto_convert_functions.goto_convert();
 }
 
-void goto_convert_functionst::collect_type(
-  const irept &type,
-  typename_sett &deps)
-{
-  if (type.id() == "pointer")
-    return;
-
-  if (type.id() == "symbol")
-  {
-    assert(type.identifier() != "");
-    deps.insert(type.identifier());
-    return;
-  }
-
-  collect_expr(type, deps);
-}
-
-static bool denotes_thrashable_subtype(const irep_idt &id)
-{
-  return id == "type" || id == "subtype";
-}
-
-void goto_convert_functionst::collect_expr(
-  const irept &expr,
-  typename_sett &deps)
-{
-  if (expr.id() == "pointer")
-    return;
-
-  forall_irep (it, expr.get_sub())
-  {
-    collect_expr(*it, deps);
-  }
-
-  forall_named_irep (it, expr.get_named_sub())
-  {
-    if (denotes_thrashable_subtype(it->first))
-      collect_type(it->second, deps);
-    else
-      collect_expr(it->second, deps);
-  }
-
-  forall_named_irep (it, expr.get_comments())
-  {
-    if (denotes_thrashable_subtype(it->first))
-      collect_type(it->second, deps);
-    else
-      collect_expr(it->second, deps);
-  }
-}
-
-void goto_convert_functionst::rename_types(
+void goto_convert_functionst::visit_sub_type(
   irept &type,
-  const symbolt &cur_name_sym,
-  const irep_idt &sname)
+  std::set<irept *> &to_replace)
 {
+  // Subtypes of pointers that are symbols are not replaced.
   if (type.id() == "pointer")
     return;
 
-  // Some type symbols aren't entirely correct. This is because (in the current
-  // 27_exStbFb test) some type symbols get the module name inserted into the
-  // name -- so int32_t becomes main::int32_t.
-  //
-  // Now this makes entire sense, because int32_t could be something else in
-  // some other file. However, because type symbols aren't squashed at type
-  // checking time (which, you know, might make sense) we now don't know what
-  // type symbol to link "int32_t" up to. So; instead we test to see whether
-  // a type symbol is linked correctly, and if it isn't we look up what module
-  // the current block of code came from and try to guess what type symbol it
-  // should have.
-
-  typet type2;
   if (type.id() == "symbol")
   {
-    if (type.identifier() == sname)
-    {
-      // A recursive symbol -- the symbol we're about to link to is in fact the
-      // one that initiated this chain of renames. This leads to either infinite
-      // loops or segfaults, depending on the phase of the moon.
-      // It should also never happen, but with C++ code it does, because methods
-      // are part of the type, and methods can take a full struct/object as a
-      // parameter, not just a reference/pointer. So, that's a legitimate place
-      // where we have this recursive symbol dependency situation.
-      // The workaround to this is to just ignore it, and hope that it doesn't
-      // become a problem in the future.
-      return;
-    }
+    to_replace.insert(&type);
+    return;
+  }
 
-    if (ns.lookup(type.identifier()))
-    {
-      // If we can just look up the current type symbol, use that.
-      type2 = ns.follow((typet &)type);
-    }
-    else
-    {
-      // Otherwise, try to guess the namespaced type symbol
-      std::string ident =
-        cur_name_sym.module.as_string() + type.identifier().as_string();
+  visit_irept(type, to_replace);
+}
 
-      // Try looking that up.
-      if (ns.lookup(irep_idt(ident)))
+void goto_convert_functionst::visit_irept(
+  irept &irept_val,
+  std::set<irept *> &to_replace)
+{
+  Forall_irep (it, irept_val.get_sub())
+  {
+    visit_irept(*it, to_replace);
+  }
+  auto handle_named_subt = [this, &to_replace](irept::named_subt &sub) {
+    Forall_named_irep (it, sub)
+    {
+      if (it->first == "type" || it->first == "subtype")
       {
-        irept tmptype = type;
-        tmptype.identifier(irep_idt(ident));
-        type2 = ns.follow((typet &)tmptype);
+        visit_sub_type(it->second, to_replace);
       }
       else
       {
-        // And if we fail
-        log_error(
-          "Can't resolve type symbol {} at symbol squashing time", ident);
-        abort();
+        visit_irept(it->second, to_replace);
       }
     }
-
-    type = type2;
-    return;
-  }
-
-  rename_exprs(type, cur_name_sym, sname);
+  };
+  handle_named_subt(irept_val.get_named_sub());
+  handle_named_subt(irept_val.get_comments());
 }
 
-void goto_convert_functionst::rename_exprs(
-  irept &expr,
-  const symbolt &cur_name_sym,
-  const irep_idt &sname)
+bool goto_convert_functionst::ensure_type_is_complete(typet &type)
 {
-  if (expr.id() == "pointer")
-    return;
-
-  Forall_irep (it, expr.get_sub())
-    rename_exprs(*it, cur_name_sym, sname);
-
-  Forall_named_irep (it, expr.get_named_sub())
-  {
-    if (denotes_thrashable_subtype(it->first))
-    {
-      rename_types(it->second, cur_name_sym, sname);
-    }
-    else
-    {
-      rename_exprs(it->second, cur_name_sym, sname);
-    }
-  }
-
-  Forall_named_irep (it, expr.get_comments())
-    rename_exprs(it->second, cur_name_sym, sname);
-}
-
-/**
- * Return true if the type is complete, that is, its size is known.
- * The size of an infinitely sized array is considered known while the size of
- * a symbolic type (symbolt) is considered unknown.
- *
- * @param type The type to check
- * @return True if the type is complete, false otherwise
- */
-static bool is_complete_type(const typet &type)
-{
+  bool changed = false;
   if (type.is_struct() || type.is_union())
   {
-    const struct_union_typet &su = to_struct_union_type(type);
-    return std::all_of(
-      su.components().begin(),
-      su.components().end(),
-      [](const struct_union_typet::componentt &c) {
-        return is_complete_type(c.type());
-      });
+    for (auto &comp : to_struct_union_type(type).components())
+    {
+      changed |= ensure_type_is_complete(comp.type());
+    }
   }
-  if (
+  else if (type.is_array() || type.is_vector())
+  {
+    changed |= ensure_type_is_complete(type.subtype());
+  }
+  else if (
     type.is_signedbv() || type.is_unsignedbv() || type.is_fixedbv() ||
     type.is_floatbv() || type.is_pointer() || type.is_bool())
   {
-    return true;
+    // already complete
   }
-  if (type.is_array())
+  else if (type.is_symbol())
   {
-    return is_complete_type(to_array_type(type).subtype());
-  }
-  return false;
-}
-
-void goto_convert_functionst::ensure_type_is_complete(
-  irep_idt name,
-  typename_mapt &typenames,
-  const irep_idt &sname)
-{
-  // If this type doesn't depend on anything, no need to rename anything.
-  typename_mapt::iterator it = typenames.find(name);
-  assert(it != typenames.end());
-  std::set<irep_idt> &deps = it->second;
-  if (deps.size() == 0)
-    return;
-
-  // Iterate over our dependencies ensuring they are complete.
-  for (const auto &dep : deps)
-  {
-    const symbolt *s = context.find_symbol(dep);
+    const auto &symbol = to_symbol_type(type);
+    symbolt *s = context.find_symbol(symbol.get_identifier());
+    assert(s);
     assert(s->is_type);
-    if (!is_complete_type(s->type))
-      ensure_type_is_complete(dep, typenames, sname);
+    ensure_type_is_complete(s->type);
+    type = s->type;
+    changed |= true;
   }
-
-  // And finally perform renaming.
-  symbolt *s = context.find_symbol(name);
-  rename_types(s->type, *s, sname);
-  assert(is_complete_type(s->type));
+  else
+  {
+    log_error("Unexpected type: {}", type.pretty());
+    abort();
+  }
+  return changed;
 }
 
 void goto_convert_functionst::thrash_type_symbols()
 {
-  // This function has one purpose: remove as many type symbols as possible.
-  // This is easy enough by just following each type symbol that occurs and
-  // replacing it with the value of the type name. However, if we have a pointer
-  // in a struct to itself, this breaks down. Therefore, don't rename types of
-  // pointers; they have a type already; they're pointers.
+  // 1. Ensure that all types in the context are complete.
 
-  // Collect a list of all type names. This is required before this entire
-  // thing has no types, and there's no way (in C++ converted code at least)
-  // to decide what name is a type or not.
-  typename_sett names;
-  context.foreach_operand([this, &names](const symbolt &s) {
-    collect_expr(s.value, names);
-    collect_type(s.type, names);
-  });
-
-  // Try to compute their dependencies.
-
-  typename_mapt typenames;
-  context.foreach_operand([this, &names, &typenames](const symbolt &s) {
-    if (names.find(s.id) != names.end())
+  context.Foreach_operand([this](symbolt &s) {
+    if (s.is_type)
     {
-      typename_sett list;
-      collect_expr(s.value, list);
-      collect_type(s.type, list);
-      typenames[s.id] = list;
+      // if the type has no "incomplete" flag, it should be complete
+      if (!s.type.get_bool(irept::a_incomplete))
+      {
+        ensure_type_is_complete(s.type);
+        assert(!ensure_type_is_complete(s.type)); // should be complete now
+      }
     }
   });
 
-  // Now, repeatedly rename all types until they are all complete.
-  // When we encounter a type that depends on unresolved symbols the type is
-  // incomplete. Make the dependencies complete, then include them into this type.
-  // This means that we recurse to whatever depth of nested types the user
-  // has. With at least a meg of stack, I doubt that's really a problem.
-  for (auto &[type_name, dependencies] : typenames)
-  {
-    ensure_type_is_complete(type_name, typenames, type_name);
-    dependencies.clear();
-  }
-
-  // And now all the types are complete, rename types in all existing code.
-  context.Foreach_operand([this](symbolt &s) {
-    rename_types(s.type, s, s.id);
-    rename_exprs(s.value, s, s.id);
+  // 2. Visit all irepts to collect all symbol types that are not pointers to symbols.
+  // (Pointers to symbols are not replaced, because we would get problems with recursive types (via pointers).)
+  // We have to collect them first, because we cannot replace them while iterating over the context.
+  // This is because it would lead to infinite recursion in the case of recursive types.
+  std::set<irept *> to_replace;
+  context.Foreach_operand([this, &to_replace](symbolt &s) {
+    visit_irept(s.value, to_replace);
+    visit_sub_type(s.type, to_replace);
   });
+
+  // 3. Replace the collected symbol types with the type they reference.
+  for (const auto type : to_replace)
+  {
+    assert(!type->identifier().empty());
+    symbolt *s = context.find_symbol(type->identifier());
+    assert(s);
+    assert(s->is_type);
+    assert(IMPLIES(
+      !s->type.get_bool(irept::a_incomplete),
+      !ensure_type_is_complete(s->type)));
+    *type = s->type;
+  }
 }
