@@ -4,6 +4,7 @@
 #include <util/expr_util.h>
 #include <irep2/irep2.h>
 #include <util/message.h>
+#include <util/arith_tools.h>
 
 /**
  * @brief To make the counterexample trace complete in "--function" mode
@@ -26,4 +27,9 @@ protected:
     std::string name,
     std::string id,
     locationt location);
+  bool assign_nondet(
+    const exprt &arg,
+    goto_programt &goto_program,
+    goto_programt::instructiont::targett &it,
+    locationt l);
 };
