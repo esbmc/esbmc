@@ -89,10 +89,10 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "force to verify every function, even it's an unreachable "
      "internal/private function"},
-    {"unbound", NULL, "model external function calls as arbitrary behavior (default)"},
+    {"unbound", NULL, "model external function calls as arbitrary behavior"},
     {"bound",
      NULL,
-     "model inter-contract function calls within a bounded system"}}},
+     "model inter-contract function calls within a bounded system (default)"}}},
 #endif
   {"Frontend",
    {{"include,I",

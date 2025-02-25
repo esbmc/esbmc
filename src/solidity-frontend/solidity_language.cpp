@@ -34,7 +34,7 @@ solidity_languaget::solidity_languaget()
   smart_contract = sol;
 
   const std::string unbound = config.options.get_option("unbound");
-  if (unbound.empty())
+  if (!unbound.empty())
     is_bound = false;
   else
     is_bound = true;

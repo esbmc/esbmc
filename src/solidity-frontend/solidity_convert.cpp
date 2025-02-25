@@ -30,6 +30,7 @@ solidity_convertert::solidity_convertert(
     current_functionDecl(nullptr),
     current_forStmt(nullptr),
     current_typeName(nullptr),
+    current_frontBlockDecl(code_blockt()),
     current_backBlockDecl(code_blockt()),
     current_lhsDecl(false),
     current_rhsDecl(false),
@@ -341,6 +342,10 @@ void solidity_convertert::populate_auxilary_vars()
 
 bool solidity_convertert::convert_ast_nodes(const nlohmann::json &contract_def)
 {
+  // parse constructor
+  if (get_constructor(contract_def, current_contractName))
+    return true;
+
   size_t index = 0;
   nlohmann::json ast_nodes = contract_def["nodes"];
   for (nlohmann::json::iterator itr = ast_nodes.begin(); itr != ast_nodes.end();
@@ -357,7 +362,7 @@ bool solidity_convertert::convert_ast_nodes(const nlohmann::json &contract_def)
       node_name.c_str(),
       node_type.c_str());
 
-    // we first handle non-functional declaration,
+    // handle non-functional declaration,
     // due to that the vars/struct might be mentioned in the constructor
     exprt dummy_decl;
     if (get_non_function_decl(ast_node, dummy_decl))
@@ -1163,10 +1168,6 @@ bool solidity_convertert::get_contract_definition(const std::string &c_name)
       if (convert_ast_nodes(c_node))
         return true;
 
-      // get constructor
-      if (get_constructor(c_node, current_contractName))
-        return true;
-
       // initialize state variable
       if (move_initializer_to_ctor(current_contractName))
         return true;
@@ -1637,7 +1638,10 @@ bool solidity_convertert::get_constructor(
 
   // check if we need to add implicit constructor
   if (add_implicit_constructor(contract_name))
+  {
+    log_error("Failed to add implicit constructor");
     return true;
+  }
 
   return false;
 }
@@ -1671,6 +1675,26 @@ void solidity_convertert::get_temporary_object(exprt &call, exprt &new_expr)
   new_expr = call;
 }
 
+bool solidity_convertert::get_unbound_expr(
+  const nlohmann::json expr,
+  exprt &new_expr)
+{
+  std::string c_name;
+  if (get_current_contract_name(expr, c_name))
+    return true;
+  if (c_name.empty())
+  {
+    log_error("Cannot get current contract name");
+    abort();
+  }
+  code_function_callt func_call;
+  if (get_unbound_funccall(c_name, func_call))
+    return true;
+
+  new_expr = func_call;
+  return false;
+}
+
 // construct the unbound verification harness
 bool solidity_convertert::get_unbound_function(
   const std::string &c_name,
@@ -1702,7 +1726,10 @@ bool solidity_convertert::get_unbound_function(
     // 1.2 get constructor id
     std::string ctor_id;
     if (get_ctor_call_id(c_name, ctor_id))
+    {
+      log_error("Cannot get constructor id");
       return true;
+    }
 
     // 1.3 get static contract instance
     symbolt added_ctor_symbol;
@@ -1764,7 +1791,10 @@ bool solidity_convertert::get_unbound_function(
       // find function definition json node
       nlohmann::json decl_ref;
       if (get_func_decl_ref(func_id, decl_ref))
+      {
+        log_error("Cannot get function definition reference");
         return true;
+      }
 
       if (decl_ref.empty())
       {
@@ -3351,6 +3381,38 @@ bool solidity_convertert::get_expr(
 
     break;
   }
+  case SolidityGrammar::ExpressionT::CallOptionsExprClass:
+  {
+    // e.g.
+    // - address(tmp).call{gas: 1000000, value: 1 ether}(abi.encodeWithSignature("register(string)", "MyName"));
+    const nlohmann::json &callee_expr_json = expr["expression"];
+    assert(
+      callee_expr_json.contains("nodeType") &&
+      callee_expr_json["nodeType"] == "MemberAccess");
+
+    // TODO: handle the ether transfer
+
+    nlohmann::json args = nullptr;
+    if (literal_type != nullptr && literal_type != empty_json)
+      args = literal_type;
+    else if (expr.contains("arguments"))
+      args = expr["arguments"];
+    if (get_expr(callee_expr_json, args, new_expr))
+      return true;
+
+    // do ether transfer
+    //!TODO: fixme
+    if (expr.contains("options") && expr["options"].size() > 0)
+    {
+      exprt ethers;
+      if (get_expr(
+            expr["options"][0], expr["options"][0]["typeDescriptions"], ethers))
+        return true;
+      change_balance(current_contractName, ethers);
+    }
+
+    break;
+  }
   case SolidityGrammar::ExpressionT::CallExprClass:
   {
     side_effect_expr_function_callt call;
@@ -3455,6 +3517,13 @@ bool solidity_convertert::get_expr(
       }
       case SolidityGrammar::FunctionDef:
       {
+        if (!is_bound)
+        {
+          if (get_unbound_expr(expr, new_expr))
+            return true;
+          break;
+        }
+
         // e.g. x.func()
         // x    --> base
         // func --> comp
@@ -3562,6 +3631,13 @@ bool solidity_convertert::get_expr(
     // * we had ruled out all the special cases
     // * we now confirm it is called by aother contract inside current contract
     // * func() ==> current_func_this.func(&current_func_this);
+    if (!is_bound)
+    {
+      if (get_unbound_expr(expr, new_expr))
+        return true;
+      break;
+    }
+
     exprt base;
     assert(current_functionDecl);
     if (get_func_decl_this_ref(*current_functionDecl, base))
@@ -4434,7 +4510,11 @@ bool solidity_convertert::get_binary_operator_expr(
       get_string_assignment(lhs, rhs, new_expr);
       return false;
     }
-
+    else if (rt.is_code())
+    {
+      rt.dump();
+      abort();
+    }
     new_expr = side_effect_exprt("assign", t);
     break;
   }
@@ -8524,4 +8604,51 @@ bool solidity_convertert::is_low_level_call(const std::string &name)
     return true;
 
   return false;
+}
+
+/**
+ * val++; // to reflect gas
+ * if(this_bal> val)
+ *   this_bal -= val
+ * else
+ *   this_bal = 0;
+ */
+void solidity_convertert::change_balance(
+  const std::string cname,
+  const exprt &value)
+{
+  // get balance
+  std::string id = "sol:@C@" + cname + "@balance";
+  if (context.find_symbol(id) == nullptr)
+  {
+    log_error("cannot find balance");
+    abort();
+  }
+  exprt bal = symbol_expr(*context.find_symbol(id));
+
+  exprt this_expr;
+  assert(current_functionDecl);
+  if (get_func_decl_this_ref(*current_functionDecl, this_expr))
+  {
+    log_error("cannot get this pointer");
+    abort();
+  }
+  exprt this_bal = member_exprt(this_expr, bal.name(), bal.type());
+
+  side_effect_expr_function_callt _update_balance;
+  typet t = unsignedbv_typet(256);
+  get_library_function_call_no_params(
+    "update_balance",
+    "c:@F@update_balance",
+    t,
+    this_bal.location(),
+    _update_balance);
+  _update_balance.arguments().push_back(this_bal);
+  _update_balance.arguments().push_back(value);
+
+  exprt _assign = side_effect_exprt("assign", t);
+  _assign.copy_to_operands(this_bal, _update_balance);
+
+  convert_expression_to_code(_assign);
+  current_frontBlockDecl.operands().push_back(_assign);
 }
