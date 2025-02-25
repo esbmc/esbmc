@@ -306,6 +306,7 @@ protected:
     const nlohmann::json &type_descriptor,
     const nlohmann::json &dyn_array_node);
   bool is_mapping(const nlohmann::json &ast_node);
+  void change_balance(const std::string cname, const exprt &value);
 
   void get_default_symbol(
     symbolt &symbol,
@@ -321,6 +322,7 @@ protected:
   bool get_sol_builtin_ref(const nlohmann::json expr, exprt &new_expr);
   void get_temporary_object(exprt &call, exprt &new_expr);
   bool get_unbound_function(const std::string &c_name, symbolt &sym);
+  bool get_unbound_expr(const nlohmann::json expr, exprt &new_expr);
 
   // literal conversion functions
   bool convert_integer_literal(
@@ -358,7 +360,8 @@ protected:
   const nlohmann::json *current_functionDecl;
   const nlohmann::json *current_forStmt;
   const nlohmann::json *current_typeName;
-  // store multiple exprt and flatten the block later
+  // store multiple exprt and flatten the block
+  code_blockt current_frontBlockDecl;
   code_blockt current_backBlockDecl;
   // for tuple
   bool current_lhsDecl;
