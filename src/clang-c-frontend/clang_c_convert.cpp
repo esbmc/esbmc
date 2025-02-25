@@ -2873,7 +2873,6 @@ void clang_c_convertert::rewrite_builtin_ref(
 {
   static const std::list<std::string> builtins_to_rewrite = {
     "__builtin_malloc",
-    "__builtin_memcpy",
     "__builtin_memmove",
     "__builtin_strcpy",
     "__builtin_free",
