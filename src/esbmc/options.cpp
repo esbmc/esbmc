@@ -72,6 +72,9 @@ const struct group_opt_templ all_cmd_options[] = {
      {"python",
       boost::program_options::value<std::string>()->value_name("path"),
       "Python interpreter binary to use (searched in $PATH; default: python)"},
+     {"override-return-annotation",
+      NULL,
+      "Override return annotation with inferred type"},
    }},
 #endif
 #ifdef ENABLE_SOLIDITY_FRONTEND

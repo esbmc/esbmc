@@ -3,15 +3,18 @@
 
 #include <stdlib.h>
 
-namespace std {
-
+namespace std
+{
 using ::strtol;
-using ::strtoul;
 using ::strtoll;
+using ::strtoul;
 using ::strtoull;
 
-using ::strtof;
 using ::strtod;
+using ::strtof;
 using ::strtold;
 
-}
+#if __cplusplus >= 201703L
+using ::aligned_alloc;
+#endif
+} // namespace std

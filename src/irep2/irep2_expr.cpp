@@ -113,6 +113,8 @@ static const char *expr_names[] = {
   "signbit",
   "concat",
   "extract",
+  "forall",
+  "exists",
 };
 // If this fires, you've added/removed an expr id, and need to update the list
 // above (which is ordered according to the enum list)

@@ -1,5 +1,5 @@
 CORE
 dynamic_array_oob_simple.solast
---function dyn_array_oob_simple --sol dynamic_array_oob_simple.sol
+--function dyn_array_oob_simple --sol dynamic_array_oob_simple.sol --incremental-bmc 
 .*line 7 function dyn_array_oob_simple$
 ^VERIFICATION FAILED$

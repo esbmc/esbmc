@@ -24,8 +24,8 @@ class Preprocessor(ast.NodeTransformer):
     #   has_next:bool = ESBMC_range_has_next_(1, 5, 1) # ESBMC_range_has_next_ parameters copied from range call
     #   while has_next == True:
     #     print(start)
-    #   start = ESBMC_range_next_(start, 1)
-    #   has_next = ESBMC_range_has_next_(start, 5, 1)
+    #     start = ESBMC_range_next_(start, 1)
+    #     has_next = ESBMC_range_has_next_(start, 5, 1)
 
     def visit_For(self, node):
         # Transformation from for to while if the iterator is range

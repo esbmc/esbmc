@@ -170,7 +170,7 @@ exprt function_call_builder::build() const
       code_typet code_type;
       if (is_len_call(function_id))
       {
-        code_type.return_type() = int_type();
+        code_type.return_type() = long_long_int_type();
         code_type.arguments().push_back(pointer_typet(empty_typet()));
       }
 

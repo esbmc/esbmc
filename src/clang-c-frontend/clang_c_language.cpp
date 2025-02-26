@@ -441,6 +441,17 @@ void __VERIFIER_atomic_end();
 /* Causes a verification error when its call is reachable; internal use in math
  * models */
 void __ESBMC_unreachable();
+/* Quantifiers
+ * Right now we only support one element and they transform the symbol into a nondet one (for the closure)
+ * For example:
+ *
+ * int i = 0;
+ * __ESBMC_forall(&i, i < 0);
+ *
+ * This will return false, because 'i' became a local variable i.e, it means "forall i \in [min(int), (max(int))] . i < 0" */
+
+_Bool __ESBMC_forall(void*, _Bool);
+_Bool __ESBMC_exists(void*, _Bool);
     )";
 
   if (config.ansi_c.cheri)

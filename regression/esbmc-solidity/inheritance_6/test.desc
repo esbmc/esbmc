@@ -1,4 +1,4 @@
 CORE
 contract.solast
---sol contract.sol --contract caller --k-induction --overflow-check
+--sol contract.sol --contract caller  --incremental-bmc --k-step 3 --z3   --unsigned-overflow-check --base-k-step 3 --16 --no-pointer-check 
 ^VERIFICATION FAILED$

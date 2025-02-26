@@ -1210,8 +1210,9 @@ bool z3_convt::get_bool(smt_astt a)
     res = false;
     break;
   default:
-    log_error("Can't get boolean value from Z3");
-    abort();
+    // Note: quantifiers may result in undefined values
+    log_warning("Can't get boolean value from Z3. Returning false");
+    res = false;
   }
 
   return res;
@@ -1694,4 +1695,21 @@ smt_astt z3_convt::mk_smt_fpbv_abs(smt_astt op)
     z3::to_expr(
       z3_ctx, Z3_mk_fpa_abs(z3_ctx, to_solver_smt_ast<z3_smt_ast>(op)->a)),
     op->sort);
+}
+
+smt_astt
+z3_convt::mk_quantifier(bool is_forall, std::vector<smt_astt> lhs, smt_astt rhs)
+{
+  if (is_forall)
+    return new_ast(
+      z3::forall(
+        to_solver_smt_ast<z3_smt_ast>(lhs[0])->a,
+        to_solver_smt_ast<z3_smt_ast>(rhs)->a),
+      rhs->sort);
+
+  return new_ast(
+    z3::exists(
+      to_solver_smt_ast<z3_smt_ast>(lhs[0])->a,
+      to_solver_smt_ast<z3_smt_ast>(rhs)->a),
+    rhs->sort);
 }

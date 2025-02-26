@@ -330,6 +330,14 @@ public:
   virtual smt_astt mk_real2int(smt_astt a);
   virtual smt_astt mk_int2real(smt_astt a);
   virtual smt_astt mk_isint(smt_astt a);
+  virtual smt_astt
+  mk_quantifier(bool is_forall, std::vector<smt_astt> lhs, smt_astt rhs)
+  {
+    (void)is_forall;
+    (void)lhs;
+    (void)rhs;
+    abort();
+  }
 
   /** Create an integer or SBV/UBV sort */
   smt_sortt mk_int_bv_sort(std::size_t width)
@@ -792,6 +800,9 @@ public:
   const namespacet &ns;
   /* Options contain all the parameters set by the user to run ESBMC */
   const optionst &options;
+
+  size_t quantifier_counter =
+    0; /// Value used to track how many quantifier symbols were created
 
   bool ptr_foo_inited;
 

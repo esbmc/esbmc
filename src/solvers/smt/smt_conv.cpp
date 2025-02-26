@@ -1,3 +1,4 @@
+#include "irep2/irep2_expr.h"
 #include <iomanip>
 #include <set>
 #include <solvers/prop/literal.h>
@@ -175,6 +176,27 @@ void smt_convt::push_ctx()
   live_asts_sizes.push_back(live_asts.size());
 
   ctx_level++;
+}
+
+/* Iterate over "body" expression looking for symbols with the same name
+   as lhs. Then, replaces it. */
+void replace_name_in_body(
+  const expr2tc &lhs,
+  const expr2tc &replacement,
+  expr2tc &body)
+{
+  // TODO: lhs and replacement should be a list of pairs to deal with multiple symbols
+  assert(is_symbol2t(lhs));
+  if (is_symbol2t(body))
+  {
+    if (to_symbol2t(body).thename == to_symbol2t(lhs).thename)
+      body = replacement;
+
+    return;
+  }
+  body->Foreach_operand([lhs, replacement](expr2tc &e) {
+    replace_name_in_body(lhs, replacement, e);
+  });
 }
 
 void smt_convt::pop_ctx()
@@ -1229,6 +1251,58 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     */
     const code_comma2t &cm = to_code_comma2t(expr);
     a = convert_ast(cm.side_2);
+    break;
+  }
+  case expr2t::forall_id:
+  case expr2t::exists_id:
+  {
+    // TODO: We should detect (and forbid) recursive calls to any quantifier (eg., forall i . forall j. i < j).
+    // TODO: technically the forall could be a list of symbols
+    // TODO: how to support other assertions inside it? e.g., buffer-overflow, arithmetic-overflow, etc...
+    expr2tc symbol;
+    expr2tc predicate;
+
+    if (is_forall2t(expr))
+    {
+      symbol = to_forall2t(expr).side_1;
+      predicate = to_forall2t(expr).side_2;
+    }
+    else
+    {
+      symbol = to_exists2t(expr).side_1;
+      predicate = to_exists2t(expr).side_2;
+    }
+
+    // We only want expressions of typecast(address_of(symbol)).
+    if (is_typecast2t(symbol) && is_address_of2t(to_typecast2t(symbol).from))
+      symbol = to_address_of2t(to_typecast2t(symbol).from).ptr_obj;
+
+    if (!is_symbol2t(symbol))
+    {
+      log_error("Can only use quantifiers with one symbol");
+      expr->dump();
+      abort();
+    }
+
+    /* A bit of spaghetti here: the RHS might have different names due to SSA magic.
+     * int i = 0;
+     * i = 1;
+     * forall(&i . i + 1 > i)
+     *
+     * We are mixing references and values so "i" has different meanings:
+     * i0 = 0
+     * i1 = 1
+     * forall(address-of(i), i1 + 1 > i1)
+     *
+     * Even worse though, we need to create a new function (smt) for all bounded symbols
+     * Some solvers have direct support (Z3) but we may do ourselfes
+     */
+
+    const expr2tc bound_symbol = symbol2tc(
+      symbol->type, fmt::format("__ESBMC_quantifier_{}", quantifier_counter++));
+    replace_name_in_body(symbol, bound_symbol, predicate);
+    a = mk_quantifier(
+      is_forall2t(expr), {convert_ast(bound_symbol)}, convert_ast(predicate));
     break;
   }
   default:
