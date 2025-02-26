@@ -12,10 +12,15 @@
 /* delegates to math.h in the C++ headers */
 #include <math.h>
 #include <type_traits>
+#include <stdlib.h>
 
 namespace std
 {
 
+inline int abs(int num)
+{
+  return ::abs(num);
+}
 inline float abs(float num)
 {
   return ::fabsf(num);
