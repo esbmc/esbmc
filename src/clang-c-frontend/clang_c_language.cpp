@@ -378,10 +378,6 @@ _Bool __ESBMC_is_dynamic[1];
 __attribute__((annotate("__ESBMC_inf_size")))
 __SIZE_TYPE__ __ESBMC_alloc_size[1];
 
-// for argc & argv
-__attribute__((annotate("__ESBMC_inf_size"))) 
-char __ESBMC_inf_str[1];
-
 // Get object size
 __SIZE_TYPE__ __ESBMC_get_object_size(const void *);
 
@@ -441,7 +437,7 @@ void __VERIFIER_error();
 void __VERIFIER_assume(int);
 void __VERIFIER_atomic_begin();
 void __VERIFIER_atomic_end();
-void __ESBMC_malloc_argv();
+char** ESBMC_malloc_argv(int);
 
 /* Causes a verification error when its call is reachable; internal use in math
  * models */

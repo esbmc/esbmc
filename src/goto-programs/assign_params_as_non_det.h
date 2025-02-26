@@ -32,9 +32,4 @@ protected:
     goto_programt &goto_program,
     goto_programt::instructiont::targett &it,
     locationt l);
-  void do_malloc(
-    const exprt &lhs,
-    const exprt &function,
-    const exprt::operandst &arguments,
-    goto_programt &dest);
 };

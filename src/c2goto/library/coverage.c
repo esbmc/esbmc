@@ -1,12 +1,15 @@
+#include <stdio.h>
 #include <stdlib.h>
 
-void __ESBMC_malloc_argv(int argc, char **argv)
+// for argc & argv
+__attribute__((annotate("__ESBMC_inf_size"))) char __ESBMC_inf_str[1];
+char **ESBMC_malloc_argv(int argc)
 {
 __ESBMC_HIDE:;
-  char **argv_copy = malloc((argc + 1) * sizeof(char *));
+  char **argv_copy = (char **)malloc((argc + 1) * sizeof(char *));
   for (int i = 0; i <= argc; i++)
   {
-      argv_copy[i] =__ESBMC_inf_str;
+    argv_copy[i] = __ESBMC_inf_str;
   }
-  argv = argv_copy;
+  return argv_copy;
 }

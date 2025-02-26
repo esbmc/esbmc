@@ -1,59 +1,4 @@
 #include <goto-programs/assign_params_as_non_det.h>
-#include "goto-programs/builtin_functions.cpp"
-
-void assign_params_as_non_det::do_malloc(
-  const exprt &lhs,
-  const exprt &function,
-  const exprt::operandst &arguments,
-  goto_programt &dest)
-{
-  namespacet ns(context);
-
-  std::string func = "malloc";
-
-  if (lhs.is_nil())
-    return; // does nothing
-
-  locationt location = function.location();
-
-  // get alloc type and size
-  typet alloc_type;
-  exprt alloc_size;
-
-  get_alloc_type(arguments[0], alloc_type, alloc_size);
-
-  if (alloc_size.is_nil())
-    alloc_size = from_integer(1, size_type());
-
-  if (alloc_type.is_nil())
-    alloc_type = char_type();
-
-  if (alloc_type.id() == "symbol")
-    alloc_type = ns.follow(alloc_type);
-
-  if (alloc_size.type() != size_type())
-  {
-    alloc_size.make_typecast(size_type());
-    simplify(alloc_size);
-  }
-
-  // produce new object
-
-  exprt new_expr("sideeffect", lhs.type());
-  new_expr.statement(func);
-  new_expr.copy_to_operands(arguments[0]);
-  new_expr.cmt_size(alloc_size);
-  new_expr.cmt_type(alloc_type);
-  new_expr.location() = location;
-
-  goto_programt::targett t_n = dest.add_instruction(ASSIGN);
-
-  exprt new_assign = code_assignt(lhs, new_expr);
-  expr2tc new_assign_expr;
-  migrate_expr(new_assign, new_assign_expr);
-  t_n->code = new_assign_expr;
-  t_n->location = location;
-}
 
 symbolt *assign_params_as_non_det::get_default_symbol(
   typet type,
@@ -213,38 +158,26 @@ bool assign_params_as_non_det::runOnFunction(
     --it;
 
     // argv = malloc(argc * sizeof(char *));
+
     side_effect_expr_function_callt call_expr;
-    const std::string malc_name = "malloc";
-    const std::string malc_id = "c:@F@malloc";
-    if (context.find_symbol(malc_id) == nullptr)
-      return false;
-    const symbolt &malc_sym = *context.find_symbol(malc_id);
-    exprt type_expr("symbol");
-    type_expr.name(malc_name);
-    type_expr.identifier(malc_id);
-    type_expr.location() = l;
+    call_expr.function() =
+      symbol_expr(*context.find_symbol("c:@F@ESBMC_malloc_argv"));
+    call_expr.arguments().push_back(argc);
+    call_expr.arguments().push_back(argv);
 
-    code_typet type;
-    typet tt = symbol_expr(malc_sym).type();
-    type_expr.type() = to_code_type(tt);
-
-    call_expr.function() = type_expr;
-    call_expr.type() = to_code_type(tt).return_type();
-
-    // malloc(argc * sizeof(char *))
-    exprt mult("*", uint_type());
-    exprt char_pointer_size = from_integer(
-      config.ansi_c.pointer_width() / config.ansi_c.char_width, uint_type());
-    mult.copy_to_operands(argc, char_pointer_size);
-    call_expr.arguments().push_back(mult);
+    code_function_callt function_call;
+    function_call.lhs() = argv;
+    function_call.function() = call_expr.function();
+    function_call.arguments() = call_expr.arguments();
+    function_call.location() = l;
 
     // do assignment
-    goto_programt tmp_assign;
-    do_malloc(
-      argv, call_expr.function(), call_expr.arguments(), tmp_assign);
+    goto_programt dest;
+    goto_programt::targett t = dest.add_instruction(FUNCTION_CALL);
+    migrate_expr(function_call, t->code);
+    t->location = function_call.location();
 
-      goto_programt::instructiont instruction3 = tmp_assign.instructions.front();
-    // insert
+    goto_programt::instructiont instruction3 = dest.instructions.front();
     goto_program.insert_swap(it++, instruction3);
     --it;
   }
