@@ -731,7 +731,7 @@ bool solidity_convertert::get_var_decl(
       move_to_initializer(func_call);
     }
     else
-      current_backBlockDecl.move_to_operands(func_call);
+      current_backBlockDecl.copy_to_operands(func_call);
   }
   else if (t_sol_type == "DYNARRAY" && set_init)
   {
@@ -768,7 +768,7 @@ bool solidity_convertert::get_var_decl(
         move_to_initializer(func_call);
       }
       else
-        current_backBlockDecl.move_to_operands(func_call);
+        current_backBlockDecl.copy_to_operands(func_call);
     }
     else if (val.is_symbol())
     {
@@ -813,7 +813,7 @@ bool solidity_convertert::get_var_decl(
         move_to_initializer(func_call);
       }
       else
-        current_backBlockDecl.move_to_operands(func_call);
+        current_backBlockDecl.copy_to_operands(func_call);
     }
     else
     {
@@ -1675,6 +1675,23 @@ void solidity_convertert::get_temporary_object(exprt &call, exprt &new_expr)
   new_expr = call;
 }
 
+void solidity_convertert::convert_unboundcall_nondet(
+  exprt &new_expr,
+  const typet common_type,
+  const locationt &l)
+{
+  if (
+    new_expr.is_code() && new_expr.statement() == "function_call" &&
+    new_expr.operands().size() >= 1 && new_expr.op1().name() == "sol_unbound$")
+  {
+    current_frontBlockDecl.copy_to_operands(new_expr);
+    exprt dump = exprt("sideeffect", common_type);
+    dump.statement("nondet");
+    dump.location() = l;
+    new_expr = dump;
+  }
+}
+
 bool solidity_convertert::get_unbound_expr(
   const nlohmann::json expr,
   exprt &new_expr)
@@ -2486,10 +2503,19 @@ bool solidity_convertert::get_block(
       if (get_statement(stmt_kv.value(), statement))
         return true;
 
+      if (!current_frontBlockDecl.operands().empty())
+      {
+        for (auto op : current_frontBlockDecl.operands())
+        {
+          convert_expression_to_code(op);
+          _block.operands().push_back(op);
+        }
+        current_frontBlockDecl.clear();
+      }
+
       convert_expression_to_code(statement);
       _block.operands().push_back(statement);
 
-      // we first parse the statement, then handle the blockDecl
       if (!current_backBlockDecl.operands().empty())
       {
         for (auto op : current_backBlockDecl.operands())
@@ -2748,7 +2774,7 @@ bool solidity_convertert::get_statement(
       }
       // do return in the end
       exprt return_expr = code_returnt();
-      current_backBlockDecl.move_to_operands(return_expr);
+      current_backBlockDecl.copy_to_operands(return_expr);
 
       new_expr = code_skipt();
       break;
@@ -4144,6 +4170,9 @@ bool solidity_convertert::get_binary_operator_expr(
   // For "BinaryOperation" expression, it's called "leftExpression" or "leftExpression"
   exprt lhs, rhs;
   nlohmann::json rhs_json;
+  locationt l;
+  get_location_from_decl(expr, l);
+
   if (expr.contains("leftHandSide"))
   {
     nlohmann::json literalType = expr["leftHandSide"]["typeDescriptions"];
@@ -4194,6 +4223,15 @@ bool solidity_convertert::get_binary_operator_expr(
       return true;
   }
 
+  typet lt = lhs.type();
+  typet rt = rhs.type();
+  std::string lt_sol = lt.get("#sol_type").as_string();
+  std::string rt_sol = rt.get("#sol_type").as_string();
+
+  // 2.1 special handling for the sol_unbound harness
+  convert_unboundcall_nondet(lhs, common_type, l);
+  convert_unboundcall_nondet(rhs, common_type, l);
+
   // 3. Convert opcode
   SolidityGrammar::ExpressionT opcode =
     SolidityGrammar::get_expr_operator_t(expr);
@@ -4219,9 +4257,6 @@ bool solidity_convertert::get_binary_operator_expr(
     if (context.find_symbol(func_id) == nullptr)
       return true;
     const auto &sym = *context.find_symbol(func_id);
-
-    locationt l;
-    get_location_from_decl(expr, l);
 
     side_effect_expr_function_callt call_expr;
     get_library_function_call_no_params(
@@ -4328,11 +4363,6 @@ bool solidity_convertert::get_binary_operator_expr(
   {
   case SolidityGrammar::ExpressionT::BO_Assign:
   {
-    typet lt = lhs.type();
-    typet rt = rhs.type();
-    std::string lt_sol = lt.get("#sol_type").as_string();
-    std::string rt_sol = rt.get("#sol_type").as_string();
-
     // special handling for tuple-type assignment;
     //TODO: handle nested tuple
     if (rt_sol == "TUPLE_INSTANCE" || rt_sol == "TUPLE")
@@ -4423,7 +4453,7 @@ bool solidity_convertert::get_binary_operator_expr(
       {
         exprt store_call;
         store_update_dyn_array(lhs, size_expr, store_call);
-        current_backBlockDecl.move_to_operands(store_call);
+        current_backBlockDecl.copy_to_operands(store_call);
       }
     }
     else if (rt_sol == "DYNARRAY")
@@ -4461,7 +4491,7 @@ bool solidity_convertert::get_binary_operator_expr(
       {
         exprt store_call;
         store_update_dyn_array(lhs, size_expr, store_call);
-        current_backBlockDecl.move_to_operands(store_call);
+        current_backBlockDecl.copy_to_operands(store_call);
       }
       // fall through to do assignment
     }
@@ -4502,7 +4532,7 @@ bool solidity_convertert::get_binary_operator_expr(
       {
         exprt store_call;
         store_update_dyn_array(lhs, size_expr, store_call);
-        current_backBlockDecl.move_to_operands(store_call);
+        current_backBlockDecl.copy_to_operands(store_call);
       }
     }
     else if (lt_sol == "STRING")
@@ -4510,11 +4540,7 @@ bool solidity_convertert::get_binary_operator_expr(
       get_string_assignment(lhs, rhs, new_expr);
       return false;
     }
-    else if (rt.is_code())
-    {
-      rt.dump();
-      abort();
-    }
+
     new_expr = side_effect_exprt("assign", t);
     break;
   }

@@ -323,6 +323,10 @@ protected:
   void get_temporary_object(exprt &call, exprt &new_expr);
   bool get_unbound_function(const std::string &c_name, symbolt &sym);
   bool get_unbound_expr(const nlohmann::json expr, exprt &new_expr);
+  void convert_unboundcall_nondet(
+    exprt &new_expr,
+    const typet common_type,
+    const locationt &l);
 
   // literal conversion functions
   bool convert_integer_literal(
