@@ -44,7 +44,7 @@ std::string type_handler::type_to_string(const typet &t) const
 {
   if (t == double_type())
     return "float";
-  if (t == int_type())
+  if (t == long_long_int_type())
     return "int";
   if (t == long_long_uint_type())
     return "uint64";
@@ -96,8 +96,10 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "int" || ast_type == "GeneralizedIndex")
     /* FIXME: We need to map 'int' to another irep type that provides unlimited precision
   	https://docs.python.org/3/library/stdtypes.html#numeric-types-int-float-complex */
-    return int_type();
-  if (ast_type == "uint64" || ast_type == "Epoch" || ast_type == "Slot")
+    return long_long_int_type();
+  if (
+    ast_type == "uint" || ast_type == "uint64" || ast_type == "Epoch" ||
+    ast_type == "Slot")
     return long_long_uint_type();
   if (ast_type == "bool")
     return bool_type();
@@ -107,7 +109,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   {
     // TODO: Keep "bytes" as signed char instead of "int_type()", and cast to an 8-bit integer in [] operations
     // or consider modelling it with string_constantt.
-    return build_array(int_type(), type_size);
+    return build_array(long_long_int_type(), type_size);
   }
   if (ast_type == "str")
   {
@@ -128,7 +130,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
 typet type_handler::get_typet(const nlohmann::json &elem) const
 {
   if (elem.is_number_integer() || elem.is_number_unsigned())
-    return int_type();
+    return long_long_int_type();
   else if (elem.is_boolean())
     return bool_type();
   else if (elem.is_number_float())

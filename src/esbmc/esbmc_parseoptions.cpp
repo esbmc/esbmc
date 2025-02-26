@@ -499,6 +499,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option(
       "keep-alive-interval", cmdline.getval("keep-alive-interval"));
 
+  if (cmdline.isset("override-return-annotation"))
+    options.set_option("override-return-annotation", true);
+
   config.options = options;
 }
 
@@ -585,6 +588,17 @@ int esbmc_parseoptionst::doit()
   // Parse ESBMC options (CMD + set internal options)
   optionst options;
   get_command_line_options(options);
+
+  // for solidity
+  if (cmdline.isset("sol"))
+  {
+    // set default options
+    options.set_option(
+      "no-align-check", true); // no need to check alignment in solidity
+    options.set_option("no-unlimited-scanf-check", true);
+    options.set_option(
+      "force-malloc-success", true); // for calloc in the 'newexpression'
+  }
 
   // Create and preprocess a GOTO program
   if (get_goto_program(options, goto_functions))

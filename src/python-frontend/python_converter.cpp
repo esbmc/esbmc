@@ -177,31 +177,32 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
   return logical_expr;
 }
 
+void python_converter::update_symbol(const exprt &expr) const
+{
+  symbol_id sid = create_symbol_id();
+  sid.set_object(expr.name().c_str());
+  symbolt *sym = symbol_table_.find_symbol(sid.to_string());
+
+  if (sym != nullptr)
+  {
+    sym->type = expr.type();
+    sym->value.type() = expr.type();
+
+    if (
+      sym->value.is_constant() ||
+      (sym->value.is_signedbv() || sym->value.is_unsignedbv()))
+    {
+      exprt new_value = from_integer(
+        std::stoll(sym->value.value().c_str(), nullptr, 2), expr.type());
+      sym->value = new_value;
+    }
+  }
+}
+
 void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
 {
   typet &lhs_type = lhs.type();
   typet &rhs_type = rhs.type();
-
-  auto update_symbol = [&](exprt &expr) {
-    symbol_id sid = create_symbol_id();
-    sid.set_object(expr.name().c_str());
-    symbolt *s = symbol_table_.find_symbol(sid.to_string());
-
-    if (s != nullptr)
-    {
-      s->type = expr.type();
-      s->value.type() = expr.type();
-
-      if (
-        s->value.is_constant() ||
-        (s->value.is_signedbv() || s->value.is_unsignedbv()))
-      {
-        exprt new_value =
-          from_integer(std::stoi(s->value.value().c_str()), expr.type());
-        s->value = new_value;
-      }
-    }
-  };
 
   // Promote int to float
   if (
@@ -217,8 +218,8 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
   }
   else if (lhs_type.width() != rhs_type.width())
   {
-    int lhs_type_width = std::stoi(lhs_type.width().c_str());
-    int rhs_type_width = std::stoi(rhs_type.width().c_str());
+    auto lhs_type_width = std::stoi(lhs_type.width().c_str());
+    auto rhs_type_width = std::stoi(rhs_type.width().c_str());
 
     if (lhs_type_width > rhs_type_width)
     {
@@ -246,6 +247,51 @@ symbol_id python_converter::create_symbol_id() const
 {
   return symbol_id(
     current_python_file, current_class_name_, current_func_name_);
+}
+
+exprt python_converter::compute_math_expr(const exprt &expr) const
+{
+  auto resolve_symbol = [this](const exprt &operand) -> exprt {
+    if (operand.is_symbol())
+    {
+      symbolt *s = symbol_table_.find_symbol(operand.identifier());
+      assert(s && "Symbol not found in symbol table");
+      return s->value;
+    }
+    return operand;
+  };
+
+  // Resolve operands
+  const exprt lhs = resolve_symbol(expr.operands().at(0));
+  const exprt rhs = resolve_symbol(expr.operands().at(1));
+
+  // Convert to BigInt
+  const BigInt op1 =
+    binary2integer(lhs.value().as_string(), lhs.type().is_signedbv());
+  const BigInt op2 =
+    binary2integer(rhs.value().as_string(), rhs.type().is_signedbv());
+
+  // Perform the math operation
+  BigInt result;
+  if (expr.id() == "+")
+    result = op1 + op2;
+  else if (expr.id() == "-")
+    result = op1 - op2;
+  else if (expr.id() == "*")
+    result = op1 * op2;
+  else if (expr.id() == "/")
+    result = op1 / op2;
+  else
+    throw std::runtime_error("Unsupported math operation");
+
+  // Return the result as a constant expression
+  return constant_exprt(result, lhs.type());
+}
+
+inline bool is_math_expr(const exprt &expr)
+{
+  const std::string &id = expr.id().as_string();
+  return id == "+" || id == "-" || id == "*" || id == "/";
 }
 
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
@@ -410,13 +456,27 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     }
   }
 
-  adjust_statement_types(lhs, rhs);
-
-  assert(lhs.type() == rhs.type());
-
   // Replace ** operation with the resultant constant.
   if (op == "Pow" || op == "power")
   {
+    if (lhs.is_symbol())
+    {
+      symbolt *s = symbol_table_.find_symbol(lhs.identifier());
+      assert(s);
+      if (!s->value.value().empty())
+        lhs = s->value;
+    }
+    if (rhs.is_symbol())
+    {
+      symbolt *s = symbol_table_.find_symbol(rhs.identifier());
+      assert(s);
+      if (!s->value.value().empty())
+        rhs = s->value;
+    }
+    else if (is_math_expr(rhs))
+    {
+      rhs = compute_math_expr(rhs);
+    }
     BigInt base(
       binary2integer(lhs.value().as_string(), lhs.type().is_signedbv()));
     BigInt exp(
@@ -425,8 +485,25 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     return pow_expr;
   }
 
+  // Determine the result type of the binary operation:
+  // If it's a relational operation (e.g., <, >, ==), the result is a boolean type.
+  // Otherwise, it inherits the type of the left-hand side (lhs).
   typet type = (is_relational_op(op)) ? bool_type() : lhs.type();
+
+  // Create a binary expression node with the determined type.
   exprt bin_expr(get_op(op, type), type);
+
+  // Handle type promotion for mixed signed/unsigned comparisons:
+  // If lhs is unsigned and rhs is signed, convert rhs to match lhs's type.
+  // This prevents signed-unsigned comparison issues.
+  if (lhs.type().is_unsignedbv() && rhs.type().is_signedbv())
+  {
+    exprt result("typecast", lhs.type());
+    result.copy_to_operands(rhs);
+    rhs = result;
+  }
+
+  // Add lhs and rhs as operands to the binary expression.
   bin_expr.copy_to_operands(lhs, rhs);
 
   // floor division (//) operation corresponds to an int division with floor rounding
@@ -650,7 +727,7 @@ exprt python_converter::get_literal(const nlohmann::json &element)
 
   // integer literals
   if (value.is_number_integer())
-    return from_integer(value.get<int>(), int_type());
+    return from_integer(value.get<long long>(), long_long_int_type());
 
   // bool literals
   if (value.is_boolean())
@@ -1073,8 +1150,7 @@ void python_converter::get_var_assign(
 
   bool is_ctor_call = type_handler_.is_constructor_call(ast_node["value"]);
 
-  if (is_ctor_call)
-    ref_instance = &lhs;
+  current_lhs = &lhs;
 
   is_converting_lhs = false;
 
@@ -1147,7 +1223,7 @@ void python_converter::get_var_assign(
     target_block.copy_to_operands(decl);
   }
 
-  ref_instance = nullptr;
+  current_lhs = nullptr;
 }
 
 void python_converter::get_compound_assign(
@@ -1246,34 +1322,51 @@ void python_converter::get_function_definition(
   // Function return type
   code_typet type;
   const nlohmann::json &return_node = function_node["returns"];
-  if (return_node.contains("id"))
-  {
-    type.return_type() =
-      type_handler_.get_typet(return_node["id"].get<std::string>());
-  }
-  else if (
+
+  if (
     return_node.is_null() ||
-    (return_node.contains("value") && return_node["value"].is_null()))
+    (return_node["_type"] == "Constant" && return_node["value"].is_null()))
   {
     type.return_type() = empty_typet();
   }
-  else if (
-    return_node.contains("value") && return_node["value"]["_type"] == "Name")
+  else if (return_node.contains("id") || return_node["_type"] == "Subscript")
   {
-    // Get type from return statement
-    const auto &return_stmt = get_return_statement(function_node);
-    const auto &json = (is_importing_module) ? imported_module_json : ast_json;
-    const auto &return_var = find_var_decl(
-      return_stmt["value"]["id"].get<std::string>(),
-      function_node["name"].get<std::string>(),
-      json);
+    const nlohmann::json &return_type = (return_node["_type"] == "Subscript")
+                                          ? return_node["value"]["id"]
+                                          : return_node["id"];
+    if (return_type == "list")
+    {
+      const auto &return_stmt = get_return_statement(function_node);
+      if (
+        return_stmt["value"]["_type"] == "Name" ||
+        return_stmt["value"]["_type"] == "Subscript")
+      {
+        const std::string &var_name =
+          (return_stmt["value"]["_type"].get<std::string>() == "Subscript")
+            ? return_stmt["value"]["value"]["id"].get<std::string>()
+            : return_stmt["value"]["id"].get<std::string>();
 
-    assert(!return_var.empty());
+        const auto &return_var = get_var_node(var_name, function_node);
 
-    if (return_var["_type"] == "arg")
-      type.return_type() = type_handler_.get_list_type(return_var);
+        assert(!return_var.empty());
+
+        if (return_var["_type"] == "arg")
+        {
+          if (return_stmt["value"]["_type"] == "Subscript")
+            type.return_type() = type_handler_.get_typet(
+              return_var["annotation"]["slice"]["id"].get<std::string>());
+          else
+            type.return_type() = type_handler_.get_list_type(return_var);
+        }
+        else
+          type.return_type() = type_handler_.get_list_type(return_var["value"]);
+      }
+    }
     else
-      type.return_type() = type_handler_.get_list_type(return_var["value"]);
+    {
+      type.return_type() =
+        type_handler_.get_typet(return_node["id"].get<std::string>());
+    }
   }
   else
   {
@@ -1315,6 +1408,13 @@ void python_converter::get_function_definition(
       arg_type = pointer_typet(empty_typet());
     else
     {
+      if (!element.contains("annotation") || element["annotation"].is_null())
+      {
+        throw std::runtime_error(
+          "All parameters in function \"" + current_func_name_ +
+          "\" must be type annotated");
+      }
+
       if (element["annotation"]["_type"] == "Subscript")
         arg_type = type_handler_.get_list_type(element);
       else
@@ -1554,6 +1654,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       exprt test = get_expr(element["test"]);
       code_assertt assert_code;
       assert_code.assertion() = test;
+      assert_code.location() = get_location_from_decl(element);
       block.move_to_operands(assert_code);
       break;
     }
@@ -1614,7 +1715,7 @@ python_converter::python_converter(
     ns(_context),
     current_func_name_(""),
     current_class_name_(""),
-    ref_instance(nullptr)
+    current_lhs(nullptr)
 {
 }
 
@@ -1664,7 +1765,8 @@ void python_converter::convert()
     // Load operational models -----
     const std::string &ast_output_dir =
       ast_json["ast_output_dir"].get<std::string>();
-    std::list<std::string> model_files = {"range", "int", "consensus"};
+    std::list<std::string> model_files = {
+      "range", "int", "consensus", "random"};
     std::list<std::string> model_folders = {"os"};
 
     for (const auto &folder : model_folders)

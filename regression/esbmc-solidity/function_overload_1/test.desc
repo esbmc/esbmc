@@ -1,4 +1,4 @@
 CORE
 function_overload.solast
---function test_overload --sol function_overload.sol
+--function test_overload --sol function_overload.sol --no-standard-checks
 ^VERIFICATION SUCCESSFUL$

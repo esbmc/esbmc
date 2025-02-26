@@ -1,4 +1,4 @@
 CORE
 contract.solast
---sol contract.sol --k-induction
+--sol contract.sol --incremental-bmc --no-div-by-zero-check --no-bounds-check --contract MyContract --z3
 ^VERIFICATION FAILED$

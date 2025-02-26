@@ -2,6 +2,8 @@
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/python_converter.h>
 #include <util/expr.h>
+#include <util/c_types.h>
+#include <util/message.h>
 
 numpy_call_expr::numpy_call_expr(
   const symbol_id &function_id,
@@ -43,18 +45,88 @@ bool numpy_call_expr::is_math_function() const
          (function == "power");
 }
 
-exprt numpy_call_expr::get()
+std::string numpy_call_expr::get_dtype() const
+{
+  if (call_.contains("keywords"))
+  {
+    for (const auto &kw : call_["keywords"])
+    {
+      if (kw["_type"] == "keyword" && kw["arg"] == "dtype")
+      {
+        return kw["value"]["attr"];
+      }
+    }
+  }
+  return {};
+}
+
+size_t numpy_call_expr::get_dtype_size() const
+{
+  static const std::unordered_map<std::string, size_t> dtype_sizes = {
+    {"int8", sizeof(int8_t)},
+    {"uint8", sizeof(uint8_t)},
+    {"int16", sizeof(int16_t)},
+    {"uint16", sizeof(uint16_t)},
+    {"int32", sizeof(int32_t)},
+    {"uint32", sizeof(uint32_t)},
+    {"int64", sizeof(int64_t)},
+    {"uint64", sizeof(uint64_t)},
+    {"float16", 2},
+    {"float32", sizeof(float)},
+    {"float64", sizeof(double)}};
+
+  const std::string dtype = get_dtype();
+  if (!dtype.empty())
+  {
+    auto it = dtype_sizes.find(dtype);
+    if (it != dtype_sizes.end())
+    {
+      return it->second * 8;
+    }
+    throw std::runtime_error("Unsupported dtype value: " + dtype);
+  }
+  return 0;
+}
+
+size_t count_effective_bits(const std::string &binary)
+{
+  size_t first_one = binary.find('1');
+  if (first_one == std::string::npos)
+  {
+    return 1;
+  }
+  return binary.size() - first_one;
+}
+
+typet numpy_call_expr::get_typet_from_dtype() const
+{
+  std::string dtype = get_dtype();
+  if (dtype.find("int") != std::string::npos)
+  {
+    if (dtype[0] == 'u')
+      return unsignedbv_typet(get_dtype_size());
+    return signedbv_typet(get_dtype_size());
+  }
+  if (dtype.find("float") != std::string::npos)
+    return build_float_type(get_dtype_size());
+
+  return {};
+}
+
+exprt numpy_call_expr::get() const
 {
   static const std::unordered_map<std::string, float> numpy_functions = {
     {"zeros", 0.0}, {"ones", 1.0}};
 
   const std::string &function = function_id_.get_function();
 
+  // Create array from numpy.array()
   if (function == "array")
   {
     return converter_.get_expr(call_["args"][0]);
   }
 
+  // Create array from numpy.zeros() or numpy.ones()
   auto it = numpy_functions.find(function);
   if (it != numpy_functions.end())
   {
@@ -62,11 +134,56 @@ exprt numpy_call_expr::get()
     return converter_.get_expr(list);
   }
 
+  // Handle math function calls
   if (is_math_function())
   {
     auto bin_op = create_binary_op(
       function, call_["args"][0]["value"], call_["args"][1]["value"]);
-    return converter_.get_expr(bin_op);
+
+    exprt e = converter_.get_expr(bin_op);
+
+    auto dtype_size(get_dtype_size());
+    if (dtype_size)
+    {
+      typet t = get_typet_from_dtype();
+      if (converter_.current_lhs)
+      {
+        // Update variable (lhs)
+        converter_.current_lhs->type() = t;
+        converter_.update_symbol(*converter_.current_lhs);
+
+        // Update rhs expression
+        e.type() = converter_.current_lhs->type();
+        if (!e.operands().empty())
+        {
+          e.operands().at(0).type() = e.type();
+          e.operands().at(1).type() = e.type();
+        }
+
+        std::string value_str = e.value().as_string();
+        size_t value_size = count_effective_bits(value_str);
+
+        if (value_size > dtype_size)
+        {
+          log_warning(
+            "{}:{}: Integer overflow detected in {}() call. Consider using a "
+            "larger integer type.",
+            converter_.current_python_file,
+            call_["end_lineno"].get<int>(),
+            function_id_.get_function());
+        }
+
+        if (!e.value().empty())
+        {
+          auto length = value_str.length();
+          e.value(value_str.substr(length - dtype_size));
+          value_str = e.value().as_string();
+          e.set("#cformat", std::to_string(std::stoll(value_str, nullptr, 2)));
+        }
+      }
+    }
+
+    return e;
   }
 
   throw std::runtime_error("Unsupported NumPy function call: " + function);

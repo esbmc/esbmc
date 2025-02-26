@@ -69,6 +69,7 @@ static void optimize_expression(expr2tc &expr, const interval_domaint &state)
   // Function calls might have an implicit assignment
   if (is_code_function_call2t(expr))
   {
+    optimize_expression(to_code_function_call2t(expr).function, state);
     for (auto &x : to_code_function_call2t(expr).operands)
       optimize_expression(x, state);
     return;

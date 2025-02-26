@@ -4,6 +4,7 @@
 
 class symbol_id;
 class exprt;
+class typet;
 class python_converter;
 
 class numpy_call_expr
@@ -14,11 +15,15 @@ public:
     const nlohmann::json &call,
     python_converter &converter);
 
-  exprt get();
-
-  bool is_math_function() const;
+  exprt get() const;
 
 private:
+  bool is_math_function() const;
+
+  std::string get_dtype() const;
+  typet get_typet_from_dtype() const;
+  size_t get_dtype_size() const;
+
   const symbol_id &function_id_;
   const nlohmann::json &call_;
   python_converter &converter_;
