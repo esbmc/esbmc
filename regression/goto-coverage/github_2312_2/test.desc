@@ -1,0 +1,4 @@
+CORE
+main.c
+--function main --force-malloc-success --unwind 10 --no-unwinding-assertions
+^VERIFICATION SUCCESSFUL$
