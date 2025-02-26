@@ -12,6 +12,6 @@ __ESBMC_HIDE:;
     argv_copy[i] = __ESBMC_inf_str;
   }
   argv_copy[argc] = NULL;
-  
+
   return argv_copy;
 }
