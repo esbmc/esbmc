@@ -17,10 +17,6 @@
 namespace std
 {
 
-inline int abs(int num)
-{
-  return ::abs(num);
-}
 inline float abs(float num)
 {
   return ::fabsf(num);
@@ -34,6 +30,7 @@ inline long double abs(long double num)
   return ::fabsl(num);
 }
 
+using ::abs;
 using ::fabs;
 using ::fabsf;
 using ::fabsl;
