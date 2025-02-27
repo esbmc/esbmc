@@ -3416,6 +3416,13 @@ bool solidity_convertert::get_expr(
       callee_expr_json.contains("nodeType") &&
       callee_expr_json["nodeType"] == "MemberAccess");
 
+    if (!is_bound)
+    {
+      if (get_unbound_expr(expr, new_expr))
+        return true;
+      break;
+    }
+
     // TODO: handle the ether transfer
 
     nlohmann::json args = nullptr;
