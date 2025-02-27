@@ -276,6 +276,21 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
 
     break;
   }
+
+  case clang::Decl::PragmaComment:
+  {
+    const clang::PragmaCommentDecl &pcd =
+      static_cast<const clang::PragmaCommentDecl &>(decl);
+    if (
+      pcd.getCommentKind() == clang::PragmaMSCommentKind::PCK_Linker &&
+      pcd.getArg() ==
+        "/alternatename:_Avx2WmemEnabled=_Avx2WmemEnabledWeakValue")
+    {
+      // This pragma is used on Windows in the wchar.h header
+      log_warning("Ignoring pragma comment: {}", pcd.getArg().str().c_str());
+      break;
+    }
+  }
   default:
     std::ostringstream oss;
     llvm::raw_os_ostream ross(oss);
