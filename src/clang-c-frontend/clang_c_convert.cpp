@@ -283,13 +283,27 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
       static_cast<const clang::PragmaCommentDecl &>(decl);
     if (
       pcd.getCommentKind() == clang::PragmaMSCommentKind::PCK_Linker &&
-      pcd.getArg() ==
-        "/alternatename:_Avx2WmemEnabled=_Avx2WmemEnabledWeakValue")
+      (pcd.getArg() ==
+         "/alternatename:_Avx2WmemEnabled=_Avx2WmemEnabledWeakValue" ||
+       pcd.getArg() ==
+         "/alternatename:__Avx2WmemEnabled=__Avx2WmemEnabledWeakValue"))
     {
       // This pragma is used on Windows in the wchar.h header
-      log_warning("Ignoring pragma comment: {}", pcd.getArg().str().c_str());
+      // https://github.com/microsoft/win32metadata/blob/a4418f7f3c58becfbb32b448d21ff82023d8bcb9/generation/WinSDK/RecompiledIdlHeaders/ucrt/wchar.h#L206-L216
+      // It should be safe to ignore it, because its uses are guarded by
+      // #if !defined(__clang__) || defined(__AVX2__)
+      // Because `_Avx2WmemEnabled` is defined as extern, ESBMC
+      // should just abort during linking (this is currently not the case, see #1424).
+      // This is because there is no definition for `_Avx2WmemEnabled`
+      // unless we correctly implement the pragma (which we don't) as the pragma would
+      // alias `_Avx2WmemEnabled` to `_Avx2WmemEnabledWeakValue`.
+      log_warning(
+        "Ignoring (linker) pragma comment: {}", pcd.getArg().str().c_str());
       break;
     }
+    log_error("unrecognized pragma comment: {}", pcd.getArg().str().c_str());
+    decl.dump();
+    return true;
   }
   default:
     std::ostringstream oss;
