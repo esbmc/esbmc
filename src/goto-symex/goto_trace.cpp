@@ -233,7 +233,12 @@ void show_goto_trace_gui(
 */
 bool input_file_check(const locationt &l)
 {
+  // probably esbmc internally converted stuff
+  if (l.as_string() == "" || l.location().user_provided())
+    return true;
   const irep_idt &f_name = l.get_file();
+  if (f_name.empty())
+    return true;
   if (f_name == config.options.get_option("input-file"))
     return true;
   for (const auto &inc : config.ansi_c.include_files)
@@ -241,10 +246,6 @@ bool input_file_check(const locationt &l)
     if (f_name == inc)
       return true;
   }
-
-  // probably esbmc internally converted stuff
-  if (l.location().user_provided() || l.as_string() == "")
-    return true;
 
   /*? should we filter esbmc_intrinsics?
     if (
@@ -501,9 +502,8 @@ void show_goto_trace(
       {
         if (simplify_trace)
         {
-          const irep_idt &file = step.pc->location.get_file();
           // if the file is empty then it's probably internally created and should not print out
-          if (file == "" || !input_file_check(step.pc->location))
+          if (!input_file_check(step.pc->location))
             break;
         }
         if (prev_step_nr != step.step_nr || first_step)
