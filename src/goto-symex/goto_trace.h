@@ -115,7 +115,7 @@ void show_goto_trace(
   const namespacet &ns,
   const goto_tracet &goto_trace);
 
-bool input_file_check(const std::string &f_name);
+bool input_file_check(const locationt &l);
 
 void show_simplified_location(std::ostream &out, const locationt &location);
 

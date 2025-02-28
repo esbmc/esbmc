@@ -225,9 +225,15 @@ void show_goto_trace_gui(
   }
 }
 
-// Return true if the file is from the user-input
-bool input_file_check(const std::string &f_name)
+/* 
+   Return true if 
+   - the location's file_name matches the user input
+   - the location is explicitly labeled as user_provided
+   - the location is empty
+*/
+bool input_file_check(const locationt &l)
 {
+  const irep_idt &f_name = l.get_file();
   if (f_name == config.options.get_option("input-file"))
     return true;
   for (const auto &inc : config.ansi_c.include_files)
@@ -235,6 +241,16 @@ bool input_file_check(const std::string &f_name)
     if (f_name == inc)
       return true;
   }
+
+  // probably esbmc internally converted stuff
+  if (l.location().user_provided() || l.as_string() == "")
+    return true;
+
+  /*? should we filter esbmc_intrinsics?
+    if (
+      f_name == "esbmc_intrinsics.h")
+      return true;
+  */
 
   return false;
 }
@@ -445,7 +461,6 @@ void show_goto_trace(
             out << "  ";
             show_simplified_location(out, step.pc->location);
           }
-
           else
             out << "  " << step.pc->location << "\n";
         }
@@ -488,7 +503,7 @@ void show_goto_trace(
         {
           const irep_idt &file = step.pc->location.get_file();
           // if the file is empty then it's probably internally created and should not print out
-          if (file == "" || !input_file_check(file.as_string()))
+          if (file == "" || !input_file_check(step.pc->location))
             break;
         }
         if (prev_step_nr != step.step_nr || first_step)
@@ -508,14 +523,13 @@ void show_goto_trace(
       printf_formatter(step.format_string, step.output_args);
       printf_formatter.print(out);
       out << "\n";
+      break;
     }
 
     case goto_trace_stept::RENUMBER:
-    {
       out << "Renumbered pointer to ";
       counterexample_value(out, ns, step.lhs, step.value);
       break;
-    }
 
     case goto_trace_stept::ASSUME:
     case goto_trace_stept::SKIP:
