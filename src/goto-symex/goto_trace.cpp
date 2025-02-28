@@ -247,11 +247,9 @@ bool input_file_check(const locationt &l)
       return true;
   }
 
-  /*? should we filter esbmc_intrinsics?
-    if (
-      f_name == "esbmc_intrinsics.h")
-      return true;
-  */
+  // exception
+  if (f_name == "esbmc_intrinsics.h")
+    return true;
 
   return false;
 }
