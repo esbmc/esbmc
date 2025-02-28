@@ -10,6 +10,7 @@
 #include <util/namespace.h>
 #include <util/std_types.h>
 #include <util/std_code.h>
+#include <util/string_constant.h>
 #include <nlohmann/json.hpp>
 #include <solidity-frontend/solidity_grammar.h>
 #include <solidity-frontend/pattern_check.h>
@@ -222,6 +223,8 @@ protected:
   bool get_empty_array_ref(const nlohmann::json &ast_node, exprt &new_expr);
   void get_aux_array_name(std::string &aux_name, std::string &aux_id);
   void get_aux_array(const exprt &src_expr, exprt &new_expr);
+  void get_aux_var(std::string &aux_name, std::string &aux_id);
+  void get_aux_function(std::string &aux_name, std::string &aux_id);
   void get_size_expr(const exprt &rhs, exprt &size_expr);
   void store_update_dyn_array(
     const exprt &dyn_arr,
@@ -327,6 +330,93 @@ protected:
     exprt &new_expr,
     const typet common_type,
     const locationt &l);
+  bool add_auxiliary_members(const std::string contract_name);
+  void get_builtin_symbol(
+    const std::string name,
+    const std::string id,
+    const typet t,
+    const locationt &l,
+    const exprt &val,
+    const std::string c_name);
+  void external_transaction_verification_high(
+    const nlohmann::json &json,
+    const exprt &base,
+    const exprt &expr,
+    exprt &new_expr,
+    const std::string bs_contract_name);
+  void external_transaction_verification_low(
+    const nlohmann::json &json,
+    const nlohmann::json &args,
+    exprt &new_expr);
+  void external_transaction_verification_low(
+    const nlohmann::json &json,
+    const nlohmann::json &args,
+    const exprt &base,
+    exprt &new_expr,
+    const std::string bs_contract_name);
+  void call_modelling(
+    const bool has_arguments,
+    const exprt &base,
+    const std::string &bs_contract_name,
+    const std::string &tgt_f_name,
+    exprt &trusted_expr);
+  void staticcall_modelling(
+    const exprt &base,
+    const std::string &bs_contract_name,
+    const std::string &tgt_f_name,
+    exprt &trusted_expr);
+  void delegatecall_modelling(
+    const exprt &base,
+    const std::string &bs_contract_name,
+    const std::string &tgt_f_name,
+    exprt &trusted_expr);
+  void transfer_modelling(
+    const exprt &base,
+    const std::string &bs_contract_name,
+    exprt &trusted_expr);
+  void send_modelling(
+    const exprt &base,
+    const std::string &bs_contract_name,
+    exprt &trusted_expr);
+  void get_low_level_memcall(
+    const std::string new_bs_contract_name,
+    const exprt &new_base,
+    const nlohmann::json &func_json,
+    side_effect_expr_function_callt &_call);
+  const nlohmann::json &
+  get_func_decl_ref(const std::string &c_name, const std::string &f_name);
+  void extend_extcall_modelling(
+    const std::string &c_contract_name,
+    const locationt &sol_loc);
+  bool memcall_ext_modelling(
+    const nlohmann::json &json,
+    const nlohmann::json &args,
+    const exprt &base,
+    exprt &new_expr);
+  bool get_new_temporary_obj(
+    const std::string &c_name,
+    const std::string &ctor_ins_name,
+    const std::string &ctor_ins_id,
+    const locationt &ctor_ins_loc,
+    symbolt &added,
+    codet &decl);
+  void get_low_level_harness(
+    const typet &struct_type,
+    const exprt &base,
+    const std::string &bs_contract_name,
+    symbolt &harness);
+  void
+  get_addr_expr(const std::string &cname, const exprt &base, exprt &new_expr);
+  bool set_addr_cname_mapping(
+    const std::string &cname,
+    const exprt &base,
+    exprt &new_expr);
+  bool arbitrary_modelling2(
+    const std::string &contract_name,
+    const struct_typet::componentst &methods,
+    const exprt &base,
+    codet &body,
+    bool is_payable = false);
 
   // literal conversion functions
   bool convert_integer_literal(
