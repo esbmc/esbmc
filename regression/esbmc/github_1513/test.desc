@@ -1,0 +1,4 @@
+CORE
+main.c
+--overflow --memory-leak-check --timeout 30 --unwind 1 --multi-property --no-unwinding-assertions --no-remove-unreachable
+^VERIFICATION FAILED$
