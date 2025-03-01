@@ -192,8 +192,15 @@ void goto_k_inductiont::make_nondet_assign(
   goto_programt::targett &loop_head,
   const loopst &loop)
 {
+  // Track the original loop head
+  goto_programt::targett original_loop_head = loop_head;
+
   // Check if the loop_head is an assertion, and track it
   bool is_assert = loop_head->is_assert();
+
+  // If it's an assertion, adjust loop_head to insert assignments before it
+  if (is_assert && loop_head != goto_function.body.instructions.begin())
+    --loop_head;
 
   // Get the list of variables modified inside the loop
   auto const &loop_vars = loop.get_modified_loop_vars();
@@ -223,15 +230,20 @@ void goto_k_inductiont::make_nondet_assign(
   // Insert the generated assignments before the loop head in the program
   goto_function.body.insert_swap(loop_head, dest);
 
-  // If the loop head was an assertion, no need to process further
-  if (is_assert)
-    return;
-
   // Get original head again
   // Since we are using insert_swap to keep the targets, the
   // original loop head as shifted to after the assume cond
-  while ((++loop_head)->inductive_step_instruction)
-    ;
+  if (is_assert)
+  {
+    // Restore the original loop head if it was an assertion
+    loop_head = original_loop_head;
+  }
+  else
+  {
+    // Move past the inserted instructions during the inductive step
+    while ((++loop_head)->inductive_step_instruction)
+      ;    
+  }
 }
 
 static bool contains_rec(const expr2tc &expr, const loopst::loop_varst &vars)
@@ -303,6 +315,8 @@ void goto_k_inductiont::adjust_loop_head_and_exit(
   goto_programt::targett &loop_head,
   goto_programt::targett &loop_exit)
 {
+  log_status("passou em 310");
+  loop_head->dump();
   loop_exit->targets.clear();
   loop_exit->targets.push_front(loop_head);
 
@@ -313,6 +327,7 @@ void goto_k_inductiont::adjust_loop_head_and_exit(
   // the k-induction transformation
   if (_loop_exit->location_number == 0)
   {
+    log_status("passou em 321");
     // Clear the target
     loop_head->targets.clear();
 
