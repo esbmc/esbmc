@@ -242,7 +242,7 @@ void goto_k_inductiont::make_nondet_assign(
   {
     // Move past the inserted instructions during the inductive step
     while ((++loop_head)->inductive_step_instruction)
-      ;    
+      ;
   }
 }
 
