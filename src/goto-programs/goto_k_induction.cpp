@@ -217,7 +217,7 @@ void goto_k_inductiont::make_nondet_assign(
     t->inductive_step_instruction = true;
     t->code = code_assign2tc(lhs, rhs);
     // Keep the same location as the loop head
-    t->location = loop_head->location; 
+    t->location = loop_head->location;
   }
 
   // Insert the generated assignments before the loop head in the program
