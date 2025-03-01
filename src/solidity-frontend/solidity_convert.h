@@ -512,6 +512,9 @@ protected:
   // bound setting
   bool is_bound;
 
+  // NONDET_BOOL
+  side_effect_expr_function_callt nondet_bool_expr;
+
 private:
   bool get_elementary_type_name_uint(
     SolidityGrammar::ElementaryTypeNameT &type,
