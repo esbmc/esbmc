@@ -201,7 +201,8 @@ void goto_k_inductiont::make_nondet_assign(
   // Check if the loop_head is an assume, and track it
   bool is_assume = loop_head->is_assume();
 
-  // If it's an assertion, adjust loop_head to insert assignments before it
+  // If it's an assertion or assume, adjust loop_head
+  // to insert assignments before it
   if ((is_assert || is_assume) && loop_head != goto_function.body.instructions.begin())
     --loop_head;
 
