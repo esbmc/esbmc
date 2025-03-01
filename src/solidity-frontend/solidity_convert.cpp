@@ -44,11 +44,22 @@ solidity_convertert::solidity_convertert(
     tgt_func(config.options.get_option("function")),
     tgt_cnt(config.options.get_option("contract")),
     aux_counter(0),
-    is_bound(_is_bound)
+    is_bound(_is_bound),
+    nondet_bool_expr()
 {
   std::ifstream in(_contract_path);
   contract_contents.assign(
     (std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+
+  // initialize nondet_bool
+  if (context.find_symbol("c:@F@nondet_bool") == nullptr)
+  {
+    log_error("Preprocessing error. Cannot find the symbol NONDET_BOOL");
+    abort();
+  }
+  locationt l;
+  get_library_function_call_no_params(
+    "nondet_bool", "c:@F@nondet_bool", bool_type(), l, nondet_bool_expr);
 }
 
 // Convert smart contracts into symbol tables
@@ -1756,18 +1767,6 @@ bool solidity_convertert::get_unbound_function(
     symbolt added_ctor_symbol;
     get_static_contract_instance(c_name, added_ctor_symbol);
     const exprt contract_var = symbol_expr(added_ctor_symbol);
-
-    // 1.4 get nondet_bool func_call
-    if (context.find_symbol("c:@F@nondet_bool") == nullptr)
-      return true;
-    const symbolt &guard = *context.find_symbol("c:@F@nondet_bool");
-    side_effect_expr_function_callt nondet_bool_expr;
-    get_library_function_call_no_params(
-      "nondet_bool",
-      "c:@F@nondet_bool",
-      guard.type,
-      guard.location,
-      nondet_bool_expr);
 
     // 2.0 check visibility setting
     bool skip_vis =
@@ -4097,6 +4096,12 @@ bool solidity_convertert::get_expr(
       // case 1 and 3, which is a type conversion node
       if (is_low_level_call(mem_name))
       {
+        if (!is_bound)
+        {
+          if (get_unbound_expr(expr, new_expr))
+            return true;
+          break;
+        }
         // address(x).call()
         external_transaction_verification_low(
           expr, literal_type, base, new_expr, bs_c_name);
@@ -4130,6 +4135,12 @@ bool solidity_convertert::get_expr(
       {
         log_error("expecting lower level external call");
         abort();
+      }
+      if (!is_bound)
+      {
+        if (get_unbound_expr(expr, new_expr))
+          return true;
+        break;
       }
       external_transaction_verification_low(expr, literal_type, new_expr);
       break;
@@ -8631,14 +8642,7 @@ bool solidity_convertert::multi_transaction_verification(
   while_body.move_to_operands(func_call);
 
   // while-cond:
-  const symbolt &guard = *context.find_symbol("c:@F@nondet_bool");
-  side_effect_expr_function_callt cond_expr;
-  get_library_function_call_no_params(
-    "nondet_bool",
-    "c:@F@nondet_bool",
-    guard.type,
-    func_call.location(),
-    cond_expr);
+  side_effect_expr_function_callt cond_expr = nondet_bool_expr;
 
   // while-loop statement:
   code_whilet code_while;
@@ -8818,7 +8822,6 @@ bool solidity_convertert::multi_contract_verification_unbound()
   func_body.make_block();
 
   // 1. construct switch-case
-  int cnt = 0;
   for (const auto &sym : contractNamesList)
   {
     // 1.1 construct multi-transaction verification entry function
@@ -8964,9 +8967,7 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
   get_library_function_call_no_params(
     "nondet_uint", "c:@F@nondet_uint", uint_type(), l, _ndt_uint);
 
-  side_effect_expr_function_callt _ndt_bool;
-  get_library_function_call_no_params(
-    "nondet_bool", "c:@F@nondet_bool", bool_type(), l, _ndt_bool);
+  side_effect_expr_function_callt _ndt_bool = nondet_bool_expr;
 
   // get_unique_address(this)
   side_effect_expr_function_callt _addr;
@@ -9011,19 +9012,12 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
     _addr,
     contract_name);
 
-  // is_bounded
-  // default false
-  get_builtin_symbol(
-    "is_bounded",
-    sol_prefix + "is_bounded",
-    bool_type(),
-    l,
-    gen_zero(bool_typet()),
-    contract_name);
-
   return false;
 }
 
+// this funciton:
+// - move the created auxiliary variables to the constructor
+// - append the symbol as the component to the struct class
 void solidity_convertert::get_builtin_symbol(
   const std::string name,
   const std::string id,
@@ -9711,28 +9705,6 @@ void solidity_convertert::delegatecall_modelling(
       trusted_expr = nil_exprt();
     }
   }
-
-  // if (call_list.size() == 1)
-  //   trusted_expr = call_list.back();
-  // else if (call_list.size() > 1)
-  // {
-  //   // this means the signature match multiple functions
-  //   // so we need to make it all possible to be reached
-  //   // if(nondet_bool)
-  //   //   this->call();
-
-  //   side_effect_expr_function_callt nondet_bool;
-  //   locationt sol_loc;
-  //   get_library_function_call(
-  //     "nondet_bool", "c:@F@nondet_bool", int_type(), sol_loc, nondet_bool);
-  //   for (auto &i : call_list)
-  //   {
-  //     codet if_expr("ifthenelse");
-  //     convert_expression_to_code(i);
-  //     if_expr.copy_to_operands(nondet_bool, i);
-  //     current_frontBlockDecl.operands().push_back(if_expr);
-  //   }
-  // }
 }
 
 /**
@@ -10400,17 +10372,7 @@ bool solidity_convertert::arbitrary_modelling2(
       continue;
 
     // guard: nondet_bool()
-    if (context.find_symbol("c:@F@nondet_bool") == nullptr)
-      return true;
-    const symbolt &guard = *context.find_symbol("c:@F@nondet_bool");
-
-    side_effect_expr_function_callt guard_expr;
-    get_library_function_call_no_params(
-      "nondet_bool",
-      "c:@F@nondet_bool",
-      guard.type,
-      guard.location,
-      guard_expr);
+    side_effect_expr_function_callt guard_expr = nondet_bool_expr;
 
     // then: function_call
     // get func_decl_ref

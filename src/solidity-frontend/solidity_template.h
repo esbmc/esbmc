@@ -497,10 +497,13 @@ uint256_t str2int(const char *str)
 const std::string sol_uqAddr = R"(
 // compromise:
 // - define a relatively large array
-static const unsigned int max_addr_obj_size = 50;
-static address_t sol_addr_array[max_addr_obj_size];
-static void *sol_obj_array[max_addr_obj_size];
-static char* sol_cname_array[max_addr_obj_size];
+// static const unsigned int max_addr_obj_size = 50;
+// static address_t sol_addr_array[max_addr_obj_size];
+// static void *sol_obj_array[max_addr_obj_size];
+// static char* sol_cname_array[max_addr_obj_size];
+__attribute__((annotate("__ESBMC_inf_size"))) address_t sol_addr_array[1];
+__attribute__((annotate("__ESBMC_inf_size"))) void *sol_obj_array[1];
+__attribute__((annotate("__ESBMC_inf_size"))) char* sol_cname_array[1];
 static unsigned sol_max_cnt = 0;
 
 int get_addr_array_idx(address_t tgt)
@@ -527,8 +530,8 @@ void update_addr_obj(address_t addr, void *obj)
   sol_addr_array[sol_max_cnt] = addr;
   sol_obj_array[sol_max_cnt] = obj;
   ++sol_max_cnt;
-  if (sol_max_cnt >= max_addr_obj_size)
-    assert(0);
+  // if (sol_max_cnt >= max_addr_obj_size)
+  //   assert(0);
 }
 address_t get_unique_address(void *obj)
 {
