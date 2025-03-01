@@ -315,8 +315,6 @@ void goto_k_inductiont::adjust_loop_head_and_exit(
   goto_programt::targett &loop_head,
   goto_programt::targett &loop_exit)
 {
-  log_status("passou em 310");
-  loop_head->dump();
   loop_exit->targets.clear();
   loop_exit->targets.push_front(loop_head);
 
@@ -327,7 +325,6 @@ void goto_k_inductiont::adjust_loop_head_and_exit(
   // the k-induction transformation
   if (_loop_exit->location_number == 0)
   {
-    log_status("passou em 321");
     // Clear the target
     loop_head->targets.clear();
 
