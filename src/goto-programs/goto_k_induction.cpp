@@ -198,8 +198,11 @@ void goto_k_inductiont::make_nondet_assign(
   // Check if the loop_head is an assertion, and track it
   bool is_assert = loop_head->is_assert();
 
+  // Check if the loop_head is an assume, and track it
+  bool is_assume = loop_head->is_assume();
+
   // If it's an assertion, adjust loop_head to insert assignments before it
-  if (is_assert && loop_head != goto_function.body.instructions.begin())
+  if ((is_assert || is_assume) && loop_head != goto_function.body.instructions.begin())
     --loop_head;
 
   // Get the list of variables modified inside the loop
@@ -233,7 +236,7 @@ void goto_k_inductiont::make_nondet_assign(
   // Get original head again
   // Since we are using insert_swap to keep the targets, the
   // original loop head as shifted to after the assume cond
-  if (is_assert)
+  if (is_assert || is_assume)
   {
     // Restore the original loop head if it was an assertion
     loop_head = original_loop_head;
