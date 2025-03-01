@@ -241,7 +241,8 @@ void goto_k_inductiont::make_nondet_assign(
   // original loop head as shifted to after the assume cond
   if (is_assert || is_assume)
   {
-    // Restore the original loop head if it was an assertion
+    // Restore the original loop head
+    // if it was an assertion or assume
     loop_head = original_loop_head;
   }
   else
