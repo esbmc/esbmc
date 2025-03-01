@@ -192,6 +192,10 @@ void goto_k_inductiont::make_nondet_assign(
   goto_programt::targett &loop_head,
   const loopst &loop)
 {
+  // Check if the loop_head is an assertion, and track it
+  bool is_assert = loop_head->is_assert();
+
+  // Get the list of variables modified inside the loop
   auto const &loop_vars = loop.get_modified_loop_vars();
 
   goto_programt dest;
@@ -204,15 +208,24 @@ void goto_k_inductiont::make_nondet_assign(
       config.options.get_bool_option("add-symex-value-sets") &&
       is_pointer_type(lhs))
       continue;
+
+    // Generate a nondeterministic value for the loop variable
     expr2tc rhs = gen_nondet(lhs->type);
 
+    // Create an assignment instruction for the nondeterministic value
     goto_programt::targett t = dest.add_instruction(ASSIGN);
     t->inductive_step_instruction = true;
     t->code = code_assign2tc(lhs, rhs);
-    t->location = loop_head->location;
+    // Keep the same location as the loop head
+    t->location = loop_head->location; 
   }
 
+  // Insert the generated assignments before the loop head in the program
   goto_function.body.insert_swap(loop_head, dest);
+
+  // If the loop head was an assertion, no need to process further
+  if (is_assert)
+    return;
 
   // Get original head again
   // Since we are using insert_swap to keep the targets, the
