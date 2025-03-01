@@ -203,7 +203,9 @@ void goto_k_inductiont::make_nondet_assign(
 
   // If it's an assertion or assume, adjust loop_head
   // to insert assignments before it
-  if ((is_assert || is_assume) && loop_head != goto_function.body.instructions.begin())
+  if (
+    (is_assert || is_assume) &&
+    loop_head != goto_function.body.instructions.begin())
     --loop_head;
 
   // Get the list of variables modified inside the loop
