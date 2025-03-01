@@ -117,7 +117,11 @@ bool solidity_convertert::convert()
   // multiple contract
   if (tgt_func.empty() && tgt_cnt.empty())
   {
-    if (multi_contract_verification())
+    // for bounded cross-contract verification  (--bound)
+    if (is_bound && multi_contract_verification_bound())
+      return true;
+    // for unbounded cross-contract verification (--unbound)
+    else if (multi_contract_verification_unbound())
       return true;
   }
   // else: verify the target function.
@@ -3503,6 +3507,7 @@ bool solidity_convertert::get_expr(
       // ContractMemberCall
       // - x.setAddress();
       // - x.address();
+      // - x.val(); ==> property
       // The later one is quite special, as in Solidity variables behave like functions from the perspective of other contracts.
       // e.g. b._addr is not an address, but a function that returns an address.
       is_contract_member_access = true;
@@ -4047,7 +4052,7 @@ bool solidity_convertert::get_expr(
   case SolidityGrammar::ExpressionT::AddressMemberCall:
   {
     // property: <address>.balance
-    // function_call: <address>.transfer
+    // function_call: <address>.transfer()
     // examples:
     // 1. address(this).balance;
     // 2. address x;
@@ -8686,7 +8691,7 @@ bool solidity_convertert::multi_transaction_verification(
   This function perform multi-transaction verification on each contract in isolation.
   To do so, we construct nondetered switch_case;
 */
-bool solidity_convertert::multi_contract_verification()
+bool solidity_convertert::multi_contract_verification_bound()
 {
   // 0. initialize "sol_main" body and switch body
   codet func_body, switch_body;
@@ -8802,6 +8807,78 @@ bool solidity_convertert::multi_contract_verification()
   added_symbol.type = main_type;
   added_symbol.value = func_body;
   config.main = sol_name;
+  return false;
+}
+
+// for unbound, we verify each contract individually
+bool solidity_convertert::multi_contract_verification_unbound()
+{
+  codet func_body;
+  static_lifetime_init(context, func_body);
+  func_body.make_block();
+
+  // 1. construct switch-case
+  int cnt = 0;
+  for (const auto &sym : contractNamesList)
+  {
+    // 1.1 construct multi-transaction verification entry function
+    // function "sol_main$contractname" will be created and inserted to the symbol table.
+    const std::string &c_name = sym.second;
+    if (multi_transaction_verification(c_name))
+      return true;
+
+    // func_call: sol_main$contractname
+    const std::string sub_sol_id =
+      "sol:@C@" + c_name + "@F@sol_main$" + c_name + "#";
+    if (context.find_symbol(sub_sol_id) == nullptr)
+      return true;
+
+    const symbolt &func = *context.find_symbol(sub_sol_id);
+    code_function_callt func_expr;
+    func_expr.location() = func.location;
+    func_expr.function() = symbol_expr(func);
+    func_body.move_to_operands(func_expr);
+  }
+
+  // add "sol_main" to symbol table
+  symbolt new_symbol;
+  code_typet main_type;
+  typet e_type = empty_typet();
+  e_type.set("cpp_type", "void");
+  main_type.return_type() = e_type;
+  const std::string sol_id = "sol:@F@sol_main$#";
+  const std::string sol_name = "sol_main$";
+
+  if (
+    context.find_symbol(prefix + linearizedBaseList.begin()->first) == nullptr)
+    return true;
+  // use first contract's location
+  const symbolt &contract =
+    *context.find_symbol(prefix + linearizedBaseList.begin()->first);
+  new_symbol.location = contract.location;
+  std::string debug_modulename =
+    get_modulename_from_path(contract.location.file().as_string());
+  get_default_symbol(
+    new_symbol,
+    debug_modulename,
+    main_type,
+    sol_name,
+    sol_id,
+    new_symbol.location);
+
+  new_symbol.lvalue = true;
+  new_symbol.is_extern = false;
+  new_symbol.file_local = false;
+
+  symbolt &added_symbol = *context.move_symbol_to_context(new_symbol);
+
+  // no params
+  main_type.make_ellipsis();
+
+  added_symbol.type = main_type;
+  added_symbol.value = func_body;
+  config.main = sol_name;
+
   return false;
 }
 
