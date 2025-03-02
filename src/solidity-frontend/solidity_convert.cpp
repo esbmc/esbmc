@@ -74,7 +74,7 @@ bool solidity_convertert::convert()
   merge_multi_files();
 
   // By now the context should have the symbols of all ESBMC's intrinsics and the dummy main
-  // We need to convert Solidity AST nodes to the equivalent symbols and add them to the context
+  // We need to convert Solidity AST nodes to thstructe equivalent symbols and add them to the context
   // check if the file is suitable for verification
   contract_precheck();
 
@@ -4063,12 +4063,15 @@ bool solidity_convertert::get_expr(
     // function_call: <address>.transfer()
     // examples:
     // 1. address(this).balance;
+    // 1.  A tmp = new A();
+    //    address(tmp).balance;
     // 2. address x;
     //    x.balance;
     //    msg.sender.balance;
-    // 3. A tmp = new A();
-    //    address(tmp).balance;
-
+    //
+    // The main difference is that, for case 1 we do not need to guess the contract instance
+    // While in case 2, we need to utilize over-approximate modelling to bind the all possible instance
+    //
     // algo:
     // 1. we add the property and function to the contract definition (not handled here)
     // 2. we create an auxiliary mapping to store the <addr, contract-instance-ptr> pair (not handled here)
@@ -4102,14 +4105,13 @@ bool solidity_convertert::get_expr(
       std::string bs_c_name = context.find_symbol(c_id)->name.as_string();
       assert(!bs_c_name.empty());
 
-      // case 1 and 3, which is a type conversion node
+      // case 1, which is a type conversion node
       if (is_low_level_call(mem_name))
       {
         if (!is_bound && get_unbound_expr(expr, new_expr))
           return true;
         else
-          external_transaction_verification_low(
-            expr, literal_type, base, new_expr, bs_c_name);
+          get_low_level_call(expr, literal_type, base, new_expr, bs_c_name);
       }
       else
       {
@@ -4138,38 +4140,32 @@ bool solidity_convertert::get_expr(
       break;
     }
     case SolidityGrammar::DeclRefExprClass:
+    case SolidityGrammar::BuiltinMemberCall:
     {
-      // case 2 address x; x.balance;
+      // case 2
+      // - address x; x.balance
+      // - msg.sender.call
+
       if (is_low_level_call(mem_name))
       {
         if (!is_bound && get_unbound_expr(expr, new_expr))
           return true;
         else
-          external_transaction_verification_low(expr, literal_type, new_expr);
+        {
+          exprt base;
+          if (get_expr(callee_expr_json, base))
+            return true;
+          if (member_extcall_harness(expr, literal_type, base, new_expr))
+            return true;
+        }
       }
       else
       {
-        //
+        if (!is_bound)
+          new_expr = nondet_uint_expr;
+        else
+          ;
       }
-
-      break;
-    }
-    case SolidityGrammar::BuiltinMemberCall:
-    {
-      //case 2 msg.sender.call
-
-      if (!is_low_level_call(mem_name))
-      {
-        log_error("expecting lower level external call");
-        abort();
-      }
-
-      exprt base;
-      if (get_expr(callee_expr_json, base))
-        return true;
-
-      if (memcall_ext_modelling(expr, literal_type, base, new_expr))
-        return true;
 
       break;
     }
@@ -4181,13 +4177,6 @@ bool solidity_convertert::get_expr(
       return true;
     }
     }
-
-    // get address
-
-    // get corresponding contract Var
-
-    // if it's not annotated
-    // we verified for both true/false
 
     break;
   }
@@ -6162,7 +6151,7 @@ bool solidity_convertert::get_tuple_instance_name(
   if (c_name.empty())
     return true;
 
-  name = "tuple_instance" + std::to_string(ast_node["id"].get<int>());
+  name = "tuple_instance$" + std::to_string(ast_node["id"].get<int>());
   id = "sol:@C@" + c_name + "@" + name;
   return false;
 }
@@ -6184,7 +6173,7 @@ bool solidity_convertert::get_tuple_function_ref(
     return true;
 
   std::string name =
-    "tuple_instance" +
+    "tuple_instance$" +
     std::to_string(ast_node["referencedDeclaration"].get<int>());
   std::string id = "sol:@C@" + c_name + "@" + name;
 
@@ -6220,6 +6209,39 @@ void solidity_convertert::get_tuple_function_call(
   exprt func_call = op;
   convert_expression_to_code(func_call);
   _block.move_to_operands(func_call);
+}
+
+void solidity_convertert::get_llc_ret_tuple(exprt &new_expr)
+{
+  std::string _id = "tag-sol_llc_ret";
+  if (context.find_symbol(_id) == nullptr)
+  {
+    log_error("cannot find library symbol tag-sol_llc_ret");
+    abort();
+  }
+  const symbolt &struct_sym = *context.find_symbol(_id);
+
+  typet sym_t = struct_sym.type;
+  sym_t.set("#sol_type", "TUPLE_INSTANCE");
+
+  std::string name, id;
+  name = "tuple_instance$" + std::to_string(aux_counter);
+  id = "sol:@" + name;
+  locationt l;
+  symbolt symbol;
+  get_default_symbol(symbol, current_fileName, sym_t, name, id, l);
+  symbol.static_lifetime = true;
+  symbol.file_local = true;
+  auto &added_sym = *move_symbol_to_context(symbol);
+
+  // value
+  typet t = struct_sym.type;
+  exprt inits = gen_zero(t);
+  inits.op0() = nondet_bool_expr;
+  inits.op1() = nondet_uint_expr;
+  added_sym.value = inits;
+
+  new_expr = symbol_expr(added_sym);
 }
 
 void solidity_convertert::get_string_assignment(
@@ -9156,12 +9178,12 @@ void solidity_convertert::external_transaction_verification_high(
   }
 }
 
-void solidity_convertert::external_transaction_verification_low(
+void solidity_convertert::get_low_level_call(
   const nlohmann::json &json,
   const nlohmann::json &args,
   exprt &new_expr)
 {
-  external_transaction_verification_low(json, args, nil_exprt(), new_expr, "");
+  get_low_level_call(json, args, nil_exprt(), new_expr, "");
 }
 
 /* For low level call
@@ -9178,7 +9200,7 @@ to
     same contract that will get re-entried.
 - json: json node in member_access layer
 */
-void solidity_convertert::external_transaction_verification_low(
+void solidity_convertert::get_low_level_call(
   const nlohmann::json &json,
   const nlohmann::json &args,
   const exprt &base,
@@ -9974,18 +9996,30 @@ void solidity_convertert::get_low_level_memcall(
 }
 
 /** 
-    Algo: over-approximation
-    if(get_addr_array_idx[base] != -1)
+  Algo: over-approximation
+  1. Insert before the expression:
+    uint tmp;
+    if(get_addr_array_idx[addr] != -1)
     {
-      if(cmp_cname(get_cname(base), cname))
+      if(cmp_cname(get_cname(addr), cname))
       {
-        (Base *)x.call(); // do_extern_call_verification
+        (Base *)x.call(); 
+        // tmp = (Base *)x.balance;
       }	
-      ...
     }
-    @base: semantically, address. such as msg.sender
-  **/
-bool solidity_convertert::memcall_ext_modelling(
+    
+  2. Then do the conversion:
+    (bool x, bytes y) = msg.sender.transfer()
+    => (bool x, bytes y)  = ( nondet_bool() , nondet_uint())
+
+    uint left_balance = msg.sender.balance
+    => uint left_balance = tmp;
+
+  @base: semantically, address. such as msg.sender
+  @is_extcall: true if it's a external low level call. 
+                false if it's a builtin member access
+**/
+bool solidity_convertert::member_extcall_harness(
   const nlohmann::json &json,
   const nlohmann::json &args,
   const exprt &base,
@@ -10068,7 +10102,7 @@ bool solidity_convertert::memcall_ext_modelling(
     exprt _def = dereference_exprt(_tycast, to_type);
 
     exprt tmp;
-    external_transaction_verification_low(json, args, _def, tmp, cname);
+    get_low_level_call(json, args, _def, tmp, cname);
 
     code_blockt inner = code_blockt();
     convert_expression_to_code(tmp);
@@ -10085,7 +10119,10 @@ bool solidity_convertert::memcall_ext_modelling(
   if_expr_out.move_to_operands(outguard, outter);
   if_expr_out.location() = base.location();
 
-  new_expr = if_expr_out;
+  current_frontBlockDecl.copy_to_operands(if_expr_out);
+
+  // new_expr = (bool, bytes);
+  get_llc_ret_tuple(new_expr);
   return false;
 }
 

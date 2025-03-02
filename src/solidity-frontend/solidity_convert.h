@@ -252,6 +252,7 @@ protected:
     exprt &new_expr);
   void get_tuple_assignment(code_blockt &_block, const exprt &lop, exprt rop);
   void get_tuple_function_call(code_blockt &_block, const exprt &op);
+  void get_llc_ret_tuple(exprt &new_expr);
 
   // string
   void
@@ -348,11 +349,11 @@ protected:
     const exprt &expr,
     exprt &new_expr,
     const std::string bs_contract_name);
-  void external_transaction_verification_low(
+  void get_low_level_call(
     const nlohmann::json &json,
     const nlohmann::json &args,
     exprt &new_expr);
-  void external_transaction_verification_low(
+  void get_low_level_call(
     const nlohmann::json &json,
     const nlohmann::json &args,
     const exprt &base,
@@ -392,7 +393,12 @@ protected:
   void extend_extcall_modelling(
     const std::string &c_contract_name,
     const locationt &sol_loc);
-  bool memcall_ext_modelling(
+  bool member_extcall_harness(
+    const nlohmann::json &json,
+    const nlohmann::json &args,
+    const exprt &base,
+    exprt &new_expr);
+  bool member_builtin_harness(
     const nlohmann::json &json,
     const nlohmann::json &args,
     const exprt &base,
