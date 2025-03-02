@@ -343,12 +343,6 @@ protected:
     const locationt &l,
     const exprt &val,
     const std::string c_name);
-  void external_transaction_verification_high(
-    const nlohmann::json &json,
-    const exprt &base,
-    const exprt &expr,
-    exprt &new_expr,
-    const std::string bs_contract_name);
   void get_low_level_call(
     const nlohmann::json &json,
     const nlohmann::json &args,
