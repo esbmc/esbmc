@@ -198,10 +198,14 @@ void goto_k_inductiont::make_nondet_assign(
   // Check if the loop_head is an assertion, and track it
   bool is_assert = loop_head->is_assert();
 
-  // If it's an assertion, adjust loop_head
-  // to insert assignments before it
+  // If it's an assertion, adjust loop_head to insert assignments before it
   if ((is_assert) && loop_head != goto_function.body.instructions.begin())
+  {
     --loop_head;
+    // We add instructions before a GOTO instruction
+    // So we ensure we have one here
+    assert(loop_head->is_goto());
+  }
 
   // Get the list of variables modified inside the loop
   auto const &loop_vars = loop.get_modified_loop_vars();
