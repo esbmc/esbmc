@@ -39,6 +39,12 @@ const std::string sol_typedef = R"(
 typedef BIGINT(256) int256_t;
 typedef unsigned BIGINT(256) uint256_t;
 typedef unsigned BIGINT(160) address_t;
+
+struct sol_llc_ret
+{
+  bool x;
+  uint y;
+};
 )";
 
 /// Variables
@@ -178,10 +184,9 @@ const std::string sol_address = R"(
   }
   
   )";
-  
 
-const std::string sol_funcs =
-  blockhash + gasleft + sol_abi + sol_math + sol_string + sol_byte + sol_address;
+const std::string sol_funcs = blockhash + gasleft + sol_abi + sol_math +
+                              sol_string + sol_byte + sol_address;
 
 /// data structure
 
@@ -574,7 +579,6 @@ uint256_t update_balance(uint256_t balance, uint256_t val)
   return balance;
 }
 )";
-
 
 const std::string sol_ext_library = sol_itoa + sol_str2hex + sol_uqAddr;
 
