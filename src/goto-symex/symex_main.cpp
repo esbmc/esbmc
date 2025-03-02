@@ -79,8 +79,8 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
     // (which is crucial for soundness)
     if (unwind < max_unwind - 1 && !is_false(simplified_claim))
     {
-        assume(claim_expr);
-        return;
+      assume(claim_expr);
+      return;
     }
   }
 
