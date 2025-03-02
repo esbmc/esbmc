@@ -45,21 +45,26 @@ solidity_convertert::solidity_convertert(
     tgt_cnt(config.options.get_option("contract")),
     aux_counter(0),
     is_bound(_is_bound),
-    nondet_bool_expr()
+    nondet_bool_expr(),
+    nondet_uint_expr()
 {
   std::ifstream in(_contract_path);
   contract_contents.assign(
     (std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
 
   // initialize nondet_bool
-  if (context.find_symbol("c:@F@nondet_bool") == nullptr)
+  if (
+    context.find_symbol("c:@F@nondet_bool") == nullptr ||
+    context.find_symbol("c:@F@nondet_uint") == nullptr)
   {
-    log_error("Preprocessing error. Cannot find the symbol NONDET_BOOL");
+    log_error("Preprocessing error. Cannot find the NONDET symbol");
     abort();
   }
   locationt l;
   get_library_function_call_no_params(
     "nondet_bool", "c:@F@nondet_bool", bool_type(), l, nondet_bool_expr);
+  get_library_function_call_no_params(
+    "nondet_uint", "c:@F@nondet_uint", uint_type(), l, nondet_uint_expr);
 }
 
 // Convert smart contracts into symbol tables
@@ -1180,6 +1185,10 @@ bool solidity_convertert::get_contract_definition(const std::string &c_name)
       if (get_struct_class(c_node))
         return true;
 
+      // add solidity built-in property like balance, codehash
+      if (add_auxiliary_members(current_contractName))
+        return true;
+
       if (convert_ast_nodes(c_node))
         return true;
 
@@ -1905,7 +1914,7 @@ bool solidity_convertert::move_initializer_to_ctor(
 
   // get this pointer
   exprt base;
-  if (get_func_decl_this_ref(ctor_id, base))
+  if (get_func_decl_this_ref(contract_name, ctor_id, base))
   {
     log_error("cannot find function's this pointer");
     return true;
@@ -4096,60 +4105,59 @@ bool solidity_convertert::get_expr(
       // case 1 and 3, which is a type conversion node
       if (is_low_level_call(mem_name))
       {
-        if (!is_bound)
-        {
-          if (get_unbound_expr(expr, new_expr))
-            return true;
-          break;
-        }
-        // address(x).call()
-        external_transaction_verification_low(
-          expr, literal_type, base, new_expr, bs_c_name);
+        if (!is_bound && get_unbound_expr(expr, new_expr))
+          return true;
+        else
+          external_transaction_verification_low(
+            expr, literal_type, base, new_expr, bs_c_name);
       }
       else
       {
-        // i.e balance/codehash
-        // get member
-        std::string mem_name = expr["memberName"].get<std::string>();
-        std::string mem_id = "sol:@C@" + bs_c_name + "@" + mem_name;
-
-        if (context.find_symbol(mem_id) == nullptr)
+        // property i.e balance/codehash
+        if (!is_bound)
         {
-          if (add_auxiliary_members(current_contractName))
-            return true;
+          // make it as a NODET_UINT
+          side_effect_expr_function_callt uint_expr = nondet_uint_expr;
+          new_expr = uint_expr;
         }
+        else
+        {
+          std::string mem_id = "sol:@C@" + bs_c_name + "@" + mem_name;
+          if (context.find_symbol(mem_id) == nullptr)
+          {
+            if (add_auxiliary_members(current_contractName))
+              return true;
+          }
+          exprt comp = symbol_expr(*context.find_symbol(mem_id));
+          exprt member = member_exprt(base, comp.name(), comp.type());
 
-        exprt comp = symbol_expr(*context.find_symbol(mem_id));
-        exprt member = member_exprt(base, comp.name(), comp.type());
-
-        external_transaction_verification_high(
-          expr, base, member, new_expr, bs_c_name);
+          new_expr = member;
+        }
       }
 
       break;
     }
     case SolidityGrammar::DeclRefExprClass:
     {
-      // case 2
-      if (!is_low_level_call(mem_name))
+      // case 2 address x; x.balance;
+      if (is_low_level_call(mem_name))
       {
-        log_error("expecting lower level external call");
-        abort();
-      }
-      if (!is_bound)
-      {
-        if (get_unbound_expr(expr, new_expr))
+        if (!is_bound && get_unbound_expr(expr, new_expr))
           return true;
-        break;
+        else
+          external_transaction_verification_low(expr, literal_type, new_expr);
       }
-      external_transaction_verification_low(expr, literal_type, new_expr);
+      else
+      {
+        //
+      }
+
       break;
     }
     case SolidityGrammar::BuiltinMemberCall:
     {
-      //case 2 msg.sender
-      // if(get_obj(msg.sender) == NULL)
-      // else
+      //case 2 msg.sender.call
+
       if (!is_low_level_call(mem_name))
       {
         log_error("expecting lower level external call");
@@ -5346,6 +5354,7 @@ const nlohmann::json &solidity_convertert::get_func_decl_ref(
   return empty_json;
 }
 
+// wrapper
 bool solidity_convertert::get_func_decl_this_ref(
   const nlohmann::json &decl,
   exprt &new_expr)
@@ -5354,18 +5363,24 @@ bool solidity_convertert::get_func_decl_this_ref(
   std::string func_name, func_id;
   get_function_definition_name(decl, func_name, func_id);
 
-  return get_func_decl_this_ref(func_id, new_expr);
+  return get_func_decl_this_ref(current_contractName, func_id, new_expr);
 }
 
 // get the this pointer symbol
 bool solidity_convertert::get_func_decl_this_ref(
+  const std::string contract_name,
   const std::string &func_id,
   exprt &new_expr)
 {
   std::string this_id = func_id + "#this";
+  locationt l;
+  code_typet type;
+  type.return_type() = empty_typet();
+  type.return_type().set("cpp_type", "void");
 
   if (context.find_symbol(this_id) == nullptr)
-    return true;
+    get_function_this_pointer_param(
+      contract_name, func_id, current_fileName, l, type);
 
   new_expr = symbol_expr(*context.find_symbol(this_id));
 
@@ -8756,16 +8771,7 @@ bool solidity_convertert::multi_contract_verification_bound()
 
   // 2. move switch to func_body
   // 2.1 construct nondet_uint jump condition
-  if (context.find_symbol("c:@F@nondet_uint") == nullptr)
-    return true;
-  const symbolt &cond = *context.find_symbol("c:@F@nondet_uint");
-
-  side_effect_expr_function_callt cond_expr;
-  cond_expr.name("nondet_uint");
-  cond_expr.identifier("c:@F@nondet_uint");
-  cond_expr.location() = cond.location;
-  cond_expr.cmt_lvalue(true);
-  cond_expr.function() = symbol_expr(cond);
+  side_effect_expr_function_callt cond_expr = nondet_uint_expr;
 
   // 2.2 construct switch statement
   code_switcht code_switch;
@@ -8942,35 +8948,32 @@ void solidity_convertert::change_balance(
   current_frontBlockDecl.operands().push_back(_assign);
 }
 
+// e.g. address(x).balance => x->balance
+// address(x).transfer() => x->transfer();
+
+// everytime we call a ctor, we will assign an unique random address
+// constructor(address _addr)
+// {
+//    A x = A(_addr);
+// }
+// =>
+//  A tmp = new A();
+//  if(get_addr_array_idx(_addr) == -1)
+//     tmp = &(struct A*)get_address_object_ptr(_addr);
+// A& x = tmp;
+
 bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
 {
-  // e.g. address(x).balance => x->balance
-  // address(x).transfer() => x->transfer();
-
-  // everytime we call a ctor, we will assign an unique random address
-  // constructor(address _addr)
-  // {
-  //    A x = A(_addr);
-  // }
-  // =>
-  //  A tmp = new A();
-  //  if(get_addr_array_idx(_addr) == -1)
-  //     tmp = &(struct A*)get_address_object_ptr(_addr);
-  // A& x = tmp;
-
   // name prefix:
   std::string sol_prefix = "sol:@C@" + contract_name + "@";
 
   // value
-  side_effect_expr_function_callt _ndt_uint;
-  locationt l;
-  get_library_function_call_no_params(
-    "nondet_uint", "c:@F@nondet_uint", uint_type(), l, _ndt_uint);
-
+  side_effect_expr_function_callt _ndt_uint = nondet_uint_expr;
   side_effect_expr_function_callt _ndt_bool = nondet_bool_expr;
 
   // get_unique_address(this)
   side_effect_expr_function_callt _addr;
+  locationt l;
   get_library_function_call_no_params(
     "get_unique_address",
     "c:@F@get_unique_address",
@@ -8981,7 +8984,8 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
   exprt this_ptr;
   std::string ctor_id;
   get_ctor_call_id(contract_name, ctor_id);
-  if (get_func_decl_this_ref(ctor_id, this_ptr))
+
+  if (get_func_decl_this_ref(contract_name, ctor_id, this_ptr))
     return true;
   _addr.arguments().push_back(this_ptr);
 
