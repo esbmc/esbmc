@@ -242,6 +242,7 @@ void goto_k_inductiont::make_nondet_assign(
   {
     // Restore the original loop head if it was an assertion
     loop_head = original_loop_head;
+    assert(loop_head->is_assert());
   }
   else
   {
