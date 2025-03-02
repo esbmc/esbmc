@@ -193,10 +193,10 @@ void goto_k_inductiont::make_nondet_assign(
   const loopst &loop)
 {
   // Track the original loop head
-  goto_programt::targett original_loop_head = loop_head;
+  auto const original_loop_head = loop_head;
 
   // Check if the loop_head is an assertion, and track it
-  bool is_assert = loop_head->is_assert();
+  const bool is_assert = loop_head->is_assert();
 
   // If it's an assertion, adjust loop_head to insert assignments before it
   if ((is_assert) && loop_head != goto_function.body.instructions.begin())
