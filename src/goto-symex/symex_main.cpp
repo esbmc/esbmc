@@ -63,15 +63,24 @@ bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
 void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
 {
   // Convert asserts in assumes, if it's not the last loop iteration
+  // This is a common technique in k-induction to strengthen the induction hypothesis.
   // also, don't convert assertions added by the bidirectional search
   if (
     inductive_step && first_loop && !cur_state->source.pc->inductive_assertion)
   {
+    // Fetch the current loop iteration count
     BigInt unwind = cur_state->loop_iterations[first_loop];
-    if (unwind < (max_unwind - 1))
+
+    // Simplify the claim expression before checking its truth value
+    expr2tc simplified_claim = claim_expr;
+    do_simplify(simplified_claim);
+
+    // if claim_expr simplifies to false, it is not assumed
+    // (which is crucial for soundness)
+    if (unwind < max_unwind - 1 && !is_false(simplified_claim))
     {
-      assume(claim_expr);
-      return;
+        assume(claim_expr);
+        return;
     }
   }
 
