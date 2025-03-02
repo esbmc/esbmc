@@ -140,7 +140,10 @@ protected:
   bool get_func_decl_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_func_decl_ref(const std::string &func_id, nlohmann::json &decl_ref);
   bool get_func_decl_this_ref(const nlohmann::json &decl, exprt &new_expr);
-  bool get_func_decl_this_ref(const std::string &func_id, exprt &new_expr);
+  bool get_func_decl_this_ref(
+    const std::string contract_name,
+    const std::string &func_id,
+    exprt &new_expr);
   bool get_enum_member_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_esbmc_builtin_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_type_description(const nlohmann::json &type_name, typet &new_type);
@@ -512,8 +515,9 @@ protected:
   // bound setting
   bool is_bound;
 
-  // NONDET_BOOL
+  // NONDET
   side_effect_expr_function_callt nondet_bool_expr;
+  side_effect_expr_function_callt nondet_uint_expr;
 
 private:
   bool get_elementary_type_name_uint(
