@@ -397,8 +397,7 @@ void goto_symext::symex_function_call_deref(const expr2tc &expr)
 
   /* Internal check that all symbols are actually of 'code' type (modulo the
    * guard) */
-  auto maybe_called_symbol_is_code [[maybe_unused]] = [this](const auto &elem)
-  {
+  auto maybe_called_symbol_is_code [[maybe_unused]] = [this](const auto &elem) {
     const guardt &guard = elem.first;
     const symbol2t &sym = to_symbol2t(elem.second);
     if (!guard.is_false() && !is_code_type(sym.type))
@@ -625,14 +624,12 @@ void goto_symext::symex_return(const expr2tc &code)
   // value optimization have been activated.
   if (stack_limit > 0 && no_return_value_opt)
   {
-    code->foreach_operand(
-      [this](const expr2tc &e)
-      {
-        // check whether the stack size has been reached.
-        claim(
-          (cur_state->top().process_stack_size(e, stack_limit)),
-          "Stack limit property was violated");
-      });
+    code->foreach_operand([this](const expr2tc &e) {
+      // check whether the stack size has been reached.
+      claim(
+        (cur_state->top().process_stack_size(e, stack_limit)),
+        "Stack limit property was violated");
+    });
   }
 
   // kill this one
