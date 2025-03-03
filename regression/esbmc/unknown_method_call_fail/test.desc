@@ -1,0 +1,5 @@
+CORE
+main.c
+--force-malloc-success --unknown-method-args-check
+
+^VERIFICATION FAILED$

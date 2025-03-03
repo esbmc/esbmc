@@ -231,6 +231,22 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
     log_warning(
       "no body for function {}", get_pretty_name(identifier.as_string()));
 
+    // For unknown functions, iterate over its arguments and check the pointers
+    if (options.get_bool_option("unknown-method-args-check"))
+    {
+      for (auto argument : call.operands)
+      {
+        if (
+          is_pointer_type(argument->type) &&
+          !is_empty_type(to_pointer_type(argument->type).subtype))
+        {
+          expr2tc deref =
+            dereference2tc(to_pointer_type(argument->type).subtype, argument);
+          dereference(deref, dereferencet::READ);
+        }
+      }
+    }
+
     /* TODO: if it is a C function with no prototype, assert/claim that all
      *       calls to this function have the same number of parameters and that
      *       they - after type promotion - are compatible. */
