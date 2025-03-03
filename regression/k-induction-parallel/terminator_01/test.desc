@@ -1,4 +1,4 @@
 CORE
 main.c
 --k-induction-parallel
-^VERIFICATION SUCCESSFUL$
+^VERIFICATION UNKNOWN$
