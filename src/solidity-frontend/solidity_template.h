@@ -43,7 +43,7 @@ typedef unsigned BIGINT(160) address_t;
 struct sol_llc_ret
 {
   bool x;
-  uint y;
+  unsigned int y;
 };
 )";
 
