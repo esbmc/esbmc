@@ -216,7 +216,6 @@ void goto_k_inductiont::make_nondet_assign(
     // do not assign nondeterministic value to pointers if we assume
     // objects extracted from the value set analysis
     if (
-      !config.options.get_bool_option("no-pointer-check") &&
       config.options.get_bool_option("add-symex-value-sets") &&
       is_pointer_type(lhs))
       continue;
