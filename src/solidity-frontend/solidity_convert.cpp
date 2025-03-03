@@ -1706,7 +1706,8 @@ void solidity_convertert::convert_unboundcall_nondet(
 {
   if (
     new_expr.is_code() && new_expr.statement() == "function_call" &&
-    new_expr.operands().size() >= 1 && new_expr.op1().name() == "sol_unbound$")
+    new_expr.operands().size() >= 1 &&
+    new_expr.op1().name() == "ESBMC_Auxiliary_Nondet_Extcall")
   {
     current_frontBlockDecl.copy_to_operands(new_expr);
     exprt dump = exprt("sideeffect", common_type);
@@ -1741,7 +1742,7 @@ bool solidity_convertert::get_unbound_function(
   const std::string &c_name,
   symbolt &sym)
 {
-  std::string h_name = "sol_unbound$";
+  std::string h_name = "ESBMC_Auxiliary_Nondet_Extcall";
   std::string h_id = "sol:@C@" + c_name + "@" + h_name + "#";
   symbolt h_sym;
 
@@ -8687,10 +8688,10 @@ bool solidity_convertert::multi_transaction_verification(
   code_while.body() = while_body;
   func_body.move_to_operands(code_while);
 
-  // construct sol_main$Base
+  // construct ESBMC_Auxiliary_Main_Base
   symbolt new_symbol;
   code_typet main_type;
-  const std::string main_name = "sol_main$" + c_name;
+  const std::string main_name = "ESBMC_Auxiliary_Main_" + c_name;
   const std::string main_id = "sol:@C@" + c_name + "@F@" + main_name + "#";
   typet e_type = empty_typet();
   e_type.set("cpp_type", "void");
@@ -8718,7 +8719,7 @@ bool solidity_convertert::multi_transaction_verification(
   main_sym.type = main_type;
   main_sym.value = func_body;
 
-  // set "sol_main$X" as the main function
+  // set "ESBMC_Auxiliary_Main_X" as the main function
   // this will be overwrite in multi-contract mode.
   config.main = main_name;
 
@@ -8746,7 +8747,7 @@ bool solidity_convertert::multi_contract_verification_bound()
   for (const auto &sym : contractNamesList)
   {
     // 1.1 construct multi-transaction verification entry function
-    // function "sol_main$contractname" will be created and inserted to the symbol table.
+    // function "ESBMC_Auxiliary_Main_contractname" will be created and inserted to the symbol table.
     const std::string &c_name = sym.second;
     if (multi_transaction_verification(c_name))
       return true;
@@ -8762,9 +8763,9 @@ bool solidity_convertert::multi_contract_verification_bound()
     static_lifetime_init(context, case_body);
     case_body.make_block();
 
-    // func_call: sol_main$contractname
+    // func_call: ESBMC_Auxiliary_Main_contractname
     const std::string sub_sol_id =
-      "sol:@C@" + c_name + "@F@sol_main$" + c_name + "#";
+      "sol:@C@" + c_name + "@F@ESBMC_Auxiliary_Main_" + c_name + "#";
     if (context.find_symbol(sub_sol_id) == nullptr)
       return true;
 
@@ -8807,8 +8808,8 @@ bool solidity_convertert::multi_contract_verification_bound()
   typet e_type = empty_typet();
   e_type.set("cpp_type", "void");
   main_type.return_type() = e_type;
-  const std::string sol_id = "sol:@F@sol_main$#";
-  const std::string sol_name = "sol_main$";
+  const std::string sol_id = "sol:@F@ESBMC_Auxiliary_Main#";
+  const std::string sol_name = "ESBMC_Auxiliary_Main";
 
   if (
     context.find_symbol(prefix + linearizedBaseList.begin()->first) == nullptr)
@@ -8853,14 +8854,14 @@ bool solidity_convertert::multi_contract_verification_unbound()
   for (const auto &sym : contractNamesList)
   {
     // 1.1 construct multi-transaction verification entry function
-    // function "sol_main$contractname" will be created and inserted to the symbol table.
+    // function "ESBMC_Auxiliary_Main_contractname" will be created and inserted to the symbol table.
     const std::string &c_name = sym.second;
     if (multi_transaction_verification(c_name))
       return true;
 
-    // func_call: sol_main$contractname
+    // func_call: ESBMC_Auxiliary_Main_contractname
     const std::string sub_sol_id =
-      "sol:@C@" + c_name + "@F@sol_main$" + c_name + "#";
+      "sol:@C@" + c_name + "@F@ESBMC_Auxiliary_Main_" + c_name + "#";
     if (context.find_symbol(sub_sol_id) == nullptr)
       return true;
 
@@ -8877,8 +8878,8 @@ bool solidity_convertert::multi_contract_verification_unbound()
   typet e_type = empty_typet();
   e_type.set("cpp_type", "void");
   main_type.return_type() = e_type;
-  const std::string sol_id = "sol:@F@sol_main$#";
-  const std::string sol_name = "sol_main$";
+  const std::string sol_id = "sol:@F@ESBMC_Auxiliary_Main#";
+  const std::string sol_name = "ESBMC_Auxiliary_Main";
 
   if (
     context.find_symbol(prefix + linearizedBaseList.begin()->first) == nullptr)
@@ -9270,7 +9271,7 @@ void solidity_convertert::get_low_level_call(
   else
   {
     // if it's untrusted, we assume the code of the callee is nondetermined.
-    // thus simulate arbitary behaviour to the contracts (not only the caller contract)
+    // thus simulate arbitrary behaviour to the contracts (not only the caller contract)
     new_expr = untrusted_expr;
     return;
   }
