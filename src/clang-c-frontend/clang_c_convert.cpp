@@ -358,7 +358,7 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
    * infinite recursion if the type we're defining refers to itself
    * (via pointers): it either is already being defined (up the stack somewhere)
    * or it's already a complete struct or union in the context. */
-  if (!sym->type.incomplete())
+  if (!sym->type.incomplete() && sym->type.id() != "incomplete_struct")
     return false;
   sym->type.remove(irept::a_incomplete);
 
