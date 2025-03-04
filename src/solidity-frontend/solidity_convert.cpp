@@ -587,19 +587,6 @@ bool solidity_convertert::get_var_decl(
     current_typeName = old_typeName;
   }
 
-  if (
-    t.get("#sol_type") == "CONTRACT" &&
-    t.identifier().as_string() == prefix + current_contractName)
-  {
-    // contract Base{
-    //   Base x;
-    // }
-    // which is not allowed in C++
-    // thus we have to log_error in this case
-    log_error("Unspported contract variable declaration.");
-    abort();
-  }
-
   // set const qualifier
   if (ast_node.contains("mutability") && ast_node["mutability"] == "constant")
     t.cmt_constant(true);
@@ -867,7 +854,11 @@ bool solidity_convertert::get_var_decl(
 
     // 2. add a empty constructor to mimic C++ object auto instantiation
     // e.g. Base x => Base x = Base(p) where p is a integer pointer
-    if (get_instantiation_ctor_call(contract_name, val))
+    // if (get_instantiation_ctor_call(contract_name, val))
+    //   return true;
+    std::string ctor_id;
+    get_ctor_call_id(contract_name, ctor_id);
+    if (get_new_object_ctor_call(contract_name, ctor_id, empty_json, val))
       return true;
 
     // 3. add constructor call to declaration operands
@@ -5179,6 +5170,26 @@ bool solidity_convertert::get_cast_expr(
   return false;
 }
 
+// always success
+void solidity_convertert::get_symbol_decl_ref(
+  const std::string &sym_name,
+  const std::string &sym_id,
+  const typet &t,
+  exprt &new_expr)
+{
+  if (context.find_symbol(sym_id) != nullptr)
+
+    new_expr = symbol_expr(*context.find_symbol(sym_id));
+  else
+  {
+    new_expr = exprt("symbol", t);
+    new_expr.identifier(sym_id);
+    new_expr.cmt_lvalue(true);
+    new_expr.name(sym_name);
+    new_expr.pretty_name(sym_name);
+  }
+}
+
 bool solidity_convertert::get_var_decl_ref(
   const nlohmann::json &decl,
   exprt &new_expr)
@@ -7795,55 +7806,14 @@ bool solidity_convertert::get_ctor_call(
   const nlohmann::json &caller,
   side_effect_expr_function_callt &call)
 {
-  call.function() = ctor;
-  call.type() = t;
-  call.location() = ctor.location();
-  if (current_functionDecl)
-    call.location().function(current_functionName);
-
   /*
   we need to convert
-     call(1)
+    call(1)
   to
-     call(&Base, 1)
-
-    get this object:
-        0: address_of
-          * type: pointer
-            * subtype: symbol
-                * identifier: tag-BB
-          * operands: 
-          0: new_object
-              * type: symbol
-                  * identifier: tag-BB
-              * #lvalue: 1
+      call(&Base, 1)
   */
-
-  code_typet tmp = to_code_type(ctor.type());
-  exprt temporary = exprt("new_object");
-  temporary.set("#lvalue", true);
-  temporary.type() = t;
-  address_of_exprt this_object(temporary);
-
-  // populate nil arguements
-  if (call.arguments().size() == 0)
-  {
-    size_t i = 0;
-    do
-    {
-      call.arguments().push_back(static_cast<const exprt &>(get_nil_irep()));
-    } while (++i < tmp.arguments().size());
-  }
-  else
-    call.arguments().resize(
-      tmp.arguments().size(), static_cast<const exprt &>(get_nil_irep()));
-  if (
-    tmp.arguments().size() > 0 && tmp.arguments().at(0).is_pointer() &&
-    tmp.arguments().at(0).base_name() == "this")
-    call.arguments().at(0) = this_object;
-  else
-    // probably because the function have not added the this param yet
-    call.arguments().emplace(call.arguments().begin(), this_object);
+  if (get_non_library_function_call(ctor, t, decl_ref, caller, call))
+    return true;
 
   // add params if there are any
   if (caller.contains("arguments"))
@@ -7942,11 +7912,6 @@ bool solidity_convertert::get_non_library_function_call(
   side_effect_expr_function_callt &call)
 {
   log_debug("solidity", "\tget_non_library_function_call");
-  if (decl_ref.empty())
-  {
-    log_error("Internal error: empty function definition refernce");
-    abort();
-  }
 
   call.function() = func;
   call.type() = t;
@@ -7954,27 +7919,12 @@ bool solidity_convertert::get_non_library_function_call(
   if (current_functionDecl)
     call.location().function(current_functionName);
 
-  // this pointer
+  // this object
   exprt this_object;
-  if ((func.id() == "member"))
-    this_object = func.op0();
-  else if (
-    func.type().is_code() && to_code_type(func.type()).arguments().size() > 0)
-  {
-    const auto tmp_arg = to_code_type(func.type()).arguments().at(0);
-    assert(tmp_arg.get("#base_name").as_string() == "this");
-    exprt temporary = exprt("new_object");
-    temporary.set("#lvalue", true);
-    temporary.type() = tmp_arg.type().subtype();
-    this_object = temporary;
-  }
-  else
-  {
-    log_error("Unexpected function call scheme\n{}", func.to_string());
+  if (get_this_object(func, this_object))
     return true;
-  }
 
-  if (!caller.empty())
+  if (!caller.empty() && !decl_ref.empty())
   {
     // * Assume it is a normal funciton call, including ctor call with params
     // set caller object as the first argument
@@ -8009,28 +7959,12 @@ bool solidity_convertert::get_non_library_function_call(
   }
   else
   {
-    // assume it's the function call in the multi-transaction-verification
-    // set as null
-    code_typet tmp = to_code_type(func.type());
+    // we know we are calling a function within the source code
+    // however, the definition json or the calling argument json is not provided
+    // it could be the function call in the multi-transaction-verification
     // populate nil arguements
-    if (call.arguments().size() == 0)
-    {
-      size_t i = 0;
-      do
-      {
-        call.arguments().push_back(static_cast<const exprt &>(get_nil_irep()));
-      } while (++i < tmp.arguments().size());
-    }
-    else
-      call.arguments().resize(
-        tmp.arguments().size(), static_cast<const exprt &>(get_nil_irep()));
-    if (
-      tmp.arguments().size() > 0 && tmp.arguments().at(0).is_pointer() &&
-      tmp.arguments().at(0).base_name() == "this")
-      call.arguments().at(0) = this_object;
-    else
-      // probably because the function have not added the this param yet
-      call.arguments().emplace(call.arguments().begin(), this_object);
+    if (populate_nil_this_arguments(func, this_object, call))
+      return true;
   }
   return false;
 }
@@ -8103,16 +8037,7 @@ bool solidity_convertert::get_new_object_ctor_call(
   typet type(irept::id_symbol);
   type.identifier(id);
   exprt ctor;
-  if (context.find_symbol(ctor_id) != nullptr)
-    ctor = symbol_expr(*context.find_symbol(ctor_id));
-  else
-  {
-    ctor = exprt("symbol", type);
-    ctor.identifier(ctor_id);
-    ctor.cmt_lvalue(true);
-    ctor.name(contract_name);
-    ctor.pretty_name(contract_name);
-  }
+  get_symbol_decl_ref(contract_name, ctor_id, type, ctor);
 
   // setup initializer, i.e. call the constructor
   side_effect_expr_function_callt call;
@@ -8212,7 +8137,7 @@ void solidity_convertert::get_static_contract_instance_name(
   std::string &name,
   std::string &id)
 {
-  name = "__sol_tmp_" + c_name;
+  name = "ESBMC_Auxiliary_Object_" + c_name;
   id = "sol:@" + name + "#";
 }
 
@@ -8283,13 +8208,24 @@ void solidity_convertert::convert_type_expr(
   log_debug("solidity", "@@@ Performing type conversion");
 
   typet src_type = src_expr.type();
+  // only do conversion when the src.type != dest.type
   if (src_type != dest_type)
   {
     std::string src_sol_type = src_type.get("#sol_type").as_string();
     std::string dest_sol_type = dest_type.get("#sol_type").as_string();
 
-    // only do conversion when the src.type != dest.type
-    if (is_bytes_type(src_type) && is_bytes_type(dest_type))
+    if (
+      (dest_sol_type == "ADDRESS" || dest_sol_type == "ADDRESS_PAYABLE") &&
+      src_sol_type == "CONTRACT")
+    {
+      // address(instance) ==> instance.address
+      exprt mem;
+      std::string c_name =
+        context.find_symbol(src_type.identifier())->name.as_string();
+      get_addr_expr(c_name, src_expr, mem);
+      src_expr = mem;
+    }
+    else if (is_bytes_type(src_type) && is_bytes_type(dest_type))
     {
       // 1. Fixed-size Bytes Converted to Smaller Types
       //    bytes2 a = 0x4326;
@@ -9083,9 +9019,10 @@ void solidity_convertert::get_builtin_symbol(
   get_default_symbol(sym, "C++", t, name, id, l);
 
   auto &added_sym = *move_symbol_to_context(sym);
+  code_declt decl(symbol_expr(added_sym));
   added_sym.value = val;
-  // ?
-  move_to_initializer(symbol_expr(added_sym));
+  decl.operands().push_back(val);
+  move_to_initializer(decl);
 
   if (!c_name.empty())
   {
@@ -10248,16 +10185,7 @@ void solidity_convertert::get_addr_expr(
   exprt _address;
   std::string addr_name = "address";
   std::string addr_id = "sol:@C@" + cname + "@" + addr_name;
-  if (context.find_symbol(addr_id) != nullptr)
-    _address = symbol_expr(*context.find_symbol(addr_id));
-  else
-  {
-    _address = exprt("symbol", unsignedbv_typet(160));
-    _address.identifier(addr_id);
-    _address.cmt_lvalue(true);
-    _address.name(addr_name);
-    _address.pretty_name(addr_name);
-  }
+  get_symbol_decl_ref(addr_name, addr_id, unsignedbv_typet(160), _address);
 
   member_exprt mem = member_exprt(base, _address.name(), _address.type());
   mem.location() = base.location();
@@ -10295,6 +10223,88 @@ bool solidity_convertert::set_addr_cname_mapping(
   _call.arguments().push_back(string);
 
   new_expr = _call;
+  return false;
+}
+
+bool solidity_convertert::get_this_object(const exprt &func, exprt &this_object)
+{
+  if ((func.id() == "member"))
+    this_object = func.op0();
+  else if (
+    func.type().is_code() && to_code_type(func.type()).arguments().size() > 0)
+  {
+    const auto tmp_arg = to_code_type(func.type()).arguments().at(0);
+    assert(tmp_arg.cmt_base_name() == "this");
+    exprt temporary = exprt("new_object");
+    temporary.set("#lvalue", true);
+    temporary.type() = tmp_arg.type().subtype();
+    this_object = temporary;
+  }
+  else
+  {
+    log_error("Unexpected function call scheme\n{}", func.to_string());
+    return true;
+  }
+  return false;
+}
+
+/*
+we need to convert
+    call(1)
+to
+    call(&Base, 1)
+
+  get this object:
+      0: address_of
+        * type: pointer
+          * subtype: symbol
+              * identifier: tag-BB
+        * operands: 
+        0: new_object
+            * type: symbol
+                * identifier: tag-BB
+            * #lvalue: 1
+*/
+bool solidity_convertert::populate_nil_this_arguments(
+  const exprt &ctor,
+  const exprt &this_object,
+  side_effect_expr_function_callt &call)
+{
+  code_typet tmp = to_code_type(ctor.type());
+  assert(tmp.arguments().size() >= call.arguments().size());
+
+  size_t i = 0;
+  do
+  {
+    exprt to_add;
+    if (
+      tmp.arguments().size() > i &&
+      tmp.arguments().at(i).type().get("#sol_type") == "CONTRACT")
+    {
+      const auto &arg = tmp.arguments().at(i);
+      const std::string contract_name =
+        context.find_symbol(arg.type().identifier())->name.as_string();
+      std::string s_name, s_id;
+      get_static_contract_instance_name(contract_name, s_name, s_id);
+      exprt sym;
+      get_symbol_decl_ref(s_name, s_id, arg.type(), sym);
+      to_add = sym;
+    }
+    else
+      to_add = static_cast<const exprt &>(get_nil_irep());
+
+    if (i < call.arguments().size())
+      call.arguments().at(i) = to_add;
+    else
+      call.arguments().push_back(to_add);
+  } while (++i < tmp.arguments().size());
+  if (
+    tmp.arguments().size() > 0 && tmp.arguments().at(0).type().is_pointer() &&
+    tmp.arguments().at(0).cmt_base_name() == "this")
+    call.arguments().at(0) = this_object;
+  else
+    // probably because the function have not added the this param yet
+    call.arguments().emplace(call.arguments().begin(), this_object);
   return false;
 }
 

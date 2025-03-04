@@ -137,6 +137,11 @@ protected:
     exprt &new_expr,
     const nlohmann::json literal_type = nullptr);
   bool get_var_decl_ref(const nlohmann::json &decl, exprt &new_expr);
+  void get_symbol_decl_ref(
+    const std::string &sym_name,
+    const std::string &sym_id,
+    const typet &t,
+    exprt &new_expr);
   bool get_func_decl_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_func_decl_ref(const std::string &func_id, nlohmann::json &decl_ref);
   bool get_func_decl_this_ref(const nlohmann::json &decl, exprt &new_expr);
@@ -421,6 +426,11 @@ protected:
     const exprt &base,
     codet &body,
     bool is_payable = false);
+  bool populate_nil_this_arguments(
+    const exprt &ctor,
+    const exprt &this_object,
+    side_effect_expr_function_callt &call);
+  bool get_this_object(const exprt &func, exprt &this_object);
 
   // literal conversion functions
   bool convert_integer_literal(
