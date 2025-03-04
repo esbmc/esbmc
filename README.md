@@ -15,7 +15,7 @@ ESBMC supports:
 
 ESBMC also implements state-of-the-art incremental BMC and *k*-induction proof-rule algorithms based on Satisfiability Modulo Theories (SMT) and Constraint Programming (CP) solvers.
 
-We provide some background material/publications to help you understand exactly what ESBMC can offer. These are available [online](https://ssvlab.github.io/esbmc/publications.html). For further information about our main components, you can also check the ESBMC [architecture](https://github.com/esbmc/esbmc/blob/master/ARCHITECTURE.md).
+We provide some background material/publications to help you understand exactly what ESBMC can offer. These are available [online](https://ssvlab.github.io/esbmc/publications.html). For further information about our main components, check the ESBMC [architecture](https://github.com/esbmc/esbmc/blob/master/ARCHITECTURE.md).
 
 Our main website is [esbmc.org](http://esbmc.org). 
 
@@ -111,7 +111,7 @@ RUN apt-get update && apt-get install -y \
     cmake \
     && rm -rf /var/lib/apt/lists/*
 
-# Keep container running with tail -f /dev/null
+# Keep the container running with tail -f /dev/null
 CMD ["bash", "-c", "tail -f /dev/null"]
 ````
 
@@ -127,7 +127,7 @@ services:
     tty: true
     stdin_open: true
 ````
-The linux/amd64 line is very important, to virtualize amd64. Now do docker-compose up --build. You can then follow the linux instructions. Make -j16 works well on M2 mac's and beyond.
+The Linux/Amd64 line is very important for virtualizing Amd64. Now do docker-compose up --build. You can then follow the Linux instructions. Make -j16 works well on M2 mac's and beyond.
 
 ### How to use ESBMC
 
@@ -201,7 +201,7 @@ cmake .. -DENABLE_Z3=1 -DENABLE_BOOLECTOR=1 -DBoolector_DIR=<the folder you ran 
 
 ### Using Config Files
 
-ESBMC supports specifying options through TOML formatted config files. To use a config file, export an environment variable:
+ESBMC supports specifying options through TOML-formatted config files. To use a config file, export an environment variable:
 
 ```sh
 export ESBMC_CONFIG_FILE="path/to/config.toml"
