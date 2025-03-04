@@ -91,9 +91,9 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
   // add assertion to the target equation
   assertion(new_expr, msg);
 
-  // Property strengthening:
-  // If the property holds, it is promoted as an assumption
-  assume(claim_expr);
+  // Strengthening the property if multi-property is not set
+  if (!options.get_bool_option("multi-property"))
+    assume(claim_expr);
 }
 
 void goto_symext::assertion(
