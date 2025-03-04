@@ -437,6 +437,7 @@ void __VERIFIER_error();
 void __VERIFIER_assume(int);
 void __VERIFIER_atomic_begin();
 void __VERIFIER_atomic_end();
+char** ESBMC_malloc_argv(int);
 
 /* Causes a verification error when its call is reachable; internal use in math
  * models */
