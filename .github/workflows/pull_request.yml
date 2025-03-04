@@ -6,7 +6,7 @@ jobs:
 
   # Check testing tool suite
   testing-tool:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
     - uses: actions/checkout@v4
     - name: Runs testing tool unit test
@@ -63,7 +63,7 @@ jobs:
     # Check project with clang-format
   code-style:
     name: Check C/C++ code-style
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     permissions:
       # Give the default GITHUB_TOKEN write permission to commit and push the
       # added or changed files to the repository.
@@ -91,7 +91,7 @@ jobs:
 
   cmake-lint:
     name: Check CMake modules
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     continue-on-error: true # TODO: Eventually this will be removed
     steps:
     - uses: actions/checkout@v4
