@@ -77,7 +77,7 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
   if (is_true(new_expr))
   {
     // strengthening the claim
-    assume(claim_expr);
+    //assume(claim_expr);
     return;
   }
 
@@ -92,7 +92,9 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
   assertion(new_expr, msg);
 
   // Strengthening the property if multi-property is not set
-  if (!options.get_bool_option("multi-property"))
+  if (
+    !options.get_bool_option("multi-property") &&
+    !options.get_bool_option("ltl"))
     assume(claim_expr);
 }
 
