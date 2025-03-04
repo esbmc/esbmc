@@ -7844,7 +7844,6 @@ bool solidity_convertert::get_ctor_call(
   else
     // probably because the function have not added the this param yet
     call.arguments().emplace(call.arguments().begin(), this_object);
-    call.dump();
 
   // add params if there are any
   if (caller.contains("arguments"))
