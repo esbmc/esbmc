@@ -1778,6 +1778,9 @@ bool solidity_convertert::get_unbound_function(
     get_static_contract_instance(c_name, added_ctor_symbol);
     const exprt contract_var = symbol_expr(added_ctor_symbol);
 
+    // construct return; to avoid fall-through
+    code_returnt return_expr;
+
     // 2.0 check visibility setting
     bool skip_vis =
       config.options.get_option("no-visibility").empty() ? false : true;
@@ -1840,13 +1843,16 @@ bool solidity_convertert::get_unbound_function(
       // set &__ESBMC_tmp as the first argument
       // which overwrite the this pointer
       then_expr.arguments().at(0) = contract_var;
-      convert_expression_to_code(then_expr);
+
+      code_blockt then;
+      then.copy_to_operands(then, return_expr);
+      return_expr.return_value() = then_expr;
 
       // ifthenelse-statement:
       codet if_expr("ifthenelse");
-      if_expr.copy_to_operands(nondet_bool_expr, then_expr);
+      if_expr.copy_to_operands(nondet_bool_expr, return_expr);
 
-      func_body.move_to_operands(if_expr);
+      func_body.copy_to_operands(if_expr);
     }
 
     // 3. construct harness
@@ -7821,14 +7827,24 @@ bool solidity_convertert::get_ctor_call(
 
   // populate nil arguements
   if (call.arguments().size() == 0)
-    call.arguments().push_back(this_object);
-
-  else
   {
+    size_t i = 0;
+    do
+    {
+      call.arguments().push_back(static_cast<const exprt &>(get_nil_irep()));
+    } while (++i < tmp.arguments().size());
+  }
+  else
     call.arguments().resize(
       tmp.arguments().size(), static_cast<const exprt &>(get_nil_irep()));
+  if (
+    tmp.arguments().size() > 0 && tmp.arguments().at(0).is_pointer() &&
+    tmp.arguments().at(0).base_name() == "this")
     call.arguments().at(0) = this_object;
-  }
+  else
+    // probably because the function have not added the this param yet
+    call.arguments().emplace(call.arguments().begin(), this_object);
+    call.dump();
 
   // add params if there are any
   if (caller.contains("arguments"))
@@ -7999,14 +8015,23 @@ bool solidity_convertert::get_non_library_function_call(
     code_typet tmp = to_code_type(func.type());
     // populate nil arguements
     if (call.arguments().size() == 0)
-      // vector::_M_range_check: __n (which is 0) >= this->size() (which is 0)
-      call.arguments().push_back(this_object);
-    else
     {
+      size_t i = 0;
+      do
+      {
+        call.arguments().push_back(static_cast<const exprt &>(get_nil_irep()));
+      } while (++i < tmp.arguments().size());
+    }
+    else
       call.arguments().resize(
         tmp.arguments().size(), static_cast<const exprt &>(get_nil_irep()));
+    if (
+      tmp.arguments().size() > 0 && tmp.arguments().at(0).is_pointer() &&
+      tmp.arguments().at(0).base_name() == "this")
       call.arguments().at(0) = this_object;
-    }
+    else
+      // probably because the function have not added the this param yet
+      call.arguments().emplace(call.arguments().begin(), this_object);
   }
   return false;
 }
@@ -8201,10 +8226,8 @@ void solidity_convertert::get_static_contract_instance(
   std::string ctor_ins_name, ctor_ins_id;
   get_static_contract_instance_name(c_name, ctor_ins_name, ctor_ins_id);
 
-  symbolt added_sym;
-
   if (context.find_symbol(ctor_ins_id) != nullptr)
-    added_sym = *context.find_symbol(ctor_ins_id);
+    sym = *context.find_symbol(ctor_ins_id);
   else
   {
     locationt ctor_ins_loc;
@@ -8224,10 +8247,26 @@ void solidity_convertert::get_static_contract_instance(
     // the instance should be set as static
     ctor_ins_symbol.static_lifetime = true;
 
-    added_sym = *move_symbol_to_context(ctor_ins_symbol);
-  }
+    auto &added_sym = *move_symbol_to_context(ctor_ins_symbol);
 
-  sym = added_sym;
+    // get value
+    std::string ctor_id;
+    // we do not check the return value as we might have not parsed the symbol yet
+    if (get_ctor_call_id(c_name, ctor_id))
+    {
+      log_error("cannot find ctor id");
+      abort();
+    }
+
+    exprt ctor;
+    if (get_new_object_ctor_call(c_name, ctor_id, empty_json, ctor))
+    {
+      log_error("failed to construct a temporary object");
+      abort();
+    }
+    added_sym.value = ctor;
+    sym = added_sym;
+  }
 }
 
 bool solidity_convertert::is_bytes_type(const typet &t)
@@ -8656,25 +8695,6 @@ bool solidity_convertert::multi_transaction_verification(
   // 1.1 get contract symbol ("tag-contractName")
   symbolt static_ins;
   get_static_contract_instance(c_name, static_ins);
-
-  // get value
-  std::string ctor_id;
-  // we do not check the return value as we might have not parsed the symbol yet
-  if (get_ctor_call_id(c_name, ctor_id))
-    return true;
-
-  exprt ctor;
-  if (get_new_object_ctor_call(c_name, ctor_id, empty_json, ctor))
-    return true;
-
-  // assignment: x = new Base();
-  exprt _assign = side_effect_exprt("assign", static_ins.type);
-  _assign.operands().push_back(symbol_expr(static_ins));
-  _assign.operands().push_back(ctor);
-
-  // move to "sol_main" body
-  convert_expression_to_code(_assign);
-  func_body.move_to_operands(_assign);
 
   // get sol harness function and move into the while body
   code_function_callt func_call;
@@ -10013,14 +10033,14 @@ bool solidity_convertert::member_extcall_harness(
     inner.operands().push_back(tmp);
 
     codet if_expr_in("ifthenelse");
-    if_expr_in.move_to_operands(_call, inner);
+    if_expr_in.copy_to_operands(_call, inner);
     if_expr_in.location() = base.location();
 
     outter.operands().push_back(if_expr_in);
   }
 
   codet if_expr_out("ifthenelse");
-  if_expr_out.move_to_operands(outguard, outter);
+  if_expr_out.copy_to_operands(outguard, outter);
   if_expr_out.location() = base.location();
 
   current_frontBlockDecl.copy_to_operands(if_expr_out);
