@@ -1770,7 +1770,7 @@ bool solidity_convertert::get_unbound_function(
     const exprt contract_var = symbol_expr(added_ctor_symbol);
 
     // construct return; to avoid fall-through
-    code_returnt return_expr;
+    exprt return_expr = code_returnt();
 
     // 2.0 check visibility setting
     bool skip_vis =
@@ -1834,14 +1834,14 @@ bool solidity_convertert::get_unbound_function(
       // set &__ESBMC_tmp as the first argument
       // which overwrite the this pointer
       then_expr.arguments().at(0) = contract_var;
+      convert_expression_to_code(then_expr);
 
       code_blockt then;
-      then.copy_to_operands(then, return_expr);
-      return_expr.return_value() = then_expr;
+      then.copy_to_operands(then_expr, return_expr);
 
       // ifthenelse-statement:
       codet if_expr("ifthenelse");
-      if_expr.copy_to_operands(nondet_bool_expr, return_expr);
+      if_expr.copy_to_operands(nondet_bool_expr, then);
 
       func_body.copy_to_operands(if_expr);
     }
