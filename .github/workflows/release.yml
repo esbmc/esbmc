@@ -19,7 +19,7 @@ jobs:
 
   create-release:
     name: Upload Release Asset
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     needs: [build]
     steps:
       - name: Download Linux Build
