@@ -236,12 +236,15 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
     {
       for (auto argument : call.operands)
       {
-        if (
-          is_pointer_type(argument->type) &&
-          !is_empty_type(to_pointer_type(argument->type).subtype))
+        if (is_pointer_type(argument->type))
         {
-          expr2tc deref =
-            dereference2tc(to_pointer_type(argument->type).subtype, argument);
+          type2tc t = to_pointer_type(argument->type).subtype;
+
+          // Special case: Void type cannot be dereferenced
+          if (is_empty_type(t))
+            t = char_type2();
+
+          expr2tc deref = dereference2tc(t, argument);
           dereference(deref, dereferencet::READ);
         }
       }
