@@ -1806,13 +1806,7 @@ bool solidity_convertert::get_unbound_function(
         continue;
 
       // then: function_call
-      // get func_decl_ref
-      if (context.find_symbol(func_id) == nullptr)
-      {
-        log_error("cannot find the function {} in the symbol table", func_id);
-        return true;
-      }
-      const exprt func = symbol_expr(*context.find_symbol(func_id));
+      exprt func = method;
 
       // do member access
       exprt mem_access =
@@ -7820,16 +7814,21 @@ bool solidity_convertert::get_ctor_call(
   */
 
   code_typet tmp = to_code_type(ctor.type());
-  // populate nil arguements
-  call.arguments().resize(
-    tmp.arguments().size(), static_cast<const exprt &>(get_nil_irep()));
-
   exprt temporary = exprt("new_object");
   temporary.set("#lvalue", true);
   temporary.type() = t;
   address_of_exprt this_object(temporary);
-  // set this
-  call.arguments().at(0) = this_object;
+
+  // populate nil arguements
+  if (call.arguments().size() == 0)
+    call.arguments().push_back(this_object);
+
+  else
+  {
+    call.arguments().resize(
+      tmp.arguments().size(), static_cast<const exprt &>(get_nil_irep()));
+    call.arguments().at(0) = this_object;
+  }
 
   // add params if there are any
   if (caller.contains("arguments"))
@@ -7963,7 +7962,6 @@ bool solidity_convertert::get_non_library_function_call(
   if (!caller.empty())
   {
     // * Assume it is a normal funciton call, including ctor call with params
-
     // set caller object as the first argument
     call.arguments().push_back(this_object);
     if (decl_ref.contains("parameters") && caller.contains("arguments"))
@@ -8000,11 +7998,16 @@ bool solidity_convertert::get_non_library_function_call(
     // set as null
     code_typet tmp = to_code_type(func.type());
     // populate nil arguements
-    call.arguments().resize(
-      tmp.arguments().size(), static_cast<const exprt &>(get_nil_irep()));
-    call.arguments().at(0) = this_object;
+    if (call.arguments().size() == 0)
+      // vector::_M_range_check: __n (which is 0) >= this->size() (which is 0)
+      call.arguments().push_back(this_object);
+    else
+    {
+      call.arguments().resize(
+        tmp.arguments().size(), static_cast<const exprt &>(get_nil_irep()));
+      call.arguments().at(0) = this_object;
+    }
   }
-
   return false;
 }
 
