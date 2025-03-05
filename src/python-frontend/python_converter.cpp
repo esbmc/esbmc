@@ -497,11 +497,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   // If lhs is unsigned and rhs is signed, convert rhs to match lhs's type.
   // This prevents signed-unsigned comparison issues.
   if (lhs.type().is_unsignedbv() && rhs.type().is_signedbv())
-  {
-    exprt result("typecast", lhs.type());
-    result.copy_to_operands(rhs);
-    rhs = result;
-  }
+    rhs.make_typecast(lhs.type());
 
   // Add lhs and rhs as operands to the binary expression.
   bin_expr.copy_to_operands(lhs, rhs);
@@ -1652,6 +1648,8 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     {
       current_element_type = bool_type();
       exprt test = get_expr(element["test"]);
+      if (!test.type().is_bool())
+        test.make_typecast(current_element_type);
       code_assertt assert_code;
       assert_code.assertion() = test;
       assert_code.location() = get_location_from_decl(element);
