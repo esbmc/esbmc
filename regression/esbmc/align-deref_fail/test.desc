@@ -1,5 +1,5 @@
 CORE
 align.c
---func f -Wno-error=implicit-function-declaration
+--func f -Wno-error=implicit-function-declaration --claim 5
 ^VERIFICATION FAILED$
 \bdereference failure: Incorrect alignment when accessing data object\b
