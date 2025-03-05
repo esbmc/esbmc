@@ -161,13 +161,13 @@ __ESBMC_HIDE:;
 )";
 
 const std::string sol_address = R"(
-void addr_transfer(uint256_t ether, uint256_t balance)
+void _transfer(uint256_t ether, uint256_t balance)
 {
 __ESBMC_HIDE:;
   __ESBMC_assume(balance < ether);
 }
 
-bool addr_send(uint256_t ether, uint256_t balance)
+bool _send(uint256_t ether, uint256_t balance)
 {
 __ESBMC_HIDE:;
   if(balance < ether)
@@ -175,25 +175,25 @@ __ESBMC_HIDE:;
   return true;
 }
 
-bool addr_call()
+bool _call()
 {
 __ESBMC_HIDE:;
   return nondet_bool();
 }
 
-bool addr_delegatecall()
+bool _delegatecall()
 {
 __ESBMC_HIDE:;
   return nondet_bool();
 }
 
-bool addr_staticcall()
+bool _staticcall()
 {
 __ESBMC_HIDE:;
   return nondet_bool();
 }
 
-bool addr_callcodecall()
+bool _callcodecall()
 {
 __ESBMC_HIDE:;
   return nondet_bool();
@@ -258,7 +258,7 @@ __ESBMC_HIDE:;
   current->next = newNode;
 }
 
-int findKeyU(struct NodeU *head, uint256_t key)
+int _ESBMC_findKeyUint(struct NodeU *head, uint256_t key)
 {
 __ESBMC_HIDE:;
   struct NodeU *current = head;
@@ -277,7 +277,7 @@ __ESBMC_HIDE:;
   return cnt;
 }
 
-int findKeyI(struct NodeI *head, int256_t key)
+int _ESBMC_findKeyInt(struct NodeI *head, int256_t key)
 {
 __ESBMC_HIDE:;
   struct NodeI *current = head;
@@ -312,7 +312,7 @@ ArrayNode *array_list_head = NULL;
  * Stores/updates an array and its length.
  * If the array already exists, it updates the length.
  */
-void store_array(void *array, size_t length) {
+void _ESBMC_store_array(void *array, size_t length) {
 __ESBMC_HIDE:;
     // Check if array already exists in the list
     ArrayNode *current = array_list_head;
@@ -336,7 +336,7 @@ __ESBMC_HIDE:;
  * Fetches the length of a stored array.
  * Returns 0 if the array is not found.
  */
-unsigned int get_array_length(void *array) {
+unsigned int _ESBMC_get_array_length(void *array) {
     ArrayNode *current = array_list_head;
     while (current != NULL) {
         if (current->array_ptr == array) {
@@ -348,7 +348,7 @@ unsigned int get_array_length(void *array) {
 }
 
 
-void *arrcpy(void *from_array, size_t from_size, size_t size_of)
+void *_ESBMC_arrcpy(void *from_array, size_t from_size, size_t size_of)
 {
 __ESBMC_HIDE:;
   // assert(from_size != 0);
@@ -541,7 +541,7 @@ __attribute__((annotate("__ESBMC_inf_size"))) void *sol_obj_array[1];
 __attribute__((annotate("__ESBMC_inf_size"))) char* sol_cname_array[1];
 static unsigned sol_max_cnt = 0;
 
-int get_addr_array_idx(address_t tgt)
+int _ESBMC_get_addr_array_idx(address_t tgt)
 {
 __ESBMC_HIDE:;
   for (unsigned int i = 0; i < sol_max_cnt; i++)
@@ -551,10 +551,10 @@ __ESBMC_HIDE:;
   }
   return -1;
 }
-void *get_obj(address_t addr)
+void *_ESBMC_get_obj(address_t addr)
 {
 __ESBMC_HIDE:;
-  int idx = get_addr_array_idx(addr);
+  int idx = _ESBMC_get_addr_array_idx(addr);
   if (idx == -1)
     // this means it's not previously stored
     return NULL;
@@ -571,7 +571,7 @@ __ESBMC_HIDE:;
   // if (sol_max_cnt >= max_addr_obj_size)
   //   assert(0);
 }
-address_t get_unique_address(void *obj)
+address_t _ESBMC_get_unique_address(void *obj)
 {
 __ESBMC_HIDE:;
   __ESBMC_assume(obj != NULL);
@@ -579,25 +579,25 @@ __ESBMC_HIDE:;
   do
   {
     tmp = nondet_long();
-  } while (get_addr_array_idx(tmp) != -1);
+  } while (_ESBMC_get_addr_array_idx(tmp) != -1);
   update_addr_obj(tmp, obj);
   return tmp;
 }
-void set_cname_array(address_t _addr, char* cname)
+void _ESBMC_set_cname_array(address_t _addr, char* cname)
 {
 __ESBMC_HIDE:;
-  int tmp = get_addr_array_idx(_addr);
+  int tmp = _ESBMC_get_addr_array_idx(_addr);
   // assert(tmp != -1);
   sol_cname_array[tmp] = cname;
 }
-const char * get_cname(address_t _addr)
+const char * _ESBMC_get_cname(address_t _addr)
 {
 __ESBMC_HIDE:;
-  int tmp = get_addr_array_idx(_addr);
+  int tmp = _ESBMC_get_addr_array_idx(_addr);
   // assert(tmp != -1);
   return sol_cname_array[tmp];
 }
-bool cmp_cname(const char* c_1, const char* c_2)
+bool _ESBMC_cmp_cname(const char* c_1, const char* c_2)
 {
 __ESBMC_HIDE:;
   if(strcmp(c_1, c_2) == 0)
@@ -606,7 +606,14 @@ __ESBMC_HIDE:;
     return false;
 }
 
-uint256_t update_balance(uint256_t balance, uint256_t val)
+const char * _ESBMC_get_nondet_cont_name(const char *c_array[], unsigned int len)
+{
+__ESBMC_HIDE:;
+unsigned int rand = nondet_uint() % len;
+return c_array[rand];
+}
+
+uint256_t _ESBMC_update_balance(uint256_t balance, uint256_t val)
 {
 __ESBMC_HIDE:;
   val = val + (uint256_t)1;
