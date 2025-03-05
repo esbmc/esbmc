@@ -390,7 +390,7 @@ const struct group_opt_templ all_cmd_options[] = {
      "convert assertions for bounds and pointer checks into assumptions"},
     {"unknown-method-args-check",
      NULL,
-     "check every argument to an unknown function call"}}},
+     "check pointer type arguments passed to the unknown function call"}}},
   {"k-induction",
    {{"base-case", NULL, "check the base case"},
     {"forward-condition", NULL, "check the forward condition"},
