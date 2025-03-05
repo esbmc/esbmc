@@ -200,7 +200,7 @@ protected:
     const typet &t,
     const nlohmann::json &caller,
     side_effect_expr_function_callt &call);
-  void get_library_function_call_no_params(
+  void get_library_function_call_no_args(
     const std::string &func_name,
     const std::string &func_id,
     const typet &t,
@@ -491,8 +491,12 @@ protected:
   std::unordered_map<int, std::string> exportedSymbolsList;
   // Inheritance Order Record <contract_name, Contract_id>
   std::unordered_map<std::string, std::vector<int>> linearizedBaseList;
+  // Who inherits from me?
+  std::unordered_map<std::string, std::unordered_set<std::string>> inheritanceMap;
+  //std::unordered_map<std::string, std::unordered_set<std::string>> functionSignature;
   // contract name list
-  std::unordered_map<int, std::string> contractNamesList;
+  std::unordered_map<int, std::string> contractNamesMap;
+  std::unordered_set<std::string> contractNamesList;
   // Store the ast_node["id"] of contract/struct/function/...
   std::unordered_map<int, std::string> scope_map;
   // Store state variables
