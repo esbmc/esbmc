@@ -671,9 +671,9 @@ bool solidity_convertert::get_var_decl(
       uint[2] z;            // uint *z = (uint *)calloc(2, sizeof(uint));
       
                             // uint tmp1[2] = {1,2}; // populated into sym tab, not a real statement
-      uint[2] zz = [1,2];   // uint *zz = (uint *)arrcpy(tmp1, 2, 2, sizeof(uint));
+      uint[2] zz = [1,2];   // uint *zz = (uint *)_ESBMC_arrcpy(tmp1, 2, 2, sizeof(uint));
 
-      uint[2] y = x;        // uint *zz = (uint *)arrcpy(x, 2, 2, sizeof(uint));
+      uint[2] y = x;        // uint *zz = (uint *)_ESBMC_arrcpy(x, 2, 2, sizeof(uint));
 
       TODO: suport disorder:
       uint[2] y = x;
@@ -765,7 +765,7 @@ bool solidity_convertert::get_var_decl(
       if (get_expr(callee_arg_json, literal_type, size_expr))
         return true;
 
-      // construct statement store_array(zz, 10);
+      // construct statement _ESBMC_store_array(zz, 10);
       exprt func_call;
       store_update_dyn_array(symbol_expr(added_symbol), size_expr, func_call);
 
@@ -810,7 +810,7 @@ bool solidity_convertert::get_var_decl(
       added_symbol.value = acpy_call;
       decl.operands().push_back(acpy_call);
 
-      // construct statement store_array(zz, 10);
+      // construct statement _ESBMC_store_array(zz, 10);
       exprt func_call;
       store_update_dyn_array(symbol_expr(added_symbol), size_expr, func_call);
 
@@ -1698,7 +1698,7 @@ void solidity_convertert::convert_unboundcall_nondet(
   if (
     new_expr.is_code() && new_expr.statement() == "function_call" &&
     new_expr.operands().size() >= 1 &&
-    new_expr.op1().name() == "__ESBMC_Nondet_Extcall")
+    new_expr.op1().name() == "_ESBMC_Nondet_Extcall")
   {
     current_frontBlockDecl.copy_to_operands(new_expr);
     exprt dump = exprt("sideeffect", common_type);
@@ -1733,7 +1733,7 @@ bool solidity_convertert::get_unbound_function(
   const std::string &c_name,
   symbolt &sym)
 {
-  std::string h_name = "__ESBMC_Nondet_Extcall";
+  std::string h_name = "_ESBMC_Nondet_Extcall";
   std::string h_id = "sol:@C@" + c_name + "@" + h_name + "#";
   symbolt h_sym;
 
@@ -1831,7 +1831,7 @@ bool solidity_convertert::get_unbound_function(
             then_expr))
         return true;
 
-      // set &__ESBMC_tmp as the first argument
+      // set &_ESBMC_tmp as the first argument
       // which overwrite the this pointer
       then_expr.arguments().at(0) = contract_var;
       convert_expression_to_code(then_expr);
@@ -2042,9 +2042,9 @@ bool solidity_convertert::move_inheritance_to_ctor(
         function ctor()
         {
           // create temporary object
-          Base2 __ESBMC_ctor_Base2_tmp = new Base();
+          Base2 _ESBMC_ctor_Base2_tmp = new Base();
           // copy value
-          this.x =  __ESBMC_ctor_Base2_tmp.x ;
+          this.x =  _ESBMC_ctor_Base2_tmp.x ;
           ...
         }
     */
@@ -2072,7 +2072,7 @@ bool solidity_convertert::move_inheritance_to_ctor(
         typet c_type(irept::id_symbol);
         c_type.identifier(prefix + c_name);
 
-        std::string ctor_ins_name = "__ESBMC_ctor_" + c_name + "_tmp";
+        std::string ctor_ins_name = "_ESBMC_ctor_" + c_name + "_tmp";
         //? do we need to set the id?
         std::string ctor_ins_id =
           "sol:@C@" + c_name + "@" + ctor_ins_name + "#";
@@ -3811,15 +3811,15 @@ bool solidity_convertert::get_expr(
       side_effect_expr_function_callt _findkey;
       if (postfix == "I")
         get_library_function_call_no_params(
-          "findKeyI",
-          "c:@F@findKeyI",
+          "_ESBMC_findKeyInt",
+          "c:@F@_ESBMC_findKeyInt",
           signedbv_typet(256),
           base.location(),
           _findkey);
       else
         get_library_function_call_no_params(
-          "findKeyU",
-          "c:@F@findKeyU",
+          "_ESBMC_findKeyUint",
+          "c:@F@_ESBMC_findKeyUint",
           unsignedbv_typet(256),
           base.location(),
           _findkey);
@@ -4600,8 +4600,8 @@ bool solidity_convertert::get_binary_operator_expr(
         data1 = ac;  // target
 
       we convert it as 
-        data1 = arrcpy(ac, get_array_size(ac), type_size); 
-        store_array(data1, ac_size);
+        data1 = _ESBMC_arrcpy(ac, get_array_size(ac), type_size); 
+        _ESBMC_store_array(data1, ac_size);
       */
 
       // get size
@@ -4639,7 +4639,7 @@ bool solidity_convertert::get_binary_operator_expr(
 
       we convert it as 
         ac = new int[](10);
-        store_array(ac, ac_size); 
+        _ESBMC_store_array(ac, ac_size); 
         */
       exprt size_expr;
       if (!rhs_json.contains("arguments"))
@@ -6479,8 +6479,8 @@ void solidity_convertert::get_arrcpy_function_call(
   const locationt &loc,
   side_effect_expr_function_callt &calc_call)
 {
-  const std::string calc_name = "arrcpy";
-  const std::string calc_id = "c:@F@arrcpy";
+  const std::string calc_name = "_ESBMC_arrcpy";
+  const std::string calc_id = "c:@F@_ESBMC_arrcpy";
   const symbolt &calc_sym = *context.find_symbol(calc_id);
   get_library_function_call_no_params(
     calc_name, calc_id, symbol_expr(calc_sym).type(), loc, calc_call);
@@ -7514,7 +7514,7 @@ void solidity_convertert::convert_expression_to_code(exprt &expr)
 bool solidity_convertert::check_intrinsic_function(
   const nlohmann::json &ast_node)
 {
-  // function to detect special intrinsic functions, e.g. __ESBMC_assume
+  // function to detect special intrinsic functions, e.g. ___ESBMC_assume
   return (
     ast_node.contains("name") && (ast_node["name"] == "__ESBMC_assume" ||
                                   ast_node["name"] == "__VERIFIER_assume" ||
@@ -8137,7 +8137,7 @@ void solidity_convertert::get_static_contract_instance_name(
   std::string &name,
   std::string &id)
 {
-  name = "__ESBMC_Object_" + c_name;
+  name = "_ESBMC_Object_" + c_name;
   id = "sol:@" + name + "#";
 }
 
@@ -8410,7 +8410,7 @@ void solidity_convertert::get_aux_var(
 {
   do
   {
-    aux_name = "__ESBMC_aux" + std::to_string(aux_counter);
+    aux_name = "_ESBMC_aux" + std::to_string(aux_counter);
     aux_id = "sol:@" + aux_name;
     ++aux_counter;
   } while (context.find_symbol(aux_id) != nullptr);
@@ -8422,7 +8422,7 @@ void solidity_convertert::get_aux_function(
 {
   do
   {
-    aux_name = "__ESBMC_aux" + std::to_string(aux_counter);
+    aux_name = "_ESBMC_aux" + std::to_string(aux_counter);
     aux_id = "sol:@F@" + aux_name;
     ++aux_counter;
   } while (context.find_symbol(aux_id) != nullptr);
@@ -8482,11 +8482,11 @@ void solidity_convertert::get_size_expr(const exprt &rhs, exprt &size_expr)
     arr_size = std::stoi(rt.subtype().get("#sol_array_size").as_string());
   else
   {
-    // arr_size = get_array_length(rhs);
+    // arr_size = _ESBMC_get_array_length(rhs);
     side_effect_expr_function_callt length_expr;
     get_library_function_call_no_params(
-      "get_array_length",
-      "c:@F@get_array_length",
+      "_ESBMC_get_array_length",
+      "c:@F@_ESBMC_get_array_length",
       uint_type(),
       rhs.location(),
       length_expr);
@@ -8508,11 +8508,11 @@ void solidity_convertert::store_update_dyn_array(
   const exprt &size_expr,
   exprt &store_call)
 {
-  // void store_array(void *array, size_t length)
+  // void _ESBMC_store_array(void *array, size_t length)
   side_effect_expr_function_callt length_expr;
   get_library_function_call_no_params(
-    "store_array",
-    "c:@F@store_array",
+    "_ESBMC_store_array",
+    "c:@F@_ESBMC_store_array",
     empty_typet(),
     dyn_arr.location(),
     length_expr);
@@ -8626,7 +8626,7 @@ bool solidity_convertert::multi_transaction_verification(
   }
 
   // construct a temporary object and move to func_body
-  // e.g. Base __ESBMC_tmp = new Base();
+  // e.g. Base _ESBMC_tmp = new Base();
   // 1.1 get contract symbol ("tag-contractName")
   symbolt static_ins;
   get_static_contract_instance(c_name, static_ins);
@@ -8646,10 +8646,10 @@ bool solidity_convertert::multi_transaction_verification(
   code_while.body() = while_body;
   func_body.move_to_operands(code_while);
 
-  // construct __ESBMC_Main_Base
+  // construct _ESBMC_Main_Base
   symbolt new_symbol;
   code_typet main_type;
-  const std::string main_name = "__ESBMC_Main_" + c_name;
+  const std::string main_name = "_ESBMC_Main_" + c_name;
   const std::string main_id = "sol:@C@" + c_name + "@F@" + main_name + "#";
   typet e_type = empty_typet();
   e_type.set("cpp_type", "void");
@@ -8677,7 +8677,7 @@ bool solidity_convertert::multi_transaction_verification(
   main_sym.type = main_type;
   main_sym.value = func_body;
 
-  // set "__ESBMC_Main_X" as the main function
+  // set "_ESBMC_Main_X" as the main function
   // this will be overwrite in multi-contract mode.
   config.main = main_name;
 
@@ -8705,7 +8705,7 @@ bool solidity_convertert::multi_contract_verification_bound()
   for (const auto &sym : contractNamesList)
   {
     // 1.1 construct multi-transaction verification entry function
-    // function "__ESBMC_Main_contractname" will be created and inserted to the symbol table.
+    // function "_ESBMC_Main_contractname" will be created and inserted to the symbol table.
     const std::string &c_name = sym.second;
     if (multi_transaction_verification(c_name))
       return true;
@@ -8721,9 +8721,9 @@ bool solidity_convertert::multi_contract_verification_bound()
     static_lifetime_init(context, case_body);
     case_body.make_block();
 
-    // func_call: __ESBMC_Main_contractname
+    // func_call: _ESBMC_Main_contractname
     const std::string sub_sol_id =
-      "sol:@C@" + c_name + "@F@__ESBMC_Main_" + c_name + "#";
+      "sol:@C@" + c_name + "@F@_ESBMC_Main_" + c_name + "#";
     if (context.find_symbol(sub_sol_id) == nullptr)
       return true;
 
@@ -8766,8 +8766,8 @@ bool solidity_convertert::multi_contract_verification_bound()
   typet e_type = empty_typet();
   e_type.set("cpp_type", "void");
   main_type.return_type() = e_type;
-  const std::string sol_id = "sol:@F@__ESBMC_Main#";
-  const std::string sol_name = "__ESBMC_Main";
+  const std::string sol_id = "sol:@F@_ESBMC_Main#";
+  const std::string sol_name = "_ESBMC_Main";
 
   if (
     context.find_symbol(prefix + linearizedBaseList.begin()->first) == nullptr)
@@ -8812,14 +8812,14 @@ bool solidity_convertert::multi_contract_verification_unbound()
   for (const auto &sym : contractNamesList)
   {
     // 1.1 construct multi-transaction verification entry function
-    // function "__ESBMC_Main_contractname" will be created and inserted to the symbol table.
+    // function "_ESBMC_Main_contractname" will be created and inserted to the symbol table.
     const std::string &c_name = sym.second;
     if (multi_transaction_verification(c_name))
       return true;
 
-    // func_call: __ESBMC_Main_contractname
+    // func_call: _ESBMC_Main_contractname
     const std::string sub_sol_id =
-      "sol:@C@" + c_name + "@F@__ESBMC_Main_" + c_name + "#";
+      "sol:@C@" + c_name + "@F@_ESBMC_Main_" + c_name + "#";
     if (context.find_symbol(sub_sol_id) == nullptr)
       return true;
 
@@ -8836,8 +8836,8 @@ bool solidity_convertert::multi_contract_verification_unbound()
   typet e_type = empty_typet();
   e_type.set("cpp_type", "void");
   main_type.return_type() = e_type;
-  const std::string sol_id = "sol:@F@__ESBMC_Main#";
-  const std::string sol_name = "__ESBMC_Main";
+  const std::string sol_id = "sol:@F@_ESBMC_Main#";
+  const std::string sol_name = "_ESBMC_Main";
 
   if (
     context.find_symbol(prefix + linearizedBaseList.begin()->first) == nullptr)
@@ -8914,8 +8914,8 @@ void solidity_convertert::change_balance(
   side_effect_expr_function_callt _update_balance;
   typet t = unsignedbv_typet(256);
   get_library_function_call_no_params(
-    "update_balance",
-    "c:@F@update_balance",
+    "_ESBMC_update_balance",
+    "c:@F@_ESBMC_update_balance",
     t,
     this_bal.location(),
     _update_balance);
@@ -8939,7 +8939,7 @@ void solidity_convertert::change_balance(
 // }
 // =>
 //  A tmp = new A();
-//  if(get_addr_array_idx(_addr) == -1)
+//  if(_ESBMC_get_addr_array_idx(_addr) == -1)
 //     tmp = &(struct A*)get_address_object_ptr(_addr);
 // A& x = tmp;
 
@@ -8952,12 +8952,12 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
   side_effect_expr_function_callt _ndt_uint = nondet_uint_expr;
   side_effect_expr_function_callt _ndt_bool = nondet_bool_expr;
 
-  // get_unique_address(this)
+  // _ESBMC_get_unique_address(this)
   side_effect_expr_function_callt _addr;
   locationt l;
   get_library_function_call_no_params(
-    "get_unique_address",
-    "c:@F@get_unique_address",
+    "_ESBMC_get_unique_address",
+    "c:@F@_ESBMC_get_unique_address",
     unsignedbv_typet(160),
     l,
     _addr);
@@ -9197,7 +9197,7 @@ void solidity_convertert::get_low_level_call(
   if (trusted_expr.is_nil())
   {
     // for trusted: unknown_func_call
-    f_name = "addr_" + f_name;
+    f_name = "_" + f_name;
     f_id = "c:@F@" + f_name;
     if (context.find_symbol(f_id) == nullptr)
     {
@@ -9207,7 +9207,7 @@ void solidity_convertert::get_low_level_call(
 
     side_effect_expr_function_callt sol_addr_call;
     typet return_type;
-    return_type = f_name == "addr_transfer" ? empty_typet() : bool_type();
+    return_type = f_name == "_transfer" ? empty_typet() : bool_type();
     get_library_function_call_no_params(
       f_name, f_id, return_type, sol_loc, sol_addr_call);
     trusted_expr = sol_addr_call;
@@ -9859,9 +9859,9 @@ void solidity_convertert::get_low_level_memcall(
   Algo: over-approximation
   1. Insert before the expression:
     uint tmp;
-    if(get_addr_array_idx[addr] != -1)
+    if(_ESBMC_get_addr_array_idx[addr] != -1)
     {
-      if(cmp_cname(get_cname(addr), cname))
+      if(_ESBMC_cmp_cname(_ESBMC_get_cname(addr), cname))
       {
         (Base *)x.call(); 
         // tmp = (Base *)x.balance;
@@ -9889,8 +9889,8 @@ bool solidity_convertert::member_extcall_harness(
 
   side_effect_expr_function_callt _get_addr_array_idx;
   get_library_function_call_no_params(
-    "get_addr_array_idx",
-    "c:@F@get_addr_array_idx",
+    "_ESBMC_get_addr_array_idx",
+    "c:@F@_ESBMC_get_addr_array_idx",
     int_type(),
     base.location(),
     _get_addr_array_idx);
@@ -9898,12 +9898,20 @@ bool solidity_convertert::member_extcall_harness(
 
   side_effect_expr_function_callt _get_cname;
   get_library_function_call_no_params(
-    "get_cname", "c:@F@get_cname", int_type(), base.location(), _get_cname);
+    "_ESBMC_get_cname",
+    "c:@F@_ESBMC_get_cname",
+    int_type(),
+    base.location(),
+    _get_cname);
   _get_cname.arguments().push_back(base);
 
   side_effect_expr_function_callt _cmp_cname;
   get_library_function_call_no_params(
-    "cmp_cname", "c:@F@cmp_cname", int_type(), base.location(), _cmp_cname);
+    "_ESBMC_cmp_cname",
+    "c:@F@_ESBMC_cmp_cname",
+    int_type(),
+    base.location(),
+    _cmp_cname);
   _cmp_cname.arguments().push_back(base);
 
   exprt neg_one = constant_exprt(
@@ -9911,12 +9919,12 @@ bool solidity_convertert::member_extcall_harness(
     "-1",
     int_type());
 
-  // get_addr_array_idx[base] != -1
+  // _ESBMC_get_addr_array_idx[base] != -1
   exprt outguard = exprt("notequal", bool_type());
   outguard.operands().push_back(_get_addr_array_idx);
   outguard.operands().push_back(neg_one);
 
-  // cmp_cname(get_cname(base)
+  // _ESBMC_cmp_cname(_ESBMC_get_cname(base)
   _get_cname.arguments().push_back(base);
 
   std::string c_name = current_contractName;
@@ -9942,7 +9950,7 @@ bool solidity_convertert::member_extcall_harness(
         int_type()));
     string_constantt _cname(cname, type, string_constantt::k_default);
 
-    // cmp_cname(get_cname(base), cname)
+    // _ESBMC_cmp_cname(_ESBMC_get_cname(base), cname)
     _call.arguments().push_back(_get_cname);
     _call.arguments().push_back(_cname);
 
@@ -9955,7 +9963,11 @@ bool solidity_convertert::member_extcall_harness(
 
     side_effect_expr_function_callt _get_obj;
     get_library_function_call_no_params(
-      "get_obj", "c:@F@get_obj", empty_typet(), base.location(), _get_obj);
+      "_ESBMC_get_obj",
+      "c:@F@_ESBMC_get_obj",
+      empty_typet(),
+      base.location(),
+      _get_obj);
     _get_obj.arguments().push_back(base);
 
     exprt _tycast = typecast_exprt(_get_obj, pointer_typet(to_type));
@@ -10197,13 +10209,17 @@ bool solidity_convertert::set_addr_cname_mapping(
   const exprt &base,
   exprt &new_expr)
 {
-  if (context.find_symbol("c:@F@set_cname_array") == nullptr)
+  if (context.find_symbol("c:@F@_ESBMC_set_cname_array") == nullptr)
     return true;
 
   side_effect_expr_function_callt _call;
   locationt loc;
   get_library_function_call_no_params(
-    "set_cname_array", "c:@F@set_cname_array", empty_typet(), loc, _call);
+    "_ESBMC_set_cname_array",
+    "c:@F@_ESBMC_set_cname_array",
+    empty_typet(),
+    loc,
+    _call);
 
   // addr
   exprt _addr;
@@ -10354,7 +10370,7 @@ bool solidity_convertert::arbitrary_modelling2(
       return true;
     const exprt func = symbol_expr(*context.find_symbol(func_id));
 
-    // get __ESBMC_tmp_ ref
+    // get _ESBMC_tmp_ ref
     const exprt contract_var = base;
 
     // do member access
@@ -10391,7 +10407,7 @@ bool solidity_convertert::arbitrary_modelling2(
       }
     }
 
-    // set &__ESBMC_tmp as the first argument
+    // set &_ESBMC_tmp as the first argument
     // which overwrite the this pointer
     then_expr.arguments().at(0) = contract_var;
     convert_expression_to_code(then_expr);
