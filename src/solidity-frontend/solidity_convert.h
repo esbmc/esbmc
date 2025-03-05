@@ -492,7 +492,8 @@ protected:
   // Inheritance Order Record <contract_name, Contract_id>
   std::unordered_map<std::string, std::vector<int>> linearizedBaseList;
   // Who inherits from me?
-  std::unordered_map<std::string, std::unordered_set<std::string>> inheritanceMap;
+  std::unordered_map<std::string, std::unordered_set<std::string>>
+    inheritanceMap;
   //std::unordered_map<std::string, std::unordered_set<std::string>> functionSignature;
   // contract name list
   std::unordered_map<int, std::string> contractNamesMap;
