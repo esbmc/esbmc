@@ -80,6 +80,7 @@ const std::string sol_vars = sol_msg + sol_tx + sol_block;
 const std::string blockhash = R"(
 uint256_t blockhash(uint256_t x)
 {
+__ESBMC_HIDE:;
   return x;
 }
 )";
@@ -87,6 +88,7 @@ uint256_t blockhash(uint256_t x)
 const std::string gasleft = R"(
 uint256_t gasleft()
 {
+__ESBMC_HIDE:;
   return nondet_uint();
 }
 )";
@@ -102,30 +104,36 @@ uint256_t abi_encodeCall();
 const std::string sol_math = R"(
 uint256_t addmod(uint256_t x, uint256_t y, uint256_t k)
 {
+__ESBMC_HIDE:;
 	return (x + y) % k;
 }
 
 uint256_t mulmod(uint256_t x, uint256_t y, uint256_t k)
 {
+__ESBMC_HIDE:;
 	return (x * y) % k;
 }
 
 uint256_t keccak256(uint256_t x)
 {
+__ESBMC_HIDE:;
   return  x;
 }
 
 uint256_t sha256(uint256_t x)
 {
+__ESBMC_HIDE:;
   return x;
 }
 address_t ripemd160(uint256_t x)
 {
+__ESBMC_HIDE:;
   // UNSAT abstraction
   return address_t(x);
 }
 address_t ecrecover(uint256_t hash, unsigned int v, uint256_t r, uint256_t s)
 {
+__ESBMC_HIDE:;
   return address_t(hash);
 }
 )";
@@ -133,6 +141,7 @@ address_t ecrecover(uint256_t hash, unsigned int v, uint256_t r, uint256_t s)
 const std::string sol_string = R"(
 char* string_concat(char *x, char *y)
 {
+__ESBMC_HIDE:;
 	strncat(x, y, 256);
 	return x;
 }
@@ -143,6 +152,7 @@ char *u256toa(uint256_t value);
 uint256_t str2int(const char *str);
 uint256_t byte_concat(uint256_t x, uint256_t y)
 {
+__ESBMC_HIDE:;
   char *s1 = u256toa(x);
   char *s2 = u256toa(y);
   strncat(s1, s2, 256);
@@ -151,39 +161,45 @@ uint256_t byte_concat(uint256_t x, uint256_t y)
 )";
 
 const std::string sol_address = R"(
-  void addr_transfer(uint256_t ether, uint256_t balance)
-  {
-    __ESBMC_assume(balance < ether);
-  }
-  
-  bool addr_send(uint256_t ether, uint256_t balance)
-  {
-    if(balance < ether)
-      return false;
-    return true;
-  }
-  
-  bool addr_call()
-  {
-    return nondet_bool();
-  }
-  
-  bool addr_delegatecall()
-  {
-    return nondet_bool();
-  }
-  
-  bool addr_staticcall()
-  {
-    return nondet_bool();
-  }
-  
-  bool addr_callcodecall()
-  {
-    return nondet_bool();
-  }
-  
-  )";
+void addr_transfer(uint256_t ether, uint256_t balance)
+{
+__ESBMC_HIDE:;
+  __ESBMC_assume(balance < ether);
+}
+
+bool addr_send(uint256_t ether, uint256_t balance)
+{
+__ESBMC_HIDE:;
+  if(balance < ether)
+    return false;
+  return true;
+}
+
+bool addr_call()
+{
+__ESBMC_HIDE:;
+  return nondet_bool();
+}
+
+bool addr_delegatecall()
+{
+__ESBMC_HIDE:;
+  return nondet_bool();
+}
+
+bool addr_staticcall()
+{
+__ESBMC_HIDE:;
+  return nondet_bool();
+}
+
+bool addr_callcodecall()
+{
+__ESBMC_HIDE:;
+  return nondet_bool();
+}
+
+)";
 
 const std::string sol_funcs = blockhash + gasleft + sol_abi + sol_math +
                               sol_string + sol_byte + sol_address;
@@ -206,6 +222,7 @@ struct NodeI
 
 void insertAtEndU(struct NodeU **head, uint256_t data)
 {
+__ESBMC_HIDE:;
   struct NodeU *newNode = (struct NodeU *)malloc(sizeof(struct NodeU));
   newNode->data = data;
   newNode->next = NULL;
@@ -224,6 +241,7 @@ void insertAtEndU(struct NodeU **head, uint256_t data)
 
 void insertAtEndI(struct NodeI **head, int256_t data)
 {
+__ESBMC_HIDE:;
   struct NodeI *newNode = (struct NodeI *)malloc(sizeof(struct NodeI));
   newNode->data = data;
   newNode->next = NULL;
@@ -242,6 +260,7 @@ void insertAtEndI(struct NodeI **head, int256_t data)
 
 int findKeyU(struct NodeU *head, uint256_t key)
 {
+__ESBMC_HIDE:;
   struct NodeU *current = head;
   int cnt = 0;
   while (current != NULL)
@@ -260,6 +279,7 @@ int findKeyU(struct NodeU *head, uint256_t key)
 
 int findKeyI(struct NodeI *head, int256_t key)
 {
+__ESBMC_HIDE:;
   struct NodeI *current = head;
   int cnt = 0;
   while (current != NULL)
@@ -293,6 +313,7 @@ ArrayNode *array_list_head = NULL;
  * If the array already exists, it updates the length.
  */
 void store_array(void *array, size_t length) {
+__ESBMC_HIDE:;
     // Check if array already exists in the list
     ArrayNode *current = array_list_head;
     while (current != NULL) {
@@ -329,6 +350,7 @@ unsigned int get_array_length(void *array) {
 
 void *arrcpy(void *from_array, size_t from_size, size_t size_of)
 {
+__ESBMC_HIDE:;
   // assert(from_size != 0);
   if(from_array == NULL || size_of == 0 || from_size == 0)
     abort();
@@ -345,11 +367,13 @@ void *arrcpy(void *from_array, size_t from_size, size_t size_of)
 const std::string sol_itoa = R"(
 char get_char(int digit)
 {
+__ESBMC_HIDE:;
     char charstr[] = "0123456789ABCDEF";
     return charstr[digit];
 }
 void sol_rev(char *p)
 {
+__ESBMC_HIDE:;
 	char *q = &p[strlen(p) - 1];
 	char *r = p;
 	for (; q > r; q--, r++)
@@ -361,6 +385,7 @@ void sol_rev(char *p)
 }
 char *i256toa(int256_t value)
 {
+__ESBMC_HIDE:;
 	// we might have memory leak as we will not free this afterwards
 	char *str = (char *)malloc(256 * sizeof(char));
 	int256_t base = (int256_t)10;
@@ -400,6 +425,7 @@ char *i256toa(int256_t value)
 
 char *u256toa(uint256_t value)
 {
+__ESBMC_HIDE:;
 	char *str = (char *)malloc(256 * sizeof(char));
 	uint256_t base = (uint256_t)10;
 	unsigned short count = 0;
@@ -438,6 +464,7 @@ static const long hextable[] = {
     -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
 char *decToHexa(int n)
 {
+__ESBMC_HIDE:;
     char *hexaDeciNum = (char *)malloc(256 * sizeof(char));
     hexaDeciNum[0] = '\0';
     int i = 0;
@@ -471,6 +498,7 @@ char *decToHexa(int n)
 }
 char *ASCIItoHEX(const char *ascii)
 {
+__ESBMC_HIDE:;
     char *hex = (char *)malloc(256 * sizeof(char));
     hex[0] = '\0';
     for (int i = 0; i < strlen(ascii); i++)
@@ -484,6 +512,7 @@ char *ASCIItoHEX(const char *ascii)
 }
 uint256_t hexdec(const char *hex)
 {
+__ESBMC_HIDE:;
     /*https://stackoverflow.com/questions/10324/convert-a-hexadecimal-string-to-an-integer-efficiently-in-c*/
     uint256_t ret = 0;
     while (*hex && ret >= (uint256_t)0)
@@ -494,6 +523,7 @@ uint256_t hexdec(const char *hex)
 }
 uint256_t str2int(const char *str)
 {
+__ESBMC_HIDE:;
     return hexdec(ASCIItoHEX(str));
 }
 )";
@@ -513,6 +543,7 @@ static unsigned sol_max_cnt = 0;
 
 int get_addr_array_idx(address_t tgt)
 {
+__ESBMC_HIDE:;
   for (unsigned int i = 0; i < sol_max_cnt; i++)
   {
     if ((address_t)sol_addr_array[i] == (address_t)tgt)
@@ -522,6 +553,7 @@ int get_addr_array_idx(address_t tgt)
 }
 void *get_obj(address_t addr)
 {
+__ESBMC_HIDE:;
   int idx = get_addr_array_idx(addr);
   if (idx == -1)
     // this means it's not previously stored
@@ -531,6 +563,7 @@ void *get_obj(address_t addr)
 }
 void update_addr_obj(address_t addr, void *obj)
 {
+__ESBMC_HIDE:;
   __ESBMC_assume(obj != NULL);
   sol_addr_array[sol_max_cnt] = addr;
   sol_obj_array[sol_max_cnt] = obj;
@@ -540,6 +573,7 @@ void update_addr_obj(address_t addr, void *obj)
 }
 address_t get_unique_address(void *obj)
 {
+__ESBMC_HIDE:;
   __ESBMC_assume(obj != NULL);
   address_t tmp;
   do
@@ -551,18 +585,21 @@ address_t get_unique_address(void *obj)
 }
 void set_cname_array(address_t _addr, char* cname)
 {
+__ESBMC_HIDE:;
   int tmp = get_addr_array_idx(_addr);
   // assert(tmp != -1);
   sol_cname_array[tmp] = cname;
 }
 const char * get_cname(address_t _addr)
 {
+__ESBMC_HIDE:;
   int tmp = get_addr_array_idx(_addr);
   // assert(tmp != -1);
   return sol_cname_array[tmp];
 }
 bool cmp_cname(const char* c_1, const char* c_2)
 {
+__ESBMC_HIDE:;
   if(strcmp(c_1, c_2) == 0)
     return true;
   else
@@ -571,6 +608,7 @@ bool cmp_cname(const char* c_1, const char* c_2)
 
 uint256_t update_balance(uint256_t balance, uint256_t val)
 {
+__ESBMC_HIDE:;
   val = val + (uint256_t)1;
   if(balance >= val)
     balance -= val;
@@ -591,15 +629,18 @@ const std::string sol_cpp_string = R"(
 const std::string empty_str = "";
 void _streq(std::string &str1, std::string str2)
 {
+__ESBMC_HIDE:;
   __ESBMC_assume(!str2.empty());
   str1 = str2;
 }
 std::string _tostr(const char* ptr)
 {
+__ESBMC_HIDE:;
   return std::string(ptr);
 }
 const char* _tochar(const std::string& str)
 {
+__ESBMC_HIDE:;
   return str.c_str();
 }
 )";
