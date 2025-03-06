@@ -93,7 +93,7 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
   // Strengthen the property by assuming the claim if neither multi-property nor LTL options are set
   if (
     !options.get_bool_option("multi-property") &&
-    !options.get_bool_option("ltl")) 
+    !options.get_bool_option("ltl"))
   {
     expr2tc assumption = implies2tc(new_expr, claim_expr);
     assume(assumption);
