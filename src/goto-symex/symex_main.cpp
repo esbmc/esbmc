@@ -82,14 +82,19 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
   }
 
   // Perform incremental SMT-based verification if enabled
-  if (options.get_bool_option("smt-symex-assert") && check_incremental(new_expr, msg))
+  if (
+    options.get_bool_option("smt-symex-assert") &&
+    check_incremental(new_expr, msg))
     return; // Verification succeeded, no further action needed
 
   // add assertion to the target equation
   assertion(new_expr, msg);
 
   // Strengthen the property by assuming the claim if neither multi-property nor LTL options are set
-  if (!options.get_bool_option("multi-property") && !options.get_bool_option("ltl")) {
+  if (
+    !options.get_bool_option("multi-property") &&
+    !options.get_bool_option("ltl")) 
+  {
     expr2tc assumption = implies2tc(new_expr, claim_expr);
     assume(assumption);
   }
