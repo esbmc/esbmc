@@ -208,8 +208,8 @@ smt_astt smt_convt::overflow_neg(const expr2tc &expr)
   const overflow_neg2t &neg = to_overflow_neg2t(expr);
   unsigned int width = neg.operand->type->get_width();
 
-   // Ensure the operand is a signed integer type
-  expr2tc operand =  typecast2tc(signedbv_type2tc(width), neg.operand);
+  // Ensure the operand is a signed integer type
+  expr2tc operand = typecast2tc(signedbv_type2tc(width), neg.operand);
 
   // Simplify if typecast was performed
   simplify(operand);
