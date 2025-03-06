@@ -204,12 +204,21 @@ smt_astt smt_convt::overflow_neg(const expr2tc &expr)
   if (int_encoding)
     return mk_smt_bool(false);
 
-  // Single failure mode: MIN_INT can't be neg'd
+  // Extract operand
   const overflow_neg2t &neg = to_overflow_neg2t(expr);
   unsigned int width = neg.operand->type->get_width();
 
-  expr2tc min_int =
-    constant_int2tc(neg.operand->type, -BigInt::power2(width - 1));
-  expr2tc val = equality2tc(neg.operand, min_int);
+  // Ensure the operand is a signed integer type
+  expr2tc operand = typecast2tc(signedbv_type2tc(width), neg.operand);
+
+  // Simplify if typecast was performed
+  simplify(operand);
+
+  // Compute the minimum integer value for the operand's type
+  expr2tc min_int = constant_int2tc(operand->type, -BigInt::power2(width - 1));
+
+  // Check if negation would result in overflow (negating INT_MIN)
+  expr2tc val = equality2tc(operand, min_int);
+
   return convert_ast(val);
 }
