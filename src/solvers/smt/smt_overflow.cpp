@@ -209,9 +209,9 @@ smt_astt smt_convt::overflow_neg(const expr2tc &expr)
   unsigned int width = neg.operand->type->get_width();
 
   // Ensure operand is an integer (convert boolean to signed integer if needed)
-  expr2tc operand = is_bool_type(neg.operand->type) 
-                        ? typecast2tc(signedbv_type2tc(width), neg.operand) 
-                        : neg.operand;
+  expr2tc operand = is_bool_type(neg.operand->type)
+                      ? typecast2tc(signedbv_type2tc(width), neg.operand)
+                      : neg.operand;
 
   // Compute the minimum integer value for the operand's type
   expr2tc min_int = constant_int2tc(operand->type, -BigInt::power2(width - 1));
