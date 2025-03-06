@@ -208,6 +208,14 @@ smt_astt smt_convt::overflow_neg(const expr2tc &expr)
   const overflow_neg2t &neg = to_overflow_neg2t(expr);
   unsigned int width = neg.operand->type->get_width();
 
+  // Handle boolean negation properly
+   if (is_bool_type(neg.operand->type)) {
+    // If operand is boolean, ensure it's converted before negation
+    expr2tc neg_value = neg2tc(neg.operand->type, neg.operand);
+    return convert_ast(neg_value);
+  }
+
+  // Handle standard integer negation overflow (INT_MIN case)
   expr2tc min_int =
     constant_int2tc(neg.operand->type, -BigInt::power2(width - 1));
   expr2tc val = equality2tc(neg.operand, min_int);
