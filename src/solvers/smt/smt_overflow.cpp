@@ -221,4 +221,3 @@ smt_astt smt_convt::overflow_neg(const expr2tc &expr)
 
   return convert_ast(val);
 }
-
