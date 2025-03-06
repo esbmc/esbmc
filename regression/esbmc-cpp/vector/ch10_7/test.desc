@@ -1,4 +1,4 @@
 CORE
 main.cpp
-baseplus.cpp commission.cpp employee.cpp hourly.cpp salaried.cpp --unwind 12 --no-unwinding-assertions --timeout 900 --no-pointer-check
+baseplus.cpp commission.cpp employee.cpp hourly.cpp salaried.cpp --unwind 12 --no-unwinding-assertions --timeout 900
 ^VERIFICATION FAILED$
