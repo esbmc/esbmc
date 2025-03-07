@@ -683,6 +683,15 @@ static expr2tc simplify_arith_1op(const type2tc &type, const expr2tc &value)
       (constant_int2t & (*)(expr2tc &)) to_constant_int2t;
 
     simpl_res = TFunctor<constant_int2t>::simplify(to_simplify, to_constant);
+
+    // Properly handle truncation when an overflow occurs
+    // or when the result gets out of the bounds of the type
+    if (!is_nil_expr(simpl_res) && is_constant_int2t(simpl_res))
+      migrate_expr(
+        from_integer(
+        to_constant_int2t(simpl_res).value,
+        migrate_type_back(simpl_res->type)),
+        simpl_res);
   }
   else if (is_fixedbv_type(value))
   {

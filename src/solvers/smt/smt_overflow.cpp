@@ -218,7 +218,7 @@ smt_astt smt_convt::overflow_neg(const expr2tc &expr)
     // Any nonzero value negated will wrap around, which is unexpected behavior.
     expr2tc zero = constant_int2tc(neg.operand->type, 0);
     // Overflow occurs if operand is x != 0
-    expr2tc val = equality2tc(neg.operand, zero);
+    expr2tc val = notequal2tc(neg.operand, zero);
 
     return convert_ast(val);
   }
