@@ -2807,7 +2807,13 @@ bool solidity_convertert::get_statement(
     //  c). For multiple return type, the return statement represented as a tuple expression using a components field.
     //      Besides, tuple can only be declared literally. https://docs.soliditylang.org/en/latest/control-structures.html#assignment
     //      e.g. return (false, 123)
-    assert(stmt.contains("expression"));
+    if (!stmt.contains("expression"))
+    {
+      // "return;"
+      code_returnt ret_expr;
+      new_expr = ret_expr;
+      return false;
+    }
     assert(stmt["expression"].contains("nodeType"));
 
     // get_type_description
