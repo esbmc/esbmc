@@ -742,9 +742,9 @@ expr2tc neg2t::do_simplify() const
 
     // Perform modular negation: (modulus - x) % modulus
     const expr2tc negated_value = sub2tc(value->type, modulus_expr, value);
-
     expr2tc wrap = modulus2tc(value->type, negated_value, modulus_expr);
     wrap->simplify();
+    
     return wrap;
   }
 
