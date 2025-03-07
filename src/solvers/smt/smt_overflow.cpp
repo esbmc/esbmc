@@ -198,9 +198,8 @@ smt_astt smt_convt::overflow_cast(const expr2tc &expr)
   return mk_not(nooverflow);
 }
 
-smt_astt smt_convt::overflow_neg(const expr2tc &expr)
-{
-  // If in integer mode, this is completely pointless. Return false.
+smt_astt smt_convt::overflow_neg(const expr2tc &expr) {
+  // If in integer mode, this check is irrelevant, return false
   if (int_encoding)
     return mk_smt_bool(false);
 
@@ -208,17 +207,30 @@ smt_astt smt_convt::overflow_neg(const expr2tc &expr)
   const overflow_neg2t &neg = to_overflow_neg2t(expr);
   unsigned int width = neg.operand->type->get_width();
 
-  // Ensure the operand is a signed integer type
-  expr2tc operand = typecast2tc(signedbv_type2tc(width), neg.operand);
+  // Check if operand is unsigned
+  bool is_unsigned = is_unsignedbv_type(neg.operand->type);
 
-  // Simplify if typecast was performed
-  simplify(operand);
+  if (is_unsigned) {
+    // **Unsigned Negation Overflow Check**
+    // In unsigned arithmetic, negation (-x) is effectively (UINT_MAX + 1 - x).
+    // Any nonzero value negated will wrap around, which is unexpected behavior.
+    expr2tc zero = constant_int2tc(neg.operand->type, 0);
+    // Overflow occurs if operand is x == 0
+    expr2tc val = equality2tc(neg.operand, zero);
 
-  // Compute the minimum integer value for the operand's type
-  expr2tc min_int = constant_int2tc(operand->type, -BigInt::power2(width - 1));
+    return convert_ast(val);
+  } else {
+    // **Signed Negation Overflow Check**
+    // Cast operand to signed type
+    expr2tc operand = typecast2tc(signedbv_type2tc(width), neg.operand);
+    simplify(operand);
 
-  // Check if negation would result in overflow (negating INT_MIN)
-  expr2tc val = equality2tc(operand, min_int);
+    // Compute the minimum integer value for the operand's type (INT_MIN)
+    expr2tc min_int = constant_int2tc(operand->type, -BigInt::power2(width - 1));
 
-  return convert_ast(val);
+    // Overflow occurs if operand is INT_MIN
+    expr2tc val = equality2tc(operand, min_int);
+
+    return convert_ast(val);
+  }
 }
