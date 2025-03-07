@@ -731,6 +731,25 @@ expr2tc neg2t::do_simplify() const
     }
     return constant_vector2tc(value->type, std::move(members));
   }
+  if (is_unsignedbv_type(value))
+  {
+    // Get bit-width of the unsigned type
+    const unsigned int width = value->type->get_width();
+
+    // Compute modulus: 2^width
+    const BigInt modulus = BigInt(1) << width;
+    const expr2tc modulus_expr = constant_int2tc(value->type, modulus);
+
+
+    // Perform modular negation: (modulus - x) % modulus
+    const expr2tc negated_value = sub2tc(value->type, modulus_expr,
+                                   value);
+
+    expr2tc wrap = modulus2tc(value->type, negated_value, modulus_expr);
+    wrap->simplify();
+    return wrap;
+  }
+
   return simplify_arith_1op<Negator, neg2t>(type, value);
 }
 
