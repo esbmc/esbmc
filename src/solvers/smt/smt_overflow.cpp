@@ -217,7 +217,7 @@ smt_astt smt_convt::overflow_neg(const expr2tc &expr)
     // In unsigned arithmetic, negation (-x) is effectively (UINT_MAX + 1 - x).
     // Any nonzero value negated will wrap around, which is unexpected behavior.
     expr2tc zero = constant_int2tc(neg.operand->type, 0);
-    // Overflow occurs if operand is x == 0
+    // Overflow occurs if operand is x != 0
     expr2tc val = equality2tc(neg.operand, zero);
 
     return convert_ast(val);
