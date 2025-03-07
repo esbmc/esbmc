@@ -198,7 +198,7 @@ smt_astt smt_convt::overflow_cast(const expr2tc &expr)
   return mk_not(nooverflow);
 }
 
-smt_astt smt_convt::overflow_neg(const expr2tc &expr) 
+smt_astt smt_convt::overflow_neg(const expr2tc &expr)
 {
   // If in integer mode, this check is irrelevant, return false
   if (int_encoding)
@@ -211,7 +211,7 @@ smt_astt smt_convt::overflow_neg(const expr2tc &expr)
   // Check if operand is unsigned
   bool is_unsigned = is_unsignedbv_type(neg.operand->type);
 
-  if (is_unsigned) 
+  if (is_unsigned)
   {
     // **Unsigned Negation Overflow Check**
     // In unsigned arithmetic, negation (-x) is effectively (UINT_MAX + 1 - x).
@@ -221,8 +221,8 @@ smt_astt smt_convt::overflow_neg(const expr2tc &expr)
     expr2tc val = equality2tc(neg.operand, zero);
 
     return convert_ast(val);
-  } 
-  else 
+  }
+  else
   {
     // **Signed Negation Overflow Check**
     // Cast operand to signed type
@@ -230,7 +230,8 @@ smt_astt smt_convt::overflow_neg(const expr2tc &expr)
     simplify(operand);
 
     // Compute the minimum integer value for the operand's type (INT_MIN)
-    expr2tc min_int = constant_int2tc(operand->type, -BigInt::power2(width - 1));
+    expr2tc min_int =
+      constant_int2tc(operand->type, -BigInt::power2(width - 1));
 
     // Overflow occurs if operand is INT_MIN
     expr2tc val = equality2tc(operand, min_int);
