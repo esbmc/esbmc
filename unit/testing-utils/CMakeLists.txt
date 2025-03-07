@@ -4,7 +4,7 @@ target_include_directories(test_util_irep
     PUBLIC ${Boost_INCLUDE_DIRS}
 )
 add_library(test_goto_factory goto_factory.cpp)
-target_link_libraries(test_goto_factory PUBLIC irep2 clangcfrontend clangcppfrontend clibs)
+target_link_libraries(test_goto_factory PUBLIC irep2 clangcfrontend clangcppfrontend clibs langapi)
 target_include_directories(test_goto_factory
     PUBLIC ${Boost_INCLUDE_DIRS}
 )
