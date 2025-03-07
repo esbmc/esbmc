@@ -431,6 +431,14 @@ protected:
     const exprt &this_object,
     side_effect_expr_function_callt &call);
   bool get_this_object(const exprt &func, exprt &this_object);
+  bool get_high_level_member_access(
+    const exprt &base,
+    const exprt &member,
+    exprt &new_expr);
+  bool get_nondet_contract_name(
+    const std::string &var_name,
+    std::string &name,
+    std::string &id);
 
   // literal conversion functions
   bool convert_integer_literal(

@@ -2458,9 +2458,9 @@ bool solidity_convertert::get_function_definition(
         }
 
         // get lhs
-        std::string sym_name = "_ESBMC_nondet_" + p_name;
-        std::string sym_id = "sol:@C@" + current_contractName + "@F@" +
-                             current_functionName + "@" + sym_name + "#";
+        std::string sym_name, sym_id;
+        if (get_nondet_contract_name(p_name, sym_name, sym_id))
+          return true;
         symbolt s;
         get_default_symbol(
           s,
@@ -8545,14 +8545,16 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
   dest = code_blockt();
 
   // call designated "initialization" functions
-  context.foreach_operand_in_order([&dest](const symbolt &s) {
-    if (s.type.initialization() && s.type.is_code())
+  context.foreach_operand_in_order(
+    [&dest](const symbolt &s)
     {
-      code_function_callt function_call;
-      function_call.function() = symbol_expr(s);
-      dest.move_to_operands(function_call);
-    }
-  });
+      if (s.type.initialization() && s.type.is_code())
+      {
+        code_function_callt function_call;
+        function_call.function() = symbol_expr(s);
+        dest.move_to_operands(function_call);
+      }
+    });
 }
 
 void solidity_convertert::get_aux_var(
@@ -10318,6 +10320,114 @@ bool solidity_convertert::set_addr_cname_mapping(
   _call.arguments().push_back(string);
 
   new_expr = _call;
+  return false;
+}
+
+bool solidity_convertert::get_nondet_contract_name(
+  const std::string &var_name,
+  std::string &name,
+  std::string &id)
+{
+  if (current_contractName.empty())
+  {
+    log_error("Internal Error: Empty Contract Name");
+    return true;
+  }
+  if (current_functionName.empty())
+  {
+    log_error("Internal Error: Empty Function Name");
+    return true;
+  }
+
+  name = "_ESBMC_nondet_" + var_name;
+  id = "sol:@C@" + current_contractName + "@F@" + current_functionName + "@" +
+       name + "#";
+
+  return false;
+}
+
+/*
+convert 
+  base.func(); base.balance; 
+to
+  tmp;
+  if(_ESBMC_NODET_cont_name == base)
+    tmp = _ESBMC_Base_Object.func();  _ESBMC_Base_Object.balance;
+  tmp;
+*/
+bool solidity_convertert::get_high_level_member_access(
+  const exprt &base,
+  const exprt &member,
+  exprt &new_expr)
+{
+  // lhs
+  std::string nondet_id, nondet_name;
+  std::string var_name = base.name().as_string();
+  if (var_name.empty())
+  {
+    log_error("Unexpect empty base name");
+    return true;
+  }
+  if (get_nondet_contract_name(var_name, nondet_name, nondet_id))
+    return true;
+
+  exprt _nondet;
+  get_symbol_decl_ref(
+    nondet_name, nondet_id, pointer_typet(signed_char_type()), _nondet);
+
+  // rhs
+  std::string _cname;
+  if (base.type().get("#sol_type") != "")
+  {
+    log_error("Expecting contract type");
+    return true;
+  }
+  std::string _id = base.type().identifier().as_string();
+  size_t pos = _id.find("tag-");
+  _cname = _id.substr(pos + 4);
+  std::unordered_set<std::string> cname_set = inheritanceMap[_cname];
+
+  assert(!member.type().is_code());
+
+  if (member.type().is_empty())
+    new_expr = code_skipt();
+  else
+  {
+    for (auto str : cname_set)
+    {
+      // _ESBMC_NODET_cont_name == Base
+      size_t string_size = str.length() + 1;
+      typet type = array_typet(
+        signed_char_type(),
+        constant_exprt(
+          integer2binary(string_size, bv_width(int_type())),
+          integer2string(string_size),
+          int_type()));
+      string_constantt string(str, type, string_constantt::k_default);
+      exprt _equal = exprt("=", bool_type());
+      _equal.operands().push_back(_nondet);
+      _equal.operands().push_back(string);
+      convert_expression_to_code(_equal);
+
+      codet if_expr("ifthenelse");
+      if_expr.copy_to_operands(nondet_bool_expr, _equal);
+
+      current_frontBlockDecl.copy_to_operands(if_expr);
+    }
+    typet t = member.type();
+    if (!t.is_empty())
+    {
+      std::string aux_name, aux_id;
+      get_aux_var(aux_name, aux_id);
+      symbolt s;
+      get_default_symbol(
+        s, current_fileName, t, aux_name, aux_id, member.location());
+      s.lvalue = true;
+      s.file_local = true;
+      auto &added_symbol = *move_symbol_to_context(s);
+    }
+  }
+
   return false;
 }
 
