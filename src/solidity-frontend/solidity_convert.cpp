@@ -3822,13 +3822,6 @@ bool solidity_convertert::get_expr(
     // * we had ruled out all the special cases
     // * we now confirm it is called by aother contract inside current contract
     // * func() ==> current_func_this.func(&current_func_this);
-    if (!is_bound)
-    {
-      if (get_unbound_expr(expr, new_expr))
-        return true;
-      break;
-    }
-
     exprt base;
     assert(current_functionDecl);
     if (get_func_decl_this_ref(*current_functionDecl, base))
