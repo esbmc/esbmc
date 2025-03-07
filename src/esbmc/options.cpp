@@ -88,7 +88,14 @@ const struct group_opt_templ all_cmd_options[] = {
     {"no-visibility",
      NULL,
      "force to verify every function, even it's an unreachable "
-     "internal/private function"}}},
+     "internal/private function"},
+    {"unbound", NULL, "model external function calls as arbitrary behavior"},
+    {"bound",
+     NULL,
+     "model inter-contract function calls within a bounded system (default)"},
+    {"negating-property",
+     boost::program_options::value<std::string>()->value_name("fname"),
+     "convert the assert(cond) to assert(!cond)"}}},
 #endif
   {"Frontend",
    {{"include,I",

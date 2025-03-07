@@ -47,6 +47,9 @@ public:
   // smart contract source
   std::string smart_contract;
 
+  // bound setting
+  bool is_bound;
+
   // store AST json in nlohmann::json data structure
   nlohmann::json src_ast_json_array = nlohmann::json::array();
   nlohmann::json intrinsic_json;

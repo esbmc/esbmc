@@ -2075,6 +2075,14 @@ bool esbmc_parseoptionst::process_goto_program(
       goto_coveraget tmp(ns, goto_functions, filename);
       tmp.branch_function_coverage();
     }
+
+    if (cmdline.isset("negating-property"))
+    {
+      std::string tgt_fname = cmdline.getval("negating-property");
+      std::string filename = cmdline.args[0];
+      goto_coveraget tmp(ns, goto_functions, filename);
+      tmp.negating_asserts(tgt_fname);
+    }
   }
 
   catch (const char *e)
