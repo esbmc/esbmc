@@ -246,6 +246,10 @@ void goto_checkt::overflow_check(
   if (is_pointer_type(*expr->get_sub_expr(0)))
     return;
 
+  // Skip unary negation overflow check for unsigned types
+  if (is_unsignedbv_type(expr) && is_neg2t(expr))
+    return;
+
   // add overflow subgoal
   expr2tc overflow =
     is_neg2t(expr) ? overflow_neg2tc(to_neg2t(expr).value) : overflow2tc(expr);
