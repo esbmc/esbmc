@@ -740,10 +740,8 @@ expr2tc neg2t::do_simplify() const
     const BigInt modulus = BigInt(1) << width;
     const expr2tc modulus_expr = constant_int2tc(value->type, modulus);
 
-
     // Perform modular negation: (modulus - x) % modulus
-    const expr2tc negated_value = sub2tc(value->type, modulus_expr,
-                                   value);
+    const expr2tc negated_value = sub2tc(value->type, modulus_expr, value);
 
     expr2tc wrap = modulus2tc(value->type, negated_value, modulus_expr);
     wrap->simplify();
