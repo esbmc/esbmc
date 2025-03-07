@@ -31,7 +31,8 @@ void goto_coveraget::replace_all_asserts_to_guard(
     if (f_it->second.body_available && f_it->first != "__ESBMC_main")
     {
       // "--function" mode
-      if (target_function != "" && !is_target_func(f_it->first))
+      if (
+        target_function != "" && !is_target_func(f_it->first, target_function))
         continue;
 
       goto_programt &goto_program = f_it->second.body;
@@ -110,7 +111,8 @@ void goto_coveraget::branch_function_coverage()
     if (f_it->second.body_available && f_it->first != "__ESBMC_main")
     {
       // "--function" mode
-      if (target_function != "" && !is_target_func(f_it->first))
+      if (
+        target_function != "" && !is_target_func(f_it->first, target_function))
         continue;
 
       goto_programt &goto_program = f_it->second.body;
@@ -185,7 +187,8 @@ void goto_coveraget::branch_coverage()
     if (f_it->second.body_available && f_it->first != "__ESBMC_main")
     {
       // "--function" mode
-      if (target_function != "" && !is_target_func(f_it->first))
+      if (
+        target_function != "" && !is_target_func(f_it->first, target_function))
         continue;
 
       goto_programt &goto_program = f_it->second.body;
@@ -270,7 +273,8 @@ int goto_coveraget::get_total_instrument() const
     if (f_it->second.body_available && f_it->first != "__ESBMC_main")
     {
       // speed up
-      if (target_function != "" && !is_target_func(f_it->first))
+      if (
+        target_function != "" && !is_target_func(f_it->first, target_function))
         continue;
 
       const goto_programt &goto_program = f_it->second.body;
@@ -307,7 +311,8 @@ goto_coveraget::get_total_cond_assert() const
   {
     if (f_it->second.body_available && f_it->first != "__ESBMC_main")
     {
-      if (target_function != "" && !is_target_func(f_it->first))
+      if (
+        target_function != "" && !is_target_func(f_it->first, target_function))
         continue;
 
       const goto_programt &goto_program = f_it->second.body;
@@ -357,7 +362,8 @@ void goto_coveraget::condition_coverage()
     if (f_it->second.body_available && f_it->first != "__ESBMC_main")
     {
       // "--function" mode
-      if (target_function != "" && !is_target_func(f_it->first))
+      if (
+        target_function != "" && !is_target_func(f_it->first, target_function))
         continue;
 
       goto_programt &goto_program = f_it->second.body;
@@ -810,7 +816,9 @@ void goto_coveraget::set_target(const std::string &_tgt)
 }
 
 // check if it's the target function
-bool goto_coveraget::is_target_func(const irep_idt &f) const
+bool goto_coveraget::is_target_func(
+  const irep_idt &f,
+  const std::string &tgt_name) const
 {
   if (ns.lookup(f) == nullptr)
   {
@@ -819,8 +827,39 @@ bool goto_coveraget::is_target_func(const irep_idt &f) const
   }
 
   exprt symbol = symbol_expr(*ns.lookup(f));
-  if (symbol.name().as_string() != target_function)
+  if (symbol.name().as_string() != tgt_name)
     return false;
 
   return true;
+}
+
+// negate the condition inside the assertion
+void goto_coveraget::negating_asserts(const std::string &tgt_fname)
+{
+  std::unordered_set<std::string> location_pool = {};
+  location_pool.insert(get_filename_from_path(filename));
+  for (auto const &inc : config.ansi_c.include_files)
+    location_pool.insert(get_filename_from_path(inc));
+
+  Forall_goto_functions (f_it, goto_functions)
+    if (f_it->second.body_available && f_it->first != "__ESBMC_main")
+    {
+      if (tgt_fname != "" && !is_target_func(f_it->first, tgt_fname))
+        continue;
+
+      goto_programt &goto_program = f_it->second.body;
+      std::string cur_filename;
+      Forall_goto_program_instructions (it, goto_program)
+      {
+        cur_filename = get_filename_from_path(it->location.file().as_string());
+        if (location_pool.count(cur_filename) == 0)
+          continue;
+
+        if (it->is_assert())
+        {
+          expr2tc guard = it->guard;
+          replace_assert_to_guard(gen_not_expr(guard), it, false);
+        }
+      }
+    }
 }
