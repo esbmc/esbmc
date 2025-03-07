@@ -689,8 +689,8 @@ static expr2tc simplify_arith_1op(const type2tc &type, const expr2tc &value)
     if (!is_nil_expr(simpl_res) && is_constant_int2t(simpl_res))
       migrate_expr(
         from_integer(
-        to_constant_int2t(simpl_res).value,
-        migrate_type_back(simpl_res->type)),
+          to_constant_int2t(simpl_res).value,
+          migrate_type_back(simpl_res->type)),
         simpl_res);
   }
   else if (is_fixedbv_type(value))
