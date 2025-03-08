@@ -163,12 +163,12 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
     smt_astt arg1_ext = convert_ast(opers.side_1);
     smt_astt arg2_ext = convert_ast(opers.side_2);
 
-    if (!int_encoding) 
+    if (!int_encoding)
     {
 
       arg1_ext = is_signedbv_type(opers.side_1) ? mk_sign_ext(arg1_ext, sz)
                                                 : mk_zero_ext(arg1_ext, sz);
-    
+
       expr2tc op2 = opers.side_2;
       if (is_shl2t(overflow.operand))
         if (opers.side_1->type->get_width() != opers.side_2->type->get_width())
@@ -179,13 +179,13 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
     }
 
     smt_astt result;
-    if (int_encoding) 
+    if (int_encoding)
     {
       // If using int_encoding, use mk_mul and mk_shl for multiplication and shift left
-      result = is_mul2t(overflow.operand) ? mk_mul(arg1_ext, arg2_ext)  // Use mk_mul for multiplication
-                                          : mk_shl(arg1_ext, arg2_ext); // Use mk_shl for shift left
-    }
-    else 
+      result = is_mul2t(overflow.operand)
+                 ? mk_mul(arg1_ext, arg2_ext)  // Use mk_mul for multiplication
+                 : mk_shl(arg1_ext, arg2_ext); // Use mk_shl for shift left    }
+    else
     {
       // If not using int_encoding, fallback to original behavior (bvmul and bvshl)
       result = is_mul2t(overflow.operand) ? mk_bvmul(arg1_ext, arg2_ext)
@@ -218,12 +218,14 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
       type2tc newtype = signedbv_type2tc(sz + 1);
       
       // Get min and max bounds for signed overflow detection
-      expr2tc min_bound_expr = constant_int2tc(newtype, -BigInt::power2(sz - 1));
-      expr2tc max_bound_expr = constant_int2tc(newtype, BigInt::power2(sz - 1) - 1);
-      
+      expr2tc min_bound_expr =
+        constant_int2tc(newtype, -BigInt::power2(sz - 1));
+      expr2tc max_bound_expr =
+        constant_int2tc(newtype, BigInt::power2(sz - 1) - 1);
+
       smt_astt min_bound = convert_ast(min_bound_expr);
       smt_astt max_bound = convert_ast(max_bound_expr);
-      
+
       // Convert result to signed type and check if it's out of bounds
       smt_astt overflow_high = mk_lt(result, min_bound);
       smt_astt overflow_low = mk_gt(result, max_bound);
