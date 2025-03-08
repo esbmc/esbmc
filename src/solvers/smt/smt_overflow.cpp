@@ -79,7 +79,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
 
   case expr2t::sub_id:
   {
-    if (is_signed)
+    if (is_signed && !int_encoding)
     {
       // Convert to be an addition
       expr2tc negop2 = neg2tc(opers.side_2->type, opers.side_2);
@@ -93,7 +93,39 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
       expr2tc is_min_int = equality2tc(min_int, opers.side_2);
       return convert_ast(or2tc(add_overflows, is_min_int));
     }
+    else if (is_signed && int_encoding)
+    {
+      // Get the width of the integer type
+      auto const width = opers.side_1->type->get_width();
+      BigInt max_val = BigInt::power2(width - 1) - 1;  // MAX_INT
+      BigInt min_val = -BigInt::power2(width - 1);     // MIN_INT
 
+      expr2tc max_int = constant_int2tc(opers.side_1->type, max_val);
+      expr2tc min_int = constant_int2tc(opers.side_1->type, min_val);
+
+      // Extract the operand of the overflow expression
+      const overflow2t &overflow_expr = to_overflow2t(expr);
+      expr2tc result_expr = overflow_expr.operand;
+
+      // Overflow case: if a > 0 and b < 0 and a - b > MAX_INT
+      expr2tc op1pos = lessthan2tc(zero, opers.side_1);
+      expr2tc op2neg = lessthan2tc(opers.side_2, zero);
+      expr2tc pos_overflow = and2tc(op1pos, op2neg);
+      expr2tc overflow = greaterthan2tc(result_expr, max_int);
+      expr2tc final_pos_overflow = and2tc(pos_overflow, overflow);
+
+      // Underflow case: if a < 0 and b > 0 and a - b < MIN_INT
+      expr2tc op1neg = lessthan2tc(opers.side_1, zero);
+      expr2tc op2pos = lessthan2tc(zero, opers.side_2);
+      expr2tc neg_underflow = and2tc(op1neg, op2pos);
+      expr2tc underflow = lessthan2tc(result_expr, min_int);
+      expr2tc final_neg_underflow = and2tc(neg_underflow, underflow);
+
+      // Return true if either overflow or underflow occurs
+      expr2tc overflow_check = or2tc(final_pos_overflow, final_neg_underflow);
+      return convert_ast(overflow_check);
+    }
+    
     // Just ensure the result is <= the first operand.
     expr2tc sub = sub2tc(opers.side_1->type, opers.side_1, opers.side_2);
     expr2tc le = lessthanequal2tc(sub, opers.side_1);
