@@ -32,7 +32,7 @@ public:
 
   // Functions to handle temp C file used by clang-c-frontend
   std::string get_temp_file();
-  std::string temp_c_file();
+  std::string temp_cpp_file();
 
   languaget *new_language() const override
   {
