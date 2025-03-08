@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--k-induction --contract DD --unbound
+^VERIFICATION FAILED$

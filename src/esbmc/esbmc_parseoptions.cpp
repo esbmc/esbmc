@@ -562,7 +562,7 @@ int esbmc_parseoptionst::doit()
     goto_preprocess_algorithms.emplace_back(
       std::make_unique<mark_decl_as_non_det>(context));
 
-    if (cmdline.isset("function"))
+    if (cmdline.isset("function") && cmdline.isset("assign-param-nondet"))
     {
       // assign parameters to "nondet"
       goto_preprocess_algorithms.emplace_back(
