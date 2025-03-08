@@ -10450,10 +10450,15 @@ bool solidity_convertert::get_high_level_member_access(
 
   // lhs
   std::string nondet_id, nondet_name;
-  std::string var_name = base.name().as_string();
-  if (var_name.empty())
+  std::string var_name;
+  if (!base.name().empty())
+    var_name = base.name().as_string();
+  else if (!base.component_name().empty())
+    var_name = base.component_name().as_string();
+  else
   {
-    log_error("Unexpect empty base name");
+    log_error("Unexpected empty base name");
+    base.dump();
     return true;
   }
   if (get_nondet_contract_name(var_name, nondet_name, nondet_id))
@@ -10465,9 +10470,10 @@ bool solidity_convertert::get_high_level_member_access(
 
   // rhs
   std::string _cname;
-  if (base.type().get("#sol_type") != "")
+  if (base.type().get("#sol_type") != "CONTRACT")
   {
     log_error("Expecting contract type");
+    base.type().dump();
     return true;
   }
   if (get_base_cname(base, _cname))
