@@ -555,6 +555,10 @@ const struct group_opt_templ all_cmd_options[] = {
      {"branch-function-coverage-claims",
       NULL,
       "enable branch-coverage-ext and shows all reached claims"},
+     {"assign-param-nondet",
+      NULL,
+      "explicitly assign every function parameters to NONDET in function "
+      "mode"},
    }},
   {"DEBUG options",
    {
