@@ -39,7 +39,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
       auto const width = opers.side_1->type->get_width();
       BigInt max_val = BigInt::power2(width - 1) - 1; // MAX_INT
       BigInt min_val = -BigInt::power2(width - 1);    // MIN_INT
-     
+
       expr2tc max_int = constant_int2tc(opers.side_1->type, max_val);
       expr2tc min_int = constant_int2tc(opers.side_1->type, min_val);
 
