@@ -580,7 +580,7 @@ __ESBMC_HIDE:;
   {
     tmp = nondet_long();
   } while (_ESBMC_get_addr_array_idx(tmp) != -1);
-  update_addr_obj(tmp, obj);
+  // update_addr_obj(tmp, obj);
   return tmp;
 }
 void _ESBMC_set_cname_array(address_t _addr, char* cname)
@@ -637,7 +637,7 @@ const std::string empty_str = "";
 void _streq(std::string &str1, std::string str2)
 {
 __ESBMC_HIDE:;
-  __ESBMC_assume(!str2.empty());
+  // __ESBMC_assume(!str2.empty());
   str1 = str2;
 }
 std::string _tostr(const char* ptr)
