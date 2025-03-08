@@ -97,8 +97,8 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
     {
       // Get the width of the integer type
       auto const width = opers.side_1->type->get_width();
-      BigInt max_val = BigInt::power2(width - 1) - 1;  // MAX_INT
-      BigInt min_val = -BigInt::power2(width - 1);     // MIN_INT
+      BigInt max_val = BigInt::power2(width - 1) - 1; // MAX_INT
+      BigInt min_val = -BigInt::power2(width - 1);    // MIN_INT
 
       expr2tc max_int = constant_int2tc(opers.side_1->type, max_val);
       expr2tc min_int = constant_int2tc(opers.side_1->type, min_val);
@@ -125,7 +125,6 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
       expr2tc overflow_check = or2tc(final_pos_overflow, final_neg_underflow);
       return convert_ast(overflow_check);
     }
-    
     // Just ensure the result is <= the first operand.
     expr2tc sub = sub2tc(opers.side_1->type, opers.side_1, opers.side_2);
     expr2tc le = lessthanequal2tc(sub, opers.side_1);
