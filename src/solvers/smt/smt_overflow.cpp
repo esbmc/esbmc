@@ -190,7 +190,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
         result = is_mul2t(overflow.operand) ? mk_bvmul(arg1_ext, arg2_ext)
                                             : mk_bvshl(arg1_ext, arg2_ext);
       }
-      log_status("passou em 189");
+
       if (is_signed && !int_encoding)
       {
         // Extract top half plus one (for the sign)
