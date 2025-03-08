@@ -89,6 +89,21 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
 
   // add assertion to the target equation
   assertion(new_expr, msg);
+
+  // Convert asserts in assumes, if it's not the last loop iteration
+  // This is a common technique in k-induction to strengthen the induction hypothesis.
+  // also, don't convert assertions added by the bidirectional search
+  if (
+    inductive_step && first_loop && !cur_state->source.pc->inductive_assertion)
+  {
+    // Fetch the current loop iteration count
+    BigInt unwind = cur_state->loop_iterations[first_loop];
+    if (unwind < max_unwind - 1)
+    {
+      assume(claim_expr);
+      return;
+    }
+  }
 }
 
 void goto_symext::assertion(
