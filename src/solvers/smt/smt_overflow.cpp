@@ -165,7 +165,6 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
 
     if (!int_encoding)
     {
-
       arg1_ext = is_signedbv_type(opers.side_1) ? mk_sign_ext(arg1_ext, sz)
                                                 : mk_zero_ext(arg1_ext, sz);
 
@@ -185,155 +184,156 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
       result = is_mul2t(overflow.operand)
                  ? mk_mul(arg1_ext, arg2_ext)  // Use mk_mul for multiplication
                  : mk_shl(arg1_ext, arg2_ext); // Use mk_shl for shift left    }
-    else
-    {
-      // If not using int_encoding, fallback to original behavior (bvmul and bvshl)
-      result = is_mul2t(overflow.operand) ? mk_bvmul(arg1_ext, arg2_ext)
-                                          : mk_bvshl(arg1_ext, arg2_ext);
+      else
+      {
+        // If not using int_encoding, fallback to original behavior (bvmul and bvshl)
+        result = is_mul2t(overflow.operand) ? mk_bvmul(arg1_ext, arg2_ext)
+                                            : mk_bvshl(arg1_ext, arg2_ext);
+      }
+      log_status("passou em 189");
+      if (is_signed && !int_encoding)
+      {
+        // Extract top half plus one (for the sign)
+        smt_astt toppart = mk_extract(result, (sz * 2) - 1, sz - 1);
+
+        // Create a now base 2 type
+        type2tc newtype = unsignedbv_type2tc(sz + 1);
+
+        // All one bit vector is tricky, might be 64 bits wide for all we know.
+        expr2tc allonesexpr =
+          constant_int2tc(newtype, BigInt::power2m1(sz + 1));
+        smt_astt allonesvector = convert_ast(allonesexpr);
+
+        // It should either be zero or all one's;
+        smt_astt all_ones = mk_eq(toppart, allonesvector);
+
+        smt_astt all_zeros = mk_eq(toppart, convert_ast(gen_zero(newtype)));
+
+        smt_astt lor = mk_or(all_ones, all_zeros);
+        return mk_not(lor);
+      }
+      else if (is_signed && int_encoding)
+      {
+        // Create a signed integer type of size sz + 1
+        type2tc newtype = signedbv_type2tc(sz + 1);
+
+        // Get min and max bounds for signed overflow detection
+        expr2tc min_bound_expr =
+          constant_int2tc(newtype, -BigInt::power2(sz - 1));
+        expr2tc max_bound_expr =
+          constant_int2tc(newtype, BigInt::power2(sz - 1) - 1);
+
+        smt_astt min_bound = convert_ast(min_bound_expr);
+        smt_astt max_bound = convert_ast(max_bound_expr);
+
+        // Convert result to signed type and check if it's out of bounds
+        smt_astt overflow_high = mk_lt(result, min_bound);
+        smt_astt overflow_low = mk_gt(result, max_bound);
+
+        return mk_or(overflow_high, overflow_low);
+      }
+
+      // Extract top half.
+      smt_astt toppart = mk_extract(result, (sz * 2) - 1, sz);
+
+      // It should be zero; if not, overflow
+      smt_astt iseq = mk_eq(toppart, convert_ast(zero));
+      return mk_not(iseq);
     }
-    log_status("passou em 189");
-    if (is_signed && !int_encoding)
-    {
-      // Extract top half plus one (for the sign)
-      smt_astt toppart = mk_extract(result, (sz * 2) - 1, sz - 1);
-
-      // Create a now base 2 type
-      type2tc newtype = unsignedbv_type2tc(sz + 1);
-
-      // All one bit vector is tricky, might be 64 bits wide for all we know.
-      expr2tc allonesexpr = constant_int2tc(newtype, BigInt::power2m1(sz + 1));
-      smt_astt allonesvector = convert_ast(allonesexpr);
-
-      // It should either be zero or all one's;
-      smt_astt all_ones = mk_eq(toppart, allonesvector);
-
-      smt_astt all_zeros = mk_eq(toppart, convert_ast(gen_zero(newtype)));
-
-      smt_astt lor = mk_or(all_ones, all_zeros);
-      return mk_not(lor);
-    }
-    else if (is_signed && int_encoding)
-    {
-      // Create a signed integer type of size sz + 1
-      type2tc newtype = signedbv_type2tc(sz + 1);
-      
-      // Get min and max bounds for signed overflow detection
-      expr2tc min_bound_expr =
-        constant_int2tc(newtype, -BigInt::power2(sz - 1));
-      expr2tc max_bound_expr =
-        constant_int2tc(newtype, BigInt::power2(sz - 1) - 1);
-
-      smt_astt min_bound = convert_ast(min_bound_expr);
-      smt_astt max_bound = convert_ast(max_bound_expr);
-
-      // Convert result to signed type and check if it's out of bounds
-      smt_astt overflow_high = mk_lt(result, min_bound);
-      smt_astt overflow_low = mk_gt(result, max_bound);
-      
-      return mk_or(overflow_high, overflow_low);
-    }
-
-    // Extract top half.
-    smt_astt toppart = mk_extract(result, (sz * 2) - 1, sz);
-
-    // It should be zero; if not, overflow
-    smt_astt iseq = mk_eq(toppart, convert_ast(zero));
-    return mk_not(iseq);
-  }
 
   default:
     log_error("unexpected overflow_arith operand");
     abort();
   }
 
-  return nullptr;
-}
-
-smt_astt smt_convt::overflow_cast(const expr2tc &expr)
-{
-  // If in integer mode, this is completely pointless. Return false.
-  if (int_encoding)
-    return mk_smt_bool(false);
-
-  const overflow_cast2t &ocast = to_overflow_cast2t(expr);
-  unsigned int width = ocast.operand->type->get_width();
-  unsigned int bits = ocast.bits;
-
-  if (ocast.bits >= width || ocast.bits == 0)
-  {
-    log_error("SMT conversion: overflow-typecast got wrong number of bits");
-    abort();
+    return nullptr;
   }
 
-  // Basically: if it's positive in the first place, ensure all the top bits
-  // are zero. If neg, then all the top are 1's /and/ the next bit, so that
-  // it's considered negative in the next interpretation.
-
-  expr2tc zero = constant_int2tc(ocast.operand->type, BigInt(0));
-  expr2tc isnegexpr = lessthan2tc(ocast.operand, zero);
-  smt_astt isneg = convert_ast(isnegexpr);
-  smt_astt orig_val = convert_ast(ocast.operand);
-
-  // Difference bits
-  unsigned int pos_zero_bits = width - bits;
-  unsigned int neg_one_bits = (width - bits) + 1;
-
-  smt_astt pos_bits = mk_smt_bv(BigInt(0), pos_zero_bits);
-  smt_astt neg_bits = mk_smt_bv(BigInt::power2m1(neg_one_bits), neg_one_bits);
-
-  smt_astt pos_sel = mk_extract(orig_val, width - 1, width - pos_zero_bits);
-  smt_astt neg_sel = mk_extract(orig_val, width - 1, width - neg_one_bits);
-
-  smt_astt pos_eq = mk_eq(pos_bits, pos_sel);
-  smt_astt neg_eq = mk_eq(neg_bits, neg_sel);
-
-  // isneg -> neg_eq, !isneg -> pos_eq
-  smt_astt notisneg = mk_not(isneg);
-  smt_astt c1 = mk_implies(isneg, neg_eq);
-  smt_astt c2 = mk_implies(notisneg, pos_eq);
-
-  smt_astt nooverflow = mk_and(c1, c2);
-  return mk_not(nooverflow);
-}
-
-smt_astt smt_convt::overflow_neg(const expr2tc &expr)
-{
-  // If in integer mode, this check is irrelevant, return false
-  if (int_encoding)
-    return mk_smt_bool(false);
-
-  // Extract operand
-  const overflow_neg2t &neg = to_overflow_neg2t(expr);
-  unsigned int width = neg.operand->type->get_width();
-
-  // Check if operand is unsigned
-  bool is_unsigned = is_unsignedbv_type(neg.operand->type);
-
-  if (is_unsigned)
+  smt_astt smt_convt::overflow_cast(const expr2tc &expr)
   {
-    // **Unsigned Negation Overflow Check**
-    // In unsigned arithmetic, negation (-x) is effectively (UINT_MAX + 1 - x).
-    // Any nonzero value negated will wrap around, which is unexpected behavior.
-    expr2tc zero = constant_int2tc(neg.operand->type, 0);
-    // Overflow occurs if operand is x != 0
-    expr2tc val = notequal2tc(neg.operand, zero);
+    // If in integer mode, this is completely pointless. Return false.
+    if (int_encoding)
+      return mk_smt_bool(false);
 
-    return convert_ast(val);
+    const overflow_cast2t &ocast = to_overflow_cast2t(expr);
+    unsigned int width = ocast.operand->type->get_width();
+    unsigned int bits = ocast.bits;
+
+    if (ocast.bits >= width || ocast.bits == 0)
+    {
+      log_error("SMT conversion: overflow-typecast got wrong number of bits");
+      abort();
+    }
+
+    // Basically: if it's positive in the first place, ensure all the top bits
+    // are zero. If neg, then all the top are 1's /and/ the next bit, so that
+    // it's considered negative in the next interpretation.
+
+    expr2tc zero = constant_int2tc(ocast.operand->type, BigInt(0));
+    expr2tc isnegexpr = lessthan2tc(ocast.operand, zero);
+    smt_astt isneg = convert_ast(isnegexpr);
+    smt_astt orig_val = convert_ast(ocast.operand);
+
+    // Difference bits
+    unsigned int pos_zero_bits = width - bits;
+    unsigned int neg_one_bits = (width - bits) + 1;
+
+    smt_astt pos_bits = mk_smt_bv(BigInt(0), pos_zero_bits);
+    smt_astt neg_bits = mk_smt_bv(BigInt::power2m1(neg_one_bits), neg_one_bits);
+
+    smt_astt pos_sel = mk_extract(orig_val, width - 1, width - pos_zero_bits);
+    smt_astt neg_sel = mk_extract(orig_val, width - 1, width - neg_one_bits);
+
+    smt_astt pos_eq = mk_eq(pos_bits, pos_sel);
+    smt_astt neg_eq = mk_eq(neg_bits, neg_sel);
+
+    // isneg -> neg_eq, !isneg -> pos_eq
+    smt_astt notisneg = mk_not(isneg);
+    smt_astt c1 = mk_implies(isneg, neg_eq);
+    smt_astt c2 = mk_implies(notisneg, pos_eq);
+
+    smt_astt nooverflow = mk_and(c1, c2);
+    return mk_not(nooverflow);
   }
-  else
+
+  smt_astt smt_convt::overflow_neg(const expr2tc &expr)
   {
-    // **Signed Negation Overflow Check**
-    // Cast operand to signed type
-    expr2tc operand = typecast2tc(signedbv_type2tc(width), neg.operand);
-    simplify(operand);
+    // If in integer mode, this check is irrelevant, return false
+    if (int_encoding)
+      return mk_smt_bool(false);
 
-    // Compute the minimum integer value for the operand's type (INT_MIN)
-    expr2tc min_int =
-      constant_int2tc(operand->type, -BigInt::power2(width - 1));
+    // Extract operand
+    const overflow_neg2t &neg = to_overflow_neg2t(expr);
+    unsigned int width = neg.operand->type->get_width();
 
-    // Overflow occurs if operand is INT_MIN
-    expr2tc val = equality2tc(operand, min_int);
+    // Check if operand is unsigned
+    bool is_unsigned = is_unsignedbv_type(neg.operand->type);
 
-    return convert_ast(val);
+    if (is_unsigned)
+    {
+      // **Unsigned Negation Overflow Check**
+      // In unsigned arithmetic, negation (-x) is effectively (UINT_MAX + 1 - x).
+      // Any nonzero value negated will wrap around, which is unexpected behavior.
+      expr2tc zero = constant_int2tc(neg.operand->type, 0);
+      // Overflow occurs if operand is x != 0
+      expr2tc val = notequal2tc(neg.operand, zero);
+
+      return convert_ast(val);
+    }
+    else
+    {
+      // **Signed Negation Overflow Check**
+      // Cast operand to signed type
+      expr2tc operand = typecast2tc(signedbv_type2tc(width), neg.operand);
+      simplify(operand);
+
+      // Compute the minimum integer value for the operand's type (INT_MIN)
+      expr2tc min_int =
+        constant_int2tc(operand->type, -BigInt::power2(width - 1));
+
+      // Overflow occurs if operand is INT_MIN
+      expr2tc val = equality2tc(operand, min_int);
+
+      return convert_ast(val);
+    }
   }
-}
