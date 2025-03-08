@@ -434,11 +434,13 @@ protected:
   bool get_high_level_member_access(
     const exprt &base,
     const exprt &member,
+    const bool is_func_call,
     exprt &new_expr);
   bool get_nondet_contract_name(
     const std::string &var_name,
     std::string &name,
     std::string &id);
+  bool get_base_cname(const exprt &base, std::string &cname);
 
   // literal conversion functions
   bool convert_integer_literal(
