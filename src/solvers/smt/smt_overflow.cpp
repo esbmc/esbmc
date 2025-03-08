@@ -184,7 +184,8 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
       result = is_mul2t(overflow.operand)
                  ? mk_mul(arg1_ext, arg2_ext)  // Use mk_mul for multiplication
                  : mk_shl(arg1_ext, arg2_ext); // Use mk_shl for shift left    }
-      else
+    }
+    else
       {
         // If not using int_encoding, fallback to original behavior (bvmul and bvshl)
         result = is_mul2t(overflow.operand) ? mk_bvmul(arg1_ext, arg2_ext)
