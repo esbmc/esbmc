@@ -42,8 +42,7 @@ bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
     {
       // check assertion to produce a counterexample
       assertion(gen_false_expr(), msg);
-      // eliminate subsequent execution paths
-      assume(gen_false_expr());
+
       // incremental verification succeeded
       return true;
     }
