@@ -2,10 +2,6 @@
 
 smt_astt smt_convt::overflow_arith(const expr2tc &expr)
 {
-  // If in integer mode, this is completely pointless. Return false.
-  if (int_encoding)
-    return mk_smt_bool(false);
-
   const overflow2t &overflow = to_overflow2t(expr);
   const arith_2ops &opers = static_cast<const arith_2ops &>(*overflow.operand);
 
@@ -19,7 +15,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
   {
   case expr2t::add_id:
   {
-    if (is_signed)
+    if (is_signed && !int_encoding)
     {
       // Two cases: pos/pos, and neg/neg, which can over and underflow resp.
       // In pos/neg cases, no overflow or underflow is possible, for any value.
@@ -36,6 +32,41 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
       expr2tc nounderflow =
         implies2tc(both_neg, lessthanequal2tc(overflow.operand, zero));
       return convert_ast(not2tc(and2tc(nooverflow, nounderflow)));
+    }
+    else if (is_signed && int_encoding)
+    {
+      // Get the width of the integer type
+      auto const width = opers.side_1->type->get_width();
+      BigInt max_val = BigInt::power2(width - 1) - 1;  // MAX_INT
+      BigInt min_val = -BigInt::power2(width - 1);     // MIN_INT
+     
+      expr2tc max_int = constant_int2tc(opers.side_1->type, max_val);
+      expr2tc min_int = constant_int2tc(opers.side_1->type, min_val);
+
+      // Extract the operand of the overflow expression
+      const overflow2t &overflow_expr = to_overflow2t(expr);
+      expr2tc result_expr = overflow_expr.operand;  // Fix: Correctly extract the operand
+
+      // Two cases: positive overflow and negative underflow
+      expr2tc op1pos = lessthan2tc(zero, opers.side_1);
+      expr2tc op2pos = lessthan2tc(zero, opers.side_2);
+      expr2tc both_pos = and2tc(op1pos, op2pos);
+
+      expr2tc negop1 = lessthan2tc(opers.side_1, zero);
+      expr2tc negop2 = lessthan2tc(opers.side_2, zero);
+      expr2tc both_neg = and2tc(negop1, negop2);
+
+      // Overflow: if both are positive and result > MAX_INT
+      expr2tc overflow = greaterthan2tc(result_expr, max_int);
+      expr2tc pos_overflow = and2tc(both_pos, overflow);
+
+      // Underflow: if both are negative and result < MIN_INT
+      expr2tc underflow = lessthan2tc(result_expr, min_int);
+      expr2tc neg_underflow = and2tc(both_neg, underflow);
+
+      // If either overflow or underflow occurs, return true
+      expr2tc overflow_check = or2tc(pos_overflow, neg_underflow);
+      return convert_ast(overflow_check);
     }
 
     // Just ensure the result is >= both operands.
