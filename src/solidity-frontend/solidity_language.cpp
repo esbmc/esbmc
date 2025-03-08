@@ -65,7 +65,7 @@ std::string solidity_languaget::get_temp_file()
   std::ofstream f;
   p += "/temp_sol.cpp";
   f.open(p.string());
-  f << temp_c_file();
+  f << temp_cpp_file();
   f.close();
 
   return p.string();
@@ -178,7 +178,7 @@ bool solidity_languaget::final(contextt &context)
   return c_main.clang_main();
 }
 
-std::string solidity_languaget::temp_c_file()
+std::string solidity_languaget::temp_cpp_file()
 {
   // This function populates the temp file so that Clang has a compilation job.
   // Clang needs a job to convert the intrinsics.

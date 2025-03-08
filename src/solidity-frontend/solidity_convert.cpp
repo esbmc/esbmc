@@ -3731,14 +3731,13 @@ bool solidity_convertert::get_expr(
         exprt comp;
         if (get_var_decl_ref(member_decl_ref, comp))
           return true;
+        const irep_idt comp_name =
+          comp.name().empty() ? comp.component_name() : comp.name();
+
         if (current_contractName == base_cname)
-        {
           // this.member();
           // comp can be either symbol_expr or member_expr
-          const irep_idt comp_name =
-            comp.name().empty() ? comp.component_name() : comp.name();
           new_expr = member_exprt(base, comp_name, comp.type());
-        }
         else if (!is_bound)
         {
           // x.member(); ==> nondet();
@@ -3748,11 +3747,12 @@ bool solidity_convertert::get_expr(
         }
         else
         {
+          exprt dump;
           if (comp.name().empty())
             // decompose member_exprt
-            comp = comp.op0();
-          if (get_high_level_member_access(base, comp, false, new_expr))
-            return true;
+            dump = comp.op0();
+          if (get_high_level_member_access(base, dump, false, new_expr))
+            new_expr = member_exprt(base, comp_name, comp.type());
         }
 
         break;
@@ -3765,23 +3765,20 @@ bool solidity_convertert::get_expr(
         exprt comp;
         if (get_func_decl_ref(member_decl_ref, comp))
           return true;
+        exprt mem_access = member_exprt(base, comp.identifier(), comp.type());
+        // obtain the type of return value
+        code_typet t;
+        if (get_type_description(
+              member_decl_ref["returnParameters"], t.return_type()))
+          return true;
+        if (get_non_library_function_call(
+              mem_access, t, member_decl_ref, expr, call))
+          return true;
+
         if (current_contractName == base_cname)
-        {
           // this.init(); we know the implementation thus cannot model it as unbound_harness
           // note that here is comp.identifier not comp.name
-          exprt mem_access = member_exprt(base, comp.identifier(), comp.type());
-          // obtain the type of return value
-          code_typet t;
-          if (get_type_description(
-                member_decl_ref["returnParameters"], t.return_type()))
-            return true;
-
-          if (get_non_library_function_call(
-                mem_access, t, member_decl_ref, expr, call))
-            return true;
-
           new_expr = call;
-        }
         else if (!is_bound)
         {
           if (get_unbound_expr(expr, new_expr))
@@ -3790,7 +3787,7 @@ bool solidity_convertert::get_expr(
         else
         {
           if (get_high_level_member_access(base, comp, true, new_expr))
-            return true;
+            new_expr = call;
         }
 
         break;
@@ -5389,7 +5386,6 @@ void solidity_convertert::get_symbol_decl_ref(
   }
 }
 
-
 /*
   This function can return expr with either id::symbol or id::member
   id::memebr can only be the case where this.xx
@@ -5440,10 +5436,12 @@ bool solidity_convertert::get_var_decl_ref(
   }
 
   std::string base_cname;
-  if(get_current_contract_name(decl,base_cname))
+  if (get_current_contract_name(decl, base_cname))
     return true;
-  
-  if (decl["stateVariable"] && current_functionDecl && base_cname == current_contractName)
+
+  if (
+    decl["stateVariable"] && current_functionDecl &&
+    base_cname == current_contractName)
   {
     // this means we are parsing function body
     // and the variable is a state var
@@ -6654,7 +6652,7 @@ void solidity_convertert::get_library_function_call_no_args(
 
   call_expr.function() = type_expr;
   if (t.is_code())
-    call_expr.type() = to_code_type(t).return_type();
+    call_expr.type();
   else
     call_expr.type() = t;
 
@@ -6911,7 +6909,7 @@ bool solidity_convertert::get_elementary_type_name(
   case SolidityGrammar::ElementaryTypeNameT::STRING:
   {
     // cpp: std::string str;
-    new_type = context.find_symbol("tag-std::string")->type;
+    new_type = symbol_typet("tag-std::string");
     new_type.set("#sol_type", "STRING");
     break;
   }
@@ -10428,6 +10426,8 @@ to
 
   the auxilidary tmp var will not be created if the member_type is void
   @is_func_call: true if it's a function member access; false state variable access
+  return true: we fail to generate the high_level_member_access bound harness
+               however, this should not be treated as an erorr
 */
 bool solidity_convertert::get_high_level_member_access(
   const exprt &base,
@@ -10436,6 +10436,27 @@ bool solidity_convertert::get_high_level_member_access(
   exprt &new_expr)
 {
   log_debug("solidity", "get_high_level_member_access");
+
+  // lhs
+  std::string nondet_id, nondet_name;
+  std::string var_name;
+  if (!base.name().empty())
+    var_name = base.name().as_string();
+  else if (!base.component_name().empty())
+    var_name = base.component_name().as_string();
+  else
+  {
+    log_error("Unexpected empty base name");
+    base.dump();
+    return true;
+  }
+
+  if (get_nondet_contract_name(var_name, nondet_name, nondet_id))
+    return true;
+  if (context.find_symbol(nondet_id) == nullptr)
+    // this means the base contract instance is not passed via the function parameter
+    return true;
+
   // get memebr type
   exprt tmp = code_skipt();
   bool is_return_void = member.type().is_empty() ||
@@ -10457,22 +10478,6 @@ bool solidity_convertert::get_high_level_member_access(
     current_frontBlockDecl.copy_to_operands(decl);
     tmp = symbol_expr(added_symbol);
   }
-
-  // lhs
-  std::string nondet_id, nondet_name;
-  std::string var_name;
-  if (!base.name().empty())
-    var_name = base.name().as_string();
-  else if (!base.component_name().empty())
-    var_name = base.component_name().as_string();
-  else
-  {
-    log_error("Unexpected empty base name");
-    base.dump();
-    return true;
-  }
-  if (get_nondet_contract_name(var_name, nondet_name, nondet_id))
-    return true;
 
   exprt _nondet;
   get_symbol_decl_ref(

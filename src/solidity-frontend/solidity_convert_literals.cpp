@@ -94,6 +94,7 @@ bool solidity_convertert::convert_string_literal(
   string_constantt string(the_value, type, string_constantt::k_default);
 
   // convert char * to std::string
+  // for intializing it to empty_str
   side_effect_expr_function_callt call;
   locationt loc;
   get_tostr_function_call(loc, call);
