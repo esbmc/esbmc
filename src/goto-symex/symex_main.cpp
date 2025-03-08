@@ -66,23 +66,26 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
   if (cur_state->guard.is_false())
     return;
 
-  total_claims++;
+  ++total_claims;
 
   expr2tc new_expr = claim_expr;
   cur_state->rename(new_expr);
 
-  // first try simplifier on it
+  // simplify the renamed expression to potentially optimize the claim
   do_simplify(new_expr);
 
   if (is_true(new_expr))
-    return;
-
-  if (options.get_bool_option("smt-symex-assert"))
   {
-    if (check_incremental(new_expr, msg))
-      // incremental verification has succeeded
-      return;
+    // Strengthen the claim by assuming it when trivially true
+    assume(claim_expr);
+    return;
   }
+
+  // Perform incremental SMT-based verification if enabled
+  if (
+    options.get_bool_option("smt-symex-assert") &&
+    check_incremental(new_expr, msg))
+    return; // Verification succeeded, no further action needed
 
   // add assertion to the target equation
   assertion(new_expr, msg);
