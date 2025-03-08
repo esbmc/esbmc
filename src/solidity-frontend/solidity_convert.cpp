@@ -2574,6 +2574,7 @@ void solidity_convertert::reset_auxiliary_vars()
   initializers.clear();
   ctor_modifier = nullptr;
   based_contracts = nullptr;
+  is_contract_member_access = false;
 }
 
 bool solidity_convertert::get_function_params(
@@ -5388,6 +5389,11 @@ void solidity_convertert::get_symbol_decl_ref(
   }
 }
 
+
+/*
+  This function can return expr with either id::symbol or id::member
+  id::memebr can only be the case where this.xx
+*/
 bool solidity_convertert::get_var_decl_ref(
   const nlohmann::json &decl,
   exprt &new_expr)
@@ -5433,7 +5439,11 @@ bool solidity_convertert::get_var_decl_ref(
     new_expr.pretty_name(name);
   }
 
-  if (decl["stateVariable"] && current_functionDecl)
+  std::string base_cname;
+  if(get_current_contract_name(decl,base_cname))
+    return true;
+  
+  if (decl["stateVariable"] && current_functionDecl && base_cname == current_contractName)
   {
     // this means we are parsing function body
     // and the variable is a state var
