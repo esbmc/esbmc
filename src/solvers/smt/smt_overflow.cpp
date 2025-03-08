@@ -37,15 +37,15 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
     {
       // Get the width of the integer type
       auto const width = opers.side_1->type->get_width();
-      BigInt max_val = BigInt::power2(width - 1) - 1;  // MAX_INT
-      BigInt min_val = -BigInt::power2(width - 1);     // MIN_INT
+      BigInt max_val = BigInt::power2(width - 1) - 1; // MAX_INT
+      BigInt min_val = -BigInt::power2(width - 1);    // MIN_INT
      
       expr2tc max_int = constant_int2tc(opers.side_1->type, max_val);
       expr2tc min_int = constant_int2tc(opers.side_1->type, min_val);
 
       // Extract the operand of the overflow expression
       const overflow2t &overflow_expr = to_overflow2t(expr);
-      expr2tc result_expr = overflow_expr.operand;  // Fix: Correctly extract the operand
+      expr2tc result_expr = overflow_expr.operand;
 
       // Two cases: positive overflow and negative underflow
       expr2tc op1pos = lessthan2tc(zero, opers.side_1);
