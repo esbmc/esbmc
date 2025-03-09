@@ -32,7 +32,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
       expr2tc nounderflow =
         implies2tc(both_neg, lessthanequal2tc(overflow.operand, zero));
       return convert_ast(not2tc(and2tc(nooverflow, nounderflow)));
-    }   
+    }
     else if (is_signed && int_encoding)
     {
       // Get the width of the integer type
