@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--k-induction --no-standard-checks --sol contract.sol   
+^VERIFICATION SUCCESSFUL$

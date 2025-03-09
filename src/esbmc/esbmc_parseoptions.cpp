@@ -562,7 +562,7 @@ int esbmc_parseoptionst::doit()
     goto_preprocess_algorithms.emplace_back(
       std::make_unique<mark_decl_as_non_det>(context));
 
-    if (cmdline.isset("function"))
+    if (cmdline.isset("function") && cmdline.isset("assign-param-nondet"))
     {
       // assign parameters to "nondet"
       goto_preprocess_algorithms.emplace_back(
@@ -2068,6 +2068,14 @@ bool esbmc_parseoptionst::process_goto_program(
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);
       tmp.branch_function_coverage();
+    }
+
+    if (cmdline.isset("negating-property"))
+    {
+      std::string tgt_fname = cmdline.getval("negating-property");
+      std::string filename = cmdline.args[0];
+      goto_coveraget tmp(ns, goto_functions, filename);
+      tmp.negating_asserts(tgt_fname);
     }
   }
 
