@@ -1,0 +1,4 @@
+CORE
+main.c
+--z3 --ir --overflow-check
+^VERIFICATION FAILED$

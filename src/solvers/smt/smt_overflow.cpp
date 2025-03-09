@@ -2,10 +2,6 @@
 
 smt_astt smt_convt::overflow_arith(const expr2tc &expr)
 {
-  // If in integer mode, this is completely pointless. Return false.
-  if (int_encoding)
-    return mk_smt_bool(false);
-
   const overflow2t &overflow = to_overflow2t(expr);
   const arith_2ops &opers = static_cast<const arith_2ops &>(*overflow.operand);
 
@@ -19,7 +15,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
   {
   case expr2t::add_id:
   {
-    if (is_signed)
+    if (is_signed && !int_encoding)
     {
       // Two cases: pos/pos, and neg/neg, which can over and underflow resp.
       // In pos/neg cases, no overflow or underflow is possible, for any value.
@@ -36,6 +32,41 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
       expr2tc nounderflow =
         implies2tc(both_neg, lessthanequal2tc(overflow.operand, zero));
       return convert_ast(not2tc(and2tc(nooverflow, nounderflow)));
+    }
+    else if (is_signed && int_encoding)
+    {
+      // Get the width of the integer type
+      auto const width = opers.side_1->type->get_width();
+      BigInt max_val = BigInt::power2(width - 1) - 1; // MAX_INT
+      BigInt min_val = -BigInt::power2(width - 1);    // MIN_INT
+
+      expr2tc max_int = constant_int2tc(opers.side_1->type, max_val);
+      expr2tc min_int = constant_int2tc(opers.side_1->type, min_val);
+
+      // Extract the operand of the overflow expression
+      const overflow2t &overflow_expr = to_overflow2t(expr);
+      expr2tc result_expr = overflow_expr.operand;
+
+      // Two cases: positive overflow and negative underflow
+      expr2tc op1pos = lessthan2tc(zero, opers.side_1);
+      expr2tc op2pos = lessthan2tc(zero, opers.side_2);
+      expr2tc both_pos = and2tc(op1pos, op2pos);
+
+      expr2tc negop1 = lessthan2tc(opers.side_1, zero);
+      expr2tc negop2 = lessthan2tc(opers.side_2, zero);
+      expr2tc both_neg = and2tc(negop1, negop2);
+
+      // Overflow: if both are positive and result > MAX_INT
+      expr2tc overflow = greaterthan2tc(result_expr, max_int);
+      expr2tc pos_overflow = and2tc(both_pos, overflow);
+
+      // Underflow: if both are negative and result < MIN_INT
+      expr2tc underflow = lessthan2tc(result_expr, min_int);
+      expr2tc neg_underflow = and2tc(both_neg, underflow);
+
+      // If either overflow or underflow occurs, return true
+      expr2tc overflow_check = or2tc(pos_overflow, neg_underflow);
+      return convert_ast(overflow_check);
     }
 
     // Just ensure the result is >= both operands.
@@ -99,22 +130,38 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
     unsigned int sz = zero->type->get_width();
 
     smt_astt arg1_ext = convert_ast(opers.side_1);
-    arg1_ext = is_signedbv_type(opers.side_1) ? mk_sign_ext(arg1_ext, sz)
-                                              : mk_zero_ext(arg1_ext, sz);
+    smt_astt arg2_ext;
+
+    if (!int_encoding)
+      arg1_ext = is_signedbv_type(opers.side_1) ? mk_sign_ext(arg1_ext, sz)
+                                                : mk_zero_ext(arg1_ext, sz);
 
     expr2tc op2 = opers.side_2;
     if (is_shl2t(overflow.operand))
       if (opers.side_1->type->get_width() != opers.side_2->type->get_width())
         op2 = typecast2tc(opers.side_1->type, opers.side_2);
 
-    smt_astt arg2_ext = convert_ast(op2);
-    arg2_ext = is_signedbv_type(op2) ? mk_sign_ext(arg2_ext, sz)
-                                     : mk_zero_ext(arg2_ext, sz);
+    arg2_ext = convert_ast(op2);
 
-    smt_astt result = is_mul2t(overflow.operand) ? mk_bvmul(arg1_ext, arg2_ext)
-                                                 : mk_bvshl(arg1_ext, arg2_ext);
+    if (!int_encoding)
+      arg2_ext = is_signedbv_type(op2) ? mk_sign_ext(arg2_ext, sz)
+                                       : mk_zero_ext(arg2_ext, sz);
+    smt_astt result;
+    if (int_encoding)
+    {
+      // If using int_encoding, use mk_mul and mk_shl for multiplication and shift left
+      result = is_mul2t(overflow.operand)
+                 ? mk_mul(arg1_ext, arg2_ext)  // Use mk_mul for multiplication
+                 : mk_shl(arg1_ext, arg2_ext); // Use mk_shl for shift left
+    }
+    else
+    {
+      // If not using int_encoding, fallback to original behavior (bvmul and bvshl)
+      result = is_mul2t(overflow.operand) ? mk_bvmul(arg1_ext, arg2_ext)
+                                          : mk_bvshl(arg1_ext, arg2_ext);
+    }
 
-    if (is_signed)
+    if (is_signed && !int_encoding)
     {
       // Extract top half plus one (for the sign)
       smt_astt toppart = mk_extract(result, (sz * 2) - 1, sz - 1);
@@ -133,6 +180,26 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
 
       smt_astt lor = mk_or(all_ones, all_zeros);
       return mk_not(lor);
+    }
+    else if (is_signed && int_encoding)
+    {
+      // Create a signed integer type of size sz + 1
+      type2tc newtype = signedbv_type2tc(sz + 1);
+
+      // Get min and max bounds for signed overflow detection
+      expr2tc min_bound_expr =
+        constant_int2tc(newtype, -BigInt::power2(sz - 1));
+      expr2tc max_bound_expr =
+        constant_int2tc(newtype, BigInt::power2(sz - 1) - 1);
+
+      smt_astt min_bound = convert_ast(min_bound_expr);
+      smt_astt max_bound = convert_ast(max_bound_expr);
+
+      // Convert result to signed type and check if it's out of bounds
+      smt_astt overflow_high = mk_lt(result, min_bound);
+      smt_astt overflow_low = mk_gt(result, max_bound);
+
+      return mk_or(overflow_high, overflow_low);
     }
 
     // Extract top half.
@@ -200,10 +267,6 @@ smt_astt smt_convt::overflow_cast(const expr2tc &expr)
 
 smt_astt smt_convt::overflow_neg(const expr2tc &expr)
 {
-  // If in integer mode, this check is irrelevant, return false
-  if (int_encoding)
-    return mk_smt_bool(false);
-
   // Extract operand
   const overflow_neg2t &neg = to_overflow_neg2t(expr);
   unsigned int width = neg.operand->type->get_width();
