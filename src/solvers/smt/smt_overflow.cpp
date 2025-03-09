@@ -267,10 +267,6 @@ smt_astt smt_convt::overflow_cast(const expr2tc &expr)
 
 smt_astt smt_convt::overflow_neg(const expr2tc &expr)
 {
-  // If in integer mode, this check is irrelevant, return false
-  if (int_encoding)
-    return mk_smt_bool(false);
-
   // Extract operand
   const overflow_neg2t &neg = to_overflow_neg2t(expr);
   unsigned int width = neg.operand->type->get_width();
