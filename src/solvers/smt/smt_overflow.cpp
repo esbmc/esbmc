@@ -161,7 +161,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
     unsigned int sz = zero->type->get_width();
 
     smt_astt arg1_ext = convert_ast(opers.side_1);
-    smt_astt arg2_ext = convert_ast(opers.side_2);
+    smt_astt arg2_ext;
 
     if (!int_encoding)
     {
@@ -172,6 +172,8 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
       if (is_shl2t(overflow.operand))
         if (opers.side_1->type->get_width() != opers.side_2->type->get_width())
           op2 = typecast2tc(opers.side_1->type, opers.side_2);
+
+      arg2_ext = convert_ast(op2);
 
       arg2_ext = is_signedbv_type(op2) ? mk_sign_ext(arg2_ext, sz)
                                        : mk_zero_ext(arg2_ext, sz);
