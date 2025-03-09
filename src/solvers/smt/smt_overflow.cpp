@@ -164,28 +164,26 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
     smt_astt arg2_ext;
 
     if (!int_encoding)
-    {
       arg1_ext = is_signedbv_type(opers.side_1) ? mk_sign_ext(arg1_ext, sz)
                                                 : mk_zero_ext(arg1_ext, sz);
 
-      expr2tc op2 = opers.side_2;
-      if (is_shl2t(overflow.operand))
-        if (opers.side_1->type->get_width() != opers.side_2->type->get_width())
-          op2 = typecast2tc(opers.side_1->type, opers.side_2);
+    expr2tc op2 = opers.side_2;
+    if (is_shl2t(overflow.operand))
+      if (opers.side_1->type->get_width() != opers.side_2->type->get_width())
+        op2 = typecast2tc(opers.side_1->type, opers.side_2);
 
-      arg2_ext = convert_ast(op2);
+    arg2_ext = convert_ast(op2);
 
+    if (!int_encoding)
       arg2_ext = is_signedbv_type(op2) ? mk_sign_ext(arg2_ext, sz)
                                        : mk_zero_ext(arg2_ext, sz);
-    }
-
     smt_astt result;
     if (int_encoding)
     {
       // If using int_encoding, use mk_mul and mk_shl for multiplication and shift left
       result = is_mul2t(overflow.operand)
                  ? mk_mul(arg1_ext, arg2_ext)  // Use mk_mul for multiplication
-                 : mk_shl(arg1_ext, arg2_ext); // Use mk_shl for shift left    }
+                 : mk_shl(arg1_ext, arg2_ext); // Use mk_shl for shift left
     }
     else
     {
