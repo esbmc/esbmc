@@ -32,7 +32,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
       expr2tc nounderflow =
         implies2tc(both_neg, lessthanequal2tc(overflow.operand, zero));
       return convert_ast(not2tc(and2tc(nooverflow, nounderflow)));
-    }
+    }   
     else if (is_signed && int_encoding)
     {
       // Get the width of the integer type
@@ -93,7 +93,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
       expr2tc is_min_int = equality2tc(min_int, opers.side_2);
       return convert_ast(or2tc(add_overflows, is_min_int));
     }
-    
+
     // Just ensure the result is <= the first operand.
     expr2tc sub = sub2tc(opers.side_1->type, opers.side_1, opers.side_2);
     expr2tc le = lessthanequal2tc(sub, opers.side_1);
