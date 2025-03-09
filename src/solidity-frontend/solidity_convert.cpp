@@ -780,7 +780,7 @@ bool solidity_convertert::get_var_decl(
     if (get_init_expr(ast_node, t, val))
       return true;
 
-    if (val.is_typecast())
+    if (val.is_typecast() || val.type().get("#sol_type") == "NEW_ARRAY")
     {
       // uint[] zz = new uint(10);
       // uint[] zz = new uint(len);
@@ -1297,6 +1297,7 @@ bool solidity_convertert::get_noncontract_decl_ref(
   const nlohmann::json &decl,
   exprt &new_expr)
 {
+  log_debug("solidity", "\tget_noncontract_decl_ref");
   if (decl["nodeType"] == "StructDefinition")
   {
     std::string id;
@@ -2397,7 +2398,9 @@ bool solidity_convertert::get_function_definition(
   //  - Convert params before body as they may get referred by the statement in the body
 
   // 11.1 add this pointer as the first param
-  if (ast_node["nodeType"].get<std::string>() != "EventDefinition")
+  bool is_event =
+    ast_node.contains("nodeType") && ast_node["nodeType"] == "EventDefinition";
+  if (!is_event)
     get_function_this_pointer_param(
       current_contractName, id, debug_modulename, location_begin, type);
 
@@ -2419,7 +2422,7 @@ bool solidity_convertert::get_function_definition(
 
       type.arguments().push_back(param);
 
-      if (is_bound)
+      if (is_bound && !is_event)
       {
         std::string sol_t = param.type().get("#sol_type").as_string();
         if (
@@ -2447,7 +2450,7 @@ bool solidity_convertert::get_function_definition(
     assert(body_exprt.is_code());
     if (
       is_bound && !current_contractName.empty() &&
-      !current_functionName.empty() && !binds.empty())
+      !current_functionName.empty() && !binds.empty() && !is_event)
     {
       // insert the following in the front
       // char * _nondet_cont_name = _ESBMC_get_nondet_cont_name(name_arr , size_expr);
@@ -3623,6 +3626,7 @@ bool solidity_convertert::get_expr(
       !get_esbmc_builtin_ref(callee_expr_json, new_expr) ||
       !get_sol_builtin_ref(expr, new_expr))
     {
+      log_debug("solidity", "\t\t@@@ got builtin function call");
       typet type = to_code_type(new_expr.type()).return_type();
       call.function() = new_expr;
       call.type() = type;
@@ -3666,6 +3670,7 @@ bool solidity_convertert::get_expr(
       callee_expr_json.contains("nodeType") &&
       callee_expr_json["nodeType"] == "MemberAccess")
     {
+      log_debug("solidity", "\t\t@@@ got member function call");
       // ContractMemberCall
       // - x.setAddress();
       // - x.address();
@@ -3816,6 +3821,7 @@ bool solidity_convertert::get_expr(
     assert(callee_expr.is_symbol());
     if (expr["kind"] == "structConstructorCall")
     {
+      log_debug("solidity", "\t\t@@@ got struct constructor call");
       // e.g. Book book = Book('Learn Java', 'TP', 1);
       if (callee_expr.type().id() != irept::id_struct)
         return true;
@@ -3861,6 +3867,7 @@ bool solidity_convertert::get_expr(
     // * check if it's a event, error function call
     if (node_type == "EventDefinition" || node_type == "ErrorDefinition")
     {
+      log_debug("solidity", "\t\t@@@ got event/error function call");
       if (get_library_function_call(callee_expr, type, expr, call))
         return true;
       new_expr = call;
@@ -3869,7 +3876,7 @@ bool solidity_convertert::get_expr(
 
     // * check if it's the funciton inside library node
     //TODO
-
+    log_debug("solidity", "\t\t@@@ got normal function call");
     // * we had ruled out all the special cases
     // * we now confirm it is called by aother contract inside current contract
     // * func() ==> current_func_this.func(&current_func_this);
@@ -5482,6 +5489,7 @@ bool solidity_convertert::get_func_decl_ref(
   if (get_func_decl_ref_type(
         decl, type)) // "type-name" as in state-variable-declaration
     return true;
+
   //! function with no value i.e function body
   new_expr = exprt("symbol", type);
   new_expr.identifier(id);
@@ -7183,7 +7191,6 @@ void solidity_convertert::get_function_definition_name(
   std::string &id)
 {
   log_debug("solidity", "\tget_function_definition_name");
-
   // Follow the way in clang:
   //  - For function name, just use the ast_node["name"]
   // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
@@ -7200,8 +7207,9 @@ void solidity_convertert::get_function_definition_name(
     log_error("Internal Error: empty contract name");
   }
 
+  //! for event/... who have added an body node. It seems that a ["kind"] is automatically added.?
   if (
-    ast_node.contains("kind") &&
+    ast_node.contains("kind") && !ast_node["kind"].is_null() &&
     ast_node["kind"].get<std::string>() == "constructor")
   {
     // In solidity
@@ -7216,6 +7224,11 @@ void solidity_convertert::get_function_definition_name(
   }
   else
   {
+    if (!ast_node.contains("name") || !ast_node.contains("id"))
+    {
+      log_error("Cannot find name or id from the json");
+      abort();
+    }
     name = ast_node["name"].get<std::string>();
     id = "sol:@C@" + contract_name + "@F@" + name + "#" +
          i2string(ast_node["id"].get<std::int16_t>());
