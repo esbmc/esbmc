@@ -1608,6 +1608,45 @@ bool goto_symext::run_builtin(
     return true;
   }
 
+  if (has_prefix(symname, "c:@F@__builtin_memcpy"))
+  {
+    expr2tc tgtptr = func_call.operands[0];
+    expr2tc srcptr = func_call.operands[1];
+    expr2tc size = func_call.operands[2];
+    expr2tc deref;
+
+    internal_deref_items.clear();
+    deref = dereference2tc(get_empty_type(), tgtptr);
+    dereference(deref, dereferencet::INTERNAL);
+    assert(internal_deref_items.size() == 1);
+    expr2tc tgt = internal_deref_items.front().object;
+
+    internal_deref_items.clear();
+    deref = dereference2tc(get_empty_type(), srcptr);
+    dereference(deref, dereferencet::INTERNAL);
+    assert(internal_deref_items.size() == 1);
+    expr2tc src = internal_deref_items.front().object;
+
+    type2tc t = array_type2tc(
+      to_array_type(tgt->type).subtype,
+      size,
+      to_array_type(tgt->type).size_is_infinite);
+
+    unsigned int sz_src = type_byte_size_bits(src->type).to_uint64();
+    unsigned int sz_tgt = type_byte_size_bits(tgt->type).to_uint64();
+    unsigned int sz = type_byte_size_bits(t).to_uint64();
+
+    expr2tc ex_src = extract2tc(
+      get_uint_type(sz), bitcast2tc(get_uint_type(sz_src), src), sz - 1, 0);
+
+    expr2tc ex_tgt = extract2tc(
+      get_uint_type(sz), bitcast2tc(get_uint_type(sz_tgt), tgt), sz - 1, 0);
+
+    symex_assign(code_assign2tc(ex_tgt, ex_src), false, cur_state->guard);
+
+    return true;
+  }
+
   return false;
 }
 
