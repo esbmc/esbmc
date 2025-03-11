@@ -130,7 +130,9 @@ void goto_symext::do_simplify(expr2tc &expr)
 }
 
 // Handle side effects
-void goto_symext::handle_sideeffect(const expr2tc &lhs, const sideeffect2t &effect)
+void goto_symext::handle_sideeffect(
+  const expr2tc &lhs,
+  const sideeffect2t &effect)
 {
   switch (effect.kind)
   {

@@ -274,9 +274,7 @@ void goto_convertt::do_realloc(
   // get alloc type and size
   typet alloc_type;
   exprt alloc_size;
-  
   get_alloc_type(arguments[1], alloc_type, alloc_size);
-  
   if (alloc_size.is_nil())
     alloc_size = from_integer(1, size_type());
   if (alloc_type.is_nil())
