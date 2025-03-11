@@ -134,27 +134,27 @@ void goto_symext::handle_sideeffect(const expr2tc &lhs, const sideeffect2t &effe
 {
   switch (effect.kind)
   {
-    case sideeffect2t::cpp_new:
-    case sideeffect2t::cpp_new_arr:
-      symex_cpp_new(lhs, effect);
-      break;
-    case sideeffect2t::realloc:
-      symex_realloc(lhs, effect);
-      break;
-    case sideeffect2t::malloc:
-      symex_malloc(lhs, effect);
-      break;
-    case sideeffect2t::alloca:
-      symex_alloca(lhs, effect);
-      break;
-    case sideeffect2t::va_arg:
-      symex_va_arg(lhs, effect);
-      break;
-    case sideeffect2t::printf2:
-      // Do nothing for printf
-      break;
-    default:
-      assert(0 && "unexpected side effect");
+  case sideeffect2t::cpp_new:
+  case sideeffect2t::cpp_new_arr:
+    symex_cpp_new(lhs, effect);
+    break;
+  case sideeffect2t::realloc:
+    symex_realloc(lhs, effect);
+    break;
+  case sideeffect2t::malloc:
+    symex_malloc(lhs, effect);
+    break;
+  case sideeffect2t::alloca:
+    symex_alloca(lhs, effect);
+    break;
+  case sideeffect2t::va_arg:
+    symex_va_arg(lhs, effect);
+    break;
+  case sideeffect2t::printf2:
+    // Do nothing for printf
+    break;
+  default:
+    assert(0 && "unexpected side effect");
   }
 }
 

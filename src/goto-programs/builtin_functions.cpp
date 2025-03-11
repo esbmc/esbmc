@@ -257,16 +257,13 @@ void goto_convertt::do_malloc(
   do_mem(true, lhs, function, arguments, dest);
 }
 
-#include <util/std_expr.h>
-#include <util/std_types.h> // Ensure proper pointer type handling
-
 void goto_convertt::do_realloc(
   const exprt &lhs,
   const exprt &function,
   const exprt::operandst &arguments,
   goto_programt &dest)
 {
-  assert(arguments.size() == 2 && "realloc requires two arguments"); 
+  assert(arguments.size() == 2 && "realloc requires two arguments");
 
   // Create a null pointer expression (workaround for missing null_pointer_exprt)
   exprt null_ptr = gen_zero(arguments[0].type());
@@ -282,19 +279,15 @@ void goto_convertt::do_realloc(
   
   if (alloc_size.is_nil())
     alloc_size = from_integer(1, size_type());
-  
   if (alloc_type.is_nil())
     alloc_type = char_type();
-  
   if (alloc_type.id() == "symbol")
     alloc_type = ns.follow(alloc_type);
-  
   if (alloc_size.type() != size_type())
   {
     alloc_size.make_typecast(size_type());
     simplify(alloc_size);
   }
-  
   // Create malloc-like allocation if ptr is NULL
   side_effect_exprt malloc_expr("malloc", lhs.type());
   malloc_expr.copy_to_operands(arguments[1]); // size argument

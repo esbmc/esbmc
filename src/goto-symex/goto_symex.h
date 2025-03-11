@@ -559,7 +559,7 @@ protected:
    * based on the conditional branches.
    */
   void handle_conditional(const expr2tc &lhs, const if2t &if_effect);
-  
+
   /**
    *  Make symbolic assignment.
    *  Renames things; records assignment in symex target, and all the relevant
