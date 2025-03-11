@@ -129,6 +129,54 @@ void goto_symext::do_simplify(expr2tc &expr)
     simplify(expr);
 }
 
+// Handle side effects
+void goto_symext::handle_sideeffect(const expr2tc &lhs, const sideeffect2t &effect)
+{
+  switch (effect.kind)
+  {
+    case sideeffect2t::cpp_new:
+    case sideeffect2t::cpp_new_arr:
+      symex_cpp_new(lhs, effect);
+      break;
+    case sideeffect2t::realloc:
+      symex_realloc(lhs, effect);
+      break;
+    case sideeffect2t::malloc:
+      symex_malloc(lhs, effect);
+      break;
+    case sideeffect2t::alloca:
+      symex_alloca(lhs, effect);
+      break;
+    case sideeffect2t::va_arg:
+      symex_va_arg(lhs, effect);
+      break;
+    case sideeffect2t::printf2:
+      // Do nothing for printf
+      break;
+    default:
+      assert(0 && "unexpected side effect");
+  }
+}
+
+// Handle conditional expressions (if2t)
+void goto_symext::handle_conditional(const expr2tc &lhs, const if2t &if_effect)
+{
+  const expr2tc &true_value = if_effect.true_value;
+  const expr2tc &false_value = if_effect.false_value;
+
+  // Handle true_value side effects
+  if (is_sideeffect2t(true_value))
+  {
+    handle_sideeffect(lhs, to_sideeffect2t(true_value));
+  }
+
+  // Handle false_value side effects
+  if (is_sideeffect2t(false_value))
+  {
+    handle_sideeffect(lhs, to_sideeffect2t(false_value));
+  }
+}
+
 void goto_symext::symex_assign(
   const expr2tc &code_assign,
   const bool hidden,
@@ -164,41 +212,24 @@ void goto_symext::symex_assign(
 
   replace_races_check(lhs);
 
-  // printf expression that has lhs
+  // If rhs is a printf expression, handle it specially
   if (is_code_printf2t(rhs))
   {
     symex_printf(lhs, rhs);
   }
 
+  // Handle sideeffect2t (side effects) expressions
   if (is_sideeffect2t(rhs))
   {
-    const sideeffect2t &effect = to_sideeffect2t(rhs);
-    switch (effect.kind)
-    {
-    case sideeffect2t::cpp_new:
-    case sideeffect2t::cpp_new_arr:
-      symex_cpp_new(lhs, effect);
-      break;
-    case sideeffect2t::realloc:
-      symex_realloc(lhs, effect);
-      break;
-    case sideeffect2t::malloc:
-      symex_malloc(lhs, effect);
-      break;
-    case sideeffect2t::alloca:
-      symex_alloca(lhs, effect);
-      break;
-    case sideeffect2t::va_arg:
-      symex_va_arg(lhs, effect);
-      break;
-    case sideeffect2t::printf2:
-      // do nothing here
-      break;
-    // No nondet side effect?
-    default:
-      assert(0 && "unexpected side effect");
-    }
+    handle_sideeffect(lhs, to_sideeffect2t(rhs));
+    return;
+  }
 
+  // Handle conditional (if2t) expressions
+  if (is_if2t(rhs))
+  {
+    const if2t &if_effect = to_if2t(rhs);
+    handle_conditional(lhs, if_effect);
     return;
   }
 
