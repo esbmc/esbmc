@@ -2492,7 +2492,7 @@ bool solidity_convertert::get_function_definition(
           _call);
         std::string _cname;
         std::unordered_set<std::string> cname_set;
-        unsigned int length;
+        unsigned int length = 0;
         std::string sol_t = param.type().get("#sol_type").as_string();
 
         if (sol_t == "CONTRACT")
@@ -5771,6 +5771,8 @@ bool solidity_convertert::get_type_description(
   if (type_name.contains("typeString"))
     typeString = type_name["typeString"].get<std::string>();
 
+  log_debug("solidity", "got type-name={}", SolidityGrammar::type_name_to_str(type));
+
   switch (type)
   {
   case SolidityGrammar::TypeNameT::ElementaryTypeName:
@@ -5965,7 +5967,8 @@ bool solidity_convertert::get_type_description(
     new_json["typeIdentifier"] = new_typeIdentifier;
     new_json["typeString"] = new_typeString;
 
-    get_elementary_type_name(new_json, new_type);
+    if (get_type_description(new_json, new_type))
+      return true;
 
     break;
   }
@@ -8613,14 +8616,16 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
   dest = code_blockt();
 
   // call designated "initialization" functions
-  context.foreach_operand_in_order([&dest](const symbolt &s) {
-    if (s.type.initialization() && s.type.is_code())
+  context.foreach_operand_in_order(
+    [&dest](const symbolt &s)
     {
-      code_function_callt function_call;
-      function_call.function() = symbol_expr(s);
-      dest.move_to_operands(function_call);
-    }
-  });
+      if (s.type.initialization() && s.type.is_code())
+      {
+        code_function_callt function_call;
+        function_call.function() = symbol_expr(s);
+        dest.move_to_operands(function_call);
+      }
+    });
 }
 
 void solidity_convertert::get_aux_var(
