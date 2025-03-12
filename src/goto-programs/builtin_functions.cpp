@@ -99,6 +99,24 @@ static void get_alloc_type(const exprt &src, typet &type, exprt &size)
   }
 }
 
+void goto_convertt::get_alloc_size(typet &alloc_type, exprt &alloc_size)
+{
+  if (alloc_size.is_nil())
+    alloc_size = from_integer(1, size_type());
+
+  if (alloc_type.is_nil())
+    alloc_type = char_type();
+
+  if (alloc_type.id() == "symbol")
+    alloc_type = ns.follow(alloc_type);
+
+  if (alloc_size.type() != size_type())
+  {
+    alloc_size.make_typecast(size_type());
+    simplify(alloc_size);
+  }
+}
+
 void goto_convertt::do_printf(
   const exprt &lhs,
   const exprt &function,
@@ -205,21 +223,7 @@ void goto_convertt::do_mem(
   exprt alloc_size;
 
   get_alloc_type(arguments[0], alloc_type, alloc_size);
-
-  if (alloc_size.is_nil())
-    alloc_size = from_integer(1, size_type());
-
-  if (alloc_type.is_nil())
-    alloc_type = char_type();
-
-  if (alloc_type.id() == "symbol")
-    alloc_type = ns.follow(alloc_type);
-
-  if (alloc_size.type() != size_type())
-  {
-    alloc_size.make_typecast(size_type());
-    simplify(alloc_size);
-  }
+  get_alloc_size(alloc_type, alloc_size);
 
   // produce new object
 
@@ -275,17 +279,8 @@ void goto_convertt::do_realloc(
   typet alloc_type;
   exprt alloc_size;
   get_alloc_type(arguments[1], alloc_type, alloc_size);
-  if (alloc_size.is_nil())
-    alloc_size = from_integer(1, size_type());
-  if (alloc_type.is_nil())
-    alloc_type = char_type();
-  if (alloc_type.id() == "symbol")
-    alloc_type = ns.follow(alloc_type);
-  if (alloc_size.type() != size_type())
-  {
-    alloc_size.make_typecast(size_type());
-    simplify(alloc_size);
-  }
+  get_alloc_size(alloc_type, alloc_size);
+
   // Create malloc-like allocation if ptr is NULL
   side_effect_exprt malloc_expr("malloc", lhs.type());
   malloc_expr.copy_to_operands(arguments[1]); // size argument
