@@ -161,8 +161,9 @@ void goto_symext::handle_sideeffect(
 }
 
 // Handle conditional expressions (if2t)
-void goto_symext::handle_conditional(const expr2tc &lhs, const if2t &if_effect)
+bool goto_symext::handle_conditional(const expr2tc &lhs, const if2t &if_effect)
 {
+  bool has_sideeffect = false;
   const expr2tc &true_value = if_effect.true_value;
   const expr2tc &false_value = if_effect.false_value;
 
@@ -170,13 +171,17 @@ void goto_symext::handle_conditional(const expr2tc &lhs, const if2t &if_effect)
   if (is_sideeffect2t(true_value))
   {
     handle_sideeffect(lhs, to_sideeffect2t(true_value));
+    has_sideeffect = true;
   }
 
   // Handle false_value side effects
   if (is_sideeffect2t(false_value))
   {
     handle_sideeffect(lhs, to_sideeffect2t(false_value));
+    has_sideeffect = true;
   }
+
+  return has_sideeffect;
 }
 
 void goto_symext::symex_assign(
@@ -231,8 +236,8 @@ void goto_symext::symex_assign(
   if (is_if2t(rhs))
   {
     const if2t &if_effect = to_if2t(rhs);
-    handle_conditional(lhs, if_effect);
-    return;
+    if (handle_conditional(lhs, if_effect))
+      return;
   }
 
   bool hidden_ssa = hidden || cur_state->top().hidden;

@@ -555,10 +555,9 @@ protected:
    * @param if_effect The conditional expression (`if2t`) to be handled, containing
    *        the condition, true branch, and false branch.
    * 
-   * This function does not return any value. It modifies the symbolic execution state
-   * based on the conditional branches.
+   * This function returns true if there is a sideeffect.
    */
-  void handle_conditional(const expr2tc &lhs, const if2t &if_effect);
+  bool handle_conditional(const expr2tc &lhs, const if2t &if_effect);
 
   /**
    *  Make symbolic assignment.
