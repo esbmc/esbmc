@@ -565,7 +565,8 @@ bool solidity_convertert::get_var_decl_stmt(
   new_expr = code_skipt();
 
   if (!ast_node.contains("nodeType"))
-    assert(!"Missing \'nodeType\' filed in ast_node");
+    // e.g. (bool success, ) = msg.sender.call{value: tmp}("");
+    return false;
 
   SolidityGrammar::VarDeclStmtT type =
     SolidityGrammar::get_var_decl_stmt_t(ast_node);
@@ -1771,6 +1772,8 @@ bool solidity_convertert::get_unbound_function(
   const std::string &c_name,
   symbolt &sym)
 {
+  log_debug("solidity", "\tget_unbound_function");
+
   std::string h_name = "_ESBMC_Nondet_Extcall";
   std::string h_id = "sol:@C@" + c_name + "@" + h_name + "#";
   symbolt h_sym;
@@ -2452,6 +2455,7 @@ bool solidity_convertert::get_function_definition(
       is_bound && !current_contractName.empty() &&
       !current_functionName.empty() && !binds.empty() && !is_event)
     {
+      log_debug("solidity", "setup bounded auxilairy variable");
       // insert the following in the front
       // char * _nondet_cont_name = _ESBMC_get_nondet_cont_name(name_arr , size_expr);
       for (auto param : binds)
@@ -2559,6 +2563,7 @@ bool solidity_convertert::get_function_definition(
   //assert(!"done - finished all expr stmt in function?");
 
   // 13. Restore current_functionDecl
+  log_debug("solidity", "Finish parsing function {}", current_functionName);
   current_functionDecl =
     old_functionDecl; // for __ESBMC_assume, old_functionDecl == null
   current_functionName = old_functionName;
@@ -3240,6 +3245,10 @@ bool solidity_convertert::get_expr(
 
       if (!check_intrinsic_function(decl))
       {
+        log_debug(
+          "solidity",
+          "\t\t@@@ got nodeType={}",
+          decl["nodeType"].get<std::string>());
         if (decl["nodeType"] == "VariableDeclaration")
         {
           if (get_var_decl_ref(decl, new_expr))
@@ -3816,9 +3825,17 @@ bool solidity_convertert::get_expr(
     if (get_expr(implicit_cast_expr, callee_expr))
       return true;
 
+    if (
+      callee_expr.is_code() && callee_expr.statement() == "function_call" &&
+      callee_expr.op1().name() == "_ESBMC_Nondet_Extcall")
+    {
+      new_expr = callee_expr;
+      return false;
+    }
+
     // * check if it's a struct call
     assert(callee_expr.is_symbol());
-    if (expr["kind"] == "structConstructorCall")
+    if (expr.contains("kind") && expr["kind"] == "structConstructorCall")
     {
       log_debug("solidity", "\t\t@@@ got struct constructor call");
       // e.g. Book book = Book('Learn Java', 'TP', 1);
@@ -3859,6 +3876,9 @@ bool solidity_convertert::get_expr(
     assert(callee_expr.type().is_code());
     typet type = to_code_type(callee_expr.type()).return_type();
 
+    assert(
+      callee_expr_json.contains("referencedDeclaration") &&
+      !callee_expr_json["referencedDeclaration"].is_null());
     const auto &caller_expr_json =
       find_decl_ref(callee_expr_json["referencedDeclaration"].get<int>());
     std::string node_type = caller_expr_json["nodeType"].get<std::string>();
@@ -4424,6 +4444,11 @@ bool solidity_convertert::get_expr(
   }
 
   new_expr.location() = location;
+
+  log_debug(
+    "solidity",
+    "@@@ Finish parsing expresion={}",
+    SolidityGrammar::expression_to_str(type));
   return false;
 }
 
@@ -5586,6 +5611,7 @@ bool solidity_convertert::get_func_decl_this_ref(
   const std::string &func_id,
   exprt &new_expr)
 {
+  log_debug("solidity", "\t@@@ get_func_decl_this_ref");
   std::string this_id = func_id + "#this";
   locationt l;
   code_typet type;
@@ -5621,11 +5647,13 @@ bool solidity_convertert::get_esbmc_builtin_ref(
   const nlohmann::json &decl,
   exprt &new_expr)
 {
+  log_debug("solidity", "\t@@@ get_esbmc_builtin_ref");
   // Function to configure new_expr that has a -ve referenced id
   // -ve ref id means built-in functions or variables.
   // Add more special function names here
   if (
     decl.contains("referencedDeclaration") &&
+    !decl["referencedDeclaration"].is_null() &&
     decl["referencedDeclaration"].get<int>() >= 0)
     return true;
 
@@ -5691,6 +5719,10 @@ bool solidity_convertert::get_sol_builtin_ref(
   const nlohmann::json expr,
   exprt &new_expr)
 {
+  log_debug(
+    "solidity",
+    "\t@@@ get_sol_builtin_ref, got nodeType={}",
+    expr["nodeType"].get<std::string>());
   // get the reference from the pre-populated symbol table
   // note that this could be either vars or funcs.
   assert(expr.contains("nodeType"));
@@ -7441,6 +7473,8 @@ const nlohmann::json &solidity_convertert::find_decl_ref(int ref_decl_id)
 const nlohmann::json &
 solidity_convertert::find_decl_ref(int ref_decl_id, std::string &contract_name)
 {
+  log_debug("solidity", "\t @@@ find_decl_ref");
+
   //TODO: Clean up this funciton. Such a mess...
 
   if (ref_decl_id < 0)
@@ -7748,6 +7782,7 @@ nlohmann::json solidity_convertert::make_implicit_cast_expr(
   const nlohmann::json &sub_expr,
   std::string cast_type)
 {
+  log_debug("solidity", "\t@@@ make_implicit_cast_expr");
   // Since Solidity AST does not have type cast information about return values,
   // we need to manually make a JSON object and wrap the return expression in it.
   std::map<std::string, std::string> m = {
@@ -10610,6 +10645,8 @@ bool solidity_convertert::populate_nil_this_arguments(
   const exprt &this_object,
   side_effect_expr_function_callt &call)
 {
+  log_debug("solidity", "\t@@@ populate_nil_this_arguments");
+
   code_typet tmp = to_code_type(ctor.type());
   assert(tmp.arguments().size() >= call.arguments().size());
 
