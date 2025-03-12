@@ -2505,13 +2505,12 @@ bool solidity_convertert::get_function_definition(
         }
         else
         {
-          std::string _cname = current_contractName;
-
-          std::unordered_set<std::string> cname_set = contractNamesList;
+          _cname = current_contractName;
+          cname_set = contractNamesList;
           //? the address should not point to itself?
           if (cname_set.size() > 1)
             cname_set.erase(_cname);
-          unsigned int length = cname_set.size();
+          length = cname_set.size();
         }
         exprt size_expr;
         size_expr = constant_exprt(
@@ -5771,7 +5770,8 @@ bool solidity_convertert::get_type_description(
   if (type_name.contains("typeString"))
     typeString = type_name["typeString"].get<std::string>();
 
-  log_debug("solidity", "got type-name={}", SolidityGrammar::type_name_to_str(type));
+  log_debug(
+    "solidity", "got type-name={}", SolidityGrammar::type_name_to_str(type));
 
   switch (type)
   {
