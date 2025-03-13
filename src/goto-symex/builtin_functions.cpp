@@ -50,7 +50,6 @@ void goto_symext::symex_realloc(const expr2tc &lhs, const sideeffect2t &code)
   // If realloc size is 0, free ptr and return NULL
   if (is_true(is_zero_size))
   {
-
     // Free the pointer
     expr2tc fr = code_free2tc(src_ptr);
     symex_free(fr);
