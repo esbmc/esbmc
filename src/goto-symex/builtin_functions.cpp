@@ -43,7 +43,7 @@ void goto_symext::symex_realloc(const expr2tc &lhs, const sideeffect2t &code)
   // Check if realloc size is zero
   expr2tc zero_size = gen_zero(realloc_size->type);
 
-  // Create equality expression correctly
+  // Create equality expression
   expr2tc is_zero_size = equality2tc(realloc_size, zero_size);
   do_simplify(is_zero_size);
 
