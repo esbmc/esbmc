@@ -886,6 +886,36 @@ void goto_symext::run_intrinsic(
     return;
   }
 
+  if (has_prefix(symname, "c:@F@__ESBMC_track_cheri_bounds"))
+  {
+    assert(func_call.operands.size() == 2 && "Wrong signature");
+    expr2tc ptr = func_call.operands[0];
+    expr2tc sz = func_call.operands[1];
+
+    internal_deref_items.clear();
+    expr2tc deref = dereference2tc(get_empty_type(), ptr);
+    dereference(deref, dereferencet::INTERNAL);
+    assert(internal_deref_items.size() == 1);
+    expr2tc tgt = internal_deref_items.front().object;
+
+    // Rename the size symbol with last known value
+    cur_state->rename(sz);
+
+    // TODO: how do we calculate the size? reference cpp_new?
+    // Get the low 64-bit type size from ptr expr to calculate?
+
+    // What should we use as index? metadata?
+    expr2tc ptr_obj = pointer_capability2tc(ptraddr_type2(), ptr);
+
+    type2tc sz_t = array_type2tc(size_type2(), expr2tc(), true);
+    expr2tc sz_sym = symbol2tc(sz_t, "c:@__ESBMC_cheri_size");
+    expr2tc index = index2tc(size_type2(), sz_sym, ptr_obj);
+
+    // __ESBMC_cheri_size[metadata] = bound
+    symex_assign(code_assign2tc(index, sz), true);
+    return;
+  }
+
   log_error(
     "Function call to non-intrinsic prefixed with __ESBMC (fatal)\n"
     "The name in question: {}\n"
