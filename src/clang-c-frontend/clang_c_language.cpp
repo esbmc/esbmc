@@ -487,6 +487,9 @@ __UINT32_TYPE__ __esbmc_cheri_type_get(void *__capability);
 _Bool __esbmc_cheri_sealed_get(void *__capability);
 #endif
 __UINT64_TYPE__ __esbmc_clzll(__UINT64_TYPE__);
+
+__attribute__((annotate("__ESBMC_inf_size")))
+__SIZE_TYPE__ __ESBMC_cheri_size[1];
     )";
   }
 

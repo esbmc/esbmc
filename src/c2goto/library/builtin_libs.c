@@ -28,6 +28,8 @@
 
 #    include <cheri/cheric.h>
 
+void __ESBMC_track_cheri_bounds(void *__capability, __SIZE_TYPE__);
+
 uint64_t __esbmc_clzll(uint64_t v)
 {
   for (int i = 0; i < 64; i++, v <<= 1)
@@ -124,6 +126,7 @@ __esbmc_cheri_bounds_set(void *__capability cap, __SIZE_TYPE__ sz)
     "error: not same pointer_offset");
   __ESBMC_assume(__ESBMC_same_object(
     (__cheri_fromcap void *)u.cap, (__cheri_fromcap void *)cap));
+  __ESBMC_track_cheri_bounds(u.cap, sz);
   return u.cap;
 }
 
