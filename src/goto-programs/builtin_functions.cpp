@@ -51,7 +51,11 @@ static void get_string_constant(const exprt &expr, std::string &the_string)
   the_string.append(v.as_string());
 }
 
-static void get_alloc_type_rec(const exprt &src, typet &type, exprt &size, bool is_mul = false)
+static void get_alloc_type_rec(
+  const exprt &src,
+  typet &type,
+  exprt &size, 
+  bool is_mul = false)
 {
   const irept &sizeof_type = src.c_sizeof_type();
 
