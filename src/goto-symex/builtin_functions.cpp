@@ -127,7 +127,7 @@ void goto_symext::symex_realloc(const expr2tc &lhs, const sideeffect2t &code)
     type2tc(),
     sideeffect2t::nondet);
   replace_nondet(alloc_fail);
-  
+
   // Model memory exhaustion: if alloc_fail is true, return NULL
   expr2tc null_ptr = symbol2tc(lhs->type, "NULL");
   result = if2tc(result->type, alloc_fail, null_ptr, result);
