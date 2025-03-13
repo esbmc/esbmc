@@ -128,9 +128,12 @@ void goto_symext::symex_realloc(const expr2tc &lhs, const sideeffect2t &code)
     sideeffect2t::nondet);
   replace_nondet(alloc_fail);
 
-  // Model memory exhaustion: if alloc_fail is true, return NULL
-  expr2tc null_ptr = symbol2tc(lhs->type, "NULL");
-  result = if2tc(result->type, alloc_fail, null_ptr, result);
+  if (!options.get_bool_option("force-realloc-success"))
+  {
+    // Model memory exhaustion: if alloc_fail is true, return NULL
+    expr2tc null_ptr = symbol2tc(lhs->type, "NULL");
+    result = if2tc(result->type, alloc_fail, null_ptr, result);
+  }
 
   // Install pointer modelling data into the relevant arrays.
   expr2tc ptr_obj = pointer_object2tc(pointer_type2(), result);
