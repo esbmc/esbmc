@@ -51,26 +51,23 @@ static void get_string_constant(const exprt &expr, std::string &the_string)
   the_string.append(v.as_string());
 }
 
-static void get_alloc_type_rec(const exprt &src, typet &type, exprt &size)
+static void get_alloc_type_rec(const exprt &src, typet &type, exprt &size, bool is_mul = false)
 {
-  static bool is_mul = false;
-
   const irept &sizeof_type = src.c_sizeof_type();
-  //nec: ex33.c
+
+  // If sizeof_type is valid and we are not in a multiplication context
   if (!sizeof_type.is_nil() && !is_mul)
-  {
-    type = (typet &)sizeof_type;
-  }
+    type = static_cast<const typet &>(sizeof_type);
   else if (src.id() == "*")
   {
-    is_mul = true;
-    forall_operands (it, src)
-      get_alloc_type_rec(*it, type, size);
+    // Mark as multiplication context and recurse
+    for (const auto &operand : src.operands())
+    {
+      get_alloc_type_rec(operand, type, size, true);
+    }
   }
   else
-  {
     size.copy_to_operands(src);
-  }
 }
 
 static void get_alloc_type(const exprt &src, typet &type, exprt &size)
@@ -78,7 +75,9 @@ static void get_alloc_type(const exprt &src, typet &type, exprt &size)
   type.make_nil();
   size.make_nil();
 
-  get_alloc_type_rec(src, type, size);
+  bool is_mul = (src.id() == "*");
+
+  get_alloc_type_rec(src, type, size, is_mul);
 
   if (type.is_nil())
     type = char_type();
