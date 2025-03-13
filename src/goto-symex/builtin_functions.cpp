@@ -60,6 +60,16 @@ void goto_symext::symex_realloc(const expr2tc &lhs, const sideeffect2t &code)
     return;
   }
 
+  // Introduce a symbolic condition to model allocation failure
+  expr2tc alloc_fail = sideeffect2tc(
+    get_bool_type(),
+    expr2tc(),
+    expr2tc(),
+    std::vector<expr2tc>(),
+    type2tc(),
+    sideeffect2t::nondet);
+  replace_nondet(alloc_fail);
+
   internal_deref_items.clear();
   expr2tc deref = dereference2tc(get_empty_type(), src_ptr);
   dereference(deref, dereferencet::INTERNAL);
@@ -117,6 +127,10 @@ void goto_symext::symex_realloc(const expr2tc &lhs, const sideeffect2t &code)
     else
       result = if2tc(result->type, it.second, it.first, result);
   }
+
+  // Model memory exhaustion: if alloc_fail is true, return NULL
+  expr2tc null_ptr = symbol2tc(lhs->type, "NULL");
+  result = if2tc(result->type, alloc_fail, null_ptr, result);
 
   // Install pointer modelling data into the relevant arrays.
   expr2tc ptr_obj = pointer_object2tc(pointer_type2(), result);
