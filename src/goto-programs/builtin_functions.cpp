@@ -51,26 +51,27 @@ static void get_string_constant(const exprt &expr, std::string &the_string)
   the_string.append(v.as_string());
 }
 
-static void get_alloc_type_rec(const exprt &src, typet &type, exprt &size)
+static void get_alloc_type_rec(
+  const exprt &src,
+  typet &type,
+  exprt &size,
+  bool is_mul = false)
 {
-  static bool is_mul = false;
-
   const irept &sizeof_type = src.c_sizeof_type();
-  //nec: ex33.c
+
+  // If sizeof_type is valid and we are not in a multiplication context
   if (!sizeof_type.is_nil() && !is_mul)
-  {
-    type = (typet &)sizeof_type;
-  }
+    type = static_cast<const typet &>(sizeof_type);
   else if (src.id() == "*")
   {
-    is_mul = true;
-    forall_operands (it, src)
-      get_alloc_type_rec(*it, type, size);
+    // Mark as multiplication context and recurse
+    for (const auto &operand : src.operands())
+    {
+      get_alloc_type_rec(operand, type, size, true);
+    }
   }
   else
-  {
     size.copy_to_operands(src);
-  }
 }
 
 static void get_alloc_type(const exprt &src, typet &type, exprt &size)
@@ -78,7 +79,9 @@ static void get_alloc_type(const exprt &src, typet &type, exprt &size)
   type.make_nil();
   size.make_nil();
 
-  get_alloc_type_rec(src, type, size);
+  bool is_mul = (src.id() == "*");
+
+  get_alloc_type_rec(src, type, size, is_mul);
 
   if (type.is_nil())
     type = char_type();
@@ -96,6 +99,24 @@ static void get_alloc_type(const exprt &src, typet &type, exprt &size)
       size.id("*");
       size.type() = size.op0().type();
     }
+  }
+}
+
+void goto_convertt::get_alloc_size(typet &alloc_type, exprt &alloc_size)
+{
+  if (alloc_size.is_nil())
+    alloc_size = from_integer(1, size_type());
+
+  if (alloc_type.is_nil())
+    alloc_type = char_type();
+
+  if (alloc_type.id() == "symbol")
+    alloc_type = ns.follow(alloc_type);
+
+  if (alloc_size.type() != size_type())
+  {
+    alloc_size.make_typecast(size_type());
+    simplify(alloc_size);
   }
 }
 
@@ -205,21 +226,7 @@ void goto_convertt::do_mem(
   exprt alloc_size;
 
   get_alloc_type(arguments[0], alloc_type, alloc_size);
-
-  if (alloc_size.is_nil())
-    alloc_size = from_integer(1, size_type());
-
-  if (alloc_type.is_nil())
-    alloc_type = char_type();
-
-  if (alloc_type.id() == "symbol")
-    alloc_type = ns.follow(alloc_type);
-
-  if (alloc_size.type() != size_type())
-  {
-    alloc_size.make_typecast(size_type());
-    simplify(alloc_size);
-  }
+  get_alloc_size(alloc_type, alloc_size);
 
   // produce new object
 
@@ -263,17 +270,41 @@ void goto_convertt::do_realloc(
   const exprt::operandst &arguments,
   goto_programt &dest)
 {
-  // produce new object
+  assert(arguments.size() == 2 && "realloc requires two arguments");
 
-  exprt new_expr("sideeffect", lhs.type());
-  new_expr.statement("realloc");
-  new_expr.copy_to_operands(arguments[0]);
-  new_expr.cmt_size(arguments[1]);
-  new_expr.location() = function.location();
+  // Create a null pointer expression (workaround for missing null_pointer_exprt)
+  exprt null_ptr = gen_zero(arguments[0].type());
+
+  // Compare if the pointer is NULL
+  equality_exprt is_null(arguments[0], null_ptr);
+
+  // get alloc type and size
+  typet alloc_type;
+  exprt alloc_size;
+  get_alloc_type(arguments[1], alloc_type, alloc_size);
+  get_alloc_size(alloc_type, alloc_size);
+
+  // Create malloc-like allocation if ptr is NULL
+  side_effect_exprt malloc_expr("malloc", lhs.type());
+  malloc_expr.copy_to_operands(arguments[1]); // size argument
+  malloc_expr.cmt_size(alloc_size);
+  malloc_expr.cmt_type(alloc_type);
+  malloc_expr.location() = function.location();
+
+  // Create regular realloc allocation
+  exprt realloc_expr("sideeffect", lhs.type());
+  realloc_expr.statement("realloc");
+  realloc_expr.copy_to_operands(arguments[0]);
+  realloc_expr.cmt_size(arguments[1]);
+  realloc_expr.location() = function.location();
+
+  // Use conditional expression: (ptr == NULL) ? malloc(size) : realloc(ptr, size)
+  if_exprt conditional_expr(is_null, malloc_expr, realloc_expr);
+  simplify(conditional_expr);
 
   goto_programt::targett t_n = dest.add_instruction(ASSIGN);
 
-  exprt new_assign = code_assignt(lhs, new_expr);
+  exprt new_assign = code_assignt(lhs, conditional_expr);
   expr2tc new_assign_expr;
   migrate_expr(new_assign, new_assign_expr);
   t_n->code = new_assign_expr;

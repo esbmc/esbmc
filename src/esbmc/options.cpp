@@ -380,6 +380,7 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::string>()->value_name("label"),
      "check if label is unreachable"},
     {"force-malloc-success", NULL, "do not check for malloc/new failure"},
+    {"force-realloc-success", NULL, "do not check for realloc failure"},
     {"malloc-zero-is-null", NULL, "force malloc(0) to return NULL"},
     {"enable-unreachability-intrinsic",
      NULL,

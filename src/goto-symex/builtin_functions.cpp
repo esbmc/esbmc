@@ -40,6 +40,26 @@ void goto_symext::symex_realloc(const expr2tc &lhs, const sideeffect2t &code)
   expr2tc src_ptr = code.operand;
   expr2tc realloc_size = code.size;
 
+  // Check if realloc size is zero
+  expr2tc zero_size = gen_zero(realloc_size->type);
+
+  // Create equality expression
+  expr2tc is_zero_size = equality2tc(realloc_size, zero_size);
+  do_simplify(is_zero_size);
+
+  // If realloc size is 0, free ptr and return NULL
+  if (is_true(is_zero_size))
+  {
+    // Free the pointer
+    expr2tc fr = code_free2tc(src_ptr);
+    symex_free(fr);
+
+    // Assign NULL to lhs
+    expr2tc null_ptr = gen_zero(lhs->type);
+    symex_assign(code_assign2tc(lhs, null_ptr), true);
+    return;
+  }
+
   internal_deref_items.clear();
   expr2tc deref = dereference2tc(get_empty_type(), src_ptr);
   dereference(deref, dereferencet::INTERNAL);
@@ -96,6 +116,23 @@ void goto_symext::symex_realloc(const expr2tc &lhs, const sideeffect2t &code)
       result = it.first;
     else
       result = if2tc(result->type, it.second, it.first, result);
+  }
+
+  // Introduce a symbolic condition to model allocation failure
+  expr2tc alloc_fail = sideeffect2tc(
+    get_bool_type(),
+    expr2tc(),
+    expr2tc(),
+    std::vector<expr2tc>(),
+    type2tc(),
+    sideeffect2t::nondet);
+  replace_nondet(alloc_fail);
+
+  if (!options.get_bool_option("force-realloc-success"))
+  {
+    // Model memory exhaustion: if alloc_fail is true, return NULL
+    expr2tc null_ptr = symbol2tc(lhs->type, "NULL");
+    result = if2tc(result->type, alloc_fail, null_ptr, result);
   }
 
   // Install pointer modelling data into the relevant arrays.

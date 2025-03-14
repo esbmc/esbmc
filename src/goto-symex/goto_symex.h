@@ -537,6 +537,29 @@ protected:
   bool is_valid_object(const symbolt &symbol);
 
   /**
+   * Handle side effects in the symbolic execution.
+   * 
+   * @param lhs The left-hand side expression (target of the assignment).
+   * @param effect The side effect expression to be handled, typically one of
+   *        the `sideeffect2t` kinds like `malloc`, `realloc`, etc.
+   * 
+   * This function does not return any value; it modifies the symbolic execution state
+   * based on the side effect encountered.
+   */
+  void handle_sideeffect(const expr2tc &lhs, const sideeffect2t &effect);
+
+  /**
+   * Handle conditional expressions (if2t) in the symbolic execution.
+   * 
+   * @param lhs The left-hand side expression (target of the assignment).
+   * @param if_effect The conditional expression (`if2t`) to be handled, containing
+   *        the condition, true branch, and false branch.
+   * 
+   * This function returns true if there is a sideeffect.
+   */
+  bool handle_conditional(const expr2tc &lhs, const if2t &if_effect);
+
+  /**
    *  Make symbolic assignment.
    *  Renames things; records assignment in symex target, and all the relevant
    *  renaming and value set tracking objects. The primary task of this routine

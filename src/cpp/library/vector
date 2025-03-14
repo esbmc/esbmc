@@ -221,6 +221,7 @@ public:
   {
     _size = n;
     buf = static_cast<T *>(realloc(buf, sizeof(T) * n));
+    __ESBMC_assume(buf);
     for (int i = 0; i < n; i++)
       buf[i] = u;
     _capacity = _size;
@@ -320,6 +321,7 @@ public:
     // once, and then fill it with default data.
     unsigned int difference = sz - _size;
     buf = static_cast<T *>(realloc(buf, sizeof(T) * sz));
+    __ESBMC_assume(buf);
     // XXX -- really we should be initializing with a nondeterministic value
     // to model the fact that these new elements are undefined.
     for (unsigned int n = _size; n < sz; n++)
@@ -442,6 +444,7 @@ public:
 
     // Fist, give us space for one more item.
     buf = static_cast<T *>(realloc(buf, sizeof(T) * (_size + 1)));
+    __ESBMC_assume(buf);
 
     // We need to shift all fields at or above the position iterator up
     // one place. Backwards copy to avoid overwriting existing data.
