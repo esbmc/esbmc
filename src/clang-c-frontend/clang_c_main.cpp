@@ -192,7 +192,7 @@ bool clang_c_maint::clang_main()
 
       // Assign the initialized array to argv_symbol
       // disable bounds check on that one
-      // Logic to perform this ^ moved into goto_check and dereference, 
+      // Logic to perform this ^ moved into goto_check and dereference,
       // rather than load irep2 with additional baggage.
       init_code.copy_to_operands(
         code_assignt(symbol_expr(argv_symbol), null_array));
