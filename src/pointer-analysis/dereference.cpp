@@ -2173,7 +2173,8 @@ void dereferencet::bounds_check(
 
   // Don't bounds check argv; it's always correct,
   // and just adds needless claims.
-  if (!is_constant_expr(expr) &&
+  if (
+    !is_constant_expr(expr) &&
     has_prefix(ns.lookup(to_symbol2t(expr).thename)->id.as_string(), "argv'"))
     return;
 
