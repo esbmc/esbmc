@@ -2170,7 +2170,7 @@ void dereferencet::bounds_check(
     assert(arr_type.size_is_infinite);
     return;
   }
- 
+
   // Don't bounds check argv; it's always correct,
   // and just adds needless claims.
   if (
