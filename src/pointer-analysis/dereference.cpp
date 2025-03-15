@@ -2152,10 +2152,6 @@ void dereferencet::bounds_check(
   if (options.get_bool_option("no-bounds-check"))
     return;
 
-  // Don't bounds check argv; it's always correct,
-  // and just adds needless claims.
-  if (has_prefix(ns.lookup(to_symbol2t(expr).thename)->id.as_string(), "argv'"))
-    return;
   assert(is_array_type(expr));
   const array_type2t arr_type = to_array_type(expr->type);
 
@@ -2174,6 +2170,12 @@ void dereferencet::bounds_check(
     assert(arr_type.size_is_infinite);
     return;
   }
+
+  // Don't bounds check argv; it's always correct,
+  // and just adds needless claims.
+  if (!is_constant_expr(expr) &&
+    has_prefix(ns.lookup(to_symbol2t(expr).thename)->id.as_string(), "argv'"))
+    return;
 
   unsigned int access_size = type_byte_size(type).to_uint64();
 
