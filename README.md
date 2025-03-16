@@ -73,6 +73,7 @@ Given the common elements of OS X, run the script. It runs on both ARM and Intel
 It creates the build folder, installs the Boolector SMT solver, and makes esbmc available globally. The script supports building the Python frontend as well. Note that the Python frontend is quite early in the support for Python.
 
 ```
+cd scripts
  ./build-esbmc-mac.sh
 ```
 
