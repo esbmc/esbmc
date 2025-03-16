@@ -17,6 +17,9 @@ use_python=${use_python:-Y}  # Default to Y if user just hits enter
 read -p "Do you want to install the recommended Boolector solver? [Y/n]: " use_boolector
 use_boolector=${use_boolector:-Y}  # Default to Y if user just hits enter
 
+# Install CMake
+brew install cmake
+
 # Create and enter build directory
 echo "Creating build directory..."
 mkdir -p build
