@@ -117,12 +117,16 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   {
     const with2t &with = to_with2t(expr);
 
-    return (is_symbol2t(with.source_value) && is_struct_type(with.source_value) &&
+    return (is_symbol2t(with.source_value) &&
+            is_struct_type(with.source_value) &&
             is_constant_expr(with.update_value)) ||
-           (is_array_type(with.source_value) && is_constant_expr(with.update_value));
+           (is_array_type(with.source_value) && 
+            is_constant_expr(with.update_value));
   }
 
-  if (is_constant_struct2t(expr) || is_constant_union2t(expr) || is_constant_array2t(expr))
+  if (
+    is_constant_struct2t(expr) || is_constant_union2t(expr) ||
+    is_constant_array2t(expr))
   {
     bool all_constants = true;
     expr->foreach_operand([this, &all_constants](const expr2tc &e) {
