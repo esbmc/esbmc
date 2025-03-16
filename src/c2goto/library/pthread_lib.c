@@ -59,46 +59,48 @@ void __ESBMC_really_atomic_end(void);
 /* These internal functions insert_key_value(), search_key() and delete_key()
  * need to be called in an atomic context. */
 
- typedef struct thread_key
- {
-   pthread_t thread;
-   pthread_key_t key;
-   const void *value;
-   struct thread_key *next;
- } __ESBMC_thread_key;
+typedef struct thread_key
+{
+ pthread_t thread;
+ pthread_key_t key;
+ const void *value;
+ struct thread_key *next;
+} __ESBMC_thread_key;
 
- __attribute__((annotate("__ESBMC_inf_size")))
- static __ESBMC_thread_key __ESBMC_pthread_thread_key[1];
+__attribute__((annotate(
+  "__ESBMC_inf_size"))) static __ESBMC_thread_key __ESBMC_pthread_thread_key[1];
+
+static int insert_key_value(pthread_key_t key, const void *value)
+{
+  pthread_t thread = __ESBMC_get_thread_id();
+  __ESBMC_pthread_thread_key[thread].thread = thread;
+  __ESBMC_pthread_thread_key[thread].key = key;
+  __ESBMC_pthread_thread_key[thread].value = value;
+  return 0;
+}
  
- static int insert_key_value(pthread_key_t key, const void *value)
- {
-   pthread_t thread = __ESBMC_get_thread_id();
-   __ESBMC_pthread_thread_key[thread].thread = thread;
-   __ESBMC_pthread_thread_key[thread].key = key;
-   __ESBMC_pthread_thread_key[thread].value = value;
-   return 0;
- }
+static __ESBMC_thread_key *search_key(pthread_key_t key)
+{
+  pthread_t thread = __ESBMC_get_thread_id();
+  if (
+    __ESBMC_pthread_thread_key[thread].thread == thread &&
+    __ESBMC_pthread_thread_key[thread].key == key)
+  {
+    return &__ESBMC_pthread_thread_key[thread];
+  }
+  return NULL;
+}
  
- static __ESBMC_thread_key *search_key(pthread_key_t key)
- {
-   pthread_t thread = __ESBMC_get_thread_id();
-   if (__ESBMC_pthread_thread_key[thread].thread == thread && __ESBMC_pthread_thread_key[thread].key == key)
-   {
-     return &__ESBMC_pthread_thread_key[thread];
-   }
-   return NULL;
- }
- 
- static int delete_key(__ESBMC_thread_key *l)
- {
-   pthread_t thread = __ESBMC_get_thread_id();
-   if (&__ESBMC_pthread_thread_key[thread] == l)
-   {
-     __ESBMC_pthread_thread_key[thread].thread = 0; // Mark as empty
-     return 0;
-   }
-   return -1;
- }
+static int delete_key(__ESBMC_thread_key *l)
+{
+  pthread_t thread = __ESBMC_get_thread_id();
+  if (&__ESBMC_pthread_thread_key[thread] == l)
+  {
+    __ESBMC_pthread_thread_key[thread].thread = 0; // Mark as empty
+    return 0;
+  }
+  return -1;
+}
 
 /************************** Thread creation and exit **************************/
 
