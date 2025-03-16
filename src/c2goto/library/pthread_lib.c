@@ -60,10 +60,10 @@ void __ESBMC_really_atomic_end(void);
 
 typedef struct thread_key
 {
- pthread_t thread;
- pthread_key_t key;
- const void *value;
- struct thread_key *next;
+  pthread_t thread;
+  pthread_key_t key;
+  const void *value;
+  struct thread_key *next;
 } __ESBMC_thread_key;
 
 __attribute__((annotate(
@@ -77,7 +77,7 @@ static int insert_key_value(pthread_key_t key, const void *value)
   __ESBMC_pthread_thread_key[thread].value = value;
   return 0;
 }
- 
+
 static __ESBMC_thread_key *search_key(pthread_key_t key)
 {
   pthread_t thread = __ESBMC_get_thread_id();
@@ -89,7 +89,7 @@ static __ESBMC_thread_key *search_key(pthread_key_t key)
   }
   return NULL;
 }
- 
+
 static int delete_key(__ESBMC_thread_key *l)
 {
   pthread_t thread = __ESBMC_get_thread_id();
