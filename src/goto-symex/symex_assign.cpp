@@ -125,6 +125,7 @@ goto_symext &goto_symext::operator=(const goto_symext &sym)
 
 void goto_symext::do_simplify(expr2tc &expr)
 {
+  global_namespace = &this->ns;
   if (!no_simplify)
     simplify(expr);
 }

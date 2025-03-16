@@ -2,6 +2,7 @@
 #define UTIL_IREP2_UTILS_H_
 
 #include <util/c_types.h>
+#include <util/simplification_check.h>
 
 #include <irep2/irep2_expr.h>
 #include <util/migrate.h>
@@ -290,9 +291,15 @@ inline const type2tc &get_base_array_subtype(const type2tc &type)
   return subtype;
 }
 
+inline const namespacet *global_namespace;
+
 inline bool simplify(expr2tc &expr)
 {
   expr2tc tmp = expr->simplify();
+#ifndef NDEBUG
+  // costly check using SMT solver
+  simplification_check::check_equivalence(expr, tmp, *global_namespace);
+#endif
   if (!is_nil_expr(tmp))
   {
     expr = tmp;

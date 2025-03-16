@@ -6,6 +6,8 @@
 #include <util/fixedbv.h>
 #include <util/ieee_float.h>
 #include <irep2/irep2_type.h>
+#include <util/message.h>
+#include <util/arith_tools.h>
 
 // So - make some type definitions for the different types we're going to be
 // working with. This is to avoid the repeated use of template names in later
@@ -1569,6 +1571,30 @@ public:
   constant_int2t(const type2tc &type, const BigInt &input)
     : constant_int_expr_methods(type, constant_int_id, input)
   {
+#ifndef NDEBUG
+    BigInt max_val;
+    BigInt min_val;
+    if (is_signedbv_type(type))
+    {
+      max_val = power(2, type->get_width() - 1);
+      min_val = -power(2, type->get_width() - 1);
+    }
+    if (is_unsignedbv_type(type))
+    {
+      max_val = power(2, type->get_width());
+      min_val = 0;
+    }
+
+    if (input < min_val || input >= max_val)
+    {
+      log_error(
+        "constant_int2t: BigInt {} out of bounds of type {}",
+        input,
+        type->pretty());
+      abort();
+    }
+
+#endif
   }
   constant_int2t(const constant_int2t &ref) = default;
 

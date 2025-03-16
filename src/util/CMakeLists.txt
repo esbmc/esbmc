@@ -16,6 +16,10 @@ add_library(crypto_hash crypto_hash.cpp)
 target_include_directories(crypto_hash PUBLIC ${Boost_INCLUDE_DIRS})
 target_link_libraries(crypto_hash PUBLIC ${Boost_LIBRARIES})
 
+add_library(simplification_check simplification_check.cpp)
+target_link_libraries(simplification_check PUBLIC irep2)
+target_link_libraries(simplification_check PRIVATE solvers)
+
 add_library(util_esbmc xml_irep.cpp xml.cpp
         arith_tools.cpp base_type.cpp cmdline.cpp config.cpp config_file.cpp context.cpp
         expr_util.cpp i2string.cpp location.cpp
@@ -43,6 +47,6 @@ target_include_directories(util_esbmc
         lib
         )
 
-target_link_libraries(util_esbmc PUBLIC irep2 fmt::fmt ${Boost_LIBRARIES})
+target_link_libraries(util_esbmc PUBLIC irep2 fmt::fmt ${Boost_LIBRARIES} simplification_check)
 
 target_link_libraries(algorithms gotoprograms)
