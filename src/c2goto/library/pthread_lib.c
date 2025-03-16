@@ -42,8 +42,7 @@ void(
   __attribute__((annotate("__ESBMC_inf_size"))) *
   __ESBMC_thread_key_destructors[1])(void *);
 
-/* TODO: these should be 'static', right? */
-pthread_key_t __ESBMC_next_thread_key = 0;
+static pthread_key_t __ESBMC_next_thread_key = 0;
 
 unsigned short int __ESBMC_num_total_threads = 0;
 unsigned short int __ESBMC_num_threads_running = 0;
