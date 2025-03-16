@@ -67,39 +67,27 @@ void goto_symex_statet::initialize(
 
 bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 {
+  if (is_nil_expr(expr) || is_vector_type(expr))
+    return true;
+
   if (is_array_type(expr))
   {
-    array_type2t arr = to_array_type(expr->type);
+    const array_type2t &arr = to_array_type(expr->type);
 
-    // Don't permit const propagation of infinite-size arrays. They're going to
-    // be special modelling arrays that require special handling either at SMT
-    // or some other level, so attempting to optimize them is a Bad Plan (TM).
-    if (arr.size_is_infinite)
-      return false;
-
-    // Don't propagate multi dimensional arrays
+    // Prevent propagation of multi-dimensional arrays
     if (is_array_type(arr.subtype))
       return false;
   }
 
-  if (is_vector_type(expr))
-    return true;
-
-  // It's fine to constant propagate something that's absent.
-  if (is_nil_expr(expr))
-    return true;
-
   if (is_symbol2t(expr))
   {
-    symbol2t s = to_symbol2t(expr);
+    const symbol2t &s = to_symbol2t(expr);
 
-    // Null is also essentially a constant.
     if (s.thename == "NULL")
-      return true;
+      return true; // NULL is a constant
 
-    // By propagation nondet symbols, we can achieve some speed up but the
-    // counterexample will be missing a lot of information, so not really worth it
-    if (s.thename.as_string().find("nondet$symex::nondet") != std::string::npos)
+    // Prevent propagation of nondet symbols for better counterexamples
+    if (s.thename.as_string().rfind("nondet$symex::nondet", 0) == 0)
       return false;
   }
 
@@ -111,63 +99,40 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 
   if (is_add2t(expr))
   {
-    bool noconst = true;
-
-    // Use noconst as a flag to indicate (and short-circuit) when a non
-    // constant propagatable expr is found.
-    expr->foreach_operand([this, &noconst](const expr2tc &e) {
-      if (noconst && !constant_propagation(e))
-        noconst = false;
+    bool all_constants = true;
+    expr->foreach_operand([this, &all_constants](const expr2tc &e) {
+      if (!constant_propagation(e))
+        all_constants = false;
     });
-
-    return noconst;
+    return all_constants;
   }
 
   if (is_constant_array_of2t(expr))
   {
     const expr2tc &init = to_constant_array_of2t(expr).initializer;
-    if (is_constant_expr(init) && !is_bool_type(init))
-      return true;
+    return is_constant_expr(init) && !is_bool_type(init);
   }
 
-  // Keeping additional with data achieves nothing; no code in ESBMC inspects
-  // with chains to extract data from them.
-  // FIXME: actually benchmark this and look at timing results, it may be
-  // important benchmarks (i.e. TACAS) work better with some propagation
   if (is_with2t(expr))
   {
     const with2t &with = to_with2t(expr);
-    // For now, we focus on propagating constants for structs only.
-    // TODO: enable other type will regress performance, need a TC
-    // to reproduce
-    if (
-      is_symbol2t(with.source_value) && is_struct_type(with.source_value) &&
-      is_constant_expr(with.update_value))
-      return true;
 
-    if (is_array_type(with.source_value) && is_constant_expr(with.update_value))
-      return true;
-
-    return false;
+    return (is_symbol2t(with.source_value) && is_struct_type(with.source_value) &&
+            is_constant_expr(with.update_value)) ||
+           (is_array_type(with.source_value) && is_constant_expr(with.update_value));
   }
 
-  if (
-    is_constant_struct2t(expr) || is_constant_union2t(expr) ||
-    is_constant_array2t(expr))
+  if (is_constant_struct2t(expr) || is_constant_union2t(expr) || is_constant_array2t(expr))
   {
-    bool noconst = true;
-
-    expr->foreach_operand([this, &noconst](const expr2tc &e) {
-      if (noconst && !constant_propagation(e))
-        noconst = false;
+    bool all_constants = true;
+    expr->foreach_operand([this, &all_constants](const expr2tc &e) {
+      if (!constant_propagation(e))
+        all_constants = false;
     });
-    return noconst;
+    return all_constants;
   }
 
-  if (is_constant_expr(expr))
-    return true;
-
-  return false;
+  return is_constant_expr(expr);
 }
 
 bool goto_symex_statet::constant_propagation_reference(
