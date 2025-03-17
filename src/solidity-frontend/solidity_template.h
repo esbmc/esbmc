@@ -337,6 +337,7 @@ __ESBMC_HIDE:;
  * Returns 0 if the array is not found.
  */
 unsigned int _ESBMC_get_array_length(void *array) {
+__ESBMC_HIDE:;
     ArrayNode *current = array_list_head;
     while (current != NULL) {
         if (current->array_ptr == array) {
@@ -530,6 +531,7 @@ __ESBMC_HIDE:;
 // string assign
 const char* empty_str = "";
 void _str_assign(char **str1, const char *str2) {
+__ESBMC_HIDE:;
     free(*str1);  
     if (str2 == NULL) {
       *str1 = NULL;  // Ensure str1 doesn't point to invalid memory

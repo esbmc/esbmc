@@ -8444,7 +8444,7 @@ void solidity_convertert::convert_type_expr(
   exprt &src_expr,
   const typet &dest_type)
 {
-  log_debug("solidity", "@@@ Performing type conversion");
+  log_debug("solidity", "\t@@@ Performing type conversion");
 
   typet src_type = src_expr.type();
   // only do conversion when the src.type != dest.type
@@ -8452,6 +8452,9 @@ void solidity_convertert::convert_type_expr(
   {
     std::string src_sol_type = src_type.get("#sol_type").as_string();
     std::string dest_sol_type = dest_type.get("#sol_type").as_string();
+
+    log_debug("solidity", "\t\tGot src_type = {}", src_sol_type);
+    log_debug("solidity", "\t\tGot dest_sol_type = {}", dest_sol_type);
 
     if (
       (dest_sol_type == "ADDRESS" || dest_sol_type == "ADDRESS_PAYABLE") &&
@@ -8463,6 +8466,12 @@ void solidity_convertert::convert_type_expr(
         context.find_symbol(src_type.identifier())->name.as_string();
       get_addr_expr(c_name, src_expr, mem);
       src_expr = mem;
+    }
+    else if (
+      (src_sol_type == "ADDRESS" || src_sol_type == "ADDRESS_PAYABLE") &&
+      dest_sol_type == "CONTRACT")
+    {
+      // TODO
     }
     else if (is_bytes_type(src_type) && is_bytes_type(dest_type))
     {
@@ -8631,14 +8640,16 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
   dest = code_blockt();
 
   // call designated "initialization" functions
-  context.foreach_operand_in_order([&dest](const symbolt &s) {
-    if (s.type.initialization() && s.type.is_code())
+  context.foreach_operand_in_order(
+    [&dest](const symbolt &s)
     {
-      code_function_callt function_call;
-      function_call.function() = symbol_expr(s);
-      dest.move_to_operands(function_call);
-    }
-  });
+      if (s.type.initialization() && s.type.is_code())
+      {
+        code_function_callt function_call;
+        function_call.function() = symbol_expr(s);
+        dest.move_to_operands(function_call);
+      }
+    });
 }
 
 void solidity_convertert::get_aux_var(
@@ -10456,7 +10467,8 @@ to
   the auxilidary tmp var will not be created if the member_type is void
   @is_func_call: true if it's a function member access; false state variable access
   return true: we fail to generate the high_level_member_access bound harness
-               however, this should not be treated as an erorr
+               however, this should not be treated as an erorr.
+               E.g. x.access() where x is a state variable
 */
 bool solidity_convertert::get_high_level_member_access(
   const exprt &base,
