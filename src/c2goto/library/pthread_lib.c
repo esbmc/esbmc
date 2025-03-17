@@ -42,8 +42,7 @@ void(
   __attribute__((annotate("__ESBMC_inf_size"))) *
   __ESBMC_thread_key_destructors[1])(void *);
 
-/* TODO: these should be 'static', right? */
-pthread_key_t __ESBMC_next_thread_key = 0;
+static pthread_key_t __ESBMC_next_thread_key = 0;
 
 unsigned short int __ESBMC_num_total_threads = 0;
 unsigned short int __ESBMC_num_threads_running = 0;
@@ -54,7 +53,7 @@ pthread_t __ESBMC_get_thread_id(void);
 void __ESBMC_really_atomic_begin(void);
 void __ESBMC_really_atomic_end(void);
 
-/************************** Linked List Implementation **************************/
+/************************** Infinite Array Implementation **************************/
 
 /* These internal functions insert_key_value(), search_key() and delete_key()
  * need to be called in an atomic context. */
@@ -64,51 +63,41 @@ typedef struct thread_key
   pthread_t thread;
   pthread_key_t key;
   const void *value;
-  struct thread_key *next;
 } __ESBMC_thread_key;
 
-static __ESBMC_thread_key *head = NULL;
+__attribute__((annotate(
+  "__ESBMC_inf_size"))) static __ESBMC_thread_key __ESBMC_pthread_thread_key[1];
 
 static int insert_key_value(pthread_key_t key, const void *value)
 {
-  __ESBMC_thread_key *l =
-    (__ESBMC_thread_key *)__ESBMC_alloca(sizeof(__ESBMC_thread_key));
-  if (l == NULL)
-    return -1;
-  l->thread = __ESBMC_get_thread_id();
-  l->key = key;
-  l->value = value;
-  l->next = head;
-  head = l;
+  pthread_t thread = __ESBMC_get_thread_id();
+  __ESBMC_pthread_thread_key[thread].thread = thread;
+  __ESBMC_pthread_thread_key[thread].key = key;
+  __ESBMC_pthread_thread_key[thread].value = value;
   return 0;
 }
 
 static __ESBMC_thread_key *search_key(pthread_key_t key)
 {
-__ESBMC_HIDE:;
-  __ESBMC_thread_key *l = head;
   pthread_t thread = __ESBMC_get_thread_id();
-  while (l != NULL && l->thread != thread)
-    l = l->next;
-  return l;
+  if (
+    __ESBMC_pthread_thread_key[thread].thread == thread &&
+    __ESBMC_pthread_thread_key[thread].key == key)
+  {
+    return &__ESBMC_pthread_thread_key[thread];
+  }
+  return NULL;
 }
 
 static int delete_key(__ESBMC_thread_key *l)
 {
-__ESBMC_HIDE:;
-  __ESBMC_thread_key *tmp;
-  if (head == NULL)
-    return -1;
-  tmp = head;
-  if (head != l)
+  pthread_t thread = __ESBMC_get_thread_id();
+  if (&__ESBMC_pthread_thread_key[thread] == l)
   {
-    while (tmp->next != NULL && tmp->next != l)
-      tmp = tmp->next;
-    tmp->next = l->next;
+    __ESBMC_pthread_thread_key[thread].thread = 0; // Mark as empty
+    return 0;
   }
-  else if (l->next != NULL)
-    head = l->next;
-  return 0;
+  return -1;
 }
 
 /************************** Thread creation and exit **************************/
