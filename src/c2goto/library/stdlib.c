@@ -226,18 +226,23 @@ __ESBMC_HIDE:;
 }
 
 /* one plus the numeric value, rest is zero */
-static const unsigned char ATOI_MAP[256] = {
-  ['0'] = 1,
-  ['1'] = 2,
-  ['2'] = 3,
-  ['3'] = 4,
-  ['4'] = 5,
-  ['5'] = 6,
-  ['6'] = 7,
-  ['7'] = 8,
-  ['8'] = 9,
-  ['9'] = 10,
-};
+static const unsigned char get_atoi_map(unsigned char pos)
+{
+__ESBMC_HIDE:;
+  const unsigned char ATOI_MAP[256] = {
+    ['0'] = 1,
+    ['1'] = 2,
+    ['2'] = 3,
+    ['3'] = 4,
+    ['4'] = 5,
+    ['5'] = 6,
+    ['6'] = 7,
+    ['7'] = 8,
+    ['8'] = 9,
+    ['9'] = 10,
+  };
+  return ATOI_MAP[pos];
+}
 
 #define ATOI_DEF(name, type, TYPE)                                             \
   type name(const char *s)                                                     \
@@ -254,7 +259,7 @@ static const unsigned char ATOI_MAP[256] = {
     else if (*s == '+')                                                        \
       s++;                                                                     \
     unsigned type r = 0;                                                       \
-    for (unsigned char c; (c = ATOI_MAP[(unsigned char)*s]); s++)              \
+    for (unsigned char c; (c = get_atoi_map((unsigned char)*s)); s++)          \
     {                                                                          \
       c--;                                                                     \
       if (r > (TYPE##_MAX - c) / 10)                                           \
