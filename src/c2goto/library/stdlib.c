@@ -226,12 +226,20 @@ __ESBMC_HIDE:;
 }
 
 /* one plus the numeric value, rest is zero */
-static const unsigned char get_atoi_map(unsigned char pos) {
-  __ESBMC_HIDE:;
+static const unsigned char get_atoi_map(unsigned char pos)
+{
+__ESBMC_HIDE:;
   const unsigned char ATOI_MAP[256] = {
-    ['0'] = 1, ['1'] = 2, ['2'] = 3, ['3'] = 4,
-    ['4'] = 5, ['5'] = 6, ['6'] = 7, ['7'] = 8,
-    ['8'] = 9, ['9'] = 10,
+    ['0'] = 1,
+    ['1'] = 2,
+    ['2'] = 3,
+    ['3'] = 4,
+    ['4'] = 5,
+    ['5'] = 6,
+    ['6'] = 7,
+    ['7'] = 8,
+    ['8'] = 9,
+    ['9'] = 10,
   };
   return ATOI_MAP[pos];
 }
