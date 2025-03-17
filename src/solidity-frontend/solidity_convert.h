@@ -218,10 +218,7 @@ protected:
   void get_strcpy_function_call(
     const locationt &loc,
     side_effect_expr_function_callt &_call);
-  void get_streq_function_call(
-    const locationt &loc,
-    side_effect_expr_function_callt &_call);
-  void get_tostr_function_call(
+  void get_str_assign_function_call(
     const locationt &loc,
     side_effect_expr_function_callt &_call);
   void get_memcpy_function_call(
@@ -424,8 +421,7 @@ protected:
     const std::string &contract_name,
     const struct_typet::componentst &methods,
     const exprt &base,
-    codet &body,
-    bool is_payable = false);
+    codet &body);
   bool populate_nil_this_arguments(
     const exprt &ctor,
     const exprt &this_object,

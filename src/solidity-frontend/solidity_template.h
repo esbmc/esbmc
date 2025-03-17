@@ -18,7 +18,7 @@ const std::string sol_header = R"(
 #include <stdbool.h>
 #include <assert.h>
 #include <string.h>
-#include <string>
+// #include <string>
 )";
 
 /*
@@ -258,7 +258,7 @@ __ESBMC_HIDE:;
   current->next = newNode;
 }
 
-int _ESBMC_findKeyUint(struct NodeU *head, uint256_t key)
+int _ESBMC_uaddress(struct NodeU *head, uint256_t key)
 {
 __ESBMC_HIDE:;
   struct NodeU *current = head;
@@ -277,7 +277,7 @@ __ESBMC_HIDE:;
   return cnt;
 }
 
-int _ESBMC_findKeyInt(struct NodeI *head, int256_t key)
+int _ESBMC_address(struct NodeI *head, int256_t key)
 {
 __ESBMC_HIDE:;
   struct NodeI *current = head;
@@ -526,6 +526,20 @@ uint256_t str2int(const char *str)
 __ESBMC_HIDE:;
     return hexdec(ASCIItoHEX(str));
 }
+
+// string assign
+const char* empty_str = "";
+void _str_assign(char **str1, const char *str2) {
+    free(*str1);  
+    if (str2 == NULL) {
+      *str1 = NULL;  // Ensure str1 doesn't point to invalid memory
+      return;
+    }
+    *str1 = (char *)malloc(strlen(str2) + 1);  
+    
+    strcpy(*str1, str2);  // force malloc success
+}
+
 )";
 
 // get unique random address
@@ -659,7 +673,8 @@ const std::string sol_signature = R"(
 const std::string sol_cpp_library = sol_cpp_string + sol_signature;
 
 // combination
-const std::string sol_library = sol_header + sol_c_library + sol_cpp_library;
+const std::string sol_library =
+  sol_header + sol_c_library; // + sol_cpp_library;
 
 }; // namespace SolidityTemplate
 

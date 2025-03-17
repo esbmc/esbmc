@@ -384,7 +384,6 @@ void solidity_convertert::populate_auxilary_vars()
       {
         auto _json = find_decl_ref(k);
         if (_json["name"].get<std::string>() == cname)
-          ;
         {
           inheritanceMap[cname].insert(cname);
           continue;
@@ -929,9 +928,9 @@ bool solidity_convertert::get_var_decl(
   }
   else if (t_sol_type == "STRING" && !set_init && is_state_var)
   {
-    if (context.find_symbol("c:temp_sol.cpp@empty_str") == nullptr)
+    if (context.find_symbol("c:@empty_str") == nullptr)
       return true;
-    val = symbol_expr(*context.find_symbol("c:temp_sol.cpp@empty_str"));
+    val = symbol_expr(*context.find_symbol("c:@empty_str"));
     added_symbol.value = val;
     decl.operands().push_back(val);
   }
@@ -4002,16 +4001,6 @@ bool solidity_convertert::get_expr(
         // otherwise we need to convert a string to decimal ASCII values
         else
         {
-          // string => const char* => int
-          side_effect_expr_function_callt _2chcall;
-          get_library_function_call_no_args(
-            "_tochar",
-            "c:@F@_tochar#$@N@std@S@string#",
-            pointer_typet(char_type()),
-            base.location(),
-            _2chcall);
-          _2chcall.arguments().push_back(pos);
-
           // signed char * c:@F@str2int
           // e.g. "Geek" => "1197827435"
           // pos => str2int(pos)
@@ -4024,7 +4013,7 @@ bool solidity_convertert::get_expr(
             _call);
 
           // insert arguments
-          _call.arguments().push_back(_2chcall);
+          _call.arguments().push_back(pos);
           pos = _call;
         }
       }
@@ -4034,15 +4023,15 @@ bool solidity_convertert::get_expr(
       side_effect_expr_function_callt _findkey;
       if (postfix == "I")
         get_library_function_call_no_args(
-          "_ESBMC_findKeyInt",
-          "c:@F@_ESBMC_findKeyInt",
+          "_ESBMC_address",
+          "c:@F@_ESBMC_address",
           signedbv_typet(256),
           base.location(),
           _findkey);
       else
         get_library_function_call_no_args(
-          "_ESBMC_findKeyUint",
-          "c:@F@_ESBMC_findKeyUint",
+          "_ESBMC_uaddress",
+          "c:@F@_ESBMC_uaddress",
           unsignedbv_typet(256),
           base.location(),
           _findkey);
@@ -4378,7 +4367,9 @@ bool solidity_convertert::get_expr(
         if (!is_bound)
           new_expr = nondet_uint_expr;
         else
-          ;
+        {
+          // todo
+        }
       }
 
       break;
@@ -5405,7 +5396,6 @@ void solidity_convertert::get_symbol_decl_ref(
   exprt &new_expr)
 {
   if (context.find_symbol(sym_id) != nullptr)
-
     new_expr = symbol_expr(*context.find_symbol(sym_id));
   else
   {
@@ -6511,8 +6501,8 @@ void solidity_convertert::get_string_assignment(
   exprt &new_expr)
 {
   side_effect_expr_function_callt call;
-  get_streq_function_call(lhs.location(), call);
-  call.arguments().push_back(lhs);
+  get_str_assign_function_call(lhs.location(), call);
+  call.arguments().push_back(address_of_exprt(lhs));
   call.arguments().push_back(rhs);
   new_expr = call;
 }
@@ -6746,23 +6736,12 @@ void solidity_convertert::get_strcpy_function_call(
     stry_name, stry_id, symbol_expr(stry_sym).type(), loc, stry_call);
 }
 
-void solidity_convertert::get_streq_function_call(
+void solidity_convertert::get_str_assign_function_call(
   const locationt &loc,
   side_effect_expr_function_callt &_call)
 {
-  const std::string func_name = "_streq";
-  const std::string func_id = "c:@F@_streq#&$@N@std@S@string#S1_#";
-  const symbolt &func_sym = *context.find_symbol(func_id);
-  get_library_function_call_no_args(
-    func_name, func_id, symbol_expr(func_sym).type(), loc, _call);
-}
-
-void solidity_convertert::get_tostr_function_call(
-  const locationt &loc,
-  side_effect_expr_function_callt &_call)
-{
-  const std::string func_name = "_tostr";
-  const std::string func_id = "c:@F@_tostr#*1C#";
+  const std::string func_name = "_str_assign";
+  const std::string func_id = "c:@F@_str_assign";
   const symbolt &func_sym = *context.find_symbol(func_id);
   get_library_function_call_no_args(
     func_name, func_id, symbol_expr(func_sym).type(), loc, _call);
@@ -6952,7 +6931,8 @@ bool solidity_convertert::get_elementary_type_name(
   case SolidityGrammar::ElementaryTypeNameT::STRING:
   {
     // cpp: std::string str;
-    new_type = symbol_typet("tag-std::string");
+    // new_type = symbol_typet("tag-std::string");
+    new_type = pointer_typet(signed_char_type());
     new_type.set("#sol_type", "STRING");
     break;
   }
@@ -9248,8 +9228,8 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
   // Auxiliary
   // address
   get_builtin_symbol(
-    "address",
-    sol_prefix + "address",
+    "$address",
+    sol_prefix + "$address",
     unsignedbv_typet(160),
     l,
     _addr,
@@ -10382,7 +10362,7 @@ void solidity_convertert::get_addr_expr(
   exprt &new_expr)
 {
   exprt _address;
-  std::string addr_name = "address";
+  std::string addr_name = "$address";
   std::string addr_id = "sol:@C@" + cname + "@" + addr_name;
   get_symbol_decl_ref(addr_name, addr_id, unsignedbv_typet(160), _address);
 
@@ -10697,8 +10677,7 @@ bool solidity_convertert::arbitrary_modelling2(
   const std::string &contract_name,
   const struct_typet::componentst &methods,
   const exprt &base,
-  codet &body,
-  bool is_payable)
+  codet &body)
 {
   bool skip_vis =
     config.options.get_option("no-visibility").empty() ? false : true;
