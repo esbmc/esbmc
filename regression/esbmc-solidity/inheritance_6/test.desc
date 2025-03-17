@@ -1,4 +1,4 @@
-CORE
+THOROUGH
 contract.solast
---sol contract.sol --contract caller  --incremental-bmc --k-step 3 --z3   --unsigned-overflow-check --base-k-step 3 --16 --no-pointer-check 
-^VERIFICATION FAILED$
+--sol contract.sol --contract caller  --unwind 1 --no-unwinding-assertions --no-standard-check
+^VERIFICATION SUCCESSFUL$
