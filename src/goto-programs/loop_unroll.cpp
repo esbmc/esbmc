@@ -93,6 +93,8 @@ int bounded_loop_unroller::get_loop_bounds(loopst &loop)
   // Pattern match symbol and K, if the relation is <= then K = K + 1
   {
     auto &cond = to_not2t(t->guard).value;
+    if (const expr2tc cond_simp = cond->do_simplify(); !is_nil_expr(cond_simp))
+      cond = cond_simp;
     if (!is_lessthan2t(cond) && !is_lessthanequal2t(cond))
       return -1;
 
