@@ -63,7 +63,6 @@ typedef struct thread_key
   pthread_t thread;
   pthread_key_t key;
   const void *value;
-  struct thread_key *next;
 } __ESBMC_thread_key;
 
 __attribute__((annotate(
