@@ -115,6 +115,11 @@ void clang_c_adjust::adjust_expr(exprt &expr)
     adjust_expr_binary_arithmetic(expr);
     adjust_reference(expr);
   }
+  else if (expr.id() == "unary-" || expr.id() == "unary+")
+  {
+    adjust_expr_unary_arithmetic(expr);
+    adjust_reference(expr);
+  }
   else if (expr.id() == "shl" || expr.id() == "shr")
   {
     adjust_expr_shifts(expr);
@@ -329,6 +334,15 @@ void clang_c_adjust::adjust_expr_binary_arithmetic(exprt &expr)
   {
     adjust_float_arith(expr);
   }
+}
+
+void clang_c_adjust::adjust_expr_unary_arithmetic(exprt &expr)
+{
+  adjust_operands(expr);
+
+  exprt &op0 = expr.op0();
+
+  gen_typecast_arithmetic(ns, op0);
 }
 
 void clang_c_adjust::adjust_index(index_exprt &index)

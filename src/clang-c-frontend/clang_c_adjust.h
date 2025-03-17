@@ -47,6 +47,7 @@ protected:
   void adjust_side_effect_statement_expression(side_effect_exprt &expr);
   virtual void adjust_member(member_exprt &expr);
   void adjust_expr_binary_arithmetic(exprt &expr);
+  void adjust_expr_unary_arithmetic(exprt &expr);
   void adjust_expr_shifts(exprt &expr);
   void adjust_expr_unary_boolean(exprt &expr);
   void adjust_expr_binary_boolean(exprt &expr);
