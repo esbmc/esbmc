@@ -1219,11 +1219,12 @@ void clang_c_adjust::adjust_expr_unary_boolean(exprt &expr)
 {
   adjust_operands(expr);
 
+  const typet orig_type = expr.type();
   expr.type() = bool_type();
 
   exprt &operand = expr.op0();
   gen_typecast_bool(ns, operand);
-  gen_typecast_arithmetic(ns, expr);
+  gen_typecast(ns, expr, orig_type);
 }
 
 void clang_c_adjust::adjust_expr_binary_boolean(exprt &expr)
