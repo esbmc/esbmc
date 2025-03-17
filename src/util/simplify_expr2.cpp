@@ -1783,6 +1783,13 @@ expr2tc typecast2t::do_simplify() const
         return fpbv.is_zero() ? gen_false_expr() : gen_true_expr();
     }
   }
+  else if (
+    is_bool_type(type) && is_signedbv_type(simp->type) && is_typecast2t(simp) &&
+    is_bool_type(to_typecast2t(simp).from->type))
+  {
+    // turn static_cast<bool>(static_cast<int>(bool_type_expr)) into just bool_type_expr
+    return to_typecast2t(simp).from;
+  }
   else if (is_bool_type(type))
   {
     // Bool type -> turn into equality with zero
