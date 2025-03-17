@@ -23,37 +23,28 @@ extern _Thread_local int errno;
 typedef struct atexit_key
 {
   void (*atexit_func)();
-  struct atexit_key *next;
 } __ESBMC_atexit_key;
 
-static __ESBMC_atexit_key *__ESBMC_atexits = NULL;
+// Infinite array for atexit functions
+__attribute__((annotate("__ESBMC_inf_size")))
+static __ESBMC_atexit_key __ESBMC_stdlib_atexit_key[1];
+static size_t __ESBMC_atexit_count = 0;
 
 void __ESBMC_atexit_handler()
 {
 __ESBMC_HIDE:;
-  // This is here to prevent k-induction from unwind the next loop unnecessarily
-  if (__ESBMC_atexits == NULL)
-    return;
-
-  while (__ESBMC_atexits)
+  while (__ESBMC_atexit_count > 0)
   {
-    __ESBMC_atexits->atexit_func();
-    __ESBMC_atexit_key *__ESBMC_tmp = __ESBMC_atexits->next;
-    free(__ESBMC_atexits);
-    __ESBMC_atexits = __ESBMC_tmp;
+    __ESBMC_atexit_count--;
+    __ESBMC_stdlib_atexit_key[__ESBMC_atexit_count].atexit_func();
   }
 }
 
 int atexit(void (*func)(void))
 {
 __ESBMC_HIDE:;
-  __ESBMC_atexit_key *l =
-    (__ESBMC_atexit_key *)malloc(sizeof(__ESBMC_atexit_key));
-  if (l == NULL)
-    return -1;
-  l->atexit_func = func;
-  l->next = __ESBMC_atexits;
-  __ESBMC_atexits = l;
+  __ESBMC_stdlib_atexit_key[__ESBMC_atexit_count].atexit_func = func;
+  __ESBMC_atexit_count++;
   return 0;
 }
 
