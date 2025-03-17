@@ -26,8 +26,8 @@ typedef struct atexit_key
 } __ESBMC_atexit_key;
 
 // Infinite array for atexit functions
-__attribute__((annotate("__ESBMC_inf_size")))
-static __ESBMC_atexit_key __ESBMC_stdlib_atexit_key[1];
+__attribute__((annotate(
+  "__ESBMC_inf_size"))) static __ESBMC_atexit_key __ESBMC_stdlib_atexit_key[1];
 static size_t __ESBMC_atexit_count = 0;
 
 void __ESBMC_atexit_handler()
