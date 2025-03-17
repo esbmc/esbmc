@@ -17,13 +17,21 @@ use_python=${use_python:-Y}  # Default to Y if user just hits enter
 read -p "Do you want to install the recommended Boolector solver? [Y/n]: " use_boolector
 use_boolector=${use_boolector:-Y}  # Default to Y if user just hits enter
 
+# Install CMake
+echo "Installing CMake"
+brew install cmake
+
 # Create and enter build directory
 echo "Creating build directory..."
 mkdir -p build
 cd build
 
 echo "Installing ESBMC dependencies..."
-brew install z3 bison clang llvm
+brew install boost
+brew install z3 
+brew install bison 
+brew install clang 
+brew install llvm
 
 # Set up Python environment if requested
 if [[ $use_python =~ ^[Yy]$ ]]; then
