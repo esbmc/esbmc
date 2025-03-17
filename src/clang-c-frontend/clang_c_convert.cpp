@@ -3007,7 +3007,7 @@ bool clang_c_convertert::get_unary_operator_expr(
     break;
 
   case clang::UO_LNot:
-    new_expr = exprt("not", bool_type());
+    new_expr = exprt("not", uniop_type);
     break;
 
   case clang::UO_PreInc:
@@ -3128,35 +3128,35 @@ bool clang_c_convertert::get_binary_operator_expr(
     break;
 
   case clang::BO_LT:
-    new_expr = exprt("<", bool_type());
+    new_expr = exprt("<", t);
     break;
 
   case clang::BO_GT:
-    new_expr = exprt(">", bool_type());
+    new_expr = exprt(">", t);
     break;
 
   case clang::BO_LE:
-    new_expr = exprt("<=", bool_type());
+    new_expr = exprt("<=", t);
     break;
 
   case clang::BO_GE:
-    new_expr = exprt(">=", bool_type());
+    new_expr = exprt(">=", t);
     break;
 
   case clang::BO_EQ:
-    new_expr = exprt("=", bool_type());
+    new_expr = exprt("=", t);
     break;
 
   case clang::BO_NE:
-    new_expr = exprt("notequal", bool_type());
+    new_expr = exprt("notequal", t);
     break;
 
   case clang::BO_LAnd:
-    new_expr = exprt("and", bool_type());
+    new_expr = exprt("and", t);
     break;
 
   case clang::BO_LOr:
-    new_expr = exprt("or", bool_type());
+    new_expr = exprt("or", t);
     break;
 
   case clang::BO_Assign:

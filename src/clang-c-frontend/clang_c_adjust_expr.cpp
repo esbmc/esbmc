@@ -380,6 +380,7 @@ void clang_c_adjust::adjust_expr_rel(exprt &expr)
   exprt &op1 = expr.op1();
 
   gen_typecast_arithmetic(ns, op0, op1);
+  gen_typecast_arithmetic(ns, expr);
 }
 
 void clang_c_adjust::adjust_float_arith(exprt &expr)
@@ -1207,6 +1208,7 @@ void clang_c_adjust::adjust_expr_unary_boolean(exprt &expr)
 
   exprt &operand = expr.op0();
   gen_typecast_bool(ns, operand);
+  gen_typecast_arithmetic(ns, expr);
 }
 
 void clang_c_adjust::adjust_expr_binary_boolean(exprt &expr)
@@ -1217,6 +1219,7 @@ void clang_c_adjust::adjust_expr_binary_boolean(exprt &expr)
 
   gen_typecast_bool(ns, expr.op0());
   gen_typecast_bool(ns, expr.op1());
+  gen_typecast_arithmetic(ns, expr);
 }
 
 void clang_c_adjust::adjust_argc_argv(const symbolt &main_symbol)
