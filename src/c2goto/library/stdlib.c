@@ -220,7 +220,7 @@ __ESBMC_HIDE:;
 static const unsigned char get_atoi_map(unsigned char pos)
 {
 __ESBMC_HIDE:;
-  static const unsigned char ATOI_MAP[256] = {
+  const unsigned char ATOI_MAP[256] = {
     ['0'] = 1,
     ['1'] = 2,
     ['2'] = 3,
