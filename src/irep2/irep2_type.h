@@ -204,17 +204,21 @@ public:
 class pointer_data : public type2t
 {
 public:
-  pointer_data(type2t::type_ids id, const type2tc &st) : type2t(id), subtype(st)
+  pointer_data(type2t::type_ids id, const type2tc &st, const bool &p)
+    : type2t(id), subtype(st), carry_provenance(p)
   {
   }
   pointer_data(const pointer_data &ref) = default;
 
   type2tc subtype;
+  bool carry_provenance;
 
   // Type mangling:
   typedef esbmct::field_traits<type2tc, pointer_data, &pointer_data::subtype>
     subtype_field;
-  typedef esbmct::type2t_traits<subtype_field> traits;
+  typedef esbmct::field_traits<bool, pointer_data, &pointer_data::carry_provenance>
+    provenance_field;
+  typedef esbmct::type2t_traits<subtype_field, provenance_field> traits;
 };
 
 class fixedbv_data : public type2t
@@ -600,12 +604,13 @@ class pointer_type2t : public pointer_type_methods
 {
 public:
   /** Primary constructor. @param subtype Subtype of this pointer */
-  pointer_type2t(const type2tc &subtype)
-    : pointer_type_methods(pointer_id, subtype)
+  pointer_type2t(const type2tc &subtype, const bool &p = false)
+    : pointer_type_methods(pointer_id, subtype, p)
   {
   }
   pointer_type2t(const pointer_type2t &ref) = default;
   unsigned int get_width() const override;
+  bool can_carry_provenance() const;
 
   static std::string field_names[esbmct::num_type_fields];
 };
