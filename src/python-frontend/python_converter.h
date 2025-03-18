@@ -66,7 +66,7 @@ public:
 
   void update_symbol(const exprt &expr) const;
 
-  symbolt* find_symbol(const std::string &symbol_id) const;
+  symbolt *find_symbol(const std::string &symbol_id) const;
 
   bool is_imported_module(const std::string &module_name) const;
 
