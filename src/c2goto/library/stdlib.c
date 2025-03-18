@@ -286,16 +286,19 @@ __ESBMC_HIDE:;
 
 void *ldv_malloc(size_t size)
 {
+__ESBMC_HIDE:;
   return malloc(size);
 }
 
 void *ldv_zalloc(size_t size)
 {
+__ESBMC_HIDE:;
   return malloc(size);
 }
 
 size_t strlcat(char *dst, const char *src, size_t siz)
 {
+__ESBMC_HIDE:;
   char *d = dst;
   const char *s = src;
   size_t n = siz;
@@ -351,11 +354,13 @@ __ESBMC_HIDE:;
 
 int rand(void)
 {
+__ESBMC_HIDE:;  
   return nondet_uint() % ((unsigned)RAND_MAX + 1);
 }
 
 long random(void)
 {
+__ESBMC_HIDE:;
   return nondet_ulong() % ((unsigned)INT32_MAX + 1);
 }
 
@@ -368,6 +373,7 @@ void srand (unsigned int s)
 
 void rev(char *p)
 {
+__ESBMC_HIDE:;  
   char *q = &p[strlen(p) - 1];
   char *r = p;
   for (; q > r; q--, r++)
@@ -380,6 +386,7 @@ void rev(char *p)
 
 char *itoa(int value, char *str, int base)
 {
+__ESBMC_HIDE:;
   int count = 0;
   bool flag = true;
   if (value < 0 && base == 10)

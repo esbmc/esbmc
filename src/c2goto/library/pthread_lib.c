@@ -70,6 +70,7 @@ __attribute__((annotate(
 
 static int insert_key_value(pthread_key_t key, const void *value)
 {
+__ESBMC_HIDE:;
   pthread_t thread = __ESBMC_get_thread_id();
   __ESBMC_pthread_thread_key[thread].thread = thread;
   __ESBMC_pthread_thread_key[thread].key = key;
@@ -79,6 +80,7 @@ static int insert_key_value(pthread_key_t key, const void *value)
 
 static __ESBMC_thread_key *search_key(pthread_key_t key)
 {
+__ESBMC_HIDE:;
   pthread_t thread = __ESBMC_get_thread_id();
   if (
     __ESBMC_pthread_thread_key[thread].thread == thread &&
@@ -91,6 +93,7 @@ static __ESBMC_thread_key *search_key(pthread_key_t key)
 
 static int delete_key(__ESBMC_thread_key *l)
 {
+__ESBMC_HIDE:;  
   pthread_t thread = __ESBMC_get_thread_id();
   if (&__ESBMC_pthread_thread_key[thread] == l)
   {
@@ -104,6 +107,7 @@ static int delete_key(__ESBMC_thread_key *l)
 
 void __ESBMC_pthread_start_main_hook(void)
 {
+__ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_num_total_threads++;
   __ESBMC_num_threads_running++;
@@ -112,6 +116,7 @@ void __ESBMC_pthread_start_main_hook(void)
 
 void __ESBMC_pthread_end_main_hook(void)
 {
+__ESBMC_HIDE:;
   // We want to be able to access this internal accounting data atomically,
   // but that'll never be permitted by POR, which will see the access and try
   // to generate context switches as a result. So, end the main thread in an
@@ -221,6 +226,7 @@ __ESBMC_HIDE:;
 
 pthread_t pthread_self(void)
 {
+__ESBMC_HIDE:;
   return __ESBMC_get_thread_id();
 }
 
@@ -293,6 +299,7 @@ __ESBMC_HIDE:;
 
 int pthread_mutex_initializer(pthread_mutex_t *mutex)
 {
+__ESBMC_HIDE:;
   // check whether this mutex has been initialized via
   // PTHREAD_MUTEX_INITIALIZER
   __ESBMC_atomic_begin();
@@ -467,6 +474,7 @@ __ESBMC_HIDE:;
 
 int pthread_rwlock_tryrdlock(pthread_rwlock_t *lock)
 {
+__ESBMC_HIDE:;
   return 0;
 }
 
