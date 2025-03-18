@@ -174,7 +174,13 @@ unsigned int vector_type2t::get_width() const
 unsigned int pointer_type2t::get_width() const
 {
   /* CHERI-TODO: take into account whether we can-carry-provenance. */
-  return config.ansi_c.pointer_width();
+  return carry_provenance ? config.ansi_c.capability_width()
+                          : config.ansi_c.pointer_width();
+}
+
+bool pointer_type2t::can_carry_provenance() const
+{
+  return carry_provenance;
 }
 
 unsigned int empty_type2t::get_width() const
