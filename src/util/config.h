@@ -77,7 +77,6 @@ public:
 
     unsigned int capability_width() const noexcept
     {
-      assert(cheri);
       return (cheri_concentrate ? 2 : 4) * address_width;
     }
 
