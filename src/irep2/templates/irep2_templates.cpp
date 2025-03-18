@@ -26,7 +26,7 @@ std::string array_type2t::field_names[esbmct::num_type_fields] =
 std::string vector_type2t::field_names[esbmct::num_type_fields] =
   {"subtype", "array_size", "size_is_infinite", "", ""};
 std::string pointer_type2t::field_names[esbmct::num_type_fields] =
-  {"subtype", "", "", "", ""};
+  {"subtype", "can_carry_provenance", "", "", ""};
 std::string fixedbv_type2t::field_names[esbmct::num_type_fields] =
   {"width", "integer_bits", "", "", ""};
 std::string floatbv_type2t::field_names[esbmct::num_type_fields] =
