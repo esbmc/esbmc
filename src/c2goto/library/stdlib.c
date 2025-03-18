@@ -354,7 +354,7 @@ __ESBMC_HIDE:;
 
 int rand(void)
 {
-__ESBMC_HIDE:;  
+__ESBMC_HIDE:;
   return nondet_uint() % ((unsigned)RAND_MAX + 1);
 }
 
@@ -373,7 +373,7 @@ void srand (unsigned int s)
 
 void rev(char *p)
 {
-__ESBMC_HIDE:;  
+__ESBMC_HIDE:;
   char *q = &p[strlen(p) - 1];
   char *r = p;
   for (; q > r; q--, r++)

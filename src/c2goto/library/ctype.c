@@ -60,13 +60,13 @@ __ESBMC_HIDE:;
 
 int isprint(int c)
 {
-__ESBMC_HIDE:;  
+__ESBMC_HIDE:;
   return c >= ' ' && c <= '~';
 }
 
 int ispunct(int c)
 {
-__ESBMC_HIDE:;  
+__ESBMC_HIDE:;
   return c == '!' || c == '"' || c == '#' || c == '$' || c == '%' || c == '&' ||
          c == '\'' || c == '(' || c == ')' || c == '*' || c == '+' ||
          c == ',' || c == '-' || c == '.' || c == '/' || c == ':' || c == ';' ||
@@ -77,32 +77,32 @@ __ESBMC_HIDE:;
 
 int isspace(int c)
 {
-__ESBMC_HIDE:;  
+__ESBMC_HIDE:;
   return c == '\t' || c == '\n' || c == '\v' || c == '\f' || c == '\r' ||
          c == ' ';
 }
 
 int isupper(int c)
 {
-__ESBMC_HIDE:;  
+__ESBMC_HIDE:;
   return c >= 'A' && c <= 'Z';
 }
 
 int isxdigit(int c)
 {
-__ESBMC_HIDE:;  
+__ESBMC_HIDE:;
   return (c >= 'A' && c <= 'F') || (c >= 'a' && c <= 'f') ||
          (c >= '0' && c <= '9');
 }
 
 int tolower(int c)
 {
-__ESBMC_HIDE:;  
+__ESBMC_HIDE:;
   return (c >= 'A' && c <= 'Z') ? c + ('a' - 'A') : c;
 }
 
 int toupper(int c)
 {
-__ESBMC_HIDE:;  
+__ESBMC_HIDE:;
   return (c >= 'a' && c <= 'z') ? c - ('a' - 'A') : c;
 }

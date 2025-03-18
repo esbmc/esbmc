@@ -17,7 +17,7 @@ char kernel_memory[KERNEL_MEMORY_SPACE]; //mock user memory
 
 static void check_gfp_flags(gfp_t flags)
 {
-__ESBMC_HIDE:;  
+__ESBMC_HIDE:;
   // Define all valid flags
   gfp_t valid_flags =
     __GFP_DMA | __GFP_HIGHMEM | __GFP_DMA32 | __GFP_ZERO | __GFP_NOWARN |
@@ -84,7 +84,7 @@ __ESBMC_HIDE:;
 
 unsigned long copy_to_user(void *to, void *from, unsigned long size)
 {
-__ESBMC_HIDE:;  
+__ESBMC_HIDE:;
   //checking on the passed parameters of kernel function
   //the source in kernel space and destination in user space must be valid
   assert(to != NULL);

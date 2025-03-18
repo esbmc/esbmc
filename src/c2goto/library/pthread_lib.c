@@ -93,7 +93,7 @@ __ESBMC_HIDE:;
 
 static int delete_key(__ESBMC_thread_key *l)
 {
-__ESBMC_HIDE:;  
+__ESBMC_HIDE:;
   pthread_t thread = __ESBMC_get_thread_id();
   if (&__ESBMC_pthread_thread_key[thread] == l)
   {

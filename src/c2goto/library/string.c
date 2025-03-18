@@ -327,7 +327,7 @@ __ESBMC_HIDE:;
 
 void *memchr(const void *buf, int ch, size_t n)
 {
-__ESBMC_HIDE:;  
+__ESBMC_HIDE:;
   while (n && (*(unsigned char *)buf != (unsigned char)ch))
   {
     buf = (unsigned char *)buf + 1;

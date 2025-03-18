@@ -23,7 +23,7 @@ __ESBMC_HIDE:;
 
 uint32_t ntohl(uint32_t netlong)
 {
-__ESBMC_HIDE:;  
+__ESBMC_HIDE:;
   if (__ESBMC_is_little_endian())
     return __builtin_bswap32(netlong);
   return netlong;
@@ -31,7 +31,7 @@ __ESBMC_HIDE:;
 
 uint16_t ntohs(uint16_t netshort)
 {
-__ESBMC_HIDE:;  
+__ESBMC_HIDE:;
   if (__ESBMC_is_little_endian())
     return __builtin_bswap16(netshort);
   return netshort;
