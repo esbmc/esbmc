@@ -1,9 +1,12 @@
 #include <python-frontend/numpy_call_expr.h>
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/python_converter.h>
+#include <python-frontend/json_utils.h>
 #include <util/expr.h>
 #include <util/c_types.h>
 #include <util/message.h>
+
+#include <ostream>
 
 numpy_call_expr::numpy_call_expr(
   const symbol_id &function_id,
@@ -26,7 +29,19 @@ static auto create_list(int size, T default_value)
 }
 
 template <typename T>
-static auto create_binary_op(const std::string &op, T lhs, T rhs)
+static auto create_list(const std::vector<T> &vector)
+{
+  nlohmann::json list;
+  list["_type"] = "List";
+  for (const auto &v : vector)
+  {
+    list["elts"].push_back({{"_type", "Constant"}, {"value", v}});
+  }
+  return list;
+}
+
+template <typename T>
+static auto create_binary_op(const std::string &op, const T &lhs, const T &rhs)
 {
   nlohmann::json bin_op = {
     {"_type", "BinOp"},
@@ -113,6 +128,130 @@ typet numpy_call_expr::get_typet_from_dtype() const
   return {};
 }
 
+// Checks if two shapes are broadcast-compatible.
+// Two dimensions are compatible if they are equal or if one of them is 1.
+bool is_broadcastable(
+  const std::vector<int> &shape1,
+  const std::vector<int> &shape2)
+{
+  int s1 = shape1.size() - 1;
+  int s2 = shape2.size() - 1;
+
+  // Compare dimensions from rightmost (inner) to leftmost (outer)
+  while (s1 >= 0 || s2 >= 0)
+  {
+    // If a shape lacks a dimension, assume its size is 1.
+    int d1 = (s1 >= 0) ? shape1[s1] : 1;
+    int d2 = (s2 >= 0) ? shape2[s2] : 1;
+
+    // Check if dimensions are compatible (either equal or one is 1)
+    if (d1 != d2 && d1 != 1 && d2 != 1)
+      return false;
+
+    --s1;
+    --s2;
+  }
+  return true;
+}
+
+void numpy_call_expr::broadcast_check(const nlohmann::json &operands) const
+{
+  std::vector<int> previous_shape;
+  bool is_first_operand = true;
+  symbol_id sid = converter_.create_symbol_id();
+
+  for (const auto &op : operands)
+  {
+    if (op["_type"] == "Name")
+    {
+      sid.set_object(op["id"].get<std::string>());
+      symbolt *s = converter_.find_symbol(sid.to_string());
+      assert(s);
+
+      // Retrieve the current operand's array shape.
+      std::vector<int> current_shape =
+        converter_.type_handler_.get_array_type_shape(s->type);
+
+      // For subsequent operands, compare shapes using broadcasting rules.
+      if (!is_first_operand)
+      {
+        if (!is_broadcastable(previous_shape, current_shape))
+        {
+          std::ostringstream oss;
+          oss << "operands could not be broadcast together with shapes (";
+          oss << previous_shape[0] << ",) (";
+          oss << current_shape[0] << ",)";
+          throw std::runtime_error(oss.str());
+        }
+      }
+      else
+      {
+        is_first_operand = false;
+      }
+
+      // Update previous_shape for the next iteration.
+      previous_shape = current_shape;
+    }
+  }
+}
+
+exprt numpy_call_expr::create_expr_from_call() const
+{
+  nlohmann::json expr;
+
+  auto lhs = call_["args"][0];
+  auto rhs = call_["args"][1];
+
+  // Resolve variables if they are names
+  auto resolve_var = [this](nlohmann::json &var) {
+    if (var["_type"] == "Name")
+    {
+      var = json_utils::find_var_decl(
+        var["id"], function_id_.get_function(), converter_.ast());
+      if (var["value"]["_type"] == "Call")
+        var = var["value"]["args"][0];
+    }
+  };
+
+  resolve_var(lhs);
+  resolve_var(rhs);
+
+  if (lhs["_type"] == "Constant" && rhs["_type"] == "Constant")
+  {
+    expr =
+      create_binary_op(function_id_.get_function(), lhs["value"], rhs["value"]);
+  }
+  else if (lhs["_type"] == "List" && rhs["_type"] == "List")
+  {
+    std::vector<int> res;
+    const std::string &operation = function_id_.get_function();
+    for (size_t i = 0; i < lhs["elts"].size(); ++i)
+    {
+      int left_val = lhs["elts"][i]["value"].get<int>();
+      int right_val = rhs["elts"][i]["value"].get<int>();
+
+      if (operation == "add")
+        res.push_back(left_val + right_val);
+      else if (operation == "subtract")
+        res.push_back(left_val - right_val);
+      else if (operation == "multiply")
+        res.push_back(left_val * right_val);
+      else if (operation == "divide")
+      {
+        if (right_val == 0)
+          throw std::runtime_error("Division by zero in list operation");
+        res.push_back(left_val / right_val);
+      }
+      else
+      {
+        throw std::runtime_error("Unsupported operation: " + operation);
+      }
+    }
+    expr = create_list(res);
+  }
+  return converter_.get_expr(expr);
+}
+
 exprt numpy_call_expr::get() const
 {
   static const std::unordered_map<std::string, float> numpy_functions = {
@@ -123,7 +262,8 @@ exprt numpy_call_expr::get() const
   // Create array from numpy.array()
   if (function == "array")
   {
-    return converter_.get_expr(call_["args"][0]);
+    auto expr = converter_.get_expr(call_["args"][0]);
+    return expr;
   }
 
   // Create array from numpy.zeros() or numpy.ones()
@@ -137,10 +277,9 @@ exprt numpy_call_expr::get() const
   // Handle math function calls
   if (is_math_function())
   {
-    auto bin_op = create_binary_op(
-      function, call_["args"][0]["value"], call_["args"][1]["value"]);
+    broadcast_check(call_["args"]);
 
-    exprt e = converter_.get_expr(bin_op);
+    exprt expr = create_expr_from_call();
 
     auto dtype_size(get_dtype_size());
     if (dtype_size)
@@ -153,14 +292,14 @@ exprt numpy_call_expr::get() const
         converter_.update_symbol(*converter_.current_lhs);
 
         // Update rhs expression
-        e.type() = converter_.current_lhs->type();
-        if (!e.operands().empty())
+        expr.type() = converter_.current_lhs->type();
+        if (!expr.operands().empty())
         {
-          e.operands().at(0).type() = e.type();
-          e.operands().at(1).type() = e.type();
+          expr.operands().at(0).type() = expr.type();
+          expr.operands().at(1).type() = expr.type();
         }
 
-        std::string value_str = e.value().as_string();
+        std::string value_str = expr.value().as_string();
         size_t value_size = count_effective_bits(value_str);
 
         if (value_size > dtype_size)
@@ -173,17 +312,18 @@ exprt numpy_call_expr::get() const
             function_id_.get_function());
         }
 
-        if (!e.value().empty())
+        if (!expr.value().empty())
         {
           auto length = value_str.length();
-          e.value(value_str.substr(length - dtype_size));
-          value_str = e.value().as_string();
-          e.set("#cformat", std::to_string(std::stoll(value_str, nullptr, 2)));
+          expr.value(value_str.substr(length - dtype_size));
+          value_str = expr.value().as_string();
+          expr.set(
+            "#cformat", std::to_string(std::stoll(value_str, nullptr, 2)));
         }
       }
     }
 
-    return e;
+    return expr;
   }
 
   throw std::runtime_error("Unsupported NumPy function call: " + function);
