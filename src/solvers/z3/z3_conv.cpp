@@ -404,7 +404,8 @@ smt_astt z3_convt::mk_bvnot(smt_astt a)
 
 smt_astt z3_convt::mk_bvnxor(smt_astt a, smt_astt b)
 {
-  assert((a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL) ||
+  assert(
+    (a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL) ||
     (b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL) ||
     (a->sort->get_data_width() == b->sort->get_data_width()));
   return new_ast(
@@ -415,7 +416,8 @@ smt_astt z3_convt::mk_bvnxor(smt_astt a, smt_astt b)
 
 smt_astt z3_convt::mk_bvnor(smt_astt a, smt_astt b)
 {
-  assert((a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL) ||
+  assert(
+    (a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL) ||
     (b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL) ||
     (a->sort->get_data_width() == b->sort->get_data_width()));
   return new_ast(
@@ -426,18 +428,19 @@ smt_astt z3_convt::mk_bvnor(smt_astt a, smt_astt b)
 
 smt_astt z3_convt::mk_bvnand(smt_astt a, smt_astt b)
 {
-  assert((a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL) ||
+  assert(
+    (a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL) ||
     (b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL) ||
     (a->sort->get_data_width() == b->sort->get_data_width()));
-    return new_ast(
-      !(to_solver_smt_ast<z3_smt_ast>(a)->a &
-        to_solver_smt_ast<z3_smt_ast>(b)->a),
-      a->sort);
+  return new_ast(
+    !(to_solver_smt_ast<z3_smt_ast>(a)->a &
+      to_solver_smt_ast<z3_smt_ast>(b)->a),
+    a->sort);
 }
 
 smt_astt z3_convt::mk_bvxor(smt_astt a, smt_astt b)
 {
-  if(int_encoding)
+  if (int_encoding)
   {
     assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
     assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
@@ -460,7 +463,8 @@ smt_astt z3_convt::mk_bvxor(smt_astt a, smt_astt b)
     assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
     assert(a->sort->get_data_width() == b->sort->get_data_width());
     return new_ast(
-      (to_solver_smt_ast<z3_smt_ast>(a)->a ^ to_solver_smt_ast<z3_smt_ast>(b)->a),
+      (to_solver_smt_ast<z3_smt_ast>(a)->a ^
+       to_solver_smt_ast<z3_smt_ast>(b)->a),
       a->sort);
   }
 }
@@ -483,7 +487,6 @@ smt_astt z3_convt::mk_bvor(smt_astt a, smt_astt b)
     // Convert result back to integer
     z3::expr int_or = z3::bv2int(or_bv, true); // 'true' = signed conversion
     return new_ast(int_or, mk_int_sort());
-
   }
   else
   {
@@ -491,7 +494,8 @@ smt_astt z3_convt::mk_bvor(smt_astt a, smt_astt b)
     assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
     assert(a->sort->get_data_width() == b->sort->get_data_width());
     return new_ast(
-      (to_solver_smt_ast<z3_smt_ast>(a)->a | to_solver_smt_ast<z3_smt_ast>(b)->a),
+      (to_solver_smt_ast<z3_smt_ast>(a)->a |
+       to_solver_smt_ast<z3_smt_ast>(b)->a),
       a->sort);
   }
 }
@@ -519,12 +523,12 @@ smt_astt z3_convt::mk_bvand(smt_astt a, smt_astt b)
   {
     assert(a->sort->id != SMT_SORT_INT && a->sort->id != SMT_SORT_REAL);
     assert(b->sort->id != SMT_SORT_INT && b->sort->id != SMT_SORT_REAL);
-    assert(a->sort->get_data_width() == b->sort->get_data_width());    
+    assert(a->sort->get_data_width() == b->sort->get_data_width());
     return new_ast(
-      (to_solver_smt_ast<z3_smt_ast>(a)->a & to_solver_smt_ast<z3_smt_ast>(b)->a),
+      (to_solver_smt_ast<z3_smt_ast>(a)->a &
+       to_solver_smt_ast<z3_smt_ast>(b)->a),
       a->sort);
   }
-
 }
 
 smt_astt z3_convt::mk_implies(smt_astt a, smt_astt b)
@@ -554,7 +558,7 @@ smt_astt z3_convt::mk_or(smt_astt a, smt_astt b)
   assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
   return new_ast(
     (to_solver_smt_ast<z3_smt_ast>(a)->a ||
-    to_solver_smt_ast<z3_smt_ast>(b)->a),
+     to_solver_smt_ast<z3_smt_ast>(b)->a),
     boolean_sort);
 }
 
@@ -563,7 +567,7 @@ smt_astt z3_convt::mk_and(smt_astt a, smt_astt b)
   assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
   return new_ast(
     (to_solver_smt_ast<z3_smt_ast>(a)->a &&
-    to_solver_smt_ast<z3_smt_ast>(b)->a),
+     to_solver_smt_ast<z3_smt_ast>(b)->a),
     boolean_sort);
 }
 
