@@ -1154,8 +1154,10 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::bitxor_id:
   {
-    assert(!int_encoding);
-    a = mk_bvxor(args[0], args[1]);
+    if (int_encoding)
+      a = mk_xor(args[0], args[1]);
+    else
+      a = mk_bvxor(args[0], args[1]);
     break;
   }
   case expr2t::bitnand_id:
@@ -1178,8 +1180,10 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::bitnot_id:
   {
-    assert(!int_encoding);
-    a = mk_bvnot(args[0]);
+    if (int_encoding)
+      a = mk_not(args[0]);
+    else
+      a = mk_bvnot(args[0]);
     break;
   }
   case expr2t::not_id:
