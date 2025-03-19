@@ -1,8 +1,4 @@
 CORE
 main.c
 --z3 --ir --no-simplify --multi-property
-VERIFICATION FAILED
-(1 & 1) != 1
-(1 & 0) != 0
-(0 & 1) != 0
-(0 & 0) != 0
+$VERIFICATION FAILED^

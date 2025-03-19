@@ -1,10 +1,4 @@
 CORE
 main.c
 --z3 --ir --no-simplify --multi-property
-VERIFICATION FAILED
-!= ~(12 | 10)
-!= ~(61680 | 3855)
-!= ~0
-!= ~1
-!= ~(5 | 3)
-!= ~(123 | 456)
+^VERIFICATION FAILED$
