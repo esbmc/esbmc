@@ -1142,58 +1142,37 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::bitand_id:
   {
-    if (int_encoding)
-      a = mk_and(args[0], args[1]);
-    else
-      a = mk_bvand(args[0], args[1]);
+    a = mk_bvand(args[0], args[1]);
     break;
   }
   case expr2t::bitor_id:
   {
-    if (int_encoding)
-      a = mk_or(args[0], args[1]);
-    else
-      a = mk_bvor(args[0], args[1]);
+    a = mk_bvor(args[0], args[1]);
     break;
   }
   case expr2t::bitxor_id:
   {
-    if (int_encoding)
-      a = mk_xor(args[0], args[1]);
-    else
-      a = mk_bvxor(args[0], args[1]);
+    a = mk_bvxor(args[0], args[1]);
     break;
   }
   case expr2t::bitnand_id:
   {
-    if (int_encoding)
-      a = mk_not(mk_and(args[0], args[1]));
-    else
-      a = mk_bvnand(args[0], args[1]);
+    a = mk_bvnand(args[0], args[1]);
     break;
   }
   case expr2t::bitnor_id:
   {
-    if (int_encoding)
-      a = mk_not(mk_or(args[0], args[1]));
-    else
-      a = mk_bvnor(args[0], args[1]);
+    a = mk_bvnor(args[0], args[1]);
     break;
   }
   case expr2t::bitnxor_id:
   {
-    if (int_encoding)
-      a = mk_not(mk_xor(args[0], args[1]));
-    else
-      a = mk_bvnxor(args[0], args[1]);
+    a = mk_bvnxor(args[0], args[1]);
     break;
   }
   case expr2t::bitnot_id:
   {
-    if (int_encoding)
-      a = mk_not(args[0]);
-    else
-      a = mk_bvnot(args[0]);
+    a = mk_bvnot(args[0]);
     break;
   }
   case expr2t::not_id:
