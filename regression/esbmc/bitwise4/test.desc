@@ -2,12 +2,12 @@ CORE
 main.c
 --z3 --ir --no-simplify --multi-property
 VERIFICATION FAILED
-return_value$_int_nxor$9 != ~0
-return_value$_int_nxor$8 != ~(-5 ^ 3)
-return_value$_int_nxor$7 != ~(123 ^ 456)
-return_value$_int_nxor$6 != ~(61680 ^ 3855)
-return_value$_int_nxor$5 != ~(12 ^ 10)
-return_value$_bool_nxor$4 != 1
-return_value$_bool_nxor$3 != 0
-return_value$_bool_nxor$2 != 0
-return_value$_bool_nxor$1 != 1
+!= ~0
+!= ~(-5 ^ 3)
+!= ~(123 ^ 456)
+!= ~(61680 ^ 3855)
+!= ~(12 ^ 10)
+!= 1
+!= 0
+!= 0
+!= 1
