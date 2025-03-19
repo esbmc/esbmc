@@ -838,7 +838,7 @@ bool goto_coveraget::is_target_func(
 void goto_coveraget::negating_asserts(const std::string &tgt_fname)
 {
   std::unordered_set<std::string> location_pool = {};
-  location_pool.insert(get_filename_from_path(filename));neg
+  location_pool.insert(get_filename_from_path(filename));
   for (auto const &inc : config.ansi_c.include_files)
     location_pool.insert(get_filename_from_path(inc));
 
