@@ -495,7 +495,6 @@ smt_astt z3_convt::mk_or(smt_astt a, smt_astt b)
   assert(
     (a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL) ||
     (a->sort->id == SMT_SORT_INT && b->sort->id == SMT_SORT_INT));
-  
   if (a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL)
   {
     return new_ast(
