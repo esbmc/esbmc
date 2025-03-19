@@ -32,6 +32,12 @@ solidity_languaget::solidity_languaget()
     abort();
   }
   smart_contract = sol;
+
+  const std::string unbound = config.options.get_option("unbound");
+  if (!unbound.empty())
+    is_bound = false;
+  else
+    is_bound = true;
 }
 
 std::string solidity_languaget::get_temp_file()
@@ -59,7 +65,7 @@ std::string solidity_languaget::get_temp_file()
   std::ofstream f;
   p += "/temp_sol.cpp";
   f.open(p.string());
-  f << temp_c_file();
+  f << temp_cpp_file();
   f.close();
 
   return p.string();
@@ -141,7 +147,7 @@ bool solidity_languaget::typecheck(contextt &context, const std::string &module)
     new_context); // Add ESBMC and TACAS intrinsic symbols to the context
 
   solidity_convertert converter(
-    new_context, src_ast_json_array, func_name, smart_contract);
+    new_context, src_ast_json_array, func_name, smart_contract, is_bound);
   if (converter.convert()) // Add Solidity symbols to the context
     return true;
 
@@ -172,7 +178,7 @@ bool solidity_languaget::final(contextt &context)
   return c_main.clang_main();
 }
 
-std::string solidity_languaget::temp_c_file()
+std::string solidity_languaget::temp_cpp_file()
 {
   // This function populates the temp file so that Clang has a compilation job.
   // Clang needs a job to convert the intrinsics.

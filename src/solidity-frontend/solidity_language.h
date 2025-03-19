@@ -32,7 +32,7 @@ public:
 
   // Functions to handle temp C file used by clang-c-frontend
   std::string get_temp_file();
-  std::string temp_c_file();
+  std::string temp_cpp_file();
 
   languaget *new_language() const override
   {
@@ -46,6 +46,9 @@ public:
 
   // smart contract source
   std::string smart_contract;
+
+  // bound setting
+  bool is_bound;
 
   // store AST json in nlohmann::json data structure
   nlohmann::json src_ast_json_array = nlohmann::json::array();

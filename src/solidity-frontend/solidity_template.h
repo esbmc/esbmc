@@ -18,7 +18,7 @@ const std::string sol_header = R"(
 #include <stdbool.h>
 #include <assert.h>
 #include <string.h>
-#include <string>
+// #include <string>
 )";
 
 /*
@@ -39,6 +39,12 @@ const std::string sol_typedef = R"(
 typedef BIGINT(256) int256_t;
 typedef unsigned BIGINT(256) uint256_t;
 typedef unsigned BIGINT(160) address_t;
+
+struct sol_llc_ret
+{
+  bool x;
+  unsigned int y;
+};
 )";
 
 /// Variables
@@ -74,6 +80,7 @@ const std::string sol_vars = sol_msg + sol_tx + sol_block;
 const std::string blockhash = R"(
 uint256_t blockhash(uint256_t x)
 {
+__ESBMC_HIDE:;
   return x;
 }
 )";
@@ -81,6 +88,7 @@ uint256_t blockhash(uint256_t x)
 const std::string gasleft = R"(
 uint256_t gasleft()
 {
+__ESBMC_HIDE:;
   return nondet_uint();
 }
 )";
@@ -96,30 +104,36 @@ uint256_t abi_encodeCall();
 const std::string sol_math = R"(
 uint256_t addmod(uint256_t x, uint256_t y, uint256_t k)
 {
+__ESBMC_HIDE:;
 	return (x + y) % k;
 }
 
 uint256_t mulmod(uint256_t x, uint256_t y, uint256_t k)
 {
+__ESBMC_HIDE:;
 	return (x * y) % k;
 }
 
 uint256_t keccak256(uint256_t x)
 {
+__ESBMC_HIDE:;
   return  x;
 }
 
 uint256_t sha256(uint256_t x)
 {
+__ESBMC_HIDE:;
   return x;
 }
 address_t ripemd160(uint256_t x)
 {
+__ESBMC_HIDE:;
   // UNSAT abstraction
   return address_t(x);
 }
 address_t ecrecover(uint256_t hash, unsigned int v, uint256_t r, uint256_t s)
 {
+__ESBMC_HIDE:;
   return address_t(hash);
 }
 )";
@@ -127,6 +141,7 @@ address_t ecrecover(uint256_t hash, unsigned int v, uint256_t r, uint256_t s)
 const std::string sol_string = R"(
 char* string_concat(char *x, char *y)
 {
+__ESBMC_HIDE:;
 	strncat(x, y, 256);
 	return x;
 }
@@ -137,6 +152,7 @@ char *u256toa(uint256_t value);
 uint256_t str2int(const char *str);
 uint256_t byte_concat(uint256_t x, uint256_t y)
 {
+__ESBMC_HIDE:;
   char *s1 = u256toa(x);
   char *s2 = u256toa(y);
   strncat(s1, s2, 256);
@@ -144,8 +160,49 @@ uint256_t byte_concat(uint256_t x, uint256_t y)
 }
 )";
 
-const std::string sol_funcs =
-  blockhash + gasleft + sol_abi + sol_math + sol_string + sol_byte;
+const std::string sol_address = R"(
+void _transfer(uint256_t ether, uint256_t balance)
+{
+__ESBMC_HIDE:;
+  __ESBMC_assume(balance < ether);
+}
+
+bool _send(uint256_t ether, uint256_t balance)
+{
+__ESBMC_HIDE:;
+  if(balance < ether)
+    return false;
+  return true;
+}
+
+bool _call()
+{
+__ESBMC_HIDE:;
+  return nondet_bool();
+}
+
+bool _delegatecall()
+{
+__ESBMC_HIDE:;
+  return nondet_bool();
+}
+
+bool _staticcall()
+{
+__ESBMC_HIDE:;
+  return nondet_bool();
+}
+
+bool _callcodecall()
+{
+__ESBMC_HIDE:;
+  return nondet_bool();
+}
+
+)";
+
+const std::string sol_funcs = blockhash + gasleft + sol_abi + sol_math +
+                              sol_string + sol_byte + sol_address;
 
 /// data structure
 
@@ -165,6 +222,7 @@ struct NodeI
 
 void insertAtEndU(struct NodeU **head, uint256_t data)
 {
+__ESBMC_HIDE:;
   struct NodeU *newNode = (struct NodeU *)malloc(sizeof(struct NodeU));
   newNode->data = data;
   newNode->next = NULL;
@@ -183,6 +241,7 @@ void insertAtEndU(struct NodeU **head, uint256_t data)
 
 void insertAtEndI(struct NodeI **head, int256_t data)
 {
+__ESBMC_HIDE:;
   struct NodeI *newNode = (struct NodeI *)malloc(sizeof(struct NodeI));
   newNode->data = data;
   newNode->next = NULL;
@@ -199,8 +258,9 @@ void insertAtEndI(struct NodeI **head, int256_t data)
   current->next = newNode;
 }
 
-int findKeyU(struct NodeU *head, uint256_t key)
+int _ESBMC_uaddress(struct NodeU *head, uint256_t key)
 {
+__ESBMC_HIDE:;
   struct NodeU *current = head;
   int cnt = 0;
   while (current != NULL)
@@ -217,8 +277,9 @@ int findKeyU(struct NodeU *head, uint256_t key)
   return cnt;
 }
 
-int findKeyI(struct NodeI *head, int256_t key)
+int _ESBMC_address(struct NodeI *head, int256_t key)
 {
+__ESBMC_HIDE:;
   struct NodeI *current = head;
   int cnt = 0;
   while (current != NULL)
@@ -251,7 +312,8 @@ ArrayNode *array_list_head = NULL;
  * Stores/updates an array and its length.
  * If the array already exists, it updates the length.
  */
-void store_array(void *array, size_t length) {
+void _ESBMC_store_array(void *array, size_t length) {
+__ESBMC_HIDE:;
     // Check if array already exists in the list
     ArrayNode *current = array_list_head;
     while (current != NULL) {
@@ -274,7 +336,8 @@ void store_array(void *array, size_t length) {
  * Fetches the length of a stored array.
  * Returns 0 if the array is not found.
  */
-unsigned int get_array_length(void *array) {
+unsigned int _ESBMC_get_array_length(void *array) {
+__ESBMC_HIDE:;
     ArrayNode *current = array_list_head;
     while (current != NULL) {
         if (current->array_ptr == array) {
@@ -286,8 +349,9 @@ unsigned int get_array_length(void *array) {
 }
 
 
-void *arrcpy(void *from_array, size_t from_size, size_t size_of)
+void *_ESBMC_arrcpy(void *from_array, size_t from_size, size_t size_of)
 {
+__ESBMC_HIDE:;
   // assert(from_size != 0);
   if(from_array == NULL || size_of == 0 || from_size == 0)
     abort();
@@ -304,11 +368,13 @@ void *arrcpy(void *from_array, size_t from_size, size_t size_of)
 const std::string sol_itoa = R"(
 char get_char(int digit)
 {
+__ESBMC_HIDE:;
     char charstr[] = "0123456789ABCDEF";
     return charstr[digit];
 }
 void sol_rev(char *p)
 {
+__ESBMC_HIDE:;
 	char *q = &p[strlen(p) - 1];
 	char *r = p;
 	for (; q > r; q--, r++)
@@ -320,6 +386,7 @@ void sol_rev(char *p)
 }
 char *i256toa(int256_t value)
 {
+__ESBMC_HIDE:;
 	// we might have memory leak as we will not free this afterwards
 	char *str = (char *)malloc(256 * sizeof(char));
 	int256_t base = (int256_t)10;
@@ -359,6 +426,7 @@ char *i256toa(int256_t value)
 
 char *u256toa(uint256_t value)
 {
+__ESBMC_HIDE:;
 	char *str = (char *)malloc(256 * sizeof(char));
 	uint256_t base = (uint256_t)10;
 	unsigned short count = 0;
@@ -397,6 +465,7 @@ static const long hextable[] = {
     -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
 char *decToHexa(int n)
 {
+__ESBMC_HIDE:;
     char *hexaDeciNum = (char *)malloc(256 * sizeof(char));
     hexaDeciNum[0] = '\0';
     int i = 0;
@@ -430,6 +499,7 @@ char *decToHexa(int n)
 }
 char *ASCIItoHEX(const char *ascii)
 {
+__ESBMC_HIDE:;
     char *hex = (char *)malloc(256 * sizeof(char));
     hex[0] = '\0';
     for (int i = 0; i < strlen(ascii); i++)
@@ -443,6 +513,7 @@ char *ASCIItoHEX(const char *ascii)
 }
 uint256_t hexdec(const char *hex)
 {
+__ESBMC_HIDE:;
     /*https://stackoverflow.com/questions/10324/convert-a-hexadecimal-string-to-an-integer-efficiently-in-c*/
     uint256_t ret = 0;
     while (*hex && ret >= (uint256_t)0)
@@ -453,11 +524,124 @@ uint256_t hexdec(const char *hex)
 }
 uint256_t str2int(const char *str)
 {
+__ESBMC_HIDE:;
     return hexdec(ASCIItoHEX(str));
+}
+
+// string assign
+const char* empty_str = "";
+void _str_assign(char **str1, const char *str2) {
+__ESBMC_HIDE:;
+    free(*str1);  
+    if (str2 == NULL) {
+      *str1 = NULL;  // Ensure str1 doesn't point to invalid memory
+      return;
+    }
+    *str1 = (char *)malloc(strlen(str2) + 1);  
+    
+    strcpy(*str1, str2);  // force malloc success
+}
+
+)";
+
+// get unique random address
+const std::string sol_uqAddr = R"(
+// compromise:
+// - define a relatively large array
+// static const unsigned int max_addr_obj_size = 50;
+// static address_t sol_addr_array[max_addr_obj_size];
+// static void *sol_obj_array[max_addr_obj_size];
+// static char* sol_cname_array[max_addr_obj_size];
+__attribute__((annotate("__ESBMC_inf_size"))) address_t sol_addr_array[1];
+__attribute__((annotate("__ESBMC_inf_size"))) void *sol_obj_array[1];
+__attribute__((annotate("__ESBMC_inf_size"))) char* sol_cname_array[1];
+static unsigned sol_max_cnt = 0;
+
+int _ESBMC_get_addr_array_idx(address_t tgt)
+{
+__ESBMC_HIDE:;
+  for (unsigned int i = 0; i < sol_max_cnt; i++)
+  {
+    if ((address_t)sol_addr_array[i] == (address_t)tgt)
+      return i;
+  }
+  return -1;
+}
+void *_ESBMC_get_obj(address_t addr)
+{
+__ESBMC_HIDE:;
+  int idx = _ESBMC_get_addr_array_idx(addr);
+  if (idx == -1)
+    // this means it's not previously stored
+    return NULL;
+  else
+    return sol_obj_array[idx];
+}
+void update_addr_obj(address_t addr, void *obj)
+{
+__ESBMC_HIDE:;
+  __ESBMC_assume(obj != NULL);
+  sol_addr_array[sol_max_cnt] = addr;
+  sol_obj_array[sol_max_cnt] = obj;
+  ++sol_max_cnt;
+  // if (sol_max_cnt >= max_addr_obj_size)
+  //   assert(0);
+}
+address_t _ESBMC_get_unique_address(void *obj)
+{
+__ESBMC_HIDE:;
+  __ESBMC_assume(obj != NULL);
+  address_t tmp;
+  do
+  {
+    tmp = nondet_long();
+  } while (_ESBMC_get_addr_array_idx(tmp) != -1);
+  // update_addr_obj(tmp, obj);
+  return tmp;
+}
+void _ESBMC_set_cname_array(address_t _addr, char* cname)
+{
+__ESBMC_HIDE:;
+  int tmp = _ESBMC_get_addr_array_idx(_addr);
+  // assert(tmp != -1);
+  sol_cname_array[tmp] = cname;
+}
+const char * _ESBMC_get_cname(address_t _addr)
+{
+__ESBMC_HIDE:;
+  int tmp = _ESBMC_get_addr_array_idx(_addr);
+  // assert(tmp != -1);
+  return sol_cname_array[tmp];
+}
+bool _ESBMC_cmp_cname(const char* c_1, const char* c_2)
+{
+__ESBMC_HIDE:;
+  if(strcmp(c_1, c_2) == 0)
+    return true;
+  else
+    return false;
+}
+
+const char * _ESBMC_get_nondet_cont_name(const char *c_array[], unsigned int len)
+{
+__ESBMC_HIDE:;
+unsigned int rand = nondet_uint() % len;
+return c_array[rand];
+}
+
+uint256_t _ESBMC_update_balance(uint256_t balance, uint256_t val)
+{
+__ESBMC_HIDE:;
+  val = val + (uint256_t)1;
+  if(balance >= val)
+    balance -= val;
+  else
+    balance = (uint256_t)0;
+  return balance;
 }
 )";
 
-const std::string sol_ext_library = sol_itoa + sol_str2hex;
+const std::string sol_ext_library = sol_itoa + sol_str2hex + sol_uqAddr;
 
 const std::string sol_c_library = "extern \"C\" {" + sol_typedef + sol_vars +
                                   sol_funcs + sol_mapping + sol_array +
@@ -468,15 +652,18 @@ const std::string sol_cpp_string = R"(
 const std::string empty_str = "";
 void _streq(std::string &str1, std::string str2)
 {
-  __ESBMC_assume(!str2.empty());
+__ESBMC_HIDE:;
+  // __ESBMC_assume(!str2.empty());
   str1 = str2;
 }
 std::string _tostr(const char* ptr)
 {
+__ESBMC_HIDE:;
   return std::string(ptr);
 }
 const char* _tochar(const std::string& str)
 {
+__ESBMC_HIDE:;
   return str.c_str();
 }
 )";
@@ -488,7 +675,8 @@ const std::string sol_signature = R"(
 const std::string sol_cpp_library = sol_cpp_string + sol_signature;
 
 // combination
-const std::string sol_library = sol_header + sol_c_library + sol_cpp_library;
+const std::string sol_library =
+  sol_header + sol_c_library; // + sol_cpp_library;
 
 }; // namespace SolidityTemplate
 

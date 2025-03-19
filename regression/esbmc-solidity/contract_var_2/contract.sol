@@ -22,7 +22,7 @@ contract Base {
 
     function setBook() public {
         book = new Book();
-        book.setDetails("Learn Java", "TP", 1);
+        //book.setDetails("Learn Java", "TP", 1);
     }
 
     function test() public {

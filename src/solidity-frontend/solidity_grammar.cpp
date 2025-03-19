@@ -1,4 +1,5 @@
 #include <fmt/core.h>
+#include <solidity-frontend/solidity_convert.h>
 #include <solidity-frontend/solidity_grammar.h>
 #include <set>
 #include <util/message.h>
@@ -91,7 +92,8 @@ ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element)
   }
   else if (
     element["nodeType"] == "FunctionDefinition" &&
-    (element["kind"] == "function" || element["kind"] == "constructor"))
+    (element["kind"] == "function" || element["kind"] == "constructor" ||
+     element["kind"] == "receive" || element["kind"] == "fallback"))
   {
     return FunctionDef;
   }
@@ -194,6 +196,10 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     {
       return StructTypeName;
     }
+    else if (typeIdentifier.compare(0, 9, "t_address") == 0)
+    {
+      return AddressTypeName;
+    }
     else if (
       uint_string_to_type_map.count(typeString) ||
       int_string_to_type_map.count(typeString) || typeString == "bool" ||
@@ -209,7 +215,7 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     {
       return EnumTypeName;
     }
-    else if (typeIdentifier.find("t_contract$") != std::string::npos)
+    else if (typeIdentifier.compare(0, 11, "t_contract$") == 0)
     {
       return ContractTypeName;
     }
@@ -279,6 +285,7 @@ const char *type_name_to_str(TypeNameT type)
     ENUM_TO_STR(ArrayTypeName)
     ENUM_TO_STR(DynArrayTypeName)
     ENUM_TO_STR(ContractTypeName)
+    ENUM_TO_STR(AddressTypeName)
     ENUM_TO_STR(TypeConversionName)
     ENUM_TO_STR(EnumTypeName)
     ENUM_TO_STR(StructTypeName)
@@ -698,14 +705,16 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
   {
     return Mapping;
   }
+  else if (expr["nodeType"] == "FunctionCallOptions")
+  {
+    return CallOptionsExprClass;
+  }
   else if (expr["nodeType"] == "FunctionCall")
   {
     if (expr["expression"]["nodeType"] == "NewExpression")
       return NewExpression;
-    if (
-      expr["expression"]["nodeType"] == "ElementaryTypeNameExpression" &&
-      expr["kind"] == "typeConversion")
-      return ElementaryTypeNameExpression;
+    if (expr["kind"] == "typeConversion")
+      return TypeConversionExpression;
     return CallExprClass;
   }
   else if (expr["nodeType"] == "MemberAccess")
@@ -719,6 +728,12 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
       return EnumMemberCall;
     else if (type_name == SolidityGrammar::TypeNameT::ContractTypeName)
       return ContractMemberCall;
+    else if (
+      type_name == SolidityGrammar::TypeNameT::AddressTypeName ||
+      (expr["expression"].contains("memberName") &&
+       solidity_convertert::is_low_level_call(
+         expr["expression"]["memberName"])))
+      return AddressMemberCall;
     else
       //TODO Assume it's a builtin member
       // due to that the BuiltinTypeName cannot cover all the builtin member
@@ -967,14 +982,16 @@ const char *expression_to_str(ExpressionT type)
     ENUM_TO_STR(Tuple)
     ENUM_TO_STR(Mapping)
     ENUM_TO_STR(CallExprClass)
+    ENUM_TO_STR(CallOptionsExprClass)
     ENUM_TO_STR(ImplicitCastExprClass)
     ENUM_TO_STR(IndexAccess)
     ENUM_TO_STR(NewExpression)
+    ENUM_TO_STR(AddressMemberCall)
     ENUM_TO_STR(ContractMemberCall)
     ENUM_TO_STR(StructMemberCall)
     ENUM_TO_STR(EnumMemberCall)
     ENUM_TO_STR(BuiltinMemberCall)
-    ENUM_TO_STR(ElementaryTypeNameExpression)
+    ENUM_TO_STR(TypeConversionExpression)
     ENUM_TO_STR(NullExpr)
     ENUM_TO_STR(ExpressionTError)
   default:
