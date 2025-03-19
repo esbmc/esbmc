@@ -498,12 +498,8 @@ smt_astt z3_convt::mk_or(smt_astt a, smt_astt b)
   if (a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL)
   {
     return new_ast(
-      z3::to_expr(
-        z3_ctx,
-        Z3_mk_xor(
-          z3_ctx,
-          to_solver_smt_ast<z3_smt_ast>(a)->a,
-          to_solver_smt_ast<z3_smt_ast>(b)->a)),
+      (to_solver_smt_ast<z3_smt_ast>(a)->a ||
+       to_solver_smt_ast<z3_smt_ast>(b)->a),
       boolean_sort);
   }
   else
@@ -525,11 +521,31 @@ smt_astt z3_convt::mk_or(smt_astt a, smt_astt b)
 
 smt_astt z3_convt::mk_and(smt_astt a, smt_astt b)
 {
-  assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
-  return new_ast(
-    (to_solver_smt_ast<z3_smt_ast>(a)->a &&
-     to_solver_smt_ast<z3_smt_ast>(b)->a),
-    boolean_sort);
+  assert(
+    (a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL) ||
+    (a->sort->id == SMT_SORT_INT && b->sort->id == SMT_SORT_INT));
+  if (a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL)
+  {
+    return new_ast(
+      (to_solver_smt_ast<z3_smt_ast>(a)->a &&
+       to_solver_smt_ast<z3_smt_ast>(b)->a),
+      boolean_sort);
+  }
+  else
+  {
+    z3::expr a_expr = to_solver_smt_ast<z3_smt_ast>(a)->a;
+    z3::expr b_expr = to_solver_smt_ast<z3_smt_ast>(b)->a;
+    // Get the signed bit-width
+    size_t bit_width = signed_size_type2()->get_width();
+    // Convert integers to bit-vectors
+    z3::expr a_bv = z3::int2bv(bit_width, a_expr);
+    z3::expr b_bv = z3::int2bv(bit_width, b_expr);
+    // Perform bitwise AND operation
+    z3::expr and_bv = a_bv & b_bv; // Equivalent to mk_bvand
+    // Convert result back to integer
+    z3::expr int_and = z3::bv2int(and_bv, true); // 'true' = signed conversion
+    return new_ast(int_and, mk_int_sort());
+  }
 }
 
 smt_astt z3_convt::mk_not(smt_astt a)
