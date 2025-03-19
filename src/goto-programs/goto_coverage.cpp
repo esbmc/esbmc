@@ -834,10 +834,11 @@ bool goto_coveraget::is_target_func(
 }
 
 // negate the condition inside the assertion
+// The idea is that, if the claim is verified safe, and its negated claim is also verified safe, then we say this claim is unreachable
 void goto_coveraget::negating_asserts(const std::string &tgt_fname)
 {
   std::unordered_set<std::string> location_pool = {};
-  location_pool.insert(get_filename_from_path(filename));
+  location_pool.insert(get_filename_from_path(filename));neg
   for (auto const &inc : config.ansi_c.include_files)
     location_pool.insert(get_filename_from_path(inc));
 
