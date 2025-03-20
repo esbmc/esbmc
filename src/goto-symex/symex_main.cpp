@@ -890,7 +890,7 @@ void goto_symext::run_intrinsic(
   {
     assert(func_call.operands.size() == 2 && "Wrong signature");
     expr2tc ptr = func_call.operands[0];
-    expr2tc sz = func_call.operands[1];
+    expr2tc cap_bounds = func_call.operands[1];
 
     internal_deref_items.clear();
     expr2tc deref = dereference2tc(get_empty_type(), ptr);
@@ -899,7 +899,7 @@ void goto_symext::run_intrinsic(
     expr2tc tgt = internal_deref_items.front().object;
 
     // Rename the size symbol with last known value
-    cur_state->rename(sz);
+    cur_state->rename(cap_bounds);
 
     // TODO: how do we calculate the size? reference cpp_new?
     // Get the low 64-bit type size from ptr expr to calculate?
@@ -912,7 +912,7 @@ void goto_symext::run_intrinsic(
     expr2tc index = index2tc(size_type2(), sz_sym, ptr_obj);
 
     // __ESBMC_cheri_size[metadata] = bound
-    symex_assign(code_assign2tc(index, sz), true);
+    symex_assign(code_assign2tc(index, cap_bounds), true);
     return;
   }
 
