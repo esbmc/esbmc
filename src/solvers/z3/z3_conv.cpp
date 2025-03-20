@@ -383,7 +383,7 @@ smt_astt z3_convt::mk_bvnot(smt_astt a)
 {
   if (int_encoding)
   {
-    assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
+    assert(a->sort->id == SMT_SORT_INT);
     z3::expr a_expr = to_solver_smt_ast<z3_smt_ast>(a)->a;
     // Get the signedbv bit-width
     size_t bit_width = signed_size_type2()->get_width();
@@ -405,8 +405,7 @@ smt_astt z3_convt::mk_bvnot(smt_astt a)
 smt_astt z3_convt::mk_bvnxor(smt_astt a, smt_astt b)
 {
   assert(
-    (a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL) ||
-    (b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL) ||
+    (a->sort->id == SMT_SORT_INT) || (b->sort->id == SMT_SORT_INT) ||
     (a->sort->get_data_width() == b->sort->get_data_width()));
   return new_ast(
     !(to_solver_smt_ast<z3_smt_ast>(a)->a ^
@@ -417,8 +416,7 @@ smt_astt z3_convt::mk_bvnxor(smt_astt a, smt_astt b)
 smt_astt z3_convt::mk_bvnor(smt_astt a, smt_astt b)
 {
   assert(
-    (a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL) ||
-    (b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL) ||
+    (a->sort->id == SMT_SORT_INT) || (b->sort->id == SMT_SORT_INT) ||
     (a->sort->get_data_width() == b->sort->get_data_width()));
   return new_ast(
     !(to_solver_smt_ast<z3_smt_ast>(a)->a |
@@ -429,8 +427,7 @@ smt_astt z3_convt::mk_bvnor(smt_astt a, smt_astt b)
 smt_astt z3_convt::mk_bvnand(smt_astt a, smt_astt b)
 {
   assert(
-    (a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL) ||
-    (b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL) ||
+    (a->sort->id == SMT_SORT_INT) || (b->sort->id == SMT_SORT_INT) ||
     (a->sort->get_data_width() == b->sort->get_data_width()));
   return new_ast(
     !(to_solver_smt_ast<z3_smt_ast>(a)->a &
@@ -442,8 +439,7 @@ smt_astt z3_convt::mk_bvxor(smt_astt a, smt_astt b)
 {
   if (int_encoding)
   {
-    assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
-    assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+    assert(a->sort->id == SMT_SORT_INT && b->sort->id == SMT_SORT_INT);
     z3::expr a_expr = to_solver_smt_ast<z3_smt_ast>(a)->a;
     z3::expr b_expr = to_solver_smt_ast<z3_smt_ast>(b)->a;
     // Get the signedbv bit-width
@@ -473,8 +469,7 @@ smt_astt z3_convt::mk_bvor(smt_astt a, smt_astt b)
 {
   if (int_encoding)
   {
-    assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
-    assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+    assert(a->sort->id == SMT_SORT_INT && b->sort->id == SMT_SORT_INT);
     z3::expr a_expr = to_solver_smt_ast<z3_smt_ast>(a)->a;
     z3::expr b_expr = to_solver_smt_ast<z3_smt_ast>(b)->a;
     // Get the signedbv bit-width
@@ -504,8 +499,7 @@ smt_astt z3_convt::mk_bvand(smt_astt a, smt_astt b)
 {
   if (int_encoding)
   {
-    assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
-    assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+    assert(a->sort->id == SMT_SORT_INT && b->sort->id == SMT_SORT_INT);
     z3::expr a_expr = to_solver_smt_ast<z3_smt_ast>(a)->a;
     z3::expr b_expr = to_solver_smt_ast<z3_smt_ast>(b)->a;
     // Get the signed bit-width
