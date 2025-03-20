@@ -1140,45 +1140,44 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     a = mk_implies(args[0], args[1]);
     break;
   }
+  /* According to the SMT-lib, LIRA focuses on arithmetic operations
+     involving integers and reals. Still, it does not inherently handle
+     bitwise operations, as these fall under the domain of bit-vector theories.
+     Here, we combine LIRA and bitwise operations (such as &, |, ^)
+     in a way that aligns with arithmetic constraints.
+  */
   case expr2t::bitand_id:
   {
-    assert(!int_encoding);
     a = mk_bvand(args[0], args[1]);
     break;
   }
   case expr2t::bitor_id:
   {
-    assert(!int_encoding);
     a = mk_bvor(args[0], args[1]);
     break;
   }
   case expr2t::bitxor_id:
   {
-    assert(!int_encoding);
     a = mk_bvxor(args[0], args[1]);
     break;
   }
   case expr2t::bitnand_id:
   {
-    assert(!int_encoding);
     a = mk_bvnand(args[0], args[1]);
     break;
   }
   case expr2t::bitnor_id:
   {
-    assert(!int_encoding);
     a = mk_bvnor(args[0], args[1]);
     break;
   }
   case expr2t::bitnxor_id:
   {
-    assert(!int_encoding);
     a = mk_bvnxor(args[0], args[1]);
     break;
   }
   case expr2t::bitnot_id:
   {
-    assert(!int_encoding);
     a = mk_bvnot(args[0]);
     break;
   }
