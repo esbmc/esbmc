@@ -522,6 +522,8 @@ void goto_coveraget::gen_cond_cov_assert(
     id == exprt::equality || id == exprt::notequal || id == exprt::i_lt ||
     id == exprt::i_gt || id == exprt::i_le || id == exprt::i_ge)
   {
+    forall_operands (op, ptr)
+      gen_cond_cov_assert(*op, pre_cond, goto_program, it);
     add_cond_cov_assert(ptr, pre_cond, goto_program, it);
   }
   else if (id == irept::id_and)
