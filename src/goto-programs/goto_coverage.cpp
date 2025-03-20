@@ -741,7 +741,7 @@ exprt goto_coveraget::handle_single_guard(exprt &expr)
 
     Forall_operands (it, expr)
       *it = handle_single_guard(*it);
-    }
+  }
   else if (expr.operands().size() == 2)
   {
     if (expr.id() == exprt::id_and || expr.id() == exprt::id_or)
