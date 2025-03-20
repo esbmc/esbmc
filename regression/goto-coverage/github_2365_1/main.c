@@ -1,12 +1,12 @@
 #include <assert.h>
 #include <stdbool.h>
 
-int b;
+int b = 2;
 int main()
 {
-  int a = 1;
+  int a = nondet_int();
   // if (a == 1 && b == 2) { // |1|
-  if ((a == 1 || b == 2) != 0)
+  if ((a == 1 && b == 2) != 0)
   { // |2|
     assert(0 && "if");
   }

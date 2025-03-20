@@ -1,7 +1,7 @@
 CORE
 main.c
 --condition-coverage-claims --k-induction
-^Reached Conditions:  6
-^Short Circuited Conditions:  8
+^Reached Conditions:  10
+^Short Circuited Conditions:  4
 ^Total Conditions:  14
 ^VERIFICATION FAILED$
