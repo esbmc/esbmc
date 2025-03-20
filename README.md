@@ -165,7 +165,7 @@ Here, ESBMC is invoked as follows:
 $esbmc file.c --incremental-bmc
 ````
 
-Where `file.c` is the C program to be checked, and --incremental-bmc selects the incremental BMC strategy. The user can choose the SMT solver, property, and verification strategy. Note that you need math.h installed on your system, especially if you run a release version. build-essential typically covers math.h.
+Where `file.c` is the C program to be checked, and --incremental-bmc selects the incremental BMC strategy. The user can choose the SMT solver, property, and verification strategy. Note that you need `math.h` installed on your system, especially if you run a release version; build-essential typically covers `math.h`.
 
 For this particular C program, ESBMC provides the following output as the verification result:
 
