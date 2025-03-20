@@ -134,20 +134,27 @@ The Linux/Amd64 line is very important for virtualizing Amd64. Now do docker-com
 As an illustrative example to show some of the ESBMC features, consider the following C code:
 
 ````C
-#include <assert.h>
-#include <math.h>
-int main() {
-  unsigned int N = nondet_uint();
-  double x = nondet_double();
-  if(x <= 0 || isnan(x))
-    return 0;
-  unsigned int i = 0;
-  while(i < N) {
-    x = (2*x);
-    assert(x>0);
-    ++i;
-  }
-  assert(x>0);
+#include <stdlib.h>
+int *a, *b;
+int n;
+#define BLOCK_SIZE 128
+void foo () {
+  int i;
+  for (i = 0; i < n; i++)
+    a[i] = -1;
+  for (i = 0; i < BLOCK_SIZE - 1; i++)
+    b[i] = -1;
+}
+int main () {
+  n = BLOCK_SIZE;
+  a = malloc (n * sizeof(*a));
+  b = malloc (n * sizeof(*b));
+  *b++ = 0;
+  foo ();
+  if (b[-1])
+  { free(a); free(b); }
+  else
+  { free(a); free(b); }
   return 0;
 }
 ````
@@ -155,32 +162,35 @@ int main() {
 Here, ESBMC is invoked as follows:
 
 ````
-$esbmc file.c --k-induction
+$esbmc file.c --incremental-bmc
 ````
 
-Where `file.c` is the C program to be checked, and --k-induction selects the k-induction proof rule. The user can choose the SMT solver, property, and verification strategy. Note that you need math.h installed on your system, especially if you run a release version. build-essential typically covers math.h.
+Where `file.c` is the C program to be checked, and --incremental-bmc selects the incremental BMC strategy. The user can choose the SMT solver, property, and verification strategy. Note that you need math.h installed on your system, especially if you run a release version. build-essential typically covers math.h.
 
 For this particular C program, ESBMC provides the following output as the verification result:
 
 ````
-*** Checking inductive step
-Starting Bounded Model Checking
-Unwinding loop 2 iteration 1 file ex5.c line 8 function main
-Not unwinding loop 2 iteration 2 file ex5.c line 8 function main
-Symex completed in: 0.001s (40 assignments)
-Slicing time: 0.000s (removed 16 assignments)
-Generated 2 VCC(s), 2 remaining after simplification (24 assignments)
-No solver specified; defaulting to Boolector
-Encoding remaining VCC(s) using bit-vector/floating-point arithmetic
-Encoding to solver time: 0.005s
-Solving with solver Boolector 3.2.0
-Encoding to solver time: 0.005s
-Runtime decision procedure: 0.427s
-BMC program time: 0.435s
+[Counterexample]
 
-VERIFICATION SUCCESSFUL
 
-Solution found by the inductive step (k = 2)
+State 1 file memory.c line 14 column 3 function main thread 0
+----------------------------------------------------
+  a = (signed int *)(&dynamic_1_array[0])
+
+State 2 file memory.c line 15 column 3 function main thread 0
+----------------------------------------------------
+  b = (signed int *)0
+
+State 3 file memory.c line 16 column 3 function main thread 0
+----------------------------------------------------
+Violated property:
+  file memory.c line 16 column 3 function main
+  dereference failure: NULL pointer
+
+
+VERIFICATION FAILED
+
+Bug found (k = 1)
 ````
 
 We refer the user to our [documentation webpage](https://ssvlab.github.io/esbmc/documentation.html) for further examples of the ESBMC's features.
