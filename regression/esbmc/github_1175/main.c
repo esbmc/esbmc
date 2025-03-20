@@ -1,5 +1,5 @@
 int main()
 {
-  int *ptr = 90;
+  int *ptr = (int*)90;
   int v = *ptr;
 }

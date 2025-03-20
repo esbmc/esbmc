@@ -1,0 +1,4 @@
+KNOWNBUG
+main.c
+
+^dereference failure: invalid pointer$
