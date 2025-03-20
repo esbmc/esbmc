@@ -707,45 +707,41 @@ exprt goto_coveraget::handle_single_guard(exprt &expr)
 
     if (expr.id() == exprt::typecast)
     {
-      // (_Bool)((_Bool)a  => (_Bool)a
-      if (expr.op0().id() == exprt::typecast)
-        Forall_operands (it, expr)
-          *it = handle_single_guard(*it);
-
-      // special handling for ternary condition
-      bool has_sub_if = false;
-      exprt sub = expr;
-      auto op0_ptr = expr.operands().begin();
-      while (sub.operands().size() == 1)
+      if (expr.type().id() == typet::t_bool)
       {
-        if (sub.op0().id() == "if")
+        // special handling for ternary condition
+        bool has_sub_if = false;
+        exprt sub = expr;
+        auto op0_ptr = expr.operands().begin();
+        while (sub.operands().size() == 1)
         {
-          has_sub_if = true;
-          break;
+          if (sub.op0().id() == "if")
+          {
+            has_sub_if = true;
+            break;
+          }
+          if (!sub.has_operands())
+            break;
+          sub = sub.op0();
+          op0_ptr = sub.operands().begin();
         }
-        if (!sub.has_operands())
-          break;
-        sub = sub.op0();
-        op0_ptr = sub.operands().begin();
-      }
 
-      if (has_sub_if)
-      {
-        *op0_ptr = handle_single_guard(*op0_ptr);
-      }
-      else
-      {
-        exprt false_expr = false_exprt();
-        false_expr.location() = expr.location();
-        return gen_not_eq_expr(expr, false_expr, expr.location());
+        if (has_sub_if)
+        {
+          *op0_ptr = handle_single_guard(*op0_ptr);
+        }
+        else
+        {
+          exprt false_expr = false_exprt();
+          false_expr.location() = expr.location();
+          return gen_not_eq_expr(expr, false_expr, expr.location());
+        }
       }
     }
-    else
-    {
-      Forall_operands (it, expr)
-        *it = handle_single_guard(*it);
+
+    Forall_operands (it, expr)
+      *it = handle_single_guard(*it);
     }
-  }
   else if (expr.operands().size() == 2)
   {
     if (expr.id() == exprt::id_and || expr.id() == exprt::id_or)
