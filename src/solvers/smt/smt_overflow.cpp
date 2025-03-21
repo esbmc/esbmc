@@ -220,6 +220,10 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
 
 smt_astt smt_convt::overflow_cast(const expr2tc &expr)
 {
+  // If in bv mode, this is completely pointless. Return false.
+  if (!int_encoding)
+    return mk_smt_bool(false);
+
   const overflow_cast2t &ocast = to_overflow_cast2t(expr);
   unsigned int src_width = ocast.operand->type->get_width();
   unsigned int dst_width = ocast.bits;
