@@ -184,9 +184,9 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
     else if (int_encoding) // Handles both signed and unsigned cases
     {
       // Create a new integer type of size sz + 1
-      type2tc newtype = 
+      type2tc newtype =
         is_signed ? signedbv_type2tc(sz + 1) : unsignedbv_type2tc(sz + 1);
-    
+
       // Define upper bound for overflow detection
       expr2tc max_bound_expr;
       if (is_signed)
@@ -195,7 +195,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
         expr2tc min_bound_expr =
           constant_int2tc(newtype, -BigInt::power2(sz - 1));
         max_bound_expr = constant_int2tc(newtype, BigInt::power2(sz - 1) - 1);
-    
+
         smt_astt min_bound = convert_ast(min_bound_expr);
         smt_astt max_bound = convert_ast(max_bound_expr);
 
@@ -209,7 +209,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
       {
         // Unsigned upper bound (MAX_UINT)
         max_bound_expr = constant_int2tc(newtype, BigInt::power2(sz) - 1);
-    
+
         smt_astt max_bound = convert_ast(max_bound_expr);
     
         // Overflow occurs if result > MAX_UINT
@@ -217,7 +217,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
         return overflow_detected;
       }
     }
-    
+
     // Extract top half.
     smt_astt toppart = mk_extract(result, (sz * 2) - 1, sz);
 
