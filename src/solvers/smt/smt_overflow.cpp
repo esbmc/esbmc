@@ -238,14 +238,17 @@ smt_astt smt_convt::overflow_cast(const expr2tc &expr)
   if (is_signed)
   {
     // Signed min and max values for the target width
-    min_val = constant_int2tc(ocast.operand->type, -BigInt::power2(dst_width - 1));
-    max_val = constant_int2tc(ocast.operand->type, BigInt::power2(dst_width - 1) - 1);
+    min_val = 
+      constant_int2tc(ocast.operand->type, -BigInt::power2(dst_width - 1));
+    max_val = 
+      constant_int2tc(ocast.operand->type, BigInt::power2(dst_width - 1) - 1);
   }
   else
   {
     // Unsigned max value for the target width
     min_val = constant_int2tc(ocast.operand->type, 0);
-    max_val = constant_int2tc(ocast.operand->type, BigInt::power2(dst_width) - 1);
+    max_val = 
+      constant_int2tc(ocast.operand->type, BigInt::power2(dst_width) - 1);
   }
 
   expr2tc is_below_min = lessthan2tc(ocast.operand, min_val);

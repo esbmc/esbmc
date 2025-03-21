@@ -68,7 +68,7 @@ protected:
     const expr2tc &expr,
     const guardt &guard,
     const locationt &loc);
-  
+
   void cast_overflow_check(
      const expr2tc &expr,
      const guardt &guard,
@@ -237,7 +237,7 @@ void goto_checkt::cast_overflow_check(
     "cast arithmetic overflow on " + get_expr_id(expr),
     "overflow",
     loc,
-    guard);   
+    guard);
 }
 
 void goto_checkt::overflow_check(
