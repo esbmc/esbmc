@@ -833,17 +833,18 @@ void goto_checkt::check_rec(
     div_by_zero_check(expr, guard, loc);
     /* fallthrough */
 
-  case expr2t::typecast_id:
-  {
-    cast_overflow_check(expr, guard, loc);
-    break;
-  }
   case expr2t::neg_id:
   case expr2t::add_id:
   case expr2t::sub_id:
   case expr2t::mul_id:
   {
     overflow_check(expr, guard, loc);
+    break;
+  }
+
+  case expr2t::typecast_id:
+  {
+    cast_overflow_check(expr, guard, loc);
     break;
   }
 

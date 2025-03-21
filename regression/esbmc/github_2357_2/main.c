@@ -8,9 +8,9 @@ int main() {
 
     assert(u_x == 0); // Expected: wrapping around to 0
 
-    // Signed integer overflow (UB in C, but useful for verification tools)
+    // Signed integer overflow
     int s_x = INT_MAX;
-    s_x += 1;  // This causes undefined behavior in standard C
+    s_x += 1;  // This causes undefined behavior
 
     return 0;
 }
