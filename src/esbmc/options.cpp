@@ -284,7 +284,11 @@ const struct group_opt_templ all_cmd_options[] = {
     {"yices", NULL, "use Yices"},
     {"bitwuzla", NULL, "use Bitwuzla"},
     {"bv", NULL, "use solver with bit-vector arithmetic"},
-    {"ir", NULL, "use solver with integer/real arithmetic. Integer/real have an unbounded range, overapproximating normal integers/reals while significantly boosting performance"},
+    {"ir",
+     NULL,
+     "use solver with integer/real arithmetic. Integer/real have an unbounded "
+     "range, overapproximating normal integers/reals while significantly "
+     "boosting performance"},
     {"smtlib", NULL, "use SMT lib format"},
     {"default-solver",
      boost::program_options::value<std::string>()->value_name("<solver>"),
