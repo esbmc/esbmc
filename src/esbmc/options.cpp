@@ -286,7 +286,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"bv", NULL, "use solver with bit-vector arithmetic"},
     {"ir", NULL, "use solver with integer/real arithmetic. 
       Integer/real have an unbounded range, 
-      overapproximating normal integers while significantly 
+      overapproximating normal integers/reals while significantly 
       boosting performance"},
     {"smtlib", NULL, "use SMT lib format"},
     {"default-solver",
