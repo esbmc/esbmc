@@ -84,7 +84,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
         return convert_ast(overflow);
       }
     }
-    
+
     // Just ensure the result is >= both operands.
     expr2tc ge1 = greaterthanequal2tc(overflow.operand, opers.side_1);
     expr2tc ge2 = greaterthanequal2tc(overflow.operand, opers.side_2);
