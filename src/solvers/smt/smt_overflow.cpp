@@ -46,27 +46,27 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
       {
         BigInt max_val = BigInt::power2(width - 1) - 1; // MAX_INT
         BigInt min_val = -BigInt::power2(width - 1);    // MIN_INT
-    
+
         expr2tc max_int = constant_int2tc(opers.side_1->type, max_val);
         expr2tc min_int = constant_int2tc(opers.side_1->type, min_val);
-    
+
         // Two cases: positive overflow and negative underflow
         expr2tc op1pos = lessthan2tc(zero, opers.side_1);
         expr2tc op2pos = lessthan2tc(zero, opers.side_2);
         expr2tc both_pos = and2tc(op1pos, op2pos);
-    
+
         expr2tc negop1 = lessthan2tc(opers.side_1, zero);
         expr2tc negop2 = lessthan2tc(opers.side_2, zero);
         expr2tc both_neg = and2tc(negop1, negop2);
-    
+
         // Overflow: if both are positive and result > MAX_INT
         expr2tc overflow = greaterthan2tc(result_expr, max_int);
         expr2tc pos_overflow = and2tc(both_pos, overflow);
-    
+
         // Underflow: if both are negative and result < MIN_INT
         expr2tc underflow = lessthan2tc(result_expr, min_int);
         expr2tc neg_underflow = and2tc(both_neg, underflow);
-    
+
         // If either overflow or underflow occurs, return true
         expr2tc overflow_check = or2tc(pos_overflow, neg_underflow);
         return convert_ast(overflow_check);
