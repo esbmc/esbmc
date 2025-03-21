@@ -68,6 +68,11 @@ protected:
     const expr2tc &expr,
     const guardt &guard,
     const locationt &loc);
+  
+  void cast_overflow_check(
+     const expr2tc &expr,
+     const guardt &guard,
+     const locationt &loc);
 
   /** check for the buffer overflow in scanf/fscanf */
   void input_overflow_check(const expr2tc &expr, const locationt &loc);
@@ -214,6 +219,25 @@ void goto_checkt::float_overflow_check(
       loc,
       guard);
   }
+}
+
+void goto_checkt::cast_overflow_check(
+  const expr2tc &expr,
+  const guardt &guard,
+  const locationt &loc)
+{
+  if (!enable_overflow_check && !enable_unsigned_overflow_check)
+    return;
+  const type2tc &type = ns.follow(expr->type);
+  // add cast overflow subgoal
+  expr2tc cast_overflow = overflow_cast2tc(expr, type->get_width());
+  make_not(cast_overflow);
+  add_guarded_claim(
+    cast_overflow,
+    "cast arithmetic overflow on " + get_expr_id(expr),
+    "overflow",
+    loc,
+    guard);   
 }
 
 void goto_checkt::overflow_check(
@@ -809,6 +833,11 @@ void goto_checkt::check_rec(
     div_by_zero_check(expr, guard, loc);
     /* fallthrough */
 
+  case expr2t::typecast_id:
+  {
+    cast_overflow_check(expr, guard, loc);
+    break;
+  }
   case expr2t::neg_id:
   case expr2t::add_id:
   case expr2t::sub_id:
