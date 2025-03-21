@@ -231,8 +231,6 @@ smt_astt smt_convt::overflow_cast(const expr2tc &expr)
   }
 
   bool is_signed = is_signedbv_type(ocast.operand->type);
-
-  // Handle integer arithmetic instead of bit-vectors
   expr2tc min_val, max_val;
 
   if (is_signed)
