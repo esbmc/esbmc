@@ -665,6 +665,7 @@ smt_astt z3_convt::mk_le(smt_astt a, smt_astt b)
 {
   assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
   assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == b->sort->id);
   return new_ast(
     z3::to_expr(
       z3_ctx,
@@ -709,6 +710,7 @@ smt_astt z3_convt::mk_ge(smt_astt a, smt_astt b)
 {
   assert(a->sort->id == SMT_SORT_INT || a->sort->id == SMT_SORT_REAL);
   assert(b->sort->id == SMT_SORT_INT || b->sort->id == SMT_SORT_REAL);
+  assert(a->sort->id == b->sort->id);
   return new_ast(
     z3::to_expr(
       z3_ctx,
