@@ -1,0 +1,4 @@
+CORE
+main.c
+--overflow-check --unsigned-overflow-check  --z3 --ir
+^VERIFICATION SUCCESSFUL$
