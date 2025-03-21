@@ -70,9 +70,9 @@ protected:
     const locationt &loc);
 
   void cast_overflow_check(
-     const expr2tc &expr,
-     const guardt &guard,
-     const locationt &loc);
+    const expr2tc &expr,
+    const guardt &guard,
+    const locationt &loc);
 
   /** check for the buffer overflow in scanf/fscanf */
   void input_overflow_check(const expr2tc &expr, const locationt &loc);
