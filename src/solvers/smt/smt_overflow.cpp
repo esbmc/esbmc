@@ -220,49 +220,38 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
 
 smt_astt smt_convt::overflow_cast(const expr2tc &expr)
 {
-  // If in integer mode, this is completely pointless. Return false.
-  if (int_encoding)
-    return mk_smt_bool(false);
-
   const overflow_cast2t &ocast = to_overflow_cast2t(expr);
-  unsigned int width = ocast.operand->type->get_width();
-  unsigned int bits = ocast.bits;
+  unsigned int src_width = ocast.operand->type->get_width();
+  unsigned int dst_width = ocast.bits;
 
-  if (ocast.bits >= width || ocast.bits == 0)
+  if (dst_width > src_width || dst_width == 0)
   {
     log_error("SMT conversion: overflow-typecast got wrong number of bits");
     abort();
   }
 
-  // Basically: if it's positive in the first place, ensure all the top bits
-  // are zero. If neg, then all the top are 1's /and/ the next bit, so that
-  // it's considered negative in the next interpretation.
+  bool is_signed = is_signedbv_type(ocast.operand->type);
 
-  expr2tc zero = constant_int2tc(ocast.operand->type, BigInt(0));
-  expr2tc isnegexpr = lessthan2tc(ocast.operand, zero);
-  smt_astt isneg = convert_ast(isnegexpr);
-  smt_astt orig_val = convert_ast(ocast.operand);
+  // Handle integer arithmetic instead of bit-vectors
+  expr2tc min_val, max_val;
 
-  // Difference bits
-  unsigned int pos_zero_bits = width - bits;
-  unsigned int neg_one_bits = (width - bits) + 1;
+  if (is_signed)
+  {
+    // Signed min and max values for the target width
+    min_val = constant_int2tc(ocast.operand->type, -BigInt::power2(dst_width - 1));
+    max_val = constant_int2tc(ocast.operand->type, BigInt::power2(dst_width - 1) - 1);
+  }
+  else
+  {
+    // Unsigned max value for the target width
+    min_val = constant_int2tc(ocast.operand->type, 0);
+    max_val = constant_int2tc(ocast.operand->type, BigInt::power2(dst_width) - 1);
+  }
 
-  smt_astt pos_bits = mk_smt_bv(BigInt(0), pos_zero_bits);
-  smt_astt neg_bits = mk_smt_bv(BigInt::power2m1(neg_one_bits), neg_one_bits);
+  expr2tc is_below_min = lessthan2tc(ocast.operand, min_val);
+  expr2tc is_above_max = greaterthan2tc(ocast.operand, max_val);
 
-  smt_astt pos_sel = mk_extract(orig_val, width - 1, width - pos_zero_bits);
-  smt_astt neg_sel = mk_extract(orig_val, width - 1, width - neg_one_bits);
-
-  smt_astt pos_eq = mk_eq(pos_bits, pos_sel);
-  smt_astt neg_eq = mk_eq(neg_bits, neg_sel);
-
-  // isneg -> neg_eq, !isneg -> pos_eq
-  smt_astt notisneg = mk_not(isneg);
-  smt_astt c1 = mk_implies(isneg, neg_eq);
-  smt_astt c2 = mk_implies(notisneg, pos_eq);
-
-  smt_astt nooverflow = mk_and(c1, c2);
-  return mk_not(nooverflow);
+  return convert_ast(not2tc(or2tc(is_below_min, is_above_max)));
 }
 
 smt_astt smt_convt::overflow_neg(const expr2tc &expr)
