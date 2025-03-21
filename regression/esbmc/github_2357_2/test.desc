@@ -1,4 +1,4 @@
 CORE
 main.c
---z3 --ir --overflow-check --no-simplify
+--z3 --ir --overflow-check --unsigned-overflow-check --no-simplify
 ^VERIFICATION FAILED$
