@@ -37,11 +37,11 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
     {
       // Get the width of the integer type
       auto const width = opers.side_1->type->get_width();
-    
+
       // Extract the operand of the overflow expression
       const overflow2t &overflow_expr = to_overflow2t(expr);
       expr2tc result_expr = overflow_expr.operand;
-    
+
       if (is_signed)
       {
         BigInt max_val = BigInt::power2(width - 1) - 1; // MAX_INT
@@ -75,12 +75,12 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
       {
         // Unsigned integer overflow detection
         BigInt max_val = BigInt::power2(width) - 1; // UINT_MAX
-    
+
         expr2tc max_uint = constant_int2tc(opers.side_1->type, max_val);
-    
+
         // Overflow occurs if result > UINT_MAX
         expr2tc overflow = greaterthan2tc(result_expr, max_uint);
-    
+
         return convert_ast(overflow);
       }
     }
