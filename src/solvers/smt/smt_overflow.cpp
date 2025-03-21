@@ -181,27 +181,43 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
       smt_astt lor = mk_or(all_ones, all_zeros);
       return mk_not(lor);
     }
-    else if (is_signed && int_encoding)
+    else if (int_encoding) // Handles both signed and unsigned cases
     {
-      // Create a signed integer type of size sz + 1
-      type2tc newtype = signedbv_type2tc(sz + 1);
-
-      // Get min and max bounds for signed overflow detection
-      expr2tc min_bound_expr =
-        constant_int2tc(newtype, -BigInt::power2(sz - 1));
-      expr2tc max_bound_expr =
-        constant_int2tc(newtype, BigInt::power2(sz - 1) - 1);
-
-      smt_astt min_bound = convert_ast(min_bound_expr);
-      smt_astt max_bound = convert_ast(max_bound_expr);
-
-      // Convert result to signed type and check if it's out of bounds
-      smt_astt overflow_high = mk_lt(result, min_bound);
-      smt_astt overflow_low = mk_gt(result, max_bound);
-
-      return mk_or(overflow_high, overflow_low);
+      // Create a new integer type of size sz + 1
+      type2tc newtype = is_signed ? signedbv_type2tc(sz + 1) : unsignedbv_type2tc(sz + 1);
+    
+      // Define upper bound for overflow detection
+      expr2tc max_bound_expr;
+      if (is_signed)
+      {
+        // Signed bounds: MIN_INT and MAX_INT
+        expr2tc min_bound_expr =
+          constant_int2tc(newtype, -BigInt::power2(sz - 1));
+        max_bound_expr =
+          constant_int2tc(newtype, BigInt::power2(sz - 1) - 1);
+    
+        smt_astt min_bound = convert_ast(min_bound_expr);
+        smt_astt max_bound = convert_ast(max_bound_expr);
+    
+        // Convert result to signed type and check if it's out of bounds
+        smt_astt overflow_high = mk_lt(result, min_bound);
+        smt_astt overflow_low = mk_gt(result, max_bound);
+    
+        return mk_or(overflow_high, overflow_low);
+      }
+      else
+      {
+        // Unsigned upper bound (MAX_UINT)
+        max_bound_expr = constant_int2tc(newtype, BigInt::power2(sz) - 1);
+    
+        smt_astt max_bound = convert_ast(max_bound_expr);
+    
+        // Overflow occurs if result > MAX_UINT
+        smt_astt overflow_detected = mk_gt(result, max_bound);
+        return overflow_detected;
+      }
     }
-
+    
     // Extract top half.
     smt_astt toppart = mk_extract(result, (sz * 2) - 1, sz);
 
