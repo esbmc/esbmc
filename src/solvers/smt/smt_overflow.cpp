@@ -211,7 +211,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
         max_bound_expr = constant_int2tc(newtype, BigInt::power2(sz) - 1);
 
         smt_astt max_bound = convert_ast(max_bound_expr);
-    
+
         // Overflow occurs if result > MAX_UINT
         smt_astt overflow_detected = mk_gt(result, max_bound);
         return overflow_detected;
@@ -236,7 +236,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
 
 smt_astt smt_convt::overflow_cast(const expr2tc &expr)
 {
-  // If in bv mode, this is completely pointless. Return false.
+  // If in bit-vector mode, overflow detection is not applicable
   if (!int_encoding)
     return mk_smt_bool(false);
 
@@ -244,35 +244,31 @@ smt_astt smt_convt::overflow_cast(const expr2tc &expr)
   unsigned int src_width = ocast.operand->type->get_width();
   unsigned int dst_width = ocast.bits;
 
-  if (dst_width > src_width || dst_width == 0)
+  // Validate the destination width
+  if (dst_width == 0 || dst_width > src_width)
   {
-    log_error("SMT conversion: overflow-typecast got wrong number of bits");
+    log_error(
+      "SMT conversion: Invalid typecast width {} (source width: {})",
+      dst_width,
+      src_width);
     abort();
   }
 
-  bool is_signed = is_signedbv_type(ocast.operand->type);
-  expr2tc min_val, max_val;
+  // Overflow is only relevant for signed/unsigned integers
+  if (is_bool_type(ocast.operand->type))
+    return mk_smt_bool(false);
 
-  if (is_signed)
-  {
-    // Signed min and max values for the target width
-    min_val =
-      constant_int2tc(ocast.operand->type, -BigInt::power2(dst_width - 1));
-    max_val =
-      constant_int2tc(ocast.operand->type, BigInt::power2(dst_width - 1) - 1);
-  }
-  else
-  {
-    // Unsigned max value for the target width
-    min_val = constant_int2tc(ocast.operand->type, 0);
-    max_val =
-      constant_int2tc(ocast.operand->type, BigInt::power2(dst_width) - 1);
-  }
+  // Define unsigned bounds for the destination width
+  expr2tc lower_bound = constant_int2tc(ocast.operand->type, 0);
+  expr2tc upper_bound =
+    constant_int2tc(ocast.operand->type, BigInt::power2(dst_width) - 1);
 
-  expr2tc is_below_min = lessthan2tc(ocast.operand, min_val);
-  expr2tc is_above_max = greaterthan2tc(ocast.operand, max_val);
+  // Check if the operand is within bounds
+  expr2tc overflow_check = or2tc(
+    lessthan2tc(ocast.operand, lower_bound),
+    greaterthan2tc(ocast.operand, upper_bound));
 
-  return convert_ast(not2tc(or2tc(is_below_min, is_above_max)));
+  return convert_ast(overflow_check);
 }
 
 smt_astt smt_convt::overflow_neg(const expr2tc &expr)
