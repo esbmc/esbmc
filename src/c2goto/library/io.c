@@ -231,7 +231,6 @@ __ESBMC_HIDE:;
   return error_state;
 }
 
-
 int fileno(FILE *stream)
 {
 __ESBMC_HIDE:;
