@@ -73,8 +73,8 @@ else()
   set(DEFAULT_Z3_URL "https://github.com/Z3Prover/z3/releases/download/z3-4.13.3/z3-4.13.3-x64-glibc-2.35.zip")
   set(DEFAULT_Z3_NAME z3-4.13.3-x64-glibc-2.35)
 
-  set(MATHSAT_URL "https://mathsat.fbk.eu/download.php?file=mathsat-5.6.10-linux-x86_64.tar.gz")
-  set(MATHSAT_NAME "mathsat-5.6.10-linux-x86_64")
+  set(MATHSAT_URL "https://mathsat.fbk.eu/release/mathsat-5.6.11-linux-x86_64.tar.gz")
+  set(MATHSAT_NAME "mathsat-5.6.11-linux-x86_64")
 
   set(DEFAULT_CVC5_URL "https://github.com/cvc5/cvc5/releases/download/cvc5-1.1.2/cvc5-Linux-static.zip")
   set(DEFAULT_CVC5_NAME cvc5-Linux-static)
