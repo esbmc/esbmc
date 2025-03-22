@@ -81,26 +81,46 @@ __ESBMC_HIDE:;
   return str;
 }
 
-FILE *fopen(const char *filename, const char *m)
+FILE *fopen(const char *filename, const char *mode)
 {
 __ESBMC_HIDE:;
-#if __ESBMC_SVCOMP
-  FILE *f = (void *)1;
-#else
-  FILE *f = malloc(sizeof(FILE));
-#endif
+
+  __ESBMC_assert(
+    filename != NULL && mode != NULL, "Validate input parameters for fopen");
+
+  // Simulate failure cases (e.g., file does not exist, permission denied)
+  int success = nondet_bool(); // Returns 0 (failure) or 1 (success)
+  __ESBMC_assume(success == 0 || success == 1); // Constrain output
+
+  if (!success)
+    return NULL;
+
+  // Allocate memory for FILE structure
+  FILE *f = malloc(sizeof(FILE)); // Dynamically allocate FILE structure
+  if (f == NULL)
+    return NULL;
+
   return f;
 }
 
 int fclose(FILE *stream)
 {
 __ESBMC_HIDE:;
-#if __ESBMC_SVCOMP
-#else
-  free(stream);
-#endif
-  return nondet_int();
+
+  // Validate input parameter
+  if (stream == NULL)
+    return EOF; // NULL stream results in failure
+
+  // Simulate possible success/failure
+  int success = nondet_bool(); // Returns 0 (success) or 1 (failure)
+  __ESBMC_assume(success == 0 || success == 1); // Ensure only valid return values
+
+  if (success)
+    free(stream);
+
+  return EOF; // fclose failure
 }
+
 
 FILE *fdopen(int handle, const char *m)
 {
@@ -190,21 +210,25 @@ __ESBMC_HIDE:;
 int feof(FILE *stream)
 {
 __ESBMC_HIDE:;
-  __ESBMC_assert(stream == NULL, "Ensure the file pointer is valid");
+  __ESBMC_assert(stream != NULL, "Ensure *stream is valid");
   // Model the EOF state using nondeterminism
-  _Bool eof_state =
+  int eof_state =
     nondet_bool(); // Returns either 0 (not EOF) or 1 (EOF reached)
   __ESBMC_assume(
     eof_state == 0 || eof_state == 1); // Ensuring only valid outputs
   return eof_state;
 }
 
-int ferror(FILE *stream)
+int ferror(FILE *stream) 
 {
 __ESBMC_HIDE:;
-  // just return nondet
-  return nondet_int();
+  __ESBMC_assert(stream != NULL, "Ensure *stream is valid");
+  // Model the error state correctly using nondeterminism
+  int error_state = nondet_bool(); // Returns either 0 (no error) or 1 (error detected)
+  __ESBMC_assume(error_state == 0 || error_state == 1); // Ensures only valid outputs
+  return error_state;
 }
+
 
 int fileno(FILE *stream)
 {
