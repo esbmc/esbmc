@@ -187,9 +187,6 @@ __ESBMC_HIDE:;
   return nread;
 }
 
-#include <stdio.h>
-#include <assert.h>
-
 int feof(FILE *stream) 
 {
   __ESBMC_HIDE:;
