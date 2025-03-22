@@ -99,20 +99,20 @@ __ESBMC_HIDE:;
 int fclose(FILE *stream)
 {
 __ESBMC_HIDE:;
-
   // Validate input parameter
   if (stream == NULL)
     return EOF; // NULL stream results in failure
-
   // Simulate possible success/failure
-  int success = nondet_bool(); // Returns 0 (success) or 1 (failure)
+  _Bool success = nondet_bool(); // Returns 0 (success) or 1 (failure)
   __ESBMC_assume(
     success == 0 || success == 1); // Ensure only valid return values
-
   if (success)
+  {
     free(stream);
-
-  return EOF; // fclose failure
+    return 0;
+  }
+  else
+    return EOF; // fclose failure
 }
 
 FILE *fdopen(int handle, const char *m)
@@ -204,11 +204,8 @@ int feof(FILE *stream)
 {
 __ESBMC_HIDE:;
   __ESBMC_assert(stream != NULL, "Ensure *stream is valid");
-  // Model the EOF state using nondeterminism
-  int eof_state =
-    nondet_bool(); // Returns either 0 (not EOF) or 1 (EOF reached)
-  __ESBMC_assume(
-    eof_state == 0 || eof_state == 1); // Ensuring only valid outputs
+  // Returns either 0 (not EOF) or 1 (EOF reached)
+  _Bool eof_state = nondet_bool(); 
   return eof_state;
 }
 
@@ -224,11 +221,31 @@ __ESBMC_HIDE:;
   return error_state;
 }
 
+#include <stdio.h>
+#include <errno.h>
+
 int fileno(FILE *stream)
 {
 __ESBMC_HIDE:;
-  // just return nondet
-  return nondet_int();
+
+  // Check for NULL or invalid stream
+  if (stream == NULL)
+    return -1; // Error: Invalid stream
+  
+  // Handle standard streams correctly
+  if (stream == stdin)
+    return 0; // STDIN_FILENO
+  if (stream == stdout)
+    return 1; // STDOUT_FILENO
+  if (stream == stderr)
+    return 2; // STDERR_FILENO
+
+  // Return a nondeterministic file descriptor, but ensure it is non-negative
+  int fd = nondet_int();
+  if (fd < 0)
+    return -1;
+
+  return fd;
 }
 
 int fputs(const char *s, FILE *stream)
@@ -268,7 +285,13 @@ __ESBMC_HIDE:;
 int fgetc(FILE *stream)
 {
 __ESBMC_HIDE:;
-  return nondet_int();
+  // Ensure the stream is valid
+  __ESBMC_assert(stream != NULL, "fgetc: stream must not be NULL");
+  // Nondeterministically return a character or EOF
+  int c = nondet_int();
+  // Ensure the returned value is either a valid unsigned char or EOF
+  __ESBMC_assume(c == EOF || (c >= 0 && c <= 255));
+  return c;
 }
 
 int getc(FILE *stream)
