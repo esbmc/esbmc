@@ -86,19 +86,12 @@ FILE *fopen(const char *filename, const char *mode)
 __ESBMC_HIDE:;
 
   if (filename == NULL || mode == NULL)
-    return NULL;
-
-  // Simulate failure cases (e.g., file does not exist, permission denied)
-  int success = nondet_bool(); // Returns 0 (failure) or 1 (success)
-  __ESBMC_assume(success == 0 || success == 1); // Constrain output
-
-  if (!success)
-    return NULL;
+    return NULL; // On error, returns a null pointer.
 
   // Allocate memory for FILE structure
   FILE *f = malloc(sizeof(FILE)); // Dynamically allocate FILE structure
   if (f == NULL)
-    return NULL;
+    return NULL; // On error, returns a null pointer.
 
   return f;
 }
