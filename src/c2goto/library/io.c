@@ -85,8 +85,8 @@ FILE *fopen(const char *filename, const char *mode)
 {
 __ESBMC_HIDE:;
 
-  __ESBMC_assert(
-    filename != NULL && mode != NULL, "Validate input parameters for fopen");
+  if (filename == NULL || mode == NULL)
+    return NULL;
 
   // Simulate failure cases (e.g., file does not exist, permission denied)
   int success = nondet_bool(); // Returns 0 (failure) or 1 (success)

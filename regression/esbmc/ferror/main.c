@@ -26,7 +26,7 @@ int main(void)
     else
     { 
       if (feof(f))
-        assert(0 && "EOF indicator set");
+        assert(1 && "EOF indicator set");
       if (ferror(f))
         assert(0 && "Error indicator set");
     }

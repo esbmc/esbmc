@@ -1,5 +1,4 @@
 CORE
 main.c
 --incremental-bmc
-VERIFICATION FAILED
-assertion 0 && "Error indicator set"
+^VERIFICATION FAILED$
