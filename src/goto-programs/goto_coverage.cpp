@@ -517,42 +517,63 @@ void goto_coveraget::gen_cond_cov_assert(
   goto_programt &goto_program,
   goto_programt::instructiont::targett &it)
 {
+  // return if we meet an atom
+  if (ptr.operands().size() == 0)
+    return;
+
   const auto &id = ptr.id();
-  if (
-    id == exprt::equality || id == exprt::notequal || id == exprt::i_lt ||
-    id == exprt::i_gt || id == exprt::i_le || id == exprt::i_ge)
+  if (ptr.operands().size() == 1)
   {
-    add_cond_cov_assert(ptr, pre_cond, goto_program, it);
+    // (a!=0)++, !a, -a, (_Bool)(int)a
+    forall_operands (op, ptr)
+      gen_cond_cov_assert(*op, pre_cond, goto_program, it);
   }
-  else if (id == irept::id_and)
+  else if (ptr.operands().size() == 2)
   {
-    // got lhs
-    gen_cond_cov_assert(ptr.op0(), pre_cond, goto_program, it);
+    if (
+      id == exprt::equality || id == exprt::notequal || id == exprt::i_lt ||
+      id == exprt::i_gt || id == exprt::i_le || id == exprt::i_ge)
+    {
+      forall_operands (op, ptr)
+        gen_cond_cov_assert(*op, pre_cond, goto_program, it);
+      add_cond_cov_assert(ptr, pre_cond, goto_program, it);
+    }
+    else if (id == irept::id_and)
+    {
+      // got lhs
+      gen_cond_cov_assert(ptr.op0(), pre_cond, goto_program, it);
 
-    // update pre-condition: pre_cond && op0
-    pre_cond = pre_cond.is_nil()
-                 ? ptr.op0()
-                 : gen_and_expr(pre_cond, ptr.op0(), it->location);
+      // update pre-condition: pre_cond && op0
+      pre_cond = pre_cond.is_nil()
+                   ? ptr.op0()
+                   : gen_and_expr(pre_cond, ptr.op0(), it->location);
 
-    // go rhs
-    gen_cond_cov_assert(ptr.op1(), pre_cond, goto_program, it);
+      // go rhs
+      gen_cond_cov_assert(ptr.op1(), pre_cond, goto_program, it);
+    }
+    else if (id == irept::id_or)
+    {
+      // got lhs
+      gen_cond_cov_assert(ptr.op0(), pre_cond, goto_program, it);
+
+      // update pre-condition: !(pre_cond && op0)
+      pre_cond = pre_cond.is_nil()
+                   ? ptr.op0()
+                   : gen_and_expr(pre_cond, ptr.op0(), it->location);
+      pre_cond = gen_not_expr(pre_cond, it->location);
+
+      // go rhs
+      gen_cond_cov_assert(ptr.op1(), pre_cond, goto_program, it);
+    }
+
+    else
+      // a+=b; a>>(b!=0);
+      forall_operands (op, ptr)
+        gen_cond_cov_assert(*op, pre_cond, goto_program, it);
   }
-  else if (id == irept::id_or)
+  else if (ptr.operands().size() == 3)
   {
-    // got lhs
-    gen_cond_cov_assert(ptr.op0(), pre_cond, goto_program, it);
-
-    // update pre-condition: !(pre_cond && op0)
-    pre_cond = pre_cond.is_nil()
-                 ? ptr.op0()
-                 : gen_and_expr(pre_cond, ptr.op0(), it->location);
-    pre_cond = gen_not_expr(pre_cond, it->location);
-
-    // go rhs
-    gen_cond_cov_assert(ptr.op1(), pre_cond, goto_program, it);
-  }
-  else if (id == "if")
-  {
+    // id == "if"
     // go left
     gen_cond_cov_assert(ptr.op0(), pre_cond, goto_program, it);
 
@@ -574,8 +595,10 @@ void goto_coveraget::gen_cond_cov_assert(
     gen_cond_cov_assert(ptr.op2(), pre_cond_2, goto_program, it);
   }
   else
-    forall_operands (op, ptr)
-      gen_cond_cov_assert(*op, pre_cond, goto_program, it);
+  {
+    log_error("unexpected operand size");
+    abort();
+  }
 }
 
 void goto_coveraget::add_cond_cov_assert(
@@ -684,39 +707,40 @@ exprt goto_coveraget::handle_single_guard(exprt &expr)
 
     if (expr.id() == exprt::typecast)
     {
-      // special handling for ternary condition
-      bool has_sub_if = false;
-      exprt sub = expr;
-      auto op0_ptr = expr.operands().begin();
-      while (sub.operands().size() == 1)
+      if (expr.type().id() == typet::t_bool)
       {
-        if (sub.op0().id() == "if")
+        // special handling for ternary condition
+        bool has_sub_if = false;
+        exprt sub = expr;
+        auto op0_ptr = expr.operands().begin();
+        while (sub.operands().size() == 1)
         {
-          has_sub_if = true;
-          break;
+          if (sub.op0().id() == "if")
+          {
+            has_sub_if = true;
+            break;
+          }
+          if (!sub.has_operands())
+            break;
+          sub = sub.op0();
+          op0_ptr = sub.operands().begin();
         }
-        if (!sub.has_operands())
-          break;
-        sub = sub.op0();
-        op0_ptr = sub.operands().begin();
-      }
 
-      if (has_sub_if)
-      {
-        *op0_ptr = handle_single_guard(*op0_ptr);
-      }
-      else
-      {
-        exprt false_expr = false_exprt();
-        false_expr.location() = expr.location();
-        return gen_not_eq_expr(expr, false_expr, expr.location());
+        if (has_sub_if)
+        {
+          *op0_ptr = handle_single_guard(*op0_ptr);
+        }
+        else
+        {
+          exprt false_expr = false_exprt();
+          false_expr.location() = expr.location();
+          return gen_not_eq_expr(expr, false_expr, expr.location());
+        }
       }
     }
-    else
-    {
-      Forall_operands (it, expr)
-        *it = handle_single_guard(*it);
-    }
+
+    Forall_operands (it, expr)
+      *it = handle_single_guard(*it);
   }
   else if (expr.operands().size() == 2)
   {
