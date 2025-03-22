@@ -113,14 +113,14 @@ __ESBMC_HIDE:;
 
   // Simulate possible success/failure
   int success = nondet_bool(); // Returns 0 (success) or 1 (failure)
-  __ESBMC_assume(success == 0 || success == 1); // Ensure only valid return values
+  __ESBMC_assume(
+    success == 0 || success == 1); // Ensure only valid return values
 
   if (success)
     free(stream);
 
   return EOF; // fclose failure
 }
-
 
 FILE *fdopen(int handle, const char *m)
 {
@@ -219,13 +219,15 @@ __ESBMC_HIDE:;
   return eof_state;
 }
 
-int ferror(FILE *stream) 
+int ferror(FILE *stream)
 {
 __ESBMC_HIDE:;
   __ESBMC_assert(stream != NULL, "Ensure *stream is valid");
   // Model the error state correctly using nondeterminism
-  int error_state = nondet_bool(); // Returns either 0 (no error) or 1 (error detected)
-  __ESBMC_assume(error_state == 0 || error_state == 1); // Ensures only valid outputs
+  int error_state =
+    nondet_bool(); // Returns either 0 (no error) or 1 (error detected)
+  __ESBMC_assume(
+    error_state == 0 || error_state == 1); // Ensures only valid outputs
   return error_state;
 }
 
