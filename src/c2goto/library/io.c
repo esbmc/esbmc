@@ -205,7 +205,7 @@ int feof(FILE *stream)
 __ESBMC_HIDE:;
   __ESBMC_assert(stream != NULL, "Ensure *stream is valid");
   // Returns either 0 (not EOF) or 1 (EOF reached)
-  _Bool eof_state = nondet_bool(); 
+  _Bool eof_state = nondet_bool();
   return eof_state;
 }
 
@@ -220,9 +220,6 @@ __ESBMC_HIDE:;
     error_state == 0 || error_state == 1); // Ensures only valid outputs
   return error_state;
 }
-
-#include <stdio.h>
-#include <errno.h>
 
 int fileno(FILE *stream)
 {
