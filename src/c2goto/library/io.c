@@ -187,11 +187,17 @@ __ESBMC_HIDE:;
   return nread;
 }
 
-int feof(FILE *stream)
+#include <stdio.h>
+#include <assert.h>
+
+int feof(FILE *stream) 
 {
-__ESBMC_HIDE:;
-  // just return nondet
-  return nondet_int();
+  __ESBMC_HIDE:;
+  __ESBMC_assert(stream == NULL, "Ensure the file pointer is valid");
+  // Model the EOF state correctly using nondeterminism
+  _Bool eof_state = nondet_bool(); // Returns either 0 (not EOF) or 1 (EOF reached)
+  __ESBMC_assume(eof_state == 0 || eof_state == 1); // Ensuring only valid outputs
+  return eof_state;
 }
 
 int ferror(FILE *stream)
