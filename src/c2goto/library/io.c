@@ -114,7 +114,6 @@ __ESBMC_HIDE:;
     return EOF; // fclose failure
 }
 
-
 FILE *fdopen(int handle, const char *mode)
 {
 __ESBMC_HIDE:;
