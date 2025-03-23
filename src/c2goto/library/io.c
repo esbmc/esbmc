@@ -114,11 +114,24 @@ __ESBMC_HIDE:;
     return EOF; // fclose failure
 }
 
-FILE *fdopen(int handle, const char *m)
+
+FILE *fdopen(int handle, const char *mode)
 {
 __ESBMC_HIDE:;
+  // Validate file descriptor
+  if (handle < 0)
+    return NULL; // Invalid file descriptor
+
+  // Validate mode
+  if (mode == NULL || *mode == '\0')
+    return NULL; // Invalid mode
+
+  // Allocate memory for FILE structure
   FILE *f = malloc(sizeof(FILE));
-  return f;
+  if (f == NULL)
+    return NULL; // Not enough memory
+
+  return f; // Successfully associated FILE* with handle
 }
 
 // fgets reads a line from the specified stream and stores it
