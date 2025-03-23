@@ -226,12 +226,13 @@ void goto_checkt::cast_overflow_check(
   const guardt &guard,
   const locationt &loc)
 {
-  if (!options.get_bool_option("int-encoding") || 
+  if (
+    !options.get_bool_option("int-encoding") || 
     (!enable_overflow_check && !enable_unsigned_overflow_check))
     return;
 
   const type2tc &resolved_type = ns.follow(expr->type);
-  
+
   // Create cast overflow check expression
   expr2tc cast_overflow = overflow_cast2tc(expr, resolved_type->get_width());
   make_not(cast_overflow);
