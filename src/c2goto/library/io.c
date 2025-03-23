@@ -228,7 +228,7 @@ __ESBMC_HIDE:;
   // Check for NULL or invalid stream
   if (stream == NULL)
     return -1; // Error: Invalid stream
-  
+
   // Handle standard streams correctly
   if (stream == stdin)
     return 0; // STDIN_FILENO
