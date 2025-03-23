@@ -227,7 +227,7 @@ void goto_checkt::cast_overflow_check(
   const locationt &loc)
 {
   if (
-    !options.get_bool_option("int-encoding") || 
+    !options.get_bool_option("int-encoding") ||
     (!enable_overflow_check && !enable_unsigned_overflow_check))
     return;
 
