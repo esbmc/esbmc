@@ -226,15 +226,19 @@ void goto_checkt::cast_overflow_check(
   const guardt &guard,
   const locationt &loc)
 {
-  if (!enable_overflow_check && !enable_unsigned_overflow_check)
+  if (!options.get_bool_option("int-encoding") || 
+    (!enable_overflow_check && !enable_unsigned_overflow_check))
     return;
-  const type2tc &type = ns.follow(expr->type);
-  // add cast overflow subgoal
-  expr2tc cast_overflow = overflow_cast2tc(expr, type->get_width());
+
+  const type2tc &resolved_type = ns.follow(expr->type);
+  
+  // Create cast overflow check expression
+  expr2tc cast_overflow = overflow_cast2tc(expr, resolved_type->get_width());
   make_not(cast_overflow);
+
   add_guarded_claim(
     cast_overflow,
-    "cast arithmetic overflow on " + get_expr_id(expr),
+    std::string("Cast arithmetic overflow on ") + get_expr_id(expr),
     "overflow",
     loc,
     guard);
