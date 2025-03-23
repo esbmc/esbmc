@@ -99,9 +99,8 @@ __ESBMC_HIDE:;
 int fclose(FILE *stream)
 {
 __ESBMC_HIDE:;
-  // Validate input parameter
-  if (stream == NULL)
-    return EOF; // NULL stream results in failure
+  // Check for preconditions
+  __ESBMC_assert(stream != NULL, "Stream must not be NULL");
   // Simulate possible success/failure
   _Bool success = nondet_bool(); // Returns 0 (success) or 1 (failure)
   __ESBMC_assume(
