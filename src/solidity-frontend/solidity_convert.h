@@ -136,7 +136,10 @@ protected:
     const nlohmann::json &cast_expr,
     exprt &new_expr,
     const nlohmann::json literal_type = nullptr);
-  bool get_var_decl_ref(const nlohmann::json &decl, exprt &new_expr);
+  bool get_var_decl_ref(
+    const nlohmann::json &decl,
+    bool is_this_ptr,
+    exprt &new_expr);
   void get_symbol_decl_ref(
     const std::string &sym_name,
     const std::string &sym_id,
@@ -295,6 +298,8 @@ protected:
   // auxiliary functions
   std::string get_modulename_from_path(std::string path);
   std::string get_filename_from_path(std::string path);
+  const nlohmann::json &
+  find_parent(const nlohmann::json &json, const nlohmann::json &target);
   const nlohmann::json &find_decl_ref(int ref_decl_id);
   const nlohmann::json &
   find_decl_ref(int ref_decl_id, std::string &contract_name);
@@ -432,14 +437,12 @@ protected:
     const exprt &member,
     const bool is_func_call,
     exprt &new_expr);
-  void get_nondet_contract_instance(
+  bool get_bind_cname(const nlohmann::json &json, exprt &bind_cname_expr);
+  void get_nondet_contract_name(
     const exprt src_expr,
     const typet dest_type,
     exprt &new_expr);
-  bool get_nondet_contract_name(
-    const std::string &var_name,
-    std::string &name,
-    std::string &id);
+  bool assign_nondet_contract_name(const std::string &_cname, exprt &new_expr);
   bool get_base_contract_name(const exprt &base, std::string &cname);
 
   // literal conversion functions
@@ -482,6 +485,7 @@ protected:
   code_blockt expr_frontBlockDecl;
   code_blockt expr_backBlockDecl;
   code_blockt ctor_frontBlockDecl;
+  code_blockt ctor_backBlockDecl;
   // for tuple
   bool current_lhsDecl;
   bool current_rhsDecl;
