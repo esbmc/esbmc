@@ -1207,10 +1207,10 @@ void goto_symext::add_memory_leak_checks()
            *   then 'g' is combined with 'same_object2tc(obj, e)' using AND.
            * - Otherwise, we directly use 'same_object2tc(obj, e)'.
            */
-           expr2tc same = (is_and2t(g) || is_same_object2t(g))
-                            ? and2tc(g, same_object2tc(obj, e))
-                            : same_object2tc(obj, e);
-           is_any = is_any ? or2tc(is_any, same) : same;
+          expr2tc same = (is_and2t(g) || is_same_object2t(g))
+                           ? and2tc(g, same_object2tc(obj, e))
+                           : same_object2tc(obj, e);
+          is_any = is_any ? or2tc(is_any, same) : same;
         }
         return is_any ? is_any : gen_false_expr();
       };
