@@ -1204,7 +1204,7 @@ void goto_symext::add_memory_leak_checks()
            * - 'g' acts as a guard condition, determining whether 'e' should be considered.
            * - 'same_object2tc(obj, e)' checks if 'obj' and 'e' refer to the same object.
            * - If 'g' is an AND condition (is_and2t) or already a same-object check (is_same_object2t),
-           *   then 'g' is combined with 'same_object2tc(obj, e)' using AND.
+           *   then 'g' is combined with 'same_object2tc(obj, e)'.
            * - Otherwise, we directly use 'same_object2tc(obj, e)'.
            */
           expr2tc same = (is_and2t(g) || is_same_object2t(g))
