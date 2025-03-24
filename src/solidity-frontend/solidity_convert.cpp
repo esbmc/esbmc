@@ -30,8 +30,9 @@ solidity_convertert::solidity_convertert(
     current_functionDecl(nullptr),
     current_forStmt(nullptr),
     current_typeName(nullptr),
-    current_frontBlockDecl(code_blockt()),
-    current_backBlockDecl(code_blockt()),
+    expr_frontBlockDecl(code_blockt()),
+    expr_backBlockDecl(code_blockt()),
+    ctor_frontBlockDecl(code_blockt()),
     current_lhsDecl(false),
     current_rhsDecl(false),
     current_functionName(""),
@@ -382,11 +383,12 @@ void solidity_convertert::populate_auxilary_vars()
     {
       for (auto k : j.second)
       {
+        std::string base_cname = j.first;
         auto _json = find_decl_ref(k);
-        if (_json["name"].get<std::string>() == cname)
+        if (cname == _json["name"].get<std::string>())
         {
-          inheritanceMap[cname].insert(cname);
-          continue;
+          inheritanceMap[cname].insert(base_cname);
+          break;
         }
       }
     }
@@ -770,7 +772,7 @@ bool solidity_convertert::get_var_decl(
       move_to_initializer(func_call);
     }
     else
-      current_backBlockDecl.copy_to_operands(func_call);
+      expr_backBlockDecl.copy_to_operands(func_call);
   }
   else if (t_sol_type == "DYNARRAY" && set_init)
   {
@@ -807,7 +809,7 @@ bool solidity_convertert::get_var_decl(
         move_to_initializer(func_call);
       }
       else
-        current_backBlockDecl.copy_to_operands(func_call);
+        expr_backBlockDecl.copy_to_operands(func_call);
     }
     else if (val.is_symbol())
     {
@@ -852,7 +854,7 @@ bool solidity_convertert::get_var_decl(
         move_to_initializer(func_call);
       }
       else
-        current_backBlockDecl.copy_to_operands(func_call);
+        expr_backBlockDecl.copy_to_operands(func_call);
     }
     else
     {
@@ -1698,7 +1700,7 @@ void solidity_convertert::convert_unboundcall_nondet(
     new_expr.operands().size() >= 1 &&
     new_expr.op1().name() == "_ESBMC_Nondet_Extcall")
   {
-    current_frontBlockDecl.copy_to_operands(new_expr);
+    expr_frontBlockDecl.copy_to_operands(new_expr);
     exprt dump = exprt("sideeffect", common_type);
     dump.statement("nondet");
     dump.location() = l;
@@ -1883,6 +1885,16 @@ bool solidity_convertert::get_unbound_function(
 void solidity_convertert::move_to_initializer(const exprt &expr)
 {
   // the initializer will clear its elements, so we populate the copy instead of origins
+  if (!ctor_frontBlockDecl.operands().empty())
+  {
+    // reverse order
+    for (auto &op : ctor_frontBlockDecl.operands())
+    {
+      convert_expression_to_code(op);
+      initializers.copy_to_operands(op);
+    }
+    ctor_frontBlockDecl.clear();
+  }
   initializers.copy_to_operands(expr);
 }
 
@@ -1924,7 +1936,7 @@ bool solidity_convertert::move_initializer_to_ctor(
       "solidity",
       "\t@@@ initializing symbol {} in the constructor",
       it->name().as_string());
-      
+
     if (
       it->type().is_code() &&
       to_code(*it).get_statement().as_string() == "decl")
@@ -2597,27 +2609,27 @@ bool solidity_convertert::get_block(
       if (get_statement(stmt_kv.value(), statement))
         return true;
 
-      if (!current_frontBlockDecl.operands().empty())
+      if (!expr_frontBlockDecl.operands().empty())
       {
-        for (auto op : current_frontBlockDecl.operands())
+        for (auto op : expr_frontBlockDecl.operands())
         {
           convert_expression_to_code(op);
           _block.operands().push_back(op);
         }
-        current_frontBlockDecl.clear();
+        expr_frontBlockDecl.clear();
       }
 
       convert_expression_to_code(statement);
       _block.operands().push_back(statement);
 
-      if (!current_backBlockDecl.operands().empty())
+      if (!expr_backBlockDecl.operands().empty())
       {
-        for (auto op : current_backBlockDecl.operands())
+        for (auto op : expr_backBlockDecl.operands())
         {
           convert_expression_to_code(op);
           _block.operands().push_back(op);
         }
-        current_backBlockDecl.clear();
+        expr_backBlockDecl.clear();
       }
 
       ++ctr;
@@ -2820,7 +2832,7 @@ bool solidity_convertert::get_statement(
           exprt rop = rhs.operands().at(i);
 
           // do assignment
-          get_tuple_assignment(current_backBlockDecl, lop, rop);
+          get_tuple_assignment(expr_backBlockDecl, lop, rop);
         }
       }
       else
@@ -2840,7 +2852,7 @@ bool solidity_convertert::get_statement(
               stmt["expression"]["typeDescriptions"],
               func_call))
           return true;
-        get_tuple_function_call(current_backBlockDecl, func_call);
+        get_tuple_function_call(expr_backBlockDecl, func_call);
 
         size_t ls = to_struct_type(lhs.type()).components().size();
         size_t rs = to_struct_type(rhs.type()).components().size();
@@ -2869,12 +2881,12 @@ bool solidity_convertert::get_statement(
             return true;
 
           // do assignment
-          get_tuple_assignment(current_backBlockDecl, lop, rop);
+          get_tuple_assignment(expr_backBlockDecl, lop, rop);
         }
       }
       // do return in the end
       exprt return_expr = code_returnt();
-      current_backBlockDecl.copy_to_operands(return_expr);
+      expr_backBlockDecl.copy_to_operands(return_expr);
 
       new_expr = code_skipt();
       break;
@@ -4665,7 +4677,7 @@ bool solidity_convertert::get_binary_operator_expr(
           return true;
 
         // add function call
-        get_tuple_function_call(current_backBlockDecl, rhs);
+        get_tuple_function_call(expr_backBlockDecl, rhs);
         rhs = new_rhs;
       }
 
@@ -4675,7 +4687,7 @@ bool solidity_convertert::get_binary_operator_expr(
       //  t.mem1 = 2; #2
       //  x = t.mem0; #3
       //  y = t.mem1; #4
-      // where #1 and #2 are already in the current_backBlockDecl
+      // where #1 and #2 are already in the expr_backBlockDecl
 
       // do #3 #4
       std::set<exprt> assigned_symbol;
@@ -4699,7 +4711,7 @@ bool solidity_convertert::get_binary_operator_expr(
               rop))
           return true;
 
-        get_tuple_assignment(current_backBlockDecl, lop, rop);
+        get_tuple_assignment(expr_backBlockDecl, lop, rop);
       }
 
       new_expr = code_skipt();
@@ -4735,7 +4747,7 @@ bool solidity_convertert::get_binary_operator_expr(
       {
         exprt store_call;
         store_update_dyn_array(lhs, size_expr, store_call);
-        current_backBlockDecl.copy_to_operands(store_call);
+        expr_backBlockDecl.copy_to_operands(store_call);
       }
     }
     else if (rt_sol == "DYNARRAY")
@@ -4773,7 +4785,7 @@ bool solidity_convertert::get_binary_operator_expr(
       {
         exprt store_call;
         store_update_dyn_array(lhs, size_expr, store_call);
-        current_backBlockDecl.copy_to_operands(store_call);
+        expr_backBlockDecl.copy_to_operands(store_call);
       }
       // fall through to do assignment
     }
@@ -4814,7 +4826,7 @@ bool solidity_convertert::get_binary_operator_expr(
       {
         exprt store_call;
         store_update_dyn_array(lhs, size_expr, store_call);
-        current_backBlockDecl.copy_to_operands(store_call);
+        expr_backBlockDecl.copy_to_operands(store_call);
       }
     }
     else if (lt_sol == "STRING")
@@ -5875,14 +5887,15 @@ bool solidity_convertert::get_type_description(
 
     std::string constructor_name = typeString;
     size_t pos = constructor_name.find(" ");
-    std::string id = prefix + constructor_name.substr(pos + 1);
+    std::string cname = constructor_name.substr(pos + 1);
+    std::string id = prefix + cname;
 
     if (context.find_symbol(id) == nullptr)
       return true;
 
     new_type = pointer_typet(symbol_typet(id));
     new_type.set("#sol_type", "CONTRACT");
-    new_type.set("#sol_contract", constructor_name);
+    new_type.set("#sol_contract", cname);
     break;
   }
   case SolidityGrammar::TypeNameT::TypeConversionName:
@@ -6302,7 +6315,7 @@ bool solidity_convertert::get_tuple_instance(
     if (get_expr(args.at(j), litera_type, init))
       return true;
 
-    get_tuple_assignment(current_backBlockDecl, member_access, init);
+    get_tuple_assignment(expr_backBlockDecl, member_access, init);
 
     // update
     ++i;
@@ -8403,7 +8416,21 @@ void solidity_convertert::convert_type_expr(
     {
       // e.g. Derive x = Derive(_addr)
       // since the solidity will not check the type conversion in the runtime, the contract instance behind the address could be any contract
-      get_nondet_contract_instance(src_expr, dest_type);
+      if (is_bound)
+      {
+        exprt dump;
+        get_nondet_contract_instance(src_expr, dest_type, dump);
+        src_expr = dump;
+      }
+      else
+      {
+        // => Derive *x = (Derive *)&_ESBMC_Obeject_Derive
+        symbolt c_sym;
+        std::string _cname = dest_type.get("#sol_contract").as_string();
+        get_static_contract_instance(_cname, c_sym);
+        src_expr =
+          typecast_exprt(address_of_exprt(symbol_expr(c_sym)), dest_type);
+      }
     }
     else if (is_bytes_type(src_type) && is_bytes_type(dest_type))
     {
@@ -9105,7 +9132,7 @@ void solidity_convertert::change_balance(
   _assign.copy_to_operands(this_bal, _update_balance);
 
   convert_expression_to_code(_assign);
-  current_frontBlockDecl.operands().push_back(_assign);
+  expr_frontBlockDecl.operands().push_back(_assign);
 }
 
 // e.g. address(x).balance => x->balance
@@ -9502,7 +9529,7 @@ void solidity_convertert::staticcall_modelling(
 
     // do new such that it will not affect any
     //TODO: might have re-entry
-    current_frontBlockDecl.operands().push_back(decl);
+    expr_frontBlockDecl.operands().push_back(decl);
 
     exprt new_base = symbol_expr(added_ctor_symbol);
     if (is_target_function_known)
@@ -9571,7 +9598,7 @@ void solidity_convertert::staticcall_modelling(
               log_error("Cannot get new temporary object");
               abort();
             }
-            current_frontBlockDecl.operands().push_back(decl);
+            expr_frontBlockDecl.operands().push_back(decl);
 
             exprt new_base = symbol_expr(added_ctor_symbol);
             auto func_json = get_func_decl_ref(cname, tgt_f_name);
@@ -9861,7 +9888,7 @@ void solidity_convertert::send_modelling(
       get_low_level_memcall(bs_contract_name, base, func_json, _call);
 
       // ?
-      current_frontBlockDecl.operands().push_back(_call);
+      expr_frontBlockDecl.operands().push_back(_call);
       trusted_expr = true_exprt();
       return;
     }
@@ -9902,7 +9929,7 @@ void solidity_convertert::send_modelling(
         side_effect_expr_function_callt _call;
         get_low_level_memcall(cname, base, func_json, _call);
 
-        current_frontBlockDecl.operands().push_back(_call);
+        expr_frontBlockDecl.operands().push_back(_call);
         trusted_expr = true_exprt();
         return;
       }
@@ -10099,7 +10126,7 @@ bool solidity_convertert::member_extcall_harness(
   if_expr_out.copy_to_operands(outguard, outter);
   if_expr_out.location() = base.location();
 
-  current_frontBlockDecl.copy_to_operands(if_expr_out);
+  expr_frontBlockDecl.copy_to_operands(if_expr_out);
 
   // new_expr = (bool, bytes);
   get_llc_ret_tuple(new_expr);
@@ -10156,28 +10183,28 @@ void solidity_convertert::extend_extcall_modelling(
   code_declt decl(symbol_expr(added_sym));
   added_sym.value = msg_sender;
   decl.operands().push_back(msg_sender);
-  current_frontBlockDecl.move_to_operands(decl);
+  expr_frontBlockDecl.move_to_operands(decl);
 
   // msg.sender = this.address
   exprt _assign = side_effect_exprt("assign", unsignedbv_typet(160));
   _assign.location() = sol_loc;
   _assign.copy_to_operands(msg_sender, _address);
   convert_expression_to_code(_assign);
-  current_frontBlockDecl.move_to_operands(_assign);
+  expr_frontBlockDecl.move_to_operands(_assign);
 
   // gas--
   exprt _dec = side_effect_exprt("predecrement", unsignedbv_typet(256));
   _dec.location() = sol_loc;
   _dec.move_to_operands(_gas);
   convert_expression_to_code(_dec);
-  current_frontBlockDecl.move_to_operands(_dec);
+  expr_frontBlockDecl.move_to_operands(_dec);
 
   // reset
   exprt _assign2 = side_effect_exprt("assign", unsignedbv_typet(160));
   _assign2.location() = sol_loc;
   _assign2.copy_to_operands(msg_sender, symbol_expr(added_sym));
   convert_expression_to_code(_assign2);
-  current_backBlockDecl.move_to_operands(_assign2);
+  expr_backBlockDecl.move_to_operands(_assign2);
 }
 
 /**
@@ -10378,14 +10405,19 @@ to
   A = aux;
 */
 void solidity_convertert::get_nondet_contract_instance(
-  exprt &src_expr,
-  const typet &dest_type)
+  const exprt src_expr,
+  const typet dest_type,
+  exprt &new_expr)
 {
   code_blockt _block;
 
   std::string _cname = dest_type.get("#sol_contract").as_string();
   auto cname_set = inheritanceMap[_cname];
-  assert(!cname_set.empty());
+  if (cname_set.empty())
+  {
+    dest_type.dump();
+    abort();
+  }
 
   // Derive * tmp
   std::string aux_name, aux_id;
@@ -10404,7 +10436,7 @@ void solidity_convertert::get_nondet_contract_instance(
   for (const auto &str : cname_set)
   {
     symbolt c_sym;
-    get_static_contract_instance(_cname, c_sym);
+    get_static_contract_instance(str, c_sym);
 
     // aux = (Base *)&_ESBMC_Object_base
     exprt _assign = side_effect_exprt("assign", dest_type);
@@ -10423,10 +10455,8 @@ void solidity_convertert::get_nondet_contract_instance(
 
     // "$address"
     // _ESBMC_Object_base.$address
-    exprt mem_addr = member_exprt(
-      symbol_expr(c_sym),
-      "sol:@C@" + _cname + "@$address",
-      unsignedbv_typet(160));
+    exprt mem_addr =
+      member_exprt(symbol_expr(c_sym), "$address", unsignedbv_typet(160));
 
     //  _addr == _ESBMC_Object_base.$address
     exprt _equal = exprt("=", bool_type());
@@ -10438,15 +10468,15 @@ void solidity_convertert::get_nondet_contract_instance(
     codet if_expr("ifthenelse");
     if_expr.copy_to_operands(_equal, _assign);
     if_expr.location() = src_expr.location();
-    _block.copy_to_operands(decl);
+    _block.copy_to_operands(if_expr);
   }
 
-  src_expr = symbol_expr(added_symbol);
+  new_expr = symbol_expr(added_symbol);
 
   if (current_functionDecl)
   {
     for (const auto &i : _block.operands())
-      current_frontBlockDecl.copy_to_operands(i);
+      expr_frontBlockDecl.copy_to_operands(i);
   }
   else
   {
@@ -10454,7 +10484,7 @@ void solidity_convertert::get_nondet_contract_instance(
     // address x = "0x...."
     // Base x = Base(x);
     for (const auto &i : _block.operands())
-      move_to_initializer(i);
+      ctor_frontBlockDecl.copy_to_operands(i);
   }
 }
 
@@ -10542,7 +10572,7 @@ bool solidity_convertert::get_high_level_member_access(
     auto &added_symbol = *move_symbol_to_context(s);
     code_declt decl(symbol_expr(added_symbol));
 
-    current_frontBlockDecl.copy_to_operands(decl);
+    expr_frontBlockDecl.copy_to_operands(decl);
     tmp = symbol_expr(added_symbol);
   }
 
@@ -10609,7 +10639,7 @@ bool solidity_convertert::get_high_level_member_access(
     if_expr.copy_to_operands(_equal, rhs);
     if_expr.location() = base.location();
 
-    current_frontBlockDecl.copy_to_operands(if_expr);
+    expr_frontBlockDecl.copy_to_operands(if_expr);
   }
 
   new_expr = tmp;

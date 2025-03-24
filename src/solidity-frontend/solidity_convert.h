@@ -432,7 +432,10 @@ protected:
     const exprt &member,
     const bool is_func_call,
     exprt &new_expr);
-  void get_nondet_contract_instance(exprt &src_expr, const typet &dest_type);
+  void get_nondet_contract_instance(
+    const exprt src_expr,
+    const typet dest_type,
+    exprt &new_expr);
   bool get_nondet_contract_name(
     const std::string &var_name,
     std::string &name,
@@ -476,8 +479,9 @@ protected:
   const nlohmann::json *current_forStmt;
   const nlohmann::json *current_typeName;
   // store multiple exprt and flatten the block
-  code_blockt current_frontBlockDecl;
-  code_blockt current_backBlockDecl;
+  code_blockt expr_frontBlockDecl;
+  code_blockt expr_backBlockDecl;
+  code_blockt ctor_frontBlockDecl;
   // for tuple
   bool current_lhsDecl;
   bool current_rhsDecl;
