@@ -432,11 +432,12 @@ protected:
     const exprt &member,
     const bool is_func_call,
     exprt &new_expr);
+  void get_nondet_contract_instance(exprt &src_expr, const typet &dest_type);
   bool get_nondet_contract_name(
     const std::string &var_name,
     std::string &name,
     std::string &id);
-  bool get_base_cname(const exprt &base, std::string &cname);
+  bool get_base_contract_name(const exprt &base, std::string &cname);
 
   // literal conversion functions
   bool convert_integer_literal(
