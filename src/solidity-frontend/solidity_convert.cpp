@@ -9253,7 +9253,10 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
     s.lvalue = true;
     s.file_local = true;
     s.static_lifetime = true;
-    move_symbol_to_context(s);
+    symbolt &_sym = *move_symbol_to_context(s);
+    string_constantt string(contract_name);
+    solidity_gen_typecast(ns, string, ct);
+    _sym.value = string;
   }
 
   return false;
