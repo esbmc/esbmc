@@ -613,13 +613,10 @@ __ESBMC_HIDE:;
   // assert(tmp != -1);
   return sol_cname_array[tmp];
 }
-bool _ESBMC_cmp_cname(const char* c_1, const char c_2[])
+bool _ESBMC_cmp_cname(const char* c_1, const char* c_2)
 {
 __ESBMC_HIDE:;
-  if(strcmp(c_1, c_2) == 0)
-    return true;
-  else
-    return false;
+  return strcmp(c_1, c_2) == 0;
 }
 
 char * _ESBMC_get_nondet_cont_name(char *c_array[], unsigned int len)

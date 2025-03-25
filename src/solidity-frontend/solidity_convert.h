@@ -100,6 +100,8 @@ protected:
     const std::string contract_name,
     std::string ctor_id,
     symbolt &sym);
+  void move_to_front_block(const exprt &expr);
+  void move_to_back_block(const exprt &expr);
 
   // handle contract variables and functions
   bool
@@ -146,7 +148,8 @@ protected:
     const typet &t,
     exprt &new_expr);
   bool get_func_decl_ref(const nlohmann::json &decl, exprt &new_expr);
-  bool get_func_decl_id_ref(const std::string &func_id, nlohmann::json &decl_ref);
+  bool
+  get_func_decl_id_ref(const std::string &func_id, nlohmann::json &decl_ref);
   bool get_func_decl_this_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_func_decl_this_ref(
     const std::string contract_name,
@@ -500,6 +503,7 @@ protected:
   //! Be careful of using 'current_contractName'. This might lead to trouble in inheritance.
   //! If you are not sure, use 'get_current_contract_name' instead.
   std::string current_contractName;
+  std::string current_baseContractName;
   std::string current_fileName;
 
   // Auxiliary data structures:
@@ -521,8 +525,6 @@ protected:
   // For inheritance
   const nlohmann::json *ctor_modifier;
   const nlohmann::json *based_contracts;
-  // This should be set to true when handling a new-object, member call of contract A while parsing contract B
-  bool is_contract_member_access;
 
   static constexpr const char *mode = "C++";
 
