@@ -1815,7 +1815,7 @@ bool solidity_convertert::get_unbound_function(
 
       // find function definition json node
       nlohmann::json decl_ref;
-      if (get_func_decl_ref(func_id, decl_ref))
+      if (get_func_decl_id_ref(func_id, decl_ref))
       {
         log_error("Cannot get function definition reference");
         return true;
@@ -3544,6 +3544,7 @@ bool solidity_convertert::get_expr(
       }
 
       exprt base;
+      std::string base_cname = "";
       if (base_expr_json.empty())
       {
         // assume it's 'this'
@@ -3553,6 +3554,7 @@ bool solidity_convertert::get_expr(
           symbolt sym;
           get_static_contract_instance(current_contractName, sym);
           base = symbol_expr(sym);
+          base_cname = current_contractName;
         }
         else
         {
@@ -3567,8 +3569,7 @@ bool solidity_convertert::get_expr(
       }
 
       // contract C{ Base x; x.call();} where base.contractname != current_ContractName;
-      std::string base_cname;
-      if (get_base_contract_name(base, base_cname))
+      if (base_cname.empty() && get_base_contract_name(base, base_cname))
         return true;
 
       auto elem_type =
@@ -5388,12 +5389,26 @@ bool solidity_convertert::get_func_decl_ref(
 }
 
 // get the definition json ref
-bool solidity_convertert::get_func_decl_ref(
+bool solidity_convertert::get_func_decl_id_ref(
   const std::string &func_id,
   nlohmann::json &decl_ref)
 {
   log_debug(
     "solidity", "@@@ looking for the definition of the function {}", func_id);
+
+  // we need to extract the actual contract, as it might be inheritance
+  size_t startPos = func_id.find("@C@") + 3; // Skip past "@C@"
+  size_t endPos = func_id.find("@", startPos);
+  assert(startPos != std::string::npos && endPos != std::string::npos);
+  std::string c_name = func_id.substr(startPos, endPos - startPos);
+  log_debug("solidity", "extracting contract name {}", c_name);
+
+  // we need to set it back before every return!
+  std::string old_contractName = current_contractName;
+  bool old_contract_member_access = is_contract_member_access;
+
+  current_contractName = c_name;
+  is_contract_member_access = false;
 
   nlohmann::json &nodes = src_ast_json["nodes"];
   unsigned index = 0;
@@ -5402,6 +5417,9 @@ bool solidity_convertert::get_func_decl_ref(
   {
     if ((*itr)["nodeType"] == "ContractDefinition")
     {
+      if (nodes.contains("name") && nodes["name"] != c_name)
+        continue;
+
       nlohmann::json &ast_nodes = nodes.at(index)["nodes"];
       unsigned idx = 0;
       for (nlohmann::json::iterator itrr = ast_nodes.begin();
@@ -5418,6 +5436,8 @@ bool solidity_convertert::get_func_decl_ref(
           if (current_func_id == func_id)
           {
             decl_ref = ast_nodes.at(idx);
+            current_contractName = old_contractName;
+            is_contract_member_access = old_contract_member_access;
             return false;
           }
         }
@@ -5426,6 +5446,8 @@ bool solidity_convertert::get_func_decl_ref(
   }
 
   log_debug("solidity", "cannot find the function definition json node.");
+  current_contractName = old_contractName;
+  is_contract_member_access = old_contract_member_access;
   return true;
 }
 
@@ -9136,6 +9158,7 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
   // _ESBMC_get_unique_address(this)
   side_effect_expr_function_callt _addr;
   locationt l;
+  l.function(contract_name);
   get_library_function_call_no_args(
     "_ESBMC_get_unique_address",
     "c:@F@_ESBMC_get_unique_address",
@@ -9182,14 +9205,7 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
   exprt bind_expr;
   if (!is_bound)
   {
-    size_t string_size = contract_name.length() + 1;
-    typet type = array_typet(
-      signed_char_type(),
-      constant_exprt(
-        integer2binary(string_size, bv_width(int_type())),
-        integer2string(string_size),
-        int_type()));
-    string_constantt string(contract_name, type, string_constantt::k_default);
+    string_constantt string(contract_name);
     bind_expr = string;
   }
   else
@@ -10390,7 +10406,7 @@ bool solidity_convertert::get_base_contract_name(
 
   if (base.type().get("#sol_contract").as_string().empty())
   {
-    log_error("cannot find base contract name {}", cname);
+    log_error("cannot find base contract name");
     return true;
   }
 
@@ -10530,6 +10546,10 @@ bool solidity_convertert::assign_nondet_contract_name(
   {
     string_constantt string(str);
     inits.operands().at(i) = string;
+    // hack: in c it's not allow to do assignment: x = {"111", "222"};  we need to define a var
+    // however, this will make the CE unclear
+    solidity_gen_typecast(
+      ns, inits.operands().at(i), pointer_typet(signed_char_type()));
     ++i;
   }
   inits.id("array");
@@ -10636,9 +10656,7 @@ bool solidity_convertert::get_high_level_member_access(
     get_library_function_call_no_args(
       "_ESBMC_cmp_cname", "c:@F@_ESBMC_cmp_cname", int_type(), l, _cmp_cname);
     _cmp_cname.arguments().push_back(bind_expr);
-    _cmp_cname.arguments().push_back(
-      typecast_exprt(cname_string, pointer_typet(signed_char_type())));
-    // we have to do this typecast otherwise it causes issue in smt_conv.cpp:1587: Assertion `array_subtype != nullptr && "Must call mk_fresh for arrays with a subtype"' failed
+    _cmp_cname.arguments().push_back(cname_string);
 
     // member access
     exprt memcall;

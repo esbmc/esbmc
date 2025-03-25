@@ -146,7 +146,7 @@ protected:
     const typet &t,
     exprt &new_expr);
   bool get_func_decl_ref(const nlohmann::json &decl, exprt &new_expr);
-  bool get_func_decl_ref(const std::string &func_id, nlohmann::json &decl_ref);
+  bool get_func_decl_id_ref(const std::string &func_id, nlohmann::json &decl_ref);
   bool get_func_decl_this_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_func_decl_this_ref(
     const std::string contract_name,
