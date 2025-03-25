@@ -591,11 +591,11 @@ address_t _ESBMC_get_unique_address(void *obj)
 {
 __ESBMC_HIDE:;
   // __ESBMC_assume(obj != NULL);
-  address_t tmp;
+  address_t tmp = (address_t)0;
   do
   {
-    tmp = nondet_ulong() + 1; // ensure it's not address(0)
-  } while (_ESBMC_get_addr_array_idx(tmp) != -1);
+    tmp = nondet_ulong() ; // ensure it's not address(0)
+  } while (_ESBMC_get_addr_array_idx(tmp) != -1 && tmp != (address_t)0);
   // update_addr_obj(tmp, obj);
   return tmp;
 }

@@ -10528,14 +10528,7 @@ bool solidity_convertert::assign_nondet_contract_name(
   unsigned int i = 0;
   for (auto str : cname_set)
   {
-    size_t string_size = str.length() + 1;
-    typet type = array_typet(
-      signed_char_type(),
-      constant_exprt(
-        integer2binary(string_size, bv_width(int_type())),
-        integer2string(string_size),
-        int_type()));
-    string_constantt string(str, type, string_constantt::k_default);
+    string_constantt string(str);
     inits.operands().at(i) = string;
     ++i;
   }
