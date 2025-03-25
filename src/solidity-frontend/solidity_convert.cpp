@@ -1718,17 +1718,16 @@ bool solidity_convertert::get_unbound_expr(
   const nlohmann::json expr,
   exprt &new_expr)
 {
-  std::string c_name;
-  if (get_current_contract_name(expr, c_name))
-    return true;
-  if (c_name.empty())
-  {
-    log_error("Cannot get current contract name");
-    abort();
-  }
+  // it's not a member access, as it can only jump within current contract
+  std::string c_name = current_contractName;
+  assert(!c_name.empty());
   code_function_callt func_call;
   if (get_unbound_funccall(c_name, func_call))
     return true;
+
+  locationt l;
+  get_location_from_node(expr, l);
+  func_call.location() = l;
 
   new_expr = func_call;
   return false;
@@ -5425,6 +5424,7 @@ bool solidity_convertert::get_func_decl_id_ref(
 
   // we need to set it back before every return!
   std::string old_contractName = current_baseContractName;
+  current_baseContractName = c_name;
 
   nlohmann::json &nodes = src_ast_json["nodes"];
   unsigned index = 0;
