@@ -661,7 +661,7 @@ bool solidity_convertert::get_var_decl(
 
   // 3. populate location
   locationt location_begin;
-  get_location_from_decl(ast_node, location_begin);
+  get_location_from_node(ast_node, location_begin);
 
   // 4. populate debug module name
   std::string debug_modulename =
@@ -966,7 +966,7 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &struct_def)
 
   // 3. populate location
   locationt location_begin;
-  get_location_from_decl(struct_def, location_begin);
+  get_location_from_node(struct_def, location_begin);
 
   // 4. populate debug module name
   std::string debug_modulename =
@@ -1454,7 +1454,7 @@ bool solidity_convertert::get_error_definition(const nlohmann::json &ast_node)
   type.return_type() = e_type;
 
   locationt location_begin;
-  get_location_from_decl(ast_node, location_begin);
+  get_location_from_node(ast_node, location_begin);
   std::string debug_modulename =
     get_modulename_from_path(location_begin.file().as_string());
 
@@ -1487,6 +1487,7 @@ bool solidity_convertert::get_error_definition(const nlohmann::json &ast_node)
   // construct a "__ESBMC_assume(false)" statement
   typet return_type = bool_type();
   locationt loc;
+  get_location_from_node(ast_node, loc);
   side_effect_expr_function_callt call;
   get_library_function_call_no_args(
     "__ESBMC_assume", "__ESBMC_assume", return_type, loc, call);
@@ -2320,7 +2321,7 @@ bool solidity_convertert::get_function_definition(
 
   // 6. Populate "locationt location_begin"
   locationt location_begin;
-  get_location_from_decl(ast_node, location_begin);
+  get_location_from_node(ast_node, location_begin);
 
   // 7. Populate "std::string id, name"
   std::string name, id;
@@ -2451,7 +2452,7 @@ bool solidity_convertert::get_function_params(
 
   // 3. get location
   locationt location_begin;
-  get_location_from_decl(pd, location_begin);
+  get_location_from_node(pd, location_begin);
 
   param.cmt_identifier(id);
   param.location() = location_begin;
@@ -3602,7 +3603,7 @@ bool solidity_convertert::get_expr(
           if (comp.name().empty())
             // decompose member_exprt
             dump = comp.op0();
-          if (get_high_level_member_access(base, dump, false, new_expr))
+          if (get_high_level_member_access(expr, base, dump, false, new_expr))
             new_expr = member_exprt(base, comp_name, comp.type());
         }
 
@@ -3637,7 +3638,7 @@ bool solidity_convertert::get_expr(
         }
         else
         {
-          if (get_high_level_member_access(base, comp, true, new_expr))
+          if (get_high_level_member_access(expr, base, comp, true, new_expr))
             new_expr = call;
         }
 
@@ -3768,6 +3769,9 @@ bool solidity_convertert::get_expr(
     if (get_type_description(expr["typeDescriptions"], t))
       return true;
 
+    locationt l;
+    get_location_from_node(expr, l);
+
     // for MAPPING
     typet base_t;
     if (get_type_description(base_json["typeDescriptions"], base_t))
@@ -3845,11 +3849,7 @@ bool solidity_convertert::get_expr(
           // pos => str2int(pos)
           side_effect_expr_function_callt _call;
           get_library_function_call_no_args(
-            "str2int",
-            "c:@F@str2int",
-            unsignedbv_typet(256),
-            base.location(),
-            _call);
+            "str2int", "c:@F@str2int", unsignedbv_typet(256), l, _call);
 
           // insert arguments
           _call.arguments().push_back(pos);
@@ -3865,14 +3865,14 @@ bool solidity_convertert::get_expr(
           "_ESBMC_address",
           "c:@F@_ESBMC_address",
           signedbv_typet(256),
-          base.location(),
+          l,
           _findkey);
       else
         get_library_function_call_no_args(
           "_ESBMC_uaddress",
           "c:@F@_ESBMC_uaddress",
           unsignedbv_typet(256),
-          base.location(),
+          l,
           _findkey);
 
       // this->key_x
@@ -4396,7 +4396,7 @@ bool solidity_convertert::get_binary_operator_expr(
   exprt lhs, rhs;
   nlohmann::json rhs_json;
   locationt l;
-  get_location_from_decl(expr, l);
+  get_location_from_node(expr, l);
 
   if (expr.contains("leftHandSide"))
   {
@@ -5567,7 +5567,7 @@ bool solidity_convertert::get_esbmc_builtin_ref(
   new_expr.name(name);
 
   locationt loc;
-  get_location_from_decl(decl, loc);
+  get_location_from_node(decl, loc);
   new_expr.location() = loc;
   if (current_functionDecl)
     new_expr.location().function(current_functionName);
@@ -6108,7 +6108,7 @@ bool solidity_convertert::get_tuple_definition(const nlohmann::json &ast_node)
 
   // get location
   locationt location_begin;
-  get_location_from_decl(ast_node, location_begin);
+  get_location_from_node(ast_node, location_begin);
 
   // get debug module name
   std::string debug_modulename =
@@ -6195,7 +6195,7 @@ bool solidity_convertert::get_tuple_instance(
 
   // get location
   locationt location_begin;
-  get_location_from_decl(ast_node, location_begin);
+  get_location_from_node(ast_node, location_begin);
 
   // get debug module name
   std::string debug_modulename =
@@ -6548,8 +6548,8 @@ void solidity_convertert::get_library_function_call_no_args(
 
   exprt type_expr("symbol");
   type_expr.name(func_name);
+  type_expr.pretty_name(func_name);
   type_expr.identifier(func_id);
-  type_expr.location() = l;
 
   code_typet type;
   if (t.is_code())
@@ -6567,6 +6567,7 @@ void solidity_convertert::get_library_function_call_no_args(
   else
     call_expr.type() = t;
 
+  call_expr.location() = l;
   new_expr = call_expr;
 }
 
@@ -7246,7 +7247,7 @@ unsigned int solidity_convertert::get_line_number(
   return loc;
 }
 
-void solidity_convertert::get_location_from_decl(
+void solidity_convertert::get_location_from_node(
   const nlohmann::json &ast_node,
   locationt &location)
 {
@@ -7255,9 +7256,7 @@ void solidity_convertert::get_location_from_decl(
     absolute_path); // assume absolute_path is the name of the contrace file, since we ran solc in the same directory
 
   // To annotate local declaration within a function
-  if (
-    ast_node["nodeType"] == "VariableDeclaration" &&
-    ast_node["stateVariable"] == false && current_functionDecl)
+  if (current_functionDecl)
   {
     location.set_function(
       current_functionName); // set the function where this local variable belongs to
@@ -8016,9 +8015,9 @@ bool solidity_convertert::get_library_function_call(
 {
   call.function() = func;
   call.type() = t;
-  call.location() = func.location();
-  if (current_functionDecl)
-    call.location().function(current_functionName);
+  locationt l;
+  get_location_from_node(caller, l);
+  call.location() = l;
 
   nlohmann::json param = nullptr;
   if (caller.contains("arguments"))
@@ -8071,7 +8070,7 @@ bool solidity_convertert::get_non_library_function_call(
 
   call.function() = func;
   call.type() = t;
-  call.location() = func.location();
+  get_location_from_node(caller, call.location());
   if (current_functionDecl)
     call.location().function(current_functionName);
 
@@ -8720,7 +8719,7 @@ bool solidity_convertert::get_empty_array_ref(
 
   // Get Location
   locationt location_begin;
-  get_location_from_decl(callee_expr_json, location_begin);
+  get_location_from_node(callee_expr_json, location_begin);
 
   // Get Debug Module Name
   std::string debug_modulename =
@@ -10576,6 +10575,7 @@ bool solidity_convertert::assign_nondet_contract_name(
                E.g. x.access() where x is a state variable
 */
 bool solidity_convertert::get_high_level_member_access(
+  const nlohmann::json &expr,
   const exprt &base,
   const exprt &member,
   const bool is_func_call,
@@ -10631,21 +10631,21 @@ bool solidity_convertert::get_high_level_member_access(
   }
 
   // rhs
+  // @str: contract name
   for (auto str : cname_set)
   {
-    // _ESBMC_NODET_cont_name == Base
-    size_t string_size = str.length() + 1;
-    typet type = array_typet(
-      signed_char_type(),
-      constant_exprt(
-        integer2binary(string_size, bv_width(int_type())),
-        integer2string(string_size),
-        int_type()));
-    string_constantt string(str, type, string_constantt::k_default);
-    exprt _equal = exprt("=", bool_type());
-    _equal.operands().push_back(bind_expr);
-    _equal.operands().push_back(string);
-    _equal.location() = base.location();
+    // strcmp（_ESBMC_NODET_cont_name, Base)
+    string_constantt cname_string(str);
+
+    side_effect_expr_function_callt _cmp_cname;
+    locationt l;
+    get_location_from_node(expr, l);
+    get_library_function_call_no_args(
+      "_ESBMC_cmp_cname", "c:@F@_ESBMC_cmp_cname", int_type(), l, _cmp_cname);
+    _cmp_cname.arguments().push_back(bind_expr);
+    _cmp_cname.arguments().push_back(
+      typecast_exprt(cname_string, pointer_typet(signed_char_type())));
+    // we have to do this typecast otherwise it causes issue in smt_conv.cpp:1587: Assertion `array_subtype != nullptr && "Must call mk_fresh for arrays with a subtype"' failed
 
     // member access
     exprt memcall;
@@ -10657,8 +10657,25 @@ bool solidity_convertert::get_high_level_member_access(
 
     if (is_func_call)
     {
-      assert(!member.identifier().empty());
-      memcall = member_exprt(_base, member.identifier(), member.type());
+      // e.g. x.call() y.call(). we need to find the definiton of the call beyond the contract x/y seperately
+      // get call
+      std::string func_name = member.name().as_string();
+      assert(!func_name.empty());
+      const nlohmann::json &member_decl_ref = get_func_decl_ref(str, func_name);
+      exprt comp;
+      if (get_func_decl_ref(member_decl_ref, comp))
+        return true;
+      exprt mem_access = member_exprt(_base, comp.identifier(), comp.type());
+      code_typet t;
+      if (get_type_description(
+            member_decl_ref["returnParameters"], t.return_type()))
+        return true;
+      side_effect_expr_function_callt call;
+      if (get_non_library_function_call(
+            mem_access, t, member_decl_ref, expr, call))
+        return true;
+
+      memcall = call;
     }
     else
     {
@@ -10675,7 +10692,7 @@ bool solidity_convertert::get_high_level_member_access(
     }
     convert_expression_to_code(rhs);
     codet if_expr("ifthenelse");
-    if_expr.copy_to_operands(_equal, rhs);
+    if_expr.copy_to_operands(_cmp_cname, rhs);
     if_expr.location() = base.location();
 
     expr_frontBlockDecl.copy_to_operands(if_expr);

@@ -277,7 +277,7 @@ protected:
 
   // line number and locations
   void
-  get_location_from_decl(const nlohmann::json &ast_node, locationt &location);
+  get_location_from_node(const nlohmann::json &ast_node, locationt &location);
   void get_start_location_from_stmt(
     const nlohmann::json &ast_node,
     locationt &location);
@@ -433,6 +433,7 @@ protected:
     side_effect_expr_function_callt &call);
   bool get_this_object(const exprt &func, exprt &this_object);
   bool get_high_level_member_access(
+    const nlohmann::json &expr,
     const exprt &base,
     const exprt &member,
     const bool is_func_call,
