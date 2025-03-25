@@ -619,7 +619,7 @@ __ESBMC_HIDE:;
   return strcmp(c_1, c_2) == 0;
 }
 
-char * _ESBMC_get_nondet_cont_name(char *c_array[], unsigned int len)
+const char * _ESBMC_get_nondet_cont_name(const char *c_array[], unsigned int len)
 {
 __ESBMC_HIDE:;
 unsigned int rand = nondet_uint() % len;

@@ -4054,14 +4054,7 @@ bool solidity_convertert::get_expr(
       // rhs
       int ref_decl_id = callee_expr_json["typeName"]["referencedDeclaration"];
       const std::string contract_name = contractNamesMap[ref_decl_id];
-      size_t string_size = contract_name.length() + 1;
-      typet type = array_typet(
-        signed_char_type(),
-        constant_exprt(
-          integer2binary(string_size, bv_width(int_type())),
-          integer2string(string_size),
-          int_type()));
-      string_constantt rhs(contract_name, type, string_constantt::k_default);
+      string_constantt rhs(contract_name);
 
       // do assignment
       exprt _assign = side_effect_exprt("assign", lhs.type());
@@ -9226,7 +9219,8 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
     exprt call;
     if (assign_nondet_contract_name(contract_name, call))
       return true;
-    bind_expr = call;
+    bind_expr = typecast_exprt(
+      call, pointer_typet(signed_char_type())); // const char* to char *
   }
 
   get_builtin_symbol(
@@ -10560,6 +10554,10 @@ bool solidity_convertert::assign_nondet_contract_name(
   for (auto str : cname_set)
   {
     string_constantt string(str);
+    // hack:
+    // N: $SolidityTest_bind_addr_list={ "Derived", "SolidityTest" };
+    // Y: $SolidityTest_bind_addr_list={ &"Derived"[0], &"SolidityTest"[0] };
+    solidity_gen_typecast(ns, string, arr_t.subtype());
     inits.operands().at(i) = string;
     ++i;
   }
@@ -10570,7 +10568,9 @@ bool solidity_convertert::assign_nondet_contract_name(
   aux_name = "$" + _cname + "_bind_addr_list";
   aux_id = "sol:@C@" + _cname + "@" + aux_name + std::to_string(aux_counter++);
   symbolt s;
-  get_default_symbol(s, current_fileName, inits.type(), aux_name, aux_id, l);
+  typet _t = inits.type();
+  _t.cmt_constant(true);
+  get_default_symbol(s, current_fileName, _t, aux_name, aux_id, l);
   s.file_local = true;
   s.static_lifetime = true;
   s.lvalue = true;
@@ -10670,6 +10670,9 @@ bool solidity_convertert::get_high_level_member_access(
     move_to_front_block(decl);
   }
 
+  locationt l;
+  get_location_from_node(expr, l);
+
   // rhs
   // @str: contract name
   for (auto str : cname_set)
@@ -10681,8 +10684,7 @@ bool solidity_convertert::get_high_level_member_access(
     get_symbol_decl_ref(str, "sol:@" + str, ct, cname_string);
 
     side_effect_expr_function_callt _cmp_cname;
-    locationt l;
-    get_location_from_node(expr, l);
+
     get_library_function_call_no_args(
       "_ESBMC_cmp_cname", "c:@F@_ESBMC_cmp_cname", int_type(), l, _cmp_cname);
     _cmp_cname.arguments().push_back(bind_expr);
@@ -10736,21 +10738,22 @@ bool solidity_convertert::get_high_level_member_access(
     rhs = memcall;
     if (!is_return_void)
     {
-      exprt _assign = side_effect_exprt("assign", member.type());
-      _assign.operands().push_back(tmp);
-      _assign.operands().push_back(memcall);
+      exprt _assign = side_effect_exprt("assign", tmp.type());
+      convert_type_expr(ns, memcall, tmp.type());
+      _assign.copy_to_operands(tmp, memcall);
       rhs = _assign;
     }
+
     convert_expression_to_code(rhs);
     codet if_expr("ifthenelse");
     if_expr.copy_to_operands(_cmp_cname, rhs);
-    if_expr.location() = base.location();
+    if_expr.location() = l;
 
     move_to_front_block(if_expr);
   }
 
   new_expr = tmp;
-  new_expr.location() = base.location();
+  new_expr.location() = l;
 
   log_debug("solidity", "\tSuccessfully modelled member access.");
   return false;
