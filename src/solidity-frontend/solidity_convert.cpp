@@ -4037,9 +4037,15 @@ bool solidity_convertert::get_expr(
 
     // case 3
     // is equal to Base x = base.base(x);
+    int ref_decl_id = callee_expr_json["typeName"]["referencedDeclaration"];
+    const std::string contract_name = contractNamesMap[ref_decl_id];
+    std::string old = current_baseContractName;
+    current_baseContractName = contract_name;
+
     exprt call;
     if (get_new_object_ctor_call(expr, call))
       return true;
+    current_baseContractName = old;
 
     new_expr = call;
 
@@ -4058,8 +4064,10 @@ bool solidity_convertert::get_expr(
 
       // do assignment
       exprt _assign = side_effect_exprt("assign", lhs.type());
+      solidity_gen_typecast(ns, rhs, lhs.type());
       _assign.operands().push_back(lhs);
       _assign.operands().push_back(rhs);
+
       convert_expression_to_code(_assign);
       move_to_back_block(_assign);
     }
@@ -10399,14 +10407,7 @@ bool solidity_convertert::set_addr_cname_mapping(
   get_addr_expr(cname, base, _addr);
 
   // cname
-  size_t string_size = cname.size() + 1;
-  typet type = array_typet(
-    signed_char_type(),
-    constant_exprt(
-      integer2binary(string_size, bv_width(int_type())),
-      integer2string(string_size),
-      int_type()));
-  string_constantt string(cname, type, string_constantt::k_default);
+  string_constantt string(cname);
 
   _call.arguments().push_back(_addr);
   _call.arguments().push_back(string);
@@ -10764,6 +10765,8 @@ bool solidity_convertert::get_bind_cname(
   exprt &bind_cname_expr)
 {
   const nlohmann::json &parent = find_parent(src_ast_json["nodes"], json);
+  locationt l;
+  get_location_from_node(json, l);
   exprt lvar;
 
   if (!parent.contains("nodeType"))
@@ -10793,6 +10796,7 @@ bool solidity_convertert::get_bind_cname(
 
   bind_cname_expr =
     member_exprt(lvar, "_ESBMC_bind_cname", pointer_typet(signed_char_type()));
+  bind_cname_expr.location() = l;
   return false;
 }
 
