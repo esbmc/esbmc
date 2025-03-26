@@ -232,7 +232,7 @@ void goto_checkt::cast_overflow_check(
     return;
 
   // First, check type.
-   const type2tc &type = ns.follow(expr->type);
+  const type2tc &type = ns.follow(expr->type);
   if (!is_signedbv_type(type) && !is_unsignedbv_type(type))
     return;
 
