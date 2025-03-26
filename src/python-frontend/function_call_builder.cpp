@@ -19,6 +19,9 @@ function_call_builder::function_call_builder(
 
 bool function_call_builder::is_numpy_call(const symbol_id &function_id) const
 {
+  if (type_utils::is_builtin_type(function_id.get_function()))
+    return false;
+
   const std::string &filename = function_id.get_filename();
   const std::string &suffix = "/models/numpy.py";
 

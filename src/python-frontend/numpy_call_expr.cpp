@@ -12,7 +12,7 @@ numpy_call_expr::numpy_call_expr(
   const symbol_id &function_id,
   const nlohmann::json &call,
   python_converter &converter)
-  : function_id_(function_id), call_(call), converter_(converter)
+  : function_call_expr(function_id, call, converter)
 {
 }
 
@@ -57,7 +57,7 @@ bool numpy_call_expr::is_math_function() const
   const std::string &function = function_id_.get_function();
   return (function == "add") || (function == "subtract") ||
          (function == "multiply") || (function == "divide") ||
-         (function == "power");
+         (function == "power") || (function == "ceil");
 }
 
 std::string numpy_call_expr::get_dtype() const
@@ -195,64 +195,80 @@ void numpy_call_expr::broadcast_check(const nlohmann::json &operands) const
   }
 }
 
-exprt numpy_call_expr::create_expr_from_call() const
+exprt numpy_call_expr::create_expr_from_call()
 {
   nlohmann::json expr;
 
-  auto lhs = call_["args"][0];
-  auto rhs = call_["args"][1];
-
-  // Resolve variables if they are names
-  auto resolve_var = [this](nlohmann::json &var) {
-    if (var["_type"] == "Name")
-    {
-      var = json_utils::find_var_decl(
-        var["id"], function_id_.get_function(), converter_.ast());
-      if (var["value"]["_type"] == "Call")
-        var = var["value"]["args"][0];
-    }
-  };
-
-  resolve_var(lhs);
-  resolve_var(rhs);
-
-  if (lhs["_type"] == "Constant" && rhs["_type"] == "Constant")
+  // Unary operations
+  if (call_["args"].size() == 1)
   {
-    expr =
-      create_binary_op(function_id_.get_function(), lhs["value"], rhs["value"]);
+    const auto &operand = call_["args"][0];
+    if (operand["_type"] == "Constant")
+      return function_call_expr::get();
   }
-  else if (lhs["_type"] == "List" && rhs["_type"] == "List")
-  {
-    std::vector<int> res;
-    const std::string &operation = function_id_.get_function();
-    for (size_t i = 0; i < lhs["elts"].size(); ++i)
-    {
-      int left_val = lhs["elts"][i]["value"].get<int>();
-      int right_val = rhs["elts"][i]["value"].get<int>();
 
-      if (operation == "add")
-        res.push_back(left_val + right_val);
-      else if (operation == "subtract")
-        res.push_back(left_val - right_val);
-      else if (operation == "multiply")
-        res.push_back(left_val * right_val);
-      else if (operation == "divide")
+  // Binary operations
+  if (call_["args"].size() == 2)
+  {
+    auto lhs = call_["args"][0];
+    auto rhs = call_["args"][1];
+
+    // Resolve variables if they are names
+    auto resolve_var = [this](nlohmann::json &var) {
+      if (var["_type"] == "Name")
       {
-        if (right_val == 0)
-          throw std::runtime_error("Division by zero in list operation");
-        res.push_back(left_val / right_val);
+        var = json_utils::find_var_decl(
+          var["id"], function_id_.get_function(), converter_.ast());
+        if (var["value"]["_type"] == "Call")
+          var = var["value"]["args"][0];
       }
-      else
-      {
-        throw std::runtime_error("Unsupported operation: " + operation);
-      }
+    };
+
+    resolve_var(lhs);
+    resolve_var(rhs);
+
+    if (lhs["_type"] == "Constant" && rhs["_type"] == "Constant")
+    {
+      expr = create_binary_op(
+        function_id_.get_function(), lhs["value"], rhs["value"]);
     }
-    expr = create_list(res);
+    else if (lhs["_type"] == "List" && rhs["_type"] == "List")
+    {
+      std::vector<int> res;
+      const std::string &operation = function_id_.get_function();
+      for (size_t i = 0; i < lhs["elts"].size(); ++i)
+      {
+        int left_val = lhs["elts"][i]["value"].get<int>();
+        int right_val = rhs["elts"][i]["value"].get<int>();
+
+        if (operation == "add")
+          res.push_back(left_val + right_val);
+        else if (operation == "subtract")
+          res.push_back(left_val - right_val);
+        else if (operation == "multiply")
+          res.push_back(left_val * right_val);
+        else if (operation == "divide")
+        {
+          if (right_val == 0)
+            throw std::runtime_error("Division by zero in list operation");
+          res.push_back(left_val / right_val);
+        }
+        else
+        {
+          throw std::runtime_error("Unsupported operation: " + operation);
+        }
+      }
+      expr = create_list(res);
+    }
   }
+
+  if (expr.empty())
+    throw std::runtime_error("Unsupported Numpy call");
+
   return converter_.get_expr(expr);
 }
 
-exprt numpy_call_expr::get() const
+exprt numpy_call_expr::get()
 {
   static const std::unordered_map<std::string, float> numpy_functions = {
     {"zeros", 0.0}, {"ones", 1.0}};
