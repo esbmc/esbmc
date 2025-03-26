@@ -363,8 +363,10 @@ public:
    *  tracking state.
    *  @param lhs Symbol being assigned to.
    *  @param rhs Value being assigned to symbol.
+   *  @param allow_const_propagation Allows propagating constants from RHS
    */
-  void assignment(expr2tc &lhs, const expr2tc &rhs);
+  void
+  assignment(expr2tc &lhs, const expr2tc &rhs, bool allow_const_propagation);
 
   /**
    *  Determine whether to constant propagate the value of an expression.
