@@ -79,6 +79,13 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
       return false;
   }
 
+  if (is_vector_type(expr))
+    return true;
+
+  // It's fine to constant propagate something that's absent.
+  if (is_nil_expr(expr))
+    return true;
+
   if (is_symbol2t(expr))
   {
     const symbol2t &s = to_symbol2t(expr);
@@ -99,18 +106,21 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 
   if (is_add2t(expr))
   {
-    bool all_constants = true;
-    expr->foreach_operand([this, &all_constants](const expr2tc &e) {
-      if (!constant_propagation(e))
-        all_constants = false;
+    bool noconst = true;
+    // Use noconst as a flag to indicate (and short-circuit) when a non
+    // constant propagatable expr is found.
+    expr->foreach_operand([this, &noconst](const expr2tc &e) {
+      if (noconst && !constant_propagation(e))
+        noconst = false;
     });
-    return all_constants;
+    return noconst;
   }
 
   if (is_constant_array_of2t(expr))
   {
     const expr2tc &init = to_constant_array_of2t(expr).initializer;
-    return is_constant_expr(init) && !is_bool_type(init);
+    if (is_constant_expr(init) && !is_bool_type(init))
+      return true;
   }
 
   if (is_with2t(expr))
