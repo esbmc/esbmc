@@ -144,12 +144,13 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
     is_constant_struct2t(expr) || is_constant_union2t(expr) ||
     is_constant_array2t(expr))
   {
-    bool all_constants = true;
-    expr->foreach_operand([this, &all_constants](const expr2tc &e) {
-      if (!constant_propagation(e))
-        all_constants = false;
+    bool noconst = true;
+
+    expr->foreach_operand([this, &noconst](const expr2tc &e) {
+      if (noconst && !constant_propagation(e))
+        noconst = false;
     });
-    return all_constants;
+    return noconst;
   }
 
   return is_constant_expr(expr);
