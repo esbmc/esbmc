@@ -1,4 +1,4 @@
 KNOWNBUG
 main.c
---no-propagation --incremental-bmc --z3
+--no-propagation --unwind 1 --z3
 ^VERIFICATION FAILED$
