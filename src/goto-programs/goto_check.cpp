@@ -231,6 +231,11 @@ void goto_checkt::cast_overflow_check(
     (!enable_overflow_check && !enable_unsigned_overflow_check))
     return;
 
+  // First, check type.
+  const type2tc &type = ns.follow(expr->type);
+  if (!is_signedbv_type(type) && !is_unsignedbv_type(type))
+    return;
+
   const type2tc &resolved_type = ns.follow(expr->type);
 
   // Create cast overflow check expression
