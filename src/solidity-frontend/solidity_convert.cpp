@@ -2290,12 +2290,16 @@ bool solidity_convertert::get_function_definition(
   if (is_ctor && !(*current_functionDecl)["modifiers"].empty())
     ctor_modifier = &((*current_functionDecl)["modifiers"]);
 
-  if (is_ctor)
+  std::string c_name;
+  if (get_current_contract_name(ast_node, c_name))
   {
-    // for construcotr
-    if (get_current_contract_name(*current_functionDecl, current_functionName))
-      return true;
+    log_error("cannot get current contract name");
+    return true;
   }
+
+  if (is_ctor)
+    // for construcotr
+    current_functionName = c_name;
   else
     current_functionName = (*current_functionDecl)["name"].get<std::string>();
 
@@ -2305,7 +2309,7 @@ bool solidity_convertert::get_function_definition(
   {
     typet tmp_rtn_type("constructor");
     type.return_type() = tmp_rtn_type;
-    type.set("#member_name", prefix + current_contractName);
+    type.set("#member_name", prefix + c_name);
   }
   else if (ast_node.contains("returnParameters"))
   {
@@ -2316,7 +2320,7 @@ bool solidity_convertert::get_function_definition(
   {
     type.return_type() = empty_typet();
     type.return_type().set("cpp_type", "void");
-    type.set("#member_name", prefix + current_contractName);
+    type.set("#member_name", prefix + c_name);
   }
 
   // special handling for tuple:
@@ -2375,7 +2379,7 @@ bool solidity_convertert::get_function_definition(
     ast_node.contains("nodeType") && ast_node["nodeType"] == "EventDefinition";
   if (!is_event)
     get_function_this_pointer_param(
-      current_contractName, id, debug_modulename, location_begin, type);
+      c_name, id, debug_modulename, location_begin, type);
 
   // 11.2 parse other params
   SolidityGrammar::ParameterListT params =
@@ -3136,10 +3140,27 @@ bool solidity_convertert::get_expr(
     }
     else
     {
-      // Soldity uses -ve odd numbers to refer to built-in var or functions that
-      // are NOT declared in the contract
-      if (get_esbmc_builtin_ref(expr, new_expr))
-        return true;
+      if (expr.contains("name") && expr["name"] == "this")
+      {
+        /*
+        assert(current_functionDecl);
+        if (get_func_decl_this_ref(*current_functionDecl, new_expr))
+          return true;
+  
+        new_expr = dereference_exprt(new_expr, (expr).type().sub_type());
+        */
+
+        symbolt sym;
+        get_static_contract_instance(current_contractName, sym);
+        new_expr = symbol_expr(sym);
+      }
+      else
+      {
+        // Soldity uses -ve odd numbers to refer to built-in var or functions that
+        // are NOT declared in the contract
+        if (get_esbmc_builtin_ref(expr, new_expr))
+          return true;
+      }
     }
 
     break;
@@ -3585,6 +3606,7 @@ bool solidity_convertert::get_expr(
       // contract C{ Base x; x.call();} where base.contractname != current_ContractName;
       if (base_cname.empty() && get_base_contract_name(base, base_cname))
         return true;
+
       std::string old = current_baseContractName;
       current_baseContractName = base_cname;
 
@@ -4360,6 +4382,8 @@ bool solidity_convertert::get_current_contract_name(
 
   if (!current_baseContractName.empty())
   {
+    log_debug(
+      "solidity", "\t\tUsing base contract name {}", current_baseContractName);
     contract_name = current_baseContractName;
     return false;
   }
@@ -6599,7 +6623,7 @@ void solidity_convertert::get_library_function_call_no_args(
 
   call_expr.function() = type_expr;
   if (t.is_code())
-    call_expr.type();
+    call_expr.type(); //TODO: fix this
   else
     call_expr.type() = t;
 
@@ -7120,7 +7144,7 @@ void solidity_convertert::get_function_definition_name(
   std::string &name,
   std::string &id)
 {
-  log_debug("solidity", "\tget_function_definition_name");
+  log_debug("solidity", "\t\t@@@ get_function_definition_name");
   // Follow the way in clang:
   //  - For function name, just use the ast_node["name"]
   // assume Solidity AST json object has "name" field, otherwise throws an exception in nlohmann::json
@@ -7163,6 +7187,7 @@ void solidity_convertert::get_function_definition_name(
     id = "sol:@C@" + contract_name + "@F@" + name + "#" +
          i2string(ast_node["id"].get<std::int16_t>());
   }
+  log_debug("solidity", "\t\t@@@ got function name {}", name);
 }
 
 unsigned int solidity_convertert::add_offset(
@@ -7177,6 +7202,7 @@ unsigned int solidity_convertert::add_offset(
 }
 
 // get the constructor symbol id
+// noted that the ctor might not have been parsed yet
 bool solidity_convertert::get_ctor_call_id(
   const std::string &contract_name,
   std::string &ctor_id)
@@ -7187,7 +7213,7 @@ bool solidity_convertert::get_ctor_call_id(
     // then we try to find the implicit constructor we manually added
     ctor_id = get_implict_ctor_call_id(contract_name);
 
-  if (context.find_symbol(ctor_id) == nullptr)
+  if (ctor_id.empty())
   {
     // this means the neither explicit nor implicit constructor is found
     return true;
@@ -7200,23 +7226,13 @@ bool solidity_convertert::get_ctor_call_id(
 std::string
 solidity_convertert::get_explicit_ctor_call_id(const std::string &contract_name)
 {
-  if (!contractNamesMap.empty())
+  // get the constructor
+  const nlohmann::json &ctor_ref = find_constructor_ref(contract_name);
+  if (!ctor_ref.empty())
   {
-    for (auto i = contractNamesMap.begin(); i != contractNamesMap.end(); i++)
-    {
-      if (i->second == contract_name)
-      {
-        int contract_ref_id = i->first;
-        // get the constructor
-        auto ctor_ref = find_constructor_ref(contract_ref_id);
-        if (!ctor_ref.empty())
-        {
-          int id = ctor_ref["id"].get<int>();
-          return "sol:@C@" + contract_name + "@F@" + contract_name + "#" +
-                 std::to_string(id);
-        }
-      }
-    }
+    int id = ctor_ref["id"].get<int>();
+    return "sol:@C@" + contract_name + "@F@" + contract_name + "#" +
+           std::to_string(id);
   }
 
   // not found
@@ -7640,30 +7656,28 @@ const nlohmann::json &solidity_convertert::find_constructor_ref(int contract_id)
 const nlohmann::json &
 solidity_convertert::find_constructor_ref(const std::string &contract_name)
 {
+  log_debug(
+    "solidity", "\t@@@ finding reference of constructor {}", contract_name);
   nlohmann::json &nodes = src_ast_json["nodes"];
-  unsigned index = 0;
-  for (nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end();
-       ++itr, ++index)
+  for (nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end(); ++itr)
   {
     if (
       (*itr).contains("name") &&
       (*itr)["name"].get<std::string>() == contract_name &&
       (*itr)["nodeType"] == "ContractDefinition")
     {
-      nlohmann::json &ast_nodes = nodes.at(index)["nodes"];
-      unsigned idx = 0;
+      nlohmann::json &ast_nodes = (*itr)["nodes"];
       for (nlohmann::json::iterator ittr = ast_nodes.begin();
            ittr != ast_nodes.end();
-           ++ittr, ++idx)
+           ++ittr)
       {
         if ((*ittr)["kind"] == "constructor")
-        {
-          return ast_nodes.at(idx);
-        }
+          return *ittr;
       }
     }
   }
 
+  log_debug("solidity", "\t@@@ Failed to find explicit constructor");
   // implicit constructor call
   return empty_json;
 }
@@ -8003,6 +8017,10 @@ bool solidity_convertert::get_ctor_call(
   to
       call(&Base, 1)
   */
+  log_debug("solidity", "\t\t@@@ get_ctor_call");
+  locationt l;
+  get_location_from_node(caller, l);
+
   if (get_non_library_function_call(ctor, t, decl_ref, caller, call))
     return true;
 
@@ -8080,6 +8098,7 @@ bool solidity_convertert::get_library_function_call(
 
 /** 
     * call to a non-library function 
+    * @param func: function_call (code_type or member)
     * @param type: return type
     * @param decl_ref: the function declaration node
     * @param caller: the function caller node which contains the arguments
@@ -8102,7 +8121,8 @@ bool solidity_convertert::get_non_library_function_call(
   const nlohmann::json &caller,
   side_effect_expr_function_callt &call)
 {
-  log_debug("solidity", "\tget_non_library_function_call");
+  log_debug(
+    "solidity", "\tget_non_library_function_call {}", func.name().as_string());
 
   call.function() = func;
   call.type() = t;
@@ -8316,7 +8336,6 @@ bool solidity_convertert::get_unbound_funccall(
   if (get_unbound_function(contractName, f_sym))
     return true;
 
-  exprt func = symbol_expr(f_sym);
   code_function_callt func_call;
   func_call.location() = f_sym.location;
   func_call.function() = symbol_expr(f_sym);
@@ -8371,8 +8390,19 @@ void solidity_convertert::get_static_contract_instance(
     // we do not check the return value as we might have not parsed the symbol yet
     if (get_ctor_call_id(c_name, ctor_id))
     {
-      log_error("cannot find ctor id");
+      // probably the contract is not parsed yet
+      log_error("cannot find ctor id for contract {}", c_name);
       abort();
+    }
+    if (context.find_symbol(ctor_id) == nullptr)
+    {
+      // this means that contract, including ctor, has not been parse yet
+      // this will lead to issue in the following process, particuarly this_pointer
+      std::string old = current_baseContractName;
+      current_baseContractName = c_name;
+      const auto &json = find_constructor_ref(c_name);
+      get_function_definition(json);
+      current_baseContractName = old;
     }
 
     exprt ctor;
@@ -8381,6 +8411,7 @@ void solidity_convertert::get_static_contract_instance(
       log_error("failed to construct a temporary object");
       abort();
     }
+
     added_sym.value = ctor;
     sym = added_sym;
   }
