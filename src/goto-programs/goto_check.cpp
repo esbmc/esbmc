@@ -232,11 +232,9 @@ void goto_checkt::cast_overflow_check(
     return;
 
   // First, check type.
-  const type2tc &type = ns.follow(expr->type);
-  if (!is_signedbv_type(type) && !is_unsignedbv_type(type))
-    return;
-
   const type2tc &resolved_type = ns.follow(expr->type);
+  if (!is_signedbv_type(resolved_type) && !is_unsignedbv_type(resolved_type))
+    return;
 
   // Create cast overflow check expression
   expr2tc cast_overflow = overflow_cast2tc(expr, resolved_type->get_width());
