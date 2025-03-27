@@ -529,10 +529,11 @@ __ESBMC_HIDE:;
 }
 
 // string assign
-const char* empty_str = "";
+const char *empty_str = "";
 void _str_assign(char **str1, const char *str2) {
 __ESBMC_HIDE:;
-    free(*str1);  
+    if(str1 != NULL)
+      free(*str1);  
     if (str2 == NULL) {
       *str1 = NULL;  // Ensure str1 doesn't point to invalid memory
       return;
@@ -590,12 +591,12 @@ __ESBMC_HIDE:;
 address_t _ESBMC_get_unique_address(void *obj)
 {
 __ESBMC_HIDE:;
-  __ESBMC_assume(obj != NULL);
-  address_t tmp;
+  // __ESBMC_assume(obj != NULL);
+  address_t tmp = (address_t)0;
   do
   {
-    tmp = nondet_long();
-  } while (_ESBMC_get_addr_array_idx(tmp) != -1);
+    tmp = nondet_ulong() ; // ensure it's not address(0)
+  } while (_ESBMC_get_addr_array_idx(tmp) != -1 && tmp != (address_t)0);
   // update_addr_obj(tmp, obj);
   return tmp;
 }
@@ -616,10 +617,7 @@ __ESBMC_HIDE:;
 bool _ESBMC_cmp_cname(const char* c_1, const char* c_2)
 {
 __ESBMC_HIDE:;
-  if(strcmp(c_1, c_2) == 0)
-    return true;
-  else
-    return false;
+  return strcmp(c_1, c_2) == 0;
 }
 
 const char * _ESBMC_get_nondet_cont_name(const char *c_array[], unsigned int len)
