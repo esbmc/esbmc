@@ -221,9 +221,6 @@ protected:
   void get_arrcpy_function_call(
     const locationt &loc,
     side_effect_expr_function_callt &calc_call);
-  void get_strcpy_function_call(
-    const locationt &loc,
-    side_effect_expr_function_callt &_call);
   void get_str_assign_function_call(
     const locationt &loc,
     side_effect_expr_function_callt &_call);
@@ -447,6 +444,9 @@ protected:
     const typet dest_type,
     exprt &new_expr);
   bool assign_nondet_contract_name(const std::string &_cname, exprt &new_expr);
+  bool assign_param_nondet(
+    const nlohmann::json &decl_ref,
+    side_effect_expr_function_callt &call);
   bool get_base_contract_name(const exprt &base, std::string &cname);
 
   // literal conversion functions

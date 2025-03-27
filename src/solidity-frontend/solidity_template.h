@@ -532,7 +532,6 @@ __ESBMC_HIDE:;
 const char* empty_str = "";
 void _str_assign(char **str1, const char *str2) {
 __ESBMC_HIDE:;
-    free(*str1);  
     if (str2 == NULL) {
       *str1 = NULL;  // Ensure str1 doesn't point to invalid memory
       return;
