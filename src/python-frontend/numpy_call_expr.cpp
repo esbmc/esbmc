@@ -203,7 +203,7 @@ exprt numpy_call_expr::create_expr_from_call()
   if (call_["args"].size() == 1)
   {
     const auto &operand = call_["args"][0];
-    if (operand["_type"] == "Constant")
+    if (operand["_type"] == "Constant" || call_["args"][0]["_type"] == "UnaryOp")
       return function_call_expr::get();
   }
 
