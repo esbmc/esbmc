@@ -1818,7 +1818,7 @@ bool solidity_convertert::get_unbound_function(
 {
   log_debug("solidity", "\tget_unbound_function");
 
-  std::string h_name = "_ESBMC_Nondet_Extcall";
+  std::string h_name = "_ESBMC_Nondet_Extcall_" + c_name;
   std::string h_id = "sol:@C@" + c_name + "@" + h_name + "#";
   symbolt h_sym;
 
