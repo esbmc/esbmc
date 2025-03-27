@@ -639,7 +639,27 @@ __ESBMC_HIDE:;
 }
 )";
 
-const std::string sol_ext_library = sol_itoa + sol_str2hex + sol_uqAddr;
+// max/min value
+const std::string sol_max_min = R"(
+uint256_t _max(int bitwidth, bool is_signed) {
+    if (is_signed) {
+        return (uint256_t(1) << (bitwidth - 1)) - uint256_t(1); // 2^(N-1) - 1
+    } else {
+        return (uint256_t(1) << bitwidth) - uint256_t(1); // 2^N - 1
+    }
+}
+
+int256_t _min(int bitwidth, bool is_signed) {
+    if (is_signed) {
+        return -(int256_t(1) << (bitwidth - 1)); // -2^(N-1)
+    } else {
+        return int256_t(0); // Min of unsigned is always 0
+    }
+}
+)";
+
+const std::string sol_ext_library =
+  sol_itoa + sol_str2hex + sol_uqAddr + sol_max_min;
 
 const std::string sol_c_library = "extern \"C\" {" + sol_typedef + sol_vars +
                                   sol_funcs + sol_mapping + sol_array +
