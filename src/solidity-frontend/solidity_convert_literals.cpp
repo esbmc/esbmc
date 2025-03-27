@@ -83,15 +83,8 @@ bool solidity_convertert::convert_string_literal(
   * value: 1234
   * kind: default
   */
-  size_t string_size = the_value.size() + 1;
-  typet type = array_typet(
-    signed_char_type(),
-    constant_exprt(
-      integer2binary(string_size, bv_width(int_type())),
-      integer2string(string_size),
-      int_type()));
   // TODO: Handle null terminator byte
-  string_constantt string(the_value, type, string_constantt::k_default);
+  string_constantt string(the_value);
 
   dest.swap(string);
   dest.type().set("#sol_type", "STRING_LITERAL");

@@ -100,6 +100,8 @@ protected:
     const std::string contract_name,
     std::string ctor_id,
     symbolt &sym);
+  void move_to_front_block(const exprt &expr);
+  void move_to_back_block(const exprt &expr);
 
   // handle contract variables and functions
   bool
@@ -136,14 +138,18 @@ protected:
     const nlohmann::json &cast_expr,
     exprt &new_expr,
     const nlohmann::json literal_type = nullptr);
-  bool get_var_decl_ref(const nlohmann::json &decl, exprt &new_expr);
+  bool get_var_decl_ref(
+    const nlohmann::json &decl,
+    bool is_this_ptr,
+    exprt &new_expr);
   void get_symbol_decl_ref(
     const std::string &sym_name,
     const std::string &sym_id,
     const typet &t,
     exprt &new_expr);
   bool get_func_decl_ref(const nlohmann::json &decl, exprt &new_expr);
-  bool get_func_decl_ref(const std::string &func_id, nlohmann::json &decl_ref);
+  bool
+  get_func_decl_id_ref(const std::string &func_id, nlohmann::json &decl_ref);
   bool get_func_decl_this_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_func_decl_this_ref(
     const std::string contract_name,
@@ -215,9 +221,6 @@ protected:
   void get_arrcpy_function_call(
     const locationt &loc,
     side_effect_expr_function_callt &calc_call);
-  void get_strcpy_function_call(
-    const locationt &loc,
-    side_effect_expr_function_callt &_call);
   void get_str_assign_function_call(
     const locationt &loc,
     side_effect_expr_function_callt &_call);
@@ -274,7 +277,7 @@ protected:
 
   // line number and locations
   void
-  get_location_from_decl(const nlohmann::json &ast_node, locationt &location);
+  get_location_from_node(const nlohmann::json &ast_node, locationt &location);
   void get_start_location_from_stmt(
     const nlohmann::json &ast_node,
     locationt &location);
@@ -295,6 +298,8 @@ protected:
   // auxiliary functions
   std::string get_modulename_from_path(std::string path);
   std::string get_filename_from_path(std::string path);
+  const nlohmann::json &
+  find_parent(const nlohmann::json &json, const nlohmann::json &target);
   const nlohmann::json &find_decl_ref(int ref_decl_id);
   const nlohmann::json &
   find_decl_ref(int ref_decl_id, std::string &contract_name);
@@ -428,15 +433,21 @@ protected:
     side_effect_expr_function_callt &call);
   bool get_this_object(const exprt &func, exprt &this_object);
   bool get_high_level_member_access(
+    const nlohmann::json &expr,
     const exprt &base,
     const exprt &member,
     const bool is_func_call,
     exprt &new_expr);
-  bool get_nondet_contract_name(
-    const std::string &var_name,
-    std::string &name,
-    std::string &id);
-  bool get_base_cname(const exprt &base, std::string &cname);
+  bool get_bind_cname(const nlohmann::json &json, exprt &bind_cname_expr);
+  void get_nondet_contract_name(
+    const exprt src_expr,
+    const typet dest_type,
+    exprt &new_expr);
+  bool assign_nondet_contract_name(const std::string &_cname, exprt &new_expr);
+  bool assign_param_nondet(
+    const nlohmann::json &decl_ref,
+    side_effect_expr_function_callt &call);
+  bool get_base_contract_name(const exprt &base, std::string &cname);
 
   // literal conversion functions
   bool convert_integer_literal(
@@ -475,8 +486,10 @@ protected:
   const nlohmann::json *current_forStmt;
   const nlohmann::json *current_typeName;
   // store multiple exprt and flatten the block
-  code_blockt current_frontBlockDecl;
-  code_blockt current_backBlockDecl;
+  code_blockt expr_frontBlockDecl;
+  code_blockt expr_backBlockDecl;
+  code_blockt ctor_frontBlockDecl;
+  code_blockt ctor_backBlockDecl;
   // for tuple
   bool current_lhsDecl;
   bool current_rhsDecl;
@@ -490,6 +503,7 @@ protected:
   //! Be careful of using 'current_contractName'. This might lead to trouble in inheritance.
   //! If you are not sure, use 'get_current_contract_name' instead.
   std::string current_contractName;
+  std::string current_baseContractName;
   std::string current_fileName;
 
   // Auxiliary data structures:
@@ -503,7 +517,7 @@ protected:
   //std::unordered_map<std::string, std::unordered_set<std::string>> functionSignature;
   // contract name list
   std::unordered_map<int, std::string> contractNamesMap;
-  std::unordered_set<std::string> contractNamesList;
+  std::set<std::string> contractNamesList;
   // Store the ast_node["id"] of contract/struct/function/...
   std::unordered_map<int, std::string> scope_map;
   // Store state variables
@@ -511,8 +525,6 @@ protected:
   // For inheritance
   const nlohmann::json *ctor_modifier;
   const nlohmann::json *based_contracts;
-  // This should be set to true when handling a new-object, member call of contract A while parsing contract B
-  bool is_contract_member_access;
 
   static constexpr const char *mode = "C++";
 
