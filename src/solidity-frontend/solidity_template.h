@@ -529,13 +529,10 @@ __ESBMC_HIDE:;
 }
 
 // string assign
-const char* empty_str = "";
+const char *empty_str = "";
 void _str_assign(char **str1, const char *str2) {
 __ESBMC_HIDE:;
-    if (str2 == NULL) {
-      *str1 = NULL;  // Ensure str1 doesn't point to invalid memory
-      return;
-    }
+    // assert(str2 != NULL);
     *str1 = (char *)malloc(strlen(str2) + 1);  
     
     strcpy(*str1, str2);  // force malloc success

@@ -406,7 +406,7 @@ void solidity_convertert::populate_auxilary_vars()
     aux_cid = "sol:@" + aux_cname;
 
     string_constantt string(contract_name);
-    typet ct = string.type();
+    typet ct = pointer_typet(signed_char_type());
     ct.cmt_constant(true);
     symbolt s;
     get_default_symbol(
@@ -415,6 +415,7 @@ void solidity_convertert::populate_auxilary_vars()
     s.file_local = true;
     s.static_lifetime = true; // static
     symbolt &_sym = *move_symbol_to_context(s);
+    solidity_gen_typecast(ns, string, ct);
     _sym.value = string;
   }
 
@@ -433,7 +434,10 @@ void solidity_convertert::populate_auxilary_vars()
       integer2binary(length, bv_width(uint_type())),
       integer2string(length),
       uint_type());
-    array_typet arr_t(pointer_typet(signed_char_type()), size_expr);
+
+    typet ct = pointer_typet(signed_char_type());
+    ct.cmt_constant(true);
+    array_typet arr_t(ct, size_expr);
     arr_t.set("#sol_type", "ARRAY");
     arr_t.set("#sol_array_size", std::to_string(length));
 
@@ -447,6 +451,7 @@ void solidity_convertert::populate_auxilary_vars()
       // N: $SolidityTest_bind_addr_list={ "Derived", "SolidityTest" };
       // Y: $SolidityTest_bind_addr_list={ &"Derived"[0], &"SolidityTest"[0] };
       // solidity_gen_typecast(ns, string, arr_t.subtype());
+      solidity_gen_typecast(ns, string, ct);
       inits.operands().at(i) = string;
       ++i;
     }
@@ -9320,7 +9325,7 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
   }
 
   t = pointer_typet(signed_char_type());
-  t.set("#sol_type", "STRING");
+  //t.set("#sol_type", "STRING");
   get_builtin_symbol(
     "_ESBMC_bind_cname",
     sol_prefix + "_ESBMC_bind_cname",
@@ -9328,6 +9333,10 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
     l,
     bind_expr,
     contract_name);
+
+  // Lastly, get the static instance
+  symbolt tmp;
+  get_static_contract_instance(current_contractName, tmp);
 
   return false;
 }
@@ -10780,12 +10789,15 @@ bool solidity_convertert::get_high_level_member_access(
     ct.cmt_constant(true);
     get_symbol_decl_ref(str, "sol:@" + str, ct, cname_string);
 
-    side_effect_expr_function_callt _cmp_cname;
+    exprt _cmp_cname = exprt("=", pointer_typet(signed_char_type()));
 
-    get_library_function_call_no_args(
-      "_ESBMC_cmp_cname", "c:@F@_ESBMC_cmp_cname", int_type(), l, _cmp_cname);
-    _cmp_cname.arguments().push_back(bind_expr);
-    _cmp_cname.arguments().push_back(cname_string);
+    //TODO: maybe we should use strcpy to compare the char * string
+    // however, since we do not modify the string, and it always point to the known object
+    // so current soultion works
+    // get_library_function_call_no_args(
+    //   "_ESBMC_cmp_cname", "c:@F@_ESBMC_cmp_cname", int_type(), l, _cmp_cname);
+    _cmp_cname.operands().push_back(bind_expr);
+    _cmp_cname.operands().push_back(cname_string);
 
     // member access
     exprt memcall;

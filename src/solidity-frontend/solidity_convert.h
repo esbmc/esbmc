@@ -517,7 +517,7 @@ protected:
   //std::unordered_map<std::string, std::unordered_set<std::string>> functionSignature;
   // contract name list
   std::unordered_map<int, std::string> contractNamesMap;
-  std::unordered_set<std::string> contractNamesList;
+  std::set<std::string> contractNamesList;
   // Store the ast_node["id"] of contract/struct/function/...
   std::unordered_map<int, std::string> scope_map;
   // Store state variables
