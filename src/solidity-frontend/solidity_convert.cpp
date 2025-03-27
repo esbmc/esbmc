@@ -5423,14 +5423,40 @@ bool solidity_convertert::get_var_decl_ref(
   if (get_var_decl_name(decl, name, id))
     return true;
 
-  typet type;
-  const nlohmann::json *old_typeName = current_typeName;
-  current_typeName = &decl["typeName"];
-  if (get_type_description(decl["typeName"]["typeDescriptions"], type))
-    return true;
-  current_typeName = old_typeName;
+  if (context.find_symbol(id) != nullptr)
+    new_expr = symbol_expr(*context.find_symbol(id));
+  else
+  {
+    typet type;
+    if (is_mapping(decl))
+    {
+      exprt map;
+      if (get_var_decl(decl, map))
+        return true;
 
-  get_symbol_decl_ref(name, id, type, new_expr);
+      if (to_code(map).operands().size() < 1)
+      {
+        log_error("Unexpected mapping structure, got {}", map.to_string());
+        abort();
+      }
+      type = to_code(map).op0().type();
+    }
+    else
+    {
+      const nlohmann::json *old_typeName = current_typeName;
+      current_typeName = &decl["typeName"];
+      if (get_type_description(decl["typeName"]["typeDescriptions"], type))
+        return true;
+      current_typeName = old_typeName;
+    }
+
+    // variable with no value
+    new_expr = exprt("symbol", type);
+    new_expr.identifier(id);
+    new_expr.cmt_lvalue(true);
+    new_expr.name(name);
+    new_expr.pretty_name(name);
+  }
 
   if (is_this_ptr)
   {
