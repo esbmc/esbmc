@@ -1807,6 +1807,8 @@ bool solidity_convertert::get_unbound_expr(
   get_location_from_node(expr, l);
   func_call.location() = l;
 
+  move_to_front_block(func_call);
+
   new_expr = func_call;
   return false;
 }
@@ -3759,6 +3761,11 @@ bool solidity_convertert::get_expr(
         {
           if (get_unbound_expr(expr, new_expr))
             return true;
+
+          typet t = to_code_type(comp.type()).return_type();
+          exprt rhs = exprt("sideeffect", t);
+          rhs.statement("nondet");
+          new_expr = rhs;
         }
         else
         {
@@ -8238,9 +8245,13 @@ bool solidity_convertert::get_non_library_function_call(
           ++itr;
         }
 
+        std::string old = current_baseContractName;
+        current_baseContractName = "";
+
         exprt single_arg;
         if (get_expr(arg.value(), param, single_arg))
           return true;
+        current_baseContractName = old;
 
         call.arguments().push_back(single_arg);
         ++num_args;
