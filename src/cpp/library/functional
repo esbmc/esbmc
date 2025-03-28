@@ -186,4 +186,3 @@ decltype(auto) invoke(Func&& f, Args&&... args) {
 } // namespace std
 
 #endif // STL_FUNCTIONAL
-
