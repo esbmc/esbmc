@@ -1,0 +1,31 @@
+CORE
+main.cpp
+--multi-property
+^VERIFICATION FAILED$
+assertion logical_not(true)
+assertion !logical_not(false)
+assertion logical_or(false, false)
+assertion !logical_or(false, true)
+assertion !logical_or(true, false)
+assertion logical_and(true, false)
+assertion !logical_and(true, true)
+assertion less_equal(6, 5)
+assertion !less_equal(4, 5)
+assertion !less_equal(5, 5)
+assertion greater_equal(4, 5)
+assertion !greater_equal(6, 5)
+assertion !greater_equal(5, 5)
+assertion less(4, 3)
+assertion add(3, 4) != 7
+assertion subtract(10, 4) != 6
+assertion multiply(3, 5) != 15
+assertion divide(10, 2) != 5
+assertion mod(10, 3) != 1
+assertion negate(5) != -5
+assertion !equal(5, 5)
+assertion equal(5, 6)
+assertion !not_equal(5, 6)
+assertion not_equal(5, 5)
+assertion !greater(7, 5)
+assertion greater(5, 7)
+assertion !less(3, 4)
