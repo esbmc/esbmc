@@ -177,6 +177,27 @@ struct logical_not {
   constexpr bool operator()(const T& a) const { return !a; }
 };
 
+// Bitwise Operations
+template <typename T = int>
+struct bit_and {
+  constexpr T operator()(const T& a, const T& b) const { return a & b; }
+};
+
+template <typename T = int>
+struct bit_or {
+  constexpr T operator()(const T& a, const T& b) const { return a | b; }
+};
+
+template <typename T = int>
+struct bit_xor {
+  constexpr T operator()(const T& a, const T& b) const { return a ^ b; }
+};
+
+template <typename T = int>
+struct bit_not {
+  constexpr T operator()(const T& a) const { return ~a; }
+};
+
 // Simplified std::invoke model
 template <typename Func, typename... Args>
 decltype(auto) invoke(Func&& f, Args&&... args) {
