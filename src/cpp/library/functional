@@ -10,7 +10,10 @@ namespace std {
 class callable_base {
 public:
     virtual ~callable_base() = default;
-    virtual int invoke(int, int) const = 0;
+    virtual int invoke(int, int) const { assert(false); return 0; }
+    virtual int invoke(int) const { assert(false); return 0; }
+    virtual bool invoke_bool(int, int) const { assert(false); return false; }
+    virtual bool invoke_bool(int) const { assert(false); return false; }
 };
 
 // Wrapper for callable types (function pointers, lambdas, functors)
@@ -24,13 +27,24 @@ public:
     int invoke(int a, int b) const override {
         return func(forward<int>(a), forward<int>(b));
     }
+
+    int invoke(int a) const override {
+        return func(forward<int>(a));
+    }
+
+    bool invoke_bool(int a, int b) const override {
+        return func(forward<int>(a), forward<int>(b));
+    }
+
+    bool invoke_bool(int a) const override {
+        return func(forward<int>(a));
+    }
 };
 
 // Standard-like std::function model
 template <typename Signature>
 class function;
 
-// Specialization for function types
 template <typename Ret, typename... Args>
 class function<Ret(Args...)> {
 private:
@@ -39,20 +53,18 @@ private:
 public:
     function() = default;
 
-    // Function pointer constructor
     function(Ret (*f)(Args...)) {
         if (f) {
             func = new callable_wrapper<Ret (*)(Args...)>(move(f));
         }
     }
 
-    // General callable constructor (lambdas, functors)
     template <typename Callable>
     function(Callable f) {
         func = new callable_wrapper<Callable>(move(f));
     }
 
-    function(const function& other) = delete; // Disable copy for simplicity
+    function(const function& other) = delete;
     function& operator=(const function& other) = delete;
 
     function(function&& other) noexcept {
@@ -74,13 +86,95 @@ public:
     }
 
     Ret operator()(Args... args) const {
-        assert(func != nullptr);  // Ensure function is valid before calling
-        return func->invoke(forward<Args>(args)...);
+        assert(func != nullptr);
+        if constexpr (sizeof...(Args) == 1) {
+            return func->invoke(forward<Args>(args)...);
+        } else {
+            return func->invoke_bool(forward<Args>(args)...);
+        }
     }
 
     explicit operator bool() const noexcept {
         return func != nullptr;
     }
+};
+
+// Arithmetic Operations
+template <typename T = int>
+struct plus {
+    constexpr T operator()(const T& a, const T& b) const { return a + b; }
+};
+
+template <typename T = int>
+struct minus {
+    constexpr T operator()(const T& a, const T& b) const { return a - b; }
+};
+
+template <typename T = int>
+struct multiplies {
+    constexpr T operator()(const T& a, const T& b) const { return a * b; }
+};
+
+template <typename T = int>
+struct divides {
+    constexpr T operator()(const T& a, const T& b) const { return a / b; }
+};
+
+template <typename T = int>
+struct modulus {
+    constexpr T operator()(const T& a, const T& b) const { return a % b; }
+};
+
+template <typename T = int>
+struct negate {
+    constexpr T operator()(const T& a) const { return -a; }
+};
+
+// Comparison Operations
+template <typename T = int>
+struct equal_to {
+    constexpr bool operator()(const T& a, const T& b) const { return a == b; }
+};
+
+template <typename T = int>
+struct not_equal_to {
+    constexpr bool operator()(const T& a, const T& b) const { return a != b; }
+};
+
+template <typename T = int>
+struct greater {
+    constexpr bool operator()(const T& a, const T& b) const { return a > b; }
+};
+
+template <typename T = int>
+struct less {
+    constexpr bool operator()(const T& a, const T& b) const { return a < b; }
+};
+
+template <typename T = int>
+struct greater_equal {
+    constexpr bool operator()(const T& a, const T& b) const { return a >= b; }
+};
+
+template <typename T = int>
+struct less_equal {
+    constexpr bool operator()(const T& a, const T& b) const { return a <= b; }
+};
+
+// Logical Operations
+template <typename T = bool>
+struct logical_and {
+    constexpr bool operator()(const T& a, const T& b) const { return a && b; }
+};
+
+template <typename T = bool>
+struct logical_or {
+    constexpr bool operator()(const T& a, const T& b) const { return a || b; }
+};
+
+template <typename T = bool>
+struct logical_not {
+    constexpr bool operator()(const T& a) const { return !a; }
 };
 
 // Simplified std::invoke model
