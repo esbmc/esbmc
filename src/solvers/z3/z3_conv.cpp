@@ -1129,7 +1129,7 @@ smt_astt z3_convt::overflow_arith(const expr2tc &expr)
   if (is_add2t(overflow.operand))
   {
     if (is_signed)
-      res  = Z3_mk_bvadd_no_overflow(z3_ctx, side1->a, side2->a, is_signed);
+      res = Z3_mk_bvadd_no_overflow(z3_ctx, side1->a, side2->a, is_signed);
     else
       res = Z3_mk_bvadd_no_underflow(z3_ctx, side1->a, side2->a);
 
@@ -1138,7 +1138,7 @@ smt_astt z3_convt::overflow_arith(const expr2tc &expr)
   else if (is_mul2t(overflow.operand))
   {
     if (is_signed)
-      res = Z3_mk_bvmul_no_overflow(z3_ctx, side1->a, side2->a, is_signed); 
+      res = Z3_mk_bvmul_no_overflow(z3_ctx, side1->a, side2->a, is_signed);
     else
       res = Z3_mk_bvmul_no_underflow(z3_ctx, side1->a, side2->a);
 
@@ -1150,9 +1150,9 @@ smt_astt z3_convt::overflow_arith(const expr2tc &expr)
       res = Z3_mk_bvsub_no_underflow(z3_ctx, side1->a, side2->a, is_signed);
     else
       res = Z3_mk_bvsub_no_overflow(z3_ctx, side1->a, side2->a);
-    
+
     res = Z3_mk_not(z3_ctx, res);
-  }  
+  }
   else if (is_div2t(overflow.operand) || is_modulus2t(overflow.operand))
   {
     res = Z3_mk_bvsdiv_no_overflow(z3_ctx, side1->a, side2->a);
