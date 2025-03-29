@@ -1129,8 +1129,9 @@ smt_astt z3_convt::overflow_arith(const expr2tc &expr)
     to_solver_smt_ast<z3_smt_ast>(convert_ast(opers.side_2));
 
   // Ensure both operands have the same bit-width before performing operations
-  assert(side1->sort->get_data_width() == side2->sort->get_data_width() &&
-         "Bit-width mismatch between operands!");
+  assert(
+    side1->sort->get_data_width() == side2->sort->get_data_width() &&
+    "Bit-width mismatch between operands!");
 
   // Determine if the operation involves signed numbers
   bool is_signed =
@@ -1139,16 +1140,16 @@ smt_astt z3_convt::overflow_arith(const expr2tc &expr)
   Z3_ast res; // Resulting SMT formula for overflow detection
 
   // Handle different arithmetic operations
-  if (is_add2t(overflow.operand))  // Addition overflow check
+  if (is_add2t(overflow.operand)) // Addition overflow check
   {
     if (is_signed)
       res = Z3_mk_bvadd_no_overflow(z3_ctx, side1->a, side2->a, is_signed);
     else
       res = Z3_mk_bvadd_no_underflow(z3_ctx, side1->a, side2->a);
 
-    res = Z3_mk_not(z3_ctx, res);  // Negate the result to indicate overflow
+    res = Z3_mk_not(z3_ctx, res); // Negate the result to indicate overflow
   }
-  else if (is_sub2t(overflow.operand))  // Subtraction overflow check
+  else if (is_sub2t(overflow.operand)) // Subtraction overflow check
   {
     if (is_signed)
       res = Z3_mk_bvsub_no_underflow(z3_ctx, side1->a, side2->a, is_signed);
@@ -1157,7 +1158,7 @@ smt_astt z3_convt::overflow_arith(const expr2tc &expr)
 
     res = Z3_mk_not(z3_ctx, res);
   }
-  else if (is_mul2t(overflow.operand))  // Multiplication overflow check
+  else if (is_mul2t(overflow.operand)) // Multiplication overflow check
   {
     if (is_signed)
       res = Z3_mk_bvmul_no_overflow(z3_ctx, side1->a, side2->a, is_signed);
@@ -1166,12 +1167,14 @@ smt_astt z3_convt::overflow_arith(const expr2tc &expr)
 
     res = Z3_mk_not(z3_ctx, res);
   }
-  else if (is_div2t(overflow.operand) || is_modulus2t(overflow.operand))  // Division overflow check
+  else if (
+    is_div2t(overflow.operand) ||
+    is_modulus2t(overflow.operand)) // Division overflow check
   {
     res = Z3_mk_bvsdiv_no_overflow(z3_ctx, side1->a, side2->a);
     res = Z3_mk_not(z3_ctx, res);
   }
-  else if (is_neg2t(overflow.operand))  // Negation overflow check
+  else if (is_neg2t(overflow.operand)) // Negation overflow check
   {
     res = Z3_mk_bvneg_no_overflow(z3_ctx, side1->a);
     res = Z3_mk_not(z3_ctx, res);
