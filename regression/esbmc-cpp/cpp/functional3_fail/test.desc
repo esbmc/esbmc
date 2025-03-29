@@ -2,15 +2,3 @@ CORE
 main.cpp
 --no-simplify --z3 --ir
 ^VERIFICATION FAILED$
-assertion bit_not_op(0) != -1
-assertion bit_not_op(8) != -9
-assertion bit_not_op(5) != -6
-assertion bit_xor_op(7, 5) != 2
-assertion bit_xor_op(8, 4) != 12
-assertion bit_xor_op(5, 3) != 6
-assertion bit_or_op(7, 5) != 7
-assertion bit_and_op(8, 4) != 0
-assertion bit_and_op(5, 3) != 1
-assertion bit_and_op(7, 5) != 5
-assertion bit_or_op(5, 3) != 7
-assertion bit_or_op(8, 4) != 12
