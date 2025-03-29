@@ -7,13 +7,13 @@
 /* These are not in the 'std' namespace */
 
 /* placement-new */
-void *operator new(std::size_t count, void *ptr)
+void *operator new(size_t count, void *ptr)
 {
   return ptr;
 }
 
 /* placement-new */
-void *operator new[](std::size_t count, void *ptr)
+void *operator new[](size_t count, void *ptr)
 {
   return ptr;
 }
@@ -30,7 +30,7 @@ public:
 };
 
 #if __cplusplus >= 201703L
-enum class align_val_t : std::size_t
+enum class align_val_t : size_t
 {
   align_1 = 1,
   align_2 = 2,
