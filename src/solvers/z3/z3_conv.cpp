@@ -1159,7 +1159,7 @@ smt_astt z3_convt::overflow_arith(const expr2tc &expr)
   }
 
   // Negate the result to indicate overflow
-  res = Z3_mk_not(z3_ctx, res); 
+  res = Z3_mk_not(z3_ctx, res);
 
   // Return the boolean result as an SMT AST node
   const smt_sort *s = boolean_sort;
