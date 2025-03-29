@@ -680,6 +680,10 @@ private:
       id = target["value"]["id"].template get<std::string>() + "." +
            target["attr"].template get<std::string>();
     }
+    else if (target.contains("slice"))
+    {
+      return; // No need to annotate assignments to array elements.
+    }
 
     assert(!id.empty());
 
