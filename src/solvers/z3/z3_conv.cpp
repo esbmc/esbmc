@@ -1142,29 +1142,17 @@ smt_astt z3_convt::overflow_arith(const expr2tc &expr)
   // Handle different arithmetic operations
   if (is_add2t(overflow.operand)) // Addition overflow check
   {
-    if (is_signed)
-      res = Z3_mk_bvadd_no_overflow(z3_ctx, side1->a, side2->a, is_signed);
-    else
-      res = Z3_mk_bvadd_no_underflow(z3_ctx, side1->a, side2->a);
-
+    res = Z3_mk_bvadd_no_overflow(z3_ctx, side1->a, side2->a, is_signed);
     res = Z3_mk_not(z3_ctx, res); // Negate the result to indicate overflow
   }
   else if (is_sub2t(overflow.operand)) // Subtraction overflow check
   {
-    if (is_signed)
-      res = Z3_mk_bvsub_no_underflow(z3_ctx, side1->a, side2->a, is_signed);
-    else
-      res = Z3_mk_bvsub_no_overflow(z3_ctx, side1->a, side2->a);
-
+    res = Z3_mk_bvsub_no_underflow(z3_ctx, side1->a, side2->a, is_signed);
     res = Z3_mk_not(z3_ctx, res);
   }
   else if (is_mul2t(overflow.operand)) // Multiplication overflow check
   {
-    if (is_signed)
-      res = Z3_mk_bvmul_no_overflow(z3_ctx, side1->a, side2->a, is_signed);
-    else
-      res = Z3_mk_bvmul_no_underflow(z3_ctx, side1->a, side2->a);
-
+    res = Z3_mk_bvmul_no_overflow(z3_ctx, side1->a, side2->a, is_signed);
     res = Z3_mk_not(z3_ctx, res);
   }
   else if (

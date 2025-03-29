@@ -1,4 +1,4 @@
 CORE
 main.c
---overflow-check -Wno-error=implicit-function-declaration
+--overflow-check --z3
 ^VERIFICATION FAILED$
