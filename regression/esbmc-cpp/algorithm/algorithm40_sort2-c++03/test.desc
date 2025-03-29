@@ -1,4 +1,4 @@
 CORE
 main.cpp
---unwind 4 --no-unwinding-assertions --timeout 900 --std c++03
+--unwind 4 --no-unwinding-assertions --timeout 900
 ^VERIFICATION SUCCESSFUL$
