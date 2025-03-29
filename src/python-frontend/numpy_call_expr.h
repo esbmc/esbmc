@@ -28,5 +28,4 @@ private:
   std::string get_dtype() const;
   typet get_typet_from_dtype() const;
   size_t get_dtype_size() const;
-
 };
