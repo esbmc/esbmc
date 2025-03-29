@@ -21,23 +21,44 @@ template <typename Callable>
 class callable_wrapper : public callable_base {
 private:
   Callable func;
+
 public:
-  explicit callable_wrapper(Callable&& f) : func(forward<Callable>(f)) {}
+  explicit callable_wrapper(Callable&& f) : func(std::forward<Callable>(f)) {}
 
   int invoke(int a, int b) const override {
-    return func(forward<int>(a), forward<int>(b));
+    if constexpr (std::is_invocable_v<Callable, int, int>) {
+      return func(a, b);
+    } else {
+      assert(false);
+      return 0;
+    }
   }
 
   int invoke(int a) const override {
-    return func(forward<int>(a));
+    if constexpr (std::is_invocable_v<Callable, int>) {
+      return func(a);
+    } else {
+      assert(false);
+      return 0;
+    }
   }
 
   bool invoke_bool(int a, int b) const override {
-    return func(forward<int>(a), forward<int>(b));
+    if constexpr (std::is_invocable_r_v<bool, Callable, int, int>) {
+      return func(a, b);
+    } else {
+      assert(false);
+      return false;
+    }
   }
 
   bool invoke_bool(int a) const override {
-    return func(forward<int>(a));
+    if constexpr (std::is_invocable_r_v<bool, Callable, int>) {
+      return func(a);
+    } else {
+      assert(false);
+      return false;
+    }
   }
 };
 
@@ -87,11 +108,7 @@ public:
 
   Ret operator()(Args... args) const {
     assert(func != nullptr);
-    if constexpr (sizeof...(Args) == 1) {
-      return func->invoke(forward<Args>(args)...);
-    } else {
-      return func->invoke_bool(forward<Args>(args)...);
-    }
+    return func->invoke(std::forward<Args>(args)...);
   }
 
   explicit operator bool() const noexcept {
