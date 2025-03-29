@@ -1,1 +1,36 @@
-#include <signal.h>
+#ifndef STL_CSIGNAL
+#define STL_CSIGNAL
+
+#include "definitions.h"
+
+typedef void (*sighandler)(int);
+
+sighandler __sighandlers[16];
+
+void signal(int sig, sighandler func)
+{
+  __ESBMC_assert(
+    (sig == 2) || (sig == 6) || (sig == 8) || (sig == 4) || (sig == 11) ||
+      (sig == 15),
+    "Signal must be equal to defined at lib csignal");
+
+  __sighandlers[sig] = func;
+}
+
+int raise(int sig)
+{
+  __ESBMC_assert(
+    (sig == 2) || (sig == 6) || (sig == 8) || (sig == 4) || (sig == 11) ||
+      (sig == 15),
+    "Signal must be equal to defined at lib csignal");
+
+  if (__sighandlers[sig] != 0)
+  {
+    __sighandlers[sig](sig);
+    return 0;
+  }
+
+  return nondet_uint();
+}
+
+#endif
