@@ -97,17 +97,55 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
   {
     if (is_signed)
     {
-      // Convert to be an addition
-      expr2tc negop2 = neg2tc(opers.side_2->type, opers.side_2);
-      expr2tc anadd = add2tc(opers.side_1->type, opers.side_1, negop2);
-      expr2tc add_overflows = overflow2tc(anadd);
+      // Define zero constant for comparisons
+      expr2tc zero = constant_int2tc(opers.side_1->type, 0);
 
-      // Corner case: subtracting MIN_INT from many things overflows. The result
-      // should always be positive.
-      BigInt topbit = -BigInt::power2(opers.side_1->type->get_width() - 1);
-      expr2tc min_int = constant_int2tc(opers.side_1->type, topbit);
-      expr2tc is_min_int = equality2tc(min_int, opers.side_2);
-      return convert_ast(or2tc(add_overflows, is_min_int));
+      // Compute the subtraction result
+      expr2tc sub_result =
+        sub2tc(opers.side_1->type, opers.side_1, opers.side_2);
+
+      // Overflow condition: (a > 0 && b < 0 && result < 0) || (a < 0 && b > 0 && result > 0)
+      expr2tc a_pos = greaterthan2tc(opers.side_1, zero); // a > 0
+      expr2tc b_neg = lessthan2tc(opers.side_2, zero);    // b < 0
+      expr2tc result_neg = lessthan2tc(sub_result, zero); // result < 0
+      expr2tc pos_minus_neg_overflow = and2tc(a_pos, and2tc(b_neg, result_neg));
+
+      expr2tc a_neg = lessthan2tc(opers.side_1, zero);       // a < 0
+      expr2tc b_pos = greaterthan2tc(opers.side_2, zero);    // b > 0
+      expr2tc result_pos = greaterthan2tc(sub_result, zero); // result > 0
+      expr2tc neg_minus_pos_overflow = and2tc(a_neg, and2tc(b_pos, result_pos));
+
+      // Additional overflow checks for integer encoding
+      if (int_encoding)
+      {
+        // Get the width of the integer type
+        auto const width = opers.side_1->type->get_width();
+
+        // Define minimum and maximum values for signed integers
+        BigInt max_val = BigInt::power2(width - 1) - 1; // MAX_INT
+        BigInt min_val = -BigInt::power2(width - 1);    // MIN_INT
+
+        expr2tc max_int = constant_int2tc(opers.side_1->type, max_val);
+        expr2tc min_int = constant_int2tc(opers.side_1->type, min_val);
+
+        // Overflow occurs if result > MAX_INT or result < MIN_INT
+        expr2tc overflow = greaterthan2tc(sub_result, max_int);
+        expr2tc underflow = lessthan2tc(sub_result, min_int);
+        expr2tc overflow_check = or2tc(overflow, underflow);
+
+        // Combine overflow conditions
+        expr2tc full_overflow_check = or2tc(
+          or2tc(pos_minus_neg_overflow, neg_minus_pos_overflow),
+          overflow_check);
+
+        return convert_ast(full_overflow_check);
+      }
+
+      // Combine overflow conditions
+      expr2tc overflow_detected =
+        or2tc(pos_minus_neg_overflow, neg_minus_pos_overflow);
+
+      return convert_ast(overflow_detected);
     }
 
     // Just ensure the result is <= the first operand.
@@ -122,21 +160,33 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
   {
     if (is_signed)
     {
-      // We can't divide -MIN_INT/-1
+      // Handle signed division/modulus overflow cases
+      // Dividing the most negative integer (MIN_INT) by -1 causes overflow
       BigInt topbit = -BigInt::power2(opers.side_1->type->get_width() - 1);
       expr2tc min_int = constant_int2tc(opers.side_1->type, topbit);
       expr2tc is_min_int = equality2tc(min_int, opers.side_1);
       expr2tc imp =
         implies2tc(is_min_int, greaterthan2tc(overflow.operand, zero));
 
+      // If MIN_INT is divided by -1, overflow occurs
       expr2tc minus_one = constant_int2tc(opers.side_1->type, -BigInt(1));
       expr2tc is_minus_one = equality2tc(minus_one, opers.side_2);
 
+      // Return overflow condition for signed division
       return convert_ast(and2tc(is_minus_one, is_min_int));
     }
 
-    // No overflow for unsigned div/modulus?
-    return nullptr;
+    // Detect unsigned integer overflow for division and modulus
+    // Overflow occurs when dividing by zero
+    expr2tc is_div_by_zero = equality2tc(opers.side_2, zero);
+
+    // Overflow occurs if the dividend is greater than the maximum representable value
+    expr2tc max_unsigned = constant_int2tc(
+      opers.side_1->type, BigInt::power2(opers.side_1->type->get_width()) - 1);
+    expr2tc is_overflow = greaterthan2tc(opers.side_1, max_unsigned);
+
+    // Return overflow condition for unsigned division/modulus
+    return convert_ast(or2tc(is_div_by_zero, is_overflow));
   }
 
   case expr2t::shl_id:
