@@ -1,4 +1,4 @@
 CORE
 main.c
---overflow-check
+--overflow-check --z3
 ^VERIFICATION FAILED$

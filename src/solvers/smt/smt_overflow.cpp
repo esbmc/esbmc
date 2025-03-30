@@ -122,11 +122,11 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
       return convert_ast(overflow_detected);
     }
 
-    // Unsigned Overflow: Detect when b > a
-    expr2tc underflow_detected = greaterthan2tc(
-      opers.side_2, opers.side_1); // if b > a, subtraction underflows
-
-    return convert_ast(underflow_detected);
+    // Just ensure the result is <= the first operand.
+    expr2tc sub = sub2tc(opers.side_1->type, opers.side_1, opers.side_2);
+    expr2tc le = lessthanequal2tc(sub, opers.side_1);
+    expr2tc inv = not2tc(le);
+    return convert_ast(inv);
   }
 
   case expr2t::div_id:
