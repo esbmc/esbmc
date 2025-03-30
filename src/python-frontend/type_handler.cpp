@@ -185,7 +185,10 @@ bool type_handler::has_multiple_types(const nlohmann::json &container) const
   else
   {
     // Get the type of the first element if it is not a sublist
-    t = get_typet(container[0]["value"]);
+    if (container[0]["_type"] == "UnaryOp")
+      t = get_typet(container[0]["operand"]["value"]); // negative numbers
+    else
+      t = get_typet(container[0]["value"]);
   }
 
   for (const auto &element : container)
@@ -197,13 +200,19 @@ bool type_handler::has_multiple_types(const nlohmann::json &container) const
         return true;
 
       // Compare the type of internal elements in the sublist with the type `t`
-      if (get_typet(element["elts"][0]["value"]) != t)
+      const auto &elem = (element["elts"][0]["_type"] == "UnaryOp")
+                           ? element["elts"]["operand"]["value"]
+                           : element["elts"][0]["value"];
+      if (get_typet(elem) != t)
         return true;
     }
     else
     {
       // Compare the type of the current element with `t`
-      if (get_typet(element["value"]) != t)
+      const auto &elem = (element["_type"] == "UnaryOp")
+                           ? element["operand"]["value"]
+                           : element["value"];
+      if (get_typet(elem) != t)
         return true;
     }
   }
@@ -228,12 +237,19 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
     {
       typet subtype;
 
-      if (elts[0]["_type"] == "Constant") // One-dimensional list
+      if (elts[0]["_type"] == "Constant" || elts[0]["_type"] == "UnaryOp")
+      { // One-dimensional list
         // Retrieve the type of the first element
-        subtype = get_typet(elts[0]["value"]);
-      else // Multi-dimensional list
+        const auto &elem = (elts[0]["_type"] == "UnaryOp")
+                             ? elts[0]["operand"]["value"]
+                             : elts[0]["value"];
+        subtype = get_typet(elem);
+      }
+      else
+      { // Multi-dimensional list
         // Get sub-array type
         subtype = get_typet(elts[0]["elts"]);
+      }
 
       return build_array(subtype, elts.size());
     }

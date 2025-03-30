@@ -729,7 +729,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
 
 exprt python_converter::get_literal(const nlohmann::json &element)
 {
-  auto value = element["value"];
+  auto value = (element["_type"] == "UnaryOp") ? element["operand"]["value"]
+                                               : element["value"];
 
   // integer literals
   if (value.is_number_integer())
@@ -843,7 +844,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       if (e["_type"] == "List")
         expr.operands().at(i++) = get_expr(e);
       else
-        expr.operands().at(i++) = get_literal(e);
+        expr.operands().at(i++) = get_expr(e);
     }
 
     break;
