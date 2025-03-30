@@ -134,16 +134,19 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
   {
     if (is_signed)
     {
-      // We can't divide -MIN_INT/-1
+    // Handle signed division/modulus overflow cases
+    // Dividing the most negative integer (MIN_INT) by -1 causes overflow
       BigInt topbit = -BigInt::power2(opers.side_1->type->get_width() - 1);
       expr2tc min_int = constant_int2tc(opers.side_1->type, topbit);
       expr2tc is_min_int = equality2tc(min_int, opers.side_1);
       expr2tc imp =
         implies2tc(is_min_int, greaterthan2tc(overflow.operand, zero));
 
+      // If MIN_INT is divided by -1, overflow occurs
       expr2tc minus_one = constant_int2tc(opers.side_1->type, -BigInt(1));
       expr2tc is_minus_one = equality2tc(minus_one, opers.side_2);
 
+      // Return overflow condition for signed division
       return convert_ast(and2tc(is_minus_one, is_min_int));
     }
 
@@ -156,6 +159,7 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
       opers.side_1->type, BigInt::power2(opers.side_1->type->get_width()) - 1);
     expr2tc is_overflow = greaterthan2tc(opers.side_1, max_unsigned);
 
+    // Return overflow condition for unsigned division/modulus
     return convert_ast(or2tc(is_div_by_zero, is_overflow));
   }
 
