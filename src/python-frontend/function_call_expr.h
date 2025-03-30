@@ -24,10 +24,12 @@ public:
     const nlohmann::json &call,
     python_converter &converter);
 
+  virtual ~function_call_expr() = default;
+
   /*
    * Converts the function from the AST into an exprt.
    */
-  exprt get();
+  virtual exprt get();
 
   const symbol_id &get_function_id() const
   {
@@ -60,6 +62,7 @@ private:
    */
   std::string get_object_name() const;
 
+protected:
   symbol_id function_id_;
   const nlohmann::json &call_;
   python_converter &converter_;
