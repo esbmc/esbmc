@@ -165,8 +165,6 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
       BigInt topbit = -BigInt::power2(opers.side_1->type->get_width() - 1);
       expr2tc min_int = constant_int2tc(opers.side_1->type, topbit);
       expr2tc is_min_int = equality2tc(min_int, opers.side_1);
-      expr2tc imp =
-        implies2tc(is_min_int, greaterthan2tc(overflow.operand, zero));
 
       // If MIN_INT is divided by -1, overflow occurs
       expr2tc minus_one = constant_int2tc(opers.side_1->type, -BigInt(1));
