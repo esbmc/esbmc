@@ -97,26 +97,35 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
   {
     if (is_signed)
     {
-      // Convert to be an addition
-      expr2tc negop2 = neg2tc(opers.side_2->type, opers.side_2);
-      expr2tc anadd = add2tc(opers.side_1->type, opers.side_1, negop2);
-      expr2tc add_overflows = overflow2tc(anadd);
-
-      // Corner case: subtracting MIN_INT from many things overflows. The result
-      // should always be positive.
-      BigInt topbit = -BigInt::power2(opers.side_1->type->get_width() - 1);
-      expr2tc min_int = constant_int2tc(opers.side_1->type, topbit);
-      expr2tc is_min_int = equality2tc(min_int, opers.side_2);
-      return convert_ast(or2tc(add_overflows, is_min_int));
+      // Define zero constant for comparisons
+      expr2tc zero = constant_int2tc(opers.side_1->type, 0);
+  
+      // Compute the subtraction result
+      expr2tc sub_result = sub2tc(opers.side_1->type, opers.side_1, opers.side_2);
+  
+      // Overflow condition: (a > 0 && b < 0 && result < 0) || (a < 0 && b > 0 && result > 0)
+      expr2tc a_pos = greaterthan2tc(opers.side_1, zero);   // a > 0
+      expr2tc b_neg = lessthan2tc(opers.side_2, zero);      // b < 0
+      expr2tc result_neg = lessthan2tc(sub_result, zero);   // result < 0
+      expr2tc pos_minus_neg_overflow = and2tc(a_pos, and2tc(b_neg, result_neg));
+  
+      expr2tc a_neg = lessthan2tc(opers.side_1, zero);      // a < 0
+      expr2tc b_pos = greaterthan2tc(opers.side_2, zero);   // b > 0
+      expr2tc result_pos = greaterthan2tc(sub_result, zero); // result > 0
+      expr2tc neg_minus_pos_overflow = and2tc(a_neg, and2tc(b_pos, result_pos));
+  
+      // Combine overflow conditions
+      expr2tc overflow_detected = or2tc(pos_minus_neg_overflow, neg_minus_pos_overflow);
+  
+      return convert_ast(overflow_detected);
     }
-
-    // Just ensure the result is <= the first operand.
-    expr2tc sub = sub2tc(opers.side_1->type, opers.side_1, opers.side_2);
-    expr2tc le = lessthanequal2tc(sub, opers.side_1);
-    expr2tc inv = not2tc(le);
-    return convert_ast(inv);
-  }
-
+  
+    // Unsigned Overflow: Detect when b > a
+    expr2tc underflow_detected = greaterthan2tc(opers.side_2, opers.side_1); // if b > a, subtraction underflows
+  
+    return convert_ast(underflow_detected);
+  }  
+    
   case expr2t::div_id:
   case expr2t::modulus_id:
   {
