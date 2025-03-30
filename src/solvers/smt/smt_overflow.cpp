@@ -135,7 +135,8 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
 
         // Combine overflow conditions
         expr2tc full_overflow_check = or2tc(
-          or2tc(pos_minus_neg_overflow, neg_minus_pos_overflow), overflow_check);
+          or2tc(pos_minus_neg_overflow, neg_minus_pos_overflow),
+          overflow_check);
 
         return convert_ast(full_overflow_check);
       }
