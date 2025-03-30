@@ -140,21 +140,22 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
       expr2tc is_min_int = equality2tc(min_int, opers.side_1);
       expr2tc imp =
         implies2tc(is_min_int, greaterthan2tc(overflow.operand, zero));
-  
+
       expr2tc minus_one = constant_int2tc(opers.side_1->type, -BigInt(1));
       expr2tc is_minus_one = equality2tc(minus_one, opers.side_2);
-  
+
       return convert_ast(and2tc(is_minus_one, is_min_int));
     }
-  
+
     // Detect unsigned integer overflow for division and modulus
     // Overflow occurs when dividing by zero
     expr2tc is_div_by_zero = equality2tc(opers.side_2, zero);
-      
+
     // Overflow occurs if the dividend is greater than the maximum representable value
-    expr2tc max_unsigned = constant_int2tc(opers.side_1->type, BigInt::power2(opers.side_1->type->get_width()) - 1);
+    expr2tc max_unsigned = constant_int2tc(
+      opers.side_1->type, BigInt::power2(opers.side_1->type->get_width()) - 1);
     expr2tc is_overflow = greaterthan2tc(opers.side_1, max_unsigned);
-  
+
     return convert_ast(or2tc(is_div_by_zero, is_overflow));
   }
 
