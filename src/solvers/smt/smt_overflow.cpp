@@ -115,6 +115,31 @@ smt_astt smt_convt::overflow_arith(const expr2tc &expr)
       expr2tc result_pos = greaterthan2tc(sub_result, zero); // result > 0
       expr2tc neg_minus_pos_overflow = and2tc(a_neg, and2tc(b_pos, result_pos));
 
+      // Additional overflow checks for integer encoding
+      if (int_encoding)
+      {
+        // Get the width of the integer type
+        auto const width = opers.side_1->type->get_width();
+
+        // Define minimum and maximum values for signed integers
+        BigInt max_val = BigInt::power2(width - 1) - 1; // MAX_INT
+        BigInt min_val = -BigInt::power2(width - 1);    // MIN_INT
+
+        expr2tc max_int = constant_int2tc(opers.side_1->type, max_val);
+        expr2tc min_int = constant_int2tc(opers.side_1->type, min_val);
+
+        // Overflow occurs if result > MAX_INT or result < MIN_INT
+        expr2tc overflow = greaterthan2tc(sub_result, max_int);
+        expr2tc underflow = lessthan2tc(sub_result, min_int);
+        expr2tc overflow_check = or2tc(overflow, underflow);
+
+        // Combine overflow conditions
+        expr2tc full_overflow_check = or2tc(
+          or2tc(pos_minus_neg_overflow, neg_minus_pos_overflow), overflow_check);
+
+        return convert_ast(full_overflow_check);
+      }
+
       // Combine overflow conditions
       expr2tc overflow_detected =
         or2tc(pos_minus_neg_overflow, neg_minus_pos_overflow);
