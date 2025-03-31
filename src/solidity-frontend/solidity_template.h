@@ -138,6 +138,7 @@ __ESBMC_HIDE:;
 }
 
 uint256_t _pow(unsigned int base, unsigned int exp) {
+__ESBMC_HIDE:;
   uint256_t result = 1;
   uint256_t b = base;
 

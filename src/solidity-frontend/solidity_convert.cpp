@@ -5033,17 +5033,56 @@ bool solidity_convertert::get_binary_operator_expr(
   case SolidityGrammar::ExpressionT::BO_Pow:
   {
     // lhs**rhs => pow(lhs, rhs)
-    // double pow(double base, double exponent)
 
-    side_effect_expr_function_callt call_expr;
-    get_library_function_call_no_args(
-      "_pow", "c:@F@_pow", unsignedbv_typet(256), lhs.location(), call_expr);
+    // optimization: if both base and exponent are constant, use bigint::power
+    exprt new_lhs = lhs;
+    exprt new_rhs = rhs;
+    // remove typecast
+    while (lhs.id() == "typecast")
+      new_lhs = new_lhs.op0();
+    while (rhs.id() == "typecast")
+      new_rhs = new_rhs.op0();
+    if (new_lhs.is_constant() && new_rhs.is_constant())
+    {
+      //? it seems the solc cannot generate ast_json for constant power like 2**20
+      BigInt base;
+      if (to_integer(new_lhs, base))
+      {
+        log_error("failed to convert constant: {}", new_lhs.pretty());
+        abort();
+      }
 
-    call_expr.arguments().push_back(lhs);
-    call_expr.arguments().push_back(rhs);
+      BigInt exp;
+      if (to_integer(new_rhs, exp))
+      {
+        log_error("failed to convert constant: {}", new_rhs.pretty());
+        abort();
+      }
 
-    new_expr = call_expr;
+      BigInt res = ::power(base, exp);
+      exprt tmp = from_integer(res, unsignedbv_typet(256));
 
+      if (tmp.is_nil())
+        return true;
+
+      new_expr.swap(tmp);
+    }
+    else
+    {
+      // Not sure why but it seems esbmc's pow works worse in solidity,
+      // so I write my own version
+      //? maybe this should convert this to BigInt too?
+      side_effect_expr_function_callt call_expr;
+      get_library_function_call_no_args(
+        "_pow", "c:@F@_pow", unsignedbv_typet(256), lhs.location(), call_expr);
+
+      call_expr.arguments().push_back(lhs);
+      call_expr.arguments().push_back(rhs);
+
+      new_expr = call_expr;
+    }
+    new_expr.location() = l;
+    // do not fall through
     return false;
   }
   default:
@@ -7078,6 +7117,16 @@ bool solidity_convertert::get_elementary_type_name(
   {
     new_type = unsignedbv_typet(256);
     new_type.set("#sol_type", elementary_type_name_to_str(type));
+
+    break;
+  }
+  case SolidityGrammar::ElementaryTypeNameT::STRING_LITERAL:
+  {
+    auto json = find_parent(src_ast_json["nodes"], type_name);
+    assert(!json.empty());
+    string_constantt x(json["value"].get<std::string>());
+    new_type = x.type();
+    new_type.set("#sol_type", "STRING_LITERAL");
 
     break;
   }
@@ -10976,7 +11025,6 @@ bool solidity_convertert::get_high_level_member_access(
   return false;
 }
 
-
 // return expr: contract_instance._ESBMC_bind_cname
 bool solidity_convertert::get_bind_cname_expr(
   const nlohmann::json &json,
@@ -11000,7 +11048,7 @@ bool solidity_convertert::get_bind_cname_expr(
     if (get_var_decl_ref(parent["declarations"][0], true, lvar))
       return true;
   }
-  else if(parent["nodeType"] == "VariableDeclaration")
+  else if (parent["nodeType"] == "VariableDeclaration")
   {
     if (get_var_decl_ref(parent, true, lvar))
       return true;
