@@ -4394,8 +4394,18 @@ bool solidity_convertert::get_expr(
       expr.contains("expression") &&
       expr["expression"].contains("argumentTypes"));
     const auto &json = expr["expression"]["argumentTypes"];
+
+    /*
+    e.g.
+      "argumentTypes": [
+          {
+              "typeIdentifier": "t_type$_t_int256_$",
+              "typeString": "type(int256)"
+          }
+      ],
+    */
     typet t;
-    if (get_type_description(json, t))
+    if (get_type_description(json[0], t))
       return true;
 
     exprt dump;
@@ -5784,11 +5794,11 @@ bool solidity_convertert::get_sol_builtin_ref(
       expr["expression"].contains("typeName") &&
       expr["expression"]["typeName"].contains("name"))
       bs = expr["expression"]["typeName"]["name"].get<std::string>();
-    else if (expr.contains("name"))
+    else if (expr.contains("memberName"))
     {
       // assume it's the no-basename type
       // e.g. address(this).balance, type(uint256).max
-      std::string name = expr["name"];
+      std::string name = expr["memberName"];
       if (name == "max" || name == "min")
       {
         exprt dump;
@@ -5821,11 +5831,16 @@ bool solidity_convertert::get_sol_builtin_ref(
         get_library_function_call_no_args(
           "_" + name, "sol:@F@_" + name, uint_type(), l, new_expr);
       else
-      {
-        log_error("Unsupported builtin member tpye, got {}", name);
         return true;
-      }
+
+      new_expr.location() = l;
+
+      new_expr.dump();
+      return false;
     }
+    else
+      // cannot get bs name;
+      return true;
 
     std::string mem = expr["memberName"].get<std::string>();
     std::string id_var = "c:@" + bs + "_" + mem;
