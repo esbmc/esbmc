@@ -549,6 +549,7 @@ const struct group_opt_templ all_cmd_options[] = {
       "use '--condition-coverage-claims' while disable "
       "'--no-remove-unreachable'"},
      {"no-cov-asserts", NULL, "does not count the guard in the assertions"},
+     {"no-cov-hiddens", NULL, "does not instrument the hidden function body"},
      {"branch-coverage", NULL, "shows the coverage of branch"},
      {"branch-coverage-claims",
       NULL,

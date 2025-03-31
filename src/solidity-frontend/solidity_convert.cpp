@@ -1832,6 +1832,12 @@ bool solidity_convertert::get_unbound_function(
     code_blockt func_body;
     func_body.make_block();
 
+    // add __ESBMC_HIDE
+    code_labelt label;
+    label.set_label("__ESBMC_HIDE");
+    label.code() = code_skipt();
+    func_body.operands().push_back(label);
+
     // 1.1 get contract symbol ("tag-contractName")
     const std::string id = prefix + c_name;
     if (context.find_symbol(id) == nullptr)
@@ -9087,6 +9093,12 @@ bool solidity_convertert::multi_transaction_verification(
   static_lifetime_init(context, while_body);
   while_body.make_block();
 
+  // add __ESBMC_HIDE
+  code_labelt label;
+  label.set_label("__ESBMC_HIDE");
+  label.code() = code_skipt();
+  func_body.operands().push_back(label);
+
   // 1. get constructor call
   if (linearizedBaseList[c_name].empty())
   {
@@ -9169,6 +9181,13 @@ bool solidity_convertert::multi_contract_verification_bound()
 
   switch_body.make_block();
   func_body.make_block();
+
+  // add __ESBMC_HIDE
+  code_labelt label;
+  label.set_label("__ESBMC_HIDE");
+  label.code() = code_skipt();
+  func_body.operands().push_back(label);
+
   // 1. construct switch-case
   int cnt = 0;
   for (const auto &sym : contractNamesMap)

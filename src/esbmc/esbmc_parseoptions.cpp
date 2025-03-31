@@ -2017,7 +2017,9 @@ bool esbmc_parseoptionst::process_goto_program(
       // for function mode
       if (cmdline.isset("function"))
         tmp.set_target(cmdline.getval("function"));
-
+      // skip the function that is labbelled as __ESBMC_HIDE
+      if (cmdline.isset("no-cov-hiddens"))
+        tmp.set_no_hide();
       // if we do not want to count the guard in the assertions
       if (cmdline.isset("no-cov-asserts"))
         tmp.replace_all_asserts_to_guard(gen_true_expr());
@@ -2049,6 +2051,9 @@ bool esbmc_parseoptionst::process_goto_program(
       // for function mode
       if (cmdline.isset("function"))
         tmp.set_target(cmdline.getval("function"));
+      // skip the function that is labbelled as __ESBMC_HIDE
+      if (cmdline.isset("no-cov-hiddens"))
+        tmp.set_no_hide();
       tmp.branch_coverage();
     }
     if (
@@ -2067,6 +2072,9 @@ bool esbmc_parseoptionst::process_goto_program(
 
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);
+      // skip the function that is labbelled as __ESBMC_HIDE
+      if (cmdline.isset("no-cov-hiddens"))
+        tmp.set_no_hide();
       tmp.branch_function_coverage();
     }
 
@@ -2265,18 +2273,20 @@ void esbmc_parseoptionst::add_property_monitors(
 {
   std::map<std::string, std::pair<std::set<std::string>, expr2tc>> monitors;
 
-  context.foreach_operand([this, &monitors](const symbolt &s) {
-    if (
-      !has_prefix(s.name, "__ESBMC_property_") ||
-      s.name.as_string().find("$type") != std::string::npos)
-      return;
+  context.foreach_operand(
+    [this, &monitors](const symbolt &s)
+    {
+      if (
+        !has_prefix(s.name, "__ESBMC_property_") ||
+        s.name.as_string().find("$type") != std::string::npos)
+        return;
 
-    // strip prefix "__ESBMC_property_"
-    std::string prop_name = s.name.as_string().substr(17);
-    std::set<std::string> used_syms;
-    expr2tc main_expr = calculate_a_property_monitor(prop_name, used_syms);
-    monitors[prop_name] = std::pair{used_syms, main_expr};
-  });
+      // strip prefix "__ESBMC_property_"
+      std::string prop_name = s.name.as_string().substr(17);
+      std::set<std::string> used_syms;
+      expr2tc main_expr = calculate_a_property_monitor(prop_name, used_syms);
+      monitors[prop_name] = std::pair{used_syms, main_expr};
+    });
 
   if (monitors.size() == 0)
     return;
@@ -2371,10 +2381,12 @@ static void collect_symbol_names(
   }
   else
   {
-    e->foreach_operand([&prefix, &used_syms](const expr2tc &e) {
-      if (!is_nil_expr(e))
-        collect_symbol_names(e, prefix, used_syms);
-    });
+    e->foreach_operand(
+      [&prefix, &used_syms](const expr2tc &e)
+      {
+        if (!is_nil_expr(e))
+          collect_symbol_names(e, prefix, used_syms);
+      });
   }
 }
 
@@ -2466,9 +2478,8 @@ static unsigned int calc_globals_used(const namespacet &ns, const expr2tc &expr)
   {
     unsigned int globals = 0;
 
-    expr->foreach_operand([&globals, &ns](const expr2tc &e) {
-      globals += calc_globals_used(ns, e);
-    });
+    expr->foreach_operand([&globals, &ns](const expr2tc &e)
+                          { globals += calc_globals_used(ns, e); });
 
     return globals;
   }
