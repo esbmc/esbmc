@@ -5834,8 +5834,6 @@ bool solidity_convertert::get_sol_builtin_ref(
         return true;
 
       new_expr.location() = l;
-
-      new_expr.dump();
       return false;
     }
     else
