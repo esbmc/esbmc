@@ -63,7 +63,7 @@ std::string solidity_languaget::get_temp_file()
 
   // populate temp file
   std::ofstream f;
-  p += "/temp_sol.cpp";
+  p += "/esbmc_sollib.cpp";
   f.open(p.string());
   f << temp_cpp_file();
   f.close();
