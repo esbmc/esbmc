@@ -229,7 +229,7 @@ esbmc_dargs = "--no-div-by-zero-check --force-malloc-success --force-realloc-suc
 esbmc_dargs += "--no-align-check --k-step 2 --floatbv --unlimited-k-steps "
 
 # <https://github.com/esbmc/esbmc/pull/1190#issuecomment-1637047028>
-esbmc_dargs += "--no-vla-size-check "
+esbmc_dargs += "--no-vla-size-check --no-slice "
 
 
 import re
@@ -287,7 +287,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
     if concurrency:
       command_line += "--no-pointer-check --no-bounds-check "
     else:
-      command_line += "--no-pointer-check --interval-analysis --no-bounds-check --error-label ERROR --goto-unwind --unlimited-goto-unwind "
+      command_line += "--no-pointer-check --no-bounds-check --error-label ERROR --goto-unwind --unlimited-goto-unwind "
   elif prop == Property.datarace:
     # TODO: can we do better in case 'concurrency == False'?
     command_line += "--no-pointer-check --no-bounds-check --data-races-check --no-assertions "
