@@ -5037,7 +5037,7 @@ bool solidity_convertert::get_binary_operator_expr(
 
     side_effect_expr_function_callt call_expr;
     get_library_function_call_no_args(
-      "_pow", "c:@F@_pow", double_type(), lhs.location(), call_expr);
+      "_pow", "c:@F@_pow", unsignedbv_typet(256), lhs.location(), call_expr);
 
     call_expr.arguments().push_back(lhs);
     call_expr.arguments().push_back(rhs);

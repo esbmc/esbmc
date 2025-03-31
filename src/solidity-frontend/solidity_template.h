@@ -137,19 +137,18 @@ __ESBMC_HIDE:;
   return address_t(hash);
 }
 
-unsigned int _pow(unsigned int base, unsigned int exp) {
-__ESBMC_HIDE:;
-    unsigned int result = 1;
-    
-    while (exp > 0) {
-        if (exp % 2 == 1) {  // If exp is odd, multiply result by base
-            result *= base;
-        }
-        base *= base;  // Square the base
-        exp /= 2;  // Divide exponent by 2
-    }
-    
-    return result;
+uint256_t _pow(unsigned int base, unsigned int exp) {
+  uint256_t result = 1;
+  uint256_t b = base;
+
+  while (exp > 0) {
+    if (exp & 1)
+      result *= b;
+    b *= b;
+    exp >>= 1;
+  }
+
+  return result;
 }
 )";
 
