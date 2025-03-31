@@ -443,6 +443,7 @@ protected:
     const exprt src_expr,
     const typet dest_type,
     exprt &new_expr);
+  void get_nondet_expr(const typet &t, exprt &new_expr);
   bool assign_nondet_contract_name(const std::string &_cname, exprt &new_expr);
   bool assign_param_nondet(
     const nlohmann::json &decl_ref,

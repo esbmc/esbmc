@@ -1785,10 +1785,8 @@ void solidity_convertert::convert_unboundcall_nondet(
     new_expr.op1().name() == "_ESBMC_Nondet_Extcall")
   {
     move_to_front_block(new_expr);
-    exprt dump = exprt("sideeffect", common_type);
-    dump.statement("nondet");
-    dump.location() = l;
-    new_expr = dump;
+    get_nondet_expr(common_type, new_expr);
+    new_expr.location() = l;
   }
 }
 
@@ -3717,12 +3715,8 @@ bool solidity_convertert::get_expr(
           // comp can be either symbol_expr or member_expr
           new_expr = member_exprt(base, comp_name, comp.type());
         else if (!is_bound)
-        {
           // x.member(); ==> nondet();
-          exprt rhs = exprt("sideeffect", comp.type());
-          rhs.statement("nondet");
-          new_expr = rhs;
-        }
+          get_nondet_expr(comp.type(), new_expr);
         else
         {
           exprt dump;
@@ -3763,9 +3757,7 @@ bool solidity_convertert::get_expr(
             return true;
 
           typet t = to_code_type(comp.type()).return_type();
-          exprt rhs = exprt("sideeffect", t);
-          rhs.statement("nondet");
-          new_expr = rhs;
+          get_nondet_expr(t, new_expr);
         }
         else
         {
@@ -4389,6 +4381,27 @@ bool solidity_convertert::get_expr(
   {
     if (get_sol_builtin_ref(expr, new_expr))
       return true;
+    break;
+  }
+  case SolidityGrammar::ExpressionT::TypePropertyExpression:
+  {
+    // e.g.
+    // Integers: 'type(uint256)'.max/min
+    // Contracts: 'type(MyContract)'.creationCode/runtimecode
+
+    // create a dump expr with no value, but set the correct type
+    assert(
+      expr.contains("expression") &&
+      expr["expression"].contains("argumentTypes"));
+    const auto &json = expr["expression"]["argumentTypes"];
+    typet t;
+    if (get_type_description(json, t))
+      return true;
+
+    exprt dump;
+    dump.type() = t;
+
+    new_expr = dump;
     break;
   }
   case SolidityGrammar::ExpressionT::TypeConversionExpression:
@@ -5743,6 +5756,8 @@ bool solidity_convertert::get_sol_builtin_ref(
   // get the reference from the pre-populated symbol table
   // note that this could be either vars or funcs.
   assert(expr.contains("nodeType"));
+  locationt l;
+  get_location_from_node(expr, l);
 
   if (expr["nodeType"].get<std::string>() == "FunctionCall")
   {
@@ -5762,18 +5777,55 @@ bool solidity_convertert::get_sol_builtin_ref(
   {
     // e.g. string.concat() <=> c:@string_concat
     std::string bs;
+
     if (expr["expression"].contains("name"))
       bs = expr["expression"]["name"].get<std::string>();
     else if (
       expr["expression"].contains("typeName") &&
       expr["expression"]["typeName"].contains("name"))
       bs = expr["expression"]["typeName"]["name"].get<std::string>();
-    else if (0)
+    else if (expr.contains("name"))
     {
-      //TODO：support something like <address>.balance
+      // assume it's the no-basename type
+      // e.g. address(this).balance, type(uint256).max
+      std::string name = expr["name"];
+      if (name == "max" || name == "min")
+      {
+        exprt dump;
+        if (get_expr(expr["expression"], dump))
+          return true;
+        std::string sol_str = dump.type().get("#sol_type").as_string();
+        // extract integer width: e.g. uint8 => uint + 8
+        std::string type = (sol_str[0] == 'U') ? "UINT" : "INT";
+        std::string width = sol_str.substr(type.size()); // Extract width part
+        exprt is_signed =
+          type == "INT" ? gen_one(bool_type()) : gen_zero(bool_type());
+
+        side_effect_expr_function_callt call;
+        if (name == "max")
+          get_library_function_call_no_args(
+            "_max", "sol:@F@_max", unsignedbv_typet(256), l, call);
+        else
+          get_library_function_call_no_args(
+            "_min", "sol:@F@_min", unsignedbv_typet(256), l, call);
+        call.arguments().push_back(constant_exprt(
+          integer2binary(string2integer(width), bv_width(int_type())),
+          width,
+          int_type()));
+        call.arguments().push_back(is_signed);
+
+        new_expr = call;
+      }
+      else if (name == "creationCode" || name == "runtimeCode")
+        // nondet Bytes
+        get_library_function_call_no_args(
+          "_" + name, "sol:@F@_" + name, uint_type(), l, new_expr);
+      else
+      {
+        log_error("Unsupported builtin member tpye, got {}", name);
+        return true;
+      }
     }
-    else
-      return true;
 
     std::string mem = expr["memberName"].get<std::string>();
     std::string id_var = "c:@" + bs + "_" + mem;
@@ -5801,6 +5853,7 @@ bool solidity_convertert::get_sol_builtin_ref(
   else
     return true;
 
+  new_expr.location() = l;
   return false;
 }
 
@@ -8747,14 +8800,16 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
   dest = code_blockt();
 
   // call designated "initialization" functions
-  context.foreach_operand_in_order([&dest](const symbolt &s) {
-    if (s.type.initialization() && s.type.is_code())
+  context.foreach_operand_in_order(
+    [&dest](const symbolt &s)
     {
-      code_function_callt function_call;
-      function_call.function() = symbol_expr(s);
-      dest.move_to_operands(function_call);
-    }
-  });
+      if (s.type.initialization() && s.type.is_code())
+      {
+        code_function_callt function_call;
+        function_call.function() = symbol_expr(s);
+        dest.move_to_operands(function_call);
+      }
+    });
 }
 
 void solidity_convertert::get_aux_var(
@@ -10630,6 +10685,12 @@ void solidity_convertert::get_nondet_contract_name(
 
   for (const auto &i : _block.operands())
     move_to_front_block(i);
+}
+
+void solidity_convertert::get_nondet_expr(const typet &t, exprt &new_expr)
+{
+  new_expr = exprt("sideeffect", t);
+  new_expr.statement("nondet");
 }
 
 // x._ESBMC_bind_cname = _ESBMC_get_nondet_cname();

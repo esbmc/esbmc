@@ -656,6 +656,16 @@ int256_t _min(int bitwidth, bool is_signed) {
         return int256_t(0); // Min of unsigned is always 0
     }
 }
+
+unsigned int _creationCode()
+{
+  return nondet_uint();
+}
+
+unsigned int _runtimeCode()
+{
+  return nondet_uint();
+}
 )";
 
 const std::string sol_ext_library =
