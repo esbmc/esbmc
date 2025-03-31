@@ -136,6 +136,21 @@ address_t ecrecover(uint256_t hash, unsigned int v, uint256_t r, uint256_t s)
 __ESBMC_HIDE:;
   return address_t(hash);
 }
+
+unsigned int _pow(unsigned int base, unsigned int exp) {
+__ESBMC_HIDE:;
+    unsigned int result = 1;
+    
+    while (exp > 0) {
+        if (exp % 2 == 1) {  // If exp is odd, multiply result by base
+            result *= base;
+        }
+        base *= base;  // Square the base
+        exp /= 2;  // Divide exponent by 2
+    }
+    
+    return result;
+}
 )";
 
 const std::string sol_string = R"(

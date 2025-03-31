@@ -438,7 +438,7 @@ protected:
     const exprt &member,
     const bool is_func_call,
     exprt &new_expr);
-  bool get_bind_cname(const nlohmann::json &json, exprt &bind_cname_expr);
+  bool get_bind_cname_expr(const nlohmann::json &json, exprt &bind_cname_expr);
   void get_nondet_contract_name(
     const exprt src_expr,
     const typet dest_type,

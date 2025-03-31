@@ -4159,7 +4159,7 @@ bool solidity_convertert::get_expr(
       // fix: x._ESBMC_bind_cname = Base
       // lhs
       exprt lhs;
-      if (get_bind_cname(expr, lhs))
+      if (get_bind_cname_expr(expr, lhs))
         break; // no lhs
 
       // rhs
@@ -5037,10 +5037,8 @@ bool solidity_convertert::get_binary_operator_expr(
 
     side_effect_expr_function_callt call_expr;
     get_library_function_call_no_args(
-      "pow", "c:@F@pow", double_type(), lhs.location(), call_expr);
+      "_pow", "c:@F@_pow", double_type(), lhs.location(), call_expr);
 
-    solidity_gen_typecast(ns, lhs, double_type());
-    solidity_gen_typecast(ns, rhs, double_type());
     call_expr.arguments().push_back(lhs);
     call_expr.arguments().push_back(rhs);
 
@@ -5438,9 +5436,10 @@ void solidity_convertert::get_symbol_decl_ref(
   }
 }
 
-/*
+/**
   This function can return expr with either id::symbol or id::member
   id::memebr can only be the case where this.xx
+  @is_this_ptr: whether we need to convert x => this.x
 */
 bool solidity_convertert::get_var_decl_ref(
   const nlohmann::json &decl,
@@ -10977,7 +10976,9 @@ bool solidity_convertert::get_high_level_member_access(
   return false;
 }
 
-bool solidity_convertert::get_bind_cname(
+
+// return expr: contract_instance._ESBMC_bind_cname
+bool solidity_convertert::get_bind_cname_expr(
   const nlohmann::json &json,
   exprt &bind_cname_expr)
 {
@@ -10997,6 +10998,11 @@ bool solidity_convertert::get_bind_cname(
   {
     assert(parent.contains("declarations"));
     if (get_var_decl_ref(parent["declarations"][0], true, lvar))
+      return true;
+  }
+  else if(parent["nodeType"] == "VariableDeclaration")
+  {
+    if (get_var_decl_ref(parent, true, lvar))
       return true;
   }
   else if (parent["nodeType"] == "Assignment")
