@@ -39,8 +39,8 @@ void goto_coveraget::replace_all_asserts_to_guard(
       Forall_goto_program_instructions (it, goto_program)
       {
         cur_filename = get_filename_from_path(it->location.file().as_string());
-        if (location_pool.count(cur_filename) == 0)
-          continue;
+        // if (location_pool.count(cur_filename) == 0)
+        //   continue;
 
         if (it->is_assert())
           replace_assert_to_guard(guard, it, is_instrumentation);

@@ -409,8 +409,7 @@ void solidity_convertert::populate_auxilary_vars()
     typet ct = pointer_typet(signed_char_type());
     ct.cmt_constant(true);
     symbolt s;
-    get_default_symbol(
-      s, current_fileName, ct, aux_cname, aux_cid, locationt());
+    get_default_symbol(s, absolute_path, ct, aux_cname, aux_cid, locationt());
     s.lvalue = true;
     s.file_local = true;
     s.static_lifetime = true; // static
@@ -464,7 +463,7 @@ void solidity_convertert::populate_auxilary_vars()
     symbolt s;
     typet _t = inits.type();
     _t.cmt_constant(true);
-    get_default_symbol(s, current_fileName, _t, aux_name, aux_id, locationt());
+    get_default_symbol(s, absolute_path, _t, aux_name, aux_id, locationt());
     s.file_local = true;
     s.static_lifetime = true;
     s.lvalue = true;
@@ -2179,7 +2178,7 @@ bool solidity_convertert::move_inheritance_to_ctor(
         std::string ctor_ins_id =
           "sol:@C@" + c_name + "@" + ctor_ins_name + "#";
         locationt ctor_ins_loc = context.find_symbol(ctor_id)->type.location();
-        std::string ctor_ins_debug_modulename = current_fileName;
+        std::string ctor_ins_debug_modulename = absolute_path;
         typet ctor_Ins_typet = symbol_typet(prefix + c_name);
 
         symbolt ctor_ins_symbol;
@@ -2285,9 +2284,7 @@ bool solidity_convertert::get_instantiation_ctor_call(
 
   locationt location_begin;
 
-  if (current_fileName == "")
-    return true;
-  std::string debug_modulename = current_fileName;
+  std::string debug_modulename = absolute_path;
 
   symbolt symbol;
   get_default_symbol(symbol, debug_modulename, type, name, id, location_begin);
@@ -2613,6 +2610,9 @@ bool solidity_convertert::get_block(
     // items() returns a key-value pair with key being the index
     for (auto const &stmt_kv : stmts.items())
     {
+      locationt cl;
+      get_location_from_node(stmt_kv.value(), cl);
+
       exprt statement;
       if (get_statement(stmt_kv.value(), statement))
         return true;
@@ -2621,12 +2621,13 @@ bool solidity_convertert::get_block(
       {
         for (auto op : expr_frontBlockDecl.operands())
         {
+          op.location() = cl;
           convert_expression_to_code(op);
           _block.operands().push_back(op);
         }
         expr_frontBlockDecl.clear();
       }
-
+      statement.location() = cl;
       convert_expression_to_code(statement);
       _block.operands().push_back(statement);
 
@@ -2634,6 +2635,7 @@ bool solidity_convertert::get_block(
       {
         for (auto op : expr_backBlockDecl.operands())
         {
+          op.location() = cl;
           convert_expression_to_code(op);
           _block.operands().push_back(op);
         }
@@ -5704,7 +5706,7 @@ bool solidity_convertert::get_func_decl_this_ref(
 
   if (context.find_symbol(this_id) == nullptr)
     get_function_this_pointer_param(
-      contract_name, func_id, current_fileName, l, type);
+      contract_name, func_id, absolute_path, l, type);
 
   new_expr = symbol_expr(*context.find_symbol(this_id));
 
@@ -8513,8 +8515,6 @@ bool solidity_convertert::get_default_function(
 
   locationt location_begin;
 
-  if (current_fileName == "")
-    return true;
   std::string debug_modulename = current_fileName;
 
   symbolt symbol;
@@ -8584,7 +8584,7 @@ void solidity_convertert::get_static_contract_instance(
   else
   {
     locationt ctor_ins_loc;
-    std::string ctor_ins_debug_modulename = current_fileName;
+    std::string ctor_ins_debug_modulename = absolute_path;
     typet ctor_ins_typet = symbol_typet(prefix + c_name);
 
     symbolt ctor_ins_symbol;
@@ -9137,7 +9137,7 @@ bool solidity_convertert::multi_transaction_verification(
   main_type.return_type() = e_type;
   const symbolt &_contract = *context.find_symbol(prefix + c_name);
   new_symbol.location = _contract.location;
-  std::string debug_modulename = current_fileName;
+  std::string debug_modulename = absolute_path;
   get_default_symbol(
     new_symbol,
     debug_modulename,
@@ -10578,7 +10578,7 @@ bool solidity_convertert::get_new_temporary_obj(
   codet &decl)
 {
   log_debug("solidity", "get new temporary object for contract {}", c_name);
-  std::string ctor_ins_debug_modulename = current_fileName;
+  std::string ctor_ins_debug_modulename = absolute_path;
   typet ctor_Ins_typet = symbol_typet(prefix + c_name);
 
   symbolt ctor_ins_symbol;
@@ -10716,7 +10716,7 @@ void solidity_convertert::get_nondet_contract_name(
   get_aux_var(aux_name, aux_id);
   symbolt s;
   get_default_symbol(
-    s, current_fileName, dest_type, aux_name, aux_id, src_expr.location());
+    s, absolute_path, dest_type, aux_name, aux_id, src_expr.location());
   s.lvalue = true;
   s.file_local = true;
   s.static_lifetime = true;
@@ -10942,7 +10942,7 @@ bool solidity_convertert::get_high_level_member_access(
     if (t.id() == irept::id_code)
       t = to_code_type(t).return_type();
     get_default_symbol(
-      s, current_fileName, t, aux_name, aux_id, member.location());
+      s, absolute_path, t, aux_name, aux_id, member.location());
     auto &added_symbol = *move_symbol_to_context(s);
     s.lvalue = true;
     s.file_local = true;
