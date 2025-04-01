@@ -1,0 +1,4 @@
+CORE
+main.c
+--no-div-by-zero-check --force-malloc-success --state-hashing --add-symex-value-sets --no-align-check --k-step 2 --floatbv --unlimited-k-steps --no-vla-size-check --32 --no-por --context-bound 3 --no-pointer-check --no-bounds-check --data-races-check --incremental-bmc
+^VERIFICATION FAILED$
