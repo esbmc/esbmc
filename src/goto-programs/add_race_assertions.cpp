@@ -135,7 +135,12 @@ void add_race_assertions(
 {
   namespacet ns(context);
 
+  // Special treatment to atomic blocks
+  // remove the assertion and place reset after the atomic block
+  // atomic {tmp_A = 1; A = n}; tmp_A = 0; 
   bool is_atomic = false;
+
+  std::vector<rw_sett::entryt> last;
 
   Forall_goto_program_instructions (i_it, goto_program)
   {
@@ -144,12 +149,10 @@ void add_race_assertions(
     if (instruction.is_atomic_begin())
       is_atomic = true;
 
-    if (
-      (instruction.is_assign() || instruction.is_other() ||
-       instruction.is_return() || instruction.is_goto() ||
-       instruction.is_assert() || instruction.is_function_call() ||
-       instruction.is_assume()) &&
-      !is_atomic)
+    if ((instruction.is_assign() || instruction.is_other() ||
+         instruction.is_return() || instruction.is_goto() ||
+         instruction.is_assert() || instruction.is_function_call() ||
+         instruction.is_assume()))
     {
       exprt tmp_expr;
       if (instruction.is_goto() || instruction.is_assert())
@@ -168,6 +171,7 @@ void add_race_assertions(
       instruction.make_skip();
       i_it++;
 
+      if (!is_atomic)
       {
         goto_programt::targett t = goto_program.insert(i_it);
         t->type = FUNCTION_CALL;
@@ -185,12 +189,15 @@ void add_race_assertions(
       // atomic {Assert tmp_A == 0; tmp_A = 1; A = n;}
       // tmp_A = 0;
       // See https://github.com/esbmc/esbmc/pull/1544
-      goto_programt::targett t = goto_program.insert(i_it);
-      *t = ATOMIC_BEGIN;
-      i_it = ++t;
+      if (!is_atomic)
+      {
+        goto_programt::targett t = goto_program.insert(i_it);
+        *t = ATOMIC_BEGIN;
+        i_it = ++t;
+      }
 
       // now add assertion for what is read and written
-      forall_rw_set_entries(e_it, rw_set)
+      forall_rw_set_entries(e_it, rw_set) if (!is_atomic)
       {
         goto_programt::targett t = goto_program.insert(i_it);
 
@@ -216,6 +223,9 @@ void add_race_assertions(
 
         t->location = original_instruction.location;
         i_it = ++t;
+
+        if (is_atomic)
+          last.push_back(e_it->second);
       }
 
       // insert original statement here
@@ -230,6 +240,7 @@ void add_race_assertions(
         i_it = ++t;
       }
 
+      if (!is_atomic)
       {
         goto_programt::targett t = goto_program.insert(i_it);
 
@@ -240,7 +251,7 @@ void add_race_assertions(
       // now add assignments for what is written -- reset
       // only write operations need to be reset:
       // tmp_A = 0;
-      forall_rw_set_entries(e_it, rw_set) if (e_it->second.w)
+      forall_rw_set_entries(e_it, rw_set) if (e_it->second.w && !is_atomic)
       {
         goto_programt::targett t = goto_program.insert(i_it);
 
@@ -264,7 +275,27 @@ void add_race_assertions(
     }
 
     if (instruction.is_atomic_end())
+    {
       is_atomic = false;
+      if (!last.empty())
+      {
+        i_it++;
+        for (const rw_sett::entryt &entry : last)
+        {
+          goto_programt::targett t = goto_program.insert(i_it);
+
+          t->type = ASSIGN;
+          code_assignt theassign(
+            w_guards.get_w_guard_expr(entry), false_exprt());
+          migrate_expr(theassign, t->code);
+          t->location = instruction.location;
+
+          i_it = ++t;
+        }
+        i_it--;
+        last.clear();
+      }
+    }
   }
 
   remove_no_op(goto_program);
