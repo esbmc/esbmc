@@ -137,7 +137,7 @@ void add_race_assertions(
 
   // Special treatment to atomic blocks
   // remove the assertion and place reset after the atomic block
-  // atomic {tmp_A = 1; A = n}; tmp_A = 0; 
+  // atomic {tmp_A = 1; A = n}; tmp_A = 0;
   bool is_atomic = false;
 
   std::vector<rw_sett::entryt> last;
