@@ -77,7 +77,7 @@ bool clang_c_maint::clang_main()
       // Allow user to provide a range. e.g.
       // --class "A B" --function test
       // --contract "Base Derieve" --function _ESBMC_main
-      // yet only the first matched one will got verified
+      // yet only the first matched one will get verified
       std::istringstream iss(config.cname);
       std::string tgt_cname;
       bool is_found_sym = false;
