@@ -31,8 +31,7 @@ void goto_coveraget::replace_all_asserts_to_guard(
     if (f_it->second.body_available && f_it->first != "__ESBMC_main")
     {
       goto_programt &goto_program = f_it->second.body;
-      irep_idt func_name = f_it->first;
-      if (filter(func_name, goto_program))
+      if (filter(f_it->first, goto_program))
         continue;
 
       std::string cur_filename;
@@ -268,7 +267,6 @@ int goto_coveraget::get_total_instrument() const
     if (f_it->second.body_available && f_it->first != "__ESBMC_main")
     {
       const goto_programt &goto_program = f_it->second.body;
-      irep_idt func_name = f_it->first;
       if (filter(f_it->first, goto_program))
         continue;
 
@@ -306,7 +304,6 @@ goto_coveraget::get_total_cond_assert() const
     if (f_it->second.body_available && f_it->first != "__ESBMC_main")
     {
       const goto_programt &goto_program = f_it->second.body;
-      irep_idt func_name = f_it->first;
       if (filter(f_it->first, goto_program))
         continue;
 
@@ -356,7 +353,6 @@ void goto_coveraget::condition_coverage()
     if (f_it->second.body_available && f_it->first != "__ESBMC_main")
     {
       goto_programt &goto_program = f_it->second.body;
-      irep_idt func_name = f_it->first;
       if (filter(f_it->first, goto_program))
         continue;
 
@@ -802,11 +798,6 @@ void goto_coveraget::handle_operands_guard(
   }
 }
 
-void goto_coveraget::set_no_hide()
-{
-  is_no_cov_hiddens = true;
-}
-
 // set the target function from "--function"
 void goto_coveraget::set_target(const std::string &_tgt)
 {
@@ -835,6 +826,9 @@ bool goto_coveraget::is_target_func(
 // The idea is that, if the claim is verified safe, and its negated claim is also verified safe, then we say this claim is unreachable
 void goto_coveraget::negating_asserts(const std::string &tgt_fname)
 {
+  std::string old = target_function;
+  target_function = tgt_fname;
+
   std::unordered_set<std::string> location_pool = {};
   location_pool.insert(get_filename_from_path(filename));
   for (auto const &inc : config.ansi_c.include_files)
@@ -844,7 +838,6 @@ void goto_coveraget::negating_asserts(const std::string &tgt_fname)
     if (f_it->second.body_available && f_it->first != "__ESBMC_main")
     {
       goto_programt &goto_program = f_it->second.body;
-      irep_idt func_name = f_it->first;
       if (filter(f_it->first, goto_program))
         continue;
 
@@ -862,6 +855,7 @@ void goto_coveraget::negating_asserts(const std::string &tgt_fname)
         }
       }
     }
+  target_function = old;
 }
 
 // return true if this function is skipped
@@ -873,7 +867,10 @@ bool goto_coveraget::filter(
   if (target_function != "" && !is_target_func(func_name, target_function))
     return true;
 
-  if (is_no_cov_hiddens && goto_program.empty())
+  // Skip the function that is labbelled with "__ESBMC_HIDE"
+  // For now, it's only for Solidity 
+  // Maybe we can extend this to a dedicated label like __ESBMC_NO_COV 
+  if (config.language.lid == language_idt::SOLIDITY && !goto_program.empty())
   {
     for (const auto &instruction : goto_program.instructions)
     {

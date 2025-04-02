@@ -63,7 +63,8 @@ public:
   void set_target(const std::string &_tgt);
   bool is_target_func(const irep_idt &f, const std::string &tgt_name) const;
   void set_no_hide();
-  bool filter(const irep_idt &func_name, const goto_programt &goto_program) const;
+  bool
+  filter(const irep_idt &func_name, const goto_programt &goto_program) const;
 
   // total numbers of instrumentation
   static size_t total_assert;
@@ -73,7 +74,6 @@ public:
   static size_t total_func_branch;
 
   std::string target_function = "";
-  bool is_no_cov_hiddens = false;
 
 protected:
   // turn a OP b OP c into a list a, b, c

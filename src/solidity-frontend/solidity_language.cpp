@@ -177,7 +177,12 @@ bool solidity_languaget::final(contextt &context)
 {
   add_cprover_library(context);
   clang_cpp_maint c_main(context);
-  return c_main.clang_main();
+  if (c_main.clang_main())
+    return true;
+
+  // roll back
+  config.language = {language_idt::SOLIDITY, ""};
+  return false;
 }
 
 std::string solidity_languaget::temp_cpp_file()

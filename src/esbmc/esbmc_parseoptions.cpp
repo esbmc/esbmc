@@ -2017,9 +2017,7 @@ bool esbmc_parseoptionst::process_goto_program(
       // for function mode
       if (cmdline.isset("function"))
         tmp.set_target(cmdline.getval("function"));
-      // skip the function that is labbelled as __ESBMC_HIDE
-      if (cmdline.isset("no-cov-hiddens"))
-        tmp.set_no_hide();
+
       // if we do not want to count the guard in the assertions
       if (cmdline.isset("no-cov-asserts"))
         tmp.replace_all_asserts_to_guard(gen_true_expr());
@@ -2051,9 +2049,7 @@ bool esbmc_parseoptionst::process_goto_program(
       // for function mode
       if (cmdline.isset("function"))
         tmp.set_target(cmdline.getval("function"));
-      // skip the function that is labbelled as __ESBMC_HIDE
-      if (cmdline.isset("no-cov-hiddens"))
-        tmp.set_no_hide();
+
       tmp.branch_coverage();
     }
     if (
@@ -2072,9 +2068,7 @@ bool esbmc_parseoptionst::process_goto_program(
 
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);
-      // skip the function that is labbelled as __ESBMC_HIDE
-      if (cmdline.isset("no-cov-hiddens"))
-        tmp.set_no_hide();
+
       tmp.branch_function_coverage();
     }
 
