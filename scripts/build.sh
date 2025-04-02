@@ -197,11 +197,12 @@ case $OS in
   *) echo "Unsupported OS $OSTYPE" ; exit 1; ;;
 esac || exit $?
 
+
 # Configure ESBMC
 printf "Running CMake:"
 printf " '%s'" $COMPILER_ARGS cmake .. $BASE_ARGS $SOLVER_FLAGS
 echo
-$COMPILER_ARGS cmake .. $BASE_ARGS $SOLVER_FLAGS &&
+$COMPILER_ARGS cmake .. $BASE_ARGS $SOLVER_FLAGS -DCMAKE_POLICY_VERSION_MINIMUM=3.5 &&
 # Compile ESBMC
 cmake --build . && ninja install || exit $?
 
