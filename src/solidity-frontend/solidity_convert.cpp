@@ -90,16 +90,33 @@ bool solidity_convertert::convert()
   // store auxiliary info
   populate_auxilary_vars();
 
+  // for coverage and trace simplification: update include_files
+  auto add_unique = [](const std::string &file)
+  {
+    if (
+      std::find(
+        config.ansi_c.include_files.begin(),
+        config.ansi_c.include_files.end(),
+        file) == config.ansi_c.include_files.end())
+    {
+      config.ansi_c.include_files.push_back(file);
+    }
+  };
+  add_unique(absolute_path);
+
   std::string old_path = absolute_path;
   // first round: handle definitions that can be outside of the contract
   // including struct, enum, interface, event, error, library, constant...
   // noted that some can also be inside the contract, e.g. struct, enum...
   for (nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end(); ++itr)
   {
-    if (nodes.contains("absolutePath"))
+    if ((*itr).contains("absolutePath"))
+    {
       // for "import" cases
       // we assume the merged file's nodes order is not messed up
-      absolute_path = nodes["absolutePath"];
+      absolute_path = (*itr)["absolutePath"];
+      add_unique(absolute_path);
+    }
 
     if (get_noncontract_defition(*itr))
       return true;
@@ -115,29 +132,11 @@ bool solidity_convertert::convert()
   }
   absolute_path = old_path;
 
-  // for coverage and trace simplification: update include_files
-  config.ansi_c.include_files.push_back(absolute_path);
-  auto add_unique = [](const std::string &file)
-  {
-    if (
-      std::find(
-        config.ansi_c.include_files.begin(),
-        config.ansi_c.include_files.end(),
-        file) == config.ansi_c.include_files.end())
-    {
-      config.ansi_c.include_files.push_back(file);
-    }
-  };
-  add_unique(absolute_path);
-
   // second round: handle contract definition
   for (nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end(); ++itr)
   {
-    if (nodes.contains("absolutePath"))
-    {
-      absolute_path = nodes["absolutePath"];
-      add_unique(absolute_path);
-    }
+    if ((*itr).contains("absolutePath"))
+      absolute_path = (*itr)["absolutePath"];
 
     std::string node_type = (*itr)["nodeType"].get<std::string>();
 
@@ -2657,7 +2656,6 @@ bool solidity_convertert::get_block(
       {
         for (auto op : expr_frontBlockDecl.operands())
         {
-          op.location() = cl;
           convert_expression_to_code(op);
           _block.operands().push_back(op);
         }
@@ -2671,7 +2669,6 @@ bool solidity_convertert::get_block(
       {
         for (auto op : expr_backBlockDecl.operands())
         {
-          op.location() = cl;
           convert_expression_to_code(op);
           _block.operands().push_back(op);
         }
@@ -10795,6 +10792,8 @@ void solidity_convertert::get_nondet_contract_name(
     codet if_expr("ifthenelse");
     if_expr.copy_to_operands(_equal, _assign);
     if_expr.location() = src_expr.location();
+    if_expr.location().file(
+      ""); // clear filename to avoid affect the coverage calculation
     _block.copy_to_operands(if_expr);
   }
 
@@ -11070,6 +11069,7 @@ bool solidity_convertert::get_high_level_member_access(
     codet if_expr("ifthenelse");
     if_expr.copy_to_operands(_cmp_cname, rhs);
     if_expr.location() = l;
+    if_expr.location().file("");
 
     move_to_front_block(if_expr);
   }
