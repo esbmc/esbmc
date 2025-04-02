@@ -83,6 +83,7 @@ protected:
     nlohmann::json &c_node,
     const std::string &c_name,
     std::set<std::string> &merged_list);
+  void add_inherit_label(nlohmann::json &node);
 
   // handle constructor
   bool get_constructor(
@@ -481,10 +482,7 @@ protected:
 
   std::string absolute_path;
   std::string contract_contents = "";
-  // scope id of "ContractDefinition"
-  int global_scope_id;
 
-  unsigned int current_scope_var_num;
   const nlohmann::json *current_functionDecl;
   const nlohmann::json *current_forStmt;
   const nlohmann::json *current_typeName;
@@ -520,8 +518,9 @@ protected:
   // contract name list
   std::unordered_map<int, std::string> contractNamesMap;
   std::set<std::string> contractNamesList;
-  // Store the ast_node["id"] of contract/struct/function/...
-  std::unordered_map<int, std::string> scope_map;
+  // Store the ast_node["id"] of struct/error
+  // where entity contains "members": [{}, {}...]
+  std::unordered_map<int, std::string> member_entity_scope;
   // Store state variables
   code_blockt initializers;
   // For inheritance

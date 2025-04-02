@@ -26,8 +26,6 @@ solidity_convertert::solidity_convertert(
     tgt_cnts(_sol_cnts),
     tgt_func(_sol_func),
     contract_path(_contract_path),
-    global_scope_id(0),
-    current_scope_var_num(1),
     current_functionDecl(nullptr),
     current_forStmt(nullptr),
     current_typeName(nullptr),
@@ -40,7 +38,7 @@ solidity_convertert::solidity_convertert(
     current_functionName(""),
     current_contractName(""),
     current_baseContractName(""),
-    scope_map({}),
+    member_entity_scope({}),
     initializers(code_blockt()),
     ctor_modifier(nullptr),
     based_contracts(nullptr),
@@ -343,7 +341,6 @@ void solidity_convertert::contract_precheck()
     std::string node_type = (*itr)["nodeType"].get<std::string>();
     if (node_type == "ContractDefinition") // contains AST nodes we need
     {
-      global_scope_id = (*itr)["id"];
       found_contract_def = true;
       break;
       //TODO: skip pattern base check as it's not really valuable at the moment.
@@ -1060,11 +1057,11 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &struct_def)
     id = prefix + "struct " + struct_def["canonicalName"].get<std::string>();
     t.tag("struct " + name);
 
-    // populate the scope_map
+    // populate the member_entity_scope
     // this map is used to find reference when there is no decl_ref_id provided in the nodes
     // or replace the find_decl_ref in order to speed up
     int scp = struct_def["id"].get<int>();
-    scope_map.insert(std::pair<int, std::string>(scp, name));
+    member_entity_scope.insert(std::pair<int, std::string>(scp, name));
   }
   else
   {
@@ -1201,7 +1198,6 @@ bool solidity_convertert::get_contract_definition(const std::string &c_name)
   auto old_current_functionName = current_functionName;
   auto old_current_functionDecl = current_functionDecl;
   auto old_current_forStmt = current_forStmt;
-  auto old_global_scope_id = global_scope_id;
   auto old_initializers = initializers;
   auto old_ctor_modifier = ctor_modifier;
   auto old_based_contracts = based_contracts;
@@ -1255,7 +1251,6 @@ bool solidity_convertert::get_contract_definition(const std::string &c_name)
         current_functionName = old_current_functionName;
         current_functionDecl = old_current_functionDecl;
         current_forStmt = old_current_forStmt;
-        global_scope_id = old_global_scope_id;
         initializers = old_initializers;
         ctor_modifier = old_ctor_modifier;
         based_contracts = old_based_contracts;
@@ -1313,7 +1308,6 @@ bool solidity_convertert::get_contract_definition(const std::string &c_name)
   current_functionName = old_current_functionName;
   current_functionDecl = old_current_functionDecl;
   current_forStmt = old_current_forStmt;
-  global_scope_id = old_global_scope_id;
   initializers = old_initializers;
   ctor_modifier = old_ctor_modifier;
   based_contracts = old_based_contracts;
@@ -1560,7 +1554,7 @@ bool solidity_convertert::get_error_definition(const nlohmann::json &ast_node)
     return false;
   }
   // update scope map
-  scope_map.insert(std::pair<int, std::string>(id_num, name));
+  member_entity_scope.insert(std::pair<int, std::string>(id_num, name));
 
   // just to pass the internal assertions
   current_functionName = name;
@@ -1625,6 +1619,29 @@ bool solidity_convertert::get_error_definition(const nlohmann::json &ast_node)
   current_functionName = old_functionName;
 
   return false;
+}
+
+// add ["is_inherited"] = true to node and all sub_node that contains an "id"
+void solidity_convertert::add_inherit_label(nlohmann::json &node)
+{
+  // Add or update the "is_inherited" label in the current node
+  if (node.is_object())
+    node["is_inherited"] = true;
+
+  // Traverse through all sub-nodes
+  if (node.is_object() || node.is_array())
+  {
+    for (auto &sub_node : node)
+    {
+      if (sub_node.is_object() && sub_node.contains("id"))
+      {
+        sub_node["is_inherited"] = true;
+      }
+
+      // Recurse into nested nodes
+      add_inherit_label(sub_node);
+    }
+  }
 }
 
 void solidity_convertert::merge_inheritance_ast(
@@ -1702,11 +1719,11 @@ void solidity_convertert::merge_inheritance_ast(
                 !c_i["name"].empty() && i["name"] == c_i["name"])
               {
                 /*
-                    A
+                   A
                   / \
-                  B   C
+                 B   C
                   \ /
-                    D
+                   D
                   for cases above, there must be an override inside D if B and C both override A.
                 */
                 is_conflict = true;
@@ -1729,7 +1746,9 @@ void solidity_convertert::merge_inheritance_ast(
             "\t@@@ Merging AST node {} to contract {}",
             i["name"].get<std::string>().c_str(),
             c_name);
-          i.push_back({"is_inherited", true});
+          // This is to distinguish it from the originals
+          add_inherit_label(i);
+
           c_node["nodes"].push_back(i);
         }
       }
@@ -2403,8 +2422,6 @@ bool solidity_convertert::get_function_definition(
   if (check_intrinsic_function(ast_node))
     return false;
 
-  // 3. Set current_scope_var_num, current_functionDecl and old_functionDecl
-  current_scope_var_num = 1;
   const nlohmann::json *old_functionDecl = current_functionDecl;
   const std::string old_functionName = current_functionName;
 
@@ -2562,7 +2579,6 @@ void solidity_convertert::reset_auxiliary_vars()
   current_functionName = "";
   current_functionDecl = nullptr;
   current_forStmt = nullptr;
-  global_scope_id = 0;
   initializers.clear();
   ctor_modifier = nullptr;
   based_contracts = nullptr;
@@ -5524,6 +5540,7 @@ void solidity_convertert::get_symbol_decl_ref(
 /**
   This function can return expr with either id::symbol or id::member
   id::memebr can only be the case where this.xx
+  @decl: declaration json node
   @is_this_ptr: whether we need to convert x => this.x
 */
 bool solidity_convertert::get_var_decl_ref(
@@ -7167,7 +7184,8 @@ bool solidity_convertert::get_elementary_type_name(
   }
   case SolidityGrammar::ElementaryTypeNameT::STRING_LITERAL:
   {
-    auto json = find_parent(src_ast_json["nodes"], type_name);
+    // it's fine even if the json is not the exact parent
+    auto json = find_parent(src_ast_json, type_name);
     assert(!json.empty());
     string_constantt x(json["value"].get<std::string>());
     new_type = x.type();
@@ -7356,12 +7374,12 @@ void solidity_convertert::get_local_var_decl_name(
     //! Assume it is a variable inside struct/error
     //TODO: add current_StructDecl/ current_ErrorDecl
     int scp = ast_node["scope"].get<int>();
-    if (scope_map.count(scp) == 0)
+    if (member_entity_scope.count(scp) == 0)
     {
       log_error("cannot find struct/error name");
       abort();
     }
-    std::string struct_name = scope_map.at(scp);
+    std::string struct_name = member_entity_scope.at(scp);
     if (contract_name.empty())
       id = "sol:@" + struct_name + "@" + name + "#" +
            i2string(ast_node["id"].get<std::int16_t>());
@@ -7608,7 +7626,9 @@ std::string solidity_convertert::get_filename_from_path(std::string path)
   return path; // for _x, it just returns "overflow_2.c" because the test program is in the same dir as esbmc binary
 }
 
-// find the last parent json node
+// Find the last parent json node
+// It will not reliably find the correct parent if the same target appears under multiple different parent nodes.
+// To enusre correctness, the input is expected to contain key "id" and, if possible, "is_inherit"
 const nlohmann::json &solidity_convertert::find_parent(
   const nlohmann::json &json,
   const nlohmann::json &target)
@@ -11107,7 +11127,7 @@ bool solidity_convertert::get_bind_cname_expr(
   const nlohmann::json &json,
   exprt &bind_cname_expr)
 {
-  const nlohmann::json &parent = find_parent(src_ast_json["nodes"], json);
+  const nlohmann::json &parent = find_parent(src_ast_json, json);
   locationt l;
   get_location_from_node(json, l);
   exprt lvar;
