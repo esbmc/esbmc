@@ -201,7 +201,7 @@ esac || exit $?
 printf "Running CMake:"
 printf " '%s'" $COMPILER_ARGS cmake .. $BASE_ARGS $SOLVER_FLAGS
 echo
-$COMPILER_ARGS CMAKE_POLICY_VERSION_MINIMUM='3.5' cmake .. $BASE_ARGS $SOLVER_FLAGS &&
+$COMPILER_ARGS cmake .. $BASE_ARGS $SOLVER_FLAGS -DCMAKE_POLICY_VERSION_MINIMUM=3.5 &&
 # Compile ESBMC
 cmake --build . && ninja install || exit $?
 
