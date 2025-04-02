@@ -197,6 +197,7 @@ case $OS in
   *) echo "Unsupported OS $OSTYPE" ; exit 1; ;;
 esac || exit $?
 
+
 # Configure ESBMC
 printf "Running CMake:"
 printf " '%s'" $COMPILER_ARGS cmake .. $BASE_ARGS $SOLVER_FLAGS
