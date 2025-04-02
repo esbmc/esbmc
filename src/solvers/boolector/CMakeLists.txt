@@ -13,8 +13,7 @@ else()
     CPMAddPackage(
       NAME boolector
       DOWNLOAD_ONLY YES
-      GITHUB_REPOSITORY rafaelsamenezes/boolector
-      GIT_TAG master)
+      GITHUB_REPOSITORY rafaelsamenezes/boolector)
 
     # We can't use ExternalProject because we need it ready
     # at configuration time
