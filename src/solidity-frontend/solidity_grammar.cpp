@@ -221,7 +221,7 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     }
     else if (typeString.find("type(") != std::string::npos)
     {
-      if(typeIdentifier.compare(0, 17 , "t_magic_meta_type") == 0)
+      if (typeIdentifier.compare(0, 17, "t_magic_meta_type") == 0)
         return TypeProperty;
       // For type conversion
       return TypeConversionName;
@@ -718,7 +718,9 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
       return NewExpression;
     if (expr["kind"] == "typeConversion")
       return TypeConversionExpression;
-    if(get_type_name_t(expr["typeDescriptions"]) == SolidityGrammar::TypeProperty)
+    if (
+      get_type_name_t(expr["typeDescriptions"]) ==
+      SolidityGrammar::TypeProperty)
       return TypePropertyExpression;
     return CallExprClass;
   }

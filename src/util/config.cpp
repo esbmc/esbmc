@@ -9,8 +9,7 @@ configt config;
 
 void configt::ansi_ct::set_data_model(enum data_model dm)
 {
-  auto next = [m = static_cast<uint64_t>(dm)]() mutable
-  {
+  auto next = [m = static_cast<uint64_t>(dm)]() mutable {
     unsigned r = m & 0xff;
     m >>= 8;
     return r;
