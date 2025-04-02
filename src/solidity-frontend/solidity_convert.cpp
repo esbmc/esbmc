@@ -39,7 +39,6 @@ solidity_convertert::solidity_convertert(
     current_functionName(""),
     current_contractName(""),
     current_baseContractName(""),
-    current_fileName(""),
     scope_map({}),
     initializers(code_blockt()),
     ctor_modifier(nullptr),
@@ -87,11 +86,17 @@ bool solidity_convertert::convert()
   // store auxiliary info
   populate_auxilary_vars();
 
+  std::string old_path = absolute_path;
   // first round: handle definitions that can be outside of the contract
   // including struct, enum, interface, event, error, library, constant...
   // noted that some can also be inside the contract, e.g. struct, enum...
   for (nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end(); ++itr)
   {
+    if (nodes.contains("absolutePath"))
+      // for "import" cases
+      // we assume the merged file's nodes order is not messed up
+      absolute_path = nodes["absolutePath"];
+
     if (get_noncontract_defition(*itr))
       return true;
     if (
@@ -104,10 +109,14 @@ bool solidity_convertert::convert()
         return true;
     }
   }
+  absolute_path = old_path;
 
   // second round: handle contract definition
   for (nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end(); ++itr)
   {
+    if (nodes.contains("absolutePath"))
+      absolute_path = nodes["absolutePath"];
+
     std::string node_type = (*itr)["nodeType"].get<std::string>();
 
     if (node_type == "ContractDefinition")
@@ -1048,7 +1057,6 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &struct_def)
   // 4. populate debug module name
   std::string debug_modulename =
     get_modulename_from_path(location_begin.file().as_string());
-  current_fileName = debug_modulename;
 
   symbolt symbol;
   get_default_symbol(symbol, debug_modulename, t, name, id, location_begin);
@@ -1951,7 +1959,7 @@ bool solidity_convertert::get_unbound_function(
     h_type.return_type() = e_type;
     const symbolt &_contract = *context.find_symbol(prefix + c_name);
     new_symbol.location = _contract.location;
-    std::string debug_modulename = current_fileName;
+    std::string debug_modulename = get_modulename_from_path(absolute_path);
     get_default_symbol(
       new_symbol, debug_modulename, h_type, h_name, h_id, _contract.location);
 
@@ -2178,7 +2186,8 @@ bool solidity_convertert::move_inheritance_to_ctor(
         std::string ctor_ins_id =
           "sol:@C@" + c_name + "@" + ctor_ins_name + "#";
         locationt ctor_ins_loc = context.find_symbol(ctor_id)->type.location();
-        std::string ctor_ins_debug_modulename = absolute_path;
+        std::string ctor_ins_debug_modulename =
+          get_modulename_from_path(absolute_path);
         typet ctor_Ins_typet = symbol_typet(prefix + c_name);
 
         symbolt ctor_ins_symbol;
@@ -2284,7 +2293,7 @@ bool solidity_convertert::get_instantiation_ctor_call(
 
   locationt location_begin;
 
-  std::string debug_modulename = absolute_path;
+  std::string debug_modulename = get_modulename_from_path(absolute_path);
 
   symbolt symbol;
   get_default_symbol(symbol, debug_modulename, type, name, id, location_begin);
@@ -6374,7 +6383,6 @@ bool solidity_convertert::get_tuple_definition(const nlohmann::json &ast_node)
   // get debug module name
   std::string debug_modulename =
     get_modulename_from_path(location_begin.file().as_string());
-  current_fileName = debug_modulename;
 
   // populate struct type symbol
   symbolt symbol;
@@ -6461,7 +6469,6 @@ bool solidity_convertert::get_tuple_instance(
   // get debug module name
   std::string debug_modulename =
     get_modulename_from_path(location_begin.file().as_string());
-  current_fileName = debug_modulename;
 
   // populate struct type symbol
   symbolt symbol;
@@ -6619,7 +6626,8 @@ void solidity_convertert::get_llc_ret_tuple(exprt &new_expr)
   id = "sol:@" + name;
   locationt l;
   symbolt symbol;
-  get_default_symbol(symbol, current_fileName, sym_t, name, id, l);
+  get_default_symbol(
+    symbol, get_modulename_from_path(absolute_path), sym_t, name, id, l);
   symbol.static_lifetime = true;
   symbol.file_local = true;
   auto &added_sym = *move_symbol_to_context(symbol);
@@ -8515,7 +8523,7 @@ bool solidity_convertert::get_default_function(
 
   locationt location_begin;
 
-  std::string debug_modulename = current_fileName;
+  std::string debug_modulename = get_modulename_from_path(absolute_path);
 
   symbolt symbol;
   get_default_symbol(symbol, debug_modulename, type, name, id, location_begin);
@@ -8584,7 +8592,8 @@ void solidity_convertert::get_static_contract_instance(
   else
   {
     locationt ctor_ins_loc;
-    std::string ctor_ins_debug_modulename = absolute_path;
+    std::string ctor_ins_debug_modulename =
+      get_modulename_from_path(absolute_path);
     typet ctor_ins_typet = symbol_typet(prefix + c_name);
 
     symbolt ctor_ins_symbol;
@@ -9137,7 +9146,7 @@ bool solidity_convertert::multi_transaction_verification(
   main_type.return_type() = e_type;
   const symbolt &_contract = *context.find_symbol(prefix + c_name);
   new_symbol.location = _contract.location;
-  std::string debug_modulename = absolute_path;
+  std::string debug_modulename = get_modulename_from_path(absolute_path);
   get_default_symbol(
     new_symbol,
     debug_modulename,
@@ -10578,7 +10587,8 @@ bool solidity_convertert::get_new_temporary_obj(
   codet &decl)
 {
   log_debug("solidity", "get new temporary object for contract {}", c_name);
-  std::string ctor_ins_debug_modulename = absolute_path;
+  std::string ctor_ins_debug_modulename =
+    get_modulename_from_path(absolute_path);
   typet ctor_Ins_typet = symbol_typet(prefix + c_name);
 
   symbolt ctor_ins_symbol;

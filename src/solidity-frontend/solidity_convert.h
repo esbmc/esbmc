@@ -506,7 +506,6 @@ protected:
   //! If you are not sure, use 'get_current_contract_name' instead.
   std::string current_contractName;
   std::string current_baseContractName;
-  std::string current_fileName;
 
   // Auxiliary data structures:
   // Mapping from the node 'id' to the exported symbol (i.e. contract, error, constant var ....)
