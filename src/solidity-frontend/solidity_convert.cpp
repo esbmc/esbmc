@@ -9211,7 +9211,7 @@ bool solidity_convertert::multi_transaction_verification(
 bool solidity_convertert::multi_contract_verification_bound(
   std::set<std::string> &tgt_set)
 {
-  log_debug("solidity","multi_contract_verification_bound");
+  log_debug("solidity", "multi_contract_verification_bound");
   // 0. initialize "sol_main" body and switch body
   codet func_body, switch_body;
   static_lifetime_init(context, switch_body);
@@ -9297,7 +9297,11 @@ bool solidity_convertert::multi_contract_verification_bound(
   typet e_type = empty_typet();
   e_type.set("cpp_type", "void");
   main_type.return_type() = e_type;
-  const std::string sol_id = "sol:@F@_ESBMC_Main#";
+  std::string sol_id;
+  if (!tgt_set.empty())
+    sol_id = "sol:@C@" + *tgt_set.begin() + "@F@_ESBMC_Main#";
+  else
+    sol_id = "sol:@F@_ESBMC_Main#";
   const std::string sol_name = "_ESBMC_Main";
 
   if (
@@ -9336,7 +9340,7 @@ bool solidity_convertert::multi_contract_verification_bound(
 bool solidity_convertert::multi_contract_verification_unbound(
   std::set<std::string> &tgt_set)
 {
-  log_debug("solidity","multi_contract_verification_unbound");
+  log_debug("solidity", "multi_contract_verification_unbound");
   codet func_body;
   static_lifetime_init(context, func_body);
   func_body.make_block();
