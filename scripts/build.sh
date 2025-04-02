@@ -2,6 +2,7 @@
 
 # Set arguments that should be available for every OS
 BASE_ARGS="\
+    -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
     -DDOWNLOAD_DEPENDENCIES=On \
     -GNinja \
     -DENABLE_CSMITH=On \
