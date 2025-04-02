@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--contract "Derived Base" --sol contract.sol
+^VERIFICATION FAILED$
