@@ -156,27 +156,32 @@ bool solidity_convertert::convert()
   // single contract verification: where the option "--contract" is set.
   // multiple contracts verification: essentially verify the whole file.
   // single contract
-  if (!tgt_cnts.empty() && tgt_func.empty())
+  std::set<std::string> tgt_cnt_set;
+  std::istringstream iss(tgt_cnts);
+  std::string tgt_cnt;
+  while (iss >> tgt_cnt)
+    tgt_cnt_set.insert(tgt_cnt);
+
+  if (tgt_func.empty())
   {
-    std::istringstream iss(tgt_cnts);
-    std::string tgt_cnt;
-    while (iss >> tgt_cnt)
+    if (tgt_cnt_set.size() == 1)
     {
       // perform multi-transaction verification
       // by adding symbols to the "sol_main()" entry function
-      if (multi_transaction_verification(tgt_cnt))
+      if (multi_transaction_verification(*tgt_cnt_set.begin()))
         return true;
     }
-  }
-  // multiple contract
-  if (tgt_func.empty() && tgt_cnts.empty())
-  {
-    // for bounded cross-contract verification  (--bound)
-    if (is_bound && multi_contract_verification_bound())
-      return true;
-    // for unbounded cross-contract verification (--unbound)
-    else if (multi_contract_verification_unbound())
-      return true;
+    // multiple contract
+    // either --contract unset, or --contract "C1 C2 ..."
+    else
+    {
+      // for bounded cross-contract verification  (--bound)
+      if (is_bound && multi_contract_verification_bound(tgt_cnt_set))
+        return true;
+      // for unbounded cross-contract verification (--unbound)
+      else if (multi_contract_verification_unbound(tgt_cnt_set))
+        return true;
+    }
   }
   // else: verify the target function.
 
@@ -8384,7 +8389,6 @@ bool solidity_convertert::get_non_library_function_call(
     if (decl_ref.contains("parameters") && caller.contains("arguments"))
     {
       nlohmann::json param_nodes = decl_ref["parameters"]["parameters"];
-      unsigned num_args = 0;
       nlohmann::json param = nullptr;
       nlohmann::json::iterator itr = param_nodes.begin();
 
@@ -8408,7 +8412,6 @@ bool solidity_convertert::get_non_library_function_call(
         current_baseContractName = old;
 
         call.arguments().push_back(single_arg);
-        ++num_args;
         param = nullptr;
       }
     }
@@ -9205,8 +9208,10 @@ bool solidity_convertert::multi_transaction_verification(
   This function perform multi-transaction verification on each contract in isolation.
   To do so, we construct nondetered switch_case;
 */
-bool solidity_convertert::multi_contract_verification_bound()
+bool solidity_convertert::multi_contract_verification_bound(
+  std::set<std::string> &tgt_set)
 {
+  log_debug("solidity","multi_contract_verification_bound");
   // 0. initialize "sol_main" body and switch body
   codet func_body, switch_body;
   static_lifetime_init(context, switch_body);
@@ -9223,11 +9228,16 @@ bool solidity_convertert::multi_contract_verification_bound()
 
   // 1. construct switch-case
   int cnt = 0;
-  for (const auto &sym : contractNamesMap)
+  std::set<std::string> cname_set;
+  if (!tgt_set.empty())
+    cname_set = tgt_set;
+  else
+    cname_set = contractNamesList;
+
+  for (const auto &c_name : cname_set)
   {
     // 1.1 construct multi-transaction verification entry function
     // function "_ESBMC_Main_contractname" will be created and inserted to the symbol table.
-    const std::string &c_name = sym.second;
     if (multi_transaction_verification(c_name))
       return true;
 
@@ -9323,17 +9333,24 @@ bool solidity_convertert::multi_contract_verification_bound()
 }
 
 // for unbound, we verify each contract individually
-bool solidity_convertert::multi_contract_verification_unbound()
+bool solidity_convertert::multi_contract_verification_unbound(
+  std::set<std::string> &tgt_set)
 {
+  log_debug("solidity","multi_contract_verification_unbound");
   codet func_body;
   static_lifetime_init(context, func_body);
   func_body.make_block();
 
-  for (const auto &sym : contractNamesMap)
+  std::set<std::string> cname_set;
+  if (!tgt_set.empty())
+    cname_set = tgt_set;
+  else
+    cname_set = contractNamesList;
+
+  for (const auto &c_name : cname_set)
   {
     // construct multi-transaction verification entry function
     // function "_ESBMC_Main_contractname" will be created and inserted to the symbol table.
-    const std::string &c_name = sym.second;
     if (multi_transaction_verification(c_name))
       return true;
 

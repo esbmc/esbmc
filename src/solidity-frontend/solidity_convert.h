@@ -292,8 +292,8 @@ protected:
 
   symbolt *move_symbol_to_context(symbolt &symbol);
   bool multi_transaction_verification(const std::string &contractName);
-  bool multi_contract_verification_bound();
-  bool multi_contract_verification_unbound();
+  bool multi_contract_verification_bound(std::set<std::string> &tgt_set);
+  bool multi_contract_verification_unbound(std::set<std::string> &tgt_set);
   void reset_auxiliary_vars();
 
   // auxiliary functions

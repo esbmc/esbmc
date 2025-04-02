@@ -9,7 +9,8 @@ configt config;
 
 void configt::ansi_ct::set_data_model(enum data_model dm)
 {
-  auto next = [m = static_cast<uint64_t>(dm)]() mutable {
+  auto next = [m = static_cast<uint64_t>(dm)]() mutable
+  {
     unsigned r = m & 0xff;
     m >>= 8;
     return r;
@@ -115,6 +116,9 @@ bool configt::set(const cmdlinet &cmdline)
 
   if (cmdline.isset("class"))
     cname = cmdline.getval("class");
+
+  if (cmdline.isset("contract"))
+    cname = cmdline.getval("contract");
 
   if (cmdline.isset("define"))
     ansi_c.defines = cmdline.get_values("define");
