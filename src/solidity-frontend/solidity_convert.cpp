@@ -17,13 +17,14 @@
 solidity_convertert::solidity_convertert(
   contextt &_context,
   nlohmann::json &_ast_json,
+  const std::string &_sol_cnts,
   const std::string &_sol_func,
-  const std::string &_contract_path,
-  const bool _is_bound)
+  const std::string &_contract_path)
   : context(_context),
     ns(context),
     src_ast_json_array(_ast_json),
-    sol_func(_sol_func),
+    tgt_cnts(_sol_cnts),
+    tgt_func(_sol_func),
     contract_path(_contract_path),
     global_scope_id(0),
     current_scope_var_num(1),
@@ -43,16 +44,19 @@ solidity_convertert::solidity_convertert(
     initializers(code_blockt()),
     ctor_modifier(nullptr),
     based_contracts(nullptr),
-    tgt_func(config.options.get_option("function")),
-    tgt_cnt(config.options.get_option("contract")),
     aux_counter(0),
-    is_bound(_is_bound),
+    is_bound(true),
     nondet_bool_expr(),
     nondet_uint_expr()
 {
   std::ifstream in(_contract_path);
   contract_contents.assign(
     (std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+
+  // bound setting - default value is true
+  const std::string unbound = config.options.get_option("unbound");
+  if (!unbound.empty())
+    is_bound = false;
 
   // initialize nondet_bool
   if (
@@ -111,11 +115,29 @@ bool solidity_convertert::convert()
   }
   absolute_path = old_path;
 
+  // for coverage and trace simplification: update include_files
+  config.ansi_c.include_files.push_back(absolute_path);
+  auto add_unique = [](const std::string &file)
+  {
+    if (
+      std::find(
+        config.ansi_c.include_files.begin(),
+        config.ansi_c.include_files.end(),
+        file) == config.ansi_c.include_files.end())
+    {
+      config.ansi_c.include_files.push_back(file);
+    }
+  };
+  add_unique(absolute_path);
+
   // second round: handle contract definition
   for (nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end(); ++itr)
   {
     if (nodes.contains("absolutePath"))
+    {
       absolute_path = nodes["absolutePath"];
+      add_unique(absolute_path);
+    }
 
     std::string node_type = (*itr)["nodeType"].get<std::string>();
 
@@ -135,15 +157,20 @@ bool solidity_convertert::convert()
   // single contract verification: where the option "--contract" is set.
   // multiple contracts verification: essentially verify the whole file.
   // single contract
-  if (!tgt_cnt.empty() && tgt_func.empty())
+  if (!tgt_cnts.empty() && tgt_func.empty())
   {
-    // perform multi-transaction verification
-    // by adding symbols to the "sol_main()" entry function
-    if (multi_transaction_verification(tgt_cnt))
-      return true;
+    std::istringstream iss(tgt_cnts);
+    std::string tgt_cnt;
+    while (iss >> tgt_cnt)
+    {
+      // perform multi-transaction verification
+      // by adding symbols to the "sol_main()" entry function
+      if (multi_transaction_verification(tgt_cnt))
+        return true;
+    }
   }
   // multiple contract
-  if (tgt_func.empty() && tgt_cnt.empty())
+  if (tgt_func.empty() && tgt_cnts.empty())
   {
     // for bounded cross-contract verification  (--bound)
     if (is_bound && multi_contract_verification_bound())

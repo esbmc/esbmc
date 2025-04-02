@@ -23,9 +23,9 @@ public:
   solidity_convertert(
     contextt &_context,
     nlohmann::json &_ast_json,
+    const std::string &_sol_cnts,
     const std::string &_sol_func,
-    const std::string &_contract_path,
-    const bool _is_bound);
+    const std::string &_contract_path);
   virtual ~solidity_convertert() = default;
 
   bool convert();
@@ -473,8 +473,9 @@ protected:
   nlohmann::json src_ast_json_array = nlohmann::json::array();
   // json for Solidity AST. Use object for single contract
   nlohmann::json src_ast_json;
-  // Solidity function to be verified
-  const std::string &sol_func;
+  // Solidity contracts/ function to be verified
+  const std::string &tgt_cnts;
+  const std::string &tgt_func;
   //smart contract source file
   const std::string &contract_path;
 
@@ -537,11 +538,6 @@ protected:
   // dealing with the implicit constructor call
   // this is to avoid reference to stack memory associated with local variable returned
   const nlohmann::json empty_json;
-
-  // --function
-  std::string tgt_func;
-  // --contract
-  std::string tgt_cnt;
 
   // for auxiliary var name
   int aux_counter;

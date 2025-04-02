@@ -116,9 +116,6 @@ bool configt::set(const cmdlinet &cmdline)
   if (cmdline.isset("class"))
     cname = cmdline.getval("class");
 
-  if (cmdline.isset("contract"))
-    cname = cmdline.getval("contract");
-
   if (cmdline.isset("define"))
     ansi_c.defines = cmdline.get_values("define");
 
