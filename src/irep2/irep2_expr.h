@@ -1410,8 +1410,9 @@ public:
   template <typename... Args>                                                  \
   inline expr2tc basename##2tc(Args && ...args)                                \
   {                                                                            \
-    return expr2tc(std::static_pointer_cast<expr2t>(                           \
-      std::make_shared<basename##2t>(std::forward<Args>(args)...)));           \
+    return expr2tc(                                                            \
+      std::static_pointer_cast<expr2t>(                                        \
+        std::make_shared<basename##2t>(std::forward<Args>(args)...)));         \
   }                                                                            \
   typedef esbmct::expr_methods2<basename##2t, superclass, superclass::traits>  \
     basename##_expr_methods;                                                   \
@@ -1526,6 +1527,7 @@ irep_typedefs(popcount, overflow_ops);
 irep_typedefs(bswap, arith_1op);
 irep_typedefs(concat, bit_2ops);
 irep_typedefs(extract, extract_data);
+irep_typedefs(capability_info, object_ops);
 irep_typedefs(forall, logic_2ops);
 irep_typedefs(exists, logic_2ops);
 
@@ -3611,6 +3613,22 @@ public:
   extract2t(const extract2t &ref) = default;
 
   expr2tc do_simplify() const override;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class capability_info2t : public capability_info_expr_methods
+{
+public:
+  /** Primary constructor. @param operand Pointer object to fetch size for. */
+  capability_info2t(const expr2tc &operand)
+    : capability_info_expr_methods(
+        get_empty_type(),
+        capability_info_id,
+        operand)
+  {
+  }
+  capability_info2t(const capability_info2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
