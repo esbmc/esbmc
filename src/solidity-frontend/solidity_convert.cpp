@@ -195,6 +195,15 @@ void solidity_convertert::merge_multi_files()
   std::unordered_set<std::string> visited_paths;
   visited_paths.insert(main_path); // main file is already there
 
+  // The purpose of the following processing is to ensure that the merged AST is presented in the following format:
+  // Assume A.sol import B.sol, B.sol import C.sol
+  // "absolutePath": "C.sol" --> this contains in the AST of B.sol
+  // "nodes": [from C.sol]
+  // "absolutePath": "B.sol" --> this contains in the AST of A.sol
+  // "nodes": [from B.sol]
+  // "absolutePath": "A.sol" --> This part is manually added to handle absolute paths differently from the above,the path is derived from its own root node
+  // "nodes": [from A.sol]
+
   // Find last ImportDirective in main file
   size_t last_import_pos = 0;
   for (size_t i = 0; i < nodes.size(); ++i)
@@ -205,11 +214,24 @@ void solidity_convertert::merge_multi_files()
     }
   }
 
+  //# Assign (max ID + 1) in this AST file to the manually created part to avoid ID conflicts
+  int max_id = 0;
+  for (const auto &ast : src_ast_json_array)
+  {
+    for (const auto &node : ast["nodes"])
+    {
+      if (node.contains("id") && node["id"].is_number_integer())
+      {
+        max_id = std::max(max_id, static_cast<int>(node["id"]));
+      }
+    }
+  }
+
   // Insert ImportDirective node for main file
   nlohmann::json main_node;
   main_node["absolutePath"] = main_path;
   main_node["file"] = "./" + main_path;
-  main_node["id"] = 1;
+  main_node["id"] = ++max_id;
   main_node["nameLocation"] = "-1:-1:-1";
   main_node["nodeType"] = "ImportDirective";
   nodes.insert(nodes.begin() + last_import_pos + 1, main_node);
@@ -227,16 +249,13 @@ void solidity_convertert::merge_multi_files()
       visited_paths.insert(import_path);
 
       const auto &imported_ast = path_to_json.at(import_path);
-      // printf(
-      //   "Merging AST from imported file: %s\n", import_path.c_str());
-      // printf(
-      //   "  AST file is as follows:\n%s\n",
-      //   imported_ast.dump(2).c_str());
       const auto &imported_nodes = imported_ast["nodes"];
 
       size_t insert_before = i;
       size_t insert_after = i + 1;
-      // 1. Insert this file's non-Pragma, non-Import nodes after the node
+      // Each file contains the absolute paths of its imported files, 
+      // so we insert content before and after to match the target format.
+      // Insert this file's non-Pragma, non-Import nodes after the node
       for (const auto &n : imported_nodes)
       {
         if (
@@ -248,7 +267,7 @@ void solidity_convertert::merge_multi_files()
         }
       }
 
-      // 2. Insert this file's ImportDirectives before the node
+      // Insert this file's ImportDirectives before the node
       for (const auto &n : imported_nodes)
       {
         if (n["nodeType"] == "ImportDirective")
@@ -260,43 +279,6 @@ void solidity_convertert::merge_multi_files()
       }
     }
   }
-
-  // The initial part of the nodes in a single AST includes an import information description section
-  // and a version description section.This is followed by all the information that needs to be verified.
-  // Therefore, the rest of the key nodes need to be inserted sequentially thereafter
-  // It also means before the first ContractDefinition node.
-  // size_t insert_pos = 0;
-  // for (size_t i = 0; i < src_ast_json["nodes"].size(); ++i)
-  // {
-  //   if (src_ast_json["nodes"][i]["nodeType"] == "ImportDirective")
-  //   {
-  //     insert_pos = i + 1;
-  //     break;
-  //   }
-  // }
-
-  // for (size_t i = 1; i < src_ast_json_array.size(); ++i)
-  // {
-  //   nlohmann::json &imported_part = src_ast_json_array[i];
-  //   // Traverse nodes in the imported part
-  //   for (const auto &node : imported_part["nodes"])
-  //   {
-  //     if (
-  //       node["nodeType"] != "PragmaDirective"&& node["nodeType"] != "PragmaDirective")
-  //     {
-  //       // Add the node before the first ContractDefinition node
-  //       // chose to insert it here instead of at the end because splitting a piece of Solidity code(use import)
-  //       // into multiple files results in the import order of contracts and interfaces in the AST file
-  //       // being reversed compared to the unsplit version.
-  //       src_ast_json["nodes"].insert(
-  //         src_ast_json["nodes"].begin() + insert_pos, node);
-  //       ++insert_pos; // Adjust the insert position for the next node
-  //     }
-  //   }
-  // }
-  // printf(
-  //   "After merging, the AST file is as follows:\n%s\n",
-  //   src_ast_json.dump(2).c_str());
 }
 
 std::vector<nlohmann::json> solidity_convertert::topological_sort(
