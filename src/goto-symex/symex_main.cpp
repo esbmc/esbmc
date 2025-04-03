@@ -901,9 +901,6 @@ void goto_symext::run_intrinsic(
     // Rename the size symbol with last known value
     cur_state->rename(cap_bounds);
 
-    // TODO: how do we calculate the size? reference cpp_new?
-    // Get the low 64-bit type size from ptr expr to calculate?
-
     // What should we use as index? metadata?
     expr2tc ptr_obj = pointer_capability2tc(ptraddr_type2(), ptr);
 
@@ -912,7 +909,7 @@ void goto_symext::run_intrinsic(
     expr2tc index = index2tc(size_type2(), sz_sym, ptr_obj);
 
     // __ESBMC_cheri_size[metadata] = bound
-    symex_assign(code_assign2tc(index, cap_bounds), true);
+    // symex_assign(code_assign2tc(index, cap_bounds), true);
     return;
   }
 

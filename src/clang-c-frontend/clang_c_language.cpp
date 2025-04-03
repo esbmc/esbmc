@@ -488,8 +488,10 @@ _Bool __esbmc_cheri_sealed_get(void *__capability);
 #endif
 __UINT64_TYPE__ __esbmc_clzll(__UINT64_TYPE__);
 
+struct cap_info {__SIZE_TYPE__ low_bound; __SIZE_TYPE__ upper_bound;};
+
 __attribute__((annotate("__ESBMC_inf_size")))
-__SIZE_TYPE__ __ESBMC_cheri_size[1];
+struct cap_info __ESBMC_cheri_size[1];
     )";
   }
 
