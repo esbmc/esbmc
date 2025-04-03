@@ -40,20 +40,24 @@ void clang_c_maint::static_lifetime_init(const contextt &context, codet &dest)
   dest = code_blockt();
 
   // Do assignments based on "value".
-  context.foreach_operand_in_order([&dest, this](const symbolt &s) {
-    if (s.static_lifetime)
-      init_variable(dest, s);
-  });
+  context.foreach_operand_in_order(
+    [&dest, this](const symbolt &s)
+    {
+      if (s.static_lifetime)
+        init_variable(dest, s);
+    });
 
   // call designated "initialization" functions
-  context.foreach_operand_in_order([&dest](const symbolt &s) {
-    if (s.type.initialization() && s.type.is_code())
+  context.foreach_operand_in_order(
+    [&dest](const symbolt &s)
     {
-      code_function_callt function_call;
-      function_call.function() = symbol_expr(s);
-      dest.move_to_operands(function_call);
-    }
-  });
+      if (s.type.initialization() && s.type.is_code())
+      {
+        code_function_callt function_call;
+        function_call.function() = symbol_expr(s);
+        dest.move_to_operands(function_call);
+      }
+    });
 }
 
 bool clang_c_maint::clang_main()
@@ -86,14 +90,21 @@ bool clang_c_maint::clang_main()
           break;
         }
       }
-      if (!is_found_sym)
-        continue;
+      if (is_found_sym)
+      {
+        symbolt *s = context.find_symbol(it->second);
+        if (s != nullptr && s->type.is_code())
+          matches.push_back(it->second);
+        break; // prevent ambiguous
+      }
     }
-
-    // look it up
-    symbolt *s = context.find_symbol(it->second);
-    if (s != nullptr && s->type.is_code())
-      matches.push_back(it->second);
+    else
+    {
+      // look it up
+      symbolt *s = context.find_symbol(it->second);
+      if (s != nullptr && s->type.is_code())
+        matches.push_back(it->second);
+    }
   }
 
   if (matches.empty())
