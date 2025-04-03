@@ -870,16 +870,7 @@ bool goto_coveraget::filter(
   // Skip the function that is labbelled with "__ESBMC_HIDE"
   // For now, it's only for Solidity
   // Maybe we can extend this to a dedicated label like __ESBMC_NO_COV
-  if (config.language.lid == language_idt::SOLIDITY && !goto_program.empty())
-  {
-    for (const auto &instruction : goto_program.instructions)
-    {
-      for (const auto &label : instruction.labels)
-      {
-        if (label == "__ESBMC_HIDE")
-          return true;
-      }
-    }
-  }
+  if (config.language.lid == language_idt::SOLIDITY && goto_program.hide)
+    return true;
   return false;
 }

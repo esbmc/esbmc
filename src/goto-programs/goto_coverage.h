@@ -62,7 +62,6 @@ public:
   std::string get_filename_from_path(std::string path);
   void set_target(const std::string &_tgt);
   bool is_target_func(const irep_idt &f, const std::string &tgt_name) const;
-  void set_no_hide();
   bool
   filter(const irep_idt &func_name, const goto_programt &goto_program) const;
 
