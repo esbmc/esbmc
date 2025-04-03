@@ -1,0 +1,8 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+import "./contract3.sol";
+
+contract C is B {
+    uint public myCValue = myBValue + 1;
+}
