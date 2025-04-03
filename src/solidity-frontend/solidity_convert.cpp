@@ -253,7 +253,7 @@ void solidity_convertert::merge_multi_files()
 
       size_t insert_before = i;
       size_t insert_after = i + 1;
-      // Each file contains the absolute paths of its imported files, 
+      // Each file contains the absolute paths of its imported files,
       // so we insert content before and after to match the target format.
       // Insert this file's non-Pragma, non-Import nodes after the node
       for (const auto &n : imported_nodes)
