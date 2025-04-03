@@ -11,7 +11,6 @@
 #include <util/std_types.h>
 #include <util/std_code.h>
 #include <util/string_constant.h>
-#include <util/arith_tools.h>
 #include <nlohmann/json.hpp>
 #include <solidity-frontend/solidity_grammar.h>
 #include <solidity-frontend/pattern_check.h>
