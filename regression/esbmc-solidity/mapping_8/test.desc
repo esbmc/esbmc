@@ -1,4 +1,4 @@
 CORE
 contract.solast
---sol contract.sol --unwind 3 --no-unwinding-assertions --force-malloc-success --no-pointer-check
+--sol contract.sol --unwind 3 --no-unwinding-assertions   --no-pointer-check
 ^VERIFICATION FAILED$

@@ -22,9 +22,9 @@ public:
   solidity_convertert(
     contextt &_context,
     nlohmann::json &_ast_json,
+    const std::string &_sol_cnts,
     const std::string &_sol_func,
-    const std::string &_contract_path,
-    const bool _is_bound);
+    const std::string &_contract_path);
   virtual ~solidity_convertert() = default;
 
   bool convert();
@@ -82,6 +82,7 @@ protected:
     nlohmann::json &c_node,
     const std::string &c_name,
     std::set<std::string> &merged_list);
+  void add_inherit_label(nlohmann::json &node);
 
   // handle constructor
   bool get_constructor(
@@ -291,8 +292,8 @@ protected:
 
   symbolt *move_symbol_to_context(symbolt &symbol);
   bool multi_transaction_verification(const std::string &contractName);
-  bool multi_contract_verification_bound();
-  bool multi_contract_verification_unbound();
+  bool multi_contract_verification_bound(std::set<std::string> &tgt_set);
+  bool multi_contract_verification_unbound(std::set<std::string> &tgt_set);
   void reset_auxiliary_vars();
 
   // auxiliary functions
@@ -438,11 +439,12 @@ protected:
     const exprt &member,
     const bool is_func_call,
     exprt &new_expr);
-  bool get_bind_cname(const nlohmann::json &json, exprt &bind_cname_expr);
+  bool get_bind_cname_expr(const nlohmann::json &json, exprt &bind_cname_expr);
   void get_nondet_contract_name(
     const exprt src_expr,
     const typet dest_type,
     exprt &new_expr);
+  void get_nondet_expr(const typet &t, exprt &new_expr);
   bool assign_nondet_contract_name(const std::string &_cname, exprt &new_expr);
   bool assign_param_nondet(
     const nlohmann::json &decl_ref,
@@ -471,17 +473,15 @@ protected:
   nlohmann::json src_ast_json_array = nlohmann::json::array();
   // json for Solidity AST. Use object for single contract
   nlohmann::json src_ast_json;
-  // Solidity function to be verified
-  const std::string &sol_func;
+  // Solidity contracts/ function to be verified
+  const std::string &tgt_cnts;
+  const std::string &tgt_func;
   //smart contract source file
   const std::string &contract_path;
 
   std::string absolute_path;
   std::string contract_contents = "";
-  // scope id of "ContractDefinition"
-  int global_scope_id;
 
-  unsigned int current_scope_var_num;
   const nlohmann::json *current_functionDecl;
   const nlohmann::json *current_forStmt;
   const nlohmann::json *current_typeName;
@@ -504,7 +504,6 @@ protected:
   //! If you are not sure, use 'get_current_contract_name' instead.
   std::string current_contractName;
   std::string current_baseContractName;
-  std::string current_fileName;
 
   // Auxiliary data structures:
   // Mapping from the node 'id' to the exported symbol (i.e. contract, error, constant var ....)
@@ -518,8 +517,9 @@ protected:
   // contract name list
   std::unordered_map<int, std::string> contractNamesMap;
   std::set<std::string> contractNamesList;
-  // Store the ast_node["id"] of contract/struct/function/...
-  std::unordered_map<int, std::string> scope_map;
+  // Store the ast_node["id"] of struct/error
+  // where entity contains "members": [{}, {}...]
+  std::unordered_map<int, std::string> member_entity_scope;
   // Store state variables
   code_blockt initializers;
   // For inheritance
@@ -536,11 +536,6 @@ protected:
   // dealing with the implicit constructor call
   // this is to avoid reference to stack memory associated with local variable returned
   const nlohmann::json empty_json;
-
-  // --function
-  std::string tgt_func;
-  // --contract
-  std::string tgt_cnt;
 
   // for auxiliary var name
   int aux_counter;

@@ -221,6 +221,8 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     }
     else if (typeString.find("type(") != std::string::npos)
     {
+      if (typeIdentifier.compare(0, 17, "t_magic_meta_type") == 0)
+        return TypeProperty;
       // For type conversion
       return TypeConversionName;
     }
@@ -287,6 +289,7 @@ const char *type_name_to_str(TypeNameT type)
     ENUM_TO_STR(ContractTypeName)
     ENUM_TO_STR(AddressTypeName)
     ENUM_TO_STR(TypeConversionName)
+    ENUM_TO_STR(TypeProperty)
     ENUM_TO_STR(EnumTypeName)
     ENUM_TO_STR(StructTypeName)
     ENUM_TO_STR(TupleTypeName)
@@ -715,6 +718,10 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
       return NewExpression;
     if (expr["kind"] == "typeConversion")
       return TypeConversionExpression;
+    if (
+      get_type_name_t(expr["typeDescriptions"]) ==
+      SolidityGrammar::TypeProperty)
+      return TypePropertyExpression;
     return CallExprClass;
   }
   else if (expr["nodeType"] == "MemberAccess")
@@ -992,6 +999,7 @@ const char *expression_to_str(ExpressionT type)
     ENUM_TO_STR(EnumMemberCall)
     ENUM_TO_STR(BuiltinMemberCall)
     ENUM_TO_STR(TypeConversionExpression)
+    ENUM_TO_STR(TypePropertyExpression)
     ENUM_TO_STR(NullExpr)
     ENUM_TO_STR(ExpressionTError)
   default:

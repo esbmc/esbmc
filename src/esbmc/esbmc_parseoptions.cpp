@@ -2049,6 +2049,7 @@ bool esbmc_parseoptionst::process_goto_program(
       // for function mode
       if (cmdline.isset("function"))
         tmp.set_target(cmdline.getval("function"));
+
       tmp.branch_coverage();
     }
     if (
@@ -2067,6 +2068,7 @@ bool esbmc_parseoptionst::process_goto_program(
 
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);
+
       tmp.branch_function_coverage();
     }
 

@@ -1,0 +1,8 @@
+CORE
+contract.solast
+--sol contract.sol --k-induction --no-standard-check --assertion-coverage --contract Algo --unbound
+^Total Asserts: 2
+^Total Assertion Instances: 2
+^Reached Assertion Instances: 2
+^Assertion Instances Coverage: 100%
+^VERIFICATION FAILED$
