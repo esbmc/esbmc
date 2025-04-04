@@ -7,7 +7,8 @@ import "./contract2.sol";
 contract D is C {
     uint public myDValue = myCValue;
 
-    function test() public view {
-        assert(myDValue == 4); 
+    function test() public {
+        myDValue = myDValue + Value;
+        assert(myDValue == 5); 
     }
 }

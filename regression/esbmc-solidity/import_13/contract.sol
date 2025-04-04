@@ -5,12 +5,16 @@ import "./contract2.sol";
 contract _MAIN_ {
     Bank bank;
 
-    constructor () public {
-        bank = new Bank();
-        uint a = 0;
-        a = bank.a();
+    uint a;
 
-        assert(a == 3);
+    constructor () {
+        bank = new Bank();
+        a = bank.a();
+    }
+    function test() public {
+        a = a + c;
+
         assert(a == 4);
     }
+
 }

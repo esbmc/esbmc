@@ -15,7 +15,8 @@ contract A {
         totalValue = b.value() + c.value(); // 3 + 4 = 7
     }
 
-    function test() public view {
-        assert(totalValue == 7);
+    function test() public {
+        totalValue = totalValue + x - y; // 7 + 1 - 2 = 6
+        assert(totalValue == 6);
     }
 }
