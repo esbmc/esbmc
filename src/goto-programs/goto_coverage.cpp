@@ -736,8 +736,7 @@ exprt goto_coveraget::handle_single_guard(
   }
 
   // --- Helper: Recognized binary comparisons ---
-  auto is_comparison = [](const exprt &e) -> bool
-  {
+  auto is_comparison = [](const exprt &e) -> bool {
     return (
       e.id() == exprt::equality || e.id() == exprt::notequal ||
       e.id() == exprt::i_lt || e.id() == exprt::i_gt || e.id() == exprt::i_le ||
