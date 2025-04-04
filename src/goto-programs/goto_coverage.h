@@ -74,7 +74,7 @@ public:
 
 protected:
   // turn a OP b OP c into a list a, b, c
-  exprt handle_single_guard(exprt &guard);
+  exprt handle_single_guard(exprt &expr, bool top_level);
   void handle_operands_guard(
     exprt &expr,
     goto_programt &goto_program,
