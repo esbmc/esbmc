@@ -27,3 +27,9 @@ assert l6[2] == 3
 
 def foo(l: list[int]) -> list[int]:
     return l
+
+l7 = [2,2,3]
+l7[0] = 1
+assert l7[0] == 1
+assert l7[1] == 2
+assert l7[2] == 3
