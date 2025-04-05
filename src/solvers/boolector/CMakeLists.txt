@@ -16,6 +16,9 @@ else()
       GITHUB_REPOSITORY Boolector/boolector
       GIT_TAG 3.2.3)
 
+    # Patch CMakeLists.txt to update the minimum required version using sed
+    execute_process(COMMAND sed -i "s/cmake_minimum_required(VERSION 3.3)/cmake_minimum_required(VERSION 3.5)/" ${boolector_SOURCE_DIR}/CMakeLists.txt)
+
     # We can't use ExternalProject because we need it ready
     # at configuration time
 
