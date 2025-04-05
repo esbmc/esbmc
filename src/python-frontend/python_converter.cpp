@@ -1158,7 +1158,12 @@ void python_converter::get_var_assign(
   }
   else if (ast_node["_type"] == "Assign")
   {
-    const std::string &name = ast_node["targets"][0]["id"].get<std::string>();
+    const auto &target = ast_node["targets"][0];
+
+    const auto &name = (target["_type"] == "Subscript")
+                         ? target["value"]["id"].get<std::string>()
+                         : target["id"].get<std::string>();
+
     sid.set_object(name);
     lhs_symbol = symbol_table_.find_symbol(sid.to_string());
 
