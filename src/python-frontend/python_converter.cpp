@@ -334,9 +334,9 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   assert(!op.empty());
 
-  // Get LHS and RHS types from variable annotation
-  std::string lhs_type = type_handler_.get_operand_type(left);
-  std::string rhs_type = type_handler_.get_operand_type(right);
+  // Get LHS and RHS types
+  std::string lhs_type = type_handler_.type_to_string(lhs.type());
+  std::string rhs_type = type_handler_.type_to_string(rhs.type());
 
   // If RHS is a string literal, like x = "foo", then we determine the type from the JSON value
   if (
@@ -1096,55 +1096,71 @@ void python_converter::get_var_assign(
   exprt lhs;
   symbolt *lhs_symbol = nullptr;
   locationt location_begin;
-  symbol_id id = create_symbol_id();
+  symbol_id sid = create_symbol_id();
+
+  const auto &target = (ast_node.contains("targets")) ? ast_node["targets"][0]
+                                                      : ast_node["target"];
+  const auto &target_type = target["_type"];
 
   if (ast_node["_type"] == "AnnAssign")
   {
     // Id and name
     std::string name;
-    auto target = ast_node["target"];
+
     if (!target.is_null())
     {
-      if (target["_type"] == "Name")
+      if (target_type == "Name")
         name = target["id"];
-      else if (target["_type"] == "Attribute")
+      else if (target_type == "Attribute")
         name = target["attr"];
+      else if (target_type == "Subscript")
+        name = target["value"]["id"];
 
-      id.set_object(name);
+      assert(!name.empty());
+
+      sid.set_object(name);
     }
 
-    assert(!name.empty());
-
     // Location
-    location_begin = get_location_from_decl(ast_node["target"]);
+    location_begin = get_location_from_decl(target);
 
-    // Debug module name
-    std::string module_name = location_begin.get_file().as_string();
+    lhs_symbol = symbol_table_.find_symbol(sid.to_string().c_str());
 
-    // Create/init symbol
-    symbolt symbol = create_symbol(
-      module_name, name, id.to_string(), location_begin, current_element_type);
-    symbol.lvalue = true;
-    symbol.static_lifetime = false;
-    symbol.file_local = true;
-    symbol.is_extern = false;
+    if (!lhs_symbol)
+    {
+      // Debug module name
+      std::string module_name = location_begin.get_file().as_string();
 
-    if (target["_type"] == "Attribute")
+      // Create/init symbol
+      symbolt symbol = create_symbol(
+        module_name,
+        name,
+        sid.to_string(),
+        location_begin,
+        current_element_type);
+      symbol.lvalue = true;
+      symbol.static_lifetime = false;
+      symbol.file_local = true;
+      symbol.is_extern = false;
+
+      lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
+    }
+
+    if (target_type == "Attribute" || target_type == "Subscript")
     {
       is_converting_lhs = true;
       lhs = get_expr(target); // lhs is a obj.member expression
     }
     else
-      lhs = symbol_expr(symbol); // lhs is a simple variable
+      lhs = symbol_expr(*lhs_symbol); // lhs is a simple variable
 
     lhs.location() = location_begin;
-    lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
   }
   else if (ast_node["_type"] == "Assign")
   {
     const std::string &name = ast_node["targets"][0]["id"].get<std::string>();
-    id.set_object(name);
-    lhs_symbol = symbol_table_.find_symbol(id.to_string());
+    sid.set_object(name);
+    lhs_symbol = symbol_table_.find_symbol(sid.to_string());
 
     if (!lhs_symbol)
       throw std::runtime_error("Type undefined for \"" + name + "\"");
