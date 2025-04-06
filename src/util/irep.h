@@ -1096,6 +1096,10 @@ public:
   {
     return id() == id_code;
   }
+  inline bool is_side_effect() const
+  {
+	return id() == id_side_effect;
+  }
   inline bool is_function_call() const
   {
     return is_code() && statement() == "function_call";
@@ -1277,7 +1281,7 @@ public:
   static const irep_idt a_need_vptr_init;
 
   static const irep_idt id_address_of, id_and, id_or, id_array, id_bool,
-    id_code;
+    id_code, id_side_effect;
   static const irep_idt id_constant, id_dereference, id_empty, id_fixedbv;
   static const irep_idt id_floatbv, id_incomplete_array, id_index, id_member;
   static const irep_idt id_not, id_notequal, id_pointer, id_signedbv;

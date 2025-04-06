@@ -569,6 +569,7 @@ const irep_idt irept::id_or = dstring("or");
 const irep_idt irept::id_array = dstring("array");
 const irep_idt irept::id_bool = dstring("bool");
 const irep_idt irept::id_code = dstring("code");
+const irep_idt irept::id_side_effect = dstring("sideeffect");
 const irep_idt irept::id_constant = dstring("constant");
 const irep_idt irept::id_dereference = dstring("dereference");
 const irep_idt irept::id_empty = dstring("empty");

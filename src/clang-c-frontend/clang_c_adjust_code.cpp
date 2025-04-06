@@ -37,6 +37,11 @@ void clang_c_adjust::adjust_code(codet &code)
   }
   else if (statement == "function_call")
   {
+    for (auto &op : code.operands())
+    {
+      if (op.is_index())
+        adjust_index(to_index_expr(op));
+    }
   }
   else if (statement == "decl-block")
     adjust_decl_block(code);
