@@ -256,6 +256,12 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "do not unroll bounded loops at goto level (need to enable "
      "--goto-unwind)"},
+    {"forward-slicer",
+     NULL,
+     "skip instructions that do not affect the VCCs from the forward check"},
+    {"goto-slicer",
+     NULL,
+     "skip instructions that do not affect the VCCs from the base case"},
     {"slice-assumes", NULL, "remove unused assume statements"},
     {"extended-try-analysis", NULL, ""},
     {"skip-bmc", NULL, "do not perform bounded model checking"},
