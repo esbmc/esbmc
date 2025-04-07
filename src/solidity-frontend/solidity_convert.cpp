@@ -17,16 +17,15 @@
 solidity_convertert::solidity_convertert(
   contextt &_context,
   nlohmann::json &_ast_json,
+  const std::string &_sol_cnts,
   const std::string &_sol_func,
-  const std::string &_contract_path,
-  const bool _is_bound)
+  const std::string &_contract_path)
   : context(_context),
     ns(context),
     src_ast_json_array(_ast_json),
-    sol_func(_sol_func),
+    tgt_cnts(_sol_cnts),
+    tgt_func(_sol_func),
     contract_path(_contract_path),
-    global_scope_id(0),
-    current_scope_var_num(1),
     current_functionDecl(nullptr),
     current_forStmt(nullptr),
     current_typeName(nullptr),
@@ -39,21 +38,23 @@ solidity_convertert::solidity_convertert(
     current_functionName(""),
     current_contractName(""),
     current_baseContractName(""),
-    current_fileName(""),
-    scope_map({}),
+    member_entity_scope({}),
     initializers(code_blockt()),
     ctor_modifier(nullptr),
     based_contracts(nullptr),
-    tgt_func(config.options.get_option("function")),
-    tgt_cnt(config.options.get_option("contract")),
     aux_counter(0),
-    is_bound(_is_bound),
+    is_bound(true),
     nondet_bool_expr(),
     nondet_uint_expr()
 {
   std::ifstream in(_contract_path);
   contract_contents.assign(
     (std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+
+  // bound setting - default value is true
+  const std::string unbound = config.options.get_option("unbound");
+  if (!unbound.empty())
+    is_bound = false;
 
   // initialize nondet_bool
   if (
@@ -87,11 +88,33 @@ bool solidity_convertert::convert()
   // store auxiliary info
   populate_auxilary_vars();
 
+  // for coverage and trace simplification: update include_files
+  auto add_unique = [](const std::string &file) {
+    if (
+      std::find(
+        config.ansi_c.include_files.begin(),
+        config.ansi_c.include_files.end(),
+        file) == config.ansi_c.include_files.end())
+    {
+      config.ansi_c.include_files.push_back(file);
+    }
+  };
+  add_unique(absolute_path);
+
+  std::string old_path = absolute_path;
   // first round: handle definitions that can be outside of the contract
   // including struct, enum, interface, event, error, library, constant...
   // noted that some can also be inside the contract, e.g. struct, enum...
   for (nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end(); ++itr)
   {
+    if ((*itr).contains("absolutePath"))
+    {
+      // for "import" cases
+      // we assume the merged file's nodes order is not messed up
+      absolute_path = (*itr)["absolutePath"];
+      add_unique(absolute_path);
+    }
+
     if (get_noncontract_defition(*itr))
       return true;
     if (
@@ -104,10 +127,14 @@ bool solidity_convertert::convert()
         return true;
     }
   }
+  absolute_path = old_path;
 
   // second round: handle contract definition
   for (nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end(); ++itr)
   {
+    if ((*itr).contains("absolutePath"))
+      absolute_path = (*itr)["absolutePath"];
+
     std::string node_type = (*itr)["nodeType"].get<std::string>();
 
     if (node_type == "ContractDefinition")
@@ -126,22 +153,32 @@ bool solidity_convertert::convert()
   // single contract verification: where the option "--contract" is set.
   // multiple contracts verification: essentially verify the whole file.
   // single contract
-  if (!tgt_cnt.empty() && tgt_func.empty())
+  std::set<std::string> tgt_cnt_set;
+  std::istringstream iss(tgt_cnts);
+  std::string tgt_cnt;
+  while (iss >> tgt_cnt)
+    tgt_cnt_set.insert(tgt_cnt);
+
+  if (tgt_func.empty())
   {
-    // perform multi-transaction verification
-    // by adding symbols to the "sol_main()" entry function
-    if (multi_transaction_verification(tgt_cnt))
-      return true;
-  }
-  // multiple contract
-  if (tgt_func.empty() && tgt_cnt.empty())
-  {
-    // for bounded cross-contract verification  (--bound)
-    if (is_bound && multi_contract_verification_bound())
-      return true;
-    // for unbounded cross-contract verification (--unbound)
-    else if (multi_contract_verification_unbound())
-      return true;
+    if (tgt_cnt_set.size() == 1)
+    {
+      // perform multi-transaction verification
+      // by adding symbols to the "sol_main()" entry function
+      if (multi_transaction_verification(*tgt_cnt_set.begin()))
+        return true;
+    }
+    // multiple contract
+    // either --contract unset, or --contract "C1 C2 ..."
+    else
+    {
+      // for bounded cross-contract verification  (--bound)
+      if (is_bound && multi_contract_verification_bound(tgt_cnt_set))
+        return true;
+      // for unbounded cross-contract verification (--unbound)
+      else if (multi_contract_verification_unbound(tgt_cnt_set))
+        return true;
+    }
   }
   // else: verify the target function.
 
@@ -364,7 +401,6 @@ void solidity_convertert::contract_precheck()
     std::string node_type = (*itr)["nodeType"].get<std::string>();
     if (node_type == "ContractDefinition") // contains AST nodes we need
     {
-      global_scope_id = (*itr)["id"];
       found_contract_def = true;
       break;
       //TODO: skip pattern base check as it's not really valuable at the moment.
@@ -470,8 +506,7 @@ void solidity_convertert::populate_auxilary_vars()
     typet ct = pointer_typet(signed_char_type());
     ct.cmt_constant(true);
     symbolt s;
-    get_default_symbol(
-      s, current_fileName, ct, aux_cname, aux_cid, locationt());
+    get_default_symbol(s, absolute_path, ct, aux_cname, aux_cid, locationt());
     s.lvalue = true;
     s.file_local = true;
     s.static_lifetime = true; // static
@@ -525,7 +560,7 @@ void solidity_convertert::populate_auxilary_vars()
     symbolt s;
     typet _t = inits.type();
     _t.cmt_constant(true);
-    get_default_symbol(s, current_fileName, _t, aux_name, aux_id, locationt());
+    get_default_symbol(s, absolute_path, _t, aux_name, aux_id, locationt());
     s.file_local = true;
     s.static_lifetime = true;
     s.lvalue = true;
@@ -1082,11 +1117,11 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &struct_def)
     id = prefix + "struct " + struct_def["canonicalName"].get<std::string>();
     t.tag("struct " + name);
 
-    // populate the scope_map
+    // populate the member_entity_scope
     // this map is used to find reference when there is no decl_ref_id provided in the nodes
     // or replace the find_decl_ref in order to speed up
     int scp = struct_def["id"].get<int>();
-    scope_map.insert(std::pair<int, std::string>(scp, name));
+    member_entity_scope.insert(std::pair<int, std::string>(scp, name));
   }
   else
   {
@@ -1110,7 +1145,6 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &struct_def)
   // 4. populate debug module name
   std::string debug_modulename =
     get_modulename_from_path(location_begin.file().as_string());
-  current_fileName = debug_modulename;
 
   symbolt symbol;
   get_default_symbol(symbol, debug_modulename, t, name, id, location_begin);
@@ -1224,7 +1258,6 @@ bool solidity_convertert::get_contract_definition(const std::string &c_name)
   auto old_current_functionName = current_functionName;
   auto old_current_functionDecl = current_functionDecl;
   auto old_current_forStmt = current_forStmt;
-  auto old_global_scope_id = global_scope_id;
   auto old_initializers = initializers;
   auto old_ctor_modifier = ctor_modifier;
   auto old_based_contracts = based_contracts;
@@ -1278,7 +1311,6 @@ bool solidity_convertert::get_contract_definition(const std::string &c_name)
         current_functionName = old_current_functionName;
         current_functionDecl = old_current_functionDecl;
         current_forStmt = old_current_forStmt;
-        global_scope_id = old_global_scope_id;
         initializers = old_initializers;
         ctor_modifier = old_ctor_modifier;
         based_contracts = old_based_contracts;
@@ -1336,7 +1368,6 @@ bool solidity_convertert::get_contract_definition(const std::string &c_name)
   current_functionName = old_current_functionName;
   current_functionDecl = old_current_functionDecl;
   current_forStmt = old_current_forStmt;
-  global_scope_id = old_global_scope_id;
   initializers = old_initializers;
   ctor_modifier = old_ctor_modifier;
   based_contracts = old_based_contracts;
@@ -1583,7 +1614,7 @@ bool solidity_convertert::get_error_definition(const nlohmann::json &ast_node)
     return false;
   }
   // update scope map
-  scope_map.insert(std::pair<int, std::string>(id_num, name));
+  member_entity_scope.insert(std::pair<int, std::string>(id_num, name));
 
   // just to pass the internal assertions
   current_functionName = name;
@@ -1648,6 +1679,29 @@ bool solidity_convertert::get_error_definition(const nlohmann::json &ast_node)
   current_functionName = old_functionName;
 
   return false;
+}
+
+// add ["is_inherited"] = true to node and all sub_node that contains an "id"
+void solidity_convertert::add_inherit_label(nlohmann::json &node)
+{
+  // Add or update the "is_inherited" label in the current node
+  if (node.is_object())
+    node["is_inherited"] = true;
+
+  // Traverse through all sub-nodes
+  if (node.is_object() || node.is_array())
+  {
+    for (auto &sub_node : node)
+    {
+      if (sub_node.is_object() && sub_node.contains("id"))
+      {
+        sub_node["is_inherited"] = true;
+      }
+
+      // Recurse into nested nodes
+      add_inherit_label(sub_node);
+    }
+  }
 }
 
 void solidity_convertert::merge_inheritance_ast(
@@ -1725,11 +1779,11 @@ void solidity_convertert::merge_inheritance_ast(
                 !c_i["name"].empty() && i["name"] == c_i["name"])
               {
                 /*
-                    A
+                   A
                   / \
-                  B   C
+                 B   C
                   \ /
-                    D
+                   D
                   for cases above, there must be an override inside D if B and C both override A.
                 */
                 is_conflict = true;
@@ -1752,7 +1806,9 @@ void solidity_convertert::merge_inheritance_ast(
             "\t@@@ Merging AST node {} to contract {}",
             i["name"].get<std::string>().c_str(),
             c_name);
-          i.push_back({"is_inherited", true});
+          // This is to distinguish it from the originals
+          add_inherit_label(i);
+
           c_node["nodes"].push_back(i);
         }
       }
@@ -1846,10 +1902,8 @@ void solidity_convertert::convert_unboundcall_nondet(
     new_expr.op1().name() == "_ESBMC_Nondet_Extcall")
   {
     move_to_front_block(new_expr);
-    exprt dump = exprt("sideeffect", common_type);
-    dump.statement("nondet");
-    dump.location() = l;
-    new_expr = dump;
+    get_nondet_expr(common_type, new_expr);
+    new_expr.location() = l;
   }
 }
 
@@ -1894,6 +1948,12 @@ bool solidity_convertert::get_unbound_function(
     // 1.0 func body
     code_blockt func_body;
     func_body.make_block();
+
+    // add __ESBMC_HIDE
+    code_labelt label;
+    label.set_label("__ESBMC_HIDE");
+    label.code() = code_skipt();
+    func_body.operands().push_back(label);
 
     // 1.1 get contract symbol ("tag-contractName")
     const std::string id = prefix + c_name;
@@ -2009,7 +2069,7 @@ bool solidity_convertert::get_unbound_function(
     h_type.return_type() = e_type;
     const symbolt &_contract = *context.find_symbol(prefix + c_name);
     new_symbol.location = _contract.location;
-    std::string debug_modulename = current_fileName;
+    std::string debug_modulename = get_modulename_from_path(absolute_path);
     get_default_symbol(
       new_symbol, debug_modulename, h_type, h_name, h_id, _contract.location);
 
@@ -2236,7 +2296,8 @@ bool solidity_convertert::move_inheritance_to_ctor(
         std::string ctor_ins_id =
           "sol:@C@" + c_name + "@" + ctor_ins_name + "#";
         locationt ctor_ins_loc = context.find_symbol(ctor_id)->type.location();
-        std::string ctor_ins_debug_modulename = current_fileName;
+        std::string ctor_ins_debug_modulename =
+          get_modulename_from_path(absolute_path);
         typet ctor_Ins_typet = symbol_typet(prefix + c_name);
 
         symbolt ctor_ins_symbol;
@@ -2342,9 +2403,7 @@ bool solidity_convertert::get_instantiation_ctor_call(
 
   locationt location_begin;
 
-  if (current_fileName == "")
-    return true;
-  std::string debug_modulename = current_fileName;
+  std::string debug_modulename = get_modulename_from_path(absolute_path);
 
   symbolt symbol;
   get_default_symbol(symbol, debug_modulename, type, name, id, location_begin);
@@ -2423,8 +2482,6 @@ bool solidity_convertert::get_function_definition(
   if (check_intrinsic_function(ast_node))
     return false;
 
-  // 3. Set current_scope_var_num, current_functionDecl and old_functionDecl
-  current_scope_var_num = 1;
   const nlohmann::json *old_functionDecl = current_functionDecl;
   const std::string old_functionName = current_functionName;
 
@@ -2582,7 +2639,6 @@ void solidity_convertert::reset_auxiliary_vars()
   current_functionName = "";
   current_functionDecl = nullptr;
   current_forStmt = nullptr;
-  global_scope_id = 0;
   initializers.clear();
   ctor_modifier = nullptr;
   based_contracts = nullptr;
@@ -2670,6 +2726,9 @@ bool solidity_convertert::get_block(
     // items() returns a key-value pair with key being the index
     for (auto const &stmt_kv : stmts.items())
     {
+      locationt cl;
+      get_location_from_node(stmt_kv.value(), cl);
+
       exprt statement;
       if (get_statement(stmt_kv.value(), statement))
         return true;
@@ -2683,7 +2742,7 @@ bool solidity_convertert::get_block(
         }
         expr_frontBlockDecl.clear();
       }
-
+      statement.location() = cl;
       convert_expression_to_code(statement);
       _block.operands().push_back(statement);
 
@@ -3778,12 +3837,8 @@ bool solidity_convertert::get_expr(
           // comp can be either symbol_expr or member_expr
           new_expr = member_exprt(base, comp_name, comp.type());
         else if (!is_bound)
-        {
           // x.member(); ==> nondet();
-          exprt rhs = exprt("sideeffect", comp.type());
-          rhs.statement("nondet");
-          new_expr = rhs;
-        }
+          get_nondet_expr(comp.type(), new_expr);
         else
         {
           exprt dump;
@@ -3824,9 +3879,7 @@ bool solidity_convertert::get_expr(
             return true;
 
           typet t = to_code_type(comp.type()).return_type();
-          exprt rhs = exprt("sideeffect", t);
-          rhs.statement("nondet");
-          new_expr = rhs;
+          get_nondet_expr(t, new_expr);
         }
         else
         {
@@ -4228,7 +4281,7 @@ bool solidity_convertert::get_expr(
       // fix: x._ESBMC_bind_cname = Base
       // lhs
       exprt lhs;
-      if (get_bind_cname(expr, lhs))
+      if (get_bind_cname_expr(expr, lhs))
         break; // no lhs
 
       // rhs
@@ -4450,6 +4503,37 @@ bool solidity_convertert::get_expr(
   {
     if (get_sol_builtin_ref(expr, new_expr))
       return true;
+    break;
+  }
+  case SolidityGrammar::ExpressionT::TypePropertyExpression:
+  {
+    // e.g.
+    // Integers: 'type(uint256)'.max/min
+    // Contracts: 'type(MyContract)'.creationCode/runtimecode
+
+    // create a dump expr with no value, but set the correct type
+    assert(
+      expr.contains("expression") &&
+      expr["expression"].contains("argumentTypes"));
+    const auto &json = expr["expression"]["argumentTypes"];
+
+    /*
+    e.g.
+      "argumentTypes": [
+          {
+              "typeIdentifier": "t_type$_t_int256_$",
+              "typeString": "type(int256)"
+          }
+      ],
+    */
+    typet t;
+    if (get_type_description(json[0], t))
+      return true;
+
+    exprt dump;
+    dump.type() = t;
+
+    new_expr = dump;
     break;
   }
   case SolidityGrammar::ExpressionT::TypeConversionExpression:
@@ -5071,19 +5155,56 @@ bool solidity_convertert::get_binary_operator_expr(
   case SolidityGrammar::ExpressionT::BO_Pow:
   {
     // lhs**rhs => pow(lhs, rhs)
-    // double pow(double base, double exponent)
 
-    side_effect_expr_function_callt call_expr;
-    get_library_function_call_no_args(
-      "pow", "c:@F@pow", double_type(), lhs.location(), call_expr);
+    // optimization: if both base and exponent are constant, use bigint::power
+    exprt new_lhs = lhs;
+    exprt new_rhs = rhs;
+    // remove typecast
+    while (lhs.id() == "typecast")
+      new_lhs = new_lhs.op0();
+    while (rhs.id() == "typecast")
+      new_rhs = new_rhs.op0();
+    if (new_lhs.is_constant() && new_rhs.is_constant())
+    {
+      //? it seems the solc cannot generate ast_json for constant power like 2**20
+      BigInt base;
+      if (to_integer(new_lhs, base))
+      {
+        log_error("failed to convert constant: {}", new_lhs.pretty());
+        abort();
+      }
 
-    solidity_gen_typecast(ns, lhs, double_type());
-    solidity_gen_typecast(ns, rhs, double_type());
-    call_expr.arguments().push_back(lhs);
-    call_expr.arguments().push_back(rhs);
+      BigInt exp;
+      if (to_integer(new_rhs, exp))
+      {
+        log_error("failed to convert constant: {}", new_rhs.pretty());
+        abort();
+      }
 
-    new_expr = call_expr;
+      BigInt res = ::power(base, exp);
+      exprt tmp = from_integer(res, unsignedbv_typet(256));
 
+      if (tmp.is_nil())
+        return true;
+
+      new_expr.swap(tmp);
+    }
+    else
+    {
+      // Not sure why but it seems esbmc's pow works worse in solidity,
+      // so I write my own version
+      //? maybe this should convert this to BigInt too?
+      side_effect_expr_function_callt call_expr;
+      get_library_function_call_no_args(
+        "_pow", "c:@F@_pow", unsignedbv_typet(256), lhs.location(), call_expr);
+
+      call_expr.arguments().push_back(lhs);
+      call_expr.arguments().push_back(rhs);
+
+      new_expr = call_expr;
+    }
+    new_expr.location() = l;
+    // do not fall through
     return false;
   }
   default:
@@ -5476,9 +5597,11 @@ void solidity_convertert::get_symbol_decl_ref(
   }
 }
 
-/*
+/**
   This function can return expr with either id::symbol or id::member
   id::memebr can only be the case where this.xx
+  @decl: declaration json node
+  @is_this_ptr: whether we need to convert x => this.x
 */
 bool solidity_convertert::get_var_decl_ref(
   const nlohmann::json &decl,
@@ -5698,7 +5821,7 @@ bool solidity_convertert::get_func_decl_this_ref(
 
   if (context.find_symbol(this_id) == nullptr)
     get_function_this_pointer_param(
-      contract_name, func_id, current_fileName, l, type);
+      contract_name, func_id, absolute_path, l, type);
 
   new_expr = symbol_expr(*context.find_symbol(this_id));
 
@@ -5804,6 +5927,8 @@ bool solidity_convertert::get_sol_builtin_ref(
   // get the reference from the pre-populated symbol table
   // note that this could be either vars or funcs.
   assert(expr.contains("nodeType"));
+  locationt l;
+  get_location_from_node(expr, l);
 
   if (expr["nodeType"].get<std::string>() == "FunctionCall")
   {
@@ -5823,17 +5948,57 @@ bool solidity_convertert::get_sol_builtin_ref(
   {
     // e.g. string.concat() <=> c:@string_concat
     std::string bs;
+
     if (expr["expression"].contains("name"))
       bs = expr["expression"]["name"].get<std::string>();
     else if (
       expr["expression"].contains("typeName") &&
       expr["expression"]["typeName"].contains("name"))
       bs = expr["expression"]["typeName"]["name"].get<std::string>();
-    else if (0)
+    else if (expr.contains("memberName"))
     {
-      //TODO：support something like <address>.balance
+      // assume it's the no-basename type
+      // e.g. address(this).balance, type(uint256).max
+      std::string name = expr["memberName"];
+      if (name == "max" || name == "min")
+      {
+        exprt dump;
+        if (get_expr(expr["expression"], dump))
+          return true;
+        std::string sol_str = dump.type().get("#sol_type").as_string();
+        // extract integer width: e.g. uint8 => uint + 8
+        std::string type = (sol_str[0] == 'U') ? "UINT" : "INT";
+        std::string width = sol_str.substr(type.size()); // Extract width part
+        exprt is_signed =
+          type == "INT" ? gen_one(bool_type()) : gen_zero(bool_type());
+
+        side_effect_expr_function_callt call;
+        if (name == "max")
+          get_library_function_call_no_args(
+            "_max", "sol:@F@_max", unsignedbv_typet(256), l, call);
+        else
+          get_library_function_call_no_args(
+            "_min", "sol:@F@_min", unsignedbv_typet(256), l, call);
+        call.arguments().push_back(constant_exprt(
+          integer2binary(string2integer(width), bv_width(int_type())),
+          width,
+          int_type()));
+        call.arguments().push_back(is_signed);
+
+        new_expr = call;
+      }
+      else if (name == "creationCode" || name == "runtimeCode")
+        // nondet Bytes
+        get_library_function_call_no_args(
+          "_" + name, "sol:@F@_" + name, uint_type(), l, new_expr);
+      else
+        return true;
+
+      new_expr.location() = l;
+      return false;
     }
     else
+      // cannot get bs name;
       return true;
 
     std::string mem = expr["memberName"].get<std::string>();
@@ -5862,6 +6027,7 @@ bool solidity_convertert::get_sol_builtin_ref(
   else
     return true;
 
+  new_expr.location() = l;
   return false;
 }
 
@@ -6323,7 +6489,6 @@ bool solidity_convertert::get_tuple_definition(const nlohmann::json &ast_node)
   // get debug module name
   std::string debug_modulename =
     get_modulename_from_path(location_begin.file().as_string());
-  current_fileName = debug_modulename;
 
   // populate struct type symbol
   symbolt symbol;
@@ -6410,7 +6575,6 @@ bool solidity_convertert::get_tuple_instance(
   // get debug module name
   std::string debug_modulename =
     get_modulename_from_path(location_begin.file().as_string());
-  current_fileName = debug_modulename;
 
   // populate struct type symbol
   symbolt symbol;
@@ -6568,7 +6732,8 @@ void solidity_convertert::get_llc_ret_tuple(exprt &new_expr)
   id = "sol:@" + name;
   locationt l;
   symbolt symbol;
-  get_default_symbol(symbol, current_fileName, sym_t, name, id, l);
+  get_default_symbol(
+    symbol, get_modulename_from_path(absolute_path), sym_t, name, id, l);
   symbol.static_lifetime = true;
   symbol.file_local = true;
   auto &added_sym = *move_symbol_to_context(symbol);
@@ -7077,6 +7242,17 @@ bool solidity_convertert::get_elementary_type_name(
 
     break;
   }
+  case SolidityGrammar::ElementaryTypeNameT::STRING_LITERAL:
+  {
+    // it's fine even if the json is not the exact parent
+    auto json = find_parent(src_ast_json, type_name);
+    assert(!json.empty());
+    string_constantt x(json["value"].get<std::string>());
+    new_type = x.type();
+    new_type.set("#sol_type", "STRING_LITERAL");
+
+    break;
+  }
   default:
   {
     log_debug(
@@ -7258,12 +7434,12 @@ void solidity_convertert::get_local_var_decl_name(
     //! Assume it is a variable inside struct/error
     //TODO: add current_StructDecl/ current_ErrorDecl
     int scp = ast_node["scope"].get<int>();
-    if (scope_map.count(scp) == 0)
+    if (member_entity_scope.count(scp) == 0)
     {
       log_error("cannot find struct/error name");
       abort();
     }
-    std::string struct_name = scope_map.at(scp);
+    std::string struct_name = member_entity_scope.at(scp);
     if (contract_name.empty())
       id = "sol:@" + struct_name + "@" + name + "#" +
            i2string(ast_node["id"].get<std::int16_t>());
@@ -7510,7 +7686,9 @@ std::string solidity_convertert::get_filename_from_path(std::string path)
   return path; // for _x, it just returns "overflow_2.c" because the test program is in the same dir as esbmc binary
 }
 
-// find the last parent json node
+// Find the last parent json node
+// It will not reliably find the correct parent if the same target appears under multiple different parent nodes.
+// To enusre correctness, the input is expected to contain key "id" and, if possible, "is_inherit"
 const nlohmann::json &solidity_convertert::find_parent(
   const nlohmann::json &json,
   const nlohmann::json &target)
@@ -8291,7 +8469,6 @@ bool solidity_convertert::get_non_library_function_call(
     if (decl_ref.contains("parameters") && caller.contains("arguments"))
     {
       nlohmann::json param_nodes = decl_ref["parameters"]["parameters"];
-      unsigned num_args = 0;
       nlohmann::json param = nullptr;
       nlohmann::json::iterator itr = param_nodes.begin();
 
@@ -8315,7 +8492,6 @@ bool solidity_convertert::get_non_library_function_call(
         current_baseContractName = old;
 
         call.arguments().push_back(single_arg);
-        ++num_args;
         param = nullptr;
       }
     }
@@ -8454,9 +8630,7 @@ bool solidity_convertert::get_default_function(
 
   locationt location_begin;
 
-  if (current_fileName == "")
-    return true;
-  std::string debug_modulename = current_fileName;
+  std::string debug_modulename = get_modulename_from_path(absolute_path);
 
   symbolt symbol;
   get_default_symbol(symbol, debug_modulename, type, name, id, location_begin);
@@ -8525,7 +8699,8 @@ void solidity_convertert::get_static_contract_instance(
   else
   {
     locationt ctor_ins_loc;
-    std::string ctor_ins_debug_modulename = current_fileName;
+    std::string ctor_ins_debug_modulename =
+      get_modulename_from_path(absolute_path);
     typet ctor_ins_typet = symbol_typet(prefix + c_name);
 
     symbolt ctor_ins_symbol;
@@ -9032,6 +9207,12 @@ bool solidity_convertert::multi_transaction_verification(
   static_lifetime_init(context, while_body);
   while_body.make_block();
 
+  // add __ESBMC_HIDE
+  code_labelt label;
+  label.set_label("__ESBMC_HIDE");
+  label.code() = code_skipt();
+  func_body.operands().push_back(label);
+
   // 1. get constructor call
   if (linearizedBaseList[c_name].empty())
   {
@@ -9070,7 +9251,7 @@ bool solidity_convertert::multi_transaction_verification(
   main_type.return_type() = e_type;
   const symbolt &_contract = *context.find_symbol(prefix + c_name);
   new_symbol.location = _contract.location;
-  std::string debug_modulename = current_fileName;
+  std::string debug_modulename = get_modulename_from_path(absolute_path);
   get_default_symbol(
     new_symbol,
     debug_modulename,
@@ -9105,8 +9286,10 @@ bool solidity_convertert::multi_transaction_verification(
   This function perform multi-transaction verification on each contract in isolation.
   To do so, we construct nondetered switch_case;
 */
-bool solidity_convertert::multi_contract_verification_bound()
+bool solidity_convertert::multi_contract_verification_bound(
+  std::set<std::string> &tgt_set)
 {
+  log_debug("solidity", "multi_contract_verification_bound");
   // 0. initialize "sol_main" body and switch body
   codet func_body, switch_body;
   static_lifetime_init(context, switch_body);
@@ -9114,13 +9297,25 @@ bool solidity_convertert::multi_contract_verification_bound()
 
   switch_body.make_block();
   func_body.make_block();
+
+  // add __ESBMC_HIDE
+  code_labelt label;
+  label.set_label("__ESBMC_HIDE");
+  label.code() = code_skipt();
+  func_body.operands().push_back(label);
+
   // 1. construct switch-case
   int cnt = 0;
-  for (const auto &sym : contractNamesMap)
+  std::set<std::string> cname_set;
+  if (!tgt_set.empty())
+    cname_set = tgt_set;
+  else
+    cname_set = contractNamesList;
+
+  for (const auto &c_name : cname_set)
   {
     // 1.1 construct multi-transaction verification entry function
     // function "_ESBMC_Main_contractname" will be created and inserted to the symbol table.
-    const std::string &c_name = sym.second;
     if (multi_transaction_verification(c_name))
       return true;
 
@@ -9180,7 +9375,11 @@ bool solidity_convertert::multi_contract_verification_bound()
   typet e_type = empty_typet();
   e_type.set("cpp_type", "void");
   main_type.return_type() = e_type;
-  const std::string sol_id = "sol:@F@_ESBMC_Main#";
+  std::string sol_id;
+  if (!tgt_set.empty())
+    sol_id = "sol:@C@" + *tgt_set.begin() + "@F@_ESBMC_Main#";
+  else
+    sol_id = "sol:@F@_ESBMC_Main#";
   const std::string sol_name = "_ESBMC_Main";
 
   if (
@@ -9216,17 +9415,24 @@ bool solidity_convertert::multi_contract_verification_bound()
 }
 
 // for unbound, we verify each contract individually
-bool solidity_convertert::multi_contract_verification_unbound()
+bool solidity_convertert::multi_contract_verification_unbound(
+  std::set<std::string> &tgt_set)
 {
+  log_debug("solidity", "multi_contract_verification_unbound");
   codet func_body;
   static_lifetime_init(context, func_body);
   func_body.make_block();
 
-  for (const auto &sym : contractNamesMap)
+  std::set<std::string> cname_set;
+  if (!tgt_set.empty())
+    cname_set = tgt_set;
+  else
+    cname_set = contractNamesList;
+
+  for (const auto &c_name : cname_set)
   {
     // construct multi-transaction verification entry function
     // function "_ESBMC_Main_contractname" will be created and inserted to the symbol table.
-    const std::string &c_name = sym.second;
     if (multi_transaction_verification(c_name))
       return true;
 
@@ -10504,7 +10710,8 @@ bool solidity_convertert::get_new_temporary_obj(
   codet &decl)
 {
   log_debug("solidity", "get new temporary object for contract {}", c_name);
-  std::string ctor_ins_debug_modulename = current_fileName;
+  std::string ctor_ins_debug_modulename =
+    get_modulename_from_path(absolute_path);
   typet ctor_Ins_typet = symbol_typet(prefix + c_name);
 
   symbolt ctor_ins_symbol;
@@ -10642,7 +10849,7 @@ void solidity_convertert::get_nondet_contract_name(
   get_aux_var(aux_name, aux_id);
   symbolt s;
   get_default_symbol(
-    s, current_fileName, dest_type, aux_name, aux_id, src_expr.location());
+    s, absolute_path, dest_type, aux_name, aux_id, src_expr.location());
   s.lvalue = true;
   s.file_local = true;
   s.static_lifetime = true;
@@ -10684,6 +10891,8 @@ void solidity_convertert::get_nondet_contract_name(
     codet if_expr("ifthenelse");
     if_expr.copy_to_operands(_equal, _assign);
     if_expr.location() = src_expr.location();
+    if_expr.location().file(
+      ""); // clear filename to avoid affect the coverage calculation
     _block.copy_to_operands(if_expr);
   }
 
@@ -10691,6 +10900,12 @@ void solidity_convertert::get_nondet_contract_name(
 
   for (const auto &i : _block.operands())
     move_to_front_block(i);
+}
+
+void solidity_convertert::get_nondet_expr(const typet &t, exprt &new_expr)
+{
+  new_expr = exprt("sideeffect", t);
+  new_expr.statement("nondet");
 }
 
 // x._ESBMC_bind_cname = _ESBMC_get_nondet_cname();
@@ -10862,7 +11077,7 @@ bool solidity_convertert::get_high_level_member_access(
     if (t.id() == irept::id_code)
       t = to_code_type(t).return_type();
     get_default_symbol(
-      s, current_fileName, t, aux_name, aux_id, member.location());
+      s, absolute_path, t, aux_name, aux_id, member.location());
     auto &added_symbol = *move_symbol_to_context(s);
     s.lvalue = true;
     s.file_local = true;
@@ -10953,6 +11168,7 @@ bool solidity_convertert::get_high_level_member_access(
     codet if_expr("ifthenelse");
     if_expr.copy_to_operands(_cmp_cname, rhs);
     if_expr.location() = l;
+    if_expr.location().file("");
 
     move_to_front_block(if_expr);
   }
@@ -10964,11 +11180,12 @@ bool solidity_convertert::get_high_level_member_access(
   return false;
 }
 
-bool solidity_convertert::get_bind_cname(
+// return expr: contract_instance._ESBMC_bind_cname
+bool solidity_convertert::get_bind_cname_expr(
   const nlohmann::json &json,
   exprt &bind_cname_expr)
 {
-  const nlohmann::json &parent = find_parent(src_ast_json["nodes"], json);
+  const nlohmann::json &parent = find_parent(src_ast_json, json);
   locationt l;
   get_location_from_node(json, l);
   exprt lvar;
@@ -10984,6 +11201,11 @@ bool solidity_convertert::get_bind_cname(
   {
     assert(parent.contains("declarations"));
     if (get_var_decl_ref(parent["declarations"][0], true, lvar))
+      return true;
+  }
+  else if (parent["nodeType"] == "VariableDeclaration")
+  {
+    if (get_var_decl_ref(parent, true, lvar))
       return true;
   }
   else if (parent["nodeType"] == "Assignment")

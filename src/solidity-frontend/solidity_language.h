@@ -41,14 +41,14 @@ public:
 
   bool convert_intrinsics(contextt &context);
 
+  // contract name for verification, allow multiple inputs.
+  std::string contract_names;
+
   // function name for verification that requires this information before GOTO conversion phase.
   std::string func_name;
 
   // smart contract source
-  std::string smart_contract;
-
-  // bound setting
-  bool is_bound;
+  std::string contract_path;
 
   // store AST json in nlohmann::json data structure
   nlohmann::json src_ast_json_array = nlohmann::json::array();
