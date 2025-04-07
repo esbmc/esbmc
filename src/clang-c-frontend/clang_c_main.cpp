@@ -70,18 +70,37 @@ bool clang_c_maint::clang_main()
     // if user provided class/contract name
     if (!config.cname.empty() && !config.main.empty())
     {
-      const std::string fmt = "@" + config.cname + "@F@" + main;
-      if (it->second.as_string().find(fmt) == std::string::npos)
-        continue;
+      // Allow user to provide a range. e.g.
+      // --class "A B" --function test
+      // --contract "Base Derieve" --function _ESBMC_main
+      // yet only the first matched one will get verified
+      std::istringstream iss(config.cname);
+      std::string tgt_cname;
+      bool is_found_sym = false;
+      while (iss >> tgt_cname)
+      {
+        const std::string fmt = "@" + tgt_cname + "@F@" + main;
+        if (it->second.as_string().find(fmt) != std::string::npos)
+        {
+          is_found_sym = true;
+          break;
+        }
+      }
+      if (is_found_sym)
+      {
+        symbolt *s = context.find_symbol(it->second);
+        if (s != nullptr && s->type.is_code())
+          matches.push_back(it->second);
+        break; // prevent ambiguous
+      }
     }
-    // look it up
-    symbolt *s = context.find_symbol(it->second);
-
-    if (s == nullptr)
-      continue;
-
-    if (s->type.is_code())
-      matches.push_back(it->second);
+    else
+    {
+      // look it up
+      symbolt *s = context.find_symbol(it->second);
+      if (s != nullptr && s->type.is_code())
+        matches.push_back(it->second);
+    }
   }
 
   if (matches.empty())
