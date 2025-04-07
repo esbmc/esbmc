@@ -30,6 +30,9 @@ public:
   void output_to(std::ostream &oss) const;
   void output_loop_vars_to(std::ostream &oss) const;
 
+  /// Replace all loops instructions (including head/exit) into skips
+  void skip_loop();
+
   void set_size(std::size_t size)
   {
     this->size = size;

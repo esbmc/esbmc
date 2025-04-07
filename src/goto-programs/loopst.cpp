@@ -80,3 +80,15 @@ void loopst::dump_loop_vars() const
   output_loop_vars_to(oss);
   log_status("{}", oss.str());
 }
+
+void loopst::skip_loop()
+{
+  goto_programt::targett loop_head = get_original_loop_head();
+  goto_programt::targett loop_exit = get_original_loop_exit();
+  while (loop_head != loop_exit)
+  {
+    loop_head->make_skip();
+    loop_head++;
+  }
+  loop_exit->make_skip();
+}
