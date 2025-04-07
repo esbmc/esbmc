@@ -37,7 +37,9 @@ protected:
     std::unordered_map<std::string, nlohmann::json> &path_to_json);
   void contract_precheck();
   void populate_auxilary_vars();
-  bool convert_ast_nodes(const nlohmann::json &contract_def);
+  bool convert_ast_nodes(
+    const nlohmann::json &contract_def,
+    const std::string &cname);
 
   // conversion functions
   // get decl in rule contract-body-element
@@ -48,17 +50,16 @@ protected:
   bool get_var_decl_stmt(const nlohmann::json &ast_node, exprt &new_expr);
   bool get_var_decl(const nlohmann::json &ast_node, exprt &new_expr);
   bool get_function_definition(const nlohmann::json &ast_node);
-  bool get_function_params(const nlohmann::json &pd, exprt &param);
+  bool get_function_params(
+    const nlohmann::json &pd,
+    const std::string &cname,
+    exprt &param);
   void get_function_this_pointer_param(
     const std::string &contract_name,
     const std::string &ctor_id,
     const std::string &debug_modulename,
     const locationt &location_begin,
     code_typet &type);
-  bool get_default_function(
-    const std::string name,
-    const std::string id,
-    symbolt &added_symbol);
   bool get_unbound_funccall(
     const std::string contractName,
     code_function_callt &call);
@@ -141,7 +142,7 @@ protected:
     const nlohmann::json literal_type = nullptr);
   bool get_var_decl_ref(
     const nlohmann::json &decl,
-    bool is_this_ptr,
+    const bool is_this_ptr,
     exprt &new_expr);
   void get_symbol_decl_ref(
     const std::string &sym_name,
@@ -166,10 +167,12 @@ protected:
   bool get_parameter_list(const nlohmann::json &type_name, typet &new_type);
   void get_state_var_decl_name(
     const nlohmann::json &ast_node,
+    const std::string &cname,
     std::string &name,
     std::string &id);
   void get_local_var_decl_name(
     const nlohmann::json &ast_node,
+    const std::string &cname,
     std::string &name,
     std::string &id);
   void get_function_definition_name(
@@ -199,7 +202,7 @@ protected:
     const std::string &ctor_id,
     const nlohmann::json param_list,
     exprt &new_expr);
-  bool get_current_contract_name(
+  void get_current_contract_name(
     const nlohmann::json &ast_node,
     std::string &contract_name);
   bool get_library_function_call(
@@ -267,6 +270,7 @@ protected:
   // mapping
   bool get_mapping_type(const nlohmann::json &ast_node, typet &t);
   bool get_mapping_key_expr(
+    const std::string &current_contractName,
     const symbolt &sym,
     const std::string &postfix,
     exprt &new_expr);
@@ -296,16 +300,19 @@ protected:
   bool multi_contract_verification_unbound(std::set<std::string> &tgt_set);
   void reset_auxiliary_vars();
 
+  // find reference
+  const nlohmann::json &
+  find_parent(const nlohmann::json &json, const nlohmann::json &target);
+  const nlohmann::json &find_parent_contract(
+    const nlohmann::json &json,
+    const nlohmann::json &target);
+  const nlohmann::json &find_decl_ref(const nlohmann::json &json, int ref_id);
+  const nlohmann::json &find_constructor_ref(int ref_decl_id);
+  const nlohmann::json &find_constructor_ref(const std::string &contract_name);
+
   // auxiliary functions
   std::string get_modulename_from_path(std::string path);
   std::string get_filename_from_path(std::string path);
-  const nlohmann::json &
-  find_parent(const nlohmann::json &json, const nlohmann::json &target);
-  const nlohmann::json &find_decl_ref(int ref_decl_id);
-  const nlohmann::json &
-  find_decl_ref(int ref_decl_id, std::string &contract_name);
-  const nlohmann::json &find_constructor_ref(int ref_decl_id);
-  const nlohmann::json &find_constructor_ref(const std::string &contract_name);
   void convert_expression_to_code(exprt &expr);
   bool check_intrinsic_function(const nlohmann::json &ast_node);
   nlohmann::json make_implicit_cast_expr(
@@ -338,7 +345,10 @@ protected:
   bool get_sol_builtin_ref(const nlohmann::json expr, exprt &new_expr);
   void get_temporary_object(exprt &call, exprt &new_expr);
   bool get_unbound_function(const std::string &c_name, symbolt &sym);
-  bool get_unbound_expr(const nlohmann::json expr, exprt &new_expr);
+  bool get_unbound_expr(
+    const nlohmann::json expr,
+    const std::string &cname,
+    exprt &new_expr);
   void convert_unboundcall_nondet(
     exprt &new_expr,
     const typet common_type,
@@ -502,7 +512,6 @@ protected:
 
   //! Be careful of using 'current_contractName'. This might lead to trouble in inheritance.
   //! If you are not sure, use 'get_current_contract_name' instead.
-  std::string current_contractName;
   std::string current_baseContractName;
 
   // Auxiliary data structures:
