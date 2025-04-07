@@ -136,6 +136,21 @@ address_t ecrecover(uint256_t hash, unsigned int v, uint256_t r, uint256_t s)
 __ESBMC_HIDE:;
   return address_t(hash);
 }
+
+uint256_t _pow(unsigned int base, unsigned int exp) {
+__ESBMC_HIDE:;
+  uint256_t result = 1;
+  uint256_t b = base;
+
+  while (exp > 0) {
+    if (exp & 1)
+      result *= b;
+    b *= b;
+    exp >>= 1;
+  }
+
+  return result;
+}
 )";
 
 const std::string sol_string = R"(
@@ -639,7 +654,41 @@ __ESBMC_HIDE:;
 }
 )";
 
-const std::string sol_ext_library = sol_itoa + sol_str2hex + sol_uqAddr;
+// max/min value
+const std::string sol_max_min = R"(
+uint256_t _max(int bitwidth, bool is_signed) {
+__ESBMC_HIDE:;
+    if (is_signed) {
+        return (uint256_t(1) << (bitwidth - 1)) - uint256_t(1); // 2^(N-1) - 1
+    } else {
+        return (uint256_t(1) << bitwidth) - uint256_t(1); // 2^N - 1
+    }
+}
+
+int256_t _min(int bitwidth, bool is_signed) {
+__ESBMC_HIDE:;
+    if (is_signed) {
+        return -(int256_t(1) << (bitwidth - 1)); // -2^(N-1)
+    } else {
+        return int256_t(0); // Min of unsigned is always 0
+    }
+}
+
+unsigned int _creationCode()
+{
+__ESBMC_HIDE:;
+  return nondet_uint();
+}
+
+unsigned int _runtimeCode()
+{
+__ESBMC_HIDE:;
+  return nondet_uint();
+}
+)";
+
+const std::string sol_ext_library =
+  sol_itoa + sol_str2hex + sol_uqAddr + sol_max_min;
 
 const std::string sol_c_library = "extern \"C\" {" + sol_typedef + sol_vars +
                                   sol_funcs + sol_mapping + sol_array +
