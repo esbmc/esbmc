@@ -30,7 +30,7 @@ protected:
    * @param loop
    * @return int negative means error, positive is the quantity to unroll
    */
-  virtual int get_loop_bounds(loopst &loop) = 0;
+  virtual int get_loop_bounds(const loopst &loop) = 0;
 };
 
 /**
@@ -80,7 +80,7 @@ public:
 protected:
   // Sets an upper limit for the quantity of loops
   const size_t unroll_limit;
-  int get_loop_bounds(loopst &loop) override;
+  int get_loop_bounds(const loopst &loop) override;
 
 private:
   unsigned number_of_bounded_loops = 0;

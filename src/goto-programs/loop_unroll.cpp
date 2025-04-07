@@ -68,7 +68,7 @@ bool unsound_loop_unroller::runOnLoop(loopst &loop, goto_programt &goto_program)
   return true;
 }
 
-int bounded_loop_unroller::get_loop_bounds(loopst &loop)
+int bounded_loop_unroller::get_loop_bounds(const loopst &loop)
 {
   /**
    * This looks for the following template
