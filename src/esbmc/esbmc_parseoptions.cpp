@@ -1417,6 +1417,17 @@ tvt esbmc_parseoptionst::does_forward_condition_hold(
   options.set_option("no-unwinding-assertions", false);
   options.set_option("partial-loops", false);
 
+  if (options.get_bool_option("forward-slicer"))
+  {
+    log_status("Applying Forward Slicer");
+    abort();
+    // namespacet ns(context);
+    // goto_slicer slicer(context, false);
+    // slicer.run(goto_functions);
+    // remove_skip(goto_functions);
+    // goto_functions.update();
+  }
+
   // We have to disable assertions in the forward condition but
   // restore the previous value after it
   bool no_assertions = options.get_bool_option("no-assertions");
@@ -1857,7 +1868,14 @@ bool esbmc_parseoptionst::process_goto_program(
         goto_partial_inline(goto_functions, options, ns);
     }
 
-    if (cmdline.isset("gcse"))
+    const bool is_gcse = cmdline.isset("gcse");
+    const bool goto_slicer = cmdline.isset("goto-slicer");
+    if (goto_slicer)
+    {
+      log_status("Applying slicer");
+      abort();
+    }
+    if (is_gcse)
     {
       std::shared_ptr<value_set_analysist> vsa =
         std::make_shared<value_set_analysist>(ns);
@@ -2265,18 +2283,20 @@ void esbmc_parseoptionst::add_property_monitors(
 {
   std::map<std::string, std::pair<std::set<std::string>, expr2tc>> monitors;
 
-  context.foreach_operand([this, &monitors](const symbolt &s) {
-    if (
-      !has_prefix(s.name, "__ESBMC_property_") ||
-      s.name.as_string().find("$type") != std::string::npos)
-      return;
+  context.foreach_operand(
+    [this, &monitors](const symbolt &s)
+    {
+      if (
+        !has_prefix(s.name, "__ESBMC_property_") ||
+        s.name.as_string().find("$type") != std::string::npos)
+        return;
 
-    // strip prefix "__ESBMC_property_"
-    std::string prop_name = s.name.as_string().substr(17);
-    std::set<std::string> used_syms;
-    expr2tc main_expr = calculate_a_property_monitor(prop_name, used_syms);
-    monitors[prop_name] = std::pair{used_syms, main_expr};
-  });
+      // strip prefix "__ESBMC_property_"
+      std::string prop_name = s.name.as_string().substr(17);
+      std::set<std::string> used_syms;
+      expr2tc main_expr = calculate_a_property_monitor(prop_name, used_syms);
+      monitors[prop_name] = std::pair{used_syms, main_expr};
+    });
 
   if (monitors.size() == 0)
     return;
@@ -2371,10 +2391,12 @@ static void collect_symbol_names(
   }
   else
   {
-    e->foreach_operand([&prefix, &used_syms](const expr2tc &e) {
-      if (!is_nil_expr(e))
-        collect_symbol_names(e, prefix, used_syms);
-    });
+    e->foreach_operand(
+      [&prefix, &used_syms](const expr2tc &e)
+      {
+        if (!is_nil_expr(e))
+          collect_symbol_names(e, prefix, used_syms);
+      });
   }
 }
 
@@ -2466,9 +2488,8 @@ static unsigned int calc_globals_used(const namespacet &ns, const expr2tc &expr)
   {
     unsigned int globals = 0;
 
-    expr->foreach_operand([&globals, &ns](const expr2tc &e) {
-      globals += calc_globals_used(ns, e);
-    });
+    expr->foreach_operand([&globals, &ns](const expr2tc &e)
+                          { globals += calc_globals_used(ns, e); });
 
     return globals;
   }
