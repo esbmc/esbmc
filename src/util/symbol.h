@@ -38,6 +38,9 @@ public:
   void from_irep(const irept &src);
 
   irep_idt get_function_name() const;
+
+  static void
+  get_expr2_symbols(const expr2tc &expr, std::set<std::string> &values);
 };
 
 std::ostream &operator<<(std::ostream &out, const symbolt &symbol);
