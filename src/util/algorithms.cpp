@@ -27,6 +27,7 @@ bool goto_functions_algorithm::run(goto_functionst &goto_functions)
       }
     }
   }
+  postProcessing(goto_functions);
   goto_functions.update();
   return true;
 }

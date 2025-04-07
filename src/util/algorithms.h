@@ -73,6 +73,10 @@ protected:
   {
     return false;
   }
+  virtual bool postProcessing(goto_functionst &)
+  {
+    return false;
+  }
   std::string target_function = "";
 
 private:
