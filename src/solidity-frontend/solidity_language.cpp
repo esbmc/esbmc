@@ -24,6 +24,14 @@ solidity_languaget::solidity_languaget()
   std::string fun = config.options.get_option("function");
   if (!fun.empty())
     func_name = fun;
+  else
+    func_name = "";
+
+  std::string cnt = config.options.get_option("contract");
+  if (!cnt.empty())
+    contract_names = cnt;
+  else
+    contract_names = "";
 
   std::string sol = config.options.get_option("sol");
   if (sol.empty())
@@ -31,13 +39,7 @@ solidity_languaget::solidity_languaget()
     log_error("Please set the smart contract source file via --sol");
     abort();
   }
-  smart_contract = sol;
-
-  const std::string unbound = config.options.get_option("unbound");
-  if (!unbound.empty())
-    is_bound = false;
-  else
-    is_bound = true;
+  contract_path = sol;
 }
 
 std::string solidity_languaget::get_temp_file()
@@ -63,7 +65,7 @@ std::string solidity_languaget::get_temp_file()
 
   // populate temp file
   std::ofstream f;
-  p += "/temp_sol.cpp";
+  p += "/libary.cpp";
   f.open(p.string());
   f << temp_cpp_file();
   f.close();
@@ -147,7 +149,7 @@ bool solidity_languaget::typecheck(contextt &context, const std::string &module)
     new_context); // Add ESBMC and TACAS intrinsic symbols to the context
 
   solidity_convertert converter(
-    new_context, src_ast_json_array, func_name, smart_contract, is_bound);
+    new_context, src_ast_json_array, contract_names, func_name, contract_path);
   if (converter.convert()) // Add Solidity symbols to the context
     return true;
 
@@ -175,7 +177,12 @@ bool solidity_languaget::final(contextt &context)
 {
   add_cprover_library(context);
   clang_cpp_maint c_main(context);
-  return c_main.clang_main();
+  if (c_main.clang_main())
+    return true;
+
+  // roll back
+  config.language = {language_idt::SOLIDITY, ""};
+  return false;
 }
 
 std::string solidity_languaget::temp_cpp_file()

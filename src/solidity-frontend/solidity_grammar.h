@@ -53,6 +53,9 @@ enum TypeNameT
   // typecast
   TypeConversionName,
 
+  // the type() keyword
+  TypeProperty,
+
   // enum
   EnumTypeName,
 
@@ -350,6 +353,9 @@ enum ExpressionT
 
   // Type Converion
   TypeConversionExpression,
+
+  // Type Property
+  TypePropertyExpression,
 
   // Struct Member Access
   StructMemberCall,
