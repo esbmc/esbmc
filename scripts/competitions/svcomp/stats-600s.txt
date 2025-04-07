@@ -1,11 +1,11 @@
 Statistics:          33569 Files
-  correct:           21382
-    correct true:    13317
-    correct false:    8065
-  incorrect:            88
-    incorrect true:     47
-    incorrect false:    41
-  unknown:           12097
-  Score:             32539 (max: 55885)
+  correct:           21247
+    correct true:    13166
+    correct false:    8081
+  incorrect:            57
+    incorrect true:     21
+    incorrect false:    36
+  unknown:           12263
+  Score:             33165 (max: 55885)
 
-GitHub Actions: https://github.com/esbmc/esbmc/actions/runs/13948851603
+https://github.com/esbmc/esbmc/actions/runs/14239296782
