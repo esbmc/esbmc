@@ -74,7 +74,7 @@ void goto_symext::replace_dynamic_allocation(expr2tc &expr)
     // default behavior
     default_replace_dynamic_allocation(expr);
   }
-  else if (is_capability_base2t(expr))
+  else if (is_capability_base2t(expr) || is_capability_top2t(expr))
   {
     default_replace_dynamic_allocation(expr);
   }

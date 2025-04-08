@@ -114,6 +114,7 @@ static const char *expr_names[] = {
   "concat",
   "extract",
   "capability_base",
+  "capability_top",
   "forall",
   "exists",
 };

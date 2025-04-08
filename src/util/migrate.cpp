@@ -1491,6 +1491,12 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_expr(expr.op0(), op0);
     new_expr_ref = capability_base2tc(op0);
   }
+  else if (expr.id() == "capability_top")
+  {
+    expr2tc op0;
+    migrate_expr(expr.op0(), op0);
+    new_expr_ref = capability_top2tc(op0);
+  }
   else if (expr.id() == "deallocated_object")
   {
     expr2tc op0;
@@ -3080,6 +3086,15 @@ exprt migrate_expr_back(const expr2tc &ref)
     typet thetype = migrate_type_back(ref->type);
     exprt op0 = migrate_expr_back(ref2.value);
     exprt theexpr("capability_base", thetype);
+    theexpr.copy_to_operands(op0);
+    return theexpr;
+  }
+  case expr2t::capability_top_id:
+  {
+    const capability_top2t &ref2 = to_capability_top2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt op0 = migrate_expr_back(ref2.value);
+    exprt theexpr("capability_top", thetype);
     theexpr.copy_to_operands(op0);
     return theexpr;
   }
