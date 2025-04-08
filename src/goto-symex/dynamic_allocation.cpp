@@ -9,12 +9,10 @@
 
 void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
 {
-  expr->Foreach_operand(
-    [this](expr2tc &e)
-    {
-      if (!is_nil_expr(e))
-        default_replace_dynamic_allocation(e);
-    });
+  expr->Foreach_operand([this](expr2tc &e) {
+    if (!is_nil_expr(e))
+      default_replace_dynamic_allocation(e);
+  });
 
   if (is_valid_object2t(expr))
   {
