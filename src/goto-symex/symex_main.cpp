@@ -890,15 +890,19 @@ void goto_symext::run_intrinsic(
   {
     assert(func_call.operands.size() == 2 && "Wrong signature");
     expr2tc ptr = func_call.operands[0];
-    expr2tc cap_bounds = func_call.operands[1];
+    expr2tc sz = func_call.operands[1];
 
     // Rename the size symbol with last known value
-    cur_state->rename(cap_bounds);
+    cur_state->rename(sz);
 
     expr2tc addr = typecast2tc(ptraddr_type2(), ptr);
+    expr2tc addr_end = add2tc(ptraddr_type2(), addr, sz);
 
     expr2tc cap_base = capability_base2tc(ptr);
+    expr2tc cap_top = capability_top2tc(ptr);
+
     symex_assign(code_assign2tc(cap_base, addr), true);
+    symex_assign(code_assign2tc(cap_top, addr_end), true);
     return;
   }
 

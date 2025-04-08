@@ -244,6 +244,8 @@ std::string extract2t::field_names[esbmct::num_type_fields] =
   {"from", "upper", "lower", "", ""};
 std::string capability_base2t::field_names[esbmct::num_type_fields] =
   {"value", "", "", "", ""};
+std::string capability_top2t::field_names[esbmct::num_type_fields] =
+  {"value", "", "", "", ""};
 
 std::string forall2t::field_names[esbmct::num_type_fields] =
   {"symbol", "predicate", "", "", ""};
