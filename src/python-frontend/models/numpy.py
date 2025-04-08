@@ -36,9 +36,9 @@ def ceil(x:float) -> int:
       return y + 1
     return y
 
-# def ceil_list(l: list[float]) -> None:
-#     i: int = 0
-#     while i < len(l):
-#         l[i] = ceil(l[i])
-#         i = i + 1
+def ceil_list(l: list[float]) -> None:
+    i: int = 0
+    while i < len(l):
+        l[i] = ceil(l[i])
+        i = i + 1
         
