@@ -1485,6 +1485,12 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_expr(expr.op0(), op0);
     new_expr_ref = races_check2tc(op0);
   }
+  else if (expr.id() == "capability_base")
+  {
+    expr2tc op0;
+    migrate_expr(expr.op0(), op0);
+    new_expr_ref = capability_base2tc(op0);
+  }
   else if (expr.id() == "deallocated_object")
   {
     expr2tc op0;
@@ -3067,6 +3073,15 @@ exprt migrate_expr_back(const expr2tc &ref)
     back.set("upper", irep_idt(std::to_string(ref2.upper)));
     back.set("lower", irep_idt(std::to_string(ref2.lower)));
     return back;
+  }
+  case expr2t::capability_base_id:
+  {
+    const capability_base2t &ref2 = to_capability_base2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt op0 = migrate_expr_back(ref2.value);
+    exprt theexpr("capability_base", thetype);
+    theexpr.copy_to_operands(op0);
+    return theexpr;
   }
   case expr2t::bitcast_id:
   {

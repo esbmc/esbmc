@@ -9,10 +9,12 @@
 
 void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
 {
-  expr->Foreach_operand([this](expr2tc &e) {
-    if (!is_nil_expr(e))
-      default_replace_dynamic_allocation(e);
-  });
+  expr->Foreach_operand(
+    [this](expr2tc &e)
+    {
+      if (!is_nil_expr(e))
+        default_replace_dynamic_allocation(e);
+    });
 
   if (is_valid_object2t(expr))
   {
@@ -98,17 +100,20 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
     expr2tc index_expr = index2tc(size_type2(), alloc_arr_2, obj_expr);
     expr = index_expr;
   }
-  else if (is_capability_info2t(expr))
+  else if (is_capability_base2t(expr))
   {
-    // replace with cheri_size[POINTER_CAPABILITY(...)]
-    const capability_info2t &size = to_capability_info2t(expr);
+    // replace with cheri_info[POINTER_CAPABILITY(...)].base
+    const capability_base2t &size = to_capability_base2t(expr);
 
     expr2tc cap_expr = pointer_capability2tc(ptraddr_type2(), size.value);
 
     expr2tc capability_arr;
-    migrate_expr(symbol_expr(*ns.lookup("c:@__ESBMC_cheri_size")), capability_arr);
+    migrate_expr(
+      symbol_expr(*ns.lookup("c:@__ESBMC_cheri_info")), capability_arr);
+    expr2tc index_expr = index2tc(
+      to_array_type(capability_arr->type).subtype, capability_arr, cap_expr);
 
-    expr2tc index_expr = index2tc(capability_arr->type, capability_arr, cap_expr);
-    expr = index_expr;
+    expr2tc base = member2tc(size_type2(), index_expr, irep_idt("base"));
+    expr = base;
   }
 }
