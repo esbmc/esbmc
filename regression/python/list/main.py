@@ -35,11 +35,12 @@ assert l7[1] == 2
 assert l7[2] == 3
 
 
-def func1() -> float:
+def func1(x:float) -> float:
+    y = x
     return 2.0
 
 def func2(l: list[float]) -> None:
-    l[0] = func1() #update list element inside functions
+    l[0] = func1(l[0]) #update list element inside functions
 
 l8 = [1.0]
 func2(l8)
