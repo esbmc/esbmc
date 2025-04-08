@@ -114,4 +114,20 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
     expr2tc base = member2tc(size_type2(), index_expr, irep_idt("base"));
     expr = base;
   }
+  else if (is_capability_top2t(expr))
+  {
+    // replace with cheri_info[POINTER_CAPABILITY(...)].top
+    const capability_top2t &size = to_capability_top2t(expr);
+
+    expr2tc cap_expr = pointer_capability2tc(ptraddr_type2(), size.value);
+
+    expr2tc capability_arr;
+    migrate_expr(
+      symbol_expr(*ns.lookup("c:@__ESBMC_cheri_info")), capability_arr);
+    expr2tc index_expr = index2tc(
+      to_array_type(capability_arr->type).subtype, capability_arr, cap_expr);
+
+    expr2tc base = member2tc(size_type2(), index_expr, irep_idt("top"));
+    expr = base;
+  }
 }
