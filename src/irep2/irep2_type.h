@@ -216,8 +216,9 @@ public:
   // Type mangling:
   typedef esbmct::field_traits<type2tc, pointer_data, &pointer_data::subtype>
     subtype_field;
-  typedef esbmct::field_traits<bool, pointer_data, &pointer_data::carry_provenance>
-    provenance_field;
+  typedef esbmct::
+    field_traits<bool, pointer_data, &pointer_data::carry_provenance>
+      provenance_field;
   typedef esbmct::type2t_traits<subtype_field, provenance_field> traits;
 };
 

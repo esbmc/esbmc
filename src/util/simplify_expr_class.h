@@ -59,6 +59,7 @@ public:
   bool simplify_same_object(exprt &expr);
   bool simplify_valid_object(exprt &expr);
   bool simplify_races_check(exprt &expr);
+  bool simplify_capability_base(exprt &expr);
   bool simplify_object(exprt &expr);
   static tvt objects_equal(const exprt &a, const exprt &b);
   static tvt objects_equal_address_of(const exprt &a, const exprt &b);

@@ -142,7 +142,7 @@
   BOOST_PP_LIST_CONS(signbit,                                                  \
   BOOST_PP_LIST_CONS(concat,                                                   \
   BOOST_PP_LIST_CONS(extract,                                                  \
-  BOOST_PP_LIST_CONS(capability_info,                                          \
+  BOOST_PP_LIST_CONS(capability_base,                                          \
   BOOST_PP_LIST_CONS(forall,                                                   \
   BOOST_PP_LIST_CONS(exists,                                                   \
   BOOST_PP_LIST_NIL))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))

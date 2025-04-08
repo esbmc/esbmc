@@ -74,6 +74,10 @@ void goto_symext::replace_dynamic_allocation(expr2tc &expr)
     // default behavior
     default_replace_dynamic_allocation(expr);
   }
+  else if (is_capability_base2t(expr))
+  {
+    default_replace_dynamic_allocation(expr);
+  }
 }
 
 bool goto_symext::is_valid_object(const symbolt &symbol)

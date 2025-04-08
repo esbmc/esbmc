@@ -113,6 +113,7 @@ static const char *expr_names[] = {
   "signbit",
   "concat",
   "extract",
+  "capability_base",
   "forall",
   "exists",
 };
