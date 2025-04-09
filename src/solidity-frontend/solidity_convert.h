@@ -29,14 +29,49 @@ public:
 
   bool convert();
   static bool is_low_level_call(const std::string &name);
+  static bool is_low_level_property(const std::string &name);
 
 protected:
+  typedef struct func_sig
+  {
+    std::string name;
+    std::string id;
+    std::string visibility;
+    code_typet type;
+    bool is_payable;
+    bool is_inherit;
+
+    func_sig(
+      const std::string &name,
+      const std::string &id,
+      const std::string &visibility,
+      const code_typet &type,
+      bool is_payable,
+      bool is_inherit)
+      : name(name),
+        id(id),
+        visibility(visibility),
+        type(type),
+        is_payable(is_payable),
+        is_inherit(is_inherit)
+    {
+    }
+
+    bool operator==(const func_sig &other) const
+    {
+      return id == other.id;
+    }
+  } func_sig;
+
   void merge_multi_files();
   std::vector<nlohmann::json> topological_sort(
     std::unordered_map<std::string, std::unordered_set<std::string>> &graph,
     std::unordered_map<std::string, nlohmann::json> &path_to_json);
   void contract_precheck();
   void populate_auxilary_vars();
+  bool populate_function_signature(
+    const nlohmann::json &json,
+    const std::string &cname);
   bool convert_ast_nodes(
     const nlohmann::json &contract_def,
     const std::string &cname);
@@ -361,58 +396,10 @@ protected:
     const locationt &l,
     const exprt &val,
     const std::string c_name);
-  void get_low_level_call(
-    const nlohmann::json &json,
-    const nlohmann::json &args,
-    exprt &new_expr);
-  void get_low_level_call(
-    const nlohmann::json &json,
-    const nlohmann::json &args,
-    const exprt &base,
-    exprt &new_expr,
-    const std::string bs_contract_name);
-  void call_modelling(
-    const bool has_arguments,
-    const exprt &base,
-    const std::string &bs_contract_name,
-    const std::string &tgt_f_name,
-    exprt &trusted_expr);
-  void staticcall_modelling(
-    const exprt &base,
-    const std::string &bs_contract_name,
-    const std::string &tgt_f_name,
-    exprt &trusted_expr);
-  void delegatecall_modelling(
-    const exprt &base,
-    const std::string &bs_contract_name,
-    const std::string &tgt_f_name,
-    exprt &trusted_expr);
-  void transfer_modelling(
-    const exprt &base,
-    const std::string &bs_contract_name,
-    exprt &trusted_expr);
-  void send_modelling(
-    const exprt &base,
-    const std::string &bs_contract_name,
-    exprt &trusted_expr);
-  void get_low_level_memcall(
-    const std::string new_bs_contract_name,
-    const exprt &new_base,
-    const nlohmann::json &func_json,
-    side_effect_expr_function_callt &_call);
   const nlohmann::json &
   get_func_decl_ref(const std::string &c_name, const std::string &f_name);
-  void extend_extcall_modelling(
-    const std::string &c_contract_name,
-    const locationt &sol_loc);
-  bool member_extcall_harness(
-    const nlohmann::json &json,
-    const nlohmann::json &args,
-    const exprt &base,
-    exprt &new_expr);
-  bool member_builtin_harness(
-    const nlohmann::json &json,
-    const nlohmann::json &args,
+  void get_builtin_property_expr(
+    const std::string &name,
     const exprt &base,
     exprt &new_expr);
   bool get_new_temporary_obj(
@@ -422,22 +409,12 @@ protected:
     const locationt &ctor_ins_loc,
     symbolt &added,
     codet &decl);
-  void get_low_level_harness(
-    const typet &struct_type,
-    const exprt &base,
-    const std::string &bs_contract_name,
-    symbolt &harness);
   void
   get_addr_expr(const std::string &cname, const exprt &base, exprt &new_expr);
   bool set_addr_cname_mapping(
     const std::string &cname,
     const exprt &base,
     exprt &new_expr);
-  bool arbitrary_modelling2(
-    const std::string &contract_name,
-    const struct_typet::componentst &methods,
-    const exprt &base,
-    codet &body);
   bool populate_nil_this_arguments(
     const exprt &ctor,
     const exprt &this_object,
@@ -449,6 +426,14 @@ protected:
     const exprt &member,
     const bool is_func_call,
     exprt &new_expr);
+  bool has_callable_func(const std::string &cname);
+  bool
+  has_target_function(const std::string &cname, const std::string func_name);
+  func_sig
+  get_target_function(const std::string &cname, const std::string &func_name);
+  bool get_call_definition(const std::string &cname);
+  bool get_call_value_definition(const std::string &cname);
+
   bool get_bind_cname_expr(const nlohmann::json &json, exprt &bind_cname_expr);
   void get_nondet_contract_name(
     const exprt src_expr,
@@ -481,7 +466,7 @@ protected:
   namespacet ns;
   // json for Solidity AST. Use vector for multiple contracts
   nlohmann::json src_ast_json_array = nlohmann::json::array();
-  // json for Solidity AST. Use object for single contract
+  // json for Solidity AST. Use object for contract
   nlohmann::json src_ast_json;
   // Solidity contracts/ function to be verified
   const std::string &tgt_cnts;
@@ -536,6 +521,8 @@ protected:
   const nlohmann::json *based_contracts;
 
   static constexpr const char *mode = "C++";
+
+  std::unordered_map<std::string, std::vector<func_sig>> funcSignatures;
 
   // The prefix for the id of each class
   std::string prefix = "tag-";
