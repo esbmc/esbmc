@@ -1,4 +1,4 @@
 CORE
 contract.solast
---function func --sol contract.sol --no-standard-checks
-^VERIFICATION SUCCESSFUL$
+--sol contract.sol --unsigned-overflow-check --no-div-by-zero --no-pointer-check --no-bounds-check
+^VERIFICATION FAILED$
