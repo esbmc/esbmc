@@ -228,6 +228,10 @@ private:
     {
       type = get_type_from_binary_expr(lhs, body);
     }
+    else if (lhs["_type"] == "List")
+    {
+      type = "list";
+    }
     // Floor division (//) operations always result in an integer value
     else if (
       stmt.contains("value") && stmt["value"]["op"]["_type"] == "FloorDiv")
