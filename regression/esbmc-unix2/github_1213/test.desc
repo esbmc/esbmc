@@ -1,0 +1,4 @@
+CORE
+main.c
+--ssa-trace --no-slice
+^VERIFICATION SUCCESSFUL$

@@ -72,8 +72,10 @@ const struct group_opt_templ all_cmd_options[] = {
    {
      {"python",
       boost::program_options::value<std::string>()->value_name("path"),
-      "Python interpreter binary to use (searched in $PATH; default: "
-      "python)"},
+      "Python interpreter binary to use (searched in $PATH; default: python)"},
+     {"override-return-annotation",
+      NULL,
+      "Override return annotation with inferred type"},
    }},
 #endif
 #ifdef ENABLE_SOLIDITY_FRONTEND
@@ -87,7 +89,14 @@ const struct group_opt_templ all_cmd_options[] = {
     {"no-visibility",
      NULL,
      "force to verify every function, even it's an unreachable "
-     "internal/private function"}}},
+     "internal/private function"},
+    {"unbound", NULL, "model external function calls as arbitrary behavior"},
+    {"bound",
+     NULL,
+     "model inter-contract function calls within a bounded system (default)"},
+    {"negating-property",
+     boost::program_options::value<std::string>()->value_name("fname"),
+     "convert the assert(cond) to assert(!cond)"}}},
 #endif
   {"Frontend",
    {{"include,I",
@@ -136,6 +145,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"show-stacktrace",
      NULL,
      "show the stack trace of function call in the counterexample"},
+    {"simplify-trace",
+     NULL,
+     "simplify the trace and exclude the assignments whose variables are not "
+     "from user-input files"},
     {"document-subgoals", NULL, "generate subgoals documentation"},
     {"no-arch", NULL, "don't set up an architecture"},
     {"no-library", NULL, "disable built-in abstract C library"},
@@ -275,7 +288,11 @@ const struct group_opt_templ all_cmd_options[] = {
     {"yices", NULL, "use Yices"},
     {"bitwuzla", NULL, "use Bitwuzla"},
     {"bv", NULL, "use solver with bit-vector arithmetic"},
-    {"ir", NULL, "use solver with integer/real arithmetic"},
+    {"ir",
+     NULL,
+     "use solver with integer/real arithmetic. Integer/real have an unbounded "
+     "range, overapproximating normal integers/reals while significantly "
+     "boosting performance"},
     {"smtlib", NULL, "use SMT lib format"},
     {"default-solver",
      boost::program_options::value<std::string>()->value_name("<solver>"),
@@ -380,6 +397,7 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::string>()->value_name("label"),
      "check if label is unreachable"},
     {"force-malloc-success", NULL, "do not check for malloc/new failure"},
+    {"force-realloc-success", NULL, "do not check for realloc failure"},
     {"malloc-zero-is-null", NULL, "force malloc(0) to return NULL"},
     {"enable-unreachability-intrinsic",
      NULL,
@@ -388,7 +406,10 @@ const struct group_opt_templ all_cmd_options[] = {
      "results in a verification failure when its call is reachable"},
     {"conv-assert-to-assume",
      NULL,
-     "convert assertions for bounds and pointer checks into assumptions"}}},
+     "convert assertions for bounds and pointer checks into assumptions"},
+    {"unknown-method-args-check",
+     NULL,
+     "check pointer type arguments passed to the unknown function call"}}},
   {"k-induction",
    {{"base-case", NULL, "check the base case"},
     {"forward-condition", NULL, "check the forward condition"},
@@ -423,6 +444,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"show-cex",
      NULL,
      "print the counter-example produced by the inductive step"},
+    {"cex-only", NULL, "do not print the state trace"},
     {"bidirectional", NULL, ""},
     {"unlimited-k-steps", NULL, "set max number of iteration to UINT_MAX"},
     {"max-inductive-step",
@@ -551,6 +573,10 @@ const struct group_opt_templ all_cmd_options[] = {
      {"branch-function-coverage-claims",
       NULL,
       "enable branch-coverage-ext and shows all reached claims"},
+     {"assign-param-nondet",
+      NULL,
+      "explicitly assign every function parameters to NONDET in function "
+      "mode"},
    }},
   {"DEBUG options",
    {

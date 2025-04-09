@@ -13,3 +13,6 @@ assert mul == 4.5
 div = num2 / num1
 assert div == 2.0
 
+x = 3.0
+assert x == 3
+

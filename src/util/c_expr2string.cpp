@@ -2451,9 +2451,9 @@ std::string c_expr2stringt::convert(const exprt &src, unsigned &precedence)
     return convert_function(src, "bswap", precedence = 15);
   }
 
-  else if (src.id() == "__ESMBC_va_arg")
+  else if (src.id() == "__ESBMC_va_arg")
   {
-    return convert_function(src, "__ESMBC_va_arg", precedence = 15);
+    return convert_function(src, "__ESBMC_va_arg", precedence = 15);
   }
 
   else if (has_prefix(src.id_string(), "byte_extract"))

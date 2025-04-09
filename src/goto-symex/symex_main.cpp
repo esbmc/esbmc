@@ -218,8 +218,7 @@ bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
     {
       // check assertion to produce a counterexample
       assertion(gen_false_expr(), msg);
-      // eliminate subsequent execution paths
-      assume(gen_false_expr());
+
       // incremental verification succeeded
       return true;
     }
@@ -238,29 +237,16 @@ bool goto_symext::check_incremental(const expr2tc &expr, const std::string &msg)
 
 void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
 {
-  // Convert asserts in assumes, if it's not the last loop iteration
-  // also, don't convert assertions added by the bidirectional search
-  if (
-    inductive_step && first_loop && !cur_state->source.pc->inductive_assertion)
-  {
-    BigInt unwind = cur_state->loop_iterations[first_loop];
-    if (unwind < (max_unwind - 1))
-    {
-      assume(claim_expr);
-      return;
-    }
-  }
-
   // Can happen when evaluating certain special intrinsics. Gulp.
   if (cur_state->guard.is_false())
     return;
 
-  total_claims++;
+  ++total_claims;
 
   expr2tc new_expr = claim_expr;
   cur_state->rename(new_expr);
 
-  // first try simplifier on it
+  // simplify the renamed expression to potentially optimize the claim
   do_simplify(new_expr);
 
   if (is_true(new_expr))
@@ -275,13 +261,34 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
 
   if (options.get_bool_option("smt-symex-assert"))
   {
-    if (check_incremental(new_expr, msg))
-      // incremental verification has succeeded
-      return;
+    // Strengthen the claim by assuming it when trivially true
+    assume(claim_expr);
+    return;
   }
+
+  // Perform incremental SMT-based verification if enabled
+  if (
+    options.get_bool_option("smt-symex-assert") &&
+    check_incremental(new_expr, msg))
+    return; // Verification succeeded, no further action needed
 
   // add assertion to the target equation
   assertion(new_expr, msg);
+
+  // Convert asserts in assumes, if it's not the last loop iteration
+  // This is a common technique in k-induction to strengthen the induction hypothesis.
+  // also, don't convert assertions added by the bidirectional search
+  if (
+    inductive_step && first_loop && !cur_state->source.pc->inductive_assertion)
+  {
+    // Fetch the current loop iteration count
+    BigInt unwind = cur_state->loop_iterations[first_loop];
+    if (unwind < max_unwind - 1)
+    {
+      assume(claim_expr);
+      return;
+    }
+  }
 }
 
 void goto_symext::assertion(
@@ -530,9 +537,11 @@ void goto_symext::symex_step(reachability_treet &art)
       const irep_idt &id = to_symbol2t(call.function).thename;
       if (has_prefix(id.as_string(), "c:@F@__builtin"))
       {
-        cur_state->source.pc++;
         if (run_builtin(call, id.as_string()))
+        {
+          cur_state->source.pc++;
           return;
+        }
       }
     }
 
@@ -1396,13 +1405,25 @@ void goto_symext::add_memory_leak_checks()
       maybe_global_target = [](expr2tc) { return gen_true_expr(); };
     else
       maybe_global_target = [tgts = std::move(globals_point_to)](expr2tc obj) {
+        // Accumulator for OR-ing conditions
         expr2tc is_any;
+        // Iterate over each (expression, condition) pair in tgts
         for (const auto &[e, g] : tgts)
         {
           /* XXX: 'obj' is the address of a statically known dynamic object,
            *      couldn't we just statically check whether the symbol 'e'
-           *      addresses is the same as 'obj' directly? */
-          expr2tc same = and2tc(g, same_object2tc(obj, e));
+           *      addresses is the same as 'obj' directly?
+           *
+           * Explanation:
+           * - 'g' acts as a guard condition, determining whether 'e' should be considered.
+           * - 'same_object2tc(obj, e)' checks if 'obj' and 'e' refer to the same object.
+           * - If 'g' is an AND condition (is_and2t) or already a same-object check (is_same_object2t),
+           *   then 'g' is combined with 'same_object2tc(obj, e)'.
+           * - Otherwise, we directly use 'same_object2tc(obj, e)'.
+           */
+          expr2tc same = (is_and2t(g) || is_same_object2t(g))
+                           ? and2tc(g, same_object2tc(obj, e))
+                           : same_object2tc(obj, e);
           is_any = is_any ? or2tc(is_any, same) : same;
         }
         return is_any ? is_any : gen_false_expr();

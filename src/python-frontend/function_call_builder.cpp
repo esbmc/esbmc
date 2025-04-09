@@ -19,6 +19,9 @@ function_call_builder::function_call_builder(
 
 bool function_call_builder::is_numpy_call(const symbol_id &function_id) const
 {
+  if (type_utils::is_builtin_type(function_id.get_function()))
+    return false;
+
   const std::string &filename = function_id.get_filename();
   const std::string &suffix = "/models/numpy.py";
 
@@ -170,7 +173,7 @@ exprt function_call_builder::build() const
       code_typet code_type;
       if (is_len_call(function_id))
       {
-        code_type.return_type() = int_type();
+        code_type.return_type() = long_long_int_type();
         code_type.arguments().push_back(pointer_typet(empty_typet()));
       }
 

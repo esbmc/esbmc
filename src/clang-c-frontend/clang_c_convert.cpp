@@ -28,6 +28,7 @@ CC_DIAGNOSTIC_POP()
 #include <util/mp_arith.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
+#include <boost/algorithm/string/replace.hpp>
 
 clang_c_convertert::clang_c_convertert(
   contextt &_context,
@@ -357,7 +358,7 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
    * infinite recursion if the type we're defining refers to itself
    * (via pointers): it either is already being defined (up the stack somewhere)
    * or it's already a complete struct or union in the context. */
-  if (!sym->type.incomplete())
+  if (!sym->type.incomplete() && sym->type.id() != "incomplete_struct")
     return false;
   sym->type.remove(irept::a_incomplete);
 
@@ -1537,6 +1538,25 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       static_cast<const clang::DeclRefExpr &>(stmt);
 
     const clang::Decl &dcl = static_cast<const clang::Decl &>(*decl.getDecl());
+
+    // pull in the type that is used to qualify the decl. This is needed so that
+    // `C<0>::f()` where `C<0>` is a template specialization and `f` is a static member function
+    // works correctly when `C<0>::f` is the only use of `C<0>`.
+    // When parsing the template `C` we do not parse the specializations, so there
+    // is no other code that could parse the type of `C<0>`.
+    // (Yes, clang allows us to get all specializations of a template, but that leads to other problems.
+    // See #1782 or #2284)
+
+    if (const auto nns = decl.getQualifier())
+    {
+      if (const auto type = nns->getAsType())
+      {
+        assert(!nns->isDependent());
+        typet ignored;
+        if (get_type(*type, ignored))
+          return true;
+      }
+    }
 
     if (get_decl_ref(dcl, new_expr))
       return true;
@@ -2823,6 +2843,7 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
     // Everything else should be a value decl
     std::string name, id;
     get_decl_name(*nd, name, id);
+    rewrite_builtin_ref(d, name, id);
 
     typet type;
     if (get_type(nd->getType(), type))
@@ -2844,6 +2865,32 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
   ross.flush();
   log_error("{}", oss.str());
   return true;
+}
+void clang_c_convertert::rewrite_builtin_ref(
+  const clang::Decl &d,
+  std::string &name,
+  std::string &id) const
+{
+  static const std::list<std::string> builtins_to_rewrite = {
+    "__builtin_malloc",
+    "__builtin_memcpy",
+    "__builtin_memmove",
+    "__builtin_strcpy",
+    "__builtin_free",
+    "__builtin_strlen",
+  };
+  if (const auto *fd = llvm::dyn_cast<clang::FunctionDecl>(&d))
+  {
+    unsigned builtin_id = fd->getBuiltinID();
+    if (
+      builtin_id && ASTContext->BuiltinInfo.isLibFunction(builtin_id) &&
+      std::find(builtins_to_rewrite.begin(), builtins_to_rewrite.end(), name) !=
+        builtins_to_rewrite.end())
+    {
+      boost::replace_all(name, "__builtin_", "");
+      boost::replace_all(id, "__builtin_", "");
+    }
+  }
 }
 
 bool clang_c_convertert::get_cast_expr(
@@ -3081,35 +3128,35 @@ bool clang_c_convertert::get_binary_operator_expr(
     break;
 
   case clang::BO_LT:
-    new_expr = exprt("<", t);
+    new_expr = exprt("<", bool_type());
     break;
 
   case clang::BO_GT:
-    new_expr = exprt(">", t);
+    new_expr = exprt(">", bool_type());
     break;
 
   case clang::BO_LE:
-    new_expr = exprt("<=", t);
+    new_expr = exprt("<=", bool_type());
     break;
 
   case clang::BO_GE:
-    new_expr = exprt(">=", t);
+    new_expr = exprt(">=", bool_type());
     break;
 
   case clang::BO_EQ:
-    new_expr = exprt("=", t);
+    new_expr = exprt("=", bool_type());
     break;
 
   case clang::BO_NE:
-    new_expr = exprt("notequal", t);
+    new_expr = exprt("notequal", bool_type());
     break;
 
   case clang::BO_LAnd:
-    new_expr = exprt("and", t);
+    new_expr = exprt("and", bool_type());
     break;
 
   case clang::BO_LOr:
-    new_expr = exprt("or", t);
+    new_expr = exprt("or", bool_type());
     break;
 
   case clang::BO_Assign:

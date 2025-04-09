@@ -1,4 +1,5 @@
 #include <fmt/core.h>
+#include <solidity-frontend/solidity_convert.h>
 #include <solidity-frontend/solidity_grammar.h>
 #include <set>
 #include <util/message.h>
@@ -91,7 +92,8 @@ ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element)
   }
   else if (
     element["nodeType"] == "FunctionDefinition" &&
-    (element["kind"] == "function" || element["kind"] == "constructor"))
+    (element["kind"] == "function" || element["kind"] == "constructor" ||
+     element["kind"] == "receive" || element["kind"] == "fallback"))
   {
     return FunctionDef;
   }
@@ -144,7 +146,7 @@ const char *contract_body_element_to_str(ContractBodyElementT type)
 // rule type-name
 TypeNameT get_type_name_t(const nlohmann::json &type_name)
 {
-  // Solidity AST node has duplicate descriptions: ["typeName"]["typeDescriptions"] and ["typeDescriptions"]
+  // Solidity AST node has duplicate descrptions: ["typeName"]["typeDescriptions"] and ["typeDescriptions"]
   //! Order matters
 
   if (type_name.contains("typeString"))
@@ -165,7 +167,7 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     {
       return MappingTypeName;
     }
-    else if (typeIdentifier.find("t_array$") != std::string::npos)
+    else if (typeIdentifier.compare(0, 8, "t_array$") == 0)
     {
       // Solidity's array type description is like:
       //  "typeIdentifier": "t_array$_t_uint8_$2_memory_ptr",
@@ -190,6 +192,14 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
 
       return ArrayTypeName;
     }
+    else if (typeIdentifier.compare(0, 9, "t_struct$") == 0)
+    {
+      return StructTypeName;
+    }
+    else if (typeIdentifier.compare(0, 9, "t_address") == 0)
+    {
+      return AddressTypeName;
+    }
     else if (
       uint_string_to_type_map.count(typeString) ||
       int_string_to_type_map.count(typeString) || typeString == "bool" ||
@@ -205,16 +215,14 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     {
       return EnumTypeName;
     }
-    else if (typeIdentifier.find("t_contract$") != std::string::npos)
+    else if (typeIdentifier.compare(0, 11, "t_contract$") == 0)
     {
       return ContractTypeName;
     }
-    else if (typeIdentifier.find("t_struct$") != std::string::npos)
-    {
-      return StructTypeName;
-    }
     else if (typeString.find("type(") != std::string::npos)
     {
+      if (typeIdentifier.compare(0, 17, "t_magic_meta_type") == 0)
+        return TypeProperty;
       // For type conversion
       return TypeConversionName;
     }
@@ -279,7 +287,9 @@ const char *type_name_to_str(TypeNameT type)
     ENUM_TO_STR(ArrayTypeName)
     ENUM_TO_STR(DynArrayTypeName)
     ENUM_TO_STR(ContractTypeName)
+    ENUM_TO_STR(AddressTypeName)
     ENUM_TO_STR(TypeConversionName)
+    ENUM_TO_STR(TypeProperty)
     ENUM_TO_STR(EnumTypeName)
     ENUM_TO_STR(StructTypeName)
     ENUM_TO_STR(TupleTypeName)
@@ -698,14 +708,20 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
   {
     return Mapping;
   }
+  else if (expr["nodeType"] == "FunctionCallOptions")
+  {
+    return CallOptionsExprClass;
+  }
   else if (expr["nodeType"] == "FunctionCall")
   {
     if (expr["expression"]["nodeType"] == "NewExpression")
       return NewExpression;
+    if (expr["kind"] == "typeConversion")
+      return TypeConversionExpression;
     if (
-      expr["expression"]["nodeType"] == "ElementaryTypeNameExpression" &&
-      expr["kind"] == "typeConversion")
-      return ElementaryTypeNameExpression;
+      get_type_name_t(expr["typeDescriptions"]) ==
+      SolidityGrammar::TypeProperty)
+      return TypePropertyExpression;
     return CallExprClass;
   }
   else if (expr["nodeType"] == "MemberAccess")
@@ -719,6 +735,12 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
       return EnumMemberCall;
     else if (type_name == SolidityGrammar::TypeNameT::ContractTypeName)
       return ContractMemberCall;
+    else if (
+      type_name == SolidityGrammar::TypeNameT::AddressTypeName ||
+      (expr["expression"].contains("memberName") &&
+       solidity_convertert::is_low_level_call(
+         expr["expression"]["memberName"])))
+      return AddressMemberCall;
     else
       //TODO Assume it's a builtin member
       // due to that the BuiltinTypeName cannot cover all the builtin member
@@ -967,14 +989,17 @@ const char *expression_to_str(ExpressionT type)
     ENUM_TO_STR(Tuple)
     ENUM_TO_STR(Mapping)
     ENUM_TO_STR(CallExprClass)
+    ENUM_TO_STR(CallOptionsExprClass)
     ENUM_TO_STR(ImplicitCastExprClass)
     ENUM_TO_STR(IndexAccess)
     ENUM_TO_STR(NewExpression)
+    ENUM_TO_STR(AddressMemberCall)
     ENUM_TO_STR(ContractMemberCall)
     ENUM_TO_STR(StructMemberCall)
     ENUM_TO_STR(EnumMemberCall)
     ENUM_TO_STR(BuiltinMemberCall)
-    ENUM_TO_STR(ElementaryTypeNameExpression)
+    ENUM_TO_STR(TypeConversionExpression)
+    ENUM_TO_STR(TypePropertyExpression)
     ENUM_TO_STR(NullExpr)
     ENUM_TO_STR(ExpressionTError)
   default:

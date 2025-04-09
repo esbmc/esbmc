@@ -77,7 +77,7 @@ The final step in the frontend involves converting the annotated JSON AST into a
 
 ## Features Supported by ESBMC-Python
 
-Below is an overview of ESBMC-Python key capabilities:
+Below is an overview of ESBMC-Python's key capabilities:
 
 ### Basic Constructs
 - **Control Structures**: Supports conditional statements (`if-else`) and loops (`for`, `while`).

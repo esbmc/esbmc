@@ -683,6 +683,15 @@ static expr2tc simplify_arith_1op(const type2tc &type, const expr2tc &value)
       (constant_int2t & (*)(expr2tc &)) to_constant_int2t;
 
     simpl_res = TFunctor<constant_int2t>::simplify(to_simplify, to_constant);
+
+    // Properly handle truncation when an overflow occurs
+    // or when the result gets out of the bounds of the type
+    if (!is_nil_expr(simpl_res) && is_constant_int2t(simpl_res))
+      migrate_expr(
+        from_integer(
+          to_constant_int2t(simpl_res).value,
+          migrate_type_back(simpl_res->type)),
+        simpl_res);
   }
   else if (is_fixedbv_type(value))
   {
@@ -731,6 +740,23 @@ expr2tc neg2t::do_simplify() const
     }
     return constant_vector2tc(value->type, std::move(members));
   }
+  if (is_unsignedbv_type(value))
+  {
+    // Get bit-width of the unsigned type
+    const unsigned int width = value->type->get_width();
+
+    // Compute modulus: 2^width
+    const BigInt modulus = BigInt(1) << width;
+    const expr2tc modulus_expr = constant_int2tc(value->type, modulus);
+
+    // Perform modular negation: (modulus - x) % modulus
+    const expr2tc negated_value = sub2tc(value->type, modulus_expr, value);
+    expr2tc wrap = modulus2tc(value->type, negated_value, modulus_expr);
+    wrap->simplify();
+
+    return wrap;
+  }
+
   return simplify_arith_1op<Negator, neg2t>(type, value);
 }
 

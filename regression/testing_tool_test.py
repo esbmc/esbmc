@@ -110,7 +110,7 @@ class CTest4(ParseTest):
             "./nonz3/29_exStbHwAcc", "29_exStbHwAcc")
 
     def _read_file_checks(self, test_obj: TestCase):
-        self.assertEqual(self.test_case.test_mode, "CORE")
+        self.assertEqual(self.test_case.test_mode, "KNOWNBUG")
         self.assertEqual(self.test_case.test_file, "main.c")
         self.assertEqual(self.test_case.test_args,
                          "--overflow-check  --unwind 3 --32")

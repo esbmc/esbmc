@@ -203,6 +203,10 @@ public:
 
   void dump_smt() override;
   void print_model() override;
+  smt_astt mk_quantifier(
+    bool is_forall,
+    std::vector<smt_astt> lhs,
+    smt_astt rhs) override;
 
 private:
   void print_smt_formulae(std::ostream &dest);

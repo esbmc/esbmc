@@ -44,7 +44,7 @@ std::string type_handler::type_to_string(const typet &t) const
 {
   if (t == double_type())
     return "float";
-  if (t == int_type())
+  if (t == long_long_int_type())
     return "int";
   if (t == long_long_uint_type())
     return "uint64";
@@ -87,6 +87,24 @@ typet type_handler::build_array(const typet &sub_type, const size_t size) const
       size_type()));
 }
 
+std::vector<int> type_handler::get_array_type_shape(const typet &type) const
+{
+  // If the type is not an array, return an empty shape.
+  if (!type.is_array())
+    return {};
+
+  // Since type is an array, cast it to array_typet.
+  const auto &arr_type = static_cast<const array_typet &>(type);
+  std::vector<int> shape{
+    std::stoi(arr_type.size().value().as_string(), nullptr, 2)};
+
+  // Recursively append dimensions from the subtype.
+  auto sub_shape = get_array_type_shape(type.subtype());
+  shape.insert(shape.end(), sub_shape.begin(), sub_shape.end());
+
+  return shape;
+}
+
 // Convert Python/AST types to irep types
 typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   const
@@ -96,8 +114,10 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "int" || ast_type == "GeneralizedIndex")
     /* FIXME: We need to map 'int' to another irep type that provides unlimited precision
   	https://docs.python.org/3/library/stdtypes.html#numeric-types-int-float-complex */
-    return int_type();
-  if (ast_type == "uint64" || ast_type == "Epoch" || ast_type == "Slot")
+    return long_long_int_type();
+  if (
+    ast_type == "uint" || ast_type == "uint64" || ast_type == "Epoch" ||
+    ast_type == "Slot")
     return long_long_uint_type();
   if (ast_type == "bool")
     return bool_type();
@@ -107,7 +127,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   {
     // TODO: Keep "bytes" as signed char instead of "int_type()", and cast to an 8-bit integer in [] operations
     // or consider modelling it with string_constantt.
-    return build_array(int_type(), type_size);
+    return build_array(long_long_int_type(), type_size);
   }
   if (ast_type == "str")
   {
@@ -128,24 +148,73 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
 typet type_handler::get_typet(const nlohmann::json &elem) const
 {
   if (elem.is_number_integer() || elem.is_number_unsigned())
-    return int_type();
+    return long_long_int_type();
   else if (elem.is_boolean())
     return bool_type();
   else if (elem.is_number_float())
     return float_type();
   else if (elem.is_string())
     return build_array(char_type(), elem.get<std::string>().size());
+  else if (elem.is_object() && elem.contains("value"))
+    return get_typet(elem["value"]);
+  else if (elem.is_array())
+  {
+    typet subtype = get_typet(elem[0]);
+    return build_array(subtype, elem.size());
+  }
 
   throw std::runtime_error("Invalid type");
 }
 
 bool type_handler::has_multiple_types(const nlohmann::json &container) const
 {
-  typet t = get_typet(container[0]["value"]);
-  for (auto it = container.begin() + 1; it != container.end(); ++it)
+  if (container.empty())
+    return false;
+
+  // Determine the type of the first element
+  typet t;
+  if (container[0]["_type"] == "List")
   {
-    if (get_typet((*it)["value"]) != t)
+    // Check the type of elements within the sublist
+    if (has_multiple_types(container[0]["elts"]))
       return true;
+
+    // Get the type of the elements in the sublist
+    t = get_typet(container[0]["elts"][0]["value"]);
+  }
+  else
+  {
+    // Get the type of the first element if it is not a sublist
+    if (container[0]["_type"] == "UnaryOp")
+      t = get_typet(container[0]["operand"]["value"]); // negative numbers
+    else
+      t = get_typet(container[0]["value"]);
+  }
+
+  for (const auto &element : container)
+  {
+    if (element["_type"] == "List")
+    {
+      // Check the consistency of the sublist
+      if (has_multiple_types(element["elts"]))
+        return true;
+
+      // Compare the type of internal elements in the sublist with the type `t`
+      const auto &elem = (element["elts"][0]["_type"] == "UnaryOp")
+                           ? element["elts"]["operand"]["value"]
+                           : element["elts"][0]["value"];
+      if (get_typet(elem) != t)
+        return true;
+    }
+    else
+    {
+      // Compare the type of the current element with `t`
+      const auto &elem = (element["_type"] == "UnaryOp")
+                           ? element["operand"]["value"]
+                           : element["value"];
+      if (get_typet(elem) != t)
+        return true;
+    }
   }
   return false;
 }
@@ -163,10 +232,26 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
   if (list_value["_type"] == "List") // Get list value type from elements
   {
     const nlohmann::json &elts = list_value["elts"];
+
     if (!has_multiple_types(elts)) // All elements have the same type
     {
-      typet t = get_typet(elts[0]["value"]); // Get the first element type
-      return build_array(t, elts.size());
+      typet subtype;
+
+      if (elts[0]["_type"] == "Constant" || elts[0]["_type"] == "UnaryOp")
+      { // One-dimensional list
+        // Retrieve the type of the first element
+        const auto &elem = (elts[0]["_type"] == "UnaryOp")
+                             ? elts[0]["operand"]["value"]
+                             : elts[0]["value"];
+        subtype = get_typet(elem);
+      }
+      else
+      { // Multi-dimensional list
+        // Get sub-array type
+        subtype = get_typet(elts[0]["elts"]);
+      }
+
+      return build_array(subtype, elts.size());
     }
     throw std::runtime_error("Multiple type lists are not supported yet");
   }
@@ -183,10 +268,7 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
     else
       sid.set_function(list_value["func"]["id"]);
 
-    symbolt *func_symbol =
-      converter_.symbol_table().find_symbol(sid.to_string());
-    if (!func_symbol)
-      func_symbol = converter_.find_imported_symbol(sid.to_string());
+    symbolt *func_symbol = converter_.find_symbol(sid.to_string());
 
     assert(func_symbol);
     return static_cast<code_typet &>(func_symbol->type).return_type();

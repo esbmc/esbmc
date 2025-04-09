@@ -112,8 +112,9 @@ void symex_dereference_statet::get_value_set(
           or_accuml = or2tc(or_accuml, eq);
       }
 
-      // add the set of objects that the pointer can point to as an assume statement.
-      goto_symex.assume(or_accuml);
+      // add the set of objects that the pointer can point to as an assertion.
+      goto_symex.claim(
+        or_accuml, "check the objects that the pointer can point to");
     }
   }
 }

@@ -192,6 +192,22 @@ void goto_k_inductiont::make_nondet_assign(
   goto_programt::targett &loop_head,
   const loopst &loop)
 {
+  // Track the original loop head
+  auto const original_loop_head = loop_head;
+
+  // Check if the loop_head is an assertion, and track it
+  const bool is_assert = loop_head->is_assert();
+
+  // If it's an assertion, adjust loop_head to insert assignments before it
+  if ((is_assert) && loop_head != goto_function.body.instructions.begin())
+  {
+    --loop_head;
+    // We add instructions before a GOTO instruction
+    // So we ensure we have one here
+    assert(loop_head->is_goto());
+  }
+
+  // Get the list of variables modified inside the loop
   auto const &loop_vars = loop.get_modified_loop_vars();
 
   goto_programt dest;
@@ -200,18 +216,20 @@ void goto_k_inductiont::make_nondet_assign(
     // do not assign nondeterministic value to pointers if we assume
     // objects extracted from the value set analysis
     if (
-      !config.options.get_bool_option("no-pointer-check") &&
       config.options.get_bool_option("add-symex-value-sets") &&
       is_pointer_type(lhs))
       continue;
+
+    // Generate a nondeterministic value for the loop variable
     expr2tc rhs = gen_nondet(lhs->type);
 
+    // Create an assignment instruction for the nondeterministic value
     goto_programt::targett t = dest.add_instruction(ASSIGN);
     t->inductive_step_instruction = true;
     t->code = code_assign2tc(lhs, rhs);
+    // Keep the same location as the loop head
     t->location = loop_head->location;
   }
-
   if (config.options.get_bool_option("vampire-for-loops"))
   {
     auto const &non_modified_loop_vars = loop.get_unmodified_loop_vars();
@@ -227,13 +245,24 @@ void goto_k_inductiont::make_nondet_assign(
     }
   }
 
+  // Insert the generated assignments before the loop head in the program
   goto_function.body.insert_swap(loop_head, dest);
 
   // Get original head again
   // Since we are using insert_swap to keep the targets, the
   // original loop head as shifted to after the assume cond
-  while ((++loop_head)->inductive_step_instruction)
-    ;
+  if (is_assert)
+  {
+    // Restore the original loop head if it was an assertion
+    loop_head = original_loop_head;
+    assert(loop_head->is_assert());
+  }
+  else
+  {
+    // Move past the inserted instructions during the inductive step
+    while ((++loop_head)->inductive_step_instruction)
+      ;
+  }
 }
 
 static bool contains_rec(const expr2tc &expr, const loopst::loop_varst &vars)

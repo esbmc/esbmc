@@ -324,6 +324,21 @@ protected:
    * Function to check whether a MemberExpr references to a static variable
    */
   bool is_member_decl_static(const clang::MemberExpr &member);
+
+  /**
+   * Rewrites references to builtin functions to their ESBMC counterparts.
+   * Clang provides builtins for e.g. malloc, memcpy, etc. Instead of re-implementing
+   * these functions in ESBMC, we rewrite references to e.g. `__builtin_memcpy` to
+   * just `memcpy`.
+   *
+   * @param d declaration to rewrite (if it refers to a builtin function)
+   * @param name name of the declaration
+   * @param id id of the declaration
+   */
+  void rewrite_builtin_ref(
+    const clang::Decl &d,
+    std::string &name,
+    std::string &id) const;
 };
 
 #endif /* CLANG_C_FRONTEND_CLANG_C_CONVERT_H_ */

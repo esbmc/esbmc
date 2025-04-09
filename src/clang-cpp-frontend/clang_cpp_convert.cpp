@@ -99,16 +99,6 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     break;
   }
 
-  case clang::Decl::ClassTemplate:
-  {
-    const clang::ClassTemplateDecl &cd =
-      static_cast<const clang::ClassTemplateDecl &>(decl);
-
-    if (get_template_decl(&cd, false, new_expr))
-      return true;
-    break;
-  }
-
   case clang::Decl::ClassTemplateSpecialization:
   {
     const clang::ClassTemplateSpecializationDecl &cd =
@@ -140,6 +130,7 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   }
 
   // We can ignore any these declarations
+  case clang::Decl::ClassTemplate:
   case clang::Decl::ClassTemplatePartialSpecialization:
   case clang::Decl::VarTemplatePartialSpecialization:
   case clang::Decl::Using:
@@ -2254,14 +2245,21 @@ bool clang_cpp_convertert::is_ConstructorOrDestructor(
 
 void clang_cpp_convertert::make_temporary(exprt &expr)
 {
-  if (expr.statement() != "temporary_object")
+  if (expr.statement() == "temporary_object")
+    return;
+
+  // make the temporary
+  side_effect_exprt tmp_obj("temporary_object", expr.type());
+  tmp_obj.location() = expr.location();
+  if (!expr.get_bool("constructor"))
   {
-    // make the temporary
-    side_effect_exprt tmp_obj("temporary_object", expr.type());
-    codet code_expr("expression");
-    code_expr.operands().push_back(expr);
-    tmp_obj.initializer(code_expr);
-    tmp_obj.location() = expr.location();
+    tmp_obj.move_to_operands(expr);
     expr.swap(tmp_obj);
+    return;
   }
+
+  codet code_expr("expression");
+  code_expr.operands().push_back(expr);
+  tmp_obj.initializer(code_expr);
+  expr.swap(tmp_obj);
 }

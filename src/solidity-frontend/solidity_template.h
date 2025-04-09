@@ -15,8 +15,10 @@ const std::string sol_header = R"(
 #include <stddef.h>
 #include <stdlib.h>
 #include <stdint.h>
-#include <string.h>
 #include <stdbool.h>
+#include <assert.h>
+#include <string.h>
+// #include <string>
 )";
 
 /*
@@ -26,9 +28,23 @@ const std::string sol_header = R"(
   address == address_t
 */
 const std::string sol_typedef = R"(
-typedef _ExtInt(256) int256_t;
-typedef unsigned _ExtInt(256) uint256_t;
-typedef unsigned _ExtInt(160) address_t;
+#if defined(__clang__)  // Ensure we are using Clang
+    #if __clang_major__ >= 15
+        #define BIGINT(bits) _BitInt(bits)
+    #else
+        #define BIGINT(bits) _ExtInt(bits)
+    #endif
+#endif
+
+typedef BIGINT(256) int256_t;
+typedef unsigned BIGINT(256) uint256_t;
+typedef unsigned BIGINT(160) address_t;
+
+struct sol_llc_ret
+{
+  bool x;
+  unsigned int y;
+};
 )";
 
 /// Variables
@@ -62,11 +78,19 @@ const std::string sol_vars = sol_msg + sol_tx + sol_block;
 // if the function does not currently have an actual implement,
 // leave the params empty.
 const std::string blockhash = R"(
-uint256_t blockhash();
+uint256_t blockhash(uint256_t x)
+{
+__ESBMC_HIDE:;
+  return x;
+}
 )";
 
 const std::string gasleft = R"(
-uint256_t gasleft();
+uint256_t gasleft()
+{
+__ESBMC_HIDE:;
+  return nondet_uint();
+}
 )";
 
 const std::string sol_abi = R"(
@@ -80,324 +104,292 @@ uint256_t abi_encodeCall();
 const std::string sol_math = R"(
 uint256_t addmod(uint256_t x, uint256_t y, uint256_t k)
 {
+__ESBMC_HIDE:;
 	return (x + y) % k;
 }
 
 uint256_t mulmod(uint256_t x, uint256_t y, uint256_t k)
 {
+__ESBMC_HIDE:;
 	return (x * y) % k;
 }
 
-uint256_t keccak256();
-uint256_t sha256();
-address_t ripemd160();
-address_t ecrecover();
+uint256_t keccak256(uint256_t x)
+{
+__ESBMC_HIDE:;
+  return  x;
+}
+
+uint256_t sha256(uint256_t x)
+{
+__ESBMC_HIDE:;
+  return x;
+}
+address_t ripemd160(uint256_t x)
+{
+__ESBMC_HIDE:;
+  // UNSAT abstraction
+  return address_t(x);
+}
+address_t ecrecover(uint256_t hash, unsigned int v, uint256_t r, uint256_t s)
+{
+__ESBMC_HIDE:;
+  return address_t(hash);
+}
+
+uint256_t _pow(unsigned int base, unsigned int exp) {
+__ESBMC_HIDE:;
+  uint256_t result = 1;
+  uint256_t b = base;
+
+  while (exp > 0) {
+    if (exp & 1)
+      result *= b;
+    b *= b;
+    exp >>= 1;
+  }
+
+  return result;
+}
 )";
 
 const std::string sol_string = R"(
 char* string_concat(char *x, char *y)
 {
-	strcat(x, y);
+__ESBMC_HIDE:;
+	strncat(x, y, 256);
 	return x;
 }
 )";
 
 const std::string sol_byte = R"(
-void byte_concat();
+char *u256toa(uint256_t value);
+uint256_t str2int(const char *str);
+uint256_t byte_concat(uint256_t x, uint256_t y)
+{
+__ESBMC_HIDE:;
+  char *s1 = u256toa(x);
+  char *s2 = u256toa(y);
+  strncat(s1, s2, 256);
+  return str2int(s1);
+}
 )";
 
-const std::string sol_funcs =
-  blockhash + gasleft + sol_abi + sol_math + sol_string + sol_byte;
+const std::string sol_address = R"(
+void _transfer(uint256_t ether, uint256_t balance)
+{
+__ESBMC_HIDE:;
+  __ESBMC_assume(balance < ether);
+}
+
+bool _send(uint256_t ether, uint256_t balance)
+{
+__ESBMC_HIDE:;
+  if(balance < ether)
+    return false;
+  return true;
+}
+
+bool _call()
+{
+__ESBMC_HIDE:;
+  return nondet_bool();
+}
+
+bool _delegatecall()
+{
+__ESBMC_HIDE:;
+  return nondet_bool();
+}
+
+bool _staticcall()
+{
+__ESBMC_HIDE:;
+  return nondet_bool();
+}
+
+bool _callcodecall()
+{
+__ESBMC_HIDE:;
+  return nondet_bool();
+}
+
+)";
+
+const std::string sol_funcs = blockhash + gasleft + sol_abi + sol_math +
+                              sol_string + sol_byte + sol_address;
 
 /// data structure
 
 /* https://github.com/rxi/map */
 const std::string sol_mapping = R"(
-struct map_node_t;
-typedef struct map_node_t map_node_t;
-
-int zero_int;
-unsigned int zero_uint;
-bool zero_bool;
-char *zero_string;
-
-typedef struct map_base_t
+struct NodeU
 {
-	map_node_t **buckets;
-	unsigned nbuckets, nnodes;
-} map_base_t;
+  uint256_t data : 256;
+  struct NodeU *next;
+};
 
-typedef struct map_iter_t
+struct NodeI
 {
-	unsigned bucketidx;
-	map_node_t *node;
-} map_iter_t;
+  int256_t data : 256;
+  struct NodeI *next;
+};
 
-typedef struct map_node_t
+void insertAtEndU(struct NodeU **head, uint256_t data)
 {
-	unsigned hash;
-	void *value;
-	map_node_t *next;
-} map_node_t;
-
-void *map_get_(map_base_t *m, const char *key);
-int map_set_(map_base_t *m, const char *key, void *value, int vsize);
-void map_remove_(map_base_t *m, const char *key);
-
-typedef struct map_int_t
-{
-	map_base_t base;
-	int *ref;
-	int tmp;
-} map_int_t;
-
-typedef struct map_uint_t
-{
-	map_base_t base;
-	unsigned int *ref;
-	unsigned int tmp;
-} map_uint_t;
-
-typedef struct map_string_t
-{
-	map_base_t base;
-	char **ref;
-	char *tmp;
-} map_string_t;
-
-typedef struct map_bool_t
-{
-	map_base_t base;
-	bool *ref;
-	bool tmp;
-} map_bool_t;
-
-/// Init
-void map_init_int(map_int_t *m)
-{
-	memset(m, 0, sizeof(*(m)));
+__ESBMC_HIDE:;
+  struct NodeU *newNode = (struct NodeU *)malloc(sizeof(struct NodeU));
+  newNode->data = data;
+  newNode->next = NULL;
+  if (*head == NULL)
+  {
+    *head = newNode;
+    return;
+  }
+  struct NodeU *current = *head;
+  while (current->next != NULL)
+  {
+    current = current->next;
+  }
+  current->next = newNode;
 }
 
-void map_init_uint(map_uint_t *m)
+void insertAtEndI(struct NodeI **head, int256_t data)
 {
-	memset(m, 0, sizeof(*(m)));
+__ESBMC_HIDE:;
+  struct NodeI *newNode = (struct NodeI *)malloc(sizeof(struct NodeI));
+  newNode->data = data;
+  newNode->next = NULL;
+  if (*head == NULL)
+  {
+    *head = newNode;
+    return;
+  }
+  struct NodeI *current = *head;
+  while (current->next != NULL)
+  {
+    current = current->next;
+  }
+  current->next = newNode;
 }
 
-void map_init_string(map_string_t *m)
+int _ESBMC_uaddress(struct NodeU *head, uint256_t key)
 {
-	memset(m, 0, sizeof(*(m)));
+__ESBMC_HIDE:;
+  struct NodeU *current = head;
+  int cnt = 0;
+  while (current != NULL)
+  {
+    if (current->data == key)
+      return cnt;
+    cnt++;
+    current = current->next;
+  }
+  insertAtEndU(&head, key);
+  // temporary
+  // if (cnt >= 50)
+  //   assert(0);
+  return cnt;
 }
 
-void map_init_bool(map_bool_t *m)
+int _ESBMC_address(struct NodeI *head, int256_t key)
 {
-	memset(m, 0, sizeof(*(m)));
+__ESBMC_HIDE:;
+  struct NodeI *current = head;
+  int cnt = 0;
+  while (current != NULL)
+  {
+    if (current->data == key)
+      return cnt;
+    cnt++;
+    current = current->next;
+  }
+  insertAtEndI(&head, key);
+  // temporary
+  // if (cnt >= 50)
+  //   assert(0);
+  return cnt;
+}
+)";
+
+const std::string sol_array = R"(
+// Node structure for linked list
+typedef struct ArrayNode {
+    void *array_ptr;        // Pointer to the stored array
+    size_t length;          // Length of the array
+    struct ArrayNode *next; // Pointer to the next node
+} ArrayNode;
+
+// Head of the linked list
+ArrayNode *array_list_head = NULL;
+
+/**
+ * Stores/updates an array and its length.
+ * If the array already exists, it updates the length.
+ */
+void _ESBMC_store_array(void *array, size_t length) {
+__ESBMC_HIDE:;
+    // Check if array already exists in the list
+    ArrayNode *current = array_list_head;
+    while (current != NULL) {
+        if (current->array_ptr == array) { // Found existing array
+            current->length = length; // Update length
+            return;
+        }
+        current = current->next;
+    }
+
+    // Create a new node
+    ArrayNode *new_node = (ArrayNode *)malloc(sizeof(ArrayNode));
+    new_node->array_ptr = array;
+    new_node->length = length;
+    new_node->next = array_list_head; // Insert at head
+    array_list_head = new_node;
 }
 
-/// Set
-void map_set_int(map_int_t *m, const char *key, const int value)
-{
-	(m)->tmp = value;
-	map_set_(&(m)->base, key, &(m)->tmp, sizeof((m)->tmp));
-}
-void map_set_uint(map_uint_t *m, const char *key, const unsigned int value)
-{
-	(m)->tmp = value;
-	map_set_(&(m)->base, key, &(m)->tmp, sizeof((m)->tmp));
-}
-void map_set_string(map_string_t *m, const char *key, char *value)
-{
-	(m)->tmp = value;
-	map_set_(&(m)->base, key, &(m)->tmp, sizeof((m)->tmp));
-}
-void map_set_bool(map_bool_t *m, const char *key, const bool value)
-{
-	(m)->tmp = value;
-	map_set_(&(m)->base, key, &(m)->tmp, sizeof((m)->tmp));
+/**
+ * Fetches the length of a stored array.
+ * Returns 0 if the array is not found.
+ */
+unsigned int _ESBMC_get_array_length(void *array) {
+__ESBMC_HIDE:;
+    ArrayNode *current = array_list_head;
+    while (current != NULL) {
+        if (current->array_ptr == array) {
+            return current->length;
+        }
+        current = current->next;
+    }
+    return 0;
 }
 
-/// Get
-int *map_get_int(map_int_t *m, const char *key)
-{
-	(m)->ref = map_get_(&(m)->base, key);
-	zero_int = 0;
-	return (m)->ref != NULL ? (m)->ref : &zero_int;
-}
-unsigned int *map_get_uint(map_uint_t *m, const char *key)
-{
-	(m)->ref = map_get_(&(m)->base, key);
-	zero_uint = 0;
-	return (m)->ref != NULL ? (m)->ref : &zero_uint;
-}
-char **map_get_string(map_string_t *m, const char *key)
-{
-	(m)->ref = map_get_(&(m)->base, key);
-	zero_string = "0";
-	return (m)->ref != NULL ? (m)->ref : &zero_string;
-}
-bool *map_get_bool(map_bool_t *m, const char *key)
-{
-	(m)->ref = map_get_(&(m)->base, key);
-	zero_bool = false;
-	return (m)->ref != NULL ? (m)->ref : &zero_bool;
-}
 
-/// General
-unsigned map_hash(const char *str)
+void *_ESBMC_arrcpy(void *from_array, size_t from_size, size_t size_of)
 {
-	unsigned hash = 5381;
-	// avoid dereferencing null ptr
-	if (str != NULL)
-		while (*str)
-		{
-			hash = ((hash << 5) + hash) ^ *str++;
-		}
-	return hash;
-}
+__ESBMC_HIDE:;
+  // assert(from_size != 0);
+  if(from_array == NULL || size_of == 0 || from_size == 0)
+    abort();
 
-map_node_t *map_newnode(const char *key, void *value, int vsize)
-{
-	map_node_t *node;
-	int ksize = strlen(key) + 1;
-	int voffset = ksize + ((sizeof(void *) - ksize) % sizeof(void *));
-	node = malloc(sizeof(*node) + voffset + vsize);
-	if (!node)
-		return NULL;
-	memcpy(node + 1, key, ksize);
-	node->hash = map_hash(key);
-	node->value = ((char *)(node + 1)) + voffset;
-	memcpy(node->value, value, vsize);
-	return node;
-}
-
-int map_bucketidx(map_base_t *m, unsigned hash)
-{
-	return hash & (m->nbuckets - 1);
-}
-
-void map_addnode(map_base_t *m, map_node_t *node)
-{
-	int n = map_bucketidx(m, node->hash);
-	node->next = m->buckets[n];
-	m->buckets[n] = node;
-}
-
-int map_resize(map_base_t *m, int nbuckets)
-{
-	map_node_t *nodes, *node, *next;
-	map_node_t **buckets;
-	int i;
-	nodes = NULL;
-	i = m->nbuckets;
-	while (i--)
-	{
-		node = (m->buckets)[i];
-		while (node)
-		{
-			next = node->next;
-			node->next = nodes;
-			nodes = node;
-			node = next;
-		}
-	}
-	/* Reset buckets */
-	/* --force-malloc-success */
-	buckets = malloc(sizeof(*m->buckets) * nbuckets);
-	if (buckets != NULL)
-	{
-		m->buckets = buckets;
-		m->nbuckets = nbuckets;
-	}
-	if (m->buckets)
-	{
-		memset(m->buckets, 0, sizeof(*m->buckets) * m->nbuckets);
-		/* Re-add nodes to buckets */
-		node = nodes;
-		while (node)
-		{
-			next = node->next;
-			map_addnode(m, node);
-			node = next;
-		}
-	}
-	/* Return error code if realloc() failed */
-	/* --force-malloc-success */
-	return 0;
-}
-
-map_node_t **map_getref(map_base_t *m, const char *key)
-{
-	unsigned hash = map_hash(key);
-	map_node_t **next;
-	if (m->nbuckets > 0)
-	{
-		next = &m->buckets[map_bucketidx(m, hash)];
-		while (*next)
-		{
-			if ((*next)->hash == hash && !strcmp((char *)(*next + 1), key))
-			{
-				return next;
-			}
-			next = &(*next)->next;
-		}
-	}
-	return NULL;
-}
-
-void *map_get_(map_base_t *m, const char *key)
-{
-	map_node_t **next = map_getref(m, key);
-	return next ? (*next)->value : NULL;
-}
-
-int map_set_(map_base_t *m, const char *key, void *value, int vsize)
-{
-	int n, err;
-	map_node_t **next, *node;
-	next = map_getref(m, key);
-	if (next)
-	{
-		memcpy((*next)->value, value, vsize);
-		return 0;
-	}
-	node = map_newnode(key, value, vsize);
-	if (node == NULL)
-		return -1;
-	if (m->nnodes >= m->nbuckets)
-	{
-		n = (m->nbuckets > 0) ? (m->nbuckets << 1) : 1;
-		err = map_resize(m, n);
-		if (err)
-			return -1;
-	}
-	map_addnode(m, node);
-	m->nnodes++;
-	return 0;
-}
-
-void map_remove_(map_base_t *m, const char *key)
-{
-	map_node_t *node;
-	map_node_t **next = map_getref(m, key);
-	if (next)
-	{
-		node = *next;
-		*next = (*next)->next;
-		free(node);
-		m->nnodes--;
-	}
+  void *to_array = (void *)calloc(from_size, size_of);
+  memcpy(to_array, from_array, from_size * size_of);
+  return to_array;
 }
 )";
 
 /// external library
 // itoa
+
 const std::string sol_itoa = R"(
 char get_char(int digit)
 {
+__ESBMC_HIDE:;
     char charstr[] = "0123456789ABCDEF";
     return charstr[digit];
 }
-void rev(char *p)
+void sol_rev(char *p)
 {
+__ESBMC_HIDE:;
 	char *q = &p[strlen(p) - 1];
 	char *r = p;
 	for (; q > r; q--, r++)
@@ -409,6 +401,7 @@ void rev(char *p)
 }
 char *i256toa(int256_t value)
 {
+__ESBMC_HIDE:;
 	// we might have memory leak as we will not free this afterwards
 	char *str = (char *)malloc(256 * sizeof(char));
 	int256_t base = (int256_t)10;
@@ -442,12 +435,13 @@ char *i256toa(int256_t value)
 		count++;
 	}
 	str[count] = 0;
-	rev(str);
+	sol_rev(str);
 	return str;
 }
 
 char *u256toa(uint256_t value)
 {
+__ESBMC_HIDE:;
 	char *str = (char *)malloc(256 * sizeof(char));
 	uint256_t base = (uint256_t)10;
 	unsigned short count = 0;
@@ -465,16 +459,271 @@ char *u256toa(uint256_t value)
 		count++;
 	}
 	str[count] = 0;
-	rev(str);
+	sol_rev(str);
 	return str;
 }
 )";
 
-const std::string sol_ext_library = sol_itoa;
+// string2hex
+const std::string sol_str2hex = R"(
+static const long hextable[] = {
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, -1, -1, -1, -1, -1, -1, -1, 10, 11, 12, 13, 14, 15, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, 10, 11, 12, 13, 14, 15, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+char *decToHexa(int n)
+{
+__ESBMC_HIDE:;
+    char *hexaDeciNum = (char *)malloc(256 * sizeof(char));
+    hexaDeciNum[0] = '\0';
+    int i = 0;
+    while (n != 0)
+    {
+        int temp = 0;
+        temp = n % 16;
+        if (temp < 10)
+        {
+            hexaDeciNum[i] = temp + 48;
+            i++;
+        }
+        else
+        {
+            hexaDeciNum[i] = temp + 55;
+            i++;
+        }
+
+        n /= 16;
+    }
+    char *ans = (char *)malloc(256 * sizeof(char));
+    ans[0] = '\0';
+    int pos = 0;
+    for (int j = i - 1; j >= 0; j--)
+    {
+        ans[pos] = (char)hexaDeciNum[j];
+        pos++;
+    }
+    ans[pos] = '\0';
+    return ans;
+}
+char *ASCIItoHEX(const char *ascii)
+{
+__ESBMC_HIDE:;
+    char *hex = (char *)malloc(256 * sizeof(char));
+    hex[0] = '\0';
+    for (int i = 0; i < strlen(ascii); i++)
+    {
+        char ch = ascii[i];
+        int tmp = (int)ch;
+        char *part = decToHexa(tmp);
+        strcat(hex, part);
+    }
+    return hex;
+}
+uint256_t hexdec(const char *hex)
+{
+__ESBMC_HIDE:;
+    /*https://stackoverflow.com/questions/10324/convert-a-hexadecimal-string-to-an-integer-efficiently-in-c*/
+    uint256_t ret = 0;
+    while (*hex && ret >= (uint256_t)0)
+    {
+        ret = (ret << (uint256_t)4) | (uint256_t)hextable[*hex++];
+    }
+    return ret;
+}
+uint256_t str2int(const char *str)
+{
+__ESBMC_HIDE:;
+    return hexdec(ASCIItoHEX(str));
+}
+
+// string assign
+const char *empty_str = "";
+void _str_assign(char **str1, const char *str2) {
+__ESBMC_HIDE:;
+    if(str1 != NULL)
+      free(*str1);  
+    if (str2 == NULL) {
+      *str1 = NULL;  // Ensure str1 doesn't point to invalid memory
+      return;
+    }
+    *str1 = (char *)malloc(strlen(str2) + 1);  
+    
+    strcpy(*str1, str2);  // force malloc success
+}
+
+)";
+
+// get unique random address
+const std::string sol_uqAddr = R"(
+// compromise:
+// - define a relatively large array
+// static const unsigned int max_addr_obj_size = 50;
+// static address_t sol_addr_array[max_addr_obj_size];
+// static void *sol_obj_array[max_addr_obj_size];
+// static char* sol_cname_array[max_addr_obj_size];
+__attribute__((annotate("__ESBMC_inf_size"))) address_t sol_addr_array[1];
+__attribute__((annotate("__ESBMC_inf_size"))) void *sol_obj_array[1];
+__attribute__((annotate("__ESBMC_inf_size"))) char* sol_cname_array[1];
+static unsigned sol_max_cnt = 0;
+
+int _ESBMC_get_addr_array_idx(address_t tgt)
+{
+__ESBMC_HIDE:;
+  for (unsigned int i = 0; i < sol_max_cnt; i++)
+  {
+    if ((address_t)sol_addr_array[i] == (address_t)tgt)
+      return i;
+  }
+  return -1;
+}
+void *_ESBMC_get_obj(address_t addr)
+{
+__ESBMC_HIDE:;
+  int idx = _ESBMC_get_addr_array_idx(addr);
+  if (idx == -1)
+    // this means it's not previously stored
+    return NULL;
+  else
+    return sol_obj_array[idx];
+}
+void update_addr_obj(address_t addr, void *obj)
+{
+__ESBMC_HIDE:;
+  __ESBMC_assume(obj != NULL);
+  sol_addr_array[sol_max_cnt] = addr;
+  sol_obj_array[sol_max_cnt] = obj;
+  ++sol_max_cnt;
+  // if (sol_max_cnt >= max_addr_obj_size)
+  //   assert(0);
+}
+address_t _ESBMC_get_unique_address(void *obj)
+{
+__ESBMC_HIDE:;
+  // __ESBMC_assume(obj != NULL);
+  address_t tmp = (address_t)0;
+  do
+  {
+    tmp = nondet_ulong() ; // ensure it's not address(0)
+  } while (_ESBMC_get_addr_array_idx(tmp) != -1 && tmp != (address_t)0);
+  // update_addr_obj(tmp, obj);
+  return tmp;
+}
+void _ESBMC_set_cname_array(address_t _addr, char* cname)
+{
+__ESBMC_HIDE:;
+  int tmp = _ESBMC_get_addr_array_idx(_addr);
+  // assert(tmp != -1);
+  sol_cname_array[tmp] = cname;
+}
+const char * _ESBMC_get_cname(address_t _addr)
+{
+__ESBMC_HIDE:;
+  int tmp = _ESBMC_get_addr_array_idx(_addr);
+  // assert(tmp != -1);
+  return sol_cname_array[tmp];
+}
+bool _ESBMC_cmp_cname(const char* c_1, const char* c_2)
+{
+__ESBMC_HIDE:;
+  return strcmp(c_1, c_2) == 0;
+}
+
+const char * _ESBMC_get_nondet_cont_name(const char *c_array[], unsigned int len)
+{
+__ESBMC_HIDE:;
+unsigned int rand = nondet_uint() % len;
+return c_array[rand];
+}
+
+uint256_t _ESBMC_update_balance(uint256_t balance, uint256_t val)
+{
+__ESBMC_HIDE:;
+  val = val + (uint256_t)1;
+  if(balance >= val)
+    balance -= val;
+  else
+    balance = (uint256_t)0;
+  return balance;
+}
+)";
+
+// max/min value
+const std::string sol_max_min = R"(
+uint256_t _max(int bitwidth, bool is_signed) {
+__ESBMC_HIDE:;
+    if (is_signed) {
+        return (uint256_t(1) << (bitwidth - 1)) - uint256_t(1); // 2^(N-1) - 1
+    } else {
+        return (uint256_t(1) << bitwidth) - uint256_t(1); // 2^N - 1
+    }
+}
+
+int256_t _min(int bitwidth, bool is_signed) {
+__ESBMC_HIDE:;
+    if (is_signed) {
+        return -(int256_t(1) << (bitwidth - 1)); // -2^(N-1)
+    } else {
+        return int256_t(0); // Min of unsigned is always 0
+    }
+}
+
+unsigned int _creationCode()
+{
+__ESBMC_HIDE:;
+  return nondet_uint();
+}
+
+unsigned int _runtimeCode()
+{
+__ESBMC_HIDE:;
+  return nondet_uint();
+}
+)";
+
+const std::string sol_ext_library =
+  sol_itoa + sol_str2hex + sol_uqAddr + sol_max_min;
+
+const std::string sol_c_library = "extern \"C\" {" + sol_typedef + sol_vars +
+                                  sol_funcs + sol_mapping + sol_array +
+                                  sol_ext_library + "}";
+
+// C++
+const std::string sol_cpp_string = R"(
+const std::string empty_str = "";
+void _streq(std::string &str1, std::string str2)
+{
+__ESBMC_HIDE:;
+  // __ESBMC_assume(!str2.empty());
+  str1 = str2;
+}
+std::string _tostr(const char* ptr)
+{
+__ESBMC_HIDE:;
+  return std::string(ptr);
+}
+const char* _tochar(const std::string& str)
+{
+__ESBMC_HIDE:;
+  return str.c_str();
+}
+)";
+
+const std::string sol_signature = R"(
+//TODO
+)";
+
+const std::string sol_cpp_library = sol_cpp_string + sol_signature;
 
 // combination
-const std::string sol_library = sol_header + sol_typedef + sol_vars +
-                                sol_funcs + sol_mapping + sol_ext_library;
+const std::string sol_library =
+  sol_header + sol_c_library; // + sol_cpp_library;
 
 }; // namespace SolidityTemplate
 

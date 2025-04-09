@@ -168,7 +168,7 @@ do
           -DENABLE_CVC4=OFF \
           -DENABLE_BITWUZLA=On \
           -DENABLE_Z3=On \
-          -DENABLE_Mathsat=ON \
+          -DENABLE_MATHSAT=ON \
           -DENABLE_GOTO_CONTRACTOR=On \
           -DACADEMIC_BUILD=ON"  ;;
     B) BASE_ARGS="$BASE_ARGS -DESBMC_BUNDLE_LIBC=$OPTARG" ;;
@@ -197,11 +197,12 @@ case $OS in
   *) echo "Unsupported OS $OSTYPE" ; exit 1; ;;
 esac || exit $?
 
+
 # Configure ESBMC
 printf "Running CMake:"
 printf " '%s'" $COMPILER_ARGS cmake .. $BASE_ARGS $SOLVER_FLAGS
 echo
-$COMPILER_ARGS cmake .. $BASE_ARGS $SOLVER_FLAGS &&
+$COMPILER_ARGS cmake .. $BASE_ARGS $SOLVER_FLAGS -DCMAKE_POLICY_VERSION_MINIMUM=3.5 &&
 # Compile ESBMC
 cmake --build . && ninja install || exit $?
 

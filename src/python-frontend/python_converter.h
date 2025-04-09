@@ -64,7 +64,9 @@ public:
     symbol_table_.add(s);
   }
 
-  symbolt *find_imported_symbol(const std::string &symbol_id) const;
+  void update_symbol(const exprt &expr) const;
+
+  symbolt *find_symbol(const std::string &symbol_id) const;
 
   bool is_imported_module(const std::string &module_name) const;
 
@@ -125,6 +127,8 @@ private:
 
   symbol_id create_symbol_id(const std::string &filename) const;
 
+  exprt compute_math_expr(const exprt &expr) const;
+
   void get_attributes_from_self(
     const nlohmann::json &method_body,
     struct_typet &clazz);
@@ -135,7 +139,8 @@ private:
     std::string method_name,
     bool is_ctor) const;
 
-  symbolt *find_symbol_in_global_scope(std::string &symbol_id) const;
+  symbolt *find_imported_symbol(const std::string &symbol_id) const;
+  symbolt *find_symbol_in_global_scope(const std::string &symbol_id) const;
 
   void update_instance_from_self(
     const std::string &class_name,
@@ -158,7 +163,7 @@ private:
   nlohmann::json imported_module_json;
   std::string current_func_name_;
   std::string current_class_name_;
-  exprt *ref_instance;
+  exprt *current_lhs;
 
   bool is_converting_lhs = false;
   bool is_converting_rhs = false;

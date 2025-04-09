@@ -183,4 +183,15 @@ const JsonType find_var_decl(
   return ref;
 }
 
+template <typename JsonType>
+const JsonType find_return_node(const JsonType &block)
+{
+  for (const auto &stmt : block)
+  {
+    if (stmt.contains("_type") && stmt["_type"] == "Return")
+      return stmt;
+  }
+  return JsonType();
+}
+
 } // namespace json_utils

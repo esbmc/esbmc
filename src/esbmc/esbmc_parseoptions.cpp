@@ -339,12 +339,6 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   if (cmdline.isset("compact-trace"))
     options.set_option("no-slice", true);
 
-  if (cmdline.isset("smt-during-symex"))
-  {
-    log_status("Enabling --no-slice due to presence of --smt-during-symex");
-    options.set_option("no-slice", true);
-  }
-
   if (
     cmdline.isset("smt-thread-guard") || cmdline.isset("smt-symex-guard") ||
     cmdline.isset("smt-symex-assert") || cmdline.isset("smt-symex-assume"))
@@ -499,6 +493,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option(
       "keep-alive-interval", cmdline.getval("keep-alive-interval"));
 
+  if (cmdline.isset("override-return-annotation"))
+    options.set_option("override-return-annotation", true);
+
   config.options = options;
 }
 
@@ -565,7 +562,7 @@ int esbmc_parseoptionst::doit()
     goto_preprocess_algorithms.emplace_back(
       std::make_unique<mark_decl_as_non_det>(context));
 
-    if (cmdline.isset("function"))
+    if (cmdline.isset("function") && cmdline.isset("assign-param-nondet"))
     {
       // assign parameters to "nondet"
       goto_preprocess_algorithms.emplace_back(
@@ -585,6 +582,17 @@ int esbmc_parseoptionst::doit()
   // Parse ESBMC options (CMD + set internal options)
   optionst options;
   get_command_line_options(options);
+
+  // for solidity
+  if (cmdline.isset("sol"))
+  {
+    // set default options
+    options.set_option(
+      "no-align-check", true); // no need to check alignment in solidity
+    options.set_option("no-unlimited-scanf-check", true);
+    options.set_option(
+      "force-malloc-success", true); // for calloc in the 'newexpression'
+  }
 
   // Create and preprocess a GOTO program
   if (get_goto_program(options, goto_functions))
@@ -2043,6 +2051,7 @@ bool esbmc_parseoptionst::process_goto_program(
       // for function mode
       if (cmdline.isset("function"))
         tmp.set_target(cmdline.getval("function"));
+
       tmp.branch_coverage();
     }
     if (
@@ -2061,7 +2070,16 @@ bool esbmc_parseoptionst::process_goto_program(
 
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);
+
       tmp.branch_function_coverage();
+    }
+
+    if (cmdline.isset("negating-property"))
+    {
+      std::string tgt_fname = cmdline.getval("negating-property");
+      std::string filename = cmdline.args[0];
+      goto_coveraget tmp(ns, goto_functions, filename);
+      tmp.negating_asserts(tgt_fname);
     }
   }
 

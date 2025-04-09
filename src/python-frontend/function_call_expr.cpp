@@ -163,16 +163,12 @@ exprt function_call_expr::get()
     obj_symbol = symbol_table.find_symbol(obj_symbol_id.to_string());
   }
 
-  // Get function symbol
+  // Get function symbol id
   const std::string &func_symbol_id = function_id_.to_string();
   assert(!func_symbol_id.empty());
 
-  // Find function in the current module
-  const symbolt *func_symbol = symbol_table.find_symbol(func_symbol_id.c_str());
-
-  // Find function in imported modules
-  if (!func_symbol)
-    func_symbol = converter_.find_imported_symbol(func_symbol_id);
+  // Find function symbol
+  const symbolt *func_symbol = converter_.find_symbol(func_symbol_id.c_str());
 
   if (func_symbol == nullptr)
   {
@@ -227,8 +223,8 @@ exprt function_call_expr::get()
   if (function_type_ == FunctionType::Constructor)
   {
     // Self is the LHS
-    assert(converter_.ref_instance);
-    call.arguments().push_back(gen_address_of(*converter_.ref_instance));
+    assert(converter_.current_lhs);
+    call.arguments().push_back(gen_address_of(*converter_.current_lhs));
   }
   else if (function_type_ == FunctionType::InstanceMethod)
   {
@@ -279,5 +275,5 @@ exprt function_call_expr::get()
       call.arguments().push_back(arg);
   }
 
-  return call;
+  return std::move(call);
 }
