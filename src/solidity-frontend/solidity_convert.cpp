@@ -3531,6 +3531,39 @@ bool solidity_convertert::get_expr(
     }
     break;
   }
+  case SolidityGrammar::ExpressionT::LiteralWithWei:
+  case SolidityGrammar::ExpressionT::LiteralWithGwei:
+  case SolidityGrammar::ExpressionT::LiteralWithSzabo:
+  case SolidityGrammar::ExpressionT::LiteralWithFinney:
+  case SolidityGrammar::ExpressionT::LiteralWithEther:
+  case SolidityGrammar::ExpressionT::LiteralWithSeconds:
+  case SolidityGrammar::ExpressionT::LiteralWithMinutes:
+  case SolidityGrammar::ExpressionT::LiteralWithHours:
+  case SolidityGrammar::ExpressionT::LiteralWithDays:
+  case SolidityGrammar::ExpressionT::LiteralWithWeeks:
+  case SolidityGrammar::ExpressionT::LiteralWithYears:
+  {
+    // e.g. _ESBMC_ether(1);
+    assert(expr.contains("subdenomination"));
+    std::string unit_name = expr["subdenomination"];
+
+    nlohmann::json node = expr;    // do copy
+    node.erase("subdenomination"); // remove unit
+    exprt l_expr;
+    if (get_expr(node, literal_type, l_expr))
+      return true;
+
+    std::string f_name = "_ESBMC_" + unit_name;
+    std::string f_id = "c:@F@" + f_name;
+
+    side_effect_expr_function_callt call;
+    get_library_function_call_no_args(
+      f_name, f_id, unsignedbv_typet(256), location, call);
+    call.arguments().push_back(l_expr);
+
+    new_expr = call;
+    break;
+  }
   case SolidityGrammar::ExpressionT::Tuple:
   {
     // "nodeType": "TupleExpression":

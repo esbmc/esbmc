@@ -316,6 +316,20 @@ enum ExpressionT
   // rule literal
   Literal,
 
+  // unit literal
+  LiteralWithWei,
+  LiteralWithGwei,
+  LiteralWithSzabo,
+  LiteralWithFinney,
+  LiteralWithEther,
+
+  LiteralWithSeconds,
+  LiteralWithMinutes,
+  LiteralWithHours,
+  LiteralWithDays,
+  LiteralWithWeeks,
+  LiteralWithYears,
+
   // rule Tuple
   Tuple,
 

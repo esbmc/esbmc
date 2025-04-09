@@ -695,8 +695,38 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
   }
   else if (expr["nodeType"] == "Literal")
   {
+    if (expr.contains("subdenomination"))
+    {
+      std::string unit = expr["subdenomination"];
+  
+      if (unit == "wei")
+        return LiteralWithWei;
+      else if (unit == "gwei")
+        return LiteralWithGwei;
+      else if (unit == "szabo")
+        return LiteralWithSzabo;
+      else if (unit == "finney")
+        return LiteralWithFinney;
+      else if (unit == "ether")
+        return LiteralWithEther;
+      else if (unit == "seconds")
+        return LiteralWithSeconds;
+      else if (unit == "minutes")
+        return LiteralWithMinutes;
+      else if (unit == "hours")
+        return LiteralWithHours;
+      else if (unit == "days")
+        return LiteralWithDays;
+      else if (unit == "weeks")
+        return LiteralWithWeeks;
+      else if (unit == "years")
+        return LiteralWithYears;
+      else
+        return LiteralWithUnknownUnit;
+    }
+  
     return Literal;
-  }
+  }  
   else if (expr["nodeType"] == "TupleExpression")
   {
     return Tuple;
@@ -989,6 +1019,17 @@ const char *expression_to_str(ExpressionT type)
 
     ENUM_TO_STR(DeclRefExprClass)
     ENUM_TO_STR(Literal)
+    ENUM_TO_STR(LiteralWithWei)
+    ENUM_TO_STR(LiteralWithGwei)
+    ENUM_TO_STR(LiteralWithSzabo)
+    ENUM_TO_STR(LiteralWithFinney)
+    ENUM_TO_STR(LiteralWithEther)
+    ENUM_TO_STR(LiteralWithSeconds)
+    ENUM_TO_STR(LiteralWithMinutes)
+    ENUM_TO_STR(LiteralWithHours)
+    ENUM_TO_STR(LiteralWithDays)
+    ENUM_TO_STR(LiteralWithWeeks)
+    ENUM_TO_STR(LiteralWithYears)
     ENUM_TO_STR(Tuple)
     ENUM_TO_STR(Mapping)
     ENUM_TO_STR(CallExprClass)
