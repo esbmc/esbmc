@@ -738,8 +738,11 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
     else if (
       type_name == SolidityGrammar::TypeNameT::AddressTypeName ||
       (expr["expression"].contains("memberName") &&
-       solidity_convertert::is_low_level_call(
-         expr["expression"]["memberName"])))
+         (solidity_convertert::is_low_level_call(
+           expr["expression"]["memberName"])) ||
+       solidity_convertert::is_low_level_property(
+         expr["expression"]["memberName"]))
+    )
       return AddressMemberCall;
     else
       //TODO Assume it's a builtin member
