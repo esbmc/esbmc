@@ -154,7 +154,8 @@ bool is_address_member_call(const nlohmann::json &expr)
     type_name == SolidityGrammar::TypeNameT::AddressPayableTypeName &&
     expr["expression"].contains("memberName") &&
     (solidity_convertert::is_low_level_call(expr["expression"]["memberName"]) ||
-     solidity_convertert::is_low_level_property(expr["expression"]["memberName"])))
+     solidity_convertert::is_low_level_property(
+       expr["expression"]["memberName"])))
     return true;
 
   return false;
