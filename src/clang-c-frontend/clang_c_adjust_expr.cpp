@@ -153,7 +153,7 @@ void clang_c_adjust::adjust_expr(exprt &expr)
         // TODO: should we initialize pads with nondet values?
         ops.insert(ops.begin() + i, gen_zero(c.type()));
       }
-      adjust_expr(ops[i]);
+      adjust_expr(ops.at(i));
     }
     assert(new_comp.size() == ops.size());
   }
