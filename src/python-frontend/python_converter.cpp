@@ -1850,6 +1850,9 @@ void python_converter::convert()
     is_loading_models = false;
   }
 
+  // Load C intrisics
+  load_c_intrisics();
+
   // Handle --function option
   const std::string function = config.options.get_option("function");
   if (!function.empty())
@@ -1966,9 +1969,6 @@ void python_converter::convert()
 
     is_importing_module = false;
     current_python_file = main_python_file;
-
-    // Load C intrisics
-    load_c_intrisics();
 
     // Convert main statements
     exprt main_block = get_block(ast_json["body"]);
