@@ -2619,9 +2619,10 @@ bool solidity_convertert::get_function_definition(
   //  - Convert params before body as they may get referred by the statement in the body
 
   // 11.1 add this pointer as the first param
-  bool is_event =
-    ast_node.contains("nodeType") && ast_node["nodeType"] == "EventDefinition";
-  if (!is_event)
+  bool is_event_err = ast_node.contains("nodeType") &&
+                      (ast_node["nodeType"] == "EventDefinition" ||
+                       ast_node["nodeType"] == "ErrorDefinition");
+  if (!is_event_err)
     get_function_this_pointer_param(
       c_name, id, debug_modulename, location_begin, type);
 
@@ -3746,14 +3747,15 @@ bool solidity_convertert::get_expr(
   case SolidityGrammar::ExpressionT::CallOptionsExprClass:
   {
     // e.g.
-    // - address(tmp).call{gas: 1000000, value: 1 ether}(abi.encodeWithSignature("register(string)", "MyName"));
-    assert(!current_contractName.empty());
-
-    const nlohmann::json &callee_expr_json = expr["expression"];
-    assert(
-      callee_expr_json.contains("nodeType") &&
-      callee_expr_json["nodeType"] == "MemberAccess");
-
+    // 1.
+    // address(tmp).call{gas: 1000000, value: 1 ether}(abi.encodeWithSignature("register(string)", "MyName"));
+    // 2.
+    // function foo(uint a, uint b) public pure returns (uint) {
+    //   return a + b;
+    // }
+    // function callFoo() public pure returns (uint) {
+    //     return foo({a: 1, b: 2});
+    // }
     if (!is_bound)
     {
       if (get_unbound_expr(expr, current_contractName, new_expr))
@@ -3761,28 +3763,24 @@ bool solidity_convertert::get_expr(
       break;
     }
 
-    // TODO: handle the ether transfer
-
-    nlohmann::json args = nullptr;
-    if (literal_type != nullptr && literal_type != empty_json)
-      args = literal_type;
-    else if (expr.contains("arguments"))
-      args = expr["arguments"];
-    if (get_expr(callee_expr_json, args, new_expr))
-      return true;
-
-    // do ether transfer
-    //!TODO: fixme
-    if (expr.contains("options") && expr["options"].size() > 0)
+    assert(expr.contains("expression"));
+    nlohmann::json callee_expr_json = expr["expression"];
+    if (SolidityGrammar::is_address_member_call(callee_expr_json))
     {
-      exprt ethers;
-      if (get_expr(
-            expr["options"][0], expr["options"][0]["typeDescriptions"], ethers))
+      assert(expr.contains("options"));
+      // add the ["options"] to the sub-expression nodes
+      callee_expr_json["options"] = expr["options"];
+      // to addressmembercall
+      if (get_expr(callee_expr_json, new_expr))
         return true;
-      change_balance(current_contractName, ethers);
-    }
 
-    break;
+      break;
+    }
+    else
+    {
+      log_error("Unsupported CallOptionsExprClass");
+      return true;
+    }
   }
   case SolidityGrammar::ExpressionT::CallExprClass:
   {
@@ -4494,6 +4492,8 @@ bool solidity_convertert::get_expr(
     switch (_type)
     {
     case SolidityGrammar::TypeConversionExpression:
+    case SolidityGrammar::DeclRefExprClass:
+    case SolidityGrammar::BuiltinMemberCall:
     {
       // get base: x.$address / this.$address
       exprt mem_expr;
@@ -4517,52 +4517,20 @@ bool solidity_convertert::get_expr(
       {
         if (!is_bound && get_unbound_expr(expr, current_contractName, new_expr))
           return true;
-        // else
-        //   get_low_level_call(expr, literal_type, base, new_expr, bs_c_name);
       }
-      else
+      else if (is_low_level_property(mem_name))
       {
-        assert(is_low_level_property(mem_name));
         // property i.e balance/codehash
         if (!is_bound)
-
           // make it as a NODET_UINT
           new_expr = nondet_uint_expr;
-
         else
           get_builtin_property_expr(mem_name, base, new_expr);
       }
-
-      break;
-    }
-    case SolidityGrammar::DeclRefExprClass:
-    case SolidityGrammar::BuiltinMemberCall:
-    {
-      // case 2
-      // - address x; x.balance
-      // - msg.sender.call
-
-      if (is_low_level_call(mem_name))
-      {
-        if (!is_bound && get_unbound_expr(expr, current_contractName, new_expr))
-          return true;
-        else
-        {
-          exprt base;
-          if (get_expr(callee_expr_json, base))
-            return true;
-          if (member_extcall_harness(expr, literal_type, base, new_expr))
-            return true;
-        }
-      }
       else
       {
-        if (!is_bound)
-          new_expr = nondet_uint_expr;
-        else
-        {
-          // todo
-        }
+        log_error("unexpected address member access");
+        return true;
       }
 
       break;
@@ -6109,6 +6077,7 @@ bool solidity_convertert::get_type_description(
   {
   case SolidityGrammar::TypeNameT::ElementaryTypeName:
   case SolidityGrammar::TypeNameT::AddressTypeName:
+  case SolidityGrammar::TypeNameT::AddressPayableTypeName:
   {
     // rule state-variable-declaration
     if (get_elementary_type_name(type_name, new_type))
@@ -9405,53 +9374,6 @@ bool solidity_convertert::is_low_level_property(const std::string &name)
   return false;
 }
 
-/**
- * val++; // to reflect gas
- * if(this_bal> val)
- *   this_bal -= val
- * else
- *   this_bal = 0;
- */
-void solidity_convertert::change_balance(
-  const std::string cname,
-  const exprt &value)
-{
-  // get balance
-  std::string id = "sol:@C@" + cname + "@balance";
-  if (context.find_symbol(id) == nullptr)
-  {
-    log_error("cannot find balance");
-    abort();
-  }
-  exprt bal = symbol_expr(*context.find_symbol(id));
-
-  exprt this_expr;
-  assert(current_functionDecl);
-  if (get_func_decl_this_ref(*current_functionDecl, this_expr))
-  {
-    log_error("cannot get this pointer");
-    abort();
-  }
-  exprt this_bal = member_exprt(this_expr, bal.name(), bal.type());
-
-  side_effect_expr_function_callt _update_balance;
-  typet t = unsignedbv_typet(256);
-  get_library_function_call_no_args(
-    "_ESBMC_update_balance",
-    "c:@F@_ESBMC_update_balance",
-    t,
-    this_bal.location(),
-    _update_balance);
-  _update_balance.arguments().push_back(this_bal);
-  _update_balance.arguments().push_back(value);
-
-  exprt _assign = side_effect_exprt("assign", t);
-  _assign.copy_to_operands(this_bal, _update_balance);
-
-  convert_expression_to_code(_assign);
-  move_to_front_block(_assign);
-}
-
 // e.g. address(x).balance => x->balance
 // address(x).transfer() => x->transfer();
 
@@ -10306,6 +10228,10 @@ bool solidity_convertert::get_call_definition(const std::string &cname)
   get_default_symbol(s, absolute_path, t, call_name, call_id, locationt());
   auto &added_symbol = *move_symbol_to_context(s);
 
+  // add this pointer as the first arguments
+  get_function_this_pointer_param(
+    cname, call_id, absolute_path, locationt(), t);
+
   // param: address _addr;
   std::string addr_name = "_addr";
   std::string addr_id = "sol:@C@" + cname + "@F@call@" + addr_name + "#0";
@@ -10396,6 +10322,8 @@ bool solidity_convertert::get_call_value_definition(const std::string &cname)
   t.return_type().set("#sol_type", "BOOL");
   get_default_symbol(s, absolute_path, t, call_name, call_id, locationt());
   auto &added_symbol = *move_symbol_to_context(s);
+  get_function_this_pointer_param(
+    cname, call_id, absolute_path, locationt(), t);
 
   // param: address _addr;
   std::string addr_name = "_addr";
@@ -10432,11 +10360,13 @@ bool solidity_convertert::get_call_value_definition(const std::string &cname)
 
   // body:
   /*
+  __ESBMC_Hide;
+  uint256_t old_value = msg_value;
+  uint160_t old_sender =  msg_sender;
   if(_addr == _ESBMC_Object_x) 
   {    
     *! we do not consider gas consumption
-    uint256_t old_value = msg_value;
-    address_t old_sender =  msg_sender;
+
     msg_value = value 
     msg_sender = this.address;
     this.balance -= x; 
@@ -10453,6 +10383,8 @@ bool solidity_convertert::get_call_value_definition(const std::string &cname)
   return false;
   */
   code_blockt func_body;
+  exprt addr_expr = symbol_expr(addr_added_symbol);
+  exprt val_expr = symbol_expr(val_added_symbol);
 
   // add __ESBMC_HIDE label
   code_labelt label;
@@ -10460,8 +10392,34 @@ bool solidity_convertert::get_call_value_definition(const std::string &cname)
   label.code() = code_skipt();
   func_body.operands().push_back(label);
 
-  exprt addr_expr = symbol_expr(addr_added_symbol);
-  exprt val_expr = symbol_expr(val_added_symbol);
+  // uint256_t old_value = msg_value;
+  symbolt old_value;
+  get_default_symbol(
+    old_value,
+    absolute_path,
+    unsignedbv_typet(256),
+    "old_value",
+    "sol:@old_value#" + std::to_string(aux_counter++),
+    locationt());
+  symbolt &added_old_value = *move_symbol_to_context(old_value);
+  added_old_value.value = symbol_expr(*context.find_symbol("c:@msg_value"));
+  code_declt old_val_decl(symbol_expr(added_old_value));
+  func_body.move_to_operands(old_val_decl);
+
+  // uint160_t old_sender =  msg_sender;
+  symbolt old_sender;
+  get_default_symbol(
+    old_sender,
+    absolute_path,
+    unsignedbv_typet(160),
+    "old_sender",
+    "sol:@old_sender#" + std::to_string(aux_counter++),
+    locationt());
+  symbolt &added_old_sender = *move_symbol_to_context(old_sender);
+  added_old_sender.value = symbol_expr(*context.find_symbol("c:@msg_sender"));
+  code_declt old_sender_decl(symbol_expr(added_old_sender));
+  func_body.move_to_operands(old_sender_decl);
+
   for (auto str : contractNamesList)
   {
     // Here, we only consider if there is receive and fallback function
@@ -10496,20 +10454,71 @@ bool solidity_convertert::get_call_value_definition(const std::string &cname)
     get_static_contract_instance(str, sym);
     exprt mem_addr = member_exprt(symbol_expr(sym), "$address", addr_t);
 
+    code_blockt then;
+
     exprt _equal = exprt("=", bool_type());
     _equal.operands().push_back(addr_expr);
     _equal.operands().push_back(mem_addr);
 
-    bool hasReceive = std::any_of(
-      funcSignatures[cname].begin(),
-      funcSignatures[cname].end(),
-      [&cname](const solidity_convertert::func_sig &sig)
-      { return sig.name == cname; });
+    // msg_value = _val;
+    exprt msg_value = symbol_expr(*context.find_symbol("c:@msg_value"));
+    exprt assign_val = side_effect_exprt("assign", val_expr.type());
+    assign_val.copy_to_operands(msg_value, val_expr);
+    convert_expression_to_code(assign_val);
+    then.move_to_operands(assign_val);
 
-    code_blockt then;
-    code_returnt return_expr;
-    return_expr.return_value() = gen_one(bool_type());
-    then.copy_to_operands(call, return_expr);
+    // msg_sender = this.$address;
+    exprt msg_sender = symbol_expr(*context.find_symbol("c:@msg_sender"));
+    std::string call_this = call_id + "this";
+    if (context.find_symbol(call_this) == nullptr)
+    {
+      log_error("cannot find this pointer");
+      return true;
+    }
+
+    symbolt this_sym = *context.find_symbol(call_this);
+    exprt this_address =
+      member_exprt(symbol_expr(this_sym), "$address", addr_t);
+    exprt assign_sender = side_effect_exprt("assign", addr_t);
+    assign_sender.copy_to_operands(msg_sender, this_address);
+    convert_expression_to_code(assign_sender);
+    then.move_to_operands(assign_sender);
+
+    // this.balance -= _val;
+    exprt this_balance = member_exprt(symbol_expr(this_sym), "balance", val_t);
+    exprt sub_assign = side_effect_exprt("assign-", val_t);
+    sub_assign.copy_to_operands(this_balance, val_expr);
+    convert_expression_to_code(sub_assign);
+    then.move_to_operands(sub_assign);
+
+    // call receive() or fallback()
+    then.move_to_operands(call);
+
+    // _ESBMC_Object_x.balance += _val;
+    exprt target_balance = member_exprt(symbol_expr(sym), "balance", val_t);
+    exprt add_assign = side_effect_exprt("assign+", val_t);
+    add_assign.copy_to_operands(target_balance, val_expr);
+    convert_expression_to_code(sub_assign);
+    then.move_to_operands(add_assign);
+
+    // msg_value = old_value;
+    exprt assign_val_restore = side_effect_exprt("assign", val_expr.type());
+    assign_val_restore.copy_to_operands(
+      msg_value, symbol_expr(added_old_value));
+    convert_expression_to_code(assign_val_restore);
+    then.move_to_operands(assign_val_restore);
+
+    // msg_sender = old_sender;
+    exprt assign_sender_restore = side_effect_exprt("assign", addr_t);
+    assign_sender_restore.copy_to_operands(
+      msg_sender, symbol_expr(added_old_sender));
+    convert_expression_to_code(assign_sender_restore);
+    then.move_to_operands(assign_sender_restore);
+
+    // return true;
+    code_returnt ret_true;
+    ret_true.return_value() = gen_one(bool_type());
+    then.move_to_operands(ret_true);
 
     codet if_expr("ifthenelse");
     if_expr.copy_to_operands(_equal, then);

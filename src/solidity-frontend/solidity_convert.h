@@ -364,7 +364,6 @@ protected:
     const nlohmann::json &type_descriptor,
     const nlohmann::json &dyn_array_node);
   bool is_mapping(const nlohmann::json &ast_node);
-  void change_balance(const std::string cname, const exprt &value);
 
   void get_default_symbol(
     symbolt &symbol,
