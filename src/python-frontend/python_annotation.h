@@ -442,7 +442,7 @@ private:
     if (type_utils::is_consensus_func(func_id))
       return type_utils::get_type_from_consensus_func(func_id);
 
-    if (!type_utils::is_model_func(func_id))
+    if (!type_utils::is_python_model_func(func_id))
       return get_function_return_type(func_id, ast_);
 
     return "";
@@ -579,7 +579,7 @@ private:
     // Get type from top-level functions
     else if (
       value_type == "Call" && stmt["value"]["func"]["_type"] == "Name" &&
-      !type_utils::is_model_func(stmt["value"]["func"]["id"]))
+      !type_utils::is_python_model_func(stmt["value"]["func"]["id"]))
     {
       inferred_type = get_type_from_call(stmt);
     }

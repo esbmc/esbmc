@@ -715,7 +715,7 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       !type_utils::is_builtin_type(func_name) &&
       !type_utils::is_consensus_type(func_name) &&
       !type_utils::is_consensus_func(func_name) &&
-      !type_utils::is_model_func(func_name) && !is_class(func_name, ast_json))
+      !type_utils::is_python_model_func(func_name) && !is_class(func_name, ast_json))
     {
       const auto &func_node = find_function(ast_json["body"], func_name);
       assert(!func_node.empty());
