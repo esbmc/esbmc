@@ -279,13 +279,13 @@ protected:
     const struct_typet::componentt &method,
     const struct_union_typet &type);
   /*
-   * Copy components and methods from base class(es) to the derived class type
+   * Copy methods from base class(es) to the derived class type
    * For virtual base class, we only copy it once.
    *
    * Params:
    *  - type: ESBMC IR representing the class' type
    */
-  void get_base_components_methods(struct_union_typet &type);
+  void get_base_methods(struct_union_typet &type);
 
   /*
    * Methods for virtual tables and virtual pointers

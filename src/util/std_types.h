@@ -203,6 +203,18 @@ public:
     return (basest &)(add(a_bases).get_sub());
   }
 
+  bool is_layouted() const
+  {
+    return get_bool(a_is_layouted);
+  }
+
+  void set_is_layouted(bool value)
+  {
+    if (is_layouted())
+      assert(false && "A type cannot be layouted twice");
+    set(a_is_layouted, value);
+  }
+
   bool has_component(const irep_idt &component_name) const
   {
     return get_component(component_name).is_not_nil();

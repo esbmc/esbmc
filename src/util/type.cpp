@@ -45,6 +45,7 @@ irep_idt typet::a_name = dstring("name");
 irep_idt typet::a_components = dstring("components");
 irep_idt typet::a_methods = dstring("methods");
 irep_idt typet::a_bases = dstring("bases");
+irep_idt typet::a_is_layouted = dstring("#is_layouted");
 irep_idt typet::a_arguments = dstring("arguments");
 irep_idt typet::a_return_type = dstring("return_type");
 irep_idt typet::a_size = dstring("size");
