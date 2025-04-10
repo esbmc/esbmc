@@ -3881,11 +3881,11 @@ bool solidity_convertert::get_expr(
         // assume it's 'this'
         if (contract_var_id < 0 && caller_expr_json["name"] == "this")
         {
-          //TODO: fix me
-          //This should be "this.x", as it might be inherited.
-          symbolt sym;
-          get_static_contract_instance(current_contractName, sym);
-          base = symbol_expr(sym);
+          exprt this_expr;
+          assert(current_functionDecl);
+          if (get_func_decl_this_ref(*current_functionDecl, this_expr))
+            return true;
+          base = this_expr;
           base_cname = current_contractName;
         }
         else
