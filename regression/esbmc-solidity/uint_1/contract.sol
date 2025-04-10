@@ -1,18 +1,70 @@
-// SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity >=0.4.0;
 
-contract UnitTest {
-    uint public oneEther = 1 ether;
-    uint public tenGwei = 10 gwei;
-    uint public someWei = 500 wei;
-
-    uint public duration = 5 minutes;
-
-    function convertToWei(uint _eth) public pure returns (uint) {
-        return _eth * 1 ether;
-    }
-
-    function waitTime() public pure returns (uint) {
-        return 2 hours + 30 minutes;
+contract Contract {
+    function func() public {
+        uint8 y0 = 1;
+        y0 = y0 + 1; assert(y0 == 2);
+        uint16 y1 = 1;
+        y1 = y1 + 1; assert(y1 == 2);
+        uint24 y2 = 1;
+        y2 = y2 + 1; assert(y2 == 2);
+        uint32 y3 = 1;
+        y3 = y3 + 1; assert(y3 == 2);
+        uint40 y4 = 1;
+        y4 = y4 + 1; assert(y4 == 2);
+        uint48 y5 = 1;
+        y5 = y5 + 1; assert(y5 == 2);
+        uint56 y6 = 1;
+        y6 = y6 + 1; assert(y6 == 2);
+        uint64 y7 = 1;
+        y7 = y7 + 1; assert(y7 == 2);
+        uint72 y8 = 1;
+        y8 = y8 + 1; assert(y8 == 2);
+        uint80 y9 = 1;
+        y9 = y9 + 1; assert(y9 == 2);
+        uint88 y10 = 1;
+        y10 = y10 + 1; assert(y10 == 2);
+        uint96 y11 = 1;
+        y11 = y11 + 1; assert(y11 == 2);
+        uint104 y12 = 1;
+        y12 = y12 + 1; assert(y12 == 2);
+        uint112 y13 = 1;
+        y13 = y13 + 1; assert(y13 == 2);
+        uint120 y14 = 1;
+        y14 = y14 + 1; assert(y14 == 2);
+        uint128 y15 = 1;
+        y15 = y15 + 1; assert(y15 == 2);
+        uint136 y16 = 1;
+        y16 = y16 + 1; assert(y16 == 2);
+        uint144 y17 = 1;
+        y17 = y17 + 1; assert(y17 == 2);
+        uint152 y18 = 1;
+        y18 = y18 + 1; assert(y18 == 2);
+        uint160 y19 = 1;
+        y19 = y19 + 1; assert(y19 == 2);
+        uint168 y20 = 1;
+        y20 = y20 + 1; assert(y20 == 2);
+        uint176 y21 = 1;
+        y21 = y21 + 1; assert(y21 == 2);
+        uint184 y22 = 1;
+        y22 = y22 + 1; assert(y22 == 2);
+        uint192 y23 = 1;
+        y23 = y23 + 1; assert(y23 == 2);
+        uint200 y24 = 1;
+        y24 = y24 + 1; assert(y24 == 2);
+        uint208 y25 = 1;
+        y25 = y25 + 1; assert(y25 == 2);
+        uint216 y26 = 1;
+        y26 = y26 + 1; assert(y26 == 2);
+        uint224 y27 = 1;
+        y27 = y27 + 1; assert(y27 == 2);
+        uint232 y28 = 1;
+        y28 = y28 + 1; assert(y28 == 2);
+        uint240 y29 = 1;
+        y29 = y29 + 1; assert(y29 == 2);
+        uint248 y30 = 1;
+        y30 = y30 + 1; assert(y30 == 2);
+        uint256 y31 = 1;
+        y31 = y31 + 1; assert(y31 == 2);
     }
 }
