@@ -377,7 +377,7 @@ __ESBMC_HIDE:;
 }
 )";
 
-const std::string sol_uint = R"(
+const std::string sol_unit = R"(
 // ether
 uint256_t _ESBMC_wei(uint256_t x)
 {
@@ -753,7 +753,7 @@ const std::string sol_ext_library =
 
 const std::string sol_c_library = "extern \"C\" {" + sol_typedef + sol_vars +
                                   sol_funcs + sol_mapping + sol_array +
-                                  sol_uint + sol_ext_library + "}";
+                                  sol_unit + sol_ext_library + "}";
 
 // C++
 const std::string sol_cpp_string = R"(
