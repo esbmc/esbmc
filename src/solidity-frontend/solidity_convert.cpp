@@ -3419,13 +3419,11 @@ bool solidity_convertert::get_expr(
   
         new_expr = dereference_exprt(new_expr, (expr).type().sub_type());
         */
-
-        symbolt sym;
-        get_static_contract_instance(current_contractName, sym);
-        new_expr = symbol_expr(sym);
-        // explicit set the sol_type
-        new_expr.type().set("#sol_type", "CONTRACT");
-        new_expr.type().set("#sol_contract", current_contractName);
+        exprt this_expr;
+        assert(current_functionDecl);
+        if (get_func_decl_this_ref(*current_functionDecl, this_expr))
+          return true;
+        new_expr = this_expr;
       }
       else
       {
