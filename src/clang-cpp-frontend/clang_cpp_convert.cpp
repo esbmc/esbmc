@@ -382,7 +382,7 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
     {
       if (get_bases(*cxxrd, type.bases()))
         return true;
-      get_base_components_methods(bases, type);
+      get_base_methods(type);
     }
   }
 
@@ -2123,7 +2123,7 @@ bool clang_cpp_convertert::get_bases(
   return false;
 }
 
-void clang_cpp_convertert::get_base_components_methods(struct_union_typet &type)
+void clang_cpp_convertert::get_base_methods(struct_union_typet &type)
 {
   for (const auto &base_id : type.bases())
   {
@@ -2132,16 +2132,6 @@ void clang_cpp_convertert::get_base_components_methods(struct_union_typet &type)
     assert(s);
 
     const struct_typet &base_type = to_struct_type(s->type);
-
-    // pull components in
-    const struct_typet::componentst &components = base_type.components();
-    for (auto component : components)
-    {
-      // TODO: tweak access specifier
-      component.set("from_base", true);
-      if (!is_duplicate_component(component, type))
-        to_struct_type(type).components().push_back(component);
-    }
 
     // pull methods in
     const struct_typet::componentst &methods = base_type.methods();
@@ -2153,20 +2143,6 @@ void clang_cpp_convertert::get_base_components_methods(struct_union_typet &type)
         to_struct_type(type).methods().push_back(method);
     }
   }
-}
-
-bool clang_cpp_convertert::is_duplicate_component(
-  const struct_typet::componentt &component,
-  const struct_union_typet &type)
-{
-  const struct_typet &stype = to_struct_type(type);
-  const struct_typet::componentst &components = stype.components();
-  for (const auto &existing_component : components)
-  {
-    if (component.name() == existing_component.name())
-      return true;
-  }
-  return false;
 }
 
 bool clang_cpp_convertert::is_duplicate_method(

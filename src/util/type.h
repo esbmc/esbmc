@@ -109,6 +109,7 @@ public:
   static irep_idt a_components;
   static irep_idt a_methods;
   static irep_idt a_bases;
+  static irep_idt a_is_layouted;
   static irep_idt a_arguments;
   static irep_idt a_return_type;
   static irep_idt a_size;

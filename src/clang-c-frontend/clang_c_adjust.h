@@ -37,6 +37,27 @@ protected:
   void adjust_type(typet &type);
 
   /**
+   * Computes a layout for a struct or union type.
+   * This means that components are assigned offsets and added
+   * from base classes. Padding is added if necessary.
+   *
+   * @param type the type to layout
+   */
+  void layout_struct_union_type(struct_union_typet &type);
+
+  /*
+   * Check whether we've already got this component in a class type
+   * Avoid copying duplicate component from a base class type to the derived class type.
+   *
+   * Params:
+   *  - component: the component to be copied from a base class to the derived class type
+   *  - type: ESBMC IR representing the derived class type
+   */
+  static bool is_duplicate_component(
+    const struct_typet::componentt &component,
+    const struct_typet::componentst &components);
+
+  /**
    * methods for expression (exprt) adjustment
    * and other IRs derived from exprt
    */
