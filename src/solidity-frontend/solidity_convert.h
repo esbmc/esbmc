@@ -396,6 +396,11 @@ protected:
     const locationt &l,
     const exprt &val,
     const std::string c_name);
+  void move_builtin_to_contract(
+    const std::string cname,
+    const std::string &name,
+    const typet &t,
+    bool is_method);
   const nlohmann::json &
   get_func_decl_ref(const std::string &c_name, const std::string &f_name);
   void get_builtin_property_expr(
@@ -436,8 +441,8 @@ protected:
   has_target_function(const std::string &cname, const std::string func_name);
   func_sig
   get_target_function(const std::string &cname, const std::string &func_name);
-  bool get_call_definition(const std::string &cname);
-  bool get_call_value_definition(const std::string &cname);
+  bool get_call_definition(const std::string &cname, exprt &new_expr);
+  bool get_call_value_definition(const std::string &cname, exprt &new_expr);
 
   bool get_bind_cname_expr(const nlohmann::json &json, exprt &bind_cname_expr);
   void get_nondet_contract_name(
