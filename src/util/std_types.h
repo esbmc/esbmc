@@ -191,6 +191,18 @@ public:
     return (componentst &)(add(a_components).get_sub());
   }
 
+  typedef std::vector<irept> basest;
+
+  const basest &bases() const
+  {
+    return (const basest &)(find(a_bases).get_sub());
+  }
+
+  basest &bases()
+  {
+    return (basest &)(add(a_bases).get_sub());
+  }
+
   bool has_component(const irep_idt &component_name) const
   {
     return get_component(component_name).is_not_nil();

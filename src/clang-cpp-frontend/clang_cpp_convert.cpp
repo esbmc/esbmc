@@ -379,8 +379,7 @@ bool clang_cpp_convertert::get_struct_union_class_fields(
   {
     if (cxxrd->bases_begin() != cxxrd->bases_end())
     {
-      base_map bases;
-      if (get_base_map(*cxxrd, bases))
+      if (get_bases(*cxxrd, type.bases()))
         return true;
       get_base_components_methods(bases, type);
     }
@@ -2053,9 +2052,9 @@ symbolt *clang_cpp_convertert::get_fd_symbol(const clang::FunctionDecl &fd)
   return (context.find_symbol(id));
 }
 
-bool clang_cpp_convertert::get_base_map(
+bool clang_cpp_convertert::get_bases(
   const clang::CXXRecordDecl &cxxrd,
-  base_map &map)
+  struct_union_typet::basest &bases)
 {
   /*
    * This function gets all the base classes from which we need to get the components/methods
@@ -2071,7 +2070,7 @@ bool clang_cpp_convertert::get_base_map(
 
     // recursively get more bases for this `base`
     if (base_cxxrd.bases_begin() != base_cxxrd.bases_end())
-      if (get_base_map(base_cxxrd, map))
+      if (get_bases(base_cxxrd, bases))
         return true;
 
     // get base class id
@@ -2079,30 +2078,22 @@ bool clang_cpp_convertert::get_base_map(
     get_decl_name(base_cxxrd, class_name, class_id);
 
     // avoid adding the same base, e.g. in case of diamond problem
-    if (map.find(class_id) != map.end())
+    if (std::find(bases.begin(), bases.end(), irept(class_id)) != bases.end())
       continue;
 
-    auto status = map.insert({class_id, base_cxxrd});
-    (void)status;
-    assert(status.second);
+    bases.emplace_back(class_id);
   }
 
   return false;
 }
 
-void clang_cpp_convertert::get_base_components_methods(
-  base_map &map,
-  struct_union_typet &type)
+void clang_cpp_convertert::get_base_components_methods(struct_union_typet &type)
 {
-  irept::subt &base_ids = type.add("bases").get_sub();
-  for (const auto &base : map)
+  for (const auto &base_id : type.bases())
   {
-    std::string class_id = base.first;
-
     // get base class symbol
-    symbolt *s = context.find_symbol(class_id);
+    symbolt *s = context.find_symbol(base_id.id());
     assert(s);
-    base_ids.emplace_back(s->id);
 
     const struct_typet &base_type = to_struct_type(s->type);
 

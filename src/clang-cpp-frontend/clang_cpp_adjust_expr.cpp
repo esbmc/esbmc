@@ -410,17 +410,16 @@ void clang_cpp_adjust::convert_exception_id(
     if (t.id() == "struct" && !is_catch)
     {
       struct_typet struct_type = to_struct_type(t);
-      const exprt &bases =
-        static_cast<const exprt &>(struct_type.find("bases"));
+      const struct_union_typet::basest &bases = struct_type.bases();
 
       // Throwing a derived class
-      if (bases.is_not_nil() && bases.get_sub().size())
+      if (!bases.empty())
       {
         // record the derived class
         ids.emplace_back(id2string(identifier) + suffix);
 
         // record all the base classes id
-        for (const auto &i : bases.get_sub())
+        for (const auto &i : bases)
         {
           identifier = i.id();
           ids.emplace_back(id2string(identifier) + suffix);
