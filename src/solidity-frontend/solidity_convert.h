@@ -72,6 +72,7 @@ protected:
   bool populate_function_signature(
     const nlohmann::json &json,
     const std::string &cname);
+  bool populate_low_level_functions();
   bool convert_ast_nodes(
     const nlohmann::json &contract_def,
     const std::string &cname);
@@ -425,13 +426,18 @@ protected:
     const exprt &member,
     const bool is_func_call,
     exprt &new_expr);
+  bool get_low_level_member_accsss(
+    const nlohmann::json &expr,
+    const std::string mem_name,
+    const exprt &base,
+    exprt &new_expr);
   bool has_callable_func(const std::string &cname);
   bool
   has_target_function(const std::string &cname, const std::string func_name);
   func_sig
   get_target_function(const std::string &cname, const std::string &func_name);
-  bool get_call_definition(const std::string &cname);
-  bool get_call_value_definition(const std::string &cname);
+  bool get_call_definition();
+  bool get_call_value_definition();
 
   bool get_bind_cname_expr(const nlohmann::json &json, exprt &bind_cname_expr);
   void get_nondet_contract_name(

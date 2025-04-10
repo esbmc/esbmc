@@ -87,6 +87,9 @@ bool solidity_convertert::convert()
   // store auxiliary info
   populate_auxilary_vars();
 
+  if (populate_low_level_functions())
+    return true;
+
   // for coverage and trace simplification: update include_files
   auto add_unique = [](const std::string &file)
   {
@@ -445,7 +448,9 @@ void solidity_convertert::populate_auxilary_vars()
     typet ct = pointer_typet(signed_char_type());
     ct.cmt_constant(true);
     symbolt s;
-    get_default_symbol(s, absolute_path, ct, aux_cname, aux_cid, locationt());
+    std::string debug_modulename = get_modulename_from_path(absolute_path);
+    get_default_symbol(
+      s, debug_modulename, ct, aux_cname, aux_cid, locationt());
     s.lvalue = true;
     s.file_local = true;
     s.static_lifetime = true; // static
@@ -499,13 +504,29 @@ void solidity_convertert::populate_auxilary_vars()
     symbolt s;
     typet _t = inits.type();
     _t.cmt_constant(true);
-    get_default_symbol(s, absolute_path, _t, aux_name, aux_id, locationt());
+    std::string debug_modulename = get_modulename_from_path(absolute_path);
+    get_default_symbol(s, debug_modulename, _t, aux_name, aux_id, locationt());
     s.file_local = true;
     s.static_lifetime = true;
     s.lvalue = true;
     symbolt &sym = *move_symbol_to_context(s);
     sym.value = inits;
   }
+}
+
+bool solidity_convertert::populate_low_level_functions()
+{
+  log_debug("solidity", "Populating low-level function definition");
+
+  // call("")
+  if (get_call_definition())
+    return true;
+
+  // call{}("")
+  if (get_call_value_definition())
+    return true;
+
+  return false;
 }
 
 /**
@@ -2022,7 +2043,7 @@ bool solidity_convertert::get_unbound_function(
       log_error("cannot find contract {}", c_name);
       return true;
     }
-    const symbolt &contract = *context.find_symbol(id);
+    const symbolt &_contract = *context.find_symbol(id);
 
     // 1.2 get static contract instance
     symbolt added_ctor_symbol;
@@ -2110,8 +2131,6 @@ bool solidity_convertert::get_unbound_function(
     typet e_type = empty_typet();
     e_type.set("cpp_type", "void");
     h_type.return_type() = e_type;
-    const symbolt &_contract = *context.find_symbol(prefix + c_name);
-    new_symbol.location = _contract.location;
     std::string debug_modulename = get_modulename_from_path(absolute_path);
     get_default_symbol(
       new_symbol, debug_modulename, h_type, h_name, h_id, _contract.location);
@@ -4515,8 +4534,21 @@ bool solidity_convertert::get_expr(
       // case 1, which is a type conversion node
       if (is_low_level_call(mem_name))
       {
-        if (!is_bound && get_unbound_expr(expr, current_contractName, new_expr))
-          return true;
+        if (!is_bound)
+        {
+          if (get_unbound_expr(expr, current_contractName, new_expr))
+            return true;
+          if (mem_name == "send")
+            new_expr = nondet_bool_expr;
+          else
+            // call, staticcall ...
+            get_llc_ret_tuple(new_expr);
+        }
+        else
+        {
+          if (get_low_level_member_accsss(expr, mem_name, base, new_expr))
+            return true;
+        }
       }
       else if (is_low_level_property(mem_name))
       {
@@ -5844,8 +5876,11 @@ bool solidity_convertert::get_func_decl_this_ref(
   type.return_type().set("cpp_type", "void");
 
   if (context.find_symbol(this_id) == nullptr)
+  {
+    std::string debug_modulename = get_modulename_from_path(absolute_path);
     get_function_this_pointer_param(
-      contract_name, func_id, absolute_path, l, type);
+      contract_name, func_id, debug_modulename, l, type);
+  }
 
   new_expr = symbol_expr(*context.find_symbol(this_id));
 
@@ -9472,15 +9507,6 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
     l,
     bind_expr,
     contract_name);
-
-  // _ESBMC_call();
-  // _ESBMC_call_val();
-  if (get_call_definition(contract_name))
-    return true;
-  if (get_call_value_definition(contract_name))
-    return true;
-
-  return false;
 }
 
 // this funciton:
@@ -9684,8 +9710,9 @@ void solidity_convertert::get_nondet_contract_name(
   std::string aux_name, aux_id;
   get_aux_var(aux_name, aux_id);
   symbolt s;
+  std::string debug_modulename = get_modulename_from_path(absolute_path);
   get_default_symbol(
-    s, absolute_path, dest_type, aux_name, aux_id, src_expr.location());
+    s, debug_modulename, dest_type, aux_name, aux_id, src_expr.location());
   s.lvalue = true;
   s.file_local = true;
   s.static_lifetime = true;
@@ -9714,8 +9741,9 @@ void solidity_convertert::get_nondet_contract_name(
 
     // "$address"
     // _ESBMC_Object_base.$address
-    exprt mem_addr =
-      member_exprt(symbol_expr(c_sym), "$address", unsignedbv_typet(160));
+    typet _addr_t = unsignedbv_typet(160);
+    _addr_t.set("#sol_type", "ADDRESS");
+    exprt mem_addr = member_exprt(symbol_expr(c_sym), "$address", _addr_t);
 
     //  _addr == _ESBMC_Object_base.$address
     exprt _equal = exprt("=", bool_type());
@@ -9976,8 +10004,9 @@ bool solidity_convertert::get_high_level_member_access(
     typet t = member.type();
     if (t.id() == irept::id_code)
       t = to_code_type(t).return_type();
+    std::string debug_modulename = get_modulename_from_path(absolute_path);
     get_default_symbol(
-      s, absolute_path, t, aux_name, aux_id, member.location());
+      s, debug_modulename, t, aux_name, aux_id, member.location());
     auto &added_symbol = *move_symbol_to_context(s);
     s.lvalue = true;
     s.file_local = true;
@@ -10077,6 +10106,65 @@ bool solidity_convertert::get_high_level_member_access(
   new_expr.location() = l;
 
   log_debug("solidity", "\tSuccessfully modelled member access.");
+  return false;
+}
+
+/** e.g.
+ * x.call{value:}("")
+ * @base: x
+ * @mem_name: call
+ */
+bool solidity_convertert::get_low_level_member_accsss(
+  const nlohmann::json &expr,
+  const std::string mem_name,
+  const exprt &base,
+  exprt &new_expr)
+{
+  locationt loc;
+  get_location_from_node(expr, loc);
+  side_effect_expr_function_callt call;
+
+  if (mem_name == "call")
+  {
+    exprt addr = member_exprt(base, "$address", unsignedbv_typet(160));
+
+    if (expr.contains("options"))
+    {
+      // do call#1(addr, value) (call with ether)
+      addr.type().set("#sol_type", "ADDRESS_PAYABLE");
+      exprt value;
+      // type should be uint256
+      nlohmann::json literal_type;
+      literal_type["typeDescriptions"] = {
+        {"typeIdentifier", "t_uint256"}, {"typeString", "uint256"}};
+
+      if (get_expr(expr["options"][0], literal_type, value))
+        return true;
+
+      get_library_function_call_no_args(
+        "call", "sol:@F@call#1", bool_type(), loc, call);
+      call.arguments().push_back(addr);
+      call.arguments().push_back(value);
+    }
+    else
+    {
+      // fo call#0(addr)
+      addr.type().set("#sol_type", "ADDRESS");
+      get_library_function_call_no_args(
+        "call", "sol:@F@call#0", bool_type(), loc, call);
+      call.arguments().push_back(addr);
+    }
+
+    // convert it to tuple
+    get_llc_ret_tuple(new_expr);
+    new_expr.op0() = call;
+  }
+  else
+  {
+    log_error("unsupported low-level call type {}", mem_name);
+    return true;
+  }
+
   return false;
 }
 
@@ -10210,14 +10298,14 @@ bool solidity_convertert::populate_nil_this_arguments(
   return false;
 }
 
-// add method `call(address _addr)` to the contract `cname`
+// `call(address _addr)` to the contract
 // If it contains the funciton signature, it should be directly converted to the function calls rathe than invoke this `call`
 // e.g. addr.call(abi.encodeWithSignature("doSomething(uint256)", 123))
 // => _ESBMC_Object_Base.doSomething(123);
-bool solidity_convertert::get_call_definition(const std::string &cname)
+bool solidity_convertert::get_call_definition()
 {
   std::string call_name = "call";
-  std::string call_id = "sol:@C@" + cname + "@F@call#0";
+  std::string call_id = "sol:@F@call#0";
   symbolt s;
   // the return value should be (bool, string)
   // however, we cannot handle the string, therefore we only return bool
@@ -10225,22 +10313,19 @@ bool solidity_convertert::get_call_definition(const std::string &cname)
   code_typet t;
   t.return_type() = bool_type();
   t.return_type().set("#sol_type", "BOOL");
-  get_default_symbol(s, absolute_path, t, call_name, call_id, locationt());
+  std::string debug_modulename = get_modulename_from_path(absolute_path);
+  get_default_symbol(s, debug_modulename, t, call_name, call_id, locationt());
   auto &added_symbol = *move_symbol_to_context(s);
-
-  // add this pointer as the first arguments
-  get_function_this_pointer_param(
-    cname, call_id, absolute_path, locationt(), t);
 
   // param: address _addr;
   std::string addr_name = "_addr";
-  std::string addr_id = "sol:@C@" + cname + "@F@call@" + addr_name + "#0";
+  std::string addr_id = "sol:@F@call@" + addr_name + "#0";
   typet addr_t;
   addr_t = unsignedbv_typet(160);
-  addr_t.set("#sol_type", "ADDRESS");
+  addr_t.set("#sol_type", "ADDRESS_PAYABLE");
   symbolt addr_s;
   get_default_symbol(
-    addr_s, absolute_path, addr_t, addr_name, addr_id, locationt());
+    addr_s, debug_modulename, addr_t, addr_name, addr_id, locationt());
   auto &addr_added_symbol = *move_symbol_to_context(addr_s);
 
   code_typet::argumentt param = code_typet::argumentt();
@@ -10308,11 +10393,11 @@ bool solidity_convertert::get_call_definition(const std::string &cname)
   return false;
 }
 
-// add method `call(address _addr, uint _val)` to the contract `cname`
-bool solidity_convertert::get_call_value_definition(const std::string &cname)
+// `call(address _addr, uint _val)`
+bool solidity_convertert::get_call_value_definition()
 {
   std::string call_name = "call";
-  std::string call_id = "sol:@C@" + cname + "@F@call#1";
+  std::string call_id = "sol:@F@call#1";
   symbolt s;
   // the return value should be (bool, string)
   // however, we cannot handle the string, therefore we only return bool
@@ -10320,19 +10405,19 @@ bool solidity_convertert::get_call_value_definition(const std::string &cname)
   code_typet t;
   t.return_type() = bool_type();
   t.return_type().set("#sol_type", "BOOL");
-  get_default_symbol(s, absolute_path, t, call_name, call_id, locationt());
+  std::string debug_modulename = get_modulename_from_path(absolute_path);
+
+  get_default_symbol(s, debug_modulename, t, call_name, call_id, locationt());
   auto &added_symbol = *move_symbol_to_context(s);
-  get_function_this_pointer_param(
-    cname, call_id, absolute_path, locationt(), t);
 
   // param: address _addr;
   std::string addr_name = "_addr";
-  std::string addr_id = "sol:@C@" + cname + "@F@call@" + addr_name + "#1";
+  std::string addr_id = "sol:@F@call@" + addr_name + "#1";
   typet addr_t = unsignedbv_typet(160);
-  addr_t.set("#sol_type", "ADDRESS");
+  addr_t.set("#sol_type", "ADDRESS_PAYABLE");
   symbolt addr_s;
   get_default_symbol(
-    addr_s, absolute_path, addr_t, addr_name, addr_id, locationt());
+    addr_s, debug_modulename, addr_t, addr_name, addr_id, locationt());
   auto addr_added_symbol = *move_symbol_to_context(addr_s);
 
   code_typet::argumentt param = code_typet::argumentt();
@@ -10343,11 +10428,11 @@ bool solidity_convertert::get_call_value_definition(const std::string &cname)
 
   // param: uint _val;
   std::string val_name = "_val";
-  std::string val_id = "sol:@C@" + cname + "@F@call@" + val_name + "#1";
+  std::string val_id = "sol:@F@call@" + val_name + "#1";
   typet val_t = unsignedbv_typet(256);
   symbolt val_s;
   get_default_symbol(
-    val_s, absolute_path, val_t, val_name, val_id, locationt());
+    val_s, debug_modulename, val_t, val_name, val_id, locationt());
   auto val_added_symbol = *move_symbol_to_context(val_s);
 
   param = code_typet::argumentt();
@@ -10396,7 +10481,7 @@ bool solidity_convertert::get_call_value_definition(const std::string &cname)
   symbolt old_value;
   get_default_symbol(
     old_value,
-    absolute_path,
+    debug_modulename,
     unsignedbv_typet(256),
     "old_value",
     "sol:@old_value#" + std::to_string(aux_counter++),
@@ -10407,11 +10492,13 @@ bool solidity_convertert::get_call_value_definition(const std::string &cname)
   func_body.move_to_operands(old_val_decl);
 
   // uint160_t old_sender =  msg_sender;
+  typet _addr_t = unsignedbv_typet(160);
+  _addr_t.set("#sol_type", "ADDRESS");
   symbolt old_sender;
   get_default_symbol(
     old_sender,
-    absolute_path,
-    unsignedbv_typet(160),
+    debug_modulename,
+    _addr_t,
     "old_sender",
     "sol:@old_sender#" + std::to_string(aux_counter++),
     locationt());
@@ -10420,7 +10507,7 @@ bool solidity_convertert::get_call_value_definition(const std::string &cname)
   code_declt old_sender_decl(symbol_expr(added_old_sender));
   func_body.move_to_operands(old_sender_decl);
 
-  for (auto str : contractNamesList)
+  for (auto cname : contractNamesList)
   {
     // Here, we only consider if there is receive and fallback function
     // as the call with signature should be directly modelled.
@@ -10451,7 +10538,7 @@ bool solidity_convertert::get_call_value_definition(const std::string &cname)
     convert_expression_to_code(call);
 
     symbolt sym;
-    get_static_contract_instance(str, sym);
+    get_static_contract_instance(cname, sym);
     exprt mem_addr = member_exprt(symbol_expr(sym), "$address", addr_t);
 
     code_blockt then;
@@ -10485,7 +10572,7 @@ bool solidity_convertert::get_call_value_definition(const std::string &cname)
     then.move_to_operands(assign_sender);
 
     // this.balance -= _val;
-    exprt this_balance = member_exprt(symbol_expr(this_sym), "balance", val_t);
+    exprt this_balance = member_exprt(symbol_expr(this_sym), "$balance", val_t);
     exprt sub_assign = side_effect_exprt("assign-", val_t);
     sub_assign.copy_to_operands(this_balance, val_expr);
     convert_expression_to_code(sub_assign);
@@ -10495,7 +10582,7 @@ bool solidity_convertert::get_call_value_definition(const std::string &cname)
     then.move_to_operands(call);
 
     // _ESBMC_Object_x.balance += _val;
-    exprt target_balance = member_exprt(symbol_expr(sym), "balance", val_t);
+    exprt target_balance = member_exprt(symbol_expr(sym), "$balance", val_t);
     exprt add_assign = side_effect_exprt("assign+", val_t);
     add_assign.copy_to_operands(target_balance, val_expr);
     convert_expression_to_code(sub_assign);
