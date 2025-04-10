@@ -143,6 +143,24 @@ const char *contract_body_element_to_str(ContractBodyElementT type)
   }
 }
 
+// check if it's <address>.member
+bool is_address_member_call(const nlohmann::json &expr)
+{
+  assert(expr.contains("expression"));
+  SolidityGrammar::TypeNameT type_name =
+    get_type_name_t(expr["expression"]["typeDescriptions"]);
+  if (
+    type_name == SolidityGrammar::TypeNameT::AddressPayableTypeName &&
+    (expr["expression"].contains("memberName") &&
+       (solidity_convertert::is_low_level_call(
+         expr["expression"]["memberName"])) ||
+     solidity_convertert::is_low_level_property(
+       expr["expression"]["memberName"])))
+    return true;
+
+  return false;
+}
+
 // rule type-name
 TypeNameT get_type_name_t(const nlohmann::json &type_name)
 {
@@ -198,6 +216,8 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     }
     else if (typeIdentifier.compare(0, 9, "t_address") == 0)
     {
+      if (typeIdentifier.compare(0, 17, "t_address_payable") == 0)
+        return AddressPayableTypeName;
       return AddressTypeName;
     }
     else if (
@@ -288,6 +308,7 @@ const char *type_name_to_str(TypeNameT type)
     ENUM_TO_STR(DynArrayTypeName)
     ENUM_TO_STR(ContractTypeName)
     ENUM_TO_STR(AddressTypeName)
+    ENUM_TO_STR(AddressPayableTypeName)
     ENUM_TO_STR(TypeConversionName)
     ENUM_TO_STR(TypeProperty)
     ENUM_TO_STR(EnumTypeName)
@@ -698,7 +719,7 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
     if (expr.contains("subdenomination"))
     {
       std::string unit = expr["subdenomination"];
-  
+
       if (unit == "wei")
         return LiteralWithWei;
       else if (unit == "gwei")
@@ -724,9 +745,9 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
       else
         return LiteralWithUnknownUnit;
     }
-  
+
     return Literal;
-  }  
+  }
   else if (expr["nodeType"] == "TupleExpression")
   {
     return Tuple;
@@ -744,14 +765,16 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
   }
   else if (expr["nodeType"] == "FunctionCall")
   {
+    SolidityGrammar::TypeNameT type_name =
+      get_type_name_t(expr["expression"]["typeDescriptions"]);
     if (expr["expression"]["nodeType"] == "NewExpression")
       return NewExpression;
     if (expr["kind"] == "typeConversion")
       return TypeConversionExpression;
-    if (
-      get_type_name_t(expr["typeDescriptions"]) ==
-      SolidityGrammar::TypeProperty)
+    if (type_name == SolidityGrammar::TypeProperty)
       return TypePropertyExpression;
+    else if (is_address_member_call(expr))
+      return AddressMemberCall;
     return CallExprClass;
   }
   else if (expr["nodeType"] == "MemberAccess")
@@ -765,14 +788,7 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
       return EnumMemberCall;
     else if (type_name == SolidityGrammar::TypeNameT::ContractTypeName)
       return ContractMemberCall;
-    else if (
-      type_name == SolidityGrammar::TypeNameT::AddressTypeName ||
-      (expr["expression"].contains("memberName") &&
-         (solidity_convertert::is_low_level_call(
-           expr["expression"]["memberName"])) ||
-       solidity_convertert::is_low_level_property(
-         expr["expression"]["memberName"]))
-    )
+    else if (is_address_member_call(expr))
       return AddressMemberCall;
     else
       //TODO Assume it's a builtin member
@@ -1030,6 +1046,7 @@ const char *expression_to_str(ExpressionT type)
     ENUM_TO_STR(LiteralWithDays)
     ENUM_TO_STR(LiteralWithWeeks)
     ENUM_TO_STR(LiteralWithYears)
+    ENUM_TO_STR(LiteralWithUnknownUnit)
     ENUM_TO_STR(Tuple)
     ENUM_TO_STR(Mapping)
     ENUM_TO_STR(CallExprClass)
