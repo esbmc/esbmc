@@ -518,13 +518,16 @@ bool solidity_convertert::populate_low_level_functions(const std::string &cname)
     "Populating low-level function definition for contract {}",
     cname);
 
+  exprt new_expr;
   // call("")
-  if (get_call_definition(cname))
+  if (get_call_definition(cname, new_expr))
     return true;
+  move_builtin_to_contract(cname, "call", new_expr.type(), true);
 
   // call{}("")
-  if (get_call_value_definition(cname))
+  if (get_call_value_definition(cname, new_expr))
     return true;
+  move_builtin_to_contract(cname, "call", new_expr.type(), true);
 
   return false;
 }
@@ -9507,6 +9510,27 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
     contract_name);
 }
 
+void solidity_convertert::move_builtin_to_contract(
+  const std::string c_name,
+  const std::string &name,
+  const typet &t,
+  bool is_method)
+{
+  std::string c_id = prefix + c_name;
+  symbolt &c_sym = *context.find_symbol(c_id);
+  assert(c_sym.type.is_struct());
+
+  struct_typet::componentt comp(name, name, t);
+  comp.set_access("private");
+  if (!is_method)
+  {
+    comp.type().set("#member_name", c_sym.type.tag());
+    to_struct_type(c_sym.type).components().push_back(comp);
+  }
+  else
+    to_struct_type(c_sym.type).methods().push_back(comp);
+}
+
 // this funciton:
 // - move the created auxiliary variables to the constructor
 // - append the symbol as the component to the struct class
@@ -9532,17 +9556,8 @@ void solidity_convertert::get_builtin_symbol(
   move_to_initializer(decl);
 
   if (!c_name.empty())
-  {
     // we need to update the fields of the contract struct symbol
-    std::string c_id = prefix + c_name;
-    symbolt &c_sym = *context.find_symbol(c_id);
-    assert(c_sym.type.is_struct());
-
-    struct_typet::componentt comp(name, name, t);
-    comp.type().set("#member_name", c_sym.type.tag());
-    comp.set_access("private");
-    to_struct_type(c_sym.type).components().push_back(comp);
-  }
+    move_builtin_to_contract(c_name, name, t, false);
 }
 
 bool solidity_convertert::get_new_temporary_obj(
@@ -10300,7 +10315,9 @@ bool solidity_convertert::populate_nil_this_arguments(
 // If it contains the funciton signature, it should be directly converted to the function calls rathe than invoke this `call`
 // e.g. addr.call(abi.encodeWithSignature("doSomething(uint256)", 123))
 // => _ESBMC_Object_Base.doSomething(123);
-bool solidity_convertert::get_call_definition(const std::string &cname)
+bool solidity_convertert::get_call_definition(
+  const std::string &cname,
+  exprt &new_expr)
 {
   std::string call_name = "call";
   std::string call_id = "sol:@C@" + cname + "@F@call#0";
@@ -10431,11 +10448,14 @@ bool solidity_convertert::get_call_definition(const std::string &cname)
   func_body.move_to_operands(return_expr);
 
   added_symbol.value = func_body;
+  new_expr = symbol_expr(added_symbol);
   return false;
 }
 
 // `call(address _addr, uint _val)`
-bool solidity_convertert::get_call_value_definition(const std::string &cname)
+bool solidity_convertert::get_call_value_definition(
+  const std::string &cname,
+  exprt &new_expr)
 {
   std::string call_name = "call";
   std::string call_id = "sol:@C@" + cname + "@F@call#1";
@@ -10650,5 +10670,6 @@ bool solidity_convertert::get_call_value_definition(const std::string &cname)
   func_body.move_to_operands(return_expr);
 
   added_symbol.value = func_body;
+  new_expr = symbol_expr(added_symbol);
   return false;
 }
