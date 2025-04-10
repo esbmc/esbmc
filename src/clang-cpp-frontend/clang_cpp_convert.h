@@ -453,17 +453,13 @@ protected:
   void
   set_thunk_name(symbolt &thunk_func_symb, const std::string &base_class_id);
   /*
-   * Recall that we mode the virtual function table as struct of function pointers.
+   * Recall that we model the virtual function table as struct of function pointers.
    * This function adds the symbols for these struct variables.
    *
    * Params:
-   *  - cxxrd: clang AST node representing the class/struct we are currently dealing with
    *  - type: ESBMC IR representing the type the class/struct we are currently dealing with
-   *  - vft_value_map: representing the vtable value maps for this class/struct we are currently dealing with
    */
-  void setup_vtable_struct_variables(
-    const clang::CXXRecordDecl &cxxrd,
-    const struct_typet &type);
+  void setup_vtable_struct_variables(const struct_typet &type);
   /*
    * This function builds the vtable value map -
    * a map representing the function switch table
@@ -492,12 +488,10 @@ protected:
    *    };
    *
    * Params:
-   *  - cxxrd: clang AST node representing the class/struct we are currently dealing with
    *  - struct_type: ESBMC IR representing the type the class/struct we are currently dealing with
    *  - vtable_value_map: representing the vtable value maps for this class/struct we are currently dealing with
    */
   void add_vtable_variable_symbols(
-    const clang::CXXRecordDecl &cxxrd,
     const struct_typet &struct_type,
     const switch_table &vtable_value_map);
 
