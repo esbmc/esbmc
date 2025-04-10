@@ -1771,6 +1771,25 @@ void python_converter::append_models_from_directory(
   }
 }
 
+void python_converter::load_c_intrisics() {
+	typet t = long_long_int_type();
+	locationt l;
+	l.set_file("esbmc_intrinsics.h");
+	symbolt symbol;
+	symbol.mode = "C";
+	symbol.module = "esbmc_intrinsics";
+	symbol.location = l;
+	symbol.type = t;
+	symbol.name = "__ESBMC_rounding_mode";
+	symbol.id = "c:@__ESBMC_rounding_mode";
+	symbol.lvalue = true;
+	symbol.static_lifetime = true;
+
+	symbolt* new_symbol = symbol_table_.move_symbol_to_context(symbol);
+	exprt value = from_integer(BigInt(0), t);
+	new_symbol->value = value;
+}
+
 void python_converter::convert()
 {
   code_typet main_type;
@@ -1947,6 +1966,9 @@ void python_converter::convert()
 
     is_importing_module = false;
     current_python_file = main_python_file;
+
+    // Load C intrisics
+    load_c_intrisics();
 
     // Convert main statements
     exprt main_block = get_block(ast_json["body"]);
