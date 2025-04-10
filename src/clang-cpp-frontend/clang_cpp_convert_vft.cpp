@@ -93,7 +93,7 @@ bool clang_cpp_convertert::get_struct_class_virtual_methods(
    * Set up virtual function table(vft) variable symbols
    * Each vft is modelled as a struct of function pointers.
    */
-  setup_vtable_struct_variables(cxxrd, type);
+  setup_vtable_struct_variables(type);
 
   return false;
 }
@@ -501,7 +501,6 @@ void clang_cpp_convertert::add_thunk_component_to_type(
 }
 
 void clang_cpp_convertert::setup_vtable_struct_variables(
-  const clang::CXXRecordDecl &cxxrd,
   const struct_typet &type)
 {
   /*
@@ -520,7 +519,7 @@ void clang_cpp_convertert::setup_vtable_struct_variables(
 
   build_vtable_map(type, vtable_value_map);
 
-  add_vtable_variable_symbols(cxxrd, type, vtable_value_map);
+  add_vtable_variable_symbols(type, vtable_value_map);
 }
 
 void clang_cpp_convertert::build_vtable_map(
@@ -568,10 +567,10 @@ void clang_cpp_convertert::build_vtable_map(
 }
 
 void clang_cpp_convertert::add_vtable_variable_symbols(
-  const clang::CXXRecordDecl &cxxrd,
   const struct_typet &type,
   const switch_table &vtable_value_map)
 {
+  const std::string class_id = tag_prefix + type.tag().as_string();
   /*
    * Now we got the vtable map for the class type representing
    * the function switch relations.
@@ -589,10 +588,6 @@ void clang_cpp_convertert::add_vtable_variable_symbols(
     const symbolt *vt_symb_type =
       ns.lookup("virtual_table::" + late_cast_symb->id.as_string());
     assert(vt_symb_type);
-
-    // This is the class we are currently dealing with
-    std::string class_id, class_name;
-    get_decl_name(cxxrd, class_name, class_id);
 
     symbolt vt_symb_var;
     vt_symb_var.id = vt_symb_type->id.as_string() + "@" + class_id;
