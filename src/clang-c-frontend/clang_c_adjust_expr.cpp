@@ -578,25 +578,97 @@ void clang_c_adjust::adjust_type(typet &type)
   }
   else if ((type.is_struct() || type.is_union()) && !type.incomplete())
   {
-    /* components only exist for complete types */
-    for (auto &f : to_struct_union_type(type).components())
-      adjust_expr(f);
+    layout_struct_union_type(to_struct_union_type(type));
+  }
+}
 
-    add_padding(type, ns);
+void clang_c_adjust::layout_struct_union_type(struct_union_typet &type)
+{
+  assert(type.is_struct() || type.is_union());
+  if (type.is_layouted())
+    return;
+  // 1. Layout structs with bases if applicable.
+  // First push all components of the bases, then the components of the
+  // current type.
+  struct_typet::componentst new_components;
+  new_components.reserve(type.components().size());
+  for (const auto &base_id : type.bases())
+  {
+    const auto s = context.find_symbol(base_id.id());
+    assert(s);
+    typet &base_type = s->type;
+    assert(base_type.is_struct());
+
+    struct_union_typet &base_struct_type = to_struct_union_type(base_type);
+    layout_struct_union_type(base_struct_type);
+    for (const auto &c : base_struct_type.components())
+    {
+      if (!is_duplicate_component(c, new_components))
+        new_components.push_back(c);
+    }
+  }
+  // 2. Add the components of the current type.
+  // Ensure that the component types are layouted.
+  for (auto &c : type.components())
+  {
+    if (!is_duplicate_component(c, new_components))
+    {
+      typet *component_type;
+      if (c.type().is_symbol())
+      {
+        symbolt *component_type_symbol =
+          context.find_symbol(c.type().identifier());
+        assert(component_type_symbol);
+        assert(component_type_symbol->is_type);
+        component_type = &component_type_symbol->type;
+      }
+      else
+      {
+        component_type = &c.type();
+      }
+      if (component_type->is_struct() || component_type->is_union())
+      {
+        layout_struct_union_type(
+          to_struct_union_type(to_struct_union_type(*component_type)));
+      }
+      new_components.push_back(c);
+    }
+  }
+  type.components().swap(new_components);
+
+  // 3. Adjust the components of the struct/union type.
+  for (auto &f : type.components())
+    adjust_expr(f);
+
+  // 4. Add padding
+  add_padding(type, ns);
 
 #ifndef NDEBUG
-    if (!type.get_bool("packed"))
-    {
-      type2tc t2 = migrate_type(type);
-      BigInt sz = type_byte_size(t2, &ns);
-      BigInt a = alignment(type, ns);
-      assert(sz % a == 0);
-    }
-    typet copy = type;
-    add_padding(copy, ns);
-    assert(copy == type);
-#endif
+  if (!type.get_bool("packed"))
+  {
+    type2tc t2 = migrate_type(type);
+    BigInt sz = type_byte_size(t2, &ns);
+    BigInt a = alignment(type, ns);
+    assert(sz % a == 0);
   }
+  typet copy = type;
+  add_padding(copy, ns);
+  assert(copy == type);
+#endif
+
+  type.set_is_layouted(true);
+}
+
+bool clang_c_adjust::is_duplicate_component(
+  const struct_typet::componentt &component,
+  const struct_typet::componentst &components)
+{
+  return std::any_of(
+    components.begin(),
+    components.end(),
+    [&component](const struct_typet::componentt &existing_component) {
+      return component.name() == existing_component.name();
+    });
 }
 
 void clang_c_adjust::adjust_side_effect_assignment(exprt &expr)

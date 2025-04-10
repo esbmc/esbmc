@@ -307,12 +307,12 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
 
   irep_idt c_tag = rd.isUnion() ? typet::t_union : typet::t_struct;
 
-  // Check if the symbol is already added to the context, do nothing if it is
-  // already in the context.
+  // Add a symbol for the type to the context
+  // if it doesn't exist yet.
   symbolt *sym = context.find_symbol(id);
   if (!sym)
   {
-    /* First put a symbol with a incomplete type into the context, then resolve
+    /* First put a symbol with an incomplete type into the context, then resolve
      * all subtypes and finally set this symbol's correctly resolved type. */
     struct_union_typet t("incomplete_" + c_tag.as_string());
     t.location() = location_begin;
@@ -351,19 +351,16 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
    * b) the type is being referred to under a pointer inside another type
    *    definition and up to this definition has not been defined, yet.
    */
-  if (!rd.isCompleteDefinition())
+  clang::RecordDecl *rd_def = rd.getDefinition();
+  if (!rd_def)
     return false;
-
   /* Don't continue if it's not incomplete; use the .incomplete() flag to avoid
    * infinite recursion if the type we're defining refers to itself
    * (via pointers): it either is already being defined (up the stack somewhere)
    * or it's already a complete struct or union in the context. */
-  if (!sym->type.incomplete() && sym->type.id() != "incomplete_struct")
+  if (!sym->type.incomplete())
     return false;
   sym->type.remove(irept::a_incomplete);
-
-  clang::RecordDecl *rd_def = rd.getDefinition();
-  assert(rd_def);
 
   /* it has a definition, now build the complete type */
   struct_union_typet t(c_tag);
@@ -372,9 +369,20 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
   /* update location with that of the type's definition */
   get_location_from_decl(*rd_def, t.location());
 
+  /* We successfully constructed the type of this symbol; replace the
+     * symbol with the incomplete type by one with the now-complete type
+     * definition.
+     * Do this by erasing and re-inserting because the order of definitions in the
+     * context matters. This type should be defined after any of the types that it
+     * is composed of. */
+  symbolt symbol = *sym;
+  context.erase_symbol(symbol.id);
+  symbol.type = t;
+  sym = context.move_symbol_to_context(symbol);
+
   // We have to add fields before methods as the fields are likely to be used
   // in the methods
-  if (get_struct_union_class_fields(*rd_def, t))
+  if (get_struct_union_class_fields(*rd_def, to_struct_union_type(sym->type)))
     return true;
 
   // Check for packed and aligned attributes
@@ -384,7 +392,7 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
     for (const auto &attr : attrs)
     {
       if (attr->getKind() == clang::attr::Packed)
-        t.set("packed", true);
+        sym->type.set("packed", true);
 
       if (attr->getKind() == clang::attr::Aligned)
       {
@@ -395,21 +403,10 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
         if (get_expr(*(aattr.getAlignmentExpr()), alignment))
           return true;
 
-        t.set("alignment", alignment);
+        sym->type.set("alignment", alignment);
       }
     }
   }
-
-  /* We successfully constructed the type of this symbol; replace the
-   * symbol with the incomplete type by one with the now-complete type
-   * definition.
-   * Do this by erasing and re-inserting because the order of definitions in the
-   * context matters. This type should be defined after any of the types that it
-   * is composed of. */
-  symbolt symbol = *sym;
-  context.erase_symbol(symbol.id);
-  symbol.type = t;
-  sym = context.move_symbol_to_context(symbol);
 
   if (get_struct_union_class_methods_decls(*rd_def, sym->type))
     return true;
@@ -1063,13 +1060,9 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
 
     std::string id, name;
     get_decl_name(rd, name, id);
-    symbolt *s = context.find_symbol(id);
-    if (!s)
-    {
-      /* record in context if not already there */
-      if (get_struct_union_class(rd))
-        return true;
-    }
+    /* record in context if not already there */
+    if (get_struct_union_class(rd))
+      return true;
 
     /* symbolic type referring to that type */
     new_type = symbol_typet(id);
