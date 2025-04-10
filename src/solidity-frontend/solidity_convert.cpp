@@ -9508,6 +9508,8 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
     l,
     bind_expr,
     contract_name);
+
+  return false;
 }
 
 void solidity_convertert::move_builtin_to_contract(
