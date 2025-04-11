@@ -8274,9 +8274,8 @@ nlohmann::json solidity_convertert::add_dyn_array_size_expr(
   nlohmann::json adjusted_descriptor;
   adjusted_descriptor = type_descriptor;
   // get the JSON object for size expr and merge it with the original type descriptor
-  adjusted_descriptor.push_back(
-    nlohmann::json::object_t::value_type(
-      "sizeExpr", dyn_array_node["initialValue"]["arguments"][0]));
+  adjusted_descriptor.push_back(nlohmann::json::object_t::value_type(
+    "sizeExpr", dyn_array_node["initialValue"]["arguments"][0]));
 
   return adjusted_descriptor;
 }
@@ -8963,16 +8962,14 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
   dest = code_blockt();
 
   // call designated "initialization" functions
-  context.foreach_operand_in_order(
-    [&dest](const symbolt &s)
+  context.foreach_operand_in_order([&dest](const symbolt &s) {
+    if (s.type.initialization() && s.type.is_code())
     {
-      if (s.type.initialization() && s.type.is_code())
-      {
-        code_function_callt function_call;
-        function_call.function() = symbol_expr(s);
-        dest.move_to_operands(function_call);
-      }
-    });
+      code_function_callt function_call;
+      function_call.function() = symbol_expr(s);
+      dest.move_to_operands(function_call);
+    }
+  });
 }
 
 void solidity_convertert::get_aux_var(
@@ -9964,8 +9961,7 @@ bool solidity_convertert::has_callable_func(const std::string &cname)
   return std::any_of(
     funcSignatures[cname].begin(),
     funcSignatures[cname].end(),
-    [&cname](const solidity_convertert::func_sig &sig)
-    {
+    [&cname](const solidity_convertert::func_sig &sig) {
       return sig.name != cname &&
              (sig.visibility == "public" || sig.visibility == "external");
     });
@@ -9979,8 +9975,9 @@ bool solidity_convertert::has_target_function(
   return std::any_of(
     funcSignatures[cname].begin(),
     funcSignatures[cname].end(),
-    [&func_name](const solidity_convertert::func_sig &sig)
-    { return sig.name == func_name; });
+    [&func_name](const solidity_convertert::func_sig &sig) {
+      return sig.name == func_name;
+    });
 }
 
 solidity_convertert::func_sig solidity_convertert::get_target_function(
@@ -10001,8 +9998,9 @@ solidity_convertert::func_sig solidity_convertert::get_target_function(
   auto func_it = std::find_if(
     functions.begin(),
     functions.end(),
-    [&func_name](const solidity_convertert::func_sig &sig)
-    { return sig.name == func_name; });
+    [&func_name](const solidity_convertert::func_sig &sig) {
+      return sig.name == func_name;
+    });
 
   // If function is found, return it; otherwise, return an empty func_sig
   if (func_it != functions.end())
