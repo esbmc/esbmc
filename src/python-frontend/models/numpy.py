@@ -32,10 +32,3 @@ def power(a:int, b:int) -> float:
 
 def ceil(x:float) -> int:
     return 0
-
-# def ceil_list(l: list[float]) -> None:
-#     i: int = 0
-#     while i < len(l):
-#         l[i] = ceil(l[i])
-#         i = i + 1
-        
