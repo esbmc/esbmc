@@ -84,8 +84,12 @@ bool clang_cpp_convertert::get_struct_class_virtual_methods(
       overriden_map cxxmethods_overriden;
       get_overriden_methods(*md, cxxmethods_overriden);
 
-      for (const auto &overriden_md_entry : cxxmethods_overriden)
-        add_thunk_method(overriden_md_entry.second, comp, type);
+      for (const auto &[_, overridden_method] : cxxmethods_overriden)
+      {
+        std::string base_id, base_name;
+        get_decl_name(*overridden_method.getParent(), base_name, base_id);
+        add_thunk_method(base_id, comp, type);
+      }
     }
   }
 
@@ -255,7 +259,7 @@ void clang_cpp_convertert::add_vtable_type_entry(
 }
 
 void clang_cpp_convertert::add_thunk_method(
-  const clang::CXXMethodDecl &md,
+  const std::string &base_class_id,
   const struct_typet::componentt &component,
   struct_typet &type)
 {
@@ -289,9 +293,6 @@ void clang_cpp_convertert::add_thunk_method(
    *
    *  also need to add this thunk method to the list of components of the derived class' type
    */
-
-  std::string base_class_id, base_class_name;
-  get_decl_name(*md.getParent(), base_class_name, base_class_id);
 
   // Create the thunk method symbol
   symbolt thunk_func_symb;
