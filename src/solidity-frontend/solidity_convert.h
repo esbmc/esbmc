@@ -337,14 +337,20 @@ protected:
   void reset_auxiliary_vars();
 
   // find reference
-  const nlohmann::json &
+  nlohmann::json
   find_parent(const nlohmann::json &json, const nlohmann::json &target);
-  const nlohmann::json &find_parent_contract(
+  nlohmann::json find_parent_contract(
     const nlohmann::json &json,
     const nlohmann::json &target);
-  const nlohmann::json &find_decl_ref(const nlohmann::json &json, int ref_id);
-  const nlohmann::json &find_constructor_ref(int ref_decl_id);
-  const nlohmann::json &find_constructor_ref(const std::string &contract_name);
+  nlohmann::json find_parent_contract(
+    const nlohmann::json &json,
+    const nlohmann::json &target,
+    const nlohmann::json &current_contract);
+  nlohmann::json find_decl_ref_in_contract(const nlohmann::json &j, int ref_id);
+  nlohmann::json find_decl_ref_global(const nlohmann::json &j, int ref_id);
+  nlohmann::json find_decl_ref(const nlohmann::json &json, int ref_id);
+  nlohmann::json find_constructor_ref(int ref_decl_id);
+  nlohmann::json find_constructor_ref(const std::string &contract_name);
 
   // auxiliary functions
   std::string get_modulename_from_path(std::string path);
@@ -541,7 +547,8 @@ protected:
   // used as the return value for find_constructor_ref when
   // dealing with the implicit constructor call
   // this is to avoid reference to stack memory associated with local variable returned
-  const nlohmann::json empty_json;
+  const nlohmann::json empty_json = nlohmann::json::object();
+  ;
 
   // for auxiliary var name
   int aux_counter;
