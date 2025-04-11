@@ -1506,6 +1506,20 @@ bool solidity_convertert::get_noncontract_defition(nlohmann::json &ast_node)
     // for abstract contract
     add_empty_body_node(ast_node);
   }
+  else if (node_type == "ContractDefinition" && ast_node["contractKind"] == "library")
+  {
+    if (get_struct_class(ast_node))
+      return true;
+    if (convert_ast_nodes(ast_node))
+      return true;
+    // static instance
+    std::string lib_name = ast_node["name"].get<std::string>();
+    symbolt lib_instance;
+    get_static_contract_instance(lib_name, lib_instance);
+    lib_instance.static_lifetime = true;
+    lib_instance.lvalue = true;
+    move_symbol_to_context(lib_instance);
+  }
 
   return false;
 }
@@ -1914,6 +1928,40 @@ bool solidity_convertert::get_unbound_expr(
   // it's not a member access, as it can only jump within current contract
   std::string c_name = current_contractName;
   assert(!c_name.empty());
+  if (expr.contains("expression") &&
+  expr["expression"]["nodeType"] == "MemberAccess")
+  {
+  const auto &member_access = expr["expression"];
+  const auto &base_expr = member_access["expression"];
+
+    if (base_expr["nodeType"] == "Identifier" &&
+        base_expr.contains("referencedDeclaration"))
+    {
+      int ref_id = base_expr["referencedDeclaration"];
+      const auto &ref_decl = find_decl_ref(ref_id);
+
+      if (ref_decl["nodeType"] == "ContractDefinition" &&
+          ref_decl["contractKind"] == "library")
+      {
+        std::string lib_name = ref_decl["name"];
+        std::string instance_name, instance_id;
+        get_static_contract_instance_name(lib_name, instance_name, instance_id);
+
+        const symbolt *lib_sym = context.find_symbol(instance_id);
+
+        exprt lib_expr = symbol_expr(*lib_sym);
+        std::string func_name = member_access["memberName"];
+
+        code_function_callt func_call;
+        locationt l;
+        get_location_from_node(expr, l);
+        func_call.location() = l;
+        func_call.function() = member_exprt(lib_expr, func_name, code_typet{});
+        new_expr = func_call;
+        return false;
+      }
+    }
+  }
   code_function_callt func_call;
   if (get_unbound_funccall(c_name, func_call))
     return true;
