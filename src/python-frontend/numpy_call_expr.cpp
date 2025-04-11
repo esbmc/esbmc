@@ -225,20 +225,31 @@ exprt numpy_call_expr::create_expr_from_call()
     {
       auto arg = call_["args"][0];
       resolve_var(arg);
-      if (arg["_type"] == "List")
+
+      if (arg["_type"] == "List")  // Handle calls with arrays as parameters; e.g. np.ceil([1, 2, 3])
       {
+    	// Append array postfix to call array variants, e.g., ceil_array instead of ceil
         std::string func_name = function_id_.get_function();
         func_name += "_array";
         function_id_.set_function(func_name);
 
         code_function_callt call = to_code_function_call(to_code(function_call_expr::get()));
         typet t = type_handler_.get_list_type(arg);
+
+        // In a call like result = np.ceil(v), the type of 'result' is only known after processing the argument 'v'.
+        // At this point, we have the argument's type information, so we update the type of the LHS expression accordingly.
+
         converter_.current_lhs->type() = t;
         converter_.update_symbol(*converter_.current_lhs);
+
+        // NumPy math functions on arrays are translated to C-style calls with the signature: func(input, output, size).
+        // For example, result = np.ceil(v) becomes ceil_array(v, result, sizeof(v)).
+        // The lines below add the output array and size arguments to the call.
 
         call.arguments().push_back(address_of_exprt(*converter_.current_lhs));
         exprt array_size = from_integer(arg["elts"].size(), int_type());
         call.arguments().push_back(array_size);
+
         return call;
       }
     }

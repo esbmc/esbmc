@@ -715,7 +715,8 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       !type_utils::is_builtin_type(func_name) &&
       !type_utils::is_consensus_type(func_name) &&
       !type_utils::is_consensus_func(func_name) &&
-      !type_utils::is_python_model_func(func_name) && !is_class(func_name, ast_json))
+      !type_utils::is_python_model_func(func_name) &&
+      !is_class(func_name, ast_json))
     {
       const auto &func_node = find_function(ast_json["body"], func_name);
       assert(!func_node.empty());
@@ -1771,23 +1772,26 @@ void python_converter::append_models_from_directory(
   }
 }
 
-void python_converter::load_c_intrisics() {
-	typet t = long_long_int_type();
-	locationt l;
-	l.set_file("esbmc_intrinsics.h");
-	symbolt symbol;
-	symbol.mode = "C";
-	symbol.module = "esbmc_intrinsics";
-	symbol.location = l;
-	symbol.type = t;
-	symbol.name = "__ESBMC_rounding_mode";
-	symbol.id = "c:@__ESBMC_rounding_mode";
-	symbol.lvalue = true;
-	symbol.static_lifetime = true;
+void python_converter::load_c_intrisics()
+{
+  // Add symbols required by the C models
 
-	symbolt* new_symbol = symbol_table_.move_symbol_to_context(symbol);
-	exprt value = from_integer(BigInt(0), t);
-	new_symbol->value = value;
+  typet t = long_long_int_type();
+  locationt l;
+  l.set_file("esbmc_intrinsics.h");
+  symbolt symbol;
+  symbol.mode = "C";
+  symbol.module = "esbmc_intrinsics";
+  symbol.location = l;
+  symbol.type = t;
+  symbol.name = "__ESBMC_rounding_mode";
+  symbol.id = "c:@__ESBMC_rounding_mode";
+  symbol.lvalue = true;
+  symbol.static_lifetime = true;
+
+  symbolt *new_symbol = symbol_table_.move_symbol_to_context(symbol);
+  exprt value = from_integer(BigInt(0), t);
+  new_symbol->value = value;
 }
 
 void python_converter::convert()
