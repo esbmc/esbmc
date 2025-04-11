@@ -340,9 +340,7 @@ protected:
    *
    * This is done the first time when we encounter a virtual method in a class
    */
-  symbolt *add_vtable_type_symbol(
-    const struct_typet::componentt &comp,
-    struct_typet &type);
+  symbolt *add_vtable_type_symbol(struct_typet &type);
   /*
    * Add virtual pointer(vptr).
    * Vptr is NOT a symbol but rather simply added as a component to the class' type.

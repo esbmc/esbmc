@@ -58,7 +58,7 @@ bool clang_cpp_convertert::get_struct_class_virtual_methods(
     if (!vtable_type_symbol)
     {
       // first time we create the vtable type for this class
-      vtable_type_symbol = add_vtable_type_symbol(comp, type);
+      vtable_type_symbol = add_vtable_type_symbol(type);
       if (vtable_type_symbol == nullptr)
         return true;
 
@@ -154,9 +154,7 @@ symbolt *clang_cpp_convertert::check_vtable_type_symbol_existence(
   return context.find_symbol(vt_name);
 }
 
-symbolt *clang_cpp_convertert::add_vtable_type_symbol(
-  const struct_typet::componentt &comp,
-  struct_typet &type)
+symbolt *clang_cpp_convertert::add_vtable_type_symbol(struct_typet &type)
 {
   /*
    *  We model the type of the virtual table as a struct type, something like:
@@ -171,6 +169,8 @@ symbolt *clang_cpp_convertert::add_vtable_type_symbol(
 
   irep_idt vt_name = vtable_type_prefix + tag_prefix + type.tag().as_string();
 
+  const locationt &location = type.location();
+
   symbolt vt_type_symb;
   vt_type_symb.id = vt_name;
   vt_type_symb.name = vtable_type_prefix + type.tag().as_string();
@@ -178,9 +178,8 @@ symbolt *clang_cpp_convertert::add_vtable_type_symbol(
   vt_type_symb.type = struct_typet();
   vt_type_symb.is_type = true;
   vt_type_symb.type.set("name", vt_type_symb.id);
-  vt_type_symb.location = comp.location();
-  vt_type_symb.module =
-    get_modulename_from_path(comp.location().file().as_string());
+  vt_type_symb.location = location;
+  vt_type_symb.module = get_modulename_from_path(location.file().as_string());
 
   if (context.move(vt_type_symb))
   {
