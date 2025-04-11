@@ -693,10 +693,11 @@ const char *statement_to_str(StatementT type)
 // rule expression
 ExpressionT get_expression_t(const nlohmann::json &expr)
 {
-  if (expr.is_null())
+  if (expr.is_null() || expr.empty())
   {
     return NullExpr;
   }
+  assert(expr.contains("nodeType"));
   if (expr["nodeType"] == "Assignment" || expr["nodeType"] == "BinaryOperation")
   {
     return BinaryOperatorClass;
