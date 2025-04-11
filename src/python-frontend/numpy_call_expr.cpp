@@ -5,6 +5,7 @@
 #include <util/expr.h>
 #include <util/c_types.h>
 #include <util/message.h>
+#include <util/arith_tools.h>
 
 #include <ostream>
 
@@ -199,13 +200,61 @@ exprt numpy_call_expr::create_expr_from_call()
 {
   nlohmann::json expr;
 
+  // Resolve variables if they are names
+  auto resolve_var = [this](nlohmann::json &var) {
+    if (var["_type"] == "Name")
+    {
+      var = json_utils::find_var_decl(
+        var["id"], function_id_.get_function(), converter_.ast());
+      if (var["value"]["_type"] == "Call")
+        var = var["value"]["args"][0];
+    }
+  };
+
   // Unary operations
   if (call_["args"].size() == 1)
   {
-    const auto &operand = call_["args"][0];
+    const auto &arg_type = call_["args"][0]["_type"];
     if (
-      operand["_type"] == "Constant" || call_["args"][0]["_type"] == "UnaryOp")
+      arg_type == "Constant" || arg_type == "UnaryOp" ||
+      arg_type == "Subscript")
+    {
       return function_call_expr::get();
+    }
+    else if (arg_type == "Name")
+    {
+      auto arg = call_["args"][0];
+      resolve_var(arg);
+
+      // Handle calls with arrays as parameters; e.g. np.ceil([1, 2, 3])
+      if (arg["_type"] == "List")
+      {
+        // Append array postfix to call array variants, e.g., ceil_array instead of ceil
+        std::string func_name = function_id_.get_function();
+        func_name += "_array";
+        function_id_.set_function(func_name);
+
+        code_function_callt call =
+          to_code_function_call(to_code(function_call_expr::get()));
+        typet t = type_handler_.get_list_type(arg);
+
+        // In a call like result = np.ceil(v), the type of 'result' is only known after processing the argument 'v'.
+        // At this point, we have the argument's type information, so we update the type of the LHS expression accordingly.
+
+        converter_.current_lhs->type() = t;
+        converter_.update_symbol(*converter_.current_lhs);
+
+        // NumPy math functions on arrays are translated to C-style calls with the signature: func(input, output, size).
+        // For example, result = np.ceil(v) becomes ceil_array(v, result, sizeof(v)).
+        // The lines below add the output array and size arguments to the call.
+
+        call.arguments().push_back(address_of_exprt(*converter_.current_lhs));
+        exprt array_size = from_integer(arg["elts"].size(), int_type());
+        call.arguments().push_back(array_size);
+
+        return call;
+      }
+    }
   }
 
   // Binary operations
@@ -213,17 +262,6 @@ exprt numpy_call_expr::create_expr_from_call()
   {
     auto lhs = call_["args"][0];
     auto rhs = call_["args"][1];
-
-    // Resolve variables if they are names
-    auto resolve_var = [this](nlohmann::json &var) {
-      if (var["_type"] == "Name")
-      {
-        var = json_utils::find_var_decl(
-          var["id"], function_id_.get_function(), converter_.ast());
-        if (var["value"]["_type"] == "Call")
-          var = var["value"]["args"][0];
-      }
-    };
 
     resolve_var(lhs);
     resolve_var(rhs);
