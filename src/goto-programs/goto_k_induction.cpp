@@ -230,6 +230,20 @@ void goto_k_inductiont::make_nondet_assign(
     // Keep the same location as the loop head
     t->location = loop_head->location;
   }
+  if (config.options.get_bool_option("vampire-for-loops"))
+  {
+    auto const &non_modified_loop_vars = loop.get_unmodified_loop_vars();
+
+    for (auto const &lhs : non_modified_loop_vars)
+    {
+      expr2tc rhs = gen_nondet(lhs->type);
+
+      goto_programt::targett t = dest.add_instruction(ASSIGN);
+      t->inductive_step_instruction = true;
+      t->code = code_assign2tc(lhs, rhs);
+      t->location = loop_head->location;
+    }
+  }
 
   // Insert the generated assignments before the loop head in the program
   goto_function.body.insert_swap(loop_head, dest);
