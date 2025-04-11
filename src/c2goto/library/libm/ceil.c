@@ -26,7 +26,6 @@ ceil_def(long double, ceill, rintl);
 
 #undef ceil_def
 
-
 // This function is used by the Python frontend
 void ceil_array(const double *v, double *out, int size)
 {

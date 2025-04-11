@@ -226,14 +226,16 @@ exprt numpy_call_expr::create_expr_from_call()
       auto arg = call_["args"][0];
       resolve_var(arg);
 
-      if (arg["_type"] == "List")  // Handle calls with arrays as parameters; e.g. np.ceil([1, 2, 3])
+      // Handle calls with arrays as parameters; e.g. np.ceil([1, 2, 3])
+      if (arg["_type"] == "List")
       {
-    	// Append array postfix to call array variants, e.g., ceil_array instead of ceil
+        // Append array postfix to call array variants, e.g., ceil_array instead of ceil
         std::string func_name = function_id_.get_function();
         func_name += "_array";
         function_id_.set_function(func_name);
 
-        code_function_callt call = to_code_function_call(to_code(function_call_expr::get()));
+        code_function_callt call =
+          to_code_function_call(to_code(function_call_expr::get()));
         typet t = type_handler_.get_list_type(arg);
 
         // In a call like result = np.ceil(v), the type of 'result' is only known after processing the argument 'v'.
