@@ -372,12 +372,12 @@ protected:
    * add a thunk function for each overriding method
    *
    * Params:
-   *  - md: clang AST of the overriden method in base class
+   *  - base_class_id: id of the class in which the overridden method is declared
    *  - component: ESBMC IR representing the the overriding method in derived class' type
    *  - type: ESBMC IR representing the derived class' type
    */
   void add_thunk_method(
-    const clang::CXXMethodDecl &md,
+    const std::string &base_class_id,
     const struct_typet::componentt &component,
     struct_typet &type);
   /*
