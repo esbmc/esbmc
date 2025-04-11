@@ -46,6 +46,7 @@ enum TypeNameT
 
   // Address type
   AddressTypeName,
+  AddressPayableTypeName,
 
   // contract type
   ContractTypeName,
@@ -316,6 +317,21 @@ enum ExpressionT
   // rule literal
   Literal,
 
+  // unit literal
+  LiteralWithWei,
+  LiteralWithGwei,
+  LiteralWithSzabo,
+  LiteralWithFinney,
+  LiteralWithEther,
+
+  LiteralWithSeconds,
+  LiteralWithMinutes,
+  LiteralWithHours,
+  LiteralWithDays,
+  LiteralWithWeeks,
+  LiteralWithYears,
+  LiteralWithUnknownUnit,
+
   // rule Tuple
   Tuple,
 
@@ -376,6 +392,7 @@ ExpressionT get_expr_operator_t(const nlohmann::json &expr);
 ExpressionT
 get_unary_expr_operator_t(const nlohmann::json &expr, bool uo_pre = true);
 const char *expression_to_str(ExpressionT type);
+bool is_address_member_call(const nlohmann::json &expr);
 
 // rule variable-declaration-statement
 enum VarDeclStmtT
