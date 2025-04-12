@@ -394,16 +394,6 @@ get_unary_expr_operator_t(const nlohmann::json &expr, bool uo_pre = true);
 const char *expression_to_str(ExpressionT type);
 bool is_address_member_call(const nlohmann::json &expr);
 
-// rule variable-declaration-statement
-enum VarDeclStmtT
-{
-  VariableDecl,      // rule variable-declaration
-  VariableDeclTuple, // rule variable-declaration-tuple
-  VarDeclStmtTError
-};
-VarDeclStmtT get_var_decl_stmt_t(const nlohmann::json &stmt);
-const char *var_decl_statement_to_str(VarDeclStmtT type);
-
 // auxiliary type to convert function call
 // No corresponding Solidity rules
 enum FunctionDeclRefT

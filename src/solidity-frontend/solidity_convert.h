@@ -69,9 +69,8 @@ protected:
     std::unordered_map<std::string, nlohmann::json> &path_to_json);
   void contract_precheck();
   void populate_auxilary_vars();
-  bool populate_function_signature(
-    const nlohmann::json &json,
-    const std::string &cname);
+  bool
+  populate_function_signature(nlohmann::json &json, const std::string &cname);
   bool populate_low_level_functions(const std::string &cname);
   bool convert_ast_nodes(
     const nlohmann::json &contract_def,
@@ -82,8 +81,10 @@ protected:
   bool get_contract_definition(const std::string &c_name);
   bool get_non_function_decl(const nlohmann::json &ast_node, exprt &new_expr);
   bool get_function_decl(const nlohmann::json &ast_node);
-  // get decl in rule variable-declaration-statement, e.g. function local declaration
-  bool get_var_decl_stmt(const nlohmann::json &ast_node, exprt &new_expr);
+  bool get_var_decl(
+    const nlohmann::json &ast_node,
+    const nlohmann::json &initialValue,
+    exprt &new_expr);
   bool get_var_decl(const nlohmann::json &ast_node, exprt &new_expr);
   bool get_function_definition(const nlohmann::json &ast_node);
   bool get_function_params(
@@ -116,8 +117,8 @@ protected:
 
   // handle inheritance
   void merge_inheritance_ast(
-    nlohmann::json &c_node,
     const std::string &c_name,
+    nlohmann::json &c_node,
     std::set<std::string> &merged_list);
   void add_inherit_label(nlohmann::json &node);
 
@@ -132,9 +133,10 @@ protected:
     exprt &new_expr);
   void move_to_initializer(const exprt &expr);
   bool move_initializer_to_ctor(
-    const std::string contract_name,
-    std::string ctor_id = "");
+    const nlohmann::json *based_contracts,
+    const std::string contract_name);
   bool move_inheritance_to_ctor(
+    const nlohmann::json *based_contracts,
     const std::string contract_name,
     std::string ctor_id,
     symbolt &sym);
@@ -161,7 +163,8 @@ protected:
     const nlohmann::json &expr_common_type,
     exprt &new_expr);
   bool get_init_expr(
-    const nlohmann::json &ast_node,
+    const nlohmann::json &init_value,
+    const nlohmann::json &literal_type,
     const typet &dest_type,
     exprt &new_expr);
   bool get_binary_operator_expr(const nlohmann::json &expr, exprt &new_expr);
@@ -367,9 +370,6 @@ protected:
   std::string get_array_size(const nlohmann::json &type_descrpt);
   void get_size_of_expr(const typet &elem_type, exprt &size_of_expr);
   bool is_dyn_array(const nlohmann::json &json_in);
-  nlohmann::json add_dyn_array_size_expr(
-    const nlohmann::json &type_descriptor,
-    const nlohmann::json &dyn_array_node);
   bool is_mapping(const nlohmann::json &ast_node);
 
   void get_default_symbol(
@@ -534,7 +534,6 @@ protected:
   code_blockt initializers;
   // For inheritance
   const nlohmann::json *ctor_modifier;
-  const nlohmann::json *based_contracts;
 
   static constexpr const char *mode = "C++";
 

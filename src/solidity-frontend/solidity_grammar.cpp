@@ -1072,40 +1072,6 @@ const char *expression_to_str(ExpressionT type)
   }
 }
 
-// rule variable-declaration-statement
-VarDeclStmtT get_var_decl_stmt_t(const nlohmann::json &stmt)
-{
-  if (
-    stmt["nodeType"] == "VariableDeclaration" && stmt["stateVariable"] == false)
-  {
-    return VariableDecl;
-  }
-  else
-  {
-    log_error(
-      "Got expression nodeType={}. Unsupported "
-      "variable-declaration-statement operator",
-      stmt["nodeType"].get<std::string>());
-    abort();
-  }
-  return VarDeclStmtTError; // make some old compilers happy
-}
-
-const char *var_decl_statement_to_str(VarDeclStmtT type)
-{
-  switch (type)
-  {
-    ENUM_TO_STR(VariableDecl)
-    ENUM_TO_STR(VariableDeclTuple)
-    ENUM_TO_STR(VarDeclStmtTError)
-  default:
-  {
-    assert(!"Unknown variable-declaration-statement type");
-    return "UNKNOWN";
-  }
-  }
-}
-
 // auxiliary type to convert function call
 FunctionDeclRefT get_func_decl_ref_t(const nlohmann::json &decl)
 {

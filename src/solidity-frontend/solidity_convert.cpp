@@ -40,7 +40,6 @@ solidity_convertert::solidity_convertert(
     member_entity_scope({}),
     initializers(code_blockt()),
     ctor_modifier(nullptr),
-    based_contracts(nullptr),
     aux_counter(0),
     is_bound(true),
     nondet_bool_expr(),
@@ -509,6 +508,15 @@ void solidity_convertert::populate_auxilary_vars()
     symbolt &sym = *move_symbol_to_context(s);
     sym.value = inits;
   }
+
+  for (auto &c_node : nodes)
+  {
+    //? should we consider library?
+    if (
+      c_node.contains("nodeType") &&
+      c_node["nodeType"] == "ContractDefinition" && c_node.contains("name"))
+      populate_function_signature(c_node, c_node["name"]);
+  }
 }
 
 bool solidity_convertert::populate_low_level_functions(const std::string &cname)
@@ -533,78 +541,77 @@ bool solidity_convertert::populate_low_level_functions(const std::string &cname)
 }
 
 /**
+ * initialize the function signature set. Additionally, we merge inherited nodes.
  * @json: parsing contract json
  * @cname: parsing contract name
  */
 bool solidity_convertert::populate_function_signature(
-  const nlohmann::json &json,
+  nlohmann::json &json,
   const std::string &cname)
 {
   log_debug(
-    "solidity", "setting up the function signatures for contract {}", cname);
-  nlohmann::json c_node = json;
+    "solidity", "Setting up the function signatures for contract {}", cname);
 
   // merge inherited nodes
   std::set<std::string> dump;
-  merge_inheritance_ast(c_node, cname, dump);
+  merge_inheritance_ast(cname, json, dump);
 
-  for (auto node : c_node)
+  std::string func_name, func_id, visibility;
+  code_typet type;
+  bool is_inherit, is_payable;
+
+  assert(json.contains("nodes"));
+  for (const auto &func_node : json["nodes"])
   {
     if (
-      node.contains("nodeType") && node["nodeType"] == "ContractDefinition" &&
-      node["name"] == cname)
+      func_node.contains("nodeType") &&
+      func_node["nodeType"] == "FunctionDefinition")
     {
-      std::string func_name, func_id, visibility;
-      code_typet type;
-      bool is_inherit, is_payable;
-      for (auto func_node : node["nodes"])
-      {
-        if (
-          func_node.contains("nodeType") &&
-          func_node["nodeType"] == "FunctionDefinition")
-        {
-          if (
-            func_node["name"].get<std::string>() == "" &&
-            func_node.contains("kind") && func_node["kind"] == "constructor")
-            func_name = cname;
-          else
-            func_name = func_node["name"];
-          func_id = "sol:@C@" + cname + "@F@" + func_name + "#" +
-                    i2string(func_node["id"].get<int>());
-          if (get_func_decl_ref_type(func_node, type))
-            return true;
-
-          visibility = func_node["visibility"];
-          is_payable = func_node["stateMutability"] == "payable";
-          is_inherit = func_node.contains("is_inherited");
-
-          funcSignatures[cname].push_back(
-            solidity_convertert::func_sig(
-              func_name, func_id, visibility, type, is_payable, is_inherit));
-        }
-      }
-
-      // check implicit ctor:
-      bool hasConstructor = std::any_of(
-        funcSignatures[cname].begin(),
-        funcSignatures[cname].end(),
-        [&cname](const solidity_convertert::func_sig &sig)
-        { return sig.name == cname; });
-      if (!hasConstructor)
-      {
+      if (
+        func_node["name"].get<std::string>() == "" &&
+        func_node.contains("kind") && func_node["kind"] == "constructor")
         func_name = cname;
-        func_id = get_implict_ctor_call_id(cname);
-        visibility = "public";
-        is_payable = false;
-        type.return_type() = empty_typet();
-        type.return_type().set("cpp_type", "void");
-        is_inherit = false;
-        funcSignatures[cname].push_back(
-          solidity_convertert::func_sig(
-            func_name, func_id, visibility, type, is_payable, is_inherit));
-      }
+      else
+        func_name = func_node["name"];
+      func_id = "sol:@C@" + cname + "@F@" + func_name + "#" +
+                i2string(func_node["id"].get<int>());
+      if (get_func_decl_ref_type(func_node, type))
+        return true;
+
+      assert(
+        func_node.contains("visibility") &&
+        func_node.contains("stateMutability"));
+
+      visibility = func_node["visibility"];
+      is_payable = func_node["stateMutability"] == "payable";
+      is_inherit = func_node.contains("is_inherited");
+
+      funcSignatures[cname].push_back(
+        solidity_convertert::func_sig(
+          func_name, func_id, visibility, type, is_payable, is_inherit));
     }
   }
+
+  // check implicit ctor:
+  bool hasConstructor = std::any_of(
+    funcSignatures[cname].begin(),
+    funcSignatures[cname].end(),
+    [&cname](const solidity_convertert::func_sig &sig)
+    { return sig.name == cname; });
+  if (!hasConstructor)
+  {
+    func_name = cname;
+    func_id = get_implict_ctor_call_id(cname);
+    visibility = "public";
+    is_payable = false;
+    type.return_type() = empty_typet();
+    type.return_type().set("cpp_type", "void");
+    is_inherit = false;
+    funcSignatures[cname].push_back(
+      solidity_convertert::func_sig(
+        func_name, func_id, visibility, type, is_payable, is_inherit));
+  }
+
   return false;
 }
 
@@ -612,6 +619,10 @@ bool solidity_convertert::convert_ast_nodes(
   const nlohmann::json &contract_def,
   const std::string &cname)
 {
+  // parse constructor
+  if (get_constructor(contract_def, cname))
+    return true;
+
   size_t index = 0;
   nlohmann::json ast_nodes = contract_def["nodes"];
   for (nlohmann::json::iterator itr = ast_nodes.begin(); itr != ast_nodes.end();
@@ -769,45 +780,18 @@ void solidity_convertert::get_function_this_pointer_param(
   type.arguments().push_back(this_param);
 }
 
-bool solidity_convertert::get_var_decl_stmt(
+bool solidity_convertert::get_var_decl(
   const nlohmann::json &ast_node,
   exprt &new_expr)
 {
-  // For rule variable-declaration-statement
-  new_expr = code_skipt();
-
-  if (!ast_node.contains("nodeType"))
-    // e.g. (bool success, ) = msg.sender.call{value: tmp}("");
-    return false;
-
-  SolidityGrammar::VarDeclStmtT type =
-    SolidityGrammar::get_var_decl_stmt_t(ast_node);
-  log_debug(
-    "solidity",
-    "	@@@ got Variable-declaration-statement: "
-    "SolidityGrammar::VarDeclStmtT::{}",
-    SolidityGrammar::var_decl_statement_to_str(type));
-
-  switch (type)
-  {
-  case SolidityGrammar::VarDeclStmtT::VariableDecl:
-  {
-    return get_var_decl(ast_node, new_expr); // rule variable-declaration
-  }
-  default:
-  {
-    assert(!"Unimplemented type in rule variable-declaration-statement");
-    return true;
-  }
-  }
-
-  return false;
+  return get_var_decl(ast_node, empty_json, new_expr);
 }
 
 // rule state-variable-declaration
 // rule variable-declaration-statement
 bool solidity_convertert::get_var_decl(
   const nlohmann::json &ast_node,
+  const nlohmann::json &initialValue,
   exprt &new_expr)
 {
   if (ast_node.is_null() || ast_node.empty())
@@ -898,11 +882,11 @@ bool solidity_convertert::get_var_decl(
 
   // For state var decl, we look for "value".
   // For local var decl, we look for "initialValue"
-  bool has_init =
-    (ast_node.contains("value") || ast_node.contains("initialValue"));
-
+  bool has_init = (ast_node.contains("value") || !initialValue.empty());
   bool set_init = has_init && !is_inherited;
-
+  const nlohmann::json init_value =
+    ast_node.contains("value") ? ast_node["value"] : initialValue;
+  const nlohmann::json literal_type = ast_node["typeDescriptions"];
   if (!set_init && !mapping && !is_contract)
   {
     // for both state and non-state variables, set default value as zero
@@ -913,9 +897,9 @@ bool solidity_convertert::get_var_decl(
   // 6. add symbol into the context
   // just like clang-c-frontend, we have to add the symbol before converting the initial assignment
   symbolt &added_symbol = *move_symbol_to_context(symbol);
+  code_declt decl(symbol_expr(added_symbol));
 
   // 7. populate init value if there is any
-  code_declt decl(symbol_expr(added_symbol));
   // special handling for array/dynarray
   std::string t_sol_type = t.get("#sol_type").as_string();
   exprt val;
@@ -956,7 +940,7 @@ bool solidity_convertert::get_var_decl(
 
     if (set_init)
     {
-      if (get_init_expr(ast_node, t, val))
+      if (get_init_expr(init_value, literal_type, t, val))
         return true;
 
       side_effect_expr_function_callt acpy_call;
@@ -997,7 +981,7 @@ bool solidity_convertert::get_var_decl(
   else if (t_sol_type == "DYNARRAY" && set_init)
   {
     exprt val;
-    if (get_init_expr(ast_node, t, val))
+    if (get_init_expr(init_value, literal_type, t, val))
       return true;
 
     if (val.is_typecast() || val.type().get("#sol_type") == "NEW_ARRAY")
@@ -1010,9 +994,6 @@ bool solidity_convertert::get_var_decl(
       decl.operands().push_back(val);
 
       // get rhs size, e.g. 10
-      nlohmann::json init_value = ast_node.contains("value")
-                                    ? ast_node["value"]
-                                    : ast_node["initialValue"];
       nlohmann::json callee_arg_json = init_value["arguments"][0];
       exprt size_expr;
       const nlohmann::json literal_type = callee_arg_json["typeDescriptions"];
@@ -1121,7 +1102,7 @@ bool solidity_convertert::get_var_decl(
   // now we have rule out other special cases
   else if (set_init)
   {
-    if (get_init_expr(ast_node, t, val))
+    if (get_init_expr(init_value, literal_type, t, val))
       return true;
     added_symbol.value = val;
     decl.operands().push_back(val);
@@ -1309,7 +1290,6 @@ bool solidity_convertert::get_contract_definition(const std::string &c_name)
   auto old_current_forStmt = current_forStmt;
   auto old_initializers = initializers;
   auto old_ctor_modifier = ctor_modifier;
-  auto old_based_contracts = based_contracts;
 
   // reset
   reset_auxiliary_vars();
@@ -1322,36 +1302,27 @@ bool solidity_convertert::get_contract_definition(const std::string &c_name)
       node_type == "ContractDefinition" &&
       (*itr)["name"] == c_name) // rule source-unit
     {
+      log_debug("solidity", "Parsing Contract {}", c_name);
+
       // set based contract name
       current_baseContractName = c_name;
 
-      // store baseContracts
+      // set baseContracts
       // this will be used in ctor initialization
+      nlohmann::json *based_contracts = nullptr;
       if ((*itr).contains("baseContracts") && !(*itr)["baseContracts"].empty())
         based_contracts = &((*itr)["baseContracts"]);
-
-      log_debug("solidity", "Parsing Contract {}", c_name);
-
-      // for inheritance: merge the ast node
-      // make copy. As we do not want to modify the src json
-      nlohmann::json c_node = *itr;
-      std::set<std::string> dump = {};
-      merge_inheritance_ast(c_node, c_name, dump);
-
-      // update function signature
-      populate_function_signature(c_node, c_name);
 
       nlohmann::json &ast_nodes = (*itr)["nodes"];
       for (nlohmann::json::iterator ittr = ast_nodes.begin();
            ittr != ast_nodes.end();
            ++ittr)
       {
+        // struct/error/event....
         if (get_noncontract_defition(*ittr))
           return true;
       }
-      // we might inherit some non-contract definition from the base contract
-      // so we need to redo the get_noncontract_defition
-      ast_nodes = c_node["nodes"];
+
       for (nlohmann::json::iterator ittr = ast_nodes.begin();
            ittr != ast_nodes.end();
            ++ittr)
@@ -1362,23 +1333,20 @@ bool solidity_convertert::get_contract_definition(const std::string &c_name)
 
       // add a struct symbol for each contract
       // e.g. contract Base => struct Base
-      if (get_struct_class(c_node))
+      if (get_struct_class(*itr))
         return true;
 
       // add solidity built-in property like balance, codehash
       if (add_auxiliary_members(c_name))
         return true;
 
-      // parse constructor
-      if (get_constructor(c_node, c_name))
-        return true;
-
       // parse contract body
-      if (convert_ast_nodes(c_node, c_name))
+      if (convert_ast_nodes(*itr, c_name))
         return true;
+      log_debug("solidity", "Finish parsing contract {}'s body", c_name);
 
       // initialize state variable
-      if (move_initializer_to_ctor(c_name))
+      if (move_initializer_to_ctor(based_contracts, c_name))
         return true;
     }
   }
@@ -1390,7 +1358,6 @@ bool solidity_convertert::get_contract_definition(const std::string &c_name)
   current_forStmt = old_current_forStmt;
   initializers = old_initializers;
   ctor_modifier = old_ctor_modifier;
-  based_contracts = old_based_contracts;
 
   return false;
 }
@@ -1535,6 +1502,7 @@ bool solidity_convertert::get_noncontract_defition(nlohmann::json &ast_node)
 // the idea is to utilize the function-handling APIs.
 void solidity_convertert::add_empty_body_node(nlohmann::json &ast_node)
 {
+  //? will this affect find_decl_ref?
   if (ast_node["nodeType"] == "EventDefinition")
   {
     // for event-definition
@@ -1738,8 +1706,8 @@ void solidity_convertert::add_inherit_label(nlohmann::json &node)
     i_: inherited contract
 */
 void solidity_convertert::merge_inheritance_ast(
-  nlohmann::json &c_node,
   const std::string &c_name,
+  nlohmann::json &c_node,
   std::set<std::string> &merged_list)
 {
   log_debug("solidity", "@@@ Merging AST for contract {}", c_name);
@@ -1761,7 +1729,7 @@ void solidity_convertert::merge_inheritance_ast(
         if (merged_list.count(i_name) == 0)
         {
           merged_list.insert(i_name);
-          merge_inheritance_ast(c_node, i_name, merged_list);
+          merge_inheritance_ast(i_name, c_node, merged_list);
         }
         else
           // we have merged this contract
@@ -2188,21 +2156,19 @@ void solidity_convertert::move_to_initializer(const exprt &expr)
 // convert the initialization of the state variable
 // into the equivalent assignmment in the ctor
 bool solidity_convertert::move_initializer_to_ctor(
-  const std::string contract_name,
-  std::string ctor_id)
+  const nlohmann::json *based_contracts,
+  const std::string contract_name)
 {
   log_debug(
     "solidity",
     "@@@ Moving initialization of the state variable to the constructor {}().",
     contract_name);
 
-  if (ctor_id.empty())
+  std::string ctor_id;
+  if (get_ctor_call_id(contract_name, ctor_id))
   {
-    if (get_ctor_call_id(contract_name, ctor_id))
-    {
-      log_error("cannot find the construcor");
-      return true;
-    }
+    log_error("cannot find the construcor");
+    return true;
   }
 
   symbolt &sym = *context.find_symbol(ctor_id);
@@ -2263,7 +2229,7 @@ bool solidity_convertert::move_initializer_to_ctor(
   }
 
   // insert parent ctor call in the front
-  if (move_inheritance_to_ctor(contract_name, ctor_id, sym))
+  if (move_inheritance_to_ctor(based_contracts, contract_name, ctor_id, sym))
     return true;
 
   return false;
@@ -2286,6 +2252,7 @@ void solidity_convertert::move_to_back_block(const exprt &expr)
 }
 
 bool solidity_convertert::move_inheritance_to_ctor(
+  const nlohmann::json *based_contracts,
   const std::string contract_name,
   std::string ctor_id,
   symbolt &sym)
@@ -2651,7 +2618,6 @@ bool solidity_convertert::get_function_definition(
   // 11.2 parse other params
   SolidityGrammar::ParameterListT params =
     SolidityGrammar::get_parameter_list_t(ast_node["parameters"]);
-  std::vector<exprt> binds;
   if (params != SolidityGrammar::ParameterListT::EMPTY)
   {
     // convert parameters if the function has them
@@ -2702,7 +2668,6 @@ void solidity_convertert::reset_auxiliary_vars()
   current_forStmt = nullptr;
   initializers.clear();
   ctor_modifier = nullptr;
-  based_contracts = nullptr;
 }
 
 bool solidity_convertert::get_function_params(
@@ -2907,14 +2872,12 @@ bool solidity_convertert::get_statement(
     {
       // deal with local var decl with init value
       nlohmann::json decl = it.value();
+      nlohmann::json initialValue = nlohmann::json::object();
       if (stmt.contains("initialValue"))
-      {
-        // Need to combine init value with the decl JSON object
-        decl["initialValue"] = stmt["initialValue"];
-      }
+        initialValue = stmt["initialValue"];
 
       exprt single_decl;
-      if (get_var_decl_stmt(decl, single_decl))
+      if (get_var_decl(decl, initialValue, single_decl))
         return true;
 
       decls.operands().push_back(single_decl);
@@ -3914,7 +3877,7 @@ bool solidity_convertert::get_expr(
         callee_expr_json["referencedDeclaration"].get<int>();
       std::string old = current_baseContractName;
       current_baseContractName = base_cname;
-      log_status("{}", current_baseContractName);
+
       const nlohmann::json member_decl_ref =
         find_decl_ref(src_ast_json, member_id); // methods or variables
       if (member_decl_ref.empty())
@@ -4677,14 +4640,11 @@ bool solidity_convertert::get_expr(
 
 // get the initial value for the variable declaration
 bool solidity_convertert::get_init_expr(
-  const nlohmann::json &ast_node,
+  const nlohmann::json &init_value,
+  const nlohmann::json &literal_type,
   const typet &dest_type,
   exprt &new_expr)
 {
-  nlohmann::json init_value =
-    ast_node.contains("value") ? ast_node["value"] : ast_node["initialValue"];
-  nlohmann::json literal_type = ast_node["typeDescriptions"];
-
   if (literal_type == nullptr)
     return true;
 
@@ -4707,7 +4667,12 @@ void solidity_convertert::get_current_contract_name(
   const auto json = find_parent_contract(src_ast_json, ast_node);
   if (json.empty() || json.is_null())
   {
-    log_debug("solidity", "failed to get current contract name");
+    log_debug(
+      "solidity",
+      "failed to get current contract name, current base name is {}, trying to "
+      "find id {}",
+      current_baseContractName,
+      std::to_string(ast_node["id"].get<int>()));
     return;
   }
 
@@ -7377,6 +7342,11 @@ bool solidity_convertert::get_parameter_list(
   SolidityGrammar::ParameterListT type =
     SolidityGrammar::get_parameter_list_t(type_name);
 
+  log_debug(
+    "solidity",
+    "\tGot ParameterList {}",
+    SolidityGrammar::parameter_list_to_str(type));
+
   switch (type)
   {
   case SolidityGrammar::ParameterListT::EMPTY:
@@ -7789,7 +7759,6 @@ nlohmann::json solidity_convertert::find_parent_contract(
   const nlohmann::json &target,
   const nlohmann::json &current_contract)
 {
-  // Match pointer
   if (json == target)
     return current_contract;
 
@@ -7799,10 +7768,8 @@ nlohmann::json solidity_convertert::find_parent_contract(
   {
     // If this node is a contract, update the current contract context
     if (json.contains("nodeType") && json["nodeType"] == "ContractDefinition")
-    {
       new_contract = json;
-    }
-
+    
     for (const auto &kv : json.items())
     {
       const auto &value = kv.value();
@@ -8269,20 +8236,6 @@ nlohmann::json solidity_convertert::make_array_to_pointer_type(
   nlohmann::json adjusted_type = m;
 
   return adjusted_type;
-}
-
-nlohmann::json solidity_convertert::add_dyn_array_size_expr(
-  const nlohmann::json &type_descriptor,
-  const nlohmann::json &dyn_array_node)
-{
-  nlohmann::json adjusted_descriptor;
-  adjusted_descriptor = type_descriptor;
-  // get the JSON object for size expr and merge it with the original type descriptor
-  adjusted_descriptor.push_back(
-    nlohmann::json::object_t::value_type(
-      "sizeExpr", dyn_array_node["initialValue"]["arguments"][0]));
-
-  return adjusted_descriptor;
 }
 
 std::string
@@ -9507,6 +9460,8 @@ bool solidity_convertert::is_low_level_property(const std::string &name)
 
 bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
 {
+  log_debug("solidity", "@@@ adding esbmc auxiliary members");
+
   // name prefix:
   std::string sol_prefix = "sol:@C@" + contract_name + "@";
 
