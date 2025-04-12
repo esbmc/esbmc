@@ -2624,6 +2624,10 @@ bool solidity_convertert::get_function_definition(
     // update the typet, since typet contains parameter annotations
     for (const auto &decl : ast_node["parameters"]["parameters"].items())
     {
+      log_debug(
+        "solidity",
+        "\t parsing function {}'s parameters",
+        current_functionName);
       const nlohmann::json &func_param_decl = decl.value();
 
       code_typet::argumentt param;
@@ -2643,6 +2647,8 @@ bool solidity_convertert::get_function_definition(
     ast_node.contains("body") ||
     (ast_node.contains("implemented") && ast_node["implemented"] == true))
   {
+    log_debug(
+      "solidity", "\t parsing function {}'s body", current_functionName);
     exprt body_exprt;
     if (get_block(ast_node["body"], body_exprt))
       return true;
@@ -2832,6 +2838,9 @@ bool solidity_convertert::get_statement(
   // For rule statement
   // Since this is an additional layer of grammar rules compared to clang C, we do NOT set location here.
   // Just pass the new_expr reference to the next layer.
+
+  locationt loc;
+  get_location_from_node(stmt, loc);
 
   SolidityGrammar::StatementT type = SolidityGrammar::get_statement_t(stmt);
   log_debug(
@@ -3243,6 +3252,7 @@ bool solidity_convertert::get_statement(
   }
   }
 
+  new_expr.location() = loc;
   return false;
 }
 
@@ -3290,7 +3300,6 @@ bool solidity_convertert::get_expr(
 {
   // For rule expression
   // We need to do location settings to match clang C's number of times to set the locations when recurring
-
   locationt location;
   get_start_location_from_stmt(expr, location);
 
@@ -3866,10 +3875,7 @@ bool solidity_convertert::get_expr(
       {
         if (get_var_decl_ref(base_expr_json, true, base))
           return true;
-        typet t;
-        if (get_type_description(base_expr_json["typeDescriptions"], t))
-          return true;
-        base_cname = t.get("#sol_contract").as_string();
+        base_cname = base.type().get("#sol_contract").as_string();
         assert(!base_cname.empty());
       }
 
@@ -4633,7 +4639,7 @@ bool solidity_convertert::get_expr(
 
   log_debug(
     "solidity",
-    "@@@ Finish parsing expresion={}",
+    "@@@ Finish parsing expresion = {}",
     SolidityGrammar::expression_to_str(type));
   return false;
 }
@@ -7769,7 +7775,7 @@ nlohmann::json solidity_convertert::find_parent_contract(
     // If this node is a contract, update the current contract context
     if (json.contains("nodeType") && json["nodeType"] == "ContractDefinition")
       new_contract = json;
-    
+
     for (const auto &kv : json.items())
     {
       const auto &value = kv.value();
@@ -10231,7 +10237,7 @@ bool solidity_convertert::get_bind_cname_expr(
 
   if (!parent.contains("nodeType"))
   {
-    log_status("{}", parent.dump());
+    log_error("{}", parent.dump());
     abort();
   }
   if (parent["nodeType"] == "ExpressionStatement")

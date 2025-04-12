@@ -766,12 +766,12 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
   }
   else if (expr["nodeType"] == "FunctionCall")
   {
-    SolidityGrammar::TypeNameT type_name =
-      get_type_name_t(expr["expression"]["typeDescriptions"]);
     if (expr["expression"]["nodeType"] == "NewExpression")
       return NewExpression;
     if (expr["kind"] == "typeConversion")
       return TypeConversionExpression;
+    SolidityGrammar::TypeNameT type_name =
+      get_type_name_t(expr["expression"]["typeDescriptions"]);
     if (type_name == SolidityGrammar::TypeProperty)
       return TypePropertyExpression;
     else if (is_address_member_call(expr))
