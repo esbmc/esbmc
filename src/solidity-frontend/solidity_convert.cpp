@@ -88,7 +88,8 @@ bool solidity_convertert::convert()
   populate_auxilary_vars();
 
   // for coverage and trace simplification: update include_files
-  auto add_unique = [](const std::string &file) {
+  auto add_unique = [](const std::string &file)
+  {
     if (
       std::find(
         config.ansi_c.include_files.begin(),
@@ -577,8 +578,9 @@ bool solidity_convertert::populate_function_signature(
           is_payable = func_node["stateMutability"] == "payable";
           is_inherit = func_node.contains("is_inherited");
 
-          funcSignatures[cname].push_back(solidity_convertert::func_sig(
-            func_name, func_id, visibility, type, is_payable, is_inherit));
+          funcSignatures[cname].push_back(
+            solidity_convertert::func_sig(
+              func_name, func_id, visibility, type, is_payable, is_inherit));
         }
       }
 
@@ -586,9 +588,8 @@ bool solidity_convertert::populate_function_signature(
       bool hasConstructor = std::any_of(
         funcSignatures[cname].begin(),
         funcSignatures[cname].end(),
-        [&cname](const solidity_convertert::func_sig &sig) {
-          return sig.name == cname;
-        });
+        [&cname](const solidity_convertert::func_sig &sig)
+        { return sig.name == cname; });
       if (!hasConstructor)
       {
         func_name = cname;
@@ -598,8 +599,9 @@ bool solidity_convertert::populate_function_signature(
         type.return_type() = empty_typet();
         type.return_type().set("cpp_type", "void");
         is_inherit = false;
-        funcSignatures[cname].push_back(solidity_convertert::func_sig(
-          func_name, func_id, visibility, type, is_payable, is_inherit));
+        funcSignatures[cname].push_back(
+          solidity_convertert::func_sig(
+            func_name, func_id, visibility, type, is_payable, is_inherit));
       }
     }
   }
@@ -3899,14 +3901,20 @@ bool solidity_convertert::get_expr(
       }
       else
       {
-        assert(base_expr_json.contains("name"));
-        base_cname = base_expr_json["name"].get<std::string>();
         if (get_var_decl_ref(base_expr_json, true, base))
           return true;
+        typet t;
+        if (get_type_description(base_expr_json["typeDescriptions"], t))
+          return true;
+        base_cname = t.get("#sol_contract").as_string();
+        assert(!base_cname.empty());
       }
 
       const int member_id =
         callee_expr_json["referencedDeclaration"].get<int>();
+      std::string old = current_baseContractName;
+      current_baseContractName = base_cname;
+      log_status("{}", current_baseContractName);
       const nlohmann::json member_decl_ref =
         find_decl_ref(src_ast_json, member_id); // methods or variables
       if (member_decl_ref.empty())
@@ -3914,9 +3922,7 @@ bool solidity_convertert::get_expr(
         log_error("cannot find member json node reference");
         return true;
       }
-
-      std::string old = current_baseContractName;
-      current_baseContractName = base_cname;
+      current_baseContractName = old;
 
       auto elem_type =
         SolidityGrammar::get_contract_body_element_t(member_decl_ref);
@@ -3999,7 +4005,6 @@ bool solidity_convertert::get_expr(
       }
       }
 
-      current_baseContractName = old;
       break;
     }
 
@@ -7634,11 +7639,10 @@ unsigned int solidity_convertert::get_line_number(
   bool final_position)
 {
   // Solidity src means "start:length:index", where "start" represents the position of the first char byte of the identifier.
-  log_status("111");
   std::string src = ast_node.contains("src")
                       ? ast_node["src"].get<std::string>()
                       : get_src_from_json(ast_node);
-  log_status("222");
+
   std::string position = src.substr(0, src.find(":"));
   unsigned int byte_position = std::stoul(position) + 1;
 
