@@ -1740,10 +1740,7 @@ void solidity_convertert::merge_inheritance_ast(
           continue;
       }
 
-      std::string old = current_baseContractName;
-      current_baseContractName = i_name;
       nlohmann::json i_node = find_decl_ref(src_ast_json, *i_ptr);
-      current_baseContractName = old;
 
       // abstract contract
       if (!i_node.contains("nodes"))
@@ -3848,7 +3845,7 @@ bool solidity_convertert::get_expr(
       callee_expr_json.contains("nodeType") &&
       callee_expr_json["nodeType"] == "MemberAccess")
     {
-      log_debug("solidity", "\t\t@@@ got member function call");
+      log_debug("solidity", "\t@@@ got member function call");
       // ContractMemberCall
       // - x.setAddress();
       // - x.address();
@@ -3862,6 +3859,7 @@ bool solidity_convertert::get_expr(
 
       const int contract_var_id =
         caller_expr_json["referencedDeclaration"].get<int>();
+      assert(!current_baseContractName.empty());
       const nlohmann::json base_expr_json =
         find_decl_ref(src_ast_json["nodes"], contract_var_id); // contract
 
@@ -3879,6 +3877,8 @@ bool solidity_convertert::get_expr(
           if (get_func_decl_this_ref(*current_functionDecl, this_expr))
             return true;
           base = this_expr;
+
+          assert(!current_contractName.empty());
           base_cname = current_contractName;
         }
         else
@@ -3911,6 +3911,10 @@ bool solidity_convertert::get_expr(
 
       auto elem_type =
         SolidityGrammar::get_contract_body_element_t(member_decl_ref);
+      log_debug(
+        "solidity",
+        "\t\t@@@ got contrant body element = {}",
+        SolidityGrammar::contract_body_element_to_str(elem_type));
       switch (elem_type)
       {
       case SolidityGrammar::VarDecl:
@@ -5744,64 +5748,6 @@ bool solidity_convertert::get_func_decl_ref(
   new_expr.cmt_lvalue(true);
   new_expr.name(name);
   return false;
-}
-
-// get the definition json ref
-bool solidity_convertert::get_func_decl_id_ref(
-  const std::string &func_id,
-  nlohmann::json &decl_ref)
-{
-  log_debug(
-    "solidity", "@@@ looking for the definition of the function {}", func_id);
-
-  // we need to extract the actual contract, as it might be inheritance
-  size_t startPos = func_id.find("@C@") + 3; // Skip past "@C@"
-  size_t endPos = func_id.find("@", startPos);
-  assert(startPos != std::string::npos && endPos != std::string::npos);
-  std::string c_name = func_id.substr(startPos, endPos - startPos);
-  log_debug("solidity", "extracting contract name {}", c_name);
-
-  // we need to set it back before every return!
-  std::string old_contractName = current_baseContractName;
-  current_baseContractName = c_name;
-
-  nlohmann::json &nodes = src_ast_json["nodes"];
-  unsigned index = 0;
-  for (nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end();
-       ++itr, ++index)
-  {
-    if ((*itr)["nodeType"] == "ContractDefinition")
-    {
-      if (nodes.contains("name") && nodes["name"] != c_name)
-        continue;
-
-      nlohmann::json &ast_nodes = nodes.at(index)["nodes"];
-      unsigned idx = 0;
-      for (nlohmann::json::iterator itrr = ast_nodes.begin();
-           itrr != ast_nodes.end();
-           ++itrr, ++idx)
-      {
-        if (
-          (*itrr).contains("nodeType") &&
-          (*itrr)["nodeType"] == "FunctionDefinition")
-        {
-          std::string current_func_name, current_func_id;
-          get_function_definition_name(
-            (*itrr), current_func_name, current_func_id);
-          if (current_func_id == func_id)
-          {
-            decl_ref = ast_nodes.at(idx);
-            current_baseContractName = old_contractName;
-            return false;
-          }
-        }
-      }
-    }
-  }
-
-  log_debug("solidity", "cannot find the function definition json node.");
-  current_baseContractName = old_contractName;
-  return true;
 }
 
 /*
@@ -7945,6 +7891,8 @@ solidity_convertert::find_decl_ref_global(const nlohmann::json &j, int ref_id)
 nlohmann::json
 solidity_convertert::find_decl_ref(const nlohmann::json &j, int ref_id)
 {
+  log_debug(
+    "solidity", "\t current base contract name {}", current_baseContractName);
   return find_decl_ref_global(j, ref_id);
 }
 
@@ -8443,7 +8391,10 @@ bool solidity_convertert::get_non_library_function_call(
   side_effect_expr_function_callt &call)
 {
   log_debug(
-    "solidity", "\tget_non_library_function_call {}", func.name().as_string());
+    "solidity",
+    "\tget_non_library_function_call {}",
+    func.name().empty() ? func.op0().name().as_string()
+                        : func.name().as_string());
 
   call.function() = func;
   call.type() = t;
@@ -8478,13 +8429,9 @@ bool solidity_convertert::get_non_library_function_call(
           ++itr;
         }
 
-        std::string old = current_baseContractName;
-        current_baseContractName = "";
-
         exprt single_arg;
         if (get_expr(arg.value(), param, single_arg))
           return true;
-        current_baseContractName = old;
 
         call.arguments().push_back(single_arg);
         param = nullptr;
@@ -8690,8 +8637,6 @@ void solidity_convertert::get_static_contract_instance(
     {
       // this means that contract, including ctor, has not been parse yet
       // this will lead to issue in the following process, particuarly this_pointer
-      std::string old = current_baseContractName;
-      current_baseContractName = c_name;
       const auto &json = find_constructor_ref(c_name);
       if (json.empty())
       {
@@ -8703,7 +8648,6 @@ void solidity_convertert::get_static_contract_instance(
       }
       else
         get_function_definition(json);
-      current_baseContractName = old;
     }
 
     exprt ctor;
@@ -10182,7 +10126,7 @@ bool solidity_convertert::get_high_level_member_access(
             member_decl_ref["returnParameters"], t.return_type()))
         return true;
 
-          side_effect_expr_function_callt call;
+      side_effect_expr_function_callt call;
       if (get_non_library_function_call(
             mem_access, t, member_decl_ref, expr, call))
         return true;
