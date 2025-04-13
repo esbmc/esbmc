@@ -421,8 +421,11 @@ void solidity_convertert::populate_auxilary_vars()
       for (auto inherit_id : j.second)
       {
         std::string base_cname = j.first;
+
         auto c_def = find_decl_ref(src_ast_json["nodes"], inherit_id);
-        if (!c_def.empty() && cname == c_def["name"].get<std::string>())
+        assert(!c_def.empty());
+
+        if (cname == c_def["name"].get<std::string>())
         {
           inheritanceMap[cname].insert(base_cname);
           break;
@@ -509,6 +512,7 @@ void solidity_convertert::populate_auxilary_vars()
     sym.value = inits;
   }
 
+  // From here, we might start to modify the original src_ast_json
   for (auto &c_node : nodes)
   {
     //? should we consider library?
@@ -1736,50 +1740,54 @@ void solidity_convertert::merge_inheritance_ast(
           continue;
       }
 
+      std::string old = current_baseContractName;
+      current_baseContractName = i_name;
       nlohmann::json i_node = find_decl_ref(src_ast_json, *i_ptr);
+      current_baseContractName = old;
 
-      // might be abstract contract
+      // abstract contract
+      if (!i_node.contains("nodes"))
+        continue;
+
       // *@i: incoming node
       // *@c_i: current node
-      if (i_node.contains("nodes"))
+      for (auto i : i_node["nodes"])
       {
-        for (auto i : i_node["nodes"])
+        // skip duplicate
+        bool is_dubplicate = false;
+        for (const auto &c_i : c_node["nodes"])
         {
-          // skip duplicate
-          bool is_dubplicate = false;
-          for (const auto &c_i : c_node["nodes"])
+          if (c_i.contains("id") && c_i["id"] == i["id"])
           {
-            if (c_i.contains("id") && c_i["id"] == i["id"])
-            {
-              is_dubplicate = true;
-              break;
-            }
+            is_dubplicate = true;
+            break;
           }
-          if (is_dubplicate)
-            continue;
+        }
+        if (is_dubplicate)
+          continue;
 
-          // skip ctor
-          if (i.contains("kind") && i["kind"] == "constructor")
-            continue;
+        // skip ctor
+        if (i.contains("kind") && i["kind"] == "constructor")
+          continue;
 
-          // for virtual/override function
-          if (
-            i.contains("nodeType") && i["nodeType"] == "FunctionDefinition" &&
-            !i["name"].empty())
+        // for virtual/override function
+        if (
+          i.contains("nodeType") && i["nodeType"] == "FunctionDefinition" &&
+          !i["name"].empty())
+        {
+          // to avoid the name ambiguous/conflict
+          // order: current_contract -> most base -> derived
+          bool is_conflict = false;
+
+          assert(c_node.contains("nodes"));
+          for (auto &c_i : c_node["nodes"])
           {
-            // to avoid the name ambiguous/conflict
-            // order: current_contract -> most base -> derived
-            bool is_conflict = false;
-
-            assert(c_node.contains("nodes"));
-            for (auto &c_i : c_node["nodes"])
+            if (
+              c_i.contains("nodeType") &&
+              c_i["nodeType"] == "FunctionDefinition" && !c_i["name"].empty() &&
+              i["name"] == c_i["name"])
             {
-              if (
-                c_i.contains("nodeType") &&
-                c_i["nodeType"] == "FunctionDefinition" &&
-                !c_i["name"].empty() && i["name"] == c_i["name"])
-              {
-                /*
+              /*
                    A
                   / \
                  B   C
@@ -1787,31 +1795,30 @@ void solidity_convertert::merge_inheritance_ast(
                    D
                   for cases above, there must be an override inside D if B and C both override A.
                 */
-                is_conflict = true;
+              is_conflict = true;
 
-                // if current function is virtual, we replace it with override
-                if (c_i["virtual"] == true)
-                  c_i = i;
+              // if current function is virtual, we replace it with override
+              if (c_i["virtual"] == true)
+                c_i = i;
 
-                break;
-              }
+              break;
             }
-            if (is_conflict)
-              continue;
           }
-
-          // Here we have ruled out the special cases
-          // so that we could merge the AST
-          log_debug(
-            "solidity",
-            "\t@@@ Merging AST node {} to contract {}",
-            i["name"].get<std::string>().c_str(),
-            c_name);
-          // This is to distinguish it from the originals
-          add_inherit_label(i);
-
-          c_node["nodes"].push_back(i);
+          if (is_conflict)
+            continue;
         }
+
+        // Here we have ruled out the special cases
+        // so that we could merge the AST
+        log_debug(
+          "solidity",
+          "\t@@@ Merging AST node {} to contract {}",
+          i["name"].get<std::string>().c_str(),
+          c_name);
+        // This is to distinguish it from the originals
+        add_inherit_label(i);
+
+        c_node["nodes"].push_back(i);
       }
     }
   }
@@ -3892,15 +3899,15 @@ bool solidity_convertert::get_expr(
         callee_expr_json["referencedDeclaration"].get<int>();
       std::string old = current_baseContractName;
       current_baseContractName = base_cname;
-
       const nlohmann::json member_decl_ref =
         find_decl_ref(src_ast_json, member_id); // methods or variables
+      current_baseContractName = old;
+
       if (member_decl_ref.empty())
       {
         log_error("cannot find member json node reference");
         return true;
       }
-      current_baseContractName = old;
 
       auto elem_type =
         SolidityGrammar::get_contract_body_element_t(member_decl_ref);
@@ -3958,6 +3965,7 @@ bool solidity_convertert::get_expr(
           // this.init(); we know the implementation thus cannot model it as unbound_harness
           // note that here is comp.identifier not comp.name
           new_expr = call;
+
         else if (!is_bound)
         {
           if (get_unbound_expr(expr, current_contractName, new_expr))
@@ -4386,13 +4394,13 @@ bool solidity_convertert::get_expr(
 
     break;
   }
-  case SolidityGrammar::ExpressionT::ContractMemberCall:
   case SolidityGrammar::ExpressionT::StructMemberCall:
   case SolidityGrammar::ExpressionT::EnumMemberCall:
   {
     // 1. ContractMemberCall: contractInstance.call()
     //                        contractInstanceArray[0].call()
     //                        contractInstance.x
+    //    this should be handled in CallExprClass
     // 2. StructMemberCall: struct.member
     // 3. EnumMemberCall: enum.member
     // 4. (?)internal property: tx.origin, msg.sender, ...
@@ -4431,12 +4439,6 @@ bool solidity_convertert::get_expr(
       new_expr = member_exprt(base, comp.name(), comp.type());
 
       break;
-    }
-    case SolidityGrammar::ExpressionT::ContractMemberCall:
-    {
-      // this should be handled in CallExprClass
-      log_error("Unexpected ContractMemberCall");
-      return true;
     }
     case SolidityGrammar::ExpressionT::EnumMemberCall:
     {
@@ -7873,6 +7875,11 @@ solidity_convertert::find_decl_ref_global(const nlohmann::json &j, int ref_id)
     // Check if the current object is a ContractDefinition.
     if (j.contains("nodeType") && j["nodeType"] == "ContractDefinition")
     {
+      // we will not merge the contract-definition
+      // so we are safe to compare the id here
+      if (j.contains("id") && j["id"] == ref_id)
+        return j;
+
       // This is a contract definition; only process if it is the base contract.
       if (
         j.contains("name") && !current_baseContractName.empty() &&
@@ -10069,7 +10076,7 @@ bool solidity_convertert::get_high_level_member_access(
   const bool is_func_call,
   exprt &new_expr)
 {
-  log_debug("solidity", "\tgetting high-level member access");
+  log_debug("solidity", "Getting high-level member access");
 
   // get 'Base'
   std::string _cname;
@@ -10083,6 +10090,7 @@ bool solidity_convertert::get_high_level_member_access(
     return true;
   std::unordered_set<std::string> cname_set = inheritanceMap[_cname];
   assert(!cname_set.empty());
+
   if (cname_set.size() == 1)
     return true; // since it has only one possible option, no need to futher binding
 
@@ -10165,21 +10173,16 @@ bool solidity_convertert::get_high_level_member_access(
         continue;
 
       exprt comp;
-      std::string old_base_cname = current_baseContractName;
-      current_baseContractName = str;
       if (get_func_decl_ref(member_decl_ref, comp))
-      {
-        current_baseContractName = old_base_cname;
         return true;
-      }
-      current_baseContractName = old_base_cname;
 
       exprt mem_access = member_exprt(_base, comp.identifier(), comp.type());
       code_typet t;
       if (get_type_description(
             member_decl_ref["returnParameters"], t.return_type()))
         return true;
-      side_effect_expr_function_callt call;
+
+          side_effect_expr_function_callt call;
       if (get_non_library_function_call(
             mem_access, t, member_decl_ref, expr, call))
         return true;
