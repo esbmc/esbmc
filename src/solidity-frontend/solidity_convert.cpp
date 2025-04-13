@@ -1740,7 +1740,8 @@ void solidity_convertert::merge_inheritance_ast(
           continue;
       }
 
-      nlohmann::json i_node = find_decl_ref(src_ast_json, *i_ptr);
+      nlohmann::json i_node = find_decl_ref(src_ast_json["nodes"], *i_ptr);
+      assert(!i_node.empty());
 
       // abstract contract
       if (!i_node.contains("nodes"))
@@ -3900,7 +3901,7 @@ bool solidity_convertert::get_expr(
       std::string old = current_baseContractName;
       current_baseContractName = base_cname;
       const nlohmann::json member_decl_ref =
-        find_decl_ref(src_ast_json, member_id); // methods or variables
+        find_decl_ref(src_ast_json["nodes"], member_id); // methods or variables
       current_baseContractName = old;
 
       if (member_decl_ref.empty())
@@ -6298,8 +6299,7 @@ bool solidity_convertert::get_type_description(
       auto pos_2 = new_typeIdentifier.find("_storage");
 
       const int ref_id = stoi(new_typeIdentifier.substr(pos_1 + 1, pos_2));
-      const nlohmann::json struct_base =
-        find_decl_ref(src_ast_json["nodes"], ref_id);
+      const nlohmann::json struct_base = find_decl_ref(src_ast_json, ref_id);
 
       if (get_struct_class(struct_base))
         return true;
