@@ -32,6 +32,56 @@ bool clang_cpp_convertert::get_struct_class_virtual_methods(
   const clang::CXXRecordDecl &cxxrd,
   struct_typet &type)
 {
+  bool needs_vtable = false;
+  for (const auto &md : cxxrd.methods())
+  {
+    if (!md->isVirtual())
+      continue;
+    needs_vtable = true;
+
+    /*
+     * 1. convert this virtual method and add them to class symbol type
+     */
+    struct_typet::componentt comp;
+    if (get_decl(*md, comp))
+      return true;
+
+    // additional annotations for virtual/overriding methods
+    if (annotate_virtual_overriding_methods(*md, comp))
+      return true;
+    type.methods().push_back(comp);
+
+  }
+    /*
+     * 2. If this is the first time we see a virtual method in this class,
+     *  add virtual table type symbol and virtual pointer. Then add a new
+     *  entry in the vtable.
+     */
+  if (!needs_vtable)
+    return false;
+  symbolt *vtable_type_symbol = check_vtable_type_symbol_existence(type);
+  if (!vtable_type_symbol)
+  {
+    // first time we create the vtable type for this class
+    vtable_type_symbol = add_vtable_type_symbol(type);
+    if (vtable_type_symbol == nullptr)
+      return true;
+
+    add_vptr(type);
+  }
+
+  /*
+   * 3. add an entry in the existing virtual table type symbol
+   */
+  for (auto &comp : type.methods())
+  {
+    if (comp.get_bool("is_virtual") && !comp.get_bool("from_base"))
+    {
+      // this is a virtual method
+      add_vtable_type_entry(type, comp, vtable_type_symbol);
+    }
+  }
+
   for (const auto &md : cxxrd.methods())
   {
     if (!md->isVirtual())
@@ -47,28 +97,6 @@ bool clang_cpp_convertert::get_struct_class_virtual_methods(
     // additional annotations for virtual/overriding methods
     if (annotate_virtual_overriding_methods(*md, comp))
       return true;
-    type.methods().push_back(comp);
-
-    /*
-     * 2. If this is the first time we see a virtual method in this class,
-     *  add virtual table type symbol and virtual pointer. Then add a new
-     *  entry in the vtable.
-     */
-    symbolt *vtable_type_symbol = check_vtable_type_symbol_existence(type);
-    if (!vtable_type_symbol)
-    {
-      // first time we create the vtable type for this class
-      vtable_type_symbol = add_vtable_type_symbol(type);
-      if (vtable_type_symbol == nullptr)
-        return true;
-
-      add_vptr(type);
-    }
-
-    /*
-     * 3. add an entry in the existing virtual table type symbol
-     */
-    add_vtable_type_entry(type, comp, vtable_type_symbol);
 
     /*
      * 4. deal with overriding method
