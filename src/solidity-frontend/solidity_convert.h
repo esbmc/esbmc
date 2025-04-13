@@ -216,6 +216,10 @@ protected:
     const nlohmann::json &ast_node,
     std::string &name,
     std::string &id);
+  void get_error_definition_name(
+    const nlohmann::json &ast_node,
+    std::string &name,
+    std::string &id);
   bool get_var_decl_name(
     const nlohmann::json &decl,
     std::string &name,
@@ -347,6 +351,7 @@ protected:
   find_decl_ref_in_contract(const nlohmann::json &j, int ref_id);
   const nlohmann::json &
   find_decl_ref_global(const nlohmann::json &j, int ref_id);
+  const nlohmann::json &find_decl_ref_unique_id(const nlohmann::json &json, int ref_id);
   const nlohmann::json &find_decl_ref(const nlohmann::json &json, int ref_id);
   const nlohmann::json &find_constructor_ref(int ref_decl_id);
   const nlohmann::json &find_constructor_ref(const std::string &contract_name);

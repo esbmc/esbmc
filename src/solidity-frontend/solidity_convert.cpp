@@ -1429,7 +1429,10 @@ bool solidity_convertert::get_noncontract_decl_ref(
   const nlohmann::json &decl,
   exprt &new_expr)
 {
-  log_debug("solidity", "\tget_noncontract_decl_ref");
+  log_debug(
+    "solidity",
+    "\tget_noncontract_decl_ref, got nodeType={}",
+    decl["nodeType"].get<std::string>());
   if (decl["nodeType"] == "StructDefinition")
   {
     std::string id;
@@ -1446,8 +1449,7 @@ bool solidity_convertert::get_noncontract_decl_ref(
   else if (decl["nodeType"] == "ErrorDefinition")
   {
     std::string name, id;
-    name = decl["name"].get<std::string>();
-    id = "sol:@" + name + "#" + std::to_string(decl["id"].get<int>());
+    get_error_definition_name(decl, name, id);
 
     if (context.find_symbol(id) == nullptr)
       return true;
@@ -1600,14 +1602,9 @@ bool solidity_convertert::get_error_definition(const nlohmann::json &ast_node)
   get_current_contract_name(ast_node, cname);
 
   // e.g. name: errmsg; id: sol:@errmsg#12
-  const int id_num = ast_node["id"].get<int>();
   std::string name, id;
-  name = ast_node["name"].get<std::string>();
-  if (cname.empty())
-    id = "sol:@" + name + "#" + std::to_string(id_num);
-  else
-    // e.g. sol:@C@Base@F@error@1
-    id = "sol:@C@" + cname + "@F@" + name + "#" + std::to_string(id_num);
+  get_error_definition_name(ast_node, name, id);
+  const int id_num = ast_node["id"].get<int>();
 
   if (context.find_symbol(id) != nullptr)
   {
@@ -4413,73 +4410,49 @@ bool solidity_convertert::get_expr(
 
     break;
   }
-  case SolidityGrammar::ExpressionT::StructMemberCall:
-  case SolidityGrammar::ExpressionT::EnumMemberCall:
-  {
-    // 1. ContractMemberCall: contractInstance.call()
-    //                        contractInstanceArray[0].call()
-    //                        contractInstance.x
-    //    this should be handled in CallExprClass
-    // 2. StructMemberCall: struct.member
-    // 3. EnumMemberCall: enum.member
-    // 4. (?)internal property: tx.origin, msg.sender, ...
 
-    // Function symbol id is sol:@C@referenced_function_contract_name@F@function_name#referenced_function_id
-    // Using referencedDeclaration will point us to the original declared function. This works even for inherited function and overrided functions.
+  // 1. ContractMemberCall: contractInstance.call()
+  //                        contractInstanceArray[0].call()
+  //                        contractInstance.x
+  //    this should be handled in CallExprClass
+  // 2. StructMemberCall: struct.member
+  // 3. EnumMemberCall: enum.member
+  // 4. AddressMemberCall: tx.origin, msg.sender, ...
+  case SolidityGrammar::ExpressionT::StructMemberCall:
+  {
     assert(expr.contains("expression"));
     const nlohmann::json callee_expr_json = expr["expression"];
 
-    const int caller_id = callee_expr_json["referencedDeclaration"].get<int>();
-
-    const nlohmann::json &caller_expr_json =
-      find_decl_ref(src_ast_json, caller_id);
-    if (caller_expr_json == empty_json)
+    exprt base;
+    if (get_expr(callee_expr_json, base))
       return true;
 
-    switch (type)
-    {
-    case SolidityGrammar::ExpressionT::StructMemberCall:
-    {
-      exprt base;
-      if (get_expr(callee_expr_json, base))
-        return true;
+    const int struct_var_id = expr["referencedDeclaration"].get<int>();
+    const nlohmann::json &struct_var_ref =
+      find_decl_ref(src_ast_json, struct_var_id);
+    if (struct_var_ref == empty_json)
+      return true;
 
-      const int struct_var_id = expr["referencedDeclaration"].get<int>();
-      const nlohmann::json &struct_var_ref =
-        find_decl_ref(src_ast_json, struct_var_id);
-      if (struct_var_ref == empty_json)
-        return true;
+    exprt comp;
+    if (get_var_decl_ref(struct_var_ref, true, comp))
+      return true;
 
-      exprt comp;
-      if (get_var_decl_ref(struct_var_ref, true, comp))
-        return true;
+    assert(comp.name() == expr["memberName"]);
+    new_expr = member_exprt(base, comp.name(), comp.type());
 
-      assert(comp.name() == expr["memberName"]);
-      new_expr = member_exprt(base, comp.name(), comp.type());
+    break;
+  }
+  case SolidityGrammar::ExpressionT::EnumMemberCall:
+  {
+    assert(expr.contains("expression"));
+    const int enum_id = expr["referencedDeclaration"].get<int>();
+    const nlohmann::json &enum_member_ref =
+      find_decl_ref_unique_id(src_ast_json, enum_id);
+    if (enum_member_ref == empty_json)
+      return true;
 
-      break;
-    }
-    case SolidityGrammar::ExpressionT::EnumMemberCall:
-    {
-      const int enum_id = expr["referencedDeclaration"].get<int>();
-      const nlohmann::json &enum_member_ref =
-        find_decl_ref(src_ast_json, enum_id);
-      if (enum_member_ref == empty_json)
-        return true;
-
-      if (get_enum_member_ref(enum_member_ref, new_expr))
-        return true;
-
-      break;
-    }
-    default:
-    {
-      if (get_expr(callee_expr_json, literal_type, new_expr))
-        return true;
-
-      break;
-    }
-    }
+    if (get_enum_member_ref(enum_member_ref, new_expr))
+      return true;
 
     break;
   }
@@ -7460,6 +7433,22 @@ void solidity_convertert::get_local_var_decl_name(
   }
 }
 
+void solidity_convertert::get_error_definition_name(
+  const nlohmann::json &ast_node,
+  std::string &name,
+  std::string &id)
+{
+  std::string cname;
+  get_current_contract_name(ast_node, cname);
+  const int id_num = ast_node["id"].get<int>();
+  name = ast_node["name"].get<std::string>();
+  if (cname.empty())
+    id = "sol:@" + name + "#" + std::to_string(id_num);
+  else
+    // e.g. sol:@C@Base@F@error@1
+    id = "sol:@C@" + cname + "@F@" + name + "#" + std::to_string(id_num);
+}
+
 void solidity_convertert::get_function_definition_name(
   const nlohmann::json &ast_node,
   std::string &name,
@@ -7789,11 +7778,6 @@ const nlohmann::json &solidity_convertert::find_decl_ref_in_contract(
   if (!j.is_structured())
     return empty_json;
 
-  log_debug(
-    "solidity",
-    "\tfinding reference in contract {}",
-    j["name"].get<std::string>());
-
   using Frame = const nlohmann::json *;
   std::stack<Frame> stack;
   stack.push(&j);
@@ -7909,6 +7893,14 @@ solidity_convertert::find_decl_ref_global(const nlohmann::json &j, int ref_id)
   return empty_json;
 }
 
+// find json reference via id only
+const nlohmann::json &solidity_convertert::find_decl_ref_unique_id(
+  const nlohmann::json &j,
+  int ref_id)
+{
+  return find_decl_ref_in_contract(j, ref_id);
+}
+
 // find the first (and the only) node with matched ref_id under based contract
 // the searching range includes: global-definition + based-contract-definition
 // e.g.
@@ -7923,7 +7915,10 @@ const nlohmann::json &
 solidity_convertert::find_decl_ref(const nlohmann::json &j, int ref_id)
 {
   log_debug(
-    "solidity", "\tcurrent base contract name {}", current_baseContractName);
+    "solidity",
+    "\tcurrent base contract name {}, ref_id {}",
+    current_baseContractName,
+    std::to_string(ref_id));
   return find_decl_ref_global(j, ref_id);
 }
 

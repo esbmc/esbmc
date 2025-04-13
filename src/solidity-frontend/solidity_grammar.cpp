@@ -770,12 +770,13 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
       return NewExpression;
     if (expr["kind"] == "typeConversion")
       return TypeConversionExpression;
-    SolidityGrammar::TypeNameT type_name =
-      get_type_name_t(expr["expression"]["typeDescriptions"]);
-    if (type_name == SolidityGrammar::TypeProperty)
-      return TypePropertyExpression;
-    else if (is_address_member_call(expr))
+    if (is_address_member_call(expr))
       return AddressMemberCall;
+    if (
+      get_type_name_t(expr["typeDescriptions"]) ==
+      SolidityGrammar::TypeProperty)
+      return TypePropertyExpression;
+
     return CallExprClass;
   }
   else if (expr["nodeType"] == "MemberAccess")
