@@ -838,7 +838,7 @@ bool solidity_convertert::get_var_decl(
   // this will be used to decide if the var will be converted to this->var
   // when parsing function body.
   bool is_state_var = ast_node["stateVariable"].get<bool>();
-  t.set("#sol_state_var", is_state_var);
+  t.set("#sol_state_var", std::to_string(is_state_var));
 
   bool is_inherited = ast_node.contains("is_inherited");
 
@@ -2196,6 +2196,15 @@ bool solidity_convertert::move_initializer_to_ctor(
         it->name().as_string());
 
       exprt comp = to_code_decl(to_code(*it)).op0();
+      bool is_state = comp.type().get("#sol_state_var") == "1";
+      if (!is_state)
+      {
+        // auxiliary local variable we created
+        exprt tmp = *it;
+        sym.value.operands().insert(sym.value.operands().begin(), tmp);
+        continue;
+      }
+
       exprt lhs = member_exprt(base, comp.name(), comp.type());
       if (context.find_symbol(comp.identifier()) == nullptr)
       {
@@ -8741,22 +8750,57 @@ void solidity_convertert::convert_type_expr(
       (src_sol_type == "ADDRESS" || src_sol_type == "ADDRESS_PAYABLE") &&
       dest_sol_type == "CONTRACT")
     {
-      // e.g. Derive x = Derive(_addr)
       // since the solidity will not check the type conversion in the runtime, the contract instance behind the address could be any contract
-      if (is_bound)
-      {
-        /* x = Base(_addr);   if address == _ESBMC_Object_Base.$address
-                                x._ESBMC_cname = Base;
-                              if address == _ESBMC_Object_Derive.$address
-                                x._ESBMC_cname = Derive;
-                              x = _ESBMC_Object_x;
-        */
-        //TODO not implement this for now.
-      }
-      // => Derive *x = (Derive *)&_ESBMC_Obeject_Derive
+      // therefore we only update the address
+      // E.g. for `Derive x = Derive(_addr)`:
+      //  old_addr = _ESBMC_Obeject_Derive.$address; <-- front
+      //  _ESBMC_Obeject_Derive.$address = _addr;    <-- front
+      //  Derive x = _ESBMC_Obeject_Derive;          <-- type conversion
+      //  _ESBMC_Obeject_Derive.$address = old_addr  <-- back
       symbolt c_sym;
       std::string _cname = dest_type.get("#sol_contract").as_string();
       get_static_contract_instance(_cname, c_sym);
+
+      // front
+      typet addr_t = unsignedbv_typet(160);
+      addr_t.set("#sol_type", "ADDRESS");
+
+      // old_addr = _ESBMC_Obeject_Derive.$address;
+      exprt object_addr = member_exprt(symbol_expr(c_sym), "$address", addr_t);
+      std::string debug_modulename = get_modulename_from_path(absolute_path);
+      symbolt old_addr;
+      std::string name = "old_addr_" + std::to_string(aux_counter);
+      std::string id =
+        "sol:@C@" + _cname + "@" + name + "#" + std::to_string(aux_counter++);
+      get_default_symbol(
+        old_addr, debug_modulename, addr_t, name, id, src_expr.location());
+      old_addr.static_lifetime = false;
+      old_addr.file_local = true;
+      old_addr.type.set("#sol_state_var", "0");
+      symbolt &added_old_addr = *move_symbol_to_context(old_addr);
+      code_declt old_sender_decl(symbol_expr(added_old_addr));
+      added_old_addr.value = object_addr;
+      old_sender_decl.operands().push_back(object_addr);
+      old_sender_decl.location() = src_expr.location();
+      move_to_front_block(old_sender_decl);
+
+      // _ESBMC_Obeject_Derive.$address = _addr;
+      exprt assign_addr = side_effect_exprt("assign", addr_t);
+      assign_addr.copy_to_operands(object_addr, src_expr);
+      convert_expression_to_code(assign_addr);
+      assign_addr.location() = src_expr.location();
+      move_to_front_block(assign_addr);
+
+      // back
+      // _ESBMC_Obeject_Derive.$address = old_addr
+      exprt assign_addr_restore = side_effect_exprt("assign", addr_t);
+      assign_addr_restore.copy_to_operands(
+        object_addr, symbol_expr(added_old_addr));
+      convert_expression_to_code(assign_addr_restore);
+      assign_addr_restore.location() = src_expr.location();
+      move_to_back_block(assign_addr_restore);
+
+      // type conversion
       src_expr = symbol_expr(c_sym);
     }
     else if (is_bytes_type(src_type) && is_bytes_type(dest_type))
@@ -9592,6 +9636,7 @@ void solidity_convertert::get_builtin_symbol(
 
   symbolt sym;
   get_default_symbol(sym, "C++", t, name, id, l);
+  sym.type.set("#sol_state_var", "1");
 
   auto &added_sym = *move_symbol_to_context(sym);
   code_declt decl(symbol_expr(added_sym));
@@ -9831,6 +9876,11 @@ void solidity_convertert::get_nondet_expr(const typet &t, exprt &new_expr)
 
 // x._ESBMC_bind_cname = _ESBMC_get_nondet_cname();
 //                        ^^^^^^^^^^^^^^^^^^^^^^^^
+// for high-level call, we bind the external calls with cname
+// e.g.
+// if(x.cname == Base)
+//   _ESBMC_Object_Base.func()
+// for low-level call, we bind the external calls with address
 bool solidity_convertert::assign_nondet_contract_name(
   const std::string &_cname,
   exprt &new_expr)
@@ -9995,14 +10045,14 @@ solidity_convertert::func_sig solidity_convertert::get_target_function(
 
   function test1(Base x, address _addr) public
   {
-      x = new Base();     // x._ESBMC_cname = Base;
-      x.test();           // if x._ESBMC_cname == base
+      x = new Base();     // x._ESBMC_bind_cname = Base;
+      x.test();           // if x._ESBMC_bind_cname == base
                           //   _ESBMC_Object_base.test();
       x = Base(_addr);    // x = ESBMC_Object_base
                           // if _addr == _ESBMC_Object_base.$address
-                          //   x._ESBMC_cname = base
+                          //   x._ESBMC_bind_cname = base
                           // if _addr == _ESBMC_Object_y.$address
-                          //   x._ESBMC_cname = y;
+                          //   x._ESBMC_bind_cname = y;
   }	
 
   the auxilidary tmp var will not be created if the member_type is void
@@ -10437,8 +10487,9 @@ bool solidity_convertert::get_call_definition(
     "sol:@C@" + cname + "@F@old_sender#" + std::to_string(aux_counter++),
     locationt());
   symbolt &added_old_sender = *move_symbol_to_context(old_sender);
-  added_old_sender.value = msg_sender;
   code_declt old_sender_decl(symbol_expr(added_old_sender));
+  added_old_sender.value = msg_sender;
+  old_sender_decl.operands().push_back(msg_sender);
   func_body.move_to_operands(old_sender_decl);
 
   for (auto str : contractNamesList)
@@ -10599,8 +10650,9 @@ bool solidity_convertert::get_call_value_definition(
     "sol:@C@" + cname + "@F@old_value#" + std::to_string(aux_counter++),
     locationt());
   symbolt &added_old_value = *move_symbol_to_context(old_value);
-  added_old_value.value = msg_value;
   code_declt old_val_decl(symbol_expr(added_old_value));
+  added_old_value.value = msg_value;
+  old_val_decl.operands().push_back(msg_value);
   func_body.move_to_operands(old_val_decl);
 
   // uint160_t old_sender =  msg_sender;
@@ -10615,8 +10667,9 @@ bool solidity_convertert::get_call_value_definition(
     "sol:@C@" + cname + "@F@old_sender#" + std::to_string(aux_counter++),
     locationt());
   symbolt &added_old_sender = *move_symbol_to_context(old_sender);
-  added_old_sender.value = msg_sender;
   code_declt old_sender_decl(symbol_expr(added_old_sender));
+  added_old_sender.value = msg_sender;
+  old_sender_decl.operands().push_back(msg_sender);
   func_body.move_to_operands(old_sender_decl);
 
   for (auto str : contractNamesList)
