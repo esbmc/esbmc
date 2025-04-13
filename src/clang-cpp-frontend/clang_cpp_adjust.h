@@ -47,6 +47,7 @@ public:
   void adjust_side_effect_assign(side_effect_exprt &expr);
   void adjust_side_effect_function_call(
     side_effect_expr_function_callt &expr) override;
+  void handle_cpp_struct_vtable_generation(struct_union_typet &type) override;
   void adjust_function_call_arguments(
     side_effect_expr_function_callt &expr) override;
   void adjust_reference(exprt &expr) override;

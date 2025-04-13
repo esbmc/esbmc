@@ -1,6 +1,7 @@
 #include <clang-c-frontend/clang_c_adjust.h>
 #include <clang-c-frontend/padding.h>
 #include <clang-c-frontend/typecast.h>
+#include <clang-cpp-frontend/clang_cpp_vft_gen.h>
 #include <util/arith_tools.h>
 #include <util/bitvector.h>
 #include <util/c_types.h>
@@ -607,7 +608,13 @@ void clang_c_adjust::layout_struct_union_type(struct_union_typet &type)
         new_components.push_back(c);
     }
   }
-  // 2. Add the components of the current type.
+  // 2.1 Handle vtable generation and vptr
+  if (type.get_bool("#needs_vtable"))
+  {
+    handle_cpp_struct_vtable_generation(type);
+  }
+
+  // 2.2 Add the components of the current type.
   // Ensure that the component types are layouted.
   for (auto &c : type.components())
   {
@@ -1450,4 +1457,10 @@ void clang_c_adjust::align_se_function_call_return_type(
 void clang_c_adjust::adjust_reference(exprt &)
 {
   // nothing to adjust for C
+}
+
+void clang_c_adjust::handle_cpp_struct_vtable_generation(
+  struct_union_typet &type)
+{
+  // nothing to do for C
 }

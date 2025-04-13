@@ -36,6 +36,7 @@ protected:
    */
   void adjust_type(typet &type);
 
+  virtual void handle_cpp_struct_vtable_generation(struct_union_typet &type);
   /**
    * Computes a layout for a struct or union type.
    * This means that components are assigned offsets and added
