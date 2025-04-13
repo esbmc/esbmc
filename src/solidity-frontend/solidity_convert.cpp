@@ -14,6 +14,8 @@
 #include <fstream>
 #include <iostream>
 
+const nlohmann::json solidity_convertert::empty_json = nlohmann::json::object();
+
 solidity_convertert::solidity_convertert(
   contextt &_context,
   nlohmann::json &_ast_json,
@@ -2594,7 +2596,11 @@ bool solidity_convertert::get_function_definition(
   // 7. Populate "std::string id, name"
   std::string name, id;
   get_function_definition_name(ast_node, name, id);
-  log_debug("solidity", "\t\t@@@ Parsing function {}", id.c_str());
+  log_debug(
+    "solidity",
+    "\t@@@ Parsing function {} in contract {}",
+    id.c_str(),
+    current_baseContractName);
 
   if (context.find_symbol(id) != nullptr)
   {
@@ -3324,7 +3330,7 @@ bool solidity_convertert::get_expr(
   SolidityGrammar::ExpressionT type = SolidityGrammar::get_expression_t(expr);
   log_debug(
     "solidity",
-    " @@@ got Expr: SolidityGrammar::ExpressionT::{}",
+    "  @@@ got Expr: SolidityGrammar::ExpressionT::{}",
     SolidityGrammar::expression_to_str(type));
 
   switch (type)
@@ -3358,7 +3364,11 @@ bool solidity_convertert::get_expr(
         find_decl_ref(src_ast_json, expr["referencedDeclaration"]);
       if (decl.empty())
       {
-        log_error("failed to find the reference AST node");
+        log_error(
+          "failed to find the reference AST node, base contract name {}, "
+          "reference id {}",
+          current_baseContractName,
+          std::to_string(expr["referencedDeclaration"].get<int>()));
         return true;
       }
 
@@ -7776,6 +7786,11 @@ const nlohmann::json &solidity_convertert::find_decl_ref_in_contract(
   if (!j.is_structured())
     return empty_json;
 
+  log_debug(
+    "solidity",
+    "\tfinding reference in contract {}",
+    j["name"].get<std::string>());
+
   using Frame = const nlohmann::json *;
   std::stack<Frame> stack;
   stack.push(&j);
@@ -7788,18 +7803,14 @@ const nlohmann::json &solidity_convertert::find_decl_ref_in_contract(
     if (node->is_object())
     {
       if (node->contains("id") && (*node)["id"] == ref_id)
+      {
+        log_debug("solidity", "\tfound");
         return *node;
+      }
 
       for (auto it = node->rbegin(); it != node->rend(); ++it)
       {
         const auto &value = it.value();
-        if (
-          value.is_object() && value.contains("nodeType") &&
-          value["nodeType"] == "ContractDefinition")
-        {
-          continue;
-        }
-
         if (value.is_structured())
           stack.push(&value);
       }
@@ -7909,7 +7920,7 @@ const nlohmann::json &
 solidity_convertert::find_decl_ref(const nlohmann::json &j, int ref_id)
 {
   log_debug(
-    "solidity", "\t current base contract name {}", current_baseContractName);
+    "solidity", "\tcurrent base contract name {}", current_baseContractName);
   return find_decl_ref_global(j, ref_id);
 }
 
@@ -7917,24 +7928,19 @@ solidity_convertert::find_decl_ref(const nlohmann::json &j, int ref_id)
 const nlohmann::json &solidity_convertert::find_constructor_ref(int contract_id)
 {
   nlohmann::json &nodes = src_ast_json["nodes"];
-  unsigned index = 0;
-  for (nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end();
-       ++itr, ++index)
+  for (nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end(); ++itr)
   {
     if (
       (*itr)["id"].get<int>() == contract_id &&
       (*itr)["nodeType"] == "ContractDefinition")
     {
-      nlohmann::json &ast_nodes = nodes.at(index)["nodes"];
-      unsigned idx = 0;
+      nlohmann::json &ast_nodes = (*itr)["nodes"];
       for (nlohmann::json::iterator ittr = ast_nodes.begin();
            ittr != ast_nodes.end();
-           ++ittr, ++idx)
+           ++ittr)
       {
         if ((*ittr)["kind"] == "constructor")
-        {
-          return ast_nodes.at(idx);
-        }
+          return *ittr;
       }
     }
   }
@@ -8664,7 +8670,18 @@ void solidity_convertert::get_static_contract_instance(
         }
       }
       else
-        get_function_definition(json);
+      {
+        // parsing the constructor in another contract
+        std::string old = current_baseContractName;
+        current_baseContractName = c_name;
+        if (get_function_definition(json))
+        {
+          log_error(
+            "Failed to parse the function {}", json["name"].get<std::string>());
+          abort();
+        }
+        current_baseContractName = old;
+      }
     }
 
     exprt ctor;

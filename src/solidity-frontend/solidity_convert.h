@@ -542,8 +542,7 @@ protected:
   // used as the return value for find_constructor_ref when
   // dealing with the implicit constructor call
   // this is to avoid reference to stack memory associated with local variable returned
-  const nlohmann::json empty_json = nlohmann::json::object();
-  ;
+  static const nlohmann::json empty_json;
 
   // for auxiliary var name
   int aux_counter;
