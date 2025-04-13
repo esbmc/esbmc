@@ -338,20 +338,18 @@ protected:
   void reset_auxiliary_vars();
 
   // find reference
-  nlohmann::json
+  const nlohmann::json &
   find_parent(const nlohmann::json &json, const nlohmann::json &target);
-  nlohmann::json find_parent_contract(
+  const nlohmann::json &find_parent_contract(
     const nlohmann::json &json,
     const nlohmann::json &target);
-  nlohmann::json find_parent_contract(
-    const nlohmann::json &json,
-    const nlohmann::json &target,
-    const nlohmann::json &current_contract);
-  nlohmann::json find_decl_ref_in_contract(const nlohmann::json &j, int ref_id);
-  nlohmann::json find_decl_ref_global(const nlohmann::json &j, int ref_id);
-  nlohmann::json find_decl_ref(const nlohmann::json &json, int ref_id);
-  nlohmann::json find_constructor_ref(int ref_decl_id);
-  nlohmann::json find_constructor_ref(const std::string &contract_name);
+  const nlohmann::json &
+  find_decl_ref_in_contract(const nlohmann::json &j, int ref_id);
+  const nlohmann::json &
+  find_decl_ref_global(const nlohmann::json &j, int ref_id);
+  const nlohmann::json &find_decl_ref(const nlohmann::json &json, int ref_id);
+  const nlohmann::json &find_constructor_ref(int ref_decl_id);
+  const nlohmann::json &find_constructor_ref(const std::string &contract_name);
 
   // auxiliary functions
   std::string get_modulename_from_path(std::string path);
