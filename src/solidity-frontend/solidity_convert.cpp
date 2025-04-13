@@ -2675,6 +2675,9 @@ bool solidity_convertert::get_function_definition(
       return true;
     added_symbol.value = body_exprt;
   }
+  else
+    // empty body
+    added_symbol.value = code_blockt();
 
   //assert(!"done - finished all expr stmt in function?");
 
