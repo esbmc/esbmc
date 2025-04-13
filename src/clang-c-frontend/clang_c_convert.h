@@ -233,9 +233,13 @@ protected:
     const clang::SourceLocation &loc,
     clang::PresumedLoc &PLoc);
 
-  std::string get_filename_from_path(std::string path);
-  std::string get_modulename_from_path(std::string path);
+  static std::string get_filename_from_path(std::string path);
 
+public:
+  // TODO: HACK
+  static std::string get_modulename_from_path(std::string path);
+
+protected:
   void convert_expression_to_code(exprt &expr);
 
   bool convert_character_literal(

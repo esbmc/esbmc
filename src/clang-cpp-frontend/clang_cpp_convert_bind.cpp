@@ -7,6 +7,8 @@
  *  clang::MemberExpr may represent x->F or x.F, but we don't care about dot operator.
  */
 
+#include "clang_cpp_vft_gen.h"
+
 #include <util/compiler_defs.h>
 // Remove warnings from Clang headers
 CC_DIAGNOSTIC_PUSH()
@@ -132,10 +134,12 @@ void clang_cpp_convertert::get_vft_binding_expr_vtable_ptr(
   std::string base_class_id, base_class_name;
   get_decl_name(*md->getParent(), base_class_name, base_class_id);
 
-  std::string vtable_type_symb_id = vtable_type_prefix + base_class_id;
+  std::string vtable_type_symb_id =
+    clang_cpp_vft_gen::vtable_type_prefix + base_class_id;
   typet vtable_type = symbol_typet(vtable_type_symb_id);
 
-  std::string vtable_ptr_name = base_class_id + "::" + vtable_ptr_suffix;
+  std::string vtable_ptr_name =
+    base_class_id + "::" + clang_cpp_vft_gen::vtable_ptr_suffix;
   pointer_typet member_type(vtable_type);
   member_exprt deref_member(base_deref, vtable_ptr_name, member_type);
   deref_member.set("#lvalue", true);
@@ -164,8 +168,8 @@ bool clang_cpp_convertert::get_vft_binding_expr_function(
    * This is the component name as in vtable's type symbol
    * e.g. virtual_table::tag.Bird::c:@S@Bird@F@do_something#
    */
-  std::string member_comp_name =
-    vtable_type_prefix + base_class_id + "::" + comp.name().as_string();
+  std::string member_comp_name = clang_cpp_vft_gen::vtable_type_prefix +
+                                 base_class_id + "::" + comp.name().as_string();
   pointer_typet member_type(comp.type());
   member_exprt deref_member(vtable_ptr_deref, member_comp_name, member_type);
   deref_member.set("#lvalue", true);

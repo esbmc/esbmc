@@ -1,3 +1,5 @@
+#include "clang_cpp_vft_gen.h"
+
 #include <clang-c-frontend/typecast.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <util/c_sizeof.h>
@@ -459,4 +461,13 @@ void clang_cpp_adjust::adjust_side_effect_function_call(
   {
     clang_c_adjust::adjust_side_effect_function_call(expr);
   }
+}
+
+void clang_cpp_adjust::handle_cpp_struct_vtable_generation(
+  struct_union_typet &type)
+{
+  assert(type.is_struct());
+  auto &struct_type = to_struct_type(type);
+  clang_cpp_vft_gen vft_gen(context);
+  vft_gen.handle_vtable_and_vptr_generation(struct_type);
 }
