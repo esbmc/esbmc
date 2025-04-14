@@ -747,7 +747,10 @@ expr2tc dereferencet::build_reference_to(
   }
   else if (is_array_type(value)) // Encode some access bounds checks.
   {
-    bounds_check(value, final_offset, type, tmp_guard);
+    expr2tc tmp_expr = to_pointer_type(deref_expr->type).can_carry_provenance()
+                         ? deref_expr
+                         : gen_false_expr();
+    bounds_check(value, final_offset, type, tmp_guard, tmp_expr);
   }
   else
   {
@@ -2147,13 +2150,30 @@ void dereferencet::bounds_check(
   const expr2tc &expr,
   const expr2tc &offset,
   const type2tc &type,
-  const guardt &guard)
+  const guardt &guard,
+  const expr2tc &deref)
 {
   if (options.get_bool_option("no-bounds-check"))
     return;
 
   assert(is_array_type(expr));
   const array_type2t arr_type = to_array_type(expr->type);
+
+  if (config.ansi_c.cheri && !is_false(deref))
+  {
+    expr2tc addr = typecast2tc(ptraddr_type2(), deref);
+    expr2tc top = capability_top2tc(deref);
+    expr2tc base = capability_base2tc(deref);
+
+    expr2tc gt = greaterthan2tc(addr, top);
+    expr2tc lt = lessthan2tc(addr, base);
+    expr2tc in_cheri_bounds = or2tc(gt, lt);
+
+    guardt cap_guard(guard);
+    cap_guard.add(in_cheri_bounds);
+    dereference_failure(
+      "capability bounds", "capability bounds violated", cap_guard);
+  }
 
   if (!arr_type.array_size)
   {
