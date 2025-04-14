@@ -146,16 +146,17 @@ const char *contract_body_element_to_str(ContractBodyElementT type)
 // check if it's <address>.member
 bool is_address_member_call(const nlohmann::json &expr)
 {
-  assert(expr.contains("expression"));
+  if (expr["nodeType"] != "MemberAccess" || !expr.contains("expression"))
+    return false;
   SolidityGrammar::TypeNameT type_name =
     get_type_name_t(expr["expression"]["typeDescriptions"]);
 
   if (
-    type_name == SolidityGrammar::TypeNameT::AddressPayableTypeName &&
-    expr["expression"].contains("memberName") &&
-    (solidity_convertert::is_low_level_call(expr["expression"]["memberName"]) ||
-     solidity_convertert::is_low_level_property(
-       expr["expression"]["memberName"])))
+    (type_name == SolidityGrammar::TypeNameT::AddressPayableTypeName ||
+     type_name == SolidityGrammar::TypeNameT::AddressTypeName) &&
+    expr.contains("memberName") &&
+    (solidity_convertert::is_low_level_call(expr["memberName"]) ||
+     solidity_convertert::is_low_level_property(expr["memberName"])))
     return true;
 
   return false;
@@ -770,7 +771,8 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
       return NewExpression;
     if (expr["kind"] == "typeConversion")
       return TypeConversionExpression;
-    if (is_address_member_call(expr))
+    if (
+      expr.contains("expression") && is_address_member_call(expr["expression"]))
       return AddressMemberCall;
     if (
       get_type_name_t(expr["typeDescriptions"]) ==

@@ -302,7 +302,7 @@ protected:
     exprt &new_expr);
   void get_tuple_assignment(code_blockt &_block, const exprt &lop, exprt rop);
   void get_tuple_function_call(code_blockt &_block, const exprt &op);
-  void get_llc_ret_tuple(exprt &new_expr);
+  void get_llc_ret_tuple(symbolt &sym);
 
   // string
   void
@@ -343,7 +343,7 @@ protected:
 
   // find reference
   const nlohmann::json &
-  find_parent(const nlohmann::json &json, const nlohmann::json &target);
+  find_last_parent(const nlohmann::json &json, const nlohmann::json &target);
   const nlohmann::json &find_parent_contract(
     const nlohmann::json &json,
     const nlohmann::json &target);
@@ -440,6 +440,7 @@ protected:
     exprt &new_expr);
   bool get_low_level_member_accsss(
     const nlohmann::json &expr,
+    const nlohmann::json &options,
     const std::string mem_name,
     const exprt &base,
     exprt &new_expr);

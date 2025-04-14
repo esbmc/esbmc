@@ -3776,29 +3776,39 @@ bool solidity_convertert::get_expr(
     // function callFoo() public pure returns (uint) {
     //     return foo({a: 1, b: 2});
     // }
-    if (!is_bound)
-    {
-      if (get_unbound_expr(expr, current_contractName, new_expr))
-        return true;
-      break;
-    }
-
     assert(expr.contains("expression"));
     nlohmann::json callee_expr_json = expr["expression"];
     if (SolidityGrammar::is_address_member_call(callee_expr_json))
     {
-      assert(expr.contains("options"));
-      // add the ["options"] to the sub-expression nodes
-      callee_expr_json["options"] = expr["options"];
-      // to addressmembercall
-      if (get_expr(callee_expr_json, new_expr))
-        return true;
+      if (!is_bound)
+      {
+        if (get_unbound_expr(expr, current_contractName, new_expr))
+          return true;
 
+        symbolt dump;
+        get_llc_ret_tuple(dump);
+        new_expr = symbol_expr(dump);
+      }
+      else
+      {
+        assert(expr.contains("options"));
+        // pass the ["options"] to addressmembercall, via literal_type
+        if (get_expr(callee_expr_json, expr["options"], new_expr))
+          return true;
+      }
       break;
     }
     else
     {
+      if (!is_bound)
+      {
+        if (get_unbound_expr(expr, current_contractName, new_expr))
+          return true;
+
+        break;
+      };
       log_error("Unsupported CallOptionsExprClass");
+
       return true;
     }
   }
@@ -3849,6 +3859,16 @@ bool solidity_convertert::get_expr(
       }
 
       new_expr = call;
+      break;
+    }
+
+    // * check if its a call-with-options
+    if (
+      !expr.contains("name") && callee_expr_json.contains("nodeType") &&
+      callee_expr_json["nodeType"] == "FunctionCallOptions")
+    {
+      if (get_expr(callee_expr_json, new_expr))
+        return true;
       break;
     }
 
@@ -4026,7 +4046,6 @@ bool solidity_convertert::get_expr(
     }
 
     // * check if it's a struct call
-    assert(callee_expr.is_symbol());
     if (expr.contains("kind") && expr["kind"] == "structConstructorCall")
     {
       log_debug("solidity", "\t\t@@@ got struct constructor call");
@@ -4487,63 +4506,30 @@ bool solidity_convertert::get_expr(
       "\t\t@@@ got = {}",
       SolidityGrammar::expression_to_str(_type));
 
+    exprt base;
     switch (_type)
     {
     case SolidityGrammar::TypeConversionExpression:
-    case SolidityGrammar::DeclRefExprClass:
-    case SolidityGrammar::BuiltinMemberCall:
     {
       // get base: x.$address / this.$address
       exprt mem_expr;
+      assert(callee_expr_json.contains("arguments"));
       assert(callee_expr_json["arguments"].size() == 1);
       if (get_expr(callee_expr_json["arguments"][0], mem_expr))
         return true;
-
+      break;
       if (!mem_expr.is_member())
       {
         log_error("expecting member_expr, got {}", mem_expr.to_string());
         return true;
       }
-      exprt base = mem_expr.op0();
-
-      // irep_idt c_id = base.type().identifier();
-      // std::string bs_c_name = context.find_symbol(c_id)->name.as_string();
-      // assert(!bs_c_name.empty());
-
-      // case 1, which is a type conversion node
-      if (is_low_level_call(mem_name))
-      {
-        if (!is_bound)
-        {
-          if (get_unbound_expr(expr, current_contractName, new_expr))
-            return true;
-          if (mem_name == "send")
-            new_expr = nondet_bool_expr;
-          else
-            // call, staticcall ...
-            get_llc_ret_tuple(new_expr);
-        }
-        else
-        {
-          if (get_low_level_member_accsss(expr, mem_name, base, new_expr))
-            return true;
-        }
-      }
-      else if (is_low_level_property(mem_name))
-      {
-        // property i.e balance/codehash
-        if (!is_bound)
-          // make it as a NODET_UINT
-          new_expr = nondet_uint_expr;
-        else
-          get_builtin_property_expr(mem_name, base, new_expr);
-      }
-      else
-      {
-        log_error("unexpected address member access");
+      base = mem_expr.op0();
+    }
+    case SolidityGrammar::DeclRefExprClass:
+    case SolidityGrammar::BuiltinMemberCall:
+    {
+      if (get_expr(callee_expr_json, base))
         return true;
-      }
-
       break;
     }
     default:
@@ -4553,6 +4539,49 @@ bool solidity_convertert::get_expr(
         SolidityGrammar::expression_to_str(_type));
       return true;
     }
+    }
+
+    // irep_idt c_id = base.type().identifier();
+    // std::string bs_c_name = context.find_symbol(c_id)->name.as_string();
+    // assert(!bs_c_name.empty());
+
+    // case 1, which is a type conversion node
+    if (is_low_level_call(mem_name))
+    {
+      if (!is_bound)
+      {
+        if (get_unbound_expr(expr, current_contractName, new_expr))
+          return true;
+        if (mem_name == "send")
+          new_expr = nondet_bool_expr;
+        else
+        {
+          // call, staticcall ...
+          symbolt dump;
+          get_llc_ret_tuple(dump);
+          new_expr = symbol_expr(dump);
+        }
+      }
+      else
+      {
+        if (get_low_level_member_accsss(
+              expr, literal_type, mem_name, base, new_expr))
+          return true;
+      }
+    }
+    else if (is_low_level_property(mem_name))
+    {
+      // property i.e balance/codehash
+      if (!is_bound)
+        // make it as a NODET_UINT
+        new_expr = nondet_uint_expr;
+      else
+        get_builtin_property_expr(mem_name, base, new_expr);
+    }
+    else
+    {
+      log_error("unexpected address member access");
+      return true;
     }
 
     break;
@@ -4678,10 +4707,10 @@ void solidity_convertert::get_current_contract_name(
   {
     log_debug(
       "solidity",
-      "failed to get current contract name, current base name is {}, trying to "
-      "find id {}",
-      current_baseContractName,
-      std::to_string(ast_node["id"].get<int>()));
+      "failed to get current contract nam, trying to "
+      "find id {}, target json is \n{}\n",
+      std::to_string(ast_node["id"].get<int>()),
+      ast_node.dump());
     return;
   }
 
@@ -6713,8 +6742,9 @@ void solidity_convertert::get_tuple_function_call(
   _block.move_to_operands(func_call);
 }
 
-void solidity_convertert::get_llc_ret_tuple(exprt &new_expr)
+void solidity_convertert::get_llc_ret_tuple(symbolt &s)
 {
+  log_debug("solidity", "\tconvert return value to tuple");
   std::string _id = "tag-sol_llc_ret";
   if (context.find_symbol(_id) == nullptr)
   {
@@ -6743,8 +6773,7 @@ void solidity_convertert::get_llc_ret_tuple(exprt &new_expr)
   inits.op0() = nondet_bool_expr;
   inits.op1() = nondet_uint_expr;
   added_sym.value = inits;
-
-  new_expr = symbol_expr(added_sym);
+  s = added_sym;
 }
 
 void solidity_convertert::get_string_assignment(
@@ -7245,7 +7274,7 @@ bool solidity_convertert::get_elementary_type_name(
   case SolidityGrammar::ElementaryTypeNameT::STRING_LITERAL:
   {
     // it's fine even if the json is not the exact parent
-    auto json = find_parent(src_ast_json, type_name);
+    auto json = find_last_parent(src_ast_json, type_name);
     assert(!json.empty());
     string_constantt x(json["value"].get<std::string>());
     new_type = x.type();
@@ -7669,7 +7698,7 @@ std::string solidity_convertert::get_filename_from_path(std::string path)
 // Find the last parent json node
 // It will not reliably find the correct parent if the same target appears under multiple different parent nodes.
 // To enusre correctness, the input is expected to contain key "id" and, if possible, "is_inherit"
-const nlohmann::json &solidity_convertert::find_parent(
+const nlohmann::json &solidity_convertert::find_last_parent(
   const nlohmann::json &root,
   const nlohmann::json &target)
 {
@@ -7718,42 +7747,42 @@ const nlohmann::json &solidity_convertert::find_parent_contract(
   const nlohmann::json &root,
   const nlohmann::json &target)
 {
-  using Frame = std::pair<
-    const nlohmann::json *,
-    const nlohmann::json *>; // (current node, current contract)
-
+  using Frame = std::pair<const nlohmann::json *, const nlohmann::json *>;
   std::stack<Frame> stack;
-  stack.emplace(&root, nullptr); // Start with root and no current contract
+  // Begin with the root, with no current contract context.
+  stack.emplace(&root, nullptr);
 
   while (!stack.empty())
   {
     auto [node, current_contract] = stack.top();
     stack.pop();
 
-    if (*node == target)
+    if (
+      node->is_object() && node->contains("nodeType") &&
+      (*node)["nodeType"] == "ContractDefinition")
     {
-      if (current_contract)
-        return *current_contract;
-      else
-        return empty_json;
+      current_contract = node;
     }
 
-    const nlohmann::json *new_contract = current_contract;
+    // check if this node is the target.
+    // We use pointer identity comparison to ensure an exact match.
+    if (*node == target)
+    {
+      return current_contract ? *current_contract : empty_json;
+    }
 
+    // If the node is an object, iterate over its values.
     if (node->is_object())
     {
-      if (
-        node->contains("nodeType") &&
-        (*node)["nodeType"] == "ContractDefinition")
-        new_contract = node;
-
+      // Use reverse order for DFS consistency.
       for (auto it = node->rbegin(); it != node->rend(); ++it)
       {
         const auto &value = it.value();
         if (value.is_structured())
-          stack.emplace(&value, new_contract);
+          stack.emplace(&value, current_contract);
       }
     }
+    // If the node is an array, do the same.
     else if (node->is_array())
     {
       for (auto it = node->rbegin(); it != node->rend(); ++it)
@@ -7764,7 +7793,8 @@ const nlohmann::json &solidity_convertert::find_parent_contract(
     }
   }
 
-  return empty_json; // Not found, return empty
+  // If the target was not found, return an empty JSON.
+  return empty_json;
 }
 
 // Searches for the target node inside a contract body.
@@ -9693,6 +9723,8 @@ void solidity_convertert::get_builtin_property_expr(
   const exprt &base,
   exprt &new_expr)
 {
+  log_debug("solidity", "Getting built-in property");
+
   typet t;
   std::string comp_name = "$" + name;
 
@@ -10199,13 +10231,17 @@ bool solidity_convertert::get_high_level_member_access(
  * x.call{value:}("")
  * @base: x
  * @mem_name: call
+ * @options: value
  */
 bool solidity_convertert::get_low_level_member_accsss(
   const nlohmann::json &expr,
+  const nlohmann::json &options,
   const std::string mem_name,
   const exprt &base,
   exprt &new_expr)
 {
+  log_debug("solidity", "Getting low-level member access");
+
   locationt loc;
   get_location_from_node(expr, loc);
   side_effect_expr_function_callt call;
@@ -10214,7 +10250,7 @@ bool solidity_convertert::get_low_level_member_accsss(
   {
     exprt addr = member_exprt(base, "$address", unsignedbv_typet(160));
 
-    if (expr.contains("options"))
+    if (options != nullptr)
     {
       // do call#1(addr, value) (call with ether)
       addr.type().set("#sol_type", "ADDRESS_PAYABLE");
@@ -10224,7 +10260,7 @@ bool solidity_convertert::get_low_level_member_accsss(
       literal_type["typeDescriptions"] = {
         {"typeIdentifier", "t_uint256"}, {"typeString", "uint256"}};
 
-      if (get_expr(expr["options"][0], literal_type, value))
+      if (get_expr(options[0], literal_type, value))
         return true;
 
       get_library_function_call_no_args(
@@ -10242,8 +10278,10 @@ bool solidity_convertert::get_low_level_member_accsss(
     }
 
     // convert it to tuple
-    get_llc_ret_tuple(new_expr);
-    new_expr.op0() = call;
+    symbolt dump;
+    get_llc_ret_tuple(dump);
+    dump.value.op0() = call;
+    new_expr = symbol_expr(dump);
   }
   else
   {
@@ -10259,7 +10297,7 @@ bool solidity_convertert::get_bind_cname_expr(
   const nlohmann::json &json,
   exprt &bind_cname_expr)
 {
-  const nlohmann::json &parent = find_parent(src_ast_json, json);
+  const nlohmann::json &parent = find_last_parent(src_ast_json, json);
   locationt l;
   get_location_from_node(json, l);
   exprt lvar;
