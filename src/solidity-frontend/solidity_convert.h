@@ -300,8 +300,12 @@ protected:
     const irep_idt instance_id,
     const exprt &comp,
     exprt &new_expr);
-  void get_tuple_assignment(code_blockt &_block, const exprt &lop, exprt rop);
-  void get_tuple_function_call(code_blockt &_block, const exprt &op);
+  bool construct_tuple_assigments(
+    const nlohmann::json &ast_node,
+    const exprt &lhs,
+    const exprt &rhs);
+  void get_tuple_assignment(const exprt &lop, exprt rop);
+  void get_tuple_function_call(const exprt &op);
   void get_llc_ret_tuple(symbolt &sym);
 
   // string
@@ -351,7 +355,8 @@ protected:
   find_decl_ref_in_contract(const nlohmann::json &j, int ref_id);
   const nlohmann::json &
   find_decl_ref_global(const nlohmann::json &j, int ref_id);
-  const nlohmann::json &find_decl_ref_unique_id(const nlohmann::json &json, int ref_id);
+  const nlohmann::json &
+  find_decl_ref_unique_id(const nlohmann::json &json, int ref_id);
   const nlohmann::json &find_decl_ref(const nlohmann::json &json, int ref_id);
   const nlohmann::json &find_constructor_ref(int ref_decl_id);
   const nlohmann::json &find_constructor_ref(const std::string &contract_name);

@@ -2572,7 +2572,7 @@ bool solidity_convertert::get_function_definition(
 
   // special handling for tuple:
   // construct a tuple type and a tuple instance
-  if (type.return_type().get("#sol_type") == "TUPLE")
+  if (type.return_type().get("#sol_type") == "TUPLE_RETURNS")
   {
     exprt dump;
     if (get_tuple_definition(*current_functionDecl))
@@ -2898,10 +2898,10 @@ bool solidity_convertert::get_statement(
     //  {"declarations": [], "id": 2}
     //  {"declarations": [], "id": 3}
     // ]
-    for (const auto &it : declgroup.items())
+    if (declgroup.size() == 1)
     {
       // deal with local var decl with init value
-      nlohmann::json decl = it.value();
+      const nlohmann::json &decl = declgroup[0];
       nlohmann::json initialValue = nlohmann::json::object();
       if (stmt.contains("initialValue"))
         initialValue = stmt["initialValue"];
@@ -2912,6 +2912,37 @@ bool solidity_convertert::get_statement(
 
       decls.operands().push_back(single_decl);
       ++ctr;
+    }
+    else
+    {
+      // seperate the decl and assignment
+      for (const auto &it : declgroup.items())
+      {
+        if(it.value().is_null()|| it.value().empty())
+          continue;
+        const nlohmann::json &decl = it.value();
+        exprt single_decl;
+        if (get_var_decl(decl, single_decl))
+          return true;
+        decls.operands().push_back(single_decl);
+        ++ctr;
+      }
+
+      if (stmt.contains("initialValue"))
+      {
+        // this is a tuple expression
+        const nlohmann::json &initialValue = stmt["initialValue"];
+        exprt tuple_expr;
+        if (get_expr(initialValue, tuple_expr))
+          return true;
+
+        code_blockt lhs_block;
+        for (auto &decl : decls.operands())
+            lhs_block.copy_to_operands(decl.op0()); // nil_expr;
+        
+        //TODO FIXME: stmt might not contains right handside
+        construct_tuple_assigments(stmt, lhs_block, tuple_expr);
+      }
     }
     log_debug("solidity", " \t@@@ DeclStmt group has {} decls", ctr);
 
@@ -2950,7 +2981,7 @@ bool solidity_convertert::get_statement(
           stmt["expression"]["typeDescriptions"], return_exrp_type))
       return true;
 
-    if (return_exrp_type.get("#sol_type") == "TUPLE")
+    if (return_exrp_type.get("#sol_type") == "TUPLE_RETURNS")
     {
       if (
         stmt["expression"]["nodeType"].get<std::string>() !=
@@ -3011,7 +3042,7 @@ bool solidity_convertert::get_statement(
           exprt rop = rhs.operands().at(i);
 
           // do assignment
-          get_tuple_assignment(expr_backBlockDecl, lop, rop);
+          get_tuple_assignment(lop, rop);
         }
       }
       else
@@ -3031,7 +3062,7 @@ bool solidity_convertert::get_statement(
               stmt["expression"]["typeDescriptions"],
               func_call))
           return true;
-        get_tuple_function_call(expr_backBlockDecl, func_call);
+        get_tuple_function_call(func_call);
 
         size_t ls = to_struct_type(lhs.type()).components().size();
         size_t rs = to_struct_type(rhs.type()).components().size();
@@ -3060,7 +3091,7 @@ bool solidity_convertert::get_statement(
             return true;
 
           // do assignment
-          get_tuple_assignment(expr_backBlockDecl, lop, rop);
+          get_tuple_assignment(lop, rop);
         }
       }
       // do return in the end
@@ -4926,61 +4957,9 @@ bool solidity_convertert::get_binary_operator_expr(
   {
     // special handling for tuple-type assignment;
     //TODO: handle nested tuple
-    if (rt_sol == "TUPLE_INSTANCE" || rt_sol == "TUPLE")
+    if (rt_sol == "TUPLE_INSTANCE" || rt_sol == "TUPLE_RETURNS")
     {
-      log_debug("solidity", "Handling tuple assignment.");
-
-      assert(lt.is_code() && to_code(lhs).statement() == "block");
-      if (rt_sol == "TUPLE")
-      {
-        // e.g. (x,y) = func(); (x,y) = func(func2()); (x, (x,y)) = (x, func());
-        // ==>
-        //    func(); // this initializes the tuple instance
-        //    x = tuple.mem0;
-        //    y = tuple.mem1;
-        exprt new_rhs;
-        if (get_tuple_function_ref(
-              expr["rightHandSide"]["expression"], new_rhs))
-          return true;
-
-        // add function call
-        get_tuple_function_call(expr_backBlockDecl, rhs);
-        rhs = new_rhs;
-      }
-
-      // e.g. (x,y) = (1,2); (x,y) = (func(),x);
-      // =>
-      //  t.mem0 = 1; #1
-      //  t.mem1 = 2; #2
-      //  x = t.mem0; #3
-      //  y = t.mem1; #4
-      // where #1 and #2 are already in the expr_backBlockDecl
-
-      // do #3 #4
-      std::set<exprt> assigned_symbol;
-      for (size_t i = 0; i < lhs.operands().size(); i++)
-      {
-        // e.g. (, x) = (1, 2)
-        //      null <=> tuple2.mem0
-        //         x <=> tuple2.mem1
-        exprt lop = lhs.operands().at(i);
-        if (lop.is_nil() || assigned_symbol.count(lop))
-          // e.g. (,y) = (1,2)
-          // or   (x,x) = (1, 2); assert(x==1) hold
-          // we skip the variable that has been assigned
-          continue;
-        assigned_symbol.insert(lop);
-
-        exprt rop;
-        if (get_tuple_member_call(
-              rhs.identifier(),
-              to_struct_type(rhs.type()).components().at(i),
-              rop))
-          return true;
-
-        get_tuple_assignment(expr_backBlockDecl, lop, rop);
-      }
-
+      construct_tuple_assigments(expr, lhs, rhs);
       new_expr = code_skipt();
       current_BinOp_type.pop();
       return false;
@@ -6338,7 +6317,7 @@ bool solidity_convertert::get_type_description(
     // do nothing as it won't be used
     new_type = struct_typet();
     new_type.set("#cpp_type", "void");
-    new_type.set("#sol_type", "TUPLE");
+    new_type.set("#sol_type", "TUPLE_RETURNS");
     break;
   }
   default:
@@ -6654,7 +6633,7 @@ bool solidity_convertert::get_tuple_instance(
     if (get_expr(args.at(j), litera_type, init))
       return true;
 
-    get_tuple_assignment(expr_backBlockDecl, member_access, init);
+    get_tuple_assignment(member_access, init);
 
     // update
     ++i;
@@ -6732,14 +6711,15 @@ bool solidity_convertert::get_tuple_member_call(
   return false;
 }
 
-void solidity_convertert::get_tuple_function_call(
-  code_blockt &_block,
-  const exprt &op)
+void solidity_convertert::get_tuple_function_call(const exprt &op)
 {
   assert(op.id() == "sideeffect");
   exprt func_call = op;
   convert_expression_to_code(func_call);
-  _block.move_to_operands(func_call);
+  if (current_functionDecl)
+    move_to_back_block(func_call);
+  else
+    move_to_initializer(func_call);
 }
 
 void solidity_convertert::get_llc_ret_tuple(symbolt &s)
@@ -6788,10 +6768,73 @@ void solidity_convertert::get_string_assignment(
   new_expr = call;
 }
 
-void solidity_convertert::get_tuple_assignment(
-  code_blockt &_block,
-  const exprt &lop,
-  exprt rop)
+/*
+  lhs: code_blockt
+  rhs: tuple_return / tuple_instancce
+*/
+bool solidity_convertert::construct_tuple_assigments(
+  const nlohmann::json &expr,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  log_debug("solidity", "Handling tuple assignment.");
+
+  typet lt = lhs.type();
+  typet rt = rhs.type();
+  std::string lt_sol = lt.get("#sol_type").as_string();
+  std::string rt_sol = rt.get("#sol_type").as_string();
+
+  assert(lt.is_code() && to_code(lhs).statement() == "block");
+  exprt new_rhs = rhs;
+  if (rt_sol == "TUPLE_RETURNS")
+  {
+    // e.g. (x,y) = func(); (x,y) = func(func2()); (x, (x,y)) = (x, func());
+    // ==>
+    //    func(); // this initializes the tuple instance
+    //    x = tuple.mem0;
+    //    y = tuple.mem1;
+    exprt new_rhs;
+    if (get_tuple_function_ref(expr["rightHandSide"]["expression"], new_rhs))
+      return true;
+
+    // add function call
+    get_tuple_function_call(rhs);
+  }
+
+  // e.g. (x,y) = (1,2); (x,y) = (func(),x);
+  // =>
+  //  t.mem0 = 1; #1
+  //  t.mem1 = 2; #2
+  //  x = t.mem0; #3
+  //  y = t.mem1; #4
+  // where #1 and #2 are already in the expr_backBlockDecl
+
+  // do #3 #4
+  std::set<exprt> assigned_symbol;
+  for (size_t i = 0; i < lhs.operands().size(); i++)
+  {
+    // e.g. (, x) = (1, 2)
+    //      null <=> tuple2.mem0
+    //         x <=> tuple2.mem1
+    exprt lop = lhs.operands().at(i);
+    if (lop.is_nil() || assigned_symbol.count(lop))
+      // e.g. (,y) = (1,2)
+      // or   (x,x) = (1, 2); assert(x==1) hold
+      // we skip the variable that has been assigned
+      continue;
+    assigned_symbol.insert(lop);
+
+    exprt rop;
+    if (get_tuple_member_call(
+          rhs.identifier(), to_struct_type(rhs.type()).components().at(i), rop))
+      return true;
+
+    get_tuple_assignment(lop, rop);
+  }
+  return false;
+}
+
+void solidity_convertert::get_tuple_assignment(const exprt &lop, exprt rop)
 {
   exprt assign_expr;
   if (lop.type().get("#sol_type") == "STRING")
@@ -6803,7 +6846,10 @@ void solidity_convertert::get_tuple_assignment(
     assign_expr.copy_to_operands(lop, rop);
   }
   convert_expression_to_code(assign_expr);
-  _block.move_to_operands(assign_expr);
+  if (current_functionDecl)
+    move_to_back_block(assign_expr);
+  else
+    move_to_initializer(assign_expr);
 }
 
 bool solidity_convertert::get_mapping_type(
@@ -7365,7 +7411,7 @@ bool solidity_convertert::get_parameter_list(
     assert(type_name["parameters"].size() > 1);
     new_type = empty_typet();
     new_type.set("#cpp_type", "void");
-    new_type.set("#sol_type", "TUPLE");
+    new_type.set("#sol_type", "TUPLE_RETURNS");
     break;
   }
   default:
@@ -10102,7 +10148,7 @@ bool solidity_convertert::get_high_level_member_access(
   if (cname_set.size() == 1)
     return true; // since it has only one possible option, no need to futher binding
 
-  if (member.type().get("#sol_type") == "TUPLE")
+  if (member.type().get("#sol_type") == "TUPLE_RETURNS")
   {
     log_error("Unsupported return tuple");
     return true;
