@@ -4512,6 +4512,7 @@ bool solidity_convertert::get_expr(
         return true;
       }
       base = mem_expr.op0();
+      break;
     }
     case SolidityGrammar::DeclRefExprClass:
     case SolidityGrammar::BuiltinMemberCall:
