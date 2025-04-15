@@ -4423,15 +4423,9 @@ bool solidity_convertert::get_expr(
 
     // case 3
     // is equal to Base x = base.base(x);
-    int ref_decl_id = callee_expr_json["typeName"]["referencedDeclaration"];
-    const std::string contract_name = contractNamesMap[ref_decl_id];
-    std::string old = current_baseContractName;
-    current_baseContractName = contract_name;
-
     exprt call;
     if (get_new_object_ctor_call(expr, call))
       return true;
-    current_baseContractName = old;
 
     new_expr = call;
 
@@ -8571,8 +8565,6 @@ bool solidity_convertert::get_new_object_ctor_call(
     log_error("cannot find the contract name");
     abort();
   }
-  std::string old = current_baseContractName;
-  current_baseContractName = contract_name;
 
   // get ctor's ast node
   const nlohmann::json constructor_ref = find_constructor_ref(ref_decl_id);
@@ -8602,7 +8594,6 @@ bool solidity_convertert::get_new_object_ctor_call(
 
   // construct temporary object
   get_temporary_object(call, new_expr);
-  current_baseContractName = old;
   return false;
 }
 
