@@ -231,7 +231,7 @@ exprt numpy_call_expr::create_expr_from_call()
       {
         // Append array postfix to call array variants, e.g., ceil_array instead of ceil
         std::string func_name = function_id_.get_function();
-        func_name += "_array";
+        func_name = "__" + func_name + "_array";
         function_id_.set_function(func_name);
 
         code_function_callt call =

@@ -91,7 +91,7 @@ static const struct buffer
 const static std::vector<std::string> python_c_models = {
   "strncmp",
   "ceil",
-  "ceil_array",
+  "__ceil_array",
   "fegetround",
   "fesetround",
   "rint",
