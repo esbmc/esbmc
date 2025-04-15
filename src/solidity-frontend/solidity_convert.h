@@ -64,9 +64,6 @@ protected:
   } func_sig;
 
   void merge_multi_files();
-  std::vector<nlohmann::json> topological_sort(
-    std::unordered_map<std::string, std::unordered_set<std::string>> &graph,
-    std::unordered_map<std::string, nlohmann::json> &path_to_json);
   void contract_precheck();
   bool populate_auxilary_vars();
   bool

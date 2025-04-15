@@ -188,132 +188,77 @@ bool solidity_convertert::convert()
   return false; // 'false' indicates successful completion.
 }
 
-void solidity_convertert::merge_multi_files()
+/*
+e.g.
+
 {
-  // Import relationship diagram
-  std::unordered_map<std::string, std::unordered_set<std::string>> import_graph;
-  // Path to JSON object mapping
-  std::unordered_map<std::string, nlohmann::json> path_to_json;
-  // Constructing an import relationship diagram
-  for (auto &ast_json : src_ast_json_array)
+  "absolutePath": "contract_import2.sol",
+  "id": 67,
+  "nodes": [
   {
-    std::string path = ast_json["absolutePath"];
-    path_to_json[path] = ast_json;
-    std::unordered_set<std::string> imports;
-    // Extract the import path from the ImportDirective node.
-    for (const auto &node : ast_json["nodes"])
-    {
-      if (node["nodeType"] == "ImportDirective")
-      {
-        std::string import_path = node["absolutePath"];
-        imports.insert(import_path);
-      }
-    }
-    import_graph[path] = imports;
+    "absolutePath": "contract_import2.sol",
+    ""id": 67,
   }
-
-  // Perform topological sorting
-  std::vector<nlohmann::json> sorted_json_files =
-    topological_sort(import_graph, path_to_json);
-
-  // Update order of src_ast_json_array
-  src_ast_json_array = sorted_json_files;
-
-  // src_ast_json_array[0] means the .sol file that is being verified and not being imported.
-  src_ast_json = src_ast_json_array[0];
-
-  // The initial part of the nodes in a single AST includes an import information description section
-  // and a version description section.This is followed by all the information that needs to be verified.
-  // Therefore, the rest of the key nodes need to be inserted sequentially thereafter
-  // It also means before the first ContractDefinition node.
-  size_t insert_pos = 0;
-  for (size_t i = 0; i < src_ast_json["nodes"].size(); ++i)
   {
-    if (src_ast_json["nodes"][i]["nodeType"] == "ContractDefinition")
-    {
-      insert_pos = i;
-      break;
-    }
+    "contractKind": "contract",
+    "name": "A",
   }
-
-  for (size_t i = 1; i < src_ast_json_array.size(); ++i)
   {
-    nlohmann::json &imported_part = src_ast_json_array[i];
-    // Traverse nodes in the imported part
-    for (const auto &node : imported_part["nodes"])
-    {
-      if (
-        node["nodeType"] == "ContractDefinition" &&
-        (node["contractKind"] == "contract" ||
-         node["contractKind"] == "interface"))
-      {
-        // Add the node before the first ContractDefinition node
-        // chose to insert it here instead of at the end because splitting a piece of Solidity code(use import)
-        // into multiple files results in the import order of contracts and interfaces in the AST file
-        // being reversed compared to the unsplit version.
-        src_ast_json["nodes"].insert(
-          src_ast_json["nodes"].begin() + insert_pos, node);
-        ++insert_pos; // Adjust the insert position for the next node
-      }
-    }
+    "absolutePath": "contract_import.sol",
+    "id": 56,
+  }
+  {
+    "contractKind": "contract",
+    "name": "B",
   }
 }
 
-std::vector<nlohmann::json> solidity_convertert::topological_sort(
-  std::unordered_map<std::string, std::unordered_set<std::string>> &graph,
-  std::unordered_map<std::string, nlohmann::json> &path_to_json)
+*/
+void solidity_convertert::merge_multi_files()
 {
-  std::unordered_map<std::string, int> in_degree;
-  std::queue<std::string> zero_in_degree_queue;
-  std::vector<nlohmann::json> sorted_files;
-  //Topological sorting function for sorting files according to import relationships
-  // Calculate the in-degree for each node
-  for (const auto &pair : graph)
+  // no imports
+  if (src_ast_json_array.size() <= 1)
   {
-    if (in_degree.find(pair.first) == in_degree.end())
-    {
-      in_degree[pair.first] = 0;
-    }
-    for (const auto &neighbor : pair.second)
-    {
-      if (pair.first != neighbor)
-      {
-        // Ignore the case of importing itself.
-        in_degree[neighbor]++;
-      }
-    }
+    src_ast_json = src_ast_json_array[0];
+    return;
   }
 
-  // Find all the nodes with 0 entry and add them to the queue.
-  for (const auto &pair : in_degree)
+  // reversal
+  //  contract B is A{}; contract A{};
+  // =>
+  //  contract A{}; contract B is A{};
+  std::reverse(src_ast_json_array.begin(), src_ast_json_array.end());
+  std::vector<nlohmann::json> nodes, paths;
+  for (auto &ast_json : src_ast_json_array)
   {
-    if (pair.second == 0)
+    // store path node (SourceUnit)
+    nlohmann::json dump = ast_json;
+    dump.erase("nodes");
+    paths.push_back(dump);
+
+    // remove all the `import` statements
+    auto &_nodes = ast_json["nodes"];
+    for (auto it = _nodes.begin(); it != _nodes.end();)
     {
-      zero_in_degree_queue.push(pair.first);
+      if ((*it)["nodeType"] == "ImportDirective")
+        it = _nodes.erase(it); // erase returns the next valid iterator
+      else
+        ++it;
     }
-  }
-  // Process nodes in the queue
-  while (!zero_in_degree_queue.empty())
-  {
-    std::string node = zero_in_degree_queue.front();
-    zero_in_degree_queue.pop();
-    // add the node's corresponding JSON file to the sorted result
-    sorted_files.push_back(path_to_json[node]);
-    // Update the in-degree of neighbouring nodes and add the new node with in-degree 0 to the queue
-    for (const auto &neighbor : graph[node])
-    {
-      if (node != neighbor)
-      { // Ignore the case of importing itself.
-        in_degree[neighbor]--;
-        if (in_degree[neighbor] == 0)
-        {
-          zero_in_degree_queue.push(neighbor);
-        }
-      }
-    }
+    nodes.push_back(_nodes);
   }
 
-  return sorted_files;
+  src_ast_json = src_ast_json_array[0];
+  auto &_nodes = src_ast_json["nodes"];
+
+  // Insert stripped SourceUnit node at the front
+  _nodes.insert(_nodes.begin(), paths[0]);
+  for (std::size_t i = 1; i < src_ast_json_array.size(); i++)
+  {
+    _nodes.push_back(paths[i]); // first path
+    for (const auto &node : nodes[i])
+      _nodes.push_back(node); // then add each individual node inside the array
+  }
 }
 
 // check if the programs is suitable for verificaiton
@@ -528,6 +473,7 @@ bool solidity_convertert::populate_auxilary_vars()
         return true;
     }
   }
+
   return false;
 }
 
@@ -2282,6 +2228,11 @@ bool solidity_convertert::move_inheritance_to_ctor(
     "@@@ Moving parents' constructor calls to the current constructor");
 
   std::string this_id = ctor_id + "#this";
+  if (context.find_symbol(this_id) == nullptr)
+  {
+    log_error("Failed to find ctor this pointer {}", this_id);
+    return true;
+  }
   exprt this_expr = symbol_expr(*context.find_symbol(this_id));
 
   // queue insert the ctor initializaiton based on the linearizedBaseList
@@ -6811,7 +6762,9 @@ bool solidity_convertert::construct_tuple_assigments(
       return true;
     }
     if (get_tuple_member_call(
-      new_rhs.identifier(), to_struct_type(new_rhs.type()).components().at(i), rop))
+          new_rhs.identifier(),
+          to_struct_type(new_rhs.type()).components().at(i),
+          rop))
       return true;
 
     get_tuple_assignment(lop, rop);
