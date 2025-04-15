@@ -32,3 +32,6 @@ def power(a:int, b:int) -> float:
 
 def ceil(x:float) -> int:
     return 0
+
+def floor(x:float) -> int:
+    return 0

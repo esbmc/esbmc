@@ -58,7 +58,7 @@ bool numpy_call_expr::is_math_function() const
   const std::string &function = function_id_.get_function();
   return (function == "add") || (function == "subtract") ||
          (function == "multiply") || (function == "divide") ||
-         (function == "power") || (function == "ceil");
+         (function == "power") || (function == "ceil") || (function == "floor");
 }
 
 std::string numpy_call_expr::get_dtype() const

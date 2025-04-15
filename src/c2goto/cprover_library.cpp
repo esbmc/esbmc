@@ -95,7 +95,7 @@ const static std::vector<std::string> python_c_models = {
   "fegetround",
   "fesetround",
   "rint",
-  "fesetround"};
+  "fesetround", "floor"};
 
 } // namespace
 

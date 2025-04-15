@@ -10,3 +10,6 @@ result = np.ceil(a) # This call is handled by ceil_array in libm/ceil.c
 assert result[0] == 2.0
 assert result[1] == 3.0
 assert result[2] == -3.0
+
+assert np.floor(2.9) == 2.0
+assert np.floor(-2.1) == -3.0
