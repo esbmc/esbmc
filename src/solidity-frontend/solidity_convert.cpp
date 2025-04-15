@@ -3804,7 +3804,15 @@ bool solidity_convertert::get_expr(
     side_effect_expr_function_callt call;
     const nlohmann::json &callee_expr_json = expr["expression"];
 
-    // * we first do special cases handling
+    // * check if it's a low-level call
+    if (SolidityGrammar::is_address_member_call(callee_expr_json))
+    {
+      log_debug("solidity", "\t\t@@@ got address member call");
+      if (get_expr(callee_expr_json, new_expr))
+        return true;
+      break;
+    }
+
     // * check if it's a solidity built-in function
     if (
       !get_esbmc_builtin_ref(callee_expr_json, new_expr) ||
@@ -4477,6 +4485,7 @@ bool solidity_convertert::get_expr(
     // 3. For case 2, where we only have the address, we need to obtain the object from the mapping
     // For case 1: => this->balance
     // For case 3: => tmp.balance
+    log_status("{}", expr.dump());
     const nlohmann::json &callee_expr_json = expr["expression"];
     const std::string mem_name = expr["memberName"].get<std::string>();
 

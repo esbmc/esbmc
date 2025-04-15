@@ -772,9 +772,6 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
     if (expr["kind"] == "typeConversion")
       return TypeConversionExpression;
     if (
-      expr.contains("expression") && is_address_member_call(expr["expression"]))
-      return AddressMemberCall;
-    if (
       get_type_name_t(expr["typeDescriptions"]) ==
       SolidityGrammar::TypeProperty)
       return TypePropertyExpression;
