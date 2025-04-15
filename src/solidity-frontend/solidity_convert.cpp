@@ -2918,7 +2918,7 @@ bool solidity_convertert::get_statement(
       // seperate the decl and assignment
       for (const auto &it : declgroup.items())
       {
-        if(it.value().is_null()|| it.value().empty())
+        if (it.value().is_null() || it.value().empty())
           continue;
         const nlohmann::json &decl = it.value();
         exprt single_decl;
@@ -2938,8 +2938,8 @@ bool solidity_convertert::get_statement(
 
         code_blockt lhs_block;
         for (auto &decl : decls.operands())
-            lhs_block.copy_to_operands(decl.op0()); // nil_expr;
-        
+          lhs_block.copy_to_operands(decl.op0()); // nil_expr;
+
         //TODO FIXME: stmt might not contains right handside
         construct_tuple_assigments(stmt, lhs_block, tuple_expr);
       }
@@ -6928,13 +6928,14 @@ bool solidity_convertert::get_mapping_key_expr(
 
   // struct Node *
   typet t = pointer_typet(node.type());
+  t.set("#sol_state_var", "1");
 
   symbolt symbol;
   get_default_symbol(symbol, sym.module.as_string(), t, name, id, sym.location);
   symbol.static_lifetime = false;
   symbol.lvalue = true;
-  symbol.file_local = false;
-  symbol.is_extern = true;
+  symbol.file_local = true;
+  symbol.is_extern = false;
 
   // set default value
   // e.g. struct Node *x = NULL;
