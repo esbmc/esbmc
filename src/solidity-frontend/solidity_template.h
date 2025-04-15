@@ -377,6 +377,67 @@ __ESBMC_HIDE:;
 }
 )";
 
+const std::string sol_unit = R"(
+// ether
+uint256_t _ESBMC_wei(uint256_t x)
+{
+__ESBMC_HIDE:;
+  return x;
+}
+uint256_t _ESBMC_gwei(uint256_t x)
+{
+__ESBMC_HIDE:;
+  return x * (uint256_t)1000000000; // 10^9
+}
+uint256_t _ESBMC_szabo(uint256_t x)
+{
+__ESBMC_HIDE:;
+  return x * (uint256_t)1000000000000; // 10^12
+}
+uint256_t _ESBMC_finney(uint256_t x)
+{
+__ESBMC_HIDE:;
+  return x * (uint256_t)1000000000000000; // 10^15
+}
+uint256_t _ESBMC_ether(uint256_t x)
+{
+__ESBMC_HIDE:;
+  return x * (uint256_t)1000000000000000000; // 10^18
+}
+
+// time
+uint256_t _ESBMC_seconds(uint256_t x)
+{
+__ESBMC_HIDE:;
+  return x;
+}
+uint256_t _ESBMC_minutes(uint256_t x)
+{
+__ESBMC_HIDE:;
+  return x * (uint256_t)60;
+}
+uint256_t _ESBMC_hours(uint256_t x)
+{
+__ESBMC_HIDE:;
+  return x * (uint256_t)3600; // 60 * 60
+}
+uint256_t _ESBMC_days(uint256_t x)
+{
+__ESBMC_HIDE:;
+  return x * (uint256_t)86400; // 24 * 3600
+}
+uint256_t _ESBMC_weeks(uint256_t x)
+{
+__ESBMC_HIDE:;
+  return x * (uint256_t)604800; // 7 * 86400
+}
+uint256_t _ESBMC_years(uint256_t x)
+{
+__ESBMC_HIDE:;
+  return x * (uint256_t)31536000; // 365 * 86400
+} 
+)";
+
 /// external library
 // itoa
 
@@ -692,7 +753,7 @@ const std::string sol_ext_library =
 
 const std::string sol_c_library = "extern \"C\" {" + sol_typedef + sol_vars +
                                   sol_funcs + sol_mapping + sol_array +
-                                  sol_ext_library + "}";
+                                  sol_unit + sol_ext_library + "}";
 
 // C++
 const std::string sol_cpp_string = R"(
@@ -715,11 +776,7 @@ __ESBMC_HIDE:;
 }
 )";
 
-const std::string sol_signature = R"(
-//TODO
-)";
-
-const std::string sol_cpp_library = sol_cpp_string + sol_signature;
+const std::string sol_cpp_library = sol_cpp_string;
 
 // combination
 const std::string sol_library =
