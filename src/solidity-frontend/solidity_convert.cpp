@@ -6774,7 +6774,6 @@ bool solidity_convertert::construct_tuple_assigments(
     //    func(); // this initializes the tuple instance
     //    x = tuple.mem0;
     //    y = tuple.mem1;
-    exprt new_rhs;
     if (get_tuple_function_ref(expr["rightHandSide"]["expression"], new_rhs))
       return true;
 
@@ -6806,8 +6805,13 @@ bool solidity_convertert::construct_tuple_assigments(
     assigned_symbol.insert(lop);
 
     exprt rop;
+    if (!new_rhs.type().is_struct())
+    {
+      log_error("expecting struct type, got {}", new_rhs);
+      return true;
+    }
     if (get_tuple_member_call(
-          rhs.identifier(), to_struct_type(rhs.type()).components().at(i), rop))
+      new_rhs.identifier(), to_struct_type(new_rhs.type()).components().at(i), rop))
       return true;
 
     get_tuple_assignment(lop, rop);
