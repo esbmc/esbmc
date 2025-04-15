@@ -68,7 +68,7 @@ protected:
     std::unordered_map<std::string, std::unordered_set<std::string>> &graph,
     std::unordered_map<std::string, nlohmann::json> &path_to_json);
   void contract_precheck();
-  void populate_auxilary_vars();
+  bool populate_auxilary_vars();
   bool
   populate_function_signature(nlohmann::json &json, const std::string &cname);
   bool populate_low_level_functions(const std::string &cname);

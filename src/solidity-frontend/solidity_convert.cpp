@@ -86,7 +86,8 @@ bool solidity_convertert::convert()
   nlohmann::json &nodes = src_ast_json["nodes"];
 
   // store auxiliary info
-  populate_auxilary_vars();
+  if (populate_auxilary_vars())
+    return true;
 
   // for coverage and trace simplification: update include_files
   auto add_unique = [](const std::string &file)
@@ -357,7 +358,7 @@ void solidity_convertert::contract_precheck()
   }
 }
 
-void solidity_convertert::populate_auxilary_vars()
+bool solidity_convertert::populate_auxilary_vars()
 {
   nlohmann::json &nodes = src_ast_json["nodes"];
 
@@ -399,7 +400,8 @@ void solidity_convertert::populate_auxilary_vars()
         int _id = id.value().get<int>();
         linearizedBaseList[c_name].push_back(_id);
       }
-      assert(!linearizedBaseList[c_name].empty());
+      if (linearizedBaseList[c_name].empty())
+        return true;
 
       // auto _json = (*itr)["nodes"];
       // functionSignature[c_name].insert(c_name); // constructor
@@ -521,8 +523,12 @@ void solidity_convertert::populate_auxilary_vars()
     if (
       c_node.contains("nodeType") &&
       c_node["nodeType"] == "ContractDefinition" && c_node.contains("name"))
-      populate_function_signature(c_node, c_node["name"]);
+    {
+      if (populate_function_signature(c_node, c_node["name"]))
+        return true;
+    }
   }
+  return false;
 }
 
 bool solidity_convertert::populate_low_level_functions(const std::string &cname)
@@ -2712,7 +2718,6 @@ bool solidity_convertert::get_function_params(
   assert(current_functionName != ""); // we are converting a function param now
   assert(current_functionDecl);
   get_local_var_decl_name(pd, cname, name, id);
-
   // 2b. handle Omitted Names in Function Definitions
   if (name == "")
   {
@@ -4732,7 +4737,7 @@ void solidity_convertert::get_current_contract_name(
   {
     log_debug(
       "solidity",
-      "failed to get current contract nam, trying to "
+      "failed to get current contract name, trying to "
       "find id {}, target json is \n{}\n",
       std::to_string(ast_node["id"].get<int>()),
       ast_node.dump());
@@ -6260,7 +6265,7 @@ bool solidity_convertert::get_type_description(
     std::string token;
     std::string _typeString = typeString;
 
-    // extract the seconde string
+    // extract the second string
     while (cnt >= 0)
     {
       if (_typeString.find(delimiter) == std::string::npos)
@@ -6275,25 +6280,6 @@ bool solidity_convertert::get_type_description(
     }
 
     const std::string id = prefix + "struct " + token;
-
-    if (context.find_symbol(id) == nullptr)
-    {
-      // if struct is not parsed, handle the struct first
-      // extract the decl ref id
-      std::string new_typeIdentifier = typeIdentifier;
-      new_typeIdentifier.replace(
-        new_typeIdentifier.find("t_struct$_"), sizeof("t_struct$_") - 1, "");
-
-      auto pos_1 = new_typeIdentifier.find("$");
-      auto pos_2 = new_typeIdentifier.find("_storage");
-
-      const int ref_id = stoi(new_typeIdentifier.substr(pos_1 + 1, pos_2));
-      const nlohmann::json &struct_base = find_decl_ref(src_ast_json, ref_id);
-
-      if (get_struct_class(struct_base))
-        return true;
-    }
-
     new_type = symbol_typet(id);
     new_type.set("#sol_type", "STRUCT");
     break;
@@ -6388,11 +6374,12 @@ bool solidity_convertert::get_func_decl_ref_type(
     const std::string old_functionName = current_functionName;
 
     // need in get_function_params()
+    assert(decl.contains("name"));
     current_functionName = decl["name"].get<std::string>();
     current_functionDecl = &decl;
 
     std::string current_contractName;
-    get_current_contract_name(*current_functionDecl, current_contractName);
+    get_current_contract_name(decl, current_contractName);
 
     const nlohmann::json &rtn_type = decl["returnParameters"];
 
@@ -7466,8 +7453,10 @@ void solidity_convertert::get_local_var_decl_name(
   std::string &name,
   std::string &id)
 {
-  name = ast_node["name"].get<std::string>();
   assert(ast_node.contains("id"));
+  assert(ast_node.contains("name"));
+
+  name = ast_node["name"].get<std::string>();
   if (current_functionDecl && !cname.empty() && !current_functionName.empty())
   {
     // converting local variable inside a function
