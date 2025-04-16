@@ -404,7 +404,7 @@ private:
     const expr2tc &offset,
     const type2tc &type,
     const guardt &guard,
-    const expr2tc &deref = gen_false_expr());
+    const expr2tc &deref = expr2tc());
   void valid_check(const expr2tc &expr, const guardt &guard, modet mode);
   std::vector<expr2tc> extract_bytes(
     const expr2tc &object,

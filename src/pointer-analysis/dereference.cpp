@@ -747,9 +747,9 @@ expr2tc dereferencet::build_reference_to(
   }
   else if (is_array_type(value)) // Encode some access bounds checks.
   {
-    expr2tc tmp_expr = to_pointer_type(deref_expr->type).can_carry_provenance()
-                         ? deref_expr
-                         : gen_false_expr();
+    bool can_carry = is_pointer_type(deref_expr) &&
+                     to_pointer_type(deref_expr->type).can_carry_provenance();
+    expr2tc tmp_expr = can_carry ? deref_expr : expr2tc();
     bounds_check(value, final_offset, type, tmp_guard, tmp_expr);
   }
   else
@@ -2159,7 +2159,7 @@ void dereferencet::bounds_check(
   assert(is_array_type(expr));
   const array_type2t arr_type = to_array_type(expr->type);
 
-  if (config.ansi_c.cheri && !is_false(deref))
+  if (config.ansi_c.cheri && !is_nil_expr(deref))
   {
     expr2tc addr = typecast2tc(ptraddr_type2(), deref);
     expr2tc top = capability_top2tc(deref);
