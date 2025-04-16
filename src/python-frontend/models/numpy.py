@@ -36,5 +36,8 @@ def ceil(x:float) -> int:
 def floor(x:float) -> int:
     return 0
 
-def fabs(x:float) -> int:
-    return 0
+def fabs(x:float) -> float:
+    return 1.0
+
+def sin(x:float) -> float:
+    return 0.2

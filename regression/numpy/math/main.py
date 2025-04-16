@@ -18,3 +18,6 @@ assert np.fabs(-2.1) == 2.1
 assert np.fabs(2.1) == 2.1
 assert np.fabs(-3) == 3 
 assert np.fabs(3) == 3
+
+# pi = 3.141592653589793
+# assert np.sin(1.57079633) == 1.0

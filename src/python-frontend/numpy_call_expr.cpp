@@ -59,7 +59,7 @@ bool numpy_call_expr::is_math_function() const
   return (function == "add") || (function == "subtract") ||
          (function == "multiply") || (function == "divide") ||
          (function == "power") || (function == "ceil") ||
-         (function == "floor") || (function == "fabs");
+         (function == "floor") || (function == "fabs") || (function == "sin");
 }
 
 std::string numpy_call_expr::get_dtype() const
