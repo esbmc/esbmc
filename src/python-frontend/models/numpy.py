@@ -41,3 +41,12 @@ def fabs(x:float) -> float:
 
 def sin(x:float) -> float:
     return 0.2
+
+def cos(x:float) -> float:
+    return 0.2
+
+def exp(x:float) -> float:
+    return 0.2
+
+def fmod(x:float) -> float:
+    return 0.2

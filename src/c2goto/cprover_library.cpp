@@ -97,7 +97,14 @@ const static std::vector<std::string> python_c_models = {
   "rint",
   "fesetround",
   "floor",
-  "fabs", "sin"};
+  "fabs",
+  "sin",
+  "cos",
+  "exp",
+  "expm1",
+  "expm1_taylor",
+  "fmod",
+  "frexp"};
 
 } // namespace
 
