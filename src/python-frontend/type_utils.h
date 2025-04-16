@@ -76,7 +76,8 @@ public:
 
   static bool is_c_model_func(const std::string &func_name)
   {
-    return (func_name == "ceil") || (func_name == "floor");
+    return (func_name == "ceil") || (func_name == "floor") ||
+           (func_name == "fabs");
   }
 
 private:

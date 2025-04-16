@@ -13,3 +13,8 @@ assert result[2] == -3.0
 
 assert np.floor(2.9) == 2.0
 assert np.floor(-2.1) == -3.0
+
+assert np.fabs(-2.1) == 2.1
+assert np.fabs(2.1) == 2.1
+assert np.fabs(-3) == 3 
+assert np.fabs(3) == 3
