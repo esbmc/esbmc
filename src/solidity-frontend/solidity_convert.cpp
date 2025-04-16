@@ -90,7 +90,8 @@ bool solidity_convertert::convert()
     return true;
 
   // for coverage and trace simplification: update include_files
-  auto add_unique = [](const std::string &file) {
+  auto add_unique = [](const std::string &file)
+  {
     if (
       std::find(
         config.ansi_c.include_files.begin(),
@@ -543,8 +544,9 @@ bool solidity_convertert::populate_function_signature(
       is_payable = func_node["stateMutability"] == "payable";
       is_inherit = func_node.contains("is_inherited");
 
-      funcSignatures[cname].push_back(solidity_convertert::func_sig(
-        func_name, func_id, visibility, type, is_payable, is_inherit));
+      funcSignatures[cname].push_back(
+        solidity_convertert::func_sig(
+          func_name, func_id, visibility, type, is_payable, is_inherit));
     }
   }
 
@@ -552,9 +554,8 @@ bool solidity_convertert::populate_function_signature(
   bool hasConstructor = std::any_of(
     funcSignatures[cname].begin(),
     funcSignatures[cname].end(),
-    [&cname](const solidity_convertert::func_sig &sig) {
-      return sig.name == cname;
-    });
+    [&cname](const solidity_convertert::func_sig &sig)
+    { return sig.name == cname; });
   if (!hasConstructor)
   {
     func_name = cname;
@@ -564,8 +565,9 @@ bool solidity_convertert::populate_function_signature(
     type.return_type() = empty_typet();
     type.return_type().set("cpp_type", "void");
     is_inherit = false;
-    funcSignatures[cname].push_back(solidity_convertert::func_sig(
-      func_name, func_id, visibility, type, is_payable, is_inherit));
+    funcSignatures[cname].push_back(
+      solidity_convertert::func_sig(
+        func_name, func_id, visibility, type, is_payable, is_inherit));
   }
 
   return false;
@@ -3781,7 +3783,6 @@ bool solidity_convertert::get_expr(
         if (get_expr(callee_expr_json, expr["options"], new_expr))
           return true;
       }
-      break;
     }
     else
     {
@@ -3791,11 +3792,25 @@ bool solidity_convertert::get_expr(
           return true;
 
         break;
-      };
-      log_error("Unsupported CallOptionsExprClass");
+      }
+      else
+      {
+        if (!expr.contains("options"))
+        {
+          log_error("Unsupported CallOptionsExprClass");
+          return true;
+        }
+        // e.g. target.deposit{value: msg.value}();
+        exprt memcall;
+        // target.deposit
+        if (get_expr(callee_expr_json, expr["options"], memcall))
+          return true;
 
-      return true;
+        new_expr = memcall;
+      }
     }
+
+    break;
   }
   case SolidityGrammar::ExpressionT::CallExprClass:
   {
@@ -3870,156 +3885,8 @@ bool solidity_convertert::get_expr(
       callee_expr_json.contains("nodeType") &&
       callee_expr_json["nodeType"] == "MemberAccess")
     {
-      log_debug("solidity", "\t@@@ got member function call");
-      // ContractMemberCall
-      // - x.setAddress();
-      // - x.address();
-      // - x.val(); ==> property
-      // The later one is quite special, as in Solidity variables behave like functions from the perspective of other contracts.
-      // e.g. b._addr is not an address, but a function that returns an address.
-
-      const nlohmann::json &caller_expr_json = callee_expr_json["expression"];
-      assert(callee_expr_json.contains("referencedDeclaration"));
-      assert(caller_expr_json.contains("referencedDeclaration"));
-
-      const int contract_var_id =
-        caller_expr_json["referencedDeclaration"].get<int>();
-      assert(!current_baseContractName.empty());
-      const nlohmann::json &base_expr_json =
-        find_decl_ref(src_ast_json["nodes"], contract_var_id); // contract
-
-      // contract C{ Base x; x.call();} where base.contractname != current_ContractName;
-      // therefore, we need to extract the based contract name
-      exprt base;
-      std::string base_cname = "";
-      if (base_expr_json.empty())
-      {
-        // assume it's 'this'
-        if (contract_var_id < 0 && caller_expr_json["name"] == "this")
-        {
-          exprt this_expr;
-          assert(current_functionDecl);
-          if (get_func_decl_this_ref(*current_functionDecl, this_expr))
-            return true;
-          base = this_expr;
-
-          assert(!current_contractName.empty());
-          base_cname = current_contractName;
-        }
-        else
-        {
-          log_error("Unexpect base expression");
-          return true;
-        }
-      }
-      else
-      {
-        if (get_var_decl_ref(base_expr_json, true, base))
-          return true;
-        base_cname = base.type().get("#sol_contract").as_string();
-        assert(!base_cname.empty());
-      }
-
-      const int member_id =
-        callee_expr_json["referencedDeclaration"].get<int>();
-      std::string old = current_baseContractName;
-      current_baseContractName = base_cname;
-      const nlohmann::json &member_decl_ref =
-        find_decl_ref(src_ast_json["nodes"], member_id); // methods or variables
-      current_baseContractName = old;
-
-      if (member_decl_ref.empty())
-      {
-        log_error("cannot find member json node reference");
+      if (get_expr(callee_expr_json, literal_type, new_expr))
         return true;
-      }
-
-      auto elem_type =
-        SolidityGrammar::get_contract_body_element_t(member_decl_ref);
-      log_debug(
-        "solidity",
-        "\t\t@@@ got contrant body element = {}",
-        SolidityGrammar::contract_body_element_to_str(elem_type));
-      switch (elem_type)
-      {
-      case SolidityGrammar::VarDecl:
-      {
-        // e.g. x.data()
-        // ==> x.data, where data is a state variable in the contract
-        // in Solidity the x.data() is read-only
-        exprt comp;
-        if (get_var_decl_ref(member_decl_ref, true, comp))
-          return true;
-        const irep_idt comp_name =
-          comp.name().empty() ? comp.component_name() : comp.name();
-
-        if (current_contractName == base_cname)
-          // this.member();
-          // comp can be either symbol_expr or member_expr
-          new_expr = member_exprt(base, comp_name, comp.type());
-        else if (!is_bound)
-          // x.member(); ==> nondet();
-          get_nondet_expr(comp.type(), new_expr);
-        else
-        {
-          exprt dump;
-          if (comp.name().empty())
-            // decompose member_exprt
-            dump = comp.op0();
-          if (get_high_level_member_access(expr, base, dump, false, new_expr))
-            new_expr = member_exprt(base, comp_name, comp.type());
-        }
-
-        break;
-      }
-      case SolidityGrammar::FunctionDef:
-      {
-        // e.g. x.func()
-        // x    --> base
-        // func --> comp
-        exprt comp;
-        if (get_func_decl_ref(member_decl_ref, comp))
-          return true;
-        exprt mem_access = member_exprt(base, comp.identifier(), comp.type());
-        // obtain the type of return value
-        code_typet t;
-        if (get_type_description(
-              member_decl_ref["returnParameters"], t.return_type()))
-          return true;
-        if (get_non_library_function_call(
-              mem_access, t, member_decl_ref, expr, call))
-          return true;
-
-        if (current_contractName == base_cname)
-          // this.init(); we know the implementation thus cannot model it as unbound_harness
-          // note that here is comp.identifier not comp.name
-          new_expr = call;
-
-        else if (!is_bound)
-        {
-          if (get_unbound_expr(expr, current_contractName, new_expr))
-            return true;
-
-          typet t = to_code_type(comp.type()).return_type();
-          get_nondet_expr(t, new_expr);
-        }
-        else
-        {
-          if (get_high_level_member_access(expr, base, comp, true, new_expr))
-            new_expr = call;
-        }
-
-        break;
-      }
-      default:
-      {
-        log_error(
-          "Unexpected Member Access Element Type, Got {}",
-          SolidityGrammar::contract_body_element_to_str(elem_type));
-        return true;
-      }
-      }
-
       break;
     }
 
@@ -4116,6 +3983,162 @@ bool solidity_convertert::get_expr(
       return true;
 
     new_expr = call;
+    break;
+  }
+  case SolidityGrammar::ExpressionT::ContractMemberCall:
+  {
+    // ContractMemberCall
+    // - x.setAddress();
+    // - x.address();
+    // - x.val(); ==> property
+    // The later one is quite special, as in Solidity variables behave like functions from the perspective of other contracts.
+    // e.g. b._addr is not an address, but a function that returns an address.
+    auto callee_expr_json = expr;
+    const nlohmann::json &caller_expr_json = callee_expr_json["expression"];
+    assert(callee_expr_json.contains("referencedDeclaration"));
+    assert(caller_expr_json.contains("referencedDeclaration"));
+
+    side_effect_expr_function_callt call;
+    const int contract_var_id =
+      caller_expr_json["referencedDeclaration"].get<int>();
+    assert(!current_baseContractName.empty());
+    const nlohmann::json &base_expr_json =
+      find_decl_ref(src_ast_json["nodes"], contract_var_id); // contract
+
+    // contract C{ Base x; x.call();} where base.contractname != current_ContractName;
+    // therefore, we need to extract the based contract name
+    exprt base;
+    std::string base_cname = "";
+    if (base_expr_json.empty())
+    {
+      // assume it's 'this'
+      if (contract_var_id < 0 && caller_expr_json["name"] == "this")
+      {
+        exprt this_expr;
+        assert(current_functionDecl);
+        if (get_func_decl_this_ref(*current_functionDecl, this_expr))
+          return true;
+        base = this_expr;
+
+        assert(!current_contractName.empty());
+        base_cname = current_contractName;
+      }
+      else
+      {
+        log_error("Unexpect base expression");
+        return true;
+      }
+    }
+    else
+    {
+      if (get_var_decl_ref(base_expr_json, true, base))
+        return true;
+      base_cname = base.type().get("#sol_contract").as_string();
+      assert(!base_cname.empty());
+    }
+
+    const int member_id = callee_expr_json["referencedDeclaration"].get<int>();
+    std::string old = current_baseContractName;
+    current_baseContractName = base_cname;
+    const nlohmann::json &member_decl_ref =
+      find_decl_ref(src_ast_json["nodes"], member_id); // methods or variables
+    current_baseContractName = old;
+
+    if (member_decl_ref.empty())
+    {
+      log_error("cannot find member json node reference");
+      return true;
+    }
+
+    auto elem_type =
+      SolidityGrammar::get_contract_body_element_t(member_decl_ref);
+    log_debug(
+      "solidity",
+      "\t\t@@@ got contrant body element = {}",
+      SolidityGrammar::contract_body_element_to_str(elem_type));
+    switch (elem_type)
+    {
+    case SolidityGrammar::VarDecl:
+    {
+      // e.g. x.data()
+      // ==> x.data, where data is a state variable in the contract
+      // in Solidity the x.data() is read-only
+      exprt comp;
+      if (get_var_decl_ref(member_decl_ref, true, comp))
+        return true;
+      const irep_idt comp_name =
+        comp.name().empty() ? comp.component_name() : comp.name();
+
+      if (current_contractName == base_cname)
+        // this.member();
+        // comp can be either symbol_expr or member_expr
+        new_expr = member_exprt(base, comp_name, comp.type());
+      else if (!is_bound)
+        // x.member(); ==> nondet();
+        get_nondet_expr(comp.type(), new_expr);
+      else
+      {
+        exprt dump;
+        if (comp.name().empty())
+          // decompose member_exprt
+          dump = comp.op0();
+        auto _mem_call = member_exprt(base, comp_name, comp.type());
+        if (get_high_level_member_access(
+              expr, base, dump, _mem_call, false, new_expr))
+          return true;
+      }
+
+      break;
+    }
+    case SolidityGrammar::FunctionDef:
+    {
+      // e.g. x.func()
+      // x    --> base
+      // func --> comp
+      exprt comp;
+      if (get_func_decl_ref(member_decl_ref, comp))
+        return true;
+      exprt mem_access = member_exprt(base, comp.identifier(), comp.type());
+      // obtain the type of return value
+      code_typet t;
+      if (get_type_description(
+            member_decl_ref["returnParameters"], t.return_type()))
+        return true;
+      if (get_non_library_function_call(
+            mem_access, t, member_decl_ref, expr, call))
+        return true;
+
+      if (current_contractName == base_cname)
+        // this.init(); we know the implementation thus cannot model it as unbound_harness
+        // note that here is comp.identifier not comp.name
+        new_expr = call;
+
+      else if (!is_bound)
+      {
+        if (get_unbound_expr(expr, current_contractName, new_expr))
+          return true;
+
+        typet t = to_code_type(comp.type()).return_type();
+        get_nondet_expr(t, new_expr);
+      }
+      else
+      {
+        if (get_high_level_member_access(
+              expr, literal_type, base, comp, call, true, new_expr))
+          return true;
+      }
+
+      break;
+    }
+    default:
+    {
+      log_error(
+        "Unexpected Member Access Element Type, Got {}",
+        SolidityGrammar::contract_body_element_to_str(elem_type));
+      return true;
+    }
+    }
+
     break;
   }
   case SolidityGrammar::ExpressionT::ImplicitCastExprClass:
@@ -4483,7 +4506,6 @@ bool solidity_convertert::get_expr(
     // 3. For case 2, where we only have the address, we need to obtain the object from the mapping
     // For case 1: => this->balance
     // For case 3: => tmp.balance
-    log_status("{}", expr.dump());
     const nlohmann::json &callee_expr_json = expr["expression"];
     const std::string mem_name = expr["memberName"].get<std::string>();
 
@@ -8975,14 +8997,16 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
   dest = code_blockt();
 
   // call designated "initialization" functions
-  context.foreach_operand_in_order([&dest](const symbolt &s) {
-    if (s.type.initialization() && s.type.is_code())
+  context.foreach_operand_in_order(
+    [&dest](const symbolt &s)
     {
-      code_function_callt function_call;
-      function_call.function() = symbol_expr(s);
-      dest.move_to_operands(function_call);
-    }
-  });
+      if (s.type.initialization() && s.type.is_code())
+      {
+        code_function_callt function_call;
+        function_call.function() = symbol_expr(s);
+        dest.move_to_operands(function_call);
+      }
+    });
 }
 
 void solidity_convertert::get_aux_var(
@@ -9984,7 +10008,8 @@ bool solidity_convertert::has_callable_func(const std::string &cname)
   return std::any_of(
     funcSignatures[cname].begin(),
     funcSignatures[cname].end(),
-    [&cname](const solidity_convertert::func_sig &sig) {
+    [&cname](const solidity_convertert::func_sig &sig)
+    {
       return sig.name != cname &&
              (sig.visibility == "public" || sig.visibility == "external");
     });
@@ -9998,9 +10023,8 @@ bool solidity_convertert::has_target_function(
   return std::any_of(
     funcSignatures[cname].begin(),
     funcSignatures[cname].end(),
-    [&func_name](const solidity_convertert::func_sig &sig) {
-      return sig.name == func_name;
-    });
+    [&func_name](const solidity_convertert::func_sig &sig)
+    { return sig.name == func_name; });
 }
 
 solidity_convertert::func_sig solidity_convertert::get_target_function(
@@ -10021,9 +10045,8 @@ solidity_convertert::func_sig solidity_convertert::get_target_function(
   auto func_it = std::find_if(
     functions.begin(),
     functions.end(),
-    [&func_name](const solidity_convertert::func_sig &sig) {
-      return sig.name == func_name;
-    });
+    [&func_name](const solidity_convertert::func_sig &sig)
+    { return sig.name == func_name; });
 
   // If function is found, return it; otherwise, return an empty func_sig
   if (func_it != functions.end())
@@ -10040,6 +10063,18 @@ solidity_convertert::func_sig solidity_convertert::get_target_function(
       false,
       false); // Return an empty func_sig if not found
   }
+}
+
+bool solidity_convertert::get_high_level_member_access(
+  const nlohmann::json &expr,
+  const exprt &base,
+  const exprt &member,
+  const exprt &_mem_call,
+  const bool is_func_call,
+  exprt &new_expr)
+{
+  return get_high_level_member_access(
+    expr, empty_json, base, member, _mem_call, is_func_call, new_expr);
 }
 
 /** 
@@ -10063,6 +10098,7 @@ solidity_convertert::func_sig solidity_convertert::get_target_function(
 
   the auxilidary tmp var will not be created if the member_type is void
   @expr: the whole member access expression json
+  @options: call with options
   @is_func_call: true if it's a function member access; false state variable access
   return true: we fail to generate the high_level_member_access bound harness
                however, this should not be treated as an erorr.
@@ -10070,12 +10106,15 @@ solidity_convertert::func_sig solidity_convertert::get_target_function(
 */
 bool solidity_convertert::get_high_level_member_access(
   const nlohmann::json &expr,
+  const nlohmann::json &options,
   const exprt &base,
   const exprt &member,
+  const exprt &_mem_call,
   const bool is_func_call,
   exprt &new_expr)
 {
   log_debug("solidity", "Getting high-level member access");
+  new_expr = _mem_call;
 
   // get 'Base'
   std::string _cname;
@@ -10087,11 +10126,50 @@ bool solidity_convertert::get_high_level_member_access(
   }
   if (get_base_contract_name(base, _cname))
     return true;
+
+  locationt l;
+  get_location_from_node(expr, l);
   std::unordered_set<std::string> cname_set = inheritanceMap[_cname];
   assert(!cname_set.empty());
 
+  exprt balance;
+  bool is_call_w_options = is_func_call && options.is_array();
+  if (is_call_w_options)
+  {
+    // this can be value, gas ...
+    // For now, we only consider value
+    nlohmann::json literal_type;
+    literal_type["typeDescriptions"] = {
+      {"typeIdentifier", "t_uint256"}, {"typeString", "uint256"}};
+    if (get_expr(options[0], literal_type, balance))
+      return true;
+  }
+
   if (cname_set.size() == 1)
-    return true; // since it has only one possible option, no need to futher binding
+  {
+    if (is_call_w_options)
+    {
+      exprt block;
+      exprt dump = _mem_call;
+      convert_expression_to_code(dump);
+      if (model_transaction(expr, base, member, _mem_call, l, block))
+      {
+        log_error("failed to model the transaction property changes");
+        return true;
+      }
+      for (auto op : block.operands())
+      {
+        if (current_functionDecl)
+          move_to_back_block(op);
+        else
+          move_to_initializer(op);
+      }
+      new_expr = code_skipt();
+      return false;
+    }
+
+    return false; // since it has only one possible option, no need to futher binding
+  }
 
   if (member.type().get("#sol_type") == "TUPLE_RETURNS")
   {
@@ -10129,9 +10207,6 @@ bool solidity_convertert::get_high_level_member_access(
     tmp = symbol_expr(added_symbol);
     move_to_front_block(decl);
   }
-
-  locationt l;
-  get_location_from_node(expr, l);
 
   // rhs
   // @str: contract name
@@ -10201,8 +10276,19 @@ bool solidity_convertert::get_high_level_member_access(
       _assign.copy_to_operands(tmp, memcall);
       rhs = _assign;
     }
-
     convert_expression_to_code(rhs);
+
+    if (is_call_w_options)
+    {
+      exprt dump;
+      if (model_transaction(expr, base, member, rhs, l, dump))
+      {
+        log_error("failed to model the transaction property changes");
+        return true;
+      }
+      rhs = dump;
+    }
+
     codet if_expr("ifthenelse");
     if_expr.copy_to_operands(_cmp_cname, rhs);
     if_expr.location() = l;
@@ -10555,6 +10641,137 @@ bool solidity_convertert::get_call_definition(
   return false;
 }
 
+/** e.g. x = target.deposit{value: msg.value}()
+ * @expr: member_call json
+ * @base: target
+ * @value: msg.value
+ * @mem_call: target.deposit()
+ * @block: returns
+*/
+bool solidity_convertert::model_transaction(
+  const nlohmann::json &expr,
+  const exprt &base,
+  const exprt &value,
+  const exprt &mem_call,
+  const locationt &loc,
+  exprt &block)
+{
+  log_debug("solidity", "modelling the transaction property changes");
+  /*
+  old_sender = msg.sender
+  old_value = msg.value
+  msg.sender = instance.$address
+  msg.value = instance.$balance
+  instance.$balance -= value
+  (call to payable func)
+  msg.sender = old_sender;
+  msg.value = old_value
+  */
+  block = code_blockt();
+  std::string debug_modulename = get_modulename_from_path(absolute_path);
+  std::string cname;
+
+  typet addr_t = unsignedbv_typet(160);
+  addr_t.set("#sol_type", "ADDRESS_PAYABLE");
+  typet val_t = unsignedbv_typet(256);
+
+  exprt msg_sender = symbol_expr(*context.find_symbol("c:@msg_sender"));
+  exprt msg_value = symbol_expr(*context.find_symbol("c:@msg_value"));
+  exprt this_expr;
+
+  if (current_functionDecl)
+  {
+    if (get_func_decl_this_ref(*current_functionDecl, this_expr))
+      return true;
+  }
+  else
+  {
+    get_current_contract_name(expr, cname);
+    if (cname.empty())
+      return true;
+    const auto ctor_json = find_constructor_ref(cname);
+    if (get_func_decl_this_ref(ctor_json, this_expr))
+      return true;
+  }
+  exprt this_address = member_exprt(this_expr, "$address", addr_t);
+  exprt this_balance = member_exprt(this_expr, "$balance", val_t);
+
+  typet _addr_t = unsignedbv_typet(160);
+  _addr_t.set("#sol_type", "ADDRESS");
+  symbolt old_sender;
+  get_default_symbol(
+    old_sender,
+    debug_modulename,
+    _addr_t,
+    "old_sender",
+    "sol:@old_sender#" + std::to_string(aux_counter++),
+    loc);
+  symbolt &added_old_sender = *move_symbol_to_context(old_sender);
+  code_declt old_sender_decl(symbol_expr(added_old_sender));
+  added_old_sender.value = msg_sender;
+  old_sender_decl.operands().push_back(msg_sender);
+  block.move_to_operands(old_sender_decl);
+
+  symbolt old_value;
+  get_default_symbol(
+    old_value,
+    debug_modulename,
+    unsignedbv_typet(256),
+    "old_value",
+    "sol:@old_value#" + std::to_string(aux_counter++),
+    loc);
+  symbolt &added_old_value = *move_symbol_to_context(old_value);
+  code_declt old_val_decl(symbol_expr(added_old_value));
+  added_old_value.value = msg_value;
+  old_val_decl.operands().push_back(msg_value);
+  block.move_to_operands(old_val_decl);
+
+  // msg_value = _val;
+  exprt assign_val = side_effect_exprt("assign", value.type());
+  assign_val.copy_to_operands(msg_value, value);
+  convert_expression_to_code(assign_val);
+  block.move_to_operands(assign_val);
+
+  // msg_sender = this.$address;
+  exprt assign_sender = side_effect_exprt("assign", addr_t);
+  assign_sender.copy_to_operands(msg_sender, this_address);
+  convert_expression_to_code(assign_sender);
+  block.move_to_operands(assign_sender);
+
+  // this.balance -= _val;
+  exprt sub_assign = side_effect_exprt("assign-", val_t);
+  sub_assign.copy_to_operands(this_balance, value);
+  convert_expression_to_code(sub_assign);
+  block.move_to_operands(sub_assign);
+
+  // function calls
+  assert(mem_call.is_code());
+  block.copy_to_operands(mem_call);
+
+  // base.balance += _val;
+  exprt target_balance = member_exprt(base, "$balance", val_t);
+  exprt add_assign = side_effect_exprt("assign+", val_t);
+  add_assign.copy_to_operands(target_balance, value);
+  convert_expression_to_code(sub_assign);
+  block.move_to_operands(add_assign);
+
+  // msg_value = old_value;
+  exprt assign_val_restore = side_effect_exprt("assign", value.type());
+  assign_val_restore.copy_to_operands(msg_value, symbol_expr(added_old_value));
+  convert_expression_to_code(assign_val_restore);
+  block.move_to_operands(assign_val_restore);
+
+  // msg_sender = old_sender;
+  exprt assign_sender_restore = side_effect_exprt("assign", addr_t);
+  assign_sender_restore.copy_to_operands(
+    msg_sender, symbol_expr(added_old_sender));
+  convert_expression_to_code(assign_sender_restore);
+  block.move_to_operands(assign_sender_restore);
+
+  convert_expression_to_code(block);
+  return false;
+}
+
 // `call(address _addr, uint _val)`
 bool solidity_convertert::get_call_value_definition(
   const std::string &cname,
@@ -10655,7 +10872,7 @@ bool solidity_convertert::get_call_value_definition(
     debug_modulename,
     unsignedbv_typet(256),
     "old_value",
-    "sol:@C@" + cname + "@F@old_value#" + std::to_string(aux_counter++),
+    "sol:@C@" + cname + "@F@call@old_value#" + std::to_string(aux_counter++),
     locationt());
   symbolt &added_old_value = *move_symbol_to_context(old_value);
   code_declt old_val_decl(symbol_expr(added_old_value));
@@ -10672,7 +10889,7 @@ bool solidity_convertert::get_call_value_definition(
     debug_modulename,
     _addr_t,
     "old_sender",
-    "sol:@C@" + cname + "@F@old_sender#" + std::to_string(aux_counter++),
+    "sol:@C@" + cname + "@F@call@old_sender#" + std::to_string(aux_counter++),
     locationt());
   symbolt &added_old_sender = *move_symbol_to_context(old_sender);
   code_declt old_sender_decl(symbol_expr(added_old_sender));

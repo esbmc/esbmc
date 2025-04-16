@@ -436,8 +436,17 @@ protected:
   bool get_this_object(const exprt &func, exprt &this_object);
   bool get_high_level_member_access(
     const nlohmann::json &expr,
+    const nlohmann::json &literal_type,
     const exprt &base,
     const exprt &member,
+    const exprt &_mem_call,
+    const bool is_func_call,
+    exprt &new_expr);
+  bool get_high_level_member_access(
+    const nlohmann::json &expr,
+    const exprt &base,
+    const exprt &member,
+    const exprt &_mem_call,
     const bool is_func_call,
     exprt &new_expr);
   bool get_low_level_member_accsss(
@@ -453,6 +462,13 @@ protected:
   get_target_function(const std::string &cname, const std::string &func_name);
   bool get_call_definition(const std::string &cname, exprt &new_expr);
   bool get_call_value_definition(const std::string &cname, exprt &new_expr);
+  bool model_transaction(
+    const nlohmann::json &expr,
+    const exprt &base,
+    const exprt &value,
+    const exprt &mem_call,
+    const locationt &loc,
+    exprt &block);
 
   bool get_bind_cname_expr(const nlohmann::json &json, exprt &bind_cname_expr);
   void get_nondet_contract_name(
