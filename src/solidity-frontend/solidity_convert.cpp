@@ -2494,6 +2494,12 @@ bool solidity_convertert::get_function_definition(
                  (*current_functionDecl).contains("kind") &&
                  (*current_functionDecl)["kind"] == "constructor";
 
+  bool is_receive_fallback =
+    (*current_functionDecl)["name"].get<std::string>() == "" &&
+    (*current_functionDecl).contains("kind") &&
+    ((*current_functionDecl)["kind"] == "receive" ||
+     (*current_functionDecl)["kind"] == "fallback");
+
   // store constructor initialization list
   if (is_ctor && !(*current_functionDecl)["modifiers"].empty())
     ctor_modifier = &((*current_functionDecl)["modifiers"]);
@@ -2504,8 +2510,10 @@ bool solidity_convertert::get_function_definition(
   if (is_ctor)
     // for construcotr
     current_functionName = c_name;
+  else if (is_receive_fallback)
+    current_functionName = (*current_functionDecl)["kind"];
   else
-    current_functionName = (*current_functionDecl)["name"].get<std::string>();
+    current_functionName = (*current_functionDecl)["name"];
 
   // 4. Return type
   code_typet type;
@@ -2550,6 +2558,7 @@ bool solidity_convertert::get_function_definition(
   // 7. Populate "std::string id, name"
   std::string name, id;
   get_function_definition_name(ast_node, name, id);
+  assert(!name.empty());
   log_debug(
     "solidity",
     "\t@@@ Parsing function {} in contract {}",
@@ -3402,6 +3411,7 @@ bool solidity_convertert::get_expr(
     {
       if (expr.contains("name") && expr["name"] == "this")
       {
+        log_debug("solidity", "\t\tgot this ref");
         /*
         assert(current_functionDecl);
         if (get_func_decl_this_ref(*current_functionDecl, new_expr))
@@ -4527,13 +4537,19 @@ bool solidity_convertert::get_expr(
       assert(callee_expr_json["arguments"].size() == 1);
       if (get_expr(callee_expr_json["arguments"][0], mem_expr))
         return true;
-      break;
-      if (!mem_expr.is_member())
+
+      if (mem_expr.is_member())
+        // x.balance
+        base = mem_expr.op0();
+      else if (mem_expr.is_symbol())
+        // this.balance
+        base = mem_expr;
+      else
       {
-        log_error("expecting member_expr, got {}", mem_expr.to_string());
+        log_error("expecting member_exprt or symbol_exprt, got {}", base);
         return true;
       }
-      base = mem_expr.op0();
+
       break;
     }
     case SolidityGrammar::DeclRefExprClass:
@@ -7524,7 +7540,8 @@ void solidity_convertert::get_function_definition_name(
     // we also allows multiple constructor where the added ctor has no  `id`
     name = contract_name;
   else
-    name = ast_node["name"].get<std::string>();
+    name = ast_node["name"] == "" ? ast_node["kind"] : ast_node["name"];
+
   id = "sol:@C@" + contract_name + "@F@" + name + "#" +
        i2string(ast_node["id"].get<std::int16_t>());
 
@@ -10149,22 +10166,17 @@ bool solidity_convertert::get_high_level_member_access(
   {
     if (is_call_w_options)
     {
-      exprt block;
-      exprt dump = _mem_call;
-      convert_expression_to_code(dump);
-      if (model_transaction(expr, base, member, _mem_call, l, block))
+      exprt front_block, back_block;
+      if (model_transaction(expr, base, member, l, front_block, back_block))
       {
         log_error("failed to model the transaction property changes");
         return true;
       }
-      for (auto op : block.operands())
-      {
-        if (current_functionDecl)
-          move_to_back_block(op);
-        else
-          move_to_initializer(op);
-      }
-      new_expr = code_skipt();
+      for (auto op : front_block.operands())
+        move_to_front_block(op);
+      for (auto op : back_block.operands())
+        move_to_back_block(op);
+
       return false;
     }
 
@@ -10280,13 +10292,21 @@ bool solidity_convertert::get_high_level_member_access(
 
     if (is_call_w_options)
     {
-      exprt dump;
-      if (model_transaction(expr, base, member, rhs, l, dump))
+      exprt front_block, back_block;
+      if (model_transaction(expr, base, member, l, front_block, back_block))
       {
         log_error("failed to model the transaction property changes");
         return true;
       }
-      rhs = dump;
+
+      // if-body
+      code_blockt block;
+      for (auto &op : front_block.operands())
+        block.operands().push_back(op);
+      block.operands().push_back(rhs);
+      for (auto &op : back_block.operands())
+        block.operands().push_back(op);
+      rhs = block;
     }
 
     codet if_expr("ifthenelse");
@@ -10645,16 +10665,15 @@ bool solidity_convertert::get_call_definition(
  * @expr: member_call json
  * @base: target
  * @value: msg.value
- * @mem_call: target.deposit()
  * @block: returns
 */
 bool solidity_convertert::model_transaction(
   const nlohmann::json &expr,
   const exprt &base,
   const exprt &value,
-  const exprt &mem_call,
   const locationt &loc,
-  exprt &block)
+  exprt &front_block,
+  exprt &back_block)
 {
   log_debug("solidity", "modelling the transaction property changes");
   /*
@@ -10668,7 +10687,8 @@ bool solidity_convertert::model_transaction(
   msg.sender = old_sender;
   msg.value = old_value
   */
-  block = code_blockt();
+  front_block = code_blockt();
+  back_block = code_blockt();
   std::string debug_modulename = get_modulename_from_path(absolute_path);
   std::string cname;
 
@@ -10711,7 +10731,7 @@ bool solidity_convertert::model_transaction(
   code_declt old_sender_decl(symbol_expr(added_old_sender));
   added_old_sender.value = msg_sender;
   old_sender_decl.operands().push_back(msg_sender);
-  block.move_to_operands(old_sender_decl);
+  front_block.move_to_operands(old_sender_decl);
 
   symbolt old_value;
   get_default_symbol(
@@ -10725,51 +10745,48 @@ bool solidity_convertert::model_transaction(
   code_declt old_val_decl(symbol_expr(added_old_value));
   added_old_value.value = msg_value;
   old_val_decl.operands().push_back(msg_value);
-  block.move_to_operands(old_val_decl);
+  front_block.move_to_operands(old_val_decl);
 
   // msg_value = _val;
   exprt assign_val = side_effect_exprt("assign", value.type());
   assign_val.copy_to_operands(msg_value, value);
   convert_expression_to_code(assign_val);
-  block.move_to_operands(assign_val);
+  front_block.move_to_operands(assign_val);
 
   // msg_sender = this.$address;
   exprt assign_sender = side_effect_exprt("assign", addr_t);
   assign_sender.copy_to_operands(msg_sender, this_address);
   convert_expression_to_code(assign_sender);
-  block.move_to_operands(assign_sender);
+  front_block.move_to_operands(assign_sender);
 
   // this.balance -= _val;
   exprt sub_assign = side_effect_exprt("assign-", val_t);
   sub_assign.copy_to_operands(this_balance, value);
   convert_expression_to_code(sub_assign);
-  block.move_to_operands(sub_assign);
+  front_block.move_to_operands(sub_assign);
 
   // base.balance += _val;
   exprt target_balance = member_exprt(base, "$balance", val_t);
   exprt add_assign = side_effect_exprt("assign+", val_t);
   add_assign.copy_to_operands(target_balance, value);
   convert_expression_to_code(sub_assign);
-  block.move_to_operands(add_assign);
-
-  // function calls
-  assert(mem_call.is_code());
-  block.copy_to_operands(mem_call);
+  front_block.move_to_operands(add_assign);
 
   // msg_value = old_value;
   exprt assign_val_restore = side_effect_exprt("assign", value.type());
   assign_val_restore.copy_to_operands(msg_value, symbol_expr(added_old_value));
   convert_expression_to_code(assign_val_restore);
-  block.move_to_operands(assign_val_restore);
+  back_block.move_to_operands(assign_val_restore);
 
   // msg_sender = old_sender;
   exprt assign_sender_restore = side_effect_exprt("assign", addr_t);
   assign_sender_restore.copy_to_operands(
     msg_sender, symbol_expr(added_old_sender));
   convert_expression_to_code(assign_sender_restore);
-  block.move_to_operands(assign_sender_restore);
+  back_block.move_to_operands(assign_sender_restore);
 
-  convert_expression_to_code(block);
+  convert_expression_to_code(front_block);
+  convert_expression_to_code(back_block);
   return false;
 }
 

@@ -466,9 +466,9 @@ protected:
     const nlohmann::json &expr,
     const exprt &base,
     const exprt &value,
-    const exprt &mem_call,
     const locationt &loc,
-    exprt &block);
+    exprt &front_block,
+    exprt &back_block);
 
   bool get_bind_cname_expr(const nlohmann::json &json, exprt &bind_cname_expr);
   void get_nondet_contract_name(
