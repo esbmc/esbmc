@@ -10663,6 +10663,7 @@ bool solidity_convertert::model_transaction(
   msg.sender = instance.$address
   msg.value = instance.$balance
   instance.$balance -= value
+  base.$balance += value
   (call to payable func)
   msg.sender = old_sender;
   msg.value = old_value
@@ -10744,16 +10745,16 @@ bool solidity_convertert::model_transaction(
   convert_expression_to_code(sub_assign);
   block.move_to_operands(sub_assign);
 
-  // function calls
-  assert(mem_call.is_code());
-  block.copy_to_operands(mem_call);
-
   // base.balance += _val;
   exprt target_balance = member_exprt(base, "$balance", val_t);
   exprt add_assign = side_effect_exprt("assign+", val_t);
   add_assign.copy_to_operands(target_balance, value);
   convert_expression_to_code(sub_assign);
   block.move_to_operands(add_assign);
+
+  // function calls
+  assert(mem_call.is_code());
+  block.copy_to_operands(mem_call);
 
   // msg_value = old_value;
   exprt assign_val_restore = side_effect_exprt("assign", value.type());
@@ -10837,10 +10838,10 @@ bool solidity_convertert::get_call_value_definition(
     msg_value = value 
     msg_sender = this.address;
     this.balance -= x; 
-    
+    _ESBMC_Object_x.balance += x; 
+
     _ESBMC_Object_x.receive() * or fallback
 
-    _ESBMC_Object_x.balance += x; 
     msg_value = old_value;
     msg_sender = old_sender
     return true;
@@ -10945,6 +10946,13 @@ bool solidity_convertert::get_call_value_definition(
     convert_expression_to_code(sub_assign);
     then.move_to_operands(sub_assign);
 
+    // _ESBMC_Object_str.balance += _val;
+    exprt target_balance = member_exprt(symbol_expr(sym), "$balance", val_t);
+    exprt add_assign = side_effect_exprt("assign+", val_t);
+    add_assign.copy_to_operands(target_balance, val_expr);
+    convert_expression_to_code(sub_assign);
+    then.move_to_operands(add_assign);
+
     // call receive() or fallback()
     exprt func;
     if (get_func_decl_ref(decl_ref, func))
@@ -10955,13 +10963,6 @@ bool solidity_convertert::get_call_value_definition(
       return true;
     convert_expression_to_code(call);
     then.move_to_operands(call);
-
-    // _ESBMC_Object_str.balance += _val;
-    exprt target_balance = member_exprt(symbol_expr(sym), "$balance", val_t);
-    exprt add_assign = side_effect_exprt("assign+", val_t);
-    add_assign.copy_to_operands(target_balance, val_expr);
-    convert_expression_to_code(sub_assign);
-    then.move_to_operands(add_assign);
 
     // msg_value = old_value;
     exprt assign_val_restore = side_effect_exprt("assign", val_expr.type());
