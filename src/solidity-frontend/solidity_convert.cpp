@@ -594,8 +594,8 @@ bool solidity_convertert::convert_ast_nodes(
       "@@ Converting node[{}]: contract={}, name={}, nodeType={} ...",
       index,
       cname,
-      node_name.c_str(),
-      node_type.c_str());
+      node_name.empty() ? ast_node["kind"].get<std::string>() : node_name,
+      node_type);
 
     // handle non-functional declaration,
     // due to that the vars/struct might be mentioned in the constructor
