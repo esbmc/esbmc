@@ -526,9 +526,12 @@ bool solidity_convertert::populate_function_signature(
       func_node["nodeType"] == "FunctionDefinition")
     {
       if (
-        func_node["name"].get<std::string>() == "" &&
+        func_node["name"] == "" &&
         func_node.contains("kind") && func_node["kind"] == "constructor")
         func_name = cname;
+      else if(func_node["name"] == "")
+        // skip built-in fallback/receive
+        continue;
       else
         func_name = func_node["name"];
       func_id = "sol:@C@" + cname + "@F@" + func_name + "#" +
