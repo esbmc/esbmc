@@ -8440,8 +8440,9 @@ bool solidity_convertert::get_non_library_function_call(
 
   // this object
   exprt this_object;
-  if (get_func_decl_this_ref(decl_ref, this_object))
-    return true;
+  exprt dump;
+  get_func_decl_this_ref(decl_ref, dump);
+  get_this_object(dump.type().subtype(), this_object);
   call.arguments().push_back(this_object);
 
   if (decl_ref.contains("parameters") && caller.contains("arguments"))
@@ -8565,6 +8566,8 @@ bool solidity_convertert::get_implicit_ctor_ref(
   const std::string &contract_name,
   exprt &new_expr)
 {
+  log_debug("solidity", "\t\tget_implicit_ctor_ref");
+
   // to obtain the type info
   std::string name, id;
   name = contract_name;
@@ -8577,13 +8580,17 @@ bool solidity_convertert::get_implicit_ctor_ref(
 
   exprt ctor = symbol_expr(*context.find_symbol(id));
   code_typet type;
-  type.return_type() = empty_typet();
-  type.return_type().set("cpp_type", "void");
+  type.return_type() = symbol_typet(prefix + contract_name);
 
   side_effect_expr_function_callt call;
   call.function() = ctor;
   call.function().set("constructor", 1);
   call.type() = type.return_type();
+  call.location().file(absolute_path);
+
+  exprt this_object;
+  get_this_object(symbol_typet(prefix + contract_name), this_object);
+  call.arguments().push_back(this_object);
 
   get_temporary_object(call, new_expr);
   return false;
@@ -10386,26 +10393,19 @@ bool solidity_convertert::get_bind_cname_expr(
   return false;
 }
 
-bool solidity_convertert::get_this_object(const exprt &func, exprt &this_object)
+/**
+ * symbol
+ *   * identifier: tag-Bank
+*/
+void solidity_convertert::get_this_object(const typet &t, exprt &this_object)
 {
-  if ((func.id() == "member"))
-    this_object = func.op0();
-  else if (
-    func.type().is_code() && to_code_type(func.type()).arguments().size() > 0)
-  {
-    const auto tmp_arg = to_code_type(func.type()).arguments().at(0);
-    assert(tmp_arg.cmt_base_name() == "this");
-    exprt temporary = exprt("new_object");
-    temporary.set("#lvalue", true);
-    temporary.type() = tmp_arg.type().subtype();
-    this_object = temporary;
-  }
-  else
-  {
-    log_error("Unexpected function call scheme\n{}", func.to_string());
-    return true;
-  }
-  return false;
+  log_debug("solidity", "\t\tget this object ref");
+  assert(t.is_symbol());
+
+  exprt temporary = exprt("new_object");
+  temporary.set("#lvalue", true);
+  temporary.type() = t;
+  this_object = temporary;
 }
 
 // add `call(address _addr)` to the contract
