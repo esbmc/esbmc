@@ -152,7 +152,7 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
   else if (elem.is_boolean())
     return bool_type();
   else if (elem.is_number_float())
-    return float_type();
+    return double_type();
   else if (elem.is_string())
     return build_array(char_type(), elem.get<std::string>().size());
   else if (elem.is_object() && elem.contains("value"))

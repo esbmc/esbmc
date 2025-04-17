@@ -66,12 +66,17 @@ public:
     return consensus_func_to_type().at(name);
   }
 
-  static bool is_model_func(const std::string &name)
+  static bool is_python_model_func(const std::string &name)
   {
     return (
       name == "ESBMC_range_next_" || name == "ESBMC_range_has_next_" ||
       name == "bit_length" || name == "from_bytes" || name == "to_bytes" ||
       name == "randint" || name == "random");
+  }
+
+  static bool is_c_model_func(const std::string &func_name)
+  {
+    return (func_name == "ceil");
   }
 
 private:

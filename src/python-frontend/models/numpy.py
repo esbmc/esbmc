@@ -31,7 +31,4 @@ def power(a:int, b:int) -> float:
     return x
 
 def ceil(x:float) -> int:
-    y:int = int(x)
-    if x > 0 and x != y:
-      return y + 1
-    return y
+    return 0

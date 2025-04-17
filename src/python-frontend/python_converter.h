@@ -91,6 +91,8 @@ private:
   friend class numpy_call_expr;
   friend class function_call_builder;
 
+  void load_c_intrisics();
+
   void get_var_assign(const nlohmann::json &ast_node, codet &target_block);
 
   void get_compound_assign(const nlohmann::json &ast_node, codet &target_block);

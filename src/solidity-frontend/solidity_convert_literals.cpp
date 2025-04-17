@@ -17,6 +17,11 @@ bool solidity_convertert::convert_integer_literal(
   if (get_type_description(integer_literal, type))
     return true;
 
+  // In Solidity (starting from version 0.6.0), you can use underscore _ as a visual separator in numeric literals — just like in other modern languages
+  // 1000000000 wei == 1_000_000_000 wei
+  the_value.erase(
+    std::remove(the_value.begin(), the_value.end(), '_'), the_value.end());
+
   exprt the_val;
   // extract the value: unsigned
   BigInt z_ext_value = string2integer(the_value);

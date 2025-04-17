@@ -37,6 +37,11 @@ public:
     prefix_ = prefix;
   }
 
+  void set_filename(const std::string &filename)
+  {
+    filename_ = filename;
+  }
+
   const std::string &get_function() const
   {
     return function_name_;

@@ -112,6 +112,9 @@ bool python_languaget::parse(const std::string &path)
 
   ast = nlohmann::json::parse(ast_json);
 
+  if (config.options.get_bool_option("parse-tree-only"))
+    return false;
+
   try
   {
     // Add type information

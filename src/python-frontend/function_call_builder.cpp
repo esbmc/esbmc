@@ -160,7 +160,7 @@ symbol_id function_call_builder::build_function_id() const
 
 exprt function_call_builder::build() const
 {
-  const symbol_id &function_id = build_function_id();
+  symbol_id function_id = build_function_id();
 
   // Add assume and len functions to symbol table
   if (is_assume_call(function_id) || is_len_call(function_id))
@@ -191,6 +191,13 @@ exprt function_call_builder::build() const
   // Handle NumPy functions
   if (is_numpy_call(function_id))
   {
+    // Adjust the function ID when reusing functions from the C models
+    if (type_utils::is_c_model_func(function_id.get_function()))
+    {
+      function_id.set_prefix("c:");
+      function_id.set_filename("");
+    }
+
     numpy_call_expr numpy_call(function_id, call_, converter_);
     return numpy_call.get();
   }
