@@ -10352,7 +10352,7 @@ bool solidity_convertert::get_low_level_member_accsss(
 
   if (mem_name == "call")
   {
-    exprt addr = member_exprt(base, "$address", unsignedbv_typet(160));
+    exprt addr = base;
 
     if (options != nullptr)
     {
@@ -10381,7 +10381,10 @@ bool solidity_convertert::get_low_level_member_accsss(
       call.arguments().push_back(addr);
     }
 
-    // convert it to tuple
+    // convert the return value to tuple
+    convert_expression_to_code(call);
+    move_to_front_block(call);
+    
     symbolt dump;
     get_llc_ret_tuple(dump);
     dump.value.op0() = call;
