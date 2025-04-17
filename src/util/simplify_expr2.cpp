@@ -592,7 +592,7 @@ struct DivModtor
       if ((to_mul2t(op1).side_2 == op2))
       {
         log_debug(nullptr, "[Divtor] Simplifying b*a/a = b");
-        return to_mul2t(op2).side_1;
+        return to_mul2t(op1).side_1;
       }
     }
     // Is a vector operation ? Apply the op
