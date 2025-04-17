@@ -526,10 +526,10 @@ bool solidity_convertert::populate_function_signature(
       func_node["nodeType"] == "FunctionDefinition")
     {
       if (
-        func_node["name"] == "" &&
-        func_node.contains("kind") && func_node["kind"] == "constructor")
+        func_node["name"] == "" && func_node.contains("kind") &&
+        func_node["kind"] == "constructor")
         func_name = cname;
-      else if(func_node["name"] == "")
+      else if (func_node["name"] == "")
         // skip built-in fallback/receive
         continue;
       else
@@ -4006,6 +4006,11 @@ bool solidity_convertert::get_expr(
     // - x.val(); ==> property
     // The later one is quite special, as in Solidity variables behave like functions from the perspective of other contracts.
     // e.g. b._addr is not an address, but a function that returns an address.
+
+    // find the parent json which contains arguments
+    const auto &func_call_json = find_last_parent(src_ast_json["nodes"], expr);
+    assert(!func_call_json.empty());
+
     auto callee_expr_json = expr;
     const nlohmann::json &caller_expr_json = callee_expr_json["expression"];
     assert(callee_expr_json.contains("referencedDeclaration"));
@@ -4097,7 +4102,7 @@ bool solidity_convertert::get_expr(
           dump = comp.op0();
         auto _mem_call = member_exprt(base, comp_name, comp.type());
         if (get_high_level_member_access(
-              expr, base, dump, _mem_call, false, new_expr))
+              func_call_json, base, dump, _mem_call, false, new_expr))
           return true;
       }
 
@@ -4118,7 +4123,7 @@ bool solidity_convertert::get_expr(
             member_decl_ref["returnParameters"], t.return_type()))
         return true;
       if (get_non_library_function_call(
-            mem_access, t, member_decl_ref, expr, call))
+            mem_access, t, member_decl_ref, func_call_json, call))
         return true;
 
       if (current_contractName == base_cname)
@@ -4128,7 +4133,7 @@ bool solidity_convertert::get_expr(
 
       else if (!is_bound)
       {
-        if (get_unbound_expr(expr, current_contractName, new_expr))
+        if (get_unbound_expr(func_call_json, current_contractName, new_expr))
           return true;
 
         typet t = to_code_type(comp.type()).return_type();
@@ -4137,7 +4142,7 @@ bool solidity_convertert::get_expr(
       else
       {
         if (get_high_level_member_access(
-              expr, literal_type, base, comp, call, true, new_expr))
+              func_call_json, literal_type, base, comp, call, true, new_expr))
           return true;
       }
 
@@ -4541,11 +4546,8 @@ bool solidity_convertert::get_expr(
       if (get_expr(callee_expr_json["arguments"][0], mem_expr))
         return true;
 
-      if (mem_expr.is_member())
-        // x.balance
-        base = mem_expr.op0();
-      else if (mem_expr.is_symbol())
-        // this.balance
+      if (mem_expr.is_member() || mem_expr.is_symbol())
+        //  address(x) || address(this)
         base = mem_expr;
       else
       {
@@ -5697,6 +5699,7 @@ bool solidity_convertert::get_var_decl_ref(
         return true;
 
       // construct member access this->data
+      assert(!new_expr.name().empty());
       new_expr = member_exprt(this_ptr, new_expr.name(), new_expr.type());
     }
   }
@@ -10120,6 +10123,7 @@ bool solidity_convertert::get_high_level_member_access(
   @expr: the whole member access expression json
   @options: call with options
   @is_func_call: true if it's a function member access; false state variable access
+  @_mem_callL: function call statement, with arguments populated
   return true: we fail to generate the high_level_member_access bound harness
                however, this should not be treated as an erorr.
                E.g. x.access() where x is a state variable
@@ -10170,7 +10174,7 @@ bool solidity_convertert::get_high_level_member_access(
     if (is_call_w_options)
     {
       exprt front_block, back_block;
-      if (model_transaction(expr, base, member, l, front_block, back_block))
+      if (model_transaction(expr, base, balance, l, front_block, back_block))
       {
         log_error("failed to model the transaction property changes");
         return true;
@@ -10296,7 +10300,7 @@ bool solidity_convertert::get_high_level_member_access(
     if (is_call_w_options)
     {
       exprt front_block, back_block;
-      if (model_transaction(expr, base, member, l, front_block, back_block))
+      if (model_transaction(expr, base, balance, l, front_block, back_block))
       {
         log_error("failed to model the transaction property changes");
         return true;
@@ -10329,7 +10333,7 @@ bool solidity_convertert::get_high_level_member_access(
 
 /** e.g.
  * x.call{value:}("")
- * @base: x
+ * @base: (this->)x
  * @mem_name: call
  * @options: value
  */
