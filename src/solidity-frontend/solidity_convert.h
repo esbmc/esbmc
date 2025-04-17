@@ -124,7 +124,7 @@ protected:
     const nlohmann::json &ast_node,
     const std::string &contract_name);
   bool add_implicit_constructor(const std::string &contract_name);
-  bool get_implicit_ctor_ref(exprt &new_expr, const std::string &contract_name);
+  bool get_implicit_ctor_ref(const std::string &contract_name, exprt &new_expr);
   bool get_instantiation_ctor_call(
     const std::string &contract_name,
     exprt &new_expr);
@@ -222,14 +222,10 @@ protected:
     std::string &name,
     std::string &id);
   bool get_non_library_function_call(
-    const exprt &func,
-    const typet &t,
     const nlohmann::json &decl_ref,
-    const nlohmann::json &epxr,
+    const nlohmann::json &caller,
     side_effect_expr_function_callt &call);
   bool get_ctor_call(
-    const exprt &func,
-    const typet &t,
     const nlohmann::json &decl_ref,
     const nlohmann::json &epxr,
     side_effect_expr_function_callt &call);
@@ -429,10 +425,6 @@ protected:
     const std::string &cname,
     const exprt &base,
     exprt &new_expr);
-  bool populate_nil_this_arguments(
-    const exprt &ctor,
-    const exprt &this_object,
-    side_effect_expr_function_callt &call);
   bool get_this_object(const exprt &func, exprt &this_object);
   bool get_high_level_member_access(
     const nlohmann::json &expr,
