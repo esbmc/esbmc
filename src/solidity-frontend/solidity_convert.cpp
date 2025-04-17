@@ -1966,17 +1966,7 @@ bool solidity_convertert::get_unbound_function(
     label.code() = code_skipt();
     func_body.operands().push_back(label);
 
-    // 1.1 get contract symbol ("tag-contractName")
-    const std::string id = prefix + c_name;
-    if (context.find_symbol(id) == nullptr)
-    {
-      //! This is to ensure we have already handled the inheritance
-      log_error("cannot find contract {}", c_name);
-      return true;
-    }
-    const symbolt &_contract = *context.find_symbol(id);
-
-    // 1.2 get static contract instance
+    // 1.1 get static contract instance
     symbolt added_ctor_symbol;
     get_static_contract_instance(c_name, added_ctor_symbol);
     const exprt contract_var = symbol_expr(added_ctor_symbol);
@@ -2064,7 +2054,7 @@ bool solidity_convertert::get_unbound_function(
     h_type.return_type() = e_type;
     std::string debug_modulename = get_modulename_from_path(absolute_path);
     get_default_symbol(
-      new_symbol, debug_modulename, h_type, h_name, h_id, _contract.location);
+      new_symbol, debug_modulename, h_type, h_name, h_id, locationt());
 
     new_symbol.lvalue = true;
     new_symbol.is_extern = false;
@@ -9645,6 +9635,9 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
     bind_expr,
     contract_name);
 
+  if (populate_low_level_functions(contract_name))
+    return true;
+
   return false;
 }
 
@@ -10353,7 +10346,6 @@ bool solidity_convertert::get_low_level_member_accsss(
   if (mem_name == "call")
   {
     exprt addr = base;
-
     if (options != nullptr)
     {
       // do call#1(addr, value) (call with ether)
@@ -10384,7 +10376,7 @@ bool solidity_convertert::get_low_level_member_accsss(
     // convert the return value to tuple
     convert_expression_to_code(call);
     move_to_front_block(call);
-    
+
     symbolt dump;
     get_llc_ret_tuple(dump);
     dump.value.op0() = call;
