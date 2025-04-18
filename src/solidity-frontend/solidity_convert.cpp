@@ -1633,29 +1633,28 @@ bool solidity_convertert::get_error_definition(const nlohmann::json &ast_node)
 }
 
 // add ["is_inherited"] = true to node and all sub_node that contains an "id"
-void solidity_convertert::add_inherit_label(nlohmann::json &node, const std::string &cname)
+void solidity_convertert::add_inherit_label(
+  nlohmann::json &node,
+  const std::string &cname)
 {
   // Add or update the "is_inherited" label in the current node
-  if (node.is_object())
+  if (node.is_object() && node.contains("id"))
   {
-    node["is_inherited"] = true;
     node["current_contract"] = cname;
+    node["is_inherited"] = true;
   }
 
   // Traverse through all sub-nodes
-  if (node.is_object() || node.is_array())
+  for (auto &sub_node : node)
   {
-    for (auto &sub_node : node)
+    if (sub_node.is_object() && sub_node.contains("id"))
     {
-      if (sub_node.is_object() && sub_node.contains("id"))
-      {
-        sub_node["is_inherited"] = true;
-        sub_node["current_contract"] = cname;
-      }
-
-      // Recurse into nested nodes
-      add_inherit_label(sub_node, cname);
+      sub_node["current_contract"] = cname;
+      sub_node["is_inherited"] = true;
     }
+
+    if (sub_node.is_object() || sub_node.is_array())
+      add_inherit_label(sub_node, cname);
   }
 }
 
@@ -1721,14 +1720,16 @@ void solidity_convertert::merge_inheritance_ast(
           continue;
 
         // skip ctor
-        if (i.contains("kind") && i["kind"] == "constructor")
+        if (i.contains("kind") && i["kind"].get<std::string>() == "constructor")
           continue;
 
         // for virtual/override function
-        std::string i_name = i["name"] == "" ? i["kind"] : i["name"];
+        assert(i.contains("name"));
+        std::string i_name = i["name"].get<std::string>() == ""
+                               ? i["kind"].get<std::string>()
+                               : i["name"].get<std::string>();
         assert(!i_name.empty());
-        if (
-          i.contains("nodeType") && i["nodeType"] == "FunctionDefinition")
+        if (i.contains("nodeType") && i["nodeType"] == "FunctionDefinition")
         {
           //! receive/fallback can be inherited but cannot be override.
           // to avoid the name ambiguous/conflict
@@ -1738,15 +1739,19 @@ void solidity_convertert::merge_inheritance_ast(
           assert(c_node.contains("nodes"));
           for (auto &c_i : c_node["nodes"])
           {
-            if (c_i.contains("kind") && c_i["kind"] == "constructor")
-            continue;
+            if (
+              c_i.contains("kind") &&
+              c_i["kind"].get<std::string>() == "constructor")
+              continue;
 
             if (
               c_i.contains("nodeType") &&
               c_i["nodeType"] == "FunctionDefinition")
             {
-              std::string c_iname =
-                c_i["name"] == "" ? c_i["kind"] : c_i["name"];
+              assert(c_i.contains("name"));
+              std::string c_iname = c_i["name"].get<std::string>() == ""
+                                      ? c_i["kind"].get<std::string>()
+                                      : c_i["name"].get<std::string>();
               assert(!c_iname.empty());
 
               if (i_name == c_iname)
@@ -1773,7 +1778,7 @@ void solidity_convertert::merge_inheritance_ast(
         log_debug(
           "solidity",
           "\t@@@ Merging AST node {} to contract {}",
-          i["name"] == "" ? i["kind"].get<std::string>() : i["name"].get<std::string>(),
+          i_name,
           c_name);
         // This is to distinguish it from the originals
         add_inherit_label(i, c_name);
@@ -2496,9 +2501,10 @@ bool solidity_convertert::get_function_definition(
     // for construcotr
     current_functionName = c_name;
   else if (is_receive_fallback)
-    current_functionName = (*current_functionDecl)["kind"];
+    current_functionName = (*current_functionDecl)["kind"].get<std::string>();
   else
-    current_functionName = (*current_functionDecl)["name"];
+    current_functionName = (*current_functionDecl)["name"].get<std::string>();
+  assert(!current_functionName.empty());
 
   // 4. Return type
   code_typet type;
