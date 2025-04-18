@@ -8340,6 +8340,12 @@ bool solidity_convertert::get_ctor_call(
   {
     if (get_non_library_function_call(decl_ref, caller, call))
       return true;
+
+    // correct the type. due to the empty returnParameters, the type of the call
+    // is wrongly set as void.
+    const auto &_contract =
+      find_parent_contract(src_ast_json["nodes"], decl_ref);
+    call.type() = symbol_typet(prefix + _contract["name"].get<std::string>());
   }
   else
   {
