@@ -117,14 +117,14 @@ protected:
     const std::string &c_name,
     nlohmann::json &c_node,
     std::set<std::string> &merged_list);
-  void add_inherit_label(nlohmann::json &node);
+  void add_inherit_label(nlohmann::json &node, const std::string &cname);
 
   // handle constructor
   bool get_constructor(
     const nlohmann::json &ast_node,
     const std::string &contract_name);
   bool add_implicit_constructor(const std::string &contract_name);
-  bool get_implicit_ctor_ref(exprt &new_expr, const std::string &contract_name);
+  bool get_implicit_ctor_ref(const std::string &contract_name, exprt &new_expr);
   bool get_instantiation_ctor_call(
     const std::string &contract_name,
     exprt &new_expr);
@@ -191,6 +191,7 @@ protected:
     const std::string contract_name,
     const std::string &func_id,
     exprt &new_expr);
+  bool get_ctor_decl_this_ref(const nlohmann::json &caller, exprt &this_object);
   bool get_enum_member_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_esbmc_builtin_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_type_description(const nlohmann::json &type_name, typet &new_type);
@@ -222,14 +223,10 @@ protected:
     std::string &name,
     std::string &id);
   bool get_non_library_function_call(
-    const exprt &func,
-    const typet &t,
     const nlohmann::json &decl_ref,
-    const nlohmann::json &epxr,
+    const nlohmann::json &caller,
     side_effect_expr_function_callt &call);
   bool get_ctor_call(
-    const exprt &func,
-    const typet &t,
     const nlohmann::json &decl_ref,
     const nlohmann::json &epxr,
     side_effect_expr_function_callt &call);
@@ -237,7 +234,6 @@ protected:
   get_new_object_ctor_call(const nlohmann::json &ast_node, exprt &new_expr);
   bool get_new_object_ctor_call(
     const std::string &contract_name,
-    const std::string &ctor_id,
     const nlohmann::json param_list,
     exprt &new_expr);
   void get_current_contract_name(
@@ -429,15 +425,20 @@ protected:
     const std::string &cname,
     const exprt &base,
     exprt &new_expr);
-  bool populate_nil_this_arguments(
-    const exprt &ctor,
-    const exprt &this_object,
-    side_effect_expr_function_callt &call);
-  bool get_this_object(const exprt &func, exprt &this_object);
+  void get_new_object(const typet &t, exprt &this_object);
+  bool get_high_level_member_access(
+    const nlohmann::json &expr,
+    const nlohmann::json &literal_type,
+    const exprt &base,
+    const exprt &member,
+    const exprt &_mem_call,
+    const bool is_func_call,
+    exprt &new_expr);
   bool get_high_level_member_access(
     const nlohmann::json &expr,
     const exprt &base,
     const exprt &member,
+    const exprt &_mem_call,
     const bool is_func_call,
     exprt &new_expr);
   bool get_low_level_member_accsss(
@@ -453,6 +454,13 @@ protected:
   get_target_function(const std::string &cname, const std::string &func_name);
   bool get_call_definition(const std::string &cname, exprt &new_expr);
   bool get_call_value_definition(const std::string &cname, exprt &new_expr);
+  bool model_transaction(
+    const nlohmann::json &expr,
+    const exprt &base,
+    const exprt &value,
+    const locationt &loc,
+    exprt &front_block,
+    exprt &back_block);
 
   bool get_bind_cname_expr(const nlohmann::json &json, exprt &bind_cname_expr);
   void get_nondet_contract_name(
