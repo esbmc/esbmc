@@ -30,11 +30,11 @@ contract Bank {
 
 
 contract Reproduction {
-    IBank public target;
+    Bank public target;
     address public owner;
 
     constructor(address _target) {
-        target = IBank(_target);
+        target = Bank(_target);
         owner = msg.sender;
     }
 
