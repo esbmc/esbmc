@@ -1,0 +1,11 @@
+url_path,views_total,views_unique
+/esbmc/esbmc,367,131
+/esbmc/esbmc/issues,52,18
+/esbmc/esbmc/releases,45,24
+/esbmc/esbmc/pulls,39,6
+/esbmc/esbmc/blob/master/BUILDING.md,38,20
+/esbmc/esbmc/tree/master/src,34,14
+/esbmc/esbmc/commits/master,32,4
+/esbmc/esbmc/tree/master/src/python-frontend,23,7
+/esbmc/esbmc/compare/master...brcfarias:esbmc:numpy-math,19,1
+/esbmc/esbmc/blob/master/ARCHITECTURE.md,15,9
