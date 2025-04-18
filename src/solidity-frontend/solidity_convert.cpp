@@ -286,7 +286,6 @@ void solidity_convertert::merge_multi_files()
     for (const auto &node : nodes[i])
       _nodes.push_back(node); // then add each individual node inside the array
   }
-  printf(src_ast_json.dump(2).c_str());
 }
 
 std::vector<nlohmann::json> solidity_convertert::topological_sort(
