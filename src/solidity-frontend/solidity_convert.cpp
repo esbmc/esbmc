@@ -90,8 +90,7 @@ bool solidity_convertert::convert()
     return true;
 
   // for coverage and trace simplification: update include_files
-  auto add_unique = [](const std::string &file)
-  {
+  auto add_unique = [](const std::string &file) {
     if (
       std::find(
         config.ansi_c.include_files.begin(),
@@ -544,9 +543,8 @@ bool solidity_convertert::populate_function_signature(
       is_payable = func_node["stateMutability"] == "payable";
       is_inherit = func_node.contains("is_inherited");
 
-      funcSignatures[cname].push_back(
-        solidity_convertert::func_sig(
-          func_name, func_id, visibility, type, is_payable, is_inherit));
+      funcSignatures[cname].push_back(solidity_convertert::func_sig(
+        func_name, func_id, visibility, type, is_payable, is_inherit));
     }
   }
 
@@ -554,8 +552,9 @@ bool solidity_convertert::populate_function_signature(
   bool hasConstructor = std::any_of(
     funcSignatures[cname].begin(),
     funcSignatures[cname].end(),
-    [&cname](const solidity_convertert::func_sig &sig)
-    { return sig.name == cname; });
+    [&cname](const solidity_convertert::func_sig &sig) {
+      return sig.name == cname;
+    });
   if (!hasConstructor)
   {
     func_name = cname;
@@ -565,9 +564,8 @@ bool solidity_convertert::populate_function_signature(
     type.return_type() = empty_typet();
     type.return_type().set("cpp_type", "void");
     is_inherit = false;
-    funcSignatures[cname].push_back(
-      solidity_convertert::func_sig(
-        func_name, func_id, visibility, type, is_payable, is_inherit));
+    funcSignatures[cname].push_back(solidity_convertert::func_sig(
+      func_name, func_id, visibility, type, is_payable, is_inherit));
   }
 
   return false;
@@ -9004,16 +9002,14 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
   dest = code_blockt();
 
   // call designated "initialization" functions
-  context.foreach_operand_in_order(
-    [&dest](const symbolt &s)
+  context.foreach_operand_in_order([&dest](const symbolt &s) {
+    if (s.type.initialization() && s.type.is_code())
     {
-      if (s.type.initialization() && s.type.is_code())
-      {
-        code_function_callt function_call;
-        function_call.function() = symbol_expr(s);
-        dest.move_to_operands(function_call);
-      }
-    });
+      code_function_callt function_call;
+      function_call.function() = symbol_expr(s);
+      dest.move_to_operands(function_call);
+    }
+  });
 }
 
 void solidity_convertert::get_aux_var(
@@ -10010,8 +10006,7 @@ bool solidity_convertert::has_callable_func(const std::string &cname)
   return std::any_of(
     funcSignatures[cname].begin(),
     funcSignatures[cname].end(),
-    [&cname](const solidity_convertert::func_sig &sig)
-    {
+    [&cname](const solidity_convertert::func_sig &sig) {
       return sig.name != cname &&
              (sig.visibility == "public" || sig.visibility == "external");
     });
@@ -10027,9 +10022,9 @@ bool solidity_convertert::has_target_function(
     return false;
 
   return std::any_of(
-    it->second.begin(),
-    it->second.end(),
-    [&](const func_sig &sig) { return sig.name == func_name; });
+    it->second.begin(), it->second.end(), [&](const func_sig &sig) {
+      return sig.name == func_name;
+    });
 }
 
 solidity_convertert::func_sig solidity_convertert::get_target_function(
@@ -10050,8 +10045,9 @@ solidity_convertert::func_sig solidity_convertert::get_target_function(
   auto func_it = std::find_if(
     functions.begin(),
     functions.end(),
-    [&func_name](const solidity_convertert::func_sig &sig)
-    { return sig.name == func_name; });
+    [&func_name](const solidity_convertert::func_sig &sig) {
+      return sig.name == func_name;
+    });
 
   // If function is found, return it; otherwise, return an empty func_sig
   if (func_it != functions.end())
