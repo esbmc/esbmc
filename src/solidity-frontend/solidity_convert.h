@@ -425,7 +425,7 @@ protected:
     const std::string &cname,
     const exprt &base,
     exprt &new_expr);
-  void get_this_object(const typet &t, exprt &this_object);
+  void get_new_object(const typet &t, exprt &this_object);
   bool get_high_level_member_access(
     const nlohmann::json &expr,
     const nlohmann::json &literal_type,

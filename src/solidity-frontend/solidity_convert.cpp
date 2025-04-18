@@ -8448,7 +8448,7 @@ bool solidity_convertert::get_non_library_function_call(
   exprt this_object;
   exprt dump;
   get_func_decl_this_ref(decl_ref, dump);
-  get_this_object(dump.type().subtype(), this_object);
+  get_new_object(dump.type().subtype(), this_object);
   call.arguments().push_back(this_object);
 
   if (decl_ref.contains("parameters") && caller.contains("arguments"))
@@ -8595,7 +8595,7 @@ bool solidity_convertert::get_implicit_ctor_ref(
   call.location().file(absolute_path);
 
   exprt this_object;
-  get_this_object(symbol_typet(prefix + contract_name), this_object);
+  get_new_object(symbol_typet(prefix + contract_name), this_object);
   call.arguments().push_back(this_object);
 
   get_temporary_object(call, new_expr);
@@ -10305,6 +10305,29 @@ bool solidity_convertert::get_low_level_member_accsss(
   get_location_from_node(expr, loc);
   side_effect_expr_function_callt call;
 
+  // get this
+  exprt this_object;
+  if (current_functionDecl)
+  {
+    if (get_func_decl_this_ref(*current_functionDecl, this_object))
+      return true;
+  }
+  else
+  {
+    // ctor
+    std::string cname;
+    std::string ctor_id;
+    get_current_contract_name(expr, cname);
+    if (get_ctor_call_id(cname, ctor_id))
+    {
+      log_error("failed to get the ctor id");
+      return true;
+    }
+
+    if (get_func_decl_this_ref(cname, ctor_id, this_object))
+      return true;
+  }
+
   if (mem_name == "call")
   {
     exprt addr = base;
@@ -10323,6 +10346,7 @@ bool solidity_convertert::get_low_level_member_accsss(
 
       get_library_function_call_no_args(
         "call", "sol:@F@call#1", bool_type(), loc, call);
+      call.arguments().push_back(this_object);
       call.arguments().push_back(addr);
       call.arguments().push_back(value);
     }
@@ -10403,7 +10427,7 @@ bool solidity_convertert::get_bind_cname_expr(
  * symbol
  *   * identifier: tag-Bank
 */
-void solidity_convertert::get_this_object(const typet &t, exprt &this_object)
+void solidity_convertert::get_new_object(const typet &t, exprt &this_object)
 {
   log_debug("solidity", "\t\tget this object ref");
   assert(t.is_symbol());
