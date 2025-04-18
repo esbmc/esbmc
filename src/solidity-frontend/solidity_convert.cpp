@@ -1633,11 +1633,14 @@ bool solidity_convertert::get_error_definition(const nlohmann::json &ast_node)
 }
 
 // add ["is_inherited"] = true to node and all sub_node that contains an "id"
-void solidity_convertert::add_inherit_label(nlohmann::json &node)
+void solidity_convertert::add_inherit_label(nlohmann::json &node, const std::string &cname)
 {
   // Add or update the "is_inherited" label in the current node
   if (node.is_object())
+  {
     node["is_inherited"] = true;
+    node["current_contract"] = cname;
+  }
 
   // Traverse through all sub-nodes
   if (node.is_object() || node.is_array())
@@ -1647,10 +1650,11 @@ void solidity_convertert::add_inherit_label(nlohmann::json &node)
       if (sub_node.is_object() && sub_node.contains("id"))
       {
         sub_node["is_inherited"] = true;
+        sub_node["current_contract"] = cname;
       }
 
       // Recurse into nested nodes
-      add_inherit_label(sub_node);
+      add_inherit_label(sub_node, cname);
     }
   }
 }
@@ -1722,9 +1726,9 @@ void solidity_convertert::merge_inheritance_ast(
 
         // for virtual/override function
         std::string i_name = i["name"] == "" ? i["kind"] : i["name"];
+        assert(!i_name.empty());
         if (
-          i.contains("nodeType") && i["nodeType"] == "FunctionDefinition" &&
-          i_name != "")
+          i.contains("nodeType") && i["nodeType"] == "FunctionDefinition")
         {
           //! receive/fallback can be inherited but cannot be override.
           // to avoid the name ambiguous/conflict
@@ -1734,14 +1738,18 @@ void solidity_convertert::merge_inheritance_ast(
           assert(c_node.contains("nodes"));
           for (auto &c_i : c_node["nodes"])
           {
+            if (c_i.contains("kind") && c_i["kind"] == "constructor")
+            continue;
+
             if (
               c_i.contains("nodeType") &&
               c_i["nodeType"] == "FunctionDefinition")
             {
               std::string c_iname =
                 c_i["name"] == "" ? c_i["kind"] : c_i["name"];
+              assert(!c_iname.empty());
 
-              if (c_iname != "" && i_name == c_iname)
+              if (i_name == c_iname)
               {
                 /*
                    A
@@ -1765,10 +1773,10 @@ void solidity_convertert::merge_inheritance_ast(
         log_debug(
           "solidity",
           "\t@@@ Merging AST node {} to contract {}",
-          i["name"].get<std::string>().c_str(),
+          i["name"] == "" ? i["kind"].get<std::string>() : i["name"].get<std::string>(),
           c_name);
         // This is to distinguish it from the originals
-        add_inherit_label(i);
+        add_inherit_label(i, c_name);
 
         c_node["nodes"].push_back(i);
       }
@@ -2266,13 +2274,6 @@ bool solidity_convertert::move_inheritance_to_ctor(
         if (c_name != target_c_name)
           continue;
 
-        std::string c_ctor_id;
-        if (get_ctor_call_id(c_name, c_ctor_id))
-        {
-          log_error("cannot find base contract's ctor");
-          return true;
-        }
-        exprt c_ctor = symbol_expr(*context.find_symbol(c_ctor_id));
         typet c_type(irept::id_symbol);
         c_type.identifier(prefix + c_name);
 
@@ -2320,7 +2321,7 @@ bool solidity_convertert::move_inheritance_to_ctor(
         }
 
         exprt rhs;
-        if (get_new_object_ctor_call(c_name, c_ctor_id, c_param_list_node, rhs))
+        if (get_new_object_ctor_call(c_name, c_param_list_node, rhs))
           return true;
         added_ctor_symbol.value = rhs;
 
@@ -2343,6 +2344,8 @@ bool solidity_convertert::move_inheritance_to_ctor(
           {
             if (c_comp.name() == comp.name())
             {
+              assert(!comp.name().empty());
+              assert(!c_comp.name().empty());
               lhs = member_exprt(this_expr, comp.name(), comp.type());
               rhs = member_exprt(
                 symbol_expr(added_ctor_symbol), c_comp.name(), c_comp.type());
@@ -2434,7 +2437,7 @@ bool solidity_convertert::get_instantiation_ctor_call(
 
   // ? we do not need to populate the initializer
   // 2. construct the ctor call
-  if (get_new_object_ctor_call(contract_name, id, empty_json, new_expr))
+  if (get_new_object_ctor_call(contract_name, empty_json, new_expr))
     return true;
 
   return false;
@@ -5791,6 +5794,32 @@ bool solidity_convertert::get_func_decl_this_ref(
   return false;
 }
 
+bool solidity_convertert::get_ctor_decl_this_ref(
+  const nlohmann::json &caller,
+  exprt &this_object)
+{
+  log_debug("solidity", "\t\tget_ctor_decl_this_ref");
+
+  // ctor
+  std::string current_cname;
+  get_current_contract_name(caller, current_cname);
+  if (current_cname.empty())
+  {
+    log_error("Failed to get caller's contract name");
+    return true;
+  }
+  std::string ctor_id;
+  if (get_ctor_call_id(current_cname, ctor_id))
+  {
+    log_error("failed to get the ctor id");
+    return true;
+  }
+
+  if (get_func_decl_this_ref(current_cname, ctor_id, this_object))
+    return true;
+  return false;
+}
+
 bool solidity_convertert::get_enum_member_ref(
   const nlohmann::json &decl,
   exprt &new_expr)
@@ -8340,11 +8369,20 @@ bool solidity_convertert::get_ctor_call(
     if (get_non_library_function_call(decl_ref, caller, call))
       return true;
 
-    // correct the type. due to the empty returnParameters, the type of the call
+    // reset the type. due to the empty returnParameters, the type of the call
     // is wrongly set as void.
     const auto &_contract =
       find_parent_contract(src_ast_json["nodes"], decl_ref);
-    call.type() = symbol_typet(prefix + _contract["name"].get<std::string>());
+    std::string c_name = _contract["name"].get<std::string>();
+    call.type() = symbol_typet(prefix + c_name);
+
+    // reset the this object
+    exprt this_object;
+    get_new_object(symbol_typet(prefix + c_name), this_object);
+    call.arguments().at(0) = this_object;
+
+    // set constructor
+    call.function().set("constructor", 1);
   }
   else
   {
@@ -8444,10 +8482,19 @@ bool solidity_convertert::get_non_library_function_call(
   // Populating arguments
 
   // this object
-  exprt this_object;
-  exprt dump;
-  get_func_decl_this_ref(decl_ref, dump);
-  get_new_object(dump.type().subtype(), this_object);
+  exprt this_object = nil_exprt();
+  if (current_functionDecl)
+  {
+    if (get_func_decl_this_ref(*current_functionDecl, this_object))
+      return true;
+  }
+  else if (!caller.empty())
+  {
+    if (get_ctor_decl_this_ref(caller, this_object))
+      return true;
+  }
+  // otherwise, it's the auxiliary function we defined //e.g. call, delegatecall...
+
   call.arguments().push_back(this_object);
 
   if (decl_ref.contains("parameters") && caller.contains("arguments"))
@@ -8502,12 +8549,12 @@ bool solidity_convertert::get_non_library_function_call(
  @ast_node: caller node whose nodeType is NewExpression
 */
 bool solidity_convertert::get_new_object_ctor_call(
-  const nlohmann::json &ast_node,
+  const nlohmann::json &caller,
   exprt &new_expr)
 {
   log_debug("solidity", "generating new contract object");
   // 1. get the ctor call expr
-  nlohmann::json callee_expr_json = ast_node["expression"];
+  nlohmann::json callee_expr_json = caller["expression"];
   int ref_decl_id = callee_expr_json["typeName"]["referencedDeclaration"];
 
   // get contract name
@@ -8517,40 +8564,19 @@ bool solidity_convertert::get_new_object_ctor_call(
     log_error("cannot find the contract name");
     abort();
   }
-
-  // get ctor's ast node
-  const nlohmann::json constructor_ref = find_constructor_ref(ref_decl_id);
-
-  // Special handling of implicit constructor
-  // since there is no ast nodes for implicit constructor
-  if (constructor_ref.empty())
-    return get_implicit_ctor_ref(contract_name, new_expr);
-
-  // setup initializer
-  side_effect_expr_function_callt call;
-  if (get_ctor_call(constructor_ref, ast_node, call))
+  if (get_new_object_ctor_call(contract_name, caller, new_expr))
     return true;
 
-  call.function().set("constructor", 1);
-
-  // construct temporary object
-  get_temporary_object(call, new_expr);
   return false;
 }
 
 // return a new expression: new Base(2);
 bool solidity_convertert::get_new_object_ctor_call(
   const std::string &contract_name,
-  const std::string &ctor_id,
-  const nlohmann::json param_list,
+  const nlohmann::json caller,
   exprt &new_expr)
 {
   assert(linearizedBaseList.count(contract_name) && !contract_name.empty());
-  std::string id = prefix + contract_name;
-  typet type(irept::id_symbol);
-  type.identifier(id);
-  exprt ctor;
-  get_symbol_decl_ref(contract_name, ctor_id, type, ctor);
 
   // setup initializer, i.e. call the constructor
   side_effect_expr_function_callt call;
@@ -8558,9 +8584,8 @@ bool solidity_convertert::get_new_object_ctor_call(
   if (constructor_ref.empty())
     return get_implicit_ctor_ref(contract_name, new_expr);
 
-  if (get_ctor_call(constructor_ref, param_list, call))
+  if (get_ctor_call(constructor_ref, caller, call))
     return true;
-  call.function().set("constructor", 1);
 
   // construct temporary object
   get_temporary_object(call, new_expr);
@@ -8703,7 +8728,7 @@ void solidity_convertert::get_static_contract_instance(
     }
 
     exprt ctor;
-    if (get_new_object_ctor_call(c_name, ctor_id, empty_json, ctor))
+    if (get_new_object_ctor_call(c_name, empty_json, ctor))
     {
       log_error("failed to construct a temporary object");
       abort();
@@ -9685,16 +9710,8 @@ bool solidity_convertert::get_new_temporary_obj(
 
   symbolt &added_ctor_symbol = *move_symbol_to_context(ctor_ins_symbol);
 
-  // get value
-  std::string ctor_id;
-  if (get_ctor_call_id(c_name, ctor_id))
-  {
-    log_error("Failed in get_ctor_call_id");
-    return true;
-  }
-
   exprt ctor;
-  if (get_new_object_ctor_call(c_name, ctor_id, empty_json, ctor))
+  if (get_new_object_ctor_call(c_name, empty_json, ctor))
   {
     log_error("Failed in get_new_object_ctor_call");
     return true;
@@ -10304,6 +10321,11 @@ bool solidity_convertert::get_low_level_member_accsss(
   get_location_from_node(expr, loc);
   side_effect_expr_function_callt call;
 
+  std::string cname;
+  get_current_contract_name(expr, cname);
+  if (cname.empty())
+    return true;
+
   // get this
   exprt this_object;
   if (current_functionDecl)
@@ -10311,28 +10333,24 @@ bool solidity_convertert::get_low_level_member_accsss(
     if (get_func_decl_this_ref(*current_functionDecl, this_object))
       return true;
   }
+  else if (!expr.empty())
+  {
+    if (get_ctor_decl_this_ref(expr, this_object))
+      return true;
+  }
   else
   {
-    // ctor
-    std::string cname;
-    std::string ctor_id;
-    get_current_contract_name(expr, cname);
-    if (get_ctor_call_id(cname, ctor_id))
-    {
-      log_error("failed to get the ctor id");
-      return true;
-    }
-
-    if (get_func_decl_this_ref(cname, ctor_id, this_object))
-      return true;
+    log_error("cannot get this object ref");
+    return true;
   }
 
   if (mem_name == "call")
   {
+    std::string func_name = "call";
     exprt addr = base;
     if (options != nullptr)
     {
-      // do call#1(addr, value) (call with ether)
+      // do call#1(this, addr, value) (call with ether)
       addr.type().set("#sol_type", "ADDRESS_PAYABLE");
       exprt value;
       // type should be uint256
@@ -10343,18 +10361,23 @@ bool solidity_convertert::get_low_level_member_accsss(
       if (get_expr(options[0], literal_type, value))
         return true;
 
+      std::string func_id = "sol:@C@" + cname + "@F@$call#1";
+
       get_library_function_call_no_args(
-        "call", "sol:@F@call#1", bool_type(), loc, call);
+        func_name, func_id, bool_type(), loc, call);
       call.arguments().push_back(this_object);
       call.arguments().push_back(addr);
       call.arguments().push_back(value);
     }
     else
     {
-      // fo call#0(addr)
+      // fo call#0(this, addr)
       addr.type().set("#sol_type", "ADDRESS");
+
+      std::string func_id = "sol:@C@" + cname + "@F@$call#0";
       get_library_function_call_no_args(
-        "call", "sol:@F@call#0", bool_type(), loc, call);
+        func_name, func_id, bool_type(), loc, call);
+      call.arguments().push_back(this_object);
       call.arguments().push_back(addr);
     }
 
@@ -10446,7 +10469,7 @@ bool solidity_convertert::get_call_definition(
   exprt &new_expr)
 {
   std::string call_name = "call";
-  std::string call_id = "sol:@C@" + cname + "@F@call#0";
+  std::string call_id = "sol:@C@" + cname + "@F@$call#0";
   symbolt s;
   // the return value should be (bool, string)
   // however, we cannot handle the string, therefore we only return bool
@@ -10713,7 +10736,7 @@ bool solidity_convertert::get_call_value_definition(
   exprt &new_expr)
 {
   std::string call_name = "call";
-  std::string call_id = "sol:@C@" + cname + "@F@call#1";
+  std::string call_id = "sol:@C@" + cname + "@F@$call#1";
   symbolt s;
   // the return value should be (bool, string)
   // however, we cannot handle the string, therefore we only return bool

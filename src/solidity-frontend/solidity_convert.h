@@ -117,7 +117,7 @@ protected:
     const std::string &c_name,
     nlohmann::json &c_node,
     std::set<std::string> &merged_list);
-  void add_inherit_label(nlohmann::json &node);
+  void add_inherit_label(nlohmann::json &node, const std::string &cname);
 
   // handle constructor
   bool get_constructor(
@@ -191,6 +191,7 @@ protected:
     const std::string contract_name,
     const std::string &func_id,
     exprt &new_expr);
+  bool get_ctor_decl_this_ref(const nlohmann::json &caller, exprt &this_object);
   bool get_enum_member_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_esbmc_builtin_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_type_description(const nlohmann::json &type_name, typet &new_type);
@@ -233,7 +234,6 @@ protected:
   get_new_object_ctor_call(const nlohmann::json &ast_node, exprt &new_expr);
   bool get_new_object_ctor_call(
     const std::string &contract_name,
-    const std::string &ctor_id,
     const nlohmann::json param_list,
     exprt &new_expr);
   void get_current_contract_name(
