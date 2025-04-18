@@ -244,7 +244,9 @@ void solidity_convertert::merge_multi_files()
   }
 
   // Perform topological sorting
-  src_ast_json_array = topological_sort(import_graph, path_to_json);
+  std::vector<nlohmann::json> src_files =
+    topological_sort(import_graph, path_to_json);
+  src_ast_json_array = src_files;
   //  reversal
   //  contract B is A{}; contract A{};
   // =>
