@@ -244,10 +244,13 @@ void solidity_convertert::merge_multi_files()
   }
 
   // Perform topological sorting
-  std::vector<nlohmann::json> src_files =
+  std::vector<nlohmann::json> sorted_json_files =
     topological_sort(import_graph, path_to_json);
-  src_ast_json_array = src_files;
-  //  reversal
+
+  // Update order of src_ast_json_array
+  src_ast_json_array = sorted_json_files;
+
+  // reversal
   //  contract B is A{}; contract A{};
   // =>
   //  contract A{}; contract B is A{};
@@ -283,10 +286,9 @@ void solidity_convertert::merge_multi_files()
     for (const auto &node : nodes[i])
       _nodes.push_back(node); // then add each individual node inside the array
   }
+  printf(src_ast_json.dump(2).c_str());
 }
 
-// topological sort is to make sure the order of contract AST is correct(Avoid some counterinstuitive cases)
-// e.g. when contract A import B : contract A AST should be before contract B AST
 std::vector<nlohmann::json> solidity_convertert::topological_sort(
   std::unordered_map<std::string, std::unordered_set<std::string>> &graph,
   std::unordered_map<std::string, nlohmann::json> &path_to_json)
@@ -340,6 +342,7 @@ std::vector<nlohmann::json> solidity_convertert::topological_sort(
       }
     }
   }
+
   return sorted_files;
 }
 
