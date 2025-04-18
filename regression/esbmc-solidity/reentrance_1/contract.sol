@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity >=0.5.0;
 
-// @custom:version conformant to specification
+interface IBank {
+    function deposit() external payable;
+    function withdraw(uint amount) external;
+}
+
 contract Bank {
     mapping(address => uint) balances;
 
@@ -24,10 +28,6 @@ contract Bank {
     }
 }
 
-interface IBank {
-    function deposit() external payable;
-    function withdraw(uint amount) external;
-}
 
 contract Reproduction {
     IBank public target;

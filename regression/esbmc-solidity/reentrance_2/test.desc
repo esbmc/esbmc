@@ -1,4 +1,4 @@
 CORE
 contract.solast
---function test_op --sol contract.sol
+--sol contract.sol --contract Reproduction --k-induction
 ^VERIFICATION FAILED$

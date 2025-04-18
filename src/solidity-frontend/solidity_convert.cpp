@@ -184,7 +184,6 @@ bool solidity_convertert::convert()
   }
   // else: verify the target function.
 
-  log_debug("solidity", "Finish parsing");
   return false; // 'false' indicates successful completion.
 }
 
@@ -10687,7 +10686,7 @@ bool solidity_convertert::model_transaction(
   exprt target_balance = member_exprt(base, "$balance", val_t);
   exprt add_assign = side_effect_exprt("assign+", val_t);
   add_assign.copy_to_operands(target_balance, value);
-  convert_expression_to_code(sub_assign);
+  convert_expression_to_code(add_assign);
   front_block.move_to_operands(add_assign);
 
   // msg_value = old_value;
