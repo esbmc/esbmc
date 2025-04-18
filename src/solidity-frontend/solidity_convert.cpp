@@ -221,8 +221,31 @@ void solidity_convertert::merge_multi_files()
     src_ast_json = src_ast_json_array[0];
     return;
   }
+  // Import relationship diagram
+  std::unordered_map<std::string, std::unordered_set<std::string>> import_graph;
+  // Path to JSON object mapping
+  std::unordered_map<std::string, nlohmann::json> path_to_json;
+  // Constructing an import relationship diagram
+  for (auto &ast_json : src_ast_json_array)
+  {
+    std::string path = ast_json["absolutePath"];
+    path_to_json[path] = ast_json;
+    std::unordered_set<std::string> imports;
+    // Extract the import path from the ImportDirective node.
+    for (const auto &node : ast_json["nodes"])
+    {
+      if (node["nodeType"] == "ImportDirective")
+      {
+        std::string import_path = node["absolutePath"];
+        imports.insert(import_path);
+      }
+    }
+    import_graph[path] = imports;
+  }
 
-  // reversal
+  // Perform topological sorting
+  topological_sort(import_graph, path_to_json, src_ast_json_array);
+  //  reversal
   //  contract B is A{}; contract A{};
   // =>
   //  contract A{}; contract B is A{};
@@ -258,6 +281,65 @@ void solidity_convertert::merge_multi_files()
     for (const auto &node : nodes[i])
       _nodes.push_back(node); // then add each individual node inside the array
   }
+}
+
+// topological sort is to make sure the order of contract AST is correct(Avoid some counterinstuitive cases)
+// e.g. when contract A import B : contract A AST should be before contract B AST
+void solidity_convertert::topological_sort(
+  std::unordered_map<std::string, std::unordered_set<std::string>> &graph,
+  std::unordered_map<std::string, nlohmann::json> &path_to_json,
+  nlohmann::json &src_ast_json_array)
+{
+  std::unordered_map<std::string, int> in_degree;
+  std::queue<std::string> zero_in_degree_queue;
+  std::vector<nlohmann::json> sorted_files;
+  // Topological sorting function for sorting files according to import relationships
+  // Calculate the in-degree for each node
+  for (const auto &pair : graph)
+  {
+    if (in_degree.find(pair.first) == in_degree.end())
+    {
+      in_degree[pair.first] = 0;
+    }
+    for (const auto &neighbor : pair.second)
+    {
+      if (pair.first != neighbor)
+      {
+        // Ignore the case of importing itself.
+        in_degree[neighbor]++;
+      }
+    }
+  }
+
+  // Find all the nodes with 0 entry and add them to the queue.
+  for (const auto &pair : in_degree)
+  {
+    if (pair.second == 0)
+    {
+      zero_in_degree_queue.push(pair.first);
+    }
+  }
+  // Process nodes in the queue
+  while (!zero_in_degree_queue.empty())
+  {
+    std::string node = zero_in_degree_queue.front();
+    zero_in_degree_queue.pop();
+    // add the node's corresponding JSON file to the sorted result
+    sorted_files.push_back(path_to_json[node]);
+    // Update the in-degree of neighbouring nodes and add the new node with in-degree 0 to the queue
+    for (const auto &neighbor : graph[node])
+    {
+      if (node != neighbor)
+      { // Ignore the case of importing itself.
+        in_degree[neighbor]--;
+        if (in_degree[neighbor] == 0)
+        {
+          zero_in_degree_queue.push(neighbor);
+        }
+      }
+    }
+  }
+  src_ast_json_array = sorted_files;
 }
 
 // check if the programs is suitable for verificaiton
