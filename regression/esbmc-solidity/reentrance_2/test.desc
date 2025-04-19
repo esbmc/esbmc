@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --contract Reproduction --k-induction
+^VERIFICATION FAILED$

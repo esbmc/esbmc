@@ -105,7 +105,6 @@ void w_guardst::add_initialization(goto_programt &goto_program)
 }
 
 void add_race_assertions(
-  value_setst &value_sets,
   contextt &context,
   goto_programt &goto_program,
   w_guardst &w_guards)
@@ -134,7 +133,7 @@ void add_race_assertions(
       else
         tmp_expr = migrate_expr_back(instruction.code);
 
-      rw_sett rw_set(ns, value_sets, i_it, tmp_expr);
+      rw_sett rw_set(ns, i_it, tmp_expr);
 
       if (rw_set.entries.empty())
         continue;
@@ -247,29 +246,23 @@ void add_race_assertions(
   remove_no_op(goto_program);
 }
 
-void add_race_assertions(
-  value_setst &value_sets,
-  contextt &context,
-  goto_programt &goto_program)
+void add_race_assertions(contextt &context, goto_programt &goto_program)
 {
   w_guardst w_guards(context);
 
-  add_race_assertions(value_sets, context, goto_program, w_guards);
+  add_race_assertions(context, goto_program, w_guards);
 
   w_guards.add_initialization(goto_program);
   goto_program.update();
 }
 
-void add_race_assertions(
-  value_setst &value_sets,
-  contextt &context,
-  goto_functionst &goto_functions)
+void add_race_assertions(contextt &context, goto_functionst &goto_functions)
 {
   w_guardst w_guards(context);
 
   Forall_goto_functions (f_it, goto_functions)
     if (f_it->first != goto_functions.main_id())
-      add_race_assertions(value_sets, context, f_it->second.body, w_guards);
+      add_race_assertions(context, f_it->second.body, w_guards);
 
   // get "main"
   goto_functionst::function_mapt::iterator m_it =
