@@ -1952,13 +1952,7 @@ bool esbmc_parseoptionst::process_goto_program(
     if (cmdline.isset("data-races-check"))
     {
       log_status("Adding Data Race Checks");
-
-      value_set_analysist value_set_analysis(ns);
-      value_set_analysis(goto_functions);
-
-      add_race_assertions(value_set_analysis, context, goto_functions);
-
-      value_set_analysis.update(goto_functions);
+      add_race_assertions(context, goto_functions);
     }
 
     //! goto-cov will also mutate the asserts added by esbmc (e.g. goto-check)
