@@ -86,11 +86,22 @@ __ESBMC_HIDE:;
 )";
 
 const std::string gasleft = R"(
+unsigned int _gaslimit = nondet_uint();
 uint256_t gasleft()
 {
 __ESBMC_HIDE:;
-  return nondet_uint();
+  gasConsume() // always less
+  return uint256_t(_gaslimit);
 }
+
+void gasConsume()
+{
+__ESBMC_HIDE:;
+  unsigned int consumed = nondet_uint();
+  assume(consumed > 0 && consumed <= _gaslimit);
+  _gaslimit -= consumed;
+}
+
 )";
 
 const std::string sol_abi = R"(

@@ -575,6 +575,16 @@ bool solidity_convertert::populate_low_level_functions(const std::string &cname)
     return true;
   move_builtin_to_contract(cname, "call", new_expr.type(), true);
 
+  // transfer()
+  if (get_transfer_definition(cname, new_expr))
+    return true;
+  move_builtin_to_contract(cname, "transfer", new_expr.type(), true);
+
+  // send()
+  if (get_send_definition(cname, new_expr))
+    return true;
+  move_builtin_to_contract(cname, "send", new_expr.type(), true);
+
   return false;
 }
 
