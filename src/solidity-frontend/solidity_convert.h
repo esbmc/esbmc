@@ -458,6 +458,8 @@ protected:
   get_target_function(const std::string &cname, const std::string &func_name);
   bool get_call_definition(const std::string &cname, exprt &new_expr);
   bool get_call_value_definition(const std::string &cname, exprt &new_expr);
+  bool get_transfer_definition(const std::string &cname, exprt &new_expr);
+  bool get_send_definition(const std::string &cname, exprt &new_expr);
   bool model_transaction(
     const nlohmann::json &expr,
     const exprt &base,

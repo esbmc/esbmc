@@ -90,7 +90,8 @@ bool solidity_convertert::convert()
     return true;
 
   // for coverage and trace simplification: update include_files
-  auto add_unique = [](const std::string &file) {
+  auto add_unique = [](const std::string &file)
+  {
     if (
       std::find(
         config.ansi_c.include_files.begin(),
@@ -624,8 +625,9 @@ bool solidity_convertert::populate_function_signature(
       is_payable = func_node["stateMutability"] == "payable";
       is_inherit = func_node.contains("is_inherited");
 
-      funcSignatures[cname].push_back(solidity_convertert::func_sig(
-        func_name, func_id, visibility, type, is_payable, is_inherit));
+      funcSignatures[cname].push_back(
+        solidity_convertert::func_sig(
+          func_name, func_id, visibility, type, is_payable, is_inherit));
     }
   }
 
@@ -633,9 +635,8 @@ bool solidity_convertert::populate_function_signature(
   bool hasConstructor = std::any_of(
     funcSignatures[cname].begin(),
     funcSignatures[cname].end(),
-    [&cname](const solidity_convertert::func_sig &sig) {
-      return sig.name == cname;
-    });
+    [&cname](const solidity_convertert::func_sig &sig)
+    { return sig.name == cname; });
   if (!hasConstructor)
   {
     func_name = cname;
@@ -645,8 +646,9 @@ bool solidity_convertert::populate_function_signature(
     type.return_type() = empty_typet();
     type.return_type().set("cpp_type", "void");
     is_inherit = false;
-    funcSignatures[cname].push_back(solidity_convertert::func_sig(
-      func_name, func_id, visibility, type, is_payable, is_inherit));
+    funcSignatures[cname].push_back(
+      solidity_convertert::func_sig(
+        func_name, func_id, visibility, type, is_payable, is_inherit));
   }
 
   return false;
@@ -9083,14 +9085,16 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
   dest = code_blockt();
 
   // call designated "initialization" functions
-  context.foreach_operand_in_order([&dest](const symbolt &s) {
-    if (s.type.initialization() && s.type.is_code())
+  context.foreach_operand_in_order(
+    [&dest](const symbolt &s)
     {
-      code_function_callt function_call;
-      function_call.function() = symbol_expr(s);
-      dest.move_to_operands(function_call);
-    }
-  });
+      if (s.type.initialization() && s.type.is_code())
+      {
+        code_function_callt function_call;
+        function_call.function() = symbol_expr(s);
+        dest.move_to_operands(function_call);
+      }
+    });
 }
 
 void solidity_convertert::get_aux_var(
@@ -10087,7 +10091,8 @@ bool solidity_convertert::has_callable_func(const std::string &cname)
   return std::any_of(
     funcSignatures[cname].begin(),
     funcSignatures[cname].end(),
-    [&cname](const solidity_convertert::func_sig &sig) {
+    [&cname](const solidity_convertert::func_sig &sig)
+    {
       return sig.name != cname &&
              (sig.visibility == "public" || sig.visibility == "external");
     });
@@ -10103,9 +10108,9 @@ bool solidity_convertert::has_target_function(
     return false;
 
   return std::any_of(
-    it->second.begin(), it->second.end(), [&](const func_sig &sig) {
-      return sig.name == func_name;
-    });
+    it->second.begin(),
+    it->second.end(),
+    [&](const func_sig &sig) { return sig.name == func_name; });
 }
 
 solidity_convertert::func_sig solidity_convertert::get_target_function(
@@ -10126,9 +10131,8 @@ solidity_convertert::func_sig solidity_convertert::get_target_function(
   auto func_it = std::find_if(
     functions.begin(),
     functions.end(),
-    [&func_name](const solidity_convertert::func_sig &sig) {
-      return sig.name == func_name;
-    });
+    [&func_name](const solidity_convertert::func_sig &sig)
+    { return sig.name == func_name; });
 
   // If function is found, return it; otherwise, return an empty func_sig
   if (func_it != functions.end())
@@ -11031,5 +11035,385 @@ bool solidity_convertert::get_call_value_definition(
 
   added_symbol.value = func_body;
   new_expr = symbol_expr(added_symbol);
+  return false;
+}
+
+bool solidity_convertert::get_transfer_definition(
+  const std::string &cname,
+  exprt &new_expr)
+{
+  std::string call_name = "transfer";
+  std::string call_id = "sol:@C@" + cname + "@F@$transfer#";
+  code_typet t;
+  t.return_type() = bool_type();
+  t.return_type().set("#sol_type", "BOOL");
+  std::string debug_modulename = get_modulename_from_path(absolute_path);
+  symbolt s;
+  get_default_symbol(s, debug_modulename, t, call_name, call_id, locationt());
+  auto &added_symbol = *move_symbol_to_context(s);
+  get_function_this_pointer_param(
+    cname, call_id, debug_modulename, locationt(), t);
+
+  // param: address _addr;
+  std::string addr_name = "_addr";
+  std::string addr_id = "sol:@C@" + cname + "@F@transfer@" + addr_name + "#0";
+  typet addr_t = unsignedbv_typet(160);
+  addr_t.set("#sol_type", "ADDRESS_PAYABLE");
+  symbolt addr_s;
+  get_default_symbol(
+    addr_s, debug_modulename, addr_t, addr_name, addr_id, locationt());
+  auto addr_added_symbol = *move_symbol_to_context(addr_s);
+
+  code_typet::argumentt param = code_typet::argumentt();
+  param.type() = addr_t;
+  param.cmt_base_name(addr_name);
+  param.cmt_identifier(addr_id);
+  t.arguments().push_back(param);
+
+  // param: uint _val;
+  std::string val_name = "_val";
+  std::string val_id = "sol:@C@" + cname + "@F@transfer@" + val_name + "#0";
+  typet val_t = unsignedbv_typet(256);
+  symbolt val_s;
+  get_default_symbol(
+    val_s, debug_modulename, val_t, val_name, val_id, locationt());
+  auto val_added_symbol = *move_symbol_to_context(val_s);
+
+  param = code_typet::argumentt();
+  param.type() = val_t;
+  param.cmt_base_name(val_name);
+  param.cmt_identifier(val_id);
+  t.arguments().push_back(param);
+
+  added_symbol.type = t;
+
+  code_blockt func_body;
+  exprt addr_expr = symbol_expr(addr_added_symbol);
+  exprt val_expr = symbol_expr(val_added_symbol);
+
+  // add __ESBMC_HIDE label
+  code_labelt label;
+  label.set_label("__ESBMC_HIDE");
+  label.code() = code_skipt();
+  func_body.operands().push_back(label);
+
+  exprt msg_sender = symbol_expr(*context.find_symbol("c:@msg_sender"));
+  exprt msg_value = symbol_expr(*context.find_symbol("c:@msg_value"));
+  symbolt this_sym = *context.find_symbol(call_id + "#this");
+  exprt this_address = member_exprt(symbol_expr(this_sym), "$address", addr_t);
+  exprt this_balance = member_exprt(symbol_expr(this_sym), "$balance", val_t);
+
+  // uint256_t old_value = msg_value;
+  symbolt old_value;
+  get_default_symbol(
+    old_value,
+    debug_modulename,
+    unsignedbv_typet(256),
+    "old_value",
+    "sol:@C@" + cname + "@F@transfer@old_value#" +
+      std::to_string(aux_counter++),
+    locationt());
+  symbolt &added_old_value = *move_symbol_to_context(old_value);
+  code_declt old_val_decl(symbol_expr(added_old_value));
+  added_old_value.value = msg_value;
+  old_val_decl.operands().push_back(msg_value);
+  func_body.move_to_operands(old_val_decl);
+
+  // uint160_t old_sender =  msg_sender;
+  typet _addr_t = unsignedbv_typet(160);
+  _addr_t.set("#sol_type", "ADDRESS");
+  symbolt old_sender;
+  get_default_symbol(
+    old_sender,
+    debug_modulename,
+    _addr_t,
+    "old_sender",
+    "sol:@C@" + cname + "@F@transfer@old_sender#" +
+      std::to_string(aux_counter++),
+    locationt());
+  symbolt &added_old_sender = *move_symbol_to_context(old_sender);
+  code_declt old_sender_decl(symbol_expr(added_old_sender));
+  added_old_sender.value = msg_sender;
+  old_sender_decl.operands().push_back(msg_sender);
+  func_body.move_to_operands(old_sender_decl);
+
+  for (auto str : contractNamesList)
+  {
+    // Here, we only consider if there is receive and fallback function
+    // as the call with signature should be directly modelled.
+    // order:
+    // 1. match payable receive
+    // 2. match payable fallback
+    // 3. return false (revert)
+    nlohmann::json decl_ref;
+    if (has_target_function(str, "receive"))
+      decl_ref = get_func_decl_ref(str, "receive");
+    else if (has_target_function(str, "fallback"))
+      decl_ref = get_func_decl_ref(str, "fallback");
+    else
+      // other payable function
+      continue;
+    if (decl_ref["stateMutability"] != "payable")
+      continue;
+
+    code_blockt then;
+
+    // _addr == _ESBMC_Object_str.$address
+    symbolt sym;
+    get_static_contract_instance(str, sym);
+    exprt mem_addr = member_exprt(symbol_expr(sym), "$address", addr_t);
+
+    exprt _equal = exprt("=", bool_type());
+    _equal.operands().push_back(addr_expr);
+    _equal.operands().push_back(mem_addr);
+
+    // msg_value = _val;
+    exprt assign_val = side_effect_exprt("assign", val_expr.type());
+    assign_val.copy_to_operands(msg_value, val_expr);
+    convert_expression_to_code(assign_val);
+    then.move_to_operands(assign_val);
+
+    // msg_sender = this.$address;
+    exprt assign_sender = side_effect_exprt("assign", addr_t);
+    assign_sender.copy_to_operands(msg_sender, this_address);
+    convert_expression_to_code(assign_sender);
+    then.move_to_operands(assign_sender);
+
+    // this.balance -= _val;
+    exprt sub_assign = side_effect_exprt("assign-", val_t);
+    sub_assign.copy_to_operands(this_balance, val_expr);
+    convert_expression_to_code(sub_assign);
+    then.move_to_operands(sub_assign);
+
+    // _ESBMC_Object_str.balance += _val;
+    exprt target_balance = member_exprt(symbol_expr(sym), "$balance", val_t);
+    exprt add_assign = side_effect_exprt("assign+", val_t);
+    add_assign.copy_to_operands(target_balance, val_expr);
+    convert_expression_to_code(add_assign);
+    then.move_to_operands(add_assign);
+
+    // func_call, e.g. receive(&_ESBMC_Object_str)
+    side_effect_expr_function_callt call;
+    if (get_non_library_function_call(decl_ref, empty_json, call))
+      return true;
+    call.arguments().at(0) = symbol_expr(sym);
+    convert_expression_to_code(call);
+    then.move_to_operands(call);
+
+    // msg_value = old_value;
+    exprt assign_val_restore = side_effect_exprt("assign", val_expr.type());
+    assign_val_restore.copy_to_operands(
+      msg_value, symbol_expr(added_old_value));
+    convert_expression_to_code(assign_val_restore);
+    then.move_to_operands(assign_val_restore);
+
+    // msg_sender = old_sender;
+    exprt assign_sender_restore = side_effect_exprt("assign", addr_t);
+    assign_sender_restore.copy_to_operands(
+      msg_sender, symbol_expr(added_old_sender));
+    convert_expression_to_code(assign_sender_restore);
+    then.move_to_operands(assign_sender_restore);
+
+    // return true;
+    code_returnt ret_true;
+    ret_true.return_value() = gen_one(bool_type());
+    then.move_to_operands(ret_true);
+
+    codet if_expr("ifthenelse");
+    if_expr.copy_to_operands(_equal, then);
+    func_body.move_to_operands(if_expr);
+  }
+  // add "Return false;" in the end
+  code_returnt return_expr;
+  return_expr.return_value() = gen_zero(bool_type());
+  func_body.move_to_operands(return_expr);
+
+  added_symbol.value = func_body;
+  new_expr = symbol_expr(added_symbol);
+  return false;
+}
+
+bool solidity_convertert::get_send_definition(
+  const std::string &cname,
+  exprt &new_expr)
+{
+  std::string call_name = "send";
+  std::string call_id = "sol:@C@" + cname + "@F@$send#";
+  code_typet t;
+  t.return_type() = bool_type();
+  t.return_type().set("#sol_type", "BOOL");
+  std::string debug_modulename = get_modulename_from_path(absolute_path);
+  symbolt s;
+  get_default_symbol(s, debug_modulename, t, call_name, call_id, locationt());
+  auto &added_symbol = *move_symbol_to_context(s);
+  get_function_this_pointer_param(
+    cname, call_id, debug_modulename, locationt(), t);
+
+  // param: address _addr;
+  std::string addr_name = "_addr";
+  std::string addr_id = "sol:@C@" + cname + "@F@send@" + addr_name + "#0";
+  typet addr_t = unsignedbv_typet(160);
+  addr_t.set("#sol_type", "ADDRESS_PAYABLE");
+  symbolt addr_s;
+  get_default_symbol(
+    addr_s, debug_modulename, addr_t, addr_name, addr_id, locationt());
+  auto addr_added_symbol = *move_symbol_to_context(addr_s);
+
+  code_typet::argumentt param = code_typet::argumentt();
+  param.type() = addr_t;
+  param.cmt_base_name(addr_name);
+  param.cmt_identifier(addr_id);
+  t.arguments().push_back(param);
+
+  // param: uint _val;
+  std::string val_name = "_val";
+  std::string val_id = "sol:@C@" + cname + "@F@send@" + val_name + "#0";
+  typet val_t = unsignedbv_typet(256);
+  symbolt val_s;
+  get_default_symbol(
+    val_s, debug_modulename, val_t, val_name, val_id, locationt());
+  auto val_added_symbol = *move_symbol_to_context(val_s);
+
+  param = code_typet::argumentt();
+  param.type() = val_t;
+  param.cmt_base_name(val_name);
+  param.cmt_identifier(val_id);
+  t.arguments().push_back(param);
+
+  added_symbol.type = t;
+
+  code_blockt func_body;
+  exprt addr_expr = symbol_expr(addr_added_symbol);
+  exprt val_expr = symbol_expr(val_added_symbol);
+
+  // add __ESBMC_HIDE label
+  code_labelt label;
+  label.set_label("__ESBMC_HIDE");
+  label.code() = code_skipt();
+  func_body.operands().push_back(label);
+
+  exprt msg_sender = symbol_expr(*context.find_symbol("c:@msg_sender"));
+  exprt msg_value = symbol_expr(*context.find_symbol("c:@msg_value"));
+  symbolt this_sym = *context.find_symbol(call_id + "#this");
+  exprt this_address = member_exprt(symbol_expr(this_sym), "$address", addr_t);
+  exprt this_balance = member_exprt(symbol_expr(this_sym), "$balance", val_t);
+
+  // uint256_t old_value = msg_value;
+  symbolt old_value;
+  get_default_symbol(
+    old_value,
+    debug_modulename,
+    unsignedbv_typet(256),
+    "old_value",
+    "sol:@C@" + cname + "@F@send@old_value#" + std::to_string(aux_counter++),
+    locationt());
+  symbolt &added_old_value = *move_symbol_to_context(old_value);
+  code_declt old_val_decl(symbol_expr(added_old_value));
+  added_old_value.value = msg_value;
+  old_val_decl.operands().push_back(msg_value);
+  func_body.move_to_operands(old_val_decl);
+
+  // uint160_t old_sender =  msg_sender;
+  typet _addr_t = unsignedbv_typet(160);
+  _addr_t.set("#sol_type", "ADDRESS");
+  symbolt old_sender;
+  get_default_symbol(
+    old_sender,
+    debug_modulename,
+    _addr_t,
+    "old_sender",
+    "sol:@C@" + cname + "@F@send@old_sender#" + std::to_string(aux_counter++),
+    locationt());
+  symbolt &added_old_sender = *move_symbol_to_context(old_sender);
+  code_declt old_sender_decl(symbol_expr(added_old_sender));
+  added_old_sender.value = msg_sender;
+  old_sender_decl.operands().push_back(msg_sender);
+  func_body.move_to_operands(old_sender_decl);
+
+  for (auto str : contractNamesList)
+  {
+    // Here, we only consider if there is receive and fallback function
+    // as the call with signature should be directly modelled.
+    // order:
+    // 1. match payable receive
+    // 2. match payable fallback
+    // 3. return false (revert)
+    nlohmann::json decl_ref;
+    if (has_target_function(str, "receive"))
+      decl_ref = get_func_decl_ref(str, "receive");
+    else if (has_target_function(str, "fallback"))
+      decl_ref = get_func_decl_ref(str, "fallback");
+    else
+      // other payable function
+      continue;
+    if (decl_ref["stateMutability"] != "payable")
+      continue;
+
+    code_blockt then;
+
+    // _addr == _ESBMC_Object_str.$address
+    symbolt sym;
+    get_static_contract_instance(str, sym);
+    exprt mem_addr = member_exprt(symbol_expr(sym), "$address", addr_t);
+
+    exprt _equal = exprt("=", bool_type());
+    _equal.operands().push_back(addr_expr);
+    _equal.operands().push_back(mem_addr);
+
+    // msg_value = _val;
+    exprt assign_val = side_effect_exprt("assign", val_expr.type());
+    assign_val.copy_to_operands(msg_value, val_expr);
+    convert_expression_to_code(assign_val);
+    then.move_to_operands(assign_val);
+
+    // msg_sender = this.$address;
+    exprt assign_sender = side_effect_exprt("assign", addr_t);
+    assign_sender.copy_to_operands(msg_sender, this_address);
+    convert_expression_to_code(assign_sender);
+    then.move_to_operands(assign_sender);
+
+    // this.balance -= _val;
+    exprt sub_assign = side_effect_exprt("assign-", val_t);
+    sub_assign.copy_to_operands(this_balance, val_expr);
+    convert_expression_to_code(sub_assign);
+    then.move_to_operands(sub_assign);
+
+    // _ESBMC_Object_str.balance += _val;
+    exprt target_balance = member_exprt(symbol_expr(sym), "$balance", val_t);
+    exprt add_assign = side_effect_exprt("assign+", val_t);
+    add_assign.copy_to_operands(target_balance, val_expr);
+    convert_expression_to_code(add_assign);
+    then.move_to_operands(add_assign);
+
+    // func_call, e.g. receive(&_ESBMC_Object_str)
+    side_effect_expr_function_callt call;
+    if (get_non_library_function_call(decl_ref, empty_json, call))
+      return true;
+    call.arguments().at(0) = symbol_expr(sym);
+    convert_expression_to_code(call);
+    then.move_to_operands(call);
+
+    // msg_value = old_value;
+    exprt assign_val_restore = side_effect_exprt("assign", val_expr.type());
+    assign_val_restore.copy_to_operands(
+      msg_value, symbol_expr(added_old_value));
+    convert_expression_to_code(assign_val_restore);
+    then.move_to_operands(assign_val_restore);
+
+    // msg_sender = old_sender;
+    exprt assign_sender_restore = side_effect_exprt("assign", addr_t);
+    assign_sender_restore.copy_to_operands(
+      msg_sender, symbol_expr(added_old_sender));
+    convert_expression_to_code(assign_sender_restore);
+    then.move_to_operands(assign_sender_restore);
+
+    codet if_expr("ifthenelse");
+    if_expr.copy_to_operands(_equal, then);
+    func_body.move_to_operands(if_expr);
+  }
+
+  added_symbol.value = func_body;
+  new_expr = symbol_expr(added_symbol);
+
   return false;
 }
