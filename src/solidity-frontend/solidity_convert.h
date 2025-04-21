@@ -450,6 +450,7 @@ protected:
     const nlohmann::json &options,
     const std::string mem_name,
     const exprt &base,
+    const exprt &arg,
     exprt &new_expr);
   bool has_callable_func(const std::string &cname);
   bool

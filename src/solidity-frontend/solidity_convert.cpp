@@ -4589,6 +4589,10 @@ bool solidity_convertert::get_expr(
     // 3. For case 2, where we only have the address, we need to obtain the object from the mapping
     // For case 1: => this->balance
     // For case 3: => tmp.balance
+    const nlohmann::json &func_call =
+      find_last_parent(src_ast_json["nodes"], expr);
+    if (func_call.empty() || func_call.is_null())
+      return true;
     const nlohmann::json &callee_expr_json = expr["expression"];
     const std::string mem_name = expr["memberName"].get<std::string>();
 
@@ -4638,10 +4642,6 @@ bool solidity_convertert::get_expr(
     }
     }
 
-    // irep_idt c_id = base.type().identifier();
-    // std::string bs_c_name = context.find_symbol(c_id)->name.as_string();
-    // assert(!bs_c_name.empty());
-
     // case 1, which is a type conversion node
     if (is_low_level_call(mem_name))
     {
@@ -4649,6 +4649,7 @@ bool solidity_convertert::get_expr(
       {
         if (get_unbound_expr(expr, current_contractName, new_expr))
           return true;
+
         if (mem_name == "send")
           new_expr = nondet_bool_expr;
         else
@@ -4661,8 +4662,15 @@ bool solidity_convertert::get_expr(
       }
       else
       {
+        exprt arg;
+        assert(func_call.contains("arguments"));
+        //! only one possible arguemnt
+        auto &arguments = func_call["arguments"][0];
+        if (get_expr(arguments, expr["argumentTypes"][0], arg))
+          return true;
+
         if (get_low_level_member_accsss(
-              expr, literal_type, mem_name, base, new_expr))
+              expr, literal_type, mem_name, base, arg, new_expr))
           return true;
       }
     }
@@ -10400,16 +10408,18 @@ bool solidity_convertert::get_high_level_member_access(
 }
 
 /** e.g.
- * x.call{value:}("")
+ * x.call{value: val}("")
  * @base: (this->)x
  * @mem_name: call
- * @options: value
+ * @options: val
+ * @arg: ""
  */
 bool solidity_convertert::get_low_level_member_accsss(
   const nlohmann::json &expr,
   const nlohmann::json &options,
   const std::string mem_name,
   const exprt &base,
+  const exprt &arg,
   exprt &new_expr)
 {
   log_debug("solidity", "Getting low-level member access");
@@ -10486,6 +10496,26 @@ bool solidity_convertert::get_low_level_member_accsss(
     get_llc_ret_tuple(dump);
     dump.value.op0() = call;
     new_expr = symbol_expr(dump);
+  }
+  else if (mem_name == "transfer")
+  {
+    std::string func_name = "transfer";
+    std::string func_id = "sol:@C@" + cname + "@F@$transfer#0";
+    get_library_function_call_no_args(
+      func_name, func_id, bool_type(), loc, call);
+    call.arguments().push_back(this_object);
+    call.arguments().push_back(base);
+    call.arguments().push_back(arg);
+  }
+  else if (mem_name == "send")
+  {
+    std::string func_name = "send";
+    std::string func_id = "sol:@C@" + cname + "@F@$send#0";
+    get_library_function_call_no_args(
+      func_name, func_id, bool_type(), loc, call);
+    call.arguments().push_back(this_object);
+    call.arguments().push_back(base);
+    call.arguments().push_back(arg);
   }
   else
   {
