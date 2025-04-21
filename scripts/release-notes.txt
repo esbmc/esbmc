@@ -1,5 +1,48 @@
 Release Notes of the ESBMC model checker
 
+*** Version 7.9
+
+This release of ESBMC v7.9 introduces enhancements in Solidity verification, Python frontend support, overflow and concurrency analysis, and overall system robustness. Below is a comprehensive summary of the new features, enhancements, and bug fixes:
+
+* New Features
+** Solidity Verification
+- Introduced a bounded cross-contract verification algorithm for more comprehensive smart contract analysis (#2327).
+- Added support for function calls with options, unit keywords, and insufficient balance checks in Solidity (#2398, #2393).
+- Implemented coverage support for Solidity programs, enabling fine-grained analysis (#2389).
+- Introduced AST merging across multiple files and fixed function order bugs, improving multi-contract verification accuracy (#2392, #2400).
+- Improved address modeling and ensured temp files are uniquely created to prevent race conditions (#2379, #2396).
+** Python Frontend
+- Enhanced support for NumPy math functions by reusing C libm models (#2395).
+- Added models for numpy.ceil, improved broadcasting rule checking, and better support for dtype arguments (#2382, #2353, #2300).
+- Implemented support for nondeterministic values, random.random(), random.randint(), and improved function call handling (#2303, #2299, #2250).
+- Enabled function default parameters to be variables and improved string literal handling (#2346, #2251).
+** C/C++ Verification
+- Added operational models for C++ constructs like std::stoi, std::stof, and align_val_t (#2277, #2301).
+- Improved realloc handling and added overflow detection for comparison operators (#2345, #2344).
+- Enhanced typecast overflow detection and introduced overflow_cast in SMT backend (#2376, #2367).
+** SMT Backend Enhancements
+- Fixed overflow detection for signed subtraction and unsigned division/modulus (#2383).
+- Enhanced overflow handling in symbolic execution (#2338, #2343).
+- Supported bitwise integer arithmetic in Z3 (#2354).
+- Added support for SMT quantifiers (#2261).
+** Concurrency and Data-Race Detection
+- Improved concurrency checks by optimizing and unifying the data race flags (#2385, #2399).
+- Increased context-switch bound for SV-COMP to 3 (#2378).
+* Fixes and Improvements
+** Verification Process
+- Fixed regression in Solidity verification (#2402).
+- Improved modeling of strcpy, atexit, and infinite arrays for operational models (#2253, #2351, #2349).
+- Fixed symbolic execution issues with goto-check and k-induction under certain edge cases (#2328, #2326, #2340).
+* Build System
+- Fixed build issues on Windows (#2403).
+- Updated external dependencies and improved CMake compatibility (#2390, #2370).
+- Made test cases compatible with Windows (#2361).
+* Coverage and Test Infrastructure
+- Fixed the internal coverage algorithm and improved Solidity coverage instrumentation (#2365, #2389).
+- Added various regression and SV-COMP benchmark test cases (#2362, #2359, #2318).
+* Acknowledgments
+We want to thank the following contributors for this release: @XLiZHI, @ChenfengWei0, @prototypeC14, @brcfarias, @intrigus-lgtm, @Ben-Eichhoefer, @ssshivaji, and @lucasccordeiro. Your contributions to Solidity support, Python frontend, SMT enhancements, and concurrency modeling have significantly strengthened the ESBMC verification ecosystem.
+
 *** Version 7.8.1
 
 This is the ESBMC version used at the FSE'25 submission:
