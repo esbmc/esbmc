@@ -6,6 +6,7 @@
 #include <util/ieee_float.h>
 #include <util/string_constant.h>
 #include <util/std_expr.h>
+#include <util/message.h>
 
 // Integer literal
 bool solidity_convertert::convert_integer_literal(
@@ -21,6 +22,12 @@ bool solidity_convertert::convert_integer_literal(
   // 1000000000 wei == 1_000_000_000 wei
   the_value.erase(
     std::remove(the_value.begin(), the_value.end(), '_'), the_value.end());
+
+  if(the_value.find(".")!= std::string::npos)
+  {
+    log_error("Unexpected rational constant");
+    return true;
+  }
 
   exprt the_val;
   // extract the value: unsigned

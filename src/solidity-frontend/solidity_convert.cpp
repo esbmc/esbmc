@@ -2497,7 +2497,7 @@ bool solidity_convertert::move_inheritance_to_ctor(
           auto _ctor = *ctor_modifier;
           for (const auto &c_mdf : _ctor)
           {
-            if(!c_node.contains("modifierName"))
+            if (!c_node.contains("modifierName"))
               continue;
 
             if (c_mdf["modifierName"]["name"].get<std::string>() == c_name)
@@ -3610,6 +3610,22 @@ bool solidity_convertert::get_expr(
 
     break;
   }
+  case SolidityGrammar::ExpressionT::LiteralWithRational:
+  {
+    // extract integer literal
+    std::string typeString = expr["typeDescriptions"]["typeString"];
+    // Remove "int_const " prefix
+    std::string value_str = typeString.substr(10);
+
+    BigInt z_ext_value = string2integer(value_str);
+    unsignedbv_typet type(256);
+    new_expr = constant_exprt(
+      integer2binary(z_ext_value, bv_width(type)),
+      integer2string(z_ext_value),
+      type);
+
+    break;
+  }
   case SolidityGrammar::ExpressionT::Literal:
   {
     // make a type-name json for integer literal conversion
@@ -4681,11 +4697,11 @@ bool solidity_convertert::get_expr(
     // 3. For case 2, where we only have the address, we need to obtain the object from the mapping
     // For case 1: => this->balance
     // For case 3: => tmp.balance
-    const nlohmann::json &callee_expr_json = expr["expression"];
+    const nlohmann::json &caller_expr_json = expr["expression"];
     const std::string mem_name = expr["memberName"].get<std::string>();
 
     SolidityGrammar::ExpressionT _type =
-      SolidityGrammar::get_expression_t(callee_expr_json);
+      SolidityGrammar::get_expression_t(caller_expr_json);
     log_debug(
       "solidity",
       "\t\t@@@ got = {}",
@@ -4698,9 +4714,9 @@ bool solidity_convertert::get_expr(
     {
       // get base: x.$address / this.$address
       exprt mem_expr;
-      assert(callee_expr_json.contains("arguments"));
-      assert(callee_expr_json["arguments"].size() == 1);
-      if (get_expr(callee_expr_json["arguments"][0], mem_expr))
+      assert(caller_expr_json.contains("arguments"));
+      assert(caller_expr_json["arguments"].size() == 1);
+      if (get_expr(caller_expr_json["arguments"][0], mem_expr))
         return true;
 
       if (mem_expr.is_member() || mem_expr.is_symbol())
@@ -4717,7 +4733,7 @@ bool solidity_convertert::get_expr(
     case SolidityGrammar::DeclRefExprClass:
     case SolidityGrammar::BuiltinMemberCall:
     {
-      if (get_expr(callee_expr_json, base))
+      if (get_expr(caller_expr_json, base))
         return true;
       break;
     }
@@ -10587,7 +10603,7 @@ bool solidity_convertert::get_low_level_member_accsss(
     }
     else
     {
-      // fo call#0(this, addr)
+      // To call#0(this, addr)
       addr.type().set("#sol_type", "ADDRESS");
 
       std::string func_id = "sol:@C@" + cname + "@F@$call#0";
@@ -10608,25 +10624,35 @@ bool solidity_convertert::get_low_level_member_accsss(
   }
   else if (mem_name == "transfer")
   {
+    // transfer(this, to_addr, balance_value)
+    exprt addr = base;
     assert(!arg.is_nil());
+
     std::string func_name = "transfer";
     std::string func_id = "sol:@C@" + cname + "@F@$transfer#0";
     get_library_function_call_no_args(
       func_name, func_id, bool_type(), loc, call);
     call.arguments().push_back(this_object);
-    call.arguments().push_back(base);
+    call.arguments().push_back(addr);
     call.arguments().push_back(arg);
+
+    new_expr = call;
   }
   else if (mem_name == "send")
   {
+    // send(this, to_addr, balance_value)
+    exprt addr = base;
     assert(!arg.is_nil());
+
     std::string func_name = "send";
     std::string func_id = "sol:@C@" + cname + "@F@$send#0";
     get_library_function_call_no_args(
       func_name, func_id, bool_type(), loc, call);
     call.arguments().push_back(this_object);
-    call.arguments().push_back(base);
+    call.arguments().push_back(addr);
     call.arguments().push_back(arg);
+
+    new_expr = call;
   }
   else
   {
@@ -11194,7 +11220,7 @@ bool solidity_convertert::get_transfer_definition(
   exprt &new_expr)
 {
   std::string call_name = "transfer";
-  std::string call_id = "sol:@C@" + cname + "@F@$transfer#";
+  std::string call_id = "sol:@C@" + cname + "@F@$transfer#0";
   code_typet t;
   t.return_type() = bool_type();
   t.return_type().set("#sol_type", "BOOL");
@@ -11389,7 +11415,7 @@ bool solidity_convertert::get_send_definition(
   exprt &new_expr)
 {
   std::string call_name = "send";
-  std::string call_id = "sol:@C@" + cname + "@F@$send#";
+  std::string call_id = "sol:@C@" + cname + "@F@$send#0";
   code_typet t;
   t.return_type() = bool_type();
   t.return_type().set("#sol_type", "BOOL");
