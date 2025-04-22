@@ -521,9 +521,6 @@ bool solidity_convertert::populate_auxilary_vars()
         bool argsMatch = true;
         for (size_t idx = 0; idx < dArgs.size(); ++idx)
         {
-          dArgs[idx].type().dump();
-          bArgs[idx].type().dump();
-
           if (dArgs[idx].type() != bArgs[idx].type())
           {
             argsMatch = false;
