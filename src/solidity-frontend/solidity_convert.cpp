@@ -480,70 +480,6 @@ bool solidity_convertert::populate_auxilary_vars()
   // since the based contract's signature is always coverred by the inherited one
   structureTypingMap = inheritanceMap;
 
-  // function signature coverage‐check lambda: name + ordered argument types
-  auto covers = [&](const std::string &derived, const std::string &base) -> bool
-  {
-    const auto &dSigs = funcSignatures.at(derived);
-    const auto &bSigs = funcSignatures.at(base);
-
-    // Every base sig must have a matching derived sig
-    for (const auto &ds : dSigs)
-    {
-      if (ds.name == derived)
-        // skip ctor
-        continue;
-
-      //TODO: skip interface, abstract contract
-
-      bool foundMatch = false;
-
-      for (const auto &bs : bSigs)
-      {
-        // 1) same name?
-        if (ds.name != bs.name)
-          continue;
-
-        // 2) same number of params?
-        const auto &dArgs = to_code_type(ds.type).arguments();
-        const auto &bArgs = to_code_type(bs.type).arguments();
-        if (dArgs.size() != bArgs.size())
-          continue;
-        if (
-          to_code_type(ds.type).has_ellipsis() &&
-          !to_code_type(bs.type).has_ellipsis())
-          continue;
-        if (
-          to_code_type(bs.type).has_ellipsis() &&
-          !to_code_type(ds.type).has_ellipsis())
-          continue;
-
-        // 3) each parameter's type must match, in order
-        bool argsMatch = true;
-        for (size_t idx = 0; idx < dArgs.size(); ++idx)
-        {
-          if (dArgs[idx].type() != bArgs[idx].type())
-          {
-            argsMatch = false;
-            break;
-          }
-        }
-
-        if (argsMatch)
-        {
-          log_debug("solidity", "function {} matched", ds.name);
-          foundMatch = true;
-          break;
-        }
-      }
-
-      // if any base‐fn had no match, derived does NOT cover base
-      if (!foundMatch)
-        return false;
-    }
-
-    return true;
-  };
-
   log_debug("solidity", "Matching function signautre");
   for (const auto &derived : contractNamesList)
   {
@@ -553,7 +489,7 @@ bool solidity_convertert::populate_auxilary_vars()
         continue;
 
       // if derived implements all base functions by name+type
-      if (covers(derived, base))
+      if (is_func_sig_cover(derived, base))
       {
         log_debug("solidity", "contract {} covers contract {}", derived, base);
         structureTypingMap[derived].insert(base);
@@ -1422,6 +1358,7 @@ bool solidity_convertert::get_contract_definition(const std::string &c_name)
   auto old_current_functionName = current_functionName;
   auto old_current_functionDecl = current_functionDecl;
   auto old_current_forStmt = current_forStmt;
+  auto old_current_typeName = current_typeName;
   auto old_initializers = initializers;
   auto old_ctor_modifier = ctor_modifier;
 
@@ -1490,6 +1427,7 @@ bool solidity_convertert::get_contract_definition(const std::string &c_name)
   current_functionName = old_current_functionName;
   current_functionDecl = old_current_functionDecl;
   current_forStmt = old_current_forStmt;
+  current_typeName = old_current_typeName;
   initializers = old_initializers;
   ctor_modifier = old_ctor_modifier;
 
@@ -2830,6 +2768,7 @@ void solidity_convertert::reset_auxiliary_vars()
   current_functionName = "";
   current_functionDecl = nullptr;
   current_forStmt = nullptr;
+  current_typeName = nullptr;
   initializers.clear();
   ctor_modifier = nullptr;
 }
@@ -4257,10 +4196,9 @@ bool solidity_convertert::get_expr(
       // ==> x.data, where data is a state variable in the contract
       // in Solidity the x.data() is read-only
       exprt comp;
-      if (get_var_decl_ref(member_decl_ref, true, comp))
+      if (get_var_decl_ref(member_decl_ref, false, comp))
         return true;
-      const irep_idt comp_name =
-        comp.name().empty() ? comp.component_name() : comp.name();
+      const irep_idt comp_name = comp.name();
 
       if (current_contractName == base_cname)
         // this.member();
@@ -4271,13 +4209,10 @@ bool solidity_convertert::get_expr(
         get_nondet_expr(comp.type(), new_expr);
       else
       {
-        exprt dump;
-        if (comp.name().empty())
-          // decompose member_exprt
-          dump = comp.op0();
+        assert(!comp.is_member());
         auto _mem_call = member_exprt(base, comp_name, comp.type());
         if (get_high_level_member_access(
-              func_call_json, base, dump, _mem_call, false, new_expr))
+              func_call_json, base, comp, _mem_call, false, new_expr))
           return true;
       }
 
@@ -4311,6 +4246,7 @@ bool solidity_convertert::get_expr(
       }
       else
       {
+        assert(!comp.is_member());
         if (get_high_level_member_access(
               func_call_json, literal_type, base, comp, call, true, new_expr))
           return true;
@@ -8560,6 +8496,135 @@ void solidity_convertert::get_size_of_expr(const typet &t, exprt &size_of_expr)
   size_of_expr.set("#c_sizeof_type", elem_type);
 }
 
+// check if the abi.encodedSignature is the same
+// note that internal/private function do not have abi signature
+bool solidity_convertert::is_func_sig_cover(
+  const std::string &derived,
+  const std::string &base)
+{
+  // function signature coverage‐check lambda: name + ordered argument types
+  auto covers = [&](const std::string &derived, const std::string &base) -> bool
+  {
+    const auto &dSigs = funcSignatures.at(derived);
+    const auto &bSigs = funcSignatures.at(base);
+
+    // Every base sig must have a matching derived sig
+    for (const auto &ds : dSigs)
+    {
+      if (ds.name == derived)
+        // skip ctor
+        continue;
+
+      if (ds.visibility == "private" || ds.visibility == "internal")
+        // cannot be called via abi
+        continue;
+
+      //TODO: skip interface, abstract contract
+
+      bool foundMatch = false;
+
+      for (const auto &bs : bSigs)
+      {
+        // 1) same name?
+        if (ds.name != bs.name)
+          continue;
+
+        // 2) internal or private?
+        if (bs.visibility == "private" || bs.visibility == "internal")
+          continue;
+
+        // 3) same number of params?
+        const auto &dArgs = to_code_type(ds.type).arguments();
+        const auto &bArgs = to_code_type(bs.type).arguments();
+        if (dArgs.size() != bArgs.size())
+          continue;
+        if (
+          to_code_type(ds.type).has_ellipsis() &&
+          !to_code_type(bs.type).has_ellipsis())
+          continue;
+        if (
+          to_code_type(bs.type).has_ellipsis() &&
+          !to_code_type(ds.type).has_ellipsis())
+          continue;
+
+        // 4) each parameter's type must match, in order
+        bool argsMatch = true;
+        for (size_t idx = 0; idx < dArgs.size(); ++idx)
+        {
+          if (dArgs[idx].type() != bArgs[idx].type())
+          {
+            argsMatch = false;
+            break;
+          }
+        }
+
+        if (argsMatch)
+        {
+          log_debug("solidity", "function {} matched", ds.name);
+          foundMatch = true;
+          break;
+        }
+      }
+
+      // if any base‐fn had no match, derived does NOT cover base
+      if (!foundMatch)
+        return false;
+    }
+
+    return true;
+  };
+
+  return covers(derived, base);
+}
+
+// check if the target contract contains any public var with matched name and type, which can be accessed via abi
+bool solidity_convertert::is_var_getter_matched(
+  const std::string &cname,
+  const std::string &tname,
+  const typet &ttype)
+{
+  // 1) get contract body
+  nlohmann::json contract_ref;
+  for (auto &nodes : src_ast_json["nodes"])
+  {
+    if (
+      nodes.contains("nodeType") && nodes["nodeType"] == "ContractDefinition" &&
+      nodes["name"] == cname)
+      contract_ref = nodes;
+  }
+  if (contract_ref.empty())
+  {
+    log_error("cannot find contract definition ref");
+    abort();
+  }
+
+  const nlohmann::json body = contract_ref["nodes"];
+  for (const auto &node : body)
+  {
+    if (
+      SolidityGrammar::get_contract_body_element_t(node) ==
+      SolidityGrammar::VarDecl)
+    {
+      assert(node.contains("visibility"));
+      std::string access = node["visibility"].get<std::string>();
+      if (access != "public")
+        continue;
+
+      exprt comp;
+      if (get_var_decl_ref(node, false, comp))
+      {
+        log_error("failed to get variable reference");
+        abort();
+      }
+
+      if (comp.name().as_string() == tname && comp.type() == ttype)
+        return true;
+    }
+  }
+
+  return false;
+}
+
 // check if the node is a mapping
 bool solidity_convertert::is_mapping(const nlohmann::json &ast_node)
 {
@@ -10233,6 +10298,7 @@ bool solidity_convertert::has_callable_func(const std::string &cname)
     funcSignatures[cname].end(),
     [&cname](const solidity_convertert::func_sig &sig)
     {
+      // must be public or external, even if the address is itself
       return sig.name != cname &&
              (sig.visibility == "public" || sig.visibility == "external");
     });
@@ -10458,6 +10524,7 @@ bool solidity_convertert::get_high_level_member_access(
     get_static_contract_instance(str, dump);
     exprt _base = symbol_expr(dump);
 
+    bool is_revert = false;
     if (is_func_call)
     {
       // e.g. x.call() y.call(). we need to find the definiton of the call beyond the contract x/y seperately
@@ -10483,10 +10550,33 @@ bool solidity_convertert::get_high_level_member_access(
     else
     {
       assert(!member.name().empty());
-      memcall = member_exprt(_base, member.name(), member.type());
+
+      if (inheritanceMap[_cname].count(str))
+        memcall = member_exprt(_base, member.name(), member.type());
+      else
+      {
+        // check if the state variable exsist in the target contract
+        // signature: type + name
+        // this is due to that the structureTypeMap only ensure the function signature matched
+        if (is_var_getter_matched(
+              str, member.name().as_string(), member.type()))
+          memcall = member_exprt(_base, member.name(), member.type());
+        else
+        {
+          // revert
+          side_effect_expr_function_callt call;
+          get_library_function_call_no_args(
+            "__ESBMC_assume", "__ESBMC_assume", bool_type(), l, call);
+
+          exprt arg = false_exprt();
+          call.arguments().push_back(arg);
+          memcall = call;
+          is_revert = true;
+        }
+      }
     }
     rhs = memcall;
-    if (!is_return_void)
+    if (!is_return_void && !is_revert)
     {
       exprt _assign = side_effect_exprt("assign", tmp.type());
       convert_type_expr(ns, memcall, tmp.type());
