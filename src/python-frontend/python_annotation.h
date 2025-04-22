@@ -380,9 +380,16 @@ private:
   std::string get_type_from_rhs_variable(const Json &element, const Json &body)
   {
     const auto &value_type = element["value"]["_type"];
-    std::string rhs_var_name = value_type == "Name"
-                                 ? element["value"]["id"]
-                                 : element["value"]["value"]["id"];
+    std::string rhs_var_name;
+
+    if (value_type == "Name")
+      rhs_var_name = element["value"]["id"];
+    else if (value_type == "UnaryOp")
+      rhs_var_name = element["value"]["operand"]["id"];
+    else
+      rhs_var_name = element["value"]["value"]["id"];
+
+    assert(!rhs_var_name.empty());
 
     // Find RHS variable declaration in the current scope (e.g.: while/if block)
     Json rhs_node = find_annotated_assign(rhs_var_name, body["body"]);
@@ -555,11 +562,14 @@ private:
     {
       inferred_type = "list";
     }
-    else if (
-      value_type == "UnaryOp" && stmt["value"]["operand"]["_type"] ==
-                                   "Constant") // Handle negative numbers
+    else if (value_type == "UnaryOp") // Handle negative numbers
     {
-      inferred_type = get_type_from_constant(stmt["value"]["operand"]);
+      const auto &operand = stmt["value"]["operand"];
+      const auto &operand_type = operand["_type"];
+      if (operand_type == "Constant")
+        inferred_type = get_type_from_constant(operand);
+      else if (operand_type == "Name")
+        inferred_type = get_type_from_rhs_variable(stmt, body);
     }
 
     // Get type from RHS variable
