@@ -4579,7 +4579,7 @@ bool solidity_convertert::get_expr(
     // 2. address x;
     //    x.balance;
     //    msg.sender.balance;
-    //
+    //! Note that member call like msg.sender will not be handled here
     // The main difference is that, for case 1 we do not need to guess the contract instance
     // While in case 2, we need to utilize over-approximate modelling to bind the all possible instance
     //
@@ -4589,10 +4589,6 @@ bool solidity_convertert::get_expr(
     // 3. For case 2, where we only have the address, we need to obtain the object from the mapping
     // For case 1: => this->balance
     // For case 3: => tmp.balance
-    const nlohmann::json &func_call =
-      find_last_parent(src_ast_json["nodes"], expr);
-    if (func_call.empty() || func_call.is_null())
-      return true;
     const nlohmann::json &callee_expr_json = expr["expression"];
     const std::string mem_name = expr["memberName"].get<std::string>();
 
@@ -4662,12 +4658,32 @@ bool solidity_convertert::get_expr(
       }
       else
       {
-        exprt arg;
-        assert(func_call.contains("arguments"));
-        //! only one possible arguemnt
-        auto &arguments = func_call["arguments"][0];
-        if (get_expr(arguments, expr["argumentTypes"][0], arg))
+        const nlohmann::json &initial_func_call =
+          find_last_parent(src_ast_json["nodes"], expr);
+        const nlohmann::json *func_call = &initial_func_call;
+
+        if ((*func_call)["nodeType"] == "FunctionCallOptions")
+        {
+          const nlohmann::json &second_call =
+            find_last_parent(src_ast_json["nodes"], initial_func_call);
+          func_call = &second_call;
+        }
+
+        assert((*func_call)["nodeType"] == "FunctionCall");
+
+        if ((*func_call).empty() || (*func_call).is_null())
           return true;
+
+        exprt arg = nil_exprt();
+        assert((*func_call).contains("arguments"));
+
+        // only one possible arguemnt
+        if ((*func_call)["arguments"].size() > 0)
+        {
+          auto &arguments = (*func_call)["arguments"][0];
+          if (get_expr(arguments, expr["argumentTypes"][0], arg))
+            return true;
+        }
 
         if (get_low_level_member_accsss(
               expr, literal_type, mem_name, base, arg, new_expr))
@@ -10499,6 +10515,7 @@ bool solidity_convertert::get_low_level_member_accsss(
   }
   else if (mem_name == "transfer")
   {
+    assert(!arg.is_nil());
     std::string func_name = "transfer";
     std::string func_id = "sol:@C@" + cname + "@F@$transfer#0";
     get_library_function_call_no_args(
@@ -10509,6 +10526,7 @@ bool solidity_convertert::get_low_level_member_accsss(
   }
   else if (mem_name == "send")
   {
+    assert(!arg.is_nil());
     std::string func_name = "send";
     std::string func_id = "sol:@C@" + cname + "@F@$send#0";
     get_library_function_call_no_args(

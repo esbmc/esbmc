@@ -542,7 +542,6 @@ protected:
   // Who inherits from me?
   std::unordered_map<std::string, std::unordered_set<std::string>>
     inheritanceMap;
-  //std::unordered_map<std::string, std::unordered_set<std::string>> functionSignature;
   // contract name list
   std::unordered_map<int, std::string> contractNamesMap;
   std::set<std::string> contractNamesList;
