@@ -569,7 +569,15 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
   if (
     element["operand"].contains("value") &&
     element["operand"]["_type"] == "Constant")
+  {
     type = type_handler_.get_typet(element["operand"]["value"]);
+  }
+  else if (element["operand"]["_type"] == "Name")
+  {
+    const std::string var_type =
+      type_handler_.get_var_type(element["operand"]["id"].get<std::string>());
+    type = type_handler_.get_typet(var_type);
+  }
 
   exprt unary_expr(
     get_op(element["op"]["_type"].get<std::string>(), type), type);
