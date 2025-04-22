@@ -463,30 +463,6 @@ bool solidity_convertert::populate_auxilary_vars()
     }
   }
 
-  // add contract name string
-  // const char * Base = &"Base"[0];
-  for (auto contract_name : contractNamesList)
-  {
-    exprt _cname_expr;
-    std::string aux_cname, aux_cid;
-    aux_cname = contract_name;
-    aux_cid = "sol:@" + aux_cname;
-
-    string_constantt string(contract_name);
-    typet ct = pointer_typet(signed_char_type());
-    ct.cmt_constant(true);
-    symbolt s;
-    std::string debug_modulename = get_modulename_from_path(absolute_path);
-    get_default_symbol(
-      s, debug_modulename, ct, aux_cname, aux_cid, locationt());
-    s.lvalue = true;
-    s.file_local = true;
-    s.static_lifetime = true; // static
-    symbolt &_sym = *move_symbol_to_context(s);
-    solidity_gen_typecast(ns, string, ct);
-    _sym.value = string;
-  }
-
   // From here, we might start to modify the original src_ast_json
   for (auto &c_node : nodes)
   {
@@ -586,6 +562,30 @@ bool solidity_convertert::populate_auxilary_vars()
         structureTypingMap[derived].insert(base);
       }
     }
+  }
+
+  // add contract name string
+  // const char * Base = &"Base"[0];
+  for (auto contract_name : contractNamesList)
+  {
+    exprt _cname_expr;
+    std::string aux_cname, aux_cid;
+    aux_cname = contract_name;
+    aux_cid = "sol:@" + aux_cname;
+
+    string_constantt string(contract_name);
+    typet ct = pointer_typet(signed_char_type());
+    ct.cmt_constant(true);
+    symbolt s;
+    std::string debug_modulename = get_modulename_from_path(absolute_path);
+    get_default_symbol(
+      s, debug_modulename, ct, aux_cname, aux_cid, locationt());
+    s.lvalue = true;
+    s.file_local = true;
+    s.static_lifetime = true; // static
+    symbolt &_sym = *move_symbol_to_context(s);
+    solidity_gen_typecast(ns, string, ct);
+    _sym.value = string;
   }
 
   // populate _bind_addr_list
@@ -2454,6 +2454,7 @@ bool solidity_convertert::move_inheritance_to_ctor(
 
       for (const auto &c_node : (*based_contracts))
       {
+        assert(c_node.contains("baseName"));
         std::string c_name = c_node["baseName"]["name"].get<std::string>();
         if (c_name != target_c_name)
           continue;
@@ -2496,6 +2497,9 @@ bool solidity_convertert::move_inheritance_to_ctor(
           auto _ctor = *ctor_modifier;
           for (const auto &c_mdf : _ctor)
           {
+            if(!c_node.contains("modifierName"))
+              continue;
+
             if (c_mdf["modifierName"]["name"].get<std::string>() == c_name)
             {
               c_param_list_node = c_mdf;
@@ -8785,6 +8789,7 @@ bool solidity_convertert::get_new_object_ctor_call(
   const nlohmann::json caller,
   exprt &new_expr)
 {
+  log_debug("solidity", "get_new_object_ctor_call");
   assert(linearizedBaseList.count(contract_name) && !contract_name.empty());
 
   // setup initializer, i.e. call the constructor
