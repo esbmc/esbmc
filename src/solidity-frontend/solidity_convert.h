@@ -542,6 +542,10 @@ protected:
   // Who inherits from me?
   std::unordered_map<std::string, std::unordered_set<std::string>>
     inheritanceMap;
+  // structural typing indentical
+  std::unordered_map<std::string, std::unordered_set<std::string>>
+    structureTypingMap;
+
   // contract name list
   std::unordered_map<int, std::string> contractNamesMap;
   std::set<std::string> contractNamesList;

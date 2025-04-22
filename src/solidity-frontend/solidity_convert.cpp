@@ -487,13 +487,114 @@ bool solidity_convertert::populate_auxilary_vars()
     _sym.value = string;
   }
 
+  // From here, we might start to modify the original src_ast_json
+  for (auto &c_node : nodes)
+  {
+    //? should we consider library?
+    if (
+      c_node.contains("nodeType") &&
+      c_node["nodeType"] == "ContractDefinition" && c_node.contains("name"))
+    {
+      if (populate_function_signature(c_node, c_node["name"]))
+        return true;
+    }
+  }
+
+  // initial structureTypingMap based on the inheritanceMap,
+  // since the based contract's signature is always coverred by the inherited one
+  structureTypingMap = inheritanceMap;
+
+  // function signature coverage‐check lambda: name + ordered argument types
+  auto covers = [&](const std::string &derived, const std::string &base) -> bool
+  {
+    const auto &dSigs = funcSignatures.at(derived);
+    const auto &bSigs = funcSignatures.at(base);
+
+    // Every base sig must have a matching derived sig
+    for (const auto &ds : dSigs)
+    {
+      if (ds.name == derived)
+        // skip ctor
+        continue;
+
+      //TODO: skip interface, abstract contract
+
+      bool foundMatch = false;
+
+      for (const auto &bs : bSigs)
+      {
+        // 1) same name?
+        if (ds.name != bs.name)
+          continue;
+
+        // 2) same number of params?
+        const auto &dArgs = to_code_type(ds.type).arguments();
+        const auto &bArgs = to_code_type(bs.type).arguments();
+        if (dArgs.size() != bArgs.size())
+          continue;
+        if (
+          to_code_type(ds.type).has_ellipsis() &&
+          !to_code_type(bs.type).has_ellipsis())
+          continue;
+        if (
+          to_code_type(bs.type).has_ellipsis() &&
+          !to_code_type(ds.type).has_ellipsis())
+          continue;
+
+        // 3) each parameter's type must match, in order
+        bool argsMatch = true;
+        for (size_t idx = 0; idx < dArgs.size(); ++idx)
+        {
+          dArgs[idx].type().dump();
+          bArgs[idx].type().dump();
+
+          if (dArgs[idx].type() != bArgs[idx].type())
+          {
+            argsMatch = false;
+            break;
+          }
+        }
+
+        if (argsMatch)
+        {
+          log_debug("solidity", "function {} matched", ds.name);
+          foundMatch = true;
+          break;
+        }
+      }
+
+      // if any base‐fn had no match, derived does NOT cover base
+      if (!foundMatch)
+        return false;
+    }
+
+    return true;
+  };
+
+  log_debug("solidity", "Matching function signautre");
+  for (const auto &derived : contractNamesList)
+  {
+    for (const auto &base : contractNamesList)
+    {
+      if (structureTypingMap[derived].count(base) > 0)
+        continue;
+
+      // if derived implements all base functions by name+type
+      if (covers(derived, base))
+      {
+        log_debug("solidity", "contract {} covers contract {}", derived, base);
+        structureTypingMap[derived].insert(base);
+      }
+    }
+  }
+
   // populate _bind_addr_list
   for (auto _cname : contractNamesList)
   {
     std::unordered_set<std::string> cname_set;
     unsigned int length = 0;
 
-    cname_set = inheritanceMap[_cname];
+    cname_set = structureTypingMap[_cname];
     length = cname_set.size();
     assert(!cname_set.empty());
 
@@ -539,19 +640,6 @@ bool solidity_convertert::populate_auxilary_vars()
     s.lvalue = true;
     symbolt &sym = *move_symbol_to_context(s);
     sym.value = inits;
-  }
-
-  // From here, we might start to modify the original src_ast_json
-  for (auto &c_node : nodes)
-  {
-    //? should we consider library?
-    if (
-      c_node.contains("nodeType") &&
-      c_node["nodeType"] == "ContractDefinition" && c_node.contains("name"))
-    {
-      if (populate_function_signature(c_node, c_node["name"]))
-        return true;
-    }
   }
 
   return false;
@@ -9947,7 +10035,7 @@ void solidity_convertert::get_nondet_contract_name(
   code_blockt _block;
 
   std::string _cname = dest_type.get("#sol_contract").as_string();
-  auto cname_set = inheritanceMap[_cname];
+  auto cname_set = structureTypingMap[_cname];
   if (cname_set.empty())
   {
     dest_type.dump();
@@ -10045,7 +10133,7 @@ bool solidity_convertert::assign_nondet_contract_name(
   std::unordered_set<std::string> cname_set;
   unsigned int length = 0;
 
-  cname_set = inheritanceMap[_cname];
+  cname_set = structureTypingMap[_cname];
   length = cname_set.size();
   assert(!cname_set.empty());
 
@@ -10250,7 +10338,7 @@ bool solidity_convertert::get_high_level_member_access(
 
   locationt l;
   get_location_from_node(expr, l);
-  std::unordered_set<std::string> cname_set = inheritanceMap[_cname];
+  std::unordered_set<std::string> cname_set = structureTypingMap[_cname];
   assert(!cname_set.empty());
 
   exprt balance;
