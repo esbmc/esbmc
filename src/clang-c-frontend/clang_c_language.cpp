@@ -405,6 +405,19 @@ void __ESBMC_pthread_end_main_hook(void);
 // We need this here or it won't be pulled from the C library
 void __ESBMC_atexit_handler(void);
 
+// Overflow result structure
+typedef struct {
+  int result;
+  _Bool overflow;
+} __ESBMC_overflow_result;
+
+// Checked arithmetic operations
+__ESBMC_overflow_result __ESBMC_overflow_result_plus(int, int);
+__ESBMC_overflow_result __ESBMC_overflow_result_minus(int, int);
+__ESBMC_overflow_result __ESBMC_overflow_result_mult(int, int);
+__ESBMC_overflow_result __ESBMC_overflow_result_shl(int, int);
+__ESBMC_overflow_result __ESBMC_overflow_result_unary_minus(int);
+
 // Forward declarations for nondeterministic types.
 int nondet_int();
 unsigned int nondet_uint();
