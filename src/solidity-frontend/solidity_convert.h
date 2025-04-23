@@ -375,7 +375,10 @@ protected:
   bool is_dyn_array(const nlohmann::json &json_in);
   bool is_mapping(const nlohmann::json &ast_node);
   bool is_func_sig_cover(const std::string &derived, const std::string &base);
-  bool is_var_getter_matched(const std::string &cname, const std::string &tname, const typet& ttype);
+  bool is_var_getter_matched(
+    const std::string &cname,
+    const std::string &tname,
+    const typet &ttype);
 
   void get_default_symbol(
     symbolt &symbol,
