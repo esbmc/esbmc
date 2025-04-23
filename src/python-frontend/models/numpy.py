@@ -32,3 +32,21 @@ def power(a:int, b:int) -> float:
 
 def ceil(x:float) -> int:
     return 0
+
+def floor(x:float) -> int:
+    return 0
+
+def fabs(x:float) -> float:
+    return 1.0
+
+def sin(x:float) -> float:
+    return 0.2
+
+def cos(x:float) -> float:
+    return 0.2
+
+def exp(x:float) -> float:
+    return 0.2
+
+def fmod(x:float) -> float:
+    return 0.2

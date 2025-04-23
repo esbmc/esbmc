@@ -44,8 +44,13 @@ double expm1(double x) /* exp(x) - 1 */
   xe += 3;                         // |xm| in [2^-4,2^-3)
   double r = expm1_taylor(xm) + 1; // r = exp(xm)
   /* xe is > 0 and xe < 1025+3, square xe times to account for 2^xe */
-  for (int i = 0; i < xe; i++)
+  int i = 0;
+  while (i < xe)
+  {
     r *= r;
+    ++i;
+  }
+
   return r - 1;
 }
 
