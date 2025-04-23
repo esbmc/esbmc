@@ -58,7 +58,9 @@ bool numpy_call_expr::is_math_function() const
   const std::string &function = function_id_.get_function();
   return (function == "add") || (function == "subtract") ||
          (function == "multiply") || (function == "divide") ||
-         (function == "power") || (function == "ceil");
+         (function == "power") || (function == "ceil") ||
+         (function == "floor") || (function == "fabs") || (function == "sin") ||
+         (function == "cos") || (function == "exp") || (function == "fmod");
 }
 
 std::string numpy_call_expr::get_dtype() const
@@ -231,7 +233,7 @@ exprt numpy_call_expr::create_expr_from_call()
       {
         // Append array postfix to call array variants, e.g., ceil_array instead of ceil
         std::string func_name = function_id_.get_function();
-        func_name += "_array";
+        func_name = "__" + func_name + "_array";
         function_id_.set_function(func_name);
 
         code_function_callt call =
