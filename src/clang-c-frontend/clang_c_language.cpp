@@ -407,9 +407,9 @@ void __ESBMC_atexit_handler(void);
 
 // Overflow result structure
 typedef struct {
-  int result;
   _Bool overflow;
-} __ESBMC_overflow_result;
+  int result;
+} __attribute__((packed)) __ESBMC_overflow_result;
 
 // Checked arithmetic operations
 __ESBMC_overflow_result __ESBMC_overflow_result_plus(int, int);

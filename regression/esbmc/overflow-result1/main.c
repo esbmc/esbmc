@@ -14,9 +14,8 @@ int main() {
   foo = __ESBMC_overflow_result_plus(a, b);
   
   // if there's no overflow, the result should be equal to a + b
-  if (!foo.overflow) {
+  if (!foo.overflow)
     assert(foo.result == a + b);
-  }
 
   return 0;
 }
