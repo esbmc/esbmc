@@ -2,11 +2,11 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-DEFINE_ESBMC_OVERFLOW_TYPE(int)
+DEFINE_ESBMC_OVERFLOW_TYPE(short)
 
 int main() {
-  int a = __VERIFIER_nondet_int();
-  int b = __VERIFIER_nondet_int();
+  short a = __VERIFIER_nondet_short();
+  short b = __VERIFIER_nondet_short();
 
   __ESBMC_assume(a >= -1000 && a <= 1000);
   __ESBMC_assume(b >= -1000 && b <= 1000);
