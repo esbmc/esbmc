@@ -542,40 +542,34 @@ void goto_convertt::do_function_call_symbol(
 
   std::string base_name = symbol->name.as_string();
 
-  if (base_name == "__ESBMC_overflow_result_plus")
+  if (base_name == "__ESBMC_overflow_result_plus") 
   {
     if (arguments.size() != 2)
     {
       log_error("`__ESBMC_overflow_result_plus` expects two arguments");
       abort();
     }
-
-    // Do not continue if there's no LHS to assign to
+  
     if (lhs.is_nil())
       return;
-
-    // Assume both arguments are of type `int`
+  
     const exprt &a = arguments[0];
     const exprt &b = arguments[1];
-
-    // Overflow: overflow("+", a, b)
+    const typet &op_type = a.type();
+  
     exprt overflow_check("overflow-+", bool_typet());
     overflow_check.copy_to_operands(a, b);
     overflow_check.location() = function.location();
-
-    // Addition: a + b
-    exprt sum("+", a.type());
+  
+    exprt sum("+", op_type);
     sum.copy_to_operands(a, b);
     sum.location() = function.location();
-
-    // Construct struct { overflow, result }
+  
     struct_exprt result_expr;
-    result_expr.type() =
-      lhs.type(); // Should be a struct type with 'int' and 'bool'
-    result_expr.operands().push_back(overflow_check); // overflow = check
-    result_expr.operands().push_back(sum);            // result = a + b
-
-    // Assignment: lhs = result_expr
+    result_expr.type() = lhs.type();
+    result_expr.operands().push_back(overflow_check);
+    result_expr.operands().push_back(sum);
+  
     code_assignt assignment(lhs, result_expr);
     assignment.location() = function.location();
     copy(assignment, ASSIGN, dest);
