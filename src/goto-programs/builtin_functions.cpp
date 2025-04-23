@@ -542,34 +542,34 @@ void goto_convertt::do_function_call_symbol(
 
   std::string base_name = symbol->name.as_string();
 
-  if (base_name == "__ESBMC_overflow_result_plus") 
+  if (base_name == "__ESBMC_overflow_result_plus")
   {
     if (arguments.size() != 2)
     {
       log_error("`__ESBMC_overflow_result_plus` expects two arguments");
       abort();
     }
-  
+
     if (lhs.is_nil())
       return;
-  
+
     const exprt &a = arguments[0];
     const exprt &b = arguments[1];
     const typet &op_type = a.type();
-  
+
     exprt overflow_check("overflow-+", bool_typet());
     overflow_check.copy_to_operands(a, b);
     overflow_check.location() = function.location();
-  
+
     exprt sum("+", op_type);
     sum.copy_to_operands(a, b);
     sum.location() = function.location();
-  
+
     struct_exprt result_expr;
     result_expr.type() = lhs.type();
     result_expr.operands().push_back(overflow_check);
     result_expr.operands().push_back(sum);
-  
+
     code_assignt assignment(lhs, result_expr);
     assignment.location() = function.location();
     copy(assignment, ASSIGN, dest);
