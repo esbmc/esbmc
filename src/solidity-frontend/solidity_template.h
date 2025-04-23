@@ -86,10 +86,19 @@ __ESBMC_HIDE:;
 )";
 
 const std::string gasleft = R"(
+unsigned int _gaslimit = nondet_uint();
+void gasConsume()
+{
+__ESBMC_HIDE:;
+  unsigned int consumed = nondet_uint();
+  __ESBMC_assume(consumed > 0 && consumed <= _gaslimit);
+  _gaslimit -= consumed;
+}
 uint256_t gasleft()
 {
 __ESBMC_HIDE:;
-  return nondet_uint();
+  gasConsume(); // always less
+  return uint256_t(_gaslimit);
 }
 )";
 
@@ -175,49 +184,8 @@ __ESBMC_HIDE:;
 }
 )";
 
-const std::string sol_address = R"(
-void _transfer(uint256_t ether, uint256_t balance)
-{
-__ESBMC_HIDE:;
-  __ESBMC_assume(balance < ether);
-}
-
-bool _send(uint256_t ether, uint256_t balance)
-{
-__ESBMC_HIDE:;
-  if(balance < ether)
-    return false;
-  return true;
-}
-
-bool _call()
-{
-__ESBMC_HIDE:;
-  return nondet_bool();
-}
-
-bool _delegatecall()
-{
-__ESBMC_HIDE:;
-  return nondet_bool();
-}
-
-bool _staticcall()
-{
-__ESBMC_HIDE:;
-  return nondet_bool();
-}
-
-bool _callcodecall()
-{
-__ESBMC_HIDE:;
-  return nondet_bool();
-}
-
-)";
-
-const std::string sol_funcs = blockhash + gasleft + sol_abi + sol_math +
-                              sol_string + sol_byte + sol_address;
+const std::string sol_funcs =
+  blockhash + gasleft + sol_abi + sol_math + sol_string + sol_byte;
 
 /// data structure
 

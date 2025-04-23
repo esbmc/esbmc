@@ -355,6 +355,11 @@ ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json &type_name)
      */
     return INT_LITERAL;
   }
+  if (typeString.find("rational_const") != std::string::npos)
+  {
+    // Will not be used
+    return RA_LITERAL;
+  }
   if (typeString.find("literal_string") == 0)
   {
     return STRING_LITERAL;
@@ -431,6 +436,7 @@ const char *elementary_type_name_to_str(ElementaryTypeNameT type)
     ENUM_TO_STR(UINT248)
     ENUM_TO_STR(UINT256)
     ENUM_TO_STR(INT_LITERAL)
+    ENUM_TO_STR(RA_LITERAL)
     ENUM_TO_STR(INT8)
     ENUM_TO_STR(INT16)
     ENUM_TO_STR(INT24)
@@ -699,6 +705,24 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
     return NullExpr;
   }
   assert(expr.contains("nodeType"));
+
+  if (
+    expr.contains("typeDescriptions") &&
+    expr["typeDescriptions"].contains("typeString"))
+  {
+    // special handling for potential rational_const
+    // e.g.
+    //  - 0.5 * 1 day
+    //  - 0.01 ether
+    //  - uint256 x = 0.5 * 10;
+    const std::string typeString = expr["typeDescriptions"]["typeString"];
+    if (
+      typeString.compare(0, 9, "int_const") == 0 &&
+      (!expr.contains("value") ||
+       expr["value"].get<std::string>().find(".") != std::string::npos))
+      return LiteralWithRational;
+  }
+
   if (expr["nodeType"] == "Assignment" || expr["nodeType"] == "BinaryOperation")
   {
     return BinaryOperatorClass;
@@ -1036,6 +1060,7 @@ const char *expression_to_str(ExpressionT type)
 
     ENUM_TO_STR(DeclRefExprClass)
     ENUM_TO_STR(Literal)
+    ENUM_TO_STR(LiteralWithRational)
     ENUM_TO_STR(LiteralWithWei)
     ENUM_TO_STR(LiteralWithGwei)
     ENUM_TO_STR(LiteralWithSzabo)

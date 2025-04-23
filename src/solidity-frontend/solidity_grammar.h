@@ -115,6 +115,7 @@ enum ElementaryTypeNameT
   UINT256,
 
   INT_LITERAL,
+  RA_LITERAL,
   // rule signed-integer-type
   INT8,
   INT16,
@@ -316,6 +317,7 @@ enum ExpressionT
 
   // rule literal
   Literal,
+  LiteralWithRational,
 
   // unit literal
   LiteralWithWei,
