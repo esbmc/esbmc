@@ -6,7 +6,6 @@
 #include <util/ieee_float.h>
 #include <util/string_constant.h>
 #include <util/std_expr.h>
-#include <util/message.h>
 
 // Integer literal
 bool solidity_convertert::convert_integer_literal(
@@ -22,10 +21,7 @@ bool solidity_convertert::convert_integer_literal(
     std::remove(the_value.begin(), the_value.end(), '_'), the_value.end());
 
   if (the_value.find(".") != std::string::npos)
-  {
-    log_error("Unexpected rational constant");
     return true;
-  }
 
   // Handle scientific notation, e.g., "1e2" -> "100"
   std::size_t e_pos = the_value.find_first_of("eE");
