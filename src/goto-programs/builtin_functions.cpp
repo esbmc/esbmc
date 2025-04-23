@@ -542,6 +542,64 @@ void goto_convertt::do_function_call_symbol(
 
   std::string base_name = symbol->name.as_string();
 
+  if (
+    base_name == "__ESBMC_overflow_result_plus" ||
+    base_name == "__ESBMC_overflow_result_minus" ||
+    base_name == "__ESBMC_overflow_result_mult" ||
+    base_name == "__ESBMC_overflow_result_shl" ||
+    base_name == "__ESBMC_overflow_result_unary_minus")
+  {
+    if (lhs.is_nil())
+      return;
+
+    std::string operation;
+    std::size_t expected_args = 2;
+
+    if (base_name == "__ESBMC_overflow_result_plus")
+      operation = "+";
+    else if (base_name == "__ESBMC_overflow_result_minus")
+      operation = "-";
+    else if (base_name == "__ESBMC_overflow_result_mult")
+      operation = "*";
+    else if (base_name == "__ESBMC_overflow_result_shl")
+      operation = "shl";
+    else if (base_name == "__ESBMC_overflow_result_unary_minus")
+    {
+      operation = "unary-";
+      expected_args = 1;
+    }
+
+    if (arguments.size() != expected_args)
+    {
+      log_error("`{}` expects {} argument(s)", base_name, expected_args);
+      abort();
+    }
+
+    // Prepare the overflow check expression
+    exprt overflow_check("overflow-" + operation, bool_typet());
+    for (const auto &arg : arguments)
+      overflow_check.copy_to_operands(arg);
+    overflow_check.location() = function.location();
+
+    // Prepare the actual operation result expression
+    exprt result_expr_node(operation, arguments[0].type());
+    for (const auto &arg : arguments)
+      result_expr_node.copy_to_operands(arg);
+    result_expr_node.location() = function.location();
+
+    // Package both in a struct result: { overflow: bool, result: type }
+    struct_exprt result_expr;
+    result_expr.type() =
+      lhs.type(); // assumes lhs type is a struct with two fields
+    result_expr.operands().push_back(overflow_check);
+    result_expr.operands().push_back(result_expr_node);
+
+    // Final assignment
+    code_assignt assignment(lhs, result_expr);
+    assignment.location() = function.location();
+    copy(assignment, ASSIGN, dest);
+    return;
+  }
   // Quantifiers passthrough. Converts function calls into forall or exists expr
   if (base_name == "__ESBMC_forall" || base_name == "__ESBMC_exists")
   {
