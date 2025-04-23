@@ -405,6 +405,19 @@ void __ESBMC_pthread_end_main_hook(void);
 // We need this here or it won't be pulled from the C library
 void __ESBMC_atexit_handler(void);
 
+// Define a macro to generate overflow result structures and function declarations
+#define DEFINE_ESBMC_OVERFLOW_TYPE(type)              \
+  typedef struct {                                          \
+    _Bool overflow;                                         \
+    type result;                                            \
+  } __attribute__((packed)) __ESBMC_overflow_result;          \
+                                                            \
+__ESBMC_overflow_result __ESBMC_overflow_result_plus(type, type);  \
+__ESBMC_overflow_result __ESBMC_overflow_result_minus(type, type); \
+__ESBMC_overflow_result __ESBMC_overflow_result_mult(type, type);  \
+__ESBMC_overflow_result __ESBMC_overflow_result_shl(type, type);   \
+__ESBMC_overflow_result __ESBMC_overflow_result_unary_minus(type);
+
 // Forward declarations for nondeterministic types.
 int nondet_int();
 unsigned int nondet_uint();
