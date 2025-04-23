@@ -552,33 +552,20 @@ void goto_convertt::do_function_call_symbol(
     if (lhs.is_nil())
       return;
 
-    std::string overflow_op, math_op;
+    std::string operation;
     std::size_t expected_args = 2;
 
     if (base_name == "__ESBMC_overflow_result_plus")
-    {
-      overflow_op = "+";
-      math_op = "+";
-    }
+      operation = "+";
     else if (base_name == "__ESBMC_overflow_result_minus")
-    {
-      overflow_op = "-";
-      math_op = "-";
-    }
+      operation = "-";
     else if (base_name == "__ESBMC_overflow_result_mult")
-    {
-      overflow_op = "*";
-      math_op = "*";
-    }
+      operation = "*";
     else if (base_name == "__ESBMC_overflow_result_shl")
-    {
-      overflow_op = "shl";
-      math_op = "shl";
-    }
+      operation = "shl";
     else if (base_name == "__ESBMC_overflow_result_unary_minus")
     {
-      overflow_op = "unary-";
-      math_op = "unary-";
+      operation = "unary-";
       expected_args = 1;
     }
 
@@ -589,13 +576,13 @@ void goto_convertt::do_function_call_symbol(
     }
 
     // Prepare the overflow check expression
-    exprt overflow_check("overflow-" + overflow_op, bool_typet());
+    exprt overflow_check("overflow-" + operation, bool_typet());
     for (const auto &arg : arguments)
       overflow_check.copy_to_operands(arg);
     overflow_check.location() = function.location();
 
     // Prepare the actual operation result expression
-    exprt result_expr_node(math_op, arguments[0].type());
+    exprt result_expr_node(operation, arguments[0].type());
     for (const auto &arg : arguments)
       result_expr_node.copy_to_operands(arg);
     result_expr_node.location() = function.location();
