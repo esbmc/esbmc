@@ -573,7 +573,7 @@ void goto_convertt::do_function_call_symbol(
     result_expr.type() =
       lhs.type(); // Should be a struct type with 'int' and 'bool'
     result_expr.operands().push_back(overflow_check); // overflow = check
-    result_expr.operands().push_back(sum); // result = a + b
+    result_expr.operands().push_back(sum);            // result = a + b
 
     // Assignment: lhs = result_expr
     code_assignt assignment(lhs, result_expr);
