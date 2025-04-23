@@ -542,76 +542,78 @@ void goto_convertt::do_function_call_symbol(
 
   std::string base_name = symbol->name.as_string();
 
-  if(base_name == "__ESBMC_overflow_result_plus" ||
+  if (
+    base_name == "__ESBMC_overflow_result_plus" ||
     base_name == "__ESBMC_overflow_result_minus" ||
     base_name == "__ESBMC_overflow_result_mult" ||
     base_name == "__ESBMC_overflow_result_shl" ||
     base_name == "__ESBMC_overflow_result_unary_minus")
   {
-    if(lhs.is_nil())
+    if (lhs.is_nil())
       return;
- 
+
     std::string overflow_op, math_op;
     std::size_t expected_args = 2;
- 
-    if(base_name == "__ESBMC_overflow_result_plus")
+
+    if (base_name == "__ESBMC_overflow_result_plus")
     {
       overflow_op = "+";
       math_op = "+";
     }
-    else if(base_name == "__ESBMC_overflow_result_minus")
+    else if (base_name == "__ESBMC_overflow_result_minus")
     {
       overflow_op = "-";
       math_op = "-";
     }
-    else if(base_name == "__ESBMC_overflow_result_mult")
+    else if (base_name == "__ESBMC_overflow_result_mult")
     {
       overflow_op = "*";
       math_op = "*";
     }
-    else if(base_name == "__ESBMC_overflow_result_shl")
+    else if (base_name == "__ESBMC_overflow_result_shl")
     {
       overflow_op = "shl";
       math_op = "shl";
     }
-    else if(base_name == "__ESBMC_overflow_result_unary_minus")
+    else if (base_name == "__ESBMC_overflow_result_unary_minus")
     {
       overflow_op = "unary-";
       math_op = "-";
       expected_args = 1;
     }
- 
-    if(arguments.size() != expected_args)
+
+    if (arguments.size() != expected_args)
     {
       log_error("`{}` expects {} argument(s)", base_name, expected_args);
       abort();
     }
- 
+
     // Prepare the overflow check expression
     exprt overflow_check("overflow-" + overflow_op, bool_typet());
-    for(const auto &arg : arguments)
+    for (const auto &arg : arguments)
       overflow_check.copy_to_operands(arg);
     overflow_check.location() = function.location();
- 
+
     // Prepare the actual operation result expression
     exprt result_expr_node(math_op, arguments[0].type());
-    for(const auto &arg : arguments)
+    for (const auto &arg : arguments)
       result_expr_node.copy_to_operands(arg);
     result_expr_node.location() = function.location();
- 
+
     // Package both in a struct result: { overflow: bool, result: type }
     struct_exprt result_expr;
-    result_expr.type() = lhs.type(); // assumes lhs type is a struct with two fields
+    result_expr.type() =
+      lhs.type(); // assumes lhs type is a struct with two fields
     result_expr.operands().push_back(overflow_check);
     result_expr.operands().push_back(result_expr_node);
- 
+
     // Final assignment
     code_assignt assignment(lhs, result_expr);
     assignment.location() = function.location();
     copy(assignment, ASSIGN, dest);
     return;
   }
-   // Quantifiers passthrough. Converts function calls into forall or exists expr
+  // Quantifiers passthrough. Converts function calls into forall or exists expr
   if (base_name == "__ESBMC_forall" || base_name == "__ESBMC_exists")
   {
     if (arguments.size() != 2)
