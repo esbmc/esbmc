@@ -570,11 +570,11 @@ void goto_convertt::do_function_call_symbol(
 
     // Construct struct { overflow, result }
     struct_exprt result_expr;
-    result_expr.type() = 
+    result_expr.type() =
       lhs.type(); // Should be a struct type with 'int' and 'bool'
     result_expr.operands().push_back(overflow_check); // overflow = check
     result_expr.operands().push_back(sum); // result = a + b
-  
+
     // Assignment: lhs = result_expr
     code_assignt assignment(lhs, result_expr);
     assignment.location() = function.location();
