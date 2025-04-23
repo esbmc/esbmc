@@ -578,7 +578,7 @@ void goto_convertt::do_function_call_symbol(
     else if (base_name == "__ESBMC_overflow_result_unary_minus")
     {
       overflow_op = "unary-";
-      math_op = "-";
+      math_op = "unary-";
       expected_args = 1;
     }
 
