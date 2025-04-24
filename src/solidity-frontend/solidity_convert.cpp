@@ -3423,7 +3423,7 @@ bool solidity_convertert::get_expr(
   const nlohmann::json &literal_type,
   exprt &new_expr)
 {
-  assrty(literal_type.is_null() || (!literal_type.is_null() &&
+  assert(literal_type.is_null() || (!literal_type.is_null() &&
                                    !literal_type.contains("typeDescriptions")));
   // For rule expression
   // We need to do location settings to match clang C's number of times to set the locations when recurring
