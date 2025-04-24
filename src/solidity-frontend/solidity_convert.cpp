@@ -3423,6 +3423,7 @@ bool solidity_convertert::get_expr(
   const nlohmann::json &literal_type,
   exprt &new_expr)
 {
+  assert(literal_type.is_null() || !literal_type.contains("typeDescriptions"));
   // For rule expression
   // We need to do location settings to match clang C's number of times to set the locations when recurring
   locationt location;
@@ -3573,7 +3574,7 @@ bool solidity_convertert::get_expr(
       SolidityGrammar::elementary_type_name_to_str(type_name));
 
     if (
-      literal_type != nullptr &&
+      literal_type != nullptr && literal_type.contains("typeString") &&
       literal_type["typeString"].get<std::string>().find("bytes") !=
         std::string::npos)
     {
@@ -10427,8 +10428,7 @@ bool solidity_convertert::get_high_level_member_access(
   {
     // this can be value, gas ...
     // For now, we only consider value
-    nlohmann::json literal_type;
-    literal_type["typeDescriptions"] = {
+    nlohmann::json literal_type = {
       {"typeIdentifier", "t_uint256"}, {"typeString", "uint256"}};
     if (get_expr(options[0], literal_type, balance))
       return true;
@@ -10669,8 +10669,7 @@ bool solidity_convertert::get_low_level_member_accsss(
       addr.type().set("#sol_type", "ADDRESS_PAYABLE");
       exprt value;
       // type should be uint256
-      nlohmann::json literal_type;
-      literal_type["typeDescriptions"] = {
+      nlohmann::json literal_type = {
         {"typeIdentifier", "t_uint256"}, {"typeString", "uint256"}};
 
       if (get_expr(options[0], literal_type, value))
