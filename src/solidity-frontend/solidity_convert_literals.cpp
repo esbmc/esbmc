@@ -9,12 +9,12 @@
 
 // Integer literal
 bool solidity_convertert::convert_integer_literal(
-  const nlohmann::json &integer_literal,
+  const nlohmann::json &integer_literal_type,
   std::string the_value,
   exprt &dest)
 {
   typet type;
-  if (get_type_description(integer_literal, type))
+  if (get_type_description(integer_literal_type, type))
     return true;
 
   the_value.erase(
