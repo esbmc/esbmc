@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --k-induction --no-standard-checks --contract Attacker --unsigned-overflow-check
+^VERIFICATION FAILED$
