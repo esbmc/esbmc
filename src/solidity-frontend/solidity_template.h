@@ -86,7 +86,7 @@ __ESBMC_HIDE:;
 )";
 
 const std::string gasleft = R"(
-unsigned int _gaslimit = nondet_uint();
+unsigned int _gaslimit;
 void gasConsume()
 {
 __ESBMC_HIDE:;
@@ -593,87 +593,62 @@ __ESBMC_HIDE:;
 const std::string sol_uqAddr = R"(
 __attribute__((annotate("__ESBMC_inf_size"))) address_t sol_addr_array[1];
 __attribute__((annotate("__ESBMC_inf_size"))) void *sol_obj_array[1];
-__attribute__((annotate("__ESBMC_inf_size"))) char* sol_cname_array[1];
+__attribute__((annotate("__ESBMC_inf_size"))) char *sol_cname_array[1];
 static unsigned sol_max_cnt = 0;
 
 int _ESBMC_get_addr_array_idx(address_t tgt)
 {
 __ESBMC_HIDE:;
-  for (unsigned int i = 0; i < sol_max_cnt; i++)
-  {
-    if ((address_t)sol_addr_array[i] == (address_t)tgt)
-      return i;
-  }
-  return -1;
+    for (unsigned int i = 0; i < sol_max_cnt; i++)
+    {
+        if ((address_t)sol_addr_array[i] == (address_t)tgt)
+            return i;
+    }
+    return -1;
 }
-void *_ESBMC_get_obj(address_t addr)
+bool _ESBMC_cmp_cname(const char *c_1, const char *c_2)
 {
 __ESBMC_HIDE:;
-  int idx = _ESBMC_get_addr_array_idx(addr);
-  if (idx == -1)
-    // this means it's not previously stored
+    return strcmp(c_1, c_2) == 0;
+}
+void *_ESBMC_get_obj(address_t addr, const char *cname)
+{
+__ESBMC_HIDE:;
+    int idx = _ESBMC_get_addr_array_idx(addr);
+    if (idx == -1)
+        // this means it's not previously stored
+        return NULL;
+    if (_ESBMC_cmp_cname(sol_cname_array[idx], cname))
+        return sol_obj_array[idx];
     return NULL;
-  else
-    return sol_obj_array[idx];
 }
-void update_addr_obj(address_t addr, void *obj)
+void update_addr_obj(address_t addr, void *obj, const char *cname)
 {
 __ESBMC_HIDE:;
-  __ESBMC_assume(obj != NULL);
-  sol_addr_array[sol_max_cnt] = addr;
-  sol_obj_array[sol_max_cnt] = obj;
-  ++sol_max_cnt;
-  // if (sol_max_cnt >= max_addr_obj_size)
-  //   assert(0);
+    __ESBMC_assume(obj != NULL);
+    sol_addr_array[sol_max_cnt] = addr;
+    sol_obj_array[sol_max_cnt] = obj;
+    sol_cname_array[sol_max_cnt] = cname;
+    ++sol_max_cnt;
 }
-address_t _ESBMC_get_unique_address(void *obj)
+address_t _ESBMC_get_unique_address(void *obj, const char *cname)
 {
 __ESBMC_HIDE:;
-  // __ESBMC_assume(obj != NULL);
-  address_t tmp = (address_t)0;
-  do
-  {
-    tmp = nondet_ulong() ; // ensure it's not address(0)
-  } while (_ESBMC_get_addr_array_idx(tmp) != -1 && tmp != (address_t)0);
-  // update_addr_obj(tmp, obj);
-  return tmp;
+    // __ESBMC_assume(obj != NULL);
+    address_t tmp = (address_t)0;
+    do
+    {
+        tmp = nondet_ulong(); // ensure it's not address(0)
+        assume(tmp != (address_t)0);
+    } while (_ESBMC_get_addr_array_idx(tmp) != -1);
+    update_addr_obj(tmp, obj, cname);
+    return tmp;
 }
-void _ESBMC_set_cname_array(address_t _addr, char* cname)
+const char *_ESBMC_get_nondet_cont_name(const char *c_array[], unsigned int len)
 {
 __ESBMC_HIDE:;
-  int tmp = _ESBMC_get_addr_array_idx(_addr);
-  // assert(tmp != -1);
-  sol_cname_array[tmp] = cname;
-}
-const char * _ESBMC_get_cname(address_t _addr)
-{
-__ESBMC_HIDE:;
-  int tmp = _ESBMC_get_addr_array_idx(_addr);
-  // assert(tmp != -1);
-  return sol_cname_array[tmp];
-}
-bool _ESBMC_cmp_cname(const char* c_1, const char* c_2)
-{
-__ESBMC_HIDE:;
-  return strcmp(c_1, c_2) == 0;
-}
-
-const char * _ESBMC_get_nondet_cont_name(const char *c_array[], unsigned int len)
-{
-__ESBMC_HIDE:;
-unsigned int rand = nondet_uint() % len;
-return c_array[rand];
-}
-
-uint256_t _ESBMC_update_balance(uint256_t balance, uint256_t val)
-{
-__ESBMC_HIDE:;
-  val = val + (uint256_t)1;
-  if(balance >= val)
-    balance -= val;
-  else
-    balance = (uint256_t)0;
-  return balance;
+    unsigned int rand = nondet_uint() % len;
+    return c_array[rand];
 }
 )";
 
@@ -713,9 +688,36 @@ __ESBMC_HIDE:;
 const std::string sol_ext_library =
   sol_itoa + sol_str2hex + sol_uqAddr + sol_max_min;
 
-const std::string sol_c_library = "extern \"C\" {" + sol_typedef + sol_vars +
-                                  sol_funcs + sol_mapping + sol_array +
-                                  sol_unit + sol_ext_library + "}";
+const std::string sol_initialize = R"(
+void initialize()
+{
+__ESBMC_HIDE:;
+// we assume it starts from an EOA
+msg_data = uint256_t(nondet_uint());
+msg_sender = address_t(nondet_uint());
+msg_sig = nondet_uint();
+msg_value = uint256_t(nondet_uint());
+
+tx_gasprice = uint256_t(nondet_uint());
+// this can only be an EOA's address
+tx_origin = address_t(nondet_uint());
+}
+
+block_basefee = uint256_t(nondet_uint());
+block_chainid = uint256_t(nondet_uint());
+block_coinbase = address_t(nondet_uint());
+block_difficulty = uint256_t(nondet_uint());
+block_gaslimit = uint256_t(nondet_uint());
+block_number = uint256_t(nondet_uint());
+block_prevrandao = uint256_t(nondet_uint());
+block_timestamp = uint256_t(nondet_uint());
+
+_gaslimit = nondet_uint();
+)";
+
+const std::string sol_c_library =
+  "extern \"C\" {" + sol_typedef + sol_vars + sol_funcs + sol_mapping +
+  sol_array + sol_unit + sol_ext_library + sol_initialize + "}";
 
 // C++
 const std::string sol_cpp_string = R"(
