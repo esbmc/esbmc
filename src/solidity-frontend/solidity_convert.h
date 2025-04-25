@@ -337,7 +337,9 @@ protected:
   std::string get_src_from_json(const nlohmann::json &ast_node);
 
   symbolt *move_symbol_to_context(symbolt &symbol);
-  bool multi_transaction_verification(const std::string &contractName);
+  bool multi_transaction_verification(
+    const std::string &contractName,
+    bool is_final_main);
   bool multi_contract_verification_bound(std::set<std::string> &tgt_set);
   bool multi_contract_verification_unbound(std::set<std::string> &tgt_set);
   void reset_auxiliary_vars();
