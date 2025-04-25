@@ -591,12 +591,6 @@ __ESBMC_HIDE:;
 
 // get unique random address
 const std::string sol_uqAddr = R"(
-// compromise:
-// - define a relatively large array
-// static const unsigned int max_addr_obj_size = 50;
-// static address_t sol_addr_array[max_addr_obj_size];
-// static void *sol_obj_array[max_addr_obj_size];
-// static char* sol_cname_array[max_addr_obj_size];
 __attribute__((annotate("__ESBMC_inf_size"))) address_t sol_addr_array[1];
 __attribute__((annotate("__ESBMC_inf_size"))) void *sol_obj_array[1];
 __attribute__((annotate("__ESBMC_inf_size"))) char* sol_cname_array[1];

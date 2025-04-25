@@ -90,7 +90,8 @@ bool solidity_convertert::convert()
     return true;
 
   // for coverage and trace simplification: update include_files
-  auto add_unique = [](const std::string &file) {
+  auto add_unique = [](const std::string &file)
+  {
     if (
       std::find(
         config.ansi_c.include_files.begin(),
@@ -655,8 +656,9 @@ bool solidity_convertert::populate_function_signature(
       is_payable = func_node["stateMutability"] == "payable";
       is_inherit = func_node.contains("is_inherited");
 
-      funcSignatures[cname].push_back(solidity_convertert::func_sig(
-        func_name, func_id, visibility, type, is_payable, is_inherit));
+      funcSignatures[cname].push_back(
+        solidity_convertert::func_sig(
+          func_name, func_id, visibility, type, is_payable, is_inherit));
     }
   }
 
@@ -664,9 +666,8 @@ bool solidity_convertert::populate_function_signature(
   bool hasConstructor = std::any_of(
     funcSignatures[cname].begin(),
     funcSignatures[cname].end(),
-    [&cname](const solidity_convertert::func_sig &sig) {
-      return sig.name == cname;
-    });
+    [&cname](const solidity_convertert::func_sig &sig)
+    { return sig.name == cname; });
   if (!hasConstructor)
   {
     func_name = cname;
@@ -676,8 +677,9 @@ bool solidity_convertert::populate_function_signature(
     type.return_type() = empty_typet();
     type.return_type().set("cpp_type", "void");
     is_inherit = false;
-    funcSignatures[cname].push_back(solidity_convertert::func_sig(
-      func_name, func_id, visibility, type, is_payable, is_inherit));
+    funcSignatures[cname].push_back(
+      solidity_convertert::func_sig(
+        func_name, func_id, visibility, type, is_payable, is_inherit));
   }
 
   return false;
@@ -4737,7 +4739,7 @@ bool solidity_convertert::get_expr(
         // make it as a NODET_UINT
         new_expr = nondet_uint_expr;
       else
-        get_builtin_property_expr(mem_name, base, new_expr);
+        get_builtin_property_expr(mem_name, base, location, new_expr);
     }
     else
     {
@@ -7147,21 +7149,15 @@ void solidity_convertert::get_library_function_call_no_args(
   type_expr.pretty_name(func_name);
   type_expr.identifier(func_id);
 
-  code_typet type;
+  typet type;
   if (t.is_code())
     // this means it's a func symbol read from the symbol_table
-    type_expr.type() = to_code_type(t);
+    type = to_code_type(t).return_type();
   else
-  {
-    type.return_type() = t;
-    type_expr.type() = type;
-  }
+    type = t;
 
   call_expr.function() = type_expr;
-  if (t.is_code())
-    call_expr.type(); //TODO: fix this
-  else
-    call_expr.type() = t;
+  call_expr.type() = type;
 
   call_expr.location() = l;
   new_expr = call_expr;
@@ -8502,8 +8498,8 @@ bool solidity_convertert::is_func_sig_cover(
   const std::string &base)
 {
   // function signature coverage‐check lambda: name + ordered argument types
-  auto covers =
-    [&](const std::string &derived, const std::string &base) -> bool {
+  auto covers = [&](const std::string &derived, const std::string &base) -> bool
+  {
     const auto &dSigs = funcSignatures.at(derived);
     const auto &bSigs = funcSignatures.at(base);
 
@@ -8692,7 +8688,10 @@ bool solidity_convertert::get_library_function_call(
   side_effect_expr_function_callt &call)
 {
   call.function() = func;
-  call.type() = t;
+  if (t.is_code())
+    call.type() = to_code_type(t).return_type();
+  else
+    call.type() = t;
   locationt l;
   get_location_from_node(caller, l);
   call.location() = l;
@@ -9062,7 +9061,7 @@ void solidity_convertert::convert_type_expr(
       exprt mem;
       std::string c_name =
         context.find_symbol(src_type.identifier())->name.as_string();
-      get_builtin_property_expr("address", src_expr, mem);
+      get_builtin_property_expr("address", src_expr, src_expr.location(), mem);
       src_expr = mem;
     }
     else if (
@@ -9289,14 +9288,16 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
   dest = code_blockt();
 
   // call designated "initialization" functions
-  context.foreach_operand_in_order([&dest](const symbolt &s) {
-    if (s.type.initialization() && s.type.is_code())
+  context.foreach_operand_in_order(
+    [&dest](const symbolt &s)
     {
-      code_function_callt function_call;
-      function_call.function() = symbol_expr(s);
-      dest.move_to_operands(function_call);
-    }
-  });
+      if (s.type.initialization() && s.type.is_code())
+      {
+        code_function_callt function_call;
+        function_call.function() = symbol_expr(s);
+        dest.move_to_operands(function_call);
+      }
+    });
 }
 
 void solidity_convertert::get_aux_var(
@@ -10015,14 +10016,128 @@ bool solidity_convertert::get_new_temporary_obj(
   return false;
 }
 
+// create a function: get_{property_name}(addr)
+// this function is universal for every contract
+void solidity_convertert::get_aux_property_function(
+  const exprt &addr,
+  const typet &return_t,
+  const locationt &loc,
+  const std::string &property_name,
+  exprt &new_expr)
+{
+  std::string fname = "get_" + property_name;
+  std::string fid = "sol:@F@" + fname + "#";
+
+  if (context.find_symbol(fid) != nullptr)
+  {
+    side_effect_expr_function_callt _call;
+    get_library_function_call_no_args(fname, fid, return_t, loc, _call);
+    _call.arguments().push_back(addr);
+    new_expr = _call;
+    return;
+  }
+
+  // poplate function definition
+  symbolt sym;
+  code_typet type;
+  type.return_type() = return_t;
+  std::string debug_modulename = get_modulename_from_path(absolute_path);
+  get_default_symbol(sym, debug_modulename, type, fname, fid, loc);
+  auto &added_symbol = *move_symbol_to_context(sym);
+
+  // param: arg
+  std::string aname = "_addr";
+  std::string aid = "sol:@F@" + fname + "@" + aname + "#";
+  typet addr_t = unsignedbv_typet(160);
+  addr_t.set("#sol_type", "ADDRESS");
+  symbolt addr_s;
+  get_default_symbol(addr_s, debug_modulename, addr_t, aname, aid, loc);
+  move_symbol_to_context(addr_s);
+
+  auto param = code_typet::argumentt();
+  param.type() = addr_t;
+  param.cmt_base_name(aname);
+  param.cmt_identifier(aid);
+  param.location() = loc;
+  type.arguments().push_back(param);
+
+  // populate param
+  added_symbol.type = type;
+
+  /* body:
+      address(_addr).code
+    =>
+      if(get_object(_addr, "A") != NULL)
+        return  (A *)get_object(_addr, "A")->code;
+      if(get_object(_addr, "B") != NULL)
+        return  (B *)get_object(_addr, "B")->code;
+      return nondet_uint();
+  */
+
+  code_blockt _block;
+  for (auto cname : contractNamesList)
+  {
+    if (context.find_symbol("c:@F@_ESBMC_get_obj") == nullptr)
+    {
+      log_error("cannot find builtin library");
+      abort();
+    }
+
+    // param
+    string_constantt _cname(cname);
+
+    // get_object(_addr, "A")
+    side_effect_expr_function_callt get_obj;
+    get_library_function_call_no_args(
+      "_ESBMC_get_obj",
+      "c:@F@_ESBMC_get_obj",
+      pointer_typet(empty_typet()),
+      loc,
+      get_obj);
+
+    get_obj.arguments().push_back(addr);
+    get_obj.arguments().push_back(_cname);
+
+    // typecast
+    typet _struct = symbol_typet(prefix + cname);
+    exprt tc = typecast_exprt(get_obj, pointer_typet(_struct));
+
+    // member access
+    std::string comp_name = "$" + property_name;
+    exprt mem = member_exprt(tc, comp_name, return_t);
+
+    // return
+    code_returnt ret_call;
+    ret_call.return_value() = mem;
+    _block.move_to_operands(ret_call);
+  }
+
+  // return nondet_uint
+  code_returnt ret_uint;
+  ret_uint.return_value() = nondet_uint_expr;
+  _block.move_to_operands(ret_uint);
+
+  // populate body
+  added_symbol.value = _block;
+
+  // do function call
+  side_effect_expr_function_callt _call;
+  _call.function() = symbol_expr(added_symbol);
+  _call.location() = loc;
+  new_expr = _call;
+}
+
 // get member access of built-in property.
 // e.g. x.$balance, x.$code ...
 void solidity_convertert::get_builtin_property_expr(
   const std::string &name,
   const exprt &base,
+  const locationt &loc,
   exprt &new_expr)
 {
   log_debug("solidity", "Getting built-in property");
+
+  std::string src_sol_type = base.get("#sol_type").as_string();
 
   typet t;
   std::string comp_name = "$" + name;
@@ -10043,40 +10158,17 @@ void solidity_convertert::get_builtin_property_expr(
     abort();
   }
 
-  member_exprt mem = member_exprt(base, comp_name, t);
-  mem.location() = base.location();
+  exprt mem;
+  if (src_sol_type == "CONTRACT")
+    // e.g. address(_ins_).balance
+    mem = member_exprt(base, comp_name, t);
+  else
+    // e.g. address(msg.sender).balance
+    // we do not know what instance is msg.sender pointed to, so over-approximate
+    get_aux_property_function(base, t, loc, name, mem);
+
+  mem.location() = loc;
   new_expr = mem;
-}
-
-bool solidity_convertert::set_addr_cname_mapping(
-  const std::string &cname,
-  const exprt &base,
-  exprt &new_expr)
-{
-  if (context.find_symbol("c:@F@_ESBMC_set_cname_array") == nullptr)
-    return true;
-
-  side_effect_expr_function_callt _call;
-  locationt loc;
-  get_library_function_call_no_args(
-    "_ESBMC_set_cname_array",
-    "c:@F@_ESBMC_set_cname_array",
-    empty_typet(),
-    loc,
-    _call);
-
-  // addr
-  exprt _addr;
-  get_builtin_property_expr("address", base, _addr);
-
-  // cname
-  string_constantt string(cname);
-
-  _call.arguments().push_back(_addr);
-  _call.arguments().push_back(string);
-
-  new_expr = _call;
-  return false;
 }
 
 bool solidity_convertert::get_base_contract_name(
@@ -10293,7 +10385,8 @@ bool solidity_convertert::has_callable_func(const std::string &cname)
   return std::any_of(
     funcSignatures[cname].begin(),
     funcSignatures[cname].end(),
-    [&cname](const solidity_convertert::func_sig &sig) {
+    [&cname](const solidity_convertert::func_sig &sig)
+    {
       // must be public or external, even if the address is itself
       return sig.name != cname &&
              (sig.visibility == "public" || sig.visibility == "external");
@@ -10310,9 +10403,9 @@ bool solidity_convertert::has_target_function(
     return false;
 
   return std::any_of(
-    it->second.begin(), it->second.end(), [&](const func_sig &sig) {
-      return sig.name == func_name;
-    });
+    it->second.begin(),
+    it->second.end(),
+    [&](const func_sig &sig) { return sig.name == func_name; });
 }
 
 solidity_convertert::func_sig solidity_convertert::get_target_function(
@@ -10333,9 +10426,8 @@ solidity_convertert::func_sig solidity_convertert::get_target_function(
   auto func_it = std::find_if(
     functions.begin(),
     functions.end(),
-    [&func_name](const solidity_convertert::func_sig &sig) {
-      return sig.name == func_name;
-    });
+    [&func_name](const solidity_convertert::func_sig &sig)
+    { return sig.name == func_name; });
 
   // If function is found, return it; otherwise, return an empty func_sig
   if (func_it != functions.end())

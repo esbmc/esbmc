@@ -420,6 +420,13 @@ protected:
   void get_builtin_property_expr(
     const std::string &name,
     const exprt &base,
+    const locationt &loc,
+    exprt &new_expr);
+  void get_aux_property_function(
+    const exprt &addr,
+    const typet &return_t,
+    const locationt &loc,
+    const std::string &property_name,
     exprt &new_expr);
   bool get_new_temporary_obj(
     const std::string &c_name,
