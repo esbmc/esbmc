@@ -167,7 +167,7 @@ bool solidity_convertert::convert()
     {
       // perform multi-transaction verification
       // by adding symbols to the "sol_main()" entry function
-      if (multi_transaction_verification(*tgt_cnt_set.begin()))
+      if (multi_transaction_verification(*tgt_cnt_set.begin(), true))
         return true;
     }
     // multiple contract
@@ -9500,7 +9500,8 @@ bool solidity_convertert::get_empty_array_ref(
 
 */
 bool solidity_convertert::multi_transaction_verification(
-  const std::string &c_name)
+  const std::string &c_name,
+  bool is_final_main)
 {
   log_debug(
     "Solidity", "@@@ performs transaction verification on contract {}", c_name);
@@ -9517,6 +9518,16 @@ bool solidity_convertert::multi_transaction_verification(
   label.set_label("__ESBMC_HIDE");
   label.code() = code_skipt();
   func_body.operands().push_back(label);
+
+  // initialize
+  if (is_final_main)
+  {
+    side_effect_expr_function_callt call;
+    get_library_function_call_no_args(
+      "initialize", "c:@F@initialize", empty_typet(), locationt(), call);
+    convert_expression_to_code(call);
+    func_body.move_to_operands(call);
+  }
 
   // 1. get constructor call
   if (linearizedBaseList[c_name].empty())
@@ -9606,6 +9617,13 @@ bool solidity_convertert::multi_contract_verification_bound(
   label.code() = code_skipt();
   func_body.operands().push_back(label);
 
+  // initialize
+  side_effect_expr_function_callt call;
+  get_library_function_call_no_args(
+    "initialize", "c:@F@initialize", empty_typet(), locationt(), call);
+  convert_expression_to_code(call);
+  func_body.move_to_operands(call);
+
   // 1. construct switch-case
   int cnt = 0;
   std::set<std::string> cname_set;
@@ -9618,7 +9636,7 @@ bool solidity_convertert::multi_contract_verification_bound(
   {
     // 1.1 construct multi-transaction verification entry function
     // function "_ESBMC_Main_contractname" will be created and inserted to the symbol table.
-    if (multi_transaction_verification(c_name))
+    if (multi_transaction_verification(c_name, false))
       return true;
 
     // 1.2 construct a "case n"
@@ -9725,6 +9743,19 @@ bool solidity_convertert::multi_contract_verification_unbound(
   static_lifetime_init(context, func_body);
   func_body.make_block();
 
+  // add __ESBMC_HIDE
+  code_labelt label;
+  label.set_label("__ESBMC_HIDE");
+  label.code() = code_skipt();
+  func_body.operands().push_back(label);
+
+  // initialize
+  side_effect_expr_function_callt call;
+  get_library_function_call_no_args(
+    "initialize", "c:@F@initialize", empty_typet(), locationt(), call);
+  convert_expression_to_code(call);
+  func_body.move_to_operands(call);
+
   std::set<std::string> cname_set;
   if (!tgt_set.empty())
     cname_set = tgt_set;
@@ -9735,7 +9766,7 @@ bool solidity_convertert::multi_contract_verification_unbound(
   {
     // construct multi-transaction verification entry function
     // function "_ESBMC_Main_contractname" will be created and inserted to the symbol table.
-    if (multi_transaction_verification(c_name))
+    if (multi_transaction_verification(c_name, false))
       return true;
 
     // func_call: _ESBMC_Main_contractname
