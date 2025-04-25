@@ -542,89 +542,6 @@ void goto_convertt::do_function_call_symbol(
 
   std::string base_name = symbol->name.as_string();
 
-  if (
-    base_name == "__ESBMC_overflow_result_plus" ||
-    base_name == "__ESBMC_overflow_result_minus" ||
-    base_name == "__ESBMC_overflow_result_mult" ||
-    base_name == "__ESBMC_overflow_result_shl" ||
-    base_name == "__ESBMC_overflow_result_unary_minus")
-  {
-    if (lhs.is_nil())
-      return;
-
-    std::string operation;
-    std::size_t expected_args = 2;
-
-    if (base_name == "__ESBMC_overflow_result_plus")
-      operation = "+";
-    else if (base_name == "__ESBMC_overflow_result_minus")
-      operation = "-";
-    else if (base_name == "__ESBMC_overflow_result_mult")
-      operation = "*";
-    else if (base_name == "__ESBMC_overflow_result_shl")
-      operation = "shl";
-    else if (base_name == "__ESBMC_overflow_result_unary_minus")
-    {
-      operation = "unary-";
-      expected_args = 1;
-    }
-
-    if (arguments.size() != expected_args)
-    {
-      log_error("`{}` expects {} argument(s)", base_name, expected_args);
-      abort();
-    }
-
-    // Prepare the overflow check expression
-    exprt overflow_check("overflow-" + operation, bool_typet());
-    for (const auto &arg : arguments)
-      overflow_check.copy_to_operands(arg);
-    overflow_check.location() = function.location();
-
-    // Prepare the actual operation result expression
-    exprt result_expr_node(operation, arguments[0].type());
-    for (const auto &arg : arguments)
-      result_expr_node.copy_to_operands(arg);
-    result_expr_node.location() = function.location();
-
-    // Package both in a struct result: { overflow: bool, result: type }
-    struct_exprt result_expr;
-    result_expr.type() =
-      lhs.type(); // assumes lhs type is a struct with two fields
-    result_expr.operands().push_back(overflow_check);
-    result_expr.operands().push_back(result_expr_node);
-
-    // Final assignment
-    code_assignt assignment(lhs, result_expr);
-    assignment.location() = function.location();
-    copy(assignment, ASSIGN, dest);
-    return;
-  }
-  // Quantifiers passthrough. Converts function calls into forall or exists expr
-  if (base_name == "__ESBMC_forall" || base_name == "__ESBMC_exists")
-  {
-    if (arguments.size() != 2)
-    {
-      log_error("`{}' expected to have two arguments", id2string(base_name));
-      abort();
-    }
-    // make it a side effect if there is an LHS
-    if (lhs.is_nil())
-      return;
-
-    exprt rhs =
-      exprt(base_name == "__ESBMC_forall" ? "forall" : "exists", typet("bool"));
-    rhs.copy_to_operands(arguments[0]);
-    rhs.copy_to_operands(arguments[1]);
-
-    rhs.location() = function.location();
-
-    code_assignt assignment(lhs, rhs);
-    assignment.location() = function.location();
-    copy(assignment, ASSIGN, dest);
-    return;
-  }
-
   bool is_assume =
     (base_name == "__ESBMC_assume") || (base_name == "__VERIFIER_assume");
   bool is_assert = (base_name == "assert");
@@ -1020,6 +937,88 @@ void goto_convertt::do_function_call_symbol(
     migrate_expr(new_assign, new_assign_expr);
     t_n->code = new_assign_expr;
     t_n->location = function.location();
+  }
+  else if (
+    base_name == "__ESBMC_overflow_result_plus" ||
+    base_name == "__ESBMC_overflow_result_minus" ||
+    base_name == "__ESBMC_overflow_result_mult" ||
+    base_name == "__ESBMC_overflow_result_shl" ||
+    base_name == "__ESBMC_overflow_result_unary_minus")
+  {
+    if (lhs.is_nil())
+      return;
+
+    std::string operation;
+    std::size_t expected_args = 2;
+
+    if (base_name == "__ESBMC_overflow_result_plus")
+      operation = "+";
+    else if (base_name == "__ESBMC_overflow_result_minus")
+      operation = "-";
+    else if (base_name == "__ESBMC_overflow_result_mult")
+      operation = "*";
+    else if (base_name == "__ESBMC_overflow_result_shl")
+      operation = "shl";
+    else if (base_name == "__ESBMC_overflow_result_unary_minus")
+    {
+      operation = "unary-";
+      expected_args = 1;
+    }
+
+    if (arguments.size() != expected_args)
+    {
+      log_error("`{}` expects {} argument(s)", base_name, expected_args);
+      abort();
+    }
+
+    // Prepare the overflow check expression
+    exprt overflow_check("overflow-" + operation, bool_typet());
+    for (const auto &arg : arguments)
+      overflow_check.copy_to_operands(arg);
+    overflow_check.location() = function.location();
+
+    // Prepare the actual operation result expression
+    exprt result_expr_node(operation, arguments[0].type());
+    for (const auto &arg : arguments)
+      result_expr_node.copy_to_operands(arg);
+    result_expr_node.location() = function.location();
+
+    // Package both in a struct result: { overflow: bool, result: type }
+    struct_exprt result_expr;
+    result_expr.type() =
+      lhs.type(); // assumes lhs type is a struct with two fields
+    result_expr.operands().push_back(overflow_check);
+    result_expr.operands().push_back(result_expr_node);
+
+    // Final assignment
+    code_assignt assignment(lhs, result_expr);
+    assignment.location() = function.location();
+    copy(assignment, ASSIGN, dest);
+    return;
+  }
+  // Quantifiers passthrough. Converts function calls into forall or exists expr
+  else if (base_name == "__ESBMC_forall" || base_name == "__ESBMC_exists")
+  {
+    if (arguments.size() != 2)
+    {
+      log_error("`{}' expected to have two arguments", id2string(base_name));
+      abort();
+    }
+    // make it a side effect if there is an LHS
+    if (lhs.is_nil())
+      return;
+
+    exprt rhs =
+      exprt(base_name == "__ESBMC_forall" ? "forall" : "exists", typet("bool"));
+    rhs.copy_to_operands(arguments[0]);
+    rhs.copy_to_operands(arguments[1]);
+
+    rhs.location() = function.location();
+
+    code_assignt assignment(lhs, rhs);
+    assignment.location() = function.location();
+    copy(assignment, ASSIGN, dest);
+    return;
   }
   else
   {
