@@ -9836,7 +9836,7 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
   // value
   side_effect_expr_function_callt _ndt_uint = nondet_uint_expr;
 
-  // _ESBMC_get_unique_address(this)
+  // _ESBMC_get_unique_address(this, cname)
   side_effect_expr_function_callt _addr;
   locationt l;
   l.function(contract_name);
@@ -9855,6 +9855,9 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
   if (get_func_decl_this_ref(contract_name, ctor_id, this_ptr))
     return true;
   _addr.arguments().push_back(this_ptr);
+  string_constantt cname_str(contract_name);
+  _addr.arguments().push_back(cname_str);
+
   // address
   get_builtin_symbol(
     "$address", sol_prefix + "$address", t, l, _addr, contract_name);
@@ -10075,6 +10078,13 @@ void solidity_convertert::get_aux_property_function(
   */
 
   code_blockt _block;
+
+  // hide it
+  code_labelt label;
+  label.set_label("__ESBMC_HIDE");
+  label.code() = code_skipt();
+  _block.move_to_operands(label);
+
   for (auto cname : contractNamesList)
   {
     if (context.find_symbol("c:@F@_ESBMC_get_obj") == nullptr)
@@ -10109,7 +10119,18 @@ void solidity_convertert::get_aux_property_function(
     // return
     code_returnt ret_call;
     ret_call.return_value() = mem;
-    _block.move_to_operands(ret_call);
+
+    // if(get_object(_addr, "A") != NULL)
+    exprt _null = gen_zero(pointer_typet(empty_typet()));
+    exprt _equal = exprt("=", bool_type());
+    _equal.operands().push_back(get_obj);
+    _equal.operands().push_back(_null);
+    _equal.location() = loc;
+
+    codet if_expr("ifthenelse");
+    if_expr.copy_to_operands(_equal, ret_call);
+    if_expr.location() = loc;
+    _block.move_to_operands(if_expr);
   }
 
   // return nondet_uint
