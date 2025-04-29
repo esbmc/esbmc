@@ -52,6 +52,22 @@ static const std::unordered_map<std::string, StatementType> statement_map = {
   {"Import", StatementType::IMPORT},
   {"Raise", StatementType::RAISE}};
 
+static bool is_equality_op(const std::string &op)
+{
+  return (op == "Eq" || op == "NotEq");
+}
+  
+static bool is_char_type(const typet &t)
+{
+  return t.is_signedbv() && t.get("#cpp_type") == "char";
+}
+  
+static bool is_float_vs_char(const exprt &lhs, const exprt &rhs)
+{
+  return (lhs.type().is_floatbv() && is_char_type(rhs.type())) ||
+         (rhs.type().is_floatbv() && is_char_type(lhs.type()));
+}
+
 static bool is_relational_op(const std::string &op)
 {
   return (
@@ -499,6 +515,9 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   if (lhs.type().is_unsignedbv() && rhs.type().is_signedbv())
     rhs.make_typecast(lhs.type());
 
+  if (is_equality_op(op) && is_float_vs_char(lhs, rhs))
+    bin_expr.make_false();
+  
   // Add lhs and rhs as operands to the binary expression.
   bin_expr.copy_to_operands(lhs, rhs);
 
