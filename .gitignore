@@ -20,6 +20,8 @@ __pycache__
 tags
 .cache
 release
+.gdbinit
+compile_commands.json
 
 # custom init scripts
 init.sh

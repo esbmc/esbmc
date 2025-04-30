@@ -990,19 +990,45 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     typet t = array.type().subtype();
 
     const nlohmann::json &slice = element["slice"];
-    exprt pos = get_expr(slice);
 
-    // Adjust negative indexes
-    if (slice.contains("op") && slice["op"]["_type"] == "USub")
+    if (slice["_type"] == "Slice")
     {
-      BigInt v = binary2integer(pos.op0().value().c_str(), true);
-      v *= -1;
-      array_typet t = static_cast<array_typet &>(array.type());
-      BigInt s = binary2integer(t.size().value().c_str(), true);
-      v += s;
-      pos = from_integer(v, pos.type());
+      const size_t &upper = slice["upper"]["value"].get<size_t>();
+      const size_t &lower = slice["lower"]["value"].get<size_t>();
+
+      typet list_type = type_handler_.build_array(t, upper - lower);
+
+      expr = constant_exprt(list_type);
+
+      const auto &list = json_utils::find_var_decl(
+        element["value"]["id"], current_func_name_, ast_json);
+
+      assert(!list.empty());
+
+      const auto &list_elts = list["value"]["elts"];
+
+      for (size_t j = lower; j < upper; ++j)
+        expr.operands().push_back(get_expr(list_elts[j]));
     }
-    expr = index_exprt(array, pos, t);
+    else
+    {
+      exprt pos = get_expr(slice);
+
+      // Adjust negative indexes
+      if (slice.contains("op") && slice["op"]["_type"] == "USub")
+      {
+        BigInt v = binary2integer(pos.op0().value().c_str(), true);
+        v *= -1;
+
+        array_typet t = static_cast<array_typet &>(array.type());
+        BigInt s = binary2integer(t.size().value().c_str(), true);
+
+        v += s;
+        pos = from_integer(v, pos.type());
+      }
+
+      expr = index_exprt(array, pos, t);
+    }
     break;
   }
   default:
