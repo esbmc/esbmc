@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: Unsupported ordered comparison between float and str$

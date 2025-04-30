@@ -51,6 +51,24 @@ static const std::unordered_map<std::string, StatementType> statement_map = {
   {"ImportFrom", StatementType::IMPORT},
   {"Import", StatementType::IMPORT},
   {"Raise", StatementType::RAISE}};
+  
+static bool is_char_type(const typet &t)
+{
+  return (t.is_signedbv() || t.is_unsignedbv()) && t.get("#cpp_type") == "char";
+}  
+
+static bool is_float_vs_char(const exprt &a, const exprt &b)
+{
+  const auto &type_a = a.type();
+  const auto &type_b = b.type();
+  return (type_a.is_floatbv() && is_char_type(type_b)) ||
+         (type_b.is_floatbv() && is_char_type(type_a));
+}  
+
+static bool is_ordered_comparison(const std::string &op)
+{
+  return op == "Lt" || op == "Gt" || op == "LtE" || op == "GtE";
+}
 
 static bool is_relational_op(const std::string &op)
 {
@@ -498,6 +516,45 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   // This prevents signed-unsigned comparison issues.
   if (lhs.type().is_unsignedbv() && rhs.type().is_signedbv())
     rhs.make_typecast(lhs.type());
+
+  // According to the Python 3 Language Reference (Section 6.10, "Comparisons"):
+  // - Equality comparisons (==, !=) between built-in incompatible types like float and str do not raise an exception.
+  //   Instead, they typically evaluate to False for `==` and True for `!=`.
+  // - However, ordered comparisons (<, <=, >, >=) between incompatible types such as float and str
+  //   raise a TypeError at runtime.
+  //
+  // References:
+  // - https://docs.python.org/3/reference/expressions.html#comparisons
+  // - https://docs.python.org/3/library/stdtypes.html#typeerror
+  //
+  // This block emulates that behavior in ESBMC's symbolic execution: converting equality comparisons to
+  // constants (false or true), and rejecting invalid ordered comparisons with a runtime error.
+  if (is_float_vs_char(lhs, rhs))
+  {
+    if (op == "Eq")
+    {
+      // float == str → False (no exception)
+      bin_expr.make_false();
+    }
+    else if (op == "NotEq")
+    {
+      // float != str → True (no exception)
+      bin_expr.make_true();
+    }
+    else if (is_ordered_comparison(op))
+    {
+      // float < str, float > str, etc. → TypeError in Python
+      const auto &loc = bin_expr.location();
+      std::ostringstream oss;
+      oss << "Unsupported ordered comparison between float and str at ";
+      if (loc.is_not_nil())
+        oss << loc.get_file() << ":" << loc.get_line();
+      else
+        oss << "<unknown location>";
+      throw std::runtime_error(oss.str());
+    }
+  }
+ 
 
   // Add lhs and rhs as operands to the binary expression.
   bin_expr.copy_to_operands(lhs, rhs);
