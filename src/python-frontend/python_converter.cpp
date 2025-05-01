@@ -523,9 +523,12 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   // Otherwise, it inherits the type of the left-hand side (lhs).
   typet type = (is_relational_op(op)) ? bool_type() : lhs.type();
 
-  // Create a binary expression node with the determined type.
+  // Create a binary expression node with the determined type and location.
   exprt bin_expr(get_op(op, type), type);
-  bin_expr.location() = lhs.location();
+  if (lhs.is_symbol())
+    bin_expr.location() = lhs.location();
+  else if (rhs.is_symbol())
+    bin_expr.location() = rhs.location();
 
   // Handle type promotion for mixed signed/unsigned comparisons:
   // If lhs is unsigned and rhs is signed, convert rhs to match lhs's type.
