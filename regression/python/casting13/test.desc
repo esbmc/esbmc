@@ -1,4 +1,4 @@
 CORE
 main.py
 
-^ERROR: TypeError: chr() argument must be int, not number$
+^ERROR: TypeError: chr\(\) argument must be int, not number$

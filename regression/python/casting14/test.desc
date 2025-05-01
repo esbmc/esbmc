@@ -1,4 +1,4 @@
 CORE
 main.py
 
-^ERROR: Invalid string passed to chr(): 'hello'$
+^ERROR: TypeError: invalid string passed to chr\(\): 'hello'$
