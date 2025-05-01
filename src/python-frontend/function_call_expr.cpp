@@ -114,12 +114,6 @@ exprt function_call_expr::build_constant_from_arg() const
   }
   else if (func_name == "chr")
   {
-    // Only process constant values
-    if (!arg.contains("value") || arg["value"].is_null())
-    {
-      // Cannot simplify, return unresolved expression
-      return converter_.get_expr(call_);
-    }
     int int_value = 0;
     if (arg["value"].is_number_integer())
       int_value = arg["value"].get<int>();
@@ -154,9 +148,6 @@ exprt function_call_expr::build_constant_from_arg() const
   exprt expr = converter_.get_expr(arg);
   typet t = type_handler_.get_typet(func_name, arg_size);
   expr.type() = t;
-  
-  printf("passou em 174\n");
-  expr.dump();
   return expr;
 }
 
