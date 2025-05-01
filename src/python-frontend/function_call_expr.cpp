@@ -134,7 +134,8 @@ exprt function_call_expr::build_constant_from_arg() const
 
     if (int_value < 0 || int_value > 255)
     {
-      throw std::runtime_error("chr() argument out of ASCII range: " + std::to_string(int_value));
+      throw std::runtime_error(
+        "chr() argument out of ASCII range: " + std::to_string(int_value));
     }
 
     // Replace with one-character string
