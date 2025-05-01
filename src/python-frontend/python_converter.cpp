@@ -312,6 +312,18 @@ inline bool is_math_expr(const exprt &expr)
   return id == "+" || id == "-" || id == "*" || id == "/";
 }
 
+// Attach source location from symbol table if expr is a symbol
+static void attach_symbol_location(exprt &expr, contextt &symbol_table)
+{
+  if(!expr.is_symbol())
+    return;
+
+  const irep_idt &id = expr.identifier();
+  symbolt *sym = symbol_table.find_symbol(id);
+  if(sym != nullptr)
+    expr.location() = sym->location;
+}
+
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
   auto left = (element.contains("left")) ? element["left"] : element["target"];
@@ -326,7 +338,10 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   exprt lhs = get_expr(left);
   exprt rhs = get_expr(right);
-
+    
+  attach_symbol_location(lhs, symbol_table());
+  attach_symbol_location(rhs, symbol_table());
+  
   auto to_side_effect_call = [](exprt &expr) {
     side_effect_expr_function_callt side_effect;
     code_function_callt &code = static_cast<code_function_callt &>(expr);
@@ -510,12 +525,16 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   // Create a binary expression node with the determined type.
   exprt bin_expr(get_op(op, type), type);
+  bin_expr.location() = lhs.location();
 
   // Handle type promotion for mixed signed/unsigned comparisons:
   // If lhs is unsigned and rhs is signed, convert rhs to match lhs's type.
   // This prevents signed-unsigned comparison issues.
   if (lhs.type().is_unsignedbv() && rhs.type().is_signedbv())
     rhs.make_typecast(lhs.type());
+
+  // Add lhs and rhs as operands to the binary expression.
+  bin_expr.copy_to_operands(lhs, rhs);
 
   // According to the Python 3 Language Reference (Section 6.10, "Comparisons"):
   // - Equality comparisons (==, !=) between built-in incompatible types like float and str do not raise an exception.
@@ -543,20 +562,26 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     }
     else if (is_ordered_comparison(op))
     {
-      // float < str, float > str, etc. → TypeError in Python
+      // Python-style error: float < str → TypeError
+      std::string lower_op = op;
+      std::transform(lower_op.begin(), lower_op.end(), lower_op.begin(),
+                     [](unsigned char c) { return std::tolower(c); });
+    
       const auto &loc = bin_expr.location();
-      std::ostringstream oss;
-      oss << "Unsupported ordered comparison between float and str at ";
+      const auto it = operator_map.find(lower_op);
+      assert(it != operator_map.end());
+    
+      std::ostringstream error;
+      error << "'" << it->second << "' not supported between instances of 'float' and 'str'";
+    
       if (loc.is_not_nil())
-        oss << loc.get_file() << ":" << loc.get_line();
+        error << " at " << loc.get_file() << ":" << loc.get_line();
       else
-        oss << "<unknown location>";
-      throw std::runtime_error(oss.str());
+        error << " at <unknown location>";
+    
+      throw std::runtime_error(error.str());
     }
   }
-
-  // Add lhs and rhs as operands to the binary expression.
-  bin_expr.copy_to_operands(lhs, rhs);
 
   // floor division (//) operation corresponds to an int division with floor rounding
   // So we need to emulate this behavior here:
