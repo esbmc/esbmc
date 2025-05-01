@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: Invalid string passed to chr(): 'hello'$
