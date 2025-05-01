@@ -8,6 +8,7 @@
 #include <util/message.h>
 #include <util/string_constant.h>
 #include <regex>
+#include <iostream>
 
 using namespace json_utils;
 
@@ -111,15 +112,37 @@ exprt function_call_expr::build_constant_from_arg() const
   else if (func_name == "chr")
   {
     int int_value = 0;
-    if (arg["value"].is_number_integer())
+  
+    // Handle unary negative constant (e.g., -1)
+    if (arg.contains("_type") && arg["_type"] == "UnaryOp")
+    {
+      const auto &op = arg["op"];
+      const auto &operand = arg["operand"];
+  
+      if (op.contains("_type") && op["_type"] == "USub" &&
+          operand.contains("value") && operand["value"].is_number_integer())
+      {
+        int_value = -operand["value"].get<int>();
+      }
+      else
+      {
+        throw std::runtime_error("TypeError: Unsupported UnaryOp in chr()");
+      }
+    }
+    // Handle plain integer
+    else if (arg.contains("value") && arg["value"].is_number_integer())
+    {
       int_value = arg["value"].get<int>();
-    else if (arg["value"].is_number_float())
+    }
+    // Handle float
+    else if (arg.contains("value") && arg["value"].is_number_float())
     {
       std::string error_msg = "TypeError: chr() argument must be int, not ";
       error_msg += arg["value"].type_name();
       throw std::runtime_error(error_msg);
     }
-    else if (arg["value"].is_string())
+    // Handle string to int conversion
+    else if (arg.contains("value") && arg["value"].is_string())
     {
       const std::string &s = arg["value"].get<std::string>();
       try
@@ -128,20 +151,25 @@ exprt function_call_expr::build_constant_from_arg() const
       }
       catch (const std::invalid_argument &)
       {
-        throw std::runtime_error("Invalid string passed to chr(): '" + s + "'");
+        throw std::runtime_error("TypeError: invalid string passed to chr(): '" + s + "'");
       }
     }
-
+    else
+    {
+      throw std::runtime_error("TypeError: chr() argument must be int");
+    }
+  
+    // Range check
     if (int_value < 0 || int_value > 255)
     {
       throw std::runtime_error(
-        "chr() argument out of ASCII range: " + std::to_string(int_value));
+        "ValueError: chr() argument out of ASCII range: " + std::to_string(int_value));
     }
-
+  
     // Replace with one-character string
     arg["value"] = std::string(1, static_cast<char>(int_value));
   }
-
+  
   typet t = type_handler_.get_typet(func_name, arg_size);
   exprt expr = converter_.get_expr(arg);
   expr.type() = t;
