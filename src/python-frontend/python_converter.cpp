@@ -227,28 +227,27 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
     lhs_type.is_floatbv() && rhs.is_constant() &&
     (rhs_type.is_signedbv() || rhs_type.is_unsignedbv()))
   {
-    // Convert RHS to float
     BigInt value(
-      binary2integer(rhs.value().as_string(), rhs.type().is_signedbv()));
+      binary2integer(rhs.value().as_string(), rhs_type.is_signedbv()));
     std::string rhs_float = std::to_string(value.to_int64()) + ".0";
     convert_float_literal(rhs_float, rhs);
     update_symbol(rhs);
+    return;
   }
-  else if (lhs_type.width() != rhs_type.width())
+  // Handle width mismatch for basic types
+  if (lhs_type.width() != rhs_type.width())
   {
     auto lhs_type_width = std::stoi(lhs_type.width().c_str());
     auto rhs_type_width = std::stoi(rhs_type.width().c_str());
 
     if (lhs_type_width > rhs_type_width)
     {
-      // Update rhs symbol value to match with new type
       rhs_type = lhs_type;
       if (rhs.is_symbol())
         update_symbol(rhs);
     }
     else
     {
-      // Update lhs symbol value to match with new type
       lhs_type = rhs_type;
       if (lhs.is_symbol())
         update_symbol(lhs);
@@ -1317,7 +1316,7 @@ void python_converter::get_var_assign(
   {
     if (lhs_symbol)
     {
-      if (lhs_type == "str" || lhs_type == "list" || rhs.type().is_array())
+      if (lhs_type == "str" || lhs_type == "chr" || lhs_type == "list" || rhs.type().is_array())
       {
         /* When a string is assigned the result of a concatenation, we initially
          * create the LHS type as a zero-size array: "current_element_type = get_typet(lhs_type, type_size);"
