@@ -102,6 +102,7 @@ exprt function_call_expr::build_constant_from_arg() const
 
   if (func_name == "str")
     arg_size = arg["value"].get<std::string>().size(); // get string length
+
   else if (func_name == "int" && arg["value"].is_number_float())
   {
     double arg_value = arg["value"].get<double>();
