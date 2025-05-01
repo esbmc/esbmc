@@ -127,10 +127,6 @@ exprt function_call_expr::build_constant_from_arg() const
         throw std::runtime_error("Invalid string passed to chr(): '" + s + "'");
       }
     }
-    else
-    {
-      return converter_.get_expr(call_); // fallback: let general handling deal with it
-    }
 
     if (int_value < 0 || int_value > 255)
     {
