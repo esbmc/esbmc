@@ -111,15 +111,16 @@ exprt function_call_expr::build_constant_from_arg() const
   else if (func_name == "chr")
   {
     int int_value = 0;
-  
+
     // Handle unary negative constant (e.g., -1)
     if (arg.contains("_type") && arg["_type"] == "UnaryOp")
     {
       const auto &op = arg["op"];
       const auto &operand = arg["operand"];
-  
-      if (op.contains("_type") && op["_type"] == "USub" &&
-          operand.contains("value") && operand["value"].is_number_integer())
+
+      if (
+        op.contains("_type") && op["_type"] == "USub" &&
+        operand.contains("value") && operand["value"].is_number_integer())
       {
         int_value = -operand["value"].get<int>();
       }
@@ -150,25 +151,27 @@ exprt function_call_expr::build_constant_from_arg() const
       }
       catch (const std::invalid_argument &)
       {
-        throw std::runtime_error("TypeError: invalid string passed to chr(): '" + s + "'");
+        throw std::runtime_error(
+          "TypeError: invalid string passed to chr(): '" + s + "'");
       }
     }
     else
     {
       throw std::runtime_error("TypeError: chr() argument must be int");
     }
-  
+
     // Range check
     if (int_value < 0 || int_value > 255)
     {
       throw std::runtime_error(
-        "ValueError: chr() argument out of ASCII range: " + std::to_string(int_value));
+        "ValueError: chr() argument out of ASCII range: " +
+        std::to_string(int_value));
     }
-  
+
     // Replace with one-character string
     arg["value"] = std::string(1, static_cast<char>(int_value));
   }
-  
+
   typet t = type_handler_.get_typet(func_name, arg_size);
   exprt expr = converter_.get_expr(arg);
   expr.type() = t;
