@@ -114,7 +114,11 @@ exprt function_call_expr::build_constant_from_arg() const
     if (arg["value"].is_number_integer())
       int_value = arg["value"].get<int>();
     else if (arg["value"].is_number_float())
-      int_value = static_cast<int>(arg["value"].get<double>());
+    {
+      std::string error_msg = "TypeError: chr() argument must be int, not ";
+      error_msg += arg["value"].type_name();
+      throw std::runtime_error(error_msg);
+    }
     else if (arg["value"].is_string())
     {
       const std::string &s = arg["value"].get<std::string>();
