@@ -315,12 +315,12 @@ inline bool is_math_expr(const exprt &expr)
 // Attach source location from symbol table if expr is a symbol
 static void attach_symbol_location(exprt &expr, contextt &symbol_table)
 {
-  if(!expr.is_symbol())
+  if (!expr.is_symbol())
     return;
 
   const irep_idt &id = expr.identifier();
   symbolt *sym = symbol_table.find_symbol(id);
-  if(sym != nullptr)
+  if (sym != nullptr)
     expr.location() = sym->location;
 }
 
@@ -338,10 +338,10 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   exprt lhs = get_expr(left);
   exprt rhs = get_expr(right);
-    
+
   attach_symbol_location(lhs, symbol_table());
   attach_symbol_location(rhs, symbol_table());
-  
+
   auto to_side_effect_call = [](exprt &expr) {
     side_effect_expr_function_callt side_effect;
     code_function_callt &code = static_cast<code_function_callt &>(expr);
@@ -564,21 +564,25 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     {
       // Python-style error: float < str → TypeError
       std::string lower_op = op;
-      std::transform(lower_op.begin(), lower_op.end(), lower_op.begin(),
-                     [](unsigned char c) { return std::tolower(c); });
-    
+      std::transform(
+        lower_op.begin(),
+        lower_op.end(),
+        lower_op.begin(),
+        [](unsigned char c) { return std::tolower(c); });
+
       const auto &loc = bin_expr.location();
       const auto it = operator_map.find(lower_op);
       assert(it != operator_map.end());
-    
+
       std::ostringstream error;
-      error << "'" << it->second << "' not supported between instances of 'float' and 'str'";
-    
+      error << "'" << it->second
+            << "' not supported between instances of 'float' and 'str'";
+
       if (loc.is_not_nil())
         error << " at " << loc.get_file() << ":" << loc.get_line();
       else
         error << " at <unknown location>";
-    
+
       throw std::runtime_error(error.str());
     }
   }
