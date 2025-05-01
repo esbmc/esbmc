@@ -101,19 +101,65 @@ exprt function_call_expr::build_constant_from_arg() const
   auto arg = call_["args"][0];
 
   if (func_name == "str")
-    arg_size = arg["value"].get<std::string>().size(); // get string length
-
-  else if (func_name == "int" && arg["value"].is_number_float())
   {
-    double arg_value = arg["value"].get<double>();
-    arg["value"] = static_cast<int>(arg_value);
+    arg_size = arg["value"].get<std::string>().size(); // get string length
+  }
+  else if (func_name == "int")
+  {
+    if (arg["value"].is_number_float())
+    {
+      double arg_value = arg["value"].get<double>();
+      arg["value"] = static_cast<int>(arg_value);
+    }
+  }
+  else if (func_name == "chr")
+  {
+    // Only process constant values
+    if (!arg.contains("value") || arg["value"].is_null())
+    {
+      // Cannot simplify, return unresolved expression
+      return converter_.get_expr(call_);
+    }
+    int int_value = 0;
+    if (arg["value"].is_number_integer())
+      int_value = arg["value"].get<int>();
+    else if (arg["value"].is_number_float())
+      int_value = static_cast<int>(arg["value"].get<double>());
+    else if (arg["value"].is_string())
+    {
+      const std::string &s = arg["value"].get<std::string>();
+      try
+      {
+        int_value = std::stoi(s);
+      }
+      catch (const std::invalid_argument &)
+      {
+        throw std::runtime_error("Invalid string passed to chr(): '" + s + "'");
+      }
+    }
+    else
+    {
+      return converter_.get_expr(call_); // fallback: let general handling deal with it
+    }
+
+    if (int_value < 0 || int_value > 255)
+    {
+      throw std::runtime_error("chr() argument out of ASCII range: " + std::to_string(int_value));
+    }
+
+    // Replace with one-character string
+    arg["value"] = std::string(1, static_cast<char>(int_value));
   }
 
-  typet t = type_handler_.get_typet(func_name, arg_size);
   exprt expr = converter_.get_expr(arg);
+  typet t = type_handler_.get_typet(func_name, arg_size);
   expr.type() = t;
+  
+  printf("passou em 174\n");
+  expr.dump();
   return expr;
 }
+
 
 std::string function_call_expr::get_object_name() const
 {
