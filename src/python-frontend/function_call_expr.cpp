@@ -137,7 +137,7 @@ exprt function_call_expr::build_constant_from_arg() const
     // Handle float
     else if (arg.contains("value") && arg["value"].is_number_float())
     {
-      std::string error_msg = "TypeError: chr() argument must be int, not ";
+      std::string error_msg = "TypeError: chr() argument must be int, not float ";
       error_msg += arg["value"].type_name();
       throw std::runtime_error(error_msg);
     }
