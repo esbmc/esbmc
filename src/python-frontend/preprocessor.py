@@ -7,6 +7,17 @@ class Preprocessor(ast.NodeTransformer):
         self.functionDefaults = {}
         self.functionParams = {}
         self.module_name = module_name # for errors
+
+
+    def generate_variable_copy(self, node_name:str, argument:ast.arg, default_val):
+        target = ast.Name(id=f"ESBMC_DEFAULT_{node_name}_{argument.arg}",ctx=ast.Store())
+        assign_node = ast.AnnAssign(
+            target=target,
+            annotation=argument.annotation,
+            value=default_val,
+            simple=1
+        )
+        return assign_node, target
     # for-range statements such as:
     #
     #   for x in range(1, 5, 1):
@@ -175,12 +186,16 @@ class Preprocessor(ast.NodeTransformer):
         if len(node.args.defaults) < 1:
             self.generic_visit(node)
             return node
+        return_nodes = []
 
         # add defaults to dictionary with tuple key (function name, parameter name)
         for i in range(1,len(node.args.defaults)+1):
             if isinstance(node.args.defaults[-i],ast.Constant):
                 self.functionDefaults[(node.name, node.args.args[-i].arg)] = node.args.defaults[-i].value
             elif isinstance(node.args.defaults[-i],ast.Name):
-                self.functionDefaults[(node.name, node.args.args[-i].arg)] = node.args.defaults[-i]
+                assignment_node, target_var = self.generate_variable_copy(node.name,node.args.args[-1],node.args.defaults[-i])
+                self.functionDefaults[(node.name, node.args.args[-i].arg)] = target_var
+                return_nodes.append(assignment_node)
         self.generic_visit(node)
-        return node
+        return_nodes.append(node)
+        return return_nodes
