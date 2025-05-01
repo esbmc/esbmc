@@ -101,16 +101,11 @@ exprt function_call_expr::build_constant_from_arg() const
   auto arg = call_["args"][0];
 
   if (func_name == "str")
-  {
     arg_size = arg["value"].get<std::string>().size(); // get string length
-  }
-  else if (func_name == "int")
+  else if (func_name == "int" && arg["value"].is_number_float())
   {
-    if (arg["value"].is_number_float())
-    {
-      double arg_value = arg["value"].get<double>();
-      arg["value"] = static_cast<int>(arg_value);
-    }
+    double arg_value = arg["value"].get<double>();
+    arg["value"] = static_cast<int>(arg_value);
   }
   else if (func_name == "chr")
   {
@@ -150,7 +145,6 @@ exprt function_call_expr::build_constant_from_arg() const
   expr.type() = t;
   return expr;
 }
-
 
 std::string function_call_expr::get_object_name() const
 {
