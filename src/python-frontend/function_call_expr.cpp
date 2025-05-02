@@ -134,8 +134,9 @@ exprt function_call_expr::build_constant_from_arg() const
       const auto &op = arg["op"];
       const auto &operand = arg["operand"];
 
-      if (op["_type"] == "USub" &&
-          operand.contains("value") && operand["value"].is_number_integer())
+      if (
+        op["_type"] == "USub" && operand.contains("value") &&
+        operand["value"].is_number_integer())
         int_value = -operand["value"].get<int>();
       else
         throw std::runtime_error("TypeError: Unsupported UnaryOp in chr()");
@@ -147,7 +148,8 @@ exprt function_call_expr::build_constant_from_arg() const
 
     // Reject float input
     else if (arg.contains("value") && arg["value"].is_number_float())
-      throw std::runtime_error("TypeError: chr() argument must be int, not float");
+      throw std::runtime_error(
+        "TypeError: chr() argument must be int, not float");
 
     // Try converting string input to integer
     else if (arg.contains("value") && arg["value"].is_string())
@@ -159,7 +161,8 @@ exprt function_call_expr::build_constant_from_arg() const
       }
       catch (const std::invalid_argument &)
       {
-        throw std::runtime_error("TypeError: invalid string passed to chr(): '" + s + "'");
+        throw std::runtime_error(
+          "TypeError: invalid string passed to chr(): '" + s + "'");
       }
     }
 
