@@ -86,15 +86,15 @@ static StatementType get_statement_type(const nlohmann::json &element)
   return (it != statement_map.end()) ? it->second : StatementType::UNKNOWN;
 }
 
-// Convert Python/AST to irep2 operations
 static std::string get_op(const std::string &op, const typet &type)
 {
+  // Convert the operator to lowercase to allow case-insensitive comparison.
   std::string lower_op = op;
   std::transform(
-    lower_op.begin(), lower_op.end(), lower_op.begin(), [](unsigned char c) {
-      return std::tolower(c);
-    });
+    lower_op.begin(), lower_op.end(), lower_op.begin(),
+    [](unsigned char c) { return std::tolower(c); });
 
+  // Special case: if the type is floating-point, use IEEE-specific operators.
   if (type.is_floatbv())
   {
     static const std::unordered_map<std::string, std::string> float_ops = {
@@ -111,13 +111,14 @@ static std::string get_op(const std::string &op, const typet &type)
       return float_it->second;
   }
 
+  // Look up the operator in the general operator map (for non-floating-point types).
   auto it = operator_map.find(lower_op);
   if (it != operator_map.end())
   {
     return it->second;
   }
 
-  // Optional: add a debug log or fallback
+  // Operator not found — issue a warning and return an empty string.
   log_warning("Unknown operator: {}", op);
   return {};
 }
@@ -127,10 +128,17 @@ static struct_typet::componentt build_component(
   const std::string &comp_name,
   const typet &type)
 {
-  struct_typet::componentt comp(comp_name, comp_name, type);
-  comp.type().set("#member_name", std::string("tag-") + class_name);
-  comp.set_access("public");
-  return comp;
+  struct_typet::componentt component(comp_name, comp_name, type);
+
+  // Add metadata used internally by ESBMC for member-to-class tagging.
+  // The key "#member_name" is used by the type system; the value "tag-<class_name>" helps
+  // associate this member with its parent class.
+  component.type().set("#member_name", "tag-" + class_name);
+
+  // Set the member visibility to public by default.
+  component.set_access("public");
+
+  return component;
 }
 
 symbolt python_converter::create_symbol(
@@ -152,38 +160,31 @@ symbolt python_converter::create_symbol(
 
 static ExpressionType get_expression_type(const nlohmann::json &element)
 {
+  // Return UNKNOWN if the expected "_type" field is missing
   if (!element.contains("_type"))
     return ExpressionType::UNKNOWN;
 
-  auto type = element["_type"];
+  // Map of Python AST "_type" strings to internal expression categories
+  static const std::unordered_map<std::string, ExpressionType> type_map = {
+    {"UnaryOp", ExpressionType::UNARY_OPERATION},
+    {"BinOp", ExpressionType::BINARY_OPERATION},
+    {"Compare", ExpressionType::BINARY_OPERATION},   // Comparison treated as binary op
+    {"BoolOp", ExpressionType::LOGICAL_OPERATION},
+    {"Constant", ExpressionType::LITERAL},
+    {"Name", ExpressionType::VARIABLE_REF},
+    {"Attribute", ExpressionType::VARIABLE_REF},     // Both treated as variable references
+    {"Call", ExpressionType::FUNC_CALL},
+    {"IfExp", ExpressionType::IF_EXPR},
+    {"Subscript", ExpressionType::SUBSCRIPT},
+    {"List", ExpressionType::LIST}
+  };
 
-  if (type == "UnaryOp")
-    return ExpressionType::UNARY_OPERATION;
+  const auto &type = element["_type"];
+  auto it = type_map.find(type);
+  if (it != type_map.end())
+    return it->second;
 
-  if (type == "BinOp" || type == "Compare")
-    return ExpressionType::BINARY_OPERATION;
-
-  if (type == "BoolOp")
-    return ExpressionType::LOGICAL_OPERATION;
-
-  if (type == "Constant")
-    return ExpressionType::LITERAL;
-
-  if (type == "Name" || type == "Attribute")
-    return ExpressionType::VARIABLE_REF;
-
-  if (type == "Call")
-    return ExpressionType::FUNC_CALL;
-
-  if (type == "IfExp")
-    return ExpressionType::IF_EXPR;
-
-  if (type == "Subscript")
-    return ExpressionType::SUBSCRIPT;
-
-  if (type == "List")
-    return ExpressionType::LIST;
-
+  // If the type is not recognized, return UNKNOWN
   return ExpressionType::UNKNOWN;
 }
 
