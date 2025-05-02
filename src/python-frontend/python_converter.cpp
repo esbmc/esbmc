@@ -90,22 +90,24 @@ static StatementType get_statement_type(const nlohmann::json &element)
 static std::string get_op(const std::string &op, const typet &type)
 {
   std::string lower_op = op;
-
   std::transform(
-    lower_op.begin(), lower_op.end(), lower_op.begin(), [](unsigned char c) {
-      return std::tolower(c);
-    });
+    lower_op.begin(), lower_op.end(), lower_op.begin(),
+    [](unsigned char c) { return std::tolower(c); });
 
   if (type.is_floatbv())
   {
-    if (lower_op == "add")
-      return "ieee_add";
-    if (lower_op == "sub" || lower_op == "subtract")
-      return "ieee_sub";
-    if (lower_op == "mult" || lower_op == "multiply")
-      return "ieee_mul";
-    if (lower_op == "div" || lower_op == "divide")
-      return "ieee_div";
+    static const std::unordered_map<std::string, std::string> float_ops = {
+      {"add", "ieee_add"},
+      {"sub", "ieee_sub"},
+      {"subtract", "ieee_sub"},
+      {"mult", "ieee_mul"},
+      {"multiply", "ieee_mul"},
+      {"div", "ieee_div"},
+      {"divide", "ieee_div"}};
+
+    auto float_it = float_ops.find(lower_op);
+    if (float_it != float_ops.end())
+      return float_it->second;
   }
 
   auto it = operator_map.find(lower_op);
@@ -113,7 +115,10 @@ static std::string get_op(const std::string &op, const typet &type)
   {
     return it->second;
   }
-  return std::string();
+
+  // Optional: add a debug log or fallback
+  log_warning("Unknown operator: {}", op);
+  return {};
 }
 
 static struct_typet::componentt build_component(
