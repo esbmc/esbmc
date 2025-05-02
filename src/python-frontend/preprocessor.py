@@ -193,7 +193,7 @@ class Preprocessor(ast.NodeTransformer):
             if isinstance(node.args.defaults[-i],ast.Constant):
                 self.functionDefaults[(node.name, node.args.args[-i].arg)] = node.args.defaults[-i].value
             elif isinstance(node.args.defaults[-i],ast.Name):
-                assignment_node, target_var = self.generate_variable_copy(node.name,node.args.args[-1],node.args.defaults[-i])
+                assignment_node, target_var = self.generate_variable_copy(node.name,node.args.args[-i],node.args.defaults[-i])
                 self.functionDefaults[(node.name, node.args.args[-i].arg)] = target_var
                 return_nodes.append(assignment_node)
         self.generic_visit(node)
