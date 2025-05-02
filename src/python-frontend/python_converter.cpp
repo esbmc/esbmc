@@ -261,14 +261,14 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
 
   // Case 1: Promote RHS integer constant to float if LHS expects a float
   if (
-    lhs_type.is_floatbv() &&
-    rhs.is_constant() &&
+    lhs_type.is_floatbv() && rhs.is_constant() &&
     (rhs_type.is_signedbv() || rhs_type.is_unsignedbv()))
   {
     try
     {
       // Convert binary string value to integer
-      BigInt value(binary2integer(rhs.value().as_string(), rhs_type.is_signedbv()));
+      BigInt value(
+        binary2integer(rhs.value().as_string(), rhs_type.is_signedbv()));
 
       // Create a float literal string (e.g., "42.0")
       std::string rhs_float = std::to_string(value.to_int64()) + ".0";
@@ -281,7 +281,9 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
     }
     catch (const std::exception &e)
     {
-      log_error("adjust_statement_types: Failed to promote integer to float: {}", e.what());
+      log_error(
+        "adjust_statement_types: Failed to promote integer to float: {}",
+        e.what());
     }
   }
   // Case 2: Align bit-widths between LHS and RHS if they differ
@@ -309,7 +311,8 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
     }
     catch (const std::exception &e)
     {
-      log_error("adjust_statement_types: Failed to parse type widths: {}", e.what());
+      log_error(
+        "adjust_statement_types: Failed to parse type widths: {}", e.what());
     }
   }
 }
@@ -1370,7 +1373,7 @@ void python_converter::get_var_assign(
     has_value = true;
     is_converting_rhs = false;
   }
-  
+
   if (has_value && rhs != exprt("_init_undefined"))
   {
     if (lhs_symbol)
