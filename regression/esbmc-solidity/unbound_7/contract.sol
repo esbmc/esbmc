@@ -22,7 +22,7 @@ contract Mutex {
 
     function run() public {
         uint xPre = x;
-        unknown.run();
+        unknown.run(); // recursion
         assert(xPre == x);
     }
 }

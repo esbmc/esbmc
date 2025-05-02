@@ -23,10 +23,7 @@ InIt find(InIt first, InIt last, const Ty &value)
   for (; first != last; first++)
   {
     if (*first == value)
-    {
-      *first = value;
       return first;
-    }
   }
   return first;
 }
@@ -37,9 +34,7 @@ InIt *find(InIt *first, InIt *last, const Ty &value)
   for (; first != last; first++)
   {
     if (*first == value)
-    {
       break;
-    }
   }
   return first;
 }

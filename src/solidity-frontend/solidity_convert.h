@@ -64,6 +64,10 @@ protected:
   } func_sig;
 
   void merge_multi_files();
+  void topological_sort(
+    std::unordered_map<std::string, std::unordered_set<std::string>> &graph,
+    std::unordered_map<std::string, nlohmann::json> &path_to_json,
+    nlohmann::json &sorted_files);
   void contract_precheck();
   bool populate_auxilary_vars();
   bool
@@ -370,6 +374,11 @@ protected:
   void get_size_of_expr(const typet &elem_type, exprt &size_of_expr);
   bool is_dyn_array(const nlohmann::json &json_in);
   bool is_mapping(const nlohmann::json &ast_node);
+  bool is_func_sig_cover(const std::string &derived, const std::string &base);
+  bool is_var_getter_matched(
+    const std::string &cname,
+    const std::string &tname,
+    const typet &ttype);
 
   void get_default_symbol(
     symbolt &symbol,
@@ -446,6 +455,7 @@ protected:
     const nlohmann::json &options,
     const std::string mem_name,
     const exprt &base,
+    const exprt &arg,
     exprt &new_expr);
   bool has_callable_func(const std::string &cname);
   bool
@@ -454,6 +464,8 @@ protected:
   get_target_function(const std::string &cname, const std::string &func_name);
   bool get_call_definition(const std::string &cname, exprt &new_expr);
   bool get_call_value_definition(const std::string &cname, exprt &new_expr);
+  bool get_transfer_definition(const std::string &cname, exprt &new_expr);
+  bool get_send_definition(const std::string &cname, exprt &new_expr);
   bool model_transaction(
     const nlohmann::json &expr,
     const exprt &base,
@@ -535,7 +547,10 @@ protected:
   // Who inherits from me?
   std::unordered_map<std::string, std::unordered_set<std::string>>
     inheritanceMap;
-  //std::unordered_map<std::string, std::unordered_set<std::string>> functionSignature;
+  // structural typing indentical
+  std::unordered_map<std::string, std::unordered_set<std::string>>
+    structureTypingMap;
+
   // contract name list
   std::unordered_map<int, std::string> contractNamesMap;
   std::set<std::string> contractNamesList;

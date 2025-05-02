@@ -42,7 +42,8 @@ public:
   static bool is_builtin_type(const std::string &name)
   {
     return (
-      name == "int" || name == "float" || name == "bool" || name == "str");
+      name == "int" || name == "float" || name == "bool" || name == "str" ||
+      name == "chr");
   }
 
   static bool is_consensus_type(const std::string &name)
@@ -76,7 +77,10 @@ public:
 
   static bool is_c_model_func(const std::string &func_name)
   {
-    return (func_name == "ceil");
+    return (func_name == "ceil") || (func_name == "floor") ||
+           (func_name == "fabs") || (func_name == "sin") ||
+           (func_name == "cos") || (func_name == "exp") ||
+           (func_name == "fmod");
   }
 
 private:
