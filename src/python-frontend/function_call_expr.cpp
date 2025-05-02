@@ -96,7 +96,6 @@ exprt function_call_expr::build_nondet_call() const
 exprt function_call_expr::build_constant_from_arg() const
 {
   const std::string &func_name = function_id_.get_function();
-
   size_t arg_size = 1;
   auto arg = call_["args"][0];
 
@@ -107,6 +106,11 @@ exprt function_call_expr::build_constant_from_arg() const
   {
     double arg_value = arg["value"].get<double>();
     arg["value"] = static_cast<int>(arg_value);
+  }
+  else if (func_name == "float" && arg["value"].is_number_integer())
+  {
+    int arg_value = arg["value"].get<int>();
+    arg["value"] = static_cast<double>(arg_value);
   }
   else if (func_name == "chr")
   {

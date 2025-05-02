@@ -1370,7 +1370,7 @@ void python_converter::get_var_assign(
     has_value = true;
     is_converting_rhs = false;
   }
-
+  
   if (has_value && rhs != exprt("_init_undefined"))
   {
     if (lhs_symbol)
