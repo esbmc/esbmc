@@ -86,34 +86,42 @@ static StatementType get_statement_type(const nlohmann::json &element)
   return (it != statement_map.end()) ? it->second : StatementType::UNKNOWN;
 }
 
-// Convert Python/AST to irep2 operations
 static std::string get_op(const std::string &op, const typet &type)
 {
+  // Convert the operator to lowercase to allow case-insensitive comparison.
   std::string lower_op = op;
-
   std::transform(
     lower_op.begin(), lower_op.end(), lower_op.begin(), [](unsigned char c) {
       return std::tolower(c);
     });
 
+  // Special case: if the type is floating-point, use IEEE-specific operators.
   if (type.is_floatbv())
   {
-    if (lower_op == "add")
-      return "ieee_add";
-    if (lower_op == "sub" || lower_op == "subtract")
-      return "ieee_sub";
-    if (lower_op == "mult" || lower_op == "multiply")
-      return "ieee_mul";
-    if (lower_op == "div" || lower_op == "divide")
-      return "ieee_div";
+    static const std::unordered_map<std::string, std::string> float_ops = {
+      {"add", "ieee_add"},
+      {"sub", "ieee_sub"},
+      {"subtract", "ieee_sub"},
+      {"mult", "ieee_mul"},
+      {"multiply", "ieee_mul"},
+      {"div", "ieee_div"},
+      {"divide", "ieee_div"}};
+
+    auto float_it = float_ops.find(lower_op);
+    if (float_it != float_ops.end())
+      return float_it->second;
   }
 
+  // Look up the operator in the general operator map (for non-floating-point types).
   auto it = operator_map.find(lower_op);
   if (it != operator_map.end())
   {
     return it->second;
   }
-  return std::string();
+
+  // Operator not found — issue a warning and return an empty string.
+  log_warning("Unknown operator: {}", op);
+  return {};
 }
 
 static struct_typet::componentt build_component(
@@ -121,10 +129,17 @@ static struct_typet::componentt build_component(
   const std::string &comp_name,
   const typet &type)
 {
-  struct_typet::componentt comp(comp_name, comp_name, type);
-  comp.type().set("#member_name", std::string("tag-") + class_name);
-  comp.set_access("public");
-  return comp;
+  struct_typet::componentt component(comp_name, comp_name, type);
+
+  // Add metadata used internally by ESBMC for member-to-class tagging.
+  // The key "#member_name" is used by the type system; the value "tag-<class_name>" helps
+  // associate this member with its parent class.
+  component.type().set("#member_name", "tag-" + class_name);
+
+  // Set the member visibility to public by default.
+  component.set_access("public");
+
+  return component;
 }
 
 symbolt python_converter::create_symbol(
@@ -146,38 +161,32 @@ symbolt python_converter::create_symbol(
 
 static ExpressionType get_expression_type(const nlohmann::json &element)
 {
+  // Return UNKNOWN if the expected "_type" field is missing
   if (!element.contains("_type"))
     return ExpressionType::UNKNOWN;
 
-  auto type = element["_type"];
+  // Map of Python AST "_type" strings to internal expression categories
+  static const std::unordered_map<std::string, ExpressionType> type_map = {
+    {"UnaryOp", ExpressionType::UNARY_OPERATION},
+    {"BinOp", ExpressionType::BINARY_OPERATION},
+    {"Compare",
+     ExpressionType::BINARY_OPERATION}, // Comparison treated as binary op
+    {"BoolOp", ExpressionType::LOGICAL_OPERATION},
+    {"Constant", ExpressionType::LITERAL},
+    {"Name", ExpressionType::VARIABLE_REF},
+    {"Attribute",
+     ExpressionType::VARIABLE_REF}, // Both treated as variable references
+    {"Call", ExpressionType::FUNC_CALL},
+    {"IfExp", ExpressionType::IF_EXPR},
+    {"Subscript", ExpressionType::SUBSCRIPT},
+    {"List", ExpressionType::LIST}};
 
-  if (type == "UnaryOp")
-    return ExpressionType::UNARY_OPERATION;
+  const auto &type = element["_type"];
+  auto it = type_map.find(type);
+  if (it != type_map.end())
+    return it->second;
 
-  if (type == "BinOp" || type == "Compare")
-    return ExpressionType::BINARY_OPERATION;
-
-  if (type == "BoolOp")
-    return ExpressionType::LOGICAL_OPERATION;
-
-  if (type == "Constant")
-    return ExpressionType::LITERAL;
-
-  if (type == "Name" || type == "Attribute")
-    return ExpressionType::VARIABLE_REF;
-
-  if (type == "Call")
-    return ExpressionType::FUNC_CALL;
-
-  if (type == "IfExp")
-    return ExpressionType::IF_EXPR;
-
-  if (type == "Subscript")
-    return ExpressionType::SUBSCRIPT;
-
-  if (type == "List")
-    return ExpressionType::LIST;
-
+  // If the type is not recognized, return UNKNOWN
   return ExpressionType::UNKNOWN;
 }
 
@@ -197,22 +206,50 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 
 void python_converter::update_symbol(const exprt &expr) const
 {
+  // Generate a symbol ID from the expression's name.
   symbol_id sid = create_symbol_id();
   sid.set_object(expr.name().c_str());
+
+  // Try to locate the symbol in the symbol table.
   symbolt *sym = symbol_table_.find_symbol(sid.to_string());
 
-  if (sym != nullptr)
+  if (sym == nullptr)
   {
-    sym->type = expr.type();
-    sym->value.type() = expr.type();
+    // Symbol not found, nothing to update.
+    return;
+  }
 
-    if (
-      sym->value.is_constant() ||
-      (sym->value.is_signedbv() || sym->value.is_unsignedbv()))
+  // Update the type of the symbol and its value.
+  const typet &expr_type = expr.type();
+  sym->type = expr_type;
+  sym->value.type() = expr_type;
+
+  // Check if the symbol has a constant or bitvector value.
+  if (
+    sym->value.is_constant() || sym->value.is_signedbv() ||
+    sym->value.is_unsignedbv())
+  {
+    const std::string &binary_value_str = sym->value.value().c_str();
+
+    try
     {
-      exprt new_value = from_integer(
-        std::stoll(sym->value.value().c_str(), nullptr, 2), expr.type());
+      // Convert binary string to integer.
+      int64_t int_val = std::stoll(binary_value_str, nullptr, 2);
+
+      // Create a new constant expression with the converted value and type.
+      exprt new_value = from_integer(int_val, expr_type);
+
+      // Assign the new value to the symbol.
       sym->value = new_value;
+    }
+    catch (const std::exception &e)
+    {
+      log_error(
+        "update_symbol: Failed to convert binary value '{}' to integer for "
+        "symbol '{}'. Error: {}",
+        binary_value_str,
+        sid.to_string(),
+        e.what());
     }
   }
 }
@@ -222,36 +259,60 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
   typet &lhs_type = lhs.type();
   typet &rhs_type = rhs.type();
 
-  // Promote int to float
+  // Case 1: Promote RHS integer constant to float if LHS expects a float
   if (
     lhs_type.is_floatbv() && rhs.is_constant() &&
     (rhs_type.is_signedbv() || rhs_type.is_unsignedbv()))
   {
-    // Convert RHS to float
-    BigInt value(
-      binary2integer(rhs.value().as_string(), rhs_type.is_signedbv()));
-    std::string rhs_float = std::to_string(value.to_int64()) + ".0";
-    convert_float_literal(rhs_float, rhs);
-    update_symbol(rhs);
+    try
+    {
+      // Convert binary string value to integer
+      BigInt value(
+        binary2integer(rhs.value().as_string(), rhs_type.is_signedbv()));
+
+      // Create a float literal string (e.g., "42.0")
+      std::string rhs_float = std::to_string(value.to_int64()) + ".0";
+
+      // Replace RHS with a float expression
+      convert_float_literal(rhs_float, rhs);
+
+      // Update the symbol table entry for RHS if needed
+      update_symbol(rhs);
+    }
+    catch (const std::exception &e)
+    {
+      log_error(
+        "adjust_statement_types: Failed to promote integer to float: {}",
+        e.what());
+    }
   }
+  // Case 2: Align bit-widths between LHS and RHS if they differ
   else if (lhs_type.width() != rhs_type.width())
   {
-    auto lhs_type_width = std::stoi(lhs_type.width().c_str());
-    auto rhs_type_width = std::stoi(rhs_type.width().c_str());
+    try
+    {
+      const int lhs_width = std::stoi(lhs_type.width().c_str());
+      const int rhs_width = std::stoi(rhs_type.width().c_str());
 
-    if (lhs_type_width > rhs_type_width)
-    {
-      // Update rhs symbol value to match with new type
-      rhs_type = lhs_type;
-      if (rhs.is_symbol())
-        update_symbol(rhs);
+      if (lhs_width > rhs_width)
+      {
+        // Promote RHS to LHS type
+        rhs_type = lhs_type;
+        if (rhs.is_symbol())
+          update_symbol(rhs);
+      }
+      else
+      {
+        // Promote LHS to RHS type
+        lhs_type = rhs_type;
+        if (lhs.is_symbol())
+          update_symbol(lhs);
+      }
     }
-    else
+    catch (const std::exception &e)
     {
-      // Update lhs symbol value to match with new type
-      lhs_type = rhs_type;
-      if (lhs.is_symbol())
-        update_symbol(lhs);
+      log_error(
+        "adjust_statement_types: Failed to parse type widths: {}", e.what());
     }
   }
 }
