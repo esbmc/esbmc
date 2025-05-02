@@ -161,11 +161,12 @@ exprt function_call_expr::build_constant_from_arg() const
       throw std::runtime_error("TypeError: chr() argument must be int");
     }
 
-    // Range check
-    if (int_value < 0 || int_value > 255)
+    // The valid range for the argument is from 0 through 1,114,111
+    // (0x10FFFF). ValueError will be raised if i is outside that range.
+    if (int_value < 0 || int_value > 0x10FFFF)
     {
       throw std::runtime_error(
-        "ValueError: chr() argument out of ASCII range: " +
+        "ValueError: chr() argument out of valid Unicode range: " +
         std::to_string(int_value));
     }
 
