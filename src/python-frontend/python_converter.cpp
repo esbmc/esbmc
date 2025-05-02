@@ -259,36 +259,57 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
   typet &lhs_type = lhs.type();
   typet &rhs_type = rhs.type();
 
-  // Promote int to float
+  // Case 1: Promote RHS integer constant to float if LHS expects a float
   if (
-    lhs_type.is_floatbv() && rhs.is_constant() &&
+    lhs_type.is_floatbv() &&
+    rhs.is_constant() &&
     (rhs_type.is_signedbv() || rhs_type.is_unsignedbv()))
   {
-    // Convert RHS to float
-    BigInt value(
-      binary2integer(rhs.value().as_string(), rhs_type.is_signedbv()));
-    std::string rhs_float = std::to_string(value.to_int64()) + ".0";
-    convert_float_literal(rhs_float, rhs);
-    update_symbol(rhs);
+    try
+    {
+      // Convert binary string value to integer
+      BigInt value(binary2integer(rhs.value().as_string(), rhs_type.is_signedbv()));
+
+      // Create a float literal string (e.g., "42.0")
+      std::string rhs_float = std::to_string(value.to_int64()) + ".0";
+
+      // Replace RHS with a float expression
+      convert_float_literal(rhs_float, rhs);
+
+      // Update the symbol table entry for RHS if needed
+      update_symbol(rhs);
+    }
+    catch (const std::exception &e)
+    {
+      log_error("adjust_statement_types: Failed to promote integer to float: {}", e.what());
+    }
   }
+  // Case 2: Align bit-widths between LHS and RHS if they differ
   else if (lhs_type.width() != rhs_type.width())
   {
-    auto lhs_type_width = std::stoi(lhs_type.width().c_str());
-    auto rhs_type_width = std::stoi(rhs_type.width().c_str());
+    try
+    {
+      const int lhs_width = std::stoi(lhs_type.width().c_str());
+      const int rhs_width = std::stoi(rhs_type.width().c_str());
 
-    if (lhs_type_width > rhs_type_width)
-    {
-      // Update rhs symbol value to match with new type
-      rhs_type = lhs_type;
-      if (rhs.is_symbol())
-        update_symbol(rhs);
+      if (lhs_width > rhs_width)
+      {
+        // Promote RHS to LHS type
+        rhs_type = lhs_type;
+        if (rhs.is_symbol())
+          update_symbol(rhs);
+      }
+      else
+      {
+        // Promote LHS to RHS type
+        lhs_type = rhs_type;
+        if (lhs.is_symbol())
+          update_symbol(lhs);
+      }
     }
-    else
+    catch (const std::exception &e)
     {
-      // Update lhs symbol value to match with new type
-      lhs_type = rhs_type;
-      if (lhs.is_symbol())
-        update_symbol(lhs);
+      log_error("adjust_statement_types: Failed to parse type widths: {}", e.what());
     }
   }
 }
