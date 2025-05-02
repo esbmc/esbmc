@@ -166,9 +166,6 @@ exprt function_call_expr::build_constant_from_arg() const
       }
     }
 
-    else
-      throw std::runtime_error("TypeError: chr() argument must be int");
-
     // Validate Unicode range: [0, 0x10FFFF]
     if (int_value < 0 || int_value > 0x10FFFF)
     {
