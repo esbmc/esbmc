@@ -91,8 +91,9 @@ static std::string get_op(const std::string &op, const typet &type)
 {
   std::string lower_op = op;
   std::transform(
-    lower_op.begin(), lower_op.end(), lower_op.begin(),
-    [](unsigned char c) { return std::tolower(c); });
+    lower_op.begin(), lower_op.end(), lower_op.begin(), [](unsigned char c) {
+      return std::tolower(c);
+    });
 
   if (type.is_floatbv())
   {
