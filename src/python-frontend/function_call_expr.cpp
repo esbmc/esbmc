@@ -99,54 +99,57 @@ exprt function_call_expr::build_constant_from_arg() const
   size_t arg_size = 1;
   auto arg = call_["args"][0];
 
+  // Handle str(): determine size of the resulting string constant
   if (func_name == "str")
-    arg_size = arg["value"].get<std::string>().size(); // get string length
+  {
+    if (!arg.contains("value") || !arg["value"].is_string())
+      throw std::runtime_error("TypeError: str() expects a string argument");
 
+    const std::string &s = arg["value"].get<std::string>();
+    arg_size = s.size();
+  }
+
+  // Handle int(): convert float to int
   else if (func_name == "int" && arg["value"].is_number_float())
   {
     double arg_value = arg["value"].get<double>();
     arg["value"] = static_cast<int>(arg_value);
   }
+
+  // Handle float(): convert int to float
   else if (func_name == "float" && arg["value"].is_number_integer())
   {
     int arg_value = arg["value"].get<int>();
     arg["value"] = static_cast<double>(arg_value);
   }
+
+  // Handle chr(): convert integer to single-character string
   else if (func_name == "chr")
   {
     int int_value = 0;
 
-    // Handle unary negative constant (e.g., -1)
+    // Check for unary minus: e.g., chr(-1)
     if (arg.contains("_type") && arg["_type"] == "UnaryOp")
     {
       const auto &op = arg["op"];
       const auto &operand = arg["operand"];
 
-      if (
-        op.contains("_type") && op["_type"] == "USub" &&
-        operand.contains("value") && operand["value"].is_number_integer())
-      {
+      if (op["_type"] == "USub" &&
+          operand.contains("value") && operand["value"].is_number_integer())
         int_value = -operand["value"].get<int>();
-      }
       else
-      {
         throw std::runtime_error("TypeError: Unsupported UnaryOp in chr()");
-      }
     }
-    // Handle plain integer
+
+    // Handle integer input
     else if (arg.contains("value") && arg["value"].is_number_integer())
-    {
       int_value = arg["value"].get<int>();
-    }
-    // Handle float
+
+    // Reject float input
     else if (arg.contains("value") && arg["value"].is_number_float())
-    {
-      std::string error_msg =
-        "TypeError: chr() argument must be int, not float ";
-      error_msg += arg["value"].type_name();
-      throw std::runtime_error(error_msg);
-    }
-    // Handle string to int conversion
+      throw std::runtime_error("TypeError: chr() argument must be int, not float");
+
+    // Try converting string input to integer
     else if (arg.contains("value") && arg["value"].is_string())
     {
       const std::string &s = arg["value"].get<std::string>();
@@ -156,17 +159,14 @@ exprt function_call_expr::build_constant_from_arg() const
       }
       catch (const std::invalid_argument &)
       {
-        throw std::runtime_error(
-          "TypeError: invalid string passed to chr(): '" + s + "'");
+        throw std::runtime_error("TypeError: invalid string passed to chr(): '" + s + "'");
       }
     }
-    else
-    {
-      throw std::runtime_error("TypeError: chr() argument must be int");
-    }
 
-    // The valid range for the argument is from 0 through 1,114,111
-    // (0x10FFFF). ValueError will be raised if i is outside that range.
+    else
+      throw std::runtime_error("TypeError: chr() argument must be int");
+
+    // Validate Unicode range: [0, 0x10FFFF]
     if (int_value < 0 || int_value > 0x10FFFF)
     {
       throw std::runtime_error(
@@ -174,13 +174,16 @@ exprt function_call_expr::build_constant_from_arg() const
         std::to_string(int_value));
     }
 
-    // Replace with one-character string
+    // Replace the value with a single-character string
     arg["value"] = std::string(1, static_cast<char>(int_value));
+    arg_size = 1;
   }
 
+  // Construct expression with appropriate type
   typet t = type_handler_.get_typet(func_name, arg_size);
   exprt expr = converter_.get_expr(arg);
   expr.type() = t;
+
   return expr;
 }
 
