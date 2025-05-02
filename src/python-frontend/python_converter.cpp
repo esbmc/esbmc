@@ -91,8 +91,9 @@ static std::string get_op(const std::string &op, const typet &type)
   // Convert the operator to lowercase to allow case-insensitive comparison.
   std::string lower_op = op;
   std::transform(
-    lower_op.begin(), lower_op.end(), lower_op.begin(),
-    [](unsigned char c) { return std::tolower(c); });
+    lower_op.begin(), lower_op.end(), lower_op.begin(), [](unsigned char c) {
+      return std::tolower(c);
+    });
 
   // Special case: if the type is floating-point, use IEEE-specific operators.
   if (type.is_floatbv())
@@ -168,16 +169,17 @@ static ExpressionType get_expression_type(const nlohmann::json &element)
   static const std::unordered_map<std::string, ExpressionType> type_map = {
     {"UnaryOp", ExpressionType::UNARY_OPERATION},
     {"BinOp", ExpressionType::BINARY_OPERATION},
-    {"Compare", ExpressionType::BINARY_OPERATION},   // Comparison treated as binary op
+    {"Compare",
+     ExpressionType::BINARY_OPERATION}, // Comparison treated as binary op
     {"BoolOp", ExpressionType::LOGICAL_OPERATION},
     {"Constant", ExpressionType::LITERAL},
     {"Name", ExpressionType::VARIABLE_REF},
-    {"Attribute", ExpressionType::VARIABLE_REF},     // Both treated as variable references
+    {"Attribute",
+     ExpressionType::VARIABLE_REF}, // Both treated as variable references
     {"Call", ExpressionType::FUNC_CALL},
     {"IfExp", ExpressionType::IF_EXPR},
     {"Subscript", ExpressionType::SUBSCRIPT},
-    {"List", ExpressionType::LIST}
-  };
+    {"List", ExpressionType::LIST}};
 
   const auto &type = element["_type"];
   auto it = type_map.find(type);
@@ -224,8 +226,7 @@ void python_converter::update_symbol(const exprt &expr) const
 
   // Check if the symbol has a constant or bitvector value.
   if (
-    sym->value.is_constant() ||
-    sym->value.is_signedbv() ||
+    sym->value.is_constant() || sym->value.is_signedbv() ||
     sym->value.is_unsignedbv())
   {
     const std::string &binary_value_str = sym->value.value().c_str();
@@ -244,7 +245,8 @@ void python_converter::update_symbol(const exprt &expr) const
     catch (const std::exception &e)
     {
       log_error(
-        "update_symbol: Failed to convert binary value '{}' to integer for symbol '{}'. Error: {}",
+        "update_symbol: Failed to convert binary value '{}' to integer for "
+        "symbol '{}'. Error: {}",
         binary_value_str,
         sid.to_string(),
         e.what());
