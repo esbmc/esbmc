@@ -204,22 +204,50 @@ exprt python_converter::get_logical_operator_expr(const nlohmann::json &element)
 
 void python_converter::update_symbol(const exprt &expr) const
 {
+  // Generate a symbol ID from the expression's name.
   symbol_id sid = create_symbol_id();
   sid.set_object(expr.name().c_str());
+
+  // Try to locate the symbol in the symbol table.
   symbolt *sym = symbol_table_.find_symbol(sid.to_string());
 
-  if (sym != nullptr)
+  if (sym == nullptr)
   {
-    sym->type = expr.type();
-    sym->value.type() = expr.type();
+    // Symbol not found, nothing to update.
+    return;
+  }
 
-    if (
-      sym->value.is_constant() ||
-      (sym->value.is_signedbv() || sym->value.is_unsignedbv()))
+  // Update the type of the symbol and its value.
+  const typet &expr_type = expr.type();
+  sym->type = expr_type;
+  sym->value.type() = expr_type;
+
+  // Check if the symbol has a constant or bitvector value.
+  if (
+    sym->value.is_constant() ||
+    sym->value.is_signedbv() ||
+    sym->value.is_unsignedbv())
+  {
+    const std::string &binary_value_str = sym->value.value().c_str();
+
+    try
     {
-      exprt new_value = from_integer(
-        std::stoll(sym->value.value().c_str(), nullptr, 2), expr.type());
+      // Convert binary string to integer.
+      int64_t int_val = std::stoll(binary_value_str, nullptr, 2);
+
+      // Create a new constant expression with the converted value and type.
+      exprt new_value = from_integer(int_val, expr_type);
+
+      // Assign the new value to the symbol.
       sym->value = new_value;
+    }
+    catch (const std::exception &e)
+    {
+      log_error(
+        "update_symbol: Failed to convert binary value '{}' to integer for symbol '{}'. Error: {}",
+        binary_value_str,
+        sid.to_string(),
+        e.what());
     }
   }
 }
