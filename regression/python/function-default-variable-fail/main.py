@@ -7,4 +7,4 @@ assert return_int() == 1
 
 x = 2
 
-assert return_int() == 1
+assert return_int() == 2
