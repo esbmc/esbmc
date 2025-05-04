@@ -62,6 +62,36 @@ private:
    */
   std::string get_object_name() const;
 
+  /*
+   * Handles string arguments (e.g., str("abc")) by converting them
+   * into character array expressions.
+   */
+  size_t handle_str(nlohmann::json &arg) const;
+
+  /*
+   * Handles float-to-int conversions (e.g., int(3.14)) by generating
+   * the appropriate cast expression.
+   */
+  void handle_float_to_int(nlohmann::json &arg) const;
+
+  /*
+   * Handles int-to-float conversions (e.g., float(3)) by generating
+   * the appropriate cast expression.
+   */
+  void handle_int_to_float(nlohmann::json &arg) const;
+
+  /*
+   * Handles chr(int) conversions by creating a single-character
+   * string expression from an integer.
+   */
+  void handle_chr(nlohmann::json &arg) const;
+
+  /*
+   * Handles hexadecimal string arguments (e.g., hex(255) -> "0xff")
+   * by building a constant expression representing the string.
+   */
+  exprt handle_hex(nlohmann::json &arg) const;
+
 protected:
   symbol_id function_id_;
   const nlohmann::json &call_;

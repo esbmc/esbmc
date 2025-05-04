@@ -129,7 +129,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
     // or consider modelling it with string_constantt.
     return build_array(long_long_int_type(), type_size);
   }
-  if (ast_type == "str" || ast_type == "chr")
+  if (ast_type == "str" || ast_type == "chr" || ast_type == "hex")
   {
     if (type_size == 1)
     {
