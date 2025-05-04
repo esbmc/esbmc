@@ -442,7 +442,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     rhs_type = "str";
   }
 
-  // If the LHS is empty and RHS is a string and 
+  // If the LHS is empty and RHS is a string and
   // the operation is == or !=, try inferring LHS type from JSON
   if (lhs_type.empty() && rhs_type == "str" && (op == "Eq" || op == "NotEq"))
   {
@@ -501,7 +501,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       // Retrieve the size of the string from the array type.
       const array_typet &array_type = to_array_type(lhs.type());
       const BigInt string_size =
-      binary2integer(array_type.size().value().as_string(), false);
+        binary2integer(array_type.size().value().as_string(), false);
 
       // Look up the 'strncmp' function symbol in the symbol table.
       symbolt *strncmp_symbol = symbol_table_.find_symbol("c:@F@strncmp");
@@ -512,8 +512,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       strncmp_call.function() = symbol_expr(*strncmp_symbol);
       strncmp_call.arguments().push_back(lhs); // First string (lhs)
       strncmp_call.arguments().push_back(rhs); // Second string (rhs)
-      strncmp_call.arguments().push_back(
-        from_integer(string_size, long_uint_type())); // Number of characters to compare
+      strncmp_call.arguments().push_back(from_integer(
+        string_size, long_uint_type())); // Number of characters to compare
       strncmp_call.location() = get_location_from_decl(element);
       strncmp_call.type() = int_type(); // Return type of strncmp is int
 
