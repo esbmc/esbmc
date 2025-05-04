@@ -182,38 +182,58 @@ exprt function_call_expr::build_constant_from_arg() const
   // Handle hex(): convert int to hexadecimal string with "0x" prefix
   else if (func_name == "hex")
   {
-    int int_value = 0;
+    long long int_value = 0;
     bool is_negative = false;
 
+    // Handle UnaryOp (e.g., -1)
     if (arg.contains("_type") && arg["_type"] == "UnaryOp")
     {
       const auto &op = arg["op"];
       const auto &operand = arg["operand"];
 
       if (op["_type"] == "USub" && operand.contains("value") &&
-          operand["value"].is_number_integer())
+        operand["value"].is_number_integer())
       {
         is_negative = true;
-        int_value = operand["value"].get<int>();
+        int_value = operand["value"].get<long long>();
       }
       else
         throw std::runtime_error("TypeError: Unsupported UnaryOp in hex()");
     }
+    // Regular integer
     else if (arg.contains("value") && arg["value"].is_number_integer())
-      int_value = arg["value"].get<int>();
+    {
+      int_value = arg["value"].get<long long>();
+      if (int_value < 0)
+        is_negative = true;
+    }
     else
       throw std::runtime_error("TypeError: hex() argument must be an integer");
 
+    // Build Python-style hex string: 0x<hex> or -0x<hex>
     std::ostringstream oss;
-    if (is_negative || int_value < 0)
-      oss << "-0x" << std::hex << std::nouppercase << std::abs(int_value);
-    else
-      oss << "0x" << std::hex << std::nouppercase << int_value;
-
+    oss << (is_negative ? "-0x" : "0x")
+      << std::hex << std::nouppercase << std::llabs(int_value);
     const std::string hex_str = oss.str();
-    arg["value"] = hex_str;
-    arg_size = hex_str.size();
+
+    // Build string constant expression
+    typet t = type_handler_.get_typet("str", hex_str.size());
+    std::vector<uint8_t> string_literal(hex_str.begin(), hex_str.end());
+    typet &char_type = t.subtype();
+    exprt expr = gen_zero(t);
+
+    for (unsigned int i = 0; i < string_literal.size(); ++i)
+    {
+      exprt char_value = constant_exprt(
+        integer2binary(BigInt(string_literal[i]), bv_width(char_type)),
+        integer2string(BigInt(string_literal[i])),
+        char_type);
+      expr.operands().at(i) = char_value;
+    }
+
+    return expr;
   }
+
 
   // Construct expression with appropriate type
   typet t = type_handler_.get_typet(func_name, arg_size);
