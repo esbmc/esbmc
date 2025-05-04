@@ -438,7 +438,31 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     element["comparators"][0].contains("value") &&
     element["comparators"][0]["value"].is_string())
   {
+    printf("passou em 448\n");
     rhs_type = "str";
+  }
+
+  // If the LHS is empty and RHS is a string and 
+  // the operation is == or !=, try inferring LHS type from JSON
+  if (lhs_type.empty() && rhs_type == "str" && (op == "Eq" || op == "NotEq"))
+  {
+    if (element.contains("left"))
+    {
+      const auto &lhs_expr = element["left"];
+
+      // Try to infer the LHS type based on literal value if available
+      if (lhs_expr.contains("value") && lhs_expr["value"].is_string())
+      {
+        lhs_type = "str";
+      }
+      // Optionally, handle known identifiers (e.g., variables that should be strings)
+      else if (lhs_expr.contains("id") && lhs_expr["id"].is_string())
+      {
+        // If you have type info in the symbol table, you could look it up here
+        // For now, conservatively assign it to "str" to match the RHS
+        lhs_type = "str";
+      }
+    }
   }
 
   if (lhs_type == "str" && rhs_type == "str")
@@ -465,10 +489,14 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     // Handle string comparison for equality (==) and inequality (!=) operators
     if (op == "Eq" || op == "NotEq")
     {
+      printf("passou em 468\n");
       // If the types of lhs and rhs differ, the strings can't be equal.
       // For "Eq", return false; for "NotEq", return true.
       if (rhs.type() != lhs.type())
+      {
+        printf("passou em 473\n");
         return gen_boolean(op == "NotEq");
+      }
 
       // Retrieve the size of the string from the array type.
       const array_typet &array_type = to_array_type(lhs.type());
