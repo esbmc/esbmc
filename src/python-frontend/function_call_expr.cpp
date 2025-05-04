@@ -103,8 +103,9 @@ exprt function_call_expr::handle_hex(nlohmann::json &arg) const
     const auto &op = arg["op"];
     const auto &operand = arg["operand"];
 
-    if (op["_type"] == "USub" && operand.contains("value") &&
-        operand["value"].is_number_integer())
+    if (
+      op["_type"] == "USub" && operand.contains("value") &&
+      operand["value"].is_number_integer())
     {
       is_negative = true;
       int_value = operand["value"].get<long long>();
