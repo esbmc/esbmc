@@ -484,10 +484,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       // If the types of lhs and rhs differ, the strings can't be equal.
       // For "Eq", return false; for "NotEq", return true.
       if (rhs.type() != lhs.type())
-      {
-        printf("passou em 473\n");
         return gen_boolean(op == "NotEq");
-      }
 
       // Retrieve the size of the string from the array type.
       const array_typet &array_type = to_array_type(lhs.type());
