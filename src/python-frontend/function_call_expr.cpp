@@ -93,6 +93,44 @@ exprt function_call_expr::build_nondet_call() const
   return rhs;
 }
 
+exprt function_call_expr::handle_hex(nlohmann::json &arg) const
+{
+  long long int_value = 0;
+  bool is_negative = false;
+
+  if (arg.contains("_type") && arg["_type"] == "UnaryOp")
+  {
+    const auto &op = arg["op"];
+    const auto &operand = arg["operand"];
+
+    if (op["_type"] == "USub" && operand.contains("value") &&
+        operand["value"].is_number_integer())
+    {
+      is_negative = true;
+      int_value = operand["value"].get<long long>();
+    }
+    else
+      throw std::runtime_error("TypeError: Unsupported UnaryOp in hex()");
+  }
+  else if (arg.contains("value") && arg["value"].is_number_integer())
+  {
+    int_value = arg["value"].get<long long>();
+    if (int_value < 0)
+      is_negative = true;
+  }
+  else
+    throw std::runtime_error("TypeError: hex() argument must be an integer");
+
+  std::ostringstream oss;
+  oss << (is_negative ? "-0x" : "0x") << std::hex << std::nouppercase
+      << std::llabs(int_value);
+  const std::string hex_str = oss.str();
+
+  typet t = type_handler_.get_typet("str", hex_str.size());
+  std::vector<uint8_t> string_literal(hex_str.begin(), hex_str.end());
+  return converter_.make_char_array_expr(string_literal, t);
+}
+
 exprt function_call_expr::build_constant_from_arg() const
 {
   const std::string &func_name = function_id_.get_function();
@@ -179,51 +217,8 @@ exprt function_call_expr::build_constant_from_arg() const
     arg_size = 1;
   }
 
-  // Handle hex(): convert int to hexadecimal string with "0x" prefix
   else if (func_name == "hex")
-  {
-    long long int_value = 0;
-    bool is_negative = false;
-
-    // Handle UnaryOp (e.g., -1)
-    if (arg.contains("_type") && arg["_type"] == "UnaryOp")
-    {
-      const auto &op = arg["op"];
-      const auto &operand = arg["operand"];
-
-      if (
-        op["_type"] == "USub" && operand.contains("value") &&
-        operand["value"].is_number_integer())
-      {
-        is_negative = true;
-        int_value = operand["value"].get<long long>();
-      }
-      else
-        throw std::runtime_error("TypeError: Unsupported UnaryOp in hex()");
-    }
-    // Regular integer
-    else if (arg.contains("value") && arg["value"].is_number_integer())
-    {
-      int_value = arg["value"].get<long long>();
-      if (int_value < 0)
-        is_negative = true;
-    }
-    else
-      throw std::runtime_error("TypeError: hex() argument must be an integer");
-
-    // Build Python-style hex string: 0x<hex> or -0x<hex>
-    std::ostringstream oss;
-    oss << (is_negative ? "-0x" : "0x") << std::hex << std::nouppercase
-        << std::llabs(int_value);
-    const std::string hex_str = oss.str();
-
-    // Build string constant expression
-    typet t = type_handler_.get_typet("str", hex_str.size());
-    std::vector<uint8_t> string_literal(hex_str.begin(), hex_str.end());
-    exprt expr = converter_.make_char_array_expr(string_literal, t);
-
-    return expr;
-  }
+    return handle_hex(arg);
 
   // Construct expression with appropriate type
   typet t = type_handler_.get_typet(func_name, arg_size);

@@ -62,6 +62,12 @@ private:
    */
   std::string get_object_name() const;
 
+  /*
+   * Handles hexadecimal string arguments (e.g., hex(255) -> "0xff")
+   * by building a constant expression representing the string.
+   */
+  exprt handle_hex(nlohmann::json &arg) const;
+
 protected:
   symbol_id function_id_;
   const nlohmann::json &call_;
