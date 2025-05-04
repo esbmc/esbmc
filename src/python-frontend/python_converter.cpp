@@ -885,6 +885,24 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   return call_builder.build();
 }
 
+exprt python_converter::make_char_array_expr(const std::vector<unsigned char> &string_literal, const typet &t)
+{
+  exprt expr = gen_zero(t);
+  const typet &char_type = t.subtype();
+
+  for (size_t i = 0; i < string_literal.size(); ++i)
+  {
+    uint8_t ch = string_literal[i];
+    exprt char_value = constant_exprt(
+      integer2binary(BigInt(ch), bv_width(char_type)),
+      integer2string(BigInt(ch)),
+      char_type);
+    expr.operands().at(i) = char_value;
+  }
+
+  return expr;
+}
+
 /// Convert a Python AST literal element to an expression.
 /// This function handles various Python 3 literal types, including:
 ///   - Integers (e.g., `42`)
@@ -959,20 +977,7 @@ exprt python_converter::get_literal(const nlohmann::json &element)
       string_literal.assign(str_val.begin(), str_val.end());
     }
 
-    // Create zero-initialized array expression
-    exprt expr = gen_zero(t);
-    typet &char_type = t.subtype();
-
-    // Fill the array with character values
-    for (size_t i = 0; i < string_literal.size(); ++i)
-    {
-      uint8_t ch = string_literal[i];
-      exprt char_value = constant_exprt(
-        integer2binary(BigInt(ch), bv_width(char_type)),
-        integer2string(BigInt(ch)),
-        char_type);
-      expr.operands().at(i) = char_value;
-    }
+    exprt expr = make_char_array_expr(string_literal, t);
 
     return expr;
   }

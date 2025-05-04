@@ -119,6 +119,8 @@ private:
 
   exprt get_function_call(const nlohmann::json &ast_block);
 
+  exprt make_char_array_expr(const std::vector<unsigned char> &string_literal, const typet &t);
+
   exprt get_literal(const nlohmann::json &element);
 
   exprt get_block(const nlohmann::json &ast_block);

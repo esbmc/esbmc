@@ -219,17 +219,7 @@ exprt function_call_expr::build_constant_from_arg() const
     // Build string constant expression
     typet t = type_handler_.get_typet("str", hex_str.size());
     std::vector<uint8_t> string_literal(hex_str.begin(), hex_str.end());
-    typet &char_type = t.subtype();
-    exprt expr = gen_zero(t);
-
-    for (unsigned int i = 0; i < string_literal.size(); ++i)
-    {
-      exprt char_value = constant_exprt(
-        integer2binary(BigInt(string_literal[i]), bv_width(char_type)),
-        integer2string(BigInt(string_literal[i])),
-        char_type);
-      expr.operands().at(i) = char_value;
-    }
+    exprt expr = converter_.make_char_array_expr(string_literal, t);
 
     return expr;
   }
