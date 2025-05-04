@@ -182,7 +182,6 @@ exprt function_call_expr::build_constant_from_arg() const
   // Handle hex(): convert int to hexadecimal string with "0x" prefix
   else if (func_name == "hex")
   {
-    printf("passou em 185\n");
     int int_value = 0;
     bool is_negative = false;
 
@@ -220,7 +219,7 @@ exprt function_call_expr::build_constant_from_arg() const
   typet t = type_handler_.get_typet(func_name, arg_size);
   exprt expr = converter_.get_expr(arg);
   expr.type() = t;
-  
+
   return expr;
 }
 
