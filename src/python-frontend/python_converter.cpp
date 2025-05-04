@@ -885,75 +885,101 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   return call_builder.build();
 }
 
+/// Convert a Python AST literal element to an expression.
+/// This function handles various Python 3 literal types, including:
+///   - Integers (e.g., `42`)
+///   - Booleans (`True`, `False`)
+///   - Floats (e.g., `3.14`)
+///   - Characters (e.g., `'a'`)
+///   - Strings (e.g., `"hello"`)
+///   - Byte literals (e.g., `b"data"`)
+///   - Ignores docstrings or other unsupported formats
+///
+/// Example JSON input:
+/// { "_type": "Constant", "value": 42 }               → returns integer constant expr
+/// { "_type": "Constant", "value": "a" }              → returns char literal expr
+/// { "_type": "Constant", "value": "hello" }          → returns string literal expr
+/// { "_type": "Constant", "value": true }             → returns boolean expr
+/// { "_type": "UnaryOp", "op": "USub", "operand":
+/// { "_type": "Constant", "value": 42 } }           → returns -42 as integer expr
 exprt python_converter::get_literal(const nlohmann::json &element)
 {
-  auto value = (element["_type"] == "UnaryOp") ? element["operand"]["value"]
-                                               : element["value"];
+  // Determine the source of the literal's value.
+  const auto &value = (element["_type"] == "UnaryOp") ?
+                        element["operand"]["value"] :
+                        element["value"];
 
-  // integer literals
+  // Handle integer literals (int)
   if (value.is_number_integer())
     return from_integer(value.get<long long>(), long_long_int_type());
 
-  // bool literals
+  // Handle boolean literals (True/False)
   if (value.is_boolean())
     return gen_boolean(value.get<bool>());
 
-  // float literals
+  // Handle floating-point literals (float)
   if (value.is_number_float())
   {
     exprt expr;
-    convert_float_literal(value.dump(), expr);
+    convert_float_literal(value.dump(), expr);  // `value.dump()` converts it to string
     return expr;
   }
 
-  // char literals
+  // Handle single-character string as char literal
   if (value.is_string() && value.get<std::string>().size() == 1)
   {
     const std::string &str = value.get<std::string>();
     typet t = type_handler_.get_typet("str", str.size());
-    return from_integer(str[0], t);
+    return from_integer(static_cast<unsigned char>(str[0]), t);
   }
 
-  // Docstrings are ignored
-  if (value.get<std::string>()[0] == '\n')
-    return exprt();
+  // Handle empty strings or docstrings (often beginning with a newline)
+  if (value.is_string() && !value.get<std::string>().empty() &&
+      value.get<std::string>()[0] == '\n')
+  {
+    return exprt();  // Return empty expression
+  }
 
-  // bytes/string literals
+  // Handle string or byte literals
   if (value.is_string())
   {
     typet t = current_element_type;
     std::vector<uint8_t> string_literal;
 
-    // "bytes" literals
+    // Detect and decode "bytes" literal from encoded base64 content
     if (element.contains("encoded_bytes"))
     {
       string_literal =
         base64_decode(element["encoded_bytes"].get<std::string>());
     }
-    else // string literals
+    else // Handle Python str literals
     {
-      t = type_handler_.get_typet("str", value.get<std::string>().size());
-      const std::string &value = element["value"].get<std::string>();
-      string_literal = std::vector<uint8_t>(std::begin(value), std::end(value));
+      const std::string &str_val = value.get<std::string>();
+      t = type_handler_.get_typet("str", str_val.size());
+      string_literal.assign(str_val.begin(), str_val.end());
     }
 
-    typet &char_type = t.subtype();
+    // Create zero-initialized array expression
     exprt expr = gen_zero(t);
+    typet &char_type = t.subtype();
 
-    // Initialize array
-    unsigned int i = 0;
-    for (uint8_t &ch : string_literal)
+    // Fill the array with character values
+    for (unsigned int i = 0; i < string_literal.size(); ++i)
     {
+      uint8_t ch = string_literal[i];
       exprt char_value = constant_exprt(
         integer2binary(BigInt(ch), bv_width(char_type)),
         integer2string(BigInt(ch)),
         char_type);
-      expr.operands().at(i++) = char_value;
+      expr.operands().at(i) = char_value;
     }
+
     return expr;
   }
 
-  throw std::runtime_error("Unsupported literal " + value.get<std::string>());
+  // If none of the above matched, throw an error
+  throw std::runtime_error(
+    "Unsupported literal type or malformed value: " + value.dump());
 }
 
 exprt python_converter::get_expr(const nlohmann::json &element)
