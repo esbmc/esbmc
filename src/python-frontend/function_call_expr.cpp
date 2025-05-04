@@ -93,6 +93,12 @@ exprt function_call_expr::build_nondet_call() const
   return rhs;
 }
 
+void function_call_expr::handle_int_to_float(nlohmann::json &arg) const
+{
+  int value = arg["value"].get<int>();
+  arg["value"] = static_cast<double>(value);
+}
+
 exprt function_call_expr::handle_hex(nlohmann::json &arg) const
 {
   long long int_value = 0;
@@ -157,6 +163,10 @@ exprt function_call_expr::build_constant_from_arg() const
 
   // Handle float(): convert int to float
   else if (func_name == "float" && arg["value"].is_number_integer())
+    handle_int_to_float(arg);
+
+  // Handle float(): convert int to float
+  else if (func_name == "float" && arg["value"].is_number_integer())
   {
     int arg_value = arg["value"].get<int>();
     arg["value"] = static_cast<double>(arg_value);
@@ -218,6 +228,7 @@ exprt function_call_expr::build_constant_from_arg() const
     arg_size = 1;
   }
 
+  // Handle hex: Handles hexadecimal string arguments
   else if (func_name == "hex")
     return handle_hex(arg);
 

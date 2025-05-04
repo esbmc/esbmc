@@ -63,6 +63,12 @@ private:
   std::string get_object_name() const;
 
   /*
+   * Handles int-to-float conversions (e.g., float(3)) by generating
+   * the appropriate cast expression.
+   */
+  void handle_int_to_float(nlohmann::json &arg) const;
+
+  /*
    * Handles hexadecimal string arguments (e.g., hex(255) -> "0xff")
    * by building a constant expression representing the string.
    */
