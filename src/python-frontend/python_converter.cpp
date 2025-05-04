@@ -433,8 +433,9 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   std::string rhs_type = type_handler_.type_to_string(rhs.type());
 
   // Infer the missing operand type if one side is explicitly a string and the operation is Eq or NotEq
-  if ((op == "Eq" || op == "NotEq") &&
-    ((lhs_type.empty() && rhs_type == "str") || (rhs_type.empty() && lhs_type == "str")))
+  if (
+    (op == "Eq" || op == "NotEq") && ((lhs_type.empty() && rhs_type == "str") ||
+                                      (rhs_type.empty() && lhs_type == "str")))
   {
     // Infer lhs_type if it is empty
     if (lhs_type.empty() && element.contains("left"))
@@ -446,10 +447,9 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
         lhs_type = "str";
     }
     // Infer rhs_type if it is empty
-    else if (rhs_type.empty() &&
-      element.contains("comparators") &&
-      element["comparators"].is_array() &&
-      !element["comparators"].empty())
+    else if (
+      rhs_type.empty() && element.contains("comparators") &&
+      element["comparators"].is_array() && !element["comparators"].empty())
     {
       const auto &rhs_expr = element["comparators"][0];
       if (rhs_expr.contains("value") && rhs_expr["value"].is_string())
