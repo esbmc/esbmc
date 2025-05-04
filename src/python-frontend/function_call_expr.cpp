@@ -93,6 +93,14 @@ exprt function_call_expr::build_nondet_call() const
   return rhs;
 }
 
+size_t function_call_expr::handle_str(nlohmann::json &arg) const
+{
+  if (!arg.contains("value") || !arg["value"].is_string())
+    throw std::runtime_error("TypeError: str() expects a string argument");
+
+  return arg["value"].get<std::string>().size();
+}
+
 void function_call_expr::handle_float_to_int(nlohmann::json &arg) const
 {
   double value = arg["value"].get<double>();
@@ -206,13 +214,7 @@ exprt function_call_expr::build_constant_from_arg() const
 
   // Handle str(): determine size of the resulting string constant
   if (func_name == "str")
-  {
-    if (!arg.contains("value") || !arg["value"].is_string())
-      throw std::runtime_error("TypeError: str() expects a string argument");
-
-    const std::string &s = arg["value"].get<std::string>();
-    arg_size = s.size();
-  }
+    arg_size = handle_str(arg);
 
   // Handle int(): convert float to int
   else if (func_name == "int" && arg["value"].is_number_float())

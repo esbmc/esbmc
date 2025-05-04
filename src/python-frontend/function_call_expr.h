@@ -63,6 +63,12 @@ private:
   std::string get_object_name() const;
 
   /*
+   * Handles string arguments (e.g., str("abc")) by converting them
+   * into character array expressions.
+   */
+  size_t handle_str(nlohmann::json &arg) const;
+
+  /*
    * Handles float-to-int conversions (e.g., int(3.14)) by generating
    * the appropriate cast expression.
    */
