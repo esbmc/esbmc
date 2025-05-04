@@ -432,15 +432,6 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   std::string lhs_type = type_handler_.type_to_string(lhs.type());
   std::string rhs_type = type_handler_.type_to_string(rhs.type());
 
-  // If RHS is a string literal, like x = "foo", then we determine the type from the JSON value
-  if (
-    rhs_type.empty() && element.contains("comparators") &&
-    element["comparators"][0].contains("value") &&
-    element["comparators"][0]["value"].is_string())
-  {
-    rhs_type = "str";
-  }
-  
   // Infer the missing operand type if one side is explicitly a string and the operation is Eq or NotEq
   if ((op == "Eq" || op == "NotEq") &&
     ((lhs_type.empty() && rhs_type == "str") || (rhs_type.empty() && lhs_type == "str")))
