@@ -224,13 +224,6 @@ exprt function_call_expr::build_constant_from_arg() const
   else if (func_name == "float" && arg["value"].is_number_integer())
     handle_int_to_float(arg);
 
-  // Handle float(): convert int to float
-  else if (func_name == "float" && arg["value"].is_number_integer())
-  {
-    int arg_value = arg["value"].get<int>();
-    arg["value"] = static_cast<double>(arg_value);
-  }
-
   // Handle chr(): convert integer to single-character string
   else if (func_name == "chr")
     handle_chr(arg);
