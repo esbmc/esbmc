@@ -93,6 +93,119 @@ exprt function_call_expr::build_nondet_call() const
   return rhs;
 }
 
+size_t function_call_expr::handle_str(nlohmann::json &arg) const
+{
+  if (!arg.contains("value") || !arg["value"].is_string())
+    throw std::runtime_error("TypeError: str() expects a string argument");
+
+  return arg["value"].get<std::string>().size();
+}
+
+void function_call_expr::handle_float_to_int(nlohmann::json &arg) const
+{
+  double value = arg["value"].get<double>();
+  arg["value"] = static_cast<int>(value);
+}
+
+void function_call_expr::handle_int_to_float(nlohmann::json &arg) const
+{
+  int value = arg["value"].get<int>();
+  arg["value"] = static_cast<double>(value);
+}
+
+void function_call_expr::handle_chr(nlohmann::json &arg) const
+{
+  int int_value = 0;
+
+  // Check for unary minus: e.g., chr(-1)
+  if (arg.contains("_type") && arg["_type"] == "UnaryOp")
+  {
+    const auto &op = arg["op"];
+    const auto &operand = arg["operand"];
+
+    if (
+      op["_type"] == "USub" && operand.contains("value") &&
+      operand["value"].is_number_integer())
+      int_value = -operand["value"].get<int>();
+    else
+      throw std::runtime_error("TypeError: Unsupported UnaryOp in chr()");
+  }
+
+  // Handle integer input
+  else if (arg.contains("value") && arg["value"].is_number_integer())
+    int_value = arg["value"].get<int>();
+
+  // Reject float input
+  else if (arg.contains("value") && arg["value"].is_number_float())
+    throw std::runtime_error(
+      "TypeError: chr() argument must be int, not float");
+
+  // Try converting string input to integer
+  else if (arg.contains("value") && arg["value"].is_string())
+  {
+    const std::string &s = arg["value"].get<std::string>();
+    try
+    {
+      int_value = std::stoi(s);
+    }
+    catch (const std::invalid_argument &)
+    {
+      throw std::runtime_error(
+        "TypeError: invalid string passed to chr(): '" + s + "'");
+    }
+  }
+
+  // Validate Unicode range: [0, 0x10FFFF]
+  if (int_value < 0 || int_value > 0x10FFFF)
+  {
+    throw std::runtime_error(
+      "ValueError: chr() argument out of valid Unicode range: " +
+      std::to_string(int_value));
+  }
+
+  // Replace the value with a single-character string
+  arg["value"] = std::string(1, static_cast<char>(int_value));
+}
+
+exprt function_call_expr::handle_hex(nlohmann::json &arg) const
+{
+  long long int_value = 0;
+  bool is_negative = false;
+
+  if (arg.contains("_type") && arg["_type"] == "UnaryOp")
+  {
+    const auto &op = arg["op"];
+    const auto &operand = arg["operand"];
+
+    if (
+      op["_type"] == "USub" && operand.contains("value") &&
+      operand["value"].is_number_integer())
+    {
+      is_negative = true;
+      int_value = operand["value"].get<long long>();
+    }
+    else
+      throw std::runtime_error("TypeError: Unsupported UnaryOp in hex()");
+  }
+  else if (arg.contains("value") && arg["value"].is_number_integer())
+  {
+    int_value = arg["value"].get<long long>();
+    if (int_value < 0)
+      is_negative = true;
+  }
+  else
+    throw std::runtime_error("TypeError: hex() argument must be an integer");
+
+  std::ostringstream oss;
+  oss << (is_negative ? "-0x" : "0x") << std::hex << std::nouppercase
+      << std::llabs(int_value);
+  const std::string hex_str = oss.str();
+
+  typet t = type_handler_.get_typet("str", hex_str.size());
+  std::vector<uint8_t> string_literal(hex_str.begin(), hex_str.end());
+  return converter_.make_char_array_expr(string_literal, t);
+}
+
 exprt function_call_expr::build_constant_from_arg() const
 {
   const std::string &func_name = function_id_.get_function();
@@ -101,83 +214,23 @@ exprt function_call_expr::build_constant_from_arg() const
 
   // Handle str(): determine size of the resulting string constant
   if (func_name == "str")
-  {
-    if (!arg.contains("value") || !arg["value"].is_string())
-      throw std::runtime_error("TypeError: str() expects a string argument");
-
-    const std::string &s = arg["value"].get<std::string>();
-    arg_size = s.size();
-  }
+    arg_size = handle_str(arg);
 
   // Handle int(): convert float to int
   else if (func_name == "int" && arg["value"].is_number_float())
-  {
-    double arg_value = arg["value"].get<double>();
-    arg["value"] = static_cast<int>(arg_value);
-  }
+    handle_float_to_int(arg);
 
   // Handle float(): convert int to float
   else if (func_name == "float" && arg["value"].is_number_integer())
-  {
-    int arg_value = arg["value"].get<int>();
-    arg["value"] = static_cast<double>(arg_value);
-  }
+    handle_int_to_float(arg);
 
   // Handle chr(): convert integer to single-character string
   else if (func_name == "chr")
-  {
-    int int_value = 0;
+    handle_chr(arg);
 
-    // Check for unary minus: e.g., chr(-1)
-    if (arg.contains("_type") && arg["_type"] == "UnaryOp")
-    {
-      const auto &op = arg["op"];
-      const auto &operand = arg["operand"];
-
-      if (
-        op["_type"] == "USub" && operand.contains("value") &&
-        operand["value"].is_number_integer())
-        int_value = -operand["value"].get<int>();
-      else
-        throw std::runtime_error("TypeError: Unsupported UnaryOp in chr()");
-    }
-
-    // Handle integer input
-    else if (arg.contains("value") && arg["value"].is_number_integer())
-      int_value = arg["value"].get<int>();
-
-    // Reject float input
-    else if (arg.contains("value") && arg["value"].is_number_float())
-      throw std::runtime_error(
-        "TypeError: chr() argument must be int, not float");
-
-    // Try converting string input to integer
-    else if (arg.contains("value") && arg["value"].is_string())
-    {
-      const std::string &s = arg["value"].get<std::string>();
-      try
-      {
-        int_value = std::stoi(s);
-      }
-      catch (const std::invalid_argument &)
-      {
-        throw std::runtime_error(
-          "TypeError: invalid string passed to chr(): '" + s + "'");
-      }
-    }
-
-    // Validate Unicode range: [0, 0x10FFFF]
-    if (int_value < 0 || int_value > 0x10FFFF)
-    {
-      throw std::runtime_error(
-        "ValueError: chr() argument out of valid Unicode range: " +
-        std::to_string(int_value));
-    }
-
-    // Replace the value with a single-character string
-    arg["value"] = std::string(1, static_cast<char>(int_value));
-    arg_size = 1;
-  }
+  // Handle hex: Handles hexadecimal string arguments
+  else if (func_name == "hex")
+    return handle_hex(arg);
 
   // Construct expression with appropriate type
   typet t = type_handler_.get_typet(func_name, arg_size);
