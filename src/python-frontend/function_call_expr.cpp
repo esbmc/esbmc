@@ -220,6 +220,7 @@ exprt function_call_expr::build_constant_from_arg() const
   typet t = type_handler_.get_typet(func_name, arg_size);
   exprt expr = converter_.get_expr(arg);
   expr.type() = t;
+  
   return expr;
 }
 
