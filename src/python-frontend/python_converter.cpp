@@ -964,7 +964,7 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     typet &char_type = t.subtype();
 
     // Fill the array with character values
-    for (unsigned int i = 0; i < string_literal.size(); ++i)
+    for (size_t i = 0; i < string_literal.size(); ++i)
     {
       uint8_t ch = string_literal[i];
       exprt char_value = constant_exprt(
@@ -977,9 +977,9 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     return expr;
   }
 
-  // If none of the above matched, throw an error
-  throw std::runtime_error(
-    "Unsupported literal type or malformed value: " + value.dump());
+  // If none of the above matched, log an error and return empty expression
+  log_error("Unsupported literal type or malformed value: {}", value.dump());
+  return exprt();
 }
 
 exprt python_converter::get_expr(const nlohmann::json &element)
