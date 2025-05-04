@@ -440,20 +440,31 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   {
     rhs_type = "str";
   }
-
-  // If the LHS is empty and RHS is a string and
-  // the operation is == or !=, try inferring LHS type from JSON
-  if (lhs_type.empty() && rhs_type == "str" && (op == "Eq" || op == "NotEq"))
+  
+  // Infer the missing operand type if one side is explicitly a string and the operation is Eq or NotEq
+  if ((op == "Eq" || op == "NotEq") &&
+    ((lhs_type.empty() && rhs_type == "str") || (rhs_type.empty() && lhs_type == "str")))
   {
-    if (element.contains("left"))
+    // Infer lhs_type if it is empty
+    if (lhs_type.empty() && element.contains("left"))
     {
       const auto &lhs_expr = element["left"];
-      // Try to infer the LHS type based on literal value
       if (lhs_expr.contains("value") && lhs_expr["value"].is_string())
         lhs_type = "str";
-      // Handle known identifiers (e.g., variables that should be strings)
       else if (lhs_expr.contains("id") && lhs_expr["id"].is_string())
         lhs_type = "str";
+    }
+    // Infer rhs_type if it is empty
+    else if (rhs_type.empty() &&
+      element.contains("comparators") &&
+      element["comparators"].is_array() &&
+      !element["comparators"].empty())
+    {
+      const auto &rhs_expr = element["comparators"][0];
+      if (rhs_expr.contains("value") && rhs_expr["value"].is_string())
+        rhs_type = "str";
+      else if (rhs_expr.contains("id") && rhs_expr["id"].is_string())
+        rhs_type = "str";
     }
   }
 
