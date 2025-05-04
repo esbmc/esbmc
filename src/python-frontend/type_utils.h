@@ -43,7 +43,7 @@ public:
   {
     return (
       name == "int" || name == "float" || name == "bool" || name == "str" ||
-      name == "chr");
+      name == "chr" || name == "hex");
   }
 
   static bool is_consensus_type(const std::string &name)

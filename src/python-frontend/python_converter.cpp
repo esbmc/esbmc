@@ -977,9 +977,7 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     return expr;
   }
 
-  // If none of the above matched, log an error and return empty expression
-  log_error("Unsupported literal type or malformed value: {}", value.dump());
-  return exprt();
+  throw std::runtime_error("Unsupported literal " + value.get<std::string>());
 }
 
 exprt python_converter::get_expr(const nlohmann::json &element)

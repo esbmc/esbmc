@@ -179,11 +179,47 @@ exprt function_call_expr::build_constant_from_arg() const
     arg_size = 1;
   }
 
+  // Handle hex(): convert int to hexadecimal string with "0x" prefix
+  else if (func_name == "hex")
+  {
+    printf("passou em 185\n");
+    int int_value = 0;
+    bool is_negative = false;
+
+    if (arg.contains("_type") && arg["_type"] == "UnaryOp")
+    {
+      const auto &op = arg["op"];
+      const auto &operand = arg["operand"];
+
+      if (op["_type"] == "USub" && operand.contains("value") &&
+          operand["value"].is_number_integer())
+      {
+        is_negative = true;
+        int_value = operand["value"].get<int>();
+      }
+      else
+        throw std::runtime_error("TypeError: Unsupported UnaryOp in hex()");
+    }
+    else if (arg.contains("value") && arg["value"].is_number_integer())
+      int_value = arg["value"].get<int>();
+    else
+      throw std::runtime_error("TypeError: hex() argument must be an integer");
+
+    std::ostringstream oss;
+    if (is_negative || int_value < 0)
+      oss << "-0x" << std::hex << std::nouppercase << std::abs(int_value);
+    else
+      oss << "0x" << std::hex << std::nouppercase << int_value;
+
+    const std::string hex_str = oss.str();
+    arg["value"] = hex_str;
+    arg_size = hex_str.size();
+  }
+
   // Construct expression with appropriate type
   typet t = type_handler_.get_typet(func_name, arg_size);
   exprt expr = converter_.get_expr(arg);
   expr.type() = t;
-
   return expr;
 }
 
