@@ -885,7 +885,9 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
   return call_builder.build();
 }
 
-exprt python_converter::make_char_array_expr(const std::vector<unsigned char> &string_literal, const typet &t)
+exprt python_converter::make_char_array_expr(
+  const std::vector<unsigned char> &string_literal,
+  const typet &t)
 {
   exprt expr = gen_zero(t);
   const typet &char_type = t.subtype();
@@ -923,9 +925,9 @@ exprt python_converter::make_char_array_expr(const std::vector<unsigned char> &s
 exprt python_converter::get_literal(const nlohmann::json &element)
 {
   // Determine the source of the literal's value.
-  const auto &value = (element["_type"] == "UnaryOp") ?
-                        element["operand"]["value"] :
-                        element["value"];
+  const auto &value = (element["_type"] == "UnaryOp")
+                        ? element["operand"]["value"]
+                        : element["value"];
 
   // Handle integer literals (int)
   if (value.is_number_integer())
@@ -939,7 +941,8 @@ exprt python_converter::get_literal(const nlohmann::json &element)
   if (value.is_number_float())
   {
     exprt expr;
-    convert_float_literal(value.dump(), expr);  // `value.dump()` converts it to string
+    convert_float_literal(
+      value.dump(), expr); // `value.dump()` converts it to string
     return expr;
   }
 
@@ -952,10 +955,11 @@ exprt python_converter::get_literal(const nlohmann::json &element)
   }
 
   // Handle empty strings or docstrings (often beginning with a newline)
-  if (value.is_string() && !value.get<std::string>().empty() &&
-      value.get<std::string>()[0] == '\n')
+  if (
+    value.is_string() && !value.get<std::string>().empty() &&
+    value.get<std::string>()[0] == '\n')
   {
-    return exprt();  // Return empty expression
+    return exprt(); // Return empty expression
   }
 
   // Handle string or byte literals

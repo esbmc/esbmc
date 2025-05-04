@@ -191,7 +191,8 @@ exprt function_call_expr::build_constant_from_arg() const
       const auto &op = arg["op"];
       const auto &operand = arg["operand"];
 
-      if (op["_type"] == "USub" && operand.contains("value") &&
+      if (
+        op["_type"] == "USub" && operand.contains("value") &&
         operand["value"].is_number_integer())
       {
         is_negative = true;
@@ -212,8 +213,8 @@ exprt function_call_expr::build_constant_from_arg() const
 
     // Build Python-style hex string: 0x<hex> or -0x<hex>
     std::ostringstream oss;
-    oss << (is_negative ? "-0x" : "0x")
-      << std::hex << std::nouppercase << std::llabs(int_value);
+    oss << (is_negative ? "-0x" : "0x") << std::hex << std::nouppercase
+        << std::llabs(int_value);
     const std::string hex_str = oss.str();
 
     // Build string constant expression
@@ -223,7 +224,6 @@ exprt function_call_expr::build_constant_from_arg() const
 
     return expr;
   }
-
 
   // Construct expression with appropriate type
   typet t = type_handler_.get_typet(func_name, arg_size);
