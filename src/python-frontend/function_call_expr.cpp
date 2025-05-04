@@ -93,6 +93,12 @@ exprt function_call_expr::build_nondet_call() const
   return rhs;
 }
 
+void function_call_expr::handle_float_to_int(nlohmann::json &arg) const
+{
+  double value = arg["value"].get<double>();
+  arg["value"] = static_cast<int>(value);
+}
+
 void function_call_expr::handle_int_to_float(nlohmann::json &arg) const
 {
   int value = arg["value"].get<int>();
@@ -156,10 +162,7 @@ exprt function_call_expr::build_constant_from_arg() const
 
   // Handle int(): convert float to int
   else if (func_name == "int" && arg["value"].is_number_float())
-  {
-    double arg_value = arg["value"].get<double>();
-    arg["value"] = static_cast<int>(arg_value);
-  }
+    handle_float_to_int(arg);
 
   // Handle float(): convert int to float
   else if (func_name == "float" && arg["value"].is_number_integer())

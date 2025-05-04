@@ -63,6 +63,12 @@ private:
   std::string get_object_name() const;
 
   /*
+   * Handles float-to-int conversions (e.g., int(3.14)) by generating
+   * the appropriate cast expression.
+   */
+  void handle_float_to_int(nlohmann::json &arg) const;
+
+  /*
    * Handles int-to-float conversions (e.g., float(3)) by generating
    * the appropriate cast expression.
    */
