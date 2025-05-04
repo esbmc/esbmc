@@ -105,6 +105,60 @@ void function_call_expr::handle_int_to_float(nlohmann::json &arg) const
   arg["value"] = static_cast<double>(value);
 }
 
+void function_call_expr::handle_chr(nlohmann::json &arg) const
+{
+  int int_value = 0;
+
+  // Check for unary minus: e.g., chr(-1)
+  if (arg.contains("_type") && arg["_type"] == "UnaryOp")
+  {
+    const auto &op = arg["op"];
+    const auto &operand = arg["operand"];
+
+    if (
+      op["_type"] == "USub" && operand.contains("value") &&
+      operand["value"].is_number_integer())
+      int_value = -operand["value"].get<int>();
+    else
+      throw std::runtime_error("TypeError: Unsupported UnaryOp in chr()");
+  }
+
+  // Handle integer input
+  else if (arg.contains("value") && arg["value"].is_number_integer())
+    int_value = arg["value"].get<int>();
+
+  // Reject float input
+  else if (arg.contains("value") && arg["value"].is_number_float())
+    throw std::runtime_error(
+      "TypeError: chr() argument must be int, not float");
+
+  // Try converting string input to integer
+  else if (arg.contains("value") && arg["value"].is_string())
+  {
+    const std::string &s = arg["value"].get<std::string>();
+    try
+    {
+      int_value = std::stoi(s);
+    }
+    catch (const std::invalid_argument &)
+    {
+      throw std::runtime_error(
+        "TypeError: invalid string passed to chr(): '" + s + "'");
+    }
+  }
+
+  // Validate Unicode range: [0, 0x10FFFF]
+  if (int_value < 0 || int_value > 0x10FFFF)
+  {
+    throw std::runtime_error(
+      "ValueError: chr() argument out of valid Unicode range: " +
+      std::to_string(int_value));
+  }
+
+  // Replace the value with a single-character string
+  arg["value"] = std::string(1, static_cast<char>(int_value));
+}
+
 exprt function_call_expr::handle_hex(nlohmann::json &arg) const
 {
   long long int_value = 0;
@@ -177,59 +231,7 @@ exprt function_call_expr::build_constant_from_arg() const
 
   // Handle chr(): convert integer to single-character string
   else if (func_name == "chr")
-  {
-    int int_value = 0;
-
-    // Check for unary minus: e.g., chr(-1)
-    if (arg.contains("_type") && arg["_type"] == "UnaryOp")
-    {
-      const auto &op = arg["op"];
-      const auto &operand = arg["operand"];
-
-      if (
-        op["_type"] == "USub" && operand.contains("value") &&
-        operand["value"].is_number_integer())
-        int_value = -operand["value"].get<int>();
-      else
-        throw std::runtime_error("TypeError: Unsupported UnaryOp in chr()");
-    }
-
-    // Handle integer input
-    else if (arg.contains("value") && arg["value"].is_number_integer())
-      int_value = arg["value"].get<int>();
-
-    // Reject float input
-    else if (arg.contains("value") && arg["value"].is_number_float())
-      throw std::runtime_error(
-        "TypeError: chr() argument must be int, not float");
-
-    // Try converting string input to integer
-    else if (arg.contains("value") && arg["value"].is_string())
-    {
-      const std::string &s = arg["value"].get<std::string>();
-      try
-      {
-        int_value = std::stoi(s);
-      }
-      catch (const std::invalid_argument &)
-      {
-        throw std::runtime_error(
-          "TypeError: invalid string passed to chr(): '" + s + "'");
-      }
-    }
-
-    // Validate Unicode range: [0, 0x10FFFF]
-    if (int_value < 0 || int_value > 0x10FFFF)
-    {
-      throw std::runtime_error(
-        "ValueError: chr() argument out of valid Unicode range: " +
-        std::to_string(int_value));
-    }
-
-    // Replace the value with a single-character string
-    arg["value"] = std::string(1, static_cast<char>(int_value));
-    arg_size = 1;
-  }
+    handle_chr(arg);
 
   // Handle hex: Handles hexadecimal string arguments
   else if (func_name == "hex")

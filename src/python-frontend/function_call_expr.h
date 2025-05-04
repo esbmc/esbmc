@@ -75,6 +75,12 @@ private:
   void handle_int_to_float(nlohmann::json &arg) const;
 
   /*
+   * Handles chr(int) conversions by creating a single-character
+   * string expression from an integer.
+   */
+  void handle_chr(nlohmann::json &arg) const;
+
+  /*
    * Handles hexadecimal string arguments (e.g., hex(255) -> "0xff")
    * by building a constant expression representing the string.
    */
