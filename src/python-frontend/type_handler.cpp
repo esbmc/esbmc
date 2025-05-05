@@ -169,7 +169,6 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size) con
   return empty_typet();
 }
 
-
 typet type_handler::get_typet(const nlohmann::json &elem) const
 {
   if (elem.is_number_integer() || elem.is_number_unsigned())
