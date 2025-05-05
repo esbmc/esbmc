@@ -432,13 +432,31 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   std::string lhs_type = type_handler_.type_to_string(lhs.type());
   std::string rhs_type = type_handler_.type_to_string(rhs.type());
 
-  // If RHS is a string literal, like x = "foo", then we determine the type from the JSON value
+  // Infer the missing operand type if one side is explicitly a string and the operation is Eq or NotEq
   if (
-    rhs_type.empty() && element.contains("comparators") &&
-    element["comparators"][0].contains("value") &&
-    element["comparators"][0]["value"].is_string())
+    (op == "Eq" || op == "NotEq") && ((lhs_type.empty() && rhs_type == "str") ||
+                                      (rhs_type.empty() && lhs_type == "str")))
   {
-    rhs_type = "str";
+    // Infer lhs_type if it is empty
+    if (lhs_type.empty() && element.contains("left"))
+    {
+      const auto &lhs_expr = element["left"];
+      if (lhs_expr.contains("value") && lhs_expr["value"].is_string())
+        lhs_type = "str";
+      else if (lhs_expr.contains("id") && lhs_expr["id"].is_string())
+        lhs_type = "str";
+    }
+    // Infer rhs_type if it is empty
+    else if (
+      rhs_type.empty() && element.contains("comparators") &&
+      element["comparators"].is_array() && !element["comparators"].empty())
+    {
+      const auto &rhs_expr = element["comparators"][0];
+      if (rhs_expr.contains("value") && rhs_expr["value"].is_string())
+        rhs_type = "str";
+      else if (rhs_expr.contains("id") && rhs_expr["id"].is_string())
+        rhs_type = "str";
+    }
   }
 
   if (lhs_type == "str" && rhs_type == "str")
@@ -462,29 +480,64 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     assert(lhs.type().is_array());
     assert(rhs.type().is_array());
 
-    // Strings comparison
-    if (op == "Eq")
+    // Handle string comparison for equality (==) and inequality (!=) operators
+    if (op == "Eq" || op == "NotEq")
     {
+      // If the types of lhs and rhs differ, the strings can't be equal.
+      // For "Eq", return false; for "NotEq", return true.
       if (rhs.type() != lhs.type())
-        return gen_boolean(false);
+        return gen_boolean(op == "NotEq");
 
-      array_typet &arr_type = static_cast<array_typet &>(lhs.type());
-      BigInt str_size =
-        binary2integer(arr_type.size().value().as_string(), false);
+      // Special case: both lhs and rhs are identical constants
+      if (
+        lhs.is_constant() && rhs.is_constant() && lhs.type().is_array() &&
+        rhs.type().is_array() && lhs == rhs)
+      {
+        // If both constants are exactly the same, we know the result.
+        return gen_boolean(op == "Eq");
+      }
 
-      // call strncmp to compare strings
-      symbolt *strncmp = symbol_table_.find_symbol("c:@F@strncmp");
-      assert(strncmp);
-      side_effect_expr_function_callt sideeffect;
-      sideeffect.function() = symbol_expr(*strncmp);
-      sideeffect.arguments().push_back(lhs); // passing lhs to strncmp
-      sideeffect.arguments().push_back(rhs); // passing rhs to strncmp
-      sideeffect.arguments().push_back(
-        from_integer(str_size, long_uint_type())); // passing n to strncmp
-      sideeffect.location() = get_location_from_decl(element);
-      sideeffect.type() = int_type();
+      // special case: both sides are arrays of size 0 and equal type
+      if (
+        lhs.type().is_array() && rhs.type().is_array() &&
+        to_array_type(lhs.type()).size().is_constant() &&
+        to_array_type(rhs.type()).size().is_constant())
+      {
+        const auto lhs_size = binary2integer(
+          to_array_type(lhs.type()).size().value().as_string(), false);
+        const auto rhs_size = binary2integer(
+          to_array_type(rhs.type()).size().value().as_string(), false);
 
-      lhs = sideeffect;
+        if (lhs_size == 0 && rhs_size == 0)
+        {
+          // Two zero-length arrays are equal by definition
+          return gen_boolean(op == "Eq");
+        }
+      }
+
+      // Retrieve the size of the string from the array type.
+      const array_typet &array_type = to_array_type(lhs.type());
+      const BigInt string_size =
+        binary2integer(array_type.size().value().as_string(), false);
+
+      // Look up the 'strncmp' function symbol in the symbol table.
+      symbolt *strncmp_symbol = symbol_table_.find_symbol("c:@F@strncmp");
+      assert(strncmp_symbol); // Ensure 'strncmp' is available.
+
+      // Construct a function call expression to strncmp(lhs, rhs, size)
+      side_effect_expr_function_callt strncmp_call;
+      strncmp_call.function() = symbol_expr(*strncmp_symbol);
+      strncmp_call.arguments().push_back(lhs); // First string (lhs)
+      strncmp_call.arguments().push_back(rhs); // Second string (rhs)
+      strncmp_call.arguments().push_back(from_integer(
+        string_size, long_uint_type())); // Number of characters to compare
+      strncmp_call.location() = get_location_from_decl(element);
+      strncmp_call.type() = int_type(); // Return type of strncmp is int
+
+      // Compare result of strncmp to 0:
+      // - If op == "Eq", test if strncmp(...) == 0 (strings are equal)
+      // - If op == "NotEq", test if strncmp(...) != 0 (strings are not equal)
+      lhs = strncmp_call;
       rhs = gen_zero(int_type());
     }
     // Strings concatenation
