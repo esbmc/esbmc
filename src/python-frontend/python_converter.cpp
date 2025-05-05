@@ -497,7 +497,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
         return gen_boolean(op == "Eq");
       }
 
-      // New special case: both sides are arrays of size 0 and equal type
+      // special case: both sides are arrays of size 0 and equal type
       if (
         lhs.type().is_array() && rhs.type().is_array() &&
         to_array_type(lhs.type()).size().is_constant() &&
@@ -505,7 +505,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       {
         const auto lhs_size = binary2integer(to_array_type(lhs.type()).size().value().as_string(), false);
         const auto rhs_size = binary2integer(to_array_type(rhs.type()).size().value().as_string(), false);
-        
+
         if (lhs_size == 0 && rhs_size == 0)
         {
           // Two zero-length arrays are equal by definition
