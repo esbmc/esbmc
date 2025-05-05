@@ -93,6 +93,8 @@ const struct group_opt_templ all_cmd_options[] = {
     {"bound",
      NULL,
      "model inter-contract function calls within a bounded system (default)"},
+     {"reentry-check", NULL,
+      "detect reentrancy behavior during contract execution"},
     {"negating-property",
      boost::program_options::value<std::string>()->value_name("fname"),
      "convert the assert(cond) to assert(!cond)"}}},

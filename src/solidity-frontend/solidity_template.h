@@ -685,8 +685,29 @@ __ESBMC_HIDE:;
 }
 )";
 
+const std::string sol_mutex = R"(
+void _ESBMC_check_reentrancy(bool _ESBMC_mutex)
+{
+__ESBMC_HIDE:;
+if(_ESBMC_mutex)
+  assert(!"Reentrancy behavior detected");
+}
+
+void _ESBMC_lock(bool _ESBMC_mutex)
+{
+__ESBMC_HIDE:;
+  _ESBMC_mutex = true;
+}
+
+void _ESBMC_unlock(bool _ESBMC_mutex)
+{
+__ESBMC_HIDE:;
+  _ESBMC_mutex = false;
+}
+)";
+
 const std::string sol_ext_library =
-  sol_itoa + sol_str2hex + sol_uqAddr + sol_max_min;
+  sol_itoa + sol_str2hex + sol_uqAddr + sol_max_min + sol_mutex;
 
 const std::string sol_initialize = R"(
 void initialize()
