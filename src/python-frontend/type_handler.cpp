@@ -336,7 +336,9 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
 std::string type_handler::get_operand_type(const nlohmann::json &operand) const
 {
   // Handle variable reference (e.g., `x`)
-  if (operand.contains("_type") && operand["_type"] == "Name" && operand.contains("id"))
+  if (
+    operand.contains("_type") && operand["_type"] == "Name" &&
+    operand.contains("id"))
     return get_var_type(operand["id"]);
 
   // Handle constant/literal values (e.g., 42, "hello", True, 3.14)
@@ -355,8 +357,7 @@ std::string type_handler::get_operand_type(const nlohmann::json &operand) const
 
   // Handle list subscript (e.g., `mylist[0]`)
   else if (
-    operand["_type"] == "Subscript" &&
-    operand.contains("value") &&
+    operand["_type"] == "Subscript" && operand.contains("value") &&
     get_operand_type(operand["value"]) == "list")
   {
     const auto &list_expr = operand["value"];
@@ -366,9 +367,7 @@ std::string type_handler::get_operand_type(const nlohmann::json &operand) const
 
       // Find the declaration of the list variable
       nlohmann::json list_node = json_utils::find_var_decl(
-        list_id,
-        converter_.current_function_name(),
-        converter_.ast());
+        list_id, converter_.current_function_name(), converter_.ast());
 
       // Get the type of the list and return the subtype (element type)
       array_typet list_type = get_list_type(list_node["value"]);
@@ -377,6 +376,9 @@ std::string type_handler::get_operand_type(const nlohmann::json &operand) const
   }
 
   // If no known type can be determined, issue a warning and return std::string()
-  log_warning("type_handler::get_operand_type: unable to determine operand type for AST node: {}", operand.dump(2));
+  log_warning(
+    "type_handler::get_operand_type: unable to determine operand type for AST "
+    "node: {}",
+    operand.dump(2));
   return std::string();
 }
