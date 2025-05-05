@@ -376,7 +376,7 @@ std::string type_handler::get_operand_type(const nlohmann::json &operand) const
     }
   }
 
-  // If no known type can be determined, issue a warning and return "unknown"
+  // If no known type can be determined, issue a warning and return std::string()
   log_warning("type_handler::get_operand_type: unable to determine operand type for AST node: {}", operand.dump(2));
   return std::string();
 }
