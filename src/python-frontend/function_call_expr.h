@@ -63,6 +63,12 @@ private:
   std::string get_object_name() const;
 
   /*
+   * Handles int-to-str conversions (e.g., str(65)) by generating
+   * the appropriate cast expression.
+   */
+  exprt handle_int_to_str(nlohmann::json &arg) const;
+
+  /*
    * Handles string arguments (e.g., str("abc")) by converting them
    * into character array expressions.
    */
