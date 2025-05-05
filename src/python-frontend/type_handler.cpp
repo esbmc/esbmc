@@ -4,6 +4,7 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/symbol_id.h>
 #include <util/context.h>
+#include <util/message.h>
 
 type_handler::type_handler(const python_converter &converter)
   : converter_(converter)
@@ -164,6 +165,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size) con
     return symbol_typet("tag-" + ast_type);
 
   // Unknown / unsupported type
+  log_warning("python", "Unknown or unsupported AST type: {}", ast_type);
   return empty_typet();
 }
 
