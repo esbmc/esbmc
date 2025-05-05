@@ -78,14 +78,22 @@ std::string type_handler::get_var_type(const std::string &var_name) const
   return ref["annotation"]["id"].get<std::string>();
 }
 
+/// This method creates a `typet` representing a statically sized array.
+/// It is typically used to model Python sequences like strings and byte arrays
 typet type_handler::build_array(const typet &sub_type, const size_t size) const
 {
-  return array_typet(
-    sub_type,
-    constant_exprt(
-      integer2binary(BigInt(size), bv_width(size_type())),
-      integer2string(BigInt(size)),
-      size_type()));
+  // Use BigInt to ensure correctness for large sizes, though typical sizes are small.
+  const BigInt big_size = BigInt(size);
+  const typet size_t_type = size_type(); // An unsignedbv of platform word width
+
+  // Construct a constant expression for the array size.
+  constant_exprt array_size_expr(
+    integer2binary(big_size, bv_width(size_t_type)),  // Binary representation
+    integer2string(big_size),                         // Decimal string for display
+    size_t_type);                                     // Size type
+
+  // Return the full array type
+  return array_typet(sub_type, array_size_expr);
 }
 
 std::vector<int> type_handler::get_array_type_shape(const typet &type) const
