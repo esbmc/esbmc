@@ -98,6 +98,14 @@ private:
    */
   exprt handle_hex(nlohmann::json &arg) const;
 
+  /*
+   * Handles octal string arguments (e.g., oct(8) -> "0o10")
+   * by building a constant expression representing the resulting
+   * string. Supports both positive and negative integers,
+   * following the Python 3 built-in `oct()` function semantics.
+   */
+  exprt handle_oct(nlohmann::json &arg) const;
+
 protected:
   symbol_id function_id_;
   const nlohmann::json &call_;

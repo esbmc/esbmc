@@ -217,6 +217,44 @@ exprt function_call_expr::handle_hex(nlohmann::json &arg) const
   return converter_.make_char_array_expr(string_literal, t);
 }
 
+exprt function_call_expr::handle_oct(nlohmann::json &arg) const
+{
+  long long int_value = 0;
+  bool is_negative = false;
+
+  if (arg.contains("_type") && arg["_type"] == "UnaryOp")
+  {
+    const auto &op = arg["op"];
+    const auto &operand = arg["operand"];
+
+    if (
+      op["_type"] == "USub" && operand.contains("value") &&
+      operand["value"].is_number_integer())
+    {
+      is_negative = true;
+      int_value = operand["value"].get<long long>();
+    }
+    else
+      throw std::runtime_error("TypeError: Unsupported UnaryOp in oct()");
+  }
+  else if (arg.contains("value") && arg["value"].is_number_integer())
+  {
+    int_value = arg["value"].get<long long>();
+    if (int_value < 0)
+      is_negative = true;
+  }
+  else
+    throw std::runtime_error("TypeError: oct() argument must be an integer");
+
+  std::ostringstream oss;
+  oss << (is_negative ? "-0o" : "0o") << std::oct << std::llabs(int_value);
+  const std::string oct_str = oss.str();
+
+  typet t = type_handler_.get_typet("str", oct_str.size());
+  std::vector<uint8_t> string_literal(oct_str.begin(), oct_str.end());
+  return converter_.make_char_array_expr(string_literal, t);
+}
+
 exprt function_call_expr::build_constant_from_arg() const
 {
   const std::string &func_name = function_id_.get_function();
@@ -246,6 +284,10 @@ exprt function_call_expr::build_constant_from_arg() const
   // Handle hex: Handles hexadecimal string arguments
   else if (func_name == "hex")
     return handle_hex(arg);
+
+  // Handle oct: Handles octal string arguments
+  else if (func_name == "oct")
+    return handle_oct(arg);
 
   // Construct expression with appropriate type
   typet t = type_handler_.get_typet(func_name, arg_size);
