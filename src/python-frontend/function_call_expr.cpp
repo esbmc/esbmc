@@ -231,8 +231,10 @@ exprt function_call_expr::handle_oct(nlohmann::json &arg) const
       op["_type"] == "USub" && operand.contains("value") &&
       operand["value"].is_number_integer())
     {
-      is_negative = true;
       int_value = operand["value"].get<long long>();
+      // Treat -0 as 0 (Python behavior)
+      if (int_value != 0)
+        is_negative = true;
     }
     else
       throw std::runtime_error("TypeError: Unsupported UnaryOp in oct()");
