@@ -240,9 +240,7 @@ exprt function_call_expr::handle_oct(nlohmann::json &arg) const
         is_negative = true;
     }
     else
-    {
       throw std::runtime_error("TypeError: Unsupported UnaryOp in oct()");
-    }
   }
   // If it's not a unary operation, expect a plain integer literal
   else if (arg.contains("value") && arg["value"].is_number_integer())
