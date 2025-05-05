@@ -105,45 +105,68 @@ std::vector<int> type_handler::get_array_type_shape(const typet &type) const
   return shape;
 }
 
-// Convert Python/AST types to irep types
-typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
-  const
+/// Convert a Python AST type to an ESBMC internal irep type.
+/// This function maps high-level Python types (from AST) to low-level internal
+/// ESBMC representations using `typet`. It supports core built-in types
+///
+/// References:
+/// - Python 3 type system: https://docs.python.org/3/library/stdtypes.html
+/// - ESBMC irep type system: src/util/type.h
+typet type_handler::get_typet(const std::string &ast_type, size_t type_size) const
 {
+  // float — represents IEEE 754 double-precision
   if (ast_type == "float")
     return double_type();
+
+  // int — arbitrarily large integers
+  // We approximate using 64-bit signed integer here.
   if (ast_type == "int" || ast_type == "GeneralizedIndex")
-    /* FIXME: We need to map 'int' to another irep type that provides unlimited precision
-  	https://docs.python.org/3/library/stdtypes.html#numeric-types-int-float-complex */
-    return long_long_int_type();
+    return long_long_int_type(); // FIXME: Support bignum for true Python semantics
+
+  // Unsigned integers used in domains like Ethereum or system modeling
   if (
-    ast_type == "uint" || ast_type == "uint64" || ast_type == "Epoch" ||
-    ast_type == "Slot")
+    ast_type == "uint" || ast_type == "uint64" ||
+    ast_type == "Epoch" || ast_type == "Slot")
     return long_long_uint_type();
+
+  // bool — represents True/False
   if (ast_type == "bool")
     return bool_type();
+
+  // Custom large unsigned integer types (used in Ethereum, BLS, etc.)
   if (ast_type == "uint256" || ast_type == "BLSFieldElement")
     return uint256_type();
+
+  // bytes — immutable sequences of bytes
+  // Here modeled as array of signed integers (8-bit).
   if (ast_type == "bytes")
   {
-    // TODO: Keep "bytes" as signed char instead of "int_type()", and cast to an 8-bit integer in [] operations
-    // or consider modelling it with string_constantt.
+    // TODO: Refactor to model using unsigned/signed char
     return build_array(long_long_int_type(), type_size);
   }
+
+  // str — immutable sequences of Unicode characters
+  // chr() returns a 1-character string
+  // hex(): returns string representation of integer in hex
   if (ast_type == "str" || ast_type == "chr" || ast_type == "hex")
   {
     if (type_size == 1)
     {
-      typet type = char_type();
-      type.set("#cpp_type", "char");
+      typet type = char_type(); // 8-bit char
+      type.set("#cpp_type", "char"); // For C backend compatibility
       return type;
     }
-    return build_array(char_type(), type_size);
+    return build_array(char_type(), type_size); // Array of characters
   }
+
+  // Custom user-defined types / classes
   if (json_utils::is_class(ast_type, converter_.ast()))
     return symbol_typet("tag-" + ast_type);
 
+  // Unknown / unsupported type
   return empty_typet();
 }
+
 
 typet type_handler::get_typet(const nlohmann::json &elem) const
 {
