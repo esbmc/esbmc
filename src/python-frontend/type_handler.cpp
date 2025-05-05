@@ -77,7 +77,9 @@ std::string type_handler::type_to_string(const typet &t) const
   }
 
   // Unknown or unsupported type
-  log_warning("type_handler::type_to_string", "Unknown or unsupported type: " + t.pretty());
+  log_warning(
+    "type_handler::type_to_string",
+    "Unknown or unsupported type: " + t.pretty());
   return "";
 }
 
@@ -102,9 +104,9 @@ typet type_handler::build_array(const typet &sub_type, const size_t size) const
 
   // Construct a constant expression for the array size.
   constant_exprt array_size_expr(
-    integer2binary(big_size, bv_width(size_t_type)),  // Binary representation
-    integer2string(big_size),                         // Decimal string for display
-    size_t_type);                                     // Size type
+    integer2binary(big_size, bv_width(size_t_type)), // Binary representation
+    integer2string(big_size), // Decimal string for display
+    size_t_type);             // Size type
 
   // Return the full array type
   return array_typet(sub_type, array_size_expr);
@@ -135,7 +137,8 @@ std::vector<int> type_handler::get_array_type_shape(const typet &type) const
 /// References:
 /// - Python 3 type system: https://docs.python.org/3/library/stdtypes.html
 /// - ESBMC irep type system: src/util/type.h
-typet type_handler::get_typet(const std::string &ast_type, size_t type_size) const
+typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
+  const
 {
   // float — represents IEEE 754 double-precision
   if (ast_type == "float")
@@ -148,8 +151,8 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size) con
 
   // Unsigned integers used in domains like Ethereum or system modeling
   if (
-    ast_type == "uint" || ast_type == "uint64" ||
-    ast_type == "Epoch" || ast_type == "Slot")
+    ast_type == "uint" || ast_type == "uint64" || ast_type == "Epoch" ||
+    ast_type == "Slot")
     return long_long_uint_type();
 
   // bool — represents True/False
@@ -172,11 +175,13 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size) con
   // chr(): returns a 1-character string
   // hex(): returns string representation of integer in hex
   // oct() — Converts an integer to a lowercase octal string
-  if (ast_type == "str" || ast_type == "chr" || ast_type == "hex" || ast_type == "oct")
+  if (
+    ast_type == "str" || ast_type == "chr" || ast_type == "hex" ||
+    ast_type == "oct")
   {
     if (type_size == 1)
     {
-      typet type = char_type(); // 8-bit char
+      typet type = char_type();      // 8-bit char
       type.set("#cpp_type", "char"); // For C backend compatibility
       return type;
     }
