@@ -4068,11 +4068,19 @@ bool solidity_convertert::get_expr(
     {
       const auto &base = callee_expr_json["expression"];
 
-      if (base.contains("referencedDeclaration"))
+      if (base["referencedDeclaration"] > 0)
       {
         int base_decl_id = base["referencedDeclaration"];
-        const auto &decl = find_decl_ref(src_ast_json, base_decl_id);
-
+        const nlohmann::json &decl = find_decl_ref_unique_id(src_ast_json, base_decl_id);
+        if (decl.empty())
+        {
+          log_error(
+            "failed to find the reference AST node, base contract name {}, "
+            "reference id {}",
+            current_baseContractName,
+            std::to_string(expr["referencedDeclaration"].get<int>()));
+          return true;
+        }
         if (
           decl["nodeType"] == "ContractDefinition" &&
           decl["contractKind"] == "library")
