@@ -487,7 +487,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       // For "Eq", return false; for "NotEq", return true.
       if (rhs.type() != lhs.type())
         return gen_boolean(op == "NotEq");
-      
+
       // Special case: both lhs and rhs are identical constants
       if (
         lhs.is_constant() && rhs.is_constant() && lhs.type().is_array() &&
@@ -503,8 +503,10 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
         to_array_type(lhs.type()).size().is_constant() &&
         to_array_type(rhs.type()).size().is_constant())
       {
-        const auto lhs_size = binary2integer(to_array_type(lhs.type()).size().value().as_string(), false);
-        const auto rhs_size = binary2integer(to_array_type(rhs.type()).size().value().as_string(), false);
+        const auto lhs_size = binary2integer(
+          to_array_type(lhs.type()).size().value().as_string(), false);
+        const auto rhs_size = binary2integer(
+          to_array_type(rhs.type()).size().value().as_string(), false);
 
         if (lhs_size == 0 && rhs_size == 0)
         {
