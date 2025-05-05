@@ -488,6 +488,15 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       if (rhs.type() != lhs.type())
         return gen_boolean(op == "NotEq");
 
+      // Special case: both lhs and rhs are identical constants
+      if (lhs.is_constant() && rhs.is_constant() &&
+       lhs.type().is_array() && rhs.type().is_array() &&
+       lhs == rhs)
+      {
+        // If both constants are exactly the same, we know the result.
+        return gen_boolean(op == "Eq");
+      }
+
       // Retrieve the size of the string from the array type.
       const array_typet &array_type = to_array_type(lhs.type());
       const BigInt string_size =
