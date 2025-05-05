@@ -219,13 +219,13 @@ exprt function_call_expr::handle_hex(nlohmann::json &arg) const
 
 exprt function_call_expr::handle_oct(nlohmann::json &arg) const
 {
-  long long int_value = 0;   // Holds the integer value to be converted
-  bool is_negative = false;  // Tracks if the number is negative
+  long long int_value = 0;  // Holds the integer value to be converted
+  bool is_negative = false; // Tracks if the number is negative
 
   // Check if the argument is a unary operation (like -123)
   if (arg.contains("_type") && arg["_type"] == "UnaryOp")
   {
-    const auto &op = arg["op"];         // Operator (e.g., USub)
+    const auto &op = arg["op"];           // Operator (e.g., USub)
     const auto &operand = arg["operand"]; // Operand of the unary operator
 
     // Only support unary subtraction (-) of integer literals
