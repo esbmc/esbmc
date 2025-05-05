@@ -41,29 +41,43 @@ bool type_handler::is_constructor_call(const nlohmann::json &json) const
   return is_ctor_call;
 }
 
+/// This utility maps internal ESBMC types to their corresponding Python type strings
 std::string type_handler::type_to_string(const typet &t) const
 {
   if (t == double_type())
     return "float";
+
   if (t == long_long_int_type())
     return "int";
+
   if (t == long_long_uint_type())
     return "uint64";
+
   if (t == bool_type())
     return "bool";
+
   if (t == uint256_type())
     return "uint256";
+
   if (t.is_array())
   {
-    const array_typet &arr_type = static_cast<const array_typet &>(t);
-    if (arr_type.subtype() == char_type())
+    const array_typet &arr_type = to_array_type(t); // Safer than static_cast
+
+    const typet &elem_type = arr_type.subtype();
+
+    if (elem_type == char_type())
       return "str";
-    if (arr_type.subtype() == int_type())
+
+    if (elem_type == int_type())
       return "bytes";
-    if (arr_type.subtype().is_array())
-      return type_to_string(arr_type.subtype());
+
+    // Handle nested arrays (e.g., list of strings)
+    if (elem_type.is_array())
+      return type_to_string(elem_type);
   }
 
+  // Unknown or unsupported type
+  log_warning("type_handler::type_to_string", "Unknown or unsupported type: " + t.pretty());
   return "";
 }
 
