@@ -44,6 +44,7 @@ solidity_convertert::solidity_convertert(
     ctor_modifier(nullptr),
     aux_counter(0),
     is_bound(true),
+    is_reentry_check(false),
     nondet_bool_expr(),
     nondet_uint_expr()
 {
@@ -55,6 +56,10 @@ solidity_convertert::solidity_convertert(
   const std::string unbound = config.options.get_option("unbound");
   if (!unbound.empty())
     is_bound = false;
+
+  const std::string reentry_check = config.options.get_option("reentry-check");
+  if (!reentry_check.empty())
+    is_reentry_check = true;
 
   // initialize nondet_bool
   if (
@@ -573,6 +578,26 @@ bool solidity_convertert::populate_auxilary_vars()
     s.lvalue = true;
     symbolt &sym = *move_symbol_to_context(s);
     sym.value = inits;
+  }
+
+  // add reentrancy mutex
+  if (is_reentry_check)
+  {
+    for (auto _cname : contractNamesList)
+    {
+      std::string tx_name, tx_id;
+      get_contract_mutex_name(_cname, tx_name, tx_id);
+      std::string debug_modulename = get_modulename_from_path(absolute_path);
+      typet _t = bool_type();
+      _t.set("#sol_type", "BOOL");
+      symbolt s;
+      get_default_symbol(s, debug_modulename, _t, tx_name, tx_id, locationt());
+      s.file_local = true;
+      s.static_lifetime = true;
+      s.lvalue = true;
+      symbolt &sym = *move_symbol_to_context(s);
+      sym.value = gen_zero(bool_type());
+    }
   }
 
   return false;
@@ -2059,8 +2084,26 @@ bool solidity_convertert::get_unbound_expr(
   get_location_from_node(expr, l);
   func_call.location() = l;
 
-  move_to_front_block(func_call);
+  // reentry check
+  if (is_reentry_check)
+  {
+    side_effect_expr_function_callt lock;
+    get_library_function_call_no_args(
+      "_ESBMC_lock", "c:@F@_ESBMC_lock", unsignedbv_typet(256), l, lock);
+    side_effect_expr_function_callt unlock;
+    get_library_function_call_no_args(
+      "_ESBMC_unlock", "c:@F@_ESBMC_unlock", unsignedbv_typet(256), l, unlock);
+    exprt arg;
+    get_contract_mutex_expr(c_name, arg);
+    lock.arguments().push_back(arg);
+    unlock.arguments().push_back(arg);
 
+    // this should before the unbound_func_call
+    move_to_front_block(lock);
+    move_to_back_block(unlock);
+  }
+
+  move_to_front_block(func_call);
   new_expr = func_call;
   return false;
 }
@@ -2736,20 +2779,42 @@ bool solidity_convertert::get_function_definition(
   // 12. Convert body and embed the body into the same symbol
   // skip for 'unimplemented' functions which has no body,
   // e.g. asbstract/interface, the symbol value would be left as unset
+
+  exprt body_exprt = code_blockt();
   if (
     ast_node.contains("body") ||
     (ast_node.contains("implemented") && ast_node["implemented"] == true))
   {
     log_debug(
       "solidity", "\t parsing function {}'s body", current_functionName);
-    exprt body_exprt;
     if (get_block(ast_node["body"], body_exprt))
       return true;
-    added_symbol.value = body_exprt;
+
+    if (is_reentry_check && !is_event_err && !is_ctor)
+    {
+      // we should only add this to the contract's functions
+      // rather than interface and library's functions,
+      // or contract's errors, events and ctor
+      //TODO: detect is_library_function
+
+      // add a global mutex checker _ESBMC_check_reentrancy() in the front
+      side_effect_expr_function_callt call;
+      get_library_function_call_no_args(
+        "_ESBMC_check_reentrancy",
+        "c:@F@_ESBMC_check_reentrancy",
+        empty_typet(),
+        location_begin,
+        call);
+      exprt arg;
+      get_contract_mutex_expr(c_name, arg);
+      call.arguments().push_back(arg);
+
+      convert_expression_to_code(call);
+      body_exprt.operands().insert(body_exprt.operands().begin(), call);
+    }
   }
-  else
-    // empty body
-    added_symbol.value = code_blockt();
+
+  added_symbol.value = body_exprt;
 
   //assert(!"done - finished all expr stmt in function?");
 
@@ -9016,6 +9081,25 @@ void solidity_convertert::get_static_contract_instance(
   }
 }
 
+void solidity_convertert::get_contract_mutex_name(
+  const std::string c_name,
+  std::string &name,
+  std::string &id)
+{
+  name = "_ESBMC_mutex_" + c_name;
+  id = "sol:@" + name + "#";
+}
+
+// for reentry check
+void solidity_convertert::get_contract_mutex_expr(
+  const std::string c_name,
+  exprt &expr)
+{
+  std::string name, id;
+  get_contract_mutex_name(c_name, name, id);
+  expr = symbol_expr(*context.find_symbol(id));
+}
+
 bool solidity_convertert::is_bytes_type(const typet &t)
 {
   if (t.get("#sol_type").as_string().find("BYTES") != std::string::npos)
@@ -11392,6 +11476,20 @@ bool solidity_convertert::get_call_value_definition(
     convert_expression_to_code(add_assign);
     then.move_to_operands(add_assign);
 
+    // _ESBMC_mutex = true;
+    if (is_reentry_check)
+    {
+      side_effect_expr_function_callt lock;
+      get_library_function_call_no_args(
+        "_ESBMC_lock", "c:@F@_ESBMC_lock", empty_typet(), locationt(), lock);
+      exprt arg;
+      get_contract_mutex_expr(cname, arg);
+      lock.arguments().push_back(arg);
+
+      convert_expression_to_code(lock);
+      then.move_to_operands(lock);
+    }
+
     // func_call, e.g. receive(&_ESBMC_Object_str)
     side_effect_expr_function_callt call;
     if (get_non_library_function_call(decl_ref, empty_json, call))
@@ -11399,6 +11497,24 @@ bool solidity_convertert::get_call_value_definition(
     call.arguments().at(0) = symbol_expr(sym);
     convert_expression_to_code(call);
     then.move_to_operands(call);
+
+    // _ESBMC_mutex = false;
+    if (is_reentry_check)
+    {
+      side_effect_expr_function_callt unlock;
+      get_library_function_call_no_args(
+        "_ESBMC_unlock",
+        "c:@F@_ESBMC_unlock",
+        empty_typet(),
+        locationt(),
+        unlock);
+      exprt arg;
+      get_contract_mutex_expr(cname, arg);
+      unlock.arguments().push_back(arg);
+
+      convert_expression_to_code(unlock);
+      then.move_to_operands(unlock);
+    }
 
     // msg_value = old_value;
     exprt assign_val_restore = side_effect_exprt("assign", val_expr.type());
@@ -11587,6 +11703,20 @@ bool solidity_convertert::get_transfer_definition(
     convert_expression_to_code(add_assign);
     then.move_to_operands(add_assign);
 
+    // _ESBMC_mutex = true;
+    if (is_reentry_check)
+    {
+      side_effect_expr_function_callt lock;
+      get_library_function_call_no_args(
+        "_ESBMC_lock", "c:@F@_ESBMC_lock", empty_typet(), locationt(), lock);
+      exprt arg;
+      get_contract_mutex_expr(cname, arg);
+      lock.arguments().push_back(arg);
+
+      convert_expression_to_code(lock);
+      then.move_to_operands(lock);
+    }
+
     // func_call, e.g. receive(&_ESBMC_Object_str)
     side_effect_expr_function_callt call;
     if (get_non_library_function_call(decl_ref, empty_json, call))
@@ -11594,6 +11724,24 @@ bool solidity_convertert::get_transfer_definition(
     call.arguments().at(0) = symbol_expr(sym);
     convert_expression_to_code(call);
     then.move_to_operands(call);
+
+    // _ESBMC_mutex = false;
+    if (is_reentry_check)
+    {
+      side_effect_expr_function_callt unlock;
+      get_library_function_call_no_args(
+        "_ESBMC_unlock",
+        "c:@F@_ESBMC_unlock",
+        empty_typet(),
+        locationt(),
+        unlock);
+      exprt arg;
+      get_contract_mutex_expr(cname, arg);
+      unlock.arguments().push_back(arg);
+
+      convert_expression_to_code(unlock);
+      then.move_to_operands(unlock);
+    }
 
     // msg_value = old_value;
     exprt assign_val_restore = side_effect_exprt("assign", val_expr.type());
@@ -11780,6 +11928,20 @@ bool solidity_convertert::get_send_definition(
     convert_expression_to_code(add_assign);
     then.move_to_operands(add_assign);
 
+    // _ESBMC_mutex = true;
+    if (is_reentry_check)
+    {
+      side_effect_expr_function_callt lock;
+      get_library_function_call_no_args(
+        "_ESBMC_lock", "c:@F@_ESBMC_lock", empty_typet(), locationt(), lock);
+
+      exprt arg;
+      get_contract_mutex_expr(cname, arg);
+      lock.arguments().push_back(arg);
+      convert_expression_to_code(lock);
+      then.move_to_operands(lock);
+    }
+
     // func_call, e.g. receive(&_ESBMC_Object_str)
     side_effect_expr_function_callt call;
     if (get_non_library_function_call(decl_ref, empty_json, call))
@@ -11787,6 +11949,24 @@ bool solidity_convertert::get_send_definition(
     call.arguments().at(0) = symbol_expr(sym);
     convert_expression_to_code(call);
     then.move_to_operands(call);
+
+    // _ESBMC_mutex = false;
+    if (is_reentry_check)
+    {
+      side_effect_expr_function_callt unlock;
+      get_library_function_call_no_args(
+        "_ESBMC_unlock",
+        "c:@F@_ESBMC_unlock",
+        empty_typet(),
+        locationt(),
+        unlock);
+      exprt arg;
+      get_contract_mutex_expr(cname, arg);
+      unlock.arguments().push_back(arg);
+
+      convert_expression_to_code(unlock);
+      then.move_to_operands(unlock);
+    }
 
     // msg_value = old_value;
     exprt assign_val_restore = side_effect_exprt("assign", val_expr.type());

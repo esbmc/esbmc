@@ -106,6 +106,11 @@ protected:
     std::string &name,
     std::string &id);
   void get_static_contract_instance(const std::string c_name, symbolt &sym);
+  void get_contract_mutex_name(
+    const std::string c_name,
+    std::string &name,
+    std::string &id);
+  void get_contract_mutex_expr(const std::string c_name, exprt &expr);
 
   // handle the non-contract definition, including struct/enum/error/event/abstract/...
   bool get_noncontract_defition(nlohmann::json &ast_node);
@@ -589,6 +594,9 @@ protected:
 
   // bound setting
   bool is_bound;
+
+  // reentry-check setting
+  bool is_reentry_check;
 
   // NONDET
   side_effect_expr_function_callt nondet_bool_expr;
