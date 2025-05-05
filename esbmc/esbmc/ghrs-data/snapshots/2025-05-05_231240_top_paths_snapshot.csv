@@ -1,0 +1,11 @@
+url_path,views_total,views_unique
+/esbmc/esbmc,577,194
+/esbmc/esbmc/pulls,110,13
+/esbmc/esbmc/issues,72,26
+/esbmc/esbmc/tree/master/src,68,34
+/esbmc/esbmc/tree/master/src/python-frontend,62,18
+/esbmc/esbmc/commits/master,54,7
+/esbmc/esbmc/releases,47,29
+/esbmc/esbmc/tree/master/regression/python,34,14
+/esbmc/esbmc/tree/master/regression,33,22
+/esbmc/esbmc/tree/master/src/python-frontend/models,33,4
