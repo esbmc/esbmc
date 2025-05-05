@@ -329,19 +329,23 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
   return typet();
 }
 
+/// This method inspects the JSON representation of a Python operand node and attempts to
+/// infer its type based on its AST node type (`_type`). It currently supports variable
+/// names, constants (literals), and list subscripts. This type information is used for
+/// symbolic execution or translation within ESBMC.
 std::string type_handler::get_operand_type(const nlohmann::json &operand) const
 {
-  // Operand is a variable
-  if (operand["_type"] == "Name")
+  // Handle variable reference (e.g., `x`)
+  if (operand.contains("_type") && operand["_type"] == "Name" && operand.contains("id"))
     return get_var_type(operand["id"]);
 
-  // Operand is a literal
-  if (operand["_type"] == "Constant")
+  // Handle constant/literal values (e.g., 42, "hello", True, 3.14)
+  else if (operand["_type"] == "Constant" && operand.contains("value"))
   {
     const auto &value = operand["value"];
     if (value.is_string())
       return "str";
-    if (value.is_number_integer() || value.is_number_unsigned())
+    else if (value.is_number_integer() || value.is_number_unsigned())
       return "int";
     else if (value.is_boolean())
       return "bool";
@@ -349,19 +353,30 @@ std::string type_handler::get_operand_type(const nlohmann::json &operand) const
       return "float";
   }
 
-  // Operand is a list element
-  if (
+  // Handle list subscript (e.g., `mylist[0]`)
+  else if (
     operand["_type"] == "Subscript" &&
+    operand.contains("value") &&
     get_operand_type(operand["value"]) == "list")
   {
-    nlohmann::json list_node = json_utils::find_var_decl(
-      operand["value"]["id"].get<std::string>(),
-      converter_.current_function_name(),
-      converter_.ast());
+    const auto &list_expr = operand["value"];
+    if (list_expr.contains("id"))
+    {
+      std::string list_id = list_expr["id"].get<std::string>();
 
-    array_typet list_type = get_list_type(list_node["value"]);
-    return type_to_string(list_type.subtype());
+      // Find the declaration of the list variable
+      nlohmann::json list_node = json_utils::find_var_decl(
+        list_id,
+        converter_.current_function_name(),
+        converter_.ast());
+
+      // Get the type of the list and return the subtype (element type)
+      array_typet list_type = get_list_type(list_node["value"]);
+      return type_to_string(list_type.subtype());
+    }
   }
 
+  // If no known type can be determined, issue a warning and return "unknown"
+  log_warning("type_handler::get_operand_type: unable to determine operand type for AST node: {}", operand.dump(2));
   return std::string();
 }
