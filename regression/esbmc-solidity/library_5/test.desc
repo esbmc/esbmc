@@ -1,4 +1,4 @@
 CORE
 contract.solast
 --sol contract.sol --unwind 6 --no-unwinding-assertion --overflow-check
-^VERIFICATION FAILED$
+^VERIFICATION SUCCESSFUL$
