@@ -110,7 +110,10 @@ protected:
     const std::string c_name,
     std::string &name,
     std::string &id);
-  void get_contract_mutex_expr(const std::string c_name, exprt &expr);
+  void get_contract_mutex_expr(
+    const std::string c_name,
+    const exprt &this_expr,
+    exprt &expr);
 
   // handle the non-contract definition, including struct/enum/error/event/abstract/...
   bool get_noncontract_defition(nlohmann::json &ast_node);

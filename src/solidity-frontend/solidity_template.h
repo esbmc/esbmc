@@ -689,8 +689,7 @@ const std::string sol_mutex = R"(
 void _ESBMC_check_reentrancy(bool _ESBMC_mutex)
 {
 __ESBMC_HIDE:;
-if(_ESBMC_mutex)
-  assert(!"Reentrancy behavior detected");
+  assert(!_ESBMC_mutex && "Reentrancy behavior detected");
 }
 
 void _ESBMC_lock(bool _ESBMC_mutex)
