@@ -580,26 +580,6 @@ bool solidity_convertert::populate_auxilary_vars()
     sym.value = inits;
   }
 
-  // add reentrancy mutex
-  if (is_reentry_check)
-  {
-    for (auto _cname : contractNamesList)
-    {
-      std::string tx_name, tx_id;
-      get_contract_mutex_name(_cname, tx_name, tx_id);
-      std::string debug_modulename = get_modulename_from_path(absolute_path);
-      typet _t = bool_type();
-      _t.set("#sol_type", "BOOL");
-      symbolt s;
-      get_default_symbol(s, debug_modulename, _t, tx_name, tx_id, locationt());
-      s.file_local = true;
-      s.static_lifetime = true;
-      s.lvalue = true;
-      symbolt &sym = *move_symbol_to_context(s);
-      sym.value = gen_zero(bool_type());
-    }
-  }
-
   return false;
 }
 
@@ -2093,8 +2073,17 @@ bool solidity_convertert::get_unbound_expr(
     side_effect_expr_function_callt unlock;
     get_library_function_call_no_args(
       "_ESBMC_unlock", "c:@F@_ESBMC_unlock", unsignedbv_typet(256), l, unlock);
+
+    exprt this_expr;
+    assert(current_functionDecl);
+    if (get_func_decl_this_ref(*current_functionDecl, this_expr))
+    {
+      log_error("cannot get internal this pointer reference");
+      return true;
+    }
+
     exprt arg;
-    get_contract_mutex_expr(c_name, arg);
+    get_contract_mutex_expr(c_name, this_expr, arg);
     lock.arguments().push_back(arg);
     unlock.arguments().push_back(arg);
 
@@ -2805,8 +2794,13 @@ bool solidity_convertert::get_function_definition(
         empty_typet(),
         location_begin,
         call);
+
+      exprt this_expr;
+      if (get_func_decl_this_ref(*current_functionDecl, this_expr))
+        return true;
+
       exprt arg;
-      get_contract_mutex_expr(c_name, arg);
+      get_contract_mutex_expr(c_name, this_expr, arg);
       call.arguments().push_back(arg);
 
       convert_expression_to_code(call);
@@ -3588,13 +3582,7 @@ bool solidity_convertert::get_expr(
       if (expr.contains("name") && expr["name"] == "this")
       {
         log_debug("solidity", "\t\tgot this ref");
-        /*
-        assert(current_functionDecl);
-        if (get_func_decl_this_ref(*current_functionDecl, new_expr))
-          return true;
-  
-        new_expr = dereference_exprt(new_expr, (expr).type().sub_type());
-        */
+
         exprt this_expr;
         assert(current_functionDecl);
         if (get_func_decl_this_ref(*current_functionDecl, this_expr))
@@ -9093,11 +9081,20 @@ void solidity_convertert::get_contract_mutex_name(
 // for reentry check
 void solidity_convertert::get_contract_mutex_expr(
   const std::string c_name,
+  const exprt &this_expr,
   exprt &expr)
 {
   std::string name, id;
+  exprt _mutex;
   get_contract_mutex_name(c_name, name, id);
-  expr = symbol_expr(*context.find_symbol(id));
+  if (context.find_symbol(id) == nullptr)
+  {
+    log_error("cannot find auxiliary var {}", id);
+    abort();
+  }
+  _mutex = symbol_expr(*context.find_symbol(id));
+
+  expr = member_exprt(this_expr, _mutex.name(), _mutex.type());
 }
 
 bool solidity_convertert::is_bytes_type(const typet &t)
@@ -9990,6 +9987,18 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
     _ndt_uint,
     contract_name);
 
+  if (is_reentry_check)
+  {
+    // populate reentry mutex flag
+    std::string tx_name, tx_id;
+    get_contract_mutex_name(contract_name, tx_name, tx_id);
+    std::string debug_modulename = get_modulename_from_path(absolute_path);
+    typet _t = bool_type();
+    _t.set("#sol_type", "BOOL");
+
+    get_builtin_symbol(tx_name, tx_id, _t, l, gen_zero(_t), contract_name);
+  }
+
   // static instance
   symbolt tmp;
   get_static_contract_instance(contract_name, tmp);
@@ -10011,6 +10020,14 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
 
   t = pointer_typet(signed_char_type());
   //t.set("#sol_type", "STRING");
+  get_builtin_symbol(
+    "_ESBMC_bind_cname",
+    sol_prefix + "_ESBMC_bind_cname",
+    t,
+    l,
+    bind_expr,
+    contract_name);
+
   get_builtin_symbol(
     "_ESBMC_bind_cname",
     sol_prefix + "_ESBMC_bind_cname",
@@ -10064,6 +10081,7 @@ void solidity_convertert::get_builtin_symbol(
   symbolt sym;
   get_default_symbol(sym, "C++", t, name, id, l);
   sym.type.set("#sol_state_var", "1");
+  sym.file_local = true;
 
   auto &added_sym = *move_symbol_to_context(sym);
   code_declt decl(symbol_expr(added_sym));
@@ -11197,6 +11215,9 @@ bool solidity_convertert::model_transaction(
   back_block = code_blockt();
   std::string debug_modulename = get_modulename_from_path(absolute_path);
   std::string cname;
+  get_current_contract_name(expr, cname);
+  if (cname.empty())
+    return true;
 
   typet addr_t = unsignedbv_typet(160);
   addr_t.set("#sol_type", "ADDRESS_PAYABLE");
@@ -11213,9 +11234,6 @@ bool solidity_convertert::model_transaction(
   }
   else
   {
-    get_current_contract_name(expr, cname);
-    if (cname.empty())
-      return true;
     const auto ctor_json = find_constructor_ref(cname);
     if (get_func_decl_this_ref(ctor_json, this_expr))
       return true;
@@ -11277,6 +11295,38 @@ bool solidity_convertert::model_transaction(
   add_assign.copy_to_operands(target_balance, value);
   convert_expression_to_code(add_assign);
   front_block.move_to_operands(add_assign);
+
+  // _ESBMC_mutex = true;
+  if (is_reentry_check)
+  {
+    side_effect_expr_function_callt lock;
+    get_library_function_call_no_args(
+      "_ESBMC_lock", "c:@F@_ESBMC_lock", empty_typet(), locationt(), lock);
+    exprt arg;
+    get_contract_mutex_expr(cname, this_expr, arg);
+    lock.arguments().push_back(arg);
+
+    convert_expression_to_code(lock);
+    front_block.move_to_operands(lock);
+  }
+
+  // _ESBMC_mutex = false;
+  if (is_reentry_check)
+  {
+    side_effect_expr_function_callt unlock;
+    get_library_function_call_no_args(
+      "_ESBMC_unlock",
+      "c:@F@_ESBMC_unlock",
+      empty_typet(),
+      locationt(),
+      unlock);
+    exprt arg;
+    get_contract_mutex_expr(cname, this_expr, arg);
+    unlock.arguments().push_back(arg);
+
+    convert_expression_to_code(unlock);
+    back_block.move_to_operands(unlock);
+  }
 
   // msg_value = old_value;
   exprt assign_val_restore = side_effect_exprt("assign", value.type());
@@ -11386,8 +11436,9 @@ bool solidity_convertert::get_call_value_definition(
   exprt msg_sender = symbol_expr(*context.find_symbol("c:@msg_sender"));
   exprt msg_value = symbol_expr(*context.find_symbol("c:@msg_value"));
   symbolt this_sym = *context.find_symbol(call_id + "#this");
-  exprt this_address = member_exprt(symbol_expr(this_sym), "$address", addr_t);
-  exprt this_balance = member_exprt(symbol_expr(this_sym), "$balance", val_t);
+  exprt this_expr = symbol_expr(this_sym);
+  exprt this_address = member_exprt(this_expr, "$address", addr_t);
+  exprt this_balance = member_exprt(this_expr, "$balance", val_t);
 
   // uint256_t old_value = msg_value;
   symbolt old_value;
@@ -11483,7 +11534,7 @@ bool solidity_convertert::get_call_value_definition(
       get_library_function_call_no_args(
         "_ESBMC_lock", "c:@F@_ESBMC_lock", empty_typet(), locationt(), lock);
       exprt arg;
-      get_contract_mutex_expr(cname, arg);
+      get_contract_mutex_expr(cname, this_expr, arg);
       lock.arguments().push_back(arg);
 
       convert_expression_to_code(lock);
@@ -11509,7 +11560,7 @@ bool solidity_convertert::get_call_value_definition(
         locationt(),
         unlock);
       exprt arg;
-      get_contract_mutex_expr(cname, arg);
+      get_contract_mutex_expr(cname, this_expr, arg);
       unlock.arguments().push_back(arg);
 
       convert_expression_to_code(unlock);
@@ -11611,8 +11662,9 @@ bool solidity_convertert::get_transfer_definition(
   exprt msg_sender = symbol_expr(*context.find_symbol("c:@msg_sender"));
   exprt msg_value = symbol_expr(*context.find_symbol("c:@msg_value"));
   symbolt this_sym = *context.find_symbol(call_id + "#this");
-  exprt this_address = member_exprt(symbol_expr(this_sym), "$address", addr_t);
-  exprt this_balance = member_exprt(symbol_expr(this_sym), "$balance", val_t);
+  exprt this_expr = symbol_expr(this_sym);
+  exprt this_address = member_exprt(this_expr, "$address", addr_t);
+  exprt this_balance = member_exprt(this_expr, "$balance", val_t);
 
   // uint256_t old_value = msg_value;
   symbolt old_value;
@@ -11710,7 +11762,7 @@ bool solidity_convertert::get_transfer_definition(
       get_library_function_call_no_args(
         "_ESBMC_lock", "c:@F@_ESBMC_lock", empty_typet(), locationt(), lock);
       exprt arg;
-      get_contract_mutex_expr(cname, arg);
+      get_contract_mutex_expr(cname, this_expr, arg);
       lock.arguments().push_back(arg);
 
       convert_expression_to_code(lock);
@@ -11736,7 +11788,7 @@ bool solidity_convertert::get_transfer_definition(
         locationt(),
         unlock);
       exprt arg;
-      get_contract_mutex_expr(cname, arg);
+      get_contract_mutex_expr(cname, this_expr, arg);
       unlock.arguments().push_back(arg);
 
       convert_expression_to_code(unlock);
@@ -11838,8 +11890,9 @@ bool solidity_convertert::get_send_definition(
   exprt msg_sender = symbol_expr(*context.find_symbol("c:@msg_sender"));
   exprt msg_value = symbol_expr(*context.find_symbol("c:@msg_value"));
   symbolt this_sym = *context.find_symbol(call_id + "#this");
-  exprt this_address = member_exprt(symbol_expr(this_sym), "$address", addr_t);
-  exprt this_balance = member_exprt(symbol_expr(this_sym), "$balance", val_t);
+  exprt this_expr = symbol_expr(this_sym);
+  exprt this_address = member_exprt(this_expr, "$address", addr_t);
+  exprt this_balance = member_exprt(this_expr, "$balance", val_t);
 
   // uint256_t old_value = msg_value;
   symbolt old_value;
@@ -11936,7 +11989,7 @@ bool solidity_convertert::get_send_definition(
         "_ESBMC_lock", "c:@F@_ESBMC_lock", empty_typet(), locationt(), lock);
 
       exprt arg;
-      get_contract_mutex_expr(cname, arg);
+      get_contract_mutex_expr(cname, this_expr, arg);
       lock.arguments().push_back(arg);
       convert_expression_to_code(lock);
       then.move_to_operands(lock);
@@ -11961,7 +12014,7 @@ bool solidity_convertert::get_send_definition(
         locationt(),
         unlock);
       exprt arg;
-      get_contract_mutex_expr(cname, arg);
+      get_contract_mutex_expr(cname, this_expr, arg);
       unlock.arguments().push_back(arg);
 
       convert_expression_to_code(unlock);
