@@ -594,7 +594,7 @@ __ESBMC_HIDE:;
 const std::string sol_uqAddr = R"(
 __attribute__((annotate("__ESBMC_inf_size"))) address_t sol_addr_array[1];
 __attribute__((annotate("__ESBMC_inf_size"))) void *sol_obj_array[1];
-__attribute__((annotate("__ESBMC_inf_size"))) char *sol_cname_array[1];
+__attribute__((annotate("__ESBMC_inf_size"))) const char *sol_cname_array[1];
 static unsigned sol_max_cnt = 0;
 
 int _ESBMC_get_addr_array_idx(address_t tgt)
@@ -640,8 +640,7 @@ __ESBMC_HIDE:;
     do
     {
         tmp = nondet_ulong(); // ensure it's not address(0)
-        assume(tmp != (address_t)0);
-    } while (_ESBMC_get_addr_array_idx(tmp) != -1);
+    } while (tmp != (address_t)0 && _ESBMC_get_addr_array_idx(tmp) != -1);
     update_addr_obj(tmp, obj, cname);
     return tmp;
 }
@@ -702,7 +701,6 @@ msg_value = uint256_t(nondet_uint());
 tx_gasprice = uint256_t(nondet_uint());
 // this can only be an EOA's address
 tx_origin = address_t(nondet_uint());
-}
 
 block_basefee = uint256_t(nondet_uint());
 block_chainid = uint256_t(nondet_uint());
@@ -714,6 +712,7 @@ block_prevrandao = uint256_t(nondet_uint());
 block_timestamp = uint256_t(nondet_uint());
 
 _gaslimit = nondet_uint();
+}
 )";
 
 const std::string sol_c_library =

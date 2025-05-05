@@ -3692,8 +3692,11 @@ bool solidity_convertert::get_expr(
     assert(expr.contains("subdenomination"));
     std::string unit_name = expr["subdenomination"];
 
-    nlohmann::json node = expr;    // do copy
-    node.erase("subdenomination"); // remove unit
+    nlohmann::json node = expr; // do copy
+    // remove unit
+    //! note that this will leads to "failed to get current contract name" error
+    // however, since this can only be int_literal, we should be safe to do so
+    node.erase("subdenomination");
     exprt l_expr;
     if (get_expr(node, literal_type, l_expr))
       return true;
@@ -4616,9 +4619,9 @@ bool solidity_convertert::get_expr(
     // function_call: <address>.transfer()
     // examples:
     // 1. address(this).balance;
-    // 1.  A tmp = new A();
+    // 2.  A tmp = new A();
     //    address(tmp).balance;
-    // 2. address x;
+    // 3. address x;
     //    x.balance;
     //    msg.sender.balance;
     //! Note that member call like msg.sender will not be handled here
@@ -4645,28 +4648,12 @@ bool solidity_convertert::get_expr(
     switch (_type)
     {
     case SolidityGrammar::TypeConversionExpression:
-    {
-      // get base: x.$address / this.$address
-      exprt mem_expr;
-      assert(caller_expr_json.contains("arguments"));
-      assert(caller_expr_json["arguments"].size() == 1);
-      if (get_expr(caller_expr_json["arguments"][0], mem_expr))
-        return true;
-
-      if (mem_expr.is_member() || mem_expr.is_symbol())
-        //  address(x) || address(this)
-        base = mem_expr;
-      else
-      {
-        log_error("expecting member_exprt or symbol_exprt, got {}", base);
-        return true;
-      }
-
-      break;
-    }
     case SolidityGrammar::DeclRefExprClass:
     case SolidityGrammar::BuiltinMemberCall:
     {
+      // e.g.
+      // - address(msg.sender)
+
       if (get_expr(caller_expr_json, base))
         return true;
       break;
@@ -9055,14 +9042,15 @@ void solidity_convertert::convert_type_expr(
 
     if (
       (dest_sol_type == "ADDRESS" || dest_sol_type == "ADDRESS_PAYABLE") &&
-      src_sol_type == "CONTRACT")
+      (src_sol_type == "CONTRACT" || src_sol_type.empty()))
     {
-      // address(instance) ==> instance.address
-      exprt mem;
-      std::string c_name =
-        context.find_symbol(src_type.identifier())->name.as_string();
-      get_builtin_property_expr("address", src_expr, src_expr.location(), mem);
-      src_expr = mem;
+      // CONTRACT: address(instance) ==> instance.address
+      // EMPTY: address(this) ==> this.address
+      std::string comp_name = "$address";
+      typet t = unsignedbv_typet(160);
+      t.set("#sol_type", "ADDRESS");
+
+      src_expr = member_exprt(src_expr, comp_name, t);
     }
     else if (
       (src_sol_type == "ADDRESS" || src_sol_type == "ADDRESS_PAYABLE") &&
@@ -10062,6 +10050,8 @@ void solidity_convertert::get_aux_property_function(
   std::string fname = "get_" + property_name;
   std::string fid = "sol:@F@" + fname + "#";
 
+  assert(addr.is_constant() || addr.is_member() || addr.is_symbol());
+
   if (context.find_symbol(fid) != nullptr)
   {
     side_effect_expr_function_callt _call;
@@ -10176,6 +10166,7 @@ void solidity_convertert::get_aux_property_function(
   side_effect_expr_function_callt _call;
   _call.function() = symbol_expr(added_symbol);
   _call.location() = loc;
+  _call.arguments().push_back(addr);
   new_expr = _call;
 }
 
@@ -10213,6 +10204,7 @@ void solidity_convertert::get_builtin_property_expr(
   exprt mem;
   if (src_sol_type == "CONTRACT")
     // e.g. address(_ins_).balance
+    // address(this) => this->address
     mem = member_exprt(base, comp_name, t);
   else
     // e.g. address(msg.sender).balance
