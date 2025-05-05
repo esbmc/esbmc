@@ -489,9 +489,9 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
         return gen_boolean(op == "NotEq");
 
       // Special case: both lhs and rhs are identical constants
-      if (lhs.is_constant() && rhs.is_constant() &&
-       lhs.type().is_array() && rhs.type().is_array() &&
-       lhs == rhs)
+      if (
+        lhs.is_constant() && rhs.is_constant() && lhs.type().is_array() &&
+        rhs.type().is_array() && lhs == rhs)
       {
         // If both constants are exactly the same, we know the result.
         return gen_boolean(op == "Eq");
