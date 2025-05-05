@@ -219,26 +219,32 @@ exprt function_call_expr::handle_hex(nlohmann::json &arg) const
 
 exprt function_call_expr::handle_oct(nlohmann::json &arg) const
 {
-  long long int_value = 0;
-  bool is_negative = false;
+  long long int_value = 0;   // Holds the integer value to be converted
+  bool is_negative = false;  // Tracks if the number is negative
 
+  // Check if the argument is a unary operation (like -123)
   if (arg.contains("_type") && arg["_type"] == "UnaryOp")
   {
-    const auto &op = arg["op"];
-    const auto &operand = arg["operand"];
+    const auto &op = arg["op"];         // Operator (e.g., USub)
+    const auto &operand = arg["operand"]; // Operand of the unary operator
 
+    // Only support unary subtraction (-) of integer literals
     if (
       op["_type"] == "USub" && operand.contains("value") &&
       operand["value"].is_number_integer())
     {
       int_value = operand["value"].get<long long>();
-      // Treat -0 as 0 (Python behavior)
+
+      // Treat -0 as 0 (consistent with Python behavior)
       if (int_value != 0)
         is_negative = true;
     }
     else
+    {
       throw std::runtime_error("TypeError: Unsupported UnaryOp in oct()");
+    }
   }
+  // If it's not a unary operation, expect a plain integer literal
   else if (arg.contains("value") && arg["value"].is_number_integer())
   {
     int_value = arg["value"].get<long long>();
@@ -246,12 +252,17 @@ exprt function_call_expr::handle_oct(nlohmann::json &arg) const
       is_negative = true;
   }
   else
+  {
+    // Invalid argument type for oct()
     throw std::runtime_error("TypeError: oct() argument must be an integer");
+  }
 
+  // Convert the absolute value to octal and prepend "0o" (or "-0o")
   std::ostringstream oss;
   oss << (is_negative ? "-0o" : "0o") << std::oct << std::llabs(int_value);
   const std::string oct_str = oss.str();
 
+  // Create a string type and return a character array expression
   typet t = type_handler_.get_typet("str", oct_str.size());
   std::vector<uint8_t> string_literal(oct_str.begin(), oct_str.end());
   return converter_.make_char_array_expr(string_literal, t);
