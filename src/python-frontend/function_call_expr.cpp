@@ -93,6 +93,17 @@ exprt function_call_expr::build_nondet_call() const
   return rhs;
 }
 
+exprt function_call_expr::handle_int_to_str(nlohmann::json &arg) const
+{
+  std::string str_val = std::to_string(arg["value"].get<int>());
+  // Convert string to vector of unsigned char
+  std::vector<unsigned char> chars(str_val.begin(), str_val.end());
+  // Get type for the array
+  typet t = type_handler_.get_typet("str", chars.size());
+  // Use helper to generate constant string expression
+  return converter_.make_char_array_expr(chars, t);
+}
+
 size_t function_call_expr::handle_str(nlohmann::json &arg) const
 {
   if (!arg.contains("value") || !arg["value"].is_string())
@@ -206,14 +217,67 @@ exprt function_call_expr::handle_hex(nlohmann::json &arg) const
   return converter_.make_char_array_expr(string_literal, t);
 }
 
+exprt function_call_expr::handle_oct(nlohmann::json &arg) const
+{
+  long long int_value = 0;  // Holds the integer value to be converted
+  bool is_negative = false; // Tracks if the number is negative
+
+  // Check if the argument is a unary operation (like -123)
+  if (arg.contains("_type") && arg["_type"] == "UnaryOp")
+  {
+    const auto &op = arg["op"];           // Operator (e.g., USub)
+    const auto &operand = arg["operand"]; // Operand of the unary operator
+
+    // Only support unary subtraction (-) of integer literals
+    if (
+      op["_type"] == "USub" && operand.contains("value") &&
+      operand["value"].is_number_integer())
+    {
+      int_value = operand["value"].get<long long>();
+
+      // Treat -0 as 0 (consistent with Python behavior)
+      if (int_value != 0)
+        is_negative = true;
+    }
+    else
+      throw std::runtime_error("TypeError: Unsupported UnaryOp in oct()");
+  }
+  // If it's not a unary operation, expect a plain integer literal
+  else if (arg.contains("value") && arg["value"].is_number_integer())
+  {
+    int_value = arg["value"].get<long long>();
+    if (int_value < 0)
+      is_negative = true;
+  }
+  else
+  {
+    // Invalid argument type for oct()
+    throw std::runtime_error("TypeError: oct() argument must be an integer");
+  }
+
+  // Convert the absolute value to octal and prepend "0o" (or "-0o")
+  std::ostringstream oss;
+  oss << (is_negative ? "-0o" : "0o") << std::oct << std::llabs(int_value);
+  const std::string oct_str = oss.str();
+
+  // Create a string type and return a character array expression
+  typet t = type_handler_.get_typet("str", oct_str.size());
+  std::vector<uint8_t> string_literal(oct_str.begin(), oct_str.end());
+  return converter_.make_char_array_expr(string_literal, t);
+}
+
 exprt function_call_expr::build_constant_from_arg() const
 {
   const std::string &func_name = function_id_.get_function();
   size_t arg_size = 1;
   auto arg = call_["args"][0];
 
+  // Handle str(): convert int to str
+  if (func_name == "str" && arg["value"].is_number_integer())
+    return handle_int_to_str(arg);
+
   // Handle str(): determine size of the resulting string constant
-  if (func_name == "str")
+  else if (func_name == "str")
     arg_size = handle_str(arg);
 
   // Handle int(): convert float to int
@@ -231,6 +295,10 @@ exprt function_call_expr::build_constant_from_arg() const
   // Handle hex: Handles hexadecimal string arguments
   else if (func_name == "hex")
     return handle_hex(arg);
+
+  // Handle oct: Handles octal string arguments
+  else if (func_name == "oct")
+    return handle_oct(arg);
 
   // Construct expression with appropriate type
   typet t = type_handler_.get_typet(func_name, arg_size);
