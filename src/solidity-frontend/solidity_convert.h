@@ -114,6 +114,11 @@ protected:
     const std::string c_name,
     const exprt &this_expr,
     exprt &expr);
+  bool get_high_level_call_wrapper(
+    const std::string c_name,
+    const exprt &this_expr,
+    exprt &front_block,
+    exprt &back_block);
 
   // handle the non-contract definition, including struct/enum/error/event/abstract/...
   bool get_noncontract_defition(nlohmann::json &ast_node);

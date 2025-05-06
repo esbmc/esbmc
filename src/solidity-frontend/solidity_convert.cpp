@@ -2067,13 +2067,6 @@ bool solidity_convertert::get_unbound_expr(
   // reentry check
   if (is_reentry_check)
   {
-    side_effect_expr_function_callt lock;
-    get_library_function_call_no_args(
-      "_ESBMC_lock", "c:@F@_ESBMC_lock", unsignedbv_typet(256), l, lock);
-    side_effect_expr_function_callt unlock;
-    get_library_function_call_no_args(
-      "_ESBMC_unlock", "c:@F@_ESBMC_unlock", unsignedbv_typet(256), l, unlock);
-
     exprt this_expr;
     assert(current_functionDecl);
     if (get_func_decl_this_ref(*current_functionDecl, this_expr))
@@ -2082,14 +2075,20 @@ bool solidity_convertert::get_unbound_expr(
       return true;
     }
 
-    exprt arg;
-    get_contract_mutex_expr(c_name, this_expr, arg);
-    lock.arguments().push_back(arg);
-    unlock.arguments().push_back(arg);
+    exprt _mutex;
+    get_contract_mutex_expr(c_name, this_expr, _mutex);
+
+    exprt assign_lock = side_effect_exprt("assign", bool_type());
+    assign_lock.copy_to_operands(_mutex, gen_one(bool_type()));
+    convert_expression_to_code(assign_lock);
+
+    exprt assign_unlock = side_effect_exprt("assign", bool_type());
+    assign_unlock.copy_to_operands(_mutex, gen_zero(bool_type()));
+    convert_expression_to_code(assign_unlock);
 
     // this should before the unbound_func_call
-    move_to_front_block(lock);
-    move_to_back_block(unlock);
+    move_to_front_block(assign_lock);
+    move_to_back_block(assign_unlock);
   }
 
   move_to_front_block(func_call);
@@ -4289,10 +4288,56 @@ bool solidity_convertert::get_expr(
       call.arguments().at(0) = base;
 
       if (current_contractName == base_cname)
+      {
         // this.init(); we know the implementation thus cannot model it as unbound_harness
         // note that here is comp.identifier not comp.name
-        new_expr = call;
+        // in unbound mode, we cannot determine the sender
+        // wrap with msg_sender update:
+        //  old_sender = msg_sender
+        //  msg_sender = this.address
+        //  ...
+        //  msg_sender = old_sender
+        // uint160_t old_sender =  msg_sender;
+        std::string debug_modulename = get_modulename_from_path(absolute_path);
+        exprt msg_sender = symbol_expr(*context.find_symbol("c:@msg_sender"));
+        exprt this_expr;
+        assert(current_functionDecl);
+        if (get_func_decl_this_ref(*current_functionDecl, this_expr))
+          return true;
 
+        typet addr_t = unsignedbv_typet(160);
+        addr_t.set("#sol_type", "ADDRESS");
+        symbolt old_sender;
+        get_default_symbol(
+          old_sender,
+          debug_modulename,
+          addr_t,
+          "old_sender",
+          "sol:@C@" + current_contractName + "@F@old_sender#" +
+            std::to_string(aux_counter++),
+          locationt());
+        symbolt &added_old_sender = *move_symbol_to_context(old_sender);
+        code_declt old_sender_decl(symbol_expr(added_old_sender));
+        added_old_sender.value = msg_sender;
+        old_sender_decl.operands().push_back(msg_sender);
+        move_to_front_block(old_sender_decl);
+
+        // msg_sender = this.address;
+        exprt this_address = member_exprt(this_expr, "$address", addr_t);
+        exprt assign_sender = side_effect_exprt("assign", addr_t);
+        assign_sender.copy_to_operands(msg_sender, this_address);
+        convert_expression_to_code(assign_sender);
+        move_to_front_block(assign_sender);
+
+        // msg_sender = old_sender;
+        exprt assign_sender_restore = side_effect_exprt("assign", addr_t);
+        assign_sender_restore.copy_to_operands(
+          msg_sender, symbol_expr(added_old_sender));
+        convert_expression_to_code(assign_sender_restore);
+        move_to_back_block(assign_sender_restore);
+
+        new_expr = call;
+      }
       else if (!is_bound)
       {
         if (get_unbound_expr(func_call_json, current_contractName, new_expr))
@@ -9097,6 +9142,79 @@ void solidity_convertert::get_contract_mutex_expr(
   expr = member_exprt(this_expr, _mutex.name(), _mutex.type());
 }
 
+/*
+  old_sender = msg.sender
+  msg.sender = instance.$address
+  (_ESBMC_mutext_Base = true)
+  (call to payable func)
+  (_ESBMC_mutext_Base = false)
+  msg.sender = old_sender;
+  */
+bool solidity_convertert::get_high_level_call_wrapper(
+  const std::string cname,
+  const exprt &this_expr,
+  exprt &front_block,
+  exprt &back_block)
+{
+  std::string debug_modulename = get_modulename_from_path(absolute_path);
+  exprt msg_sender = symbol_expr(*context.find_symbol("c:@msg_sender"));
+
+  typet addr_t = unsignedbv_typet(160);
+  addr_t.set("#sol_type", "ADDRESS");
+  symbolt old_sender;
+  get_default_symbol(
+    old_sender,
+    debug_modulename,
+    addr_t,
+    "old_sender",
+    "sol:@C@" + cname + "@F@old_sender#" + std::to_string(aux_counter++),
+    locationt());
+  symbolt &added_old_sender = *move_symbol_to_context(old_sender);
+  code_declt old_sender_decl(symbol_expr(added_old_sender));
+  added_old_sender.value = msg_sender;
+  old_sender_decl.operands().push_back(msg_sender);
+  front_block.move_to_operands(old_sender_decl);
+
+  // msg_sender = this.address;
+  exprt this_address = member_exprt(this_expr, "$address", addr_t);
+  exprt assign_sender = side_effect_exprt("assign", addr_t);
+  assign_sender.copy_to_operands(msg_sender, this_address);
+  convert_expression_to_code(assign_sender);
+  front_block.move_to_operands(assign_sender);
+
+  if (is_reentry_check)
+  {
+    exprt _mutex;
+    get_contract_mutex_expr(cname, this_expr, _mutex);
+
+    // _ESBMC_mutex = true;
+    exprt assign_lock = side_effect_exprt("assign", bool_type());
+    assign_lock.copy_to_operands(_mutex, gen_one(bool_type()));
+    convert_expression_to_code(assign_lock);
+    front_block.move_to_operands(assign_lock);
+  }
+
+  if (is_reentry_check)
+  {
+    exprt _mutex;
+    get_contract_mutex_expr(cname, this_expr, _mutex);
+
+    // _ESBMC_mutex = false;
+    exprt assign_unlock = side_effect_exprt("assign", bool_type());
+    assign_unlock.copy_to_operands(_mutex, gen_zero(bool_type()));
+    convert_expression_to_code(assign_unlock);
+    back_block.move_to_operands(assign_unlock);
+  }
+
+  // msg_sender = old_sender;
+  exprt assign_sender_restore = side_effect_exprt("assign", addr_t);
+  assign_sender_restore.copy_to_operands(
+    msg_sender, symbol_expr(added_old_sender));
+  convert_expression_to_code(assign_sender_restore);
+  back_block.move_to_operands(assign_sender_restore);
+  return false;
+}
+
 bool solidity_convertert::is_bytes_type(const typet &t)
 {
   if (t.get("#sol_type").as_string().find("BYTES") != std::string::npos)
@@ -10655,6 +10773,24 @@ bool solidity_convertert::get_high_level_member_access(
   if (get_base_contract_name(base, _cname))
     return true;
 
+  // current contract name
+  std::string cname;
+  get_current_contract_name(expr, cname);
+
+  // current this pointer reference
+  exprt this_expr;
+  if (current_functionDecl)
+  {
+    if (get_func_decl_this_ref(*current_functionDecl, this_expr))
+      return true;
+  }
+  else
+  {
+    const auto ctor_json = find_constructor_ref(cname);
+    if (get_func_decl_this_ref(ctor_json, this_expr))
+      return true;
+  }
+
   locationt l;
   get_location_from_node(expr, l);
   std::unordered_set<std::string> cname_set = structureTypingMap[_cname];
@@ -10674,21 +10810,26 @@ bool solidity_convertert::get_high_level_member_access(
 
   if (cname_set.size() == 1)
   {
+    exprt front_block = code_blockt();
+    exprt back_block = code_blockt();
     if (is_call_w_options)
     {
-      exprt front_block, back_block;
       if (model_transaction(expr, base, balance, l, front_block, back_block))
       {
         log_error("failed to model the transaction property changes");
         return true;
       }
-      for (auto op : front_block.operands())
-        move_to_front_block(op);
-      for (auto op : back_block.operands())
-        move_to_back_block(op);
-
-      return false;
     }
+    else
+    {
+      if (get_high_level_call_wrapper(
+            cname, this_expr, front_block, back_block))
+        return true;
+    }
+    for (auto op : front_block.operands())
+      move_to_front_block(op);
+    for (auto op : back_block.operands())
+      move_to_back_block(op);
 
     return false; // since it has only one possible option, no need to futher binding
   }
@@ -10818,31 +10959,40 @@ bool solidity_convertert::get_high_level_member_access(
       rhs = _assign;
     }
     convert_expression_to_code(rhs);
-
-    if (is_call_w_options)
+    if (is_func_call)
     {
-      exprt front_block, back_block;
-      if (model_transaction(expr, base, balance, l, front_block, back_block))
+      if (is_call_w_options)
       {
-        log_error("failed to model the transaction property changes");
-        return true;
-      }
+        exprt front_block = code_blockt();
+        exprt back_block = code_blockt();
+        if (model_transaction(expr, base, balance, l, front_block, back_block))
+        {
+          log_error("failed to model the transaction property changes");
+          return true;
+        }
+        else
+        {
+          if (get_high_level_call_wrapper(
+                cname, this_expr, front_block, back_block))
+            return true;
+        }
 
-      // if-body
-      code_blockt block;
-      for (auto &op : front_block.operands())
-        block.operands().push_back(op);
-      block.operands().push_back(rhs);
-      for (auto &op : back_block.operands())
-        block.operands().push_back(op);
-      rhs = block;
+        // if-body
+        code_blockt block;
+        for (auto &op : front_block.operands())
+          block.operands().push_back(op);
+        block.operands().push_back(rhs);
+        for (auto &op : back_block.operands())
+          block.operands().push_back(op);
+        rhs = block;
+      }
     }
 
     codet if_expr("ifthenelse");
     if_expr.copy_to_operands(_cmp_cname, rhs);
     if_expr.location() = l;
+    //? empty file?
     if_expr.location().file("");
-
     move_to_front_block(if_expr);
   }
 
@@ -11207,7 +11357,9 @@ bool solidity_convertert::model_transaction(
   msg.value = instance.$balance
   instance.$balance -= value
   base.$balance += value
+  (_ESBMC_mutext_Base = true)
   (call to payable func)
+  (_ESBMC_mutext_Base = false)
   msg.sender = old_sender;
   msg.value = old_value
   */
@@ -11238,24 +11390,11 @@ bool solidity_convertert::model_transaction(
     if (get_func_decl_this_ref(ctor_json, this_expr))
       return true;
   }
-  exprt this_address = member_exprt(this_expr, "$address", addr_t);
-  exprt this_balance = member_exprt(this_expr, "$balance", val_t);
 
-  typet _addr_t = unsignedbv_typet(160);
-  _addr_t.set("#sol_type", "ADDRESS");
-  symbolt old_sender;
-  get_default_symbol(
-    old_sender,
-    debug_modulename,
-    _addr_t,
-    "old_sender",
-    "sol:@old_sender#" + std::to_string(aux_counter++),
-    loc);
-  symbolt &added_old_sender = *move_symbol_to_context(old_sender);
-  code_declt old_sender_decl(symbol_expr(added_old_sender));
-  added_old_sender.value = msg_sender;
-  old_sender_decl.operands().push_back(msg_sender);
-  front_block.move_to_operands(old_sender_decl);
+  if (get_high_level_call_wrapper(cname, this_expr, front_block, back_block))
+    return true;
+
+  exprt this_balance = member_exprt(this_expr, "$balance", val_t);
 
   symbolt old_value;
   get_default_symbol(
@@ -11277,12 +11416,6 @@ bool solidity_convertert::model_transaction(
   convert_expression_to_code(assign_val);
   front_block.move_to_operands(assign_val);
 
-  // msg_sender = this.$address;
-  exprt assign_sender = side_effect_exprt("assign", addr_t);
-  assign_sender.copy_to_operands(msg_sender, this_address);
-  convert_expression_to_code(assign_sender);
-  front_block.move_to_operands(assign_sender);
-
   // this.balance -= _val;
   exprt sub_assign = side_effect_exprt("assign-", val_t);
   sub_assign.copy_to_operands(this_balance, value);
@@ -11296,50 +11429,11 @@ bool solidity_convertert::model_transaction(
   convert_expression_to_code(add_assign);
   front_block.move_to_operands(add_assign);
 
-  // _ESBMC_mutex = true;
-  if (is_reentry_check)
-  {
-    side_effect_expr_function_callt lock;
-    get_library_function_call_no_args(
-      "_ESBMC_lock", "c:@F@_ESBMC_lock", empty_typet(), locationt(), lock);
-    exprt arg;
-    get_contract_mutex_expr(cname, this_expr, arg);
-    lock.arguments().push_back(arg);
-
-    convert_expression_to_code(lock);
-    front_block.move_to_operands(lock);
-  }
-
-  // _ESBMC_mutex = false;
-  if (is_reentry_check)
-  {
-    side_effect_expr_function_callt unlock;
-    get_library_function_call_no_args(
-      "_ESBMC_unlock",
-      "c:@F@_ESBMC_unlock",
-      empty_typet(),
-      locationt(),
-      unlock);
-    exprt arg;
-    get_contract_mutex_expr(cname, this_expr, arg);
-    unlock.arguments().push_back(arg);
-
-    convert_expression_to_code(unlock);
-    back_block.move_to_operands(unlock);
-  }
-
   // msg_value = old_value;
   exprt assign_val_restore = side_effect_exprt("assign", value.type());
   assign_val_restore.copy_to_operands(msg_value, symbol_expr(added_old_value));
   convert_expression_to_code(assign_val_restore);
   back_block.move_to_operands(assign_val_restore);
-
-  // msg_sender = old_sender;
-  exprt assign_sender_restore = side_effect_exprt("assign", addr_t);
-  assign_sender_restore.copy_to_operands(
-    msg_sender, symbol_expr(added_old_sender));
-  convert_expression_to_code(assign_sender_restore);
-  back_block.move_to_operands(assign_sender_restore);
 
   convert_expression_to_code(front_block);
   convert_expression_to_code(back_block);
@@ -11527,18 +11621,16 @@ bool solidity_convertert::get_call_value_definition(
     convert_expression_to_code(add_assign);
     then.move_to_operands(add_assign);
 
-    // _ESBMC_mutex = true;
     if (is_reentry_check)
     {
-      side_effect_expr_function_callt lock;
-      get_library_function_call_no_args(
-        "_ESBMC_lock", "c:@F@_ESBMC_lock", empty_typet(), locationt(), lock);
-      exprt arg;
-      get_contract_mutex_expr(cname, this_expr, arg);
-      lock.arguments().push_back(arg);
+      exprt _mutex;
+      get_contract_mutex_expr(cname, this_expr, _mutex);
 
-      convert_expression_to_code(lock);
-      then.move_to_operands(lock);
+      // _ESBMC_mutex = true;
+      exprt assign_lock = side_effect_exprt("assign", bool_type());
+      assign_lock.copy_to_operands(_mutex, gen_one(bool_type()));
+      convert_expression_to_code(assign_lock);
+      then.move_to_operands(assign_lock);
     }
 
     // func_call, e.g. receive(&_ESBMC_Object_str)
@@ -11549,22 +11641,16 @@ bool solidity_convertert::get_call_value_definition(
     convert_expression_to_code(call);
     then.move_to_operands(call);
 
-    // _ESBMC_mutex = false;
     if (is_reentry_check)
     {
-      side_effect_expr_function_callt unlock;
-      get_library_function_call_no_args(
-        "_ESBMC_unlock",
-        "c:@F@_ESBMC_unlock",
-        empty_typet(),
-        locationt(),
-        unlock);
-      exprt arg;
-      get_contract_mutex_expr(cname, this_expr, arg);
-      unlock.arguments().push_back(arg);
+      exprt _mutex;
+      get_contract_mutex_expr(cname, this_expr, _mutex);
 
-      convert_expression_to_code(unlock);
-      then.move_to_operands(unlock);
+      // _ESBMC_mutex = false;
+      exprt assign_unlock = side_effect_exprt("assign", bool_type());
+      assign_unlock.copy_to_operands(_mutex, gen_zero(bool_type()));
+      convert_expression_to_code(assign_unlock);
+      then.move_to_operands(assign_unlock);
     }
 
     // msg_value = old_value;
@@ -11755,18 +11841,16 @@ bool solidity_convertert::get_transfer_definition(
     convert_expression_to_code(add_assign);
     then.move_to_operands(add_assign);
 
-    // _ESBMC_mutex = true;
     if (is_reentry_check)
     {
-      side_effect_expr_function_callt lock;
-      get_library_function_call_no_args(
-        "_ESBMC_lock", "c:@F@_ESBMC_lock", empty_typet(), locationt(), lock);
-      exprt arg;
-      get_contract_mutex_expr(cname, this_expr, arg);
-      lock.arguments().push_back(arg);
+      exprt _mutex;
+      get_contract_mutex_expr(cname, this_expr, _mutex);
 
-      convert_expression_to_code(lock);
-      then.move_to_operands(lock);
+      // _ESBMC_mutex = true;
+      exprt assign_lock = side_effect_exprt("assign", bool_type());
+      assign_lock.copy_to_operands(_mutex, gen_one(bool_type()));
+      convert_expression_to_code(assign_lock);
+      then.move_to_operands(assign_lock);
     }
 
     // func_call, e.g. receive(&_ESBMC_Object_str)
@@ -11777,22 +11861,16 @@ bool solidity_convertert::get_transfer_definition(
     convert_expression_to_code(call);
     then.move_to_operands(call);
 
-    // _ESBMC_mutex = false;
     if (is_reentry_check)
     {
-      side_effect_expr_function_callt unlock;
-      get_library_function_call_no_args(
-        "_ESBMC_unlock",
-        "c:@F@_ESBMC_unlock",
-        empty_typet(),
-        locationt(),
-        unlock);
-      exprt arg;
-      get_contract_mutex_expr(cname, this_expr, arg);
-      unlock.arguments().push_back(arg);
+      exprt _mutex;
+      get_contract_mutex_expr(cname, this_expr, _mutex);
 
-      convert_expression_to_code(unlock);
-      then.move_to_operands(unlock);
+      // _ESBMC_mutex = false;
+      exprt assign_unlock = side_effect_exprt("assign", bool_type());
+      assign_unlock.copy_to_operands(_mutex, gen_zero(bool_type()));
+      convert_expression_to_code(assign_unlock);
+      then.move_to_operands(assign_unlock);
     }
 
     // msg_value = old_value;
@@ -11981,18 +12059,16 @@ bool solidity_convertert::get_send_definition(
     convert_expression_to_code(add_assign);
     then.move_to_operands(add_assign);
 
-    // _ESBMC_mutex = true;
     if (is_reentry_check)
     {
-      side_effect_expr_function_callt lock;
-      get_library_function_call_no_args(
-        "_ESBMC_lock", "c:@F@_ESBMC_lock", empty_typet(), locationt(), lock);
+      exprt _mutex;
+      get_contract_mutex_expr(cname, this_expr, _mutex);
 
-      exprt arg;
-      get_contract_mutex_expr(cname, this_expr, arg);
-      lock.arguments().push_back(arg);
-      convert_expression_to_code(lock);
-      then.move_to_operands(lock);
+      // _ESBMC_mutex = true;
+      exprt assign_lock = side_effect_exprt("assign", bool_type());
+      assign_lock.copy_to_operands(_mutex, gen_one(bool_type()));
+      convert_expression_to_code(assign_lock);
+      then.move_to_operands(assign_lock);
     }
 
     // func_call, e.g. receive(&_ESBMC_Object_str)
@@ -12003,22 +12079,16 @@ bool solidity_convertert::get_send_definition(
     convert_expression_to_code(call);
     then.move_to_operands(call);
 
-    // _ESBMC_mutex = false;
     if (is_reentry_check)
     {
-      side_effect_expr_function_callt unlock;
-      get_library_function_call_no_args(
-        "_ESBMC_unlock",
-        "c:@F@_ESBMC_unlock",
-        empty_typet(),
-        locationt(),
-        unlock);
-      exprt arg;
-      get_contract_mutex_expr(cname, this_expr, arg);
-      unlock.arguments().push_back(arg);
+      exprt _mutex;
+      get_contract_mutex_expr(cname, this_expr, _mutex);
 
-      convert_expression_to_code(unlock);
-      then.move_to_operands(unlock);
+      // _ESBMC_mutex = false;
+      exprt assign_unlock = side_effect_exprt("assign", bool_type());
+      assign_unlock.copy_to_operands(_mutex, gen_zero(bool_type()));
+      convert_expression_to_code(assign_unlock);
+      then.move_to_operands(assign_unlock);
     }
 
     // msg_value = old_value;
