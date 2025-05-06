@@ -10810,6 +10810,8 @@ bool solidity_convertert::get_high_level_member_access(
 
   if (cname_set.size() == 1)
   {
+    // skip the "if(..)"
+    // wrap it
     exprt front_block = code_blockt();
     exprt back_block = code_blockt();
     if (is_call_w_options)
@@ -10959,6 +10961,8 @@ bool solidity_convertert::get_high_level_member_access(
       rhs = _assign;
     }
     convert_expression_to_code(rhs);
+
+    // wrap it
     if (is_func_call)
     {
       if (is_call_w_options)
@@ -11262,7 +11266,8 @@ bool solidity_convertert::get_call_definition(
   exprt addr_expr = symbol_expr(addr_added_symbol);
   exprt msg_sender = symbol_expr(*context.find_symbol("c:@msg_sender"));
   symbolt this_sym = *context.find_symbol(call_id + "#this");
-  exprt this_address = member_exprt(symbol_expr(this_sym), "$address", addr_t);
+  exprt this_expr = symbol_expr(this_sym);
+  exprt this_address = member_exprt(this_expr, "$address", addr_t);
 
   // uint160_t old_sender =  msg_sender;
   typet _addr_t = unsignedbv_typet(160);
@@ -11294,11 +11299,35 @@ bool solidity_convertert::get_call_definition(
     convert_expression_to_code(assign_sender);
     then.move_to_operands(assign_sender);
 
+    if (is_reentry_check)
+    {
+      exprt _mutex;
+      get_contract_mutex_expr(cname, this_expr, _mutex);
+
+      // _ESBMC_mutex = true;
+      exprt assign_lock = side_effect_exprt("assign", bool_type());
+      assign_lock.copy_to_operands(_mutex, gen_one(bool_type()));
+      convert_expression_to_code(assign_lock);
+      then.move_to_operands(assign_lock);
+    }
+
     // _ESBMC_Nondet_Extcall_x();
     code_function_callt call;
     if (get_unbound_funccall(str, call))
       return true;
     then.move_to_operands(call);
+
+    if (is_reentry_check)
+    {
+      exprt _mutex;
+      get_contract_mutex_expr(cname, this_expr, _mutex);
+
+      // _ESBMC_mutex = false;
+      exprt assign_unlock = side_effect_exprt("assign", bool_type());
+      assign_unlock.copy_to_operands(_mutex, gen_zero(bool_type()));
+      convert_expression_to_code(assign_unlock);
+      then.move_to_operands(assign_unlock);
+    }
 
     // msg_sender = old_sender;
     exprt assign_sender_restore = side_effect_exprt("assign", addr_t);
