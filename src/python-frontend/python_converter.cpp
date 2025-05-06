@@ -447,6 +447,47 @@ exprt python_converter::handle_power_operator(exprt lhs, exprt rhs)
   return std::move(pow_expr);
 }
 
+exprt handle_float_vs_string(exprt &bin_expr, const std::string &op)
+{
+  if (op == "Eq")
+  {
+    // float == str → False (no exception)
+    bin_expr.make_false();
+  }
+  else if (op == "NotEq")
+  {
+    // float != str → True (no exception)
+    bin_expr.make_true();
+  }
+  else if (is_ordered_comparison(op))
+  {
+    // Python-style error: float < str → TypeError
+    std::string lower_op = op;
+    std::transform(
+      lower_op.begin(),
+      lower_op.end(),
+      lower_op.begin(),
+      [](unsigned char c) { return std::tolower(c); });
+
+    const auto &loc = bin_expr.location();
+    const auto it = operator_map.find(lower_op);
+    assert(it != operator_map.end());
+
+    std::ostringstream error;
+    error << "'" << it->second
+          << "' not supported between instances of 'float' and 'str'";
+
+    if (loc.is_not_nil())
+      error << " at " << loc.get_file() << ":" << loc.get_line();
+    else
+      error << " at <unknown location>";
+
+    throw std::runtime_error(error.str());
+  }
+
+  return bin_expr;
+}
+
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
   auto left = (element.contains("left")) ? element["left"] : element["target"];
@@ -703,43 +744,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   // This block emulates that behavior in ESBMC's symbolic execution: converting equality comparisons to
   // constants (false or true), and rejecting invalid ordered comparisons with a runtime error.
   if (is_float_vs_char(lhs, rhs))
-  {
-    if (op == "Eq")
-    {
-      // float == str → False (no exception)
-      bin_expr.make_false();
-    }
-    else if (op == "NotEq")
-    {
-      // float != str → True (no exception)
-      bin_expr.make_true();
-    }
-    else if (is_ordered_comparison(op))
-    {
-      // Python-style error: float < str → TypeError
-      std::string lower_op = op;
-      std::transform(
-        lower_op.begin(),
-        lower_op.end(),
-        lower_op.begin(),
-        [](unsigned char c) { return std::tolower(c); });
-
-      const auto &loc = bin_expr.location();
-      const auto it = operator_map.find(lower_op);
-      assert(it != operator_map.end());
-
-      std::ostringstream error;
-      error << "'" << it->second
-            << "' not supported between instances of 'float' and 'str'";
-
-      if (loc.is_not_nil())
-        error << " at " << loc.get_file() << ":" << loc.get_line();
-      else
-        error << " at <unknown location>";
-
-      throw std::runtime_error(error.str());
-    }
-  }
+    return handle_float_vs_string(bin_expr, op);
 
   // floor division (//) operation corresponds to an int division with floor rounding
   // So we need to emulate this behavior here:
