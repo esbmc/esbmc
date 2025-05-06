@@ -1465,7 +1465,7 @@ void python_converter::get_var_assign(
     if (lhs_symbol)
     {
       if (
-        lhs_type == "str" || lhs_type == "chr" || lhs_type == "list" ||
+        lhs_type == "str" || lhs_type == "chr" || lhs_type == "ord" || lhs_type == "list" ||
         rhs.type().is_array())
       {
         /* When a string is assigned the result of a concatenation, we initially

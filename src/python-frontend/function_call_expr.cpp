@@ -266,6 +266,54 @@ exprt function_call_expr::handle_oct(nlohmann::json &arg) const
   return converter_.make_char_array_expr(string_literal, t);
 }
 
+exprt function_call_expr::handle_ord(nlohmann::json &arg) const
+{
+  int code_point = 0;
+
+  // Ensure the argument is a string
+  if (arg.contains("value") && arg["value"].is_string())
+  {
+    const std::string &s = arg["value"].get<std::string>();
+
+    // Ensure it's exactly one character
+    if (s.length() != 1)
+    {
+      throw std::runtime_error(
+        "TypeError: ord() expected a character, but string of length " +
+        std::to_string(s.length()) + " found");
+    }
+
+    code_point = static_cast<unsigned char>(s[0]);  // safe for ASCII
+
+    // For full Unicode (e.g., €), handle multibyte UTF-8
+    if ((s[0] & 0x80) != 0) // high bit set -> possibly UTF-8
+    {
+      wchar_t wc;
+      mbstate_t state{};
+      const char* src = s.c_str();
+      size_t len = mbrtowc(&wc, src, s.length(), &state);
+
+      if (len == static_cast<size_t>(-1) || len == static_cast<size_t>(-2))
+        throw std::runtime_error("ValueError: ord() failed to decode UTF-8");
+
+      code_point = static_cast<int>(wc);
+    }
+  }
+  else
+  {
+    throw std::runtime_error("TypeError: ord() argument must be a string");
+  }
+
+  // Replace the arg with the integer value
+  arg["value"] = code_point;
+  arg["type"] = "int";
+
+  // Build and return the integer expression
+  exprt expr = converter_.get_expr(arg);
+  expr.type() = type_handler_.get_typet("int", 0);
+  return expr;
+}
+
 exprt function_call_expr::build_constant_from_arg() const
 {
   const std::string &func_name = function_id_.get_function();
@@ -291,6 +339,10 @@ exprt function_call_expr::build_constant_from_arg() const
   // Handle chr(): convert integer to single-character string
   else if (func_name == "chr")
     handle_chr(arg);
+
+  // Handle ord(): convert single-character string to integer Unicode code point
+  else if (func_name == "ord")
+    return handle_ord(arg);
 
   // Handle hex: Handles hexadecimal string arguments
   else if (func_name == "hex")
