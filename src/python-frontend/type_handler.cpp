@@ -174,10 +174,11 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   // str: immutable sequences of Unicode characters
   // chr(): returns a 1-character string
   // hex(): returns string representation of integer in hex
-  // oct() — Converts an integer to a lowercase octal string
+  // oct(): Converts an integer to a lowercase octal string
+  // ord(): Converts a 1-character string to its Unicode code point (as integer)
   if (
     ast_type == "str" || ast_type == "chr" || ast_type == "hex" ||
-    ast_type == "oct")
+    ast_type == "oct" || ast_type == "ord")
   {
     if (type_size == 1)
     {
