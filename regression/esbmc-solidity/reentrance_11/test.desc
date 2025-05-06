@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol  --contract Attacker --k-induction --reentry-check --show-stacktrace --no-standard-checks
+^VERIFICATION FAILED$
