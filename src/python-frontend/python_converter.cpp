@@ -385,6 +385,40 @@ static void attach_symbol_location(exprt &expr, contextt &symbol_table)
     expr.location() = sym->location;
 }
 
+exprt handle_floor_division(const exprt &lhs, const exprt &rhs, const exprt &bin_expr)
+{
+  typet div_type = bin_expr.type();
+  // remainder = num%den;
+  exprt remainder("mod", div_type);
+  remainder.copy_to_operands(lhs, rhs);
+
+  // Get num signal
+  exprt is_num_neg("<", bool_type());
+  is_num_neg.copy_to_operands(lhs, gen_zero(div_type));
+  // Get den signal
+  exprt is_den_neg("<", bool_type());
+  is_den_neg.copy_to_operands(rhs, gen_zero(div_type));
+
+  // remainder != 0
+  exprt pos_remainder("notequal", bool_type());
+  pos_remainder.copy_to_operands(remainder, gen_zero(div_type));
+
+  // diff_signals = is_num_neg ^ is_den_neg;
+  exprt diff_signals("bitxor", bool_type());
+  diff_signals.copy_to_operands(is_num_neg, is_den_neg);
+
+  exprt cond("and", bool_type());
+  cond.copy_to_operands(pos_remainder, diff_signals);
+  exprt if_expr("if", div_type);
+  if_expr.copy_to_operands(cond, gen_one(div_type), gen_zero(div_type));
+
+  // floor_div = (lhs / rhs) - (1 if (lhs % rhs != 0) and (lhs < 0) ^ (rhs < 0) else 0)
+  exprt floor_div("-", div_type);
+  floor_div.copy_to_operands(bin_expr, if_expr); //bin_expr contains lhs/rhs
+
+  return floor_div;
+}
+
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
   auto left = (element.contains("left")) ? element["left"] : element["target"];
@@ -709,38 +743,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   // int result = (num/div) - (num%div != 0 && ((num < 0) ^ (den<0)) ? 1 : 0)
   // e.g.: -5//2 equals to -3, and 5//2 equals to 2
   if (op == "FloorDiv")
-  {
-    typet div_type = bin_expr.type();
-    // remainder = num%den;
-    exprt remainder("mod", div_type);
-    remainder.copy_to_operands(lhs, rhs);
-
-    // Get num signal
-    exprt is_num_neg("<", bool_type());
-    is_num_neg.copy_to_operands(lhs, gen_zero(div_type));
-    // Get den signal
-    exprt is_den_neg("<", bool_type());
-    is_den_neg.copy_to_operands(rhs, gen_zero(div_type));
-
-    // remainder != 0
-    exprt pos_remainder("notequal", bool_type());
-    pos_remainder.copy_to_operands(remainder, gen_zero(div_type));
-
-    // diff_signals = is_num_neg ^ is_den_neg;
-    exprt diff_signals("bitxor", bool_type());
-    diff_signals.copy_to_operands(is_num_neg, is_den_neg);
-
-    exprt cond("and", bool_type());
-    cond.copy_to_operands(pos_remainder, diff_signals);
-    exprt if_expr("if", div_type);
-    if_expr.copy_to_operands(cond, gen_one(div_type), gen_zero(div_type));
-
-    // floor_div = (lhs / rhs) - (1 if (lhs % rhs != 0) and (lhs < 0) ^ (rhs < 0) else 0)
-    exprt floor_div("-", div_type);
-    floor_div.copy_to_operands(bin_expr, if_expr); //bin_expr contains lhs/rhs
-
-    return floor_div;
-  }
+    return handle_floor_division(lhs, rhs, bin_expr);
 
   // Handle chained comparisons like: assert 0 <= x <= 1
   if (element.contains("comparators") && element["comparators"].size() > 1)
