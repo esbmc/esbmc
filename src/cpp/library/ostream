@@ -167,12 +167,18 @@ ios::streampos ostream::tellp()
   __ESBMC_assert(_filepos >= 0, "Invalid stream position");
   return _filepos;
 }
-} // namespace std
-
-namespace std
+ostream &ostream::flush()
 {
+  return *this;
+}
+
 //Output manipulators
 ostream &ends(ostream &os);
+
+inline ostream &flush(ostream &os)
+{
+  return os.flush();
+}
 } // namespace std
 
 #endif
