@@ -106,6 +106,12 @@ private:
    */
   exprt handle_oct(nlohmann::json &arg) const;
 
+  /*
+   * Handles ord(str) conversions by extracting the Unicode code point
+   * (as an integer) from a single-character string expression.
+   */
+  exprt handle_ord(nlohmann::json &arg) const;
+
 protected:
   symbol_id function_id_;
   const nlohmann::json &call_;
