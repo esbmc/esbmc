@@ -113,6 +113,8 @@ private:
 
   exprt get_binary_operator_expr(const nlohmann::json &element);
 
+  exprt handle_power_operator(exprt lhs, exprt rhs);
+
   exprt get_logical_operator_expr(const nlohmann::json &element);
 
   exprt get_conditional_stm(const nlohmann::json &ast_node);

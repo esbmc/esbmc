@@ -419,6 +419,34 @@ exprt handle_floor_division(const exprt &lhs, const exprt &rhs, const exprt &bin
   return floor_div;
 }
 
+exprt python_converter::handle_power_operator(exprt lhs, exprt rhs)
+{
+  if (lhs.is_symbol())
+  {
+    symbolt *s = symbol_table_.find_symbol(lhs.identifier());
+    assert(s);
+    if (!s->value.value().empty())
+      lhs = s->value;
+  }
+  if (rhs.is_symbol())
+  {
+    symbolt *s = symbol_table_.find_symbol(rhs.identifier());
+    assert(s);
+    if (!s->value.value().empty())
+      rhs = s->value;
+  }
+  else if (is_math_expr(rhs))
+  {
+    rhs = compute_math_expr(rhs);
+  }
+  BigInt base(
+    binary2integer(lhs.value().as_string(), lhs.type().is_signedbv()));
+  BigInt exp(
+    binary2integer(rhs.value().as_string(), rhs.type().is_signedbv()));
+  constant_exprt pow_expr(power(base, exp), lhs.type());
+  return std::move(pow_expr);
+}
+
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
   auto left = (element.contains("left")) ? element["left"] : element["target"];
@@ -639,32 +667,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   // Replace ** operation with the resultant constant.
   if (op == "Pow" || op == "power")
-  {
-    if (lhs.is_symbol())
-    {
-      symbolt *s = symbol_table_.find_symbol(lhs.identifier());
-      assert(s);
-      if (!s->value.value().empty())
-        lhs = s->value;
-    }
-    if (rhs.is_symbol())
-    {
-      symbolt *s = symbol_table_.find_symbol(rhs.identifier());
-      assert(s);
-      if (!s->value.value().empty())
-        rhs = s->value;
-    }
-    else if (is_math_expr(rhs))
-    {
-      rhs = compute_math_expr(rhs);
-    }
-    BigInt base(
-      binary2integer(lhs.value().as_string(), lhs.type().is_signedbv()));
-    BigInt exp(
-      binary2integer(rhs.value().as_string(), rhs.type().is_signedbv()));
-    constant_exprt pow_expr(power(base, exp), lhs.type());
-    return std::move(pow_expr);
-  }
+    return handle_power_operator(lhs, rhs);
 
   // Determine the result type of the binary operation:
   // If it's a relational operation (e.g., <, >, ==), the result is a boolean type.
