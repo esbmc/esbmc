@@ -274,29 +274,56 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
   if (arg.contains("value") && arg["value"].is_string())
   {
     const std::string &s = arg["value"].get<std::string>();
+    const unsigned char* bytes = reinterpret_cast<const unsigned char*>(s.c_str());
+    size_t length = s.length();
 
-    // Ensure it's exactly one character
-    if (s.length() != 1)
+    if (length == 0)
     {
-      throw std::runtime_error(
-        "TypeError: ord() expected a character, but string of length " +
-        std::to_string(s.length()) + " found");
+      throw std::runtime_error("TypeError: ord() expected a character, but string of length 0 found");
     }
 
-    code_point = static_cast<unsigned char>(s[0]);  // safe for ASCII
-
-    // For full Unicode (e.g., €), handle multibyte UTF-8
-    if ((s[0] & 0x80) != 0) // high bit set -> possibly UTF-8
+    // Manual UTF-8 decoding
+    if ((bytes[0] & 0x80) == 0)
     {
-      wchar_t wc;
-      mbstate_t state{};
-      const char* src = s.c_str();
-      size_t len = mbrtowc(&wc, src, s.length(), &state);
+      // 1-byte ASCII
+      if (length != 1)
+        throw std::runtime_error("TypeError: ord() expected a single character");
 
-      if (len == static_cast<size_t>(-1) || len == static_cast<size_t>(-2))
-        throw std::runtime_error("ValueError: ord() failed to decode UTF-8");
+      code_point = bytes[0];
+    }
+    else if ((bytes[0] & 0xE0) == 0xC0)
+    {
+      // 2-byte sequence
+      if (length != 2)
+        throw std::runtime_error("TypeError: ord() expected a single character");
 
-      code_point = static_cast<int>(wc);
+      code_point = ((bytes[0] & 0x1F) << 6) |
+                   (bytes[1] & 0x3F);
+    }
+    else if ((bytes[0] & 0xF0) == 0xE0)
+    {
+      // 3-byte sequence
+      if (length != 3)
+        throw std::runtime_error("TypeError: ord() expected a single character");
+
+      code_point = ((bytes[0] & 0x0F) << 12) |
+                   ((bytes[1] & 0x3F) << 6) |
+                   (bytes[2] & 0x3F);
+    }
+    else if ((bytes[0] & 0xF8) == 0xF0)
+    {
+      // 4-byte sequence
+      if (length != 4)
+        throw std::runtime_error("TypeError: ord() expected a single character");
+
+      code_point = ((bytes[0] & 0x07) << 18) |
+                   ((bytes[1] & 0x3F) << 12) |
+                   ((bytes[2] & 0x3F) << 6) |
+                   (bytes[3] & 0x3F);
+    }
+    else
+    {
+      throw std::runtime_error("ValueError: ord() received invalid UTF-8 input");
     }
   }
   else
