@@ -2079,11 +2079,11 @@ bool solidity_convertert::get_unbound_expr(
     get_contract_mutex_expr(c_name, this_expr, _mutex);
 
     exprt assign_lock = side_effect_exprt("assign", bool_type());
-    assign_lock.copy_to_operands(_mutex, gen_one(bool_type()));
+    assign_lock.copy_to_operands(_mutex, true_exprt());
     convert_expression_to_code(assign_lock);
 
     exprt assign_unlock = side_effect_exprt("assign", bool_type());
-    assign_unlock.copy_to_operands(_mutex, gen_zero(bool_type()));
+    assign_unlock.copy_to_operands(_mutex, false_exprt());
     convert_expression_to_code(assign_unlock);
 
     // this should before the unbound_func_call
@@ -9119,8 +9119,8 @@ void solidity_convertert::get_contract_mutex_name(
   std::string &name,
   std::string &id)
 {
-  name = "_ESBMC_mutex_" + c_name;
-  id = "sol:@" + name + "#";
+  name = "$mutex_" + c_name;
+  id = "sol:@C@" + c_name + "@" + name + "#";
 }
 
 // for reentry check
@@ -9188,20 +9188,23 @@ bool solidity_convertert::get_high_level_call_wrapper(
     get_contract_mutex_expr(cname, this_expr, _mutex);
 
     // _ESBMC_mutex = true;
-    exprt assign_lock = side_effect_exprt("assign", bool_type());
-    assign_lock.copy_to_operands(_mutex, gen_one(bool_type()));
+    typet _t = bool_type();
+    _t.set("#sol_type", "BOOL");
+    _t.set("#cpp_type", "bool");
+    exprt _true = true_exprt();
+    exprt _false = false_exprt();
+    _true.location() = this_expr.location();
+    _false.location() = this_expr.location();
+    exprt assign_lock = side_effect_exprt("assign", _t);
+    assign_lock.copy_to_operands(_mutex, _true);
+    assign_lock.location() = this_expr.location();
     convert_expression_to_code(assign_lock);
     front_block.move_to_operands(assign_lock);
-  }
-
-  if (is_reentry_check)
-  {
-    exprt _mutex;
-    get_contract_mutex_expr(cname, this_expr, _mutex);
 
     // _ESBMC_mutex = false;
-    exprt assign_unlock = side_effect_exprt("assign", bool_type());
-    assign_unlock.copy_to_operands(_mutex, gen_zero(bool_type()));
+    exprt assign_unlock = side_effect_exprt("assign", _t);
+    assign_unlock.copy_to_operands(_mutex, _false);
+    assign_unlock.location() = this_expr.location();
     convert_expression_to_code(assign_unlock);
     back_block.move_to_operands(assign_unlock);
   }
@@ -10113,6 +10116,7 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
     std::string debug_modulename = get_modulename_from_path(absolute_path);
     typet _t = bool_type();
     _t.set("#sol_type", "BOOL");
+    _t.set("#cpp_type", "bool");
 
     get_builtin_symbol(tx_name, tx_id, _t, l, gen_zero(_t), contract_name);
   }
@@ -10172,6 +10176,8 @@ void solidity_convertert::move_builtin_to_contract(
 
   struct_typet::componentt comp(name, name, t);
   comp.set_access("private");
+  comp.set("#lvalue", 1);
+
   if (!is_method)
   {
     comp.type().set("#member_name", c_sym.type.tag());
@@ -10200,7 +10206,7 @@ void solidity_convertert::get_builtin_symbol(
   get_default_symbol(sym, "C++", t, name, id, l);
   sym.type.set("#sol_state_var", "1");
   sym.file_local = true;
-
+  sym.lvalue = true;
   auto &added_sym = *move_symbol_to_context(sym);
   code_declt decl(symbol_expr(added_sym));
   added_sym.value = val;
@@ -11306,7 +11312,7 @@ bool solidity_convertert::get_call_definition(
 
       // _ESBMC_mutex = true;
       exprt assign_lock = side_effect_exprt("assign", bool_type());
-      assign_lock.copy_to_operands(_mutex, gen_one(bool_type()));
+      assign_lock.copy_to_operands(_mutex, true_exprt());
       convert_expression_to_code(assign_lock);
       then.move_to_operands(assign_lock);
     }
@@ -11324,7 +11330,7 @@ bool solidity_convertert::get_call_definition(
 
       // _ESBMC_mutex = false;
       exprt assign_unlock = side_effect_exprt("assign", bool_type());
-      assign_unlock.copy_to_operands(_mutex, gen_zero(bool_type()));
+      assign_unlock.copy_to_operands(_mutex, false_exprt());
       convert_expression_to_code(assign_unlock);
       then.move_to_operands(assign_unlock);
     }
@@ -11657,7 +11663,7 @@ bool solidity_convertert::get_call_value_definition(
 
       // _ESBMC_mutex = true;
       exprt assign_lock = side_effect_exprt("assign", bool_type());
-      assign_lock.copy_to_operands(_mutex, gen_one(bool_type()));
+      assign_lock.copy_to_operands(_mutex, true_exprt());
       convert_expression_to_code(assign_lock);
       then.move_to_operands(assign_lock);
     }
@@ -11677,7 +11683,7 @@ bool solidity_convertert::get_call_value_definition(
 
       // _ESBMC_mutex = false;
       exprt assign_unlock = side_effect_exprt("assign", bool_type());
-      assign_unlock.copy_to_operands(_mutex, gen_zero(bool_type()));
+      assign_unlock.copy_to_operands(_mutex, false_exprt());
       convert_expression_to_code(assign_unlock);
       then.move_to_operands(assign_unlock);
     }
@@ -11877,7 +11883,9 @@ bool solidity_convertert::get_transfer_definition(
 
       // _ESBMC_mutex = true;
       exprt assign_lock = side_effect_exprt("assign", bool_type());
-      assign_lock.copy_to_operands(_mutex, gen_one(bool_type()));
+      //! Do not use gen_one(bool_type()) to replace true_exprt()
+      //! it will make the verification process stuck somehow
+      assign_lock.copy_to_operands(_mutex, true_exprt());
       convert_expression_to_code(assign_lock);
       then.move_to_operands(assign_lock);
     }
@@ -11897,7 +11905,7 @@ bool solidity_convertert::get_transfer_definition(
 
       // _ESBMC_mutex = false;
       exprt assign_unlock = side_effect_exprt("assign", bool_type());
-      assign_unlock.copy_to_operands(_mutex, gen_zero(bool_type()));
+      assign_unlock.copy_to_operands(_mutex, false_exprt());
       convert_expression_to_code(assign_unlock);
       then.move_to_operands(assign_unlock);
     }
@@ -12095,7 +12103,7 @@ bool solidity_convertert::get_send_definition(
 
       // _ESBMC_mutex = true;
       exprt assign_lock = side_effect_exprt("assign", bool_type());
-      assign_lock.copy_to_operands(_mutex, gen_one(bool_type()));
+      assign_lock.copy_to_operands(_mutex, true_exprt());
       convert_expression_to_code(assign_lock);
       then.move_to_operands(assign_lock);
     }
@@ -12115,7 +12123,7 @@ bool solidity_convertert::get_send_definition(
 
       // _ESBMC_mutex = false;
       exprt assign_unlock = side_effect_exprt("assign", bool_type());
-      assign_unlock.copy_to_operands(_mutex, gen_zero(bool_type()));
+      assign_unlock.copy_to_operands(_mutex, false_exprt());
       convert_expression_to_code(assign_unlock);
       then.move_to_operands(assign_unlock);
     }
