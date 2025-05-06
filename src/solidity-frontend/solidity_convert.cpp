@@ -10363,7 +10363,7 @@ void solidity_convertert::get_aux_property_function(
 
     // if(get_object(_addr, "A") != NULL)
     exprt _null = gen_zero(pointer_typet(empty_typet()));
-    exprt _equal = exprt("=", bool_type());
+    exprt _equal = exprt("notequal", bool_type());
     _equal.operands().push_back(get_obj);
     _equal.operands().push_back(_null);
     _equal.location() = loc;
