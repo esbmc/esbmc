@@ -29,6 +29,17 @@ public:
   }
 };
 
+typedef void (*new_handler)();
+static new_handler current_handler = 0;
+
+// TODO: add handler to new model
+inline new_handler set_new_handler(new_handler handler) /* noexcept */
+{
+  new_handler old = current_handler;
+  current_handler = handler;
+  return old;
+}
+
 #if __cplusplus >= 201703L
 enum class align_val_t : size_t
 {
