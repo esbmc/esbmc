@@ -6212,7 +6212,7 @@ bool solidity_convertert::get_sol_builtin_ref(
         std::string type = (sol_str[0] == 'U') ? "UINT" : "INT";
         std::string width = sol_str.substr(type.size()); // Extract width part
         exprt is_signed =
-          type == "INT" ? gen_one(bool_type()) : gen_zero(bool_type());
+          type == "INT" ? exprt(true_exprt()) : exprt(false_exprt());
 
         side_effect_expr_function_callt call;
         if (name == "max")
@@ -10858,15 +10858,42 @@ bool solidity_convertert::get_high_level_member_access(
     log_error("Unsupported return tuple");
     return true;
   }
+
+  bool is_return_void = member.type().is_empty() ||
+                        (member.type().is_code() &&
+                         to_code_type(member.type()).return_type().is_empty());
+
+  // construct auxilirary funciton
+  assert(!base.name().empty());
+  assert(!member.name().empty());
+  std::string fname = base.name().as_string() + "_" + member.name().as_string();
+  std::string fid = "sol:@C@" + cname + "@F@" + fname + "#";
+  code_typet ft;
+  if (!is_return_void)
+    ft.return_type() = member.type();
+  else
+    ft.return_type() = empty_typet();
+  symbolt fs;
+  std::string debug_modulename = get_modulename_from_path(absolute_path);
+  get_default_symbol(fs, debug_modulename, ft, fname, fid, locationt());
+  fs.lvalue = true;
+  fs.is_extern = false;
+  fs.file_local = true;
+  auto &added_fsymbol = *move_symbol_to_context(fs);
+
+  // function body
+  exprt func_body = code_blockt();
+  code_labelt label;
+  label.set_label("__ESBMC_HIDE");
+  label.code() = code_skipt();
+  func_body.move_to_operands(label);
+
   // get 'x._ESBMC_bind_cname'
   exprt bind_expr =
     member_exprt(base, "_ESBMC_bind_cname", pointer_typet(signed_char_type()));
 
   // get memebr type
-  exprt tmp = code_skipt();
-  bool is_return_void = member.type().is_empty() ||
-                        (member.type().is_code() &&
-                         to_code_type(member.type()).return_type().is_empty());
+  exprt tmp;
   if (!is_return_void)
   {
     std::string aux_name, aux_id;
@@ -10886,7 +10913,7 @@ bool solidity_convertert::get_high_level_member_access(
     code_declt decl(symbol_expr(added_symbol));
 
     tmp = symbol_expr(added_symbol);
-    move_to_front_block(decl);
+    func_body.move_to_operands(decl);
   }
 
   // rhs
@@ -10917,7 +10944,7 @@ bool solidity_convertert::get_high_level_member_access(
     get_static_contract_instance(str, dump);
     exprt _base = symbol_expr(dump);
 
-    bool is_revert = false;
+    // bool is_revert = false;
     if (is_func_call)
     {
       // e.g. x.call() y.call(). we need to find the definiton of the call beyond the contract x/y seperately
@@ -10956,24 +10983,29 @@ bool solidity_convertert::get_high_level_member_access(
           memcall = member_exprt(_base, member.name(), member.type());
         else
         {
-          // revert
-          side_effect_expr_function_callt call;
-          get_library_function_call_no_args(
-            "__ESBMC_assume", "c:@F@__ESBMC_assume", empty_typet(), l, call);
+          // this should be a revert
+          // however, the revert cases have little verification value
+          // also, esbmc-kind havs trouble in __ESBMC_asusme(false) (v7.8)
+          // thus skip it
+          // side_effect_expr_function_callt call;
+          // get_library_function_call_no_args(
+          //   "__ESBMC_assume", "c:@F@__ESBMC_assume", empty_typet(), l, call);
 
-          exprt arg = false_exprt();
-          call.arguments().push_back(arg);
-          memcall = call;
-          is_revert = true;
+          // exprt arg = false_exprt();
+          // call.arguments().push_back(arg);
+          // memcall = call;
+          // is_revert = true;
+
+          continue;
         }
       }
     }
     rhs = memcall;
-    if (!is_return_void && !is_revert)
+    if (!is_return_void) // && !is_revert
     {
       exprt _assign = side_effect_exprt("assign", tmp.type());
       convert_type_expr(ns, memcall, tmp.type());
-      _assign.move_to_operands(tmp, memcall);
+      _assign.copy_to_operands(tmp, memcall);
       rhs = _assign;
     }
     convert_expression_to_code(rhs);
@@ -11013,11 +11045,26 @@ bool solidity_convertert::get_high_level_member_access(
     if_expr.location() = l;
     //? empty file?
     if_expr.location().file("");
-    move_to_front_block(if_expr);
+    func_body.move_to_operands(if_expr);
   }
 
-  new_expr = tmp;
-  new_expr.location() = l;
+  // return
+  if (!is_return_void)
+  {
+    code_returnt _ret;
+    _ret.return_value() = tmp;
+    func_body.move_to_operands(_ret);
+  }
+
+  added_fsymbol.value = func_body;
+
+  // construct function call
+  side_effect_expr_function_callt _call;
+  _call.function() = symbol_expr(added_fsymbol);
+  _call.type() = ft.return_type();
+  _call.location() = l;
+
+  new_expr = _call;
 
   log_debug("solidity", "\tSuccessfully modelled member access.");
   return false;
@@ -11277,7 +11324,7 @@ bool solidity_convertert::get_call_definition(
   code_labelt label;
   label.set_label("__ESBMC_HIDE");
   label.code() = code_skipt();
-  func_body.operands().push_back(label);
+  func_body.move_to_operands(label);
 
   exprt addr_expr = symbol_expr(addr_added_symbol);
   exprt msg_sender = symbol_expr(*context.find_symbol("c:@msg_sender"));
@@ -11354,7 +11401,7 @@ bool solidity_convertert::get_call_definition(
 
     // return true;
     code_returnt ret_true;
-    ret_true.return_value() = gen_one(bool_type());
+    ret_true.return_value() = true_exprt();
     then.move_to_operands(ret_true);
 
     // _addr == _ESBMC_Object_str.$address
@@ -11372,7 +11419,7 @@ bool solidity_convertert::get_call_definition(
 
   // add "Return false;" in the end
   code_returnt return_expr;
-  return_expr.return_value() = gen_zero(bool_type());
+  return_expr.return_value() = false_exprt();
   func_body.move_to_operands(return_expr);
 
   added_symbol.value = func_body;
@@ -11714,7 +11761,7 @@ bool solidity_convertert::get_call_value_definition(
 
     // return true;
     code_returnt ret_true;
-    ret_true.return_value() = gen_one(bool_type());
+    ret_true.return_value() = true_exprt();
     then.move_to_operands(ret_true);
 
     codet if_expr("ifthenelse");
@@ -11723,7 +11770,7 @@ bool solidity_convertert::get_call_value_definition(
   }
   // add "Return false;" in the end
   code_returnt return_expr;
-  return_expr.return_value() = gen_zero(bool_type());
+  return_expr.return_value() = false_exprt();
   func_body.move_to_operands(return_expr);
 
   added_symbol.value = func_body;
@@ -11936,7 +11983,7 @@ bool solidity_convertert::get_transfer_definition(
 
     // return true;
     code_returnt ret_true;
-    ret_true.return_value() = gen_one(bool_type());
+    ret_true.return_value() = true_exprt();
     then.move_to_operands(ret_true);
 
     codet if_expr("ifthenelse");
@@ -11945,7 +11992,7 @@ bool solidity_convertert::get_transfer_definition(
   }
   // add "Return false;" in the end
   code_returnt return_expr;
-  return_expr.return_value() = gen_zero(bool_type());
+  return_expr.return_value() = false_exprt();
   func_body.move_to_operands(return_expr);
 
   added_symbol.value = func_body;
