@@ -139,6 +139,8 @@ private:
 
   void promote_int_to_float(exprt &op, const typet &target_type) const;
 
+  void handle_float_division(exprt &lhs, exprt &rhs, exprt &bin_expr) const;
+
   void get_attributes_from_self(
     const nlohmann::json &method_body,
     struct_typet &clazz);
