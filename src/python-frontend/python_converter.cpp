@@ -254,6 +254,33 @@ void python_converter::update_symbol(const exprt &expr) const
   }
 }
 
+/// Promote an integer constant expression to floatbv type if needed.
+/// Modifies the operand in place.
+void python_converter::promote_int_to_float(exprt &op, const typet &target_type) const
+{
+  typet &op_type = op.type();
+  if (op_type.is_signedbv() || op_type.is_unsignedbv())
+  {
+    if (op.is_constant())
+    {
+      try
+      {
+        const BigInt value = binary2integer(op.value().as_string(), op_type.is_signedbv());
+        const std::string float_literal = std::to_string(value.to_int64()) + ".0";
+        convert_float_literal(float_literal, op);
+      }
+      catch (const std::exception &e)
+      {
+        log_error("promote_int_to_float: Failed to promote operand to float: {}", e.what());
+        return;
+      }
+    }
+    op.type() = target_type;
+    if (op.is_symbol())
+      update_symbol(op);
+  }
+}
+
 void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
 {
   typet &lhs_type = lhs.type();
@@ -286,7 +313,30 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
         e.what());
     }
   }
-  // Case 2: Align bit-widths between LHS and RHS if they differ
+  // Case 2: Determine result type for Python's true division ("/")
+  else if (lhs_type.is_floatbv() &&
+         rhs.id() == "/" &&
+         rhs.operands().size() == 2)
+  {
+    const auto &ops = rhs.operands();
+    if (!ops[0].is_constant() || !ops[1].is_constant())
+      return;
+
+    // Check if the divisor is a constant zero
+    const auto &divisor = ops[1];
+    const std::string &val = divisor.value().as_string();
+    if (binary2integer(val, divisor.type().is_signedbv()) == 0)
+      return;
+
+    const typet float_type = lhs_type;
+
+    for (exprt &op : rhs.operands())
+      promote_int_to_float(op, float_type);
+
+    rhs.type() = float_type;
+    rhs.id(get_op("div", float_type));
+  }
+  // Case 3: Align bit-widths between LHS and RHS if they differ
   else if (lhs_type.width() != rhs_type.width())
   {
     try
