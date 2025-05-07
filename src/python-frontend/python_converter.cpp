@@ -256,7 +256,8 @@ void python_converter::update_symbol(const exprt &expr) const
 
 /// Promote an integer constant expression to floatbv type if needed.
 /// Modifies the operand in place.
-void python_converter::promote_int_to_float(exprt &op, const typet &target_type) const
+void python_converter::promote_int_to_float(exprt &op, const typet &target_type)
+  const
 {
   typet &op_type = op.type();
   if (op_type.is_signedbv() || op_type.is_unsignedbv())
@@ -265,13 +266,17 @@ void python_converter::promote_int_to_float(exprt &op, const typet &target_type)
     {
       try
       {
-        const BigInt value = binary2integer(op.value().as_string(), op_type.is_signedbv());
-        const std::string float_literal = std::to_string(value.to_int64()) + ".0";
+        const BigInt value =
+          binary2integer(op.value().as_string(), op_type.is_signedbv());
+        const std::string float_literal =
+          std::to_string(value.to_int64()) + ".0";
         convert_float_literal(float_literal, op);
       }
       catch (const std::exception &e)
       {
-        log_error("promote_int_to_float: Failed to promote operand to float: {}", e.what());
+        log_error(
+          "promote_int_to_float: Failed to promote operand to float: {}",
+          e.what());
         return;
       }
     }
@@ -314,9 +319,8 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
     }
   }
   // Case 2: Determine result type for Python's true division ("/")
-  else if (lhs_type.is_floatbv() &&
-         rhs.id() == "/" &&
-         rhs.operands().size() == 2)
+  else if (
+    lhs_type.is_floatbv() && rhs.id() == "/" && rhs.operands().size() == 2)
   {
     const auto &ops = rhs.operands();
     if (!ops[0].is_constant() || !ops[1].is_constant())
@@ -435,7 +439,10 @@ static void attach_symbol_location(exprt &expr, contextt &symbol_table)
     expr.location() = sym->location;
 }
 
-exprt handle_floor_division(const exprt &lhs, const exprt &rhs, const exprt &bin_expr)
+exprt handle_floor_division(
+  const exprt &lhs,
+  const exprt &rhs,
+  const exprt &bin_expr)
 {
   typet div_type = bin_expr.type();
   // remainder = num%den;
@@ -491,8 +498,7 @@ exprt python_converter::handle_power_operator(exprt lhs, exprt rhs)
   }
   BigInt base(
     binary2integer(lhs.value().as_string(), lhs.type().is_signedbv()));
-  BigInt exp(
-    binary2integer(rhs.value().as_string(), rhs.type().is_signedbv()));
+  BigInt exp(binary2integer(rhs.value().as_string(), rhs.type().is_signedbv()));
   constant_exprt pow_expr(power(base, exp), lhs.type());
   return std::move(pow_expr);
 }
@@ -514,10 +520,9 @@ exprt handle_float_vs_string(exprt &bin_expr, const std::string &op)
     // Python-style error: float < str → TypeError
     std::string lower_op = op;
     std::transform(
-      lower_op.begin(),
-      lower_op.end(),
-      lower_op.begin(),
-      [](unsigned char c) { return std::tolower(c); });
+      lower_op.begin(), lower_op.end(), lower_op.begin(), [](unsigned char c) {
+        return std::tolower(c);
+      });
 
     const auto &loc = bin_expr.location();
     const auto it = operator_map.find(lower_op);
