@@ -254,7 +254,7 @@ void python_converter::update_symbol(const exprt &expr) const
   }
 }
 
-/// Promotes an integer expression to a float type (floatbv) when needed, 
+/// Promotes an integer expression to a float type (floatbv) when needed,
 /// typically for Python-style division where / must always yield a float result,
 // even with integer operands.
 void python_converter::promote_int_to_float(exprt &op, const typet &target_type)
