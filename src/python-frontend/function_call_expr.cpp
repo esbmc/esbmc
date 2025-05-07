@@ -104,6 +104,21 @@ exprt function_call_expr::handle_int_to_str(nlohmann::json &arg) const
   return converter_.make_char_array_expr(chars, t);
 }
 
+exprt function_call_expr::handle_float_to_str(nlohmann::json &arg) const
+{
+  std::string str_val = std::to_string(arg["value"].get<double>());
+
+  // Remove unnecessary trailing zeros and dot if needed (to match Python str behavior)
+  // Example: "5.500000" → "5.5"
+  str_val.erase(str_val.find_last_not_of('0') + 1, std::string::npos);
+  if (str_val.back() == '.')
+    str_val.pop_back();
+
+  std::vector<unsigned char> chars(str_val.begin(), str_val.end());
+  typet t = type_handler_.get_typet("str", chars.size());
+  return converter_.make_char_array_expr(chars, t);
+}
+
 size_t function_call_expr::handle_str(nlohmann::json &arg) const
 {
   if (!arg.contains("value") || !arg["value"].is_string())
@@ -353,6 +368,10 @@ exprt function_call_expr::build_constant_from_arg() const
   // Handle str(): convert int to str
   if (func_name == "str" && arg["value"].is_number_integer())
     return handle_int_to_str(arg);
+
+  // Handle str(): convert float to str
+  else if (func_name == "str" && arg["value"].is_number_float())
+    return handle_float_to_str(arg);
 
   // Handle str(): determine size of the resulting string constant
   else if (func_name == "str")
