@@ -93,6 +93,17 @@ exprt function_call_expr::build_nondet_call() const
   return rhs;
 }
 
+exprt function_call_expr::handle_int_to_str(nlohmann::json &arg) const
+{
+  std::string str_val = std::to_string(arg["value"].get<int>());
+  // Convert string to vector of unsigned char
+  std::vector<unsigned char> chars(str_val.begin(), str_val.end());
+  // Get type for the array
+  typet t = type_handler_.get_typet("str", chars.size());
+  // Use helper to generate constant string expression
+  return converter_.make_char_array_expr(chars, t);
+}
+
 size_t function_call_expr::handle_str(nlohmann::json &arg) const
 {
   if (!arg.contains("value") || !arg["value"].is_string())
@@ -206,14 +217,145 @@ exprt function_call_expr::handle_hex(nlohmann::json &arg) const
   return converter_.make_char_array_expr(string_literal, t);
 }
 
+exprt function_call_expr::handle_oct(nlohmann::json &arg) const
+{
+  long long int_value = 0;  // Holds the integer value to be converted
+  bool is_negative = false; // Tracks if the number is negative
+
+  // Check if the argument is a unary operation (like -123)
+  if (arg.contains("_type") && arg["_type"] == "UnaryOp")
+  {
+    const auto &op = arg["op"];           // Operator (e.g., USub)
+    const auto &operand = arg["operand"]; // Operand of the unary operator
+
+    // Only support unary subtraction (-) of integer literals
+    if (
+      op["_type"] == "USub" && operand.contains("value") &&
+      operand["value"].is_number_integer())
+    {
+      int_value = operand["value"].get<long long>();
+
+      // Treat -0 as 0 (consistent with Python behavior)
+      if (int_value != 0)
+        is_negative = true;
+    }
+    else
+      throw std::runtime_error("TypeError: Unsupported UnaryOp in oct()");
+  }
+  // If it's not a unary operation, expect a plain integer literal
+  else if (arg.contains("value") && arg["value"].is_number_integer())
+  {
+    int_value = arg["value"].get<long long>();
+    if (int_value < 0)
+      is_negative = true;
+  }
+  else
+  {
+    // Invalid argument type for oct()
+    throw std::runtime_error("TypeError: oct() argument must be an integer");
+  }
+
+  // Convert the absolute value to octal and prepend "0o" (or "-0o")
+  std::ostringstream oss;
+  oss << (is_negative ? "-0o" : "0o") << std::oct << std::llabs(int_value);
+  const std::string oct_str = oss.str();
+
+  // Create a string type and return a character array expression
+  typet t = type_handler_.get_typet("str", oct_str.size());
+  std::vector<uint8_t> string_literal(oct_str.begin(), oct_str.end());
+  return converter_.make_char_array_expr(string_literal, t);
+}
+
+exprt function_call_expr::handle_ord(nlohmann::json &arg) const
+{
+  int code_point = 0;
+
+  // Ensure the argument is a string
+  if (arg.contains("value") && arg["value"].is_string())
+  {
+    const std::string &s = arg["value"].get<std::string>();
+    const unsigned char *bytes =
+      reinterpret_cast<const unsigned char *>(s.c_str());
+    size_t length = s.length();
+
+    if (length == 0)
+    {
+      throw std::runtime_error(
+        "TypeError: ord() expected a character, but string of length 0 found");
+    }
+
+    // Manual UTF-8 decoding
+    if ((bytes[0] & 0x80) == 0)
+    {
+      // 1-byte ASCII
+      if (length != 1)
+        throw std::runtime_error(
+          "TypeError: ord() expected a single character");
+
+      code_point = bytes[0];
+    }
+    else if ((bytes[0] & 0xE0) == 0xC0)
+    {
+      // 2-byte sequence
+      if (length != 2)
+        throw std::runtime_error(
+          "TypeError: ord() expected a single character");
+
+      code_point = ((bytes[0] & 0x1F) << 6) | (bytes[1] & 0x3F);
+    }
+    else if ((bytes[0] & 0xF0) == 0xE0)
+    {
+      // 3-byte sequence
+      if (length != 3)
+        throw std::runtime_error(
+          "TypeError: ord() expected a single character");
+
+      code_point = ((bytes[0] & 0x0F) << 12) | ((bytes[1] & 0x3F) << 6) |
+                   (bytes[2] & 0x3F);
+    }
+    else if ((bytes[0] & 0xF8) == 0xF0)
+    {
+      // 4-byte sequence
+      if (length != 4)
+        throw std::runtime_error(
+          "TypeError: ord() expected a single character");
+
+      code_point = ((bytes[0] & 0x07) << 18) | ((bytes[1] & 0x3F) << 12) |
+                   ((bytes[2] & 0x3F) << 6) | (bytes[3] & 0x3F);
+    }
+    else
+    {
+      throw std::runtime_error(
+        "ValueError: ord() received invalid UTF-8 input");
+    }
+  }
+  else
+  {
+    throw std::runtime_error("TypeError: ord() argument must be a string");
+  }
+
+  // Replace the arg with the integer value
+  arg["value"] = code_point;
+  arg["type"] = "int";
+
+  // Build and return the integer expression
+  exprt expr = converter_.get_expr(arg);
+  expr.type() = type_handler_.get_typet("int", 0);
+  return expr;
+}
+
 exprt function_call_expr::build_constant_from_arg() const
 {
   const std::string &func_name = function_id_.get_function();
   size_t arg_size = 1;
   auto arg = call_["args"][0];
 
+  // Handle str(): convert int to str
+  if (func_name == "str" && arg["value"].is_number_integer())
+    return handle_int_to_str(arg);
+
   // Handle str(): determine size of the resulting string constant
-  if (func_name == "str")
+  else if (func_name == "str")
     arg_size = handle_str(arg);
 
   // Handle int(): convert float to int
@@ -228,9 +370,17 @@ exprt function_call_expr::build_constant_from_arg() const
   else if (func_name == "chr")
     handle_chr(arg);
 
+  // Handle ord(): convert single-character string to integer Unicode code point
+  else if (func_name == "ord")
+    return handle_ord(arg);
+
   // Handle hex: Handles hexadecimal string arguments
   else if (func_name == "hex")
     return handle_hex(arg);
+
+  // Handle oct: Handles octal string arguments
+  else if (func_name == "oct")
+    return handle_oct(arg);
 
   // Construct expression with appropriate type
   typet t = type_handler_.get_typet(func_name, arg_size);
