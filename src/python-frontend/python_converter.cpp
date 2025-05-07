@@ -263,7 +263,8 @@ void python_converter::update_symbol(const exprt &expr) const
 ///
 /// This is used in the Python frontend to ensure that expressions involving division
 /// follow Python's semantics, where `/` results in a float, even for integer inputs.
-void python_converter::promote_int_to_float(exprt &op, const typet &target_type) const
+void python_converter::promote_int_to_float(exprt &op, const typet &target_type)
+  const
 {
   typet &op_type = op.type();
 
@@ -276,17 +277,21 @@ void python_converter::promote_int_to_float(exprt &op, const typet &target_type)
   {
     try
     {
-      const BigInt int_val = binary2integer(op.value().as_string(), op_type.is_signedbv());
+      const BigInt int_val =
+        binary2integer(op.value().as_string(), op_type.is_signedbv());
 
       // Generate a string like "3.0" for float parsing
-      const std::string float_literal = std::to_string(int_val.to_int64()) + ".0";
+      const std::string float_literal =
+        std::to_string(int_val.to_int64()) + ".0";
 
       // Convert string literal to float expression
       convert_float_literal(float_literal, op);
     }
     catch (const std::exception &e)
     {
-      log_error("promote_int_to_float: Failed to promote constant to float: {}", e.what());
+      log_error(
+        "promote_int_to_float: Failed to promote constant to float: {}",
+        e.what());
       return;
     }
   }
@@ -350,12 +355,15 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
       return;
 
     // Check if the right-hand side is a constant zero to prevent division-by-zero
-    if ((rhs_op.type().is_signedbv() || rhs_op.type().is_unsignedbv()) &&
-        binary2integer(rhs_op.value().as_string(), rhs_op.type().is_signedbv()) == 0)
+    if (
+      (rhs_op.type().is_signedbv() || rhs_op.type().is_unsignedbv()) &&
+      binary2integer(rhs_op.value().as_string(), rhs_op.type().is_signedbv()) ==
+        0)
       return;
 
     // Promote both operands to IEEE float (double precision) to match Python semantics
-    const typet float_type = double_type(); // Python default float is double-precision
+    const typet float_type =
+      double_type(); // Python default float is double-precision
 
     for (exprt &op : ops)
       promote_int_to_float(op, float_type);
@@ -368,7 +376,7 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
     // Update the division expression type and operator ID
     rhs.type() = float_type;
     rhs.id(get_op("div", float_type));
-}
+  }
   // Case 3: Align bit-widths between LHS and RHS if they differ
   else if (lhs_type.width() != rhs_type.width())
   {
@@ -598,7 +606,9 @@ void python_converter::handle_float_division(
       }
       catch (const std::exception &ex)
       {
-        log_error("handle_float_division: failed to promote constant to float: {}", ex.what());
+        log_error(
+          "handle_float_division: failed to promote constant to float: {}",
+          ex.what());
       }
     }
 
