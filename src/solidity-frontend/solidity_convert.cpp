@@ -1548,7 +1548,7 @@ bool solidity_convertert::get_noncontract_decl_ref(
   return false;
 }
 
-// definition of event/error/interface/struct/...
+// definition of event/error/interface/struct/library/...
 bool solidity_convertert::get_noncontract_defition(nlohmann::json &ast_node)
 {
   std::string node_type = (ast_node)["nodeType"].get<std::string>();
@@ -1583,10 +1583,12 @@ bool solidity_convertert::get_noncontract_defition(nlohmann::json &ast_node)
   else if (
     node_type == "ContractDefinition" && ast_node["contractKind"] == "library")
   {
+    // for library entity
     std::string lib_name = ast_node["name"].get<std::string>();
 
     if (get_struct_class(ast_node))
       return true;
+    std::string old = current_baseContractName;
     current_baseContractName = lib_name;
     if (convert_ast_nodes(ast_node, lib_name))
       return true;
@@ -1595,6 +1597,7 @@ bool solidity_convertert::get_noncontract_defition(nlohmann::json &ast_node)
     get_static_contract_instance(lib_name, lib_instance);
     lib_instance.lvalue = true;
     move_symbol_to_context(lib_instance);
+    current_baseContractName = old;
   }
 
   return false;
@@ -4068,10 +4071,13 @@ bool solidity_convertert::get_expr(
     {
       const auto &base = callee_expr_json["expression"];
 
-      if (base["referencedDeclaration"] > 0)
+      if (
+        base.contains("referencedDeclaration") &&
+        base["referencedDeclaration"] > 0)
       {
         int base_decl_id = base["referencedDeclaration"];
-        const nlohmann::json &decl = find_decl_ref_unique_id(src_ast_json, base_decl_id);
+        const nlohmann::json &decl =
+          find_decl_ref_unique_id(src_ast_json, base_decl_id);
         if (decl.empty())
         {
           log_error(
@@ -4089,7 +4095,7 @@ bool solidity_convertert::get_expr(
           std::string func_name = callee_expr_json["memberName"];
 
           const auto &func_def = get_func_decl_ref(lib_name, func_name);
-          if (func_def.is_null())
+          if (func_def.empty())
           {
             log_error(
               "Cannot locate function '{}' in library '{}'",
