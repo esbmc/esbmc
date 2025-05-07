@@ -254,36 +254,48 @@ void python_converter::update_symbol(const exprt &expr) const
   }
 }
 
-/// Promote an integer constant expression to floatbv type if needed.
-/// Modifies the operand in place.
+/// Promotes an integer expression to a float type (floatbv) when needed,
+/// typically for Python-style division where / must always yield a float result,
+// even with integer operands.
 void python_converter::promote_int_to_float(exprt &op, const typet &target_type)
   const
 {
   typet &op_type = op.type();
-  if (op_type.is_signedbv() || op_type.is_unsignedbv())
+
+  // Only promote if operand is an integer type
+  if (!(op_type.is_signedbv() || op_type.is_unsignedbv()))
+    return;
+
+  // Handle constant integers
+  if (op.is_constant())
   {
-    if (op.is_constant())
+    try
     {
-      try
-      {
-        const BigInt value =
-          binary2integer(op.value().as_string(), op_type.is_signedbv());
-        const std::string float_literal =
-          std::to_string(value.to_int64()) + ".0";
-        convert_float_literal(float_literal, op);
-      }
-      catch (const std::exception &e)
-      {
-        log_error(
-          "promote_int_to_float: Failed to promote operand to float: {}",
-          e.what());
-        return;
-      }
+      const BigInt int_val =
+        binary2integer(op.value().as_string(), op_type.is_signedbv());
+
+      // Generate a string like "3.0" for float parsing
+      const std::string float_literal =
+        std::to_string(int_val.to_int64()) + ".0";
+
+      // Convert string literal to float expression
+      convert_float_literal(float_literal, op);
     }
-    op.type() = target_type;
-    if (op.is_symbol())
-      update_symbol(op);
+    catch (const std::exception &e)
+    {
+      log_error(
+        "promote_int_to_float: Failed to promote constant to float: {}",
+        e.what());
+      return;
+    }
   }
+
+  // Update the operand type
+  op.type() = target_type;
+
+  // Update symbol type info if necessary
+  if (op.is_symbol())
+    update_symbol(op);
 }
 
 void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
@@ -318,25 +330,39 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
         e.what());
     }
   }
-  // Case 2: Determine result type for Python's true division ("/")
-  else if (
-    lhs_type.is_floatbv() && rhs.id() == "/" && rhs.operands().size() == 2)
+  /// Case 2: Handles Python’s / operator by promoting operands to floats
+  /// to ensure floating-point division, preventing division by zero, and
+  /// setting the result type to floatbv.
+  else if (rhs.id() == "/" && rhs.operands().size() == 2)
   {
-    const auto &ops = rhs.operands();
-    if (!ops[0].is_constant() || !ops[1].is_constant())
+    auto &ops = rhs.operands();
+    exprt &lhs_op = ops[0];
+    exprt &rhs_op = ops[1];
+
+    // Only optimize when both operands are compile-time constants
+    if (!lhs_op.is_constant() || !rhs_op.is_constant())
       return;
 
-    // Check if the divisor is a constant zero
-    const auto &divisor = ops[1];
-    const std::string &val = divisor.value().as_string();
-    if (binary2integer(val, divisor.type().is_signedbv()) == 0)
+    // Check if the right-hand side is a constant zero to prevent division-by-zero
+    if (
+      (rhs_op.type().is_signedbv() || rhs_op.type().is_unsignedbv()) &&
+      binary2integer(rhs_op.value().as_string(), rhs_op.type().is_signedbv()) ==
+        0)
       return;
 
-    const typet float_type = lhs_type;
+    // Promote both operands to IEEE float (double precision) to match Python semantics
+    const typet float_type =
+      double_type(); // Python default float is double-precision
 
-    for (exprt &op : rhs.operands())
+    for (exprt &op : ops)
       promote_int_to_float(op, float_type);
 
+    // Update LHS type if it's a symbol, so it holds a float result
+    lhs.type() = float_type;
+    if (lhs.is_symbol())
+      update_symbol(lhs);
+
+    // Update the division expression type and operator ID
     rhs.type() = float_type;
     rhs.id(get_op("div", float_type));
   }
@@ -541,6 +567,54 @@ exprt handle_float_vs_string(exprt &bin_expr, const std::string &op)
   }
 
   return bin_expr;
+}
+
+void python_converter::handle_float_division(
+  exprt &lhs,
+  exprt &rhs,
+  exprt &bin_expr) const
+{
+  const typet float_type = double_type();
+
+  auto promote_to_float = [&](exprt &e) {
+    const typet &t = e.type();
+    const bool is_integer = t.is_signedbv() || t.is_unsignedbv();
+
+    if (!is_integer)
+      return;
+
+    // Handle constant integers: convert them to float literals
+    if (e.is_constant())
+    {
+      try
+      {
+        const bool is_signed = t.is_signedbv();
+        const BigInt val = binary2integer(e.value().as_string(), is_signed);
+        const double float_val = static_cast<double>(val.to_int64());
+        convert_float_literal(std::to_string(float_val), e);
+      }
+      catch (const std::exception &ex)
+      {
+        log_error(
+          "handle_float_division: failed to promote constant to float: {}",
+          ex.what());
+      }
+    }
+
+    // Update expression type to float (double)
+    e.type() = float_type;
+
+    // Update symbol table if this is a symbol
+    if (e.is_symbol())
+      update_symbol(e);
+  };
+
+  promote_to_float(lhs);
+  promote_to_float(rhs);
+
+  // Set the result type and operator ID to reflect float division
+  bin_expr.type() = float_type;
+  bin_expr.id(get_op("div", float_type));
 }
 
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
@@ -782,6 +856,10 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   // This prevents signed-unsigned comparison issues.
   if (lhs.type().is_unsignedbv() && rhs.type().is_signedbv())
     rhs.make_typecast(lhs.type());
+
+  // Promote both operands to float for Python-style true division ("/")
+  if (lhs.type().is_floatbv() && (op == "Div" || op == "div"))
+    handle_float_division(lhs, rhs, bin_expr);
 
   // Add lhs and rhs as operands to the binary expression.
   bin_expr.copy_to_operands(lhs, rhs);
