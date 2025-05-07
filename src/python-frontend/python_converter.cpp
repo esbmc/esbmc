@@ -254,15 +254,9 @@ void python_converter::update_symbol(const exprt &expr) const
   }
 }
 
-/// Promote an integer expression to a floating-point (floatbv) type if needed.
-///
-/// This function checks whether the given operand is an integer (signed or unsigned),
-/// and if so, converts it into a floating-point constant expression when it is
-/// a compile-time constant. The operand's type is then updated to the given target
-/// float type (typically `double_type()` to match Python's float).
-///
-/// This is used in the Python frontend to ensure that expressions involving division
-/// follow Python's semantics, where `/` results in a float, even for integer inputs.
+/// Promotes an integer expression to a float type (floatbv) when needed, 
+/// typically for Python-style division where / must always yield a float result,
+// even with integer operands.
 void python_converter::promote_int_to_float(exprt &op, const typet &target_type)
   const
 {
@@ -336,14 +330,9 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
         e.what());
     }
   }
-  /// Case 2: Handle Python's true division ("/") operator
-  /// In Python, the `/` operator always performs floating-point division,
-  /// even when both operands are integers. For example:
-  ///   `3 / 2` yields `1.5`, not `1`
-  /// This logic promotes both operands to floating-point if needed,
-  /// avoids division by zero, and sets the expression's result type
-  /// accordingly. ESBMC uses IEEE float types (`floatbv`) to represent
-  /// Python floats.
+  /// Case 2: Handles Python’s / operator by promoting operands to floats
+  /// to ensure floating-point division, preventing division by zero, and
+  /// setting the result type to floatbv.
   else if (rhs.id() == "/" && rhs.operands().size() == 2)
   {
     auto &ops = rhs.operands();
