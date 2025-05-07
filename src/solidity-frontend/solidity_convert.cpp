@@ -6106,9 +6106,13 @@ bool solidity_convertert::get_esbmc_builtin_ref(
   std::string name, id;
 
   // "require" keyword is virtually identical to "assume"
-  if (blt_name == "require" || blt_name == "revert")
+  if (
+    blt_name == "require" || blt_name == "revert" ||
+    blt_name == "__ESBMC_assume" || blt_name == "__VERIFIER_assume")
     name = "__ESBMC_assume";
-  else if (blt_name == "assert")
+  else if (
+    blt_name == "assert" || blt_name == "__ESBMC_assert" ||
+    blt_name == "__VERIFIER_assert")
     name = "__ESBMC_assert";
   else
     //!assume it's a solidity built-in func
