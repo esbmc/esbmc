@@ -572,6 +572,52 @@ exprt handle_float_vs_string(exprt &bin_expr, const std::string &op)
   return bin_expr;
 }
 
+void python_converter::handle_float_division(
+  exprt &lhs,
+  exprt &rhs,
+  exprt &bin_expr) const
+{
+  const typet float_type = double_type();
+
+  auto promote_to_float = [&](exprt &e) {
+    const typet &t = e.type();
+    const bool is_integer = t.is_signedbv() || t.is_unsignedbv();
+
+    if (!is_integer)
+      return;
+
+    // Handle constant integers: convert them to float literals
+    if (e.is_constant())
+    {
+      try
+      {
+        const bool is_signed = t.is_signedbv();
+        const BigInt val = binary2integer(e.value().as_string(), is_signed);
+        const double float_val = static_cast<double>(val.to_int64());
+        convert_float_literal(std::to_string(float_val), e);
+      }
+      catch (const std::exception &ex)
+      {
+        log_error("handle_float_division: failed to promote constant to float: {}", ex.what());
+      }
+    }
+
+    // Update expression type to float (double)
+    e.type() = float_type;
+
+    // Update symbol table if this is a symbol
+    if (e.is_symbol())
+      update_symbol(e);
+  };
+
+  promote_to_float(lhs);
+  promote_to_float(rhs);
+
+  // Set the result type and operator ID to reflect float division
+  bin_expr.type() = float_type;
+  bin_expr.id(get_op("div", float_type));
+}
+
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
   auto left = (element.contains("left")) ? element["left"] : element["target"];
@@ -811,6 +857,10 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   // This prevents signed-unsigned comparison issues.
   if (lhs.type().is_unsignedbv() && rhs.type().is_signedbv())
     rhs.make_typecast(lhs.type());
+
+  // Promote both operands to float for Python-style true division ("/")
+  if (lhs.type().is_floatbv() && (op == "Div" || op == "div"))
+    handle_float_division(lhs, rhs, bin_expr);
 
   // Add lhs and rhs as operands to the binary expression.
   bin_expr.copy_to_operands(lhs, rhs);
