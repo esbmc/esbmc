@@ -262,7 +262,7 @@ void python_converter::update_symbol(const exprt &expr) const
 /// float type (typically `double_type()` to match Python's float).
 ///
 /// This is used in the Python frontend to ensure that expressions involving division
-/// follow Python's semantics, where `/` always results in a float, even for integer inputs.
+/// follow Python's semantics, where `/` results in a float, even for integer inputs.
 void python_converter::promote_int_to_float(exprt &op, const typet &target_type) const
 {
   typet &op_type = op.type();
@@ -271,7 +271,7 @@ void python_converter::promote_int_to_float(exprt &op, const typet &target_type)
   if (!(op_type.is_signedbv() || op_type.is_unsignedbv()))
     return;
 
-  // Handle compile-time constant integers
+  // Handle constant integers
   if (op.is_constant())
   {
     try
