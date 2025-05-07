@@ -1728,12 +1728,12 @@ bool solidity_convertert::get_error_definition(const nlohmann::json &ast_node)
   added_symbol.type = type;
 
   // construct a "__ESBMC_assume(false)" statement
-  typet return_type = bool_type();
+  typet return_type = empty_typet();
   locationt loc;
   get_location_from_node(ast_node, loc);
   side_effect_expr_function_callt call;
   get_library_function_call_no_args(
-    "__ESBMC_assume", "__ESBMC_assume", return_type, loc, call);
+    "__ESBMC_assume", "c:@F@__ESBMC_assume", return_type, loc, call);
 
   exprt arg = false_exprt();
   call.arguments().push_back(arg);
@@ -2049,6 +2049,7 @@ bool solidity_convertert::get_unbound_expr(
   const std::string &c_name,
   exprt &new_expr)
 {
+  log_debug("solidity", "get_unbound_expr");
   if (c_name.empty())
   {
     log_error("got empty contract name");
@@ -6107,15 +6108,12 @@ bool solidity_convertert::get_esbmc_builtin_ref(
   // "require" keyword is virtually identical to "assume"
   if (blt_name == "require" || blt_name == "revert")
     name = "__ESBMC_assume";
-  else if (
-    blt_name == "assert" || name == "__ESBMC_assert" ||
-    name == "__VERIFIER_asert" || name == "__ESBMC_assume" ||
-    name == "__VERIFIER_assume")
-    name = blt_name;
+  else if (blt_name == "assert")
+    name = "__ESBMC_assert";
   else
     //!assume it's a solidity built-in func
     return get_sol_builtin_ref(decl, new_expr);
-  id = name;
+  id = "c:@F@" + name;
 
   // manually unrolled recursion here
   // type config for Builtin && Int
@@ -8663,6 +8661,12 @@ bool solidity_convertert::is_var_getter_matched(
   const std::string &tname,
   const typet &ttype)
 {
+  log_debug(
+    "solidity",
+    "heck if the target contract {} contains any public var {} with matched "
+    "name and type",
+    cname,
+    tname);
   // 1) get contract body
   nlohmann::json contract_ref;
   for (auto &nodes : src_ast_json["nodes"])
@@ -10751,7 +10755,7 @@ bool solidity_convertert::get_high_level_member_access(
   @expr: the whole member access expression json
   @options: call with options
   @is_func_call: true if it's a function member access; false state variable access
-  @_mem_callL: function call statement, with arguments populated
+  @_mem_call: function call statement, with arguments populated
   return true: we fail to generate the high_level_member_access bound harness
                however, this should not be treated as an erorr.
                E.g. x.access() where x is a state variable
@@ -10817,27 +10821,30 @@ bool solidity_convertert::get_high_level_member_access(
   if (cname_set.size() == 1)
   {
     // skip the "if(..)"
-    // wrap it
-    exprt front_block = code_blockt();
-    exprt back_block = code_blockt();
-    if (is_call_w_options)
+    if (is_func_call)
     {
-      if (model_transaction(expr, base, balance, l, front_block, back_block))
+      // wrap it
+      exprt front_block = code_blockt();
+      exprt back_block = code_blockt();
+      if (is_call_w_options)
       {
-        log_error("failed to model the transaction property changes");
-        return true;
+        if (model_transaction(expr, base, balance, l, front_block, back_block))
+        {
+          log_error("failed to model the transaction property changes");
+          return true;
+        }
+        else
+        {
+          if (get_high_level_call_wrapper(
+                cname, this_expr, front_block, back_block))
+            return true;
+        }
+        for (auto op : front_block.operands())
+          move_to_front_block(op);
+        for (auto op : back_block.operands())
+          move_to_back_block(op);
       }
     }
-    else
-    {
-      if (get_high_level_call_wrapper(
-            cname, this_expr, front_block, back_block))
-        return true;
-    }
-    for (auto op : front_block.operands())
-      move_to_front_block(op);
-    for (auto op : back_block.operands())
-      move_to_back_block(op);
 
     return false; // since it has only one possible option, no need to futher binding
   }
@@ -10847,7 +10854,6 @@ bool solidity_convertert::get_high_level_member_access(
     log_error("Unsupported return tuple");
     return true;
   }
-
   // get 'x._ESBMC_bind_cname'
   exprt bind_expr =
     member_exprt(base, "_ESBMC_bind_cname", pointer_typet(signed_char_type()));
@@ -10949,7 +10955,7 @@ bool solidity_convertert::get_high_level_member_access(
           // revert
           side_effect_expr_function_callt call;
           get_library_function_call_no_args(
-            "__ESBMC_assume", "__ESBMC_assume", bool_type(), l, call);
+            "__ESBMC_assume", "c:@F@__ESBMC_assume", empty_typet(), l, call);
 
           exprt arg = false_exprt();
           call.arguments().push_back(arg);
@@ -10963,7 +10969,7 @@ bool solidity_convertert::get_high_level_member_access(
     {
       exprt _assign = side_effect_exprt("assign", tmp.type());
       convert_type_expr(ns, memcall, tmp.type());
-      _assign.copy_to_operands(tmp, memcall);
+      _assign.move_to_operands(tmp, memcall);
       rhs = _assign;
     }
     convert_expression_to_code(rhs);
@@ -10990,16 +10996,16 @@ bool solidity_convertert::get_high_level_member_access(
         // if-body
         code_blockt block;
         for (auto &op : front_block.operands())
-          block.operands().push_back(op);
-        block.operands().push_back(rhs);
+          block.move_to_operands(op);
+        block.move_to_operands(rhs);
         for (auto &op : back_block.operands())
-          block.operands().push_back(op);
+          block.move_to_operands(op);
         rhs = block;
       }
     }
 
     codet if_expr("ifthenelse");
-    if_expr.copy_to_operands(_cmp_cname, rhs);
+    if_expr.move_to_operands(_cmp_cname, rhs);
     if_expr.location() = l;
     //? empty file?
     if_expr.location().file("");
