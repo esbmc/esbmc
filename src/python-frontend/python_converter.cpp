@@ -254,6 +254,50 @@ void python_converter::update_symbol(const exprt &expr) const
   }
 }
 
+/// Promotes an integer expression to a float type (floatbv) when needed,
+/// typically for Python-style division where / must always yield a float result,
+// even with integer operands.
+void python_converter::promote_int_to_float(exprt &op, const typet &target_type)
+  const
+{
+  typet &op_type = op.type();
+
+  // Only promote if operand is an integer type
+  if (!(op_type.is_signedbv() || op_type.is_unsignedbv()))
+    return;
+
+  // Handle constant integers
+  if (op.is_constant())
+  {
+    try
+    {
+      const BigInt int_val =
+        binary2integer(op.value().as_string(), op_type.is_signedbv());
+
+      // Generate a string like "3.0" for float parsing
+      const std::string float_literal =
+        std::to_string(int_val.to_int64()) + ".0";
+
+      // Convert string literal to float expression
+      convert_float_literal(float_literal, op);
+    }
+    catch (const std::exception &e)
+    {
+      log_error(
+        "promote_int_to_float: Failed to promote constant to float: {}",
+        e.what());
+      return;
+    }
+  }
+
+  // Update the operand type
+  op.type() = target_type;
+
+  // Update symbol type info if necessary
+  if (op.is_symbol())
+    update_symbol(op);
+}
+
 void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
 {
   typet &lhs_type = lhs.type();
@@ -286,7 +330,43 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
         e.what());
     }
   }
-  // Case 2: Align bit-widths between LHS and RHS if they differ
+  /// Case 2: Handles Python’s / operator by promoting operands to floats
+  /// to ensure floating-point division, preventing division by zero, and
+  /// setting the result type to floatbv.
+  else if (rhs.id() == "/" && rhs.operands().size() == 2)
+  {
+    auto &ops = rhs.operands();
+    exprt &lhs_op = ops[0];
+    exprt &rhs_op = ops[1];
+
+    // Only optimize when both operands are compile-time constants
+    if (!lhs_op.is_constant() || !rhs_op.is_constant())
+      return;
+
+    // Check if the right-hand side is a constant zero to prevent division-by-zero
+    if (
+      (rhs_op.type().is_signedbv() || rhs_op.type().is_unsignedbv()) &&
+      binary2integer(rhs_op.value().as_string(), rhs_op.type().is_signedbv()) ==
+        0)
+      return;
+
+    // Promote both operands to IEEE float (double precision) to match Python semantics
+    const typet float_type =
+      double_type(); // Python default float is double-precision
+
+    for (exprt &op : ops)
+      promote_int_to_float(op, float_type);
+
+    // Update LHS type if it's a symbol, so it holds a float result
+    lhs.type() = float_type;
+    if (lhs.is_symbol())
+      update_symbol(lhs);
+
+    // Update the division expression type and operator ID
+    rhs.type() = float_type;
+    rhs.id(get_op("div", float_type));
+  }
+  // Case 3: Align bit-widths between LHS and RHS if they differ
   else if (lhs_type.width() != rhs_type.width())
   {
     try
@@ -383,6 +463,158 @@ static void attach_symbol_location(exprt &expr, contextt &symbol_table)
   symbolt *sym = symbol_table.find_symbol(id);
   if (sym != nullptr)
     expr.location() = sym->location;
+}
+
+exprt handle_floor_division(
+  const exprt &lhs,
+  const exprt &rhs,
+  const exprt &bin_expr)
+{
+  typet div_type = bin_expr.type();
+  // remainder = num%den;
+  exprt remainder("mod", div_type);
+  remainder.copy_to_operands(lhs, rhs);
+
+  // Get num signal
+  exprt is_num_neg("<", bool_type());
+  is_num_neg.copy_to_operands(lhs, gen_zero(div_type));
+  // Get den signal
+  exprt is_den_neg("<", bool_type());
+  is_den_neg.copy_to_operands(rhs, gen_zero(div_type));
+
+  // remainder != 0
+  exprt pos_remainder("notequal", bool_type());
+  pos_remainder.copy_to_operands(remainder, gen_zero(div_type));
+
+  // diff_signals = is_num_neg ^ is_den_neg;
+  exprt diff_signals("bitxor", bool_type());
+  diff_signals.copy_to_operands(is_num_neg, is_den_neg);
+
+  exprt cond("and", bool_type());
+  cond.copy_to_operands(pos_remainder, diff_signals);
+  exprt if_expr("if", div_type);
+  if_expr.copy_to_operands(cond, gen_one(div_type), gen_zero(div_type));
+
+  // floor_div = (lhs / rhs) - (1 if (lhs % rhs != 0) and (lhs < 0) ^ (rhs < 0) else 0)
+  exprt floor_div("-", div_type);
+  floor_div.copy_to_operands(bin_expr, if_expr); //bin_expr contains lhs/rhs
+
+  return floor_div;
+}
+
+exprt python_converter::handle_power_operator(exprt lhs, exprt rhs)
+{
+  if (lhs.is_symbol())
+  {
+    symbolt *s = symbol_table_.find_symbol(lhs.identifier());
+    assert(s);
+    if (!s->value.value().empty())
+      lhs = s->value;
+  }
+  if (rhs.is_symbol())
+  {
+    symbolt *s = symbol_table_.find_symbol(rhs.identifier());
+    assert(s);
+    if (!s->value.value().empty())
+      rhs = s->value;
+  }
+  else if (is_math_expr(rhs))
+  {
+    rhs = compute_math_expr(rhs);
+  }
+  BigInt base(
+    binary2integer(lhs.value().as_string(), lhs.type().is_signedbv()));
+  BigInt exp(binary2integer(rhs.value().as_string(), rhs.type().is_signedbv()));
+  constant_exprt pow_expr(power(base, exp), lhs.type());
+  return std::move(pow_expr);
+}
+
+exprt handle_float_vs_string(exprt &bin_expr, const std::string &op)
+{
+  if (op == "Eq")
+  {
+    // float == str → False (no exception)
+    bin_expr.make_false();
+  }
+  else if (op == "NotEq")
+  {
+    // float != str → True (no exception)
+    bin_expr.make_true();
+  }
+  else if (is_ordered_comparison(op))
+  {
+    // Python-style error: float < str → TypeError
+    std::string lower_op = op;
+    std::transform(
+      lower_op.begin(), lower_op.end(), lower_op.begin(), [](unsigned char c) {
+        return std::tolower(c);
+      });
+
+    const auto &loc = bin_expr.location();
+    const auto it = operator_map.find(lower_op);
+    assert(it != operator_map.end());
+
+    std::ostringstream error;
+    error << "'" << it->second
+          << "' not supported between instances of 'float' and 'str'";
+
+    if (loc.is_not_nil())
+      error << " at " << loc.get_file() << ":" << loc.get_line();
+    else
+      error << " at <unknown location>";
+
+    throw std::runtime_error(error.str());
+  }
+
+  return bin_expr;
+}
+
+void python_converter::handle_float_division(
+  exprt &lhs,
+  exprt &rhs,
+  exprt &bin_expr) const
+{
+  const typet float_type = double_type();
+
+  auto promote_to_float = [&](exprt &e) {
+    const typet &t = e.type();
+    const bool is_integer = t.is_signedbv() || t.is_unsignedbv();
+
+    if (!is_integer)
+      return;
+
+    // Handle constant integers: convert them to float literals
+    if (e.is_constant())
+    {
+      try
+      {
+        const bool is_signed = t.is_signedbv();
+        const BigInt val = binary2integer(e.value().as_string(), is_signed);
+        const double float_val = static_cast<double>(val.to_int64());
+        convert_float_literal(std::to_string(float_val), e);
+      }
+      catch (const std::exception &ex)
+      {
+        log_error(
+          "handle_float_division: failed to promote constant to float: {}",
+          ex.what());
+      }
+    }
+
+    // Update expression type to float (double)
+    e.type() = float_type;
+
+    // Update symbol table if this is a symbol
+    if (e.is_symbol())
+      update_symbol(e);
+  };
+
+  promote_to_float(lhs);
+  promote_to_float(rhs);
+
+  // Set the result type and operator ID to reflect float division
+  bin_expr.type() = float_type;
+  bin_expr.id(get_op("div", float_type));
 }
 
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
@@ -605,32 +837,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   // Replace ** operation with the resultant constant.
   if (op == "Pow" || op == "power")
-  {
-    if (lhs.is_symbol())
-    {
-      symbolt *s = symbol_table_.find_symbol(lhs.identifier());
-      assert(s);
-      if (!s->value.value().empty())
-        lhs = s->value;
-    }
-    if (rhs.is_symbol())
-    {
-      symbolt *s = symbol_table_.find_symbol(rhs.identifier());
-      assert(s);
-      if (!s->value.value().empty())
-        rhs = s->value;
-    }
-    else if (is_math_expr(rhs))
-    {
-      rhs = compute_math_expr(rhs);
-    }
-    BigInt base(
-      binary2integer(lhs.value().as_string(), lhs.type().is_signedbv()));
-    BigInt exp(
-      binary2integer(rhs.value().as_string(), rhs.type().is_signedbv()));
-    constant_exprt pow_expr(power(base, exp), lhs.type());
-    return std::move(pow_expr);
-  }
+    return handle_power_operator(lhs, rhs);
 
   // Determine the result type of the binary operation:
   // If it's a relational operation (e.g., <, >, ==), the result is a boolean type.
@@ -650,6 +857,10 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   if (lhs.type().is_unsignedbv() && rhs.type().is_signedbv())
     rhs.make_typecast(lhs.type());
 
+  // Promote both operands to float for Python-style true division ("/")
+  if (lhs.type().is_floatbv() && (op == "Div" || op == "div"))
+    handle_float_division(lhs, rhs, bin_expr);
+
   // Add lhs and rhs as operands to the binary expression.
   bin_expr.copy_to_operands(lhs, rhs);
 
@@ -666,81 +877,14 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   // This block emulates that behavior in ESBMC's symbolic execution: converting equality comparisons to
   // constants (false or true), and rejecting invalid ordered comparisons with a runtime error.
   if (is_float_vs_char(lhs, rhs))
-  {
-    if (op == "Eq")
-    {
-      // float == str → False (no exception)
-      bin_expr.make_false();
-    }
-    else if (op == "NotEq")
-    {
-      // float != str → True (no exception)
-      bin_expr.make_true();
-    }
-    else if (is_ordered_comparison(op))
-    {
-      // Python-style error: float < str → TypeError
-      std::string lower_op = op;
-      std::transform(
-        lower_op.begin(),
-        lower_op.end(),
-        lower_op.begin(),
-        [](unsigned char c) { return std::tolower(c); });
-
-      const auto &loc = bin_expr.location();
-      const auto it = operator_map.find(lower_op);
-      assert(it != operator_map.end());
-
-      std::ostringstream error;
-      error << "'" << it->second
-            << "' not supported between instances of 'float' and 'str'";
-
-      if (loc.is_not_nil())
-        error << " at " << loc.get_file() << ":" << loc.get_line();
-      else
-        error << " at <unknown location>";
-
-      throw std::runtime_error(error.str());
-    }
-  }
+    return handle_float_vs_string(bin_expr, op);
 
   // floor division (//) operation corresponds to an int division with floor rounding
   // So we need to emulate this behavior here:
   // int result = (num/div) - (num%div != 0 && ((num < 0) ^ (den<0)) ? 1 : 0)
   // e.g.: -5//2 equals to -3, and 5//2 equals to 2
   if (op == "FloorDiv")
-  {
-    typet div_type = bin_expr.type();
-    // remainder = num%den;
-    exprt remainder("mod", div_type);
-    remainder.copy_to_operands(lhs, rhs);
-
-    // Get num signal
-    exprt is_num_neg("<", bool_type());
-    is_num_neg.copy_to_operands(lhs, gen_zero(div_type));
-    // Get den signal
-    exprt is_den_neg("<", bool_type());
-    is_den_neg.copy_to_operands(rhs, gen_zero(div_type));
-
-    // remainder != 0
-    exprt pos_remainder("notequal", bool_type());
-    pos_remainder.copy_to_operands(remainder, gen_zero(div_type));
-
-    // diff_signals = is_num_neg ^ is_den_neg;
-    exprt diff_signals("bitxor", bool_type());
-    diff_signals.copy_to_operands(is_num_neg, is_den_neg);
-
-    exprt cond("and", bool_type());
-    cond.copy_to_operands(pos_remainder, diff_signals);
-    exprt if_expr("if", div_type);
-    if_expr.copy_to_operands(cond, gen_one(div_type), gen_zero(div_type));
-
-    // floor_div = (lhs / rhs) - (1 if (lhs % rhs != 0) and (lhs < 0) ^ (rhs < 0) else 0)
-    exprt floor_div("-", div_type);
-    floor_div.copy_to_operands(bin_expr, if_expr); //bin_expr contains lhs/rhs
-
-    return floor_div;
-  }
+    return handle_floor_division(lhs, rhs, bin_expr);
 
   // Handle chained comparisons like: assert 0 <= x <= 1
   if (element.contains("comparators") && element["comparators"].size() > 1)
