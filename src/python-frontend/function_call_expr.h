@@ -69,6 +69,19 @@ private:
   exprt handle_int_to_str(nlohmann::json &arg) const;
 
   /*
+   * Extracts a string representation from a symbol's constant value.
+   * Handles both character arrays (e.g., ['6', '5']) and single-character
+   * constants by decoding their binary-encoded bitvector representations.
+   */
+  std::optional<std::string> extract_string_from_symbol(const symbolt *sym) const;
+
+  /*
+   * Looks up a Python variable's symbol using its identifier and the
+   * current filename to construct the full scoped symbol name.
+   */
+  const symbolt *lookup_python_symbol(const std::string &var_name) const;
+
+  /*
    * Handles str-to-int conversions (e.g., int('65')) by reconstructing
    * the string value from a symbol's internal representation and
    * converting it to an integer expression.
