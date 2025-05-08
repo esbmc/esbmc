@@ -68,6 +68,11 @@ private:
    */
   exprt handle_int_to_str(nlohmann::json &arg) const;
 
+  /*
+   * Handles str-to-int conversions (e.g., int('65')) by reconstructing
+   * the string value from a symbol's internal representation and
+   * converting it to an integer expression.
+   */
   exprt handle_str_symbol_to_int(const symbolt *sym) const;
 
   /*
