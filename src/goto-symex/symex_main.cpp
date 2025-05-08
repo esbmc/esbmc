@@ -817,13 +817,13 @@ void goto_symext::run_intrinsic(
   
     expr2tc zero = constant_int2tc(len_expr->type, BigInt(0));
     expr2tc lower_bound = lessthanequal2tc(zero, len_expr);
-    expr2tc upper_bound = lessthanequal2tc(len_expr, base_size);
+    expr2tc upper_bound = lessthan2tc(len_expr, base_size);
     expr2tc result = and2tc(lower_bound, upper_bound);
   
     symex_assign(code_assign2tc(func_call.ret, result), false, cur_state->guard);
     return;
   }
-  
+
   if (symname == "c:@F@__ESBMC_unreachable")
   {
     if (options.get_bool_option("enable-unreachability-intrinsic"))
