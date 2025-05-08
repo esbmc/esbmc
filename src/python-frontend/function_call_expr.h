@@ -69,6 +69,13 @@ private:
   exprt handle_int_to_str(nlohmann::json &arg) const;
 
   /*
+   * Handles float-to-str conversions (e.g., str(5.5)) by converting
+   * the float value into a string representation and generating
+   * the corresponding constant character array expression.
+   */
+  exprt handle_float_to_str(nlohmann::json &arg) const;
+
+  /*
    * Handles string arguments (e.g., str("abc")) by converting them
    * into character array expressions.
    */
