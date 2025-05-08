@@ -472,7 +472,6 @@ exprt function_call_expr::build_constant_from_arg() const
       return from_integer(0, type_handler_.get_typet("int", 0));
     }
 
-    // Ensure it's a constant array (i.e., a string)
     if(sym->value.is_constant())
       return handle_str_symbol_to_int(sym);
   }
