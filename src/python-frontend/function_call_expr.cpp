@@ -8,11 +8,10 @@
 #include <util/message.h>
 #include <util/string_constant.h>
 #include <regex>
-#include <iostream>
-
-#include <util/arith_tools.h>    // for from_integer
-#include <util/std_expr.h>       // for to_constant_expr
-#include <util/mp_arith.h>       // for mp_integer, to_integer
+#include <util/arith_tools.h>
+#include <util/std_expr.h>
+#include <util/message.h>
+#include <util/mp_arith.h>
 
 using namespace json_utils;
 
@@ -364,6 +363,8 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
   return expr;
 }
 
+#include <util/message.h> // Ensure this include is present at the top
+
 exprt function_call_expr::handle_str_symbol_to_int(const symbolt *sym) const
 {
   std::string value;
@@ -385,7 +386,7 @@ exprt function_call_expr::handle_str_symbol_to_int(const symbolt *sym) const
         if(c == 0) break; // null terminator
         if(c < 32 || c > 126)
         {
-          std::cerr << "Invalid character code in string (non-printable): " << c << std::endl;
+          log_error("Invalid character code in string (non-printable): {}", c);
           return from_integer(0, type_handler_.get_typet("int", 0));
         }
 
@@ -393,7 +394,7 @@ exprt function_call_expr::handle_str_symbol_to_int(const symbolt *sym) const
       }
       catch(const std::exception &e)
       {
-        std::cerr << "Exception during character extraction: " << e.what() << std::endl;
+        log_error("Exception during character extraction: {}", e.what());
         return from_integer(0, type_handler_.get_typet("int", 0));
       }
     }
@@ -408,7 +409,7 @@ exprt function_call_expr::handle_str_symbol_to_int(const symbolt *sym) const
 
       if(c < 32 || c > 126)
       {
-        std::cerr << "Invalid character code (non-printable): " << c << std::endl;
+        log_error("Invalid character code (non-printable): {}", c);
         return from_integer(0, type_handler_.get_typet("int", 0));
       }
 
@@ -416,22 +417,22 @@ exprt function_call_expr::handle_str_symbol_to_int(const symbolt *sym) const
     }
     catch(const std::exception &e)
     {
-      std::cerr << "Exception during single-char extraction: " << e.what() << std::endl;
+      log_error("Exception during single-char extraction: {}", e.what());
       return from_integer(0, type_handler_.get_typet("int", 0));
     }
   }
   else
   {
-    std::cerr << "Unhandled symbol format for int() conversion." << std::endl;
+    log_error("Unhandled symbol format for int() conversion.");
     return from_integer(0, type_handler_.get_typet("int", 0));
   }
 
-  std::cout << "Reconstructed string value: \"" << value << "\"" << std::endl;
+  log_status("Reconstructed string value: \"{}\"", value);
 
   // Validate that it's a digit-only string
   if(value.empty() || !std::all_of(value.begin(), value.end(), ::isdigit))
   {
-    std::cerr << "Invalid string for integer conversion: \"" << value << "\"" << std::endl;
+    log_error("Invalid string for integer conversion: \"{}\"", value);
     return from_integer(0, type_handler_.get_typet("int", 0));
   }
 
@@ -469,18 +470,13 @@ exprt function_call_expr::build_constant_from_arg() const
 
     if(!sym)
     {
-      std::cerr << "Warning: symbol not found: " << var_name << std::endl;
+      log_warning("Warning: symbol not found: {}", var_name);
       return from_integer(0, type_handler_.get_typet("int", 0)); // safe fallback
     }
 
     // Ensure it's a constant array (i.e., a string)
     if(sym->value.is_constant() /*&& sym->value.type().is_array()*/)
       return handle_str_symbol_to_int(sym);
-    //else
-    //{
-    //  std::cerr << "Symbol is not a constant array for int(): " << var_name << std::endl;
-    //  return from_integer(0, type_handler_.get_typet("int", 0)); // fallback
-    //}
   }
 
   // Handle int(): convert float to int
