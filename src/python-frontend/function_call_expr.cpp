@@ -9,9 +9,7 @@
 #include <util/string_constant.h>
 #include <regex>
 #include <util/arith_tools.h>
-#include <util/std_expr.h>
 #include <util/message.h>
-#include <util/mp_arith.h>
 
 using namespace json_utils;
 
@@ -471,11 +469,11 @@ exprt function_call_expr::build_constant_from_arg() const
     if(!sym)
     {
       log_warning("Warning: symbol not found: {}", var_name);
-      return from_integer(0, type_handler_.get_typet("int", 0)); // safe fallback
+      return from_integer(0, type_handler_.get_typet("int", 0));
     }
 
     // Ensure it's a constant array (i.e., a string)
-    if(sym->value.is_constant() /*&& sym->value.type().is_array()*/)
+    if(sym->value.is_constant())
       return handle_str_symbol_to_int(sym);
   }
 
