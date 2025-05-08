@@ -102,6 +102,20 @@ expr2tc from_integer(const BigInt &int_value, const type2tc &type)
   }
 }
 
+exprt from_double(double val, const typet &type)
+{
+  ieee_floatt f;
+  f.rounding_mode = ieee_floatt::ROUND_TO_EVEN;
+
+  if(type.is_floatbv())
+    f.change_spec(ieee_float_spect(to_floatbv_type(type)));
+  else
+    throw "from_double: unsupported type";
+
+  f.from_double(val);
+  return f.to_expr();
+}
+
 BigInt power(const BigInt &base, const BigInt &exponent)
 {
   assert(exponent >= 0);

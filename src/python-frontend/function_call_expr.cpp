@@ -362,29 +362,15 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
   return expr;
 }
 
-static exprt from_double(double val, const typet &type)
-{
-  ieee_floatt f;
-  f.rounding_mode = ieee_floatt::ROUND_TO_EVEN;
-
-  if (type.is_floatbv())
-    f.change_spec(ieee_float_spect(to_floatbv_type(type)));
-  else
-    throw "from_double: unsupported type";
-
-  f.from_double(val);
-  return f.to_expr();
-}
-
 exprt function_call_expr::handle_str_symbol_to_float(const symbolt *sym) const
 {
   std::string value;
   const exprt &val = sym->value;
 
   // Case 1: array of characters
-  if (val.type().is_array() && val.has_operands())
+  if(val.type().is_array() && val.has_operands())
   {
-    for (const auto &ch : val.operands())
+    for(const auto &ch : val.operands())
     {
       try
       {
@@ -393,7 +379,7 @@ exprt function_call_expr::handle_str_symbol_to_float(const symbolt *sym) const
         unsigned c = std::stoul(binary_str, nullptr, 2);
         value += static_cast<char>(c);
       }
-      catch (const std::exception &e)
+      catch(const std::exception &e)
       {
         log_error("Exception during float char extraction: {}", e.what());
         return from_double(0.0, type_handler_.get_typet("float", 0));
@@ -401,7 +387,7 @@ exprt function_call_expr::handle_str_symbol_to_float(const symbolt *sym) const
     }
   }
   // Case 2: single character constant
-  else if (val.is_constant() && val.type().is_signedbv())
+  else if(val.is_constant() && val.type().is_signedbv())
   {
     try
     {
@@ -409,7 +395,7 @@ exprt function_call_expr::handle_str_symbol_to_float(const symbolt *sym) const
       unsigned c = std::stoul(binary_str, nullptr, 2);
       value += static_cast<char>(c);
     }
-    catch (const std::exception &e)
+    catch(const std::exception &e)
     {
       log_error("Exception during single-char float extraction: {}", e.what());
       return from_double(0.0, type_handler_.get_typet("float", 0));
@@ -426,7 +412,7 @@ exprt function_call_expr::handle_str_symbol_to_float(const symbolt *sym) const
     double dval = std::stod(value);
     return from_double(dval, type_handler_.get_typet("float", 0));
   }
-  catch (const std::exception &e)
+  catch(const std::exception &e)
   {
     log_error("Invalid float string conversion: {}", e.what());
     return from_double(0.0, type_handler_.get_typet("float", 0));
@@ -439,9 +425,9 @@ exprt function_call_expr::handle_str_symbol_to_int(const symbolt *sym) const
   const exprt &val = sym->value;
 
   // Case 1: value is an array of characters (i.e., a proper string)
-  if (val.type().is_array() && val.has_operands())
+  if(val.type().is_array() && val.has_operands())
   {
-    for (const auto &ch : val.operands())
+    for(const auto &ch : val.operands())
     {
       try
       {
@@ -452,7 +438,7 @@ exprt function_call_expr::handle_str_symbol_to_int(const symbolt *sym) const
         unsigned c = std::stoul(binary_str, nullptr, 2);
         value += static_cast<char>(c);
       }
-      catch (const std::exception &e)
+      catch(const std::exception &e)
       {
         log_error("Exception during character extraction: {}", e.what());
         return from_integer(0, type_handler_.get_typet("int", 0));
@@ -460,7 +446,7 @@ exprt function_call_expr::handle_str_symbol_to_int(const symbolt *sym) const
     }
   }
   // Case 2: value is a single character constant
-  else if (val.is_constant() && val.type().is_signedbv())
+  else if(val.is_constant() && val.type().is_signedbv())
   {
     try
     {
@@ -468,7 +454,7 @@ exprt function_call_expr::handle_str_symbol_to_int(const symbolt *sym) const
       unsigned c = std::stoul(binary_str, nullptr, 2);
       value += static_cast<char>(c);
     }
-    catch (const std::exception &e)
+    catch(const std::exception &e)
     {
       log_error("Exception during single-char extraction: {}", e.what());
       return from_integer(0, type_handler_.get_typet("int", 0));
@@ -481,7 +467,7 @@ exprt function_call_expr::handle_str_symbol_to_int(const symbolt *sym) const
   }
 
   // Validate that it's a digit-only string
-  if (value.empty() || !std::all_of(value.begin(), value.end(), ::isdigit))
+  if(value.empty() || !std::all_of(value.begin(), value.end(), ::isdigit))
   {
     log_error("Invalid string for integer conversion: \"{}\"", value);
     return from_integer(0, type_handler_.get_typet("int", 0));
@@ -519,13 +505,13 @@ exprt function_call_expr::build_constant_from_arg() const
     // Look up the symbol using the variable name
     const symbolt *sym = converter_.find_symbol(var_symbol);
 
-    if (!sym)
+    if(!sym)
     {
       log_warning("Warning: symbol not found: {}", var_name);
       return from_integer(0, type_handler_.get_typet("int", 0));
     }
 
-    if (sym->value.is_constant())
+    if(sym->value.is_constant())
       return handle_str_symbol_to_int(sym);
   }
 
@@ -533,25 +519,25 @@ exprt function_call_expr::build_constant_from_arg() const
   else if (func_name == "int" && arg["value"].is_number_float())
     handle_float_to_int(arg);
 
-  // Handle int(): convert string (from symbol) to float
+  // Handle float(): convert string (from symbol) to float
   else if (func_name == "float" && arg["_type"] == "Name")
   {
     std::string var_name = arg["id"];
     std::string filename = function_id_.get_filename();
     std::string var_symbol = "py:" + filename + "@" + var_name;
-
+    
     const symbolt *sym = converter_.find_symbol(var_symbol);
-
-    if (!sym)
+    
+    if(!sym)
     {
       log_warning("Warning: symbol not found for float(): {}", var_name);
       return from_double(0.0, type_handler_.get_typet("float", 0));
     }
-
-    if (sym->value.is_constant())
+    
+    if(sym->value.is_constant())
       return handle_str_symbol_to_float(sym);
   }
-
+    
   // Handle float(): convert int to float
   else if (func_name == "float" && arg["value"].is_number_integer())
     handle_int_to_float(arg);
