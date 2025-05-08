@@ -595,7 +595,7 @@ const std::string sol_uqAddr = R"(
 __attribute__((annotate("__ESBMC_inf_size"))) address_t sol_addr_array[1];
 __attribute__((annotate("__ESBMC_inf_size"))) void *sol_obj_array[1];
 __attribute__((annotate("__ESBMC_inf_size"))) const char *sol_cname_array[1];
-unsigned int sol_max_cnt;
+static unsigned int sol_max_cnt = 0;
 
 int _ESBMC_get_addr_array_idx(address_t tgt)
 {
@@ -639,12 +639,15 @@ address_t _ESBMC_get_unique_address(void *obj, const char *cname)
 {
 __ESBMC_HIDE:;
     __ESBMC_assume(obj != NULL);
-    address_t tmp = (address_t)nondet_uint();
-    while (_ESBMC_get_addr_array_idx(tmp) == -1)
-    {
-      // ensure it's not address(0) and unique
-        tmp = (address_t)nondet_uint(); 
-    }
+    address_t tmp;
+    do {
+        tmp = (address_t)nondet_uint();
+        if (tmp == (address_t)0)
+            continue;
+        if (sol_max_cnt == 0)
+            break;
+    } while (_ESBMC_get_addr_array_idx(tmp) == -1);
+    
     update_addr_obj(tmp, obj, cname);
     return tmp;
 }
@@ -727,8 +730,6 @@ block_prevrandao = uint256_t(nondet_uint());
 block_timestamp = uint256_t(nondet_uint());
 
 _gaslimit = nondet_uint();
-
-sol_max_cnt = 0;
 }
 )";
 
