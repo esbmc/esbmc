@@ -76,6 +76,12 @@ private:
   exprt handle_str_symbol_to_int(const symbolt *sym) const;
 
   /*
+   * Handles str-to-float conversions (e.g., float("3.14")) by reconstructing
+   * the string value from the symbol and converting it to a float expression.
+   */
+  exprt handle_str_symbol_to_float(const symbolt *sym) const;
+
+  /*
    * Handles float-to-str conversions (e.g., str(5.5)) by converting
    * the float value into a string representation and generating
    * the corresponding constant character array expression.
