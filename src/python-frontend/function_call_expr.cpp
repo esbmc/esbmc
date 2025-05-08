@@ -361,8 +361,6 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
   return expr;
 }
 
-#include <util/message.h> // Ensure this include is present at the top
-
 exprt function_call_expr::handle_str_symbol_to_int(const symbolt *sym) const
 {
   std::string value;
