@@ -19,6 +19,7 @@ const std::string sol_header = R"(
 #include <assert.h>
 #include <string.h>
 // #include <string>
+#include <math.h>
 )";
 
 /*
@@ -146,20 +147,20 @@ __ESBMC_HIDE:;
   return address_t(hash);
 }
 
-uint256_t _pow(unsigned int base, unsigned int exp) {
-__ESBMC_HIDE:;
-  uint256_t result = 1;
-  uint256_t b = base;
+// uint256_t _pow(unsigned int base, unsigned int exp) {
+// __ESBMC_HIDE:;
+//   uint256_t result = 1;
+//   uint256_t b = base;
 
-  while (exp > 0) {
-    if (exp & 1)
-      result *= b;
-    b *= b;
-    exp >>= 1;
-  }
+//   while (exp > 0) {
+//     if (exp & 1)
+//       result *= b;
+//     b *= b;
+//     exp >>= 1;
+//   }
 
-  return result;
-}
+//   return result;
+// }
 )";
 
 const std::string sol_string = R"(
@@ -698,8 +699,6 @@ void _ESBMC_check_reentrancy(const bool _ESBMC_mutex)
 __ESBMC_HIDE:;
   if(_ESBMC_mutex)
     assert(!"Reentrancy behavior detected");
-  // esbmc-kind will not terminate if:
-  // assert(!_ESBMC_mutex && "Reentrancy behavior detected");
 }
 )";
 

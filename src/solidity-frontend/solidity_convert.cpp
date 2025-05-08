@@ -5466,10 +5466,10 @@ bool solidity_convertert::get_binary_operator_expr(
       //? maybe this should convert this to BigInt too?
       side_effect_expr_function_callt call_expr;
       get_library_function_call_no_args(
-        "_pow", "c:@F@_pow", unsignedbv_typet(256), lhs.location(), call_expr);
+        "pow", "c:@F@pow", double_type(), lhs.location(), call_expr);
 
-      call_expr.arguments().push_back(lhs);
-      call_expr.arguments().push_back(rhs);
+      call_expr.arguments().push_back(typecast_exprt(lhs, double_type()));
+      call_expr.arguments().push_back(typecast_exprt(rhs, double_type()));
 
       new_expr = call_expr;
     }

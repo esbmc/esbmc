@@ -1,4 +1,4 @@
 CORE
 contract.solast
---sol contract.sol --incremental-bmc --no-standard-checks --contract A
+--sol contract.sol --incremental-bmc --no-standard-checks --contract A --base-k-step 2
 ^VERIFICATION FAILED$
