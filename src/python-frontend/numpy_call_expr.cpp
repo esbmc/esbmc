@@ -64,7 +64,7 @@ bool numpy_call_expr::is_math_function() const
          (function == "sqrt") || (function == "fmin") || (function == "fmax") ||
          (function == "trunc") || (function == "round") ||
          (function == "arccos") || (function == "copysign") ||
-         (function == "arctan");
+         (function == "arctan") || (function == "dot");
 }
 
 std::string numpy_call_expr::get_dtype() const
@@ -359,12 +359,7 @@ exprt numpy_call_expr::create_expr_from_call()
   }
 
   if (expr.empty())
-  {
-    std::ostringstream oss;
-    oss << "Unsupported NumPy call: " << function_id_.get_function();
-    log_error("{}", oss.str());
-    abort();
-  }
+    throw std::runtime_error("Unsupported Numpy call: " + function_id_.get_function());
 
   return converter_.get_expr(expr);
 }

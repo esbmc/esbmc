@@ -23,15 +23,15 @@ using namespace json_utils;
 namespace fs = boost::filesystem;
 
 static const std::unordered_map<std::string, std::string> operator_map = {
-  {"add", "+"},         {"sub", "-"},          {"subtract", "-"},
-  {"mult", "*"},        {"multiply", "*"},     {"div", "/"},
-  {"divide", "/"},      {"mod", "mod"},        {"bitor", "bitor"},
-  {"floordiv", "/"},    {"bitand", "bitand"},  {"bitxor", "bitxor"},
-  {"invert", "bitnot"}, {"lshift", "shl"},     {"rshift", "ashr"},
-  {"usub", "unary-"},   {"eq", "="},           {"lt", "<"},
-  {"lte", "<="},        {"noteq", "notequal"}, {"gt", ">"},
-  {"gte", ">="},        {"and", "and"},        {"or", "or"},
-  {"not", "not"},
+  {"add", "+"},         {"sub", "-"},         {"subtract", "-"},
+  {"mult", "*"},        {"multiply", "*"},    {"dot", "*"},
+  {"div", "/"},         {"divide", "/"},      {"mod", "mod"},
+  {"bitor", "bitor"},   {"floordiv", "/"},    {"bitand", "bitand"},
+  {"bitxor", "bitxor"}, {"invert", "bitnot"}, {"lshift", "shl"},
+  {"rshift", "ashr"},   {"usub", "unary-"},   {"eq", "="},
+  {"lt", "<"},          {"lte", "<="},        {"noteq", "notequal"},
+  {"gt", ">"},          {"gte", ">="},        {"and", "and"},
+  {"or", "or"},         {"not", "not"},
 };
 
 static const std::unordered_map<std::string, StatementType> statement_map = {
@@ -103,6 +103,7 @@ static std::string get_op(const std::string &op, const typet &type)
       {"sub", "ieee_sub"},
       {"subtract", "ieee_sub"},
       {"mult", "ieee_mul"},
+      {"dot", "ieee_mul"},
       {"multiply", "ieee_mul"},
       {"div", "ieee_div"},
       {"divide", "ieee_div"}};
