@@ -73,7 +73,8 @@ private:
    * Handles both character arrays (e.g., ['6', '5']) and single-character
    * constants by decoding their binary-encoded bitvector representations.
    */
-  std::optional<std::string> extract_string_from_symbol(const symbolt *sym) const;
+  std::optional<std::string>
+  extract_string_from_symbol(const symbolt *sym) const;
 
   /*
    * Looks up a Python variable's symbol using its identifier and the

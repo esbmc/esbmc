@@ -107,7 +107,7 @@ exprt from_double(double val, const typet &type)
   ieee_floatt f;
   f.rounding_mode = ieee_floatt::ROUND_TO_EVEN;
 
-  if(type.is_floatbv())
+  if (type.is_floatbv())
     f.change_spec(ieee_float_spect(to_floatbv_type(type)));
   else
     throw "from_double: unsupported type";
