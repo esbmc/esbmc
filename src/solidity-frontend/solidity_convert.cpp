@@ -2804,7 +2804,19 @@ bool solidity_convertert::get_function_definition(
       call.arguments().push_back(arg);
 
       convert_expression_to_code(call);
-      body_exprt.operands().insert(body_exprt.operands().begin(), call);
+      // Insert after the last front requirement (__ESBMC_assume) statement,
+      // as the function may only be re-entered once the requirements are fulfilled.
+      auto &ops = body_exprt.operands();
+      for (auto it = ops.begin(); it != ops.end(); ++it)
+      {
+        if (
+          it->op0().id() == "sideeffect" &&
+          it->op0().op0().name() == "__ESBMC_assume")
+          continue;
+
+        ops.insert(it, call);
+        break;
+      }
     }
   }
 
@@ -10864,9 +10876,9 @@ bool solidity_convertert::get_high_level_member_access(
                          to_code_type(member.type()).return_type().is_empty());
 
   // construct auxilirary funciton
-  assert(!base.name().empty());
+  assert(!_cname.empty());
   assert(!member.name().empty());
-  std::string fname = base.name().as_string() + "_" + member.name().as_string();
+  std::string fname = _cname + "_" + member.name().as_string();
   std::string fid = "sol:@C@" + cname + "@F@" + fname + "#";
   code_typet ft;
   if (!is_return_void)
