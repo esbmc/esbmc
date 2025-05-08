@@ -801,6 +801,7 @@ void goto_symext::run_intrinsic(
   if(symname == "c:@F@__ESBMC_r_ok")
   {
     assert(func_call.operands.size() == 2 && "__ESBMC_r_ok expects 2 operands");
+  
     expr2tc addr = func_call.operands[0];
     expr2tc len_expr = func_call.operands[1];
   
@@ -808,13 +809,48 @@ void goto_symext::run_intrinsic(
     expr2tc deref = dereference2tc(get_empty_type(), addr);
     dereference(deref, dereferencet::INTERNAL);
   
-    if(internal_deref_items.empty())
-      return;
+    assert(!internal_deref_items.empty());
   
     expr2tc base_obj = internal_deref_items.front().object;
-    BigInt obj_size = type_byte_size(base_obj->type);
-    expr2tc base_size = constant_int2tc(len_expr->type, obj_size);
+    expr2tc base_size; // This will hold the size of the object being read from
   
+    if(is_array_type(base_obj->type))
+    {
+      const array_type2t &arr_type = to_array_type(base_obj->type);
+  
+      // Handle fixed-size and variable-size arrays
+      if(!is_nil_expr(arr_type.array_size))
+      {
+        BigInt elem_size_int = type_byte_size(arr_type.subtype);
+        expr2tc elem_size_expr = constant_int2tc(len_expr->type, elem_size_int);
+        base_size = mul2tc(len_expr->type, arr_type.array_size, elem_size_expr);        
+      }
+    }
+    else if(is_symbol2t(base_obj))
+    {
+      // Attempt to resolve VLA size from symbol's type
+      const symbol2t &sym = to_symbol2t(base_obj);
+      const type2tc &sym_type = sym.type;
+  
+      if(is_array_type(sym_type))
+      {
+        const array_type2t &arr_sym_type = to_array_type(sym_type);
+        if(!is_nil_expr(arr_sym_type.array_size))
+        {
+          BigInt elem_size = type_byte_size(arr_sym_type.subtype);
+          expr2tc elem_size_expr = constant_int2tc(len_expr->type, elem_size);
+          base_size = mul2tc(len_expr->type, arr_sym_type.array_size, elem_size_expr);
+        }
+      }
+    }
+    if(is_nil_expr(base_size))
+    {
+      // Fallback if no size info found
+      symex_assign(code_assign2tc(func_call.ret, expr2tc(gen_false_expr())), false, cur_state->guard);
+      return;
+    }
+    
+    // Construct bounds checks: 0 <= len < base_size
     expr2tc zero = constant_int2tc(len_expr->type, BigInt(0));
     expr2tc lower_bound = lessthanequal2tc(zero, len_expr);
     expr2tc upper_bound = lessthan2tc(len_expr, base_size);
@@ -823,7 +859,7 @@ void goto_symext::run_intrinsic(
     symex_assign(code_assign2tc(func_call.ret, result), false, cur_state->guard);
     return;
   }
-
+    
   if (symname == "c:@F@__ESBMC_unreachable")
   {
     if (options.get_bool_option("enable-unreachability-intrinsic"))
