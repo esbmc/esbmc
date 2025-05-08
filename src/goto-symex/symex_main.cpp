@@ -798,6 +798,32 @@ void goto_symext::run_intrinsic(
     return;
   }
 
+  if(symname == "c:@F@__ESBMC_r_ok")
+  {
+    assert(func_call.operands.size() == 2 && "__ESBMC_r_ok expects 2 operands");
+    expr2tc addr = func_call.operands[0];
+    expr2tc len_expr = func_call.operands[1];
+  
+    internal_deref_items.clear();
+    expr2tc deref = dereference2tc(get_empty_type(), addr);
+    dereference(deref, dereferencet::INTERNAL);
+  
+    if(internal_deref_items.empty())
+      return;
+  
+    expr2tc base_obj = internal_deref_items.front().object;
+    BigInt obj_size = type_byte_size(base_obj->type);
+    expr2tc base_size = constant_int2tc(len_expr->type, obj_size);
+  
+    expr2tc zero = constant_int2tc(len_expr->type, BigInt(0));
+    expr2tc lower_bound = lessthanequal2tc(zero, len_expr);
+    expr2tc upper_bound = lessthanequal2tc(len_expr, base_size);
+    expr2tc result = and2tc(lower_bound, upper_bound);
+  
+    symex_assign(code_assign2tc(func_call.ret, result), false, cur_state->guard);
+    return;
+  }
+  
   if (symname == "c:@F@__ESBMC_unreachable")
   {
     if (options.get_bool_option("enable-unreachability-intrinsic"))

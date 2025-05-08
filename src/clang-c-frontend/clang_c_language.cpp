@@ -451,6 +451,11 @@ void __VERIFIER_assume(int);
 void __VERIFIER_atomic_begin();
 void __VERIFIER_atomic_end();
 
+/* Support for CPROVER R_OK: This should return True if reading length bytes 
+ * of addr will not extrapolate the object that addr is pointing to.
+ */
+_Bool __ESBMC_r_ok(void *, unsigned long);
+
 /* Causes a verification error when its call is reachable; internal use in math
  * models */
 void __ESBMC_unreachable();
