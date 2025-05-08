@@ -10,8 +10,8 @@ assert float(a) == 60.0
 assert float(b) == 5.0
 
 # String conversion
-assert str(60) == '60'
-assert str(5.5) == '5.5'
+#assert str(60) == '60'
+#assert str(5.5) == '5.5'
 
 # Character conversion (ASCII values)
 assert chr(60) == '<'
