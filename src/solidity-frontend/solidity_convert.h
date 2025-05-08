@@ -119,6 +119,7 @@ protected:
     const exprt &this_expr,
     exprt &front_block,
     exprt &back_block);
+  bool is_sol_builin_symbol(const std::string &cname, const std::string &name);
 
   // handle the non-contract definition, including struct/enum/error/event/abstract/...
   bool get_noncontract_defition(nlohmann::json &ast_node);

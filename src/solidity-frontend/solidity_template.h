@@ -595,11 +595,14 @@ const std::string sol_uqAddr = R"(
 __attribute__((annotate("__ESBMC_inf_size"))) address_t sol_addr_array[1];
 __attribute__((annotate("__ESBMC_inf_size"))) void *sol_obj_array[1];
 __attribute__((annotate("__ESBMC_inf_size"))) const char *sol_cname_array[1];
-static unsigned sol_max_cnt = 0;
+unsigned int sol_max_cnt;
 
 int _ESBMC_get_addr_array_idx(address_t tgt)
 {
 __ESBMC_HIDE:;
+    if(tgt == (address_t)0)
+      return -1;
+
     for (unsigned int i = 0; i < sol_max_cnt; i++)
     {
         if ((address_t)sol_addr_array[i] == (address_t)tgt)
@@ -626,7 +629,7 @@ __ESBMC_HIDE:;
 void update_addr_obj(address_t addr, void *obj, const char *cname)
 {
 __ESBMC_HIDE:;
-    __ESBMC_assume(obj != NULL);
+    // __ESBMC_assume(obj != NULL);
     sol_addr_array[sol_max_cnt] = addr;
     sol_obj_array[sol_max_cnt] = obj;
     sol_cname_array[sol_max_cnt] = cname;
@@ -635,12 +638,13 @@ __ESBMC_HIDE:;
 address_t _ESBMC_get_unique_address(void *obj, const char *cname)
 {
 __ESBMC_HIDE:;
-    // __ESBMC_assume(obj != NULL);
-    address_t tmp = (address_t)0;
-    do
+    __ESBMC_assume(obj != NULL);
+    address_t tmp = (address_t)nondet_uint();
+    while (_ESBMC_get_addr_array_idx(tmp) == -1)
     {
-        tmp = nondet_ulong(); // ensure it's not address(0)
-    } while (tmp != (address_t)0 && _ESBMC_get_addr_array_idx(tmp) != -1);
+      // ensure it's not address(0) and unique
+        tmp = (address_t)nondet_uint(); 
+    }
     update_addr_obj(tmp, obj, cname);
     return tmp;
 }
@@ -723,6 +727,8 @@ block_prevrandao = uint256_t(nondet_uint());
 block_timestamp = uint256_t(nondet_uint());
 
 _gaslimit = nondet_uint();
+
+sol_max_cnt = 0;
 }
 )";
 
