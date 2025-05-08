@@ -10918,7 +10918,7 @@ bool solidity_convertert::get_high_level_member_access(
       "$return_" + base.name().as_string() + "_" + member.name().as_string();
     aux_id = "sol:@" + aux_name + std::to_string(aux_counter++);
     symbolt s;
-    typet t = member.type();
+    typet t = ft.return_type();
     if (t.id() == irept::id_code)
       t = to_code_type(t).return_type();
     std::string debug_modulename = get_modulename_from_path(absolute_path);
