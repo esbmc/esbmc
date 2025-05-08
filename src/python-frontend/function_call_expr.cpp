@@ -8,6 +8,11 @@
 #include <util/message.h>
 #include <util/string_constant.h>
 #include <regex>
+#include <iostream>
+
+#include <util/arith_tools.h>    // for from_integer
+#include <util/std_expr.h>       // for to_constant_expr
+#include <util/mp_arith.h>       // for mp_integer, to_integer
 
 using namespace json_utils;
 
@@ -359,6 +364,81 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
   return expr;
 }
 
+exprt function_call_expr::handle_str_symbol_to_int(const symbolt *sym) const
+{
+  std::string value;
+  const exprt &val = sym->value;
+
+  // Case 1: value is an array of characters (i.e., a proper string)
+  if(val.type().is_array() && val.has_operands())
+  {
+    for(const auto &ch : val.operands())
+    {
+      try
+      {
+        const auto &const_expr = to_constant_expr(ch);
+        std::string binary_str = id2string(const_expr.get_value());
+
+        // Interpret value as binary string
+        unsigned c = std::stoul(binary_str, nullptr, 2);
+
+        if(c == 0) break; // null terminator
+        if(c < 32 || c > 126)
+        {
+          std::cerr << "Invalid character code in string (non-printable): " << c << std::endl;
+          return from_integer(0, type_handler_.get_typet("int", 0));
+        }
+
+        value += static_cast<char>(c);
+      }
+      catch(const std::exception &e)
+      {
+        std::cerr << "Exception during character extraction: " << e.what() << std::endl;
+        return from_integer(0, type_handler_.get_typet("int", 0));
+      }
+    }
+  }
+  // Case 2: value is a single character constant
+  else if(val.is_constant() && val.type().is_signedbv())
+  {
+    try
+    {
+      std::string binary_str = id2string(to_constant_expr(val).get_value());
+      unsigned c = std::stoul(binary_str, nullptr, 2);
+
+      if(c < 32 || c > 126)
+      {
+        std::cerr << "Invalid character code (non-printable): " << c << std::endl;
+        return from_integer(0, type_handler_.get_typet("int", 0));
+      }
+
+      value += static_cast<char>(c);
+    }
+    catch(const std::exception &e)
+    {
+      std::cerr << "Exception during single-char extraction: " << e.what() << std::endl;
+      return from_integer(0, type_handler_.get_typet("int", 0));
+    }
+  }
+  else
+  {
+    std::cerr << "Unhandled symbol format for int() conversion." << std::endl;
+    return from_integer(0, type_handler_.get_typet("int", 0));
+  }
+
+  std::cout << "Reconstructed string value: \"" << value << "\"" << std::endl;
+
+  // Validate that it's a digit-only string
+  if(value.empty() || !std::all_of(value.begin(), value.end(), ::isdigit))
+  {
+    std::cerr << "Invalid string for integer conversion: \"" << value << "\"" << std::endl;
+    return from_integer(0, type_handler_.get_typet("int", 0));
+  }
+
+  int int_val = std::stoi(value);
+  return from_integer(int_val, type_handler_.get_typet("int", 0));
+}
+
 exprt function_call_expr::build_constant_from_arg() const
 {
   const std::string &func_name = function_id_.get_function();
@@ -376,6 +456,32 @@ exprt function_call_expr::build_constant_from_arg() const
   // Handle str(): determine size of the resulting string constant
   else if (func_name == "str")
     arg_size = handle_str(arg);
+
+  // Handle int(): convert string (from symbol) to int
+  else if (func_name == "int" && arg["_type"] == "Name")
+  {
+    std::string var_name = arg["id"];
+    std::string filename = function_id_.get_filename();
+    std::string var_symbol = "py:" + filename + "@" + var_name;
+
+    // Look up the symbol using the variable name
+    const symbolt *sym = converter_.find_symbol(var_symbol);
+
+    if(!sym)
+    {
+      std::cerr << "Warning: symbol not found: " << var_name << std::endl;
+      return from_integer(0, type_handler_.get_typet("int", 0)); // safe fallback
+    }
+
+    // Ensure it's a constant array (i.e., a string)
+    if(sym->value.is_constant() /*&& sym->value.type().is_array()*/)
+      return handle_str_symbol_to_int(sym);
+    //else
+    //{
+    //  std::cerr << "Symbol is not a constant array for int(): " << var_name << std::endl;
+    //  return from_integer(0, type_handler_.get_typet("int", 0)); // fallback
+    //}
+  }
 
   // Handle int(): convert float to int
   else if (func_name == "int" && arg["value"].is_number_float())

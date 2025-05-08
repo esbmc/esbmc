@@ -68,6 +68,8 @@ private:
    */
   exprt handle_int_to_str(nlohmann::json &arg) const;
 
+  exprt handle_str_symbol_to_int(const symbolt *sym) const;
+
   /*
    * Handles float-to-str conversions (e.g., str(5.5)) by converting
    * the float value into a string representation and generating
