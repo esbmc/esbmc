@@ -1534,7 +1534,7 @@ bool solidity_convertert::get_noncontract_decl_ref(
   return false;
 }
 
-// definition of event/error/interface/struct/...
+// definition of event/error/interface/struct/library/...
 bool solidity_convertert::get_noncontract_defition(nlohmann::json &ast_node)
 {
   std::string node_type = (ast_node)["nodeType"].get<std::string>();
@@ -1565,6 +1565,25 @@ bool solidity_convertert::get_noncontract_defition(nlohmann::json &ast_node)
   {
     // for abstract contract
     add_empty_body_node(ast_node);
+  }
+  else if (
+    node_type == "ContractDefinition" && ast_node["contractKind"] == "library")
+  {
+    // for library entity
+    std::string lib_name = ast_node["name"].get<std::string>();
+
+    if (get_struct_class(ast_node))
+      return true;
+    std::string old = current_baseContractName;
+    current_baseContractName = lib_name;
+    if (convert_ast_nodes(ast_node, lib_name))
+      return true;
+
+    symbolt lib_instance;
+    get_static_contract_instance(lib_name, lib_instance);
+    lib_instance.lvalue = true;
+    move_symbol_to_context(lib_instance);
+    current_baseContractName = old;
   }
 
   return false;
@@ -4020,6 +4039,50 @@ bool solidity_convertert::get_expr(
       callee_expr_json.contains("nodeType") &&
       callee_expr_json["nodeType"] == "MemberAccess")
     {
+      const auto &base = callee_expr_json["expression"];
+
+      if (
+        base.contains("referencedDeclaration") &&
+        base["referencedDeclaration"] > 0)
+      {
+        int base_decl_id = base["referencedDeclaration"];
+        const nlohmann::json &decl =
+          find_decl_ref_unique_id(src_ast_json, base_decl_id);
+        if (decl.empty())
+        {
+          log_error(
+            "failed to find the reference AST node, base contract name {}, "
+            "reference id {}",
+            current_baseContractName,
+            std::to_string(expr["referencedDeclaration"].get<int>()));
+          return true;
+        }
+        if (
+          decl["nodeType"] == "ContractDefinition" &&
+          decl["contractKind"] == "library")
+        {
+          std::string lib_name = decl["name"];
+          std::string func_name = callee_expr_json["memberName"];
+
+          const auto &func_def = get_func_decl_ref(lib_name, func_name);
+          if (func_def.empty())
+          {
+            log_error(
+              "Cannot locate function '{}' in library '{}'",
+              func_name,
+              lib_name);
+            return true;
+          }
+
+          side_effect_expr_function_callt call;
+          if (get_non_library_function_call(func_def, expr, call))
+            return true;
+
+          new_expr = call;
+          return false;
+        }
+      }
+
       if (get_expr(callee_expr_json, literal_type, new_expr))
         return true;
       break;
