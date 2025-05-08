@@ -128,6 +128,14 @@ function(mangle_clib output)
   file(GLOB_RECURSE c2goto_header_files CONFIGURE_DEPENDS
     "${CMAKE_CURRENT_SOURCE_DIR}/headers/*.h")
 
+  # Extract C models for NumPy
+  if(ENABLE_PYTHON_FRONTEND)
+    file(GLOB_RECURSE c2goto_numpy_files CONFIGURE_DEPENDS
+      "${CMAKE_CURRENT_SOURCE_DIR}/library/numpy/*.c")
+  else()
+    set(c2goto_numpy_files "")
+  endif()
+
   # For each config, generate clib*.c and clib*.goto file in the current binary directory
   foreach(in_f ${ARGN})
     set (in_f "${${in_f}}")
@@ -139,10 +147,14 @@ function(mangle_clib output)
     set(out_goto "${CMAKE_CURRENT_BINARY_DIR}/${out_goto}")
     set(out_file "${CMAKE_CURRENT_BINARY_DIR}/${out_file}")
 
+    set(inputs_c ${c2goto_library_files})
+
     if(ENABLE_LIBM)
-      set(inputs_c ${c2goto_library_files} ${c2goto_libm_files})
-    else()
-      set(inputs_c ${c2goto_library_files})
+      list(APPEND inputs_c ${c2goto_libm_files})
+    endif()
+
+    if(ENABLE_PYTHON_FRONTEND)
+      list(APPEND inputs_c ${c2goto_numpy_files})
     endif()
 
     if(ESBMC_CHERI_CLANG)
@@ -189,6 +201,21 @@ function(mangle_clib output)
          MACRO ESBMC_FLAIL
          ACC_HEADERS_INTO ${CMAKE_CURRENT_BINARY_DIR}/libm.h)
 
+  if(ENABLE_PYTHON_FRONTEND)
+    mangle(${CMAKE_CURRENT_BINARY_DIR}/libnumpy.c
+           ${CMAKE_CURRENT_SOURCE_DIR}/library/numpy
+           WILDCARD *.c
+           SINGLE
+           PREFIX esbmc_numpy_
+           MACRO ESBMC_FLAIL
+           ACC_HEADERS_INTO ${CMAKE_CURRENT_BINARY_DIR}/libnumpy.h)
+
+    list(APPEND result
+      ${CMAKE_CURRENT_BINARY_DIR}/libnumpy.c
+      ${CMAKE_CURRENT_BINARY_DIR}/libnumpy.h)
+  endif()
+
+
   list(APPEND result ${CMAKE_CURRENT_BINARY_DIR}/libc.c
                      ${CMAKE_CURRENT_BINARY_DIR}/libm.c)
   set(${output} "${result}" PARENT_SCOPE)
@@ -203,4 +230,17 @@ target_include_directories(clibs
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
 )
 target_link_libraries(clibs c2gotoheaders fmt::fmt filesystem)
-set_target_properties(clibs PROPERTIES PRIVATE_HEADER "${CMAKE_CURRENT_BINARY_DIR}/libc.h;${CMAKE_CURRENT_BINARY_DIR}/libm.h")
+#set_target_properties(clibs PROPERTIES PRIVATE_HEADER "${CMAKE_CURRENT_BINARY_DIR}/libc.h;${CMAKE_CURRENT_BINARY_DIR}/libm.h${NUMPY_HEADER}")
+
+set(private_headers
+  "${CMAKE_CURRENT_BINARY_DIR}/libc.h"
+  "${CMAKE_CURRENT_BINARY_DIR}/libm.h"
+)
+
+if(ENABLE_PYTHON_FRONTEND)
+  list(APPEND private_headers "${CMAKE_CURRENT_BINARY_DIR}/libnumpy.h")
+endif()
+
+set_target_properties(clibs PROPERTIES PRIVATE_HEADER "${private_headers}")
+
+
