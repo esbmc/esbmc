@@ -10882,7 +10882,12 @@ bool solidity_convertert::get_high_level_member_access(
   std::string fid = "sol:@C@" + cname + "@F@" + fname + "#";
   code_typet ft;
   if (!is_return_void)
-    ft.return_type() = member.type();
+  {
+    if(is_func_call)
+      ft.return_type() = to_code_type(member.type()).return_type();
+    else
+      ft.return_type() = member.type();
+  }
   else
     ft.return_type() = empty_typet();
   symbolt fs;
@@ -10956,7 +10961,7 @@ bool solidity_convertert::get_high_level_member_access(
     get_static_contract_instance(str, dump);
     exprt _base = symbol_expr(dump);
 
-    // bool is_revert = false;
+    bool is_revert = false;
     if (is_func_call)
     {
       // e.g. x.call() y.call(). we need to find the definiton of the call beyond the contract x/y seperately
@@ -10996,24 +11001,20 @@ bool solidity_convertert::get_high_level_member_access(
         else
         {
           // this should be a revert
-          // however, the revert cases have little verification value
-          // also, esbmc-kind havs trouble in __ESBMC_asusme(false) (v7.8)
-          // thus skip it
-          // side_effect_expr_function_callt call;
-          // get_library_function_call_no_args(
-          //   "__ESBMC_assume", "c:@F@__ESBMC_assume", empty_typet(), l, call);
+          // however, esbmc-kind havs trouble in __ESBMC_asusme(false) (v7.8)
+          side_effect_expr_function_callt call;
+          get_library_function_call_no_args(
+            "__ESBMC_assume", "c:@F@__ESBMC_assume", empty_typet(), l, call);
 
-          // exprt arg = false_exprt();
-          // call.arguments().push_back(arg);
-          // memcall = call;
-          // is_revert = true;
-
-          continue;
+          exprt arg = false_exprt();
+          call.arguments().push_back(arg);
+          memcall = call;
+          is_revert = true;
         }
       }
     }
     rhs = memcall;
-    if (!is_return_void) // && !is_revert
+    if (!is_return_void && !is_revert) 
     {
       exprt _assign = side_effect_exprt("assign", tmp.type());
       convert_type_expr(ns, memcall, tmp.type());
