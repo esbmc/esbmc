@@ -799,7 +799,7 @@ void goto_symext::run_intrinsic(
   }
 
   // Check if the function being interpreted is the intrinsic __ESBMC_r_ok
-  if(symname == "c:@F@__ESBMC_r_ok")
+  if (symname == "c:@F@__ESBMC_r_ok")
   {
     assert(func_call.operands.size() == 2 && "__ESBMC_r_ok expects 2 operands");
 
@@ -818,15 +818,15 @@ void goto_symext::run_intrinsic(
     expr2tc base_size;
     type2tc size_type = get_uint64_type();
 
-    if(is_array_type(base_obj->type))
+    if (is_array_type(base_obj->type))
     {
       const array_type2t &arr_type = to_array_type(base_obj->type);
 
-      if(!is_nil_expr(arr_type.array_size))
+      if (!is_nil_expr(arr_type.array_size))
       {
         // Compute the size of each element in bytes
         BigInt elem_size = type_byte_size(arr_type.subtype);
-        
+
         // Represent the element size as a constant expression of the chosen size type
         expr2tc elem_size_expr = constant_int2tc(size_type, elem_size);
 
@@ -847,11 +847,12 @@ void goto_symext::run_intrinsic(
     // Combine the two bounds checks: (0 <= len_expr && len_expr < base_size)
     expr2tc result = and2tc(lower_bound, upper_bound);
     // Assign the final result to the return value of __ESBMC_r_ok
-    symex_assign(code_assign2tc(func_call.ret, result), false, cur_state->guard);
+    symex_assign(
+      code_assign2tc(func_call.ret, result), false, cur_state->guard);
 
     return;
   }
-        
+
   if (symname == "c:@F@__ESBMC_unreachable")
   {
     if (options.get_bool_option("enable-unreachability-intrinsic"))
