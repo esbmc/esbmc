@@ -6229,10 +6229,10 @@ bool solidity_convertert::get_sol_builtin_ref(
         side_effect_expr_function_callt call;
         if (name == "max")
           get_library_function_call_no_args(
-            "_max", "sol:@F@_max", unsignedbv_typet(256), l, call);
+            "_max", "c:@F@_max", unsignedbv_typet(256), l, call);
         else
           get_library_function_call_no_args(
-            "_min", "sol:@F@_min", unsignedbv_typet(256), l, call);
+            "_min", "c:@F@_min", unsignedbv_typet(256), l, call);
         call.arguments().push_back(constant_exprt(
           integer2binary(string2integer(width), bv_width(int_type())),
           width,
@@ -6244,7 +6244,7 @@ bool solidity_convertert::get_sol_builtin_ref(
       else if (name == "creationCode" || name == "runtimeCode")
         // nondet Bytes
         get_library_function_call_no_args(
-          "_" + name, "sol:@F@_" + name, uint_type(), l, new_expr);
+          "_" + name, "c:@F@_" + name, uint_type(), l, new_expr);
       else
         return true;
 
