@@ -2501,6 +2501,12 @@ bool solidity_convertert::move_inheritance_to_ctor(
             {
               assert(!comp.name().empty());
               assert(!c_comp.name().empty());
+
+              if (is_sol_builin_symbol(c_name, c_comp.name().as_string()))
+                // skip builtin symbol.
+                //e.g. this->$address = _ESBMC_ctor_A_tmp.$address;
+                continue;
+
               lhs = member_exprt(this_expr, comp.name(), comp.type());
               rhs = member_exprt(
                 symbol_expr(added_ctor_symbol), c_comp.name(), c_comp.type());
@@ -9162,6 +9168,20 @@ void solidity_convertert::get_contract_mutex_expr(
   expr = member_exprt(this_expr, _mutex.name(), _mutex.type());
 }
 
+bool solidity_convertert::is_sol_builin_symbol(
+  const std::string &cname,
+  const std::string &name)
+{
+  std::string tx_name, tx_id;
+  get_contract_mutex_name(cname, tx_name, tx_id);
+  std::set<std::string> list = {
+    "$address", "$codehash", "$balance", "$code", tx_name, "_ESBMC_bind_cname"};
+  if (list.count(name) != 0)
+    return true;
+
+  return false;
+}
+
 /*
   old_sender = msg.sender
   msg.sender = instance.$address
@@ -10883,7 +10903,7 @@ bool solidity_convertert::get_high_level_member_access(
   code_typet ft;
   if (!is_return_void)
   {
-    if(is_func_call)
+    if (is_func_call)
       ft.return_type() = to_code_type(member.type()).return_type();
     else
       ft.return_type() = member.type();
@@ -11014,7 +11034,7 @@ bool solidity_convertert::get_high_level_member_access(
       }
     }
     rhs = memcall;
-    if (!is_return_void && !is_revert) 
+    if (!is_return_void && !is_revert)
     {
       exprt _assign = side_effect_exprt("assign", tmp.type());
       convert_type_expr(ns, memcall, tmp.type());
