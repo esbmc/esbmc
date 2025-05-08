@@ -8,6 +8,9 @@
 #include <util/message.h>
 #include <util/string_constant.h>
 #include <regex>
+#include <util/arith_tools.h>
+#include <util/ieee_float.h>
+#include <util/message.h>
 
 using namespace json_utils;
 
@@ -359,6 +362,111 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
   return expr;
 }
 
+/// Extracts the character string represented by a symbol's constant value.
+std::optional<std::string>
+function_call_expr::extract_string_from_symbol(const symbolt *sym) const
+{
+  const exprt &val = sym->value;
+  std::string result;
+
+  auto decode_char = [](const exprt &expr) -> std::optional<char> {
+    try
+    {
+      const auto &const_expr = to_constant_expr(expr);
+      std::string binary_str = id2string(const_expr.get_value());
+      unsigned c = std::stoul(binary_str, nullptr, 2);
+      return static_cast<char>(c);
+    }
+    catch (const std::exception &e)
+    {
+      log_error("Failed to decode character: {}", e.what());
+      return std::nullopt;
+    }
+  };
+
+  if (val.type().is_array() && val.has_operands())
+  {
+    for (const auto &ch : val.operands())
+    {
+      auto decoded = decode_char(ch);
+      if (!decoded)
+        return std::nullopt;
+      result += *decoded;
+    }
+  }
+  else if (val.is_constant() && val.type().is_signedbv())
+  {
+    auto decoded = decode_char(val);
+    if (!decoded)
+      return std::nullopt;
+    result += *decoded;
+  }
+  else
+  {
+    log_error("Unhandled symbol format in string extraction.");
+    return std::nullopt;
+  }
+
+  return result;
+}
+
+exprt function_call_expr::handle_str_symbol_to_float(const symbolt *sym) const
+{
+  auto value_opt = extract_string_from_symbol(sym);
+  if (!value_opt)
+    return from_double(0.0, type_handler_.get_typet("float", 0));
+
+  try
+  {
+    double dval = std::stod(*value_opt);
+    return from_double(dval, type_handler_.get_typet("float", 0));
+  }
+  catch (const std::exception &e)
+  {
+    log_error(
+      "Failed float conversion from string \"{}\": {}", *value_opt, e.what());
+    return from_double(0.0, type_handler_.get_typet("float", 0));
+  }
+}
+
+exprt function_call_expr::handle_str_symbol_to_int(const symbolt *sym) const
+{
+  auto value_opt = extract_string_from_symbol(sym);
+  if (!value_opt)
+    return from_integer(0, type_handler_.get_typet("int", 0));
+
+  const std::string &value = *value_opt;
+  if (value.empty() || !std::all_of(value.begin(), value.end(), ::isdigit))
+  {
+    log_error("Invalid string for integer conversion: \"{}\"", value);
+    return from_integer(0, type_handler_.get_typet("int", 0));
+  }
+
+  try
+  {
+    int int_val = std::stoi(value);
+    return from_integer(int_val, type_handler_.get_typet("int", 0));
+  }
+  catch (const std::exception &e)
+  {
+    log_error("Failed int conversion from string \"{}\": {}", value, e.what());
+    return from_integer(0, type_handler_.get_typet("int", 0));
+  }
+}
+
+const symbolt *
+function_call_expr::lookup_python_symbol(const std::string &var_name) const
+{
+  std::string filename = function_id_.get_filename();
+  std::string var_symbol = "py:" + filename + "@" + var_name;
+  const symbolt *sym = converter_.find_symbol(var_symbol);
+
+  if (!sym)
+    log_warning("Symbol not found: {}", var_name);
+
+  return sym;
+}
+
 exprt function_call_expr::build_constant_from_arg() const
 {
   const std::string &func_name = function_id_.get_function();
@@ -377,9 +485,25 @@ exprt function_call_expr::build_constant_from_arg() const
   else if (func_name == "str")
     arg_size = handle_str(arg);
 
+  // Handle int(): convert string (from symbol) to int
+  else if (func_name == "int" && arg["_type"] == "Name")
+  {
+    const symbolt *sym = lookup_python_symbol(arg["id"]);
+    if (sym && sym->value.is_constant())
+      return handle_str_symbol_to_int(sym);
+  }
+
   // Handle int(): convert float to int
   else if (func_name == "int" && arg["value"].is_number_float())
     handle_float_to_int(arg);
+
+  // Handle float(): convert string (from symbol) to float
+  else if (func_name == "float" && arg["_type"] == "Name")
+  {
+    const symbolt *sym = lookup_python_symbol(arg["id"]);
+    if (sym && sym->value.is_constant())
+      return handle_str_symbol_to_float(sym);
+  }
 
   // Handle float(): convert int to float
   else if (func_name == "float" && arg["value"].is_number_integer())
