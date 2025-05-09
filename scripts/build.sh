@@ -173,7 +173,7 @@ do
           -DENABLE_GOTO_CONTRACTOR=On \
           -DACADEMIC_BUILD=ON"  ;;
     B) BASE_ARGS="$BASE_ARGS -DESBMC_BUNDLE_LIBC=$OPTARG" ;;
-    x) BASE_ARGS="$BASE_ARGS -ESBMC_CHERI=ON" ;;
+    x) BASE_ARGS="$BASE_ARGS -DESBMC_CHERI=ON" ;;
     *) exit 1 ;;
     esac
 done
