@@ -19,7 +19,7 @@ const std::string sol_header = R"(
 #include <assert.h>
 #include <string.h>
 // #include <string>
-#include <math.h>
+// #include <math.h>
 )";
 
 /*
@@ -161,6 +161,7 @@ __ESBMC_HIDE:;
 
 //   return result;
 // }
+double pow(double x, double y);
 )";
 
 const std::string sol_string = R"(
@@ -596,7 +597,7 @@ const std::string sol_uqAddr = R"(
 __attribute__((annotate("__ESBMC_inf_size"))) address_t sol_addr_array[1];
 __attribute__((annotate("__ESBMC_inf_size"))) void *sol_obj_array[1];
 __attribute__((annotate("__ESBMC_inf_size"))) const char *sol_cname_array[1];
-static unsigned int sol_max_cnt = 0;
+unsigned int sol_max_cnt;
 
 int _ESBMC_get_addr_array_idx(address_t tgt)
 {
@@ -729,6 +730,8 @@ block_prevrandao = uint256_t(nondet_uint());
 block_timestamp = uint256_t(nondet_uint());
 
 _gaslimit = nondet_uint();
+
+unsigned int sol_max_cnt = 0;
 }
 )";
 

@@ -594,22 +594,22 @@ bool solidity_convertert::populate_low_level_functions(const std::string &cname)
   // call("")
   if (get_call_definition(cname, new_expr))
     return true;
-  move_builtin_to_contract(cname, "call", new_expr.type(), true);
+  move_builtin_to_contract(cname, new_expr, true);
 
   // call{}("")
   if (get_call_value_definition(cname, new_expr))
     return true;
-  move_builtin_to_contract(cname, "call", new_expr.type(), true);
+  move_builtin_to_contract(cname, new_expr, true);
 
   // transfer()
   if (get_transfer_definition(cname, new_expr))
     return true;
-  move_builtin_to_contract(cname, "transfer", new_expr.type(), true);
+  move_builtin_to_contract(cname, new_expr, true);
 
   // send()
   if (get_send_definition(cname, new_expr))
     return true;
-  move_builtin_to_contract(cname, "send", new_expr.type(), true);
+  move_builtin_to_contract(cname, new_expr, true);
 
   return false;
 }
@@ -1421,9 +1421,19 @@ bool solidity_convertert::get_contract_definition(const std::string &c_name)
         return true;
       log_debug("solidity", "Finish parsing contract {}'s body", c_name);
 
+      // for inheritance
+      bool has_inherit_from = inheritanceMap[c_name].size() > 1;
+      if (
+        has_inherit_from &&
+        move_initializer_to_ctor(based_contracts, c_name, true))
+        return true;
+
       // initialize state variable
       if (move_initializer_to_ctor(based_contracts, c_name))
         return true;
+
+      symbolt s = *context.find_symbol(prefix + c_name);
+      s.dump();
     }
   }
 
@@ -2251,11 +2261,20 @@ void solidity_convertert::move_to_initializer(const exprt &expr)
   }
 }
 
-// convert the initialization of the state variable
-// into the equivalent assignmment in the ctor
 bool solidity_convertert::move_initializer_to_ctor(
   const nlohmann::json *based_contracts,
   const std::string contract_name)
+{
+  return move_initializer_to_ctor(based_contracts, contract_name, false);
+}
+
+// convert the initialization of the state variable
+// into the equivalent assignmment in the ctor
+// for inheritance_ctor, we skip the builtin assignment
+bool solidity_convertert::move_initializer_to_ctor(
+  const nlohmann::json *based_contracts,
+  const std::string contract_name,
+  bool is_aux_ctor)
 {
   log_debug(
     "solidity",
@@ -2263,10 +2282,18 @@ bool solidity_convertert::move_initializer_to_ctor(
     contract_name);
 
   std::string ctor_id;
-  if (get_ctor_call_id(contract_name, ctor_id))
+  if (is_aux_ctor)
   {
-    log_error("cannot find the construcor");
-    return true;
+    std::string dump;
+    get_inherit_ctor_definition_name(contract_name, dump, ctor_id);
+  }
+  else
+  {
+    if (get_ctor_call_id(contract_name, ctor_id))
+    {
+      log_error("cannot find the construcor");
+      return true;
+    }
   }
 
   symbolt &sym = *context.find_symbol(ctor_id);
@@ -2302,6 +2329,13 @@ bool solidity_convertert::move_initializer_to_ctor(
         sym.value.operands().insert(sym.value.operands().begin(), tmp);
         continue;
       }
+      if (is_aux_ctor)
+      {
+        if (
+          comp.name().empty() ||
+          is_sol_builin_symbol(contract_name, comp.name().as_string()))
+          continue;
+      }
 
       exprt lhs = member_exprt(base, comp.name(), comp.type());
       if (context.find_symbol(comp.identifier()) == nullptr)
@@ -2332,12 +2366,20 @@ bool solidity_convertert::move_initializer_to_ctor(
       convert_expression_to_code(tmp);
       sym.value.operands().insert(sym.value.operands().begin(), tmp);
     }
-    // }
   }
 
   // insert parent ctor call in the front
   if (move_inheritance_to_ctor(based_contracts, contract_name, ctor_id, sym))
     return true;
+
+  if (is_aux_ctor)
+  {
+    // hide it
+    code_labelt label;
+    label.set_label("__ESBMC_HIDE");
+    label.code() = code_skipt();
+    sym.value.operands().insert(sym.value.operands().begin(), label);
+  }
 
   return false;
 }
@@ -2429,26 +2471,9 @@ bool solidity_convertert::move_inheritance_to_ctor(
         typet c_type(irept::id_symbol);
         c_type.identifier(prefix + c_name);
 
-        std::string ctor_ins_name = "_ESBMC_ctor_" + c_name + "_tmp";
-        //? do we need to set the id?
-        std::string ctor_ins_id =
-          "sol:@C@" + c_name + "@" + ctor_ins_name + "#";
-        locationt ctor_ins_loc = context.find_symbol(ctor_id)->type.location();
-        std::string ctor_ins_debug_modulename =
-          get_modulename_from_path(absolute_path);
-        typet ctor_Ins_typet = symbol_typet(prefix + c_name);
-
-        symbolt ctor_ins_symbol;
-        get_default_symbol(
-          ctor_ins_symbol,
-          ctor_ins_debug_modulename,
-          ctor_Ins_typet,
-          ctor_ins_name,
-          ctor_ins_id,
-          ctor_ins_loc);
-        ctor_ins_symbol.lvalue = true;
-        ctor_ins_symbol.is_extern = false;
-        symbolt &added_ctor_symbol = *move_symbol_to_context(ctor_ins_symbol);
+        symbolt added_ctor_symbol;
+        if (get_inherit_static_contract_instance(c_name, added_ctor_symbol))
+          return true;
 
         // get value
         // search for the parameter list for the constructor
@@ -2475,16 +2500,6 @@ bool solidity_convertert::move_inheritance_to_ctor(
           }
         }
 
-        exprt rhs;
-        if (get_new_object_ctor_call(c_name, c_param_list_node, rhs))
-          return true;
-        added_ctor_symbol.value = rhs;
-
-        // insert the declaration
-        code_declt decl(symbol_expr(added_ctor_symbol));
-        decl.operands().push_back(rhs);
-        sym.value.operands().insert(sym.value.operands().begin(), decl);
-
         // copy value e.g.  this.data = X.data
         struct_typet type_complete =
           to_struct_type(context.find_symbol(prefix + contract_name)->type);
@@ -2492,6 +2507,7 @@ bool solidity_convertert::move_inheritance_to_ctor(
           to_struct_type(context.find_symbol(prefix + c_name)->type);
 
         exprt lhs;
+        exprt rhs;
         exprt _assign;
         for (const auto &c_comp : c_type_complete.components())
         {
@@ -2521,9 +2537,8 @@ bool solidity_convertert::move_inheritance_to_ctor(
               }
 
               convert_expression_to_code(_assign);
-              // insert after the object declaration
               sym.value.operands().insert(
-                sym.value.operands().begin() + 1, _assign);
+                sym.value.operands().begin(), _assign);
               break;
             }
           }
@@ -2531,76 +2546,6 @@ bool solidity_convertert::move_inheritance_to_ctor(
       }
     }
   }
-  return false;
-}
-
-// for the contract-type variable that does not have initialization
-bool solidity_convertert::get_instantiation_ctor_call(
-  const std::string &contract_name,
-  exprt &new_expr)
-{
-  // 1. add the ctor function symbol
-  std::string name, id;
-  name = contract_name;
-  id = "sol:@C@" + contract_name + "@F@" + contract_name + "#";
-
-  code_typet type;
-  typet tmp_rtn_type("constructor");
-  type.return_type() = tmp_rtn_type;
-  type.set("#member_name", prefix + contract_name);
-  type.set("copy_cons", 1);
-
-  locationt location_begin;
-
-  std::string debug_modulename = get_modulename_from_path(absolute_path);
-
-  symbolt symbol;
-  get_default_symbol(symbol, debug_modulename, type, name, id, location_begin);
-
-  symbol.lvalue = true;
-  symbol.is_extern = false;
-  symbol.file_local = false;
-
-  auto &added_symbol = *move_symbol_to_context(symbol);
-
-  // add empty body
-  added_symbol.value = nil_exprt();
-
-  // add this pointer as the first function param
-  get_function_this_pointer_param(
-    contract_name, id, debug_modulename, location_begin, type);
-
-  // add "int* p" as the second function param
-  // as there is no var_ptr in solidity, we will not have conflict definition
-  typet param_type = pointer_typet(int_type());
-
-  // the name and id can be hard-coded since they will not be referred
-  std::string p_name = "p";
-  std::string p_id =
-    "sol:@C@" + contract_name + "@F@" + contract_name + "@" + p_name + "#";
-  symbolt param_symbol;
-  get_default_symbol(
-    param_symbol, debug_modulename, param_type, p_name, p_id, location_begin);
-  param_symbol.lvalue = true;
-  param_symbol.is_parameter = true;
-  param_symbol.file_local = true;
-  move_symbol_to_context(param_symbol);
-
-  auto param = code_typet::argumentt();
-  param.type() = param_type;
-  param.cmt_base_name(p_name);
-  param.cmt_identifier(p_id);
-  param.location() = location_begin;
-
-  // update the param
-  type.arguments().push_back(param);
-  added_symbol.type = type;
-
-  // ? we do not need to populate the initializer
-  // 2. construct the ctor call
-  if (get_new_object_ctor_call(contract_name, empty_json, new_expr))
-    return true;
-
   return false;
 }
 
@@ -2669,11 +2614,13 @@ bool solidity_convertert::get_function_definition(
     typet tmp_rtn_type("constructor");
     type.return_type() = tmp_rtn_type;
     type.set("#member_name", prefix + c_name);
+    type.set("#inlined", true);
   }
   else if (ast_node.contains("returnParameters"))
   {
     if (get_type_description(ast_node["returnParameters"], type.return_type()))
       return true;
+    //? set member name?
   }
   else
   {
@@ -7864,7 +7811,7 @@ std::string
 solidity_convertert::get_implict_ctor_call_id(const std::string &contract_name)
 {
   // for implicit ctor, the id is manually set as 0
-  return "sol:@C@" + contract_name + "@F@" + contract_name + "#0";
+  return "sol:@C@" + contract_name + "@F@" + contract_name + "#";
 }
 
 std::string
@@ -9088,6 +9035,8 @@ void solidity_convertert::get_static_contract_instance(
     ctor_ins_symbol.is_extern = false;
     // the instance should be set as static
     ctor_ins_symbol.static_lifetime = true;
+    ctor_ins_symbol.file_local = true;
+    ctor_ins_symbol.lvalue = true;
 
     auto &added_sym = *move_symbol_to_context(ctor_ins_symbol);
 
@@ -9138,6 +9087,188 @@ void solidity_convertert::get_static_contract_instance(
     added_sym.value = ctor;
     sym = added_sym;
   }
+}
+
+void solidity_convertert::get_inherit_static_contract_instance_name(
+  const std::string c_name,
+  std::string &name,
+  std::string &id)
+{
+  name = "_ESBMC_ctor_" + c_name;
+  id = "sol:@" + name + "#";
+}
+
+void solidity_convertert::get_inherit_ctor_definition_name(
+  const std::string c_name,
+  std::string &name,
+  std::string &id)
+{
+  name = c_name;
+  id = "sol:@C@" + c_name + "@F@" + name + "#0";
+}
+
+void solidity_convertert::get_inherit_ctor_definition(
+  const std::string c_name,
+  exprt &new_expr)
+{
+  std::string fname, fid;
+  get_inherit_ctor_definition_name(c_name, fname, fid);
+  if (context.find_symbol(fid) != nullptr)
+  {
+    new_expr = symbol_expr(*context.find_symbol(fid));
+    return;
+  }
+  code_typet ft;
+  typet tmp_rtn_type("constructor");
+  ft.return_type() = tmp_rtn_type;
+  ft.set("#member_name", prefix + c_name);
+  ft.set("#inlined", true);
+  symbolt fs;
+  std::string debug_modulename = get_modulename_from_path(absolute_path);
+  get_default_symbol(fs, debug_modulename, ft, fname, fid, locationt());
+  auto &add_sym = *move_symbol_to_context(fs);
+
+  get_function_this_pointer_param(
+    c_name, fid, debug_modulename, locationt(), ft);
+
+  // param: float
+  std::string aname = "dump";
+  std::string aid = "sol:@C@" + c_name + "@F@" + c_name + "@" + aname + "#";
+  typet addr_t = float_type();
+  addr_t.cmt_constant(true);
+  symbolt addr_s;
+  get_default_symbol(addr_s, debug_modulename, addr_t, aname, aid, locationt());
+  move_symbol_to_context(addr_s);
+
+  auto param = code_typet::argumentt();
+  param.type() = addr_t;
+  param.cmt_base_name(aname);
+  param.cmt_identifier(aid);
+  param.location() = locationt();
+  ft.arguments().push_back(param);
+  add_sym.type = ft;
+
+  // body
+  exprt func_body = code_blockt();
+  std::string ctor_id = get_explicit_ctor_call_id(c_name);
+  if (!ctor_id.empty())
+  {
+    nlohmann::json json = find_constructor_ref(c_name);
+    if (json.is_null() || json.empty() || !json.contains("id"))
+    {
+      log_error("internal error in constructing inherit_ctor body");
+      abort();
+    }
+    json["id"] = 0;
+    json["is_inherited"] = true;
+
+    // insert
+    for (auto &node : src_ast_json["nodes"])
+    {
+      if (node["nodeType"] == "ContractDefinition" && node["name"] == c_name)
+        node["nodes"].push_back(json);
+    }
+
+    auto old_current_functionName = current_functionName;
+    auto old_current_functionDecl = current_functionDecl;
+    current_functionDecl = &json;
+    current_functionName = c_name;
+    if (
+      (*current_functionDecl).contains("body") ||
+      ((*current_functionDecl).contains("implemented") &&
+       (*current_functionDecl)["implemented"] == true))
+    {
+      log_debug(
+        "solidity", "\t parsing function {}'s body", current_functionName);
+      if (get_block((*current_functionDecl)["body"], func_body))
+      {
+        log_error("internal error in constructing inherit_ctor body");
+        abort();
+      }
+    }
+    current_functionDecl = old_current_functionDecl;
+    current_functionName = old_current_functionName;
+
+    // remove insertion
+    for (nlohmann::json &node : src_ast_json["nodes"])
+    {
+      if (node["nodeType"] == "ContractDefinition" && node["name"] == c_name)
+      {
+        // Reverse iterate to find the last inserted object with id == 0
+        for (auto it = node.rbegin(); it != node.rend(); ++it)
+        {
+          if (
+            it.value().is_object() && it.value().contains("id") &&
+            it.value()["id"].get<int>() == 0)
+          {
+            // Erase requires a forward iterator, so convert it
+            node.erase(std::next(it).base());
+            break; // Only one needs to be removed
+          }
+        }
+      }
+    }
+  }
+  add_sym.value = func_body;
+
+  new_expr = symbol_expr(add_sym);
+  move_builtin_to_contract(c_name, new_expr, "public", true);
+}
+
+// create an const instance only used for inheritance assignment
+// e.g. this->x = _ESBMC_ctor_A_tmp.x;
+bool solidity_convertert::get_inherit_static_contract_instance(
+  const std::string c_name,
+  symbolt &sym)
+{
+  log_debug("solidity", "get_inherit_static_contract_instance");
+  std::string ctor_ins_name, ctor_ins_id;
+  get_inherit_static_contract_instance_name(c_name, ctor_ins_name, ctor_ins_id);
+
+  if (context.find_symbol(ctor_ins_id) != nullptr)
+  {
+    sym = *context.find_symbol(ctor_ins_id);
+    return false;
+  }
+
+  std::string ctor_ins_debug_modulename =
+    get_modulename_from_path(absolute_path);
+  typet ctor_Ins_typet = symbol_typet(prefix + c_name);
+
+  symbolt ctor_ins_symbol;
+  get_default_symbol(
+    ctor_ins_symbol,
+    ctor_ins_debug_modulename,
+    ctor_Ins_typet,
+    ctor_ins_name,
+    ctor_ins_id,
+    locationt());
+  ctor_ins_symbol.lvalue = true;
+  ctor_ins_symbol.file_local = true;
+  ctor_ins_symbol.static_lifetime = true;
+
+  symbolt &added_ctor_symbol = *move_symbol_to_context(ctor_ins_symbol);
+
+  // create aux constructor
+  // Base(&this, float y) // since solidity has no floating point
+  side_effect_expr_function_callt call;
+  exprt new_expr;
+  get_inherit_ctor_definition(c_name, new_expr);
+
+  exprt this_object;
+  get_new_object(symbol_typet(prefix + c_name), this_object);
+  call.arguments().push_back(this_object);
+  call.arguments().push_back(gen_zero(float_type()));
+
+  call.function() = new_expr;
+  call.function().set("constructor", 1);
+  call.type() = symbol_typet(prefix + c_name);
+  exprt val;
+  get_temporary_object(call, val);
+  added_ctor_symbol.value = val;
+
+  sym = added_ctor_symbol;
+  return false;
 }
 
 void solidity_convertert::get_contract_mutex_name(
@@ -9590,6 +9721,7 @@ void solidity_convertert::get_aux_array(const exprt &src_expr, exprt &new_expr)
   sym.static_lifetime = true;
   sym.is_extern = false;
   sym.lvalue = true;
+  sym.file_local = true;
 
   symbolt &added_symbol = *move_symbol_to_context(sym);
 
@@ -10165,6 +10297,14 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
   symbolt tmp;
   get_static_contract_instance(contract_name, tmp);
 
+  // inheritance instance: make a copy of the static instance
+  symbolt tmp2;
+  if (inheritanceMap[contract_name].size() > 1)
+  {
+    if (get_inherit_static_contract_instance(contract_name, tmp2))
+      return true;
+  }
+
   // binding
   exprt bind_expr;
   if (!is_bound)
@@ -10205,26 +10345,43 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
 }
 
 void solidity_convertert::move_builtin_to_contract(
-  const std::string c_name,
-  const std::string &name,
-  const typet &t,
+  const std::string cname,
+  const exprt &sym,
   bool is_method)
 {
-  std::string c_id = prefix + c_name;
+  move_builtin_to_contract(cname, sym, "private", is_method);
+}
+
+void solidity_convertert::move_builtin_to_contract(
+  const std::string cname,
+  const exprt &sym,
+  const std::string &access,
+  bool is_method)
+{
+  std::string c_id = prefix + cname;
   symbolt &c_sym = *context.find_symbol(c_id);
   assert(c_sym.type.is_struct());
 
-  struct_typet::componentt comp(name, name, t);
-  comp.set_access("private");
-  comp.set("#lvalue", 1);
-
   if (!is_method)
   {
+    struct_typet::componentt comp(sym.name(), sym.name(), sym.type());
+    comp.set_access(access);
+    comp.set("#lvalue", 1);
     comp.type().set("#member_name", c_sym.type.tag());
     to_struct_type(c_sym.type).components().push_back(comp);
   }
   else
+  {
+    struct_typet::componentt comp;
+    // construct comp
+    comp.type() = sym.type();
+    comp.identifier(sym.identifier());
+    comp.name(sym.name());
+    comp.pretty_name(sym.name());
+    comp.set_access(access);
+    comp.id("symbol");
     to_struct_type(c_sym.type).methods().push_back(comp);
+  }
 }
 
 // this funciton:
@@ -10255,7 +10412,7 @@ void solidity_convertert::get_builtin_symbol(
 
   if (!c_name.empty())
     // we need to update the fields of the contract struct symbol
-    move_builtin_to_contract(c_name, name, t, false);
+    move_builtin_to_contract(c_name, symbol_expr(added_sym), false);
 }
 
 bool solidity_convertert::get_new_temporary_obj(
@@ -10284,7 +10441,7 @@ bool solidity_convertert::get_new_temporary_obj(
   // should set it as static global var
   ctor_ins_symbol.static_lifetime = true;
   ctor_ins_symbol.lvalue = true;
-  ctor_ins_symbol.is_extern = false;
+  ctor_ins_symbol.file_local = true;
 
   symbolt &added_ctor_symbol = *move_symbol_to_context(ctor_ins_symbol);
 
@@ -10340,6 +10497,7 @@ void solidity_convertert::get_aux_property_function(
   std::string aid = "sol:@F@" + fname + "@" + aname + "#";
   typet addr_t = unsignedbv_typet(160);
   addr_t.set("#sol_type", "ADDRESS");
+  addr_t.cmt_constant(true);
   symbolt addr_s;
   get_default_symbol(addr_s, debug_modulename, addr_t, aname, aid, loc);
   move_symbol_to_context(addr_s);

@@ -106,6 +106,17 @@ protected:
     std::string &name,
     std::string &id);
   void get_static_contract_instance(const std::string c_name, symbolt &sym);
+  void get_inherit_static_contract_instance_name(
+    const std::string c_name,
+    std::string &name,
+    std::string &id);
+  bool
+  get_inherit_static_contract_instance(const std::string c_name, symbolt &sym);
+  void get_inherit_ctor_definition(const std::string c_name, exprt &new_expr);
+  void get_inherit_ctor_definition_name(
+    const std::string c_name,
+    std::string &name,
+    std::string &id);
   void get_contract_mutex_name(
     const std::string c_name,
     std::string &name,
@@ -150,6 +161,9 @@ protected:
   bool move_initializer_to_ctor(
     const nlohmann::json *based_contracts,
     const std::string contract_name);
+  bool move_initializer_to_ctor(
+    const nlohmann::json *based_contracts,
+    const std::string contract_name, bool is_aux_ctor);
   bool move_inheritance_to_ctor(
     const nlohmann::json *based_contracts,
     const std::string contract_name,
@@ -428,8 +442,12 @@ protected:
     const std::string c_name);
   void move_builtin_to_contract(
     const std::string cname,
-    const std::string &name,
-    const typet &t,
+    const exprt &sym,
+    bool is_method);
+  void move_builtin_to_contract(
+    const std::string cname,
+    const exprt &sym,
+    const std::string &access,
     bool is_method);
   const nlohmann::json &
   get_func_decl_ref(const std::string &c_name, const std::string &f_name);
