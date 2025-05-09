@@ -106,6 +106,20 @@ protected:
     std::string &name,
     std::string &id);
   void get_static_contract_instance(const std::string c_name, symbolt &sym);
+  void get_contract_mutex_name(
+    const std::string c_name,
+    std::string &name,
+    std::string &id);
+  void get_contract_mutex_expr(
+    const std::string c_name,
+    const exprt &this_expr,
+    exprt &expr);
+  bool get_high_level_call_wrapper(
+    const std::string c_name,
+    const exprt &this_expr,
+    exprt &front_block,
+    exprt &back_block);
+  bool is_sol_builin_symbol(const std::string &cname, const std::string &name);
 
   // handle the non-contract definition, including struct/enum/error/event/abstract/...
   bool get_noncontract_defition(nlohmann::json &ast_node);
@@ -337,7 +351,9 @@ protected:
   std::string get_src_from_json(const nlohmann::json &ast_node);
 
   symbolt *move_symbol_to_context(symbolt &symbol);
-  bool multi_transaction_verification(const std::string &contractName);
+  bool multi_transaction_verification(
+    const std::string &contractName,
+    bool is_final_main);
   bool multi_contract_verification_bound(std::set<std::string> &tgt_set);
   bool multi_contract_verification_unbound(std::set<std::string> &tgt_set);
   void reset_auxiliary_vars();
@@ -420,6 +436,13 @@ protected:
   void get_builtin_property_expr(
     const std::string &name,
     const exprt &base,
+    const locationt &loc,
+    exprt &new_expr);
+  void get_aux_property_function(
+    const exprt &addr,
+    const typet &return_t,
+    const locationt &loc,
+    const std::string &property_name,
     exprt &new_expr);
   bool get_new_temporary_obj(
     const std::string &c_name,
@@ -580,6 +603,9 @@ protected:
 
   // bound setting
   bool is_bound;
+
+  // reentry-check setting
+  bool is_reentry_check;
 
   // NONDET
   side_effect_expr_function_callt nondet_bool_expr;

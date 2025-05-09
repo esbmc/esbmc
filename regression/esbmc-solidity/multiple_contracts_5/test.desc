@@ -1,4 +1,4 @@
 CORE
 mul.solast
---function test --contract Base --sol mul.sol --no-standard-checks
+--function test --contract Base --sol mul.sol --no-standard-checks --k-induction
 ^VERIFICATION SUCCESSFUL$
