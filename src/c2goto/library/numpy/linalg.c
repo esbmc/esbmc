@@ -1,21 +1,24 @@
 // NumPy documentation: https://numpy.org/doc/stable/reference/routines.linalg.html
 
-void dot(const int *A, int m, int n, const int *B, int n2, int p, int *C)
+#include <assert.h>
+#include <stdint.h>
+
+void dot(int64_t *A, int64_t *B, int64_t *C, int64_t m, int64_t n, int64_t p)
 {
   int i = 0;
-  int j = 0;
-  int k = 0;
-
   while (i < m)
   {
+    int j = 0;
     while (j < p)
     {
-      C[i * p + j] = 0;
+      int sum = 0;
+      int k = 0;
       while (k < n)
       {
-        C[i * p + j] += A[i * n + k] * B[k * p + j];
+        sum += *(A + i * n + k) * *(B + k * p + j);
         k++;
       }
+      *(C + i * p + j) = sum;
       j++;
     }
     i++;

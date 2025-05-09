@@ -3,6 +3,7 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/json_utils.h>
 #include <util/expr.h>
+#include <util/expr_util.h>
 #include <util/c_types.h>
 #include <util/message.h>
 #include <util/arith_tools.h>
@@ -332,6 +333,41 @@ exprt numpy_call_expr::create_expr_from_call()
     {
       std::vector<int> res;
       const std::string &operation = function_id_.get_function();
+
+      if (operation == "dot")
+      {
+        size_t m = lhs["elts"].size();
+        size_t n = lhs["elts"][0]["elts"].size();
+        size_t n2 = rhs["elts"].size();
+        size_t p = rhs["elts"][0]["elts"].size();
+
+        if (n != n2)
+          throw std::runtime_error("Incompatible shapes for dot product");
+
+        const auto &elem = lhs["elts"][0]["elts"][0]["value"];
+        typet base_type = type_handler_.get_typet(elem);
+
+        typet row_type = type_handler_.build_array(base_type, p);
+        typet matrix_type = type_handler_.build_array(row_type, m);
+
+        function_id_.set_function("dot");
+
+        converter_.current_lhs->type() = matrix_type;
+        converter_.update_symbol(*converter_.current_lhs);
+
+        code_function_callt call =
+          to_code_function_call(to_code(function_call_expr::get()));
+
+        auto &args = call.arguments();
+        args.push_back(address_of_exprt(*converter_.current_lhs));
+        args.push_back(from_integer(m, int_type()));
+        args.push_back(from_integer(n, int_type()));
+        args.push_back(from_integer(p, int_type()));
+
+        return call;
+      }
+
+      // FIXME: Replace this by C models function calls
       for (size_t i = 0; i < lhs["elts"].size(); ++i)
       {
         int left_val = lhs["elts"][i]["value"].get<int>();
@@ -359,7 +395,8 @@ exprt numpy_call_expr::create_expr_from_call()
   }
 
   if (expr.empty())
-    throw std::runtime_error("Unsupported Numpy call: " + function_id_.get_function());
+    throw std::runtime_error(
+      "Unsupported Numpy call: " + function_id_.get_function());
 
   return converter_.get_expr(expr);
 }

@@ -143,6 +143,17 @@ static struct_typet::componentt build_component(
   return component;
 }
 
+static codet convert_expression_to_code(exprt &expr)
+{
+  if (expr.is_code())
+    return static_cast<codet &>(expr);
+
+  codet code("expression");
+  code.location() = expr.location();
+  code.move_to_operands(expr);
+  return code;
+}
+
 symbolt python_converter::create_symbol(
   const std::string &module,
   const std::string &name,
@@ -1648,7 +1659,8 @@ void python_converter::get_var_assign(
         lhs_symbol->type = rhs.type();
         lhs.type() = rhs.type();
       }
-      lhs_symbol->value = rhs;
+      if (!rhs.type().is_empty())
+        lhs_symbol->value = rhs;
     }
 
     /* If the right-hand side (rhs) of the assignment is a function call, such as: x : int = func()
@@ -1672,7 +1684,11 @@ void python_converter::get_var_assign(
           func_name, func_name, lhs_symbol->id.as_string());
       }
       // op0() refers to the left-hand side (lhs) of the function call
-      rhs.op0() = lhs;
+      if (!rhs.type().is_empty())
+      {
+        rhs.op0() = lhs;
+      }
+
       target_block.copy_to_operands(rhs);
       return;
     }
@@ -1742,17 +1758,6 @@ void python_converter::get_compound_assign(
   code_assignt code_assign(lhs, rhs);
   code_assign.location() = loc;
   target_block.copy_to_operands(code_assign);
-}
-
-static codet convert_expression_to_code(exprt &expr)
-{
-  if (expr.is_code())
-    return static_cast<codet &>(expr);
-
-  codet code("expression");
-  code.location() = expr.location();
-  code.move_to_operands(expr);
-  return code;
 }
 
 exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)

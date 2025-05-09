@@ -1,4 +1,4 @@
 CORE
 main.py
 
-^ERROR: Unsupported NumPy call: fabs$
+^ERROR: Unsupported Numpy call: fabs
