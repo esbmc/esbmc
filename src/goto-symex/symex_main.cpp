@@ -798,6 +798,75 @@ void goto_symext::run_intrinsic(
     return;
   }
 
+  if (symname == "c:@F@__ESBMC_r_ok")
+  {
+    assert(func_call.operands.size() == 2 && "__ESBMC_r_ok expects 2 operands");
+
+    expr2tc addr = func_call.operands[0];
+    expr2tc len_expr = func_call.operands[1];
+    expr2tc final_result;
+
+    internal_deref_items.clear();
+
+    expr2tc deref = dereference2tc(get_empty_type(), addr);
+    dereference(deref, dereferencet::INTERNAL);
+
+    type2tc size_type = get_uint64_type();
+    expr2tc cast_len_expr = typecast2tc(size_type, len_expr);
+    addr = typecast2tc(size_type, addr);
+    expr2tc zero = constant_int2tc(size_type, BigInt(0));
+
+    final_result =
+      implies2tc(equality2tc(addr, zero), equality2tc(zero, cast_len_expr));
+
+    for (const auto &item : internal_deref_items)
+    {
+      expr2tc base_obj = item.object;
+      expr2tc base_size;
+
+      if (is_array_type(base_obj->type))
+      {
+        const array_type2t &arr_type = to_array_type(base_obj->type);
+        if (!is_nil_expr(arr_type.array_size))
+        {
+          BigInt elem_size = type_byte_size(arr_type.subtype);
+          expr2tc elem_size_expr = constant_int2tc(size_type, elem_size);
+          expr2tc array_size = typecast2tc(size_type, arr_type.array_size);
+          base_size = mul2tc(size_type, array_size, elem_size_expr);
+        }
+      }
+      else if (is_struct_type(base_obj->type))
+      {
+        // Total size of the entire struct
+        base_size = constant_int2tc(size_type, type_byte_size(base_obj->type));
+      }
+      else if (is_symbol2t(base_obj))
+      {
+        // Try getting size from type directly
+        BigInt sz = type_byte_size(base_obj->type);
+        if (sz > 0)
+          base_size = constant_int2tc(size_type, sz);
+      }
+
+      if (is_nil_expr(base_size))
+        continue;
+
+      base_size = sub2tc(base_size->type, base_size, item.offset);
+      expr2tc lower_bound = lessthanequal2tc(zero, cast_len_expr);
+      expr2tc upper_bound = lessthanequal2tc(cast_len_expr, base_size);
+      expr2tc check = and2tc(lower_bound, upper_bound);
+      expr2tc result = implies2tc(item.guard, check);
+
+      final_result =
+        is_nil_expr(final_result) ? result : and2tc(final_result, result);
+    }
+
+    symex_assign(
+      code_assign2tc(func_call.ret, final_result), false, cur_state->guard);
+
+    return;
+  }
+
   if (symname == "c:@F@__ESBMC_unreachable")
   {
     if (options.get_bool_option("enable-unreachability-intrinsic"))
