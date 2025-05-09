@@ -813,7 +813,10 @@ void goto_symext::run_intrinsic(
 
     type2tc size_type = get_uint64_type();
     expr2tc cast_len_expr = typecast2tc(size_type, len_expr);
+    addr = typecast2tc(size_type, addr);
     expr2tc zero = constant_int2tc(size_type, BigInt(0));
+
+    final_result = implies2tc(equality2tc(addr, zero), equality2tc(zero, cast_len_expr));
 
     for (const auto &item : internal_deref_items)
     {
@@ -847,16 +850,15 @@ void goto_symext::run_intrinsic(
       if (is_nil_expr(base_size))
         continue;
 
+      base_size = sub2tc(base_size->type, base_size, item.offset);
       expr2tc lower_bound = lessthanequal2tc(zero, cast_len_expr);
-      expr2tc upper_bound = lessthan2tc(cast_len_expr, base_size);
-      expr2tc result = and2tc(lower_bound, upper_bound);
+      expr2tc upper_bound = lessthanequal2tc(cast_len_expr, base_size);
+      expr2tc check = and2tc(lower_bound, upper_bound);
+      expr2tc result = implies2tc(item.guard, check);
 
       final_result =
-        is_nil_expr(final_result) ? result : or2tc(final_result, result);
+        is_nil_expr(final_result) ? result : and2tc(final_result, result);
     }
-
-    if (is_nil_expr(final_result))
-      final_result = gen_false_expr();
 
     symex_assign(
       code_assign2tc(func_call.ret, final_result), false, cur_state->guard);
