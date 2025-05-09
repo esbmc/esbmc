@@ -811,12 +811,6 @@ void goto_symext::run_intrinsic(
     expr2tc deref = dereference2tc(get_empty_type(), addr);
     dereference(deref, dereferencet::INTERNAL);
 
-    if (internal_deref_items.empty())
-    {
-      // No valid base objects found: Null or Invalid Pointer
-      final_result = gen_false_expr();
-    }
-
     type2tc size_type = get_uint64_type();
     expr2tc cast_len_expr = typecast2tc(size_type, len_expr);
     expr2tc zero = constant_int2tc(size_type, BigInt(0));
@@ -837,6 +831,18 @@ void goto_symext::run_intrinsic(
           base_size = mul2tc(size_type, array_size, elem_size_expr);
         }
       }
+      else if (is_struct_type(base_obj->type))
+      {
+        // Total size of the entire struct
+        base_size = constant_int2tc(size_type, type_byte_size(base_obj->type));
+      }
+      else if (is_symbol2t(base_obj))
+      {
+        // Try getting size from type directly
+        BigInt sz = type_byte_size(base_obj->type);
+        if (sz > 0)
+          base_size = constant_int2tc(size_type, sz);
+      }
 
       if (is_nil_expr(base_size))
         continue;
@@ -849,7 +855,8 @@ void goto_symext::run_intrinsic(
         is_nil_expr(final_result) ? result : or2tc(final_result, result);
     }
 
-    assert(!is_nil_expr(final_result));
+    if (is_nil_expr(final_result))
+      final_result = gen_false_expr();
 
     symex_assign(
       code_assign2tc(func_call.ret, final_result), false, cur_state->guard);
