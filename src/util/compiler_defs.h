@@ -23,7 +23,8 @@
     DO_PRAGMA(GCC diagnostic ignored "-Wstrict-aliasing")                      \
     DO_PRAGMA(GCC diagnostic ignored "-Wunused-parameter")                     \
     DO_PRAGMA(GCC diagnostic ignored "-Wnonnull")                              \
-    DO_PRAGMA(GCC diagnostic ignored "-Wdeprecated-declarations")
+    DO_PRAGMA(GCC diagnostic ignored "-Wdeprecated-declarations")              \
+    DO_PRAGMA(GCC diagnostic ignored "-Wclass-memaccess")
 #endif
 
 #ifndef GNUC_PREREQ
