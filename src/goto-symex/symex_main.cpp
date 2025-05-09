@@ -816,7 +816,8 @@ void goto_symext::run_intrinsic(
     addr = typecast2tc(size_type, addr);
     expr2tc zero = constant_int2tc(size_type, BigInt(0));
 
-    final_result = implies2tc(equality2tc(addr, zero), equality2tc(zero, cast_len_expr));
+    final_result =
+      implies2tc(equality2tc(addr, zero), equality2tc(zero, cast_len_expr));
 
     for (const auto &item : internal_deref_items)
     {
