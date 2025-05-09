@@ -138,6 +138,7 @@ usage() {
     echo "  -c VERS    use packaged clang-VERS in a shared build on Ubuntu [11]"
     echo "  -C         build an SV-COMP version [disabled]"
     echo "  -B ON|OFF  enable/disable esbmc bundled libc [ON]"
+    echo "  -x ON|OFF  enable/disable esbmc cheri [OFF]"
     echo
     echo "This script prepares the environment, downloads dependencies, configures"
     echo "the ESBMC build and runs the commands to compile and install ESBMC into"
@@ -149,7 +150,7 @@ usage() {
 }
 
 # Setup build flags (release, debug, sanitizer, ...)
-while getopts hb:s:e:r:dS:c:CB: flag
+while getopts hb:s:e:r:dS:c:CB:x flag
 do
     case "${flag}" in
     h) usage; exit 0 ;;
@@ -172,6 +173,7 @@ do
           -DENABLE_GOTO_CONTRACTOR=On \
           -DACADEMIC_BUILD=ON"  ;;
     B) BASE_ARGS="$BASE_ARGS -DESBMC_BUNDLE_LIBC=$OPTARG" ;;
+    x) BASE_ARGS="$BASE_ARGS -DESBMC_CHERI=ON" ;;
     *) exit 1 ;;
     esac
 done
