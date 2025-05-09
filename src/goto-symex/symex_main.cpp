@@ -845,7 +845,8 @@ void goto_symext::run_intrinsic(
       expr2tc upper_bound = lessthan2tc(cast_len_expr, base_size);
       expr2tc result = and2tc(lower_bound, upper_bound);
 
-      final_result = is_nil_expr(final_result) ? result : or2tc(final_result, result);
+      final_result =
+        is_nil_expr(final_result) ? result : or2tc(final_result, result);
     }
 
     assert(!is_nil_expr(final_result));
