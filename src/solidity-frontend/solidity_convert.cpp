@@ -6078,7 +6078,7 @@ bool solidity_convertert::get_esbmc_builtin_ref(
   else if (
     blt_name == "assert" || blt_name == "__ESBMC_assert" ||
     blt_name == "__VERIFIER_assert")
-    name = "__ESBMC_assert";
+    name = "assert";
   else
     //!assume it's a solidity built-in func
     return get_sol_builtin_ref(decl, new_expr);
@@ -8726,7 +8726,7 @@ bool solidity_convertert::get_ctor_call(
     call.arguments().at(0) = this_object;
 
     // set constructor
-    call.function().set("constructor", 1);
+    call.set("constructor", 1);
   }
   else
   {
@@ -8962,7 +8962,7 @@ bool solidity_convertert::get_implicit_ctor_ref(
 
   side_effect_expr_function_callt call;
   call.function() = ctor;
-  call.function().set("constructor", 1);
+  call.set("constructor", 1);
   call.type() = type.return_type();
   call.location().file(absolute_path);
 
@@ -9019,6 +9019,8 @@ void solidity_convertert::get_static_contract_instance(
   else
   {
     locationt ctor_ins_loc;
+    ctor_ins_loc.file(absolute_path);
+    ctor_ins_loc.line(1);
     std::string ctor_ins_debug_modulename =
       get_modulename_from_path(absolute_path);
     typet ctor_ins_typet = symbol_typet(prefix + c_name);
@@ -9036,7 +9038,6 @@ void solidity_convertert::get_static_contract_instance(
     // the instance should be set as static
     ctor_ins_symbol.static_lifetime = true;
     ctor_ins_symbol.file_local = true;
-    ctor_ins_symbol.lvalue = true;
 
     auto &added_sym = *move_symbol_to_context(ctor_ins_symbol);
 
@@ -9124,12 +9125,14 @@ void solidity_convertert::get_inherit_ctor_definition(
   ft.set("#member_name", prefix + c_name);
   ft.set("#inlined", true);
   symbolt fs;
+  locationt l;
+  l.file(absolute_path);
+  l.line(1);
   std::string debug_modulename = get_modulename_from_path(absolute_path);
-  get_default_symbol(fs, debug_modulename, ft, fname, fid, locationt());
+  get_default_symbol(fs, debug_modulename, ft, fname, fid, l);
   auto &add_sym = *move_symbol_to_context(fs);
 
-  get_function_this_pointer_param(
-    c_name, fid, debug_modulename, locationt(), ft);
+  get_function_this_pointer_param(c_name, fid, debug_modulename, l, ft);
 
   // param: float
   std::string aname = "dump";
@@ -9137,14 +9140,14 @@ void solidity_convertert::get_inherit_ctor_definition(
   typet addr_t = float_type();
   addr_t.cmt_constant(true);
   symbolt addr_s;
-  get_default_symbol(addr_s, debug_modulename, addr_t, aname, aid, locationt());
+  get_default_symbol(addr_s, debug_modulename, addr_t, aname, aid, l);
   move_symbol_to_context(addr_s);
 
   auto param = code_typet::argumentt();
   param.type() = addr_t;
   param.cmt_base_name(aname);
   param.cmt_identifier(aid);
-  param.location() = locationt();
+  param.location() = l;
   ft.arguments().push_back(param);
   add_sym.type = ft;
 
@@ -9261,8 +9264,10 @@ bool solidity_convertert::get_inherit_static_contract_instance(
   call.arguments().push_back(gen_zero(float_type()));
 
   call.function() = new_expr;
-  call.function().set("constructor", 1);
+  call.set("constructor", 1);
   call.type() = symbol_typet(prefix + c_name);
+  call.location().file(absolute_path);
+  call.location().line(1);
   exprt val;
   get_temporary_object(call, val);
   added_ctor_symbol.value = val;
