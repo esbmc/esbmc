@@ -798,57 +798,60 @@ void goto_symext::run_intrinsic(
     return;
   }
 
-  // Check if the function being interpreted is the intrinsic __ESBMC_r_ok
   if (symname == "c:@F@__ESBMC_r_ok")
   {
     assert(func_call.operands.size() == 2 && "__ESBMC_r_ok expects 2 operands");
 
     expr2tc addr = func_call.operands[0];
     expr2tc len_expr = func_call.operands[1];
+    expr2tc final_result;
 
     internal_deref_items.clear();
 
-    // Perform an internal dereference to resolve the base object being pointed to
     expr2tc deref = dereference2tc(get_empty_type(), addr);
     dereference(deref, dereferencet::INTERNAL);
 
-    assert(!internal_deref_items.empty());
-
-    expr2tc base_obj = internal_deref_items.front().object;
-    expr2tc base_size;
-    type2tc size_type = get_uint64_type();
-
-    if (is_array_type(base_obj->type))
+    if (internal_deref_items.empty())
     {
-      const array_type2t &arr_type = to_array_type(base_obj->type);
-
-      if (!is_nil_expr(arr_type.array_size))
-      {
-        // Compute the size of each element in bytes
-        BigInt elem_size = type_byte_size(arr_type.subtype);
-
-        // Represent the element size as a constant expression of the chosen size type
-        expr2tc elem_size_expr = constant_int2tc(size_type, elem_size);
-
-        // Cast the array size to the same type to match the multiplication operands
-        expr2tc array_size = typecast2tc(size_type, arr_type.array_size);
-
-        // Compute the total size of the array in bytes: array_size * element_size
-        base_size = mul2tc(size_type, array_size, elem_size_expr);
-      }
+      // No valid base objects found: Null or Invalid Pointer
+      final_result = gen_false_expr();
     }
 
-    assert(!is_nil_expr(base_size));
-
+    type2tc size_type = get_uint64_type();
     expr2tc cast_len_expr = typecast2tc(size_type, len_expr);
     expr2tc zero = constant_int2tc(size_type, BigInt(0));
-    expr2tc lower_bound = lessthanequal2tc(zero, cast_len_expr);
-    expr2tc upper_bound = lessthan2tc(cast_len_expr, base_size);
-    // Combine the two bounds checks: (0 <= len_expr && len_expr < base_size)
-    expr2tc result = and2tc(lower_bound, upper_bound);
-    // Assign the final result to the return value of __ESBMC_r_ok
+
+    for (const auto &item : internal_deref_items)
+    {
+      expr2tc base_obj = item.object;
+      expr2tc base_size;
+
+      if (is_array_type(base_obj->type))
+      {
+        const array_type2t &arr_type = to_array_type(base_obj->type);
+        if (!is_nil_expr(arr_type.array_size))
+        {
+          BigInt elem_size = type_byte_size(arr_type.subtype);
+          expr2tc elem_size_expr = constant_int2tc(size_type, elem_size);
+          expr2tc array_size = typecast2tc(size_type, arr_type.array_size);
+          base_size = mul2tc(size_type, array_size, elem_size_expr);
+        }
+      }
+
+      if (is_nil_expr(base_size))
+        continue;
+
+      expr2tc lower_bound = lessthanequal2tc(zero, cast_len_expr);
+      expr2tc upper_bound = lessthan2tc(cast_len_expr, base_size);
+      expr2tc result = and2tc(lower_bound, upper_bound);
+
+      final_result = is_nil_expr(final_result) ? result : or2tc(final_result, result);
+    }
+
+    assert(!is_nil_expr(final_result));
+
     symex_assign(
-      code_assign2tc(func_call.ret, result), false, cur_state->guard);
+      code_assign2tc(func_call.ret, final_result), false, cur_state->guard);
 
     return;
   }
