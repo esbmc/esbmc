@@ -58,8 +58,8 @@ option(ESBMC_SVCOMP "Enable an SV-COMP build of ESBMC (default: OFF)" OFF)
 
 # these URLs are all for an x86_64 target
 if(WIN32)
-  set(DEFAULT_LLVM_URL "https://gitlab.com/Anthonysdu/llvm11/-/raw/main/llvm+clang+lld-11.0.0-x86_64-windows-msvc-release-mt.zip")
-  set(DEFAULT_LLVM_NAME "llvm+clang+lld-11.0.0-x86_64-windows-msvc-release-mt")
+  set(DEFAULT_LLVM_URL "https://github.com/XLiZHI/esbmc/releases/download/v17/llvm16-win-release.zip")
+  set(DEFAULT_LLVM_NAME "llvm16-win-release")
 
   set(DEFAULT_Z3_URL "https://github.com/Z3Prover/z3/releases/download/z3-4.13.3/z3-4.13.3-x64-win.zip")
   set(DEFAULT_Z3_NAME z3-4.13.3-x64-win)
