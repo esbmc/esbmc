@@ -194,7 +194,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
     return symbol_typet("tag-" + ast_type);
 
   // Unknown / unsupported type
-  log_warning("python", "Unknown or unsupported AST type: {}", ast_type);
+  log_warning("Unknown or unsupported AST type: {}", ast_type);
   return empty_typet();
 }
 
