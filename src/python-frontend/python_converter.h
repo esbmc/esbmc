@@ -115,6 +115,12 @@ private:
 
   exprt handle_power_operator(exprt lhs, exprt rhs);
 
+  exprt handle_string_comparison(
+  const std::string &op,
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &element);
+
   exprt handle_string_operations(
   const std::string &op,
   exprt &lhs,

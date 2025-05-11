@@ -617,6 +617,72 @@ void python_converter::handle_float_division(
   bin_expr.id(get_op("div", float_type));
 }
 
+exprt python_converter::handle_string_comparison(
+  const std::string &op,
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &element)
+{
+  // If the types of lhs and rhs differ, the strings can't be equal.
+  // For "Eq", return false; for "NotEq", return true.
+  if (rhs.type() != lhs.type())
+    return gen_boolean(op == "NotEq");
+
+  // Special case: both lhs and rhs are identical constants
+  if (
+    lhs.is_constant() && rhs.is_constant() && lhs.type().is_array() &&
+    rhs.type().is_array() && lhs == rhs)
+  {
+    // If both constants are exactly the same, we know the result.
+    return gen_boolean(op == "Eq");
+  }
+
+  // special case: both sides are arrays of size 0 and equal type
+  if (
+    lhs.type().is_array() && rhs.type().is_array() &&
+    to_array_type(lhs.type()).size().is_constant() &&
+    to_array_type(rhs.type()).size().is_constant())
+    {
+      const auto lhs_size = binary2integer(
+        to_array_type(lhs.type()).size().value().as_string(), false);
+      const auto rhs_size = binary2integer(
+        to_array_type(rhs.type()).size().value().as_string(), false);
+
+      if (lhs_size == 0 && rhs_size == 0)
+      {
+        // Two zero-length arrays are equal by definition
+        return gen_boolean(op == "Eq");
+      }
+    }
+
+  // Retrieve the size of the string from the array type.
+  const array_typet &array_type = to_array_type(lhs.type());
+  const BigInt string_size =
+    binary2integer(array_type.size().value().as_string(), false);
+
+  // Look up the 'strncmp' function symbol in the symbol table.
+  symbolt *strncmp_symbol = symbol_table_.find_symbol("c:@F@strncmp");
+  assert(strncmp_symbol); // Ensure 'strncmp' is available.
+
+  // Construct a function call expression to strncmp(lhs, rhs, size)
+  side_effect_expr_function_callt strncmp_call;
+  strncmp_call.function() = symbol_expr(*strncmp_symbol);
+  strncmp_call.arguments().push_back(lhs); // First string (lhs)
+  strncmp_call.arguments().push_back(rhs); // Second string (rhs)
+  strncmp_call.arguments().push_back(from_integer(
+    string_size, long_uint_type())); // Number of characters to compare
+  strncmp_call.location() = get_location_from_decl(element);
+  strncmp_call.type() = int_type(); // Return type of strncmp is int
+
+  // Compare result of strncmp to 0:
+  // - If op == "Eq", test if strncmp(...) == 0 (strings are equal)
+  // - If op == "NotEq", test if strncmp(...) != 0 (strings are not equal)
+  lhs = strncmp_call;
+  rhs = gen_zero(int_type());
+
+  return nil_exprt();
+}
+
 exprt python_converter::handle_string_operations(
   const std::string &op,
   exprt &lhs,
@@ -647,64 +713,7 @@ exprt python_converter::handle_string_operations(
 
     // Handle string comparison for equality (==) and inequality (!=) operators
     if (op == "Eq" || op == "NotEq")
-    {
-      // If the types of lhs and rhs differ, the strings can't be equal.
-      // For "Eq", return false; for "NotEq", return true.
-      if (rhs.type() != lhs.type())
-        return gen_boolean(op == "NotEq");
-
-      // Special case: both lhs and rhs are identical constants
-      if (
-        lhs.is_constant() && rhs.is_constant() && lhs.type().is_array() &&
-        rhs.type().is_array() && lhs == rhs)
-      {
-        // If both constants are exactly the same, we know the result.
-        return gen_boolean(op == "Eq");
-      }
-
-      // special case: both sides are arrays of size 0 and equal type
-      if (
-        lhs.type().is_array() && rhs.type().is_array() &&
-        to_array_type(lhs.type()).size().is_constant() &&
-        to_array_type(rhs.type()).size().is_constant())
-      {
-        const auto lhs_size = binary2integer(
-          to_array_type(lhs.type()).size().value().as_string(), false);
-        const auto rhs_size = binary2integer(
-          to_array_type(rhs.type()).size().value().as_string(), false);
-
-        if (lhs_size == 0 && rhs_size == 0)
-        {
-          // Two zero-length arrays are equal by definition
-          return gen_boolean(op == "Eq");
-        }
-      }
-
-      // Retrieve the size of the string from the array type.
-      const array_typet &array_type = to_array_type(lhs.type());
-      const BigInt string_size =
-        binary2integer(array_type.size().value().as_string(), false);
-
-      // Look up the 'strncmp' function symbol in the symbol table.
-      symbolt *strncmp_symbol = symbol_table_.find_symbol("c:@F@strncmp");
-      assert(strncmp_symbol); // Ensure 'strncmp' is available.
-
-      // Construct a function call expression to strncmp(lhs, rhs, size)
-      side_effect_expr_function_callt strncmp_call;
-      strncmp_call.function() = symbol_expr(*strncmp_symbol);
-      strncmp_call.arguments().push_back(lhs); // First string (lhs)
-      strncmp_call.arguments().push_back(rhs); // Second string (rhs)
-      strncmp_call.arguments().push_back(from_integer(
-        string_size, long_uint_type())); // Number of characters to compare
-      strncmp_call.location() = get_location_from_decl(element);
-      strncmp_call.type() = int_type(); // Return type of strncmp is int
-
-      // Compare result of strncmp to 0:
-      // - If op == "Eq", test if strncmp(...) == 0 (strings are equal)
-      // - If op == "NotEq", test if strncmp(...) != 0 (strings are not equal)
-      lhs = strncmp_call;
-      rhs = gen_zero(int_type());
-    }
+      return handle_string_comparison(op, lhs, rhs, element);
     // Strings concatenation
     else if (op == "Add")
     {
