@@ -115,6 +115,18 @@ private:
 
   exprt handle_power_operator(exprt lhs, exprt rhs);
 
+  bool is_zero_length_array(const exprt &expr);
+
+  void ensure_string_array(exprt &expr);
+
+  BigInt get_string_size(const exprt &expr);
+
+  exprt handle_string_concatenation(
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &left,
+  const nlohmann::json &right);
+
   exprt handle_string_comparison(
   const std::string &op,
   exprt &lhs,

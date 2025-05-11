@@ -617,70 +617,116 @@ void python_converter::handle_float_division(
   bin_expr.id(get_op("div", float_type));
 }
 
+BigInt python_converter::get_string_size(const exprt &expr)
+{
+  const auto &arr_type = to_array_type(expr.type());
+  return binary2integer(arr_type.size().value().as_string(), false);
+}
+
+exprt python_converter::handle_string_concatenation(
+  const exprt &lhs,
+  const exprt &rhs,
+  const nlohmann::json &left,
+  const nlohmann::json &right)
+{
+  BigInt lhs_size = get_string_size(lhs);
+  BigInt rhs_size = get_string_size(rhs);
+  BigInt total_size = lhs_size + rhs_size;
+
+  typet t = type_handler_.get_typet("str", total_size.to_uint64());
+  exprt result = gen_zero(t);
+  unsigned int i = 0;
+
+  auto append_from_symbol = [&](const std::string &id) {
+    symbolt *symbol = symbol_table_.find_symbol(id);
+    assert(symbol);
+    for (const exprt &ch : symbol->value.operands())
+      result.operands().at(i++) = ch;
+  };
+
+  auto append_from_json = [&](const nlohmann::json &json) {
+    std::string value = json["value"].get<std::string>();
+    typet &char_type = t.subtype();
+
+    for (char ch : value)
+    {
+      BigInt v(ch);
+      exprt char_expr = constant_exprt(
+        integer2binary(v, bv_width(char_type)),
+        integer2string(v),
+        char_type);
+      result.operands().at(i++) = char_expr;
+    }
+  };
+
+  if (left["_type"] == "Name")
+    append_from_symbol(lhs.identifier().as_string());
+  else if (left["_type"] == "Constant")
+    append_from_json(left);
+
+  if (right["_type"] == "Name")
+    append_from_symbol(rhs.identifier().as_string());
+  else if (right["_type"] == "Constant")
+    append_from_json(right);
+
+  return result;
+}
+
+bool python_converter::is_zero_length_array(const exprt &expr)
+{
+  if (!expr.type().is_array())
+    return false;
+
+  const auto &arr_type = to_array_type(expr.type());
+  if (!arr_type.size().is_constant())
+    return false;
+
+  BigInt size = binary2integer(arr_type.size().value().as_string(), false);
+  return size == 0;
+}
+
 exprt python_converter::handle_string_comparison(
   const std::string &op,
   exprt &lhs,
   exprt &rhs,
   const nlohmann::json &element)
 {
-  // If the types of lhs and rhs differ, the strings can't be equal.
-  // For "Eq", return false; for "NotEq", return true.
-  if (rhs.type() != lhs.type())
+  if (lhs.type() != rhs.type())
     return gen_boolean(op == "NotEq");
 
-  // Special case: both lhs and rhs are identical constants
-  if (
-    lhs.is_constant() && rhs.is_constant() && lhs.type().is_array() &&
-    rhs.type().is_array() && lhs == rhs)
-  {
-    // If both constants are exactly the same, we know the result.
+  if (lhs.is_constant() && rhs.is_constant() && lhs == rhs)
     return gen_boolean(op == "Eq");
-  }
 
-  // special case: both sides are arrays of size 0 and equal type
-  if (
-    lhs.type().is_array() && rhs.type().is_array() &&
-    to_array_type(lhs.type()).size().is_constant() &&
-    to_array_type(rhs.type()).size().is_constant())
-    {
-      const auto lhs_size = binary2integer(
-        to_array_type(lhs.type()).size().value().as_string(), false);
-      const auto rhs_size = binary2integer(
-        to_array_type(rhs.type()).size().value().as_string(), false);
+  if (is_zero_length_array(lhs) && is_zero_length_array(rhs))
+    return gen_boolean(op == "Eq");
 
-      if (lhs_size == 0 && rhs_size == 0)
-      {
-        // Two zero-length arrays are equal by definition
-        return gen_boolean(op == "Eq");
-      }
-    }
+  const auto &array_type = to_array_type(lhs.type());
+  BigInt string_size = binary2integer(array_type.size().value().as_string(), false);
 
-  // Retrieve the size of the string from the array type.
-  const array_typet &array_type = to_array_type(lhs.type());
-  const BigInt string_size =
-    binary2integer(array_type.size().value().as_string(), false);
-
-  // Look up the 'strncmp' function symbol in the symbol table.
   symbolt *strncmp_symbol = symbol_table_.find_symbol("c:@F@strncmp");
-  assert(strncmp_symbol); // Ensure 'strncmp' is available.
+  assert(strncmp_symbol);
 
-  // Construct a function call expression to strncmp(lhs, rhs, size)
   side_effect_expr_function_callt strncmp_call;
   strncmp_call.function() = symbol_expr(*strncmp_symbol);
-  strncmp_call.arguments().push_back(lhs); // First string (lhs)
-  strncmp_call.arguments().push_back(rhs); // Second string (rhs)
-  strncmp_call.arguments().push_back(from_integer(
-    string_size, long_uint_type())); // Number of characters to compare
+  strncmp_call.arguments() = {lhs, rhs, from_integer(string_size, long_uint_type())};
   strncmp_call.location() = get_location_from_decl(element);
-  strncmp_call.type() = int_type(); // Return type of strncmp is int
+  strncmp_call.type() = int_type();
 
-  // Compare result of strncmp to 0:
-  // - If op == "Eq", test if strncmp(...) == 0 (strings are equal)
-  // - If op == "NotEq", test if strncmp(...) != 0 (strings are not equal)
   lhs = strncmp_call;
   rhs = gen_zero(int_type());
 
-  return nil_exprt();
+  return nil_exprt(); // continue with lhs OP rhs
+}
+
+void python_converter::ensure_string_array(exprt &expr)
+{
+  if (!expr.type().is_array())
+  {
+    typet t = type_handler_.build_array(expr.type(), 1);
+    exprt arr = gen_zero(t);
+    arr.operands().at(0) = expr;
+    expr = arr;
+  }
 }
 
 exprt python_converter::handle_string_operations(
@@ -691,91 +737,18 @@ exprt python_converter::handle_string_operations(
   const nlohmann::json &right,
   const nlohmann::json &element)
 {
-  {
-    auto ensure_array = [&](exprt &expr) {
-      // Single-character are treated as constants.
-      // Therefore, we need to create a temporary array of size one,
-      // to ensure a valid address for C-string models.
-      if (!expr.type().is_array())
-      {
-        typet t = type_handler_.build_array(expr.type(), 1);
-        exprt arr = gen_zero(t);
-        arr.operands().at(0) = expr;
-        expr = arr;
-      }
-    };
+  ensure_string_array(lhs);
+  ensure_string_array(rhs);
 
-    ensure_array(rhs);
-    ensure_array(lhs);
+  assert(lhs.type().is_array());
+  assert(rhs.type().is_array());
 
-    assert(lhs.type().is_array());
-    assert(rhs.type().is_array());
+  if (op == "Eq" || op == "NotEq")
+    return handle_string_comparison(op, lhs, rhs, element);
 
-    // Handle string comparison for equality (==) and inequality (!=) operators
-    if (op == "Eq" || op == "NotEq")
-      return handle_string_comparison(op, lhs, rhs, element);
-    // Strings concatenation
-    else if (op == "Add")
-    {
-      array_typet lhs_str_type = static_cast<array_typet &>(lhs.type());
-      BigInt lhs_str_size =
-        binary2integer(lhs_str_type.size().value().c_str(), true);
+  if (op == "Add")
+    return handle_string_concatenation(lhs, rhs, left, right);
 
-      array_typet rhs_str_type = static_cast<array_typet &>(rhs.type());
-      BigInt rhs_str_size =
-        binary2integer(rhs_str_type.size().value().c_str(), true);
-
-      BigInt concat_str_size = lhs_str_size + rhs_str_size;
-
-      typet t = type_handler_.get_typet("str", concat_str_size.to_uint64());
-      exprt expr = gen_zero(t);
-
-      unsigned int i = 0;
-
-      auto get_value_from_symbol = [&](const std::string &symbol_id, exprt &e) {
-        symbolt *symbol = symbol_table_.find_symbol(symbol_id);
-        assert(symbol);
-        // Copy symbol value
-        for (const exprt &ch : symbol->value.operands())
-          e.operands().at(i++) = ch;
-      };
-
-      auto get_value_from_json = [&](const nlohmann::json &elem, exprt &e) {
-        const std::string &value = elem["value"].get<std::string>();
-        std::vector<uint8_t> string_literal =
-          std::vector<uint8_t>(std::begin(value), std::end(value));
-
-        typet &char_type = t.subtype();
-
-        // Copy JSON value
-        for (uint8_t &ch : string_literal)
-        {
-          exprt char_value = constant_exprt(
-            integer2binary(BigInt(ch), bv_width(char_type)),
-            integer2string(BigInt(ch)),
-            char_type);
-
-          e.operands().at(i++) = char_value;
-        }
-      };
-
-      // If LHS is a variable
-      if (left["_type"] == "Name")
-        get_value_from_symbol(lhs.identifier().as_string(), expr);
-      // If LHS is a literal
-      else if (left["_type"] == "Constant")
-        get_value_from_json(left, expr);
-
-      // If RHS is a variable
-      if (right["_type"] == "Name")
-        get_value_from_symbol(rhs.identifier().as_string(), expr);
-      // If RHS is a literal
-      else if (right["_type"] == "Constant")
-        get_value_from_json(right, expr);
-
-      return expr;
-    }
-  }
   return nil_exprt();
 }
 
