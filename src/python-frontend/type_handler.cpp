@@ -77,9 +77,7 @@ std::string type_handler::type_to_string(const typet &t) const
   }
 
   // Unknown or unsupported type
-  log_warning(
-    "type_handler::type_to_string",
-    "Unknown or unsupported type: " + t.pretty());
+  log_warning("Unknown or unsupported type: {}", t.pretty());
   return "";
 }
 
