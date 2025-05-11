@@ -115,6 +115,14 @@ private:
 
   exprt handle_power_operator(exprt lhs, exprt rhs);
 
+  exprt handle_string_operations(
+  const std::string &op,
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &left,
+  const nlohmann::json &right,
+  const nlohmann::json &element);
+
   exprt get_logical_operator_expr(const nlohmann::json &element);
 
   exprt get_conditional_stm(const nlohmann::json &ast_node);

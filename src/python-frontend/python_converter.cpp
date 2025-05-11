@@ -617,81 +617,14 @@ void python_converter::handle_float_division(
   bin_expr.id(get_op("div", float_type));
 }
 
-exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
+exprt python_converter::handle_string_operations(
+  const std::string &op,
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &left,
+  const nlohmann::json &right,
+  const nlohmann::json &element)
 {
-  auto left = (element.contains("left")) ? element["left"] : element["target"];
-
-  decltype(left) right;
-  if (element.contains("right"))
-    right = element["right"];
-  else if (element.contains("comparators"))
-    right = element["comparators"][0];
-  else if (element.contains("value"))
-    right = element["value"];
-
-  exprt lhs = get_expr(left);
-  exprt rhs = get_expr(right);
-
-  attach_symbol_location(lhs, symbol_table());
-  attach_symbol_location(rhs, symbol_table());
-
-  auto to_side_effect_call = [](exprt &expr) {
-    side_effect_expr_function_callt side_effect;
-    code_function_callt &code = static_cast<code_function_callt &>(expr);
-    side_effect.function() = code.function();
-    side_effect.location() = code.location();
-    side_effect.type() = code.type();
-    side_effect.arguments() = code.arguments();
-    expr = side_effect;
-  };
-
-  // Function calls in expressions like "fib(n-1) + fib(n-2)" need to be converted to side effects
-  if (lhs.is_function_call())
-    to_side_effect_call(lhs);
-  if (rhs.is_function_call())
-    to_side_effect_call(rhs);
-
-  std::string op;
-
-  if (element.contains("op"))
-    op = element["op"]["_type"].get<std::string>();
-  else if (element.contains("ops"))
-    op = element["ops"][0]["_type"].get<std::string>();
-
-  assert(!op.empty());
-
-  // Get LHS and RHS types
-  std::string lhs_type = type_handler_.type_to_string(lhs.type());
-  std::string rhs_type = type_handler_.type_to_string(rhs.type());
-
-  // Infer the missing operand type if one side is explicitly a string and the operation is Eq or NotEq
-  if (
-    (op == "Eq" || op == "NotEq") && ((lhs_type.empty() && rhs_type == "str") ||
-                                      (rhs_type.empty() && lhs_type == "str")))
-  {
-    // Infer lhs_type if it is empty
-    if (lhs_type.empty() && element.contains("left"))
-    {
-      const auto &lhs_expr = element["left"];
-      if (lhs_expr.contains("value") && lhs_expr["value"].is_string())
-        lhs_type = "str";
-      else if (lhs_expr.contains("id") && lhs_expr["id"].is_string())
-        lhs_type = "str";
-    }
-    // Infer rhs_type if it is empty
-    else if (
-      rhs_type.empty() && element.contains("comparators") &&
-      element["comparators"].is_array() && !element["comparators"].empty())
-    {
-      const auto &rhs_expr = element["comparators"][0];
-      if (rhs_expr.contains("value") && rhs_expr["value"].is_string())
-        rhs_type = "str";
-      else if (rhs_expr.contains("id") && rhs_expr["id"].is_string())
-        rhs_type = "str";
-    }
-  }
-
-  if (lhs_type == "str" && rhs_type == "str")
   {
     auto ensure_array = [&](exprt &expr) {
       // Single-character are treated as constants.
@@ -833,6 +766,89 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
       return expr;
     }
+  }
+  return nil_exprt();
+}
+
+exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
+{
+  auto left = (element.contains("left")) ? element["left"] : element["target"];
+
+  decltype(left) right;
+  if (element.contains("right"))
+    right = element["right"];
+  else if (element.contains("comparators"))
+    right = element["comparators"][0];
+  else if (element.contains("value"))
+    right = element["value"];
+
+  exprt lhs = get_expr(left);
+  exprt rhs = get_expr(right);
+
+  attach_symbol_location(lhs, symbol_table());
+  attach_symbol_location(rhs, symbol_table());
+
+  auto to_side_effect_call = [](exprt &expr) {
+    side_effect_expr_function_callt side_effect;
+    code_function_callt &code = static_cast<code_function_callt &>(expr);
+    side_effect.function() = code.function();
+    side_effect.location() = code.location();
+    side_effect.type() = code.type();
+    side_effect.arguments() = code.arguments();
+    expr = side_effect;
+  };
+
+  // Function calls in expressions like "fib(n-1) + fib(n-2)" need to be converted to side effects
+  if (lhs.is_function_call())
+    to_side_effect_call(lhs);
+  if (rhs.is_function_call())
+    to_side_effect_call(rhs);
+
+  std::string op;
+
+  if (element.contains("op"))
+    op = element["op"]["_type"].get<std::string>();
+  else if (element.contains("ops"))
+    op = element["ops"][0]["_type"].get<std::string>();
+
+  assert(!op.empty());
+
+  // Get LHS and RHS types
+  std::string lhs_type = type_handler_.type_to_string(lhs.type());
+  std::string rhs_type = type_handler_.type_to_string(rhs.type());
+
+  // Infer the missing operand type if one side is explicitly a string and the operation is Eq or NotEq
+  if (
+    (op == "Eq" || op == "NotEq") && ((lhs_type.empty() && rhs_type == "str") ||
+                                      (rhs_type.empty() && lhs_type == "str")))
+  {
+    // Infer lhs_type if it is empty
+    if (lhs_type.empty() && element.contains("left"))
+    {
+      const auto &lhs_expr = element["left"];
+      if (lhs_expr.contains("value") && lhs_expr["value"].is_string())
+        lhs_type = "str";
+      else if (lhs_expr.contains("id") && lhs_expr["id"].is_string())
+        lhs_type = "str";
+    }
+    // Infer rhs_type if it is empty
+    else if (
+      rhs_type.empty() && element.contains("comparators") &&
+      element["comparators"].is_array() && !element["comparators"].empty())
+    {
+      const auto &rhs_expr = element["comparators"][0];
+      if (rhs_expr.contains("value") && rhs_expr["value"].is_string())
+        rhs_type = "str";
+      else if (rhs_expr.contains("id") && rhs_expr["id"].is_string())
+        rhs_type = "str";
+    }
+  }
+
+  if (lhs_type == "str" && rhs_type == "str")
+  {
+    const exprt &result = handle_string_operations(op, lhs, rhs, left, right, element);
+    if (!result.is_nil())
+      return result;
   }
 
   // Replace ** operation with the resultant constant.
