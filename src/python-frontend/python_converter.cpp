@@ -826,6 +826,11 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     }
   }
 
+  if ((op == "Eq" || op == "NotEq") &&
+    ((lhs_type == "char" && rhs_type == "str") ||
+     (lhs_type == "str" && rhs_type == "char")))
+    return gen_boolean(op == "NotEq");
+
   if (lhs_type == "str" && rhs_type == "str")
   {
     const exprt &result =

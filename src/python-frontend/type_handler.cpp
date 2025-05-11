@@ -69,7 +69,7 @@ std::string type_handler::type_to_string(const typet &t) const
     {
       // Likely represents a character in Python (e.g., in a string literal)
       if (t.get("#cpp_type") == "char")
-        return "int";
+        return "char";
     }
   }
 
