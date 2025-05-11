@@ -652,9 +652,7 @@ exprt python_converter::handle_string_concatenation(
     {
       BigInt v(ch);
       exprt char_expr = constant_exprt(
-        integer2binary(v, bv_width(char_type)),
-        integer2string(v),
-        char_type);
+        integer2binary(v, bv_width(char_type)), integer2string(v), char_type);
       result.operands().at(i++) = char_expr;
     }
   };
@@ -701,14 +699,16 @@ exprt python_converter::handle_string_comparison(
     return gen_boolean(op == "Eq");
 
   const auto &array_type = to_array_type(lhs.type());
-  BigInt string_size = binary2integer(array_type.size().value().as_string(), false);
+  BigInt string_size =
+    binary2integer(array_type.size().value().as_string(), false);
 
   symbolt *strncmp_symbol = symbol_table_.find_symbol("c:@F@strncmp");
   assert(strncmp_symbol);
 
   side_effect_expr_function_callt strncmp_call;
   strncmp_call.function() = symbol_expr(*strncmp_symbol);
-  strncmp_call.arguments() = {lhs, rhs, from_integer(string_size, long_uint_type())};
+  strncmp_call.arguments() = {
+    lhs, rhs, from_integer(string_size, long_uint_type())};
   strncmp_call.location() = get_location_from_decl(element);
   strncmp_call.type() = int_type();
 
@@ -828,7 +828,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   if (lhs_type == "str" && rhs_type == "str")
   {
-    const exprt &result = handle_string_operations(op, lhs, rhs, left, right, element);
+    const exprt &result =
+      handle_string_operations(op, lhs, rhs, left, right, element);
     if (!result.is_nil())
       return result;
   }

@@ -122,24 +122,24 @@ private:
   BigInt get_string_size(const exprt &expr);
 
   exprt handle_string_concatenation(
-  const exprt &lhs,
-  const exprt &rhs,
-  const nlohmann::json &left,
-  const nlohmann::json &right);
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
 
   exprt handle_string_comparison(
-  const std::string &op,
-  exprt &lhs,
-  exprt &rhs,
-  const nlohmann::json &element);
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &element);
 
   exprt handle_string_operations(
-  const std::string &op,
-  exprt &lhs,
-  exprt &rhs,
-  const nlohmann::json &left,
-  const nlohmann::json &right,
-  const nlohmann::json &element);
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    const nlohmann::json &element);
 
   exprt get_logical_operator_expr(const nlohmann::json &element);
 
