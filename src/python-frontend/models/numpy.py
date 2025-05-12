@@ -39,6 +39,9 @@ def floor(x:float) -> int:
 def fabs(x:float) -> float:
     return 1.0
 
+def sqrt(x:float) -> float:
+    return 0.2
+
 def sin(x:float) -> float:
     return 0.2
 

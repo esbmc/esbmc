@@ -80,7 +80,7 @@ public:
     return (func_name == "ceil") || (func_name == "floor") ||
            (func_name == "fabs") || (func_name == "sin") ||
            (func_name == "cos") || (func_name == "exp") ||
-           (func_name == "fmod");
+           (func_name == "fmod") || (func_name == "sqrt");
   }
 
 private:

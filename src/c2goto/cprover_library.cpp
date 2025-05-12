@@ -104,6 +104,7 @@ const static std::vector<std::string> python_c_models = {
   "expm1",
   "expm1_taylor",
   "fmod",
+  "sqrt",
   "frexp"};
 
 } // namespace
