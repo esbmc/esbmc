@@ -826,6 +826,18 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     }
   }
 
+  if (op == "Add" && lhs_type == "char" && rhs_type == "char")
+  {
+    symbolt *strcat_symbol = symbol_table_.find_symbol("c:@F@strcat");
+    assert(strcat_symbol);
+    side_effect_expr_function_callt strcat_call;
+    strcat_call.function() = symbol_expr(*strcat_symbol);
+    strcat_call.arguments() = {lhs, rhs};
+    strcat_call.location() = lhs.location();
+    strcat_call.type() = char_type();
+    return strcat_call;
+  }
+
   if ((op == "Eq" || op == "NotEq") &&
     ((lhs_type == "char" && rhs_type == "str") ||
      (lhs_type == "str" && rhs_type == "char")))
