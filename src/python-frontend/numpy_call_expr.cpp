@@ -304,7 +304,12 @@ exprt numpy_call_expr::create_expr_from_call()
   }
 
   if (expr.empty())
-    throw std::runtime_error("Unsupported Numpy call");
+  {
+    std::ostringstream oss;
+    oss << "Unsupported NumPy call: " << function_id_.get_function();
+    log_error("{}", oss.str());
+    abort();
+  }
 
   return converter_.get_expr(expr);
 }
