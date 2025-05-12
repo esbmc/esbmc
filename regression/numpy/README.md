@@ -1,10 +1,10 @@
-# 🧮 ESBMC – NumPy Math Library Mapping
+# ESBMC – NumPy Math Library Mapping
 
 This repository documents the mapping between ESBMC's math library implementations and their NumPy equivalents. These mappings help in testing and verifying floating-point behavior consistently across C and Python environments.
 
 ---
 
-## 🧮 Mathematical & Trigonometric Functions
+## Mathematical & Trigonometric Functions
 
 | ESBMC File | NumPy Equivalent       | Category      |
 |------------|------------------------|---------------|
@@ -15,7 +15,7 @@ This repository documents the mapping between ESBMC's math library implementatio
 
 ---
 
-## 📐 Rounding & Remainders
+## Rounding & Remainders
 
 | ESBMC File     | NumPy Equivalent              | Category             |
 |----------------|-------------------------------|----------------------|
@@ -30,7 +30,7 @@ This repository documents the mapping between ESBMC's math library implementatio
 
 ---
 
-## ➕ Floating Point Properties
+## Floating Point Properties
 
 | ESBMC File    | NumPy Equivalent                    | Category             |
 |---------------|-------------------------------------|----------------------|
@@ -41,7 +41,7 @@ This repository documents the mapping between ESBMC's math library implementatio
 
 ---
 
-## 🔬 Comparisons, Extrema
+## Comparisons, Extrema
 
 | ESBMC File | NumPy Equivalent                    | Category             |
 |------------|-------------------------------------|----------------------|
@@ -51,7 +51,7 @@ This repository documents the mapping between ESBMC's math library implementatio
 
 ---
 
-## 🔢 Exponents and Powers
+## Exponents and Powers
 
 | ESBMC File | NumPy Equivalent | Category     |
 |------------|------------------|--------------|
@@ -60,7 +60,7 @@ This repository documents the mapping between ESBMC's math library implementatio
 
 ---
 
-## 📏 Miscellaneous
+## Miscellaneous
 
 | ESBMC File     | NumPy Equivalent         | Category              |
 |----------------|--------------------------|-----------------------|
