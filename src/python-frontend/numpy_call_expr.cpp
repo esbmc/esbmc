@@ -62,7 +62,7 @@ bool numpy_call_expr::is_math_function() const
          (function == "floor") || (function == "fabs") || (function == "sin") ||
          (function == "cos") || (function == "exp") || (function == "fmod") ||
          (function == "sqrt") || (function == "fmin") || (function == "fmax") ||
-         (function == "trunc");
+         (function == "trunc") || (function == "round") || (function == "copysign");
 }
 
 std::string numpy_call_expr::get_dtype() const

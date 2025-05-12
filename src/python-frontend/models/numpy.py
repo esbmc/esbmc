@@ -51,6 +51,12 @@ def fmaxf(x:float, y:float) -> float:
 def trunc(x:float) -> float:
     return 0.2
 
+def round(x:float) -> float:
+    return 0.2
+
+def copysign(x:float, y:float) -> float:
+    return 0.2
+
 def sin(x:float) -> float:
     return 0.2
 
