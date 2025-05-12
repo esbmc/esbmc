@@ -1,6 +1,6 @@
 # ESBMC – NumPy Math Library Mapping
 
-This repository documents the mapping between ESBMC's math library implementations and their NumPy equivalents. 
+Here, we document the mapping between ESBMC's math library implementations and their NumPy equivalents. 
 
 These mappings help in testing and verifying floating-point behavior consistently across C and Python environments.
 
