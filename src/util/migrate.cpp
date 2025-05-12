@@ -1848,13 +1848,38 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_expr(expr.op1(), args[1]);
     new_expr_ref = exists2tc(type, args[0], args[1]);
   }
+
+  // TRANSCODER START
   else if (expr.id() == "object_size")
   {
     assert(expr.operands().size() == 1);
     type = migrate_type(expr.type());
-    // We don't care for now. Return max value
-    type->dump();
-    new_expr_ref = constant_int2tc(type, BigInt(-1));
+
+    code_function_callt call;
+    std::string function = "c:@F@__ESBMC_get_object_size";
+
+    code_typet code_type;
+    code_type.return_type() = expr.type();
+    code_type.arguments().push_back(pointer_type());
+
+    symbolt symbol;
+    symbol.mode = "C";
+    symbol.type = code_type;
+    symbol.name = function;
+    symbol.id = function;
+    symbol.is_extern = false;
+    symbol.file_local = false;
+
+    exprt tmp("symbol", symbol.type);
+    tmp.identifier(symbol.id);
+    tmp.name(symbol.name);
+
+    call.function() = tmp;
+    call.arguments().push_back(expr.op0());
+
+    //migrate_namespace_lookup->get_context().dump();
+    migrate_expr(call, new_expr_ref);
+    // abort();
   }
   else if (expr.id() == "overflow_result-+")
   {
@@ -1912,6 +1937,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     members.push_back(overflow2tc(mul2tc(op0->type, op0, op1)));
     new_expr_ref = constant_struct2tc(type, members);
   }
+  // TRANSCODER END
   else
   {
     log_error("{}\nmigrate expr failed", expr);
