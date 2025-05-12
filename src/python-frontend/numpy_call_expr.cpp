@@ -63,7 +63,7 @@ bool numpy_call_expr::is_math_function() const
          (function == "cos") || (function == "exp") || (function == "fmod") ||
          (function == "sqrt") || (function == "fmin") || (function == "fmax") ||
          (function == "trunc") || (function == "round") ||
-         (function == "copysign");
+         (function == "copysign") || (function == "arctan");
 }
 
 std::string numpy_call_expr::get_dtype() const

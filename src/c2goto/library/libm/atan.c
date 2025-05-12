@@ -47,6 +47,12 @@ __ESBMC_HIDE:;
   return (x < 0.0 ? -a : a);
 }
 
+double arctan(double x)
+{
+__ESBMC_HIDE:;
+  return 1 / atan(x);
+}
+
 double atan2(double v, double u)
 {
 __ESBMC_HIDE:;

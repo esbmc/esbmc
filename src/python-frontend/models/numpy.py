@@ -68,3 +68,6 @@ def exp(x:float) -> float:
 
 def fmod(x:float) -> float:
     return 0.2
+
+def arctan(x:float) -> float:
+    return 0.2

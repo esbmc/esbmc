@@ -83,7 +83,7 @@ public:
            (func_name == "fmod") || (func_name == "sqrt") ||
            (func_name == "fmin") || (func_name == "fmax") ||
            (func_name == "trunc") || (func_name == "round") ||
-           (func_name == "copysign");
+           (func_name == "copysign" || func_name == "arctan");
   }
 
 private:
