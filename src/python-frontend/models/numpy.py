@@ -45,7 +45,10 @@ def sqrt(x:float) -> float:
 def fmin(x:float, y:float) -> float:
     return 0.2
 
-def pow(x:float, y:float) -> float:
+def fmaxf(x:float, y:float) -> float:
+    return 0.2
+
+def trunc(x:float) -> float:
     return 0.2
 
 def sin(x:float) -> float:

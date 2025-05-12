@@ -81,7 +81,8 @@ public:
            (func_name == "fabs") || (func_name == "sin") ||
            (func_name == "cos") || (func_name == "exp") ||
            (func_name == "fmod") || (func_name == "sqrt") ||
-           (func_name == "fmin") || (func_name == "pow");
+           (func_name == "fmin") || (func_name == "fmax") ||
+           (func_name == "trunc");
   }
 
 private:
