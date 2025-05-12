@@ -47,6 +47,9 @@ __ESBMC_HIDE:;
   return (x < 0.0 ? -a : a);
 }
 
+// This function is used by the Python frontend
+// The inverse of atan, so that if y = atan(x) then x = arctan(y).
+// Reference: https://numpy.org/doc/stable/reference/generated/numpy.arctan.html
 double arctan(double x)
 {
 __ESBMC_HIDE:;
