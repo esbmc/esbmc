@@ -59,15 +59,12 @@ std::string type_handler::type_to_string(const typet &t) const
   if (t == uint256_type())
     return "uint256";
 
-  // Handle signedbv types (e.g., char, small integers)
   if (t.is_signedbv())
   {
     const auto &bv = to_signedbv_type(t);
     const auto width = bv.get_width();
-
     if (width == 8)
     {
-      // Likely represents a character in Python (e.g., in a string literal)
       if (t.get("#cpp_type") == "char")
         return "char";
     }
