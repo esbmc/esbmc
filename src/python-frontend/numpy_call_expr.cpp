@@ -61,7 +61,7 @@ bool numpy_call_expr::is_math_function() const
          (function == "power") || (function == "ceil") ||
          (function == "floor") || (function == "fabs") || (function == "sin") ||
          (function == "cos") || (function == "exp") || (function == "fmod") ||
-         (function == "sqrt");
+         (function == "sqrt") || (function == "fmin") || (function == "pow");
 }
 
 std::string numpy_call_expr::get_dtype() const

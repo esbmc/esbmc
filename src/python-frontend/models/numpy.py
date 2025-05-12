@@ -42,6 +42,12 @@ def fabs(x:float) -> float:
 def sqrt(x:float) -> float:
     return 0.2
 
+def fmin(x:float, y:float) -> float:
+    return 0.2
+
+def pow(x:float, y:float) -> float:
+    return 0.2
+
 def sin(x:float) -> float:
     return 0.2
 
