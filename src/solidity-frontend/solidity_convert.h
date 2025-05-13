@@ -592,6 +592,8 @@ protected:
   // contract name list
   std::unordered_map<int, std::string> contractNamesMap;
   std::set<std::string> contractNamesList;
+  // contract name & kind
+  std::unordered_map<std::string, std::string> contractKindMap;
   // Store the ast_node["id"] of struct/error
   // where entity contains "members": [{}, {}...]
   std::unordered_map<int, std::string> member_entity_scope;

@@ -416,11 +416,13 @@ bool solidity_convertert::populate_auxilary_vars()
     if (node_type == "ContractDefinition") // rule source-unit
     {
       std::string c_name = (*itr)["name"].get<std::string>();
+      std::string kind = (*itr)["contractKind"].get<std::string>();
       auto c_id = (*itr)["id"].get<int>();
 
       // store contract name
       contractNamesMap.insert(std::pair<int, std::string>(c_id, c_name));
       contractNamesList.insert(c_name);
+      contractKindMap.insert(std::pair<std::string, std::string>(c_name, kind));
 
       // store linearizedBaseList: inherit from who?
       // this is esstinally the calling order of the constructor
@@ -505,6 +507,25 @@ bool solidity_convertert::populate_auxilary_vars()
   // const char * Base = &"Base"[0];
   for (auto contract_name : contractNamesList)
   {
+    if (contractKindMap.count(contract_name) && contractKindMap[contract_name] == "library")
+      continue;
+    bool flag = false;
+    for (const auto &node : src_ast_json["nodes"])
+    {
+      if (node.contains("nodeType") &&
+          node["nodeType"] == "ContractDefinition" &&
+          node["name"] == contract_name &&
+          node.contains("contractKind") &&
+          node["contractKind"] == "library")
+      {
+        flag = true;
+        break;
+      }
+    }
+    if (flag == true)
+    {
+      continue;
+    }
     exprt _cname_expr;
     std::string aux_cname, aux_cid;
     aux_cname = contract_name;
@@ -10137,6 +10158,8 @@ bool solidity_convertert::multi_contract_verification_bound(
 
   for (const auto &c_name : cname_set)
   {
+    if (contractKindMap.count(c_name) && contractKindMap[c_name] == "library")
+      continue;
     // 1.1 construct multi-transaction verification entry function
     // function "_ESBMC_Main_contractname" will be created and inserted to the symbol table.
     if (multi_transaction_verification(c_name, false))
@@ -10267,6 +10290,8 @@ bool solidity_convertert::multi_contract_verification_unbound(
 
   for (const auto &c_name : cname_set)
   {
+    if (contractKindMap.count(c_name) && contractKindMap[c_name] == "library")
+      continue;
     // construct multi-transaction verification entry function
     // function "_ESBMC_Main_contractname" will be created and inserted to the symbol table.
     if (multi_transaction_verification(c_name, false))
@@ -11166,6 +11191,8 @@ bool solidity_convertert::get_high_level_member_access(
   // @str: contract name
   for (auto str : cname_set)
   {
+    if (contractKindMap.count(str) && contractKindMap[str] == "library")
+      continue;
     // strcmp（_ESBMC_NODET_cont_name, Base)
     exprt cname_string;
     typet ct = pointer_typet(signed_char_type());
@@ -11593,6 +11620,8 @@ bool solidity_convertert::get_call_definition(
 
   for (auto str : contractNamesList)
   {
+    if (contractKindMap.count(str) && contractKindMap[str] == "library")
+      continue;
     if (!has_callable_func(str))
       continue;
 
@@ -11908,6 +11937,8 @@ bool solidity_convertert::get_call_value_definition(
     // 1. match payable receive
     // 2. match payable fallback
     // 3. return false (revert)
+    if (contractKindMap.count(str) && contractKindMap[str] == "library")
+      continue;
     nlohmann::json decl_ref;
     if (has_target_function(str, "receive"))
       decl_ref = get_func_decl_ref(str, "receive");
@@ -12128,6 +12159,8 @@ bool solidity_convertert::get_transfer_definition(
     // 1. match payable receive
     // 2. match payable fallback
     // 3. return false (revert)
+    if (contractKindMap.count(str) && contractKindMap[str] == "library")
+      continue;
     nlohmann::json decl_ref;
     if (has_target_function(str, "receive"))
       decl_ref = get_func_decl_ref(str, "receive");
@@ -12348,6 +12381,8 @@ bool solidity_convertert::get_send_definition(
     // 1. match payable receive
     // 2. match payable fallback
     // 3. return false (revert)
+    if (contractKindMap.count(str) && contractKindMap[str] == "library")
+      continue;
     nlohmann::json decl_ref;
     if (has_target_function(str, "receive"))
       decl_ref = get_func_decl_ref(str, "receive");
