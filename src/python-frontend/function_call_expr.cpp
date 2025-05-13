@@ -470,26 +470,26 @@ function_call_expr::lookup_python_symbol(const std::string &var_name) const
 exprt function_call_expr::handle_abs(nlohmann::json &arg) const
 {
   // Handle unary minus on constants (e.g., abs(-5) becomes abs(5))
-  if(arg.contains("_type") && arg["_type"] == "UnaryOp")
+  if (arg.contains("_type") && arg["_type"] == "UnaryOp")
   {
     const auto &op = arg["op"];
     const auto &operand = arg["operand"];
-    if(op["_type"] == "USub" && operand.contains("value"))
+    if (op["_type"] == "USub" && operand.contains("value"))
     {
       arg = operand; // Remove the unary minus syntactic sugar
     }
   }
 
   // Evaluate constant expressions
-  if(arg.contains("value") && arg["value"].is_number())
+  if (arg.contains("value") && arg["value"].is_number())
   {
-    if(arg["value"].is_number_integer())
+    if (arg["value"].is_number_integer())
     {
       int value = arg["value"].get<int>();
       arg["value"] = std::abs(value);
       arg["type"] = "int";
     }
-    else if(arg["value"].is_number_float())
+    else if (arg["value"].is_number_float())
     {
       double value = arg["value"].get<double>();
       arg["value"] = std::abs(value);
