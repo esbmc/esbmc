@@ -106,6 +106,35 @@ protected:
     std::string &name,
     std::string &id);
   void get_static_contract_instance(const std::string c_name, symbolt &sym);
+  void get_inherit_static_contract_instance_name(
+    const std::string bs_c_name,
+    const std::string c_name,
+    std::string &name,
+    std::string &id);
+  void get_inherit_static_contract_instance(
+    const std::string bs_c_name,
+    const std::string c_name,
+    const nlohmann::json &args_list,
+    symbolt &sym);
+  void get_inherit_ctor_definition(const std::string c_name, exprt &new_expr);
+  void get_inherit_ctor_definition_name(
+    const std::string c_name,
+    std::string &name,
+    std::string &id);
+  void get_contract_mutex_name(
+    const std::string c_name,
+    std::string &name,
+    std::string &id);
+  void get_contract_mutex_expr(
+    const std::string c_name,
+    const exprt &this_expr,
+    exprt &expr);
+  bool get_high_level_call_wrapper(
+    const std::string c_name,
+    const exprt &this_expr,
+    exprt &front_block,
+    exprt &back_block);
+  bool is_sol_builin_symbol(const std::string &cname, const std::string &name);
 
   // handle the non-contract definition, including struct/enum/error/event/abstract/...
   bool get_noncontract_defition(nlohmann::json &ast_node);
@@ -136,6 +165,10 @@ protected:
   bool move_initializer_to_ctor(
     const nlohmann::json *based_contracts,
     const std::string contract_name);
+  bool move_initializer_to_ctor(
+    const nlohmann::json *based_contracts,
+    const std::string contract_name,
+    bool is_aux_ctor);
   bool move_inheritance_to_ctor(
     const nlohmann::json *based_contracts,
     const std::string contract_name,
@@ -337,7 +370,9 @@ protected:
   std::string get_src_from_json(const nlohmann::json &ast_node);
 
   symbolt *move_symbol_to_context(symbolt &symbol);
-  bool multi_transaction_verification(const std::string &contractName);
+  bool multi_transaction_verification(
+    const std::string &contractName,
+    bool is_final_main);
   bool multi_contract_verification_bound(std::set<std::string> &tgt_set);
   bool multi_contract_verification_unbound(std::set<std::string> &tgt_set);
   void reset_auxiliary_vars();
@@ -412,14 +447,25 @@ protected:
     const std::string c_name);
   void move_builtin_to_contract(
     const std::string cname,
-    const std::string &name,
-    const typet &t,
+    const exprt &sym,
+    bool is_method);
+  void move_builtin_to_contract(
+    const std::string cname,
+    const exprt &sym,
+    const std::string &access,
     bool is_method);
   const nlohmann::json &
   get_func_decl_ref(const std::string &c_name, const std::string &f_name);
   void get_builtin_property_expr(
     const std::string &name,
     const exprt &base,
+    const locationt &loc,
+    exprt &new_expr);
+  void get_aux_property_function(
+    const exprt &addr,
+    const typet &return_t,
+    const locationt &loc,
+    const std::string &property_name,
     exprt &new_expr);
   bool get_new_temporary_obj(
     const std::string &c_name,
@@ -430,10 +476,6 @@ protected:
     codet &decl);
   void
   get_addr_expr(const std::string &cname, const exprt &base, exprt &new_expr);
-  bool set_addr_cname_mapping(
-    const std::string &cname,
-    const exprt &base,
-    exprt &new_expr);
   void get_new_object(const typet &t, exprt &this_object);
   bool get_high_level_member_access(
     const nlohmann::json &expr,
@@ -475,10 +517,6 @@ protected:
     exprt &back_block);
 
   bool get_bind_cname_expr(const nlohmann::json &json, exprt &bind_cname_expr);
-  void get_nondet_contract_name(
-    const exprt src_expr,
-    const typet dest_type,
-    exprt &new_expr);
   void get_nondet_expr(const typet &t, exprt &new_expr);
   bool assign_nondet_contract_name(const std::string &_cname, exprt &new_expr);
   bool assign_param_nondet(
@@ -580,6 +618,9 @@ protected:
 
   // bound setting
   bool is_bound;
+
+  // reentry-check setting
+  bool is_reentry_check;
 
   // NONDET
   side_effect_expr_function_callt nondet_bool_expr;
