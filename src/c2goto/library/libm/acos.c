@@ -4,7 +4,7 @@
 double acos(double x)
 {
 __ESBMC_HIDE:;
-  return 1 / cos(x);
+  return atan2(sqrt(1.0 - x * x), x);
 }
 
 double __acos(double x)
