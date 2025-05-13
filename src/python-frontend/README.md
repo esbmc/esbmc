@@ -173,7 +173,7 @@ For more information about our frontend, please refer to our ISSTA 2024 [tool pa
 - Linear algebra, Fourier transform, and random number capabilities  
 
 ### Potential Issues
-- According to [Harzevili et al., 2023](https://arxiv.org/abs/2303.06439), Numpy is susceptible to:
+- According to [Harzevili et al., 2023](https://arxiv.org/abs/2203.06502), Numpy is susceptible to: 
   - Integer overflows/underflows  
   - Division by zero  
   - Insufficient precision  
@@ -274,7 +274,7 @@ x != 0
 
 ## References
 
-- Harzevili et al. (2023). *Characterizing Numerical Bugs in Numpy*. [arXiv:2303.06439](https://arxiv.org/abs/2303.06439)
+- Harzevili et al. (2023). *Characterizing and Understanding Software Security Vulnerabilities in Machine Learning Libraries*. [arXiv:2303.06502](https://arxiv.org/abs/2203.06502)
 
 ## Thank You
 
