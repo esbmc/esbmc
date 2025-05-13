@@ -62,7 +62,7 @@ bool numpy_call_expr::is_math_function() const
          (function == "floor") || (function == "fabs") || (function == "sin") ||
          (function == "cos") || (function == "exp") || (function == "fmod") ||
          (function == "sqrt") || (function == "fmin") || (function == "fmax") ||
-         (function == "trunc") || (function == "round") ||
+         (function == "trunc") || (function == "round") || (function == "arccos") ||
          (function == "copysign") || (function == "arctan");
 }
 
