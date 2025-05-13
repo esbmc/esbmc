@@ -17,3 +17,4 @@ assert abs(x) == 2.5
 y = 1.000001
 assert abs(y) == 1.000001
 
+assert x != y
