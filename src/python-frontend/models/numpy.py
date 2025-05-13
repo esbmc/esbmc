@@ -39,6 +39,24 @@ def floor(x:float) -> int:
 def fabs(x:float) -> float:
     return 1.0
 
+def sqrt(x:float) -> float:
+    return 0.2
+
+def fmin(x:float, y:float) -> float:
+    return 0.2
+
+def fmaxf(x:float, y:float) -> float:
+    return 0.2
+
+def trunc(x:float) -> float:
+    return 0.2
+
+def round(x:float) -> float:
+    return 0.2
+
+def copysign(x:float, y:float) -> float:
+    return 0.2
+
 def sin(x:float) -> float:
     return 0.2
 
@@ -49,4 +67,7 @@ def exp(x:float) -> float:
     return 0.2
 
 def fmod(x:float) -> float:
+    return 0.2
+
+def arctan(x:float) -> float:
     return 0.2
