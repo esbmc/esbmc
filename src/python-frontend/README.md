@@ -109,3 +109,129 @@ Below is an overview of ESBMC-Python's key capabilities:
 
 ## References
 For more information about our frontend, please refer to our ISSTA 2024 [tool paper](https://dl.acm.org/doi/abs/10.1145/3650212.3685304).
+
+# Numpy Formal Verification
+
+## What We Are Trying to Verify
+
+### Targeted Numpy Features
+- N-dimensional array objects  
+- Sophisticated broadcasting functions  
+- Linear algebra, Fourier transform, and random number capabilities  
+
+### Potential Issues
+- According to [Harzevili et al., 2023](https://arxiv.org/abs/2303.06439), Numpy is susceptible to:
+  - Integer overflows/underflows  
+  - Division by zero  
+  - Insufficient precision  
+  - Out-of-bounds memory access
+
+---
+
+## How to Verify Numpy with ESBMC
+
+**ESBMC** is a model checker that performs static analysis to:
+
+- ✅ Find bugs: Overflows, division-by-zero, out-of-bounds access  
+- ✅ Prove user-defined assertions are not violated  
+
+### Two Approaches for Verifying Python Libraries
+
+1. **Black-box verification**  
+   Evaluate API behavior by checking function return values.
+
+2. **White-box verification**  
+   Submit Python code to ESBMC and verify individual functions using non-determinism.
+
+---
+
+## ESBMC as a Black-Box Verifier
+
+**Example:**
+
+```python
+import numpy as np
+
+x = np.add(1, 2)
+assert x == 1
+```
+
+**Command:**
+
+```bash
+$ esbmc main.py
+```
+
+**ESBMC Output:**
+
+```
+[Counterexample]
+
+main.py line 3 column 0
+---------------------------
+
+Violated property:
+file main.py line 3 column 0
+assertion
+x == 1.000000
+
+VERIFICATION FAILED
+```
+
+🧩 **Note**: Black-box verification relies on user-defined `assert` statements.
+
+---
+
+## ESBMC as a White-Box Verifier
+
+**Example Function:**
+
+```python
+def integer_squareroot(n: uint64) -> uint64:
+    x = n
+    y = (x + 1) // 2
+    while y < x:
+        x = y
+        y = (x + n // x) // 2
+    return x
+```
+
+**Command:**
+
+```bash
+$ esbmc main.py --function integer_squareroot
+```
+
+**ESBMC Output:**
+
+```
+[Counterexample]
+State 1 main.py line 2
+x = 0xFFFFFFFFFFFFFFFF
+--------------------------------
+State 2 main.py line 3
+y = 0
+--------------------------------
+State 3 main.py line 5
+x = 0
+--------------------------------
+State 4 main.py line 6
+Violated property:
+division by zero
+x != 0
+```
+
+🧩 **Note**: White-box verification uses **symbolic execution** and **non-determinism**.
+
+---
+
+## References
+
+- Harzevili et al. (2023). *Characterizing Numerical Bugs in Numpy*. [arXiv:2303.06439](https://arxiv.org/abs/2303.06439)
+
+---
+
+## Thank You
+
+If you have any more questions or would like to collaborate, please don't hesitate to contact the authors.
+
