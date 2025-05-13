@@ -469,37 +469,48 @@ function_call_expr::lookup_python_symbol(const std::string &var_name) const
 
 exprt function_call_expr::handle_abs(nlohmann::json &arg) const
 {
+  // Handle unary minus on constants (e.g., abs(-5) becomes abs(5))
   if(arg.contains("_type") && arg["_type"] == "UnaryOp")
   {
     const auto &op = arg["op"];
     const auto &operand = arg["operand"];
     if(op["_type"] == "USub" && operand.contains("value"))
     {
-      arg = operand; // remove the unary minus
+      arg = operand; // Remove the unary minus syntactic sugar
     }
   }
 
-  if(arg.contains("value") && arg["value"].is_number_integer())
+  // If the argument is a constant, evaluate it directly
+  if(arg.contains("value") && arg["value"].is_number())
   {
-    int value = arg["value"].get<int>();
-    arg["value"] = std::abs(value);
-    arg["type"] = "int";
-  }
-  else if(arg.contains("value") && arg["value"].is_number_float())
-  {
-    double value = arg["value"].get<double>();
-    arg["value"] = std::abs(value);
-    arg["type"] = "float";
-  }
-  else
-  {
-    throw std::runtime_error("TypeError: bad operand type for abs()");
+    if(arg["value"].is_number_integer())
+    {
+      int value = arg["value"].get<int>();
+      arg["value"] = std::abs(value);
+      arg["type"] = "int";
+    }
+    else if(arg["value"].is_number_float())
+    {
+      double value = arg["value"].get<double>();
+      arg["value"] = std::abs(value);
+      arg["type"] = "float";
+    }
+
+    typet t = type_handler_.get_typet(arg["type"], 0);
+    exprt expr = converter_.get_expr(arg);
+    expr.type() = t;
+    return expr;
   }
 
-  typet t = type_handler_.get_typet(arg["type"], 0);
-  exprt expr = converter_.get_expr(arg);
-  expr.type() = t;
-  return expr;
+  // Otherwise, treat it as a symbolic abs expression
+  exprt operand_expr = converter_.get_expr(arg);
+  typet operand_type = operand_expr.type();
+
+  // Create an abs expression in ESBMC's irep format
+  exprt abs_expr("abs", operand_type);
+  abs_expr.copy_to_operands(operand_expr);
+
+  return abs_expr;
 }
 
 exprt function_call_expr::build_constant_from_arg() const
