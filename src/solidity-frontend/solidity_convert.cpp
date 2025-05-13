@@ -1590,18 +1590,14 @@ bool solidity_convertert::get_noncontract_defition(nlohmann::json &ast_node)
   {
     // for library entity
     std::string lib_name = ast_node["name"].get<std::string>();
-
-    if (get_struct_class(ast_node))
-      return true;
+    
+    // we treat library as a contract, but we do not populate it as struct/contract symbol
+    // instead, we only populate the entity and functions
     std::string old = current_baseContractName;
     current_baseContractName = lib_name;
     if (convert_ast_nodes(ast_node, lib_name))
       return true;
 
-    symbolt lib_instance;
-    get_static_contract_instance(lib_name, lib_instance);
-    lib_instance.lvalue = true;
-    move_symbol_to_context(lib_instance);
     current_baseContractName = old;
   }
 
