@@ -1,4 +1,4 @@
 CORE
 contract.solast
---function Conv --sol contract.sol --no-standard-checks --incremental-bmc
+--function Conv --sol contract.sol --no-standard-checks --k-induction
 ^VERIFICATION SUCCESSFUL$
