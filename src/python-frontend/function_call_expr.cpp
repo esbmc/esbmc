@@ -467,6 +467,41 @@ function_call_expr::lookup_python_symbol(const std::string &var_name) const
   return sym;
 }
 
+exprt function_call_expr::handle_abs(nlohmann::json &arg) const
+{
+  if(arg.contains("_type") && arg["_type"] == "UnaryOp")
+  {
+    const auto &op = arg["op"];
+    const auto &operand = arg["operand"];
+    if(op["_type"] == "USub" && operand.contains("value"))
+    {
+      arg = operand; // remove the unary minus
+    }
+  }
+
+  if(arg.contains("value") && arg["value"].is_number_integer())
+  {
+    int value = arg["value"].get<int>();
+    arg["value"] = std::abs(value);
+    arg["type"] = "int";
+  }
+  else if(arg.contains("value") && arg["value"].is_number_float())
+  {
+    double value = arg["value"].get<double>();
+    arg["value"] = std::abs(value);
+    arg["type"] = "float";
+  }
+  else
+  {
+    throw std::runtime_error("TypeError: bad operand type for abs()");
+  }
+
+  typet t = type_handler_.get_typet(arg["type"], 0);
+  exprt expr = converter_.get_expr(arg);
+  expr.type() = t;
+  return expr;
+}
+
 exprt function_call_expr::build_constant_from_arg() const
 {
   const std::string &func_name = function_id_.get_function();
@@ -524,6 +559,10 @@ exprt function_call_expr::build_constant_from_arg() const
   // Handle oct: Handles octal string arguments
   else if (func_name == "oct")
     return handle_oct(arg);
+
+  // Handle abs: Returns the absolute value of an integer or float literal
+  else if (func_name == "abs")
+    return handle_abs(arg);
 
   // Construct expression with appropriate type
   typet t = type_handler_.get_typet(func_name, arg_size);
