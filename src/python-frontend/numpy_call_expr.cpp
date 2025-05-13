@@ -60,7 +60,10 @@ bool numpy_call_expr::is_math_function() const
          (function == "multiply") || (function == "divide") ||
          (function == "power") || (function == "ceil") ||
          (function == "floor") || (function == "fabs") || (function == "sin") ||
-         (function == "cos") || (function == "exp") || (function == "fmod");
+         (function == "cos") || (function == "exp") || (function == "fmod") ||
+         (function == "sqrt") || (function == "fmin") || (function == "fmax") ||
+         (function == "trunc") || (function == "round") ||
+         (function == "copysign") || (function == "arctan");
 }
 
 std::string numpy_call_expr::get_dtype() const
