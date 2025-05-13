@@ -40,6 +40,7 @@ protected:
     code_typet type;
     bool is_payable;
     bool is_inherit;
+    bool is_library;
 
     func_sig(
       const std::string &name,
@@ -47,13 +48,15 @@ protected:
       const std::string &visibility,
       const code_typet &type,
       bool is_payable,
-      bool is_inherit)
+      bool is_inherit,
+      bool is_library)
       : name(name),
         id(id),
         visibility(visibility),
         type(type),
         is_payable(is_payable),
-        is_inherit(is_inherit)
+        is_inherit(is_inherit),
+        is_library(is_library)
     {
     }
 

@@ -653,7 +653,9 @@ bool solidity_convertert::populate_function_signature(
   std::string func_name, func_id, visibility;
   code_typet type;
   bool is_inherit, is_payable;
-
+  // check if the contract is library
+  assert(json.contains("contractKind"));
+  bool is_library = json["contractKind"] == "library";
   assert(json.contains("nodes"));
   for (const auto &func_node : json["nodes"])
   {
@@ -680,9 +682,9 @@ bool solidity_convertert::populate_function_signature(
       visibility = func_node["visibility"];
       is_payable = func_node["stateMutability"] == "payable";
       is_inherit = func_node.contains("is_inherited");
-
+      
       funcSignatures[cname].push_back(solidity_convertert::func_sig(
-        func_name, func_id, visibility, type, is_payable, is_inherit));
+        func_name, func_id, visibility, type, is_payable, is_inherit, is_library));
     }
   }
 
@@ -693,7 +695,7 @@ bool solidity_convertert::populate_function_signature(
     [&cname](const solidity_convertert::func_sig &sig) {
       return sig.name == cname;
     });
-  if (!hasConstructor)
+  if (!hasConstructor && !is_library)
   {
     func_name = cname;
     func_id = get_implict_ctor_call_id(cname);
@@ -703,7 +705,7 @@ bool solidity_convertert::populate_function_signature(
     type.return_type().set("cpp_type", "void");
     is_inherit = false;
     funcSignatures[cname].push_back(solidity_convertert::func_sig(
-      func_name, func_id, visibility, type, is_payable, is_inherit));
+      func_name, func_id, visibility, type, is_payable, is_inherit, is_library));
   }
 
   return false;
@@ -10961,7 +10963,7 @@ solidity_convertert::func_sig solidity_convertert::get_target_function(
   {
     // If contract not found, return an empty func_sig
     return solidity_convertert::func_sig(
-      "", "", "", code_typet(), false, false);
+      "", "", "", code_typet(), false, false, false);
   }
 
   // Search for the function with the matching name
@@ -10985,6 +10987,7 @@ solidity_convertert::func_sig solidity_convertert::get_target_function(
       "",
       "",
       code_typet(),
+      false,
       false,
       false); // Return an empty func_sig if not found
   }
