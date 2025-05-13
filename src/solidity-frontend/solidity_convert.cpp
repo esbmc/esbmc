@@ -509,23 +509,6 @@ bool solidity_convertert::populate_auxilary_vars()
   {
     if (contractKindMap.count(contract_name) && contractKindMap[contract_name] == "library")
       continue;
-    bool flag = false;
-    for (const auto &node : src_ast_json["nodes"])
-    {
-      if (node.contains("nodeType") &&
-          node["nodeType"] == "ContractDefinition" &&
-          node["name"] == contract_name &&
-          node.contains("contractKind") &&
-          node["contractKind"] == "library")
-      {
-        flag = true;
-        break;
-      }
-    }
-    if (flag == true)
-    {
-      continue;
-    }
     exprt _cname_expr;
     std::string aux_cname, aux_cid;
     aux_cname = contract_name;
