@@ -146,6 +146,13 @@ private:
    */
   exprt handle_ord(nlohmann::json &arg) const;
 
+  /*
+   * Handles abs() function calls by computing the absolute value of the argument.
+   * The argument can be an integer, a floating-point number, or an object implementing
+   * the __abs__() method. The function returns an expression representing the absolute value.
+   */
+  exprt handle_abs(nlohmann::json &arg) const;
+
 protected:
   symbol_id function_id_;
   const nlohmann::json &call_;
