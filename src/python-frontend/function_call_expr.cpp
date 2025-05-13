@@ -480,7 +480,7 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     }
   }
 
-  // If the argument is a constant, evaluate it directly
+  // Evaluate constant expressions
   if(arg.contains("value") && arg["value"].is_number())
   {
     if(arg["value"].is_number_integer())
@@ -502,11 +502,29 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     return expr;
   }
 
-  // Otherwise, treat it as a symbolic abs expression
+  // Validate type before symbolic expression generation
+  std::string arg_type;
+  if (arg.contains("type"))
+  {
+    arg_type = arg["type"].get<std::string>();
+  }
+  else
+  {
+    log_error("TypeError: operand to abs() is missing a type");
+    abort();
+  }
+
+  // Only allow numeric types for abs()
+  if (arg_type != "int" && arg_type != "float" && arg_type != "complex")
+  {
+    log_error("TypeError: bad operand type for abs(): {}", arg_type);
+    abort();
+  }
+
+  // Convert and build symbolic abs() expression
   exprt operand_expr = converter_.get_expr(arg);
   typet operand_type = operand_expr.type();
 
-  // Create an abs expression in ESBMC's irep format
   exprt abs_expr("abs", operand_type);
   abs_expr.copy_to_operands(operand_expr);
 
