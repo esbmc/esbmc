@@ -487,13 +487,13 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     if (arg["value"].is_number_integer())
     {
       int value = arg["value"].get<int>();
-      arg["value"] = std::abs(value);     // Apply abs to integer constant
+      arg["value"] = std::abs(value); // Apply abs to integer constant
       arg["type"] = "int";
     }
     else if (arg["value"].is_number_float())
     {
       double value = arg["value"].get<double>();
-      arg["value"] = std::abs(value);     // Apply abs to float constant
+      arg["value"] = std::abs(value); // Apply abs to float constant
       arg["type"] = "float";
     }
 
