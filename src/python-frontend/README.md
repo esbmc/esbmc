@@ -106,6 +106,59 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Built-in Functions**: Supports Python's built-in functions, such as `int`, `float`, `chr`, `str`, `hex`, `oct`, `len`, and `range`.
 - **Verification properties**: Division-by-zero, indexing errors, arithmetic overflow, and user-defined assertions.
 
+### Example: Division by Zero in Python
+
+The following Python program executes without issues in standard Python 3. However, when analyzed using ESBMC, it reveals a hidden bug: a possible division by zero.
+
+```python
+import random as rand
+
+def div1(cond: int, x: int) -> int:
+    if (not cond):
+        return 42 // x
+    else:
+       return x // 10
+
+cond:int = rand.random()
+x:int = rand.random()
+
+assert div1(cond, x) != 1
+```
+
+**Command:**
+
+```bash
+$ esbmc main.py
+```
+
+**ESBMC Output:**
+
+```
+[Counterexample]
+
+
+State 1 file main.py line 12 column 8 function random thread 0
+----------------------------------------------------
+  value = 2.619487e-10 (00111101 11110010 00000000 01000000 00000010 00000000 00010000 00001000)
+
+State 3 file main.py line 12 column 8 function random thread 0
+----------------------------------------------------
+  value = 3.454678e-77 (00110000 00010000 00000000 01000000 00000010 00000000 00010000 00000000)
+
+State 5 file main.py line 5 column 8 function div1 thread 0
+----------------------------------------------------
+Violated property:
+  file main.py line 5 column 8 function div1
+  division by zero
+  x != 0
+
+
+VERIFICATION FAILED
+```
+
+ESBMC successfully identifies a path where the randomly generated variable x evaluates to zero (or very close to zero, causing integer division by zero). This triggers a property violation, and ESBMC generates a counterexample showing the precise values of `x` and `cond` that lead to the failure.
+
+This example highlights how bounded model checking can uncover subtle bugs that may not be triggered during regular testing.
 
 ## References
 For more information about our frontend, please refer to our ISSTA 2024 [tool paper](https://dl.acm.org/doi/abs/10.1145/3650212.3685304).
