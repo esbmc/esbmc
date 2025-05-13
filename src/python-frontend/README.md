@@ -126,8 +126,6 @@ For more information about our frontend, please refer to our ISSTA 2024 [tool pa
   - Insufficient precision  
   - Out-of-bounds memory access
 
----
-
 ## How to Verify Numpy with ESBMC
 
 **ESBMC** is a model checker that performs static analysis to:
@@ -142,8 +140,6 @@ For more information about our frontend, please refer to our ISSTA 2024 [tool pa
 
 2. **White-box verification**  
    Submit Python code to ESBMC and verify individual functions using non-determinism.
-
----
 
 ## ESBMC as a Black-Box Verifier
 
@@ -223,13 +219,9 @@ x != 0
 
 🧩 **Note**: White-box verification uses **symbolic execution** and **non-determinism**.
 
----
-
 ## References
 
 - Harzevili et al. (2023). *Characterizing Numerical Bugs in Numpy*. [arXiv:2303.06439](https://arxiv.org/abs/2303.06439)
-
----
 
 ## Thank You
 
