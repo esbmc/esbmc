@@ -107,11 +107,15 @@ protected:
     std::string &id);
   void get_static_contract_instance(const std::string c_name, symbolt &sym);
   void get_inherit_static_contract_instance_name(
+    const std::string bs_c_name,
     const std::string c_name,
     std::string &name,
     std::string &id);
-  bool
-  get_inherit_static_contract_instance(const std::string c_name, symbolt &sym);
+  void get_inherit_static_contract_instance(
+    const std::string bs_c_name,
+    const std::string c_name,
+    const nlohmann::json &args_list,
+    symbolt &sym);
   void get_inherit_ctor_definition(const std::string c_name, exprt &new_expr);
   void get_inherit_ctor_definition_name(
     const std::string c_name,
@@ -163,7 +167,8 @@ protected:
     const std::string contract_name);
   bool move_initializer_to_ctor(
     const nlohmann::json *based_contracts,
-    const std::string contract_name, bool is_aux_ctor);
+    const std::string contract_name,
+    bool is_aux_ctor);
   bool move_inheritance_to_ctor(
     const nlohmann::json *based_contracts,
     const std::string contract_name,
@@ -471,10 +476,6 @@ protected:
     codet &decl);
   void
   get_addr_expr(const std::string &cname, const exprt &base, exprt &new_expr);
-  bool set_addr_cname_mapping(
-    const std::string &cname,
-    const exprt &base,
-    exprt &new_expr);
   void get_new_object(const typet &t, exprt &this_object);
   bool get_high_level_member_access(
     const nlohmann::json &expr,
@@ -516,10 +517,6 @@ protected:
     exprt &back_block);
 
   bool get_bind_cname_expr(const nlohmann::json &json, exprt &bind_cname_expr);
-  void get_nondet_contract_name(
-    const exprt src_expr,
-    const typet dest_type,
-    exprt &new_expr);
   void get_nondet_expr(const typet &t, exprt &new_expr);
   bool assign_nondet_contract_name(const std::string &_cname, exprt &new_expr);
   bool assign_param_nondet(

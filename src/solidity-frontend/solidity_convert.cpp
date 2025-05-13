@@ -1433,7 +1433,6 @@ bool solidity_convertert::get_contract_definition(const std::string &c_name)
         return true;
 
       symbolt s = *context.find_symbol(prefix + c_name);
-      s.dump();
     }
   }
 
@@ -2284,8 +2283,9 @@ bool solidity_convertert::move_initializer_to_ctor(
   std::string ctor_id;
   if (is_aux_ctor)
   {
-    std::string dump;
-    get_inherit_ctor_definition_name(contract_name, dump, ctor_id);
+    exprt dump;
+    get_inherit_ctor_definition(contract_name, dump);
+    ctor_id = dump.identifier().as_string();
   }
   else
   {
@@ -2296,6 +2296,11 @@ bool solidity_convertert::move_initializer_to_ctor(
     }
   }
 
+  if (context.find_symbol(ctor_id) == nullptr)
+  {
+    log_error("cannot find the ctor ref of {}", ctor_id);
+    return true;
+  }
   symbolt &sym = *context.find_symbol(ctor_id);
 
   // get this pointer
@@ -2315,12 +2320,12 @@ bool solidity_convertert::move_initializer_to_ctor(
       it->type().is_code() &&
       to_code(*it).get_statement().as_string() == "decl")
     {
+      exprt comp = to_code_decl(to_code(*it)).op0();
       log_debug(
         "solidity",
         "\t@@@ initializing symbol {} in the constructor",
-        it->name().as_string());
+        comp.name().as_string());
 
-      exprt comp = to_code_decl(to_code(*it)).op0();
       bool is_state = comp.type().get("#sol_state_var") == "1";
       if (!is_state)
       {
@@ -2355,8 +2360,8 @@ bool solidity_convertert::move_initializer_to_ctor(
         convert_type_expr(ns, rhs, comp.type());
         _assign.copy_to_operands(lhs, rhs);
       }
-
       convert_expression_to_code(_assign);
+
       // insert before the sym.value.operands
       sym.value.operands().insert(sym.value.operands().begin(), _assign);
     }
@@ -2471,34 +2476,37 @@ bool solidity_convertert::move_inheritance_to_ctor(
         typet c_type(irept::id_symbol);
         c_type.identifier(prefix + c_name);
 
-        symbolt added_ctor_symbol;
-        if (get_inherit_static_contract_instance(c_name, added_ctor_symbol))
-          return true;
-
         // get value
         // search for the parameter list for the constructor
         // they could be in two places:
         // - contract DD is BB(3)
         // or
         // - constructor() BB(3)
-        nlohmann::json c_param_list_node = empty_json;
+        nlohmann::json c_args_list_node = empty_json;
+        const nlohmann::json &ctor_node = find_constructor_ref(contract_name);
+
         if (c_node.contains("arguments"))
-          c_param_list_node = c_node;
-        else if (ctor_modifier != nullptr)
+          c_args_list_node = c_node;
+        else if (!ctor_node.empty())
         {
-          auto _ctor = *ctor_modifier;
+          auto _ctor = ctor_node["modifiers"];
           for (const auto &c_mdf : _ctor)
           {
-            if (!c_node.contains("modifierName"))
+            if (!c_mdf.contains("modifierName"))
               continue;
 
             if (c_mdf["modifierName"]["name"].get<std::string>() == c_name)
             {
-              c_param_list_node = c_mdf;
+              c_args_list_node = c_mdf;
               break;
             }
           }
         }
+
+        // BB _ESBMC_aux_BB = BB(&this, 3, true);
+        symbolt added_ctor_symbol;
+        get_inherit_static_contract_instance(
+          contract_name, c_name, c_args_list_node, added_ctor_symbol);
 
         // copy value e.g.  this.data = X.data
         struct_typet type_complete =
@@ -2543,6 +2551,11 @@ bool solidity_convertert::move_inheritance_to_ctor(
             }
           }
         }
+
+        // insert ctor call
+        code_declt dl(symbol_expr(added_ctor_symbol));
+        dl.operands().push_back(added_ctor_symbol.value);
+        sym.value.operands().insert(sym.value.operands().begin(), dl);
       }
     }
   }
@@ -2590,10 +2603,6 @@ bool solidity_convertert::get_function_definition(
     (*current_functionDecl).contains("kind") &&
     ((*current_functionDecl)["kind"] == "receive" ||
      (*current_functionDecl)["kind"] == "fallback");
-
-  // store constructor initialization list
-  if (is_ctor && !(*current_functionDecl)["modifiers"].empty())
-    ctor_modifier = &((*current_functionDecl)["modifiers"]);
 
   std::string c_name;
   get_current_contract_name(ast_node, c_name);
@@ -9018,6 +9027,8 @@ void solidity_convertert::get_static_contract_instance(
     sym = *context.find_symbol(ctor_ins_id);
   else
   {
+    // inheritance instance: make a copy of the static instance
+    // this is to make sure we insert it before the _ESBMC_Object_cname
     locationt ctor_ins_loc;
     ctor_ins_loc.file(absolute_path);
     ctor_ins_loc.line(1);
@@ -9091,12 +9102,13 @@ void solidity_convertert::get_static_contract_instance(
 }
 
 void solidity_convertert::get_inherit_static_contract_instance_name(
+  const std::string bs_c_name,
   const std::string c_name,
   std::string &name,
   std::string &id)
 {
-  name = "_ESBMC_ctor_" + c_name;
-  id = "sol:@" + name + "#";
+  name = "_ESBMC_aux_" + c_name;
+  id = "sol:@C@" + bs_c_name + "@" + name + "#";
 }
 
 void solidity_convertert::get_inherit_ctor_definition_name(
@@ -9114,6 +9126,7 @@ void solidity_convertert::get_inherit_ctor_definition(
 {
   std::string fname, fid;
   get_inherit_ctor_definition_name(c_name, fname, fid);
+
   if (context.find_symbol(fid) != nullptr)
   {
     new_expr = symbol_expr(*context.find_symbol(fid));
@@ -9134,10 +9147,44 @@ void solidity_convertert::get_inherit_ctor_definition(
 
   get_function_this_pointer_param(c_name, fid, debug_modulename, l, ft);
 
-  // param: float
-  std::string aname = "dump";
+  // copy the param list
+  // e.g. the original ctor: Base(int x)
+  //      the inherit ctor:  Base(int x, bool aux)
+  auto ctor_json = find_constructor_ref(c_name);
+  bool is_implicit_ctor = ctor_json.empty();
+
+  auto old_current_functionName = current_functionName;
+  auto old_current_functionDecl = current_functionDecl;
+  ctor_json["id"] = 0;
+  ctor_json["is_inherited"] = true;
+  current_functionDecl = &ctor_json;
+  current_functionName = c_name;
+
+  if (!is_implicit_ctor)
+  {
+    SolidityGrammar::ParameterListT params =
+      SolidityGrammar::get_parameter_list_t(ctor_json["parameters"]);
+    if (params != SolidityGrammar::ParameterListT::EMPTY)
+    {
+      for (const auto &decl : ctor_json["parameters"]["parameters"].items())
+      {
+        const nlohmann::json &func_param_decl = decl.value();
+
+        code_typet::argumentt param;
+        if (get_function_params(func_param_decl, c_name, param))
+        {
+          log_error("internal error in parsing params");
+          abort();
+        }
+        ft.arguments().push_back(param);
+      }
+    }
+  }
+
+  // param: bool
+  std::string aname = "aux";
   std::string aid = "sol:@C@" + c_name + "@F@" + c_name + "@" + aname + "#";
-  typet addr_t = float_type();
+  typet addr_t = bool_type();
   addr_t.cmt_constant(true);
   symbolt addr_s;
   get_default_symbol(addr_s, debug_modulename, addr_t, aname, aid, l);
@@ -9153,29 +9200,15 @@ void solidity_convertert::get_inherit_ctor_definition(
 
   // body
   exprt func_body = code_blockt();
-  std::string ctor_id = get_explicit_ctor_call_id(c_name);
-  if (!ctor_id.empty())
+  if (!is_implicit_ctor)
   {
-    nlohmann::json json = find_constructor_ref(c_name);
-    if (json.is_null() || json.empty() || !json.contains("id"))
-    {
-      log_error("internal error in constructing inherit_ctor body");
-      abort();
-    }
-    json["id"] = 0;
-    json["is_inherited"] = true;
-
     // insert
     for (auto &node : src_ast_json["nodes"])
     {
       if (node["nodeType"] == "ContractDefinition" && node["name"] == c_name)
-        node["nodes"].push_back(json);
+        node["nodes"].push_back(ctor_json);
     }
 
-    auto old_current_functionName = current_functionName;
-    auto old_current_functionDecl = current_functionDecl;
-    current_functionDecl = &json;
-    current_functionName = c_name;
     if (
       (*current_functionDecl).contains("body") ||
       ((*current_functionDecl).contains("implemented") &&
@@ -9189,8 +9222,6 @@ void solidity_convertert::get_inherit_ctor_definition(
         abort();
       }
     }
-    current_functionDecl = old_current_functionDecl;
-    current_functionName = old_current_functionName;
 
     // remove insertion
     for (nlohmann::json &node : src_ast_json["nodes"])
@@ -9212,6 +9243,11 @@ void solidity_convertert::get_inherit_ctor_definition(
       }
     }
   }
+
+  // reset
+  current_functionDecl = old_current_functionDecl;
+  current_functionName = old_current_functionName;
+
   add_sym.value = func_body;
 
   new_expr = symbol_expr(add_sym);
@@ -9220,18 +9256,23 @@ void solidity_convertert::get_inherit_ctor_definition(
 
 // create an const instance only used for inheritance assignment
 // e.g. this->x = _ESBMC_ctor_A_tmp.x;
-bool solidity_convertert::get_inherit_static_contract_instance(
+// @bs_c_name: caller's contract name
+// @c_name: callee ctor name
+void solidity_convertert::get_inherit_static_contract_instance(
+  const std::string bs_c_name,
   const std::string c_name,
+  const nlohmann::json &args_list,
   symbolt &sym)
 {
-  log_debug("solidity", "get_inherit_static_contract_instance");
+  log_debug("solidity", "get inherit_static_contract_instance");
   std::string ctor_ins_name, ctor_ins_id;
-  get_inherit_static_contract_instance_name(c_name, ctor_ins_name, ctor_ins_id);
+  get_inherit_static_contract_instance_name(
+    bs_c_name, c_name, ctor_ins_name, ctor_ins_id);
 
   if (context.find_symbol(ctor_ins_id) != nullptr)
   {
     sym = *context.find_symbol(ctor_ins_id);
-    return false;
+    return;
   }
 
   std::string ctor_ins_debug_modulename =
@@ -9248,7 +9289,6 @@ bool solidity_convertert::get_inherit_static_contract_instance(
     locationt());
   ctor_ins_symbol.lvalue = true;
   ctor_ins_symbol.file_local = true;
-  ctor_ins_symbol.static_lifetime = true;
 
   symbolt &added_ctor_symbol = *move_symbol_to_context(ctor_ins_symbol);
 
@@ -9261,7 +9301,46 @@ bool solidity_convertert::get_inherit_static_contract_instance(
   exprt this_object;
   get_new_object(symbol_typet(prefix + c_name), this_object);
   call.arguments().push_back(this_object);
-  call.arguments().push_back(gen_zero(float_type()));
+
+  if (args_list.contains("arguments"))
+  {
+    // get param type
+    auto decl_ref = find_constructor_ref(c_name);
+    if (decl_ref.empty() || decl_ref.is_null())
+    {
+      log_error("cannot find ctor ref");
+      abort();
+    }
+
+    assert(decl_ref.contains("parameters"));
+    nlohmann::json param_nodes = decl_ref["parameters"]["parameters"];
+    nlohmann::json param = nullptr;
+    nlohmann::json::iterator itr = param_nodes.begin();
+
+    for (const auto &arg : args_list["arguments"].items())
+    {
+      if (itr != param_nodes.end())
+      {
+        if ((*itr).contains("typeDescriptions"))
+        {
+          param = (*itr)["typeDescriptions"];
+        }
+        ++itr;
+      }
+
+      exprt single_arg;
+      if (get_expr(arg.value(), param, single_arg))
+      {
+        log_error("parsing arguments error");
+        abort();
+      }
+
+      call.arguments().push_back(single_arg);
+      param = nullptr;
+    }
+  }
+
+  call.arguments().push_back(true_exprt());
 
   call.function() = new_expr;
   call.set("constructor", 1);
@@ -9271,9 +9350,7 @@ bool solidity_convertert::get_inherit_static_contract_instance(
   exprt val;
   get_temporary_object(call, val);
   added_ctor_symbol.value = val;
-
   sym = added_ctor_symbol;
-  return false;
 }
 
 void solidity_convertert::get_contract_mutex_name(
@@ -10302,14 +10379,6 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
   symbolt tmp;
   get_static_contract_instance(contract_name, tmp);
 
-  // inheritance instance: make a copy of the static instance
-  symbolt tmp2;
-  if (inheritanceMap[contract_name].size() > 1)
-  {
-    if (get_inherit_static_contract_instance(contract_name, tmp2))
-      return true;
-  }
-
   // binding
   exprt bind_expr;
   if (!is_bound)
@@ -10364,6 +10433,11 @@ void solidity_convertert::move_builtin_to_contract(
   bool is_method)
 {
   std::string c_id = prefix + cname;
+  if (context.find_symbol(c_id) == nullptr)
+  {
+    log_status("parsing order error for struct {}", c_id);
+    abort();
+  }
   symbolt &c_sym = *context.find_symbol(c_id);
   assert(c_sym.type.is_struct());
 
@@ -10658,93 +10732,6 @@ bool solidity_convertert::get_base_contract_name(
 
   cname = base.type().get("#sol_contract").as_string();
   return false;
-}
-
-/* Only for bounded mode
-convert
-  Base A = Base(x);
-to 
-  Base *aux;
-  aux = &_ESBMC_Object_base // make sure that aux will not be null
-  if(x == _ESBMC_Object_Derive)
-    aux = &_ESBMC_Object_Derive
-  if(...)
-    aux = &...
-  A = aux;
-*/
-void solidity_convertert::get_nondet_contract_name(
-  const exprt src_expr,
-  const typet dest_type,
-  exprt &new_expr)
-{
-  code_blockt _block;
-
-  std::string _cname = dest_type.get("#sol_contract").as_string();
-  auto cname_set = structureTypingMap[_cname];
-  if (cname_set.empty())
-  {
-    dest_type.dump();
-    abort();
-  }
-
-  // Derive * tmp
-  std::string aux_name, aux_id;
-  get_aux_var(aux_name, aux_id);
-  symbolt s;
-  std::string debug_modulename = get_modulename_from_path(absolute_path);
-  get_default_symbol(
-    s, debug_modulename, dest_type, aux_name, aux_id, src_expr.location());
-  s.lvalue = true;
-  s.file_local = true;
-  s.static_lifetime = true;
-  auto &added_symbol = *move_symbol_to_context(s);
-
-  bool flg = true;
-
-  for (const auto &str : cname_set)
-  {
-    symbolt c_sym;
-    get_static_contract_instance(str, c_sym);
-
-    // aux = (Base *)&_ESBMC_Object_base
-    exprt _assign = side_effect_exprt("assign", dest_type);
-    _assign.operands().push_back(symbol_expr(added_symbol));
-    _assign.operands().push_back((address_of_exprt(symbol_expr(c_sym))));
-
-    convert_expression_to_code(_assign);
-
-    if (flg)
-    {
-      _block.copy_to_operands(_assign);
-      flg = false;
-      continue;
-    }
-
-    // "$address"
-    // _ESBMC_Object_base.$address
-    typet _addr_t = unsignedbv_typet(160);
-    _addr_t.set("#sol_type", "ADDRESS");
-    exprt mem_addr = member_exprt(symbol_expr(c_sym), "$address", _addr_t);
-
-    //  _addr == _ESBMC_Object_base.$address
-    exprt _equal = exprt("=", bool_type());
-    _equal.operands().push_back(mem_addr);
-    _equal.operands().push_back(src_expr);
-    _equal.location() = src_expr.location();
-
-    // if:
-    codet if_expr("ifthenelse");
-    if_expr.copy_to_operands(_equal, _assign);
-    if_expr.location() = src_expr.location();
-    if_expr.location().file(
-      ""); // clear filename to avoid affect the coverage calculation
-    _block.copy_to_operands(if_expr);
-  }
-
-  new_expr = symbol_expr(added_symbol);
-
-  for (const auto &i : _block.operands())
-    move_to_front_block(i);
 }
 
 void solidity_convertert::get_nondet_expr(const typet &t, exprt &new_expr)
