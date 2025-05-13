@@ -476,9 +476,7 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     const auto &op = arg["op"];
     const auto &operand = arg["operand"];
     if (op["_type"] == "USub" && operand.contains("value"))
-    {
       arg = operand; // Strip the unary minus and use the positive literal
-    }
   }
 
   // If the argument is a numeric literal, evaluate abs() at compile time
