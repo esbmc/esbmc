@@ -1,4 +1,4 @@
 CORE
 contract.solast
---function func --sol contract.sol --no-standard-checks
+--function func --sol contract.sol --no-standard-checks --k-induction
 ^VERIFICATION SUCCESSFUL$
