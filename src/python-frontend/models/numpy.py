@@ -63,6 +63,9 @@ def sin(x:float) -> float:
 def cos(x:float) -> float:
     return 0.2
 
+def arccos(x:float) -> float:
+    return 0.2
+
 def exp(x:float) -> float:
     return 0.2
 

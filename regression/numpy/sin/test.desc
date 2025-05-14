@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.py
-
+--multi-property
 ^VERIFICATION SUCCESSFUL$
