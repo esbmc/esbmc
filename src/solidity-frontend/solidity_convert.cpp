@@ -8838,7 +8838,7 @@ bool solidity_convertert::get_library_function_call(
 
 // library/error/event functions have no definition node
 // the key difference comparing to the `get_non_library_function_call` is that we do not need a this-object as the first argument for the function call
-// the key difference is that we do not add this pointer. 
+// the key difference is that we do not add this pointer.
 bool solidity_convertert::get_library_function_call(
   const exprt &func,
   const typet &t,
@@ -8862,9 +8862,9 @@ bool solidity_convertert::get_library_function_call(
     auto itr = empty_array.end();
     auto itr_end = empty_array.end();
     if (!decl_ref.empty() && decl_ref.contains("parameters"))
-    { 
+    {
       assert(decl_ref["parameters"].contains("parameters"));
-      const nlohmann::json& param_nodes = decl_ref["parameters"]["parameters"];
+      const nlohmann::json &param_nodes = decl_ref["parameters"]["parameters"];
       itr = param_nodes.begin();
       itr_end = param_nodes.end();
     }
@@ -8873,7 +8873,7 @@ bool solidity_convertert::get_library_function_call(
     for (const auto &arg : caller["arguments"].items())
     {
       exprt single_arg;
-     if (itr != itr_end && (*itr).contains("typeDescriptions"))
+      if (itr != itr_end && (*itr).contains("typeDescriptions"))
       {
         param = (*itr)["typeDescriptions"];
         ++itr;
@@ -8882,10 +8882,10 @@ bool solidity_convertert::get_library_function_call(
         param = arg.value()["commonType"];
       else if (arg.value().contains("typeDescriptions"))
         param = arg.value()["typeDescriptions"];
-        
+
       if (get_expr(arg.value(), param, single_arg))
         return true;
-      
+
       call.arguments().push_back(single_arg);
       param = nullptr;
     }
