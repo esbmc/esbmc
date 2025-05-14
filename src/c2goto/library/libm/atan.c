@@ -53,7 +53,7 @@ __ESBMC_HIDE:;
 double arctan(double x)
 {
 __ESBMC_HIDE:;
-  return 1 / atan(x);
+  return atan(x);
 }
 
 double atan2(double v, double u)
