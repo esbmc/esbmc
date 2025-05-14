@@ -1268,7 +1268,18 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     symbolt *symbol = nullptr;
     if (!(symbol = find_symbol(sid_str)))
     {
-      throw std::runtime_error("Symbol " + sid_str + " not found");
+      // Fallback for global variables accessed inside functions
+      if (!is_class_attr && element["_type"] == "Name")
+      {
+        sid.set_function("");  // remove function scope
+        sid_str = sid.to_string();
+        symbol = find_symbol(sid_str);
+      }
+      if (!symbol)
+      {
+        log_error("Symbol not found {}", sid_str);
+        abort();
+      }
     }
 
     expr = symbol_expr(*symbol);
