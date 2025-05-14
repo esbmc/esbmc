@@ -2784,7 +2784,7 @@ bool solidity_convertert::get_function_definition(
     if (get_block(ast_node["body"], body_exprt))
       return true;
 
-    if (is_reentry_check && !is_event_err && !is_ctor)
+    if (is_reentry_check && !is_event_err_lib && !is_ctor)
     {
       // we should only add this to the contract's functions
       // rather than interface and library's functions,
@@ -10323,7 +10323,7 @@ bool solidity_convertert::multi_contract_verification_unbound(
   {
     // construct multi-transaction verification entry function
     // function "_ESBMC_Main_contractname" will be created and inserted to the symbol table.
-    if (multi_transaction_verification(c_name))
+    if (multi_transaction_verification(c_name, false))
     {
       log_error("Failed to construct multi-transaction verification for contract {}", c_name);
       return true;
