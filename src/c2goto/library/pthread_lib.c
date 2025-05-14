@@ -141,7 +141,7 @@ __ESBMC_HIDE:;
     __ESBMC_thread_key *l = search_key(i);
     if (__ESBMC_thread_key_destructors[i] && l->value)
     {
-      __ESBMC_thread_key_destructors[i](l->value);
+      __ESBMC_thread_key_destructors[i]((void *)l->value);
       delete_key(l);
     }
   }

@@ -45,6 +45,7 @@ void clang_c_languaget::build_include_args(
     compiler_args.push_back("-isystem");
     compiler_args.push_back(*libc_headers);
     compiler_args.push_back("-Wno-implicit-function-declaration");
+    compiler_args.push_back("-Wno-invalid-noreturn");
   }
 
   compiler_args.push_back("-resource-dir");
