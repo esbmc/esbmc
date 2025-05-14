@@ -163,77 +163,91 @@ This example highlights how bounded model checking can uncover subtle bugs that 
 ## References
 For more information about our frontend, please refer to our ISSTA 2024 [tool paper](https://dl.acm.org/doi/abs/10.1145/3650212.3685304).
 
-# Numpy Formal Verification
+
+# Numpy Formal Verification with ESBMC
 
 ## What We Are Trying to Verify
 
 ### Targeted Numpy Features
-- N-dimensional array objects  
-- Sophisticated broadcasting functions  
-- Linear algebra, Fourier transform, and random number capabilities  
 
-### Potential Issues
-- According to [Harzevili et al., 2023](https://arxiv.org/abs/2203.06502), Numpy is susceptible to: 
-  - Integer overflows/underflows  
-  - Division by zero  
-  - Insufficient precision  
-  - Out-of-bounds memory access
+This verification focuses on common numerical operations provided by Numpy, particularly:
 
-## How to Verify Numpy with ESBMC
+- N-dimensional array computations  
+- Broadcasting behavior  
+- Mathematical functions (e.g., `np.add`, `np.multiply`, `np.power`)  
+- Precision-sensitive operations (e.g., `np.exp`, `np.sin`, `np.arccos`)  
 
-**ESBMC** is a model checker that performs static analysis to:
+### Why It Matters
 
-- ✅ Find bugs: Overflows, division-by-zero, out-of-bounds access  
-- ✅ Prove user-defined assertions are not violated  
+While Python and Numpy silently handle overflows or undefined behavior at runtime, model checkers such as **ESBMC** can expose hidden issues that go undetected during normal test execution.
 
-### Two Approaches for Verifying Python Libraries
+As highlighted by **Harzevili et al., 2023**, common issues in ML-related libraries include:
 
-1. **Black-box verification**  
-   Evaluate API behavior by checking function return values.
+- Integer overflows and underflows  
+- Division by zero  
+- Precision errors due to rounding or limited bit-width  
+- Out-of-bounds access in arrays  
 
-2. **White-box verification**  
-   Submit Python code to ESBMC and verify individual functions using non-determinism.
+## Verifying Numpy Programs with ESBMC
 
-## ESBMC as a Black-Box Verifier
+### Black-Box Verification with ESBMC
 
-**Example:**
+This approach treats Numpy as a black box by analyzing **assertions written by the developer**.
+
+#### 🔍 Example: Detecting Integer Overflow
 
 ```python
 import numpy as np
 
-x = np.add(1, 2)
-assert x == 1
+assert np.power(2, 7, dtype=np.int8) == -128  # Expected overflow
 ```
 
-**Command:**
+**Python3 Runtime Output:**
 
-```bash
-$ esbmc main.py
-```
+No error — Python silently wraps 128 to -128 (int8 overflow behavior)
 
 **ESBMC Output:**
 
 ```
 [Counterexample]
 
-main.py line 3 column 0
----------------------------
-
 Violated property:
-file main.py line 3 column 0
-assertion
-x == 1.000000
+  file main.py line 3 column 0
+  assertion
+  128 == -128
 
 VERIFICATION FAILED
 ```
 
-🧩 **Note**: Black-box verification relies on user-defined `assert` statements.
+** Explanation:**  
+ESBMC interprets the computation using precise bit-level semantics. It detects that `2^7 == 128` exceeds the `int8` range `[-128, 127]`, causing a wraparound. Python allows this silently, but ESBMC flags it as a **verification failure**.
 
 ---
 
-## ESBMC as a White-Box Verifier
+### Additional Black-Box Examples
 
-**Example Function:**
+```python
+import numpy as np
+
+# Silent underflow: int8 cannot represent -129
+assert np.power(-2, 7, dtype=np.int8) == -128
+
+# Overflow in unsigned type
+assert np.power(2, 8, dtype=np.uint8) == 0  # 256 wraps to 0
+
+# Valid case: no overflow
+assert np.power(2, 6, dtype=np.int8) == 64
+```
+
+Due to stricter semantic modeling, these cases may pass in Python but trigger **warnings** or **assertion violations** in ESBMC.
+
+---
+
+### White-Box Verification
+
+For deeper analysis, symbolically execute individual functions using **non-determinism** to verify all possible input paths.
+
+#### Example:
 
 ```python
 def integer_squareroot(n: uint64) -> uint64:
@@ -254,29 +268,35 @@ $ esbmc main.py --function integer_squareroot
 **ESBMC Output:**
 
 ```
-[Counterexample]
-State 1 main.py line 2
-x = 0xFFFFFFFFFFFFFFFF
---------------------------------
-State 2 main.py line 3
-y = 0
---------------------------------
-State 3 main.py line 5
-x = 0
---------------------------------
-State 4 main.py line 6
 Violated property:
-division by zero
-x != 0
+  division by zero
 ```
 
-🧩 **Note**: White-box verification uses **symbolic execution** and **non-determinism**.
+**Explanation:**  
+This highlights a potential bug: `n // x` is unsafe if `x == 0`.
+
+---
+
+## Why ESBMC Matters for Numpy
+
+| Feature                  | Python Behavior        | ESBMC Behavior                  |
+|--------------------------|------------------------|----------------------------------|
+| Integer overflow         | Silently wraps         | Detects and reports violations   |
+| Float precision loss     | Tolerated silently     | Symbolically tracked             |
+| Division by zero         | Raises at runtime      | Verified statically              |
+| Unsafe dtype conversions | May truncate silently  | Triggers verification errors     |
+
+---
 
 ## References
 
-- Harzevili et al. (2023). *Characterizing and Understanding Software Security Vulnerabilities in Machine Learning Libraries*. [arXiv:2303.06502](https://arxiv.org/abs/2203.06502)
+Harzevili et al. (2023).  
+*Characterizing and Understanding Software Security Vulnerabilities in Machine Learning Libraries.*  
+[arXiv:2303.06502](https://arxiv.org/abs/2303.06502)
 
-## Thank You
+---
 
-If you have any more questions or would like to collaborate, please don't hesitate to contact the authors.
+## Questions or Collaboration?
+
+If you're exploring ways to **increase trust and correctness in numerical computations** or want to **integrate ESBMC** into your verification workflow, feel free to reach out!
 
