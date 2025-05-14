@@ -23,4 +23,13 @@ if(ESBMC_CHERI_CLANG)
                      ${cheri_compressed_cap_BINARY_DIR}
                      EXCLUDE_FROM_ALL)
   endif()
+
+  if(ESBMC_CHERI AND DOWNLOAD_DEPENDENCIES AND ("${ESBMC_CHERI_HYBRID_SYSROOT}" STREQUAL ""))
+    FetchContent_Declare(cheri_sysroot
+     URL https://github.com/XLiZHI/esbmc/releases/download/v17/sysroot-riscv64-purecap.zip)
+    FetchContent_MakeAvailable(cheri_sysroot)
+
+    set(ESBMC_CHERI_HYBRID_SYSROOT ${cheri_sysroot_SOURCE_DIR})
+    set(ESBMC_CHERI_PURECAP_SYSROOT ${cheri_sysroot_SOURCE_DIR})
+  endif()
 endif()
