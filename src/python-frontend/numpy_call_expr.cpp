@@ -202,7 +202,7 @@ void numpy_call_expr::broadcast_check(const nlohmann::json &operands) const
   }
 }
 
-template<typename T>
+template <typename T>
 T get_constant_value(const nlohmann::json &node)
 {
   if (node["_type"] == "Constant")
@@ -226,7 +226,10 @@ T get_constant_value(const nlohmann::json &node)
   }
   else
   {
-    log_error("get_constant_value: Expected Constant or UnaryOp with Constant operand, got '{}'", node.dump());
+    log_error(
+      "get_constant_value: Expected Constant or UnaryOp with Constant operand, "
+      "got '{}'",
+      node.dump());
     abort();
   }
 }
@@ -305,8 +308,12 @@ exprt numpy_call_expr::create_expr_from_call()
       (lhs["_type"] == "Constant" || lhs["_type"] == "UnaryOp") &&
       (rhs["_type"] == "Constant" || rhs["_type"] == "UnaryOp"))
     {
-      bool lhs_is_float = (lhs["_type"] == "UnaryOp" ? lhs["operand"]["value"].is_number_float() : lhs["value"].is_number_float());
-      bool rhs_is_float = (rhs["_type"] == "UnaryOp" ? rhs["operand"]["value"].is_number_float() : rhs["value"].is_number_float());
+      bool lhs_is_float =
+        (lhs["_type"] == "UnaryOp" ? lhs["operand"]["value"].is_number_float()
+                                   : lhs["value"].is_number_float());
+      bool rhs_is_float =
+        (rhs["_type"] == "UnaryOp" ? rhs["operand"]["value"].is_number_float()
+                                   : rhs["value"].is_number_float());
 
       if (lhs_is_float || rhs_is_float)
       {
