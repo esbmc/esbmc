@@ -975,7 +975,7 @@ bool solidity_convertert::get_var_decl(
   const nlohmann::json init_value =
     ast_node.contains("value") ? ast_node["value"] : initialValue;
   const nlohmann::json literal_type = ast_node["typeDescriptions"];
-  if (!set_init && !mapping && !is_contract)
+  if (!set_init && !mapping)
   {
     // for both state and non-state variables, set default value as zero
     symbol.value = gen_zero(get_complete_type(t, ns), true);
@@ -6490,8 +6490,7 @@ bool solidity_convertert::get_type_description(
     std::string cname = constructor_name.substr(pos + 1);
     std::string id = prefix + cname;
 
-    // new_type = pointer_typet(symbol_typet(id));
-    new_type = symbol_typet(id);
+    new_type = pointer_typet(symbol_typet(id));
     new_type.set("#sol_type", "CONTRACT");
     new_type.set("#sol_contract", cname);
     break;
