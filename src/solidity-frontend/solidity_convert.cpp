@@ -4170,7 +4170,8 @@ bool solidity_convertert::get_expr(
     if (node_type == "EventDefinition" || node_type == "ErrorDefinition")
     {
       log_debug("solidity", "\t\t@@@ got event/error function call");
-      if (get_library_function_call(callee_expr, type,decl_ref, expr, call))
+      assert(expr.contains("arguments"));
+      if (get_library_function_call(callee_expr, type, decl_ref, expr, call))
         return true;
       new_expr = call;
       break;
@@ -8822,7 +8823,6 @@ bool solidity_convertert::get_library_function_call(
   side_effect_expr_function_callt &call)
 {
   assert(!decl_ref.empty());
-
   assert(decl_ref.contains("returnParameters"));
 
   exprt func;
@@ -8863,7 +8863,8 @@ bool solidity_convertert::get_library_function_call(
     auto itr_end = empty_array.end();
     if (!decl_ref.empty() && decl_ref.contains("parameters"))
     { 
-      nlohmann::json param_nodes = decl_ref["parameters"]["parameters"];
+      assert(decl_ref["parameters"].contains("parameters"));
+      const nlohmann::json& param_nodes = decl_ref["parameters"]["parameters"];
       itr = param_nodes.begin();
       itr_end = param_nodes.end();
     }
@@ -8872,7 +8873,7 @@ bool solidity_convertert::get_library_function_call(
     for (const auto &arg : caller["arguments"].items())
     {
       exprt single_arg;
-      if (itr != itr_end && (*itr).contains("typeDescriptions"))
+     if (itr != itr_end && (*itr).contains("typeDescriptions"))
       {
         param = (*itr)["typeDescriptions"];
         ++itr;
@@ -8881,10 +8882,10 @@ bool solidity_convertert::get_library_function_call(
         param = arg.value()["commonType"];
       else if (arg.value().contains("typeDescriptions"))
         param = arg.value()["typeDescriptions"];
-
+        
       if (get_expr(arg.value(), param, single_arg))
         return true;
-
+      
       call.arguments().push_back(single_arg);
       param = nullptr;
     }
