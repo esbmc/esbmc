@@ -103,7 +103,7 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Recursion**: Supports and verifies recursive functions.
 - **Imports**: Handles import styles and validates their usage.
 - **Numeric Types**: Supports manipulation of numeric types (e.g., bytes, integers, floats).
-- **Built-in Functions**: Supports Python's built-in functions, such as `int`, `float`, `chr`, `str`, `hex`, `oct`, `len`, and `range`.
+- **Built-in Functions**: Supports Python's built-in functions, such as `abs`, `int`, `float`, `chr`, `str`, `hex`, `oct`, `len`, and `range`.
 - **Verification properties**: Division-by-zero, indexing errors, arithmetic overflow, and user-defined assertions.
 
 ### Example: Division by Zero in Python
