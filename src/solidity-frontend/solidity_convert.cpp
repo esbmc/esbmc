@@ -14,7 +14,10 @@
 #include <fstream>
 #include <iostream>
 
+// initialize static members
 const nlohmann::json solidity_convertert::empty_json = nlohmann::json::object();
+std::string solidity_convertert::current_baseContractName = "";
+nlohmann::json solidity_convertert::src_ast_json = empty_json;
 
 solidity_convertert::solidity_convertert(
   contextt &_context,
@@ -38,7 +41,6 @@ solidity_convertert::solidity_convertert(
     current_lhsDecl(false),
     current_rhsDecl(false),
     current_functionName(""),
-    current_baseContractName(""),
     member_entity_scope({}),
     initializers(code_blockt()),
     ctor_modifier(nullptr),
@@ -707,14 +709,20 @@ bool solidity_convertert::convert_ast_nodes(
        ++itr, ++index)
   {
     nlohmann::json ast_node = *itr;
-    std::string node_name = ast_node["name"].get<std::string>();
+    std::string node_name = "";
+    if (ast_node.contains("name")){
+      node_name = ast_node["name"].get<std::string>();
+      if(node_name.empty()&& !ast_node["kind"].is_null())
+       ast_node["kind"].get<std::string>();
+    }
+      
     std::string node_type = ast_node["nodeType"].get<std::string>();
     log_debug(
       "solidity",
       "@@ Converting node[{}]: contract={}, name={}, nodeType={} ...",
       index,
       cname,
-      node_name.empty() ? ast_node["kind"].get<std::string>() : node_name,
+      node_name,
       node_type);
 
     // handle non-functional declaration,
@@ -769,6 +777,7 @@ bool solidity_convertert::get_non_function_decl(
   case SolidityGrammar::ContractBodyElementT::EnumDef:
   case SolidityGrammar::ContractBodyElementT::ErrorDef:
   case SolidityGrammar::ContractBodyElementT::EventDef:
+  case SolidityGrammar::ContractBodyElementT::UsingForDef:
   {
     break;
   }
@@ -809,6 +818,7 @@ bool solidity_convertert::get_function_decl(const nlohmann::json &ast_node)
   case SolidityGrammar::ContractBodyElementT::EnumDef:
   case SolidityGrammar::ContractBodyElementT::ErrorDef:
   case SolidityGrammar::ContractBodyElementT::EventDef:
+  case SolidityGrammar::ContractBodyElementT::UsingForDef:
   {
     break;
   }
@@ -1317,6 +1327,7 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &struct_def)
       break;
     }
     case SolidityGrammar::ContractBodyElementT::EnumDef:
+    case SolidityGrammar::ContractBodyElementT::UsingForDef:
     {
       // skip as it do not need to be populated to the value of the struct
       break;
@@ -1381,6 +1392,12 @@ bool solidity_convertert::get_contract_definition(const std::string &c_name)
       node_type == "ContractDefinition" &&
       (*itr)["name"] == c_name) // rule source-unit
     {
+      if(
+        (*itr).contains("contractKind") &&
+        (*itr)["contractKind"] == "library")
+      // we paerse library in the get_noncontract_defition
+        continue;
+
       log_debug("solidity", "Parsing Contract {}", c_name);
 
       // set based contract name
@@ -1543,6 +1560,12 @@ bool solidity_convertert::get_noncontract_decl_ref(
     // treat event as a function definition
     if (get_func_decl_ref(decl, new_expr))
       return true;
+  }
+  else if(decl["nodeType"] == "ContractDefinition" &&
+    decl["contractKind"] == "library")
+  {
+    new_expr = code_skipt();
+    new_expr.type().set("#sol_type", "LIBRARY");
   }
   else
   {
@@ -1940,7 +1963,7 @@ bool solidity_convertert::get_constructor(
   const nlohmann::json &ast_node,
   const std::string &contract_name)
 {
-  log_debug("solidity", "Parsing Constructor...");
+  log_debug("solidity", "Parsing Constructor {}...", contract_name);
 
   // check if we could find a explicit constructor
   nlohmann::json ast_nodes = ast_node["nodes"];
@@ -2129,10 +2152,10 @@ bool solidity_convertert::get_unbound_function(
   const std::string &c_name,
   symbolt &sym)
 {
-  log_debug("solidity", "\tget_unbound_function");
-
   std::string h_name = "_ESBMC_Nondet_Extcall_" + c_name;
   std::string h_id = "sol:@C@" + c_name + "@" + h_name + "#";
+  log_debug("solidity", "\tget_unbound_function {}", h_name);
+
   symbolt h_sym;
 
   if (context.find_symbol(h_id) != nullptr)
@@ -2713,10 +2736,12 @@ bool solidity_convertert::get_function_definition(
   //  - Convert params before body as they may get referred by the statement in the body
 
   // 11.1 add this pointer as the first param
-  bool is_event_err = ast_node.contains("nodeType") &&
-                      (ast_node["nodeType"] == "EventDefinition" ||
-                       ast_node["nodeType"] == "ErrorDefinition");
-  if (!is_event_err)
+  bool is_event_err_lib =
+    ast_node.contains("nodeType") &&
+    (ast_node["nodeType"] == "EventDefinition" ||
+     ast_node["nodeType"] == "ErrorDefinition" ||
+     SolidityGrammar::is_sol_library_function(ast_node["id"].get<int>()));
+  if (!is_event_err_lib)
     get_function_this_pointer_param(
       c_name, id, debug_modulename, location_begin, type);
 
@@ -3549,7 +3574,9 @@ bool solidity_convertert::get_expr(
         else if (
           decl["nodeType"] == "StructDefinition" ||
           decl["nodeType"] == "ErrorDefinition" ||
-          decl["nodeType"] == "EventDefinition")
+          decl["nodeType"] == "EventDefinition" ||
+          (decl["nodeType"] == "ContractDefinition" &&
+            decl["contractKind"] == "library"))
         {
           if (get_noncontract_decl_ref(decl, new_expr))
             return true;
@@ -4047,7 +4074,7 @@ bool solidity_convertert::get_expr(
       else
       {
         // other solidity built-in functions
-        if (get_library_function_call(new_expr, type, expr, call))
+        if (get_library_function_call(new_expr, type,empty_json, expr, call))
           return true;
       }
 
@@ -4070,50 +4097,6 @@ bool solidity_convertert::get_expr(
       callee_expr_json.contains("nodeType") &&
       callee_expr_json["nodeType"] == "MemberAccess")
     {
-      const auto &base = callee_expr_json["expression"];
-
-      if (
-        base.contains("referencedDeclaration") &&
-        base["referencedDeclaration"] > 0)
-      {
-        int base_decl_id = base["referencedDeclaration"];
-        const nlohmann::json &decl =
-          find_decl_ref_unique_id(src_ast_json, base_decl_id);
-        if (decl.empty())
-        {
-          log_error(
-            "failed to find the reference AST node, base contract name {}, "
-            "reference id {}",
-            current_baseContractName,
-            std::to_string(expr["referencedDeclaration"].get<int>()));
-          return true;
-        }
-        if (
-          decl["nodeType"] == "ContractDefinition" &&
-          decl["contractKind"] == "library")
-        {
-          std::string lib_name = decl["name"];
-          std::string func_name = callee_expr_json["memberName"];
-
-          const auto &func_def = get_func_decl_ref(lib_name, func_name);
-          if (func_def.empty())
-          {
-            log_error(
-              "Cannot locate function '{}' in library '{}'",
-              func_name,
-              lib_name);
-            return true;
-          }
-
-          side_effect_expr_function_callt call;
-          if (get_non_library_function_call(func_def, expr, call))
-            return true;
-
-          new_expr = call;
-          return false;
-        }
-      }
-
       if (get_expr(callee_expr_json, literal_type, new_expr))
         return true;
       break;
@@ -4179,15 +4162,15 @@ bool solidity_convertert::get_expr(
     assert(
       callee_expr_json.contains("referencedDeclaration") &&
       !callee_expr_json["referencedDeclaration"].is_null());
-    const auto caller_expr_json = find_decl_ref(
+    const auto& decl_ref = find_decl_ref(
       src_ast_json, callee_expr_json["referencedDeclaration"].get<int>());
-    std::string node_type = caller_expr_json["nodeType"].get<std::string>();
+    std::string node_type = decl_ref["nodeType"].get<std::string>();
 
     // * check if it's a event, error function call
     if (node_type == "EventDefinition" || node_type == "ErrorDefinition")
     {
       log_debug("solidity", "\t\t@@@ got event/error function call");
-      if (get_library_function_call(callee_expr, type, expr, call))
+      if (get_library_function_call(callee_expr, type,decl_ref, expr, call))
         return true;
       new_expr = call;
       break;
@@ -4199,7 +4182,7 @@ bool solidity_convertert::get_expr(
     // * we had ruled out all the special cases
     // * we now confirm it is called by aother contract inside current contract
     // * func() ==> current_func_this.func(&current_func_this);
-    if (get_non_library_function_call(caller_expr_json, expr, call))
+    if (get_non_library_function_call(decl_ref, expr, call))
       return true;
 
     new_expr = call;
@@ -4713,10 +4696,10 @@ bool solidity_convertert::get_expr(
   case SolidityGrammar::ExpressionT::StructMemberCall:
   {
     assert(expr.contains("expression"));
-    const nlohmann::json callee_expr_json = expr["expression"];
+    const nlohmann::json caller_expr_json = expr["expression"];
 
     exprt base;
-    if (get_expr(callee_expr_json, base))
+    if (get_expr(caller_expr_json, base))
       return true;
 
     const int struct_var_id = expr["referencedDeclaration"].get<int>();
@@ -4869,6 +4852,30 @@ bool solidity_convertert::get_expr(
       return true;
     }
 
+    break;
+  }
+  case SolidityGrammar::ExpressionT::LibraryMemberCall:
+  {
+    side_effect_expr_function_callt call;
+    const auto &func_ref = find_decl_ref_unique_id(
+      src_ast_json, expr["referencedDeclaration"].get<int>());
+
+    const nlohmann::json &args_json =
+      find_last_parent(src_ast_json["nodes"], expr);
+    assert(args_json.contains("arguments"));
+    if (get_library_function_call(func_ref, args_json, call))
+      return true;
+
+    exprt base;
+    const nlohmann::json caller_expr_json = expr["expression"];
+    if (get_expr(caller_expr_json, literal_type, base))
+      return true;
+
+    if (!(base.is_code() && base.type().get("#sol_type") == "LIBRARY"))
+      // this means it is a using for library
+      call.arguments().insert(call.arguments().begin(), base);
+
+    new_expr = call;
     break;
   }
   case SolidityGrammar::ExpressionT::BuiltinMemberCall:
@@ -7342,7 +7349,7 @@ void solidity_convertert::get_memcpy_function_call(
 }
 
 // check if the function is a library function (defined in solidity.h)
-bool solidity_convertert::is_library_function(const std::string &id)
+bool solidity_convertert::is_esbmc_library_function(const std::string &id)
 {
   if (context.find_symbol(id) == nullptr)
     return false;
@@ -8808,11 +8815,34 @@ bool solidity_convertert::get_ctor_call(
   return false;
 }
 
+// wrapper
+bool solidity_convertert::get_library_function_call(
+  const nlohmann::json &decl_ref,
+  const nlohmann::json &caller,
+  side_effect_expr_function_callt &call)
+{
+  assert(!decl_ref.empty());
+
+  assert(decl_ref.contains("returnParameters"));
+
+  exprt func;
+  if (get_func_decl_ref(decl_ref, func))
+    return true;
+
+  code_typet t;
+  if (get_type_description(decl_ref["returnParameters"], t.return_type()))
+    return true;
+
+  return get_library_function_call(func, t, decl_ref, caller, call);
+}
+
 // library/error/event functions have no definition node
 // the key difference comparing to the `get_non_library_function_call` is that we do not need a this-object as the first argument for the function call
+// the key difference is that we do not add this pointer. 
 bool solidity_convertert::get_library_function_call(
   const exprt &func,
   const typet &t,
+  const nlohmann::json &decl_ref,
   const nlohmann::json &caller,
   side_effect_expr_function_callt &call)
 {
@@ -8825,14 +8855,29 @@ bool solidity_convertert::get_library_function_call(
   get_location_from_node(caller, l);
   call.location() = l;
 
-  nlohmann::json param = nullptr;
   if (caller.contains("arguments"))
   {
+    nlohmann::json param = nullptr;
+    const nlohmann::json empty_array = nlohmann::json::array();
+    auto itr = empty_array.end();
+    auto itr_end = empty_array.end();
+    if (!decl_ref.empty() && decl_ref.contains("parameters"))
+    { 
+      nlohmann::json param_nodes = decl_ref["parameters"]["parameters"];
+      itr = param_nodes.begin();
+      itr_end = param_nodes.end();
+    }
+
     //  builtin functions do not need the this object as the first arguments
     for (const auto &arg : caller["arguments"].items())
     {
       exprt single_arg;
-      if (arg.value().contains("commonType"))
+      if (itr != itr_end && (*itr).contains("typeDescriptions"))
+      {
+        param = (*itr)["typeDescriptions"];
+        ++itr;
+      }
+      else if (arg.value().contains("commonType"))
         param = arg.value()["commonType"];
       else if (arg.value().contains("typeDescriptions"))
         param = arg.value()["typeDescriptions"];
@@ -10034,9 +10079,9 @@ bool solidity_convertert::multi_transaction_verification(
   }
 
   // 1. get constructor call
-  if (linearizedBaseList[c_name].empty())
+  if (contractNamesList.count(c_name) == 0)
   {
-    log_error("Input contract is not found in the source file.");
+    log_error("Cannot find the contract name {}", c_name);
     return true;
   }
 
@@ -10141,7 +10186,10 @@ bool solidity_convertert::multi_contract_verification_bound(
     // 1.1 construct multi-transaction verification entry function
     // function "_ESBMC_Main_contractname" will be created and inserted to the symbol table.
     if (multi_transaction_verification(c_name, false))
+    {
+      log_error("Failed to construct multi-transaction verification for contract {}", c_name);
       return true;
+    }
 
     // 1.2 construct a "case n"
     exprt case_cond = constant_exprt(
@@ -10158,7 +10206,10 @@ bool solidity_convertert::multi_contract_verification_bound(
     const std::string sub_sol_id =
       "sol:@C@" + c_name + "@F@_ESBMC_Main_" + c_name + "#";
     if (context.find_symbol(sub_sol_id) == nullptr)
+    {
+      log_error("Cannot find the {}'s main function {}",c_name, sub_sol_id);
       return true;
+    }
 
     const symbolt &func = *context.find_symbol(sub_sol_id);
     code_function_callt func_expr;
@@ -10206,12 +10257,14 @@ bool solidity_convertert::multi_contract_verification_bound(
     sol_id = "sol:@F@_ESBMC_Main#";
   const std::string sol_name = "_ESBMC_Main";
 
-  if (
-    context.find_symbol(prefix + linearizedBaseList.begin()->first) == nullptr)
+  if (context.find_symbol(prefix + *contractNamesList.begin()) == nullptr)
+  {
+    log_error("Cannot find the main function");
     return true;
+  }
   // use first contract's location
   const symbolt &contract =
-    *context.find_symbol(prefix + linearizedBaseList.begin()->first);
+    *context.find_symbol(prefix + *contractNamesList.begin());
   new_symbol.location = contract.location;
   std::string debug_modulename =
     get_modulename_from_path(contract.location.file().as_string());
@@ -10270,14 +10323,20 @@ bool solidity_convertert::multi_contract_verification_unbound(
   {
     // construct multi-transaction verification entry function
     // function "_ESBMC_Main_contractname" will be created and inserted to the symbol table.
-    if (multi_transaction_verification(c_name, false))
+    if (multi_transaction_verification(c_name))
+    {
+      log_error("Failed to construct multi-transaction verification for contract {}", c_name);
       return true;
+    }
 
     // func_call: _ESBMC_Main_contractname
     const std::string sub_sol_id =
       "sol:@C@" + c_name + "@F@_ESBMC_Main_" + c_name + "#";
-    if (context.find_symbol(sub_sol_id) == nullptr)
-      return true;
+      if (context.find_symbol(sub_sol_id) == nullptr)
+      {
+        log_error("Cannot find the {}'s main function {}",c_name, sub_sol_id);
+        return true;
+      }
 
     const symbolt &func = *context.find_symbol(sub_sol_id);
     code_function_callt func_expr;
@@ -10295,12 +10354,14 @@ bool solidity_convertert::multi_contract_verification_unbound(
   const std::string sol_id = "sol:@F@_ESBMC_Main#";
   const std::string sol_name = "_ESBMC_Main";
 
-  if (
-    context.find_symbol(prefix + linearizedBaseList.begin()->first) == nullptr)
+  if (context.find_symbol(prefix + *contractNamesList.begin()) == nullptr)
+  {
+    log_error("Cannot find the main function");
     return true;
+  }
   // use first contract's location
   const symbolt &contract =
-    *context.find_symbol(prefix + linearizedBaseList.begin()->first);
+    *context.find_symbol(prefix + *contractNamesList.begin());
   new_symbol.location = contract.location;
   std::string debug_modulename =
     get_modulename_from_path(contract.location.file().as_string());
