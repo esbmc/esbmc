@@ -28,6 +28,8 @@
 
 #    include <cheri/cheric.h>
 
+__SIZE_TYPE__ get_all_permissions(const cc128_cap_t *cap);
+
 uint64_t __esbmc_clzll(uint64_t v)
 {
   for (int i = 0; i < 64; i++, v <<= 1)
@@ -62,9 +64,7 @@ __SIZE_TYPE__ __esbmc_cheri_perms_get(void *__capability cap)
   cc128_cap_t comp;
   cc128_decompress_mem(u.pesbt, u.cursor, true /* tag */, &comp);
   // __ESBMC_assert(u.comp.cr_bounds_valid, "__esbmc_cheri_type_get on capability with invalid bounds");
-  __SIZE_TYPE__ hwperms = cc128_get_perms(&comp);
-  __SIZE_TYPE__ swperms = cc128_get_uperms(&comp);
-  return hwperms | swperms << CC128_UPERMS_SHFT;
+  return get_all_permissions(&comp);
 }
 
 __UINT16_TYPE__ __esbmc_cheri_flags_get(void *__capability cap)
