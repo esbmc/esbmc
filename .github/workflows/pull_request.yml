@@ -62,10 +62,10 @@ jobs:
 
   build-cheri:
     uses: ./.github/workflows/build-unix.yml
-    name: CHERI llvm-17 build
+    name: static CHERI llvm-17 build
     with:
       operating-system: ubuntu-22.04
-      build-flags: '-b DebugOpt -x -S ON'
+      build-flags: '-b DebugOpt -x'
       testing: false
 
     # Check project with clang-format

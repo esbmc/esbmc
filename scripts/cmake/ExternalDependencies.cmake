@@ -32,4 +32,9 @@ if(ESBMC_CHERI_CLANG)
     set(ESBMC_CHERI_HYBRID_SYSROOT ${cheri_sysroot_SOURCE_DIR})
     set(ESBMC_CHERI_PURECAP_SYSROOT ${cheri_sysroot_SOURCE_DIR})
   endif()
+
+  # CHERI Clang AST: ignore other frontend
+  unset(ENABLE_PYTHON_FRONTEND CACHE)
+  unset(ENABLE_SOLIDITY_FRONTEND CACHE)
+  unset(ENABLE_JIMPLE_FRONTEND CACHE)
 endif()
