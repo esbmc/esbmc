@@ -1271,7 +1271,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       // Fallback for global variables accessed inside functions
       if (!is_class_attr && element["_type"] == "Name")
       {
-        sid.set_function("");  // remove function scope
+        sid.set_function(""); // remove function scope
         sid_str = sid.to_string();
         symbol = find_symbol(sid_str);
       }
