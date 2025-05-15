@@ -12,7 +12,6 @@ target_include_directories(clangcfrontend_stuff
     PRIVATE ${Boost_INCLUDE_DIRS}
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
 )
-target_compile_definitions(clangcfrontend_stuff PUBLIC BOOST_ALL_NO_LIB)
 target_link_libraries(clangcfrontend_stuff gotoprograms ${cheaders_lib} ${ESBMC_CLANG_LIBS})
 
 add_library(clangcfrontend INTERFACE)

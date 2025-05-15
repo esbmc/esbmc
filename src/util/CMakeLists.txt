@@ -43,7 +43,6 @@ target_include_directories(util_esbmc
         lib
         )
 
-target_compile_definitions(util_esbmc PUBLIC BOOST_ALL_NO_LIB)
 target_link_libraries(util_esbmc PUBLIC irep2 fmt::fmt ${Boost_LIBRARIES})
 
 target_link_libraries(algorithms gotoprograms)

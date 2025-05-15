@@ -13,7 +13,6 @@ target_include_directories(esbmc_internal_cpp
     PRIVATE ${Boost_INCLUDE_DIRS}
     PRIVATE ${CMAKE_CURRENT_BINARY_DIR}
 )
-target_compile_definitions(clangcppfrontend PUBLIC BOOST_ALL_NO_LIB)
 target_link_libraries(esbmc_internal_cpp cpp_includes)
 
 target_link_libraries(clangcppfrontend esbmc_internal_cpp fmt::fmt)
