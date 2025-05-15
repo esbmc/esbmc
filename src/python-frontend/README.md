@@ -156,13 +156,38 @@ Violated property:
 VERIFICATION FAILED
 ```
 
-ESBMC successfully identifies a path where the randomly generated variable x evaluates to zero (or very close to zero, causing integer division by zero). This triggers a property violation, and ESBMC generates a counterexample showing the precise values of `x` and `cond` that lead to the failure.
+ESBMC successfully identifies a path where the randomly generated variable x evaluates to zero (or very close to zero, causing integer division by zero). This triggers a property violation, and ESBMC generates a counterexample showing the precise values of `x` and `cond` that lead to the failure. An executable test case can be created from this counterexample to expose this implementation error as follows:
 
-This example highlights how bounded model checking can uncover subtle bugs that may not be triggered during regular testing.
+````python
+def div1(cond: int, x: int) -> int:
+    if not cond:
+        return 42 // x
+    else:
+        return x // 10
 
-## References
-For more information about our frontend, please refer to our ISSTA 2024 [tool paper](https://dl.acm.org/doi/abs/10.1145/3650212.3685304).
+# Constructing values that become 0 when cast to int
+cond = int(2.619487e-10)  # → 0
+x = int(3.454678e-77)     # → 0
 
+print(f"cond: {cond}, x: {x}")
+print(div1(cond, x))  # Triggers division by zero
+````
+
+```bash
+$ python3 main.py
+```
+
+````
+cond: 0, x: 0
+Traceback (most recent call last):
+  File "/home/lucas/examples/site/div-test.py", line 12, in <module>
+    print(div1(cond, x))  # Triggers division by zero
+  File "/home/lucas/examples/site/div-test.py", line 3, in div1
+    return 42 // x
+ZeroDivisionError: integer division or modulo by zero
+````
+
+This example highlights how symbolic model checking can uncover subtle bugs that may not be triggered during regular testing.
 
 # Numpy Formal Verification with ESBMC
 
@@ -194,52 +219,69 @@ As highlighted by **Harzevili et al., 2023**, common issues in ML-related librar
 
 This approach treats Numpy as a black box by analyzing **assertions written by the developer**.
 
-#### 🔍 Example: Detecting Integer Overflow
+#### Example: Detecting Integer Overflow
 
 ```python
 import numpy as np
 
-assert np.power(2, 7, dtype=np.int8) == -128  # Expected overflow
+x = np.add(2147483647, 1, dtype=np.int32)
 ```
 
 **Python3 Runtime Output:**
 
-No error — Python silently wraps 128 to -128 (int8 overflow behavior)
+No error — NumPy silently wraps on overflow for fixed-width dtypes (like int32).
 
 **ESBMC Output:**
 
 ```
 [Counterexample]
 
+State 1 file main.py line 3 column 0 thread 0
+----------------------------------------------------
 Violated property:
   file main.py line 3 column 0
-  assertion
-  128 == -128
+  arithmetic overflow on add
+  !overflow("+", 2147483647, 1)
+
 
 VERIFICATION FAILED
 ```
 
-** Explanation:**  
-ESBMC interprets the computation using precise bit-level semantics. It detects that `2^7 == 128` exceeds the `int8` range `[-128, 127]`, causing a wraparound. Python allows this silently, but ESBMC flags it as a **verification failure**.
+An executable test case can be created from this counterexample to expose this implementation error as follows:
 
----
-
-### Additional Black-Box Examples
-
-```python
+````python
 import numpy as np
 
-# Silent underflow: int8 cannot represent -129
-assert np.power(-2, 7, dtype=np.int8) == -128
+x = np.add(2147483647, 1, dtype=np.int32)
 
-# Overflow in unsigned type
-assert np.power(2, 8, dtype=np.uint8) == 0  # 256 wraps to 0
+print("Result:", x)         # Expected: -2147483648 due to overflow
+print("Type:", type(x))     # <class 'numpy.int32'>
+print("Correctly overflowed:", x == -2147483648)
 
-# Valid case: no overflow
-assert np.power(2, 6, dtype=np.int8) == 64
+# Optional assertion to expose unexpected behavior
+assert x == -2147483648, "Overflow did not wrap around correctly"
+````
+
+```bash
+$ python3 main.py
 ```
 
-Due to stricter semantic modeling, these cases may pass in Python but trigger **warnings** or **assertion violations** in ESBMC.
+````
+Result: -2147483648
+Type: <class 'numpy.int32'>
+Correctly overflowed: True
+````
+
+
+**Explanation:**  
+
+ESBMC performs bit-precise analysis and treats signed overflow as undefined or erroneous, unlike NumPy’s permissive semantics.
+
+- np.int32 represents 32-bit signed integers: range is −2,147,483,648 to 2,147,483,647.
+- The expression 2147483647 + 1 equals 2147483648, which exceeds the upper bound.
+- In np.int32, this overflows and wraps around to −2,147,483,648.
+
+While NumPy permits this silent overflow, ESBMC correctly identifies it as a violation of safe arithmetic.
 
 ---
 
@@ -262,14 +304,38 @@ def integer_squareroot(n: uint64) -> uint64:
 **Command:**
 
 ```bash
-$ esbmc main.py --function integer_squareroot
+$ esbmc main.py --function integer_squareroot --incremental-bmc
 ```
 
 **ESBMC Output:**
 
 ```
+[Counterexample]
+
+
+State 1 file square.py line 2 column 4 function integer_squareroot thread 0
+----------------------------------------------------
+  x = 0xFFFFFFFFFFFFFFFF (11111111 11111111 11111111 11111111 11111111 11111111 11111111 11111111)
+
+State 2 file square.py line 3 column 4 function integer_squareroot thread 0
+----------------------------------------------------
+  y = 0 (00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000)
+
+State 3 file square.py line 5 column 8 function integer_squareroot thread 0
+----------------------------------------------------
+  x = 0 (00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000)
+
+State 4 file square.py line 6 column 8 function integer_squareroot thread 0
+----------------------------------------------------
 Violated property:
+  file square.py line 6 column 8 function integer_squareroot
   division by zero
+  x != 0
+
+
+VERIFICATION FAILED
+
+Bug found (k = 1)
 ```
 
 **Explanation:**  
@@ -350,6 +416,8 @@ Reference: https://numpy.org/doc/stable/reference/routines.math.html
 
 
 ## References
+
+For more information about our frontend, please refer to our ISSTA 2024 [tool paper](https://dl.acm.org/doi/abs/10.1145/3650212.3685304).
 
 Harzevili et al. (2023).  
 *Characterizing and Understanding Software Security Vulnerabilities in Machine Learning Libraries.*  

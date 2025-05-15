@@ -141,7 +141,7 @@ __ESBMC_HIDE:;
     __ESBMC_thread_key *l = search_key(i);
     if (__ESBMC_thread_key_destructors[i] && l->value)
     {
-      __ESBMC_thread_key_destructors[i](l->value);
+      __ESBMC_thread_key_destructors[i]((void *)l->value);
       delete_key(l);
     }
   }
@@ -159,8 +159,8 @@ __ESBMC_HIDE:;
 
   __ESBMC_atomic_begin();
   threadid = __ESBMC_get_thread_id();
-  __ESBMC_pthread_end_values[(int)threadid] = exit_val;
-  __ESBMC_pthread_thread_ended[(int)threadid] = 1;
+  __ESBMC_pthread_end_values[threadid] = exit_val;
+  __ESBMC_pthread_thread_ended[threadid] = 1;
   __ESBMC_num_threads_running--;
   // A thread terminating during a search for a deadlock means there's no
   // deadlock or it can be found down a different path. Proof left as exercise
@@ -209,8 +209,8 @@ __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   pthread_exec_key_destructors();
   pthread_t threadid = __ESBMC_get_thread_id();
-  __ESBMC_pthread_end_values[(int)threadid] = retval;
-  __ESBMC_pthread_thread_ended[(int)threadid] = 1;
+  __ESBMC_pthread_end_values[threadid] = retval;
+  __ESBMC_pthread_thread_ended[threadid] = 1;
   __ESBMC_num_threads_running--;
   // A thread terminating during a search for a deadlock means there's no
   // deadlock or it can be found down a different path. Proof left as exercise
@@ -756,15 +756,15 @@ __ESBMC_HIDE:;
   int result = 0;
   // This assert also checks whether this thread is not a joinable thread.
   __ESBMC_assert(
-    !__ESBMC_pthread_thread_detach[(int)threadid],
+    !__ESBMC_pthread_thread_detach[threadid],
     "Attempting to detach an already detached thread results in unspecified "
     "behavior");
   if (
-    __ESBMC_pthread_thread_ended[(int)threadid] ||
-    (int)threadid > __ESBMC_num_total_threads)
+    __ESBMC_pthread_thread_ended[threadid] ||
+    threadid > __ESBMC_num_total_threads)
     result = ESRCH; // No thread with the ID thread could be found.
   else
-    __ESBMC_pthread_thread_detach[(int)threadid] = 1;
+    __ESBMC_pthread_thread_detach[threadid] = 1;
   __ESBMC_atomic_end();
   return result; // no error occurred
 }
