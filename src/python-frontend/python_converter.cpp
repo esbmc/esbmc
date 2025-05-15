@@ -2329,6 +2329,8 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     }
   }
 
+  current_block = old_block;
+
   return block;
 }
 

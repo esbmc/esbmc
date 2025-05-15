@@ -275,7 +275,7 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
       log_error(
         "Unsupported builtin template kind id: {}",
         (int)btd.getBuiltinTemplateKind());
-        return true;
+      return true;
     }
 
     break;
