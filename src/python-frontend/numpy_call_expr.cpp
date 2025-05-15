@@ -202,6 +202,38 @@ void numpy_call_expr::broadcast_check(const nlohmann::json &operands) const
   }
 }
 
+template <typename T>
+T get_constant_value(const nlohmann::json &node)
+{
+  if (node["_type"] == "Constant")
+  {
+    return node["value"].get<T>();
+  }
+  else if (node["_type"] == "UnaryOp" && node["operand"]["_type"] == "Constant")
+  {
+    std::string op_type = node["op"]["_type"];
+    T val = node["operand"]["value"].get<T>();
+
+    if (op_type == "USub")
+      return -val;
+    else if (op_type == "UAdd")
+      return val;
+    else
+    {
+      log_error("get_constant_value: Unsupported unary operator '{}'", op_type);
+      abort();
+    }
+  }
+  else
+  {
+    log_error(
+      "get_constant_value: Expected Constant or UnaryOp with Constant operand, "
+      "got '{}'",
+      node.dump());
+    abort();
+  }
+}
+
 exprt numpy_call_expr::create_expr_from_call()
 {
   nlohmann::json expr;
@@ -272,10 +304,29 @@ exprt numpy_call_expr::create_expr_from_call()
     resolve_var(lhs);
     resolve_var(rhs);
 
-    if (lhs["_type"] == "Constant" && rhs["_type"] == "Constant")
+    if (
+      (lhs["_type"] == "Constant" || lhs["_type"] == "UnaryOp") &&
+      (rhs["_type"] == "Constant" || rhs["_type"] == "UnaryOp"))
     {
-      expr = create_binary_op(
-        function_id_.get_function(), lhs["value"], rhs["value"]);
+      bool lhs_is_float =
+        (lhs["_type"] == "UnaryOp" ? lhs["operand"]["value"].is_number_float()
+                                   : lhs["value"].is_number_float());
+      bool rhs_is_float =
+        (rhs["_type"] == "UnaryOp" ? rhs["operand"]["value"].is_number_float()
+                                   : rhs["value"].is_number_float());
+
+      if (lhs_is_float || rhs_is_float)
+      {
+        double lhs_val = get_constant_value<double>(lhs);
+        double rhs_val = get_constant_value<double>(rhs);
+        expr = create_binary_op(function_id_.get_function(), lhs_val, rhs_val);
+      }
+      else
+      {
+        int lhs_val = get_constant_value<int>(lhs);
+        int rhs_val = get_constant_value<int>(rhs);
+        expr = create_binary_op(function_id_.get_function(), lhs_val, rhs_val);
+      }
     }
     else if (lhs["_type"] == "List" && rhs["_type"] == "List")
     {

@@ -103,7 +103,7 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Recursion**: Supports and verifies recursive functions.
 - **Imports**: Handles import styles and validates their usage.
 - **Numeric Types**: Supports manipulation of numeric types (e.g., bytes, integers, floats).
-- **Built-in Functions**: Supports Python's built-in functions, such as `int`, `float`, `chr`, `str`, `hex`, `oct`, `len`, and `range`.
+- **Built-in Functions**: Supports Python's built-in functions, such as `abs`, `int`, `float`, `chr`, `str`, `hex`, `oct`, `len`, and `range`.
 - **Verification properties**: Division-by-zero, indexing errors, arithmetic overflow, and user-defined assertions.
 
 ### Example: Division by Zero in Python
@@ -286,7 +286,68 @@ This highlights a potential bug: `n // x` is unsafe if `x == 0`.
 | Division by zero         | Raises at runtime      | Verified statically              |
 | Unsafe dtype conversions | May truncate silently  | Triggers verification errors     |
 
----
+## ESBMC – NumPy Math Library Mapping
+
+Here, we document the mapping between ESBMC's math library implementations and their NumPy equivalents. 
+
+These mappings help test and verify floating-point behavior consistently across C and Python environments.
+
+Reference: https://numpy.org/doc/stable/reference/routines.math.html
+
+### Mathematical & Trigonometric Functions
+
+| ESBMC File | NumPy Equivalent       | Category      |
+|------------|------------------------|---------------|
+| `acos.c`   | `np.arccos`, `np.acos` | Inverse trig  |
+| `atan.c`   | `np.arctan`, `np.atan` | Inverse trig  |
+| `cos.c`    | `np.cos`               | Trig          |
+| `sin.c`    | `np.sin`               | Trig          |
+
+### Rounding & Remainders
+
+| ESBMC File     | NumPy Equivalent              | Category             |
+|----------------|-------------------------------|----------------------|
+| `ceil.c`       | `np.ceil`                     | Rounding             |
+| `floor.c`      | `np.floor`                    | Rounding             |
+| `round.c`      | `np.round`, `np.around`       | Rounding             |
+| `rint.c`       | `np.rint`                     | Rounding             |
+| `trunc.c`      | `np.trunc`, `np.fix`          | Rounding             |
+| `fmod.c`       | `np.fmod`                     | Remainder            |
+| `remainder.c`  | `np.remainder`                | Remainder            |
+| `remquo.c`     | `divmod` + sign logic         | Remainder + Quotient |
+
+### Floating Point Properties
+
+| ESBMC File    | NumPy Equivalent                    | Category             |
+|---------------|-------------------------------------|----------------------|
+| `copysign.c`  | `np.copysign`                       | Floating point ops   |
+| `frexp.c`     | `np.frexp`                          | Float decomposition  |
+| `modf.c`      | `np.modf`                           | Float decomposition  |
+| `fpclassify.c`| `np.isnan`, `np.isinf`, `np.isfinite`| Classification       |
+
+### Comparisons, Extrema
+
+| ESBMC File | NumPy Equivalent                    | Category             |
+|------------|-------------------------------------|----------------------|
+| `fmin.c`   | `np.fmin`                           | Min function         |
+| `fmax.c`   | `np.fmax`                           | Max function         |
+| `fdim.c`   | `np.maximum(x - y, 0)` (approx.)    | Difference           |
+
+### Exponents and Powers
+
+| ESBMC File | NumPy Equivalent | Category     |
+|------------|------------------|--------------|
+| `exp.c`    | `np.exp`         | Exponential  |
+| `pow.c`    | `np.power`       | Power        |
+
+### Miscellaneous
+
+| ESBMC File     | NumPy Equivalent         | Category              |
+|----------------|--------------------------|-----------------------|
+| `fabs.c`       | `np.fabs`, `np.absolute` | Absolute value        |
+| `sqrt.c`       | `np.sqrt`                | Square root           |
+| `nextafter.c`  | `np.nextafter`           | Floating-point step   |
+
 
 ## References
 
@@ -294,9 +355,12 @@ Harzevili et al. (2023).
 *Characterizing and Understanding Software Security Vulnerabilities in Machine Learning Libraries.*  
 [arXiv:2303.06502](https://arxiv.org/abs/2303.06502)
 
+*NumPy Mathematical functions*
+[Documentation](https://numpy.org/doc/stable/reference/routines.math.html)
+
 ---
 
 ## Questions or Collaboration?
 
-If you're exploring ways to **increase trust and correctness in numerical computations** or want to **integrate ESBMC** into your verification workflow, feel free to reach out!
+If you're exploring ways to increase trust and correctness in numerical computations or integrate ESBMC into your verification workflow, feel free to contact us!
 

@@ -1,4 +1,4 @@
 CORE
-main.py
---multi-property
+main.c
+
 ^VERIFICATION SUCCESSFUL$
