@@ -2205,15 +2205,32 @@ void dereferencet::bounds_check(
       return;
 
     // Secondly, try to calc the size of the array.
+    type2tc subtype = arr_type.subtype;
+    expr2tc total_elems = typecast2tc(size_type2(), arr_type.array_size);
+
+    // Multiply sizes of all nested array dimensions
+    while (is_array_type(subtype))
+    {
+      const array_type2t &nested_arr_type = to_array_type(subtype);
+      if (nested_arr_type.size_is_infinite)
+        return;
+
+      expr2tc nested_size =
+        typecast2tc(size_type2(), nested_arr_type.array_size);
+      total_elems = mul2tc(size_type2(), total_elems, nested_size);
+
+      subtype = nested_arr_type.subtype;
+    }
+
     expr2tc subtype_size =
-      constant_int2tc(size_type2(), type_byte_size(arr_type.subtype));
-    expr2tc array_size = typecast2tc(size_type2(), arr_type.array_size);
-    arrsize = mul2tc(size_type2(), array_size, subtype_size);
+      constant_int2tc(size_type2(), type_byte_size(subtype));
+    arrsize = mul2tc(size_type2(), total_elems, subtype_size);
   }
 
   // Transforming offset to bytes
   expr2tc unsigned_offset = typecast2tc(
     size_type2(), div2tc(offset->type, offset, gen_long(offset->type, 8)));
+  simplify(unsigned_offset);
 
   // Then, expressions as to whether the access is over or under the array
   // size.

@@ -76,8 +76,6 @@ std::string type_handler::type_to_string(const typet &t) const
       return type_to_string(elem_type);
   }
 
-  // Unknown or unsupported type
-  log_warning("Unknown or unsupported type: {}", t.pretty());
   return "";
 }
 
@@ -192,8 +190,9 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (json_utils::is_class(ast_type, converter_.ast()))
     return symbol_typet("tag-" + ast_type);
 
-  // Unknown / unsupported type
-  log_warning("Unknown or unsupported AST type: {}", ast_type);
+  if (ast_type != "Any")
+    log_warning("Unknown or unsupported AST type: {}", ast_type);
+
   return empty_typet();
 }
 
