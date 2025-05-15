@@ -53,7 +53,7 @@ pthread_t __ESBMC_get_thread_id(void);
 void __ESBMC_really_atomic_begin(void);
 void __ESBMC_really_atomic_end(void);
 
-int __ESBMC_pthread_id_to_index(pthread_t t) 
+int __ESBMC_pthread_id_to_index(pthread_t t)
 {
   // Here we assume pthread_t is just a small integer type.
   return (int)(uintptr_t)t;
