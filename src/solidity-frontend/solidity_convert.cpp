@@ -666,9 +666,15 @@ bool solidity_convertert::populate_function_signature(
       visibility = func_node["visibility"];
       is_payable = func_node["stateMutability"] == "payable";
       is_inherit = func_node.contains("is_inherited");
-      
+
       funcSignatures[cname].push_back(solidity_convertert::func_sig(
-        func_name, func_id, visibility, type, is_payable, is_inherit, is_library));
+        func_name,
+        func_id,
+        visibility,
+        type,
+        is_payable,
+        is_inherit,
+        is_library));
     }
   }
 
@@ -689,7 +695,13 @@ bool solidity_convertert::populate_function_signature(
     type.return_type().set("cpp_type", "void");
     is_inherit = false;
     funcSignatures[cname].push_back(solidity_convertert::func_sig(
-      func_name, func_id, visibility, type, is_payable, is_inherit, is_library));
+      func_name,
+      func_id,
+      visibility,
+      type,
+      is_payable,
+      is_inherit,
+      is_library));
   }
 
   return false;
