@@ -710,12 +710,13 @@ bool solidity_convertert::convert_ast_nodes(
   {
     nlohmann::json ast_node = *itr;
     std::string node_name = "";
-    if (ast_node.contains("name")){
+    if (ast_node.contains("name"))
+    {
       node_name = ast_node["name"].get<std::string>();
-      if(node_name.empty()&& !ast_node["kind"].is_null())
-       ast_node["kind"].get<std::string>();
+      if (node_name.empty() && !ast_node["kind"].is_null())
+        ast_node["kind"].get<std::string>();
     }
-      
+
     std::string node_type = ast_node["nodeType"].get<std::string>();
     log_debug(
       "solidity",
@@ -1392,10 +1393,9 @@ bool solidity_convertert::get_contract_definition(const std::string &c_name)
       node_type == "ContractDefinition" &&
       (*itr)["name"] == c_name) // rule source-unit
     {
-      if(
-        (*itr).contains("contractKind") &&
-        (*itr)["contractKind"] == "library")
-      // we paerse library in the get_noncontract_defition
+      if (
+        (*itr).contains("contractKind") && (*itr)["contractKind"] == "library")
+        // we paerse library in the get_noncontract_defition
         continue;
 
       log_debug("solidity", "Parsing Contract {}", c_name);
@@ -1561,7 +1561,8 @@ bool solidity_convertert::get_noncontract_decl_ref(
     if (get_func_decl_ref(decl, new_expr))
       return true;
   }
-  else if(decl["nodeType"] == "ContractDefinition" &&
+  else if (
+    decl["nodeType"] == "ContractDefinition" &&
     decl["contractKind"] == "library")
   {
     new_expr = code_skipt();
@@ -1613,7 +1614,7 @@ bool solidity_convertert::get_noncontract_defition(nlohmann::json &ast_node)
   {
     // for library entity
     std::string lib_name = ast_node["name"].get<std::string>();
-    
+
     // we treat library as a contract, but we do not populate it as struct/contract symbol
     // instead, we only populate the entity and functions
     std::string old = current_baseContractName;
@@ -3576,7 +3577,7 @@ bool solidity_convertert::get_expr(
           decl["nodeType"] == "ErrorDefinition" ||
           decl["nodeType"] == "EventDefinition" ||
           (decl["nodeType"] == "ContractDefinition" &&
-            decl["contractKind"] == "library"))
+           decl["contractKind"] == "library"))
         {
           if (get_noncontract_decl_ref(decl, new_expr))
             return true;
@@ -4074,7 +4075,7 @@ bool solidity_convertert::get_expr(
       else
       {
         // other solidity built-in functions
-        if (get_library_function_call(new_expr, type,empty_json, expr, call))
+        if (get_library_function_call(new_expr, type, empty_json, expr, call))
           return true;
       }
 
@@ -4162,7 +4163,7 @@ bool solidity_convertert::get_expr(
     assert(
       callee_expr_json.contains("referencedDeclaration") &&
       !callee_expr_json["referencedDeclaration"].is_null());
-    const auto& decl_ref = find_decl_ref(
+    const auto &decl_ref = find_decl_ref(
       src_ast_json, callee_expr_json["referencedDeclaration"].get<int>());
     std::string node_type = decl_ref["nodeType"].get<std::string>();
 
@@ -4707,8 +4708,10 @@ bool solidity_convertert::get_expr(
     const nlohmann::json &struct_var_ref =
       find_decl_ref(src_ast_json, struct_var_id);
     if (struct_var_ref == empty_json)
+    {
+      log_error("cannot find struct member reference");
       return true;
-
+    }
     exprt comp;
     if (get_var_decl_ref(struct_var_ref, true, comp))
       return true;
@@ -8196,15 +8199,21 @@ solidity_convertert::find_decl_ref_global(const nlohmann::json &j, int ref_id)
         if (node->contains("id") && (*node)["id"] == ref_id)
           return *node;
 
+        if (
+          node->contains("contractKind") &&
+          (*node)["contractKind"] == "library")
+        {
+          const nlohmann::json &result =
+            find_decl_ref_in_contract(*node, ref_id);
+          if (!result.is_null() && !result.empty())
+            return result;
+        }
+
         // This is a contract definition; only process if it is the base contract.
         if (
           node->contains("name") && !current_baseContractName.empty() &&
           (*node)["name"] == current_baseContractName)
         {
-          // Check if the contract node itself matches.
-          if (node->contains("id") && (*node)["id"] == ref_id)
-            return *node;
-
           // Search recursively in the contract body.
           const nlohmann::json &result =
             find_decl_ref_in_contract(*node, ref_id);
@@ -9188,6 +9197,9 @@ void solidity_convertert::get_static_contract_instance(
         current_baseContractName = c_name;
         if (get_function_definition(json))
         {
+          auto name = json["name"].get<std::string>();
+          if (name.empty())
+            name = json["kind"].get<std::string>();
           log_error(
             "Failed to parse the function {}", json["name"].get<std::string>());
           abort();
@@ -10187,7 +10199,9 @@ bool solidity_convertert::multi_contract_verification_bound(
     // function "_ESBMC_Main_contractname" will be created and inserted to the symbol table.
     if (multi_transaction_verification(c_name, false))
     {
-      log_error("Failed to construct multi-transaction verification for contract {}", c_name);
+      log_error(
+        "Failed to construct multi-transaction verification for contract {}",
+        c_name);
       return true;
     }
 
@@ -10207,7 +10221,7 @@ bool solidity_convertert::multi_contract_verification_bound(
       "sol:@C@" + c_name + "@F@_ESBMC_Main_" + c_name + "#";
     if (context.find_symbol(sub_sol_id) == nullptr)
     {
-      log_error("Cannot find the {}'s main function {}",c_name, sub_sol_id);
+      log_error("Cannot find the {}'s main function {}", c_name, sub_sol_id);
       return true;
     }
 
@@ -10325,18 +10339,20 @@ bool solidity_convertert::multi_contract_verification_unbound(
     // function "_ESBMC_Main_contractname" will be created and inserted to the symbol table.
     if (multi_transaction_verification(c_name, false))
     {
-      log_error("Failed to construct multi-transaction verification for contract {}", c_name);
+      log_error(
+        "Failed to construct multi-transaction verification for contract {}",
+        c_name);
       return true;
     }
 
     // func_call: _ESBMC_Main_contractname
     const std::string sub_sol_id =
       "sol:@C@" + c_name + "@F@_ESBMC_Main_" + c_name + "#";
-      if (context.find_symbol(sub_sol_id) == nullptr)
-      {
-        log_error("Cannot find the {}'s main function {}",c_name, sub_sol_id);
-        return true;
-      }
+    if (context.find_symbol(sub_sol_id) == nullptr)
+    {
+      log_error("Cannot find the {}'s main function {}", c_name, sub_sol_id);
+      return true;
+    }
 
     const symbolt &func = *context.find_symbol(sub_sol_id);
     code_function_callt func_expr;

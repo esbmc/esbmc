@@ -170,14 +170,19 @@ bool is_address_member_call(const nlohmann::json &expr)
 // check if it is a function defined in a library
 bool is_sol_library_function(const int ref_id)
 {
-  const auto& func_ref = solidity_convertert::find_decl_ref_unique_id(solidity_convertert::src_ast_json["nodes"],ref_id);
+  const auto &func_ref = solidity_convertert::find_decl_ref_unique_id(
+    solidity_convertert::src_ast_json["nodes"], ref_id);
   if (func_ref.empty() || func_ref.is_null())
     return false;
-  
-  const auto& lib_ref = solidity_convertert::find_parent_contract(solidity_convertert::src_ast_json["nodes"], func_ref);
+  if (!(func_ref["nodeType"] == "FunctionDefinition" ||
+        func_ref["nodeType"] == "EventDefinition" ||
+        func_ref["nodeType"] == "ErrorDefinition"))
+    return false;
+  const auto &lib_ref = solidity_convertert::find_parent_contract(
+    solidity_convertert::src_ast_json["nodes"], func_ref);
   if (lib_ref.contains("contractKind") && lib_ref["contractKind"] == "library")
     return true;
-  
+
   return false;
 }
 
@@ -826,7 +831,11 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
     assert(expr.contains("expression"));
     SolidityGrammar::TypeNameT type_name =
       get_type_name_t(expr["expression"]["typeDescriptions"]);
-    if (type_name == SolidityGrammar::TypeNameT::StructTypeName)
+    if (
+      expr.contains("referencedDeclaration") &&
+      is_sol_library_function(expr["referencedDeclaration"].get<int>()))
+      return LibraryMemberCall;
+    else if (type_name == SolidityGrammar::TypeNameT::StructTypeName)
       return StructMemberCall;
     else if (type_name == SolidityGrammar::TypeNameT::EnumTypeName)
       return EnumMemberCall;
@@ -834,8 +843,6 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
       return ContractMemberCall;
     else if (is_address_member_call(expr))
       return AddressMemberCall;
-    else if(expr.contains("referencedDeclaration") && is_sol_library_function(expr["referencedDeclaration"].get<int>()))
-      return LibraryMemberCall;
     else
       //TODO Assume it's a builtin member
       // due to that the BuiltinTypeName cannot cover all the builtin member
