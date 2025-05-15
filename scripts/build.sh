@@ -38,7 +38,6 @@ error() {
 ubuntu_setup () {
     # Tested on ubuntu 22.04
     PKGS="\
-        clang-$CLANG_VERSION clang-tidy-$CLANG_VERSION \
         python-is-python3 csmith python3 \
         git ccache unzip wget curl libcsmith-dev gperf \
         libgmp-dev cmake bison flex g++-multilib linux-libc-dev \
