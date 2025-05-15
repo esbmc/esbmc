@@ -459,7 +459,7 @@ _Bool __ESBMC_r_ok(void *, unsigned long);
 
 /* Causes a verification error when its call is reachable; internal use in math
  * models */
-void __ESBMC_unreachable();
+_Noreturn void __ESBMC_unreachable();
 /* Quantifiers
  * Right now we only support one element and they transform the symbol into a nondet one (for the closure)
  * For example:
