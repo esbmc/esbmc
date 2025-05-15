@@ -262,7 +262,7 @@ def integer_squareroot(n: uint64) -> uint64:
 **Command:**
 
 ```bash
-$ esbmc main.py --function integer_squareroot
+$ esbmc main.py --function integer_squareroot --incremental-bmc
 ```
 
 **ESBMC Output:**
