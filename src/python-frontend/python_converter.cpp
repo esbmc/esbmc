@@ -1938,7 +1938,7 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   if (!else_expr.id_string().empty())
     code.copy_to_operands(else_expr);
 
-  return std::move(code);
+  return code;
 }
 
 void python_converter::get_function_definition(
@@ -2329,9 +2329,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     }
   }
 
-  current_block = old_block;
-
-  return std::move(block);
+  return block;
 }
 
 python_converter::python_converter(
