@@ -1,4 +1,4 @@
 CORE
 main.py
---function integer_squareroot --incremental-bmc
+--incremental-bmc
 ^VERIFICATION FAILED$
