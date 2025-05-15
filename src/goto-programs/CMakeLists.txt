@@ -28,6 +28,5 @@ target_include_directories(gotoprograms
 target_include_directories(gotoalgorithms
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
-target_compile_definitions(gotoprograms PUBLIC BOOST_ALL_NO_LIB)
 
 target_link_libraries(gotoprograms pointeranalysis bigint)
