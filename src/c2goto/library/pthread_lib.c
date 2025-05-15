@@ -56,7 +56,7 @@ void __ESBMC_really_atomic_end(void);
 int pthread_id_to_index(pthread_t t)
 {
   // Here we assume pthread_t is just a small integer type.
-  return (int)(uintptr_t)t;
+  return (int)t;
 }
 
 /************************** Infinite Array Implementation **************************/
