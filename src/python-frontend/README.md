@@ -156,9 +156,38 @@ Violated property:
 VERIFICATION FAILED
 ```
 
-ESBMC successfully identifies a path where the randomly generated variable x evaluates to zero (or very close to zero, causing integer division by zero). This triggers a property violation, and ESBMC generates a counterexample showing the precise values of `x` and `cond` that lead to the failure.
+ESBMC successfully identifies a path where the randomly generated variable x evaluates to zero (or very close to zero, causing integer division by zero). This triggers a property violation, and ESBMC generates a counterexample showing the precise values of `x` and `cond` that lead to the failure. An executable test case can be created from this counterexample to expose this implementation error as follows:
 
-This example highlights how bounded model checking can uncover subtle bugs that may not be triggered during regular testing.
+````python
+def div1(cond: int, x: int) -> int:
+    if not cond:
+        return 42 // x
+    else:
+        return x // 10
+
+# Constructing values that become 0 when cast to int
+cond = int(2.619487e-10)  # → 0
+x = int(3.454678e-77)     # → 0
+
+print(f"cond: {cond}, x: {x}")
+print(div1(cond, x))  # Triggers division by zero
+````
+
+```bash
+$ python3 main.py
+```
+
+````
+cond: 0, x: 0
+Traceback (most recent call last):
+  File "/home/lucas/examples/site/div-test.py", line 12, in <module>
+    print(div1(cond, x))  # Triggers division by zero
+  File "/home/lucas/examples/site/div-test.py", line 3, in div1
+    return 42 // x
+ZeroDivisionError: integer division or modulo by zero
+````
+
+This example highlights how symbolic model checking can uncover subtle bugs that may not be triggered during regular testing.
 
 ## References
 For more information about our frontend, please refer to our ISSTA 2024 [tool paper](https://dl.acm.org/doi/abs/10.1145/3650212.3685304).
