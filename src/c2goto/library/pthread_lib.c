@@ -53,7 +53,7 @@ pthread_t __ESBMC_get_thread_id(void);
 void __ESBMC_really_atomic_begin(void);
 void __ESBMC_really_atomic_end(void);
 
-int __ESBMC_pthread_id_to_index(pthread_t t)
+int pthread_id_to_index(pthread_t t)
 {
   // Here we assume pthread_t is just a small integer type.
   return (int)(uintptr_t)t;
@@ -165,8 +165,8 @@ __ESBMC_HIDE:;
 
   __ESBMC_atomic_begin();
   threadid = __ESBMC_get_thread_id();
-  __ESBMC_pthread_end_values[__ESBMC_pthread_id_to_index(threadid)] = exit_val;
-  __ESBMC_pthread_thread_ended[__ESBMC_pthread_id_to_index(threadid)] = 1;
+  __ESBMC_pthread_end_values[pthread_id_to_index(threadid)] = exit_val;
+  __ESBMC_pthread_thread_ended[pthread_id_to_index(threadid)] = 1;
   __ESBMC_num_threads_running--;
   // A thread terminating during a search for a deadlock means there's no
   // deadlock or it can be found down a different path. Proof left as exercise
@@ -215,8 +215,8 @@ __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   pthread_exec_key_destructors();
   pthread_t threadid = __ESBMC_get_thread_id();
-  __ESBMC_pthread_end_values[__ESBMC_pthread_id_to_index(threadid)] = retval;
-  __ESBMC_pthread_thread_ended[__ESBMC_pthread_id_to_index(threadid)] = 1;
+  __ESBMC_pthread_end_values[pthread_id_to_index(threadid)] = retval;
+  __ESBMC_pthread_thread_ended[pthread_id_to_index(threadid)] = 1;
   __ESBMC_num_threads_running--;
   // A thread terminating during a search for a deadlock means there's no
   // deadlock or it can be found down a different path. Proof left as exercise
@@ -762,15 +762,15 @@ __ESBMC_HIDE:;
   int result = 0;
   // This assert also checks whether this thread is not a joinable thread.
   __ESBMC_assert(
-    !__ESBMC_pthread_thread_detach[__ESBMC_pthread_id_to_index(threadid)],
+    !__ESBMC_pthread_thread_detach[pthread_id_to_index(threadid)],
     "Attempting to detach an already detached thread results in unspecified "
     "behavior");
   if (
-    __ESBMC_pthread_thread_ended[__ESBMC_pthread_id_to_index(threadid)] ||
-    __ESBMC_pthread_id_to_index(threadid) > __ESBMC_num_total_threads)
+    __ESBMC_pthread_thread_ended[pthread_id_to_index(threadid)] ||
+    pthread_id_to_index(threadid) > __ESBMC_num_total_threads)
     result = ESRCH; // No thread with the ID thread could be found.
   else
-    __ESBMC_pthread_thread_detach[__ESBMC_pthread_id_to_index(threadid)] = 1;
+    __ESBMC_pthread_thread_detach[pthread_id_to_index(threadid)] = 1;
   __ESBMC_atomic_end();
   return result; // no error occurred
 }
