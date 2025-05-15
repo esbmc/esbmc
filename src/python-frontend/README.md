@@ -219,52 +219,69 @@ As highlighted by **Harzevili et al., 2023**, common issues in ML-related librar
 
 This approach treats Numpy as a black box by analyzing **assertions written by the developer**.
 
-#### 🔍 Example: Detecting Integer Overflow
+#### Example: Detecting Integer Overflow
 
 ```python
 import numpy as np
 
-assert np.power(2, 7, dtype=np.int8) == -128  # Expected overflow
+x = np.add(2147483647, 1, dtype=np.int32)
 ```
 
 **Python3 Runtime Output:**
 
-No error — Python silently wraps 128 to -128 (int8 overflow behavior)
+No error — NumPy silently wraps on overflow for fixed-width dtypes (like int32).
 
 **ESBMC Output:**
 
 ```
 [Counterexample]
 
+State 1 file main.py line 3 column 0 thread 0
+----------------------------------------------------
 Violated property:
   file main.py line 3 column 0
-  assertion
-  128 == -128
+  arithmetic overflow on add
+  !overflow("+", 2147483647, 1)
+
 
 VERIFICATION FAILED
 ```
 
-** Explanation:**  
-ESBMC interprets the computation using precise bit-level semantics. It detects that `2^7 == 128` exceeds the `int8` range `[-128, 127]`, causing a wraparound. Python allows this silently, but ESBMC flags it as a **verification failure**.
+An executable test case can be created from this counterexample to expose this implementation error as follows:
 
----
-
-### Additional Black-Box Examples
-
-```python
+````python
 import numpy as np
 
-# Silent underflow: int8 cannot represent -129
-assert np.power(-2, 7, dtype=np.int8) == -128
+x = np.add(2147483647, 1, dtype=np.int32)
 
-# Overflow in unsigned type
-assert np.power(2, 8, dtype=np.uint8) == 0  # 256 wraps to 0
+print("Result:", x)         # Expected: -2147483648 due to overflow
+print("Type:", type(x))     # <class 'numpy.int32'>
+print("Correctly overflowed:", x == -2147483648)
 
-# Valid case: no overflow
-assert np.power(2, 6, dtype=np.int8) == 64
+# Optional assertion to expose unexpected behavior
+assert x == -2147483648, "Overflow did not wrap around correctly"
+````
+
+```bash
+$ python3 main.py
 ```
 
-Due to stricter semantic modeling, these cases may pass in Python but trigger **warnings** or **assertion violations** in ESBMC.
+````
+Result: -2147483648
+Type: <class 'numpy.int32'>
+Correctly overflowed: True
+````
+
+
+**Explanation:**  
+
+ESBMC performs bit-precise analysis and treats signed overflow as undefined or erroneous, unlike NumPy’s permissive semantics.
+
+- np.int32 represents 32-bit signed integers: range is −2,147,483,648 to 2,147,483,647.
+- The expression 2147483647 + 1 equals 2147483648, which exceeds the upper bound.
+- In np.int32, this overflows and wraps around to −2,147,483,648.
+
+While NumPy permits this silent overflow, ESBMC correctly identifies it as a violation of safe arithmetic.
 
 ---
 
