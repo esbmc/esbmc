@@ -16,7 +16,7 @@ __ESBMC_HIDE:;
   return setjmp(__env);
 }
 
-void longjmp(jmp_buf env, int status)
+_Noreturn void longjmp(jmp_buf env, int status)
 {
 __ESBMC_HIDE:;
   __ESBMC_unreachable();
