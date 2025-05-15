@@ -189,10 +189,6 @@ ZeroDivisionError: integer division or modulo by zero
 
 This example highlights how symbolic model checking can uncover subtle bugs that may not be triggered during regular testing.
 
-## References
-For more information about our frontend, please refer to our ISSTA 2024 [tool paper](https://dl.acm.org/doi/abs/10.1145/3650212.3685304).
-
-
 # Numpy Formal Verification with ESBMC
 
 ## What We Are Trying to Verify
@@ -379,6 +375,8 @@ Reference: https://numpy.org/doc/stable/reference/routines.math.html
 
 
 ## References
+
+For more information about our frontend, please refer to our ISSTA 2024 [tool paper](https://dl.acm.org/doi/abs/10.1145/3650212.3685304).
 
 Harzevili et al. (2023).  
 *Characterizing and Understanding Software Security Vulnerabilities in Machine Learning Libraries.*  
