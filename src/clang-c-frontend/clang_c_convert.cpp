@@ -264,14 +264,18 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     // expanded by clang itself
     const clang::BuiltinTemplateDecl &btd =
       static_cast<const clang::BuiltinTemplateDecl &>(decl);
-    if (
-      btd.getBuiltinTemplateKind() !=
-      clang::BuiltinTemplateKind::BTK__make_integer_seq)
+
+    switch (btd.getBuiltinTemplateKind())
     {
+    case clang::BuiltinTemplateKind::BTK__make_integer_seq:
+    case clang::BuiltinTemplateKind::BTK__type_pack_element:
+      break;
+
+    default:
       log_error(
         "Unsupported builtin template kind id: {}",
         (int)btd.getBuiltinTemplateKind());
-      abort();
+        return true;
     }
 
     break;
