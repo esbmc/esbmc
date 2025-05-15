@@ -310,8 +310,32 @@ $ esbmc main.py --function integer_squareroot --incremental-bmc
 **ESBMC Output:**
 
 ```
+[Counterexample]
+
+
+State 1 file square.py line 2 column 4 function integer_squareroot thread 0
+----------------------------------------------------
+  x = 0xFFFFFFFFFFFFFFFF (11111111 11111111 11111111 11111111 11111111 11111111 11111111 11111111)
+
+State 2 file square.py line 3 column 4 function integer_squareroot thread 0
+----------------------------------------------------
+  y = 0 (00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000)
+
+State 3 file square.py line 5 column 8 function integer_squareroot thread 0
+----------------------------------------------------
+  x = 0 (00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000)
+
+State 4 file square.py line 6 column 8 function integer_squareroot thread 0
+----------------------------------------------------
 Violated property:
+  file square.py line 6 column 8 function integer_squareroot
   division by zero
+  x != 0
+
+
+VERIFICATION FAILED
+
+Bug found (k = 1)
 ```
 
 **Explanation:**  
