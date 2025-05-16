@@ -219,21 +219,21 @@ bool operator>=(const array<T, N> &a, const array<T, N> &b)
 }
 
 template <std::size_t I, typename T, std::size_t N>
-T &get(array<T, N> &a) noexcept
+constexpr T &get(array<T, N> &a) noexcept
 {
   __ESBMC_assert(I < N, "Index out of bounds");
   return a[I];
 }
 
 template <std::size_t I, typename T, std::size_t N>
-const T &get(const array<T, N> &a) noexcept
+constexpr const T &get(const array<T, N> &a) noexcept
 {
   __ESBMC_assert(I < N, "Index out of bounds");
   return a[I];
 }
 
 template <std::size_t I, typename T, std::size_t N>
-T &&get(array<T, N> &&a) noexcept
+constexpr T &&get(array<T, N> &&a) noexcept
 {
   __ESBMC_assert(I < N, "Index out of bounds");
   return std::move(a[I]);
