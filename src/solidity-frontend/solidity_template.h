@@ -193,92 +193,119 @@ const std::string sol_funcs =
 
 /* https://github.com/rxi/map */
 const std::string sol_mapping = R"(
-struct NodeU
+struct _ESBMC_Mapping
 {
-  uint256_t data : 256;
-  struct NodeU *next;
-};
+  address_t addr : 160;
+  uint256_t key : 256;
+  void *value;
+  struct _ESBMC_Mapping *next;
+} __attribute__((packed));
 
-struct NodeI
+struct mapping_t
 {
-  int256_t data : 256;
-  struct NodeI *next;
-};
+  struct _ESBMC_Mapping *base;
+  address_t addr : 160;
+} __attribute__((packed));
 
-void insertAtEndU(struct NodeU **head, uint256_t data)
+void *map_get_raw(struct _ESBMC_Mapping a[], address_t addr, uint256_t key)
 {
 __ESBMC_HIDE:;
-  struct NodeU *newNode = (struct NodeU *)malloc(sizeof(struct NodeU));
-  newNode->data = data;
-  newNode->next = NULL;
-  if (*head == NULL)
+  struct _ESBMC_Mapping *cur = a[key].next;
+  while (cur)
   {
-    *head = newNode;
-    return;
+    if (cur->addr == addr && cur->key == key)
+      return cur->value;
+    cur = cur->next;
   }
-  struct NodeU *current = *head;
-  while (current->next != NULL)
-  {
-    current = current->next;
-  }
-  current->next = newNode;
+  return NULL;
 }
 
-void insertAtEndI(struct NodeI **head, int256_t data)
+void map_set_raw(struct _ESBMC_Mapping a[], address_t addr,
+                 uint256_t key, void *val)
 {
 __ESBMC_HIDE:;
-  struct NodeI *newNode = (struct NodeI *)malloc(sizeof(struct NodeI));
-  newNode->data = data;
-  newNode->next = NULL;
-  if (*head == NULL)
-  {
-    *head = newNode;
-    return;
-  }
-  struct NodeI *current = *head;
-  while (current->next != NULL)
-  {
-    current = current->next;
-  }
-  current->next = newNode;
+  struct _ESBMC_Mapping *n = (struct _ESBMC_Mapping *)malloc(sizeof *n);
+  n->addr = addr;
+  n->key = key;
+  n->value = val;
+  n->next = a[key].next;
+  a[key].next = n;
 }
 
-int _ESBMC_uaddress(struct NodeU *head, uint256_t key)
+/* uint256_t */
+static inline void map_uint_set(struct mapping_t *m, uint256_t k, uint256_t v)
 {
 __ESBMC_HIDE:;
-  struct NodeU *current = head;
-  int cnt = 0;
-  while (current != NULL)
-  {
-    if (current->data == key)
-      return cnt;
-    cnt++;
-    current = current->next;
-  }
-  insertAtEndU(&head, key);
-  // temporary
-  // if (cnt >= 50)
-  //   assert(0);
-  return cnt;
+  uint256_t *p = (uint256_t *)malloc(sizeof *p);
+  *p = v;
+  map_set_raw(m->base, m->addr, k, p);
+}
+static inline uint256_t map_uint_get(struct mapping_t *m, uint256_t k)
+{
+__ESBMC_HIDE:;
+  uint256_t *p = (uint256_t *)map_get_raw(m->base, m->addr, k);
+  return p ? *p : (uint256_t)0;
 }
 
-int _ESBMC_address(struct NodeI *head, int256_t key)
+/* int256_t */
+static inline void map_int_set(struct mapping_t *m, uint256_t k, int256_t v)
 {
 __ESBMC_HIDE:;
-  struct NodeI *current = head;
-  int cnt = 0;
-  while (current != NULL)
-  {
-    if (current->data == key)
-      return cnt;
-    cnt++;
-    current = current->next;
-  }
-  insertAtEndI(&head, key);
-  // temporary
-  // if (cnt >= 50)
-  //   assert(0);
-  return cnt;
+  int256_t *p = (int256_t *)malloc(sizeof *p);
+  *p = v;
+  map_set_raw(m->base, m->addr, k, p);
+}
+static inline int256_t map_int_get(struct mapping_t *m, uint256_t k)
+{
+__ESBMC_HIDE:;
+  int256_t *p = (int256_t *)map_get_raw(m->base, m->addr, k);
+  return p ? *p : (int256_t)0;
+}
+
+/* string */
+static inline void map_string_set(struct mapping_t *m, uint256_t k, char *v)
+{
+__ESBMC_HIDE:;
+  char **p = (char **)malloc(sizeof *p);
+  *p = v;
+  map_set_raw(m->base, m->addr, k, p);
+}
+static inline char *map_string_get(struct mapping_t *m, uint256_t k)
+{
+__ESBMC_HIDE:;
+  char **p = (char **)map_get_raw(m->base, m->addr, k);
+  return p ? *p : (char *)0;
+}
+
+/* bool */
+static inline void map_bool_set(struct mapping_t *m, uint256_t k, bool v)
+{
+__ESBMC_HIDE:;
+  bool *p = (bool *)malloc(sizeof *p);
+  *p = v;
+  map_set_raw(m->base, m->addr, k, p);
+}
+
+static inline bool map_bool_get(struct mapping_t *m, uint256_t k)
+{
+__ESBMC_HIDE:;
+  bool *p = (bool *)map_get_raw(m->base, m->addr, k);
+  return p ? *p : false;
+}
+
+
+/* generic */
+static inline void map_set_generic(struct mapping_t *m, uint256_t k, const void *v, size_t sz)
+{
+__ESBMC_HIDE:;
+  void *p = malloc(sz);
+  memcpy(p, v, sz);
+  map_set_raw(m->base, m->addr, k, p);
+}
+static inline void *map_get_generic(struct mapping_t *m, uint256_t k)
+{
+__ESBMC_HIDE:;
+  return map_get_raw(m->base, m->addr, k);
 }
 )";
 

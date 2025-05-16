@@ -7156,6 +7156,12 @@ bool solidity_convertert::get_mapping_type(
   // 4. bool
   //TODO: support nested structure
 
+  // get key type
+  typet key_type;
+  if (get_type_description(
+        ast_node["typeName"]["valueType"]["typeDescriptions"], key_type))
+    return true;
+
   // get element type
   typet elem_type;
   if (get_type_description(
@@ -7192,6 +7198,8 @@ bool solidity_convertert::get_mapping_type(
   t = pointer_typet(elem_type);
   // ? MAPPING_INSTANCE?
   t.set("#sol_type", "MAPPING");
+  t.set("#sol_mapping_key", key_type.get("#sol_type"));
+  t.set("#sol_mapping_value", elem_type.get("#sol_type"));
 
   return false;
 }
