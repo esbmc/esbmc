@@ -1,4 +1,4 @@
-CORE
+KNOWNBUG
 contract.solast
---sol contract.sol --contract Reproduction --incremental-bmc
+--sol contract.sol --contract Reproduction --unwind 4 --no-unwinding-assertion
 ^VERIFICATION FAILED$
