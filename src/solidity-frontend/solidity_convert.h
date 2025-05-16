@@ -381,6 +381,11 @@ protected:
   get_string_assignment(const exprt &lhs, const exprt &rhs, exprt &new_expr);
 
   // mapping
+  void get_mapping_inf_arr_name(
+    const std::string &cname,
+    const std::string &name,
+    std::string &arr_name,
+    std::string &arr_id);
   bool get_mapping_type(const nlohmann::json &ast_node, typet &t);
   bool get_mapping_key_expr(
     const std::string &current_contractName,

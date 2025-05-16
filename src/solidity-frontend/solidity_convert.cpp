@@ -97,7 +97,8 @@ bool solidity_convertert::convert()
     return true;
 
   // for coverage and trace simplification: update include_files
-  auto add_unique = [](const std::string &file) {
+  auto add_unique = [](const std::string &file)
+  {
     if (
       std::find(
         config.ansi_c.include_files.begin(),
@@ -667,14 +668,15 @@ bool solidity_convertert::populate_function_signature(
       is_payable = func_node["stateMutability"] == "payable";
       is_inherit = func_node.contains("is_inherited");
 
-      funcSignatures[cname].push_back(solidity_convertert::func_sig(
-        func_name,
-        func_id,
-        visibility,
-        type,
-        is_payable,
-        is_inherit,
-        is_library));
+      funcSignatures[cname].push_back(
+        solidity_convertert::func_sig(
+          func_name,
+          func_id,
+          visibility,
+          type,
+          is_payable,
+          is_inherit,
+          is_library));
     }
   }
 
@@ -682,9 +684,8 @@ bool solidity_convertert::populate_function_signature(
   bool hasConstructor = std::any_of(
     funcSignatures[cname].begin(),
     funcSignatures[cname].end(),
-    [&cname](const solidity_convertert::func_sig &sig) {
-      return sig.name == cname;
-    });
+    [&cname](const solidity_convertert::func_sig &sig)
+    { return sig.name == cname; });
   if (!hasConstructor && !is_library)
   {
     func_name = cname;
@@ -694,14 +695,15 @@ bool solidity_convertert::populate_function_signature(
     type.return_type() = empty_typet();
     type.return_type().set("cpp_type", "void");
     is_inherit = false;
-    funcSignatures[cname].push_back(solidity_convertert::func_sig(
-      func_name,
-      func_id,
-      visibility,
-      type,
-      is_payable,
-      is_inherit,
-      is_library));
+    funcSignatures[cname].push_back(
+      solidity_convertert::func_sig(
+        func_name,
+        func_id,
+        visibility,
+        type,
+        is_payable,
+        is_inherit,
+        is_library));
   }
 
   return false;
@@ -1169,28 +1171,33 @@ bool solidity_convertert::get_var_decl(
   else if (mapping)
   {
     // mapping(string => uint) test;
-    // => int256* test = calloc(50, sizeof(int256));
-    //TODO: FIXME. Currently the infinite array is not well-supported in C++, so we set it as a relatively large array.
+    // => __attribute__((annotate("__ESBMC_inf_size"))) struct _ESBMC_Mapping _ESBMC_inf_test[];
+    // => struct mapping_t test = {_ESBMC_inf_test, this.address};
 
-    // construct calloc call
-    side_effect_expr_function_callt calc_call;
-    get_calloc_function_call(location_begin, calc_call);
+    // 1. construct static infinite array
+    std::string arr_name, arr_id;
+    get_mapping_inf_arr_name(current_contractName, name, arr_name, arr_id);
+    symbolt arr_s;
+    typet arr_t = array_typet(symbol_typet(prefix + "_ESBMC_Mapping"), exprt("infinity"));
+    get_default_symbol(arr_s, debug_modulename, arr_t, arr_name, arr_id, location_begin);
+    arr_s.static_lifetime = true;
+    arr_s.file_local = true;
+    arr_s.lvalue = true;
+    auto &add_added_s = *move_symbol_to_context(arr_s);
 
-    exprt size_expr = constant_exprt(
-      integer2binary(50, bv_width(uint_type())),
-      integer2string(50),
-      uint_type());
+    // 2. construct mapping_t struct instance's value
+    exprt this_ptr;
+    get_func_decl_this_ref(*current_functionDecl,this_ptr);
+    typet addr_t = unsignedbv_typet(160);
+    addr_t.set("#sol_type", "ADDRESS");
+    exprt  mem = member_exprt(this_ptr, "$address", addr_t);
 
-    exprt size_of_expr;
-    get_size_of_expr(t.subtype(), size_of_expr);
+    exprt inits = gen_zero(t);
+    inits.op0() = symbol_expr(add_added_s);
+    inits.op1() = mem;
 
-    // populate arguments for calloc call
-    calc_call.arguments().push_back(size_expr);
-    calc_call.arguments().push_back(size_of_expr);
-
-    // assign it as the initial value
-    added_symbol.value = calc_call;
-    decl.operands().push_back(calc_call);
+    added_symbol.value = inits;
+    decl.operands().push_back(inits);
   }
   else if (t_sol_type == "STRING" && !set_init && is_state_var)
   {
@@ -7144,6 +7151,17 @@ void solidity_convertert::get_tuple_assignment(const exprt &lop, exprt rop)
     move_to_initializer(assign_expr);
 }
 
+void solidity_convertert::get_mapping_inf_arr_name(
+  const std::string &cname,
+  const std::string &name,
+  std::string &arr_name,
+  std::string &arr_id)
+{
+  arr_name = "_ESBMC_inf_" + name;
+  // we cannot define a mapping inside a function body 
+  arr_id = "sol:@C@"+ cname + "@" + arr_name + "#";
+}
+
 bool solidity_convertert::get_mapping_type(
   const nlohmann::json &ast_node,
   typet &t)
@@ -7168,13 +7186,6 @@ bool solidity_convertert::get_mapping_type(
         ast_node["typeName"]["valueType"]["typeDescriptions"], elem_type))
     return true;
 
-  if (elem_type.get("#sol_type") == "STRING")
-  {
-    // TODO: FIXME! We treat string as uint256
-    elem_type = unsignedbv_typet(256);
-    elem_type.set("#sol_type", "STRING_UINT");
-  }
-
   //TODO set as infinite array. E.g.
   //   array
   //    * size: infinity
@@ -7195,7 +7206,7 @@ bool solidity_convertert::get_mapping_type(
   //     integer2string(value_length),
   //     unsignedbv_typet(8)));
 
-  t = pointer_typet(elem_type);
+  t = symbol_typet(prefix + "mapping_t");
   // ? MAPPING_INSTANCE?
   t.set("#sol_type", "MAPPING");
   t.set("#sol_mapping_key", key_type.get("#sol_type"));
@@ -8657,8 +8668,8 @@ bool solidity_convertert::is_func_sig_cover(
   const std::string &base)
 {
   // function signature coverage‐check lambda: name + ordered argument types
-  auto covers =
-    [&](const std::string &derived, const std::string &base) -> bool {
+  auto covers = [&](const std::string &derived, const std::string &base) -> bool
+  {
     const auto &dSigs = funcSignatures.at(derived);
     const auto &bSigs = funcSignatures.at(base);
 
@@ -9870,14 +9881,16 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
   dest = code_blockt();
 
   // call designated "initialization" functions
-  context.foreach_operand_in_order([&dest](const symbolt &s) {
-    if (s.type.initialization() && s.type.is_code())
+  context.foreach_operand_in_order(
+    [&dest](const symbolt &s)
     {
-      code_function_callt function_call;
-      function_call.function() = symbol_expr(s);
-      dest.move_to_operands(function_call);
-    }
-  });
+      if (s.type.initialization() && s.type.is_code())
+      {
+        code_function_callt function_call;
+        function_call.function() = symbol_expr(s);
+        dest.move_to_operands(function_call);
+      }
+    });
 }
 
 void solidity_convertert::get_aux_var(
@@ -11002,7 +11015,8 @@ bool solidity_convertert::has_callable_func(const std::string &cname)
   return std::any_of(
     funcSignatures[cname].begin(),
     funcSignatures[cname].end(),
-    [&cname](const solidity_convertert::func_sig &sig) {
+    [&cname](const solidity_convertert::func_sig &sig)
+    {
       // must be public or external, even if the address is itself
       return sig.name != cname &&
              (sig.visibility == "public" || sig.visibility == "external");
@@ -11019,9 +11033,9 @@ bool solidity_convertert::has_target_function(
     return false;
 
   return std::any_of(
-    it->second.begin(), it->second.end(), [&](const func_sig &sig) {
-      return sig.name == func_name;
-    });
+    it->second.begin(),
+    it->second.end(),
+    [&](const func_sig &sig) { return sig.name == func_name; });
 }
 
 solidity_convertert::func_sig solidity_convertert::get_target_function(
@@ -11042,9 +11056,8 @@ solidity_convertert::func_sig solidity_convertert::get_target_function(
   auto func_it = std::find_if(
     functions.begin(),
     functions.end(),
-    [&func_name](const solidity_convertert::func_sig &sig) {
-      return sig.name == func_name;
-    });
+    [&func_name](const solidity_convertert::func_sig &sig)
+    { return sig.name == func_name; });
 
   // If function is found, return it; otherwise, return an empty func_sig
   if (func_it != functions.end())
