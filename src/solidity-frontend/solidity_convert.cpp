@@ -915,23 +915,16 @@ bool solidity_convertert::get_var_decl(
   // to improve the re-usability of get_type* function, when dealing with non-array var decls.
   // For array, do NOT use ["typeName"]. Otherwise, it will cause problem
   // when populating typet in get_cast
-  bool mapping = is_mapping(ast_node);
-  if (mapping)
-  {
-    if (get_mapping_type(ast_node, t))
-      return true;
-  }
-  else
-  {
-    const nlohmann::json *old_typeName = current_typeName;
-    current_typeName = &ast_node["typeName"];
-    if (get_type_description(ast_node["typeName"]["typeDescriptions"], t))
-      return true;
-    current_typeName = old_typeName;
-  }
+
+  const nlohmann::json *old_typeName = current_typeName;
+  current_typeName = &ast_node["typeName"];
+  if (get_type_description(ast_node["typeName"]["typeDescriptions"], t))
+    return true;
+  current_typeName = old_typeName;
 
   bool is_contract =
     t.get("#sol_type").as_string() == "CONTRACT" ? true : false;
+  bool is_mapping = t.get("#sol_type").as_string() == "MAPPING" ? true : false;
 
   // set const qualifier
   if (ast_node.contains("mutability") && ast_node["mutability"] == "constant")
@@ -990,7 +983,7 @@ bool solidity_convertert::get_var_decl(
   const nlohmann::json init_value =
     ast_node.contains("value") ? ast_node["value"] : initialValue;
   const nlohmann::json literal_type = ast_node["typeDescriptions"];
-  if (!set_init && !mapping)
+  if (!set_init && !is_mapping)
   {
     // for both state and non-state variables, set default value as zero
     symbol.value = gen_zero(get_complete_type(t, ns), true);
@@ -1168,7 +1161,7 @@ bool solidity_convertert::get_var_decl(
     }
   }
   // special handling for mapping
-  else if (mapping)
+  else if (is_mapping)
   {
     // mapping(string => uint) test;
     // => __attribute__((annotate("__ESBMC_inf_size"))) struct _ESBMC_Mapping _ESBMC_inf_test[];
@@ -1178,8 +1171,10 @@ bool solidity_convertert::get_var_decl(
     std::string arr_name, arr_id;
     get_mapping_inf_arr_name(current_contractName, name, arr_name, arr_id);
     symbolt arr_s;
-    typet arr_t = array_typet(symbol_typet(prefix + "_ESBMC_Mapping"), exprt("infinity"));
-    get_default_symbol(arr_s, debug_modulename, arr_t, arr_name, arr_id, location_begin);
+    typet arr_t =
+      array_typet(symbol_typet(prefix + "_ESBMC_Mapping"), exprt("infinity"));
+    get_default_symbol(
+      arr_s, debug_modulename, arr_t, arr_name, arr_id, location_begin);
     arr_s.static_lifetime = true;
     arr_s.file_local = true;
     arr_s.lvalue = true;
@@ -1187,10 +1182,10 @@ bool solidity_convertert::get_var_decl(
 
     // 2. construct mapping_t struct instance's value
     exprt this_ptr;
-    get_func_decl_this_ref(*current_functionDecl,this_ptr);
+    get_func_decl_this_ref(*current_functionDecl, this_ptr);
     typet addr_t = unsignedbv_typet(160);
     addr_t.set("#sol_type", "ADDRESS");
-    exprt  mem = member_exprt(this_ptr, "$address", addr_t);
+    exprt mem = member_exprt(this_ptr, "$address", addr_t);
 
     exprt inits = gen_zero(t);
     inits.op0() = symbol_expr(add_added_s);
@@ -4433,8 +4428,16 @@ bool solidity_convertert::get_expr(
       return true;
     if (base_t.get("#sol_type").as_string() == "MAPPING")
     {
-      // this could be set or get
-      // e.g. y = map[x] or map[x] = y
+      // this could be set or get:
+      // - if it's in the lhs(including tuple) then should be set
+      // otherwise get
+  
+      assert(current_functionDecl);
+      // is_mapping_index_lvalue(current_functionDecl, expr);
+
+      // get
+
+      
 
       // find mapping definition
       assert(base_json.contains("referencedDeclaration"));
@@ -5938,27 +5941,11 @@ bool solidity_convertert::get_var_decl_ref(
   else
   {
     typet type;
-    if (is_mapping(decl))
-    {
-      exprt map;
-      if (get_var_decl(decl, map))
-        return true;
-
-      if (to_code(map).operands().size() < 1)
-      {
-        log_error("Unexpected mapping structure, got {}", map.to_string());
-        abort();
-      }
-      type = to_code(map).op0().type();
-    }
-    else
-    {
-      const nlohmann::json *old_typeName = current_typeName;
-      current_typeName = &decl["typeName"];
-      if (get_type_description(decl["typeName"]["typeDescriptions"], type))
-        return true;
-      current_typeName = old_typeName;
-    }
+    const nlohmann::json *old_typeName = current_typeName;
+    current_typeName = &decl["typeName"];
+    if (get_type_description(decl["typeName"]["typeDescriptions"], type))
+      return true;
+    current_typeName = old_typeName;
 
     // variable with no value
     new_expr = exprt("symbol", type);
@@ -6599,8 +6586,7 @@ bool solidity_convertert::get_type_description(
   case SolidityGrammar::TypeNameT::MappingTypeName:
   {
     // do nothing as it won't be used
-    new_type = struct_typet();
-    new_type.set("#cpp_type", "void");
+    new_type = symbol_typet(prefix + "mapping_t");
     new_type.set("#sol_type", "MAPPING");
     break;
   }
@@ -7158,61 +7144,8 @@ void solidity_convertert::get_mapping_inf_arr_name(
   std::string &arr_id)
 {
   arr_name = "_ESBMC_inf_" + name;
-  // we cannot define a mapping inside a function body 
-  arr_id = "sol:@C@"+ cname + "@" + arr_name + "#";
-}
-
-bool solidity_convertert::get_mapping_type(
-  const nlohmann::json &ast_node,
-  typet &t)
-{
-  // value type:
-  // 1. int/uint
-  // 2. string => unsignedbv_typet(256);
-  // 3. address => uint160
-  // 4. contract/struct => struct type
-  // 4. bool
-  //TODO: support nested structure
-
-  // get key type
-  typet key_type;
-  if (get_type_description(
-        ast_node["typeName"]["valueType"]["typeDescriptions"], key_type))
-    return true;
-
-  // get element type
-  typet elem_type;
-  if (get_type_description(
-        ast_node["typeName"]["valueType"]["typeDescriptions"], elem_type))
-    return true;
-
-  //TODO set as infinite array. E.g.
-  //   array
-  //    * size: infinity
-  //        * type: unsignedbv
-  //            * width: 64
-  //    * subtype: bool
-  //        * #cpp_type: bool
-  // t = array_typet(elem_type, exprt("infinity"));
-  // t.set("#sol_type", "MAPPING");
-
-  // For now, we set it as a relatively large array
-  // if the value_length is too large, the efficiency will be affected.
-  // BigInt value_length = 50;
-  // t = array_typet(
-  //   elem_type,
-  //   constant_exprt(
-  //     integer2binary(value_length, bv_width(unsignedbv_typet(8))),
-  //     integer2string(value_length),
-  //     unsignedbv_typet(8)));
-
-  t = symbol_typet(prefix + "mapping_t");
-  // ? MAPPING_INSTANCE?
-  t.set("#sol_type", "MAPPING");
-  t.set("#sol_mapping_key", key_type.get("#sol_type"));
-  t.set("#sol_mapping_value", elem_type.get("#sol_type"));
-
-  return false;
+  // we cannot define a mapping inside a function body
+  arr_id = "sol:@C@" + cname + "@" + arr_name + "#";
 }
 
 bool solidity_convertert::get_mapping_key_expr(
@@ -8793,17 +8726,6 @@ bool solidity_convertert::is_var_getter_matched(
     }
   }
 
-  return false;
-}
-
-// check if the node is a mapping
-bool solidity_convertert::is_mapping(const nlohmann::json &ast_node)
-{
-  if (
-    ast_node.contains("typeDescriptions") &&
-    SolidityGrammar::get_type_name_t(ast_node["typeDescriptions"]) ==
-      SolidityGrammar::MappingTypeName)
-    return true;
   return false;
 }
 

@@ -386,7 +386,6 @@ protected:
     const std::string &name,
     std::string &arr_name,
     std::string &arr_id);
-  bool get_mapping_type(const nlohmann::json &ast_node, typet &t);
   bool get_mapping_key_expr(
     const std::string &current_contractName,
     const symbolt &sym,
@@ -435,7 +434,6 @@ protected:
   std::string get_array_size(const nlohmann::json &type_descrpt);
   void get_size_of_expr(const typet &elem_type, exprt &size_of_expr);
   bool is_dyn_array(const nlohmann::json &json_in);
-  bool is_mapping(const nlohmann::json &ast_node);
   bool is_func_sig_cover(const std::string &derived, const std::string &base);
   bool is_var_getter_matched(
     const std::string &cname,
