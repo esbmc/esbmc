@@ -813,9 +813,6 @@ void pthread_cleanup_push(void (*function)(void *), void *arg)
   // Get the current cleanup stack level for this thread
   size_t cleanup_level = __esbmc_get_cleanup_level();
 
-  // Assume cleanup level is non-negative (valid)
-  __ESBMC_assume(cleanup_level >= 0);
-
   // Calculate the index for the cleanup entry in the symbolic infinite array.
   // Each thread gets a separate chunk of CLEANUP_STACK_CHUNK_SIZE slots to avoid interference.
   // Within the chunk, cleanup_level indexes the next free slot.
