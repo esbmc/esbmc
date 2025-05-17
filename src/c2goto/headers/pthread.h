@@ -296,6 +296,10 @@ extern pthread_t pthread_self (void) __attribute__ ((__const__));
 /* Compare two thread identifiers.  */
 extern int pthread_equal (pthread_t __thread1, pthread_t __thread2);
 
+/* push and pop thread cancellation clean-up handlers */
+void pthread_cleanup_push(void (*routine)(void *),
+                          void *arg);
+void pthread_cleanup_pop(int execute);
 
 /* Thread attribute handling.  */
 
