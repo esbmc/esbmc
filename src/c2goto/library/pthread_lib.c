@@ -2,6 +2,8 @@
 #include <pthread.h>
 #include <stddef.h>
 
+#define CLEANUP_STACK_CHUNK_SIZE 1024
+
 typedef void *(*__ESBMC_thread_start_func_type)(void *);
 void __ESBMC_terminate_thread(void);
 unsigned int __ESBMC_spawn_thread(void (*)(void));
@@ -798,7 +800,7 @@ __ESBMC_HIDE:;
  * to be called later if pthread_cleanup_pop is invoked with execute != 0.
  *
  * The cleanup handlers are stored in a large symbolic array divided into
- * chunks of size 1024 per thread to avoid overlap between threads.
+ * chunks of size CLEANUP_STACK_CHUNK_SIZE per thread to avoid overlap between threads.
  * 
  * @param function Pointer to the cleanup function to be called.
  * @param arg      Argument to pass to the cleanup function.
@@ -815,9 +817,9 @@ void pthread_cleanup_push(void (*function)(void *), void *arg)
   __ESBMC_assume(cleanup_level >= 0);
 
   // Calculate the index for the cleanup entry in the symbolic infinite array.
-  // Each thread gets a separate chunk of 1024 slots to avoid interference.
+  // Each thread gets a separate chunk of CLEANUP_STACK_CHUNK_SIZE slots to avoid interference.
   // Within the chunk, cleanup_level indexes the next free slot.
-  size_t index = tid * 1024 + cleanup_level;
+  size_t index = tid * CLEANUP_STACK_CHUNK_SIZE + cleanup_level;
 
   // Store the cleanup function pointer and its argument at the calculated index
   __esbmc_cleanup_stack[index].function = (void *)function;
@@ -855,7 +857,7 @@ void pthread_cleanup_pop(int execute)
   if (execute)
   {
     // Calculate the index in the infinite symbolic cleanup stack for this thread and level
-    size_t index = tid * 1024 + cleanup_level;
+    size_t index = tid * CLEANUP_STACK_CHUNK_SIZE + cleanup_level;
 
     // Retrieve the stored cleanup function and argument
     void (*function)(void *) =
