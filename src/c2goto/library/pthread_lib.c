@@ -53,6 +53,26 @@ pthread_t __ESBMC_get_thread_id(void);
 void __ESBMC_really_atomic_begin(void);
 void __ESBMC_really_atomic_end(void);
 
+typedef struct {
+  void *arg;
+  void *function;
+} cleanup_entry_t;
+
+cleanup_entry_t __esbmc_cleanup_stack[1] __attribute__((annotate("__ESBMC_inf_size")));
+int __esbmc_cleanup_level[1] __attribute__((annotate("__ESBMC_inf_size")));
+
+int __esbmc_get_cleanup_level(void)
+{
+  pthread_t tid = __ESBMC_get_thread_id();
+  return __esbmc_cleanup_level[tid];
+}
+
+void __esbmc_set_cleanup_level(int level)
+{
+  pthread_t tid = __ESBMC_get_thread_id();
+  __esbmc_cleanup_level[tid] = level;
+}
+
 /************************** Infinite Array Implementation **************************/
 
 /* These internal functions insert_key_value(), search_key() and delete_key()
@@ -767,4 +787,34 @@ __ESBMC_HIDE:;
     __ESBMC_pthread_thread_detach[threadid] = 1;
   __ESBMC_atomic_end();
   return result; // no error occurred
+}
+
+void pthread_cleanup_push(void (*function)(void *), void *arg)
+{
+  pthread_t tid = __ESBMC_get_thread_id();
+  int cleanup_level = __esbmc_get_cleanup_level();
+  __ESBMC_assume(cleanup_level >= 0);
+
+  // Store the cleanup function and argument
+  __esbmc_cleanup_stack[tid * 1024 + cleanup_level].function = (void *)function;
+  __esbmc_cleanup_stack[tid * 1024 + cleanup_level].arg = arg;
+
+  __esbmc_set_cleanup_level(cleanup_level + 1);
+}
+
+void pthread_cleanup_pop(int execute)
+{
+  pthread_t tid = __ESBMC_get_thread_id();
+  int cleanup_level = __esbmc_get_cleanup_level();
+  __ESBMC_assume(cleanup_level > 0);
+  cleanup_level--;
+  __esbmc_set_cleanup_level(cleanup_level);
+
+  if (execute)
+  {
+    void (*function)(void *) = (void (*)(void *))__esbmc_cleanup_stack[tid * 1024 + cleanup_level].function;
+    void *arg = __esbmc_cleanup_stack[tid * 1024 + cleanup_level].arg;
+    __ESBMC_assume(function != NULL);
+    function(arg);
+  }
 }
