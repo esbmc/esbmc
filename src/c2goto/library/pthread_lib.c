@@ -61,9 +61,9 @@ typedef struct
 
 cleanup_entry_t __esbmc_cleanup_stack[1]
   __attribute__((annotate("__ESBMC_inf_size")));
-int __esbmc_cleanup_level[1] __attribute__((annotate("__ESBMC_inf_size")));
+size_t __esbmc_cleanup_level[1] __attribute__((annotate("__ESBMC_inf_size")));
 
-int __esbmc_get_cleanup_level(void)
+size_t __esbmc_get_cleanup_level(void)
 {
   pthread_t tid = __ESBMC_get_thread_id();
   return __esbmc_cleanup_level[tid];
@@ -809,7 +809,7 @@ void pthread_cleanup_push(void (*function)(void *), void *arg)
   pthread_t tid = __ESBMC_get_thread_id();
 
   // Get the current cleanup stack level for this thread
-  int cleanup_level = __esbmc_get_cleanup_level();
+  size_t cleanup_level = __esbmc_get_cleanup_level();
 
   // Assume cleanup level is non-negative (valid)
   __ESBMC_assume(cleanup_level >= 0);
@@ -817,7 +817,7 @@ void pthread_cleanup_push(void (*function)(void *), void *arg)
   // Calculate the index for the cleanup entry in the symbolic infinite array.
   // Each thread gets a separate chunk of 1024 slots to avoid interference.
   // Within the chunk, cleanup_level indexes the next free slot.
-  int index = tid * 1024 + cleanup_level;
+  size_t index = tid * 1024 + cleanup_level;
 
   // Store the cleanup function pointer and its argument at the calculated index
   __esbmc_cleanup_stack[index].function = (void *)function;
@@ -841,7 +841,7 @@ void pthread_cleanup_pop(int execute)
   pthread_t tid = __ESBMC_get_thread_id();
 
   // Get the current cleanup stack level
-  int cleanup_level = __esbmc_get_cleanup_level();
+  size_t cleanup_level = __esbmc_get_cleanup_level();
 
   // Assume the cleanup level is positive (there is a cleanup handler to pop)
   __ESBMC_assume(cleanup_level > 0);
@@ -855,7 +855,7 @@ void pthread_cleanup_pop(int execute)
   if (execute)
   {
     // Calculate the index in the infinite symbolic cleanup stack for this thread and level
-    int index = tid * 1024 + cleanup_level;
+    size_t index = tid * 1024 + cleanup_level;
 
     // Retrieve the stored cleanup function and argument
     void (*function)(void *) =
