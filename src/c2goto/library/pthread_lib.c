@@ -53,12 +53,14 @@ pthread_t __ESBMC_get_thread_id(void);
 void __ESBMC_really_atomic_begin(void);
 void __ESBMC_really_atomic_end(void);
 
-typedef struct {
+typedef struct
+{
   void *arg;
   void *function;
 } cleanup_entry_t;
 
-cleanup_entry_t __esbmc_cleanup_stack[1] __attribute__((annotate("__ESBMC_inf_size")));
+cleanup_entry_t __esbmc_cleanup_stack[1]
+  __attribute__((annotate("__ESBMC_inf_size")));
 int __esbmc_cleanup_level[1] __attribute__((annotate("__ESBMC_inf_size")));
 
 int __esbmc_get_cleanup_level(void)
@@ -856,7 +858,8 @@ void pthread_cleanup_pop(int execute)
     int index = tid * 1024 + cleanup_level;
 
     // Retrieve the stored cleanup function and argument
-    void (*function)(void *) = (void (*)(void *))__esbmc_cleanup_stack[index].function;
+    void (*function)(void *) =
+      (void (*)(void *))__esbmc_cleanup_stack[index].function;
     void *arg = __esbmc_cleanup_stack[index].arg;
 
     // Assume the function pointer is not NULL before calling
