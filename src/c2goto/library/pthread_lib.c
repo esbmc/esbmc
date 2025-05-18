@@ -55,6 +55,8 @@ pthread_t __ESBMC_get_thread_id(void);
 void __ESBMC_really_atomic_begin(void);
 void __ESBMC_really_atomic_end(void);
 
+static _Bool pthread_cleanup_enabled = 0;
+
 typedef struct
 {
   void *arg;
@@ -236,7 +238,7 @@ __ESBMC_HIDE:;
   pthread_exec_key_destructors();
 
   // Run cleanup handlers
-  while (__esbmc_get_cleanup_level() > 0)
+  while (pthread_cleanup_enabled && __esbmc_get_cleanup_level() > 0)
     pthread_cleanup_pop(1); // 1 means execute the handler
 
   pthread_t threadid = __ESBMC_get_thread_id();
@@ -817,6 +819,9 @@ __ESBMC_HIDE:;
  */
 void pthread_cleanup_push(void (*function)(void *), void *arg)
 {
+  // Enable calling pthread_cleanup_pop from pthread_exit
+  pthread_cleanup_enabled = 1;
+
   // Get the current thread ID
   pthread_t tid = __ESBMC_get_thread_id();
 
