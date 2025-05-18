@@ -1,4 +1,4 @@
 CORE
 main.c
---data-races-check --context-bound 3
+--data-races-check --context-bound 3 --incremental-bmc
 ^VERIFICATION FAILED$

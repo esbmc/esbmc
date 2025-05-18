@@ -1,4 +1,4 @@
 KNOWNBUG
 main.c
--I . --context-bound 6
+-I . --context-bound 6 --incremental-bmc
 ^VERIFICATION FAILED$
