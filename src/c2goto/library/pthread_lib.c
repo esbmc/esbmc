@@ -244,7 +244,9 @@ __ESBMC_HIDE:;
   __ESBMC_pthread_thread_ended[threadid] = 1;
   __ESBMC_num_threads_running--;
 
-  // Deadlock assumption
+  // A thread terminating during a search for a deadlock means there's no
+  // deadlock or it can be found down a different path. Proof left as exercise
+  // to the reader.
   __ESBMC_assume(__ESBMC_blocked_threads_count == 0);
 
   // Terminate thread
