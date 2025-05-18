@@ -4429,15 +4429,24 @@ bool solidity_convertert::get_expr(
     if (base_t.get("#sol_type").as_string() == "MAPPING")
     {
       // this could be set or get:
-      // - if it's in the lhs(including tuple) then should be set
-      // otherwise get
-  
-      assert(current_functionDecl);
-      // is_mapping_index_lvalue(current_functionDecl, expr);
+      bool is_mapping_set = is_mapping_index_lvalue(expr);
 
-      // get
 
       
+      std::string func_name;
+
+      typet t;
+      if (is_mapping_set)
+      {
+        t = empty_typet();
+      }
+      else
+      {
+
+      }
+      side_effect_expr_function_callt call;
+      get_library_function_call_no_args(
+      func_name, "c:@F@" + func_name, t, location, call);
 
       // find mapping definition
       assert(base_json.contains("referencedDeclaration"));
@@ -7146,6 +7155,19 @@ void solidity_convertert::get_mapping_inf_arr_name(
   arr_name = "_ESBMC_inf_" + name;
   // we cannot define a mapping inside a function body
   arr_id = "sol:@C@" + cname + "@" + arr_name + "#";
+}
+
+/**
+	@target: target index access child json
+	return true if it's a mapping_set, including assign, assign+, tuple assign...
+	otherwise return false, representing mapping_get
+*/
+bool is_mapping_index_lvalue(const nlohmann::json &target)
+{
+  assert(target.value("nodeType", "") == "IndexAccess");
+  if (!target.value("lValueRequested", false))
+    return true;
+  return false;
 }
 
 bool solidity_convertert::get_mapping_key_expr(
