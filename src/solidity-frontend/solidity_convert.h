@@ -386,6 +386,7 @@ protected:
     const std::string &name,
     std::string &arr_name,
     std::string &arr_id);
+  bool is_mapping_index_lvalue(const nlohmann::json &json);
   bool get_mapping_key_expr(
     const std::string &current_contractName,
     const symbolt &sym,
