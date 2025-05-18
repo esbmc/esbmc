@@ -1,4 +1,4 @@
 CORE
 main.c
---atomicity-check -I . --incremental-bmc
+--atomicity-check -I .
 ^VERIFICATION SUCCESSFUL$

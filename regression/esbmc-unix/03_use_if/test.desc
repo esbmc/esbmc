@@ -1,4 +1,4 @@
 CORE
 main.c
---no-por --context-bound 4 -Wno-error=implicit-function-declaration --incremental-bmc
+--no-por --context-bound 4 -Wno-error=implicit-function-declaration
 ^VERIFICATION FAILED$
