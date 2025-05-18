@@ -231,21 +231,30 @@ void pthread_exit(void *retval)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
+
+  // Run key destructors first
   pthread_exec_key_destructors();
+
+  // Run cleanup handlers
+  while (__esbmc_get_cleanup_level() > 0)
+    pthread_cleanup_pop(1); // 1 means execute the handler
+
   pthread_t threadid = __ESBMC_get_thread_id();
   __ESBMC_pthread_end_values[threadid] = retval;
   __ESBMC_pthread_thread_ended[threadid] = 1;
   __ESBMC_num_threads_running--;
-  // A thread terminating during a search for a deadlock means there's no
-  // deadlock or it can be found down a different path. Proof left as exercise
-  // to the reader.
+
+  // Deadlock assumption
   __ESBMC_assume(__ESBMC_blocked_threads_count == 0);
+
+  // Terminate thread
   __ESBMC_terminate_thread();
   __ESBMC_atomic_end();
 
   // Ensure that there is no subsequent execution path
   __ESBMC_assume(0);
 }
+
 #pragma clang diagnostic pop
 
 pthread_t pthread_self(void)

@@ -5,7 +5,7 @@ int flag = 0;
 
 void cleanup(void *arg)
 {
-  flag = 12;
+  flag = 123;
 }
 
 void *thread_func(void *arg)
