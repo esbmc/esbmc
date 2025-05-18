@@ -4431,8 +4431,6 @@ bool solidity_convertert::get_expr(
       // this could be set or get:
       bool is_mapping_set = is_mapping_index_lvalue(expr);
 
-
-      
       std::string func_name;
 
       typet t;
@@ -7162,7 +7160,7 @@ void solidity_convertert::get_mapping_inf_arr_name(
 	return true if it's a mapping_set, including assign, assign+, tuple assign...
 	otherwise return false, representing mapping_get
 */
-bool is_mapping_index_lvalue(const nlohmann::json &target)
+bool solidity_convertert::is_mapping_index_lvalue(const nlohmann::json &target)
 {
   assert(target.value("nodeType", "") == "IndexAccess");
   if (!target.value("lValueRequested", false))
