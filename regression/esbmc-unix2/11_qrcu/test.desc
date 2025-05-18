@@ -1,4 +1,4 @@
 CORE
 qrcu.c
---no-unwinding-assertions --unwind 2 --context-bound 2 -Wno-error=implicit-function-declaration --incremental-bmc
+--no-unwinding-assertions --unwind 2 --context-bound 2 -Wno-error=implicit-function-declaration
 ^VERIFICATION SUCCESSFUL$
