@@ -79,6 +79,15 @@ void __esbmc_set_cleanup_level(int level)
   __esbmc_cleanup_level[tid] = level;
 }
 
+__attribute__((annotate("__ESBMC_inf_size")))
+int __ESBMC_thread_cancel_requested[1];
+
+__attribute__((annotate("__ESBMC_inf_size")))
+int __ESBMC_thread_cancel_enabled[1];
+
+__attribute__((annotate("__ESBMC_inf_size")))
+int __ESBMC_thread_cancel_type[1]; // 0 = deferred, 1 = asynchronous
+
 /************************** Infinite Array Implementation **************************/
 
 /* These internal functions insert_key_value(), search_key() and delete_key()
@@ -222,6 +231,10 @@ __ESBMC_HIDE:;
   // pthread_t is actually an unsigned long int; identify a thread using just
   // its thread number.
   *thread = threadid;
+
+  __ESBMC_thread_cancel_requested[threadid] = 0;
+  __ESBMC_thread_cancel_enabled[threadid] = 1; // default: enabled
+  __ESBMC_thread_cancel_type[threadid] = 0;    // default: deferred
 
   __ESBMC_atomic_end();
   return 0; // We never fail
@@ -882,4 +895,80 @@ void pthread_cleanup_pop(int execute)
     // Call the cleanup function with the provided argument
     function(arg);
   }
+}
+
+int pthread_cancel(pthread_t thread)
+{
+__ESBMC_HIDE:;
+  __ESBMC_atomic_begin();
+
+  if (!__ESBMC_pthread_thread_running[thread])
+  {
+    __ESBMC_atomic_end();
+    return ESRCH;
+  }
+
+  __ESBMC_thread_cancel_requested[thread] = 1;
+
+  // If the target is asynchronously cancelable, terminate immediately
+  if (__ESBMC_thread_cancel_enabled[thread] &&
+      __ESBMC_thread_cancel_type[thread] == 1)
+  {
+    // If we model running thread, and it's cancelable now, cancel it
+    if (thread == __ESBMC_get_thread_id())
+    {
+      __ESBMC_atomic_end();
+      pthread_exit(PTHREAD_CANCELED); // defined as ((void *) -1)
+    }
+  }
+
+  __ESBMC_atomic_end();
+  return 0;
+}
+
+void pthread_testcancel(void)
+{
+__ESBMC_HIDE:;
+  pthread_t tid = __ESBMC_get_thread_id();
+  __ESBMC_atomic_begin();
+
+  if (__ESBMC_thread_cancel_requested[tid] &&
+      __ESBMC_thread_cancel_enabled[tid] &&
+      __ESBMC_thread_cancel_type[tid] == 0)
+  {
+    __ESBMC_atomic_end();
+    pthread_exit(PTHREAD_CANCELED);
+  }
+
+  __ESBMC_atomic_end();
+}
+
+int pthread_setcancelstate(int state, int *oldstate)
+{
+__ESBMC_HIDE:;
+  pthread_t tid = __ESBMC_get_thread_id();
+  __ESBMC_atomic_begin();
+
+  if (oldstate)
+    *oldstate = __ESBMC_thread_cancel_enabled[tid];
+
+  __ESBMC_thread_cancel_enabled[tid] = state;
+  __ESBMC_atomic_end();
+
+  return 0;
+}
+
+int pthread_setcanceltype(int type, int *oldtype)
+{
+__ESBMC_HIDE:;
+  pthread_t tid = __ESBMC_get_thread_id();
+  __ESBMC_atomic_begin();
+
+  if (oldtype)
+    *oldtype = __ESBMC_thread_cancel_type[tid];
+
+  __ESBMC_thread_cancel_type[tid] = type;
+  __ESBMC_atomic_end();
+
+  return 0;
 }
