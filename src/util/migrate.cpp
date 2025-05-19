@@ -11,14 +11,17 @@
 #include <util/string_constant.h>
 #include <util/type_byte_size.h>
 
-
-inline code_function_callt invoke_intrinsic(const std::string &name, const typet &type, const std::vector<exprt> &args) {
+inline code_function_callt invoke_intrinsic(
+  const std::string &name,
+  const typet &type,
+  const std::vector<exprt> &args)
+{
   assert(has_prefix(name, "c:@F@__ESBMC"));
   code_function_callt call;
   code_typet code_type;
   code_type.return_type() = type;
 
-  for(const exprt &arg : args)
+  for (const exprt &arg : args)
     code_type.arguments().push_back(arg.type());
 
   symbolt symbol;
@@ -34,7 +37,7 @@ inline code_function_callt invoke_intrinsic(const std::string &name, const typet
   tmp.name(symbol.name);
 
   call.function() = tmp;
-  for(const exprt &arg : args)
+  for (const exprt &arg : args)
     call.arguments().push_back(arg);
 
   return call;
@@ -1945,7 +1948,8 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     members.push_back(overflow2tc(mul2tc(op0->type, op0, op1)));
     new_expr_ref = constant_struct2tc(type, members);
   }
-  else if (expr.id() == "r_ok") {
+  else if (expr.id() == "r_ok")
+  {
     log_status("dealing with r_ok");
     expr.dump();
     const std::string function = "c:@F@__ESBMC_r_ok";
