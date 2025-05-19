@@ -1759,6 +1759,9 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   else if (type == "While")
     code.set_statement("while");
 
+  // Set location for the conditional statement
+  code.location() = get_location_from_decl(ast_node);
+
   // Append "then" block
   code.copy_to_operands(cond, then);
   if (!else_expr.id_string().empty())
