@@ -70,7 +70,7 @@ You can either download and unpack a release manually:
 ```
 wget https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.0/clang+llvm-16.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz &&
 tar xfJ clang+llvm-16.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz &&
-ESBMC_CLANG=$(echo -D{LLVM,Clang}_DIR=$PWD/clang+llvm-16.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz) &&
+ESBMC_CLANG=$(echo -D{LLVM,Clang}_DIR=$PWD/clang+llvm-16.0.0-x86_64-linux-gnu-ubuntu-18.04) &&
 ESBMC_STATIC=ON
 ```
 
@@ -89,7 +89,7 @@ They are optional.
 ### Preparing distributed Clang (recommended for a shared build)
 
 For shared builds, it is recommended to use the system's LLVM/Clang, which on
-Ubuntu can be obtained by:
+Ubuntu 24.04 can be obtained by:
 ```
 apt-get install libclang-cpp16-dev &&
 ESBMC_CLANG="-DLLVM_DIR=/usr/lib/llvm-16/lib/cmake/llvm -DClang_DIR=/usr/lib/cmake/clang-16" &&
@@ -396,7 +396,7 @@ The following command will install the packages required for the most commonly u
 sudo apt install autoconf automake libtool pkg-config clang bison cmake mercurial ninja-build samba flex texinfo time libglib2.0-dev libpixman-1-dev libarchive-dev libarchive-tools libbz2-dev libattr1-dev libcap-ng-dev libexpat1-dev libgmp-dev bc
 ```
 
-Download and build Cheri riscv64 purecap:
+Download and build Cheri riscv64 purecap sdk:
 ```
 git clone https://github.com/CTSRD-CHERI/cheribuild.git && cd cheribuild && python3 cheribuild.py cheribsd-sdk-riscv64-purecap -d
 ```
