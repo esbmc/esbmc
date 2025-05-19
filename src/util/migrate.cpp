@@ -1945,6 +1945,25 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     members.push_back(overflow2tc(mul2tc(op0->type, op0, op1)));
     new_expr_ref = constant_struct2tc(type, members);
   }
+  else if (expr.id() == "r_ok") {
+    log_status("dealing with r_ok");
+    expr.dump();
+    const std::string function = "c:@F@__ESBMC_r_ok";
+#if 0
+    expr.get_sub().at(0).is_expression();
+    exprt arg0 = expr.get_sub().at(0);
+    const std::vector<exprt> args = {};
+
+    log_status("Before invoking things");
+    auto mycall = invoke_intrinsic(function, expr.type(), args);
+
+    log_status("had a call");
+    mycall.dump();
+    migrate_expr(mycall, new_expr_ref);
+#endif
+    true_exprt t;
+    migrate_expr(t, new_expr_ref);
+  }
   // TRANSCODER END
   else
   {
