@@ -1884,31 +1884,10 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     assert(expr.operands().size() == 1);
     type = migrate_type(expr.type());
 
-    code_function_callt call;
-    std::string function = "c:@F@__ESBMC_get_object_size";
+    const std::string function = "c:@F@__ESBMC_get_object_size";
+    const std::vector<exprt> args = {expr.op0()};
 
-    code_typet code_type;
-    code_type.return_type() = expr.type();
-    code_type.arguments().push_back(pointer_type());
-
-    symbolt symbol;
-    symbol.mode = "C";
-    symbol.type = code_type;
-    symbol.name = function;
-    symbol.id = function;
-    symbol.is_extern = false;
-    symbol.file_local = false;
-
-    exprt tmp("symbol", symbol.type);
-    tmp.identifier(symbol.id);
-    tmp.name(symbol.name);
-
-    call.function() = tmp;
-    call.arguments().push_back(expr.op0());
-
-    //migrate_namespace_lookup->get_context().dump();
-    migrate_expr(call, new_expr_ref);
-    // abort();
+    migrate_expr(invoke_intrinsic(function, expr.type(), args), new_expr_ref);
   }
   else if (expr.id() == "overflow_result-+")
   {
