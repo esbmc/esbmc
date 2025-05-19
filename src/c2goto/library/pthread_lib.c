@@ -2,6 +2,8 @@
 #include <pthread.h>
 #include <stddef.h>
 
+#define CLEANUP_STACK_CHUNK_SIZE 1024
+
 typedef void *(*__ESBMC_thread_start_func_type)(void *);
 void __ESBMC_terminate_thread(void);
 unsigned int __ESBMC_spawn_thread(void (*)(void));
@@ -52,6 +54,30 @@ pthread_t __ESBMC_get_thread_id(void);
 
 void __ESBMC_really_atomic_begin(void);
 void __ESBMC_really_atomic_end(void);
+
+static _Bool pthread_cleanup_enabled = 0;
+
+typedef struct
+{
+  void *arg;
+  void *function;
+} cleanup_entry_t;
+
+cleanup_entry_t __esbmc_cleanup_stack[1]
+  __attribute__((annotate("__ESBMC_inf_size")));
+size_t __esbmc_cleanup_level[1] __attribute__((annotate("__ESBMC_inf_size")));
+
+size_t __esbmc_get_cleanup_level(void)
+{
+  pthread_t tid = __ESBMC_get_thread_id();
+  return __esbmc_cleanup_level[tid];
+}
+
+void __esbmc_set_cleanup_level(int level)
+{
+  pthread_t tid = __ESBMC_get_thread_id();
+  __esbmc_cleanup_level[tid] = level;
+}
 
 /************************** Infinite Array Implementation **************************/
 
@@ -207,15 +233,25 @@ void pthread_exit(void *retval)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
+
+  // Run key destructors first
   pthread_exec_key_destructors();
+
+  // Run cleanup handlers
+  while (pthread_cleanup_enabled && __esbmc_get_cleanup_level() > 0)
+    pthread_cleanup_pop(1); // 1 means execute the handler
+
   pthread_t threadid = __ESBMC_get_thread_id();
   __ESBMC_pthread_end_values[threadid] = retval;
   __ESBMC_pthread_thread_ended[threadid] = 1;
   __ESBMC_num_threads_running--;
+
   // A thread terminating during a search for a deadlock means there's no
   // deadlock or it can be found down a different path. Proof left as exercise
   // to the reader.
   __ESBMC_assume(__ESBMC_blocked_threads_count == 0);
+
+  // Terminate thread
   __ESBMC_terminate_thread();
   __ESBMC_atomic_end();
 
@@ -767,4 +803,83 @@ __ESBMC_HIDE:;
     __ESBMC_pthread_thread_detach[threadid] = 1;
   __ESBMC_atomic_end();
   return result; // no error occurred
+}
+
+/**
+ * Push a cleanup handler onto the current thread's cleanup stack.
+ *
+ * This function registers a cleanup handler function along with its argument
+ * to be called later if pthread_cleanup_pop is invoked with execute != 0.
+ *
+ * The cleanup handlers are stored in a large symbolic array divided into
+ * chunks of size CLEANUP_STACK_CHUNK_SIZE per thread to avoid overlap between threads.
+ * 
+ * @param function Pointer to the cleanup function to be called.
+ * @param arg      Argument to pass to the cleanup function.
+ */
+void pthread_cleanup_push(void (*function)(void *), void *arg)
+{
+  // Enable calling pthread_cleanup_pop from pthread_exit
+  pthread_cleanup_enabled = 1;
+
+  // Get the current thread ID
+  pthread_t tid = __ESBMC_get_thread_id();
+
+  // Get the current cleanup stack level for this thread
+  size_t cleanup_level = __esbmc_get_cleanup_level();
+
+  // Calculate the index for the cleanup entry in the symbolic infinite array.
+  // Each thread gets a separate chunk of CLEANUP_STACK_CHUNK_SIZE slots to avoid interference.
+  // Within the chunk, cleanup_level indexes the next free slot.
+  size_t index = tid * CLEANUP_STACK_CHUNK_SIZE + cleanup_level;
+
+  // Store the cleanup function pointer and its argument at the calculated index
+  __esbmc_cleanup_stack[index].function = (void *)function;
+  __esbmc_cleanup_stack[index].arg = arg;
+
+  // Increase the cleanup stack level for the thread
+  __esbmc_set_cleanup_level(cleanup_level + 1);
+}
+
+/**
+ * Pop a cleanup handler from the current thread's cleanup stack and optionally execute it.
+ *
+ * This function removes the most recently pushed cleanup handler.
+ * If execute is non-zero, it calls the cleanup function with the stored argument.
+ *
+ * @param execute If non-zero, execute the popped cleanup handler.
+ */
+void pthread_cleanup_pop(int execute)
+{
+  // Get the current thread ID
+  pthread_t tid = __ESBMC_get_thread_id();
+
+  // Get the current cleanup stack level
+  size_t cleanup_level = __esbmc_get_cleanup_level();
+
+  // Assume the cleanup level is positive (there is a cleanup handler to pop)
+  __ESBMC_assume(cleanup_level > 0);
+
+  // Decrement the cleanup level to point to the handler being popped
+  cleanup_level--;
+
+  // Update the cleanup level
+  __esbmc_set_cleanup_level(cleanup_level);
+
+  if (execute)
+  {
+    // Calculate the index in the infinite symbolic cleanup stack for this thread and level
+    size_t index = tid * CLEANUP_STACK_CHUNK_SIZE + cleanup_level;
+
+    // Retrieve the stored cleanup function and argument
+    void (*function)(void *) =
+      (void (*)(void *))__esbmc_cleanup_stack[index].function;
+    void *arg = __esbmc_cleanup_stack[index].arg;
+
+    // Assume the function pointer is not NULL before calling
+    __ESBMC_assume(function != NULL);
+
+    // Call the cleanup function with the provided argument
+    function(arg);
+  }
 }
