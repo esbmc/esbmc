@@ -811,7 +811,7 @@ bool solidity_convertert::populate_function_signature(
   {
     if (
       func_node.contains("nodeType") &&
-      func_node["nodeType"] == "FunctionDefinition")
+      (func_node["nodeType"] == "FunctionDefinition"))
     {
       if (
         func_node["name"] == "" && func_node.contains("kind") &&
@@ -952,6 +952,7 @@ bool solidity_convertert::get_non_function_decl(
   {
     return get_struct_class(ast_node); // rule enum-definition
   }
+  case SolidityGrammar::ContractBodyElementT::ModifierDef:
   case SolidityGrammar::ContractBodyElementT::FunctionDef:
   case SolidityGrammar::ContractBodyElementT::EnumDef:
   case SolidityGrammar::ContractBodyElementT::ErrorDef:
@@ -988,6 +989,7 @@ bool solidity_convertert::get_function_decl(const nlohmann::json &ast_node)
   // based on each element as in Solidty grammar "rule contract-body-element"
   switch (type)
   {
+  case SolidityGrammar::ContractBodyElementT::ModifierDef:
   case SolidityGrammar::ContractBodyElementT::FunctionDef:
   {
     return get_function_definition(ast_node); // rule function-definition
@@ -1506,6 +1508,7 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &struct_def)
         return true;
       break;
     }
+    case SolidityGrammar::ContractBodyElementT::ModifierDef:
     case SolidityGrammar::ContractBodyElementT::FunctionDef:
     {
       if (get_struct_class_method(*itr, t))
@@ -1858,7 +1861,8 @@ void solidity_convertert::add_empty_body_node(nlohmann::json &ast_node)
     for (auto &subNode : ast_node["nodes"])
     {
       if (
-        subNode["nodeType"] == "FunctionDefinition" &&
+        (subNode["nodeType"] == "FunctionDefinition" ||
+         subNode["nodeType"] == "ModifierDefinition") &&
         !subNode.contains("body"))
         subNode["body"] = {
           {"nodeType", "Block"},
@@ -1872,7 +1876,8 @@ void solidity_convertert::add_empty_body_node(nlohmann::json &ast_node)
     for (auto &subNode : ast_node["nodes"])
     {
       if (
-        subNode["nodeType"] == "FunctionDefinition" &&
+        (subNode["nodeType"] == "FunctionDefinition" ||
+         subNode["nodeType"] == "ModifierDefinition") &&
         !subNode.contains("body"))
         subNode["body"] = {
           {"nodeType", "Block"},
@@ -2185,6 +2190,7 @@ bool solidity_convertert::get_constructor(
       SolidityGrammar::get_contract_body_element_t(ast_node);
     switch (type)
     {
+    case SolidityGrammar::ContractBodyElementT::ModifierDef:
     case SolidityGrammar::ContractBodyElementT::FunctionDef:
     {
       if (
@@ -3680,6 +3686,12 @@ bool solidity_convertert::get_statement(
 
     break;
   }
+  case SolidityGrammar::StatementT::PlaceholderStatement:
+  {
+    // TODO: splite the modifierdefinition node, record content before and after, and prepare to insert
+    new_expr = code_skipt();
+    break;
+  }
   case SolidityGrammar::StatementT::StatementTError:
   default:
   {
@@ -3801,7 +3813,9 @@ bool solidity_convertert::get_expr(
           if (get_var_decl_ref(decl, true, new_expr))
             return true;
         }
-        else if (decl["nodeType"] == "FunctionDefinition")
+        else if (
+          decl["nodeType"] == "FunctionDefinition" ||
+          decl["nodeType"] == "ModifierDefinition")
         {
           if (get_func_decl_ref(decl, new_expr))
             return true;
@@ -4589,6 +4603,7 @@ bool solidity_convertert::get_expr(
 
       break;
     }
+    case SolidityGrammar::ModifierDef:
     case SolidityGrammar::FunctionDef:
     {
       // e.g. x.func()
@@ -6060,7 +6075,8 @@ bool solidity_convertert::get_func_decl_ref(
   assert(
     decl["nodeType"] == "FunctionDefinition" ||
     decl["nodeType"] == "EventDefinition" ||
-    decl["nodeType"] == "ErrorDefinition");
+    decl["nodeType"] == "ErrorDefinition" ||
+    decl["nodeType"] == "ModifierDefinition");
 
   // find base contract name
   const auto contract_def = find_parent_contract(src_ast_json, decl);
@@ -6108,7 +6124,9 @@ const nlohmann::json &solidity_convertert::get_func_decl_ref(
            itrr != ast_nodes.end();
            ++itrr)
       {
-        if ((*itrr)["nodeType"] == "FunctionDefinition")
+        if (
+          (*itrr)["nodeType"] == "FunctionDefinition" ||
+          (*itrr)["nodeType"] == "ModifierDefinition")
         {
           if ((*itrr).contains("name") && (*itrr)["name"] == f_name)
             return (*itrr);
@@ -6740,16 +6758,17 @@ bool solidity_convertert::get_func_decl_ref_type(
   case SolidityGrammar::FunctionDeclRefT::FunctionNoProto:
   {
     code_typet type;
+    if (decl["nodeType"] != "ModifierDefinition")
+    {
+      // Return type
+      const nlohmann::json &rtn_type = decl["returnParameters"];
 
-    // Return type
-    const nlohmann::json &rtn_type = decl["returnParameters"];
+      typet return_type;
+      if (get_type_description(rtn_type, return_type))
+        return true;
 
-    typet return_type;
-    if (get_type_description(rtn_type, return_type))
-      return true;
-
-    type.return_type() = return_type;
-
+      type.return_type() = return_type;
+    }
     if (!type.arguments().size())
       type.make_ellipsis();
 
