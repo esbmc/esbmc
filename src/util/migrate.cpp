@@ -11,6 +11,35 @@
 #include <util/string_constant.h>
 #include <util/type_byte_size.h>
 
+
+inline code_function_callt invoke_intrinsic(const std::string &name, const typet &type, const std::vector<exprt> &args) {
+  assert(has_prefix(name, "c:@F@__ESBMC"));
+  code_function_callt call;
+  code_typet code_type;
+  code_type.return_type() = type;
+
+  for(const exprt &arg : args)
+    code_type.arguments().push_back(arg.type());
+
+  symbolt symbol;
+  symbol.mode = "C";
+  symbol.type = code_type;
+  symbol.name = name;
+  symbol.id = name;
+  symbol.is_extern = false;
+  symbol.file_local = false;
+
+  exprt tmp("symbol", symbol.type);
+  tmp.identifier(symbol.id);
+  tmp.name(symbol.name);
+
+  call.function() = tmp;
+  for(const exprt &arg : args)
+    call.arguments().push_back(arg);
+
+  return call;
+}
+
 // File for old irep -> new irep conversions.
 
 // Due to the sins of the fathers, we need to have a namespace available during
