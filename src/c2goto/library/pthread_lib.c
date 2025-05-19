@@ -851,6 +851,9 @@ void pthread_cleanup_push(void (*function)(void *), void *arg)
  */
 void pthread_cleanup_pop(int execute)
 {
+  // This violates API contract: undefined behavior
+  __ESBMC_assert(pthread_cleanup_enabled, "API contract: push/pop must match");
+
   // Get the current thread ID
   pthread_t tid = __ESBMC_get_thread_id();
 
