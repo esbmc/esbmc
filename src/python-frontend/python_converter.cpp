@@ -1677,23 +1677,55 @@ void python_converter::get_var_assign(
   current_lhs = nullptr;
 }
 
+/// Convert a Python compound assignment (e.g., `x += 1`) 
+/// into a GOTO program statement.
 void python_converter::get_compound_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
-  // Get type from declaration node
+  // Extract the name of the variable being assigned to 
+  // (e.g., 'count' in 'count += 1')
   std::string var_name = ast_node["target"]["id"].get<std::string>();
   nlohmann::json ref = get_var_node(var_name, ast_json);
-  assert(!ref.empty());
-  current_element_type =
-    type_handler_.get_typet(ref["annotation"]["id"].get<std::string>());
 
+  // Get the source location of the compound assignment 
+  locationt loc = get_location_from_decl(ast_node);
+
+  if (!ref.empty())
+  {
+    current_element_type =
+      type_handler_.get_typet(ref["annotation"]["id"].get<std::string>());
+  }
+  else
+  {
+    // Construct the fully qualified symbol name:
+    // py:<filename>@F@<function_name>@<variable_name>
+    std::string filename = loc.get_file().as_string();
+    std::string function = loc.get_function().as_string();
+    std::string symbol_id = "py:" + filename + "@F@" + function + "@" + var_name;
+
+    // Attempt to look up the variable symbol in the symbol table
+    const symbolt *sym = symbol_table_.find_symbol(symbol_id);
+
+    if(sym != nullptr)
+      current_element_type = sym->type;
+    else
+    {
+      log_error("Variable '{}' not found in symbol table; assuming type 'int'.", symbol_id);
+      abort();
+    }
+  }
+
+  // Recursively convert the left-hand side (LHS) and 
+  // right-hand side (RHS) of the assignment
   exprt lhs = get_expr(ast_node["target"]);
   exprt rhs = get_binary_operator_expr(ast_node);
 
+  // Construct the actual assignment statement (e.g., 'count = count + 1')
   code_assignt code_assign(lhs, rhs);
-  code_assign.location() = get_location_from_decl(ast_node);
+  code_assign.location() = loc;
 
+  // Append the assignment to the current code block
   target_block.copy_to_operands(code_assign);
 }
 
