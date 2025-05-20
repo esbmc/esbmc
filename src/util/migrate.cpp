@@ -1973,7 +1973,7 @@ typet migrate_type_back(const type2tc &ref)
 
     typet subtype = migrate_type_back(ref2.subtype);
     pointer_typet thetype(subtype);
-    if (ref2.can_carry_provenance())
+    if (ref2.carry_provenance)
       thetype.can_carry_provenance(true);
     return thetype;
   }

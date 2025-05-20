@@ -611,7 +611,6 @@ public:
   }
   pointer_type2t(const pointer_type2t &ref) = default;
   unsigned int get_width() const override;
-  bool can_carry_provenance() const;
 
   static std::string field_names[esbmct::num_type_fields];
 };
