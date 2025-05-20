@@ -566,6 +566,8 @@ exprt handle_float_vs_string(exprt &bin_expr, const std::string &op)
     throw std::runtime_error(error.str());
   }
 
+  printf("passou em 569\n");
+  bin_expr.dump();
   return bin_expr;
 }
 
@@ -884,6 +886,17 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   // e.g.: -5//2 equals to -3, and 5//2 equals to 2
   if (op == "FloorDiv")
     return handle_floor_division(lhs, rhs, bin_expr);
+
+  // Promote operands to floating point if IEEE operator is used
+  if(bin_expr.id() == "ieee_add" || bin_expr.id() == "ieee_sub" ||
+     bin_expr.id() == "ieee_mul" || bin_expr.id() == "ieee_div")
+  {
+    const typet &target_type = lhs.type().is_floatbv() ? lhs.type() : rhs.type();
+    if(!lhs.type().is_floatbv())
+      bin_expr.op0() = typecast_exprt(lhs, target_type);
+    if(!rhs.type().is_floatbv())
+      bin_expr.op1() = typecast_exprt(rhs, target_type);
+  }
 
   // Handle chained comparisons like: assert 0 <= x <= 1
   if (element.contains("comparators") && element["comparators"].size() > 1)
