@@ -1732,7 +1732,7 @@ void python_converter::get_compound_assign(
       current_element_type = sym->type;
     else
     {
-      // This is an internal error: type resolution failed
+      // type resolution failed
       log_error(
         "Variable '{}' not found in symbol table; cannot determine type.",
         symbol_id);
