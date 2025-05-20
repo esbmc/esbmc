@@ -1725,9 +1725,7 @@ void python_converter::get_compound_assign(
     const symbolt *sym = symbol_table_.find_symbol(symbol_id);
 
     if(sym != nullptr)
-    {
       current_element_type = sym->type;
-    }
     else
     {
       // This is an internal error: type resolution failed
