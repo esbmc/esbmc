@@ -1699,7 +1699,8 @@ typet python_converter::resolve_variable_type(
 
   if (!decl_node.empty())
   {
-    std::string type_annotation = decl_node["annotation"]["id"].get<std::string>();
+    std::string type_annotation =
+      decl_node["annotation"]["id"].get<std::string>();
     return type_handler_.get_typet(type_annotation);
   }
 

@@ -95,7 +95,8 @@ private:
 
   void get_var_assign(const nlohmann::json &ast_node, codet &target_block);
 
-  typet resolve_variable_type(const std::string &var_name, const locationt &loc);
+  typet
+  resolve_variable_type(const std::string &var_name, const locationt &loc);
 
   void get_compound_assign(const nlohmann::json &ast_node, codet &target_block);
 
