@@ -1677,8 +1677,7 @@ void python_converter::get_var_assign(
   current_lhs = nullptr;
 }
 
-/// \brief Convert a Python compound assignment (e.g., `x += 1`)
-/// into a GOTO program statement.
+/// Convert a Python compound assignment (e.g., `x += 1`) into a GOTO program statement.
 /// This function handles the compound assignment by resolving the variable's
 /// type from either the Python AST annotations or ESBMC's symbol table.
 /// It then constructs the equivalent GOTO assignment code and inserts it
