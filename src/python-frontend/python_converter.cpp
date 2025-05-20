@@ -886,13 +886,15 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     return handle_floor_division(lhs, rhs, bin_expr);
 
   // Promote operands to floating point if IEEE operator is used
-  if(bin_expr.id() == "ieee_add" || bin_expr.id() == "ieee_sub" ||
-     bin_expr.id() == "ieee_mul" || bin_expr.id() == "ieee_div")
+  if (
+    bin_expr.id() == "ieee_add" || bin_expr.id() == "ieee_sub" ||
+    bin_expr.id() == "ieee_mul" || bin_expr.id() == "ieee_div")
   {
-    const typet &target_type = lhs.type().is_floatbv() ? lhs.type() : rhs.type();
-    if(!lhs.type().is_floatbv())
+    const typet &target_type =
+      lhs.type().is_floatbv() ? lhs.type() : rhs.type();
+    if (!lhs.type().is_floatbv())
       bin_expr.op0() = typecast_exprt(lhs, target_type);
-    if(!rhs.type().is_floatbv())
+    if (!rhs.type().is_floatbv())
       bin_expr.op1() = typecast_exprt(rhs, target_type);
   }
 
@@ -1710,7 +1712,8 @@ void python_converter::get_compound_assign(
   if (!decl_node.empty())
   {
     // If the variable has a declared type annotation, use it
-    std::string type_annotation = decl_node["annotation"]["id"].get<std::string>();
+    std::string type_annotation =
+      decl_node["annotation"]["id"].get<std::string>();
     current_element_type = type_handler_.get_typet(type_annotation);
   }
   else
@@ -1719,17 +1722,20 @@ void python_converter::get_compound_assign(
     // py:<filename>@F@<function_name>@<variable_name>
     std::string filename = loc.get_file().as_string();
     std::string function = loc.get_function().as_string();
-    std::string symbol_id = "py:" + filename + "@F@" + function + "@" + var_name;
+    std::string symbol_id =
+      "py:" + filename + "@F@" + function + "@" + var_name;
 
     // Try to find the symbol in the symbol table
     const symbolt *sym = symbol_table_.find_symbol(symbol_id);
 
-    if(sym != nullptr)
+    if (sym != nullptr)
       current_element_type = sym->type;
     else
     {
       // This is an internal error: type resolution failed
-      log_error("Variable '{}' not found in symbol table; cannot determine type.", symbol_id);
+      log_error(
+        "Variable '{}' not found in symbol table; cannot determine type.",
+        symbol_id);
       abort();
     }
   }
