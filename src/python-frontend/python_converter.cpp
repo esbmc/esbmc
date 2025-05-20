@@ -566,8 +566,6 @@ exprt handle_float_vs_string(exprt &bin_expr, const std::string &op)
     throw std::runtime_error(error.str());
   }
 
-  printf("passou em 569\n");
-  bin_expr.dump();
   return bin_expr;
 }
 
