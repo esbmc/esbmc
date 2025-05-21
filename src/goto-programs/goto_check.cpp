@@ -27,7 +27,7 @@ public:
       enable_overflow_check(options.get_bool_option("overflow-check")),
       enable_unsigned_overflow_check(
         options.get_bool_option("unsigned-overflow-check")),
-      enable_ub_shift_check(options.get_bool_option("ub-shift-check")),
+      disable_ub_shift_check(options.get_bool_option("no-ub-shift-check")),
       enable_nan_check(options.get_bool_option("nan-check"))
   {
   }
@@ -110,7 +110,7 @@ protected:
   bool disable_unlimited_scanf_check;
   bool enable_overflow_check;
   bool enable_unsigned_overflow_check;
-  bool enable_ub_shift_check;
+  bool disable_ub_shift_check;
   bool enable_nan_check;
 };
 
@@ -255,7 +255,7 @@ void goto_checkt::overflow_check(
 {
   if (
     !enable_overflow_check && !enable_unsigned_overflow_check &&
-    !enable_ub_shift_check)
+    disable_ub_shift_check)
     return;
 
   // Don't check shift right
@@ -515,7 +515,7 @@ void goto_checkt::shift_check(
 {
   overflow_check(expr, guard, loc);
 
-  if (!enable_ub_shift_check)
+  if (disable_ub_shift_check)
     return;
 
   assert(is_lshr2t(expr) || is_ashr2t(expr) || is_shl2t(expr));
