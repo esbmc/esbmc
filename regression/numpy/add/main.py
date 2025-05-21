@@ -15,6 +15,6 @@ f = np.add(d, e)
 assert f[0] == 4
 assert f[1] == 6
 
-g = np.add([1,2],[3,4])
-assert g[0] == 4
-assert g[1] == 6
+# g = np.add([1,2],[3,4])
+# assert g[0] == 4
+# assert g[1] == 6

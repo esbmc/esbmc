@@ -367,6 +367,26 @@ exprt numpy_call_expr::create_expr_from_call()
         return call;
       }
 
+      if (operation == "add")
+      {
+        code_function_callt call =
+          to_code_function_call(to_code(function_call_expr::get()));
+        typet t = converter_.get_expr(lhs).type();
+        converter_.current_lhs->type() = t;
+        converter_.update_symbol(*converter_.current_lhs);
+        auto &args = call.arguments();
+        args.push_back(address_of_exprt(*converter_.current_lhs));
+
+        std::vector<int> shape = type_handler_.get_array_type_shape(t);
+        exprt m = shape.size() < 2 ? gen_one(int_type())
+                                   : from_integer(shape[0], int_type());
+        exprt n = from_integer(shape.back(), int_type());
+        args.push_back(m);
+        args.push_back(n);
+
+        return call;
+      }
+
       // FIXME: Replace this by C models function calls
       for (size_t i = 0; i < lhs["elts"].size(); ++i)
       {
