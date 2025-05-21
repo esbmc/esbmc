@@ -619,8 +619,8 @@ static bool has_dereference(const expr2tc &expr)
   // Recurse through all subsequent source objects, which are always operand
   // zero.
   bool found = false;
-  expr->foreach_operand([&found](const expr2tc &e)
-                        { found |= has_dereference(e); });
+  expr->foreach_operand(
+    [&found](const expr2tc &e) { found |= has_dereference(e); });
 
   return found;
 }
@@ -745,8 +745,9 @@ void goto_checkt::check_rec(
       break;
 
     default:
-      expr->foreach_operand([this, &guard, &loc](const expr2tc &e)
-                            { check_rec(e, guard, loc, true); });
+      expr->foreach_operand([this, &guard, &loc](const expr2tc &e) {
+        check_rec(e, guard, loc, true);
+      });
     }
 
     return;
@@ -766,21 +767,19 @@ void goto_checkt::check_rec(
     guardt old_guards(guard);
 
     bool is_or = is_or2t(expr);
-    expr->foreach_operand(
-      [this, &is_or, &guard, &loc](const expr2tc &e)
-      {
-        assert(is_bool_type(e));
-        check_rec(e, guard, loc, false);
+    expr->foreach_operand([this, &is_or, &guard, &loc](const expr2tc &e) {
+      assert(is_bool_type(e));
+      check_rec(e, guard, loc, false);
 
-        if (is_or)
-        {
-          expr2tc tmp = e;
-          make_not(tmp);
-          guard.add(tmp);
-        }
-        else
-          guard.add(e);
-      });
+      if (is_or)
+      {
+        expr2tc tmp = e;
+        make_not(tmp);
+        guard.add(tmp);
+      }
+      else
+        guard.add(e);
+    });
 
     guard.swap(old_guards);
     return;
@@ -819,8 +818,9 @@ void goto_checkt::check_rec(
     break;
   }
 
-  expr->foreach_operand([this, &guard, &loc](const expr2tc &e)
-                        { check_rec(e, guard, loc, false); });
+  expr->foreach_operand([this, &guard, &loc](const expr2tc &e) {
+    check_rec(e, guard, loc, false);
+  });
 
   switch (expr->expr_id)
   {
@@ -907,8 +907,8 @@ void goto_checkt::goto_check(goto_programt &goto_program)
       }
       else if (is_code_printf2t(i.code))
       {
-        i.code->foreach_operand([this, &loc](const expr2tc &e)
-                                { check(e, loc); });
+        i.code->foreach_operand(
+          [this, &loc](const expr2tc &e) { check(e, loc); });
       }
     }
     else if (i.is_assign())
@@ -922,8 +922,8 @@ void goto_checkt::goto_check(goto_programt &goto_program)
     }
     else if (i.is_function_call())
     {
-      i.code->foreach_operand([this, &loc](const expr2tc &e)
-                              { check(e, loc); });
+      i.code->foreach_operand(
+        [this, &loc](const expr2tc &e) { check(e, loc); });
 
       if (enable_overflow_check)
         input_overflow_check(i.code, loc);
