@@ -23,15 +23,15 @@ using namespace json_utils;
 namespace fs = boost::filesystem;
 
 static const std::unordered_map<std::string, std::string> operator_map = {
-  {"add", "+"},         {"sub", "-"},          {"subtract", "-"},
-  {"mult", "*"},        {"multiply", "*"},     {"div", "/"},
-  {"divide", "/"},      {"mod", "mod"},        {"bitor", "bitor"},
-  {"floordiv", "/"},    {"bitand", "bitand"},  {"bitxor", "bitxor"},
-  {"invert", "bitnot"}, {"lshift", "shl"},     {"rshift", "ashr"},
-  {"usub", "unary-"},   {"eq", "="},           {"lt", "<"},
-  {"lte", "<="},        {"noteq", "notequal"}, {"gt", ">"},
-  {"gte", ">="},        {"and", "and"},        {"or", "or"},
-  {"not", "not"},
+  {"add", "+"},         {"sub", "-"},         {"subtract", "-"},
+  {"mult", "*"},        {"multiply", "*"},    {"dot", "*"},
+  {"div", "/"},         {"divide", "/"},      {"mod", "mod"},
+  {"bitor", "bitor"},   {"floordiv", "/"},    {"bitand", "bitand"},
+  {"bitxor", "bitxor"}, {"invert", "bitnot"}, {"lshift", "shl"},
+  {"rshift", "ashr"},   {"usub", "unary-"},   {"eq", "="},
+  {"lt", "<"},          {"lte", "<="},        {"noteq", "notequal"},
+  {"gt", ">"},          {"gte", ">="},        {"and", "and"},
+  {"or", "or"},         {"not", "not"},
 };
 
 static const std::unordered_map<std::string, StatementType> statement_map = {
@@ -103,6 +103,7 @@ static std::string get_op(const std::string &op, const typet &type)
       {"sub", "ieee_sub"},
       {"subtract", "ieee_sub"},
       {"mult", "ieee_mul"},
+      {"dot", "ieee_mul"},
       {"multiply", "ieee_mul"},
       {"div", "ieee_div"},
       {"divide", "ieee_div"}};
@@ -140,6 +141,17 @@ static struct_typet::componentt build_component(
   component.set_access("public");
 
   return component;
+}
+
+static codet convert_expression_to_code(exprt &expr)
+{
+  if (expr.is_code())
+    return static_cast<codet &>(expr);
+
+  codet code("expression");
+  code.location() = expr.location();
+  code.move_to_operands(expr);
+  return code;
 }
 
 symbolt python_converter::create_symbol(
@@ -1647,7 +1659,8 @@ void python_converter::get_var_assign(
         lhs_symbol->type = rhs.type();
         lhs.type() = rhs.type();
       }
-      lhs_symbol->value = rhs;
+      if (!rhs.type().is_empty())
+        lhs_symbol->value = rhs;
     }
 
     /* If the right-hand side (rhs) of the assignment is a function call, such as: x : int = func()
@@ -1671,7 +1684,11 @@ void python_converter::get_var_assign(
           func_name, func_name, lhs_symbol->id.as_string());
       }
       // op0() refers to the left-hand side (lhs) of the function call
-      rhs.op0() = lhs;
+      if (!rhs.type().is_empty())
+      {
+        rhs.op0() = lhs;
+      }
+
       target_block.copy_to_operands(rhs);
       return;
     }
@@ -1741,17 +1758,6 @@ void python_converter::get_compound_assign(
   code_assignt code_assign(lhs, rhs);
   code_assign.location() = loc;
   target_block.copy_to_operands(code_assign);
-}
-
-static codet convert_expression_to_code(exprt &expr)
-{
-  if (expr.is_code())
-    return static_cast<codet &>(expr);
-
-  codet code("expression");
-  code.location() = expr.location();
-  code.move_to_operands(expr);
-  return code;
 }
 
 exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
