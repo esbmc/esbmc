@@ -535,7 +535,7 @@ exprt python_converter::handle_power_operator(exprt lhs, exprt rhs)
   {
     rhs = compute_math_expr(rhs);
   }
-  // If rhs is not constant, report error through log_error
+  // If rhs is not constant, report warning through log_warning
   if (!rhs.is_constant())
   {
     log_warning(
