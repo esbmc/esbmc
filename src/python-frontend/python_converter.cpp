@@ -534,19 +534,24 @@ exprt python_converter::handle_power_operator(exprt lhs, exprt rhs)
   else if (is_math_expr(rhs))
   {
     rhs = compute_math_expr(rhs);
-  }  
+  }
   // If rhs is not constant, report error through log_error
   if (!rhs.is_constant())
   {
-    log_warning("ESBMC-Python does not support power expressions with non-constant exponents");
+    log_warning(
+      "ESBMC-Python does not support power expressions with non-constant "
+      "exponents");
     return lhs;
-  }  
+  }
   // Convert rhs to integer exponent
-  BigInt exponent = binary2integer(rhs.value().as_string(), rhs.type().is_signedbv());
+  BigInt exponent =
+    binary2integer(rhs.value().as_string(), rhs.type().is_signedbv());
   if (exponent < 0)
   {
     // Negative exponent: report error through log_error
-    log_error("ESBMC-Python does not support power expressions with negative exponents");
+    log_error(
+      "ESBMC-Python does not support power expressions with negative "
+      "exponents");
     abort();
   }
   // Handle exponent == 0 and 1
