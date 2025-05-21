@@ -523,16 +523,10 @@ exprt handle_floor_division(
 
 exprt python_converter::handle_power_operator(exprt lhs, exprt rhs)
 {
-  if (lhs.is_symbol())
-  {
-    symbolt *s = symbol_table_.find_symbol(lhs.identifier());
-    assert(s);
-    if (!s->value.value().empty())
-      lhs = s->value;
-  }
+  // Try to resolve constant value of rhs only
   if (rhs.is_symbol())
   {
-    symbolt *s = symbol_table_.find_symbol(rhs.identifier());
+    const symbolt *s = symbol_table_.find_symbol(rhs.identifier());
     assert(s);
     if (!s->value.value().empty())
       rhs = s->value;
@@ -540,12 +534,35 @@ exprt python_converter::handle_power_operator(exprt lhs, exprt rhs)
   else if (is_math_expr(rhs))
   {
     rhs = compute_math_expr(rhs);
+  }  
+  // If rhs is not constant, report error through log_error
+  if (!rhs.is_constant())
+  {
+    log_warning("ESBMC-Python does not support power expressions with non-constant exponents");
+    return lhs;
+  }  
+  // Convert rhs to integer exponent
+  BigInt exponent = binary2integer(rhs.value().as_string(), rhs.type().is_signedbv());
+  if (exponent < 0)
+  {
+    // Negative exponent: report error through log_error
+    log_error("ESBMC-Python does not support power expressions with negative exponents");
+    abort();
   }
-  BigInt base(
-    binary2integer(lhs.value().as_string(), lhs.type().is_signedbv()));
-  BigInt exp(binary2integer(rhs.value().as_string(), rhs.type().is_signedbv()));
-  constant_exprt pow_expr(power(base, exp), lhs.type());
-  return std::move(pow_expr);
+  // Handle exponent == 0 and 1
+  if (exponent == 0)
+    return from_integer(1, lhs.type());
+  if (exponent == 1)
+    return lhs;
+  // Build symbolic multiplication tree
+  exprt result = lhs;
+  for (BigInt i = 1; i < exponent; ++i)
+  {
+    exprt mul_expr("*", lhs.type());
+    mul_expr.copy_to_operands(result, lhs);
+    result = mul_expr;
+  }
+  return result;
 }
 
 exprt handle_float_vs_string(exprt &bin_expr, const std::string &op)
