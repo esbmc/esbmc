@@ -229,8 +229,7 @@ esbmc_dargs = "--no-div-by-zero-check --force-malloc-success --force-realloc-suc
 esbmc_dargs += "--no-align-check --k-step 2 --floatbv --unlimited-k-steps "
 
 # <https://github.com/esbmc/esbmc/pull/1190#issuecomment-1637047028>
-esbmc_dargs += "--no-vla-size-check "
-
+esbmc_dargs += "--no-vla-size-check --no-ub-shift-check "
 
 import re
 def check_if_benchmark_contains_pthread(benchmark):
