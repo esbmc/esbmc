@@ -450,7 +450,8 @@ exprt python_converter::compute_math_expr(const exprt &expr) const
 inline bool is_ieee_op(const exprt &expr)
 {
   const std::string &id = expr.id().as_string();
-  return id == "ieee_add" || id == "ieee_mul" || id == "ieee_sub" || id == "ieee_div";
+  return id == "ieee_add" || id == "ieee_mul" || id == "ieee_sub" ||
+         id == "ieee_div";
 }
 
 inline bool is_math_expr(const exprt &expr)
