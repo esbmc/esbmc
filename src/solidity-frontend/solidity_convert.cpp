@@ -2194,7 +2194,7 @@ bool solidity_convertert::get_constructor(
     case SolidityGrammar::ContractBodyElementT::FunctionDef:
     {
       if (
-        ast_node.contains("kind") &&
+        ast_node.contains("kind") && !ast_node["kind"].empty() &&
         ast_node["kind"].get<std::string>() == "constructor")
         return get_function_definition(ast_node);
       continue;
