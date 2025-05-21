@@ -447,6 +447,12 @@ exprt python_converter::compute_math_expr(const exprt &expr) const
   return constant_exprt(result, lhs.type());
 }
 
+inline bool is_ieee_op(const exprt &expr)
+{
+  const std::string &id = expr.id().as_string();
+  return id == "ieee_add" || id == "ieee_mul" || id == "ieee_sub" || id == "ieee_div";
+}
+
 inline bool is_math_expr(const exprt &expr)
 {
   const std::string &id = expr.id().as_string();
@@ -886,9 +892,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     return handle_floor_division(lhs, rhs, bin_expr);
 
   // Promote operands to floating point if IEEE operator is used
-  if (
-    bin_expr.id() == "ieee_add" || bin_expr.id() == "ieee_sub" ||
-    bin_expr.id() == "ieee_mul" || bin_expr.id() == "ieee_div")
+  if (is_ieee_op(bin_expr))
   {
     const typet &target_type =
       lhs.type().is_floatbv() ? lhs.type() : rhs.type();
