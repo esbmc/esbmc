@@ -32,7 +32,6 @@ void __ESBMC_track_cheri(void *__capability, __SIZE_TYPE__);
 
 uint64_t __esbmc_clzll(uint64_t v)
 {
-__ESBMC_HIDE:;
   for (int i = 0; i < 64; i++, v <<= 1)
     if (v & (uint64_t)1 << 63)
       return i;
