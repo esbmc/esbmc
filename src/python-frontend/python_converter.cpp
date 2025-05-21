@@ -447,6 +447,13 @@ exprt python_converter::compute_math_expr(const exprt &expr) const
   return constant_exprt(result, lhs.type());
 }
 
+inline bool is_ieee_op(const exprt &expr)
+{
+  const std::string &id = expr.id().as_string();
+  return id == "ieee_add" || id == "ieee_mul" || id == "ieee_sub" ||
+         id == "ieee_div";
+}
+
 inline bool is_math_expr(const exprt &expr)
 {
   const std::string &id = expr.id().as_string();
@@ -884,6 +891,17 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   // e.g.: -5//2 equals to -3, and 5//2 equals to 2
   if (op == "FloorDiv")
     return handle_floor_division(lhs, rhs, bin_expr);
+
+  // Promote operands to floating point if IEEE operator is used
+  if (is_ieee_op(bin_expr))
+  {
+    const typet &target_type =
+      lhs.type().is_floatbv() ? lhs.type() : rhs.type();
+    if (!lhs.type().is_floatbv())
+      bin_expr.op0() = typecast_exprt(lhs, target_type);
+    if (!rhs.type().is_floatbv())
+      bin_expr.op1() = typecast_exprt(rhs, target_type);
+  }
 
   // Handle chained comparisons like: assert 0 <= x <= 1
   if (element.contains("comparators") && element["comparators"].size() > 1)
@@ -1677,23 +1695,51 @@ void python_converter::get_var_assign(
   current_lhs = nullptr;
 }
 
+/// Resolve the type of a variable from AST annotations or the symbol table
+typet python_converter::resolve_variable_type(
+  const std::string &var_name,
+  const locationt &loc)
+{
+  nlohmann::json decl_node = get_var_node(var_name, ast_json);
+
+  if (!decl_node.empty())
+  {
+    std::string type_annotation =
+      decl_node["annotation"]["id"].get<std::string>();
+    return type_handler_.get_typet(type_annotation);
+  }
+
+  std::string filename = loc.get_file().as_string();
+  std::string function = loc.get_function().as_string();
+  std::string symbol_id = "py:" + filename + "@F@" + function + "@" + var_name;
+
+  const symbolt *sym = symbol_table_.find_symbol(symbol_id);
+  if (sym != nullptr)
+    return sym->type;
+  else
+  {
+    log_error(
+      "Variable '{}' not found in symbol table; cannot determine type.",
+      symbol_id);
+    abort();
+  }
+}
+
 void python_converter::get_compound_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
-  // Get type from declaration node
   std::string var_name = ast_node["target"]["id"].get<std::string>();
-  nlohmann::json ref = get_var_node(var_name, ast_json);
-  assert(!ref.empty());
-  current_element_type =
-    type_handler_.get_typet(ref["annotation"]["id"].get<std::string>());
+  locationt loc = get_location_from_decl(ast_node);
+
+  // Resolve variable type using AST annotations or symbol table
+  current_element_type = resolve_variable_type(var_name, loc);
 
   exprt lhs = get_expr(ast_node["target"]);
   exprt rhs = get_binary_operator_expr(ast_node);
 
   code_assignt code_assign(lhs, rhs);
-  code_assign.location() = get_location_from_decl(ast_node);
-
+  code_assign.location() = loc;
   target_block.copy_to_operands(code_assign);
 }
 
