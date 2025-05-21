@@ -403,9 +403,6 @@ exprt numpy_call_expr::create_expr_from_call()
 
 exprt numpy_call_expr::get()
 {
-  static const std::unordered_map<std::string, float> numpy_functions = {
-    {"zeros", 0.0}, {"ones", 1.0}};
-
   const std::string &function = function_id_.get_function();
 
   // Create array from numpy.array()
@@ -415,9 +412,12 @@ exprt numpy_call_expr::get()
     return expr;
   }
 
+  static const std::unordered_map<std::string, float> array_creation_funcs = {
+    {"zeros", 0.0}, {"ones", 1.0}};
+
   // Create array from numpy.zeros() or numpy.ones()
-  auto it = numpy_functions.find(function);
-  if (it != numpy_functions.end())
+  auto it = array_creation_funcs.find(function);
+  if (it != array_creation_funcs.end())
   {
     auto list = create_list(call_["args"][0]["value"].get<int>(), it->second);
     return converter_.get_expr(list);
