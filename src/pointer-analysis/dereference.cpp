@@ -110,12 +110,10 @@ bool dereferencet::has_dereference(const expr2tc &expr) const
 
   // Check over each operand,
   bool result = false;
-  expr->foreach_operand(
-    [this, &result](const expr2tc &e)
-    {
-      if (has_dereference(e))
-        result = true;
-    });
+  expr->foreach_operand([this, &result](const expr2tc &e) {
+    if (has_dereference(e))
+      result = true;
+  });
 
   // If a derefing operand is found, return true.
   if (result == true)
@@ -192,13 +190,11 @@ void dereferencet::dereference_expr(expr2tc &expr, guardt &guard, modet mode)
   default:
   {
     // Recurse over the operands
-    expr->Foreach_operand(
-      [this, &guard, &mode](expr2tc &e)
-      {
-        if (is_nil_expr(e))
-          return;
-        dereference_expr(e, guard, mode);
-      });
+    expr->Foreach_operand([this, &guard, &mode](expr2tc &e) {
+      if (is_nil_expr(e))
+        return;
+      dereference_expr(e, guard, mode);
+    });
     break;
   }
   }
@@ -221,26 +217,24 @@ void dereferencet::dereference_guard_expr(
     // Take the current size of the guard, so that we can reset it later.
     guardt old_guards(guard);
 
-    expr->Foreach_operand(
-      [this, &guard, &expr](expr2tc &op)
+    expr->Foreach_operand([this, &guard, &expr](expr2tc &op) {
+      assert(is_bool_type(op));
+
+      // Handle any dereferences in this operand
+      if (has_dereference(op))
+        dereference_expr(op, guard, dereferencet::READ);
+
+      // Guard the next operand against this operand short circuiting us.
+      if (is_or2t(expr))
       {
-        assert(is_bool_type(op));
-
-        // Handle any dereferences in this operand
-        if (has_dereference(op))
-          dereference_expr(op, guard, dereferencet::READ);
-
-        // Guard the next operand against this operand short circuiting us.
-        if (is_or2t(expr))
-        {
-          expr2tc tmp = not2tc(op);
-          guard.add(tmp);
-        }
-        else
-        {
-          guard.add(op);
-        }
-      });
+        expr2tc tmp = not2tc(op);
+        guard.add(tmp);
+      }
+      else
+      {
+        guard.add(op);
+      }
+    });
 
     // Reset guard to where it was.
     guard.swap(old_guards);
