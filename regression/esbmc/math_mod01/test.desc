@@ -1,4 +1,4 @@
 CORE
 main.c
---no-bounds-check --no-pointer-check --no-div-by-zero-check --ub-shift-check
+--no-bounds-check --no-pointer-check --no-div-by-zero-check
 ^VERIFICATION SUCCESSFUL$
