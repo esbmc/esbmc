@@ -110,10 +110,12 @@ bool dereferencet::has_dereference(const expr2tc &expr) const
 
   // Check over each operand,
   bool result = false;
-  expr->foreach_operand([this, &result](const expr2tc &e) {
-    if (has_dereference(e))
-      result = true;
-  });
+  expr->foreach_operand(
+    [this, &result](const expr2tc &e)
+    {
+      if (has_dereference(e))
+        result = true;
+    });
 
   // If a derefing operand is found, return true.
   if (result == true)
@@ -190,11 +192,13 @@ void dereferencet::dereference_expr(expr2tc &expr, guardt &guard, modet mode)
   default:
   {
     // Recurse over the operands
-    expr->Foreach_operand([this, &guard, &mode](expr2tc &e) {
-      if (is_nil_expr(e))
-        return;
-      dereference_expr(e, guard, mode);
-    });
+    expr->Foreach_operand(
+      [this, &guard, &mode](expr2tc &e)
+      {
+        if (is_nil_expr(e))
+          return;
+        dereference_expr(e, guard, mode);
+      });
     break;
   }
   }
@@ -217,24 +221,26 @@ void dereferencet::dereference_guard_expr(
     // Take the current size of the guard, so that we can reset it later.
     guardt old_guards(guard);
 
-    expr->Foreach_operand([this, &guard, &expr](expr2tc &op) {
-      assert(is_bool_type(op));
-
-      // Handle any dereferences in this operand
-      if (has_dereference(op))
-        dereference_expr(op, guard, dereferencet::READ);
-
-      // Guard the next operand against this operand short circuiting us.
-      if (is_or2t(expr))
+    expr->Foreach_operand(
+      [this, &guard, &expr](expr2tc &op)
       {
-        expr2tc tmp = not2tc(op);
-        guard.add(tmp);
-      }
-      else
-      {
-        guard.add(op);
-      }
-    });
+        assert(is_bool_type(op));
+
+        // Handle any dereferences in this operand
+        if (has_dereference(op))
+          dereference_expr(op, guard, dereferencet::READ);
+
+        // Guard the next operand against this operand short circuiting us.
+        if (is_or2t(expr))
+        {
+          expr2tc tmp = not2tc(op);
+          guard.add(tmp);
+        }
+        else
+        {
+          guard.add(op);
+        }
+      });
 
     // Reset guard to where it was.
     guard.swap(old_guards);
@@ -2161,6 +2167,18 @@ void dereferencet::bounds_check(
 
   if (config.ansi_c.cheri && !is_nil_expr(deref))
   {
+    /*
+     * CHERI capability bounds check:
+     * Check that the dereferenced address remains within the bounds of
+     * the CHERI capability associated with the pointer in it.
+     *
+     * Convert pointer into its raw integer address form via 'ptraddr_type2()'
+     * Use capability_top2tc and capability_base2tc to get the upper and 
+     * lower bounds for the capability.
+     * 
+     * cheri_bounds assertion will be (addr < top && addr > base)
+     * 
+     */
     expr2tc addr = typecast2tc(ptraddr_type2(), deref);
     expr2tc top = capability_top2tc(deref);
     expr2tc base = capability_base2tc(deref);
@@ -2168,11 +2186,21 @@ void dereferencet::bounds_check(
     expr2tc gt = greaterthan2tc(addr, top);
     expr2tc lt = lessthan2tc(addr, base);
     expr2tc in_cheri_bounds = or2tc(gt, lt);
+    /*
+     * In CHERI Clang if a pointer is marked as can_carry_provenance does not 
+     * mean it must carries CHERI capability. Therefore, we need to determine here
+     * whether the capacity exists.
+     * 
+     * pointer_capability == zero ?
+     */
+    expr2tc is_zero = equality2tc(
+      pointer_capability2tc(ptraddr_type2(), deref), gen_zero(ptraddr_type2()));
+    expr2tc cap = and2tc(is_zero, in_cheri_bounds);
 
     guardt cap_guard(guard);
-    cap_guard.add(in_cheri_bounds);
+    cap_guard.add(cap);
     dereference_failure(
-      "capability bounds", "capability bounds violated", cap_guard);
+      "capability bounds", "CHERI capability bounds violated", cap_guard);
   }
 
   if (!arr_type.array_size)

@@ -900,7 +900,14 @@ void goto_symext::run_intrinsic(
 
     expr2tc cap_base = capability_base2tc(ptr);
     expr2tc cap_top = capability_top2tc(ptr);
-
+    /*
+     * Compiler flag: -cheri-bounds=subobject-safe
+     * For sub objects, CHERI clang should generate 
+     * independent capabilities for it instead of sharing.
+     * 
+     * cheri_base = address 
+     * cheri_top = address + size
+     */
     symex_assign(code_assign2tc(cap_base, addr), true);
     symex_assign(code_assign2tc(cap_top, addr_end), true);
     return;
