@@ -406,8 +406,8 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     cmdline.isset("overflow-check") || cmdline.isset("unsigned-overflow-check"))
     options.set_option("disable-inductive-step", true);
 
-  if (cmdline.isset("ub-shift-check"))
-    options.set_option("ub-shift-check", true);
+  if (cmdline.isset("no-ub-shift-check"))
+    options.set_option("no-ub-shift-check", true);
 
   if (cmdline.isset("timeout"))
   {
