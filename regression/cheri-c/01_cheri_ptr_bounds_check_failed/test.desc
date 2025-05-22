@@ -1,0 +1,5 @@
+CORE
+main.c
+--cheri hybrid
+^VERIFICATION FAILED$
+\bdereference failure: CHERI capability bounds violated\b

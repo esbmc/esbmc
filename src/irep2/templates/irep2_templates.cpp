@@ -26,7 +26,7 @@ std::string array_type2t::field_names[esbmct::num_type_fields] =
 std::string vector_type2t::field_names[esbmct::num_type_fields] =
   {"subtype", "array_size", "size_is_infinite", "", ""};
 std::string pointer_type2t::field_names[esbmct::num_type_fields] =
-  {"subtype", "", "", "", ""};
+  {"subtype", "provenance", "", "", ""};
 std::string fixedbv_type2t::field_names[esbmct::num_type_fields] =
   {"width", "integer_bits", "", "", ""};
 std::string floatbv_type2t::field_names[esbmct::num_type_fields] =
@@ -242,6 +242,10 @@ std::string concat2t::field_names[esbmct::num_type_fields] =
   {"forward", "aft", "", "", ""};
 std::string extract2t::field_names[esbmct::num_type_fields] =
   {"from", "upper", "lower", "", ""};
+std::string capability_base2t::field_names[esbmct::num_type_fields] =
+  {"value", "", "", "", ""};
+std::string capability_top2t::field_names[esbmct::num_type_fields] =
+  {"value", "", "", "", ""};
 
 std::string forall2t::field_names[esbmct::num_type_fields] =
   {"symbol", "predicate", "", "", ""};
