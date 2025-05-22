@@ -2177,7 +2177,7 @@ void dereferencet::bounds_check(
     expr2tc top = capability_top2tc(deref);
     expr2tc base = capability_base2tc(deref);
 
-    expr2tc gt = greaterthan2tc(addr, top);
+    expr2tc gt = greaterthanequal2tc(addr, top);
     expr2tc lt = lessthan2tc(addr, base);
     expr2tc in_cheri_bounds = or2tc(gt, lt);
     /*
