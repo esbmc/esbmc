@@ -469,83 +469,89 @@ function_call_expr::lookup_python_symbol(const std::string &var_name) const
 
 exprt function_call_expr::handle_abs(nlohmann::json &arg) const
 {
-  // Handle the case where the input is a unary minus applied to a literal
-  // (e.g., abs(-5) becomes abs(5)).
+  // Handle abs(-literal)
   if (arg.contains("_type") && arg["_type"] == "UnaryOp")
   {
     const auto &op = arg["op"];
     const auto &operand = arg["operand"];
     if (op["_type"] == "USub" && operand.contains("value"))
-      arg = operand; // Strip the unary minus and use the positive literal
+      arg = operand;
   }
 
-  // If the argument is a numeric literal, evaluate abs() at compile time
+  // Handle constant literals
   if (arg.contains("value") && arg["value"].is_number())
   {
     if (arg["value"].is_number_integer())
     {
       int value = arg["value"].get<int>();
-      arg["value"] = std::abs(value); // Apply abs to integer constant
+      arg["value"] = std::abs(value);
       arg["type"] = "int";
     }
     else if (arg["value"].is_number_float())
     {
       double value = arg["value"].get<double>();
-      arg["value"] = std::abs(value); // Apply abs to float constant
+      arg["value"] = std::abs(value);
       arg["type"] = "float";
     }
 
-    // Convert the constant into an expression with the appropriate type
     typet t = type_handler_.get_typet(arg["type"], 0);
     exprt expr = converter_.get_expr(arg);
     expr.type() = t;
     return expr;
   }
 
-  // If the argument is a variable (e.g., abs(x)) without a type,
-  // attempt to resolve its type from the symbol table
-  if (!arg.contains("type") && arg["_type"] == "Name" && arg.contains("id"))
+  // NEW: Try to infer type for composite expressions like BinOp
+  if (!arg.contains("type"))
+  {
+    try
+    {
+      exprt inferred_expr = converter_.get_expr(arg);
+      typet inferred_type = inferred_expr.type();
+      exprt abs_expr("abs", inferred_type);
+      abs_expr.copy_to_operands(inferred_expr);
+      return abs_expr;
+    }
+    catch (const std::exception &e)
+    {
+      log_error("TypeError: failed to infer operand type for abs(): {}", e.what());
+      abort();
+    }
+  }
+
+  // Handle variable references
+  if (arg["_type"] == "Name" && arg.contains("id"))
   {
     std::string var_name = arg["id"].get<std::string>();
     const symbolt *sym = lookup_python_symbol(var_name);
     if (sym)
     {
-      // Build a symbolic abs() expression with the resolved operand type
       exprt operand_expr = converter_.get_expr(arg);
       typet operand_type = operand_expr.type();
-
       exprt abs_expr("abs", operand_type);
       abs_expr.copy_to_operands(operand_expr);
-
       return abs_expr;
     }
     else
     {
-      // Variable could not be resolved
       log_error("NameError: variable '{}' is not defined", var_name);
       abort();
     }
   }
 
-  // If we have a "type" field, validate it; otherwise, abort
-  std::string arg_type;
-  if (arg.contains("type"))
-    arg_type = arg["type"].get<std::string>();
-  else
+  // Final fallback if no type is available
+  std::string arg_type = arg.value("type", "");
+  if (arg_type.empty())
   {
     log_error("TypeError: operand to abs() is missing a type");
     abort();
   }
 
-  // Only numeric types are valid operands for abs()
   if (arg_type != "int" && arg_type != "float" && arg_type != "complex")
   {
     log_error("TypeError: bad operand type for abs(): {}", arg_type);
     abort();
   }
 
-  // Fallback for unsupported symbolic expressions (e.g., complex)
-  // Currently returns a nil expression to signal unsupported cases
   log_warning("Returning nil expression for abs()");
   return nil_exprt();
 }
