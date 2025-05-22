@@ -386,7 +386,7 @@ protected:
     const std::string &name,
     std::string &arr_name,
     std::string &arr_id);
-  bool is_mapping_index_lvalue(const nlohmann::json &json);
+  bool is_mapping_set_lvalue(const nlohmann::json &json);
 
   // line number and locations
   void

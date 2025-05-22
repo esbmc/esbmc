@@ -1187,6 +1187,7 @@ bool solidity_convertert::get_var_decl(
     arr_s.file_local = true;
     arr_s.lvalue = true;
     auto &add_added_s = *move_symbol_to_context(arr_s);
+    add_added_s.value = gen_zero(get_complete_type(arr_t, ns), true);
 
     // 2. construct mapping_t struct instance's value
     exprt this_ptr;
@@ -1207,7 +1208,11 @@ bool solidity_convertert::get_var_decl(
     typet map_t = context.find_symbol(prefix + "mapping_t")->type;
     assert(map_t.is_struct());
     exprt inits = gen_zero(map_t);
-    inits.op0() = symbol_expr(add_added_s);
+    exprt op0 = symbol_expr(add_added_s);
+    // array => &array[0]
+    solidity_gen_typecast(
+      ns, op0, to_struct_type(map_t).components().at(0).type());
+    inits.op0() = op0;
     inits.op1() = mem;
 
     added_symbol.value = inits;
@@ -4510,7 +4515,7 @@ bool solidity_convertert::get_expr(
       // index accesss could either be set or get:
       // x[1] => map_uint_get(&m, 1)
       // x[1] = 2 => map_uint_set(&x, 1, 2)
-      bool is_mapping_set = is_mapping_index_lvalue(expr);
+      bool is_mapping_set = is_mapping_set_lvalue(expr);
 
       // construct func call
       std::string func_name;
@@ -5997,7 +6002,8 @@ bool solidity_convertert::get_func_decl_this_ref(
       contract_name, func_id, debug_modulename, l, type);
   }
 
-  new_expr = symbol_exprt(this_id);
+  assert(context.find_symbol(this_id) != nullptr);
+  new_expr = symbol_expr(*context.find_symbol(this_id));
   return false;
 }
 
@@ -7061,12 +7067,11 @@ void solidity_convertert::get_mapping_inf_arr_name(
 	return true if it's a mapping_set, including assign, assign+, tuple assign...
 	otherwise return false, representing mapping_get
 */
-bool solidity_convertert::is_mapping_index_lvalue(const nlohmann::json &target)
+bool solidity_convertert::is_mapping_set_lvalue(const nlohmann::json &target)
 {
   assert(target.value("nodeType", "") == "IndexAccess");
-  if (!target.value("lValueRequested", false))
-    return true;
-  return false;
+  assert(target.contains("lValueRequested"));
+  return target["lValueRequested"].get<bool>();
 }
 
 // invoking a function in the library
