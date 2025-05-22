@@ -479,6 +479,20 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
       arg = operand;  // Strip the unary minus and use the positive literal
   }
 
+  // Reject strings early
+  if (arg.contains("type") && arg["type"] == "str")
+  {
+    log_error("TypeError: bad operand type for abs(): 'str'");
+    abort();
+  }
+
+  // Also catch string constants without "type" annotation
+  if (arg.contains("value") && arg["value"].is_string())
+  {
+    log_error("TypeError: bad operand type for abs(): 'str'");
+    abort();
+  }
+
   // If the argument is a numeric literal, evaluate abs() at compile time
   if (arg.contains("value") && arg["value"].is_number())
   {
@@ -502,7 +516,7 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     return expr;
   }
 
-  // NEW: Try to infer type for composite expressions like BinOp
+  // Try to infer type for composite expressions like BinOp
   if (!arg.contains("type"))
   {
     try
