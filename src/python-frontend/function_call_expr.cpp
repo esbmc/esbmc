@@ -469,31 +469,33 @@ function_call_expr::lookup_python_symbol(const std::string &var_name) const
 
 exprt function_call_expr::handle_abs(nlohmann::json &arg) const
 {
-  // Handle abs(-literal)
+  // Handle the case where the input is a unary minus applied to a literal
+  // (e.g., abs(-5) becomes abs(5)).
   if (arg.contains("_type") && arg["_type"] == "UnaryOp")
   {
     const auto &op = arg["op"];
     const auto &operand = arg["operand"];
     if (op["_type"] == "USub" && operand.contains("value"))
-      arg = operand;
+      arg = operand;  // Strip the unary minus and use the positive literal
   }
 
-  // Handle constant literals
+  // If the argument is a numeric literal, evaluate abs() at compile time
   if (arg.contains("value") && arg["value"].is_number())
   {
     if (arg["value"].is_number_integer())
     {
       int value = arg["value"].get<int>();
-      arg["value"] = std::abs(value);
+      arg["value"] = std::abs(value);  // Apply abs to integer constant
       arg["type"] = "int";
     }
     else if (arg["value"].is_number_float())
     {
       double value = arg["value"].get<double>();
-      arg["value"] = std::abs(value);
+      arg["value"] = std::abs(value); // Apply abs to float constant
       arg["type"] = "float";
     }
 
+    // Convert the constant into an expression with the appropriate type
     typet t = type_handler_.get_typet(arg["type"], 0);
     exprt expr = converter_.get_expr(arg);
     expr.type() = t;
@@ -525,6 +527,7 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     const symbolt *sym = lookup_python_symbol(var_name);
     if (sym)
     {
+      // Build a symbolic abs() expression with the resolved operand type
       exprt operand_expr = converter_.get_expr(arg);
       typet operand_type = operand_expr.type();
       exprt abs_expr("abs", operand_type);
@@ -533,6 +536,7 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     }
     else
     {
+      // Variable could not be resolved
       log_error("NameError: variable '{}' is not defined", var_name);
       abort();
     }
@@ -546,12 +550,15 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     abort();
   }
 
+  // Only numeric types are valid operands for abs()
   if (arg_type != "int" && arg_type != "float" && arg_type != "complex")
   {
     log_error("TypeError: bad operand type for abs(): {}", arg_type);
     abort();
   }
 
+  // Fallback for unsupported symbolic expressions (e.g., complex)
+  // Currently returns a nil expression to signal unsupported cases
   log_warning("Returning nil expression for abs()");
   return nil_exprt();
 }
