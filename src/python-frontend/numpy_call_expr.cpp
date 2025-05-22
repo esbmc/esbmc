@@ -48,7 +48,7 @@ static auto create_list(const std::vector<T> &vector)
 template <typename T>
 static auto create_binary_op(
   const std::string &op,
-  const std::string type,
+  const std::string &type,
   const T &lhs,
   const T &rhs)
 {
