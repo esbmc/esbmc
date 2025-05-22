@@ -4496,21 +4496,22 @@ bool solidity_convertert::get_expr(
 
       // set type flag
       std::string key_sol_type = key_t.get("#sol_type").as_string();
-      if (key_sol_type.empty())
+      std::string val_sol_type = value_t.get("#sol_type").as_string();
+      if (val_sol_type.empty())
         return true;
-      std::string key_flg;
-      if (key_sol_type.find("UINT") != std::string::npos)
-        key_flg = "uint";
-      else if (key_sol_type.find("INT") != std::string::npos)
-        key_flg = "int";
-      else if (key_sol_type.find("BOOL") != std::string::npos)
-        key_flg = "bool";
+      std::string val_flg;
+      if (val_sol_type.find("UINT") != std::string::npos)
+        val_flg = "uint";
+      else if (val_sol_type.find("INT") != std::string::npos)
+        val_flg = "int";
+      else if (val_sol_type.find("BOOL") != std::string::npos)
+        val_flg = "bool";
       else if (
-        key_sol_type.find("STRING") != std::string::npos ||
-        key_sol_type.find("STRING_LITERAL") != std::string::npos)
-        key_flg = "string";
+        val_sol_type.find("STRING") != std::string::npos ||
+        val_sol_type.find("STRING_LITERAL") != std::string::npos)
+        val_flg = "string";
       else
-        key_flg = "general";
+        val_flg = "general";
 
       // index accesss could either be set or get:
       // x[1] => map_uint_get(&m, 1)
@@ -4522,16 +4523,17 @@ bool solidity_convertert::get_expr(
       typet func_type;
       if (is_mapping_set)
       {
-        func_name = "map_" + key_flg + "_set";
+        func_name = "map_" + val_flg + "_set";
         func_type = empty_typet();
         func_type.set("cpp_type", "void");
       }
       else
       {
-        func_name = "map_" + key_flg + "_get";
+        func_name = "map_" + val_flg + "_get";
         func_type = value_t;
       }
 
+      assert(context.find_symbol("c:@F@" + func_name) != nullptr);
       side_effect_expr_function_callt call;
       get_library_function_call_no_args(
         func_name, "c:@F@" + func_name, func_type, location, call);
@@ -4540,6 +4542,20 @@ bool solidity_convertert::get_expr(
       call.arguments().push_back(address_of_exprt(array));
 
       // index
+      // if it's a string, we should convert it to
+      if (key_sol_type == "STRING" || key_sol_type == "STRING_LITERAL")
+      {
+        side_effect_expr_function_callt str2uint_call;
+        assert(context.find_symbol("c:@F@str2uint") != nullptr);
+        get_library_function_call_no_args(
+          "str2uint",
+          "c:@F@str2uint",
+          unsignedbv_typet(256),
+          location,
+          str2uint_call);
+        str2uint_call.arguments().push_back(pos);
+        pos = str2uint_call;
+      }
       call.arguments().push_back(pos);
 
       if (is_mapping_set)
@@ -4566,7 +4582,7 @@ bool solidity_convertert::get_expr(
 
         // value
         call.arguments().push_back(symbol_expr(added_sym));
-        if (key_flg == "generic")
+        if (val_flg == "generic")
         {
           // sizeof
           exprt size_of_expr;
@@ -4574,16 +4590,15 @@ bool solidity_convertert::get_expr(
           call.arguments().push_back(symbol_expr(added_sym));
         }
 
-        code_function_callt _call;
-        _call.function() = call;
-        _call.location() = location;
-        move_to_back_block(_call);
+        convert_expression_to_code(call);
+        move_to_back_block(call);
 
         new_expr = symbol_expr(added_sym);
         break;
       }
 
-      new_expr = call;
+      // e.g. (int8)map_int_get(&arr, 1);
+      new_expr = typecast_exprt(call, value_t);
       break;
     }
 
