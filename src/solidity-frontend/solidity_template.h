@@ -175,14 +175,14 @@ __ESBMC_HIDE:;
 
 const std::string sol_byte = R"(
 char *u256toa(uint256_t value);
-uint256_t str2int(const char *str);
+uint256_t str2uint(const char *str);
 uint256_t byte_concat(uint256_t x, uint256_t y)
 {
 __ESBMC_HIDE:;
   char *s1 = u256toa(x);
   char *s2 = u256toa(y);
   strncat(s1, s2, 256);
-  return str2int(s1);
+  return str2uint(s1);
 }
 )";
 
@@ -595,7 +595,7 @@ __ESBMC_HIDE:;
     }
     return ret;
 }
-uint256_t str2int(const char *str)
+uint256_t str2uint(const char *str)
 {
 __ESBMC_HIDE:;
     return hexdec(ASCIItoHEX(str));
