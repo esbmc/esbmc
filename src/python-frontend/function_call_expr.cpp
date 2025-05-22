@@ -479,6 +479,14 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
       arg = operand; // Strip the unary minus and use the positive literal
   }
 
+  // Reject strings early
+  if (arg.contains("type") && arg["type"] == "str")
+    throw std::runtime_error("TypeError: bad operand type for abs(): 'str'");
+
+  // Also catch string constants without "type" annotation
+  if (arg.contains("value") && arg["value"].is_string())
+    throw std::runtime_error("TypeError: bad operand type for abs(): 'str'");
+
   // If the argument is a numeric literal, evaluate abs() at compile time
   if (arg.contains("value") && arg["value"].is_number())
   {
@@ -502,9 +510,27 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     return expr;
   }
 
-  // If the argument is a variable (e.g., abs(x)) without a type,
-  // attempt to resolve its type from the symbol table
-  if (!arg.contains("type") && arg["_type"] == "Name" && arg.contains("id"))
+  // Try to infer type for composite expressions like BinOp
+  if (!arg.contains("type"))
+  {
+    try
+    {
+      exprt inferred_expr = converter_.get_expr(arg);
+      typet inferred_type = inferred_expr.type();
+      exprt abs_expr("abs", inferred_type);
+      abs_expr.copy_to_operands(inferred_expr);
+      return abs_expr;
+    }
+    catch (const std::exception &e)
+    {
+      throw std::runtime_error(
+        std::string("TypeError: failed to infer operand type for abs(): ") +
+        e.what());
+    }
+  }
+
+  // Handle variable references
+  if (arg["_type"] == "Name" && arg.contains("id"))
   {
     std::string var_name = arg["id"].get<std::string>();
     const symbolt *sym = lookup_python_symbol(var_name);
@@ -527,11 +553,9 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     }
   }
 
-  // If we have a "type" field, validate it; otherwise, abort
-  std::string arg_type;
-  if (arg.contains("type"))
-    arg_type = arg["type"].get<std::string>();
-  else
+  // Final fallback if no type is available
+  std::string arg_type = arg.value("type", "");
+  if (arg_type.empty())
   {
     log_error("TypeError: operand to abs() is missing a type");
     abort();
