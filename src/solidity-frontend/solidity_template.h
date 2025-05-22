@@ -295,14 +295,14 @@ __ESBMC_HIDE:;
 
 
 /* generic */
-static inline void map_set_generic(struct mapping_t *m, uint256_t k, const void *v, size_t sz)
+static inline void map_generic_set(struct mapping_t *m, uint256_t k, const void *v, size_t sz)
 {
 __ESBMC_HIDE:;
   void *p = malloc(sz);
   memcpy(p, v, sz);
   map_set_raw(m->base, m->addr, k, p);
 }
-static inline void *map_get_generic(struct mapping_t *m, uint256_t k)
+static inline void *map_generic_get(struct mapping_t *m, uint256_t k)
 {
 __ESBMC_HIDE:;
   return map_get_raw(m->base, m->addr, k);
