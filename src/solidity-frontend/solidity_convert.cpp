@@ -854,6 +854,8 @@ void solidity_convertert::get_function_this_pointer_param(
   const locationt &location_begin,
   code_typet &type)
 {
+  log_status("\t@@@ gettring function this pointer param");
+  assert(!contract_name.empty());
   code_typet::argumentt this_param;
   std::string this_name = "this";
   //? do we need to drop the '#n' tail in func_id?
@@ -1171,6 +1173,12 @@ bool solidity_convertert::get_var_decl(
     std::string arr_name, arr_id;
     get_mapping_inf_arr_name(current_contractName, name, arr_name, arr_id);
     symbolt arr_s;
+    if (context.find_symbol(prefix + "_ESBMC_Mapping") == nullptr)
+    {
+      log_error("failed to find _ESBMC_Mapping reference");
+      return true;
+    }
+
     typet arr_t =
       array_typet(symbol_typet(prefix + "_ESBMC_Mapping"), exprt("infinity"));
     get_default_symbol(
@@ -1182,12 +1190,23 @@ bool solidity_convertert::get_var_decl(
 
     // 2. construct mapping_t struct instance's value
     exprt this_ptr;
-    get_func_decl_this_ref(*current_functionDecl, this_ptr);
+    if (current_functionDecl)
+    {
+      if (get_func_decl_this_ref(*current_functionDecl, this_ptr))
+        return true;
+    }
+    else
+    {
+      if (get_ctor_decl_this_ref(ast_node, this_ptr))
+        return true;
+    }
     typet addr_t = unsignedbv_typet(160);
     addr_t.set("#sol_type", "ADDRESS");
     exprt mem = member_exprt(this_ptr, "$address", addr_t);
 
-    exprt inits = gen_zero(t);
+    typet map_t = context.find_symbol(prefix + "mapping_t")->type;
+    assert(map_t.is_struct());
+    exprt inits = gen_zero(map_t);
     inits.op0() = symbol_expr(add_added_s);
     inits.op1() = mem;
 
@@ -4550,8 +4569,10 @@ bool solidity_convertert::get_expr(
           call.arguments().push_back(symbol_expr(added_sym));
         }
 
-        convert_expression_to_code(call);
-        move_to_back_block(call);
+        code_function_callt _call;
+        _call.function() = call;
+        _call.location() = location;
+        move_to_back_block(_call);
 
         new_expr = symbol_expr(added_sym);
         break;
@@ -5007,10 +5028,17 @@ void solidity_convertert::get_current_contract_name(
   const nlohmann::json &ast_node,
   std::string &contract_name)
 {
-  if (ast_node.is_null() || !ast_node.contains("id"))
-    return;
+  log_debug("solidity", "\tfinding current contract name");
 
-  const auto json = find_parent_contract(src_ast_json, ast_node);
+  if (ast_node.is_null() || ast_node.empty())
+  {
+    log_debug("solidity", "got empty contract name");
+    contract_name = "";
+    return;
+  }
+  assert(ast_node.contains("id"));
+
+  const auto &json = find_parent_contract(src_ast_json["nodes"], ast_node);
   if (json.empty() || json.is_null())
   {
     log_debug(
@@ -5025,6 +5053,7 @@ void solidity_convertert::get_current_contract_name(
   assert(json.contains("name"));
 
   contract_name = json["name"].get<std::string>();
+  log_debug("solidity", "\tcurrent contract name={}", contract_name);
 }
 
 bool solidity_convertert::get_binary_operator_expr(
@@ -5108,7 +5137,7 @@ bool solidity_convertert::get_binary_operator_expr(
     "solidity",
     "	@@@ got binop.getOpcode: SolidityGrammar::{}",
     SolidityGrammar::expression_to_str(opcode));
-  
+
   switch (opcode)
   {
   case SolidityGrammar::ExpressionT::BO_Assign:
@@ -5927,7 +5956,9 @@ bool solidity_convertert::get_func_decl_this_ref(
   const nlohmann::json &decl,
   exprt &new_expr)
 {
-  assert(!decl.empty());
+  assert(
+    !decl.empty() &&
+    !decl.is_null()); // yet we cannot detect if it's a Dangling
   std::string func_name, func_id;
   get_function_definition_name(decl, func_name, func_id);
 
@@ -5948,7 +5979,11 @@ bool solidity_convertert::get_func_decl_this_ref(
   const std::string &func_id,
   exprt &new_expr)
 {
-  log_debug("solidity", "\t@@@ get_func_decl_this_ref");
+  log_debug(
+    "solidity",
+    "\t@@@ get this reference of func {} in contract {}",
+    func_id,
+    contract_name);
   std::string this_id = func_id + "#this";
   locationt l;
   code_typet type;
@@ -5962,8 +5997,7 @@ bool solidity_convertert::get_func_decl_this_ref(
       contract_name, func_id, debug_modulename, l, type);
   }
 
-  new_expr = symbol_expr(*context.find_symbol(this_id));
-
+  new_expr = symbol_exprt(this_id);
   return false;
 }
 
@@ -5971,7 +6005,7 @@ bool solidity_convertert::get_ctor_decl_this_ref(
   const nlohmann::json &caller,
   exprt &this_object)
 {
-  log_debug("solidity", "\t\tget_ctor_decl_this_ref");
+  log_debug("solidity", "get_ctor_decl_this_ref");
 
   // ctor
   std::string current_cname;
@@ -5989,7 +6023,10 @@ bool solidity_convertert::get_ctor_decl_this_ref(
   }
 
   if (get_func_decl_this_ref(current_cname, ctor_id, this_object))
+  {
+    log_error("failed to get this ref of function {}", ctor_id);
     return true;
+  }
   return false;
 }
 
@@ -8808,7 +8845,7 @@ bool solidity_convertert::get_new_object_ctor_call(
 
   // setup initializer, i.e. call the constructor
   side_effect_expr_function_callt call;
-  const nlohmann::json constructor_ref = find_constructor_ref(contract_name);
+  const nlohmann::json &constructor_ref = find_constructor_ref(contract_name);
   if (constructor_ref.empty())
     return get_implicit_ctor_ref(contract_name, new_expr);
 
@@ -8936,7 +8973,7 @@ void solidity_convertert::get_static_contract_instance(
     {
       // this means that contract, including ctor, has not been parse yet
       // this will lead to issue in the following process, particuarly this_pointer
-      const auto json = find_constructor_ref(c_name);
+      const auto &json = find_constructor_ref(c_name);
       if (json.empty())
       {
         if (add_implicit_constructor(c_name))
@@ -9179,7 +9216,7 @@ void solidity_convertert::get_inherit_static_contract_instance(
   if (args_list.contains("arguments"))
   {
     // get param type
-    auto decl_ref = find_constructor_ref(c_name);
+    auto &decl_ref = find_constructor_ref(c_name);
     if (decl_ref.empty() || decl_ref.is_null())
     {
       log_error("cannot find ctor ref");
@@ -10877,7 +10914,7 @@ bool solidity_convertert::get_high_level_member_access(
   }
   else
   {
-    const auto ctor_json = find_constructor_ref(cname);
+    const auto &ctor_json = find_constructor_ref(cname);
     if (get_func_decl_this_ref(ctor_json, this_expr))
       return true;
   }
@@ -11556,7 +11593,7 @@ bool solidity_convertert::model_transaction(
   }
   else
   {
-    const auto ctor_json = find_constructor_ref(cname);
+    const auto &ctor_json = find_constructor_ref(cname);
     if (get_func_decl_this_ref(ctor_json, this_expr))
       return true;
   }
