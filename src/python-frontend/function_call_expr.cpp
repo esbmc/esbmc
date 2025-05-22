@@ -481,17 +481,11 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
 
   // Reject strings early
   if (arg.contains("type") && arg["type"] == "str")
-  {
-    log_error("TypeError: bad operand type for abs(): 'str'");
-    abort();
-  }
+    throw std::runtime_error("TypeError: bad operand type for abs(): 'str'");
 
   // Also catch string constants without "type" annotation
   if (arg.contains("value") && arg["value"].is_string())
-  {
-    log_error("TypeError: bad operand type for abs(): 'str'");
-    abort();
-  }
+    throw std::runtime_error("TypeError: bad operand type for abs(): 'str'");
 
   // If the argument is a numeric literal, evaluate abs() at compile time
   if (arg.contains("value") && arg["value"].is_number())
