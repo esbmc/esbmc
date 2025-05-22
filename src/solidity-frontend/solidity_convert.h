@@ -387,16 +387,6 @@ protected:
     std::string &arr_name,
     std::string &arr_id);
   bool is_mapping_index_lvalue(const nlohmann::json &json);
-  bool get_mapping_key_expr(
-    const std::string &current_contractName,
-    const symbolt &sym,
-    const std::string &postfix,
-    exprt &new_expr);
-  void get_mapping_key_name(
-    const std::string &m_name,
-    const std::string &m_id,
-    std::string &k_name,
-    std::string &k_id);
 
   // line number and locations
   void
