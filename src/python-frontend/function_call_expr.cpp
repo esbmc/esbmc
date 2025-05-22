@@ -547,7 +547,7 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
 
       exprt abs_expr("abs", operand_type);
       abs_expr.copy_to_operands(operand_expr);
-      
+
       return abs_expr;
     }
     else
