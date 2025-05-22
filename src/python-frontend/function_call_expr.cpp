@@ -764,6 +764,39 @@ exprt function_call_expr::get()
   {
     exprt arg = converter_.get_expr(arg_node);
 
+    // Handle function calls used as arguments
+    if (arg.is_code() && arg.is_function_call())
+    {
+      // This is a function call being used as an argument
+      // Instead of using the code expression directly, we need to create
+      // a side effect expression that represents the function call's result
+
+      // Create a side effect expression for the function call
+      side_effect_expr_function_callt func_call;
+      func_call.function() = arg.op1(); // The function being called
+
+      // Handle the arguments - op2() is an arguments expression containing operands
+      const exprt &args_expr = to_code(arg).op2();
+      for (const auto &operand : args_expr.operands())
+        func_call.arguments().push_back(operand);
+
+      // Set the type to the return type of the function
+      const exprt &func_expr = arg.op1();
+      if (func_expr.is_symbol())
+      {
+        const symbolt *func_symbol =
+          converter_.ns.lookup(to_symbol_expr(func_expr));
+        if (func_symbol != nullptr)
+        {
+          const code_typet &func_type = to_code_type(func_symbol->type);
+          func_call.type() = func_type.return_type();
+        }
+      }
+
+      // Use the side effect expression as the argument
+      arg = func_call;
+    }
+
     // All array function arguments (e.g. bytes type) are handled as pointers.
     if (arg.type().is_array())
     {
