@@ -1275,16 +1275,34 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       current_element_type = list_type;
     }
 
-    expr = gen_zero(list_type);
+    exprt list = gen_zero(list_type);
 
     unsigned int i = 0;
     for (auto &e : element["elts"])
     {
-      if (e["_type"] == "List")
-        expr.operands().at(i++) = get_expr(e);
-      else
-        expr.operands().at(i++) = get_expr(e);
+      list.operands().at(i++) = get_expr(e);
     }
+
+    locationt location = get_location_from_decl(element);
+    std::string path = location.file().as_string();
+    std::string name_prefix =
+      path + ":" + location.get_line().as_string() + "$compound-literal$";
+    symbolt &cl =
+      sym_generator_.new_symbol(symbol_table_, list_type, name_prefix);
+    cl.mode = "Python";
+    std::string module_name = location.get_file().as_string();
+    cl.module = module_name;
+    cl.location = location;
+    cl.static_lifetime = false;
+    cl.is_extern = false;
+    cl.file_local = true;
+    cl.value = list;
+
+    expr = symbol_expr(cl);
+    code_declt decl(expr);
+    decl.operands().push_back(list);
+    assert(current_block);
+    current_block->copy_to_operands(decl);
 
     break;
   }
@@ -2139,7 +2157,8 @@ void python_converter::get_return_statements(
 
 exprt python_converter::get_block(const nlohmann::json &ast_block)
 {
-  code_blockt block;
+  code_blockt block, *old_block = current_block;
+  current_block = &block;
 
   // Iterate over block statements
   for (auto &element : ast_block)
@@ -2231,6 +2250,8 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     }
   }
 
+  current_block = old_block;
+
   return std::move(block);
 }
 
@@ -2242,9 +2263,11 @@ python_converter::python_converter(
     ast_json(ast),
     global_scope_(gs),
     type_handler_(*this),
+    sym_generator_("python_converter::"),
     ns(_context),
     current_func_name_(""),
     current_class_name_(""),
+    current_block(nullptr),
     current_lhs(nullptr)
 {
 }
