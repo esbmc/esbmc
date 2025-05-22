@@ -476,7 +476,7 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     const auto &op = arg["op"];
     const auto &operand = arg["operand"];
     if (op["_type"] == "USub" && operand.contains("value"))
-      arg = operand;  // Strip the unary minus and use the positive literal
+      arg = operand; // Strip the unary minus and use the positive literal
   }
 
   // Reject strings early
@@ -499,7 +499,7 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     if (arg["value"].is_number_integer())
     {
       int value = arg["value"].get<int>();
-      arg["value"] = std::abs(value);  // Apply abs to integer constant
+      arg["value"] = std::abs(value); // Apply abs to integer constant
       arg["type"] = "int";
     }
     else if (arg["value"].is_number_float())
@@ -544,8 +544,10 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
       // Build a symbolic abs() expression with the resolved operand type
       exprt operand_expr = converter_.get_expr(arg);
       typet operand_type = operand_expr.type();
+
       exprt abs_expr("abs", operand_type);
       abs_expr.copy_to_operands(operand_expr);
+      
       return abs_expr;
     }
     else
