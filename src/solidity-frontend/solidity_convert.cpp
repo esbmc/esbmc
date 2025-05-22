@@ -4419,8 +4419,29 @@ bool solidity_convertert::get_expr(
     if (get_type_description(expr["typeDescriptions"], t))
       return true;
 
-    locationt l;
-    get_location_from_node(expr, l);
+    // 2. get the decl ref of the array
+    exprt array;
+
+    // 2.1 arr[n] / x.arr[n]
+    if (base_json.contains("referencedDeclaration"))
+    {
+      if (get_expr(base_json, literal_type, array))
+        return true;
+    }
+    else
+    {
+      // 2.2 func()[n]
+      const nlohmann::json &decl = base_json;
+      nlohmann::json implicit_cast_expr =
+        make_implicit_cast_expr(decl, "ArrayToPointerDecay");
+      if (get_expr(implicit_cast_expr, literal_type, array))
+        return true;
+    }
+
+    // 3. get the position index
+    exprt pos;
+    if (get_expr(index_json, expr["typeDescriptions"], pos))
+      return true;
 
     // for MAPPING
     typet base_t;
@@ -4428,129 +4449,115 @@ bool solidity_convertert::get_expr(
       return true;
     if (base_t.get("#sol_type").as_string() == "MAPPING")
     {
-      // this could be set or get:
-      bool is_mapping_set = is_mapping_index_lvalue(expr);
-
-      std::string func_name;
-
-      typet t;
-      if (is_mapping_set)
-      {
-        t = empty_typet();
-      }
-      else
-      {
-
-      }
-      side_effect_expr_function_callt call;
-      get_library_function_call_no_args(
-      func_name, "c:@F@" + func_name, t, location, call);
-
       // find mapping definition
       assert(base_json.contains("referencedDeclaration"));
       const nlohmann::json &map_node = find_decl_ref(
         src_ast_json["nodes"], base_json["referencedDeclaration"].get<int>());
 
-      // add mapping key linked list
-      // 1. get mapping id
-      std::string m_name, m_id;
-      if (get_var_decl_name(map_node, m_name, m_id))
-        return true;
-      // 2. get mapping symbol
-      if (context.find_symbol(m_id) == nullptr)
-        return true;
-      symbolt &m_sym = *context.find_symbol(m_id);
-      // 3. get mapping key type
-      typet key_t;
+      // get key/value type
+      assert(map_node.contains("typeName"));
+      typet key_t, value_t;
       if (get_type_description(
             map_node["typeName"]["keyType"]["typeDescriptions"], key_t))
-        return true;
-
-      // get mapping key
-      std::string sol_type = key_t.get("#sol_type").as_string();
-      std::string postfix = "U"; // uint
-      if (sol_type.compare(0, 3, "INT") == 0)
-        postfix = "I"; // int
-      exprt key_node_instance;
-      if (get_mapping_key_expr(
-            current_contractName, m_sym, postfix, key_node_instance))
-        return true;
-
-      // get base
-      exprt base;
-      if (get_expr(base_json, base_json["typeDescriptions"], base))
-        return true;
-
-      // if it's string, conert it to member access
-      // e.g. (_ESBMC_MAPPING_STRING)x.value()[i]
-      if (base.type().subtype().get("#sol_type") == "_ESBMC_MAPPING_STRING")
       {
-        struct_typet st = to_struct_type(
-          (*context.find_symbol("tag-struct _ESBMC_MAPPING_STRING")).type);
-        exprt comp = st.components().at(0);
-        base = member_exprt(base, comp.name(), comp.type());
+        log_error("cannot get mapping key type");
+        return true;
+      }
+      if (get_type_description(
+            map_node["typeName"]["valueType"]["typeDescriptions"], value_t))
+      {
+        log_error("cannot get mapping value type");
+        return true;
       }
 
-      // get pos
-      exprt pos;
-      if (get_expr(index_json, expr["typeDescriptions"], pos))
+      // set type flag
+      std::string key_sol_type = key_t.get("#sol_type").as_string();
+      if (key_sol_type.empty())
         return true;
-
-      // typecast: convert xx => uint
-      if (sol_type == "STRING" || sol_type == "STRING_LITERAL")
-      {
-        // convert string hex literal
-        // if there is already a hexValue in the node
-        if (index_json.contains("hexValue"))
-        {
-          std::string hex_val = index_json["hexValue"].get<std::string>();
-          if (convert_hex_literal(hex_val, pos))
-            return true;
-        }
-        // otherwise we need to convert a string to decimal ASCII values
-        else
-        {
-          // signed char * c:@F@str2int
-          // e.g. "Geek" => "1197827435"
-          // pos => str2int(pos)
-          side_effect_expr_function_callt _call;
-          get_library_function_call_no_args(
-            "str2int", "c:@F@str2int", unsignedbv_typet(256), l, _call);
-
-          // insert arguments
-          _call.arguments().push_back(pos);
-          pos = _call;
-        }
-      }
-
-      // obtain key from the key linked list
-      // e.g. x[10] ==> x[findKey(&key_x, 10)]
-      side_effect_expr_function_callt _findkey;
-      if (postfix == "I")
-        get_library_function_call_no_args(
-          "_ESBMC_address",
-          "c:@F@_ESBMC_address",
-          signedbv_typet(256),
-          l,
-          _findkey);
+      std::string key_flg;
+      if (key_sol_type.find("UINT") != std::string::npos)
+        key_flg = "uint";
+      else if (key_sol_type.find("INT") != std::string::npos)
+        key_flg = "int";
+      else if (key_sol_type.find("BOOL") != std::string::npos)
+        key_flg = "bool";
+      else if (
+        key_sol_type.find("STRING") != std::string::npos ||
+        key_sol_type.find("STRING_LITERAL") != std::string::npos)
+        key_flg = "string";
       else
-        get_library_function_call_no_args(
-          "_ESBMC_uaddress",
-          "c:@F@_ESBMC_uaddress",
-          unsignedbv_typet(256),
-          l,
-          _findkey);
+        key_flg = "general";
 
-      // this->key_x
-      exprt this_ptr = base.op0();
-      exprt mem_key = member_exprt(
-        this_ptr, key_node_instance.name(), key_node_instance.type());
+      // index accesss could either be set or get:
+      // x[1] => map_uint_get(&m, 1)
+      // x[1] = 2 => map_uint_set(&x, 1, 2)
+      bool is_mapping_set = is_mapping_index_lvalue(expr);
 
-      // findKey(this->key_x, this->pos);
-      _findkey.arguments().push_back(mem_key);
-      _findkey.arguments().push_back(pos);
+      // construct func call
+      std::string func_name;
+      typet func_type;
+      if (is_mapping_set)
+      {
+        func_name = "map_" + key_flg + "_set";
+        func_type = empty_typet();
+        func_type.set("cpp_type", "void");
+      }
+      else
+      {
+        func_name = "map_" + key_flg + "_get";
+        func_type = value_t;
+      }
 
-      new_expr = index_exprt(base, _findkey);
+      side_effect_expr_function_callt call;
+      get_library_function_call_no_args(
+        func_name, "c:@F@" + func_name, func_type, location, call);
+
+      // &array
+      call.arguments().push_back(address_of_exprt(array));
+
+      // index
+      call.arguments().push_back(pos);
+
+      if (is_mapping_set)
+      {
+        /*
+        x[1] = 2 =>
+        DECL temp   <-- move to front block
+        temp = 2;
+        map_uint_set(&array, pos, temp);  <-- move to back block
+        (map_generic_set(&array, pos, temp, sizeof(temp));) 
+        */
+        std::string aux_name, aux_id;
+        get_aux_var(aux_name, aux_id);
+        symbolt aux_sym;
+        std::string debug_modulename = get_modulename_from_path(absolute_path);
+        typet aux_type = value_t;
+        get_default_symbol(
+          aux_sym, debug_modulename, aux_type, aux_name, aux_id, location);
+        aux_sym.file_local = true;
+        aux_sym.lvalue = true;
+        auto &added_sym = *move_symbol_to_context(aux_sym);
+        code_declt decl(symbol_expr(added_sym));
+        move_to_front_block(decl);
+
+        // value
+        call.arguments().push_back(symbol_expr(added_sym));
+        if (key_flg == "generic")
+        {
+          // sizeof
+          exprt size_of_expr;
+          get_size_of_expr(value_t, size_of_expr);
+          call.arguments().push_back(symbol_expr(added_sym));
+        }
+
+        convert_expression_to_code(call);
+        move_to_back_block(call);
+
+        new_expr = symbol_expr(added_sym);
+        break;
+      }
+
+      new_expr = call;
       break;
     }
 
@@ -4597,30 +4604,6 @@ bool solidity_convertert::get_expr(
         break;
       }
     }
-
-    // 2. get the decl ref of the array
-    exprt array;
-
-    // 2.1 arr[n] / x.arr[n]
-    if (base_json.contains("referencedDeclaration"))
-    {
-      if (get_expr(base_json, literal_type, array))
-        return true;
-    }
-    else
-    {
-      // 2.2 func()[n]
-      const nlohmann::json &decl = base_json;
-      nlohmann::json implicit_cast_expr =
-        make_implicit_cast_expr(decl, "ArrayToPointerDecay");
-      if (get_expr(implicit_cast_expr, literal_type, array))
-        return true;
-    }
-
-    // 3. get the position index
-    exprt pos;
-    if (get_expr(index_json, expr["typeDescriptions"], pos))
-      return true;
 
     // BYTES:  func_ret_bytes()[]
     // same process as above
