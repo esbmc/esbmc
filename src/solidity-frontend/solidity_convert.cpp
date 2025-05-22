@@ -854,7 +854,7 @@ void solidity_convertert::get_function_this_pointer_param(
   const locationt &location_begin,
   code_typet &type)
 {
-  log_status("\t@@@ gettring function this pointer param");
+  log_debug("solidity", "\t@@@ gettring function this pointer param");
   assert(!contract_name.empty());
   code_typet::argumentt this_param;
   std::string this_name = "this";
@@ -10366,7 +10366,7 @@ void solidity_convertert::move_builtin_to_contract(
   std::string c_id = prefix + cname;
   if (context.find_symbol(c_id) == nullptr)
   {
-    log_status("parsing order error for struct {}", c_id);
+    log_error("parsing order error for struct {}", c_id);
     abort();
   }
   symbolt &c_sym = *context.find_symbol(c_id);
