@@ -523,9 +523,7 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     }
     catch (const std::exception &e)
     {
-      log_error(
-        "TypeError: failed to infer operand type for abs(): {}", e.what());
-      abort();
+      throw std::runtime_error(std::string("TypeError: failed to infer operand type for abs(): ") + e.what());
     }
   }
 
