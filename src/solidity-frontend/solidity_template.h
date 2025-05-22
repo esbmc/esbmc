@@ -233,14 +233,14 @@ __ESBMC_HIDE:;
 }
 
 /* uint256_t */
-static inline void map_uint_set(struct mapping_t *m, uint256_t k, uint256_t v)
+void map_uint_set(struct mapping_t *m, uint256_t k, uint256_t v)
 {
 __ESBMC_HIDE:;
   uint256_t *p = (uint256_t *)malloc(sizeof *p);
   *p = v;
   map_set_raw(m->base, m->addr, k, p);
 }
-static inline uint256_t map_uint_get(struct mapping_t *m, uint256_t k)
+uint256_t map_uint_get(struct mapping_t *m, uint256_t k)
 {
 __ESBMC_HIDE:;
   uint256_t *p = (uint256_t *)map_get_raw(m->base, m->addr, k);
@@ -248,14 +248,14 @@ __ESBMC_HIDE:;
 }
 
 /* int256_t */
-static inline void map_int_set(struct mapping_t *m, uint256_t k, int256_t v)
+void map_int_set(struct mapping_t *m, uint256_t k, int256_t v)
 {
 __ESBMC_HIDE:;
   int256_t *p = (int256_t *)malloc(sizeof *p);
   *p = v;
   map_set_raw(m->base, m->addr, k, p);
 }
-static inline int256_t map_int_get(struct mapping_t *m, uint256_t k)
+int256_t map_int_get(struct mapping_t *m, uint256_t k)
 {
 __ESBMC_HIDE:;
   int256_t *p = (int256_t *)map_get_raw(m->base, m->addr, k);
@@ -263,14 +263,14 @@ __ESBMC_HIDE:;
 }
 
 /* string */
-static inline void map_string_set(struct mapping_t *m, uint256_t k, char *v)
+void map_string_set(struct mapping_t *m, uint256_t k, char *v)
 {
 __ESBMC_HIDE:;
   char **p = (char **)malloc(sizeof *p);
   *p = v;
   map_set_raw(m->base, m->addr, k, p);
 }
-static inline char *map_string_get(struct mapping_t *m, uint256_t k)
+char *map_string_get(struct mapping_t *m, uint256_t k)
 {
 __ESBMC_HIDE:;
   char **p = (char **)map_get_raw(m->base, m->addr, k);
@@ -278,7 +278,7 @@ __ESBMC_HIDE:;
 }
 
 /* bool */
-static inline void map_bool_set(struct mapping_t *m, uint256_t k, bool v)
+void map_bool_set(struct mapping_t *m, uint256_t k, bool v)
 {
 __ESBMC_HIDE:;
   bool *p = (bool *)malloc(sizeof *p);
@@ -286,23 +286,22 @@ __ESBMC_HIDE:;
   map_set_raw(m->base, m->addr, k, p);
 }
 
-static inline bool map_bool_get(struct mapping_t *m, uint256_t k)
+bool map_bool_get(struct mapping_t *m, uint256_t k)
 {
 __ESBMC_HIDE:;
   bool *p = (bool *)map_get_raw(m->base, m->addr, k);
   return p ? *p : false;
 }
 
-
 /* generic */
-static inline void map_generic_set(struct mapping_t *m, uint256_t k, const void *v, size_t sz)
+void map_generic_set(struct mapping_t *m, uint256_t k, const void *v, size_t sz)
 {
 __ESBMC_HIDE:;
   void *p = malloc(sz);
   memcpy(p, v, sz);
   map_set_raw(m->base, m->addr, k, p);
 }
-static inline void *map_generic_get(struct mapping_t *m, uint256_t k)
+void *map_generic_get(struct mapping_t *m, uint256_t k)
 {
 __ESBMC_HIDE:;
   return map_get_raw(m->base, m->addr, k);
