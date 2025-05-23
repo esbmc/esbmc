@@ -4573,9 +4573,9 @@ bool solidity_convertert::get_expr(
       if (is_mapping_set)
       {
         /*
-        x[1] = 2 =>
-        DECL temp   <-- move to front block
-        temp = 2;
+        x[1] += 2 =>
+        DECL temp = map_uint_get(&array, pos);  <-- move to front block
+        temp += 2;
         map_uint_set(&array, pos, temp);  <-- move to back block
         (map_generic_set(&array, pos, temp, sizeof(temp));) 
         */
@@ -4590,6 +4590,19 @@ bool solidity_convertert::get_expr(
         aux_sym.lvalue = true;
         auto &added_sym = *move_symbol_to_context(aux_sym);
         code_declt decl(symbol_expr(added_sym));
+
+        // populate initial value
+        side_effect_expr_function_callt get_call;
+        get_library_function_call_no_args(
+          "map_" + val_flg + "_get",
+          "c:@F@map_" + val_flg + "_get",
+          value_t,
+          location,
+          get_call);
+        get_call.arguments().push_back(address_of_exprt(array));
+        get_call.arguments().push_back(pos);
+        added_sym.value = get_call;
+        decl.operands().push_back(get_call);
         move_to_front_block(decl);
 
         // value
