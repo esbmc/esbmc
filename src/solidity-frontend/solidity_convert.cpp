@@ -2550,7 +2550,9 @@ bool solidity_convertert::move_inheritance_to_ctor(
           auto _ctor = ctor_node["modifiers"];
           for (const auto &c_mdf : _ctor)
           {
-            if (!c_mdf.contains("modifierName"))
+            if (
+              !c_mdf.contains("modifierName") ||
+              c_mdf["kind"] != "baseConstructorSpecifier")
               continue;
 
             if (c_mdf["modifierName"]["name"].get<std::string>() == c_name)
