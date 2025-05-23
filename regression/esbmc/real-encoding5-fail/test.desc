@@ -1,0 +1,5 @@
+CORE
+main.c
+--z3 --ir
+
+^VERIFICATION FAILED$
