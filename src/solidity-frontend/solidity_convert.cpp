@@ -5068,7 +5068,21 @@ void solidity_convertert::get_current_contract_name(
     contract_name = "";
     return;
   }
-  assert(ast_node.contains("id"));
+  if (!ast_node.contains("id"))
+  {
+    // this could be manually created json.
+    //TODO: avoid this kind of implementation
+    if (ast_node["nodeType"] == "ImplicitCastExprClass")
+    {
+      get_current_contract_name(ast_node["subExpr"], contract_name);
+    }
+    else
+    {
+      log_warning("target node do not have id.");
+      log_status("{}", ast_node.dump());
+    }
+    return;
+  }
 
   const auto &json = find_parent_contract(src_ast_json["nodes"], ast_node);
   if (json.empty() || json.is_null())
