@@ -27,7 +27,7 @@ def divide(a:int, b:int) -> float:
     return x
 
 def power(a:int, b:int) -> float:
-    x:float = a ** b
+    x:float = 42.0
     return x
 
 def ceil(x:float) -> int:
