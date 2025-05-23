@@ -4500,7 +4500,11 @@ bool solidity_convertert::get_expr(
       if (val_sol_type.empty())
         return true;
       std::string val_flg;
-      if (val_sol_type.find("UINT") != std::string::npos)
+      if (
+        val_sol_type.find("UINT") != std::string::npos ||
+        val_sol_type.find("BYTES") != std::string::npos ||
+        val_sol_type.find("ADDRESS") != std::string::npos ||
+        val_sol_type.find("ENUM") != std::string::npos)
         val_flg = "uint";
       else if (val_sol_type.find("INT") != std::string::npos)
         val_flg = "int";
@@ -4533,7 +4537,14 @@ bool solidity_convertert::get_expr(
         func_type = value_t;
       }
 
-      assert(context.find_symbol("c:@F@" + func_name) != nullptr);
+      if (context.find_symbol("c:@F@" + func_name) == nullptr)
+      {
+        log_error(
+          "cannot find mapping ref {}. Got val_sol_type={}",
+          func_name,
+          val_sol_type);
+        return true;
+      }
       side_effect_expr_function_callt call;
       get_library_function_call_no_args(
         func_name, "c:@F@" + func_name, func_type, location, call);
@@ -4556,6 +4567,7 @@ bool solidity_convertert::get_expr(
         str2uint_call.arguments().push_back(pos);
         pos = str2uint_call;
       }
+      solidity_gen_typecast(ns, pos, unsignedbv_typet(256));
       call.arguments().push_back(pos);
 
       if (is_mapping_set)
