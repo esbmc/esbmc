@@ -43,7 +43,6 @@ solidity_convertert::solidity_convertert(
     current_functionName(""),
     member_entity_scope({}),
     initializers(code_blockt()),
-    ctor_modifier(nullptr),
     aux_counter(0),
     is_bound(true),
     is_reentry_check(false),
@@ -1396,7 +1395,6 @@ bool solidity_convertert::get_contract_definition(const std::string &c_name)
   auto old_current_forStmt = current_forStmt;
   auto old_current_typeName = current_typeName;
   auto old_initializers = initializers;
-  auto old_ctor_modifier = ctor_modifier;
 
   // reset
   reset_auxiliary_vars();
@@ -1479,7 +1477,6 @@ bool solidity_convertert::get_contract_definition(const std::string &c_name)
   current_forStmt = old_current_forStmt;
   current_typeName = old_current_typeName;
   initializers = old_initializers;
-  ctor_modifier = old_ctor_modifier;
 
   return false;
 }
@@ -2866,7 +2863,6 @@ void solidity_convertert::reset_auxiliary_vars()
   current_forStmt = nullptr;
   current_typeName = nullptr;
   initializers.clear();
-  ctor_modifier = nullptr;
 }
 
 bool solidity_convertert::get_function_params(
