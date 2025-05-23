@@ -10,6 +10,9 @@
 
 #include <ostream>
 
+const char *kConstant = "Constant";
+const char *kName = "Name";
+
 numpy_call_expr::numpy_call_expr(
   const symbol_id &function_id,
   const nlohmann::json &call,
@@ -43,13 +46,30 @@ static auto create_list(const std::vector<T> &vector)
 }
 
 template <typename T>
-static auto create_binary_op(const std::string &op, const T &lhs, const T &rhs)
+static auto create_binary_op(
+  const std::string &op,
+  const std::string &type,
+  const T &lhs,
+  const T &rhs)
 {
+  nlohmann::json left, right;
+
+  if (type == kName)
+  {
+    left = {{"_type", type}, {"id", lhs}};
+    right = {{"_type", type}, {"id", rhs}};
+  }
+  else
+  {
+    left = {{"_type", type}, {"value", lhs}};
+    right = {{"_type", type}, {"value", rhs}};
+  }
+
   nlohmann::json bin_op = {
     {"_type", "BinOp"},
-    {"left", {{"_type", "Constant"}, {"value", lhs}}},
+    {"left", left},
     {"op", {{"_type", op}}},
-    {"right", {{"_type", "Constant"}, {"value", rhs}}}};
+    {"right", right}};
 
   return bin_op;
 }
@@ -320,14 +340,24 @@ exprt numpy_call_expr::create_expr_from_call()
       {
         double lhs_val = get_constant_value<double>(lhs);
         double rhs_val = get_constant_value<double>(rhs);
-        expr = create_binary_op(function_id_.get_function(), lhs_val, rhs_val);
+        expr = create_binary_op(
+          function_id_.get_function(), kConstant, lhs_val, rhs_val);
       }
       else
       {
         int lhs_val = get_constant_value<int>(lhs);
         int rhs_val = get_constant_value<int>(rhs);
-        expr = create_binary_op(function_id_.get_function(), lhs_val, rhs_val);
+        expr = create_binary_op(
+          function_id_.get_function(), kConstant, lhs_val, rhs_val);
       }
+    }
+    else if (lhs["_type"] == "AnnAssign" && rhs["_type"] == "AnnAssign")
+    {
+      expr = create_binary_op(
+        function_id_.get_function(),
+        kName,
+        lhs["target"]["id"],
+        rhs["target"]["id"]);
     }
     else if (lhs["_type"] == "List" && rhs["_type"] == "List")
     {
@@ -367,30 +397,29 @@ exprt numpy_call_expr::create_expr_from_call()
         return call;
       }
 
-      // FIXME: Replace this by C models function calls
-      for (size_t i = 0; i < lhs["elts"].size(); ++i)
+      if (
+        operation == "add" || operation == "subtract" ||
+        operation == "multiply" || operation == "divide")
       {
-        int left_val = lhs["elts"][i]["value"].get<int>();
-        int right_val = rhs["elts"][i]["value"].get<int>();
+        code_function_callt call =
+          to_code_function_call(to_code(function_call_expr::get()));
+        typet t = converter_.get_expr(lhs).type();
+        converter_.current_lhs->type() = t;
+        converter_.update_symbol(*converter_.current_lhs);
+        auto &args = call.arguments();
+        args.push_back(address_of_exprt(*converter_.current_lhs));
 
-        if (operation == "add")
-          res.push_back(left_val + right_val);
-        else if (operation == "subtract")
-          res.push_back(left_val - right_val);
-        else if (operation == "multiply")
-          res.push_back(left_val * right_val);
-        else if (operation == "divide")
-        {
-          if (right_val == 0)
-            throw std::runtime_error("Division by zero in list operation");
-          res.push_back(left_val / right_val);
-        }
-        else
-        {
-          throw std::runtime_error("Unsupported operation: " + operation);
-        }
+        std::vector<int> shape = type_handler_.get_array_type_shape(t);
+        exprt m = shape.size() < 2 ? gen_one(int_type())
+                                   : from_integer(shape[0], int_type());
+        exprt n = from_integer(shape.back(), int_type());
+        args.push_back(m);
+        args.push_back(n);
+
+        return call;
       }
-      expr = create_list(res);
+
+      throw std::runtime_error("Unsupported operation: " + operation);
     }
   }
 
@@ -403,9 +432,6 @@ exprt numpy_call_expr::create_expr_from_call()
 
 exprt numpy_call_expr::get()
 {
-  static const std::unordered_map<std::string, float> numpy_functions = {
-    {"zeros", 0.0}, {"ones", 1.0}};
-
   const std::string &function = function_id_.get_function();
 
   // Create array from numpy.array()
@@ -415,9 +441,12 @@ exprt numpy_call_expr::get()
     return expr;
   }
 
+  static const std::unordered_map<std::string, float> array_creation_funcs = {
+    {"zeros", 0.0}, {"ones", 1.0}};
+
   // Create array from numpy.zeros() or numpy.ones()
-  auto it = numpy_functions.find(function);
-  if (it != numpy_functions.end())
+  auto it = array_creation_funcs.find(function);
+  if (it != array_creation_funcs.end())
   {
     auto list = create_list(call_["args"][0]["value"].get<int>(), it->second);
     return converter_.get_expr(list);

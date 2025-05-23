@@ -89,12 +89,13 @@ static const struct buffer
 };
 
 const static std::vector<std::string> python_c_models = {
-  "strncmp", "ceil",       "__ceil_array", "fegetround",   "fesetround",
-  "rint",    "fesetround", "floor",        "fabs",         "sin",
-  "cos",     "exp",        "expm1",        "expm1_taylor", "fmod",
-  "sqrt",    "fmin",       "fmax",         "trunc",        "frexp",
-  "round",   "copysign",   "arctan",       "atan",         "_atan",
-  "atan2",   "acos",       "arccos",       "dot"};
+  "strncmp",  "ceil",       "__ceil_array", "fegetround",   "fesetround",
+  "rint",     "fesetround", "floor",        "fabs",         "sin",
+  "cos",      "exp",        "expm1",        "expm1_taylor", "fmod",
+  "sqrt",     "fmin",       "fmax",         "trunc",        "frexp",
+  "round",    "copysign",   "arctan",       "atan",         "_atan",
+  "atan2",    "acos",       "arccos",       "dot",          "add",
+  "subtract", "multiply",   "divide"};
 
 } // namespace
 

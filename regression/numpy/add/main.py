@@ -1,5 +1,10 @@
 import numpy as np
 
+x = 2
+y = 3
+z = np.add(x,y)
+assert z == 5
+
 a = np.add(1.0, 4.0)
 assert a == 5.0
 
