@@ -43,7 +43,6 @@ solidity_convertert::solidity_convertert(
     current_functionName(""),
     member_entity_scope({}),
     initializers(code_blockt()),
-    ctor_modifier(nullptr),
     aux_counter(0),
     is_bound(true),
     is_reentry_check(false),
@@ -645,7 +644,7 @@ bool solidity_convertert::populate_function_signature(
   {
     if (
       func_node.contains("nodeType") &&
-      func_node["nodeType"] == "FunctionDefinition")
+      (func_node["nodeType"] == "FunctionDefinition"))
     {
       if (
         func_node["name"] == "" && func_node.contains("kind") &&
@@ -786,6 +785,7 @@ bool solidity_convertert::get_non_function_decl(
   {
     return get_struct_class(ast_node); // rule enum-definition
   }
+  case SolidityGrammar::ContractBodyElementT::ModifierDef:
   case SolidityGrammar::ContractBodyElementT::FunctionDef:
   case SolidityGrammar::ContractBodyElementT::EnumDef:
   case SolidityGrammar::ContractBodyElementT::ErrorDef:
@@ -822,6 +822,7 @@ bool solidity_convertert::get_function_decl(const nlohmann::json &ast_node)
   // based on each element as in Solidty grammar "rule contract-body-element"
   switch (type)
   {
+  case SolidityGrammar::ContractBodyElementT::ModifierDef:
   case SolidityGrammar::ContractBodyElementT::FunctionDef:
   {
     return get_function_definition(ast_node); // rule function-definition
@@ -947,12 +948,13 @@ bool solidity_convertert::get_var_decl(
   std::string name, id;
   //TODO: Omitted variable
   if (ast_node["name"].get<std::string>().empty())
+    // Omitted variable
+    get_aux_var(name, id);
+  else
   {
-    log_error("Variables with omitted name are not supported.");
-    return true;
+    if (get_var_decl_name(ast_node, name, id))
+      return true;
   }
-  if (get_var_decl_name(ast_node, name, id))
-    return true;
 
   // if we have already populated the var symbol, we do not need to re-parse
   // however, we need to return the symbol info
@@ -1317,6 +1319,7 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &struct_def)
         return true;
       break;
     }
+    case SolidityGrammar::ContractBodyElementT::ModifierDef:
     case SolidityGrammar::ContractBodyElementT::FunctionDef:
     {
       if (get_struct_class_method(*itr, t))
@@ -1392,7 +1395,6 @@ bool solidity_convertert::get_contract_definition(const std::string &c_name)
   auto old_current_forStmt = current_forStmt;
   auto old_current_typeName = current_typeName;
   auto old_initializers = initializers;
-  auto old_ctor_modifier = ctor_modifier;
 
   // reset
   reset_auxiliary_vars();
@@ -1475,7 +1477,6 @@ bool solidity_convertert::get_contract_definition(const std::string &c_name)
   current_forStmt = old_current_forStmt;
   current_typeName = old_current_typeName;
   initializers = old_initializers;
-  ctor_modifier = old_ctor_modifier;
 
   return false;
 }
@@ -1661,7 +1662,8 @@ void solidity_convertert::add_empty_body_node(nlohmann::json &ast_node)
     for (auto &subNode : ast_node["nodes"])
     {
       if (
-        subNode["nodeType"] == "FunctionDefinition" &&
+        (subNode["nodeType"] == "FunctionDefinition" ||
+         subNode["nodeType"] == "ModifierDefinition") &&
         !subNode.contains("body"))
         subNode["body"] = {
           {"nodeType", "Block"},
@@ -1675,7 +1677,8 @@ void solidity_convertert::add_empty_body_node(nlohmann::json &ast_node)
     for (auto &subNode : ast_node["nodes"])
     {
       if (
-        subNode["nodeType"] == "FunctionDefinition" &&
+        (subNode["nodeType"] == "FunctionDefinition" ||
+         subNode["nodeType"] == "ModifierDefinition") &&
         !subNode.contains("body"))
         subNode["body"] = {
           {"nodeType", "Block"},
@@ -1988,10 +1991,11 @@ bool solidity_convertert::get_constructor(
       SolidityGrammar::get_contract_body_element_t(ast_node);
     switch (type)
     {
+    case SolidityGrammar::ContractBodyElementT::ModifierDef:
     case SolidityGrammar::ContractBodyElementT::FunctionDef:
     {
       if (
-        ast_node.contains("kind") &&
+        ast_node.contains("kind") && !ast_node["kind"].empty() &&
         ast_node["kind"].get<std::string>() == "constructor")
         return get_function_definition(ast_node);
       continue;
@@ -2546,7 +2550,9 @@ bool solidity_convertert::move_inheritance_to_ctor(
           auto _ctor = ctor_node["modifiers"];
           for (const auto &c_mdf : _ctor)
           {
-            if (!c_mdf.contains("modifierName"))
+            if (
+              !c_mdf.contains("modifierName") ||
+              c_mdf["kind"] != "baseConstructorSpecifier")
               continue;
 
             if (c_mdf["modifierName"]["name"].get<std::string>() == c_name)
@@ -2859,7 +2865,6 @@ void solidity_convertert::reset_auxiliary_vars()
   current_forStmt = nullptr;
   current_typeName = nullptr;
   initializers.clear();
-  ctor_modifier = nullptr;
 }
 
 bool solidity_convertert::get_function_params(
@@ -3458,6 +3463,12 @@ bool solidity_convertert::get_statement(
 
     break;
   }
+  case SolidityGrammar::StatementT::PlaceholderStatement:
+  {
+    // TODO: splite the modifierdefinition node, record content before and after, and prepare to insert
+    new_expr = code_skipt();
+    break;
+  }
   case SolidityGrammar::StatementT::StatementTError:
   default:
   {
@@ -3579,7 +3590,9 @@ bool solidity_convertert::get_expr(
           if (get_var_decl_ref(decl, true, new_expr))
             return true;
         }
-        else if (decl["nodeType"] == "FunctionDefinition")
+        else if (
+          decl["nodeType"] == "FunctionDefinition" ||
+          decl["nodeType"] == "ModifierDefinition")
         {
           if (get_func_decl_ref(decl, new_expr))
             return true;
@@ -4308,6 +4321,7 @@ bool solidity_convertert::get_expr(
 
       break;
     }
+    case SolidityGrammar::ModifierDef:
     case SolidityGrammar::FunctionDef:
     {
       // e.g. x.func()
@@ -5995,7 +6009,8 @@ bool solidity_convertert::get_func_decl_ref(
   assert(
     decl["nodeType"] == "FunctionDefinition" ||
     decl["nodeType"] == "EventDefinition" ||
-    decl["nodeType"] == "ErrorDefinition");
+    decl["nodeType"] == "ErrorDefinition" ||
+    decl["nodeType"] == "ModifierDefinition");
 
   // find base contract name
   const auto contract_def = find_parent_contract(src_ast_json, decl);
@@ -6043,7 +6058,9 @@ const nlohmann::json &solidity_convertert::get_func_decl_ref(
            itrr != ast_nodes.end();
            ++itrr)
       {
-        if ((*itrr)["nodeType"] == "FunctionDefinition")
+        if (
+          (*itrr)["nodeType"] == "FunctionDefinition" ||
+          (*itrr)["nodeType"] == "ModifierDefinition")
         {
           if ((*itrr).contains("name") && (*itrr)["name"] == f_name)
             return (*itrr);
@@ -6654,16 +6671,17 @@ bool solidity_convertert::get_func_decl_ref_type(
   case SolidityGrammar::FunctionDeclRefT::FunctionNoProto:
   {
     code_typet type;
+    if (decl["nodeType"] != "ModifierDefinition")
+    {
+      // Return type
+      const nlohmann::json &rtn_type = decl["returnParameters"];
 
-    // Return type
-    const nlohmann::json &rtn_type = decl["returnParameters"];
+      typet return_type;
+      if (get_type_description(rtn_type, return_type))
+        return true;
 
-    typet return_type;
-    if (get_type_description(rtn_type, return_type))
-      return true;
-
-    type.return_type() = return_type;
-
+      type.return_type() = return_type;
+    }
     if (!type.arguments().size())
       type.make_ellipsis();
 

@@ -613,8 +613,6 @@ protected:
   std::unordered_map<int, std::string> member_entity_scope;
   // Store state variables
   code_blockt initializers;
-  // For inheritance
-  const nlohmann::json *ctor_modifier;
 
   static constexpr const char *mode = "C++";
 
