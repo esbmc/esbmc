@@ -937,9 +937,6 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       bin_expr.op1() = typecast_exprt(rhs, target_type);
   }
 
-  printf("passou em 940\n");
-  bin_expr.dump();
-
   // Handle chained comparisons like: assert 0 <= x <= 1
   if (element.contains("comparators") && element["comparators"].size() > 1)
   {
@@ -960,7 +957,6 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     return cond;
   }
 
-  printf("passou em 963\n");
   return bin_expr;
 }
 
