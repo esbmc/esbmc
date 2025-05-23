@@ -1306,154 +1306,154 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
     break;
   }
-case ExpressionType::VARIABLE_REF:
-{
-  std::string var_name;
-  bool is_class_attr = false;
-  if (element["_type"] == "Name")
+  case ExpressionType::VARIABLE_REF:
   {
-    var_name = element["id"].get<std::string>();
-  }
-  else if (element["_type"] == "Attribute")
-  {
-    var_name = element["value"]["id"].get<std::string>();
-    if (is_class(var_name, ast_json))
+    std::string var_name;
+    bool is_class_attr = false;
+    if (element["_type"] == "Name")
     {
-      // Found a class attribute
-      var_name = "C@" + var_name;
-      is_class_attr = true;
+      var_name = element["id"].get<std::string>();
     }
-  }
-
-  assert(!var_name.empty());
-
-  symbol_id sid = create_symbol_id();
-  sid.set_object(var_name);
-
-  if (element.contains("attr") && is_class_attr)
-    sid.set_attribute(element["attr"].get<std::string>());
-
-  std::string sid_str = sid.to_string();
-
-  symbolt *symbol = nullptr;
-  if (!(symbol = find_symbol(sid_str)))
-  {
-    // Fallback for global variables accessed inside functions
-    if (!is_class_attr && element["_type"] == "Name")
+    else if (element["_type"] == "Attribute")
     {
-      sid.set_function(""); // remove function scope
-      sid_str = sid.to_string();
-      symbol = find_symbol(sid_str);
-    }
-    if (!symbol)
-    {
-      log_error("Symbol not found {}", sid_str);
-      abort();
-    }
-  }
-
-  expr = symbol_expr(*symbol);
-
-  // Get instance attribute
-  if (!is_class_attr && element["_type"] == "Attribute")
-  {
-    const std::string &attr_name = element["attr"].get<std::string>();
-
-    // Get object type name from symbol. e.g.: tag-MyClass
-    std::string obj_type_name;
-    const typet &symbol_type =
-      (symbol->type.is_pointer()) ? symbol->type.subtype() : symbol->type;
-    for (const auto &it : symbol_type.get_named_sub())
-    {
-      if (it.first == "identifier")
-        obj_type_name = it.second.id_string();
-    }
-
-    // Get class definition from symbols table
-    symbolt *class_symbol = symbol_table_.find_symbol(obj_type_name);
-    if (!class_symbol)
-    {
-      throw std::runtime_error("Class \"" + obj_type_name + "\" not found");
-    }
-
-    struct_typet &class_type =
-      static_cast<struct_typet &>(class_symbol->type);
-
-    if (is_converting_lhs)
-    {
-      // Add member in the class
-      if (!class_type.has_component(attr_name))
+      var_name = element["value"]["id"].get<std::string>();
+      if (is_class(var_name, ast_json))
       {
-        struct_typet::componentt comp = build_component(
-          class_type.tag().as_string(), attr_name, current_element_type);
-        class_type.components().push_back(comp);
+        // Found a class attribute
+        var_name = "C@" + var_name;
+        is_class_attr = true;
       }
-      // Add instance attribute in the objects map
-      instance_attr_map[symbol->id.as_string()].insert(attr_name);
     }
 
-    auto is_instance_attr = [&]() -> bool {
-      auto it = instance_attr_map.find(symbol->id.as_string());
-      if (it != instance_attr_map.end())
-      {
-        return it->second.count(attr_name) > 0;
-      }
-      return false;
-    };
+    assert(!var_name.empty());
 
-    auto has_any_instance_attr = [&]() -> bool {
-      // Check if ANY object of this class type has this as an instance attribute
-      for (const auto& [obj_id, attrs] : instance_attr_map) {
-        if (attrs.count(attr_name)) {
-          return true;
+    symbol_id sid = create_symbol_id();
+    sid.set_object(var_name);
+
+    if (element.contains("attr") && is_class_attr)
+      sid.set_attribute(element["attr"].get<std::string>());
+
+    std::string sid_str = sid.to_string();
+
+    symbolt *symbol = nullptr;
+    if (!(symbol = find_symbol(sid_str)))
+    {
+      // Fallback for global variables accessed inside functions
+      if (!is_class_attr && element["_type"] == "Name")
+      {
+        sid.set_function(""); // remove function scope
+        sid_str = sid.to_string();
+        symbol = find_symbol(sid_str);
+      }
+      if (!symbol)
+      {
+        log_error("Symbol not found {}", sid_str);
+        abort();
+      }
+    }
+
+    expr = symbol_expr(*symbol);
+
+    // Get instance attribute
+    if (!is_class_attr && element["_type"] == "Attribute")
+    {
+      const std::string &attr_name = element["attr"].get<std::string>();
+
+      // Get object type name from symbol. e.g.: tag-MyClass
+      std::string obj_type_name;
+      const typet &symbol_type =
+        (symbol->type.is_pointer()) ? symbol->type.subtype() : symbol->type;
+      for (const auto &it : symbol_type.get_named_sub())
+      {
+        if (it.first == "identifier")
+          obj_type_name = it.second.id_string();
+      }
+
+      // Get class definition from symbols table
+      symbolt *class_symbol = symbol_table_.find_symbol(obj_type_name);
+      if (!class_symbol)
+      {
+        throw std::runtime_error("Class \"" + obj_type_name + "\" not found");
+      }
+
+      struct_typet &class_type =
+        static_cast<struct_typet &>(class_symbol->type);
+
+      if (is_converting_lhs)
+      {
+        // Add member in the class
+        if (!class_type.has_component(attr_name))
+        {
+          struct_typet::componentt comp = build_component(
+            class_type.tag().as_string(), attr_name, current_element_type);
+          class_type.components().push_back(comp);
         }
+        // Add instance attribute in the objects map
+        instance_attr_map[symbol->id.as_string()].insert(attr_name);
       }
-      return false;
-    };
 
-    // Check if this specific object has the attribute as an instance attribute
-    if (class_type.has_component(attr_name) && is_instance_attr())
-    {
-      // Use instance attribute - this object has its own copy
-      const typet &attr_type = class_type.get_component(attr_name).type();
-      expr = member_exprt(
-        symbol_exprt(symbol->id, symbol->type), attr_name, attr_type);
-    }
-    // Check if we're in the process of setting an instance attribute
-    else if (class_type.has_component(attr_name) && is_converting_lhs)
-    {
-      // Setting an instance attribute - use instance attribute access
-      const typet &attr_type = class_type.get_component(attr_name).type();
-      expr = member_exprt(
-        symbol_exprt(symbol->id, symbol->type), attr_name, attr_type);
-    }
-    // For reads, if any instance has this attribute, treat as instance attribute
-    // This handles object references through function calls and assignments
-    else if (class_type.has_component(attr_name) && !is_converting_lhs && has_any_instance_attr())
-    {
-      // Use instance attribute for reads when any instance has this attribute
-      const typet &attr_type = class_type.get_component(attr_name).type();
-      expr = member_exprt(
-        symbol_exprt(symbol->id, symbol->type), attr_name, attr_type);
-    }
-    // Fallback to class attribute when no instance attribute exists
-    else
-    {
-      // Use class attribute - all objects share this
-      sid.set_function("");
-      sid.set_class(obj_type_name.substr(4));
-      sid.set_object(attr_name);
-      symbolt *class_attr_symbol = symbol_table_.find_symbol(sid.to_string());
+      auto is_instance_attr = [&]() -> bool {
+        auto it = instance_attr_map.find(symbol->id.as_string());
+        if (it != instance_attr_map.end())
+        {
+          return it->second.count(attr_name) > 0;
+        }
+        return false;
+      };
 
-      if (!class_attr_symbol)
+      auto has_any_instance_attr = [&]() -> bool {
+        // Check if ANY object of this class type has this as an instance attribute
+        for (const auto& [obj_id, attrs] : instance_attr_map) {
+          if (attrs.count(attr_name)) {
+            return true;
+          }
+        }
+        return false;
+      };
+
+      // Check if this specific object has the attribute as an instance attribute
+      if (class_type.has_component(attr_name) && is_instance_attr())
       {
-        throw std::runtime_error("Attribute \"" + attr_name + "\" not found");
+        // Use instance attribute - this object has its own copy
+        const typet &attr_type = class_type.get_component(attr_name).type();
+        expr = member_exprt(
+          symbol_exprt(symbol->id, symbol->type), attr_name, attr_type);
       }
-      expr = symbol_expr(*class_attr_symbol);
+      // Check if we're in the process of setting an instance attribute
+      else if (class_type.has_component(attr_name) && is_converting_lhs)
+      {
+        // Setting an instance attribute - use instance attribute access
+        const typet &attr_type = class_type.get_component(attr_name).type();
+        expr = member_exprt(
+          symbol_exprt(symbol->id, symbol->type), attr_name, attr_type);
+      }
+      // For reads, if any instance has this attribute, treat as instance attribute
+      // This handles object references through function calls and assignments
+      else if (class_type.has_component(attr_name) && !is_converting_lhs && has_any_instance_attr())
+      {
+        // Use instance attribute for reads when any instance has this attribute
+        const typet &attr_type = class_type.get_component(attr_name).type();
+        expr = member_exprt(
+          symbol_exprt(symbol->id, symbol->type), attr_name, attr_type);
+      }
+      // Fallback to class attribute when no instance attribute exists
+      else
+      {
+        // Use class attribute - all objects share this
+        sid.set_function("");
+        sid.set_class(obj_type_name.substr(4));
+        sid.set_object(attr_name);
+        symbolt *class_attr_symbol = symbol_table_.find_symbol(sid.to_string());
+
+        if (!class_attr_symbol)
+        {
+          throw std::runtime_error("Attribute \"" + attr_name + "\" not found");
+        }
+        expr = symbol_expr(*class_attr_symbol);
+      }
     }
+    break;
   }
-  break;
-}
   case ExpressionType::FUNC_CALL:
   {
     expr = get_function_call(element);
