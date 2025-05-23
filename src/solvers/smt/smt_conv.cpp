@@ -881,15 +881,23 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
      *       them properly according to the input language.
      */
 
-    auto eq = to_equality2t(expr);
+    const auto &eq = to_equality2t(expr);
+  smt_astt lhs = convert_ast(eq.side_1);
+  smt_astt rhs = convert_ast(eq.side_2);
 
-    if (
-      is_floatbv_type(eq.side_1) && is_floatbv_type(eq.side_2) && !int_encoding)
-      a = fp_api->mk_smt_fpbv_eq(args[0], args[1]);
-    else
-      a = args[0]->eq(this, args[1]);
-    break;
+  if(int_encoding &&
+     is_floatbv_type(eq.side_1) &&
+     is_floatbv_type(eq.side_2))
+  {
+    // encode x==y as (x==y) AND NOT isNaN(x)
+    smt_astt isn = convert_is_nan(eq.side_1);
+    a = mk_and(lhs->eq(this, rhs), mk_not(isn));
   }
+  else
+    a = lhs->eq(this, rhs);
+
+  break;
+}
   case expr2t::notequal_id:
   {
     // Handle all kinds of structs by inverted equality. The only that's really
@@ -1140,45 +1148,44 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     a = mk_implies(args[0], args[1]);
     break;
   }
+  /* According to the SMT-lib, LIRA focuses on arithmetic operations
+     involving integers and reals. Still, it does not inherently handle
+     bitwise operations, as these fall under the domain of bit-vector theories.
+     Here, we combine LIRA and bitwise operations (such as &, |, ^)
+     in a way that aligns with arithmetic constraints.
+  */
   case expr2t::bitand_id:
   {
-    assert(!int_encoding);
     a = mk_bvand(args[0], args[1]);
     break;
   }
   case expr2t::bitor_id:
   {
-    assert(!int_encoding);
     a = mk_bvor(args[0], args[1]);
     break;
   }
   case expr2t::bitxor_id:
   {
-    assert(!int_encoding);
     a = mk_bvxor(args[0], args[1]);
     break;
   }
   case expr2t::bitnand_id:
   {
-    assert(!int_encoding);
     a = mk_bvnand(args[0], args[1]);
     break;
   }
   case expr2t::bitnor_id:
   {
-    assert(!int_encoding);
     a = mk_bvnor(args[0], args[1]);
     break;
   }
   case expr2t::bitnxor_id:
   {
-    assert(!int_encoding);
     a = mk_bvnxor(args[0], args[1]);
     break;
   }
   case expr2t::bitnot_id:
   {
-    assert(!int_encoding);
     a = mk_bvnot(args[0]);
     break;
   }
@@ -1598,10 +1605,19 @@ smt_astt smt_convt::convert_is_nan(const expr2tc &expr)
 {
   const isnan2t &isnan = to_isnan2t(expr);
 
-  // Anything other than floats will never be NaNs
-  if (!is_floatbv_type(isnan.value) || int_encoding)
+  // Anything other than floats is never NaN
+  if(!is_floatbv_type(isnan.value))
     return mk_smt_bool(false);
 
+  // In --ir, Generate a fresh Boolean symbol for isnan(x)
+  if(int_encoding)
+  {
+    smt_sortt bool_sort = mk_bool_sort();
+    std::string sym = mk_fresh_name("isnan");
+    return mk_smt_symbol(sym, bool_sort);
+  }
+
+  
   smt_astt operand = convert_ast(isnan.value);
   return fp_api->mk_smt_fpbv_is_nan(operand);
 }
