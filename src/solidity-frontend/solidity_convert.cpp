@@ -949,12 +949,13 @@ bool solidity_convertert::get_var_decl(
   std::string name, id;
   //TODO: Omitted variable
   if (ast_node["name"].get<std::string>().empty())
+    // Omitted variable
+    get_aux_var(name, id);
+  else
   {
-    log_error("Variables with omitted name are not supported.");
-    return true;
+    if (get_var_decl_name(ast_node, name, id))
+      return true;
   }
-  if (get_var_decl_name(ast_node, name, id))
-    return true;
 
   // if we have already populated the var symbol, we do not need to re-parse
   // however, we need to return the symbol info
