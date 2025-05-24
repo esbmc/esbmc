@@ -4505,22 +4505,39 @@ bool solidity_convertert::get_expr(
       if (val_sol_type.empty())
         return true;
       std::string val_flg;
+      typet func_type;
       if (
         val_sol_type.find("UINT") != std::string::npos ||
         val_sol_type.find("BYTES") != std::string::npos ||
         val_sol_type.find("ADDRESS") != std::string::npos ||
         val_sol_type.find("ENUM") != std::string::npos)
+      {
         val_flg = "uint";
+        func_type = unsignedbv_typet(256);
+      }
       else if (val_sol_type.find("INT") != std::string::npos)
+      {
         val_flg = "int";
+        func_type = signedbv_typet(256);
+      }
       else if (val_sol_type.find("BOOL") != std::string::npos)
+      {
         val_flg = "bool";
+        func_type = bool_typet();
+      }
       else if (
         val_sol_type.find("STRING") != std::string::npos ||
         val_sol_type.find("STRING_LITERAL") != std::string::npos)
+      {
         val_flg = "string";
+        func_type = value_t;
+      }
       else
+      {
         val_flg = "general";
+        // void *
+        func_type = pointer_typet(empty_typet());
+      }
 
       // index accesss could either be set or get:
       // x[1] => map_uint_get(&m, 1)
@@ -4529,18 +4546,15 @@ bool solidity_convertert::get_expr(
 
       // construct func call
       std::string func_name;
-      typet func_type;
       if (is_mapping_set)
       {
         func_name = "map_" + val_flg + "_set";
         func_type = empty_typet();
+        // overwrite func_type
         func_type.set("cpp_type", "void");
       }
       else
-      {
         func_name = "map_" + val_flg + "_get";
-        func_type = value_t;
-      }
 
       if (context.find_symbol("c:@F@" + func_name) == nullptr)
       {
@@ -4606,7 +4620,7 @@ bool solidity_convertert::get_expr(
           get_call);
         get_call.arguments().push_back(address_of_exprt(array));
         get_call.arguments().push_back(pos);
-        added_sym.value = get_call;
+        added_sym.value = typecast_exprt(get_call, aux_type);
         decl.operands().push_back(get_call);
         move_to_front_block(decl);
 
