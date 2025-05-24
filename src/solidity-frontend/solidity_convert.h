@@ -138,7 +138,8 @@ protected:
     const std::string c_name,
     std::string &name,
     std::string &id);
-  void get_static_contract_instance(const std::string c_name, symbolt &sym);
+  void add_static_contract_instance(const std::string c_name);
+  void get_static_contract_instance_ref(const std::string &c_name, exprt &new_expr);
   void get_inherit_static_contract_instance_name(
     const std::string bs_c_name,
     const std::string c_name,
