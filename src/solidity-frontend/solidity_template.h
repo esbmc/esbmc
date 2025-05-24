@@ -666,7 +666,7 @@ __ESBMC_HIDE:;
 address_t _ESBMC_get_unique_address(void *obj, const char *cname)
 {
 __ESBMC_HIDE:;
-    __ESBMC_assume(obj != NULL);
+    // __ESBMC_assume(obj != NULL);
     address_t tmp;
     do {
         tmp = (address_t)nondet_uint();
