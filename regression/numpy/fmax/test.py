@@ -11,3 +11,5 @@ assert np.fmax(-1.0, -3.0) == -1.0
 # Zero comparisons
 assert np.fmax(0.0, -0.0) == 0.0
 assert np.fmax(-0.0, 0.0) == 0.0
+
+

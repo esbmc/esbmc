@@ -1834,6 +1834,39 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_expr(expr.op1(), args[1]);
     new_expr_ref = exists2tc(type, args[0], args[1]);
   }
+  else if (expr.id() == "max")
+  {
+    // Expecting 2 operands
+    assert(expr.operands().size() == 2);
+    const exprt &x = expr.op0();
+    const exprt &y = expr.op1();
+
+    // isnan(x)
+    exprt x_isnan("isnan", bool_typet());
+    x_isnan.copy_to_operands(x);
+
+    // isnan(y)
+    exprt y_isnan("isnan", bool_typet());
+    y_isnan.copy_to_operands(y);
+
+    // x > y
+    exprt x_gt_y(">", bool_typet());
+    x_gt_y.copy_to_operands(x, y);
+
+    // if x > y then x else y
+    exprt max_expr("if", x.type());
+    max_expr.copy_to_operands(x_gt_y, x, y);
+
+    // if isnan(y) then x else max_expr
+    exprt second_check("if", x.type());
+    second_check.copy_to_operands(y_isnan, x, max_expr);
+
+    // if isnan(x) then y else second_check
+    exprt final_expr("if", x.type());
+    final_expr.copy_to_operands(x_isnan, y, second_check);
+
+    migrate_expr(final_expr, new_expr_ref);
+  }
   else
   {
     log_error("{}\nmigrate expr failed", expr);
