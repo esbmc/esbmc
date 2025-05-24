@@ -881,38 +881,38 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
      *       them properly according to the input language.
      */
 
-     auto eq = to_equality2t(expr);
+    auto eq = to_equality2t(expr);
 
-     if (is_floatbv_type(eq.side_1) && is_floatbv_type(eq.side_2))
-     {
-       if (!int_encoding)
-       {
-         // Bit-vector mode: use IEEE-compliant floating-point equality
-         a = fp_api->mk_smt_fpbv_eq(args[0], args[1]);
-       }
-       else
-       {
-         // Real arithmetic mode: manually implement IEEE 754 semantics
-         // IEEE 754: x == y is false if either x or y is NaN
-         smt_astt normal_eq = args[0]->eq(this, args[1]);
-    
-         // Create isnan2t expressions before calling convert_is_nan
-         expr2tc isnan_side1 = isnan2tc(eq.side_1);
-         expr2tc isnan_side2 = isnan2tc(eq.side_2);
-    
-         smt_astt x_not_nan = mk_not(convert_is_nan(isnan_side1));
-         smt_astt y_not_nan = mk_not(convert_is_nan(isnan_side2));
-    
-         // (x == y) && !isnan(x) && !isnan(y)
-         a = mk_and(normal_eq, mk_and(x_not_nan, y_not_nan));
-       }
-     }
-     else
-     {
-       // Non-floating point types
-       a = args[0]->eq(this, args[1]);
-     }
-     break;
+    if (is_floatbv_type(eq.side_1) && is_floatbv_type(eq.side_2))
+    {
+      if (!int_encoding)
+      {
+        // Bit-vector mode: use IEEE-compliant floating-point equality
+        a = fp_api->mk_smt_fpbv_eq(args[0], args[1]);
+      }
+      else
+      {
+        // Real arithmetic mode: manually implement IEEE 754 semantics
+        // IEEE 754: x == y is false if either x or y is NaN
+        smt_astt normal_eq = args[0]->eq(this, args[1]);
+
+        // Create isnan2t expressions before calling convert_is_nan
+        expr2tc isnan_side1 = isnan2tc(eq.side_1);
+        expr2tc isnan_side2 = isnan2tc(eq.side_2);
+
+        smt_astt x_not_nan = mk_not(convert_is_nan(isnan_side1));
+        smt_astt y_not_nan = mk_not(convert_is_nan(isnan_side2));
+
+        // (x == y) && !isnan(x) && !isnan(y)
+        a = mk_and(normal_eq, mk_and(x_not_nan, y_not_nan));
+      }
+    }
+    else
+    {
+      // Non-floating point types
+      a = args[0]->eq(this, args[1]);
+    }
+    break;
   }
   case expr2t::notequal_id:
   {
