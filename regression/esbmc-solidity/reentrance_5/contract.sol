@@ -40,7 +40,7 @@ contract Crowdfund {
 
     function invariant() public {
 
-        assert(address(this).balance != saved);
+        assert(address(this).balance == saved);
     }
 
     function reclaim() public { 
@@ -77,10 +77,8 @@ contract Reproduction {
     }
 
     receive() external payable {
-        if (!reentered) {
-            reentered = true;
-            target.reclaim(); 
-        }
+        reentered = true;
+        target.reclaim(); 
     }
 }
 

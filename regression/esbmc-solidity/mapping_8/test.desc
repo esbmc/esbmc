@@ -1,4 +1,4 @@
 CORE
 contract.solast
---sol contract.sol --unwind 3 --no-unwinding-assertions   --no-pointer-check
+--sol contract.sol --k-induction --no-standard-checks --contract Base
 ^VERIFICATION FAILED$
