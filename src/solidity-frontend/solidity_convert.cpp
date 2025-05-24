@@ -4534,7 +4534,7 @@ bool solidity_convertert::get_expr(
       }
       else
       {
-        val_flg = "general";
+        val_flg = "generic";
         // void *
         func_type = pointer_typet(empty_typet());
       }
