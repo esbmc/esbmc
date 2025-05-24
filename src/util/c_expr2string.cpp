@@ -2622,6 +2622,9 @@ std::string c_expr2stringt::convert(const exprt &src, unsigned &precedence)
   else if (src.id() == "max")
     return convert_function(src, "max", precedence = 15);
 
+  else if (src.id() == "min")
+    return convert_function(src, "min", precedence = 15);
+
   else if (src.id() == "bitand")
     return convert_binary(src, "&", precedence = 8, false);
 
