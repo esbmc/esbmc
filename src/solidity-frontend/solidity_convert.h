@@ -139,7 +139,8 @@ protected:
     std::string &name,
     std::string &id);
   void add_static_contract_instance(const std::string c_name);
-  void get_static_contract_instance_ref(const std::string &c_name, exprt &new_expr);
+  void
+  get_static_contract_instance_ref(const std::string &c_name, exprt &new_expr);
   void get_inherit_static_contract_instance_name(
     const std::string bs_c_name,
     const std::string c_name,
@@ -236,7 +237,12 @@ protected:
     const typet &dest_type,
     exprt &new_expr);
   bool get_binary_operator_expr(const nlohmann::json &expr, exprt &new_expr);
-  bool get_compound_assign_expr(const nlohmann::json &expr, exprt &new_expr);
+  bool get_compound_assign_expr(
+    const nlohmann::json &expr,
+    exprt &lhs,
+    exprt &rhs,
+    typet &common_type,
+    exprt &new_expr);
   bool get_unary_operator_expr(
     const nlohmann::json &expr,
     const nlohmann::json &literal_type,

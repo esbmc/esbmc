@@ -5494,7 +5494,7 @@ bool solidity_convertert::get_binary_operator_expr(
   }
   default:
   {
-    if (get_compound_assign_expr(expr, new_expr))
+    if (get_compound_assign_expr(expr, lhs, rhs, common_type, new_expr))
     {
       assert(!"Unimplemented binary operator");
       return true;
@@ -5594,10 +5594,12 @@ bool solidity_convertert::get_binary_operator_expr(
 
 bool solidity_convertert::get_compound_assign_expr(
   const nlohmann::json &expr,
+  exprt &lhs,
+  exprt &rhs,
+  typet &common_type,
   exprt &new_expr)
 {
   // equivalent to clang_c_convertert::get_compound_assign_expr
-
   SolidityGrammar::ExpressionT opcode =
     SolidityGrammar::get_expr_operator_t(expr);
 
@@ -5655,43 +5657,6 @@ bool solidity_convertert::get_compound_assign_expr(
   }
   default:
     return true;
-  }
-
-  exprt lhs, rhs;
-  if (expr.contains("leftHandSide"))
-  {
-    nlohmann::json literalType = expr["leftHandSide"]["typeDescriptions"];
-
-    if (get_expr(expr["leftHandSide"], lhs))
-      return true;
-
-    if (get_expr(expr["rightHandSide"], literalType, rhs))
-      return true;
-  }
-  else if (expr.contains("leftExpression"))
-  {
-    nlohmann::json literalType_l = expr["leftExpression"]["typeDescriptions"];
-    nlohmann::json literalType_r = expr["rightExpression"]["typeDescriptions"];
-
-    if (get_expr(expr["leftExpression"], literalType_l, lhs))
-      return true;
-
-    if (get_expr(expr["rightExpression"], literalType_r, rhs))
-      return true;
-  }
-  else
-    assert(!"should not be here - unrecognized LHS and RHS keywords in expression JSON");
-
-  assert(current_BinOp_type.size());
-  const nlohmann::json &binop_type = *(current_BinOp_type.top());
-  if (get_type_description(binop_type, new_expr.type()))
-    return true;
-
-  typet common_type;
-  if (expr.contains("commonType"))
-  {
-    if (get_type_description(expr["commonType"], common_type))
-      return true;
   }
 
   if (common_type.id() != "")
@@ -9000,8 +8965,7 @@ void solidity_convertert::get_static_contract_instance_ref(
   new_expr.pretty_name(name);
 }
 
-void solidity_convertert::add_static_contract_instance(
-  const std::string c_name)
+void solidity_convertert::add_static_contract_instance(const std::string c_name)
 {
   log_debug("solidity", "\tAdd static instance of contract {}", c_name);
 
@@ -11120,7 +11084,7 @@ bool solidity_convertert::get_high_level_member_access(
     exprt memcall;
     exprt rhs;
 
-    exprt _base ;
+    exprt _base;
     get_static_contract_instance_ref(str, _base);
 
     bool is_revert = false;
