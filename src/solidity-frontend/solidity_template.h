@@ -199,13 +199,13 @@ struct _ESBMC_Mapping
   uint256_t key : 256;
   void *value;
   struct _ESBMC_Mapping *next;
-} __attribute__((packed));
+};
 
 struct mapping_t
 {
   struct _ESBMC_Mapping *base;
   address_t addr : 160;
-} __attribute__((packed));
+};
 
 void *map_get_raw(struct _ESBMC_Mapping a[], address_t addr, uint256_t key)
 {
