@@ -158,6 +158,12 @@ bool solidity_convertert::convert()
     reset_auxiliary_vars();
   }
 
+  // add static instance
+  // note that we populate the static instance in the end
+  // this is to ensure that we have populated other auxiliary static variables before them
+  for (const auto &c_name : contractNamesList)
+    add_static_contract_instance(c_name);
+
   // Do Verification
   // single contract verification: where the option "--contract" is set.
   // multiple contracts verification: essentially verify the whole file.
@@ -2214,9 +2220,8 @@ bool solidity_convertert::get_unbound_function(
     func_body.operands().push_back(label);
 
     // 1.1 get static contract instance
-    symbolt added_ctor_symbol;
-    get_static_contract_instance(c_name, added_ctor_symbol);
-    const exprt contract_var = symbol_expr(added_ctor_symbol);
+    exprt contract_var;
+    get_static_contract_instance_ref(c_name, contract_var);
 
     // construct return; to avoid fall-through
     exprt return_expr = code_returnt();
@@ -8981,94 +8986,101 @@ void solidity_convertert::get_static_contract_instance_name(
   id = "sol:@" + name + "#";
 }
 
-void solidity_convertert::get_static_contract_instance(
-  const std::string c_name,
-  symbolt &sym)
+void solidity_convertert::get_static_contract_instance_ref(
+  const std::string &c_name,
+  exprt &new_expr)
 {
-  log_debug("solidity", "\tGet static instance of contract {}", c_name);
+  std::string name, id;
+  get_static_contract_instance_name(c_name, name, id);
+  typet t = symbol_typet(prefix + c_name);
+  new_expr = exprt("symbol", t);
+  new_expr.identifier(id);
+  new_expr.cmt_lvalue(true);
+  new_expr.name(name);
+  new_expr.pretty_name(name);
+}
+
+void solidity_convertert::add_static_contract_instance(
+  const std::string c_name)
+{
+  log_debug("solidity", "\tAdd static instance of contract {}", c_name);
 
   std::string ctor_ins_name, ctor_ins_id;
   get_static_contract_instance_name(c_name, ctor_ins_name, ctor_ins_id);
 
-  if (context.find_symbol(ctor_ins_id) != nullptr)
-    sym = *context.find_symbol(ctor_ins_id);
-  else
+  // inheritance instance: make a copy of the static instance
+  // this is to make sure we insert it before the _ESBMC_Object_cname
+  locationt ctor_ins_loc;
+  ctor_ins_loc.file(absolute_path);
+  ctor_ins_loc.line(1);
+  std::string ctor_ins_debug_modulename =
+    get_modulename_from_path(absolute_path);
+  typet ctor_ins_typet = symbol_typet(prefix + c_name);
+
+  symbolt ctor_ins_symbol;
+  get_default_symbol(
+    ctor_ins_symbol,
+    ctor_ins_debug_modulename,
+    ctor_ins_typet,
+    ctor_ins_name,
+    ctor_ins_id,
+    ctor_ins_loc);
+  ctor_ins_symbol.lvalue = true;
+  ctor_ins_symbol.is_extern = false;
+  // the instance should be set as static
+  ctor_ins_symbol.static_lifetime = true;
+  ctor_ins_symbol.file_local = true;
+
+  auto &added_sym = *move_symbol_to_context(ctor_ins_symbol);
+
+  // get value
+  std::string ctor_id;
+  // we do not check the return value as we might have not parsed the symbol yet
+  if (get_ctor_call_id(c_name, ctor_id))
   {
-    // inheritance instance: make a copy of the static instance
-    // this is to make sure we insert it before the _ESBMC_Object_cname
-    locationt ctor_ins_loc;
-    ctor_ins_loc.file(absolute_path);
-    ctor_ins_loc.line(1);
-    std::string ctor_ins_debug_modulename =
-      get_modulename_from_path(absolute_path);
-    typet ctor_ins_typet = symbol_typet(prefix + c_name);
-
-    symbolt ctor_ins_symbol;
-    get_default_symbol(
-      ctor_ins_symbol,
-      ctor_ins_debug_modulename,
-      ctor_ins_typet,
-      ctor_ins_name,
-      ctor_ins_id,
-      ctor_ins_loc);
-    ctor_ins_symbol.lvalue = true;
-    ctor_ins_symbol.is_extern = false;
-    // the instance should be set as static
-    ctor_ins_symbol.static_lifetime = true;
-    ctor_ins_symbol.file_local = true;
-
-    auto &added_sym = *move_symbol_to_context(ctor_ins_symbol);
-
-    // get value
-    std::string ctor_id;
-    // we do not check the return value as we might have not parsed the symbol yet
-    if (get_ctor_call_id(c_name, ctor_id))
-    {
-      // probably the contract is not parsed yet
-      log_error("cannot find ctor id for contract {}", c_name);
-      abort();
-    }
-    if (context.find_symbol(ctor_id) == nullptr)
-    {
-      // this means that contract, including ctor, has not been parse yet
-      // this will lead to issue in the following process, particuarly this_pointer
-      const auto &json = find_constructor_ref(c_name);
-      if (json.empty())
-      {
-        if (add_implicit_constructor(c_name))
-        {
-          log_error("Failed to add the implicit constructor");
-          abort();
-        }
-      }
-      else
-      {
-        // parsing the constructor in another contract
-        std::string old = current_baseContractName;
-        current_baseContractName = c_name;
-        if (get_function_definition(json))
-        {
-          auto name = json["name"].get<std::string>();
-          if (name.empty())
-            name = json["kind"].get<std::string>();
-          log_error(
-            "Failed to parse the function {}", json["name"].get<std::string>());
-          abort();
-        }
-        current_baseContractName = old;
-      }
-    }
-
-    exprt ctor;
-    if (get_new_object_ctor_call(c_name, empty_json, ctor))
-    {
-      log_error("failed to construct a temporary object");
-      abort();
-    }
-
-    added_sym.value = ctor;
-    sym = added_sym;
+    // probably the contract is not parsed yet
+    log_error("cannot find ctor id for contract {}", c_name);
+    abort();
   }
+  if (context.find_symbol(ctor_id) == nullptr)
+  {
+    // this means that contract, including ctor, has not been parse yet
+    // this will lead to issue in the following process, particuarly this_pointer
+    const auto &json = find_constructor_ref(c_name);
+    if (json.empty())
+    {
+      if (add_implicit_constructor(c_name))
+      {
+        log_error("Failed to add the implicit constructor");
+        abort();
+      }
+    }
+    else
+    {
+      // parsing the constructor in another contract
+      std::string old = current_baseContractName;
+      current_baseContractName = c_name;
+      if (get_function_definition(json))
+      {
+        auto name = json["name"].get<std::string>();
+        if (name.empty())
+          name = json["kind"].get<std::string>();
+        log_error(
+          "Failed to parse the function {}", json["name"].get<std::string>());
+        abort();
+      }
+      current_baseContractName = old;
+    }
+  }
+
+  exprt ctor;
+  if (get_new_object_ctor_call(c_name, empty_json, ctor))
+  {
+    log_error("failed to construct a temporary object");
+    abort();
+  }
+
+  added_sym.value = ctor;
 }
 
 void solidity_convertert::get_inherit_static_contract_instance_name(
@@ -9488,16 +9500,16 @@ void solidity_convertert::convert_type_expr(
       //  _ESBMC_Obeject_Derive.$address = _addr;    <-- front
       //  Derive x = _ESBMC_Obeject_Derive;          <-- type conversion
       //  _ESBMC_Obeject_Derive.$address = old_addr  <-- back
-      symbolt c_sym;
+      exprt c_ins;
       std::string _cname = dest_type.get("#sol_contract").as_string();
-      get_static_contract_instance(_cname, c_sym);
+      get_static_contract_instance_ref(_cname, c_ins);
 
       // front
       typet addr_t = unsignedbv_typet(160);
       addr_t.set("#sol_type", "ADDRESS");
 
       // old_addr = _ESBMC_Obeject_Derive.$address;
-      exprt object_addr = member_exprt(symbol_expr(c_sym), "$address", addr_t);
+      exprt object_addr = member_exprt(c_ins, "$address", addr_t);
       std::string debug_modulename = get_modulename_from_path(absolute_path);
       symbolt old_addr;
       std::string name = "old_addr_" + std::to_string(aux_counter);
@@ -9532,7 +9544,7 @@ void solidity_convertert::convert_type_expr(
       move_to_back_block(assign_addr_restore);
 
       // type conversion
-      src_expr = symbol_expr(c_sym);
+      src_expr = c_ins;
     }
     else if (is_bytes_type(src_type) && is_bytes_type(dest_type))
     {
@@ -9950,12 +9962,6 @@ bool solidity_convertert::multi_transaction_verification(
     return true;
   }
 
-  // construct a temporary object and move to func_body
-  // e.g. Base _ESBMC_tmp = new Base();
-  // 1.1 get contract symbol ("tag-contractName")
-  symbolt static_ins;
-  get_static_contract_instance(c_name, static_ins);
-
   // get sol harness function and move into the while body
   code_function_callt func_call;
   if (get_unbound_funccall(c_name, func_call))
@@ -10364,10 +10370,6 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
 
     get_builtin_symbol(tx_name, tx_id, _t, l, gen_zero(_t), contract_name);
   }
-
-  // static instance
-  symbolt tmp;
-  get_static_contract_instance(contract_name, tmp);
 
   // binding
   exprt bind_expr;
@@ -10816,9 +10818,9 @@ bool solidity_convertert::assign_param_nondet(
           */
         std::string base_cname = t.get("#sol_contract").as_string();
         assert(!base_cname.empty());
-        symbolt s;
-        get_static_contract_instance(base_cname, s);
-        call.arguments().push_back(symbol_expr(s));
+        exprt s;
+        get_static_contract_instance_ref(base_cname, s);
+        call.arguments().push_back(s);
       }
       else
         call.arguments().push_back(static_cast<const exprt &>(get_nil_irep()));
@@ -11118,9 +11120,8 @@ bool solidity_convertert::get_high_level_member_access(
     exprt memcall;
     exprt rhs;
 
-    symbolt dump;
-    get_static_contract_instance(str, dump);
-    exprt _base = symbol_expr(dump);
+    exprt _base ;
+    get_static_contract_instance_ref(str, _base);
 
     bool is_revert = false;
     if (is_func_call)
@@ -11579,9 +11580,9 @@ bool solidity_convertert::get_call_definition(
     then.move_to_operands(ret_true);
 
     // _addr == _ESBMC_Object_str.$address
-    symbolt sym;
-    get_static_contract_instance(str, sym);
-    exprt mem_addr = member_exprt(symbol_expr(sym), "$address", addr_t);
+    exprt static_ins;
+    get_static_contract_instance_ref(str, static_ins);
+    exprt mem_addr = member_exprt(static_ins, "$address", addr_t);
     exprt _equal = exprt("=", bool_type());
     _equal.operands().push_back(addr_expr);
     _equal.operands().push_back(mem_addr);
@@ -11854,9 +11855,9 @@ bool solidity_convertert::get_call_value_definition(
     code_blockt then;
 
     // _addr == _ESBMC_Object_str.$address
-    symbolt sym;
-    get_static_contract_instance(str, sym);
-    exprt mem_addr = member_exprt(symbol_expr(sym), "$address", addr_t);
+    exprt static_ins;
+    get_static_contract_instance_ref(str, static_ins);
+    exprt mem_addr = member_exprt(static_ins, "$address", addr_t);
 
     exprt _equal = exprt("=", bool_type());
     _equal.operands().push_back(addr_expr);
@@ -11881,7 +11882,7 @@ bool solidity_convertert::get_call_value_definition(
     then.move_to_operands(sub_assign);
 
     // _ESBMC_Object_str.balance += _val;
-    exprt target_balance = member_exprt(symbol_expr(sym), "$balance", val_t);
+    exprt target_balance = member_exprt(static_ins, "$balance", val_t);
     exprt add_assign = side_effect_exprt("assign+", val_t);
     add_assign.copy_to_operands(target_balance, val_expr);
     convert_expression_to_code(add_assign);
@@ -11903,7 +11904,7 @@ bool solidity_convertert::get_call_value_definition(
     side_effect_expr_function_callt call;
     if (get_non_library_function_call(decl_ref, empty_json, call))
       return true;
-    call.arguments().at(0) = symbol_expr(sym);
+    call.arguments().at(0) = static_ins;
     convert_expression_to_code(call);
     then.move_to_operands(call);
 
@@ -12074,9 +12075,9 @@ bool solidity_convertert::get_transfer_definition(
     code_blockt then;
 
     // _addr == _ESBMC_Object_str.$address
-    symbolt sym;
-    get_static_contract_instance(str, sym);
-    exprt mem_addr = member_exprt(symbol_expr(sym), "$address", addr_t);
+    exprt static_ins;
+    get_static_contract_instance_ref(str, static_ins);
+    exprt mem_addr = member_exprt(static_ins, "$address", addr_t);
 
     exprt _equal = exprt("=", bool_type());
     _equal.operands().push_back(addr_expr);
@@ -12101,7 +12102,7 @@ bool solidity_convertert::get_transfer_definition(
     then.move_to_operands(sub_assign);
 
     // _ESBMC_Object_str.balance += _val;
-    exprt target_balance = member_exprt(symbol_expr(sym), "$balance", val_t);
+    exprt target_balance = member_exprt(static_ins, "$balance", val_t);
     exprt add_assign = side_effect_exprt("assign+", val_t);
     add_assign.copy_to_operands(target_balance, val_expr);
     convert_expression_to_code(add_assign);
@@ -12125,7 +12126,7 @@ bool solidity_convertert::get_transfer_definition(
     side_effect_expr_function_callt call;
     if (get_non_library_function_call(decl_ref, empty_json, call))
       return true;
-    call.arguments().at(0) = symbol_expr(sym);
+    call.arguments().at(0) = static_ins;
     convert_expression_to_code(call);
     then.move_to_operands(call);
 
@@ -12294,9 +12295,9 @@ bool solidity_convertert::get_send_definition(
     code_blockt then;
 
     // _addr == _ESBMC_Object_str.$address
-    symbolt sym;
-    get_static_contract_instance(str, sym);
-    exprt mem_addr = member_exprt(symbol_expr(sym), "$address", addr_t);
+    exprt static_ins;
+    get_static_contract_instance_ref(str, static_ins);
+    exprt mem_addr = member_exprt(static_ins, "$address", addr_t);
 
     exprt _equal = exprt("=", bool_type());
     _equal.operands().push_back(addr_expr);
@@ -12321,7 +12322,7 @@ bool solidity_convertert::get_send_definition(
     then.move_to_operands(sub_assign);
 
     // _ESBMC_Object_str.balance += _val;
-    exprt target_balance = member_exprt(symbol_expr(sym), "$balance", val_t);
+    exprt target_balance = member_exprt(static_ins, "$balance", val_t);
     exprt add_assign = side_effect_exprt("assign+", val_t);
     add_assign.copy_to_operands(target_balance, val_expr);
     convert_expression_to_code(add_assign);
@@ -12343,7 +12344,7 @@ bool solidity_convertert::get_send_definition(
     side_effect_expr_function_callt call;
     if (get_non_library_function_call(decl_ref, empty_json, call))
       return true;
-    call.arguments().at(0) = symbol_expr(sym);
+    call.arguments().at(0) = static_ins;
     convert_expression_to_code(call);
     then.move_to_operands(call);
 
