@@ -55,6 +55,16 @@ class Preprocessor(ast.NodeTransformer):
             else:
                 step = ast.Constant(value=1)
 
+            # Step validation - Python raises ValueError if step == 0
+            step_validation = ast.Assert(
+                test=ast.Compare(
+                left=step,
+                ops=[ast.NotEq()],
+                comparators=[ast.Constant(value=0)]
+                ),
+                msg=ast.Constant(value="range() arg 3 must not be zero")
+            )
+
             # Create assignment for the start variable
             start_assign = ast.AnnAssign(
                 target=ast.Name(id='start', ctx=ast.Store()),
@@ -120,7 +130,7 @@ class Preprocessor(ast.NodeTransformer):
             )
 
             # Return the transformed statements
-            return [start_assign, has_next_assign, while_stmt]
+            return [step_validation, start_assign, has_next_assign, while_stmt]
 
         return node
 
