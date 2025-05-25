@@ -199,7 +199,7 @@ struct _ESBMC_Mapping
   uint256_t key : 256;
   void *value;
   struct _ESBMC_Mapping *next;
-};
+}__attribute__((packed));
 
 struct mapping_t
 {
