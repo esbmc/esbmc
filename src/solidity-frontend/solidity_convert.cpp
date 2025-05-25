@@ -4592,11 +4592,11 @@ bool solidity_convertert::get_expr(
       if (is_mapping_set)
       {
         /*
-        x[1] += 2 =>
-        DECL temp = map_uint_get(&array, pos);  <-- move to front block
-        temp += 2;
-        map_uint_set(&array, pos, temp);  <-- move to back block
-        (map_generic_set(&array, pos, temp, sizeof(temp));) 
+        case 1: x[1] += 2 =>
+          DECL temp = map_uint_get(&array, pos);  <-- move to front block
+          temp += 2;
+          map_uint_set(&array, pos, temp);  <-- move to back block
+          (map_generic_set(&array, pos, temp, sizeof(temp));) 
         */
         std::string aux_name, aux_id;
         get_aux_var(aux_name, aux_id);
@@ -4620,7 +4620,8 @@ bool solidity_convertert::get_expr(
           get_call);
         get_call.arguments().push_back(address_of_exprt(array));
         get_call.arguments().push_back(pos);
-        added_sym.value = typecast_exprt(get_call, aux_type);
+        solidity_gen_typecast(ns, get_call, aux_type);
+        added_sym.value = get_call;
         decl.operands().push_back(get_call);
         move_to_front_block(decl);
 
@@ -4640,9 +4641,46 @@ bool solidity_convertert::get_expr(
         new_expr = symbol_expr(added_sym);
         break;
       }
+      else if (val_flg == "generic")
+      {
+        /* generic_get:
+          case 2: users[msg.sender].age; =>
+            DECL struct temp = map_users_get(&array, pos);
+            temp.age;
+        */
+        std::string aux_name, aux_id;
+        get_aux_var(aux_name, aux_id);
+        symbolt aux_sym;
+        std::string debug_modulename = get_modulename_from_path(absolute_path);
+        typet aux_type = value_t; // struct *
+        get_default_symbol(
+          aux_sym, debug_modulename, aux_type, aux_name, aux_id, location);
+        aux_sym.file_local = true;
+        aux_sym.lvalue = true;
+        auto &added_sym = *move_symbol_to_context(aux_sym);
+        code_declt decl(symbol_expr(added_sym));
+
+        // construct map_{struct_name}_get() function
+        // e.g. map_Base_User_get();
+        exprt map_struct_get;
+        std::string struct_contract_name = value_t.identifier().as_string();
+        assert(!struct_contract_name.empty());
+        assert(val_sol_type == "STRUCT"); // t_symbol
+        get_mapping_struct_function(
+          value_t, struct_contract_name, call, map_struct_get);
+
+        // struct temp = map_users_get(&array, pos);
+        added_sym.value = map_struct_get;
+        decl.operands().push_back(map_struct_get);
+        move_to_front_block(decl);
+
+        new_expr = symbol_expr(added_sym);
+        break;
+      }
 
       // e.g. (int8)map_int_get(&arr, 1);
-      new_expr = typecast_exprt(call, value_t);
+      solidity_gen_typecast(ns, call, value_t);
+      new_expr = call;
       break;
     }
 
@@ -7110,6 +7148,127 @@ bool solidity_convertert::is_mapping_set_lvalue(const nlohmann::json &target)
   assert(target.value("nodeType", "") == "IndexAccess");
   assert(target.contains("lValueRequested"));
   return target["lValueRequested"].get<bool>();
+}
+
+void solidity_convertert::get_mapping_struct_function(
+  const typet &struct_t,
+  std::string &struct_contract_name,
+  const side_effect_expr_function_callt &gen_call,
+  exprt &new_expr)
+{
+  /*
+  e.g.
+  struct A map_get_A_default_val(struct mapping_t *m, uint256_t k)
+  {
+  __ESBMC_HIDE:;
+    struct A *ap = (struct A *)map_get_generic(m, k);
+    return ap ? *ap : (struct A){0}; 
+  }
+  */
+  side_effect_expr_function_callt call;
+
+  // split contract struct name
+  // drop prefix
+  struct_contract_name = struct_contract_name.substr(prefix.length());
+  // replace "." to "_"
+  std::replace(
+    struct_contract_name.begin(), struct_contract_name.end(), '.', '_');
+  std::string func_name = "map_" + struct_contract_name + "_get";
+  std::string func_id = "c:@F@" + func_name;
+  if (context.find_symbol(func_id) != nullptr)
+  {
+    call.function() = symbol_expr(*context.find_symbol(func_id));
+    call.type() = struct_t;
+    for (auto &arg : gen_call.arguments())
+      call.arguments().push_back(arg); // same arugments as map_get_generic
+    new_expr = call;
+    return;
+  }
+
+  std::string debug_modulename = get_modulename_from_path(absolute_path);
+  code_typet func_t;
+  func_t.return_type() = struct_t;
+  symbolt sym;
+  get_default_symbol(
+    sym, debug_modulename, func_t, func_name, func_id, gen_call.location());
+  sym.file_local = true;
+  auto &func_sym = *move_symbol_to_context(sym);
+
+  code_blockt func_body;
+  // hide it
+  code_labelt label;
+  label.set_label("__ESBMC_HIDE");
+  label.code() = code_skipt();
+  func_body.move_to_operands(label);
+
+  // struct A *ap = (struct A *)map_get_generic(m, k);
+  std::string aux_name, aux_id;
+  get_aux_var(aux_name, aux_id);
+  symbolt aux_sym;
+  typet aux_type = gen_pointer_type(struct_t); // struct *
+  get_default_symbol(
+    aux_sym, debug_modulename, aux_type, aux_name, aux_id, gen_call.location());
+  aux_sym.file_local = true;
+  aux_sym.lvalue = true;
+  auto &added_sym = *move_symbol_to_context(aux_sym);
+  code_declt decl(symbol_expr(added_sym));
+  // for typcast
+  side_effect_expr_function_callt temp_call = gen_call;
+  solidity_gen_typecast(ns, temp_call, aux_type);
+  added_sym.value = temp_call;
+  decl.operands().push_back(temp_call);
+  // move to func body
+  func_body.operands().push_back(decl);
+
+  // ternary: return ap ? *ap : (struct A){0};
+  // we split it into
+  // - struct A aux = {0};
+  // - return ap ? *ap : aux;
+
+  // construct empty struct instance
+  std::string aux_name2, aux_id2;
+  get_aux_var(aux_name2, aux_id2);
+  symbolt aux_sym2;
+  typet aux_type2 = struct_t; // struct *
+  get_default_symbol(
+    aux_sym2,
+    debug_modulename,
+    aux_type2,
+    aux_name2,
+    aux_id2,
+    gen_call.location());
+  aux_sym2.file_local = true;
+  aux_sym2.lvalue = true;
+  auto &added_sym2 = *move_symbol_to_context(aux_sym2);
+  code_declt decl2(symbol_expr(added_sym2));
+  // zero value
+  exprt inits = gen_zero(get_complete_type(aux_type2, ns), true);
+  added_sym2.value = inits;
+  decl2.operands().push_back(inits);
+  // move to func body
+  func_body.operands().push_back(decl2);
+
+  // ap ? *ap : aux;
+  exprt if_expr("if", struct_t);
+  if_expr.operands().push_back(symbol_expr(added_sym));
+  if_expr.operands().push_back(
+    dereference_exprt(symbol_expr(added_sym), struct_t));
+  if_expr.operands().push_back(symbol_expr(added_sym2));
+  if_expr.location() = gen_call.location();
+
+  // return ap ? *ap : aux;
+  code_returnt ret;
+  ret.return_value() = if_expr;
+  func_body.operands().push_back(ret);
+
+  func_sym.value = func_body;
+
+  // func call
+  call.function() = symbol_expr(func_sym);
+  call.type() = struct_t;
+  for (auto &arg : gen_call.arguments())
+    call.arguments().push_back(arg); // same arugments as map_get_generic
+  new_expr = call;
 }
 
 // invoking a function in the library

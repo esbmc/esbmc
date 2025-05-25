@@ -394,6 +394,11 @@ protected:
     std::string &arr_name,
     std::string &arr_id);
   bool is_mapping_set_lvalue(const nlohmann::json &json);
+  void get_mapping_struct_function(
+    const typet &struct_t,
+    std::string &struct_contract_name,
+    const side_effect_expr_function_callt &gen_call,
+    exprt &new_expr);
 
   // line number and locations
   void
