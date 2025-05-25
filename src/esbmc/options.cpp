@@ -369,6 +369,7 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "exclude still reachable objects from --memory-leak-check"},
     {"nan-check", NULL, "check floating-point for NaN"},
+    {"infinity-check", NULL, "check floating-point for Infinity"},
     {"memory-leak-check", NULL, "enable memory leak check"},
     {"overflow-check", NULL, "enable arithmetic over- and underflow check"},
     {"unsigned-overflow-check",

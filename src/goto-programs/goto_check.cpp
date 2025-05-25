@@ -28,7 +28,8 @@ public:
       enable_unsigned_overflow_check(
         options.get_bool_option("unsigned-overflow-check")),
       enable_ub_shift_check(options.get_bool_option("ub-shift-check")),
-      enable_nan_check(options.get_bool_option("nan-check"))
+      enable_nan_check(options.get_bool_option("nan-check")),
+      enable_infinity_check(options.get_bool_option("infinity-check"))
   {
   }
 
@@ -93,6 +94,9 @@ protected:
   void
   nan_check(const expr2tc &expr, const guardt &guard, const locationt &loc);
 
+  void
+  infinity_check(const expr2tc &expr, const guardt &guard, const locationt &loc);
+
   void add_guarded_claim(
     const expr2tc &expr,
     const std::string &comment,
@@ -112,6 +116,7 @@ protected:
   bool enable_unsigned_overflow_check;
   bool enable_ub_shift_check;
   bool enable_nan_check;
+  bool enable_infinity_check;
 };
 
 void goto_checkt::div_by_zero_check(
@@ -585,6 +590,26 @@ void goto_checkt::nan_check(
   add_guarded_claim(isnan, "NaN on " + get_expr_id(expr), "NaN", loc, guard);
 }
 
+void goto_checkt::infinity_check(
+  const expr2tc &expr,
+  const guardt &guard,
+  const locationt &loc)
+{
+  if (!enable_infinity_check)
+    return;
+
+  // First, check type.
+  const type2tc &type = ns.follow(expr->type);
+  if (!is_floatbv_type(type))
+    return;
+
+  // add infinity subgoal
+  expr2tc isinf = isinf2tc(expr);
+  make_not(isinf);
+
+  add_guarded_claim(isinf, "Infinity on " + get_expr_id(expr), "Infinity", loc, guard);
+}
+
 void goto_checkt::pointer_rel_check(
   const expr2tc &expr,
   const guardt &guard,
@@ -864,6 +889,7 @@ void goto_checkt::check_rec(
     // No division by zero for ieee_div, as it's defined behavior
     float_overflow_check(expr, guard, loc);
     nan_check(expr, guard, loc);
+    infinity_check(expr, guard, loc);
     break;
   }
 
