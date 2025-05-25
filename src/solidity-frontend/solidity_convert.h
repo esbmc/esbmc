@@ -138,7 +138,9 @@ protected:
     const std::string c_name,
     std::string &name,
     std::string &id);
-  void get_static_contract_instance(const std::string c_name, symbolt &sym);
+  void add_static_contract_instance(const std::string c_name);
+  void
+  get_static_contract_instance_ref(const std::string &c_name, exprt &new_expr);
   void get_inherit_static_contract_instance_name(
     const std::string bs_c_name,
     const std::string c_name,
@@ -235,7 +237,12 @@ protected:
     const typet &dest_type,
     exprt &new_expr);
   bool get_binary_operator_expr(const nlohmann::json &expr, exprt &new_expr);
-  bool get_compound_assign_expr(const nlohmann::json &expr, exprt &new_expr);
+  bool get_compound_assign_expr(
+    const nlohmann::json &expr,
+    exprt &lhs,
+    exprt &rhs,
+    typet &common_type,
+    exprt &new_expr);
   bool get_unary_operator_expr(
     const nlohmann::json &expr,
     const nlohmann::json &literal_type,
@@ -381,17 +388,17 @@ protected:
   get_string_assignment(const exprt &lhs, const exprt &rhs, exprt &new_expr);
 
   // mapping
-  bool get_mapping_type(const nlohmann::json &ast_node, typet &t);
-  bool get_mapping_key_expr(
-    const std::string &current_contractName,
-    const symbolt &sym,
-    const std::string &postfix,
+  void get_mapping_inf_arr_name(
+    const std::string &cname,
+    const std::string &name,
+    std::string &arr_name,
+    std::string &arr_id);
+  bool is_mapping_set_lvalue(const nlohmann::json &json);
+  void get_mapping_struct_function(
+    const typet &struct_t,
+    std::string &struct_contract_name,
+    const side_effect_expr_function_callt &gen_call,
     exprt &new_expr);
-  void get_mapping_key_name(
-    const std::string &m_name,
-    const std::string &m_id,
-    std::string &k_name,
-    std::string &k_id);
 
   // line number and locations
   void
@@ -430,7 +437,6 @@ protected:
   std::string get_array_size(const nlohmann::json &type_descrpt);
   void get_size_of_expr(const typet &elem_type, exprt &size_of_expr);
   bool is_dyn_array(const nlohmann::json &json_in);
-  bool is_mapping(const nlohmann::json &ast_node);
   bool is_func_sig_cover(const std::string &derived, const std::string &base);
   bool is_var_getter_matched(
     const std::string &cname,
