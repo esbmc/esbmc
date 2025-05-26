@@ -6,6 +6,8 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/type_utils.h>
 
+#include <boost/algorithm/string/predicate.hpp>
+
 const std::string kGetObjectSize = "__ESBMC_get_object_size";
 const std::string kEsbmcAssume = "__ESBMC_assume";
 const std::string kVerifierAssume = "__VERIFIER_assume";
@@ -23,9 +25,9 @@ bool function_call_builder::is_numpy_call(const symbol_id &function_id) const
     return false;
 
   const std::string &filename = function_id.get_filename();
-  const std::string &suffix = "/models/numpy.py";
 
-  return (filename.rfind(suffix) == (filename.size() - suffix.size()));
+  return boost::algorithm::ends_with(filename, "/models/numpy.py") ||
+         filename.find("/numpy/linalg") != std::string::npos;
 }
 
 bool function_call_builder::is_assume_call(const symbol_id &function_id) const

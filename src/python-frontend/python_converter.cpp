@@ -2342,7 +2342,7 @@ void python_converter::convert()
       ast_json["ast_output_dir"].get<std::string>();
     std::list<std::string> model_files = {
       "range", "int", "consensus", "random"};
-    std::list<std::string> model_folders = {"os"};
+    std::list<std::string> model_folders = {"os", "numpy"};
 
     for (const auto &folder : model_folders)
     {
