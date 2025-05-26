@@ -86,7 +86,8 @@ public:
            func_name == "arctan" || func_name == "arccos" ||
            func_name == "dot" || func_name == "add" ||
            func_name == "subtract" || func_name == "multiply" ||
-           func_name == "divide" || func_name == "transpose" || func_name == "det";
+           func_name == "divide" || func_name == "transpose" ||
+           func_name == "det";
   }
 
 private:

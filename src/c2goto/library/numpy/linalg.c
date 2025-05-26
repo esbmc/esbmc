@@ -41,7 +41,7 @@ void transpose(int64_t *src, int64_t *dst, int64_t rows, int64_t cols)
 }
 
 #if 0
-#define IDX(i, j, n) ((i) * (n) + (j))
+#  define IDX(i, j, n) ((i) * (n) + (j))
 
 void det(const double *src, double *dst, int n)
 {
