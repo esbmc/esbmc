@@ -3064,6 +3064,8 @@ bool solidity_convertert::get_function_definition(
         break;
       }
     }
+    if (get_func_modifier(ast_node, c_name, body_exprt))
+      return true;
   }
 
   added_symbol.value = body_exprt;
@@ -3075,6 +3077,142 @@ bool solidity_convertert::get_function_definition(
   current_functionDecl =
     old_functionDecl; // for __ESBMC_assume, old_functionDecl == null
   current_functionName = old_functionName;
+
+  return false;
+}
+
+// parse the modifiers, this could be:
+// 1. merge code into function body
+// 2. construct an auxiliary function, move the body to it, and call it
+bool solidity_convertert::get_func_modifier(
+  const nlohmann::json &ast_node,
+  const std::string &c_name,
+  exprt &body_exprt)
+{
+  // check if there is any modifier invocation (not constructor calls)
+  if (!ast_node.contains("modifiers") || ast_node["modifiers"].empty())
+  {
+    return false;
+  }
+
+  nlohmann::json modifiers = nlohmann::json::array();
+  for (const auto &m : ast_node["modifiers"])
+  {
+    assert(m.contains("kind"));
+    if (m.contains("kind") && m["kind"] == "modifierInvocation")
+    {
+      modifiers.push_back(m);
+    }
+  }
+  // if there is no modifier invocation, return
+  if (modifiers.size() == 0)
+    return false;
+
+  // rebegin the function body
+  for (auto it = modifiers.rbegin(); it != modifiers.rend(); ++it)
+  {
+    int modifier_id = (*it)["modifierName"]["referencedDeclaration"];
+    const nlohmann::json &mod_def =
+      find_decl_ref(src_ast_json["nodes"], modifier_id);
+
+    if ((*it).contains("arguments") && !(*it)["arguments"].empty())
+    {
+      std::string func_name = ast_node["name"];
+      std::string mod_name = mod_def["name"];
+      std::string aux_func_name = "_modifier_" + func_name + "_" + mod_name;
+      std::string aux_func_id = "sol:@M@" + aux_func_name;
+      code_typet aux_type;
+
+      for (const auto &param : mod_def["parameters"]["parameters"])
+      {
+        code_typet::argumentt arg;
+        if (get_function_params(param, c_name, arg))
+          return true;
+        arg.type() = pointer_typet(arg.type());
+        aux_type.arguments().push_back(arg);
+      }
+
+      // construct the auxiliary function, replace the "_" with the function body
+      code_blockt mod_body;
+      if (get_block(mod_def["body"], mod_body))
+        return true;
+
+      for (auto &stmt : mod_body.operands())
+      {
+        if (stmt.get_bool("#is_modifier_placeholder"))
+        {
+          stmt = body_exprt;
+        }
+      }
+
+      symbolt added_sym;
+      locationt loc;
+      get_location_from_node(mod_def, loc);
+
+      get_default_symbol(
+        added_sym,
+        get_modulename_from_path(absolute_path),
+        aux_type,
+        aux_func_name,
+        aux_func_id,
+        loc);
+      added_sym.type = aux_type;
+      added_sym.lvalue = true;
+      added_sym.file_local = true;
+      added_sym.value = mod_body;
+      //added_sym.value.operands().push_back(mod_body);
+
+      // move the symbol to the context
+      symbolt &a_sym = *move_symbol_to_context(added_sym);
+      move_builtin_to_contract(c_name, symbol_expr(a_sym), "internal", true);
+
+      // construct the function call
+      side_effect_expr_function_callt func_modifier;
+      func_modifier.function() = symbol_expr(added_sym);
+
+      for (const auto &arg_json : (*it)["arguments"])
+      {
+        exprt arg_expr;
+        if (get_expr(arg_json, arg_json["typeDescriptions"], arg_expr))
+          return true;
+        func_modifier.arguments().push_back(arg_expr);
+      }
+
+      if (
+        ast_node.contains("returnParameters") &&
+        !ast_node["returnParameters"].empty())
+      {
+        // return func_modifier();
+        code_typet type;
+        if (get_type_description(
+              ast_node["returnParameters"], type.return_type()))
+          return true;
+        code_returnt return_expr = code_returnt();
+        return_expr.return_value() = func_modifier;
+        body_exprt = return_expr;
+      }
+      else
+      {
+        body_exprt = func_modifier;
+      }
+    }
+    else
+    {
+      // no arguments, just inline the modifier in current function body
+      code_blockt mod_body;
+      if (get_block(mod_def["body"], mod_body))
+        return true;
+      for (auto &stmt : mod_body.operands())
+      {
+        if (stmt.get_bool("#is_modifier_placeholder"))
+        {
+          // replace the skip with the current function body
+          stmt = body_exprt;
+        }
+      }
+      body_exprt = mod_body;
+    }
+  }
 
   return false;
 }
@@ -3687,8 +3825,9 @@ bool solidity_convertert::get_statement(
   }
   case SolidityGrammar::StatementT::PlaceholderStatement:
   {
-    // TODO: splite the modifierdefinition node, record content before and after, and prepare to insert
-    new_expr = code_skipt();
+    code_skipt placeholder;
+    placeholder.set("#is_modifier_placeholder", true);
+    new_expr = placeholder;
     break;
   }
   case SolidityGrammar::StatementT::StatementTError:
@@ -6790,13 +6929,17 @@ bool solidity_convertert::get_func_decl_ref_type(
     std::string current_contractName;
     get_current_contract_name(decl, current_contractName);
 
-    const nlohmann::json &rtn_type = decl["returnParameters"];
+    if (decl.contains("returnParameters"))
+    {
+      const nlohmann::json &rtn_type = decl["returnParameters"];
 
-    typet return_type;
-    if (get_type_description(rtn_type, return_type))
-      return true;
+      typet return_type;
+      if (get_type_description(rtn_type, return_type))
+        return true;
 
-    type.return_type() = return_type;
+      type.return_type() = return_type;
+    }
+
     // convert parameters if the function has them
     // update the typet, since typet contains parameter annotations
     for (const auto &decl : decl["parameters"]["parameters"].items())
