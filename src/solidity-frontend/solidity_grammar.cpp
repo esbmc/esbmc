@@ -1145,7 +1145,7 @@ FunctionDeclRefT get_func_decl_ref_t(const nlohmann::json &decl)
     decl["nodeType"] == "EventDefinition");
   if (
     decl["parameters"]["parameters"].size() == 0 ||
-    decl["kind"] == "constructor")
+    (decl.contains("kind") && decl["kind"] == "constructor"))
   {
     return FunctionNoProto;
   }
