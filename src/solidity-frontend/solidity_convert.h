@@ -122,6 +122,10 @@ protected:
     exprt &new_expr);
   bool get_var_decl(const nlohmann::json &ast_node, exprt &new_expr);
   bool get_function_definition(const nlohmann::json &ast_node);
+  bool get_func_modifier(
+    const nlohmann::json &ast_node,
+    const std::string &c_name,
+    exprt &body_exprt);
   bool get_function_params(
     const nlohmann::json &pd,
     const std::string &cname,
