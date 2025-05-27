@@ -532,9 +532,7 @@ exprt python_converter::handle_power_operator(exprt lhs, exprt rhs)
       resolved_lhs = s->value;
   }
   else if (is_math_expr(lhs))
-  {
     resolved_lhs = compute_math_expr(lhs);
-  }
   
   exprt resolved_rhs = rhs;
   if (rhs.is_symbol())
@@ -544,9 +542,7 @@ exprt python_converter::handle_power_operator(exprt lhs, exprt rhs)
       resolved_rhs = s->value;
   }
   else if (is_math_expr(rhs))
-  {
     resolved_rhs = compute_math_expr(rhs);
-  }
   
   // If rhs is still not constant, we need to handle this case
   if (!resolved_rhs.is_constant())
@@ -554,7 +550,6 @@ exprt python_converter::handle_power_operator(exprt lhs, exprt rhs)
     log_warning(
       "ESBMC-Python does not support power expressions with non-constant "
       "exponents");
-    // Return a safe default rather than creating unsupported "power" expression
     return from_integer(1, lhs.type());
   }
 
@@ -589,7 +584,7 @@ exprt python_converter::handle_power_operator(exprt lhs, exprt rhs)
   if (exponent == 1)
     return lhs;
     
-  // Check resolved base for special cases - do this BEFORE large exponent check
+  // Check resolved base for special cases
   if (resolved_lhs.is_constant())
   {
     BigInt base = binary2integer(resolved_lhs.value().as_string(), resolved_lhs.type().is_signedbv());
@@ -601,14 +596,6 @@ exprt python_converter::handle_power_operator(exprt lhs, exprt rhs)
       return from_integer(1, lhs.type());
     if (base == -1)
       return from_integer((exponent % 2 == 0) ? 1 : -1, lhs.type());
-  }
-  
-  // Set reasonable limit for exponent size to prevent memory explosion
-  const BigInt MAX_EXPONENT = 1000;
-  if (exponent > MAX_EXPONENT)
-  {
-    log_warning("Exponent too large, returning safe default");
-    return from_integer(1, lhs.type());
   }
   
   // Build symbolic multiplication tree using exponentiation by squaring for efficiency
