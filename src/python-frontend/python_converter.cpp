@@ -569,7 +569,7 @@ exprt python_converter::handle_power_operator(exprt lhs, exprt rhs)
   }
   catch (...)
   {
-    std::runtime_error("Failed to convert exponent to integer");
+    log_warning("Failed to convert exponent to integer");
     return from_integer(1, lhs.type());
   }
 
