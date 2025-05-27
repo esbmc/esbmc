@@ -1,0 +1,4 @@
+KNOWNBUG
+main.goto
+--cprover --binary library.goto
+^VERIFICATION FAILED$
