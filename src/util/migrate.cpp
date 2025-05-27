@@ -1890,7 +1890,6 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     const std::string function = "c:@F@__ESBMC_get_object_size";
     const std::vector<exprt> args = {expr.op0()};
 
-
     migrate_expr(invoke_intrinsic(function, expr.type(), args), new_expr_ref);
     new_expr_ref->dump();
   }
