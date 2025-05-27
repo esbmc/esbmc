@@ -20,7 +20,7 @@ inline code_function_callt invoke_intrinsic(
   code_function_callt call;
   code_typet code_type;
   code_type.return_type() = type;
-
+  code_type.type() = type;
   for (const exprt &arg : args)
     code_type.arguments().push_back(arg.type());
 
@@ -1890,7 +1890,9 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     const std::string function = "c:@F@__ESBMC_get_object_size";
     const std::vector<exprt> args = {expr.op0()};
 
+
     migrate_expr(invoke_intrinsic(function, expr.type(), args), new_expr_ref);
+    new_expr_ref->dump();
   }
   else if (expr.id() == "overflow_result-+")
   {
@@ -1950,21 +1952,6 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   }
   else if (expr.id() == "r_ok")
   {
-    log_status("dealing with r_ok");
-    expr.dump();
-    const std::string function = "c:@F@__ESBMC_r_ok";
-#if 0
-    expr.get_sub().at(0).is_expression();
-    exprt arg0 = expr.get_sub().at(0);
-    const std::vector<exprt> args = {};
-
-    log_status("Before invoking things");
-    auto mycall = invoke_intrinsic(function, expr.type(), args);
-
-    log_status("had a call");
-    mycall.dump();
-    migrate_expr(mycall, new_expr_ref);
-#endif
     true_exprt t;
     migrate_expr(t, new_expr_ref);
   }
