@@ -557,7 +557,14 @@ exprt python_converter::handle_power_operator(exprt lhs, exprt rhs)
     // Return a safe default rather than creating unsupported "power" expression
     return from_integer(1, lhs.type());
   }
-  
+
+  // Check if the exponent is a floating-point number
+  if (resolved_rhs.type().is_floatbv())
+  {
+    log_warning("ESBMC-Python does not support floating-point exponents yet");
+    return from_integer(1, lhs.type());
+  }
+
   // Convert rhs to integer exponent
   BigInt exponent;
   try {
