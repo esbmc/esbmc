@@ -533,7 +533,7 @@ exprt python_converter::handle_power_operator(exprt lhs, exprt rhs)
   }
   else if (is_math_expr(lhs))
     resolved_lhs = compute_math_expr(lhs);
-  
+
   exprt resolved_rhs = rhs;
   if (rhs.is_symbol())
   {
@@ -543,7 +543,7 @@ exprt python_converter::handle_power_operator(exprt lhs, exprt rhs)
   }
   else if (is_math_expr(rhs))
     resolved_rhs = compute_math_expr(rhs);
-  
+
   // If rhs is still not constant, we need to handle this case
   if (!resolved_rhs.is_constant())
   {
@@ -562,13 +562,17 @@ exprt python_converter::handle_power_operator(exprt lhs, exprt rhs)
 
   // Convert rhs to integer exponent
   BigInt exponent;
-  try {
-    exponent = binary2integer(resolved_rhs.value().as_string(), resolved_rhs.type().is_signedbv());
-  } catch (...) {
+  try
+  {
+    exponent = binary2integer(
+      resolved_rhs.value().as_string(), resolved_rhs.type().is_signedbv());
+  }
+  catch (...)
+  {
     std::runtime_error("Failed to convert exponent to integer");
     return from_integer(1, lhs.type());
   }
-  
+
   // Handle negative exponents more gracefully
   if (exponent < 0)
   {
@@ -577,18 +581,19 @@ exprt python_converter::handle_power_operator(exprt lhs, exprt rhs)
       "exponents, treating as symbolic");
     return from_integer(1, lhs.type());
   }
-  
+
   // Handle special cases first
   if (exponent == 0)
     return from_integer(1, lhs.type());
   if (exponent == 1)
     return lhs;
-    
+
   // Check resolved base for special cases
   if (resolved_lhs.is_constant())
   {
-    BigInt base = binary2integer(resolved_lhs.value().as_string(), resolved_lhs.type().is_signedbv());
-    
+    BigInt base = binary2integer(
+      resolved_lhs.value().as_string(), resolved_lhs.type().is_signedbv());
+
     // Special cases for constant base
     if (base == 0 && exponent > 0)
       return from_integer(0, lhs.type());
@@ -597,19 +602,21 @@ exprt python_converter::handle_power_operator(exprt lhs, exprt rhs)
     if (base == -1)
       return from_integer((exponent % 2 == 0) ? 1 : -1, lhs.type());
   }
-  
+
   // Build symbolic multiplication tree using exponentiation by squaring for efficiency
   return build_power_expression(lhs, exponent);
 }
 
 // Helper function for efficient exponentiation
-exprt python_converter::build_power_expression(const exprt& base, const BigInt& exp)
+exprt python_converter::build_power_expression(
+  const exprt &base,
+  const BigInt &exp)
 {
   if (exp == 0)
     return from_integer(1, base.type());
   if (exp == 1)
     return base;
-    
+
   // For small exponents, use simple multiplication chain
   if (exp <= 10)
   {
@@ -622,7 +629,7 @@ exprt python_converter::build_power_expression(const exprt& base, const BigInt& 
     }
     return result;
   }
-  
+
   // For larger exponents, use exponentiation by squaring
   // This reduces the number of operations from O(n) to O(log n)
   if (exp % 2 == 0)

@@ -120,7 +120,7 @@ private:
 
   exprt handle_power_operator(exprt lhs, exprt rhs);
 
-  exprt build_power_expression(const exprt& base, const BigInt& exp);
+  exprt build_power_expression(const exprt &base, const BigInt &exp);
 
   bool is_zero_length_array(const exprt &expr);
 
