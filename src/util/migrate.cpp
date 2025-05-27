@@ -1939,6 +1939,7 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   }
   else if (expr.id() == "r_ok")
   {
+    // FUTURE: call __ESBMC_r_ok
     true_exprt t;
     migrate_expr(t, new_expr_ref);
   }
