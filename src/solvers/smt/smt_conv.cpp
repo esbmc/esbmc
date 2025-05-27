@@ -754,8 +754,28 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::typecast_id:
   {
+      const auto &tc = to_typecast2t(expr);
+  smt_astt in = convert_ast(tc.from);
+
+  if(int_encoding)
+  {
+    
+    if(is_floatbv_type(tc.from) && is_signedbv_type(tc.type))
+      a = mk_real2int(in);
+    else if(is_signedbv_type(tc.from) && is_floatbv_type(tc.type))
+      a = mk_int2real(in);
+    else
+      
+      a = in;
+  }
+  else
+  {
+    
     a = convert_typecast(expr);
-    break;
+  }
+
+  break;
+
   }
   case expr2t::nearbyint_id:
   {
@@ -881,39 +901,33 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
      *       them properly according to the input language.
      */
 
-    auto eq = to_equality2t(expr);
+    const auto &eq = to_equality2t(expr);
+  smt_astt lhs = convert_ast(eq.side_1);
+  smt_astt rhs = convert_ast(eq.side_2);
 
-    if (is_floatbv_type(eq.side_1) && is_floatbv_type(eq.side_2))
+  if(is_floatbv_type(eq.side_1) && is_floatbv_type(eq.side_2))
+  {
+    if(!int_encoding)
     {
-      if (!int_encoding)
-      {
-        // Bit-vector mode: use IEEE-compliant floating-point equality
-        a = fp_api->mk_smt_fpbv_eq(args[0], args[1]);
-      }
-      else
-      {
-        // Real arithmetic mode: manually implement IEEE 754 semantics
-        // IEEE 754: x == y is false if either x or y is NaN
-        smt_astt normal_eq = args[0]->eq(this, args[1]);
-
-        // Create isnan2t expressions before calling convert_is_nan
-        expr2tc isnan_side1 = isnan2tc(eq.side_1);
-        expr2tc isnan_side2 = isnan2tc(eq.side_2);
-
-        smt_astt x_not_nan = mk_not(convert_is_nan(isnan_side1));
-        smt_astt y_not_nan = mk_not(convert_is_nan(isnan_side2));
-
-        // (x == y) && !isnan(x) && !isnan(y)
-        a = mk_and(normal_eq, mk_and(x_not_nan, y_not_nan));
-      }
+      // Bit-vector mode: IEEE‐754 FP equality
+      a = fp_api->mk_smt_fpbv_eq(lhs, rhs);
     }
     else
     {
-      // Non-floating point types
-      a = args[0]->eq(this, args[1]);
+      // IR mode: (x==y) AND no NaNs
+      smt_astt normal_eq = lhs->eq(this, rhs);
+      smt_astt x_not_nan = mk_not(convert_is_nan(isnan2tc(eq.side_1)));
+      smt_astt y_not_nan = mk_not(convert_is_nan(isnan2tc(eq.side_2)));
+      a = mk_and(normal_eq, mk_and(x_not_nan, y_not_nan));
     }
-    break;
   }
+  else
+  {
+    // Non‐floating types
+    a = lhs->eq(this, rhs);
+  }
+  break;
+}
   case expr2t::notequal_id:
   {
     // Handle all kinds of structs by inverted equality. The only that's really
