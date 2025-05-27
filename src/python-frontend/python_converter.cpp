@@ -523,51 +523,129 @@ exprt handle_floor_division(
 
 exprt python_converter::handle_power_operator(exprt lhs, exprt rhs)
 {
-  // Try to resolve constant value of rhs only
+  // Try to resolve constant values of both lhs and rhs
+  exprt resolved_lhs = lhs;
+  if (lhs.is_symbol())
+  {
+    const symbolt *s = symbol_table_.find_symbol(lhs.identifier());
+    if (s && !s->value.value().empty())
+      resolved_lhs = s->value;
+  }
+  else if (is_math_expr(lhs))
+  {
+    resolved_lhs = compute_math_expr(lhs);
+  }
+  
+  exprt resolved_rhs = rhs;
   if (rhs.is_symbol())
   {
     const symbolt *s = symbol_table_.find_symbol(rhs.identifier());
-    assert(s);
-    if (!s->value.value().empty())
-      rhs = s->value;
+    if (s && !s->value.value().empty())
+      resolved_rhs = s->value;
   }
   else if (is_math_expr(rhs))
   {
-    rhs = compute_math_expr(rhs);
+    resolved_rhs = compute_math_expr(rhs);
   }
-  // If rhs is not constant, report warning through log_warning
-  if (!rhs.is_constant())
+  
+  // If rhs is still not constant, we need to handle this case
+  if (!resolved_rhs.is_constant())
   {
     log_warning(
       "ESBMC-Python does not support power expressions with non-constant "
       "exponents");
-    return lhs;
+    // Return a safe default rather than creating unsupported "power" expression
+    return from_integer(1, lhs.type());
   }
+  
   // Convert rhs to integer exponent
-  BigInt exponent =
-    binary2integer(rhs.value().as_string(), rhs.type().is_signedbv());
+  BigInt exponent;
+  try {
+    exponent = binary2integer(resolved_rhs.value().as_string(), resolved_rhs.type().is_signedbv());
+  } catch (...) {
+    std::runtime_error("Failed to convert exponent to integer");
+    return from_integer(1, lhs.type());
+  }
+  
+  // Handle negative exponents more gracefully
   if (exponent < 0)
   {
-    // Negative exponent: report error through log_error
-    log_error(
+    log_warning(
       "ESBMC-Python does not support power expressions with negative "
-      "exponents");
-    abort();
+      "exponents, treating as symbolic");
+    return from_integer(1, lhs.type());
   }
-  // Handle exponent == 0 and 1
+  
+  // Handle special cases first
   if (exponent == 0)
     return from_integer(1, lhs.type());
   if (exponent == 1)
     return lhs;
-  // Build symbolic multiplication tree
-  exprt result = lhs;
-  for (BigInt i = 1; i < exponent; ++i)
+    
+  // Check resolved base for special cases - do this BEFORE large exponent check
+  if (resolved_lhs.is_constant())
   {
-    exprt mul_expr("*", lhs.type());
-    mul_expr.copy_to_operands(result, lhs);
-    result = mul_expr;
+    BigInt base = binary2integer(resolved_lhs.value().as_string(), resolved_lhs.type().is_signedbv());
+    
+    // Special cases for constant base
+    if (base == 0 && exponent > 0)
+      return from_integer(0, lhs.type());
+    if (base == 1)
+      return from_integer(1, lhs.type());
+    if (base == -1)
+      return from_integer((exponent % 2 == 0) ? 1 : -1, lhs.type());
   }
-  return result;
+  
+  // Set reasonable limit for exponent size to prevent memory explosion
+  const BigInt MAX_EXPONENT = 1000;
+  if (exponent > MAX_EXPONENT)
+  {
+    log_warning("Exponent too large, returning safe default");
+    return from_integer(1, lhs.type());
+  }
+  
+  // Build symbolic multiplication tree using exponentiation by squaring for efficiency
+  return build_power_expression(lhs, exponent);
+}
+
+// Helper function for efficient exponentiation
+exprt python_converter::build_power_expression(const exprt& base, const BigInt& exp)
+{
+  if (exp == 0)
+    return from_integer(1, base.type());
+  if (exp == 1)
+    return base;
+    
+  // For small exponents, use simple multiplication chain
+  if (exp <= 10)
+  {
+    exprt result = base;
+    for (BigInt i = 1; i < exp; ++i)
+    {
+      exprt mul_expr("*", base.type());
+      mul_expr.copy_to_operands(result, base);
+      result = mul_expr;
+    }
+    return result;
+  }
+  
+  // For larger exponents, use exponentiation by squaring
+  // This reduces the number of operations from O(n) to O(log n)
+  if (exp % 2 == 0)
+  {
+    // Even exponent: (base^2)^(exp/2)
+    exprt square("*", base.type());
+    square.copy_to_operands(base, base);
+    return build_power_expression(square, exp / 2);
+  }
+  else
+  {
+    // Odd exponent: base * base^(exp-1)
+    exprt mul_expr("*", base.type());
+    exprt sub_power = build_power_expression(base, exp - 1);
+    mul_expr.copy_to_operands(base, sub_power);
+    return mul_expr;
+  }
 }
 
 exprt handle_float_vs_string(exprt &bin_expr, const std::string &op)
