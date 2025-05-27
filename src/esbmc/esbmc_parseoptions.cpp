@@ -1660,6 +1660,8 @@ bool esbmc_parseoptionst::create_goto_program(
     // If the user is providing the GOTO functions, we don't need to parse
     if (cmdline.isset("binary"))
     {
+      if (cmdline.isset("cprover"))
+        log_warning("Be sure you are manually linking with the cprover libraries. This will be automated in the future.");
       if (read_goto_binary(goto_functions))
         return true;
     }
