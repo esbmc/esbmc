@@ -99,7 +99,7 @@ jobs:
     uses: ./.github/workflows/build.yml
     with:
       operating-system: ubuntu-22.04
-      build-flags: '-b Release -e Off -C'
+      build-flags: '-b DebugOpt -e Off -C'
       testing: false     
 
   run-benchexec:
@@ -112,7 +112,7 @@ jobs:
       - name: Download Linux Build
         uses: actions/download-artifact@v4
         with:
-          name: 'release-ubuntu-22.04--b Release -e Off -C'
+          name: 'release-ubuntu-22.04--b DebugOpt -e Off -C'
           path: ./
       - name: Checkout code
         uses: actions/checkout@v4
