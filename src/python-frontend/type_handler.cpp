@@ -6,6 +6,8 @@
 #include <util/context.h>
 #include <util/message.h>
 
+#include <iostream>
+
 type_handler::type_handler(const python_converter &converter)
   : converter_(converter)
 {
@@ -225,56 +227,109 @@ bool type_handler::has_multiple_types(const nlohmann::json &container) const
   if (container.empty())
     return false;
 
+  // Quick check: if all elements are string constants, they have the same type
+  bool all_string_constants = true;
+  for (const auto &element : container)
+  {
+    if (element["_type"] != "Constant" || !element["value"].is_string())
+    {
+      all_string_constants = false;
+      break;
+    }
+  }
+  
+  if (all_string_constants)
+    return false; // All string constants have the same type
+  
+  // Quick check: if all elements are numeric constants, they might have the same type
+  bool all_numeric_constants = true;
+  for (const auto &element : container)
+  {
+    if (element["_type"] != "Constant" || !element["value"].is_number())
+    {
+      all_numeric_constants = false;
+      break;
+    }
+  }
+  
+  if (all_numeric_constants)
+  {
+    // Check if all numbers are the same type (int vs float)
+    bool first_is_int = container[0]["value"].is_number_integer();
+    for (size_t i = 1; i < container.size(); ++i)
+    {
+      bool current_is_int = container[i]["value"].is_number_integer();
+      if (first_is_int != current_is_int)
+        return true; // Mixed int/float
+    }
+    return false; // All same numeric type
+  }
+
+  // Fallback to original complex logic for mixed types
+  
   // Determine the type of the first element
-  typet t;
+  typet first_type;
+  
   if (container[0]["_type"] == "List")
   {
-    // Check the type of elements within the sublist
     if (has_multiple_types(container[0]["elts"]))
       return true;
-
-    // Get the type of the elements in the sublist
-    t = get_typet(container[0]["elts"][0]["value"]);
+    
+    const auto &first_sublist = container[0]["elts"];
+    if (!first_sublist.empty())
+    {
+      if (first_sublist[0]["_type"] == "UnaryOp")
+        first_type = get_typet(first_sublist[0]["operand"]["value"]);
+      else
+        first_type = get_typet(first_sublist[0]["value"]);
+    }
   }
   else
   {
-    // Get the type of the first element if it is not a sublist
     if (container[0]["_type"] == "UnaryOp")
-      t = get_typet(container[0]["operand"]["value"]); // negative numbers
+      first_type = get_typet(container[0]["operand"]["value"]);
     else
-      t = get_typet(container[0]["value"]);
+      first_type = get_typet(container[0]["value"]);
   }
 
-  for (const auto &element : container)
+  // Compare all other elements with the first one
+  for (size_t i = 1; i < container.size(); ++i)
   {
+    const auto &element = container[i];
+    typet current_type;
+    
     if (element["_type"] == "List")
     {
-      // Check the consistency of the sublist
       if (has_multiple_types(element["elts"]))
         return true;
 
-      // Compare the type of internal elements in the sublist with the type `t`
-      const auto &elem = (element["elts"][0]["_type"] == "UnaryOp")
-                           ? element["elts"]["operand"]["value"]
-                           : element["elts"][0]["value"];
-      if (get_typet(elem) != t)
-        return true;
+      const auto &sublist = element["elts"];
+      if (!sublist.empty())
+      {
+        if (sublist[0]["_type"] == "UnaryOp")
+          current_type = get_typet(sublist[0]["operand"]["value"]);
+        else
+          current_type = get_typet(sublist[0]["value"]);
+      }
     }
     else
     {
-      // Compare the type of the current element with `t`
-      const auto &elem = (element["_type"] == "UnaryOp")
-                           ? element["operand"]["value"]
-                           : element["value"];
-      if (get_typet(elem) != t)
-        return true;
+      if (element["_type"] == "UnaryOp")
+        current_type = get_typet(element["operand"]["value"]);
+      else
+        current_type = get_typet(element["value"]);
     }
+
+    if (current_type != first_type)
+      return true;
   }
+
   return false;
 }
 
 typet type_handler::get_list_type(const nlohmann::json &list_value) const
 {
+  std::cout << list_value.dump(2) << std::endl;
   if (list_value["_type"] == "arg" && list_value.contains("annotation"))
   {
     assert(list_value["annotation"]["value"]["id"] == "list");
