@@ -107,8 +107,8 @@ private:
         {
           try
           {
-            const auto func_node =
-              json_utils::find_function(ast_["body"], func_name);
+            const auto &node = ast_["body"];
+            const auto &func_node = json_utils::find_function(node, func_name);
             get_global_elements(func_node);
           }
           catch (std::runtime_error &)
