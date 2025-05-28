@@ -61,7 +61,7 @@ if(ENABLE_BITWUZLA)
     if(NOT GMP_LIB)
         message(FATAL_ERROR "gmp not found")
     endif()
-    target_link_libraries(solverbitw fmt::fmt PkgConfig::Bitwuzla ${GMP_LIB})
+    target_link_libraries(solverbitw fmt::fmt PkgConfig::Bitwuzla)
 
     target_link_libraries(solvers INTERFACE solverbitw)
 

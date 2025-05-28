@@ -165,13 +165,13 @@ do
     C) BASE_ARGS="$BASE_ARGS -DESBMC_SVCOMP=ON"
        SOLVER_FLAGS="\
           -DENABLE_BOOLECTOR=On \
-          -DENABLE_YICES=OFF \
+          -DENABLE_YICES=On \
           -DENABLE_CVC4=OFF \
-          -DENABLE_BITWUZLA=OFF \
+          -DENABLE_BITWUZLA=On \
           -DENABLE_Z3=On \
-          -DENABLE_MATHSAT=ON \
+          -DENABLE_MATHSAT=On \
           -DENABLE_GOTO_CONTRACTOR=On \
-          -DACADEMIC_BUILD=ON"  ;;
+          -DACADEMIC_BUILD=On"  ;;
     B) BASE_ARGS="$BASE_ARGS -DESBMC_BUNDLE_LIBC=$OPTARG" ;;
     x) BASE_ARGS="$BASE_ARGS -DESBMC_CHERI=ON" ;;
     *) exit 1 ;;
