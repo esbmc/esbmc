@@ -32,8 +32,7 @@ static const std::unordered_map<std::string, std::string> operator_map = {
   {"lt", "<"},          {"lte", "<="},        {"noteq", "notequal"},
   {"gt", ">"},          {"gte", ">="},        {"and", "and"},
   {"or", "or"},         {"not", "not"},       {"uadd", "unary+"},
-  {"is", "="},          {"isnot", "notequal"}
-};
+  {"is", "="},          {"isnot", "notequal"}};
 
 static const std::unordered_map<std::string, StatementType> statement_map = {
   {"AnnAssign", StatementType::VARIABLE_ASSIGN},
