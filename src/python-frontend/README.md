@@ -272,7 +272,6 @@ Type: <class 'numpy.int32'>
 Correctly overflowed: True
 ````
 
-
 **Explanation:**  
 
 ESBMC performs bit-precise analysis and treats signed overflow as undefined or erroneous, unlike NumPy’s permissive semantics.
@@ -283,7 +282,20 @@ ESBMC performs bit-precise analysis and treats signed overflow as undefined or e
 
 While NumPy permits this silent overflow, ESBMC correctly identifies it as a violation of safe arithmetic.
 
----
+#### Matrix Determinant (`np.linalg.det`)
+
+You can also verify the correctness of determinant computations for 2D NumPy arrays:
+
+```python
+import numpy as np
+
+a = np.array([[1, 2], [3, 4]])
+x = np.linalg.det(a)
+assert x == -2
+````
+
+ESBMC symbolically executes the closed-form expression for small matrices, enabling the detection of singular matrices, ill-conditioned operations, or incorrect expectations.
+
 
 ### White-Box Verification
 
