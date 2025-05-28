@@ -4,6 +4,8 @@
 #include <python-frontend/type_handler.h>
 #include <util/context.h>
 #include <util/namespace.h>
+#include <util/std_code.h>
+#include <util/symbol_generator.h>
 #include <nlohmann/json.hpp>
 #include <map>
 #include <set>
@@ -118,6 +120,8 @@ private:
 
   exprt handle_power_operator(exprt lhs, exprt rhs);
 
+  exprt build_power_expression(const exprt &base, const BigInt &exp);
+
   bool is_zero_length_array(const exprt &expr);
 
   void ensure_string_array(exprt &expr);
@@ -196,6 +200,7 @@ private:
   const nlohmann::json &ast_json;
   const global_scope &global_scope_;
   type_handler type_handler_;
+  symbol_generator sym_generator_;
 
   namespacet ns;
   typet current_element_type;
@@ -204,6 +209,7 @@ private:
   nlohmann::json imported_module_json;
   std::string current_func_name_;
   std::string current_class_name_;
+  code_blockt *current_block;
   exprt *current_lhs;
 
   bool is_converting_lhs = false;

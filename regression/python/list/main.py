@@ -45,3 +45,9 @@ def func2(l: list[float]) -> None:
 l8 = [1.0]
 func2(l8)
 assert l8[0] == 2.0
+
+def bar(x:list[int]) -> None:
+    assert x[0] == 1
+
+x = 0    
+bar([1,2,3])

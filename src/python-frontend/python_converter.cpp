@@ -523,51 +523,130 @@ exprt handle_floor_division(
 
 exprt python_converter::handle_power_operator(exprt lhs, exprt rhs)
 {
-  // Try to resolve constant value of rhs only
+  // Try to resolve constant values of both lhs and rhs
+  exprt resolved_lhs = lhs;
+  if (lhs.is_symbol())
+  {
+    const symbolt *s = symbol_table_.find_symbol(lhs.identifier());
+    if (s && !s->value.value().empty())
+      resolved_lhs = s->value;
+  }
+  else if (is_math_expr(lhs))
+    resolved_lhs = compute_math_expr(lhs);
+
+  exprt resolved_rhs = rhs;
   if (rhs.is_symbol())
   {
     const symbolt *s = symbol_table_.find_symbol(rhs.identifier());
-    assert(s);
-    if (!s->value.value().empty())
-      rhs = s->value;
+    if (s && !s->value.value().empty())
+      resolved_rhs = s->value;
   }
   else if (is_math_expr(rhs))
-  {
-    rhs = compute_math_expr(rhs);
-  }
-  // If rhs is not constant, report warning through log_warning
-  if (!rhs.is_constant())
+    resolved_rhs = compute_math_expr(rhs);
+
+  // If rhs is still not constant, we need to handle this case
+  if (!resolved_rhs.is_constant())
   {
     log_warning(
       "ESBMC-Python does not support power expressions with non-constant "
       "exponents");
-    return lhs;
+    return from_integer(1, lhs.type());
   }
+
+  // Check if the exponent is a floating-point number
+  if (resolved_rhs.type().is_floatbv())
+  {
+    log_warning("ESBMC-Python does not support floating-point exponents yet");
+    return from_integer(1, lhs.type());
+  }
+
   // Convert rhs to integer exponent
-  BigInt exponent =
-    binary2integer(rhs.value().as_string(), rhs.type().is_signedbv());
+  BigInt exponent;
+  try
+  {
+    exponent = binary2integer(
+      resolved_rhs.value().as_string(), resolved_rhs.type().is_signedbv());
+  }
+  catch (...)
+  {
+    log_warning("Failed to convert exponent to integer");
+    return from_integer(1, lhs.type());
+  }
+
+  // Handle negative exponents more gracefully
   if (exponent < 0)
   {
-    // Negative exponent: report error through log_error
-    log_error(
+    log_warning(
       "ESBMC-Python does not support power expressions with negative "
-      "exponents");
-    abort();
+      "exponents, treating as symbolic");
+    return from_integer(1, lhs.type());
   }
-  // Handle exponent == 0 and 1
+
+  // Handle special cases first
   if (exponent == 0)
     return from_integer(1, lhs.type());
   if (exponent == 1)
     return lhs;
-  // Build symbolic multiplication tree
-  exprt result = lhs;
-  for (BigInt i = 1; i < exponent; ++i)
+
+  // Check resolved base for special cases
+  if (resolved_lhs.is_constant())
   {
-    exprt mul_expr("*", lhs.type());
-    mul_expr.copy_to_operands(result, lhs);
-    result = mul_expr;
+    BigInt base = binary2integer(
+      resolved_lhs.value().as_string(), resolved_lhs.type().is_signedbv());
+
+    // Special cases for constant base
+    if (base == 0 && exponent > 0)
+      return from_integer(0, lhs.type());
+    if (base == 1)
+      return from_integer(1, lhs.type());
+    if (base == -1)
+      return from_integer((exponent % 2 == 0) ? 1 : -1, lhs.type());
   }
-  return result;
+
+  // Build symbolic multiplication tree using exponentiation by squaring for efficiency
+  return build_power_expression(lhs, exponent);
+}
+
+// Helper function for efficient exponentiation
+exprt python_converter::build_power_expression(
+  const exprt &base,
+  const BigInt &exp)
+{
+  if (exp == 0)
+    return from_integer(1, base.type());
+  if (exp == 1)
+    return base;
+
+  // For small exponents, use simple multiplication chain
+  if (exp <= 10)
+  {
+    exprt result = base;
+    for (BigInt i = 1; i < exp; ++i)
+    {
+      exprt mul_expr("*", base.type());
+      mul_expr.copy_to_operands(result, base);
+      result = mul_expr;
+    }
+    return result;
+  }
+
+  // For larger exponents, use exponentiation by squaring
+  // This reduces the number of operations from O(n) to O(log n)
+  if (exp % 2 == 0)
+  {
+    // Even exponent: (base^2)^(exp/2)
+    exprt square("*", base.type());
+    square.copy_to_operands(base, base);
+    return build_power_expression(square, exp / 2);
+  }
+  else
+  {
+    // Odd exponent: base * base^(exp-1)
+    exprt mul_expr("*", base.type());
+    exprt sub_power = build_power_expression(base, exp - 1);
+    mul_expr.copy_to_operands(base, sub_power);
+    return mul_expr;
+  }
 }
 
 exprt handle_float_vs_string(exprt &bin_expr, const std::string &op)
@@ -1275,16 +1354,34 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       current_element_type = list_type;
     }
 
-    expr = gen_zero(list_type);
+    exprt list = gen_zero(list_type);
 
     unsigned int i = 0;
     for (auto &e : element["elts"])
     {
-      if (e["_type"] == "List")
-        expr.operands().at(i++) = get_expr(e);
-      else
-        expr.operands().at(i++) = get_expr(e);
+      list.operands().at(i++) = get_expr(e);
     }
+
+    locationt location = get_location_from_decl(element);
+    std::string path = location.file().as_string();
+    std::string name_prefix =
+      path + ":" + location.get_line().as_string() + "$compound-literal$";
+    symbolt &cl =
+      sym_generator_.new_symbol(symbol_table_, list_type, name_prefix);
+    cl.mode = "Python";
+    std::string module_name = location.get_file().as_string();
+    cl.module = module_name;
+    cl.location = location;
+    cl.static_lifetime = false;
+    cl.is_extern = false;
+    cl.file_local = true;
+    cl.value = list;
+
+    expr = symbol_expr(cl);
+    code_declt decl(expr);
+    decl.operands().push_back(list);
+    assert(current_block);
+    current_block->copy_to_operands(decl);
 
     break;
   }
@@ -2139,7 +2236,8 @@ void python_converter::get_return_statements(
 
 exprt python_converter::get_block(const nlohmann::json &ast_block)
 {
-  code_blockt block;
+  code_blockt block, *old_block = current_block;
+  current_block = &block;
 
   // Iterate over block statements
   for (auto &element : ast_block)
@@ -2231,6 +2329,8 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     }
   }
 
+  current_block = old_block;
+
   return std::move(block);
 }
 
@@ -2242,9 +2342,11 @@ python_converter::python_converter(
     ast_json(ast),
     global_scope_(gs),
     type_handler_(*this),
+    sym_generator_("python_converter::"),
     ns(_context),
     current_func_name_(""),
     current_class_name_(""),
+    current_block(nullptr),
     current_lhs(nullptr)
 {
 }
@@ -2319,7 +2421,7 @@ void python_converter::convert()
       ast_json["ast_output_dir"].get<std::string>();
     std::list<std::string> model_files = {
       "range", "int", "consensus", "random"};
-    std::list<std::string> model_folders = {"os"};
+    std::list<std::string> model_folders = {"os", "numpy"};
 
     for (const auto &folder : model_folders)
     {

@@ -1,4 +1,4 @@
 CORE
 contract.solast
---sol contract.sol --unwind 3 --no-unwinding-assertions --quiet --no-pointer-check --z3
+--sol contract.sol --no-standard-checks --incremental-bmc --contract Base
 ^VERIFICATION FAILED$
