@@ -248,7 +248,7 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
           type2tc ptr_type = pointer_type2tc(get_empty_type());
           expr2tc invalid_object = symbol2tc(ptr_type, "INVALID");
 
-          // There should be a difference here, we assign all pointer type arguments as 
+          // There should be a difference here, we assign all pointer type arguments as
           // invalid pointers, and CHERI's capabilities should prevent that here.
           symex_assign(code_assign2tc(argument, invalid_object));
         }
