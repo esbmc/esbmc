@@ -169,9 +169,9 @@ do
           -DENABLE_CVC4=OFF \
           -DENABLE_BITWUZLA=On \
           -DENABLE_Z3=On \
-          -DENABLE_MATHSAT=ON \
+          -DENABLE_MATHSAT=On \
           -DENABLE_GOTO_CONTRACTOR=On \
-          -DACADEMIC_BUILD=ON"  ;;
+          -DACADEMIC_BUILD=On"  ;;
     B) BASE_ARGS="$BASE_ARGS -DESBMC_BUNDLE_LIBC=$OPTARG" ;;
     x) BASE_ARGS="$BASE_ARGS -DESBMC_CHERI=ON" ;;
     *) exit 1 ;;

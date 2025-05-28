@@ -56,6 +56,11 @@ if(ENABLE_BITWUZLA)
     target_include_directories(solverbitw
             PRIVATE ${Boost_INCLUDE_DIRS}
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+    find_library(GMP_LIB gmp)
+    if(NOT GMP_LIB)
+        message(FATAL_ERROR "gmp not found")
+    endif()
     target_link_libraries(solverbitw fmt::fmt PkgConfig::Bitwuzla)
 
     target_link_libraries(solvers INTERFACE solverbitw)
