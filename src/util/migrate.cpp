@@ -1891,7 +1891,6 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     const std::vector<exprt> args = {expr.op0()};
 
     migrate_expr(invoke_intrinsic(function, expr.type(), args), new_expr_ref);
-    new_expr_ref->dump();
   }
   else if (expr.id() == "overflow_result-+")
   {
