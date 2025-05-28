@@ -1,6 +1,4 @@
 def f(x:str) -> str:
-    return x
+    assert x == "abc"
 
-k = f("abc")
-
-assert k == "abc"
+k = f("abcd")

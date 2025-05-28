@@ -809,31 +809,117 @@ exprt python_converter::handle_string_comparison(
   exprt &rhs,
   const nlohmann::json &element)
 {
-  if (lhs.type() != rhs.type())
-    return gen_boolean(op == "NotEq");
+  printf("op: %s\n", op.c_str());
+  lhs.dump();
+  rhs.dump();
+  
+  // Prepare arguments for string comparison
+  exprt lhs_arg = lhs;
+  exprt rhs_arg = rhs;
+  
+  // Handle special case: array containing a single symbol (parameter case)
+  if (lhs.id() == "constant" && lhs.type().id() == "array")
+  {
+    const auto &array_type = to_array_type(lhs.type());
+    BigInt array_size = binary2integer(array_type.size().value().as_string(), false);
+    
+    // If it's an array of size 1 containing a symbol, extract the symbol
+    if (array_size == 1 && lhs.operands().size() == 1 && 
+        lhs.operands()[0].id() == "symbol")
+    {
+      printf("Extracting symbol from single-element array\n");
+      lhs_arg = lhs.operands()[0]; // Extract the symbol directly
+    }
+  }
+  
+  // Similar handling for rhs (though less likely)
+  if (rhs.id() == "constant" && rhs.type().id() == "array")
+  {
+    const auto &array_type = to_array_type(rhs.type());
+    BigInt array_size = binary2integer(array_type.size().value().as_string(), false);
+    
+    if (array_size == 1 && rhs.operands().size() == 1 && 
+        rhs.operands()[0].id() == "symbol")
+    {
+      printf("Extracting symbol from single-element array (rhs)\n");
+      rhs_arg = rhs.operands()[0]; // Extract the symbol directly
+    }
+  }
 
-  if (lhs.is_constant() && rhs.is_constant() && lhs == rhs)
+  // Handle constant comparisons
+  if (lhs_arg.is_constant() && rhs_arg.is_constant() && lhs_arg == rhs_arg)
     return gen_boolean(op == "Eq");
 
-  if (is_zero_length_array(lhs) && is_zero_length_array(rhs))
+  if (is_zero_length_array(lhs_arg) && is_zero_length_array(rhs_arg))
     return gen_boolean(op == "Eq");
 
-  const auto &array_type = to_array_type(lhs.type());
-  BigInt string_size =
-    binary2integer(array_type.size().value().as_string(), false);
+  // Try strcmp first (handles pointer arguments naturally)
+  symbolt *strcmp_symbol = symbol_table_.find_symbol("c:@F@strcmp");
+  
+  if (strcmp_symbol)
+  {
+    side_effect_expr_function_callt strcmp_call;
+    strcmp_call.function() = symbol_expr(*strcmp_symbol);
+    strcmp_call.arguments() = {lhs_arg, rhs_arg};
+    strcmp_call.location() = get_location_from_decl(element);
+    strcmp_call.type() = int_type();
 
-  symbolt *strncmp_symbol = symbol_table_.find_symbol("c:@F@strncmp");
-  assert(strncmp_symbol);
+    lhs = strcmp_call;
+    rhs = gen_zero(int_type());
+  }
+  else
+  {
+    // For strncmp, we need to determine the correct length
+    BigInt string_size = 0;
+    
+    // Prioritize getting size from the actual string literal (not the parameter)
+    bool found_size = false;
+    
+    // Check original operands for array size (before symbol extraction)
+    if (rhs.id() == "constant" && rhs.type().id() == "array")
+    {
+      const auto &array_type = to_array_type(rhs.type());
+      BigInt rhs_size = binary2integer(array_type.size().value().as_string(), false);
+      if (rhs_size > 1) // Only use if it's a real string, not a wrapped symbol
+      {
+        string_size = rhs_size;
+        found_size = true;
+        printf("Using rhs string size: %ld\n", string_size.to_uint64());
+      }
+    }
+    
+    if (!found_size && lhs.id() == "constant" && lhs.type().id() == "array")
+    {
+      const auto &array_type = to_array_type(lhs.type());
+      BigInt lhs_size = binary2integer(array_type.size().value().as_string(), false);
+      if (lhs_size > 1) // Only use if it's a real string, not a wrapped symbol
+      {
+        string_size = lhs_size;
+        found_size = true;
+        printf("Using lhs string size: %ld\n", string_size.to_uint64());
+      }
+    }
+    
+    if (!found_size)
+    {
+      // If we can't determine size, use a reasonable default for string comparison
+      string_size = 256; // Large enough for most strings
+      printf("Using default string size: %ld\n", string_size.to_uint64());
+    }
 
-  side_effect_expr_function_callt strncmp_call;
-  strncmp_call.function() = symbol_expr(*strncmp_symbol);
-  strncmp_call.arguments() = {
-    lhs, rhs, from_integer(string_size, long_uint_type())};
-  strncmp_call.location() = get_location_from_decl(element);
-  strncmp_call.type() = int_type();
+    symbolt *strncmp_symbol = symbol_table_.find_symbol("c:@F@strncmp");
+    assert(strncmp_symbol);
 
-  lhs = strncmp_call;
-  rhs = gen_zero(int_type());
+    side_effect_expr_function_callt strncmp_call;
+    strncmp_call.function() = symbol_expr(*strncmp_symbol);
+    strncmp_call.arguments() = {
+      lhs_arg, rhs_arg, from_integer(string_size, long_uint_type())};
+    strncmp_call.location() = get_location_from_decl(element);
+    strncmp_call.type() = int_type();
+
+    lhs = strncmp_call;
+    rhs = gen_zero(int_type());
+  }
 
   return nil_exprt(); // continue with lhs OP rhs
 }
