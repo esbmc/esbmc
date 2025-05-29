@@ -872,6 +872,33 @@ exprt python_converter::handle_string_operations(
   return nil_exprt();
 }
 
+// Helper function for 'is' comparison logic
+exprt python_converter::get_binary_operator_expr_for_is(const exprt &lhs, const exprt &rhs)
+{
+  typet bool_type_result = bool_type();
+  exprt is_expr("=", bool_type_result);
+  
+  // If comparing list variables that are stored as pointers
+  if (lhs.type().is_pointer() && rhs.type().is_pointer())
+  {
+    is_expr.copy_to_operands(lhs, rhs);
+  }
+  else if (lhs.type().is_array() && rhs.type().is_array())
+  {
+    // For arrays, compare their base addresses
+    exprt lhs_addr = address_of_exprt(index_exprt(lhs, from_integer(0, index_type())));
+    exprt rhs_addr = address_of_exprt(index_exprt(rhs, from_integer(0, index_type())));
+    is_expr.copy_to_operands(lhs_addr, rhs_addr);
+  }
+  else
+  {
+    // Default case - direct comparison
+    is_expr.copy_to_operands(lhs, rhs);
+  }
+  
+  return is_expr;
+}
+
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
   auto left = (element.contains("left")) ? element["left"] : element["target"];
@@ -914,6 +941,46 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     op = element["ops"][0]["_type"].get<std::string>();
 
   assert(!op.empty());
+
+  // Handle Python 'is' operator for identity comparison
+  if (op == "Is")
+  {
+    // For Python 'is' operator, compare the variables directly
+    // If both operands are pointers or arrays, compare them directly
+    typet bool_type_result = bool_type();
+    exprt is_expr("=", bool_type_result);
+    
+    // If comparing list variables that are stored as pointers
+    if (lhs.type().is_pointer() && rhs.type().is_pointer())
+    {
+      is_expr.copy_to_operands(lhs, rhs);
+    }
+    else if (lhs.type().is_array() && rhs.type().is_array())
+    {
+      // For arrays, compare their base addresses
+      exprt lhs_addr = address_of_exprt(index_exprt(lhs, from_integer(0, index_type())));
+      exprt rhs_addr = address_of_exprt(index_exprt(rhs, from_integer(0, index_type())));
+      is_expr.copy_to_operands(lhs_addr, rhs_addr);
+    }
+    else
+    {
+      // Default case - direct comparison
+      is_expr.copy_to_operands(lhs, rhs);
+    }
+    
+    return is_expr;
+  }
+  
+  // Handle Python 'is not' operator
+  if (op == "IsNot")
+  {
+    // Create the 'is' comparison first
+    exprt is_expr = get_binary_operator_expr_for_is(lhs, rhs);
+    // Then negate it
+    exprt not_expr("not", bool_type());
+    not_expr.copy_to_operands(is_expr);
+    return not_expr;
+  }
 
   // Get LHS and RHS types
   std::string lhs_type = type_handler_.type_to_string(lhs.type());
@@ -1849,7 +1916,20 @@ void python_converter::get_var_assign(
   {
     if (lhs_symbol)
     {
-      if (
+      // Handle list reference assignment
+      if (lhs_type == "list" && rhs.is_symbol() && rhs.type().is_array())
+      {
+        // For list assignment like z = y, create a pointer assignment
+        // Convert z to a pointer type
+        typet ptr_type = gen_pointer_type(rhs.type().subtype());
+        lhs_symbol->type = ptr_type;
+        lhs.type() = ptr_type;
+        
+        // Create address-of expression for RHS
+        exprt rhs_addr = address_of_exprt(index_exprt(rhs, from_integer(0, index_type())));
+        rhs = rhs_addr;
+      }
+      else if (
         lhs_type == "str" || lhs_type == "chr" || lhs_type == "ord" ||
         lhs_type == "list" || rhs.type().is_array())
       {

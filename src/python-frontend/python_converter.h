@@ -130,6 +130,8 @@ private:
 
   bool is_bytes_literal(const nlohmann::json &element);
 
+  exprt get_binary_operator_expr_for_is(const exprt &lhs, const exprt &rhs);
+
   exprt handle_string_concatenation(
     const exprt &lhs,
     const exprt &rhs,
