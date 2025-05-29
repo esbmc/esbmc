@@ -42,11 +42,7 @@ if(ENABLE_CVC4)
     target_include_directories(solvercvc4
             PRIVATE ${Boost_INCLUDE_DIRS}
             PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-    find_library(gmp gmp)
-    if (NOT gmp)
-        message(FATAL_ERROR "gmp not found")
-    endif ()
-    target_link_libraries(solvercvc4 fmt::fmt "CVC4::cvc4" ${gmp})
+    target_link_libraries(solvercvc4 fmt::fmt "CVC4::cvc4")
 
     # Add to solver link
     target_link_libraries(solvers INTERFACE solvercvc4)
