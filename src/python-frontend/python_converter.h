@@ -128,6 +128,8 @@ private:
 
   BigInt get_string_size(const exprt &expr);
 
+  bool is_bytes_literal(const nlohmann::json &element);
+
   exprt handle_string_concatenation(
     const exprt &lhs,
     const exprt &rhs,
