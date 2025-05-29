@@ -873,11 +873,13 @@ exprt python_converter::handle_string_operations(
 }
 
 // Helper function for 'is' comparison logic
-exprt python_converter::get_binary_operator_expr_for_is(const exprt &lhs, const exprt &rhs)
+exprt python_converter::get_binary_operator_expr_for_is(
+  const exprt &lhs,
+  const exprt &rhs)
 {
   typet bool_type_result = bool_type();
   exprt is_expr("=", bool_type_result);
-  
+
   // If comparing list variables that are stored as pointers
   if (lhs.type().is_pointer() && rhs.type().is_pointer())
   {
@@ -886,8 +888,10 @@ exprt python_converter::get_binary_operator_expr_for_is(const exprt &lhs, const 
   else if (lhs.type().is_array() && rhs.type().is_array())
   {
     // For arrays, compare their base addresses
-    exprt lhs_addr = address_of_exprt(index_exprt(lhs, from_integer(0, index_type())));
-    exprt rhs_addr = address_of_exprt(index_exprt(rhs, from_integer(0, index_type())));
+    exprt lhs_addr =
+      address_of_exprt(index_exprt(lhs, from_integer(0, index_type())));
+    exprt rhs_addr =
+      address_of_exprt(index_exprt(rhs, from_integer(0, index_type())));
     is_expr.copy_to_operands(lhs_addr, rhs_addr);
   }
   else
@@ -895,7 +899,7 @@ exprt python_converter::get_binary_operator_expr_for_is(const exprt &lhs, const 
     // Default case - direct comparison
     is_expr.copy_to_operands(lhs, rhs);
   }
-  
+
   return is_expr;
 }
 
@@ -949,7 +953,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     // If both operands are pointers or arrays, compare them directly
     typet bool_type_result = bool_type();
     exprt is_expr("=", bool_type_result);
-    
+
     // If comparing list variables that are stored as pointers
     if (lhs.type().is_pointer() && rhs.type().is_pointer())
     {
@@ -958,8 +962,10 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     else if (lhs.type().is_array() && rhs.type().is_array())
     {
       // For arrays, compare their base addresses
-      exprt lhs_addr = address_of_exprt(index_exprt(lhs, from_integer(0, index_type())));
-      exprt rhs_addr = address_of_exprt(index_exprt(rhs, from_integer(0, index_type())));
+      exprt lhs_addr =
+        address_of_exprt(index_exprt(lhs, from_integer(0, index_type())));
+      exprt rhs_addr =
+        address_of_exprt(index_exprt(rhs, from_integer(0, index_type())));
       is_expr.copy_to_operands(lhs_addr, rhs_addr);
     }
     else
@@ -967,10 +973,10 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       // Default case - direct comparison
       is_expr.copy_to_operands(lhs, rhs);
     }
-    
+
     return is_expr;
   }
-  
+
   // Handle Python 'is not' operator
   if (op == "IsNot")
   {
@@ -1924,9 +1930,10 @@ void python_converter::get_var_assign(
         typet ptr_type = gen_pointer_type(rhs.type().subtype());
         lhs_symbol->type = ptr_type;
         lhs.type() = ptr_type;
-        
+
         // Create address-of expression for RHS
-        exprt rhs_addr = address_of_exprt(index_exprt(rhs, from_integer(0, index_type())));
+        exprt rhs_addr =
+          address_of_exprt(index_exprt(rhs, from_integer(0, index_type())));
         rhs = rhs_addr;
       }
       else if (
