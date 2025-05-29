@@ -165,9 +165,9 @@ do
     C) BASE_ARGS="$BASE_ARGS -DESBMC_SVCOMP=ON"
        SOLVER_FLAGS="\
           -DENABLE_BOOLECTOR=On \
-          -DENABLE_YICES=On \
+          -DENABLE_YICES=OFF \
           -DENABLE_CVC4=OFF \
-          -DENABLE_BITWUZLA=On \
+          -DENABLE_BITWUZLA=OFF \
           -DENABLE_Z3=On \
           -DENABLE_MATHSAT=ON \
           -DENABLE_GOTO_CONTRACTOR=On \
