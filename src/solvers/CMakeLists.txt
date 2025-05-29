@@ -32,15 +32,6 @@ add_subdirectory(mathsat)
 add_subdirectory(yices)
 add_subdirectory(bitwuzla)
 add_subdirectory(smtlib)
-
-if(ENABLE_BITWUZLA OR ENABLE_MATHSAT OR ENABLE_CVC4)
-    find_library(GMP_LIB gmp)
-    if(NOT GMP_LIB)
-        message(FATAL_ERROR "gmp not found")
-    endif()
-    target_link_libraries(solvers INTERFACE ${GMP_LIB})
-endif()
-
 set(ESBMC_AVAILABLE_SOLVERS "${ESBMC_AVAILABLE_SOLVERS}" PARENT_SCOPE)
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/solver_config.h.in"
   "${CMAKE_CURRENT_BINARY_DIR}/solver_config.h")
