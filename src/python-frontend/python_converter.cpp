@@ -949,8 +949,6 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   // Handle Python 'is' operator for identity comparison
   if (op == "Is")
   {
-    // For Python 'is' operator, compare the variables directly
-    // If both operands are pointers or arrays, compare them directly
     typet bool_type_result = bool_type();
     exprt is_expr("=", bool_type_result);
 
@@ -1922,23 +1920,26 @@ void python_converter::get_var_assign(
   {
     if (lhs_symbol)
     {
-      // Handle list reference assignment
-      if (lhs_type == "list" && rhs.is_symbol() && rhs.type().is_array())
+      const bool is_lhs_list = lhs_type == "list";
+      const bool is_lhs_str_related =
+        lhs_type == "str" || lhs_type == "chr" || lhs_type == "ord";
+      const bool is_rhs_array = rhs.type().is_array();
+      const bool is_global_scope = lhs.location().function().empty();
+      const bool is_rhs_symbol = rhs.is_symbol();
+
+      // Case: z = y, where both are lists in global scope
+      if (is_lhs_list && is_rhs_symbol && is_rhs_array && is_global_scope)
       {
-        // For list assignment like z = y, create a pointer assignment
-        // Convert z to a pointer type
+        // Convert LHS to a pointer type matching RHS element type
         typet ptr_type = gen_pointer_type(rhs.type().subtype());
         lhs_symbol->type = ptr_type;
         lhs.type() = ptr_type;
 
-        // Create address-of expression for RHS
-        exprt rhs_addr =
-          address_of_exprt(index_exprt(rhs, from_integer(0, index_type())));
-        rhs = rhs_addr;
+        // Use address-of the first element of the RHS array
+        rhs = address_of_exprt(index_exprt(rhs, from_integer(0, index_type())));
       }
-      else if (
-        lhs_type == "str" || lhs_type == "chr" || lhs_type == "ord" ||
-        lhs_type == "list" || rhs.type().is_array())
+      // Case: assignment to string, char, ord, or list with array RHS
+      else if (is_lhs_str_related || is_lhs_list || is_rhs_array)
       {
         /* When a string is assigned the result of a concatenation, we initially
          * create the LHS type as a zero-size array: "current_element_type = get_typet(lhs_type, type_size);"
@@ -1947,6 +1948,7 @@ void python_converter::get_var_assign(
         lhs_symbol->type = rhs.type();
         lhs.type() = rhs.type();
       }
+      // Always assign the RHS value if it has a valid type
       if (!rhs.type().is_empty())
         lhs_symbol->value = rhs;
     }
