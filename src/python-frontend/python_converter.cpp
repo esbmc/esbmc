@@ -1924,11 +1924,10 @@ void python_converter::get_var_assign(
       const bool is_lhs_str_related =
         lhs_type == "str" || lhs_type == "chr" || lhs_type == "ord";
       const bool is_rhs_array = rhs.type().is_array();
-      const bool is_global_scope = lhs.location().function().empty();
       const bool is_rhs_symbol = rhs.is_symbol();
 
       // Case: z = y, where both are lists in global scope
-      if (is_lhs_list && is_rhs_symbol && is_rhs_array && is_global_scope)
+      if (is_lhs_list && is_rhs_symbol && is_rhs_array)
       {
         // Convert LHS to a pointer type matching RHS element type
         typet ptr_type = gen_pointer_type(rhs.type().subtype());
