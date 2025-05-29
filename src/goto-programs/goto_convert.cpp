@@ -12,6 +12,7 @@
 #include <util/prefix.h>
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>
+#include <iostream>
 
 static bool is_empty(const goto_programt &goto_program)
 {
@@ -93,7 +94,8 @@ void goto_convertt::optimize_guarded_gotos(goto_programt &dest)
 
     if (
       it_goto_y == dest.instructions.end() || !it_goto_y->is_goto() ||
-      !is_true(it_goto_y->guard) || it_goto_y->is_target())
+      !is_true(it_goto_y->guard) || it_goto_y->is_target() ||
+      it_goto_y->is_break)
       continue;
 
     auto it_z = std::next(it_goto_y);
@@ -1168,6 +1170,7 @@ void goto_convertt::convert_assume(const codet &code, goto_programt &dest)
   t->location = code.location();
 }
 
+// --------------Original For Loop Code------------------------------------
 void goto_convertt::convert_for(const codet &code, goto_programt &dest)
 {
   if (code.operands().size() != 4)
@@ -1176,37 +1179,39 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
     abort();
   }
 
+  exprt tmp = code.op1();
+  const exprt *cond = &tmp;
+  const locationt &location = code.location();
+
+  bool mark_loop_head = true;
+
+  if (cond->has_operands())
+  {
+    const exprt &op = cond->op0();
+    if (strcmp(op.name().c_str(), "__ESBMC_atexits") == 0)
+    {
+      // hack, this is some ESBMC internal loop
+      // we don't want to mark it as a loop for the purpose of invariant gen
+      mark_loop_head = false;
+    }
+  }
+
   // turn for(A; c; B) { P } into
   //  A; while(c) { P; B; }
   //-----------------------------
   //    A;
-  // u: sideeffects in c
   // v: if(!c) goto z;
   // w: P;
   // x: B;               <-- continue target
-  // y: goto u;
+  // y: goto v
   // z: ;                <-- break target
 
   // A;
   if (code.op0().is_not_nil())
     convert(to_code(code.op0()), dest);
 
-  exprt tmp = code.op1();
-
-  exprt cond = tmp;
-  goto_programt sideeffects;
-
-  remove_sideeffects(cond, sideeffects);
-
   // save break/continue targets
   break_continue_targetst old_targets(targets);
-
-  // do the u label
-  goto_programt::targett u = sideeffects.instructions.begin();
-
-  // do the v label
-  goto_programt tmp_v;
-  goto_programt::targett v = tmp_v.add_instruction();
 
   // do the z label
   goto_programt tmp_z;
@@ -1226,35 +1231,48 @@ void goto_convertt::convert_for(const codet &code, goto_programt &dest)
     convert(to_code(code.op2()), tmp_x);
   }
 
+#if 0
   // optimize the v label
   if (sideeffects.instructions.empty())
     u = v;
+#endif
 
   // set the targets
   targets.set_break(z);
   targets.set_continue(tmp_x.instructions.begin());
 
   // v: if(!c) goto z;
+
+#if 0
   v->make_goto(z);
   expr2tc tmp_cond;
   migrate_expr(cond, tmp_cond);
   tmp_cond = not2tc(tmp_cond);
   v->guard = tmp_cond;
   v->location = code.location();
+#endif
+
+  goto_programt tmp_branch;
+  generate_conditional_branch(
+    gen_not(*cond), z, location, tmp_branch, mark_loop_head);
+
+  // do the v label
+  goto_programt::targett v = tmp_branch.instructions.begin();
+
+  // do the y label
+  goto_programt tmp_y;
+  goto_programt::targett y = tmp_y.add_instruction();
+
+  // y: if(c) goto v;
+  y->make_goto(v);
+  y->guard = gen_true_expr();
+  y->location = code.location();
 
   // do the w label
   goto_programt tmp_w;
   convert(to_code(code.op3()), tmp_w);
 
-  // y: goto u;
-  goto_programt tmp_y;
-  goto_programt::targett y = tmp_y.add_instruction();
-  y->make_goto(u);
-  y->guard = gen_true_expr();
-  y->location = code.location();
-
-  dest.destructive_append(sideeffects);
-  dest.destructive_append(tmp_v);
+  dest.destructive_append(tmp_branch);
   dest.destructive_append(tmp_w);
   dest.destructive_append(tmp_x);
   dest.destructive_append(tmp_y);
@@ -1271,10 +1289,24 @@ void goto_convertt::convert_while(const codet &code, goto_programt &dest)
     log_error("while takes two operands");
     abort();
   }
+  // std::cout<<code.pretty()<<std::endl;
 
   exprt tmp = code.op0();
   const exprt *cond = &tmp;
   const locationt &location = code.location();
+
+  bool mark_loop_head = true;
+
+  if (cond->has_operands())
+  {
+    const exprt &op = cond->op0();
+    if (strcmp(op.name().c_str(), "__ESBMC_atexits") == 0)
+    {
+      // hack, this is some ESBMC internal loop
+      // we don't want to mark it as a loop for the purpose of invariant gen
+      mark_loop_head = false;
+    }
+  }
 
   //    while(c) P;
   //--------------------
@@ -1293,7 +1325,8 @@ void goto_convertt::convert_while(const codet &code, goto_programt &dest)
   z->location = code.location();
 
   goto_programt tmp_branch;
-  generate_conditional_branch(gen_not(*cond), z, location, tmp_branch);
+  generate_conditional_branch(
+    gen_not(*cond), z, location, tmp_branch, mark_loop_head);
 
   // do the v label
   goto_programt::targett v = tmp_branch.instructions.begin();
@@ -1520,6 +1553,13 @@ void goto_convertt::convert_break(const code_breakt &code, goto_programt &dest)
 
   goto_programt::targett t = dest.add_instruction();
   t->make_goto(targets.break_target);
+  if (options.get_bool_option("vampire-for-loops"))
+  {
+    t->is_break = true;
+    log_error(
+      "When running with Vampire for loops, we currently don't support breaks");
+    abort();
+  }
   t->location = code.location();
 }
 
@@ -1870,7 +1910,8 @@ void goto_convertt::generate_conditional_branch(
   const exprt &guard,
   goto_programt::targett target_true,
   const locationt &location,
-  goto_programt &dest)
+  goto_programt &dest,
+  bool loop_head)
 {
   if (!has_sideeffect(guard))
   {
@@ -1886,6 +1927,8 @@ void goto_convertt::generate_conditional_branch(
     t->make_goto(target_true);
     migrate_expr(g, t->guard);
     t->location = location;
+    if (options.get_bool_option("vampire-for-loops"))
+      t->is_loop_head = loop_head;
     return;
   }
 
@@ -1899,7 +1942,8 @@ void goto_convertt::generate_conditional_branch(
   target_false->make_skip();
   target_false->location = location;
 
-  generate_conditional_branch(guard, target_true, target_false, location, dest);
+  generate_conditional_branch(
+    guard, target_true, target_false, location, dest, loop_head);
 
   dest.destructive_append(tmp);
 }
@@ -1909,14 +1953,15 @@ void goto_convertt::generate_conditional_branch(
   goto_programt::targett target_true,
   goto_programt::targett target_false,
   const locationt &location,
-  goto_programt &dest)
+  goto_programt &dest,
+  bool loop_head)
 {
   if (guard.id() == "not")
   {
     assert(guard.operands().size() == 1);
     // swap targets
     generate_conditional_branch(
-      guard.op0(), target_false, target_true, location, dest);
+      guard.op0(), target_false, target_true, location, dest, loop_head);
     return;
   }
 
@@ -1984,7 +2029,6 @@ void goto_convertt::generate_conditional_branch(
     t_false->make_goto(target_false);
     t_false->guard = gen_true_expr();
     t_false->location = location;
-
     return;
   }
 
@@ -2002,6 +2046,8 @@ void goto_convertt::generate_conditional_branch(
   t_true->make_goto(target_true);
   migrate_expr(cond, t_true->guard);
   t_true->location = location;
+  if (options.get_bool_option("vampire-for-loops"))
+    t_true->is_loop_head = loop_head;
 
   goto_programt::targett t_false = dest.add_instruction();
   t_false->make_goto(target_false);
