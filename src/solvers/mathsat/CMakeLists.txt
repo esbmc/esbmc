@@ -1,9 +1,9 @@
 set(Mathsat_MIN_VERSION 5.5.4)
 
 if (DEFINED Mathsat_DIR)
-    set(ENABLE_MATHSAT ON)
+    set(ENABLE_MATHSAT ON PARENT_SCOPE)
 elseif (EXISTS $ENV{HOME}/mathsat)
-  set(ENABLE_MATHSAT ON)
+  set(ENABLE_MATHSAT ON PARENT_SCOPE)
 else()
   if(ENABLE_MATHSAT AND DOWNLOAD_DEPENDENCIES AND ACADEMIC_BUILD)
     message("Downloading Mathsat")
