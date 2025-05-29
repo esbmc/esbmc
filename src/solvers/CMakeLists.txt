@@ -33,11 +33,13 @@ add_subdirectory(yices)
 add_subdirectory(bitwuzla)
 add_subdirectory(smtlib)
 
-find_library(GMP_TOP gmp)
-if(NOT GMP_TOP)
-    message(FATAL_ERROR "gmp not found")
+if(ENABLE_BITWUZLA OR ENABLE_MATHSAT OR ENABLE_CVC4)
+    find_library(GMP_LIB gmp)
+    if(NOT GMP_LIB)
+        message(FATAL_ERROR "gmp not found")
+    endif()
+    target_link_libraries(solvers INTERFACE ${GMP_LIB})
 endif()
-target_link_libraries(solvers INTERFACE ${GMP_LIB})
 
 set(ESBMC_AVAILABLE_SOLVERS "${ESBMC_AVAILABLE_SOLVERS}" PARENT_SCOPE)
 configure_file("${CMAKE_CURRENT_SOURCE_DIR}/solver_config.h.in"
