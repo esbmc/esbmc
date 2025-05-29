@@ -44,6 +44,7 @@ void clang_c_languaget::build_include_args(
   {
     compiler_args.push_back("-isystem");
     compiler_args.push_back(*libc_headers);
+    compiler_args.push_back("-Wno-implicit-function-declaration");
   }
 
   compiler_args.push_back("-resource-dir");
@@ -121,6 +122,7 @@ void clang_c_languaget::build_compiler_args(
     bool is_purecap = config.ansi_c.cheri == configt::ansi_ct::CHERI_PURECAP;
     compiler_args.emplace_back(
       "-cheri=" + std::to_string(config.ansi_c.capability_width()));
+    compiler_args.emplace_back("-cheri-bounds=subobject-safe");
 
     if (config.ansi_c.target
           .is_riscv()) /* unused as of yet: arch is mips64el */
@@ -487,6 +489,11 @@ __UINT32_TYPE__ __esbmc_cheri_type_get(void *__capability);
 _Bool __esbmc_cheri_sealed_get(void *__capability);
 #endif
 __UINT64_TYPE__ __esbmc_clzll(__UINT64_TYPE__);
+
+struct cap_info {__SIZE_TYPE__ base; __SIZE_TYPE__ top;};
+
+__attribute__((annotate("__ESBMC_inf_size")))
+struct cap_info __ESBMC_cheri_info[1];
     )";
   }
 

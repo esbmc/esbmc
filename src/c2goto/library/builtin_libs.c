@@ -28,6 +28,8 @@
 
 #    include <cheri/cheric.h>
 
+void __ESBMC_track_cheri(void *__capability, __SIZE_TYPE__);
+
 uint64_t __esbmc_clzll(uint64_t v)
 {
   for (int i = 0; i < 64; i++, v <<= 1)
@@ -49,6 +51,7 @@ union __esbmc_cheri_cap128
 
 __SIZE_TYPE__ __esbmc_cheri_base_get(void *__capability cap)
 {
+__ESBMC_HIDE:;
   union __esbmc_cheri_cap128 u = {cap};
   cc128_cap_t comp;
   cc128_decompress_mem(u.pesbt, u.cursor, true /* tag */, &comp);
@@ -58,6 +61,7 @@ __SIZE_TYPE__ __esbmc_cheri_base_get(void *__capability cap)
 
 __SIZE_TYPE__ __esbmc_cheri_perms_get(void *__capability cap)
 {
+__ESBMC_HIDE:;
   union __esbmc_cheri_cap128 u = {cap};
   cc128_cap_t comp;
   cc128_decompress_mem(u.pesbt, u.cursor, true /* tag */, &comp);
@@ -69,6 +73,7 @@ __SIZE_TYPE__ __esbmc_cheri_perms_get(void *__capability cap)
 
 __UINT16_TYPE__ __esbmc_cheri_flags_get(void *__capability cap)
 {
+__ESBMC_HIDE:;
   union __esbmc_cheri_cap128 u = {cap};
   cc128_cap_t comp;
   cc128_decompress_mem(u.pesbt, u.cursor, true /* tag */, &comp);
@@ -77,6 +82,7 @@ __UINT16_TYPE__ __esbmc_cheri_flags_get(void *__capability cap)
 
 __UINT32_TYPE__ __esbmc_cheri_type_get(void *__capability cap)
 {
+__ESBMC_HIDE:;
   union __esbmc_cheri_cap128 u = {cap};
   cc128_cap_t comp;
   cc128_decompress_mem(u.pesbt, u.cursor, true /* tag */, &comp);
@@ -86,6 +92,7 @@ __UINT32_TYPE__ __esbmc_cheri_type_get(void *__capability cap)
 
 _Bool __esbmc_cheri_sealed_get(void *__capability cap)
 {
+__ESBMC_HIDE:;
   union __esbmc_cheri_cap128 u = {cap};
   cc128_cap_t comp;
   cc128_decompress_mem(u.pesbt, u.cursor, true /* tag */, &comp);
@@ -96,6 +103,7 @@ _Bool __esbmc_cheri_sealed_get(void *__capability cap)
 void *__capability
 __esbmc_cheri_bounds_set(void *__capability cap, __SIZE_TYPE__ sz)
 {
+__ESBMC_HIDE:;
 #    if 1
   union __esbmc_cheri_cap128 u = {cap};
   cc128_cap_t comp;
@@ -124,6 +132,7 @@ __esbmc_cheri_bounds_set(void *__capability cap, __SIZE_TYPE__ sz)
     "error: not same pointer_offset");
   __ESBMC_assume(__ESBMC_same_object(
     (__cheri_fromcap void *)u.cap, (__cheri_fromcap void *)cap));
+  __ESBMC_track_cheri(u.cap, sz);
   return u.cap;
 }
 

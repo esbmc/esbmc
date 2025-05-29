@@ -140,7 +140,7 @@ static type2tc migrate_type0(const typet &type)
     // Don't recursively look up anything through pointers.
     type2tc subtype = migrate_type(type.subtype());
 
-    return pointer_type2tc(subtype);
+    return pointer_type2tc(subtype, type.can_carry_provenance());
   }
 
   if (type.id() == typet::t_empty)
@@ -1485,6 +1485,18 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_expr(expr.op0(), op0);
     new_expr_ref = races_check2tc(op0);
   }
+  else if (expr.id() == "capability_base")
+  {
+    expr2tc op0;
+    migrate_expr(expr.op0(), op0);
+    new_expr_ref = capability_base2tc(op0);
+  }
+  else if (expr.id() == "capability_top")
+  {
+    expr2tc op0;
+    migrate_expr(expr.op0(), op0);
+    new_expr_ref = capability_top2tc(op0);
+  }
   else if (expr.id() == "deallocated_object")
   {
     expr2tc op0;
@@ -1961,6 +1973,8 @@ typet migrate_type_back(const type2tc &ref)
 
     typet subtype = migrate_type_back(ref2.subtype);
     pointer_typet thetype(subtype);
+    if (ref2.carry_provenance)
+      thetype.can_carry_provenance(true);
     return thetype;
   }
   case type2t::unsignedbv_id:
@@ -3065,6 +3079,24 @@ exprt migrate_expr_back(const expr2tc &ref)
     back.set("upper", irep_idt(std::to_string(ref2.upper)));
     back.set("lower", irep_idt(std::to_string(ref2.lower)));
     return back;
+  }
+  case expr2t::capability_base_id:
+  {
+    const capability_base2t &ref2 = to_capability_base2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt op0 = migrate_expr_back(ref2.value);
+    exprt theexpr("capability_base", thetype);
+    theexpr.copy_to_operands(op0);
+    return theexpr;
+  }
+  case expr2t::capability_top_id:
+  {
+    const capability_top2t &ref2 = to_capability_top2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt op0 = migrate_expr_back(ref2.value);
+    exprt theexpr("capability_top", thetype);
+    theexpr.copy_to_operands(op0);
+    return theexpr;
   }
   case expr2t::bitcast_id:
   {

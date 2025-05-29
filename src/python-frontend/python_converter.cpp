@@ -1274,7 +1274,9 @@ exprt python_converter::get_literal(const nlohmann::json &element)
   }
 
   // Handle single-character string as char literal
-  if (value.is_string() && value.get<std::string>().size() == 1)
+  if (
+    value.is_string() && value.get<std::string>().size() == 1 &&
+    !is_bytes_literal(element))
   {
     const std::string &str = value.get<std::string>();
     typet t = type_handler_.get_typet("str", str.size());
@@ -1284,7 +1286,7 @@ exprt python_converter::get_literal(const nlohmann::json &element)
   // Handle empty strings or docstrings (often beginning with a newline)
   if (
     value.is_string() && !value.get<std::string>().empty() &&
-    value.get<std::string>()[0] == '\n')
+    value.get<std::string>()[0] == '\n' && !is_bytes_literal(element))
   {
     return exprt(); // Return empty expression
   }
@@ -1295,11 +1297,24 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     typet t = current_element_type;
     std::vector<uint8_t> string_literal;
 
-    // Detect and decode "bytes" literal from encoded base64 content
-    if (element.contains("encoded_bytes"))
+    // Check if this is a bytes literal
+    if (is_bytes_literal(element))
     {
-      string_literal =
-        base64_decode(element["encoded_bytes"].get<std::string>());
+      // Handle bytes literal - check for encoded_bytes field first
+      if (element.contains("encoded_bytes"))
+      {
+        string_literal =
+          base64_decode(element["encoded_bytes"].get<std::string>());
+      }
+      else
+      {
+        // Handle direct bytes literal (e.g., b'A')
+        const std::string &str_val = value.get<std::string>();
+        string_literal.assign(str_val.begin(), str_val.end());
+      }
+
+      // Set appropriate bytes type
+      t = type_handler_.get_typet("bytes", string_literal.size());
     }
     else // Handle Python str literals
     {
@@ -1314,6 +1329,51 @@ exprt python_converter::get_literal(const nlohmann::json &element)
   }
 
   throw std::runtime_error("Unsupported literal " + value.get<std::string>());
+}
+
+// Helper function to detect bytes literals
+bool python_converter::is_bytes_literal(const nlohmann::json &element)
+{
+  // Check if element has encoded_bytes field (explicit bytes)
+  if (element.contains("encoded_bytes"))
+    return true;
+
+  // Check if element has bytes type annotation
+  if (
+    element.contains("annotation") && element["annotation"].contains("id") &&
+    element["annotation"]["id"] == "bytes")
+    return true;
+
+  // Check if element has a parent context indicating bytes
+  if (element.contains("kind") && element["kind"] == "bytes")
+    return true;
+
+  // Check if this is part of a bytes assignment/initialization
+  if (current_element_type.id() == "bytes")
+    return true;
+
+  // Check if this is an array of uint8 (bytes representation)
+  if (current_element_type.id() == "array")
+  {
+    const typet &subtype = current_element_type.subtype();
+    if (subtype.id() == "unsignedbv")
+    {
+      // Convert dstring width to integer
+      const irep_idt &width_str = subtype.width();
+      try
+      {
+        int width = std::stoi(width_str.as_string());
+        if (width == 8)
+          return true;
+      }
+      catch (const std::exception &)
+      {
+        // If conversion fails, continue with other checks
+      }
+    }
+  }
+
+  return false;
 }
 
 exprt python_converter::get_expr(const nlohmann::json &element)
@@ -1608,12 +1668,24 @@ size_t get_type_size(const nlohmann::json &ast_node)
   size_t type_size = 0;
   if (ast_node["value"].contains("value"))
   {
-    if (ast_node["annotation"]["id"] == "bytes")
+    // Handle bytes literals
+    if (
+      ast_node.contains("annotation") &&
+      ast_node["annotation"].contains("id") &&
+      ast_node["annotation"]["id"] == "bytes")
     {
-      const std::string &str =
-        ast_node["value"]["encoded_bytes"].get<std::string>();
-      std::vector<uint8_t> decoded = base64_decode(str);
-      type_size = decoded.size();
+      if (ast_node["value"].contains("encoded_bytes"))
+      {
+        const std::string &str =
+          ast_node["value"]["encoded_bytes"].get<std::string>();
+        std::vector<uint8_t> decoded = base64_decode(str);
+        type_size = decoded.size();
+      }
+      else if (ast_node["value"]["value"].is_string())
+      {
+        // Direct bytes literal like b'A'
+        type_size = ast_node["value"]["value"].get<std::string>().size();
+      }
     }
     else if (ast_node["value"]["value"].is_string())
       type_size = ast_node["value"]["value"].get<std::string>().size();
@@ -1623,11 +1695,21 @@ size_t get_type_size(const nlohmann::json &ast_node)
     ast_node["value"]["args"].size() > 0 &&
     ast_node["value"]["args"][0].contains("value") &&
     ast_node["value"]["args"][0]["value"].is_string())
+  {
     type_size = ast_node["value"]["args"][0]["value"].get<std::string>().size();
+  }
   else if (
     ast_node["value"].contains("_type") && ast_node["value"]["_type"] == "List")
   {
     type_size = ast_node["value"]["elts"].size();
+  }
+  // Handle cases where size cannot be determined from AST structure
+  else if (
+    ast_node["value"].contains("value") &&
+    ast_node["value"]["value"].is_string())
+  {
+    // Fallback for direct string values
+    type_size = ast_node["value"]["value"].get<std::string>().size();
   }
 
   return type_size;

@@ -1526,6 +1526,8 @@ irep_typedefs(popcount, overflow_ops);
 irep_typedefs(bswap, arith_1op);
 irep_typedefs(concat, bit_2ops);
 irep_typedefs(extract, extract_data);
+irep_typedefs(capability_base, object_ops);
+irep_typedefs(capability_top, object_ops);
 irep_typedefs(forall, logic_2ops);
 irep_typedefs(exists, logic_2ops);
 
@@ -3611,6 +3613,32 @@ public:
   extract2t(const extract2t &ref) = default;
 
   expr2tc do_simplify() const override;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class capability_base2t : public capability_base_expr_methods
+{
+public:
+  /** Primary constructor. @param operand Pointer object to fetch size for. */
+  capability_base2t(const expr2tc &operand)
+    : capability_base_expr_methods(size_type2(), capability_base_id, operand)
+  {
+  }
+  capability_base2t(const capability_base2t &ref) = default;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class capability_top2t : public capability_top_expr_methods
+{
+public:
+  /** Primary constructor. @param operand Pointer object to fetch size for. */
+  capability_top2t(const expr2tc &operand)
+    : capability_top_expr_methods(size_type2(), capability_top_id, operand)
+  {
+  }
+  capability_top2t(const capability_top2t &ref) = default;
 
   static std::string field_names[esbmct::num_type_fields];
 };
