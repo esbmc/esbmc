@@ -886,6 +886,33 @@ void goto_symext::run_intrinsic(
     return;
   }
 
+  if (has_prefix(symname, "c:@F@__ESBMC_track_cheri"))
+  {
+    assert(func_call.operands.size() == 2 && "Wrong signature");
+    expr2tc ptr = func_call.operands[0];
+    expr2tc sz = func_call.operands[1];
+
+    // Rename the size symbol with last known value
+    cur_state->rename(sz);
+
+    expr2tc addr = typecast2tc(ptraddr_type2(), ptr);
+    expr2tc addr_end = add2tc(ptraddr_type2(), addr, sz);
+
+    expr2tc cap_base = capability_base2tc(ptr);
+    expr2tc cap_top = capability_top2tc(ptr);
+    /*
+     * Compiler flag: -cheri-bounds=subobject-safe
+     * For sub objects, CHERI clang should generate 
+     * independent capabilities for it instead of sharing.
+     * 
+     * cheri_base = address 
+     * cheri_top = address + size
+     */
+    symex_assign(code_assign2tc(cap_base, addr), true);
+    symex_assign(code_assign2tc(cap_top, addr_end), true);
+    return;
+  }
+
   log_error(
     "Function call to non-intrinsic prefixed with __ESBMC (fatal)\n"
     "The name in question: {}\n"
