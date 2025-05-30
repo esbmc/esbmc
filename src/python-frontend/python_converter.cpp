@@ -872,7 +872,7 @@ exprt python_converter::handle_string_operations(
   return nil_exprt();
 }
 
-// Helper function for 'is' comparison logic
+/// Construct the expression for Python 'is' operator
 exprt python_converter::get_binary_operator_expr_for_is(
   const exprt &lhs,
   const exprt &rhs)
@@ -880,27 +880,43 @@ exprt python_converter::get_binary_operator_expr_for_is(
   typet bool_type_result = bool_type();
   exprt is_expr("=", bool_type_result);
 
-  // If comparing list variables that are stored as pointers
   if (lhs.type().is_pointer() && rhs.type().is_pointer())
   {
+    // Compare pointer identity directly
     is_expr.copy_to_operands(lhs, rhs);
   }
   else if (lhs.type().is_array() && rhs.type().is_array())
   {
-    // For arrays, compare their base addresses
-    exprt lhs_addr =
-      address_of_exprt(index_exprt(lhs, from_integer(0, index_type())));
-    exprt rhs_addr =
-      address_of_exprt(index_exprt(rhs, from_integer(0, index_type())));
-    is_expr.copy_to_operands(lhs_addr, rhs_addr);
+    // Compare base addresses of the arrays
+    is_expr.copy_to_operands(
+      get_array_base_address(lhs),
+      get_array_base_address(rhs));
   }
   else
   {
-    // Default case - direct comparison
+    // Default identity comparison
     is_expr.copy_to_operands(lhs, rhs);
   }
 
   return is_expr;
+}
+
+/// Get address of the first element of an array
+exprt python_converter::get_array_base_address(const exprt &arr)
+{
+  exprt index = index_exprt(arr, from_integer(0, index_type()));
+  return address_of_exprt(index);
+}
+
+/// Construct the negation of an 'is' expression, used for 'is not'
+exprt python_converter::get_negated_is_expr(
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  exprt is_expr = get_binary_operator_expr_for_is(lhs, rhs);
+  exprt not_expr("not", bool_type());
+  not_expr.copy_to_operands(is_expr);
+  return not_expr;
 }
 
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
@@ -946,45 +962,12 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   assert(!op.empty());
 
-  // Handle Python 'is' operator for identity comparison
+  /// Handle 'is' and 'is not' Python identity comparisons
   if (op == "Is")
-  {
-    typet bool_type_result = bool_type();
-    exprt is_expr("=", bool_type_result);
-    // If comparing list variables that are stored as pointers
-    if (lhs.type().is_pointer() && rhs.type().is_pointer())
-    {
-      is_expr.copy_to_operands(lhs, rhs);
-    }
-    else if (lhs.type().is_array() && rhs.type().is_array())
-    {
-      // For arrays, compare their base addresses
-      exprt lhs_addr =
-        address_of_exprt(index_exprt(lhs, from_integer(0, index_type())));
-      exprt rhs_addr =
-        address_of_exprt(index_exprt(rhs, from_integer(0, index_type())));
-      is_expr.copy_to_operands(lhs_addr, rhs_addr);
-    }
-    else
-    {
-      // Default case - direct comparison
-      is_expr.copy_to_operands(lhs, rhs);
-    }
-
-    return is_expr;
-  }
-
-  // Handle Python 'is not' operator
-  if (op == "IsNot")
-  {
-    // Create the 'is' comparison first
-    exprt is_expr = get_binary_operator_expr_for_is(lhs, rhs);
-    // Then negate it
-    exprt not_expr("not", bool_type());
-    not_expr.copy_to_operands(is_expr);
-    return not_expr;
-  }
-
+    return get_binary_operator_expr_for_is(lhs, rhs);
+  else if (op == "IsNot")
+    return get_negated_is_expr(lhs, rhs);
+  
   // Get LHS and RHS types
   std::string lhs_type = type_handler_.type_to_string(lhs.type());
   std::string rhs_type = type_handler_.type_to_string(rhs.type());

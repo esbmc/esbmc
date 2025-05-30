@@ -132,6 +132,10 @@ private:
 
   exprt get_binary_operator_expr_for_is(const exprt &lhs, const exprt &rhs);
 
+  exprt get_negated_is_expr(const exprt &lhs, const exprt &rhs);
+
+  exprt get_array_base_address(const exprt &arr);
+
   exprt handle_string_concatenation(
     const exprt &lhs,
     const exprt &rhs,
