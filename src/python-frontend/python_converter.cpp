@@ -889,8 +889,7 @@ exprt python_converter::get_binary_operator_expr_for_is(
   {
     // Compare base addresses of the arrays
     is_expr.copy_to_operands(
-      get_array_base_address(lhs),
-      get_array_base_address(rhs));
+      get_array_base_address(lhs), get_array_base_address(rhs));
   }
   else
   {
@@ -909,9 +908,7 @@ exprt python_converter::get_array_base_address(const exprt &arr)
 }
 
 /// Construct the negation of an 'is' expression, used for 'is not'
-exprt python_converter::get_negated_is_expr(
-  const exprt &lhs,
-  const exprt &rhs)
+exprt python_converter::get_negated_is_expr(const exprt &lhs, const exprt &rhs)
 {
   exprt is_expr = get_binary_operator_expr_for_is(lhs, rhs);
   exprt not_expr("not", bool_type());
@@ -967,7 +964,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     return get_binary_operator_expr_for_is(lhs, rhs);
   else if (op == "IsNot")
     return get_negated_is_expr(lhs, rhs);
-  
+
   // Get LHS and RHS types
   std::string lhs_type = type_handler_.type_to_string(lhs.type());
   std::string rhs_type = type_handler_.type_to_string(rhs.type());
