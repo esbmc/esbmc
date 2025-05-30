@@ -1,7 +1,7 @@
 set(Bitwuzla_MIN_VERSION "0.1")
 
 if(DEFINED Bitwuzla_DIR)
-    set(ENABLE_BITWUZLA ON)
+    set(ENABLE_BITWUZLA ON PARENT_SCOPE)
 else()
     if(ENABLE_BITWUZLA AND DOWNLOAD_DEPENDENCIES)
         # See Boolector configurations for more details about this
@@ -29,7 +29,7 @@ else()
 endif()
 
 if(EXISTS $ENV{HOME}/bitwuzla)
-    set(ENABLE_BITWUZLA ON)
+    set(ENABLE_BITWUZLA ON PARENT_SCOP)
 endif()
 
 if(ENABLE_BITWUZLA)
