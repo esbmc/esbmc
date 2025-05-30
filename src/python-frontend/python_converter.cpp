@@ -1921,15 +1921,20 @@ void python_converter::get_var_assign(
     {
       if (lhs.type().id().empty() && rhs.type().is_array())
       {
-        // Convert LHS to a pointer type matching RHS element type
-        typet ptr_type = gen_pointer_type(rhs.type().subtype());
-        lhs_symbol->type = ptr_type;
-        lhs.type() = ptr_type;
+        const typet &element_type = to_array_type(rhs.type()).subtype();
 
-        // Use address-of the first element of the RHS array
-        rhs = address_of_exprt(index_exprt(rhs, from_integer(0, index_type())));
+        // Convert LHS to pointer to element type
+        typet pointer_type = gen_pointer_type(element_type);
+        lhs_symbol->type = pointer_type;
+        lhs.type() = pointer_type;
+
+        // Take address of rhs[0]
+        exprt index_expr("index", element_type);
+        index_expr.copy_to_operands(rhs, from_integer(0, index_type()));
+
+        rhs = address_of_exprt(index_expr);
       }
-      if (
+      else if (
         lhs_type == "str" || lhs_type == "chr" || lhs_type == "ord" ||
         lhs_type == "list" || rhs.type().is_array())
       {
