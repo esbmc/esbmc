@@ -78,6 +78,9 @@ def arctan(x:float) -> float:
 def dot(a:float, b:float) -> float:
     return 0.0
 
+def matmul(a:float, b:float) -> float:
+    return 0.0
+
 def transpose(a:float, b:float) -> float:
     return 0.0
 
