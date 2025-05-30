@@ -17,9 +17,9 @@ def comprehensive_list_test():
     
     # Test 4: Modification affects references
     w = [1, 2, 3, 4]
-    z = w
-    assert w is z, "w and z should still reference the same object"
-    assert w == z, "y and z should still have equal content"
+    a = w
+    assert w is a, "w and z should still reference the same object"
+    assert w == a, "y and z should still have equal content"
     assert x != w, "x should now have different content from y"
     
 comprehensive_list_test()
