@@ -160,7 +160,7 @@ smt_convt *create_new_smtlib_solver(
   return conv;
 }
 
-void smtlib_convt::dump_smt()
+std::string smtlib_convt::dump_smt()
 {
   auto path = config.options.get_option("output");
   if (path != "")
