@@ -86,7 +86,7 @@ bool numpy_call_expr::is_math_function() const
          function == "fmax" || function == "trunc" || function == "round" ||
          function == "arccos" || function == "copysign" ||
          function == "arctan" || function == "dot" || function == "transpose" ||
-         function == "det";
+         function == "det" || function == "matmul";
 }
 
 std::string numpy_call_expr::get_dtype() const
@@ -398,7 +398,7 @@ exprt numpy_call_expr::create_expr_from_call()
     {
       const std::string &operation = function_id_.get_function();
 
-      if (operation == "dot")
+      if (operation == "dot" || operation == "matmul")
       {
         size_t m = lhs["elts"].size();
         size_t n = lhs["elts"][0]["elts"].size();
