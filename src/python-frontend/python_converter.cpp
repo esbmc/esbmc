@@ -951,7 +951,6 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   {
     typet bool_type_result = bool_type();
     exprt is_expr("=", bool_type_result);
-
     // If comparing list variables that are stored as pointers
     if (lhs.type().is_pointer() && rhs.type().is_pointer())
     {
@@ -1920,14 +1919,7 @@ void python_converter::get_var_assign(
   {
     if (lhs_symbol)
     {
-      const bool is_lhs_list = lhs_type == "list";
-      const bool is_lhs_str_related =
-        lhs_type == "str" || lhs_type == "chr" || lhs_type == "ord";
-      const bool is_rhs_array = rhs.type().is_array();
-      const bool is_rhs_symbol = rhs.is_symbol();
-
-      // Case: z = y, where both are lists in global scope
-      if (is_lhs_list && is_rhs_symbol && is_rhs_array)
+      if (lhs.type().id().empty() && rhs.type().is_array())
       {
         // Convert LHS to a pointer type matching RHS element type
         typet ptr_type = gen_pointer_type(rhs.type().subtype());
@@ -1937,8 +1929,9 @@ void python_converter::get_var_assign(
         // Use address-of the first element of the RHS array
         rhs = address_of_exprt(index_exprt(rhs, from_integer(0, index_type())));
       }
-      // Case: assignment to string, char, ord, or list with array RHS
-      else if (is_lhs_str_related || is_lhs_list || is_rhs_array)
+      if (
+        lhs_type == "str" || lhs_type == "chr" || lhs_type == "ord" ||
+        lhs_type == "list" || rhs.type().is_array())
       {
         /* When a string is assigned the result of a concatenation, we initially
          * create the LHS type as a zero-size array: "current_element_type = get_typet(lhs_type, type_size);"
@@ -1947,7 +1940,6 @@ void python_converter::get_var_assign(
         lhs_symbol->type = rhs.type();
         lhs.type() = rhs.type();
       }
-      // Always assign the RHS value if it has a valid type
       if (!rhs.type().is_empty())
         lhs_symbol->value = rhs;
     }
