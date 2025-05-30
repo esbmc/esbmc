@@ -1902,20 +1902,23 @@ void python_converter::get_var_assign(
   {
     if (lhs_symbol)
     {
+      // If the LHS type is currently unspecified (i.e., no type assigned),
+      // and the RHS is an array, we perform normalization to convert the RHS
+      // array into a pointer to its first element, and update the LHS accordingly.
       if (lhs.type().id().empty() && rhs.type().is_array())
       {
+        // Extract the type of the elements in the RHS array
         const typet &element_type = to_array_type(rhs.type()).subtype();
 
-        // Convert LHS to pointer to element type
+        // Generate a pointer type to the element type (e.g., int[] -> int*)
         typet pointer_type = gen_pointer_type(element_type);
+
+        // Update the symbol table entry and LHS expression to use the new pointer type
         lhs_symbol->type = pointer_type;
         lhs.type() = pointer_type;
 
-        // Take address of rhs[0]
-        exprt index_expr("index", element_type);
-        index_expr.copy_to_operands(rhs, from_integer(0, index_type()));
-
-        rhs = address_of_exprt(index_expr);
+        // Replace RHS with the address of its first element (decay to pointer)
+        rhs = get_array_base_address(rhs);
       }
       else if (
         lhs_type == "str" || lhs_type == "chr" || lhs_type == "ord" ||
