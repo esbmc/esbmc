@@ -401,15 +401,9 @@ exprt numpy_call_expr::create_expr_from_call()
 
       if (operation == "dot" || operation == "matmul")
       {
-        // Helper function to check if array is 2D (has nested elts)
-        auto is_2d_array = [](const nlohmann::json &arr) {
-          return arr["_type"] == "List" && !arr["elts"].empty() &&
-                 arr["elts"][0].contains("elts");
-        };
-
         // Determine dimensionality of both operands
-        bool lhs_is_2d = is_2d_array(lhs);
-        bool rhs_is_2d = is_2d_array(rhs);
+        bool lhs_is_2d = type_handler_.is_2d_array(lhs);
+        bool rhs_is_2d = type_handler_.is_2d_array(rhs);
 
         size_t m, n, n2, p;
         typet base_type;
