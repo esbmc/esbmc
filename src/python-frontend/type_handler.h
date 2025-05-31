@@ -86,8 +86,6 @@ public:
 
   int get_array_dimensions(const nlohmann::json &arr) const;
 
-  typet get_default_numeric_type() const;
-
 private:
   const python_converter &converter_;
 };
