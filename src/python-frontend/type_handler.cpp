@@ -221,8 +221,6 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
     return build_array(char_type(), elem.get<std::string>().size());
   else if (elem.is_object() && elem.contains("value"))
     return get_typet(elem["value"]);
-  else if (elem.is_object() && elem.contains("value"))
-    return get_typet(elem["value"]);
   else if (elem.is_array())
   {
     if (elem.empty())
@@ -234,8 +232,9 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
     return build_array(subtype, elem.size());
   }
 
-  // Fallback for any unhandled cases
-  return long_long_int_type(); // Default to int instead of throwing
+  log_warning("Falling back to 'int' for unsupported JSON element: {}", elem.dump(2));
+
+  return long_long_int_type(); // Default to int
 }
 
 // Helper method to provide a safe default type
