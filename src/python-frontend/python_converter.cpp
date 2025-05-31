@@ -1383,15 +1383,7 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     return expr;
   }
 
-  std::string error_msg = "Unsupported literal: ";
-  if (value.is_null())
-    error_msg += "null (None)";
-  else if (value.is_string())
-    error_msg += value.get<std::string>();
-  else
-    error_msg += value.dump(); // dump() works for any JSON type
-
-  throw std::runtime_error(error_msg);
+  throw std::runtime_error("Unsupported literal " + value.get<std::string>());
 }
 
 // Helper function to detect bytes literals
