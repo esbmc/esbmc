@@ -401,21 +401,6 @@ exprt numpy_call_expr::create_expr_from_call()
 
       if (operation == "dot" || operation == "matmul")
       {
-        // Check for 3D+ arrays and reject them early
-        int lhs_dims = type_handler_.get_array_dimensions(lhs);
-        int rhs_dims = type_handler_.get_array_dimensions(rhs);
-
-        if (lhs_dims >= 3 || rhs_dims >= 3)
-        {
-          throw std::runtime_error(
-            "ESBMC does not support dot product operations with 3D or higher "
-            "dimensional arrays. "
-            "Found " +
-            std::to_string(lhs_dims) + "D × " + std::to_string(rhs_dims) +
-            "D operation. "
-            "Please use 1D or 2D arrays only.");
-        }
-
         // Determine dimensionality of both operands
         bool lhs_is_2d = type_handler_.is_2d_array(lhs);
         bool rhs_is_2d = type_handler_.is_2d_array(rhs);
@@ -581,6 +566,18 @@ exprt numpy_call_expr::get()
   if (function == "array")
   {
     auto expr = converter_.get_expr(call_["args"][0]);
+    
+    // Check for 3D+ arrays and reject them early
+    int array_dims = type_handler_.get_array_dimensions(call_["args"][0]);
+    
+    if (array_dims >= 3)
+    {
+      throw std::runtime_error(
+        "ESBMC does not support 3D or higher dimensional arrays. "
+        "Found " + std::to_string(array_dims) + "D array creation. "
+        "Please use 1D or 2D arrays only.");
+    }
+    
     return expr;
   }
 
