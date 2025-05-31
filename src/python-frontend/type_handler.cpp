@@ -209,7 +209,7 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
   // Handle null/empty values
   if (elem.is_null())
     return empty_typet(); // or some default type
-    
+
   // Handle primitive types
   if (elem.is_number_integer() || elem.is_number_unsigned())
     return long_long_int_type();
@@ -226,8 +226,9 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
   else if (elem.is_array())
   {
     if (elem.empty())
-      return build_array(long_long_int_type(), 0); // Default to int array for empty arrays
-      
+      return build_array(
+        long_long_int_type(), 0); // Default to int array for empty arrays
+
     // Get the type of the first element
     typet subtype = get_typet(elem[0]);
     return build_array(subtype, elem.size());
@@ -255,16 +256,17 @@ bool type_handler::has_multiple_types(const nlohmann::json &container) const
     // Check if the sublist exists and has elements
     if (!container[0].contains("elts") || container[0]["elts"].empty())
       return false; // Empty or missing sublists are considered consistent
-      
+
     // Check the type of elements within the sublist
     if (has_multiple_types(container[0]["elts"]))
       return true;
 
     // Get the type of the elements in the sublist
-    const auto& first_elt = container[0]["elts"][0];
+    const auto &first_elt = container[0]["elts"][0];
     if (first_elt["_type"] == "UnaryOp")
     {
-      if (first_elt.contains("operand") && first_elt["operand"].contains("value"))
+      if (
+        first_elt.contains("operand") && first_elt["operand"].contains("value"))
         t = get_typet(first_elt["operand"]["value"]);
       else
         return false; // Can't determine type, assume consistent
@@ -282,7 +284,9 @@ bool type_handler::has_multiple_types(const nlohmann::json &container) const
     // Get the type of the first element if it is not a sublist
     if (container[0]["_type"] == "UnaryOp")
     {
-      if (container[0].contains("operand") && container[0]["operand"].contains("value"))
+      if (
+        container[0].contains("operand") &&
+        container[0]["operand"].contains("value"))
         t = get_typet(container[0]["operand"]["value"]);
       else
         return false; // Can't determine type, assume consistent
@@ -303,16 +307,18 @@ bool type_handler::has_multiple_types(const nlohmann::json &container) const
       // Check if the sublist exists and has elements
       if (!element.contains("elts") || element["elts"].empty())
         continue; // Empty or missing sublists are consistent with any type
-        
+
       // Check the consistency of the sublist
       if (has_multiple_types(element["elts"]))
         return true;
 
       // Compare the type of internal elements in the sublist with the type `t`
-      const auto& first_elt = element["elts"][0];
+      const auto &first_elt = element["elts"][0];
       if (first_elt["_type"] == "UnaryOp")
       {
-        if (first_elt.contains("operand") && first_elt["operand"].contains("value"))
+        if (
+          first_elt.contains("operand") &&
+          first_elt["operand"].contains("value"))
         {
           if (get_typet(first_elt["operand"]["value"]) != t)
             return true;
@@ -479,16 +485,16 @@ int type_handler::get_array_dimensions(const nlohmann::json &arr) const
 {
   if (!arr.is_object() || arr["_type"] != "List" || !arr.contains("elts"))
     return 0;
-    
+
   if (arr["elts"].empty())
     return 1; // Empty array is considered 1D
-    
+
   // Check the first element to determine nesting depth
   const auto &first_elem = arr["elts"][0];
-  
+
   if (!first_elem.is_object())
     return 1;
-    
+
   if (first_elem["_type"] == "List")
   {
     // Recursive case: this is a nested array
