@@ -396,6 +396,7 @@ exprt numpy_call_expr::create_expr_from_call()
     }
     else if (lhs["_type"] == "List" && rhs["_type"] == "List")
     {
+      // Get the name of the function being called (e.g., "dot" or "matmul")
       const std::string &operation = function_id_.get_function();
 
       if (operation == "dot" || operation == "matmul")
@@ -406,6 +407,7 @@ exprt numpy_call_expr::create_expr_from_call()
                  arr["elts"][0].contains("elts");
         };
 
+        // Determine dimensionality of both operands
         bool lhs_is_2d = is_2d_array(lhs);
         bool rhs_is_2d = is_2d_array(rhs);
 
@@ -500,17 +502,26 @@ exprt numpy_call_expr::create_expr_from_call()
           const auto &elem = lhs["elts"][0]["elts"][0]["value"];
           base_type = type_handler_.get_typet(elem);
 
+          // Build a (m × p) matrix type: array of m rows, each of p elements
           typet row_type = type_handler_.build_array(base_type, p);
           typet matrix_type = type_handler_.build_array(row_type, m);
           converter_.current_lhs->type() = matrix_type;
         }
 
+        // Normalize to "dot" regardless of whether "matmul" was originally used
         function_id_.set_function("dot");
+        // Update the symbol associated with the result
         converter_.update_symbol(*converter_.current_lhs);
 
+        // Generate a function call expression to the backend `dot` function
         code_function_callt call =
           to_code_function_call(to_code(function_call_expr::get()));
 
+        // Arguments:
+        // 1. Output pointer
+        // 2. m = number of rows in lhs (or 1 for 1D lhs)
+        // 3. n = inner dimension (shared)
+        // 4. p = number of columns in rhs (or 1 for 1D rhs)
         auto &args = call.arguments();
         args.push_back(address_of_exprt(*converter_.current_lhs));
         args.push_back(from_integer(m, int_type()));
@@ -519,6 +530,7 @@ exprt numpy_call_expr::create_expr_from_call()
 
         return call;
       }
+      // Handle other binary operations like add, subtract, multiply, divide
       if (
         operation == "add" || operation == "subtract" ||
         operation == "multiply" || operation == "divide")
