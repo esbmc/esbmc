@@ -139,6 +139,11 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "Any")
     return empty_typet();
 
+  // NoneType — represents Python's None value
+  // Use a pointer type to void to represent None/null properly
+  if (ast_type == "NoneType")
+    return pointer_type();
+
   // float — represents IEEE 754 double-precision
   if (ast_type == "float")
     return double_type();
