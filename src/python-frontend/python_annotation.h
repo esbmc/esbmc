@@ -262,60 +262,112 @@ private:
     return type;
   }
 
-  std::string
-  get_function_return_type(const std::string &func_name, const Json &ast)
+std::string get_function_return_type(const std::string &func_name, const Json &ast)
+{
+  // Get type from nondet_<type> functions
+  if (func_name.find("nondet_") == 0)
   {
-    // Get type from nondet_<type> functions
-    if (func_name.find("nondet_") == 0)
+    size_t last_underscore_pos = func_name.find_last_of('_');
+    if (last_underscore_pos != std::string::npos)
     {
-      size_t last_underscore_pos = func_name.find_last_of('_');
-      if (last_underscore_pos != std::string::npos)
-      {
-        // Return the substring from the position after the last underscore to the end
-        return func_name.substr(last_underscore_pos + 1);
-      }
+      // Return the substring from the position after the last underscore to the end
+      return func_name.substr(last_underscore_pos + 1);
     }
-
-    for (const Json &elem : ast["body"])
-    {
-      if (elem["_type"] == "FunctionDef" && elem["name"] == func_name)
-      {
-        auto return_node = json_utils::find_return_node(elem["body"]);
-        if (!return_node.empty())
-        {
-          std::string inferred_type;
-          infer_type(return_node, elem, inferred_type);
-          return inferred_type;
-        }
-
-        if (elem["returns"]["_type"] == "Subscript")
-          return elem["returns"]["value"]["id"];
-        else
-          return elem["returns"]["id"];
-      }
-    }
-
-    // Get type from imported functions
-    try
-    {
-      if (module_manager_)
-      {
-        const auto &import_node =
-          json_utils::find_imported_function(ast_, func_name);
-        auto module = module_manager_->get_module(import_node["module"]);
-        return module->get_function(func_name).return_type_;
-      }
-    }
-    catch (std::runtime_error &)
-    {
-    }
-
-    std::ostringstream oss;
-    oss << "Function \"" << func_name << "\" not found (" << python_filename_
-        << " line " << current_line_ << ")";
-
-    throw std::runtime_error(oss.str());
   }
+
+  for (const Json &elem : ast["body"])
+  {
+    if (elem["_type"] == "FunctionDef" && elem["name"] == func_name)
+    {
+      auto return_node = json_utils::find_return_node(elem["body"]);
+      if (!return_node.empty())
+      {
+        std::string inferred_type;
+        infer_type(return_node, elem, inferred_type);
+        return inferred_type;
+      }
+
+      // Check if function has a return type annotation
+      if (elem.contains("returns") && !elem["returns"].is_null())
+      {
+        const auto &returns = elem["returns"];
+        
+        // Handle different return type annotation structures
+        if (returns.contains("_type"))
+        {
+          const std::string &return_type = returns["_type"];
+          
+          // Handle Subscript type (e.g., List[int], Dict[str, int])
+          if (return_type == "Subscript")
+          {
+            if (returns.contains("value") && returns["value"].contains("id"))
+              return returns["value"]["id"];
+            else
+              return "Any"; // Default for complex subscript types
+          }
+          // Handle Constant type (e.g., None)
+          else if (return_type == "Constant")
+          {
+            if (returns.contains("value") && returns["value"].is_null())
+              return "NoneType";
+            else if (returns.contains("value"))
+              return "Any"; // Other constant types
+          }
+          // Handle Name type (e.g., int, str, bool)
+          else if (return_type == "Name")
+          {
+            if (returns.contains("id"))
+              return returns["id"];
+          }
+          // Handle other annotation types
+          else
+          {
+            // Try to extract id if it exists
+            if (returns.contains("id"))
+              return returns["id"];
+          }
+        }
+        // Handle direct string annotations (legacy or simplified cases)
+        else if (returns.is_string())
+        {
+          return returns.template get<std::string>();
+        }
+        // Handle case where returns exists but doesn't have expected structure
+        else
+        {
+          log_warning("Unrecognized return type annotation structure for function '{}': {}", 
+                     func_name, returns.dump(2));
+          return "Any"; // Safe default
+        }
+      }
+      
+      // No return type annotation found, try to infer from function body
+      // If function has no explicit return statements, assume void/None
+      return "NoneType";
+    }
+  }
+
+  // Get type from imported functions
+  try
+  {
+    if (module_manager_)
+    {
+      const auto &import_node =
+        json_utils::find_imported_function(ast_, func_name);
+      auto module = module_manager_->get_module(import_node["module"]);
+      return module->get_function(func_name).return_type_;
+    }
+  }
+  catch (std::runtime_error &)
+  {
+  }
+
+  std::ostringstream oss;
+  oss << "Function \"" << func_name << "\" not found (" << python_filename_
+      << " line " << current_line_ << ")";
+
+  throw std::runtime_error(oss.str());
+}
 
   std::string get_type_from_lhs(const std::string &id, Json &body)
   {
