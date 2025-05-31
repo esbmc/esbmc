@@ -665,8 +665,7 @@ private:
         (rhs["_type"] == "Constant" && rhs["value"].is_null()) ||
         (rhs["_type"] == "NameConstant" && rhs["value"].is_null()) ||
         (rhs["_type"] == "Name" && rhs.contains("id") && rhs["id"] == "None"))
-          inferred_type = "NoneType";
-
+        inferred_type = "NoneType";
 
       if (inferred_type.empty())
       {
