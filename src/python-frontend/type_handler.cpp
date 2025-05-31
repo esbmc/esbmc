@@ -238,12 +238,6 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
   return long_long_int_type(); // Default to int
 }
 
-// Helper method to provide a safe default type
-typet type_handler::get_default_numeric_type() const
-{
-  return long_long_int_type();
-}
-
 bool type_handler::has_multiple_types(const nlohmann::json &container) const
 {
   if (container.empty())
