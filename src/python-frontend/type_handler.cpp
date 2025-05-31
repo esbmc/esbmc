@@ -219,56 +219,10 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
     return double_type();
   else if (elem.is_string())
     return build_array(char_type(), elem.get<std::string>().size());
-    
-  // Handle objects (nested structures)
-  else if (elem.is_object())
-  {
-    // Check if it has a "value" field
-    if (elem.contains("value"))
-      return get_typet(elem["value"]);
-      
-    // Check if it's a type descriptor object (e.g., {"_type": "something", ...})
-    if (elem.contains("_type"))
-    {
-      const std::string type_name = elem["_type"];
-      
-      // Handle specific AST node types
-      if (type_name == "Constant" && elem.contains("value"))
-        return get_typet(elem["value"]);
-      else if (type_name == "UnaryOp" && elem.contains("operand"))
-        return get_typet(elem["operand"]);
-      else if (type_name == "List" && elem.contains("elts"))
-      {
-        if (elem["elts"].empty())
-          return build_array(long_long_int_type(), 0); // Default to int array for empty lists
-        return build_array(get_typet(elem["elts"][0]), elem["elts"].size());
-      }
-      else if (type_name == "Name" && elem.contains("id"))
-      {
-        // Handle variable references - assume they're numeric for now
-        return long_long_int_type();
-      }
-      else if (type_name == "Num")
-      {
-        // Legacy Python AST numeric node
-        if (elem.contains("n"))
-          return get_typet(elem["n"]);
-        return long_long_int_type();
-      }
-      else if (type_name == "Str")
-      {
-        // Legacy Python AST string node
-        if (elem.contains("s"))
-          return get_typet(elem["s"]);
-        return build_array(char_type(), 0);
-      }
-    }
-    
-    // If it's an object but we can't determine the type, default to int
-    return long_long_int_type();
-  }
-  
-  // Handle arrays
+  else if (elem.is_object() && elem.contains("value"))
+    return get_typet(elem["value"]);
+  else if (elem.is_object() && elem.contains("value"))
+    return get_typet(elem["value"]);
   else if (elem.is_array())
   {
     if (elem.empty())
