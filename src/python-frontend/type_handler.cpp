@@ -384,3 +384,10 @@ std::string type_handler::get_operand_type(const nlohmann::json &operand) const
     operand.dump(2));
   return std::string();
 }
+
+bool type_handler::is_2d_array(const nlohmann::json &arr) const
+{
+  return arr.contains("_type") && arr["_type"] == "List" &&
+         arr.contains("elts") && !arr["elts"].empty() &&
+         arr["elts"][0].is_object() && arr["elts"][0].contains("elts");
+}

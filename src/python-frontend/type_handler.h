@@ -77,6 +77,13 @@ public:
    */
   std::string get_operand_type(const nlohmann::json &operand) const;
 
+  /*
+   * Checks whether the given JSON object represents a 2D array (list of lists).
+   * @param arr The JSON object to check.
+   * @return true if it's a 2D array, false otherwise.
+  */
+  bool is_2d_array(const nlohmann::json &arr) const;
+
 private:
   const python_converter &converter_;
 };
