@@ -880,12 +880,7 @@ exprt python_converter::get_binary_operator_expr_for_is(
   typet bool_type_result = bool_type();
   exprt is_expr("=", bool_type_result);
 
-  if (lhs.type().is_pointer() && rhs.type().is_pointer())
-  {
-    // Compare pointer identity directly
-    is_expr.copy_to_operands(lhs, rhs);
-  }
-  else if (lhs.type().is_array() && rhs.type().is_array())
+  if (lhs.type().is_array() && rhs.type().is_array())
   {
     // Compare base addresses of the arrays
     is_expr.copy_to_operands(
