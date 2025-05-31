@@ -208,7 +208,7 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
 {
   // Handle null/empty values
   if (elem.is_null())
-    return empty_typet(); // or some default type
+    return empty_typet();
 
   // Handle primitive types
   if (elem.is_number_integer() || elem.is_number_unsigned())
@@ -219,24 +219,39 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
     return double_type();
   else if (elem.is_string())
     return build_array(char_type(), elem.get<std::string>().size());
-  else if (elem.is_object() && elem.contains("value"))
-    return get_typet(elem["value"]);
-  else if (elem.is_array())
+
+  // Handle nested value object
+  if (elem.is_object())
+  {
+    // Recursive delegation for wrapper node
+    if (elem.contains("value"))
+      return get_typet(elem["value"]);
+
+    // Handle Python AST List node
+    if (elem["_type"] == "List" && elem.contains("elts"))
+    {
+      const auto &elements = elem["elts"];
+      if (elements.empty())
+        return build_array(long_long_int_type(), 0);
+
+      typet subtype = get_typet(elements[0]);
+      return build_array(subtype, elements.size());
+    }
+  }
+
+  // Handle JSON arrays directly (not from AST)
+  if (elem.is_array())
   {
     if (elem.empty())
-      return build_array(
-        long_long_int_type(), 0); // Default to int array for empty arrays
+      return build_array(long_long_int_type(), 0);
 
-    // Get the type of the first element
     typet subtype = get_typet(elem[0]);
     return build_array(subtype, elem.size());
   }
 
-  log_warning(
-    "Falling back to 'int' for unsupported JSON element: {}", elem.dump(2));
-
-  return long_long_int_type(); // Default to int
+  throw std::runtime_error("Invalid type");
 }
+
 
 bool type_handler::has_multiple_types(const nlohmann::json &container) const
 {
