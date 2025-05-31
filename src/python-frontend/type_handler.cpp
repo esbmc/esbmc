@@ -232,7 +232,8 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
     return build_array(subtype, elem.size());
   }
 
-  log_warning("Falling back to 'int' for unsupported JSON element: {}", elem.dump(2));
+  log_warning(
+    "Falling back to 'int' for unsupported JSON element: {}", elem.dump(2));
 
   return long_long_int_type(); // Default to int
 }
