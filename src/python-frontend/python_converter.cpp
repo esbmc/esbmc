@@ -31,7 +31,8 @@ static const std::unordered_map<std::string, std::string> operator_map = {
   {"rshift", "ashr"},   {"usub", "unary-"},   {"eq", "="},
   {"lt", "<"},          {"lte", "<="},        {"noteq", "notequal"},
   {"gt", ">"},          {"gte", ">="},        {"and", "and"},
-  {"or", "or"},         {"not", "not"},       {"uadd", "unary+"}};
+  {"or", "or"},         {"not", "not"},       {"uadd", "unary+"},
+  {"is", "="},          {"isnot", "not"}};
 
 static const std::unordered_map<std::string, StatementType> statement_map = {
   {"AnnAssign", StatementType::VARIABLE_ASSIGN},
@@ -871,6 +872,50 @@ exprt python_converter::handle_string_operations(
   return nil_exprt();
 }
 
+/// Construct the expression for Python 'is' operator
+exprt python_converter::get_binary_operator_expr_for_is(
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  typet bool_type_result = bool_type();
+  exprt is_expr("=", bool_type_result);
+
+  if (lhs.type().is_pointer() && rhs.type().is_pointer())
+  {
+    // Compare pointer identity directly
+    is_expr.copy_to_operands(lhs, rhs);
+  }
+  else if (lhs.type().is_array() && rhs.type().is_array())
+  {
+    // Compare base addresses of the arrays
+    is_expr.copy_to_operands(
+      get_array_base_address(lhs), get_array_base_address(rhs));
+  }
+  else
+  {
+    // Default identity comparison
+    is_expr.copy_to_operands(lhs, rhs);
+  }
+
+  return is_expr;
+}
+
+/// Get address of the first element of an array
+exprt python_converter::get_array_base_address(const exprt &arr)
+{
+  exprt index = index_exprt(arr, from_integer(0, index_type()));
+  return address_of_exprt(index);
+}
+
+/// Construct the negation of an 'is' expression, used for 'is not'
+exprt python_converter::get_negated_is_expr(const exprt &lhs, const exprt &rhs)
+{
+  exprt is_expr = get_binary_operator_expr_for_is(lhs, rhs);
+  exprt not_expr("not", bool_type());
+  not_expr.copy_to_operands(is_expr);
+  return not_expr;
+}
+
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
   auto left = (element.contains("left")) ? element["left"] : element["target"];
@@ -913,6 +958,12 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     op = element["ops"][0]["_type"].get<std::string>();
 
   assert(!op.empty());
+
+  /// Handle 'is' and 'is not' Python identity comparisons
+  if (op == "Is")
+    return get_binary_operator_expr_for_is(lhs, rhs);
+  else if (op == "IsNot")
+    return get_negated_is_expr(lhs, rhs);
 
   // Get LHS and RHS types
   std::string lhs_type = type_handler_.type_to_string(lhs.type());
@@ -1848,7 +1899,25 @@ void python_converter::get_var_assign(
   {
     if (lhs_symbol)
     {
-      if (
+      // If the LHS type is currently unspecified (i.e., no type assigned),
+      // and the RHS is an array, we perform normalization to convert the RHS
+      // array into a pointer to its first element, and update the LHS accordingly.
+      if (lhs.type().id().empty() && rhs.type().is_array())
+      {
+        // Extract the type of the elements in the RHS array
+        const typet &element_type = to_array_type(rhs.type()).subtype();
+
+        // Generate a pointer type to the element type (e.g., int[] -> int*)
+        typet pointer_type = gen_pointer_type(element_type);
+
+        // Update the symbol table entry and LHS expression to use the new pointer type
+        lhs_symbol->type = pointer_type;
+        lhs.type() = pointer_type;
+
+        // Replace RHS with the address of its first element (decay to pointer)
+        rhs = get_array_base_address(rhs);
+      }
+      else if (
         lhs_type == "str" || lhs_type == "chr" || lhs_type == "ord" ||
         lhs_type == "list" || rhs.type().is_array())
       {
