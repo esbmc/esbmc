@@ -84,6 +84,8 @@ public:
   */
   bool is_2d_array(const nlohmann::json &arr) const;
 
+  typet get_default_numeric_type() const;
+
 private:
   const python_converter &converter_;
 };

@@ -206,6 +206,11 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
 
 typet type_handler::get_typet(const nlohmann::json &elem) const
 {
+  // Handle null/empty values
+  if (elem.is_null())
+    return empty_typet(); // or some default type
+    
+  // Handle primitive types
   if (elem.is_number_integer() || elem.is_number_unsigned())
     return long_long_int_type();
   else if (elem.is_boolean())
@@ -214,15 +219,74 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
     return double_type();
   else if (elem.is_string())
     return build_array(char_type(), elem.get<std::string>().size());
-  else if (elem.is_object() && elem.contains("value"))
-    return get_typet(elem["value"]);
+    
+  // Handle objects (nested structures)
+  else if (elem.is_object())
+  {
+    // Check if it has a "value" field
+    if (elem.contains("value"))
+      return get_typet(elem["value"]);
+      
+    // Check if it's a type descriptor object (e.g., {"_type": "something", ...})
+    if (elem.contains("_type"))
+    {
+      const std::string type_name = elem["_type"];
+      
+      // Handle specific AST node types
+      if (type_name == "Constant" && elem.contains("value"))
+        return get_typet(elem["value"]);
+      else if (type_name == "UnaryOp" && elem.contains("operand"))
+        return get_typet(elem["operand"]);
+      else if (type_name == "List" && elem.contains("elts"))
+      {
+        if (elem["elts"].empty())
+          return build_array(long_long_int_type(), 0); // Default to int array for empty lists
+        return build_array(get_typet(elem["elts"][0]), elem["elts"].size());
+      }
+      else if (type_name == "Name" && elem.contains("id"))
+      {
+        // Handle variable references - assume they're numeric for now
+        return long_long_int_type();
+      }
+      else if (type_name == "Num")
+      {
+        // Legacy Python AST numeric node
+        if (elem.contains("n"))
+          return get_typet(elem["n"]);
+        return long_long_int_type();
+      }
+      else if (type_name == "Str")
+      {
+        // Legacy Python AST string node
+        if (elem.contains("s"))
+          return get_typet(elem["s"]);
+        return build_array(char_type(), 0);
+      }
+    }
+    
+    // If it's an object but we can't determine the type, default to int
+    return long_long_int_type();
+  }
+  
+  // Handle arrays
   else if (elem.is_array())
   {
+    if (elem.empty())
+      return build_array(long_long_int_type(), 0); // Default to int array for empty arrays
+      
+    // Get the type of the first element
     typet subtype = get_typet(elem[0]);
     return build_array(subtype, elem.size());
   }
 
-  throw std::runtime_error("Invalid type");
+  // Fallback for any unhandled cases
+  return long_long_int_type(); // Default to int instead of throwing
+}
+
+// Helper method to provide a safe default type
+typet type_handler::get_default_numeric_type() const
+{
+  return long_long_int_type();
 }
 
 bool type_handler::has_multiple_types(const nlohmann::json &container) const
@@ -234,45 +298,104 @@ bool type_handler::has_multiple_types(const nlohmann::json &container) const
   typet t;
   if (container[0]["_type"] == "List")
   {
+    // Check if the sublist exists and has elements
+    if (!container[0].contains("elts") || container[0]["elts"].empty())
+      return false; // Empty or missing sublists are considered consistent
+      
     // Check the type of elements within the sublist
     if (has_multiple_types(container[0]["elts"]))
       return true;
 
     // Get the type of the elements in the sublist
-    t = get_typet(container[0]["elts"][0]["value"]);
+    const auto& first_elt = container[0]["elts"][0];
+    if (first_elt["_type"] == "UnaryOp")
+    {
+      if (first_elt.contains("operand") && first_elt["operand"].contains("value"))
+        t = get_typet(first_elt["operand"]["value"]);
+      else
+        return false; // Can't determine type, assume consistent
+    }
+    else
+    {
+      if (first_elt.contains("value"))
+        t = get_typet(first_elt["value"]);
+      else
+        return false; // Can't determine type, assume consistent
+    }
   }
   else
   {
     // Get the type of the first element if it is not a sublist
     if (container[0]["_type"] == "UnaryOp")
-      t = get_typet(container[0]["operand"]["value"]); // negative numbers
+    {
+      if (container[0].contains("operand") && container[0]["operand"].contains("value"))
+        t = get_typet(container[0]["operand"]["value"]);
+      else
+        return false; // Can't determine type, assume consistent
+    }
     else
-      t = get_typet(container[0]["value"]);
+    {
+      if (container[0].contains("value"))
+        t = get_typet(container[0]["value"]);
+      else
+        return false; // Can't determine type, assume consistent
+    }
   }
 
   for (const auto &element : container)
   {
     if (element["_type"] == "List")
     {
+      // Check if the sublist exists and has elements
+      if (!element.contains("elts") || element["elts"].empty())
+        continue; // Empty or missing sublists are consistent with any type
+        
       // Check the consistency of the sublist
       if (has_multiple_types(element["elts"]))
         return true;
 
       // Compare the type of internal elements in the sublist with the type `t`
-      const auto &elem = (element["elts"][0]["_type"] == "UnaryOp")
-                           ? element["elts"]["operand"]["value"]
-                           : element["elts"][0]["value"];
-      if (get_typet(elem) != t)
-        return true;
+      const auto& first_elt = element["elts"][0];
+      if (first_elt["_type"] == "UnaryOp")
+      {
+        if (first_elt.contains("operand") && first_elt["operand"].contains("value"))
+        {
+          if (get_typet(first_elt["operand"]["value"]) != t)
+            return true;
+        }
+        // If we can't determine the type, skip this element (assume consistent)
+      }
+      else
+      {
+        if (first_elt.contains("value"))
+        {
+          if (get_typet(first_elt["value"]) != t)
+            return true;
+        }
+        // If we can't determine the type, skip this element (assume consistent)
+      }
     }
     else
     {
       // Compare the type of the current element with `t`
-      const auto &elem = (element["_type"] == "UnaryOp")
-                           ? element["operand"]["value"]
-                           : element["value"];
-      if (get_typet(elem) != t)
-        return true;
+      if (element["_type"] == "UnaryOp")
+      {
+        if (element.contains("operand") && element["operand"].contains("value"))
+        {
+          if (get_typet(element["operand"]["value"]) != t)
+            return true;
+        }
+        // If we can't determine the type, skip this element (assume consistent)
+      }
+      else
+      {
+        if (element.contains("value"))
+        {
+          if (get_typet(element["value"]) != t)
+            return true;
+        }
+        // If we can't determine the type, skip this element (assume consistent)
+      }
     }
   }
   return false;
