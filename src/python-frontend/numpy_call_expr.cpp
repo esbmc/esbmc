@@ -394,99 +394,106 @@ exprt numpy_call_expr::create_expr_from_call()
         lhs["target"]["id"],
         rhs["target"]["id"]);
     }
-else if (lhs["_type"] == "List" && rhs["_type"] == "List")
-{
-  const std::string &operation = function_id_.get_function();
+    else if (lhs["_type"] == "List" && rhs["_type"] == "List")
+    {
+      const std::string &operation = function_id_.get_function();
 
-  if (operation == "dot" || operation == "matmul")
-  {
-    // Helper function to check if array is 2D (has nested elts)
-    auto is_2d_array = [](const nlohmann::json &arr) {
-      return arr["_type"] == "List" && 
-             !arr["elts"].empty() && 
-              arr["elts"][0].contains("elts");
-    };
+      if (operation == "dot" || operation == "matmul")
+      {
+        // Helper function to check if array is 2D (has nested elts)
+        auto is_2d_array = [](const nlohmann::json &arr) {
+          return arr["_type"] == "List" && !arr["elts"].empty() &&
+                 arr["elts"][0].contains("elts");
+        };
 
-    bool lhs_is_2d = is_2d_array(lhs);
-    bool rhs_is_2d = is_2d_array(rhs);
+        bool lhs_is_2d = is_2d_array(lhs);
+        bool rhs_is_2d = is_2d_array(rhs);
 
-    size_t m, n, n2, p;
-    typet base_type;
+        size_t m, n, n2, p;
+        typet base_type;
 
-    if (!lhs_is_2d && !rhs_is_2d) {
-      // 1D × 1D case: vector dot product
-      size_t lhs_len = lhs["elts"].size();
-      size_t rhs_len = rhs["elts"].size();
-          
-      if (lhs_len != rhs_len) {
-        throw std::runtime_error("Incompatible shapes for dot product");
-      }
+        if (!lhs_is_2d && !rhs_is_2d)
+        {
+          // 1D × 1D case: vector dot product
+          size_t lhs_len = lhs["elts"].size();
+          size_t rhs_len = rhs["elts"].size();
 
-      // Get element type from first element
-      const auto &elem = lhs["elts"][0]["value"];
-      base_type = type_handler_.get_typet(elem);
+          if (lhs_len != rhs_len)
+          {
+            throw std::runtime_error("Incompatible shapes for dot product");
+          }
 
-      // For 1D dot product, treat as (1×n) × (n×1) = (1×1) scalar
-      m = 1;
-      n = lhs_len;
-      n2 = rhs_len;
-      p = 1;
+          // Get element type from first element
+          const auto &elem = lhs["elts"][0]["value"];
+          base_type = type_handler_.get_typet(elem);
 
-      // Result is a scalar, not a matrix
-      converter_.current_lhs->type() = base_type;
-    }
-    else if (!lhs_is_2d && rhs_is_2d) {
-      // 1D × 2D case: (n,) × (n, p) -> (p,)
-      size_t lhs_len = lhs["elts"].size();
-      size_t rhs_rows = rhs["elts"].size();
-      size_t rhs_cols = rhs["elts"][0]["elts"].size();
-          
-      if (lhs_len != rhs_rows) {
-        throw std::runtime_error("Incompatible shapes for dot product");
-      }
+          // For 1D dot product, treat as (1×n) × (n×1) = (1×1) scalar
+          m = 1;
+          n = lhs_len;
+          n2 = rhs_len;
+          p = 1;
 
-      const auto &elem = rhs["elts"][0]["elts"][0]["value"];
-      base_type = type_handler_.get_typet(elem);
+          // Result is a scalar, not a matrix
+          converter_.current_lhs->type() = base_type;
+        }
+        else if (!lhs_is_2d && rhs_is_2d)
+        {
+          // 1D × 2D case: (n,) × (n, p) -> (p,)
+          size_t lhs_len = lhs["elts"].size();
+          size_t rhs_rows = rhs["elts"].size();
+          size_t rhs_cols = rhs["elts"][0]["elts"].size();
 
-      m = 1;
-      n = lhs_len;
-      n2 = rhs_rows;
-      p = rhs_cols;
+          if (lhs_len != rhs_rows)
+          {
+            throw std::runtime_error("Incompatible shapes for dot product");
+          }
 
-      // Result is 1D array of length p
-      typet result_type = type_handler_.build_array(base_type, p);
-      converter_.current_lhs->type() = result_type;
-    }
-    else if (lhs_is_2d && !rhs_is_2d) {
-      // 2D × 1D case: (m, n) × (n,) -> (m,)
-      size_t lhs_rows = lhs["elts"].size();
-      size_t lhs_cols = lhs["elts"][0]["elts"].size();
-      size_t rhs_len = rhs["elts"].size();
-          
-      if (lhs_cols != rhs_len) {
-        throw std::runtime_error("Incompatible shapes for dot product");
-      }
+          const auto &elem = rhs["elts"][0]["elts"][0]["value"];
+          base_type = type_handler_.get_typet(elem);
 
-      const auto &elem = lhs["elts"][0]["elts"][0]["value"];
-      base_type = type_handler_.get_typet(elem);
+          m = 1;
+          n = lhs_len;
+          n2 = rhs_rows;
+          p = rhs_cols;
 
-      m = lhs_rows;
-      n = lhs_cols;
-      n2 = rhs_len;
-      p = 1;
+          // Result is 1D array of length p
+          typet result_type = type_handler_.build_array(base_type, p);
+          converter_.current_lhs->type() = result_type;
+        }
+        else if (lhs_is_2d && !rhs_is_2d)
+        {
+          // 2D × 1D case: (m, n) × (n,) -> (m,)
+          size_t lhs_rows = lhs["elts"].size();
+          size_t lhs_cols = lhs["elts"][0]["elts"].size();
+          size_t rhs_len = rhs["elts"].size();
 
-      // Result is 1D array of length m
-      typet result_type = type_handler_.build_array(base_type, m);
-      converter_.current_lhs->type() = result_type;
-    }
-    else {
+          if (lhs_cols != rhs_len)
+          {
+            throw std::runtime_error("Incompatible shapes for dot product");
+          }
+
+          const auto &elem = lhs["elts"][0]["elts"][0]["value"];
+          base_type = type_handler_.get_typet(elem);
+
+          m = lhs_rows;
+          n = lhs_cols;
+          n2 = rhs_len;
+          p = 1;
+
+          // Result is 1D array of length m
+          typet result_type = type_handler_.build_array(base_type, m);
+          converter_.current_lhs->type() = result_type;
+        }
+        else
+        {
           // 2D × 2D case: original matrix multiplication logic
           m = lhs["elts"].size();
           n = lhs["elts"][0]["elts"].size();
           n2 = rhs["elts"].size();
           p = rhs["elts"][0]["elts"].size();
 
-          if (n != n2) {
+          if (n != n2)
+          {
             throw std::runtime_error("Incompatible shapes for dot product");
           }
 
