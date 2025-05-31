@@ -1301,6 +1301,16 @@ exprt python_converter::get_literal(const nlohmann::json &element)
                         ? element["operand"]["value"]
                         : element["value"];
 
+  // Handle None literals (null values)
+  if (value.is_null())
+  {
+    // Create a null pointer expression to represent NoneType
+    constant_exprt null_expr(pointer_type());
+    // Sets the value to "NULL"
+    null_expr.set_value("0");
+    return null_expr;
+  }
+
   // Handle integer literals (int)
   if (value.is_number_integer())
     return from_integer(value.get<long long>(), long_long_int_type());
@@ -1373,7 +1383,15 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     return expr;
   }
 
-  throw std::runtime_error("Unsupported literal " + value.get<std::string>());
+  std::string error_msg = "Unsupported literal: ";
+  if (value.is_null())
+    error_msg += "null (None)";
+  else if (value.is_string())
+    error_msg += value.get<std::string>();
+  else
+    error_msg += value.dump(); // dump() works for any JSON type
+    
+  throw std::runtime_error(error_msg);
 }
 
 // Helper function to detect bytes literals

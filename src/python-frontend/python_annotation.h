@@ -659,6 +659,18 @@ private:
       if (infer_type(element, body, inferred_type) == InferResult::UNKNOWN)
         continue;
 
+      const auto &rhs = element["value"];
+        
+      // Handle None assignments (Constant with null value)
+      if (rhs["_type"] == "Constant" && rhs["value"].is_null())
+        inferred_type = "NoneType";
+      // Handle legacy AST NameConstant for None
+      else if (rhs["_type"] == "NameConstant" && rhs["value"].is_null())
+        inferred_type = "NoneType";
+      // Handle None as Name node (some Python versions)
+      else if (rhs["_type"] == "Name" && rhs.contains("id") && rhs["id"] == "None")
+        inferred_type = "NoneType";
+
       if (inferred_type.empty())
       {
         std::ostringstream oss;
