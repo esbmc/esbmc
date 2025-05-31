@@ -276,10 +276,12 @@ private:
       }
     }
 
+    // Search the top-level AST body for a matching function definition
     for (const Json &elem : ast["body"])
     {
       if (elem["_type"] == "FunctionDef" && elem["name"] == func_name)
       {
+        // Try to infer return type from actual return statements
         auto return_node = json_utils::find_return_node(elem["body"]);
         if (!return_node.empty())
         {
