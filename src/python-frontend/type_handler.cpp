@@ -239,7 +239,6 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
     }
   }
 
-  // Handle JSON arrays directly (not from AST)
   if (elem.is_array())
   {
     if (elem.empty())
@@ -251,7 +250,6 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
 
   throw std::runtime_error("Invalid type");
 }
-
 
 bool type_handler::has_multiple_types(const nlohmann::json &container) const
 {
