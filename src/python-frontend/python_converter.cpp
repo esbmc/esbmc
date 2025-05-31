@@ -1390,7 +1390,7 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     error_msg += value.get<std::string>();
   else
     error_msg += value.dump(); // dump() works for any JSON type
-    
+
   throw std::runtime_error(error_msg);
 }
 

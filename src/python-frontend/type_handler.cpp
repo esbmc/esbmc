@@ -133,7 +133,8 @@ std::vector<int> type_handler::get_array_type_shape(const typet &type) const
 /// References:
 /// - Python 3 type system: https://docs.python.org/3/library/stdtypes.html
 /// - ESBMC irep type system: src/util/type.h
-typet type_handler::get_typet(const std::string &ast_type, size_t type_size) const
+typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
+  const
 {
   if (ast_type == "Any")
     return empty_typet();
