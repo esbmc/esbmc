@@ -1,3 +1,5 @@
+#include "goto-programs/goto_binary_reader.h"
+#include "irep2/irep2_expr.h"
 #include <util/c_types.h>
 #include <util/config.h>
 #include <irep2/irep2_utils.h>
@@ -8,6 +10,38 @@
 #include <util/simplify_expr.h>
 #include <util/string_constant.h>
 #include <util/type_byte_size.h>
+
+inline code_function_callt invoke_intrinsic(
+  const std::string &name,
+  const typet &type,
+  const std::vector<exprt> &args)
+{
+  assert(has_prefix(name, "c:@F@__ESBMC"));
+  code_function_callt call;
+  code_typet code_type;
+  code_type.return_type() = type;
+  code_type.type() = type;
+  for (const exprt &arg : args)
+    code_type.arguments().push_back(arg.type());
+
+  symbolt symbol;
+  symbol.mode = "C";
+  symbol.type = code_type;
+  symbol.name = name;
+  symbol.id = name;
+  symbol.is_extern = false;
+  symbol.file_local = false;
+
+  exprt tmp("symbol", symbol.type);
+  tmp.identifier(symbol.id);
+  tmp.name(symbol.name);
+
+  call.function() = tmp;
+  for (const exprt &arg : args)
+    call.arguments().push_back(arg);
+
+  return call;
+}
 
 // File for old irep -> new irep conversions.
 
@@ -1846,6 +1880,81 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_expr(expr.op1(), args[1]);
     new_expr_ref = exists2tc(type, args[0], args[1]);
   }
+
+  // TRANSCODER START
+  else if (expr.id() == "object_size")
+  {
+    assert(expr.operands().size() == 1);
+    type = migrate_type(expr.type());
+
+    const std::string function = "c:@F@__ESBMC_get_object_size";
+    const std::vector<exprt> args = {expr.op0()};
+
+    migrate_expr(invoke_intrinsic(function, expr.type(), args), new_expr_ref);
+  }
+  else if (expr.id() == "overflow_result-+")
+  {
+    // Overflow_result : {result = op0 + op1, overflowed = overflow(op0 + op1)}
+    type = migrate_type(expr.type());
+    assert(expr.operands().size() == 2);
+    expr2tc op0, op1;
+    convert_operand_pair(expr, op0, op1);
+    expr2tc add = add2tc(op0->type, op0, op1); // XXX type?
+
+    std::vector<expr2tc> members;
+    members.push_back(add2tc(op0->type, op0, op1));
+    members.push_back(overflow2tc(add2tc(op0->type, op0, op1)));
+    new_expr_ref = constant_struct2tc(type, members);
+  }
+  else if (expr.id() == "overflow_result--")
+  {
+    // Overflow_result : {result = op0 + op1, overflowed = overflow(op0 + op1)}
+    type = migrate_type(expr.type());
+    assert(expr.operands().size() == 2);
+    expr2tc op0, op1;
+    convert_operand_pair(expr, op0, op1);
+    expr2tc add = sub2tc(op0->type, op0, op1); // XXX type?
+
+    std::vector<expr2tc> members;
+    members.push_back(sub2tc(op0->type, op0, op1));
+    members.push_back(overflow2tc(sub2tc(op0->type, op0, op1)));
+    new_expr_ref = constant_struct2tc(type, members);
+  }
+  else if (expr.id() == "overflow_result-shr")
+  {
+    // Overflow_result : {result = op0 + op1, overflowed = overflow(op0 + op1)}
+    type = migrate_type(expr.type());
+    assert(expr.operands().size() == 2);
+    expr2tc op0, op1;
+    convert_operand_pair(expr, op0, op1);
+    expr2tc add = ashr2tc(op0->type, op0, op1); // XXX type?
+
+    std::vector<expr2tc> members;
+    members.push_back(ashr2tc(op0->type, op0, op1));
+    members.push_back(overflow2tc(ashr2tc(op0->type, op0, op1)));
+    new_expr_ref = constant_struct2tc(type, members);
+  }
+  else if (expr.id() == "overflow_result-*")
+  {
+    // Overflow_result : {result = op0 + op1, overflowed = overflow(op0 + op1)}
+    type = migrate_type(expr.type());
+    assert(expr.operands().size() == 2);
+    expr2tc op0, op1;
+    convert_operand_pair(expr, op0, op1);
+    expr2tc add = mul2tc(op0->type, op0, op1); // XXX type?
+
+    std::vector<expr2tc> members;
+    members.push_back(mul2tc(op0->type, op0, op1));
+    members.push_back(overflow2tc(mul2tc(op0->type, op0, op1)));
+    new_expr_ref = constant_struct2tc(type, members);
+  }
+  else if (expr.id() == "r_ok")
+  {
+    // FUTURE: call __ESBMC_r_ok
+    true_exprt t;
+    migrate_expr(t, new_expr_ref);
+  }
+  // TRANSCODER END
   else
   {
     log_error("{}\nmigrate expr failed", expr);
