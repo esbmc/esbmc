@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: ESBMC does not support 3D or higher dimensional arrays\. Found 3D array creation\. Please use 1D or 2D arrays only\.$
