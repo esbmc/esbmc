@@ -473,3 +473,30 @@ bool type_handler::is_2d_array(const nlohmann::json &arr) const
          arr.contains("elts") && !arr["elts"].empty() &&
          arr["elts"][0].is_object() && arr["elts"][0].contains("elts");
 }
+
+// Add this method to the type_handler class
+int type_handler::get_array_dimensions(const nlohmann::json &arr) const
+{
+  if (!arr.is_object() || arr["_type"] != "List" || !arr.contains("elts"))
+    return 0;
+    
+  if (arr["elts"].empty())
+    return 1; // Empty array is considered 1D
+    
+  // Check the first element to determine nesting depth
+  const auto &first_elem = arr["elts"][0];
+  
+  if (!first_elem.is_object())
+    return 1;
+    
+  if (first_elem["_type"] == "List")
+  {
+    // Recursive case: this is a nested array
+    return 1 + get_array_dimensions(first_elem);
+  }
+  else
+  {
+    // Base case: first element is not a list, so this is 1D
+    return 1;
+  }
+}
