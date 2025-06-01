@@ -2464,19 +2464,21 @@ void python_converter::get_function_definition(
   {
     // Handle string annotations like -> "int" (legacy forward references)
     std::string type_string = return_node["value"].get<std::string>();
-  
+
     // Remove surrounding quotes if present
-    if (type_string.length() >= 2 && 
-        type_string.front() == '"' && type_string.back() == '"')
+    if (
+      type_string.length() >= 2 && type_string.front() == '"' &&
+      type_string.back() == '"')
     {
       type_string = type_string.substr(1, type_string.length() - 2);
     }
-    else if (type_string.length() >= 2 && 
-             type_string.front() == '\'' && type_string.back() == '\'')
+    else if (
+      type_string.length() >= 2 && type_string.front() == '\'' &&
+      type_string.back() == '\'')
     {
       type_string = type_string.substr(1, type_string.length() - 2);
     }
-  
+
     type.return_type() = type_handler_.get_typet(type_string);
   }
   else
