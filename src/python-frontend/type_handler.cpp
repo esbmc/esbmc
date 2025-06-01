@@ -227,6 +227,13 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
     if (elem.contains("value"))
       return get_typet(elem["value"]);
 
+    // Handle Python AST UnaryOp node (e.g., -1, +1, ~1, not x)
+    if (elem["_type"] == "UnaryOp" && elem.contains("operand"))
+    {
+      // For unary operations, the result type is typically the same as the operand type
+      return get_typet(elem["operand"]);
+    }
+
     // Handle Python AST List node
     if (elem["_type"] == "List" && elem.contains("elts"))
     {
