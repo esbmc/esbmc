@@ -316,12 +316,6 @@ private:
               else if (returns.contains("value"))
                 return "Any"; // Other constant types
             }
-            // Handle Name type (e.g., int, str, bool)
-            else if (return_type == "Name")
-            {
-              if (returns.contains("id"))
-                return returns["id"];
-            }
             // Handle other annotation types
             else
             {
@@ -330,24 +324,16 @@ private:
                 return returns["id"];
             }
           }
-          // Handle direct string annotations (legacy or simplified cases)
-          else if (returns.is_string())
-          {
-            return returns.template get<std::string>();
-          }
           // Handle case where returns exists but doesn't have expected structure
           else
           {
             log_warning(
-              "Unrecognized return type annotation structure for function "
-              "'{}': {}",
-              func_name,
-              returns.dump(2));
+              "Unrecognized return type annotation for function "
+              "{}",
+              func_name);
             return "Any"; // Safe default
           }
         }
-
-        // No return type annotation found, try to infer from function body
         // If function has no explicit return statements, assume void/None
         return "NoneType";
       }
