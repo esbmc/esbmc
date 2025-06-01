@@ -276,10 +276,12 @@ private:
       }
     }
 
+    // Search the top-level AST body for a matching function definition
     for (const Json &elem : ast["body"])
     {
       if (elem["_type"] == "FunctionDef" && elem["name"] == func_name)
       {
+        // Try to infer return type from actual return statements
         auto return_node = json_utils::find_return_node(elem["body"]);
         if (!return_node.empty())
         {
@@ -288,10 +290,52 @@ private:
           return inferred_type;
         }
 
-        if (elem["returns"]["_type"] == "Subscript")
-          return elem["returns"]["value"]["id"];
-        else
-          return elem["returns"]["id"];
+        // Check if function has a return type annotation
+        if (elem.contains("returns") && !elem["returns"].is_null())
+        {
+          const auto &returns = elem["returns"];
+
+          // Handle different return type annotation structures
+          if (returns.contains("_type"))
+          {
+            const std::string &return_type = returns["_type"];
+
+            // Handle Subscript type (e.g., List[int], Dict[str, int])
+            if (return_type == "Subscript")
+            {
+              if (returns.contains("value") && returns["value"].contains("id"))
+                return returns["value"]["id"];
+              else
+                return "Any"; // Default for complex subscript types
+            }
+            // Handle Constant type (e.g., None)
+            else if (return_type == "Constant")
+            {
+              if (returns.contains("value") && returns["value"].is_null())
+                return "NoneType";
+              else if (returns.contains("value"))
+                return "Any"; // Other constant types
+            }
+            // Handle other annotation types
+            else
+            {
+              // Try to extract id if it exists
+              if (returns.contains("id"))
+                return returns["id"];
+            }
+          }
+          // Handle case where returns exists but doesn't have expected structure
+          else
+          {
+            log_warning(
+              "Unrecognized return type annotation for function "
+              "{}",
+              func_name);
+            return "Any"; // Safe default
+          }
+        }
+        // If function has no explicit return statements, assume void/None
+        return "NoneType";
       }
     }
 
