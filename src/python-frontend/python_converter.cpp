@@ -809,18 +809,72 @@ exprt python_converter::handle_string_comparison(
   exprt &rhs,
   const nlohmann::json &element)
 {
-  if (lhs.type() != rhs.type())
-    return gen_boolean(op == "NotEq");
+  // Try to resolve symbols to their constant values
+  exprt lhs_resolved = get_resolved_value(lhs);
+  exprt rhs_resolved = get_resolved_value(rhs);
 
-  if (lhs.is_constant() && rhs.is_constant() && lhs == rhs)
-    return gen_boolean(op == "Eq");
+  if (!lhs_resolved.is_nil())
+    lhs = lhs_resolved;
+  if (!rhs_resolved.is_nil())
+    rhs = rhs_resolved;
 
+  // Direct constant comparison if both are constants
+  if (lhs.is_constant() && rhs.is_constant())
+  {
+    // For array constants, compare element by element
+    if (lhs.is_array() && rhs.is_array())
+    {
+      const exprt::operandst &lhs_ops = lhs.operands();
+      const exprt::operandst &rhs_ops = rhs.operands();
+      
+      // Compare sizes first
+      if (lhs_ops.size() != rhs_ops.size())
+        return gen_boolean(op == "NotEq");
+      
+      // Compare each element
+      for (size_t i = 0; i < lhs_ops.size(); ++i)
+        if (lhs_ops[i] != rhs_ops[i])
+          return gen_boolean(op == "NotEq");
+      
+      return gen_boolean(op == "Eq");
+    }
+    
+    // Fallback for other constant types
+    bool constants_equal = (lhs == rhs);
+    return gen_boolean((op == "Eq") ? constants_equal : !constants_equal);
+  }
+
+  // Check for zero-length arrays
   if (is_zero_length_array(lhs) && is_zero_length_array(rhs))
     return gen_boolean(op == "Eq");
 
+  // Handle type mismatches to prevent crashes/array out of bounds
+  if (lhs.type() != rhs.type())
+  {
+    // If one is a constant array and the other is empty, compare based on size
+    if (lhs.is_constant() && lhs.is_array() && is_zero_length_array(rhs))
+    {
+      const exprt::operandst &lhs_ops = lhs.operands();
+      bool lhs_empty = (lhs_ops.size() == 0);
+      return gen_boolean((op == "Eq") ? lhs_empty : !lhs_empty);
+    }
+    else if (rhs.is_constant() && rhs.is_array() && is_zero_length_array(lhs))
+    {
+      const exprt::operandst &rhs_ops = rhs.operands();
+      bool rhs_empty = (rhs_ops.size() == 0);
+      return gen_boolean((op == "Eq") ? rhs_empty : !rhs_empty);
+    }
+    else
+      return gen_boolean(op == "NotEq");
+  }
+
+  // Make sure we have valid array types before proceeding to strncmp
+  if (!lhs.type().is_array() || !rhs.type().is_array())
+    return gen_boolean(op == "NotEq");
+
+  // Fallback: use strncmp for non-constant comparisons
   const auto &array_type = to_array_type(lhs.type());
-  BigInt string_size =
-    binary2integer(array_type.size().value().as_string(), false);
+  BigInt string_size = binary2integer(array_type.size().value().as_string(), false);
 
   symbolt *strncmp_symbol = symbol_table_.find_symbol("c:@F@strncmp");
   assert(strncmp_symbol);
@@ -836,6 +890,143 @@ exprt python_converter::handle_string_comparison(
   rhs = gen_zero(int_type());
 
   return nil_exprt(); // continue with lhs OP rhs
+}
+
+// Helper method to resolve symbol values to constants
+exprt python_converter::get_resolved_value(const exprt &expr)
+{
+  // Handle direct function call expressions
+  if (expr.id() == "sideeffect")
+  {
+    const side_effect_exprt &side_effect = to_side_effect_expr(expr);
+    if (side_effect.get_statement() == "function_call" && side_effect.operands().size() >= 2)
+      // Structure: operand 0 = function symbol, operand 1 = arguments
+      return resolve_identity_function_call(side_effect.operands()[0], side_effect.operands()[1]);
+  }
+
+  // Handle symbols that contain function calls or constants
+  if (!expr.is_symbol())
+    return nil_exprt();
+
+  const symbol_exprt &sym = to_symbol_expr(expr);
+  const symbolt *symbol = symbol_table_.find_symbol(sym.get_identifier());
+  
+  if (!symbol || symbol->value.is_nil())
+    return nil_exprt();
+
+  // Return constant values directly
+  if (symbol->value.is_constant())
+    return symbol->value;
+
+  // Handle function calls stored as code
+  if (symbol->value.is_code())
+  {
+    const codet &code = to_code(symbol->value);
+    
+    if (code.get_statement() == "function_call" && code.operands().size() >= 3)
+    {
+      // Structure: operand 1 = function symbol, operand 2 = arguments
+      exprt result = resolve_identity_function_call(code.operands()[1], code.operands()[2]);
+      if (!result.is_nil())
+        return result;
+    }    
+  }
+
+  return nil_exprt();
+}
+
+// Helper to resolve identity function calls
+exprt python_converter::resolve_identity_function_call(const exprt &func_expr, const exprt &args_expr)
+{
+  if (!func_expr.is_symbol())
+    return nil_exprt();
+
+  const symbol_exprt &func_sym = to_symbol_expr(func_expr);
+  const symbolt *func_symbol = symbol_table_.find_symbol(func_sym.get_identifier());
+  
+  if (!func_symbol || func_symbol->value.is_nil())
+    return nil_exprt();
+
+  // Check if this function is an identity function (returns its parameter)
+  if (!is_identity_function(func_symbol->value, func_sym.get_identifier().as_string()))
+    return nil_exprt();
+
+  // Extract the first argument
+  if (args_expr.id() != "arguments" || args_expr.operands().empty())
+    return nil_exprt();
+
+  exprt arg = args_expr.operands()[0];
+  
+  // Handle address_of wrapper
+  if (arg.is_address_of() && arg.operands().size() > 0)
+    arg = arg.operands()[0];
+  
+  // If the argument is a symbol, try to resolve it to its constant value
+  if (arg.is_symbol())
+  {
+    const symbol_exprt &sym = to_symbol_expr(arg);
+    const symbolt *symbol = symbol_table_.find_symbol(sym.get_identifier());    
+    if (symbol && symbol->value.is_constant())
+      arg = symbol->value;
+  }
+  
+  // Return string constants and array constants directly
+  if (arg.id() == "string-constant" || 
+      (arg.is_constant() && arg.is_array()) ||
+      (arg.is_constant() && arg.type().is_array()))
+  {
+    return arg;
+  }
+
+  return nil_exprt();
+}
+
+// Helper to check if a function is an identity function (returns its parameter)
+bool python_converter::is_identity_function(const exprt &func_value, const std::string &func_identifier)
+{
+  if (!func_value.is_code())
+    return false;
+    
+  const codet &func_code = to_code(func_value);
+  
+  // Check if it's a simple return statement
+  if (func_code.get_statement() == "return")
+  {
+    const code_returnt &ret = to_code_return(func_code);
+    if (ret.has_return_value() && ret.return_value().is_symbol())
+    {
+      const symbol_exprt &return_sym = to_symbol_expr(ret.return_value());
+      std::string return_identifier = return_sym.get_identifier().as_string();
+      
+      // Check if the returned symbol is a parameter of this function
+      // Parameter pattern: func_identifier + "@" + parameter_name
+      if (return_identifier.find(func_identifier + "@") == 0)
+        return true;
+    }
+  }
+  
+  // Check nested code structures
+  for (const auto &operand : func_value.operands())
+  {
+    if (operand.is_code())
+    {
+      const codet &sub_code = to_code(operand);
+      if (sub_code.get_statement() == "return")
+      {
+        const code_returnt &ret = to_code_return(sub_code);
+        if (ret.has_return_value() && ret.return_value().is_symbol())
+        {
+          const symbol_exprt &return_sym = to_symbol_expr(ret.return_value());
+          std::string return_identifier = return_sym.get_identifier().as_string();
+          // Check if the returned symbol is a parameter of this function
+          if (return_identifier.find(func_identifier + "@") == 0)
+            return true;
+        }
+      }
+    }
+  }
+  
+  return false;
 }
 
 void python_converter::ensure_string_array(exprt &expr)
