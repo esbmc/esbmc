@@ -41,6 +41,8 @@ std::shared_ptr<module> create_module(const fs::path &json_path)
 
         if (node["returns"]["_type"] == "Subscript")
           f.return_type_ = node["returns"]["value"]["id"];
+        else if (node["returns"]["_type"] == "Tuple")
+          f.return_type_ = "Tuple";
         else if (
           node["returns"].contains("value") &&
           node["returns"]["value"].is_null())

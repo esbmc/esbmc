@@ -2148,6 +2148,12 @@ void python_converter::get_function_definition(
         type_handler_.get_typet(return_node["id"].get<std::string>());
     }
   }
+  else if (return_node["_type"] == "Tuple")
+  {
+    // Handle tuple return types like (int, str)
+    // TODO: we must still handle tuple types!
+    type.return_type() = type_handler_.get_typet(std::string("tuple"));
+  }
   else
   {
     throw std::runtime_error("Return type undefined");
