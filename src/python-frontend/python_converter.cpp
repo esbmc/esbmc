@@ -1104,11 +1104,12 @@ exprt python_converter::get_function_constant_return(const exprt &func_value)
     if (ret.has_return_value())
     {
       const exprt &return_val = ret.return_value();
-      if (return_val.id() == "string-constant" || 
-          (return_val.is_constant() && return_val.is_array()) ||
-          (return_val.is_constant() && return_val.type().is_array()) ||
-          (return_val.is_constant() &&
-           (return_val.type().is_unsignedbv() || return_val.type().is_signedbv())))
+      if (
+        return_val.id() == "string-constant" ||
+        (return_val.is_constant() && return_val.is_array()) ||
+        (return_val.is_constant() && return_val.type().is_array()) ||
+        (return_val.is_constant() && (return_val.type().is_unsignedbv() ||
+                                      return_val.type().is_signedbv())))
       {
         return return_val;
       }
@@ -1127,11 +1128,12 @@ exprt python_converter::get_function_constant_return(const exprt &func_value)
         if (ret.has_return_value())
         {
           const exprt &return_val = ret.return_value();
-          if (return_val.id() == "string-constant" || 
-              (return_val.is_constant() && return_val.is_array()) ||
-              (return_val.is_constant() && return_val.type().is_array()) ||
-              (return_val.is_constant() &&
-               (return_val.type().is_unsignedbv() || return_val.type().is_signedbv())))
+          if (
+            return_val.id() == "string-constant" ||
+            (return_val.is_constant() && return_val.is_array()) ||
+            (return_val.is_constant() && return_val.type().is_array()) ||
+            (return_val.is_constant() && (return_val.type().is_unsignedbv() ||
+                                          return_val.type().is_signedbv())))
           {
             return return_val;
           }
