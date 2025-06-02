@@ -1,4 +1,4 @@
 CORE
 main.goto
---cprover --binary library.goto
+--cprover --binary library.goto --function _RNvNtNtCsesPP5EAma4_4core3num6verify24checked_unchecked_add_i8
 ^VERIFICATION SUCCESSFUL$
