@@ -138,6 +138,10 @@ private:
 
   exprt get_resolved_value(const exprt &expr);
 
+  exprt get_function_constant_return(const exprt &func_value);
+  
+  exprt resolve_function_call(const exprt &func_expr, const exprt &args_expr);
+
   exprt resolve_identity_function_call(
     const exprt &func_expr,
     const exprt &args_expr);

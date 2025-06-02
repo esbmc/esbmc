@@ -988,7 +988,7 @@ exprt python_converter::get_resolved_value(const exprt &expr)
       side_effect.get_statement() == "function_call" &&
       side_effect.operands().size() >= 2)
       // Structure: operand 0 = function symbol, operand 1 = arguments
-      return resolve_identity_function_call(
+      return resolve_function_call(
         side_effect.operands()[0], side_effect.operands()[1]);
   }
 
@@ -1015,7 +1015,7 @@ exprt python_converter::get_resolved_value(const exprt &expr)
     {
       // Structure: operand 1 = function symbol, operand 2 = arguments
       exprt result =
-        resolve_identity_function_call(code.operands()[1], code.operands()[2]);
+        resolve_function_call(code.operands()[1], code.operands()[2]);
       if (!result.is_nil())
         return result;
     }
@@ -1024,8 +1024,8 @@ exprt python_converter::get_resolved_value(const exprt &expr)
   return nil_exprt();
 }
 
-// Helper to resolve identity function calls
-exprt python_converter::resolve_identity_function_call(
+// Helper to resolve function calls (both identity functions and constant-returning functions)
+exprt python_converter::resolve_function_call(
   const exprt &func_expr,
   const exprt &args_expr)
 {
@@ -1039,12 +1039,17 @@ exprt python_converter::resolve_identity_function_call(
   if (!func_symbol || func_symbol->value.is_nil())
     return nil_exprt();
 
-  // Check if this function is an identity function (returns its parameter)
+  // First check if this function returns a constant value
+  exprt constant_result = get_function_constant_return(func_symbol->value);
+  if (!constant_result.is_nil())
+    return constant_result;
+
+  // Then check if this function is an identity function (returns its parameter)
   if (!is_identity_function(
         func_symbol->value, func_sym.get_identifier().as_string()))
     return nil_exprt();
 
-  // Extract the first argument
+  // Extract the first argument for identity functions
   if (args_expr.id() != "arguments" || args_expr.operands().empty())
     return nil_exprt();
 
@@ -1079,6 +1084,60 @@ exprt python_converter::resolve_identity_function_call(
      (arg.type().is_unsignedbv() || arg.type().is_signedbv())))
   {
     return arg;
+  }
+
+  return nil_exprt();
+}
+
+// Helper to check if a function returns a constant value
+exprt python_converter::get_function_constant_return(const exprt &func_value)
+{
+  if (!func_value.is_code())
+    return nil_exprt();
+
+  const codet &func_code = to_code(func_value);
+
+  // Check if it's a simple return statement with a constant
+  if (func_code.get_statement() == "return")
+  {
+    const code_returnt &ret = to_code_return(func_code);
+    if (ret.has_return_value())
+    {
+      const exprt &return_val = ret.return_value();
+      if (return_val.id() == "string-constant" || 
+          (return_val.is_constant() && return_val.is_array()) ||
+          (return_val.is_constant() && return_val.type().is_array()) ||
+          (return_val.is_constant() &&
+           (return_val.type().is_unsignedbv() || return_val.type().is_signedbv())))
+      {
+        return return_val;
+      }
+    }
+  }
+
+  // Check nested code structures
+  for (const auto &operand : func_value.operands())
+  {
+    if (operand.is_code())
+    {
+      const codet &sub_code = to_code(operand);
+      if (sub_code.get_statement() == "return")
+      {
+        const code_returnt &ret = to_code_return(sub_code);
+        if (ret.has_return_value())
+        {
+          const exprt &return_val = ret.return_value();
+          if (return_val.id() == "string-constant" || 
+              (return_val.is_constant() && return_val.is_array()) ||
+              (return_val.is_constant() && return_val.type().is_array()) ||
+              (return_val.is_constant() &&
+               (return_val.type().is_unsignedbv() || return_val.type().is_signedbv())))
+          {
+            return return_val;
+          }
+        }
+      }
+    }
   }
 
   return nil_exprt();
