@@ -302,7 +302,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
 
   std::vector<smt_astt> args;
-  args.reserve(expr->get_num_sub_exprs());
+  args.resize(expr->get_num_sub_exprs());
 
   switch (expr->expr_id)
   {
