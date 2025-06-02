@@ -1030,6 +1030,14 @@ exprt python_converter::resolve_identity_function_call(
   if (arg.is_address_of() && arg.operands().size() > 0)
     arg = arg.operands()[0];
 
+  // If the argument is itself a function call, recursively resolve it
+  if (arg.id() == "sideeffect")
+  {
+    exprt nested_resolved = get_resolved_value(arg);
+    if (!nested_resolved.is_nil())
+      arg = nested_resolved;
+  }
+  
   // If the argument is a symbol, try to resolve it to its constant value
   if (arg.is_symbol())
   {
@@ -1070,6 +1078,7 @@ bool python_converter::is_identity_function(
       const symbol_exprt &return_sym = to_symbol_expr(ret.return_value());
       std::string return_identifier = return_sym.get_identifier().as_string();
       std::string parameter_prefix = func_identifier + "@";
+
       // Check if the returned symbol is a parameter of this function
       // Parameter pattern: func_identifier + "@" + parameter_name
       if (return_identifier.size() >= parameter_prefix.size() &&
@@ -1092,6 +1101,7 @@ bool python_converter::is_identity_function(
           const symbol_exprt &return_sym = to_symbol_expr(ret.return_value());
           std::string return_identifier = return_sym.get_identifier().as_string();
           std::string parameter_prefix = func_identifier + "@";
+          
           // Check if the returned symbol is a parameter of this function
           if (return_identifier.size() >= parameter_prefix.size() &&
               return_identifier.compare(0, parameter_prefix.size(), parameter_prefix) == 0)
