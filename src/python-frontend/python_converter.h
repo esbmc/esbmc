@@ -136,6 +136,16 @@ private:
 
   exprt get_array_base_address(const exprt &arr);
 
+  exprt get_resolved_value(const exprt &expr);
+
+  exprt resolve_identity_function_call(
+    const exprt &func_expr,
+    const exprt &args_expr);
+
+  bool is_identity_function(
+    const exprt &func_value,
+    const std::string &func_identifier);
+
   exprt handle_string_concatenation(
     const exprt &lhs,
     const exprt &rhs,
