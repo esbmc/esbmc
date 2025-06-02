@@ -1179,13 +1179,13 @@ RanIt partial_sort_copy(InIt first1, InIt last1, RanIt first2, RanIt last2)
 {
   InIt pilgrim1 = first1;
   RanIt pilgrim2 = first2;
-  while (pilgrim2 < last2)
+  while (pilgrim1 != last1 && pilgrim2 < last2) // Ensure no out-of-bound writes
     *pilgrim2++ = *pilgrim1++;
   RanIt i, j;
-  for (i = first2; i != last2; i++)
+  for (i = first2; i != pilgrim2; i++) // Use pilgrim2 to avoid out-of-bound reads
   {
     j = i;
-    while ((*j < *(j - 1)) && (j != first2))
+    while (j != first2 && (*j < *(j - 1))) // Ensure j - 1 is valid
     {
       std::swap(*j, *(j - 1));
       j--;
@@ -1193,17 +1193,19 @@ RanIt partial_sort_copy(InIt first1, InIt last1, RanIt first2, RanIt last2)
   }
   pilgrim2--;
   while (pilgrim1 != last1)
+  {
     if (*pilgrim1 < *pilgrim2)
     {
       *pilgrim2 = *pilgrim1;
-      for (i = first2; i != last2; i++)
+      for (i = first2; i != pilgrim2 + 1; i++) // Use pilgrim2 + 1 to avoid out-of-bound writes
       {
         j = i;
-        while ((*j < *(j - 1)) && (j != first2))
+        while (j != first2 && (*j < *(j - 1))) // Ensure j - 1 is valid
         {
           std::swap(*j, *(j - 1));
           j--;
         }
+    }
       }
       pilgrim1++;
     }
@@ -1215,13 +1217,13 @@ RanIt partial_sort_copy(InIt *first1, InIt *last1, RanIt first2, RanIt last2)
 {
   InIt *pilgrim1 = first1;
   RanIt pilgrim2 = first2;
-  while (pilgrim2 < last2)
+  while (pilgrim1 != last1 && pilgrim2 < last2) // Ensure no out-of-bound writes
     *pilgrim2++ = *pilgrim1++;
   RanIt i, j;
-  for (i = first2; i != last2; i++)
+  for (i = first2; i != pilgrim2; i++) // Use pilgrim2 to avoid out-of-bound reads
   {
     j = i;
-    while ((*j < *(j - 1)) && (j != first2))
+    while (j != first2 && (*j < *(j - 1))) // Ensure j - 1 is valid
     {
       std::swap(*j, *(j - 1));
       j--;
@@ -1229,17 +1231,19 @@ RanIt partial_sort_copy(InIt *first1, InIt *last1, RanIt first2, RanIt last2)
   }
   pilgrim2--;
   while (pilgrim1 != last1)
+  {
     if (*pilgrim1 < *pilgrim2)
     {
       *pilgrim2 = *pilgrim1;
-      for (i = first2; i != last2; i++)
+      for (i = first2; i != pilgrim2 + 1; i++) // Use pilgrim2 + 1 to avoid out-of-bound writes
       {
         j = i;
-        while ((*j < *(j - 1)) && (j != first2))
+        while (j != first2 && (*j < *(j - 1))) // Ensure j - 1 is valid
         {
           std::swap(*j, *(j - 1));
           j--;
         }
+}
       }
       pilgrim1++;
     }
@@ -1256,32 +1260,34 @@ RanIt partial_sort_copy(
 {
   InIt pilgrim1 = first1;
   RanIt pilgrim2 = first2;
-  while (pilgrim2 < last2)
+  while (pilgrim1 != last1 && pilgrim2 < last2) // Ensure no out-of-bound writes
     *pilgrim2++ = *pilgrim1++;
   RanIt i, j;
-  for (i = first2; i != last2; i++)
+  for (i = first2; i != pilgrim2; i++) // Use pilgrim2 to avoid out-of-bound reads
   {
     j = i;
-    while (pred(*j, *(j - 1)) && (j != first2))
-    {
+    while (j != first2 && pred(*j, *(j - 1))) // Ensure j - 1 is valid
+  {
       std::swap(*j, *(j - 1));
       j--;
     }
-  }
+    }
   pilgrim2--;
   while (pilgrim1 != last1)
+  {
     if (pred(*pilgrim1, *pilgrim2))
     {
       *pilgrim2 = *pilgrim1;
-      for (i = first2; i != last2; i++)
+      for (i = first2; i != pilgrim2 + 1; i++) // Use pilgrim2 + 1 to avoid out-of-bound writes
       {
         j = i;
-        while (pred(*j, *(j - 1)) && (j != first2))
+        while (j != first2 && pred(*j, *(j - 1))) // Ensure j - 1 is valid
         {
           std::swap(*j, *(j - 1));
           j--;
-        }
       }
+    }
+    }
       pilgrim1++;
     }
   return pilgrim2;
@@ -1297,13 +1303,13 @@ RanIt partial_sort_copy(
 {
   InIt *pilgrim1 = first1;
   RanIt pilgrim2 = first2;
-  while (pilgrim2 < last2)
+  while (pilgrim2 < last2 && pilgrim1 != last1) // Ensure no out-of-bound writes
     *pilgrim2++ = *pilgrim1++;
   RanIt i, j;
-  for (i = first2; i != last2; i++)
+  for (i = first2; i != pilgrim2; i++) // Use pilgrim2 to avoid out-of-bound reads
   {
     j = i;
-    while (pred(*j, *(j - 1)) && (j != first2))
+    while (j != first2 && pred(*j, *(j - 1))) // Ensure j - 1 is valid
     {
       std::swap(*j, *(j - 1));
       j--;
@@ -1311,20 +1317,22 @@ RanIt partial_sort_copy(
   }
   pilgrim2--;
   while (pilgrim1 != last1)
+  {
     if (pred(*pilgrim1, *pilgrim2))
     {
       *pilgrim2 = *pilgrim1;
-      for (i = first2; i != last2; i++)
+      for (i = first2; i != pilgrim2 + 1; i++) // Use pilgrim2 + 1 to avoid out-of-bound writes
       {
         j = i;
-        while (pred(*j, *(j - 1)) && (j != first2))
+        while (j != first2 && pred(*j, *(j - 1))) // Ensure j - 1 is valid
         {
           std::swap(*j, *(j - 1));
           j--;
         }
       }
-      pilgrim1++;
     }
+    pilgrim1++;
+  }
   return pilgrim2;
 }
 
