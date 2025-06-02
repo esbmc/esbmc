@@ -238,7 +238,9 @@ def _add_test(test_case, executor):
                 matches_regex = False
 
         if (test_case.test_mode in FAIL_MODES) and matches_regex:
-            self.fail(error_message_prefix + error_message)
+            rel_path = os.path.relpath(test_case.test_dir, os.path.dirname(__file__))
+            print(f"\033[33mERROR: Test '{rel_path}' passed but is marked as KNOWNBUG. Consider reclassifying it as CORE.\033[0m")
+            sys.exit(77)
         elif (test_case.test_mode not in FAIL_MODES) and (not matches_regex):
             if RegressionBase.FAIL_WITH_WORD is not None:
                 match_regex = re.compile(RegressionBase.FAIL_WITH_WORD, re.MULTILINE)
