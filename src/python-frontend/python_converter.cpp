@@ -819,21 +819,27 @@ exprt python_converter::handle_string_comparison(
     rhs = rhs_resolved;
 
   // Also try to resolve array elements if they are symbols
-  if (lhs.is_constant() && lhs.type().is_array()) {
+  if (lhs.is_constant() && lhs.type().is_array())
+  {
     exprt::operandst &lhs_ops = lhs.operands();
-    for (size_t i = 0; i < lhs_ops.size(); ++i) {
-      if (lhs_ops[i].is_symbol()) {
+    for (size_t i = 0; i < lhs_ops.size(); ++i)
+    {
+      if (lhs_ops[i].is_symbol())
+      {
         exprt resolved_elem = get_resolved_value(lhs_ops[i]);
         if (!resolved_elem.is_nil())
           lhs_ops[i] = resolved_elem;
       }
     }
   }
-  
-  if (rhs.is_constant() && rhs.type().is_array()) {
+
+  if (rhs.is_constant() && rhs.type().is_array())
+  {
     exprt::operandst &rhs_ops = rhs.operands();
-    for (size_t i = 0; i < rhs_ops.size(); ++i) {
-      if (rhs_ops[i].is_symbol()) {
+    for (size_t i = 0; i < rhs_ops.size(); ++i)
+    {
+      if (rhs_ops[i].is_symbol())
+      {
         exprt resolved_elem = get_resolved_value(rhs_ops[i]);
         if (!resolved_elem.is_nil())
           rhs_ops[i] = resolved_elem;
@@ -842,9 +848,10 @@ exprt python_converter::handle_string_comparison(
   }
 
   // Handle single character comparisons (represented as integers)
-  if (lhs.is_constant() && rhs.is_constant() && 
-      (lhs.type().is_unsignedbv() || lhs.type().is_signedbv()) && 
-      (rhs.type().is_unsignedbv() || rhs.type().is_signedbv()))
+  if (
+    lhs.is_constant() && rhs.is_constant() &&
+    (lhs.type().is_unsignedbv() || lhs.type().is_signedbv()) &&
+    (rhs.type().is_unsignedbv() || rhs.type().is_signedbv()))
   {
     bool chars_equal = (lhs == rhs);
     return gen_boolean((op == "Eq") ? chars_equal : !chars_equal);
@@ -854,32 +861,42 @@ exprt python_converter::handle_string_comparison(
   if (lhs.is_constant() && rhs.is_constant())
   {
     // Single char (int) vs array comparison
-    if ((lhs.type().is_unsignedbv() || lhs.type().is_signedbv()) && rhs.type().is_array())
+    if (
+      (lhs.type().is_unsignedbv() || lhs.type().is_signedbv()) &&
+      rhs.type().is_array())
     {
       const exprt::operandst &rhs_ops = rhs.operands();
-      if (rhs_ops.size() == 1) {
+      if (rhs_ops.size() == 1)
+      {
         // Compare single char with single element array
         bool chars_equal = (lhs == rhs_ops[0]);
         // Try value-based comparison if direct comparison fails
         if (!chars_equal && lhs.get("value") == rhs_ops[0].get("value"))
           chars_equal = true;
         return gen_boolean((op == "Eq") ? chars_equal : !chars_equal);
-      } else {
+      }
+      else
+      {
         return gen_boolean(op == "NotEq");
       }
     }
     // Array vs single char (int) comparison
-    else if (lhs.type().is_array() && (rhs.type().is_unsignedbv() || rhs.type().is_signedbv()))
+    else if (
+      lhs.type().is_array() &&
+      (rhs.type().is_unsignedbv() || rhs.type().is_signedbv()))
     {
       const exprt::operandst &lhs_ops = lhs.operands();
-      if (lhs_ops.size() == 1) {
+      if (lhs_ops.size() == 1)
+      {
         // Compare single element array with single char
         bool chars_equal = (lhs_ops[0] == rhs);
         // Try value-based comparison if direct comparison fails
         if (!chars_equal && lhs_ops[0].get("value") == rhs.get("value"))
           chars_equal = true;
         return gen_boolean((op == "Eq") ? chars_equal : !chars_equal);
-      } else {
+      }
+      else
+      {
         return gen_boolean(op == "NotEq");
       }
     }
@@ -941,7 +958,8 @@ exprt python_converter::handle_string_comparison(
 
   // Fallback: use strncmp for non-constant comparisons
   const auto &array_type = to_array_type(lhs.type());
-  BigInt string_size = binary2integer(array_type.size().value().as_string(), false);
+  BigInt string_size =
+    binary2integer(array_type.size().value().as_string(), false);
 
   symbolt *strncmp_symbol = symbol_table_.find_symbol("c:@F@strncmp");
   assert(strncmp_symbol);
@@ -966,9 +984,12 @@ exprt python_converter::get_resolved_value(const exprt &expr)
   if (expr.id() == "sideeffect")
   {
     const side_effect_exprt &side_effect = to_side_effect_expr(expr);
-    if (side_effect.get_statement() == "function_call" && side_effect.operands().size() >= 2)
+    if (
+      side_effect.get_statement() == "function_call" &&
+      side_effect.operands().size() >= 2)
       // Structure: operand 0 = function symbol, operand 1 = arguments
-      return resolve_identity_function_call(side_effect.operands()[0], side_effect.operands()[1]);
+      return resolve_identity_function_call(
+        side_effect.operands()[0], side_effect.operands()[1]);
   }
 
   // Handle symbols that contain function calls or constants
@@ -993,7 +1014,8 @@ exprt python_converter::get_resolved_value(const exprt &expr)
     if (code.get_statement() == "function_call" && code.operands().size() >= 3)
     {
       // Structure: operand 1 = function symbol, operand 2 = arguments
-      exprt result = resolve_identity_function_call(code.operands()[1], code.operands()[2]);
+      exprt result =
+        resolve_identity_function_call(code.operands()[1], code.operands()[2]);
       if (!result.is_nil())
         return result;
     }
@@ -1011,13 +1033,15 @@ exprt python_converter::resolve_identity_function_call(
     return nil_exprt();
 
   const symbol_exprt &func_sym = to_symbol_expr(func_expr);
-  const symbolt *func_symbol = symbol_table_.find_symbol(func_sym.get_identifier());
+  const symbolt *func_symbol =
+    symbol_table_.find_symbol(func_sym.get_identifier());
 
   if (!func_symbol || func_symbol->value.is_nil())
     return nil_exprt();
 
   // Check if this function is an identity function (returns its parameter)
-  if (!is_identity_function(func_symbol->value, func_sym.get_identifier().as_string()))
+  if (!is_identity_function(
+        func_symbol->value, func_sym.get_identifier().as_string()))
     return nil_exprt();
 
   // Extract the first argument
@@ -1037,7 +1061,7 @@ exprt python_converter::resolve_identity_function_call(
     if (!nested_resolved.is_nil())
       arg = nested_resolved;
   }
-  
+
   // If the argument is a symbol, try to resolve it to its constant value
   if (arg.is_symbol())
   {
@@ -1048,10 +1072,11 @@ exprt python_converter::resolve_identity_function_call(
   }
 
   // Return string constants, array constants, and single character constants
-  if (arg.id() == "string-constant" || 
-      (arg.is_constant() && arg.is_array()) ||
-      (arg.is_constant() && arg.type().is_array()) ||
-      (arg.is_constant() && (arg.type().is_unsignedbv() || arg.type().is_signedbv())))
+  if (
+    arg.id() == "string-constant" || (arg.is_constant() && arg.is_array()) ||
+    (arg.is_constant() && arg.type().is_array()) ||
+    (arg.is_constant() &&
+     (arg.type().is_unsignedbv() || arg.type().is_signedbv())))
   {
     return arg;
   }
@@ -1081,8 +1106,10 @@ bool python_converter::is_identity_function(
 
       // Check if the returned symbol is a parameter of this function
       // Parameter pattern: func_identifier + "@" + parameter_name
-      if (return_identifier.size() >= parameter_prefix.size() &&
-          return_identifier.compare(0, parameter_prefix.size(), parameter_prefix) == 0)
+      if (
+        return_identifier.size() >= parameter_prefix.size() &&
+        return_identifier.compare(
+          0, parameter_prefix.size(), parameter_prefix) == 0)
         return true;
     }
   }
@@ -1099,12 +1126,15 @@ bool python_converter::is_identity_function(
         if (ret.has_return_value() && ret.return_value().is_symbol())
         {
           const symbol_exprt &return_sym = to_symbol_expr(ret.return_value());
-          std::string return_identifier = return_sym.get_identifier().as_string();
+          std::string return_identifier =
+            return_sym.get_identifier().as_string();
           std::string parameter_prefix = func_identifier + "@";
-          
+
           // Check if the returned symbol is a parameter of this function
-          if (return_identifier.size() >= parameter_prefix.size() &&
-              return_identifier.compare(0, parameter_prefix.size(), parameter_prefix) == 0)
+          if (
+            return_identifier.size() >= parameter_prefix.size() &&
+            return_identifier.compare(
+              0, parameter_prefix.size(), parameter_prefix) == 0)
             return true;
         }
       }
