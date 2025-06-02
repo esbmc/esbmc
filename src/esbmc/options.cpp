@@ -157,6 +157,7 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::string>(),
      "export generated goto program"},
     {"binary", NULL, "read goto program instead of source code"},
+    {"cprover", NULL, "add compatibility layer for CPROVER gotos"},
     {"little-endian", NULL, "allow little-endian word-byte conversions"},
     {"big-endian", NULL, "allow big-endian word-byte conversions"},
     {"16", NULL, "set width of machine word (default is 64)"},

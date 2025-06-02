@@ -1660,8 +1660,33 @@ bool esbmc_parseoptionst::create_goto_program(
     // If the user is providing the GOTO functions, we don't need to parse
     if (cmdline.isset("binary"))
     {
+      if (cmdline.isset("cprover"))
+        log_warning(
+          "Be sure you are manually linking with the cprover libraries. This "
+          "will be automated in the future.");
       if (read_goto_binary(goto_functions))
         return true;
+
+      if (cmdline.isset("function"))
+      {
+        Forall_goto_program_instructions (
+          it, goto_functions.function_map["__ESBMC_main"].body)
+        {
+          if (!it->is_function_call())
+            continue;
+
+          if (
+            !is_symbol2t(to_code_function_call2t(it->code).function) ||
+            to_symbol2t(to_code_function_call2t(it->code).function).thename !=
+              "c:@F@main")
+            continue;
+
+          to_code_function_call2t(it->code).function =
+            symbol2tc(get_empty_type(), cmdline.getval("function"));
+        }
+      }
+
+      goto_functions.update();
     }
     else
     {
