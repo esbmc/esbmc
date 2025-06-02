@@ -73,7 +73,6 @@ class TestCase:
     def generate_run_argument_list(self, *tool):
         """Generates run command list to be used in Popen"""
         result = list(tool)
-        result.append(os.path.join(self.test_dir, self.test_file))
         for x in shlex.split(self.test_args):
             if x != "":
                 p = os.path.join(self.test_dir, x)
@@ -93,6 +92,7 @@ class TestCase:
             except ValueError:
                 pass
 
+        result.append(os.path.join(self.test_dir, self.test_file))
         return result
 
     def __str__(self):
