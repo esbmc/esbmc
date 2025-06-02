@@ -470,13 +470,11 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     new_rhs.operands.erase(new_rhs.operands.begin());
 
   std::list<expr2tc> args;
-  new_rhs.foreach_operand(
-    [this, &args](const expr2tc &e)
-    {
-      expr2tc tmp = e;
-      do_simplify(tmp);
-      args.push_back(tmp);
-    });
+  new_rhs.foreach_operand([this, &args](const expr2tc &e) {
+    expr2tc tmp = e;
+    do_simplify(tmp);
+    args.push_back(tmp);
+  });
 
   if (!is_nil_expr(lhs))
   {
@@ -1673,7 +1671,7 @@ bool goto_symext::run_builtin(
     expr2tc in_range = and2tc(ge, le);
     assume(in_range);
 
-    // This idx is the bit‐position where the first 1 should occur.  
+    // This idx is the bit‐position where the first 1 should occur.
     // 63 - clz_sym
     expr2tc idx = sub2tc(get_uint64_type(), upper, clz_sym);
 
@@ -1685,7 +1683,7 @@ bool goto_symext::run_builtin(
     expr2tc is_one = notequal2tc(bit1, zero);
     assume(is_one);
 
-    // Requiring (x >> (idx + 1)) == 0 forces every bit from idx + 1 up 
+    // Requiring (x >> (idx + 1)) == 0 forces every bit from idx + 1 up
     // to bit 63 to be zero, All bits above index idx must be 0
     // (x >> (idx+1)) == 0
     expr2tc next = add2tc(get_uint64_type(), idx, one);
@@ -1709,12 +1707,10 @@ void goto_symext::replace_races_check(expr2tc &expr)
 
   // replace RACE_CHECK(&x) with __ESBMC_races_flag[&x]
   // recursion is needed for this case: !RACE_CHECK(&x)
-  expr->Foreach_operand(
-    [this](expr2tc &e)
-    {
-      if (!is_nil_expr(e))
-        replace_races_check(e);
-    });
+  expr->Foreach_operand([this](expr2tc &e) {
+    if (!is_nil_expr(e))
+      replace_races_check(e);
+  });
 
   if (is_races_check2t(expr))
   {
