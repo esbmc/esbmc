@@ -1020,8 +1020,10 @@ bool python_converter::is_identity_function(const exprt &func_value, const std::
         {
           const symbol_exprt &return_sym = to_symbol_expr(ret.return_value());
           std::string return_identifier = return_sym.get_identifier().as_string();
+          std::string parameter_prefix = func_identifier + "@";
           // Check if the returned symbol is a parameter of this function
-          if (return_identifier.find(func_identifier + "@") == 0)
+          if (return_identifier.size() >= parameter_prefix.size() && 
+              return_identifier.compare(0, parameter_prefix.size(), parameter_prefix) == 0)
             return true;
         }
       }
