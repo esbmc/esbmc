@@ -13,6 +13,7 @@ def bool_annotation() -> "bool":
 result1 = int_annotation()
 assert result1 == 42
 result2 = str_annotation()
+assert result2 == "hello"
 result3 = float_annotation()
 assert result3 == 3.14
 result4 = bool_annotation()
