@@ -172,7 +172,6 @@ void clang_c_languaget::build_compiler_args(
 
     /* TODO: DEMO */
     compiler_args.emplace_back("-D__builtin_cheri_tag_get(p)=1");
-    compiler_args.emplace_back("-D__builtin_clzll(n)=__esbmc_clzll(n)");
 
     switch (config.ansi_c.cheri)
     {
