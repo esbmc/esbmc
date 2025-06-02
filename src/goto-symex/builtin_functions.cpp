@@ -1693,7 +1693,9 @@ bool goto_symext::run_builtin(
     expr2tc above_zero = equality2tc(shift2, zero);
     assume(above_zero);
 
-    symex_assign(code_assign2tc(ret, typecast2tc(ret->type, clz_sym)));
+    if (!is_nil_expr(ret))
+      symex_assign(code_assign2tc(ret, typecast2tc(ret->type, clz_sym)));
+
     return true;
   }
 
