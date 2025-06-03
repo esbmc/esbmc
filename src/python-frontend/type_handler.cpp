@@ -384,7 +384,6 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
       get_typet(list_value["annotation"]["slice"]["id"].get<std::string>());
     return build_array(t, 0);
   }
-
   if (list_value["_type"] == "List") // Get list value type from elements
   {
     const nlohmann::json &elts = list_value["elts"];
@@ -397,8 +396,8 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
       { // One-dimensional list
         // Retrieve the type of the first element
         const auto &elem = (elts[0]["_type"] == "UnaryOp")
-                             ? elts[0]["operand"]["value"]
-                             : elts[0]["value"];
+                           ? elts[0]["operand"]["value"]
+                           : elts[0]["value"];
         subtype = get_typet(elem);
       }
       else
@@ -409,9 +408,46 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
 
       return build_array(subtype, elts.size());
     }
-    throw std::runtime_error("Multiple type lists are not supported yet");
+    else // Handle multiple types
+    {
+      // Check if all elements are string constants (arrays of char with different sizes)
+      bool all_strings = true;
+      for (const auto &elt : elts)
+      {
+        if (elt["_type"] != "Constant")
+        {
+          all_strings = false;
+          break;
+        }
+      
+        typet elem_type = get_typet(elt["value"]);
+        if (elem_type.id_string() != "array" || 
+            elem_type.subtype().id_string() != "signedbv" ||
+            to_signedbv_type(elem_type.subtype()).get_width() != 8)
+        {
+          all_strings = false;
+          break;
+        }
+      }
+    
+      if (all_strings)
+      {
+        // All elements are strings (char arrays), use a flexible string representation
+        // Create a pointer to char to represent variable-length strings
+        typet char_type = signedbv_typet(8);
+        typet string_type = pointer_typet(char_type);
+      
+        return build_array(string_type, elts.size());
+      }
+      else
+      {
+        // Genuine mixed types - use a generic pointer type
+        typet generic_type = pointer_typet(empty_typet());
+      
+        return build_array(generic_type, elts.size());
+      }
+    }
   }
-
   if (list_value["_type"] == "Call") // Get list type from function return type
   {
     symbol_id sid(
