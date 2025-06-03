@@ -792,6 +792,9 @@ exprt python_converter::handle_string_concatenation(
 
 bool python_converter::is_zero_length_array(const exprt &expr)
 {
+  if (expr.id() == "sideeffect")
+    return false;
+
   if (!expr.type().is_array())
     return false;
 
