@@ -2290,8 +2290,9 @@ void python_converter::get_var_assign(
         rhs = get_array_base_address(rhs);
       }
       else if (
-        lhs_type == "str" || lhs_type == "chr" || lhs_type == "ord" ||
-        lhs_type == "list" || rhs.type().is_array())
+        (lhs_type == "str" || lhs_type == "chr" || lhs_type == "ord" ||
+        lhs_type == "list" || rhs.type().is_array()) && 
+        target_type != "Subscript")
       {
         /* When a string is assigned the result of a concatenation, we initially
          * create the LHS type as a zero-size array: "current_element_type = get_typet(lhs_type, type_size);"
@@ -2299,6 +2300,12 @@ void python_converter::get_var_assign(
          * the size of the resulting RHS string.*/
         lhs_symbol->type = rhs.type();
         lhs.type() = rhs.type();
+      }
+      // Handle subscript assignment where LHS is pointer and RHS is array
+      else if (lhs.type().is_pointer() && rhs.type().is_array() && target_type == "Subscript")
+      {
+        // Convert RHS array to pointer to its first element (array decay)
+        rhs = get_array_base_address(rhs);
       }
       if (!rhs.type().is_empty())
         lhs_symbol->value = rhs;
