@@ -44,6 +44,11 @@ std::shared_ptr<module> create_module(const fs::path &json_path)
         else if (node["returns"]["_type"] == "Tuple")
           f.return_type_ = "Tuple";
         else if (
+          node["returns"]["_type"] == "Constant" ||
+          node["returns"]["_type"] == "Str")
+          // Handle string annotations like -> "int" (legacy forward references)
+          f.return_type_ = node["returns"]["value"];
+        else if (
           node["returns"].contains("value") &&
           node["returns"]["value"].is_null())
           f.return_type_ = "None";
