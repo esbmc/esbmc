@@ -447,8 +447,3 @@ Harzevili et al. (2023).
 [Documentation](https://numpy.org/doc/stable/reference/routines.math.html)
 
 ---
-
-## Questions or Collaboration?
-
-If you're exploring ways to increase trust and correctness in numerical computations or integrate ESBMC into your verification workflow, feel free to contact us!
-
