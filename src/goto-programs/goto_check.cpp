@@ -187,11 +187,33 @@ void goto_checkt::float_overflow_check(
   if (is_ieee_div2t(expr))
   {
     // Can overflow if dividing by something small
-    expr2tc op0_inf = isinf2tc(side_1);
-    expr2tc new_inf = isinf2tc(expr);
-    make_not(new_inf);
+    // IEEE 754 division by zero can produce:
+    // 1. x/0 where x≠0 → ±∞ (infinity)
+    // 2. 0/0 → NaN (Not a Number)
+    // 3. ∞/∞ → NaN
 
-    expr2tc overflow_check = or2tc(op0_inf, new_inf);
+    // Check for division by zero: denominator equals zero
+    expr2tc zero_constant = gen_zero(side_2->type);
+    expr2tc div_by_zero = equality2tc(side_2, zero_constant);
+
+    // Check for invalid results: infinity or NaN
+    expr2tc result_is_inf = isinf2tc(expr);
+    expr2tc result_is_nan = isnan2tc(expr);
+    expr2tc invalid_result = or2tc(result_is_inf, result_is_nan);
+
+    // Check if operands are already invalid
+    expr2tc op0_inf = isinf2tc(side_1);
+    expr2tc op1_inf = isinf2tc(side_2);
+    expr2tc op0_nan = isnan2tc(side_1);
+    expr2tc op1_nan = isnan2tc(side_2);
+    expr2tc operands_invalid = or2tc(or2tc(op0_inf, op1_inf), or2tc(op0_nan, op1_nan));
+
+    // Division overflow/error occurs if:
+    // 1. We divide by zero, OR
+    // 2. Operands were already invalid, OR  
+    // 3. Result becomes invalid (inf/nan)
+    expr2tc overflow_check = or2tc(or2tc(div_by_zero, operands_invalid), invalid_result);
+    make_not(overflow_check);  // Assert that none of these conditions occur
 
     add_guarded_claim(
       overflow_check,

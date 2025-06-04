@@ -1,0 +1,4 @@
+CORE
+main.c
+--floatbv --overflow-check
+^VERIFICATION FAILED$
