@@ -108,11 +108,13 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Verification properties**: Division-by-zero, indexing errors, arithmetic overflow, and user-defined assertions.
 
 ### Limitations
-We describe the ESBMC-Python limitations below:
-- It only supports the `for-range` statement.
-- It does not fully support true division.
-- It does not fully support list.
-- There is no support for dictionaries.
+
+The current version of ESBMC-Python has the following limitations:
+
+- Only `for` loops using the `range()` function are supported.
+- True division `(/)` is not fully supported yet.
+- List support is partial and limited in functionality.
+- Dictionaries are not supported at all.
 
 ### Example: Division by Zero in Python
 
