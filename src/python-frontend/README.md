@@ -80,7 +80,7 @@ The final step in the frontend involves converting the annotated JSON AST into a
 Below is an overview of ESBMC-Python's key capabilities:
 
 ### Basic Constructs
-- **Control Structures**: Supports conditional statements (`if-else`) and loops (`for`, `while`).
+- **Control Structures**: Supports conditional statements (`if-else`) and loops (`for-range`, `while`).
 - **Arithmetic**: Includes standard arithmetic operations (e.g., addition, subtraction, multiplication, division).
 - **Logical Operations**: Supports logical constructs (e.g., `AND`, `OR`, `NOT`).
 - **Identity Comparisons**: Supports `is` and `is not` operators for identity-based comparisons, including `x is None`, `x is y`, or `x is not None`.
@@ -106,6 +106,13 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Numeric Types**: Supports manipulation of numeric types (e.g., bytes, integers, floats).
 - **Built-in Functions**: Supports Python's built-in functions, such as `abs`, `int`, `float`, `chr`, `str`, `hex`, `oct`, `len`, and `range`.
 - **Verification properties**: Division-by-zero, indexing errors, arithmetic overflow, and user-defined assertions.
+
+### Limitations
+We describe the ESBMC-Python limitations below:
+- It only supports the `for-range` statement.
+- It does not fully support true division.
+- It does not fully support list.
+- There is no support for dictionaries.
 
 ### Example: Division by Zero in Python
 
