@@ -118,9 +118,7 @@ private:
 
   exprt get_binary_operator_expr(const nlohmann::json &element);
 
-  exprt handle_power_operator(exprt lhs, exprt rhs);
-
-  exprt build_power_expression(const exprt &base, const BigInt &exp);
+  exprt handle_power_operator(exprt base, exprt exp);
 
   bool is_zero_length_array(const exprt &expr);
 
