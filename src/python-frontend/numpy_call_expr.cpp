@@ -613,11 +613,10 @@ exprt numpy_call_expr::get()
 
         // Update rhs expression
         expr.type() = converter_.current_lhs->type();
-        if (!expr.operands().empty())
-        {
-          expr.operands().at(0).type() = expr.type();
-          expr.operands().at(1).type() = expr.type();
-        }
+        
+        // Update all operands' types safely
+        for (auto &operand : expr.operands())
+          operand.type() = expr.type();
 
         std::string value_str = expr.value().as_string();
         size_t value_size = count_effective_bits(value_str);
