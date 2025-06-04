@@ -613,7 +613,7 @@ exprt numpy_call_expr::get()
 
         // Update rhs expression
         expr.type() = converter_.current_lhs->type();
-        
+
         // Update all operands' types safely
         for (auto &operand : expr.operands())
           operand.type() = expr.type();
