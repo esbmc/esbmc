@@ -206,14 +206,16 @@ void goto_checkt::float_overflow_check(
     expr2tc op1_inf = isinf2tc(side_2);
     expr2tc op0_nan = isnan2tc(side_1);
     expr2tc op1_nan = isnan2tc(side_2);
-    expr2tc operands_invalid = or2tc(or2tc(op0_inf, op1_inf), or2tc(op0_nan, op1_nan));
+    expr2tc operands_invalid =
+      or2tc(or2tc(op0_inf, op1_inf), or2tc(op0_nan, op1_nan));
 
     // Division overflow/error occurs if:
     // 1. We divide by zero, OR
-    // 2. Operands were already invalid, OR  
+    // 2. Operands were already invalid, OR
     // 3. Result becomes invalid (inf/nan)
-    expr2tc overflow_check = or2tc(or2tc(div_by_zero, operands_invalid), invalid_result);
-    make_not(overflow_check);  // Assert that none of these conditions occur
+    expr2tc overflow_check =
+      or2tc(or2tc(div_by_zero, operands_invalid), invalid_result);
+    make_not(overflow_check); // Assert that none of these conditions occur
 
     add_guarded_claim(
       overflow_check,
