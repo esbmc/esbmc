@@ -342,32 +342,49 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
         e.what());
     }
   }
-  /// Case 2: Handles Python’s / operator by promoting operands to floats
-  /// to ensure floating-point division, preventing division by zero, and
-  /// setting the result type to floatbv.
-  else if (rhs.id() == "/" && rhs.operands().size() == 2)
+  // Case 2: For Python assignments, if RHS is float but LHS is integer,
+  // promote LHS to float to maintain Python's dynamic typing semantics
+  else if (rhs_type.is_floatbv() && (lhs_type.is_signedbv() || lhs_type.is_unsignedbv()))
+  {
+    // Update LHS variable type to match RHS float type
+    lhs.type() = rhs_type;
+    
+    // Update symbol table if LHS is a symbol
+    if (lhs.is_symbol())
+      update_symbol(lhs);
+  }
+  // Case 3: Handles Python's / operator by promoting operands to floats
+  // to ensure floating-point division, preventing division by zero, and
+  // setting the result type to floatbv.
+  else if ((rhs.id() == "/" || rhs.id() == "ieee_div") && rhs.operands().size() == 2)
   {
     auto &ops = rhs.operands();
     exprt &lhs_op = ops[0];
     exprt &rhs_op = ops[1];
 
-    // Only optimize when both operands are compile-time constants
-    if (!lhs_op.is_constant() || !rhs_op.is_constant())
-      return;
-
-    // Check if the right-hand side is a constant zero to prevent division-by-zero
-    if (
-      (rhs_op.type().is_signedbv() || rhs_op.type().is_unsignedbv()) &&
-      binary2integer(rhs_op.value().as_string(), rhs_op.type().is_signedbv()) ==
-        0)
-      return;
-
     // Promote both operands to IEEE float (double precision) to match Python semantics
-    const typet float_type =
-      double_type(); // Python default float is double-precision
+    const typet float_type = double_type(); // Python default float is double-precision
 
-    for (exprt &op : ops)
-      promote_int_to_float(op, float_type);
+    // Handle constant operands
+    if (lhs_op.is_constant() && (lhs_op.type().is_signedbv() || lhs_op.type().is_unsignedbv()))
+    {
+      promote_int_to_float(lhs_op, float_type);
+    }
+    else if (!lhs_op.type().is_floatbv())
+    {
+      // For non-constant operands, create explicit typecast
+      lhs_op = typecast_exprt(lhs_op, float_type);
+    }
+
+    if (rhs_op.is_constant() && (rhs_op.type().is_signedbv() || rhs_op.type().is_unsignedbv()))
+    {
+      promote_int_to_float(rhs_op, float_type);
+    }
+    else if (!rhs_op.type().is_floatbv())
+    {
+      // For non-constant operands, create explicit typecast
+      rhs_op = typecast_exprt(rhs_op, float_type);
+    }
 
     // Update LHS type if it's a symbol, so it holds a float result
     lhs.type() = float_type;
@@ -378,7 +395,7 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
     rhs.type() = float_type;
     rhs.id(get_op("div", float_type));
   }
-  // Case 3: Align bit-widths between LHS and RHS if they differ
+  // Case 4: Align bit-widths between LHS and RHS if they differ
   else if (lhs_type.width() != rhs_type.width())
   {
     try
@@ -720,13 +737,11 @@ void python_converter::handle_float_division(
           ex.what());
       }
     }
-
-    // Update expression type to float (double)
-    e.type() = float_type;
-
-    // Update symbol table if this is a symbol
-    if (e.is_symbol())
-      update_symbol(e);
+    else
+    {
+      // For non-constant operands (like function parameters), create explicit typecast expression
+      e = typecast_exprt(e, float_type);
+    }
   };
 
   promote_to_float(lhs);
@@ -1379,8 +1394,15 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   // Determine the result type of the binary operation:
   // If it's a relational operation (e.g., <, >, ==), the result is a boolean type.
+  // For Python division ("/"), the result is always a float regardless of operand types.
   // Otherwise, it inherits the type of the left-hand side (lhs).
-  typet type = (is_relational_op(op)) ? bool_type() : lhs.type();
+  typet type;
+  if (is_relational_op(op))
+    type = bool_type();
+  else if (op == "Div" || op == "div")
+    type = double_type(); // Python division always returns float
+  else
+    type = lhs.type();
 
   // Create a binary expression node with the determined type and location.
   exprt bin_expr(get_op(op, type), type);
@@ -1396,7 +1418,9 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     rhs.make_typecast(lhs.type());
 
   // Promote both operands to float for Python-style true division ("/")
-  if (lhs.type().is_floatbv() && (op == "Div" || op == "div"))
+  // In Python 3, the '/' operator ALWAYS performs floating-point division,
+  // regardless of operand types. Only '//' performs floor division.
+  if (op == "Div" || op == "div")
     handle_float_division(lhs, rhs, bin_expr);
 
   // Add lhs and rhs as operands to the binary expression.
