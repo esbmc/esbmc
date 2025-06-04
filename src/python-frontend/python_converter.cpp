@@ -344,11 +344,13 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
   }
   // Case 2: For Python assignments, if RHS is float but LHS is integer,
   // promote LHS to float to maintain Python's dynamic typing semantics
-  else if (rhs_type.is_floatbv() && (lhs_type.is_signedbv() || lhs_type.is_unsignedbv()))
+  else if (
+    rhs_type.is_floatbv() &&
+    (lhs_type.is_signedbv() || lhs_type.is_unsignedbv()))
   {
     // Update LHS variable type to match RHS float type
     lhs.type() = rhs_type;
-    
+
     // Update symbol table if LHS is a symbol
     if (lhs.is_symbol())
       update_symbol(lhs);
@@ -356,23 +358,29 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
   // Case 3: Handles Python's / operator by promoting operands to floats
   // to ensure floating-point division, preventing division by zero, and
   // setting the result type to floatbv.
-  else if ((rhs.id() == "/" || rhs.id() == "ieee_div") && rhs.operands().size() == 2)
+  else if (
+    (rhs.id() == "/" || rhs.id() == "ieee_div") && rhs.operands().size() == 2)
   {
     auto &ops = rhs.operands();
     exprt &lhs_op = ops[0];
     exprt &rhs_op = ops[1];
 
     // Promote both operands to IEEE float (double precision) to match Python semantics
-    const typet float_type = double_type(); // Python default float is double-precision
+    const typet float_type =
+      double_type(); // Python default float is double-precision
 
     // Handle constant operands
-    if (lhs_op.is_constant() && (lhs_op.type().is_signedbv() || lhs_op.type().is_unsignedbv()))
+    if (
+      lhs_op.is_constant() &&
+      (lhs_op.type().is_signedbv() || lhs_op.type().is_unsignedbv()))
       promote_int_to_float(lhs_op, float_type);
     // For non-constant operands, create explicit typecast
     else if (!lhs_op.type().is_floatbv())
       lhs_op = typecast_exprt(lhs_op, float_type);
 
-    if (rhs_op.is_constant() && (rhs_op.type().is_signedbv() || rhs_op.type().is_unsignedbv()))
+    if (
+      rhs_op.is_constant() &&
+      (rhs_op.type().is_signedbv() || rhs_op.type().is_unsignedbv()))
       promote_int_to_float(rhs_op, float_type);
     else if (!rhs_op.type().is_floatbv())
       rhs_op = typecast_exprt(rhs_op, float_type);
@@ -393,10 +401,10 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
     // promote the variable to float to avoid truncation
     const typet float_type = double_type();
     lhs.type() = float_type;
-    
+
     if (lhs.is_symbol())
       update_symbol(lhs);
-      
+
     // Ensure RHS type is also float
     if (!rhs_type.is_floatbv())
       rhs.type() = float_type;
@@ -550,20 +558,22 @@ exprt python_converter::handle_power_operator(exprt base, exprt exp)
   symbolt *pow_symbol = symbol_table_.find_symbol("c:@F@pow");
   if (!pow_symbol)
   {
-    log_warning("pow function not found in symbol table, falling back to symbolic representation");
+    log_warning(
+      "pow function not found in symbol table, falling back to symbolic "
+      "representation");
     return from_integer(1, base.type());
   }
 
   // Convert arguments to double type if needed
   exprt double_base = base;
   exprt double_exp = exp;
-    
+
   if (!base.type().is_floatbv())
   {
     double_base = exprt("typecast", double_type());
     double_base.copy_to_operands(base);
   }
-  
+
   if (!exp.type().is_floatbv())
   {
     double_exp = exprt("typecast", double_type());
@@ -575,7 +585,7 @@ exprt python_converter::handle_power_operator(exprt base, exprt exp)
   pow_call.function() = symbol_expr(*pow_symbol);
   pow_call.arguments() = {double_base, double_exp};
   pow_call.type() = double_type();
-  
+
   // If result type is not double, add typecast
   if (!base.type().is_floatbv())
   {
@@ -583,7 +593,7 @@ exprt python_converter::handle_power_operator(exprt base, exprt exp)
     result.copy_to_operands(pow_call);
     return result;
   }
-  
+
   return pow_call;
 }
 
