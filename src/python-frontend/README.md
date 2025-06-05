@@ -112,8 +112,7 @@ Below is an overview of ESBMC-Python's key capabilities:
 The current version of ESBMC-Python has the following limitations:
 
 - Only `for` loops using the `range()` function are supported.
-- True division `(/)` is not fully supported yet.
-- List support is partial and limited in functionality.
+- List and String support are partial and limited in functionality.
 - Dictionaries are not supported at all.
 
 ### Example: Division by Zero in Python
