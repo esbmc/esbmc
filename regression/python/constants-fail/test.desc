@@ -1,6 +1,6 @@
 CORE
 main.py
---multi-property --incremental-bmc
+--multi-property
 
 SIZE == .*?9(?:\n.*)*X == 15(?:\n.*)*VERIFICATION FAILED
 
