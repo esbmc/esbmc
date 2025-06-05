@@ -552,8 +552,58 @@ exprt handle_floor_division(
   return floor_div;
 }
 
+exprt python_converter::handle_power_operator_sym(exprt base, exprt exp)
+{
+  // Find the pow function symbol
+  symbolt *pow_symbol = symbol_table_.find_symbol("c:@F@pow");
+  if (!pow_symbol)
+  {
+    log_warning(
+      "pow function not found in symbol table, falling back to symbolic "
+      "representation");
+    return from_integer(1, base.type());
+  }
+
+  // Convert arguments to double type if needed
+  exprt double_base = base;
+  exprt double_exp = exp;
+
+  if (!base.type().is_floatbv())
+  {
+    double_base = exprt("typecast", double_type());
+    double_base.copy_to_operands(base);
+  }
+
+  if (!exp.type().is_floatbv())
+  {
+    double_exp = exprt("typecast", double_type());
+    double_exp.copy_to_operands(exp);
+  }
+
+  // Create the function call
+  side_effect_expr_function_callt pow_call;
+  pow_call.function() = symbol_expr(*pow_symbol);
+  pow_call.arguments() = {double_base, double_exp};
+  pow_call.type() = double_type();
+
+  // If result type is not double, add typecast
+  if (!base.type().is_floatbv())
+  {
+    exprt result = exprt("typecast", base.type());
+    result.copy_to_operands(pow_call);
+    return result;
+  }
+
+  return pow_call;
+}
+
 exprt python_converter::handle_power_operator(exprt lhs, exprt rhs)
 {
+  // Handle pow symbolically if one of the operands is floatbv
+  if (lhs.type().is_floatbv() ||
+      rhs.type().is_floatbv())
+    return handle_power_operator_sym(lhs, rhs);
+
   // Try to resolve constant values of both lhs and rhs
   exprt resolved_lhs = lhs;
   if (lhs.is_symbol())
