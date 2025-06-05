@@ -310,6 +310,49 @@ void python_converter::promote_int_to_float(exprt &op, const typet &target_type)
     update_symbol(op);
 }
 
+// Helper function to get numeric width from type
+size_t get_type_width(const typet &type) {
+  // First try to parse width directly
+  try {
+    return std::stoi(type.width().c_str());
+  }
+  catch (const std::exception &) {
+    // If direct parsing fails, try to infer from type name
+    std::string type_str = type.width().as_string();
+    
+    // Handle common Python/ESBMC type mappings
+    if (type_str == "int" || type_str == "int32")
+      return 32;
+    else if (type_str == "int64" || type_str == "long")
+      return 64;
+    else if (type_str == "int16" || type_str == "short")
+      return 16;
+    else if (type_str == "int8" || type_str == "char")
+      return 8;
+    else if (type_str == "float" || type_str == "float32")
+      return 32;
+    else if (type_str == "double" || type_str == "float64")
+      return 64;
+    else if (type_str == "bool")
+      return 1;
+
+    // Try to extract number from string like "int32", "uint64", etc.
+    std::regex width_regex(R"(\d+)");
+    std::smatch match;
+    if (std::regex_search(type_str, match, width_regex)) {
+      try {
+        return std::stoi(match.str());
+      }
+      catch (const std::exception &) {
+        // Fall through to default
+      }
+    }
+    
+    // Default to 32 for unknown types
+    return 32;
+  }
+}
+
 void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
 {
   typet &lhs_type = lhs.type();
@@ -414,8 +457,8 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
   {
     try
     {
-      const int lhs_width = std::stoi(lhs_type.width().c_str());
-      const int rhs_width = std::stoi(rhs_type.width().c_str());
+      const int lhs_width = get_type_width(lhs_type);
+      const int rhs_width = get_type_width(rhs_type);
 
       if (lhs_width > rhs_width)
       {
