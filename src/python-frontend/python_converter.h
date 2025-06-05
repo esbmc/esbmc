@@ -142,6 +142,8 @@ private:
 
   exprt resolve_function_call(const exprt &func_expr, const exprt &args_expr);
 
+  exprt handle_power_operator_sym(exprt base, exprt exp);
+
   exprt resolve_identity_function_call(
     const exprt &func_expr,
     const exprt &args_expr);
