@@ -600,8 +600,7 @@ exprt python_converter::handle_power_operator_sym(exprt base, exprt exp)
 exprt python_converter::handle_power_operator(exprt lhs, exprt rhs)
 {
   // Handle pow symbolically if one of the operands is floatbv
-  if (lhs.type().is_floatbv() ||
-      rhs.type().is_floatbv())
+  if (lhs.type().is_floatbv() || rhs.type().is_floatbv())
     return handle_power_operator_sym(lhs, rhs);
 
   // Try to resolve constant values of both lhs and rhs
