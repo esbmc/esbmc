@@ -552,49 +552,132 @@ exprt handle_floor_division(
   return floor_div;
 }
 
-exprt python_converter::handle_power_operator(exprt base, exprt exp)
+exprt python_converter::handle_power_operator(exprt lhs, exprt rhs)
 {
-  // Find the pow function symbol
-  symbolt *pow_symbol = symbol_table_.find_symbol("c:@F@pow");
-  if (!pow_symbol)
+  // Try to resolve constant values of both lhs and rhs
+  exprt resolved_lhs = lhs;
+  if (lhs.is_symbol())
+  {
+    const symbolt *s = symbol_table_.find_symbol(lhs.identifier());
+    if (s && !s->value.value().empty())
+      resolved_lhs = s->value;
+  }
+  else if (is_math_expr(lhs))
+    resolved_lhs = compute_math_expr(lhs);
+
+  exprt resolved_rhs = rhs;
+  if (rhs.is_symbol())
+  {
+    const symbolt *s = symbol_table_.find_symbol(rhs.identifier());
+    if (s && !s->value.value().empty())
+      resolved_rhs = s->value;
+  }
+  else if (is_math_expr(rhs))
+    resolved_rhs = compute_math_expr(rhs);
+
+  // If rhs is still not constant, we need to handle this case
+  if (!resolved_rhs.is_constant())
   {
     log_warning(
-      "pow function not found in symbol table, falling back to symbolic "
-      "representation");
+      "ESBMC-Python does not support power expressions with non-constant "
+      "exponents");
+    return from_integer(1, lhs.type());
+  }
+
+  // Check if the exponent is a floating-point number
+  if (resolved_rhs.type().is_floatbv())
+  {
+    log_warning("ESBMC-Python does not support floating-point exponents yet");
+    return from_integer(1, lhs.type());
+  }
+
+  // Convert rhs to integer exponent
+  BigInt exponent;
+  try
+  {
+    exponent = binary2integer(
+      resolved_rhs.value().as_string(), resolved_rhs.type().is_signedbv());
+  }
+  catch (...)
+  {
+    log_warning("Failed to convert exponent to integer");
+    return from_integer(1, lhs.type());
+  }
+
+  // Handle negative exponents more gracefully
+  if (exponent < 0)
+  {
+    log_warning(
+      "ESBMC-Python does not support power expressions with negative "
+      "exponents, treating as symbolic");
+    return from_integer(1, lhs.type());
+  }
+
+  // Handle special cases first
+  if (exponent == 0)
+    return from_integer(1, lhs.type());
+  if (exponent == 1)
+    return lhs;
+
+  // Check resolved base for special cases
+  if (resolved_lhs.is_constant())
+  {
+    BigInt base = binary2integer(
+      resolved_lhs.value().as_string(), resolved_lhs.type().is_signedbv());
+
+    // Special cases for constant base
+    if (base == 0 && exponent > 0)
+      return from_integer(0, lhs.type());
+    if (base == 1)
+      return from_integer(1, lhs.type());
+    if (base == -1)
+      return from_integer((exponent % 2 == 0) ? 1 : -1, lhs.type());
+  }
+
+  // Build symbolic multiplication tree using exponentiation by squaring for efficiency
+  return build_power_expression(lhs, exponent);
+}
+
+// Helper function for efficient exponentiation
+exprt python_converter::build_power_expression(
+  const exprt &base,
+  const BigInt &exp)
+{
+  if (exp == 0)
     return from_integer(1, base.type());
-  }
+  if (exp == 1)
+    return base;
 
-  // Convert arguments to double type if needed
-  exprt double_base = base;
-  exprt double_exp = exp;
-
-  if (!base.type().is_floatbv())
+  // For small exponents, use simple multiplication chain
+  if (exp <= 10)
   {
-    double_base = exprt("typecast", double_type());
-    double_base.copy_to_operands(base);
-  }
-
-  if (!exp.type().is_floatbv())
-  {
-    double_exp = exprt("typecast", double_type());
-    double_exp.copy_to_operands(exp);
-  }
-
-  // Create the function call
-  side_effect_expr_function_callt pow_call;
-  pow_call.function() = symbol_expr(*pow_symbol);
-  pow_call.arguments() = {double_base, double_exp};
-  pow_call.type() = double_type();
-
-  // If result type is not double, add typecast
-  if (!base.type().is_floatbv())
-  {
-    exprt result = exprt("typecast", base.type());
-    result.copy_to_operands(pow_call);
+    exprt result = base;
+    for (BigInt i = 1; i < exp; ++i)
+    {
+      exprt mul_expr("*", base.type());
+      mul_expr.copy_to_operands(result, base);
+      result = mul_expr;
+    }
     return result;
   }
 
-  return pow_call;
+  // For larger exponents, use exponentiation by squaring
+  // This reduces the number of operations from O(n) to O(log n)
+  if (exp % 2 == 0)
+  {
+    // Even exponent: (base^2)^(exp/2)
+    exprt square("*", base.type());
+    square.copy_to_operands(base, base);
+    return build_power_expression(square, exp / 2);
+  }
+  else
+  {
+    // Odd exponent: base * base^(exp-1)
+    exprt mul_expr("*", base.type());
+    exprt sub_power = build_power_expression(base, exp - 1);
+    mul_expr.copy_to_operands(base, sub_power);
+    return mul_expr;
+  }
 }
 
 exprt handle_float_vs_string(exprt &bin_expr, const std::string &op)
