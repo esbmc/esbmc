@@ -20,11 +20,11 @@ class Preprocessor(ast.NodeTransformer):
             node.lineno = line
         if not hasattr(node, 'col_offset') or node.col_offset is None:
             node.col_offset = col
-        
+
         # Recursively apply to all child nodes
         for child in ast.iter_child_nodes(node):
             self.ensure_all_locations(child, source_node, line, col)
-        
+
         return node
 
     def create_name_node(self, name_id, ctx, source_node=None):
