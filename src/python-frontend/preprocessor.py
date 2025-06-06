@@ -14,7 +14,7 @@ class Preprocessor(ast.NodeTransformer):
         if source_node:
             line = getattr(source_node, 'lineno', 1)
             col = getattr(source_node, 'col_offset', 0)
-        
+
         # Ensure current node has location info
         if not hasattr(node, 'lineno') or node.lineno is None:
             node.lineno = line
@@ -46,7 +46,6 @@ class Preprocessor(ast.NodeTransformer):
             simple=1
         )
         return assign_node, target
-
     # for-range statements such as:
     #
     #   for x in range(1, 5, 1):
@@ -76,8 +75,8 @@ class Preprocessor(ast.NodeTransformer):
         node = self.generic_visit(node)
         
         # Check if iter is a Call to range
-        is_range_call = (isinstance(node.iter, ast.Call) and 
-                        isinstance(node.iter.func, ast.Name) and 
+        is_range_call = (isinstance(node.iter, ast.Call) and
+                        isinstance(node.iter.func, ast.Name) and
                         node.iter.func.id == "range")
         
         if is_range_call:
