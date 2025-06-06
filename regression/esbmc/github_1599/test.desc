@@ -1,0 +1,5 @@
+KNOWNBUG
+main.c
+--unwind 1 --overflow --no-unwinding-assertions --multi-property
+^VERIFICATION SUCCESSFUL$
+
