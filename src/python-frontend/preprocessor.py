@@ -47,6 +47,26 @@ class Preprocessor(ast.NodeTransformer):
         )
         return assign_node, target
 
+    # for-range statements such as:
+    #
+    #   for x in range(1, 5, 1):
+    #     print(x)
+    #
+    # are transformed into a corresponding while loop with the following structure:
+    #
+    #   def ESBMC_range_next_(curr: int, step: int) -> int:
+    #     return curr + step
+    #
+    #   def ESBMC_range_has_next_(curr: int, end: int, step: int) -> bool:
+    #     return curr + step <= end
+    #
+    #   start = 1  # start value is copied from the first parameter of range call
+    #   has_next:bool = ESBMC_range_has_next_(1, 5, 1) # ESBMC_range_has_next_ parameters copied from range call
+    #   while has_next == True:
+    #     print(start)
+    #     start = ESBMC_range_next_(start, 1)
+    #     has_next = ESBMC_range_has_next_(start, 5, 1)
+
     def visit_For(self, node):
         """
         Transform for loops into while loops.
@@ -176,22 +196,6 @@ class Preprocessor(ast.NodeTransformer):
         
         Handles continue statements correctly by placing index increment
         at the beginning of the loop body, not the end.
-        
-        Transforms:
-            for item in iterable:
-                if condition:
-                    continue
-                body
-        Into:
-            ESBMC_iter: str = iterable
-            ESBMC_index: int = 0
-            ESBMC_length: int = len(ESBMC_iter)
-            while ESBMC_index < ESBMC_length:
-                item: str = ESBMC_iter[ESBMC_index]
-                ESBMC_index: int = ESBMC_index + 1  # Increment FIRST
-                if condition:
-                    continue  # Now safe - index already incremented
-                body
         """
         # Handle the target variable name
         if hasattr(node.target, 'id'):
@@ -303,14 +307,14 @@ class Preprocessor(ast.NodeTransformer):
         return result
 
     def visit_Name(self, node):
-        """Replace variable names as needed in range-based for to while transformation"""
+        # Replace variable names as needed in range-based for to while transformation
         # Replace variable names ONLY for range-based loops, not iterable loops
         if self.is_range_loop and node.id == self.target_name:
             node.id = 'start'  # Replace the variable name with 'start'
         return node
 
+    # This method is responsible for visiting and transforming Call nodes in the AST.
     def visit_Call(self, node):
-        """Transform function calls and handle default arguments"""
         # Transformation for int.from_bytes calls
         if isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Name) and node.func.value.id == "int" and node.func.attr == "from_bytes":
             # Replace 'big' argument with True and anything else with False
@@ -353,11 +357,11 @@ class Preprocessor(ast.NodeTransformer):
                 print(f"* file: {self.module_name}\n* line {node.lineno}\n* function: {functionName}\n* column: {node.col_offset} ")
                 break # breaking means not enough arguments, solver should reject
 
+
         self.generic_visit(node)
         return node # transformed node
 
     def visit_FunctionDef(self, node):
-        """Handle function definitions and extract default parameter values"""
         # Preserve order of parameters
         self.functionParams[node.name] = [i.arg for i in node.args.args]
 
