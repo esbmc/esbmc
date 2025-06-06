@@ -15,6 +15,80 @@ enum class InferResult
   UNKNOWN,
 };
 
+// Handle Python built-in functions
+static const std::map<std::string, std::string> builtin_functions = {
+  // Type conversion functions
+  {"int", "int"},
+  {"float", "float"},
+  {"str", "str"},
+  {"bool", "bool"},
+  {"list", "list"},
+  {"dict", "dict"},
+  {"set", "set"},
+  {"tuple", "tuple"},
+
+  // Numeric functions
+  {"abs", "int"},   // Can return int or float, but int is common case
+  {"round", "int"}, // Can return int or float
+  {"min", "Any"},   // Type depends on input
+  {"max", "Any"},   // Type depends on input
+  {"sum", "int"},   // Can return int or float, but int is common case
+  {"pow", "int"},   // Can return int or float
+
+  // Sequence functions
+  {"len", "int"},
+  {"range", "range"},
+  {"enumerate", "enumerate"},
+  {"zip", "zip"},
+  {"reversed", "reversed"},
+  {"sorted", "list"},
+
+  // I/O functions
+  {"print", "NoneType"},
+  {"input", "str"},
+  {"open", "file"},
+
+  // Utility functions
+  {"isinstance", "bool"},
+  {"issubclass", "bool"},
+  {"hasattr", "bool"},
+  {"getattr", "Any"},
+  {"setattr", "NoneType"},
+  {"delattr", "NoneType"},
+  {"callable", "bool"},
+  {"id", "int"},
+  {"hash", "int"},
+  {"repr", "str"},
+  {"ascii", "str"},
+  {"ord", "int"},
+  {"chr", "str"},
+  {"bin", "str"},
+  {"oct", "str"},
+  {"hex", "str"},
+  {"format", "str"},
+
+  // Iteration functions
+  {"iter", "iterator"},
+  {"next", "Any"},
+  {"all", "bool"},
+  {"any", "bool"},
+  {"filter", "filter"},
+  {"map", "map"},
+
+  // Variable functions
+  {"vars", "dict"},
+  {"dir", "list"},
+  {"globals", "dict"},
+  {"locals", "dict"},
+
+  // Execution functions
+  {"eval", "Any"},
+  {"exec", "NoneType"},
+  {"compile", "code"},
+
+  // Import functions
+  {"__import__", "module"}};
+
 template <class Json>
 class python_annotation
 {
@@ -352,6 +426,13 @@ private:
     }
     catch (std::runtime_error &)
     {
+    }
+
+    // Check if the function is a built-in function
+    auto it = builtin_functions.find(func_name);
+    if (it != builtin_functions.end())
+    {
+      return it->second;
     }
 
     std::ostringstream oss;
