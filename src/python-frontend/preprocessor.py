@@ -73,12 +73,12 @@ class Preprocessor(ast.NodeTransformer):
         """
         # First, recursively visit any nested nodes
         node = self.generic_visit(node)
-        
+
         # Check if iter is a Call to range
         is_range_call = (isinstance(node.iter, ast.Call) and
                         isinstance(node.iter.func, ast.Name) and
                         node.iter.func.id == "range")
-        
+
         if is_range_call:
             # Handle range-based for loops
             self.is_range_loop = True
@@ -150,7 +150,7 @@ class Preprocessor(ast.NodeTransformer):
         transformed_body = []
         old_target_name = self.target_name
         self.target_name = node.target.id # Store the target variable name for replacement
-        
+
         for statement in node.body:
             transformed_statement = self.visit(statement)
             if isinstance(transformed_statement, list):
@@ -192,7 +192,7 @@ class Preprocessor(ast.NodeTransformer):
     def _transform_iterable_for(self, node):
         """
         Transform general iterable for loops to while loops.
-        
+
         Handles continue statements correctly by placing index increment
         at the beginning of the loop body, not the end.
         """
@@ -240,7 +240,7 @@ class Preprocessor(ast.NodeTransformer):
         )
         self.ensure_all_locations(length_assign, node)
 
-        # Create condition for the while loop
+        # Create a condition for the while loop
         index_left = self.create_name_node('ESBMC_index', ast.Load(), node)
         length_right = self.create_name_node('ESBMC_length', ast.Load(), node)
         lt_op = ast.Lt()
@@ -283,7 +283,7 @@ class Preprocessor(ast.NodeTransformer):
         # Transform the body of the for loop
         # Order: item_assign, index_increment, then original body
         transformed_body = [item_assign, index_increment]
-        
+
         # Transform the original body statements
         for statement in node.body:
             transformed_statement = self.visit(statement)
@@ -297,12 +297,12 @@ class Preprocessor(ast.NodeTransformer):
         self.ensure_all_locations(while_stmt, node)
 
         result = [iter_assign, index_assign, length_assign, while_stmt]
-        
+
         # Ensure all nodes in the result have proper location info
         for stmt in result:
             self.ensure_all_locations(stmt, node)
             ast.fix_missing_locations(stmt)
-        
+
         return result
 
     def visit_Name(self, node):
