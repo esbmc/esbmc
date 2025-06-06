@@ -174,8 +174,13 @@ class Preprocessor(ast.NodeTransformer):
         """
         Transform general iterable for loops to while loops.
         
+        Handles continue statements correctly by placing index increment
+        at the beginning of the loop body, not the end.
+        
         Transforms:
             for item in iterable:
+                if condition:
+                    continue
                 body
         Into:
             ESBMC_iter: str = iterable
@@ -183,8 +188,10 @@ class Preprocessor(ast.NodeTransformer):
             ESBMC_length: int = len(ESBMC_iter)
             while ESBMC_index < ESBMC_length:
                 item: str = ESBMC_iter[ESBMC_index]
+                ESBMC_index: int = ESBMC_index + 1  # Increment FIRST
+                if condition:
+                    continue  # Now safe - index already incremented
                 body
-                ESBMC_index: int = ESBMC_index + 1
         """
         # Handle the target variable name
         if hasattr(node.target, 'id'):
@@ -253,18 +260,7 @@ class Preprocessor(ast.NodeTransformer):
         )
         self.ensure_all_locations(item_assign, node)
 
-        # Transform the body of the for loop
-        transformed_body = [item_assign]
-        
-        # Transform the original body statements
-        for statement in node.body:
-            transformed_statement = self.visit(statement)
-            if isinstance(transformed_statement, list):
-                transformed_body.extend(transformed_statement)
-            else:
-                transformed_body.append(transformed_statement)
-
-        # Add increment of index
+        # Add increment of index BEFORE the body (so continue can't skip it)
         inc_target = self.create_name_node('ESBMC_index', ast.Store(), node)
         inc_left = self.create_name_node('ESBMC_index', ast.Load(), node)
         inc_right = self.create_constant_node(1, node)
@@ -280,7 +276,18 @@ class Preprocessor(ast.NodeTransformer):
             simple=1
         )
         self.ensure_all_locations(index_increment, node)
-        transformed_body.append(index_increment)
+
+        # Transform the body of the for loop
+        # Order: item_assign, index_increment, then original body
+        transformed_body = [item_assign, index_increment]
+        
+        # Transform the original body statements
+        for statement in node.body:
+            transformed_statement = self.visit(statement)
+            if isinstance(transformed_statement, list):
+                transformed_body.extend(transformed_statement)
+            else:
+                transformed_body.append(transformed_statement)
 
         # Create the while statement
         while_stmt = ast.While(test=while_cond, body=transformed_body, orelse=[])
