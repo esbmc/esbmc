@@ -2530,14 +2530,66 @@ void python_converter::get_compound_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
-  std::string var_name = ast_node["target"]["id"].get<std::string>();
   locationt loc = get_location_from_decl(ast_node);
 
-  // Resolve variable type using AST annotations or symbol table
-  current_element_type = resolve_variable_type(var_name, loc);
+  // Set flags for LHS processing
+  is_converting_lhs = true;
 
+  // Get the target expression first
   exprt lhs = get_expr(ast_node["target"]);
+
+  // Reset LHS flag and set RHS flag
+  is_converting_lhs = false;
+  is_converting_rhs = true;
+
+  std::string var_name;
+  bool is_attribute_assignment = false;
+
+  // Extract variable name based on target type
+  if (ast_node["target"].contains("id"))
+  {
+    // Simple variable assignment: x += 1
+    var_name = ast_node["target"]["id"].get<std::string>();
+  }
+  else if (ast_node["target"]["_type"] == "Attribute")
+  {
+    // Attribute assignment: self.x += 1
+    is_attribute_assignment = true;
+    // Don't extract just the attribute name for type resolution
+    // The type should come from the LHS expression we just created
+    if (ast_node["target"].contains("attr"))
+    {
+      var_name = ast_node["target"]["attr"].get<std::string>();
+    }
+  }
+  else if (ast_node["target"]["_type"] == "Subscript")
+  {
+    // Subscript assignment: arr[i] += 1
+    var_name = "subscript_target"; // placeholder
+  }
+  else
+  {
+    // Fallback for other target types
+    var_name = "unknown_target";
+  }
+
+  // For attribute assignments, use the type from the LHS expression
+  // For other assignments, resolve the variable type
+  if (is_attribute_assignment)
+  {
+    // The type should already be determined from the LHS expression
+    current_element_type = lhs.type();
+  }
+  else
+  {
+    // Resolve variable type using AST annotations or symbol table
+    current_element_type = resolve_variable_type(var_name, loc);
+  }
+
   exprt rhs = get_binary_operator_expr(ast_node);
+
+  // Reset RHS flag
+  is_converting_rhs = false;
 
   code_assignt code_assign(lhs, rhs);
   code_assign.location() = loc;
