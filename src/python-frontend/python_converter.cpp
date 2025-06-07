@@ -2558,9 +2558,7 @@ void python_converter::get_compound_assign(
     // Don't extract just the attribute name for type resolution
     // The type should come from the LHS expression we just created
     if (ast_node["target"].contains("attr"))
-    {
       var_name = ast_node["target"]["attr"].get<std::string>();
-    }
   }
   else if (ast_node["target"]["_type"] == "Subscript")
   {
