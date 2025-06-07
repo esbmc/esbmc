@@ -2565,12 +2565,14 @@ void python_converter::get_compound_assign(
   else if (ast_node["target"]["_type"] == "Subscript")
   {
     // Subscript assignment: arr[i] += 1
-    var_name = "subscript_target"; // placeholder
+    throw std::runtime_error(
+      "Subscript assignment not supported in compound assignment");
   }
   else
   {
-    // Fallback for other target types
-    var_name = "unknown_target";
+    throw std::runtime_error(
+      "Unsupported target type in compound assignment: " +
+      ast_node["target"]["_type"].get<std::string>());
   }
 
   // For attribute assignments, use the type from the LHS expression
