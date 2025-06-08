@@ -91,9 +91,10 @@ static std::string get_op(const std::string &op, const typet &type)
   // Convert the operator to lowercase to allow case-insensitive comparison.
   std::string lower_op = op;
   std::transform(
-    lower_op.begin(), lower_op.end(), lower_op.begin(), [](unsigned char c) {
-      return std::tolower(c);
-    });
+    lower_op.begin(),
+    lower_op.end(),
+    lower_op.begin(),
+    [](unsigned char c) { return std::tolower(c); });
 
   // Special case: if the type is floating-point, use IEEE-specific operators.
   if (type.is_floatbv())
@@ -502,7 +503,8 @@ symbol_id python_converter::create_symbol_id() const
 
 exprt python_converter::compute_math_expr(const exprt &expr) const
 {
-  auto resolve_symbol = [this](const exprt &operand) -> exprt {
+  auto resolve_symbol = [this](const exprt &operand) -> exprt
+  {
     if (operand.is_symbol())
     {
       symbolt *s = symbol_table_.find_symbol(operand.identifier());
@@ -795,9 +797,10 @@ exprt handle_float_vs_string(exprt &bin_expr, const std::string &op)
     // Python-style error: float < str → TypeError
     std::string lower_op = op;
     std::transform(
-      lower_op.begin(), lower_op.end(), lower_op.begin(), [](unsigned char c) {
-        return std::tolower(c);
-      });
+      lower_op.begin(),
+      lower_op.end(),
+      lower_op.begin(),
+      [](unsigned char c) { return std::tolower(c); });
 
     const auto &loc = bin_expr.location();
     const auto it = operator_map.find(lower_op);
@@ -825,7 +828,8 @@ void python_converter::handle_float_division(
 {
   const typet float_type = double_type();
 
-  auto promote_to_float = [&](exprt &e) {
+  auto promote_to_float = [&](exprt &e)
+  {
     const typet &t = e.type();
     const bool is_integer = t.is_signedbv() || t.is_unsignedbv();
 
@@ -884,14 +888,16 @@ exprt python_converter::handle_string_concatenation(
   exprt result = gen_zero(t);
   unsigned int i = 0;
 
-  auto append_from_symbol = [&](const std::string &id) {
+  auto append_from_symbol = [&](const std::string &id)
+  {
     symbolt *symbol = symbol_table_.find_symbol(id);
     assert(symbol);
     for (const exprt &ch : symbol->value.operands())
       result.operands().at(i++) = ch;
   };
 
-  auto append_from_json = [&](const nlohmann::json &json) {
+  auto append_from_json = [&](const nlohmann::json &json)
+  {
     std::string value = json["value"].get<std::string>();
     typet &char_type = t.subtype();
 
@@ -1430,7 +1436,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   attach_symbol_location(lhs, symbol_table());
   attach_symbol_location(rhs, symbol_table());
 
-  auto to_side_effect_call = [](exprt &expr) {
+  auto to_side_effect_call = [](exprt &expr)
+  {
     side_effect_expr_function_callt side_effect;
     code_function_callt &code = static_cast<code_function_callt &>(expr);
     side_effect.function() = code.function();
@@ -1941,6 +1948,88 @@ bool python_converter::is_bytes_literal(const nlohmann::json &element)
   return false;
 }
 
+// Helper function to extract class name from tag (removes "tag-" prefix)
+std::string
+python_converter::extract_class_name_from_tag(const std::string &tag_name)
+{
+  if (tag_name.size() > 4 && tag_name.substr(0, 4) == "tag-")
+    return tag_name.substr(4);
+  return tag_name;
+}
+
+// Helper function to create normalized self key for cross-method access
+std::string
+python_converter::create_normalized_self_key(const std::string &class_tag)
+{
+  std::string class_name = extract_class_name_from_tag(class_tag);
+  return "self@" + class_name;
+}
+
+// Helper function to clean attribute type by removing internal annotations
+typet python_converter::clean_attribute_type(const typet &attr_type)
+{
+  typet clean_type = attr_type;
+  clean_type.remove("#member_name");
+  clean_type.remove("#location");
+  clean_type.remove("#identifier");
+  return clean_type;
+}
+
+// Helper function to create member expression with cleaned type
+exprt python_converter::create_member_expression(
+  const symbolt &symbol,
+  const std::string &attr_name,
+  const typet &attr_type)
+{
+  typet clean_type = clean_attribute_type(attr_type);
+  return member_exprt(
+    symbol_exprt(symbol.id, symbol.type), attr_name, clean_type);
+}
+
+// Helper function to register instance attribute in maps
+void python_converter::register_instance_attribute(
+  const std::string &symbol_id,
+  const std::string &attr_name,
+  const std::string &var_name,
+  const std::string &class_tag)
+{
+  // Add to regular instance attribute map
+  instance_attr_map[symbol_id].insert(attr_name);
+
+  // For 'self' parameters, also track with normalized key for cross-method access
+  if (var_name == "self")
+  {
+    std::string normalized_key = create_normalized_self_key(class_tag);
+    instance_attr_map[normalized_key].insert(attr_name);
+  }
+}
+
+// Helper function to check if attribute is an instance attribute
+bool python_converter::is_instance_attribute(
+  const std::string &symbol_id,
+  const std::string &attr_name,
+  const std::string &var_name,
+  const std::string &class_tag)
+{
+  // Check regular per-symbol lookup
+  auto it = instance_attr_map.find(symbol_id);
+  if (
+    it != instance_attr_map.end() &&
+    it->second.find(attr_name) != it->second.end())
+    return true;
+
+  // For 'self' parameters, check normalized key for cross-method access
+  if (var_name == "self")
+  {
+    std::string normalized_key = create_normalized_self_key(class_tag);
+    auto self_it = instance_attr_map.find(normalized_key);
+    if (self_it != instance_attr_map.end())
+      return self_it->second.find(attr_name) != self_it->second.end();
+  }
+
+  return false;
+}
+
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
   exprt expr;
@@ -2085,53 +2174,60 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
       if (is_converting_lhs)
       {
-        // Add member in the class
+        // Add member in the class if not exists
         if (!class_type.has_component(attr_name))
         {
           struct_typet::componentt comp = build_component(
             class_type.tag().as_string(), attr_name, current_element_type);
           class_type.components().push_back(comp);
         }
-        // Add instance attribute in the objects map
-        instance_attr_map[symbol->id.as_string()].insert(attr_name);
+
+        // Register instance attribute for both regular and normalized keys
+        register_instance_attribute(
+          symbol->id.as_string(),
+          attr_name,
+          var_name,
+          class_type.tag().as_string());
       }
 
-      auto is_instance_attr = [&]() -> bool {
-        auto it = instance_attr_map.find(symbol->id.as_string());
-        if (it != instance_attr_map.end())
-        {
-          for (const auto &attr : it->second)
-          {
-            if (attr == attr_name)
-              return true;
-          }
-        }
-        return false;
-      };
-
-      // Get instance attribute from class component
+      // Check if this is an instance attribute
       if (
-        class_type.has_component(attr_name) &&
-        (is_instance_attr() || is_converting_rhs))
+        class_type.has_component(attr_name) && is_instance_attribute(
+                                                 symbol->id.as_string(),
+                                                 attr_name,
+                                                 var_name,
+                                                 class_type.tag().as_string()))
       {
         const typet &attr_type = class_type.get_component(attr_name).type();
-        expr = member_exprt(
-          symbol_exprt(symbol->id, symbol->type), attr_name, attr_type);
+        expr = create_member_expression(*symbol, attr_name, attr_type);
       }
       // Fallback to class attribute when instance attribute is not found
       else
       {
         // All class attributes are static symbols with ids in the format: filename@C@classname@varname
         sid.set_function("");
-        sid.set_class(obj_type_name.substr(4));
+        sid.set_class(extract_class_name_from_tag(obj_type_name));
         sid.set_object(attr_name);
         symbolt *class_attr_symbol = symbol_table_.find_symbol(sid.to_string());
 
         if (!class_attr_symbol)
         {
-          throw std::runtime_error("Attribute \"" + attr_name + "\" not found");
+          // If no class attribute exists and we're on LHS, create instance attribute
+          if (is_converting_lhs && class_type.has_component(attr_name))
+          {
+            const typet &attr_type = class_type.get_component(attr_name).type();
+            expr = create_member_expression(*symbol, attr_name, attr_type);
+          }
+          else
+          {
+            throw std::runtime_error(
+              "Attribute \"" + attr_name + "\" not found");
+          }
         }
-        expr = symbol_expr(*class_attr_symbol);
+        else
+        {
+          expr = symbol_expr(*class_attr_symbol);
+        }
       }
     }
     break;
@@ -2978,6 +3074,46 @@ void python_converter::get_return_statements(
   target_block.copy_to_operands(return_code);
 }
 
+// Helper function to create temporary variable for function call results
+symbolt python_converter::create_assert_temp_variable(const locationt &location)
+{
+  symbol_id temp_sid = create_symbol_id();
+  temp_sid.set_object("__assert_temp");
+  std::string temp_sid_str = temp_sid.to_string();
+
+  symbolt temp_symbol;
+  temp_symbol.id = temp_sid_str;
+  temp_symbol.name = temp_sid_str;
+  temp_symbol.type = bool_type();
+  temp_symbol.lvalue = true;
+  temp_symbol.static_lifetime = false;
+  temp_symbol.location = location;
+
+  return temp_symbol;
+}
+
+// Helper function to create function call statement from function call expression
+code_function_callt create_function_call_statement(
+  const exprt &func_call_expr,
+  const exprt &lhs_var,
+  const locationt &location)
+{
+  code_function_callt function_call;
+  function_call.lhs() = lhs_var;
+  function_call.function() = func_call_expr.operands()[1];
+
+  const exprt &args_operand = func_call_expr.operands()[2];
+  code_function_callt::argumentst arguments;
+  for (const auto &arg : args_operand.operands())
+  {
+    arguments.push_back(arg);
+  }
+  function_call.arguments() = arguments;
+  function_call.location() = location;
+
+  return function_call;
+}
+
 exprt python_converter::get_block(const nlohmann::json &ast_block)
 {
   code_blockt block, *old_block = current_block;
@@ -3024,10 +3160,70 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       exprt test = get_expr(element["test"]);
       if (!test.type().is_bool())
         test.make_typecast(current_element_type);
-      code_assertt assert_code;
-      assert_code.assertion() = test;
-      assert_code.location() = get_location_from_decl(element);
-      block.move_to_operands(assert_code);
+
+      // Check for function calls in assertions (direct or negated)
+      const exprt *func_call_expr = nullptr;
+      bool is_negated = false;
+
+      // Case 1: Direct function call - assert func()
+      if (test.id() == "code" && test.get("statement") == "function_call")
+      {
+        func_call_expr = &test;
+        is_negated = false;
+      }
+      // Case 2: Negated function call - assert not func()
+      else if (
+        test.id() == "not" && test.operands().size() == 1 &&
+        test.operands()[0].id() == "code" &&
+        test.operands()[0].get("statement") == "function_call")
+      {
+        func_call_expr = &test.operands()[0];
+        is_negated = true;
+      }
+
+      // Transform function call assertions to prevent solver crashes
+      if (func_call_expr != nullptr)
+      {
+        locationt location = get_location_from_decl(element);
+
+        // Create temporary variable
+        symbolt temp_symbol = create_assert_temp_variable(location);
+        symbol_table_.add(temp_symbol);
+        exprt temp_var_expr = symbol_expr(temp_symbol);
+
+        // Create function call statement: temp_var = func(args)
+        code_function_callt function_call = create_function_call_statement(
+          *func_call_expr, temp_var_expr, location);
+        block.move_to_operands(function_call);
+
+        // Create appropriate assertion based on negation
+        exprt assertion_expr;
+        if (is_negated)
+        {
+          // assert not func() -> assert !temp_var
+          assertion_expr = not_exprt(temp_var_expr);
+        }
+        else
+        {
+          // assert func() -> assert temp_var == 1
+          exprt cast_expr = typecast_exprt(temp_var_expr, signedbv_typet(32));
+          exprt one_expr = constant_exprt("1", signedbv_typet(32));
+          assertion_expr = equality_exprt(cast_expr, one_expr);
+        }
+
+        code_assertt assert_code;
+        assert_code.assertion() = assertion_expr;
+        assert_code.location() = location;
+        block.move_to_operands(assert_code);
+      }
+      else
+      {
+        // For expressions without function calls, use direct assertion
+        code_assertt assert_code;
+        assert_code.assertion() = test;
+        assert_code.location() = get_location_from_decl(element);
+        block.move_to_operands(assert_code);
+      }
       break;
     }
     case StatementType::EXPR:
