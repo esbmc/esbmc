@@ -144,6 +144,10 @@ private:
 
   exprt handle_power_operator_sym(exprt base, exprt exp);
 
+  exprt handle_chained_comparisons(
+    const nlohmann::json &element, 
+    exprt &first_bin_expr);
+
   exprt resolve_identity_function_call(
     const exprt &func_expr,
     const exprt &args_expr);

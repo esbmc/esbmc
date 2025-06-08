@@ -1412,6 +1412,41 @@ exprt python_converter::get_negated_is_expr(const exprt &lhs, const exprt &rhs)
   return not_expr;
 }
 
+exprt python_converter::handle_chained_comparisons(
+    const nlohmann::json &element, 
+    exprt &first_bin_expr)
+{
+  // Create an "and" expression to combine all comparison operations
+  exprt cond("and", bool_type());
+    
+  // Add the first binary expression (compares left operand with comparators[0])
+  cond.move_to_operands(first_bin_expr);
+    
+  // Process remaining comparisons in the chain
+  // For a chain like "a <= b < c <= d", we need to create:
+  // (a <= b) AND (b < c) AND (c <= d)
+  for (size_t i = 0; i + 1 < element["comparators"].size(); i++)
+  {
+    // Get the operator for this comparison (ops[i+1] because ops[0] was used for first_bin_expr)
+    std::string op(element["ops"][i + 1]["_type"].get<std::string>());
+        
+    // Create the logical expression for this comparison
+    exprt logical_expr(get_op(op, bool_type()), bool_type());
+        
+    // Left operand: current comparator
+    exprt left_operand = get_expr(element["comparators"][i]);
+    logical_expr.copy_to_operands(left_operand);
+        
+    // Right operand: next comparator  
+    exprt right_operand = get_expr(element["comparators"][i + 1]);
+    logical_expr.copy_to_operands(right_operand);
+        
+    // Add this comparison to the overall condition
+    cond.move_to_operands(logical_expr);
+  }
+  return cond;
+}
+
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
   auto left = (element.contains("left")) ? element["left"] : element["target"];
@@ -1571,25 +1606,9 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       bin_expr.op1() = typecast_exprt(rhs, target_type);
   }
 
-  // Handle chained comparisons like: assert 0 <= x <= 1
+  // Handle chained comparisons like: assert 0 <= x <= 1  
   if (element.contains("comparators") && element["comparators"].size() > 1)
-  {
-    exprt cond("and", bool_type());
-    cond.move_to_operands(
-      bin_expr); // bin_expr compares left and comparators[0]
-    for (size_t i = 0; i + 1 < element["comparators"].size(); i += 2)
-    {
-      std::string op(element["ops"][i + 1]["_type"].get<std::string>());
-      exprt logical_expr(get_op(op, bool_type()), bool_type());
-      exprt operand = get_expr(element["comparators"][i]);
-      logical_expr.copy_to_operands(operand);
-      operand = get_expr(element["comparators"][i + 1]);
-      logical_expr.copy_to_operands(operand);
-
-      cond.move_to_operands(logical_expr);
-    }
-    return cond;
-  }
+    return handle_chained_comparisons(element, bin_expr);
 
   return bin_expr;
 }
