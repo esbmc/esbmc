@@ -1527,14 +1527,6 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     }
   }
 
-  if (lhs_type == "str" && rhs_type == "str")
-  {
-    const exprt &result =
-      handle_string_operations(op, lhs, rhs, left, right, element);
-    if (!result.is_nil())
-      return result;
-  }
-
   // Replace ** operation with the resultant constant.
   if (op == "Pow" || op == "power")
     return handle_power_operator(lhs, rhs);
@@ -1557,6 +1549,14 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     bin_expr.location() = lhs.location();
   else if (rhs.is_symbol())
     bin_expr.location() = rhs.location();
+
+  if (lhs_type == "str" && rhs_type == "str")
+  {
+    const exprt &result =
+      handle_string_operations(op, lhs, rhs, left, right, element);
+    if (!result.is_nil())
+      return result;
+  }
 
   // Handle type promotion for mixed signed/unsigned comparisons:
   // If lhs is unsigned and rhs is signed, convert rhs to match lhs's type.
