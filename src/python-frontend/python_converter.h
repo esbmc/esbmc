@@ -144,6 +144,31 @@ private:
 
   exprt handle_power_operator_sym(exprt base, exprt exp);
 
+  symbolt create_assert_temp_variable(const locationt &location);
+
+  void register_instance_attribute(
+    const std::string &symbol_id,
+    const std::string &attr_name,
+    const std::string &var_name,
+    const std::string &class_tag);
+
+  bool is_instance_attribute(
+    const std::string &symbol_id,
+    const std::string &attr_name,
+    const std::string &var_name,
+    const std::string &class_tag);
+
+  exprt create_member_expression(
+    const symbolt &symbol,
+    const std::string &attr_name,
+    const typet &attr_type);
+
+  typet clean_attribute_type(const typet &attr_type);
+
+  std::string create_normalized_self_key(const std::string &class_tag);
+
+  std::string extract_class_name_from_tag(const std::string &tag_name);
+
   exprt resolve_identity_function_call(
     const exprt &func_expr,
     const exprt &args_expr);
@@ -243,7 +268,7 @@ private:
   bool base_ctor_called = false;
 
   // Map object to list of instance attributes
-  std::unordered_map<std::string, std::set<std::string>> instance_attr_map;
+  std::map<std::string, std::set<std::string>> instance_attr_map;
   // Map imported modules to their corresponding paths
   std::unordered_map<std::string, std::string> imported_modules;
 };
