@@ -308,6 +308,121 @@ __ESBMC_HIDE:;
 }
 )";
 
+// used when there is no NewExpression in the source json.
+const std::string sol_mapping_fast = R"(
+{
+struct _ESBMC_Mapping_fast
+{
+  uint256_t key : 256;
+  void *value;
+  struct _ESBMC_Mapping_fast *next;
+} __attribute__((packed));
+
+struct mapping_t_fast
+{
+  struct _ESBMC_Mapping_fast *base;
+};
+
+void *map_get_raw_fast(struct _ESBMC_Mapping_fast a[], uint256_t key)
+{
+__ESBMC_HIDE:;
+  struct _ESBMC_Mapping_fast *cur = a[key].next;
+  while (cur)
+  {
+    if (cur->key == key)
+      return cur->value;
+    cur = cur->next;
+  }
+  return NULL;
+}
+
+void map_set_raw_fast(struct _ESBMC_Mapping_fast a[],
+                      uint256_t key, void *val)
+{
+__ESBMC_HIDE:;
+  struct _ESBMC_Mapping_fast *n = (struct _ESBMC_Mapping_fast *)malloc(sizeof *n);
+  n->key = key;
+  n->value = val;
+  n->next = a[key].next;
+  a[key].next = n;
+}
+
+/* uint256_t */
+void map_uint_set_fast(struct mapping_t_fast *m, uint256_t k, uint256_t v)
+{
+__ESBMC_HIDE:;
+  uint256_t *p = (uint256_t *)malloc(sizeof *p);
+  *p = v;
+  map_set_raw_fast(m->base, k, p);
+}
+uint256_t map_uint_get_fast(struct mapping_t_fast *m, uint256_t k)
+{
+__ESBMC_HIDE:;
+  uint256_t *p = (uint256_t *)map_get_raw_fast(m->base, k);
+  return p ? *p : (uint256_t)0;
+}
+
+/* int256_t */
+void map_int_set_fast(struct mapping_t_fast *m, uint256_t k, int256_t v)
+{
+__ESBMC_HIDE:;
+  int256_t *p = (int256_t *)malloc(sizeof *p);
+  *p = v;
+  map_set_raw_fast(m->base, k, p);
+}
+int256_t map_int_get_fast(struct mapping_t_fast *m, uint256_t k)
+{
+__ESBMC_HIDE:;
+  int256_t *p = (int256_t *)map_get_raw_fast(m->base, k);
+  return p ? *p : (int256_t)0;
+}
+
+/* string */
+void map_string_set_fast(struct mapping_t_fast *m, uint256_t k, char *v)
+{
+__ESBMC_HIDE:;
+  char **p = (char **)malloc(sizeof *p);
+  *p = v;
+  map_set_raw_fast(m->base, k, p);
+}
+char *map_string_get_fast(struct mapping_t_fast *m, uint256_t k)
+{
+__ESBMC_HIDE:;
+  char **p = (char **)map_get_raw_fast(m->base, k);
+  return p ? *p : (char *)0;
+}
+
+/* bool */
+void map_bool_set_fast(struct mapping_t_fast *m, uint256_t k, bool v)
+{
+__ESBMC_HIDE:;
+  bool *p = (bool *)malloc(sizeof *p);
+  *p = v;
+  map_set_raw_fast(m->base, k, p);
+}
+bool map_bool_get_fast(struct mapping_t_fast *m, uint256_t k)
+{
+__ESBMC_HIDE:;
+  bool *p = (bool *)map_get_raw_fast(m->base, k);
+  return p ? *p : false;
+}
+
+/* generic */
+void map_generic_set_fast(struct mapping_t_fast *m, uint256_t k, const void *v, size_t sz)
+{
+__ESBMC_HIDE:;
+  void *p = malloc(sz);
+  memcpy(p, v, sz);
+  map_set_raw_fast(m->base, k, p);
+}
+void *map_generic_get_fast(struct mapping_t_fast *m, uint256_t k)
+{
+__ESBMC_HIDE:;
+  return map_get_raw_fast(m->base, k);
+}
+}
+)";
+
 const std::string sol_array = R"(
 // Node structure for linked list
 typedef struct ArrayNode {
@@ -757,13 +872,14 @@ block_timestamp = uint256_t(nondet_uint());
 
 _gaslimit = nondet_uint();
 
-unsigned int sol_max_cnt = 0;
+sol_max_cnt = 0;
 }
 )";
 
-const std::string sol_c_library =
-  "extern \"C\" {" + sol_typedef + sol_vars + sol_funcs + sol_mapping +
-  sol_array + sol_unit + sol_ext_library + sol_initialize + "}";
+const std::string sol_c_library = "extern \"C\" {" + sol_typedef + sol_vars +
+                                  sol_funcs + sol_mapping + sol_mapping_fast +
+                                  sol_array + sol_unit + sol_ext_library +
+                                  sol_initialize + "}";
 
 // C++
 const std::string sol_cpp_string = R"(
