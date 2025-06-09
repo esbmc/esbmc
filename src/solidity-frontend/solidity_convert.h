@@ -399,6 +399,8 @@ protected:
     std::string &struct_contract_name,
     const side_effect_expr_function_callt &gen_call,
     exprt &new_expr);
+  void extract_new_contracts();
+
 
   // line number and locations
   void
@@ -614,6 +616,8 @@ protected:
   // contract name list
   std::unordered_map<int, std::string> contractNamesMap;
   std::set<std::string> contractNamesList;
+  // for mapping hack
+  std::set<std::string> newContractSet;
   // Store the ast_node["id"] of struct/error
   // where entity contains "members": [{}, {}...]
   std::unordered_map<int, std::string> member_entity_scope;

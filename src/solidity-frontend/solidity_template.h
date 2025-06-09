@@ -310,7 +310,6 @@ __ESBMC_HIDE:;
 
 // used when there is no NewExpression in the source json.
 const std::string sol_mapping_fast = R"(
-{
 struct _ESBMC_Mapping_fast
 {
   uint256_t key : 256;
@@ -419,7 +418,6 @@ void *map_generic_get_fast(struct mapping_t_fast *m, uint256_t k)
 {
 __ESBMC_HIDE:;
   return map_get_raw_fast(m->base, k);
-}
 }
 )";
 
