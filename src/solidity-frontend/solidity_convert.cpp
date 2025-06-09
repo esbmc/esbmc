@@ -1175,8 +1175,12 @@ bool solidity_convertert::get_var_decl(
   else if (is_mapping)
   {
     // mapping(string => uint) test;
+    // 1. the contract that contains this mapping is also used in a new expression
     // => __attribute__((annotate("__ESBMC_inf_size"))) struct _ESBMC_Mapping _ESBMC_inf_test[];
     // => struct mapping_t test = {_ESBMC_inf_test, this.address};
+    // 2.
+    // => struct mapping_t_fast test = {_ESBMC_inf_test};
+    bool is_new_expr = newContractSet.count(current_contractName);
 
     // 1. construct static infinite array
     std::string arr_name, arr_id;
@@ -1199,30 +1203,40 @@ bool solidity_convertert::get_var_decl(
     add_added_s.value = gen_zero(get_complete_type(arr_t, ns), true);
 
     // 2. construct mapping_t struct instance's value
-    exprt this_ptr;
-    if (current_functionDecl)
-    {
-      if (get_func_decl_this_ref(*current_functionDecl, this_ptr))
-        return true;
-    }
+    typet map_t;
+    if (is_new_expr)
+      map_t = context.find_symbol(prefix + "mapping_t")->type;
     else
-    {
-      if (get_ctor_decl_this_ref(ast_node, this_ptr))
-        return true;
-    }
-    typet addr_t = unsignedbv_typet(160);
-    addr_t.set("#sol_type", "ADDRESS");
-    exprt mem = member_exprt(this_ptr, "$address", addr_t);
-
-    typet map_t = context.find_symbol(prefix + "mapping_t")->type;
+      map_t = context.find_symbol(prefix + "mapping_t_fast")->type;
     assert(map_t.is_struct());
     exprt inits = gen_zero(map_t);
+
     exprt op0 = symbol_expr(add_added_s);
     // array => &array[0]
     solidity_gen_typecast(
       ns, op0, to_struct_type(map_t).components().at(0).type());
     inits.op0() = op0;
-    inits.op1() = mem;
+
+    if (is_new_expr)
+    {
+      // set member address
+      exprt this_ptr;
+      if (current_functionDecl)
+      {
+        if (get_func_decl_this_ref(*current_functionDecl, this_ptr))
+          return true;
+      }
+      else
+      {
+        if (get_ctor_decl_this_ref(ast_node, this_ptr))
+          return true;
+      }
+      typet addr_t = unsignedbv_typet(160);
+      addr_t.set("#sol_type", "ADDRESS");
+      exprt mem = member_exprt(this_ptr, "$address", addr_t);
+
+      inits.op1() = mem;
+    }
 
     added_symbol.value = inits;
     decl.operands().push_back(inits);
