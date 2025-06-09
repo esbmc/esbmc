@@ -9089,7 +9089,11 @@ void solidity_convertert::extract_new_contracts()
       top_level_node.contains("nodeType") &&
       top_level_node["nodeType"] == "ContractDefinition")
     {
+      // for get_type_descriptions
+      std::string old = current_baseContractName;
+      current_baseContractName = top_level_node["name"].get<std::string>();
       process_node(top_level_node);
+      current_baseContractName = old;
     }
   }
 }
