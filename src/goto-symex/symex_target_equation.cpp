@@ -528,7 +528,7 @@ tvt runtime_encoded_equationt::ask_solver_question(const expr2tc &question)
   // Convert the question (must be a bool).
   assert(is_bool_type(question));
   smt_astt q = conv.convert_ast(question);
-
+  smt_astt q1 = conv.imply_ast(assumpt_chain.back(), q);
   // The proposition also needs to be guarded with the in-program assumptions,
   // which are not necessarily going to be part of the state guard.
   //conv.assert_ast(assumpt_chain.back());
@@ -540,11 +540,11 @@ tvt runtime_encoded_equationt::ask_solver_question(const expr2tc &question)
   // Those assertions are just is-the-prop-true, is-the-prop-false. Valid
   // results are true, false, both.
   push_ctx();
-  conv.assert_ast(q);
+  conv.assert_ast(q1);
   smt_convt::resultt res1 = conv.dec_solve();
   pop_ctx();
   push_ctx();
-  conv.assert_ast(conv.invert_ast(q));
+  conv.assert_ast(conv.invert_ast(q1));
   smt_convt::resultt res2 = conv.dec_solve();
   pop_ctx();
 
