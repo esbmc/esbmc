@@ -1186,14 +1186,18 @@ bool solidity_convertert::get_var_decl(
     std::string arr_name, arr_id;
     get_mapping_inf_arr_name(current_contractName, name, arr_name, arr_id);
     symbolt arr_s;
-    if (context.find_symbol(prefix + "_ESBMC_Mapping") == nullptr)
+    std::string mapping_struct_name = "_ESBMC_Mapping";
+    if (!is_new_expr)
+      mapping_struct_name += "_fast";
+
+    if (context.find_symbol(prefix + mapping_struct_name) == nullptr)
     {
       log_error("failed to find _ESBMC_Mapping reference");
       return true;
     }
 
-    typet arr_t =
-      array_typet(symbol_typet(prefix + "_ESBMC_Mapping"), exprt("infinity"));
+    typet arr_t = array_typet(
+      symbol_typet(prefix + mapping_struct_name), exprt("infinity"));
     get_default_symbol(
       arr_s, debug_modulename, arr_t, arr_name, arr_id, location_begin);
     arr_s.static_lifetime = true;
@@ -4495,6 +4499,9 @@ bool solidity_convertert::get_expr(
       return true;
     if (base_t.get("#sol_type").as_string() == "MAPPING")
     {
+      // hack to improve the verification speed
+      bool is_new_expr = newContractSet.count(current_contractName);
+
       // find mapping definition
       assert(base_json.contains("referencedDeclaration"));
       const nlohmann::json &map_node = find_decl_ref(
@@ -4573,6 +4580,9 @@ bool solidity_convertert::get_expr(
       else
         func_name = "map_" + val_flg + "_get";
 
+      if (!is_new_expr)
+        func_name += "_fast";
+
       if (context.find_symbol("c:@F@" + func_name) == nullptr)
       {
         log_error(
@@ -4629,12 +4639,11 @@ bool solidity_convertert::get_expr(
 
         // populate initial value
         side_effect_expr_function_callt get_call;
+        std::string f_get_name = "map_" + val_flg + "_get";
+        if (!is_new_expr)
+          f_get_name += "_fast";
         get_library_function_call_no_args(
-          "map_" + val_flg + "_get",
-          "c:@F@map_" + val_flg + "_get",
-          value_t,
-          location,
-          get_call);
+          f_get_name, "c:@F@" + f_get_name, value_t, location, get_call);
         get_call.arguments().push_back(address_of_exprt(array));
         get_call.arguments().push_back(pos);
         solidity_gen_typecast(ns, get_call, aux_type);
@@ -6592,8 +6601,13 @@ bool solidity_convertert::get_type_description(
   }
   case SolidityGrammar::TypeNameT::MappingTypeName:
   {
-    // do nothing as it won't be used
-    new_type = symbol_typet(prefix + "mapping_t");
+    // we need to check if it's inside a contract used in a new expression statement
+    assert(!current_baseContractName.empty());
+    bool is_new_expr = newContractSet.count(current_baseContractName);
+    if (is_new_expr)
+      new_type = symbol_typet(prefix + "mapping_t");
+    else
+      new_type = symbol_typet(prefix + "mapping_t_fast");
     new_type.set("#sol_type", "MAPPING");
     break;
   }
