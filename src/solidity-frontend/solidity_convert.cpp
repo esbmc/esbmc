@@ -6291,9 +6291,9 @@ bool solidity_convertert::get_sol_builtin_ref(
           get_library_function_call_no_args(
             "_min", "c:@F@_min", unsignedbv_typet(256), l, call);
         call.arguments().push_back(constant_exprt(
-          integer2binary(string2integer(width), bv_width(int_type())),
+          integer2binary(string2integer(width), bv_width(uint_type())),
           width,
-          int_type()));
+          uint_type()));
         call.arguments().push_back(is_signed);
 
         new_expr = call;

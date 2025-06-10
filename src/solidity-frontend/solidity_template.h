@@ -718,14 +718,20 @@ __ESBMC_HIDE:;
 const char *empty_str = "";
 void _str_assign(char **str1, const char *str2) {
 __ESBMC_HIDE:;
-    if(str1 != NULL)
-      free(*str1);  
+    // Ensure str1 is a valid pointer (not NULL)
+    if (str1 == NULL) {
+        return;  // Early exit if str1 is invalid
+    }
+    // Free *str1 only if it was previously allocated (non-NULL)
+    if (*str1 != NULL) {
+        free(*str1);
+    }
+    // If str2 is NULL, set *str1 to NULL (avoid dangling pointers)
     if (str2 == NULL) {
-      *str1 = NULL;  // Ensure str1 doesn't point to invalid memory
-      return;
+        *str1 = NULL;
+        return;
     }
     *str1 = (char *)malloc(strlen(str2) + 1);  
-    
     strcpy(*str1, str2);  // force malloc success
 }
 
@@ -802,18 +808,21 @@ __ESBMC_HIDE:;
 
 // max/min value
 const std::string sol_max_min = R"(
-uint256_t _max(int bitwidth, bool is_signed) {
+uint256_t _max(unsigned int bitwidth, bool is_signed) {
 __ESBMC_HIDE:;
     if (is_signed) {
+        __ESBMC_assume(bitwidth > 0 && bitwidth <= 256); 
         return (uint256_t(1) << (bitwidth - 1)) - uint256_t(1); // 2^(N-1) - 1
     } else {
+        __ESBMC_assume(bitwidth < 256);
         return (uint256_t(1) << bitwidth) - uint256_t(1); // 2^N - 1
     }
 }
 
-int256_t _min(int bitwidth, bool is_signed) {
+int256_t _min(unsigned int bitwidth, bool is_signed) {
 __ESBMC_HIDE:;
     if (is_signed) {
+        __ESBMC_assume(bitwidth > 0 && bitwidth <= 256);
         return -(int256_t(1) << (bitwidth - 1)); // -2^(N-1)
     } else {
         return int256_t(0); // Min of unsigned is always 0
