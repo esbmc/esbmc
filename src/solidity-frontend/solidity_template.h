@@ -731,7 +731,12 @@ __ESBMC_HIDE:;
         *str1 = NULL;
         return;
     }
-    *str1 = (char *)malloc(strlen(str2) + 1);  
+    size_t len = strlen(str2);
+    if (len == SIZE_MAX) {  // Would overflow when adding 1
+        *str1 = NULL;  // Or handle error differently
+        return;
+    }
+    *str1 = (char *)malloc(len + 1);  
     strcpy(*str1, str2);  // force malloc success
 }
 
