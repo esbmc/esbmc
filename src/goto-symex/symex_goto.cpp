@@ -40,9 +40,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
     catch (runtime_encoded_equationt::dual_unsat_exception &e)
     {
       // Assumptions mean that the guard is never satisfiable as true or false,
-      // basically means we've assume'd away the possibility of hitting this
-      // point.
-      new_guard_false = true;
+      // basically means we are not sure if the guard holds or not, so do nothing.
     }
   }
 
