@@ -531,7 +531,7 @@ tvt runtime_encoded_equationt::ask_solver_question(const expr2tc &question)
 
   // The proposition also needs to be guarded with the in-program assumptions,
   // which are not necessarily going to be part of the state guard.
-  //conv.assert_ast(assumpt_chain.back());
+  conv.assert_ast(assumpt_chain.back());
 
   // Now, how to ask the question? Unfortunately the clever solver stuff won't
   // negate the condition, it'll only give us a handle to it that it negates
