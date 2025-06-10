@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --incremental-bmc --no-standard-checks --contract Reproduction --unsigned-overflow-check
+^VERIFICATION FAILED$
