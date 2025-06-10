@@ -815,23 +815,24 @@ __ESBMC_HIDE:;
 const std::string sol_max_min = R"(
 uint256_t _max(unsigned int bitwidth, bool is_signed) {
 __ESBMC_HIDE:;
-    if (is_signed) {
-        __ESBMC_assume(bitwidth > 0 && bitwidth <= 256); 
-        return (uint256_t(1) << (bitwidth - 1)) - uint256_t(1); // 2^(N-1) - 1
-    } else {
-        __ESBMC_assume(bitwidth < 256);
-        return (uint256_t(1) << bitwidth) - uint256_t(1); // 2^N - 1
-    }
+  __ESBMC_assume(bitwidth > 0 && bitwidth <= 256);
+  if (is_signed) {
+      return (uint256_t(1) << (bitwidth - 1)) - uint256_t(1);
+  } else {
+      if (bitwidth == 256) {
+          return uint256_t(-1); 
+      }
+      return (uint256_t(1) << bitwidth) - uint256_t(1);
+  }
 }
-
 int256_t _min(unsigned int bitwidth, bool is_signed) {
 __ESBMC_HIDE:;
-    if (is_signed) {
-        __ESBMC_assume(bitwidth > 0 && bitwidth <= 256);
-        return -(int256_t(1) << (bitwidth - 1)); // -2^(N-1)
-    } else {
-        return int256_t(0); // Min of unsigned is always 0
-    }
+  if (is_signed) {
+      __ESBMC_assume(bitwidth > 0 && bitwidth <= 256);
+      return -(int256_t(1) << (bitwidth - 1)); // -2^(N-1)
+  } else {
+      return int256_t(0); // Min of unsigned is always 0
+  }
 }
 
 unsigned int _creationCode()
