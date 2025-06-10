@@ -25,17 +25,26 @@
 #include <algorithm>
 #include <util/array2string.h>
 
-expr2tc goto_symext::symex_malloc(const expr2tc &lhs, const sideeffect2t &code)
+expr2tc goto_symext::symex_malloc(
+  const expr2tc &lhs,
+  const sideeffect2t &code,
+  const guardt &guard)
 {
-  return symex_mem(true, lhs, code);
+  return symex_mem(true, lhs, code, guard);
 }
 
-expr2tc goto_symext::symex_alloca(const expr2tc &lhs, const sideeffect2t &code)
+expr2tc goto_symext::symex_alloca(
+  const expr2tc &lhs,
+  const sideeffect2t &code,
+  const guardt &guard)
 {
-  return symex_mem(false, lhs, code);
+  return symex_mem(false, lhs, code, guard);
 }
 
-void goto_symext::symex_realloc(const expr2tc &lhs, const sideeffect2t &code)
+void goto_symext::symex_realloc(
+  const expr2tc &lhs,
+  const sideeffect2t &code,
+  const guardt &guard)
 {
   expr2tc src_ptr = code.operand;
   expr2tc realloc_size = code.size;
@@ -56,7 +65,7 @@ void goto_symext::symex_realloc(const expr2tc &lhs, const sideeffect2t &code)
 
     // Assign NULL to lhs
     expr2tc null_ptr = gen_zero(lhs->type);
-    symex_assign(code_assign2tc(lhs, null_ptr), true);
+    symex_assign(code_assign2tc(lhs, null_ptr), true, guard);
     return;
   }
 
@@ -137,15 +146,16 @@ void goto_symext::symex_realloc(const expr2tc &lhs, const sideeffect2t &code)
 
   // Install pointer modelling data into the relevant arrays.
   expr2tc ptr_obj = pointer_object2tc(pointer_type2(), result);
-  track_new_pointer(ptr_obj, type2tc(), realloc_size);
+  track_new_pointer(ptr_obj, type2tc(), guard, realloc_size);
 
-  symex_assign(code_assign2tc(lhs, result), true);
+  symex_assign(code_assign2tc(lhs, result), true, guard);
 }
 
 expr2tc goto_symext::symex_mem(
   const bool is_malloc,
   const expr2tc &lhs,
-  const sideeffect2t &code)
+  const sideeffect2t &code,
+  const guardt &guard)
 {
   if (is_nil_expr(lhs))
     return expr2tc(); // ignore
@@ -264,7 +274,7 @@ expr2tc goto_symext::symex_mem(
   cur_state->rename(rhs);
   expr2tc rhs_copy(rhs);
 
-  symex_assign(code_assign2tc(lhs, rhs), true);
+  symex_assign(code_assign2tc(lhs, rhs), true, guard);
 
   expr2tc ptr_obj = pointer_object2tc(pointer_type2(), ptr_rhs);
 
@@ -273,6 +283,7 @@ expr2tc goto_symext::symex_mem(
   else
     track_new_pointer(ptr_obj, new_type, size);
 
+  alloc_guard.append(guard);
   dynamic_memory.emplace_back(
     rhs_copy, alloc_guard, !is_malloc, symbol.name.as_string());
 
@@ -282,6 +293,7 @@ expr2tc goto_symext::symex_mem(
 void goto_symext::track_new_pointer(
   const expr2tc &ptr_obj,
   const type2tc &new_type,
+  const guardt &guard,
   const expr2tc &size)
 {
   // Also update all the accounting data.
@@ -292,12 +304,12 @@ void goto_symext::track_new_pointer(
 
   expr2tc idx = index2tc(get_bool_type(), sym, ptr_obj);
   expr2tc truth = gen_true_expr();
-  symex_assign(code_assign2tc(idx, truth), true);
+  symex_assign(code_assign2tc(idx, truth), true, guard);
 
   expr2tc valid_sym = symbol2tc(sym_type, valid_ptr_arr_name);
   expr2tc valid_index_expr = index2tc(get_bool_type(), valid_sym, ptr_obj);
   truth = gen_true_expr();
-  symex_assign(code_assign2tc(valid_index_expr, truth), true);
+  symex_assign(code_assign2tc(valid_index_expr, truth), true, guard);
 
   type2tc sz_sym_type = array_type2tc(size_type2(), expr2tc(), true);
   expr2tc sz_sym = symbol2tc(sz_sym_type, alloc_size_arr_name);
@@ -306,7 +318,7 @@ void goto_symext::track_new_pointer(
   expr2tc object_size_exp =
     is_nil_expr(size) ? type_byte_size_expr(new_type) : size;
 
-  symex_assign(code_assign2tc(sz_index_expr, object_size_exp), true);
+  symex_assign(code_assign2tc(sz_index_expr, object_size_exp), true, guard);
 }
 
 void goto_symext::symex_free(const expr2tc &expr)
@@ -584,7 +596,10 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
   cur_state->source.pc++;
 }
 
-void goto_symext::symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code)
+void goto_symext::symex_cpp_new(
+  const expr2tc &lhs,
+  const sideeffect2t &code,
+  const guardt &guard)
 {
   expr2tc size = code.size;
 
@@ -637,10 +652,11 @@ void goto_symext::symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code)
   symex_assign(code_assign2tc(lhs, rhs), true);
 
   expr2tc ptr_obj = pointer_object2tc(pointer_type2(), ptr_rhs);
-  track_new_pointer(ptr_obj, newtype, size);
+  track_new_pointer(ptr_obj, newtype, guard, size);
 
-  dynamic_memory.emplace_back(
-    rhs_copy, cur_state->guard, false, symbol.name.as_string());
+  guardt g(cur_state->guard);
+  g.append(guard);
+  dynamic_memory.emplace_back(rhs_copy, g, false, symbol.name.as_string());
 }
 
 void goto_symext::symex_cpp_delete(const expr2tc &expr)
@@ -932,7 +948,8 @@ void goto_symext::intrinsic_kill_monitor(reachability_treet &art)
 
 void goto_symext::symex_va_arg(
   const expr2tc &lhs,
-  const sideeffect2t &code [[maybe_unused]])
+  const sideeffect2t &code [[maybe_unused]],
+  const guardt &guard)
 {
   std::string base =
     id2string(cur_state->top().function_identifier) + "::va_arg";
@@ -956,7 +973,7 @@ void goto_symext::symex_va_arg(
     va_rhs = gen_zero(lhs->type);
   }
 
-  symex_assign(code_assign2tc(lhs, va_rhs), true);
+  symex_assign(code_assign2tc(lhs, va_rhs), true, guard);
 }
 
 // Computes the equivalent object value when considering a memset operation on it

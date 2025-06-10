@@ -546,7 +546,10 @@ protected:
    * This function does not return any value; it modifies the symbolic execution state
    * based on the side effect encountered.
    */
-  void handle_sideeffect(const expr2tc &lhs, const sideeffect2t &effect);
+  void handle_sideeffect(
+    const expr2tc &lhs,
+    const sideeffect2t &effect,
+    const guardt &guard);
 
   /**
    * Handle conditional expressions (if2t) in the symbolic execution.
@@ -557,7 +560,10 @@ protected:
    * 
    * This function returns true if there is a sideeffect.
    */
-  bool handle_conditional(const expr2tc &lhs, const if2t &if_effect);
+  bool handle_conditional(
+    const expr2tc &lhs,
+    const if2t &if_effect,
+    const guardt &guard);
 
   /**
    *  Make symbolic assignment.
@@ -773,31 +779,50 @@ protected:
     const bool hidden);
 
   /** Symbolic implementation of malloc. */
-  expr2tc symex_malloc(const expr2tc &lhs, const sideeffect2t &code);
+  expr2tc symex_malloc(
+    const expr2tc &lhs,
+    const sideeffect2t &code,
+    const guardt &guard);
   /** Implementation of realloc. */
-  void symex_realloc(const expr2tc &lhs, const sideeffect2t &code);
+  void symex_realloc(
+    const expr2tc &lhs,
+    const sideeffect2t &code,
+    const guardt &guard);
   /** Symbolic implementation of alloca. */
-  expr2tc symex_alloca(const expr2tc &lhs, const sideeffect2t &code);
+  expr2tc symex_alloca(
+    const expr2tc &lhs,
+    const sideeffect2t &code,
+    const guardt &guard);
   /** Wrapper around for alloca and malloc. */
-  expr2tc
-  symex_mem(const bool is_malloc, const expr2tc &lhs, const sideeffect2t &code);
+  expr2tc symex_mem(
+    const bool is_malloc,
+    const expr2tc &lhs,
+    const sideeffect2t &code,
+    const guardt &guard);
   /** Pointer modelling update function */
   void track_new_pointer(
     const expr2tc &ptr_obj,
     const type2tc &new_type,
+    const guardt &guard,
     const expr2tc &size = expr2tc());
   /** Symbolic implementation of free */
   void symex_free(const expr2tc &expr);
   /** Symbolic implementation of c++'s delete. */
   void symex_cpp_delete(const expr2tc &code);
   /** Symbolic implementation of c++'s new. */
-  void symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code);
+  void symex_cpp_new(
+    const expr2tc &lhs,
+    const sideeffect2t &code,
+    const guardt &guard);
   /** Symbolic implementation of printf */
   void symex_printf(const expr2tc &lhs, expr2tc &code);
   /** Symbolic implementation of scanf and fscanf */
   void symex_input(const code_function_call2t &expr);
   /** Symbolic implementation of va_arg */
-  void symex_va_arg(const expr2tc &lhs, const sideeffect2t &code);
+  void symex_va_arg(
+    const expr2tc &lhs,
+    const sideeffect2t &code,
+    const guardt &guard);
 
   /**
    *  Replace nondet func calls with nondeterminism.
