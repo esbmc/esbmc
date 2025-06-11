@@ -135,6 +135,8 @@ public:
     _size = 0;
     _capacity = 10;
   }
+  // TODO: Support destructors. 
+  // Check discussion at https://github.com/esbmc/esbmc/pull/2515
 #if 0
   // Destructor
   ~vector()
