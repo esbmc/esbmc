@@ -306,10 +306,10 @@ pair<InIt1, InIt2> mismatch(InIt1 first1, InIt1 last1, InIt2 first2)
   return make_pair(first1, first2);
 }
 
-template <class InIt1, class InIt2>
-pair<InIt1, InIt2> mismatch(InIt1 first1, InIt1 last1, InIt2 *first2)
+template <class InIt1, class InIt2, class Pr>
+pair<InIt1, InIt2> mismatch(InIt1 first1, InIt1 last1, InIt2 first2, Pr pred)
 {
-  while ((first1 != last1) && (*first1 == *first2))
+  while ((first1 != last1) && pred(*first1, *first2))
   {
     ++first1;
     ++first2;
@@ -318,9 +318,9 @@ pair<InIt1, InIt2> mismatch(InIt1 first1, InIt1 last1, InIt2 *first2)
 }
 
 template <class InIt1, class InIt2, class Pr>
-pair<InIt1, InIt2> mismatch(InIt1 first1, InIt1 last1, InIt2 first2, Pr pred)
+pair<InIt1, InIt2*> mismatch(InIt1 first1, InIt1 last1, InIt2* first2, Pr pred)
 {
-  while (pred(*first1, *first2))
+  while ((first1 != last1) && pred(*first1, *first2))
   {
     ++first1;
     ++first2;
