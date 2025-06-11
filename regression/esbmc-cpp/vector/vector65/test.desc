@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.cpp
 --unwind 5 --no-unwinding-assertions --no-pointer-check
 ^VERIFICATION FAILED$
