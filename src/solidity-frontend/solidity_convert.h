@@ -540,6 +540,7 @@ protected:
   bool get_send_definition(const std::string &cname, exprt &new_expr);
   bool model_transaction(
     const nlohmann::json &expr,
+    const exprt &this_expr,
     const exprt &base,
     const exprt &value,
     const locationt &loc,

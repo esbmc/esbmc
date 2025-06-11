@@ -197,6 +197,16 @@ bool solidity_convertert::convert()
   }
   // else: verify the target function.
 
+  for (auto str : contractNamesList)
+  {
+    auto i = context.find_symbol(prefix + str);
+    i->dump();
+  }
+
+  // std::ostringstream oss;
+  // ::show_symbol_table_plain(ns, oss);
+  //     log_status("{}", oss.str());
+
   return false; // 'false' indicates successful completion.
 }
 
@@ -10663,6 +10673,13 @@ void solidity_convertert::move_builtin_to_contract(
 
   if (!is_method)
   {
+    // check if it's already inserted
+    for (auto i : to_struct_type(c_sym.type).components())
+    {
+      if (i.identifier() == sym.identifier())
+        return;
+    }
+
     struct_typet::componentt comp(sym.name(), sym.name(), sym.type());
     comp.set_access(access);
     comp.set("#lvalue", 1);
@@ -10671,6 +10688,13 @@ void solidity_convertert::move_builtin_to_contract(
   }
   else
   {
+    // check if it's already inserted
+    for (auto i : to_struct_type(c_sym.type).methods())
+    {
+      if (i.identifier() == sym.identifier())
+        return;
+    }
+
     struct_typet::componentt comp;
     // construct comp
     comp.type() = sym.type();
@@ -11195,16 +11219,16 @@ bool solidity_convertert::get_high_level_member_access(
   get_current_contract_name(expr, cname);
 
   // current this pointer reference
-  exprt this_expr;
+  exprt cur_this_expr;
   if (current_functionDecl)
   {
-    if (get_func_decl_this_ref(*current_functionDecl, this_expr))
+    if (get_func_decl_this_ref(*current_functionDecl, cur_this_expr))
       return true;
   }
   else
   {
     const auto &ctor_json = find_constructor_ref(cname);
-    if (get_func_decl_this_ref(ctor_json, this_expr))
+    if (get_func_decl_this_ref(ctor_json, cur_this_expr))
       return true;
   }
 
@@ -11235,7 +11259,8 @@ bool solidity_convertert::get_high_level_member_access(
       exprt back_block = code_blockt();
       if (is_call_w_options)
       {
-        if (model_transaction(expr, base, balance, l, front_block, back_block))
+        if (model_transaction(
+              expr, cur_this_expr, base, balance, l, front_block, back_block))
         {
           log_error("failed to model the transaction property changes");
           return true;
@@ -11243,7 +11268,7 @@ bool solidity_convertert::get_high_level_member_access(
         else
         {
           if (get_high_level_call_wrapper(
-                cname, this_expr, front_block, back_block))
+                cname, cur_this_expr, front_block, back_block))
             return true;
         }
         for (auto op : front_block.operands())
@@ -11256,6 +11281,8 @@ bool solidity_convertert::get_high_level_member_access(
     return false; // since it has only one possible option, no need to futher binding
   }
 
+  // now we need to consider the binding
+
   if (member.type().get("#sol_type") == "TUPLE_RETURNS")
   {
     log_error("Unsupported return tuple");
@@ -11267,6 +11294,10 @@ bool solidity_convertert::get_high_level_member_access(
                          to_code_type(member.type()).return_type().is_empty());
 
   // construct auxilirary funciton
+  // e.g.
+  //  Bank target;
+  //  target.withdraw()
+  // => Bank_withdraw(this, this->target)
   assert(!_cname.empty());
   assert(!member.name().empty());
   std::string fname = _cname + "_" + member.name().as_string();
@@ -11289,7 +11320,49 @@ bool solidity_convertert::get_high_level_member_access(
   fs.file_local = true;
   auto &added_fsymbol = *move_symbol_to_context(fs);
 
+  // add this pointer to arguments
+  get_function_this_pointer_param(
+    cname, fid, debug_modulename, locationt(), ft);
+  // add base to arguments
+  code_typet::argumentt base_param;
+  std::string base_name = "base";
+  std::string base_id =
+    "sol:@C@" + cname + "@F@" + fname + "@" + base_name + "#";
+  base_param.cmt_base_name(base_name);
+  base_param.cmt_identifier(base_id);
+
+  base_param.type() = base.type();
+  symbolt param_symbol;
+  get_default_symbol(
+    param_symbol,
+    debug_modulename,
+    base_param.type(),
+    base_name,
+    base_id,
+    locationt());
+  param_symbol.lvalue = true;
+  param_symbol.is_parameter = true;
+  param_symbol.file_local = true;
+  if (context.find_symbol(base_id) == nullptr)
+  {
+    context.move_symbol_to_context(param_symbol);
+  }
+
+  ft.arguments().push_back(base_param);
+  exprt new_base = symbol_expr(*context.find_symbol(base_id));
+
+  added_fsymbol.type = ft;
+  //! we need to move it to the struct symbol
+  // this is because we use the member from the contract
+  move_builtin_to_contract(cname, symbol_expr(added_fsymbol), true);
+
+  exprt this_expr;
+  if (get_func_decl_this_ref(cname, fid, this_expr))
+    return true;
+
   // function body
+
+  // add esbmc_hide label
   exprt func_body = code_blockt();
   code_labelt label;
   label.set_label("__ESBMC_HIDE");
@@ -11297,8 +11370,8 @@ bool solidity_convertert::get_high_level_member_access(
   func_body.move_to_operands(label);
 
   // get 'x._ESBMC_bind_cname'
-  exprt bind_expr =
-    member_exprt(base, "_ESBMC_bind_cname", pointer_typet(signed_char_type()));
+  exprt bind_expr = member_exprt(
+    new_base, "_ESBMC_bind_cname", pointer_typet(signed_char_type()));
 
   // get memebr type
   exprt tmp;
@@ -11416,31 +11489,32 @@ bool solidity_convertert::get_high_level_member_access(
     // wrap it
     if (is_func_call)
     {
+      exprt front_block = code_blockt();
+      exprt back_block = code_blockt();
       if (is_call_w_options)
       {
-        exprt front_block = code_blockt();
-        exprt back_block = code_blockt();
-        if (model_transaction(expr, base, balance, l, front_block, back_block))
+        if (model_transaction(
+              expr, this_expr, new_base, balance, l, front_block, back_block))
         {
           log_error("failed to model the transaction property changes");
           return true;
         }
-        else
-        {
-          if (get_high_level_call_wrapper(
-                cname, this_expr, front_block, back_block))
-            return true;
-        }
-
-        // if-body
-        code_blockt block;
-        for (auto &op : front_block.operands())
-          block.move_to_operands(op);
-        block.move_to_operands(rhs);
-        for (auto &op : back_block.operands())
-          block.move_to_operands(op);
-        rhs = block;
       }
+      else
+      {
+        if (get_high_level_call_wrapper(
+              cname, this_expr, front_block, back_block))
+          return true;
+      }
+
+      // if-body
+      code_blockt block;
+      for (auto &op : front_block.operands())
+        block.move_to_operands(op);
+      block.move_to_operands(rhs);
+      for (auto &op : back_block.operands())
+        block.move_to_operands(op);
+      rhs = block;
     }
 
     codet if_expr("ifthenelse");
@@ -11466,6 +11540,9 @@ bool solidity_convertert::get_high_level_member_access(
   _call.function() = symbol_expr(added_fsymbol);
   _call.type() = ft.return_type();
   _call.location() = l;
+  // bank_withdraw(this, this->target)
+  _call.arguments().push_back(cur_this_expr);
+  _call.arguments().push_back(base);
 
   new_expr = _call;
 
@@ -11832,12 +11909,14 @@ bool solidity_convertert::get_call_definition(
 
 /** e.g. x = target.deposit{value: msg.value}()
  * @expr: member_call json
+ * @this_expr: this->(target)
  * @base: target
  * @value: msg.value
  * @block: returns
 */
 bool solidity_convertert::model_transaction(
   const nlohmann::json &expr,
+  const exprt &this_expr,
   const exprt &base,
   const exprt &value,
   const locationt &loc,
@@ -11866,25 +11945,8 @@ bool solidity_convertert::model_transaction(
   if (cname.empty())
     return true;
 
-  typet addr_t = unsignedbv_typet(160);
-  addr_t.set("#sol_type", "ADDRESS_PAYABLE");
   typet val_t = unsignedbv_typet(256);
-
-  exprt msg_sender = symbol_expr(*context.find_symbol("c:@msg_sender"));
   exprt msg_value = symbol_expr(*context.find_symbol("c:@msg_value"));
-  exprt this_expr;
-
-  if (current_functionDecl)
-  {
-    if (get_func_decl_this_ref(*current_functionDecl, this_expr))
-      return true;
-  }
-  else
-  {
-    const auto &ctor_json = find_constructor_ref(cname);
-    if (get_func_decl_this_ref(ctor_json, this_expr))
-      return true;
-  }
 
   if (get_high_level_call_wrapper(cname, this_expr, front_block, back_block))
     return true;
