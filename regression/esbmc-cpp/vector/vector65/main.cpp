@@ -18,16 +18,17 @@ bool compare_speed(const Car& c1, const Car& c2) {
 
 int main() {
     std::vector<Car> cars = {
-        Car("Toyota", 120),
-        Car("Honda", 130),
-        Car("Ford", 110)
+        Car("T", 200),
+        Car("H", 130),
+        Car("F", 110)
     };
 
     std::vector<Car> sorted_cars = cars;
-    std::sort(sorted_cars.begin(), sorted_cars.end(), compare_speed);
+    // do not sort to make the assertion to fail!
+    //std::sort(sorted_cars.begin(), sorted_cars.end(), compare_speed);
 
     assert(std::is_sorted(sorted_cars.begin(), sorted_cars.end(), compare_speed) && "List is not sorted correctly!");
 
-    std::cout << "Assertion passed successfully!" << std::endl;
+    std::cout << "Assertion should fail!" << std::endl;
     return 0;
 }
