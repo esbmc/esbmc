@@ -155,8 +155,7 @@ public:
     for (; tmp != t2; tmp++)
       count++;
 
-    buf = static_cast<T*>(malloc(sizeof(T) * count));
-    __ESBMC_assume(buf);
+    buf = new T[count];
     int n = 0;
     for (; t1 != t2; t1++)
     {
@@ -206,8 +205,7 @@ public:
 
   vector(const vector &x) : _size(0), _capacity(1)
   {
-    buf = static_cast<T*>(malloc(sizeof(T) * x._size));
-    __ESBMC_assume(buf);
+    buf = new T[x._size];
     _size = x._size;
     for (int i = 0; i < _size; i++)
       buf[i] = x.buf[i];
@@ -228,8 +226,7 @@ public:
 
   vector &operator=(const vector &x)
   {
-    buf = static_cast<T*>(malloc(sizeof(T) * x._size));
-    __ESBMC_assume(buf);
+    buf = new T[x._size];
     _size = x._size;
     for (int i = 0; i < _size; i++)
       buf[i] = x.buf[i];
