@@ -189,7 +189,8 @@ public:
 
   vector(const vector &x) : _size(0), _capacity(1)
   {
-    buf = new T[x._size];
+    buf = static_cast<T*>(malloc(sizeof(T) * x._size));
+    __ESBMC_assume(buf);
     _size = x._size;
     for (int i = 0; i < _size; i++)
       buf[i] = x.buf[i];
@@ -199,11 +200,12 @@ public:
 #if __cplusplus >= 201103L
   vector(std::initializer_list<T> init) :_size(0), _capacity(1)
   {
-    buf = new T[init.size()];
+    buf = static_cast<T*>(malloc(sizeof(T) * init.size()));
+    __ESBMC_assume(buf);
     _size = init.size();
-    for (int i = 0; i < _size; i++)
-      buf[i] = *(init.begin() + i);
-    _capacity = _size;
+    auto it = init.begin();
+    for (int i = 0; i < _size; i++, ++it)
+      new(&buf[i]) T(*it);
   }
 #endif
 
