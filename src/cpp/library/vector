@@ -130,11 +130,24 @@ public:
   // construct:
   explicit vector() : _size(0), _capacity(1)
   {
-    buf = new T[10];
+    buf = static_cast<T*>(malloc(sizeof(T) * 10));
+    __ESBMC_assume(buf);
     _size = 0;
     _capacity = 10;
   }
-
+#if 0
+  // Destructor
+  ~vector()
+  {
+    if (buf != nullptr)
+    {
+      free(buf);
+      buf = nullptr;
+      _size = 0;
+      _capacity = 0;
+    }
+  }
+#endif
   explicit vector(iterator t1, iterator t2) : _size(0)
   {
     int count = 0;
@@ -142,7 +155,8 @@ public:
     for (; tmp != t2; tmp++)
       count++;
 
-    buf = new T[count];
+    buf = static_cast<T*>(malloc(sizeof(T) * count));
+    __ESBMC_assume(buf);
     int n = 0;
     for (; t1 != t2; t1++)
     {
@@ -154,7 +168,8 @@ public:
 
   explicit vector(size_type n) : _size(0), _capacity(1)
   {
-    buf = new T[n];
+    buf = static_cast<T*>(malloc(sizeof(T) * n));
+    __ESBMC_assume(buf);
     _size = 0;
     for (int i = 0; i < n; i++)
     {
@@ -170,7 +185,8 @@ public:
     for (InputIt tmp = t; tmp != addr; tmp++)
       count++;
 
-    buf = new T[count];
+    buf = static_cast<T*>(malloc(sizeof(T) * count));
+    __ESBMC_assume(buf);
     for (int i = 0; i < count; i++)
       buf[i] = *t++;
 
@@ -180,7 +196,8 @@ public:
 
   explicit vector(size_type n, const T &x)
   {
-    buf = new T[n];
+    buf = static_cast<T*>(malloc(sizeof(T) * n));
+    __ESBMC_assume(buf);
     _size = n;
     for (int i = 0; i < n; i++)
       buf[i] = x;
@@ -203,15 +220,16 @@ public:
     buf = static_cast<T*>(malloc(sizeof(T) * init.size()));
     __ESBMC_assume(buf);
     _size = init.size();
-    auto it = init.begin();
-    for (int i = 0; i < _size; i++, ++it)
-      new(&buf[i]) T(*it);
+    for (int i = 0; i < _size; i++)
+      buf[i] = *(init.begin() + i);
+    _capacity = _size;
   }
 #endif
 
   vector &operator=(const vector &x)
   {
-    buf = new T[x._size];
+    buf = static_cast<T*>(malloc(sizeof(T) * x._size));
+    __ESBMC_assume(buf);
     _size = x._size;
     for (int i = 0; i < _size; i++)
       buf[i] = x.buf[i];
@@ -235,8 +253,9 @@ public:
     iterator tmp = t1;
     for (; tmp != t2; tmp++)
       count++;
-
-    buf = new T[count];
+    
+    buf = static_cast<T*>(malloc(sizeof(T) * count));
+    __ESBMC_assume(buf);
     int n = 0;
     for (; t1 != t2; t1++)
     {
