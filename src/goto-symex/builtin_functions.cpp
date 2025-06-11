@@ -267,7 +267,11 @@ expr2tc goto_symext::symex_mem(
   symex_assign(code_assign2tc(lhs, rhs), true);
 
   expr2tc ptr_obj = pointer_object2tc(pointer_type2(), ptr_rhs);
-  track_new_pointer(ptr_obj, new_type, size);
+
+  if (size_is_one)
+    track_new_pointer(ptr_obj, new_type);
+  else
+    track_new_pointer(ptr_obj, new_type, size);
 
   dynamic_memory.emplace_back(
     rhs_copy, alloc_guard, !is_malloc, symbol.name.as_string());
