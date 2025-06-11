@@ -197,16 +197,6 @@ bool solidity_convertert::convert()
   }
   // else: verify the target function.
 
-  for (auto str : contractNamesList)
-  {
-    auto i = context.find_symbol(prefix + str);
-    i->dump();
-  }
-
-  // std::ostringstream oss;
-  // ::show_symbol_table_plain(ns, oss);
-  //     log_status("{}", oss.str());
-
   return false; // 'false' indicates successful completion.
 }
 
@@ -5019,7 +5009,8 @@ bool solidity_convertert::get_expr(
         // make it as a NODET_UINT
         new_expr = nondet_uint_expr;
       else
-        get_builtin_property_expr(mem_name, base, location, new_expr);
+        get_builtin_property_expr(
+          current_contractName, mem_name, base, location, new_expr);
     }
     else
     {
@@ -10787,33 +10778,51 @@ bool solidity_convertert::get_new_temporary_obj(
 // create a function: get_{property_name}(addr)
 // this function is universal for every contract
 void solidity_convertert::get_aux_property_function(
-  const exprt &addr,
+  const std::string &cname,
+  const exprt &base,
   const typet &return_t,
   const locationt &loc,
   const std::string &property_name,
   exprt &new_expr)
 {
   std::string fname = "get_" + property_name;
-  std::string fid = "sol:@F@" + fname + "#";
+  std::string fid = "sol:@C@" + cname + "@F@" + fname + "#";
 
-  assert(addr.is_constant() || addr.is_member() || addr.is_symbol());
+  exprt cur_this_expr;
+  if (current_functionDecl)
+  {
+    if (get_func_decl_this_ref(*current_functionDecl, cur_this_expr))
+      abort();
+  }
+  else
+  {
+    const auto &ctor_json = find_constructor_ref(cname);
+    if (get_func_decl_this_ref(ctor_json, cur_this_expr))
+      abort();
+  }
+
+  assert(base.is_constant() || base.is_member() || base.is_symbol());
 
   if (context.find_symbol(fid) != nullptr)
   {
     side_effect_expr_function_callt _call;
     get_library_function_call_no_args(fname, fid, return_t, loc, _call);
-    _call.arguments().push_back(addr);
+    _call.arguments().push_back(cur_this_expr);
+    _call.arguments().push_back(base);
     new_expr = _call;
     return;
   }
 
   // poplate function definition
+  // e.g. get_balance(this, this->addr);
   symbolt sym;
   code_typet type;
   type.return_type() = return_t;
   std::string debug_modulename = get_modulename_from_path(absolute_path);
   get_default_symbol(sym, debug_modulename, type, fname, fid, loc);
   auto &added_symbol = *move_symbol_to_context(sym);
+
+  get_function_this_pointer_param(cname, fid, debug_modulename, loc, type);
 
   // param: arg
   std::string aname = "_addr";
@@ -10834,7 +10843,10 @@ void solidity_convertert::get_aux_property_function(
 
   // populate param
   added_symbol.type = type;
+  // move to struct symbol
+  move_builtin_to_contract(cname, symbol_expr(added_symbol), true);
 
+  exprt addr_expr = symbol_expr(*context.find_symbol(aid));
   /* body:
       address(_addr).code
     =>
@@ -10873,7 +10885,7 @@ void solidity_convertert::get_aux_property_function(
       loc,
       get_obj);
 
-    get_obj.arguments().push_back(addr);
+    get_obj.arguments().push_back(addr_expr);
     get_obj.arguments().push_back(_cname);
 
     // typecast
@@ -10913,13 +10925,15 @@ void solidity_convertert::get_aux_property_function(
   side_effect_expr_function_callt _call;
   _call.function() = symbol_expr(added_symbol);
   _call.location() = loc;
-  _call.arguments().push_back(addr);
+  _call.arguments().push_back(cur_this_expr);
+  _call.arguments().push_back(base);
   new_expr = _call;
 }
 
 // get member access of built-in property.
 // e.g. x.$balance, x.$code ...
 void solidity_convertert::get_builtin_property_expr(
+  const std::string &cname,
   const std::string &name,
   const exprt &base,
   const locationt &loc,
@@ -10956,7 +10970,7 @@ void solidity_convertert::get_builtin_property_expr(
   else
     // e.g. address(msg.sender).balance
     // we do not know what instance is msg.sender pointed to, so over-approximate
-    get_aux_property_function(base, t, loc, name, mem);
+    get_aux_property_function(cname, base, t, loc, name, mem);
 
   mem.location() = loc;
   new_expr = mem;
