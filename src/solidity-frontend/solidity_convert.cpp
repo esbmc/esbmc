@@ -11216,17 +11216,15 @@ bool solidity_convertert::get_high_level_member_access(
           log_error("failed to model the transaction property changes");
           return true;
         }
-        else
-        {
-          if (get_high_level_call_wrapper(
-                cname, cur_this_expr, front_block, back_block))
-            return true;
-        }
-        for (auto op : front_block.operands())
-          move_to_front_block(op);
-        for (auto op : back_block.operands())
-          move_to_back_block(op);
       }
+      else if (get_high_level_call_wrapper(
+                 cname, cur_this_expr, front_block, back_block))
+        return true;
+
+      for (auto op : front_block.operands())
+        move_to_front_block(op);
+      for (auto op : back_block.operands())
+        move_to_back_block(op);
     }
 
     return false; // since it has only one possible option, no need to futher binding
@@ -11371,15 +11369,9 @@ bool solidity_convertert::get_high_level_member_access(
     exprt _base;
     get_static_contract_instance_ref(str, _base);
 
-    // fix address. e.g.
+    // ?fix address?. e.g.
     // B target = B(_addr); // previously
     // base->$address =  _ESBMC_Object_B.$address // note that pointer this->target == base
-    typet address_t = unsignedbv_typet(160);
-    exprt base_addr = member_exprt(new_base, "$address", address_t);
-    exprt obj_addr = member_exprt(_base, "$address", address_t);
-    exprt _assign = side_effect_exprt("assign", address_t);
-    _assign.copy_to_operands(base_addr, obj_addr);
-    convert_expression_to_code(_assign);
 
     bool is_revert = false;
     if (is_func_call)
@@ -11457,18 +11449,14 @@ bool solidity_convertert::get_high_level_member_access(
           return true;
         }
       }
-      else
-      {
-        if (get_high_level_call_wrapper(
-              cname, this_expr, front_block, back_block))
-          return true;
-      }
+      else if (get_high_level_call_wrapper(
+                 cname, this_expr, front_block, back_block))
+        return true;
 
       // if-body
       code_blockt block;
       for (auto &op : front_block.operands())
         block.move_to_operands(op);
-      block.move_to_operands(_assign);
       block.move_to_operands(rhs);
       for (auto &op : back_block.operands())
         block.move_to_operands(op);
@@ -11477,7 +11465,6 @@ bool solidity_convertert::get_high_level_member_access(
     else
     {
       code_blockt block;
-      block.move_to_operands(_assign);
       block.move_to_operands(rhs);
       rhs = block;
     }
