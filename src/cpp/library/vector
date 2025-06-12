@@ -84,35 +84,152 @@ public:
 
   class const_reverse_iterator
   {
+  private:
+    const T *pointer;
+    int pos;
+    const T *vec_pos;
+    
   public:
-    const_reverse_iterator(const const_reverse_iterator &);
-    const_reverse_iterator();
-    const_reverse_iterator &operator=(const const_reverse_iterator &);
+    // Copy constructor
+    const_reverse_iterator(const const_reverse_iterator &i)
+    {
+      pointer = i.pointer;
+      pos = i.pos;
+      vec_pos = i.vec_pos;
+    }
+    
+    // Default constructor
+    const_reverse_iterator() : pointer(nullptr), pos(-1), vec_pos(nullptr)
+    {
+    }
+    
+    // Conversion constructor from reverse_iterator
+    const_reverse_iterator(const reverse_iterator &i)
+    {
+      pointer = i.pointer;
+      pos = i.pos;
+      vec_pos = i.vec_pos;
+    }
+    
+    // Assignment operator
+    const_reverse_iterator &operator=(const const_reverse_iterator &i)
+    {
+      if (this != &i) {
+        pointer = i.pointer;
+        pos = i.pos;
+        vec_pos = i.vec_pos;
+      }
+      return *this;
+    }
+    
+    // Assignment from reverse_iterator
+    const_reverse_iterator &operator=(const reverse_iterator &i)
+    {
+      pointer = i.pointer;
+      pos = i.pos;
+      vec_pos = i.vec_pos;
+      return *this;
+    }
 
-    const T *operator->();
+    const T *operator->() const
+    {
+      return pointer;
+    }
 
-    const T &operator*();
+    const T &operator*() const
+    {
+      return *pointer;
+    }
 
-    const_reverse_iterator &operator++();
-    const_reverse_iterator operator++(int);
+    const_reverse_iterator &operator++()
+    {
+      pointer--;
+      pos--;
+      return *this;
+    }
+    
+    const_reverse_iterator operator++(int)
+    {
+      const_reverse_iterator buffer = *this;
+      pointer--;
+      pos--;
+      return buffer;
+    }
 
-    const_reverse_iterator &operator--();
-    const_reverse_iterator operator--(int);
+    const_reverse_iterator &operator--()
+    {
+      pointer++;
+      pos++;
+      return *this;
+    }
+    
+    const_reverse_iterator operator--(int)
+    {
+      const_reverse_iterator buffer = *this;
+      pointer++;
+      pos++;
+      return buffer;
+    }
 
-    bool operator==(const const_reverse_iterator &) const;
-    bool operator!=(const const_reverse_iterator &) const;
+    bool operator==(const const_reverse_iterator &other) const
+    {
+      return pointer == other.pointer;
+    }
+    
+    bool operator!=(const const_reverse_iterator &other) const
+    {
+      return pointer != other.pointer;
+    }
 
-    bool operator<(const const_reverse_iterator &) const;
-    bool operator>(const const_reverse_iterator &) const;
+    bool operator<(const const_reverse_iterator &other) const
+    {
+      return pointer > other.pointer; // reversed logic for reverse iterator
+    }
+    
+    bool operator>(const const_reverse_iterator &other) const
+    {
+      return pointer < other.pointer; // reversed logic for reverse iterator
+    }
 
-    bool operator<=(const const_reverse_iterator &) const;
-    bool operator>=(const const_reverse_iterator &) const;
+    bool operator<=(const const_reverse_iterator &other) const
+    {
+      return pointer >= other.pointer; // reversed logic for reverse iterator
+    }
+    
+    bool operator>=(const const_reverse_iterator &other) const
+    {
+      return pointer <= other.pointer; // reversed logic for reverse iterator
+    }
 
-    const_reverse_iterator operator+(int) const;
-    const_reverse_iterator operator-(int) const;
+    const_reverse_iterator operator+(int n) const
+    {
+      const_reverse_iterator result = *this;
+      result.pointer -= n;
+      result.pos -= n;
+      return result;
+    }
+    
+    const_reverse_iterator operator-(int n) const
+    {
+      const_reverse_iterator result = *this;
+      result.pointer += n;
+      result.pos += n;
+      return result;
+    }
 
-    const_reverse_iterator &operator+=(int);
-    const_reverse_iterator &operator-=(int);
+    const_reverse_iterator &operator+=(int n)
+    {
+      pointer -= n;
+      pos -= n;
+      return *this;
+    }
+    
+    const_reverse_iterator &operator-=(int n)
+    {
+      pointer += n;
+      pos += n;
+      return *this;
+    }
   };
 
   // types:
@@ -309,7 +426,17 @@ public:
     return buffer;
   }
 
-  const_reverse_iterator rbegin() const;
+  const_reverse_iterator rbegin() const
+  {
+    const_reverse_iterator buffer;
+    if (_size > 0) {
+      buffer = const_reverse_iterator();
+      buffer.pointer = buf + _size - 1;
+      buffer.pos = _size - 1;
+      buffer.vec_pos = buf;
+    }
+    return buffer;
+  }
 
   reverse_iterator rend()
   {
@@ -320,7 +447,14 @@ public:
     return buffer;
   }
 
-  const_reverse_iterator rend() const;
+  const_reverse_iterator rend() const
+  {
+    const_reverse_iterator buffer;
+    buffer.pointer = nullptr;
+    buffer.pos = -1;
+    buffer.vec_pos = buf;
+    return buffer;
+  }
 
   // capacity:
   size_type size() const
