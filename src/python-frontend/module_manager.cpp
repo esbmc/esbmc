@@ -69,7 +69,6 @@ std::shared_ptr<module> create_module(const fs::path &json_path)
   }
   catch (const std::exception &e)
   {
-    log_error("Unknown error: {}", e.what());
     return nullptr;
   }
 }

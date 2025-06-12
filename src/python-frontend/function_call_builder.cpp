@@ -9,6 +9,7 @@
 #include <boost/algorithm/string/predicate.hpp>
 
 const std::string kGetObjectSize = "__ESBMC_get_object_size";
+const std::string kStrlen = "strlen";
 const std::string kEsbmcAssume = "__ESBMC_assume";
 const std::string kVerifierAssume = "__VERIFIER_assume";
 
@@ -39,7 +40,7 @@ bool function_call_builder::is_assume_call(const symbol_id &function_id) const
 bool function_call_builder::is_len_call(const symbol_id &function_id) const
 {
   const std::string &func_name = function_id.get_function();
-  return func_name == kGetObjectSize;
+  return func_name == kGetObjectSize || func_name == kStrlen;
 }
 
 symbol_id function_call_builder::build_function_id() const
@@ -112,7 +113,16 @@ symbol_id function_call_builder::build_function_id() const
   // build symbol_id
   if (func_name == "len")
   {
-    func_name = kGetObjectSize;
+    const auto &arg = call_["args"][0];
+    func_name = kStrlen;
+    if (arg["_type"] == "List")
+      func_name = kGetObjectSize;
+    else if (arg["_type"] == "Name")
+    {
+      const std::string &var_type = th.get_var_type(arg["id"]);
+      if (var_type == "bytes" || var_type == "list" || var_type.empty())
+        func_name = kGetObjectSize;
+    }
     function_id.clear();
     function_id.set_prefix("c:");
   }

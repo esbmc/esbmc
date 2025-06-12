@@ -876,9 +876,9 @@ exprt python_converter::handle_string_concatenation(
   const nlohmann::json &left,
   const nlohmann::json &right)
 {
-  BigInt lhs_size = get_string_size(lhs);
-  BigInt rhs_size = get_string_size(rhs);
-  BigInt total_size = lhs_size + rhs_size;
+  BigInt lhs_size = get_string_size(lhs) - 1;
+  BigInt rhs_size = get_string_size(rhs) - 1;
+  BigInt total_size = lhs_size + rhs_size + 1;
 
   typet t = type_handler_.get_typet("str", total_size.to_uint64());
   exprt result = gen_zero(t);
@@ -888,7 +888,10 @@ exprt python_converter::handle_string_concatenation(
     symbolt *symbol = symbol_table_.find_symbol(id);
     assert(symbol);
     for (const exprt &ch : symbol->value.operands())
-      result.operands().at(i++) = ch;
+    {
+      if (ch != gen_zero(ch.type()))
+        result.operands().at(i++) = ch;
+    }
   };
 
   auto append_from_json = [&](const nlohmann::json &json) {
@@ -897,6 +900,8 @@ exprt python_converter::handle_string_concatenation(
 
     for (char ch : value)
     {
+      if (ch == 0)
+        break;
       BigInt v(ch);
       exprt char_expr = constant_exprt(
         integer2binary(v, bv_width(char_type)), integer2string(v), char_type);
@@ -913,6 +918,8 @@ exprt python_converter::handle_string_concatenation(
     append_from_symbol(rhs.identifier().as_string());
   else if (right["_type"] == "Constant")
     append_from_json(right);
+
+  result.operands().push_back(gen_zero(t.subtype()));
 
   return result;
 }
@@ -1036,32 +1043,6 @@ exprt python_converter::handle_string_comparison(
     }
   }
 
-  // Direct constant comparison if both are constants
-  if (lhs.is_constant() && rhs.is_constant())
-  {
-    // For array constants, compare element by element
-    if (lhs.is_array() && rhs.is_array())
-    {
-      const exprt::operandst &lhs_ops = lhs.operands();
-      const exprt::operandst &rhs_ops = rhs.operands();
-
-      // Compare sizes first
-      if (lhs_ops.size() != rhs_ops.size())
-        return gen_boolean(op == "NotEq");
-
-      // Compare each element
-      for (size_t i = 0; i < lhs_ops.size(); ++i)
-        if (lhs_ops[i] != rhs_ops[i])
-          return gen_boolean(op == "NotEq");
-
-      return gen_boolean(op == "Eq");
-    }
-
-    // Fallback for other constant types
-    bool constants_equal = (lhs == rhs);
-    return gen_boolean((op == "Eq") ? constants_equal : !constants_equal);
-  }
-
   // Check for zero-length arrays
   if (is_zero_length_array(lhs) && is_zero_length_array(rhs))
     return gen_boolean(op == "Eq");
@@ -1083,25 +1064,20 @@ exprt python_converter::handle_string_comparison(
       return gen_boolean((op == "Eq") ? rhs_empty : !rhs_empty);
     }
     else
+    {
       return gen_boolean(op == "NotEq");
+    }
   }
 
-  // Make sure we have valid array types before proceeding to strncmp
-  if (!lhs.type().is_array() || !rhs.type().is_array())
-    return gen_boolean(op == "NotEq");
-
-  // Fallback: use strncmp for non-constant comparisons
-  const auto &array_type = to_array_type(lhs.type());
-  BigInt string_size =
-    binary2integer(array_type.size().value().as_string(), false);
-
-  symbolt *strncmp_symbol = symbol_table_.find_symbol("c:@F@strncmp");
+  symbolt *strncmp_symbol = symbol_table_.find_symbol("c:@F@strcmp");
   assert(strncmp_symbol);
+
+  if (rhs.type().is_array())
+    rhs = get_array_base_address(rhs);
 
   side_effect_expr_function_callt strncmp_call;
   strncmp_call.function() = symbol_expr(*strncmp_symbol);
-  strncmp_call.arguments() = {
-    lhs, rhs, from_integer(string_size, long_uint_type())};
+  strncmp_call.arguments() = {lhs, rhs};
   strncmp_call.location() = get_location_from_decl(element);
   strncmp_call.type() = int_type();
 
@@ -1361,8 +1337,8 @@ exprt python_converter::handle_string_operations(
   ensure_string_array(lhs);
   ensure_string_array(rhs);
 
-  assert(lhs.type().is_array());
-  assert(rhs.type().is_array());
+  assert(lhs.type().is_array() || lhs.type().is_pointer());
+  assert(rhs.type().is_array() || rhs.type().is_pointer());
 
   if (op == "Eq" || op == "NotEq")
     return handle_string_comparison(op, lhs, rhs, element);
@@ -1581,12 +1557,30 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     {
       std::string op(element["ops"][i + 1]["_type"].get<std::string>());
       exprt logical_expr(get_op(op, bool_type()), bool_type());
-      exprt operand = get_expr(element["comparators"][i]);
-      logical_expr.copy_to_operands(operand);
-      operand = get_expr(element["comparators"][i + 1]);
-      logical_expr.copy_to_operands(operand);
+      exprt op1 = get_expr(element["comparators"][i]);
+      exprt op2 = get_expr(element["comparators"][i + 1]);
 
-      cond.move_to_operands(logical_expr);
+      if (op1.is_function_call())
+        to_side_effect_call(op1);
+      if (op2.is_function_call())
+        to_side_effect_call(op2);
+
+      std::string op1_type = type_handler_.type_to_string(op1.type());
+      std::string op2_type = type_handler_.type_to_string(op2.type());
+
+      if (op1_type == "str" && op2_type == "str")
+      {
+        handle_string_comparison(op, op1, op2, element);
+        exprt expr(get_op(op, bool_type()), type);
+        expr.copy_to_operands(op1, op2);
+        cond.move_to_operands(expr);
+      }
+      else
+      {
+        logical_expr.copy_to_operands(op1);
+        logical_expr.copy_to_operands(op2);
+        cond.move_to_operands(logical_expr);
+      }
     }
     return cond;
   }
@@ -1644,7 +1638,7 @@ symbolt *python_converter::find_function_in_base_classes(
   symbolt *func = nullptr;
 
   // Find class node in the AST
-  auto class_node = json_utils::find_class(ast_json["body"], class_name);
+  auto class_node = json_utils::find_class((*ast_json)["body"], class_name);
 
   if (class_node != nlohmann::json())
   {
@@ -1678,7 +1672,7 @@ symbolt *python_converter::find_function_in_base_classes(
 symbolt *
 python_converter::find_imported_symbol(const std::string &symbol_id) const
 {
-  for (const auto &obj : ast_json["body"])
+  for (const auto &obj : (*ast_json)["body"])
   {
     if (obj["_type"] == "ImportFrom" || obj["_type"] == "Import")
     {
@@ -1730,7 +1724,7 @@ bool python_converter::is_imported_module(const std::string &module_name) const
   if (imported_modules.find(module_name) != imported_modules.end())
     return true;
 
-  return json_utils::is_module(module_name, ast_json);
+  return json_utils::is_module(module_name, *ast_json);
 }
 
 exprt python_converter::get_function_call(const nlohmann::json &element)
@@ -1755,9 +1749,9 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       !type_utils::is_consensus_type(func_name) &&
       !type_utils::is_consensus_func(func_name) &&
       !type_utils::is_python_model_func(func_name) &&
-      !is_class(func_name, ast_json))
+      !is_class(func_name, *ast_json))
     {
-      const auto &func_node = find_function(ast_json["body"], func_name);
+      const auto &func_node = find_function((*ast_json)["body"], func_name);
       assert(!func_node.empty());
       get_function_definition(func_node);
     }
@@ -1838,62 +1832,54 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     return expr;
   }
 
+  if (!value.is_string())
+    return exprt(); // Not a string, no handling
+
+  const std::string &str_val = value.get<std::string>();
+
   // Handle single-character string as char literal
-  if (
-    value.is_string() && value.get<std::string>().size() == 1 &&
-    !is_bytes_literal(element))
+  if (str_val.size() == 1 && !is_bytes_literal(element))
   {
-    const std::string &str = value.get<std::string>();
-    typet t = type_handler_.get_typet("str", str.size());
-    return from_integer(static_cast<unsigned char>(str[0]), t);
+    typet t = type_handler_.get_typet("str", str_val.size());
+    return from_integer(static_cast<unsigned char>(str_val[0]), t);
   }
 
   // Handle empty strings or docstrings (often beginning with a newline)
-  if (
-    value.is_string() && !value.get<std::string>().empty() &&
-    value.get<std::string>()[0] == '\n' && !is_bytes_literal(element))
+  if (!str_val.empty() && str_val[0] == '\n' && !is_bytes_literal(element))
   {
     return exprt(); // Return empty expression
   }
 
   // Handle string or byte literals
-  if (value.is_string())
+  typet t = current_element_type;
+  std::vector<uint8_t> string_literal;
+
+  if (is_bytes_literal(element))
   {
-    typet t = current_element_type;
-    std::vector<uint8_t> string_literal;
-
-    // Check if this is a bytes literal
-    if (is_bytes_literal(element))
+    // Handle bytes literal - check for encoded_bytes field first
+    if (element.contains("encoded_bytes"))
     {
-      // Handle bytes literal - check for encoded_bytes field first
-      if (element.contains("encoded_bytes"))
-      {
-        string_literal =
-          base64_decode(element["encoded_bytes"].get<std::string>());
-      }
-      else
-      {
-        // Handle direct bytes literal (e.g., b'A')
-        const std::string &str_val = value.get<std::string>();
-        string_literal.assign(str_val.begin(), str_val.end());
-      }
-
-      // Set appropriate bytes type
-      t = type_handler_.get_typet("bytes", string_literal.size());
+      string_literal =
+        base64_decode(element["encoded_bytes"].get<std::string>());
     }
-    else // Handle Python str literals
+    else
     {
-      const std::string &str_val = value.get<std::string>();
-      t = type_handler_.get_typet("str", str_val.size());
       string_literal.assign(str_val.begin(), str_val.end());
     }
 
-    exprt expr = make_char_array_expr(string_literal, t);
+    // Set appropriate bytes type
+    t = type_handler_.get_typet("bytes", string_literal.size());
+  }
+  else
+  {
+    // Python str literal - add null terminator
+    string_literal.assign(str_val.begin(), str_val.end());
+    string_literal.push_back('\0');
 
-    return expr;
+    t = type_handler_.build_array(char_type(), string_literal.size());
   }
 
-  throw std::runtime_error("Unsupported literal " + value.get<std::string>());
+  return make_char_array_expr(string_literal, t);
 }
 
 // Helper function to detect bytes literals
@@ -2103,7 +2089,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     else if (element["_type"] == "Attribute")
     {
       var_name = element["value"]["id"].get<std::string>();
-      if (is_class(var_name, ast_json))
+      if (is_class(var_name, *ast_json))
       {
         // Found a class attribute
         var_name = "C@" + var_name;
@@ -2253,7 +2239,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       expr = constant_exprt(list_type);
 
       const auto &list = json_utils::find_var_decl(
-        element["value"]["id"], current_func_name_, ast_json);
+        element["value"]["id"], current_func_name_, *ast_json);
 
       assert(!list.empty());
 
@@ -2532,7 +2518,7 @@ void python_converter::get_var_assign(
         lhs_symbol->type = rhs.type();
         lhs.type() = rhs.type();
       }
-      if (!rhs.type().is_empty())
+      if (!rhs.type().is_empty() && !is_ctor_call)
         lhs_symbol->value = rhs;
     }
 
@@ -2548,7 +2534,8 @@ void python_converter::get_var_assign(
 
         if (base_ctor_called)
         {
-          auto class_node = json_utils::find_class(ast_json["body"], func_name);
+          auto class_node =
+            json_utils::find_class((*ast_json)["body"], func_name);
           func_name = class_node["bases"][0]["id"].get<std::string>();
           base_ctor_called = false;
         }
@@ -2590,7 +2577,7 @@ typet python_converter::resolve_variable_type(
   const std::string &var_name,
   const locationt &loc)
 {
-  nlohmann::json decl_node = get_var_node(var_name, ast_json);
+  nlohmann::json decl_node = get_var_node(var_name, *ast_json);
 
   if (!decl_node.empty())
   {
@@ -2940,8 +2927,19 @@ void python_converter::get_attributes_from_self(
       stmt["target"]["value"]["id"] == "self")
     {
       std::string attr_name = stmt["target"]["attr"];
-      typet type =
-        type_handler_.get_typet(stmt["annotation"]["id"].get<std::string>());
+      const std::string &annotated_type =
+        stmt["annotation"]["id"].get<std::string>();
+      typet type;
+      if (annotated_type == "str")
+      {
+        type = gen_pointer_type(char_type());
+      }
+      else
+      {
+        type =
+          type_handler_.get_typet(stmt["annotation"]["id"].get<std::string>());
+      }
+
       struct_typet::componentt comp =
         build_component(current_class_name_, attr_name, type);
 
@@ -3032,7 +3030,7 @@ void python_converter::get_class_definition(
       const std::string &class_name = class_member["annotation"]["id"];
       if (!symbol_table_.find_symbol("tag-" + class_name))
       {
-        const auto &class_node = find_class(ast_json["body"], class_name);
+        const auto &class_node = find_class((*ast_json)["body"], class_name);
         if (!class_node.empty())
         {
           std::string current_class = current_class_name_;
@@ -3269,7 +3267,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
 
 python_converter::python_converter(
   contextt &_context,
-  const nlohmann::json &ast,
+  const nlohmann::json *ast,
   const global_scope &gs)
   : symbol_table_(_context),
     ast_json(ast),
@@ -3344,14 +3342,14 @@ void python_converter::convert()
   main_symbol.is_extern = false;
   main_symbol.file_local = false;
 
-  main_python_file = ast_json["filename"].get<std::string>();
+  main_python_file = (*ast_json)["filename"].get<std::string>();
   current_python_file = main_python_file;
 
   if (!config.options.get_bool_option("no-library"))
   {
     // Load operational models -----
     const std::string &ast_output_dir =
-      ast_json["ast_output_dir"].get<std::string>();
+      (*ast_json)["ast_output_dir"].get<std::string>();
     std::list<std::string> model_files = {
       "range", "int", "consensus", "random"};
     std::list<std::string> model_folders = {"os", "numpy"};
@@ -3381,7 +3379,9 @@ void python_converter::convert()
           current_python_file = imported_modules[filename];
       }
 
-      exprt model_code = get_block(model_json["body"]);
+      exprt model_code =
+        with_ast(&model_json, [&]() { return get_block((*ast_json)["body"]); });
+
       convert_expression_to_code(model_code);
 
       // Add imported code to main symbol
@@ -3404,7 +3404,7 @@ void python_converter::convert()
 
     nlohmann::json function_node;
     // Find function node in AST
-    for (const auto &element : ast_json["body"])
+    for (const auto &element : (*ast_json)["body"])
     {
       if (element["_type"] == "FunctionDef" && element["name"] == function)
       {
@@ -3422,7 +3422,7 @@ void python_converter::convert()
     // Convert classes referenced by the function
     for (const auto &clazz : global_scope_.classes())
     {
-      const auto &class_node = find_class(ast_json["body"], clazz);
+      const auto &class_node = find_class((*ast_json)["body"], clazz);
       get_class_definition(class_node, block);
       current_class_name_.clear();
     }
@@ -3430,14 +3430,14 @@ void python_converter::convert()
     // Convert only the global variables referenced by the function
     for (const auto &global_var : global_scope_.variables())
     {
-      const auto &var_node = find_var_decl(global_var, "", ast_json);
+      const auto &var_node = find_var_decl(global_var, "", *ast_json);
       get_var_assign(var_node, block);
     }
 
     // Convert function arguments types
     for (const auto &arg : function_node["args"]["args"])
     {
-      auto node = find_class(ast_json["body"], arg["annotation"]["id"]);
+      auto node = find_class((*ast_json)["body"], arg["annotation"]["id"]);
       if (!node.empty())
         get_class_definition(node, block);
     }
@@ -3481,7 +3481,7 @@ void python_converter::convert()
   else
   {
     // Convert imported modules
-    for (const auto &elem : ast_json["body"])
+    for (const auto &elem : (*ast_json)["body"])
     {
       if (elem["_type"] == "ImportFrom" || elem["_type"] == "Import")
       {
@@ -3490,7 +3490,7 @@ void python_converter::convert()
                                            ? elem["module"]
                                            : elem["names"][0]["name"];
         std::stringstream module_path;
-        module_path << ast_json["ast_output_dir"].get<std::string>() << "/"
+        module_path << (*ast_json)["ast_output_dir"].get<std::string>() << "/"
                     << module_name << ".json";
         std::ifstream imported_file(module_path.str());
         imported_file >> imported_module_json;
@@ -3512,7 +3512,7 @@ void python_converter::convert()
     current_python_file = main_python_file;
 
     // Convert main statements
-    exprt main_block = get_block(ast_json["body"]);
+    exprt main_block = get_block((*ast_json)["body"]);
     codet main_code = convert_expression_to_code(main_block);
 
     if (main_symbol.value.is_code())
