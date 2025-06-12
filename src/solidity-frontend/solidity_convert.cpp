@@ -11925,6 +11925,15 @@ bool solidity_convertert::model_transaction(
   convert_expression_to_code(assign_val);
   front_block.move_to_operands(assign_val);
 
+  // if(this.balance < val) return false;
+  exprt less_than = exprt("<", bool_type());
+  less_than.copy_to_operands(this_balance, value);
+  codet cmp_less_than("ifthenelse");
+  code_returnt ret_false;
+  ret_false.return_value() = false_exprt();
+  cmp_less_than.copy_to_operands(less_than, ret_false);
+  front_block.move_to_operands(cmp_less_than);
+
   // this.balance -= _val;
   exprt sub_assign = side_effect_exprt("assign-", val_t);
   sub_assign.copy_to_operands(this_balance, value);
@@ -12013,6 +12022,8 @@ bool solidity_convertert::get_call_value_definition(
 
     msg_value = value 
     msg_sender = this.address;
+    if(this.balance < x)      <-- simulate EVM rollback
+      return false;
     this.balance -= x; 
     _ESBMC_Object_x.balance += x; 
 
@@ -12116,6 +12127,15 @@ bool solidity_convertert::get_call_value_definition(
     assign_sender.copy_to_operands(msg_sender, this_address);
     convert_expression_to_code(assign_sender);
     then.move_to_operands(assign_sender);
+
+    // if(this.balance < val) return false;
+  exprt less_than = exprt("<", bool_type());
+    less_than.copy_to_operands(this_balance, val_expr);
+        codet cmp_less_than("ifthenelse");
+    code_returnt ret_false;
+    ret_false.return_value() = false_exprt();
+    cmp_less_than.copy_to_operands(less_than, ret_false);
+    then.move_to_operands(cmp_less_than);
 
     // this.balance -= _val;
     exprt sub_assign = side_effect_exprt("assign-", val_t);
@@ -12337,6 +12357,15 @@ bool solidity_convertert::get_transfer_definition(
     convert_expression_to_code(assign_sender);
     then.move_to_operands(assign_sender);
 
+    // if(this.balance < val) return false;
+  exprt less_than = exprt("<", bool_type());
+    less_than.copy_to_operands(this_balance, val_expr);
+        codet cmp_less_than("ifthenelse");
+    code_returnt ret_false;
+    ret_false.return_value() = false_exprt();
+    cmp_less_than.copy_to_operands(less_than, ret_false);
+    then.move_to_operands(cmp_less_than);
+
     // this.balance -= _val;
     exprt sub_assign = side_effect_exprt("assign-", val_t);
     sub_assign.copy_to_operands(this_balance, val_expr);
@@ -12556,6 +12585,16 @@ bool solidity_convertert::get_send_definition(
     assign_sender.copy_to_operands(msg_sender, this_address);
     convert_expression_to_code(assign_sender);
     then.move_to_operands(assign_sender);
+
+    // if(this.balance < val) return false;
+    exprt less_than = exprt("<", val_expr.type());
+    less_than.copy_to_operands(this_balance, val_expr);
+    //! "ifthenelse" has to be declared as codet, not exprt and use convert_expr_to_code
+    codet cmp_less_than("ifthenelse");
+    code_returnt ret_false;
+    ret_false.return_value() = false_exprt();
+    cmp_less_than.copy_to_operands(less_than, ret_false);
+    then.move_to_operands(cmp_less_than);
 
     // this.balance -= _val;
     exprt sub_assign = side_effect_exprt("assign-", val_t);
