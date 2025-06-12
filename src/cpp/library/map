@@ -981,7 +981,7 @@ public:
     x = tmp;
   }
 
-  pair<iterator, bool> insert(value_type &val)
+  pair<iterator, bool> insert(const value_type &val)
   {
     unsigned int s = this->_size;
     pair<iterator, bool> _pair;
