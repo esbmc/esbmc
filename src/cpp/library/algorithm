@@ -9,6 +9,32 @@ typedef bool(function)(int arg1, int arg2);
 
 namespace std
 {
+template<class ForwardIt, class Compare>
+bool is_sorted(ForwardIt first, ForwardIt last, Compare comp) {
+    if (first != last) {
+        ForwardIt next = first;
+        while (++next != last) {
+            if (comp(*next, *first))
+                return false;
+            first = next;
+        }
+    }
+    return true;
+}
+
+template<class ForwardIt>
+bool is_sorted(ForwardIt first, ForwardIt last) {
+    if (first != last) {
+        ForwardIt next = first;
+        while (++next != last) {
+            if (*next < *first)
+                return false;
+            first = next;
+        }
+    }
+    return true;
+}
+
 template <class InputIterator, class Function>
 Function for_each(InputIterator first, InputIterator last, Function f)
 {

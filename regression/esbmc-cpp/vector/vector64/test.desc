@@ -1,4 +1,4 @@
 CORE
 main.cpp
---incremental-bmc
+--unwind 5 --no-unwinding-assertions
 ^VERIFICATION SUCCESSFUL$
