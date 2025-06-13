@@ -8,7 +8,6 @@
 #include "iostream"
 #include "cstdlib"
 
-size_t npos;
 extern "C" void itoa(int value, char *str, int base);
 
 namespace std
@@ -22,6 +21,7 @@ struct char_traits
 class string
 {
 public:
+  static const size_t npos = static_cast<size_t>(-1);
   char *str;
   int _size;
 
