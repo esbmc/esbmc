@@ -2940,8 +2940,18 @@ void python_converter::get_attributes_from_self(
       stmt["target"]["value"]["id"] == "self")
     {
       std::string attr_name = stmt["target"]["attr"];
-      typet type =
-        type_handler_.get_typet(stmt["annotation"]["id"].get<std::string>());
+      const std::string& annotated_type = stmt["annotation"]["id"].get<std::string>();
+      typet type;
+      if (annotated_type == "str")
+      {
+        type = gen_pointer_type(char_type());
+      }
+      else
+      {
+        type =
+          type_handler_.get_typet(stmt["annotation"]["id"].get<std::string>());
+      }
+
       struct_typet::componentt comp =
         build_component(current_class_name_, attr_name, type);
 
