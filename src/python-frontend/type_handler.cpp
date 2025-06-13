@@ -76,6 +76,9 @@ std::string type_handler::type_to_string(const typet &t) const
       return type_to_string(elem_type);
   }
 
+  if (t.is_pointer() && t.subtype() == char_type())
+	  return "str";
+
   return "";
 }
 
