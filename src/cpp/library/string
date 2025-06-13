@@ -49,14 +49,14 @@ public:
       pointer = p_pointer;
     }
 
-    iterator &operator=(const_iterator &right)
+    iterator &operator=(const const_iterator &right)
     {
       this->pointer = right.pointer;
       this->pos = right.pos;
       return *this;
     }
 
-    iterator &operator=(iterator &right)
+    iterator &operator=(const iterator &right)
     {
       this->pointer = right.pointer;
       this->pos = right.pos;
