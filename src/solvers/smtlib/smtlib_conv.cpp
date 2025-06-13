@@ -174,6 +174,7 @@ std::string smtlib_convt::dump_smt()
       emit_opt_output.emit("%s\n", "(check-sat)");
       log_status("SMT formula written to output file {}", path);
   }
+  return "SMT formula dumped successfully"; 
 } 
 
 smtlib_convt::file_emitter::file_emitter(const std::string &path)

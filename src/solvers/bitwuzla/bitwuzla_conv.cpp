@@ -1,5 +1,6 @@
 #include <bitwuzla_conv.h>
 #include <cstring>
+#include <fstream>
 
 #define new_ast new_solver_ast<bitw_smt_ast>
 
@@ -825,7 +826,7 @@ bitwuzla_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
     arrsort);
 }
 
-void bitwuzla_convt::dump_smt()
+std::string bitwuzla_convt::dump_smt()
 {
   const std::string &path = options.get_option("output");
 
@@ -839,12 +840,16 @@ void bitwuzla_convt::dump_smt()
     if (!out)
     {
       log_error("Could not open output file '{}'", path);
+      return "Failed to open output file.";
     }
     else
     {
       bitwuzla_print_formula(bitw, "smt2", out, 2);
     }
   }
+  log_status("SMT formula dumped successfully");
+  return "SMT formula dumped successfully";
+
 }
 
 void bitw_smt_ast::dump() const
