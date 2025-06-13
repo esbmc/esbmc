@@ -1444,8 +1444,8 @@ public:
   template <class Predicate>
   void remove_if(Predicate pred)
   {
-    __ESBMC_assert(
-      pred != ((void *)0), "The parameter must be different than NULL.");
+	__ESBMC_assert(sizeof(pred) > 0, 
+	  "Predicate must be a valid callable object");
     for (iterator _it = this->begin(); _it.pos < this->_size;)
     {
       if (pred(*_it.it))
