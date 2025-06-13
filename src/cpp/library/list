@@ -1321,6 +1321,13 @@ public:
     position.it = &(this->_list[position.pos]);
   }
 
+  void insert(iterator position, int n, const value_type& x)
+  {
+    __ESBMC_assert(
+      n >= 0, "The count parameter must be greater than or equal to zero.");
+	insert(position, static_cast<size_type>(n), x); 
+  }
+
   template <class InputIterator>
   void insert(iterator position, InputIterator n, InputIterator x)
   {
