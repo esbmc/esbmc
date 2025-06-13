@@ -1066,6 +1066,26 @@ exprt python_converter::handle_string_comparison(
   if (is_zero_length_array(lhs) && is_zero_length_array(rhs))
     return gen_boolean(op == "Eq");
 
+  if (lhs.type().is_pointer() || rhs.type().is_pointer())
+  {
+    symbolt *strncmp_symbol = symbol_table_.find_symbol("c:@F@strcmp");
+    assert(strncmp_symbol);
+
+    if (rhs.type().is_array())
+    	rhs = get_array_base_address(rhs);
+
+    side_effect_expr_function_callt strncmp_call;
+    strncmp_call.function() = symbol_expr(*strncmp_symbol);
+    strncmp_call.arguments() = {lhs, rhs};
+    strncmp_call.location() = get_location_from_decl(element);
+    strncmp_call.type() = int_type();
+
+    lhs = strncmp_call;
+    rhs = gen_zero(int_type());
+
+    return nil_exprt(); // continue with lhs OP rhs
+  }
+
   // Handle type mismatches to prevent crashes/array out of bounds
   if (lhs.type() != rhs.type())
   {
@@ -1083,7 +1103,9 @@ exprt python_converter::handle_string_comparison(
       return gen_boolean((op == "Eq") ? rhs_empty : !rhs_empty);
     }
     else
+    {
       return gen_boolean(op == "NotEq");
+    }
   }
 
   // Make sure we have valid array types before proceeding to strncmp
@@ -1341,6 +1363,9 @@ bool python_converter::is_identity_function(
 
 void python_converter::ensure_string_array(exprt &expr)
 {
+  if (expr.type().is_pointer())
+	  return;
+
   if (!expr.type().is_array())
   {
     typet t = type_handler_.build_array(expr.type(), 1);
@@ -1361,8 +1386,8 @@ exprt python_converter::handle_string_operations(
   ensure_string_array(lhs);
   ensure_string_array(rhs);
 
-  assert(lhs.type().is_array());
-  assert(rhs.type().is_array());
+  assert(lhs.type().is_array() || lhs.type().is_pointer());
+  assert(rhs.type().is_array() || rhs.type().is_pointer());
 
   if (op == "Eq" || op == "NotEq")
     return handle_string_comparison(op, lhs, rhs, element);
