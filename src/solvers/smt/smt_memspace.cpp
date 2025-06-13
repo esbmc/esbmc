@@ -428,7 +428,7 @@ void smt_convt::finalize_pointer_chain(unsigned int objnum)
     expr2tc start_j = symbol2tc(inttype, startj.str());
     expr2tc end_j = symbol2tc(inttype, endj.str());
 
-    // Formula: (i_end < j_start) || (i_start > j_end)
+    // Formula: ((i_end < j_start) || (i_start > j_end)) && i_start!= j_start
     // Previous assertions ensure start <= end for all objs.
     expr2tc lt1 = lessthan2tc(end_i, start_j);
     expr2tc gt1 = greaterthan2tc(start_i, end_j);
@@ -455,6 +455,9 @@ void smt_convt::finalize_pointer_chain(unsigned int objnum)
     }
 
     assert_expr(e);
+
+    expr2tc not_equal = notequal2tc(start_i, start_j);
+    assert_expr(not_equal);
   }
 }
 
