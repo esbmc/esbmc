@@ -1208,14 +1208,6 @@ bool solidity_convertert::get_var_decl(
     added_symbol.value = inits;
     decl.operands().push_back(inits);
   }
-  else if (t_sol_type == "STRING" && !set_init && is_state_var)
-  {
-    if (context.find_symbol("c:@empty_str") == nullptr)
-      return true;
-    val = symbol_expr(*context.find_symbol("c:@empty_str"));
-    added_symbol.value = val;
-    decl.operands().push_back(val);
-  }
   // now we have rule out other special cases
   else if (set_init)
   {
@@ -2430,7 +2422,9 @@ bool solidity_convertert::move_initializer_to_ctor(
       symbolt *symbol = context.find_symbol(comp.identifier());
       exprt rhs = symbol->value;
       exprt _assign;
-      if (lhs.type().get("#sol_type") == "STRING")
+      if (
+        lhs.type().get("#sol_type") == "STRING" &&
+        rhs.get("#zero_initializer") != "1")
         get_string_assignment(lhs, rhs, _assign);
       else
       {

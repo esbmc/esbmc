@@ -715,7 +715,6 @@ __ESBMC_HIDE:;
 }
 
 // string assign
-const char *empty_str = "";
 void _str_assign(char **str1, const char *str2) {
 __ESBMC_HIDE:;
     // Ensure str1 is a valid pointer (not NULL)
