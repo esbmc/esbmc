@@ -2978,7 +2978,7 @@ smt_astt smt_ast::project(
   abort();
 }
 
-void smt_convt::dump_smt()
+std::string smt_convt::dump_smt()
 {
   log_error("SMT dump not implemented for {}", solver_text());
   abort();

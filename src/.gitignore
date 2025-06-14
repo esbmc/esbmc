@@ -22,3 +22,10 @@ stamp-h1
 libltdl
 debian
 *.*~
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+build/
+CPack*
+a.out
+

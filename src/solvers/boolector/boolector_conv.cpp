@@ -787,9 +787,12 @@ boolector_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
     arrsort);
 }
 
-void boolector_convt::dump_smt()
+std::string boolector_convt::dump_smt()
 {
   boolector_dump_smt2(btor, messaget::state.out);
+  log_status("SMT formula dumped successfully");
+  return "SMT formula dumped successfully";
+
 }
 
 void btor_smt_ast::dump() const
