@@ -97,7 +97,8 @@ bool solidity_convertert::convert()
     return true;
 
   // for coverage and trace simplification: update include_files
-  auto add_unique = [](const std::string &file) {
+  auto add_unique = [](const std::string &file)
+  {
     if (
       std::find(
         config.ansi_c.include_files.begin(),
@@ -512,7 +513,38 @@ bool solidity_convertert::populate_auxilary_vars()
     }
   }
 
-  // populate _bind_addr_list
+  // add contract name string
+  // const char * Base = &"Base"[0];
+  for (auto contract_name : contractNamesList)
+  {
+    exprt _cname_expr;
+    std::string aux_cname, aux_cid;
+    aux_cname = contract_name;
+    aux_cid = "sol:@" + aux_cname;
+
+    string_constantt string(contract_name);
+    typet ct = pointer_typet(signed_char_type());
+    ct.cmt_constant(true);
+    symbolt s;
+    std::string debug_modulename = get_modulename_from_path(absolute_path);
+    get_default_symbol(
+      s, debug_modulename, ct, aux_cname, aux_cid, locationt());
+    s.lvalue = true;
+    s.file_local = true;
+    s.static_lifetime = true; // static
+    symbolt &_sym = *move_symbol_to_context(s);
+    solidity_gen_typecast(ns, string, ct);
+    _sym.value = string;
+  }
+
+  /* populate _bind_cname_list
+  const char* Base = "Base";
+  const char* Bank_bind_cname_list[1];
+  void initialize_bind_list()
+  {
+    Bank_bind_cname_list[0] = Base;
+  }
+  */
   for (auto _cname : contractNamesList)
   {
     std::unordered_set<std::string> cname_set;
@@ -534,28 +566,11 @@ bool solidity_convertert::populate_auxilary_vars()
     arr_t.set("#sol_type", "ARRAY");
     arr_t.set("#sol_array_size", std::to_string(length));
 
-    exprt inits;
-    inits = gen_zero(arr_t);
-    unsigned int i = 0;
-    for (auto str : cname_set)
-    {
-      string_constantt string(str);
-      // hack:
-      // N: $SolidityTest_bind_addr_list={ "Derived", "SolidityTest" };
-      // Y: $SolidityTest_bind_addr_list={ &"Derived"[0], &"SolidityTest"[0] };
-      // solidity_gen_typecast(ns, string, arr_t.subtype());
-      solidity_gen_typecast(ns, string, ct);
-      inits.operands().at(i) = string;
-      ++i;
-    }
-    inits.id("array");
-
-    // convert this string array (e.g. {"base", "derive"}) to a symbol
     std::string aux_name, aux_id;
-    aux_name = "$" + _cname + "_bind_addr_list";
+    aux_name = "$" + _cname + "_bind_cname_list";
     aux_id = "sol:@C@" + _cname + "@" + aux_name;
     symbolt s;
-    typet _t = inits.type();
+    typet _t = arr_t;
     _t.cmt_constant(true);
     std::string debug_modulename = get_modulename_from_path(absolute_path);
     get_default_symbol(s, debug_modulename, _t, aux_name, aux_id, locationt());
@@ -563,7 +578,47 @@ bool solidity_convertert::populate_auxilary_vars()
     s.static_lifetime = true;
     s.lvalue = true;
     symbolt &sym = *move_symbol_to_context(s);
-    sym.value = inits;
+    sym.value = gen_zero(get_complete_type(_t, ns), true);
+    sym.value.zero_initializer(true);
+
+    // f: initialize_bind_list
+    std::string fname, fid;
+    get_bind_cname_func_name(_cname, fname, fid);
+    symbolt fs;
+    code_typet ft;
+    ft.return_type() = empty_typet();
+    ft.make_ellipsis();
+    get_default_symbol(fs, debug_modulename, ft, fname, fid, locationt());
+    s.file_local = true;
+    symbolt &fsym = *move_symbol_to_context(fs);
+
+    // fbody:
+    // Bank_bind_cname_list[0] = Base;
+    // Bank_bind_cname_list[1] = Derived;
+    // ...
+    code_blockt fbody;
+    unsigned int i = 0;
+    exprt arr = symbol_expr(sym);
+    for (auto str : cname_set)
+    {
+      // lhs
+      exprt pos = constant_exprt(
+        integer2binary(i, bv_width(uint_type())),
+        integer2string(i),
+        uint_type());
+      exprt idx = index_exprt(arr, pos, ct);
+      // rhs
+      exprt cname_str = symbol_expr(*context.find_symbol("sol:@" + str));
+      solidity_gen_typecast(ns, cname_str, ct);
+      // assign
+      exprt ass_expr = side_effect_exprt("assign", ct);
+      ass_expr.copy_to_operands(idx, cname_str);
+      convert_expression_to_code(ass_expr);
+
+      fbody.copy_to_operands(ass_expr);
+      ++i;
+    }
+    fsym.value = fbody;
   }
 
   // for mapping
@@ -652,14 +707,15 @@ bool solidity_convertert::populate_function_signature(
       is_payable = func_node["stateMutability"] == "payable";
       is_inherit = func_node.contains("is_inherited");
 
-      funcSignatures[cname].push_back(solidity_convertert::func_sig(
-        func_name,
-        func_id,
-        visibility,
-        type,
-        is_payable,
-        is_inherit,
-        is_library));
+      funcSignatures[cname].push_back(
+        solidity_convertert::func_sig(
+          func_name,
+          func_id,
+          visibility,
+          type,
+          is_payable,
+          is_inherit,
+          is_library));
     }
   }
 
@@ -667,9 +723,8 @@ bool solidity_convertert::populate_function_signature(
   bool hasConstructor = std::any_of(
     funcSignatures[cname].begin(),
     funcSignatures[cname].end(),
-    [&cname](const solidity_convertert::func_sig &sig) {
-      return sig.name == cname;
-    });
+    [&cname](const solidity_convertert::func_sig &sig)
+    { return sig.name == cname; });
   if (!hasConstructor && !is_library)
   {
     func_name = cname;
@@ -679,14 +734,15 @@ bool solidity_convertert::populate_function_signature(
     type.return_type() = empty_typet();
     type.return_type().set("cpp_type", "void");
     is_inherit = false;
-    funcSignatures[cname].push_back(solidity_convertert::func_sig(
-      func_name,
-      func_id,
-      visibility,
-      type,
-      is_payable,
-      is_inherit,
-      is_library));
+    funcSignatures[cname].push_back(
+      solidity_convertert::func_sig(
+        func_name,
+        func_id,
+        visibility,
+        type,
+        is_payable,
+        is_inherit,
+        is_library));
   }
 
   return false;
@@ -2334,6 +2390,28 @@ bool solidity_convertert::move_initializer_to_ctor(
   const std::string contract_name)
 {
   return move_initializer_to_ctor(based_contracts, contract_name, false);
+}
+
+// move library initializer and bind-name initializer to main
+bool solidity_convertert::move_initializer_to_main(codet &func_body)
+{
+  side_effect_expr_function_callt call;
+  get_library_function_call_no_args(
+    "initialize", "c:@F@initialize", empty_typet(), locationt(), call);
+  convert_expression_to_code(call);
+  func_body.move_to_operands(call);
+
+  for (auto str : contractNamesList)
+  {
+    std::string fname, fid;
+    get_bind_cname_func_name(str, fname, fid);
+    if (context.find_symbol(fid) == nullptr)
+      return true;
+    exprt func = symbol_expr(*context.find_symbol(fid));
+    code_function_callt _call;
+    _call.function() = func;
+    func_body.move_to_operands(_call);
+  }
 }
 
 // convert the initialization of the state variable
@@ -8660,8 +8738,8 @@ bool solidity_convertert::is_func_sig_cover(
   const std::string &base)
 {
   // function signature coverage‐check lambda: name + ordered argument types
-  auto covers =
-    [&](const std::string &derived, const std::string &base) -> bool {
+  auto covers = [&](const std::string &derived, const std::string &base) -> bool
+  {
     const auto &dSigs = funcSignatures.at(derived);
     const auto &bSigs = funcSignatures.at(base);
 
@@ -9033,7 +9111,8 @@ void solidity_convertert::extract_new_contracts()
     return;
 
   std::function<void(const nlohmann::json &)> process_node;
-  process_node = [&](const nlohmann::json &node) {
+  process_node = [&](const nlohmann::json &node)
+  {
     if (node.is_object())
     {
       if (node.contains("nodeType") && node["nodeType"] == "NewExpression")
@@ -9885,14 +9964,16 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
   dest = code_blockt();
 
   // call designated "initialization" functions
-  context.foreach_operand_in_order([&dest](const symbolt &s) {
-    if (s.type.initialization() && s.type.is_code())
+  context.foreach_operand_in_order(
+    [&dest](const symbolt &s)
     {
-      code_function_callt function_call;
-      function_call.function() = symbol_expr(s);
-      dest.move_to_operands(function_call);
-    }
-  });
+      if (s.type.initialization() && s.type.is_code())
+      {
+        code_function_callt function_call;
+        function_call.function() = symbol_expr(s);
+        dest.move_to_operands(function_call);
+      }
+    });
 }
 
 void solidity_convertert::get_aux_var(
@@ -10117,13 +10198,7 @@ bool solidity_convertert::multi_transaction_verification(
 
   // initialize
   if (is_final_main)
-  {
-    side_effect_expr_function_callt call;
-    get_library_function_call_no_args(
-      "initialize", "c:@F@initialize", empty_typet(), locationt(), call);
-    convert_expression_to_code(call);
-    func_body.move_to_operands(call);
-  }
+    move_initializer_to_main(func_body);
 
   // 1. get constructor call
   if (contractNamesList.count(c_name) == 0)
@@ -10208,11 +10283,7 @@ bool solidity_convertert::multi_contract_verification_bound(
   func_body.operands().push_back(label);
 
   // initialize
-  side_effect_expr_function_callt call;
-  get_library_function_call_no_args(
-    "initialize", "c:@F@initialize", empty_typet(), locationt(), call);
-  convert_expression_to_code(call);
-  func_body.move_to_operands(call);
+  move_initializer_to_main(func_body);
 
   // 1. construct switch-case
   int cnt = 0;
@@ -10350,11 +10421,7 @@ bool solidity_convertert::multi_contract_verification_unbound(
   func_body.operands().push_back(label);
 
   // initialize
-  side_effect_expr_function_callt call;
-  get_library_function_call_no_args(
-    "initialize", "c:@F@initialize", empty_typet(), locationt(), call);
-  convert_expression_to_code(call);
-  func_body.move_to_operands(call);
+  move_initializer_to_main(func_body);
 
   std::set<std::string> cname_set;
   if (!tgt_set.empty())
@@ -10979,7 +11046,7 @@ bool solidity_convertert::assign_nondet_contract_name(
 
   // convert this string array (e.g. {"base", "derive"}) to a symbol
   std::string aux_name, aux_id;
-  aux_name = "$" + _cname + "_bind_addr_list";
+  aux_name = "$" + _cname + "_bind_cname_list";
   aux_id = "sol:@C@" + _cname + "@" + aux_name;
 
   if (context.find_symbol(aux_id) == nullptr)
@@ -11047,7 +11114,8 @@ bool solidity_convertert::has_callable_func(const std::string &cname)
   return std::any_of(
     funcSignatures[cname].begin(),
     funcSignatures[cname].end(),
-    [&cname](const solidity_convertert::func_sig &sig) {
+    [&cname](const solidity_convertert::func_sig &sig)
+    {
       // must be public or external, even if the address is itself
       return sig.name != cname &&
              (sig.visibility == "public" || sig.visibility == "external");
@@ -11064,9 +11132,9 @@ bool solidity_convertert::has_target_function(
     return false;
 
   return std::any_of(
-    it->second.begin(), it->second.end(), [&](const func_sig &sig) {
-      return sig.name == func_name;
-    });
+    it->second.begin(),
+    it->second.end(),
+    [&](const func_sig &sig) { return sig.name == func_name; });
 }
 
 solidity_convertert::func_sig solidity_convertert::get_target_function(
@@ -11087,9 +11155,8 @@ solidity_convertert::func_sig solidity_convertert::get_target_function(
   auto func_it = std::find_if(
     functions.begin(),
     functions.end(),
-    [&func_name](const solidity_convertert::func_sig &sig) {
-      return sig.name == func_name;
-    });
+    [&func_name](const solidity_convertert::func_sig &sig)
+    { return sig.name == func_name; });
 
   // If function is found, return it; otherwise, return an empty func_sig
   if (func_it != functions.end())
@@ -11637,6 +11704,15 @@ bool solidity_convertert::get_low_level_member_accsss(
   }
 
   return false;
+}
+
+void solidity_convertert::get_bind_cname_func_name(
+  const std::string &cname,
+  std::string &fname,
+  std::string &fid)
+{
+  fname = "initialize_" + cname + +"_bind_cname#";
+  fid = "sol:@F@" + fname;
 }
 
 // return expr: contract_instance._ESBMC_bind_cname

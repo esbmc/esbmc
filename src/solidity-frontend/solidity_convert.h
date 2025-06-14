@@ -204,6 +204,7 @@ protected:
     const nlohmann::json *based_contracts,
     const std::string contract_name,
     bool is_aux_ctor);
+  bool move_initializer_to_main(codet &func_body);
   bool move_inheritance_to_ctor(
     const nlohmann::json *based_contracts,
     const std::string contract_name,
@@ -549,6 +550,10 @@ protected:
     exprt &back_block);
 
   bool get_bind_cname_expr(const nlohmann::json &json, exprt &bind_cname_expr);
+  void get_bind_cname_func_name(
+    const std::string &cname,
+    std::string &fname,
+    std::string &fid);
   void get_nondet_expr(const typet &t, exprt &new_expr);
   bool assign_nondet_contract_name(const std::string &_cname, exprt &new_expr);
   bool assign_param_nondet(
