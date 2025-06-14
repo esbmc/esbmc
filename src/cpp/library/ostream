@@ -91,6 +91,14 @@ inline ostream &operator<<(ostream &o, unsigned long val)
   return o;
 }
 #endif
+inline ostream &operator<<(ostream &o, long long val)
+{
+  return o;
+}
+inline ostream &operator<<(ostream &o, unsigned long long val)
+{
+  return o;
+}
 inline ostream &operator<<(ostream &o, float val)
 {
   return o;
