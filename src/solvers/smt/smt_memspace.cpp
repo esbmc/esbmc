@@ -447,11 +447,14 @@ void smt_convt::finalize_pointer_chain(unsigned int objnum)
      * version of the __ESBMC_alloc symbol stored in `current_valid_objects_sym`
      * is the one this new object i gets registered with.
      */
-    if (j && current_valid_objects_sym)
+    if (j && current_valid_objects_sym && current_dynamic)
     {
       expr2tc alive =
         index2tc(get_bool_type(), current_valid_objects_sym, gen_ulong(j));
-      e = implies2tc(alive, e);
+      
+      expr2tc dynamic =
+        index2tc(get_bool_type(), current_dynamic, gen_ulong(j));
+      e = implies2tc(or2tc(not2tc(dynamic), alive), e);
     }
 
     assert_expr(e);
