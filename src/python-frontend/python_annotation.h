@@ -15,6 +15,80 @@ enum class InferResult
   UNKNOWN,
 };
 
+// Handle Python built-in functions
+static const std::map<std::string, std::string> builtin_functions = {
+  // Type conversion functions
+  {"int", "int"},
+  {"float", "float"},
+  {"str", "str"},
+  {"bool", "bool"},
+  {"list", "list"},
+  {"dict", "dict"},
+  {"set", "set"},
+  {"tuple", "tuple"},
+
+  // Numeric functions
+  {"abs", "int"},   // Can return int or float, but int is common case
+  {"round", "int"}, // Can return int or float
+  {"min", "Any"},   // Type depends on input
+  {"max", "Any"},   // Type depends on input
+  {"sum", "int"},   // Can return int or float, but int is common case
+  {"pow", "int"},   // Can return int or float
+
+  // Sequence functions
+  {"len", "int"},
+  {"range", "range"},
+  {"enumerate", "enumerate"},
+  {"zip", "zip"},
+  {"reversed", "reversed"},
+  {"sorted", "list"},
+
+  // I/O functions
+  {"print", "NoneType"},
+  {"input", "str"},
+  {"open", "file"},
+
+  // Utility functions
+  {"isinstance", "bool"},
+  {"issubclass", "bool"},
+  {"hasattr", "bool"},
+  {"getattr", "Any"},
+  {"setattr", "NoneType"},
+  {"delattr", "NoneType"},
+  {"callable", "bool"},
+  {"id", "int"},
+  {"hash", "int"},
+  {"repr", "str"},
+  {"ascii", "str"},
+  {"ord", "int"},
+  {"chr", "str"},
+  {"bin", "str"},
+  {"oct", "str"},
+  {"hex", "str"},
+  {"format", "str"},
+
+  // Iteration functions
+  {"iter", "iterator"},
+  {"next", "Any"},
+  {"all", "bool"},
+  {"any", "bool"},
+  {"filter", "filter"},
+  {"map", "map"},
+
+  // Variable functions
+  {"vars", "dict"},
+  {"dir", "list"},
+  {"globals", "dict"},
+  {"locals", "dict"},
+
+  // Execution functions
+  {"eval", "Any"},
+  {"exec", "NoneType"},
+  {"compile", "code"},
+
+  // Import functions
+  {"__import__", "module"}};
+
 template <class Json>
 class python_annotation
 {
@@ -276,10 +350,12 @@ private:
       }
     }
 
+    // Search the top-level AST body for a matching function definition
     for (const Json &elem : ast["body"])
     {
       if (elem["_type"] == "FunctionDef" && elem["name"] == func_name)
       {
+        // Try to infer return type from actual return statements
         auto return_node = json_utils::find_return_node(elem["body"]);
         if (!return_node.empty())
         {
@@ -288,10 +364,52 @@ private:
           return inferred_type;
         }
 
-        if (elem["returns"]["_type"] == "Subscript")
-          return elem["returns"]["value"]["id"];
-        else
-          return elem["returns"]["id"];
+        // Check if function has a return type annotation
+        if (elem.contains("returns") && !elem["returns"].is_null())
+        {
+          const auto &returns = elem["returns"];
+
+          // Handle different return type annotation structures
+          if (returns.contains("_type"))
+          {
+            const std::string &return_type = returns["_type"];
+
+            // Handle Subscript type (e.g., List[int], Dict[str, int])
+            if (return_type == "Subscript")
+            {
+              if (returns.contains("value") && returns["value"].contains("id"))
+                return returns["value"]["id"];
+              else
+                return "Any"; // Default for complex subscript types
+            }
+            // Handle Constant type (e.g., None)
+            else if (return_type == "Constant")
+            {
+              if (returns.contains("value") && returns["value"].is_null())
+                return "NoneType";
+              else if (returns.contains("value"))
+                return "Any"; // Other constant types
+            }
+            // Handle other annotation types
+            else
+            {
+              // Try to extract id if it exists
+              if (returns.contains("id"))
+                return returns["id"];
+            }
+          }
+          // Handle case where returns exists but doesn't have expected structure
+          else
+          {
+            log_warning(
+              "Unrecognized return type annotation for function "
+              "{}",
+              func_name);
+            return "Any"; // Safe default
+          }
+        }
+        // If function has no explicit return statements, assume void/None
+        return "NoneType";
       }
     }
 
@@ -308,6 +426,13 @@ private:
     }
     catch (std::runtime_error &)
     {
+    }
+
+    // Check if the function is a built-in function
+    auto it = builtin_functions.find(func_name);
+    if (it != builtin_functions.end())
+    {
+      return it->second;
     }
 
     std::ostringstream oss;
@@ -658,6 +783,14 @@ private:
 
       if (infer_type(element, body, inferred_type) == InferResult::UNKNOWN)
         continue;
+
+      const auto &rhs = element["value"];
+
+      if (
+        (rhs["_type"] == "Constant" && rhs["value"].is_null()) ||
+        (rhs["_type"] == "NameConstant" && rhs["value"].is_null()) ||
+        (rhs["_type"] == "Name" && rhs.contains("id") && rhs["id"] == "None"))
+        inferred_type = "NoneType";
 
       if (inferred_type.empty())
       {

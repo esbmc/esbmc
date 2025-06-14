@@ -62,13 +62,16 @@ public:
 
     iterator &operator++()
     {
-      return iterator(++pointer, ++pos, vec_pos);
+      ++pointer;
+      ++pos;
+      return *this;
     }
-    iterator operator++(int b)
+    iterator operator++(int)
     {
-      return iterator(pointer++, pos++, vec_pos);
+      iterator temp = *this;
+      ++(*this);  // Use the pre-increment operator
+      return temp;
     }
-
     iterator &operator--()
     {
       return iterator(--pointer, --pos, vec_pos);

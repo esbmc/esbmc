@@ -302,7 +302,6 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
 
   std::vector<smt_astt> args;
-  args.reserve(expr->get_num_sub_exprs());
 
   switch (expr->expr_id)
   {
@@ -326,9 +325,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   default:
   {
     // Convert all the arguments and store them in 'args'.
-    unsigned int i = 0;
+    args.reserve(expr->get_num_sub_exprs());
     expr->foreach_operand(
-      [this, &args, &i](const expr2tc &e) { args[i++] = convert_ast(e); });
+      [this, &args](const expr2tc &e) { args.push_back(convert_ast(e)); });
   }
   }
 
@@ -723,8 +722,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     while (is_typecast2t(*ptr) && !is_pointer_type(*ptr))
       ptr = &to_typecast2t(*ptr).from;
 
-    args[0] = convert_ast(*ptr);
-    a = args[0]->project(this, 1);
+    a = convert_ast(*ptr)->project(this, 1);
     break;
   }
   case expr2t::pointer_object_id:
@@ -735,8 +733,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     while (is_typecast2t(*ptr) && !is_pointer_type((*ptr)))
       ptr = &to_typecast2t(*ptr).from;
 
-    args[0] = convert_ast(*ptr);
-    a = args[0]->project(this, 0);
+    a = convert_ast(*ptr)->project(this, 0);
     break;
   }
   case expr2t::pointer_capability_id:
@@ -748,8 +745,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     while (is_typecast2t(*ptr) && !is_pointer_type((*ptr)))
       ptr = &to_typecast2t(*ptr).from;
 
-    args[0] = convert_ast(*ptr);
-    a = args[0]->project(this, 2);
+    a = convert_ast(*ptr)->project(this, 2);
     break;
   }
   case expr2t::typecast_id:

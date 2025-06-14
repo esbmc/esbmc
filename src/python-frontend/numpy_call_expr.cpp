@@ -10,6 +10,9 @@
 
 #include <ostream>
 
+const char *kConstant = "Constant";
+const char *kName = "Name";
+
 numpy_call_expr::numpy_call_expr(
   const symbol_id &function_id,
   const nlohmann::json &call,
@@ -43,13 +46,30 @@ static auto create_list(const std::vector<T> &vector)
 }
 
 template <typename T>
-static auto create_binary_op(const std::string &op, const T &lhs, const T &rhs)
+static auto create_binary_op(
+  const std::string &op,
+  const std::string &type,
+  const T &lhs,
+  const T &rhs)
 {
+  nlohmann::json left, right;
+
+  if (type == kName)
+  {
+    left = {{"_type", type}, {"id", lhs}};
+    right = {{"_type", type}, {"id", rhs}};
+  }
+  else
+  {
+    left = {{"_type", type}, {"value", lhs}};
+    right = {{"_type", type}, {"value", rhs}};
+  }
+
   nlohmann::json bin_op = {
     {"_type", "BinOp"},
-    {"left", {{"_type", "Constant"}, {"value", lhs}}},
+    {"left", left},
     {"op", {{"_type", op}}},
-    {"right", {{"_type", "Constant"}, {"value", rhs}}}};
+    {"right", right}};
 
   return bin_op;
 }
@@ -57,15 +77,16 @@ static auto create_binary_op(const std::string &op, const T &lhs, const T &rhs)
 bool numpy_call_expr::is_math_function() const
 {
   const std::string &function = function_id_.get_function();
-  return (function == "add") || (function == "subtract") ||
-         (function == "multiply") || (function == "divide") ||
-         (function == "power") || (function == "ceil") ||
-         (function == "floor") || (function == "fabs") || (function == "sin") ||
-         (function == "cos") || (function == "exp") || (function == "fmod") ||
-         (function == "sqrt") || (function == "fmin") || (function == "fmax") ||
-         (function == "trunc") || (function == "round") ||
-         (function == "arccos") || (function == "copysign") ||
-         (function == "arctan") || (function == "dot");
+  return function == "add" || function == "subtract" ||
+         function == "multiply" ||
+         (function == "divide" || function == "power" || function == "ceil" ||
+          function == "floor" || function == "fabs" || function == "sin" ||
+          function == "cos" || function == "exp" || function == "fmod" ||
+          function == "sqrt" || function == "fmin") ||
+         function == "fmax" || function == "trunc" || function == "round" ||
+         function == "arccos" || function == "copysign" ||
+         function == "arctan" || function == "dot" || function == "transpose" ||
+         function == "det" || function == "matmul";
 }
 
 std::string numpy_call_expr::get_dtype() const
@@ -260,6 +281,23 @@ exprt numpy_call_expr::create_expr_from_call()
     {
       return function_call_expr::get();
     }
+    else if (arg_type == "List")
+    {
+      const std::string &operation = function_id_.get_function();
+      if (operation == "transpose")
+      {
+        code_function_callt call =
+          to_code_function_call(to_code(function_call_expr::get()));
+        typet t = call.arguments().at(0).type().subtype();
+        converter_.current_lhs->type() = t;
+        converter_.update_symbol(*converter_.current_lhs);
+        call.arguments().push_back(address_of_exprt(*converter_.current_lhs));
+        std::vector<int> shape = type_handler_.get_array_type_shape(t);
+        call.arguments().push_back(from_integer(shape[0], int_type()));
+        call.arguments().push_back(from_integer(shape[1], int_type()));
+        return call;
+      }
+    }
     else if (arg_type == "Name")
     {
       auto arg = call_["args"][0];
@@ -270,7 +308,8 @@ exprt numpy_call_expr::create_expr_from_call()
       {
         // Append array postfix to call array variants, e.g., ceil_array instead of ceil
         std::string func_name = function_id_.get_function();
-        func_name = "__" + func_name + "_array";
+        if (func_name == "ceil")
+          func_name = "__" + func_name + "_array";
         function_id_.set_function(func_name);
 
         code_function_callt call =
@@ -280,16 +319,32 @@ exprt numpy_call_expr::create_expr_from_call()
         // In a call like result = np.ceil(v), the type of 'result' is only known after processing the argument 'v'.
         // At this point, we have the argument's type information, so we update the type of the LHS expression accordingly.
 
-        converter_.current_lhs->type() = t;
+        if (t.subtype().is_array())
+          converter_.current_lhs->type() = long_long_int_type();
+        else
+          converter_.current_lhs->type() = t;
+
         converter_.update_symbol(*converter_.current_lhs);
 
         // NumPy math functions on arrays are translated to C-style calls with the signature: func(input, output, size).
         // For example, result = np.ceil(v) becomes ceil_array(v, result, sizeof(v)).
         // The lines below add the output array and size arguments to the call.
 
+        // Add output argument
         call.arguments().push_back(address_of_exprt(*converter_.current_lhs));
-        exprt array_size = from_integer(arg["elts"].size(), int_type());
-        call.arguments().push_back(array_size);
+
+        // Add array size arguments
+        if (t.subtype().is_array())
+        {
+          std::vector<int> shape = type_handler_.get_array_type_shape(t);
+          call.arguments().push_back(from_integer(shape[0], int_type()));
+          call.arguments().push_back(from_integer(shape[1], int_type()));
+        }
+        else
+        {
+          exprt array_size = from_integer(arg["elts"].size(), int_type());
+          call.arguments().push_back(array_size);
+        }
 
         return call;
       }
@@ -320,44 +375,147 @@ exprt numpy_call_expr::create_expr_from_call()
       {
         double lhs_val = get_constant_value<double>(lhs);
         double rhs_val = get_constant_value<double>(rhs);
-        expr = create_binary_op(function_id_.get_function(), lhs_val, rhs_val);
+        expr = create_binary_op(
+          function_id_.get_function(), kConstant, lhs_val, rhs_val);
       }
       else
       {
         int lhs_val = get_constant_value<int>(lhs);
         int rhs_val = get_constant_value<int>(rhs);
-        expr = create_binary_op(function_id_.get_function(), lhs_val, rhs_val);
+        expr = create_binary_op(
+          function_id_.get_function(), kConstant, lhs_val, rhs_val);
       }
+    }
+    else if (lhs["_type"] == "AnnAssign" && rhs["_type"] == "AnnAssign")
+    {
+      expr = create_binary_op(
+        function_id_.get_function(),
+        kName,
+        lhs["target"]["id"],
+        rhs["target"]["id"]);
     }
     else if (lhs["_type"] == "List" && rhs["_type"] == "List")
     {
-      std::vector<int> res;
+      // Get the name of the function being called (e.g., "dot" or "matmul")
       const std::string &operation = function_id_.get_function();
 
-      if (operation == "dot")
+      if (operation == "dot" || operation == "matmul")
       {
-        size_t m = lhs["elts"].size();
-        size_t n = lhs["elts"][0]["elts"].size();
-        size_t n2 = rhs["elts"].size();
-        size_t p = rhs["elts"][0]["elts"].size();
+        // Determine dimensionality of both operands
+        bool lhs_is_2d = type_handler_.is_2d_array(lhs);
+        bool rhs_is_2d = type_handler_.is_2d_array(rhs);
 
-        if (n != n2)
-          throw std::runtime_error("Incompatible shapes for dot product");
+        size_t m, n, n2, p;
+        typet base_type;
 
-        const auto &elem = lhs["elts"][0]["elts"][0]["value"];
-        typet base_type = type_handler_.get_typet(elem);
+        if (!lhs_is_2d && !rhs_is_2d)
+        {
+          // 1D × 1D case: vector dot product
+          size_t lhs_len = lhs["elts"].size();
+          size_t rhs_len = rhs["elts"].size();
 
-        typet row_type = type_handler_.build_array(base_type, p);
-        typet matrix_type = type_handler_.build_array(row_type, m);
+          if (lhs_len != rhs_len)
+          {
+            throw std::runtime_error("Incompatible shapes for dot product");
+          }
 
+          // Get element type from first element
+          const auto &elem = lhs["elts"][0]["value"];
+          base_type = type_handler_.get_typet(elem);
+
+          // For 1D dot product, treat as (1×n) × (n×1) = (1×1) scalar
+          m = 1;
+          n = lhs_len;
+          n2 = rhs_len;
+          p = 1;
+
+          // Result is a scalar, not a matrix
+          converter_.current_lhs->type() = base_type;
+        }
+        else if (!lhs_is_2d && rhs_is_2d)
+        {
+          // 1D × 2D case: (n,) × (n, p) -> (p,)
+          size_t lhs_len = lhs["elts"].size();
+          size_t rhs_rows = rhs["elts"].size();
+          size_t rhs_cols = rhs["elts"][0]["elts"].size();
+
+          if (lhs_len != rhs_rows)
+          {
+            throw std::runtime_error("Incompatible shapes for dot product");
+          }
+
+          const auto &elem = rhs["elts"][0]["elts"][0]["value"];
+          base_type = type_handler_.get_typet(elem);
+
+          m = 1;
+          n = lhs_len;
+          n2 = rhs_rows;
+          p = rhs_cols;
+
+          // Result is 1D array of length p
+          typet result_type = type_handler_.build_array(base_type, p);
+          converter_.current_lhs->type() = result_type;
+        }
+        else if (lhs_is_2d && !rhs_is_2d)
+        {
+          // 2D × 1D case: (m, n) × (n,) -> (m,)
+          size_t lhs_rows = lhs["elts"].size();
+          size_t lhs_cols = lhs["elts"][0]["elts"].size();
+          size_t rhs_len = rhs["elts"].size();
+
+          if (lhs_cols != rhs_len)
+          {
+            throw std::runtime_error("Incompatible shapes for dot product");
+          }
+
+          const auto &elem = lhs["elts"][0]["elts"][0]["value"];
+          base_type = type_handler_.get_typet(elem);
+
+          m = lhs_rows;
+          n = lhs_cols;
+          n2 = rhs_len;
+          p = 1;
+
+          // Result is 1D array of length m
+          typet result_type = type_handler_.build_array(base_type, m);
+          converter_.current_lhs->type() = result_type;
+        }
+        else
+        {
+          // 2D × 2D case: original matrix multiplication logic
+          m = lhs["elts"].size();
+          n = lhs["elts"][0]["elts"].size();
+          n2 = rhs["elts"].size();
+          p = rhs["elts"][0]["elts"].size();
+
+          if (n != n2)
+          {
+            throw std::runtime_error("Incompatible shapes for dot product");
+          }
+
+          const auto &elem = lhs["elts"][0]["elts"][0]["value"];
+          base_type = type_handler_.get_typet(elem);
+
+          // Build a (m × p) matrix type: array of m rows, each of p elements
+          typet row_type = type_handler_.build_array(base_type, p);
+          typet matrix_type = type_handler_.build_array(row_type, m);
+          converter_.current_lhs->type() = matrix_type;
+        }
+
+        // Normalize to "dot" regardless of whether "matmul" was originally used
         function_id_.set_function("dot");
-
-        converter_.current_lhs->type() = matrix_type;
+        // Update the symbol associated with the result
         converter_.update_symbol(*converter_.current_lhs);
 
+        // Generate a function call expression to the backend `dot` function
         code_function_callt call =
           to_code_function_call(to_code(function_call_expr::get()));
 
+        // Arguments:
+        // 1. Output pointer
+        // 2. m = number of rows in lhs (or 1 for 1D lhs)
+        // 3. n = inner dimension (shared)
+        // 4. p = number of columns in rhs (or 1 for 1D rhs)
         auto &args = call.arguments();
         args.push_back(address_of_exprt(*converter_.current_lhs));
         args.push_back(from_integer(m, int_type()));
@@ -366,31 +524,30 @@ exprt numpy_call_expr::create_expr_from_call()
 
         return call;
       }
-
-      // FIXME: Replace this by C models function calls
-      for (size_t i = 0; i < lhs["elts"].size(); ++i)
+      // Handle other binary operations like add, subtract, multiply, divide
+      if (
+        operation == "add" || operation == "subtract" ||
+        operation == "multiply" || operation == "divide")
       {
-        int left_val = lhs["elts"][i]["value"].get<int>();
-        int right_val = rhs["elts"][i]["value"].get<int>();
+        code_function_callt call =
+          to_code_function_call(to_code(function_call_expr::get()));
+        typet t = converter_.get_expr(lhs).type();
+        converter_.current_lhs->type() = t;
+        converter_.update_symbol(*converter_.current_lhs);
+        auto &args = call.arguments();
+        args.push_back(address_of_exprt(*converter_.current_lhs));
 
-        if (operation == "add")
-          res.push_back(left_val + right_val);
-        else if (operation == "subtract")
-          res.push_back(left_val - right_val);
-        else if (operation == "multiply")
-          res.push_back(left_val * right_val);
-        else if (operation == "divide")
-        {
-          if (right_val == 0)
-            throw std::runtime_error("Division by zero in list operation");
-          res.push_back(left_val / right_val);
-        }
-        else
-        {
-          throw std::runtime_error("Unsupported operation: " + operation);
-        }
+        std::vector<int> shape = type_handler_.get_array_type_shape(t);
+        exprt m = shape.size() < 2 ? gen_one(int_type())
+                                   : from_integer(shape[0], int_type());
+        exprt n = from_integer(shape.back(), int_type());
+        args.push_back(m);
+        args.push_back(n);
+
+        return call;
       }
-      expr = create_list(res);
+
+      throw std::runtime_error("Unsupported operation: " + operation);
     }
   }
 
@@ -403,21 +560,35 @@ exprt numpy_call_expr::create_expr_from_call()
 
 exprt numpy_call_expr::get()
 {
-  static const std::unordered_map<std::string, float> numpy_functions = {
-    {"zeros", 0.0}, {"ones", 1.0}};
-
   const std::string &function = function_id_.get_function();
 
   // Create array from numpy.array()
   if (function == "array")
   {
     auto expr = converter_.get_expr(call_["args"][0]);
+
+    // Check for 3D+ arrays and reject them early
+    int array_dims = type_handler_.get_array_dimensions(call_["args"][0]);
+
+    if (array_dims >= 3)
+    {
+      throw std::runtime_error(
+        "ESBMC does not support 3D or higher dimensional arrays. "
+        "Found " +
+        std::to_string(array_dims) +
+        "D array creation. "
+        "Please use 1D or 2D arrays only.");
+    }
+
     return expr;
   }
 
+  static const std::unordered_map<std::string, float> array_creation_funcs = {
+    {"zeros", 0.0}, {"ones", 1.0}};
+
   // Create array from numpy.zeros() or numpy.ones()
-  auto it = numpy_functions.find(function);
-  if (it != numpy_functions.end())
+  auto it = array_creation_funcs.find(function);
+  if (it != array_creation_funcs.end())
   {
     auto list = create_list(call_["args"][0]["value"].get<int>(), it->second);
     return converter_.get_expr(list);
@@ -442,11 +613,10 @@ exprt numpy_call_expr::get()
 
         // Update rhs expression
         expr.type() = converter_.current_lhs->type();
-        if (!expr.operands().empty())
-        {
-          expr.operands().at(0).type() = expr.type();
-          expr.operands().at(1).type() = expr.type();
-        }
+
+        // Update all operands' types safely
+        for (auto &operand : expr.operands())
+          operand.type() = expr.type();
 
         std::string value_str = expr.value().as_string();
         size_t value_size = count_effective_bits(value_str);

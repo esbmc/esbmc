@@ -1,3 +1,5 @@
+#include "goto-programs/goto_binary_reader.h"
+#include "irep2/irep2_expr.h"
 #include <util/c_types.h>
 #include <util/config.h>
 #include <irep2/irep2_utils.h>
@@ -8,6 +10,38 @@
 #include <util/simplify_expr.h>
 #include <util/string_constant.h>
 #include <util/type_byte_size.h>
+
+inline code_function_callt invoke_intrinsic(
+  const std::string &name,
+  const typet &type,
+  const std::vector<exprt> &args)
+{
+  assert(has_prefix(name, "c:@F@__ESBMC"));
+  code_function_callt call;
+  code_typet code_type;
+  code_type.return_type() = type;
+  code_type.type() = type;
+  for (const exprt &arg : args)
+    code_type.arguments().push_back(arg.type());
+
+  symbolt symbol;
+  symbol.mode = "C";
+  symbol.type = code_type;
+  symbol.name = name;
+  symbol.id = name;
+  symbol.is_extern = false;
+  symbol.file_local = false;
+
+  exprt tmp("symbol", symbol.type);
+  tmp.identifier(symbol.id);
+  tmp.name(symbol.name);
+
+  call.function() = tmp;
+  for (const exprt &arg : args)
+    call.arguments().push_back(arg);
+
+  return call;
+}
 
 // File for old irep -> new irep conversions.
 
@@ -140,7 +174,7 @@ static type2tc migrate_type0(const typet &type)
     // Don't recursively look up anything through pointers.
     type2tc subtype = migrate_type(type.subtype());
 
-    return pointer_type2tc(subtype);
+    return pointer_type2tc(subtype, type.can_carry_provenance());
   }
 
   if (type.id() == typet::t_empty)
@@ -1485,6 +1519,18 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_expr(expr.op0(), op0);
     new_expr_ref = races_check2tc(op0);
   }
+  else if (expr.id() == "capability_base")
+  {
+    expr2tc op0;
+    migrate_expr(expr.op0(), op0);
+    new_expr_ref = capability_base2tc(op0);
+  }
+  else if (expr.id() == "capability_top")
+  {
+    expr2tc op0;
+    migrate_expr(expr.op0(), op0);
+    new_expr_ref = capability_top2tc(op0);
+  }
   else if (expr.id() == "deallocated_object")
   {
     expr2tc op0;
@@ -1834,6 +1880,81 @@ void migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_expr(expr.op1(), args[1]);
     new_expr_ref = exists2tc(type, args[0], args[1]);
   }
+
+  // TRANSCODER START
+  else if (expr.id() == "object_size")
+  {
+    assert(expr.operands().size() == 1);
+    type = migrate_type(expr.type());
+
+    const std::string function = "c:@F@__ESBMC_get_object_size";
+    const std::vector<exprt> args = {expr.op0()};
+
+    migrate_expr(invoke_intrinsic(function, expr.type(), args), new_expr_ref);
+  }
+  else if (expr.id() == "overflow_result-+")
+  {
+    // Overflow_result : {result = op0 + op1, overflowed = overflow(op0 + op1)}
+    type = migrate_type(expr.type());
+    assert(expr.operands().size() == 2);
+    expr2tc op0, op1;
+    convert_operand_pair(expr, op0, op1);
+    expr2tc add = add2tc(op0->type, op0, op1); // XXX type?
+
+    std::vector<expr2tc> members;
+    members.push_back(add2tc(op0->type, op0, op1));
+    members.push_back(overflow2tc(add2tc(op0->type, op0, op1)));
+    new_expr_ref = constant_struct2tc(type, members);
+  }
+  else if (expr.id() == "overflow_result--")
+  {
+    // Overflow_result : {result = op0 + op1, overflowed = overflow(op0 + op1)}
+    type = migrate_type(expr.type());
+    assert(expr.operands().size() == 2);
+    expr2tc op0, op1;
+    convert_operand_pair(expr, op0, op1);
+    expr2tc add = sub2tc(op0->type, op0, op1); // XXX type?
+
+    std::vector<expr2tc> members;
+    members.push_back(sub2tc(op0->type, op0, op1));
+    members.push_back(overflow2tc(sub2tc(op0->type, op0, op1)));
+    new_expr_ref = constant_struct2tc(type, members);
+  }
+  else if (expr.id() == "overflow_result-shr")
+  {
+    // Overflow_result : {result = op0 + op1, overflowed = overflow(op0 + op1)}
+    type = migrate_type(expr.type());
+    assert(expr.operands().size() == 2);
+    expr2tc op0, op1;
+    convert_operand_pair(expr, op0, op1);
+    expr2tc add = ashr2tc(op0->type, op0, op1); // XXX type?
+
+    std::vector<expr2tc> members;
+    members.push_back(ashr2tc(op0->type, op0, op1));
+    members.push_back(overflow2tc(ashr2tc(op0->type, op0, op1)));
+    new_expr_ref = constant_struct2tc(type, members);
+  }
+  else if (expr.id() == "overflow_result-*")
+  {
+    // Overflow_result : {result = op0 + op1, overflowed = overflow(op0 + op1)}
+    type = migrate_type(expr.type());
+    assert(expr.operands().size() == 2);
+    expr2tc op0, op1;
+    convert_operand_pair(expr, op0, op1);
+    expr2tc add = mul2tc(op0->type, op0, op1); // XXX type?
+
+    std::vector<expr2tc> members;
+    members.push_back(mul2tc(op0->type, op0, op1));
+    members.push_back(overflow2tc(mul2tc(op0->type, op0, op1)));
+    new_expr_ref = constant_struct2tc(type, members);
+  }
+  else if (expr.id() == "r_ok")
+  {
+    // FUTURE: call __ESBMC_r_ok
+    true_exprt t;
+    migrate_expr(t, new_expr_ref);
+  }
+  // TRANSCODER END
   else
   {
     log_error("{}\nmigrate expr failed", expr);
@@ -1961,6 +2082,8 @@ typet migrate_type_back(const type2tc &ref)
 
     typet subtype = migrate_type_back(ref2.subtype);
     pointer_typet thetype(subtype);
+    if (ref2.carry_provenance)
+      thetype.can_carry_provenance(true);
     return thetype;
   }
   case type2t::unsignedbv_id:
@@ -3065,6 +3188,24 @@ exprt migrate_expr_back(const expr2tc &ref)
     back.set("upper", irep_idt(std::to_string(ref2.upper)));
     back.set("lower", irep_idt(std::to_string(ref2.lower)));
     return back;
+  }
+  case expr2t::capability_base_id:
+  {
+    const capability_base2t &ref2 = to_capability_base2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt op0 = migrate_expr_back(ref2.value);
+    exprt theexpr("capability_base", thetype);
+    theexpr.copy_to_operands(op0);
+    return theexpr;
+  }
+  case expr2t::capability_top_id:
+  {
+    const capability_top2t &ref2 = to_capability_top2t(ref);
+    typet thetype = migrate_type_back(ref->type);
+    exprt op0 = migrate_expr_back(ref2.value);
+    exprt theexpr("capability_top", thetype);
+    theexpr.copy_to_operands(op0);
+    return theexpr;
   }
   case expr2t::bitcast_id:
   {

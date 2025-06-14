@@ -84,35 +84,152 @@ public:
 
   class const_reverse_iterator
   {
+  private:
+    const T *pointer;
+    int pos;
+    const T *vec_pos;
+    
   public:
-    const_reverse_iterator(const const_reverse_iterator &);
-    const_reverse_iterator();
-    const_reverse_iterator &operator=(const const_reverse_iterator &);
+    // Copy constructor
+    const_reverse_iterator(const const_reverse_iterator &i)
+    {
+      pointer = i.pointer;
+      pos = i.pos;
+      vec_pos = i.vec_pos;
+    }
+    
+    // Default constructor
+    const_reverse_iterator() : pointer(nullptr), pos(-1), vec_pos(nullptr)
+    {
+    }
+    
+    // Conversion constructor from reverse_iterator
+    const_reverse_iterator(const reverse_iterator &i)
+    {
+      pointer = i.pointer;
+      pos = i.pos;
+      vec_pos = i.vec_pos;
+    }
+    
+    // Assignment operator
+    const_reverse_iterator &operator=(const const_reverse_iterator &i)
+    {
+      if (this != &i) {
+        pointer = i.pointer;
+        pos = i.pos;
+        vec_pos = i.vec_pos;
+      }
+      return *this;
+    }
+    
+    // Assignment from reverse_iterator
+    const_reverse_iterator &operator=(const reverse_iterator &i)
+    {
+      pointer = i.pointer;
+      pos = i.pos;
+      vec_pos = i.vec_pos;
+      return *this;
+    }
 
-    const T *operator->();
+    const T *operator->() const
+    {
+      return pointer;
+    }
 
-    const T &operator*();
+    const T &operator*() const
+    {
+      return *pointer;
+    }
 
-    const_reverse_iterator &operator++();
-    const_reverse_iterator operator++(int);
+    const_reverse_iterator &operator++()
+    {
+      pointer--;
+      pos--;
+      return *this;
+    }
+    
+    const_reverse_iterator operator++(int)
+    {
+      const_reverse_iterator buffer = *this;
+      pointer--;
+      pos--;
+      return buffer;
+    }
 
-    const_reverse_iterator &operator--();
-    const_reverse_iterator operator--(int);
+    const_reverse_iterator &operator--()
+    {
+      pointer++;
+      pos++;
+      return *this;
+    }
+    
+    const_reverse_iterator operator--(int)
+    {
+      const_reverse_iterator buffer = *this;
+      pointer++;
+      pos++;
+      return buffer;
+    }
 
-    bool operator==(const const_reverse_iterator &) const;
-    bool operator!=(const const_reverse_iterator &) const;
+    bool operator==(const const_reverse_iterator &other) const
+    {
+      return pointer == other.pointer;
+    }
+    
+    bool operator!=(const const_reverse_iterator &other) const
+    {
+      return pointer != other.pointer;
+    }
 
-    bool operator<(const const_reverse_iterator &) const;
-    bool operator>(const const_reverse_iterator &) const;
+    bool operator<(const const_reverse_iterator &other) const
+    {
+      return pointer > other.pointer; // reversed logic for reverse iterator
+    }
+    
+    bool operator>(const const_reverse_iterator &other) const
+    {
+      return pointer < other.pointer; // reversed logic for reverse iterator
+    }
 
-    bool operator<=(const const_reverse_iterator &) const;
-    bool operator>=(const const_reverse_iterator &) const;
+    bool operator<=(const const_reverse_iterator &other) const
+    {
+      return pointer >= other.pointer; // reversed logic for reverse iterator
+    }
+    
+    bool operator>=(const const_reverse_iterator &other) const
+    {
+      return pointer <= other.pointer; // reversed logic for reverse iterator
+    }
 
-    const_reverse_iterator operator+(int) const;
-    const_reverse_iterator operator-(int) const;
+    const_reverse_iterator operator+(int n) const
+    {
+      const_reverse_iterator result = *this;
+      result.pointer -= n;
+      result.pos -= n;
+      return result;
+    }
+    
+    const_reverse_iterator operator-(int n) const
+    {
+      const_reverse_iterator result = *this;
+      result.pointer += n;
+      result.pos += n;
+      return result;
+    }
 
-    const_reverse_iterator &operator+=(int);
-    const_reverse_iterator &operator-=(int);
+    const_reverse_iterator &operator+=(int n)
+    {
+      pointer -= n;
+      pos -= n;
+      return *this;
+    }
+    
+    const_reverse_iterator &operator-=(int n)
+    {
+      pointer += n;
+      pos += n;
+      return *this;
+    }
   };
 
   // types:
@@ -130,11 +247,26 @@ public:
   // construct:
   explicit vector() : _size(0), _capacity(1)
   {
-    buf = new T[10];
+    buf = static_cast<T*>(malloc(sizeof(T) * 10));
+    __ESBMC_assume(buf);
     _size = 0;
     _capacity = 10;
   }
-
+  // TODO: Support destructors. 
+  // Check discussion at https://github.com/esbmc/esbmc/pull/2515
+#if 0
+  // Destructor
+  ~vector()
+  {
+    if (buf != nullptr)
+    {
+      free(buf);
+      buf = nullptr;
+      _size = 0;
+      _capacity = 0;
+    }
+  }
+#endif
   explicit vector(iterator t1, iterator t2) : _size(0)
   {
     int count = 0;
@@ -142,7 +274,8 @@ public:
     for (; tmp != t2; tmp++)
       count++;
 
-    buf = new T[count];
+    buf = static_cast<T*>(malloc(sizeof(T) * count));
+    __ESBMC_assume(buf);
     int n = 0;
     for (; t1 != t2; t1++)
     {
@@ -154,7 +287,8 @@ public:
 
   explicit vector(size_type n) : _size(0), _capacity(1)
   {
-    buf = new T[n];
+    buf = static_cast<T*>(malloc(sizeof(T) * n));
+    __ESBMC_assume(buf);
     _size = 0;
     for (int i = 0; i < n; i++)
     {
@@ -170,7 +304,8 @@ public:
     for (InputIt tmp = t; tmp != addr; tmp++)
       count++;
 
-    buf = new T[count];
+    buf = static_cast<T*>(malloc(sizeof(T) * count));
+    __ESBMC_assume(buf);
     for (int i = 0; i < count; i++)
       buf[i] = *t++;
 
@@ -180,7 +315,8 @@ public:
 
   explicit vector(size_type n, const T &x)
   {
-    buf = new T[n];
+    buf = static_cast<T*>(malloc(sizeof(T) * n));
+    __ESBMC_assume(buf);
     _size = n;
     for (int i = 0; i < n; i++)
       buf[i] = x;
@@ -189,7 +325,8 @@ public:
 
   vector(const vector &x) : _size(0), _capacity(1)
   {
-    buf = new T[x._size];
+    buf = static_cast<T*>(malloc(sizeof(T) * x._size));
+    __ESBMC_assume(buf);
     _size = x._size;
     for (int i = 0; i < _size; i++)
       buf[i] = x.buf[i];
@@ -199,7 +336,8 @@ public:
 #if __cplusplus >= 201103L
   vector(std::initializer_list<T> init) :_size(0), _capacity(1)
   {
-    buf = new T[init.size()];
+    buf = static_cast<T*>(malloc(sizeof(T) * init.size()));
+    __ESBMC_assume(buf);
     _size = init.size();
     for (int i = 0; i < _size; i++)
       buf[i] = *(init.begin() + i);
@@ -209,7 +347,8 @@ public:
 
   vector &operator=(const vector &x)
   {
-    buf = new T[x._size];
+    buf = static_cast<T*>(malloc(sizeof(T) * x._size));
+    __ESBMC_assume(buf);
     _size = x._size;
     for (int i = 0; i < _size; i++)
       buf[i] = x.buf[i];
@@ -234,7 +373,8 @@ public:
     for (; tmp != t2; tmp++)
       count++;
 
-    buf = new T[count];
+    buf = static_cast<T*>(malloc(sizeof(T) * count));
+    __ESBMC_assume(buf);
     int n = 0;
     for (; t1 != t2; t1++)
     {
@@ -286,7 +426,17 @@ public:
     return buffer;
   }
 
-  const_reverse_iterator rbegin() const;
+  const_reverse_iterator rbegin() const
+  {
+    const_reverse_iterator buffer;
+    if (_size > 0) {
+      buffer = const_reverse_iterator();
+      buffer.pointer = buf + _size - 1;
+      buffer.pos = _size - 1;
+      buffer.vec_pos = buf;
+    }
+    return buffer;
+  }
 
   reverse_iterator rend()
   {
@@ -297,7 +447,14 @@ public:
     return buffer;
   }
 
-  const_reverse_iterator rend() const;
+  const_reverse_iterator rend() const
+  {
+    const_reverse_iterator buffer;
+    buffer.pointer = nullptr;
+    buffer.pos = -1;
+    buffer.vec_pos = buf;
+    return buffer;
+  }
 
   // capacity:
   size_type size() const

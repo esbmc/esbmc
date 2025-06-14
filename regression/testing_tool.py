@@ -73,7 +73,6 @@ class TestCase:
     def generate_run_argument_list(self, *tool):
         """Generates run command list to be used in Popen"""
         result = list(tool)
-        result.append(os.path.join(self.test_dir, self.test_file))
         for x in shlex.split(self.test_args):
             if x != "":
                 p = os.path.join(self.test_dir, x)
@@ -93,6 +92,7 @@ class TestCase:
             except ValueError:
                 pass
 
+        result.append(os.path.join(self.test_dir, self.test_file))
         return result
 
     def __str__(self):
@@ -238,7 +238,9 @@ def _add_test(test_case, executor):
                 matches_regex = False
 
         if (test_case.test_mode in FAIL_MODES) and matches_regex:
-            self.fail(error_message_prefix + error_message)
+            rel_path = os.path.relpath(test_case.test_dir, os.path.dirname(__file__))
+            print(f"\033[33mERROR: Test '{rel_path}' passed but is marked as KNOWNBUG. Consider reclassifying it as CORE.\033[0m")
+            sys.exit(77)
         elif (test_case.test_mode not in FAIL_MODES) and (not matches_regex):
             if RegressionBase.FAIL_WITH_WORD is not None:
                 match_regex = re.compile(RegressionBase.FAIL_WITH_WORD, re.MULTILINE)

@@ -4,6 +4,8 @@
 #include <python-frontend/type_handler.h>
 #include <util/context.h>
 #include <util/namespace.h>
+#include <util/std_code.h>
+#include <util/symbol_generator.h>
 #include <nlohmann/json.hpp>
 #include <map>
 #include <set>
@@ -116,13 +118,64 @@ private:
 
   exprt get_binary_operator_expr(const nlohmann::json &element);
 
-  exprt handle_power_operator(exprt lhs, exprt rhs);
+  exprt handle_power_operator(exprt base, exprt exp);
+
+  exprt build_power_expression(const exprt &base, const BigInt &exp);
 
   bool is_zero_length_array(const exprt &expr);
 
   void ensure_string_array(exprt &expr);
 
   BigInt get_string_size(const exprt &expr);
+
+  bool is_bytes_literal(const nlohmann::json &element);
+
+  exprt get_binary_operator_expr_for_is(const exprt &lhs, const exprt &rhs);
+
+  exprt get_negated_is_expr(const exprt &lhs, const exprt &rhs);
+
+  exprt get_array_base_address(const exprt &arr);
+
+  exprt get_resolved_value(const exprt &expr);
+
+  exprt get_function_constant_return(const exprt &func_value);
+
+  exprt resolve_function_call(const exprt &func_expr, const exprt &args_expr);
+
+  exprt handle_power_operator_sym(exprt base, exprt exp);
+
+  symbolt create_assert_temp_variable(const locationt &location);
+
+  void register_instance_attribute(
+    const std::string &symbol_id,
+    const std::string &attr_name,
+    const std::string &var_name,
+    const std::string &class_tag);
+
+  bool is_instance_attribute(
+    const std::string &symbol_id,
+    const std::string &attr_name,
+    const std::string &var_name,
+    const std::string &class_tag);
+
+  exprt create_member_expression(
+    const symbolt &symbol,
+    const std::string &attr_name,
+    const typet &attr_type);
+
+  typet clean_attribute_type(const typet &attr_type);
+
+  std::string create_normalized_self_key(const std::string &class_tag);
+
+  std::string extract_class_name_from_tag(const std::string &tag_name);
+
+  exprt resolve_identity_function_call(
+    const exprt &func_expr,
+    const exprt &args_expr);
+
+  bool is_identity_function(
+    const exprt &func_value,
+    const std::string &func_identifier);
 
   exprt handle_string_concatenation(
     const exprt &lhs,
@@ -196,6 +249,7 @@ private:
   const nlohmann::json &ast_json;
   const global_scope &global_scope_;
   type_handler type_handler_;
+  symbol_generator sym_generator_;
 
   namespacet ns;
   typet current_element_type;
@@ -204,6 +258,7 @@ private:
   nlohmann::json imported_module_json;
   std::string current_func_name_;
   std::string current_class_name_;
+  code_blockt *current_block;
   exprt *current_lhs;
 
   bool is_converting_lhs = false;
@@ -213,7 +268,7 @@ private:
   bool base_ctor_called = false;
 
   // Map object to list of instance attributes
-  std::unordered_map<std::string, std::set<std::string>> instance_attr_map;
+  std::map<std::string, std::set<std::string>> instance_attr_map;
   // Map imported modules to their corresponding paths
   std::unordered_map<std::string, std::string> imported_modules;
 };

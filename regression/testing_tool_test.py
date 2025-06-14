@@ -53,8 +53,8 @@ class CTest1(ParseTest):
     def _argument_list_checks(self, test_obj):
         argument_list = self.test_case.generate_run_argument_list("__test__")
         self.assertEqual(argument_list[0], "__test__")
-        self.assertEqual(argument_list[1], "./esbmc-unix/00_bbuf_02/main.c")
-        self.assertEqual(argument_list[2], "--unwind")
+        self.assertEqual(argument_list[-1], "./esbmc-unix/00_bbuf_02/main.c")
+        self.assertEqual(argument_list[1], "--unwind")
 
 
 class CTest2(ParseTest):
@@ -94,9 +94,9 @@ class CTest3(ParseTest):
 
     def _argument_list_checks(self, test_obj: TestCase):
         argument_list = self.test_case.generate_run_argument_list("__test__")
-        expected = ['__test__', './esbmc-unix/00_account_02/test.c',
+        expected = ['__test__',
                     './esbmc-unix/00_account_02/account.c',
-                    '--no-slice', '--context-bound', '1', '--depth', '150']
+                    '--no-slice', '--context-bound', '1', '--depth', '150', './esbmc-unix/00_account_02/test.c']
         self.assertEqual(argument_list, expected, str(argument_list))
 
 
@@ -118,8 +118,8 @@ class CTest4(ParseTest):
 
     def _argument_list_checks(self, test_obj: TestCase):
         argument_list = self.test_case.generate_run_argument_list("__test__")
-        expected = ['__test__', './nonz3/29_exStbHwAcc/main.c',
-                    '--overflow-check', '--unwind', '3', '--32']
+        expected = ['__test__',
+                    '--overflow-check', '--unwind', '3', '--32', './nonz3/29_exStbHwAcc/main.c']
         self.assertEqual(argument_list, expected, str(argument_list))
 
 
@@ -130,8 +130,8 @@ class ToolTest1(CTest4):
         argument_list = self.test_case.generate_run_argument_list(
             "__tool_contains_spaces__ --param 1 __test__")
         expected = ['__tool_contains_spaces__ --param 1 __test__',
-                    './nonz3/29_exStbHwAcc/main.c', '--overflow-check',
-                    '--unwind', '3', '--32']
+                    '--overflow-check',
+                    '--unwind', '3', '--32', './nonz3/29_exStbHwAcc/main.c',]
         self.assertEqual(argument_list, expected, str(argument_list))
 
 
@@ -142,8 +142,8 @@ class ToolTest2(CTest4):
         argument_list = self.test_case.generate_run_argument_list(
             '__tool_contains_no_spaces__', '--param', '1', '__test__')
         expected = ['__tool_contains_no_spaces__', '--param', '1', '__test__',
-                    './nonz3/29_exStbHwAcc/main.c', '--overflow-check',
-                    '--unwind', '3', '--32']
+                    '--overflow-check',
+                    '--unwind', '3', '--32', './nonz3/29_exStbHwAcc/main.c']
         self.assertEqual(argument_list, expected, str(argument_list))
 
 

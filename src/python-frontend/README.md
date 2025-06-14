@@ -80,9 +80,10 @@ The final step in the frontend involves converting the annotated JSON AST into a
 Below is an overview of ESBMC-Python's key capabilities:
 
 ### Basic Constructs
-- **Control Structures**: Supports conditional statements (`if-else`) and loops (`for`, `while`).
+- **Control Structures**: Supports conditional statements (`if-else`) and loops (`for-range`, `while`).
 - **Arithmetic**: Includes standard arithmetic operations (e.g., addition, subtraction, multiplication, division).
 - **Logical Operations**: Supports logical constructs (e.g., `AND`, `OR`, `NOT`).
+- **Identity Comparisons**: Supports `is` and `is not` operators for identity-based comparisons, including `x is None`, `x is y`, or `x is not None`.
 
 ### Functions and Methods
 - **Function Handling**: This allows for defining, calling, and verifying functions, including parameter passing and return values.
@@ -105,6 +106,14 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Numeric Types**: Supports manipulation of numeric types (e.g., bytes, integers, floats).
 - **Built-in Functions**: Supports Python's built-in functions, such as `abs`, `int`, `float`, `chr`, `str`, `hex`, `oct`, `len`, and `range`.
 - **Verification properties**: Division-by-zero, indexing errors, arithmetic overflow, and user-defined assertions.
+
+### Limitations
+
+The current version of ESBMC-Python has the following limitations:
+
+- Only `for` loops using the `range()` function are supported.
+- List and String support are partial and limited in functionality.
+- Dictionaries are not supported at all.
 
 ### Example: Division by Zero in Python
 
@@ -272,7 +281,6 @@ Type: <class 'numpy.int32'>
 Correctly overflowed: True
 ````
 
-
 **Explanation:**  
 
 ESBMC performs bit-precise analysis and treats signed overflow as undefined or erroneous, unlike NumPy’s permissive semantics.
@@ -283,7 +291,20 @@ ESBMC performs bit-precise analysis and treats signed overflow as undefined or e
 
 While NumPy permits this silent overflow, ESBMC correctly identifies it as a violation of safe arithmetic.
 
----
+#### Matrix Determinant (`np.linalg.det`)
+
+You can also verify the correctness of determinant computations for 2D NumPy arrays:
+
+```python
+import numpy as np
+
+a = np.array([[1, 2], [3, 4]])
+x = np.linalg.det(a)
+assert x == -2
+````
+
+ESBMC symbolically executes the closed-form expression for small matrices, enabling the detection of singular matrices, ill-conditioned operations, or incorrect expectations.
+
 
 ### White-Box Verification
 
@@ -427,8 +448,3 @@ Harzevili et al. (2023).
 [Documentation](https://numpy.org/doc/stable/reference/routines.math.html)
 
 ---
-
-## Questions or Collaboration?
-
-If you're exploring ways to increase trust and correctness in numerical computations or integrate ESBMC into your verification workflow, feel free to contact us!
-
