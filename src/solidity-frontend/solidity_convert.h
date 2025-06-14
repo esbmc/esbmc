@@ -399,6 +399,7 @@ protected:
     std::string &struct_contract_name,
     const side_effect_expr_function_callt &gen_call,
     exprt &new_expr);
+  void extract_new_contracts();
 
   // line number and locations
   void
@@ -485,11 +486,13 @@ protected:
   const nlohmann::json &
   get_func_decl_ref(const std::string &c_name, const std::string &f_name);
   void get_builtin_property_expr(
+    const std::string &cname,
     const std::string &name,
     const exprt &base,
     const locationt &loc,
     exprt &new_expr);
   void get_aux_property_function(
+    const std::string &cname,
     const exprt &addr,
     const typet &return_t,
     const locationt &loc,
@@ -538,6 +541,7 @@ protected:
   bool get_send_definition(const std::string &cname, exprt &new_expr);
   bool model_transaction(
     const nlohmann::json &expr,
+    const exprt &this_expr,
     const exprt &base,
     const exprt &value,
     const locationt &loc,
@@ -614,6 +618,8 @@ protected:
   // contract name list
   std::unordered_map<int, std::string> contractNamesMap;
   std::set<std::string> contractNamesList;
+  // for mapping hack
+  std::set<std::string> newContractSet;
   // Store the ast_node["id"] of struct/error
   // where entity contains "members": [{}, {}...]
   std::unordered_map<int, std::string> member_entity_scope;

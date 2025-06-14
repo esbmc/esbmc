@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0
 pragma solidity >=0.5.0;
 
-interface IBank {
-    function deposit() external payable;
-    function withdraw(uint amount) external;
+contract IBank {
+    function deposit() external payable {}
+    function withdraw(uint amount) external {}
 }
 
-contract Bank is IBank {
+contract Bank {
     mapping(address => uint) balances;
 
     function deposit() public payable {
@@ -14,14 +14,17 @@ contract Bank is IBank {
     }
 
     function withdraw(uint amount) public {
-        require(amount > 0);
         /// @custom:preghost function withdraw
         uint old_contract_balance = address(this).balance;
+        require(amount > 0);
+        require(amount <= balances[msg.sender]);
+
         (bool success, ) = msg.sender.call{value: amount}("");
+        balances[msg.sender] -= amount;
         require(success);
         /// @custom:postghost function withdraw
         uint new_contract_balance = address(this).balance;
-        assert(new_contract_balance == old_contract_balance - amount);
+        assert(new_contract_balance <= old_contract_balance);
     }
 }
 
@@ -30,7 +33,9 @@ contract Reproduction {
 
     constructor(address _target) {
         target = Bank(_target);
+        address(target).balance;
     }
+
     function setup() external payable {
         require(msg.value > 0);
         target.deposit{value: msg.value}();
@@ -41,6 +46,6 @@ contract Reproduction {
     }
 
     receive() external payable {
-        target.withdraw(msg.value);
+        //target.deposit();
     }
 }

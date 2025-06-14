@@ -208,6 +208,16 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     }
     if (typeIdentifier.find("t_mapping$") != std::string::npos)
     {
+      std::string target = "t_mapping$";
+
+      size_t first = typeIdentifier.find(target);
+      size_t second = typeIdentifier.find(target, first + 1);
+
+      if (first != std::string::npos && second != std::string::npos)
+      {
+        log_error("Currently we do not support nested mapping");
+        return TypeNameTError;
+      }
       return MappingTypeName;
     }
     else if (typeIdentifier.compare(0, 8, "t_array$") == 0)
