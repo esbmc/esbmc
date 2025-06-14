@@ -91,6 +91,14 @@ inline ostream &operator<<(ostream &o, unsigned long val)
   return o;
 }
 #endif
+inline ostream &operator<<(ostream &o, long long val)
+{
+  return o;
+}
+inline ostream &operator<<(ostream &o, unsigned long long val)
+{
+  return o;
+}
 inline ostream &operator<<(ostream &o, float val)
 {
   return o;
@@ -179,6 +187,17 @@ inline ostream &flush(ostream &os)
 {
   return os.flush();
 }
+
+inline ostream& boolalpha(ostream& os) 
+{
+  return os;
+}
+
+inline ostream &operator<<(ostream &o, ostream& (*manip)(ostream&))
+{
+  return manip(o);
+}
+
 } // namespace std
 
 #endif
