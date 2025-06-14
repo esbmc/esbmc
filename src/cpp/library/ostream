@@ -188,9 +188,8 @@ inline ostream &flush(ostream &os)
   return os.flush();
 }
 
-inline ostream& boolalpha(ostream& os) {
-  // In a real implementation this would set a flag
-  // For ESBMC verification, just return the stream
+inline ostream& boolalpha(ostream& os) 
+{
   return os;
 }
 
