@@ -1,6 +1,7 @@
 #include <bitwuzla_conv.h>
 #include <cstring>
 #include <fstream>
+#include <cstdio>
 
 #define new_ast new_solver_ast<bitw_smt_ast>
 
@@ -832,20 +833,18 @@ std::string bitwuzla_convt::dump_smt()
 
   // Print formulas using binary bit-vector output format
   if (path.empty() || path == "-") {
-  bitwuzla_print_formula(bitw, "smt2", messaget::state.out, 2);
+  bitwuzla_print_formula(bitw, "smt2", stdout, 2);
   }
   else 
   {
-    std::ofstream out(path);
-    if (!out)
+    FILE* file = fopen(path.c_str(), "w")
+    if (!file)
     {
       log_error("Could not open output file '{}'", path);
       return "Failed to open output file.";
     }
-    else
-    {
-      bitwuzla_print_formula(bitw, "smt2", out, 2);
-    }
+    bitwuzla_print_formula(bitw, "smt2", out, 2);
+    fclose(file);
   }
   log_status("SMT formula dumped successfully");
   return "SMT formula dumped successfully";
