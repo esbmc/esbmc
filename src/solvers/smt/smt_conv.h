@@ -834,6 +834,10 @@ public:
    */
   expr2tc current_valid_objects_sym;
 
+  /** whether the `__ESBMC_alloc` is dynamic
+  */
+  expr2tc current_dynamic;
+
   // XXX - push-pop will break here.
   typedef std::map<std::string, smt_astt> renumber_mapt;
   std::vector<renumber_mapt> renumber_map;
