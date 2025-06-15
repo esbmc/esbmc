@@ -91,11 +91,21 @@ jobs:
     - name: Delete downloaded Clang 11
       run: rm -rf clang*
     # Commit all changed files back to the repository
-    - uses: stefanzweifel/git-auto-commit-action@v5
-      if: ${{ ! startsWith(github.head_ref, 'fb/') }}
-    - name: Throws error if changes were made
-      run: git diff --exit-code --ignore-cr-at-eol
-      if: ${{ startsWith(github.head_ref, 'fb/') }}
+    #- uses: stefanzweifel/git-auto-commit-action@v5
+    #  if: ${{ ! startsWith(github.head_ref, 'fb/') }}
+    #- name: Throws error if changes were made
+    #  run: git diff --exit-code --ignore-cr-at-eol
+    #  if: ${{ startsWith(github.head_ref, 'fb/') }}
+    - name: Auto-commit changes (if any)
+      if: ${{ ! startsWith(github.head_ref, 'fb/') }}
+    - uses: stefanzweifel/git-auto-commit-action@v5
+      with:
+       commit_message: "chore: auto-commit formatting or generated changes"
+    
+    - name: Check for uncommitted changes
+      if: ${{ ! startsWith(github.head_ref, 'fb/') }}
+      run: git diff --exit-code --ignore-cr-at-eol
+      
 
   cmake-lint:
     name: Check CMake modules
