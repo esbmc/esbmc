@@ -1,6 +1,5 @@
 #include <bitwuzla_conv.h>
 #include <cstring>
-#include <fstream>
 #include <cstdio>
 
 #define new_ast new_solver_ast<bitw_smt_ast>

@@ -1390,10 +1390,8 @@ void z3_convt::output_smt()
 {
   const std::string &path = options.get_option("output");
   /* the iostream API is just unusable */
-  std::string smt_output = dump_smt();
   if (path.empty() || path == "-")
     print_smt_formulae(std::cout);
-    //std
   else
   {
     std::ofstream out(path);
