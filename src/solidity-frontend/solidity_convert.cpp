@@ -751,7 +751,6 @@ bool solidity_convertert::get_esbmc_sol_init()
 
   added_ins_sym.value = ctor;
 
-  log_debug("solidity", "finish populating _ESBMC_sol_init");
   return false;
 }
 
@@ -4716,6 +4715,7 @@ bool solidity_convertert::get_expr(
         str2uint_call.arguments().push_back(pos);
         pos = str2uint_call;
       }
+      // e.g x[-1] => x[uint256(-1)]
       solidity_gen_typecast(ns, pos, unsignedbv_typet(256));
 
       if (!is_new_expr)
@@ -4724,6 +4724,7 @@ bool solidity_convertert::get_expr(
         //TODO: the index type of ESBMC is limited to unsigned long long
         // we need to extend such limit up to unsignedbv_type(256)
         new_expr = index_exprt(array, pos, t);
+        break;
       }
       else
       {
