@@ -13,7 +13,7 @@ namespace std {
 template<typename T>
 struct esbmc_hash {
     size_t operator()(const T& key) const {
-        return static_cast<size_t>(key); // Simplified for verification
+        return static_cast<size_t>(key);
     }
 };
 
@@ -25,93 +25,15 @@ struct esbmc_equal_to {
     }
 };
 
-// Simple iterator category
+// Simple forward iterator tag
 struct esbmc_forward_iterator_tag {};
 
-// Forward declarations
+// Forward declaration
 template<typename Key, typename Hash = esbmc_hash<Key>, 
          typename KeyEqual = esbmc_equal_to<Key>>
 class unordered_set;
 
-// Simple bucket implementation - fixed size array with explicit bounds
-template<typename Key>
-struct simple_bucket {
-    static const size_t MAX_BUCKET_SIZE = 4; // Small fixed size for verification
-    Key elements[MAX_BUCKET_SIZE];
-    size_t count;
-    
-    simple_bucket() : count(0) {
-        for (size_t i = 0; i < MAX_BUCKET_SIZE; ++i) {
-            elements[i] = Key(); // Default initialize elements
-        }
-    }
-    
-    bool empty() const { return count == 0; }
-    size_t size() const { return count; }
-    
-    bool insert(const Key& key) {
-        // Check if already exists with explicit bound
-        if (count > MAX_BUCKET_SIZE) count = MAX_BUCKET_SIZE; // Safety check
-        
-        for (size_t i = 0; i < count && i < MAX_BUCKET_SIZE; ++i) {
-            if (elements[i] == key) {
-                return false; // Already exists
-            }
-        }
-        
-        // Insert if space available
-        if (count < MAX_BUCKET_SIZE) {
-            elements[count] = key;
-            ++count;
-            return true;
-        }
-        return false; // Bucket full
-    }
-    
-    bool erase(const Key& key) {
-        if (count > MAX_BUCKET_SIZE) count = MAX_BUCKET_SIZE; // Safety check
-        
-        for (size_t i = 0; i < count && i < MAX_BUCKET_SIZE; ++i) {
-            if (elements[i] == key) {
-                // Shift elements down with explicit bounds
-                for (size_t j = i; j < count - 1 && j < MAX_BUCKET_SIZE - 1; ++j) {
-                    elements[j] = elements[j + 1];
-                }
-                --count;
-                return true;
-            }
-        }
-        return false;
-    }
-    
-    bool find(const Key& key) const {
-        if (count > MAX_BUCKET_SIZE) return false; // Safety check
-        
-        for (size_t i = 0; i < count && i < MAX_BUCKET_SIZE; ++i) {
-            if (elements[i] == key) {
-                return true;
-            }
-        }
-        return false;
-    }
-    
-    int find_index(const Key& key) const {
-        if (count > MAX_BUCKET_SIZE) return -1; // Safety check
-        
-        for (size_t i = 0; i < count && i < MAX_BUCKET_SIZE; ++i) {
-            if (elements[i] == key) {
-                return static_cast<int>(i);
-            }
-        }
-        return -1;
-    }
-    
-    void clear() {
-        count = 0;
-    }
-};
-
-// Iterator for unordered_set with explicit bounds
+// Simple array-based implementation - much simpler than hash table
 template<typename Key, typename Hash, typename KeyEqual>
 class esbmc_unordered_set_iterator {
 public:
@@ -121,62 +43,34 @@ public:
     typedef ptrdiff_t difference_type;
     typedef esbmc_forward_iterator_tag iterator_category;
 
-    // Grant friend access to unordered_set for iterator-based operations
+    // Grant friend access to unordered_set
     friend class unordered_set<Key, Hash, KeyEqual>;
 
 private:
-    const simple_bucket<Key>* buckets_;
-    size_t bucket_count_;
-    size_t current_bucket_;
-    size_t current_element_;
-    bool is_end_;
-    
-    void advance_to_next_valid() {
-        // TODO: Use vector implementation for buckets
-        // Explicit upper bound
-        static const size_t MAX_ITERATIONS = 8; // BUCKET_COUNT
-        size_t iterations = 0;
-        
-        while (current_bucket_ < bucket_count_ && iterations < MAX_ITERATIONS) {
-            if (current_element_ < buckets_[current_bucket_].count && 
-                current_element_ < simple_bucket<Key>::MAX_BUCKET_SIZE) {
-                return; // Found valid element
-            }
-            ++current_bucket_;
-            current_element_ = 0;
-            ++iterations;
-        }
-        is_end_ = true;
-    }
+    const Key* data_;
+    size_t pos_;
+    size_t size_;
 
 public:
     // Constructors
-    esbmc_unordered_set_iterator() : buckets_(nullptr), bucket_count_(0), 
-                                     current_bucket_(0), current_element_(0), is_end_(true) {}
+    esbmc_unordered_set_iterator() : data_(nullptr), pos_(0), size_(0) {}
     
-    esbmc_unordered_set_iterator(const simple_bucket<Key>* buckets, size_t bucket_count, 
-                                 size_t bucket_idx, size_t elem_idx, bool end_flag = false)
-        : buckets_(buckets), bucket_count_(bucket_count), 
-          current_bucket_(bucket_idx), current_element_(elem_idx), is_end_(end_flag) {
-        if (!is_end_) {
-            advance_to_next_valid();
-        }
-    }
+    esbmc_unordered_set_iterator(const Key* data, size_t position, size_t size)
+        : data_(data), pos_(position), size_(size) {}
 
     // Dereference operators
     reference operator*() const {
-        return buckets_[current_bucket_].elements[current_element_];
+        return data_[pos_];
     }
     
     pointer operator->() const {
-        return &buckets_[current_bucket_].elements[current_element_];
+        return &data_[pos_];
     }
 
     // Increment operators
     esbmc_unordered_set_iterator& operator++() {
-        if (!is_end_) {
-            ++current_element_;
-            advance_to_next_valid();
+        if (pos_ < size_) {
+            ++pos_;
         }
         return *this;
     }
@@ -189,10 +83,7 @@ public:
 
     // Comparison operators
     bool operator==(const esbmc_unordered_set_iterator& other) const {
-        if (is_end_ && other.is_end_) return true;
-        if (is_end_ || other.is_end_) return false;
-        return current_bucket_ == other.current_bucket_ && 
-               current_element_ == other.current_element_;
+        return data_ == other.data_ && pos_ == other.pos_;
     }
     
     bool operator!=(const esbmc_unordered_set_iterator& other) const {
@@ -200,7 +91,7 @@ public:
     }
 };
 
-// Main unordered_set implementation
+// Simple unordered_set implementation using fixed-size array
 template<typename Key, typename Hash, typename KeyEqual>
 class unordered_set {
 public:
@@ -220,57 +111,46 @@ public:
     typedef esbmc_unordered_set_iterator<Key, Hash, KeyEqual> const_iterator;
 
 private:
-    // TODO: Use vector implementation for buckets
-    // We use a fixed-size array of buckets to avoid vector resize issues
-    static const size_t BUCKET_COUNT = 8;
-    simple_bucket<Key> buckets_[BUCKET_COUNT];
+    // Simple fixed-size array storage
+    static const size_t MAX_SIZE = 32; // Small size for verification
+    Key data_[MAX_SIZE];
     size_type size_;
     hasher hash_function_;
     key_equal equal_function_;
 
-    // Get bucket index for a key
-    size_type get_bucket_index(const Key& key) const {
-        return hash_function_(key) % BUCKET_COUNT;
+    // Find index of key, or MAX_SIZE if not found
+    size_type find_index(const Key& key) const {
+        for (size_type i = 0; i < size_; ++i) {
+            if (equal_function_(data_[i], key)) {
+                return i;
+            }
+        }
+        return MAX_SIZE;
     }
 
 public:
     // Constructors
+    unordered_set() : size_(0) {}
     
-    // Default constructor - no dynamic allocation
-    unordered_set() : size_(0) {
-        // Explicitly initialize all buckets to ensure clean state for ESBMC
-        for (size_t i = 0; i < BUCKET_COUNT; ++i) {
-            buckets_[i].count = 0;
-        }
-    }
-    
-    // Constructor with bucket count (ignored for simplicity)
-    explicit unordered_set(size_type /*bucket_count*/) : size_(0) {
-        // Explicitly initialize all buckets
-        for (size_t i = 0; i < BUCKET_COUNT; ++i) {
-            buckets_[i].count = 0;
-        }
-    }
+    explicit unordered_set(size_type /*bucket_count*/) : size_(0) {}
     
     // Copy constructor
-    unordered_set(const unordered_set& other) : size_(other.size_),
-                                                hash_function_(other.hash_function_),
-                                                equal_function_(other.equal_function_) {
-        // Copy buckets with explicit bounds
-        for (size_t i = 0; i < BUCKET_COUNT; ++i) {
-            buckets_[i] = other.buckets_[i];
+    unordered_set(const unordered_set& other) 
+        : size_(other.size_), hash_function_(other.hash_function_), 
+          equal_function_(other.equal_function_) {
+        for (size_type i = 0; i < size_; ++i) {
+            data_[i] = other.data_[i];
         }
     }
     
     // Move constructor
-    unordered_set(unordered_set&& other) noexcept : size_(other.size_),
-                                                    hash_function_(other.hash_function_),
-                                                    equal_function_(other.equal_function_) {
-        // Move buckets manually
-        for (size_t i = 0; i < BUCKET_COUNT; ++i) {
-            buckets_[i] = other.buckets_[i];
+    unordered_set(unordered_set&& other) noexcept
+        : size_(other.size_), hash_function_(other.hash_function_), 
+          equal_function_(other.equal_function_) {
+        for (size_type i = 0; i < size_; ++i) {
+            data_[i] = other.data_[i];
         }
-        other.clear();
+        other.size_ = 0;
     }
 
     // Assignment operators
@@ -279,8 +159,8 @@ public:
             size_ = other.size_;
             hash_function_ = other.hash_function_;
             equal_function_ = other.equal_function_;
-            for (size_t i = 0; i < BUCKET_COUNT; ++i) {
-                buckets_[i] = other.buckets_[i];
+            for (size_type i = 0; i < size_; ++i) {
+                data_[i] = other.data_[i];
             }
         }
         return *this;
@@ -291,29 +171,29 @@ public:
             size_ = other.size_;
             hash_function_ = other.hash_function_;
             equal_function_ = other.equal_function_;
-            for (size_t i = 0; i < BUCKET_COUNT; ++i) {
-                buckets_[i] = other.buckets_[i];
+            for (size_type i = 0; i < size_; ++i) {
+                data_[i] = other.data_[i];
             }
-            other.clear();
+            other.size_ = 0;
         }
         return *this;
     }
 
     // Iterators
     iterator begin() {
-        return iterator(buckets_, BUCKET_COUNT, 0, 0, false);
+        return iterator(data_, 0, size_);
     }
     
     const_iterator begin() const {
-        return const_cast<unordered_set*>(this)->begin();
+        return const_iterator(data_, 0, size_);
     }
     
     iterator end() {
-        return iterator(buckets_, BUCKET_COUNT, BUCKET_COUNT, 0, true);
+        return iterator(data_, size_, size_);
     }
     
     const_iterator end() const {
-        return const_cast<unordered_set*>(this)->end();
+        return const_iterator(data_, size_, size_);
     }
     
     const_iterator cbegin() const {
@@ -334,35 +214,29 @@ public:
     }
     
     size_type max_size() const noexcept {
-        return SIZE_MAX;
+        return MAX_SIZE;
     }
 
     // Modifiers
     
     // Insert single element
     std::pair<iterator, bool> insert(const Key& key) {
-        size_type bucket_index = get_bucket_index(key);
-        
-        // Check if already exists
-        if (buckets_[bucket_index].find(key)) {
-            // Find the element and return iterator to it
-            int idx = buckets_[bucket_index].find_index(key);
-            if (idx >= 0) {
-                return std::make_pair(iterator(buckets_, BUCKET_COUNT, bucket_index, 
-                                             static_cast<size_t>(idx)), false);
-            }
+        size_type idx = find_index(key);
+        if (idx != MAX_SIZE) {
+            // Already exists
+            return std::make_pair(iterator(data_, idx, size_), false);
         }
         
-        // Try to insert
-        if (buckets_[bucket_index].insert(key)) {
-            ++size_;
-            // Return iterator to newly inserted element
-            size_t new_pos = buckets_[bucket_index].count - 1;
-            return std::make_pair(iterator(buckets_, BUCKET_COUNT, bucket_index, new_pos), true);
+        if (size_ >= MAX_SIZE) {
+            // Array full
+            return std::make_pair(end(), false);
         }
         
-        // Bucket full - for operational model, just fail
-        return std::make_pair(end(), false);
+        // Insert new element
+        data_[size_] = key;
+        iterator result(data_, size_, size_ + 1);
+        ++size_;
+        return std::make_pair(result, true);
     }
     
     // Insert with move semantics
@@ -379,69 +253,57 @@ public:
     
     // Erase by key
     size_type erase(const Key& key) {
-        size_type bucket_index = get_bucket_index(key);
-        if (buckets_[bucket_index].erase(key)) {
-            --size_;
-            return 1;
+        size_type idx = find_index(key);
+        if (idx == MAX_SIZE) {
+            return 0; // Not found
         }
-        return 0;
+        
+        // Shift elements down
+        for (size_type i = idx; i < size_ - 1; ++i) {
+            data_[i] = data_[i + 1];
+        }
+        --size_;
+        return 1;
     }
     
     // Erase by iterator
     iterator erase(const_iterator position) {
-        if (position.is_end_ || position == end()) {
+        if (position == end()) {
             return end();
         }
         
-        // Get the key from the iterator position
-        const Key& key = *position;
-        
-        // Store current position information
-        size_t current_bucket = position.current_bucket_;
-        size_t current_element = position.current_element_;
-        
-        // Erase the element from the bucket
-        if (buckets_[current_bucket].erase(key)) {
-            --size_;
-            
-            // After erasing, the element at current_element position might be different
-            // or the position might be past the end of the bucket
-            // Return iterator to the next valid position
-            if (current_element < buckets_[current_bucket].count) {
-                // There's still an element at this position (shifted down)
-                return iterator(buckets_, BUCKET_COUNT, current_bucket, current_element);
-            } else {
-                // We need to advance to the next valid element
-                iterator next_it(buckets_, BUCKET_COUNT, current_bucket, current_element);
-                return next_it;
-            }
+        // Calculate index from iterator position
+        size_type idx = position.pos_;
+        if (idx >= size_) {
+            return end();
         }
         
-        // Element was not found (shouldn't happen with valid iterator)
-        return end();
+        // Shift elements down
+        for (size_type i = idx; i < size_ - 1; ++i) {
+            data_[i] = data_[i + 1];
+        }
+        --size_;
+        
+        // Return iterator to next element (or end if we removed the last)
+        return iterator(data_, idx, size_);
     }
     
-    // Erase range of iterators - NEW METHOD
+    // Erase range
     iterator erase(const_iterator first, const_iterator last) {
         if (first == last) {
-            return iterator(buckets_, BUCKET_COUNT, first.current_bucket_, first.current_element_);
+            return iterator(data_, first.pos_, size_);
         }
         
-        // For simplicity, erase elements one by one
-        iterator current(buckets_, BUCKET_COUNT, first.current_bucket_, first.current_element_);
-        
-        while (current != last && current != end()) {
+        // Simple implementation: erase elements one by one
+        iterator current(data_, first.pos_, size_);
+        while (current != end() && current.pos_ < last.pos_) {
             current = erase(current);
         }
-        
         return current;
     }
     
     // Clear all elements
     void clear() noexcept {
-        for (size_t i = 0; i < BUCKET_COUNT; ++i) {
-            buckets_[i].clear();
-        }
         size_ = 0;
     }
 
@@ -449,44 +311,47 @@ public:
     
     // Find element
     iterator find(const Key& key) {
-        size_type bucket_index = get_bucket_index(key);
-        int idx = buckets_[bucket_index].find_index(key);
-        if (idx >= 0) {
-            return iterator(buckets_, BUCKET_COUNT, bucket_index, static_cast<size_t>(idx));
+        size_type idx = find_index(key);
+        if (idx != MAX_SIZE) {
+            return iterator(data_, idx, size_);
         }
         return end();
     }
     
     const_iterator find(const Key& key) const {
-        return const_cast<unordered_set*>(this)->find(key);
+        size_type idx = find_index(key);
+        if (idx != MAX_SIZE) {
+            return const_iterator(data_, idx, size_);
+        }
+        return end();
     }
     
     // Count occurrences (0 or 1 for set)
     size_type count(const Key& key) const {
-        return find(key) != end() ? 1 : 0;
+        return find_index(key) != MAX_SIZE ? 1 : 0;
     }
     
     // Check if key exists (C++20)
     bool contains(const Key& key) const {
-        return find(key) != end();
+        return find_index(key) != MAX_SIZE;
     }
 
-    // Bucket interface
+    // Bucket interface (dummy implementations for API compatibility)
     size_type bucket_count() const noexcept {
-        return BUCKET_COUNT;
+        return 1;
     }
     
-    size_type bucket_size(size_type bucket_index) const {
-        return bucket_index < BUCKET_COUNT ? buckets_[bucket_index].size() : 0;
+    size_type bucket_size(size_type /*bucket_index*/) const {
+        return size_;
     }
     
-    size_type bucket(const Key& key) const {
-        return get_bucket_index(key);
+    size_type bucket(const Key& /*key*/) const {
+        return 0;
     }
 
-    // Hash policy
+    // Hash policy (dummy implementations)
     double load_factor() const noexcept {
-        return static_cast<double>(size_) / BUCKET_COUNT;
+        return static_cast<double>(size_) / MAX_SIZE;
     }
     
     double max_load_factor() const noexcept {
@@ -494,7 +359,7 @@ public:
     }
     
     void reserve(size_type /*count*/) {
-        // No-op for fixed-size operational model
+        // No-op for fixed-size array
     }
 
     // Observers
@@ -508,14 +373,14 @@ public:
 
     // Comparison operators
     bool operator==(const unordered_set& other) const {
-        if (size_ != other.size_) return false;
+        if (size_ != other.size_) {
+            return false;
+        }
         
-        // Check all elements in this set exist in other with explicit bounds
-        for (size_t i = 0; i < BUCKET_COUNT; ++i) {
-            for (size_t j = 0; j < buckets_[i].count && j < simple_bucket<Key>::MAX_BUCKET_SIZE; ++j) {
-                if (other.find(buckets_[i].elements[j]) == other.end()) {
-                    return false;
-                }
+        // Check that all elements in this set exist in other
+        for (size_type i = 0; i < size_; ++i) {
+            if (!other.contains(data_[i])) {
+                return false;
             }
         }
         return true;
