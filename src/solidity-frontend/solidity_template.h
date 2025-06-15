@@ -99,7 +99,7 @@ uint256_t gasleft()
 {
 __ESBMC_HIDE:;
   gasConsume(); // always less
-  return uint256_t(_gaslimit);
+  return (uint256_t)_gaslimit;
 }
 )";
 
@@ -139,12 +139,12 @@ address_t ripemd160(uint256_t x)
 {
 __ESBMC_HIDE:;
   // UNSAT abstraction
-  return address_t(x);
+  return (address_t)x;
 }
 address_t ecrecover(uint256_t hash, unsigned int v, uint256_t r, uint256_t s)
 {
 __ESBMC_HIDE:;
-  return address_t(hash);
+  return (address_t)hash;
 }
 
 // uint256_t _pow(unsigned int base, unsigned int exp) {
@@ -816,21 +816,21 @@ uint256_t _max(unsigned int bitwidth, bool is_signed) {
 __ESBMC_HIDE:;
   __ESBMC_assume(bitwidth > 0 && bitwidth <= 256);
   if (is_signed) {
-      return (uint256_t(1) << (bitwidth - 1)) - uint256_t(1);
+      return ((uint256_t)1 << (bitwidth - 1)) - (uint256_t)1;
   } else {
       if (bitwidth == 256) {
-          return uint256_t(-1); 
+          return (uint256_t)-1; 
       }
-      return (uint256_t(1) << bitwidth) - uint256_t(1);
+      return ((uint256_t)1 << bitwidth) - (uint256_t)1;
   }
 }
 int256_t _min(unsigned int bitwidth, bool is_signed) {
 __ESBMC_HIDE:;
   if (is_signed) {
       __ESBMC_assume(bitwidth > 0 && bitwidth <= 256);
-      return -(int256_t(1) << (bitwidth - 1)); // -2^(N-1)
+      return -((int256_t)1 << (bitwidth - 1)); // -2^(N-1)
   } else {
-      return int256_t(0); // Min of unsigned is always 0
+      return (int256_t)0; // Min of unsigned is always 0
   }
 }
 
@@ -864,23 +864,23 @@ void initialize()
 {
 __ESBMC_HIDE:;
 // we assume it starts from an EOA
-msg_data = uint256_t(nondet_uint());
-msg_sender = address_t(nondet_uint());
+msg_data = (uint256_t)nondet_uint();
+msg_sender = (address_t)nondet_uint();
 msg_sig = nondet_uint();
-msg_value = uint256_t(nondet_uint());
+msg_value = (uint256_t)nondet_uint();
 
-tx_gasprice = uint256_t(nondet_uint());
+tx_gasprice = (uint256_t)nondet_uint();
 // this can only be an EOA's address
-tx_origin = address_t(nondet_uint());
+tx_origin = (address_t)nondet_uint();
 
-block_basefee = uint256_t(nondet_uint());
-block_chainid = uint256_t(nondet_uint());
-block_coinbase = address_t(nondet_uint());
-block_difficulty = uint256_t(nondet_uint());
-block_gaslimit = uint256_t(nondet_uint());
-block_number = uint256_t(nondet_uint());
-block_prevrandao = uint256_t(nondet_uint());
-block_timestamp = uint256_t(nondet_uint());
+block_basefee = (uint256_t)nondet_uint();
+block_chainid = (uint256_t)nondet_uint();
+block_coinbase = (address_t)nondet_uint();
+block_difficulty = (uint256_t)nondet_uint();
+block_gaslimit = (uint256_t)nondet_uint();
+block_number = (uint256_t)nondet_uint();
+block_prevrandao = (uint256_t)nondet_uint();
+block_timestamp = (uint256_t)nondet_uint();
 
 _gaslimit = nondet_uint();
 
