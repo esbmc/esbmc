@@ -103,6 +103,7 @@ protected:
     nlohmann::json &sorted_files);
   void contract_precheck();
   bool populate_auxilary_vars();
+  bool get_esbmc_sol_init();
   bool
   populate_function_signature(nlohmann::json &json, const std::string &cname);
   bool populate_low_level_functions(const std::string &cname);
@@ -204,6 +205,7 @@ protected:
     const nlohmann::json *based_contracts,
     const std::string contract_name,
     bool is_aux_ctor);
+  bool move_initializer_to_main(codet &func_body);
   bool move_inheritance_to_ctor(
     const nlohmann::json *based_contracts,
     const std::string contract_name,
@@ -399,6 +401,7 @@ protected:
     std::string &struct_contract_name,
     const side_effect_expr_function_callt &gen_call,
     exprt &new_expr);
+  void extract_new_contracts();
 
   // line number and locations
   void
@@ -415,9 +418,7 @@ protected:
   std::string get_src_from_json(const nlohmann::json &ast_node);
 
   symbolt *move_symbol_to_context(symbolt &symbol);
-  bool multi_transaction_verification(
-    const std::string &contractName,
-    bool is_final_main);
+  bool multi_transaction_verification(const std::string &contractName);
   bool multi_contract_verification_bound(std::set<std::string> &tgt_set);
   bool multi_contract_verification_unbound(std::set<std::string> &tgt_set);
   void reset_auxiliary_vars();
@@ -485,11 +486,13 @@ protected:
   const nlohmann::json &
   get_func_decl_ref(const std::string &c_name, const std::string &f_name);
   void get_builtin_property_expr(
+    const std::string &cname,
     const std::string &name,
     const exprt &base,
     const locationt &loc,
     exprt &new_expr);
   void get_aux_property_function(
+    const std::string &cname,
     const exprt &addr,
     const typet &return_t,
     const locationt &loc,
@@ -538,6 +541,7 @@ protected:
   bool get_send_definition(const std::string &cname, exprt &new_expr);
   bool model_transaction(
     const nlohmann::json &expr,
+    const exprt &this_expr,
     const exprt &base,
     const exprt &value,
     const locationt &loc,
@@ -545,6 +549,10 @@ protected:
     exprt &back_block);
 
   bool get_bind_cname_expr(const nlohmann::json &json, exprt &bind_cname_expr);
+  void get_bind_cname_func_name(
+    const std::string &cname,
+    std::string &fname,
+    std::string &fid);
   void get_nondet_expr(const typet &t, exprt &new_expr);
   bool assign_nondet_contract_name(const std::string &_cname, exprt &new_expr);
   bool assign_param_nondet(
@@ -614,6 +622,8 @@ protected:
   // contract name list
   std::unordered_map<int, std::string> contractNamesMap;
   std::set<std::string> contractNamesList;
+  // for mapping hack
+  std::set<std::string> newContractSet;
   // Store the ast_node["id"] of struct/error
   // where entity contains "members": [{}, {}...]
   std::unordered_map<int, std::string> member_entity_scope;
