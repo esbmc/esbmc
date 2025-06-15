@@ -287,7 +287,7 @@ public:
   void push_ctx() override;
   void pop_ctx() override;
 
-  void dump_smt() override;
+  std::string dump_smt() override;
 
   template <typename... Ts>
   void emit(const Ts &...) const;
