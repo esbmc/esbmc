@@ -134,6 +134,12 @@ public:
     
     explicit unordered_set(size_type /*bucket_count*/) : size_(0) {}
     
+    // Iterator range constructor
+    template<typename InputIterator>
+    unordered_set(InputIterator first, InputIterator last) : size_(0) {
+        insert(first, last);
+    }
+    
     // Copy constructor
     unordered_set(const unordered_set& other) 
         : size_(other.size_), hash_function_(other.hash_function_), 
@@ -242,6 +248,14 @@ public:
     // Insert with move semantics
     std::pair<iterator, bool> insert(Key&& key) {
         return insert(key);
+    }
+    
+    // Insert range
+    template<typename InputIterator>
+    void insert(InputIterator first, InputIterator last) {
+        for (InputIterator it = first; it != last; ++it) {
+            insert(*it);
+        }
     }
     
     // Emplace
