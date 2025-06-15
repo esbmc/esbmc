@@ -837,13 +837,13 @@ std::string bitwuzla_convt::dump_smt()
   }
   else 
   {
-    FILE* file = fopen(path.c_str(), "w")
+    FILE* file = fopen(path.c_str(), "w");
     if (!file)
     {
       log_error("Could not open output file '{}'", path);
       return "Failed to open output file.";
     }
-    bitwuzla_print_formula(bitw, "smt2", out, 2);
+    bitwuzla_print_formula(bitw, "smt2", file, 2);
     fclose(file);
   }
   log_status("SMT formula dumped successfully");
