@@ -90,6 +90,10 @@ jobs:
       run: find unit -iname *.h -o -iname *.c -o -iname *.cpp -o -iname *.hpp -iname *.hh  | xargs ./clang/bin/clang-format -style=file -i -fallback-style=none
     - name: Delete downloaded Clang 11
       run: rm -rf clang*
+    # Clean up any local changes before auto-commit
+    - name: Reset local changes before auto-commit
+    if: ${{ ! startsWith(github.head_ref, 'fb/') }}
+    run: git reset --hard
     # Commit all changed files back to the repository
     #- uses: stefanzweifel/git-auto-commit-action@v5
     #  if: ${{ ! startsWith(github.head_ref, 'fb/') }}
