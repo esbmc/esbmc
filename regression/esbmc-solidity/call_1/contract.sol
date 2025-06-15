@@ -1,33 +1,34 @@
-// // SPDX-License-Identifier: GPL-3.0
+// SPDX-License-Identifier: GPL-3.0
 pragma solidity >=0.8.0;
 
 contract Bank {
     mapping (address => uint) balances;
-    address x;
-    uint choice;
 
     function deposit() public payable {
-        balances[x] += 1;
+        balances[msg.sender] += msg.value;
     }
 
     function withdraw(uint amount) public {
         require(amount > 0);
-        require(amount <= balances[x]);
+        require(amount <= balances[msg.sender]);
 
-        (bool success,) = x.call{value: amount}("");
-        balances[x] -= amount;
+        (bool success,) = msg.sender.call{value: amount}("");
+        balances[msg.sender] -= amount;
+        require(success);
     }
-    function invariant(uint u1, address a) public payable {
+    function invariant(uint choice, uint u1, address a) public payable {
         uint currb = balances[a];
         if (choice == 0) {
             deposit();
-            ++choice;
-        } else {
+        } else if (choice == 1) {
             withdraw(u1);
+        } else {
+            require(false);
         }
         uint newb = balances[a];
 
-        assert(newb == currb);
-
+        require(newb < currb);
+        assert(choice == 1);
+        assert(msg.sender == a);
 }
 }
