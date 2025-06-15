@@ -180,7 +180,7 @@ bool solidity_convertert::convert()
     {
       // perform multi-transaction verification
       // by adding symbols to the "sol_main()" entry function
-      if (multi_transaction_verification(*tgt_cnt_set.begin(), true))
+      if (multi_transaction_verification(*tgt_cnt_set.begin()))
         return true;
     }
     // multiple contract
@@ -599,6 +599,12 @@ bool solidity_convertert::populate_auxilary_vars()
     code_blockt fbody;
     unsigned int i = 0;
     exprt arr = symbol_expr(sym);
+    // add hide
+   code_labelt label;
+    label.set_label("__ESBMC_HIDE");
+    label.code() = code_skipt();
+    fbody.operands().push_back(label);
+
     for (auto str : cname_set)
     {
       // lhs
@@ -2412,6 +2418,7 @@ bool solidity_convertert::move_initializer_to_main(codet &func_body)
     _call.function() = func;
     func_body.move_to_operands(_call);
   }
+  return false;
 }
 
 // convert the initialization of the state variable
@@ -10177,8 +10184,7 @@ bool solidity_convertert::get_empty_array_ref(
 
 */
 bool solidity_convertert::multi_transaction_verification(
-  const std::string &c_name,
-  bool is_final_main)
+  const std::string &c_name)
 {
   log_debug(
     "Solidity", "@@@ performs transaction verification on contract {}", c_name);
@@ -10197,8 +10203,6 @@ bool solidity_convertert::multi_transaction_verification(
   func_body.operands().push_back(label);
 
   // initialize
-  if (is_final_main)
-    move_initializer_to_main(func_body);
 
   // 1. get constructor call
   if (contractNamesList.count(c_name) == 0)
@@ -10283,7 +10287,6 @@ bool solidity_convertert::multi_contract_verification_bound(
   func_body.operands().push_back(label);
 
   // initialize
-  move_initializer_to_main(func_body);
 
   // 1. construct switch-case
   int cnt = 0;
@@ -10297,7 +10300,7 @@ bool solidity_convertert::multi_contract_verification_bound(
   {
     // 1.1 construct multi-transaction verification entry function
     // function "_ESBMC_Main_contractname" will be created and inserted to the symbol table.
-    if (multi_transaction_verification(c_name, false))
+    if (multi_transaction_verification(c_name))
     {
       log_error(
         "Failed to construct multi-transaction verification for contract {}",
@@ -10421,7 +10424,6 @@ bool solidity_convertert::multi_contract_verification_unbound(
   func_body.operands().push_back(label);
 
   // initialize
-  move_initializer_to_main(func_body);
 
   std::set<std::string> cname_set;
   if (!tgt_set.empty())
@@ -10433,7 +10435,7 @@ bool solidity_convertert::multi_contract_verification_unbound(
   {
     // construct multi-transaction verification entry function
     // function "_ESBMC_Main_contractname" will be created and inserted to the symbol table.
-    if (multi_transaction_verification(c_name, false))
+    if (multi_transaction_verification(c_name))
     {
       log_error(
         "Failed to construct multi-transaction verification for contract {}",
@@ -11424,17 +11426,16 @@ bool solidity_convertert::get_high_level_member_access(
   // @str: contract name
   for (auto str : cname_set)
   {
-    // strcmp(_ESBMC_NODET_cont_name, Base)
+    // strcmp（_ESBMC_NODET_cont_name, Base)
+    exprt cname_string;
     typet ct = pointer_typet(signed_char_type());
-    string_constantt cname_string(str);
-    solidity_gen_typecast(ns, cname_string, ct);
+    ct.cmt_constant(true);
+    get_symbol_decl_ref(str, "sol:@" + str, ct, cname_string);
 
-    //TODO: use pointer compare to improve performance
-    side_effect_expr_function_callt _cmp_cname;
-    get_library_function_call_no_args(
-      "_ESBMC_cmp_cname", "c:@F@_ESBMC_cmp_cname", bool_type(), l, _cmp_cname);
-    _cmp_cname.arguments().push_back(bind_expr);
-    _cmp_cname.arguments().push_back(cname_string);
+    // since we do not modify the string, and it always point to the known object
+    exprt _cmp_cname = exprt("=", pointer_typet(signed_char_type()));
+    _cmp_cname.operands().push_back(bind_expr);
+    _cmp_cname.operands().push_back(cname_string);
 
     // member access
     exprt memcall;
@@ -11711,8 +11712,8 @@ void solidity_convertert::get_bind_cname_func_name(
   std::string &fname,
   std::string &fid)
 {
-  fname = "initialize_" + cname + +"_bind_cname#";
-  fid = "sol:@F@" + fname;
+  fname = "initialize_" + cname + +"_bind_cname";
+  fid = "sol:@F@" + fname + "#";
 }
 
 // return expr: contract_instance._ESBMC_bind_cname
