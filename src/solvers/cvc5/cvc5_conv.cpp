@@ -1306,13 +1306,15 @@ void cvc5_convt::pop_ctx()
   smt_convt::pop_ctx();
 }
 
-void cvc5_convt::dump_smt()
+std::string cvc5_convt::dump_smt()
 {
   std::ostringstream oss;
   auto const &assertions = slv.getAssertions();
   for (auto const &a : assertions)
     oss << a.toString();
-  log_status("{}", oss.str());
+  std::string smt_output = oss.str();
+  log_status("{}", smt_output);
+  return smt_output;
 }
 
 void cvc5_smt_ast::dump() const
