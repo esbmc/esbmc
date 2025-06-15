@@ -356,6 +356,7 @@ TEST_SUITES = [
     "esbmc-cpp/map",
     "esbmc-cpp/multimap",
     "esbmc-cpp/multiset",
+    "esbmc-cpp/unordered_set",
     "esbmc-cpp/OM_sanity_checks",
     "esbmc-cpp/polymorphism_bringup",
     "esbmc-cpp/priority_queue",

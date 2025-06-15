@@ -112,6 +112,7 @@ set(REGRESSIONS_CPP03 esbmc-cpp/cpp
                       esbmc-cpp/priority_queue
                       esbmc-cpp/queue
                       esbmc-cpp/set
+                      esbmc-cpp/unordered_set
                       esbmc-cpp/stack
                       esbmc-cpp/unix
                       esbmc-cpp/vector
