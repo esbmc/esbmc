@@ -121,6 +121,9 @@ public:
     typedef ptrdiff_t difference_type;
     typedef esbmc_forward_iterator_tag iterator_category;
 
+    // Grant friend access to unordered_set for iterator-based operations
+    friend class unordered_set<Key, Hash, KeyEqual>;
+
 private:
     const simple_bucket<Key>* buckets_;
     size_t bucket_count_;
@@ -129,6 +132,7 @@ private:
     bool is_end_;
     
     void advance_to_next_valid() {
+        // TODO: Use vector implementation for buckets
         // Explicit upper bound
         static const size_t MAX_ITERATIONS = 8; // BUCKET_COUNT
         size_t iterations = 0;
@@ -216,7 +220,8 @@ public:
     typedef esbmc_unordered_set_iterator<Key, Hash, KeyEqual> const_iterator;
 
 private:
-    // Fixed-size bucket array to avoid vector resize issues
+    // TODO: Use vector implementation for buckets
+    // We use a fixed-size array of buckets to avoid vector resize issues
     static const size_t BUCKET_COUNT = 8;
     simple_bucket<Key> buckets_[BUCKET_COUNT];
     size_type size_;
@@ -380,6 +385,56 @@ public:
             return 1;
         }
         return 0;
+    }
+    
+    // Erase by iterator
+    iterator erase(const_iterator position) {
+        if (position.is_end_ || position == end()) {
+            return end();
+        }
+        
+        // Get the key from the iterator position
+        const Key& key = *position;
+        
+        // Store current position information
+        size_t current_bucket = position.current_bucket_;
+        size_t current_element = position.current_element_;
+        
+        // Erase the element from the bucket
+        if (buckets_[current_bucket].erase(key)) {
+            --size_;
+            
+            // After erasing, the element at current_element position might be different
+            // or the position might be past the end of the bucket
+            // Return iterator to the next valid position
+            if (current_element < buckets_[current_bucket].count) {
+                // There's still an element at this position (shifted down)
+                return iterator(buckets_, BUCKET_COUNT, current_bucket, current_element);
+            } else {
+                // We need to advance to the next valid element
+                iterator next_it(buckets_, BUCKET_COUNT, current_bucket, current_element);
+                return next_it;
+            }
+        }
+        
+        // Element was not found (shouldn't happen with valid iterator)
+        return end();
+    }
+    
+    // Erase range of iterators - NEW METHOD
+    iterator erase(const_iterator first, const_iterator last) {
+        if (first == last) {
+            return iterator(buckets_, BUCKET_COUNT, first.current_bucket_, first.current_element_);
+        }
+        
+        // For simplicity, erase elements one by one
+        iterator current(buckets_, BUCKET_COUNT, first.current_bucket_, first.current_element_);
+        
+        while (current != last && current != end()) {
+            current = erase(current);
+        }
+        
+        return current;
     }
     
     // Clear all elements
