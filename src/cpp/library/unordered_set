@@ -111,8 +111,9 @@ public:
     typedef esbmc_unordered_set_iterator<Key, Hash, KeyEqual> const_iterator;
 
 private:
+    // TODO: Implement a hash table if needed.
     // Simple fixed-size array storage
-    static const size_t MAX_SIZE = 32; // Small size for verification
+    static const size_t MAX_SIZE = 1024; // Small size for verification
     Key data_[MAX_SIZE];
     size_type size_;
     hasher hash_function_;
