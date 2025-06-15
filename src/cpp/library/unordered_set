@@ -350,7 +350,7 @@ public:
         return find_index(key) != MAX_SIZE;
     }
 
-    // Bucket interface (dummy implementations for API compatibility)
+    // Bucket interface
     size_type bucket_count() const noexcept {
         return 1;
     }
@@ -363,7 +363,7 @@ public:
         return 0;
     }
 
-    // Hash policy (dummy implementations)
+    // Hash policy
     double load_factor() const noexcept {
         return static_cast<double>(size_) / MAX_SIZE;
     }
