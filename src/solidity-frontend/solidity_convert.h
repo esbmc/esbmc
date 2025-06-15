@@ -103,6 +103,7 @@ protected:
     nlohmann::json &sorted_files);
   void contract_precheck();
   bool populate_auxilary_vars();
+  bool get_esbmc_sol_init();
   bool
   populate_function_signature(nlohmann::json &json, const std::string &cname);
   bool populate_low_level_functions(const std::string &cname);

@@ -600,7 +600,7 @@ bool solidity_convertert::populate_auxilary_vars()
     unsigned int i = 0;
     exprt arr = symbol_expr(sym);
     // add hide
-   code_labelt label;
+    code_labelt label;
     label.set_label("__ESBMC_HIDE");
     label.code() = code_skipt();
     fbody.operands().push_back(label);
@@ -630,6 +630,128 @@ bool solidity_convertert::populate_auxilary_vars()
   // for mapping
   extract_new_contracts();
 
+  // create a _ESBMC_sol_init_ class and object
+  if (get_esbmc_sol_init())
+    return true;
+
+  return false;
+}
+
+/*
+class _ESBMC_sol_init_
+{
+  public:
+  _ESBMC_sol_init_()
+  {
+    initialize();
+    $_bind_cname_list();
+  }
+}
+*/
+bool solidity_convertert::get_esbmc_sol_init()
+{
+  std::string id, name;
+  struct_typet t = struct_typet();
+
+  name = "_ESBMC_sol_init_";
+  id = prefix + name;
+  t.tag(name);
+  symbolt s;
+  std::string debug = get_modulename_from_path(absolute_path);
+  get_default_symbol(s, debug, t, name, id, locationt());
+  s.is_type = true;
+  symbolt &added_sym = *move_symbol_to_context(s);
+
+  // constructor
+  std::string fname, fid;
+  fname = "_ESBMC_sol_init_";
+  fid = "sol:@C@_ESBMC_sol_init_@F@" + fname + "#";
+  code_typet ft;
+  typet tmp_rtn_type("constructor");
+  ft.return_type() = tmp_rtn_type;
+  ft.set("#member_name", fid);
+  ft.set("#inlined", true);
+
+  symbolt fs;
+  get_default_symbol(fs, debug, ft, fname, fid, locationt());
+  fs.lvalue = true;
+  fs.file_local = true;
+  symbolt &added_fs = *move_symbol_to_context(fs);
+
+  get_function_this_pointer_param(fname, fid, debug, locationt(), ft);
+  added_fs.type = ft;
+
+  code_blockt _block;
+  code_labelt label;
+  label.set_label("__ESBMC_HIDE");
+  label.code() = code_skipt();
+  _block.operands().push_back(label);
+  if(move_initializer_to_main(_block))
+    return true;
+  added_fs.value = _block;
+
+  exprt sym = symbol_expr(added_fs);
+
+  // add component to struct
+  struct_typet::componentt comp;
+  // construct comp
+  comp.type() = sym.type();
+  comp.identifier(sym.identifier());
+  comp.name(sym.name());
+  comp.pretty_name(sym.name());
+  comp.set_access("public");
+  comp.id("symbol");
+  to_struct_type(added_sym.type).methods().push_back(comp);
+
+  // add static contract instance
+  std::string ctor_ins_name, ctor_ins_id;
+  get_static_contract_instance_name(name, ctor_ins_name, ctor_ins_id);
+
+  locationt ctor_ins_loc;
+  ctor_ins_loc.file(absolute_path);
+  ctor_ins_loc.line(1);
+  std::string ctor_ins_debug_modulename =
+    get_modulename_from_path(absolute_path);
+  typet ctor_ins_typet = symbol_typet(prefix + name);
+
+  symbolt ctor_ins_symbol;
+  get_default_symbol(
+    ctor_ins_symbol,
+    ctor_ins_debug_modulename,
+    ctor_ins_typet,
+    ctor_ins_name,
+    ctor_ins_id,
+    ctor_ins_loc);
+  ctor_ins_symbol.lvalue = true;
+  ctor_ins_symbol.is_extern = false;
+  // the instance should be set as static
+  ctor_ins_symbol.static_lifetime = true;
+  ctor_ins_symbol.file_local = true;
+
+  auto &added_ins_sym = *move_symbol_to_context(ctor_ins_symbol);
+
+  exprt ctor;
+  side_effect_expr_function_callt call;
+  call.function() = sym;
+  call.type() = symbol_typet(prefix + name);
+
+  exprt this_object;
+  get_new_object(symbol_typet(prefix + name), this_object);
+  call.arguments().push_back(this_object);
+
+  // set constructor
+  call.set("constructor", 1);
+
+  side_effect_exprt tmp_obj("temporary_object", call.type());
+  codet code_expr("expression");
+  code_expr.operands().push_back(call);
+  tmp_obj.initializer(code_expr);
+  call.swap(tmp_obj);
+  ctor = call;
+
+  added_ins_sym.value = ctor;
+
+  log_debug("solidity", "finish populating _ESBMC_sol_init");
   return false;
 }
 
@@ -2414,8 +2536,9 @@ bool solidity_convertert::move_initializer_to_main(codet &func_body)
     if (context.find_symbol(fid) == nullptr)
       return true;
     exprt func = symbol_expr(*context.find_symbol(fid));
-    code_function_callt _call;
+    side_effect_expr_function_callt _call;
     _call.function() = func;
+    convert_expression_to_code(_call);
     func_body.move_to_operands(_call);
   }
   return false;
