@@ -424,7 +424,7 @@ public:
   string &operator=(const char *s);
   string &operator=(char c);
   string &operator=(const string &str);
-  string &operator+=(string &s);
+  string &operator+=(const string &s);
   string &operator+=(const char *s);
   string &operator+=(char s);
   //TODO: operator+
@@ -1411,7 +1411,7 @@ __ESBMC_HIDE:
  return next;
  }
  */
-string &string::operator+=(string &s)
+string &string::operator+=(const string &s)
 {
 __ESBMC_HIDE:
   __ESBMC_assert(s.str != NULL, "The parameter must to be different than NULL");
