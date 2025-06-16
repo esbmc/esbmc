@@ -396,6 +396,24 @@ protected:
     std::string &arr_name,
     std::string &arr_id);
   bool is_mapping_set_lvalue(const nlohmann::json &json);
+  bool get_mapping_key_value_type(
+    const nlohmann::json &map_node,
+    typet &key_t,
+    typet &value_t,
+    std::string &key_sol_type,
+    std::string &val_sol_type);
+  void gen_mapping_key_typecast(
+    exprt &pos,
+    const locationt &l,
+    const std::string &key_sol_type);
+  bool get_new_mapping_index_access(
+    const typet &value_t,
+    const std::string &val_sol_type,
+    bool is_mapping_set,
+    const exprt &array,
+    const exprt &pos,
+    const locationt &location,
+    exprt &new_expr);
   void get_mapping_struct_function(
     const typet &struct_t,
     std::string &struct_contract_name,

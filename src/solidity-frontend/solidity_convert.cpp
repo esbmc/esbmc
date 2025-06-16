@@ -686,7 +686,7 @@ bool solidity_convertert::get_esbmc_sol_init()
   label.set_label("__ESBMC_HIDE");
   label.code() = code_skipt();
   _block.operands().push_back(label);
-  if(move_initializer_to_main(_block))
+  if (move_initializer_to_main(_block))
     return true;
   added_fs.value = _block;
 
@@ -4514,6 +4514,65 @@ bool solidity_convertert::get_expr(
         return true;
       const irep_idt comp_name = comp.name();
 
+      // special checks for mapping
+      // e.g. _b.map(0)
+      // => map[0] or map_uint_get(ins , 0);
+      if (comp.type().get("#sol_type") == "MAPPING")
+      {
+        assert(func_call_json.contains("arguments"));
+        assert(member_decl_ref.contains("typeName"));
+        assert(member_decl_ref["typeName"].contains("valueType"));
+        exprt pos;
+        if (get_expr(
+              func_call_json["arguments"][0],
+              member_decl_ref["typeName"]["valueType"]["typeDescriptions"],
+              pos))
+          return true;
+
+        bool is_new_expr = newContractSet.count(base_cname);
+        // get key/value type
+        typet key_t, value_t;
+        std::string key_sol_type, val_sol_type;
+        if (get_mapping_key_value_type(
+              member_decl_ref, key_t, value_t, key_sol_type, val_sol_type))
+        {
+          log_error("cannot get mapping key/value type");
+          return true;
+        }
+        gen_mapping_key_typecast(pos, location, key_sol_type);
+
+        if (!is_bound)
+        {
+          // x.member(); ==> nondet();
+          get_nondet_expr(value_t, new_expr);
+          break;
+        }
+
+        if (!is_new_expr)
+        {
+          assert(comp.type().is_array());
+          //TODO: the index type of ESBMC is limited to unsigned long long
+          // we need to extend such limit up to unsignedbv_type(256)
+          new_expr = index_exprt(comp, pos, value_t);
+        }
+        else
+        {
+          bool is_mapping_set = false;
+          auto _mem_call = member_exprt(base, comp.name(), comp.type());
+          if (get_new_mapping_index_access(
+                value_t,
+                val_sol_type,
+                is_mapping_set,
+                _mem_call,
+                pos,
+                location,
+                new_expr))
+            return true;
+        }
+
+        break;
+      }
+
       if (current_contractName == base_cname)
         // this.member();
         // comp can be either symbol_expr or member_expr
@@ -4680,43 +4739,15 @@ bool solidity_convertert::get_expr(
         src_ast_json["nodes"], base_json["referencedDeclaration"].get<int>());
 
       // get key/value type
-      assert(map_node.contains("typeName"));
       typet key_t, value_t;
-      if (get_type_description(
-            map_node["typeName"]["keyType"]["typeDescriptions"], key_t))
+      std::string key_sol_type, val_sol_type;
+      if (get_mapping_key_value_type(
+            map_node, key_t, value_t, key_sol_type, val_sol_type))
       {
-        log_error("cannot get mapping key type");
+        log_error("cannot get mapping key/value type");
         return true;
       }
-      if (get_type_description(
-            map_node["typeName"]["valueType"]["typeDescriptions"], value_t))
-      {
-        log_error("cannot get mapping value type");
-        return true;
-      }
-
-      // set type flag
-      std::string key_sol_type = key_t.get("#sol_type").as_string();
-      std::string val_sol_type = value_t.get("#sol_type").as_string();
-      if (val_sol_type.empty())
-        return true;
-
-      // if index is a string, we should convert it to
-      if (key_sol_type == "STRING" || key_sol_type == "STRING_LITERAL")
-      {
-        side_effect_expr_function_callt str2uint_call;
-        assert(context.find_symbol("c:@F@str2uint") != nullptr);
-        get_library_function_call_no_args(
-          "str2uint",
-          "c:@F@str2uint",
-          unsignedbv_typet(256),
-          location,
-          str2uint_call);
-        str2uint_call.arguments().push_back(pos);
-        pos = str2uint_call;
-      }
-      // e.g x[-1] => x[uint256(-1)]
-      solidity_gen_typecast(ns, pos, unsignedbv_typet(256));
+      gen_mapping_key_typecast(pos, location, key_sol_type);
 
       if (!is_new_expr)
       {
@@ -4724,174 +4755,21 @@ bool solidity_convertert::get_expr(
         //TODO: the index type of ESBMC is limited to unsigned long long
         // we need to extend such limit up to unsignedbv_type(256)
         new_expr = index_exprt(array, pos, t);
-        break;
       }
       else
       {
-        std::string val_flg;
-        typet func_type;
-        if (
-          val_sol_type.find("UINT") != std::string::npos ||
-          val_sol_type.find("BYTES") != std::string::npos ||
-          val_sol_type.find("ADDRESS") != std::string::npos ||
-          val_sol_type.find("ENUM") != std::string::npos)
-        {
-          val_flg = "uint";
-          func_type = unsignedbv_typet(256);
-        }
-        else if (val_sol_type.find("INT") != std::string::npos)
-        {
-          val_flg = "int";
-          func_type = signedbv_typet(256);
-        }
-        else if (val_sol_type.find("BOOL") != std::string::npos)
-        {
-          val_flg = "bool";
-          func_type = bool_typet();
-        }
-        else if (
-          val_sol_type.find("STRING") != std::string::npos ||
-          val_sol_type.find("STRING_LITERAL") != std::string::npos)
-        {
-          val_flg = "string";
-          func_type = value_t;
-        }
-        else
-        {
-          val_flg = "generic";
-          // void *
-          func_type = pointer_typet(empty_typet());
-        }
-
-        // index accesss could either be set or get:
-        // x[1] => map_uint_get(&m, 1)
-        // x[1] = 2 => map_uint_set(&x, 1, 2)
         bool is_mapping_set = is_mapping_set_lvalue(expr);
-
-        // construct func call
-        std::string func_name;
-        if (is_mapping_set)
-        {
-          func_name = "map_" + val_flg + "_set";
-          func_type = empty_typet();
-          // overwrite func_type
-          func_type.set("cpp_type", "void");
-        }
-        else
-          func_name = "map_" + val_flg + "_get";
-
-        if (context.find_symbol("c:@F@" + func_name) == nullptr)
-        {
-          log_error(
-            "cannot find mapping ref {}. Got val_sol_type={}",
-            func_name,
-            val_sol_type);
+        if (get_new_mapping_index_access(
+              value_t,
+              val_sol_type,
+              is_mapping_set,
+              array,
+              pos,
+              location,
+              new_expr))
           return true;
-        }
-        side_effect_expr_function_callt call;
-        get_library_function_call_no_args(
-          func_name, "c:@F@" + func_name, func_type, location, call);
-
-        // &array
-        call.arguments().push_back(address_of_exprt(array));
-
-        // index
-        call.arguments().push_back(pos);
-
-        if (is_mapping_set)
-        {
-          /*
-        case 1: x[1] += 2 =>
-          DECL temp = map_uint_get(&array, pos);  <-- move to front block
-          temp += 2;
-          map_uint_set(&array, pos, temp);  <-- move to back block
-          (map_generic_set(&array, pos, temp, sizeof(temp));) 
-        */
-          std::string aux_name, aux_id;
-          get_aux_var(aux_name, aux_id);
-          symbolt aux_sym;
-          std::string debug_modulename =
-            get_modulename_from_path(absolute_path);
-          typet aux_type = value_t;
-          get_default_symbol(
-            aux_sym, debug_modulename, aux_type, aux_name, aux_id, location);
-          aux_sym.file_local = true;
-          aux_sym.lvalue = true;
-          auto &added_sym = *move_symbol_to_context(aux_sym);
-          code_declt decl(symbol_expr(added_sym));
-
-          // populate initial value
-          side_effect_expr_function_callt get_call;
-          std::string f_get_name = "map_" + val_flg + "_get";
-
-          get_library_function_call_no_args(
-            f_get_name, "c:@F@" + f_get_name, value_t, location, get_call);
-          get_call.arguments().push_back(address_of_exprt(array));
-          get_call.arguments().push_back(pos);
-          solidity_gen_typecast(ns, get_call, aux_type);
-          added_sym.value = get_call;
-          decl.operands().push_back(get_call);
-          move_to_front_block(decl);
-
-          // value
-          call.arguments().push_back(symbol_expr(added_sym));
-          if (val_flg == "generic")
-          {
-            // sizeof
-            exprt size_of_expr;
-            get_size_of_expr(value_t, size_of_expr);
-            call.arguments().push_back(symbol_expr(added_sym));
-          }
-
-          convert_expression_to_code(call);
-          move_to_back_block(call);
-
-          new_expr = symbol_expr(added_sym);
-          break;
-        }
-        else if (val_flg == "generic")
-        {
-          /* generic_get:
-          case 2: users[msg.sender].age; =>
-            DECL struct temp = map_users_get(&array, pos);
-            temp.age;
-        */
-          std::string aux_name, aux_id;
-          get_aux_var(aux_name, aux_id);
-          symbolt aux_sym;
-          std::string debug_modulename =
-            get_modulename_from_path(absolute_path);
-          typet aux_type = value_t; // struct *
-          get_default_symbol(
-            aux_sym, debug_modulename, aux_type, aux_name, aux_id, location);
-          aux_sym.file_local = true;
-          aux_sym.lvalue = true;
-          auto &added_sym = *move_symbol_to_context(aux_sym);
-          code_declt decl(symbol_expr(added_sym));
-
-          // construct map_{struct_name}_get() function
-          // e.g. map_Base_User_get();
-          exprt map_struct_get;
-          std::string struct_contract_name = value_t.identifier().as_string();
-          assert(!struct_contract_name.empty());
-          assert(val_sol_type == "STRUCT"); // t_symbol
-          get_mapping_struct_function(
-            value_t, struct_contract_name, call, map_struct_get);
-
-          // struct temp = map_users_get(&array, pos);
-          added_sym.value = map_struct_get;
-          decl.operands().push_back(map_struct_get);
-          move_to_front_block(decl);
-
-          new_expr = symbol_expr(added_sym);
-          break;
-        }
-
-        // e.g. (int8)map_int_get(&arr, 1);
-        solidity_gen_typecast(ns, call, value_t);
-        new_expr = call;
-        break;
       }
+      break;
     }
 
     // for BYTESN, where the index access is read-only
@@ -7377,6 +7255,234 @@ bool solidity_convertert::is_mapping_set_lvalue(const nlohmann::json &target)
   return target["lValueRequested"].get<bool>();
 }
 
+bool solidity_convertert::get_mapping_key_value_type(
+  const nlohmann::json &map_node,
+  typet &key_t,
+  typet &value_t,
+  std::string &key_sol_type,
+  std::string &val_sol_type)
+{
+  assert(map_node.contains("typeName"));
+  if (get_type_description(
+        map_node["typeName"]["keyType"]["typeDescriptions"], key_t))
+  {
+    log_error("cannot get mapping key type");
+    return true;
+  }
+  if (get_type_description(
+        map_node["typeName"]["valueType"]["typeDescriptions"], value_t))
+  {
+    log_error("cannot get mapping value type");
+    return true;
+  }
+
+  // set type flag
+  key_sol_type = key_t.get("#sol_type").as_string();
+  val_sol_type = value_t.get("#sol_type").as_string();
+  if (val_sol_type.empty())
+    return true;
+  return false;
+}
+
+void solidity_convertert::gen_mapping_key_typecast(
+  exprt &pos,
+  const locationt &location,
+  const std::string &key_sol_type)
+{
+  // if index is a string, we should convert it to uint256
+  if (key_sol_type == "STRING" || key_sol_type == "STRING_LITERAL")
+  {
+    side_effect_expr_function_callt str2uint_call;
+    assert(context.find_symbol("c:@F@str2uint") != nullptr);
+    get_library_function_call_no_args(
+      "str2uint",
+      "c:@F@str2uint",
+      unsignedbv_typet(256),
+      location,
+      str2uint_call);
+    str2uint_call.arguments().push_back(pos);
+    pos = str2uint_call;
+  }
+  // e.g x[-1] => x[uint256(-1)]
+  solidity_gen_typecast(ns, pos, unsignedbv_typet(256));
+}
+
+/**
+  index accesss could either be set or get:
+  x[1]      => map_uint_get(&m, 1)
+  x[1] = 2  => map_uint_set(&x, 1, 2)
+  @array: x
+  @pos: 1
+  @is_mapping_set: true if it's a setValue, otherwise getValue
+*/
+bool solidity_convertert::get_new_mapping_index_access(
+  const typet &value_t,
+  const std::string &val_sol_type,
+  bool is_mapping_set,
+  const exprt &array,
+  const exprt &pos,
+  const locationt &location,
+  exprt &new_expr)
+{
+  std::string val_flg;
+  typet func_type;
+  if (
+    val_sol_type.find("UINT") != std::string::npos ||
+    val_sol_type.find("BYTES") != std::string::npos ||
+    val_sol_type.find("ADDRESS") != std::string::npos ||
+    val_sol_type.find("ENUM") != std::string::npos)
+  {
+    val_flg = "uint";
+    func_type = unsignedbv_typet(256);
+  }
+  else if (val_sol_type.find("INT") != std::string::npos)
+  {
+    val_flg = "int";
+    func_type = signedbv_typet(256);
+  }
+  else if (val_sol_type.find("BOOL") != std::string::npos)
+  {
+    val_flg = "bool";
+    func_type = bool_typet();
+  }
+  else if (
+    val_sol_type.find("STRING") != std::string::npos ||
+    val_sol_type.find("STRING_LITERAL") != std::string::npos)
+  {
+    val_flg = "string";
+    func_type = value_t;
+  }
+  else
+  {
+    val_flg = "generic";
+    // void *
+    func_type = pointer_typet(empty_typet());
+  }
+
+  // construct func call
+  std::string func_name;
+  if (is_mapping_set)
+  {
+    func_name = "map_" + val_flg + "_set";
+    func_type = empty_typet();
+    // overwrite func_type
+    func_type.set("cpp_type", "void");
+  }
+  else
+    func_name = "map_" + val_flg + "_get";
+
+  if (context.find_symbol("c:@F@" + func_name) == nullptr)
+  {
+    log_error(
+      "cannot find mapping ref {}. Got val_sol_type={}",
+      func_name,
+      val_sol_type);
+    return true;
+  }
+  side_effect_expr_function_callt call;
+  get_library_function_call_no_args(
+    func_name, "c:@F@" + func_name, func_type, location, call);
+
+  // &array
+  call.arguments().push_back(address_of_exprt(array));
+
+  // index
+  call.arguments().push_back(pos);
+
+  if (is_mapping_set)
+  {
+    /*
+        case 1: x[1] += 2 =>
+          DECL temp = map_uint_get(&array, pos);  <-- move to front block
+          temp += 2;
+          map_uint_set(&array, pos, temp);  <-- move to back block
+          (map_generic_set(&array, pos, temp, sizeof(temp));) 
+    */
+    std::string aux_name, aux_id;
+    get_aux_var(aux_name, aux_id);
+    symbolt aux_sym;
+    std::string debug_modulename = get_modulename_from_path(absolute_path);
+    typet aux_type = value_t;
+    get_default_symbol(
+      aux_sym, debug_modulename, aux_type, aux_name, aux_id, location);
+    aux_sym.file_local = true;
+    aux_sym.lvalue = true;
+    auto &added_sym = *move_symbol_to_context(aux_sym);
+    code_declt decl(symbol_expr(added_sym));
+
+    // populate initial value
+    side_effect_expr_function_callt get_call;
+    std::string f_get_name = "map_" + val_flg + "_get";
+
+    get_library_function_call_no_args(
+      f_get_name, "c:@F@" + f_get_name, value_t, location, get_call);
+    get_call.arguments().push_back(address_of_exprt(array));
+    get_call.arguments().push_back(pos);
+    solidity_gen_typecast(ns, get_call, aux_type);
+    added_sym.value = get_call;
+    decl.operands().push_back(get_call);
+    move_to_front_block(decl);
+
+    // value
+    call.arguments().push_back(symbol_expr(added_sym));
+    if (val_flg == "generic")
+    {
+      // sizeof
+      exprt size_of_expr;
+      get_size_of_expr(value_t, size_of_expr);
+      call.arguments().push_back(symbol_expr(added_sym));
+    }
+
+    convert_expression_to_code(call);
+    move_to_back_block(call);
+
+    new_expr = symbol_expr(added_sym);
+  }
+  else if (val_flg == "generic")
+  {
+    /* generic_get:
+          case 2: users[msg.sender].age; =>
+            DECL struct temp = map_users_get(&array, pos);
+            temp.age;
+        */
+    std::string aux_name, aux_id;
+    get_aux_var(aux_name, aux_id);
+    symbolt aux_sym;
+    std::string debug_modulename = get_modulename_from_path(absolute_path);
+    typet aux_type = value_t; // struct *
+    get_default_symbol(
+      aux_sym, debug_modulename, aux_type, aux_name, aux_id, location);
+    aux_sym.file_local = true;
+    aux_sym.lvalue = true;
+    auto &added_sym = *move_symbol_to_context(aux_sym);
+    code_declt decl(symbol_expr(added_sym));
+
+    // construct map_{struct_name}_get() function
+    // e.g. map_Base_User_get();
+    exprt map_struct_get;
+    std::string struct_contract_name = value_t.identifier().as_string();
+    assert(!struct_contract_name.empty());
+    assert(val_sol_type == "STRUCT"); // t_symbol
+    get_mapping_struct_function(
+      value_t, struct_contract_name, call, map_struct_get);
+
+    // struct temp = map_users_get(&array, pos);
+    added_sym.value = map_struct_get;
+    decl.operands().push_back(map_struct_get);
+    move_to_front_block(decl);
+
+    new_expr = symbol_expr(added_sym);
+  }
+  else
+  {
+    // e.g. (int8)map_int_get(&arr, 1);
+    solidity_gen_typecast(ns, call, value_t);
+    new_expr = call;
+  }
+
+  return false;
+}
+
 void solidity_convertert::get_mapping_struct_function(
   const typet &struct_t,
   std::string &struct_contract_name,
@@ -9235,7 +9341,10 @@ bool solidity_convertert::get_non_library_function_call(
 }
 
 // extract new contract instance expression
-// e.g. Base x = new Base();
+// we insert that contract name into the newContractSet if there is a new expresssion related to this contract
+// e.g. Base x = new Base(); then we insert "Base" into newContractSet
+// the idea is that if the contract is not used in 'new', then we can simply create a
+// global static infinity array to play as a mapping structure
 void solidity_convertert::extract_new_contracts()
 {
   if (!src_ast_json.contains("nodes"))
