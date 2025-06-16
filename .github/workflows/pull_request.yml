@@ -102,18 +102,10 @@ jobs:
     if: ${{ ! startsWith(github.head_ref, 'fb/') }}
     run: git reset --hard
     # Commit all changed files back to the repository
-    #- uses: stefanzweifel/git-auto-commit-action@v5
-    #  if: ${{ ! startsWith(github.head_ref, 'fb/') }}
-    #- name: Throws error if changes were made
-    #  run: git diff --exit-code --ignore-cr-at-eol
-    #  if: ${{ startsWith(github.head_ref, 'fb/') }}
     - name: Check for formatting issues
       run: git diff --exit-code --ignore-cr-at-eol
     - name: Auto-commit changes (if any)
       if: ${{ ! startsWith(github.head_ref, 'fb/') }}
-    #- uses: stefanzweifel/git-auto-commit-action@v5
-    #  with:
-    #   commit_message: "chore: auto-commit formatting or generated changes"
     
     - name: Check for uncommitted changes
       if: ${{ ! startsWith(github.head_ref, 'fb/') }}
@@ -134,4 +126,3 @@ jobs:
       run: pip install cmakelint
     - name: Run CMake Lint
       run: find . -iname *.cmake -o -iname CMakeLists.txt | grep -v build | xargs cmakelint || echo "failure"
-
