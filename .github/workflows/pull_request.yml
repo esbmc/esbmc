@@ -100,6 +100,8 @@ jobs:
     #- name: Throws error if changes were made
     #  run: git diff --exit-code --ignore-cr-at-eol
     #  if: ${{ startsWith(github.head_ref, 'fb/') }}
+    - name: Check for formatting issues
+      run: git diff --exit-code --ignore-cr-at-eol
     - name: Auto-commit changes (if any)
       if: ${{ ! startsWith(github.head_ref, 'fb/') }}
     - uses: stefanzweifel/git-auto-commit-action@v5
