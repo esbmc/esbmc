@@ -1,4 +1,4 @@
 CORE
 main.cpp
---unwind 8 --goto-unwind
+--unwind 4 --goto-unwind
 ^VERIFICATION FAILED$

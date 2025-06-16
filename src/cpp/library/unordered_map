@@ -26,9 +26,6 @@ struct esbmc_equal_to {
     }
 };
 
-// Simple forward iterator tag
-struct esbmc_forward_iterator_tag {};
-
 // Forward declaration
 template<typename Key, typename Value, typename Hash = esbmc_hash<Key>, 
          typename KeyEqual = esbmc_equal_to<Key>>
@@ -38,21 +35,20 @@ class unordered_map;
 template<typename Key, typename Value, typename Hash, typename KeyEqual>
 class esbmc_unordered_map_iterator {
 public:
-    typedef std::pair<Key, Value> value_type;  // Note: using non-const Key
+    // Note: using non-const Key
+    typedef std::pair<Key, Value> value_type;
     typedef value_type& reference;
     typedef value_type* pointer;
     typedef ptrdiff_t difference_type;
-    typedef esbmc_forward_iterator_tag iterator_category;
 
     // Grant friend access to unordered_map
     friend class unordered_map<Key, Value, Hash, KeyEqual>;
 
-private:
+    // Make members public for compatibility
     value_type* data_;
     size_t pos_;
     size_t size_;
 
-public:
     // Constructors
     esbmc_unordered_map_iterator() : data_(nullptr), pos_(0), size_(0) {}
     
@@ -96,21 +92,20 @@ public:
 template<typename Key, typename Value, typename Hash, typename KeyEqual>
 class esbmc_unordered_map_const_iterator {
 public:
-    typedef std::pair<Key, Value> value_type;  // Note: using non-const Key
+    // Note: using non-const Key
+    typedef std::pair<Key, Value> value_type;
     typedef const value_type& reference;
     typedef const value_type* pointer;
     typedef ptrdiff_t difference_type;
-    typedef esbmc_forward_iterator_tag iterator_category;
 
     // Grant friend access to unordered_map
     friend class unordered_map<Key, Value, Hash, KeyEqual>;
 
-private:
+    // Make members public for compatibility
     const value_type* data_;
     size_t pos_;
     size_t size_;
 
-public:
     // Constructors
     esbmc_unordered_map_const_iterator() : data_(nullptr), pos_(0), size_(0) {}
     
@@ -161,7 +156,7 @@ public:
     // Type definitions
     typedef Key key_type;
     typedef Value mapped_type;
-    // Note: using non-const Key for ESBMC compatibility
+    // Note: using non-const Key for compatibility
     typedef std::pair<Key, Value> value_type;
     typedef Hash hasher;
     typedef KeyEqual key_equal;
@@ -214,7 +209,6 @@ public:
         }
     }
     
-    // Move constructor
     // Move constructor
     unordered_map(unordered_map&& other) noexcept
         : size_(other.size_), hash_function_(other.hash_function_), 
@@ -296,7 +290,7 @@ public:
         size_type idx = find_index(key);
         if (idx == MAX_SIZE) {
             // In real implementation, this would throw std::out_of_range
-            // For ESBMC, we'll return a reference to a static default value
+            // Here, we'll return a reference to a static default value
             static Value default_value = Value();
             return default_value;
         }
@@ -414,13 +408,9 @@ public:
             return 0; // Not found
         }
         
-        // Destroy the element
-        data_[idx].~value_type();
-        
         // Shift elements down
         for (size_type i = idx; i < size_ - 1; ++i) {
-            new (&data_[i]) value_type(data_[i + 1].first, data_[i + 1].second);
-            data_[i + 1].~value_type();
+            data_[i] = data_[i + 1];
         }
         --size_;
         return 1;
@@ -438,13 +428,9 @@ public:
             return end();
         }
         
-        // Destroy the element
-        data_[idx].~value_type();
-        
         // Shift elements down
         for (size_type i = idx; i < size_ - 1; ++i) {
-            new (&data_[i]) value_type(data_[i + 1].first, data_[i + 1].second);
-            data_[i + 1].~value_type();
+            data_[i] = data_[i + 1];
         }
         --size_;
         
@@ -458,19 +444,29 @@ public:
             return iterator(data_, first.pos_, size_);
         }
         
-        // Simple implementation: erase elements one by one
-        iterator current(data_, first.pos_, size_);
-        while (current != end() && current.pos_ < last.pos_) {
-            current = erase(current);
+        // Erase elements one by one from the beginning
+        // Since we're shifting elements, we need to be careful about indices
+        size_type start_idx = first.pos_;
+        size_type end_idx = last.pos_;
+        
+        if (end_idx > size_) {
+            end_idx = size_;
         }
-        return current;
+        
+        // Number of elements to remove
+        size_type num_to_remove = end_idx - start_idx;
+        
+        // Shift remaining elements down
+        for (size_type i = start_idx; i + num_to_remove < size_; ++i) {
+            data_[i] = data_[i + num_to_remove];
+        }
+        
+        size_ -= num_to_remove;
+        return iterator(data_, start_idx, size_);
     }
     
     // Clear all elements
     void clear() noexcept {
-        for (size_type i = 0; i < size_; ++i) {
-            data_[i].~value_type();
-        }
         size_ = 0;
     }
 
