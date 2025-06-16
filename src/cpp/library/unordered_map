@@ -2,7 +2,6 @@
 #define ESBMC_UNORDERED_MAP_H
 
 #include <utility>
-#include <new>
 
 namespace std {
 
@@ -12,7 +11,7 @@ namespace std {
 
 // Simple hash function for keys
 template<typename T>
-struct esbmc_hash {
+struct esbmc_um_hash {
     size_t operator()(const T& key) const {
         return static_cast<size_t>(key);
     }
@@ -20,15 +19,15 @@ struct esbmc_hash {
 
 // Simple equality comparison for keys
 template<typename T>
-struct esbmc_equal_to {
+struct esbmc_um_equal_to {
     bool operator()(const T& lhs, const T& rhs) const {
         return lhs == rhs;
     }
 };
 
 // Forward declaration
-template<typename Key, typename Value, typename Hash = esbmc_hash<Key>, 
-         typename KeyEqual = esbmc_equal_to<Key>>
+template<typename Key, typename Value, typename Hash = esbmc_um_hash<Key>, 
+         typename KeyEqual = esbmc_um_equal_to<Key>>
 class unordered_map;
 
 // Iterator for unordered_map
