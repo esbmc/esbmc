@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--unwind 10 --no-bounds-check --no-pointer-check
+^VERIFICATION FAILED$
