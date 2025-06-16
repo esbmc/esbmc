@@ -90,6 +90,13 @@ jobs:
       run: find unit -iname *.h -o -iname *.c -o -iname *.cpp -o -iname *.hpp -iname *.hh  | xargs ./clang/bin/clang-format -style=file -i -fallback-style=none
     - name: Delete downloaded Clang 11
       run: rm -rf clang*
+    - name: Run clang-format on src & unit
+      run: |
+        find src unit -iname '*.h' -o -iname '*.c' -o -iname '*.cpp' -o -iname '*.hpp' -o -iname '*.hh' \
+         | grep -v src/ansi-c/cpp \
+         | grep -v src/clang-c-frontend/headers/ \
+         | grep -v src/c2goto/library/libm/musl \
+         | xargs clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04/bin/clang-format -style=file -i -fallback-style=none      
     # Clean up any local changes before auto-commit
     - name: Reset local changes before auto-commit
     if: ${{ ! startsWith(github.head_ref, 'fb/') }}
@@ -104,9 +111,9 @@ jobs:
       run: git diff --exit-code --ignore-cr-at-eol
     - name: Auto-commit changes (if any)
       if: ${{ ! startsWith(github.head_ref, 'fb/') }}
-    - uses: stefanzweifel/git-auto-commit-action@v5
-      with:
-       commit_message: "chore: auto-commit formatting or generated changes"
+    #- uses: stefanzweifel/git-auto-commit-action@v5
+    #  with:
+    #   commit_message: "chore: auto-commit formatting or generated changes"
     
     - name: Check for uncommitted changes
       if: ${{ ! startsWith(github.head_ref, 'fb/') }}
