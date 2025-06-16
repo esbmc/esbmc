@@ -354,6 +354,7 @@ TEST_SUITES = [
     "esbmc-cpp/inheritance_bringup",
     "esbmc-cpp/list",
     "esbmc-cpp/map",
+    "esbmc-cpp/unordered_map",
     "esbmc-cpp/multimap",
     "esbmc-cpp/multiset",
     "esbmc-cpp/unordered_set",
