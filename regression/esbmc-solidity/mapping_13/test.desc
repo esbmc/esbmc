@@ -1,0 +1,4 @@
+KNOWNBUG
+contract.solast
+--sol contract.sol --unwind 3 --no-unwinding-assertions
+^VERIFICATION SUCCESSFUL$

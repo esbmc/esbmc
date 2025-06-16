@@ -1,13 +1,10 @@
-// SPDX-License-Identifier: GPL-3.0
-pragma solidity >=0.5.0;
+//https://github.com/fsainas/contracts-verification-benchmark/blob/main/contracts/bank/
+//SPDX-License-Identifier: UNLICENSED
+pragma solidity >= 0.8.2;
 
-interface IBank {
-    function deposit() external payable;
-    function withdraw(uint amount) external;
-}
-
-contract Bank is IBank{
-    mapping(address => uint) balances;
+/// @custom:version conformant to specification
+contract Bank {
+    mapping (address => uint) balances;
 
     function deposit() public payable {
         balances[msg.sender] += msg.value;
@@ -15,19 +12,23 @@ contract Bank is IBank{
 
     function withdraw(uint amount) public {
         /// @custom:preghost function withdraw
-        uint old_contract_balance = address(this).balance;
+        uint old_user_balance = balances[msg.sender];
         require(amount > 0);
         require(amount <= balances[msg.sender]);
 
-        (bool success, ) = msg.sender.call{value: amount}("");
         balances[msg.sender] -= amount;
+        (bool success,) = msg.sender.call{value: amount}("");
         require(success);
         /// @custom:postghost function withdraw
-        uint new_contract_balance = address(this).balance;
-        assert(new_contract_balance == old_contract_balance - amount);
-    }
+        uint new_user_balance = balances[msg.sender];
+        assert(new_user_balance == old_user_balance - amount);
+}
 }
 
+interface IBank {
+    function deposit() external payable;
+    function withdraw(uint amount) external;
+}
 
 contract Reproduction {
     IBank public target;
@@ -38,8 +39,7 @@ contract Reproduction {
         owner = msg.sender;
     }
 
-    function setup() external payable {
-        require(msg.sender == owner);
+    function set() external payable {
         require(msg.value > 0);
         target.deposit{value: msg.value}();
     }
@@ -50,9 +50,6 @@ contract Reproduction {
     }
 
     receive() external payable {
-        if (address(target).balance > 0) {
-            target.withdraw(msg.value);
-        }
+        target.withdraw(msg.value);
     }
 }
-

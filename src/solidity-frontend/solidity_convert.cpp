@@ -179,7 +179,7 @@ bool solidity_convertert::convert()
     {
       // perform multi-transaction verification
       // by adding symbols to the "sol_main()" entry function
-      if (multi_transaction_verification(*tgt_cnt_set.begin(), true))
+      if (multi_transaction_verification(*tgt_cnt_set.begin()))
         return true;
     }
     // multiple contract
@@ -536,7 +536,14 @@ bool solidity_convertert::populate_auxilary_vars()
     _sym.value = string;
   }
 
-  // populate _bind_addr_list
+  /* populate _bind_cname_list
+  const char* Base = "Base";
+  const char* Bank_bind_cname_list[1];
+  void initialize_bind_list()
+  {
+    Bank_bind_cname_list[0] = Base;
+  }
+  */
   for (auto _cname : contractNamesList)
   {
     std::unordered_set<std::string> cname_set;
@@ -558,28 +565,11 @@ bool solidity_convertert::populate_auxilary_vars()
     arr_t.set("#sol_type", "ARRAY");
     arr_t.set("#sol_array_size", std::to_string(length));
 
-    exprt inits;
-    inits = gen_zero(arr_t);
-    unsigned int i = 0;
-    for (auto str : cname_set)
-    {
-      string_constantt string(str);
-      // hack:
-      // N: $SolidityTest_bind_addr_list={ "Derived", "SolidityTest" };
-      // Y: $SolidityTest_bind_addr_list={ &"Derived"[0], &"SolidityTest"[0] };
-      // solidity_gen_typecast(ns, string, arr_t.subtype());
-      solidity_gen_typecast(ns, string, ct);
-      inits.operands().at(i) = string;
-      ++i;
-    }
-    inits.id("array");
-
-    // convert this string array (e.g. {"base", "derive"}) to a symbol
     std::string aux_name, aux_id;
-    aux_name = "$" + _cname + "_bind_addr_list";
+    aux_name = "$" + _cname + "_bind_cname_list";
     aux_id = "sol:@C@" + _cname + "@" + aux_name;
     symbolt s;
-    typet _t = inits.type();
+    typet _t = arr_t;
     _t.cmt_constant(true);
     std::string debug_modulename = get_modulename_from_path(absolute_path);
     get_default_symbol(s, debug_modulename, _t, aux_name, aux_id, locationt());
@@ -587,8 +577,178 @@ bool solidity_convertert::populate_auxilary_vars()
     s.static_lifetime = true;
     s.lvalue = true;
     symbolt &sym = *move_symbol_to_context(s);
-    sym.value = inits;
+    sym.value = gen_zero(get_complete_type(_t, ns), true);
+    sym.value.zero_initializer(true);
+
+    // f: initialize_bind_list
+    std::string fname, fid;
+    get_bind_cname_func_name(_cname, fname, fid);
+    symbolt fs;
+    code_typet ft;
+    ft.return_type() = empty_typet();
+    ft.make_ellipsis();
+    get_default_symbol(fs, debug_modulename, ft, fname, fid, locationt());
+    s.file_local = true;
+    symbolt &fsym = *move_symbol_to_context(fs);
+
+    // fbody:
+    // Bank_bind_cname_list[0] = Base;
+    // Bank_bind_cname_list[1] = Derived;
+    // ...
+    code_blockt fbody;
+    unsigned int i = 0;
+    exprt arr = symbol_expr(sym);
+    // add hide
+    code_labelt label;
+    label.set_label("__ESBMC_HIDE");
+    label.code() = code_skipt();
+    fbody.operands().push_back(label);
+
+    for (auto str : cname_set)
+    {
+      // lhs
+      exprt pos = constant_exprt(
+        integer2binary(i, bv_width(uint_type())),
+        integer2string(i),
+        uint_type());
+      exprt idx = index_exprt(arr, pos, ct);
+      // rhs
+      exprt cname_str = symbol_expr(*context.find_symbol("sol:@" + str));
+      solidity_gen_typecast(ns, cname_str, ct);
+      // assign
+      exprt ass_expr = side_effect_exprt("assign", ct);
+      ass_expr.copy_to_operands(idx, cname_str);
+      convert_expression_to_code(ass_expr);
+
+      fbody.copy_to_operands(ass_expr);
+      ++i;
+    }
+    fsym.value = fbody;
   }
+
+  // for mapping
+  extract_new_contracts();
+
+  // create a _ESBMC_sol_init_ class and object
+  if (get_esbmc_sol_init())
+    return true;
+
+  return false;
+}
+
+/*
+class _ESBMC_sol_init_
+{
+  public:
+  _ESBMC_sol_init_()
+  {
+    initialize();
+    $_bind_cname_list();
+  }
+}
+*/
+bool solidity_convertert::get_esbmc_sol_init()
+{
+  std::string id, name;
+  struct_typet t = struct_typet();
+
+  name = "_ESBMC_sol_init_";
+  id = prefix + name;
+  t.tag(name);
+  symbolt s;
+  std::string debug = get_modulename_from_path(absolute_path);
+  get_default_symbol(s, debug, t, name, id, locationt());
+  s.is_type = true;
+  symbolt &added_sym = *move_symbol_to_context(s);
+
+  // constructor
+  std::string fname, fid;
+  fname = "_ESBMC_sol_init_";
+  fid = "sol:@C@_ESBMC_sol_init_@F@" + fname + "#";
+  code_typet ft;
+  typet tmp_rtn_type("constructor");
+  ft.return_type() = tmp_rtn_type;
+  ft.set("#member_name", fid);
+  ft.set("#inlined", true);
+
+  symbolt fs;
+  get_default_symbol(fs, debug, ft, fname, fid, locationt());
+  fs.lvalue = true;
+  fs.file_local = true;
+  symbolt &added_fs = *move_symbol_to_context(fs);
+
+  get_function_this_pointer_param(fname, fid, debug, locationt(), ft);
+  added_fs.type = ft;
+
+  code_blockt _block;
+  code_labelt label;
+  label.set_label("__ESBMC_HIDE");
+  label.code() = code_skipt();
+  _block.operands().push_back(label);
+  if (move_initializer_to_main(_block))
+    return true;
+  added_fs.value = _block;
+
+  exprt sym = symbol_expr(added_fs);
+
+  // add component to struct
+  struct_typet::componentt comp;
+  // construct comp
+  comp.type() = sym.type();
+  comp.identifier(sym.identifier());
+  comp.name(sym.name());
+  comp.pretty_name(sym.name());
+  comp.set_access("public");
+  comp.id("symbol");
+  to_struct_type(added_sym.type).methods().push_back(comp);
+
+  // add static contract instance
+  std::string ctor_ins_name, ctor_ins_id;
+  get_static_contract_instance_name(name, ctor_ins_name, ctor_ins_id);
+
+  locationt ctor_ins_loc;
+  ctor_ins_loc.file(absolute_path);
+  ctor_ins_loc.line(1);
+  std::string ctor_ins_debug_modulename =
+    get_modulename_from_path(absolute_path);
+  typet ctor_ins_typet = symbol_typet(prefix + name);
+
+  symbolt ctor_ins_symbol;
+  get_default_symbol(
+    ctor_ins_symbol,
+    ctor_ins_debug_modulename,
+    ctor_ins_typet,
+    ctor_ins_name,
+    ctor_ins_id,
+    ctor_ins_loc);
+  ctor_ins_symbol.lvalue = true;
+  ctor_ins_symbol.is_extern = false;
+  // the instance should be set as static
+  ctor_ins_symbol.static_lifetime = true;
+  ctor_ins_symbol.file_local = true;
+
+  auto &added_ins_sym = *move_symbol_to_context(ctor_ins_symbol);
+
+  exprt ctor;
+  side_effect_expr_function_callt call;
+  call.function() = sym;
+  call.type() = symbol_typet(prefix + name);
+
+  exprt this_object;
+  get_new_object(symbol_typet(prefix + name), this_object);
+  call.arguments().push_back(this_object);
+
+  // set constructor
+  call.set("constructor", 1);
+
+  side_effect_exprt tmp_obj("temporary_object", call.type());
+  codet code_expr("expression");
+  code_expr.operands().push_back(call);
+  tmp_obj.initializer(code_expr);
+  call.swap(tmp_obj);
+  ctor = call;
+
+  added_ins_sym.value = ctor;
 
   return false;
 }
@@ -931,6 +1091,18 @@ bool solidity_convertert::get_var_decl(
   bool is_contract =
     t.get("#sol_type").as_string() == "CONTRACT" ? true : false;
   bool is_mapping = t.get("#sol_type").as_string() == "MAPPING" ? true : false;
+  bool is_new_expr = newContractSet.count(current_contractName);
+
+  // for mapping: populate the element type
+  if (is_mapping && !is_new_expr)
+  {
+    assert(t.is_array());
+    const auto &val_type = ast_node["typeName"]["valueType"];
+    typet val_t;
+    if (get_type_description(val_type["typeDescriptions"], val_t))
+      return true;
+    t.subtype() = val_t;
+  }
 
   // set const qualifier
   if (ast_node.contains("mutability") && ast_node["mutability"] == "constant")
@@ -978,7 +1150,9 @@ bool solidity_convertert::get_var_decl(
 
   symbol.lvalue = true;
   // static_lifetime: this means it's defined in the file level, not inside contract
-  symbol.static_lifetime = current_contractName.empty();
+  // special case for mapping, even if it's inside a contract
+  symbol.static_lifetime =
+    current_contractName.empty() || (is_mapping && !is_new_expr);
   symbol.file_local = !symbol.static_lifetime;
   symbol.is_extern = false;
 
@@ -989,7 +1163,7 @@ bool solidity_convertert::get_var_decl(
   const nlohmann::json init_value =
     ast_node.contains("value") ? ast_node["value"] : initialValue;
   const nlohmann::json literal_type = ast_node["typeDescriptions"];
-  if (!set_init && !is_mapping)
+  if (!set_init && !(is_mapping && is_new_expr))
   {
     // for both state and non-state variables, set default value as zero
     symbol.value = gen_zero(get_complete_type(t, ns), true);
@@ -1167,24 +1341,28 @@ bool solidity_convertert::get_var_decl(
     }
   }
   // special handling for mapping
-  else if (is_mapping)
+  else if (is_mapping && is_new_expr)
   {
     // mapping(string => uint) test;
+    // 1. the contract that contains this mapping is also used in a new expression
     // => __attribute__((annotate("__ESBMC_inf_size"))) struct _ESBMC_Mapping _ESBMC_inf_test[];
     // => struct mapping_t test = {_ESBMC_inf_test, this.address};
-
+    // 2.
+    // => struct mapping_t_fast test = {_ESBMC_inf_test};
     // 1. construct static infinite array
     std::string arr_name, arr_id;
     get_mapping_inf_arr_name(current_contractName, name, arr_name, arr_id);
     symbolt arr_s;
-    if (context.find_symbol(prefix + "_ESBMC_Mapping") == nullptr)
+    std::string mapping_struct_name = "_ESBMC_Mapping";
+
+    if (context.find_symbol(prefix + mapping_struct_name) == nullptr)
     {
       log_error("failed to find _ESBMC_Mapping reference");
       return true;
     }
 
-    typet arr_t =
-      array_typet(symbol_typet(prefix + "_ESBMC_Mapping"), exprt("infinity"));
+    typet arr_t = array_typet(
+      symbol_typet(prefix + mapping_struct_name), exprt("infinity"));
     get_default_symbol(
       arr_s, debug_modulename, arr_t, arr_name, arr_id, location_begin);
     arr_s.static_lifetime = true;
@@ -1194,41 +1372,20 @@ bool solidity_convertert::get_var_decl(
     add_added_s.value = gen_zero(get_complete_type(arr_t, ns), true);
 
     // 2. construct mapping_t struct instance's value
-    exprt this_ptr;
-    if (current_functionDecl)
-    {
-      if (get_func_decl_this_ref(*current_functionDecl, this_ptr))
-        return true;
-    }
-    else
-    {
-      if (get_ctor_decl_this_ref(ast_node, this_ptr))
-        return true;
-    }
-    typet addr_t = unsignedbv_typet(160);
-    addr_t.set("#sol_type", "ADDRESS");
-    exprt mem = member_exprt(this_ptr, "$address", addr_t);
+    typet map_t;
+    map_t = context.find_symbol(prefix + "mapping_t")->type;
 
-    typet map_t = context.find_symbol(prefix + "mapping_t")->type;
     assert(map_t.is_struct());
     exprt inits = gen_zero(map_t);
+
     exprt op0 = symbol_expr(add_added_s);
     // array => &array[0]
     solidity_gen_typecast(
       ns, op0, to_struct_type(map_t).components().at(0).type());
     inits.op0() = op0;
-    inits.op1() = mem;
 
     added_symbol.value = inits;
     decl.operands().push_back(inits);
-  }
-  else if (t_sol_type == "STRING" && !set_init && is_state_var)
-  {
-    if (context.find_symbol("c:@empty_str") == nullptr)
-      return true;
-    val = symbol_expr(*context.find_symbol("c:@empty_str"));
-    added_symbol.value = val;
-    decl.operands().push_back(val);
   }
   // now we have rule out other special cases
   else if (set_init)
@@ -1243,7 +1400,9 @@ bool solidity_convertert::get_var_decl(
   // note that for the state variables that do not have initializer
   // we have already set it as zero value
   // For unintialized contract type, no need to move to the initializer
-  if (is_state_var && !is_inherited && !(is_contract && !has_init))
+  if (
+    is_state_var && !is_inherited && !(is_contract && !has_init) &&
+    !(is_mapping && !is_new_expr))
     move_to_initializer(decl);
 
   decl.location() = location_begin;
@@ -1518,6 +1677,14 @@ bool solidity_convertert::get_struct_class_fields(
 
   if (get_var_decl_ref(ast_node, false, comp))
     return true;
+
+  if (comp.type().get("#sol_type") == "MAPPING" && comp.type().is_array())
+  {
+    //! hack: for the (non-nested) mapping from contract that is not used in a new expression
+    // we convert it to a global static inifinity array
+    // thuse we do not populate it into the struct symbol
+    return false;
+  }
 
   comp.id("component");
   // TODO: add bitfield
@@ -2350,6 +2517,30 @@ bool solidity_convertert::move_initializer_to_ctor(
   return move_initializer_to_ctor(based_contracts, contract_name, false);
 }
 
+// move library initializer and bind-name initializer to main
+bool solidity_convertert::move_initializer_to_main(codet &func_body)
+{
+  side_effect_expr_function_callt call;
+  get_library_function_call_no_args(
+    "initialize", "c:@F@initialize", empty_typet(), locationt(), call);
+  convert_expression_to_code(call);
+  func_body.move_to_operands(call);
+
+  for (auto str : contractNamesList)
+  {
+    std::string fname, fid;
+    get_bind_cname_func_name(str, fname, fid);
+    if (context.find_symbol(fid) == nullptr)
+      return true;
+    exprt func = symbol_expr(*context.find_symbol(fid));
+    side_effect_expr_function_callt _call;
+    _call.function() = func;
+    convert_expression_to_code(_call);
+    func_body.move_to_operands(_call);
+  }
+  return false;
+}
+
 // convert the initialization of the state variable
 // into the equivalent assignmment in the ctor
 // for inheritance_ctor, we skip the builtin assignment
@@ -2434,7 +2625,9 @@ bool solidity_convertert::move_initializer_to_ctor(
       symbolt *symbol = context.find_symbol(comp.identifier());
       exprt rhs = symbol->value;
       exprt _assign;
-      if (lhs.type().get("#sol_type") == "STRING")
+      if (
+        lhs.type().get("#sol_type") == "STRING" &&
+        rhs.get("#zero_initializer") != "1")
         get_string_assignment(lhs, rhs, _assign);
       else
       {
@@ -4319,6 +4512,65 @@ bool solidity_convertert::get_expr(
         return true;
       const irep_idt comp_name = comp.name();
 
+      // special checks for mapping
+      // e.g. _b.map(0)
+      // => map[0] or map_uint_get(ins , 0);
+      if (comp.type().get("#sol_type") == "MAPPING")
+      {
+        assert(func_call_json.contains("arguments"));
+        assert(member_decl_ref.contains("typeName"));
+        assert(member_decl_ref["typeName"].contains("valueType"));
+        exprt pos;
+        if (get_expr(
+              func_call_json["arguments"][0],
+              member_decl_ref["typeName"]["valueType"]["typeDescriptions"],
+              pos))
+          return true;
+
+        bool is_new_expr = newContractSet.count(base_cname);
+        // get key/value type
+        typet key_t, value_t;
+        std::string key_sol_type, val_sol_type;
+        if (get_mapping_key_value_type(
+              member_decl_ref, key_t, value_t, key_sol_type, val_sol_type))
+        {
+          log_error("cannot get mapping key/value type");
+          return true;
+        }
+        gen_mapping_key_typecast(pos, location, key_sol_type);
+
+        if (!is_bound)
+        {
+          // x.member(); ==> nondet();
+          get_nondet_expr(value_t, new_expr);
+          break;
+        }
+
+        if (!is_new_expr)
+        {
+          assert(comp.type().is_array());
+          //TODO: the index type of ESBMC is limited to unsigned long long
+          // we need to extend such limit up to unsignedbv_type(256)
+          new_expr = index_exprt(comp, pos, value_t);
+        }
+        else
+        {
+          bool is_mapping_set = false;
+          auto _mem_call = member_exprt(base, comp.name(), comp.type());
+          if (get_new_mapping_index_access(
+                value_t,
+                val_sol_type,
+                is_mapping_set,
+                _mem_call,
+                pos,
+                location,
+                new_expr))
+            return true;
+        }
+
+        break;
+      }
+
       if (current_contractName == base_cname)
         // this.member();
         // comp can be either symbol_expr or member_expr
@@ -4476,209 +4728,45 @@ bool solidity_convertert::get_expr(
       return true;
     if (base_t.get("#sol_type").as_string() == "MAPPING")
     {
+      // hack to improve the verification speed
+      bool is_new_expr = newContractSet.count(current_contractName);
+
       // find mapping definition
       assert(base_json.contains("referencedDeclaration"));
       const nlohmann::json &map_node = find_decl_ref(
         src_ast_json["nodes"], base_json["referencedDeclaration"].get<int>());
 
       // get key/value type
-      assert(map_node.contains("typeName"));
       typet key_t, value_t;
-      if (get_type_description(
-            map_node["typeName"]["keyType"]["typeDescriptions"], key_t))
+      std::string key_sol_type, val_sol_type;
+      if (get_mapping_key_value_type(
+            map_node, key_t, value_t, key_sol_type, val_sol_type))
       {
-        log_error("cannot get mapping key type");
+        log_error("cannot get mapping key/value type");
         return true;
       }
-      if (get_type_description(
-            map_node["typeName"]["valueType"]["typeDescriptions"], value_t))
-      {
-        log_error("cannot get mapping value type");
-        return true;
-      }
+      gen_mapping_key_typecast(pos, location, key_sol_type);
 
-      // set type flag
-      std::string key_sol_type = key_t.get("#sol_type").as_string();
-      std::string val_sol_type = value_t.get("#sol_type").as_string();
-      if (val_sol_type.empty())
-        return true;
-      std::string val_flg;
-      typet func_type;
-      if (
-        val_sol_type.find("UINT") != std::string::npos ||
-        val_sol_type.find("BYTES") != std::string::npos ||
-        val_sol_type.find("ADDRESS") != std::string::npos ||
-        val_sol_type.find("ENUM") != std::string::npos)
+      if (!is_new_expr)
       {
-        val_flg = "uint";
-        func_type = unsignedbv_typet(256);
-      }
-      else if (val_sol_type.find("INT") != std::string::npos)
-      {
-        val_flg = "int";
-        func_type = signedbv_typet(256);
-      }
-      else if (val_sol_type.find("BOOL") != std::string::npos)
-      {
-        val_flg = "bool";
-        func_type = bool_typet();
-      }
-      else if (
-        val_sol_type.find("STRING") != std::string::npos ||
-        val_sol_type.find("STRING_LITERAL") != std::string::npos)
-      {
-        val_flg = "string";
-        func_type = value_t;
+        assert(array.type().is_array());
+        //TODO: the index type of ESBMC is limited to unsigned long long
+        // we need to extend such limit up to unsignedbv_type(256)
+        new_expr = index_exprt(array, pos, t);
       }
       else
       {
-        val_flg = "generic";
-        // void *
-        func_type = pointer_typet(empty_typet());
+        bool is_mapping_set = is_mapping_set_lvalue(expr);
+        if (get_new_mapping_index_access(
+              value_t,
+              val_sol_type,
+              is_mapping_set,
+              array,
+              pos,
+              location,
+              new_expr))
+          return true;
       }
-
-      // index accesss could either be set or get:
-      // x[1] => map_uint_get(&m, 1)
-      // x[1] = 2 => map_uint_set(&x, 1, 2)
-      bool is_mapping_set = is_mapping_set_lvalue(expr);
-
-      // construct func call
-      std::string func_name;
-      if (is_mapping_set)
-      {
-        func_name = "map_" + val_flg + "_set";
-        func_type = empty_typet();
-        // overwrite func_type
-        func_type.set("cpp_type", "void");
-      }
-      else
-        func_name = "map_" + val_flg + "_get";
-
-      if (context.find_symbol("c:@F@" + func_name) == nullptr)
-      {
-        log_error(
-          "cannot find mapping ref {}. Got val_sol_type={}",
-          func_name,
-          val_sol_type);
-        return true;
-      }
-      side_effect_expr_function_callt call;
-      get_library_function_call_no_args(
-        func_name, "c:@F@" + func_name, func_type, location, call);
-
-      // &array
-      call.arguments().push_back(address_of_exprt(array));
-
-      // index
-      // if it's a string, we should convert it to
-      if (key_sol_type == "STRING" || key_sol_type == "STRING_LITERAL")
-      {
-        side_effect_expr_function_callt str2uint_call;
-        assert(context.find_symbol("c:@F@str2uint") != nullptr);
-        get_library_function_call_no_args(
-          "str2uint",
-          "c:@F@str2uint",
-          unsignedbv_typet(256),
-          location,
-          str2uint_call);
-        str2uint_call.arguments().push_back(pos);
-        pos = str2uint_call;
-      }
-      solidity_gen_typecast(ns, pos, unsignedbv_typet(256));
-      call.arguments().push_back(pos);
-
-      if (is_mapping_set)
-      {
-        /*
-        case 1: x[1] += 2 =>
-          DECL temp = map_uint_get(&array, pos);  <-- move to front block
-          temp += 2;
-          map_uint_set(&array, pos, temp);  <-- move to back block
-          (map_generic_set(&array, pos, temp, sizeof(temp));) 
-        */
-        std::string aux_name, aux_id;
-        get_aux_var(aux_name, aux_id);
-        symbolt aux_sym;
-        std::string debug_modulename = get_modulename_from_path(absolute_path);
-        typet aux_type = value_t;
-        get_default_symbol(
-          aux_sym, debug_modulename, aux_type, aux_name, aux_id, location);
-        aux_sym.file_local = true;
-        aux_sym.lvalue = true;
-        auto &added_sym = *move_symbol_to_context(aux_sym);
-        code_declt decl(symbol_expr(added_sym));
-
-        // populate initial value
-        side_effect_expr_function_callt get_call;
-        get_library_function_call_no_args(
-          "map_" + val_flg + "_get",
-          "c:@F@map_" + val_flg + "_get",
-          value_t,
-          location,
-          get_call);
-        get_call.arguments().push_back(address_of_exprt(array));
-        get_call.arguments().push_back(pos);
-        solidity_gen_typecast(ns, get_call, aux_type);
-        added_sym.value = get_call;
-        decl.operands().push_back(get_call);
-        move_to_front_block(decl);
-
-        // value
-        call.arguments().push_back(symbol_expr(added_sym));
-        if (val_flg == "generic")
-        {
-          // sizeof
-          exprt size_of_expr;
-          get_size_of_expr(value_t, size_of_expr);
-          call.arguments().push_back(symbol_expr(added_sym));
-        }
-
-        convert_expression_to_code(call);
-        move_to_back_block(call);
-
-        new_expr = symbol_expr(added_sym);
-        break;
-      }
-      else if (val_flg == "generic")
-      {
-        /* generic_get:
-          case 2: users[msg.sender].age; =>
-            DECL struct temp = map_users_get(&array, pos);
-            temp.age;
-        */
-        std::string aux_name, aux_id;
-        get_aux_var(aux_name, aux_id);
-        symbolt aux_sym;
-        std::string debug_modulename = get_modulename_from_path(absolute_path);
-        typet aux_type = value_t; // struct *
-        get_default_symbol(
-          aux_sym, debug_modulename, aux_type, aux_name, aux_id, location);
-        aux_sym.file_local = true;
-        aux_sym.lvalue = true;
-        auto &added_sym = *move_symbol_to_context(aux_sym);
-        code_declt decl(symbol_expr(added_sym));
-
-        // construct map_{struct_name}_get() function
-        // e.g. map_Base_User_get();
-        exprt map_struct_get;
-        std::string struct_contract_name = value_t.identifier().as_string();
-        assert(!struct_contract_name.empty());
-        assert(val_sol_type == "STRUCT"); // t_symbol
-        get_mapping_struct_function(
-          value_t, struct_contract_name, call, map_struct_get);
-
-        // struct temp = map_users_get(&array, pos);
-        added_sym.value = map_struct_get;
-        decl.operands().push_back(map_struct_get);
-        move_to_front_block(decl);
-
-        new_expr = symbol_expr(added_sym);
-        break;
-      }
-
-      // e.g. (int8)map_int_get(&arr, 1);
-      solidity_gen_typecast(ns, call, value_t);
-      new_expr = call;
       break;
     }
 
@@ -4981,7 +5069,8 @@ bool solidity_convertert::get_expr(
         // make it as a NODET_UINT
         new_expr = nondet_uint_expr;
       else
-        get_builtin_property_expr(mem_name, base, location, new_expr);
+        get_builtin_property_expr(
+          current_contractName, mem_name, base, location, new_expr);
     }
     else
     {
@@ -5915,17 +6004,20 @@ bool solidity_convertert::get_var_decl_ref(
   if (get_var_decl_name(decl, name, id))
     return true;
 
+  typet type;
+  const nlohmann::json *old_typeName = current_typeName;
+  current_typeName = &decl["typeName"];
+  if (get_type_description(decl["typeName"]["typeDescriptions"], type))
+    return true;
+  current_typeName = old_typeName;
+
+  bool is_global_static_mapping =
+    type.get("#sol_type") == "MAPPING" && type.is_array();
+
   if (context.find_symbol(id) != nullptr)
     new_expr = symbol_expr(*context.find_symbol(id));
   else
   {
-    typet type;
-    const nlohmann::json *old_typeName = current_typeName;
-    current_typeName = &decl["typeName"];
-    if (get_type_description(decl["typeName"]["typeDescriptions"], type))
-      return true;
-    current_typeName = old_typeName;
-
     // variable with no value
     new_expr = exprt("symbol", type);
     new_expr.identifier(id);
@@ -5934,7 +6026,7 @@ bool solidity_convertert::get_var_decl_ref(
     new_expr.pretty_name(name);
   }
 
-  if (is_this_ptr)
+  if (is_this_ptr && !is_global_static_mapping)
   {
     if (decl["stateVariable"] && current_functionDecl)
     {
@@ -6263,9 +6355,9 @@ bool solidity_convertert::get_sol_builtin_ref(
           get_library_function_call_no_args(
             "_min", "c:@F@_min", unsignedbv_typet(256), l, call);
         call.arguments().push_back(constant_exprt(
-          integer2binary(string2integer(width), bv_width(int_type())),
+          integer2binary(string2integer(width), bv_width(uint_type())),
           width,
-          int_type()));
+          uint_type()));
         call.arguments().push_back(is_signed);
 
         new_expr = call;
@@ -6573,8 +6665,21 @@ bool solidity_convertert::get_type_description(
   }
   case SolidityGrammar::TypeNameT::MappingTypeName:
   {
-    // do nothing as it won't be used
-    new_type = symbol_typet(prefix + "mapping_t");
+    /*
+        "typeIdentifier": "t_mapping$_t_address_$_t_uint256_$",
+        "typeString": "mapping(address => uint256)"
+    */
+    // we need to check if it's inside a contract used in a new expression statement
+    assert(!current_baseContractName.empty());
+    bool is_new_expr = newContractSet.count(current_baseContractName);
+    if (is_new_expr)
+      new_type = symbol_typet(prefix + "mapping_t");
+    else
+    {
+      // we will populate the size type later
+      new_type = array_typet();
+      new_type.size(exprt("infinity"));
+    }
     new_type.set("#sol_type", "MAPPING");
     break;
   }
@@ -7146,6 +7251,234 @@ bool solidity_convertert::is_mapping_set_lvalue(const nlohmann::json &target)
   assert(target.value("nodeType", "") == "IndexAccess");
   assert(target.contains("lValueRequested"));
   return target["lValueRequested"].get<bool>();
+}
+
+bool solidity_convertert::get_mapping_key_value_type(
+  const nlohmann::json &map_node,
+  typet &key_t,
+  typet &value_t,
+  std::string &key_sol_type,
+  std::string &val_sol_type)
+{
+  assert(map_node.contains("typeName"));
+  if (get_type_description(
+        map_node["typeName"]["keyType"]["typeDescriptions"], key_t))
+  {
+    log_error("cannot get mapping key type");
+    return true;
+  }
+  if (get_type_description(
+        map_node["typeName"]["valueType"]["typeDescriptions"], value_t))
+  {
+    log_error("cannot get mapping value type");
+    return true;
+  }
+
+  // set type flag
+  key_sol_type = key_t.get("#sol_type").as_string();
+  val_sol_type = value_t.get("#sol_type").as_string();
+  if (val_sol_type.empty())
+    return true;
+  return false;
+}
+
+void solidity_convertert::gen_mapping_key_typecast(
+  exprt &pos,
+  const locationt &location,
+  const std::string &key_sol_type)
+{
+  // if index is a string, we should convert it to uint256
+  if (key_sol_type == "STRING" || key_sol_type == "STRING_LITERAL")
+  {
+    side_effect_expr_function_callt str2uint_call;
+    assert(context.find_symbol("c:@F@str2uint") != nullptr);
+    get_library_function_call_no_args(
+      "str2uint",
+      "c:@F@str2uint",
+      unsignedbv_typet(256),
+      location,
+      str2uint_call);
+    str2uint_call.arguments().push_back(pos);
+    pos = str2uint_call;
+  }
+  // e.g x[-1] => x[uint256(-1)]
+  solidity_gen_typecast(ns, pos, unsignedbv_typet(256));
+}
+
+/**
+  index accesss could either be set or get:
+  x[1]      => map_uint_get(&m, 1)
+  x[1] = 2  => map_uint_set(&x, 1, 2)
+  @array: x
+  @pos: 1
+  @is_mapping_set: true if it's a setValue, otherwise getValue
+*/
+bool solidity_convertert::get_new_mapping_index_access(
+  const typet &value_t,
+  const std::string &val_sol_type,
+  bool is_mapping_set,
+  const exprt &array,
+  const exprt &pos,
+  const locationt &location,
+  exprt &new_expr)
+{
+  std::string val_flg;
+  typet func_type;
+  if (
+    val_sol_type.find("UINT") != std::string::npos ||
+    val_sol_type.find("BYTES") != std::string::npos ||
+    val_sol_type.find("ADDRESS") != std::string::npos ||
+    val_sol_type.find("ENUM") != std::string::npos)
+  {
+    val_flg = "uint";
+    func_type = unsignedbv_typet(256);
+  }
+  else if (val_sol_type.find("INT") != std::string::npos)
+  {
+    val_flg = "int";
+    func_type = signedbv_typet(256);
+  }
+  else if (val_sol_type.find("BOOL") != std::string::npos)
+  {
+    val_flg = "bool";
+    func_type = bool_typet();
+  }
+  else if (
+    val_sol_type.find("STRING") != std::string::npos ||
+    val_sol_type.find("STRING_LITERAL") != std::string::npos)
+  {
+    val_flg = "string";
+    func_type = value_t;
+  }
+  else
+  {
+    val_flg = "generic";
+    // void *
+    func_type = pointer_typet(empty_typet());
+  }
+
+  // construct func call
+  std::string func_name;
+  if (is_mapping_set)
+  {
+    func_name = "map_" + val_flg + "_set";
+    func_type = empty_typet();
+    // overwrite func_type
+    func_type.set("cpp_type", "void");
+  }
+  else
+    func_name = "map_" + val_flg + "_get";
+
+  if (context.find_symbol("c:@F@" + func_name) == nullptr)
+  {
+    log_error(
+      "cannot find mapping ref {}. Got val_sol_type={}",
+      func_name,
+      val_sol_type);
+    return true;
+  }
+  side_effect_expr_function_callt call;
+  get_library_function_call_no_args(
+    func_name, "c:@F@" + func_name, func_type, location, call);
+
+  // &array
+  call.arguments().push_back(address_of_exprt(array));
+
+  // index
+  call.arguments().push_back(pos);
+
+  if (is_mapping_set)
+  {
+    /*
+        case 1: x[1] += 2 =>
+          DECL temp = map_uint_get(&array, pos);  <-- move to front block
+          temp += 2;
+          map_uint_set(&array, pos, temp);  <-- move to back block
+          (map_generic_set(&array, pos, temp, sizeof(temp));) 
+    */
+    std::string aux_name, aux_id;
+    get_aux_var(aux_name, aux_id);
+    symbolt aux_sym;
+    std::string debug_modulename = get_modulename_from_path(absolute_path);
+    typet aux_type = value_t;
+    get_default_symbol(
+      aux_sym, debug_modulename, aux_type, aux_name, aux_id, location);
+    aux_sym.file_local = true;
+    aux_sym.lvalue = true;
+    auto &added_sym = *move_symbol_to_context(aux_sym);
+    code_declt decl(symbol_expr(added_sym));
+
+    // populate initial value
+    side_effect_expr_function_callt get_call;
+    std::string f_get_name = "map_" + val_flg + "_get";
+
+    get_library_function_call_no_args(
+      f_get_name, "c:@F@" + f_get_name, value_t, location, get_call);
+    get_call.arguments().push_back(address_of_exprt(array));
+    get_call.arguments().push_back(pos);
+    solidity_gen_typecast(ns, get_call, aux_type);
+    added_sym.value = get_call;
+    decl.operands().push_back(get_call);
+    move_to_front_block(decl);
+
+    // value
+    call.arguments().push_back(symbol_expr(added_sym));
+    if (val_flg == "generic")
+    {
+      // sizeof
+      exprt size_of_expr;
+      get_size_of_expr(value_t, size_of_expr);
+      call.arguments().push_back(symbol_expr(added_sym));
+    }
+
+    convert_expression_to_code(call);
+    move_to_back_block(call);
+
+    new_expr = symbol_expr(added_sym);
+  }
+  else if (val_flg == "generic")
+  {
+    /* generic_get:
+          case 2: users[msg.sender].age; =>
+            DECL struct temp = map_users_get(&array, pos);
+            temp.age;
+        */
+    std::string aux_name, aux_id;
+    get_aux_var(aux_name, aux_id);
+    symbolt aux_sym;
+    std::string debug_modulename = get_modulename_from_path(absolute_path);
+    typet aux_type = value_t; // struct *
+    get_default_symbol(
+      aux_sym, debug_modulename, aux_type, aux_name, aux_id, location);
+    aux_sym.file_local = true;
+    aux_sym.lvalue = true;
+    auto &added_sym = *move_symbol_to_context(aux_sym);
+    code_declt decl(symbol_expr(added_sym));
+
+    // construct map_{struct_name}_get() function
+    // e.g. map_Base_User_get();
+    exprt map_struct_get;
+    std::string struct_contract_name = value_t.identifier().as_string();
+    assert(!struct_contract_name.empty());
+    assert(val_sol_type == "STRUCT"); // t_symbol
+    get_mapping_struct_function(
+      value_t, struct_contract_name, call, map_struct_get);
+
+    // struct temp = map_users_get(&array, pos);
+    added_sym.value = map_struct_get;
+    decl.operands().push_back(map_struct_get);
+    move_to_front_block(decl);
+
+    new_expr = symbol_expr(added_sym);
+  }
+  else
+  {
+    // e.g. (int8)map_int_get(&arr, 1);
+    solidity_gen_typecast(ns, call, value_t);
+    new_expr = call;
+  }
+
+  return false;
 }
 
 void solidity_convertert::get_mapping_struct_function(
@@ -9005,6 +9338,68 @@ bool solidity_convertert::get_non_library_function_call(
   return false;
 }
 
+// extract new contract instance expression
+// we insert that contract name into the newContractSet if there is a new expresssion related to this contract
+// e.g. Base x = new Base(); then we insert "Base" into newContractSet
+// the idea is that if the contract is not used in 'new', then we can simply create a
+// global static infinity array to play as a mapping structure
+void solidity_convertert::extract_new_contracts()
+{
+  if (!src_ast_json.contains("nodes"))
+    return;
+
+  std::function<void(const nlohmann::json &)> process_node;
+  process_node = [&](const nlohmann::json &node) {
+    if (node.is_object())
+    {
+      if (node.contains("nodeType") && node["nodeType"] == "NewExpression")
+      {
+        if (node.contains("typeName"))
+        {
+          typet new_type;
+          if (get_type_description(
+                node["typeName"]["typeDescriptions"], new_type))
+          {
+            log_error("failed to obtain typeDescriptions");
+            abort();
+          }
+          if (new_type.get("#sol_type") == "CONTRACT")
+          {
+            std::string contract_name = new_type.get("#sol_contract").c_str();
+            newContractSet.insert(contract_name);
+          }
+        }
+      }
+
+      for (const auto &item : node.items())
+      {
+        process_node(item.value());
+      }
+    }
+    else if (node.is_array())
+    {
+      for (const auto &child : node)
+      {
+        process_node(child);
+      }
+    }
+  };
+
+  for (const auto &top_level_node : src_ast_json["nodes"])
+  {
+    if (
+      top_level_node.contains("nodeType") &&
+      top_level_node["nodeType"] == "ContractDefinition")
+    {
+      // for get_type_descriptions
+      std::string old = current_baseContractName;
+      current_baseContractName = top_level_node["name"].get<std::string>();
+      process_node(top_level_node);
+      current_baseContractName = old;
+    }
+  }
+}
+
 /** 
  return the new-object expression
  basically we need to
@@ -9628,55 +10023,13 @@ void solidity_convertert::convert_type_expr(
       (src_sol_type == "ADDRESS" || src_sol_type == "ADDRESS_PAYABLE") &&
       dest_sol_type == "CONTRACT")
     {
-      // since the solidity will not check the type conversion in the runtime, the contract instance behind the address could be any contract
-      // therefore we only update the address
       // E.g. for `Derive x = Derive(_addr)`:
-      //  old_addr = _ESBMC_Obeject_Derive.$address; <-- front
-      //  _ESBMC_Obeject_Derive.$address = _addr;    <-- front
-      //  Derive x = _ESBMC_Obeject_Derive;          <-- type conversion
-      //  _ESBMC_Obeject_Derive.$address = old_addr  <-- back
+      // => Derive* x = &_ESBMC_Obeject_Derive;
+      // because in trusted mode, the address has been limited to the set of _ESBMC_Object
+
       exprt c_ins;
       std::string _cname = dest_type.get("#sol_contract").as_string();
       get_static_contract_instance_ref(_cname, c_ins);
-
-      // front
-      typet addr_t = unsignedbv_typet(160);
-      addr_t.set("#sol_type", "ADDRESS");
-
-      // old_addr = _ESBMC_Obeject_Derive.$address;
-      exprt object_addr = member_exprt(c_ins, "$address", addr_t);
-      std::string debug_modulename = get_modulename_from_path(absolute_path);
-      symbolt old_addr;
-      std::string name = "old_addr_" + std::to_string(aux_counter);
-      std::string id =
-        "sol:@C@" + _cname + "@" + name + "#" + std::to_string(aux_counter++);
-      get_default_symbol(
-        old_addr, debug_modulename, addr_t, name, id, src_expr.location());
-      old_addr.static_lifetime = false;
-      old_addr.file_local = true;
-      old_addr.type.set("#sol_state_var", "0");
-      symbolt &added_old_addr = *move_symbol_to_context(old_addr);
-      code_declt old_sender_decl(symbol_expr(added_old_addr));
-      added_old_addr.value = object_addr;
-      old_sender_decl.operands().push_back(object_addr);
-      old_sender_decl.location() = src_expr.location();
-      move_to_front_block(old_sender_decl);
-
-      // _ESBMC_Obeject_Derive.$address = _addr;
-      exprt assign_addr = side_effect_exprt("assign", addr_t);
-      assign_addr.copy_to_operands(object_addr, src_expr);
-      convert_expression_to_code(assign_addr);
-      assign_addr.location() = src_expr.location();
-      move_to_front_block(assign_addr);
-
-      // back
-      // _ESBMC_Obeject_Derive.$address = old_addr
-      exprt assign_addr_restore = side_effect_exprt("assign", addr_t);
-      assign_addr_restore.copy_to_operands(
-        object_addr, symbol_expr(added_old_addr));
-      convert_expression_to_code(assign_addr_restore);
-      assign_addr_restore.location() = src_expr.location();
-      move_to_back_block(assign_addr_restore);
 
       // type conversion
       src_expr = c_ins;
@@ -10059,8 +10412,7 @@ bool solidity_convertert::get_empty_array_ref(
 
 */
 bool solidity_convertert::multi_transaction_verification(
-  const std::string &c_name,
-  bool is_final_main)
+  const std::string &c_name)
 {
   log_debug(
     "Solidity", "@@@ performs transaction verification on contract {}", c_name);
@@ -10079,14 +10431,6 @@ bool solidity_convertert::multi_transaction_verification(
   func_body.operands().push_back(label);
 
   // initialize
-  if (is_final_main)
-  {
-    side_effect_expr_function_callt call;
-    get_library_function_call_no_args(
-      "initialize", "c:@F@initialize", empty_typet(), locationt(), call);
-    convert_expression_to_code(call);
-    func_body.move_to_operands(call);
-  }
 
   // 1. get constructor call
   if (contractNamesList.count(c_name) == 0)
@@ -10171,11 +10515,6 @@ bool solidity_convertert::multi_contract_verification_bound(
   func_body.operands().push_back(label);
 
   // initialize
-  side_effect_expr_function_callt call;
-  get_library_function_call_no_args(
-    "initialize", "c:@F@initialize", empty_typet(), locationt(), call);
-  convert_expression_to_code(call);
-  func_body.move_to_operands(call);
 
   // 1. construct switch-case
   int cnt = 0;
@@ -10189,7 +10528,7 @@ bool solidity_convertert::multi_contract_verification_bound(
   {
     // 1.1 construct multi-transaction verification entry function
     // function "_ESBMC_Main_contractname" will be created and inserted to the symbol table.
-    if (multi_transaction_verification(c_name, false))
+    if (multi_transaction_verification(c_name))
     {
       log_error(
         "Failed to construct multi-transaction verification for contract {}",
@@ -10313,11 +10652,6 @@ bool solidity_convertert::multi_contract_verification_unbound(
   func_body.operands().push_back(label);
 
   // initialize
-  side_effect_expr_function_callt call;
-  get_library_function_call_no_args(
-    "initialize", "c:@F@initialize", empty_typet(), locationt(), call);
-  convert_expression_to_code(call);
-  func_body.move_to_operands(call);
 
   std::set<std::string> cname_set;
   if (!tgt_set.empty())
@@ -10329,7 +10663,7 @@ bool solidity_convertert::multi_contract_verification_unbound(
   {
     // construct multi-transaction verification entry function
     // function "_ESBMC_Main_contractname" will be created and inserted to the symbol table.
-    if (multi_transaction_verification(c_name, false))
+    if (multi_transaction_verification(c_name))
     {
       log_error(
         "Failed to construct multi-transaction verification for contract {}",
@@ -10568,6 +10902,13 @@ void solidity_convertert::move_builtin_to_contract(
 
   if (!is_method)
   {
+    // check if it's already inserted
+    for (auto i : to_struct_type(c_sym.type).components())
+    {
+      if (i.identifier() == sym.identifier())
+        return;
+    }
+
     struct_typet::componentt comp(sym.name(), sym.name(), sym.type());
     comp.set_access(access);
     comp.set("#lvalue", 1);
@@ -10576,6 +10917,13 @@ void solidity_convertert::move_builtin_to_contract(
   }
   else
   {
+    // check if it's already inserted
+    for (auto i : to_struct_type(c_sym.type).methods())
+    {
+      if (i.identifier() == sym.identifier())
+        return;
+    }
+
     struct_typet::componentt comp;
     // construct comp
     comp.type() = sym.type();
@@ -10668,33 +11016,51 @@ bool solidity_convertert::get_new_temporary_obj(
 // create a function: get_{property_name}(addr)
 // this function is universal for every contract
 void solidity_convertert::get_aux_property_function(
-  const exprt &addr,
+  const std::string &cname,
+  const exprt &base,
   const typet &return_t,
   const locationt &loc,
   const std::string &property_name,
   exprt &new_expr)
 {
   std::string fname = "get_" + property_name;
-  std::string fid = "sol:@F@" + fname + "#";
+  std::string fid = "sol:@C@" + cname + "@F@" + fname + "#";
 
-  assert(addr.is_constant() || addr.is_member() || addr.is_symbol());
+  exprt cur_this_expr;
+  if (current_functionDecl)
+  {
+    if (get_func_decl_this_ref(*current_functionDecl, cur_this_expr))
+      abort();
+  }
+  else
+  {
+    const auto &ctor_json = find_constructor_ref(cname);
+    if (get_func_decl_this_ref(ctor_json, cur_this_expr))
+      abort();
+  }
+
+  assert(base.is_constant() || base.is_member() || base.is_symbol());
 
   if (context.find_symbol(fid) != nullptr)
   {
     side_effect_expr_function_callt _call;
     get_library_function_call_no_args(fname, fid, return_t, loc, _call);
-    _call.arguments().push_back(addr);
+    _call.arguments().push_back(cur_this_expr);
+    _call.arguments().push_back(base);
     new_expr = _call;
     return;
   }
 
   // poplate function definition
+  // e.g. get_balance(this, this->addr);
   symbolt sym;
   code_typet type;
   type.return_type() = return_t;
   std::string debug_modulename = get_modulename_from_path(absolute_path);
   get_default_symbol(sym, debug_modulename, type, fname, fid, loc);
   auto &added_symbol = *move_symbol_to_context(sym);
+
+  get_function_this_pointer_param(cname, fid, debug_modulename, loc, type);
 
   // param: arg
   std::string aname = "_addr";
@@ -10715,7 +11081,10 @@ void solidity_convertert::get_aux_property_function(
 
   // populate param
   added_symbol.type = type;
+  // move to struct symbol
+  move_builtin_to_contract(cname, symbol_expr(added_symbol), true);
 
+  exprt addr_expr = symbol_expr(*context.find_symbol(aid));
   /* body:
       address(_addr).code
     =>
@@ -10754,7 +11123,7 @@ void solidity_convertert::get_aux_property_function(
       loc,
       get_obj);
 
-    get_obj.arguments().push_back(addr);
+    get_obj.arguments().push_back(addr_expr);
     get_obj.arguments().push_back(_cname);
 
     // typecast
@@ -10794,21 +11163,21 @@ void solidity_convertert::get_aux_property_function(
   side_effect_expr_function_callt _call;
   _call.function() = symbol_expr(added_symbol);
   _call.location() = loc;
-  _call.arguments().push_back(addr);
+  _call.arguments().push_back(cur_this_expr);
+  _call.arguments().push_back(base);
   new_expr = _call;
 }
 
 // get member access of built-in property.
 // e.g. x.$balance, x.$code ...
 void solidity_convertert::get_builtin_property_expr(
+  const std::string &cname,
   const std::string &name,
   const exprt &base,
   const locationt &loc,
   exprt &new_expr)
 {
   log_debug("solidity", "Getting built-in property");
-
-  std::string src_sol_type = base.get("#sol_type").as_string();
 
   typet t;
   std::string comp_name = "$" + name;
@@ -10830,14 +11199,19 @@ void solidity_convertert::get_builtin_property_expr(
   }
 
   exprt mem;
-  if (src_sol_type == "CONTRACT")
-    // e.g. address(_ins_).balance
-    // address(this) => this->address
-    mem = member_exprt(base, comp_name, t);
+  if (
+    base.is_member() && (base.op0().name() == "this" ||
+                         base.op0().type().get("#sol_type") == "CONTRACT"))
+    // e.g. address(_ins_).balance => _ins_.balance
+    //      address(this) => this->address
+    //TODO: fixme! this pattern match is weak
+    mem = member_exprt(base.op0(), comp_name, t);
   else
+  {
     // e.g. address(msg.sender).balance
     // we do not know what instance is msg.sender pointed to, so over-approximate
-    get_aux_property_function(base, t, loc, name, mem);
+    get_aux_property_function(cname, base, t, loc, name, mem);
+  }
 
   mem.location() = loc;
   new_expr = mem;
@@ -10902,7 +11276,7 @@ bool solidity_convertert::assign_nondet_contract_name(
 
   // convert this string array (e.g. {"base", "derive"}) to a symbol
   std::string aux_name, aux_id;
-  aux_name = "$" + _cname + "_bind_addr_list";
+  aux_name = "$" + _cname + "_bind_cname_list";
   aux_id = "sol:@C@" + _cname + "@" + aux_name;
 
   if (context.find_symbol(aux_id) == nullptr)
@@ -11100,16 +11474,16 @@ bool solidity_convertert::get_high_level_member_access(
   get_current_contract_name(expr, cname);
 
   // current this pointer reference
-  exprt this_expr;
+  exprt cur_this_expr;
   if (current_functionDecl)
   {
-    if (get_func_decl_this_ref(*current_functionDecl, this_expr))
+    if (get_func_decl_this_ref(*current_functionDecl, cur_this_expr))
       return true;
   }
   else
   {
     const auto &ctor_json = find_constructor_ref(cname);
-    if (get_func_decl_this_ref(ctor_json, this_expr))
+    if (get_func_decl_this_ref(ctor_json, cur_this_expr))
       return true;
   }
 
@@ -11140,26 +11514,27 @@ bool solidity_convertert::get_high_level_member_access(
       exprt back_block = code_blockt();
       if (is_call_w_options)
       {
-        if (model_transaction(expr, base, balance, l, front_block, back_block))
+        if (model_transaction(
+              expr, cur_this_expr, base, balance, l, front_block, back_block))
         {
           log_error("failed to model the transaction property changes");
           return true;
         }
-        else
-        {
-          if (get_high_level_call_wrapper(
-                cname, this_expr, front_block, back_block))
-            return true;
-        }
-        for (auto op : front_block.operands())
-          move_to_front_block(op);
-        for (auto op : back_block.operands())
-          move_to_back_block(op);
       }
+      else if (get_high_level_call_wrapper(
+                 cname, cur_this_expr, front_block, back_block))
+        return true;
+
+      for (auto op : front_block.operands())
+        move_to_front_block(op);
+      for (auto op : back_block.operands())
+        move_to_back_block(op);
     }
 
     return false; // since it has only one possible option, no need to futher binding
   }
+
+  // now we need to consider the binding
 
   if (member.type().get("#sol_type") == "TUPLE_RETURNS")
   {
@@ -11172,6 +11547,10 @@ bool solidity_convertert::get_high_level_member_access(
                          to_code_type(member.type()).return_type().is_empty());
 
   // construct auxilirary funciton
+  // e.g.
+  //  Bank target;
+  //  target.withdraw()
+  // => Bank_withdraw(this, this->target)
   assert(!_cname.empty());
   assert(!member.name().empty());
   std::string fname = _cname + "_" + member.name().as_string();
@@ -11194,7 +11573,49 @@ bool solidity_convertert::get_high_level_member_access(
   fs.file_local = true;
   auto &added_fsymbol = *move_symbol_to_context(fs);
 
+  // add this pointer to arguments
+  get_function_this_pointer_param(
+    cname, fid, debug_modulename, locationt(), ft);
+  // add base to arguments
+  code_typet::argumentt base_param;
+  std::string base_name = "base";
+  std::string base_id =
+    "sol:@C@" + cname + "@F@" + fname + "@" + base_name + "#";
+  base_param.cmt_base_name(base_name);
+  base_param.cmt_identifier(base_id);
+
+  base_param.type() = base.type();
+  symbolt param_symbol;
+  get_default_symbol(
+    param_symbol,
+    debug_modulename,
+    base_param.type(),
+    base_name,
+    base_id,
+    locationt());
+  param_symbol.lvalue = true;
+  param_symbol.is_parameter = true;
+  param_symbol.file_local = true;
+  if (context.find_symbol(base_id) == nullptr)
+  {
+    context.move_symbol_to_context(param_symbol);
+  }
+
+  ft.arguments().push_back(base_param);
+  exprt new_base = symbol_expr(*context.find_symbol(base_id));
+
+  added_fsymbol.type = ft;
+  //! we need to move it to the struct symbol
+  // this is because we use the member from the contract
+  move_builtin_to_contract(cname, symbol_expr(added_fsymbol), true);
+
+  exprt this_expr;
+  if (get_func_decl_this_ref(cname, fid, this_expr))
+    return true;
+
   // function body
+
+  // add esbmc_hide label
   exprt func_body = code_blockt();
   code_labelt label;
   label.set_label("__ESBMC_HIDE");
@@ -11202,8 +11623,8 @@ bool solidity_convertert::get_high_level_member_access(
   func_body.move_to_operands(label);
 
   // get 'x._ESBMC_bind_cname'
-  exprt bind_expr =
-    member_exprt(base, "_ESBMC_bind_cname", pointer_typet(signed_char_type()));
+  exprt bind_expr = member_exprt(
+    new_base, "_ESBMC_bind_cname", pointer_typet(signed_char_type()));
 
   // get memebr type
   exprt tmp;
@@ -11239,13 +11660,8 @@ bool solidity_convertert::get_high_level_member_access(
     ct.cmt_constant(true);
     get_symbol_decl_ref(str, "sol:@" + str, ct, cname_string);
 
+    // since we do not modify the string, and it always point to the known object
     exprt _cmp_cname = exprt("=", pointer_typet(signed_char_type()));
-
-    //TODO: maybe we should use strcpy to compare the char * string
-    // however, since we do not modify the string, and it always point to the known object
-    // so current soultion works
-    // get_library_function_call_no_args(
-    //   "_ESBMC_cmp_cname", "c:@F@_ESBMC_cmp_cname", int_type(), l, _cmp_cname);
     _cmp_cname.operands().push_back(bind_expr);
     _cmp_cname.operands().push_back(cname_string);
 
@@ -11255,6 +11671,10 @@ bool solidity_convertert::get_high_level_member_access(
 
     exprt _base;
     get_static_contract_instance_ref(str, _base);
+
+    // ?fix address?. e.g.
+    // B target = B(_addr); // previously
+    // base->$address =  _ESBMC_Object_B.$address // note that pointer this->target == base
 
     bool is_revert = false;
     if (is_func_call)
@@ -11321,31 +11741,35 @@ bool solidity_convertert::get_high_level_member_access(
     // wrap it
     if (is_func_call)
     {
+      exprt front_block = code_blockt();
+      exprt back_block = code_blockt();
       if (is_call_w_options)
       {
-        exprt front_block = code_blockt();
-        exprt back_block = code_blockt();
-        if (model_transaction(expr, base, balance, l, front_block, back_block))
+        if (model_transaction(
+              expr, this_expr, new_base, balance, l, front_block, back_block))
         {
           log_error("failed to model the transaction property changes");
           return true;
         }
-        else
-        {
-          if (get_high_level_call_wrapper(
-                cname, this_expr, front_block, back_block))
-            return true;
-        }
-
-        // if-body
-        code_blockt block;
-        for (auto &op : front_block.operands())
-          block.move_to_operands(op);
-        block.move_to_operands(rhs);
-        for (auto &op : back_block.operands())
-          block.move_to_operands(op);
-        rhs = block;
       }
+      else if (get_high_level_call_wrapper(
+                 cname, this_expr, front_block, back_block))
+        return true;
+
+      // if-body
+      code_blockt block;
+      for (auto &op : front_block.operands())
+        block.move_to_operands(op);
+      block.move_to_operands(rhs);
+      for (auto &op : back_block.operands())
+        block.move_to_operands(op);
+      rhs = block;
+    }
+    else
+    {
+      code_blockt block;
+      block.move_to_operands(rhs);
+      rhs = block;
     }
 
     codet if_expr("ifthenelse");
@@ -11371,6 +11795,9 @@ bool solidity_convertert::get_high_level_member_access(
   _call.function() = symbol_expr(added_fsymbol);
   _call.type() = ft.return_type();
   _call.location() = l;
+  // bank_withdraw(this, this->target)
+  _call.arguments().push_back(cur_this_expr);
+  _call.arguments().push_back(base);
 
   new_expr = _call;
 
@@ -11506,6 +11933,15 @@ bool solidity_convertert::get_low_level_member_accsss(
   }
 
   return false;
+}
+
+void solidity_convertert::get_bind_cname_func_name(
+  const std::string &cname,
+  std::string &fname,
+  std::string &fid)
+{
+  fname = "initialize_" + cname + +"_bind_cname";
+  fid = "sol:@F@" + fname + "#";
 }
 
 // return expr: contract_instance._ESBMC_bind_cname
@@ -11737,12 +12173,14 @@ bool solidity_convertert::get_call_definition(
 
 /** e.g. x = target.deposit{value: msg.value}()
  * @expr: member_call json
+ * @this_expr: this->(target)
  * @base: target
  * @value: msg.value
  * @block: returns
 */
 bool solidity_convertert::model_transaction(
   const nlohmann::json &expr,
+  const exprt &this_expr,
   const exprt &base,
   const exprt &value,
   const locationt &loc,
@@ -11771,25 +12209,8 @@ bool solidity_convertert::model_transaction(
   if (cname.empty())
     return true;
 
-  typet addr_t = unsignedbv_typet(160);
-  addr_t.set("#sol_type", "ADDRESS_PAYABLE");
   typet val_t = unsignedbv_typet(256);
-
-  exprt msg_sender = symbol_expr(*context.find_symbol("c:@msg_sender"));
   exprt msg_value = symbol_expr(*context.find_symbol("c:@msg_value"));
-  exprt this_expr;
-
-  if (current_functionDecl)
-  {
-    if (get_func_decl_this_ref(*current_functionDecl, this_expr))
-      return true;
-  }
-  else
-  {
-    const auto &ctor_json = find_constructor_ref(cname);
-    if (get_func_decl_this_ref(ctor_json, this_expr))
-      return true;
-  }
 
   if (get_high_level_call_wrapper(cname, this_expr, front_block, back_block))
     return true;
@@ -11815,6 +12236,15 @@ bool solidity_convertert::model_transaction(
   assign_val.copy_to_operands(msg_value, value);
   convert_expression_to_code(assign_val);
   front_block.move_to_operands(assign_val);
+
+  // if(this.balance < val) return false;
+  exprt less_than = exprt("<", bool_type());
+  less_than.copy_to_operands(this_balance, value);
+  codet cmp_less_than("ifthenelse");
+  code_returnt ret_false;
+  ret_false.return_value() = false_exprt();
+  cmp_less_than.copy_to_operands(less_than, ret_false);
+  front_block.move_to_operands(cmp_less_than);
 
   // this.balance -= _val;
   exprt sub_assign = side_effect_exprt("assign-", val_t);
@@ -11904,6 +12334,8 @@ bool solidity_convertert::get_call_value_definition(
 
     msg_value = value 
     msg_sender = this.address;
+    if(this.balance < x)      <-- simulate EVM rollback
+      return false;
     this.balance -= x; 
     _ESBMC_Object_x.balance += x; 
 
@@ -12007,6 +12439,15 @@ bool solidity_convertert::get_call_value_definition(
     assign_sender.copy_to_operands(msg_sender, this_address);
     convert_expression_to_code(assign_sender);
     then.move_to_operands(assign_sender);
+
+    // if(this.balance < val) return false;
+    exprt less_than = exprt("<", bool_type());
+    less_than.copy_to_operands(this_balance, val_expr);
+    codet cmp_less_than("ifthenelse");
+    code_returnt ret_false;
+    ret_false.return_value() = false_exprt();
+    cmp_less_than.copy_to_operands(less_than, ret_false);
+    then.move_to_operands(cmp_less_than);
 
     // this.balance -= _val;
     exprt sub_assign = side_effect_exprt("assign-", val_t);
@@ -12228,6 +12669,15 @@ bool solidity_convertert::get_transfer_definition(
     convert_expression_to_code(assign_sender);
     then.move_to_operands(assign_sender);
 
+    // if(this.balance < val) return false;
+    exprt less_than = exprt("<", bool_type());
+    less_than.copy_to_operands(this_balance, val_expr);
+    codet cmp_less_than("ifthenelse");
+    code_returnt ret_false;
+    ret_false.return_value() = false_exprt();
+    cmp_less_than.copy_to_operands(less_than, ret_false);
+    then.move_to_operands(cmp_less_than);
+
     // this.balance -= _val;
     exprt sub_assign = side_effect_exprt("assign-", val_t);
     sub_assign.copy_to_operands(this_balance, val_expr);
@@ -12447,6 +12897,16 @@ bool solidity_convertert::get_send_definition(
     assign_sender.copy_to_operands(msg_sender, this_address);
     convert_expression_to_code(assign_sender);
     then.move_to_operands(assign_sender);
+
+    // if(this.balance < val) return false;
+    exprt less_than = exprt("<", val_expr.type());
+    less_than.copy_to_operands(this_balance, val_expr);
+    //! "ifthenelse" has to be declared as codet, not exprt and use convert_expr_to_code
+    codet cmp_less_than("ifthenelse");
+    code_returnt ret_false;
+    ret_false.return_value() = false_exprt();
+    cmp_less_than.copy_to_operands(less_than, ret_false);
+    then.move_to_operands(cmp_less_than);
 
     // this.balance -= _val;
     exprt sub_assign = side_effect_exprt("assign-", val_t);

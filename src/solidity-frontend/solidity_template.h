@@ -99,7 +99,7 @@ uint256_t gasleft()
 {
 __ESBMC_HIDE:;
   gasConsume(); // always less
-  return uint256_t(_gaslimit);
+  return (uint256_t)_gaslimit;
 }
 )";
 
@@ -139,12 +139,12 @@ address_t ripemd160(uint256_t x)
 {
 __ESBMC_HIDE:;
   // UNSAT abstraction
-  return address_t(x);
+  return (address_t)x;
 }
 address_t ecrecover(uint256_t hash, unsigned int v, uint256_t r, uint256_t s)
 {
 __ESBMC_HIDE:;
-  return address_t(hash);
+  return (address_t)hash;
 }
 
 // uint256_t _pow(unsigned int base, unsigned int exp) {
@@ -305,6 +305,119 @@ void *map_generic_get(struct mapping_t *m, uint256_t k)
 {
 __ESBMC_HIDE:;
   return map_get_raw(m->base, m->addr, k);
+}
+)";
+
+// used when there is no NewExpression in the source json.
+const std::string sol_mapping_fast = R"(
+struct _ESBMC_Mapping_fast
+{
+  uint256_t key : 256;
+  void *value;
+  struct _ESBMC_Mapping_fast *next;
+} __attribute__((packed));
+
+struct mapping_t_fast
+{
+  struct _ESBMC_Mapping_fast *base;
+};
+
+void *map_get_raw_fast(struct _ESBMC_Mapping_fast a[], uint256_t key)
+{
+__ESBMC_HIDE:;
+  struct _ESBMC_Mapping_fast *cur = a[key].next;
+  while (cur)
+  {
+    if (cur->key == key)
+      return cur->value;
+    cur = cur->next;
+  }
+  return NULL;
+}
+
+void map_set_raw_fast(struct _ESBMC_Mapping_fast a[],
+                      uint256_t key, void *val)
+{
+__ESBMC_HIDE:;
+  struct _ESBMC_Mapping_fast *n = (struct _ESBMC_Mapping_fast *)malloc(sizeof *n);
+  n->key = key;
+  n->value = val;
+  n->next = a[key].next;
+  a[key].next = n;
+}
+
+/* uint256_t */
+void map_uint_set_fast(struct mapping_t_fast *m, uint256_t k, uint256_t v)
+{
+__ESBMC_HIDE:;
+  uint256_t *p = (uint256_t *)malloc(sizeof *p);
+  *p = v;
+  map_set_raw_fast(m->base, k, p);
+}
+uint256_t map_uint_get_fast(struct mapping_t_fast *m, uint256_t k)
+{
+__ESBMC_HIDE:;
+  uint256_t *p = (uint256_t *)map_get_raw_fast(m->base, k);
+  return p ? *p : (uint256_t)0;
+}
+
+/* int256_t */
+void map_int_set_fast(struct mapping_t_fast *m, uint256_t k, int256_t v)
+{
+__ESBMC_HIDE:;
+  int256_t *p = (int256_t *)malloc(sizeof *p);
+  *p = v;
+  map_set_raw_fast(m->base, k, p);
+}
+int256_t map_int_get_fast(struct mapping_t_fast *m, uint256_t k)
+{
+__ESBMC_HIDE:;
+  int256_t *p = (int256_t *)map_get_raw_fast(m->base, k);
+  return p ? *p : (int256_t)0;
+}
+
+/* string */
+void map_string_set_fast(struct mapping_t_fast *m, uint256_t k, char *v)
+{
+__ESBMC_HIDE:;
+  char **p = (char **)malloc(sizeof *p);
+  *p = v;
+  map_set_raw_fast(m->base, k, p);
+}
+char *map_string_get_fast(struct mapping_t_fast *m, uint256_t k)
+{
+__ESBMC_HIDE:;
+  char **p = (char **)map_get_raw_fast(m->base, k);
+  return p ? *p : (char *)0;
+}
+
+/* bool */
+void map_bool_set_fast(struct mapping_t_fast *m, uint256_t k, bool v)
+{
+__ESBMC_HIDE:;
+  bool *p = (bool *)malloc(sizeof *p);
+  *p = v;
+  map_set_raw_fast(m->base, k, p);
+}
+bool map_bool_get_fast(struct mapping_t_fast *m, uint256_t k)
+{
+__ESBMC_HIDE:;
+  bool *p = (bool *)map_get_raw_fast(m->base, k);
+  return p ? *p : false;
+}
+
+/* generic */
+void map_generic_set_fast(struct mapping_t_fast *m, uint256_t k, const void *v, size_t sz)
+{
+__ESBMC_HIDE:;
+  void *p = malloc(sz);
+  memcpy(p, v, sz);
+  map_set_raw_fast(m->base, k, p);
+}
+void *map_generic_get_fast(struct mapping_t_fast *m, uint256_t k)
+{
+__ESBMC_HIDE:;
+  return map_get_raw_fast(m->base, k);
 }
 )";
 
@@ -602,17 +715,27 @@ __ESBMC_HIDE:;
 }
 
 // string assign
-const char *empty_str = "";
 void _str_assign(char **str1, const char *str2) {
 __ESBMC_HIDE:;
-    if(str1 != NULL)
-      free(*str1);  
-    if (str2 == NULL) {
-      *str1 = NULL;  // Ensure str1 doesn't point to invalid memory
-      return;
+    // Ensure str1 is a valid pointer (not NULL)
+    if (str1 == NULL) {
+        return;  // Early exit if str1 is invalid
     }
-    *str1 = (char *)malloc(strlen(str2) + 1);  
-    
+    // Free *str1 only if it was previously allocated (non-NULL)
+    if (*str1 != NULL) {
+        free(*str1);
+    }
+    // If str2 is NULL, set *str1 to NULL (avoid dangling pointers)
+    if (str2 == NULL) {
+        *str1 = NULL;
+        return;
+    }
+    size_t len = strlen(str2);
+    if (len == SIZE_MAX) {  // Would overflow when adding 1
+        *str1 = NULL;  // Or handle error differently
+        return;
+    }
+    *str1 = (char *)malloc(len + 1);  
     strcpy(*str1, str2);  // force malloc success
 }
 
@@ -689,22 +812,26 @@ __ESBMC_HIDE:;
 
 // max/min value
 const std::string sol_max_min = R"(
-uint256_t _max(int bitwidth, bool is_signed) {
+uint256_t _max(unsigned int bitwidth, bool is_signed) {
 __ESBMC_HIDE:;
-    if (is_signed) {
-        return (uint256_t(1) << (bitwidth - 1)) - uint256_t(1); // 2^(N-1) - 1
-    } else {
-        return (uint256_t(1) << bitwidth) - uint256_t(1); // 2^N - 1
-    }
+  __ESBMC_assume(bitwidth > 0 && bitwidth <= 256);
+  if (is_signed) {
+      return ((uint256_t)1 << (bitwidth - 1)) - (uint256_t)1;
+  } else {
+      if (bitwidth == 256) {
+          return (uint256_t)-1; 
+      }
+      return ((uint256_t)1 << bitwidth) - (uint256_t)1;
+  }
 }
-
-int256_t _min(int bitwidth, bool is_signed) {
+int256_t _min(unsigned int bitwidth, bool is_signed) {
 __ESBMC_HIDE:;
-    if (is_signed) {
-        return -(int256_t(1) << (bitwidth - 1)); // -2^(N-1)
-    } else {
-        return int256_t(0); // Min of unsigned is always 0
-    }
+  if (is_signed) {
+      __ESBMC_assume(bitwidth > 0 && bitwidth <= 256);
+      return -((int256_t)1 << (bitwidth - 1)); // -2^(N-1)
+  } else {
+      return (int256_t)0; // Min of unsigned is always 0
+  }
 }
 
 unsigned int _creationCode()
@@ -737,33 +864,34 @@ void initialize()
 {
 __ESBMC_HIDE:;
 // we assume it starts from an EOA
-msg_data = uint256_t(nondet_uint());
-msg_sender = address_t(nondet_uint());
+msg_data = (uint256_t)nondet_uint();
+msg_sender = (address_t)nondet_uint();
 msg_sig = nondet_uint();
-msg_value = uint256_t(nondet_uint());
+msg_value = (uint256_t)nondet_uint();
 
-tx_gasprice = uint256_t(nondet_uint());
+tx_gasprice = (uint256_t)nondet_uint();
 // this can only be an EOA's address
-tx_origin = address_t(nondet_uint());
+tx_origin = (address_t)nondet_uint();
 
-block_basefee = uint256_t(nondet_uint());
-block_chainid = uint256_t(nondet_uint());
-block_coinbase = address_t(nondet_uint());
-block_difficulty = uint256_t(nondet_uint());
-block_gaslimit = uint256_t(nondet_uint());
-block_number = uint256_t(nondet_uint());
-block_prevrandao = uint256_t(nondet_uint());
-block_timestamp = uint256_t(nondet_uint());
+block_basefee = (uint256_t)nondet_uint();
+block_chainid = (uint256_t)nondet_uint();
+block_coinbase = (address_t)nondet_uint();
+block_difficulty = (uint256_t)nondet_uint();
+block_gaslimit = (uint256_t)nondet_uint();
+block_number = (uint256_t)nondet_uint();
+block_prevrandao = (uint256_t)nondet_uint();
+block_timestamp = (uint256_t)nondet_uint();
 
 _gaslimit = nondet_uint();
 
-unsigned int sol_max_cnt = 0;
+sol_max_cnt = 0;
 }
 )";
 
-const std::string sol_c_library =
-  "extern \"C\" {" + sol_typedef + sol_vars + sol_funcs + sol_mapping +
-  sol_array + sol_unit + sol_ext_library + sol_initialize + "}";
+const std::string sol_c_library = "extern \"C\" {" + sol_typedef + sol_vars +
+                                  sol_funcs + sol_mapping + sol_mapping_fast +
+                                  sol_array + sol_unit + sol_ext_library +
+                                  sol_initialize + "}";
 
 // C++
 const std::string sol_cpp_string = R"(
