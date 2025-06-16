@@ -1,0 +1,564 @@
+#ifndef ESBMC_UNORDERED_MAP_H
+#define ESBMC_UNORDERED_MAP_H
+
+#include <utility>
+#include <new>
+
+namespace std {
+
+#ifndef SIZE_MAX
+#define SIZE_MAX ((size_t)-1)
+#endif
+
+// Simple hash function for keys
+template<typename T>
+struct esbmc_hash {
+    size_t operator()(const T& key) const {
+        return static_cast<size_t>(key);
+    }
+};
+
+// Simple equality comparison for keys
+template<typename T>
+struct esbmc_equal_to {
+    bool operator()(const T& lhs, const T& rhs) const {
+        return lhs == rhs;
+    }
+};
+
+// Simple forward iterator tag
+struct esbmc_forward_iterator_tag {};
+
+// Forward declaration
+template<typename Key, typename Value, typename Hash = esbmc_hash<Key>, 
+         typename KeyEqual = esbmc_equal_to<Key>>
+class unordered_map;
+
+// Iterator for unordered_map
+template<typename Key, typename Value, typename Hash, typename KeyEqual>
+class esbmc_unordered_map_iterator {
+public:
+    typedef std::pair<Key, Value> value_type;  // Note: using non-const Key
+    typedef value_type& reference;
+    typedef value_type* pointer;
+    typedef ptrdiff_t difference_type;
+    typedef esbmc_forward_iterator_tag iterator_category;
+
+    // Grant friend access to unordered_map
+    friend class unordered_map<Key, Value, Hash, KeyEqual>;
+
+private:
+    value_type* data_;
+    size_t pos_;
+    size_t size_;
+
+public:
+    // Constructors
+    esbmc_unordered_map_iterator() : data_(nullptr), pos_(0), size_(0) {}
+    
+    esbmc_unordered_map_iterator(value_type* data, size_t position, size_t size)
+        : data_(data), pos_(position), size_(size) {}
+
+    // Dereference operators
+    reference operator*() const {
+        return data_[pos_];
+    }
+    
+    pointer operator->() const {
+        return &data_[pos_];
+    }
+
+    // Increment operators
+    esbmc_unordered_map_iterator& operator++() {
+        if (pos_ < size_) {
+            ++pos_;
+        }
+        return *this;
+    }
+    
+    esbmc_unordered_map_iterator operator++(int) {
+        esbmc_unordered_map_iterator temp = *this;
+        ++(*this);
+        return temp;
+    }
+
+    // Comparison operators
+    bool operator==(const esbmc_unordered_map_iterator& other) const {
+        return data_ == other.data_ && pos_ == other.pos_;
+    }
+    
+    bool operator!=(const esbmc_unordered_map_iterator& other) const {
+        return !(*this == other);
+    }
+};
+
+// Const iterator for unordered_map
+template<typename Key, typename Value, typename Hash, typename KeyEqual>
+class esbmc_unordered_map_const_iterator {
+public:
+    typedef std::pair<Key, Value> value_type;  // Note: using non-const Key
+    typedef const value_type& reference;
+    typedef const value_type* pointer;
+    typedef ptrdiff_t difference_type;
+    typedef esbmc_forward_iterator_tag iterator_category;
+
+    // Grant friend access to unordered_map
+    friend class unordered_map<Key, Value, Hash, KeyEqual>;
+
+private:
+    const value_type* data_;
+    size_t pos_;
+    size_t size_;
+
+public:
+    // Constructors
+    esbmc_unordered_map_const_iterator() : data_(nullptr), pos_(0), size_(0) {}
+    
+    esbmc_unordered_map_const_iterator(const value_type* data, size_t position, size_t size)
+        : data_(data), pos_(position), size_(size) {}
+    
+    // Conversion from non-const iterator
+    esbmc_unordered_map_const_iterator(const esbmc_unordered_map_iterator<Key, Value, Hash, KeyEqual>& other)
+        : data_(other.data_), pos_(other.pos_), size_(other.size_) {}
+
+    // Dereference operators
+    reference operator*() const {
+        return data_[pos_];
+    }
+    
+    pointer operator->() const {
+        return &data_[pos_];
+    }
+
+    // Increment operators
+    esbmc_unordered_map_const_iterator& operator++() {
+        if (pos_ < size_) {
+            ++pos_;
+        }
+        return *this;
+    }
+    
+    esbmc_unordered_map_const_iterator operator++(int) {
+        esbmc_unordered_map_const_iterator temp = *this;
+        ++(*this);
+        return temp;
+    }
+
+    // Comparison operators
+    bool operator==(const esbmc_unordered_map_const_iterator& other) const {
+        return data_ == other.data_ && pos_ == other.pos_;
+    }
+    
+    bool operator!=(const esbmc_unordered_map_const_iterator& other) const {
+        return !(*this == other);
+    }
+};
+
+// Simple unordered_map implementation using fixed-size array
+template<typename Key, typename Value, typename Hash, typename KeyEqual>
+class unordered_map {
+public:
+    // Type definitions
+    typedef Key key_type;
+    typedef Value mapped_type;
+    // Note: using non-const Key for ESBMC compatibility
+    typedef std::pair<Key, Value> value_type;
+    typedef Hash hasher;
+    typedef KeyEqual key_equal;
+    typedef value_type& reference;
+    typedef const value_type& const_reference;
+    typedef value_type* pointer;
+    typedef const value_type* const_pointer;
+    typedef size_t size_type;
+    typedef ptrdiff_t difference_type;
+    
+    typedef esbmc_unordered_map_iterator<Key, Value, Hash, KeyEqual> iterator;
+    typedef esbmc_unordered_map_const_iterator<Key, Value, Hash, KeyEqual> const_iterator;
+
+private:
+    // Simple fixed-size array storage
+    static const size_t MAX_SIZE = 1024; // Small size for verification
+    value_type data_[MAX_SIZE];
+    size_type size_;
+    hasher hash_function_;
+    key_equal equal_function_;
+
+    // Find index of key, or MAX_SIZE if not found
+    size_type find_index(const Key& key) const {
+        for (size_type i = 0; i < size_; ++i) {
+            if (equal_function_(data_[i].first, key)) {
+                return i;
+            }
+        }
+        return MAX_SIZE;
+    }
+
+public:
+    // Constructors
+    unordered_map() : size_(0) {}
+    
+    explicit unordered_map(size_type /*bucket_count*/) : size_(0) {}
+    
+    // Iterator range constructor
+    template<typename InputIterator>
+    unordered_map(InputIterator first, InputIterator last) : size_(0) {
+        insert(first, last);
+    }
+    
+    // Copy constructor
+    unordered_map(const unordered_map& other) 
+        : size_(other.size_), hash_function_(other.hash_function_), 
+          equal_function_(other.equal_function_) {
+        for (size_type i = 0; i < size_; ++i) {
+            data_[i] = other.data_[i];
+        }
+    }
+    
+    // Move constructor
+    // Move constructor
+    unordered_map(unordered_map&& other) noexcept
+        : size_(other.size_), hash_function_(other.hash_function_), 
+          equal_function_(other.equal_function_) {
+        for (size_type i = 0; i < size_; ++i) {
+            data_[i] = other.data_[i];
+        }
+        other.size_ = 0;
+    }
+
+    // Assignment operators
+    unordered_map& operator=(const unordered_map& other) {
+        if (this != &other) {
+            size_ = other.size_;
+            hash_function_ = other.hash_function_;
+            equal_function_ = other.equal_function_;
+            for (size_type i = 0; i < size_; ++i) {
+                data_[i] = other.data_[i];
+            }
+        }
+        return *this;
+    }
+    
+    unordered_map& operator=(unordered_map&& other) noexcept {
+        if (this != &other) {
+            size_ = other.size_;
+            hash_function_ = other.hash_function_;
+            equal_function_ = other.equal_function_;
+            for (size_type i = 0; i < size_; ++i) {
+                data_[i] = other.data_[i];
+            }
+            other.size_ = 0;
+        }
+        return *this;
+    }
+
+    // Iterators
+    iterator begin() {
+        return iterator(data_, 0, size_);
+    }
+    
+    const_iterator begin() const {
+        return const_iterator(data_, 0, size_);
+    }
+    
+    iterator end() {
+        return iterator(data_, size_, size_);
+    }
+    
+    const_iterator end() const {
+        return const_iterator(data_, size_, size_);
+    }
+    
+    const_iterator cbegin() const {
+        return begin();
+    }
+    
+    const_iterator cend() const {
+        return end();
+    }
+
+    // Capacity
+    bool empty() const noexcept {
+        return size_ == 0;
+    }
+    
+    size_type size() const noexcept {
+        return size_;
+    }
+    
+    size_type max_size() const noexcept {
+        return MAX_SIZE;
+    }
+
+    // Element access
+    
+    // Access with bounds checking
+    Value& at(const Key& key) {
+        size_type idx = find_index(key);
+        if (idx == MAX_SIZE) {
+            // In real implementation, this would throw std::out_of_range
+            // For ESBMC, we'll return a reference to a static default value
+            static Value default_value = Value();
+            return default_value;
+        }
+        return data_[idx].second;
+    }
+    
+    const Value& at(const Key& key) const {
+        size_type idx = find_index(key);
+        if (idx == MAX_SIZE) {
+            // In real implementation, this would throw std::out_of_range
+            static const Value default_value = Value();
+            return default_value;
+        }
+        return data_[idx].second;
+    }
+    
+    // Access without bounds checking (insert if not found)
+    Value& operator[](const Key& key) {
+        size_type idx = find_index(key);
+        if (idx != MAX_SIZE) {
+            return data_[idx].second;
+        }
+        
+        // Insert with default value if not found and space available
+        if (size_ < MAX_SIZE) {
+            data_[size_] = std::make_pair(key, Value());
+            return data_[size_++].second;
+        }
+        
+        // Array full - return reference to static default
+        static Value default_value = Value();
+        return default_value;
+    }
+
+    // Modifiers
+    
+    // Insert pair
+    std::pair<iterator, bool> insert(const value_type& pair) {
+        size_type idx = find_index(pair.first);
+        if (idx != MAX_SIZE) {
+            // Already exists
+            return std::make_pair(iterator(data_, idx, size_), false);
+        }
+        
+        if (size_ >= MAX_SIZE) {
+            // Array full
+            return std::make_pair(end(), false);
+        }
+        
+        // Insert new element
+        data_[size_] = pair;
+        iterator result(data_, size_, size_ + 1);
+        ++size_;
+        return std::make_pair(result, true);
+    }
+    
+    // Insert with move semantics
+    std::pair<iterator, bool> insert(value_type&& pair) {
+        return insert(pair);
+    }
+    
+    // Insert range
+    template<typename InputIterator>
+    void insert(InputIterator first, InputIterator last) {
+        for (InputIterator it = first; it != last; ++it) {
+            insert(*it);
+        }
+    }
+    
+    // Insert or assign
+    std::pair<iterator, bool> insert_or_assign(const Key& key, const Value& value) {
+        size_type idx = find_index(key);
+        if (idx != MAX_SIZE) {
+            // Key exists, update value
+            data_[idx].second = value;
+            return std::make_pair(iterator(data_, idx, size_), false);
+        }
+        
+        // Key doesn't exist, insert new pair
+        return insert(std::make_pair(key, value));
+    }
+    
+    // Emplace
+    template<typename... Args>
+    std::pair<iterator, bool> emplace(Args&&... args) {
+        value_type pair(args...);
+        return insert(pair);
+    }
+    
+    // Try emplace
+    template<typename... Args>
+    std::pair<iterator, bool> try_emplace(const Key& key, Args&&... args) {
+        size_type idx = find_index(key);
+        if (idx != MAX_SIZE) {
+            // Key already exists
+            return std::make_pair(iterator(data_, idx, size_), false);
+        }
+        
+        if (size_ >= MAX_SIZE) {
+            // Array full
+            return std::make_pair(end(), false);
+        }
+        
+        // Construct new element
+        data_[size_] = std::make_pair(key, Value(args...));
+        iterator result(data_, size_, size_ + 1);
+        ++size_;
+        return std::make_pair(result, true);
+    }
+    
+    // Erase by key
+    size_type erase(const Key& key) {
+        size_type idx = find_index(key);
+        if (idx == MAX_SIZE) {
+            return 0; // Not found
+        }
+        
+        // Destroy the element
+        data_[idx].~value_type();
+        
+        // Shift elements down
+        for (size_type i = idx; i < size_ - 1; ++i) {
+            new (&data_[i]) value_type(data_[i + 1].first, data_[i + 1].second);
+            data_[i + 1].~value_type();
+        }
+        --size_;
+        return 1;
+    }
+    
+    // Erase by iterator
+    iterator erase(const_iterator position) {
+        if (position == end()) {
+            return end();
+        }
+        
+        // Calculate index from iterator position
+        size_type idx = position.pos_;
+        if (idx >= size_) {
+            return end();
+        }
+        
+        // Destroy the element
+        data_[idx].~value_type();
+        
+        // Shift elements down
+        for (size_type i = idx; i < size_ - 1; ++i) {
+            new (&data_[i]) value_type(data_[i + 1].first, data_[i + 1].second);
+            data_[i + 1].~value_type();
+        }
+        --size_;
+        
+        // Return iterator to next element (or end if we removed the last)
+        return iterator(data_, idx, size_);
+    }
+    
+    // Erase range
+    iterator erase(const_iterator first, const_iterator last) {
+        if (first == last) {
+            return iterator(data_, first.pos_, size_);
+        }
+        
+        // Simple implementation: erase elements one by one
+        iterator current(data_, first.pos_, size_);
+        while (current != end() && current.pos_ < last.pos_) {
+            current = erase(current);
+        }
+        return current;
+    }
+    
+    // Clear all elements
+    void clear() noexcept {
+        for (size_type i = 0; i < size_; ++i) {
+            data_[i].~value_type();
+        }
+        size_ = 0;
+    }
+
+    // Lookup operations
+    
+    // Find element
+    iterator find(const Key& key) {
+        size_type idx = find_index(key);
+        if (idx != MAX_SIZE) {
+            return iterator(data_, idx, size_);
+        }
+        return end();
+    }
+    
+    const_iterator find(const Key& key) const {
+        size_type idx = find_index(key);
+        if (idx != MAX_SIZE) {
+            return const_iterator(data_, idx, size_);
+        }
+        return end();
+    }
+    
+    // Count occurrences (0 or 1 for map)
+    size_type count(const Key& key) const {
+        return find_index(key) != MAX_SIZE ? 1 : 0;
+    }
+    
+    // Check if key exists (C++20)
+    bool contains(const Key& key) const {
+        return find_index(key) != MAX_SIZE;
+    }
+
+    // Bucket interface
+    size_type bucket_count() const noexcept {
+        return 1;
+    }
+    
+    size_type bucket_size(size_type /*bucket_index*/) const {
+        return size_;
+    }
+    
+    size_type bucket(const Key& /*key*/) const {
+        return 0;
+    }
+
+    // Hash policy
+    double load_factor() const noexcept {
+        return static_cast<double>(size_) / MAX_SIZE;
+    }
+    
+    double max_load_factor() const noexcept {
+        return 1.0;
+    }
+    
+    void reserve(size_type /*count*/) {
+        // No-op for fixed-size array
+    }
+
+    // Observers
+    hasher hash_function() const {
+        return hash_function_;
+    }
+    
+    key_equal key_eq() const {
+        return equal_function_;
+    }
+
+    // Comparison operators
+    bool operator==(const unordered_map& other) const {
+        if (size_ != other.size_) {
+            return false;
+        }
+        
+        // Check that all key-value pairs in this map exist in other
+        for (size_type i = 0; i < size_; ++i) {
+            const_iterator it = other.find(data_[i].first);
+            if (it == other.end() || !(it->second == data_[i].second)) {
+                return false;
+            }
+        }
+        return true;
+    }
+    
+    bool operator!=(const unordered_map& other) const {
+        return !(*this == other);
+    }
+};
+
+} // namespace std
+
+#endif // ESBMC_UNORDERED_MAP_H
