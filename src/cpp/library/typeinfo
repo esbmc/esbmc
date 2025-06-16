@@ -17,8 +17,18 @@ public:
   bool operator!=(const type_info &rhs) const;
   bool before(const type_info &rhs) const;
   const char *name() const;
+  virtual bool __do_catch(const type_info *__thr_type, void **__thr_obj, unsigned __outer) const
+  {
+    return *this == *__thr_type;
+  }
+
+protected:
+  explicit type_info(const char* __name) : __name(__name)
+  {
+  }
 
 private:
+  const char* __name;  
   type_info(const type_info &rhs);
   type_info &operator=(const type_info &rhs);
 };
