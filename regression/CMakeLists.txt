@@ -107,6 +107,7 @@ set(REGRESSIONS_CPP03 esbmc-cpp/cpp
                       esbmc-cpp/deque
                       esbmc-cpp/list
                       esbmc-cpp/map
+                      esbmc-cpp/unordered_map
                       esbmc-cpp/multimap
                       esbmc-cpp/multiset
                       esbmc-cpp/priority_queue
