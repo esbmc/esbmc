@@ -86,10 +86,10 @@ void goto_symext::symex_realloc(
   std::list<std::pair<expr2tc, expr2tc>> result_list;
   for (auto &item : internal_deref_items)
   {
-    expr2tc guard = item.guard;
+    expr2tc g = item.guard;
     cur_state->rename_address(item.object);
-    cur_state->guard.guard_expr(guard);
-    target->renumber(guard, item.object, realloc_size, cur_state->source);
+    cur_state->guard.guard_expr(g);
+    target->renumber(g, item.object, realloc_size, cur_state->source);
     type2tc new_ptr = pointer_type2tc(item.object->type);
     expr2tc addrof = address_of2tc(new_ptr, item.object);
     result_list.emplace_back(addrof, item.guard);
@@ -279,9 +279,9 @@ expr2tc goto_symext::symex_mem(
   expr2tc ptr_obj = pointer_object2tc(pointer_type2(), ptr_rhs);
 
   if (size_is_one)
-    track_new_pointer(ptr_obj, new_type);
+    track_new_pointer(ptr_obj, new_type, guard);
   else
-    track_new_pointer(ptr_obj, new_type, size);
+    track_new_pointer(ptr_obj, new_type, guard, size);
 
   alloc_guard.append(guard);
   dynamic_memory.emplace_back(
