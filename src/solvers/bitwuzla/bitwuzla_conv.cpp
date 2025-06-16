@@ -831,12 +831,13 @@ std::string bitwuzla_convt::dump_smt()
   const std::string &path = options.get_option("output");
 
   // Print formulas using binary bit-vector output format
-  if (path.empty() || path == "-") {
-  bitwuzla_print_formula(bitw, "smt2", stdout, 2);
-  }
-  else 
+  if (path.empty() || path == "-")
   {
-    FILE* file = fopen(path.c_str(), "w");
+    bitwuzla_print_formula(bitw, "smt2", stdout, 2);
+  }
+  else
+  {
+    FILE *file = fopen(path.c_str(), "w");
     if (!file)
     {
       log_error("Could not open output file '{}'", path);
@@ -847,7 +848,6 @@ std::string bitwuzla_convt::dump_smt()
   }
   log_status("SMT formula dumped successfully");
   return "SMT formula dumped successfully";
-
 }
 
 void bitw_smt_ast::dump() const

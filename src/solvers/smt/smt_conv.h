@@ -516,7 +516,7 @@ public:
   virtual smt_astt overflow_neg(const expr2tc &expr);
 
   /** Method to dump the SMT formula */
-  virtual std::string dump_smt(); 
+  virtual std::string dump_smt();
 
   //virtual void smt
 

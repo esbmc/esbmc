@@ -792,7 +792,6 @@ std::string boolector_convt::dump_smt()
   boolector_dump_smt2(btor, messaget::state.out);
   log_status("SMT formula dumped successfully");
   return "SMT formula dumped successfully";
-
 }
 
 void btor_smt_ast::dump() const

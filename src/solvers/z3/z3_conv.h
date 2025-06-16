@@ -210,7 +210,7 @@ public:
 
 private:
   void print_smt_formulae(std::ostream &dest);
-  
+
 public:
   virtual void output_smt();
   //  Must be first member; that way it's the last to be destroyed.
