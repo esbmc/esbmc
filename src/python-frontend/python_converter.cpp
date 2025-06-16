@@ -1072,7 +1072,7 @@ exprt python_converter::handle_string_comparison(
     assert(strncmp_symbol);
 
     if (rhs.type().is_array())
-    	rhs = get_array_base_address(rhs);
+      rhs = get_array_base_address(rhs);
 
     side_effect_expr_function_callt strncmp_call;
     strncmp_call.function() = symbol_expr(*strncmp_symbol);
@@ -1363,8 +1363,16 @@ bool python_converter::is_identity_function(
 
 void python_converter::ensure_string_array(exprt &expr)
 {
+  if (expr.is_member())
+  {
+    const exprt &op0 = expr.op0();
+    const irep_idt &identifier = to_symbol_expr(op0).get_identifier();
+    const symbolt *s = ns.lookup(identifier);
+    s->dump();
+  }
+
   if (expr.type().is_pointer())
-	  return;
+    return;
 
   if (!expr.type().is_array())
   {
@@ -2557,7 +2565,7 @@ void python_converter::get_var_assign(
         lhs_symbol->type = rhs.type();
         lhs.type() = rhs.type();
       }
-      if (!rhs.type().is_empty())
+      if (!rhs.type().is_empty() && !is_ctor_call)
         lhs_symbol->value = rhs;
     }
 
@@ -2580,6 +2588,16 @@ void python_converter::get_var_assign(
 
         update_instance_from_self(
           func_name, func_name, lhs_symbol->id.as_string());
+
+        lhs_symbol->value = gen_zero(current_element_type, true);
+        lhs_symbol->value.zero_initializer(true);
+
+        code_declt decl(symbol_expr(*lhs_symbol));
+        decl.location() = location_begin;
+        target_block.copy_to_operands(decl);
+
+        target_block.copy_to_operands(rhs);
+        return;
       }
       // op0() refers to the left-hand side (lhs) of the function call
       if (!rhs.type().is_empty())
@@ -2965,7 +2983,8 @@ void python_converter::get_attributes_from_self(
       stmt["target"]["value"]["id"] == "self")
     {
       std::string attr_name = stmt["target"]["attr"];
-      const std::string& annotated_type = stmt["annotation"]["id"].get<std::string>();
+      const std::string &annotated_type =
+        stmt["annotation"]["id"].get<std::string>();
       typet type;
       if (annotated_type == "str")
       {

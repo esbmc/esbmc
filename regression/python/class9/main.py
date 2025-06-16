@@ -3,7 +3,7 @@ class BankAccount:
         self.owner = owner
         
 account = BankAccount("Alice")
-#assert account.owner == "Alice"
+assert account.owner == "Alice"
 
 #strcmp call:
 
