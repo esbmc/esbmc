@@ -92,11 +92,10 @@ jobs:
       run: rm -rf clang*
     - name: Run clang-format on src & unit
       run: |
-        find src unit -iname '*.h' -o -iname '*.c' -o -iname '*.cpp' -o -iname '*.hpp' -o -iname '*.hh' \
-         | grep -v src/ansi-c/cpp \
-         | grep -v src/clang-c-frontend/headers/ \
-         | grep -v src/c2goto/library/libm/musl \
-         | xargs clang+llvm-11.0.0-x86_64-linux-gnu-ubuntu-20.04/bin/clang-format -style=file -i -fallback-style=none      
+          find src -iname *.h -o -iname *.c -o -iname *.cpp -o -iname *.hpp -iname *.hh |
+          grep -v src/ansi-c/cpp | grep -v src/clang-c-frontend/headers/ | 
+          grep -v src/c2goto/library/libm/musl | 
+          xargs .././clang11/bin/clang-format -style=file -i -fallback-style=none
     # Clean up any local changes before auto-commit
     - name: Reset local changes before auto-commit
     if: ${{ ! startsWith(github.head_ref, 'fb/') }}
