@@ -1142,6 +1142,11 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
         t.is_unsignedbv());
       expr.type() = t;
     }
+    else if (identifier == "__builtin_is_constant_evaluated")
+    {
+      exprt new_expr = false_exprt();
+      expr.swap(new_expr);
+    }
   }
 
   // Restore location
