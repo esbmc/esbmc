@@ -998,10 +998,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     {
       const clang::QualType qtype = cxxtid.getExprOperand()->getType();
       if (!cxxtid.isMostDerived(*ASTContext) && qtype->getAsCXXRecordDecl())
-      {
-        log_error("Typeid for polymorphism is not implemented");
-        abort();
-      }
+        log_warning("Typeid for polymorphism is not implemented");
       type_name = qtype.getAsString();
     }
 
@@ -1017,11 +1014,11 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (get_type(cxxtid.getType(), t))
       return true;
 
-    // In the front-end implementation, constant struct is constructed and 
+    // In the front-end implementation, constant struct is constructed and
     // assigned to the temporary object
     // tmp = { .__name=&"int"[0], .std::type_info@vtable_pointer=0 }
     // const std::type_info& = &tmp
-    // Front end can't account for polymorphism 
+    // Front end can't account for polymorphism
     exprt sym("struct", t);
     sym.copy_to_operands(address_of_exprt(string_name));
     sym.copy_to_operands(gen_zero(pointer_type()));
