@@ -66,6 +66,9 @@ void terminate() throw()
   terminate_pf();
 }
 
+// Hack for the GUN library
+#ifndef __EXCEPTION_H
+#define __EXCEPTION_H 1
 class exception
 {
 public:
@@ -88,7 +91,7 @@ public:
     return "std::exception";
   }
 };
-
+#endif
 /** If an %exception is thrown which is not listed in a function's
  *  %exception specification, one of these may be thrown.
  **/
