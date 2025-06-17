@@ -1363,13 +1363,13 @@ bool python_converter::is_identity_function(
 
 void python_converter::ensure_string_array(exprt &expr)
 {
-  if (expr.is_member())
-  {
-    const exprt &op0 = expr.op0();
-    const irep_idt &identifier = to_symbol_expr(op0).get_identifier();
-    const symbolt *s = ns.lookup(identifier);
-    s->dump();
-  }
+//  if (expr.is_member())
+//  {
+//    const exprt &op0 = expr.op0();
+//    const irep_idt &identifier = to_symbol_expr(op0).get_identifier();
+//    const symbolt *s = ns.lookup(identifier);
+//    s->dump();
+//  }
 
   if (expr.type().is_pointer())
     return;
@@ -1917,8 +1917,9 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     else // Handle Python str literals
     {
       const std::string &str_val = value.get<std::string>();
-      t = type_handler_.get_typet("str", str_val.size());
+      t = type_handler_.get_typet("str", str_val.size() + 1);
       string_literal.assign(str_val.begin(), str_val.end());
+      string_literal.push_back('\0');
     }
 
     exprt expr = make_char_array_expr(string_literal, t);
@@ -2589,6 +2590,7 @@ void python_converter::get_var_assign(
         update_instance_from_self(
           func_name, func_name, lhs_symbol->id.as_string());
 
+#if 0
         lhs_symbol->value = gen_zero(current_element_type, true);
         lhs_symbol->value.zero_initializer(true);
 
@@ -2598,6 +2600,7 @@ void python_converter::get_var_assign(
 
         target_block.copy_to_operands(rhs);
         return;
+#endif
       }
       // op0() refers to the left-hand side (lhs) of the function call
       if (!rhs.type().is_empty())
