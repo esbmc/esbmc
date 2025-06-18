@@ -38,7 +38,6 @@ error() {
 ubuntu_setup () {
     # Tested on ubuntu 22.04
     PKGS="\
-        clang-$CLANG_VERSION clang-tidy-$CLANG_VERSION \
         python-is-python3 csmith python3 \
         git ccache unzip wget curl libcsmith-dev gperf \
         libgmp-dev cmake bison flex g++-multilib linux-libc-dev \
@@ -138,6 +137,7 @@ usage() {
     echo "  -c VERS    use packaged clang-VERS in a shared build on Ubuntu [11]"
     echo "  -C         build an SV-COMP version [disabled]"
     echo "  -B ON|OFF  enable/disable esbmc bundled libc [ON]"
+    echo "  -x ON|OFF  enable/disable esbmc cheri [OFF]"
     echo
     echo "This script prepares the environment, downloads dependencies, configures"
     echo "the ESBMC build and runs the commands to compile and install ESBMC into"
@@ -149,7 +149,7 @@ usage() {
 }
 
 # Setup build flags (release, debug, sanitizer, ...)
-while getopts hb:s:e:r:dS:c:CB: flag
+while getopts hb:s:e:r:dS:c:CB:x flag
 do
     case "${flag}" in
     h) usage; exit 0 ;;
@@ -164,7 +164,7 @@ do
     C) BASE_ARGS="$BASE_ARGS -DESBMC_SVCOMP=ON"
        SOLVER_FLAGS="\
           -DENABLE_BOOLECTOR=On \
-          -DENABLE_YICES=ON \
+          -DENABLE_YICES=On \
           -DENABLE_CVC4=OFF \
           -DENABLE_BITWUZLA=On \
           -DENABLE_Z3=On \
@@ -172,6 +172,7 @@ do
           -DENABLE_GOTO_CONTRACTOR=On \
           -DACADEMIC_BUILD=ON"  ;;
     B) BASE_ARGS="$BASE_ARGS -DESBMC_BUNDLE_LIBC=$OPTARG" ;;
+    x) BASE_ARGS="$BASE_ARGS -DESBMC_CHERI=ON" ;;
     *) exit 1 ;;
     esac
 done

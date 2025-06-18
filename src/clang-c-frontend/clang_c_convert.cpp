@@ -2876,6 +2876,7 @@ void clang_c_convertert::rewrite_builtin_ref(
     "__builtin_memcpy",
     "__builtin_memmove",
     "__builtin_strcpy",
+    "__builtin_strcmp",
     "__builtin_free",
     "__builtin_strlen",
   };

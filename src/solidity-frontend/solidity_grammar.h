@@ -18,6 +18,7 @@ enum ContractBodyElementT
   EnumDef,     // rule enum-definition
   ErrorDef,    // rule error-definition
   EventDef,    // rule event-definition
+  UsingForDef, // rule using-for-directive
   ContractBodyElementTError
 };
 ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element);
@@ -369,6 +370,9 @@ enum ExpressionT
   // see https://docs.soliditylang.org/en/v0.8.23/units-and-global-variables.html#members-of-address-types
   AddressMemberCall,
 
+  // library function call
+  LibraryMemberCall,
+
   // Type Converion
   TypeConversionExpression,
 
@@ -395,6 +399,7 @@ ExpressionT
 get_unary_expr_operator_t(const nlohmann::json &expr, bool uo_pre = true);
 const char *expression_to_str(ExpressionT type);
 bool is_address_member_call(const nlohmann::json &expr);
+bool is_sol_library_function(const int ref_id);
 
 // auxiliary type to convert function call
 // No corresponding Solidity rules

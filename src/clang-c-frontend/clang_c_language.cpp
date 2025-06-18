@@ -44,6 +44,7 @@ void clang_c_languaget::build_include_args(
   {
     compiler_args.push_back("-isystem");
     compiler_args.push_back(*libc_headers);
+    compiler_args.push_back("-Wno-implicit-function-declaration");
   }
 
   compiler_args.push_back("-resource-dir");
@@ -121,6 +122,7 @@ void clang_c_languaget::build_compiler_args(
     bool is_purecap = config.ansi_c.cheri == configt::ansi_ct::CHERI_PURECAP;
     compiler_args.emplace_back(
       "-cheri=" + std::to_string(config.ansi_c.capability_width()));
+    compiler_args.emplace_back("-cheri-bounds=subobject-safe");
 
     if (config.ansi_c.target
           .is_riscv()) /* unused as of yet: arch is mips64el */
@@ -170,7 +172,6 @@ void clang_c_languaget::build_compiler_args(
 
     /* TODO: DEMO */
     compiler_args.emplace_back("-D__builtin_cheri_tag_get(p)=1");
-    compiler_args.emplace_back("-D__builtin_clzll(n)=__esbmc_clzll(n)");
 
     switch (config.ansi_c.cheri)
     {
@@ -238,6 +239,7 @@ void clang_c_languaget::build_compiler_args(
     compiler_args.push_back("-D_INC_TIME_INL");
     compiler_args.push_back("-D__CRT__NO_INLINE");
     compiler_args.push_back("-D_USE_MATH_DEFINES");
+    compiler_args.push_back("-Wno-implicit-function-declaration");
   }
 
 #if ESBMC_SVCOMP
@@ -451,9 +453,14 @@ void __VERIFIER_assume(int);
 void __VERIFIER_atomic_begin();
 void __VERIFIER_atomic_end();
 
+/* Support for CPROVER R_OK: This should return True if reading length bytes 
+ * of addr will not extrapolate the object that addr is pointing to.
+ */
+_Bool __ESBMC_r_ok(void *, unsigned long);
+
 /* Causes a verification error when its call is reachable; internal use in math
  * models */
-void __ESBMC_unreachable();
+_Noreturn void __ESBMC_unreachable();
 /* Quantifiers
  * Right now we only support one element and they transform the symbol into a nondet one (for the closure)
  * For example:
@@ -481,6 +488,11 @@ __UINT32_TYPE__ __esbmc_cheri_type_get(void *__capability);
 _Bool __esbmc_cheri_sealed_get(void *__capability);
 #endif
 __UINT64_TYPE__ __esbmc_clzll(__UINT64_TYPE__);
+
+struct cap_info {__SIZE_TYPE__ base; __SIZE_TYPE__ top;};
+
+__attribute__((annotate("__ESBMC_inf_size")))
+struct cap_info __ESBMC_cheri_info[1];
     )";
   }
 

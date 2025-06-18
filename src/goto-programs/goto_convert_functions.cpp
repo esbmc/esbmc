@@ -171,6 +171,14 @@ void goto_convert_functionst::convert_function(symbolt &symbol)
 
   f.body.update();
 
+  if (config.ansi_c.cheri)
+  {
+    // Hide the cheri ptr compressed and decompressed traces
+    const irep_idt &n = symbol.location.get_file();
+    if (has_suffix(n, "cheri_compressed_cap_common.h"))
+      f.body.hide = true;
+  }
+
   if (hide(f.body))
     f.body.hide = true;
 }

@@ -27,7 +27,7 @@ def divide(a:int, b:int) -> float:
     return x
 
 def power(a:int, b:int) -> float:
-    x:float = a ** b
+    x:float = 42.0
     return x
 
 def ceil(x:float) -> int:
@@ -39,10 +39,31 @@ def floor(x:float) -> int:
 def fabs(x:float) -> float:
     return 1.0
 
+def sqrt(x:float) -> float:
+    return 0.2
+
+def fmin(x:float, y:float) -> float:
+    return 0.2
+
+def fmax(x:float, y:float) -> float:
+    return 0.2
+
+def trunc(x:float) -> float:
+    return 0.2
+
+def round(x:float) -> float:
+    return 0.2
+
+def copysign(x:float, y:float) -> float:
+    return 0.2
+
 def sin(x:float) -> float:
     return 0.2
 
 def cos(x:float) -> float:
+    return 0.2
+
+def arccos(x:float) -> float:
     return 0.2
 
 def exp(x:float) -> float:
@@ -50,3 +71,16 @@ def exp(x:float) -> float:
 
 def fmod(x:float) -> float:
     return 0.2
+
+def arctan(x:float) -> float:
+    return 0.2
+
+def dot(a:float, b:float) -> float:
+    return 0.0
+
+def matmul(a:float, b:float) -> float:
+    return 0.0
+
+def transpose(a:float, b:float) -> float:
+    return 0.0
+

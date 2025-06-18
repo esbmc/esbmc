@@ -8,7 +8,6 @@
 #include "iostream"
 #include "cstdlib"
 
-size_t npos;
 extern "C" void itoa(int value, char *str, int base);
 
 namespace std
@@ -22,6 +21,7 @@ struct char_traits
 class string
 {
 public:
+  static const size_t npos = static_cast<size_t>(-1);
   char *str;
   int _size;
 
@@ -49,14 +49,14 @@ public:
       pointer = p_pointer;
     }
 
-    iterator &operator=(const_iterator &right)
+    iterator &operator=(const const_iterator &right)
     {
       this->pointer = right.pointer;
       this->pos = right.pos;
       return *this;
     }
 
-    iterator &operator=(iterator &right)
+    iterator &operator=(const iterator &right)
     {
       this->pointer = right.pointer;
       this->pos = right.pos;
@@ -424,7 +424,7 @@ public:
   string &operator=(const char *s);
   string &operator=(char c);
   string &operator=(const string &str);
-  string &operator+=(string &s);
+  string &operator+=(const string &s);
   string &operator+=(const char *s);
   string &operator+=(char s);
   //TODO: operator+
@@ -1411,7 +1411,7 @@ __ESBMC_HIDE:
  return next;
  }
  */
-string &string::operator+=(string &s)
+string &string::operator+=(const string &s)
 {
 __ESBMC_HIDE:
   __ESBMC_assert(s.str != NULL, "The parameter must to be different than NULL");

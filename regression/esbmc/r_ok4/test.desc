@@ -1,0 +1,4 @@
+CORE
+main.c
+--no-pointer-check  --force-malloc-success
+^VERIFICATION SUCCESSFUL$

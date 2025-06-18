@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: TypeError: hex\(\) argument must be an integer$

@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--unwind 6 --goto-unwind --no-bounds-check --no-pointer-check --no-div-by-zero-check
+^VERIFICATION SUCCESSFUL$

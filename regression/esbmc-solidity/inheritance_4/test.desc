@@ -1,4 +1,4 @@
 CORE
 inheritance.solast
---function test_inheritance --sol inheritance.sol --no-standard-checks
+--function test_inheritance --sol inheritance.sol --no-standard-checks --k-induction
 ^VERIFICATION SUCCESSFUL$

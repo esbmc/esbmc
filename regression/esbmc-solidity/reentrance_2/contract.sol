@@ -56,4 +56,3 @@ contract Reproduction {
     }
 }
 
-

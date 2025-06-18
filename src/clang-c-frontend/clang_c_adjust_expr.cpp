@@ -265,6 +265,14 @@ void clang_c_adjust::adjust_member(member_exprt &expr)
     deref.move_to_operands(base);
     base.swap(deref);
   }
+  else if (base.type().is_array())
+  {
+    exprt index("index");
+    index.type() = base.type().subtype();
+    index.move_to_operands(base);
+    index.copy_to_operands(gen_zero(index_type()));
+    base.swap(index);
+  }
 }
 
 void clang_c_adjust::adjust_expr_shifts(exprt &expr)
@@ -1133,6 +1141,11 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
         t.is_floatbv() || t.is_vector() || t.is_signedbv() ||
         t.is_unsignedbv());
       expr.type() = t;
+    }
+    else if (identifier == "__builtin_is_constant_evaluated")
+    {
+      exprt new_expr = false_exprt();
+      expr.swap(new_expr);
     }
   }
 

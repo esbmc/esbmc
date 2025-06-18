@@ -127,6 +127,18 @@ get_object_alias(const JsonType &ast, const std::string &obj_name)
       }
     }
   }
+
+  std::size_t dot_pos = obj_name.rfind('.');
+  if (dot_pos == std::string::npos)
+    return obj_name;
+
+  std::string prefix = obj_name.substr(0, dot_pos);
+  std::string suffix = obj_name.substr(dot_pos);
+  std::string resolved_prefix = get_object_alias(ast, prefix);
+
+  if (resolved_prefix != prefix)
+    return resolved_prefix + suffix;
+
   return obj_name;
 }
 

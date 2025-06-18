@@ -372,7 +372,7 @@ public:
   };
 
   // construct/copy/destroy:
-  explicit multiset(const Compare &comp = Compare()) : _size(0)
+  explicit multiset(const Compare &comp) : _size(0) 
   {
   }
 

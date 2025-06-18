@@ -31,6 +31,36 @@ public:
   static bool is_low_level_call(const std::string &name);
   static bool is_low_level_property(const std::string &name);
 
+  // find reference
+  static const nlohmann::json &
+  find_last_parent(const nlohmann::json &json, const nlohmann::json &target);
+  static const nlohmann::json &find_parent_contract(
+    const nlohmann::json &json,
+    const nlohmann::json &target);
+  static const nlohmann::json &
+  find_decl_ref_in_contract(const nlohmann::json &j, int ref_id);
+  static const nlohmann::json &
+  find_decl_ref_global(const nlohmann::json &j, int ref_id);
+  static const nlohmann::json &
+  find_decl_ref_unique_id(const nlohmann::json &json, int ref_id);
+  static const nlohmann::json &
+  find_decl_ref(const nlohmann::json &json, int ref_id);
+  static const nlohmann::json &find_constructor_ref(int ref_decl_id);
+  static const nlohmann::json &
+  find_constructor_ref(const std::string &contract_name);
+
+  // json nodes that always empty
+  // used as the return value for find_constructor_ref when
+  // dealing with the implicit constructor call
+  // this is to avoid reference to stack memory associated with local variable returned
+  static const nlohmann::json empty_json;
+  //! Be careful of using 'current_contractName'. This might lead to trouble in inheritance.
+  //! If you are not sure, use 'get_current_contract_name' instead.
+  static std::string current_baseContractName;
+
+  // json for Solidity AST. Use object for contract
+  static nlohmann::json src_ast_json;
+
 protected:
   typedef struct func_sig
   {
@@ -40,6 +70,7 @@ protected:
     code_typet type;
     bool is_payable;
     bool is_inherit;
+    bool is_library;
 
     func_sig(
       const std::string &name,
@@ -47,13 +78,15 @@ protected:
       const std::string &visibility,
       const code_typet &type,
       bool is_payable,
-      bool is_inherit)
+      bool is_inherit,
+      bool is_library)
       : name(name),
         id(id),
         visibility(visibility),
         type(type),
         is_payable(is_payable),
-        is_inherit(is_inherit)
+        is_inherit(is_inherit),
+        is_library(is_library)
     {
     }
 
@@ -70,6 +103,7 @@ protected:
     nlohmann::json &sorted_files);
   void contract_precheck();
   bool populate_auxilary_vars();
+  bool get_esbmc_sol_init();
   bool
   populate_function_signature(nlohmann::json &json, const std::string &cname);
   bool populate_low_level_functions(const std::string &cname);
@@ -105,7 +139,38 @@ protected:
     const std::string c_name,
     std::string &name,
     std::string &id);
-  void get_static_contract_instance(const std::string c_name, symbolt &sym);
+  void add_static_contract_instance(const std::string c_name);
+  void
+  get_static_contract_instance_ref(const std::string &c_name, exprt &new_expr);
+  void get_inherit_static_contract_instance_name(
+    const std::string bs_c_name,
+    const std::string c_name,
+    std::string &name,
+    std::string &id);
+  void get_inherit_static_contract_instance(
+    const std::string bs_c_name,
+    const std::string c_name,
+    const nlohmann::json &args_list,
+    symbolt &sym);
+  void get_inherit_ctor_definition(const std::string c_name, exprt &new_expr);
+  void get_inherit_ctor_definition_name(
+    const std::string c_name,
+    std::string &name,
+    std::string &id);
+  void get_contract_mutex_name(
+    const std::string c_name,
+    std::string &name,
+    std::string &id);
+  void get_contract_mutex_expr(
+    const std::string c_name,
+    const exprt &this_expr,
+    exprt &expr);
+  bool get_high_level_call_wrapper(
+    const std::string c_name,
+    const exprt &this_expr,
+    exprt &front_block,
+    exprt &back_block);
+  bool is_sol_builin_symbol(const std::string &cname, const std::string &name);
 
   // handle the non-contract definition, including struct/enum/error/event/abstract/...
   bool get_noncontract_defition(nlohmann::json &ast_node);
@@ -136,6 +201,11 @@ protected:
   bool move_initializer_to_ctor(
     const nlohmann::json *based_contracts,
     const std::string contract_name);
+  bool move_initializer_to_ctor(
+    const nlohmann::json *based_contracts,
+    const std::string contract_name,
+    bool is_aux_ctor);
+  bool move_initializer_to_main(codet &func_body);
   bool move_inheritance_to_ctor(
     const nlohmann::json *based_contracts,
     const std::string contract_name,
@@ -169,7 +239,12 @@ protected:
     const typet &dest_type,
     exprt &new_expr);
   bool get_binary_operator_expr(const nlohmann::json &expr, exprt &new_expr);
-  bool get_compound_assign_expr(const nlohmann::json &expr, exprt &new_expr);
+  bool get_compound_assign_expr(
+    const nlohmann::json &expr,
+    exprt &lhs,
+    exprt &rhs,
+    typet &common_type,
+    exprt &new_expr);
   bool get_unary_operator_expr(
     const nlohmann::json &expr,
     const nlohmann::json &literal_type,
@@ -244,8 +319,13 @@ protected:
     const nlohmann::json &ast_node,
     std::string &contract_name);
   bool get_library_function_call(
+    const nlohmann::json &decl_ref,
+    const nlohmann::json &caller,
+    side_effect_expr_function_callt &call);
+  bool get_library_function_call(
     const exprt &func,
     const typet &t,
+    const nlohmann::json &decl_ref,
     const nlohmann::json &caller,
     side_effect_expr_function_callt &call);
   void get_library_function_call_no_args(
@@ -269,7 +349,7 @@ protected:
   void get_memcpy_function_call(
     const locationt &loc,
     side_effect_expr_function_callt &_call);
-  bool is_library_function(const std::string &id);
+  bool is_esbmc_library_function(const std::string &id);
   bool get_empty_array_ref(const nlohmann::json &ast_node, exprt &new_expr);
   void get_aux_array_name(std::string &aux_name, std::string &aux_id);
   void get_aux_array(const exprt &src_expr, exprt &new_expr);
@@ -310,17 +390,36 @@ protected:
   get_string_assignment(const exprt &lhs, const exprt &rhs, exprt &new_expr);
 
   // mapping
-  bool get_mapping_type(const nlohmann::json &ast_node, typet &t);
-  bool get_mapping_key_expr(
-    const std::string &current_contractName,
-    const symbolt &sym,
-    const std::string &postfix,
+  void get_mapping_inf_arr_name(
+    const std::string &cname,
+    const std::string &name,
+    std::string &arr_name,
+    std::string &arr_id);
+  bool is_mapping_set_lvalue(const nlohmann::json &json);
+  bool get_mapping_key_value_type(
+    const nlohmann::json &map_node,
+    typet &key_t,
+    typet &value_t,
+    std::string &key_sol_type,
+    std::string &val_sol_type);
+  void gen_mapping_key_typecast(
+    exprt &pos,
+    const locationt &l,
+    const std::string &key_sol_type);
+  bool get_new_mapping_index_access(
+    const typet &value_t,
+    const std::string &val_sol_type,
+    bool is_mapping_set,
+    const exprt &array,
+    const exprt &pos,
+    const locationt &location,
     exprt &new_expr);
-  void get_mapping_key_name(
-    const std::string &m_name,
-    const std::string &m_id,
-    std::string &k_name,
-    std::string &k_id);
+  void get_mapping_struct_function(
+    const typet &struct_t,
+    std::string &struct_contract_name,
+    const side_effect_expr_function_callt &gen_call,
+    exprt &new_expr);
+  void extract_new_contracts();
 
   // line number and locations
   void
@@ -342,22 +441,6 @@ protected:
   bool multi_contract_verification_unbound(std::set<std::string> &tgt_set);
   void reset_auxiliary_vars();
 
-  // find reference
-  const nlohmann::json &
-  find_last_parent(const nlohmann::json &json, const nlohmann::json &target);
-  const nlohmann::json &find_parent_contract(
-    const nlohmann::json &json,
-    const nlohmann::json &target);
-  const nlohmann::json &
-  find_decl_ref_in_contract(const nlohmann::json &j, int ref_id);
-  const nlohmann::json &
-  find_decl_ref_global(const nlohmann::json &j, int ref_id);
-  const nlohmann::json &
-  find_decl_ref_unique_id(const nlohmann::json &json, int ref_id);
-  const nlohmann::json &find_decl_ref(const nlohmann::json &json, int ref_id);
-  const nlohmann::json &find_constructor_ref(int ref_decl_id);
-  const nlohmann::json &find_constructor_ref(const std::string &contract_name);
-
   // auxiliary functions
   std::string get_modulename_from_path(std::string path);
   std::string get_filename_from_path(std::string path);
@@ -373,7 +456,6 @@ protected:
   std::string get_array_size(const nlohmann::json &type_descrpt);
   void get_size_of_expr(const typet &elem_type, exprt &size_of_expr);
   bool is_dyn_array(const nlohmann::json &json_in);
-  bool is_mapping(const nlohmann::json &ast_node);
   bool is_func_sig_cover(const std::string &derived, const std::string &base);
   bool is_var_getter_matched(
     const std::string &cname,
@@ -412,14 +494,27 @@ protected:
     const std::string c_name);
   void move_builtin_to_contract(
     const std::string cname,
-    const std::string &name,
-    const typet &t,
+    const exprt &sym,
+    bool is_method);
+  void move_builtin_to_contract(
+    const std::string cname,
+    const exprt &sym,
+    const std::string &access,
     bool is_method);
   const nlohmann::json &
   get_func_decl_ref(const std::string &c_name, const std::string &f_name);
   void get_builtin_property_expr(
+    const std::string &cname,
     const std::string &name,
     const exprt &base,
+    const locationt &loc,
+    exprt &new_expr);
+  void get_aux_property_function(
+    const std::string &cname,
+    const exprt &addr,
+    const typet &return_t,
+    const locationt &loc,
+    const std::string &property_name,
     exprt &new_expr);
   bool get_new_temporary_obj(
     const std::string &c_name,
@@ -430,10 +525,6 @@ protected:
     codet &decl);
   void
   get_addr_expr(const std::string &cname, const exprt &base, exprt &new_expr);
-  bool set_addr_cname_mapping(
-    const std::string &cname,
-    const exprt &base,
-    exprt &new_expr);
   void get_new_object(const typet &t, exprt &this_object);
   bool get_high_level_member_access(
     const nlohmann::json &expr,
@@ -468,6 +559,7 @@ protected:
   bool get_send_definition(const std::string &cname, exprt &new_expr);
   bool model_transaction(
     const nlohmann::json &expr,
+    const exprt &this_expr,
     const exprt &base,
     const exprt &value,
     const locationt &loc,
@@ -475,10 +567,10 @@ protected:
     exprt &back_block);
 
   bool get_bind_cname_expr(const nlohmann::json &json, exprt &bind_cname_expr);
-  void get_nondet_contract_name(
-    const exprt src_expr,
-    const typet dest_type,
-    exprt &new_expr);
+  void get_bind_cname_func_name(
+    const std::string &cname,
+    std::string &fname,
+    std::string &fid);
   void get_nondet_expr(const typet &t, exprt &new_expr);
   bool assign_nondet_contract_name(const std::string &_cname, exprt &new_expr);
   bool assign_param_nondet(
@@ -506,8 +598,6 @@ protected:
   namespacet ns;
   // json for Solidity AST. Use vector for multiple contracts
   nlohmann::json src_ast_json_array = nlohmann::json::array();
-  // json for Solidity AST. Use object for contract
-  nlohmann::json src_ast_json;
   // Solidity contracts/ function to be verified
   const std::string &tgt_cnts;
   const std::string &tgt_func;
@@ -535,10 +625,6 @@ protected:
   std::stack<const nlohmann::json *> current_BinOp_type;
   std::string current_functionName;
 
-  //! Be careful of using 'current_contractName'. This might lead to trouble in inheritance.
-  //! If you are not sure, use 'get_current_contract_name' instead.
-  std::string current_baseContractName;
-
   // Auxiliary data structures:
   // Mapping from the node 'id' to the exported symbol (i.e. contract, error, constant var ....)
   std::unordered_map<int, std::string> exportedSymbolsList;
@@ -554,6 +640,8 @@ protected:
   // contract name list
   std::unordered_map<int, std::string> contractNamesMap;
   std::set<std::string> contractNamesList;
+  // for mapping hack
+  std::set<std::string> newContractSet;
   // Store the ast_node["id"] of struct/error
   // where entity contains "members": [{}, {}...]
   std::unordered_map<int, std::string> member_entity_scope;
@@ -569,17 +657,14 @@ protected:
   // The prefix for the id of each class
   std::string prefix = "tag-";
 
-  // json nodes that always empty
-  // used as the return value for find_constructor_ref when
-  // dealing with the implicit constructor call
-  // this is to avoid reference to stack memory associated with local variable returned
-  static const nlohmann::json empty_json;
-
   // for auxiliary var name
   int aux_counter;
 
   // bound setting
   bool is_bound;
+
+  // reentry-check setting
+  bool is_reentry_check;
 
   // NONDET
   side_effect_expr_function_callt nondet_bool_expr;
