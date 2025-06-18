@@ -245,7 +245,7 @@ public:
   typedef const_pointer const_iterator;
 
   // construct:
-  explicit vector() : _size(0), _capacity(1)
+  vector() : _size(0), _capacity(1)
   {
     buf = static_cast<T*>(malloc(sizeof(T) * 10));
     __ESBMC_assume(buf);
@@ -267,7 +267,7 @@ public:
     }
   }
 #endif
-  explicit vector(iterator t1, iterator t2) : _size(0)
+  vector(iterator t1, iterator t2) : _size(0)
   {
     int count = 0;
     iterator tmp = t1;
@@ -313,7 +313,7 @@ public:
     _capacity = _size;
   }
 
-  explicit vector(size_type n, const T &x)
+  vector(size_type n, const T &x)
   {
     buf = static_cast<T*>(malloc(sizeof(T) * n));
     __ESBMC_assume(buf);
