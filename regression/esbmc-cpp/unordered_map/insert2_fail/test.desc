@@ -1,4 +1,4 @@
 CORE
 main.cpp
---incremental-bmc
+--unwind 10
 ^VERIFICATION FAILED$
