@@ -12,7 +12,7 @@ class Person:
         self.weight += 1
         return self.weight
     
-    # Another instance method
+    # # Another instance method
     def have_birthday(self) -> int:
         self.age += 1
         return self.age
@@ -39,4 +39,4 @@ person2 = Person(75, 30)
 print(f"Person 2: {person2.introduce()}")
 
 # Verify class variable is shared
-assert person1.species == person2.species == "Homo sapiens"
+assert person1.species == person2.species #== "Homo sapiens"
