@@ -90,38 +90,34 @@ jobs:
       run: find unit -iname *.h -o -iname *.c -o -iname *.cpp -o -iname *.hpp -iname *.hh  | xargs ./clang/bin/clang-format -style=file -i -fallback-style=none
     - name: Delete downloaded Clang 11
       run: rm -rf clang*
-    - name: Run clang-format on src & unit
+    - name: Run clang-format
       run: |
-          find src -iname *.h -o -iname *.c -o -iname *.cpp -o -iname *.hpp -iname *.hh |
-          grep -v src/ansi-c/cpp | grep -v src/clang-c-frontend/headers/ | 
-          grep -v src/c2goto/library/libm/musl | 
-          xargs .././clang11/bin/clang-format -style=file -i -fallback-style=none
-    # Clean up any local changes before auto-commit
-    - name: Reset local changes before auto-commit
-    if: ${{ ! startsWith(github.head_ref, 'fb/') }}
-    run: git reset --hard
-    # Commit all changed files back to the repository
+          find src unit -iname '*.h' -o -iname '*.c' -o -iname '*.cpp' \
+            -o -iname '*.hpp' -o -iname '*.hh' \
+            | grep -v src/ansi-c/cpp \
+            | grep -v src/clang-c-frontend/headers/ \
+            | grep -v src/c2goto/library/libm/musl \
+            | xargs ./clang/bin/clang-format -style=file -i -fallback-style=none
+
     - name: Check for formatting issues
       run: git diff --exit-code --ignore-cr-at-eol
-    - name: Auto-commit changes (if any)
-      if: ${{ ! startsWith(github.head_ref, 'fb/') }}
     
     - name: Check for uncommitted changes
       if: ${{ ! startsWith(github.head_ref, 'fb/') }}
       run: git diff --exit-code --ignore-cr-at-eol
       
 
-  cmake-lint:
+cmake-lint:
     name: Check CMake modules
     runs-on: ubuntu-22.04
     continue-on-error: true # TODO: Eventually this will be removed
     steps:
-    - uses: actions/checkout@v4
-    - name: Set up Python 3.9
-      uses: actions/setup-python@v5
-      with:
+     - uses: actions/checkout@v4
+     - name: Set up Python 3.9
+       uses: actions/setup-python@v5
+       with:
         python-version: 3.9
-    - name: Install cmakelint
-      run: pip install cmakelint
-    - name: Run CMake Lint
-      run: find . -iname *.cmake -o -iname CMakeLists.txt | grep -v build | xargs cmakelint || echo "failure"
+     - name: Install cmakelint
+       run: pip install cmakelint
+     - name: Run CMake Lint
+       run: find . -iname *.cmake -o -iname CMakeLists.txt | grep -v build | xargs cmakelint || echo "failure"
