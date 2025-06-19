@@ -231,7 +231,7 @@ exprt function_call_expr::handle_hex(nlohmann::json &arg) const
       << std::llabs(int_value);
   const std::string hex_str = oss.str();
 
-  typet t = type_handler_.get_typet("str", hex_str.size());
+  typet t = type_handler_.get_typet("str", hex_str.size() + 1);
   std::vector<uint8_t> string_literal(hex_str.begin(), hex_str.end());
   return converter_.make_char_array_expr(string_literal, t);
 }
@@ -280,7 +280,7 @@ exprt function_call_expr::handle_oct(nlohmann::json &arg) const
   const std::string oct_str = oss.str();
 
   // Create a string type and return a character array expression
-  typet t = type_handler_.get_typet("str", oct_str.size());
+  typet t = type_handler_.get_typet("str", oct_str.size() + 1);
   std::vector<uint8_t> string_literal(oct_str.begin(), oct_str.end());
   return converter_.make_char_array_expr(string_literal, t);
 }
@@ -440,7 +440,6 @@ exprt function_call_expr::handle_str_symbol_to_int(const symbolt *sym) const
     return from_integer(0, type_handler_.get_typet("int", 0));
 
   const std::string &value = *value_opt;
-  printf("value: %s\n", value.c_str());
   if (value.empty() || !std::all_of(value.begin(), value.end(), ::isdigit))
   {
     log_error("Invalid string for integer conversion: \"{}\"", value);
@@ -645,8 +644,6 @@ exprt function_call_expr::build_constant_from_arg() const
   typet t = type_handler_.get_typet(func_name, arg_size);
   exprt expr = converter_.get_expr(arg);
   expr.type() = t;
-
-  expr.dump();
 
   return expr;
 }
