@@ -102,9 +102,10 @@ exprt function_call_expr::handle_int_to_str(nlohmann::json &arg) const
   // Convert string to vector of unsigned char
   std::vector<unsigned char> chars(str_val.begin(), str_val.end());
   // Get type for the array
-  typet t = type_handler_.get_typet("str", chars.size());
+  typet t = type_handler_.get_typet("str", chars.size() + 1);
   // Use helper to generate constant string expression
-  return converter_.make_char_array_expr(chars, t);
+  exprt str = converter_.make_char_array_expr(chars, t);
+  return str;
 }
 
 exprt function_call_expr::handle_float_to_str(nlohmann::json &arg) const
@@ -118,7 +119,7 @@ exprt function_call_expr::handle_float_to_str(nlohmann::json &arg) const
     str_val.pop_back();
 
   std::vector<unsigned char> chars(str_val.begin(), str_val.end());
-  typet t = type_handler_.get_typet("str", chars.size());
+  typet t = type_handler_.get_typet("str", chars.size() + 1);
   return converter_.make_char_array_expr(chars, t);
 }
 
@@ -388,6 +389,9 @@ function_call_expr::extract_string_from_symbol(const symbolt *sym) const
   {
     for (const auto &ch : val.operands())
     {
+      if (ch == gen_zero(ch.type()))
+    	  break;
+
       auto decoded = decode_char(ch);
       if (!decoded)
         return std::nullopt;
@@ -436,6 +440,7 @@ exprt function_call_expr::handle_str_symbol_to_int(const symbolt *sym) const
     return from_integer(0, type_handler_.get_typet("int", 0));
 
   const std::string &value = *value_opt;
+  printf("value: %s\n", value.c_str());
   if (value.empty() || !std::all_of(value.begin(), value.end(), ::isdigit))
   {
     log_error("Invalid string for integer conversion: \"{}\"", value);
@@ -588,10 +593,6 @@ exprt function_call_expr::build_constant_from_arg() const
   else if (func_name == "str" && arg["value"].is_number_float())
     return handle_float_to_str(arg);
 
-  // Handle str(): determine size of the resulting string constant
-  else if (func_name == "str")
-    arg_size = handle_str(arg);
-
   // Handle int(): convert string (from symbol) to int
   else if (func_name == "int" && arg["_type"] == "Name")
   {
@@ -636,10 +637,16 @@ exprt function_call_expr::build_constant_from_arg() const
   else if (func_name == "abs")
     return handle_abs(arg);
 
+  // Handle str(): determine size of the resulting string constant
+  else if (func_name == "str")
+    arg_size = handle_str(arg);
+
   // Construct expression with appropriate type
   typet t = type_handler_.get_typet(func_name, arg_size);
   exprt expr = converter_.get_expr(arg);
   expr.type() = t;
+
+  expr.dump();
 
   return expr;
 }
