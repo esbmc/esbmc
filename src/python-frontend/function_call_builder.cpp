@@ -8,7 +8,7 @@
 
 #include <boost/algorithm/string/predicate.hpp>
 
-const std::string kGetObjectSize = "__ESBMC_get_object_size";
+const std::string kGetObjectSize = "strlen";
 const std::string kEsbmcAssume = "__ESBMC_assume";
 const std::string kVerifierAssume = "__VERIFIER_assume";
 
