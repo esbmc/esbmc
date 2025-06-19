@@ -876,9 +876,9 @@ exprt python_converter::handle_string_concatenation(
   const nlohmann::json &left,
   const nlohmann::json &right)
 {
-  BigInt lhs_size = get_string_size(lhs);
-  BigInt rhs_size = get_string_size(rhs);
-  BigInt total_size = lhs_size + rhs_size;
+  BigInt lhs_size = get_string_size(lhs) - 1;
+  BigInt rhs_size = get_string_size(rhs) - 1;
+  BigInt total_size = lhs_size + rhs_size + 1;
 
   typet t = type_handler_.get_typet("str", total_size.to_uint64());
   exprt result = gen_zero(t);
@@ -887,8 +887,10 @@ exprt python_converter::handle_string_concatenation(
   auto append_from_symbol = [&](const std::string &id) {
     symbolt *symbol = symbol_table_.find_symbol(id);
     assert(symbol);
-    for (const exprt &ch : symbol->value.operands())
-      result.operands().at(i++) = ch;
+    for (const exprt &ch : symbol->value.operands()) {
+      if (ch != gen_zero(ch.type()))
+        result.operands().at(i++) = ch;
+    }
   };
 
   auto append_from_json = [&](const nlohmann::json &json) {
@@ -897,6 +899,8 @@ exprt python_converter::handle_string_concatenation(
 
     for (char ch : value)
     {
+      if (ch == 0)
+        break;
       BigInt v(ch);
       exprt char_expr = constant_exprt(
         integer2binary(v, bv_width(char_type)), integer2string(v), char_type);
@@ -913,6 +917,8 @@ exprt python_converter::handle_string_concatenation(
     append_from_symbol(rhs.identifier().as_string());
   else if (right["_type"] == "Constant")
     append_from_json(right);
+
+  result.operands().push_back(gen_zero(t.subtype()));
 
   return result;
 }
@@ -1037,6 +1043,7 @@ exprt python_converter::handle_string_comparison(
   }
 
   // Direct constant comparison if both are constants
+#if 0
   if (lhs.is_constant() && rhs.is_constant())
   {
     // For array constants, compare element by element
@@ -1061,30 +1068,11 @@ exprt python_converter::handle_string_comparison(
     bool constants_equal = (lhs == rhs);
     return gen_boolean((op == "Eq") ? constants_equal : !constants_equal);
   }
+#endif
 
   // Check for zero-length arrays
   if (is_zero_length_array(lhs) && is_zero_length_array(rhs))
     return gen_boolean(op == "Eq");
-
-  if (lhs.type().is_pointer() || rhs.type().is_pointer())
-  {
-    symbolt *strncmp_symbol = symbol_table_.find_symbol("c:@F@strcmp");
-    assert(strncmp_symbol);
-
-    if (rhs.type().is_array())
-      rhs = get_array_base_address(rhs);
-
-    side_effect_expr_function_callt strncmp_call;
-    strncmp_call.function() = symbol_expr(*strncmp_symbol);
-    strncmp_call.arguments() = {lhs, rhs};
-    strncmp_call.location() = get_location_from_decl(element);
-    strncmp_call.type() = int_type();
-
-    lhs = strncmp_call;
-    rhs = gen_zero(int_type());
-
-    return nil_exprt(); // continue with lhs OP rhs
-  }
 
   // Handle type mismatches to prevent crashes/array out of bounds
   if (lhs.type() != rhs.type())
@@ -1108,6 +1096,27 @@ exprt python_converter::handle_string_comparison(
     }
   }
 
+  /*if (lhs.type().is_pointer() || rhs.type().is_pointer())*/
+  {
+    symbolt *strncmp_symbol = symbol_table_.find_symbol("c:@F@strcmp");
+    assert(strncmp_symbol);
+
+    if (rhs.type().is_array())
+      rhs = get_array_base_address(rhs);
+
+    side_effect_expr_function_callt strncmp_call;
+    strncmp_call.function() = symbol_expr(*strncmp_symbol);
+    strncmp_call.arguments() = {lhs, rhs};
+    strncmp_call.location() = get_location_from_decl(element);
+    strncmp_call.type() = int_type();
+
+    lhs = strncmp_call;
+    rhs = gen_zero(int_type());
+
+    return nil_exprt(); // continue with lhs OP rhs
+  }
+
+#if 0
   // Make sure we have valid array types before proceeding to strncmp
   if (!lhs.type().is_array() || !rhs.type().is_array())
     return gen_boolean(op == "NotEq");
@@ -1131,6 +1140,7 @@ exprt python_converter::handle_string_comparison(
   rhs = gen_zero(int_type());
 
   return nil_exprt(); // continue with lhs OP rhs
+#endif
 }
 
 // Helper method to resolve symbol values to constants
