@@ -1927,9 +1927,14 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     else // Handle Python str literals
     {
       const std::string &str_val = value.get<std::string>();
-      t = type_handler_.get_typet("str", str_val.size() + 1);
-      string_literal.assign(str_val.begin(), str_val.end());
-      string_literal.push_back('\0');
+      size_t str_size = str_val.size();
+      if (!str_val.empty())
+      {
+        str_size += 1;
+        string_literal.assign(str_val.begin(), str_val.end());
+        string_literal.push_back('\0');
+      }
+      t = type_handler_.get_typet("str", str_size);
     }
 
     exprt expr = make_char_array_expr(string_literal, t);

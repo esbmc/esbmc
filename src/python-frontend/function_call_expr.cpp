@@ -128,6 +128,9 @@ size_t function_call_expr::handle_str(nlohmann::json &arg) const
   if (!arg.contains("value") || !arg["value"].is_string())
     throw std::runtime_error("TypeError: str() expects a string argument");
 
+  if (arg["value"].get<std::string>().empty())
+	  return 0;
+
   return arg["value"].get<std::string>().size() + 1;
 }
 
