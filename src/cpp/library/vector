@@ -3,13 +3,14 @@
 
 #include <stdlib.h>
 #include <assert.h>
+#include <cstddef> // for size_t, ptrdiff_t
 
 #include "stdexcept"
 
 #include <utility> /* std::move */
-#include <new> /* placement-new */
+#include <new>     /* placement-new */
 #if __cplusplus >= 201103L
-# include <initializer_list>
+#  include <initializer_list>
 #endif
 
 #define VECTOR_CAPACITY 500
@@ -17,7 +18,70 @@
 namespace std
 {
 
-template <class T>
+// Minimal allocator implementation
+template <typename T>
+class allocator
+{
+public:
+  typedef T value_type;
+  typedef T *pointer;
+  typedef const T *const_pointer;
+  typedef T &reference;
+  typedef const T &const_reference;
+  typedef size_t size_type;
+  typedef ptrdiff_t difference_type;
+
+  template <typename U>
+  struct rebind
+  {
+    typedef allocator<U> other;
+  };
+
+  allocator() = default;
+
+  template <typename U>
+  allocator(const allocator<U> &)
+  {
+  }
+
+  pointer allocate(size_type n)
+  {
+    return static_cast<pointer>(malloc(n * sizeof(T)));
+  }
+
+  void deallocate(pointer ptr, size_type)
+  {
+    free(ptr);
+  }
+
+  template <typename U, typename... Args>
+  void construct(U *ptr, Args &&...args)
+  {
+    new (ptr) U(args...);
+  }
+
+  template <typename U>
+  void destroy(U *ptr)
+  {
+    ptr->~U();
+  }
+
+  size_type max_size() const
+  {
+    return size_t(-1) / sizeof(T);
+  }
+
+  bool operator==(const allocator &) const
+  {
+    return true;
+  }
+  bool operator!=(const allocator &) const
+  {
+    return false;
+  }
+};
+
+template <class T, class Allocator = std::allocator<T>>
 class vector
 {
 public:
@@ -88,7 +152,7 @@ public:
     const T *pointer;
     int pos;
     const T *vec_pos;
-    
+
   public:
     // Copy constructor
     const_reverse_iterator(const const_reverse_iterator &i)
@@ -97,12 +161,12 @@ public:
       pos = i.pos;
       vec_pos = i.vec_pos;
     }
-    
+
     // Default constructor
     const_reverse_iterator() : pointer(nullptr), pos(-1), vec_pos(nullptr)
     {
     }
-    
+
     // Conversion constructor from reverse_iterator
     const_reverse_iterator(const reverse_iterator &i)
     {
@@ -110,18 +174,19 @@ public:
       pos = i.pos;
       vec_pos = i.vec_pos;
     }
-    
+
     // Assignment operator
     const_reverse_iterator &operator=(const const_reverse_iterator &i)
     {
-      if (this != &i) {
+      if (this != &i)
+      {
         pointer = i.pointer;
         pos = i.pos;
         vec_pos = i.vec_pos;
       }
       return *this;
     }
-    
+
     // Assignment from reverse_iterator
     const_reverse_iterator &operator=(const reverse_iterator &i)
     {
@@ -147,7 +212,7 @@ public:
       pos--;
       return *this;
     }
-    
+
     const_reverse_iterator operator++(int)
     {
       const_reverse_iterator buffer = *this;
@@ -162,7 +227,7 @@ public:
       pos++;
       return *this;
     }
-    
+
     const_reverse_iterator operator--(int)
     {
       const_reverse_iterator buffer = *this;
@@ -175,7 +240,7 @@ public:
     {
       return pointer == other.pointer;
     }
-    
+
     bool operator!=(const const_reverse_iterator &other) const
     {
       return pointer != other.pointer;
@@ -185,7 +250,7 @@ public:
     {
       return pointer > other.pointer; // reversed logic for reverse iterator
     }
-    
+
     bool operator>(const const_reverse_iterator &other) const
     {
       return pointer < other.pointer; // reversed logic for reverse iterator
@@ -195,7 +260,7 @@ public:
     {
       return pointer >= other.pointer; // reversed logic for reverse iterator
     }
-    
+
     bool operator>=(const const_reverse_iterator &other) const
     {
       return pointer <= other.pointer; // reversed logic for reverse iterator
@@ -208,7 +273,7 @@ public:
       result.pos -= n;
       return result;
     }
-    
+
     const_reverse_iterator operator-(int n) const
     {
       const_reverse_iterator result = *this;
@@ -223,7 +288,7 @@ public:
       pos -= n;
       return *this;
     }
-    
+
     const_reverse_iterator &operator-=(int n)
     {
       pointer += n;
@@ -240,6 +305,7 @@ public:
   typedef T value_type;
   typedef T *pointer;
   typedef const T *const_pointer;
+  typedef Allocator allocator_type;
 
   typedef pointer iterator;
   typedef const_pointer const_iterator;
@@ -247,12 +313,21 @@ public:
   // construct:
   vector() : _size(0), _capacity(1)
   {
-    buf = static_cast<T*>(malloc(sizeof(T) * 10));
+    buf = static_cast<T *>(malloc(sizeof(T) * 10));
     __ESBMC_assume(buf);
     _size = 0;
     _capacity = 10;
   }
-  // TODO: Support destructors. 
+
+  explicit vector(const Allocator &alloc) : _size(0), _capacity(1)
+  {
+    buf = static_cast<T *>(malloc(sizeof(T) * 10));
+    __ESBMC_assume(buf);
+    _size = 0;
+    _capacity = 10;
+  }
+
+  // TODO: Support destructors.
   // Check discussion at https://github.com/esbmc/esbmc/pull/2515
 #if 0
   // Destructor
@@ -267,14 +342,15 @@ public:
     }
   }
 #endif
-  vector(iterator t1, iterator t2) : _size(0)
+  vector(iterator t1, iterator t2, const Allocator &alloc = Allocator())
+    : _size(0)
   {
     int count = 0;
     iterator tmp = t1;
     for (; tmp != t2; tmp++)
       count++;
 
-    buf = static_cast<T*>(malloc(sizeof(T) * count));
+    buf = static_cast<T *>(malloc(sizeof(T) * count));
     __ESBMC_assume(buf);
     int n = 0;
     for (; t1 != t2; t1++)
@@ -285,9 +361,10 @@ public:
     _capacity = _size;
   }
 
-  explicit vector(size_type n) : _size(0), _capacity(1)
+  explicit vector(size_type n, const Allocator &alloc = Allocator())
+    : _size(0), _capacity(1)
   {
-    buf = static_cast<T*>(malloc(sizeof(T) * n));
+    buf = static_cast<T *>(malloc(sizeof(T) * n));
     __ESBMC_assume(buf);
     _size = 0;
     for (int i = 0; i < n; i++)
@@ -298,13 +375,14 @@ public:
   }
 
   template <typename InputIt>
-  vector(InputIt t, InputIt addr) : _size(0), _capacity(1)
+  vector(InputIt t, InputIt addr, const Allocator &alloc = Allocator())
+    : _size(0), _capacity(1)
   {
     int count = 0;
     for (InputIt tmp = t; tmp != addr; tmp++)
       count++;
 
-    buf = static_cast<T*>(malloc(sizeof(T) * count));
+    buf = static_cast<T *>(malloc(sizeof(T) * count));
     __ESBMC_assume(buf);
     for (int i = 0; i < count; i++)
       buf[i] = *t++;
@@ -313,9 +391,9 @@ public:
     _capacity = _size;
   }
 
-  vector(size_type n, const T &x)
+  vector(size_type n, const T &x, const Allocator &alloc = Allocator())
   {
-    buf = static_cast<T*>(malloc(sizeof(T) * n));
+    buf = static_cast<T *>(malloc(sizeof(T) * n));
     __ESBMC_assume(buf);
     _size = n;
     for (int i = 0; i < n; i++)
@@ -323,9 +401,10 @@ public:
     _capacity = n;
   }
 
-  vector(const vector &x) : _size(0), _capacity(1)
+  vector(const vector &x, const Allocator &alloc = Allocator())
+    : _size(0), _capacity(1)
   {
-    buf = static_cast<T*>(malloc(sizeof(T) * x._size));
+    buf = static_cast<T *>(malloc(sizeof(T) * x._size));
     __ESBMC_assume(buf);
     _size = x._size;
     for (int i = 0; i < _size; i++)
@@ -334,9 +413,10 @@ public:
   }
 
 #if __cplusplus >= 201103L
-  vector(std::initializer_list<T> init) :_size(0), _capacity(1)
+  vector(std::initializer_list<T> init, const Allocator &alloc = Allocator())
+    : _size(0), _capacity(1)
   {
-    buf = static_cast<T*>(malloc(sizeof(T) * init.size()));
+    buf = static_cast<T *>(malloc(sizeof(T) * init.size()));
     __ESBMC_assume(buf);
     _size = init.size();
     for (int i = 0; i < _size; i++)
@@ -347,12 +427,16 @@ public:
 
   vector &operator=(const vector &x)
   {
-    buf = static_cast<T*>(malloc(sizeof(T) * x._size));
-    __ESBMC_assume(buf);
-    _size = x._size;
-    for (int i = 0; i < _size; i++)
-      buf[i] = x.buf[i];
-    _capacity = _size;
+    if (this != &x)
+    {
+      free(buf); // Clean up existing memory
+      buf = static_cast<T *>(malloc(sizeof(T) * x._size));
+      __ESBMC_assume(buf);
+      _size = x._size;
+      for (int i = 0; i < _size; i++)
+        buf[i] = x.buf[i];
+      _capacity = _size;
+    }
     return *this;
   }
 
@@ -373,7 +457,7 @@ public:
     for (; tmp != t2; tmp++)
       count++;
 
-    buf = static_cast<T*>(malloc(sizeof(T) * count));
+    buf = static_cast<T *>(malloc(sizeof(T) * count));
     __ESBMC_assume(buf);
     int n = 0;
     for (; t1 != t2; t1++)
@@ -393,6 +477,11 @@ public:
     while ((t11 + i) < t21)
       push_back(t11[i++]);
     _capacity = _size;
+  }
+
+  allocator_type get_allocator() const
+  {
+    return allocator_type();
   }
 
   // iterators:
@@ -429,7 +518,8 @@ public:
   const_reverse_iterator rbegin() const
   {
     const_reverse_iterator buffer;
-    if (_size > 0) {
+    if (_size > 0)
+    {
       buffer = const_reverse_iterator();
       buffer.pointer = buf + _size - 1;
       buffer.pos = _size - 1;
@@ -633,21 +723,21 @@ public:
 #if 0 /* TODO: can't use placement-new, yet: needs more frontend support */
     reserve(_size + count);
     for (size_type i = _size; i > at; i--)
-# if __cplusplus >= 201103L // Check if C++11 or later is being used
+#  if __cplusplus >= 201103L // Check if C++11 or later is being used
       new(&buf[i + count - 1]) T(std::move(buf[i - 1]));
-# else
+#  else
       new(&buf[i + count - 1]) T(buf[i - 1]);
-# endif
+#  endif
     _size += count;
 #else
     size_type sz = _size;
     resize(_size + count);
     for (size_type i = sz; i > at; i--)
-# if __cplusplus >= 201103L // Check if C++11 or later is being used
+#  if __cplusplus >= 201103L // Check if C++11 or later is being used
       buf[i + count - 1] = std::move(buf[i - 1]);
-# else
+#  else
       buf[i + count - 1] = buf[i - 1];
-# endif
+#  endif
 #endif
     for (size_type i = 0; i < count; i++)
       buf[i + at] = value;
