@@ -2,60 +2,102 @@
 #define STL_FUNCTIONAL
 
 #include <cassert>
-#include <utility>  // std::forward
+#include <utility> // std::forward
+#include <cstddef>
+#include <type_traits>
+#include <cstdint> // for uint32_t, uint64_t
+#include <cmath>   // for INFINITY
+#include <string>  // for std::string
 
-namespace std {
+namespace std
+{
 
 // Base class for callable objects
-class callable_base {
+class callable_base
+{
 public:
   virtual ~callable_base() = default;
-  virtual int invoke(int, int) const { assert(false); return 0; }
-  virtual int invoke(int) const { assert(false); return 0; }
-  virtual bool invoke_bool(int, int) const { assert(false); return false; }
-  virtual bool invoke_bool(int) const { assert(false); return false; }
+  virtual int invoke(int, int) const
+  {
+    assert(false);
+    return 0;
+  }
+  virtual int invoke(int) const
+  {
+    assert(false);
+    return 0;
+  }
+  virtual bool invoke_bool(int, int) const
+  {
+    assert(false);
+    return false;
+  }
+  virtual bool invoke_bool(int) const
+  {
+    assert(false);
+    return false;
+  }
 };
 
 // Wrapper for callable types (function pointers, lambdas, functors)
 template <typename Callable>
-class callable_wrapper : public callable_base {
+class callable_wrapper : public callable_base
+{
 private:
   Callable func;
 
 public:
-  explicit callable_wrapper(Callable&& f) : func(std::forward<Callable>(f)) {}
+  explicit callable_wrapper(Callable &&f) : func(std::forward<Callable>(f))
+  {
+  }
 
-  int invoke(int a, int b) const override {
-    if constexpr (std::is_invocable_v<Callable, int, int>) {
+  int invoke(int a, int b) const override
+  {
+    if constexpr (std::is_invocable_v<Callable, int, int>)
+    {
       return func(a, b);
-    } else {
+    }
+    else
+    {
       assert(false);
       return 0;
     }
   }
 
-  int invoke(int a) const override {
-    if constexpr (std::is_invocable_v<Callable, int>) {
+  int invoke(int a) const override
+  {
+    if constexpr (std::is_invocable_v<Callable, int>)
+    {
       return func(a);
-    } else {
+    }
+    else
+    {
       assert(false);
       return 0;
     }
   }
 
-  bool invoke_bool(int a, int b) const override {
-    if constexpr (std::is_invocable_r_v<bool, Callable, int, int>) {
+  bool invoke_bool(int a, int b) const override
+  {
+    if constexpr (std::is_invocable_r_v<bool, Callable, int, int>)
+    {
       return func(a, b);
-    } else {
+    }
+    else
+    {
       assert(false);
       return false;
     }
   }
 
-  bool invoke_bool(int a) const override {
-    if constexpr (std::is_invocable_r_v<bool, Callable, int>) {
+  bool invoke_bool(int a) const override
+  {
+    if constexpr (std::is_invocable_r_v<bool, Callable, int>)
+    {
       return func(a);
-    } else {
+    }
+    else
+    {
       assert(false);
       return false;
     }
@@ -67,34 +109,41 @@ template <typename Signature>
 class function;
 
 template <typename Ret, typename... Args>
-class function<Ret(Args...)> {
+class function<Ret(Args...)>
+{
 private:
-  callable_base* func = nullptr;
+  callable_base *func = nullptr;
 
 public:
   function() = default;
 
-  function(Ret (*f)(Args...)) {
-    if (f) {
+  function(Ret (*f)(Args...))
+  {
+    if (f)
+    {
       func = new callable_wrapper<Ret (*)(Args...)>(move(f));
     }
   }
 
   template <typename Callable>
-  function(Callable f) {
+  function(Callable f)
+  {
     func = new callable_wrapper<Callable>(move(f));
   }
 
-  function(const function& other) = delete;
-  function& operator=(const function& other) = delete;
+  function(const function &other) = delete;
+  function &operator=(const function &other) = delete;
 
-  function(function&& other) noexcept {
+  function(function &&other) noexcept
+  {
     func = other.func;
     other.func = nullptr;
   }
 
-  function& operator=(function&& other) noexcept {
-    if (this != &other) {
+  function &operator=(function &&other) noexcept
+  {
+    if (this != &other)
+    {
       delete func;
       func = other.func;
       other.func = nullptr;
@@ -102,23 +151,311 @@ public:
     return *this;
   }
 
-  ~function() {
+  ~function()
+  {
     delete func;
   }
 
-  Ret operator()(Args... args) const {
+  Ret operator()(Args... args) const
+  {
     assert(func != nullptr);
     return func->invoke(std::forward<Args>(args)...);
   }
 
-  explicit operator bool() const noexcept {
+  explicit operator bool() const noexcept
+  {
     return func != nullptr;
+  }
+};
+
+// Deterministic hash value generator using simple mathematical function
+// This ensures determinism while still providing hash-like distribution
+inline size_t __esbmc_deterministic_hash(size_t key)
+{
+  // Simple hash function that's deterministic
+  // Uses bit manipulation to create pseudo-random distribution
+  key ^= key >> 16;
+  key *= 0x85ebca6b;
+  key ^= key >> 13;
+  key *= 0xc2b2ae35;
+  key ^= key >> 16;
+  return key;
+}
+
+// Helper function to handle signed integer hashing consistently
+template <typename SignedInt>
+inline size_t __esbmc_hash_signed_int(SignedInt key)
+{
+  using Unsigned = typename std::make_unsigned<SignedInt>::type;
+  return __esbmc_deterministic_hash(
+    static_cast<size_t>(static_cast<Unsigned>(key)));
+}
+
+// Helper function for unsigned integer hashing
+template <typename UnsignedInt>
+inline size_t __esbmc_hash_unsigned_int(UnsignedInt key)
+{
+  size_t unsigned_key = static_cast<size_t>(key);
+  return __esbmc_deterministic_hash(unsigned_key);
+}
+
+// Primary template for std::hash
+template <typename T>
+struct hash
+{
+  // Default hash is undefined for non-specialized types
+  size_t operator()(const T &key) const = delete;
+};
+
+// Specialization for bool
+template <>
+struct hash<bool>
+{
+  size_t operator()(bool key) const
+  {
+    // Simple deterministic mapping for bool
+    return key ? 1 : 0;
+  }
+};
+
+// Specializations for character types
+template <>
+struct hash<char>
+{
+  size_t operator()(char key) const
+  {
+    // Convert char to unsigned and hash
+    size_t unsigned_key = static_cast<unsigned char>(key);
+    return __esbmc_deterministic_hash(unsigned_key);
+  }
+};
+
+template <>
+struct hash<signed char>
+{
+  size_t operator()(signed char key) const
+  {
+    return __esbmc_hash_signed_int(key);
+  }
+};
+
+template <>
+struct hash<unsigned char>
+{
+  size_t operator()(unsigned char key) const
+  {
+    return __esbmc_hash_unsigned_int(key);
+  }
+};
+
+// Specialization for wchar_t
+template <>
+struct hash<wchar_t>
+{
+  size_t operator()(wchar_t key) const
+  {
+    // Convert wchar_t to size_t and hash
+    size_t unsigned_key = static_cast<size_t>(key);
+    return __esbmc_deterministic_hash(unsigned_key);
+  }
+};
+
+// Specializations for short integer types
+template <>
+struct hash<short>
+{
+  size_t operator()(short key) const
+  {
+    return __esbmc_hash_signed_int(key);
+  }
+};
+
+template <>
+struct hash<unsigned short>
+{
+  size_t operator()(unsigned short key) const
+  {
+    return __esbmc_hash_unsigned_int(key);
+  }
+};
+
+// Specializations for int types
+template <>
+struct hash<int>
+{
+  size_t operator()(int key) const
+  {
+    return __esbmc_hash_signed_int(key);
+  }
+};
+
+template <>
+struct hash<unsigned int>
+{
+  size_t operator()(unsigned int key) const
+  {
+    return __esbmc_hash_unsigned_int(key);
+  }
+};
+
+// Specializations for long types
+template <>
+struct hash<long>
+{
+  size_t operator()(long key) const
+  {
+    return __esbmc_hash_signed_int(key);
+  }
+};
+
+template <>
+struct hash<unsigned long>
+{
+  size_t operator()(unsigned long key) const
+  {
+    return __esbmc_hash_unsigned_int(key);
+  }
+};
+
+// Specializations for long long types
+template <>
+struct hash<long long>
+{
+  size_t operator()(long long key) const
+  {
+    return __esbmc_hash_signed_int(key);
+  }
+};
+
+template <>
+struct hash<unsigned long long>
+{
+  size_t operator()(unsigned long long key) const
+  {
+    return __esbmc_hash_unsigned_int(key);
+  }
+};
+
+// Specialization for size_t (only if different from unsigned long)
+#if !defined(__SIZEOF_SIZE_T__) || (__SIZEOF_SIZE_T__ != __SIZEOF_LONG__)
+template <>
+struct hash<size_t>
+{
+  size_t operator()(size_t key) const
+  {
+    return __esbmc_deterministic_hash(key);
+  }
+};
+#endif
+
+// Specializations for floating point types
+template <>
+struct hash<float>
+{
+  size_t operator()(float key) const
+  {
+    // Handle special floating point values
+    if (key != key)
+    {                                                // NaN check
+      return __esbmc_deterministic_hash(0xFFFFFFFF); // Consistent NaN hash
+    }
+    if (key == 0.0f)
+    { // Handle +0.0 and -0.0 as same
+      return __esbmc_deterministic_hash(0);
+    }
+
+    // For normal values, use bit representation
+    union
+    {
+      float f;
+      uint32_t i;
+    } u;
+    u.f = key;
+    return __esbmc_deterministic_hash(static_cast<size_t>(u.i));
+  }
+};
+
+template <>
+struct hash<double>
+{
+  size_t operator()(double key) const
+  {
+    // Handle special floating point values
+    if (key != key)
+    { // NaN check
+      return __esbmc_deterministic_hash(
+        0xFFFFFFFFFFFFFFFF); // Consistent NaN hash
+    }
+    if (key == 0.0)
+    { // Handle +0.0 and -0.0 as same
+      return __esbmc_deterministic_hash(0);
+    }
+
+    // For normal values, use bit representation
+    union
+    {
+      double d;
+      uint64_t i;
+    } u;
+    u.d = key;
+    return __esbmc_deterministic_hash(static_cast<size_t>(u.i));
+  }
+};
+
+// Specialization for pointer types
+template <typename T>
+struct hash<T *>
+{
+  size_t operator()(T *key) const
+  {
+    // Convert pointer to size_t and hash
+    size_t ptr_value = reinterpret_cast<size_t>(key);
+    return __esbmc_deterministic_hash(ptr_value);
+  }
+};
+
+// Specialization for C-strings
+template <>
+struct hash<const char *>
+{
+  size_t operator()(const char *key) const
+  {
+    // Basic null check
+    assert(key != nullptr);
+
+    // For deterministic verification, use pointer address as hash
+    // This ensures same pointer gives same hash, different pointers give different hashes
+    size_t ptr_hash = reinterpret_cast<size_t>(key);
+    return __esbmc_deterministic_hash(ptr_hash);
+  }
+};
+
+// Specialization for std::string
+template <>
+struct hash<std::string>
+{
+  size_t operator()(const std::string &key) const
+  {
+    // Simple deterministic string hash using polynomial rolling hash
+    size_t hash_value = 0;
+    const size_t prime = 31;
+
+    // Use c_str() to access characters in a const-compatible way
+    const char *str = key.c_str();
+    for (size_t i = 0; i < key.length(); ++i)
+    {
+      hash_value = hash_value * prime +
+                   static_cast<size_t>(static_cast<unsigned char>(str[i]));
+    }
+
+    return __esbmc_deterministic_hash(hash_value);
   }
 };
 
 // Legacy binary_function class template (for compatibility)
 template <typename Arg1, typename Arg2, typename Result>
-struct binary_function {
+struct binary_function
+{
   using first_argument_type = Arg1;
   using second_argument_type = Arg2;
   using result_type = Result;
@@ -126,106 +463,183 @@ struct binary_function {
 
 // Arithmetic Operations
 template <typename T = int>
-struct plus {
-  constexpr T operator()(const T& a, const T& b) const { return a + b; }
+struct plus
+{
+  constexpr T operator()(const T &a, const T &b) const
+  {
+    return a + b;
+  }
 };
 
 template <typename T = int>
-struct minus {
-  constexpr T operator()(const T& a, const T& b) const { return a - b; }
+struct minus
+{
+  constexpr T operator()(const T &a, const T &b) const
+  {
+    return a - b;
+  }
 };
 
 template <typename T = int>
-struct multiplies {
-  constexpr T operator()(const T& a, const T& b) const { return a * b; }
+struct multiplies
+{
+  constexpr T operator()(const T &a, const T &b) const
+  {
+    return a * b;
+  }
 };
 
 template <typename T = int>
-struct divides {
-  constexpr T operator()(const T& a, const T& b) const { return a / b; }
+struct divides
+{
+  constexpr T operator()(const T &a, const T &b) const
+  {
+    return a / b;
+  }
 };
 
 template <typename T = int>
-struct modulus {
-  constexpr T operator()(const T& a, const T& b) const { return a % b; }
+struct modulus
+{
+  constexpr T operator()(const T &a, const T &b) const
+  {
+    return a % b;
+  }
 };
 
 template <typename T = int>
-struct negate {
-  constexpr T operator()(const T& a) const { return -a; }
+struct negate
+{
+  constexpr T operator()(const T &a) const
+  {
+    return -a;
+  }
 };
 
 // Comparison Operations
 template <typename T = int>
-struct equal_to {
-  constexpr bool operator()(const T& a, const T& b) const { return a == b; }
+struct equal_to
+{
+  constexpr bool operator()(const T &a, const T &b) const
+  {
+    return a == b;
+  }
 };
 
 template <typename T = int>
-struct not_equal_to {
-  constexpr bool operator()(const T& a, const T& b) const { return a != b; }
+struct not_equal_to
+{
+  constexpr bool operator()(const T &a, const T &b) const
+  {
+    return a != b;
+  }
 };
 
 template <typename T = int>
-struct greater {
-  constexpr bool operator()(const T& a, const T& b) const { return a > b; }
+struct greater
+{
+  constexpr bool operator()(const T &a, const T &b) const
+  {
+    return a > b;
+  }
 };
 
 template <typename T = int>
-struct less {
-  constexpr bool operator()(const T& a, const T& b) const { return a < b; }
+struct less
+{
+  constexpr bool operator()(const T &a, const T &b) const
+  {
+    return a < b;
+  }
 };
 
 template <typename T = int>
-struct greater_equal {
-  constexpr bool operator()(const T& a, const T& b) const { return a >= b; }
+struct greater_equal
+{
+  constexpr bool operator()(const T &a, const T &b) const
+  {
+    return a >= b;
+  }
 };
 
 template <typename T = int>
-struct less_equal {
-  constexpr bool operator()(const T& a, const T& b) const { return a <= b; }
+struct less_equal
+{
+  constexpr bool operator()(const T &a, const T &b) const
+  {
+    return a <= b;
+  }
 };
 
 // Logical Operations
 template <typename T = bool>
-struct logical_and {
-  constexpr bool operator()(const T& a, const T& b) const { return a && b; }
+struct logical_and
+{
+  constexpr bool operator()(const T &a, const T &b) const
+  {
+    return a && b;
+  }
 };
 
 template <typename T = bool>
-struct logical_or {
-  constexpr bool operator()(const T& a, const T& b) const { return a || b; }
+struct logical_or
+{
+  constexpr bool operator()(const T &a, const T &b) const
+  {
+    return a || b;
+  }
 };
 
 template <typename T = bool>
-struct logical_not {
-  constexpr bool operator()(const T& a) const { return !a; }
+struct logical_not
+{
+  constexpr bool operator()(const T &a) const
+  {
+    return !a;
+  }
 };
 
 // Bitwise Operations
 template <typename T = int>
-struct bit_and {
-  constexpr T operator()(const T& a, const T& b) const { return a & b; }
+struct bit_and
+{
+  constexpr T operator()(const T &a, const T &b) const
+  {
+    return a & b;
+  }
 };
 
 template <typename T = int>
-struct bit_or {
-  constexpr T operator()(const T& a, const T& b) const { return a | b; }
+struct bit_or
+{
+  constexpr T operator()(const T &a, const T &b) const
+  {
+    return a | b;
+  }
 };
 
 template <typename T = int>
-struct bit_xor {
-  constexpr T operator()(const T& a, const T& b) const { return a ^ b; }
+struct bit_xor
+{
+  constexpr T operator()(const T &a, const T &b) const
+  {
+    return a ^ b;
+  }
 };
 
 template <typename T = int>
-struct bit_not {
-  constexpr T operator()(const T& a) const { return ~a; }
+struct bit_not
+{
+  constexpr T operator()(const T &a) const
+  {
+    return ~a;
+  }
 };
 
 // Simplified std::invoke model
 template <typename Func, typename... Args>
-decltype(auto) invoke(Func&& f, Args&&... args) {
+decltype(auto) invoke(Func &&f, Args &&...args)
+{
   return forward<Func>(f)(forward<Args>(args)...);
 }
 
