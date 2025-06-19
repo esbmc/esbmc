@@ -90,7 +90,14 @@ std::string type_handler::get_var_type(const std::string &var_name) const
   if (ref.empty())
     return std::string();
 
-  return ref["annotation"]["id"].get<std::string>();
+  const auto& annotation = ref["annotation"];
+  if (annotation.contains("id"))
+	  return annotation["id"].get<std::string>();
+
+  if (annotation["_type"] == "Subscript")
+	  return annotation["value"]["id"];
+
+  return std::string();
 }
 
 /// This method creates a `typet` representing a statically sized array.

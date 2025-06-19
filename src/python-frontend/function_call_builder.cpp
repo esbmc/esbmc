@@ -120,7 +120,7 @@ symbol_id function_call_builder::build_function_id() const
     else if (arg["_type"] == "Name")
     {
       const std::string &var_type = th.get_var_type(arg["id"]);
-      if (var_type == "bytes")
+      if (var_type == "bytes" || var_type == "list")
         func_name = kGetObjectSize;
     }
     function_id.clear();
