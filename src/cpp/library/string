@@ -2,6 +2,7 @@
 #define STL_STRING
 
 #include "definitions.h"
+#include "algorithm"
 #include "cstring"
 #include "cstdio"
 #include "cassert"
@@ -1307,31 +1308,23 @@ bool string::empty() const
 
 string &string::operator=(const string &str)
 {
-  int i, len;
-  this->_size = str.length();
-  this->str = new char[this->_size + 1];
-  len = str.length();
-  for (i = 0; i < len; i++)
-  {
-    this->str[i] = str.str[i];
-  }
-  this->str[i] = '\0';
+__ESBMC_HIDE:  
+  // Create temporary copy
+  string temp(str);  // Use copy constructor
+  // Swap with current object
+  std::swap(this->str, temp.str);
+  std::swap(this->_size, temp._size);
   return *this;
 }
 
 string &string::operator=(string &str)
 {
-  //	__ESBMC_HIDE: __ESBMC_assert(str.str != NULL,
-  //		"The parameter must to be different than NULL");
-  int i, len;
-  this->_size = str.size();
-  this->str = new char[this->_size + 1];
-  len = str.size();
-  for (i = 0; i < len; i++)
-  {
-    this->str[i] = str.str[i];
-  }
-  this->str[i] = '\0';
+__ESBMC_HIDE:  
+  // Create temporary copy
+  string temp(str);  // Use copy constructor
+  // Swap with current object
+  std::swap(this->str, temp.str);
+  std::swap(this->_size, temp._size);
   return *this;
 }
 
