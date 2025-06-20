@@ -1881,6 +1881,7 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     return expr;
   }
 
+#if 0
   // Handle single-character string as char literal
   if (
     value.is_string() && value.get<std::string>().size() == 1 &&
@@ -1890,6 +1891,7 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     typet t = type_handler_.get_typet("str", str.size());
     return from_integer(static_cast<unsigned char>(str[0]), t);
   }
+#endif
 
   // Handle empty strings or docstrings (often beginning with a newline)
   if (
