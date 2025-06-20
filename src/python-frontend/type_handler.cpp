@@ -77,7 +77,7 @@ std::string type_handler::type_to_string(const typet &t) const
   }
 
   if (t.is_pointer() && t.subtype() == char_type())
-	  return "str";
+    return "str";
 
   return "";
 }
@@ -90,12 +90,12 @@ std::string type_handler::get_var_type(const std::string &var_name) const
   if (ref.empty())
     return std::string();
 
-  const auto& annotation = ref["annotation"];
+  const auto &annotation = ref["annotation"];
   if (annotation.contains("id"))
-	  return annotation["id"].get<std::string>();
+    return annotation["id"].get<std::string>();
 
   if (annotation["_type"] == "Subscript")
-	  return annotation["value"]["id"];
+    return annotation["value"]["id"];
 
   return std::string();
 }
@@ -228,7 +228,12 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
   else if (elem.is_number_float())
     return double_type();
   else if (elem.is_string())
-    return build_array(char_type(), elem.get<std::string>().size());
+  {
+    size_t str_size = elem.get<std::string>().size();
+    if (str_size > 1)
+      str_size += 1;
+    return build_array(char_type(), str_size);
+  }
 
   // Handle nested value object
   if (elem.is_object())
