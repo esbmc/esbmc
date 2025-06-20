@@ -1881,7 +1881,7 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     return expr;
   }
 
-#if 0
+#if 1
   // Handle single-character string as char literal
   if (
     value.is_string() && value.get<std::string>().size() == 1 &&

@@ -131,7 +131,8 @@ size_t function_call_expr::handle_str(nlohmann::json &arg) const
   if (arg["value"].get<std::string>().empty())
 	  return 0;
 
-  return arg["value"].get<std::string>().size() + 1;
+  size_t str_size = arg["value"].get<std::string>().size();
+  return (str_size > 1) ? str_size + 1: str_size;
 }
 
 void function_call_expr::handle_float_to_int(nlohmann::json &arg) const
