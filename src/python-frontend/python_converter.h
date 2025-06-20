@@ -21,14 +21,14 @@ class python_converter
 public:
   python_converter(
     contextt &_context,
-    const nlohmann::json &ast,
+    const nlohmann::json *ast,
     const global_scope &gs);
 
   void convert();
 
   const nlohmann::json &ast() const
   {
-    return ast_json;
+    return *ast_json;
   }
 
   contextt &symbol_table() const
@@ -92,6 +92,16 @@ private:
   friend class function_call_expr;
   friend class numpy_call_expr;
   friend class function_call_builder;
+
+  template<typename Func> decltype(auto)
+  with_ast(const nlohmann::json *new_ast, Func &&f)
+  {
+    const nlohmann::json *old_ast = ast_json;
+    ast_json = new_ast;
+    auto result = f();
+    ast_json = old_ast;
+    return result;
+  }
 
   void load_c_intrisics();
 
@@ -246,7 +256,7 @@ private:
     const std::string &dir_path);
 
   contextt &symbol_table_;
-  const nlohmann::json &ast_json;
+  const nlohmann::json *ast_json;
   const global_scope &global_scope_;
   type_handler type_handler_;
   symbol_generator sym_generator_;

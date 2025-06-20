@@ -119,8 +119,9 @@ symbol_id function_call_builder::build_function_id() const
       func_name = kGetObjectSize;
     else if (arg["_type"] == "Name")
     {
+      //FIXME: Consider class methods in get_var_type()
       const std::string &var_type = th.get_var_type(arg["id"]);
-      if (var_type == "bytes" || var_type == "list")
+      if (var_type == "bytes" || var_type == "list" || var_type.empty())
         func_name = kGetObjectSize;
     }
     function_id.clear();

@@ -1687,7 +1687,7 @@ symbolt *python_converter::find_function_in_base_classes(
   symbolt *func = nullptr;
 
   // Find class node in the AST
-  auto class_node = json_utils::find_class(ast_json["body"], class_name);
+  auto class_node = json_utils::find_class((*ast_json)["body"], class_name);
 
   if (class_node != nlohmann::json())
   {
@@ -1721,7 +1721,7 @@ symbolt *python_converter::find_function_in_base_classes(
 symbolt *
 python_converter::find_imported_symbol(const std::string &symbol_id) const
 {
-  for (const auto &obj : ast_json["body"])
+  for (const auto &obj : (*ast_json)["body"])
   {
     if (obj["_type"] == "ImportFrom" || obj["_type"] == "Import")
     {
@@ -1773,7 +1773,7 @@ bool python_converter::is_imported_module(const std::string &module_name) const
   if (imported_modules.find(module_name) != imported_modules.end())
     return true;
 
-  return json_utils::is_module(module_name, ast_json);
+  return json_utils::is_module(module_name, *ast_json);
 }
 
 exprt python_converter::get_function_call(const nlohmann::json &element)
@@ -1798,9 +1798,9 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       !type_utils::is_consensus_type(func_name) &&
       !type_utils::is_consensus_func(func_name) &&
       !type_utils::is_python_model_func(func_name) &&
-      !is_class(func_name, ast_json))
+      !is_class(func_name, *ast_json))
     {
-      const auto &func_node = find_function(ast_json["body"], func_name);
+      const auto &func_node = find_function((*ast_json)["body"], func_name);
       assert(!func_node.empty());
       get_function_definition(func_node);
     }
@@ -2154,7 +2154,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     else if (element["_type"] == "Attribute")
     {
       var_name = element["value"]["id"].get<std::string>();
-      if (is_class(var_name, ast_json))
+      if (is_class(var_name, *ast_json))
       {
         // Found a class attribute
         var_name = "C@" + var_name;
@@ -2304,7 +2304,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       expr = constant_exprt(list_type);
 
       const auto &list = json_utils::find_var_decl(
-        element["value"]["id"], current_func_name_, ast_json);
+        element["value"]["id"], current_func_name_, *ast_json);
 
       assert(!list.empty());
 
@@ -2599,7 +2599,7 @@ void python_converter::get_var_assign(
 
         if (base_ctor_called)
         {
-          auto class_node = json_utils::find_class(ast_json["body"], func_name);
+          auto class_node = json_utils::find_class((*ast_json)["body"], func_name);
           func_name = class_node["bases"][0]["id"].get<std::string>();
           base_ctor_called = false;
         }
@@ -2653,7 +2653,7 @@ typet python_converter::resolve_variable_type(
   const std::string &var_name,
   const locationt &loc)
 {
-  nlohmann::json decl_node = get_var_node(var_name, ast_json);
+  nlohmann::json decl_node = get_var_node(var_name, *ast_json);
 
   if (!decl_node.empty())
   {
@@ -3106,7 +3106,7 @@ void python_converter::get_class_definition(
       const std::string &class_name = class_member["annotation"]["id"];
       if (!symbol_table_.find_symbol("tag-" + class_name))
       {
-        const auto &class_node = find_class(ast_json["body"], class_name);
+        const auto &class_node = find_class((*ast_json)["body"], class_name);
         if (!class_node.empty())
         {
           std::string current_class = current_class_name_;
@@ -3343,7 +3343,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
 
 python_converter::python_converter(
   contextt &_context,
-  const nlohmann::json &ast,
+  const nlohmann::json *ast,
   const global_scope &gs)
   : symbol_table_(_context),
     ast_json(ast),
@@ -3418,14 +3418,14 @@ void python_converter::convert()
   main_symbol.is_extern = false;
   main_symbol.file_local = false;
 
-  main_python_file = ast_json["filename"].get<std::string>();
+  main_python_file = (*ast_json)["filename"].get<std::string>();
   current_python_file = main_python_file;
 
   if (!config.options.get_bool_option("no-library"))
   {
     // Load operational models -----
     const std::string &ast_output_dir =
-      ast_json["ast_output_dir"].get<std::string>();
+      (*ast_json)["ast_output_dir"].get<std::string>();
     std::list<std::string> model_files = {
       "range", "int", "consensus", "random"};
     std::list<std::string> model_folders = {"os", "numpy"};
@@ -3455,7 +3455,9 @@ void python_converter::convert()
           current_python_file = imported_modules[filename];
       }
 
-      exprt model_code = get_block(model_json["body"]);
+      exprt model_code =
+        with_ast(&model_json, [&]() { return get_block((*ast_json)["body"]); });
+
       convert_expression_to_code(model_code);
 
       // Add imported code to main symbol
@@ -3478,7 +3480,7 @@ void python_converter::convert()
 
     nlohmann::json function_node;
     // Find function node in AST
-    for (const auto &element : ast_json["body"])
+    for (const auto &element : (*ast_json)["body"])
     {
       if (element["_type"] == "FunctionDef" && element["name"] == function)
       {
@@ -3496,7 +3498,7 @@ void python_converter::convert()
     // Convert classes referenced by the function
     for (const auto &clazz : global_scope_.classes())
     {
-      const auto &class_node = find_class(ast_json["body"], clazz);
+      const auto &class_node = find_class((*ast_json)["body"], clazz);
       get_class_definition(class_node, block);
       current_class_name_.clear();
     }
@@ -3504,14 +3506,14 @@ void python_converter::convert()
     // Convert only the global variables referenced by the function
     for (const auto &global_var : global_scope_.variables())
     {
-      const auto &var_node = find_var_decl(global_var, "", ast_json);
+      const auto &var_node = find_var_decl(global_var, "", *ast_json);
       get_var_assign(var_node, block);
     }
 
     // Convert function arguments types
     for (const auto &arg : function_node["args"]["args"])
     {
-      auto node = find_class(ast_json["body"], arg["annotation"]["id"]);
+      auto node = find_class((*ast_json)["body"], arg["annotation"]["id"]);
       if (!node.empty())
         get_class_definition(node, block);
     }
@@ -3555,7 +3557,7 @@ void python_converter::convert()
   else
   {
     // Convert imported modules
-    for (const auto &elem : ast_json["body"])
+    for (const auto &elem : (*ast_json)["body"])
     {
       if (elem["_type"] == "ImportFrom" || elem["_type"] == "Import")
       {
@@ -3564,7 +3566,7 @@ void python_converter::convert()
                                            ? elem["module"]
                                            : elem["names"][0]["name"];
         std::stringstream module_path;
-        module_path << ast_json["ast_output_dir"].get<std::string>() << "/"
+        module_path << (*ast_json)["ast_output_dir"].get<std::string>() << "/"
                     << module_name << ".json";
         std::ifstream imported_file(module_path.str());
         imported_file >> imported_module_json;
@@ -3586,7 +3588,7 @@ void python_converter::convert()
     current_python_file = main_python_file;
 
     // Convert main statements
-    exprt main_block = get_block(ast_json["body"]);
+    exprt main_block = get_block((*ast_json)["body"]);
     codet main_code = convert_expression_to_code(main_block);
 
     if (main_symbol.value.is_code())
