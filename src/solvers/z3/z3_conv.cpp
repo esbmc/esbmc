@@ -1385,17 +1385,31 @@ void z3_smt_ast::dump() const
     "{}\nsort is {}", ast, Z3_sort_to_string(a.ctx(), Z3_get_sort(a.ctx(), a)));
 }
 
-void z3_convt::dump_smt()
+void z3_convt::output_smt()
 {
   const std::string &path = options.get_option("output");
   /* the iostream API is just unusable */
-  if (path == "-")
+  if (path.empty() || path == "-")
     print_smt_formulae(std::cout);
   else
   {
     std::ofstream out(path);
-    print_smt_formulae(out);
+    if (out)
+    {
+      print_smt_formulae(out);
+    }
+    else
+    {
+      log_error("Failed to open output file: {}", path);
+    }
   }
+}
+
+std::string z3_convt::dump_smt()
+{
+  std::ostringstream ss;
+  print_smt_formulae(ss);
+  return ss.str();
 }
 
 void z3_convt::print_smt_formulae(std::ostream &dest)

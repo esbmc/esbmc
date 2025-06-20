@@ -153,7 +153,7 @@ public:
 
   void assert_ast(smt_astt a) override;
 
-  void dump_smt() override;
+  std::string dump_smt() override;
 
   unsigned int to_bv_counter;
 
