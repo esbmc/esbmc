@@ -12,7 +12,7 @@ class Person:
         self.weight += 1
         return self.weight
     
-    # # Another instance method
+    # Another instance method
     def have_birthday(self) -> int:
         self.age += 1
         return self.age
