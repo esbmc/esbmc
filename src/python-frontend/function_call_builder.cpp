@@ -113,7 +113,6 @@ symbol_id function_call_builder::build_function_id() const
   // build symbol_id
   if (func_name == "len")
   {
-#if 1
     const auto &arg = call_["args"][0];
     func_name = kStrlen;
     if (arg["_type"] == "List")
@@ -125,9 +124,6 @@ symbol_id function_call_builder::build_function_id() const
       if (var_type == "bytes" || var_type == "list" || var_type.empty())
         func_name = kGetObjectSize;
     }
-#else
-    func_name = kGetObjectSize;
-#endif
     function_id.clear();
     function_id.set_prefix("c:");
   }
