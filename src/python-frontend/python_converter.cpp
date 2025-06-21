@@ -1814,7 +1814,6 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     return expr;
   }
 
-#if 1
   // Handle single-character string as char literal
   if (
     value.is_string() && value.get<std::string>().size() == 1 &&
@@ -1862,13 +1861,9 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     {
       const std::string &str_val = value.get<std::string>();
       size_t str_size = str_val.size();
-      //if (!str_val.empty())
-      {
-        str_size += 1;
-        string_literal.assign(str_val.begin(), str_val.end());
-        string_literal.push_back('\0');
-      }
-      //t = type_handler_.get_typet("str", str_size);
+      str_size += 1;
+      string_literal.assign(str_val.begin(), str_val.end());
+      string_literal.push_back('\0');
       t = type_handler_.build_array(char_type(), str_size);
     }
 
@@ -1876,58 +1871,6 @@ exprt python_converter::get_literal(const nlohmann::json &element)
 
     return expr;
   }
-#else
-  if (value.is_string())
-  {
-    std::string str = value.get<std::string>();
-    str += '\0';
-
-    size_t str_size = str.size();
-
-    // Handle single-character string as char literal
-    if (str_size <= 2 && !is_bytes_literal(element))
-    {
-      typet t = type_handler_.get_typet("str", str_size);
-      return from_integer(static_cast<unsigned char>(str[0]), t);
-    }
-
-    // Handle empty strings or docstrings (often beginning with a newline)
-    if (str[0] == '\n' && !is_bytes_literal(element))
-    {
-      return exprt(); // Return empty expression
-    }
-
-    typet t = current_element_type;
-    std::vector<uint8_t> string_literal;
-
-    // Check if this is a bytes literal
-    if (is_bytes_literal(element))
-    {
-      // Handle bytes literal - check for encoded_bytes field first
-      if (element.contains("encoded_bytes"))
-      {
-        string_literal =
-          base64_decode(element["encoded_bytes"].get<std::string>());
-      }
-      else
-      {
-        // Handle direct bytes literal (e.g., b'A')
-        const std::string &str_val = value.get<std::string>();
-        string_literal.assign(str_val.begin(), str_val.end());
-      }
-
-      // Set appropriate bytes type
-      t = type_handler_.get_typet("bytes", string_literal.size());
-    }
-    else // Handle Python str literals
-    {
-      string_literal.assign(str.begin(), str.end());
-      t = type_handler_.get_typet("str", str_size);
-    }
-
-    return make_char_array_expr(string_literal, t);
-  }
-#endif
 
   throw std::runtime_error("Unsupported literal " + value.get<std::string>());
 }
