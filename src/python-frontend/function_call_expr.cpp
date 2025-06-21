@@ -129,10 +129,10 @@ size_t function_call_expr::handle_str(nlohmann::json &arg) const
     throw std::runtime_error("TypeError: str() expects a string argument");
 
   if (arg["value"].get<std::string>().empty())
-	  return 0;
+    return 0;
 
   size_t str_size = arg["value"].get<std::string>().size();
-  return (str_size > 1) ? str_size + 1: str_size;
+  return (str_size > 1) ? str_size + 1 : str_size;
 }
 
 void function_call_expr::handle_float_to_int(nlohmann::json &arg) const
@@ -394,7 +394,7 @@ function_call_expr::extract_string_from_symbol(const symbolt *sym) const
     for (const auto &ch : val.operands())
     {
       if (ch == gen_zero(ch.type()))
-    	  break;
+        break;
 
       auto decoded = decode_char(ch);
       if (!decoded)
@@ -647,7 +647,9 @@ exprt function_call_expr::build_constant_from_arg() const
   // Construct expression with appropriate type
   typet t = type_handler_.get_typet(func_name, arg_size);
   exprt expr = converter_.get_expr(arg);
-  expr.type() = t;
+  //expr.dump();
+  //expr.type() = t;
+  //expr.dump();
 
   return expr;
 }
@@ -792,6 +794,9 @@ exprt function_call_expr::get()
     }
   }
 
+  //  const auto &param_types = to_code_type(func_symbol->type).arguments();
+  //  size_t param_index = 0;
+
   for (const auto &arg_node : call_["args"])
   {
     exprt arg = converter_.get_expr(arg_node);
@@ -829,6 +834,8 @@ exprt function_call_expr::get()
       arg = func_call;
     }
 
+#if 1
+
     // All array function arguments (e.g. bytes type) are handled as pointers.
     if (arg.type().is_array())
     {
@@ -843,6 +850,34 @@ exprt function_call_expr::get()
     }
     else
       call.arguments().push_back(arg);
+#else
+    if (
+      arg.type().is_array() && arg_node["_type"] == "Constant" &&
+      arg_node["value"].is_string())
+    {
+      arg = string_constantt(
+        arg_node["value"].get<std::string>(),
+        arg.type(),
+        string_constantt::k_default);
+    }
+
+    typet expected_type;
+    if (param_index < param_types.size())
+      expected_type = param_types[param_index].type();
+    else
+      expected_type = arg.type();
+
+    expected_type.dump();
+
+    if (expected_type.is_pointer())
+    {
+      if (!arg.is_address_of() && !arg.is_constant())
+        arg = address_of_exprt(arg);
+    }
+
+    call.arguments().push_back(arg);
+    ++param_index;
+#endif
   }
 
   return std::move(call);
