@@ -676,7 +676,6 @@ exprt function_call_expr::get()
     type_utils::is_builtin_type(func_name) ||
     type_utils::is_consensus_type(func_name))
   {
-    // FIXME: We should model calls to builtin_type functions (e.g: int(x)) as type casts
     return build_constant_from_arg();
   }
 
@@ -825,8 +824,6 @@ exprt function_call_expr::get()
       arg = func_call;
     }
 
-#if 1
-
     // All array function arguments (e.g. bytes type) are handled as pointers.
     if (arg.type().is_array())
     {
@@ -841,34 +838,6 @@ exprt function_call_expr::get()
     }
     else
       call.arguments().push_back(arg);
-#else
-    if (
-      arg.type().is_array() && arg_node["_type"] == "Constant" &&
-      arg_node["value"].is_string())
-    {
-      arg = string_constantt(
-        arg_node["value"].get<std::string>(),
-        arg.type(),
-        string_constantt::k_default);
-    }
-
-    typet expected_type;
-    if (param_index < param_types.size())
-      expected_type = param_types[param_index].type();
-    else
-      expected_type = arg.type();
-
-    expected_type.dump();
-
-    if (expected_type.is_pointer())
-    {
-      if (!arg.is_address_of() && !arg.is_constant())
-        arg = address_of_exprt(arg);
-    }
-
-    call.arguments().push_back(arg);
-    ++param_index;
-#endif
   }
 
   return std::move(call);
