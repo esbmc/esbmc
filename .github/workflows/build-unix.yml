@@ -29,4 +29,4 @@ jobs:
         path: ./release
     - name: Run tests
       if: ${{ inputs.testing == true }}
-      run: cd build/ && ctest -j4 --output-on-failure --progress -R python .
+      run: cd build/ && ctest -j4 --output-on-failure --progress .
