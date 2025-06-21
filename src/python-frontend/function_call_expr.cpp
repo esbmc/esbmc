@@ -662,6 +662,7 @@ exprt function_call_expr::get()
     type_utils::is_builtin_type(func_name) ||
     type_utils::is_consensus_type(func_name))
   {
+    // FIXME: We should model calls to builtin_type functions (e.g: int(x)) as type casts
     return build_constant_from_arg();
   }
 
