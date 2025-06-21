@@ -645,11 +645,7 @@ exprt function_call_expr::build_constant_from_arg() const
     arg_size = handle_str(arg);
 
   // Construct expression with appropriate type
-  typet t = type_handler_.get_typet(func_name, arg_size);
   exprt expr = converter_.get_expr(arg);
-  //expr.dump();
-  //expr.type() = t;
-  //expr.dump();
 
   return expr;
 }
