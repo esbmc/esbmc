@@ -202,9 +202,23 @@ class Preprocessor(ast.NodeTransformer):
         else:
             target_var_name = 'ESBMC_loop_var'
 
+        # Determine annotation type based on the iterable value
+        if isinstance(node.iter, ast.Str):
+            annotation_id = 'str'
+        elif isinstance(node.iter, ast.List):
+            annotation_id = 'list'
+        elif isinstance(node.iter, ast.Tuple):
+            annotation_id = 'tuple'
+        elif isinstance(node.iter, ast.Name):
+            # try to infer from variable name if known constants are used
+            known_types = {'word': 'str', 'numbers': 'list'}  # extend as needed
+            annotation_id = known_types.get(node.iter.id, 'Any')
+        else:
+            annotation_id = 'Any'  # default fallback
+
         # Create assignment for the iterable variable
         iter_target = self.create_name_node('ESBMC_iter', ast.Store(), node)
-        str_annotation = self.create_name_node('str', ast.Load(), node)
+        str_annotation = self.create_name_node(annotation_id, ast.Load(), node)
         iter_assign = ast.AnnAssign(
             target=iter_target,
             annotation=str_annotation,
