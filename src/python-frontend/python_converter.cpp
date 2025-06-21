@@ -1317,9 +1317,6 @@ bool python_converter::is_identity_function(
 
 void python_converter::ensure_string_array(exprt &expr)
 {
-  if (expr.type().is_pointer())
-    return;
-
   if (!expr.type().is_array())
   {
     typet t = type_handler_.build_array(expr.type(), 1);
