@@ -8,6 +8,8 @@ class Preprocessor(ast.NodeTransformer):
         self.functionParams = {}
         self.module_name = module_name # for errors
         self.is_range_loop = False  # Track if we're in a range loop transformation
+        self.known_variable_types = {}
+
 
     def ensure_all_locations(self, node, source_node=None, line=1, col=0):
         """Recursively ensure all nodes in an AST tree have location information"""
@@ -210,11 +212,9 @@ class Preprocessor(ast.NodeTransformer):
         elif isinstance(node.iter, ast.Tuple):
             annotation_id = 'tuple'
         elif isinstance(node.iter, ast.Name):
-            # try to infer from variable name if known constants are used
-            known_types = {'word': 'str', 'numbers': 'list'}  # extend as needed
-            annotation_id = known_types.get(node.iter.id, 'Any')
+            annotation_id = self.known_variable_types.get(node.iter.id, 'Any')
         else:
-            annotation_id = 'Any'  # default fallback
+            annotation_id = 'Any'
 
         # Create assignment for the iterable variable
         iter_target = self.create_name_node('ESBMC_iter', ast.Store(), node)
@@ -325,6 +325,27 @@ class Preprocessor(ast.NodeTransformer):
         if self.is_range_loop and node.id == self.target_name:
             node.id = 'start'  # Replace the variable name with 'start'
         return node
+
+    def visit_Assign(self, node):
+        self.generic_visit(node)
+
+        if len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            var_name = node.targets[0].id
+            value = node.value
+
+            if isinstance(value, ast.List):
+                self.known_variable_types[var_name] = 'list'
+            elif isinstance(value, ast.Tuple):
+                self.known_variable_types[var_name] = 'tuple'
+            elif isinstance(value, ast.Str):
+                self.known_variable_types[var_name] = 'str'
+            elif isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and value.func.id == 'range':
+                self.known_variable_types[var_name] = 'range'
+            elif isinstance(value, ast.Dict):
+                self.known_variable_types[var_name] = 'dict'
+
+        return node
+
 
     # This method is responsible for visiting and transforming Call nodes in the AST.
     def visit_Call(self, node):
