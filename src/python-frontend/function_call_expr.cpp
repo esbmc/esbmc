@@ -591,8 +591,17 @@ exprt function_call_expr::build_constant_from_arg() const
       return handle_str_symbol_to_int(sym);
   }
 
+  size_t arg_size = 1;
+  if (func_name == "str")
+  {
+    arg_size = arg["value"].get<std::string>().size();
+    if (arg_size > 1)
+      arg_size += 1;
+  }
+  typet t = type_handler_.get_typet(func_name, arg_size);
+
   // Handle int(): convert float to int
-  else if (func_name == "int" && arg["value"].is_number_float())
+  if (func_name == "int" && arg["value"].is_number_float())
     handle_float_to_int(arg);
 
   // Handle float(): convert string (from symbol) to float
@@ -627,7 +636,12 @@ exprt function_call_expr::build_constant_from_arg() const
   else if (func_name == "abs")
     return handle_abs(arg);
 
-  return converter_.get_expr(arg);
+  exprt expr = converter_.get_expr(arg);
+
+  if (func_name != "str")
+    expr.type() = t;
+
+  return expr;
 }
 
 std::string function_call_expr::get_object_name() const
