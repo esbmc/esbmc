@@ -473,6 +473,14 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   }
 #endif
 
+  // parallel solving activates "--multi-property"
+  if(cmdline.isset("parallel-solving"))
+  {
+    options.set_option("result-only", true);
+    options.set_option("base-case", true);
+    options.set_option("multi-property", true);
+  }
+
   // If multi-property is on, we should set base-case
   if (cmdline.isset("multi-property"))
   {
