@@ -165,6 +165,7 @@ const static std::vector<std::string> python_c_models = {
 =======
   "strncmp",
 =======
+<<<<<<< HEAD
   "strncmp",
   "strcmp",
   "strlen",
@@ -258,7 +259,19 @@ const static std::vector<std::string> python_c_models = {
   "ldexp",
   "log1p_taylor"};
 >>>>>>> 4abbd7e11 ([python-frontend] Handling string attributes (#2546))
+<<<<<<< HEAD
 >>>>>>> a710fa95b (Improved memcpy function)
+=======
+=======
+"strncmp", "strcmp", "strlen", "ceil", "__ceil_array", "fegetround",
+  "fesetround", "rint", "fesetround", "floor", "fabs", "sin", "cos", "exp",
+  "expm1", "expm1_taylor", "fmod", "sqrt", "fmin", "fmax", "trunc", "frexp",
+  "round", "copysign", "arctan", "atan", "_atan", "atan2", "acos", "arccos",
+  "dot", "add", "subtract", "multiply", "divide", "transpose", "det", "matmul",
+  "pow", "log", "pow_by_squaring", "log2", "ldexp", "log1p_taylor"
+};
+>>>>>>> 65e1daef5 (Apply automatic changes)
+>>>>>>> 8bb3dfef5 (Apply automatic changes)
 
 } // namespace
 

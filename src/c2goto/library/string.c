@@ -279,11 +279,17 @@ __ESBMC_HIDE:;
   __ESBMC_assert(dst != NULL, "Destination pointer is NULL.");
   __ESBMC_assert(src != NULL, "Source pointer is NULL.");
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 8bb3dfef5 (Apply automatic changes)
   __ESBMC_assume(n <= 1024);
   char *cdst = (char *)dst;
   const char *csrc = (const char *)src;
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 8bb3dfef5 (Apply automatic changes)
   if (((uintptr_t)dst % 8 == 0) && ((uintptr_t)src % 8 == 0))
   {
     size_t i = 0;
@@ -304,6 +310,7 @@ __ESBMC_HIDE:;
     {
       cdst[i] = csrc[i];
     }
+<<<<<<< HEAD
   }
 
   return dst;
@@ -325,13 +332,11 @@ __ESBMC_HIDE:;
   
   for (; i + 8 <= n; i += 8) {
   ((uint64_t *)cdst)[i / 8] = ((const uint64_t *)csrc)[i / 8];
+=======
+>>>>>>> 8bb3dfef5 (Apply automatic changes)
   }
- // Copy the  remaining bytes
- for (; i < n; ++i) {
- cdst[i] = csrc[i];
- }
-   } else {
 
+<<<<<<< HEAD
    for (size_t i = 0; i < n; ++i) {
     cdst[i] = csrc[i];
  }
@@ -339,6 +344,9 @@ __ESBMC_HIDE:;
 
  return dst;
 >>>>>>> a710fa95b (Improved memcpy function)
+=======
+  return dst;
+>>>>>>> 8bb3dfef5 (Apply automatic changes)
 }
 
 void *__memset_impl(void *s, int c, size_t n)
