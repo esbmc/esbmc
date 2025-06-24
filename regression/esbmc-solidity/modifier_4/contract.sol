@@ -1,29 +1,22 @@
-// SPDX-License-Identifier: GPL-3.0
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
 
-pragma solidity >=0.8.2 ;
+contract D {
+    uint x;
+    uint y;
 
-contract A {
-    int x = 0;
-    constructor() {
-        x = 1;
-    }
-}
-
-contract B is A {
-    constructor() {
-        x = 2;
-    }
-}
-
-contract C is A, B {
-    modifier func(int k, uint) {
-        require(k == 2, "ok");
+    modifier check {
         _;
+        assert(x == 0);
     }
 
-    constructor() func(x, 2) A() B() {
-        assert(1 == 0);
+    modifier check2 {
+        _;
+        x = 0;
     }
 
-    function test() public pure {}
+    function func2() public check check2{
+        x = 1;
+
+    }
 }
