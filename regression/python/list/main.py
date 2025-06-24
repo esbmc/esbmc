@@ -44,10 +44,21 @@ def func2(l: list[float]) -> None:
 
 l8 = [1.0]
 func2(l8)
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 9216cc719 ([python-frontend] Handling array literals (#2467))
 assert l8[0] == 2.0
 
 def bar(x:list[int]) -> None:
     assert x[0] == 1
 
 x = 0    
+<<<<<<< HEAD
 bar([1,2,3])
+=======
+assert l8[0] == 2.0
+>>>>>>> f59fd87f9 ([python-frontend] Reuse C libm models for NumPy math functions (#2395))
+=======
+bar([1,2,3])
+>>>>>>> 9216cc719 ([python-frontend] Handling array literals (#2467))

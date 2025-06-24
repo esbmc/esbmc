@@ -1,4 +1,12 @@
+<<<<<<< HEAD
+<<<<<<< HEAD
 CORE
+=======
+KNOWNBUG
+>>>>>>> 03f9c6079 ([regression] added test cases for vector)
+=======
+CORE
+>>>>>>> 2a2f4fa7c ([c++] add allocator template parameter to std::vector (#2536))
 main.cpp
 
 ^VERIFICATION SUCCESSFUL$

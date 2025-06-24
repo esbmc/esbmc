@@ -1,4 +1,12 @@
+<<<<<<< HEAD
+<<<<<<< HEAD
 CORE
+=======
+KNOWNBUG
+>>>>>>> 4ed7a6d91 ([regression] added test case for class)
+=======
+CORE
+>>>>>>> 39b012f9f ([python] handles assertions involving function calls and refactor attribute handling (#2510))
 main.py
 
 ^VERIFICATION SUCCESSFUL$

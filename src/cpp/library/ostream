@@ -187,6 +187,10 @@ inline ostream &flush(ostream &os)
 {
   return os.flush();
 }
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 27d39fce3 ([c++] fix STL operator overload resolution errors in ostream, sstream and string headers (#2528))
 
 inline ostream& boolalpha(ostream& os) 
 {
@@ -198,6 +202,11 @@ inline ostream &operator<<(ostream &o, ostream& (*manip)(ostream&))
   return manip(o);
 }
 
+<<<<<<< HEAD
+=======
+>>>>>>> ac551525f ([C++ verification] update operational models (#2424))
+=======
+>>>>>>> 27d39fce3 ([c++] fix STL operator overload resolution errors in ostream, sstream and string headers (#2528))
 } // namespace std
 
 #endif

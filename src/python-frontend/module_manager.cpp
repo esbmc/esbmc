@@ -43,6 +43,14 @@ std::shared_ptr<module> create_module(const fs::path &json_path)
           f.return_type_ = node["returns"]["value"]["id"];
         else if (node["returns"]["_type"] == "Tuple")
           f.return_type_ = "Tuple";
+<<<<<<< HEAD
+        else if (
+          node["returns"]["_type"] == "Constant" ||
+          node["returns"]["_type"] == "Str")
+          // Handle string annotations like -> "int" (legacy forward references)
+          f.return_type_ = node["returns"]["value"];
+=======
+>>>>>>> 702b6f4ad ([python] improved return type inference (#2494))
         else if (
           node["returns"]["_type"] == "Constant" ||
           node["returns"]["_type"] == "Str")

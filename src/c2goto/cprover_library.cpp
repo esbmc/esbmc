@@ -90,6 +90,7 @@ static const struct buffer
 
 const static std::vector<std::string> python_c_models = {
 <<<<<<< HEAD
+<<<<<<< HEAD
   "strncmp",
   "strcmp",
   "strlen",
@@ -135,6 +136,14 @@ const static std::vector<std::string> python_c_models = {
   "ldexp",
   "log1p_taylor"};
 =======
+=======
+<<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 59fb1bf8f ([python] enhanced handling of true division (#2505))
+>>>>>>> a710fa95b (Improved memcpy function)
   "strncmp",    "ceil",         "__ceil_array",
   "fegetround", "fesetround",   "rint",
   "fesetround", "floor",        "fabs",
@@ -149,7 +158,107 @@ const static std::vector<std::string> python_c_models = {
   "transpose",  "det",          "matmul",
   "pow",        "log",          "pow_by_squaring",
   "log2",       "ldexp",        "log1p_taylor"};
+<<<<<<< HEAD
 >>>>>>> e7c955101 (Update stats-300s.txt)
+=======
+<<<<<<< HEAD
+=======
+  "strncmp",
+=======
+  "strncmp",
+  "strcmp",
+  "strlen",
+>>>>>>> 4abbd7e11 ([python-frontend] Handling string attributes (#2546))
+  "ceil",
+  "__ceil_array",
+  "fegetround",
+  "fesetround",
+  "rint",
+<<<<<<< HEAD
+<<<<<<< HEAD
+  "fesetround"};
+>>>>>>> f59fd87f9 ([python-frontend] Reuse C libm models for NumPy math functions (#2395))
+=======
+=======
+>>>>>>> 4abbd7e11 ([python-frontend] Handling string attributes (#2546))
+  "fesetround",
+  "floor",
+  "fabs",
+  "sin",
+  "cos",
+  "exp",
+  "expm1",
+  "expm1_taylor",
+  "fmod",
+<<<<<<< HEAD
+  "frexp"};
+>>>>>>> 2e5aef15f ([python] Expand numpy math models (#2407))
+=======
+  "strncmp", "ceil",       "__ceil_array", "fegetround",   "fesetround",
+  "rint",    "fesetround", "floor",        "fabs",         "sin",
+  "cos",     "exp",        "expm1",        "expm1_taylor", "fmod",
+  "sqrt",    "fmin",       "fmax",         "trunc",        "frexp",
+<<<<<<< HEAD
+  "round",   "copysign",   "arctan",       "atan",         "_atan"};
+>>>>>>> f86e3ad14 ([python] added test cases for numpy math functions (#2437))
+=======
+  "round",   "copysign",   "arctan",       "atan",         "_atan",
+<<<<<<< HEAD
+  "atan2",   "acos",       "arccos"};
+>>>>>>> 227449899 ([numpy] Add support for numpy.arccos() and some fixes (#2444))
+=======
+  "atan2",   "acos",       "arccos",       "dot"};
+>>>>>>> bea8feb3b ([python] Handling NumPy dot product (#2460))
+=======
+  "strncmp",  "ceil",       "__ceil_array", "fegetround",   "fesetround",
+  "rint",     "fesetround", "floor",        "fabs",         "sin",
+  "cos",      "exp",        "expm1",        "expm1_taylor", "fmod",
+  "sqrt",     "fmin",       "fmax",         "trunc",        "frexp",
+  "round",    "copysign",   "arctan",       "atan",         "_atan",
+  "atan2",    "acos",       "arccos",       "dot",          "add",
+<<<<<<< HEAD
+<<<<<<< HEAD
+  "subtract", "multiply",   "divide"};
+>>>>>>> 5cd8a6f44 ([python] Allow variables in NumPy math function calls (#2469))
+=======
+  "subtract", "multiply",   "divide",       "transpose",    "det"};
+>>>>>>> 26666f4c8 ([python] Handling numpy functions (#2474))
+=======
+  "subtract", "multiply",   "divide",       "transpose",    "det",
+  "matmul"};
+>>>>>>> 80338d5a3 ([python] Add numpy.matmul (#2487))
+=======
+>>>>>>> 59fb1bf8f ([python] enhanced handling of true division (#2505))
+=======
+  "sqrt",
+  "fmin",
+  "fmax",
+  "trunc",
+  "frexp",
+  "round",
+  "copysign",
+  "arctan",
+  "atan",
+  "_atan",
+  "atan2",
+  "acos",
+  "arccos",
+  "dot",
+  "add",
+  "subtract",
+  "multiply",
+  "divide",
+  "transpose",
+  "det",
+  "matmul",
+  "pow",
+  "log",
+  "pow_by_squaring",
+  "log2",
+  "ldexp",
+  "log1p_taylor"};
+>>>>>>> 4abbd7e11 ([python-frontend] Handling string attributes (#2546))
+>>>>>>> a710fa95b (Improved memcpy function)
 
 } // namespace
 

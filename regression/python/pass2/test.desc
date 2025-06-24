@@ -1,4 +1,12 @@
+<<<<<<< HEAD
+<<<<<<< HEAD
 CORE
+=======
+KNOWNBUG
+>>>>>>> d3481a166 ([regression] added test cases for pass in Python)
+=======
+CORE
+>>>>>>> 702b6f4ad ([python] improved return type inference (#2494))
 main.py
 
 ^VERIFICATION SUCCESSFUL$

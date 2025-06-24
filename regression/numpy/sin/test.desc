@@ -1,4 +1,16 @@
+<<<<<<< HEAD
+<<<<<<< HEAD
 CORE
 main.py
 --multi-property
+=======
+KNOWNBUG
+main.py
+
+>>>>>>> f86e3ad14 ([python] added test cases for numpy math functions (#2437))
+=======
+CORE
+main.py
+--multi-property
+>>>>>>> 227449899 ([numpy] Add support for numpy.arccos() and some fixes (#2444))
 ^VERIFICATION SUCCESSFUL$

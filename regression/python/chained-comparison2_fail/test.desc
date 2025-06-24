@@ -1,4 +1,12 @@
+<<<<<<< HEAD
+<<<<<<< HEAD
 KNOWNBUG
+=======
+CORE
+>>>>>>> 8ce08b28a ([regression] added more test cases for chained comparisons)
+=======
+KNOWNBUG
+>>>>>>> 59fb1bf8f ([python] enhanced handling of true division (#2505))
 main.py
 
 ^VERIFICATION FAILED$

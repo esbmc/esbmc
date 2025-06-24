@@ -1,4 +1,12 @@
+<<<<<<< HEAD
+<<<<<<< HEAD
 CORE
+=======
+KNOWNBUG
+>>>>>>> f27b28ce1 ([Solidity] Upgrade the AST merging algorithm for multiple files (#2392))
+=======
+CORE
+>>>>>>> 0f6d29c39 ([Solidity] Support Unit keywords && insufficient balance checks (#2393))
 contract.solast
 --sol contract.sol --k-induction
 ^VERIFICATION FAILED$

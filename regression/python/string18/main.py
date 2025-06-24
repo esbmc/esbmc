@@ -7,6 +7,13 @@ def test_unicode():
 
 def test_very_long_string():
     very_long = "x" * 1000  # 1000 character string
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+    assert identity_string(very_long) == very_long
+>>>>>>> 2b11dd71d ([python] enhanced string comparison handling (#2497))
+=======
+>>>>>>> 928d8df54 ([python] avoid string comparison with sideeffects)
 
 def complex_identity(x: str) -> str:
     temp = x
@@ -26,6 +33,14 @@ def multi_return_identity(x: str, flag: bool) -> str:
 
 def test_multi_return():
     test_str = "multi_return"
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+    assert multi_return_identity(test_str, True) == test_str
+    assert multi_return_identity(test_str, False) == test_str
+>>>>>>> 2b11dd71d ([python] enhanced string comparison handling (#2497))
+=======
+>>>>>>> 928d8df54 ([python] avoid string comparison with sideeffects)
 
 def fake_identity(x: str) -> str:
     if len(x) > 0:
@@ -44,6 +59,13 @@ def recursive_identity(x: str, depth: int = 0) -> str:
 
 def test_recursive():
     test_str = "recursive"
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+    assert recursive_identity(test_str, 0) == test_str
+>>>>>>> 2b11dd71d ([python] enhanced string comparison handling (#2497))
+=======
+>>>>>>> 928d8df54 ([python] avoid string comparison with sideeffects)
 
 def test_null_bytes():
     null_str = "test\0null"

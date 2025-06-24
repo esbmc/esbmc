@@ -62,6 +62,8 @@ private:
    */
   std::string get_object_name() const;
 
+<<<<<<< HEAD
+=======
   /*
    * Handles int-to-str conversions (e.g., str(65)) by generating
    * the appropriate cast expression.
@@ -154,6 +156,7 @@ private:
   exprt handle_abs(nlohmann::json &arg) const;
 
 protected:
+>>>>>>> 8a6c3ff59 ([python] Add support for hex() built-in function (#2419))
   symbol_id function_id_;
   const nlohmann::json &call_;
   python_converter &converter_;

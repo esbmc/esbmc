@@ -1,4 +1,12 @@
+<<<<<<< HEAD
+<<<<<<< HEAD
 CORE
+=======
+KNOWNBUG
+>>>>>>> b3fb47787 ([python] added test case for true division)
+=======
+CORE
+>>>>>>> 59fb1bf8f ([python] enhanced handling of true division (#2505))
 main.py
 
 ^VERIFICATION SUCCESSFUL$

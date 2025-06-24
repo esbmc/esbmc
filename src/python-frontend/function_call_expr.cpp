@@ -96,12 +96,17 @@ exprt function_call_expr::build_nondet_call() const
   return rhs;
 }
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 038fae2a5 ([python] add support for python's oct() built-in function (#2421))
 exprt function_call_expr::handle_int_to_str(nlohmann::json &arg) const
 {
   std::string str_val = std::to_string(arg["value"].get<int>());
   // Convert string to vector of unsigned char
   std::vector<unsigned char> chars(str_val.begin(), str_val.end());
   // Get type for the array
+<<<<<<< HEAD
 <<<<<<< HEAD
   typet t = type_handler_.get_typet("str", chars.size() + 1);
   // Use helper to generate constant string expression
@@ -112,8 +117,18 @@ exprt function_call_expr::handle_int_to_str(nlohmann::json &arg) const
   // Use helper to generate constant string expression
   return converter_.make_char_array_expr(chars, t);
 >>>>>>> e7c955101 (Update stats-300s.txt)
+=======
+  typet t = type_handler_.get_typet("str", chars.size() + 1);
+  // Use helper to generate constant string expression
+  exprt str = converter_.make_char_array_expr(chars, t);
+  return str;
+>>>>>>> a710fa95b (Improved memcpy function)
 }
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 8783f585b ([python] add support for str(float) conversion (#2427))
 exprt function_call_expr::handle_float_to_str(nlohmann::json &arg) const
 {
   std::string str_val = std::to_string(arg["value"].get<double>());
@@ -126,13 +141,24 @@ exprt function_call_expr::handle_float_to_str(nlohmann::json &arg) const
 
   std::vector<unsigned char> chars(str_val.begin(), str_val.end());
 <<<<<<< HEAD
+<<<<<<< HEAD
   typet t = type_handler_.get_typet("str", chars.size() + 1);
 =======
   typet t = type_handler_.get_typet("str", chars.size());
 >>>>>>> e7c955101 (Update stats-300s.txt)
+=======
+  typet t = type_handler_.get_typet("str", chars.size() + 1);
+>>>>>>> a710fa95b (Improved memcpy function)
   return converter_.make_char_array_expr(chars, t);
 }
 
+<<<<<<< HEAD
+=======
+>>>>>>> 8a6c3ff59 ([python] Add support for hex() built-in function (#2419))
+=======
+>>>>>>> 038fae2a5 ([python] add support for python's oct() built-in function (#2421))
+=======
+>>>>>>> 8783f585b ([python] add support for str(float) conversion (#2427))
 size_t function_call_expr::handle_str(nlohmann::json &arg) const
 {
   if (!arg.contains("value") || !arg["value"].is_string())
@@ -242,15 +268,23 @@ exprt function_call_expr::handle_hex(nlohmann::json &arg) const
   const std::string hex_str = oss.str();
 
 <<<<<<< HEAD
+<<<<<<< HEAD
   typet t = type_handler_.get_typet("str", hex_str.size() + 1);
 
 =======
   typet t = type_handler_.get_typet("str", hex_str.size());
 >>>>>>> e7c955101 (Update stats-300s.txt)
+=======
+  typet t = type_handler_.get_typet("str", hex_str.size() + 1);
+>>>>>>> a710fa95b (Improved memcpy function)
   std::vector<uint8_t> string_literal(hex_str.begin(), hex_str.end());
   return converter_.make_char_array_expr(string_literal, t);
 }
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 038fae2a5 ([python] add support for python's oct() built-in function (#2421))
 exprt function_call_expr::handle_oct(nlohmann::json &arg) const
 {
   long long int_value = 0;  // Holds the integer value to be converted
@@ -296,16 +330,24 @@ exprt function_call_expr::handle_oct(nlohmann::json &arg) const
 
   // Create a string type and return a character array expression
 <<<<<<< HEAD
+<<<<<<< HEAD
 
   typet t = type_handler_.get_typet("str", oct_str.size() + 1);
 
 =======
   typet t = type_handler_.get_typet("str", oct_str.size());
 >>>>>>> e7c955101 (Update stats-300s.txt)
+=======
+  typet t = type_handler_.get_typet("str", oct_str.size() + 1);
+>>>>>>> a710fa95b (Improved memcpy function)
   std::vector<uint8_t> string_literal(oct_str.begin(), oct_str.end());
   return converter_.make_char_array_expr(string_literal, t);
 }
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> ffcecbd12 ([python] Handle ord(): convert single-character string to integer Unicode code point (#2423))
 exprt function_call_expr::handle_ord(nlohmann::json &arg) const
 {
   int code_point = 0;
@@ -384,6 +426,10 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
   return expr;
 }
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 8075be423 ([python] support for int() and float() conversion for symbols (#2429))
 /// Extracts the character string represented by a symbol's constant value.
 std::optional<std::string>
 function_call_expr::extract_string_from_symbol(const symbolt *sym) const
@@ -411,10 +457,16 @@ function_call_expr::extract_string_from_symbol(const symbolt *sym) const
     for (const auto &ch : val.operands())
     {
 <<<<<<< HEAD
+<<<<<<< HEAD
       if (ch == gen_zero(ch.type()))
         break;
 =======
 >>>>>>> e7c955101 (Update stats-300s.txt)
+=======
+      if (ch == gen_zero(ch.type()))
+        break;
+
+>>>>>>> a710fa95b (Improved memcpy function)
       auto decoded = decode_char(ch);
       if (!decoded)
         return std::nullopt;
@@ -494,6 +546,10 @@ function_call_expr::lookup_python_symbol(const std::string &var_name) const
   return sym;
 }
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> e73ba5595 ([python]  add support and error checking for Python abs() builtin function (#2441))
 exprt function_call_expr::handle_abs(nlohmann::json &arg) const
 {
   // Handle the case where the input is a unary minus applied to a literal
@@ -506,6 +562,10 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
       arg = operand; // Strip the unary minus and use the positive literal
   }
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> a766747f5 ([python] Improve abs() handling (#2466))
   // Reject strings early
   if (arg.contains("type") && arg["type"] == "str")
     throw std::runtime_error("TypeError: bad operand type for abs(): 'str'");
@@ -514,6 +574,11 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
   if (arg.contains("value") && arg["value"].is_string())
     throw std::runtime_error("TypeError: bad operand type for abs(): 'str'");
 
+<<<<<<< HEAD
+=======
+>>>>>>> e73ba5595 ([python]  add support and error checking for Python abs() builtin function (#2441))
+=======
+>>>>>>> a766747f5 ([python] Improve abs() handling (#2466))
   // If the argument is a numeric literal, evaluate abs() at compile time
   if (arg.contains("value") && arg["value"].is_number())
   {
@@ -537,6 +602,10 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     return expr;
   }
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> a766747f5 ([python] Improve abs() handling (#2466))
   // Try to infer type for composite expressions like BinOp
   if (!arg.contains("type"))
   {
@@ -558,6 +627,14 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
 
   // Handle variable references
   if (arg["_type"] == "Name" && arg.contains("id"))
+<<<<<<< HEAD
+=======
+  // If the argument is a variable (e.g., abs(x)) without a type,
+  // attempt to resolve its type from the symbol table
+  if (!arg.contains("type") && arg["_type"] == "Name" && arg.contains("id"))
+>>>>>>> e73ba5595 ([python]  add support and error checking for Python abs() builtin function (#2441))
+=======
+>>>>>>> a766747f5 ([python] Improve abs() handling (#2466))
   {
     std::string var_name = arg["id"].get<std::string>();
     const symbolt *sym = lookup_python_symbol(var_name);
@@ -580,9 +657,23 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     }
   }
 
+<<<<<<< HEAD
+<<<<<<< HEAD
   // Final fallback if no type is available
   std::string arg_type = arg.value("type", "");
   if (arg_type.empty())
+=======
+  // If we have a "type" field, validate it; otherwise, abort
+  std::string arg_type;
+  if (arg.contains("type"))
+    arg_type = arg["type"].get<std::string>();
+  else
+>>>>>>> e73ba5595 ([python]  add support and error checking for Python abs() builtin function (#2441))
+=======
+  // Final fallback if no type is available
+  std::string arg_type = arg.value("type", "");
+  if (arg_type.empty())
+>>>>>>> a766747f5 ([python] Improve abs() handling (#2466))
   {
     log_error("TypeError: operand to abs() is missing a type");
     abort();
@@ -601,30 +692,69 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
   return nil_exprt();
 }
 
+<<<<<<< HEAD
+=======
+>>>>>>> 8a6c3ff59 ([python] Add support for hex() built-in function (#2419))
+=======
+>>>>>>> 038fae2a5 ([python] add support for python's oct() built-in function (#2421))
+=======
+>>>>>>> ffcecbd12 ([python] Handle ord(): convert single-character string to integer Unicode code point (#2423))
+=======
+>>>>>>> 8075be423 ([python] support for int() and float() conversion for symbols (#2429))
+=======
+>>>>>>> e73ba5595 ([python]  add support and error checking for Python abs() builtin function (#2441))
 exprt function_call_expr::build_constant_from_arg() const
 {
   const std::string &func_name = function_id_.get_function();
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
   size_t arg_size = 1;
 >>>>>>> e7c955101 (Update stats-300s.txt)
+=======
+>>>>>>> a710fa95b (Improved memcpy function)
   auto arg = call_["args"][0];
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 038fae2a5 ([python] add support for python's oct() built-in function (#2421))
   // Handle str(): convert int to str
   if (func_name == "str" && arg["value"].is_number_integer())
     return handle_int_to_str(arg);
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 8783f585b ([python] add support for str(float) conversion (#2427))
   // Handle str(): convert float to str
   else if (func_name == "str" && arg["value"].is_number_float())
     return handle_float_to_str(arg);
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+<<<<<<< HEAD
+>>>>>>> a710fa95b (Improved memcpy function)
   // Handle str(): determine size of the resulting string constant
   else if (func_name == "str")
     arg_size = handle_str(arg);
 
 >>>>>>> e7c955101 (Update stats-300s.txt)
+  // Handle int(): convert string (from symbol) to int
+  else if (func_name == "int" && arg["_type"] == "Name")
+=======
+=======
+>>>>>>> 038fae2a5 ([python] add support for python's oct() built-in function (#2421))
+=======
+>>>>>>> 8783f585b ([python] add support for str(float) conversion (#2427))
+  // Handle str(): determine size of the resulting string constant
+  else if (func_name == "str")
+    arg_size = handle_str(arg);
+
+=======
+>>>>>>> 4abbd7e11 ([python-frontend] Handling string attributes (#2546))
   // Handle int(): convert string (from symbol) to int
   else if (func_name == "int" && arg["_type"] == "Name")
   {
@@ -650,8 +780,53 @@ exprt function_call_expr::build_constant_from_arg() const
 =======
   }
 
+  size_t arg_size = 1;
+
+  // Handle int(): convert float to int
+<<<<<<< HEAD
+  else if (func_name == "int" && arg["value"].is_number_float())
+<<<<<<< HEAD
+>>>>>>> 4604cc57c ([python] refactor our python frontend and extend chr() and float() built-in functions (#2417))
+  {
+    const symbolt *sym = lookup_python_symbol(arg["id"]);
+    if (sym && sym->value.is_constant())
+      return handle_str_symbol_to_int(sym);
+  }
+=======
+    handle_float_to_int(arg);
+>>>>>>> 8a6c3ff59 ([python] Add support for hex() built-in function (#2419))
+
+  // Handle float(): convert string (from symbol) to float
+  else if (func_name == "float" && arg["_type"] == "Name")
+  {
+    const symbolt *sym = lookup_python_symbol(arg["id"]);
+    if (sym && sym->value.is_constant())
+      return handle_str_symbol_to_float(sym);
+  }
+
+  // Handle float(): convert int to float
+  else if (func_name == "float" && arg["value"].is_number_integer())
+    handle_int_to_float(arg);
+
+  // Handle chr(): convert integer to single-character string
+  else if (func_name == "chr")
+    handle_chr(arg);
+
+  // Handle ord(): convert single-character string to integer Unicode code point
+  else if (func_name == "ord")
+    return handle_ord(arg);
+
+  // Handle hex: Handles hexadecimal string arguments
+  else if (func_name == "hex")
+    return handle_hex(arg);
+
+<<<<<<< HEAD
+<<<<<<< HEAD
   // Handle int(): convert float to int
   else if (func_name == "int" && arg["value"].is_number_float())
+=======
+  if (func_name == "int" && arg["value"].is_number_float())
+>>>>>>> 4abbd7e11 ([python-frontend] Handling string attributes (#2546))
     handle_float_to_int(arg);
 
   // Handle float(): convert string (from symbol) to float
@@ -679,14 +854,21 @@ exprt function_call_expr::build_constant_from_arg() const
   else if (func_name == "hex")
     return handle_hex(arg);
 
+=======
+>>>>>>> 038fae2a5 ([python] add support for python's oct() built-in function (#2421))
   // Handle oct: Handles octal string arguments
   else if (func_name == "oct")
     return handle_oct(arg);
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> e73ba5595 ([python]  add support and error checking for Python abs() builtin function (#2441))
   // Handle abs: Returns the absolute value of an integer or float literal
   else if (func_name == "abs")
     return handle_abs(arg);
 
+<<<<<<< HEAD
 <<<<<<< HEAD
   else if (func_name == "str")
     arg_size = handle_str(arg);
@@ -698,11 +880,31 @@ exprt function_call_expr::build_constant_from_arg() const
   if (func_name != "str")
     expr.type() = t;
 =======
+=======
+<<<<<<< HEAD
+=======
+>>>>>>> 4604cc57c ([python] refactor our python frontend and extend chr() and float() built-in functions (#2417))
+=======
+>>>>>>> 038fae2a5 ([python] add support for python's oct() built-in function (#2421))
+=======
+>>>>>>> e73ba5595 ([python]  add support and error checking for Python abs() builtin function (#2441))
+>>>>>>> a710fa95b (Improved memcpy function)
   // Construct expression with appropriate type
+=======
+  else if (func_name == "str")
+    arg_size = handle_str(arg);
+
+>>>>>>> 4abbd7e11 ([python-frontend] Handling string attributes (#2546))
   typet t = type_handler_.get_typet(func_name, arg_size);
   exprt expr = converter_.get_expr(arg);
+<<<<<<< HEAD
   expr.type() = t;
 >>>>>>> e7c955101 (Update stats-300s.txt)
+=======
+
+  if (func_name != "str")
+    expr.type() = t;
+>>>>>>> a710fa95b (Improved memcpy function)
 
   return expr;
 }

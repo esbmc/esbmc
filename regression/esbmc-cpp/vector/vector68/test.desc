@@ -1,4 +1,12 @@
+<<<<<<< HEAD
+<<<<<<< HEAD
 CORE
+=======
+KNOWNBUG
+>>>>>>> b3edc02d4 ([c++] added test case for vector)
+=======
+CORE
+>>>>>>> f11daf94a ([c++] fix vector default constructor: remove explicit keyword (#2535))
 main.cpp
 --unwind 5
 ^VERIFICATION SUCCESSFUL$

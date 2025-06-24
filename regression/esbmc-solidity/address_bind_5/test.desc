@@ -1,4 +1,7 @@
+<<<<<<< HEAD
+=======
 CORE
 contract.solast
 --sol contract.sol --contract Base --k-induction --no-standard-check
 ^VERIFICATION FAILED$
+>>>>>>> 0ad7495d4 ([Solidity] add support for several keywords and update modelling algorithm (#2405))

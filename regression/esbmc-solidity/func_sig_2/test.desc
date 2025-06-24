@@ -1,4 +1,12 @@
 CORE
 contract.solast
+<<<<<<< HEAD
+<<<<<<< HEAD
 --sol contract.sol --contract C --no-standard-checks --unwind 4 --no-unwinding-assertions
+=======
+--sol contract.sol --k-induction --contract C --no-standard-checks
+>>>>>>> 0ad7495d4 ([Solidity] add support for several keywords and update modelling algorithm (#2405))
+=======
+--sol contract.sol --contract C --no-standard-checks --unwind 4 --no-unwinding-assertions
+>>>>>>> 9aac25be5 ([solidity] fix reentry attack checks (#2422))
 ^VERIFICATION SUCCESSFUL$

@@ -2,7 +2,15 @@
 
 Here, we document the mapping between ESBMC's math library implementations and their NumPy equivalents. 
 
+<<<<<<< HEAD
+<<<<<<< HEAD
 These mappings help test and verify floating-point behavior consistently across C and Python environments.
+=======
+These mappings help in testing and verifying floating-point behavior consistently across C and Python environments.
+>>>>>>> f86e3ad14 ([python] added test cases for numpy math functions (#2437))
+=======
+These mappings help test and verify floating-point behavior consistently across C and Python environments.
+>>>>>>> b70647734 (Update README.md)
 
 Reference: https://numpy.org/doc/stable/reference/routines.math.html
 

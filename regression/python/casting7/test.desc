@@ -1,4 +1,16 @@
 CORE
 main.py
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
 ^ERROR: '<' not supported between instances of 'float' and 'str' at .*main\.py:3$
+=======
+^ERROR: Unsupported ordered comparison between float and str$
+>>>>>>> 8fc89cda7 ([python] check for float and str comparisons)
+=======
+^ERROR: '<' not supported between instances of 'float' and 'str' at main.py:3$
+>>>>>>> e2a86215d ([python] improved report about the TypeError location)
+=======
+^ERROR: '<' not supported between instances of 'float' and 'str' at .*main\.py:3$
+>>>>>>> be37252c6 ([regression] fixed regular expression)

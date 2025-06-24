@@ -1,4 +1,12 @@
+<<<<<<< HEAD
+<<<<<<< HEAD
 CORE
+=======
+THOROUGH
+>>>>>>> fa27ea0ea ([Cov & Sol] Coverage support for Solidity (#2389))
+=======
+CORE
+>>>>>>> 652ccf467 ([Solidity] function call with options (#2398))
 contract.solast
 --sol contract.sol --contract caller  --unwind 1 --no-unwinding-assertions --no-standard-check
 ^VERIFICATION SUCCESSFUL$

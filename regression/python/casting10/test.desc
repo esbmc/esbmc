@@ -1,4 +1,12 @@
+<<<<<<< HEAD
+<<<<<<< HEAD
 CORE
+=======
+KNOWNBUG
+>>>>>>> f4632e776 ([regression] added test case for casting)
+=======
+CORE
+>>>>>>> 4604cc57c ([python] refactor our python frontend and extend chr() and float() built-in functions (#2417))
 main.py
 
 ^VERIFICATION SUCCESSFUL$

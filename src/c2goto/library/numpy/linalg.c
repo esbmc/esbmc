@@ -1,6 +1,14 @@
 // NumPy documentation: https://numpy.org/doc/stable/reference/routines.linalg.html
 
+<<<<<<< HEAD
+<<<<<<< HEAD
 #include <math.h>
+=======
+#include <assert.h>
+>>>>>>> bea8feb3b ([python] Handling NumPy dot product (#2460))
+=======
+#include <math.h>
+>>>>>>> 26666f4c8 ([python] Handling numpy functions (#2474))
 #include <stdint.h>
 
 void dot(int64_t *A, int64_t *B, int64_t *C, int64_t m, int64_t n, int64_t p)
@@ -24,6 +32,15 @@ void dot(int64_t *A, int64_t *B, int64_t *C, int64_t m, int64_t n, int64_t p)
     i++;
   }
 }
+<<<<<<< HEAD
+<<<<<<< HEAD
+
+void matmul(int64_t *A, int64_t *B, int64_t *C, int64_t m, int64_t n, int64_t p)
+{
+  dot(A, B, C, m, n, p);
+}
+=======
+>>>>>>> 26666f4c8 ([python] Handling numpy functions (#2474))
 
 void matmul(int64_t *A, int64_t *B, int64_t *C, int64_t m, int64_t n, int64_t p)
 {
@@ -104,3 +121,8 @@ void det(const int64_t *src, int64_t *dst, int64_t rows, int64_t cols)
 
   *dst = a * d - b * c;
 }
+<<<<<<< HEAD
+=======
+>>>>>>> bea8feb3b ([python] Handling NumPy dot product (#2460))
+=======
+>>>>>>> 26666f4c8 ([python] Handling numpy functions (#2474))

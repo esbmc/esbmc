@@ -1,4 +1,12 @@
 CORE
 contract.solast
+<<<<<<< HEAD
+<<<<<<< HEAD
 --function func_array_loop --sol contract.sol --k-induction
+=======
+--function func_array_loop --sol contract.sol
+>>>>>>> f27b28ce1 ([Solidity] Upgrade the AST merging algorithm for multiple files (#2392))
+=======
+--function func_array_loop --sol contract.sol --k-induction
+>>>>>>> 9aac25be5 ([solidity] fix reentry attack checks (#2422))
 ^VERIFICATION FAILED$

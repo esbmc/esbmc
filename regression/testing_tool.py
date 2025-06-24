@@ -371,9 +371,13 @@ TEST_SUITES = [
     "esbmc-cpp/vector",
     "esbmc-cpp/functional",
 <<<<<<< HEAD
+<<<<<<< HEAD
     "esbmc-cpp/bitset",
 =======
 >>>>>>> e7c955101 (Update stats-300s.txt)
+=======
+    "esbmc-cpp/bitset",
+>>>>>>> a710fa95b (Improved memcpy function)
     "esbmc-cpp11/constructors",
     "esbmc-cpp11/cpp",
     "esbmc-cpp11/new-delete",

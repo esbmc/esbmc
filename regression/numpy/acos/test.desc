@@ -1,4 +1,17 @@
+<<<<<<< HEAD
+<<<<<<< HEAD
 CORE
 main.py
 --incremental-bmc
+<<<<<<< HEAD
+=======
+KNOWNBUG
+=======
+CORE
+>>>>>>> 227449899 ([numpy] Add support for numpy.arccos() and some fixes (#2444))
+main.py
+
+>>>>>>> f86e3ad14 ([python] added test cases for numpy math functions (#2437))
+=======
+>>>>>>> 9adda6dfa ([numpy] enhance numpy math function verification coverage (#2445))
 ^VERIFICATION SUCCESSFUL$

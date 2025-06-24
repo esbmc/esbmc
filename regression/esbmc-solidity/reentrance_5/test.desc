@@ -1,4 +1,16 @@
 CORE
 contract.solast
+<<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
 --sol contract.sol --incremental-bmc --no-standard-checks
+=======
+--sol contract.sol --contract Reproduction --incremental-bmc
+>>>>>>> 652ccf467 ([Solidity] function call with options (#2398))
+=======
+--sol contract.sol --contract Reproduction --unwind 4 --no-unwinding-assertion
+>>>>>>> 297a99968 ([Solidity] Add support for the library entity (#2394))
+=======
+--sol contract.sol --incremental-bmc --no-standard-checks
+>>>>>>> 97c1e1f45 ([Solidity] Refactoring Mapping (#2468))
 ^VERIFICATION FAILED$

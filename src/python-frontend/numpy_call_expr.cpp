@@ -77,6 +77,33 @@ static auto create_binary_op(
 bool numpy_call_expr::is_math_function() const
 {
   const std::string &function = function_id_.get_function();
+<<<<<<< HEAD
+  return (function == "add") || (function == "subtract") ||
+         (function == "multiply") || (function == "divide") ||
+<<<<<<< HEAD
+         (function == "power");
+=======
+         (function == "power") || (function == "ceil") ||
+         (function == "floor") || (function == "fabs") || (function == "sin") ||
+<<<<<<< HEAD
+         (function == "cos") || (function == "exp") || (function == "fmod");
+>>>>>>> 2e5aef15f ([python] Expand numpy math models (#2407))
+=======
+         (function == "cos") || (function == "exp") || (function == "fmod") ||
+         (function == "sqrt") || (function == "fmin") || (function == "fmax") ||
+         (function == "trunc") || (function == "round") ||
+<<<<<<< HEAD
+         (function == "copysign") || (function == "arctan");
+>>>>>>> f86e3ad14 ([python] added test cases for numpy math functions (#2437))
+=======
+         (function == "arccos") || (function == "copysign") ||
+<<<<<<< HEAD
+         (function == "arctan");
+>>>>>>> 227449899 ([numpy] Add support for numpy.arccos() and some fixes (#2444))
+=======
+         (function == "arctan") || (function == "dot");
+>>>>>>> bea8feb3b ([python] Handling NumPy dot product (#2460))
+=======
   return function == "add" || function == "subtract" ||
          function == "multiply" ||
          (function == "divide" || function == "power" || function == "ceil" ||
@@ -86,7 +113,12 @@ bool numpy_call_expr::is_math_function() const
          function == "fmax" || function == "trunc" || function == "round" ||
          function == "arccos" || function == "copysign" ||
          function == "arctan" || function == "dot" || function == "transpose" ||
+<<<<<<< HEAD
+         function == "det";
+>>>>>>> 26666f4c8 ([python] Handling numpy functions (#2474))
+=======
          function == "det" || function == "matmul";
+>>>>>>> 80338d5a3 ([python] Add numpy.matmul (#2487))
 }
 
 std::string numpy_call_expr::get_dtype() const
@@ -224,6 +256,9 @@ void numpy_call_expr::broadcast_check(const nlohmann::json &operands) const
   }
 }
 
+<<<<<<< HEAD
+exprt numpy_call_expr::create_expr_from_call() const
+=======
 template <typename T>
 T get_constant_value(const nlohmann::json &node)
 {
@@ -257,9 +292,28 @@ T get_constant_value(const nlohmann::json &node)
 }
 
 exprt numpy_call_expr::create_expr_from_call()
+>>>>>>> 9adda6dfa ([numpy] enhance numpy math function verification coverage (#2445))
 {
   nlohmann::json expr;
 
+<<<<<<< HEAD
+  auto lhs = call_["args"][0];
+  auto rhs = call_["args"][1];
+
+    // Resolve variables if they are names
+    auto resolve_var = [this](nlohmann::json &var) {
+      if (var["_type"] == "Name")
+      {
+        var = json_utils::find_var_decl(
+          var["id"], function_id_.get_function(), converter_.ast());
+        if (var["value"]["_type"] == "Call")
+          var = var["value"]["args"][0];
+      }
+    };
+
+  resolve_var(lhs);
+  resolve_var(rhs);
+=======
   // Resolve variables if they are names
   auto resolve_var = [this](nlohmann::json &var) {
     if (var["_type"] == "Name")
@@ -359,7 +413,14 @@ exprt numpy_call_expr::create_expr_from_call()
 
     resolve_var(lhs);
     resolve_var(rhs);
+>>>>>>> f59fd87f9 ([python-frontend] Reuse C libm models for NumPy math functions (#2395))
 
+<<<<<<< HEAD
+  if (lhs["_type"] == "Constant" && rhs["_type"] == "Constant")
+  {
+    expr =
+      create_binary_op(function_id_.get_function(), lhs["value"], rhs["value"]);
+=======
     if (
       (lhs["_type"] == "Constant" || lhs["_type"] == "UnaryOp") &&
       (rhs["_type"] == "Constant" || rhs["_type"] == "UnaryOp"))
@@ -549,12 +610,43 @@ exprt numpy_call_expr::create_expr_from_call()
 
       throw std::runtime_error("Unsupported operation: " + operation);
     }
+>>>>>>> 9adda6dfa ([numpy] enhance numpy math function verification coverage (#2445))
   }
+  else if (lhs["_type"] == "List" && rhs["_type"] == "List")
+  {
+    std::vector<int> res;
+    const std::string &operation = function_id_.get_function();
+    for (size_t i = 0; i < lhs["elts"].size(); ++i)
+    {
+      int left_val = lhs["elts"][i]["value"].get<int>();
+      int right_val = rhs["elts"][i]["value"].get<int>();
 
+<<<<<<< HEAD
+      if (operation == "add")
+        res.push_back(left_val + right_val);
+      else if (operation == "subtract")
+        res.push_back(left_val - right_val);
+      else if (operation == "multiply")
+        res.push_back(left_val * right_val);
+      else if (operation == "divide")
+      {
+        if (right_val == 0)
+          throw std::runtime_error("Division by zero in list operation");
+        res.push_back(left_val / right_val);
+      }
+      else
+      {
+        throw std::runtime_error("Unsupported operation: " + operation);
+      }
+    }
+    expr = create_list(res);
+  }
+=======
   if (expr.empty())
     throw std::runtime_error(
       "Unsupported Numpy call: " + function_id_.get_function());
 
+>>>>>>> a76609233 ([python] add support for numpy.fabs() (#2435))
   return converter_.get_expr(expr);
 }
 

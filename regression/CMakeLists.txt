@@ -120,9 +120,13 @@ set(REGRESSIONS_CPP03 esbmc-cpp/cpp
                       esbmc-cpp/try_catch
                       esbmc-cpp/functional
 <<<<<<< HEAD
+<<<<<<< HEAD
                       esbmc-cpp/bitset
 =======
 >>>>>>> e7c955101 (Update stats-300s.txt)
+=======
+                      esbmc-cpp/bitset
+>>>>>>> a710fa95b (Improved memcpy function)
                       )
 # list of C++11 test suites
 set(REGRESSIONS_CPP11 esbmc-cpp11/cpp

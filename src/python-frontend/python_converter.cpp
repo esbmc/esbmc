@@ -31,8 +31,26 @@ static const std::unordered_map<std::string, std::string> operator_map = {
   {"rshift", "ashr"},   {"usub", "unary-"},   {"eq", "="},
   {"lt", "<"},          {"lte", "<="},        {"noteq", "notequal"},
   {"gt", ">"},          {"gte", ">="},        {"and", "and"},
+<<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
   {"or", "or"},         {"not", "not"},       {"uadd", "unary+"},
   {"is", "="},          {"isnot", "not"}};
+=======
+  {"or", "or"},         {"not", "not"},
+=======
+  {"or", "or"},         {"not", "not"},       {"uadd", "unary+"}
+>>>>>>> 11a554ca1 ([python] add support for unary+ operator)
+};
+>>>>>>> bea8feb3b ([python] Handling NumPy dot product (#2460))
+=======
+  {"or", "or"},         {"not", "not"},       {"uadd", "unary+"}};
+>>>>>>> 9c19afb82 ([python] add support for bytes literals and indexing (#2484))
+=======
+  {"or", "or"},         {"not", "not"},       {"uadd", "unary+"},
+  {"is", "="},          {"isnot", "not"}};
+>>>>>>> 0ecf84c8c ([python] add support for Is and IsNot operators (#2480))
 
 static const std::unordered_map<std::string, StatementType> statement_map = {
   {"AnnAssign", StatementType::VARIABLE_ASSIGN},
@@ -51,6 +69,24 @@ static const std::unordered_map<std::string, StatementType> statement_map = {
   {"ImportFrom", StatementType::IMPORT},
   {"Import", StatementType::IMPORT},
   {"Raise", StatementType::RAISE}};
+
+static bool is_char_type(const typet &t)
+{
+  return (t.is_signedbv() || t.is_unsignedbv()) && t.get("#cpp_type") == "char";
+}
+
+static bool is_float_vs_char(const exprt &a, const exprt &b)
+{
+  const auto &type_a = a.type();
+  const auto &type_b = b.type();
+  return (type_a.is_floatbv() && is_char_type(type_b)) ||
+         (type_b.is_floatbv() && is_char_type(type_a));
+}
+
+static bool is_ordered_comparison(const std::string &op)
+{
+  return op == "Lt" || op == "Gt" || op == "LtE" || op == "GtE";
+}
 
 static bool is_char_type(const typet &t)
 {
@@ -103,7 +139,14 @@ static std::string get_op(const std::string &op, const typet &type)
       {"sub", "ieee_sub"},
       {"subtract", "ieee_sub"},
       {"mult", "ieee_mul"},
+<<<<<<< HEAD
+<<<<<<< HEAD
       {"dot", "ieee_mul"},
+=======
+>>>>>>> 4604cc57c ([python] refactor our python frontend and extend chr() and float() built-in functions (#2417))
+=======
+      {"dot", "ieee_mul"},
+>>>>>>> bea8feb3b ([python] Handling NumPy dot product (#2460))
       {"multiply", "ieee_mul"},
       {"div", "ieee_div"},
       {"divide", "ieee_div"}};
@@ -141,6 +184,20 @@ static struct_typet::componentt build_component(
   component.set_access("public");
 
   return component;
+<<<<<<< HEAD
+}
+
+static codet convert_expression_to_code(exprt &expr)
+{
+  if (expr.is_code())
+    return static_cast<codet &>(expr);
+
+  codet code("expression");
+  code.location() = expr.location();
+  code.move_to_operands(expr);
+  return code;
+=======
+>>>>>>> 4604cc57c ([python] refactor our python frontend and extend chr() and float() built-in functions (#2417))
 }
 
 static codet convert_expression_to_code(exprt &expr)
@@ -263,6 +320,102 @@ void python_converter::update_symbol(const exprt &expr) const
         sid.to_string(),
         e.what());
     }
+<<<<<<< HEAD
+  }
+}
+
+/// Promotes an integer expression to a float type (floatbv) when needed,
+/// typically for Python-style division where / must always yield a float result,
+// even with integer operands.
+void python_converter::promote_int_to_float(exprt &op, const typet &target_type)
+  const
+{
+  typet &op_type = op.type();
+
+  // Only promote if operand is an integer type
+  if (!(op_type.is_signedbv() || op_type.is_unsignedbv()))
+    return;
+
+  // Handle constant integers
+  if (op.is_constant())
+  {
+    try
+    {
+      const BigInt int_val =
+        binary2integer(op.value().as_string(), op_type.is_signedbv());
+
+      // Generate a string like "3.0" for float parsing
+      const std::string float_literal =
+        std::to_string(int_val.to_int64()) + ".0";
+
+      // Convert string literal to float expression
+      convert_float_literal(float_literal, op);
+    }
+    catch (const std::exception &e)
+    {
+      log_error(
+        "promote_int_to_float: Failed to promote constant to float: {}",
+        e.what());
+      return;
+    }
+  }
+
+  // Update the operand type
+  op.type() = target_type;
+
+  // Update symbol type info if necessary
+  if (op.is_symbol())
+    update_symbol(op);
+}
+
+// Helper function to get numeric width from type
+size_t get_type_width(const typet &type)
+{
+  // First try to parse width directly
+  try
+  {
+    return std::stoi(type.width().c_str());
+  }
+  catch (const std::exception &)
+  {
+    // If direct parsing fails, try to infer from type name
+    std::string type_str = type.width().as_string();
+
+    // Handle common Python/ESBMC type mappings
+    if (type_str == "int" || type_str == "int32")
+      return 32;
+    else if (type_str == "int64" || type_str == "long")
+      return 64;
+    else if (type_str == "int16" || type_str == "short")
+      return 16;
+    else if (type_str == "int8" || type_str == "char")
+      return 8;
+    else if (type_str == "float" || type_str == "float32")
+      return 32;
+    else if (type_str == "double" || type_str == "float64")
+      return 64;
+    else if (type_str == "bool")
+      return 1;
+
+    // Try to extract number from string like "int32", "uint64", etc.
+    std::regex width_regex(R"(\d+)");
+    std::smatch match;
+    if (std::regex_search(type_str, match, width_regex))
+    {
+      try
+      {
+        return std::stoi(match.str());
+      }
+      catch (const std::exception &)
+      {
+        // Fall through to default
+      }
+    }
+
+    // Default to 32 for unknown types
+    return 32;
+=======
+>>>>>>> 4604cc57c ([python] refactor our python frontend and extend chr() and float() built-in functions (#2417))
   }
 }
 
@@ -369,6 +522,10 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
     lhs_type.is_floatbv() && rhs.is_constant() &&
     (rhs_type.is_signedbv() || rhs_type.is_unsignedbv()))
   {
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 4604cc57c ([python] refactor our python frontend and extend chr() and float() built-in functions (#2417))
     try
     {
       // Convert binary string value to integer
@@ -390,7 +547,20 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
         "adjust_statement_types: Failed to promote integer to float: {}",
         e.what());
     }
+<<<<<<< HEAD
+=======
+    // Convert RHS to float
+    BigInt value(
+      binary2integer(rhs.value().as_string(), rhs_type.is_signedbv()));
+    std::string rhs_float = std::to_string(value.to_int64()) + ".0";
+    convert_float_literal(rhs_float, rhs);
+    update_symbol(rhs);
+>>>>>>> 1078ace71 ([Python]  add chr() built-in function support (#2416))
   }
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 59fb1bf8f ([python] enhanced handling of true division (#2505))
   // Case 2: For Python assignments, if RHS is float but LHS is integer,
   // promote LHS to float to maintain Python's dynamic typing semantics
   else if (
@@ -409,6 +579,7 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
   // setting the result type to floatbv.
   else if (
     (rhs.id() == "/" || rhs.id() == "ieee_div") && rhs.operands().size() == 2)
+<<<<<<< HEAD
   {
     auto &ops = rhs.operands();
     exprt &lhs_op = ops[0];
@@ -459,12 +630,94 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
       rhs.type() = float_type;
   }
   // Case 5: Align bit-widths between LHS and RHS if they differ
+=======
+  }
+<<<<<<< HEAD
+  // Case 2: Align bit-widths between LHS and RHS if they differ
+>>>>>>> 4604cc57c ([python] refactor our python frontend and extend chr() and float() built-in functions (#2417))
+=======
+  // Case 2: Determine result type for Python's true division ("/")
+  else if (
+    lhs_type.is_floatbv() && rhs.id() == "/" && rhs.operands().size() == 2)
+=======
+  /// Case 2: Handles Python’s / operator by promoting operands to floats
+  /// to ensure floating-point division, preventing division by zero, and
+  /// setting the result type to floatbv.
+  else if (rhs.id() == "/" && rhs.operands().size() == 2)
+>>>>>>> 117989e74 ([python] Improved inference to handle true division (/) operator (#2426))
+=======
+>>>>>>> 59fb1bf8f ([python] enhanced handling of true division (#2505))
+  {
+    auto &ops = rhs.operands();
+    exprt &lhs_op = ops[0];
+    exprt &rhs_op = ops[1];
+
+    // Promote both operands to IEEE float (double precision) to match Python semantics
+    const typet float_type =
+      double_type(); // Python default float is double-precision
+
+    // Handle constant operands
+    if (
+      lhs_op.is_constant() &&
+      (lhs_op.type().is_signedbv() || lhs_op.type().is_unsignedbv()))
+      promote_int_to_float(lhs_op, float_type);
+    // For non-constant operands, create explicit typecast
+    else if (!lhs_op.type().is_floatbv())
+      lhs_op = typecast_exprt(lhs_op, float_type);
+
+    if (
+      rhs_op.is_constant() &&
+      (rhs_op.type().is_signedbv() || rhs_op.type().is_unsignedbv()))
+      promote_int_to_float(rhs_op, float_type);
+    else if (!rhs_op.type().is_floatbv())
+      rhs_op = typecast_exprt(rhs_op, float_type);
+
+    // For in-place division (like x /= y), ensure LHS variable is promoted to float
+    lhs.type() = float_type;
+    if (lhs.is_symbol())
+      update_symbol(lhs);
+
+    // Update the division expression type and operator ID
+    rhs.type() = float_type;
+    rhs.id(get_op("div", float_type));
+  }
+<<<<<<< HEAD
+  // Case 3: Align bit-widths between LHS and RHS if they differ
+>>>>>>> d76a37c5d ([python] Support python true division semantics (/) with float type coercion (#2425))
+=======
+  // Case 4: Special case for IEEE division results - ensure LHS is float
+  else if (rhs.id() == "ieee_div" && !lhs_type.is_floatbv())
+  {
+    // For any IEEE division result assigned to an integer variable,
+    // promote the variable to float to avoid truncation
+    const typet float_type = double_type();
+    lhs.type() = float_type;
+
+    if (lhs.is_symbol())
+      update_symbol(lhs);
+
+    // Ensure RHS type is also float
+    if (!rhs_type.is_floatbv())
+      rhs.type() = float_type;
+  }
+  // Case 5: Align bit-widths between LHS and RHS if they differ
+>>>>>>> 59fb1bf8f ([python] enhanced handling of true division (#2505))
   else if (lhs_type.width() != rhs_type.width())
   {
     try
     {
+<<<<<<< HEAD
+<<<<<<< HEAD
       const int lhs_width = get_type_width(lhs_type);
       const int rhs_width = get_type_width(rhs_type);
+=======
+      const int lhs_width = std::stoi(lhs_type.width().c_str());
+      const int rhs_width = std::stoi(rhs_type.width().c_str());
+>>>>>>> 4604cc57c ([python] refactor our python frontend and extend chr() and float() built-in functions (#2417))
+=======
+      const int lhs_width = get_type_width(lhs_type);
+      const int rhs_width = get_type_width(rhs_type);
+>>>>>>> ed3bcb449 ([python] add support for python built-in function handling (#2507))
 
       if (lhs_width > rhs_width)
       {
@@ -555,11 +808,21 @@ inline bool is_math_expr(const exprt &expr)
 // Attach source location from symbol table if expr is a symbol
 static void attach_symbol_location(exprt &expr, contextt &symbol_table)
 {
+<<<<<<< HEAD
+<<<<<<< HEAD
   if (!expr.is_symbol())
+=======
+  if(!expr.is_symbol())
+>>>>>>> e2a86215d ([python] improved report about the TypeError location)
+=======
+  if (!expr.is_symbol())
+>>>>>>> 7ac9567e2 (Apply automatic changes)
     return;
 
   const irep_idt &id = expr.identifier();
   symbolt *sym = symbol_table.find_symbol(id);
+<<<<<<< HEAD
+<<<<<<< HEAD
   if (sym != nullptr)
     expr.location() = sym->location;
 }
@@ -601,6 +864,10 @@ exprt handle_floor_division(
   return floor_div;
 }
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 8c98a1162 ([python] implement pow symbolically (#2506))
 exprt python_converter::handle_power_operator_sym(exprt base, exprt exp)
 {
   // Find the pow function symbol
@@ -776,6 +1043,158 @@ exprt python_converter::build_power_expression(
     mul_expr.copy_to_operands(base, sub_power);
     return mul_expr;
   }
+=======
+exprt python_converter::handle_power_operator(exprt lhs, exprt rhs)
+{
+  // Try to resolve constant values of both lhs and rhs
+  exprt resolved_lhs = lhs;
+  if (lhs.is_symbol())
+  {
+    const symbolt *s = symbol_table_.find_symbol(lhs.identifier());
+    if (s && !s->value.value().empty())
+      resolved_lhs = s->value;
+  }
+  else if (is_math_expr(lhs))
+    resolved_lhs = compute_math_expr(lhs);
+
+  exprt resolved_rhs = rhs;
+  if (rhs.is_symbol())
+  {
+    const symbolt *s = symbol_table_.find_symbol(rhs.identifier());
+    if (s && !s->value.value().empty())
+      resolved_rhs = s->value;
+  }
+  else if (is_math_expr(rhs))
+<<<<<<< HEAD
+  {
+    rhs = compute_math_expr(rhs);
+  }
+<<<<<<< HEAD
+<<<<<<< HEAD
+  BigInt base(
+    binary2integer(lhs.value().as_string(), lhs.type().is_signedbv()));
+  BigInt exp(binary2integer(rhs.value().as_string(), rhs.type().is_signedbv()));
+  constant_exprt pow_expr(power(base, exp), lhs.type());
+  return std::move(pow_expr);
+>>>>>>> d76a37c5d ([python] Support python true division semantics (/) with float type coercion (#2425))
+=======
+  // If rhs is not constant, report error through log_error
+=======
+  // If rhs is not constant, report warning through log_warning
+>>>>>>> bd5808f62 ([python] improved comment for handle_power_operator)
+  if (!rhs.is_constant())
+=======
+    resolved_rhs = compute_math_expr(rhs);
+
+  // If rhs is still not constant, we need to handle this case
+  if (!resolved_rhs.is_constant())
+>>>>>>> 9041d9851 ([python] improved support for power operator (**) (#2478))
+  {
+    log_warning(
+      "ESBMC-Python does not support power expressions with non-constant "
+      "exponents");
+    return from_integer(1, lhs.type());
+  }
+
+  // Check if the exponent is a floating-point number
+  if (resolved_rhs.type().is_floatbv())
+  {
+    log_warning("ESBMC-Python does not support floating-point exponents yet");
+    return from_integer(1, lhs.type());
+  }
+
+  // Convert rhs to integer exponent
+  BigInt exponent;
+  try
+  {
+    exponent = binary2integer(
+      resolved_rhs.value().as_string(), resolved_rhs.type().is_signedbv());
+  }
+  catch (...)
+  {
+    log_warning("Failed to convert exponent to integer");
+    return from_integer(1, lhs.type());
+  }
+
+  // Handle negative exponents more gracefully
+  if (exponent < 0)
+  {
+    log_warning(
+      "ESBMC-Python does not support power expressions with negative "
+      "exponents, treating as symbolic");
+    return from_integer(1, lhs.type());
+  }
+
+  // Handle special cases first
+  if (exponent == 0)
+    return from_integer(1, lhs.type());
+  if (exponent == 1)
+    return lhs;
+
+  // Check resolved base for special cases
+  if (resolved_lhs.is_constant())
+  {
+    BigInt base = binary2integer(
+      resolved_lhs.value().as_string(), resolved_lhs.type().is_signedbv());
+
+    // Special cases for constant base
+    if (base == 0 && exponent > 0)
+      return from_integer(0, lhs.type());
+    if (base == 1)
+      return from_integer(1, lhs.type());
+    if (base == -1)
+      return from_integer((exponent % 2 == 0) ? 1 : -1, lhs.type());
+  }
+
+  // Build symbolic multiplication tree using exponentiation by squaring for efficiency
+  return build_power_expression(lhs, exponent);
+}
+
+// Helper function for efficient exponentiation
+exprt python_converter::build_power_expression(
+  const exprt &base,
+  const BigInt &exp)
+{
+  if (exp == 0)
+    return from_integer(1, base.type());
+  if (exp == 1)
+    return base;
+
+  // For small exponents, use simple multiplication chain
+  if (exp <= 10)
+  {
+    exprt result = base;
+    for (BigInt i = 1; i < exp; ++i)
+    {
+      exprt mul_expr("*", base.type());
+      mul_expr.copy_to_operands(result, base);
+      result = mul_expr;
+    }
+    return result;
+  }
+
+  // For larger exponents, use exponentiation by squaring
+  // This reduces the number of operations from O(n) to O(log n)
+  if (exp % 2 == 0)
+  {
+    // Even exponent: (base^2)^(exp/2)
+    exprt square("*", base.type());
+    square.copy_to_operands(base, base);
+    return build_power_expression(square, exp / 2);
+  }
+  else
+  {
+    // Odd exponent: base * base^(exp-1)
+    exprt mul_expr("*", base.type());
+    exprt sub_power = build_power_expression(base, exp - 1);
+    mul_expr.copy_to_operands(base, sub_power);
+    return mul_expr;
+  }
+<<<<<<< HEAD
+  return result;
+>>>>>>> 0aec14495 ([python] build symbolic multiplication tree for power/pow functions (#2462))
+=======
+>>>>>>> 9041d9851 ([python] improved support for power operator (**) (#2478))
 }
 
 exprt handle_float_vs_string(exprt &bin_expr, const std::string &op)
@@ -818,6 +1237,10 @@ exprt handle_float_vs_string(exprt &bin_expr, const std::string &op)
   return bin_expr;
 }
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 117989e74 ([python] Improved inference to handle true division (/) operator (#2426))
 void python_converter::handle_float_division(
   exprt &lhs,
   exprt &rhs,
@@ -849,11 +1272,27 @@ void python_converter::handle_float_division(
           ex.what());
       }
     }
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 59fb1bf8f ([python] enhanced handling of true division (#2505))
     else
     {
       // For non-constant operands (like function parameters), create explicit typecast expression
       e = typecast_exprt(e, float_type);
     }
+<<<<<<< HEAD
+=======
+
+    // Update expression type to float (double)
+    e.type() = float_type;
+
+    // Update symbol table if this is a symbol
+    if (e.is_symbol())
+      update_symbol(e);
+>>>>>>> 117989e74 ([python] Improved inference to handle true division (/) operator (#2426))
+=======
+>>>>>>> 59fb1bf8f ([python] enhanced handling of true division (#2505))
   };
 
   promote_to_float(lhs);
@@ -864,6 +1303,10 @@ void python_converter::handle_float_division(
   bin_expr.id(get_op("div", float_type));
 }
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> d4a995c3a ([python] Refactor get_binary_operator_expr (#2434))
 BigInt python_converter::get_string_size(const exprt &expr)
 {
   const auto &arr_type = to_array_type(expr.type());
@@ -877,6 +1320,7 @@ exprt python_converter::handle_string_concatenation(
   const nlohmann::json &right)
 {
 <<<<<<< HEAD
+<<<<<<< HEAD
   BigInt lhs_size = get_string_size(lhs) - 1;
   BigInt rhs_size = get_string_size(rhs) - 1;
   BigInt total_size = lhs_size + rhs_size + 1;
@@ -885,6 +1329,11 @@ exprt python_converter::handle_string_concatenation(
   BigInt rhs_size = get_string_size(rhs);
   BigInt total_size = lhs_size + rhs_size;
 >>>>>>> e7c955101 (Update stats-300s.txt)
+=======
+  BigInt lhs_size = get_string_size(lhs) - 1;
+  BigInt rhs_size = get_string_size(rhs) - 1;
+  BigInt total_size = lhs_size + rhs_size + 1;
+>>>>>>> a710fa95b (Improved memcpy function)
 
   typet t = type_handler_.get_typet("str", total_size.to_uint64());
   exprt result = gen_zero(t);
@@ -895,13 +1344,19 @@ exprt python_converter::handle_string_concatenation(
     assert(symbol);
     for (const exprt &ch : symbol->value.operands())
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> a710fa95b (Improved memcpy function)
     {
       if (ch != gen_zero(ch.type()))
         result.operands().at(i++) = ch;
     }
+<<<<<<< HEAD
 =======
       result.operands().at(i++) = ch;
 >>>>>>> e7c955101 (Update stats-300s.txt)
+=======
+>>>>>>> a710fa95b (Improved memcpy function)
   };
 
   auto append_from_json = [&](const nlohmann::json &json) {
@@ -911,10 +1366,15 @@ exprt python_converter::handle_string_concatenation(
     for (char ch : value)
     {
 <<<<<<< HEAD
+<<<<<<< HEAD
       if (ch == 0)
         break;
 =======
 >>>>>>> e7c955101 (Update stats-300s.txt)
+=======
+      if (ch == 0)
+        break;
+>>>>>>> a710fa95b (Improved memcpy function)
       BigInt v(ch);
       exprt char_expr = constant_exprt(
         integer2binary(v, bv_width(char_type)), integer2string(v), char_type);
@@ -933,18 +1393,32 @@ exprt python_converter::handle_string_concatenation(
     append_from_json(right);
 
 <<<<<<< HEAD
+<<<<<<< HEAD
   result.operands().push_back(gen_zero(t.subtype()));
 
 =======
 >>>>>>> e7c955101 (Update stats-300s.txt)
+=======
+  result.operands().push_back(gen_zero(t.subtype()));
+
+>>>>>>> a710fa95b (Improved memcpy function)
   return result;
 }
 
 bool python_converter::is_zero_length_array(const exprt &expr)
 {
+<<<<<<< HEAD
+<<<<<<< HEAD
   if (expr.id() == "sideeffect")
     return false;
 
+=======
+>>>>>>> d4a995c3a ([python] Refactor get_binary_operator_expr (#2434))
+=======
+  if (expr.id() == "sideeffect")
+    return false;
+
+>>>>>>> cad4d294a ([python] check for sideeffect in is_zero_length_array)
   if (!expr.type().is_array())
     return false;
 
@@ -962,6 +1436,8 @@ exprt python_converter::handle_string_comparison(
   exprt &rhs,
   const nlohmann::json &element)
 {
+<<<<<<< HEAD
+<<<<<<< HEAD
   // Try to resolve symbols to their constant values
   exprt lhs_resolved = get_resolved_value(lhs);
   exprt rhs_resolved = get_resolved_value(rhs);
@@ -1060,7 +1536,140 @@ exprt python_converter::handle_string_comparison(
   }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
+=======
+  // Check for zero-length arrays
+  if (is_zero_length_array(lhs) && is_zero_length_array(rhs))
+    return gen_boolean(op == "Eq");
+
+  // Handle type mismatches to prevent crashes/array out of bounds
+  if (lhs.type() != rhs.type())
+  {
+    // If one is a constant array and the other is empty, compare based on size
+    if (lhs.is_constant() && lhs.is_array() && is_zero_length_array(rhs))
+    {
+      const exprt::operandst &lhs_ops = lhs.operands();
+      bool lhs_empty = (lhs_ops.size() == 0);
+      return gen_boolean((op == "Eq") ? lhs_empty : !lhs_empty);
+    }
+    else if (rhs.is_constant() && rhs.is_array() && is_zero_length_array(lhs))
+    {
+      const exprt::operandst &rhs_ops = rhs.operands();
+      bool rhs_empty = (rhs_ops.size() == 0);
+      return gen_boolean((op == "Eq") ? rhs_empty : !rhs_empty);
+    }
+    else
+    {
+      return gen_boolean(op == "NotEq");
+    }
+  }
+
+<<<<<<< HEAD
+  // Make sure we have valid array types before proceeding to strncmp
+  if (!lhs.type().is_array() || !rhs.type().is_array())
+    return gen_boolean(op == "NotEq");
+
+  // Fallback: use strncmp for non-constant comparisons
+=======
+  if (lhs.type() != rhs.type())
+    return gen_boolean(op == "NotEq");
+=======
+  // Try to resolve symbols to their constant values
+  exprt lhs_resolved = get_resolved_value(lhs);
+  exprt rhs_resolved = get_resolved_value(rhs);
+>>>>>>> 2b11dd71d ([python] enhanced string comparison handling (#2497))
+
+  if (!lhs_resolved.is_nil())
+    lhs = lhs_resolved;
+  if (!rhs_resolved.is_nil())
+    rhs = rhs_resolved;
+
+  // Also try to resolve array elements if they are symbols
+  if (lhs.is_constant() && lhs.type().is_array())
+  {
+    exprt::operandst &lhs_ops = lhs.operands();
+    for (size_t i = 0; i < lhs_ops.size(); ++i)
+    {
+      if (lhs_ops[i].is_symbol())
+      {
+        exprt resolved_elem = get_resolved_value(lhs_ops[i]);
+        if (!resolved_elem.is_nil())
+          lhs_ops[i] = resolved_elem;
+      }
+    }
+  }
+
+  if (rhs.is_constant() && rhs.type().is_array())
+  {
+    exprt::operandst &rhs_ops = rhs.operands();
+    for (size_t i = 0; i < rhs_ops.size(); ++i)
+    {
+      if (rhs_ops[i].is_symbol())
+      {
+        exprt resolved_elem = get_resolved_value(rhs_ops[i]);
+        if (!resolved_elem.is_nil())
+          rhs_ops[i] = resolved_elem;
+      }
+    }
+  }
+
+  // Handle single character comparisons (represented as integers)
+  if (
+    lhs.is_constant() && rhs.is_constant() &&
+    (lhs.type().is_unsignedbv() || lhs.type().is_signedbv()) &&
+    (rhs.type().is_unsignedbv() || rhs.type().is_signedbv()))
+  {
+    bool chars_equal = (lhs == rhs);
+    return gen_boolean((op == "Eq") ? chars_equal : !chars_equal);
+  }
+
+  // Handle mixed single char vs array comparisons
+  if (lhs.is_constant() && rhs.is_constant())
+  {
+    // Single char (int) vs array comparison
+    if (
+      (lhs.type().is_unsignedbv() || lhs.type().is_signedbv()) &&
+      rhs.type().is_array())
+    {
+      const exprt::operandst &rhs_ops = rhs.operands();
+      if (rhs_ops.size() == 1)
+      {
+        // Compare single char with single element array
+        bool chars_equal = (lhs == rhs_ops[0]);
+        // Try value-based comparison if direct comparison fails
+        if (!chars_equal && lhs.get("value") == rhs_ops[0].get("value"))
+          chars_equal = true;
+        return gen_boolean((op == "Eq") ? chars_equal : !chars_equal);
+      }
+      else
+      {
+        return gen_boolean(op == "NotEq");
+      }
+    }
+    // Array vs single char (int) comparison
+    else if (
+      lhs.type().is_array() &&
+      (rhs.type().is_unsignedbv() || rhs.type().is_signedbv()))
+    {
+      const exprt::operandst &lhs_ops = lhs.operands();
+      if (lhs_ops.size() == 1)
+      {
+        // Compare single element array with single char
+        bool chars_equal = (lhs_ops[0] == rhs);
+        // Try value-based comparison if direct comparison fails
+        if (!chars_equal && lhs_ops[0].get("value") == rhs.get("value"))
+          chars_equal = true;
+        return gen_boolean((op == "Eq") ? chars_equal : !chars_equal);
+      }
+      else
+      {
+        return gen_boolean(op == "NotEq");
+      }
+    }
+  }
+
+>>>>>>> a710fa95b (Improved memcpy function)
   // Direct constant comparison if both are constants
   if (lhs.is_constant() && rhs.is_constant())
   {
@@ -1092,6 +1701,9 @@ exprt python_converter::handle_string_comparison(
   if (is_zero_length_array(lhs) && is_zero_length_array(rhs))
     return gen_boolean(op == "Eq");
 
+<<<<<<< HEAD
+>>>>>>> d4a995c3a ([python] Refactor get_binary_operator_expr (#2434))
+=======
   // Handle type mismatches to prevent crashes/array out of bounds
 <<<<<<< HEAD
   if (!(lhs.is_member() || rhs.is_member()) && lhs.type() != rhs.type())
@@ -1137,18 +1749,29 @@ exprt python_converter::handle_string_comparison(
     return gen_boolean(op == "NotEq");
 
   // Fallback: use strncmp for non-constant comparisons
+>>>>>>> 2b11dd71d ([python] enhanced string comparison handling (#2497))
   const auto &array_type = to_array_type(lhs.type());
   BigInt string_size =
     binary2integer(array_type.size().value().as_string(), false);
 
   symbolt *strncmp_symbol = symbol_table_.find_symbol("c:@F@strncmp");
+=======
+  symbolt *strncmp_symbol = symbol_table_.find_symbol("c:@F@strcmp");
+>>>>>>> 4abbd7e11 ([python-frontend] Handling string attributes (#2546))
   assert(strncmp_symbol);
+
+  if (rhs.type().is_array())
+    rhs = get_array_base_address(rhs);
 
   side_effect_expr_function_callt strncmp_call;
   strncmp_call.function() = symbol_expr(*strncmp_symbol);
+<<<<<<< HEAD
   strncmp_call.arguments() = {
     lhs, rhs, from_integer(string_size, long_uint_type())};
 >>>>>>> e7c955101 (Update stats-300s.txt)
+=======
+  strncmp_call.arguments() = {lhs, rhs};
+>>>>>>> a710fa95b (Improved memcpy function)
   strncmp_call.location() = get_location_from_decl(element);
   strncmp_call.type() = int_type();
 
@@ -1158,6 +1781,10 @@ exprt python_converter::handle_string_comparison(
   return nil_exprt(); // continue with lhs OP rhs
 }
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 2b11dd71d ([python] enhanced string comparison handling (#2497))
 // Helper method to resolve symbol values to constants
 exprt python_converter::get_resolved_value(const exprt &expr)
 {
@@ -1169,7 +1796,15 @@ exprt python_converter::get_resolved_value(const exprt &expr)
       side_effect.get_statement() == "function_call" &&
       side_effect.operands().size() >= 2)
       // Structure: operand 0 = function symbol, operand 1 = arguments
+<<<<<<< HEAD
+<<<<<<< HEAD
       return resolve_function_call(
+=======
+      return resolve_identity_function_call(
+>>>>>>> 2b11dd71d ([python] enhanced string comparison handling (#2497))
+=======
+      return resolve_function_call(
+>>>>>>> cad2c8c57 ([python] Handle string annotations like -> int (#2495))
         side_effect.operands()[0], side_effect.operands()[1]);
   }
 
@@ -1196,7 +1831,15 @@ exprt python_converter::get_resolved_value(const exprt &expr)
     {
       // Structure: operand 1 = function symbol, operand 2 = arguments
       exprt result =
+<<<<<<< HEAD
+<<<<<<< HEAD
         resolve_function_call(code.operands()[1], code.operands()[2]);
+=======
+        resolve_identity_function_call(code.operands()[1], code.operands()[2]);
+>>>>>>> 2b11dd71d ([python] enhanced string comparison handling (#2497))
+=======
+        resolve_function_call(code.operands()[1], code.operands()[2]);
+>>>>>>> cad2c8c57 ([python] Handle string annotations like -> int (#2495))
       if (!result.is_nil())
         return result;
     }
@@ -1205,8 +1848,18 @@ exprt python_converter::get_resolved_value(const exprt &expr)
   return nil_exprt();
 }
 
+<<<<<<< HEAD
+<<<<<<< HEAD
 // Helper to resolve function calls (both identity functions and constant-returning functions)
 exprt python_converter::resolve_function_call(
+=======
+// Helper to resolve identity function calls
+exprt python_converter::resolve_identity_function_call(
+>>>>>>> 2b11dd71d ([python] enhanced string comparison handling (#2497))
+=======
+// Helper to resolve function calls (both identity functions and constant-returning functions)
+exprt python_converter::resolve_function_call(
+>>>>>>> cad2c8c57 ([python] Handle string annotations like -> int (#2495))
   const exprt &func_expr,
   const exprt &args_expr)
 {
@@ -1220,17 +1873,35 @@ exprt python_converter::resolve_function_call(
   if (!func_symbol || func_symbol->value.is_nil())
     return nil_exprt();
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> cad2c8c57 ([python] Handle string annotations like -> int (#2495))
   // First check if this function returns a constant value
   exprt constant_result = get_function_constant_return(func_symbol->value);
   if (!constant_result.is_nil())
     return constant_result;
 
   // Then check if this function is an identity function (returns its parameter)
+<<<<<<< HEAD
+=======
+  // Check if this function is an identity function (returns its parameter)
+>>>>>>> 2b11dd71d ([python] enhanced string comparison handling (#2497))
+=======
+>>>>>>> cad2c8c57 ([python] Handle string annotations like -> int (#2495))
   if (!is_identity_function(
         func_symbol->value, func_sym.get_identifier().as_string()))
     return nil_exprt();
 
+<<<<<<< HEAD
+<<<<<<< HEAD
   // Extract the first argument for identity functions
+=======
+  // Extract the first argument
+>>>>>>> 2b11dd71d ([python] enhanced string comparison handling (#2497))
+=======
+  // Extract the first argument for identity functions
+>>>>>>> cad2c8c57 ([python] Handle string annotations like -> int (#2495))
   if (args_expr.id() != "arguments" || args_expr.operands().empty())
     return nil_exprt();
 
@@ -1270,6 +1941,10 @@ exprt python_converter::resolve_function_call(
   return nil_exprt();
 }
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> cad2c8c57 ([python] Handle string annotations like -> int (#2495))
 // Helper to check if a function returns a constant value
 exprt python_converter::get_function_constant_return(const exprt &func_value)
 {
@@ -1326,6 +2001,11 @@ exprt python_converter::get_function_constant_return(const exprt &func_value)
   return nil_exprt();
 }
 
+<<<<<<< HEAD
+=======
+>>>>>>> 2b11dd71d ([python] enhanced string comparison handling (#2497))
+=======
+>>>>>>> cad2c8c57 ([python] Handle string annotations like -> int (#2495))
 // Helper to check if a function is an identity function (returns its parameter)
 bool python_converter::is_identity_function(
   const exprt &func_value,
@@ -1386,6 +2066,11 @@ bool python_converter::is_identity_function(
   return false;
 }
 
+<<<<<<< HEAD
+=======
+>>>>>>> d4a995c3a ([python] Refactor get_binary_operator_expr (#2434))
+=======
+>>>>>>> 2b11dd71d ([python] enhanced string comparison handling (#2497))
 void python_converter::ensure_string_array(exprt &expr)
 {
 <<<<<<< HEAD
@@ -1415,12 +2100,17 @@ exprt python_converter::handle_string_operations(
   ensure_string_array(rhs);
 
 <<<<<<< HEAD
+<<<<<<< HEAD
   assert(lhs.type().is_array() || lhs.type().is_pointer());
   assert(rhs.type().is_array() || rhs.type().is_pointer());
 =======
   assert(lhs.type().is_array());
   assert(rhs.type().is_array());
 >>>>>>> e7c955101 (Update stats-300s.txt)
+=======
+  assert(lhs.type().is_array() || lhs.type().is_pointer());
+  assert(rhs.type().is_array() || rhs.type().is_pointer());
+>>>>>>> a710fa95b (Improved memcpy function)
 
   if (op == "Eq" || op == "NotEq")
     return handle_string_comparison(op, lhs, rhs, element);
@@ -1431,6 +2121,10 @@ exprt python_converter::handle_string_operations(
   return nil_exprt();
 }
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 0ecf84c8c ([python] add support for Is and IsNot operators (#2480))
 /// Construct the expression for Python 'is' operator
 exprt python_converter::get_binary_operator_expr_for_is(
   const exprt &lhs,
@@ -1439,7 +2133,20 @@ exprt python_converter::get_binary_operator_expr_for_is(
   typet bool_type_result = bool_type();
   exprt is_expr("=", bool_type_result);
 
+<<<<<<< HEAD
+<<<<<<< HEAD
   if (lhs.type().is_array() && rhs.type().is_array())
+=======
+  if (lhs.type().is_pointer() && rhs.type().is_pointer())
+  {
+    // Compare pointer identity directly
+    is_expr.copy_to_operands(lhs, rhs);
+  }
+  else if (lhs.type().is_array() && rhs.type().is_array())
+>>>>>>> 0ecf84c8c ([python] add support for Is and IsNot operators (#2480))
+=======
+  if (lhs.type().is_array() && rhs.type().is_array())
+>>>>>>> bcfe0ddf8 ([python] simplified is operator (#2490))
   {
     // Compare base addresses of the arrays
     is_expr.copy_to_operands(
@@ -1470,6 +2177,24 @@ exprt python_converter::get_negated_is_expr(const exprt &lhs, const exprt &rhs)
   return not_expr;
 }
 
+<<<<<<< HEAD
+=======
+  if(sym != nullptr)
+=======
+  if (sym != nullptr)
+>>>>>>> 7ac9567e2 (Apply automatic changes)
+    expr.location() = sym->location;
+}
+
+>>>>>>> e2a86215d ([python] improved report about the TypeError location)
+=======
+>>>>>>> d76a37c5d ([python] Support python true division semantics (/) with float type coercion (#2425))
+=======
+>>>>>>> 117989e74 ([python] Improved inference to handle true division (/) operator (#2426))
+=======
+>>>>>>> d4a995c3a ([python] Refactor get_binary_operator_expr (#2434))
+=======
+>>>>>>> 0ecf84c8c ([python] add support for Is and IsNot operators (#2480))
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
   auto left = (element.contains("left")) ? element["left"] : element["target"];
@@ -1484,10 +2209,24 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   exprt lhs = get_expr(left);
   exprt rhs = get_expr(right);
+<<<<<<< HEAD
+<<<<<<< HEAD
 
   attach_symbol_location(lhs, symbol_table());
   attach_symbol_location(rhs, symbol_table());
 
+=======
+    
+  attach_symbol_location(lhs, symbol_table());
+  attach_symbol_location(rhs, symbol_table());
+  
+>>>>>>> e2a86215d ([python] improved report about the TypeError location)
+=======
+
+  attach_symbol_location(lhs, symbol_table());
+  attach_symbol_location(rhs, symbol_table());
+
+>>>>>>> 7ac9567e2 (Apply automatic changes)
   auto to_side_effect_call = [](exprt &expr) {
     side_effect_expr_function_callt side_effect;
     code_function_callt &code = static_cast<code_function_callt &>(expr);
@@ -1513,11 +2252,23 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   assert(!op.empty());
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 0ecf84c8c ([python] add support for Is and IsNot operators (#2480))
   /// Handle 'is' and 'is not' Python identity comparisons
   if (op == "Is")
     return get_binary_operator_expr_for_is(lhs, rhs);
   else if (op == "IsNot")
     return get_negated_is_expr(lhs, rhs);
+<<<<<<< HEAD
+=======
+  // Get LHS and RHS types
+  std::string lhs_type = type_handler_.type_to_string(lhs.type());
+  std::string rhs_type = type_handler_.type_to_string(rhs.type());
+>>>>>>> f59fd87f9 ([python-frontend] Reuse C libm models for NumPy math functions (#2395))
+=======
+>>>>>>> 0ecf84c8c ([python] add support for Is and IsNot operators (#2480))
 
   // Get LHS and RHS types
   std::string lhs_type = type_handler_.type_to_string(lhs.type());
@@ -1552,10 +2303,159 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   if (lhs_type == "str" && rhs_type == "str")
   {
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> d4a995c3a ([python] Refactor get_binary_operator_expr (#2434))
     const exprt &result =
       handle_string_operations(op, lhs, rhs, left, right, element);
     if (!result.is_nil())
       return result;
+<<<<<<< HEAD
+=======
+    auto ensure_array = [&](exprt &expr) {
+      // Single-character are treated as constants.
+      // Therefore, we need to create a temporary array of size one,
+      // to ensure a valid address for C-string models.
+      if (!expr.type().is_array())
+      {
+        typet t = type_handler_.build_array(expr.type(), 1);
+        exprt arr = gen_zero(t);
+        arr.operands().at(0) = expr;
+        expr = arr;
+      }
+    };
+
+    ensure_array(rhs);
+    ensure_array(lhs);
+
+    assert(lhs.type().is_array());
+    assert(rhs.type().is_array());
+
+    // Handle string comparison for equality (==) and inequality (!=) operators
+    if (op == "Eq" || op == "NotEq")
+    {
+      // If the types of lhs and rhs differ, the strings can't be equal.
+      // For "Eq", return false; for "NotEq", return true.
+      if (rhs.type() != lhs.type())
+        return gen_boolean(op == "NotEq");
+
+      // Special case: both lhs and rhs are identical constants
+      if (
+        lhs.is_constant() && rhs.is_constant() && lhs.type().is_array() &&
+        rhs.type().is_array() && lhs == rhs)
+      {
+        // If both constants are exactly the same, we know the result.
+        return gen_boolean(op == "Eq");
+      }
+
+      // special case: both sides are arrays of size 0 and equal type
+      if (
+        lhs.type().is_array() && rhs.type().is_array() &&
+        to_array_type(lhs.type()).size().is_constant() &&
+        to_array_type(rhs.type()).size().is_constant())
+      {
+        const auto lhs_size = binary2integer(
+          to_array_type(lhs.type()).size().value().as_string(), false);
+        const auto rhs_size = binary2integer(
+          to_array_type(rhs.type()).size().value().as_string(), false);
+
+        if (lhs_size == 0 && rhs_size == 0)
+        {
+          // Two zero-length arrays are equal by definition
+          return gen_boolean(op == "Eq");
+        }
+      }
+
+      // Retrieve the size of the string from the array type.
+      const array_typet &array_type = to_array_type(lhs.type());
+      const BigInt string_size =
+        binary2integer(array_type.size().value().as_string(), false);
+
+      // Look up the 'strncmp' function symbol in the symbol table.
+      symbolt *strncmp_symbol = symbol_table_.find_symbol("c:@F@strncmp");
+      assert(strncmp_symbol); // Ensure 'strncmp' is available.
+
+      // Construct a function call expression to strncmp(lhs, rhs, size)
+      side_effect_expr_function_callt strncmp_call;
+      strncmp_call.function() = symbol_expr(*strncmp_symbol);
+      strncmp_call.arguments().push_back(lhs); // First string (lhs)
+      strncmp_call.arguments().push_back(rhs); // Second string (rhs)
+      strncmp_call.arguments().push_back(from_integer(
+        string_size, long_uint_type())); // Number of characters to compare
+      strncmp_call.location() = get_location_from_decl(element);
+      strncmp_call.type() = int_type(); // Return type of strncmp is int
+
+      // Compare result of strncmp to 0:
+      // - If op == "Eq", test if strncmp(...) == 0 (strings are equal)
+      // - If op == "NotEq", test if strncmp(...) != 0 (strings are not equal)
+      lhs = strncmp_call;
+      rhs = gen_zero(int_type());
+    }
+    // Strings concatenation
+    else if (op == "Add")
+    {
+      array_typet lhs_str_type = static_cast<array_typet &>(lhs.type());
+      BigInt lhs_str_size =
+        binary2integer(lhs_str_type.size().value().c_str(), true);
+
+      array_typet rhs_str_type = static_cast<array_typet &>(rhs.type());
+      BigInt rhs_str_size =
+        binary2integer(rhs_str_type.size().value().c_str(), true);
+
+      BigInt concat_str_size = lhs_str_size + rhs_str_size;
+
+      typet t = type_handler_.get_typet("str", concat_str_size.to_uint64());
+      exprt expr = gen_zero(t);
+
+      unsigned int i = 0;
+
+      auto get_value_from_symbol = [&](const std::string &symbol_id, exprt &e) {
+        symbolt *symbol = symbol_table_.find_symbol(symbol_id);
+        assert(symbol);
+        // Copy symbol value
+        for (const exprt &ch : symbol->value.operands())
+          e.operands().at(i++) = ch;
+      };
+
+      auto get_value_from_json = [&](const nlohmann::json &elem, exprt &e) {
+        const std::string &value = elem["value"].get<std::string>();
+        std::vector<uint8_t> string_literal =
+          std::vector<uint8_t>(std::begin(value), std::end(value));
+
+        typet &char_type = t.subtype();
+
+        // Copy JSON value
+        for (uint8_t &ch : string_literal)
+        {
+          exprt char_value = constant_exprt(
+            integer2binary(BigInt(ch), bv_width(char_type)),
+            integer2string(BigInt(ch)),
+            char_type);
+
+          e.operands().at(i++) = char_value;
+        }
+      };
+
+      // If LHS is a variable
+      if (left["_type"] == "Name")
+        get_value_from_symbol(lhs.identifier().as_string(), expr);
+      // If LHS is a literal
+      else if (left["_type"] == "Constant")
+        get_value_from_json(left, expr);
+
+      // If RHS is a variable
+      if (right["_type"] == "Name")
+        get_value_from_symbol(rhs.identifier().as_string(), expr);
+      // If RHS is a literal
+      else if (right["_type"] == "Constant")
+        get_value_from_json(right, expr);
+
+      return expr;
+    }
+>>>>>>> 4bc1e1246 ([python] Handle string comparison for != operator (#2420))
+=======
+>>>>>>> d4a995c3a ([python] Refactor get_binary_operator_expr (#2434))
   }
 
   // Replace ** operation with the resultant constant.
@@ -1576,10 +2476,20 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   // Create a binary expression node with the determined type and location.
   exprt bin_expr(get_op(op, type), type);
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 8583563df ([regression] added test cases for casting)
   if (lhs.is_symbol())
     bin_expr.location() = lhs.location();
   else if (rhs.is_symbol())
     bin_expr.location() = rhs.location();
+<<<<<<< HEAD
+=======
+  bin_expr.location() = lhs.location();
+>>>>>>> e2a86215d ([python] improved report about the TypeError location)
+=======
+>>>>>>> 8583563df ([regression] added test cases for casting)
 
   // Handle type promotion for mixed signed/unsigned comparisons:
   // If lhs is unsigned and rhs is signed, convert rhs to match lhs's type.
@@ -1587,12 +2497,89 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   if (lhs.type().is_unsignedbv() && rhs.type().is_signedbv())
     rhs.make_typecast(lhs.type());
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
+  // Promote both operands to float for Python-style true division ("/")
+  // In Python 3, the '/' operator ALWAYS performs floating-point division,
+  // regardless of operand types. Only '//' performs floor division.
+  if (op == "Div" || op == "div")
+    handle_float_division(lhs, rhs, bin_expr);
+=======
+=======
+  // Add lhs and rhs as operands to the binary expression.
+  bin_expr.copy_to_operands(lhs, rhs);
+
+>>>>>>> e2a86215d ([python] improved report about the TypeError location)
+  // According to the Python 3 Language Reference (Section 6.10, "Comparisons"):
+  // - Equality comparisons (==, !=) between built-in incompatible types like float and str do not raise an exception.
+  //   Instead, they typically evaluate to False for `==` and True for `!=`.
+  // - However, ordered comparisons (<, <=, >, >=) between incompatible types such as float and str
+  //   raise a TypeError at runtime.
+  //
+  // References:
+  // - https://docs.python.org/3/reference/expressions.html#comparisons
+  // - https://docs.python.org/3/library/stdtypes.html#typeerror
+  //
+  // This block emulates that behavior in ESBMC's symbolic execution: converting equality comparisons to
+  // constants (false or true), and rejecting invalid ordered comparisons with a runtime error.
+  if (is_float_vs_char(lhs, rhs))
+<<<<<<< HEAD
+  {
+    if (op == "Eq")
+    {
+      // float == str → False (no exception)
+      bin_expr.make_false();
+    }
+    else if (op == "NotEq")
+    {
+      // float != str → True (no exception)
+      bin_expr.make_true();
+    }
+    else if (is_ordered_comparison(op))
+    {
+      // Python-style error: float < str → TypeError
+      std::string lower_op = op;
+      std::transform(
+        lower_op.begin(),
+        lower_op.end(),
+        lower_op.begin(),
+        [](unsigned char c) { return std::tolower(c); });
+
+      const auto &loc = bin_expr.location();
+      const auto it = operator_map.find(lower_op);
+      assert(it != operator_map.end());
+
+      std::ostringstream error;
+      error << "'" << it->second
+            << "' not supported between instances of 'float' and 'str'";
+
+      if (loc.is_not_nil())
+        error << " at " << loc.get_file() << ":" << loc.get_line();
+      else
+        error << " at <unknown location>";
+
+      throw std::runtime_error(error.str());
+    }
+  }
+<<<<<<< HEAD
+ 
+>>>>>>> 8fc89cda7 ([python] check for float and str comparisons)
+=======
+>>>>>>> bfe2891eb (Apply automatic changes)
+=======
+    return handle_float_vs_string(bin_expr, op);
+>>>>>>> d76a37c5d ([python] Support python true division semantics (/) with float type coercion (#2425))
+
+<<<<<<< HEAD
+=======
   // Promote both operands to float for Python-style true division ("/")
   // In Python 3, the '/' operator ALWAYS performs floating-point division,
   // regardless of operand types. Only '//' performs floor division.
   if (op == "Div" || op == "div")
     handle_float_division(lhs, rhs, bin_expr);
 
+>>>>>>> 117989e74 ([python] Improved inference to handle true division (/) operator (#2426))
   // Add lhs and rhs as operands to the binary expression.
   bin_expr.copy_to_operands(lhs, rhs);
 
@@ -1611,12 +2598,28 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   if (is_float_vs_char(lhs, rhs))
     return handle_float_vs_string(bin_expr, op);
 
+=======
+>>>>>>> e2a86215d ([python] improved report about the TypeError location)
   // floor division (//) operation corresponds to an int division with floor rounding
   // So we need to emulate this behavior here:
   // int result = (num/div) - (num%div != 0 && ((num < 0) ^ (den<0)) ? 1 : 0)
   // e.g.: -5//2 equals to -3, and 5//2 equals to 2
   if (op == "FloorDiv")
     return handle_floor_division(lhs, rhs, bin_expr);
+<<<<<<< HEAD
+
+  // Promote operands to floating point if IEEE operator is used
+  if (is_ieee_op(bin_expr))
+  {
+    const typet &target_type =
+      lhs.type().is_floatbv() ? lhs.type() : rhs.type();
+    if (!lhs.type().is_floatbv())
+      bin_expr.op0() = typecast_exprt(lhs, target_type);
+    if (!rhs.type().is_floatbv())
+      bin_expr.op1() = typecast_exprt(rhs, target_type);
+  }
+=======
+>>>>>>> d76a37c5d ([python] Support python true division semantics (/) with float type coercion (#2425))
 
   // Promote operands to floating point if IEEE operator is used
   if (is_ieee_op(bin_expr))
@@ -1832,10 +2835,14 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       !type_utils::is_consensus_func(func_name) &&
       !type_utils::is_python_model_func(func_name) &&
 <<<<<<< HEAD
+<<<<<<< HEAD
       !is_class(func_name, *ast_json))
 =======
       !is_class(func_name, ast_json))
 >>>>>>> e7c955101 (Update stats-300s.txt)
+=======
+      !is_class(func_name, *ast_json))
+>>>>>>> a710fa95b (Improved memcpy function)
     {
       const auto &func_node = find_function((*ast_json)["body"], func_name);
       assert(!func_node.empty());
@@ -1886,10 +2893,8 @@ exprt python_converter::make_char_array_expr(
 /// { "_type": "Constant", "value": 42 } }           → returns -42 as integer expr
 exprt python_converter::get_literal(const nlohmann::json &element)
 {
-  // Determine the source of the literal's value.
-  const auto &value = (element["_type"] == "UnaryOp")
-                        ? element["operand"]["value"]
-                        : element["value"];
+<<<<<<< HEAD
+  auto value = element["value"];
 
   // Handle None literals (null values)
   if (value.is_null())
@@ -1901,6 +2906,26 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     return null_expr;
   }
 
+=======
+  // Determine the source of the literal's value.
+  const auto &value = (element["_type"] == "UnaryOp")
+                        ? element["operand"]["value"]
+                        : element["value"];
+
+<<<<<<< HEAD
+>>>>>>> 8a6c3ff59 ([python] Add support for hex() built-in function (#2419))
+=======
+  // Handle None literals (null values)
+  if (value.is_null())
+  {
+    // Create a null pointer expression to represent NoneType
+    constant_exprt null_expr(pointer_type());
+    // Sets the value to "NULL"
+    null_expr.set_value("0");
+    return null_expr;
+  }
+
+>>>>>>> 67d826a87 ([python]  support for "NoneType" (#2493))
   // Handle integer literals (int)
   if (value.is_number_integer())
     return from_integer(value.get<long long>(), long_long_int_type());
@@ -1919,11 +2944,15 @@ exprt python_converter::get_literal(const nlohmann::json &element)
   }
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> a710fa95b (Improved memcpy function)
   if (!value.is_string())
     return exprt(); // Not a string, no handling
 
   const std::string &str_val = value.get<std::string>();
 
+<<<<<<< HEAD
   // Handle single-character string as char literal
   if (str_val.size() == 1 && !is_bytes_literal(element))
   {
@@ -1934,25 +2963,53 @@ exprt python_converter::get_literal(const nlohmann::json &element)
   // Handle empty strings or docstrings (often beginning with a newline)
   if (!str_val.empty() && str_val[0] == '\n' && !is_bytes_literal(element))
 =======
+=======
+>>>>>>> a710fa95b (Improved memcpy function)
   // Handle single-character string as char literal
+<<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
   if (
     value.is_string() && value.get<std::string>().size() == 1 &&
     !is_bytes_literal(element))
+=======
+  if (value.is_string() && value.get<std::string>().size() == 1)
+>>>>>>> 8a6c3ff59 ([python] Add support for hex() built-in function (#2419))
+=======
+  if (
+    value.is_string() && value.get<std::string>().size() == 1 &&
+    !is_bytes_literal(element))
+>>>>>>> 9c19afb82 ([python] add support for bytes literals and indexing (#2484))
+=======
+  if (str_val.size() == 1 && !is_bytes_literal(element))
+>>>>>>> 4abbd7e11 ([python-frontend] Handling string attributes (#2546))
   {
-    const std::string &str = value.get<std::string>();
-    typet t = type_handler_.get_typet("str", str.size());
-    return from_integer(static_cast<unsigned char>(str[0]), t);
+    typet t = type_handler_.get_typet("str", str_val.size());
+    return from_integer(static_cast<unsigned char>(str_val[0]), t);
   }
 
   // Handle empty strings or docstrings (often beginning with a newline)
+<<<<<<< HEAD
   if (
     value.is_string() && !value.get<std::string>().empty() &&
+<<<<<<< HEAD
+<<<<<<< HEAD
     value.get<std::string>()[0] == '\n' && !is_bytes_literal(element))
+=======
+    value.get<std::string>()[0] == '\n')
+>>>>>>> 8a6c3ff59 ([python] Add support for hex() built-in function (#2419))
+=======
+    value.get<std::string>()[0] == '\n' && !is_bytes_literal(element))
+>>>>>>> 9c19afb82 ([python] add support for bytes literals and indexing (#2484))
+=======
+  if (!str_val.empty() && str_val[0] == '\n' && !is_bytes_literal(element))
+>>>>>>> 4abbd7e11 ([python-frontend] Handling string attributes (#2546))
   {
     return exprt(); // Return empty expression
   }
 
   // Handle string or byte literals
+<<<<<<< HEAD
   if (value.is_string())
 >>>>>>> e7c955101 (Update stats-300s.txt)
   {
@@ -1972,23 +3029,38 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     // Check if this is a bytes literal
     if (is_bytes_literal(element))
 >>>>>>> e7c955101 (Update stats-300s.txt)
-    {
-      // Handle bytes literal - check for encoded_bytes field first
-      if (element.contains("encoded_bytes"))
-      {
-        string_literal =
-          base64_decode(element["encoded_bytes"].get<std::string>());
-      }
-      else
-      {
-        // Handle direct bytes literal (e.g., b'A')
-        const std::string &str_val = value.get<std::string>();
-        string_literal.assign(str_val.begin(), str_val.end());
-      }
+=======
+  typet t = current_element_type;
+  std::vector<uint8_t> string_literal;
 
-      // Set appropriate bytes type
-      t = type_handler_.get_typet("bytes", string_literal.size());
+  if (is_bytes_literal(element))
+  {
+<<<<<<< HEAD
+    typet t = current_element_type;
+    std::vector<uint8_t> string_literal;
+
+<<<<<<< HEAD
+<<<<<<< HEAD
+    // Check if this is a bytes literal
+    if (is_bytes_literal(element))
+=======
+    // Detect and decode "bytes" literal from encoded base64 content
+    if (element.contains("encoded_bytes"))
+>>>>>>> 8a6c3ff59 ([python] Add support for hex() built-in function (#2419))
+=======
+    // Check if this is a bytes literal
+    if (is_bytes_literal(element))
+>>>>>>> 9c19afb82 ([python] add support for bytes literals and indexing (#2484))
+=======
+    // Handle bytes literal - check for encoded_bytes field first
+    if (element.contains("encoded_bytes"))
+>>>>>>> 4abbd7e11 ([python-frontend] Handling string attributes (#2546))
+>>>>>>> a710fa95b (Improved memcpy function)
+    {
+      string_literal =
+        base64_decode(element["encoded_bytes"].get<std::string>());
     }
+<<<<<<< HEAD
 <<<<<<< HEAD
     else
     {
@@ -2007,14 +3079,23 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     t = type_handler_.build_array(char_type(), string_literal.size());
 =======
     else // Handle Python str literals
+=======
+    else
+>>>>>>> a710fa95b (Improved memcpy function)
     {
-      const std::string &str_val = value.get<std::string>();
-      t = type_handler_.get_typet("str", str_val.size());
       string_literal.assign(str_val.begin(), str_val.end());
     }
 
-    exprt expr = make_char_array_expr(string_literal, t);
+    // Set appropriate bytes type
+    t = type_handler_.get_typet("bytes", string_literal.size());
+  }
+  else
+  {
+    // Python str literal - add null terminator
+    string_literal.assign(str_val.begin(), str_val.end());
+    string_literal.push_back('\0');
 
+<<<<<<< HEAD
     return expr;
 >>>>>>> e7c955101 (Update stats-300s.txt)
   }
@@ -2147,6 +3228,12 @@ bool python_converter::is_instance_attribute(
   }
 
   return false;
+=======
+    t = type_handler_.build_array(char_type(), string_literal.size());
+  }
+
+  return make_char_array_expr(string_literal, t);
+>>>>>>> a710fa95b (Improved memcpy function)
 }
 
 // Helper function to detect bytes literals
@@ -2194,6 +3281,10 @@ bool python_converter::is_bytes_literal(const nlohmann::json &element)
   return false;
 }
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 39b012f9f ([python] handles assertions involving function calls and refactor attribute handling (#2510))
 // Helper function to extract class name from tag (removes "tag-" prefix)
 std::string
 python_converter::extract_class_name_from_tag(const std::string &tag_name)
@@ -2276,6 +3367,11 @@ bool python_converter::is_instance_attribute(
   return false;
 }
 
+<<<<<<< HEAD
+=======
+>>>>>>> 9c19afb82 ([python] add support for bytes literals and indexing (#2484))
+=======
+>>>>>>> 39b012f9f ([python] handles assertions involving function calls and refactor attribute handling (#2510))
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
   exprt expr;
@@ -2319,7 +3415,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     unsigned int i = 0;
     for (auto &e : element["elts"])
     {
+<<<<<<< HEAD
+      if (e["_type"] == "List")
+        expr.operands().at(i++) = get_expr(e);
+      else
+        expr.operands().at(i++) = get_literal(e);
+=======
       list.operands().at(i++) = get_expr(e);
+>>>>>>> 9216cc719 ([python-frontend] Handling array literals (#2467))
     }
 
     locationt location = get_location_from_decl(element);
@@ -2507,10 +3610,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
       const auto &list = json_utils::find_var_decl(
 <<<<<<< HEAD
+<<<<<<< HEAD
         element["value"]["id"], current_func_name_, *ast_json);
 =======
         element["value"]["id"], current_func_name_, ast_json);
 >>>>>>> e7c955101 (Update stats-300s.txt)
+=======
+        element["value"]["id"], current_func_name_, *ast_json);
+>>>>>>> a710fa95b (Improved memcpy function)
 
       assert(!list.empty());
 
@@ -2760,6 +3867,10 @@ void python_converter::get_var_assign(
   {
     if (lhs_symbol)
     {
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 0ecf84c8c ([python] add support for Is and IsNot operators (#2480))
       // If the LHS type is currently unspecified (i.e., no type assigned),
       // and the RHS is an array, we perform normalization to convert the RHS
       // array into a pointer to its first element, and update the LHS accordingly.
@@ -2781,6 +3892,16 @@ void python_converter::get_var_assign(
       else if (
         lhs_type == "str" || lhs_type == "chr" || lhs_type == "ord" ||
         lhs_type == "list" || rhs.type().is_array())
+=======
+      if (
+<<<<<<< HEAD
+        lhs_type == "str" || lhs_type == "chr" || lhs_type == "list" ||
+        rhs.type().is_array())
+>>>>>>> 1078ace71 ([Python]  add chr() built-in function support (#2416))
+=======
+        lhs_type == "str" || lhs_type == "chr" || lhs_type == "ord" ||
+        lhs_type == "list" || rhs.type().is_array())
+>>>>>>> ffcecbd12 ([python] Handle ord(): convert single-character string to integer Unicode code point (#2423))
       {
         /* When a string is assigned the result of a concatenation, we initially
          * create the LHS type as a zero-size array: "current_element_type = get_typet(lhs_type, type_size);"
@@ -2790,10 +3911,14 @@ void python_converter::get_var_assign(
         lhs.type() = rhs.type();
       }
 <<<<<<< HEAD
+<<<<<<< HEAD
       if (!rhs.type().is_empty() && !is_ctor_call)
 =======
       if (!rhs.type().is_empty())
 >>>>>>> e7c955101 (Update stats-300s.txt)
+=======
+      if (!rhs.type().is_empty() && !is_ctor_call)
+>>>>>>> a710fa95b (Improved memcpy function)
         lhs_symbol->value = rhs;
     }
 
@@ -2853,10 +3978,14 @@ typet python_converter::resolve_variable_type(
   const locationt &loc)
 {
 <<<<<<< HEAD
+<<<<<<< HEAD
   nlohmann::json decl_node = get_var_node(var_name, *ast_json);
 =======
   nlohmann::json decl_node = get_var_node(var_name, ast_json);
 >>>>>>> e7c955101 (Update stats-300s.txt)
+=======
+  nlohmann::json decl_node = get_var_node(var_name, *ast_json);
+>>>>>>> a710fa95b (Improved memcpy function)
 
   if (!decl_node.empty())
   {
@@ -2885,11 +4014,27 @@ void python_converter::get_compound_assign(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
+<<<<<<< HEAD
+<<<<<<< HEAD
+  locationt loc = get_location_from_decl(ast_node);
+=======
+  std::string var_name = ast_node["target"]["id"].get<std::string>();
+  locationt loc = get_location_from_decl(ast_node);
+
+  // Resolve variable type using AST annotations or symbol table
+  current_element_type = resolve_variable_type(var_name, loc);
+>>>>>>> cbcd98be8 ([Python] Extend support for compound assignment statements (#2458))
+
+  // Set flags for LHS processing
+  is_converting_lhs = true;
+
+=======
   locationt loc = get_location_from_decl(ast_node);
 
   // Set flags for LHS processing
   is_converting_lhs = true;
 
+>>>>>>> 7dd23100b ([python] Fix compound assignment on object attributes (#2509))
   // Get the target expression first
   exprt lhs = get_expr(ast_node["target"]);
 
@@ -3071,6 +4216,10 @@ void python_converter::get_function_definition(
     // TODO: we must still handle tuple types!
     type.return_type() = type_handler_.get_typet(std::string("tuple"));
   }
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> cad2c8c57 ([python] Handle string annotations like -> int (#2495))
   else if (return_node["_type"] == "Constant" || return_node["_type"] == "Str")
   {
     // Handle string annotations like -> "int" (legacy forward references)
@@ -3092,6 +4241,11 @@ void python_converter::get_function_definition(
 
     type.return_type() = type_handler_.get_typet(type_string);
   }
+<<<<<<< HEAD
+=======
+>>>>>>> 702b6f4ad ([python] improved return type inference (#2494))
+=======
+>>>>>>> cad2c8c57 ([python] Handle string annotations like -> int (#2495))
   else
   {
     throw std::runtime_error("Return type undefined");

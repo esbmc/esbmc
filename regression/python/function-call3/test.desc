@@ -1,4 +1,12 @@
+<<<<<<< HEAD
+<<<<<<< HEAD
 CORE
+=======
+KNOWNBUG
+>>>>>>> 1f9669d8d ([regression] added test cases in Python for function call)
+=======
+CORE
+>>>>>>> 59fb1bf8f ([python] enhanced handling of true division (#2505))
 main.py
 
 ^VERIFICATION SUCCESSFUL$

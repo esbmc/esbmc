@@ -1,4 +1,12 @@
 CORE
 contract.solast
+<<<<<<< HEAD
+<<<<<<< HEAD
 --sol contract.sol --k-induction --no-standard-checks --contract EtherStore --unbound --reentry-check
+=======
+--sol contract.sol --k-induction --no-standard-checks --contract EtherStore --unbound --unsigned-overflow-check
+>>>>>>> 5074bc418 ([Solidity] Bug fix (#2409))
+=======
+--sol contract.sol --k-induction --no-standard-checks --contract EtherStore --unbound --reentry-check
+>>>>>>> 9aac25be5 ([solidity] fix reentry attack checks (#2422))
 ^VERIFICATION FAILED$

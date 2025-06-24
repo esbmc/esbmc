@@ -1,4 +1,12 @@
+<<<<<<< HEAD
+<<<<<<< HEAD
 CORE
+=======
+KNOWNBUG
+>>>>>>> be897f6c5 ([regression] added test cases for pthread cleanup)
+=======
+CORE
+>>>>>>> c129445a4 ([pthread] push/pop must match)
 main.c
 
 ^VERIFICATION FAILED$

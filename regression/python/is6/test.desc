@@ -1,4 +1,12 @@
+<<<<<<< HEAD
+<<<<<<< HEAD
 CORE
+=======
+KNOWNBUG
+>>>>>>> 994f0cc7d ([python] added test case for None)
+=======
+CORE
+>>>>>>> 67d826a87 ([python]  support for "NoneType" (#2493))
 main.py
 
 ^VERIFICATION SUCCESSFUL$

@@ -167,6 +167,10 @@ bool is_address_member_call(const nlohmann::json &expr)
   return false;
 }
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 297a99968 ([Solidity] Add support for the library entity (#2394))
 // check if it is a function defined in a library
 bool is_sol_library_function(const int ref_id)
 {
@@ -186,6 +190,11 @@ bool is_sol_library_function(const int ref_id)
   return false;
 }
 
+<<<<<<< HEAD
+=======
+>>>>>>> 0f6d29c39 ([Solidity] Support Unit keywords && insufficient balance checks (#2393))
+=======
+>>>>>>> 297a99968 ([Solidity] Add support for the library entity (#2394))
 // rule type-name
 TypeNameT get_type_name_t(const nlohmann::json &type_name)
 {
@@ -739,6 +748,10 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
     return NullExpr;
   }
   assert(expr.contains("nodeType"));
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 0ad7495d4 ([Solidity] add support for several keywords and update modelling algorithm (#2405))
 
   if (
     expr.contains("typeDescriptions") &&
@@ -757,6 +770,11 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
       return LiteralWithRational;
   }
 
+<<<<<<< HEAD
+=======
+>>>>>>> 0f6d29c39 ([Solidity] Support Unit keywords && insufficient balance checks (#2393))
+=======
+>>>>>>> 0ad7495d4 ([Solidity] add support for several keywords and update modelling algorithm (#2405))
   if (expr["nodeType"] == "Assignment" || expr["nodeType"] == "BinaryOperation")
   {
     return BinaryOperatorClass;
@@ -833,7 +851,14 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
       get_type_name_t(expr["typeDescriptions"]) ==
       SolidityGrammar::TypeProperty)
       return TypePropertyExpression;
+<<<<<<< HEAD
+<<<<<<< HEAD
 
+=======
+>>>>>>> fa27ea0ea ([Cov & Sol] Coverage support for Solidity (#2389))
+=======
+
+>>>>>>> 0f6d29c39 ([Solidity] Support Unit keywords && insufficient balance checks (#2393))
     return CallExprClass;
   }
   else if (expr["nodeType"] == "MemberAccess")
@@ -1098,7 +1123,14 @@ const char *expression_to_str(ExpressionT type)
 
     ENUM_TO_STR(DeclRefExprClass)
     ENUM_TO_STR(Literal)
+<<<<<<< HEAD
+<<<<<<< HEAD
     ENUM_TO_STR(LiteralWithRational)
+=======
+>>>>>>> 0f6d29c39 ([Solidity] Support Unit keywords && insufficient balance checks (#2393))
+=======
+    ENUM_TO_STR(LiteralWithRational)
+>>>>>>> 0ad7495d4 ([Solidity] add support for several keywords and update modelling algorithm (#2405))
     ENUM_TO_STR(LiteralWithWei)
     ENUM_TO_STR(LiteralWithGwei)
     ENUM_TO_STR(LiteralWithSzabo)

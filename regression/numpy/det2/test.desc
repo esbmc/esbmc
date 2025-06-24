@@ -1,3 +1,10 @@
 CORE
 main.py
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+--bitwuzla
+>>>>>>> 84384f3ae ([python] added tests for numpy det)
+=======
+>>>>>>> bdf51e0dd ([regression] Show warning when KNOWNBUG tests stop failing (#2496))
 ^VERIFICATION FAILED$

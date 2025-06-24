@@ -59,6 +59,16 @@ neq_str = "not_equal_test"
 assert not (identity_string(neq_str) != neq_str)
 assert not (neq_str != identity_string(neq_str))
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+modified_str = "base"
+assert identity_string(modified_str) != modify_string(modified_str)
+assert modify_string(modified_str) != identity_string(modified_str)
+
+>>>>>>> 2b11dd71d ([python] enhanced string comparison handling (#2497))
+=======
+>>>>>>> 928d8df54 ([python] avoid string comparison with sideeffects)
 multi_str1 = "first"
 multi_str2 = "second"
 assert first_param(multi_str1, multi_str2) == multi_str1

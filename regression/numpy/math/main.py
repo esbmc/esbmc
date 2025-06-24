@@ -1,3 +1,5 @@
+<<<<<<< HEAD
+=======
 import numpy as np
 
 # numpy.ceil
@@ -12,6 +14,9 @@ result = np.ceil(a) # This call is handled by ceil_array in libm/ceil.c
 assert result[0] == 2.0
 assert result[1] == 3.0
 assert result[2] == -3.0
+<<<<<<< HEAD
+>>>>>>> f59fd87f9 ([python-frontend] Reuse C libm models for NumPy math functions (#2395))
+=======
 
 assert np.floor(2.9) == 2.0
 fl = np.floor(5.1)
@@ -29,3 +34,7 @@ assert np.fabs(3) == 3
 assert np.exp(0) == 1.0
 
 #assert np.exp(1) == 2.718281828459045
+<<<<<<< HEAD
+>>>>>>> 2e5aef15f ([python] Expand numpy math models (#2407))
+=======
+>>>>>>> 95c79d948 ([regression] extended numpy test case for math)

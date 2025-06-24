@@ -1,4 +1,12 @@
 CORE
 main.py
+<<<<<<< HEAD
+<<<<<<< HEAD
 --incremental-bmc
+=======
+
+>>>>>>> f86e3ad14 ([python] added test cases for numpy math functions (#2437))
+=======
+--incremental-bmc
+>>>>>>> 59fb1bf8f ([python] enhanced handling of true division (#2505))
 ^VERIFICATION SUCCESSFUL$

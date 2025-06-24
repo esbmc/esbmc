@@ -1,8 +1,12 @@
+<<<<<<< HEAD
 KNOWNBUG
 <<<<<<< HEAD
 CORE
 =======
 >>>>>>> e7c955101 (Update stats-300s.txt)
+=======
+CORE
+>>>>>>> a710fa95b (Improved memcpy function)
 main.py
 
 ^VERIFICATION FAILED$

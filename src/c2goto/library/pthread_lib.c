@@ -55,6 +55,11 @@ pthread_t __ESBMC_get_thread_id(void);
 void __ESBMC_really_atomic_begin(void);
 void __ESBMC_really_atomic_end(void);
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 4e14ba532 ([concurrency] : add support for pthread_cleanup_push and pthread_cleanup_pop (#2450))
 static _Bool pthread_cleanup_enabled = 0;
 
 typedef struct
@@ -77,8 +82,21 @@ void __esbmc_set_cleanup_level(int level)
 {
   pthread_t tid = __ESBMC_get_thread_id();
   __esbmc_cleanup_level[tid] = level;
+<<<<<<< HEAD
+=======
+int pthread_id_to_index(pthread_t t)
+{
+  // Here we assume pthread_t is just a small integer type.
+  return (int)t;
+>>>>>>> 381e200cb ([OM] Fix warning messages for pthread and setjmp models (#2448))
 }
 
+=======
+>>>>>>> e1935c59c ([OM] removed unnecessary typecast)
+=======
+}
+
+>>>>>>> 4e14ba532 ([concurrency] : add support for pthread_cleanup_push and pthread_cleanup_pop (#2450))
 /************************** Infinite Array Implementation **************************/
 
 /* These internal functions insert_key_value(), search_key() and delete_key()
@@ -185,8 +203,18 @@ __ESBMC_HIDE:;
 
   __ESBMC_atomic_begin();
   threadid = __ESBMC_get_thread_id();
+<<<<<<< HEAD
+<<<<<<< HEAD
   __ESBMC_pthread_end_values[threadid] = exit_val;
   __ESBMC_pthread_thread_ended[threadid] = 1;
+=======
+  __ESBMC_pthread_end_values[pthread_id_to_index(threadid)] = exit_val;
+  __ESBMC_pthread_thread_ended[pthread_id_to_index(threadid)] = 1;
+>>>>>>> 381e200cb ([OM] Fix warning messages for pthread and setjmp models (#2448))
+=======
+  __ESBMC_pthread_end_values[threadid] = exit_val;
+  __ESBMC_pthread_thread_ended[threadid] = 1;
+>>>>>>> e1935c59c ([OM] removed unnecessary typecast)
   __ESBMC_num_threads_running--;
   // A thread terminating during a search for a deadlock means there's no
   // deadlock or it can be found down a different path. Proof left as exercise
@@ -242,8 +270,18 @@ __ESBMC_HIDE:;
     pthread_cleanup_pop(1); // 1 means execute the handler
 
   pthread_t threadid = __ESBMC_get_thread_id();
+<<<<<<< HEAD
+<<<<<<< HEAD
   __ESBMC_pthread_end_values[threadid] = retval;
   __ESBMC_pthread_thread_ended[threadid] = 1;
+=======
+  __ESBMC_pthread_end_values[pthread_id_to_index(threadid)] = retval;
+  __ESBMC_pthread_thread_ended[pthread_id_to_index(threadid)] = 1;
+>>>>>>> 381e200cb ([OM] Fix warning messages for pthread and setjmp models (#2448))
+=======
+  __ESBMC_pthread_end_values[threadid] = retval;
+  __ESBMC_pthread_thread_ended[threadid] = 1;
+>>>>>>> e1935c59c ([OM] removed unnecessary typecast)
   __ESBMC_num_threads_running--;
 
   // A thread terminating during a search for a deadlock means there's no
@@ -792,6 +830,8 @@ __ESBMC_HIDE:;
   int result = 0;
   // This assert also checks whether this thread is not a joinable thread.
   __ESBMC_assert(
+<<<<<<< HEAD
+<<<<<<< HEAD
     !__ESBMC_pthread_thread_detach[threadid],
     "Attempting to detach an already detached thread results in unspecified "
     "behavior");
@@ -801,6 +841,24 @@ __ESBMC_HIDE:;
     result = ESRCH; // No thread with the ID thread could be found.
   else
     __ESBMC_pthread_thread_detach[threadid] = 1;
+=======
+    !__ESBMC_pthread_thread_detach[pthread_id_to_index(threadid)],
+=======
+    !__ESBMC_pthread_thread_detach[threadid],
+>>>>>>> e1935c59c ([OM] removed unnecessary typecast)
+    "Attempting to detach an already detached thread results in unspecified "
+    "behavior");
+  if (
+    __ESBMC_pthread_thread_ended[threadid] ||
+    threadid > __ESBMC_num_total_threads)
+    result = ESRCH; // No thread with the ID thread could be found.
+  else
+<<<<<<< HEAD
+    __ESBMC_pthread_thread_detach[pthread_id_to_index(threadid)] = 1;
+>>>>>>> 381e200cb ([OM] Fix warning messages for pthread and setjmp models (#2448))
+=======
+    __ESBMC_pthread_thread_detach[threadid] = 1;
+>>>>>>> e1935c59c ([OM] removed unnecessary typecast)
   __ESBMC_atomic_end();
   return result; // no error occurred
 }
@@ -851,9 +909,22 @@ void pthread_cleanup_push(void (*function)(void *), void *arg)
  */
 void pthread_cleanup_pop(int execute)
 {
+<<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
   // This checks for API contract violation (undefined behavior)
   __ESBMC_assert(pthread_cleanup_enabled, "API contract: push/pop must match");
 
+=======
+>>>>>>> 4e14ba532 ([concurrency] : add support for pthread_cleanup_push and pthread_cleanup_pop (#2450))
+=======
+  // This violates API contract: undefined behavior
+=======
+  // This checks for API contract violation (undefined behavior)
+>>>>>>> e7661ab8b ([pthread] improved comment for assertion)
+  __ESBMC_assert(pthread_cleanup_enabled, "API contract: push/pop must match");
+
+>>>>>>> c129445a4 ([pthread] push/pop must match)
   // Get the current thread ID
   pthread_t tid = __ESBMC_get_thread_id();
 

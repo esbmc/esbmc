@@ -1,4 +1,12 @@
+<<<<<<< HEAD
+<<<<<<< HEAD
 CORE
+=======
+KNOWNBUG
+>>>>>>> d85c9ce5d ([regression] added test cases for power in Python)
+=======
+CORE
+>>>>>>> 9041d9851 ([python] improved support for power operator (**) (#2478))
 main.py
 
 ^VERIFICATION SUCCESSFUL$

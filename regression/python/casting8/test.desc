@@ -1,4 +1,12 @@
 CORE
 main.py
 
+<<<<<<< HEAD
+<<<<<<< HEAD
 ^ERROR: '<=' not supported between instances of 'float' and 'str' at .*main\.py:1$
+=======
+^ERROR: '<=' not supported between instances of 'float' and 'str' at main.py:1$
+>>>>>>> 8583563df ([regression] added test cases for casting)
+=======
+^ERROR: '<=' not supported between instances of 'float' and 'str' at .*main\.py:1$
+>>>>>>> 1698df24f ([regression] fixed regular expression)

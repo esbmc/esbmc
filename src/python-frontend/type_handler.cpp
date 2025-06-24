@@ -146,6 +146,8 @@ std::vector<int> type_handler::get_array_type_shape(const typet &type) const
 typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   const
 {
+<<<<<<< HEAD
+<<<<<<< HEAD
   if (ast_type == "Any")
     return empty_typet();
 
@@ -154,6 +156,16 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "NoneType")
     return pointer_type();
 
+<<<<<<< HEAD
+=======
+>>>>>>> 038fae2a5 ([python] add support for python's oct() built-in function (#2421))
+=======
+  if (ast_type == "Any")
+    return empty_typet();
+
+>>>>>>> bea8feb3b ([python] Handling NumPy dot product (#2460))
+=======
+>>>>>>> 67d826a87 ([python]  support for "NoneType" (#2493))
   // float — represents IEEE 754 double-precision
   if (ast_type == "float")
     return double_type();
@@ -184,16 +196,47 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
     // TODO: Refactor to model using unsigned/signed char
     return build_array(long_long_int_type(), type_size);
   }
+<<<<<<< HEAD
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 038fae2a5 ([python] add support for python's oct() built-in function (#2421))
 
   // str: immutable sequences of Unicode characters
   // chr(): returns a 1-character string
   // hex(): returns string representation of integer in hex
+<<<<<<< HEAD
+<<<<<<< HEAD
   // oct(): Converts an integer to a lowercase octal string
   // ord(): Converts a 1-character string to its Unicode code point (as integer)
   // abs(): Return the absolute value of a number
   if (
     ast_type == "str" || ast_type == "chr" || ast_type == "hex" ||
     ast_type == "oct" || ast_type == "ord" || ast_type == "abs")
+=======
+  if (ast_type == "str" || ast_type == "chr")
+>>>>>>> 1078ace71 ([Python]  add chr() built-in function support (#2416))
+=======
+  if (ast_type == "str" || ast_type == "chr" || ast_type == "hex")
+>>>>>>> 8a6c3ff59 ([python] Add support for hex() built-in function (#2419))
+=======
+  // oct() — Converts an integer to a lowercase octal string
+  if (
+    ast_type == "str" || ast_type == "chr" || ast_type == "hex" ||
+    ast_type == "oct")
+>>>>>>> 038fae2a5 ([python] add support for python's oct() built-in function (#2421))
+=======
+  // oct(): Converts an integer to a lowercase octal string
+  // ord(): Converts a 1-character string to its Unicode code point (as integer)
+  // abs(): Return the absolute value of a number
+  if (
+    ast_type == "str" || ast_type == "chr" || ast_type == "hex" ||
+<<<<<<< HEAD
+    ast_type == "oct" || ast_type == "ord")
+>>>>>>> ffcecbd12 ([python] Handle ord(): convert single-character string to integer Unicode code point (#2423))
+=======
+    ast_type == "oct" || ast_type == "ord" || ast_type == "abs")
+>>>>>>> e73ba5595 ([python]  add support and error checking for Python abs() builtin function (#2441))
   {
     if (type_size == 1)
     {
@@ -208,9 +251,24 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (json_utils::is_class(ast_type, converter_.ast()))
     return symbol_typet("tag-" + ast_type);
 
+<<<<<<< HEAD
+<<<<<<< HEAD
   if (ast_type != "Any")
     log_warning("Unknown or unsupported AST type: {}", ast_type);
 
+=======
+  // Unknown / unsupported type
+<<<<<<< HEAD
+  log_warning("python", "Unknown or unsupported AST type: {}", ast_type);
+>>>>>>> 038fae2a5 ([python] add support for python's oct() built-in function (#2421))
+=======
+  log_warning("Unknown or unsupported AST type: {}", ast_type);
+>>>>>>> 4239e400b ([python] fixed log warning)
+=======
+  if (ast_type != "Any")
+    log_warning("Unknown or unsupported AST type: {}", ast_type);
+
+>>>>>>> 9b1bde235 (Fix bounds computation for multi-dimensional arrays (#2446))
   return empty_typet();
 }
 
@@ -229,17 +287,23 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
     return double_type();
   else if (elem.is_string())
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> a710fa95b (Improved memcpy function)
   {
     size_t str_size = elem.get<std::string>().size();
     if (str_size > 1)
       str_size += 1;
     return build_array(char_type(), str_size);
   }
+<<<<<<< HEAD
   // Handle nested value object
   if (elem.is_object())
   {
 =======
     return build_array(char_type(), elem.get<std::string>().size());
+=======
+>>>>>>> a710fa95b (Improved memcpy function)
 
   // Handle nested value object
   if (elem.is_object())
@@ -318,6 +382,9 @@ bool type_handler::has_multiple_types(const nlohmann::json &container) const
   else
   {
     // Get the type of the first element if it is not a sublist
+<<<<<<< HEAD
+    t = get_typet(container[0]["value"]);
+=======
     if (container[0]["_type"] == "UnaryOp")
     {
       if (
@@ -334,6 +401,7 @@ bool type_handler::has_multiple_types(const nlohmann::json &container) const
       else
         return false; // Can't determine type, assume consistent
     }
+>>>>>>> 468bb9ad1 ([numpy] disallow 3D or higher-dimensional arrays (#2492))
   }
 
   for (const auto &element : container)
@@ -349,6 +417,10 @@ bool type_handler::has_multiple_types(const nlohmann::json &container) const
         return true;
 
       // Compare the type of internal elements in the sublist with the type `t`
+<<<<<<< HEAD
+      if (get_typet(element["elts"][0]["value"]) != t)
+        return true;
+=======
       const auto &first_elt = element["elts"][0];
       if (first_elt["_type"] == "UnaryOp")
       {
@@ -370,10 +442,15 @@ bool type_handler::has_multiple_types(const nlohmann::json &container) const
         }
         // If we can't determine the type, skip this element (assume consistent)
       }
+>>>>>>> 468bb9ad1 ([numpy] disallow 3D or higher-dimensional arrays (#2492))
     }
     else
     {
       // Compare the type of the current element with `t`
+<<<<<<< HEAD
+      if (get_typet(element["value"]) != t)
+        return true;
+=======
       if (element["_type"] == "UnaryOp")
       {
         if (element.contains("operand") && element["operand"].contains("value"))
@@ -392,6 +469,7 @@ bool type_handler::has_multiple_types(const nlohmann::json &container) const
         }
         // If we can't determine the type, skip this element (assume consistent)
       }
+>>>>>>> 468bb9ad1 ([numpy] disallow 3D or higher-dimensional arrays (#2492))
     }
   }
   return false;
@@ -512,6 +590,8 @@ std::string type_handler::get_operand_type(const nlohmann::json &operand) const
     "node: {}",
     operand.dump(2));
   return std::string();
+<<<<<<< HEAD
+<<<<<<< HEAD
 }
 
 bool type_handler::is_2d_array(const nlohmann::json &arr) const
@@ -520,6 +600,10 @@ bool type_handler::is_2d_array(const nlohmann::json &arr) const
          arr.contains("elts") && !arr["elts"].empty() &&
          arr["elts"][0].is_object() && arr["elts"][0].contains("elts");
 }
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 468bb9ad1 ([numpy] disallow 3D or higher-dimensional arrays (#2492))
 
 // Add this method to the type_handler class
 int type_handler::get_array_dimensions(const nlohmann::json &arr) const
@@ -547,3 +631,14 @@ int type_handler::get_array_dimensions(const nlohmann::json &arr) const
     return 1;
   }
 }
+<<<<<<< HEAD
+=======
+}
+>>>>>>> 038fae2a5 ([python] add support for python's oct() built-in function (#2421))
+=======
+}
+>>>>>>> 9b1bde235 (Fix bounds computation for multi-dimensional arrays (#2446))
+=======
+>>>>>>> 7b9925f49 ([python] add support for numpy.dot() with 1D and mixed-dimension arrays (#2489))
+=======
+>>>>>>> 468bb9ad1 ([numpy] disallow 3D or higher-dimensional arrays (#2492))

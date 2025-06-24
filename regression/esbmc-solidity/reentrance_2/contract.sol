@@ -56,3 +56,10 @@ contract Reproduction {
     }
 }
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+
+>>>>>>> 652ccf467 ([Solidity] function call with options (#2398))
+=======
+>>>>>>> 7107ec709 ([solidity] improve overall performance (#2511))

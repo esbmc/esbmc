@@ -1,4 +1,16 @@
 Statistics:          33569 Files
+<<<<<<< HEAD
+  correct:           21382
+    correct true:    13317
+    correct false:    8065
+  incorrect:            88
+    incorrect true:     47
+    incorrect false:    41
+  unknown:           12097
+  Score:             32539 (max: 55885)
+
+GitHub Actions: https://github.com/esbmc/esbmc/actions/runs/13948851603
+=======
   correct:           21234
     correct true:    13168
     correct false:    8066
@@ -9,3 +21,4 @@ Statistics:          33569 Files
   Score:             33170 (max: 55885)
 
 https://github.com/esbmc/esbmc/actions/runs/15397901013
+>>>>>>> 5aabeb5a6 (Update stats-600s.txt)

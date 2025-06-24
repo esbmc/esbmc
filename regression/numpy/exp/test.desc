@@ -1,4 +1,22 @@
+<<<<<<< HEAD
+<<<<<<< HEAD
 CORE
 main.py
+<<<<<<< HEAD
+<<<<<<< HEAD
 --incremental-bmc --multi-property
+=======
+KNOWNBUG
+=======
+CORE
+>>>>>>> 921e0757a ([regression] enabled test case for exp numpy function)
+main.py
+
+>>>>>>> f86e3ad14 ([python] added test cases for numpy math functions (#2437))
+=======
+--incremental-bmc
+>>>>>>> d4e547f4c ([regression] enabled test case for exp numpy function)
+=======
+--incremental-bmc --multi-property
+>>>>>>> 9adda6dfa ([numpy] enhance numpy math function verification coverage (#2445))
 ^VERIFICATION SUCCESSFUL$

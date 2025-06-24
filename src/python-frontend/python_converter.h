@@ -94,6 +94,9 @@ private:
   friend class function_call_builder;
 
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> a710fa95b (Improved memcpy function)
   template <typename Func>
   decltype(auto) with_ast(const nlohmann::json *new_ast, Func &&f)
   {
@@ -104,8 +107,11 @@ private:
     return result;
   }
 
+<<<<<<< HEAD
 =======
 >>>>>>> e7c955101 (Update stats-300s.txt)
+=======
+>>>>>>> a710fa95b (Improved memcpy function)
   void load_c_intrisics();
 
   void get_var_assign(const nlohmann::json &ast_node, codet &target_block);
@@ -131,6 +137,8 @@ private:
 
   exprt get_binary_operator_expr(const nlohmann::json &element);
 
+<<<<<<< HEAD
+<<<<<<< HEAD
   exprt handle_power_operator(exprt base, exprt exp);
 
   exprt build_power_expression(const exprt &base, const BigInt &exp);
@@ -157,6 +165,10 @@ private:
 
   exprt handle_power_operator_sym(exprt base, exprt exp);
 
+<<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 39b012f9f ([python] handles assertions involving function calls and refactor attribute handling (#2510))
   symbolt create_assert_temp_variable(const locationt &location);
 
   void register_instance_attribute(
@@ -182,6 +194,67 @@ private:
 
   std::string extract_class_name_from_tag(const std::string &tag_name);
 
+<<<<<<< HEAD
+  exprt resolve_identity_function_call(
+    const exprt &func_expr,
+    const exprt &args_expr);
+
+  bool is_identity_function(
+    const exprt &func_value,
+    const std::string &func_identifier);
+
+  exprt handle_string_concatenation(
+    const exprt &lhs,
+    const exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
+
+  exprt handle_string_comparison(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &element);
+
+  exprt handle_string_operations(
+    const std::string &op,
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right,
+    const nlohmann::json &element);
+=======
+  exprt handle_power_operator(exprt lhs, exprt rhs);
+>>>>>>> d76a37c5d ([python] Support python true division semantics (/) with float type coercion (#2425))
+=======
+  exprt handle_power_operator(exprt base, exprt exp);
+>>>>>>> 59fb1bf8f ([python] enhanced handling of true division (#2505))
+
+  exprt build_power_expression(const exprt &base, const BigInt &exp);
+
+  bool is_zero_length_array(const exprt &expr);
+
+  void ensure_string_array(exprt &expr);
+
+  BigInt get_string_size(const exprt &expr);
+
+  bool is_bytes_literal(const nlohmann::json &element);
+
+  exprt get_binary_operator_expr_for_is(const exprt &lhs, const exprt &rhs);
+
+  exprt get_negated_is_expr(const exprt &lhs, const exprt &rhs);
+
+  exprt get_array_base_address(const exprt &arr);
+
+  exprt get_resolved_value(const exprt &expr);
+
+  exprt get_function_constant_return(const exprt &func_value);
+
+  exprt resolve_function_call(const exprt &func_expr, const exprt &args_expr);
+
+=======
+>>>>>>> 8c98a1162 ([python] implement pow symbolically (#2506))
+=======
+>>>>>>> 39b012f9f ([python] handles assertions involving function calls and refactor attribute handling (#2510))
   exprt resolve_identity_function_call(
     const exprt &func_expr,
     const exprt &args_expr);
@@ -234,8 +307,16 @@ private:
 
   void promote_int_to_float(exprt &op, const typet &target_type) const;
 
+<<<<<<< HEAD
+<<<<<<< HEAD
   void handle_float_division(exprt &lhs, exprt &rhs, exprt &bin_expr) const;
 
+=======
+>>>>>>> d76a37c5d ([python] Support python true division semantics (/) with float type coercion (#2425))
+=======
+  void handle_float_division(exprt &lhs, exprt &rhs, exprt &bin_expr) const;
+
+>>>>>>> 117989e74 ([python] Improved inference to handle true division (/) operator (#2426))
   void get_attributes_from_self(
     const nlohmann::json &method_body,
     struct_typet &clazz);

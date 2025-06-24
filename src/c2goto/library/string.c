@@ -283,6 +283,7 @@ __ESBMC_HIDE:;
   char *cdst = (char *)dst;
   const char *csrc = (const char *)src;
 
+<<<<<<< HEAD
   if (((uintptr_t)dst % 8 == 0) && ((uintptr_t)src % 8 == 0))
   {
     size_t i = 0;
@@ -318,6 +319,26 @@ __ESBMC_HIDE:;
 
   return dst; // Return pointer to destination
 >>>>>>> e7c955101 (Update stats-300s.txt)
+=======
+  if (((uintptr_t)dst % 8 == 0) && ((uintptr_t)src % 8 == 0)) {
+    size_t i=0;
+  
+  for (; i + 8 <= n; i += 8) {
+  ((uint64_t *)cdst)[i / 8] = ((const uint64_t *)csrc)[i / 8];
+  }
+ // Copy the  remaining bytes
+ for (; i < n; ++i) {
+ cdst[i] = csrc[i];
+ }
+   } else {
+
+   for (size_t i = 0; i < n; ++i) {
+    cdst[i] = csrc[i];
+ }
+ }
+
+ return dst;
+>>>>>>> a710fa95b (Improved memcpy function)
 }
 
 void *__memset_impl(void *s, int c, size_t n)

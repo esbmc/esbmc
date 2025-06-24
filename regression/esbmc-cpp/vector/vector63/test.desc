@@ -1,4 +1,16 @@
+<<<<<<< HEAD
+<<<<<<< HEAD
 CORE
 main.cpp
 --incremental-bmc
+=======
+KNOWNBUG
+main.cpp
+
+>>>>>>> 12457b33a ([c++] added test case for vector)
+=======
+CORE
+main.cpp
+--incremental-bmc
+>>>>>>> bcb0dd214 ([cpp] add support for std::is_sorted and improve vector initialization (#2515))
 ^VERIFICATION SUCCESSFUL$

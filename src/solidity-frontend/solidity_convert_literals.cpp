@@ -17,6 +17,8 @@ bool solidity_convertert::convert_integer_literal(
   if (get_type_description(integer_literal_type, type))
     return true;
 
+<<<<<<< HEAD
+<<<<<<< HEAD
   the_value.erase(
     std::remove(the_value.begin(), the_value.end(), '_'), the_value.end());
 
@@ -41,6 +43,39 @@ bool solidity_convertert::convert_integer_literal(
     the_value = integer2string(result);
   }
 
+=======
+  // In Solidity (starting from version 0.6.0), you can use underscore _ as a visual separator in numeric literals — just like in other modern languages
+  // 1000000000 wei == 1_000_000_000 wei
+  the_value.erase(
+    std::remove(the_value.begin(), the_value.end(), '_'), the_value.end());
+
+>>>>>>> 0f6d29c39 ([Solidity] Support Unit keywords && insufficient balance checks (#2393))
+=======
+  the_value.erase(
+    std::remove(the_value.begin(), the_value.end(), '_'), the_value.end());
+
+  if (the_value.find(".") != std::string::npos)
+    return true;
+
+  // Handle scientific notation, e.g., "1e2" -> "100"
+  std::size_t e_pos = the_value.find_first_of("eE");
+  if (e_pos != std::string::npos)
+  {
+    std::string base_part = the_value.substr(0, e_pos);
+    std::string exp_part = the_value.substr(e_pos + 1);
+
+    // Convert base and exponent to BigInt
+    BigInt base = string2integer(base_part);
+    BigInt exponent = string2integer(exp_part);
+
+    // Calculate base * (10 ^ exponent)
+    BigInt scale = ::power(BigInt(10), exponent);
+    BigInt result = base * scale;
+
+    the_value = integer2string(result);
+  }
+
+>>>>>>> 0ad7495d4 ([Solidity] add support for several keywords and update modelling algorithm (#2405))
   exprt the_val;
   // Extract the integer value
   BigInt z_ext_value = string2integer(the_value);

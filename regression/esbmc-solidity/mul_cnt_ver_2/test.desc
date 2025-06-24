@@ -1,4 +1,12 @@
 CORE
 contract.solast
+<<<<<<< HEAD
+<<<<<<< HEAD
 --sol contract.sol  --unwind 2 --no-unwinding-assertions --overflow-check --multi-property
+=======
+--sol contract.sol  --unwind 5 --no-unwinding-assertions --overflow-check --multi-property
+>>>>>>> 5074bc418 ([Solidity] Bug fix (#2409))
+=======
+--sol contract.sol  --unwind 2 --no-unwinding-assertions --overflow-check --multi-property
+>>>>>>> 9aac25be5 ([solidity] fix reentry attack checks (#2422))
 ^VERIFICATION FAILED$

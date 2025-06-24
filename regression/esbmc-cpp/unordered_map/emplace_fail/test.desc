@@ -1,4 +1,12 @@
 CORE
 main.cpp
+<<<<<<< HEAD
+<<<<<<< HEAD
 --unwind 4 --goto-unwind --no-bounds-check --no-pointer-check --no-div-by-zero-check --interval-analysis
+=======
+--unwind 6 --goto-unwind --no-bounds-check --no-pointer-check --no-div-by-zero-check
+>>>>>>> c76c4bd02 ([c++] added basic std::unordered_map support (#2530))
+=======
+--unwind 4 --goto-unwind --no-bounds-check --no-pointer-check --no-div-by-zero-check --interval-analysis
+>>>>>>> 6ab85a8fb ([regression] reduced verification time for emplace_fail)
 ^VERIFICATION FAILED$
