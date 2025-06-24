@@ -126,7 +126,7 @@ protected:
     const nlohmann::json &ast_node,
     const std::string &c_name,
     const std::string &f_name,
-        const std::string &f_id,
+    const std::string &f_id,
     exprt &body_exprt);
   bool has_modifier_invocation(const nlohmann::json &ast_node);
   bool insert_modifier_json(
