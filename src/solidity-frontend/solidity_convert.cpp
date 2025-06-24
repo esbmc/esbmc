@@ -1021,7 +1021,7 @@ void solidity_convertert::get_function_this_pointer_param(
   const locationt &location_begin,
   code_typet &type)
 {
-  log_debug("solidity", "\t@@@ gettring function this pointer param");
+  log_debug("solidity", "\t@@@ getting function this pointer param");
   assert(!contract_name.empty());
   code_typet::argumentt this_param;
   std::string this_name = "this";
