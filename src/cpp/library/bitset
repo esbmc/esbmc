@@ -5,69 +5,481 @@
 #include "utility"
 #include "iterator"
 #include "string"
+#include "cassert"
 
 namespace std
 {
-
 class reference
 {
   template <size_t>
   friend class bitset;
+
+private:
+  unsigned long *word_ptr;
+  size_t bit_pos;
+
+  reference(unsigned long *ptr, size_t pos) : word_ptr(ptr), bit_pos(pos)
+  {
+  }
   reference(); // no public constructor
+
 public:
-  ~reference();
-  operator bool() const;                    // convert to bool
-  reference &operator=(bool x);             // assign from bool
-  reference &operator=(const reference &x); // assign from bit
-  reference &flip();                        // flip bit value
-  bool operator~() const;                   // return inverse value
+  ~reference()
+  {
+  }
+
+  operator bool() const
+  {
+    return (*word_ptr >> bit_pos) & 1UL;
+  }
+
+  reference &operator=(bool x)
+  {
+    if (x)
+    {
+      *word_ptr |= (1UL << bit_pos);
+    }
+    else
+    {
+      *word_ptr &= ~(1UL << bit_pos);
+    }
+    return *this;
+  }
+
+  reference &operator=(const reference &x)
+  {
+    return operator=(bool(x));
+  }
+
+  reference &flip()
+  {
+    *word_ptr ^= (1UL << bit_pos);
+    return *this;
+  }
+
+  bool operator~() const
+  {
+    return !operator bool();
+  }
 };
 
 template <size_t N>
 class bitset
 {
+private:
+  static const size_t BITS_PER_WORD = sizeof(unsigned long) * 8;
+  static const size_t WORD_COUNT = (N + BITS_PER_WORD - 1) / BITS_PER_WORD;
+  unsigned long data[WORD_COUNT ? WORD_COUNT : 1];
+
+  void clear_unused_bits()
+  {
+    if (N % BITS_PER_WORD != 0)
+    {
+      data[WORD_COUNT - 1] &= (1UL << (N % BITS_PER_WORD)) - 1;
+    }
+  }
+
 public:
+  // Constructors
   bitset()
   {
+    for (size_t i = 0; i < WORD_COUNT; ++i)
+    {
+      data[i] = 0UL;
+    }
   }
+
   bitset(unsigned long val)
   {
+    data[0] = val;
+    for (size_t i = 1; i < WORD_COUNT; ++i)
+    {
+      data[i] = 0UL;
+    }
+    clear_unused_bits();
   }
-  bitset<N> &flip();
-  bitset<N> &flip(size_t pos);
+
+  explicit bitset(const std::string &str)
+  {
+    for (size_t i = 0; i < WORD_COUNT; ++i)
+    {
+      data[i] = 0UL;
+    }
+
+    std::string &non_const_str = const_cast<std::string &>(str);
+    size_t len = str.length();
+    for (size_t i = 0; i < N && i < len; ++i)
+    {
+      char c = non_const_str[len - 1 - i];
+      if (c == '1')
+      {
+        set(i);
+      }
+      else if (c == '0')
+      {
+        reset(i);
+      }
+      // Ignore other characters as per standard
+    }
+  }
+
+  explicit bitset(const char *str) : bitset(std::string(str))
+  {
+  }
+
+  explicit bitset(
+    const std::string &str,
+    size_t pos,
+    size_t n = std::string::npos)
+  {
+    for (size_t i = 0; i < WORD_COUNT; ++i)
+    {
+      data[i] = 0UL;
+    }
+
+    if (pos >= str.length())
+      return;
+
+    size_t end_pos = (n == std::string::npos) ? str.length() : pos + n;
+    if (end_pos > str.length())
+      end_pos = str.length();
+
+    std::string &non_const_str = const_cast<std::string &>(str);
+
+    // Manually extract substring characters
+    size_t bit_pos = 0;
+    for (size_t i = pos; i < end_pos && bit_pos < N; ++i, ++bit_pos)
+    {
+      char c =
+        non_const_str[end_pos - 1 - (i - pos)]; // Read from right to left
+      if (c == '1')
+      {
+        set(bit_pos);
+      }
+      else if (c == '0')
+      {
+        reset(bit_pos);
+      }
+      // Ignore other characters as per standard
+    }
+  }
+
+  // Flip operations
+  bitset<N> &flip()
+  {
+    for (size_t i = 0; i < WORD_COUNT; ++i)
+    {
+      data[i] = ~data[i];
+    }
+    clear_unused_bits();
+    return *this;
+  }
+
+  bitset<N> &flip(size_t pos)
+  {
+    assert(pos < N);
+    size_t word_idx = pos / BITS_PER_WORD;
+    size_t bit_idx = pos % BITS_PER_WORD;
+    data[word_idx] ^= (1UL << bit_idx);
+    return *this;
+  }
+
+  // Size
   size_t size() const
   {
     return N;
   }
-  unsigned long to_ulong() const;
-  bool any() const;
-  bool none() const;
-  bool test(size_t pos) const;
-  bitset<N> &reset();
-  bitset<N> &reset(size_t pos);
-  bool operator[](size_t pos) const;
-  reference operator[](size_t pos);
-  bitset<N> &set();
-  bitset<N> &set(size_t pos, bool val = true);
-  size_t count();
-  bitset<N> &operator&=(const bitset<N> &rhs);
-  bitset<N> &operator|=(const bitset<N> &rhs);
-  bitset<N> &operator^=(const bitset<N> &rhs);
-  bitset<N> &operator<<=(size_t pos);
-  bitset<N> &operator>>=(size_t pos);
-  bitset<N> operator~() const;
-  bitset<N> operator<<(size_t pos) const;
-  bitset<N> operator>>(size_t pos) const;
-  bool operator==(const bitset<N> &rhs) const;
-  bool operator!=(const bitset<N> &rhs) const;
+
+  // Conversion
+  unsigned long to_ulong() const
+  {
+    // Check if value fits in unsigned long
+    for (size_t i = 1; i < WORD_COUNT; ++i)
+    {
+      if (data[i] != 0)
+      {
+        // Value too large - would throw overflow_error in real implementation
+        assert(false && "bitset value too large for unsigned long");
+      }
+    }
+    return data[0];
+  }
+
+  // Test operations
+  bool any() const
+  {
+    for (size_t i = 0; i < WORD_COUNT; ++i)
+    {
+      if (data[i] != 0)
+        return true;
+    }
+    return false;
+  }
+
+  bool none() const
+  {
+    return !any();
+  }
+
+  bool all() const
+  {
+    // Check if all bits are set
+    for (size_t i = 0; i < N; ++i)
+    {
+      if (!test(i))
+        return false;
+    }
+    return true;
+  }
+
+  bool test(size_t pos) const
+  {
+    assert(pos < N);
+    size_t word_idx = pos / BITS_PER_WORD;
+    size_t bit_idx = pos % BITS_PER_WORD;
+    return (data[word_idx] >> bit_idx) & 1UL;
+  }
+
+  // Reset operations
+  bitset<N> &reset()
+  {
+    for (size_t i = 0; i < WORD_COUNT; ++i)
+    {
+      data[i] = 0UL;
+    }
+    return *this;
+  }
+
+  bitset<N> &reset(size_t pos)
+  {
+    assert(pos < N);
+    size_t word_idx = pos / BITS_PER_WORD;
+    size_t bit_idx = pos % BITS_PER_WORD;
+    data[word_idx] &= ~(1UL << bit_idx);
+    return *this;
+  }
+
+  // Element access
+  bool operator[](size_t pos) const
+  {
+    assert(pos < N);
+    return test(pos);
+  }
+
+  reference operator[](size_t pos)
+  {
+    assert(pos < N);
+    size_t word_idx = pos / BITS_PER_WORD;
+    size_t bit_idx = pos % BITS_PER_WORD;
+    return reference(&data[word_idx], bit_idx);
+  }
+
+  // Set operations
+  bitset<N> &set()
+  {
+    for (size_t i = 0; i < WORD_COUNT; ++i)
+    {
+      data[i] = ~0UL;
+    }
+    clear_unused_bits();
+    return *this;
+  }
+
+  bitset<N> &set(size_t pos, bool val = true)
+  {
+    assert(pos < N);
+    if (val)
+    {
+      size_t word_idx = pos / BITS_PER_WORD;
+      size_t bit_idx = pos % BITS_PER_WORD;
+      data[word_idx] |= (1UL << bit_idx);
+    }
+    else
+    {
+      reset(pos);
+    }
+    return *this;
+  }
+
+  // Count
+  size_t count()
+  {
+    size_t result = 0;
+    for (size_t i = 0; i < WORD_COUNT; ++i)
+    {
+      unsigned long word = data[i];
+      // Count bits using Brian Kernighan's algorithm
+      while (word)
+      {
+        word &= word - 1;
+        ++result;
+      }
+    }
+    return result;
+  }
+
+  // Bitwise assignment operators
+  bitset<N> &operator&=(const bitset<N> &rhs)
+  {
+    for (size_t i = 0; i < WORD_COUNT; ++i)
+    {
+      data[i] &= rhs.data[i];
+    }
+    return *this;
+  }
+
+  bitset<N> &operator|=(const bitset<N> &rhs)
+  {
+    for (size_t i = 0; i < WORD_COUNT; ++i)
+    {
+      data[i] |= rhs.data[i];
+    }
+    return *this;
+  }
+
+  bitset<N> &operator^=(const bitset<N> &rhs)
+  {
+    for (size_t i = 0; i < WORD_COUNT; ++i)
+    {
+      data[i] ^= rhs.data[i];
+    }
+    return *this;
+  }
+
+  // Shift assignment operators
+  bitset<N> &operator<<=(size_t pos)
+  {
+    if (pos >= N)
+    {
+      reset();
+      return *this;
+    }
+
+    if (pos > 0)
+    {
+      // Simple bit-by-bit shift for operational model
+      for (size_t i = N - 1; i >= pos; --i)
+      {
+        if (test(i - pos))
+        {
+          set(i);
+        }
+        else
+        {
+          reset(i);
+        }
+        if (i == 0)
+          break; // Prevent underflow
+      }
+
+      for (size_t i = 0; i < pos && i < N; ++i)
+      {
+        reset(i);
+      }
+    }
+    return *this;
+  }
+
+  bitset<N> &operator>>=(size_t pos)
+  {
+    if (pos >= N)
+    {
+      reset();
+      return *this;
+    }
+
+    if (pos > 0)
+    {
+      // Simple bit-by-bit shift for operational model
+      for (size_t i = 0; i < N - pos; ++i)
+      {
+        if (test(i + pos))
+        {
+          set(i);
+        }
+        else
+        {
+          reset(i);
+        }
+      }
+
+      for (size_t i = N - pos; i < N; ++i)
+      {
+        reset(i);
+      }
+    }
+    return *this;
+  }
+
+  // Unary operators
+  bitset<N> operator~() const
+  {
+    bitset<N> result(*this);
+    return result.flip();
+  }
+
+  // Shift operators
+  bitset<N> operator<<(size_t pos) const
+  {
+    bitset<N> result(*this);
+    return result <<= pos;
+  }
+
+  bitset<N> operator>>(size_t pos) const
+  {
+    bitset<N> result(*this);
+    return result >>= pos;
+  }
+
+  // Comparison operators
+  bool operator==(const bitset<N> &rhs) const
+  {
+    for (size_t i = 0; i < WORD_COUNT; ++i)
+    {
+      if (data[i] != rhs.data[i])
+        return false;
+    }
+    return true;
+  }
+
+  bool operator!=(const bitset<N> &rhs) const
+  {
+    return !operator==(rhs);
+  }
 };
 
+// Non-member bitwise operators
 template <size_t N>
-bitset<N> operator&(const bitset<N> &lhs, const bitset<N> &rhs);
+bitset<N> operator&(const bitset<N> &lhs, const bitset<N> &rhs)
+{
+  bitset<N> result(lhs);
+  return result &= rhs;
+}
+
 template <size_t N>
-bitset<N> operator|(const bitset<N> &lhs, const bitset<N> &rhs);
+bitset<N> operator|(const bitset<N> &lhs, const bitset<N> &rhs)
+{
+  bitset<N> result(lhs);
+  return result |= rhs;
+}
+
 template <size_t N>
-bitset<N> operator^(const bitset<N> &lhs, const bitset<N> &rhs);
+bitset<N> operator^(const bitset<N> &lhs, const bitset<N> &rhs)
+{
+  bitset<N> result(lhs);
+  return result ^= rhs;
+}
+
+// Stream insertion operator
+template <size_t N>
+ostream &operator<<(ostream &os, const bitset<N> &bs)
+{
+  for (size_t i = N; i > 0; --i)
+  {
+    os << (bs.test(i - 1) ? '1' : '0');
+  }
+  return os;
+}
 
 } // namespace std
 #endif

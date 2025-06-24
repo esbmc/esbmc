@@ -1,4 +1,4 @@
-# Directories
+# Directories for esbmc-cpp
 algorithm := algorithm
 cpp := cpp
 inheritance := inheritance
@@ -18,6 +18,8 @@ multiset := multiset
 unordered_set := unordered_set
 unordered_map := unordered_map
 functional := functional
+bitset := bitset
+
 
 # Clean
 ifneq ($(filter clean,$(MAKECMDGOALS)),)
@@ -40,6 +42,7 @@ $(algorithm) $(cpp) $(inheritance) $(stream) $(trycatch) $(vector) $(deque) $(li
 #Make only STL directories
 stl: $(algorithm) $(vector) $(deque) $(list) $(stack) $(queue) $(priority_queue) $(map) $(set) $(multimap) $(multiset) $(unordered_set) $(unordered_map) $(functional)
 
+
 # Make each directory
 algorithm: $(algorithm)
 cpp: $(cpp)
@@ -60,6 +63,7 @@ multiset: $(multiset)
 unordered_set: $(unordered_set)
 unordered_map: $(unordered_map)
 functional : $(functional)
+bitset : $(bitset)
 
 # Allow parallel make
 

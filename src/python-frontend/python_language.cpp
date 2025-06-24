@@ -147,7 +147,7 @@ bool python_languaget::typecheck(contextt &context, const std::string &)
   try
   {
     // Generate symbol table
-    python_converter converter(context, ast, global_scope_);
+    python_converter converter(context, &ast, global_scope_);
     converter.convert();
   }
   catch (const std::runtime_error &e)

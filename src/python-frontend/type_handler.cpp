@@ -76,6 +76,9 @@ std::string type_handler::type_to_string(const typet &t) const
       return type_to_string(elem_type);
   }
 
+  if (t.is_pointer() && t.subtype() == char_type())
+    return "str";
+
   return "";
 }
 
@@ -87,7 +90,14 @@ std::string type_handler::get_var_type(const std::string &var_name) const
   if (ref.empty())
     return std::string();
 
-  return ref["annotation"]["id"].get<std::string>();
+  const auto &annotation = ref["annotation"];
+  if (annotation.contains("id"))
+    return annotation["id"].get<std::string>();
+
+  if (annotation["_type"] == "Subscript")
+    return annotation["value"]["id"];
+
+  return std::string();
 }
 
 /// This method creates a `typet` representing a statically sized array.
@@ -219,6 +229,16 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
     return double_type();
   else if (elem.is_string())
     return build_array(char_type(), elem.get<std::string>().size());
+
+  // Handle nested value object
+  if (elem.is_object())
+  {
+  {
+    size_t str_size = elem.get<std::string>().size();
+    if (str_size > 1)
+      str_size += 1;
+    return build_array(char_type(), str_size);
+  }
 
   // Handle nested value object
   if (elem.is_object())
