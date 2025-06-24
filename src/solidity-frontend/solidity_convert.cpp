@@ -3132,7 +3132,7 @@ bool solidity_convertert::insert_modifier_json(
   const std::string &fname,
   nlohmann::json *&modifier_def)
 {
-  log_debug("solidity", "\tinsert modifier json");
+  log_debug("solidity", "\tinsert modifier json {}", fname);
   nlohmann::json &nodes = src_ast_json["nodes"];
   for (nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end(); ++itr)
   {
@@ -3242,9 +3242,12 @@ bool solidity_convertert::get_func_modifier(
   for (auto it = modifiers.rbegin(); it != modifiers.rend(); ++it)
   {
     int modifier_id = (*it)["modifierName"]["referencedDeclaration"];
-    const nlohmann::json &mod_def =
+    // we cannot use reference here, as the src_ast_json got inserted/deleted later
+    const nlohmann::json mod_def =
       find_decl_ref(src_ast_json["nodes"], modifier_id);
-
+    assert(!mod_def.is_null());
+    assert(!mod_def.empty());
+    
     std::string func_name = f_name;
     std::string mod_name = mod_def["name"];
     std::string aux_func_name, aux_func_id;
