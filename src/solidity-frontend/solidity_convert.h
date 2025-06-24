@@ -125,7 +125,25 @@ protected:
   bool get_func_modifier(
     const nlohmann::json &ast_node,
     const std::string &c_name,
+    const std::string &f_name,
+        const std::string &f_id,
     exprt &body_exprt);
+  bool has_modifier_invocation(const nlohmann::json &ast_node);
+  bool insert_modifier_json(
+    const nlohmann::json &ast_node,
+    const std::string &cname,
+    const std::string &fname,
+    nlohmann::json *&modifier_def);
+  bool delete_modifier_json(
+    const std::string &cname,
+    const std::string &fname,
+    nlohmann::json *&modifier_def);
+  void get_modifier_function_name(
+    const std::string &cname,
+    const std::string &mod_name,
+    const std::string &func_name,
+    std::string &name,
+    std::string &id);
   bool get_function_params(
     const nlohmann::json &pd,
     const std::string &cname,
