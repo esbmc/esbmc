@@ -139,7 +139,10 @@ configure_file (
  "${PROJECT_SOURCE_DIR}/scripts/cmake/cmake_config.in"
  "${PROJECT_BINARY_DIR}/src/ac_config.h"
 )
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(GMP REQUIRED IMPORTED_TARGET gmp)
 
+target_link_libraries(esbmc PUBLIC PkgConfig::GMP)
 # This should be added after all source files
 include(Docs)
 
