@@ -2,4 +2,4 @@ CORE
 main.py
 --function foo
 
-^VERIFICATION SUCCESSFUL$
+^ERROR: Function foo not found
