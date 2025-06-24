@@ -990,7 +990,6 @@ bool solidity_convertert::get_function_decl(const nlohmann::json &ast_node)
   // based on each element as in Solidty grammar "rule contract-body-element"
   switch (type)
   {
-  case SolidityGrammar::ContractBodyElementT::ModifierDef:
   case SolidityGrammar::ContractBodyElementT::FunctionDef:
   {
     return get_function_definition(ast_node); // rule function-definition
@@ -1001,6 +1000,7 @@ bool solidity_convertert::get_function_decl(const nlohmann::json &ast_node)
   case SolidityGrammar::ContractBodyElementT::ErrorDef:
   case SolidityGrammar::ContractBodyElementT::EventDef:
   case SolidityGrammar::ContractBodyElementT::UsingForDef:
+  case SolidityGrammar::ContractBodyElementT::ModifierDef:
   {
     break;
   }
@@ -1510,7 +1510,6 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &struct_def)
         return true;
       break;
     }
-    case SolidityGrammar::ContractBodyElementT::ModifierDef:
     case SolidityGrammar::ContractBodyElementT::FunctionDef:
     {
       if (get_struct_class_method(*itr, t))
@@ -1535,6 +1534,7 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &struct_def)
     }
     case SolidityGrammar::ContractBodyElementT::EnumDef:
     case SolidityGrammar::ContractBodyElementT::UsingForDef:
+    case SolidityGrammar::ContractBodyElementT::ModifierDef:
     {
       // skip as it do not need to be populated to the value of the struct
       break;
@@ -1861,8 +1861,7 @@ void solidity_convertert::add_empty_body_node(nlohmann::json &ast_node)
     for (auto &subNode : ast_node["nodes"])
     {
       if (
-        (subNode["nodeType"] == "FunctionDefinition" ||
-         subNode["nodeType"] == "ModifierDefinition") &&
+        (subNode["nodeType"] == "FunctionDefinition") &&
         !subNode.contains("body"))
         subNode["body"] = {
           {"nodeType", "Block"},
@@ -1876,8 +1875,7 @@ void solidity_convertert::add_empty_body_node(nlohmann::json &ast_node)
     for (auto &subNode : ast_node["nodes"])
     {
       if (
-        (subNode["nodeType"] == "FunctionDefinition" ||
-         subNode["nodeType"] == "ModifierDefinition") &&
+        (subNode["nodeType"] == "FunctionDefinition") &&
         !subNode.contains("body"))
         subNode["body"] = {
           {"nodeType", "Block"},
@@ -2190,7 +2188,6 @@ bool solidity_convertert::get_constructor(
       SolidityGrammar::get_contract_body_element_t(ast_node);
     switch (type)
     {
-    case SolidityGrammar::ContractBodyElementT::ModifierDef:
     case SolidityGrammar::ContractBodyElementT::FunctionDef:
     {
       if (
@@ -3031,50 +3028,55 @@ bool solidity_convertert::get_function_definition(
       // => func() => func_modf1() => func_modf2()
       if (get_func_modifier(ast_node, c_name, name, id, body_exprt))
         return true;
+      if (is_reentry_check && !is_event_err_lib && !is_ctor)
+      {
+        
+
+      }
     }
     else
     {
       if (get_block(ast_node["body"], body_exprt))
         return true;
-    }
 
-    if (is_reentry_check && !is_event_err_lib && !is_ctor)
-    {
-      // we should only add this to the contract's functions
-      // rather than interface and library's functions,
-      // or contract's errors, events and ctor
-      //TODO: detect is_library_function
-
-      // add a global mutex checker _ESBMC_check_reentrancy() in the front
-      side_effect_expr_function_callt call;
-      get_library_function_call_no_args(
-        "_ESBMC_check_reentrancy",
-        "c:@F@_ESBMC_check_reentrancy",
-        empty_typet(),
-        location_begin,
-        call);
-
-      exprt this_expr;
-      if (get_func_decl_this_ref(*current_functionDecl, this_expr))
-        return true;
-
-      exprt arg;
-      get_contract_mutex_expr(c_name, this_expr, arg);
-      call.arguments().push_back(arg);
-
-      convert_expression_to_code(call);
-      // Insert after the last front requirement (__ESBMC_assume) statement,
-      // as the function may only be re-entered once the requirements are fulfilled.
-      auto &ops = body_exprt.operands();
-      for (auto it = ops.begin(); it != ops.end(); ++it)
+      if (is_reentry_check && !is_event_err_lib && !is_ctor)
       {
-        if (
-          it->op0().id() == "sideeffect" &&
-          it->op0().op0().name() == "__ESBMC_assume")
-          continue;
+        // we should only add this to the contract's functions
+        // rather than interface and library's functions,
+        // or contract's errors, events and ctor
+        //TODO: detect is_library_function
 
-        ops.insert(it, call);
-        break;
+        // add a global mutex checker _ESBMC_check_reentrancy() in the front
+        side_effect_expr_function_callt call;
+        get_library_function_call_no_args(
+          "_ESBMC_check_reentrancy",
+          "c:@F@_ESBMC_check_reentrancy",
+          empty_typet(),
+          location_begin,
+          call);
+
+        exprt this_expr;
+        if (get_func_decl_this_ref(*current_functionDecl, this_expr))
+          return true;
+
+        exprt arg;
+        get_contract_mutex_expr(c_name, this_expr, arg);
+        call.arguments().push_back(arg);
+
+        convert_expression_to_code(call);
+        // Insert after the last front requirement (__ESBMC_assume) statement,
+        // as the function may only be re-entered once the requirements are fulfilled.
+        auto &ops = body_exprt.operands();
+        for (auto it = ops.begin(); it != ops.end(); ++it)
+        {
+          if (
+            it->op0().id() == "sideeffect" &&
+            it->op0().op0().name() == "__ESBMC_assume")
+            continue;
+
+          ops.insert(it, call);
+          break;
+        }
       }
     }
   }
@@ -3247,7 +3249,7 @@ bool solidity_convertert::get_func_modifier(
       find_decl_ref(src_ast_json["nodes"], modifier_id);
     assert(!mod_def.is_null());
     assert(!mod_def.empty());
-    
+
     std::string func_name = f_name;
     std::string mod_name = mod_def["name"];
     std::string aux_func_name, aux_func_id;
@@ -3359,7 +3361,8 @@ bool solidity_convertert::get_func_modifier(
         return true;
       func_modifier.arguments().push_back(this_ptr);
 
-      if (insert_modifier_json(ast_node, c_name, next_aux_func_name, modifier_func))
+      if (insert_modifier_json(
+            ast_node, c_name, next_aux_func_name, modifier_func))
         return true;
       assert(modifier_func != nullptr);
       auto old_decl = current_functionDecl;
@@ -4152,8 +4155,7 @@ bool solidity_convertert::get_expr(
             return true;
         }
         else if (
-          decl["nodeType"] == "FunctionDefinition" ||
-          decl["nodeType"] == "ModifierDefinition")
+          decl["nodeType"] == "FunctionDefinition")
         {
           if (get_func_decl_ref(decl, new_expr))
             return true;
@@ -4941,7 +4943,6 @@ bool solidity_convertert::get_expr(
 
       break;
     }
-    case SolidityGrammar::ModifierDef:
     case SolidityGrammar::FunctionDef:
     {
       // e.g. x.func()
@@ -6415,8 +6416,7 @@ bool solidity_convertert::get_func_decl_ref(
   assert(
     decl["nodeType"] == "FunctionDefinition" ||
     decl["nodeType"] == "EventDefinition" ||
-    decl["nodeType"] == "ErrorDefinition" ||
-    decl["nodeType"] == "ModifierDefinition");
+    decl["nodeType"] == "ErrorDefinition" );
 
   // find base contract name
   const auto contract_def = find_parent_contract(src_ast_json, decl);
@@ -6465,8 +6465,7 @@ const nlohmann::json &solidity_convertert::get_func_decl_ref(
            ++itrr)
       {
         if (
-          (*itrr)["nodeType"] == "FunctionDefinition" ||
-          (*itrr)["nodeType"] == "ModifierDefinition")
+          (*itrr)["nodeType"] == "FunctionDefinition")
         {
           if ((*itrr).contains("name") && (*itrr)["name"] == f_name)
             return (*itrr);
@@ -7097,17 +7096,15 @@ bool solidity_convertert::get_func_decl_ref_type(
   case SolidityGrammar::FunctionDeclRefT::FunctionNoProto:
   {
     code_typet type;
-    if (decl["nodeType"] != "ModifierDefinition")
-    {
-      // Return type
-      const nlohmann::json &rtn_type = decl["returnParameters"];
+    // Return type
+    const nlohmann::json &rtn_type = decl["returnParameters"];
 
-      typet return_type;
-      if (get_type_description(rtn_type, return_type))
-        return true;
+    typet return_type;
+    if (get_type_description(rtn_type, return_type))
+      return true;
 
-      type.return_type() = return_type;
-    }
+    type.return_type() = return_type;
+    
     if (!type.arguments().size())
       type.make_ellipsis();
 

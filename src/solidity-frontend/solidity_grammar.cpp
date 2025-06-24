@@ -1151,7 +1151,6 @@ FunctionDeclRefT get_func_decl_ref_t(const nlohmann::json &decl)
 {
   assert(
     decl["nodeType"] == "FunctionDefinition" ||
-    decl["nodeType"] == "ModifierDefinition" ||
     decl["nodeType"] == "EventDefinition");
   if (
     decl["parameters"]["parameters"].size() == 0 ||
