@@ -1,0 +1,5 @@
+CORE
+main.py
+--function foo
+
+^VERIFICATION SUCCESSFUL$
