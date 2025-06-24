@@ -288,19 +288,18 @@ void *memcpy(void *dst, const void *src, size_t n)
   for (; i + 8 <= n; i += 8) {
   ((uint64_t *)cdst)[i / 8] = ((const uint64_t *)csrc)[i / 8];
   }
-
-  // Copy the  remaining bytes
-  for (; i < n; ++i) {
-     cdst[i] = csrc[i];
-  }
+ // Copy the  remaining bytes
+ for (; i < n; ++i) {
+ cdst[i] = csrc[i];
+ }
    } else {
 
-    for (size_t i = 0; i < n; ++i) {
-     cdst[i] = csrc[i];
-   }
-  }
+   for (size_t i = 0; i < n; ++i) {
+    cdst[i] = csrc[i];
+ }
+ }
 
-  return dst;
+ return dst;
 }
 
 void *__memset_impl(void *s, int c, size_t n)
