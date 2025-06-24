@@ -93,8 +93,8 @@ private:
   friend class numpy_call_expr;
   friend class function_call_builder;
 
-  template<typename Func> decltype(auto)
-  with_ast(const nlohmann::json *new_ast, Func &&f)
+  template <typename Func>
+  decltype(auto) with_ast(const nlohmann::json *new_ast, Func &&f)
   {
     const nlohmann::json *old_ast = ast_json;
     ast_json = new_ast;
