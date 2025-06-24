@@ -122,11 +122,16 @@ protected:
     exprt &new_expr);
   bool get_var_decl(const nlohmann::json &ast_node, exprt &new_expr);
   bool get_function_definition(const nlohmann::json &ast_node);
+  bool add_reentry_check(
+    const std::string &c_name,
+    const locationt &loc,
+    exprt &body_exprt);
   bool get_func_modifier(
     const nlohmann::json &ast_node,
     const std::string &c_name,
     const std::string &f_name,
     const std::string &f_id,
+    const bool add_reentry,
     exprt &body_exprt);
   bool has_modifier_invocation(const nlohmann::json &ast_node);
   bool insert_modifier_json(
