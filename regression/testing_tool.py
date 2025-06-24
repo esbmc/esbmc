@@ -370,6 +370,7 @@ TEST_SUITES = [
     "esbmc-cpp/unix",
     "esbmc-cpp/vector",
     "esbmc-cpp/functional",
+    "esbmc-cpp/bitset",
     "esbmc-cpp11/constructors",
     "esbmc-cpp11/cpp",
     "esbmc-cpp11/new-delete",
