@@ -1048,7 +1048,7 @@ exprt python_converter::handle_string_comparison(
     return gen_boolean(op == "Eq");
 
   // Handle type mismatches to prevent crashes/array out of bounds
-  if (lhs.type() != rhs.type())
+  if (!(lhs.is_member() || rhs.is_member()) && lhs.type() != rhs.type())
   {
     // If one is a constant array and the other is empty, compare based on size
     if (lhs.is_constant() && lhs.is_array() && is_zero_length_array(rhs))
@@ -1317,6 +1317,9 @@ bool python_converter::is_identity_function(
 
 void python_converter::ensure_string_array(exprt &expr)
 {
+  if (expr.type().is_pointer())
+    return;
+
   if (!expr.type().is_array())
   {
     typet t = type_handler_.build_array(expr.type(), 1);
