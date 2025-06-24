@@ -248,22 +248,24 @@ bool goto_symext::unexpected_handler()
   // It'll call the current function handler
   if (!is_included)
   {
+    // We only call it if the user replaced the default one
+    const symbolt *handler = ns.lookup("c:@F@__ESBMC_unexpected");
+    if (!handler)
+      return false;
+
     expr2tc the_call;
     code_function_callt unexpected_function;
-    unexpected_function.function() = symbol_expr(*tmp);
+    unexpected_function.function() = handler->value;
     migrate_expr(unexpected_function, the_call);
-
-    // We only call it if the user replaced the default one
-    if (
-      to_symbol2t(to_code_function_call2t(the_call).function).thename ==
-      "c:@N@std@F@default_unexpected#")
-      return false;
 
     // Indicate there we're inside the unexpected flow
     inside_unexpected = true;
 
     // Call the function
     symex_function_call(the_call);
+    // TODO: implement rethrow
+    std::string msg = std::string("Unexpected exceptions");
+    claim(gen_false_expr(), msg);
     return true;
   }
 

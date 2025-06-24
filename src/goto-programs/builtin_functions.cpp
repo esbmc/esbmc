@@ -1020,6 +1020,16 @@ void goto_convertt::do_function_call_symbol(
     copy(assignment, ASSIGN, dest);
     return;
   }
+  else if (base_name == "set_unexpected")
+  {
+    symbolt new_symbol;
+    new_symbol.name = "__ESBMC_unexpected";
+    new_symbol.type = arguments[0].type();
+    new_symbol.id = "c:@F@" + id2string(new_symbol.name);
+    new_symbol.value = arguments[0].op0().op0();
+    new_name(new_symbol);
+    return;
+  }
   else
   {
     // insert function call
