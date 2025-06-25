@@ -908,7 +908,7 @@ void mathsat_smt_ast::dump() const
   log_debug("mathsat", "{}", msat_to_smtlib2(convt->env, a));
 }
 
-void mathsat_convt::dump_smt()
+std::string mathsat_convt::dump_smt()
 {
   size_t num_of_asserted;
   msat_term *asserted_formulas =
@@ -918,6 +918,7 @@ void mathsat_convt::dump_smt()
     log_status("{}", msat_to_smtlib2(env, asserted_formulas[i]));
 
   msat_free(asserted_formulas);
+  return "SMT formula dumped successfully.";
 }
 
 smt_astt mathsat_convt::mk_smt_fpbv_fma(
