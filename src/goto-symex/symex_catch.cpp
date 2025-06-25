@@ -55,7 +55,7 @@ bool goto_symext::symex_throw()
 
   // get the list of exceptions thrown
   const code_cpp_throw2t &throw_ref = to_code_cpp_throw2t(instruction.code);
-  const std::vector<irep_idt> exceptions_thrown = throw_ref.exception_list;
+  const std::vector<irep_idt> &exceptions_thrown = throw_ref.exception_list;
 
   // Handle rethrows
   if (handle_rethrow(throw_ref.operand, instruction))
@@ -390,8 +390,10 @@ bool goto_symext::handle_rethrow(
       goto_programt::instructiont &mutable_ref =
         const_cast<goto_programt::instructiont &>(instruction);
       to_code_cpp_throw2t(mutable_ref.code).exception_list.push_back((*e_it));
+      to_code_cpp_throw2t(mutable_ref.code).operand =
+        to_code_cpp_throw2t(last_throw->code).operand;
 
-      return true;
+      return false;
     }
 
     const std::string &msg = "Trying to re-throw without last exception.";
