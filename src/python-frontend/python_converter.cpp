@@ -50,7 +50,8 @@ static const std::unordered_map<std::string, StatementType> statement_map = {
   {"Continue", StatementType::CONTINUE},
   {"ImportFrom", StatementType::IMPORT},
   {"Import", StatementType::IMPORT},
-  {"Raise", StatementType::RAISE}};
+  {"Raise", StatementType::RAISE},
+  {"Global", StatementType::GLOBAL}};
 
 static bool is_char_type(const typet &t)
 {
@@ -2212,6 +2213,13 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         }
       }
     }
+
+    // Tracks global reads within a function
+    if (element["_type"] == "Name" && sid.to_string().find("@C") == std::string::npos && sid.to_string().find("@F") != std::string::npos
+      && is_right && !symbol_table_.find_symbol(sid.to_string().c_str()))
+      {
+        local_loads.push_back(sid.to_string());
+      }
     break;
   }
   case ExpressionType::FUNC_CALL:
@@ -2419,12 +2427,39 @@ void python_converter::get_var_assign(
       sid.set_object(name);
     }
 
+    // Process RHS before LHS if code is in a Function, to update local_load
+    exprt rhs;
+    if (sid.to_string().find("@F") != std::string::npos && sid.to_string().find("@C") == std::string::npos)
+    {
+      is_right = true;
+      if (!ast_node["value"].is_null())
+      {
+        if (ast_node["_type"] != "Call") // Test cases showed that some types cannot be processed here
+        {
+          rhs = get_expr(ast_node["value"]);
+        }
+      }
+      is_right = false;
+    }
+
     // Location
     location_begin = get_location_from_decl(target);
 
     lhs_symbol = symbol_table_.find_symbol(sid.to_string().c_str());
 
-    if (!lhs_symbol)
+    bool is_global = false;
+
+    for(std::string& s  : global_declarations)
+    {
+      if (s == sid.global_to_string())
+      {
+        is_global = true;
+        lhs_symbol = symbol_table_.find_symbol(sid.global_to_string().c_str());
+        break;
+      }
+    }
+
+    if (!lhs_symbol || !is_global)
     {
       // Debug module name
       std::string module_name = location_begin.get_file().as_string();
@@ -2437,11 +2472,19 @@ void python_converter::get_var_assign(
         location_begin,
         current_element_type);
       symbol.lvalue = true;
-      symbol.static_lifetime = false;
+      symbol.static_lifetime = (current_class_name_ == "" && current_func_name_ == "") ? true : false;
       symbol.file_local = true;
       symbol.is_extern = false;
 
       lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
+    }
+
+    for(std::string& s  : local_loads)
+    {
+      if (lhs_symbol->id.as_string() == s) {
+        throw std::runtime_error("Variable " + sid.get_object() + " in function " + current_func_name_ + " is uninitialized.");
+      }
+      continue;
     }
 
     if (target_type == "Attribute" || target_type == "Subscript")
@@ -2465,7 +2508,18 @@ void python_converter::get_var_assign(
     sid.set_object(name);
     lhs_symbol = symbol_table_.find_symbol(sid.to_string());
 
-    if (!lhs_symbol)
+    bool is_global = false;
+
+    for(std::string& s  : global_declarations)
+    {
+      if (s == sid.global_to_string())
+      {
+        is_global = true;
+        break;
+      }
+    }
+
+    if (!lhs_symbol && !is_global)
       throw std::runtime_error("Type undefined for \"" + name + "\"");
 
     lhs = symbol_expr(*lhs_symbol);
@@ -3141,6 +3195,8 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     case StatementType::FUNC_DEFINITION:
     {
       get_function_definition(element);
+      global_declarations.clear();
+      local_loads.clear();
       break;
     }
     case StatementType::RETURN:
@@ -3245,6 +3301,16 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     {
       code_continuet continue_expr;
       block.move_to_operands(continue_expr);
+      break;
+    }
+    case StatementType::GLOBAL:
+    {
+      symbol_id sid = create_symbol_id();
+      for (const auto &item : element["names"])
+      {
+        sid.set_object(item);
+        global_declarations.push_back(sid.global_to_string());
+      }
       break;
     }
     /* "https://docs.python.org/3/tutorial/controlflow.html:

@@ -281,4 +281,8 @@ private:
   std::map<std::string, std::set<std::string>> instance_attr_map;
   // Map imported modules to their corresponding paths
   std::unordered_map<std::string, std::string> imported_modules;
+
+  std::vector<std::string> global_declarations;
+  std::vector<std::string> local_loads;
+  bool is_right = false;
 };
