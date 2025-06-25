@@ -43,7 +43,6 @@ solidity_convertert::solidity_convertert(
     current_functionName(""),
     member_entity_scope({}),
     initializers(code_blockt()),
-    ctor_modifier(nullptr),
     aux_counter(0),
     is_bound(true),
     is_reentry_check(false),
@@ -811,7 +810,7 @@ bool solidity_convertert::populate_function_signature(
   {
     if (
       func_node.contains("nodeType") &&
-      func_node["nodeType"] == "FunctionDefinition")
+      (func_node["nodeType"] == "FunctionDefinition"))
     {
       if (
         func_node["name"] == "" && func_node.contains("kind") &&
@@ -952,6 +951,7 @@ bool solidity_convertert::get_non_function_decl(
   {
     return get_struct_class(ast_node); // rule enum-definition
   }
+  case SolidityGrammar::ContractBodyElementT::ModifierDef:
   case SolidityGrammar::ContractBodyElementT::FunctionDef:
   case SolidityGrammar::ContractBodyElementT::EnumDef:
   case SolidityGrammar::ContractBodyElementT::ErrorDef:
@@ -998,6 +998,7 @@ bool solidity_convertert::get_function_decl(const nlohmann::json &ast_node)
   case SolidityGrammar::ContractBodyElementT::ErrorDef:
   case SolidityGrammar::ContractBodyElementT::EventDef:
   case SolidityGrammar::ContractBodyElementT::UsingForDef:
+  case SolidityGrammar::ContractBodyElementT::ModifierDef:
   {
     break;
   }
@@ -1018,7 +1019,7 @@ void solidity_convertert::get_function_this_pointer_param(
   const locationt &location_begin,
   code_typet &type)
 {
-  log_debug("solidity", "\t@@@ gettring function this pointer param");
+  log_debug("solidity", "\t@@@ getting function this pointer param");
   assert(!contract_name.empty());
   code_typet::argumentt this_param;
   std::string this_name = "this";
@@ -1120,12 +1121,13 @@ bool solidity_convertert::get_var_decl(
   std::string name, id;
   //TODO: Omitted variable
   if (ast_node["name"].get<std::string>().empty())
+    // Omitted variable
+    get_aux_var(name, id);
+  else
   {
-    log_error("Variables with omitted name are not supported.");
-    return true;
+    if (get_var_decl_name(ast_node, name, id))
+      return true;
   }
-  if (get_var_decl_name(ast_node, name, id))
-    return true;
 
   // if we have already populated the var symbol, we do not need to re-parse
   // however, we need to return the symbol info
@@ -1530,6 +1532,7 @@ bool solidity_convertert::get_struct_class(const nlohmann::json &struct_def)
     }
     case SolidityGrammar::ContractBodyElementT::EnumDef:
     case SolidityGrammar::ContractBodyElementT::UsingForDef:
+    case SolidityGrammar::ContractBodyElementT::ModifierDef:
     {
       // skip as it do not need to be populated to the value of the struct
       break;
@@ -1581,7 +1584,6 @@ bool solidity_convertert::get_contract_definition(const std::string &c_name)
   auto old_current_forStmt = current_forStmt;
   auto old_current_typeName = current_typeName;
   auto old_initializers = initializers;
-  auto old_ctor_modifier = ctor_modifier;
 
   // reset
   reset_auxiliary_vars();
@@ -1664,7 +1666,6 @@ bool solidity_convertert::get_contract_definition(const std::string &c_name)
   current_forStmt = old_current_forStmt;
   current_typeName = old_current_typeName;
   initializers = old_initializers;
-  ctor_modifier = old_ctor_modifier;
 
   return false;
 }
@@ -1858,7 +1859,7 @@ void solidity_convertert::add_empty_body_node(nlohmann::json &ast_node)
     for (auto &subNode : ast_node["nodes"])
     {
       if (
-        subNode["nodeType"] == "FunctionDefinition" &&
+        (subNode["nodeType"] == "FunctionDefinition") &&
         !subNode.contains("body"))
         subNode["body"] = {
           {"nodeType", "Block"},
@@ -1872,7 +1873,7 @@ void solidity_convertert::add_empty_body_node(nlohmann::json &ast_node)
     for (auto &subNode : ast_node["nodes"])
     {
       if (
-        subNode["nodeType"] == "FunctionDefinition" &&
+        (subNode["nodeType"] == "FunctionDefinition") &&
         !subNode.contains("body"))
         subNode["body"] = {
           {"nodeType", "Block"},
@@ -2188,7 +2189,7 @@ bool solidity_convertert::get_constructor(
     case SolidityGrammar::ContractBodyElementT::FunctionDef:
     {
       if (
-        ast_node.contains("kind") &&
+        ast_node.contains("kind") && !ast_node["kind"].empty() &&
         ast_node["kind"].get<std::string>() == "constructor")
         return get_function_definition(ast_node);
       continue;
@@ -2768,7 +2769,9 @@ bool solidity_convertert::move_inheritance_to_ctor(
           auto _ctor = ctor_node["modifiers"];
           for (const auto &c_mdf : _ctor)
           {
-            if (!c_mdf.contains("modifierName"))
+            if (
+              !c_mdf.contains("modifierName") ||
+              c_mdf["kind"] != "baseConstructorSpecifier")
               continue;
 
             if (c_mdf["modifierName"]["name"].get<std::string>() == c_name)
@@ -3016,46 +3019,24 @@ bool solidity_convertert::get_function_definition(
   {
     log_debug(
       "solidity", "\t parsing function {}'s body", current_functionName);
-    if (get_block(ast_node["body"], body_exprt))
-      return true;
+    bool add_reentry = is_reentry_check && !is_event_err_lib && !is_ctor;
 
-    if (is_reentry_check && !is_event_err_lib && !is_ctor)
+    if (has_modifier_invocation(ast_node))
     {
-      // we should only add this to the contract's functions
-      // rather than interface and library's functions,
-      // or contract's errors, events and ctor
-      //TODO: detect is_library_function
-
-      // add a global mutex checker _ESBMC_check_reentrancy() in the front
-      side_effect_expr_function_callt call;
-      get_library_function_call_no_args(
-        "_ESBMC_check_reentrancy",
-        "c:@F@_ESBMC_check_reentrancy",
-        empty_typet(),
-        location_begin,
-        call);
-
-      exprt this_expr;
-      if (get_func_decl_this_ref(*current_functionDecl, this_expr))
+      // func() modf_1 modf_2
+      // => func() => func_modf1() => func_modf2()
+      if (get_func_modifier(
+            ast_node, c_name, name, id, add_reentry, body_exprt))
         return true;
-
-      exprt arg;
-      get_contract_mutex_expr(c_name, this_expr, arg);
-      call.arguments().push_back(arg);
-
-      convert_expression_to_code(call);
-      // Insert after the last front requirement (__ESBMC_assume) statement,
-      // as the function may only be re-entered once the requirements are fulfilled.
-      auto &ops = body_exprt.operands();
-      for (auto it = ops.begin(); it != ops.end(); ++it)
+    }
+    else
+    {
+      if (get_block(ast_node["body"], body_exprt))
+        return true;
+      if (add_reentry)
       {
-        if (
-          it->op0().id() == "sideeffect" &&
-          it->op0().op0().name() == "__ESBMC_assume")
-          continue;
-
-        ops.insert(it, call);
-        break;
+        if (add_reentry_check(c_name, location_begin, body_exprt))
+          return true;
       }
     }
   }
@@ -3073,6 +3054,380 @@ bool solidity_convertert::get_function_definition(
   return false;
 }
 
+bool solidity_convertert::delete_modifier_json(
+  const std::string &cname,
+  const std::string &fname,
+  nlohmann::json *&modifier_def)
+{
+  if (!src_ast_json.contains("nodes") || !src_ast_json["nodes"].is_array())
+    return true;
+
+  for (auto &node : src_ast_json["nodes"])
+  {
+    if (
+      node.contains("name") && node["name"] == cname &&
+      node.contains("nodeType") && node["nodeType"] == "ContractDefinition" &&
+      node.contains("nodes") && node["nodes"].is_array())
+    {
+      nlohmann::json &contract_nodes = node["nodes"];
+
+      for (auto it = contract_nodes.begin(); it != contract_nodes.end(); ++it)
+      {
+        if (
+          it->contains("nodeType") &&
+          (*it)["nodeType"] == "FunctionDefinition" && it->contains("name") &&
+          (*it)["name"] == fname)
+        {
+          contract_nodes.erase(it);
+          modifier_def = nullptr;
+          return false;
+        }
+      }
+    }
+  }
+  return true;
+}
+
+bool solidity_convertert::insert_modifier_json(
+  const nlohmann::json &ast_node,
+  const std::string &cname,
+  const std::string &fname,
+  nlohmann::json *&modifier_def)
+{
+  log_debug("solidity", "\tinsert modifier json {}", fname);
+  nlohmann::json &nodes = src_ast_json["nodes"];
+  for (nlohmann::json::iterator itr = nodes.begin(); itr != nodes.end(); ++itr)
+  {
+    if (
+      (*itr).contains("name") && (*itr)["name"].get<std::string>() == cname &&
+      (*itr)["nodeType"] == "ContractDefinition")
+    {
+      nlohmann::json &contract_nodes = (*itr)["nodes"];
+
+      // check if we already inserted
+      for (auto &func_node : contract_nodes)
+      {
+        if (
+          func_node.contains("nodeType") &&
+          func_node["nodeType"] == "FunctionDefinition" &&
+          func_node.contains("name") && func_node["name"] == fname)
+        {
+          modifier_def = &func_node;
+          return false;
+        }
+      }
+
+      const nlohmann::json returnParameters = ast_node["returnParameters"];
+      const nlohmann::json src = ast_node["src"];
+      /*
+        append below node to the contract_nodes
+        {
+          nodeType: FunctionDefinition
+          id: 0
+          name: fname
+          returnParameters: returnParameters
+          src: src
+        }
+      */
+      nlohmann::json new_function = {
+        {"nodeType", "FunctionDefinition"},
+        {"id", 0},
+        {"name", fname},
+        {"kind", "function"},
+        {"implemented", true},
+        {"returnParameters", returnParameters},
+        {"src", src}};
+
+      contract_nodes.push_back(new_function);
+      modifier_def = &contract_nodes.back();
+      return false;
+    }
+  }
+
+  return true; // unexpected error
+}
+
+void solidity_convertert::get_modifier_function_name(
+  const std::string &cname,
+  const std::string &mod_name,
+  const std::string &func_name,
+  std::string &name,
+  std::string &id)
+{
+  name = func_name + "_" + mod_name;
+  id = "sol:@C@" + cname + "@F@" + name + "#0";
+}
+
+bool solidity_convertert::has_modifier_invocation(
+  const nlohmann::json &ast_node)
+{
+  // check if there is any modifier invocation (not constructor calls)
+  if (!ast_node.contains("modifiers") || ast_node["modifiers"].empty())
+  {
+    return false;
+  }
+
+  nlohmann::json modifiers = nlohmann::json::array();
+  for (const auto &m : ast_node["modifiers"])
+  {
+    assert(m.contains("kind"));
+    if (m.contains("kind") && m["kind"] == "modifierInvocation")
+    {
+      modifiers.push_back(m);
+    }
+  }
+  // if there is no modifier invocation, return
+  if (modifiers.size() == 0)
+    return false;
+
+  return true;
+}
+
+bool solidity_convertert::add_reentry_check(
+  const std::string &c_name,
+  const locationt &loc,
+  exprt &body_exprt)
+{
+  // we should only add this to the contract's functions
+  // rather than interface and library's functions,
+  // or contract's errors, events and ctor
+  //TODO: detect is_library_function
+
+  // add a global mutex checker _ESBMC_check_reentrancy() in the front
+  side_effect_expr_function_callt call;
+  get_library_function_call_no_args(
+    "_ESBMC_check_reentrancy",
+    "c:@F@_ESBMC_check_reentrancy",
+    empty_typet(),
+    loc,
+    call);
+
+  exprt this_expr;
+  if (get_func_decl_this_ref(*current_functionDecl, this_expr))
+    return true;
+
+  exprt arg;
+  get_contract_mutex_expr(c_name, this_expr, arg);
+  call.arguments().push_back(arg);
+
+  convert_expression_to_code(call);
+  // Insert after the last front requirement (__ESBMC_assume) statement,
+  // as the function may only be re-entered once the requirements are fulfilled.
+  auto &ops = body_exprt.operands();
+  for (auto it = ops.begin(); it != ops.end(); ++it)
+  {
+    if (
+      it->op0().id() == "sideeffect" &&
+      it->op0().op0().name() == "__ESBMC_assume")
+      continue;
+
+    ops.insert(it, call);
+    break;
+  }
+  return false;
+}
+
+// parse the modifiers, this could be:
+// 1. merge code into function body
+// 2. construct an auxiliary function, move the body to it, and call it
+bool solidity_convertert::get_func_modifier(
+  const nlohmann::json &ast_node,
+  const std::string &c_name,
+  const std::string &f_name,
+  const std::string &f_id,
+  const bool add_reentry,
+  exprt &body_exprt)
+{
+  log_debug("solidity", "parsing function modifiers");
+  nlohmann::json modifiers = nlohmann::json::array();
+  for (const auto &m : ast_node["modifiers"])
+  {
+    if (m.contains("kind") && m["kind"] == "modifierInvocation")
+      modifiers.push_back(m);
+  }
+  // rebegin the function body
+  for (auto it = modifiers.rbegin(); it != modifiers.rend(); ++it)
+  {
+    int modifier_id = (*it)["modifierName"]["referencedDeclaration"];
+    // we cannot use reference here, as the src_ast_json got inserted/deleted later
+    const nlohmann::json mod_def =
+      find_decl_ref(src_ast_json["nodes"], modifier_id);
+    assert(!mod_def.is_null());
+    assert(!mod_def.empty());
+
+    std::string func_name = f_name;
+    std::string mod_name = mod_def["name"];
+    std::string aux_func_name, aux_func_id;
+    get_modifier_function_name(
+      c_name, mod_name, func_name, aux_func_name, aux_func_id);
+
+    nlohmann::json *modifier_func = nullptr;
+    if (insert_modifier_json(ast_node, c_name, aux_func_name, modifier_func))
+      return true;
+    assert(modifier_func != nullptr);
+    auto old_decl = current_functionDecl;
+    auto old_name = current_functionName;
+    current_functionDecl = modifier_func;
+    current_functionName = aux_func_name;
+
+    symbolt added_sym;
+    locationt loc;
+    get_location_from_node(ast_node, loc);
+    std::string debug_mode = get_modulename_from_path(absolute_path);
+    code_typet aux_type;
+
+    bool has_return = ast_node.contains("returnParameters") &&
+                      !ast_node["returnParameters"]["parameters"].empty();
+
+    if (has_return)
+    {
+      // return func_modifier();
+      if (get_type_description(
+            ast_node["returnParameters"], aux_type.return_type()))
+        return true;
+    }
+    else
+    {
+      aux_type.return_type() = empty_typet();
+      aux_type.set("cpp_type", "void");
+    }
+
+    get_default_symbol(
+      added_sym, debug_mode, aux_type, aux_func_name, aux_func_id, loc);
+    added_sym.lvalue = true;
+    added_sym.file_local = true;
+
+    // move the symbol to the context
+    symbolt &a_sym = *move_symbol_to_context(added_sym);
+    get_function_this_pointer_param(
+      c_name, aux_func_id, debug_mode, loc, aux_type);
+    for (const auto &param : mod_def["parameters"]["parameters"])
+    {
+      code_typet::argumentt arg;
+      if (get_function_params(param, c_name, arg))
+        return true;
+      aux_type.arguments().push_back(arg);
+    }
+    a_sym.type = aux_type;
+    move_builtin_to_contract(c_name, symbol_expr(a_sym), "internal", true);
+
+    // same as origin function body
+    if (body_exprt.operands().empty())
+    {
+      // modify the src_ast_json: insert the func node
+      // nodeType: esbmcModfunction
+      if (get_block(ast_node["body"], body_exprt))
+        return true;
+      if (add_reentry)
+      {
+        if (add_reentry_check(c_name, loc, body_exprt))
+          return true;
+      }
+    }
+    else
+    {
+      // this can only be a function call
+      assert(body_exprt.operands().size() == 1);
+    }
+
+    // get func body
+    code_blockt mod_body;
+    if (get_block(mod_def["body"], mod_body))
+      return true;
+
+    for (auto &stmt : mod_body.operands())
+    {
+      if (stmt.get_bool("#is_modifier_placeholder"))
+        stmt = body_exprt;
+    }
+    a_sym.value = mod_body;
+
+    // reset
+    current_functionDecl = old_decl;
+    current_functionName = old_name;
+    if (delete_modifier_json(c_name, aux_func_name, modifier_func))
+      return true;
+    assert(modifier_func == nullptr);
+
+    // construct the function call
+    side_effect_expr_function_callt func_modifier;
+    func_modifier.function() = symbol_expr(a_sym);
+
+    exprt this_ptr;
+    auto next_it = std::next(it);
+    if (next_it != modifiers.rend())
+    {
+      int next_modifier_id =
+        (*next_it)["modifierName"]["referencedDeclaration"];
+      const nlohmann::json &next_mod_def =
+        find_decl_ref(src_ast_json["nodes"], next_modifier_id);
+
+      std::string next_mod_name = next_mod_def["name"];
+      std::string next_aux_func_name, next_aux_func_id;
+      get_modifier_function_name(
+        c_name, next_mod_name, f_name, next_aux_func_name, next_aux_func_id);
+
+      if (get_func_decl_this_ref(c_name, next_aux_func_id, this_ptr))
+        return true;
+      func_modifier.arguments().push_back(this_ptr);
+
+      if (insert_modifier_json(
+            ast_node, c_name, next_aux_func_name, modifier_func))
+        return true;
+      assert(modifier_func != nullptr);
+      auto old_decl = current_functionDecl;
+      auto old_name = current_functionName;
+      current_functionDecl = modifier_func;
+      current_functionName = next_aux_func_name;
+
+      for (const auto &arg_json : (*it)["arguments"])
+      {
+        exprt arg_expr;
+        if (get_expr(arg_json, arg_json["typeDescriptions"], arg_expr))
+          return true;
+        func_modifier.arguments().push_back(arg_expr);
+      }
+
+      // reset
+      current_functionDecl = old_decl;
+      current_functionName = old_name;
+    }
+    else
+    {
+      // original
+      if (get_func_decl_this_ref(c_name, f_id, this_ptr))
+        return true;
+      func_modifier.arguments().push_back(this_ptr);
+
+      for (const auto &arg_json : (*it)["arguments"])
+      {
+        exprt arg_expr;
+        if (get_expr(arg_json, arg_json["typeDescriptions"], arg_expr))
+          return true;
+        func_modifier.arguments().push_back(arg_expr);
+      }
+    }
+
+    code_blockt _block;
+    if (has_return)
+    {
+      // return func_modifier();
+      code_returnt return_expr = code_returnt();
+      return_expr.return_value() = func_modifier;
+      _block.move_to_operands(return_expr);
+      body_exprt = _block;
+    }
+    else
+    {
+      convert_expression_to_code(func_modifier);
+      _block.move_to_operands(func_modifier);
+      body_exprt = _block;
+    }
+  }
+
+  return false;
+}
+
 void solidity_convertert::reset_auxiliary_vars()
 {
   current_baseContractName = "";
@@ -3081,7 +3436,6 @@ void solidity_convertert::reset_auxiliary_vars()
   current_forStmt = nullptr;
   current_typeName = nullptr;
   initializers.clear();
-  ctor_modifier = nullptr;
 }
 
 bool solidity_convertert::get_function_params(
@@ -3680,6 +4034,13 @@ bool solidity_convertert::get_statement(
 
     break;
   }
+  case SolidityGrammar::StatementT::PlaceholderStatement:
+  {
+    code_skipt placeholder;
+    placeholder.set("#is_modifier_placeholder", true);
+    new_expr = placeholder;
+    break;
+  }
   case SolidityGrammar::StatementT::StatementTError:
   default:
   {
@@ -3690,6 +4051,8 @@ bool solidity_convertert::get_statement(
   }
   }
 
+  log_debug(
+    "solidity", "finish statement {}", SolidityGrammar::statement_to_str(type));
   new_expr.location() = loc;
   return false;
 }
@@ -5218,7 +5581,6 @@ void solidity_convertert::get_current_contract_name(
   std::string &contract_name)
 {
   log_debug("solidity", "\tfinding current contract name");
-
   if (ast_node.is_null() || ast_node.empty())
   {
     log_debug("solidity", "got empty contract name");
@@ -5229,13 +5591,15 @@ void solidity_convertert::get_current_contract_name(
   {
     // this could be manually created json.
     //TODO: avoid this kind of implementation
-    if (ast_node["nodeType"] == "ImplicitCastExprClass")
+    if (ast_node.is_object() && ast_node["nodeType"] == "ImplicitCastExprClass")
     {
       get_current_contract_name(ast_node["subExpr"], contract_name);
     }
     else
     {
       log_warning("target node do not have id.");
+      if (!ast_node.is_object())
+        abort();
       log_status("{}", ast_node.dump());
     }
     return;
@@ -6036,6 +6400,7 @@ bool solidity_convertert::get_var_decl_ref(
 
       // get function this pointer
       exprt this_ptr;
+      assert(current_functionDecl != nullptr);
       if (get_func_decl_this_ref(*current_functionDecl, this_ptr))
         return true;
 
@@ -6132,7 +6497,6 @@ bool solidity_convertert::get_func_decl_this_ref(
     !decl.is_null()); // yet we cannot detect if it's a Dangling
   std::string func_name, func_id;
   get_function_definition_name(decl, func_name, func_id);
-
   std::string current_contractName;
   get_current_contract_name(decl, current_contractName);
   if (current_contractName.empty())
@@ -6740,7 +7104,6 @@ bool solidity_convertert::get_func_decl_ref_type(
   case SolidityGrammar::FunctionDeclRefT::FunctionNoProto:
   {
     code_typet type;
-
     // Return type
     const nlohmann::json &rtn_type = decl["returnParameters"];
 
@@ -6772,13 +7135,17 @@ bool solidity_convertert::get_func_decl_ref_type(
     std::string current_contractName;
     get_current_contract_name(decl, current_contractName);
 
-    const nlohmann::json &rtn_type = decl["returnParameters"];
+    if (decl.contains("returnParameters"))
+    {
+      const nlohmann::json &rtn_type = decl["returnParameters"];
 
-    typet return_type;
-    if (get_type_description(rtn_type, return_type))
-      return true;
+      typet return_type;
+      if (get_type_description(rtn_type, return_type))
+        return true;
 
-    type.return_type() = return_type;
+      type.return_type() = return_type;
+    }
+
     // convert parameters if the function has them
     // update the typet, since typet contains parameter annotations
     for (const auto &decl : decl["parameters"]["parameters"].items())

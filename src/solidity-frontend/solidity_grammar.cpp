@@ -117,6 +117,10 @@ ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element)
   {
     return UsingForDef;
   }
+  else if (element["nodeType"] == "ModifierDefinition")
+  {
+    return ModifierDef;
+  }
   else
   {
     log_error(
@@ -139,6 +143,7 @@ const char *contract_body_element_to_str(ContractBodyElementT type)
     ENUM_TO_STR(ErrorDef)
     ENUM_TO_STR(EventDef)
     ENUM_TO_STR(UsingForDef)
+    ENUM_TO_STR(ModifierDef)
     ENUM_TO_STR(ContractBodyElementTError)
   default:
   {
@@ -697,6 +702,10 @@ StatementT get_statement_t(const nlohmann::json &stmt)
   {
     return EmitStatement;
   }
+  else if (stmt["nodeType"] == "PlaceholderStatement")
+  {
+    return PlaceholderStatement;
+  }
   else
   {
     log_error(
@@ -723,6 +732,7 @@ const char *statement_to_str(StatementT type)
     ENUM_TO_STR(BreakStatement)
     ENUM_TO_STR(RevertStatement)
     ENUM_TO_STR(EmitStatement)
+    ENUM_TO_STR(PlaceholderStatement)
   default:
   {
     assert(!"Unknown statement type");
@@ -1144,7 +1154,7 @@ FunctionDeclRefT get_func_decl_ref_t(const nlohmann::json &decl)
     decl["nodeType"] == "EventDefinition");
   if (
     decl["parameters"]["parameters"].size() == 0 ||
-    decl["kind"] == "constructor")
+    (decl.contains("kind") && decl["kind"] == "constructor"))
   {
     return FunctionNoProto;
   }

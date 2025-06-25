@@ -122,6 +122,33 @@ protected:
     exprt &new_expr);
   bool get_var_decl(const nlohmann::json &ast_node, exprt &new_expr);
   bool get_function_definition(const nlohmann::json &ast_node);
+  bool add_reentry_check(
+    const std::string &c_name,
+    const locationt &loc,
+    exprt &body_exprt);
+  bool get_func_modifier(
+    const nlohmann::json &ast_node,
+    const std::string &c_name,
+    const std::string &f_name,
+    const std::string &f_id,
+    const bool add_reentry,
+    exprt &body_exprt);
+  bool has_modifier_invocation(const nlohmann::json &ast_node);
+  bool insert_modifier_json(
+    const nlohmann::json &ast_node,
+    const std::string &cname,
+    const std::string &fname,
+    nlohmann::json *&modifier_def);
+  bool delete_modifier_json(
+    const std::string &cname,
+    const std::string &fname,
+    nlohmann::json *&modifier_def);
+  void get_modifier_function_name(
+    const std::string &cname,
+    const std::string &mod_name,
+    const std::string &func_name,
+    std::string &name,
+    std::string &id);
   bool get_function_params(
     const nlohmann::json &pd,
     const std::string &cname,
@@ -647,8 +674,6 @@ protected:
   std::unordered_map<int, std::string> member_entity_scope;
   // Store state variables
   code_blockt initializers;
-  // For inheritance
-  const nlohmann::json *ctor_modifier;
 
   static constexpr const char *mode = "C++";
 
