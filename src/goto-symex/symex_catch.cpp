@@ -263,9 +263,7 @@ bool goto_symext::unexpected_handler()
 
     // Call the function
     symex_function_call(the_call);
-    // TODO: implement rethrow
-    std::string msg = std::string("Unexpected exceptions");
-    claim(gen_false_expr(), msg);
+    unexpected_end = handler->value.identifier();
     return true;
   }
 
