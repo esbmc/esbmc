@@ -198,8 +198,15 @@ void goto_symext::symex_step(reachability_treet &art)
     break;
 
   case END_FUNCTION:
-    symex_end_of_function();
+    if (
+      inside_unexpected &&
+      unexpected_end == cur_state->source.pc->function.as_string())
+    {
+      std::string msg = std::string("Unexpected exceptions");
+      claim(gen_false_expr(), msg);
+    }
 
+    symex_end_of_function();
     if (!stack_catch.empty())
     {
       // Get to the correct try (always the last one)

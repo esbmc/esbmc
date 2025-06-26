@@ -912,6 +912,8 @@ protected:
 
   /** Flag to indicate if we are go into the unexpected flow. */
   bool inside_unexpected;
+  /** Store the unexpected function end */
+  irep_idt unexpected_end;
 
   /** Disable return value optimization */
   bool no_return_value_opt;
