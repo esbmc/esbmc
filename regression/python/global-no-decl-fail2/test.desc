@@ -1,4 +1,4 @@
 CORE
 main.py
 
-^VERIFICATION FAILED$
+^ERROR: Variable x in function modify is uninitialized.$
