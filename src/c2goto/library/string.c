@@ -1,9 +1,3 @@
-#include <string.h>
-#include <stdlib.h>
-#include <ctype.h>
-#include <stdint.h>
-#include <stddef.h>
-
 #undef strcpy
 #undef strncpy
 #undef strcat

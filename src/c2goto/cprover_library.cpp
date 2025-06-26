@@ -103,7 +103,7 @@ const static std::vector<std::string> python_c_models = {
   "transpose",  "det",          "matmul",
   "pow",        "log",          "pow_by_squaring",
   "log2",       "ldexp",        "log1p_taylor"};
-=======
+
 "strncmp", "strcmp", "strlen", "ceil", "__ceil_array", "fegetround",
   "fesetround", "rint", "fesetround", "floor", "fabs", "sin", "cos", "exp",
   "expm1", "expm1_taylor", "fmod", "sqrt", "fmin", "fmax", "trunc", "frexp",
@@ -112,7 +112,6 @@ const static std::vector<std::string> python_c_models = {
   "pow", "log", "pow_by_squaring", "log2", "ldexp", "log1p_taylor"
 };
 
-} // namespace
 
 static void generate_symbol_deps(
   irep_idt name,
