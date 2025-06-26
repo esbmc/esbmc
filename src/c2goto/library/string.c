@@ -1,9 +1,12 @@
+<<<<<<< HEAD
 #include <stdint.h>
 #include <assert.h>
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
 
+=======
+>>>>>>> e741f3c00 (Fixed minor issues)
 #undef strcpy
 #undef strncpy
 #undef strcat

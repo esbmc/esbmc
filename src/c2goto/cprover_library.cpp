@@ -159,8 +159,11 @@ const static std::vector<std::string> python_c_models = {
   "pow",        "log",          "pow_by_squaring",
   "log2",       "ldexp",        "log1p_taylor"};
 <<<<<<< HEAD
+<<<<<<< HEAD
 >>>>>>> e7c955101 (Update stats-300s.txt)
 =======
+=======
+>>>>>>> e741f3c00 (Fixed minor issues)
 <<<<<<< HEAD
 =======
   "strncmp",
@@ -263,6 +266,9 @@ const static std::vector<std::string> python_c_models = {
 >>>>>>> a710fa95b (Improved memcpy function)
 =======
 =======
+=======
+
+>>>>>>> 8d40796c7 (Fixed minor issues)
 "strncmp", "strcmp", "strlen", "ceil", "__ceil_array", "fegetround",
   "fesetround", "rint", "fesetround", "floor", "fabs", "sin", "cos", "exp",
   "expm1", "expm1_taylor", "fmod", "sqrt", "fmin", "fmax", "trunc", "frexp",
@@ -273,7 +279,6 @@ const static std::vector<std::string> python_c_models = {
 >>>>>>> 65e1daef5 (Apply automatic changes)
 >>>>>>> 8bb3dfef5 (Apply automatic changes)
 
-} // namespace
 
 static void generate_symbol_deps(
   irep_idt name,
