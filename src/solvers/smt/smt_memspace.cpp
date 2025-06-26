@@ -451,7 +451,20 @@ void smt_convt::finalize_pointer_chain(unsigned int objnum)
     {
       expr2tc alive =
         index2tc(get_bool_type(), current_valid_objects_sym, gen_ulong(j));
-      e = implies2tc(alive, e);
+
+      // Tong: "alive" is only changed when the pointer is dynamic from malloc/free.
+      // And it's value is always false for some pointers that represent race-flags.
+      // However usually this issue will not be exposed because the slicer has sliced
+      // away "alive", but it's expoosed in no-slice and incremental-smt. 
+      // For now we just modify for races check.
+
+      if (options.get_bool_option("data-races-check") && cur_dynamic)
+      {
+        expr2tc dynamic = index2tc(get_bool_type(), cur_dynamic, gen_ulong(j));
+        e = implies2tc((or2tc(not2tc(dynamic), alive)), e);
+      }
+      else
+        e = implies2tc(alive, e);
     }
 
     assert_expr(e);
