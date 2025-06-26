@@ -23,7 +23,9 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   bool new_guard_false = (is_false(new_guard) || cur_state->guard.is_false());
   bool new_guard_true = is_true(new_guard);
 
-  if (!new_guard_false && !new_guard_true && options.get_bool_option("smt-symex-guard"))
+  if (
+    !new_guard_false && !new_guard_true &&
+    options.get_bool_option("smt-symex-guard"))
   {
     auto rte = std::dynamic_pointer_cast<runtime_encoded_equationt>(target);
 

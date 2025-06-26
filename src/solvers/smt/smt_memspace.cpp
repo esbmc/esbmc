@@ -455,7 +455,7 @@ void smt_convt::finalize_pointer_chain(unsigned int objnum)
       // Tong: "alive" is only changed when the pointer is dynamic from malloc/free.
       // And it's value is always false for some pointers that represent race-flags.
       // However usually this issue will not be exposed because the slicer has sliced
-      // away "alive", but it's exposed in no-slice and incremental-smt. 
+      // away "alive", but it's exposed in no-slice and incremental-smt.
       // For now we just modify for races check.
 
       if (options.get_bool_option("data-races-check") && cur_dynamic)
