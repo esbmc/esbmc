@@ -23,7 +23,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   bool new_guard_false = (is_false(new_guard) || cur_state->guard.is_false());
   bool new_guard_true = is_true(new_guard);
 
-  if (!new_guard_false && options.get_bool_option("smt-symex-guard"))
+  if (!new_guard_false && !new_guard_true && options.get_bool_option("smt-symex-guard"))
   {
     auto rte = std::dynamic_pointer_cast<runtime_encoded_equationt>(target);
 
@@ -40,9 +40,8 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
     catch (runtime_encoded_equationt::dual_unsat_exception &e)
     {
       // Assumptions mean that the guard is never satisfiable as true or false,
-      // basically means we've assume'd away the possibility of hitting this
-      // point.
-      new_guard_false = true;
+      // basically means we can't say for sure the guard must be false.
+      new_guard_false = false;
     }
   }
 
