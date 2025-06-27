@@ -1433,7 +1433,34 @@ smt_convt::resultt bmct::multi_property_check(
         clear_verified_claims(claim, is_goto_cov);
   };
 
-  std::for_each(std::begin(jobs), std::end(jobs), job_function);
+  // PARALLEL
+  if(options.get_bool_option("parallel-solving"))
+  {
+    /* NOTE: I would love to use std::for_each here, but it is not giving
+       * the result I would expect. My guess is either compiler version
+       * or some magic flag that we are not using.
+       *
+       * Nevertheless, we can achieve the same results by just creating
+       * threads.
+       */
+
+    // TODO: Running everything in parallel might be a bad idea.
+    //       Should we also add a thread pool?
+    std::vector<std::thread> parallel_jobs;
+    for(const auto &i : jobs)
+      parallel_jobs.push_back(std::thread(job_function, i));
+
+    // Main driver
+    for(auto &t : parallel_jobs)
+    {
+      t.join();
+    }
+    // We could remove joined jobs from the parallel_jobs vector.
+    // However, its probably not worth for small vectors.
+  }
+  // SEQUENTIAL
+  else
+    std::for_each(std::begin(jobs), std::end(jobs), job_function);
 
   // For coverage with fixed bound unwinding
   if (
