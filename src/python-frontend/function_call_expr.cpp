@@ -601,9 +601,6 @@ exprt function_call_expr::build_constant_from_arg() const
       return handle_str_symbol_to_int(sym);
   }
   size_t arg_size = 1;
-  // Handle int(): convert float to int
-  else if (func_name == "int" && arg["value"].is_number_float())
-    handle_float_to_int(arg);
 
   // Handle int(): convert float to int
   if (func_name == "int" && arg["value"].is_number_float())
@@ -641,11 +638,13 @@ exprt function_call_expr::build_constant_from_arg() const
   else if (func_name == "abs")
     return handle_abs(arg);
 
+  else if (func_name == "str") 
+    arg_size = handle_str(arg);    
+
   // Construct expression with appropriate type
   typet t = type_handler_.get_typet(func_name, arg_size);
   exprt expr = converter_.get_expr(arg);
-  expr.type() = t;
-  else if (func_name == "str") arg_size = handle_str(arg);
+
   if (func_name != "str")
     expr.type() = t;
 

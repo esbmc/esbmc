@@ -228,21 +228,15 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
   else if (elem.is_number_float())
     return double_type();
   else if (elem.is_string())
-    return build_array(char_type(), elem.get<std::string>().size());
-
+  {
+    size_t str_size = elem.get<std::string>().size();
+    if (str_size > 1)
+      str_size += 1;
+    return build_array(char_type(), str_size);
+  }
   // Handle nested value object
   if (elem.is_object())
   {
-    {
-      size_t str_size = elem.get<std::string>().size();
-      if (str_size > 1)
-        str_size += 1;
-      return build_array(char_type(), str_size);
-    }
-
-    // Handle nested value object
-    if (elem.is_object())
-    {
       // Recursive delegation for wrapper node
       if (elem.contains("value"))
         return get_typet(elem["value"]);
