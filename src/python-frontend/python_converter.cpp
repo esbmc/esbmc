@@ -876,9 +876,15 @@ exprt python_converter::handle_string_concatenation(
   const nlohmann::json &left,
   const nlohmann::json &right)
 {
+<<<<<<< HEAD
   BigInt lhs_size = get_string_size(lhs) - 1;
   BigInt rhs_size = get_string_size(rhs) - 1;
   BigInt total_size = lhs_size + rhs_size + 1;
+=======
+  BigInt lhs_size = get_string_size(lhs);
+  BigInt rhs_size = get_string_size(rhs);
+  BigInt total_size = lhs_size + rhs_size;
+>>>>>>> e7c955101 (Update stats-300s.txt)
 
   typet t = type_handler_.get_typet("str", total_size.to_uint64());
   exprt result = gen_zero(t);
@@ -888,10 +894,14 @@ exprt python_converter::handle_string_concatenation(
     symbolt *symbol = symbol_table_.find_symbol(id);
     assert(symbol);
     for (const exprt &ch : symbol->value.operands())
+<<<<<<< HEAD
     {
       if (ch != gen_zero(ch.type()))
         result.operands().at(i++) = ch;
     }
+=======
+      result.operands().at(i++) = ch;
+>>>>>>> e7c955101 (Update stats-300s.txt)
   };
 
   auto append_from_json = [&](const nlohmann::json &json) {
@@ -900,8 +910,11 @@ exprt python_converter::handle_string_concatenation(
 
     for (char ch : value)
     {
+<<<<<<< HEAD
       if (ch == 0)
         break;
+=======
+>>>>>>> e7c955101 (Update stats-300s.txt)
       BigInt v(ch);
       exprt char_expr = constant_exprt(
         integer2binary(v, bv_width(char_type)), integer2string(v), char_type);
@@ -919,8 +932,11 @@ exprt python_converter::handle_string_concatenation(
   else if (right["_type"] == "Constant")
     append_from_json(right);
 
+<<<<<<< HEAD
   result.operands().push_back(gen_zero(t.subtype()));
 
+=======
+>>>>>>> e7c955101 (Update stats-300s.txt)
   return result;
 }
 
@@ -1043,12 +1059,45 @@ exprt python_converter::handle_string_comparison(
     }
   }
 
+<<<<<<< HEAD
+=======
+  // Direct constant comparison if both are constants
+  if (lhs.is_constant() && rhs.is_constant())
+  {
+    // For array constants, compare element by element
+    if (lhs.is_array() && rhs.is_array())
+    {
+      const exprt::operandst &lhs_ops = lhs.operands();
+      const exprt::operandst &rhs_ops = rhs.operands();
+
+      // Compare sizes first
+      if (lhs_ops.size() != rhs_ops.size())
+        return gen_boolean(op == "NotEq");
+
+      // Compare each element
+      for (size_t i = 0; i < lhs_ops.size(); ++i)
+        if (lhs_ops[i] != rhs_ops[i])
+          return gen_boolean(op == "NotEq");
+
+      return gen_boolean(op == "Eq");
+    }
+
+    // Fallback for other constant types
+    bool constants_equal = (lhs == rhs);
+    return gen_boolean((op == "Eq") ? constants_equal : !constants_equal);
+  }
+
+>>>>>>> e7c955101 (Update stats-300s.txt)
   // Check for zero-length arrays
   if (is_zero_length_array(lhs) && is_zero_length_array(rhs))
     return gen_boolean(op == "Eq");
 
   // Handle type mismatches to prevent crashes/array out of bounds
+<<<<<<< HEAD
   if (!(lhs.is_member() || rhs.is_member()) && lhs.type() != rhs.type())
+=======
+  if (lhs.type() != rhs.type())
+>>>>>>> e7c955101 (Update stats-300s.txt)
   {
     // If one is a constant array and the other is empty, compare based on size
     if (lhs.is_constant() && lhs.is_array() && is_zero_length_array(rhs))
@@ -1064,6 +1113,7 @@ exprt python_converter::handle_string_comparison(
       return gen_boolean((op == "Eq") ? rhs_empty : !rhs_empty);
     }
     else
+<<<<<<< HEAD
     {
       return gen_boolean(op == "NotEq");
     }
@@ -1078,6 +1128,27 @@ exprt python_converter::handle_string_comparison(
   side_effect_expr_function_callt strncmp_call;
   strncmp_call.function() = symbol_expr(*strncmp_symbol);
   strncmp_call.arguments() = {lhs, rhs};
+=======
+      return gen_boolean(op == "NotEq");
+  }
+
+  // Make sure we have valid array types before proceeding to strncmp
+  if (!lhs.type().is_array() || !rhs.type().is_array())
+    return gen_boolean(op == "NotEq");
+
+  // Fallback: use strncmp for non-constant comparisons
+  const auto &array_type = to_array_type(lhs.type());
+  BigInt string_size =
+    binary2integer(array_type.size().value().as_string(), false);
+
+  symbolt *strncmp_symbol = symbol_table_.find_symbol("c:@F@strncmp");
+  assert(strncmp_symbol);
+
+  side_effect_expr_function_callt strncmp_call;
+  strncmp_call.function() = symbol_expr(*strncmp_symbol);
+  strncmp_call.arguments() = {
+    lhs, rhs, from_integer(string_size, long_uint_type())};
+>>>>>>> e7c955101 (Update stats-300s.txt)
   strncmp_call.location() = get_location_from_decl(element);
   strncmp_call.type() = int_type();
 
@@ -1317,9 +1388,12 @@ bool python_converter::is_identity_function(
 
 void python_converter::ensure_string_array(exprt &expr)
 {
+<<<<<<< HEAD
   if (expr.type().is_pointer())
     return;
 
+=======
+>>>>>>> e7c955101 (Update stats-300s.txt)
   if (!expr.type().is_array())
   {
     typet t = type_handler_.build_array(expr.type(), 1);
@@ -1340,8 +1414,13 @@ exprt python_converter::handle_string_operations(
   ensure_string_array(lhs);
   ensure_string_array(rhs);
 
+<<<<<<< HEAD
   assert(lhs.type().is_array() || lhs.type().is_pointer());
   assert(rhs.type().is_array() || rhs.type().is_pointer());
+=======
+  assert(lhs.type().is_array());
+  assert(rhs.type().is_array());
+>>>>>>> e7c955101 (Update stats-300s.txt)
 
   if (op == "Eq" || op == "NotEq")
     return handle_string_comparison(op, lhs, rhs, element);
@@ -1752,7 +1831,11 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
       !type_utils::is_consensus_type(func_name) &&
       !type_utils::is_consensus_func(func_name) &&
       !type_utils::is_python_model_func(func_name) &&
+<<<<<<< HEAD
       !is_class(func_name, *ast_json))
+=======
+      !is_class(func_name, ast_json))
+>>>>>>> e7c955101 (Update stats-300s.txt)
     {
       const auto &func_node = find_function((*ast_json)["body"], func_name);
       assert(!func_node.empty());
@@ -1835,6 +1918,7 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     return expr;
   }
 
+<<<<<<< HEAD
   if (!value.is_string())
     return exprt(); // Not a string, no handling
 
@@ -1849,10 +1933,33 @@ exprt python_converter::get_literal(const nlohmann::json &element)
 
   // Handle empty strings or docstrings (often beginning with a newline)
   if (!str_val.empty() && str_val[0] == '\n' && !is_bytes_literal(element))
+=======
+  // Handle single-character string as char literal
+  if (
+    value.is_string() && value.get<std::string>().size() == 1 &&
+    !is_bytes_literal(element))
+  {
+    const std::string &str = value.get<std::string>();
+    typet t = type_handler_.get_typet("str", str.size());
+    return from_integer(static_cast<unsigned char>(str[0]), t);
+  }
+
+  // Handle empty strings or docstrings (often beginning with a newline)
+  if (
+    value.is_string() && !value.get<std::string>().empty() &&
+    value.get<std::string>()[0] == '\n' && !is_bytes_literal(element))
   {
     return exprt(); // Return empty expression
   }
 
+  // Handle string or byte literals
+  if (value.is_string())
+>>>>>>> e7c955101 (Update stats-300s.txt)
+  {
+    return exprt(); // Return empty expression
+  }
+
+<<<<<<< HEAD
   // Handle string or byte literals
   typet t = current_element_type;
   std::vector<uint8_t> string_literal;
@@ -1861,10 +1968,28 @@ exprt python_converter::get_literal(const nlohmann::json &element)
   {
     // Handle bytes literal - check for encoded_bytes field first
     if (element.contains("encoded_bytes"))
+=======
+    // Check if this is a bytes literal
+    if (is_bytes_literal(element))
+>>>>>>> e7c955101 (Update stats-300s.txt)
     {
-      string_literal =
-        base64_decode(element["encoded_bytes"].get<std::string>());
+      // Handle bytes literal - check for encoded_bytes field first
+      if (element.contains("encoded_bytes"))
+      {
+        string_literal =
+          base64_decode(element["encoded_bytes"].get<std::string>());
+      }
+      else
+      {
+        // Handle direct bytes literal (e.g., b'A')
+        const std::string &str_val = value.get<std::string>();
+        string_literal.assign(str_val.begin(), str_val.end());
+      }
+
+      // Set appropriate bytes type
+      t = type_handler_.get_typet("bytes", string_literal.size());
     }
+<<<<<<< HEAD
     else
     {
       string_literal.assign(str_val.begin(), str_val.end());
@@ -1880,9 +2005,148 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     string_literal.push_back('\0');
 
     t = type_handler_.build_array(char_type(), string_literal.size());
+=======
+    else // Handle Python str literals
+    {
+      const std::string &str_val = value.get<std::string>();
+      t = type_handler_.get_typet("str", str_val.size());
+      string_literal.assign(str_val.begin(), str_val.end());
+    }
+
+    exprt expr = make_char_array_expr(string_literal, t);
+
+    return expr;
+>>>>>>> e7c955101 (Update stats-300s.txt)
   }
 
   return make_char_array_expr(string_literal, t);
+}
+
+// Helper function to detect bytes literals
+bool python_converter::is_bytes_literal(const nlohmann::json &element)
+{
+  // Check if element has encoded_bytes field (explicit bytes)
+  if (element.contains("encoded_bytes"))
+    return true;
+
+  // Check if element has bytes type annotation
+  if (
+    element.contains("annotation") && element["annotation"].contains("id") &&
+    element["annotation"]["id"] == "bytes")
+    return true;
+
+  // Check if element has a parent context indicating bytes
+  if (element.contains("kind") && element["kind"] == "bytes")
+    return true;
+
+  // Check if this is part of a bytes assignment/initialization
+  if (current_element_type.id() == "bytes")
+    return true;
+
+  // Check if this is an array of uint8 (bytes representation)
+  if (current_element_type.id() == "array")
+  {
+    const typet &subtype = current_element_type.subtype();
+    if (subtype.id() == "unsignedbv")
+    {
+      // Convert dstring width to integer
+      const irep_idt &width_str = subtype.width();
+      try
+      {
+        int width = std::stoi(width_str.as_string());
+        if (width == 8)
+          return true;
+      }
+      catch (const std::exception &)
+      {
+        // If conversion fails, continue with other checks
+      }
+    }
+  }
+
+  return false;
+}
+
+// Helper function to extract class name from tag (removes "tag-" prefix)
+std::string
+python_converter::extract_class_name_from_tag(const std::string &tag_name)
+{
+  if (tag_name.size() > 4 && tag_name.substr(0, 4) == "tag-")
+    return tag_name.substr(4);
+  return tag_name;
+}
+
+// Helper function to create normalized self key for cross-method access
+std::string
+python_converter::create_normalized_self_key(const std::string &class_tag)
+{
+  std::string class_name = extract_class_name_from_tag(class_tag);
+  return "self@" + class_name;
+}
+
+// Helper function to clean attribute type by removing internal annotations
+typet python_converter::clean_attribute_type(const typet &attr_type)
+{
+  typet clean_type = attr_type;
+  clean_type.remove("#member_name");
+  clean_type.remove("#location");
+  clean_type.remove("#identifier");
+  return clean_type;
+}
+
+// Helper function to create member expression with cleaned type
+exprt python_converter::create_member_expression(
+  const symbolt &symbol,
+  const std::string &attr_name,
+  const typet &attr_type)
+{
+  typet clean_type = clean_attribute_type(attr_type);
+  return member_exprt(
+    symbol_exprt(symbol.id, symbol.type), attr_name, clean_type);
+}
+
+// Helper function to register instance attribute in maps
+void python_converter::register_instance_attribute(
+  const std::string &symbol_id,
+  const std::string &attr_name,
+  const std::string &var_name,
+  const std::string &class_tag)
+{
+  // Add to regular instance attribute map
+  instance_attr_map[symbol_id].insert(attr_name);
+
+  // For 'self' parameters, also track with normalized key for cross-method access
+  if (var_name == "self")
+  {
+    std::string normalized_key = create_normalized_self_key(class_tag);
+    instance_attr_map[normalized_key].insert(attr_name);
+  }
+}
+
+// Helper function to check if attribute is an instance attribute
+bool python_converter::is_instance_attribute(
+  const std::string &symbol_id,
+  const std::string &attr_name,
+  const std::string &var_name,
+  const std::string &class_tag)
+{
+  // Check regular per-symbol lookup
+  auto it = instance_attr_map.find(symbol_id);
+  if (
+    it != instance_attr_map.end() &&
+    it->second.find(attr_name) != it->second.end())
+    return true;
+
+  // For 'self' parameters, check normalized key for cross-method access
+  if (var_name == "self")
+  {
+    std::string normalized_key = create_normalized_self_key(class_tag);
+    auto self_it = instance_attr_map.find(normalized_key);
+    if (self_it != instance_attr_map.end())
+      return self_it->second.find(attr_name) != self_it->second.end();
+  }
+
+  return false;
 }
 
 // Helper function to detect bytes literals
@@ -2242,7 +2506,11 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       expr = constant_exprt(list_type);
 
       const auto &list = json_utils::find_var_decl(
+<<<<<<< HEAD
         element["value"]["id"], current_func_name_, *ast_json);
+=======
+        element["value"]["id"], current_func_name_, ast_json);
+>>>>>>> e7c955101 (Update stats-300s.txt)
 
       assert(!list.empty());
 
@@ -2521,7 +2789,11 @@ void python_converter::get_var_assign(
         lhs_symbol->type = rhs.type();
         lhs.type() = rhs.type();
       }
+<<<<<<< HEAD
       if (!rhs.type().is_empty() && !is_ctor_call)
+=======
+      if (!rhs.type().is_empty())
+>>>>>>> e7c955101 (Update stats-300s.txt)
         lhs_symbol->value = rhs;
     }
 
@@ -2580,7 +2852,11 @@ typet python_converter::resolve_variable_type(
   const std::string &var_name,
   const locationt &loc)
 {
+<<<<<<< HEAD
   nlohmann::json decl_node = get_var_node(var_name, *ast_json);
+=======
+  nlohmann::json decl_node = get_var_node(var_name, ast_json);
+>>>>>>> e7c955101 (Update stats-300s.txt)
 
   if (!decl_node.empty())
   {

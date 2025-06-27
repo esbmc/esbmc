@@ -1,7 +1,7 @@
 #include <stdint.h>
 #include <assert.h>
-#include <string.h> 
-#include <stdlib.h>  
+#include <string.h>
+#include <stdlib.h>
 #include <ctype.h>
 
 #undef strcpy
@@ -278,6 +278,7 @@ __ESBMC_HIDE:;
   // NULL pointer checks
   __ESBMC_assert(dst != NULL, "Destination pointer is NULL.");
   __ESBMC_assert(src != NULL, "Source pointer is NULL.");
+<<<<<<< HEAD
   __ESBMC_assume(n <= 1024);
   char *cdst = (char *)dst;
   const char *csrc = (const char *)src;
@@ -305,6 +306,18 @@ __ESBMC_HIDE:;
   }
 
   return dst;
+=======
+
+  // Cast to char pointers for byte-wise copying
+  char *cdst = dst;
+  const char *csrc = src;
+
+  // Copy `n` bytes from `src` to `dst`
+  for (size_t i = 0; i < n; i++)
+    cdst[i] = csrc[i];
+
+  return dst; // Return pointer to destination
+>>>>>>> e7c955101 (Update stats-300s.txt)
 }
 
 void *__memset_impl(void *s, int c, size_t n)

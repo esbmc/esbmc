@@ -102,10 +102,16 @@ exprt function_call_expr::handle_int_to_str(nlohmann::json &arg) const
   // Convert string to vector of unsigned char
   std::vector<unsigned char> chars(str_val.begin(), str_val.end());
   // Get type for the array
+<<<<<<< HEAD
   typet t = type_handler_.get_typet("str", chars.size() + 1);
   // Use helper to generate constant string expression
   exprt str = converter_.make_char_array_expr(chars, t);
   return str;
+=======
+  typet t = type_handler_.get_typet("str", chars.size());
+  // Use helper to generate constant string expression
+  return converter_.make_char_array_expr(chars, t);
+>>>>>>> e7c955101 (Update stats-300s.txt)
 }
 
 exprt function_call_expr::handle_float_to_str(nlohmann::json &arg) const
@@ -119,7 +125,11 @@ exprt function_call_expr::handle_float_to_str(nlohmann::json &arg) const
     str_val.pop_back();
 
   std::vector<unsigned char> chars(str_val.begin(), str_val.end());
+<<<<<<< HEAD
   typet t = type_handler_.get_typet("str", chars.size() + 1);
+=======
+  typet t = type_handler_.get_typet("str", chars.size());
+>>>>>>> e7c955101 (Update stats-300s.txt)
   return converter_.make_char_array_expr(chars, t);
 }
 
@@ -231,8 +241,12 @@ exprt function_call_expr::handle_hex(nlohmann::json &arg) const
       << std::llabs(int_value);
   const std::string hex_str = oss.str();
 
+<<<<<<< HEAD
   typet t = type_handler_.get_typet("str", hex_str.size() + 1);
 
+=======
+  typet t = type_handler_.get_typet("str", hex_str.size());
+>>>>>>> e7c955101 (Update stats-300s.txt)
   std::vector<uint8_t> string_literal(hex_str.begin(), hex_str.end());
   return converter_.make_char_array_expr(string_literal, t);
 }
@@ -281,9 +295,13 @@ exprt function_call_expr::handle_oct(nlohmann::json &arg) const
   const std::string oct_str = oss.str();
 
   // Create a string type and return a character array expression
+<<<<<<< HEAD
 
   typet t = type_handler_.get_typet("str", oct_str.size() + 1);
 
+=======
+  typet t = type_handler_.get_typet("str", oct_str.size());
+>>>>>>> e7c955101 (Update stats-300s.txt)
   std::vector<uint8_t> string_literal(oct_str.begin(), oct_str.end());
   return converter_.make_char_array_expr(string_literal, t);
 }
@@ -392,8 +410,11 @@ function_call_expr::extract_string_from_symbol(const symbolt *sym) const
   {
     for (const auto &ch : val.operands())
     {
+<<<<<<< HEAD
       if (ch == gen_zero(ch.type()))
         break;
+=======
+>>>>>>> e7c955101 (Update stats-300s.txt)
       auto decoded = decode_char(ch);
       if (!decoded)
         return std::nullopt;
@@ -583,6 +604,10 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
 exprt function_call_expr::build_constant_from_arg() const
 {
   const std::string &func_name = function_id_.get_function();
+<<<<<<< HEAD
+=======
+  size_t arg_size = 1;
+>>>>>>> e7c955101 (Update stats-300s.txt)
   auto arg = call_["args"][0];
 
   // Handle str(): convert int to str
@@ -593,12 +618,20 @@ exprt function_call_expr::build_constant_from_arg() const
   else if (func_name == "str" && arg["value"].is_number_float())
     return handle_float_to_str(arg);
 
+<<<<<<< HEAD
+=======
+  // Handle str(): determine size of the resulting string constant
+  else if (func_name == "str")
+    arg_size = handle_str(arg);
+
+>>>>>>> e7c955101 (Update stats-300s.txt)
   // Handle int(): convert string (from symbol) to int
   else if (func_name == "int" && arg["_type"] == "Name")
   {
     const symbolt *sym = lookup_python_symbol(arg["id"]);
     if (sym && sym->value.is_constant())
       return handle_str_symbol_to_int(sym);
+<<<<<<< HEAD
   }
   size_t arg_size = 1;
 
@@ -614,6 +647,22 @@ exprt function_call_expr::build_constant_from_arg() const
       return handle_str_symbol_to_float(sym);
   }
 
+=======
+  }
+
+  // Handle int(): convert float to int
+  else if (func_name == "int" && arg["value"].is_number_float())
+    handle_float_to_int(arg);
+
+  // Handle float(): convert string (from symbol) to float
+  else if (func_name == "float" && arg["_type"] == "Name")
+  {
+    const symbolt *sym = lookup_python_symbol(arg["id"]);
+    if (sym && sym->value.is_constant())
+      return handle_str_symbol_to_float(sym);
+  }
+
+>>>>>>> e7c955101 (Update stats-300s.txt)
   // Handle float(): convert int to float
   else if (func_name == "float" && arg["value"].is_number_integer())
     handle_int_to_float(arg);
@@ -638,8 +687,9 @@ exprt function_call_expr::build_constant_from_arg() const
   else if (func_name == "abs")
     return handle_abs(arg);
 
-  else if (func_name == "str") 
-    arg_size = handle_str(arg);    
+<<<<<<< HEAD
+  else if (func_name == "str")
+    arg_size = handle_str(arg);
 
   // Construct expression with appropriate type
   typet t = type_handler_.get_typet(func_name, arg_size);
@@ -647,6 +697,12 @@ exprt function_call_expr::build_constant_from_arg() const
 
   if (func_name != "str")
     expr.type() = t;
+=======
+  // Construct expression with appropriate type
+  typet t = type_handler_.get_typet(func_name, arg_size);
+  exprt expr = converter_.get_expr(arg);
+  expr.type() = t;
+>>>>>>> e7c955101 (Update stats-300s.txt)
 
   return expr;
 }

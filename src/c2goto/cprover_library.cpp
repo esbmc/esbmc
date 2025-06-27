@@ -89,6 +89,7 @@ static const struct buffer
 };
 
 const static std::vector<std::string> python_c_models = {
+<<<<<<< HEAD
   "strncmp",
   "strcmp",
   "strlen",
@@ -133,6 +134,22 @@ const static std::vector<std::string> python_c_models = {
   "log2",
   "ldexp",
   "log1p_taylor"};
+=======
+  "strncmp",    "ceil",         "__ceil_array",
+  "fegetround", "fesetround",   "rint",
+  "fesetround", "floor",        "fabs",
+  "sin",        "cos",          "exp",
+  "expm1",      "expm1_taylor", "fmod",
+  "sqrt",       "fmin",         "fmax",
+  "trunc",      "frexp",        "round",
+  "copysign",   "arctan",       "atan",
+  "_atan",      "atan2",        "acos",
+  "arccos",     "dot",          "add",
+  "subtract",   "multiply",     "divide",
+  "transpose",  "det",          "matmul",
+  "pow",        "log",          "pow_by_squaring",
+  "log2",       "ldexp",        "log1p_taylor"};
+>>>>>>> e7c955101 (Update stats-300s.txt)
 
 } // namespace
 

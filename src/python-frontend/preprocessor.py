@@ -8,7 +8,10 @@ class Preprocessor(ast.NodeTransformer):
         self.functionParams = {}
         self.module_name = module_name # for errors
         self.is_range_loop = False  # Track if we're in a range loop transformation
+<<<<<<< HEAD
         self.known_variable_types = {}
+=======
+>>>>>>> e7c955101 (Update stats-300s.txt)
 
     def ensure_all_locations(self, node, source_node=None, line=1, col=0):
         """Recursively ensure all nodes in an AST tree have location information"""
@@ -203,6 +206,7 @@ class Preprocessor(ast.NodeTransformer):
         else:
             target_var_name = 'ESBMC_loop_var'
 
+<<<<<<< HEAD
         # Determine annotation type based on the iterable value
         if isinstance(node.iter, ast.Str):
             annotation_id = 'str'
@@ -218,6 +222,11 @@ class Preprocessor(ast.NodeTransformer):
         # Create assignment for the iterable variable
         iter_target = self.create_name_node('ESBMC_iter', ast.Store(), node)
         str_annotation = self.create_name_node(annotation_id, ast.Load(), node)
+=======
+        # Create assignment for the iterable variable
+        iter_target = self.create_name_node('ESBMC_iter', ast.Store(), node)
+        str_annotation = self.create_name_node('str', ast.Load(), node)
+>>>>>>> e7c955101 (Update stats-300s.txt)
         iter_assign = ast.AnnAssign(
             target=iter_target,
             annotation=str_annotation,

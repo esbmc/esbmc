@@ -93,6 +93,7 @@ private:
   friend class numpy_call_expr;
   friend class function_call_builder;
 
+<<<<<<< HEAD
   template <typename Func>
   decltype(auto) with_ast(const nlohmann::json *new_ast, Func &&f)
   {
@@ -103,6 +104,8 @@ private:
     return result;
   }
 
+=======
+>>>>>>> e7c955101 (Update stats-300s.txt)
   void load_c_intrisics();
 
   void get_var_assign(const nlohmann::json &ast_node, codet &target_block);

@@ -18,8 +18,11 @@ multiset := multiset
 unordered_set := unordered_set
 unordered_map := unordered_map
 functional := functional
+<<<<<<< HEAD
 bitset := bitset
 
+=======
+>>>>>>> e7c955101 (Update stats-300s.txt)
 
 # Clean
 ifneq ($(filter clean,$(MAKECMDGOALS)),)
@@ -41,7 +44,10 @@ $(algorithm) $(cpp) $(inheritance) $(stream) $(trycatch) $(vector) $(deque) $(li
 
 #Make only STL directories
 stl: $(algorithm) $(vector) $(deque) $(list) $(stack) $(queue) $(priority_queue) $(map) $(set) $(multimap) $(multiset) $(unordered_set) $(unordered_map) $(functional)
+<<<<<<< HEAD
 
+=======
+>>>>>>> e7c955101 (Update stats-300s.txt)
 
 # Make each directory
 algorithm: $(algorithm)
@@ -63,7 +69,10 @@ multiset: $(multiset)
 unordered_set: $(unordered_set)
 unordered_map: $(unordered_map)
 functional : $(functional)
+<<<<<<< HEAD
 bitset : $(bitset)
+=======
+>>>>>>> e7c955101 (Update stats-300s.txt)
 
 # Allow parallel make
 
