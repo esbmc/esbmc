@@ -23,7 +23,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   bool new_guard_false = (is_false(new_guard) || cur_state->guard.is_false());
   bool new_guard_true = is_true(new_guard);
 
-  // new_guard_false = TRUE means that the guard is false, 
+  // new_guard_false = TRUE means that the guard is false,
   // new_guard_true = TRUE means that the guard is true.
   // And if both variables are not TRUE we need to ask the solver whether the guard holds.
   if (
