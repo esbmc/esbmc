@@ -380,6 +380,12 @@ void solidity_convertert::contract_precheck()
     std::string node_type = (*itr)["nodeType"].get<std::string>();
     if (node_type == "ContractDefinition") // contains AST nodes we need
     {
+      if ((*itr)["contractKind"] == "library" && tgt_func.empty())
+      {
+        // Skip if it's a library and target function is empty
+        // since a library cannot verify as a contract
+        continue;
+      }
       found_contract_def = true;
       break;
       //TODO: skip pattern base check as it's not really valuable at the moment.
@@ -391,7 +397,7 @@ void solidity_convertert::contract_precheck()
   }
   if (!found_contract_def)
   {
-    log_error("No contracts were found in the program.");
+    log_error("No verification targets(contracts) were found in the program.");
     abort();
   }
 }
