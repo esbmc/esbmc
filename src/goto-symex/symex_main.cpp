@@ -293,7 +293,12 @@ void goto_symext::symex_step(reachability_treet &art)
         thrown_obj_map.erase(cur_state->source.pc);
       }
 
-      symex_assign(code_assign2tc(std::move(deref_code)));
+      const irep_idt &file = cur_state->source.pc->location.get_file();
+      if (has_suffix(file, "c2goto/library/pthread_lib.c"))
+        symex_assign(code_assign2tc(std::move(deref_code)));
+      else
+        symex_assign(
+          code_assign2tc(std::move(deref_code)), false, cur_state->guard);
     }
 
     cur_state->source.pc++;
