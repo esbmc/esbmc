@@ -836,6 +836,10 @@ public:
    */
   expr2tc current_valid_objects_sym;
 
+  /** Holds the `__ESBMC_is_dynamic` symbol convert_terminal() was last invoked with.
+   */
+  expr2tc cur_dynamic;
+
   // XXX - push-pop will break here.
   typedef std::map<std::string, smt_astt> renumber_mapt;
   std::vector<renumber_mapt> renumber_map;
