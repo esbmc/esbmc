@@ -7,18 +7,9 @@ class Preprocessor(ast.NodeTransformer):
         self.functionDefaults = {}
         self.functionParams = {}
         self.module_name = module_name # for errors
-<<<<<<< HEAD
-<<<<<<< HEAD
         self.is_range_loop = False  # Track if we're in a range loop transformation
-<<<<<<< HEAD
-<<<<<<< HEAD
-        self.known_variable_types = {}
-=======
->>>>>>> e7c955101 (Update stats-300s.txt)
-=======
         self.known_variable_types = {}
 
->>>>>>> a710fa95b (Improved memcpy function)
 
     def ensure_all_locations(self, node, source_node=None, line=1, col=0):
         """Recursively ensure all nodes in an AST tree have location information"""
@@ -50,47 +41,6 @@ class Preprocessor(ast.NodeTransformer):
 
     def generate_variable_copy(self, node_name: str, argument: ast.arg, default_val):
         target = ast.Name(id=f"ESBMC_DEFAULT_{node_name}_{argument.arg}", ctx=ast.Store())
-=======
-=======
-        self.is_range_loop = False  # Track if we're in a range loop transformation
->>>>>>> 52314d195 ([python] add support for transforming general python for loops over iterables  (#2508))
-
-    def ensure_all_locations(self, node, source_node=None, line=1, col=0):
-        """Recursively ensure all nodes in an AST tree have location information"""
-        if source_node:
-            line = getattr(source_node, 'lineno', 1)
-            col = getattr(source_node, 'col_offset', 0)
-
-<<<<<<< HEAD
-    def generate_variable_copy(self, node_name:str, argument:ast.arg, default_val):
-        target = ast.Name(id=f"ESBMC_DEFAULT_{node_name}_{argument.arg}",ctx=ast.Store())
->>>>>>> b47fecc13 (Fix default variable implementation (#2418))
-=======
-        # Ensure current node has location info
-        if not hasattr(node, 'lineno') or node.lineno is None:
-            node.lineno = line
-        if not hasattr(node, 'col_offset') or node.col_offset is None:
-            node.col_offset = col
-
-        # Recursively apply to all child nodes
-        for child in ast.iter_child_nodes(node):
-            self.ensure_all_locations(child, source_node, line, col)
-
-        return node
-
-    def create_name_node(self, name_id, ctx, source_node=None):
-        """Create a Name node with proper location info"""
-        node = ast.Name(id=name_id, ctx=ctx)
-        return self.ensure_all_locations(node, source_node)
-
-    def create_constant_node(self, value, source_node=None):
-        """Create a Constant node with proper location info"""
-        node = ast.Constant(value=value)
-        return self.ensure_all_locations(node, source_node)
-
-    def generate_variable_copy(self, node_name: str, argument: ast.arg, default_val):
-        target = ast.Name(id=f"ESBMC_DEFAULT_{node_name}_{argument.arg}", ctx=ast.Store())
->>>>>>> 52314d195 ([python] add support for transforming general python for loops over iterables  (#2508))
         assign_node = ast.AnnAssign(
             target=target,
             annotation=argument.annotation,
@@ -211,10 +161,6 @@ class Preprocessor(ast.NodeTransformer):
                 transformed_body.append(transformed_statement)
         self.target_name = old_target_name
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 52314d195 ([python] add support for transforming general python for loops over iterables  (#2508))
         # Create the body of the while loop, including updating the start and has_next variables
         while_body = transformed_body + [
             ast.Assign(
@@ -231,96 +177,16 @@ class Preprocessor(ast.NodeTransformer):
                     func=ast.Name(id='ESBMC_range_has_next_', ctx=ast.Load()),
                     args=[ast.Name(id='start', ctx=ast.Load()), end, step],
                     keywords=[]
-<<<<<<< HEAD
-=======
-            # Step validation - Python raises ValueError if step == 0
-            step_validation = ast.Assert(
-                test=ast.Compare(
-                left=step,
-                ops=[ast.NotEq()],
-                comparators=[ast.Constant(value=0)]
-                ),
-                msg=ast.Constant(value="range() arg 3 must not be zero")
-            )
-
-            # Create assignment for the start variable
-            start_assign = ast.AnnAssign(
-                target=ast.Name(id='start', ctx=ast.Store()),
-                annotation=ast.Name(id='int', ctx=ast.Load()),
-                value=start,
-                simple=1
-            )
-
-            # Create call to ESBMC_range_has_next_ function for the range
-            has_next_call = ast.Call(
-                func=ast.Name(id='ESBMC_range_has_next_', ctx=ast.Load()),
-                args=[start, end, step],
-                keywords=[]
-            )
-
-            # Create assignment for the has_next variable
-            has_next_assign = ast.AnnAssign(
-                target=ast.Name(id='has_next', ctx=ast.Store()),
-                annotation=ast.Name(id='bool', ctx=ast.Load()),
-                value=has_next_call,
-                simple=1
-            )
-
-            # Create condition for the while loop
-            has_next_name = ast.Name(id='has_next', ctx=ast.Load())
-            while_cond = ast.Compare(
-                left=has_next_name,
-                ops=[ast.Eq()],
-                comparators=[ast.Constant(value=True)]
-            )
-
-            # Transform the body of the for loop
-            transformed_body = []
-            self.target_name = node.target.id # Store the target variable name for replacement
-            for statement in node.body:
-                transformed_body.append(self.visit(statement))
-
-            # Create the body of the while loop, including updating the start and has_next variables
-            while_body = transformed_body + [
-                ast.Assign(
-                    targets=[ast.Name(id='start', ctx=ast.Store())],
-                    value=ast.Call(
-                        func=ast.Name(id='ESBMC_range_next_', ctx=ast.Load()),
-                        args=[ast.Name(id='start', ctx=ast.Load()), step],
-                        keywords=[]
-                    )
-                ),
-                ast.Assign(
-                    targets=[has_next_name],
-                    value=ast.Call(
-                        func=ast.Name(id='ESBMC_range_has_next_', ctx=ast.Load()),
-                        args=[ast.Name(id='start', ctx=ast.Load()), end, step],
-                        keywords=[]
-                    )
->>>>>>> 1564cd399 ([python] improve range() handling (#2473))
-=======
->>>>>>> 52314d195 ([python] add support for transforming general python for loops over iterables  (#2508))
                 )
             )
         ]
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 52314d195 ([python] add support for transforming general python for loops over iterables  (#2508))
         # Create the while statement
         while_stmt = ast.While(
             test=while_cond,
             body=while_body,
             orelse=[]
         )
-<<<<<<< HEAD
-=======
-            # Return the transformed statements
-            return [step_validation, start_assign, has_next_assign, while_stmt]
->>>>>>> 1564cd399 ([python] improve range() handling (#2473))
-=======
->>>>>>> 52314d195 ([python] add support for transforming general python for loops over iterables  (#2508))
 
         # Return the transformed statements
         return [step_validation, start_assign, has_next_assign, while_stmt]
@@ -338,10 +204,6 @@ class Preprocessor(ast.NodeTransformer):
         else:
             target_var_name = 'ESBMC_loop_var'
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> a710fa95b (Improved memcpy function)
         # Determine annotation type based on the iterable value
         if isinstance(node.iter, ast.Str):
             annotation_id = 'str'
@@ -354,20 +216,9 @@ class Preprocessor(ast.NodeTransformer):
         else:
             annotation_id = 'Any'
 
-<<<<<<< HEAD
         # Create assignment for the iterable variable
         iter_target = self.create_name_node('ESBMC_iter', ast.Store(), node)
         str_annotation = self.create_name_node(annotation_id, ast.Load(), node)
-=======
-        # Create assignment for the iterable variable
-        iter_target = self.create_name_node('ESBMC_iter', ast.Store(), node)
-        str_annotation = self.create_name_node('str', ast.Load(), node)
->>>>>>> e7c955101 (Update stats-300s.txt)
-=======
-        # Create assignment for the iterable variable
-        iter_target = self.create_name_node('ESBMC_iter', ast.Store(), node)
-        str_annotation = self.create_name_node(annotation_id, ast.Load(), node)
->>>>>>> a710fa95b (Improved memcpy function)
         iter_assign = ast.AnnAssign(
             target=iter_target,
             annotation=str_annotation,
@@ -564,12 +415,4 @@ class Preprocessor(ast.NodeTransformer):
                 return_nodes.append(assignment_node)
         self.generic_visit(node)
         return_nodes.append(node)
-<<<<<<< HEAD
-<<<<<<< HEAD
         return return_nodes
-=======
-        return return_nodes
->>>>>>> b47fecc13 (Fix default variable implementation (#2418))
-=======
-        return return_nodes
->>>>>>> 52314d195 ([python] add support for transforming general python for loops over iterables  (#2508))

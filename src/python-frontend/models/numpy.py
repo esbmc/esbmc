@@ -29,14 +29,9 @@ def divide(a:int, b:int) -> float:
 def power(a:int, b:int) -> float:
     x:float = 42.0
     return x
-<<<<<<< HEAD
-=======
 
 def ceil(x:float) -> int:
     return 0
-<<<<<<< HEAD
->>>>>>> f59fd87f9 ([python-frontend] Reuse C libm models for NumPy math functions (#2395))
-=======
 
 def floor(x:float) -> int:
     return 0
@@ -76,26 +71,15 @@ def exp(x:float) -> float:
 
 def fmod(x:float) -> float:
     return 0.2
-<<<<<<< HEAD
->>>>>>> 2e5aef15f ([python] Expand numpy math models (#2407))
-=======
 
 def arctan(x:float) -> float:
     return 0.2
-<<<<<<< HEAD
->>>>>>> f86e3ad14 ([python] added test cases for numpy math functions (#2437))
-=======
 
 def dot(a:float, b:float) -> float:
     return 0.0
-<<<<<<< HEAD
->>>>>>> bea8feb3b ([python] Handling NumPy dot product (#2460))
-=======
 
 def matmul(a:float, b:float) -> float:
     return 0.0
 
 def transpose(a:float, b:float) -> float:
     return 0.0
-
->>>>>>> 26666f4c8 ([python] Handling numpy functions (#2474))

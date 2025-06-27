@@ -870,6 +870,7 @@ exprt function_call_expr::build_constant_from_arg() const
 
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
   else if (func_name == "str")
     arg_size = handle_str(arg);
 
@@ -881,6 +882,8 @@ exprt function_call_expr::build_constant_from_arg() const
     expr.type() = t;
 =======
 =======
+=======
+>>>>>>> cdbeeab4d (Fixed cprover_library.cpp file error)
 <<<<<<< HEAD
 =======
 >>>>>>> 4604cc57c ([python] refactor our python frontend and extend chr() and float() built-in functions (#2417))
@@ -888,7 +891,15 @@ exprt function_call_expr::build_constant_from_arg() const
 >>>>>>> 038fae2a5 ([python] add support for python's oct() built-in function (#2421))
 =======
 >>>>>>> e73ba5595 ([python]  add support and error checking for Python abs() builtin function (#2441))
+<<<<<<< HEAD
 >>>>>>> a710fa95b (Improved memcpy function)
+=======
+=======
+  else if (func_name == "str") 
+    arg_size = handle_str(arg);    
+
+>>>>>>> 8ab75a401 (Fixed cprover_library.cpp file error)
+>>>>>>> cdbeeab4d (Fixed cprover_library.cpp file error)
   // Construct expression with appropriate type
 <<<<<<< HEAD
 =======
@@ -906,9 +917,13 @@ exprt function_call_expr::build_constant_from_arg() const
 =======
   typet t = type_handler_.get_typet(func_name, arg_size);
   exprt expr = converter_.get_expr(arg);
+<<<<<<< HEAD
   expr.type() = t;
   else if (func_name == "str") arg_size = handle_str(arg);
 >>>>>>> 65e1daef5 (Apply automatic changes)
+=======
+
+>>>>>>> 8ab75a401 (Fixed cprover_library.cpp file error)
   if (func_name != "str")
     expr.type() = t;
 >>>>>>> a710fa95b (Improved memcpy function)

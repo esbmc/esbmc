@@ -542,7 +542,6 @@ void goto_convertt::do_function_call_symbol(
 
   std::string base_name = symbol->name.as_string();
 
-<<<<<<< HEAD
   // Quantifiers passthrough. Converts function calls into forall or exists expr
   if (base_name == "__ESBMC_forall" || base_name == "__ESBMC_exists")
   {
@@ -568,8 +567,7 @@ void goto_convertt::do_function_call_symbol(
     return;
   }
 
-=======
->>>>>>> f7e546349 ([goto-programs] refactored do_function_call_symbol (#2411))
+
   bool is_assume =
     (base_name == "__ESBMC_assume") || (base_name == "__VERIFIER_assume");
   bool is_assert = (base_name == "assert");

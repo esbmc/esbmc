@@ -289,16 +289,22 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
+<<<<<<< HEAD
 =======
 >>>>>>> a710fa95b (Improved memcpy function)
 =======
 >>>>>>> 8bb3dfef5 (Apply automatic changes)
+=======
+=======
+>>>>>>> 8ab75a401 (Fixed cprover_library.cpp file error)
+>>>>>>> cdbeeab4d (Fixed cprover_library.cpp file error)
   {
     size_t str_size = elem.get<std::string>().size();
     if (str_size > 1)
       str_size += 1;
     return build_array(char_type(), str_size);
   }
+<<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
   // Handle nested value object
@@ -309,6 +315,8 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
 =======
 >>>>>>> a710fa95b (Improved memcpy function)
 =======
+=======
+>>>>>>> cdbeeab4d (Fixed cprover_library.cpp file error)
 =======
     return build_array(char_type(), elem.get<std::string>().size());
 >>>>>>> 65e1daef5 (Apply automatic changes)
@@ -340,6 +348,11 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
     // Handle nested value object
     if (elem.is_object())
     {
+=======
+  // Handle nested value object
+  if (elem.is_object())
+  {
+>>>>>>> 8ab75a401 (Fixed cprover_library.cpp file error)
       // Recursive delegation for wrapper node
       if (elem.contains("value"))
         return get_typet(elem["value"]);
