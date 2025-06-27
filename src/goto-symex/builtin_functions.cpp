@@ -277,29 +277,12 @@ expr2tc goto_symext::symex_mem(
   symex_assign(code_assign2tc(lhs, rhs), true, guard);
 
   expr2tc ptr_obj = pointer_object2tc(pointer_type2(), ptr_rhs);
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-  track_new_pointer(ptr_obj, new_type, size);
->>>>>>> bcb0dd214 ([cpp] add support for std::is_sorted and improve vector initialization (#2515))
-=======
-
-  if (size_is_one)
-    track_new_pointer(ptr_obj, new_type, guard);
-  else
-<<<<<<< HEAD
-    track_new_pointer(ptr_obj, new_type, size);
->>>>>>> 4c145da2f ([goto-symex] use size directly (#2516))
 
   if (size_is_one)
     track_new_pointer(ptr_obj, new_type, guard);
   else
     track_new_pointer(ptr_obj, new_type, guard, size);
 
-=======
-    track_new_pointer(ptr_obj, new_type, guard, size);
-
->>>>>>> 76d9314ef (Consider the guard when dealing with sideeffects (#2514))
   alloc_guard.append(guard);
   dynamic_memory.emplace_back(
     rhs_copy, alloc_guard, !is_malloc, symbol.name.as_string());

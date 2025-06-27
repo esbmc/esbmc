@@ -117,6 +117,10 @@ ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element)
   {
     return UsingForDef;
   }
+  else if (element["nodeType"] == "ModifierDefinition")
+  {
+    return ModifierDef;
+  }
   else
   {
     log_error(
@@ -139,6 +143,7 @@ const char *contract_body_element_to_str(ContractBodyElementT type)
     ENUM_TO_STR(ErrorDef)
     ENUM_TO_STR(EventDef)
     ENUM_TO_STR(UsingForDef)
+    ENUM_TO_STR(ModifierDef)
     ENUM_TO_STR(ContractBodyElementTError)
   default:
   {
@@ -167,10 +172,6 @@ bool is_address_member_call(const nlohmann::json &expr)
   return false;
 }
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 297a99968 ([Solidity] Add support for the library entity (#2394))
 // check if it is a function defined in a library
 bool is_sol_library_function(const int ref_id)
 {
@@ -190,11 +191,6 @@ bool is_sol_library_function(const int ref_id)
   return false;
 }
 
-<<<<<<< HEAD
-=======
->>>>>>> 0f6d29c39 ([Solidity] Support Unit keywords && insufficient balance checks (#2393))
-=======
->>>>>>> 297a99968 ([Solidity] Add support for the library entity (#2394))
 // rule type-name
 TypeNameT get_type_name_t(const nlohmann::json &type_name)
 {
@@ -706,6 +702,10 @@ StatementT get_statement_t(const nlohmann::json &stmt)
   {
     return EmitStatement;
   }
+  else if (stmt["nodeType"] == "PlaceholderStatement")
+  {
+    return PlaceholderStatement;
+  }
   else
   {
     log_error(
@@ -732,6 +732,7 @@ const char *statement_to_str(StatementT type)
     ENUM_TO_STR(BreakStatement)
     ENUM_TO_STR(RevertStatement)
     ENUM_TO_STR(EmitStatement)
+    ENUM_TO_STR(PlaceholderStatement)
   default:
   {
     assert(!"Unknown statement type");
@@ -748,10 +749,6 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
     return NullExpr;
   }
   assert(expr.contains("nodeType"));
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 0ad7495d4 ([Solidity] add support for several keywords and update modelling algorithm (#2405))
 
   if (
     expr.contains("typeDescriptions") &&
@@ -770,11 +767,6 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
       return LiteralWithRational;
   }
 
-<<<<<<< HEAD
-=======
->>>>>>> 0f6d29c39 ([Solidity] Support Unit keywords && insufficient balance checks (#2393))
-=======
->>>>>>> 0ad7495d4 ([Solidity] add support for several keywords and update modelling algorithm (#2405))
   if (expr["nodeType"] == "Assignment" || expr["nodeType"] == "BinaryOperation")
   {
     return BinaryOperatorClass;
@@ -851,14 +843,7 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
       get_type_name_t(expr["typeDescriptions"]) ==
       SolidityGrammar::TypeProperty)
       return TypePropertyExpression;
-<<<<<<< HEAD
-<<<<<<< HEAD
 
-=======
->>>>>>> fa27ea0ea ([Cov & Sol] Coverage support for Solidity (#2389))
-=======
-
->>>>>>> 0f6d29c39 ([Solidity] Support Unit keywords && insufficient balance checks (#2393))
     return CallExprClass;
   }
   else if (expr["nodeType"] == "MemberAccess")
@@ -1123,14 +1108,7 @@ const char *expression_to_str(ExpressionT type)
 
     ENUM_TO_STR(DeclRefExprClass)
     ENUM_TO_STR(Literal)
-<<<<<<< HEAD
-<<<<<<< HEAD
     ENUM_TO_STR(LiteralWithRational)
-=======
->>>>>>> 0f6d29c39 ([Solidity] Support Unit keywords && insufficient balance checks (#2393))
-=======
-    ENUM_TO_STR(LiteralWithRational)
->>>>>>> 0ad7495d4 ([Solidity] add support for several keywords and update modelling algorithm (#2405))
     ENUM_TO_STR(LiteralWithWei)
     ENUM_TO_STR(LiteralWithGwei)
     ENUM_TO_STR(LiteralWithSzabo)
@@ -1176,7 +1154,7 @@ FunctionDeclRefT get_func_decl_ref_t(const nlohmann::json &decl)
     decl["nodeType"] == "EventDefinition");
   if (
     decl["parameters"]["parameters"].size() == 0 ||
-    decl["kind"] == "constructor")
+    (decl.contains("kind") && decl["kind"] == "constructor"))
   {
     return FunctionNoProto;
   }

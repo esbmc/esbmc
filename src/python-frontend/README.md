@@ -83,15 +83,9 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Control Structures**: Supports conditional statements (`if-else`) and loops (`for-range`, `while`).
 - **Arithmetic**: Includes standard arithmetic operations (e.g., addition, subtraction, multiplication, division).
 - **Logical Operations**: Supports logical constructs (e.g., `AND`, `OR`, `NOT`).
-<<<<<<< HEAD
-<<<<<<< HEAD
+
 - **Identity Comparisons**: Supports `is` and `is not` operators for identity-based comparisons, including `x is None`, `x is y`, or `x is not None`.
-=======
-- **Identity Comparisons**: Supports `is` and `is not` operators for identity-based comparisons.
->>>>>>> 009aadf47 (Update README.md)
-=======
-- **Identity Comparisons**: Supports `is` and `is not` operators for identity-based comparisons, including `x is None`, `x is y`, or `x is not None`.
->>>>>>> 67d826a87 ([python]  support for "NoneType" (#2493))
+
 
 ### Functions and Methods
 - **Function Handling**: This allows for defining, calling, and verifying functions, including parameter passing and return values.
@@ -112,27 +106,11 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Recursion**: Supports and verifies recursive functions.
 - **Imports**: Handles import styles and validates their usage.
 - **Numeric Types**: Supports manipulation of numeric types (e.g., bytes, integers, floats).
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
+
 - **Built-in Functions**: Supports Python's built-in functions, such as `abs`, `int`, `float`, `chr`, `str`, `hex`, `oct`, `len`, and `range`.
-=======
-- **Built-in Functions**: Supports Python's built-in functions, such as `int`, `float`, `hex`, `oct`, `len`, and `range`.
->>>>>>> da3931b48 (Update README.md)
-=======
-- **Built-in Functions**: Supports Python's built-in functions, such as `int`, `float`, `str`, `hex`, `oct`, `len`, and `range`.
->>>>>>> 9f64d42c6 (Update README.md)
-=======
-- **Built-in Functions**: Supports Python's built-in functions, such as `int`, `float`, `chr`, `str`, `hex`, `oct`, `len`, and `range`.
->>>>>>> 966f02536 (Update README.md)
-=======
-- **Built-in Functions**: Supports Python's built-in functions, such as `abs`, `int`, `float`, `chr`, `str`, `hex`, `oct`, `len`, and `range`.
->>>>>>> ba5a2e857 (Update README.md)
+
 - **Verification properties**: Division-by-zero, indexing errors, arithmetic overflow, and user-defined assertions.
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 ### Limitations
 
 The current version of ESBMC-Python has the following limitations:
@@ -141,9 +119,6 @@ The current version of ESBMC-Python has the following limitations:
 - List and String support are partial and limited in functionality.
 - Dictionaries are not supported at all.
 
-=======
->>>>>>> 6715609a7 (Update README.md)
-=======
 ### Limitations
 
 The current version of ESBMC-Python has the following limitations:
@@ -152,7 +127,6 @@ The current version of ESBMC-Python has the following limitations:
 - List and String support are partial and limited in functionality.
 - Dictionaries are not supported at all.
 
->>>>>>> fe26ac51b (Update README.md)
 ### Example: Division by Zero in Python
 
 The following Python program executes without issues in standard Python 3. However, when analyzed using ESBMC, it reveals a hidden bug: a possible division by zero.
@@ -203,8 +177,6 @@ Violated property:
 VERIFICATION FAILED
 ```
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 ESBMC successfully identifies a path where the randomly generated variable x evaluates to zero (or very close to zero, causing integer division by zero). This triggers a property violation, and ESBMC generates a counterexample showing the precise values of `x` and `cond` that lead to the failure. An executable test case can be created from this counterexample to expose this implementation error as follows:
 
 ````python
@@ -270,7 +242,6 @@ As highlighted by **Harzevili et al., 2023**, common issues in ML-related librar
 This approach treats Numpy as a black box by analyzing **assertions written by the developer**.
 
 #### Example: Detecting Integer Overflow
-<<<<<<< HEAD
 
 ```python
 import numpy as np
@@ -477,12 +448,11 @@ Reference: https://numpy.org/doc/stable/reference/routines.math.html
 | `sqrt.c`       | `np.sqrt`                | Square root           |
 | `nextafter.c`  | `np.nextafter`           | Floating-point step   |
 
-=======
+
 ESBMC successfully identifies a path where the randomly generated variable x evaluates to zero (or very close to zero, causing integer division by zero). This triggers a property violation, and ESBMC generates a counterexample showing the precise values of `x` and `cond` that lead to the failure.
 
 This example highlights how bounded model checking can uncover subtle bugs that may not be triggered during regular testing.
->>>>>>> 6715609a7 (Update README.md)
-=======
+
 ESBMC successfully identifies a path where the randomly generated variable x evaluates to zero (or very close to zero, causing integer division by zero). This triggers a property violation, and ESBMC generates a counterexample showing the precise values of `x` and `cond` that lead to the failure. An executable test case can be created from this counterexample to expose this implementation error as follows:
 
 ````python
@@ -515,14 +485,11 @@ ZeroDivisionError: integer division or modulo by zero
 ````
 
 This example highlights how symbolic model checking can uncover subtle bugs that may not be triggered during regular testing.
->>>>>>> 505f72c0f (Update README.md)
 
 ## References
 
 For more information about our frontend, please refer to our ISSTA 2024 [tool paper](https://dl.acm.org/doi/abs/10.1145/3650212.3685304).
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 Harzevili et al. (2023).  
 *Characterizing and Understanding Software Security Vulnerabilities in Machine Learning Libraries.*  
 [arXiv:2303.06502](https://arxiv.org/abs/2303.06502)
@@ -530,13 +497,9 @@ Harzevili et al. (2023).
 *NumPy Mathematical functions*
 [Documentation](https://numpy.org/doc/stable/reference/routines.math.html)
 
----
-=======
-# Numpy Formal Verification
-=======
 
-=======
->>>>>>> 3aec7aa6c (Update README.md)
+# Numpy Formal Verification
+
 # Numpy Formal Verification with ESBMC
 >>>>>>> 88b89536a (Update README.md)
 
@@ -569,8 +532,6 @@ As highlighted by **Harzevili et al., 2023**, common issues in ML-related librar
 This approach treats Numpy as a black box by analyzing **assertions written by the developer**.
 
 #### 🔍 Example: Detecting Integer Overflow
-=======
->>>>>>> 7c65745de (Update README.md)
 
 ```python
 import numpy as np
@@ -789,13 +750,9 @@ Harzevili et al. (2023).
 *NumPy Mathematical functions*
 [Documentation](https://numpy.org/doc/stable/reference/routines.math.html)
 
----
-<<<<<<< HEAD
 
 ## Questions or Collaboration?
 
 If you're exploring ways to increase trust and correctness in numerical computations or integrate ESBMC into your verification workflow, feel free to contact us!
 
->>>>>>> f3fd45834 (Update README.md)
-=======
->>>>>>> bf7276a0f (Update README.md)
+

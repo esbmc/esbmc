@@ -1,113 +1,11 @@
 Statistics:          33569 Files
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-  correct:           18057
-    correct true:    10735
-    correct false:    7322
-  incorrect:            36
-    incorrect true:     13
-    incorrect false:    23
-  unknown:           15476
-  Score:             28008 (max: 55885)
-
-https://github.com/esbmc/esbmc/actions/runs/14159511896/
-=======
-  correct:           17683
-    correct true:    10389
-    correct false:    7294
-=======
-  correct:           17631
-    correct true:    10354
-    correct false:    7277
->>>>>>> 0f0ca59eb (Update stats-30s.txt)
-=======
-  correct:           17706
-    correct true:    10404
-    correct false:    7302
->>>>>>> 779e92ef9 (Update stats-30s.txt)
-=======
-  correct:           17705
-    correct true:    10407
-    correct false:    7298
->>>>>>> 1a8892020 (Update stats-30s.txt)
-=======
-  correct:           17632
-    correct true:    10347
-    correct false:    7285
->>>>>>> 73a8699fb (Update stats-30s.txt)
-=======
-  correct:           17618
-    correct true:    10337
-    correct false:    7281
->>>>>>> c3ba09a73 (Update stats-30s.txt)
-=======
-  correct:           17639
-    correct true:    10350
-    correct false:    7289
->>>>>>> f6ae4e953 (Update stats-30s.txt)
-=======
-  correct:           17705
-    correct true:    10406
-    correct false:    7299
->>>>>>> 42bb18921 (Update stats-30s.txt)
-=======
-  correct:           17662
-    correct true:    10372
-    correct false:    7290
->>>>>>> 067e7bf2d (Update stats-30s.txt)
-=======
   correct:           17705
     correct true:    10400
     correct false:    7305
->>>>>>> 8f5b9d6ac (Update stats-30s.txt)
   incorrect:            35
     incorrect true:     14
     incorrect false:    21
   unknown:           15829
   Score:             27321 (max: 55885)
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-https://github.com/esbmc/esbmc/actions/runs/14591257253
->>>>>>> 485bafc14 (Update stats-30s.txt)
-=======
->>>>>>> 0f0ca59eb (Update stats-30s.txt)
-=======
-https://github.com/esbmc/esbmc/actions/runs/14991281698
->>>>>>> 779e92ef9 (Update stats-30s.txt)
-=======
-https://github.com/esbmc/esbmc/actions/runs/15033843533
->>>>>>> 1a8892020 (Update stats-30s.txt)
-=======
-https://github.com/esbmc/esbmc/actions/runs/15083131192
->>>>>>> 73a8699fb (Update stats-30s.txt)
-=======
-https://github.com/esbmc/esbmc/actions/runs/15107109902
->>>>>>> c3ba09a73 (Update stats-30s.txt)
-=======
-https://github.com/esbmc/esbmc/actions/runs/15319973264
->>>>>>> f6ae4e953 (Update stats-30s.txt)
-=======
-https://github.com/esbmc/esbmc/actions/runs/15402119199
->>>>>>> 42bb18921 (Update stats-30s.txt)
-=======
-https://github.com/esbmc/esbmc/actions/runs/15429068267
->>>>>>> 067e7bf2d (Update stats-30s.txt)
-=======
 https://github.com/esbmc/esbmc/actions/runs/15709379929
->>>>>>> 8f5b9d6ac (Update stats-30s.txt)

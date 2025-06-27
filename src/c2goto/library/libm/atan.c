@@ -53,15 +53,7 @@ __ESBMC_HIDE:;
 double arctan(double x)
 {
 __ESBMC_HIDE:;
-<<<<<<< HEAD
-<<<<<<< HEAD
   return atan(x);
-=======
-  return 1 / atan(x);
->>>>>>> f86e3ad14 ([python] added test cases for numpy math functions (#2437))
-=======
-  return atan(x);
->>>>>>> 9adda6dfa ([numpy] enhance numpy math function verification coverage (#2445))
 }
 
 double atan2(double v, double u)

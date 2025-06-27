@@ -1,7 +1,5 @@
 // NumPy documentation: https://numpy.org/doc/stable/reference/routines.linalg.html
 #include <math.h>
-#include <assert.h>
-#include <math.h>
 #include <stdint.h>
 
 void dot(int64_t *A, int64_t *B, int64_t *C, int64_t m, int64_t n, int64_t p)
@@ -24,11 +22,6 @@ void dot(int64_t *A, int64_t *B, int64_t *C, int64_t m, int64_t n, int64_t p)
     }
     i++;
   }
-}
-
-void matmul(int64_t *A, int64_t *B, int64_t *C, int64_t m, int64_t n, int64_t p)
-{
-  dot(A, B, C, m, n, p);
 }
 
 void matmul(int64_t *A, int64_t *B, int64_t *C, int64_t m, int64_t n, int64_t p)

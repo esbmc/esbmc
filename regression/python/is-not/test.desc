@@ -1,12 +1,4 @@
-<<<<<<< HEAD
-<<<<<<< HEAD
 CORE
-=======
-KNOWNBUG
->>>>>>> 42f154ce9 ([python] Fix unary negation (#2406))
-=======
-CORE
->>>>>>> 0ecf84c8c ([python] add support for Is and IsNot operators (#2480))
 main.py
 
 ^VERIFICATION SUCCESSFUL$

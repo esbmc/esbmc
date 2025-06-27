@@ -1,12 +1,4 @@
 KNOWNBUG
 main.py
-<<<<<<< HEAD
-<<<<<<< HEAD
 --incremental-bmc
-=======
-
->>>>>>> 9041d9851 ([python] improved support for power operator (**) (#2478))
-=======
---incremental-bmc
->>>>>>> 59fb1bf8f ([python] enhanced handling of true division (#2505))
 ^VERIFICATION SUCCESSFUL$

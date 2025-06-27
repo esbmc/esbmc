@@ -87,15 +87,7 @@ __ESBMC_HIDE:;
 )";
 
 const std::string gasleft = R"(
-<<<<<<< HEAD
-<<<<<<< HEAD
 unsigned int _gaslimit;
-=======
-unsigned int _gaslimit = nondet_uint();
->>>>>>> 0ad7495d4 ([Solidity] add support for several keywords and update modelling algorithm (#2405))
-=======
-unsigned int _gaslimit;
->>>>>>> 9aac25be5 ([solidity] fix reentry attack checks (#2422))
 void gasConsume()
 {
 __ESBMC_HIDE:;
@@ -107,15 +99,7 @@ uint256_t gasleft()
 {
 __ESBMC_HIDE:;
   gasConsume(); // always less
-<<<<<<< HEAD
-<<<<<<< HEAD
   return (uint256_t)_gaslimit;
-=======
-  return uint256_t(_gaslimit);
->>>>>>> 0ad7495d4 ([Solidity] add support for several keywords and update modelling algorithm (#2405))
-=======
-  return (uint256_t)_gaslimit;
->>>>>>> 7107ec709 ([solidity] improve overall performance (#2511))
 }
 )";
 
@@ -163,15 +147,10 @@ __ESBMC_HIDE:;
   return (address_t)hash;
 }
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 9aac25be5 ([solidity] fix reentry attack checks (#2422))
 // uint256_t _pow(unsigned int base, unsigned int exp) {
 // __ESBMC_HIDE:;
 //   uint256_t result = 1;
 //   uint256_t b = base;
-<<<<<<< HEAD
 
 //   while (exp > 0) {
 //     if (exp & 1)
@@ -183,30 +162,6 @@ __ESBMC_HIDE:;
 //   return result;
 // }
 double pow(double x, double y);
-=======
-uint256_t _pow(unsigned int base, unsigned int exp) {
-__ESBMC_HIDE:;
-  uint256_t result = 1;
-  uint256_t b = base;
-=======
->>>>>>> 9aac25be5 ([solidity] fix reentry attack checks (#2422))
-
-//   while (exp > 0) {
-//     if (exp & 1)
-//       result *= b;
-//     b *= b;
-//     exp >>= 1;
-//   }
-
-<<<<<<< HEAD
-  return result;
-}
->>>>>>> fa27ea0ea ([Cov & Sol] Coverage support for Solidity (#2389))
-=======
-//   return result;
-// }
-double pow(double x, double y);
->>>>>>> 9aac25be5 ([solidity] fix reentry attack checks (#2422))
 )";
 
 const std::string sol_string = R"(
@@ -253,7 +208,6 @@ struct mapping_t
 };
 
 void *map_get_raw(struct _ESBMC_Mapping a[], address_t addr, uint256_t key)
-<<<<<<< HEAD
 {
 __ESBMC_HIDE:;
   struct _ESBMC_Mapping *cur = a[key].next;
@@ -375,43 +329,17 @@ __ESBMC_HIDE:;
   while (cur)
   {
     if (cur->key == key)
-<<<<<<< HEAD
-=======
-{
-__ESBMC_HIDE:;
-  struct _ESBMC_Mapping *cur = a[key].next;
-  while (cur)
-  {
-    if (cur->addr == addr && cur->key == key)
->>>>>>> 97c1e1f45 ([Solidity] Refactoring Mapping (#2468))
-=======
->>>>>>> 7107ec709 ([solidity] improve overall performance (#2511))
       return cur->value;
     cur = cur->next;
   }
   return NULL;
 }
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 7107ec709 ([solidity] improve overall performance (#2511))
 void map_set_raw_fast(struct _ESBMC_Mapping_fast a[],
                       uint256_t key, void *val)
 {
 __ESBMC_HIDE:;
   struct _ESBMC_Mapping_fast *n = (struct _ESBMC_Mapping_fast *)malloc(sizeof *n);
-<<<<<<< HEAD
-=======
-void map_set_raw(struct _ESBMC_Mapping a[], address_t addr,
-                 uint256_t key, void *val)
-{
-__ESBMC_HIDE:;
-  struct _ESBMC_Mapping *n = (struct _ESBMC_Mapping *)malloc(sizeof *n);
-  n->addr = addr;
->>>>>>> 97c1e1f45 ([Solidity] Refactoring Mapping (#2468))
-=======
->>>>>>> 7107ec709 ([solidity] improve overall performance (#2511))
   n->key = key;
   n->value = val;
   n->next = a[key].next;
@@ -419,193 +347,77 @@ __ESBMC_HIDE:;
 }
 
 /* uint256_t */
-<<<<<<< HEAD
-<<<<<<< HEAD
 void map_uint_set_fast(struct mapping_t_fast *m, uint256_t k, uint256_t v)
-=======
-void map_uint_set(struct mapping_t *m, uint256_t k, uint256_t v)
->>>>>>> 97c1e1f45 ([Solidity] Refactoring Mapping (#2468))
-=======
-void map_uint_set_fast(struct mapping_t_fast *m, uint256_t k, uint256_t v)
->>>>>>> 7107ec709 ([solidity] improve overall performance (#2511))
 {
 __ESBMC_HIDE:;
   uint256_t *p = (uint256_t *)malloc(sizeof *p);
   *p = v;
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 7107ec709 ([solidity] improve overall performance (#2511))
   map_set_raw_fast(m->base, k, p);
 }
 uint256_t map_uint_get_fast(struct mapping_t_fast *m, uint256_t k)
 {
 __ESBMC_HIDE:;
   uint256_t *p = (uint256_t *)map_get_raw_fast(m->base, k);
-<<<<<<< HEAD
-=======
-  map_set_raw(m->base, m->addr, k, p);
-}
-uint256_t map_uint_get(struct mapping_t *m, uint256_t k)
-{
-__ESBMC_HIDE:;
-  uint256_t *p = (uint256_t *)map_get_raw(m->base, m->addr, k);
->>>>>>> 97c1e1f45 ([Solidity] Refactoring Mapping (#2468))
-=======
->>>>>>> 7107ec709 ([solidity] improve overall performance (#2511))
   return p ? *p : (uint256_t)0;
 }
 
 /* int256_t */
-<<<<<<< HEAD
-<<<<<<< HEAD
 void map_int_set_fast(struct mapping_t_fast *m, uint256_t k, int256_t v)
-=======
-void map_int_set(struct mapping_t *m, uint256_t k, int256_t v)
->>>>>>> 97c1e1f45 ([Solidity] Refactoring Mapping (#2468))
-=======
-void map_int_set_fast(struct mapping_t_fast *m, uint256_t k, int256_t v)
->>>>>>> 7107ec709 ([solidity] improve overall performance (#2511))
 {
 __ESBMC_HIDE:;
   int256_t *p = (int256_t *)malloc(sizeof *p);
   *p = v;
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 7107ec709 ([solidity] improve overall performance (#2511))
   map_set_raw_fast(m->base, k, p);
 }
 int256_t map_int_get_fast(struct mapping_t_fast *m, uint256_t k)
 {
 __ESBMC_HIDE:;
   int256_t *p = (int256_t *)map_get_raw_fast(m->base, k);
-<<<<<<< HEAD
-=======
-  map_set_raw(m->base, m->addr, k, p);
-}
-int256_t map_int_get(struct mapping_t *m, uint256_t k)
-{
-__ESBMC_HIDE:;
-  int256_t *p = (int256_t *)map_get_raw(m->base, m->addr, k);
->>>>>>> 97c1e1f45 ([Solidity] Refactoring Mapping (#2468))
-=======
->>>>>>> 7107ec709 ([solidity] improve overall performance (#2511))
   return p ? *p : (int256_t)0;
 }
 
 /* string */
-<<<<<<< HEAD
-<<<<<<< HEAD
 void map_string_set_fast(struct mapping_t_fast *m, uint256_t k, char *v)
-=======
-void map_string_set(struct mapping_t *m, uint256_t k, char *v)
->>>>>>> 97c1e1f45 ([Solidity] Refactoring Mapping (#2468))
-=======
-void map_string_set_fast(struct mapping_t_fast *m, uint256_t k, char *v)
->>>>>>> 7107ec709 ([solidity] improve overall performance (#2511))
 {
 __ESBMC_HIDE:;
   char **p = (char **)malloc(sizeof *p);
   *p = v;
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 7107ec709 ([solidity] improve overall performance (#2511))
   map_set_raw_fast(m->base, k, p);
 }
 char *map_string_get_fast(struct mapping_t_fast *m, uint256_t k)
 {
 __ESBMC_HIDE:;
   char **p = (char **)map_get_raw_fast(m->base, k);
-<<<<<<< HEAD
-=======
-  map_set_raw(m->base, m->addr, k, p);
-}
-char *map_string_get(struct mapping_t *m, uint256_t k)
-{
-__ESBMC_HIDE:;
-  char **p = (char **)map_get_raw(m->base, m->addr, k);
->>>>>>> 97c1e1f45 ([Solidity] Refactoring Mapping (#2468))
-=======
->>>>>>> 7107ec709 ([solidity] improve overall performance (#2511))
   return p ? *p : (char *)0;
 }
 
 /* bool */
-<<<<<<< HEAD
-<<<<<<< HEAD
 void map_bool_set_fast(struct mapping_t_fast *m, uint256_t k, bool v)
-=======
-void map_bool_set(struct mapping_t *m, uint256_t k, bool v)
->>>>>>> 97c1e1f45 ([Solidity] Refactoring Mapping (#2468))
-=======
-void map_bool_set_fast(struct mapping_t_fast *m, uint256_t k, bool v)
->>>>>>> 7107ec709 ([solidity] improve overall performance (#2511))
 {
 __ESBMC_HIDE:;
   bool *p = (bool *)malloc(sizeof *p);
   *p = v;
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 7107ec709 ([solidity] improve overall performance (#2511))
   map_set_raw_fast(m->base, k, p);
 }
 bool map_bool_get_fast(struct mapping_t_fast *m, uint256_t k)
 {
 __ESBMC_HIDE:;
   bool *p = (bool *)map_get_raw_fast(m->base, k);
-<<<<<<< HEAD
-=======
-  map_set_raw(m->base, m->addr, k, p);
-}
-
-bool map_bool_get(struct mapping_t *m, uint256_t k)
-{
-__ESBMC_HIDE:;
-  bool *p = (bool *)map_get_raw(m->base, m->addr, k);
->>>>>>> 97c1e1f45 ([Solidity] Refactoring Mapping (#2468))
-=======
->>>>>>> 7107ec709 ([solidity] improve overall performance (#2511))
   return p ? *p : false;
 }
 
 /* generic */
-<<<<<<< HEAD
-<<<<<<< HEAD
 void map_generic_set_fast(struct mapping_t_fast *m, uint256_t k, const void *v, size_t sz)
-=======
-void map_generic_set(struct mapping_t *m, uint256_t k, const void *v, size_t sz)
->>>>>>> 97c1e1f45 ([Solidity] Refactoring Mapping (#2468))
-=======
-void map_generic_set_fast(struct mapping_t_fast *m, uint256_t k, const void *v, size_t sz)
->>>>>>> 7107ec709 ([solidity] improve overall performance (#2511))
 {
 __ESBMC_HIDE:;
   void *p = malloc(sz);
   memcpy(p, v, sz);
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 7107ec709 ([solidity] improve overall performance (#2511))
   map_set_raw_fast(m->base, k, p);
 }
 void *map_generic_get_fast(struct mapping_t_fast *m, uint256_t k)
 {
 __ESBMC_HIDE:;
   return map_get_raw_fast(m->base, k);
-<<<<<<< HEAD
-=======
-  map_set_raw(m->base, m->addr, k, p);
-}
-void *map_generic_get(struct mapping_t *m, uint256_t k)
-{
-__ESBMC_HIDE:;
-  return map_get_raw(m->base, m->addr, k);
->>>>>>> 97c1e1f45 ([Solidity] Refactoring Mapping (#2468))
-=======
->>>>>>> 7107ec709 ([solidity] improve overall performance (#2511))
 }
 )";
 
@@ -903,16 +715,6 @@ __ESBMC_HIDE:;
 }
 
 // string assign
-<<<<<<< HEAD
-const char* empty_str = "";
-void _str_assign(char **str1, const char *str2) {
-__ESBMC_HIDE:;
-    free(*str1);  
-    if (str2 == NULL) {
-        *str1 = NULL;
-        return;
-    }
-=======
 void _str_assign(char **str1, const char *str2) {
 __ESBMC_HIDE:;
     // Ensure str1 is a valid pointer (not NULL)
@@ -928,7 +730,6 @@ __ESBMC_HIDE:;
         *str1 = NULL;
         return;
     }
->>>>>>> 7107ec709 ([solidity] improve overall performance (#2511))
     size_t len = strlen(str2);
     if (len == SIZE_MAX) {  // Would overflow when adding 1
         *str1 = NULL;  // Or handle error differently
@@ -964,40 +765,6 @@ bool _ESBMC_cmp_cname(const char *c_1, const char *c_2)
 {
 __ESBMC_HIDE:;
     return strcmp(c_1, c_2) == 0;
-<<<<<<< HEAD
-}
-void *_ESBMC_get_obj(address_t addr, const char *cname)
-{
-__ESBMC_HIDE:;
-    int idx = _ESBMC_get_addr_array_idx(addr);
-    if (idx == -1)
-        // this means it's not previously stored
-        return NULL;
-    if (_ESBMC_cmp_cname(sol_cname_array[idx], cname))
-        return sol_obj_array[idx];
-    return NULL;
-}
-void update_addr_obj(address_t addr, void *obj, const char *cname)
-{
-__ESBMC_HIDE:;
-    // __ESBMC_assume(obj != NULL);
-    sol_addr_array[sol_max_cnt] = addr;
-    sol_obj_array[sol_max_cnt] = obj;
-    sol_cname_array[sol_max_cnt] = cname;
-    ++sol_max_cnt;
-}
-address_t _ESBMC_get_unique_address(void *obj, const char *cname)
-{
-__ESBMC_HIDE:;
-  __ESBMC_assume(obj != NULL);
-  address_t tmp;
-  do
-  {
-    tmp = nondet_long();
-  } while (_ESBMC_get_addr_array_idx(tmp) != -1);
-  // update_addr_obj(tmp, obj);
-  return tmp;
-=======
 }
 void *_ESBMC_get_obj(address_t addr, const char *cname)
 {
@@ -1034,7 +801,6 @@ __ESBMC_HIDE:;
     
     update_addr_obj(tmp, obj, cname);
     return tmp;
->>>>>>> 9aac25be5 ([solidity] fix reentry attack checks (#2422))
 }
 const char *_ESBMC_get_nondet_cont_name(const char *c_array[], unsigned int len)
 {
@@ -1046,8 +812,6 @@ __ESBMC_HIDE:;
 
 // max/min value
 const std::string sol_max_min = R"(
-<<<<<<< HEAD
-<<<<<<< HEAD
 uint256_t _max(unsigned int bitwidth, bool is_signed) {
 __ESBMC_HIDE:;
   __ESBMC_assume(bitwidth > 0 && bitwidth <= 256);
@@ -1068,39 +832,6 @@ __ESBMC_HIDE:;
   } else {
       return (int256_t)0; // Min of unsigned is always 0
   }
-=======
-uint256_t _max(int bitwidth, bool is_signed) {
-=======
-uint256_t _max(unsigned int bitwidth, bool is_signed) {
->>>>>>> 7107ec709 ([solidity] improve overall performance (#2511))
-__ESBMC_HIDE:;
-  __ESBMC_assume(bitwidth > 0 && bitwidth <= 256);
-  if (is_signed) {
-      return ((uint256_t)1 << (bitwidth - 1)) - (uint256_t)1;
-  } else {
-      if (bitwidth == 256) {
-          return (uint256_t)-1; 
-      }
-      return ((uint256_t)1 << bitwidth) - (uint256_t)1;
-  }
-}
-int256_t _min(unsigned int bitwidth, bool is_signed) {
-__ESBMC_HIDE:;
-<<<<<<< HEAD
-    if (is_signed) {
-        return -(int256_t(1) << (bitwidth - 1)); // -2^(N-1)
-    } else {
-        return int256_t(0); // Min of unsigned is always 0
-    }
->>>>>>> fa27ea0ea ([Cov & Sol] Coverage support for Solidity (#2389))
-=======
-  if (is_signed) {
-      __ESBMC_assume(bitwidth > 0 && bitwidth <= 256);
-      return -((int256_t)1 << (bitwidth - 1)); // -2^(N-1)
-  } else {
-      return (int256_t)0; // Min of unsigned is always 0
-  }
->>>>>>> 7107ec709 ([solidity] improve overall performance (#2511))
 }
 
 unsigned int _creationCode()
@@ -1112,73 +843,10 @@ __ESBMC_HIDE:;
 unsigned int _runtimeCode()
 {
 __ESBMC_HIDE:;
-<<<<<<< HEAD
-  if(strcmp(c_1, c_2) == 0)
-    return true;
-  else
-    return false;
-}
-)";
-
-const std::string sol_mutex = R"(
-void _ESBMC_check_reentrancy(const bool _ESBMC_mutex)
-{
-__ESBMC_HIDE:;
-  if(_ESBMC_mutex)
-    assert(!"Reentrancy behavior detected");
-=======
   return nondet_uint();
->>>>>>> fa27ea0ea ([Cov & Sol] Coverage support for Solidity (#2389))
 }
 )";
 
-<<<<<<< HEAD
-const std::string sol_ext_library =
-<<<<<<< HEAD
-  sol_itoa + sol_str2hex + sol_uqAddr + sol_max_min + sol_mutex;
-
-const std::string sol_initialize = R"(
-void initialize()
-{
-__ESBMC_HIDE:;
-// we assume it starts from an EOA
-msg_data = (uint256_t)nondet_uint();
-msg_sender = (address_t)nondet_uint();
-msg_sig = nondet_uint();
-msg_value = (uint256_t)nondet_uint();
-
-tx_gasprice = (uint256_t)nondet_uint();
-// this can only be an EOA's address
-tx_origin = (address_t)nondet_uint();
-
-block_basefee = (uint256_t)nondet_uint();
-block_chainid = (uint256_t)nondet_uint();
-block_coinbase = (address_t)nondet_uint();
-block_difficulty = (uint256_t)nondet_uint();
-block_gaslimit = (uint256_t)nondet_uint();
-block_number = (uint256_t)nondet_uint();
-block_prevrandao = (uint256_t)nondet_uint();
-block_timestamp = (uint256_t)nondet_uint();
-
-_gaslimit = nondet_uint();
-
-sol_max_cnt = 0;
-}
-)";
-=======
-  sol_itoa + sol_str2hex + sol_uqAddr + sol_max_min;
->>>>>>> fa27ea0ea ([Cov & Sol] Coverage support for Solidity (#2389))
-
-const std::string sol_c_library = "extern \"C\" {" + sol_typedef + sol_vars +
-<<<<<<< HEAD
-                                  sol_funcs + sol_mapping + sol_mapping_fast +
-                                  sol_array + sol_unit + sol_ext_library +
-                                  sol_initialize + "}";
-=======
-                                  sol_funcs + sol_mapping + sol_array +
-                                  sol_unit + sol_ext_library + "}";
->>>>>>> 0f6d29c39 ([Solidity] Support Unit keywords && insufficient balance checks (#2393))
-=======
 const std::string sol_mutex = R"(
 void _ESBMC_check_reentrancy(const bool _ESBMC_mutex)
 {
@@ -1220,17 +888,10 @@ sol_max_cnt = 0;
 }
 )";
 
-<<<<<<< HEAD
-const std::string sol_c_library =
-  "extern \"C\" {" + sol_typedef + sol_vars + sol_funcs + sol_mapping +
-  sol_array + sol_unit + sol_ext_library + sol_initialize + "}";
->>>>>>> 9aac25be5 ([solidity] fix reentry attack checks (#2422))
-=======
 const std::string sol_c_library = "extern \"C\" {" + sol_typedef + sol_vars +
                                   sol_funcs + sol_mapping + sol_mapping_fast +
                                   sol_array + sol_unit + sol_ext_library +
                                   sol_initialize + "}";
->>>>>>> 7107ec709 ([solidity] improve overall performance (#2511))
 
 // C++
 const std::string sol_cpp_string = R"(

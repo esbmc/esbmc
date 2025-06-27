@@ -1,12 +1,4 @@
 CORE
 contract.solast
-<<<<<<< HEAD
-<<<<<<< HEAD
 --sol contract.sol --k-induction --no-standard-checks --unbound --contract Bank
-=======
---sol contract.sol --k-induction --no-standard-checks --unbound
->>>>>>> 0f6d29c39 ([Solidity] Support Unit keywords && insufficient balance checks (#2393))
-=======
---sol contract.sol --k-induction --no-standard-checks --unbound --contract Bank
->>>>>>> 7107ec709 ([solidity] improve overall performance (#2511))
 ^VERIFICATION FAILED$

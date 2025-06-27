@@ -1,12 +1,3 @@
 CORE
 main.py
-<<<<<<< HEAD
-<<<<<<< HEAD
 ^ERROR: TypeError: bad operand type for abs\(\): 'str'$
-=======
-
-^ERROR: TypeError: operand to abs\(\) is missing a type$
->>>>>>> e73ba5595 ([python]  add support and error checking for Python abs() builtin function (#2441))
-=======
-^ERROR: TypeError: bad operand type for abs\(\): 'str'$
->>>>>>> a766747f5 ([python] Improve abs() handling (#2466))

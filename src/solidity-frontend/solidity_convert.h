@@ -30,39 +30,6 @@ public:
   bool convert();
   static bool is_low_level_call(const std::string &name);
   static bool is_low_level_property(const std::string &name);
-<<<<<<< HEAD
-
-  // find reference
-  static const nlohmann::json &
-  find_last_parent(const nlohmann::json &json, const nlohmann::json &target);
-  static const nlohmann::json &find_parent_contract(
-    const nlohmann::json &json,
-    const nlohmann::json &target);
-  static const nlohmann::json &
-  find_decl_ref_in_contract(const nlohmann::json &j, int ref_id);
-  static const nlohmann::json &
-  find_decl_ref_global(const nlohmann::json &j, int ref_id);
-  static const nlohmann::json &
-  find_decl_ref_unique_id(const nlohmann::json &json, int ref_id);
-  static const nlohmann::json &
-  find_decl_ref(const nlohmann::json &json, int ref_id);
-  static const nlohmann::json &find_constructor_ref(int ref_decl_id);
-  static const nlohmann::json &
-  find_constructor_ref(const std::string &contract_name);
-
-  // json nodes that always empty
-  // used as the return value for find_constructor_ref when
-  // dealing with the implicit constructor call
-  // this is to avoid reference to stack memory associated with local variable returned
-  static const nlohmann::json empty_json;
-  //! Be careful of using 'current_contractName'. This might lead to trouble in inheritance.
-  //! If you are not sure, use 'get_current_contract_name' instead.
-  static std::string current_baseContractName;
-
-  // json for Solidity AST. Use object for contract
-  static nlohmann::json src_ast_json;
-=======
->>>>>>> 0f6d29c39 ([Solidity] Support Unit keywords && insufficient balance checks (#2393))
 
   // find reference
   static const nlohmann::json &
@@ -103,14 +70,7 @@ protected:
     code_typet type;
     bool is_payable;
     bool is_inherit;
-<<<<<<< HEAD
-<<<<<<< HEAD
     bool is_library;
-=======
->>>>>>> 0f6d29c39 ([Solidity] Support Unit keywords && insufficient balance checks (#2393))
-=======
-    bool is_library;
->>>>>>> 297a99968 ([Solidity] Add support for the library entity (#2394))
 
     func_sig(
       const std::string &name,
@@ -118,33 +78,15 @@ protected:
       const std::string &visibility,
       const code_typet &type,
       bool is_payable,
-<<<<<<< HEAD
-<<<<<<< HEAD
       bool is_inherit,
       bool is_library)
-=======
-      bool is_inherit)
->>>>>>> 0f6d29c39 ([Solidity] Support Unit keywords && insufficient balance checks (#2393))
-=======
-      bool is_inherit,
-      bool is_library)
->>>>>>> 297a99968 ([Solidity] Add support for the library entity (#2394))
       : name(name),
         id(id),
         visibility(visibility),
         type(type),
         is_payable(is_payable),
-<<<<<<< HEAD
-<<<<<<< HEAD
         is_inherit(is_inherit),
         is_library(is_library)
-=======
-        is_inherit(is_inherit)
->>>>>>> 0f6d29c39 ([Solidity] Support Unit keywords && insufficient balance checks (#2393))
-=======
-        is_inherit(is_inherit),
-        is_library(is_library)
->>>>>>> 297a99968 ([Solidity] Add support for the library entity (#2394))
     {
     }
 
@@ -155,10 +97,6 @@ protected:
   } func_sig;
 
   void merge_multi_files();
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 82b6c1ccc ([Solidity] Fix function order bug in AST merge (#2400))
   void topological_sort(
     std::unordered_map<std::string, std::unordered_set<std::string>> &graph,
     std::unordered_map<std::string, nlohmann::json> &path_to_json,
@@ -166,13 +104,6 @@ protected:
   void contract_precheck();
   bool populate_auxilary_vars();
   bool get_esbmc_sol_init();
-<<<<<<< HEAD
-=======
-  void contract_precheck();
-  bool populate_auxilary_vars();
->>>>>>> 0f6d29c39 ([Solidity] Support Unit keywords && insufficient balance checks (#2393))
-=======
->>>>>>> 7107ec709 ([solidity] improve overall performance (#2511))
   bool
   populate_function_signature(nlohmann::json &json, const std::string &cname);
   bool populate_low_level_functions(const std::string &cname);
@@ -191,6 +122,33 @@ protected:
     exprt &new_expr);
   bool get_var_decl(const nlohmann::json &ast_node, exprt &new_expr);
   bool get_function_definition(const nlohmann::json &ast_node);
+  bool add_reentry_check(
+    const std::string &c_name,
+    const locationt &loc,
+    exprt &body_exprt);
+  bool get_func_modifier(
+    const nlohmann::json &ast_node,
+    const std::string &c_name,
+    const std::string &f_name,
+    const std::string &f_id,
+    const bool add_reentry,
+    exprt &body_exprt);
+  bool has_modifier_invocation(const nlohmann::json &ast_node);
+  bool insert_modifier_json(
+    const nlohmann::json &ast_node,
+    const std::string &cname,
+    const std::string &fname,
+    nlohmann::json *&modifier_def);
+  bool delete_modifier_json(
+    const std::string &cname,
+    const std::string &fname,
+    nlohmann::json *&modifier_def);
+  void get_modifier_function_name(
+    const std::string &cname,
+    const std::string &mod_name,
+    const std::string &func_name,
+    std::string &name,
+    std::string &id);
   bool get_function_params(
     const nlohmann::json &pd,
     const std::string &cname,
@@ -208,19 +166,9 @@ protected:
     const std::string c_name,
     std::string &name,
     std::string &id);
-<<<<<<< HEAD
-<<<<<<< HEAD
   void add_static_contract_instance(const std::string c_name);
   void
   get_static_contract_instance_ref(const std::string &c_name, exprt &new_expr);
-=======
-  void get_static_contract_instance(const std::string c_name, symbolt &sym);
->>>>>>> 9aac25be5 ([solidity] fix reentry attack checks (#2422))
-=======
-  void add_static_contract_instance(const std::string c_name);
-  void
-  get_static_contract_instance_ref(const std::string &c_name, exprt &new_expr);
->>>>>>> 97c1e1f45 ([Solidity] Refactoring Mapping (#2468))
   void get_inherit_static_contract_instance_name(
     const std::string bs_c_name,
     const std::string c_name,
@@ -265,15 +213,7 @@ protected:
     const std::string &c_name,
     nlohmann::json &c_node,
     std::set<std::string> &merged_list);
-<<<<<<< HEAD
-<<<<<<< HEAD
   void add_inherit_label(nlohmann::json &node, const std::string &cname);
-=======
-  void add_inherit_label(nlohmann::json &node);
->>>>>>> fa27ea0ea ([Cov & Sol] Coverage support for Solidity (#2389))
-=======
-  void add_inherit_label(nlohmann::json &node, const std::string &cname);
->>>>>>> 652ccf467 ([Solidity] function call with options (#2398))
 
   // handle constructor
   bool get_constructor(
@@ -288,24 +228,11 @@ protected:
   bool move_initializer_to_ctor(
     const nlohmann::json *based_contracts,
     const std::string contract_name);
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 9aac25be5 ([solidity] fix reentry attack checks (#2422))
   bool move_initializer_to_ctor(
     const nlohmann::json *based_contracts,
     const std::string contract_name,
     bool is_aux_ctor);
-<<<<<<< HEAD
-<<<<<<< HEAD
   bool move_initializer_to_main(codet &func_body);
-=======
->>>>>>> 0f6d29c39 ([Solidity] Support Unit keywords && insufficient balance checks (#2393))
-=======
->>>>>>> 9aac25be5 ([solidity] fix reentry attack checks (#2422))
-=======
-  bool move_initializer_to_main(codet &func_body);
->>>>>>> 7107ec709 ([solidity] improve overall performance (#2511))
   bool move_inheritance_to_ctor(
     const nlohmann::json *based_contracts,
     const std::string contract_name,
@@ -355,24 +282,16 @@ protected:
     const nlohmann::json &cast_expr,
     exprt &new_expr,
     const nlohmann::json literal_type = nullptr);
-<<<<<<< HEAD
-  bool get_var_decl_ref(const nlohmann::json &decl, exprt &new_expr);
-=======
   bool get_var_decl_ref(
     const nlohmann::json &decl,
     const bool is_this_ptr,
     exprt &new_expr);
->>>>>>> 0f6d29c39 ([Solidity] Support Unit keywords && insufficient balance checks (#2393))
   void get_symbol_decl_ref(
     const std::string &sym_name,
     const std::string &sym_id,
     const typet &t,
     exprt &new_expr);
   bool get_func_decl_ref(const nlohmann::json &decl, exprt &new_expr);
-<<<<<<< HEAD
-  bool get_func_decl_ref(const std::string &func_id, nlohmann::json &decl_ref);
-=======
->>>>>>> 0f6d29c39 ([Solidity] Support Unit keywords && insufficient balance checks (#2393))
   bool get_func_decl_this_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_func_decl_this_ref(
     const std::string contract_name,
@@ -498,20 +417,12 @@ protected:
   get_string_assignment(const exprt &lhs, const exprt &rhs, exprt &new_expr);
 
   // mapping
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 97c1e1f45 ([Solidity] Refactoring Mapping (#2468))
   void get_mapping_inf_arr_name(
     const std::string &cname,
     const std::string &name,
     std::string &arr_name,
     std::string &arr_id);
   bool is_mapping_set_lvalue(const nlohmann::json &json);
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 7107ec709 ([solidity] improve overall performance (#2511))
   bool get_mapping_key_value_type(
     const nlohmann::json &map_node,
     typet &key_t,
@@ -529,16 +440,6 @@ protected:
     const exprt &array,
     const exprt &pos,
     const locationt &location,
-<<<<<<< HEAD
-=======
-  bool get_mapping_type(const nlohmann::json &ast_node, typet &t);
-  bool get_mapping_key_expr(
-    const std::string &current_contractName,
-    const symbolt &sym,
-    const std::string &postfix,
->>>>>>> 0f6d29c39 ([Solidity] Support Unit keywords && insufficient balance checks (#2393))
-=======
->>>>>>> 7107ec709 ([solidity] improve overall performance (#2511))
     exprt &new_expr);
   void get_mapping_struct_function(
     const typet &struct_t,
@@ -546,16 +447,6 @@ protected:
     const side_effect_expr_function_callt &gen_call,
     exprt &new_expr);
   void extract_new_contracts();
-<<<<<<< HEAD
-=======
-  void get_mapping_struct_function(
-    const typet &struct_t,
-    std::string &struct_contract_name,
-    const side_effect_expr_function_callt &gen_call,
-    exprt &new_expr);
->>>>>>> 97c1e1f45 ([Solidity] Refactoring Mapping (#2468))
-=======
->>>>>>> 7107ec709 ([solidity] improve overall performance (#2511))
 
   // line number and locations
   void
@@ -580,14 +471,6 @@ protected:
   // auxiliary functions
   std::string get_modulename_from_path(std::string path);
   std::string get_filename_from_path(std::string path);
-<<<<<<< HEAD
-  const nlohmann::json &find_decl_ref(int ref_decl_id);
-  const nlohmann::json &
-  find_decl_ref(int ref_decl_id, std::string &contract_name);
-  const nlohmann::json &find_constructor_ref(int ref_decl_id);
-  const nlohmann::json &find_constructor_ref(const std::string &contract_name);
-=======
->>>>>>> 0f6d29c39 ([Solidity] Support Unit keywords && insufficient balance checks (#2393))
   void convert_expression_to_code(exprt &expr);
   bool check_intrinsic_function(const nlohmann::json &ast_node);
   nlohmann::json make_implicit_cast_expr(
@@ -600,26 +483,11 @@ protected:
   std::string get_array_size(const nlohmann::json &type_descrpt);
   void get_size_of_expr(const typet &elem_type, exprt &size_of_expr);
   bool is_dyn_array(const nlohmann::json &json_in);
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 97c1e1f45 ([Solidity] Refactoring Mapping (#2468))
   bool is_func_sig_cover(const std::string &derived, const std::string &base);
   bool is_var_getter_matched(
     const std::string &cname,
     const std::string &tname,
     const typet &ttype);
-=======
-  bool is_mapping(const nlohmann::json &ast_node);
-<<<<<<< HEAD
->>>>>>> 0f6d29c39 ([Solidity] Support Unit keywords && insufficient balance checks (#2393))
-=======
-  bool is_func_sig_cover(const std::string &derived, const std::string &base);
-  bool is_var_getter_matched(
-    const std::string &cname,
-    const std::string &tname,
-    const typet &ttype);
->>>>>>> 0ad7495d4 ([Solidity] add support for several keywords and update modelling algorithm (#2405))
 
   void get_default_symbol(
     symbolt &symbol,
@@ -653,56 +521,27 @@ protected:
     const std::string c_name);
   void move_builtin_to_contract(
     const std::string cname,
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 9aac25be5 ([solidity] fix reentry attack checks (#2422))
     const exprt &sym,
     bool is_method);
   void move_builtin_to_contract(
     const std::string cname,
     const exprt &sym,
     const std::string &access,
-<<<<<<< HEAD
-=======
-    const std::string &name,
-    const typet &t,
->>>>>>> 0f6d29c39 ([Solidity] Support Unit keywords && insufficient balance checks (#2393))
-=======
->>>>>>> 9aac25be5 ([solidity] fix reentry attack checks (#2422))
     bool is_method);
   const nlohmann::json &
   get_func_decl_ref(const std::string &c_name, const std::string &f_name);
   void get_builtin_property_expr(
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 7107ec709 ([solidity] improve overall performance (#2511))
     const std::string &cname,
     const std::string &name,
     const exprt &base,
     const locationt &loc,
     exprt &new_expr);
   void get_aux_property_function(
-<<<<<<< HEAD
-<<<<<<< HEAD
     const std::string &cname,
-=======
->>>>>>> 9aac25be5 ([solidity] fix reentry attack checks (#2422))
-=======
-    const std::string &cname,
->>>>>>> 7107ec709 ([solidity] improve overall performance (#2511))
     const exprt &addr,
     const typet &return_t,
     const locationt &loc,
     const std::string &property_name,
-<<<<<<< HEAD
-=======
-    const std::string &name,
-    const exprt &base,
->>>>>>> 0f6d29c39 ([Solidity] Support Unit keywords && insufficient balance checks (#2393))
-=======
->>>>>>> 9aac25be5 ([solidity] fix reentry attack checks (#2422))
     exprt &new_expr);
   bool get_new_temporary_obj(
     const std::string &c_name,
@@ -722,26 +561,6 @@ protected:
     const exprt &_mem_call,
     const bool is_func_call,
     exprt &new_expr);
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-  bool populate_nil_this_arguments(
-    const exprt &ctor,
-    const exprt &this_object,
-    side_effect_expr_function_callt &call);
-  bool get_this_object(const exprt &func, exprt &this_object);
->>>>>>> 0f6d29c39 ([Solidity] Support Unit keywords && insufficient balance checks (#2393))
-=======
-  void get_new_object(const typet &t, exprt &this_object);
-  bool get_high_level_member_access(
-    const nlohmann::json &expr,
-    const nlohmann::json &literal_type,
-    const exprt &base,
-    const exprt &member,
-    const exprt &_mem_call,
-    const bool is_func_call,
-    exprt &new_expr);
->>>>>>> 652ccf467 ([Solidity] function call with options (#2398))
   bool get_high_level_member_access(
     const nlohmann::json &expr,
     const exprt &base,
@@ -749,15 +568,6 @@ protected:
     const exprt &_mem_call,
     const bool is_func_call,
     exprt &new_expr);
-<<<<<<< HEAD
-<<<<<<< HEAD
-  bool get_nondet_contract_name(
-    const std::string &var_name,
-    std::string &name,
-    std::string &id);
-  bool get_base_cname(const exprt &base, std::string &cname);
-=======
-=======
   bool get_low_level_member_accsss(
     const nlohmann::json &expr,
     const nlohmann::json &options,
@@ -783,7 +593,6 @@ protected:
     exprt &front_block,
     exprt &back_block);
 
->>>>>>> 0f6d29c39 ([Solidity] Support Unit keywords && insufficient balance checks (#2393))
   bool get_bind_cname_expr(const nlohmann::json &json, exprt &bind_cname_expr);
   void get_bind_cname_func_name(
     const std::string &cname,
@@ -795,7 +604,6 @@ protected:
     const nlohmann::json &decl_ref,
     side_effect_expr_function_callt &call);
   bool get_base_contract_name(const exprt &base, std::string &cname);
->>>>>>> fa27ea0ea ([Cov & Sol] Coverage support for Solidity (#2389))
 
   // literal conversion functions
   bool convert_integer_literal(
@@ -817,18 +625,6 @@ protected:
   namespacet ns;
   // json for Solidity AST. Use vector for multiple contracts
   nlohmann::json src_ast_json_array = nlohmann::json::array();
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-  // json for Solidity AST. Use object for single contract
-=======
-  // json for Solidity AST. Use object for contract
->>>>>>> 0f6d29c39 ([Solidity] Support Unit keywords && insufficient balance checks (#2393))
-  nlohmann::json src_ast_json;
->>>>>>> fa27ea0ea ([Cov & Sol] Coverage support for Solidity (#2389))
-=======
->>>>>>> 297a99968 ([Solidity] Add support for the library entity (#2394))
   // Solidity contracts/ function to be verified
   const std::string &tgt_cnts;
   const std::string &tgt_func;
@@ -856,21 +652,6 @@ protected:
   std::stack<const nlohmann::json *> current_BinOp_type;
   std::string current_functionName;
 
-<<<<<<< HEAD
-  //! Be careful of using 'current_contractName'. This might lead to trouble in inheritance.
-  //! If you are not sure, use 'get_current_contract_name' instead.
-<<<<<<< HEAD
-  std::string current_contractName;
-<<<<<<< HEAD
-  std::string current_fileName;
-=======
-=======
->>>>>>> 0f6d29c39 ([Solidity] Support Unit keywords && insufficient balance checks (#2393))
-  std::string current_baseContractName;
->>>>>>> fa27ea0ea ([Cov & Sol] Coverage support for Solidity (#2389))
-
-=======
->>>>>>> 297a99968 ([Solidity] Add support for the library entity (#2394))
   // Auxiliary data structures:
   // Mapping from the node 'id' to the exported symbol (i.e. contract, error, constant var ....)
   std::unordered_map<int, std::string> exportedSymbolsList;
@@ -885,28 +666,14 @@ protected:
 
   // contract name list
   std::unordered_map<int, std::string> contractNamesMap;
-<<<<<<< HEAD
-  std::unordered_set<std::string> contractNamesList;
-  // Store the ast_node["id"] of contract/struct/function/...
-  std::unordered_map<int, std::string> scope_map;
-=======
   std::set<std::string> contractNamesList;
   // for mapping hack
   std::set<std::string> newContractSet;
   // Store the ast_node["id"] of struct/error
   // where entity contains "members": [{}, {}...]
   std::unordered_map<int, std::string> member_entity_scope;
->>>>>>> fa27ea0ea ([Cov & Sol] Coverage support for Solidity (#2389))
   // Store state variables
   code_blockt initializers;
-  // For inheritance
-  const nlohmann::json *ctor_modifier;
-<<<<<<< HEAD
-  const nlohmann::json *based_contracts;
-  // This should be set to true when handling a new-object, member call of contract A while parsing contract B
-  bool is_contract_member_access;
-=======
->>>>>>> 0f6d29c39 ([Solidity] Support Unit keywords && insufficient balance checks (#2393))
 
   static constexpr const char *mode = "C++";
 
@@ -915,18 +682,6 @@ protected:
   // The prefix for the id of each class
   std::string prefix = "tag-";
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
-  // json nodes that always empty
-  // used as the return value for find_constructor_ref when
-  // dealing with the implicit constructor call
-  // this is to avoid reference to stack memory associated with local variable returned
-  static const nlohmann::json empty_json;
-
->>>>>>> fa27ea0ea ([Cov & Sol] Coverage support for Solidity (#2389))
-=======
->>>>>>> 297a99968 ([Solidity] Add support for the library entity (#2394))
   // for auxiliary var name
   int aux_counter;
 

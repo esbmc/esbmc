@@ -1,12 +1,4 @@
-<<<<<<< HEAD
-<<<<<<< HEAD
 CORE
-=======
-KNOWNBUG
->>>>>>> 1145ef55b ([python] added test cases for numpy dot)
-=======
-CORE
->>>>>>> 7b9925f49 ([python] add support for numpy.dot() with 1D and mixed-dimension arrays (#2489))
 main.py
 
 ^VERIFICATION SUCCESSFUL$

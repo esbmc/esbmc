@@ -1,14 +1,4 @@
 CORE
 main.py
-<<<<<<< HEAD
-<<<<<<< HEAD
 --incremental-bmc
 ^VERIFICATION SUCCESSFUL$
-=======
-
-^VERIFICATION SUCCESSFUL$
->>>>>>> 9041d9851 ([python] improved support for power operator (**) (#2478))
-=======
---incremental-bmc
-^VERIFICATION SUCCESSFUL$
->>>>>>> 59fb1bf8f ([python] enhanced handling of true division (#2505))

@@ -1,12 +1,4 @@
-<<<<<<< HEAD
-<<<<<<< HEAD
 CORE
-=======
-KNOWNBUG
->>>>>>> 1f9669d8d ([regression] added test cases in Python for function call)
-=======
-CORE
->>>>>>> 933e6bdb6 ([python] Handle function calls used as arguments (#2465))
 main.py
 
 ^VERIFICATION SUCCESSFUL$

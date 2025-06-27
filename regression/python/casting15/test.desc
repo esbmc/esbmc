@@ -1,12 +1,4 @@
 CORE
 main.py
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 ^ERROR: ValueError: chr\(\) argument out of valid Unicode range: -1$
-=======
-^ERROR: ValueError: chr\(\) argument out of ASCII range: -1$
->>>>>>> 1078ace71 ([Python]  add chr() built-in function support (#2416))
-=======
-^ERROR: ValueError: chr\(\) argument out of valid Unicode range: -1$
->>>>>>> 799263ccf ([python] fixed range check)

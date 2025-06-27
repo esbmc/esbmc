@@ -164,23 +164,7 @@ do
     C) BASE_ARGS="$BASE_ARGS -DESBMC_SVCOMP=ON"
        SOLVER_FLAGS="\
           -DENABLE_BOOLECTOR=On \
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
           -DENABLE_YICES=On \
-=======
-          -DENABLE_YICES=OFF \
->>>>>>> b24ece869 (Disabled broken solvers for benchexec CI (#2481))
-=======
-          -DENABLE_YICES=On \
->>>>>>> a9204b548 ([build] fix solvers gmp library link (#2483))
-=======
-          -DENABLE_YICES=OFF \
->>>>>>> 24f1ed697 (Revert "[build] fix solvers gmp library link" (#2485))
-=======
-          -DENABLE_YICES=On \
->>>>>>> 0f67edca1 (Revert "Revert "[build] fix solvers gmp library link"" (#2486))
           -DENABLE_CVC4=OFF \
           -DENABLE_BITWUZLA=On \
           -DENABLE_Z3=On \

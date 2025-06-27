@@ -1,20 +1,4 @@
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
 CORE
-=======
-KNOWNBUG
->>>>>>> 96f674437 ([regression] added test case for casting)
-=======
-CORE
->>>>>>> 987532605 ([regression] enabled test case)
-=======
-KNOWNBUG
->>>>>>> 92da6eab4 ([regression] disabled test case)
-=======
-CORE
->>>>>>> 8fc89cda7 ([python] check for float and str comparisons)
 main.py
 
 ^VERIFICATION FAILED$

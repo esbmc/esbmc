@@ -1,12 +1,4 @@
 CORE
 contract.solast
-<<<<<<< HEAD
-<<<<<<< HEAD
 --sol contract.sol --contract C --k-induction --no-standard-checks
-=======
---sol contract.sol --contract C --k-induction
->>>>>>> 46fe041cd ([solidity] fix regression (#2402))
-=======
---sol contract.sol --contract C --k-induction --no-standard-checks
->>>>>>> 9aac25be5 ([solidity] fix reentry attack checks (#2422))
 ^VERIFICATION FAILED$

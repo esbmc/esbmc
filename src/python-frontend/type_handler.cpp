@@ -146,8 +146,6 @@ std::vector<int> type_handler::get_array_type_shape(const typet &type) const
 typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   const
 {
-<<<<<<< HEAD
-<<<<<<< HEAD
   if (ast_type == "Any")
     return empty_typet();
 
@@ -156,16 +154,6 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "NoneType")
     return pointer_type();
 
-<<<<<<< HEAD
-=======
->>>>>>> 038fae2a5 ([python] add support for python's oct() built-in function (#2421))
-=======
-  if (ast_type == "Any")
-    return empty_typet();
-
->>>>>>> bea8feb3b ([python] Handling NumPy dot product (#2460))
-=======
->>>>>>> 67d826a87 ([python]  support for "NoneType" (#2493))
   // float — represents IEEE 754 double-precision
   if (ast_type == "float")
     return double_type();
@@ -196,47 +184,16 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
     // TODO: Refactor to model using unsigned/signed char
     return build_array(long_long_int_type(), type_size);
   }
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 038fae2a5 ([python] add support for python's oct() built-in function (#2421))
 
   // str: immutable sequences of Unicode characters
   // chr(): returns a 1-character string
   // hex(): returns string representation of integer in hex
-<<<<<<< HEAD
-<<<<<<< HEAD
   // oct(): Converts an integer to a lowercase octal string
   // ord(): Converts a 1-character string to its Unicode code point (as integer)
   // abs(): Return the absolute value of a number
   if (
     ast_type == "str" || ast_type == "chr" || ast_type == "hex" ||
     ast_type == "oct" || ast_type == "ord" || ast_type == "abs")
-=======
-  if (ast_type == "str" || ast_type == "chr")
->>>>>>> 1078ace71 ([Python]  add chr() built-in function support (#2416))
-=======
-  if (ast_type == "str" || ast_type == "chr" || ast_type == "hex")
->>>>>>> 8a6c3ff59 ([python] Add support for hex() built-in function (#2419))
-=======
-  // oct() — Converts an integer to a lowercase octal string
-  if (
-    ast_type == "str" || ast_type == "chr" || ast_type == "hex" ||
-    ast_type == "oct")
->>>>>>> 038fae2a5 ([python] add support for python's oct() built-in function (#2421))
-=======
-  // oct(): Converts an integer to a lowercase octal string
-  // ord(): Converts a 1-character string to its Unicode code point (as integer)
-  // abs(): Return the absolute value of a number
-  if (
-    ast_type == "str" || ast_type == "chr" || ast_type == "hex" ||
-<<<<<<< HEAD
-    ast_type == "oct" || ast_type == "ord")
->>>>>>> ffcecbd12 ([python] Handle ord(): convert single-character string to integer Unicode code point (#2423))
-=======
-    ast_type == "oct" || ast_type == "ord" || ast_type == "abs")
->>>>>>> e73ba5595 ([python]  add support and error checking for Python abs() builtin function (#2441))
   {
     if (type_size == 1)
     {
@@ -251,24 +208,9 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (json_utils::is_class(ast_type, converter_.ast()))
     return symbol_typet("tag-" + ast_type);
 
-<<<<<<< HEAD
-<<<<<<< HEAD
   if (ast_type != "Any")
     log_warning("Unknown or unsupported AST type: {}", ast_type);
 
-=======
-  // Unknown / unsupported type
-<<<<<<< HEAD
-  log_warning("python", "Unknown or unsupported AST type: {}", ast_type);
->>>>>>> 038fae2a5 ([python] add support for python's oct() built-in function (#2421))
-=======
-  log_warning("Unknown or unsupported AST type: {}", ast_type);
->>>>>>> 4239e400b ([python] fixed log warning)
-=======
-  if (ast_type != "Any")
-    log_warning("Unknown or unsupported AST type: {}", ast_type);
-
->>>>>>> 9b1bde235 (Fix bounds computation for multi-dimensional arrays (#2446))
   return empty_typet();
 }
 
@@ -286,114 +228,44 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
   else if (elem.is_number_float())
     return double_type();
   else if (elem.is_string())
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> a710fa95b (Improved memcpy function)
-=======
->>>>>>> 8bb3dfef5 (Apply automatic changes)
-=======
-=======
->>>>>>> 8ab75a401 (Fixed cprover_library.cpp file error)
->>>>>>> cdbeeab4d (Fixed cprover_library.cpp file error)
   {
     size_t str_size = elem.get<std::string>().size();
     if (str_size > 1)
       str_size += 1;
     return build_array(char_type(), str_size);
   }
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
-  // Handle nested value object
-  if (elem.is_object())
-  {
-=======
-    return build_array(char_type(), elem.get<std::string>().size());
-=======
->>>>>>> a710fa95b (Improved memcpy function)
-=======
-=======
->>>>>>> cdbeeab4d (Fixed cprover_library.cpp file error)
-=======
-    return build_array(char_type(), elem.get<std::string>().size());
->>>>>>> 65e1daef5 (Apply automatic changes)
->>>>>>> 8bb3dfef5 (Apply automatic changes)
 
   // Handle nested value object
   if (elem.is_object())
   {
-<<<<<<< HEAD
->>>>>>> e7c955101 (Update stats-300s.txt)
-=======
-<<<<<<< HEAD
->>>>>>> 8bb3dfef5 (Apply automatic changes)
     // Recursive delegation for wrapper node
     if (elem.contains("value"))
       return get_typet(elem["value"]);
 
     // Handle Python AST UnaryOp node (e.g., -1, +1, ~1, not x)
     if (elem["_type"] == "UnaryOp" && elem.contains("operand"))
-=======
->>>>>>> 65e1daef5 (Apply automatic changes)
     {
-      size_t str_size = elem.get<std::string>().size();
-      if (str_size > 1)
-        str_size += 1;
-      return build_array(char_type(), str_size);
+      // For unary operations, the result type is typically the same as the operand type
+      return get_typet(elem["operand"]);
     }
 
-    // Handle nested value object
-    if (elem.is_object())
+    // Handle Python AST List node
+    if (elem["_type"] == "List" && elem.contains("elts"))
     {
-=======
-  // Handle nested value object
-  if (elem.is_object())
-  {
->>>>>>> 8ab75a401 (Fixed cprover_library.cpp file error)
-      // Recursive delegation for wrapper node
-      if (elem.contains("value"))
-        return get_typet(elem["value"]);
-
-      // Handle Python AST UnaryOp node (e.g., -1, +1, ~1, not x)
-      if (elem["_type"] == "UnaryOp" && elem.contains("operand"))
-      {
-        // For unary operations, the result type is typically the same as the operand type
-        return get_typet(elem["operand"]);
-      }
-
-      // Handle Python AST List node
-      if (elem["_type"] == "List" && elem.contains("elts"))
-      {
-        const auto &elements = elem["elts"];
-        if (elements.empty())
-          return build_array(long_long_int_type(), 0);
-
-        typet subtype = get_typet(elements[0]);
-        return build_array(subtype, elements.size());
-      }
-    }
-
-    if (elem.is_array())
-    {
-      if (elem.empty())
+      const auto &elements = elem["elts"];
+      if (elements.empty())
         return build_array(long_long_int_type(), 0);
 
-      typet subtype = get_typet(elem[0]);
-      return build_array(subtype, elem.size());
+      typet subtype = get_typet(elements[0]);
+      return build_array(subtype, elements.size());
     }
-
-    throw std::runtime_error("Invalid type");
   }
 
-  bool type_handler::has_multiple_types(const nlohmann::json &container) const
+  if (elem.is_array())
   {
-    if (container.empty())
-      return false;
+    if (elem.empty())
+      return build_array(long_long_int_type(), 0);
 
-<<<<<<< HEAD
     typet subtype = get_typet(elem[0]);
     return build_array(subtype, elem.size());
   }
@@ -439,9 +311,6 @@ bool type_handler::has_multiple_types(const nlohmann::json &container) const
   else
   {
     // Get the type of the first element if it is not a sublist
-<<<<<<< HEAD
-    t = get_typet(container[0]["value"]);
-=======
     if (container[0]["_type"] == "UnaryOp")
     {
       if (
@@ -458,311 +327,179 @@ bool type_handler::has_multiple_types(const nlohmann::json &container) const
       else
         return false; // Can't determine type, assume consistent
     }
->>>>>>> 468bb9ad1 ([numpy] disallow 3D or higher-dimensional arrays (#2492))
   }
 
   for (const auto &element : container)
   {
     if (element["_type"] == "List")
-=======
-    // Determine the type of the first element
-    typet t;
-    if (container[0]["_type"] == "List")
->>>>>>> 65e1daef5 (Apply automatic changes)
     {
       // Check if the sublist exists and has elements
-      if (!container[0].contains("elts") || container[0]["elts"].empty())
-        return false; // Empty or missing sublists are considered consistent
+      if (!element.contains("elts") || element["elts"].empty())
+        continue; // Empty or missing sublists are consistent with any type
 
-      // Check the type of elements within the sublist
-      if (has_multiple_types(container[0]["elts"]))
+      // Check the consistency of the sublist
+      if (has_multiple_types(element["elts"]))
         return true;
 
-<<<<<<< HEAD
       // Compare the type of internal elements in the sublist with the type `t`
-<<<<<<< HEAD
-      if (get_typet(element["elts"][0]["value"]) != t)
-        return true;
-=======
       const auto &first_elt = element["elts"][0];
-=======
-      // Get the type of the elements in the sublist
-      const auto &first_elt = container[0]["elts"][0];
->>>>>>> 65e1daef5 (Apply automatic changes)
       if (first_elt["_type"] == "UnaryOp")
       {
         if (
           first_elt.contains("operand") &&
           first_elt["operand"].contains("value"))
-          t = get_typet(first_elt["operand"]["value"]);
-        else
-          return false; // Can't determine type, assume consistent
+        {
+          if (get_typet(first_elt["operand"]["value"]) != t)
+            return true;
+        }
+        // If we can't determine the type, skip this element (assume consistent)
       }
       else
       {
         if (first_elt.contains("value"))
-          t = get_typet(first_elt["value"]);
-        else
-          return false; // Can't determine type, assume consistent
+        {
+          if (get_typet(first_elt["value"]) != t)
+            return true;
+        }
+        // If we can't determine the type, skip this element (assume consistent)
       }
->>>>>>> 468bb9ad1 ([numpy] disallow 3D or higher-dimensional arrays (#2492))
     }
     else
     {
-<<<<<<< HEAD
       // Compare the type of the current element with `t`
-<<<<<<< HEAD
-      if (get_typet(element["value"]) != t)
-        return true;
-=======
       if (element["_type"] == "UnaryOp")
-=======
-      // Get the type of the first element if it is not a sublist
-      if (container[0]["_type"] == "UnaryOp")
->>>>>>> 65e1daef5 (Apply automatic changes)
       {
-        if (
-          container[0].contains("operand") &&
-          container[0]["operand"].contains("value"))
-          t = get_typet(container[0]["operand"]["value"]);
-        else
-          return false; // Can't determine type, assume consistent
+        if (element.contains("operand") && element["operand"].contains("value"))
+        {
+          if (get_typet(element["operand"]["value"]) != t)
+            return true;
+        }
+        // If we can't determine the type, skip this element (assume consistent)
       }
       else
       {
-        if (container[0].contains("value"))
-          t = get_typet(container[0]["value"]);
-        else
-          return false; // Can't determine type, assume consistent
+        if (element.contains("value"))
+        {
+          if (get_typet(element["value"]) != t)
+            return true;
+        }
+        // If we can't determine the type, skip this element (assume consistent)
       }
->>>>>>> 468bb9ad1 ([numpy] disallow 3D or higher-dimensional arrays (#2492))
     }
+  }
+  return false;
+}
 
-    for (const auto &element : container)
+typet type_handler::get_list_type(const nlohmann::json &list_value) const
+{
+  if (list_value["_type"] == "arg" && list_value.contains("annotation"))
+  {
+    assert(list_value["annotation"]["value"]["id"] == "list");
+    typet t =
+      get_typet(list_value["annotation"]["slice"]["id"].get<std::string>());
+    return build_array(t, 0);
+  }
+
+  if (list_value["_type"] == "List") // Get list value type from elements
+  {
+    const nlohmann::json &elts = list_value["elts"];
+
+    if (!has_multiple_types(elts)) // All elements have the same type
     {
-      if (element["_type"] == "List")
-      {
-        // Check if the sublist exists and has elements
-        if (!element.contains("elts") || element["elts"].empty())
-          continue; // Empty or missing sublists are consistent with any type
+      typet subtype;
 
-        // Check the consistency of the sublist
-        if (has_multiple_types(element["elts"]))
-          return true;
-
-        // Compare the type of internal elements in the sublist with the type `t`
-        const auto &first_elt = element["elts"][0];
-        if (first_elt["_type"] == "UnaryOp")
-        {
-          if (
-            first_elt.contains("operand") &&
-            first_elt["operand"].contains("value"))
-          {
-            if (get_typet(first_elt["operand"]["value"]) != t)
-              return true;
-          }
-          // If we can't determine the type, skip this element (assume consistent)
-        }
-        else
-        {
-          if (first_elt.contains("value"))
-          {
-            if (get_typet(first_elt["value"]) != t)
-              return true;
-          }
-          // If we can't determine the type, skip this element (assume consistent)
-        }
+      if (elts[0]["_type"] == "Constant" || elts[0]["_type"] == "UnaryOp")
+      { // One-dimensional list
+        // Retrieve the type of the first element
+        const auto &elem = (elts[0]["_type"] == "UnaryOp")
+                             ? elts[0]["operand"]["value"]
+                             : elts[0]["value"];
+        subtype = get_typet(elem);
       }
       else
-      {
-        // Compare the type of the current element with `t`
-        if (element["_type"] == "UnaryOp")
-        {
-          if (
-            element.contains("operand") && element["operand"].contains("value"))
-          {
-            if (get_typet(element["operand"]["value"]) != t)
-              return true;
-          }
-          // If we can't determine the type, skip this element (assume consistent)
-        }
-        else
-        {
-          if (element.contains("value"))
-          {
-            if (get_typet(element["value"]) != t)
-              return true;
-          }
-          // If we can't determine the type, skip this element (assume consistent)
-        }
+      { // Multi-dimensional list
+        // Get sub-array type
+        subtype = get_typet(elts[0]["elts"]);
       }
+
+      return build_array(subtype, elts.size());
     }
-    return false;
+    throw std::runtime_error("Multiple type lists are not supported yet");
   }
 
-  typet type_handler::get_list_type(const nlohmann::json &list_value) const
+  if (list_value["_type"] == "Call") // Get list type from function return type
   {
-    if (list_value["_type"] == "arg" && list_value.contains("annotation"))
-    {
-      assert(list_value["annotation"]["value"]["id"] == "list");
-      typet t =
-        get_typet(list_value["annotation"]["slice"]["id"].get<std::string>());
-      return build_array(t, 0);
-    }
+    symbol_id sid(
+      converter_.python_file(),
+      converter_.current_classname(),
+      converter_.current_function_name());
 
-    if (list_value["_type"] == "List") // Get list value type from elements
-    {
-      const nlohmann::json &elts = list_value["elts"];
-
-      if (!has_multiple_types(elts)) // All elements have the same type
-      {
-        typet subtype;
-
-        if (elts[0]["_type"] == "Constant" || elts[0]["_type"] == "UnaryOp")
-        { // One-dimensional list
-          // Retrieve the type of the first element
-          const auto &elem = (elts[0]["_type"] == "UnaryOp")
-                               ? elts[0]["operand"]["value"]
-                               : elts[0]["value"];
-          subtype = get_typet(elem);
-        }
-        else
-        { // Multi-dimensional list
-          // Get sub-array type
-          subtype = get_typet(elts[0]["elts"]);
-        }
-
-        return build_array(subtype, elts.size());
-      }
-      throw std::runtime_error("Multiple type lists are not supported yet");
-    }
-
-    if (
-      list_value["_type"] == "Call") // Get list type from function return type
-    {
-      symbol_id sid(
-        converter_.python_file(),
-        converter_.current_classname(),
-        converter_.current_function_name());
-
-      if (list_value["func"]["_type"] == "Attribute")
-        sid.set_function(list_value["func"]["attr"]);
-      else
-        sid.set_function(list_value["func"]["id"]);
-
-      symbolt *func_symbol = converter_.find_symbol(sid.to_string());
-
-      assert(func_symbol);
-      return static_cast<code_typet &>(func_symbol->type).return_type();
-    }
-
-    return typet();
-  }
-
-  /// This method inspects the JSON representation of a Python operand node and attempts to
-  /// infer its type based on its AST node type (`_type`). It currently supports variable
-  /// names, constants (literals), and list subscripts. This type information is used for
-  /// symbolic execution or translation within ESBMC.
-  std::string type_handler::get_operand_type(const nlohmann::json &operand)
-    const
-  {
-    // Handle variable reference (e.g., `x`)
-    if (
-      operand.contains("_type") && operand["_type"] == "Name" &&
-      operand.contains("id"))
-      return get_var_type(operand["id"]);
-
-    // Handle constant/literal values (e.g., 42, "hello", True, 3.14)
-    else if (operand["_type"] == "Constant" && operand.contains("value"))
-    {
-      const auto &value = operand["value"];
-      if (value.is_string())
-        return "str";
-      else if (value.is_number_integer() || value.is_number_unsigned())
-        return "int";
-      else if (value.is_boolean())
-        return "bool";
-      else if (value.is_number_float())
-        return "float";
-    }
-
-    // Handle list subscript (e.g., `mylist[0]`)
-    else if (
-      operand["_type"] == "Subscript" && operand.contains("value") &&
-      get_operand_type(operand["value"]) == "list")
-    {
-      const auto &list_expr = operand["value"];
-      if (list_expr.contains("id"))
-      {
-        std::string list_id = list_expr["id"].get<std::string>();
-
-        // Find the declaration of the list variable
-        nlohmann::json list_node = json_utils::find_var_decl(
-          list_id, converter_.current_function_name(), converter_.ast());
-
-        // Get the type of the list and return the subtype (element type)
-        array_typet list_type = get_list_type(list_node["value"]);
-        return type_to_string(list_type.subtype());
-      }
-    }
-
-    // If no known type can be determined, issue a warning and return std::string()
-    log_warning(
-      "type_handler::get_operand_type: unable to determine operand type for "
-      "AST "
-      "node: {}",
-      operand.dump(2));
-    return std::string();
-  }
-
-  bool type_handler::is_2d_array(const nlohmann::json &arr) const
-  {
-    return arr.contains("_type") && arr["_type"] == "List" &&
-           arr.contains("elts") && !arr["elts"].empty() &&
-           arr["elts"][0].is_object() && arr["elts"][0].contains("elts");
-  }
-
-  // Add this method to the type_handler class
-  int type_handler::get_array_dimensions(const nlohmann::json &arr) const
-  {
-    if (!arr.is_object() || arr["_type"] != "List" || !arr.contains("elts"))
-      return 0;
-
-    if (arr["elts"].empty())
-      return 1; // Empty array is considered 1D
-
-    // Check the first element to determine nesting depth
-    const auto &first_elem = arr["elts"][0];
-
-    if (!first_elem.is_object())
-      return 1;
-
-    if (first_elem["_type"] == "List")
-    {
-      // Recursive case: this is a nested array
-      return 1 + get_array_dimensions(first_elem);
-    }
+    if (list_value["func"]["_type"] == "Attribute")
+      sid.set_function(list_value["func"]["attr"]);
     else
+      sid.set_function(list_value["func"]["id"]);
+
+    symbolt *func_symbol = converter_.find_symbol(sid.to_string());
+
+    assert(func_symbol);
+    return static_cast<code_typet &>(func_symbol->type).return_type();
+  }
+
+  return typet();
+}
+
+/// This method inspects the JSON representation of a Python operand node and attempts to
+/// infer its type based on its AST node type (`_type`). It currently supports variable
+/// names, constants (literals), and list subscripts. This type information is used for
+/// symbolic execution or translation within ESBMC.
+std::string type_handler::get_operand_type(const nlohmann::json &operand) const
+{
+  // Handle variable reference (e.g., `x`)
+  if (
+    operand.contains("_type") && operand["_type"] == "Name" &&
+    operand.contains("id"))
+    return get_var_type(operand["id"]);
+
+  // Handle constant/literal values (e.g., 42, "hello", True, 3.14)
+  else if (operand["_type"] == "Constant" && operand.contains("value"))
+  {
+    const auto &value = operand["value"];
+    if (value.is_string())
+      return "str";
+    else if (value.is_number_integer() || value.is_number_unsigned())
+      return "int";
+    else if (value.is_boolean())
+      return "bool";
+    else if (value.is_number_float())
+      return "float";
+  }
+
+  // Handle list subscript (e.g., `mylist[0]`)
+  else if (
+    operand["_type"] == "Subscript" && operand.contains("value") &&
+    get_operand_type(operand["value"]) == "list")
+  {
+    const auto &list_expr = operand["value"];
+    if (list_expr.contains("id"))
     {
-      // Base case: first element is not a list, so this is 1D
-      return 1;
+      std::string list_id = list_expr["id"].get<std::string>();
+
+      // Find the declaration of the list variable
+      nlohmann::json list_node = json_utils::find_var_decl(
+        list_id, converter_.current_function_name(), converter_.ast());
+
+      // Get the type of the list and return the subtype (element type)
+      array_typet list_type = get_list_type(list_node["value"]);
+      return type_to_string(list_type.subtype());
     }
   }
-<<<<<<< HEAD
 
   // If no known type can be determined, issue a warning and return std::string()
   log_warning(
-<<<<<<< HEAD
-    "type_handler::get_operand_type: unable to determine operand type for "
-    "AST "
-=======
     "type_handler::get_operand_type: unable to determine operand type for AST "
->>>>>>> e7c955101 (Update stats-300s.txt)
     "node: {}",
     operand.dump(2));
   return std::string();
-<<<<<<< HEAD
-<<<<<<< HEAD
 }
 
 bool type_handler::is_2d_array(const nlohmann::json &arr) const
@@ -771,10 +508,6 @@ bool type_handler::is_2d_array(const nlohmann::json &arr) const
          arr.contains("elts") && !arr["elts"].empty() &&
          arr["elts"][0].is_object() && arr["elts"][0].contains("elts");
 }
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 468bb9ad1 ([numpy] disallow 3D or higher-dimensional arrays (#2492))
 
 // Add this method to the type_handler class
 int type_handler::get_array_dimensions(const nlohmann::json &arr) const
@@ -802,16 +535,3 @@ int type_handler::get_array_dimensions(const nlohmann::json &arr) const
     return 1;
   }
 }
-<<<<<<< HEAD
-=======
-}
->>>>>>> 038fae2a5 ([python] add support for python's oct() built-in function (#2421))
-=======
-}
->>>>>>> 9b1bde235 (Fix bounds computation for multi-dimensional arrays (#2446))
-=======
->>>>>>> 7b9925f49 ([python] add support for numpy.dot() with 1D and mixed-dimension arrays (#2489))
-=======
->>>>>>> 468bb9ad1 ([numpy] disallow 3D or higher-dimensional arrays (#2492))
-=======
->>>>>>> 65e1daef5 (Apply automatic changes)

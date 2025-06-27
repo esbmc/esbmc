@@ -1,12 +1,4 @@
 CORE
 main.py
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 ^ERROR: Unsupported Numpy call: fabs
-=======
-^ERROR: Unsupported NumPy call: fabs$
->>>>>>> a76609233 ([python] add support for numpy.fabs() (#2435))
-=======
-^ERROR: Unsupported Numpy call: fabs
->>>>>>> bea8feb3b ([python] Handling NumPy dot product (#2460))

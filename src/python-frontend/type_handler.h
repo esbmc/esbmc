@@ -84,16 +84,8 @@ public:
   */
   bool is_2d_array(const nlohmann::json &arr) const;
 
-<<<<<<< HEAD
-<<<<<<< HEAD
   int get_array_dimensions(const nlohmann::json &arr) const;
 
-=======
->>>>>>> 7b9925f49 ([python] add support for numpy.dot() with 1D and mixed-dimension arrays (#2489))
-=======
-  int get_array_dimensions(const nlohmann::json &arr) const;
-
->>>>>>> 468bb9ad1 ([numpy] disallow 3D or higher-dimensional arrays (#2492))
 private:
   const python_converter &converter_;
 };

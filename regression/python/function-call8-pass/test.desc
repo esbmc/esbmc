@@ -1,12 +1,4 @@
-<<<<<<< HEAD
-<<<<<<< HEAD
 CORE
-=======
-KNOWNBUG
->>>>>>> 933e6bdb6 ([python] Handle function calls used as arguments (#2465))
-=======
-CORE
->>>>>>> a766747f5 ([python] Improve abs() handling (#2466))
 main.py
 
 ^VERIFICATION SUCCESSFUL$

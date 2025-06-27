@@ -1,12 +1,4 @@
 CORE
 main.py
-<<<<<<< HEAD
-<<<<<<< HEAD
 --incremental-bmc
-=======
---function integer_squareroot --incremental-bmc
->>>>>>> e2b480c2a ([numpy] added integer_squareroot test case)
-=======
---incremental-bmc
->>>>>>> 5b7dded0b ([numpy] added integer_squareroot test case)
 ^VERIFICATION FAILED$

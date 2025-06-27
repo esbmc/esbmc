@@ -1,12 +1,4 @@
 CORE
 main.py
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 ^ERROR: TypeError: chr\(\) argument must be int, not float$
-=======
-^ERROR: TypeError: chr\(\) argument must be int, not float number$
->>>>>>> 1078ace71 ([Python]  add chr() built-in function support (#2416))
-=======
-^ERROR: TypeError: chr\(\) argument must be int, not float$
->>>>>>> 4604cc57c ([python] refactor our python frontend and extend chr() and float() built-in functions (#2417))

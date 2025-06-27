@@ -1,12 +1,4 @@
-<<<<<<< HEAD
-<<<<<<< HEAD
 CORE
-=======
-KNOWNBUG
->>>>>>> 702b6f4ad ([python] improved return type inference (#2494))
-=======
-CORE
->>>>>>> cad2c8c57 ([python] Handle string annotations like -> int (#2495))
 main.py
 
 ^VERIFICATION SUCCESSFUL$

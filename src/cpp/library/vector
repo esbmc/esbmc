@@ -30,22 +30,6 @@ public:
   typedef size_t size_type;
   typedef ptrdiff_t difference_type;
 
-<<<<<<< HEAD
-=======
-// Minimal allocator implementation
-template <typename T>
-class allocator
-{
-public:
-  typedef T value_type;
-  typedef T *pointer;
-  typedef const T *const_pointer;
-  typedef T &reference;
-  typedef const T &const_reference;
-  typedef size_t size_type;
-  typedef ptrdiff_t difference_type;
-
->>>>>>> 2a2f4fa7c ([c++] add allocator template parameter to std::vector (#2536))
   template <typename U>
   struct rebind
   {
@@ -167,15 +151,7 @@ public:
     const T *pointer;
     int pos;
     const T *vec_pos;
-<<<<<<< HEAD
-<<<<<<< HEAD
 
-=======
-    
->>>>>>> 4d2a63ec3 ([cpp] Fix vector const_reverse_iterator implementation for reverse iteration support (#2520))
-=======
-
->>>>>>> 2a2f4fa7c ([c++] add allocator template parameter to std::vector (#2536))
   public:
     // Copy constructor
     const_reverse_iterator(const const_reverse_iterator &i)
@@ -184,8 +160,6 @@ public:
       pos = i.pos;
       vec_pos = i.vec_pos;
     }
-<<<<<<< HEAD
-<<<<<<< HEAD
 
     // Default constructor
     const_reverse_iterator() : pointer(nullptr), pos(-1), vec_pos(nullptr)
@@ -307,147 +281,13 @@ public:
       return result;
     }
 
-=======
-    
-=======
-
->>>>>>> 2a2f4fa7c ([c++] add allocator template parameter to std::vector (#2536))
-    // Default constructor
-    const_reverse_iterator() : pointer(nullptr), pos(-1), vec_pos(nullptr)
-    {
-    }
-
-    // Conversion constructor from reverse_iterator
-    const_reverse_iterator(const reverse_iterator &i)
-    {
-      pointer = i.pointer;
-      pos = i.pos;
-      vec_pos = i.vec_pos;
-    }
-
-    // Assignment operator
-    const_reverse_iterator &operator=(const const_reverse_iterator &i)
-    {
-      if (this != &i)
-      {
-        pointer = i.pointer;
-        pos = i.pos;
-        vec_pos = i.vec_pos;
-      }
-      return *this;
-    }
-
-    // Assignment from reverse_iterator
-    const_reverse_iterator &operator=(const reverse_iterator &i)
-    {
-      pointer = i.pointer;
-      pos = i.pos;
-      vec_pos = i.vec_pos;
-      return *this;
-    }
-
-    const T *operator->() const
-    {
-      return pointer;
-    }
-
-    const T &operator*() const
-    {
-      return *pointer;
-    }
-
-    const_reverse_iterator &operator++()
-    {
-      pointer--;
-      pos--;
-      return *this;
-    }
-
-    const_reverse_iterator operator++(int)
-    {
-      const_reverse_iterator buffer = *this;
-      pointer--;
-      pos--;
-      return buffer;
-    }
-
-    const_reverse_iterator &operator--()
-    {
-      pointer++;
-      pos++;
-      return *this;
-    }
-
-    const_reverse_iterator operator--(int)
-    {
-      const_reverse_iterator buffer = *this;
-      pointer++;
-      pos++;
-      return buffer;
-    }
-
-    bool operator==(const const_reverse_iterator &other) const
-    {
-      return pointer == other.pointer;
-    }
-
-    bool operator!=(const const_reverse_iterator &other) const
-    {
-      return pointer != other.pointer;
-    }
-
-    bool operator<(const const_reverse_iterator &other) const
-    {
-      return pointer > other.pointer; // reversed logic for reverse iterator
-    }
-
-    bool operator>(const const_reverse_iterator &other) const
-    {
-      return pointer < other.pointer; // reversed logic for reverse iterator
-    }
-
-    bool operator<=(const const_reverse_iterator &other) const
-    {
-      return pointer >= other.pointer; // reversed logic for reverse iterator
-    }
-
-    bool operator>=(const const_reverse_iterator &other) const
-    {
-      return pointer <= other.pointer; // reversed logic for reverse iterator
-    }
-
-    const_reverse_iterator operator+(int n) const
-    {
-      const_reverse_iterator result = *this;
-      result.pointer -= n;
-      result.pos -= n;
-      return result;
-    }
-
-    const_reverse_iterator operator-(int n) const
-    {
-      const_reverse_iterator result = *this;
-      result.pointer += n;
-      result.pos += n;
-      return result;
-    }
-
->>>>>>> 4d2a63ec3 ([cpp] Fix vector const_reverse_iterator implementation for reverse iteration support (#2520))
     const_reverse_iterator &operator+=(int n)
     {
       pointer -= n;
       pos -= n;
       return *this;
     }
-<<<<<<< HEAD
-<<<<<<< HEAD
 
-=======
-    
->>>>>>> 4d2a63ec3 ([cpp] Fix vector const_reverse_iterator implementation for reverse iteration support (#2520))
-=======
-
->>>>>>> 2a2f4fa7c ([c++] add allocator template parameter to std::vector (#2536))
     const_reverse_iterator &operator-=(int n)
     {
       pointer += n;
@@ -472,23 +312,11 @@ public:
   // construct:
   vector() : _size(0), _capacity(1)
   {
-<<<<<<< HEAD
-<<<<<<< HEAD
     buf = static_cast<T *>(malloc(sizeof(T) * 10));
-=======
-    buf = static_cast<T*>(malloc(sizeof(T) * 10));
->>>>>>> bcb0dd214 ([cpp] add support for std::is_sorted and improve vector initialization (#2515))
-=======
-    buf = static_cast<T *>(malloc(sizeof(T) * 10));
->>>>>>> 2a2f4fa7c ([c++] add allocator template parameter to std::vector (#2536))
     __ESBMC_assume(buf);
     _size = 0;
     _capacity = 10;
   }
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 2a2f4fa7c ([c++] add allocator template parameter to std::vector (#2536))
 
   explicit vector(const Allocator &alloc) : _size(0), _capacity(1)
   {
@@ -499,12 +327,6 @@ public:
   }
 
   // TODO: Support destructors.
-<<<<<<< HEAD
-=======
-  // TODO: Support destructors. 
->>>>>>> bcb0dd214 ([cpp] add support for std::is_sorted and improve vector initialization (#2515))
-=======
->>>>>>> 2a2f4fa7c ([c++] add allocator template parameter to std::vector (#2536))
   // Check discussion at https://github.com/esbmc/esbmc/pull/2515
 #if 0
   // Destructor
@@ -519,36 +341,15 @@ public:
     }
   }
 #endif
-<<<<<<< HEAD
-<<<<<<< HEAD
-<<<<<<< HEAD
   vector(iterator t1, iterator t2, const Allocator &alloc = Allocator())
     : _size(0)
-=======
-  explicit vector(iterator t1, iterator t2) : _size(0)
->>>>>>> bcb0dd214 ([cpp] add support for std::is_sorted and improve vector initialization (#2515))
-=======
-  vector(iterator t1, iterator t2) : _size(0)
->>>>>>> f11daf94a ([c++] fix vector default constructor: remove explicit keyword (#2535))
-=======
-  vector(iterator t1, iterator t2, const Allocator &alloc = Allocator())
-    : _size(0)
->>>>>>> 2a2f4fa7c ([c++] add allocator template parameter to std::vector (#2536))
   {
     int count = 0;
     iterator tmp = t1;
     for (; tmp != t2; tmp++)
       count++;
 
-<<<<<<< HEAD
-<<<<<<< HEAD
     buf = static_cast<T *>(malloc(sizeof(T) * count));
-=======
-    buf = static_cast<T*>(malloc(sizeof(T) * count));
->>>>>>> bcb0dd214 ([cpp] add support for std::is_sorted and improve vector initialization (#2515))
-=======
-    buf = static_cast<T *>(malloc(sizeof(T) * count));
->>>>>>> 2a2f4fa7c ([c++] add allocator template parameter to std::vector (#2536))
     __ESBMC_assume(buf);
     int n = 0;
     for (; t1 != t2; t1++)
@@ -562,15 +363,7 @@ public:
   explicit vector(size_type n, const Allocator &alloc = Allocator())
     : _size(0), _capacity(1)
   {
-<<<<<<< HEAD
-<<<<<<< HEAD
     buf = static_cast<T *>(malloc(sizeof(T) * n));
-=======
-    buf = static_cast<T*>(malloc(sizeof(T) * n));
->>>>>>> bcb0dd214 ([cpp] add support for std::is_sorted and improve vector initialization (#2515))
-=======
-    buf = static_cast<T *>(malloc(sizeof(T) * n));
->>>>>>> 2a2f4fa7c ([c++] add allocator template parameter to std::vector (#2536))
     __ESBMC_assume(buf);
     _size = 0;
     for (int i = 0; i < n; i++)
@@ -588,15 +381,7 @@ public:
     for (InputIt tmp = t; tmp != addr; tmp++)
       count++;
 
-<<<<<<< HEAD
-<<<<<<< HEAD
     buf = static_cast<T *>(malloc(sizeof(T) * count));
-=======
-    buf = static_cast<T*>(malloc(sizeof(T) * count));
->>>>>>> bcb0dd214 ([cpp] add support for std::is_sorted and improve vector initialization (#2515))
-=======
-    buf = static_cast<T *>(malloc(sizeof(T) * count));
->>>>>>> 2a2f4fa7c ([c++] add allocator template parameter to std::vector (#2536))
     __ESBMC_assume(buf);
     for (int i = 0; i < count; i++)
       buf[i] = *t++;
@@ -605,23 +390,9 @@ public:
     _capacity = _size;
   }
 
-<<<<<<< HEAD
-<<<<<<< HEAD
-  vector(size_type n, const T &x, const Allocator &alloc = Allocator())
-=======
-  vector(size_type n, const T &x)
->>>>>>> f11daf94a ([c++] fix vector default constructor: remove explicit keyword (#2535))
-  {
-<<<<<<< HEAD
-    buf = static_cast<T *>(malloc(sizeof(T) * n));
-=======
-    buf = static_cast<T*>(malloc(sizeof(T) * n));
->>>>>>> bcb0dd214 ([cpp] add support for std::is_sorted and improve vector initialization (#2515))
-=======
   vector(size_type n, const T &x, const Allocator &alloc = Allocator())
   {
     buf = static_cast<T *>(malloc(sizeof(T) * n));
->>>>>>> 2a2f4fa7c ([c++] add allocator template parameter to std::vector (#2536))
     __ESBMC_assume(buf);
     _size = n;
     for (int i = 0; i < n; i++)
@@ -632,15 +403,7 @@ public:
   vector(const vector &x, const Allocator &alloc = Allocator())
     : _size(0), _capacity(1)
   {
-<<<<<<< HEAD
-<<<<<<< HEAD
     buf = static_cast<T *>(malloc(sizeof(T) * x._size));
-=======
-    buf = static_cast<T*>(malloc(sizeof(T) * x._size));
->>>>>>> bcb0dd214 ([cpp] add support for std::is_sorted and improve vector initialization (#2515))
-=======
-    buf = static_cast<T *>(malloc(sizeof(T) * x._size));
->>>>>>> 2a2f4fa7c ([c++] add allocator template parameter to std::vector (#2536))
     __ESBMC_assume(buf);
     _size = x._size;
     for (int i = 0; i < _size; i++)
@@ -652,15 +415,7 @@ public:
   vector(std::initializer_list<T> init, const Allocator &alloc = Allocator())
     : _size(0), _capacity(1)
   {
-<<<<<<< HEAD
-<<<<<<< HEAD
     buf = static_cast<T *>(malloc(sizeof(T) * init.size()));
-=======
-    buf = static_cast<T*>(malloc(sizeof(T) * init.size()));
->>>>>>> bcb0dd214 ([cpp] add support for std::is_sorted and improve vector initialization (#2515))
-=======
-    buf = static_cast<T *>(malloc(sizeof(T) * init.size()));
->>>>>>> 2a2f4fa7c ([c++] add allocator template parameter to std::vector (#2536))
     __ESBMC_assume(buf);
     _size = init.size();
     for (int i = 0; i < _size; i++)
@@ -671,10 +426,6 @@ public:
 
   vector &operator=(const vector &x)
   {
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 2a2f4fa7c ([c++] add allocator template parameter to std::vector (#2536))
     if (this != &x)
     {
       free(buf); // Clean up existing memory
@@ -685,17 +436,6 @@ public:
         buf[i] = x.buf[i];
       _capacity = _size;
     }
-<<<<<<< HEAD
-=======
-    buf = static_cast<T*>(malloc(sizeof(T) * x._size));
-    __ESBMC_assume(buf);
-    _size = x._size;
-    for (int i = 0; i < _size; i++)
-      buf[i] = x.buf[i];
-    _capacity = _size;
->>>>>>> bcb0dd214 ([cpp] add support for std::is_sorted and improve vector initialization (#2515))
-=======
->>>>>>> 2a2f4fa7c ([c++] add allocator template parameter to std::vector (#2536))
     return *this;
   }
 
@@ -716,15 +456,7 @@ public:
     for (; tmp != t2; tmp++)
       count++;
 
-<<<<<<< HEAD
-<<<<<<< HEAD
     buf = static_cast<T *>(malloc(sizeof(T) * count));
-=======
-    buf = static_cast<T*>(malloc(sizeof(T) * count));
->>>>>>> bcb0dd214 ([cpp] add support for std::is_sorted and improve vector initialization (#2515))
-=======
-    buf = static_cast<T *>(malloc(sizeof(T) * count));
->>>>>>> 2a2f4fa7c ([c++] add allocator template parameter to std::vector (#2536))
     __ESBMC_assume(buf);
     int n = 0;
     for (; t1 != t2; t1++)
@@ -785,17 +517,8 @@ public:
   const_reverse_iterator rbegin() const
   {
     const_reverse_iterator buffer;
-<<<<<<< HEAD
-<<<<<<< HEAD
     if (_size > 0)
     {
-=======
-    if (_size > 0) {
->>>>>>> 4d2a63ec3 ([cpp] Fix vector const_reverse_iterator implementation for reverse iteration support (#2520))
-=======
-    if (_size > 0)
-    {
->>>>>>> 2a2f4fa7c ([c++] add allocator template parameter to std::vector (#2536))
       buffer = const_reverse_iterator();
       buffer.pointer = buf + _size - 1;
       buffer.pos = _size - 1;

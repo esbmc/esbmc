@@ -2,10 +2,6 @@ import numpy as np
 
 assert np.arctan(0.0) >= 0.0
 assert np.arctan(1.0) >= (3.14153 / 4)
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 9adda6dfa ([numpy] enhance numpy math function verification coverage (#2445))
 
 # arctan(1) ≈ π/4 ≈ 0.785
 x = np.arctan(1.0) - (3.14 / 4)
@@ -30,8 +26,3 @@ assert abs(y) < 0.01
 # arctan(-∞) ≈ -π/2 ≈ -1.57
 z = np.arctan(-1e6) + (3.14 / 2)
 assert abs(z) < 0.01
-<<<<<<< HEAD
-=======
->>>>>>> f86e3ad14 ([python] added test cases for numpy math functions (#2437))
-=======
->>>>>>> 9adda6dfa ([numpy] enhance numpy math function verification coverage (#2445))

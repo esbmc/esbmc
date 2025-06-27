@@ -1,12 +1,4 @@
 CORE
 main.py
-<<<<<<< HEAD
-<<<<<<< HEAD
 --multi-property
-=======
-
->>>>>>> f86e3ad14 ([python] added test cases for numpy math functions (#2437))
-=======
---multi-property
->>>>>>> 9adda6dfa ([numpy] enhance numpy math function verification coverage (#2445))
 ^VERIFICATION SUCCESSFUL$

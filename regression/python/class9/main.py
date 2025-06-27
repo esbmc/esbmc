@@ -4,3 +4,4 @@ class BankAccount:
         self.balance = balance
 
 account = BankAccount("Alice", 100.0)
+assert account.owner == "Alice"

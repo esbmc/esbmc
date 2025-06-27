@@ -1,22 +1,10 @@
-<<<<<<< HEAD
-<<<<<<< HEAD
 def integer_squareroot(n: int) -> int:
-=======
-def integer_squareroot(n: uint64) -> uint64:
->>>>>>> e2b480c2a ([numpy] added integer_squareroot test case)
-=======
-def integer_squareroot(n: int) -> int:
->>>>>>> 5b7dded0b ([numpy] added integer_squareroot test case)
     x = n
     y = (x + 1) // 2
     while y < x:
         x = y
         y = (x + n // x) // 2
     return x
-<<<<<<< HEAD
-<<<<<<< HEAD
-=======
->>>>>>> 5b7dded0b ([numpy] added integer_squareroot test case)
 
 def test_integer_squareroot():
     # Edge case: smallest input
@@ -40,8 +28,3 @@ def test_integer_squareroot():
     assert integer_squareroot(big * big) == big
 
 test_integer_squareroot()
-<<<<<<< HEAD
-=======
->>>>>>> e2b480c2a ([numpy] added integer_squareroot test case)
-=======
->>>>>>> 5b7dded0b ([numpy] added integer_squareroot test case)

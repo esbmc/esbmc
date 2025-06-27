@@ -19,6 +19,7 @@ enum ContractBodyElementT
   ErrorDef,    // rule error-definition
   EventDef,    // rule event-definition
   UsingForDef, // rule using-for-directive
+  ModifierDef, // rule modifier-definition
   ContractBodyElementTError
 };
 ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element);
@@ -248,10 +249,11 @@ enum StatementT
   IfStatement,           // rule if-statement
   WhileStatement,
   StatementTError,
-  ContinueStatement, // rule continue
-  BreakStatement,    // rule break
-  RevertStatement,   // rule revert
-  EmitStatement      // rule emit
+  ContinueStatement,   // rule continue
+  BreakStatement,      // rule break
+  RevertStatement,     // rule revert
+  EmitStatement,       // rule emit
+  PlaceholderStatement //rule placeholder
 };
 StatementT get_statement_t(const nlohmann::json &stmt);
 const char *statement_to_str(StatementT type);
@@ -319,24 +321,6 @@ enum ExpressionT
   // rule literal
   Literal,
   LiteralWithRational,
-<<<<<<< HEAD
-
-  // unit literal
-  LiteralWithWei,
-  LiteralWithGwei,
-  LiteralWithSzabo,
-  LiteralWithFinney,
-  LiteralWithEther,
-
-  LiteralWithSeconds,
-  LiteralWithMinutes,
-  LiteralWithHours,
-  LiteralWithDays,
-  LiteralWithWeeks,
-  LiteralWithYears,
-  LiteralWithUnknownUnit,
-=======
->>>>>>> 0ad7495d4 ([Solidity] add support for several keywords and update modelling algorithm (#2405))
 
   // unit literal
   LiteralWithWei,
@@ -417,14 +401,7 @@ ExpressionT
 get_unary_expr_operator_t(const nlohmann::json &expr, bool uo_pre = true);
 const char *expression_to_str(ExpressionT type);
 bool is_address_member_call(const nlohmann::json &expr);
-<<<<<<< HEAD
-<<<<<<< HEAD
 bool is_sol_library_function(const int ref_id);
-=======
->>>>>>> 0f6d29c39 ([Solidity] Support Unit keywords && insufficient balance checks (#2393))
-=======
-bool is_sol_library_function(const int ref_id);
->>>>>>> 297a99968 ([Solidity] Add support for the library entity (#2394))
 
 // auxiliary type to convert function call
 // No corresponding Solidity rules

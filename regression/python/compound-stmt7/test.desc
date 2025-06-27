@@ -1,12 +1,4 @@
-<<<<<<< HEAD
-<<<<<<< HEAD
 CORE
-=======
-KNOWNBUG
->>>>>>> cbcd98be8 ([Python] Extend support for compound assignment statements (#2458))
-=======
-CORE
->>>>>>> 0aec14495 ([python] build symbolic multiplication tree for power/pow functions (#2462))
 main.py
 
 ^VERIFICATION SUCCESSFUL$

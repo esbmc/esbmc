@@ -1,12 +1,4 @@
-<<<<<<< HEAD
-<<<<<<< HEAD
 CORE
-=======
-KNOWNBUG
->>>>>>> 96cf203b1 ([python] added test cases for numpy transpose)
-=======
-CORE
->>>>>>> 468bb9ad1 ([numpy] disallow 3D or higher-dimensional arrays (#2492))
 main.py
 
 ^VERIFICATION SUCCESSFUL$

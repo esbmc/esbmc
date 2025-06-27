@@ -40,15 +40,7 @@ contract Crowdfund {
 
     function invariant() public {
 
-<<<<<<< HEAD
-<<<<<<< HEAD
         assert(address(this).balance == saved);
-=======
-        assert(address(this).balance != saved);
->>>>>>> 652ccf467 ([Solidity] function call with options (#2398))
-=======
-        assert(address(this).balance == saved);
->>>>>>> 97c1e1f45 ([Solidity] Refactoring Mapping (#2468))
     }
 
     function reclaim() public { 
@@ -85,23 +77,7 @@ contract Reproduction {
     }
 
     receive() external payable {
-<<<<<<< HEAD
-<<<<<<< HEAD
         reentered = true;
         target.reclaim(); 
-=======
-        if (!reentered) {
-            reentered = true;
-            target.reclaim(); 
-        }
->>>>>>> 652ccf467 ([Solidity] function call with options (#2398))
-=======
-        reentered = true;
-        target.reclaim(); 
->>>>>>> 97c1e1f45 ([Solidity] Refactoring Mapping (#2468))
     }
 }
-
-
-
-

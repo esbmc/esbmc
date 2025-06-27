@@ -1,12 +1,4 @@
-<<<<<<< HEAD
-<<<<<<< HEAD
 KNOWNBUG
-=======
-CORE
->>>>>>> cad4d294a ([python] check for sideeffect in is_zero_length_array)
-=======
-KNOWNBUG
->>>>>>> 928d8df54 ([python] avoid string comparison with sideeffects)
 main.py
 
 ^VERIFICATION FAILED$

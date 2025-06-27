@@ -1,12 +1,4 @@
 CORE
 main.cpp
-<<<<<<< HEAD
-<<<<<<< HEAD
 --unwind 10
-=======
---incremental-bmc
->>>>>>> c76c4bd02 ([c++] added basic std::unordered_map support (#2530))
-=======
---unwind 10
->>>>>>> 3dafdf92e ([regression] reduced verification time for insert2_fail)
 ^VERIFICATION FAILED$

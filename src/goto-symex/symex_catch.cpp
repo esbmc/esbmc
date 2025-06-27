@@ -55,7 +55,7 @@ bool goto_symext::symex_throw()
 
   // get the list of exceptions thrown
   const code_cpp_throw2t &throw_ref = to_code_cpp_throw2t(instruction.code);
-  const std::vector<irep_idt> exceptions_thrown = throw_ref.exception_list;
+  const std::vector<irep_idt> &exceptions_thrown = throw_ref.exception_list;
 
   // Handle rethrows
   if (handle_rethrow(throw_ref.operand, instruction))
@@ -248,22 +248,22 @@ bool goto_symext::unexpected_handler()
   // It'll call the current function handler
   if (!is_included)
   {
+    // We only call it if the user replaced the default one
+    const symbolt *handler = ns.lookup("c:@F@__ESBMC_unexpected");
+    if (!handler)
+      return false;
+
     expr2tc the_call;
     code_function_callt unexpected_function;
-    unexpected_function.function() = symbol_expr(*tmp);
+    unexpected_function.function() = handler->value;
     migrate_expr(unexpected_function, the_call);
-
-    // We only call it if the user replaced the default one
-    if (
-      to_symbol2t(to_code_function_call2t(the_call).function).thename ==
-      "c:@N@std@F@default_unexpected#")
-      return false;
 
     // Indicate there we're inside the unexpected flow
     inside_unexpected = true;
 
     // Call the function
     symex_function_call(the_call);
+    unexpected_end = handler->value.identifier();
     return true;
   }
 
@@ -388,8 +388,10 @@ bool goto_symext::handle_rethrow(
       goto_programt::instructiont &mutable_ref =
         const_cast<goto_programt::instructiont &>(instruction);
       to_code_cpp_throw2t(mutable_ref.code).exception_list.push_back((*e_it));
+      to_code_cpp_throw2t(mutable_ref.code).operand =
+        to_code_cpp_throw2t(last_throw->code).operand;
 
-      return true;
+      return false;
     }
 
     const std::string &msg = "Trying to re-throw without last exception.";

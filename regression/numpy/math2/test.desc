@@ -1,12 +1,4 @@
-<<<<<<< HEAD
-<<<<<<< HEAD
 CORE
-=======
-KNOWNBUG
->>>>>>> c53dfb99e ([regression] extended numpy test case for fabs)
-=======
-CORE
->>>>>>> a76609233 ([python] add support for numpy.fabs() (#2435))
 main.py
 
 ^VERIFICATION SUCCESSFUL$
