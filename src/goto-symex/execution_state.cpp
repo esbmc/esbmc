@@ -659,8 +659,8 @@ bool execution_statet::is_cur_state_guard_false(const expr2tc &guard)
     {
       // Basically, this means our _assumptions_ here are false as well, so
       // neither true or false guards are possible. Consider this as meaning
-      // that the guard is false.
-      return true;
+      // that the guard is either boolean true or false.
+      return false;
     }
   }
 

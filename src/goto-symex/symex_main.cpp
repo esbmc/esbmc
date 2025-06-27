@@ -139,7 +139,7 @@ bool goto_symext::is_assume_false(const expr2tc &assumption)
     }
     catch (runtime_encoded_equationt::dual_unsat_exception &e)
     {
-      return true;
+      return false;
     }
   }
 
