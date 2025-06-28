@@ -99,6 +99,8 @@ smt_convt::resultt z3_convt::dec_solve()
 void z3_convt::assert_ast(smt_astt a)
 {
   z3::expr theval = to_solver_smt_ast<z3_smt_ast>(a)->a;
+  if (!theval.is_bool())
+    return;
   solver.add(theval);
 }
 
