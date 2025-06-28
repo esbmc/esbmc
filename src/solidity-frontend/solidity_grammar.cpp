@@ -308,7 +308,7 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     {
       return BuiltinTypeName;
     }
-    else if(solidity_convertert::UserDefinedVarMap.count(typeString) > 0)
+    else if (solidity_convertert::UserDefinedVarMap.count(typeString) > 0)
     {
       return UserDefinedTypeName;
     }
