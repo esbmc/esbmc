@@ -806,7 +806,7 @@ bool solidity_convertert::populate_function_signature(
 
   // merge inherited nodes
   std::set<std::string> dump;
-  if(!is_library)
+  if (!is_library)
     merge_inheritance_ast(cname, json, dump);
 
   std::string func_name, func_id, visibility;
@@ -4667,19 +4667,26 @@ bool solidity_convertert::get_expr(
         // Special case: revert
         // insert a bool false as the first argument.
         // drop the rest of params.
-        call.arguments().push_back(false_exprt());
+        call.function() = new_expr;
+        call.type() = to_code_type(new_expr.type()).return_type();
+        call.arguments().resize(1);
+        call.arguments().at(0) = false_exprt();
       }
       else if (sol_name == "require")
       {
         // Special case: require
         // __ESBMC_assume only handle one param.
+        // drop the potential second param.
         exprt single_arg;
         if (get_expr(
               expr["arguments"].at(0),
               expr["arguments"].at(0)["typeDescriptions"],
               single_arg))
           return true;
-        call.arguments().push_back(single_arg);
+        call.function() = new_expr;
+        call.type() = to_code_type(new_expr.type()).return_type();
+        call.arguments().resize(1);
+        call.arguments().at(0) = single_arg;
       }
       else
       {
@@ -6628,36 +6635,36 @@ bool solidity_convertert::get_esbmc_builtin_ref(
     return get_sol_builtin_ref(decl, new_expr);
   id = "c:@F@" + name;
 
-  // manually unrolled recursion here
-  // type config for Builtin && Int
-  typet type;
-  // Creat a new code_typet, parse the return_type and copy the code_typet to typet
-  code_typet convert_type;
-  typet return_type;
+  if (name == "__ESBMC_assume")
+  {
+    assert(context.find_symbol(id) != nullptr);
+    new_expr = symbol_expr(*context.find_symbol(id));
+    new_expr.type().set("#sol_name", blt_name);
+  }
+  else
+  {
+    // assert
+    typet type;
+    code_typet convert_type;
+    typet return_type;
+    return_type = bool_type();
+    std::string c_type = "bool";
+    return_type.set("#cpp_type", c_type);
+    convert_type.return_type() = return_type;
+    type = convert_type;
+    type.set("#sol_name", blt_name);
 
-  // clang's assert(.) uses "signed_int" as assert(.) type (NOT the argument type),
-  // while Solidity's assert uses "bool" as assert(.) type (NOT the argument type).
-  return_type = bool_type();
-  std::string c_type = "bool";
-  return_type.set("#cpp_type", c_type);
-  convert_type.return_type() = return_type;
+    new_expr = exprt("symbol", type);
+    new_expr.identifier(id);
+    new_expr.cmt_lvalue(true);
+    new_expr.name(name);
 
-  if (!convert_type.arguments().size())
-    convert_type.make_ellipsis();
-
-  type = convert_type;
-  type.set("#sol_name", blt_name);
-
-  new_expr = exprt("symbol", type);
-  new_expr.identifier(id);
-  new_expr.cmt_lvalue(true);
-  new_expr.name(name);
-
-  locationt loc;
-  get_location_from_node(decl, loc);
-  new_expr.location() = loc;
-  if (current_functionDecl)
-    new_expr.location().function(current_functionName);
+    locationt loc;
+    get_location_from_node(decl, loc);
+    new_expr.location() = loc;
+    if (current_functionDecl)
+      new_expr.location().function(current_functionName);
+  }
 
   return false;
 }
