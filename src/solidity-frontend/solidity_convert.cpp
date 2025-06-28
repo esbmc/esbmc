@@ -1081,6 +1081,8 @@ bool solidity_convertert::get_var_decl(
 
   std::string current_contractName;
   get_current_contract_name(ast_node, current_contractName);
+  bool is_library = !current_contractName.empty() &&
+                    contractNamesList.count(current_contractName) == 0;
 
   // For Solidity rule state-variable-declaration:
   // 1. populate typet
@@ -1115,7 +1117,9 @@ bool solidity_convertert::get_var_decl(
   }
 
   // set const qualifier
-  if (ast_node.contains("mutability") && ast_node["mutability"] == "constant")
+  bool is_constant =
+    ast_node.contains("mutability") && ast_node["mutability"] == "constant";
+  if (is_constant)
     t.cmt_constant(true);
 
   // record the state info
@@ -1162,8 +1166,9 @@ bool solidity_convertert::get_var_decl(
   symbol.lvalue = true;
   // static_lifetime: this means it's defined in the file level, not inside contract
   // special case for mapping, even if it's inside a contract
-  symbol.static_lifetime =
-    current_contractName.empty() || (is_mapping && !is_new_expr);
+  symbol.static_lifetime = current_contractName.empty() ||
+                           (is_mapping && !is_new_expr) ||
+                           (is_library && is_constant);
   symbol.file_local = !symbol.static_lifetime;
   symbol.is_extern = false;
 
@@ -1832,12 +1837,16 @@ bool solidity_convertert::get_noncontract_defition(nlohmann::json &ast_node)
     node_type == "ContractDefinition" && ast_node["contractKind"] == "library")
   {
     // for library entity
+    // a library is equivalent to a static class
     std::string lib_name = ast_node["name"].get<std::string>();
 
     // we treat library as a contract, but we do not populate it as struct/contract symbol
     // instead, we only populate the entity and functions
     std::string old = current_baseContractName;
     current_baseContractName = lib_name;
+    if (get_struct_class(ast_node))
+      return true;
+
     if (convert_ast_nodes(ast_node, lib_name))
       return true;
 
@@ -5593,7 +5602,7 @@ bool solidity_convertert::get_init_expr(
   return false;
 }
 
-// get the name of the contract that contains the target ast_node
+// get the name of the contract that contains the target ast_node, including library
 // note that the contract_name might be empty
 void solidity_convertert::get_current_contract_name(
   const nlohmann::json &ast_node,
@@ -6413,6 +6422,16 @@ bool solidity_convertert::get_var_decl_ref(
   {
     if (decl["stateVariable"] && current_functionDecl)
     {
+      // check if it's a constant in the library,
+      // if so, no need to add the this pointer
+      std::string c_name;
+      get_current_contract_name(decl, c_name);
+      if (!c_name.empty() && contractNamesList.count(c_name) == 0)
+      {
+        assert(decl["mutability"] == "constant");
+        return false;
+      }
+
       // this means we are parsing function body
       // and the variable is a state var
       // data = _data ==> this->data = _data;
