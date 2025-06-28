@@ -799,18 +799,21 @@ bool solidity_convertert::populate_function_signature(
 {
   log_debug(
     "solidity", "Setting up the function signatures for contract {}", cname);
+  assert(json.contains("contractKind"));
+  assert(json.contains("nodes"));
+
+  bool is_library = json["contractKind"] == "library";
 
   // merge inherited nodes
   std::set<std::string> dump;
-  merge_inheritance_ast(cname, json, dump);
+  if(!is_library)
+    merge_inheritance_ast(cname, json, dump);
 
   std::string func_name, func_id, visibility;
   code_typet type;
   bool is_inherit, is_payable;
   // check if the contract is library
-  assert(json.contains("contractKind"));
-  bool is_library = json["contractKind"] == "library";
-  assert(json.contains("nodes"));
+
   for (const auto &func_node : json["nodes"])
   {
     if (
@@ -4648,22 +4651,25 @@ bool solidity_convertert::get_expr(
       !get_sol_builtin_ref(expr, new_expr))
     {
       log_debug("solidity", "\t\t@@@ got builtin function call");
-      typet type = to_code_type(new_expr.type()).return_type();
-      call.function() = new_expr;
-      call.type() = type;
+      if (new_expr.id() == "typecast")
+      {
+        // assume it's a wrap/unwrap
+        exprt args;
+        if (get_expr(expr["arguments"][0], args))
+          return true;
+        new_expr.op0() = args;
+        break;
+      }
 
-      if (
-        new_expr.type().get("#sol_name").as_string().find("revert") !=
-        std::string::npos)
+      std::string sol_name = new_expr.type().get("#sol_name").as_string();
+      if (sol_name == "revert")
       {
         // Special case: revert
         // insert a bool false as the first argument.
         // drop the rest of params.
         call.arguments().push_back(false_exprt());
       }
-      else if (
-        new_expr.type().get("#sol_name").as_string().find("require") !=
-        std::string::npos)
+      else if (sol_name == "require")
       {
         // Special case: require
         // __ESBMC_assume only handle one param.
@@ -4678,7 +4684,8 @@ bool solidity_convertert::get_expr(
       else
       {
         // other solidity built-in functions
-        if (get_library_function_call(new_expr, type, empty_json, expr, call))
+        if (get_library_function_call(
+              new_expr, new_expr.type(), empty_json, expr, call))
           return true;
       }
 
@@ -5365,7 +5372,6 @@ bool solidity_convertert::get_expr(
     {
       // e.g.
       // - address(msg.sender)
-
       if (get_expr(caller_expr_json, base))
         return true;
       break;
@@ -6667,7 +6673,7 @@ bool solidity_convertert::get_sol_builtin_ref(
 {
   log_debug(
     "solidity",
-    "\t@@@ get_sol_builtin_ref, got nodeType={}",
+    "\t@@@ expecting solidity builtin ref, got nodeType={}",
     expr["nodeType"].get<std::string>());
   // get the reference from the pre-populated symbol table
   // note that this could be either vars or funcs.
@@ -6693,14 +6699,7 @@ bool solidity_convertert::get_sol_builtin_ref(
   {
     // e.g. string.concat() <=> c:@string_concat
     std::string bs;
-
-    if (expr["expression"].contains("name"))
-      bs = expr["expression"]["name"].get<std::string>();
-    else if (
-      expr["expression"].contains("typeName") &&
-      expr["expression"]["typeName"].contains("name"))
-      bs = expr["expression"]["typeName"]["name"].get<std::string>();
-    else if (expr.contains("memberName"))
+    if (expr.contains("memberName"))
     {
       // assume it's the no-basename type
       // e.g. address(this).balance, type(uint256).max
@@ -6731,17 +6730,34 @@ bool solidity_convertert::get_sol_builtin_ref(
         call.arguments().push_back(is_signed);
 
         new_expr = call;
+        new_expr.location() = l;
+        return false;
       }
       else if (name == "creationCode" || name == "runtimeCode")
+      {
         // nondet Bytes
         get_library_function_call_no_args(
           "_" + name, "c:@F@_" + name, uint_type(), l, new_expr);
-      else
-        return true;
-
-      new_expr.location() = l;
-      return false;
+        new_expr.location() = l;
+        return false;
+      }
+      else if (name == "wrap" || name == "unwrap")
+      {
+        // do nothhing, return operands
+        std::string udv = expr["expression"]["name"].get<std::string>();
+        assert(UserDefinedVarMap.count(udv) > 0);
+        typet t = UserDefinedVarMap[udv];
+        new_expr = typecast_exprt(t); // we will set the op0 later
+        new_expr.location() = l;
+        return false;
+      }
     }
+    if (expr["expression"].contains("name"))
+      bs = expr["expression"]["name"].get<std::string>();
+    else if (
+      expr["expression"].contains("typeName") &&
+      expr["expression"]["typeName"].contains("name"))
+      bs = expr["expression"]["typeName"]["name"].get<std::string>();
     else
       // cannot get bs name;
       return true;
@@ -9559,7 +9575,10 @@ bool solidity_convertert::get_library_function_call(
 {
   call.function() = func;
   if (t.is_code())
+  {
     call.type() = to_code_type(t).return_type();
+    assert(!call.type().is_code());
+  }
   else
     call.type() = t;
   locationt l;
