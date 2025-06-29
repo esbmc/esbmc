@@ -84,6 +84,7 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Arithmetic**: Includes standard arithmetic operations (e.g., addition, subtraction, multiplication, division).
 - **Logical Operations**: Supports logical constructs (e.g., `AND`, `OR`, `NOT`).
 - **Identity Comparisons**: Supports `is` and `is not` operators for identity-based comparisons, including `x is None`, `x is y`, or `x is not None`.
+- **Global Variables:** Recognises the `global` keyword for accessing and modifying variables in the global scope from within functions.
 
 ### Functions and Methods
 - **Function Handling**: This allows for defining, calling, and verifying functions, including parameter passing and return values.
