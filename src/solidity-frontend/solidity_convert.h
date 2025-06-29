@@ -60,6 +60,9 @@ public:
 
   // json for Solidity AST. Use object for contract
   static nlohmann::json src_ast_json;
+  // User-Defined Variable Mapping
+  // e.g. type UFixed256x18 is uint256;
+  static std::unordered_map<std::string, typet> UserDefinedVarMap;
 
 protected:
   typedef struct func_sig
@@ -653,8 +656,6 @@ protected:
   std::string current_functionName;
 
   // Auxiliary data structures:
-  // Mapping from the node 'id' to the exported symbol (i.e. contract, error, constant var ....)
-  std::unordered_map<int, std::string> exportedSymbolsList;
   // Inheritance Order Record <contract_name, Contract_id>
   std::unordered_map<std::string, std::vector<int>> linearizedBaseList;
   // Who inherits from me?
