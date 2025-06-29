@@ -2215,11 +2215,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     }
 
     // Tracks global reads within a function
-    if (element["_type"] == "Name" && sid.to_string().find("@C") == std::string::npos && sid.to_string().find("@F") != std::string::npos
-      && is_right && !symbol_table_.find_symbol(sid.to_string().c_str()))
-      {
-        local_loads.push_back(sid.to_string());
-      }
+    if (
+      element["_type"] == "Name" &&
+      sid.to_string().find("@C") == std::string::npos &&
+      sid.to_string().find("@F") != std::string::npos && is_right &&
+      !symbol_table_.find_symbol(sid.to_string().c_str()))
+    {
+      local_loads.push_back(sid.to_string());
+    }
     break;
   }
   case ExpressionType::FUNC_CALL:
@@ -2429,12 +2432,16 @@ void python_converter::get_var_assign(
 
     // Process RHS before LHS if code is in a Function, to update local_load
     exprt rhs;
-    if (sid.to_string().find("@F") != std::string::npos && sid.to_string().find("@C") == std::string::npos)
+    if (
+      sid.to_string().find("@F") != std::string::npos &&
+      sid.to_string().find("@C") == std::string::npos)
     {
       is_right = true;
       if (!ast_node["value"].is_null())
       {
-        if (ast_node["_type"] != "Call") // Test cases showed that some types cannot be processed here
+        if (
+          ast_node["_type"] !=
+          "Call") // Test cases showed that some types cannot be processed here
         {
           rhs = get_expr(ast_node["value"]);
         }
@@ -2449,7 +2456,7 @@ void python_converter::get_var_assign(
 
     bool is_global = false;
 
-    for(std::string& s  : global_declarations)
+    for (std::string &s : global_declarations)
     {
       if (s == sid.global_to_string())
       {
@@ -2472,17 +2479,21 @@ void python_converter::get_var_assign(
         location_begin,
         current_element_type);
       symbol.lvalue = true;
-      symbol.static_lifetime = (current_class_name_ == "" && current_func_name_ == "") ? true : false;
+      symbol.static_lifetime =
+        (current_class_name_ == "" && current_func_name_ == "") ? true : false;
       symbol.file_local = true;
       symbol.is_extern = false;
 
       lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
     }
 
-    for(std::string& s  : local_loads)
+    for (std::string &s : local_loads)
     {
-      if (lhs_symbol->id.as_string() == s) {
-        throw std::runtime_error("Variable " + sid.get_object() + " in function " + current_func_name_ + " is uninitialized.");
+      if (lhs_symbol->id.as_string() == s)
+      {
+        throw std::runtime_error(
+          "Variable " + sid.get_object() + " in function " +
+          current_func_name_ + " is uninitialized.");
       }
       continue;
     }
@@ -2510,7 +2521,7 @@ void python_converter::get_var_assign(
 
     bool is_global = false;
 
-    for(std::string& s  : global_declarations)
+    for (std::string &s : global_declarations)
     {
       if (s == sid.global_to_string())
       {
