@@ -30,11 +30,15 @@ const std::string sol_header = R"(
 */
 const std::string sol_typedef = R"(
 #if defined(__clang__)  // Ensure we are using Clang
-    #if __clang_major__ >= 15
+    #if __clang_major__ >= 16
         #define BIGINT(bits) _BitInt(bits)
-    #else
+    #elif __clang_major__ >= 11 && __clang_major__ <= 13
         #define BIGINT(bits) _ExtInt(bits)
+    #else
+        #error "Unsupported Clang version: ExtInt and BigInt are not properly supported. Please use Clang 11-13 for ExtInt or Clang 16+ for BigInt."
     #endif
+#else
+    #error "This code requires Clang to compile."
 #endif
 
 typedef BIGINT(256) int256_t;
