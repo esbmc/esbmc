@@ -4,7 +4,6 @@
 #include <stdlib.h>
 #include <ctype.h>
 
-
 #undef strcpy
 #undef strncpy
 #undef strcat
@@ -306,8 +305,6 @@ __ESBMC_HIDE:;
   }
 
   return dst;
-
-
 }
 
 void *__memset_impl(void *s, int c, size_t n)
