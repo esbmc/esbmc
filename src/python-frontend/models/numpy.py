@@ -83,4 +83,3 @@ def matmul(a:float, b:float) -> float:
 
 def transpose(a:float, b:float) -> float:
     return 0.0
-

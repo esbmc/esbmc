@@ -1,4 +1,12 @@
+<<<<<<< HEAD
+<<<<<<< HEAD
 CORE
+=======
+KNOWNBUG
+>>>>>>> e60718a34 ([regression] added test case for casting)
+=======
+CORE
+>>>>>>> 8fc89cda7 ([python] check for float and str comparisons)
 main.py
 
 ^VERIFICATION SUCCESSFUL$

@@ -1,5 +1,4 @@
 // NumPy documentation: https://numpy.org/doc/stable/reference/routines.linalg.html
-
 #include <math.h>
 #include <stdint.h>
 

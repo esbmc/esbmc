@@ -1,4 +1,12 @@
 CORE
 main.py
+<<<<<<< HEAD
+<<<<<<< HEAD
 --overflow-check --nan-check
+=======
+
+>>>>>>> cbcd98be8 ([Python] Extend support for compound assignment statements (#2458))
+=======
+--overflow-check --nan-check
+>>>>>>> 59fb1bf8f ([python] enhanced handling of true division (#2505))
 ^VERIFICATION FAILED$

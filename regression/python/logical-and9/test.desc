@@ -1,4 +1,14 @@
 CORE
 main.py
+<<<<<<< HEAD
+<<<<<<< HEAD
 --overflow-check
 ^VERIFICATION FAILED$
+=======
+
+^VERIFICATION FAILED$
+>>>>>>> deb2f345e ([regression] added test cases for logican and in Python)
+=======
+--overflow-check
+^VERIFICATION FAILED$
+>>>>>>> 59fb1bf8f ([python] enhanced handling of true division (#2505))

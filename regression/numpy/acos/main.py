@@ -16,4 +16,3 @@ x = np.arccos(-1.0) - 3.14
 assert abs(x) < 1e-2            # arccos(-1) ≈ π ≈ 3.14
 y = np.arccos(0.5) - (3.14 / 3)
 assert abs(y) < 1e-2       # arccos(0.5) ≈ π/3 ≈ 1.047
-

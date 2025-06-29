@@ -1,4 +1,14 @@
 CORE
 main.py
+<<<<<<< HEAD
+<<<<<<< HEAD
 --incremental-bmc
 ^VERIFICATION SUCCESSFUL$
+=======
+
+^VERIFICATION SUCCESSFUL$
+>>>>>>> d85c9ce5d ([regression] added test cases for power in Python)
+=======
+--incremental-bmc
+^VERIFICATION SUCCESSFUL$
+>>>>>>> 59fb1bf8f ([python] enhanced handling of true division (#2505))

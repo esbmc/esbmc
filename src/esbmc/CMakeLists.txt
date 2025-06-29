@@ -50,7 +50,7 @@ target_include_directories(esbmc
 cmake_path(SET MY_MAGIC_PATH NORMALIZE "${cvc5_DIR}/../../")
 cmake_path(ABSOLUTE_PATH MY_MAGIC_PATH OUTPUT_VARIABLE CVC_LINK_DIR)
 message("Looking at ${CVC_LINK_DIR}")
-target_link_libraries(esbmc ${OLD_FRONTEND_TARGETS} ${SOLIDITY_FRONTEND_TARGETS} ${PYTHON_FRONTEND_TARGETS}
+target_link_libraries(esbmc PUBLIC ${OLD_FRONTEND_TARGETS} ${SOLIDITY_FRONTEND_TARGETS} ${PYTHON_FRONTEND_TARGETS}
                             ${GOTO_CONTRACTOR_TARGETS} ${JIMPLE_FRONTEND_TARGETS} ${JIMPLE_FRONTEND_TARGETS}
                             clangcfrontend clangcppfrontend filesystem symex pointeranalysis langapi util_esbmc bigint
                             solvers clibs gotoalgorithms cache ${Boost_LIBRARIES} goto2c ${OS_INCLUDE_LIBS})
