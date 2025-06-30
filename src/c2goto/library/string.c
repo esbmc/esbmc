@@ -302,12 +302,16 @@ __ESBMC_HIDE:;
  }
    } else {
 
+<<<<<<< HEAD
    for (size_t i = 0; i < n; ++i) {
     cdst[i] = csrc[i];
  }
  }
 
  return dst;
+=======
+  return dst;
+>>>>>>> 2005b470f (Updated the CMakeList requirements for Windows)
 }
 
 void *__memset_impl(void *s, int c, size_t n)
