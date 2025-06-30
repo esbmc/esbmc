@@ -29,3 +29,4 @@ assert np.fabs(3) == 3
 assert np.exp(0) == 1.0
 
 #assert np.exp(1) == 2.718281828459045
+
