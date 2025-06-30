@@ -141,11 +141,10 @@ configure_file (
 )
 if(NOT WIN32)
   find_package(PkgConfig REQUIRED)
-  pkg_check_modules(GMP_PKG gmp)
-  target_link_libraries(esbmc PUBLIC PkgConfig::GMP)
+  pkg_check_modules(GMP	REQUIRED gmp)
+  target_link_libraries(esbmc PUBLIC ${GMP_LIBRARIES})
+  target_include_directories(esbmc PUBLIC ${GMP_INCLUDE_DIRS})
 endif() 
-find_package(GMP REQUIRED)
-target_link_libraries(esbmc PUBLIC GMP::GMP)
 
 # This should be added after all source files
 include(Docs)
