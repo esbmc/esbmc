@@ -542,6 +542,32 @@ void goto_convertt::do_function_call_symbol(
 
   std::string base_name = symbol->name.as_string();
 
+  // Quantifiers passthrough. Converts function calls into forall or exists expr
+  if (base_name == "__ESBMC_forall" || base_name == "__ESBMC_exists")
+  {
+    if (arguments.size() != 2)
+    {
+      log_error("`{}' expected to have two arguments", id2string(base_name));
+      abort();
+    }
+    // make it a side effect if there is an LHS
+    if (lhs.is_nil())
+      return;
+
+    exprt rhs =
+      exprt(base_name == "__ESBMC_forall" ? "forall" : "exists", typet("bool"));
+    rhs.copy_to_operands(arguments[0]);
+    rhs.copy_to_operands(arguments[1]);
+
+    rhs.location() = function.location();
+
+    code_assignt assignment(lhs, rhs);
+    assignment.location() = function.location();
+    copy(assignment, ASSIGN, dest);
+    return;
+  }
+
+
   bool is_assume =
     (base_name == "__ESBMC_assume") || (base_name == "__VERIFIER_assume");
   bool is_assert = (base_name == "assert");

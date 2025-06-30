@@ -1,5 +1,4 @@
 // NumPy documentation: https://numpy.org/doc/stable/reference/routines.linalg.html
-
 #include <math.h>
 #include <stdint.h>
 
@@ -104,3 +103,4 @@ void det(const int64_t *src, int64_t *dst, int64_t rows, int64_t cols)
 
   *dst = a * d - b * c;
 }
+

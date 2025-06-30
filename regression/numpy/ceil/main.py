@@ -57,3 +57,7 @@ assert np.ceil(1e-100) == 1.0
 assert np.ceil(-1e-100) == 0.0
 
 print("All numpy.ceil edge cases passed!")
+
+assert np.ceil(0.0) == 0.0
+assert np.ceil(1.2) == 2.0
+assert np.ceil(-1.8) == -1.0

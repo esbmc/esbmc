@@ -139,6 +139,12 @@ configure_file (
  "${PROJECT_SOURCE_DIR}/scripts/cmake/cmake_config.in"
  "${PROJECT_BINARY_DIR}/src/ac_config.h"
 )
+if(NOT WIN32)
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(GMP	REQUIRED gmp)
+  target_link_libraries(esbmc PUBLIC ${GMP_LIBRARIES})
+  target_include_directories(esbmc PUBLIC ${GMP_INCLUDE_DIRS})
+endif() 
 
 if(NOT WIN32)
   find_package(PkgConfig REQUIRED)
