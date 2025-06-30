@@ -94,8 +94,8 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Inheritance**: Handles inheritance and verifies scenarios involving inheritance issues.
 ### Data Types and Structures
 - **Dynamic Typing**: Accommodates Python's dynamic typing in variable assignments.
-- **Data Structures**: Supports operations on Python's built-in data structures, such as lists and strings, including concatenation and bounds checks.
-- **Bytes and Integers**: Supports bytes and integer operations, such as conversions and bit length.
+- **Data Structures**: Supports operations on Python's built-in data structures, including lists and strings, with features such as concatenation and bounds checks.
+- **Bytes and Integers**: Supports byte and integer operations, such as conversions and bit length.
 ### Error Handling and Assertions
 - **Assertions**: Supports `assert` statements for program verification.
 - **Assumptions**: Supports `assume` statements for specifying assumptions for verification.
