@@ -57,9 +57,16 @@ public:
     return filename_;
   }
 
+  const std::string &get_object() const
+  {
+    return object_;
+  }
+
   void clear();
 
   std::string to_string() const;
+
+  std::string global_to_string() const;
 
 private:
   std::string filename_;

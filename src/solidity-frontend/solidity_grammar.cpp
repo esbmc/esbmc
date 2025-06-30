@@ -308,6 +308,10 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     {
       return BuiltinTypeName;
     }
+    else if (solidity_convertert::UserDefinedVarMap.count(typeString) > 0)
+    {
+      return UserDefinedTypeName;
+    }
     else
     {
       log_error(
@@ -356,6 +360,7 @@ const char *type_name_to_str(TypeNameT type)
     ENUM_TO_STR(TupleTypeName)
     ENUM_TO_STR(MappingTypeName)
     ENUM_TO_STR(BuiltinTypeName)
+    ENUM_TO_STR(UserDefinedTypeName)
     ENUM_TO_STR(TypeNameTError)
   default:
   {

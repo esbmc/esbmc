@@ -20,6 +20,7 @@ enum class StatementType
   CONTINUE,
   RAISE,
   UNKNOWN,
+  GLOBAL
 };
 
 enum class ExpressionType
@@ -33,7 +34,7 @@ enum class ExpressionType
   SUBSCRIPT,
   VARIABLE_REF,
   LIST,
-  UNKNOWN,
+  UNKNOWN
 };
 
 class type_utils

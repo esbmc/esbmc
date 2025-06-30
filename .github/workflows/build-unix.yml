@@ -31,6 +31,13 @@ jobs:
       with:
         name: release-${{ inputs.operating-system }}-${{ inputs.build-flags }}
         path: ./release
+    
+    - name: Check Python regression tests
+      if: ${{ inputs.testing == true }}
+      run: |
+        chmod +x scripts/check_python_tests.sh
+        ./scripts/check_python_tests.sh
+
     - name: Run tests
       if: ${{ inputs.testing == true }}
       run: cd build/ && ctest -j4 --output-on-failure --progress .
