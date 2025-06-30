@@ -567,7 +567,6 @@ void goto_convertt::do_function_call_symbol(
     return;
   }
 
-
   bool is_assume =
     (base_name == "__ESBMC_assume") || (base_name == "__VERIFIER_assume");
   bool is_assert = (base_name == "assert");
