@@ -1,12 +1,4 @@
-<<<<<<< HEAD
-<<<<<<< HEAD
 CORE
-=======
-KNOWNBUG
->>>>>>> 04b763367 ([regression] added test case for Python class)
-=======
-CORE
->>>>>>> 7dd23100b ([python] Fix compound assignment on object attributes (#2509))
 main.py
 
 ^VERIFICATION SUCCESSFUL$

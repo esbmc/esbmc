@@ -210,7 +210,6 @@ ZeroDivisionError: integer division or modulo by zero
 
 This example highlights how symbolic model checking can uncover subtle bugs that may not be triggered during regular testing.
 
-<<<<<<< HEAD
 # Numpy Formal Verification with ESBMC
 
 ## What We Are Trying to Verify
@@ -501,7 +500,6 @@ Harzevili et al. (2023).
 # Numpy Formal Verification
 
 # Numpy Formal Verification with ESBMC
->>>>>>> 88b89536a (Update README.md)
 
 ## What We Are Trying to Verify
 

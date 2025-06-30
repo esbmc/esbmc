@@ -1,12 +1,4 @@
 CORE
 main.py
-<<<<<<< HEAD
-<<<<<<< HEAD
 
-=======
---incremental-bmc
->>>>>>> 59fb1bf8f ([python] enhanced handling of true division (#2505))
-=======
-
->>>>>>> 67b8f1125 ([regression] removed --incremental-bmc)
 ^VERIFICATION SUCCESSFUL$

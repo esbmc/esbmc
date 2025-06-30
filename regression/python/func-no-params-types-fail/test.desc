@@ -1,0 +1,4 @@
+CORE
+main.py
+
+ERROR: All parameters in function "foo" must be type annotated
