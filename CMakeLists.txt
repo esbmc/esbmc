@@ -139,10 +139,14 @@ configure_file (
  "${PROJECT_SOURCE_DIR}/scripts/cmake/cmake_config.in"
  "${PROJECT_BINARY_DIR}/src/ac_config.h"
 )
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(GMP REQUIRED IMPORTED_TARGET gmp)
+if(NOT WIN32)
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(GMP_PKG gmp)
+  target_link_libraries(esbmc PUBLIC PkgConfig::GMP)
+endif() 
+find_package(GMP REQUIRED)
+target_link_libraries(esbmc PUBLIC GMP::GMP)
 
-target_link_libraries(esbmc PUBLIC PkgConfig::GMP)
 # This should be added after all source files
 include(Docs)
 

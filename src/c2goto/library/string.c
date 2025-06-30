@@ -306,8 +306,6 @@ __ESBMC_HIDE:;
   }
 
   return dst;
-
-
 }
 
 void *__memset_impl(void *s, int c, size_t n)
