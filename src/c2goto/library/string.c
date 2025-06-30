@@ -8,7 +8,6 @@
 #include <stdlib.h>  
 #include <ctype.h>
 
-
 #undef strcpy
 #undef strncpy
 #undef strcat
