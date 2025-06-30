@@ -1,3 +1,5 @@
+#include <stdint.h>
+#include <assert.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -273,10 +275,39 @@ __ESBMC_HIDE:;
 void *memcpy(void *dst, const void *src, size_t n)
 {
 __ESBMC_HIDE:;
-  char *cdst = dst;
-  const char *csrc = src;
-  for (size_t i = 0; i < n; i++)
-    cdst[i] = csrc[i];
+  // If n is 0, return dst (nothing to copy)
+  if (n == 0)
+    return dst;
+
+  // NULL pointer checks
+  __ESBMC_assert(dst != NULL, "Destination pointer is NULL.");
+  __ESBMC_assert(src != NULL, "Source pointer is NULL.");
+  __ESBMC_assume(n <= 1024);
+  char *cdst = (char *)dst;
+  const char *csrc = (const char *)src;
+
+  if (((uintptr_t)dst % 8 == 0) && ((uintptr_t)src % 8 == 0))
+  {
+    size_t i = 0;
+
+    for (; i + 8 <= n; i += 8)
+    {
+      ((uint64_t *)cdst)[i / 8] = ((const uint64_t *)csrc)[i / 8];
+    }
+    // Copy the  remaining bytes
+    for (; i < n; ++i)
+    {
+      cdst[i] = csrc[i];
+    }
+  }
+  else
+  {
+    for (size_t i = 0; i < n; ++i)
+    {
+      cdst[i] = csrc[i];
+    }
+  }
+
   return dst;
   __ESBMC_HIDE:;
   // If n is 0, return dst (nothing to copy)

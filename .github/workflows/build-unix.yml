@@ -21,7 +21,15 @@ jobs:
     runs-on: ${{ inputs.operating-system }}
     steps:
     - uses: actions/checkout@v4
-
+    - name: Install system Dependencies
+      run: |
+        if [[ "${RUNNER_OS}" == "macOS" ]]; then
+           brew update
+           brew install gmp pkg-config
+        elif [[ "${RUNNER_OS}" == "Linux" ]]; then
+           sudo apt-get update && \
+           sudo apt-get install -y libgmp-dev pkg-config        
+        fi          
     - name: Build ESBMC
       run: ./scripts/build.sh ${{ inputs.build-flags }}
     - uses: actions/upload-artifact@v4
