@@ -448,4 +448,172 @@ Harzevili et al. (2023).
 *NumPy Mathematical functions*
 [Documentation](https://numpy.org/doc/stable/reference/routines.math.html)
 
+
+# Numpy Formal Verification
+
+# Numpy Formal Verification with ESBMC
+
+## What We Are Trying to Verify
+
+### Targeted Numpy Features
+
+This verification focuses on common numerical operations provided by Numpy, particularly:
+
+- N-dimensional array computations  
+- Broadcasting behavior  
+- Mathematical functions (e.g., `np.add`, `np.multiply`, `np.power`)  
+- Precision-sensitive operations (e.g., `np.exp`, `np.sin`, `np.arccos`)  
+
+### Why It Matters
+
+While Python and Numpy silently handle overflows or undefined behavior at runtime, model checkers such as **ESBMC** can expose hidden issues that go undetected during normal test execution.
+
+As highlighted by **Harzevili et al., 2023**, common issues in ML-related libraries include:
+
+- Integer overflows and underflows  
+- Division by zero  
+- Precision errors due to rounding or limited bit-width  
+- Out-of-bounds access in arrays  
+
+## Verifying Numpy Programs with ESBMC
+
+### Black-Box Verification with ESBMC
+
+This approach treats Numpy as a black box by analyzing **assertions written by the developer**.
+
+#### 🔍 Example: Detecting Integer Overflow
+
+```python
+import numpy as np
+
+x = np.add(2147483647, 1, dtype=np.int32)
+```
+
+**Python3 Runtime Output:**
+
+No error — NumPy silently wraps on overflow for fixed-width dtypes (like int32).
+
+**ESBMC Output:**
+
+```
+[Counterexample]
+
+State 1 file main.py line 3 column 0 thread 0
+----------------------------------------------------
+Violated property:
+  file main.py line 3 column 0
+  arithmetic overflow on add
+  !overflow("+", 2147483647, 1)
+
+
+VERIFICATION FAILED
+```
+
+An executable test case can be created from this counterexample to expose this implementation error as follows:
+
+````python
+import numpy as np
+
+x = np.add(2147483647, 1, dtype=np.int32)
+
+print("Result:", x)         # Expected: -2147483648 due to overflow
+print("Type:", type(x))     # <class 'numpy.int32'>
+print("Correctly overflowed:", x == -2147483648)
+
+# Optional assertion to expose unexpected behavior
+assert x == -2147483648, "Overflow did not wrap around correctly"
+````
+
+```bash
+$ python3 main.py
+```
+
+````
+Result: -2147483648
+Type: <class 'numpy.int32'>
+Correctly overflowed: True
+````
+
+**Explanation:**  
+
+ESBMC performs bit-precise analysis and treats signed overflow as undefined or erroneous, unlike NumPy’s permissive semantics.
+
+- np.int32 represents 32-bit signed integers: range is −2,147,483,648 to 2,147,483,647.
+- The expression 2147483647 + 1 equals 2147483648, which exceeds the upper bound.
+- In np.int32, this overflows and wraps around to −2,147,483,648.
+
+While NumPy permits this silent overflow, ESBMC correctly identifies it as a violation of safe arithmetic.
+
+#### Matrix Determinant (`np.linalg.det`)
+
+You can also verify the correctness of determinant computations for 2D NumPy arrays:
+
+```python
+import numpy as np
+
+a = np.array([[1, 2], [3, 4]])
+x = np.linalg.det(a)
+assert x == -2
+````
+
+ESBMC symbolically executes the closed-form expression for small matrices, enabling the detection of singular matrices, ill-conditioned operations, or incorrect expectations.
+
+
+### White-Box Verification
+
+For deeper analysis, symbolically execute individual functions using **non-determinism** to verify all possible input paths.
+
+#### Example:
+
+```python
+def integer_squareroot(n: uint64) -> uint64:
+    x = n
+    y = (x + 1) // 2
+    while y < x:
+        x = y
+        y = (x + n // x) // 2
+    return x
+```
+
+**Command:**
+
+```bash
+$ esbmc main.py --function integer_squareroot --incremental-bmc
+```
+
+**ESBMC Output:**
+
+```
+[Counterexample]
+
+
+State 1 file square.py line 2 column 4 function integer_squareroot thread 0
+----------------------------------------------------
+  x = 0xFFFFFFFFFFFFFFFF (11111111 11111111 11111111 11111111 11111111 11111111 11111111 11111111)
+
+State 2 file square.py line 3 column 4 function integer_squareroot thread 0
+----------------------------------------------------
+  y = 0 (00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000)
+
+State 3 file square.py line 5 column 8 function integer_squareroot thread 0
+----------------------------------------------------
+  x = 0 (00000000 00000000 00000000 00000000 00000000 00000000 00000000 00000000)
+
+State 4 file square.py line 6 column 8 function integer_squareroot thread 0
+----------------------------------------------------
+Violated property:
+  file square.py line 6 column 8 function integer_squareroot
+  division by zero
+  x != 0
+
+
+VERIFICATION FAILED
+
+Bug found (k = 1)
+```
+
+**Explanation:**  
+This highlights a potential bug: `n // x` is unsafe if `x == 0`.
+
+>>>>>>> ae8c52c84 (Updated the build-unix.yml file)
 ---
