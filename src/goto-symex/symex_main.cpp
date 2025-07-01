@@ -440,6 +440,20 @@ void goto_symext::symex_assume()
   replace_dynamic_allocation(cond);
 
   assume(cond);
+  expr2tc c = cond;
+  // Recursively remove typecast
+  while (is_typecast2t(c))
+    c = to_typecast2t(c).from;
+
+  // Hack for assume, which allows us to take advantage
+  // of constant propagation in some cases
+  if (is_equality2t(c))
+  {
+    if (is_symbol2t(to_equality2t(c).side_1))
+      cur_state->assignment(to_equality2t(c).side_1, to_equality2t(c).side_2);
+    else if (is_symbol2t(to_equality2t(c).side_2))
+      cur_state->assignment(to_equality2t(c).side_2, to_equality2t(c).side_1);
+  }
 }
 
 void goto_symext::symex_assert()

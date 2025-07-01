@@ -26,28 +26,33 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   // new_guard_false = TRUE means that the guard is false,
   // new_guard_true = TRUE means that the guard is true.
   // And if both variables are not TRUE we need to ask the solver whether the guard holds.
-  if (
-    !new_guard_false && !new_guard_true &&
-    options.get_bool_option("smt-symex-guard"))
+  if (!new_guard_false && !new_guard_true)
   {
-    auto rte = std::dynamic_pointer_cast<runtime_encoded_equationt>(target);
-
-    expr2tc question = equality2tc(gen_true_expr(), new_guard);
-    try
+    if (options.get_bool_option("smt-symex-guard"))
     {
-      tvt res = rte->ask_solver_question(question);
+      auto rte = std::dynamic_pointer_cast<runtime_encoded_equationt>(target);
 
-      if (res.is_false())
-        new_guard_false = true;
-      else if (res.is_true())
-        new_guard_true = true;
+      expr2tc question = equality2tc(gen_true_expr(), new_guard);
+      try
+      {
+        tvt res = rte->ask_solver_question(question);
+
+        if (res.is_false())
+          new_guard_false = true;
+        else if (res.is_true())
+          new_guard_true = true;
+      }
+      catch (runtime_encoded_equationt::dual_unsat_exception &e)
+      {
+        // If reach here it means both guard G and !G are unsatisfiable,
+        // basically means we can't prove the guard must be true or must be false.
+        new_guard_false = false;
+      }
     }
-    catch (runtime_encoded_equationt::dual_unsat_exception &e)
-    {
-      // If reach here it means both guard G and !G are unsatisfiable,
-      // basically means we can't prove the guard must be true or must be false.
-      new_guard_false = false;
-    }
+    else
+      log_warning(
+        "The GOTO guard cannot be determined during symbolic execution, "
+        "please using: --smt-symex-guard");
   }
 
   goto_programt::const_targett goto_target = instruction.targets.front();
