@@ -690,6 +690,40 @@ smt_astt smt_convt::convert_typecast(const expr2tc &expr)
     return convert_ast(cast.from);
   }
 
+  // Handle float-to-integer conversions when int_encoding is enabled
+  if (
+    int_encoding && is_floatbv_type(cast.from->type) &&
+    (is_bv_type(cast.type) || is_fixedbv_type(cast.type)))
+  {
+    // Convert float to real, then to integer
+    smt_astt from_real = convert_ast(cast.from);
+
+    // Convert real to integer using appropriate SMT operation
+    if (is_signedbv_type(cast.type))
+    {
+      return round_real_to_int(from_real);
+    }
+    else
+    {
+      // For unsigned types, ensure non-negative conversion
+      smt_astt int_val = round_real_to_int(from_real);
+      smt_astt zero = mk_smt_int(BigInt(0));
+      smt_astt is_negative = mk_lt(int_val, zero);
+      return mk_ite(is_negative, zero, int_val);
+    }
+  }
+
+  // Handle integer-to-float conversions when int_encoding is enabled
+  if (
+    int_encoding &&
+    (is_bv_type(cast.from->type) || is_fixedbv_type(cast.from->type)) &&
+    is_floatbv_type(cast.type))
+  {
+    // Convert integer to real (which represents float in int_encoding mode)
+    smt_astt from_int = convert_ast(cast.from);
+    return mk_int2real(from_int);
+  }
+
   if (cast.type == cast.from->type)
     return convert_ast(cast.from);
 
