@@ -51,8 +51,8 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
     }
     else
       log_warning(
-        "The GOTO guard cannot be determined during symbolic execution, "
-        "please using: --smt-symex-guard");
+        "Unable to determine the GOTO guard during symbolic execution. "
+        "To proceed, please use the option: --smt-symex-guard.");
   }
 
   goto_programt::const_targett goto_target = instruction.targets.front();

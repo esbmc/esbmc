@@ -449,9 +449,13 @@ void goto_symext::symex_assume()
   // of constant propagation in some cases
   if (is_equality2t(c))
   {
-    if (is_symbol2t(to_equality2t(c).side_1))
+    if (
+      is_symbol2t(to_equality2t(c).side_1) &&
+      is_constant_expr(to_equality2t(c).side_2))
       cur_state->assignment(to_equality2t(c).side_1, to_equality2t(c).side_2);
-    else if (is_symbol2t(to_equality2t(c).side_2))
+    else if (
+      is_symbol2t(to_equality2t(c).side_2) &&
+      is_constant_expr(to_equality2t(c).side_1))
       cur_state->assignment(to_equality2t(c).side_2, to_equality2t(c).side_1);
   }
 }
