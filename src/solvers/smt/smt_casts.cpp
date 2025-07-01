@@ -700,9 +700,7 @@ smt_astt smt_convt::convert_typecast(const expr2tc &expr)
 
     // Convert real to integer using appropriate SMT operation
     if (is_signedbv_type(cast.type))
-    {
       return round_real_to_int(from_real);
-    }
     else
     {
       // For unsigned types, ensure non-negative conversion
