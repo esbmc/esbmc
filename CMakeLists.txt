@@ -13,6 +13,9 @@ set (ESBMC_VERSION_MAJOR 7)
 set (ESBMC_VERSION_MINOR 9)
 set (ESBMC_VERSION_PATCH 0)
 set (ESBMC_VERSION "${ESBMC_VERSION_MAJOR}.${ESBMC_VERSION_MINOR}.${ESBMC_VERSION_PATCH}")
+set (CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 # The only default solver available is smtlib
 set (ESBMC_AVAILABLE_SOLVERS "smtlib")
@@ -139,12 +142,6 @@ configure_file (
  "${PROJECT_SOURCE_DIR}/scripts/cmake/cmake_config.in"
  "${PROJECT_BINARY_DIR}/src/ac_config.h"
 )
-if(NOT WIN32)
-  find_package(PkgConfig REQUIRED)
-  pkg_check_modules(GMP	REQUIRED gmp)
-  target_link_libraries(esbmc PUBLIC ${GMP_LIBRARIES})
-  target_include_directories(esbmc PUBLIC ${GMP_INCLUDE_DIRS})
-endif() 
 
 if(NOT WIN32)
   find_package(PkgConfig REQUIRED)
