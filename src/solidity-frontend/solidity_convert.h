@@ -694,6 +694,9 @@ protected:
   // reentry-check setting
   bool is_reentry_check;
 
+  // pointer-check setting
+  bool is_pointer_check;
+
   // NONDET
   side_effect_expr_function_callt nondet_bool_expr;
   side_effect_expr_function_callt nondet_uint_expr;

@@ -48,6 +48,7 @@ solidity_convertert::solidity_convertert(
     aux_counter(0),
     is_bound(true),
     is_reentry_check(false),
+    is_pointer_check(true),
     nondet_bool_expr(),
     nondet_uint_expr()
 {
@@ -63,6 +64,15 @@ solidity_convertert::solidity_convertert(
   const std::string reentry_check = config.options.get_option("reentry-check");
   if (!reentry_check.empty())
     is_reentry_check = true;
+
+  // solidity does not have pointer
+  // however, in esbmc some array bounds check is related to the pointer check
+  const std::string pointer_check =
+    !config.options.get_option("no-pointer-check").empty()
+      ? config.options.get_option("no-pointer-check")
+      : config.options.get_option("no-standard-checks");
+  if (pointer_check.empty())
+    is_pointer_check = false;
 
   // initialize nondet_bool
   if (
@@ -453,7 +463,8 @@ bool solidity_convertert::check_sol_ver()
   }
 
   auto parse_version =
-    [](const std::string &version_str) -> std::optional<versiont> {
+    [](const std::string &version_str) -> std::optional<versiont>
+  {
     std::regex ver_regex(R"((\d+)\.(\d+)\.(\d+))");
     std::smatch match;
     if (std::regex_match(version_str, match, ver_regex))
@@ -1290,7 +1301,9 @@ bool solidity_convertert::get_var_decl(
   if (is_new_expr)
   {
     // hack: check if it's unbound and the only verifying targets
-    if (!is_bound && tgt_cnt_set.count(current_contractName) > 0 && tgt_cnt_set.size() == 1)
+    if (
+      !is_bound && tgt_cnt_set.count(current_contractName) > 0 &&
+      tgt_cnt_set.size() == 1)
       is_new_expr = false;
   }
 
@@ -5129,7 +5142,9 @@ bool solidity_convertert::get_expr(
         bool is_new_expr = newContractSet.count(base_cname);
         if (is_new_expr)
         {
-          if (!is_bound && tgt_cnt_set.count(base_cname) > 0 && tgt_cnt_set.size() == 1)
+          if (
+            !is_bound && tgt_cnt_set.count(base_cname) > 0 &&
+            tgt_cnt_set.size() == 1)
             is_new_expr = false;
         }
         // get key/value type
@@ -11982,7 +11997,7 @@ bool solidity_convertert::assign_param_nondet(
         get_static_contract_instance_ref(base_cname, s);
         call.arguments().push_back(s);
       }
-      else if (t.get("#sol_type") == "STRING")
+      else if (t.get("#sol_type") == "STRING" && is_pointer_check)
       {
         //! specific for string, we need to explicitly assign it as nondet_string()
         side_effect_expr_function_callt nondet_str;
