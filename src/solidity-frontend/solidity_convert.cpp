@@ -67,11 +67,11 @@ solidity_convertert::solidity_convertert(
 
   // solidity does not have pointer
   // however, in esbmc some array bounds check is related to the pointer check
-  const std::string pointer_check =
+  const std::string no_pointer_check =
     !config.options.get_option("no-pointer-check").empty()
-      ? config.options.get_option("no-pointer-check")
+      ? "1"
       : config.options.get_option("no-standard-checks");
-  if (pointer_check.empty())
+  if (!no_pointer_check.empty())
     is_pointer_check = false;
 
   // initialize nondet_bool
@@ -12000,6 +12000,7 @@ bool solidity_convertert::assign_param_nondet(
       else if (t.get("#sol_type") == "STRING" && is_pointer_check)
       {
         //! specific for string, we need to explicitly assign it as nondet_string()
+        // otherwise we will get invalid_object
         side_effect_expr_function_callt nondet_str;
         get_library_function_call_no_args(
           "nondet_string",
