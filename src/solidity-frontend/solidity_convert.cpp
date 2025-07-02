@@ -10,6 +10,7 @@
 #include <util/std_expr.h>
 #include <util/message.h>
 #include <regex>
+#include <optional>
 
 #include <fstream>
 #include <iostream>
@@ -87,7 +88,8 @@ bool solidity_convertert::convert()
   // By now the context should have the symbols of all ESBMC's intrinsics and the dummy main
   // We need to convert Solidity AST nodes to thstructe equivalent symbols and add them to the context
   // check if the file is suitable for verification
-  contract_precheck();
+  if (contract_precheck())
+    return true;
 
   absolute_path = src_ast_json["absolutePath"].get<std::string>();
   nlohmann::json &nodes = src_ast_json["nodes"];
@@ -97,7 +99,8 @@ bool solidity_convertert::convert()
     return true;
 
   // for coverage and trace simplification: update include_files
-  auto add_unique = [](const std::string &file) {
+  auto add_unique = [](const std::string &file)
+  {
     if (
       std::find(
         config.ansi_c.include_files.begin(),
@@ -354,21 +357,25 @@ void solidity_convertert::topological_sort(
 }
 
 // check if the programs is suitable for verificaiton
-void solidity_convertert::contract_precheck()
+bool solidity_convertert::contract_precheck()
 {
   // check json file contains AST nodes as Solidity might change
   if (!src_ast_json.contains("nodes"))
   {
     log_error("JSON file does not contain any AST nodes");
-    abort();
+    return true;
   }
 
   // check json file contains AST nodes as Solidity might change
   if (!src_ast_json.contains("absolutePath"))
   {
     log_error("JSON file does not contain absolutePath");
-    abort();
+    return true;
   }
+
+  // check solc-version
+  if (check_sol_ver())
+    return true;
 
   nlohmann::json &nodes = src_ast_json["nodes"];
 
@@ -397,8 +404,177 @@ void solidity_convertert::contract_precheck()
   if (!found_contract_def)
   {
     log_error("No verification targets(contracts) were found in the program.");
-    abort();
+    return true;
   }
+  return false;
+}
+
+bool solidity_convertert::check_sol_ver()
+{
+  struct versiont
+  {
+    int major = 0;
+    int minor = 0;
+    int patch = 0;
+
+    bool operator<(const versiont &other) const
+    {
+      if (major != other.major)
+        return major < other.major;
+      if (minor != other.minor)
+        return minor < other.minor;
+      return patch < other.patch;
+    }
+
+    bool operator>(const versiont &other) const
+    {
+      return other < *this;
+    }
+
+    bool operator<=(const versiont &other) const
+    {
+      return !(other < *this);
+    }
+
+    bool operator>=(const versiont &other) const
+    {
+      return !(*this < other);
+    }
+
+    bool operator==(const versiont &other) const
+    {
+      return major == other.major && minor == other.minor && patch == other.patch;
+    }
+  };
+
+  bool found_pragma = false;
+  std::optional<versiont> lower_bound;
+  std::optional<versiont> upper_bound;
+
+  if (!src_ast_json.contains("nodes") || !src_ast_json["nodes"].is_array())
+  {
+    log_error("Cannot find 'nodes' in AST.");
+    return true;
+  }
+
+  auto parse_version = [](const std::string &version_str) -> std::optional<versiont>
+  {
+    std::regex ver_regex(R"((\d+)\.(\d+)\.(\d+))");
+    std::smatch match;
+    if (std::regex_match(version_str, match, ver_regex))
+    {
+      versiont result;
+      result.major = std::stoi(match[1].str());
+      result.minor = std::stoi(match[2].str());
+      result.patch = std::stoi(match[3].str());
+      return result;
+    }
+    return std::nullopt;
+  };
+
+  for (const auto &node : src_ast_json["nodes"])
+  {
+    if (node.contains("nodeType") && node["nodeType"] == "PragmaDirective")
+    {
+      found_pragma = true;
+
+      if (node.contains("literals") && node["literals"].is_array())
+      {
+        std::vector<std::string> literals;
+        for (const auto &lit : node["literals"])
+        {
+          if (lit.is_string())
+          {
+            literals.push_back(lit.get<std::string>());
+          }
+        }
+
+        std::string current_op;
+
+        for (size_t i = 0; i < literals.size(); ++i)
+        {
+          const std::string &token = literals[i];
+
+          if (token == ">=" || token == ">" || token == "<=" || token == "<" || token == "^")
+          {
+            current_op = token;
+            continue;
+          }
+
+          for (size_t len = 1; len <= 3 && (i + len - 1) < literals.size(); ++len)
+          {
+            std::string combined;
+            for (size_t j = 0; j < len; ++j)
+            {
+              combined += literals[i + j];
+            }
+
+            auto ver_opt = parse_version(combined);
+            if (ver_opt.has_value())
+            {
+              versiont ver = ver_opt.value();
+
+              if (current_op == ">=" || current_op == "^" || current_op.empty())
+              {
+                if (!lower_bound.has_value() || ver > lower_bound.value())
+                {
+                  lower_bound = ver;
+                }
+              }
+              else if (current_op == "<=" || current_op == "<")
+              {
+                if (!upper_bound.has_value() || ver < upper_bound.value())
+                {
+                  upper_bound = ver;
+                }
+              }
+
+              i += len - 1;
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  if (!found_pragma)
+  {
+    log_error("Cannot find 'PragmaDirective' in AST.");
+    return true;
+  }
+
+  if (!lower_bound.has_value())
+  {
+    log_warning("Cannot determine minimum Solidity version from pragma.");
+    return false;
+  }
+
+  versiont min_version = lower_bound.value();
+  versiont v050 = {0, 5, 0};
+  versiont v070 = {0, 7, 0};
+
+  if (min_version < v050)
+  {
+    log_error(
+      "The minimum Solidity version ({}.{}.{}) < 0.5.0 is not supported. It is recommended "
+      "to use a more recent Solidity version",
+      min_version.major,
+      min_version.minor,
+      min_version.patch);
+    return true;
+  }
+  else if (min_version >= v050 && min_version < v070)
+  {
+    log_warning(
+      "The minimum solidity version ({}.{}.{}) < 0.7.0 may cause unexpected "
+      "behaviour. It is recommended to use a more recent Solidity version.",
+      min_version.major,
+      min_version.minor,
+      min_version.patch);
+  }
+
+  return false;
 }
 
 bool solidity_convertert::populate_auxilary_vars()
@@ -839,14 +1015,15 @@ bool solidity_convertert::populate_function_signature(
       is_payable = func_node["stateMutability"] == "payable";
       is_inherit = func_node.contains("is_inherited");
 
-      funcSignatures[cname].push_back(solidity_convertert::func_sig(
-        func_name,
-        func_id,
-        visibility,
-        type,
-        is_payable,
-        is_inherit,
-        is_library));
+      funcSignatures[cname].push_back(
+        solidity_convertert::func_sig(
+          func_name,
+          func_id,
+          visibility,
+          type,
+          is_payable,
+          is_inherit,
+          is_library));
     }
   }
 
@@ -854,9 +1031,8 @@ bool solidity_convertert::populate_function_signature(
   bool hasConstructor = std::any_of(
     funcSignatures[cname].begin(),
     funcSignatures[cname].end(),
-    [&cname](const solidity_convertert::func_sig &sig) {
-      return sig.name == cname;
-    });
+    [&cname](const solidity_convertert::func_sig &sig)
+    { return sig.name == cname; });
   if (!hasConstructor && !is_library)
   {
     func_name = cname;
@@ -866,14 +1042,15 @@ bool solidity_convertert::populate_function_signature(
     type.return_type() = empty_typet();
     type.return_type().set("cpp_type", "void");
     is_inherit = false;
-    funcSignatures[cname].push_back(solidity_convertert::func_sig(
-      func_name,
-      func_id,
-      visibility,
-      type,
-      is_payable,
-      is_inherit,
-      is_library));
+    funcSignatures[cname].push_back(
+      solidity_convertert::func_sig(
+        func_name,
+        func_id,
+        visibility,
+        type,
+        is_payable,
+        is_inherit,
+        is_library));
   }
 
   return false;
@@ -9391,8 +9568,8 @@ bool solidity_convertert::is_func_sig_cover(
   const std::string &base)
 {
   // function signature coverage‐check lambda: name + ordered argument types
-  auto covers =
-    [&](const std::string &derived, const std::string &base) -> bool {
+  auto covers = [&](const std::string &derived, const std::string &base) -> bool
+  {
     const auto &dSigs = funcSignatures.at(derived);
     const auto &bSigs = funcSignatures.at(base);
 
@@ -9770,7 +9947,8 @@ void solidity_convertert::extract_new_contracts()
     return;
 
   std::function<void(const nlohmann::json &)> process_node;
-  process_node = [&](const nlohmann::json &node) {
+  process_node = [&](const nlohmann::json &node)
+  {
     if (node.is_object())
     {
       if (node.contains("nodeType") && node["nodeType"] == "NewExpression")
@@ -10622,14 +10800,16 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
   dest = code_blockt();
 
   // call designated "initialization" functions
-  context.foreach_operand_in_order([&dest](const symbolt &s) {
-    if (s.type.initialization() && s.type.is_code())
+  context.foreach_operand_in_order(
+    [&dest](const symbolt &s)
     {
-      code_function_callt function_call;
-      function_call.function() = symbol_expr(s);
-      dest.move_to_operands(function_call);
-    }
-  });
+      if (s.type.initialization() && s.type.is_code())
+      {
+        code_function_callt function_call;
+        function_call.function() = symbol_expr(s);
+        dest.move_to_operands(function_call);
+      }
+    });
 }
 
 void solidity_convertert::get_aux_var(
@@ -11765,7 +11945,8 @@ bool solidity_convertert::has_callable_func(const std::string &cname)
   return std::any_of(
     funcSignatures[cname].begin(),
     funcSignatures[cname].end(),
-    [&cname](const solidity_convertert::func_sig &sig) {
+    [&cname](const solidity_convertert::func_sig &sig)
+    {
       // must be public or external, even if the address is itself
       return sig.name != cname &&
              (sig.visibility == "public" || sig.visibility == "external");
@@ -11782,9 +11963,9 @@ bool solidity_convertert::has_target_function(
     return false;
 
   return std::any_of(
-    it->second.begin(), it->second.end(), [&](const func_sig &sig) {
-      return sig.name == func_name;
-    });
+    it->second.begin(),
+    it->second.end(),
+    [&](const func_sig &sig) { return sig.name == func_name; });
 }
 
 solidity_convertert::func_sig solidity_convertert::get_target_function(
@@ -11805,9 +11986,8 @@ solidity_convertert::func_sig solidity_convertert::get_target_function(
   auto func_it = std::find_if(
     functions.begin(),
     functions.end(),
-    [&func_name](const solidity_convertert::func_sig &sig) {
-      return sig.name == func_name;
-    });
+    [&func_name](const solidity_convertert::func_sig &sig)
+    { return sig.name == func_name; });
 
   // If function is found, return it; otherwise, return an empty func_sig
   if (func_it != functions.end())
