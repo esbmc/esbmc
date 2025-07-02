@@ -1,5 +1,5 @@
 CORE
 contract.solast
 --sol contract.sol --k-induction --no-standard-checks
-^WARNING: Solidity version .*
+^WARNING: The minimum solidity version .*
 ^VERIFICATION SUCCESSFUL$
