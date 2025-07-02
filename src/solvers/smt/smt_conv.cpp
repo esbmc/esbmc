@@ -2489,7 +2489,7 @@ expr2tc smt_convt::get(const expr2tc &expr)
   bool has_null_operands = false;
 
   res->Foreach_operand([this, &have_all, &has_null_operands](expr2tc &e) {
-    if (!e) 
+    if (!e)
     {
       has_null_operands = true;
       have_all = false;
