@@ -631,6 +631,7 @@ protected:
   nlohmann::json src_ast_json_array = nlohmann::json::array();
   // Solidity contracts/ function to be verified
   const std::string &tgt_cnts;
+  std::set<std::string> tgt_cnt_set;
   const std::string &tgt_func;
   //smart contract source file
   const std::string &contract_path;

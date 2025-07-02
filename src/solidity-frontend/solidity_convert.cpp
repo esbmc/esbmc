@@ -170,12 +170,6 @@ bool solidity_convertert::convert()
   // single contract verification: where the option "--contract" is set.
   // multiple contracts verification: essentially verify the whole file.
   // single contract
-  std::set<std::string> tgt_cnt_set;
-  std::istringstream iss(tgt_cnts);
-  std::string tgt_cnt;
-  while (iss >> tgt_cnt)
-    tgt_cnt_set.insert(tgt_cnt);
-
   if (tgt_func.empty())
   {
     if (tgt_cnt_set.size() == 1)
@@ -617,6 +611,15 @@ bool solidity_convertert::populate_auxilary_vars()
       // for(nlohmann::json::iterator ittr;ittr != _json.end(); ++ittr)
       // {}
     }
+  }
+
+  // verifying targets
+  if (!tgt_cnts.empty())
+  {
+    std::istringstream iss(tgt_cnts);
+    std::string tgt_cnt;
+    while (iss >> tgt_cnt)
+      tgt_cnt_set.insert(tgt_cnt);
   }
 
   // TODO: Optimise
@@ -1283,7 +1286,14 @@ bool solidity_convertert::get_var_decl(
   bool is_contract =
     t.get("#sol_type").as_string() == "CONTRACT" ? true : false;
   bool is_mapping = t.get("#sol_type").as_string() == "MAPPING" ? true : false;
+  // hack: if it's unbound and the target contracts does not include it
+  // we treat it as not a newExpression case.
   bool is_new_expr = newContractSet.count(current_contractName);
+  if (is_new_expr)
+  {
+    if (tgt_cnt_set.count(current_contractName) > 0 && tgt_cnt_set.size() == 1)
+      is_new_expr = false;
+  }
 
   // for mapping: populate the element type
   if (is_mapping && !is_new_expr)
@@ -5118,6 +5128,11 @@ bool solidity_convertert::get_expr(
           return true;
 
         bool is_new_expr = newContractSet.count(base_cname);
+        if (is_new_expr)
+        {
+          if (tgt_cnt_set.count(base_cname) > 0 && tgt_cnt_set.size() == 1)
+            is_new_expr = false;
+        }
         // get key/value type
         typet key_t, value_t;
         std::string key_sol_type, val_sol_type;
@@ -5320,6 +5335,13 @@ bool solidity_convertert::get_expr(
     {
       // hack to improve the verification speed
       bool is_new_expr = newContractSet.count(current_contractName);
+      if (is_new_expr)
+      {
+        if (
+          tgt_cnt_set.count(current_contractName) > 0 &&
+          tgt_cnt_set.size() == 1)
+          is_new_expr = false;
+      }
 
       // find mapping definition
       assert(base_json.contains("referencedDeclaration"));
@@ -7282,6 +7304,14 @@ bool solidity_convertert::get_type_description(
     // we need to check if it's inside a contract used in a new expression statement
     assert(!current_baseContractName.empty());
     bool is_new_expr = newContractSet.count(current_baseContractName);
+    if (is_new_expr)
+    {
+      if (
+        tgt_cnt_set.count(current_baseContractName) > 0 &&
+        tgt_cnt_set.size() == 1)
+        is_new_expr = false;
+    }
+
     if (is_new_expr)
       new_type = symbol_typet(prefix + "mapping_t");
     else
