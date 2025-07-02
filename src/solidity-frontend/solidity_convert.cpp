@@ -1286,12 +1286,11 @@ bool solidity_convertert::get_var_decl(
   bool is_contract =
     t.get("#sol_type").as_string() == "CONTRACT" ? true : false;
   bool is_mapping = t.get("#sol_type").as_string() == "MAPPING" ? true : false;
-  // hack: if it's unbound and the target contracts does not include it
-  // we treat it as not a newExpression case.
   bool is_new_expr = newContractSet.count(current_contractName);
   if (is_new_expr)
   {
-    if (tgt_cnt_set.count(current_contractName) > 0 && tgt_cnt_set.size() == 1)
+    // hack: check if it's unbound and the only verifying targets
+    if (!is_bound && tgt_cnt_set.count(current_contractName) > 0 && tgt_cnt_set.size() == 1)
       is_new_expr = false;
   }
 
@@ -5130,7 +5129,7 @@ bool solidity_convertert::get_expr(
         bool is_new_expr = newContractSet.count(base_cname);
         if (is_new_expr)
         {
-          if (tgt_cnt_set.count(base_cname) > 0 && tgt_cnt_set.size() == 1)
+          if (!is_bound && tgt_cnt_set.count(base_cname) > 0 && tgt_cnt_set.size() == 1)
             is_new_expr = false;
         }
         // get key/value type
@@ -5338,7 +5337,7 @@ bool solidity_convertert::get_expr(
       if (is_new_expr)
       {
         if (
-          tgt_cnt_set.count(current_contractName) > 0 &&
+          !is_bound && tgt_cnt_set.count(current_contractName) > 0 &&
           tgt_cnt_set.size() == 1)
           is_new_expr = false;
       }
@@ -7307,7 +7306,7 @@ bool solidity_convertert::get_type_description(
     if (is_new_expr)
     {
       if (
-        tgt_cnt_set.count(current_baseContractName) > 0 &&
+        !is_bound && tgt_cnt_set.count(current_baseContractName) > 0 &&
         tgt_cnt_set.size() == 1)
         is_new_expr = false;
     }
