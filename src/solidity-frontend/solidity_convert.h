@@ -104,7 +104,8 @@ protected:
     std::unordered_map<std::string, std::unordered_set<std::string>> &graph,
     std::unordered_map<std::string, nlohmann::json> &path_to_json,
     nlohmann::json &sorted_files);
-  void contract_precheck();
+  bool contract_precheck();
+  bool check_sol_ver();
   bool populate_auxilary_vars();
   bool get_esbmc_sol_init();
   bool
