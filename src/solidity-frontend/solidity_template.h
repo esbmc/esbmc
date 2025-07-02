@@ -193,8 +193,8 @@ __attribute__((annotate("__ESBMC_inf_size"))) char _ESBMC_rand_str[1];
 
 char *nondet_string() {
 __ESBMC_HIDE:;
-    size_t len = nondet_size_t();
-    __ESBMC_assume(len < SIZE_MAX);  
+    size_t len = nondet_uint();
+    // __ESBMC_assume(len < SIZE_MAX);  
 
     for (size_t i = 0; i < len; ++i) {
         _ESBMC_rand_str[i] = nondet_char();
