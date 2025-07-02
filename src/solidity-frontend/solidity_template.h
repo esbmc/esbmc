@@ -190,8 +190,16 @@ __ESBMC_HIDE:;
 }
 )";
 
+const std::string sol_destruct = R"(
+void selfdestruct()
+{
+__ESBMC_HIDE:;
+  exit(0);
+}
+)";
+
 const std::string sol_funcs =
-  blockhash + gasleft + sol_abi + sol_math + sol_string + sol_byte;
+  blockhash + gasleft + sol_abi + sol_math + sol_string + sol_byte + sol_destruct;
 
 /// data structure
 
