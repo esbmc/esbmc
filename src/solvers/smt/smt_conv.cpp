@@ -2486,18 +2486,31 @@ expr2tc smt_convt::get(const expr2tc &expr)
 
   // Recurse on operands
   bool have_all = true;
-  res->Foreach_operand([this, &have_all](expr2tc &e) {
-    expr2tc new_e;
-    if (e)
-      new_e = get(e);
-    e = new_e;
-    if (!e)
+  bool has_null_operands = false;
+
+  res->Foreach_operand([this, &have_all, &has_null_operands](expr2tc &e) {
+    if (!e) 
+    {
+      has_null_operands = true;
+      have_all = false;
+      return;
+    }
+
+    expr2tc new_e = get(e);
+    if (new_e)
+      e = new_e;
+    else
       have_all = false;
   });
 
-  // And simplify
+  // If we have null operands, return early to avoid crashes in simplify()
+  if (has_null_operands)
+    return expr;
+
+  // Only simplify if all operands are valid
   if (have_all)
     simplify(res);
+
   return res;
 }
 
