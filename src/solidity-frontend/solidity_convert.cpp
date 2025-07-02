@@ -1580,6 +1580,24 @@ bool solidity_convertert::get_var_decl(
       ns, op0, to_struct_type(map_t).components().at(0).type());
     inits.op0() = op0;
 
+    // address => this->
+    exprt this_expr;
+    if (current_functionDecl)
+    {
+      if (get_func_decl_this_ref(*current_functionDecl, this_expr))
+        return true;
+    }
+    else
+    {
+      if (get_ctor_decl_this_ref(ast_node, this_expr))
+        return true;
+    }
+    exprt addr_expr =
+      member_exprt(this_expr, "$address", unsignedbv_typet(160));
+    solidity_gen_typecast(
+      ns, addr_expr, to_struct_type(map_t).components().at(1).type());
+    inits.op1() = addr_expr;
+
     added_symbol.value = inits;
     decl.operands().push_back(inits);
   }

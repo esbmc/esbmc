@@ -188,21 +188,6 @@ __ESBMC_HIDE:;
   strncat(s1, s2, 256);
   return str2uint(s1);
 }
-
-__attribute__((annotate("__ESBMC_inf_size"))) char _ESBMC_rand_str[1];
-
-char *nondet_string() {
-__ESBMC_HIDE:;
-    size_t len = nondet_uint();
-    // __ESBMC_assume(len < SIZE_MAX);  
-
-    for (size_t i = 0; i < len; ++i) {
-        _ESBMC_rand_str[i] = nondet_char();
-        __ESBMC_assume(_ESBMC_rand_str[i] != '\0');
-    }
-    _ESBMC_rand_str[len] = '\0'; 
-    return _ESBMC_rand_str;
-}
 )";
 
 const std::string sol_destruct = R"(
@@ -226,7 +211,7 @@ struct _ESBMC_Mapping
   uint256_t key : 256;
   void *value;
   struct _ESBMC_Mapping *next;
-}__attribute__((packed));
+};
 
 struct mapping_t
 {
