@@ -172,6 +172,7 @@ protected:
    *  merges in the future to handle each path thats taken.
    *  @param old_guard Renamed guard on this jump occuring.
    */
+  bool goto_guard_warning = true;
   virtual void symex_goto(const expr2tc &old_guard);
 
   /**
