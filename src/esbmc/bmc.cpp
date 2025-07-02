@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <thread>
 #include <chrono>
+#include "BS_thread_pool.hpp"
 
 #ifndef _WIN32
 #  include <unistd.h>
@@ -1560,27 +1561,22 @@ smt_convt::resultt bmct::multi_property_check(
   // PARALLEL
   if (options.get_bool_option("parallel-solving"))
   {
-    /* NOTE: I would love to use std::for_each here, but it is not giving
-       * the result I would expect. My guess is either compiler version
-       * or some magic flag that we are not using.
-       *
-       * Nevertheless, we can achieve the same results by just creating
-       * threads.
-       */
 
-    // TODO: Running everything in parallel might be a bad idea.
-    //       Should we also add a thread pool?
-    std::vector<std::thread> parallel_jobs;
+    // Defaults to std::thread::hardware_concurrency() threads.
+    BS::thread_pool pool;
+
+    // Job function does not return value so use detach_task over submit_task
     for (const auto &i : jobs)
-      parallel_jobs.push_back(std::thread(job_function, i));
-
-    // Main driver
-    for (auto &t : parallel_jobs)
     {
-      t.join();
+        pool.detach_task(
+            [i, &job_function]()
+            {
+                job_function(i);
+            });
     }
-    // We could remove joined jobs from the parallel_jobs vector.
-    // However, its probably not worth for small vectors.
+    // Wait for all tasks to complete
+    pool.wait();
+
   }
   // SEQUENTIAL
   else
