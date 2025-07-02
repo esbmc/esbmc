@@ -1,5 +1,4 @@
 CORE
 main.cpp
---bitwuzla --unwind 1
 
 ^VERIFICATION FAILED$
