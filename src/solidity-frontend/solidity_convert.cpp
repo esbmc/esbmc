@@ -540,8 +540,8 @@ bool solidity_convertert::check_sol_ver()
 
   if (!found_pragma)
   {
-    log_error("Cannot find 'PragmaDirective' in AST.");
-    return true;
+    log_warning("Cannot find 'PragmaDirective' in AST.");
+    return false;
   }
 
   if (!lower_bound.has_value())
