@@ -855,7 +855,11 @@ void execution_statet::get_expr_globals(
       name == "c:@__ESBMC_blocked_threads_count" ||
       name.find("c:pthread_lib") != std::string::npos ||
       name == "c:@__ESBMC_rounding_mode" ||
-      name.find("c:@__ESBMC_pthread_thread") != std::string::npos)
+      name.find("c:@__ESBMC_pthread_thread") != std::string::npos ||
+      name.find("c:@__ESBMC_pthread_end_values") != std::string::npos ||
+      name == "c:@__ESBMC_next_thread_key" ||
+      name == "c:@__ESBMC_thread_key_destructors" ||
+      name.find("c:stdlib.c@__ESBMC_atexits") != std::string::npos)
     {
       return;
     }
