@@ -517,7 +517,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
                       (!vd.isExternallyVisible() && !vd.hasGlobalStorage());
 
   if (
-    symbol.static_lifetime && !symbol.is_extern &&
+    symbol.static_lifetime &&
     (!vd.hasInit() || is_aggregate_type(vd.getType())))
   {
     // the type might contains symbolic types,
@@ -525,8 +525,17 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 
     // Initialize with zero value, if the symbol has initial value,
     // it will be added later on in this method
-    symbol.value = gen_zero(get_complete_type(t, ns), true);
-    symbol.value.zero_initializer(true);
+    if (symbol.is_extern)
+    {
+      exprt value = exprt("sideeffect", get_complete_type(t, ns));
+      value.statement("nondet");
+      symbol.value = value;
+    }
+    else
+    {
+      symbol.value = gen_zero(get_complete_type(t, ns), true);
+      symbol.value.zero_initializer(true);
+    }
   }
 
   symbolt *added_symbol = nullptr;
