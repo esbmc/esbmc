@@ -138,7 +138,9 @@ smt_astt smt_convt::convert_bitcast(const expr2tc &expr)
 
     // When int_encoding is true, integer types are represented as integers
     // in the SMT solver, but fp_api expects bitvectors. Fall back to value-based conversion.
-    if (int_encoding && (is_signedbv_type(new_from) || is_unsignedbv_type(new_from)))
+    if (
+      int_encoding &&
+      (is_signedbv_type(new_from) || is_unsignedbv_type(new_from)))
     {
       // Fall back to value-based conversion instead of bit-pattern conversion
       return convert_ast(typecast2tc(to_type, new_from));
