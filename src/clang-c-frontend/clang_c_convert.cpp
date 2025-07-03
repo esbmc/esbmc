@@ -28,6 +28,7 @@ CC_DIAGNOSTIC_POP()
 #include <util/mp_arith.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
+#include <boost/algorithm/string/replace.hpp>
 
 clang_c_convertert::clang_c_convertert(
   contextt &_context,
@@ -156,33 +157,10 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     struct_union_typet::componentt comp(id, name, t);
     if (fd.isBitField())
     {
-      /* According to the C standard, the bitfield width shall be an integer
-       * constant expression (C11 6.7.2.1/4), which the compiler can evaluate
-       * (C11 6.6/2) */
-      clang::Expr::EvalResult result;
-      if (!fd.getBitWidth()->EvaluateAsInt(result, *ASTContext))
-      {
-        log_error("Clang could not calculate bitfield width");
-        std::ostringstream oss;
-        llvm::raw_os_ostream ross(oss);
-        fd.getBitWidth()->dump(ross, *ASTContext);
-        ross.flush();
-        log_error("{}", oss.str());
-        return true;
-      }
-
-      /* TODO: remove this recursive call. `width` is not used. However, there
-       * are side-effects that cause re-ordering in the GOTO for pthread_lib.c
-       * and that also negatively affect Boolector run times, see #764. These
-       * should be investigated before removing it. */
-      exprt width;
-      if (get_expr(*fd.getBitWidth(), width))
+      if (get_bitfield_type(fd, t, comp.type()))
         return true;
 
-      comp.type().width(integer2string(result.Val.getInt().getSExtValue()));
-      comp.type().set("#bitfield", true);
-      comp.type().subtype() = t;
-#if LLVM_VERSION_MAJOR > 16
+#if LLVM_VERSION_MAJOR > 18
       comp.set_is_unnamed_bitfield(fd.isUnnamedBitField());
 #else
       comp.set_is_unnamed_bitfield(fd.isUnnamedBitfield());
@@ -220,7 +198,7 @@ bool clang_c_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
       comp.type().width(width.cformat());
       comp.type().set("#bitfield", true);
       comp.type().subtype() = t;
-#if LLVM_VERSION_MAJOR > 16
+#if LLVM_VERSION_MAJOR > 18
       comp.set_is_unnamed_bitfield(fd.getAnonField()->isUnnamedBitField());
 #else
       comp.set_is_unnamed_bitfield(fd.getAnonField()->isUnnamedBitfield());
@@ -380,7 +358,7 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
    * infinite recursion if the type we're defining refers to itself
    * (via pointers): it either is already being defined (up the stack somewhere)
    * or it's already a complete struct or union in the context. */
-  if (!sym->type.incomplete())
+  if (!sym->type.incomplete() && sym->type.id() != "incomplete_struct")
     return false;
   sym->type.remove(irept::a_incomplete);
 
@@ -1423,6 +1401,7 @@ bool clang_c_convertert::get_builtin_type(
     c_type = "signed_long_long";
     break;
 
+  case clang::BuiltinType::Float16:
   case clang::BuiltinType::Half:
     new_type = half_float_type();
     c_type = "_Float16";
@@ -1491,6 +1470,41 @@ bool clang_c_convertert::get_builtin_type(
   return false;
 }
 
+bool clang_c_convertert::get_bitfield_type(
+  const clang::FieldDecl &fd,
+  const typet &orig_type,
+  typet &new_type)
+{
+  /* According to the C standard, the bitfield width shall be an integer
+   * constant expression (C11 6.7.2.1/4), which the compiler can evaluate
+   * (C11 6.6/2) */
+  clang::Expr::EvalResult result;
+  if (!fd.getBitWidth()->EvaluateAsInt(result, *ASTContext))
+  {
+    log_error("Clang could not calculate bitfield width");
+    std::ostringstream oss;
+    llvm::raw_os_ostream ross(oss);
+    fd.getBitWidth()->dump(ross, *ASTContext);
+    ross.flush();
+    log_error("{}", oss.str());
+    return true;
+  }
+
+  /* TODO: remove this recursive call. `width` is not used. However, there
+       * are side-effects that cause re-ordering in the GOTO for pthread_lib.c
+       * and that also negatively affect Boolector run times, see #764. These
+       * should be investigated before removing it. */
+  exprt width;
+  if (get_expr(*fd.getBitWidth(), width))
+    return true;
+
+  new_type = orig_type;
+  new_type.width(result.Val.getInt().getSExtValue());
+  new_type.set("#bitfield", true);
+  new_type.subtype() = orig_type;
+  return false;
+}
+
 bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 {
   locationt location;
@@ -1524,6 +1538,25 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       static_cast<const clang::DeclRefExpr &>(stmt);
 
     const clang::Decl &dcl = static_cast<const clang::Decl &>(*decl.getDecl());
+
+    // pull in the type that is used to qualify the decl. This is needed so that
+    // `C<0>::f()` where `C<0>` is a template specialization and `f` is a static member function
+    // works correctly when `C<0>::f` is the only use of `C<0>`.
+    // When parsing the template `C` we do not parse the specializations, so there
+    // is no other code that could parse the type of `C<0>`.
+    // (Yes, clang allows us to get all specializations of a template, but that leads to other problems.
+    // See #1782 or #2284)
+
+    if (const auto nns = decl.getQualifier())
+    {
+      if (const auto type = nns->getAsType())
+      {
+        assert(!nns->isDependent());
+        typet ignored;
+        if (get_type(*type, ignored))
+          return true;
+      }
+    }
 
     if (get_decl_ref(dcl, new_expr))
       return true;
@@ -1833,38 +1866,8 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       break;
     }
 
-    if (!perform_virtual_dispatch(member))
-    {
-      exprt comp;
-      if (get_decl(*member.getMemberDecl(), comp))
-        return true;
-
-      if (!is_member_decl_static(member))
-      {
-        exprt base;
-        if (get_expr(*member.getBase(), base))
-          return true;
-
-        assert(!comp.name().empty());
-        // for MemberExpr referring to struct field (or method in case of C++ class)
-        new_expr = member_exprt(base, comp.name(), comp.type());
-      }
-      else
-      {
-        // for static members, use the member decl symbol directly
-        // without making a member_exprt, e.g.
-        // If the member_exprt refers to a class static member, then
-        // replace "OBJECT.MyStatic = 1" with "MyStatic = 1;"
-        assert(comp.statement() == "decl");
-        assert(comp.op0().is_symbol());
-        new_expr = comp.op0();
-      }
-    }
-    else
-    {
-      if (get_vft_binding_expr(member, new_expr))
-        return true;
-    }
+    if (get_member_expr(member, new_expr))
+      return true;
 
     break;
   }
@@ -2840,6 +2843,7 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
     // Everything else should be a value decl
     std::string name, id;
     get_decl_name(*nd, name, id);
+    rewrite_builtin_ref(d, name, id);
 
     typet type;
     if (get_type(nd->getType(), type))
@@ -2861,6 +2865,33 @@ bool clang_c_convertert::get_decl_ref(const clang::Decl &d, exprt &new_expr)
   ross.flush();
   log_error("{}", oss.str());
   return true;
+}
+void clang_c_convertert::rewrite_builtin_ref(
+  const clang::Decl &d,
+  std::string &name,
+  std::string &id) const
+{
+  static const std::list<std::string> builtins_to_rewrite = {
+    "__builtin_malloc",
+    "__builtin_memcpy",
+    "__builtin_memmove",
+    "__builtin_strcpy",
+    "__builtin_strcmp",
+    "__builtin_free",
+    "__builtin_strlen",
+  };
+  if (const auto *fd = llvm::dyn_cast<clang::FunctionDecl>(&d))
+  {
+    unsigned builtin_id = fd->getBuiltinID();
+    if (
+      builtin_id && ASTContext->BuiltinInfo.isLibFunction(builtin_id) &&
+      std::find(builtins_to_rewrite.begin(), builtins_to_rewrite.end(), name) !=
+        builtins_to_rewrite.end())
+    {
+      boost::replace_all(name, "__builtin_", "");
+      boost::replace_all(id, "__builtin_", "");
+    }
+  }
 }
 
 bool clang_c_convertert::get_cast_expr(
@@ -3098,35 +3129,35 @@ bool clang_c_convertert::get_binary_operator_expr(
     break;
 
   case clang::BO_LT:
-    new_expr = exprt("<", t);
+    new_expr = exprt("<", bool_type());
     break;
 
   case clang::BO_GT:
-    new_expr = exprt(">", t);
+    new_expr = exprt(">", bool_type());
     break;
 
   case clang::BO_LE:
-    new_expr = exprt("<=", t);
+    new_expr = exprt("<=", bool_type());
     break;
 
   case clang::BO_GE:
-    new_expr = exprt(">=", t);
+    new_expr = exprt(">=", bool_type());
     break;
 
   case clang::BO_EQ:
-    new_expr = exprt("=", t);
+    new_expr = exprt("=", bool_type());
     break;
 
   case clang::BO_NE:
-    new_expr = exprt("notequal", t);
+    new_expr = exprt("notequal", bool_type());
     break;
 
   case clang::BO_LAnd:
-    new_expr = exprt("and", t);
+    new_expr = exprt("and", bool_type());
     break;
 
   case clang::BO_LOr:
-    new_expr = exprt("or", t);
+    new_expr = exprt("or", bool_type());
     break;
 
   case clang::BO_Assign:
@@ -3440,6 +3471,47 @@ bool clang_c_convertert::get_atomic_expr(
   fake_call.function() = symbol_exprt("c:@F@" + name, t);
   fake_call.function().name(name);
   new_expr.swap(fake_call);
+  return false;
+}
+
+bool clang_c_convertert::get_member_expr(
+  const clang::MemberExpr &memb,
+  exprt &new_expr)
+{
+  typet comp_type;
+  if (get_type(*memb.getMemberDecl()->getType(), comp_type))
+    return true;
+
+  if (const auto *bitfield = memb.getSourceBitField())
+  {
+    typet bitfield_type;
+    if (get_bitfield_type(*bitfield, comp_type, bitfield_type))
+      return true;
+    comp_type.swap(bitfield_type);
+  }
+
+  std::string id, name;
+  get_decl_name(*memb.getMemberDecl(), name, id);
+
+  if (!is_member_decl_static(memb))
+  {
+    exprt base;
+    if (get_expr(*memb.getBase(), base))
+      return true;
+
+    assert(!id.empty());
+    // for MemberExpr referring to struct field (or method in case of C++ class)
+    new_expr = member_exprt(base, id, comp_type);
+  }
+  else
+  {
+    // for static members, use the member decl symbol directly
+    // without making a member_exprt, e.g.
+    // If the member_exprt refers to a class static member, then
+    // replace "OBJECT.MyStatic = 1" with "MyStatic = 1;"
+    new_expr = symbol_exprt(id, comp_type);
+    new_expr.name(name);
+  }
   return false;
 }
 

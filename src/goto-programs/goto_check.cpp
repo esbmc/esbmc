@@ -69,6 +69,11 @@ protected:
     const guardt &guard,
     const locationt &loc);
 
+  void cast_overflow_check(
+    const expr2tc &expr,
+    const guardt &guard,
+    const locationt &loc);
+
   /** check for the buffer overflow in scanf/fscanf */
   void input_overflow_check(const expr2tc &expr, const locationt &loc);
   /* check for signed/unsigned_bv */
@@ -214,6 +219,33 @@ void goto_checkt::float_overflow_check(
       loc,
       guard);
   }
+}
+
+void goto_checkt::cast_overflow_check(
+  const expr2tc &expr,
+  const guardt &guard,
+  const locationt &loc)
+{
+  if (
+    !options.get_bool_option("int-encoding") ||
+    (!enable_overflow_check && !enable_unsigned_overflow_check))
+    return;
+
+  // First, check type.
+  const type2tc &resolved_type = ns.follow(expr->type);
+  if (!is_signedbv_type(resolved_type) && !is_unsignedbv_type(resolved_type))
+    return;
+
+  // Create cast overflow check expression
+  expr2tc cast_overflow = overflow_cast2tc(expr, resolved_type->get_width());
+  make_not(cast_overflow);
+
+  add_guarded_claim(
+    cast_overflow,
+    std::string("Cast arithmetic overflow on ") + get_expr_id(expr),
+    "overflow",
+    loc,
+    guard);
 }
 
 void goto_checkt::overflow_check(
@@ -489,16 +521,30 @@ void goto_checkt::shift_check(
   assert(is_lshr2t(expr) || is_ashr2t(expr) || is_shl2t(expr));
 
   auto right_op = (*expr->get_sub_expr(1));
+  auto right_op_type = right_op->type;
 
-  expr2tc zero = gen_zero(right_op->type);
+  expr2tc zero = gen_zero(right_op_type);
   assert(!is_nil_expr(zero));
 
   expr2tc right_op_non_negative = greaterthanequal2tc(right_op, zero);
 
   auto left_op = (*expr->get_sub_expr(0));
   auto left_op_type = left_op->type;
+  // Use right_op_type as the type of the expression, because otherwise we could
+  // get a signedness mismatch in the lessthan2tc below
   expr2tc left_op_type_size =
-    constant_int2tc(left_op_type, BigInt(left_op_type->get_width()));
+    constant_int2tc(right_op_type, BigInt(left_op_type->get_width()));
+#ifndef NDEBUG
+  // Be paranoid and verify that the size is the same regardless of which type we're using for the
+  // constant. In theory, we could have different signedness or width, but in practice
+  // those differences should not be relevant as the relevant numbers e.g. 32 or 64 can't
+  // cause wraparound issues.
+  expr2tc check2 = (equality2tc(
+    constant_int2tc(left_op_type, BigInt(left_op_type->get_width())),
+    constant_int2tc(right_op_type, BigInt(left_op_type->get_width()))));
+  simplify(check2);
+  assert(is_true(check2));
+#endif
 
   expr2tc right_op_size_check = lessthan2tc(right_op, left_op_type_size);
 
@@ -801,6 +847,12 @@ void goto_checkt::check_rec(
   case expr2t::mul_id:
   {
     overflow_check(expr, guard, loc);
+    break;
+  }
+
+  case expr2t::typecast_id:
+  {
+    cast_overflow_check(expr, guard, loc);
     break;
   }
 

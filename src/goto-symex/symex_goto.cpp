@@ -23,26 +23,38 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
   bool new_guard_false = (is_false(new_guard) || cur_state->guard.is_false());
   bool new_guard_true = is_true(new_guard);
 
-  if (!new_guard_false && options.get_bool_option("smt-symex-guard"))
+  // new_guard_false = TRUE means that the guard is false,
+  // new_guard_true = TRUE means that the guard is true.
+  // And if both variables are not TRUE we need to ask the solver whether the guard holds.
+  if (!new_guard_false && !new_guard_true)
   {
-    auto rte = std::dynamic_pointer_cast<runtime_encoded_equationt>(target);
-
-    expr2tc question = equality2tc(gen_true_expr(), new_guard);
-    try
+    if (options.get_bool_option("smt-symex-guard"))
     {
-      tvt res = rte->ask_solver_question(question);
+      auto rte = std::dynamic_pointer_cast<runtime_encoded_equationt>(target);
 
-      if (res.is_false())
-        new_guard_false = true;
-      else if (res.is_true())
-        new_guard_true = true;
+      expr2tc question = equality2tc(gen_true_expr(), new_guard);
+      try
+      {
+        tvt res = rte->ask_solver_question(question);
+
+        if (res.is_false())
+          new_guard_false = true;
+        else if (res.is_true())
+          new_guard_true = true;
+      }
+      catch (runtime_encoded_equationt::dual_unsat_exception &e)
+      {
+        // If reach here it means both guard G and !G are unsatisfiable,
+        // basically means we can't prove the guard must be true or must be false.
+        new_guard_false = false;
+      }
     }
-    catch (runtime_encoded_equationt::dual_unsat_exception &e)
+    else if (goto_guard_warning)
     {
-      // Assumptions mean that the guard is never satisfiable as true or false,
-      // basically means we've assume'd away the possibility of hitting this
-      // point.
-      new_guard_false = true;
+      log_warning(
+        "Unable to determine the GOTO guard during symbolic execution. "
+        "To proceed, please use the option: --smt-symex-guard.");
+      goto_guard_warning = false;
     }
   }
 

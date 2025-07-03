@@ -2,6 +2,8 @@
 
 #include <string>
 #include <fstream>
+#include <sstream>
+#include <algorithm>
 
 #define DUMP_OBJECT(obj) printf("%s\n", (obj).dump(2).c_str())
 
@@ -95,6 +97,52 @@ JsonType &find_function(JsonType &json, const std::string &func_name)
 }
 
 template <typename JsonType>
+const JsonType &
+find_imported_function(const JsonType &ast, const std::string &func_name)
+{
+  for (const auto &node : ast["body"])
+  {
+    if (node["_type"] == "ImportFrom" || node["_type"] == "Import")
+    {
+      for (const auto &name : node["names"])
+        if (name["name"] == func_name)
+          return node;
+    }
+  }
+  throw std::runtime_error("Function " + func_name + " not found\n");
+}
+
+template <typename JsonType>
+const std::string
+get_object_alias(const JsonType &ast, const std::string &obj_name)
+{
+  for (auto &node : ast["body"])
+  {
+    if (node["_type"] == "ImportFrom" || node["_type"] == "Import")
+    {
+      for (const auto &name : node["names"])
+      {
+        if (name["_type"] == "alias" && name["asname"] == obj_name)
+          return name["name"];
+      }
+    }
+  }
+
+  std::size_t dot_pos = obj_name.rfind('.');
+  if (dot_pos == std::string::npos)
+    return obj_name;
+
+  std::string prefix = obj_name.substr(0, dot_pos);
+  std::string suffix = obj_name.substr(dot_pos);
+  std::string resolved_prefix = get_object_alias(ast, prefix);
+
+  if (resolved_prefix != prefix)
+    return resolved_prefix + suffix;
+
+  return obj_name;
+}
+
+template <typename JsonType>
 const JsonType get_var_node(const std::string &var_name, const JsonType &block)
 {
   for (auto &element : block["body"])
@@ -145,6 +193,17 @@ const JsonType find_var_decl(
     ref = get_var_node(var_name, ast);
 
   return ref;
+}
+
+template <typename JsonType>
+const JsonType find_return_node(const JsonType &block)
+{
+  for (const auto &stmt : block)
+  {
+    if (stmt.contains("_type") && stmt["_type"] == "Return")
+      return stmt;
+  }
+  return JsonType();
 }
 
 } // namespace json_utils

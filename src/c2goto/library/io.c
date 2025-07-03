@@ -189,36 +189,42 @@ __ESBMC_HIDE:;
 
 int feof(FILE *stream)
 {
+__ESBMC_HIDE:;
   // just return nondet
   return nondet_int();
 }
 
 int ferror(FILE *stream)
 {
+__ESBMC_HIDE:;
   // just return nondet
   return nondet_int();
 }
 
 int fileno(FILE *stream)
 {
+__ESBMC_HIDE:;
   // just return nondet
   return nondet_int();
 }
 
 int fputs(const char *s, FILE *stream)
 {
+__ESBMC_HIDE:;
   // just return nondet
   return nondet_int();
 }
 
 int fflush(FILE *stream)
 {
+__ESBMC_HIDE:;
   // just return nondet
   return nondet_int();
 }
 
 int fpurge(FILE *stream)
 {
+__ESBMC_HIDE:;
   // just return nondet
   return nondet_int();
 }

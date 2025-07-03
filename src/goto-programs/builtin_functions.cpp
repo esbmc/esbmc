@@ -1,4 +1,5 @@
 
+#include "irep2/irep2_utils.h"
 #include <ac_config.h>
 
 #include <cassert>
@@ -19,17 +20,20 @@
 #include <util/string_constant.h>
 #include <util/type_byte_size.h>
 
-static const std::string &get_string_constant(const exprt &expr)
+static void get_string_constant(const exprt &expr, std::string &the_string)
 {
   if (expr.id() == "typecast" && expr.operands().size() == 1)
-    return get_string_constant(expr.op0());
+  {
+    get_string_constant(expr.op0(), the_string);
+    return;
+  }
 
   if (
     !expr.is_address_of() || expr.operands().size() != 1 ||
     !expr.op0().is_index() || expr.op0().operands().size() != 2)
   {
-    log_error("expected string constant, but got:\n{}", expr);
-    abort();
+    log_warning("expected string constant, but got:\n{}", expr);
+    return;
   }
 
   const exprt &string = expr.op0().op0();
@@ -44,29 +48,30 @@ static const std::string &get_string_constant(const exprt &expr)
       log_warning("{}", e.what());
     }
 
-  return v.as_string();
+  the_string.append(v.as_string());
 }
 
-static void get_alloc_type_rec(const exprt &src, typet &type, exprt &size)
+static void get_alloc_type_rec(
+  const exprt &src,
+  typet &type,
+  exprt &size,
+  bool is_mul = false)
 {
-  static bool is_mul = false;
-
   const irept &sizeof_type = src.c_sizeof_type();
-  //nec: ex33.c
+
+  // If sizeof_type is valid and we are not in a multiplication context
   if (!sizeof_type.is_nil() && !is_mul)
-  {
-    type = (typet &)sizeof_type;
-  }
+    type = static_cast<const typet &>(sizeof_type);
   else if (src.id() == "*")
   {
-    is_mul = true;
-    forall_operands (it, src)
-      get_alloc_type_rec(*it, type, size);
+    // Mark as multiplication context and recurse
+    for (const auto &operand : src.operands())
+    {
+      get_alloc_type_rec(operand, type, size, true);
+    }
   }
   else
-  {
     size.copy_to_operands(src);
-  }
 }
 
 static void get_alloc_type(const exprt &src, typet &type, exprt &size)
@@ -74,7 +79,9 @@ static void get_alloc_type(const exprt &src, typet &type, exprt &size)
   type.make_nil();
   size.make_nil();
 
-  get_alloc_type_rec(src, type, size);
+  bool is_mul = (src.id() == "*");
+
+  get_alloc_type_rec(src, type, size, is_mul);
 
   if (type.is_nil())
     type = char_type();
@@ -92,6 +99,24 @@ static void get_alloc_type(const exprt &src, typet &type, exprt &size)
       size.id("*");
       size.type() = size.op0().type();
     }
+  }
+}
+
+void goto_convertt::get_alloc_size(typet &alloc_type, exprt &alloc_size)
+{
+  if (alloc_size.is_nil())
+    alloc_size = from_integer(1, size_type());
+
+  if (alloc_type.is_nil())
+    alloc_type = char_type();
+
+  if (alloc_type.id() == "symbol")
+    alloc_type = ns.follow(alloc_type);
+
+  if (alloc_size.type() != size_type())
+  {
+    alloc_size.make_typecast(size_type());
+    simplify(alloc_size);
   }
 }
 
@@ -202,21 +227,7 @@ void goto_convertt::do_mem(
   exprt alloc_size;
 
   get_alloc_type(arguments[0], alloc_type, alloc_size);
-
-  if (alloc_size.is_nil())
-    alloc_size = from_integer(1, size_type());
-
-  if (alloc_type.is_nil())
-    alloc_type = char_type();
-
-  if (alloc_type.id() == "symbol")
-    alloc_type = ns.follow(alloc_type);
-
-  if (alloc_size.type() != size_type())
-  {
-    alloc_size.make_typecast(size_type());
-    simplify(alloc_size);
-  }
+  get_alloc_size(alloc_type, alloc_size);
 
   // produce new object
 
@@ -260,17 +271,41 @@ void goto_convertt::do_realloc(
   const exprt::operandst &arguments,
   goto_programt &dest)
 {
-  // produce new object
+  assert(arguments.size() == 2 && "realloc requires two arguments");
 
-  exprt new_expr("sideeffect", lhs.type());
-  new_expr.statement("realloc");
-  new_expr.copy_to_operands(arguments[0]);
-  new_expr.cmt_size(arguments[1]);
-  new_expr.location() = function.location();
+  // Create a null pointer expression (workaround for missing null_pointer_exprt)
+  exprt null_ptr = gen_zero(arguments[0].type());
+
+  // Compare if the pointer is NULL
+  equality_exprt is_null(arguments[0], null_ptr);
+
+  // get alloc type and size
+  typet alloc_type;
+  exprt alloc_size;
+  get_alloc_type(arguments[1], alloc_type, alloc_size);
+  get_alloc_size(alloc_type, alloc_size);
+
+  // Create malloc-like allocation if ptr is NULL
+  side_effect_exprt malloc_expr("malloc", lhs.type());
+  malloc_expr.copy_to_operands(arguments[1]); // size argument
+  malloc_expr.cmt_size(alloc_size);
+  malloc_expr.cmt_type(alloc_type);
+  malloc_expr.location() = function.location();
+
+  // Create regular realloc allocation
+  exprt realloc_expr("sideeffect", lhs.type());
+  realloc_expr.statement("realloc");
+  realloc_expr.copy_to_operands(arguments[0]);
+  realloc_expr.cmt_size(arguments[1]);
+  realloc_expr.location() = function.location();
+
+  // Use conditional expression: (ptr == NULL) ? malloc(size) : realloc(ptr, size)
+  if_exprt conditional_expr(is_null, malloc_expr, realloc_expr);
+  simplify(conditional_expr);
 
   goto_programt::targett t_n = dest.add_instruction(ASSIGN);
 
-  exprt new_assign = code_assignt(lhs, new_expr);
+  exprt new_assign = code_assignt(lhs, conditional_expr);
   expr2tc new_assign_expr;
   migrate_expr(new_assign, new_assign_expr);
   t_n->code = new_assign_expr;
@@ -303,7 +338,7 @@ void goto_convertt::do_cpp_new(
     remove_sideeffects(alloc_size, dest);
 
     // jmorse: multiply alloc size by size of subtype.
-    type2tc subtype = migrate_type(rhs.type());
+    type2tc subtype = migrate_type(ns.follow(rhs.type().subtype()));
     expr2tc alloc_units;
     migrate_expr(alloc_size, alloc_units);
 
@@ -564,9 +599,12 @@ void goto_convertt::do_function_call_symbol(
     goto_programt::targett t = dest.add_instruction(ASSERT);
     migrate_expr(arguments[0], t->guard);
 
-    const std::string &description = arguments.size() == 1
-                                       ? "ESBMC assertion"
-                                       : get_string_constant(arguments[1]);
+    std::string description;
+    if (arguments.size() == 1)
+      description = "ESBMC assertion";
+    else
+      get_string_constant(arguments[1], description);
+
     t->location = function.location();
     t->location.user_provided(true);
     t->location.property("assertion");
@@ -679,8 +717,8 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
 
-    const irep_idt description =
-      "assertion " + id2string(get_string_constant(arguments[0]));
+    std::string description = "assertion ";
+    get_string_constant(arguments[0], description);
 
     if (options.get_bool_option("no-assertions"))
       return;
@@ -703,8 +741,8 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
 
-    const irep_idt description =
-      "assertion " + id2string(get_string_constant(arguments[3]));
+    std::string description = "assertion ";
+    get_string_constant(arguments[3], description);
 
     if (options.get_bool_option("no-assertions"))
       return;
@@ -727,8 +765,8 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
 
-    const std::string description =
-      "assertion " + get_string_constant(arguments[0]);
+    std::string description = "assertion ";
+    get_string_constant(arguments[0], description);
 
     if (options.get_bool_option("no-assertions"))
       return;
@@ -772,24 +810,10 @@ void goto_convertt::do_function_call_symbol(
       abort();
     }
 
-    exprt list_arg = make_va_list(arguments[0]);
-
-    {
-      side_effect_exprt rhs("va_arg", list_arg.type());
-      rhs.copy_to_operands(list_arg);
-      rhs.set("va_arg_type", to_code_type(function.type()).return_type());
-      goto_programt::targett t1 = dest.add_instruction(ASSIGN);
-      exprt assign_expr = code_assignt(list_arg, rhs);
-      migrate_expr(assign_expr, t1->code);
-      t1->location = function.location();
-    }
-
     if (lhs.is_not_nil())
     {
-      typet t = pointer_typet();
-      t.subtype() = lhs.type();
-      dereference_exprt rhs(lhs.type());
-      rhs.op0() = typecast_exprt(list_arg, t);
+      side_effect_exprt rhs("va_arg", lhs.type());
+      rhs.copy_to_operands(gen_zero(lhs.type()));
       rhs.location() = function.location();
       goto_programt::targett t2 = dest.add_instruction(ASSIGN);
       exprt assign_expr = code_assignt(lhs, rhs);
@@ -870,6 +894,30 @@ void goto_convertt::do_function_call_symbol(
       t->location = function.location();
     }
   }
+  else if (base_name == "__builtin_va_start")
+  {
+    // For Clang fontend, no assignment is needed
+    // just check the type
+    exprt dest_expr = make_va_list(arguments[0]);
+
+    if (!is_lvalue(dest_expr))
+    {
+      log_error("va_start argument expected to be lvalue");
+      abort();
+    }
+  }
+  else if (base_name == "__builtin_va_end")
+  {
+    // For Clang fontend, no assignment is needed,
+    // goto_symex implements VA
+    exprt dest_expr = make_va_list(arguments[0]);
+
+    if (!is_lvalue(dest_expr))
+    {
+      log_error("va_end argument expected to be lvalue");
+      abort();
+    }
+  }
   // Nontemporal means "do not cache please" (https://lwn.net/Articles/255364/)
   else if (base_name == "__builtin_nontemporal_load")
   {
@@ -890,6 +938,98 @@ void goto_convertt::do_function_call_symbol(
     migrate_expr(new_assign, new_assign_expr);
     t_n->code = new_assign_expr;
     t_n->location = function.location();
+  }
+  else if (
+    base_name == "__ESBMC_overflow_result_plus" ||
+    base_name == "__ESBMC_overflow_result_minus" ||
+    base_name == "__ESBMC_overflow_result_mult" ||
+    base_name == "__ESBMC_overflow_result_shl" ||
+    base_name == "__ESBMC_overflow_result_unary_minus")
+  {
+    if (lhs.is_nil())
+      return;
+
+    std::string operation;
+    std::size_t expected_args = 2;
+
+    if (base_name == "__ESBMC_overflow_result_plus")
+      operation = "+";
+    else if (base_name == "__ESBMC_overflow_result_minus")
+      operation = "-";
+    else if (base_name == "__ESBMC_overflow_result_mult")
+      operation = "*";
+    else if (base_name == "__ESBMC_overflow_result_shl")
+      operation = "shl";
+    else if (base_name == "__ESBMC_overflow_result_unary_minus")
+    {
+      operation = "unary-";
+      expected_args = 1;
+    }
+
+    if (arguments.size() != expected_args)
+    {
+      log_error("`{}` expects {} argument(s)", base_name, expected_args);
+      abort();
+    }
+
+    // Prepare the overflow check expression
+    exprt overflow_check("overflow-" + operation, bool_typet());
+    for (const auto &arg : arguments)
+      overflow_check.copy_to_operands(arg);
+    overflow_check.location() = function.location();
+
+    // Prepare the actual operation result expression
+    exprt result_expr_node(operation, arguments[0].type());
+    for (const auto &arg : arguments)
+      result_expr_node.copy_to_operands(arg);
+    result_expr_node.location() = function.location();
+
+    // Package both in a struct result: { overflow: bool, result: type }
+    struct_exprt result_expr;
+    result_expr.type() =
+      lhs.type(); // assumes lhs type is a struct with two fields
+    result_expr.operands().push_back(overflow_check);
+    result_expr.operands().push_back(result_expr_node);
+
+    // Final assignment
+    code_assignt assignment(lhs, result_expr);
+    assignment.location() = function.location();
+    copy(assignment, ASSIGN, dest);
+    return;
+  }
+  // Quantifiers passthrough. Converts function calls into forall or exists expr
+  else if (base_name == "__ESBMC_forall" || base_name == "__ESBMC_exists")
+  {
+    if (arguments.size() != 2)
+    {
+      log_error("`{}' expected to have two arguments", id2string(base_name));
+      abort();
+    }
+    // make it a side effect if there is an LHS
+    if (lhs.is_nil())
+      return;
+
+    exprt rhs =
+      exprt(base_name == "__ESBMC_forall" ? "forall" : "exists", typet("bool"));
+    rhs.copy_to_operands(arguments[0]);
+    rhs.copy_to_operands(arguments[1]);
+
+    rhs.location() = function.location();
+
+    code_assignt assignment(lhs, rhs);
+    assignment.location() = function.location();
+    copy(assignment, ASSIGN, dest);
+    return;
+  }
+  else if (base_name == "set_unexpected")
+  {
+    symbolt new_symbol;
+    new_symbol.name = "__ESBMC_unexpected";
+    new_symbol.type = arguments[0].type();
+    new_symbol.id = "c:@F@" + id2string(new_symbol.name);
+    new_symbol.value = arguments[0].op0().op0();
+    new_name(new_symbol);
+    return;
   }
   else
   {

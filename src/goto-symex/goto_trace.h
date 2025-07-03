@@ -115,6 +115,10 @@ void show_goto_trace(
   const namespacet &ns,
   const goto_tracet &goto_trace);
 
+bool input_file_check(const locationt &l);
+
+void show_simplified_location(std::ostream &out, const locationt &location);
+
 void violation_graphml_goto_trace(
   optionst &options,
   const namespacet &ns,
@@ -142,7 +146,7 @@ void generate_html_report(
   const std::string_view uuid,
   const namespacet &ns,
   const goto_tracet &goto_trace,
-  const cmdlinet::options_mapt &options_map);
+  const optionst &options);
 
 void generate_json_report(
   const std::string_view uuid,

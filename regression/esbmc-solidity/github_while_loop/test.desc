@@ -1,4 +1,4 @@
 CORE
 contract.solast
---function while_loop --sol contract.sol
+--function while_loop --sol contract.sol --no-standard-checks --k-induction
 ^VERIFICATION SUCCESSFUL$

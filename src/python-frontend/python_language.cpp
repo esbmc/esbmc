@@ -70,11 +70,26 @@ bool python_languaget::parse(const std::string &path)
 
   // Get Python interpreter path informed by the user
   std::string python_exec = config.options.get_option("python");
-  if (python_exec.empty())
-    python_exec = "python";
+  auto python_exec_path = bp::search_path(python_exec);
+  std::list<std::string> python_exec_names = {"python3", "python"};
+  if (!python_exec.empty())
+    python_exec_names.push_front(python_exec);
+  for (const auto &name : python_exec_names)
+  {
+    python_exec_path = bp::search_path(name);
+    if (!python_exec_path.empty())
+      break;
+  }
+  if (python_exec_path.empty())
+  {
+    log_error(
+      "No python executable was found. Tried: {}\n",
+      fmt::join(python_exec_names, ", "));
+    exit(1);
+  }
 
   // Create a child process to execute Python
-  bp::child process(bp::search_path(python_exec), args);
+  bp::child process(python_exec_path, args);
 
   // Wait for execution
   process.wait();
@@ -96,6 +111,9 @@ bool python_languaget::parse(const std::string &path)
   }
 
   ast = nlohmann::json::parse(ast_json);
+
+  if (config.options.get_bool_option("parse-tree-only"))
+    return false;
 
   try
   {
@@ -129,7 +147,7 @@ bool python_languaget::typecheck(contextt &context, const std::string &)
   try
   {
     // Generate symbol table
-    python_converter converter(context, ast, global_scope_);
+    python_converter converter(context, &ast, global_scope_);
     converter.convert();
   }
   catch (const std::runtime_error &e)

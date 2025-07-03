@@ -101,7 +101,7 @@ public:
 
   smt_astt overflow_arith(const expr2tc &expr) override;
 
-  void dump_smt() override;
+  std::string dump_smt() override;
   void print_model() override;
 
   // Members

@@ -1,0 +1,4 @@
+CORE
+main.c
+--unwind 8 --no-unwinding-assertions --force-malloc-success --force-realloc-success
+^VERIFICATION SUCCESSFUL$

@@ -23,3 +23,31 @@ l6 = make_list()
 assert l6[0] == 1
 assert l6[1] == 2
 assert l6[2] == 3
+
+
+def foo(l: list[int]) -> list[int]:
+    return l
+
+l7 = [2,2,3]
+l7[0] = 1    # Modify element after initialisation
+assert l7[0] == 1
+assert l7[1] == 2
+assert l7[2] == 3
+
+
+def func1(x:float) -> float:
+    y = x
+    return 2.0
+
+def func2(l: list[float]) -> None:
+    l[0] = func1(l[0]) # Updating list element within a function
+
+l8 = [1.0]
+func2(l8)
+assert l8[0] == 2.0
+
+def bar(x:list[int]) -> None:
+    assert x[0] == 1
+
+x = 0    
+bar([1,2,3])

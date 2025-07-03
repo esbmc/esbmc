@@ -1,4 +1,5 @@
 #include <fmt/core.h>
+#include <solidity-frontend/solidity_convert.h>
 #include <solidity-frontend/solidity_grammar.h>
 #include <set>
 #include <util/message.h>
@@ -91,7 +92,8 @@ ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element)
   }
   else if (
     element["nodeType"] == "FunctionDefinition" &&
-    (element["kind"] == "function" || element["kind"] == "constructor"))
+    (element["kind"] == "function" || element["kind"] == "constructor" ||
+     element["kind"] == "receive" || element["kind"] == "fallback"))
   {
     return FunctionDef;
   }
@@ -110,6 +112,14 @@ ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element)
   else if (element["nodeType"] == "EventDefinition")
   {
     return EventDef;
+  }
+  else if (element["nodeType"] == "UsingForDirective")
+  {
+    return UsingForDef;
+  }
+  else if (element["nodeType"] == "ModifierDefinition")
+  {
+    return ModifierDef;
   }
   else
   {
@@ -132,6 +142,8 @@ const char *contract_body_element_to_str(ContractBodyElementT type)
     ENUM_TO_STR(EnumDef)
     ENUM_TO_STR(ErrorDef)
     ENUM_TO_STR(EventDef)
+    ENUM_TO_STR(UsingForDef)
+    ENUM_TO_STR(ModifierDef)
     ENUM_TO_STR(ContractBodyElementTError)
   default:
   {
@@ -141,10 +153,48 @@ const char *contract_body_element_to_str(ContractBodyElementT type)
   }
 }
 
+// check if it's <address>.member
+bool is_address_member_call(const nlohmann::json &expr)
+{
+  if (expr["nodeType"] != "MemberAccess" || !expr.contains("expression"))
+    return false;
+  SolidityGrammar::TypeNameT type_name =
+    get_type_name_t(expr["expression"]["typeDescriptions"]);
+
+  if (
+    (type_name == SolidityGrammar::TypeNameT::AddressPayableTypeName ||
+     type_name == SolidityGrammar::TypeNameT::AddressTypeName) &&
+    expr.contains("memberName") &&
+    (solidity_convertert::is_low_level_call(expr["memberName"]) ||
+     solidity_convertert::is_low_level_property(expr["memberName"])))
+    return true;
+
+  return false;
+}
+
+// check if it is a function defined in a library
+bool is_sol_library_function(const int ref_id)
+{
+  const auto &func_ref = solidity_convertert::find_decl_ref_unique_id(
+    solidity_convertert::src_ast_json["nodes"], ref_id);
+  if (func_ref.empty() || func_ref.is_null())
+    return false;
+  if (!(func_ref["nodeType"] == "FunctionDefinition" ||
+        func_ref["nodeType"] == "EventDefinition" ||
+        func_ref["nodeType"] == "ErrorDefinition"))
+    return false;
+  const auto &lib_ref = solidity_convertert::find_parent_contract(
+    solidity_convertert::src_ast_json["nodes"], func_ref);
+  if (lib_ref.contains("contractKind") && lib_ref["contractKind"] == "library")
+    return true;
+
+  return false;
+}
+
 // rule type-name
 TypeNameT get_type_name_t(const nlohmann::json &type_name)
 {
-  // Solidity AST node has duplicate descriptions: ["typeName"]["typeDescriptions"] and ["typeDescriptions"]
+  // Solidity AST node has duplicate descrptions: ["typeName"]["typeDescriptions"] and ["typeDescriptions"]
   //! Order matters
 
   if (type_name.contains("typeString"))
@@ -163,9 +213,19 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     }
     if (typeIdentifier.find("t_mapping$") != std::string::npos)
     {
+      std::string target = "t_mapping$";
+
+      size_t first = typeIdentifier.find(target);
+      size_t second = typeIdentifier.find(target, first + 1);
+
+      if (first != std::string::npos && second != std::string::npos)
+      {
+        log_error("Currently we do not support nested mapping");
+        return TypeNameTError;
+      }
       return MappingTypeName;
     }
-    else if (typeIdentifier.find("t_array$") != std::string::npos)
+    else if (typeIdentifier.compare(0, 8, "t_array$") == 0)
     {
       // Solidity's array type description is like:
       //  "typeIdentifier": "t_array$_t_uint8_$2_memory_ptr",
@@ -190,6 +250,16 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
 
       return ArrayTypeName;
     }
+    else if (typeIdentifier.compare(0, 9, "t_struct$") == 0)
+    {
+      return StructTypeName;
+    }
+    else if (typeIdentifier.compare(0, 9, "t_address") == 0)
+    {
+      if (typeIdentifier.compare(0, 17, "t_address_payable") == 0)
+        return AddressPayableTypeName;
+      return AddressTypeName;
+    }
     else if (
       uint_string_to_type_map.count(typeString) ||
       int_string_to_type_map.count(typeString) || typeString == "bool" ||
@@ -205,16 +275,14 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     {
       return EnumTypeName;
     }
-    else if (typeIdentifier.find("t_contract$") != std::string::npos)
+    else if (typeIdentifier.compare(0, 11, "t_contract$") == 0)
     {
       return ContractTypeName;
     }
-    else if (typeIdentifier.find("t_struct$") != std::string::npos)
-    {
-      return StructTypeName;
-    }
     else if (typeString.find("type(") != std::string::npos)
     {
+      if (typeIdentifier.compare(0, 17, "t_magic_meta_type") == 0)
+        return TypeProperty;
       // For type conversion
       return TypeConversionName;
     }
@@ -239,6 +307,10 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     else if (typeIdentifier.compare(0, 7, "t_magic") == 0)
     {
       return BuiltinTypeName;
+    }
+    else if (solidity_convertert::UserDefinedVarMap.count(typeString) > 0)
+    {
+      return UserDefinedTypeName;
     }
     else
     {
@@ -279,12 +351,16 @@ const char *type_name_to_str(TypeNameT type)
     ENUM_TO_STR(ArrayTypeName)
     ENUM_TO_STR(DynArrayTypeName)
     ENUM_TO_STR(ContractTypeName)
+    ENUM_TO_STR(AddressTypeName)
+    ENUM_TO_STR(AddressPayableTypeName)
     ENUM_TO_STR(TypeConversionName)
+    ENUM_TO_STR(TypeProperty)
     ENUM_TO_STR(EnumTypeName)
     ENUM_TO_STR(StructTypeName)
     ENUM_TO_STR(TupleTypeName)
     ENUM_TO_STR(MappingTypeName)
     ENUM_TO_STR(BuiltinTypeName)
+    ENUM_TO_STR(UserDefinedTypeName)
     ENUM_TO_STR(TypeNameTError)
   default:
   {
@@ -322,6 +398,11 @@ ElementaryTypeNameT get_elementary_type_name_t(const nlohmann::json &type_name)
      * expr to create an internal type.
      */
     return INT_LITERAL;
+  }
+  if (typeString.find("rational_const") != std::string::npos)
+  {
+    // Will not be used
+    return RA_LITERAL;
   }
   if (typeString.find("literal_string") == 0)
   {
@@ -399,6 +480,7 @@ const char *elementary_type_name_to_str(ElementaryTypeNameT type)
     ENUM_TO_STR(UINT248)
     ENUM_TO_STR(UINT256)
     ENUM_TO_STR(INT_LITERAL)
+    ENUM_TO_STR(RA_LITERAL)
     ENUM_TO_STR(INT8)
     ENUM_TO_STR(INT16)
     ENUM_TO_STR(INT24)
@@ -625,6 +707,10 @@ StatementT get_statement_t(const nlohmann::json &stmt)
   {
     return EmitStatement;
   }
+  else if (stmt["nodeType"] == "PlaceholderStatement")
+  {
+    return PlaceholderStatement;
+  }
   else
   {
     log_error(
@@ -651,6 +737,7 @@ const char *statement_to_str(StatementT type)
     ENUM_TO_STR(BreakStatement)
     ENUM_TO_STR(RevertStatement)
     ENUM_TO_STR(EmitStatement)
+    ENUM_TO_STR(PlaceholderStatement)
   default:
   {
     assert(!"Unknown statement type");
@@ -662,10 +749,29 @@ const char *statement_to_str(StatementT type)
 // rule expression
 ExpressionT get_expression_t(const nlohmann::json &expr)
 {
-  if (expr.is_null())
+  if (expr.is_null() || expr.empty())
   {
     return NullExpr;
   }
+  assert(expr.contains("nodeType"));
+
+  if (
+    expr.contains("typeDescriptions") &&
+    expr["typeDescriptions"].contains("typeString"))
+  {
+    // special handling for potential rational_const
+    // e.g.
+    //  - 0.5 * 1 day
+    //  - 0.01 ether
+    //  - uint256 x = 0.5 * 10;
+    const std::string typeString = expr["typeDescriptions"]["typeString"];
+    if (
+      typeString.compare(0, 9, "int_const") == 0 &&
+      (!expr.contains("value") ||
+       expr["value"].get<std::string>().find(".") != std::string::npos))
+      return LiteralWithRational;
+  }
+
   if (expr["nodeType"] == "Assignment" || expr["nodeType"] == "BinaryOperation")
   {
     return BinaryOperatorClass;
@@ -685,6 +791,36 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
   }
   else if (expr["nodeType"] == "Literal")
   {
+    if (expr.contains("subdenomination"))
+    {
+      std::string unit = expr["subdenomination"];
+
+      if (unit == "wei")
+        return LiteralWithWei;
+      else if (unit == "gwei")
+        return LiteralWithGwei;
+      else if (unit == "szabo")
+        return LiteralWithSzabo;
+      else if (unit == "finney")
+        return LiteralWithFinney;
+      else if (unit == "ether")
+        return LiteralWithEther;
+      else if (unit == "seconds")
+        return LiteralWithSeconds;
+      else if (unit == "minutes")
+        return LiteralWithMinutes;
+      else if (unit == "hours")
+        return LiteralWithHours;
+      else if (unit == "days")
+        return LiteralWithDays;
+      else if (unit == "weeks")
+        return LiteralWithWeeks;
+      else if (unit == "years")
+        return LiteralWithYears;
+      else
+        return LiteralWithUnknownUnit;
+    }
+
     return Literal;
   }
   else if (expr["nodeType"] == "TupleExpression")
@@ -698,14 +834,21 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
   {
     return Mapping;
   }
+  else if (expr["nodeType"] == "FunctionCallOptions")
+  {
+    return CallOptionsExprClass;
+  }
   else if (expr["nodeType"] == "FunctionCall")
   {
     if (expr["expression"]["nodeType"] == "NewExpression")
       return NewExpression;
+    if (expr["kind"] == "typeConversion")
+      return TypeConversionExpression;
     if (
-      expr["expression"]["nodeType"] == "ElementaryTypeNameExpression" &&
-      expr["kind"] == "typeConversion")
-      return ElementaryTypeNameExpression;
+      get_type_name_t(expr["typeDescriptions"]) ==
+      SolidityGrammar::TypeProperty)
+      return TypePropertyExpression;
+
     return CallExprClass;
   }
   else if (expr["nodeType"] == "MemberAccess")
@@ -713,12 +856,18 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
     assert(expr.contains("expression"));
     SolidityGrammar::TypeNameT type_name =
       get_type_name_t(expr["expression"]["typeDescriptions"]);
-    if (type_name == SolidityGrammar::TypeNameT::StructTypeName)
+    if (
+      expr.contains("referencedDeclaration") &&
+      is_sol_library_function(expr["referencedDeclaration"].get<int>()))
+      return LibraryMemberCall;
+    else if (type_name == SolidityGrammar::TypeNameT::StructTypeName)
       return StructMemberCall;
     else if (type_name == SolidityGrammar::TypeNameT::EnumTypeName)
       return EnumMemberCall;
     else if (type_name == SolidityGrammar::TypeNameT::ContractTypeName)
       return ContractMemberCall;
+    else if (is_address_member_call(expr))
+      return AddressMemberCall;
     else
       //TODO Assume it's a builtin member
       // due to that the BuiltinTypeName cannot cover all the builtin member
@@ -964,56 +1113,39 @@ const char *expression_to_str(ExpressionT type)
 
     ENUM_TO_STR(DeclRefExprClass)
     ENUM_TO_STR(Literal)
+    ENUM_TO_STR(LiteralWithRational)
+    ENUM_TO_STR(LiteralWithWei)
+    ENUM_TO_STR(LiteralWithGwei)
+    ENUM_TO_STR(LiteralWithSzabo)
+    ENUM_TO_STR(LiteralWithFinney)
+    ENUM_TO_STR(LiteralWithEther)
+    ENUM_TO_STR(LiteralWithSeconds)
+    ENUM_TO_STR(LiteralWithMinutes)
+    ENUM_TO_STR(LiteralWithHours)
+    ENUM_TO_STR(LiteralWithDays)
+    ENUM_TO_STR(LiteralWithWeeks)
+    ENUM_TO_STR(LiteralWithYears)
+    ENUM_TO_STR(LiteralWithUnknownUnit)
     ENUM_TO_STR(Tuple)
     ENUM_TO_STR(Mapping)
     ENUM_TO_STR(CallExprClass)
+    ENUM_TO_STR(CallOptionsExprClass)
     ENUM_TO_STR(ImplicitCastExprClass)
     ENUM_TO_STR(IndexAccess)
     ENUM_TO_STR(NewExpression)
+    ENUM_TO_STR(AddressMemberCall)
+    ENUM_TO_STR(LibraryMemberCall)
     ENUM_TO_STR(ContractMemberCall)
     ENUM_TO_STR(StructMemberCall)
     ENUM_TO_STR(EnumMemberCall)
     ENUM_TO_STR(BuiltinMemberCall)
-    ENUM_TO_STR(ElementaryTypeNameExpression)
+    ENUM_TO_STR(TypeConversionExpression)
+    ENUM_TO_STR(TypePropertyExpression)
     ENUM_TO_STR(NullExpr)
     ENUM_TO_STR(ExpressionTError)
   default:
   {
     assert(!"Unknown expression type");
-    return "UNKNOWN";
-  }
-  }
-}
-
-// rule variable-declaration-statement
-VarDeclStmtT get_var_decl_stmt_t(const nlohmann::json &stmt)
-{
-  if (
-    stmt["nodeType"] == "VariableDeclaration" && stmt["stateVariable"] == false)
-  {
-    return VariableDecl;
-  }
-  else
-  {
-    log_error(
-      "Got expression nodeType={}. Unsupported "
-      "variable-declaration-statement operator",
-      stmt["nodeType"].get<std::string>());
-    abort();
-  }
-  return VarDeclStmtTError; // make some old compilers happy
-}
-
-const char *var_decl_statement_to_str(VarDeclStmtT type)
-{
-  switch (type)
-  {
-    ENUM_TO_STR(VariableDecl)
-    ENUM_TO_STR(VariableDeclTuple)
-    ENUM_TO_STR(VarDeclStmtTError)
-  default:
-  {
-    assert(!"Unknown variable-declaration-statement type");
     return "UNKNOWN";
   }
   }
@@ -1027,7 +1159,7 @@ FunctionDeclRefT get_func_decl_ref_t(const nlohmann::json &decl)
     decl["nodeType"] == "EventDefinition");
   if (
     decl["parameters"]["parameters"].size() == 0 ||
-    decl["kind"] == "constructor")
+    (decl.contains("kind") && decl["kind"] == "constructor"))
   {
     return FunctionNoProto;
   }

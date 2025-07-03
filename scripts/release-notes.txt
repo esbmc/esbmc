@@ -1,5 +1,107 @@
 Release Notes of the ESBMC model checker
 
+*** Version 7.9
+
+This release of ESBMC v7.9 introduces enhancements in Solidity verification, Python frontend support, overflow and concurrency analysis, and overall system robustness. Below is a comprehensive summary of the new features, enhancements, and bug fixes:
+
+* New Features
+** Solidity Verification
+- Introduced a bounded cross-contract verification algorithm for more comprehensive smart contract analysis (#2327).
+- Added support for function calls with options, unit keywords, and insufficient balance checks in Solidity (#2398, #2393).
+- Implemented coverage support for Solidity programs, enabling fine-grained analysis (#2389).
+- Introduced AST merging across multiple files and fixed function order bugs, improving multi-contract verification accuracy (#2392, #2400).
+- Improved address modeling and ensured temp files are uniquely created to prevent race conditions (#2379, #2396).
+** Python Frontend
+- Enhanced support for NumPy math functions by reusing C libm models (#2395).
+- Added models for numpy.ceil, improved broadcasting rule checking, and better support for dtype arguments (#2382, #2353, #2300).
+- Implemented support for nondeterministic values, random.random(), random.randint(), and improved function call handling (#2303, #2299, #2250).
+- Enabled function default parameters to be variables and improved string literal handling (#2346, #2251).
+** C/C++ Verification
+- Added operational models for C++ constructs like std::stoi, std::stof, and align_val_t (#2277, #2301).
+- Improved realloc handling and added overflow detection for comparison operators (#2345, #2344).
+- Enhanced typecast overflow detection and introduced overflow_cast in SMT backend (#2376, #2367).
+** SMT Backend Enhancements
+- Fixed overflow detection for signed subtraction and unsigned division/modulus (#2383).
+- Enhanced overflow handling in symbolic execution (#2338, #2343).
+- Supported bitwise integer arithmetic in Z3 (#2354).
+- Added support for SMT quantifiers (#2261).
+** Concurrency and Data-Race Detection
+- Improved concurrency checks by optimizing and unifying the data race flags (#2385, #2399).
+- Increased context-switch bound for SV-COMP to 3 (#2378).
+* Fixes and Improvements
+** Verification Process
+- Fixed regression in Solidity verification (#2402).
+- Improved modeling of strcpy, atexit, and infinite arrays for operational models (#2253, #2351, #2349).
+- Fixed symbolic execution issues with goto-check and k-induction under certain edge cases (#2328, #2326, #2340).
+* Build System
+- Fixed build issues on Windows (#2403).
+- Updated external dependencies and improved CMake compatibility (#2390, #2370).
+- Made test cases compatible with Windows (#2361).
+* Coverage and Test Infrastructure
+- Fixed the internal coverage algorithm and improved Solidity coverage instrumentation (#2365, #2389).
+- Added various regression and SV-COMP benchmark test cases (#2362, #2359, #2318).
+* Acknowledgments
+We want to thank the following contributors for this release: @XLiZHI, @ChenfengWei0, @prototypeC14, @brcfarias, @intrigus-lgtm, @Ben-Eichhoefer, @ssshivaji, and @lucasccordeiro. Your contributions to Solidity support, Python frontend, SMT enhancements, and concurrency modeling have significantly strengthened the ESBMC verification ecosystem.
+
+*** Version 7.8.1
+
+This is the ESBMC version used at the FSE'25 submission:
+
+- Feature/build mac (#2219)
+- GCSE now only caches overflow inner operands (#2221)
+- Only replace inner expressions for overflow in GCSE (#2227)
+- Handling chained comparisons in Python (#2228)
+- GCSE now resets index2t (#2230)
+- Force update of tags in benchexec action (#2234)
+- Added new catch exception for GCSE (#2233)
+- Improve the adjustment of capture variables (#2222)
+
+
+*** Version 7.8
+
+This release introduces several significant improvements, feature enhancements, bug fixes, and updates to improve the functionality and usability of ESBMC. Below is a detailed breakdown of the changes:
+
+* New Features
+** Build Support for macOS:
+- Added build instructions for macOS M1 and Intel architectures (#2217, #2216, #2213).
+- Updated README files to reflect new macOS build compatibility (#2213, #2089).
+** SMT Solver Enhancements:
+- Support for extracting arrays from tuples in SMT (#2215).
+- Updated Bitwuzla SMT solver from v0.6.1 to v0.7.0 for improved performance (#2199).
+- Fixed pointer typecast issues in SMT backends for byte updates (#2197).
+** Concurrency Improvements:
+- Adjusted concurrency flags for memory leak and overflow checks (#2206).
+- Read global variables directly from function calls in concurrency checks (#2192).
+- Fixed interleavings and guards for better thread scheduling (#2185).
+- Introduced a new thread scheduling policy (#2178).
+** C and C++ Verification Enhancements:
+- Added support for clang built-in float16 types (#2214).
+- Support for clang::__builtin_va_* operations in C verification (#2207).
+- Fixed allocation size calculations in C++ new operations (#2187).
+- Enhanced lambda captures for C++14 (#2170).
+- Supported std::make_tuple, std::forward, and other C++ standard functions (#2051, #2118).
+** Python Frontend Updates:
+- Improved handling of module aliases during verification (#2196).
+- Enhanced error messages and documentation for Python (#2107, #2086).
+* Fixes and Improvements
+** Verification Process:
+- Improved constant propagation handling (#2128).
+- Addressed robustness issues in alloca handling during symbolic execution (#2095).
+- Enhanced handling of array initialization loops in C++ verification (#2101).
+** Build and Compilation:
+- Fixed compatibility with newer Clang versions (Clang 18 and Clang 19) (#2189, #2099).
+- Updated CI to include static builds with LLVM 16 as the default (#2062).
+** Coverage and Benchmarks:
+- Enabled assertion coverage in function mode (#2106).
+- Added benchmarks for SV-COMP 2025 (#2158).
+- Improved branch coverage support (#2056).
+* Miscellaneous:
+- Hardened utility functions like binary2integer for reliability (#2132).
+- Added JSON generation for test reports and refined HTML reports (#2127).
+- Updated concurrency benchmark inclusion in BenchExec runs (#2201).
+* Acknowledgments
+This release would not have been possible without the contributions from the community and team members, including but not limited to @ssshivaji, @intrigus-lgtm, @XLiZHI, @ChenfengWei0, @Anthonysdu, @mikhailramalho, and @brcfarias. Thank you for your continued support and efforts to enhance ESBMC.
+
 *** Version 7.7
 * New Features and Improvements:
 ** Python Frontend:

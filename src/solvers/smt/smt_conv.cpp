@@ -1,3 +1,4 @@
+#include "irep2/irep2_expr.h"
 #include <iomanip>
 #include <set>
 #include <solvers/prop/literal.h>
@@ -177,6 +178,27 @@ void smt_convt::push_ctx()
   ctx_level++;
 }
 
+/* Iterate over "body" expression looking for symbols with the same name
+   as lhs. Then, replaces it. */
+void replace_name_in_body(
+  const expr2tc &lhs,
+  const expr2tc &replacement,
+  expr2tc &body)
+{
+  // TODO: lhs and replacement should be a list of pairs to deal with multiple symbols
+  assert(is_symbol2t(lhs));
+  if (is_symbol2t(body))
+  {
+    if (to_symbol2t(body).thename == to_symbol2t(lhs).thename)
+      body = replacement;
+
+    return;
+  }
+  body->Foreach_operand([lhs, replacement](expr2tc &e) {
+    replace_name_in_body(lhs, replacement, e);
+  });
+}
+
 void smt_convt::pop_ctx()
 {
   // Erase everything in caches added in the current context level. Everything
@@ -280,7 +302,6 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
 
   std::vector<smt_astt> args;
-  args.reserve(expr->get_num_sub_exprs());
 
   switch (expr->expr_id)
   {
@@ -304,9 +325,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   default:
   {
     // Convert all the arguments and store them in 'args'.
-    unsigned int i = 0;
+    args.reserve(expr->get_num_sub_exprs());
     expr->foreach_operand(
-      [this, &args, &i](const expr2tc &e) { args[i++] = convert_ast(e); });
+      [this, &args](const expr2tc &e) { args.push_back(convert_ast(e)); });
   }
   }
 
@@ -701,8 +722,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     while (is_typecast2t(*ptr) && !is_pointer_type(*ptr))
       ptr = &to_typecast2t(*ptr).from;
 
-    args[0] = convert_ast(*ptr);
-    a = args[0]->project(this, 1);
+    a = convert_ast(*ptr)->project(this, 1);
     break;
   }
   case expr2t::pointer_object_id:
@@ -713,8 +733,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     while (is_typecast2t(*ptr) && !is_pointer_type((*ptr)))
       ptr = &to_typecast2t(*ptr).from;
 
-    args[0] = convert_ast(*ptr);
-    a = args[0]->project(this, 0);
+    a = convert_ast(*ptr)->project(this, 0);
     break;
   }
   case expr2t::pointer_capability_id:
@@ -726,8 +745,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     while (is_typecast2t(*ptr) && !is_pointer_type((*ptr)))
       ptr = &to_typecast2t(*ptr).from;
 
-    args[0] = convert_ast(*ptr);
-    a = args[0]->project(this, 2);
+    a = convert_ast(*ptr)->project(this, 2);
     break;
   }
   case expr2t::typecast_id:
@@ -1118,45 +1136,44 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     a = mk_implies(args[0], args[1]);
     break;
   }
+  /* According to the SMT-lib, LIRA focuses on arithmetic operations
+     involving integers and reals. Still, it does not inherently handle
+     bitwise operations, as these fall under the domain of bit-vector theories.
+     Here, we combine LIRA and bitwise operations (such as &, |, ^)
+     in a way that aligns with arithmetic constraints.
+  */
   case expr2t::bitand_id:
   {
-    assert(!int_encoding);
     a = mk_bvand(args[0], args[1]);
     break;
   }
   case expr2t::bitor_id:
   {
-    assert(!int_encoding);
     a = mk_bvor(args[0], args[1]);
     break;
   }
   case expr2t::bitxor_id:
   {
-    assert(!int_encoding);
     a = mk_bvxor(args[0], args[1]);
     break;
   }
   case expr2t::bitnand_id:
   {
-    assert(!int_encoding);
     a = mk_bvnand(args[0], args[1]);
     break;
   }
   case expr2t::bitnor_id:
   {
-    assert(!int_encoding);
     a = mk_bvnor(args[0], args[1]);
     break;
   }
   case expr2t::bitnxor_id:
   {
-    assert(!int_encoding);
     a = mk_bvnxor(args[0], args[1]);
     break;
   }
   case expr2t::bitnot_id:
   {
-    assert(!int_encoding);
     a = mk_bvnot(args[0]);
     break;
   }
@@ -1229,6 +1246,58 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     */
     const code_comma2t &cm = to_code_comma2t(expr);
     a = convert_ast(cm.side_2);
+    break;
+  }
+  case expr2t::forall_id:
+  case expr2t::exists_id:
+  {
+    // TODO: We should detect (and forbid) recursive calls to any quantifier (eg., forall i . forall j. i < j).
+    // TODO: technically the forall could be a list of symbols
+    // TODO: how to support other assertions inside it? e.g., buffer-overflow, arithmetic-overflow, etc...
+    expr2tc symbol;
+    expr2tc predicate;
+
+    if (is_forall2t(expr))
+    {
+      symbol = to_forall2t(expr).side_1;
+      predicate = to_forall2t(expr).side_2;
+    }
+    else
+    {
+      symbol = to_exists2t(expr).side_1;
+      predicate = to_exists2t(expr).side_2;
+    }
+
+    // We only want expressions of typecast(address_of(symbol)).
+    if (is_typecast2t(symbol) && is_address_of2t(to_typecast2t(symbol).from))
+      symbol = to_address_of2t(to_typecast2t(symbol).from).ptr_obj;
+
+    if (!is_symbol2t(symbol))
+    {
+      log_error("Can only use quantifiers with one symbol");
+      expr->dump();
+      abort();
+    }
+
+    /* A bit of spaghetti here: the RHS might have different names due to SSA magic.
+     * int i = 0;
+     * i = 1;
+     * forall(&i . i + 1 > i)
+     *
+     * We are mixing references and values so "i" has different meanings:
+     * i0 = 0
+     * i1 = 1
+     * forall(address-of(i), i1 + 1 > i1)
+     *
+     * Even worse though, we need to create a new function (smt) for all bounded symbols
+     * Some solvers have direct support (Z3) but we may do ourselfes
+     */
+
+    const expr2tc bound_symbol = symbol2tc(
+      symbol->type, fmt::format("__ESBMC_quantifier_{}", quantifier_counter++));
+    replace_name_in_body(symbol, bound_symbol, predicate);
+    a = mk_quantifier(
+      is_forall2t(expr), {convert_ast(bound_symbol)}, convert_ast(predicate));
     break;
   }
   default:
@@ -1456,6 +1525,9 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
      * XXXfbrausse: How can we ensure this? */
     if (sym.thename == "c:@__ESBMC_alloc")
       current_valid_objects_sym = expr;
+
+    if (sym.thename == "c:@__ESBMC_is_dynamic")
+      cur_dynamic = expr;
 
     // Special case for tuple symbols
     if (is_tuple_ast_type(expr))
@@ -2361,14 +2433,7 @@ expr2tc smt_convt::get(const expr2tc &expr)
     }
     else if (is_array_type(expr))
     {
-      if (extracting_from_array_tuple_is_error)
-      {
-        log_error(
-          "Fetching array elements inside tuples currently "
-          "unimplemented, sorry");
-        abort();
-      }
-      return expr2tc(); // TODO: ??? This is horrible
+      return get_by_type(res);
     }
 
     simplify(res);
@@ -2421,18 +2486,31 @@ expr2tc smt_convt::get(const expr2tc &expr)
 
   // Recurse on operands
   bool have_all = true;
-  res->Foreach_operand([this, &have_all](expr2tc &e) {
-    expr2tc new_e;
-    if (e)
-      new_e = get(e);
-    e = new_e;
+  bool has_null_operands = false;
+
+  res->Foreach_operand([this, &have_all, &has_null_operands](expr2tc &e) {
     if (!e)
+    {
+      has_null_operands = true;
+      have_all = false;
+      return;
+    }
+
+    expr2tc new_e = get(e);
+    if (new_e)
+      e = new_e;
+    else
       have_all = false;
   });
 
-  // And simplify
+  // If we have null operands, return early to avoid crashes in simplify()
+  if (has_null_operands)
+    return expr;
+
+  // Only simplify if all operands are valid
   if (have_all)
     simplify(res);
+
   return res;
 }
 
@@ -2916,7 +2994,7 @@ smt_astt smt_ast::project(
   abort();
 }
 
-void smt_convt::dump_smt()
+std::string smt_convt::dump_smt()
 {
   log_error("SMT dump not implemented for {}", solver_text());
   abort();

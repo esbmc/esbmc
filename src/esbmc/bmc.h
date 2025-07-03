@@ -2,6 +2,7 @@
 #define CPROVER_CBMC_BMC_H
 
 #include <goto-programs/goto_coverage.h>
+#include <goto-symex/slice.h>
 #include <goto-symex/reachability_tree.h>
 #include <goto-symex/symex_target_equation.h>
 #include <langapi/language_ui.h>
@@ -18,14 +19,9 @@
 class bmct
 {
 public:
-  bmct(
-    goto_functionst &funcs,
-    optionst &opts,
-    const cmdlinet::options_mapt &option_map,
-    contextt &_context);
+  bmct(goto_functionst &funcs, optionst &opts, contextt &_context);
 
   optionst &options;
-  const cmdlinet::options_mapt &opt_map;
   enum ltl_res
   {
     ltl_res_good,
@@ -71,14 +67,6 @@ protected:
   virtual void
   report_trace(smt_convt::resultt &res, const symex_target_equationt &eq);
 
-  virtual void report_multi_property_trace(
-    const smt_convt::resultt &res,
-    const std::unique_ptr<smt_convt> &solver,
-    const symex_target_equationt &local_eq,
-    const size_t ce_counter,
-    const goto_tracet &goto_trace,
-    const std::string &msg);
-
   virtual void report_result(smt_convt::resultt &res);
 
   virtual void
@@ -97,6 +85,33 @@ protected:
   void generate_smt_from_equation(
     smt_convt &smt_conv,
     symex_target_equationt &eq) const;
+
+  // for multi-property
+  void
+  clear_verified_claims(const claim_slicer &claim, const bool &is_goto_cov);
+
+  virtual void report_multi_property_trace(
+    const smt_convt::resultt &res,
+    const std::unique_ptr<smt_convt> &solver,
+    const symex_target_equationt &local_eq,
+    const size_t ce_counter,
+    const goto_tracet &goto_trace,
+    const std::string &msg);
+
+  void report_coverage_verbose(
+    const claim_slicer &claim,
+    const std::string &claim_sig,
+    const bool &is_assert_cov,
+    const bool &is_cond_cov,
+    const bool &is_branch_cov,
+    const bool &is_branch_func_cov,
+    const std::unordered_set<std::string> &reached_claims,
+    const std::unordered_multiset<std::string> &reached_mul_claims);
 };
+
+void report_coverage(
+  const optionst &options,
+  std::unordered_set<std::string> &reached_claims,
+  const std::unordered_multiset<std::string> &reached_mul_claims);
 
 #endif

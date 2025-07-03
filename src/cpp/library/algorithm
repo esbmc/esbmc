@@ -9,6 +9,32 @@ typedef bool(function)(int arg1, int arg2);
 
 namespace std
 {
+template<class ForwardIt, class Compare>
+bool is_sorted(ForwardIt first, ForwardIt last, Compare comp) {
+    if (first != last) {
+        ForwardIt next = first;
+        while (++next != last) {
+            if (comp(*next, *first))
+                return false;
+            first = next;
+        }
+    }
+    return true;
+}
+
+template<class ForwardIt>
+bool is_sorted(ForwardIt first, ForwardIt last) {
+    if (first != last) {
+        ForwardIt next = first;
+        while (++next != last) {
+            if (*next < *first)
+                return false;
+            first = next;
+        }
+    }
+    return true;
+}
+
 template <class InputIterator, class Function>
 Function for_each(InputIterator first, InputIterator last, Function f)
 {
@@ -23,10 +49,7 @@ InIt find(InIt first, InIt last, const Ty &value)
   for (; first != last; first++)
   {
     if (*first == value)
-    {
-      *first = value;
       return first;
-    }
   }
   return first;
 }
@@ -37,9 +60,7 @@ InIt *find(InIt *first, InIt *last, const Ty &value)
   for (; first != last; first++)
   {
     if (*first == value)
-    {
       break;
-    }
   }
   return first;
 }
@@ -311,10 +332,10 @@ pair<InIt1, InIt2> mismatch(InIt1 first1, InIt1 last1, InIt2 first2)
   return make_pair(first1, first2);
 }
 
-template <class InIt1, class InIt2>
-pair<InIt1, InIt2> mismatch(InIt1 first1, InIt1 last1, InIt2 *first2)
+template <class InIt1, class InIt2, class Pr>
+pair<InIt1, InIt2> mismatch(InIt1 first1, InIt1 last1, InIt2 first2, Pr pred)
 {
-  while ((first1 != last1) && (*first1 == *first2))
+  while ((first1 != last1) && pred(*first1, *first2))
   {
     ++first1;
     ++first2;
@@ -323,9 +344,9 @@ pair<InIt1, InIt2> mismatch(InIt1 first1, InIt1 last1, InIt2 *first2)
 }
 
 template <class InIt1, class InIt2, class Pr>
-pair<InIt1, InIt2> mismatch(InIt1 first1, InIt1 last1, InIt2 first2, Pr pred)
+pair<InIt1, InIt2*> mismatch(InIt1 first1, InIt1 last1, InIt2* first2, Pr pred)
 {
-  while (pred(*first1, *first2))
+  while ((first1 != last1) && pred(*first1, *first2))
   {
     ++first1;
     ++first2;
@@ -2293,46 +2314,30 @@ void pop_heap(RanIt first, RanIt last, Pr pred)
 template <class RanIt>
 void make_heap(RanIt first, RanIt last)
 {
-  int n = 0;
-  RanIt t = first;
-  while (t++ != last)
-    n++;
-  int i = n / 2;
-  int parent, child;
-  t = last;
-  for (int j = 0; j < n / 2; j++)
+  auto n = last - first;
+
+  for (int i = (n / 2) - 1; i >= 0; --i)
   {
-    if (i > 0)
+    int parent = i;
+    auto value = *(first + parent);
+    while (1)
     {
-      i--;
-      *t = *(first + i);
-    }
-    else
-    {
-      n--;
-      if (n == 0)
-      {
-        return;
-      }
-      *t = *(first + n);
-      *(first + n) = *first;
-    }
-    parent = i;
-    child = i * 2 + 1;
-    while (child < n)
-    {
-      if ((child + 1 < n) && (*(first + child + 1) > *(first + child)))
-        child++;
-      if (*(first + child) > *t)
+      int child = 2 * parent + 1;
+      if (child >= n)
+        break;
+
+      if (child + 1 < n && *(first + child + 1) > *(first + child))
+        ++child;
+
+      if (*(first + child) > value)
       {
         *(first + parent) = *(first + child);
         parent = child;
-        child = parent * 2 + 1;
       }
       else
         break;
     }
-    *(first + parent) = *t;
+    *(first + parent) = value;
   }
 }
 

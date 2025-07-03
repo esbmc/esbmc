@@ -29,6 +29,17 @@ std::string symbol_id::to_string() const
   return ss.str();
 }
 
+std::string symbol_id::global_to_string() const
+{
+  std::stringstream ss;
+  ss << prefix_ << filename_;
+
+  if (!object_.empty())
+    ss << "@" << object_;
+
+  return ss.str();
+}
+
 void symbol_id::clear()
 {
   filename_.clear();

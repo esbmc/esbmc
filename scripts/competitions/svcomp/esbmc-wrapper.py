@@ -225,7 +225,7 @@ def get_result_string(the_result):
 esbmc_path = "./esbmc "
 
 # ESBMC default commands: this is the same for every submission
-esbmc_dargs = "--no-div-by-zero-check --force-malloc-success --state-hashing --add-symex-value-sets "
+esbmc_dargs = "--no-div-by-zero-check --force-malloc-success --force-realloc-success --state-hashing --add-symex-value-sets "
 esbmc_dargs += "--no-align-check --k-step 2 --floatbv --unlimited-k-steps "
 
 # <https://github.com/esbmc/esbmc/pull/1190#issuecomment-1637047028>
@@ -252,7 +252,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
   else:
     command_line += "--64 "
 
-  concurrency = ((prop in (Property.reach, Property.datarace)) and
+  concurrency = ((prop in (Property.reach, Property.datarace, Property.overflow, Property.memory)) and
                  check_if_benchmark_contains_pthread(benchmark))
 
   if concurrency:

@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--overflow-check --unsigned-overflow-check --ub-shift-check
+^VERIFICATION FAILED$

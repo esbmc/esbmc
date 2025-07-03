@@ -69,6 +69,7 @@ static void optimize_expression(expr2tc &expr, const interval_domaint &state)
   // Function calls might have an implicit assignment
   if (is_code_function_call2t(expr))
   {
+    optimize_expression(to_code_function_call2t(expr).function, state);
     for (auto &x : to_code_function_call2t(expr).operands)
       optimize_expression(x, state);
     return;
@@ -110,7 +111,11 @@ inline void instrument_symbol_constraints(
   goto_functiont &goto_function)
 {
   std::vector<expr2tc> symbol_constraints;
-  const interval_domaint &d = interval_analysis[it];
+  auto state_iterator = interval_analysis.state_map.find(it);
+  // We may be trying to instrument an unreachable state
+  if (state_iterator == interval_analysis.state_map.end())
+    return;
+  const interval_domaint &d = state_iterator->second;
   for (const auto &symbol_expr : symbols)
   {
     expr2tc tmp = d.make_expression(symbol_expr);

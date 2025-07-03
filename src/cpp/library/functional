@@ -1,445 +1,648 @@
 #ifndef STL_FUNCTIONAL
 #define STL_FUNCTIONAL
 
+#include <cassert>
+#include <utility> // std::forward
+#include <cstddef>
+#include <type_traits>
+#include <cstdint> // for uint32_t, uint64_t
+#include <cmath>   // for INFINITY
+#include <string>  // for std::string
+
 namespace std
 {
 
-template <class Arg, class Result>
-struct unary_function {
-    typedef Arg argument_type;
-    typedef Result result_type;
+// Base class for callable objects
+class callable_base
+{
+public:
+  virtual ~callable_base() = default;
+  virtual int invoke(int, int) const
+  {
+    assert(false);
+    return 0;
+  }
+  virtual int invoke(int) const
+  {
+    assert(false);
+    return 0;
+  }
+  virtual bool invoke_bool(int, int) const
+  {
+    assert(false);
+    return false;
+  }
+  virtual bool invoke_bool(int) const
+  {
+    assert(false);
+    return false;
+  }
 };
 
-template <class Predicate>
-class unary_negate {
-protected:
-  Predicate fn;
+// Wrapper for callable types (function pointers, lambdas, functors)
+template <typename Callable>
+class callable_wrapper : public callable_base
+{
+private:
+  Callable func;
 
 public:
-    explicit unary_negate(const Predicate &pred) : fn(pred) {}
+  explicit callable_wrapper(Callable &&f) : func(::std::forward<Callable>(f))
+  {
+  }
 
-    // Define a functor type compatible with unary_negate
-    template <class Arg>
-    struct result : std::unary_function<Arg, bool> {};
-
-    bool operator()(const typename Predicate::argument_type &x) const {
-        return !fn(x);
+  int invoke(int a, int b) const override
+  {
+    if constexpr (::std::is_invocable_v<Callable, int, int>)
+    {
+      return func(a, b);
     }
-};
-
-template <class Arg1, class Arg2, class Result>
-struct binary_function {
-    typedef Arg1 first_argument_type;
-    typedef Arg2 second_argument_type;
-    typedef Result result_type;
-};
-
-template <class Predicate>
-class binary_negate {
-protected:
-  Predicate fn;
-
-public:
-    explicit binary_negate(const Predicate &pred) : fn(pred) {}
-
-    // Define a functor type compatible with binary_negate
-    template <class Arg1, class Arg2>
-    struct result : std::binary_function<Arg1, Arg2, bool> {};
-
-    bool operator()(
-        const typename Predicate::first_argument_type &x,
-        const typename Predicate::second_argument_type &y) const {
-        return !fn(x, y);
+    else
+    {
+      assert(false);
+      return 0;
     }
+  }
+
+  int invoke(int a) const override
+  {
+    if constexpr (::std::is_invocable_v<Callable, int>)
+    {
+      return func(a);
+    }
+    else
+    {
+      assert(false);
+      return 0;
+    }
+  }
+
+  bool invoke_bool(int a, int b) const override
+  {
+    if constexpr (::std::is_invocable_r_v<bool, Callable, int, int>)
+    {
+      return func(a, b);
+    }
+    else
+    {
+      assert(false);
+      return false;
+    }
+  }
+
+  bool invoke_bool(int a) const override
+  {
+    if constexpr (::std::is_invocable_r_v<bool, Callable, int>)
+    {
+      return func(a);
+    }
+    else
+    {
+      assert(false);
+      return false;
+    }
+  }
 };
 
+// Standard-like std::function model
+template <typename Signature>
+class function;
 
-template <class Operation>
-class binder1st : public unary_function<
-                    typename Operation::second_argument_type,
-                    typename Operation::result_type>
+template <typename Ret, typename... Args>
+class function<Ret(Args...)>
 {
-protected:
-  Operation op;
-  typename Operation::first_argument_type value;
+private:
+  callable_base *func = nullptr;
 
 public:
-  binder1st(
-    const Operation &x,
-    const typename Operation::first_argument_type &y)
-    : op(x), value(y)
+  function() = default;
+
+  function(Ret (*f)(Args...))
   {
+    if (f)
+    {
+      func = new callable_wrapper<Ret (*)(Args...)>(move(f));
+    }
   }
-  typename Operation::result_type
-  operator()(const typename Operation::second_argument_type &x) const
+
+  template <typename Callable>
+  function(Callable f)
   {
-    return op(value, x);
+    func = new callable_wrapper<Callable>(move(f));
+  }
+
+  function(const function &other) = delete;
+  function &operator=(const function &other) = delete;
+
+  function(function &&other) noexcept
+  {
+    func = other.func;
+    other.func = nullptr;
+  }
+
+  function &operator=(function &&other) noexcept
+  {
+    if (this != &other)
+    {
+      delete func;
+      func = other.func;
+      other.func = nullptr;
+    }
+    return *this;
+  }
+
+  ~function()
+  {
+    delete func;
+  }
+
+  Ret operator()(Args... args) const
+  {
+    assert(func != nullptr);
+    return func->invoke(::std::forward<Args>(args)...);
+  }
+
+  explicit operator bool() const noexcept
+  {
+    return func != nullptr;
   }
 };
 
-template <class Operation>
-class binder2nd : public unary_function<
-                    typename Operation::first_argument_type,
-                    typename Operation::result_type>
+// Deterministic hash value generator using simple mathematical function
+// This ensures determinism while still providing hash-like distribution
+inline size_t __esbmc_deterministic_hash(size_t key)
 {
-protected:
-  Operation op;
-  typename Operation::second_argument_type value;
-
-public:
-  binder2nd(
-    const Operation &x,
-    const typename Operation::second_argument_type &y)
-    : op(x), value(y)
-  {
-  }
-  typename Operation::result_type
-  operator()(const typename Operation::first_argument_type &x) const
-  {
-    return op(x, value);
-  }
-};
-
-template <class Arg, class Result>
-class pointer_to_unary_function : public unary_function<Arg, Result>
-{
-protected:
-  Result (*pfunc)(Arg);
-
-public:
-  explicit pointer_to_unary_function(Result (*f)(Arg)) : pfunc(f)
-  {
-  }
-  Result operator()(Arg x) const
-  {
-    return pfunc(x);
-  }
-};
-
-template <class Arg1, class Arg2, class Result>
-class pointer_to_binary_function : public binary_function<Arg1, Arg2, Result>
-{
-protected:
-  Result (*pfunc)(Arg1, Arg2);
-
-public:
-  explicit pointer_to_binary_function(Result (*f)(Arg1, Arg2)) : pfunc(f)
-  {
-  }
-  Result operator()(Arg1 x, Arg2 y) const
-  {
-    return pfunc(x, y);
-  }
-};
-
-template <class S, class T>
-class mem_fun_t : public unary_function<T *, S>
-{
-  S (T::*pmem)();
-
-public:
-  explicit mem_fun_t(S (T::*p)()) : pmem(p)
-  {
-  }
-  S operator()(T *p) const
-  {
-    return (p->*pmem)();
-  }
-};
-
-template <class S, class T, class A>
-class mem_fun1_t : public binary_function<T *, A, S>
-{
-  S (T::*pmem)(A);
-
-public:
-  explicit mem_fun1_t(S (T::*p)(A)) : pmem(p)
-  {
-  }
-  S operator()(T *p, A x) const
-  {
-    return (p->*pmem)(x);
-  }
-};
-
-template <class S, class T>
-class const_mem_fun_t : public unary_function<T *, S>
-{
-  S (T::*pmem)() const;
-
-public:
-  explicit const_mem_fun_t(S (T::*p)() const) : pmem(p)
-  {
-  }
-  S operator()(T *p) const
-  {
-    return (p->*pmem)();
-  }
-};
-
-template <class S, class T>
-class mem_fun_ref_t : public unary_function<T, S>
-{
-  S (T::*pmem)();
-
-public:
-  explicit mem_fun_ref_t(S (T::*p)()) : pmem(p)
-  {
-  }
-  S operator()(T &p) const
-  {
-    return (p.*pmem)();
-  }
-};
-
-template <class S, class T, class A>
-class mem_fun1_ref_t : public binary_function<T, A, S>
-{
-  S (T::*pmem)(A);
-
-public:
-  explicit mem_fun1_ref_t(S (T::*p)(A)) : pmem(p)
-  {
-  }
-  S operator()(T &p, A x) const
-  {
-    return (p.*pmem)(x);
-  }
-};
-
-template <class S, class T>
-class const_mem_fun_ref_t : public unary_function<T, S>
-{
-  S (T::*pmem)() const;
-
-public:
-  explicit const_mem_fun_ref_t(S (T::*p)() const) : pmem(p)
-  {
-  }
-  S operator()(T &p) const
-  {
-    return (p.*pmem)();
-  }
-};
-
-template <class T>
-struct plus : binary_function<T, T, T>
-{
-  T operator()(const T &x, const T &y) const
-  {
-    return x + y;
-  }
-};
-
-template <class T>
-struct minus : binary_function<T, T, T>
-{
-  T operator()(const T &x, const T &y) const
-  {
-    return x - y;
-  }
-};
-
-template <class T>
-struct multiplies : binary_function<T, T, T>
-{
-  T operator()(const T &x, const T &y) const
-  {
-    return x * y;
-  }
-};
-
-template <class T>
-struct divides : binary_function<T, T, T>
-{
-  T operator()(const T &x, const T &y) const
-  {
-    return x / y;
-  }
-};
-
-template <class T>
-struct modulus : binary_function<T, T, T>
-{
-  T operator()(const T &x, const T &y) const
-  {
-    return x % y;
-  }
-};
-
-template <class T>
-struct negate : unary_function<T, T>
-{
-  T operator()(const T &x) const
-  {
-    return -x;
-  }
-};
-
-template <class T>
-struct equal_to : binary_function<T, T, bool>
-{
-  bool operator()(const T &x, const T &y) const
-  {
-    return x == y;
-  }
-};
-
-template <class T>
-struct not_equal_to : binary_function<T, T, bool>
-{
-  bool operator()(const T &x, const T &y) const
-  {
-    return x != y;
-  }
-};
-
-template <class T>
-struct greater : binary_function<T, T, bool>
-{
-  bool operator()(const T &x, const T &y) const
-  {
-    return x > y;
-  }
-};
-
-template <class T>
-struct less : binary_function<T, T, bool>
-{
-  bool operator()(T x, T y) const
-  {
-    return x < y;
-  }
-};
-
-template <class T>
-struct greater_equal : binary_function<T, T, bool>
-{
-  bool operator()(const T &x, const T &y) const
-  {
-    return x >= y;
-  }
-};
-
-template <class T>
-struct less_equal : binary_function<T, T, bool>
-{
-  bool operator()(const T &x, const T &y) const
-  {
-    return x <= y;
-  }
-};
-
-template <class T>
-struct logical_and : binary_function<T, T, bool>
-{
-  bool operator()(const T &x, const T &y) const
-  {
-    return x && y;
-  }
-};
-
-template <class T>
-struct logical_or : binary_function<T, T, bool>
-{
-  bool operator()(const T &x, const T &y) const
-  {
-    return x || y;
-  }
-};
-
-template <class T>
-struct logical_not : unary_function<T, bool>
-{
-  bool operator()(const T &x) const
-  {
-    return !x;
-  }
-};
-
-template <class Predicate>
-unary_negate<Predicate> not1(const Predicate &pred)
-{
-  return unary_negate<Predicate>(pred);
+  // Simple hash function that's deterministic
+  // Uses bit manipulation to create pseudo-random distribution
+  key ^= key >> 16;
+  key *= 0x85ebca6b;
+  key ^= key >> 13;
+  key *= 0xc2b2ae35;
+  key ^= key >> 16;
+  return key;
 }
 
-template <class Predicate>
-binary_negate<Predicate> not2(const Predicate &pred)
+// Helper function to handle signed integer hashing consistently
+template <typename SignedInt>
+inline size_t __esbmc_hash_signed_int(SignedInt key)
 {
-  return binary_negate<Predicate>(pred);
+  using Unsigned = typename ::std::make_unsigned<SignedInt>::type;
+  return __esbmc_deterministic_hash(
+    static_cast<size_t>(static_cast<Unsigned>(key)));
 }
 
-template <class Operation, class T>
-binder1st<Operation> bind1st(const Operation &op, const T &x)
+// Helper function for unsigned integer hashing
+template <typename UnsignedInt>
+inline size_t __esbmc_hash_unsigned_int(UnsignedInt key)
 {
-  return binder1st<Operation>(op, typename Operation::first_argument_type(x));
+  size_t unsigned_key = static_cast<size_t>(key);
+  return __esbmc_deterministic_hash(unsigned_key);
 }
 
-template <class Operation, class T>
-binder2nd<Operation> bind2nd(const Operation &op, const T &x)
+// Primary template for std::hash
+template <typename T>
+struct hash
 {
-  return binder2nd<Operation>(op, typename Operation::second_argument_type(x));
-}
+  // Default hash is undefined for non-specialized types
+  size_t operator()(const T &key) const = delete;
+};
 
-template <class Arg, class Result>
-pointer_to_unary_function<Arg, Result> ptr_fun(Result (*f)(Arg))
+// Specialization for bool
+template <>
+struct hash<bool>
 {
-  return pointer_to_unary_function<Arg, Result>(f);
-}
+  size_t operator()(bool key) const
+  {
+    // Simple deterministic mapping for bool
+    return key ? 1 : 0;
+  }
+};
 
-template <class Arg1, class Arg2, class Result>
-pointer_to_binary_function<Arg1, Arg2, Result> ptr_fun(Result (*f)(Arg1, Arg2))
+// Specializations for character types
+template <>
+struct hash<char>
 {
-  return pointer_to_binary_function<Arg1, Arg2, Result>(f);
-}
+  size_t operator()(char key) const
+  {
+    // Convert char to unsigned and hash
+    size_t unsigned_key = static_cast<unsigned char>(key);
+    return __esbmc_deterministic_hash(unsigned_key);
+  }
+};
 
-template <class S, class T>
-mem_fun_t<S, T> mem_fun(S (T::*f)())
+template <>
+struct hash<signed char>
 {
-  return mem_fun_t<S, T>(f);
-}
+  size_t operator()(signed char key) const
+  {
+    return __esbmc_hash_signed_int(key);
+  }
+};
 
-template <class S, class T, class A>
-mem_fun1_t<S, T, A> mem_fun(S (T::*f)(A))
+template <>
+struct hash<unsigned char>
 {
-  return mem_fun1_t<S, T, A>(f);
-}
+  size_t operator()(unsigned char key) const
+  {
+    return __esbmc_hash_unsigned_int(key);
+  }
+};
 
-template <class S, class T>
-const_mem_fun_t<S, T> mem_fun(S (T::*f)() const)
+// Specialization for wchar_t
+template <>
+struct hash<wchar_t>
 {
-  return const_mem_fun_t<S, T>(f);
-}
-#if 0
-template <class S, class T, class A>
-const_mem_fun1_t<S, T, A> mem_fun(S (T::*f)(A) const)
+  size_t operator()(wchar_t key) const
+  {
+    // Convert wchar_t to size_t and hash
+    size_t unsigned_key = static_cast<size_t>(key);
+    return __esbmc_deterministic_hash(unsigned_key);
+  }
+};
+
+// Specializations for short integer types
+template <>
+struct hash<short>
 {
-  return const_mem_fun1_t<S, T, A>(f);
-}
+  size_t operator()(short key) const
+  {
+    return __esbmc_hash_signed_int(key);
+  }
+};
+
+template <>
+struct hash<unsigned short>
+{
+  size_t operator()(unsigned short key) const
+  {
+    return __esbmc_hash_unsigned_int(key);
+  }
+};
+
+// Specializations for int types
+template <>
+struct hash<int>
+{
+  size_t operator()(int key) const
+  {
+    return __esbmc_hash_signed_int(key);
+  }
+};
+
+template <>
+struct hash<unsigned int>
+{
+  size_t operator()(unsigned int key) const
+  {
+    return __esbmc_hash_unsigned_int(key);
+  }
+};
+
+// Specializations for long types
+template <>
+struct hash<long>
+{
+  size_t operator()(long key) const
+  {
+    return __esbmc_hash_signed_int(key);
+  }
+};
+
+template <>
+struct hash<unsigned long>
+{
+  size_t operator()(unsigned long key) const
+  {
+    return __esbmc_hash_unsigned_int(key);
+  }
+};
+
+// Specializations for long long types
+template <>
+struct hash<long long>
+{
+  size_t operator()(long long key) const
+  {
+    return __esbmc_hash_signed_int(key);
+  }
+};
+
+template <>
+struct hash<unsigned long long>
+{
+  size_t operator()(unsigned long long key) const
+  {
+    return __esbmc_hash_unsigned_int(key);
+  }
+};
+
+// Specialization for size_t (only if different from unsigned long)
+#if !defined(__SIZEOF_SIZE_T__) || (__SIZEOF_SIZE_T__ != __SIZEOF_LONG__)
+template <>
+struct hash<size_t>
+{
+  size_t operator()(size_t key) const
+  {
+    return __esbmc_deterministic_hash(key);
+  }
+};
 #endif
-template <class S, class T>
-mem_fun_ref_t<S, T> mem_fun_ref(S (T::*f)())
+
+// Specializations for floating point types
+template <>
+struct hash<float>
 {
-  return mem_fun_ref_t<S, T>(f);
-}
-#if 0
-template <class S, class T, class A>
-mem_fun1_ref_t<S, T, A> mem_fun_ref(S (T::*f)(A))
+  size_t operator()(float key) const
+  {
+    // Handle special floating point values
+    if (key != key)
+    {                                                // NaN check
+      return __esbmc_deterministic_hash(0xFFFFFFFF); // Consistent NaN hash
+    }
+    if (key == 0.0f)
+    { // Handle +0.0 and -0.0 as same
+      return __esbmc_deterministic_hash(0);
+    }
+
+    // For normal values, use bit representation
+    union
+    {
+      float f;
+      uint32_t i;
+    } u;
+    u.f = key;
+    return __esbmc_deterministic_hash(static_cast<size_t>(u.i));
+  }
+};
+
+template <>
+struct hash<double>
 {
-  return mem_fun1_ref_t<S, T, A>(f);
-}
-#endif
-template <class S, class T>
-const_mem_fun_ref_t<S, T> mem_fun_ref(S (T::*f)() const)
+  size_t operator()(double key) const
+  {
+    // Handle special floating point values
+    if (key != key)
+    { // NaN check
+      return __esbmc_deterministic_hash(
+        0xFFFFFFFFFFFFFFFF); // Consistent NaN hash
+    }
+    if (key == 0.0)
+    { // Handle +0.0 and -0.0 as same
+      return __esbmc_deterministic_hash(0);
+    }
+
+    // For normal values, use bit representation
+    union
+    {
+      double d;
+      uint64_t i;
+    } u;
+    u.d = key;
+    return __esbmc_deterministic_hash(static_cast<size_t>(u.i));
+  }
+};
+
+// Specialization for pointer types
+template <typename T>
+struct hash<T *>
 {
-  return const_mem_fun_ref_t<S, T>(f);
-}
-#if 0
-template <class S, class T, class A>
-const_mem_fun1_ref_t<S, T, A> mem_fun_ref(S (T::*f)(A) const)
+  size_t operator()(T *key) const
+  {
+    // Convert pointer to size_t and hash
+    size_t ptr_value = reinterpret_cast<size_t>(key);
+    return __esbmc_deterministic_hash(ptr_value);
+  }
+};
+
+// Specialization for C-strings
+template <>
+struct hash<const char *>
 {
-  return const_mem_fun1_ref_t<S, T, A>(f);
+  size_t operator()(const char *key) const
+  {
+    // Basic null check
+    assert(key != nullptr);
+
+    // For deterministic verification, use pointer address as hash
+    // This ensures same pointer gives same hash, different pointers give different hashes
+    size_t ptr_hash = reinterpret_cast<size_t>(key);
+    return __esbmc_deterministic_hash(ptr_hash);
+  }
+};
+
+// Specialization for std::string
+template <>
+struct hash<::std::string>
+{
+  size_t operator()(const ::std::string &key) const
+  {
+    // Simple deterministic string hash using polynomial rolling hash
+    size_t hash_value = 0;
+    const size_t prime = 31;
+
+    // Use c_str() to access characters in a const-compatible way
+    const char *str = key.c_str();
+    for (size_t i = 0; i < key.length(); ++i)
+    {
+      hash_value = hash_value * prime +
+                   static_cast<size_t>(static_cast<unsigned char>(str[i]));
+    }
+
+    return __esbmc_deterministic_hash(hash_value);
+  }
+};
+
+// Legacy binary_function class template (for compatibility)
+template <typename Arg1, typename Arg2, typename Result>
+struct binary_function
+{
+  using first_argument_type = Arg1;
+  using second_argument_type = Arg2;
+  using result_type = Result;
+};
+
+// Arithmetic Operations
+template <typename T = int>
+struct plus
+{
+  constexpr T operator()(const T &a, const T &b) const
+  {
+    return a + b;
+  }
+};
+
+template <typename T = int>
+struct minus
+{
+  constexpr T operator()(const T &a, const T &b) const
+  {
+    return a - b;
+  }
+};
+
+template <typename T = int>
+struct multiplies
+{
+  constexpr T operator()(const T &a, const T &b) const
+  {
+    return a * b;
+  }
+};
+
+template <typename T = int>
+struct divides
+{
+  constexpr T operator()(const T &a, const T &b) const
+  {
+    return a / b;
+  }
+};
+
+template <typename T = int>
+struct modulus
+{
+  constexpr T operator()(const T &a, const T &b) const
+  {
+    return a % b;
+  }
+};
+
+template <typename T = int>
+struct negate
+{
+  constexpr T operator()(const T &a) const
+  {
+    return -a;
+  }
+};
+
+// Comparison Operations
+template <typename T = int>
+struct equal_to
+{
+  constexpr bool operator()(const T &a, const T &b) const
+  {
+    return a == b;
+  }
+};
+
+template <typename T = int>
+struct not_equal_to
+{
+  constexpr bool operator()(const T &a, const T &b) const
+  {
+    return a != b;
+  }
+};
+
+template <typename T = int>
+struct greater
+{
+  constexpr bool operator()(const T &a, const T &b) const
+  {
+    return a > b;
+  }
+};
+
+template <typename T = int>
+struct less
+{
+  constexpr bool operator()(const T &a, const T &b) const
+  {
+    return a < b;
+  }
+};
+
+template <typename T = int>
+struct greater_equal
+{
+  constexpr bool operator()(const T &a, const T &b) const
+  {
+    return a >= b;
+  }
+};
+
+template <typename T = int>
+struct less_equal
+{
+  constexpr bool operator()(const T &a, const T &b) const
+  {
+    return a <= b;
+  }
+};
+
+// Logical Operations
+template <typename T = bool>
+struct logical_and
+{
+  constexpr bool operator()(const T &a, const T &b) const
+  {
+    return a && b;
+  }
+};
+
+template <typename T = bool>
+struct logical_or
+{
+  constexpr bool operator()(const T &a, const T &b) const
+  {
+    return a || b;
+  }
+};
+
+template <typename T = bool>
+struct logical_not
+{
+  constexpr bool operator()(const T &a) const
+  {
+    return !a;
+  }
+};
+
+// Bitwise Operations
+template <typename T = int>
+struct bit_and
+{
+  constexpr T operator()(const T &a, const T &b) const
+  {
+    return a & b;
+  }
+};
+
+template <typename T = int>
+struct bit_or
+{
+  constexpr T operator()(const T &a, const T &b) const
+  {
+    return a | b;
+  }
+};
+
+template <typename T = int>
+struct bit_xor
+{
+  constexpr T operator()(const T &a, const T &b) const
+  {
+    return a ^ b;
+  }
+};
+
+template <typename T = int>
+struct bit_not
+{
+  constexpr T operator()(const T &a) const
+  {
+    return ~a;
+  }
+};
+
+// Simplified std::invoke model
+template <typename Func, typename... Args>
+decltype(auto) invoke(Func &&f, Args &&...args)
+{
+  return ::std::forward<Func>(f)(::std::forward<Args>(args)...);
 }
-#endif
+
 } // namespace std
-#endif
+
+#endif // STL_FUNCTIONAL

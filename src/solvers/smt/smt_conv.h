@@ -131,10 +131,6 @@ class smt_convt;
 class smt_convt
 {
 public:
-  /* NOTE: I've made this horrible so we remember that there is an
-   * even uglier implementation that just returns an empty
-   * look at where this variable is used for more info :) */
-  bool extracting_from_array_tuple_is_error = false;
   /** Shorthand for a vector of smt_ast's */
   typedef std::vector<smt_astt> ast_vec;
 
@@ -334,6 +330,14 @@ public:
   virtual smt_astt mk_real2int(smt_astt a);
   virtual smt_astt mk_int2real(smt_astt a);
   virtual smt_astt mk_isint(smt_astt a);
+  virtual smt_astt
+  mk_quantifier(bool is_forall, std::vector<smt_astt> lhs, smt_astt rhs)
+  {
+    (void)is_forall;
+    (void)lhs;
+    (void)rhs;
+    abort();
+  }
 
   /** Create an integer or SBV/UBV sort */
   smt_sortt mk_int_bv_sort(std::size_t width)
@@ -512,7 +516,9 @@ public:
   virtual smt_astt overflow_neg(const expr2tc &expr);
 
   /** Method to dump the SMT formula */
-  virtual void dump_smt();
+  virtual std::string dump_smt();
+
+  //virtual void smt
 
   /** Method to print the SMT model */
   virtual void print_model();
@@ -797,6 +803,9 @@ public:
   /* Options contain all the parameters set by the user to run ESBMC */
   const optionst &options;
 
+  size_t quantifier_counter =
+    0; /// Value used to track how many quantifier symbols were created
+
   bool ptr_foo_inited;
 
   smt_astt null_ptr_ast;
@@ -826,6 +835,10 @@ public:
   /** Holds the `__ESBMC_alloc` symbol convert_terminal() was last invoked with.
    */
   expr2tc current_valid_objects_sym;
+
+  /** Holds the `__ESBMC_is_dynamic` symbol convert_terminal() was last invoked with.
+   */
+  expr2tc cur_dynamic;
 
   // XXX - push-pop will break here.
   typedef std::map<std::string, smt_astt> renumber_mapt;

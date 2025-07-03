@@ -18,6 +18,8 @@ enum ContractBodyElementT
   EnumDef,     // rule enum-definition
   ErrorDef,    // rule error-definition
   EventDef,    // rule event-definition
+  UsingForDef, // rule using-for-directive
+  ModifierDef, // rule modifier-definition
   ContractBodyElementTError
 };
 ContractBodyElementT get_contract_body_element_t(const nlohmann::json &element);
@@ -44,11 +46,18 @@ enum TypeNameT
   // dynamic array type
   DynArrayTypeName,
 
+  // Address type
+  AddressTypeName,
+  AddressPayableTypeName,
+
   // contract type
   ContractTypeName,
 
   // typecast
   TypeConversionName,
+
+  // the type() keyword
+  TypeProperty,
 
   // enum
   EnumTypeName,
@@ -64,6 +73,9 @@ enum TypeNameT
 
   // built-in member
   BuiltinTypeName,
+
+  // user-defined
+  UserDefinedTypeName,
 
   TypeNameTError
 };
@@ -108,6 +120,7 @@ enum ElementaryTypeNameT
   UINT256,
 
   INT_LITERAL,
+  RA_LITERAL,
   // rule signed-integer-type
   INT8,
   INT16,
@@ -239,10 +252,11 @@ enum StatementT
   IfStatement,           // rule if-statement
   WhileStatement,
   StatementTError,
-  ContinueStatement, // rule continue
-  BreakStatement,    // rule break
-  RevertStatement,   // rule revert
-  EmitStatement      // rule emit
+  ContinueStatement,   // rule continue
+  BreakStatement,      // rule break
+  RevertStatement,     // rule revert
+  EmitStatement,       // rule emit
+  PlaceholderStatement //rule placeholder
 };
 StatementT get_statement_t(const nlohmann::json &stmt);
 const char *statement_to_str(StatementT type);
@@ -309,6 +323,22 @@ enum ExpressionT
 
   // rule literal
   Literal,
+  LiteralWithRational,
+
+  // unit literal
+  LiteralWithWei,
+  LiteralWithGwei,
+  LiteralWithSzabo,
+  LiteralWithFinney,
+  LiteralWithEther,
+
+  LiteralWithSeconds,
+  LiteralWithMinutes,
+  LiteralWithHours,
+  LiteralWithDays,
+  LiteralWithWeeks,
+  LiteralWithYears,
+  LiteralWithUnknownUnit,
 
   // rule Tuple
   Tuple,
@@ -318,6 +348,9 @@ enum ExpressionT
 
   // FunctionCall
   CallExprClass,
+
+  // FunctionCallOptions
+  CallOptionsExprClass,
 
   // auxiliary type for implicit casting in Solidity, e.g. function return value
   // Solidity does NOT provide such information.
@@ -338,8 +371,18 @@ enum ExpressionT
   // i.e. x.caller();
   ContractMemberCall,
 
-  // Type Conversion
-  ElementaryTypeNameExpression,
+  // Members of Address Types
+  // see https://docs.soliditylang.org/en/v0.8.23/units-and-global-variables.html#members-of-address-types
+  AddressMemberCall,
+
+  // library function call
+  LibraryMemberCall,
+
+  // Type Converion
+  TypeConversionExpression,
+
+  // Type Property
+  TypePropertyExpression,
 
   // Struct Member Access
   StructMemberCall,
@@ -360,16 +403,8 @@ ExpressionT get_expr_operator_t(const nlohmann::json &expr);
 ExpressionT
 get_unary_expr_operator_t(const nlohmann::json &expr, bool uo_pre = true);
 const char *expression_to_str(ExpressionT type);
-
-// rule variable-declaration-statement
-enum VarDeclStmtT
-{
-  VariableDecl,      // rule variable-declaration
-  VariableDeclTuple, // rule variable-declaration-tuple
-  VarDeclStmtTError
-};
-VarDeclStmtT get_var_decl_stmt_t(const nlohmann::json &stmt);
-const char *var_decl_statement_to_str(VarDeclStmtT type);
+bool is_address_member_call(const nlohmann::json &expr);
+bool is_sol_library_function(const int ref_id);
 
 // auxiliary type to convert function call
 // No corresponding Solidity rules
