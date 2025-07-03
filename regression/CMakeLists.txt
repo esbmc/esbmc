@@ -119,6 +119,7 @@ set(REGRESSIONS_CPP03 esbmc-cpp/cpp
                       esbmc-cpp/vector
                       esbmc-cpp/try_catch
                       esbmc-cpp/functional
+                      esbmc-cpp/bitset
                       )
 # list of C++11 test suites
 set(REGRESSIONS_CPP11 esbmc-cpp11/cpp
