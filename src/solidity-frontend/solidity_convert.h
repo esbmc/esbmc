@@ -631,6 +631,7 @@ protected:
   nlohmann::json src_ast_json_array = nlohmann::json::array();
   // Solidity contracts/ function to be verified
   const std::string &tgt_cnts;
+  std::set<std::string> tgt_cnt_set;
   const std::string &tgt_func;
   //smart contract source file
   const std::string &contract_path;
@@ -692,6 +693,9 @@ protected:
 
   // reentry-check setting
   bool is_reentry_check;
+
+  // pointer-check setting
+  bool is_pointer_check;
 
   // NONDET
   side_effect_expr_function_callt nondet_bool_expr;

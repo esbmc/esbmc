@@ -48,6 +48,7 @@ solidity_convertert::solidity_convertert(
     aux_counter(0),
     is_bound(true),
     is_reentry_check(false),
+    is_pointer_check(true),
     nondet_bool_expr(),
     nondet_uint_expr()
 {
@@ -63,6 +64,15 @@ solidity_convertert::solidity_convertert(
   const std::string reentry_check = config.options.get_option("reentry-check");
   if (!reentry_check.empty())
     is_reentry_check = true;
+
+  // solidity does not have pointer
+  // however, in esbmc some array bounds check is related to the pointer check
+  const std::string no_pointer_check =
+    !config.options.get_option("no-pointer-check").empty()
+      ? "1"
+      : config.options.get_option("no-standard-checks");
+  if (!no_pointer_check.empty())
+    is_pointer_check = false;
 
   // initialize nondet_bool
   if (
@@ -169,12 +179,6 @@ bool solidity_convertert::convert()
   // single contract verification: where the option "--contract" is set.
   // multiple contracts verification: essentially verify the whole file.
   // single contract
-  std::set<std::string> tgt_cnt_set;
-  std::istringstream iss(tgt_cnts);
-  std::string tgt_cnt;
-  while (iss >> tgt_cnt)
-    tgt_cnt_set.insert(tgt_cnt);
-
   if (tgt_func.empty())
   {
     if (tgt_cnt_set.size() == 1)
@@ -616,6 +620,15 @@ bool solidity_convertert::populate_auxilary_vars()
       // for(nlohmann::json::iterator ittr;ittr != _json.end(); ++ittr)
       // {}
     }
+  }
+
+  // verifying targets
+  if (!tgt_cnts.empty())
+  {
+    std::istringstream iss(tgt_cnts);
+    std::string tgt_cnt;
+    while (iss >> tgt_cnt)
+      tgt_cnt_set.insert(tgt_cnt);
   }
 
   // TODO: Optimise
@@ -1282,6 +1295,14 @@ bool solidity_convertert::get_var_decl(
     t.get("#sol_type").as_string() == "CONTRACT" ? true : false;
   bool is_mapping = t.get("#sol_type").as_string() == "MAPPING" ? true : false;
   bool is_new_expr = newContractSet.count(current_contractName);
+  if (is_new_expr)
+  {
+    // hack: check if it's unbound and the only verifying targets
+    if (
+      !is_bound && tgt_cnt_set.count(current_contractName) > 0 &&
+      tgt_cnt_set.size() == 1)
+      is_new_expr = false;
+  }
 
   // for mapping: populate the element type
   if (is_mapping && !is_new_expr)
@@ -1577,6 +1598,24 @@ bool solidity_convertert::get_var_decl(
     solidity_gen_typecast(
       ns, op0, to_struct_type(map_t).components().at(0).type());
     inits.op0() = op0;
+
+    // address => this->
+    exprt this_expr;
+    if (current_functionDecl)
+    {
+      if (get_func_decl_this_ref(*current_functionDecl, this_expr))
+        return true;
+    }
+    else
+    {
+      if (get_ctor_decl_this_ref(ast_node, this_expr))
+        return true;
+    }
+    exprt addr_expr =
+      member_exprt(this_expr, "$address", unsignedbv_typet(160));
+    solidity_gen_typecast(
+      ns, addr_expr, to_struct_type(map_t).components().at(1).type());
+    inits.op1() = addr_expr;
 
     added_symbol.value = inits;
     decl.operands().push_back(inits);
@@ -5098,6 +5137,13 @@ bool solidity_convertert::get_expr(
           return true;
 
         bool is_new_expr = newContractSet.count(base_cname);
+        if (is_new_expr)
+        {
+          if (
+            !is_bound && tgt_cnt_set.count(base_cname) > 0 &&
+            tgt_cnt_set.size() == 1)
+            is_new_expr = false;
+        }
         // get key/value type
         typet key_t, value_t;
         std::string key_sol_type, val_sol_type;
@@ -5300,6 +5346,13 @@ bool solidity_convertert::get_expr(
     {
       // hack to improve the verification speed
       bool is_new_expr = newContractSet.count(current_contractName);
+      if (is_new_expr)
+      {
+        if (
+          !is_bound && tgt_cnt_set.count(current_contractName) > 0 &&
+          tgt_cnt_set.size() == 1)
+          is_new_expr = false;
+      }
 
       // find mapping definition
       assert(base_json.contains("referencedDeclaration"));
@@ -7262,6 +7315,14 @@ bool solidity_convertert::get_type_description(
     // we need to check if it's inside a contract used in a new expression statement
     assert(!current_baseContractName.empty());
     bool is_new_expr = newContractSet.count(current_baseContractName);
+    if (is_new_expr)
+    {
+      if (
+        !is_bound && tgt_cnt_set.count(current_baseContractName) > 0 &&
+        tgt_cnt_set.size() == 1)
+        is_new_expr = false;
+    }
+
     if (is_new_expr)
       new_type = symbol_typet(prefix + "mapping_t");
     else
@@ -11929,6 +11990,19 @@ bool solidity_convertert::assign_param_nondet(
         exprt s;
         get_static_contract_instance_ref(base_cname, s);
         call.arguments().push_back(s);
+      }
+      else if (t.get("#sol_type") == "STRING" && is_pointer_check)
+      {
+        //! specific for string, we need to explicitly assign it as nondet_string()
+        // otherwise we will get invalid_object
+        side_effect_expr_function_callt nondet_str;
+        get_library_function_call_no_args(
+          "nondet_string",
+          "c:@F@nondet_string",
+          pointer_typet(signed_char_type()),
+          locationt(),
+          nondet_str);
+        call.arguments().push_back(nondet_str);
       }
       else
         call.arguments().push_back(static_cast<const exprt &>(get_nil_irep()));
