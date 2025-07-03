@@ -4,8 +4,8 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <assert.h>
-#include <string.h> 
-#include <stdlib.h>  
+#include <string.h>
+#include <stdlib.h>
 #include <ctype.h>
 
 #undef strcpy
@@ -275,7 +275,7 @@ __ESBMC_HIDE:;
 void *memcpy(void *dst, const void *src, size_t n)
 {
 __ESBMC_HIDE:;
-    // If n is 0, return dst (nothing to copy)
+  // If n is 0, return dst (nothing to copy)
   if (n == 0)
     return dst;
 
