@@ -1654,7 +1654,7 @@ smt_astt smt_convt::convert_signbit(const expr2tc &expr)
   auto value = convert_ast(signbit.operand);
 
   smt_astt is_neg;
-  
+
   if (int_encoding)
   {
     // In integer/real encoding mode, floating-point values are represented as reals
