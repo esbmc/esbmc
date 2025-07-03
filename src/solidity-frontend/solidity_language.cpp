@@ -47,31 +47,25 @@ std::string solidity_languaget::get_temp_file()
 {
   // Create a temp file for clang-tool
   // needed to convert intrinsics
-  auto p = boost::filesystem::temp_directory_path();
-  if (!boost::filesystem::exists(p) || !boost::filesystem::is_directory(p))
-  {
-    log_error("Can't find temporary directory (needed to convert intrinsics)");
-    abort();
-  }
+  static std::once_flag flag;
+  static std::string p;
 
-  // Create temporary directory
-  p += "/esbmc_solidity_temp";
-  boost::filesystem::create_directory(p);
-  if (!boost::filesystem::is_directory(p))
-  {
-    log_error(
-      "Can't create temporary directory (needed to convert intrinsics)");
-    abort();
-  }
+  std::call_once(flag, [&]() {
+    p = file_operations::create_tmp_dir("esbmc_solidity_temp-%%%%-%%%%-%%%%")
+          .path();
+    boost::filesystem::create_directories(p);
+    p += "/libary.cpp";
+    std::ofstream f(p);
+    if (!f)
+    {
+      log_error(
+        "Can't create temporary directory (needed to convert intrinsics)");
+      abort();
+    }
+    f << temp_cpp_file();
+  });
 
-  // populate temp file
-  std::ofstream f;
-  p += "/libary.cpp";
-  f.open(p.string());
-  f << temp_cpp_file();
-  f.close();
-
-  return p.string();
+  return p;
 }
 
 bool solidity_languaget::parse(const std::string &path)

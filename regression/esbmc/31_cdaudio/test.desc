@@ -1,4 +1,4 @@
 THOROUGH
 main.c
 --unwind 1 --no-unwinding-assertions --no-bounds-check --no-pointer-check --no-div-by-zero-check -Wno-error=implicit-function-declaration -Wno-error=incompatible-function-pointer-types -Wno-error=int-conversion
-^VERIFICATION FAILED$
+^VERIFICATION SUCCESSFUL$
