@@ -47,6 +47,7 @@ target_include_directories(esbmc
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
+target_compile_features(esbmc PUBLIC cxx_std_17)
 cmake_path(SET MY_MAGIC_PATH NORMALIZE "${cvc5_DIR}/../../")
 cmake_path(ABSOLUTE_PATH MY_MAGIC_PATH OUTPUT_VARIABLE CVC_LINK_DIR)
 message("Looking at ${CVC_LINK_DIR}")
