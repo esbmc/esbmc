@@ -254,6 +254,19 @@ public:
    *  @return Expression representation of a's value */
   expr2tc get_by_value(const type2tc &type, BigInt value);
 
+  /** Extract the assignment to a rational/real value from the SMT solvers model.
+   *  Used in integer/real arithmetic mode to get floating point values.
+   *  @param a The AST whose value we wish to know.
+   *  @param numerator Output parameter for the numerator of the rational.
+   *  @param denominator Output parameter for the denominator of the rational.
+   *  @return True if the rational value was successfully extracted, false otherwise. */
+   virtual bool get_rational(smt_astt a, BigInt &numerator, BigInt &denominator)
+  {
+    // Default implementation returns false - solver-specific implementations should override this
+    (void)a; (void)numerator; (void)denominator;
+    return false;
+  }
+
   /** Fetch a satisfying assignment from the solver. If a previous call to
    *  dec_solve returned satisfiable, then the solver has a set of assignments
    *  to symbols / variables used in the formula. This method retrieves the
@@ -859,6 +872,9 @@ public:
   // Workaround for integer shifts. This is an array of the powers of two,
   // up to 2^64.
   smt_astt int_shift_op_array;
+
+private:
+  double convert_rational_to_double(const BigInt &numerator, const BigInt &denominator);
 };
 
 /** Given an array type, create a type2tc representing its domain. */
