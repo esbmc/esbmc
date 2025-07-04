@@ -1,0 +1,4 @@
+KNOWNBUG
+main.c
+--incremental-bmc
+^VERIFICATION SUCCESSFUL$

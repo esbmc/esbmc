@@ -339,12 +339,6 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   if (cmdline.isset("compact-trace"))
     options.set_option("no-slice", true);
 
-  if (cmdline.isset("smt-during-symex"))
-  {
-    log_status("Enabling --no-slice due to presence of --smt-during-symex");
-    options.set_option("no-slice", true);
-  }
-
   if (
     cmdline.isset("smt-thread-guard") || cmdline.isset("smt-symex-guard") ||
     cmdline.isset("smt-symex-assert") || cmdline.isset("smt-symex-assume"))
@@ -499,6 +493,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option(
       "keep-alive-interval", cmdline.getval("keep-alive-interval"));
 
+  if (cmdline.isset("override-return-annotation"))
+    options.set_option("override-return-annotation", true);
+
   config.options = options;
 }
 
@@ -565,7 +562,7 @@ int esbmc_parseoptionst::doit()
     goto_preprocess_algorithms.emplace_back(
       std::make_unique<mark_decl_as_non_det>(context));
 
-    if (cmdline.isset("function"))
+    if (cmdline.isset("function") && cmdline.isset("assign-param-nondet"))
     {
       // assign parameters to "nondet"
       goto_preprocess_algorithms.emplace_back(
@@ -585,6 +582,17 @@ int esbmc_parseoptionst::doit()
   // Parse ESBMC options (CMD + set internal options)
   optionst options;
   get_command_line_options(options);
+
+  // for solidity
+  if (cmdline.isset("sol"))
+  {
+    // set default options
+    options.set_option(
+      "no-align-check", true); // no need to check alignment in solidity
+    options.set_option("no-unlimited-scanf-check", true);
+    options.set_option(
+      "force-malloc-success", true); // for calloc in the 'newexpression'
+  }
 
   // Create and preprocess a GOTO program
   if (get_goto_program(options, goto_functions))
@@ -970,7 +978,7 @@ int esbmc_parseoptionst::doit_k_induction_parallel()
       bmct bmc(goto_functions, options, context);
       bmc.options.set_option("unwind", integer2string(k_step));
 
-      log_status("Checking base case, k = {:d}\n", k_step);
+      log_progress("Checking base case, k = {:d}\n", k_step);
 
       // If an exception was thrown, we should abort the process
       int res = smt_convt::P_ERROR;
@@ -1244,21 +1252,41 @@ int esbmc_parseoptionst::do_bmc_strategy(
     // k-induction
     if (options.get_bool_option("k-induction"))
     {
+      bool is_bcv =
+        is_base_case_violated(options, goto_functions, k_step).is_true();
       if (
-        is_base_case_violated(options, goto_functions, k_step).is_true() &&
-        !cmdline.isset("multi-property"))
+        is_bcv && !cmdline.isset("multi-property") &&
+        !options.get_bool_option("multi-property"))
         return 1;
 
-      if (does_forward_condition_hold(options, goto_functions, k_step)
-            .is_false())
+      // if the property is proven violated in the bs, it's unnecessary to further run fw and is
+      // this will make the trace looks cleaner yet might lead to an extra round to terminate the verification
+      if (
+        !is_bcv &&
+        does_forward_condition_hold(options, goto_functions, k_step).is_false())
+      {
+        if (is_coverage)
+          report_coverage(
+            options,
+            goto_functions.reached_claims,
+            goto_functions.reached_mul_claims);
         return 0;
+      }
 
       // Don't run inductive step for k_step == 1
       if (k_step > 1)
       {
-        if (is_inductive_step_violated(options, goto_functions, k_step)
-              .is_false())
+        if (
+          !is_bcv && is_inductive_step_violated(options, goto_functions, k_step)
+                       .is_false())
+        {
+          if (is_coverage)
+            report_coverage(
+              options,
+              goto_functions.reached_claims,
+              goto_functions.reached_mul_claims);
           return 0;
+        }
       }
     }
     // termination
@@ -1276,14 +1304,24 @@ int esbmc_parseoptionst::do_bmc_strategy(
     // incremental-bmc
     if (options.get_bool_option("incremental-bmc"))
     {
+      bool is_bcv =
+        is_base_case_violated(options, goto_functions, k_step).is_true();
       if (
-        is_base_case_violated(options, goto_functions, k_step).is_true() &&
-        !cmdline.isset("multi-property"))
+        is_bcv && !cmdline.isset("multi-property") &&
+        !options.get_bool_option("multi-property"))
         return 1;
 
-      if (does_forward_condition_hold(options, goto_functions, k_step)
-            .is_false())
+      if (
+        !is_bcv &&
+        does_forward_condition_hold(options, goto_functions, k_step).is_false())
+      {
+        if (is_coverage)
+          report_coverage(
+            options,
+            goto_functions.reached_claims,
+            goto_functions.reached_mul_claims);
         return 0;
+      }
     }
     // falsification
     if (options.get_bool_option("falsification"))
@@ -1295,6 +1333,12 @@ int esbmc_parseoptionst::do_bmc_strategy(
 
   log_status("Unable to prove or falsify the program, giving up.");
   log_fail("VERIFICATION UNKNOWN");
+
+  if (is_coverage)
+    report_coverage(
+      options,
+      goto_functions.reached_claims,
+      goto_functions.reached_mul_claims);
   return 0;
 }
 
@@ -1324,7 +1368,7 @@ tvt esbmc_parseoptionst::is_base_case_violated(
 
   bmct bmc(goto_functions, options, context);
 
-  log_status("Checking base case, k = {:d}", k_step);
+  log_progress("Checking base case, k = {:d}", k_step);
   switch (do_bmc(bmc))
   {
   case smt_convt::P_UNSATISFIABLE:
@@ -1616,8 +1660,33 @@ bool esbmc_parseoptionst::create_goto_program(
     // If the user is providing the GOTO functions, we don't need to parse
     if (cmdline.isset("binary"))
     {
+      if (cmdline.isset("cprover"))
+        log_warning(
+          "Be sure you are manually linking with the cprover libraries. This "
+          "will be automated in the future.");
       if (read_goto_binary(goto_functions))
         return true;
+
+      if (cmdline.isset("function"))
+      {
+        Forall_goto_program_instructions (
+          it, goto_functions.function_map["__ESBMC_main"].body)
+        {
+          if (!it->is_function_call())
+            continue;
+
+          if (
+            !is_symbol2t(to_code_function_call2t(it->code).function) ||
+            to_symbol2t(to_code_function_call2t(it->code).function).thename !=
+              "c:@F@main")
+            continue;
+
+          to_code_function_call2t(it->code).function =
+            symbol2tc(get_empty_type(), cmdline.getval("function"));
+        }
+      }
+
+      goto_functions.update();
     }
     else
     {
@@ -1754,14 +1823,16 @@ bool esbmc_parseoptionst::process_goto_program(
     namespacet ns(context);
 
     bool is_mul = cmdline.isset("multi-property");
-    bool is_coverage = cmdline.isset("assertion-coverage") ||
-                       cmdline.isset("assertion-coverage-claims") ||
-                       cmdline.isset("condition-coverage") ||
-                       cmdline.isset("condition-coverage-claims") ||
-                       cmdline.isset("branch-coverage") ||
-                       cmdline.isset("branch-coverage-claims") ||
-                       cmdline.isset("branch-function-coverage") ||
-                       cmdline.isset("branch-function-coverage-claims");
+    is_coverage = cmdline.isset("assertion-coverage") ||
+                  cmdline.isset("assertion-coverage-claims") ||
+                  cmdline.isset("condition-coverage") ||
+                  cmdline.isset("condition-coverage-claims") ||
+                  cmdline.isset("condition-coverage-rm") ||
+                  cmdline.isset("condition-coverage-claims-rm") ||
+                  cmdline.isset("branch-coverage") ||
+                  cmdline.isset("branch-coverage-claims") ||
+                  cmdline.isset("branch-function-coverage") ||
+                  cmdline.isset("branch-function-coverage-claims");
 
     // this should be before goto_check()
     if (
@@ -1788,7 +1859,10 @@ bool esbmc_parseoptionst::process_goto_program(
     // - multi-property wants to find all the bugs in the src code
     // - assertion-coverage wants to find out unreached codes (asserts)
     // - however, the optimization below will remove codes during the Goto stage
-    if (!(cmdline.isset("no-remove-unreachable") || is_mul || is_coverage))
+    if (
+      !(cmdline.isset("no-remove-unreachable") || is_mul || is_coverage) ||
+      cmdline.isset("condition-coverage-rm") ||
+      cmdline.isset("condition-coverage-claims-rm"))
       remove_unreachable(goto_functions);
 
     // Apply all the initialized algorithms
@@ -1829,6 +1903,14 @@ bool esbmc_parseoptionst::process_goto_program(
         log_warning(
           "[GOTO] Unable to compute VSA due to symbolic type. Some GOTO "
           "optimizations will be disabled");
+        vsa = nullptr;
+      }
+      catch (const std::string &e)
+      {
+        log_warning(
+          "[GOTO] Unable to compute VSA due to: {}. Some GOTO "
+          "optimizations will be disabled",
+          e);
         vsa = nullptr;
       }
 
@@ -1895,13 +1977,7 @@ bool esbmc_parseoptionst::process_goto_program(
     if (cmdline.isset("data-races-check"))
     {
       log_status("Adding Data Race Checks");
-
-      value_set_analysist value_set_analysis(ns);
-      value_set_analysis(goto_functions);
-
-      add_race_assertions(value_set_analysis, context, goto_functions);
-
-      value_set_analysis.update(goto_functions);
+      add_race_assertions(context, goto_functions);
     }
 
     //! goto-cov will also mutate the asserts added by esbmc (e.g. goto-check)
@@ -1992,6 +2068,7 @@ bool esbmc_parseoptionst::process_goto_program(
       // for function mode
       if (cmdline.isset("function"))
         tmp.set_target(cmdline.getval("function"));
+
       tmp.branch_coverage();
     }
     if (
@@ -2010,7 +2087,16 @@ bool esbmc_parseoptionst::process_goto_program(
 
       std::string filename = cmdline.args[0];
       goto_coveraget tmp(ns, goto_functions, filename);
+
       tmp.branch_function_coverage();
+    }
+
+    if (cmdline.isset("negating-property"))
+    {
+      std::string tgt_fname = cmdline.getval("negating-property");
+      std::string filename = cmdline.args[0];
+      goto_coveraget tmp(ns, goto_functions, filename);
+      tmp.negating_asserts(tgt_fname);
     }
   }
 

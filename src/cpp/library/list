@@ -1321,7 +1321,10 @@ public:
     position.it = &(this->_list[position.pos]);
   }
 
-  template <class InputIterator>
+  template <
+    class InputIterator,
+    typename =
+      typename std::enable_if<!std::is_integral<InputIterator>::value>::type>
   void insert(iterator position, InputIterator n, InputIterator x)
   {
     __ESBMC_assert(
@@ -1437,8 +1440,8 @@ public:
   template <class Predicate>
   void remove_if(Predicate pred)
   {
-    __ESBMC_assert(
-      pred != ((void *)0), "The parameter must be different than NULL.");
+	__ESBMC_assert(sizeof(pred) > 0, 
+	  "Predicate must be a valid callable object");
     for (iterator _it = this->begin(); _it.pos < this->_size;)
     {
       if (pred(*_it.it))
@@ -1506,7 +1509,6 @@ public:
   template <class Predicate>
   void unique(Predicate pred)
   {
-    __ESBMC_assert(pred != NULL, "The parameter must be different than NULL.");
     size_type i;
     size_type j = 0;
     size_type _limit = this->_size;

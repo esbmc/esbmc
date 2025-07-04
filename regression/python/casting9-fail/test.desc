@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^ERROR: '<' not supported between instances of 'float' and 'str' at .*main\.py:2$

@@ -201,13 +201,18 @@ public:
     return ss.str();
   }
 
-  void dump_smt() override;
+  std::string dump_smt() override;
   void print_model() override;
+  smt_astt mk_quantifier(
+    bool is_forall,
+    std::vector<smt_astt> lhs,
+    smt_astt rhs) override;
 
 private:
   void print_smt_formulae(std::ostream &dest);
 
 public:
+  virtual void output_smt();
   //  Must be first member; that way it's the last to be destroyed.
   z3::context z3_ctx;
   z3::solver solver;

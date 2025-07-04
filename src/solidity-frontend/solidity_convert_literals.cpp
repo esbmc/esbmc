@@ -9,23 +9,50 @@
 
 // Integer literal
 bool solidity_convertert::convert_integer_literal(
-  const nlohmann::json &integer_literal,
+  const nlohmann::json &integer_literal_type,
   std::string the_value,
   exprt &dest)
 {
   typet type;
-  if (get_type_description(integer_literal, type))
+  if (get_type_description(integer_literal_type, type))
     return true;
 
+  the_value.erase(
+    std::remove(the_value.begin(), the_value.end(), '_'), the_value.end());
+
+  if (the_value.find(".") != std::string::npos)
+    return true;
+
+  // Handle scientific notation, e.g., "1e2" -> "100"
+  std::size_t e_pos = the_value.find_first_of("eE");
+  if (e_pos != std::string::npos)
+  {
+    std::string base_part = the_value.substr(0, e_pos);
+    std::string exp_part = the_value.substr(e_pos + 1);
+
+    // Convert base and exponent to BigInt
+    BigInt base = string2integer(base_part);
+    BigInt exponent = string2integer(exp_part);
+
+    // Calculate base * (10 ^ exponent)
+    BigInt scale = ::power(BigInt(10), exponent);
+    BigInt result = base * scale;
+
+    the_value = integer2string(result);
+  }
+
   exprt the_val;
-  // extract the value: unsigned
+  // Extract the integer value
   BigInt z_ext_value = string2integer(the_value);
+
   the_val = constant_exprt(
     integer2binary(z_ext_value, bv_width(type)),
     integer2string(z_ext_value),
     type);
 
   dest.swap(the_val);
+  return false;
+
   return false;
 }
 
@@ -68,17 +95,26 @@ bool solidity_convertert::convert_string_literal(
   std::string the_value,
   exprt &dest)
 {
-  size_t string_size = the_value.size();
-  typet type = array_typet(
-    signed_char_type(),
-    constant_exprt(
-      integer2binary(string_size, bv_width(int_type())),
-      integer2string(string_size),
-      int_type()));
+  /*
+  string-constant
+  * type: array
+      * size: constant
+          * type: unsignedbv
+              * width: 64
+          * value: 0000000000000000000000000000000000000000000000000000000000000101
+          * #cformat: 5
+      * subtype: signedbv
+          * width: 8
+          * #cpp_type: signed_char
+      * #sol_type: STRING_LITERAL
+  * value: 1234
+  * kind: default
+  */
   // TODO: Handle null terminator byte
-  string_constantt string(the_value, type, string_constantt::k_default);
-  dest.swap(string);
+  string_constantt string(the_value);
 
+  dest.swap(string);
+  dest.type().set("#sol_type", "STRING_LITERAL");
   return false;
 }
 

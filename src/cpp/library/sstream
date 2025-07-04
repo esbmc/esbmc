@@ -111,6 +111,14 @@ public:
     return *this;
   }
 
+  ostream &operator<<(unsigned long val)
+  {
+    char *temp = new char[NUM_SIZE];
+    itoa(val, temp, DEC);
+    _string.append(temp);
+    return *this;
+  }
+
   ostream &operator<<(float val)
   {
     char *temp = new char[NUM_SIZE];

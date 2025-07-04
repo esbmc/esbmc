@@ -46,8 +46,8 @@ public:
     goto_programt::instructiont::targett &it,
     bool is_instrumentation);
 
-  // convert every assertion to an assert(1)
-  void make_asserts_true(bool is_instrumentation);
+  // convert assert(cond) to assert(!cond)
+  void negating_asserts(const std::string &tgt_fname);
 
   // condition cov
   void condition_coverage();
@@ -61,16 +61,22 @@ public:
   std::set<std::pair<std::string, std::string>> get_total_cond_assert() const;
   std::string get_filename_from_path(std::string path);
   void set_target(const std::string &_tgt);
-  bool is_target_func(const irep_idt &f) const;
+  bool is_target_func(const irep_idt &f, const std::string &tgt_name) const;
+  bool
+  filter(const irep_idt &func_name, const goto_programt &goto_program) const;
 
   // total numbers of instrumentation
-  static size_t total_branch;
+  static size_t total_assert;
+  static size_t total_assert_ins;
   static std::set<std::pair<std::string, std::string>> total_cond;
+  static size_t total_branch;
+  static size_t total_func_branch;
+
   std::string target_function = "";
 
 protected:
   // turn a OP b OP c into a list a, b, c
-  exprt handle_single_guard(exprt &guard);
+  exprt handle_single_guard(exprt &expr, bool top_level);
   void handle_operands_guard(
     exprt &expr,
     goto_programt &goto_program,

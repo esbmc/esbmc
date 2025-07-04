@@ -69,6 +69,11 @@ protected:
     const guardt &guard,
     const locationt &loc);
 
+  void cast_overflow_check(
+    const expr2tc &expr,
+    const guardt &guard,
+    const locationt &loc);
+
   /** check for the buffer overflow in scanf/fscanf */
   void input_overflow_check(const expr2tc &expr, const locationt &loc);
   /* check for signed/unsigned_bv */
@@ -214,6 +219,33 @@ void goto_checkt::float_overflow_check(
       loc,
       guard);
   }
+}
+
+void goto_checkt::cast_overflow_check(
+  const expr2tc &expr,
+  const guardt &guard,
+  const locationt &loc)
+{
+  if (
+    !options.get_bool_option("int-encoding") ||
+    (!enable_overflow_check && !enable_unsigned_overflow_check))
+    return;
+
+  // First, check type.
+  const type2tc &resolved_type = ns.follow(expr->type);
+  if (!is_signedbv_type(resolved_type) && !is_unsignedbv_type(resolved_type))
+    return;
+
+  // Create cast overflow check expression
+  expr2tc cast_overflow = overflow_cast2tc(expr, resolved_type->get_width());
+  make_not(cast_overflow);
+
+  add_guarded_claim(
+    cast_overflow,
+    std::string("Cast arithmetic overflow on ") + get_expr_id(expr),
+    "overflow",
+    loc,
+    guard);
 }
 
 void goto_checkt::overflow_check(
@@ -815,6 +847,12 @@ void goto_checkt::check_rec(
   case expr2t::mul_id:
   {
     overflow_check(expr, guard, loc);
+    break;
+  }
+
+  case expr2t::typecast_id:
+  {
+    cast_overflow_check(expr, guard, loc);
     break;
   }
 

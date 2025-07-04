@@ -6,7 +6,7 @@ def foo(a:int) -> None:
   c = a # Infer type of lhs from function arg type (int)
   d = n # Infer from global scope variable
 
-v:uint64 = 16
+v = 16
 y = 1
 x = (v + y)//2
 

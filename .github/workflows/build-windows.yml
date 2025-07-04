@@ -30,7 +30,7 @@ jobs:
       run: |
         vcpkg.exe update
         cd C:/vcpkg
-        git.exe pull
+        git.exe checkout 2025.03.19
         .\bootstrap-vcpkg.bat
     - name: Make git use LF only
       run: |

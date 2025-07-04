@@ -58,8 +58,8 @@ option(ESBMC_SVCOMP "Enable an SV-COMP build of ESBMC (default: OFF)" OFF)
 
 # these URLs are all for an x86_64 target
 if(WIN32)
-  set(DEFAULT_LLVM_URL "https://gitlab.com/Anthonysdu/llvm11/-/raw/main/llvm+clang+lld-11.0.0-x86_64-windows-msvc-release-mt.zip")
-  set(DEFAULT_LLVM_NAME "llvm+clang+lld-11.0.0-x86_64-windows-msvc-release-mt")
+  set(DEFAULT_LLVM_URL "https://github.com/XLiZHI/esbmc/releases/download/v17/llvm+clang+lld-16.0.0-x86_64-windows-msvc-release-mt.zip")
+  set(DEFAULT_LLVM_NAME "llvm+clang+lld-16.0.0-x86_64-windows-msvc-release-mt")
 
   set(DEFAULT_Z3_URL "https://github.com/Z3Prover/z3/releases/download/z3-4.13.3/z3-4.13.3-x64-win.zip")
   set(DEFAULT_Z3_NAME z3-4.13.3-x64-win)
@@ -70,11 +70,14 @@ else()
   set(DEFAULT_LLVM_URL "https://github.com/llvm/llvm-project/releases/download/llvmorg-16.0.0/clang+llvm-16.0.0-x86_64-linux-gnu-ubuntu-18.04.tar.xz")
   set(DEFAULT_LLVM_NAME "clang+llvm-16.0.0-x86_64-linux-gnu-ubuntu-18.04")
 
+  set(DEFAULT_CHERI_LLVM_URL "https://github.com/XLiZHI/esbmc/releases/download/v17/clang-cheri-17.zip")
+  set(DEFAULT_CHERI_LLVM_NAME "clang-cheri-17")
+
   set(DEFAULT_Z3_URL "https://github.com/Z3Prover/z3/releases/download/z3-4.13.3/z3-4.13.3-x64-glibc-2.35.zip")
   set(DEFAULT_Z3_NAME z3-4.13.3-x64-glibc-2.35)
 
-  set(MATHSAT_URL "https://mathsat.fbk.eu/download.php?file=mathsat-5.6.10-linux-x86_64.tar.gz")
-  set(MATHSAT_NAME "mathsat-5.6.10-linux-x86_64")
+  set(MATHSAT_URL "https://mathsat.fbk.eu/release/mathsat-5.6.11-linux-x86_64.tar.gz")
+  set(MATHSAT_NAME "mathsat-5.6.11-linux-x86_64")
 
   set(DEFAULT_CVC5_URL "https://github.com/cvc5/cvc5/releases/download/cvc5-1.1.2/cvc5-Linux-static.zip")
   set(DEFAULT_CVC5_NAME cvc5-Linux-static)
@@ -88,6 +91,9 @@ set(ESBMC_Z3_NAME ${DEFAULT_Z3_NAME} CACHE STRING "Name of the extracted directo
 
 set(ESBMC_CVC5_URL ${DEFAULT_CVC5_URL} CACHE STRING "URL to download prebuilt CVC")
 set(ESBMC_CVC5_NAME ${DEFAULT_CVC5_NAME} CACHE STRING "Name of the extracted directory of CVC")
+
+set(ESBMC_CHERI_LLVM_URL ${DEFAULT_CHERI_LLVM_URL} CACHE STRING "URL to download prebuilt CHERI LLVM")
+set(ESBMC_CHERI_LLVM_NAME ${DEFAULT_CHERI_LLVM_NAME} CACHE STRING "Name of the extracted directory of CHERI LLVM")
 
 #############################
 # CMake extra Vars

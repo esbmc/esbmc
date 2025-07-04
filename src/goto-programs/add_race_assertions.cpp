@@ -41,49 +41,26 @@ public:
     return *symbol_ptr;
   }
 
-  const exprt get_guard_symbol_expr(
-    const irep_idt &object,
-    const exprt &original_expr,
-    bool deref)
+  const exprt get_guard_symbol_expr(const exprt &original_expr)
   {
-    if (deref || original_expr.is_member())
-    {
-      // introduce a new expression: RACE_CHECK(&x)
-      // its operand is the address of the variable
-      // which we will replace during symbolic execution.
-      exprt address = address_of_exprt(original_expr);
-      exprt check("races_check", typet("bool"));
-      check.move_to_operands(address);
+    // introduce a new expression: RACE_CHECK(&x)
+    // its operand is the address of the variable
+    // which we will replace during symbolic execution.
+    exprt address = address_of_exprt(original_expr);
+    exprt check("races_check", typet("bool"));
+    check.move_to_operands(address);
 
-      return check;
-    }
-
-    exprt expr = symbol_expr(get_guard_symbol(object, original_expr));
-    if (original_expr.is_index() && expr.type().is_array())
-    {
-      index_exprt full_expr = to_index_expr(original_expr);
-
-      index_exprt index;
-      index.array() = expr;
-      index.index() = full_expr.index();
-      index.type() = typet("bool");
-
-      expr.swap(index);
-    }
-
-    return expr;
+    return check;
   }
 
   const exprt get_w_guard_expr(const rw_sett::entryt &entry)
   {
-    return get_guard_symbol_expr(
-      entry.object, entry.original_expr, entry.deref);
+    return get_guard_symbol_expr(entry.original_expr);
   }
 
   const exprt get_assertion(const rw_sett::entryt &entry)
   {
-    return gen_not(
-      get_guard_symbol_expr(entry.object, entry.original_expr, entry.deref));
+    return gen_not(get_guard_symbol_expr(entry.original_expr));
   }
 
   void add_initialization(goto_programt &goto_program);
@@ -128,7 +105,6 @@ void w_guardst::add_initialization(goto_programt &goto_program)
 }
 
 void add_race_assertions(
-  value_setst &value_sets,
   contextt &context,
   goto_programt &goto_program,
   w_guardst &w_guards)
@@ -157,7 +133,7 @@ void add_race_assertions(
       else
         tmp_expr = migrate_expr_back(instruction.code);
 
-      rw_sett rw_set(ns, value_sets, i_it, tmp_expr);
+      rw_sett rw_set(ns, i_it, tmp_expr);
 
       if (rw_set.entries.empty())
         continue;
@@ -270,29 +246,23 @@ void add_race_assertions(
   remove_no_op(goto_program);
 }
 
-void add_race_assertions(
-  value_setst &value_sets,
-  contextt &context,
-  goto_programt &goto_program)
+void add_race_assertions(contextt &context, goto_programt &goto_program)
 {
   w_guardst w_guards(context);
 
-  add_race_assertions(value_sets, context, goto_program, w_guards);
+  add_race_assertions(context, goto_program, w_guards);
 
   w_guards.add_initialization(goto_program);
   goto_program.update();
 }
 
-void add_race_assertions(
-  value_setst &value_sets,
-  contextt &context,
-  goto_functionst &goto_functions)
+void add_race_assertions(contextt &context, goto_functionst &goto_functions)
 {
   w_guardst w_guards(context);
 
   Forall_goto_functions (f_it, goto_functions)
     if (f_it->first != goto_functions.main_id())
-      add_race_assertions(value_sets, context, f_it->second.body, w_guards);
+      add_race_assertions(context, f_it->second.body, w_guards);
 
   // get "main"
   goto_functionst::function_mapt::iterator m_it =

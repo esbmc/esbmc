@@ -1,13 +1,3 @@
-/*******************************************************************\
-
-Module: Message System. This system is used to send messages through
-    ESBMC execution.
-Author: Daniel Kroening, kroening@kroening.com
-
-Maintainers:
-- @2021: Rafael Sá Menezes, rafael.sa.menezes@outlook.com
-
-\*******************************************************************/
 #pragma once
 
 #include <cstdio>

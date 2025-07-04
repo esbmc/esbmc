@@ -1,5 +1,6 @@
 char *strerror(int errnum)
 {
+__ESBMC_HIDE:;
   char *sys_errlist[] = {
     /*  0                 */ "No error",
     /*  1 EPERM           */ "Operation not permitted",

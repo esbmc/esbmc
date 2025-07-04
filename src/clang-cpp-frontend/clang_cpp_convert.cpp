@@ -25,6 +25,7 @@ CC_DIAGNOSTIC_POP()
 #include <fmt/core.h>
 #include <clang-c-frontend/typecast.h>
 #include <util/c_types.h>
+#include <util/string_constant.h>
 
 clang_cpp_convertert::clang_cpp_convertert(
   contextt &_context,
@@ -99,16 +100,6 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
     break;
   }
 
-  case clang::Decl::ClassTemplate:
-  {
-    const clang::ClassTemplateDecl &cd =
-      static_cast<const clang::ClassTemplateDecl &>(decl);
-
-    if (get_template_decl(&cd, false, new_expr))
-      return true;
-    break;
-  }
-
   case clang::Decl::ClassTemplateSpecialization:
   {
     const clang::ClassTemplateSpecializationDecl &cd =
@@ -140,6 +131,7 @@ bool clang_cpp_convertert::get_decl(const clang::Decl &decl, exprt &new_expr)
   }
 
   // We can ignore any these declarations
+  case clang::Decl::ClassTemplate:
   case clang::Decl::ClassTemplatePartialSpecialization:
   case clang::Decl::VarTemplatePartialSpecialization:
   case clang::Decl::Using:
@@ -852,14 +844,27 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (get_type(this_expr.getType(), this_type))
       return true;
 
-    // In a lambda `CXXThisExpr` refers to the captured `this` pointer, while the `this_map` refers to
-    // the `this` pointer of the lambda closure type. This causes a mismatch, so ignore the type check in this case.
-    assert(
-      this_type == it->second.second || current_functionDecl->getParent()
-                                          ->getOuterLexicalRecordContext()
-                                          ->isLambda());
+    // In a lambda `CXXThisExpr` refers to the captured `this` pointer,
+    // while the `this_map` refers to the `this` pointer of the lambda closure type.
+    // This causes a mismatch, so ignore the type check in this case.
+    assert(this_type == it->second.second || is_lambda());
 
-    new_expr = symbol_exprt(it->second.first, it->second.second);
+    if (is_lambda())
+    {
+      if (auto it = cap_map.find(address); it != cap_map.end())
+      {
+        // Replace This pointer in the lambda operator
+        assert(it->second.second);
+        get_decl(*it->second.second, new_expr);
+        build_member_from_component(*current_functionDecl, new_expr);
+        // special case: gen address of when capturing *this
+        if (!new_expr.type().is_pointer())
+          new_expr = gen_address_of(new_expr);
+      }
+    }
+    else
+      new_expr = symbol_exprt(it->second.first, it->second.second);
+
     break;
   }
 
@@ -983,8 +988,43 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::CXXTypeidExpr &cxxtid =
       static_cast<const clang::CXXTypeidExpr &>(stmt);
 
-    if (get_expr(*cxxtid.getExprOperand(), new_expr))
+    std::string type_name;
+    if (cxxtid.isTypeOperand())
+    {
+      const clang::QualType qtype = cxxtid.getTypeOperand(*ASTContext);
+      type_name = qtype.getAsString();
+    }
+    else
+    {
+      const clang::QualType qtype = cxxtid.getExprOperand()->getType();
+      if (!cxxtid.isMostDerived(*ASTContext) && qtype->getAsCXXRecordDecl())
+        log_warning("Typeid for polymorphism is not implemented");
+      type_name = qtype.getAsString();
+    }
+
+    exprt size = constant_exprt(
+      integer2binary(type_name.size(), bv_width(size_type())),
+      integer2string(type_name.size()),
+      size_type());
+
+    typet arr = array_typet(char_type(), size);
+    string_constantt string_name(type_name, arr, string_constantt::k_default);
+
+    typet t;
+    if (get_type(cxxtid.getType(), t))
       return true;
+
+    // In the front-end implementation, constant struct is constructed and
+    // assigned to the temporary object
+    // tmp = { .__name=&"int"[0], .std::type_info@vtable_pointer=0 }
+    // const std::type_info& = &tmp
+    // Front end can't account for polymorphism
+    exprt sym("struct", t);
+    sym.copy_to_operands(address_of_exprt(string_name));
+    sym.copy_to_operands(gen_zero(pointer_type()));
+    make_temporary(sym);
+
+    new_expr = sym;
 
     break;
   }
@@ -1301,6 +1341,22 @@ bool clang_cpp_convertert::get_function_body(
   if (!fd.hasBody())
     return false;
 
+  // Retrieve the mapping between captured variables
+  // and the members that store their values or references
+  if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
+  {
+    if (md->getParent()->getLambdaCallOperator() == md)
+    {
+      field_mapt captures;
+      clang::FieldDecl *thisCapture{};
+      md->getParent()->getCaptureFields(captures, thisCapture);
+
+      std::size_t address = reinterpret_cast<std::size_t>(md->getFirstDecl());
+      cap_map[address] =
+        std::pair<field_mapt, clang::FieldDecl *>(captures, thisCapture);
+    }
+  }
+
   // Parse body
   if (clang_c_convertert::get_function_body(fd, new_expr, ftype))
     return true;
@@ -1513,43 +1569,6 @@ bool clang_cpp_convertert::get_function_body(
     }
   }
 
-  // Mark the `operator()` function of the lambda class
-  // in order to adjust the body function later
-  if (const auto *md = llvm::dyn_cast<clang::CXXMethodDecl>(&fd))
-  {
-    if (md->getParent()->getLambdaCallOperator() == md)
-    {
-#if CLANG_VERSION_MAJOR <= 15
-#  define CAPTURE_VARIABLE_TYPE clang::VarDecl
-#else
-#  define CAPTURE_VARIABLE_TYPE clang::ValueDecl
-#endif
-      new_expr.set("#lambda_call_operator", true);
-      irept &lambda_capture_fields = new_expr.add("#lambda_capture_fields");
-      llvm::DenseMap<const CAPTURE_VARIABLE_TYPE *, clang::FieldDecl *>
-        captures{};
-      clang::FieldDecl *thisCapture{};
-      md->getParent()->getCaptureFields(captures, thisCapture);
-      for (auto &capture : captures)
-      {
-        std::string captured_var_id, ignored;
-        get_decl_name(*capture.first, ignored, captured_var_id);
-        exprt ref_to_captured_var;
-        get_decl(*capture.second, ref_to_captured_var);
-        build_member_from_component(fd, ref_to_captured_var);
-        lambda_capture_fields.set(captured_var_id, ref_to_captured_var);
-      }
-      if (thisCapture)
-      {
-        exprt ref_to_captured_this;
-        get_decl(*thisCapture, ref_to_captured_this);
-        build_member_from_component(fd, ref_to_captured_this);
-        dstring lambda_this_id = ref_to_captured_this.op0().identifier();
-        lambda_capture_fields.set(lambda_this_id, ref_to_captured_this);
-      }
-    }
-  }
-
   return false;
 }
 
@@ -1742,6 +1761,29 @@ bool clang_cpp_convertert::get_decl_ref(
   const clang::Decl &decl,
   exprt &new_expr)
 {
+  if (is_lambda())
+  {
+    std::size_t address =
+      reinterpret_cast<std::size_t>(current_functionDecl->getFirstDecl());
+    // Replace decl in the lambda operator with FieldDecl
+    // x = 1 convert into this->_x = 1;
+    if (auto it = cap_map.find(address); it != cap_map.end())
+      if (auto it1 =
+            it->second.first.find(llvm::dyn_cast<CAPTURE_VARIABLE_TYPE>(&decl));
+          it1 != it->second.first.end())
+      {
+        typet t;
+        if (get_type(it1->first->getType(), t))
+          return true;
+
+        if (get_decl(*it1->second, new_expr))
+          return true;
+        build_member_from_component(*current_functionDecl, new_expr);
+
+        gen_typecast(ns, new_expr, t);
+        return false;
+      }
+  }
   std::string name, id;
   typet type;
   /**
@@ -2239,14 +2281,21 @@ bool clang_cpp_convertert::is_ConstructorOrDestructor(
 
 void clang_cpp_convertert::make_temporary(exprt &expr)
 {
-  if (expr.statement() != "temporary_object")
+  if (expr.statement() == "temporary_object")
+    return;
+
+  // make the temporary
+  side_effect_exprt tmp_obj("temporary_object", expr.type());
+  tmp_obj.location() = expr.location();
+  if (!expr.get_bool("constructor"))
   {
-    // make the temporary
-    side_effect_exprt tmp_obj("temporary_object", expr.type());
-    codet code_expr("expression");
-    code_expr.operands().push_back(expr);
-    tmp_obj.initializer(code_expr);
-    tmp_obj.location() = expr.location();
+    tmp_obj.move_to_operands(expr);
     expr.swap(tmp_obj);
+    return;
   }
+
+  codet code_expr("expression");
+  code_expr.operands().push_back(expr);
+  tmp_obj.initializer(code_expr);
+  expr.swap(tmp_obj);
 }

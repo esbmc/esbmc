@@ -747,7 +747,10 @@ expr2tc dereferencet::build_reference_to(
   }
   else if (is_array_type(value)) // Encode some access bounds checks.
   {
-    bounds_check(value, final_offset, type, tmp_guard);
+    bool can_carry = is_pointer_type(deref_expr) &&
+                     to_pointer_type(deref_expr->type).carry_provenance;
+    expr2tc tmp_expr = can_carry ? deref_expr : expr2tc();
+    bounds_check(value, final_offset, type, tmp_guard, tmp_expr);
   }
   else
   {
@@ -1093,6 +1096,18 @@ void dereferencet::construct_from_array(
 
   expr2tc mod = modulus2tc(offset->type, offset, subtype_sz_expr);
   simplify(mod);
+
+  // If an array contains structs, the dereferencing process
+  // accesses the indexed structure and resolves nested fields.
+  if (is_structure_type(arr_subtype))
+  {
+    value = index2tc(arr_subtype, value, div);
+    build_reference_rec(value, mod, type, guard, mode, alignment);
+    return;
+  }
+  // prevent unexpected behaviors when handling non-structure
+  // and non-scalar types
+  assert(is_scalar_type(arr_subtype));
 
   // Two different ways we can access elements
   //  1) Just treat them as an element and select them out, possibly with some
@@ -2135,13 +2150,52 @@ void dereferencet::bounds_check(
   const expr2tc &expr,
   const expr2tc &offset,
   const type2tc &type,
-  const guardt &guard)
+  const guardt &guard,
+  const expr2tc &deref)
 {
   if (options.get_bool_option("no-bounds-check"))
     return;
 
   assert(is_array_type(expr));
   const array_type2t arr_type = to_array_type(expr->type);
+
+  if (config.ansi_c.cheri && !is_nil_expr(deref))
+  {
+    /*
+     * CHERI capability bounds check:
+     * Check that the dereferenced address remains within the bounds of
+     * the CHERI capability associated with the pointer in it.
+     *
+     * Convert pointer into its raw integer address form via 'ptraddr_type2()'
+     * Use capability_top2tc and capability_base2tc to get the upper and 
+     * lower bounds for the capability.
+     * 
+     * cheri_bounds assertion will be (addr < top && addr > base)
+     * 
+     */
+    expr2tc addr = typecast2tc(ptraddr_type2(), deref);
+    expr2tc top = capability_top2tc(deref);
+    expr2tc base = capability_base2tc(deref);
+
+    expr2tc gt = greaterthanequal2tc(addr, top);
+    expr2tc lt = lessthan2tc(addr, base);
+    expr2tc in_cheri_bounds = or2tc(gt, lt);
+    /*
+     * In CHERI Clang if a pointer is marked as can_carry_provenance does not 
+     * mean it must carries CHERI capability. Therefore, we need to determine here
+     * whether the capacity exists.
+     * 
+     * pointer_capability == zero ?
+     */
+    expr2tc is_zero = equality2tc(
+      pointer_capability2tc(ptraddr_type2(), deref), gen_zero(ptraddr_type2()));
+    expr2tc cap = and2tc(is_zero, in_cheri_bounds);
+
+    guardt cap_guard(guard);
+    cap_guard.add(cap);
+    dereference_failure(
+      "capability bounds", "CHERI capability bounds violated", cap_guard);
+  }
 
   if (!arr_type.array_size)
   {
@@ -2193,15 +2247,32 @@ void dereferencet::bounds_check(
       return;
 
     // Secondly, try to calc the size of the array.
+    type2tc subtype = arr_type.subtype;
+    expr2tc total_elems = typecast2tc(size_type2(), arr_type.array_size);
+
+    // Multiply sizes of all nested array dimensions
+    while (is_array_type(subtype))
+    {
+      const array_type2t &nested_arr_type = to_array_type(subtype);
+      if (nested_arr_type.size_is_infinite)
+        return;
+
+      expr2tc nested_size =
+        typecast2tc(size_type2(), nested_arr_type.array_size);
+      total_elems = mul2tc(size_type2(), total_elems, nested_size);
+
+      subtype = nested_arr_type.subtype;
+    }
+
     expr2tc subtype_size =
-      constant_int2tc(size_type2(), type_byte_size(arr_type.subtype));
-    expr2tc array_size = typecast2tc(size_type2(), arr_type.array_size);
-    arrsize = mul2tc(size_type2(), array_size, subtype_size);
+      constant_int2tc(size_type2(), type_byte_size(subtype));
+    arrsize = mul2tc(size_type2(), total_elems, subtype_size);
   }
 
   // Transforming offset to bytes
   expr2tc unsigned_offset = typecast2tc(
     size_type2(), div2tc(offset->type, offset, gen_long(offset->type, 8)));
+  simplify(unsigned_offset);
 
   // Then, expressions as to whether the access is over or under the array
   // size.

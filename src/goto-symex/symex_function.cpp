@@ -231,6 +231,30 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
     log_warning(
       "no body for function {}", get_pretty_name(identifier.as_string()));
 
+    /*
+     * For unknown functions, iterate over its arguments and check the pointers
+     * Improve the behavior logic of ESBMC to make it more realistic：
+     * 1. All pointers are invalid after calling unknown function -- too strict.
+     * 2. Only pointers given by (or reachable via) arguments are invalid.
+     * 3. CHERI guarantee: only memory within the capability permission may be modified.
+     */
+    if (options.get_bool_option("unknown-method-args-check"))
+    {
+      for (auto argument : call.operands)
+      {
+        if (is_pointer_type(argument->type))
+        {
+          // Create an invalid pointer
+          type2tc ptr_type = pointer_type2tc(get_empty_type());
+          expr2tc invalid_object = symbol2tc(ptr_type, "INVALID");
+
+          // There should be a difference here, we assign all pointer type arguments as
+          // invalid pointers, and CHERI's capabilities should prevent that here.
+          symex_assign(code_assign2tc(argument, invalid_object));
+        }
+      }
+    }
+
     /* TODO: if it is a C function with no prototype, assert/claim that all
      *       calls to this function have the same number of parameters and that
      *       they - after type promotion - are compatible. */
@@ -541,17 +565,6 @@ void goto_symext::pop_frame()
   if (!frame.function_identifier.empty())
     --cur_state->function_unwind[frame.function_identifier];
 
-  if (
-    (options.get_bool_option("condition-coverage") ||
-     options.get_bool_option("condition-coverage-claims") ||
-     options.get_bool_option("condition-coverage-rm") ||
-     options.get_bool_option("condition-coverage-claims-rm")) &&
-    cur_state->call_stack.back().goto_state_map.size() != 0)
-  {
-    //TODO: temporary fix for the condition coverage
-    // to prevent the assertion `call_stack.back().goto_state_map.size() == 0' failure.
-    cur_state->call_stack.back().goto_state_map.clear();
-  }
   cur_state->pop_frame();
 }
 

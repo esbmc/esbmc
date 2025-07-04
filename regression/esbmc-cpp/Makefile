@@ -1,4 +1,4 @@
-# Directories
+# Directories for esbmc-cpp
 algorithm := algorithm
 cpp := cpp
 inheritance := inheritance
@@ -15,6 +15,10 @@ map := map
 set := set
 multimap := multimap
 multiset := multiset
+unordered_set := unordered_set
+unordered_map := unordered_map
+functional := functional
+bitset := bitset
 
 # Clean
 ifneq ($(filter clean,$(MAKECMDGOALS)),)
@@ -29,13 +33,13 @@ endif
 llvm: all
 
 # Make them all
-all: $(algorithm) $(cpp) $(inheritance) $(stream)  $(trycatch) $(vector) $(deque) $(list) $(stack) $(queue) $(priority_queue) $(map) $(set) $(multimap) $(multiset) $(string)
+all: $(algorithm) $(cpp) $(inheritance) $(stream)  $(trycatch) $(vector) $(deque) $(list) $(stack) $(queue) $(priority_queue) $(map) $(set) $(multimap) $(multiset) $(string) $(unordered_set) $(unordered_map) $(functional) $(bitset)
 
-$(algorithm) $(cpp) $(inheritance) $(stream) $(trycatch) $(vector) $(deque) $(list) $(stack) $(queue) $(priority_queue) $(map) $(set)  $(multimap) $(multiset) $(string):
+$(algorithm) $(cpp) $(inheritance) $(stream) $(trycatch) $(vector) $(deque) $(list) $(stack) $(queue) $(priority_queue) $(map) $(set)  $(multimap) $(multiset) $(string) $(unordered_set) $(unordered_map) $(functional) $(bitset):
 	$(MAKE) --directory=$@ $(TARGET)
 
 #Make only STL directories
-stl: $(algorithm) $(vector) $(deque) $(list) $(stack) $(queue) $(priority_queue) $(map) $(set) $(multimap) $(multiset)
+stl: $(algorithm) $(vector) $(deque) $(list) $(stack) $(queue) $(priority_queue) $(map) $(set) $(multimap) $(multiset) $(unordered_set) $(unordered_map) $(functional) $(bitset)
 
 # Make each directory
 algorithm: $(algorithm)
@@ -54,7 +58,11 @@ map: $(map)
 set: $(set)
 multimap: $(multimap)
 multiset: $(multiset)
+unordered_set: $(unordered_set)
+unordered_map: $(unordered_map)
+functional : $(functional)
+bitset : $(bitset)
 
 # Allow parallel make
 
-.PHONY: all $(algorithm) $(cpp) $(inheritance) $(stream) $(trycatch) $(vector) $(deque) $(list) $(stack) $(queue) $(priority_queue) $(map) $(set) $(multimap) $(multiset) $(string)
+.PHONY: all $(algorithm) $(cpp) $(inheritance) $(stream) $(trycatch) $(vector) $(deque) $(list) $(stack) $(queue) $(priority_queue) $(map) $(set) $(multimap) $(multiset) $(string) $(unordered_set) $(unordered_map) $(functional)

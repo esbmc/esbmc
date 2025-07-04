@@ -81,6 +81,7 @@ if(ENABLE_JIMPLE_FRONTEND)
 endif()
 if(ENABLE_PYTHON_FRONTEND)
     set(REGRESSIONS_PYTHON python)
+    set(REGRESSIONS_NUMPY numpy)
 endif()
 
 if(ESBMC_CHERI_CLANG)
@@ -106,15 +107,19 @@ set(REGRESSIONS_CPP03 esbmc-cpp/cpp
                       esbmc-cpp/deque
                       esbmc-cpp/list
                       esbmc-cpp/map
+                      esbmc-cpp/unordered_map
                       esbmc-cpp/multimap
                       esbmc-cpp/multiset
                       esbmc-cpp/priority_queue
                       esbmc-cpp/queue
                       esbmc-cpp/set
+                      esbmc-cpp/unordered_set
                       esbmc-cpp/stack
                       esbmc-cpp/unix
                       esbmc-cpp/vector
                       esbmc-cpp/try_catch
+                      esbmc-cpp/functional
+                      esbmc-cpp/bitset
                       )
 # list of C++11 test suites
 set(REGRESSIONS_CPP11 esbmc-cpp11/cpp
@@ -135,7 +140,9 @@ set(REGRESSIONS_CPP14 esbmc-cpp14/cpp
                       )
 
 # list of C++17 test suites
-set(REGRESSIONS_CPP17 esbmc-cpp17/lambda)
+set(REGRESSIONS_CPP17 esbmc-cpp17/cpp
+                      esbmc-cpp17/lambda
+                      )
 
 # list of C++20 test suites
 set(REGRESSIONS_CPP20 esbmc-cpp20/cpp)
@@ -165,7 +172,9 @@ if(APPLE)
                     extensions
                     ${REGRESSIONS_CHERI}
                     ${REGRESSIONS_PYTHON}
+                    ${REGRESSIONS_NUMPY}
                     ltl
+                    goto-transcoder
        )
 elseif(WIN32)
     # FUTURE: Add floats-regression esbmc-cpp/cpp
@@ -183,6 +192,7 @@ elseif(WIN32)
                     ${REGRESSIONS_SMTLIB}
                     ${REGRESSIONS_Z3}
                     ltl
+                    goto-transcoder
        )
 else()
   if(NOT BENCHBRINGUP)
@@ -220,8 +230,10 @@ else()
                     linux
                     ${REGRESSIONS_CHERI}
                     ${REGRESSIONS_PYTHON}
+                    ${REGRESSIONS_NUMPY}
                     ltl
                     goto-coverage
+                    goto-transcoder
        )
   else()
     set(REGRESSIONS $ENV{BENCHMARK_TO_RUN}) # run a single user-specified benchmark

@@ -1,13 +1,93 @@
 #pragma once
 
 #include <python-frontend/json_utils.h>
-#include <python-frontend/python_frontend_types.h>
 #include <python-frontend/global_scope.h>
 #include <python-frontend/module_manager.h>
 #include <python-frontend/module.h>
+#include <python-frontend/type_utils.h>
 #include <util/message.h>
 
 #include <string>
+
+enum class InferResult
+{
+  OK,
+  UNKNOWN,
+};
+
+// Handle Python built-in functions
+static const std::map<std::string, std::string> builtin_functions = {
+  // Type conversion functions
+  {"int", "int"},
+  {"float", "float"},
+  {"str", "str"},
+  {"bool", "bool"},
+  {"list", "list"},
+  {"dict", "dict"},
+  {"set", "set"},
+  {"tuple", "tuple"},
+
+  // Numeric functions
+  {"abs", "int"},   // Can return int or float, but int is common case
+  {"round", "int"}, // Can return int or float
+  {"min", "Any"},   // Type depends on input
+  {"max", "Any"},   // Type depends on input
+  {"sum", "int"},   // Can return int or float, but int is common case
+  {"pow", "int"},   // Can return int or float
+
+  // Sequence functions
+  {"len", "int"},
+  {"range", "range"},
+  {"enumerate", "enumerate"},
+  {"zip", "zip"},
+  {"reversed", "reversed"},
+  {"sorted", "list"},
+
+  // I/O functions
+  {"print", "NoneType"},
+  {"input", "str"},
+  {"open", "file"},
+
+  // Utility functions
+  {"isinstance", "bool"},
+  {"issubclass", "bool"},
+  {"hasattr", "bool"},
+  {"getattr", "Any"},
+  {"setattr", "NoneType"},
+  {"delattr", "NoneType"},
+  {"callable", "bool"},
+  {"id", "int"},
+  {"hash", "int"},
+  {"repr", "str"},
+  {"ascii", "str"},
+  {"ord", "int"},
+  {"chr", "str"},
+  {"bin", "str"},
+  {"oct", "str"},
+  {"hex", "str"},
+  {"format", "str"},
+
+  // Iteration functions
+  {"iter", "iterator"},
+  {"next", "Any"},
+  {"all", "bool"},
+  {"any", "bool"},
+  {"filter", "filter"},
+  {"map", "map"},
+
+  // Variable functions
+  {"vars", "dict"},
+  {"dir", "list"},
+  {"globals", "dict"},
+  {"locals", "dict"},
+
+  // Execution functions
+  {"eval", "Any"},
+  {"exec", "NoneType"},
+  {"compile", "code"},
+
+  // Import functions
+  {"__import__", "module"}};
 
 template <class Json>
 class python_annotation
@@ -97,7 +177,7 @@ private:
       else
       {
         const auto &func_name = node["func"]["id"];
-        if (!is_builtin_type(func_name))
+        if (!type_utils::is_builtin_type(func_name))
         {
           try
           {
@@ -139,6 +219,31 @@ private:
 
     // Add type annotations within the function
     add_annotation(function_element);
+
+    auto return_node = json_utils::find_return_node(function_element["body"]);
+    if (
+      !return_node.empty() &&
+      (function_element["returns"].is_null() ||
+       config.options.get_bool_option("override-return-annotation")))
+    {
+      std::string inferred_type;
+      if (
+        infer_type(return_node, function_element, inferred_type) ==
+        InferResult::OK)
+      {
+        // Update the function node to include the return type annotation
+        function_element["returns"] = {
+          {"_type", "Name"},
+          {"id", inferred_type},
+          {"ctx", {{"_type", "Load"}}},
+          {"lineno", function_element["lineno"]},
+          {"col_offset", function_element["col_offset"]},
+          {"end_lineno", function_element["lineno"]},
+          {"end_col_offset",
+           function_element["col_offset"].template get<int>() +
+             inferred_type.size()}};
+      }
+    }
 
     // Update the end column offset after adding annotations
     update_end_col_offset(function_element);
@@ -197,6 +302,10 @@ private:
     {
       type = get_type_from_binary_expr(lhs, body);
     }
+    else if (lhs["_type"] == "List")
+    {
+      type = "list";
+    }
     // Floor division (//) operations always result in an integer value
     else if (
       stmt.contains("value") && stmt["value"]["op"]["_type"] == "FloorDiv")
@@ -241,19 +350,66 @@ private:
       }
     }
 
+    // Search the top-level AST body for a matching function definition
     for (const Json &elem : ast["body"])
     {
       if (elem["_type"] == "FunctionDef" && elem["name"] == func_name)
       {
-        if (!elem.contains("returns") || elem["returns"].is_null())
-          throw std::runtime_error(
-            "All functions must include type annotations for parameters and "
-            "return types.");
+        // Try to infer return type from actual return statements
+        auto return_node = json_utils::find_return_node(elem["body"]);
+        if (!return_node.empty())
+        {
+          std::string inferred_type;
+          infer_type(return_node, elem, inferred_type);
+          return inferred_type;
+        }
 
-        if (elem["returns"]["_type"] == "Subscript")
-          return elem["returns"]["value"]["id"];
-        else
-          return elem["returns"]["id"];
+        // Check if function has a return type annotation
+        if (elem.contains("returns") && !elem["returns"].is_null())
+        {
+          const auto &returns = elem["returns"];
+
+          // Handle different return type annotation structures
+          if (returns.contains("_type"))
+          {
+            const std::string &return_type = returns["_type"];
+
+            // Handle Subscript type (e.g., List[int], Dict[str, int])
+            if (return_type == "Subscript")
+            {
+              if (returns.contains("value") && returns["value"].contains("id"))
+                return returns["value"]["id"];
+              else
+                return "Any"; // Default for complex subscript types
+            }
+            // Handle Constant type (e.g., None)
+            else if (return_type == "Constant")
+            {
+              if (returns.contains("value") && returns["value"].is_null())
+                return "NoneType";
+              else if (returns.contains("value"))
+                return "Any"; // Other constant types
+            }
+            // Handle other annotation types
+            else
+            {
+              // Try to extract id if it exists
+              if (returns.contains("id"))
+                return returns["id"];
+            }
+          }
+          // Handle case where returns exists but doesn't have expected structure
+          else
+          {
+            log_warning(
+              "Unrecognized return type annotation for function "
+              "{}",
+              func_name);
+            return "Any"; // Safe default
+          }
+        }
+        // If function has no explicit return statements, assume void/None
+        return "NoneType";
       }
     }
 
@@ -270,6 +426,13 @@ private:
     }
     catch (std::runtime_error &)
     {
+    }
+
+    // Check if the function is a built-in function
+    auto it = builtin_functions.find(func_name);
+    if (it != builtin_functions.end())
+    {
+      return it->second;
     }
 
     std::ostringstream oss;
@@ -295,15 +458,77 @@ private:
     return node.empty() ? "" : node["annotation"]["id"];
   }
 
-  std::string get_type_from_rhs_variable(const Json &element, Json &body)
+  std::string get_type_from_json(const Json &value)
+  {
+    if (value.is_null())
+      return "null";
+    if (value.is_boolean())
+      return "bool";
+    if (value.is_number_unsigned())
+      return "int";
+    if (value.is_number_integer())
+      return "int";
+    if (value.is_number_float())
+      return "float";
+    if (value.is_string())
+      return "str";
+    if (value.is_array())
+      return "array";
+    if (value.is_object())
+      return "object";
+    return "unknown";
+  }
+
+  std::string get_list_subtype(const Json &list)
+  {
+    std::string list_subtype;
+
+    if (list["_type"] == "Call" && list["func"]["attr"] == "array")
+      return get_list_subtype(list["args"][0]);
+
+    if (!list.contains("elts"))
+      return "";
+
+    if (!list["elts"].empty())
+      list_subtype = get_type_from_json(list["elts"][0]["value"]);
+
+    for (const auto &elem : list["elts"])
+    {
+      if (get_type_from_json(elem["value"]) != list_subtype)
+      {
+        throw std::runtime_error("Multiple typed lists are not supported\n");
+      }
+    }
+    return list_subtype;
+  }
+
+  std::string get_type_from_rhs_variable(const Json &element, const Json &body)
   {
     const auto &value_type = element["value"]["_type"];
-    std::string rhs_var_name = value_type == "Name"
-                                 ? element["value"]["id"]
-                                 : element["value"]["value"]["id"];
+    std::string rhs_var_name;
+
+    if (value_type == "Name")
+      rhs_var_name = element["value"]["id"];
+    else if (value_type == "UnaryOp")
+      rhs_var_name = element["value"]["operand"]["id"];
+    else
+      rhs_var_name = element["value"]["value"]["id"];
+
+    assert(!rhs_var_name.empty());
 
     // Find RHS variable declaration in the current scope (e.g.: while/if block)
     Json rhs_node = find_annotated_assign(rhs_var_name, body["body"]);
+
+    // Try to infer variable from current scope
+    if (rhs_node.empty())
+    {
+      auto var = json_utils::get_var_node(rhs_var_name, body);
+      std::string type;
+      if (infer_type(var, body, type) == InferResult::OK && !type.empty())
+      {
+        return type;
+      }
+    }
 
     // Find RHS variable declaration in the current function
     if (rhs_node.empty() && current_func)
@@ -328,6 +553,11 @@ private:
       throw std::runtime_error(oss.str());
     }
 
+    if (value_type == "Subscript")
+    {
+      return get_list_subtype(rhs_node["value"]);
+    }
+
     return rhs_node["annotation"]["id"];
   }
 
@@ -336,14 +566,15 @@ private:
     const std::string &func_id = element["value"]["func"]["id"];
 
     if (
-      json_utils::is_class<Json>(func_id, ast_) || is_builtin_type(func_id) ||
-      is_consensus_type(func_id))
+      json_utils::is_class<Json>(func_id, ast_) ||
+      type_utils::is_builtin_type(func_id) ||
+      type_utils::is_consensus_type(func_id))
       return func_id;
 
-    if (is_consensus_func(func_id))
-      return get_type_from_consensus_func(func_id);
+    if (type_utils::is_consensus_func(func_id))
+      return type_utils::get_type_from_consensus_func(func_id);
 
-    if (!is_model_func(func_id))
+    if (!type_utils::is_python_model_func(func_id))
       return get_function_return_type(func_id, ast_);
 
     return "";
@@ -423,10 +654,81 @@ private:
     const std::string &obj_type =
       obj_node["annotation"]["id"].template get<std::string>();
 
-    if (is_builtin_type(obj_type))
+    if (type_utils::is_builtin_type(obj_type))
       type = obj_type;
 
     return type;
+  }
+
+  InferResult
+  infer_type(const Json &stmt, const Json &body, std::string &inferred_type)
+  {
+    if (stmt.empty())
+      return InferResult::UNKNOWN;
+
+    if (stmt["_type"] == "arg")
+    {
+      if (stmt["annotation"].contains("value"))
+        inferred_type =
+          stmt["annotation"]["value"]["id"].template get<std::string>();
+      else
+        inferred_type = stmt["annotation"]["id"].template get<std::string>();
+      return InferResult::OK;
+    }
+
+    const auto &value_type = stmt["value"]["_type"];
+
+    // Get type from RHS constant
+    if (value_type == "Constant")
+    {
+      inferred_type = get_type_from_constant(stmt["value"]);
+    }
+    else if (value_type == "List")
+    {
+      inferred_type = "list";
+    }
+    else if (value_type == "UnaryOp") // Handle negative numbers
+    {
+      const auto &operand = stmt["value"]["operand"];
+      const auto &operand_type = operand["_type"];
+      if (operand_type == "Constant")
+        inferred_type = get_type_from_constant(operand);
+      else if (operand_type == "Name")
+        inferred_type = get_type_from_rhs_variable(stmt, body);
+    }
+
+    // Get type from RHS variable
+    else if (value_type == "Name" || value_type == "Subscript")
+    {
+      inferred_type = get_type_from_rhs_variable(stmt, body);
+    }
+
+    // Get type from RHS binary expression
+    else if (value_type == "BinOp")
+    {
+      std::string got_type = get_type_from_binary_expr(stmt, body);
+      if (!got_type.empty())
+        inferred_type = got_type;
+    }
+
+    // Get type from top-level functions
+    else if (
+      value_type == "Call" && stmt["value"]["func"]["_type"] == "Name" &&
+      !type_utils::is_python_model_func(stmt["value"]["func"]["id"]))
+    {
+      inferred_type = get_type_from_call(stmt);
+    }
+
+    // Get type from methods
+    else if (
+      value_type == "Call" && stmt["value"]["func"]["_type"] == "Attribute")
+    {
+      inferred_type = get_type_from_method(stmt["value"]);
+    }
+    else
+      return InferResult::UNKNOWN;
+
+    return InferResult::OK;
   }
 
   void add_annotation(Json &body)
@@ -479,55 +781,16 @@ private:
         inferred_type = get_type_from_lhs(element["targets"][0]["id"], body);
       }
 
-      const auto &value_type = element["value"]["_type"];
-
-      // Get type from RHS constant
-      if (value_type == "Constant")
-      {
-        inferred_type = get_type_from_constant(element["value"]);
-      }
-      else if (value_type == "List")
-      {
-        inferred_type = "list";
-      }
-      else if (
-        value_type == "UnaryOp" && element["value"]["operand"]["_type"] ==
-                                     "Constant") // Handle negative numbers
-      {
-        inferred_type = get_type_from_constant(element["value"]["operand"]);
-      }
-
-      // Get type from RHS variable
-      else if (value_type == "Name" || value_type == "Subscript")
-      {
-        inferred_type = get_type_from_rhs_variable(element, body);
-      }
-
-      // Get type from RHS binary expression
-      else if (value_type == "BinOp")
-      {
-        std::string got_type = get_type_from_binary_expr(element, body);
-        if (!got_type.empty())
-          inferred_type = got_type;
-      }
-
-      // Get type from top-level functions
-      else if (
-        value_type == "Call" && element["value"]["func"]["_type"] == "Name" &&
-        !is_model_func(element["value"]["func"]["id"]))
-      {
-        inferred_type = get_type_from_call(element);
-      }
-
-      // Get type from methods
-      else if (
-        value_type == "Call" &&
-        element["value"]["func"]["_type"] == "Attribute")
-      {
-        inferred_type = get_type_from_method(element["value"]);
-      }
-      else
+      if (infer_type(element, body, inferred_type) == InferResult::UNKNOWN)
         continue;
+
+      const auto &rhs = element["value"];
+
+      if (
+        (rhs["_type"] == "Constant" && rhs["value"].is_null()) ||
+        (rhs["_type"] == "NameConstant" && rhs["value"].is_null()) ||
+        (rhs["_type"] == "Name" && rhs.contains("id") && rhs["id"] == "None"))
+        inferred_type = "NoneType";
 
       if (inferred_type.empty())
       {
@@ -563,6 +826,10 @@ private:
     {
       id = target["value"]["id"].template get<std::string>() + "." +
            target["attr"].template get<std::string>();
+    }
+    else if (target.contains("slice"))
+    {
+      return; // No need to annotate assignments to array elements.
     }
 
     assert(!id.empty());
