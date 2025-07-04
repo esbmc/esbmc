@@ -2542,18 +2542,18 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
     if (int_encoding)
     {
       BigInt numerator, denominator;
-      if (get_rational(a, numerator, denominator)) 
+      if (get_rational(a, numerator, denominator))
       {
         double value = convert_rational_to_double(numerator, denominator);
         unsigned int type_width = type->get_width();
-      
-        if (type_width == ieee_float_spect::single_precision().width()) 
+
+        if (type_width == ieee_float_spect::single_precision().width())
         {
           ieee_floatt ieee_val(ieee_float_spect::single_precision());
           ieee_val.from_float(static_cast<float>(value));
           return constant_floatbv2tc(ieee_val);
-        } 
-        else 
+        }
+        else
         {
           ieee_floatt ieee_val(ieee_float_spect::double_precision());
           ieee_val.from_double(value);
@@ -2612,19 +2612,24 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
   }
 }
 
-double smt_convt::convert_rational_to_double(const BigInt &numerator, const BigInt &denominator)
+double smt_convt::convert_rational_to_double(
+  const BigInt &numerator,
+  const BigInt &denominator)
 {
   char num_buffer[256];
   char den_buffer[256];
-  
+
   numerator.as_string(num_buffer, sizeof(num_buffer), 10);
   denominator.as_string(den_buffer, sizeof(den_buffer), 10);
-  
-  try {
+
+  try
+  {
     double num_val = std::stod(std::string(num_buffer));
     double den_val = std::stod(std::string(den_buffer));
     return (den_val != 0.0) ? num_val / den_val : 0.0;
-  } catch (const std::exception &) {
+  }
+  catch (const std::exception &)
+  {
     return 0.0; // Fallback value
   }
 }

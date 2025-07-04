@@ -260,10 +260,12 @@ public:
    *  @param numerator Output parameter for the numerator of the rational.
    *  @param denominator Output parameter for the denominator of the rational.
    *  @return True if the rational value was successfully extracted, false otherwise. */
-   virtual bool get_rational(smt_astt a, BigInt &numerator, BigInt &denominator)
+  virtual bool get_rational(smt_astt a, BigInt &numerator, BigInt &denominator)
   {
     // Default implementation returns false - solver-specific implementations should override this
-    (void)a; (void)numerator; (void)denominator;
+    (void)a;
+    (void)numerator;
+    (void)denominator;
     return false;
   }
 
@@ -874,7 +876,9 @@ public:
   smt_astt int_shift_op_array;
 
 private:
-  double convert_rational_to_double(const BigInt &numerator, const BigInt &denominator);
+  double convert_rational_to_double(
+    const BigInt &numerator,
+    const BigInt &denominator);
 };
 
 /** Given an array type, create a type2tc representing its domain. */
