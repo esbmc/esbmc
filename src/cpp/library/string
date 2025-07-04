@@ -17,9 +17,9 @@ template <class charT>
 struct char_traits
 {
   using char_type = charT;
-  using int_type    = int;
-  using off_type    = std::ptrdiff_t;
-  using pos_type    = std::size_t;
+  using int_type = int;
+  using off_type = std::ptrdiff_t;
+  using pos_type = std::size_t;
 
   static void assign(char_type &c1, const char_type &c2) noexcept
   {
