@@ -57,9 +57,8 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
 
   // The next block will initialize the algorithms used for the analysis.
   {
-    if (opts.get_bool_option("no-slice"))
-      algorithms.emplace_back(std::make_unique<simple_slice>());
-    else
+    algorithms.emplace_back(std::make_unique<simple_slice>());
+    if (!opts.get_bool_option("no-slice"))
       algorithms.emplace_back(std::make_unique<symex_slicet>(options));
 
     // Run cache if user has specified the option
