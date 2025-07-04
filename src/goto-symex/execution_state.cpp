@@ -967,18 +967,6 @@ bool execution_statet::check_mpor_dependency(unsigned int j, unsigned int l)
 {
   assert(j < threads_state.size());
   assert(l < threads_state.size());
-  // log_status("writes j: ");
-  // for(auto & a : thread_last_writes[j])
-  //   a.get()->dump();
-  // log_status("writes l: ");
-  // for(auto & b : thread_last_writes[l])
-  //   b.get()->dump();
-  // log_status("reads j: ");
-  // for(auto & c: thread_last_reads[j])
-  //   c.get()->dump();
-  // log_status("reads l: ");
-  // for(auto & d: thread_last_reads[l])
-  //   d.get()->dump();
 
   // Rules given on page 13 of MPOR paper, although they don't appear to
   // distinguish which thread is which correctly. Essentially, check that
