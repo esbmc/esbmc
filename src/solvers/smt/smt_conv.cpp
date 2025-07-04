@@ -2640,7 +2640,7 @@ double smt_convt::convert_rational_to_double(
   {
     log_warning(
       "BigInt to string conversion may have been truncated - buffer too small");
-    return 0.0; // Safer to return 0 than use truncated data
+    return 0.0;
   }
 
   try
