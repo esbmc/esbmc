@@ -1378,10 +1378,10 @@ bool z3_convt::parse_rational_bigint(
 {
   std::string value_str(str);
 
-  if (value_str.find('/') != std::string::npos)
+  size_t slash_pos = value_str.find('/');
+  if (slash_pos != std::string::npos)
   {
     // Parse rational "numerator/denominator"
-    size_t slash_pos = value_str.find('/');
     std::string num_str = value_str.substr(0, slash_pos);
     std::string den_str = value_str.substr(slash_pos + 1);
 
