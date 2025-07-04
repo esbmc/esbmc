@@ -2549,15 +2549,23 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
 
         if (type_width == ieee_float_spect::single_precision().width())
         {
+          // Single precision (32-bit float)
           ieee_floatt ieee_val(ieee_float_spect::single_precision());
           ieee_val.from_float(static_cast<float>(value));
           return constant_floatbv2tc(ieee_val);
         }
-        else
+        else if (type_width == ieee_float_spect::double_precision().width())
         {
+          // Double precision (64-bit double)
           ieee_floatt ieee_val(ieee_float_spect::double_precision());
           ieee_val.from_double(value);
           return constant_floatbv2tc(ieee_val);
+        }
+        else
+        {
+          log_error(
+            "Unsupported floatbv width ({}) for rational conversion",
+            type_width);
         }
       }
       return expr2tc();
