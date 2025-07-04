@@ -2622,7 +2622,6 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
 
 double smt_convt::convert_rational_to_double(const BigInt &numerator, const BigInt &denominator)
 {
-  // Can handle very large BigInt values
   size_t buffer_size = 1024;
   
   std::vector<char> num_buffer(buffer_size);
@@ -2630,6 +2629,15 @@ double smt_convt::convert_rational_to_double(const BigInt &numerator, const BigI
   
   numerator.as_string(num_buffer.data(), buffer_size, 10);
   denominator.as_string(den_buffer.data(), buffer_size, 10);
+  
+  // Check for buffer overflow
+  size_t num_len = strlen(num_buffer.data());
+  size_t den_len = strlen(den_buffer.data());
+  
+  if (num_len >= buffer_size - 1 || den_len >= buffer_size - 1) {
+    log_warning("BigInt to string conversion may have been truncated - buffer too small");
+    return 0.0; // Safer to return 0 than use truncated data
+  }
   
   try {
     double num_val = std::stod(num_buffer.data());

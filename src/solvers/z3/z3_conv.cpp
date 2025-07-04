@@ -1325,6 +1325,15 @@ bool z3_convt::get_rational(smt_astt a, BigInt &numerator, BigInt &denominator)
   // First check if this is a numeral (constant value)
   if (Z3_get_ast_kind(z3_ctx, za->a) == Z3_NUMERAL_AST)
   {
+    int64_t num, den;
+    if (Z3_get_numeral_rational_int64(z3_ctx, za->a, &num, &den))
+    {
+      numerator = BigInt(num);
+      denominator = BigInt(den);
+      return true;
+    }
+
+    // Fallback to string-based parsing
     Z3_string str = Z3_get_numeral_string(z3_ctx, za->a);
     if (str != nullptr)
       return parse_rational_bigint(str, numerator, denominator);
@@ -1332,7 +1341,6 @@ bool z3_convt::get_rational(smt_astt a, BigInt &numerator, BigInt &denominator)
   else
   {
     // It's not a numeral, need to evaluate it in the model
-    // Get the current model from Z3 solver
     Z3_model current_model = Z3_solver_get_model(z3_ctx, solver);
     if (current_model != nullptr)
     {
@@ -1340,15 +1348,21 @@ bool z3_convt::get_rational(smt_astt a, BigInt &numerator, BigInt &denominator)
       bool eval_success =
         Z3_model_eval(z3_ctx, current_model, za->a, true, &evaluated);
 
-      if (eval_success && evaluated != nullptr)
+      if (eval_success && evaluated != nullptr &&
+          Z3_get_ast_kind(z3_ctx, evaluated) == Z3_NUMERAL_AST)
       {
-        // Check if the evaluated result is a numeral
-        if (Z3_get_ast_kind(z3_ctx, evaluated) == Z3_NUMERAL_AST)
+        int64_t num, den;
+        if (Z3_get_numeral_rational_int64(z3_ctx, evaluated, &num, &den))
         {
-          Z3_string str = Z3_get_numeral_string(z3_ctx, evaluated);
-          if (str != nullptr)
-            return parse_rational_bigint(str, numerator, denominator);
+          numerator = BigInt(num);
+          denominator = BigInt(den);
+          return true;
         }
+
+        // Fallback to string-based parsing
+        Z3_string str = Z3_get_numeral_string(z3_ctx, evaluated);
+        if (str != nullptr)
+          return parse_rational_bigint(str, numerator, denominator);
       }
     }
   }
