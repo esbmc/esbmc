@@ -1348,8 +1348,9 @@ bool z3_convt::get_rational(smt_astt a, BigInt &numerator, BigInt &denominator)
       bool eval_success =
         Z3_model_eval(z3_ctx, current_model, za->a, true, &evaluated);
 
-      if (eval_success && evaluated != nullptr &&
-          Z3_get_ast_kind(z3_ctx, evaluated) == Z3_NUMERAL_AST)
+      if (
+        eval_success && evaluated != nullptr &&
+        Z3_get_ast_kind(z3_ctx, evaluated) == Z3_NUMERAL_AST)
       {
         int64_t num, den;
         if (Z3_get_numeral_rational_int64(z3_ctx, evaluated, &num, &den))
