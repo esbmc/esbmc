@@ -10,6 +10,7 @@
   <column displayTitle="GOTO Generation Time" sourceUnit="s" title="goto-generation">GOTO program creation time: (.*)s</column>
   <column displayTitle="GOTO Preprocessing Time" sourceUnit="s" title="goto-preprocessing">GOTO program processing time: (.*)s</column>
   <column displayTitle="Total Symex Time" sourceUnit="s" title="symex-total">Symex completed in: (.*)s .*</column>
+  <column displayTitle="Total Slicing Time" sourceUnit="s" title="slicer-total">Slicing time: (.*)s .*</column>
   <column displayTitle="Total Solving Time" sourceUnit="s" title="decision-total">Runtime decision procedure: (.*)s</column>
   <column displayTitle="VCC(s)" sourceUnit="i" title="vcc-total">Generated (.*) VCC.*</column>
 </table>
