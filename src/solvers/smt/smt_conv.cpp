@@ -1653,9 +1653,21 @@ smt_astt smt_convt::convert_signbit(const expr2tc &expr)
   // Extract the top bit
   auto value = convert_ast(signbit.operand);
 
-  const auto width = value->sort->get_data_width();
-  smt_astt is_neg =
-    mk_eq(mk_extract(value, width - 1, width - 1), mk_smt_bv(BigInt(1), 1));
+  smt_astt is_neg;
+
+  if (int_encoding)
+  {
+    // In integer/real encoding mode, floating-point values are represented as reals
+    // We can't extract bits, so check the sign mathematically
+    is_neg = mk_lt(value, mk_smt_real("0"));
+  }
+  else
+  {
+    // In bitvector mode, extract the sign bit
+    const auto width = value->sort->get_data_width();
+    is_neg =
+      mk_eq(mk_extract(value, width - 1, width - 1), mk_smt_bv(BigInt(1), 1));
+  }
 
   // If it's true, return 1. Return 0, othewise.
   return mk_ite(
