@@ -4496,7 +4496,6 @@ bool solidity_convertert::get_expr(
       //    bytes32 x = "string";
       //    bytes x = "string";
       //
-
       SolidityGrammar::ElementaryTypeNameT type =
         SolidityGrammar::get_elementary_type_name_t(literal_type);
 
@@ -4890,11 +4889,14 @@ bool solidity_convertert::get_expr(
         break;
       }
 
-      std::string func_name = new_expr.op0().name().as_string();
-      if (
-        func_name == "_ESBMC_array_push" || func_name == "_ESBMC_array_pop" ||
-        func_name == "_ESBMC_array_length")
-        break;
+      if (new_expr.id() == "sideeffect")
+      {
+        std::string func_name = new_expr.op0().name().as_string();
+        if (
+          func_name == "_ESBMC_array_push" || func_name == "_ESBMC_array_pop" ||
+          func_name == "_ESBMC_array_length")
+          break;
+      }
 
       std::string sol_name = new_expr.type().get("#sol_name").as_string();
       if (sol_name == "revert")
@@ -7026,7 +7028,32 @@ bool solidity_convertert::get_sol_builtin_ref(
         if (get_type_description(
               expr["expression"]["typeDescriptions"], base_t))
           return true;
-            }
+        std::string solt = base_t.get("#sol_type").as_string();
+        if (solt.find("ARRAY") != std::string::npos)
+        {
+          side_effect_expr_function_callt length_expr;
+          get_library_function_call_no_args(
+            "_ESBMC_array_length",
+            "c:@F@_ESBMC_array_length",
+            uint_type(),
+            l,
+            length_expr);
+          length_expr.arguments().push_back(base);
+
+          new_expr = length_expr;
+          new_expr.location() = l;
+          return false;
+        }
+        else if (solt.find("BYTES"))
+        {
+          //TODO
+        }
+        else
+        {
+          log_error("Unexpect length of {} type", solt);
+          return true;
+        }
+      }
       else if (name == "push" || name == "pop")
       {
         // _ESBMC_array_push(arr, &val, sizeof(int));
@@ -7103,7 +7130,6 @@ bool solidity_convertert::get_sol_builtin_ref(
 
         new_expr = mem;
         new_expr.location() = l;
-        new_expr.dump();
         return false;
       }
     }
