@@ -113,10 +113,14 @@ pick_solver(std::string &solver_name, const optionst &options)
     }
     else
     {
-      log_warning("Z3 not available for integer/real arithmetic mode; using default solver");
+      log_warning(
+        "Z3 not available for integer/real arithmetic mode; using default "
+        "solver");
     }
 #else
-    log_warning("Z3 not built into this version of ESBMC; using default solver for integer/real mode");
+    log_warning(
+      "Z3 not built into this version of ESBMC; using default solver for "
+      "integer/real mode");
 #endif
   }
   if (solver_name == "")
