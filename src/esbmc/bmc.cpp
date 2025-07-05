@@ -1511,10 +1511,10 @@ void bmct::report_simple_summary(const SimpleSummary &summary) const
 
   std::ostringstream timing_oss;
   timing_oss << "Solver: " << summary.solver_name
-             << " • Decision procedure total time: " << time2string(summary.total_time_s)
-             << "s"
-             << " • Avg: " << std::fixed << std::setprecision(1) << time2string(avg_time)
-             << "s/property";
+             << " • Decision procedure total time: "
+             << time2string(summary.total_time_s) << "s"
+             << " • Avg: " << std::fixed << std::setprecision(1)
+             << time2string(avg_time) << "s/property";
 
   // Output the summary
   log_result("{}", properties_oss.str());
