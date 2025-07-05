@@ -165,6 +165,7 @@ execution_statet &execution_statet::operator=(const execution_statet &ex)
   dependency_chain = ex.dependency_chain;
   mpor_says_no = ex.mpor_says_no;
   cswitch_forced = ex.cswitch_forced;
+  dependency_exist = ex.dependency_exist;
 
   // Vastly irritatingly, we have to iterate through existing level2t objects
   // updating their ex_state references. There isn't an elegant way of updating
@@ -853,7 +854,8 @@ void execution_statet::get_expr_globals(
       name == "c:@__ESBMC_alloc" || name == "c:@__ESBMC_alloc_size" ||
       name == "c:@__ESBMC_is_dynamic" ||
       name == "c:@__ESBMC_blocked_threads_count" ||
-      name.find("c:pthread_lib") != std::string::npos ||
+      (name.find("c:pthread_lib") != std::string::npos &&
+       name.find("mutex") == std::string::npos)||
       name == "c:@__ESBMC_rounding_mode" ||
       name.find("c:@__ESBMC_pthread_thread") != std::string::npos)
     {
@@ -967,6 +969,9 @@ bool execution_statet::check_mpor_dependency(unsigned int j, unsigned int l)
 {
   assert(j < threads_state.size());
   assert(l < threads_state.size());
+
+  if (dependency_exist)
+    return true;
 
   // Rules given on page 13 of MPOR paper, although they don't appear to
   // distinguish which thread is which correctly. Essentially, check that
@@ -1109,6 +1114,21 @@ bool execution_statet::has_cswitch_point_occured() const
 
   if (cswitch_forced)
     return true;
+
+if (thread_last_reads[active_thread].size() == 1 &&
+    thread_last_writes[active_thread].size() == 1) {
+
+  auto& r = *thread_last_reads[active_thread].begin();
+  auto& w = *thread_last_writes[active_thread].begin();
+
+  auto is_mutex_type = [](const auto& val) {
+    return is_struct_type(val) &&
+           has_prefix(to_struct_type(val->type).name, "struct __anon_typedef_pthread_mutex_t");
+  };
+
+  if (is_mutex_type(r) && is_mutex_type(w))
+    return false;
+}
 
   if (
     thread_last_reads[active_thread].size() != 0 ||

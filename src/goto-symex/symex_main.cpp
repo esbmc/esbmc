@@ -342,6 +342,9 @@ void goto_symext::symex_step(reachability_treet &art)
         symex_input(call);
         return;
       }
+
+      // if (id == "c:@F@pthread_join_noswitch")
+      //   depend_exist = true;
     }
 
     if (cur_state->guard.is_false())
