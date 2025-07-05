@@ -1232,6 +1232,10 @@ smt_convt::resultt bmct::multi_property_check(
   std::unordered_set<size_t> jobs;
   std::mutex result_mutex;
 
+  // Add summary tracking
+  SimpleSummary summary;
+  summary.total_properties = remaining_claims;
+
   // For coverage info
   auto &reached_claims = symex->goto_functions.reached_claims;
   auto &reached_mul_claims = symex->goto_functions.reached_mul_claims;
@@ -1294,6 +1298,7 @@ smt_convt::resultt bmct::multi_property_check(
                        &ce_counter,
                        &final_result,
                        &result_mutex,
+                       &summary,
                        &reached_claims,
                        &reached_mul_claims,
                        &verified_claims,
@@ -1345,9 +1350,7 @@ smt_convt::resultt bmct::multi_property_check(
 
     // skip if we have already verified
     if (is_verified && !is_keep_verified)
-    {
       return;
-    }
 
     // Slice
     if (!options.get_bool_option("no-slice"))
@@ -1365,14 +1368,46 @@ smt_convt::resultt bmct::multi_property_check(
     // Initialize a solver
     std::unique_ptr<smt_convt> runtime_solver(create_solver("", ns, options));
 
+    // Store solver name
+    if (summary.solver_name.empty())
+      summary.solver_name = runtime_solver->solver_text();
+
     log_status(
       "Solving claim '{}' with solver {}",
       claim.claim_msg,
       runtime_solver->solver_text());
 
-    // Save current instance
+    // Save current instance with timing
+    fine_timet solve_start = current_time();
     smt_convt::resultt solver_result =
       run_decision_procedure(*runtime_solver, local_eq);
+    fine_timet solve_stop = current_time();
+
+    // Show colored result after solving
+    const std::string GREEN = "\033[32m";
+    const std::string RED = "\033[31m";
+    const std::string RESET = "\033[0m";
+
+    if (solver_result == smt_convt::P_UNSATISFIABLE)
+    {
+      // Claim passed - show in green
+      log_status("{}✓ PASSED{}: '{}'", GREEN, RESET, claim.claim_msg);
+    }
+    else if (solver_result == smt_convt::P_SATISFIABLE)
+    {
+      // Claim failed - show in red
+      log_status("{}✗ FAILED{}: '{}'", RED, RESET, claim.claim_msg);
+    }
+
+    double solve_time_s = (solve_stop - solve_start);
+
+    // Update summary with timing and results
+    summary.total_time_s += solve_time_s;
+
+    if (solver_result == smt_convt::P_SATISFIABLE)
+      summary.failed_properties++;
+    else if (solver_result == smt_convt::P_UNSATISFIABLE)
+      summary.passed_properties++;
 
     // If an assertion instance is verified to be violated
     if (solver_result == smt_convt::P_SATISFIABLE)
@@ -1435,6 +1470,9 @@ smt_convt::resultt bmct::multi_property_check(
 
   std::for_each(std::begin(jobs), std::end(jobs), job_function);
 
+  // show summary
+  report_simple_summary(summary);
+
   // For coverage with fixed bound unwinding
   if (
     bs && !fc && !is && !options.get_bool_option("k-induction") &&
@@ -1442,4 +1480,43 @@ smt_convt::resultt bmct::multi_property_check(
     report_coverage(options, reached_claims, reached_mul_claims);
 
   return final_result;
+}
+
+void bmct::report_simple_summary(const SimpleSummary &summary) const
+{
+  if (options.get_bool_option("result-only"))
+    return;
+
+  // ANSI color codes
+  const std::string GREEN = "\033[32m";
+  const std::string RED = "\033[31m";
+  const std::string RESET = "\033[0m";
+
+  // Build the properties summary string with colors
+  std::ostringstream properties_oss;
+  properties_oss << "Properties: " << summary.total_properties << " verified";
+
+  if (summary.passed_properties > 0)
+    properties_oss << " " << GREEN << "✓ " << summary.passed_properties
+                   << " passed" << RESET;
+
+  if (summary.failed_properties > 0)
+    properties_oss << ", " << RED << "✗ " << summary.failed_properties
+                   << " failed" << RESET;
+
+  // Build the timing summary string
+  double avg_time = summary.total_properties > 0
+                      ? summary.total_time_s / summary.total_properties
+                      : 0.0;
+
+  std::ostringstream timing_oss;
+  timing_oss << "Solver: " << summary.solver_name
+             << " • Decision procedure total time: " << time2string(summary.total_time_s)
+             << "s"
+             << " • Avg: " << std::fixed << std::setprecision(1) << time2string(avg_time)
+             << "s/property";
+
+  // Output the summary
+  log_result("{}", properties_oss.str());
+  log_result("{}", timing_oss.str());
 }
