@@ -109,7 +109,8 @@ bool solidity_convertert::convert()
     return true;
 
   // for coverage and trace simplification: update include_files
-  auto add_unique = [](const std::string &file) {
+  auto add_unique = [](const std::string &file)
+  {
     if (
       std::find(
         config.ansi_c.include_files.begin(),
@@ -462,7 +463,8 @@ bool solidity_convertert::check_sol_ver()
   }
 
   auto parse_version =
-    [](const std::string &version_str) -> std::optional<versiont> {
+    [](const std::string &version_str) -> std::optional<versiont>
+  {
     std::regex ver_regex(R"((\d+)\.(\d+)\.(\d+))");
     std::smatch match;
     if (std::regex_match(version_str, match, ver_regex))
@@ -1032,14 +1034,15 @@ bool solidity_convertert::populate_function_signature(
       is_payable = func_node["stateMutability"] == "payable";
       is_inherit = func_node.contains("is_inherited");
 
-      funcSignatures[cname].push_back(solidity_convertert::func_sig(
-        func_name,
-        func_id,
-        visibility,
-        type,
-        is_payable,
-        is_inherit,
-        is_library));
+      funcSignatures[cname].push_back(
+        solidity_convertert::func_sig(
+          func_name,
+          func_id,
+          visibility,
+          type,
+          is_payable,
+          is_inherit,
+          is_library));
     }
   }
 
@@ -1047,9 +1050,8 @@ bool solidity_convertert::populate_function_signature(
   bool hasConstructor = std::any_of(
     funcSignatures[cname].begin(),
     funcSignatures[cname].end(),
-    [&cname](const solidity_convertert::func_sig &sig) {
-      return sig.name == cname;
-    });
+    [&cname](const solidity_convertert::func_sig &sig)
+    { return sig.name == cname; });
   if (!hasConstructor && !is_library)
   {
     func_name = cname;
@@ -1059,14 +1061,15 @@ bool solidity_convertert::populate_function_signature(
     type.return_type() = empty_typet();
     type.return_type().set("cpp_type", "void");
     is_inherit = false;
-    funcSignatures[cname].push_back(solidity_convertert::func_sig(
-      func_name,
-      func_id,
-      visibility,
-      type,
-      is_payable,
-      is_inherit,
-      is_library));
+    funcSignatures[cname].push_back(
+      solidity_convertert::func_sig(
+        func_name,
+        func_id,
+        visibility,
+        type,
+        is_payable,
+        is_inherit,
+        is_library));
   }
 
   return false;
@@ -4887,6 +4890,12 @@ bool solidity_convertert::get_expr(
         break;
       }
 
+      std::string func_name = new_expr.op0().name().as_string();
+      if (
+        func_name == "_ESBMC_array_push" || func_name == "_ESBMC_array_pop" ||
+        func_name == "_ESBMC_array_length")
+        break;
+
       std::string sol_name = new_expr.type().get("#sol_name").as_string();
       if (sol_name == "revert")
       {
@@ -7006,6 +7015,95 @@ bool solidity_convertert::get_sol_builtin_ref(
         typet t = UserDefinedVarMap[udv];
         new_expr = typecast_exprt(t); // we will set the op0 later
         new_expr.location() = l;
+        return false;
+      }
+      else if (name == "length")
+      {
+        exprt base;
+        if (get_expr(expr["expression"], base))
+          return true;
+        typet base_t;
+        if (get_type_description(
+              expr["expression"]["typeDescriptions"], base_t))
+          return true;
+            }
+      else if (name == "push" || name == "pop")
+      {
+        // _ESBMC_array_push(arr, &val, sizeof(int));
+        // push default (0): _ESBMC_array_push(arr, NULL, sizeof(int));
+        // _ESBMC_array_pop(arr, sizeof(int));
+        exprt base;
+        if (get_expr(expr["expression"], base))
+          return true;
+        typet base_t;
+        if (get_type_description(
+              expr["expression"]["typeDescriptions"], base_t))
+          return true;
+
+        assert(base_t.has_subtype());
+        exprt size_of;
+        get_size_of_expr(base_t.subtype(), size_of);
+
+        const nlohmann::json &func =
+          find_last_parent(src_ast_json["node"], func);
+        assert(!func.empty());
+        exprt args;
+        if (func["arguments"].size())
+          args = gen_zero(pointer_typet(empty_typet()));
+        else
+        {
+          if (get_expr(func["arguments"], expr["argumentTypes"][0], args))
+            return true;
+          // wrap it
+          std::string aux_name = "_idx#" + std::to_string(aux_counter++);
+          std::string aux_id;
+          std::string cname;
+          get_current_contract_name(expr, cname);
+          assert(!cname.empty());
+          if (current_functionDecl)
+            aux_id =
+              "sol:@C@" + cname + "@F@" + current_functionName + "@" + aux_name;
+          else
+            aux_id = "sol:@C@" + cname + "@" + aux_name;
+          symbolt aux_idx;
+          get_default_symbol(
+            aux_idx,
+            get_modulename_from_path(absolute_path),
+            args.type(),
+            aux_name,
+            aux_id,
+            l);
+          auto &added_aux = *move_symbol_to_context(aux_idx);
+          code_declt decl(symbol_expr(added_aux));
+          added_aux.value = args;
+          decl.operands().push_back(args);
+          move_to_front_block(decl);
+          args = address_of_exprt(symbol_expr(added_aux));
+        }
+
+        side_effect_expr_function_callt mem;
+        get_library_function_call_no_args(
+          "_ESBMC_array_" + name,
+          "c:@F@_ESBMC_array_" + name,
+          empty_typet(),
+          l,
+          mem);
+
+        if (name == "push")
+        {
+          mem.arguments().push_back(base);
+          mem.arguments().push_back(args);
+          mem.arguments().push_back(size_of);
+        }
+        else
+        {
+          mem.arguments().push_back(base);
+          mem.arguments().push_back(size_of);
+        }
+
+        new_expr = mem;
+        new_expr.location() = l;
+        new_expr.dump();
         return false;
       }
     }
@@ -9632,8 +9730,8 @@ bool solidity_convertert::is_func_sig_cover(
   const std::string &base)
 {
   // function signature coverage‐check lambda: name + ordered argument types
-  auto covers =
-    [&](const std::string &derived, const std::string &base) -> bool {
+  auto covers = [&](const std::string &derived, const std::string &base) -> bool
+  {
     const auto &dSigs = funcSignatures.at(derived);
     const auto &bSigs = funcSignatures.at(base);
 
@@ -10011,7 +10109,8 @@ void solidity_convertert::extract_new_contracts()
     return;
 
   std::function<void(const nlohmann::json &)> process_node;
-  process_node = [&](const nlohmann::json &node) {
+  process_node = [&](const nlohmann::json &node)
+  {
     if (node.is_object())
     {
       if (node.contains("nodeType") && node["nodeType"] == "NewExpression")
@@ -10863,14 +10962,16 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
   dest = code_blockt();
 
   // call designated "initialization" functions
-  context.foreach_operand_in_order([&dest](const symbolt &s) {
-    if (s.type.initialization() && s.type.is_code())
+  context.foreach_operand_in_order(
+    [&dest](const symbolt &s)
     {
-      code_function_callt function_call;
-      function_call.function() = symbol_expr(s);
-      dest.move_to_operands(function_call);
-    }
-  });
+      if (s.type.initialization() && s.type.is_code())
+      {
+        code_function_callt function_call;
+        function_call.function() = symbol_expr(s);
+        dest.move_to_operands(function_call);
+      }
+    });
 }
 
 void solidity_convertert::get_aux_var(
@@ -10952,11 +11053,11 @@ void solidity_convertert::get_size_expr(const exprt &rhs, exprt &size_expr)
     arr_size = std::stoi(rt.subtype().get("#sol_array_size").as_string());
   else
   {
-    // arr_size = _ESBMC_get_array_length(rhs);
+    // arr_size = _ESBMC_array_length(rhs);
     side_effect_expr_function_callt length_expr;
     get_library_function_call_no_args(
-      "_ESBMC_get_array_length",
-      "c:@F@_ESBMC_get_array_length",
+      "_ESBMC_array_length",
+      "c:@F@_ESBMC_array_length",
       uint_type(),
       rhs.location(),
       length_expr);
@@ -12019,7 +12120,8 @@ bool solidity_convertert::has_callable_func(const std::string &cname)
   return std::any_of(
     funcSignatures[cname].begin(),
     funcSignatures[cname].end(),
-    [&cname](const solidity_convertert::func_sig &sig) {
+    [&cname](const solidity_convertert::func_sig &sig)
+    {
       // must be public or external, even if the address is itself
       return sig.name != cname &&
              (sig.visibility == "public" || sig.visibility == "external");
@@ -12036,9 +12138,9 @@ bool solidity_convertert::has_target_function(
     return false;
 
   return std::any_of(
-    it->second.begin(), it->second.end(), [&](const func_sig &sig) {
-      return sig.name == func_name;
-    });
+    it->second.begin(),
+    it->second.end(),
+    [&](const func_sig &sig) { return sig.name == func_name; });
 }
 
 solidity_convertert::func_sig solidity_convertert::get_target_function(
@@ -12059,9 +12161,8 @@ solidity_convertert::func_sig solidity_convertert::get_target_function(
   auto func_it = std::find_if(
     functions.begin(),
     functions.end(),
-    [&func_name](const solidity_convertert::func_sig &sig) {
-      return sig.name == func_name;
-    });
+    [&func_name](const solidity_convertert::func_sig &sig)
+    { return sig.name == func_name; });
 
   // If function is found, return it; otherwise, return an empty func_sig
   if (func_it != functions.end())
