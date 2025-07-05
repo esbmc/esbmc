@@ -1115,21 +1115,6 @@ bool execution_statet::has_cswitch_point_occured() const
   if (cswitch_forced)
     return true;
 
-if (thread_last_reads[active_thread].size() == 1 &&
-    thread_last_writes[active_thread].size() == 1) {
-
-  auto& r = *thread_last_reads[active_thread].begin();
-  auto& w = *thread_last_writes[active_thread].begin();
-
-  auto is_mutex_type = [](const auto& val) {
-    return is_struct_type(val) &&
-           has_prefix(to_struct_type(val->type).name, "struct __anon_typedef_pthread_mutex_t");
-  };
-
-  if (is_mutex_type(r) && is_mutex_type(w))
-    return false;
-}
-
   if (
     thread_last_reads[active_thread].size() != 0 ||
     thread_last_writes[active_thread].size() != 0)

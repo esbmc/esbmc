@@ -225,7 +225,7 @@ def get_result_string(the_result):
 esbmc_path = "./esbmc "
 
 # ESBMC default commands: this is the same for every submission
-esbmc_dargs = "--no-div-by-zero-check --force-malloc-success --force-realloc-success --add-symex-value-sets "
+esbmc_dargs = "--no-div-by-zero-check --force-malloc-success --force-realloc-success --state-hashing --add-symex-value-sets "
 esbmc_dargs += "--no-align-check --k-step 2 --floatbv --unlimited-k-steps "
 
 # <https://github.com/esbmc/esbmc/pull/1190#issuecomment-1637047028>
@@ -256,11 +256,9 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
                  check_if_benchmark_contains_pthread(benchmark))
 
   if concurrency:
-    command_line += " --z3 --context-bound 3 "
+    command_line += " --no-por --context-bound 3 "
     #command_line += "--no-slice " # TODO: Witness validation is only working without slicing
 
-  else:
-    command_line += " --state-hashing "
   # Add witness arg
   witness_name = os.path.basename(benchmark) if esbmc_ci else "witness"
   command_line += "--witness-output " + witness_name + ".graphml "

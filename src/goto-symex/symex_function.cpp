@@ -276,16 +276,8 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   std::vector<expr2tc> arguments = call.operands;
 
   
-  if (identifier.as_string() == "c:@F@pthread_join_noswitch") {
-    auto &thread_id = *arguments.begin();
-    cur_state->rename(thread_id);
-    if(is_constant_int2t(thread_id)){
-      BigInt v = to_constant_int2t(thread_id).value;
-      //strict_constraint(cur_state->top().level1.thread_id, v.to_uint64());
-      //depend_exist = true;
-      depend_exist();
-    }
-  }
+  if (identifier.as_string() == "c:@F@pthread_join_noswitch")
+    depend_exist();
 
   for (auto &argument : arguments)
   {
