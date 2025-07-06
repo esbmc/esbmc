@@ -1503,7 +1503,7 @@ void bmct::report_simple_summary(const SimpleSummary &summary) const
     properties_oss << " " << GREEN << "✓ " << summary.passed_properties
                    << " passed" << RESET;
 
-    if (summary.skipped_properties > 0)
+  if (summary.skipped_properties > 0)
     properties_oss << ", " << GREEN << "✓ " << summary.skipped_properties
                    << " skipped" << RESET;
 
