@@ -1295,6 +1295,9 @@ smt_convt::resultt bmct::multi_property_check(
     abort();
   }
 
+  // For color output
+  bool is_color = options.get_bool_option("color");
+
   // TODO: This is the place to check a cache
   for (size_t i = 1; i <= remaining_claims; i++)
     jobs.emplace(i);
@@ -1331,7 +1334,8 @@ smt_convt::resultt bmct::multi_property_check(
                        &fail_fast_cnt,
                        &bs,
                        &fc,
-                       &is](const size_t &i) {
+                       &is,
+                       &is_color](const size_t &i) {
     //"multi-fail-fast n": stop after first n SATs found.
     if (is_fail_fast && fail_fast_cnt >= fail_fast_limit)
       return;
@@ -1406,9 +1410,9 @@ smt_convt::resultt bmct::multi_property_check(
     fine_timet solve_stop = current_time();
 
     // Show colored result after solving
-    const std::string GREEN = "\033[32m";
-    const std::string RED = "\033[31m";
-    const std::string RESET = "\033[0m";
+    const std::string GREEN = is_color ? "\033[32m" : "";
+    const std::string RED = is_color ? "\033[31m" : "";
+    const std::string RESET = is_color ? "\033[0m" : "";
 
     if (solver_result == smt_convt::P_UNSATISFIABLE)
     {
