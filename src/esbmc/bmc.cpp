@@ -65,10 +65,8 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
     // Run cache if user has specified the option
     if (options.get_bool_option("cache-asserts"))
       // Store the set between runs
-      algorithms.emplace_back(
-        std::make_unique<assertion_cache>(
-          config.ssa_caching_db,
-          !options.get_bool_option("forward-condition")));
+      algorithms.emplace_back(std::make_unique<assertion_cache>(
+        config.ssa_caching_db, !options.get_bool_option("forward-condition")));
 
     if (opts.get_bool_option("ssa-features-dump"))
       algorithms.emplace_back(std::make_unique<ssa_features>());
@@ -1237,8 +1235,9 @@ int bmct::ltl_run_thread(symex_target_equationt &equation) const
   return ltl_res_good;
 }
 
-smt_convt::resultt
-bmct::multi_property_check(const symex_target_equationt &eq, size_t remaining_claims)
+smt_convt::resultt bmct::multi_property_check(
+  const symex_target_equationt &eq,
+  size_t remaining_claims)
 {
   // As of now, it only makes sense to do this for the base-case
   assert(
@@ -1327,8 +1326,7 @@ bmct::multi_property_check(const symex_target_equationt &eq, size_t remaining_cl
                        &fail_fast_cnt,
                        &bs,
                        &fc,
-                       &is](const size_t &i)
-  {
+                       &is](const size_t &i) {
     //"multi-fail-fast n": stop after first n SATs found.
     if (is_fail_fast && fail_fast_cnt >= fail_fast_limit)
       return;
