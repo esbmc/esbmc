@@ -77,7 +77,7 @@ protected:
   int ltl_run_thread(symex_target_equationt &equation) const;
 
   smt_convt::resultt
-  multi_property_check(symex_target_equationt &eq, size_t remaining_claims);
+  multi_property_check(const symex_target_equationt &eq, size_t remaining_claims);
 
   std::vector<std::unique_ptr<ssa_step_algorithm>> algorithms;
 

@@ -1238,7 +1238,7 @@ int bmct::ltl_run_thread(symex_target_equationt &equation) const
 }
 
 smt_convt::resultt
-bmct::multi_property_check(symex_target_equationt &eq, size_t remaining_claims)
+bmct::multi_property_check(const symex_target_equationt &eq, size_t remaining_claims)
 {
   // As of now, it only makes sense to do this for the base-case
   assert(
