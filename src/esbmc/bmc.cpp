@@ -378,7 +378,7 @@ void bmct::clear_verified_claims_in_ssa(
   }
 }
 
-void bmct::clear_verified_claims_in_ssa_in_goto(
+void bmct::clear_verified_claims_in_goto(
   const claim_slicer &claim,
   const bool &is_goto_cov)
 {
@@ -1358,7 +1358,7 @@ smt_convt::resultt bmct::multi_property_check(
     if (verified_claims.count(claim_sig))
     {
       clear_verified_claims_in_ssa(local_eq, claim, is_goto_cov);
-      clear_verified_claims_in_ssa_in_goto(claim, is_goto_cov);
+      clear_verified_claims_in_goto(claim, is_goto_cov);
       is_verified = true;
     }
 
@@ -1444,7 +1444,7 @@ smt_convt::resultt bmct::multi_property_check(
       if (!is_keep_verified && (bs || fc || is))
       {
         clear_verified_claims_in_ssa(local_eq, claim, is_goto_cov);
-        clear_verified_claims_in_ssa_in_goto(claim, is_goto_cov);
+        clear_verified_claims_in_goto(claim, is_goto_cov);
       }
     }
     else if (solver_result == smt_convt::P_UNSATISFIABLE)
@@ -1454,7 +1454,7 @@ smt_convt::resultt bmct::multi_property_check(
       if (!is_keep_verified && !bs)
       {
         clear_verified_claims_in_ssa(local_eq, claim, is_goto_cov);
-        clear_verified_claims_in_ssa_in_goto(claim, is_goto_cov);
+        clear_verified_claims_in_goto(claim, is_goto_cov);
       }
   };
 

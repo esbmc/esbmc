@@ -91,7 +91,7 @@ protected:
     symex_target_equationt &local_eq,
     const claim_slicer &claim,
     const bool &is_goto_cov);
-  void clear_verified_claims_in_ssa_in_goto(
+  void clear_verified_claims_in_goto(
     const claim_slicer &claim,
     const bool &is_goto_cov);
 
