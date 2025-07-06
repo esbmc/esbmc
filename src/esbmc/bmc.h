@@ -113,6 +113,7 @@ private:
   {
     size_t total_properties = 0;
     size_t passed_properties = 0;
+    size_t skipped_properties = 0;
     size_t failed_properties = 0;
     double total_time_s = 0.0;
     std::string solver_name;

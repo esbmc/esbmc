@@ -1350,7 +1350,10 @@ smt_convt::resultt bmct::multi_property_check(
 
     // skip if we have already verified
     if (is_verified && !is_keep_verified)
+    {
+      ++summary.skipped_properties;
       return;
+    }
 
     // Slice
     if (!options.get_bool_option("no-slice"))
@@ -1499,6 +1502,10 @@ void bmct::report_simple_summary(const SimpleSummary &summary) const
   if (summary.passed_properties > 0)
     properties_oss << " " << GREEN << "✓ " << summary.passed_properties
                    << " passed" << RESET;
+
+    if (summary.skipped_properties > 0)
+    properties_oss << ", " << GREEN << "✓ " << summary.skipped_properties
+                   << " skipped" << RESET;
 
   if (summary.failed_properties > 0)
     properties_oss << ", " << RED << "✗ " << summary.failed_properties
