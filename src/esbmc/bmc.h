@@ -87,8 +87,13 @@ protected:
     symex_target_equationt &eq) const;
 
   // for multi-property
-  void
-  clear_verified_claims(const claim_slicer &claim, const bool &is_goto_cov);
+  void clear_verified_claims_in_ssa(
+    symex_target_equationt &local_eq,
+    const claim_slicer &claim,
+    const bool &is_goto_cov);
+  void clear_verified_claims_in_goto(
+    const claim_slicer &claim,
+    const bool &is_goto_cov);
 
   virtual void report_multi_property_trace(
     const smt_convt::resultt &res,
