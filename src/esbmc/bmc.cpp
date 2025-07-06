@@ -65,8 +65,10 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
     // Run cache if user has specified the option
     if (options.get_bool_option("cache-asserts"))
       // Store the set between runs
-      algorithms.emplace_back(std::make_unique<assertion_cache>(
-        config.ssa_caching_db, !options.get_bool_option("forward-condition")));
+      algorithms.emplace_back(
+        std::make_unique<assertion_cache>(
+          config.ssa_caching_db,
+          !options.get_bool_option("forward-condition")));
 
     if (opts.get_bool_option("ssa-features-dump"))
       algorithms.emplace_back(std::make_unique<ssa_features>());
@@ -349,41 +351,59 @@ void bmct::report_trace(
   Whenever an error_trace or successful_trace is reported
   we finish reasoning this claims, thereby converting it to SKIP
 */
-void bmct::clear_verified_claims(
+void bmct::clear_verified_claims_in_ssa(
+  symex_target_equationt &local_eq,
   const claim_slicer &claim,
   const bool &is_goto_cov)
 {
-  // first record that we have verified it
-  std::string claim_sig = claim.claim_msg + "\t" + claim.claim_loc;
-  symex->goto_functions.verified_claims.emplace(claim_sig);
-
-  auto temp = symex->goto_functions;
-  // then remove it by converting to SKIP
-  for (auto &it : symex->goto_functions.function_map)
+  for (auto &step : local_eq.SSA_steps)
   {
-    for (auto &instruction : it.second.body.instructions)
+    if (!step.is_assert())
+      continue;
+
+    if (!step.source.is_set)
+      continue;
+
+    bool loc_match = (step.source.pc->location.as_string() == claim.claim_loc);
+    bool expr_match = false;
+
+    if (is_goto_cov)
+      expr_match =
+        (step.source.pc->location.comment().as_string() == claim.claim_msg);
+    else
+      expr_match = (from_expr(ns, "", step.guard) == claim.claim_msg);
+
+    if (loc_match && expr_match)
     {
+      step.cond = step.cond = gen_true_expr();
+    }
+  }
+}
+
+void bmct::clear_verified_claims_in_ssa_in_goto(
+  const claim_slicer &claim,
+  const bool &is_goto_cov)
+{
+  for (auto &func : symex->goto_functions.function_map)
+  {
+    for (auto &instr : func.second.body.instructions)
+    {
+      if (!instr.is_assert())
+        continue;
+
+      bool loc_match = (instr.location.as_string() == claim.claim_loc);
+      bool expr_match = false;
+
+      std::string guard_str = from_expr(ns, "", instr.guard);
+
       if (is_goto_cov)
-      {
-        if (
-          instruction.is_assert() &&
-          instruction.location.as_string() == claim.claim_loc &&
-          instruction.location.comment().as_string() == claim.claim_msg)
-        {
-          instruction.make_skip();
-          break;
-        }
-      }
+        expr_match = (instr.location.comment().as_string() == claim.claim_msg);
       else
+        expr_match = (guard_str == claim.claim_msg);
+
+      if (loc_match && expr_match)
       {
-        if (
-          instruction.is_assert() &&
-          instruction.location.as_string() == claim.claim_loc &&
-          from_expr(ns, "", instruction.guard) == claim.claim_msg)
-        {
-          instruction.make_skip();
-          break;
-        }
+        instr.make_skip();
       }
     }
   }
@@ -1217,9 +1237,8 @@ int bmct::ltl_run_thread(symex_target_equationt &equation) const
   return ltl_res_good;
 }
 
-smt_convt::resultt bmct::multi_property_check(
-  const symex_target_equationt &eq,
-  size_t remaining_claims)
+smt_convt::resultt
+bmct::multi_property_check(symex_target_equationt &eq, size_t remaining_claims)
 {
   // As of now, it only makes sense to do this for the base-case
   assert(
@@ -1308,7 +1327,8 @@ smt_convt::resultt bmct::multi_property_check(
                        &fail_fast_cnt,
                        &bs,
                        &fc,
-                       &is](const size_t &i) {
+                       &is](const size_t &i)
+  {
     //"multi-fail-fast n": stop after first n SATs found.
     if (is_fail_fast && fail_fast_cnt >= fail_fast_limit)
       return;
@@ -1339,7 +1359,8 @@ smt_convt::resultt bmct::multi_property_check(
 
     if (verified_claims.count(claim_sig))
     {
-      clear_verified_claims(claim, is_goto_cov);
+      clear_verified_claims_in_ssa(local_eq, claim, is_goto_cov);
+      clear_verified_claims_in_ssa_in_goto(claim, is_goto_cov);
       is_verified = true;
     }
 
@@ -1423,14 +1444,20 @@ smt_convt::resultt bmct::multi_property_check(
       // for kind && incr: remove verified claims
       // whenever we find a property violation, we remove the claim
       if (!is_keep_verified && (bs || fc || is))
-        clear_verified_claims(claim, is_goto_cov);
+      {
+        clear_verified_claims_in_ssa(local_eq, claim, is_goto_cov);
+        clear_verified_claims_in_ssa_in_goto(claim, is_goto_cov);
+      }
     }
     else if (solver_result == smt_convt::P_UNSATISFIABLE)
       // for kind && incr: remove verified claims
       // when we find a property proven correct in
       // either forward condition or inductive step
       if (!is_keep_verified && !bs)
-        clear_verified_claims(claim, is_goto_cov);
+      {
+        clear_verified_claims_in_ssa(local_eq, claim, is_goto_cov);
+        clear_verified_claims_in_ssa_in_goto(claim, is_goto_cov);
+      }
   };
 
   std::for_each(std::begin(jobs), std::end(jobs), job_function);
