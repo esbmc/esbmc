@@ -107,6 +107,19 @@ protected:
     const bool &is_branch_func_cov,
     const std::unordered_set<std::string> &reached_claims,
     const std::unordered_multiset<std::string> &reached_mul_claims);
+
+private:
+  struct SimpleSummary
+  {
+    size_t total_properties = 0;
+    size_t passed_properties = 0;
+    size_t skipped_properties = 0;
+    size_t failed_properties = 0;
+    double total_time_s = 0.0;
+    std::string solver_name;
+  };
+
+  void report_simple_summary(const SimpleSummary &summary) const;
 };
 
 void report_coverage(
