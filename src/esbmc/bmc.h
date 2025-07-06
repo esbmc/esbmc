@@ -76,9 +76,8 @@ protected:
 
   int ltl_run_thread(symex_target_equationt &equation) const;
 
-  smt_convt::resultt multi_property_check(
-    const symex_target_equationt &eq,
-    size_t remaining_claims);
+  smt_convt::resultt
+  multi_property_check(symex_target_equationt &eq, size_t remaining_claims);
 
   std::vector<std::unique_ptr<ssa_step_algorithm>> algorithms;
 
@@ -87,8 +86,13 @@ protected:
     symex_target_equationt &eq) const;
 
   // for multi-property
-  void
-  clear_verified_claims(const claim_slicer &claim, const bool &is_goto_cov);
+  void clear_verified_claims_in_ssa(
+    symex_target_equationt &local_eq,
+    const claim_slicer &claim,
+    const bool &is_goto_cov);
+  void clear_verified_claims_in_ssa_in_goto(
+    const claim_slicer &claim,
+    const bool &is_goto_cov);
 
   virtual void report_multi_property_trace(
     const smt_convt::resultt &res,
