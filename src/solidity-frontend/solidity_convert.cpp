@@ -7072,7 +7072,7 @@ bool solidity_convertert::get_sol_builtin_ref(
         get_size_of_expr(base_t.subtype(), size_of);
 
         const nlohmann::json &func =
-          find_last_parent(src_ast_json["node"], func);
+          find_last_parent(src_ast_json["node"], expr);
         assert(!func.empty());
         exprt args;
         if (func["arguments"].size())
