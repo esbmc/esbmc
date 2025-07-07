@@ -6,6 +6,7 @@
 #include <boost/multi_index/ordered_index.hpp>
 #include <boost/multi_index_container.hpp>
 #include <cstdint>
+#include <mutex>
 #include <solvers/prop/literal.h>
 #include <solvers/prop/pointer_logic.h>
 #include <irep2/irep2_utils.h>
@@ -781,6 +782,8 @@ public:
 
   /** A cache mapping expressions to converted SMT ASTs. */
   smt_cachet smt_cache;
+  /** A mutex lock for writing to the cache. */
+  std::mutex smt_cache_mutex;
   /** A cache of converted type2tc's to smt sorts */
   smt_sort_cachet sort_cache;
   /** Pointer_logict object, which contains some code for formatting how
