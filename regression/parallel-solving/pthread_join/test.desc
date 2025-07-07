@@ -1,4 +1,4 @@
 CORE
-main.i
+main.c
 --parallel-solving --k-induction
 ^VERIFICATION FAILED$
