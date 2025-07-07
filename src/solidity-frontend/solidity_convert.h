@@ -302,6 +302,7 @@ protected:
     const std::string &func_id,
     exprt &new_expr);
   bool get_ctor_decl_this_ref(const nlohmann::json &caller, exprt &this_object);
+  bool get_ctor_decl_this_ref(const std::string &c_name, exprt &this_object);
   bool get_enum_member_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_esbmc_builtin_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_type_description(const nlohmann::json &type_name, typet &new_type);
@@ -434,6 +435,7 @@ protected:
     std::string &key_sol_type,
     std::string &val_sol_type);
   void gen_mapping_key_typecast(
+    const std::string &c_name,
     exprt &pos,
     const locationt &l,
     const std::string &key_sol_type);
@@ -624,6 +626,7 @@ protected:
   convert_hex_literal(std::string the_value, exprt &dest, const int n = 256);
   // check if it's a bytes type
   bool is_bytes_type(const typet &t);
+  bool is_bytesN_type(const std::string &t) const;
 
   contextt &context;
   namespacet ns;
