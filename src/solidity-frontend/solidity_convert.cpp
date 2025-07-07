@@ -46,7 +46,7 @@ solidity_convertert::solidity_convertert(
     member_entity_scope({}),
     initializers(code_blockt()),
     aux_counter(0),
-    is_bound(true),
+    is_bound(false),
     is_reentry_check(false),
     is_pointer_check(true),
     nondet_bool_expr(),
@@ -56,10 +56,10 @@ solidity_convertert::solidity_convertert(
   contract_contents.assign(
     (std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
 
-  // bound setting - default value is true
-  const std::string unbound = config.options.get_option("unbound");
-  if (!unbound.empty())
-    is_bound = false;
+  // bound setting - default value is false
+  const std::string bound = config.options.get_option("bound");
+  if (!bound.empty())
+    is_bound = true;
 
   const std::string reentry_check = config.options.get_option("reentry-check");
   if (!reentry_check.empty())
