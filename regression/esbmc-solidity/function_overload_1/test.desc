@@ -1,4 +1,4 @@
 CORE
 function_overload.solast
---function test_overload --sol function_overload.sol --no-standard-checks --k-induction
+--function test_overload --sol function_overload.sol --no-standard-checks --k-induction --bound
 ^VERIFICATION SUCCESSFUL$

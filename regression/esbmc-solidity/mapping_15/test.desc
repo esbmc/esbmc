@@ -1,4 +1,4 @@
 CORE
 contract.solast
---sol contract.sol --k-induction --contract Derived --unbound
+--sol contract.sol --k-induction --contract Derived --unbound 
 ^VERIFICATION FAILED$
