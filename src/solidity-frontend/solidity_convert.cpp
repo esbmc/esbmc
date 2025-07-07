@@ -2468,8 +2468,10 @@ bool solidity_convertert::add_implicit_constructor(
   // if we reach here, the id must be equal to get_implicit_ctor_id()
   // an implicit constructor is an void empty function
   code_typet type;
-  type.return_type() = empty_typet();
-  type.return_type().set("cpp_type", "void");
+  typet tmp_rtn_type("constructor");
+  type.return_type() = tmp_rtn_type;
+  type.set("#member_name", prefix + contract_name);
+  type.set("#inlined", true);
 
   locationt location_begin;
 
@@ -5177,7 +5179,8 @@ bool solidity_convertert::get_expr(
           log_error("cannot get mapping key/value type");
           return true;
         }
-        gen_mapping_key_typecast(pos, location, key_sol_type);
+        gen_mapping_key_typecast(
+          current_contractName, pos, location, key_sol_type);
 
         if (!is_bound)
         {
@@ -5392,7 +5395,8 @@ bool solidity_convertert::get_expr(
         log_error("cannot get mapping key/value type");
         return true;
       }
-      gen_mapping_key_typecast(pos, location, key_sol_type);
+      gen_mapping_key_typecast(
+        current_contractName, pos, location, key_sol_type);
 
       if (!is_new_expr)
       {
@@ -6867,6 +6871,25 @@ bool solidity_convertert::get_func_decl_this_ref(
 }
 
 bool solidity_convertert::get_ctor_decl_this_ref(
+  const std::string &c_name,
+  exprt &this_object)
+{
+  std::string ctor_id;
+  if (get_ctor_call_id(c_name, ctor_id))
+  {
+    log_error("failed to get the ctor id");
+    return true;
+  }
+
+  if (get_func_decl_this_ref(c_name, ctor_id, this_object))
+  {
+    log_error("failed to get this ref of function {}", ctor_id);
+    return true;
+  }
+  return false;
+}
+
+bool solidity_convertert::get_ctor_decl_this_ref(
   const nlohmann::json &caller,
   exprt &this_object)
 {
@@ -6880,19 +6903,8 @@ bool solidity_convertert::get_ctor_decl_this_ref(
     log_error("Failed to get caller's contract name");
     return true;
   }
-  std::string ctor_id;
-  if (get_ctor_call_id(current_cname, ctor_id))
-  {
-    log_error("failed to get the ctor id");
-    return true;
-  }
 
-  if (get_func_decl_this_ref(current_cname, ctor_id, this_object))
-  {
-    log_error("failed to get this ref of function {}", ctor_id);
-    return true;
-  }
-  return false;
+  return get_ctor_decl_this_ref(current_cname, this_object);
 }
 
 bool solidity_convertert::get_enum_member_ref(
@@ -8115,12 +8127,23 @@ bool solidity_convertert::get_mapping_key_value_type(
   return false;
 }
 
+bool solidity_convertert::is_bytesN_type(const std::string &t) const
+{
+  // expects t like "bytes1", "bytes2", ..., "bytes32"
+  if (t.substr(0, 5) == "bytes" && t.size() > 5)
+  {
+    int sz = std::stoi(t.substr(5));
+    return sz >= 1 && sz <= 32;
+  }
+  return false;
+}
+
 void solidity_convertert::gen_mapping_key_typecast(
+  const std::string &c_name,
   exprt &pos,
   const locationt &location,
   const std::string &key_sol_type)
 {
-  // if index is a string, we should convert it to uint256
   if (key_sol_type == "STRING" || key_sol_type == "STRING_LITERAL")
   {
     side_effect_expr_function_callt str2uint_call;
@@ -8133,8 +8156,62 @@ void solidity_convertert::gen_mapping_key_typecast(
       str2uint_call);
     str2uint_call.arguments().push_back(pos);
     pos = str2uint_call;
+    solidity_gen_typecast(ns, pos, unsignedbv_typet(256));
+    return;
   }
-  // e.g x[-1] => x[uint256(-1)]
+  // bytesN: use bytes_static_to_mapping_key
+  if (is_bytesN_type(key_sol_type))
+  {
+    side_effect_expr_function_callt bytes_static_call;
+    assert(context.find_symbol("c:@F@bytes_static_to_mapping_key") != nullptr);
+    get_library_function_call_no_args(
+      "bytes_static_to_mapping_key",
+      "c:@F@bytes_static_to_mapping_key",
+      unsignedbv_typet(256),
+      location,
+      bytes_static_call);
+    bytes_static_call.arguments().push_back(pos);
+    pos = bytes_static_call;
+    return;
+  }
+  if (key_sol_type == "bytes")
+  {
+    side_effect_expr_function_callt bytes_dynamic_call;
+    assert(context.find_symbol("c:@F@bytes_dynamic_to_mapping_key") != nullptr);
+    get_library_function_call_no_args(
+      "bytes_dynamic_to_mapping_key",
+      "c:@F@bytes_dynamic_to_mapping_key",
+      unsignedbv_typet(256),
+      location,
+      bytes_dynamic_call);
+    bytes_dynamic_call.arguments().push_back(pos);
+
+    // get dynamic_pool from current contract instance
+    const symbolt *bytes_pool_sym = context.find_symbol("tag-BytesPool");
+    assert(bytes_pool_sym != nullptr);
+
+    // get this
+    exprt this_ptr;
+    if (current_functionDecl)
+    {
+      if (get_func_decl_this_ref(*current_functionDecl, this_ptr))
+        abort();
+    }
+    else
+    {
+      if (get_func_decl_this_ref(c_name, this_ptr))
+        abort();
+    }
+
+    member_exprt dynamic_pool_member(
+      this_ptr, "dynamic_pool", bytes_pool_sym->type);
+
+    bytes_dynamic_call.arguments().push_back(dynamic_pool_member);
+
+    pos = bytes_dynamic_call;
+    return;
+  }
+  // fallback for all others: keep old logic
   solidity_gen_typecast(ns, pos, unsignedbv_typet(256));
 }
 
@@ -8745,20 +8822,29 @@ bool solidity_convertert::get_elementary_type_name(
   case SolidityGrammar::ElementaryTypeNameT::BYTES31:
   case SolidityGrammar::ElementaryTypeNameT::BYTES32:
   {
-    if (get_elementary_type_name_bytesn(type, new_type))
+    const symbolt *bytesStatic_sym =
+      context.find_symbol(prefix + "BytesStatic");
+    if (bytesStatic_sym == nullptr)
+    {
+      log_error("Unable to find BytesStatic type in symbol table");
       return true;
-
-    // for type conversion
+    }
+    new_type = bytesStatic_sym->type;
     new_type.set("#sol_type", elementary_type_name_to_str(type));
     new_type.set("#sol_bytes_size", bytesn_type_name_to_size(type));
-
     break;
   }
   case SolidityGrammar::ElementaryTypeNameT::BYTES:
   {
-    new_type = unsignedbv_typet(256);
+    const symbolt *bytesDynamic_sym =
+      context.find_symbol(prefix + "BytesDynamic");
+    if (bytesDynamic_sym == nullptr)
+    {
+      log_error("Unable to find BytesDynamic type in symbol table");
+      return true;
+    }
+    new_type = bytesDynamic_sym->type;
     new_type.set("#sol_type", elementary_type_name_to_str(type));
-
     break;
   }
   case SolidityGrammar::ElementaryTypeNameT::STRING_LITERAL:
@@ -9947,7 +10033,7 @@ bool solidity_convertert::get_ctor_call(
   we need to convert
     call(1)
   to
-      call(&Base, 1)
+    call(&Base, 1)
   */
   log_debug("solidity", "\t\t@@@ get_ctor_call");
   locationt l;
@@ -9969,7 +10055,6 @@ bool solidity_convertert::get_ctor_call(
     exprt this_object;
     get_new_object(symbol_typet(prefix + c_name), this_object);
     call.arguments().at(0) = this_object;
-
     // set constructor
     call.set("constructor", 1);
   }
@@ -11664,6 +11749,8 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
     _ndt_uint,
     contract_name);
 
+  // for dynamic bytes
+
   if (is_reentry_check)
   {
     // populate reentry mutex flag
@@ -11873,8 +11960,7 @@ void solidity_convertert::get_aux_property_function(
   }
   else
   {
-    const auto &ctor_json = find_constructor_ref(cname);
-    if (get_func_decl_this_ref(ctor_json, cur_this_expr))
+    if (get_ctor_decl_this_ref(cname, cur_this_expr))
       abort();
   }
 
@@ -12334,8 +12420,7 @@ bool solidity_convertert::get_high_level_member_access(
   }
   else
   {
-    const auto &ctor_json = find_constructor_ref(cname);
-    if (get_func_decl_this_ref(ctor_json, cur_this_expr))
+    if (get_ctor_decl_this_ref(expr, cur_this_expr))
       return true;
   }
 

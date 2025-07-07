@@ -18,6 +18,7 @@ const std::string sol_header = R"(
 #include <stdbool.h>
 #include <assert.h>
 #include <string.h>
+#include <ctype.h>
 // #include <string>
 // #include <math.h>
 )";
@@ -178,15 +179,242 @@ __ESBMC_HIDE:;
 )";
 
 const std::string sol_byte = R"(
-char *u256toa(uint256_t value);
-uint256_t str2uint(const char *str);
-uint256_t byte_concat(uint256_t x, uint256_t y)
-{
+typedef struct BytesPool {
+    unsigned char* pool;
+    size_t pool_cursor;
+} BytesPool;
+
+typedef struct BytesStatic {
+    unsigned char data[32];
+    size_t length;
+} BytesStatic;
+
+typedef struct BytesDynamic {
+    size_t offset;
+    size_t length;
+    int initialized;
+} BytesDynamic;
+
+unsigned char hex_char_to_nibble(char c) {
 __ESBMC_HIDE:;
-  char *s1 = u256toa(x);
-  char *s2 = u256toa(y);
-  strncat(s1, s2, 256);
-  return str2uint(s1);
+    if ('0' <= c && c <= '9') return c - '0';
+    if ('a' <= tolower(c) && tolower(c) <= 'f') return tolower(c) - 'a' + 10;
+    assert(0 && "Invalid hex character");
+}
+
+BytesStatic bytes_static_from_hex(const char* hex_str) {
+__ESBMC_HIDE:;
+    BytesStatic b = {0};
+    assert(hex_str[0] == '0' && hex_str[1] == 'x');
+    size_t hex_len = strlen(hex_str) - 2;
+    assert(hex_len % 2 == 0);
+    b.length = hex_len / 2;
+    assert(b.length <= 32);
+    for (size_t i = 0; i < b.length; i++) {
+        unsigned char high = hex_char_to_nibble(hex_str[2 + i * 2]);
+        unsigned char low = hex_char_to_nibble(hex_str[2 + i * 2 + 1]);
+        b.data[i] = (high << 4) | low;
+    }
+    return b;
+}
+
+BytesStatic bytes_static_from_string(const char* str) {
+__ESBMC_HIDE:;
+    size_t len = strlen(str);
+    assert(len <= 32);
+    BytesStatic b = {0};
+    for (size_t i = 0; i < len; i++) {
+        b.data[i] = str[i];
+    }
+    b.length = len;
+    return b;
+}
+
+BytesStatic bytes_static_truncate(const BytesStatic* src, size_t new_len) {
+__ESBMC_HIDE:;
+    assert(new_len <= src->length);
+    BytesStatic b = {0};
+    for (size_t i = 0; i < new_len; i++) {
+        b.data[i] = src->data[i];
+    }
+    b.length = new_len;
+    return b;
+}
+
+BytesStatic bytes_static_and(const BytesStatic* a, const BytesStatic* b) {
+__ESBMC_HIDE:;
+    assert(a->length == b->length);
+    BytesStatic r = {0};
+    for (size_t i = 0; i < a->length; i++) {
+        r.data[i] = a->data[i] & b->data[i];
+    }
+    r.length = a->length;
+    return r;
+}
+
+BytesStatic bytes_static_or(const BytesStatic* a, const BytesStatic* b) {
+__ESBMC_HIDE:;
+    assert(a->length == b->length);
+    BytesStatic r = {0};
+    for (size_t i = 0; i < a->length; i++) {
+        r.data[i] = a->data[i] | b->data[i];
+    }
+    r.length = a->length;
+    return r;
+}
+
+BytesStatic bytes_static_xor(const BytesStatic* a, const BytesStatic* b) {
+__ESBMC_HIDE:;
+    assert(a->length == b->length);
+    BytesStatic r = {0};
+    for (size_t i = 0; i < a->length; i++) {
+        r.data[i] = a->data[i] ^ b->data[i];
+    }
+    r.length = a->length;
+    return r;
+}
+
+uint256_t bytes_static_to_uint(const BytesStatic* b) {
+__ESBMC_HIDE:;
+    uint256_t result = 0;
+    for (size_t i = 0; i < b->length; i++) {
+        result = (result << 8) | b->data[i];
+    }
+    return result;
+}
+
+BytesStatic bytes_static_from_uint(uint256_t val, size_t len) {
+__ESBMC_HIDE:;
+    assert(len <= 32);
+    BytesStatic b = {0};
+    for (size_t i = 0; i < len; i++) {
+        b.data[len - 1 - i] = val & 0xFF;
+        val >>= 8;
+    }
+    b.length = len;
+    return b;
+}
+
+BytesStatic bytes_static_shl(const BytesStatic* src, unsigned shift_bits) {
+__ESBMC_HIDE:;
+    uint256_t val = bytes_static_to_uint(src);
+    val <<= shift_bits;
+    return bytes_static_from_uint(val, src->length);
+}
+
+BytesStatic bytes_static_shr(const BytesStatic* src, unsigned shift_bits) {
+__ESBMC_HIDE:;
+    uint256_t val = bytes_static_to_uint(src);
+    val >>= shift_bits;
+    return bytes_static_from_uint(val, src->length);
+}
+
+uint256_t bytes_static_to_mapping_key(const BytesStatic* b) {
+__ESBMC_HIDE:;
+    return ((uint256_t)b->length << 248) | bytes_static_to_uint(b);
+}
+
+void bytes_dynamic_init(BytesDynamic* b, const unsigned char* input, size_t len, BytesPool* pool) {
+__ESBMC_HIDE:;
+    b->offset = pool->pool_cursor;
+    b->length = len;
+    b->initialized = 1;
+    for (size_t i = 0; i < len; i++) {
+        pool->pool[b->offset + i] = input[i];
+    }
+    pool->pool_cursor += len;
+}
+
+BytesDynamic bytes_dynamic_from_static(const BytesStatic* s, BytesPool* pool) {
+__ESBMC_HIDE:;
+    BytesDynamic b = {0};
+    bytes_dynamic_init(&b, s->data, s->length, pool);
+    return b;
+}
+
+BytesDynamic bytes_dynamic_from_string(const char* str, BytesPool* pool) {
+__ESBMC_HIDE:;
+    BytesDynamic b = {0};
+    bytes_dynamic_init(&b, (const unsigned char*)str, strlen(str), pool);
+    return b;
+}
+
+BytesStatic bytes_static_truncate_from_dynamic(const BytesDynamic* src, size_t new_len, const BytesPool* pool) {
+__ESBMC_HIDE:;
+    assert(src->initialized);
+    assert(new_len <= src->length);
+    BytesStatic b = {0};
+    for (size_t i = 0; i < new_len; i++) {
+        b.data[i] = pool->pool[src->offset + i];
+    }
+    b.length = new_len;
+    return b;
+}
+
+BytesDynamic bytes_dynamic_concat(const BytesDynamic* a, const BytesDynamic* b, BytesPool* pool) {
+__ESBMC_HIDE:;
+    assert(a->initialized && b->initialized);
+    BytesDynamic d = {0};
+    d.offset = pool->pool_cursor;
+    d.length = a->length + b->length;
+    d.initialized = 1;
+    for (size_t i = 0; i < a->length; i++) {
+        pool->pool[d.offset + i] = pool->pool[a->offset + i];
+    }
+    for (size_t i = 0; i < b->length; i++) {
+        pool->pool[d.offset + a->length + i] = pool->pool[b->offset + i];
+    }
+    pool->pool_cursor += d.length;
+    return d;
+}
+
+BytesDynamic bytes_dynamic_copy(const BytesDynamic* src, BytesPool* pool) {
+__ESBMC_HIDE:;
+    assert(src->initialized);
+    BytesDynamic d = {0};
+    d.offset = pool->pool_cursor;
+    d.length = src->length;
+    d.initialized = 1;
+    for (size_t i = 0; i < src->length; i++) {
+        pool->pool[d.offset + i] = pool->pool[src->offset + i];
+    }
+    pool->pool_cursor += d.length;
+    return d;
+}
+
+unsigned char bytes_dynamic_get(const BytesDynamic* b, const BytesPool* pool, size_t index) {
+__ESBMC_HIDE:;
+    assert(b->initialized);
+    assert(index < b->length);
+    return pool->pool[b->offset + index];
+}
+
+int bytes_dynamic_equal(const BytesDynamic* a, const BytesDynamic* b, const BytesPool* pool) {
+__ESBMC_HIDE:;
+    assert(a->initialized && b->initialized);
+    if (a->length != b->length) return 0;
+    for (size_t i = 0; i < a->length; i++) {
+        if (pool->pool[a->offset + i] != pool->pool[b->offset + i]) return 0;
+    }
+    return 1;
+}
+
+uint256_t bytes_dynamic_to_mapping_key(const BytesDynamic* b, const BytesPool* pool) {
+__ESBMC_HIDE:;
+    assert(b->initialized);
+    uint256_t result = 0;
+    assert(b->length <= 32);
+    for (size_t i = 0; i < b->length; i++) {
+        result = (result << 8) | pool->pool[b->offset + i];
+    }
+    result |= ((uint256_t)b->length) << 248;
+    return result;
+}
+
+BytesPool bytes_pool_init(unsigned char* pool_data) {
+__ESBMC_HIDE:;
+    BytesPool pool = { pool_data, 0 };
+    return pool;
 }
 )";
 
