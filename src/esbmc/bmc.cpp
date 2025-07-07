@@ -1442,8 +1442,12 @@ smt_convt::resultt bmct::multi_property_check(
 
     double solve_time_s = (solve_stop - solve_start);
 
-    // Update summary with timing and results
-    summary.total_time_s += solve_time_s;
+    // Atomically update summary with timing and results
+    double old_total_time_s = summary.total_time_s;
+    double new_total_time_s;
+    do {
+      new_total_time_s = old_total_time_s + solve_time_s;
+    } while (!summary.total_time_s.compare_exchange_weak(old_total_time_s, new_total_time_s));
 
     if (solver_result == smt_convt::P_SATISFIABLE)
       summary.failed_properties++;
