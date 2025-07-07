@@ -1,6 +1,7 @@
 #include <iostream>
 #include <cassert>
 #include <bitset>
+#include <exception>
 
 using namespace std;
 
