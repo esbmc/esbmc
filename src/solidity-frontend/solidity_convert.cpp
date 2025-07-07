@@ -4493,7 +4493,6 @@ bool solidity_convertert::get_expr(
       //    bytes32 x = "string";
       //    bytes x = "string";
       //
-
       SolidityGrammar::ElementaryTypeNameT type =
         SolidityGrammar::get_elementary_type_name_t(literal_type);
 
@@ -4885,6 +4884,15 @@ bool solidity_convertert::get_expr(
           return true;
         new_expr.op0() = args;
         break;
+      }
+
+      if (new_expr.id() == "sideeffect")
+      {
+        std::string func_name = new_expr.op0().name().as_string();
+        if (
+          func_name == "_ESBMC_array_push" || func_name == "_ESBMC_array_pop" ||
+          func_name == "_ESBMC_array_length")
+          break;
       }
 
       std::string sol_name = new_expr.type().get("#sol_name").as_string();
@@ -7005,6 +7013,120 @@ bool solidity_convertert::get_sol_builtin_ref(
         assert(UserDefinedVarMap.count(udv) > 0);
         typet t = UserDefinedVarMap[udv];
         new_expr = typecast_exprt(t); // we will set the op0 later
+        new_expr.location() = l;
+        return false;
+      }
+      else if (name == "length")
+      {
+        exprt base;
+        if (get_expr(expr["expression"], base))
+          return true;
+        typet base_t;
+        if (get_type_description(
+              expr["expression"]["typeDescriptions"], base_t))
+          return true;
+        std::string solt = base_t.get("#sol_type").as_string();
+        if (solt.find("ARRAY") != std::string::npos)
+        {
+          side_effect_expr_function_callt length_expr;
+          get_library_function_call_no_args(
+            "_ESBMC_array_length",
+            "c:@F@_ESBMC_array_length",
+            uint_type(),
+            l,
+            length_expr);
+          length_expr.arguments().push_back(base);
+
+          new_expr = length_expr;
+          new_expr.location() = l;
+          return false;
+        }
+        else if (solt.find("BYTES"))
+        {
+          //TODO
+        }
+        else
+        {
+          log_error("Unexpect length of {} type", solt);
+          return true;
+        }
+      }
+      else if (name == "push" || name == "pop")
+      {
+        // _ESBMC_array_push(arr, &val, sizeof(int));
+        // push default (0): _ESBMC_array_push(arr, NULL, sizeof(int));
+        // _ESBMC_array_pop(arr, sizeof(int));
+        exprt base;
+        if (get_expr(expr["expression"], base))
+          return true;
+        typet base_t;
+        if (get_type_description(
+              expr["expression"]["typeDescriptions"], base_t))
+          return true;
+
+        assert(base_t.has_subtype());
+        exprt size_of;
+        get_size_of_expr(base_t.subtype(), size_of);
+
+        const nlohmann::json &func =
+          find_last_parent(src_ast_json["nodes"], expr);
+        assert(!func.empty());
+        exprt args;
+        if (func["arguments"].size() == 0)
+          args = gen_zero(pointer_typet(empty_typet()));
+        else
+        {
+          log_status("{}", func.dump());
+          if (get_expr(func["arguments"][0], expr["argumentTypes"][0], args))
+            return true;
+          // wrap it
+          std::string aux_name = "_idx#" + std::to_string(aux_counter++);
+          std::string aux_id;
+          std::string cname;
+          get_current_contract_name(expr, cname);
+          assert(!cname.empty());
+          if (current_functionDecl)
+            aux_id =
+              "sol:@C@" + cname + "@F@" + current_functionName + "@" + aux_name;
+          else
+            aux_id = "sol:@C@" + cname + "@" + aux_name;
+          symbolt aux_idx;
+          get_default_symbol(
+            aux_idx,
+            get_modulename_from_path(absolute_path),
+            args.type(),
+            aux_name,
+            aux_id,
+            l);
+          auto &added_aux = *move_symbol_to_context(aux_idx);
+          code_declt decl(symbol_expr(added_aux));
+          added_aux.value = args;
+          decl.operands().push_back(args);
+          move_to_front_block(decl);
+          args = address_of_exprt(symbol_expr(added_aux));
+        }
+
+        side_effect_expr_function_callt mem;
+        get_library_function_call_no_args(
+          "_ESBMC_array_" + name,
+          "c:@F@_ESBMC_array_" + name,
+          empty_typet(),
+          l,
+          mem);
+
+        if (name == "push")
+        {
+          mem.arguments().push_back(base);
+          mem.arguments().push_back(args);
+          mem.arguments().push_back(size_of);
+        }
+        else
+        {
+          mem.arguments().push_back(base);
+          mem.arguments().push_back(size_of);
+        }
+
+        new_expr = mem;
         new_expr.location() = l;
         return false;
       }
@@ -10952,11 +11074,11 @@ void solidity_convertert::get_size_expr(const exprt &rhs, exprt &size_expr)
     arr_size = std::stoi(rt.subtype().get("#sol_array_size").as_string());
   else
   {
-    // arr_size = _ESBMC_get_array_length(rhs);
+    // arr_size = _ESBMC_array_length(rhs);
     side_effect_expr_function_callt length_expr;
     get_library_function_call_no_args(
-      "_ESBMC_get_array_length",
-      "c:@F@_ESBMC_get_array_length",
+      "_ESBMC_array_length",
+      "c:@F@_ESBMC_array_length",
       uint_type(),
       rhs.location(),
       length_expr);
