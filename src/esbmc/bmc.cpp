@@ -357,7 +357,6 @@ void bmct::clear_verified_claims(
   std::string claim_sig = claim.claim_msg + "\t" + claim.claim_loc;
   symex->goto_functions.verified_claims.emplace(claim_sig);
 
-  auto temp = symex->goto_functions;
   // then remove it by converting to SKIP
   for (auto &it : symex->goto_functions.function_map)
   {
