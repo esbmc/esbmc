@@ -621,6 +621,7 @@ protected:
     std::string the_value,
     exprt &dest);
   bool convert_string_literal(std::string the_value, exprt &dest);
+  void convert_type_expr(const namespacet &ns, exprt &dest, const typet &type, const nlohmann::json &expr);
   void convert_type_expr(const namespacet &ns, exprt &dest, const typet &type);
   bool
   convert_hex_literal(std::string the_value, exprt &dest, const int n = 256);
