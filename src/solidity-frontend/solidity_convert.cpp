@@ -2874,7 +2874,7 @@ bool solidity_convertert::move_initializer_to_ctor(
       {
         _assign = side_effect_exprt("assign", comp.type());
         _assign.location() = sym.location;
-        convert_type_expr(ns, rhs, comp.type());
+        convert_type_expr(ns, rhs, comp.type(), *based_contracts);
         _assign.copy_to_operands(lhs, rhs);
       }
       convert_expression_to_code(_assign);
@@ -3059,7 +3059,7 @@ bool solidity_convertert::move_inheritance_to_ctor(
               {
                 _assign = side_effect_exprt("assign", comp.type());
 
-                convert_type_expr(ns, rhs, comp.type());
+                convert_type_expr(ns, rhs, comp.type(), *based_contracts);
                 _assign.copy_to_operands(lhs, rhs);
               }
 
@@ -4503,54 +4503,55 @@ bool solidity_convertert::get_expr(
       literal_type["typeString"].get<std::string>().find("bytes") !=
         std::string::npos)
     {
-      // literal_type["typeString"] could be
-      //    "bytes1" ... "bytes32"
-      //    "bytes storage ref"
-      // e.g.
-      //    bytes1 x = 0x12;
-      //    bytes32 x = "string";
-      //    bytes x = "string";
-      //
-      SolidityGrammar::ElementaryTypeNameT type =
+      SolidityGrammar::ElementaryTypeNameT target_type =
         SolidityGrammar::get_elementary_type_name_t(literal_type);
 
-      int byte_size;
-      if (type == SolidityGrammar::ElementaryTypeNameT::BYTES)
-        // dynamic bytes array, the type is set to unsignedbv(256);
-        byte_size = 32;
-      else
-        byte_size = bytesn_type_name_to_size(type);
-
-      // convert hex to decimal value and populate
-      switch (type_name)
+      const symbolt *bytes_static_sym = context.find_symbol("tag-BytesStatic");
+      assert(bytes_static_sym != nullptr);
+      typet bytes_static_type = bytes_static_sym->type;
+      std::string sol_type_str =
+        SolidityGrammar::elementary_type_name_to_str(target_type);
+      if (
+        type_name == SolidityGrammar::ElementaryTypeNameT::INT_LITERAL &&
+        expr["value"].get<std::string>().rfind("0x", 0) == 0)
       {
-      case SolidityGrammar::ElementaryTypeNameT::INT_LITERAL:
-      {
-        if (convert_hex_literal(the_value, new_expr, byte_size * 8))
-          return true;
+        side_effect_expr_function_callt hex_call;
+        get_library_function_call_no_args(
+          "bytes_static_from_hex",
+          "c:@F@bytes_static_from_hex",
+          bytes_static_type,
+          location,
+          hex_call);
 
-        new_expr.type().set("#sol_type", "BYTES_LITERAL");
+        string_constantt str(expr["value"].get<std::string>());
+        hex_call.arguments().push_back(str);
+        new_expr = hex_call;
+
+        new_expr.type().set("#sol_type", sol_type_str); // e.g. "BYTES24"
         break;
       }
-      case SolidityGrammar::ElementaryTypeNameT::STRING_LITERAL:
+      else if (
+        type_name == SolidityGrammar::ElementaryTypeNameT::STRING_LITERAL)
       {
-        std::string hex_val = expr["hexValue"].get<std::string>();
+        side_effect_expr_function_callt str_call;
+        get_library_function_call_no_args(
+          "bytes_static_from_string",
+          "c:@F@bytes_static_from_string",
+          bytes_static_type,
+          location,
+          str_call);
 
-        // add padding
-        for (int i = 0; i < byte_size; i++)
-          hex_val += "00";
-        hex_val.resize(byte_size * 2);
+        string_constantt str(expr["value"].get<std::string>());
+        str_call.arguments().push_back(str);
+        new_expr = str_call;
 
-        if (convert_hex_literal(hex_val, new_expr, byte_size * 8))
-          return true;
-
-        new_expr.type().set("#sol_type", "BYTES_LITERAL");
+        new_expr.type().set("#sol_type", sol_type_str); // e.g. "BYTES12"
         break;
       }
-      default:
-        assert(!"Error occurred when handling bytes literal");
-      }
-      break;
+
+      log_error(
+        "Unsupported bytes literal type in expression: {}", expr.dump());
+      return true;
     }
 
     switch (type_name)
@@ -5852,7 +5853,7 @@ bool solidity_convertert::get_expr(
       return true;
 
     // 3. generate the type casting expr
-    convert_type_expr(ns, from_expr, type);
+    convert_type_expr(ns, from_expr, type, expr);
 
     new_expr = from_expr;
     break;
@@ -5893,7 +5894,7 @@ bool solidity_convertert::get_init_expr(
   if (get_expr(init_value, literal_type, new_expr))
     return true;
 
-  convert_type_expr(ns, new_expr, dest_type);
+  convert_type_expr(ns, new_expr, dest_type, init_value);
   return false;
 }
 
@@ -6028,54 +6029,215 @@ bool solidity_convertert::get_binary_operator_expr(
     "	@@@ got binop.getOpcode: SolidityGrammar::{}",
     SolidityGrammar::expression_to_str(opcode));
 
-  switch (opcode)
+  if (is_bytes_type(lhs.type()) || is_bytes_type(rhs.type()))
   {
-  case SolidityGrammar::ExpressionT::BO_Assign:
-  {
-    // special handling for tuple-type assignment;
-    //TODO: handle nested tuple
-    if (rt_sol == "TUPLE_INSTANCE" || rt_sol == "TUPLE_RETURNS")
+    const std::string lhs_sol = lhs.type().get("#sol_type").as_string();
+    const std::string rhs_sol = rhs.type().get("#sol_type").as_string();
+
+    // normalize lhs and rhs types
+    convert_type_expr(ns, lhs, common_type, expr);
+    convert_type_expr(ns, rhs, common_type, expr);
+
+    // Determine which API to call based on type
+    const bool is_static = is_bytesN_type(lhs_sol) && is_bytesN_type(rhs_sol);
+    const bool is_dynamic = lhs_sol == "BYTES" && rhs_sol == "BYTES";
+
+    // handle comparison: == or !=
+    switch (opcode)
     {
-      construct_tuple_assigments(expr, lhs, rhs);
-      new_expr = code_skipt();
+    case SolidityGrammar::ExpressionT::BO_EQ:
+    case SolidityGrammar::ExpressionT::BO_NE:
+    {
+      // Create function call
+      side_effect_expr_function_callt call_expr;
+      std::string fname, fid;
+      if (is_static)
+      {
+        fname = "bytes_static_equal";
+        fid = "c:@F@bytes_static_equal";
+      }
+      else if (is_dynamic)
+      {
+        fname = "bytes_dynamic_equal";
+        fid = "c:@F@bytes_dynamic_equal";
+      }
+      else
+      {
+        log_error(
+          "Incompatible bytes comparison between {} and {}", lhs_sol, rhs_sol);
+        return true;
+      }
+
+      get_library_function_call_no_args(fname, fid, bool_type(), l, call_expr);
+
+      if (is_dynamic)
+      {
+        // dynamic: bytes_dynamic_equal(&a, &b, &pool)
+        call_expr.arguments().push_back(address_of_exprt(lhs));
+        call_expr.arguments().push_back(address_of_exprt(rhs));
+
+        // get pool_data symbol from current contract
+        std::string cname;
+        get_current_contract_name(expr, cname);
+        if (cname.empty())
+        {
+          log_error(
+            "Cannot resolve contract name for dynamic bytes comparison");
+          return true;
+        }
+
+        exprt cur_this_expr;
+        if (current_functionDecl)
+        {
+          if (get_func_decl_this_ref(*current_functionDecl, cur_this_expr))
+            return true;
+        }
+        else
+        {
+          if (get_ctor_decl_this_ref(cname, cur_this_expr))
+            return true;
+        }
+
+        const symbolt *bytes_pool_sym = context.find_symbol("tag-BytesPool");
+        if (!bytes_pool_sym)
+        {
+          log_error("Missing tag-BytesPool in symbol table");
+          return true;
+        }
+
+        member_exprt pool_member(
+          cur_this_expr, "dynamic_pool", bytes_pool_sym->type);
+        call_expr.arguments().push_back(pool_member);
+      }
+      else
+      {
+        // static: bytes_static_equal(&a, &b)
+        call_expr.arguments().push_back(address_of_exprt(lhs));
+        call_expr.arguments().push_back(address_of_exprt(rhs));
+      }
+
+      if (opcode == SolidityGrammar::ExpressionT::BO_EQ)
+      {
+        new_expr = call_expr;
+      }
+      else
+      {
+        new_expr = not_exprt(call_expr);
+      }
+
       current_BinOp_type.pop();
       return false;
     }
-    else if (rt_sol == "ARRAY" || rt_sol == "ARRAY_LITERAL")
+
+    case SolidityGrammar::ExpressionT::BO_Shl:
     {
-      if (rt_sol == "ARRAY_LITERAL")
-        // construct aux_array while adding padding
-        // e.g. data1 = [1,2] ==> data1 = aux_array$1
-        convert_type_expr(ns, rhs, lt);
-
-      // get size
-      exprt size_expr;
-      get_size_expr(rhs, size_expr);
-
-      // get sizeof
-      exprt size_of_expr;
-      get_size_of_expr(rt.subtype(), size_of_expr);
-
-      // do array copy
-      side_effect_expr_function_callt acpy_call;
-      get_arrcpy_function_call(lhs.location(), acpy_call);
-      acpy_call.arguments().push_back(rhs);
-      acpy_call.arguments().push_back(size_expr);
-      acpy_call.arguments().push_back(size_of_expr);
-      solidity_gen_typecast(ns, acpy_call, lt);
-
-      rhs = acpy_call;
-
-      if (lt_sol == "DYNARRAY")
-      {
-        exprt store_call;
-        store_update_dyn_array(lhs, size_expr, store_call);
-        move_to_back_block(store_call);
-      }
+      // bytes shift left
+      new_expr.copy_to_operands(lhs, rhs);
+      convert_type_expr(ns, new_expr, lhs.type(), expr);
+      current_BinOp_type.pop();
+      return false;
     }
-    else if (rt_sol == "DYNARRAY")
+
+    case SolidityGrammar::ExpressionT::BO_Shr:
     {
-      /* e.g. 
+      // bytes shift right
+      new_expr.copy_to_operands(lhs, rhs);
+      convert_type_expr(ns, new_expr, lhs.type(), expr);
+      current_BinOp_type.pop();
+      return false;
+    }
+
+    case SolidityGrammar::ExpressionT::BO_And:
+    case SolidityGrammar::ExpressionT::BO_Or:
+    case SolidityGrammar::ExpressionT::BO_Xor:
+    {
+      std::string fname, fid;
+      if (opcode == SolidityGrammar::ExpressionT::BO_And)
+      {
+        fname = "bytes_static_and";
+        fid = "c:@F@bytes_static_and";
+      }
+      else if (opcode == SolidityGrammar::ExpressionT::BO_Or)
+      {
+        fname = "bytes_static_or";
+        fid = "c:@F@bytes_static_or";
+      }
+      else
+      {
+        fname = "bytes_static_xor";
+        fid = "c:@F@bytes_static_xor";
+      }
+
+      if (!is_static)
+      {
+        log_error("Bitwise operations only supported for bytesN types");
+        return true;
+      }
+
+      side_effect_expr_function_callt call_expr;
+      get_library_function_call_no_args(fname, fid, lhs.type(), l, call_expr);
+      call_expr.arguments().push_back(address_of_exprt(lhs));
+      call_expr.arguments().push_back(address_of_exprt(rhs));
+
+      new_expr = call_expr;
+      current_BinOp_type.pop();
+      return false;
+    }
+
+    default:
+      break;
+    }
+  }
+  else
+  {
+    switch (opcode)
+    {
+    case SolidityGrammar::ExpressionT::BO_Assign:
+    {
+      // special handling for tuple-type assignment;
+      //TODO: handle nested tuple
+      if (rt_sol == "TUPLE_INSTANCE" || rt_sol == "TUPLE_RETURNS")
+      {
+        construct_tuple_assigments(expr, lhs, rhs);
+        new_expr = code_skipt();
+        current_BinOp_type.pop();
+        return false;
+      }
+      else if (rt_sol == "ARRAY" || rt_sol == "ARRAY_LITERAL")
+      {
+        if (rt_sol == "ARRAY_LITERAL")
+          // construct aux_array while adding padding
+          // e.g. data1 = [1,2] ==> data1 = aux_array$1
+          convert_type_expr(ns, rhs, lt, expr);
+
+        // get size
+        exprt size_expr;
+        get_size_expr(rhs, size_expr);
+
+        // get sizeof
+        exprt size_of_expr;
+        get_size_of_expr(rt.subtype(), size_of_expr);
+
+        // do array copy
+        side_effect_expr_function_callt acpy_call;
+        get_arrcpy_function_call(lhs.location(), acpy_call);
+        acpy_call.arguments().push_back(rhs);
+        acpy_call.arguments().push_back(size_expr);
+        acpy_call.arguments().push_back(size_of_expr);
+        solidity_gen_typecast(ns, acpy_call, lt);
+
+        rhs = acpy_call;
+
+        if (lt_sol == "DYNARRAY")
+        {
+          exprt store_call;
+          store_update_dyn_array(lhs, size_expr, store_call);
+          move_to_back_block(store_call);
+        }
+      }
+      else if (rt_sol == "DYNARRAY")
+      {
+        /* e.g. 
         int[] public data1;
         int[] memory ac;
         ac = new int[](10);
@@ -6086,35 +6248,35 @@ bool solidity_convertert::get_binary_operator_expr(
         _ESBMC_store_array(data1, ac_size);
       */
 
-      // get size
-      exprt size_expr;
-      get_size_expr(rhs, size_expr);
+        // get size
+        exprt size_expr;
+        get_size_expr(rhs, size_expr);
 
-      // get sizeof
-      exprt size_of_expr;
-      get_size_of_expr(rt.subtype(), size_of_expr);
+        // get sizeof
+        exprt size_of_expr;
+        get_size_of_expr(rt.subtype(), size_of_expr);
 
-      // do array copy
-      side_effect_expr_function_callt acpy_call;
-      get_arrcpy_function_call(lhs.location(), acpy_call);
-      acpy_call.arguments().push_back(rhs);
-      acpy_call.arguments().push_back(size_expr);
-      acpy_call.arguments().push_back(size_of_expr);
-      solidity_gen_typecast(ns, acpy_call, lt);
+        // do array copy
+        side_effect_expr_function_callt acpy_call;
+        get_arrcpy_function_call(lhs.location(), acpy_call);
+        acpy_call.arguments().push_back(rhs);
+        acpy_call.arguments().push_back(size_expr);
+        acpy_call.arguments().push_back(size_of_expr);
+        solidity_gen_typecast(ns, acpy_call, lt);
 
-      rhs = acpy_call;
+        rhs = acpy_call;
 
-      if (lt_sol == "DYNARRAY")
-      {
-        exprt store_call;
-        store_update_dyn_array(lhs, size_expr, store_call);
-        move_to_back_block(store_call);
+        if (lt_sol == "DYNARRAY")
+        {
+          exprt store_call;
+          store_update_dyn_array(lhs, size_expr, store_call);
+          move_to_back_block(store_call);
+        }
+        // fall through to do assignment
       }
-      // fall through to do assignment
-    }
-    else if (rt_sol == "NEW_ARRAY")
-    {
-      /* e.g. 
+      else if (rt_sol == "NEW_ARRAY")
+      {
+        /* e.g. 
         int[] public data1;
         int[] memory ac;
         ac = new int[](10);
@@ -6123,290 +6285,221 @@ bool solidity_convertert::get_binary_operator_expr(
         ac = new int[](10);
         _ESBMC_store_array(ac, ac_size); 
         */
-      exprt size_expr;
-      if (!rhs_json.contains("arguments"))
-        abort();
-      nlohmann::json callee_arg_json = rhs_json["arguments"][0];
-      const nlohmann::json literal_type = callee_arg_json["typeDescriptions"];
-      if (get_expr(callee_arg_json, literal_type, size_expr))
-        return true;
-
-      // get sizeof
-      exprt size_of_expr;
-      get_size_of_expr(rt.subtype(), size_of_expr);
-
-      // do array copy
-      side_effect_expr_function_callt acpy_call;
-      get_arrcpy_function_call(lhs.location(), acpy_call);
-      acpy_call.arguments().push_back(rhs);
-      acpy_call.arguments().push_back(size_expr);
-      acpy_call.arguments().push_back(size_of_expr);
-      solidity_gen_typecast(ns, acpy_call, lt);
-
-      rhs = acpy_call;
-
-      if (lt_sol == "DYNARRAY")
-      {
-        exprt store_call;
-        store_update_dyn_array(lhs, size_expr, store_call);
-        move_to_back_block(store_call);
-      }
-    }
-    else if (lt_sol == "STRING")
-    {
-      get_string_assignment(lhs, rhs, new_expr);
-      return false;
-    }
-
-    new_expr = side_effect_exprt("assign", t);
-    break;
-  }
-  case SolidityGrammar::ExpressionT::BO_Add:
-  {
-    if (t.is_floatbv())
-      assert(!"Solidity does not support FP arithmetic as of v0.8.6.");
-    else
-      new_expr = exprt("+", t);
-    break;
-  }
-  case SolidityGrammar::ExpressionT::BO_Sub:
-  {
-    if (t.is_floatbv())
-      assert(!"Solidity does not support FP arithmetic as of v0.8.6.");
-    else
-      new_expr = exprt("-", t);
-    break;
-  }
-  case SolidityGrammar::ExpressionT::BO_Mul:
-  {
-    if (t.is_floatbv())
-      assert(!"Solidity does not support FP arithmetic as of v0.8.6.");
-    else
-      new_expr = exprt("*", t);
-    break;
-  }
-  case SolidityGrammar::ExpressionT::BO_Div:
-  {
-    if (t.is_floatbv())
-      assert(!"Solidity does not support FP arithmetic as of v0.8.6.");
-    else
-      new_expr = exprt("/", t);
-    break;
-  }
-  case SolidityGrammar::ExpressionT::BO_Rem:
-  {
-    new_expr = exprt("mod", t);
-    break;
-  }
-  case SolidityGrammar::ExpressionT::BO_Shl:
-  {
-    new_expr = exprt("shl", t);
-    break;
-  }
-  case SolidityGrammar::ExpressionT::BO_Shr:
-  {
-    new_expr = exprt("shr", t);
-    break;
-  }
-  case SolidityGrammar::BO_And:
-  {
-    new_expr = exprt("bitand", t);
-    break;
-  }
-  case SolidityGrammar::BO_Xor:
-  {
-    new_expr = exprt("bitxor", t);
-    break;
-  }
-  case SolidityGrammar::BO_Or:
-  {
-    new_expr = exprt("bitor", t);
-    break;
-  }
-  case SolidityGrammar::ExpressionT::BO_GT:
-  {
-    new_expr = exprt(">", t);
-    break;
-  }
-  case SolidityGrammar::ExpressionT::BO_LT:
-  {
-    new_expr = exprt("<", t);
-    break;
-  }
-  case SolidityGrammar::ExpressionT::BO_GE:
-  {
-    new_expr = exprt(">=", t);
-    break;
-  }
-  case SolidityGrammar::ExpressionT::BO_LE:
-  {
-    new_expr = exprt("<=", t);
-    break;
-  }
-  case SolidityGrammar::ExpressionT::BO_NE:
-  {
-    new_expr = exprt("notequal", t);
-    break;
-  }
-  case SolidityGrammar::ExpressionT::BO_EQ:
-  {
-    new_expr = exprt("=", t);
-    break;
-  }
-  case SolidityGrammar::ExpressionT::BO_LAnd:
-  {
-    new_expr = exprt("and", t);
-    break;
-  }
-  case SolidityGrammar::ExpressionT::BO_LOr:
-  {
-    new_expr = exprt("or", t);
-    break;
-  }
-  case SolidityGrammar::ExpressionT::BO_Pow:
-  {
-    // lhs**rhs => pow(lhs, rhs)
-
-    // optimization: if both base and exponent are constant, use bigint::power
-    exprt new_lhs = lhs;
-    exprt new_rhs = rhs;
-    // remove typecast
-    while (lhs.id() == "typecast")
-      new_lhs = new_lhs.op0();
-    while (rhs.id() == "typecast")
-      new_rhs = new_rhs.op0();
-    if (new_lhs.is_constant() && new_rhs.is_constant())
-    {
-      //? it seems the solc cannot generate ast_json for constant power like 2**20
-      BigInt base;
-      if (to_integer(new_lhs, base))
-      {
-        log_error("failed to convert constant: {}", new_lhs.pretty());
-        abort();
-      }
-
-      BigInt exp;
-      if (to_integer(new_rhs, exp))
-      {
-        log_error("failed to convert constant: {}", new_rhs.pretty());
-        abort();
-      }
-
-      BigInt res = ::power(base, exp);
-      exprt tmp = from_integer(res, unsignedbv_typet(256));
-
-      if (tmp.is_nil())
-        return true;
-
-      new_expr.swap(tmp);
-    }
-    else
-    {
-      // Not sure why but it seems esbmc's pow works worse in solidity,
-      // so I write my own version
-      //? maybe this should convert this to BigInt too?
-      side_effect_expr_function_callt call_expr;
-      get_library_function_call_no_args(
-        "pow", "c:@F@pow", double_type(), lhs.location(), call_expr);
-
-      call_expr.arguments().push_back(typecast_exprt(lhs, double_type()));
-      call_expr.arguments().push_back(typecast_exprt(rhs, double_type()));
-
-      new_expr = call_expr;
-    }
-    new_expr.location() = l;
-    // do not fall through
-    return false;
-  }
-  default:
-  {
-    if (get_compound_assign_expr(expr, lhs, rhs, common_type, new_expr))
-    {
-      assert(!"Unimplemented binary operator");
-      return true;
-    }
-
-    current_BinOp_type.pop();
-
-    return false;
-  }
-  }
-
-  // for bytes type
-  if (is_bytes_type(lhs.type()) || is_bytes_type(rhs.type()))
-  {
-    switch (opcode)
-    {
-    case SolidityGrammar::ExpressionT::BO_GT:
-    case SolidityGrammar::ExpressionT::BO_LT:
-    case SolidityGrammar::ExpressionT::BO_GE:
-    case SolidityGrammar::ExpressionT::BO_LE:
-    case SolidityGrammar::ExpressionT::BO_NE:
-    case SolidityGrammar::ExpressionT::BO_EQ:
-    {
-      // e.g. cmp(0x74,  0x7500)
-      // ->   cmp(0x74, 0x0075)
-
-      // convert string to bytes
-      // e.g.
-      //    data1 = "test"; data2 = 0x74657374; // "test"
-      //    assert(data1 == data2); // true
-      // Do type conversion before the bswap
-      // the arguement of bswap should only be int/uint type, not string
-      // e.g. data1 == "test", it should not be bswap("test")
-      // instead it should be bswap(0x74657374)
-      // this may overwrite the lhs & rhs.
-      if (!is_bytes_type(lhs.type()))
-      {
-        if (get_expr(expr["leftExpression"], expr["commonType"], lhs))
+        exprt size_expr;
+        if (!rhs_json.contains("arguments"))
+          abort();
+        nlohmann::json callee_arg_json = rhs_json["arguments"][0];
+        const nlohmann::json literal_type = callee_arg_json["typeDescriptions"];
+        if (get_expr(callee_arg_json, literal_type, size_expr))
           return true;
+
+        // get sizeof
+        exprt size_of_expr;
+        get_size_of_expr(rt.subtype(), size_of_expr);
+
+        // do array copy
+        side_effect_expr_function_callt acpy_call;
+        get_arrcpy_function_call(lhs.location(), acpy_call);
+        acpy_call.arguments().push_back(rhs);
+        acpy_call.arguments().push_back(size_expr);
+        acpy_call.arguments().push_back(size_of_expr);
+        solidity_gen_typecast(ns, acpy_call, lt);
+
+        rhs = acpy_call;
+
+        if (lt_sol == "DYNARRAY")
+        {
+          exprt store_call;
+          store_update_dyn_array(lhs, size_expr, store_call);
+          move_to_back_block(store_call);
+        }
       }
-      if (!is_bytes_type(rhs.type()))
+      else if (lt_sol == "STRING")
       {
-        if (get_expr(expr["rightExpression"], expr["commonType"], rhs))
-          return true;
+        get_string_assignment(lhs, rhs, new_expr);
+        return false;
       }
 
-      // do implicit type conversion
-      convert_type_expr(ns, lhs, common_type);
-      convert_type_expr(ns, rhs, common_type);
-
-      exprt bwrhs, bwlhs;
-      bwlhs = exprt("bswap", common_type);
-      bwlhs.operands().push_back(lhs);
-      lhs = bwlhs;
-
-      bwrhs = exprt("bswap", common_type);
-      bwrhs.operands().push_back(rhs);
-      rhs = bwrhs;
-
-      new_expr.copy_to_operands(lhs, rhs);
-      // Pop current_BinOp_type.push as we've finished this conversion
-      current_BinOp_type.pop();
-      return false;
+      new_expr = side_effect_exprt("assign", t);
+      break;
+    }
+    case SolidityGrammar::ExpressionT::BO_Add:
+    {
+      if (t.is_floatbv())
+        assert(!"Solidity does not support FP arithmetic as of v0.8.6.");
+      else
+        new_expr = exprt("+", t);
+      break;
+    }
+    case SolidityGrammar::ExpressionT::BO_Sub:
+    {
+      if (t.is_floatbv())
+        assert(!"Solidity does not support FP arithmetic as of v0.8.6.");
+      else
+        new_expr = exprt("-", t);
+      break;
+    }
+    case SolidityGrammar::ExpressionT::BO_Mul:
+    {
+      if (t.is_floatbv())
+        assert(!"Solidity does not support FP arithmetic as of v0.8.6.");
+      else
+        new_expr = exprt("*", t);
+      break;
+    }
+    case SolidityGrammar::ExpressionT::BO_Div:
+    {
+      if (t.is_floatbv())
+        assert(!"Solidity does not support FP arithmetic as of v0.8.6.");
+      else
+        new_expr = exprt("/", t);
+      break;
+    }
+    case SolidityGrammar::ExpressionT::BO_Rem:
+    {
+      new_expr = exprt("mod", t);
+      break;
     }
     case SolidityGrammar::ExpressionT::BO_Shl:
     {
-      // e.g.
-      //    bytes1 = 0x11
-      //    x<<8 == 0x00
-      new_expr.copy_to_operands(lhs, rhs);
-      convert_type_expr(ns, new_expr, lhs.type());
-      current_BinOp_type.pop();
+      new_expr = exprt("shl", t);
+      break;
+    }
+    case SolidityGrammar::ExpressionT::BO_Shr:
+    {
+      new_expr = exprt("shr", t);
+      break;
+    }
+    case SolidityGrammar::BO_And:
+    {
+      new_expr = exprt("bitand", t);
+      break;
+    }
+    case SolidityGrammar::BO_Xor:
+    {
+      new_expr = exprt("bitxor", t);
+      break;
+    }
+    case SolidityGrammar::BO_Or:
+    {
+      new_expr = exprt("bitor", t);
+      break;
+    }
+    case SolidityGrammar::ExpressionT::BO_GT:
+    {
+      new_expr = exprt(">", t);
+      break;
+    }
+    case SolidityGrammar::ExpressionT::BO_LT:
+    {
+      new_expr = exprt("<", t);
+      break;
+    }
+    case SolidityGrammar::ExpressionT::BO_GE:
+    {
+      new_expr = exprt(">=", t);
+      break;
+    }
+    case SolidityGrammar::ExpressionT::BO_LE:
+    {
+      new_expr = exprt("<=", t);
+      break;
+    }
+    case SolidityGrammar::ExpressionT::BO_NE:
+    {
+      new_expr = exprt("notequal", t);
+      break;
+    }
+    case SolidityGrammar::ExpressionT::BO_EQ:
+    {
+      new_expr = exprt("=", t);
+      break;
+    }
+    case SolidityGrammar::ExpressionT::BO_LAnd:
+    {
+      new_expr = exprt("and", t);
+      break;
+    }
+    case SolidityGrammar::ExpressionT::BO_LOr:
+    {
+      new_expr = exprt("or", t);
+      break;
+    }
+    case SolidityGrammar::ExpressionT::BO_Pow:
+    {
+      // lhs**rhs => pow(lhs, rhs)
+
+      // optimization: if both base and exponent are constant, use bigint::power
+      exprt new_lhs = lhs;
+      exprt new_rhs = rhs;
+      // remove typecast
+      while (lhs.id() == "typecast")
+        new_lhs = new_lhs.op0();
+      while (rhs.id() == "typecast")
+        new_rhs = new_rhs.op0();
+      if (new_lhs.is_constant() && new_rhs.is_constant())
+      {
+        //? it seems the solc cannot generate ast_json for constant power like 2**20
+        BigInt base;
+        if (to_integer(new_lhs, base))
+        {
+          log_error("failed to convert constant: {}", new_lhs.pretty());
+          abort();
+        }
+
+        BigInt exp;
+        if (to_integer(new_rhs, exp))
+        {
+          log_error("failed to convert constant: {}", new_rhs.pretty());
+          abort();
+        }
+
+        BigInt res = ::power(base, exp);
+        exprt tmp = from_integer(res, unsignedbv_typet(256));
+
+        if (tmp.is_nil())
+          return true;
+
+        new_expr.swap(tmp);
+      }
+      else
+      {
+        // Not sure why but it seems esbmc's pow works worse in solidity,
+        // so I write my own version
+        //? maybe this should convert this to BigInt too?
+        side_effect_expr_function_callt call_expr;
+        get_library_function_call_no_args(
+          "pow", "c:@F@pow", double_type(), lhs.location(), call_expr);
+
+        call_expr.arguments().push_back(typecast_exprt(lhs, double_type()));
+        call_expr.arguments().push_back(typecast_exprt(rhs, double_type()));
+
+        new_expr = call_expr;
+      }
+      new_expr.location() = l;
+      // do not fall through
       return false;
     }
     default:
     {
-      break;
-    }
-    }
-  }
+      if (get_compound_assign_expr(expr, lhs, rhs, common_type, new_expr))
+      {
+        assert(!"Unimplemented binary operator");
+        return true;
+      }
 
-  // 4.1 check if it needs implicit type conversion
-  if (common_type.id() != "")
-  {
-    convert_type_expr(ns, lhs, common_type);
-    convert_type_expr(ns, rhs, common_type);
+      current_BinOp_type.pop();
+
+      return false;
+    }
+    }
+
+    // 4.1 check if it needs implicit type conversion
+    if (common_type.id() != "")
+    {
+      convert_type_expr(ns, lhs, common_type, expr);
+      convert_type_expr(ns, rhs, common_type, expr);
+    }
   }
 
   // 4.2 Copy to operands
@@ -6487,8 +6580,8 @@ bool solidity_convertert::get_compound_assign_expr(
 
   if (common_type.id() != "")
   {
-    convert_type_expr(ns, lhs, common_type);
-    convert_type_expr(ns, rhs, common_type);
+    convert_type_expr(ns, lhs, common_type, expr);
+    convert_type_expr(ns, rhs, common_type, expr);
   }
 
   new_expr.copy_to_operands(lhs, rhs);
@@ -7140,7 +7233,6 @@ bool solidity_convertert::get_sol_builtin_ref(
           args = gen_zero(pointer_typet(empty_typet()));
         else
         {
-          log_status("{}", func.dump());
           if (get_expr(func["arguments"][0], expr["argumentTypes"][0], args))
             return true;
           // wrap it
@@ -8130,7 +8222,7 @@ bool solidity_convertert::get_mapping_key_value_type(
 bool solidity_convertert::is_bytesN_type(const std::string &t) const
 {
   // expects t like "bytes1", "bytes2", ..., "bytes32"
-  if (t.substr(0, 5) == "bytes" && t.size() > 5)
+  if (t.substr(0, 5) == "BYTES" && t.size() > 5)
   {
     int sz = std::stoi(t.substr(5));
     return sz >= 1 && sz <= 32;
@@ -8174,7 +8266,7 @@ void solidity_convertert::gen_mapping_key_typecast(
     pos = bytes_static_call;
     return;
   }
-  if (key_sol_type == "bytes")
+  if (key_sol_type == "BYTES")
   {
     side_effect_expr_function_callt bytes_dynamic_call;
     assert(context.find_symbol("c:@F@bytes_dynamic_to_mapping_key") != nullptr);
@@ -10917,6 +11009,15 @@ void solidity_convertert::convert_type_expr(
   exprt &src_expr,
   const typet &dest_type)
 {
+  convert_type_expr(ns, src_expr, dest_type, empty_json);
+}
+
+void solidity_convertert::convert_type_expr(
+  const namespacet &ns,
+  exprt &src_expr,
+  const typet &dest_type,
+  const nlohmann::json &expr)
+{
   log_debug("solidity", "\t@@@ Performing type conversion");
 
   typet src_type = src_expr.type();
@@ -10958,30 +11059,176 @@ void solidity_convertert::convert_type_expr(
     }
     else if (is_bytes_type(src_type) && is_bytes_type(dest_type))
     {
-      // 1. Fixed-size Bytes Converted to Smaller Types
-      //    bytes2 a = 0x4326;
-      //    bytes1 b = bytes1(a); // b will be 0x43
-      // 2. Fixed-size Bytes Converted to Larger Types
-      //    bytes2 a = 0x4235;
-      //    bytes4 b = bytes4(a); // b will be 0x42350000
-      // which equals to:
-      //    new_type b = bswap(new_type)(bswap(x)))
+      std::string src_sol_type = src_type.get("#sol_type").as_string();
+      std::string dest_sol_type = dest_type.get("#sol_type").as_string();
 
-      exprt bswap_expr, sub_bswap_expr;
+      auto get_bytesN_size = [](const std::string &s) -> unsigned
+      {
+        if (s.substr(0, 5) == "BYTES" && s.size() > 5)
+          return std::stoul(s.substr(5));
+        abort();
+      };
 
-      // 1. bswap
-      sub_bswap_expr = exprt("bswap", src_type);
-      sub_bswap_expr.operands().push_back(src_expr);
+      std::string c_name;
+      get_current_contract_name(expr, c_name);
+      if (c_name.empty())
+      {
+        log_error(
+          "Unable to resolve current contract name during type conversion");
+        abort();
+      }
 
-      // 2. typecast
-      solidity_gen_typecast(ns, sub_bswap_expr, dest_type);
+      exprt cur_this_expr;
+      if (current_functionDecl)
+      {
+        if (get_func_decl_this_ref(*current_functionDecl, cur_this_expr))
+          abort();
+      }
+      else
+      {
+        if (get_ctor_decl_this_ref(c_name, cur_this_expr))
+          abort();
+      }
 
-      // 3. bswap back
-      bswap_expr = exprt("bswap", sub_bswap_expr.type());
-      bswap_expr.operands().push_back(sub_bswap_expr);
+      const symbolt *pool_sym = context.find_symbol("tag-BytesPool");
+      assert(pool_sym != nullptr);
+      member_exprt pool_member(cur_this_expr, "dynamic_pool", pool_sym->type);
 
-      src_expr = bswap_expr;
+      // e.g. Bytes2 x; Bytes4(x); -> bytes_static_truncate(&x, 2)
+      if (is_bytesN_type(src_sol_type) && is_bytesN_type(dest_sol_type))
+      {
+        side_effect_expr_function_callt trunc_call;
+        assert(context.find_symbol("c:@F@bytes_static_truncate") != nullptr);
+        get_library_function_call_no_args(
+          "bytes_static_truncate",
+          "c:@F@bytes_static_truncate",
+          dest_type,
+          src_expr.location(),
+          trunc_call);
+        trunc_call.arguments().push_back(src_expr);
+        trunc_call.arguments().push_back(
+          from_integer(get_bytesN_size(dest_sol_type), size_type()));
+
+        std::string aux_name, aux_id;
+        get_aux_var(aux_name, aux_id);
+        symbolt aux_sym;
+        std::string mod = get_modulename_from_path(absolute_path);
+        get_default_symbol(
+          aux_sym, mod, dest_type, aux_name, aux_id, src_expr.location());
+        aux_sym.file_local = true;
+        aux_sym.lvalue = true;
+        auto &added = *move_symbol_to_context(aux_sym);
+        added.value = trunc_call;
+
+        code_declt decl(symbol_expr(added));
+        decl.operands().push_back(trunc_call);
+        move_to_front_block(decl);
+        src_expr = symbol_expr(added);
+        return;
+      }
+
+      // e.g. bytes2 x; bytes y = bytes(x);
+      if (is_bytesN_type(src_sol_type) && dest_sol_type == "BYTES")
+      {
+        side_effect_expr_function_callt from_static_call;
+        assert(
+          context.find_symbol("c:@F@bytes_dynamic_from_static") != nullptr);
+        get_library_function_call_no_args(
+          "bytes_dynamic_from_static",
+          "c:@F@bytes_dynamic_from_static",
+          dest_type,
+          src_expr.location(),
+          from_static_call);
+        from_static_call.arguments().push_back(src_expr);
+        from_static_call.arguments().push_back(pool_member);
+
+        std::string aux_name, aux_id;
+        get_aux_var(aux_name, aux_id);
+        symbolt aux_sym;
+        std::string mod = get_modulename_from_path(absolute_path);
+        get_default_symbol(
+          aux_sym, mod, dest_type, aux_name, aux_id, src_expr.location());
+        aux_sym.file_local = true;
+        aux_sym.lvalue = true;
+        auto &added = *move_symbol_to_context(aux_sym);
+        added.value = from_static_call;
+
+        code_declt decl(symbol_expr(added));
+        decl.operands().push_back(from_static_call);
+        move_to_front_block(decl);
+        src_expr = symbol_expr(added);
+        return;
+      }
+
+      // e.g. bytes x; bytes2 y = bytes2(x);
+      if (src_sol_type == "BYTES" && is_bytesN_type(dest_sol_type))
+      {
+        side_effect_expr_function_callt trunc_dyn_call;
+        assert(
+          context.find_symbol("c:@F@bytes_static_truncate_from_dynamic") !=
+          nullptr);
+        get_library_function_call_no_args(
+          "bytes_static_truncate_from_dynamic",
+          "c:@F@bytes_static_truncate_from_dynamic",
+          dest_type,
+          src_expr.location(),
+          trunc_dyn_call);
+        trunc_dyn_call.arguments().push_back(src_expr);
+        trunc_dyn_call.arguments().push_back(
+          from_integer(get_bytesN_size(dest_sol_type), size_type()));
+        trunc_dyn_call.arguments().push_back(pool_member);
+
+        std::string aux_name, aux_id;
+        get_aux_var(aux_name, aux_id);
+        symbolt aux_sym;
+        std::string mod = get_modulename_from_path(absolute_path);
+        get_default_symbol(
+          aux_sym, mod, dest_type, aux_name, aux_id, src_expr.location());
+        aux_sym.file_local = true;
+        aux_sym.lvalue = true;
+        auto &added = *move_symbol_to_context(aux_sym);
+        added.value = trunc_dyn_call;
+
+        code_declt decl(symbol_expr(added));
+        decl.operands().push_back(trunc_dyn_call);
+        move_to_front_block(decl);
+        src_expr = symbol_expr(added);
+        return;
+      }
+
+      // e.g. bytes x; bytes y = bytes(x);
+      if (src_sol_type == "BYTES" && dest_sol_type == "BYTES")
+      {
+        side_effect_expr_function_callt copy_call;
+        assert(context.find_symbol("c:@F@bytes_dynamic_copy") != nullptr);
+        get_library_function_call_no_args(
+          "bytes_dynamic_copy",
+          "c:@F@bytes_dynamic_copy",
+          dest_type,
+          src_expr.location(),
+          copy_call);
+        copy_call.arguments().push_back(src_expr);
+        copy_call.arguments().push_back(pool_member);
+
+        std::string aux_name, aux_id;
+        get_aux_var(aux_name, aux_id);
+        symbolt aux_sym;
+        std::string mod = get_modulename_from_path(absolute_path);
+        get_default_symbol(
+          aux_sym, mod, dest_type, aux_name, aux_id, src_expr.location());
+        aux_sym.file_local = true;
+        aux_sym.lvalue = true;
+        auto &added = *move_symbol_to_context(aux_sym);
+        added.value = copy_call;
+
+        code_declt decl(symbol_expr(added));
+        decl.operands().push_back(copy_call);
+        move_to_front_block(decl);
+        src_expr = symbol_expr(added);
+        return;
+      }
     }
+
     else if (
       (src_sol_type == "ARRAY_LITERAL") && src_type.id() == typet::id_array)
     {
@@ -12669,7 +12916,7 @@ bool solidity_convertert::get_high_level_member_access(
     if (!is_return_void && !is_revert)
     {
       exprt _assign = side_effect_exprt("assign", tmp.type());
-      convert_type_expr(ns, memcall, tmp.type());
+      convert_type_expr(ns, memcall, tmp.type(), expr);
       _assign.copy_to_operands(tmp, memcall);
       rhs = _assign;
     }
