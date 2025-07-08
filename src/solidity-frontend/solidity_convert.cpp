@@ -88,6 +88,9 @@ solidity_convertert::solidity_convertert(
   get_library_function_call_no_args(
     "nondet_uint", "c:@F@nondet_uint", uint_type(), l, nondet_uint_expr);
 
+  nondet_bool_expr.type().set("#sol_type", "BOOL");
+  nondet_uint_expr.type().set("#sol_type", "UINT256");
+
   addr_t = unsignedbv_typet(160);
   addr_t.set("#sol_type", "ADDRESS");
 
@@ -95,7 +98,7 @@ solidity_convertert::solidity_convertert(
   addrp_t.set("#sol_type", "ADDRESS_PAYABLE");
 
   string_t = pointer_typet(signed_char_type());
-  string_t.set("sol_type", "STRING");
+  string_t.set("#sol_type", "STRING");
 }
 
 // Convert smart contracts into symbol tables
@@ -11038,13 +11041,13 @@ void solidity_convertert::convert_type_expr(
   {
     std::string src_sol_type = src_type.get("#sol_type").as_string();
     std::string dest_sol_type = dest_type.get("#sol_type").as_string();
-    if (src_sol_type.empty())
-      src_expr.dump();
-    if (dest_sol_type.empty())
-      dest_type.dump();
 
     log_debug("solidity", "\t\tGot src_sol_type = {}", src_sol_type);
+    if (src_sol_type.empty())
+      log_debug("solidity", "{}", src_type.to_string());
     log_debug("solidity", "\t\tGot dest_sol_type = {}", dest_sol_type);
+    if (dest_sol_type.empty())
+      log_debug("solidity", "{}", dest_type.to_string());
 
     if (
       (dest_sol_type == "ADDRESS" || dest_sol_type == "ADDRESS_PAYABLE") &&
@@ -11059,7 +11062,7 @@ void solidity_convertert::convert_type_expr(
       else
         t = addrp_t;
 
-          src_expr = member_exprt(src_expr, comp_name, t);
+      src_expr = member_exprt(src_expr, comp_name, t);
     }
     else if (
       (src_sol_type == "ADDRESS" || src_sol_type == "ADDRESS_PAYABLE") &&
