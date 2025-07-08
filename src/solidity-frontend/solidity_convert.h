@@ -709,6 +709,7 @@ protected:
   typet addr_t;
   typet addrp_t;
   typet string_t;
+  typet bool_t;
 
 private:
   bool get_elementary_type_name_uint(

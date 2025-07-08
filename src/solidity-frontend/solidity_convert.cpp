@@ -84,7 +84,7 @@ solidity_convertert::solidity_convertert(
   }
   locationt l;
   get_library_function_call_no_args(
-    "nondet_bool", "c:@F@nondet_bool", bool_type(), l, nondet_bool_expr);
+    "nondet_bool", "c:@F@nondet_bool", bool_t, l, nondet_bool_expr);
   get_library_function_call_no_args(
     "nondet_uint", "c:@F@nondet_uint", uint_type(), l, nondet_uint_expr);
 
@@ -99,6 +99,10 @@ solidity_convertert::solidity_convertert(
 
   string_t = pointer_typet(signed_char_type());
   string_t.set("#sol_type", "STRING");
+
+  bool_t = bool_type();
+  bool_t.set("#sol_type", "BOOL");
+  bool_t.set("#cpp_type", "bool");
 }
 
 // Convert smart contracts into symbol tables
@@ -2592,11 +2596,11 @@ bool solidity_convertert::get_unbound_expr(
     exprt _mutex;
     get_contract_mutex_expr(c_name, this_expr, _mutex);
 
-    exprt assign_lock = side_effect_exprt("assign", bool_type());
+    exprt assign_lock = side_effect_exprt("assign", bool_t);
     assign_lock.copy_to_operands(_mutex, true_exprt());
     convert_expression_to_code(assign_lock);
 
-    exprt assign_unlock = side_effect_exprt("assign", bool_type());
+    exprt assign_unlock = side_effect_exprt("assign", bool_t);
     assign_unlock.copy_to_operands(_mutex, false_exprt());
     convert_expression_to_code(assign_unlock);
 
@@ -6039,7 +6043,7 @@ bool solidity_convertert::get_binary_operator_expr(
         return true;
       }
 
-      get_library_function_call_no_args(fname, fid, bool_type(), l, call_expr);
+      get_library_function_call_no_args(fname, fid, bool_t, l, call_expr);
 
       if (is_dynamic)
       {
@@ -6618,7 +6622,7 @@ bool solidity_convertert::get_unary_operator_expr(
 
   case SolidityGrammar::ExpressionT::UO_LNot:
   {
-    new_expr = exprt("not", bool_type());
+    new_expr = exprt("not", bool_t);
     break;
   }
   default:
@@ -7032,9 +7036,7 @@ bool solidity_convertert::get_esbmc_builtin_ref(
     typet type;
     code_typet convert_type;
     typet return_type;
-    return_type = bool_type();
-    std::string c_type = "bool";
-    return_type.set("#cpp_type", c_type);
+    return_type = bool_t;
     convert_type.return_type() = return_type;
     type = convert_type;
     type.set("#sol_name", blt_name);
@@ -8824,9 +8826,7 @@ bool solidity_convertert::get_elementary_type_name(
   }
   case SolidityGrammar::ElementaryTypeNameT::BOOL:
   {
-    new_type = bool_type();
-    new_type.set("#cpp_type", "bool");
-    new_type.set("#sol_type", "BOOL");
+    new_type = bool_t;
     break;
   }
   case SolidityGrammar::ElementaryTypeNameT::STRING:
@@ -10678,7 +10678,7 @@ void solidity_convertert::get_inherit_ctor_definition(
   // param: bool
   std::string aname = "aux";
   std::string aid = "sol:@C@" + c_name + "@F@" + c_name + "@" + aname + "#";
-  typet addr_t = bool_type();
+  typet addr_t = bool_t;
   addr_t.cmt_constant(true);
   symbolt addr_s;
   get_default_symbol(addr_s, debug_modulename, addr_t, aname, aid, l);
@@ -10933,9 +10933,7 @@ bool solidity_convertert::get_high_level_call_wrapper(
     get_contract_mutex_expr(cname, this_expr, _mutex);
 
     // _ESBMC_mutex = true;
-    typet _t = bool_type();
-    _t.set("#sol_type", "BOOL");
-    _t.set("#cpp_type", "bool");
+    typet _t = bool_t;
     exprt _true = true_exprt();
     exprt _false = false_exprt();
     _true.location() = this_expr.location();
@@ -10987,12 +10985,20 @@ void solidity_convertert::convert_type_expr(
   log_debug("solidity", "\t@@@ Performing type conversion");
 
   typet src_type = src_expr.type();
-  // only do conversion when the src.type != dest.type
-  if (src_type != dest_type)
-  {
-    std::string src_sol_type = src_type.get("#sol_type").as_string();
-    std::string dest_sol_type = dest_type.get("#sol_type").as_string();
+  std::string src_sol_type = src_type.get("#sol_type").as_string();
+  std::string dest_sol_type = dest_type.get("#sol_type").as_string();
 
+  bool not_same_type = false;
+  if (src_type != dest_type)
+    not_same_type = true;
+  if (
+    !src_sol_type.empty() && !dest_sol_type.empty() &&
+    src_sol_type != dest_sol_type)
+    not_same_type = true;
+
+  // only do conversion when the src.type != dest.type
+  if (not_same_type)
+  {
     log_debug("solidity", "\t\tGot src_sol_type = {}", src_sol_type);
     if (src_sol_type.empty())
       log_debug("solidity", "{}", src_type.to_string());
@@ -11976,9 +11982,7 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
     std::string tx_name, tx_id;
     get_contract_mutex_name(contract_name, tx_name, tx_id);
     std::string debug_modulename = get_modulename_from_path(absolute_path);
-    typet _t = bool_type();
-    _t.set("#sol_type", "BOOL");
-    _t.set("#cpp_type", "bool");
+    typet _t = bool_t;
 
     get_builtin_symbol(tx_name, tx_id, _t, l, gen_zero(_t), contract_name);
   }
@@ -12284,7 +12288,7 @@ void solidity_convertert::get_aux_property_function(
 
     // if(get_object(_addr, "A") != NULL)
     exprt _null = gen_zero(pointer_typet(empty_typet()));
-    exprt _equal = exprt("notequal", bool_type());
+    exprt _equal = exprt("notequal", bool_t);
     _equal.operands().push_back(get_obj);
     _equal.operands().push_back(_null);
     _equal.location() = loc;
@@ -13019,8 +13023,7 @@ bool solidity_convertert::get_low_level_member_accsss(
 
       std::string func_id = "sol:@C@" + cname + "@F@$call#1";
 
-      get_library_function_call_no_args(
-        func_name, func_id, bool_type(), loc, call);
+      get_library_function_call_no_args(func_name, func_id, bool_t, loc, call);
       call.arguments().push_back(this_object);
       call.arguments().push_back(addr);
       call.arguments().push_back(value);
@@ -13031,8 +13034,7 @@ bool solidity_convertert::get_low_level_member_accsss(
       addr.type().set("#sol_type", "ADDRESS");
 
       std::string func_id = "sol:@C@" + cname + "@F@$call#0";
-      get_library_function_call_no_args(
-        func_name, func_id, bool_type(), loc, call);
+      get_library_function_call_no_args(func_name, func_id, bool_t, loc, call);
       call.arguments().push_back(this_object);
       call.arguments().push_back(addr);
     }
@@ -13054,8 +13056,7 @@ bool solidity_convertert::get_low_level_member_accsss(
 
     std::string func_name = "transfer";
     std::string func_id = "sol:@C@" + cname + "@F@$transfer#0";
-    get_library_function_call_no_args(
-      func_name, func_id, bool_type(), loc, call);
+    get_library_function_call_no_args(func_name, func_id, bool_t, loc, call);
     call.arguments().push_back(this_object);
     call.arguments().push_back(addr);
     call.arguments().push_back(arg);
@@ -13070,8 +13071,7 @@ bool solidity_convertert::get_low_level_member_accsss(
 
     std::string func_name = "send";
     std::string func_id = "sol:@C@" + cname + "@F@$send#0";
-    get_library_function_call_no_args(
-      func_name, func_id, bool_type(), loc, call);
+    get_library_function_call_no_args(func_name, func_id, bool_t, loc, call);
     call.arguments().push_back(this_object);
     call.arguments().push_back(addr);
     call.arguments().push_back(arg);
@@ -13171,8 +13171,7 @@ bool solidity_convertert::get_call_definition(
   // however, we cannot handle the string, therefore we only return bool
   // and make it (x.call(), nondet_uint_expr)
   code_typet t;
-  t.return_type() = bool_type();
-  t.return_type().set("#sol_type", "BOOL");
+  t.return_type() = bool_t;
   std::string debug_modulename = get_modulename_from_path(absolute_path);
   get_default_symbol(s, debug_modulename, t, call_name, call_id, locationt());
   auto &added_symbol = *move_symbol_to_context(s);
@@ -13259,7 +13258,7 @@ bool solidity_convertert::get_call_definition(
       get_contract_mutex_expr(cname, this_expr, _mutex);
 
       // _ESBMC_mutex = true;
-      exprt assign_lock = side_effect_exprt("assign", bool_type());
+      exprt assign_lock = side_effect_exprt("assign", bool_t);
       assign_lock.copy_to_operands(_mutex, true_exprt());
       convert_expression_to_code(assign_lock);
       then.move_to_operands(assign_lock);
@@ -13277,7 +13276,7 @@ bool solidity_convertert::get_call_definition(
       get_contract_mutex_expr(cname, this_expr, _mutex);
 
       // _ESBMC_mutex = false;
-      exprt assign_unlock = side_effect_exprt("assign", bool_type());
+      exprt assign_unlock = side_effect_exprt("assign", bool_t);
       assign_unlock.copy_to_operands(_mutex, false_exprt());
       convert_expression_to_code(assign_unlock);
       then.move_to_operands(assign_unlock);
@@ -13299,7 +13298,7 @@ bool solidity_convertert::get_call_definition(
     exprt static_ins;
     get_static_contract_instance_ref(str, static_ins);
     exprt mem_addr = member_exprt(static_ins, "$address", addr_t);
-    exprt _equal = exprt("=", bool_type());
+    exprt _equal = exprt("=", bool_t);
     _equal.operands().push_back(addr_expr);
     _equal.operands().push_back(mem_addr);
 
@@ -13385,7 +13384,7 @@ bool solidity_convertert::model_transaction(
   front_block.move_to_operands(assign_val);
 
   // if(this.balance < val) return false;
-  exprt less_than = exprt("<", bool_type());
+  exprt less_than = exprt("<", bool_t);
   less_than.copy_to_operands(this_balance, value);
   codet cmp_less_than("ifthenelse");
   code_returnt ret_false;
@@ -13429,8 +13428,7 @@ bool solidity_convertert::get_call_value_definition(
   // however, we cannot handle the string, therefore we only return bool
   // and make it (x.call(), nondet_uint_expr) later
   code_typet t;
-  t.return_type() = bool_type();
-  t.return_type().set("#sol_type", "BOOL");
+  t.return_type() = bool_t;
   std::string debug_modulename = get_modulename_from_path(absolute_path);
   get_default_symbol(s, debug_modulename, t, call_name, call_id, locationt());
   auto &added_symbol = *move_symbol_to_context(s);
@@ -13567,7 +13565,7 @@ bool solidity_convertert::get_call_value_definition(
     get_static_contract_instance_ref(str, static_ins);
     exprt mem_addr = member_exprt(static_ins, "$address", addrp_t);
 
-    exprt _equal = exprt("=", bool_type());
+    exprt _equal = exprt("=", bool_t);
     _equal.operands().push_back(addr_expr);
     _equal.operands().push_back(mem_addr);
 
@@ -13584,7 +13582,7 @@ bool solidity_convertert::get_call_value_definition(
     then.move_to_operands(assign_sender);
 
     // if(this.balance < val) return false;
-    exprt less_than = exprt("<", bool_type());
+    exprt less_than = exprt("<", bool_t);
     less_than.copy_to_operands(this_balance, val_expr);
     codet cmp_less_than("ifthenelse");
     code_returnt ret_false;
@@ -13611,7 +13609,7 @@ bool solidity_convertert::get_call_value_definition(
       get_contract_mutex_expr(cname, this_expr, _mutex);
 
       // _ESBMC_mutex = true;
-      exprt assign_lock = side_effect_exprt("assign", bool_type());
+      exprt assign_lock = side_effect_exprt("assign", bool_t);
       assign_lock.copy_to_operands(_mutex, true_exprt());
       convert_expression_to_code(assign_lock);
       then.move_to_operands(assign_lock);
@@ -13631,7 +13629,7 @@ bool solidity_convertert::get_call_value_definition(
       get_contract_mutex_expr(cname, this_expr, _mutex);
 
       // _ESBMC_mutex = false;
-      exprt assign_unlock = side_effect_exprt("assign", bool_type());
+      exprt assign_unlock = side_effect_exprt("assign", bool_t);
       assign_unlock.copy_to_operands(_mutex, false_exprt());
       convert_expression_to_code(assign_unlock);
       then.move_to_operands(assign_unlock);
@@ -13677,8 +13675,7 @@ bool solidity_convertert::get_transfer_definition(
   std::string call_name = "transfer";
   std::string call_id = "sol:@C@" + cname + "@F@$transfer#0";
   code_typet t;
-  t.return_type() = bool_type();
-  t.return_type().set("#sol_type", "BOOL");
+  t.return_type() = bool_t;
   std::string debug_modulename = get_modulename_from_path(absolute_path);
   symbolt s;
   get_default_symbol(s, debug_modulename, t, call_name, call_id, locationt());
@@ -13792,7 +13789,7 @@ bool solidity_convertert::get_transfer_definition(
     get_static_contract_instance_ref(str, static_ins);
     exprt mem_addr = member_exprt(static_ins, "$address", addrp_t);
 
-    exprt _equal = exprt("=", bool_type());
+    exprt _equal = exprt("=", bool_t);
     _equal.operands().push_back(addr_expr);
     _equal.operands().push_back(mem_addr);
 
@@ -13809,7 +13806,7 @@ bool solidity_convertert::get_transfer_definition(
     then.move_to_operands(assign_sender);
 
     // if(this.balance < val) return false;
-    exprt less_than = exprt("<", bool_type());
+    exprt less_than = exprt("<", bool_t);
     less_than.copy_to_operands(this_balance, val_expr);
     codet cmp_less_than("ifthenelse");
     code_returnt ret_false;
@@ -13836,7 +13833,7 @@ bool solidity_convertert::get_transfer_definition(
       get_contract_mutex_expr(cname, this_expr, _mutex);
 
       // _ESBMC_mutex = true;
-      exprt assign_lock = side_effect_exprt("assign", bool_type());
+      exprt assign_lock = side_effect_exprt("assign", bool_t);
       //! Do not use gen_one(bool_type()) to replace true_exprt()
       //! it will make the verification process stuck somehow
       assign_lock.copy_to_operands(_mutex, true_exprt());
@@ -13858,7 +13855,7 @@ bool solidity_convertert::get_transfer_definition(
       get_contract_mutex_expr(cname, this_expr, _mutex);
 
       // _ESBMC_mutex = false;
-      exprt assign_unlock = side_effect_exprt("assign", bool_type());
+      exprt assign_unlock = side_effect_exprt("assign", bool_t);
       assign_unlock.copy_to_operands(_mutex, false_exprt());
       convert_expression_to_code(assign_unlock);
       then.move_to_operands(assign_unlock);
@@ -13904,8 +13901,7 @@ bool solidity_convertert::get_send_definition(
   std::string call_name = "send";
   std::string call_id = "sol:@C@" + cname + "@F@$send#0";
   code_typet t;
-  t.return_type() = bool_type();
-  t.return_type().set("#sol_type", "BOOL");
+  t.return_type() = bool_t;
   std::string debug_modulename = get_modulename_from_path(absolute_path);
   symbolt s;
   get_default_symbol(s, debug_modulename, t, call_name, call_id, locationt());
@@ -14018,7 +14014,7 @@ bool solidity_convertert::get_send_definition(
     get_static_contract_instance_ref(str, static_ins);
     exprt mem_addr = member_exprt(static_ins, "$address", addr_t);
 
-    exprt _equal = exprt("=", bool_type());
+    exprt _equal = exprt("=", bool_t);
     _equal.operands().push_back(addr_expr);
     _equal.operands().push_back(mem_addr);
 
@@ -14063,7 +14059,7 @@ bool solidity_convertert::get_send_definition(
       get_contract_mutex_expr(cname, this_expr, _mutex);
 
       // _ESBMC_mutex = true;
-      exprt assign_lock = side_effect_exprt("assign", bool_type());
+      exprt assign_lock = side_effect_exprt("assign", bool_t);
       assign_lock.copy_to_operands(_mutex, true_exprt());
       convert_expression_to_code(assign_lock);
       then.move_to_operands(assign_lock);
@@ -14083,7 +14079,7 @@ bool solidity_convertert::get_send_definition(
       get_contract_mutex_expr(cname, this_expr, _mutex);
 
       // _ESBMC_mutex = false;
-      exprt assign_unlock = side_effect_exprt("assign", bool_type());
+      exprt assign_unlock = side_effect_exprt("assign", bool_t);
       assign_unlock.copy_to_operands(_mutex, false_exprt());
       convert_expression_to_code(assign_unlock);
       then.move_to_operands(assign_unlock);
