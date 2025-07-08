@@ -2655,6 +2655,10 @@ double smt_convt::convert_rational_to_double(
   }
   catch (const std::exception &)
   {
+    log_warning(
+      "Failed to convert BigInt to double: numerator={}, denominator={}",
+      num_buffer.data(),
+      den_buffer.data());
     return 0.0;
   }
 }
