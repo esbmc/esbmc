@@ -705,6 +705,11 @@ protected:
   side_effect_expr_function_callt nondet_bool_expr;
   side_effect_expr_function_callt nondet_uint_expr;
 
+  // type
+  typet addr_t;
+  typet addrp_t;
+  typet string_t;
+
 private:
   bool get_elementary_type_name_uint(
     SolidityGrammar::ElementaryTypeNameT &type,

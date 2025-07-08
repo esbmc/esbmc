@@ -87,6 +87,15 @@ solidity_convertert::solidity_convertert(
     "nondet_bool", "c:@F@nondet_bool", bool_type(), l, nondet_bool_expr);
   get_library_function_call_no_args(
     "nondet_uint", "c:@F@nondet_uint", uint_type(), l, nondet_uint_expr);
+
+  addr_t = unsignedbv_typet(160);
+  addr_t.set("#sol_type", "ADDRESS");
+
+  addrp_t = unsignedbv_typet(160);
+  addrp_t.set("#sol_type", "ADDRESS_PAYABLE");
+
+  string_t = pointer_typet(signed_char_type());
+  string_t.set("sol_type", "STRING");
 }
 
 // Convert smart contracts into symbol tables
@@ -720,7 +729,8 @@ bool solidity_convertert::populate_auxilary_vars()
     aux_cid = "sol:@" + aux_cname;
 
     string_constantt string(contract_name);
-    typet ct = pointer_typet(signed_char_type());
+    string.type().set("#sol_type", "STRING_LITERAL");
+    typet ct = string_t;
     ct.cmt_constant(true);
     symbolt s;
     std::string debug_modulename = get_modulename_from_path(absolute_path);
@@ -757,7 +767,7 @@ bool solidity_convertert::populate_auxilary_vars()
       integer2string(length),
       uint_type());
 
-    typet ct = pointer_typet(signed_char_type());
+    typet ct = string_t;
     ct.cmt_constant(true);
     array_typet arr_t(ct, size_expr);
     arr_t.set("#sol_type", "ARRAY");
@@ -1614,8 +1624,7 @@ bool solidity_convertert::get_var_decl(
       if (get_ctor_decl_this_ref(ast_node, this_expr))
         return true;
     }
-    exprt addr_expr =
-      member_exprt(this_expr, "$address", unsignedbv_typet(160));
+    exprt addr_expr = member_exprt(this_expr, "$address", addr_t);
     solidity_gen_typecast(
       ns, addr_expr, to_struct_type(map_t).components().at(1).type());
     inits.op1() = addr_expr;
@@ -4524,6 +4533,7 @@ bool solidity_convertert::get_expr(
           hex_call);
 
         string_constantt str(expr["value"].get<std::string>());
+        str.type().set("#sol_type", "STRING_LITERAL");
         hex_call.arguments().push_back(str);
         new_expr = hex_call;
 
@@ -4542,6 +4552,7 @@ bool solidity_convertert::get_expr(
           str_call);
 
         string_constantt str(expr["value"].get<std::string>());
+        str.type().set("#sol_type", "STRING_LITERAL");
         str_call.arguments().push_back(str);
         new_expr = str_call;
 
@@ -4586,12 +4597,18 @@ bool solidity_convertert::get_expr(
       break;
     }
     case SolidityGrammar::ElementaryTypeNameT::ADDRESS:
+    {
+      if (convert_hex_literal(the_value, new_expr, 160))
+        return true;
+      new_expr.type().set("#sol_type", "ADDRESS");
+      break;
+    }
     case SolidityGrammar::ElementaryTypeNameT::ADDRESS_PAYABLE:
     {
       // 20 bytes
       if (convert_hex_literal(the_value, new_expr, 160))
         return true;
-      new_expr.type().set("#sol_type", "ADDRESS");
+      new_expr.type().set("#sol_type", "ADDRESS_PAYABLE");
       break;
     }
     default:
@@ -5264,8 +5281,6 @@ bool solidity_convertert::get_expr(
         if (get_func_decl_this_ref(*current_functionDecl, this_expr))
           return true;
 
-        typet addr_t = unsignedbv_typet(160);
-        addr_t.set("#sol_type", "ADDRESS");
         symbolt old_sender;
         get_default_symbol(
           old_sender,
@@ -5547,6 +5562,7 @@ bool solidity_convertert::get_expr(
       int ref_decl_id = callee_expr_json["typeName"]["referencedDeclaration"];
       const std::string contract_name = contractNamesMap[ref_decl_id];
       string_constantt rhs(contract_name);
+      rhs.type().set("#sol_type", "STRING_LITERAL");
 
       // do assignment
       exprt _assign = side_effect_exprt("assign", lhs.type());
@@ -6031,16 +6047,17 @@ bool solidity_convertert::get_binary_operator_expr(
 
   if (is_bytes_type(lhs.type()) || is_bytes_type(rhs.type()))
   {
-    const std::string lhs_sol = lhs.type().get("#sol_type").as_string();
-    const std::string rhs_sol = rhs.type().get("#sol_type").as_string();
-
-    // normalize lhs and rhs types
-    convert_type_expr(ns, lhs, common_type, expr);
-    convert_type_expr(ns, rhs, common_type, expr);
+    // bytes binary operators have their own rules
+    // so handle sperately
+    if (common_type.id() != "")
+    {
+      convert_type_expr(ns, lhs, common_type, expr);
+      convert_type_expr(ns, rhs, common_type, expr);
+    }
 
     // Determine which API to call based on type
-    const bool is_static = is_bytesN_type(lhs_sol) && is_bytesN_type(rhs_sol);
-    const bool is_dynamic = lhs_sol == "BYTES" && rhs_sol == "BYTES";
+    const bool is_static = is_bytesN_type(lt_sol) && is_bytesN_type(rt_sol);
+    const bool is_dynamic = lt_sol == "BYTES" && rt_sol == "BYTES";
 
     // handle comparison: == or !=
     switch (opcode)
@@ -6064,7 +6081,7 @@ bool solidity_convertert::get_binary_operator_expr(
       else
       {
         log_error(
-          "Incompatible bytes comparison between {} and {}", lhs_sol, rhs_sol);
+          "Incompatible bytes comparison between {} and {}", lt_sol, rt_sol);
         return true;
       }
 
@@ -6117,36 +6134,36 @@ bool solidity_convertert::get_binary_operator_expr(
       }
 
       if (opcode == SolidityGrammar::ExpressionT::BO_EQ)
-      {
         new_expr = call_expr;
-      }
       else
-      {
         new_expr = not_exprt(call_expr);
-      }
-
-      current_BinOp_type.pop();
-      return false;
+      break;
     }
-
     case SolidityGrammar::ExpressionT::BO_Shl:
-    {
-      // bytes shift left
-      new_expr.copy_to_operands(lhs, rhs);
-      convert_type_expr(ns, new_expr, lhs.type(), expr);
-      current_BinOp_type.pop();
-      return false;
-    }
-
     case SolidityGrammar::ExpressionT::BO_Shr:
     {
-      // bytes shift right
-      new_expr.copy_to_operands(lhs, rhs);
-      convert_type_expr(ns, new_expr, lhs.type(), expr);
-      current_BinOp_type.pop();
-      return false;
-    }
+      // Shift operations on bytesN: use bytes_static_shl/shr
+      std::string shift_func = (opcode == SolidityGrammar::ExpressionT::BO_Shl)
+                                 ? "bytes_static_shl"
+                                 : "bytes_static_shr";
 
+      side_effect_expr_function_callt shift_call;
+      assert(context.find_symbol("c:@F@" + shift_func) != nullptr);
+
+      get_library_function_call_no_args(
+        shift_func,
+        "c:@F@" + shift_func,
+        lhs.type(), // return type is still BytesStatic
+        l,
+        shift_call);
+
+      address_of_exprt lhs_ptr(lhs);
+      shift_call.arguments().push_back(lhs_ptr);
+      shift_call.arguments().push_back(rhs);
+
+      new_expr = shift_call;
+      break;
+    }
     case SolidityGrammar::ExpressionT::BO_And:
     case SolidityGrammar::ExpressionT::BO_Or:
     case SolidityGrammar::ExpressionT::BO_Xor:
@@ -6180,8 +6197,7 @@ bool solidity_convertert::get_binary_operator_expr(
       call_expr.arguments().push_back(address_of_exprt(rhs));
 
       new_expr = call_expr;
-      current_BinOp_type.pop();
-      return false;
+      break;
     }
 
     default:
@@ -8863,22 +8879,20 @@ bool solidity_convertert::get_elementary_type_name(
   {
     // cpp: std::string str;
     // new_type = symbol_typet("tag-std::string");
-    new_type = pointer_typet(signed_char_type());
-    new_type.set("#sol_type", "STRING");
+    new_type = string_t;
     break;
   }
   case SolidityGrammar::ElementaryTypeNameT::ADDRESS:
-  case SolidityGrammar::ElementaryTypeNameT::ADDRESS_PAYABLE:
   {
     //  An Address is a DataHexString of 20 bytes (uint160)
     // e.g. 0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984
     // ops: <=, <, ==, !=, >= and >
-
-    new_type = unsignedbv_typet(160);
-
-    // for type conversion
-    new_type.set("#sol_type", elementary_type_name_to_str(type));
-    new_type.set("#sol_type", "ADDRESS");
+    new_type = addr_t;
+    break;
+  }
+  case SolidityGrammar::ElementaryTypeNameT::ADDRESS_PAYABLE:
+  {
+    new_type = addrp_t;
     break;
   }
   case SolidityGrammar::ElementaryTypeNameT::BYTES1:
@@ -8945,8 +8959,8 @@ bool solidity_convertert::get_elementary_type_name(
     auto json = find_last_parent(src_ast_json, type_name);
     assert(!json.empty());
     string_constantt x(json["value"].get<std::string>());
+    x.type().set("#sol_type", "STRING_LITERAL");
     new_type = x.type();
-    new_type.set("#sol_type", "STRING_LITERAL");
 
     break;
   }
@@ -10938,8 +10952,6 @@ bool solidity_convertert::get_high_level_call_wrapper(
   std::string debug_modulename = get_modulename_from_path(absolute_path);
   exprt msg_sender = symbol_expr(*context.find_symbol("c:@msg_sender"));
 
-  typet addr_t = unsignedbv_typet(160);
-  addr_t.set("#sol_type", "ADDRESS");
   symbolt old_sender;
   get_default_symbol(
     old_sender,
@@ -11026,6 +11038,10 @@ void solidity_convertert::convert_type_expr(
   {
     std::string src_sol_type = src_type.get("#sol_type").as_string();
     std::string dest_sol_type = dest_type.get("#sol_type").as_string();
+    if (src_sol_type.empty())
+      src_expr.dump();
+    if (dest_sol_type.empty())
+      dest_type.dump();
 
     log_debug("solidity", "\t\tGot src_sol_type = {}", src_sol_type);
     log_debug("solidity", "\t\tGot dest_sol_type = {}", dest_sol_type);
@@ -11037,10 +11053,13 @@ void solidity_convertert::convert_type_expr(
       // CONTRACT: address(instance) ==> instance.address
       // EMPTY: address(this) ==> this.address
       std::string comp_name = "$address";
-      typet t = unsignedbv_typet(160);
-      t.set("#sol_type", "ADDRESS");
+      typet t;
+      if (dest_sol_type == "ADDRESS")
+        t = addr_t;
+      else
+        t = addrp_t;
 
-      src_expr = member_exprt(src_expr, comp_name, t);
+          src_expr = member_exprt(src_expr, comp_name, t);
     }
     else if (
       (src_sol_type == "ADDRESS" || src_sol_type == "ADDRESS_PAYABLE") &&
@@ -11950,9 +11969,7 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
   locationt l;
   l.function(contract_name);
 
-  typet t;
-  t = unsignedbv_typet(160);
-  t.set("#sol_type", "ADDRESS");
+  typet t = addr_t;
 
   get_library_function_call_no_args(
     "_ESBMC_get_unique_address", "c:@F@_ESBMC_get_unique_address", t, l, _addr);
@@ -11965,6 +11982,7 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
     return true;
   _addr.arguments().push_back(this_ptr);
   string_constantt cname_str(contract_name);
+  cname_str.type().set("#sol_type", "STRING_LITERAL");
   _addr.arguments().push_back(cname_str);
 
   // address
@@ -12016,6 +12034,7 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
   if (!is_bound)
   {
     string_constantt string(contract_name);
+    string.type().set("#sol_type", "STRING_LITERAL");
     bind_expr = string;
   }
   else
@@ -12026,7 +12045,7 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
     bind_expr = call;
   }
 
-  t = pointer_typet(signed_char_type());
+  t = string_t;
   //t.set("#sol_type", "STRING");
   get_builtin_symbol(
     "_ESBMC_bind_cname",
@@ -12237,8 +12256,6 @@ void solidity_convertert::get_aux_property_function(
   // param: arg
   std::string aname = "_addr";
   std::string aid = "sol:@F@" + fname + "@" + aname + "#";
-  typet addr_t = unsignedbv_typet(160);
-  addr_t.set("#sol_type", "ADDRESS");
   addr_t.cmt_constant(true);
   symbolt addr_s;
   get_default_symbol(addr_s, debug_modulename, addr_t, aname, aid, loc);
@@ -12285,6 +12302,7 @@ void solidity_convertert::get_aux_property_function(
 
     // param
     string_constantt _cname(cname);
+    _cname.type().set("#sol_type", "STRING_LITERAL");
 
     // get_object(_addr, "A")
     side_effect_expr_function_callt get_obj;
@@ -12355,14 +12373,11 @@ void solidity_convertert::get_builtin_property_expr(
   std::string comp_name = "$" + name;
 
   if (name == "address")
-  {
-    t = unsignedbv_typet(160);
-    t.set("#sol_type", "ADDRESS");
-  }
+    t = addr_t;
   else if (name == "code" || name == "codehash" || name == "balance")
   {
     t = unsignedbv_typet(256);
-    //? set sol_type?
+    t.set("#sol_type", "UINT256");
   }
   else
   {
@@ -12429,7 +12444,7 @@ bool solidity_convertert::assign_nondet_contract_name(
   get_library_function_call_no_args(
     "_ESBMC_get_nondet_cont_name",
     "c:@F@_ESBMC_get_nondet_cont_name",
-    pointer_typet(signed_char_type()),
+    string_t,
     l,
     _call);
 
@@ -12509,7 +12524,7 @@ bool solidity_convertert::assign_param_nondet(
         get_library_function_call_no_args(
           "nondet_string",
           "c:@F@nondet_string",
-          pointer_typet(signed_char_type()),
+          string_t,
           locationt(),
           nondet_str);
         call.arguments().push_back(nondet_str);
@@ -12807,8 +12822,7 @@ bool solidity_convertert::get_high_level_member_access(
   func_body.move_to_operands(label);
 
   // get 'x._ESBMC_bind_cname'
-  exprt bind_expr = member_exprt(
-    new_base, "_ESBMC_bind_cname", pointer_typet(signed_char_type()));
+  exprt bind_expr = member_exprt(new_base, "_ESBMC_bind_cname", string_t);
 
   // get memebr type
   exprt tmp;
@@ -12840,12 +12854,12 @@ bool solidity_convertert::get_high_level_member_access(
   {
     // strcmp（_ESBMC_NODET_cont_name, Base)
     exprt cname_string;
-    typet ct = pointer_typet(signed_char_type());
+    typet ct = string_t;
     ct.cmt_constant(true);
     get_symbol_decl_ref(str, "sol:@" + str, ct, cname_string);
 
     // since we do not modify the string, and it always point to the known object
-    exprt _cmp_cname = exprt("=", pointer_typet(signed_char_type()));
+    exprt _cmp_cname = exprt("=", string_t);
     _cmp_cname.operands().push_back(bind_expr);
     _cmp_cname.operands().push_back(cname_string);
 
@@ -13168,8 +13182,7 @@ bool solidity_convertert::get_bind_cname_expr(
     return true;
   }
 
-  bind_cname_expr =
-    member_exprt(lvar, "_ESBMC_bind_cname", pointer_typet(signed_char_type()));
+  bind_cname_expr = member_exprt(lvar, "_ESBMC_bind_cname", string_t);
   bind_cname_expr.location() = l;
   return false;
 }
@@ -13216,8 +13229,6 @@ bool solidity_convertert::get_call_definition(
   std::string addr_name = "_addr";
   std::string addr_id = "sol:@C@" + cname + "@F@call@" + addr_name + "#" +
                         std::to_string(aux_counter++);
-  typet addr_t = unsignedbv_typet(160);
-  addr_t.set("#sol_type", "ADDRESS");
   symbolt addr_s;
   get_default_symbol(
     addr_s, debug_modulename, addr_t, addr_name, addr_id, locationt());
@@ -13261,13 +13272,11 @@ bool solidity_convertert::get_call_definition(
   exprt this_address = member_exprt(this_expr, "$address", addr_t);
 
   // uint160_t old_sender =  msg_sender;
-  typet _addr_t = unsignedbv_typet(160);
-  _addr_t.set("#sol_type", "ADDRESS");
   symbolt old_sender;
   get_default_symbol(
     old_sender,
     debug_modulename,
-    _addr_t,
+    addr_t,
     "old_sender",
     "sol:@C@" + cname + "@F@old_sender#" + std::to_string(aux_counter++),
     locationt());
@@ -13477,15 +13486,13 @@ bool solidity_convertert::get_call_value_definition(
   // param: address _addr;
   std::string addr_name = "_addr";
   std::string addr_id = "sol:@C@" + cname + "@F@call@" + addr_name + "#1";
-  typet addr_t = unsignedbv_typet(160);
-  addr_t.set("#sol_type", "ADDRESS_PAYABLE");
   symbolt addr_s;
   get_default_symbol(
-    addr_s, debug_modulename, addr_t, addr_name, addr_id, locationt());
+    addr_s, debug_modulename, addrp_t, addr_name, addr_id, locationt());
   auto addr_added_symbol = *move_symbol_to_context(addr_s);
 
   code_typet::argumentt param = code_typet::argumentt();
-  param.type() = addr_t;
+  param.type() = addrp_t;
   param.cmt_base_name(addr_name);
   param.cmt_identifier(addr_id);
   t.arguments().push_back(param);
@@ -13547,7 +13554,7 @@ bool solidity_convertert::get_call_value_definition(
   exprt msg_value = symbol_expr(*context.find_symbol("c:@msg_value"));
   symbolt this_sym = *context.find_symbol(call_id + "#this");
   exprt this_expr = symbol_expr(this_sym);
-  exprt this_address = member_exprt(this_expr, "$address", addr_t);
+  exprt this_address = member_exprt(this_expr, "$address", addrp_t);
   exprt this_balance = member_exprt(this_expr, "$balance", val_t);
 
   // uint256_t old_value = msg_value;
@@ -13566,13 +13573,11 @@ bool solidity_convertert::get_call_value_definition(
   func_body.move_to_operands(old_val_decl);
 
   // uint160_t old_sender =  msg_sender;
-  typet _addr_t = unsignedbv_typet(160);
-  _addr_t.set("#sol_type", "ADDRESS");
   symbolt old_sender;
   get_default_symbol(
     old_sender,
     debug_modulename,
-    _addr_t,
+    addrp_t,
     "old_sender",
     "sol:@C@" + cname + "@F@call@old_sender#" + std::to_string(aux_counter++),
     locationt());
@@ -13606,7 +13611,7 @@ bool solidity_convertert::get_call_value_definition(
     // _addr == _ESBMC_Object_str.$address
     exprt static_ins;
     get_static_contract_instance_ref(str, static_ins);
-    exprt mem_addr = member_exprt(static_ins, "$address", addr_t);
+    exprt mem_addr = member_exprt(static_ins, "$address", addrp_t);
 
     exprt _equal = exprt("=", bool_type());
     _equal.operands().push_back(addr_expr);
@@ -13619,7 +13624,7 @@ bool solidity_convertert::get_call_value_definition(
     then.move_to_operands(assign_val);
 
     // msg_sender = this.$address;
-    exprt assign_sender = side_effect_exprt("assign", addr_t);
+    exprt assign_sender = side_effect_exprt("assign", addrp_t);
     assign_sender.copy_to_operands(msg_sender, this_address);
     convert_expression_to_code(assign_sender);
     then.move_to_operands(assign_sender);
@@ -13686,7 +13691,7 @@ bool solidity_convertert::get_call_value_definition(
     then.move_to_operands(assign_val_restore);
 
     // msg_sender = old_sender;
-    exprt assign_sender_restore = side_effect_exprt("assign", addr_t);
+    exprt assign_sender_restore = side_effect_exprt("assign", addrp_t);
     assign_sender_restore.copy_to_operands(
       msg_sender, symbol_expr(added_old_sender));
     convert_expression_to_code(assign_sender_restore);
@@ -13730,15 +13735,13 @@ bool solidity_convertert::get_transfer_definition(
   // param: address _addr;
   std::string addr_name = "_addr";
   std::string addr_id = "sol:@C@" + cname + "@F@transfer@" + addr_name + "#0";
-  typet addr_t = unsignedbv_typet(160);
-  addr_t.set("#sol_type", "ADDRESS_PAYABLE");
   symbolt addr_s;
   get_default_symbol(
-    addr_s, debug_modulename, addr_t, addr_name, addr_id, locationt());
+    addr_s, debug_modulename, addrp_t, addr_name, addr_id, locationt());
   auto addr_added_symbol = *move_symbol_to_context(addr_s);
 
   code_typet::argumentt param = code_typet::argumentt();
-  param.type() = addr_t;
+  param.type() = addrp_t;
   param.cmt_base_name(addr_name);
   param.cmt_identifier(addr_id);
   t.arguments().push_back(param);
@@ -13774,7 +13777,7 @@ bool solidity_convertert::get_transfer_definition(
   exprt msg_value = symbol_expr(*context.find_symbol("c:@msg_value"));
   symbolt this_sym = *context.find_symbol(call_id + "#this");
   exprt this_expr = symbol_expr(this_sym);
-  exprt this_address = member_exprt(this_expr, "$address", addr_t);
+  exprt this_address = member_exprt(this_expr, "$address", addrp_t);
   exprt this_balance = member_exprt(this_expr, "$balance", val_t);
 
   // uint256_t old_value = msg_value;
@@ -13794,13 +13797,11 @@ bool solidity_convertert::get_transfer_definition(
   func_body.move_to_operands(old_val_decl);
 
   // uint160_t old_sender =  msg_sender;
-  typet _addr_t = unsignedbv_typet(160);
-  _addr_t.set("#sol_type", "ADDRESS");
   symbolt old_sender;
   get_default_symbol(
     old_sender,
     debug_modulename,
-    _addr_t,
+    addrp_t,
     "old_sender",
     "sol:@C@" + cname + "@F@transfer@old_sender#" +
       std::to_string(aux_counter++),
@@ -13835,7 +13836,7 @@ bool solidity_convertert::get_transfer_definition(
     // _addr == _ESBMC_Object_str.$address
     exprt static_ins;
     get_static_contract_instance_ref(str, static_ins);
-    exprt mem_addr = member_exprt(static_ins, "$address", addr_t);
+    exprt mem_addr = member_exprt(static_ins, "$address", addrp_t);
 
     exprt _equal = exprt("=", bool_type());
     _equal.operands().push_back(addr_expr);
@@ -13848,7 +13849,7 @@ bool solidity_convertert::get_transfer_definition(
     then.move_to_operands(assign_val);
 
     // msg_sender = this.$address;
-    exprt assign_sender = side_effect_exprt("assign", addr_t);
+    exprt assign_sender = side_effect_exprt("assign", addrp_t);
     assign_sender.copy_to_operands(msg_sender, this_address);
     convert_expression_to_code(assign_sender);
     then.move_to_operands(assign_sender);
@@ -13917,7 +13918,7 @@ bool solidity_convertert::get_transfer_definition(
     then.move_to_operands(assign_val_restore);
 
     // msg_sender = old_sender;
-    exprt assign_sender_restore = side_effect_exprt("assign", addr_t);
+    exprt assign_sender_restore = side_effect_exprt("assign", addrp_t);
     assign_sender_restore.copy_to_operands(
       msg_sender, symbol_expr(added_old_sender));
     convert_expression_to_code(assign_sender_restore);
@@ -13961,11 +13962,10 @@ bool solidity_convertert::get_send_definition(
   // param: address _addr;
   std::string addr_name = "_addr";
   std::string addr_id = "sol:@C@" + cname + "@F@send@" + addr_name + "#0";
-  typet addr_t = unsignedbv_typet(160);
-  addr_t.set("#sol_type", "ADDRESS_PAYABLE");
+
   symbolt addr_s;
   get_default_symbol(
-    addr_s, debug_modulename, addr_t, addr_name, addr_id, locationt());
+    addr_s, debug_modulename, addrp_t, addr_name, addr_id, locationt());
   auto addr_added_symbol = *move_symbol_to_context(addr_s);
 
   code_typet::argumentt param = code_typet::argumentt();
@@ -14024,13 +14024,11 @@ bool solidity_convertert::get_send_definition(
   func_body.move_to_operands(old_val_decl);
 
   // uint160_t old_sender =  msg_sender;
-  typet _addr_t = unsignedbv_typet(160);
-  _addr_t.set("#sol_type", "ADDRESS");
   symbolt old_sender;
   get_default_symbol(
     old_sender,
     debug_modulename,
-    _addr_t,
+    addr_t,
     "old_sender",
     "sol:@C@" + cname + "@F@send@old_sender#" + std::to_string(aux_counter++),
     locationt());
