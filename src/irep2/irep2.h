@@ -27,6 +27,7 @@
 #include <boost/preprocessor/list/for_each.hpp>
 #include <cstdarg>
 #include <functional>
+#include <mutex>
 #include <util/compiler_defs.h>
 #include <util/crypto_hash.h>
 #include <util/dstring.h>
@@ -317,8 +318,11 @@ public:
   size_t crc() const
   {
     const T *foo = get();
-    if (foo->crc_val != 0)
-      return foo->crc_val;
+    {
+      std::lock_guard<std::mutex> lock(foo->crc_mutex);
+      if (foo->crc_val != 0)
+        return foo->crc_val;
+    }
 
     return foo->do_crc();
   }
@@ -458,7 +462,7 @@ protected:
   type2t(type_ids id);
 
   /** Copy constructor */
-  type2t(const type2t &ref) = default;
+  type2t(const type2t &ref);
 
   virtual void foreach_subtype_impl_const(const_subtype_delegate &t) const = 0;
   virtual void foreach_subtype_impl(subtype_delegate &t) = 0;
@@ -605,6 +609,7 @@ public:
   type_ids type_id;
 
   mutable size_t crc_val;
+  mutable std::mutex crc_mutex;
 };
 
 /** Fetch identifying name for a type.
@@ -860,6 +865,8 @@ public:
   type2tc type;
 
   mutable size_t crc_val;
+  mutable std::mutex crc_mutex;
+
 };
 
 inline bool is_nil_expr(const expr2tc &exp)
