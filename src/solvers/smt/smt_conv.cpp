@@ -1,4 +1,5 @@
 #include "irep2/irep2_expr.h"
+#include <cfloat>
 #include <iomanip>
 #include <set>
 #include <solvers/prop/literal.h>
