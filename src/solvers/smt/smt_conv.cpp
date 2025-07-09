@@ -254,6 +254,48 @@ smt_astt smt_convt::convert_assign(const expr2tc &expr)
   return side2;
 }
 
+smt_astt smt_convt::get_zero_real()
+{
+  // Returns SMT representation of zero (0.0)
+  return mk_smt_real("0");
+}
+
+smt_astt smt_convt::get_double_min_normal()
+{
+  // IEEE 754 double precision minimum normal positive value (2^-1022)
+  return mk_smt_real("2.2250738585072014e-308");
+}
+
+smt_astt smt_convt::get_double_min_subnormal()
+{
+  // IEEE 754 double precision minimum positive subnormal value (2^-1074)
+  return mk_smt_real("4.9406564584124654e-324");
+}
+
+smt_astt smt_convt::get_double_max_normal()
+{
+  // IEEE 754 double precision maximum normal positive value (~(2-2^-52)*2^1023)
+  return mk_smt_real("1.7976931348623157e+308");
+}
+
+smt_astt smt_convt::get_single_min_normal()
+{
+  // IEEE 754 single precision minimum normal positive value (2^-126)
+  return mk_smt_real("1.1754943508222875e-38");
+}
+
+smt_astt smt_convt::get_single_min_subnormal()
+{
+  // IEEE 754 single precision minimum positive subnormal value (2^-149)
+  return mk_smt_real("1.4012984643248171e-45");
+}
+
+smt_astt smt_convt::get_single_max_normal()
+{
+  // IEEE 754 single precision maximum normal positive value (~(2-2^-23)*2^127)
+  return mk_smt_real("3.4028234663852886e+38");
+}
+
 // Apply IEEE 754 semantics to a real arithmetic result
 smt_astt smt_convt::apply_ieee754_semantics(
   smt_astt real_result,
@@ -271,17 +313,16 @@ smt_astt smt_convt::apply_ieee754_semantics(
   // IEEE 754 double precision (64-bit): 11 exponent bits, 52 fraction bits
   if (exponent_bits == double_spec.e && fraction_bits == double_spec.f)
   {
-    min_normal = mk_smt_real("2.2250738585072014e-308");    // 2^(-1022)
-    min_subnormal = mk_smt_real("4.9406564584124654e-324"); // 2^(-1074)
-    max_normal =
-      mk_smt_real("1.7976931348623157e+308"); // ~(2-2^(-52)) * 2^1023
+    min_normal = get_double_min_normal();
+    min_subnormal = get_double_min_subnormal();
+    max_normal = get_double_max_normal();
   }
   // IEEE 754 single precision (32-bit): 8 exponent bits, 23 fraction bits
   else if (exponent_bits == single_spec.e && fraction_bits == single_spec.f)
   {
-    min_normal = mk_smt_real("1.1754943508222875e-38");    // 2^(-126)
-    min_subnormal = mk_smt_real("1.4012984643248171e-45"); // 2^(-149)
-    max_normal = mk_smt_real("3.4028234663852886e+38"); // ~(2-2^(-23)) * 2^127
+    min_normal = get_single_min_normal();
+    min_subnormal = get_single_min_subnormal();
+    max_normal = get_single_max_normal();
   }
   // Unsupported format - return original result
   else
@@ -293,18 +334,19 @@ smt_astt smt_convt::apply_ieee754_semantics(
     return real_result;
   }
 
-  smt_astt zero = mk_smt_real("0.0");
-
   // Get absolute value of result
-  smt_astt abs_result =
-    mk_ite(mk_lt(real_result, zero), mk_sub(zero, real_result), real_result);
+  smt_astt abs_result = mk_ite(
+    mk_lt(real_result, get_zero_real()),
+    mk_sub(get_zero_real(), real_result),
+    real_result);
 
   // Check for overflow
   smt_astt overflows = mk_gt(abs_result, max_normal);
 
   // Check for underflow to zero
-  smt_astt underflows_to_zero =
-    mk_and(mk_lt(abs_result, min_subnormal), mk_not(mk_eq(real_result, zero)));
+  smt_astt underflows_to_zero = mk_and(
+    mk_lt(abs_result, min_subnormal),
+    mk_not(mk_eq(real_result, get_zero_real())));
 
   // If we have a special zero check (like for multiplication), use it
   if (operand_zero_check)
@@ -318,21 +360,22 @@ smt_astt smt_convt::apply_ieee754_semantics(
   // Use the appropriate subnormal step for the format
   smt_astt subnormal_step =
     (exponent_bits == double_spec.e && fraction_bits == double_spec.f)
-      ? mk_smt_real("4.9406564584124654e-324")
-      :                                      // Double precision
-      mk_smt_real("1.4012984643248171e-45"); // Single precision
+      ? get_double_min_subnormal()  // Double precision
+      : get_single_min_subnormal(); // Single precision
   smt_astt quotient = mk_div(abs_result, subnormal_step);
   smt_astt rounded_quotient = mk_add(quotient, mk_smt_real("0.5"));
   smt_astt subnormal_magnitude = mk_mul(rounded_quotient, subnormal_step);
 
   smt_astt subnormal_result = mk_ite(
-    mk_lt(real_result, zero),
-    mk_sub(zero, subnormal_magnitude),
+    mk_lt(real_result, get_zero_real()),
+    mk_sub(get_zero_real(), subnormal_magnitude),
     subnormal_magnitude);
 
   // Overflow result (approximate infinity)
-  smt_astt overflow_result =
-    mk_ite(mk_lt(real_result, zero), mk_sub(zero, max_normal), max_normal);
+  smt_astt overflow_result = mk_ite(
+    mk_lt(real_result, get_zero_real()),
+    mk_sub(get_zero_real(), max_normal),
+    max_normal);
 
   // Apply IEEE 754 semantics with priority: overflow > underflow > subnormal > normal
   smt_astt ieee_result = mk_ite(
@@ -340,12 +383,12 @@ smt_astt smt_convt::apply_ieee754_semantics(
     overflow_result,
     mk_ite(
       underflows_to_zero,
-      zero,
+      get_zero_real(),
       mk_ite(is_subnormal, subnormal_result, real_result)));
 
   // Handle special operand zero case for multiplication
   if (operand_zero_check)
-    return mk_ite(operand_zero_check, zero, ieee_result);
+    return mk_ite(operand_zero_check, get_zero_real(), ieee_result);
 
   return ieee_result;
 }
@@ -691,8 +734,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     {
       smt_astt side1 = convert_ast(to_ieee_div2t(expr).side_1);
       smt_astt side2 = convert_ast(to_ieee_div2t(expr).side_2);
-      smt_astt zero = mk_smt_real("0.0");
-      smt_astt div_by_zero = mk_eq(side2, zero);
+      smt_astt div_by_zero = mk_eq(side2, get_zero_real());
 
       // Handle division by zero specially
       const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
@@ -708,17 +750,16 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
          fbv_type.fraction == single_spec.f)) // Single precision
       {
         // Get the appropriate max value for infinity approximation
-        smt_astt max_val =
-          (fbv_type.exponent == double_spec.e &&
-           fbv_type.fraction == double_spec.f)
-            ? mk_smt_real("1.7976931348623157e+308") // Double precision max
-            : mk_smt_real("3.4028234663852886e+38"); // Single precision max
+        smt_astt max_val = (fbv_type.exponent == double_spec.e &&
+                            fbv_type.fraction == double_spec.f)
+                             ? get_double_max_normal()  // Double precision max
+                             : get_single_max_normal(); // Single precision max
 
         // Return signed infinity for division by zero
         smt_astt inf_result = mk_ite(
-          mk_lt(side1, zero),
-          mk_sub(zero, max_val), // -infinity (approximate)
-          max_val                // +infinity (approximate)
+          mk_lt(side1, get_zero_real()),
+          mk_sub(get_zero_real(), max_val), // -infinity (approximate)
+          max_val                           // +infinity (approximate)
         );
 
         smt_astt real_result = mk_div(side1, side2);

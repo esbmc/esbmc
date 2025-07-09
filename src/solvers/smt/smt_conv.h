@@ -416,6 +416,21 @@ public:
    *  @return The newly created terminal smt_ast of this real. */
   virtual smt_astt mk_smt_real(const std::string &str) = 0;
 
+  // Returns SMT AST representing real zero
+  smt_astt get_zero_real();
+  // Returns SMT AST representing double precision minimum normal value (2^-1022)
+  smt_astt get_double_min_normal();
+  // Returns SMT AST representing double precision minimum subnormal value (2^-1074)
+  smt_astt get_double_min_subnormal();
+  // Returns SMT AST representing double precision maximum normal value (~1.7976931348623157e+308)
+  smt_astt get_double_max_normal();
+  // Returns SMT AST representing single precision minimum normal value (2^-126)
+  smt_astt get_single_min_normal();
+  // Returns SMT AST representing single precision minimum subnormal value (2^-149)
+  smt_astt get_single_min_subnormal();
+  // Returns SMT AST representing single precision maximum normal value (~3.4028234663852886e+38)
+  smt_astt get_single_max_normal();
+
   /** Create a bitvector.
    *  @param theint Integer representation of the bitvector. Any excess bits
    *         in the stored integer should be ignored.
