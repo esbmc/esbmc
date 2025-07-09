@@ -83,10 +83,8 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Control Structures**: Supports conditional statements (`if-else`) and loops (`for-range`, `while`).
 - **Arithmetic**: Includes standard arithmetic operations (e.g., addition, subtraction, multiplication, division).
 - **Logical Operations**: Supports logical constructs (e.g., `AND`, `OR`, `NOT`).
-
 - **Identity Comparisons**: Supports `is` and `is not` operators for identity-based comparisons, including `x is None`, `x is y`, or `x is not None`.
 - **Global Variables:** Recognises the `global` keyword for accessing and modifying variables in the global scope from within functions.
-
 
 ### Functions and Methods
 - **Function Handling**: This allows for defining, calling, and verifying functions, including parameter passing and return values.
@@ -107,18 +105,8 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Recursion**: Supports and verifies recursive functions.
 - **Imports**: Handles import styles and validates their usage.
 - **Numeric Types**: Supports manipulation of numeric types (e.g., bytes, integers, floats).
-
 - **Built-in Functions**: Supports Python's built-in functions, such as `abs`, `int`, `float`, `chr`, `str`, `hex`, `oct`, `len`, and `range`.
-
 - **Verification properties**: Division-by-zero, indexing errors, arithmetic overflow, and user-defined assertions.
-
-### Limitations
-
-The current version of ESBMC-Python has the following limitations:
-
-- Only `for` loops using the `range()` function are supported.
-- List and String support are partial and limited in functionality.
-- Dictionaries are not supported at all.
 
 ### Limitations
 
@@ -448,43 +436,6 @@ Reference: https://numpy.org/doc/stable/reference/routines.math.html
 | `sqrt.c`       | `np.sqrt`                | Square root           |
 | `nextafter.c`  | `np.nextafter`           | Floating-point step   |
 
-
-ESBMC successfully identifies a path where the randomly generated variable x evaluates to zero (or very close to zero, causing integer division by zero). This triggers a property violation, and ESBMC generates a counterexample showing the precise values of `x` and `cond` that lead to the failure.
-
-This example highlights how bounded model checking can uncover subtle bugs that may not be triggered during regular testing.
-
-ESBMC successfully identifies a path where the randomly generated variable x evaluates to zero (or very close to zero, causing integer division by zero). This triggers a property violation, and ESBMC generates a counterexample showing the precise values of `x` and `cond` that lead to the failure. An executable test case can be created from this counterexample to expose this implementation error as follows:
-
-````python
-def div1(cond: int, x: int) -> int:
-    if not cond:
-        return 42 // x
-    else:
-        return x // 10
-
-# Constructing values that become 0 when cast to int
-cond = int(2.619487e-10)  # → 0
-x = int(3.454678e-77)     # → 0
-
-print(f"cond: {cond}, x: {x}")
-print(div1(cond, x))  # Triggers division by zero
-````
-
-```bash
-$ python3 main.py
-```
-
-````
-cond: 0, x: 0
-Traceback (most recent call last):
-  File "/home/lucas/examples/site/div-test.py", line 12, in <module>
-    print(div1(cond, x))  # Triggers division by zero
-  File "/home/lucas/examples/site/div-test.py", line 3, in div1
-    return 42 // x
-ZeroDivisionError: integer division or modulo by zero
-````
-
-This example highlights how symbolic model checking can uncover subtle bugs that may not be triggered during regular testing.
 
 ## References
 
