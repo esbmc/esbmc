@@ -629,6 +629,7 @@ protected:
   bool is_bytes_type(const typet &t);
   bool is_bytesN_type(const std::string &t) const;
   exprt make_aux_var_for_bytes(exprt &val, const locationt &location);
+  unsigned get_bytesN_size(const std::string &type_str);
 
   contextt &context;
   namespacet ns;

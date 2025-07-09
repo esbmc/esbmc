@@ -6110,8 +6110,10 @@ bool solidity_convertert::get_binary_operator_expr(
 
   if (is_bytes_type(lhs.type()) || is_bytes_type(rhs.type()))
   {
-    const bool is_static = is_bytesN_type(lt_sol) && is_bytesN_type(rt_sol);
-    const bool is_dynamic = lt_sol == "BYTES" && rt_sol == "BYTES";
+    log_debug("solidity", "\t\tHandling BYTES/BYTESN operators");
+
+    bool is_static = is_bytesN_type(lt_sol) && is_bytesN_type(rt_sol);
+    bool is_dynamic = lt_sol == "BYTES" && rt_sol == "BYTES";
 
     switch (opcode)
     {
@@ -6132,9 +6134,32 @@ bool solidity_convertert::get_binary_operator_expr(
       }
       else
       {
-        log_error(
-          "Incompatible bytes comparison between {} and {}", lt_sol, rt_sol);
-        return true;
+        // try to convert non-bytes operand to matching type
+        if (is_bytes_type(lhs.type()) && !is_bytes_type(rhs.type()))
+          convert_type_expr(ns, rhs, lhs.type(), expr);
+        else if (!is_bytes_type(lhs.type()) && is_bytes_type(rhs.type()))
+          convert_type_expr(ns, lhs, rhs.type(), expr);
+
+        lt_sol = lhs.type().get("#sol_type").as_string();
+        rt_sol = rhs.type().get("#sol_type").as_string();
+        is_static = is_bytesN_type(lt_sol) && is_bytesN_type(rt_sol);
+        is_dynamic = lt_sol == "BYTES" && rt_sol == "BYTES";
+
+        if (is_static)
+        {
+          fname = "bytes_static_equal";
+          fid = "c:@F@bytes_static_equal";
+        }
+        else if (is_dynamic)
+        {
+          fname = "bytes_dynamic_equal";
+          fid = "c:@F@bytes_dynamic_equal";
+        }
+        else
+        {
+          log_error("Incompatible bytes comparison: {} vs {}", lt_sol, rt_sol);
+          return true;
+        }
       }
 
       get_library_function_call_no_args(fname, fid, bool_typet(), l, call_expr);
@@ -6151,8 +6176,7 @@ bool solidity_convertert::get_binary_operator_expr(
         get_current_contract_name(expr, cname);
         if (cname.empty())
         {
-          log_error(
-            "Cannot resolve contract name for dynamic bytes comparison");
+          log_error("Cannot resolve contract name for dynamic bytes");
           return true;
         }
 
@@ -6171,7 +6195,7 @@ bool solidity_convertert::get_binary_operator_expr(
         const symbolt *pool_sym = context.find_symbol("tag-BytesPool");
         if (!pool_sym)
         {
-          log_error("Missing tag-BytesPool in symbol table");
+          log_error("Missing tag-BytesPool");
           return true;
         }
 
@@ -6188,21 +6212,26 @@ bool solidity_convertert::get_binary_operator_expr(
     case SolidityGrammar::ExpressionT::BO_Shl:
     case SolidityGrammar::ExpressionT::BO_Shr:
     {
-      std::string shift_func = (opcode == SolidityGrammar::ExpressionT::BO_Shl)
-                                 ? "bytes_static_shl"
-                                 : "bytes_static_shr";
+      if (!is_bytesN_type(lt_sol))
+      {
+        log_error(
+          "Shift operations only supported on bytesN types, got {}", lt_sol);
+        return true;
+      }
 
-      side_effect_expr_function_callt shift_call;
+      std::string fname = (opcode == SolidityGrammar::ExpressionT::BO_Shl)
+                            ? "bytes_static_shl"
+                            : "bytes_static_shr";
+
+      side_effect_expr_function_callt call_expr;
       get_library_function_call_no_args(
-        shift_func, "c:@F@" + shift_func, lhs.type(), l, shift_call);
+        fname, "c:@F@" + fname, lhs.type(), l, call_expr);
 
       exprt lhs_tmp = make_aux_var_for_bytes(lhs, l);
-      exprt rhs_tmp = make_aux_var_for_bytes(rhs, l);
+      call_expr.arguments().push_back(address_of_exprt(lhs_tmp));
+      call_expr.arguments().push_back(rhs);
 
-      shift_call.arguments().push_back(address_of_exprt(lhs_tmp));
-      shift_call.arguments().push_back(rhs_tmp);
-
-      new_expr = shift_call;
+      new_expr = call_expr;
       return false;
     }
 
@@ -6212,7 +6241,7 @@ bool solidity_convertert::get_binary_operator_expr(
     {
       if (!is_static)
       {
-        log_error("Bitwise operations only supported for bytesN types");
+        log_error("Bitwise operations only supported for static bytesN");
         return true;
       }
 
@@ -8275,6 +8304,17 @@ bool solidity_convertert::get_mapping_key_value_type(
   if (val_sol_type.empty())
     return true;
   return false;
+}
+
+unsigned solidity_convertert::get_bytesN_size(const std::string &type_str)
+{
+  if (type_str.find("BYTES") == 0)
+  {
+    std::string suffix = type_str.substr(5); // skip "BYTES"
+    return std::stoul(suffix);
+  }
+  log_error("Invalid bytesN type string: {}", type_str);
+  abort();
 }
 
 /* 
@@ -11168,16 +11208,6 @@ void solidity_convertert::convert_type_expr(
     }
     else if (is_bytes_type(src_type) && is_bytes_type(dest_type))
     {
-      std::string src_sol_type = src_type.get("#sol_type").as_string();
-      std::string dest_sol_type = dest_type.get("#sol_type").as_string();
-
-      auto get_bytesN_size = [](const std::string &s) -> unsigned
-      {
-        if (s.substr(0, 5) == "BYTES" && s.size() > 5)
-          return std::stoul(s.substr(5));
-        abort();
-      };
-
       std::string c_name;
       get_current_contract_name(expr, c_name);
       if (c_name.empty())
@@ -11282,7 +11312,78 @@ void solidity_convertert::convert_type_expr(
         return;
       }
     }
+    // int/symbol to bytes or bytesN
+    else if (!is_bytes_type(src_type) && is_bytes_type(dest_type))
+    {
+      locationt loc = src_expr.location();
 
+      if (dest_sol_type == "BYTES")
+      {
+        // dynamic bytes: use bytes_dynamic_from_uint(...)
+        side_effect_expr_function_callt call;
+        get_library_function_call_no_args(
+          "bytes_dynamic_from_uint",
+          "c:@F@bytes_dynamic_from_uint",
+          dest_type,
+          loc,
+          call);
+        call.arguments().push_back(src_expr);
+
+        // resolve pool_data: this.dynamic_pool
+        std::string cname;
+        get_current_contract_name(expr, cname);
+        if (cname.empty())
+        {
+          log_error("Unable to resolve contract name in convert_type_expr");
+          abort();
+        }
+
+        exprt this_expr;
+        if (current_functionDecl)
+        {
+          if (get_func_decl_this_ref(*current_functionDecl, this_expr))
+            abort();
+        }
+        else
+        {
+          if (get_ctor_decl_this_ref(cname, this_expr))
+            abort();
+        }
+
+        const symbolt *pool_sym = context.find_symbol("tag-BytesPool");
+        assert(pool_sym != nullptr);
+
+        member_exprt pool_member(this_expr, "dynamic_pool", pool_sym->type);
+        call.arguments().push_back(pool_member);
+
+        src_expr = make_aux_var_for_bytes(call, loc);
+      }
+      else if (is_bytesN_type(dest_sol_type))
+      {
+        // e.g. bytes3 a = 0x1234;
+        unsigned len = get_bytesN_size(dest_sol_type); // e.g. "BYTES3" => 3
+
+        side_effect_expr_function_callt call;
+        get_library_function_call_no_args(
+          "bytes_static_from_uint",
+          "c:@F@bytes_static_from_uint",
+          dest_type,
+          loc,
+          call);
+        call.arguments().push_back(src_expr);
+
+        exprt len_expr =
+          from_integer(len, unsignedbv_typet(32)); // uint32 length
+        call.arguments().push_back(len_expr);
+
+        src_expr = make_aux_var_for_bytes(call, loc);
+      }
+      else
+      {
+        log_error("Unknown bytes destination type: {}", dest_sol_type);
+        abort();
+      }
+    }
     else if (
       (src_sol_type == "ARRAY_LITERAL") && src_type.id() == typet::id_array)
     {
