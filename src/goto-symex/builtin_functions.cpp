@@ -1550,6 +1550,118 @@ void goto_symext::intrinsic_memset(
   dereference(ret_ref, dereferencet::READ);
   symex_assign(code_assign2tc(ret_ref, arg0), false, cur_state->guard);
 }
+void goto_symext::intrinsic_memcpy(
+  reachability_treet &art, const code_function_call2t &func_call){
+    assert(func_call.operands.size() == 3 && "Wrong memcpy signature");
+
+    const execution_statet &ex_state = art.get_cur_state();
+    if (ex_state.cur_state->guard.is_false())
+      return;
+
+    expr2tc dst = func_call.operands[0];
+    expr2tc src = func_call.operands[1];
+    expr2tc n = func_call.operands[2];
+
+    cur_state->rename(dst);
+    cur_state->rename(src);
+    cur_state->rename(n);
+
+    // Only handle constant-size copies for now
+    simplify(n);
+    if(!is_constant_int2t(n))
+    {
+      log_debug("memcpy", "Symbolic size not supported, falling back");
+      bump_call(func_call, "c:@F@memcpy");
+      return;
+    }
+
+    unsigned long num_bytes = to_constant_int2t(n).as_long();
+
+    //Dereference both src and dst
+    internal_deref_items.clear();
+    expr2tc deref_dst = dereference2tc(get_empty_type(), dst);
+    dereference(deref_dst, dereferencet::INTERNAL);
+    auto dst_items = internal_deref_items;
+
+
+    internal_deref_items.clear();
+    expr2tc deref_src = dereference2tc(get_empty_type(), src);
+    dereference(deref_src, dereferencet::INTERNAL);
+    auto src_items = internal_deref_items;
+
+    if(dst_items.empty() || src_items.empty()){
+      log_debug("memcpy", "Could not dereference src or dst");
+      bump_call(func_call, "c:@F@memcpy");
+      return;
+    }
+
+    //For now, only support single-object copies
+    auto &dst_item = dst_items.front();
+    auto &src_item = src_items.front();
+
+    guardt guard = ex_state.cur_state->guard;
+    guard.add(dst_item.guard);
+    guard.add(src_item.guard);
+
+    cur_state->rename(dst_item.object);
+    cur_state->rename(src_item.object);
+    cur_state->rename(src_item.offset);
+    cur_state->rename(src_item.offset);
+
+    simplify(dst_item.object);
+    simplify(src_item.offset);
+
+    if(!is_constant_int2t(dst_item.offset) || !is_constant_int2t(src_item.offset))
+    {
+      log_debug("memcpy", "Symbolic offsets not supported");
+      bump_call(func_call, "c:@F@memcpy");
+      return;
+    }
+    uint64_t dst_offset = to_constant_int2t(dst_item.offset).value.to_uint64();
+    uint64_t src_offset = to_constant_int2t(src_item.offset).value.to_uint64();
+
+    //Compute alingnment 
+    bool aligned = (dst_offset % 8 == 0) && (src_offset % 8 == 0);
+
+    if (aligned) {
+        for (unsigned i = 0; i+8 <= num_bytes; i+=8) {
+          expr2tc dst_idx = index2tc(get_uint64_type(), dst_item.object,
+                                      constant_int2tc(get_uint64_type(), BigInt(dst_offset + i)));
+          expr2tc src_idx = index2tc(get_uint64_type(), src_item.object, 
+                                      constant_int2tc(get_uint64_type(), BigInt(src_offset + i)));
+          expr2tc value = src_idx;
+          dereference(value, dereferencet::READ);
+          symex_assign(code_assign2tc(dst_idx, value), false, guard);                                                         
+        }
+        for (unsigned i = (num_bytes / 8) * 8; i<num_bytes; ++i) {
+            expr2tc dst_idx = index2tc(get_uint64_type(), dst_item.object,
+                                      constant_int2tc(get_uint64_type(), BigInt(dst_offset + i)));
+            expr2tc src_idx = index2tc(get_uint64_type(), src_item.object, 
+                                      constant_int2tc(get_uint64_type(), BigInt(src_offset + i)));
+            expr2tc value = src_idx;
+            dereference(value, dereferencet::READ);
+            symex_assign(code_assign2tc(dst_idx, value), false, guard);    
+        }
+
+
+    } else {
+
+    //Copy byte-by-byte
+    for (unsigned i = 0; i< num_bytes; ++i)
+    {
+      expr2tc offset = constant_int2tc(get_uint64_type(), BigInt(i));
+      expr2tc dst_idx = index2tc(get_uint8_type(), dst_item.object, constant_int2tc(get_uint64_type(), BigInt(src_offset + i)));
+      expr2tc src_idx = index2tc(get_uint8_type(), src_item.object, constant_int2tc(get_uint64_type(), BigInt(src_offset+i)));
+      expr2tc value = src_idx;
+      dereference(value, dereferencet::READ);
+      symex_assign(code_assign2tc(dst_idx, value), false, guard);
+
+    } }
+    //Return dst
+    expr2tc ret_ref = func_call.ret;
+    dereference(ret_ref, dereferencet::READ);
+    symex_assign(code_assign2tc(ret_ref, dst), false, cur_state->guard); 
+  }
 
 void goto_symext::intrinsic_get_object_size(
   const code_function_call2t &func_call,

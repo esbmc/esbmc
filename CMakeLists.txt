@@ -19,8 +19,6 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 #add_compile_features(cxx_std_17)
 
-#add_subdirectory(src/esbmc)
-
 #add_executable(esbmc 	main.cpp	esbmc_parseoptions.cpp...)
 #target_compile_features(esbmc PUBLIC cxx_std_17)
 
@@ -152,9 +150,18 @@ configure_file (
 
 if(NOT WIN32)
   find_package(PkgConfig REQUIRED)
-  pkg_check_modules(GMP	REQUIRED gmp)
-  target_link_libraries(esbmc PUBLIC ${GMP_LIBRARIES})
-  target_include_directories(esbmc PUBLIC ${GMP_INCLUDE_DIRS})
+  pkg_check_modules(GMP	REQUIRED IMPORTED_TARGET GLOBAL gmp)
+  pkg_check_modules(GMPXX REQUIRED IMPORTED_TARGET GLOBAL gmpxx)
+ # target_link_libraries(esbmc PUBLIC ${GMP_LIBRARIES} gmpxx)
+
+  message(STATUS "GMP LIB DIRS: ${GMP_LIBRARY_DIRS}")
+  message(STATUS "GMPXX LIB DIRS: ${GMPXX_LIBRARY_DIRS}")
+
+  target_include_directories(esbmc PRIVATE ${GMP_INCLUDE_DIRS})
+  target_link_directories(esbmc PRIVATE ${GMP_LIBRARY_DIRS}) 
+  #target_link_libraries(esbmc PRIVATE ${GMP_LIBRARIES} ${GMPXX_LIBRARIES})
+ # target_link_libraries(esbmc PRIVATE ${GMP_LIBRARY_DIRS})
+  target_link_libraries(esbmc PRIVATE ${GMP_LIBRARIES} ${GMPXX_LIBRARIES})
 endif() 
 
 # This should be added after all source files

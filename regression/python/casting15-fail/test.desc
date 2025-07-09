@@ -2,7 +2,3 @@ CORE
 main.py
 
 ^ERROR: ValueError: chr\(\) argument out of valid Unicode range: -1$
-<<<<<<<< HEAD:regression/python/casting15-fail/test.desc
-========
-
->>>>>>>> ae8c52c84 (Updated the build-unix.yml file):regression/python/casting15/test.desc
