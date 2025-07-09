@@ -254,6 +254,91 @@ smt_astt smt_convt::convert_assign(const expr2tc &expr)
   return side2;
 }
 
+// Apply IEEE 754 semantics to a real arithmetic result
+smt_astt smt_convt::apply_ieee754_semantics(smt_astt real_result, const floatbv_type2t &fbv_type, 
+                                            smt_astt operand_zero_check) 
+{
+  unsigned int fraction_bits = fbv_type.fraction;
+  unsigned int exponent_bits = fbv_type.exponent;
+
+  // For IEEE 754 double precision only
+  if (exponent_bits != 11 || fraction_bits != 52) {
+    return real_result;
+  }
+
+  // IEEE 754 double precision constants
+  smt_astt min_normal = mk_smt_real("2.2250738585072014e-308");
+  smt_astt min_subnormal = mk_smt_real("4.9406564584124654e-324");
+  smt_astt max_normal = mk_smt_real("1.7976931348623157e+308");
+  smt_astt zero = mk_smt_real("0.0");
+
+  // Get absolute value of result
+  smt_astt abs_result = mk_ite(
+    mk_lt(real_result, zero),
+    mk_sub(zero, real_result),
+    real_result
+  );
+
+  // Check for overflow
+  smt_astt overflows = mk_gt(abs_result, max_normal);
+
+  // Check for underflow to zero
+  smt_astt underflows_to_zero = mk_and(
+    mk_lt(abs_result, min_subnormal),
+    mk_not(mk_eq(real_result, zero))
+  );
+
+  // If we have a special zero check (like for multiplication), use it
+  if (operand_zero_check)
+    underflows_to_zero = mk_and(underflows_to_zero, mk_not(operand_zero_check));
+
+  // Check if result is in subnormal range
+  smt_astt is_subnormal = mk_and(
+    mk_ge(abs_result, min_subnormal),
+    mk_lt(abs_result, min_normal)
+  );
+
+  // Handle subnormal rounding (simplified round-to-nearest)
+  smt_astt subnormal_step = mk_smt_real("4.9406564584124654e-324");
+  smt_astt quotient = mk_div(abs_result, subnormal_step);
+  smt_astt rounded_quotient = mk_add(quotient, mk_smt_real("0.5"));
+  smt_astt subnormal_magnitude = mk_mul(rounded_quotient, subnormal_step);
+
+  smt_astt subnormal_result = mk_ite(
+    mk_lt(real_result, zero),
+    mk_sub(zero, subnormal_magnitude),
+    subnormal_magnitude
+  );
+
+  // Overflow result (approximate infinity)
+  smt_astt overflow_result = mk_ite(
+    mk_lt(real_result, zero),
+    mk_sub(zero, max_normal),
+    max_normal
+  );
+
+  // Apply IEEE 754 semantics with priority: overflow > underflow > subnormal > normal
+  smt_astt ieee_result = mk_ite(
+    overflows,
+    overflow_result,
+    mk_ite(
+      underflows_to_zero,
+      zero,
+      mk_ite(
+        is_subnormal,
+        subnormal_result,
+        real_result
+      )
+    )
+  );
+
+  // Handle special operand zero case for multiplication
+  if (operand_zero_check)
+    return mk_ite(operand_zero_check, zero, ieee_result);
+
+  return ieee_result;
+}
+
 smt_astt smt_convt::convert_ast(const expr2tc &expr)
 {
   smt_cachet::const_iterator cache_result = smt_cache.find(expr);
@@ -525,9 +610,12 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     if (int_encoding)
     {
-      a = mk_add(
-        convert_ast(to_ieee_add2t(expr).side_1),
-        convert_ast(to_ieee_add2t(expr).side_2));
+      smt_astt side1 = convert_ast(to_ieee_add2t(expr).side_1);
+      smt_astt side2 = convert_ast(to_ieee_add2t(expr).side_2);
+      smt_astt real_result = mk_add(side1, side2);
+      
+      const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
+      a = apply_ieee754_semantics(real_result, fbv_type, nullptr);
     }
     else
     {
@@ -544,9 +632,12 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     assert(is_floatbv_type(expr));
     if (int_encoding)
     {
-      a = mk_sub(
-        convert_ast(to_ieee_sub2t(expr).side_1),
-        convert_ast(to_ieee_sub2t(expr).side_2));
+      smt_astt side1 = convert_ast(to_ieee_sub2t(expr).side_1);
+      smt_astt side2 = convert_ast(to_ieee_sub2t(expr).side_2);
+      smt_astt real_result = mk_sub(side1, side2);
+      
+      const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
+      a = apply_ieee754_semantics(real_result, fbv_type, nullptr);
     }
     else
     {
@@ -562,9 +653,16 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     assert(is_floatbv_type(expr));
     if (int_encoding)
     {
-      a = mk_mul(
-        convert_ast(to_ieee_mul2t(expr).side_1),
-        convert_ast(to_ieee_mul2t(expr).side_2));
+      smt_astt side1 = convert_ast(to_ieee_mul2t(expr).side_1);
+      smt_astt side2 = convert_ast(to_ieee_mul2t(expr).side_2);
+      smt_astt real_result = mk_mul(side1, side2);
+      
+      // Special handling for multiplication: check if either operand is zero
+      smt_astt zero = mk_smt_real("0.0");
+      smt_astt operand_is_zero = mk_or(mk_eq(side1, zero), mk_eq(side2, zero));
+      
+      const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
+      a = apply_ieee754_semantics(real_result, fbv_type, operand_is_zero);
     }
     else
     {
@@ -580,9 +678,38 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     assert(is_floatbv_type(expr));
     if (int_encoding)
     {
-      a = mk_div(
-        convert_ast(to_ieee_div2t(expr).side_1),
-        convert_ast(to_ieee_div2t(expr).side_2));
+      smt_astt side1 = convert_ast(to_ieee_div2t(expr).side_1);
+      smt_astt side2 = convert_ast(to_ieee_div2t(expr).side_2);
+      smt_astt zero = mk_smt_real("0.0");
+      smt_astt div_by_zero = mk_eq(side2, zero);
+      
+      // Handle division by zero specially
+      const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
+      if (fbv_type.exponent == 11 && fbv_type.fraction == 52) 
+      {
+        // Double precision: return signed infinity for division by zero
+        smt_astt inf_result = mk_ite(
+          mk_lt(side1, zero),
+          mk_smt_real("-1.7976931348623157e+308"),  // -max (approximate -infinity)
+          mk_smt_real("1.7976931348623157e+308")    // +max (approximate +infinity)
+        );
+        
+        smt_astt real_result = mk_div(side1, side2);
+        smt_astt ieee_result = apply_ieee754_semantics(real_result, fbv_type, nullptr);
+        
+        a = mk_ite(div_by_zero, inf_result, ieee_result);
+      }
+      else 
+      {
+        // Other formats: simplified division by zero handling
+        smt_astt inf_result = mk_ite(
+          mk_lt(side1, zero),
+          mk_smt_real("-1e308"),
+          mk_smt_real("1e308")
+        );
+        smt_astt real_result = mk_div(side1, side2);
+        a = mk_ite(div_by_zero, inf_result, real_result);
+      }
     }
     else
     {
@@ -598,11 +725,17 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     assert(is_floatbv_type(expr));
     if (int_encoding)
     {
-      a = mk_add(
-        mk_mul(
-          convert_ast(to_ieee_fma2t(expr).value_1),
-          convert_ast(to_ieee_fma2t(expr).value_2)),
-        convert_ast(to_ieee_fma2t(expr).value_3));
+      smt_astt val1 = convert_ast(to_ieee_fma2t(expr).value_1);
+      smt_astt val2 = convert_ast(to_ieee_fma2t(expr).value_2);
+      smt_astt val3 = convert_ast(to_ieee_fma2t(expr).value_3);
+      
+      // Fused multiply-add: (val1 * val2) + val3
+      // In true FMA, the intermediate result isn't rounded
+      smt_astt intermediate = mk_mul(val1, val2);
+      smt_astt real_result = mk_add(intermediate, val3);
+      
+      const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
+      a = apply_ieee754_semantics(real_result, fbv_type, nullptr);
     }
     else
     {
