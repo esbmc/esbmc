@@ -22,9 +22,10 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Install system Dependencies
+      env: 
+          HOMEBREW_NO_AUTO_UPDATE: 1        
       run: |
         if [[ "${RUNNER_OS}" == "macOS" ]]; then
-           brew update
            brew install gmp pkg-config
         elif [[ "${RUNNER_OS}" == "Linux" ]]; then
            sudo apt-get update && \

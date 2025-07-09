@@ -152,8 +152,13 @@ configure_file (
 
 if(NOT WIN32)
   find_package(PkgConfig REQUIRED)
-  pkg_check_modules(GMP	REQUIRED gmp)
-  target_link_libraries(esbmc PUBLIC ${GMP_LIBRARIES})
+  pkg_check_modules(GMP	REQUIRED IMPORTED_TARGET GLOBAL gmp)
+  target_link_libraries(esbmc PUBLIC PkgConfig::GMP)
+ 
+  pkg_check_modules(GMPXX REQUIRED IMPORTED_TARGET GLOBAL gmpxx)
+ # target_link_libraries(esbmc PUBLIC ${GMP_LIBRARIES} gmpxx)
+  target_link_libraries(esbmc PUBLIC PkgConfig::GMPXX) 
+  #target_link_libraries(bitwuzla PUBLIC ${GMP_LIBRARIES} gmpxx)
   target_include_directories(esbmc PUBLIC ${GMP_INCLUDE_DIRS})
 endif() 
 
