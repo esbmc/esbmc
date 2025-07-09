@@ -7291,9 +7291,6 @@ bool solidity_convertert::get_sol_builtin_ref(
       }
       else if (name == "push" || name == "pop")
       {
-        // _ESBMC_array_push(arr, &val, sizeof(int));
-        // push default (0): _ESBMC_array_push(arr, NULL, sizeof(int));
-        // _ESBMC_array_pop(arr, sizeof(int));
         exprt base;
         if (get_expr(expr["expression"], base))
           return true;
@@ -7302,68 +7299,138 @@ bool solidity_convertert::get_sol_builtin_ref(
               expr["expression"]["typeDescriptions"], base_t))
           return true;
 
-        assert(base_t.has_subtype());
-        exprt size_of;
-        get_size_of_expr(base_t.subtype(), size_of);
+        std::string solt = base_t.get("#sol_type").as_string();
 
-        const nlohmann::json &func =
-          find_last_parent(src_ast_json["nodes"], expr);
-        assert(!func.empty());
-        exprt args;
-        if (func["arguments"].size() == 0)
-          args = gen_zero(pointer_typet(empty_typet()));
-        else
+        locationt l;
+        get_location_from_node(expr, l);
+
+        if (solt.find("ARRAY") != std::string::npos)
         {
-          if (get_expr(func["arguments"][0], expr["argumentTypes"][0], args))
-            return true;
-          // wrap it
-          std::string aux_name = "_idx#" + std::to_string(aux_counter++);
-          std::string aux_id;
+          // Original array push/pop logic
+          assert(base_t.has_subtype());
+          exprt size_of;
+          get_size_of_expr(base_t.subtype(), size_of);
+
+          const nlohmann::json &func =
+            find_last_parent(src_ast_json["nodes"], expr);
+          assert(!func.empty());
+          exprt args;
+          if (func["arguments"].size() == 0)
+            args = gen_zero(pointer_typet(empty_typet()));
+          else
+          {
+            if (get_expr(func["arguments"][0], expr["argumentTypes"][0], args))
+              return true;
+
+            std::string aux_name = "_idx#" + std::to_string(aux_counter++);
+            std::string aux_id;
+            std::string cname;
+            get_current_contract_name(expr, cname);
+            assert(!cname.empty());
+            if (current_functionDecl)
+              aux_id = "sol:@C@" + cname + "@F@" + current_functionName + "@" +
+                       aux_name;
+            else
+              aux_id = "sol:@C@" + cname + "@" + aux_name;
+            symbolt aux_idx;
+            get_default_symbol(
+              aux_idx,
+              get_modulename_from_path(absolute_path),
+              args.type(),
+              aux_name,
+              aux_id,
+              l);
+            auto &added_aux = *move_symbol_to_context(aux_idx);
+            code_declt decl(symbol_expr(added_aux));
+            added_aux.value = args;
+            decl.operands().push_back(args);
+            move_to_front_block(decl);
+            args = address_of_exprt(symbol_expr(added_aux));
+          }
+
+          side_effect_expr_function_callt mem;
+          get_library_function_call_no_args(
+            "_ESBMC_array_" + name,
+            "c:@F@_ESBMC_array_" + name,
+            empty_typet(),
+            l,
+            mem);
+
+          if (name == "push")
+          {
+            mem.arguments().push_back(base);
+            mem.arguments().push_back(args);
+            mem.arguments().push_back(size_of);
+          }
+          else
+          {
+            mem.arguments().push_back(base);
+            mem.arguments().push_back(size_of);
+          }
+
+          new_expr = mem;
+        }
+        else if (solt == "BYTES")
+        {
+          // Support for bytes.push / bytes.pop
+          side_effect_expr_function_callt mem;
+          std::string fname =
+            (name == "push") ? "bytes_dynamic_push" : "bytes_dynamic_pop";
+          get_library_function_call_no_args(
+            fname, "c:@F@" + fname, empty_typet(), l, mem);
+
+          exprt this_expr;
           std::string cname;
           get_current_contract_name(expr, cname);
-          assert(!cname.empty());
+          if (cname.empty())
+          {
+            log_error("Cannot resolve contract name for bytes.{}", name);
+            return true;
+          }
           if (current_functionDecl)
-            aux_id =
-              "sol:@C@" + cname + "@F@" + current_functionName + "@" + aux_name;
+          {
+            if (get_func_decl_this_ref(*current_functionDecl, this_expr))
+              return true;
+          }
           else
-            aux_id = "sol:@C@" + cname + "@" + aux_name;
-          symbolt aux_idx;
-          get_default_symbol(
-            aux_idx,
-            get_modulename_from_path(absolute_path),
-            args.type(),
-            aux_name,
-            aux_id,
-            l);
-          auto &added_aux = *move_symbol_to_context(aux_idx);
-          code_declt decl(symbol_expr(added_aux));
-          added_aux.value = args;
-          decl.operands().push_back(args);
-          move_to_front_block(decl);
-          args = address_of_exprt(symbol_expr(added_aux));
-        }
+          {
+            if (get_ctor_decl_this_ref(cname, this_expr))
+              return true;
+          }
+          member_exprt pool_member(
+            this_expr, "dynamic_pool", symbol_typet("tag-BytesPool"));
+          mem.arguments().push_back(address_of_exprt(base));
+          if (name == "push")
+          {
+            exprt value_expr;
+            const nlohmann::json &func =
+              find_last_parent(src_ast_json["nodes"], expr);
+            assert(!func.empty());
 
-        side_effect_expr_function_callt mem;
-        get_library_function_call_no_args(
-          "_ESBMC_array_" + name,
-          "c:@F@_ESBMC_array_" + name,
-          empty_typet(),
-          l,
-          mem);
+            if (func["arguments"].size() == 0)
+            {
+              log_error("bytes.push requires argument");
+              return true;
+            }
 
-        if (name == "push")
-        {
-          mem.arguments().push_back(base);
-          mem.arguments().push_back(args);
-          mem.arguments().push_back(size_of);
+            if (get_expr(
+                  func["arguments"][0], expr["argumentTypes"][0], value_expr))
+              return true;
+
+            // push value must be byte-sized
+            if (value_expr.type() != unsigned_char_type())
+              solidity_gen_typecast(ns, value_expr, unsigned_char_type());
+            mem.arguments().push_back(value_expr);
+          }
+          mem.arguments().push_back(pool_member);
+
+          new_expr = mem;
         }
         else
         {
-          mem.arguments().push_back(base);
-          mem.arguments().push_back(size_of);
+          log_error("Unexpected .{}() on non-array/bytes type: {}", name, solt);
+          return true;
         }
-
-        new_expr = mem;
         new_expr.location() = l;
         return false;
       }
