@@ -87,8 +87,13 @@ protected:
     symex_target_equationt &eq) const;
 
   // for multi-property
-  void
-  clear_verified_claims(const claim_slicer &claim, const bool &is_goto_cov);
+  void clear_verified_claims_in_ssa(
+    symex_target_equationt &local_eq,
+    const claim_slicer &claim,
+    const bool &is_goto_cov);
+  void clear_verified_claims_in_goto(
+    const claim_slicer &claim,
+    const bool &is_goto_cov);
 
   virtual void report_multi_property_trace(
     const smt_convt::resultt &res,
@@ -107,6 +112,19 @@ protected:
     const bool &is_branch_func_cov,
     const std::unordered_set<std::string> &reached_claims,
     const std::unordered_multiset<std::string> &reached_mul_claims);
+
+private:
+  struct SimpleSummary
+  {
+    size_t total_properties = 0;
+    size_t passed_properties = 0;
+    size_t skipped_properties = 0;
+    size_t failed_properties = 0;
+    double total_time_s = 0.0;
+    std::string solver_name;
+  };
+
+  void report_simple_summary(const SimpleSummary &summary) const;
 };
 
 void report_coverage(

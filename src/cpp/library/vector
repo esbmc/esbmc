@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <assert.h>
 #include <cstddef> // for size_t, ptrdiff_t
-
+#include <memory>
 #include "stdexcept"
 
 #include <utility> /* std::move */
@@ -17,69 +17,6 @@
 
 namespace std
 {
-// Minimal allocator implementation
-template <typename T>
-class allocator
-{
-public:
-  typedef T value_type;
-  typedef T *pointer;
-  typedef const T *const_pointer;
-  typedef T &reference;
-  typedef const T &const_reference;
-  typedef size_t size_type;
-  typedef ptrdiff_t difference_type;
-
-  template <typename U>
-  struct rebind
-  {
-    typedef allocator<U> other;
-  };
-
-  allocator() = default;
-
-  template <typename U>
-  allocator(const allocator<U> &)
-  {
-  }
-
-  pointer allocate(size_type n)
-  {
-    return static_cast<pointer>(malloc(n * sizeof(T)));
-  }
-
-  void deallocate(pointer ptr, size_type)
-  {
-    free(ptr);
-  }
-
-  template <typename U, typename... Args>
-  void construct(U *ptr, Args &&...args)
-  {
-    new (ptr) U(args...);
-  }
-
-  template <typename U>
-  void destroy(U *ptr)
-  {
-    ptr->~U();
-  }
-
-  size_type max_size() const
-  {
-    return size_t(-1) / sizeof(T);
-  }
-
-  bool operator==(const allocator &) const
-  {
-    return true;
-  }
-  bool operator!=(const allocator &) const
-  {
-    return false;
-  }
-};
-
 template <class T, class Allocator = std::allocator<T>>
 class vector
 {

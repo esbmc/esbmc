@@ -1653,9 +1653,21 @@ smt_astt smt_convt::convert_signbit(const expr2tc &expr)
   // Extract the top bit
   auto value = convert_ast(signbit.operand);
 
-  const auto width = value->sort->get_data_width();
-  smt_astt is_neg =
-    mk_eq(mk_extract(value, width - 1, width - 1), mk_smt_bv(BigInt(1), 1));
+  smt_astt is_neg;
+
+  if (int_encoding)
+  {
+    // In integer/real encoding mode, floating-point values are represented as reals
+    // We can't extract bits, so check the sign mathematically
+    is_neg = mk_lt(value, mk_smt_real("0"));
+  }
+  else
+  {
+    // In bitvector mode, extract the sign bit
+    const auto width = value->sort->get_data_width();
+    is_neg =
+      mk_eq(mk_extract(value, width - 1, width - 1), mk_smt_bv(BigInt(1), 1));
+  }
 
   // If it's true, return 1. Return 0, othewise.
   return mk_ite(
@@ -2486,18 +2498,31 @@ expr2tc smt_convt::get(const expr2tc &expr)
 
   // Recurse on operands
   bool have_all = true;
-  res->Foreach_operand([this, &have_all](expr2tc &e) {
-    expr2tc new_e;
-    if (e)
-      new_e = get(e);
-    e = new_e;
+  bool has_null_operands = false;
+
+  res->Foreach_operand([this, &have_all, &has_null_operands](expr2tc &e) {
     if (!e)
+    {
+      has_null_operands = true;
+      have_all = false;
+      return;
+    }
+
+    expr2tc new_e = get(e);
+    if (new_e)
+      e = new_e;
+    else
       have_all = false;
   });
 
-  // And simplify
+  // If we have null operands, return early to avoid crashes in simplify()
+  if (has_null_operands)
+    return expr;
+
+  // Only simplify if all operands are valid
   if (have_all)
     simplify(res);
+
   return res;
 }
 
@@ -2516,8 +2541,33 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
   case type2t::floatbv_id:
     if (int_encoding)
     {
-      /* TODO: how to retrieve an floatbv from a rational or algebraic real
-       * number in a meaningful way? */
+      BigInt numerator, denominator;
+      if (get_rational(a, numerator, denominator))
+      {
+        double value = convert_rational_to_double(numerator, denominator);
+        unsigned int type_width = type->get_width();
+
+        if (type_width == ieee_float_spect::single_precision().width())
+        {
+          // Single precision (32-bit float)
+          ieee_floatt ieee_val(ieee_float_spect::single_precision());
+          ieee_val.from_float(static_cast<float>(value));
+          return constant_floatbv2tc(ieee_val);
+        }
+        else if (type_width == ieee_float_spect::double_precision().width())
+        {
+          // Double precision (64-bit double)
+          ieee_floatt ieee_val(ieee_float_spect::double_precision());
+          ieee_val.from_double(value);
+          return constant_floatbv2tc(ieee_val);
+        }
+        else
+        {
+          log_error(
+            "Unsupported floatbv width ({}) for rational conversion",
+            type_width);
+        }
+      }
       return expr2tc();
     }
     return constant_floatbv2tc(fp_api->get_fpbv(a));
@@ -2567,6 +2617,49 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
         fmt::underlying(type->type_id));
       return gen_zero(type);
     }
+  }
+}
+
+double smt_convt::convert_rational_to_double(
+  const BigInt &numerator,
+  const BigInt &denominator)
+{
+  constexpr size_t BUFFER_SIZE = 1024;
+
+  std::vector<char> num_buffer(BUFFER_SIZE, '\0');
+  std::vector<char> den_buffer(BUFFER_SIZE, '\0');
+
+  numerator.as_string(num_buffer.data(), BUFFER_SIZE, 10);
+  denominator.as_string(den_buffer.data(), BUFFER_SIZE, 10);
+
+  // Force null termination to prevent over-read
+  num_buffer[BUFFER_SIZE - 1] = '\0';
+  den_buffer[BUFFER_SIZE - 1] = '\0';
+
+  // Use bounded string length check
+  size_t num_len = strnlen(num_buffer.data(), BUFFER_SIZE);
+  size_t den_len = strnlen(den_buffer.data(), BUFFER_SIZE);
+
+  if (num_len >= BUFFER_SIZE - 1 || den_len >= BUFFER_SIZE - 1)
+  {
+    log_warning(
+      "BigInt to string conversion may have been truncated - buffer too small");
+    return 0.0;
+  }
+
+  try
+  {
+    double num_val = std::stod(num_buffer.data());
+    double den_val = std::stod(den_buffer.data());
+    return (den_val != 0.0) ? num_val / den_val : 0.0;
+  }
+  catch (const std::exception &)
+  {
+    log_warning(
+      "Failed to convert BigInt to double: numerator={}, denominator={}",
+      num_buffer.data(),
+      den_buffer.data());
+    return 0.0;
   }
 }
 
