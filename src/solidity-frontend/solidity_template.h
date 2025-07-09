@@ -389,14 +389,23 @@ __ESBMC_HIDE:;
     return pool->pool[b->offset + index];
 }
 
-int bytes_dynamic_equal(const BytesDynamic* a, const BytesDynamic* b, const BytesPool* pool) {
+bool bytes_static_equal(const BytesStatic* a, const BytesStatic* b) {
+__ESBMC_HIDE:;
+    if (a->length != b->length) return false;
+    for (size_t i = 0; i < a->length; i++) {
+        if (a->data[i] != b->data[i]) return false;
+    }
+    return true;
+}
+
+bool bytes_dynamic_equal(const BytesDynamic* a, const BytesDynamic* b, const BytesPool* pool) {
 __ESBMC_HIDE:;
     assert(a->initialized && b->initialized);
-    if (a->length != b->length) return 0;
+    if (a->length != b->length) return false;
     for (size_t i = 0; i < a->length; i++) {
-        if (pool->pool[a->offset + i] != pool->pool[b->offset + i]) return 0;
+        if (pool->pool[a->offset + i] != pool->pool[b->offset + i]) return false;
     }
-    return 1;
+    return true;
 }
 
 uint256_t bytes_dynamic_to_mapping_key(const BytesDynamic* b, const BytesPool* pool) {
