@@ -711,8 +711,8 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
         smt_astt max_val =
           (fbv_type.exponent == double_spec.e &&
            fbv_type.fraction == double_spec.f)
-            ? mk_smt_real("1.7976931348623157e+308")
-            :                                      // Double precision max
+            ? mk_smt_real("1.7976931348623157e+308") // Double precision max
+            :
             mk_smt_real("3.4028234663852886e+38"); // Single precision max
 
         // Return signed infinity for division by zero
