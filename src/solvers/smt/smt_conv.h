@@ -545,8 +545,10 @@ public:
    *         (e.g., multiplication where either operand is zero should yield zero
    *         regardless of the other operand, even if it would cause underflow)
    *  @return SMT AST representing the result with IEEE 754 semantics applied */
-  virtual smt_astt apply_ieee754_semantics(smt_astt real_result, const floatbv_type2t &fbv_type, 
-                                         smt_astt operand_zero_check = nullptr);
+  virtual smt_astt apply_ieee754_semantics(
+    smt_astt real_result,
+    const floatbv_type2t &fbv_type,
+    smt_astt operand_zero_check = nullptr);
 
   /** Method to dump the SMT formula */
   virtual std::string dump_smt();
