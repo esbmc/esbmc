@@ -4050,7 +4050,7 @@ bool solidity_convertert::get_statement(
           exprt rop = rhs.operands().at(i);
 
           // do assignment
-          get_tuple_assignment(lop, rop);
+          get_tuple_assignment(stmt, lop, rop);
         }
       }
       else
@@ -4099,7 +4099,7 @@ bool solidity_convertert::get_statement(
             return true;
 
           // do assignment
-          get_tuple_assignment(lop, rop);
+          get_tuple_assignment(stmt, lop, rop);
         }
       }
       // do return in the end
@@ -4949,6 +4949,8 @@ bool solidity_convertert::get_expr(
           func_name == "_ESBMC_array_length")
           break;
       }
+      if (new_expr.is_member() && new_expr.component_name() == "length")
+        break;
 
       std::string sol_name = new_expr.type().get("#sol_name").as_string();
       if (sol_name == "revert")
@@ -5468,7 +5470,7 @@ bool solidity_convertert::get_expr(
       }
 
       // static bytes
-      if (is_bytesN_type(t.get("#sol_type").as_string()))
+      if (is_bytesN_type(t))
       {
         exprt arg_val = array;
 
@@ -6105,8 +6107,10 @@ bool solidity_convertert::get_binary_operator_expr(
   {
     log_debug("solidity", "\t\tHandling BYTES/BYTESN operators");
 
-    bool is_static = is_bytesN_type(lt_sol) && is_bytesN_type(rt_sol);
-    bool is_dynamic = lt_sol == "BYTES" && rt_sol == "BYTES";
+    bool is_static = is_bytesN_type(lt) && is_bytesN_type(rt);
+    bool is_dynamic =
+      (lt_sol == "BYTES" || (lt.is_struct() && lt.tag() == "BytesDynamic")) &&
+      (rt_sol == "BYTES" || (rt.is_struct() && rt.tag() == "BytesDynamic"));
 
     switch (opcode)
     {
@@ -6135,8 +6139,11 @@ bool solidity_convertert::get_binary_operator_expr(
 
         lt_sol = lhs.type().get("#sol_type").as_string();
         rt_sol = rhs.type().get("#sol_type").as_string();
-        is_static = is_bytesN_type(lt_sol) && is_bytesN_type(rt_sol);
-        is_dynamic = lt_sol == "BYTES" && rt_sol == "BYTES";
+        is_static = is_bytesN_type(lt) && is_bytesN_type(rt);
+        is_dynamic =
+          (lt_sol == "BYTES" ||
+           (lt.is_struct() && lt.tag() == "BytesDynamic")) &&
+          (rt_sol == "BYTES" || (rt.is_struct() && rt.tag() == "BytesDynamic"));
 
         if (is_static)
         {
@@ -6199,7 +6206,7 @@ bool solidity_convertert::get_binary_operator_expr(
     case SolidityGrammar::ExpressionT::BO_Shl:
     case SolidityGrammar::ExpressionT::BO_Shr:
     {
-      if (!is_bytesN_type(lt_sol))
+      if (!is_bytesN_type(lt))
       {
         log_error(
           "Shift operations only supported on bytesN types, got {}", lt_sol);
@@ -7267,20 +7274,20 @@ bool solidity_convertert::get_sol_builtin_ref(
             l,
             length_expr);
           length_expr.arguments().push_back(base);
-
           new_expr = length_expr;
-          new_expr.location() = l;
-          return false;
         }
-        else if (solt.find("BYTES"))
+        else if (solt.find("BYTES") != std::string::npos)
         {
-          //TODO
+          member_exprt len(base, "length", uint_type());
+          new_expr = len;
         }
         else
         {
           log_error("Unexpect length of {} type", solt);
           return true;
         }
+        new_expr.location() = l;
+        return false;
       }
       else if (name == "push" || name == "pop")
       {
@@ -8016,7 +8023,7 @@ bool solidity_convertert::get_tuple_instance(
     if (get_expr(args.at(j), litera_type, init))
       return true;
 
-    get_tuple_assignment(member_access, init);
+    get_tuple_assignment(ast_node, member_access, init);
 
     // update
     ++i;
@@ -8218,12 +8225,15 @@ bool solidity_convertert::construct_tuple_assigments(
           rop))
       return true;
 
-    get_tuple_assignment(lop, rop);
+    get_tuple_assignment(expr, lop, rop);
   }
   return false;
 }
 
-void solidity_convertert::get_tuple_assignment(const exprt &lop, exprt rop)
+void solidity_convertert::get_tuple_assignment(
+  const nlohmann::json &expr,
+  const exprt &lop,
+  exprt rop)
 {
   exprt assign_expr;
   if (lop.type().get("#sol_type") == "STRING")
@@ -8231,7 +8241,7 @@ void solidity_convertert::get_tuple_assignment(const exprt &lop, exprt rop)
   else
   {
     assign_expr = side_effect_exprt("assign", lop.type());
-    convert_type_expr(ns, rop, lop.type());
+    convert_type_expr(ns, rop, lop.type(), expr);
     assign_expr.copy_to_operands(lop, rop);
   }
   convert_expression_to_code(assign_expr);
@@ -8350,12 +8360,22 @@ exprt solidity_convertert::make_aux_var_for_bytes(
 
 bool solidity_convertert::is_bytesN_type(const std::string &t) const
 {
-  // expects t like "bytes1", "bytes2", ..., "bytes32"
   if (t.substr(0, 5) == "BYTES" && t.size() > 5)
   {
     int sz = std::stoi(t.substr(5));
     return sz >= 1 && sz <= 32;
   }
+  return false;
+}
+
+bool solidity_convertert::is_bytesN_type(const typet &t) const
+{
+  // expects t like "bytes1", "bytes2", ..., "bytes32"
+  std::string sol_t = t.get("#sol_type").as_string();
+  if (is_bytesN_type(sol_t))
+    return true;
+  if (t.is_struct() && t.tag() == "BytesStatic")
+    return true;
   return false;
 }
 
@@ -11119,15 +11139,9 @@ bool solidity_convertert::is_bytes_type(const typet &t)
 {
   if (t.get("#sol_type").as_string().find("BYTES") != std::string::npos)
     return true;
+  if (t.is_struct() && t.tag() == "BytesDynamic")
+    return true;
   return false;
-}
-
-void solidity_convertert::convert_type_expr(
-  const namespacet &ns,
-  exprt &src_expr,
-  const typet &dest_type)
-{
-  convert_type_expr(ns, src_expr, dest_type, empty_json);
 }
 
 void solidity_convertert::convert_type_expr(
@@ -11193,6 +11207,9 @@ void solidity_convertert::convert_type_expr(
     else if (is_bytes_type(src_type) && is_bytes_type(dest_type))
     {
       std::string c_name;
+      log_status("111");
+      log_status("{}", expr.dump());
+      log_status("222");
       get_current_contract_name(expr, c_name);
       if (c_name.empty())
       {
@@ -11217,7 +11234,7 @@ void solidity_convertert::convert_type_expr(
         cur_this_expr, "$dynamic_pool", symbol_typet("tag-BytesPool"));
 
       // e.g. Bytes2 x; Bytes4(x); -> bytes_static_truncate(&x, 2)
-      if (is_bytesN_type(src_sol_type) && is_bytesN_type(dest_sol_type))
+      if (is_bytesN_type(src_type) && is_bytesN_type(dest_type))
       {
         side_effect_expr_function_callt trunc_call;
         assert(context.find_symbol("c:@F@bytes_static_truncate") != nullptr);
@@ -11236,7 +11253,10 @@ void solidity_convertert::convert_type_expr(
       }
 
       // e.g. bytes2 x; bytes y = bytes(x);
-      if (is_bytesN_type(src_sol_type) && dest_sol_type == "BYTES")
+      if (
+        is_bytesN_type(src_type) &&
+        (dest_sol_type == "BYTES" ||
+         (dest_type.is_struct() && dest_type.tag() == "BytesDynamic")))
       {
         side_effect_expr_function_callt from_static_call;
         assert(
@@ -11256,7 +11276,10 @@ void solidity_convertert::convert_type_expr(
       }
 
       // e.g. bytes x; bytes2 y = bytes2(x);
-      if (src_sol_type == "BYTES" && is_bytesN_type(dest_sol_type))
+      if (
+        (src_sol_type == "BYTES" ||
+         (src_type.is_struct() && src_type.tag() == "BytesDynamic")) &&
+        is_bytesN_type(dest_type))
       {
         side_effect_expr_function_callt trunc_dyn_call;
         assert(
@@ -11339,7 +11362,7 @@ void solidity_convertert::convert_type_expr(
 
         src_expr = make_aux_var_for_bytes(call, loc);
       }
-      else if (is_bytesN_type(dest_sol_type))
+      else if (is_bytesN_type(dest_type))
       {
         // e.g. bytes3 a = 0x1234;
         unsigned len = get_bytesN_size(dest_sol_type); // e.g. "BYTES3" => 3

@@ -413,7 +413,7 @@ protected:
     const nlohmann::json &ast_node,
     const exprt &lhs,
     const exprt &rhs);
-  void get_tuple_assignment(const exprt &lop, exprt rop);
+  void get_tuple_assignment(const nlohmann::json& expr, const exprt &lop, exprt rop);
   void get_tuple_function_call(const exprt &op);
   void get_llc_ret_tuple(symbolt &sym);
 
@@ -622,12 +622,12 @@ protected:
     exprt &dest);
   bool convert_string_literal(std::string the_value, exprt &dest);
   void convert_type_expr(const namespacet &ns, exprt &dest, const typet &type, const nlohmann::json &expr);
-  void convert_type_expr(const namespacet &ns, exprt &dest, const typet &type);
   bool
   convert_hex_literal(std::string the_value, exprt &dest, const int n = 256);
   // check if it's a bytes type
   bool is_bytes_type(const typet &t);
   bool is_bytesN_type(const std::string &t) const;
+  bool is_bytesN_type(const typet &t) const;
   exprt make_aux_var_for_bytes(exprt &val, const locationt &location);
   unsigned get_bytesN_size(const std::string &type_str);
 
