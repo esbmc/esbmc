@@ -1932,7 +1932,7 @@ bool solidity_convertert::get_struct_class_fields(
   if (comp.type().get("#sol_type") == "MAPPING" && comp.type().is_array())
   {
     //! hack: for the (non-nested) mapping from contract that is not used in a new expression
-    // we convert it to a global static inifinity array
+    // we convert it to a global static infinity array
     // thuse we do not populate it into the struct symbol
     return false;
   }
@@ -5535,15 +5535,8 @@ bool solidity_convertert::get_expr(
             return true;
         }
 
-        const symbolt *bytes_pool_sym = context.find_symbol("tag-BytesPool");
-        if (!bytes_pool_sym)
-        {
-          log_error("Cannot find tag-BytesPool");
-          return true;
-        }
-
         member_exprt dynamic_pool(
-          cur_this_expr, "dynamic_pool", bytes_pool_sym->type);
+          cur_this_expr, "$dynamic_pool", symbol_typet("tag-BytesPool"));
 
         dyn_get_call.arguments().push_back(arg_addr);
         dyn_get_call.arguments().push_back(dynamic_pool);
@@ -6192,14 +6185,8 @@ bool solidity_convertert::get_binary_operator_expr(
             return true;
         }
 
-        const symbolt *pool_sym = context.find_symbol("tag-BytesPool");
-        if (!pool_sym)
-        {
-          log_error("Missing tag-BytesPool");
-          return true;
-        }
-
-        member_exprt pool_member(this_expr, "dynamic_pool", pool_sym->type);
+        member_exprt pool_member(
+          this_expr, "$dynamic_pool", symbol_typet("tag-BytesPool"));
         call_expr.arguments().push_back(pool_member);
       }
 
@@ -8421,9 +8408,6 @@ void solidity_convertert::gen_mapping_key_typecast(
     bytes_dynamic_call.arguments().push_back(pos);
 
     // get dynamic_pool from current contract instance
-    const symbolt *bytes_pool_sym = context.find_symbol("tag-BytesPool");
-    assert(bytes_pool_sym != nullptr);
-
     // get this
     exprt this_ptr;
     if (current_functionDecl)
@@ -8438,7 +8422,7 @@ void solidity_convertert::gen_mapping_key_typecast(
     }
 
     member_exprt dynamic_pool_member(
-      this_ptr, "dynamic_pool", bytes_pool_sym->type);
+      this_ptr, "$dynamic_pool", symbol_typet("tag-BytesPool"));
 
     bytes_dynamic_call.arguments().push_back(dynamic_pool_member);
 
@@ -11229,9 +11213,8 @@ void solidity_convertert::convert_type_expr(
           abort();
       }
 
-      const symbolt *pool_sym = context.find_symbol("tag-BytesPool");
-      assert(pool_sym != nullptr);
-      member_exprt pool_member(cur_this_expr, "dynamic_pool", pool_sym->type);
+      member_exprt pool_member(
+        cur_this_expr, "$dynamic_pool", symbol_typet("tag-BytesPool"));
 
       // e.g. Bytes2 x; Bytes4(x); -> bytes_static_truncate(&x, 2)
       if (is_bytesN_type(src_sol_type) && is_bytesN_type(dest_sol_type))
@@ -11350,10 +11333,8 @@ void solidity_convertert::convert_type_expr(
             abort();
         }
 
-        const symbolt *pool_sym = context.find_symbol("tag-BytesPool");
-        assert(pool_sym != nullptr);
-
-        member_exprt pool_member(this_expr, "dynamic_pool", pool_sym->type);
+        member_exprt pool_member(
+          this_expr, "$dynamic_pool", symbol_typet("tag-BytesPool"));
         call.arguments().push_back(pool_member);
 
         src_expr = make_aux_var_for_bytes(call, loc);
@@ -12151,6 +12132,38 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
     contract_name);
 
   // for dynamic bytes
+  // for each contract, we add a static infinity array {$cname}_pool
+  // e.g. __attribute__((annotate("__ESBMC_inf_size"))) unsigned char base_pool[1];
+  // then we add symbol call $dynamic_pool
+  // e.g. BytesPool pool = bytes_pool_init(base_pool);
+  // 1. declare static base pool
+  symbolt pool_sym;
+  typet pool_t = array_typet(unsigned_char_type(), exprt("infinity"));
+  std::string pool_name = "$" + contract_name + "_pool#";
+  std::string pool_id = "sol:@C@" + contract_name + "@" + pool_name;
+
+  get_default_symbol(pool_sym, "C++", pool_t, pool_name, pool_id, l);
+  pool_sym.file_local = true;
+  pool_sym.lvalue = true;
+  pool_sym.static_lifetime = true;
+  move_symbol_to_context(pool_sym);
+
+  side_effect_expr_function_callt init_call;
+  get_library_function_call_no_args(
+    "bytes_pool_init",
+    "c:@F@bytes_pool_init",
+    symbol_typet("tag-BytesPool"),
+    l,
+    init_call);
+
+  init_call.arguments().push_back(symbol_expr(pool_sym));
+  get_builtin_symbol(
+    "$dynamic_pool",
+    sol_prefix + "$dynamic_pool#",
+    symbol_typet("tag-BytesPool"),
+    l,
+    init_call,
+    contract_name);
 
   if (is_reentry_check)
   {

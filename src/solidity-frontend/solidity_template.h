@@ -420,6 +420,20 @@ __ESBMC_HIDE:;
     return result;
 }
 
+void bytes_dynamic_push(BytesDynamic* b, unsigned char value, BytesPool* pool) {
+__ESBMC_HIDE:;
+    assert(b->initialized);
+    pool->pool[b->offset + b->length] = value;
+    ++b->length;
+}
+
+void bytes_dynamic_pop(BytesDynamic* b, BytesPool* pool) {
+__ESBMC_HIDE:;
+    assert(b->initialized);
+    assert(b->length > 0);
+    --b->length;
+}
+
 BytesPool bytes_pool_init(unsigned char* pool_data) {
 __ESBMC_HIDE:;
     BytesPool pool = { pool_data, 0 };
