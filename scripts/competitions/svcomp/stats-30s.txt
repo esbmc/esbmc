@@ -9,4 +9,3 @@ Statistics:          33569 Files
   Score:             27191 (max: 55885)
 
 https://github.com/esbmc/esbmc/actions/runs/16080161225
-

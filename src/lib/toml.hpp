@@ -4363,7 +4363,7 @@ TOML_NAMESPACE_START
 					nonvoid<visit_return_type<Func&&, Node&&, date>,
 					nonvoid<visit_return_type<Func&&, Node&&, time>,
 							visit_return_type<Func&&, Node&&, date_time>
-        >>>>>>>>;      
+				>>>>>>>>;
 
         // clang-format on
 

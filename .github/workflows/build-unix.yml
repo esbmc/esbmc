@@ -21,22 +21,7 @@ jobs:
     runs-on: ${{ inputs.operating-system }}
     steps:
     - uses: actions/checkout@v4
-    - name: Show runner OS
-      run: |
-        echo "RUNNER_OS = $RUNNER_OS"; User: $(whoami)"
-        uname -a    
-    - name: Install dependencies (macOS)
-      if: runner.os == 'macOS'
-      env:
-       HOMEBREW_NO_AUTO_UPDATE: 1
-      run: |
-       brew install gmp pkg-config || true
 
-    - name: Install dependencies (Linux)
-      if: runner.os == 'Linux'
-      run: |
-          apt-get update
-          apt-get install -y libgmp-dev pkg-config        
     - name: Build ESBMC
       run: ./scripts/build.sh ${{ inputs.build-flags }}
     - uses: actions/upload-artifact@v4

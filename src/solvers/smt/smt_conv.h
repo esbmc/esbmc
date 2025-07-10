@@ -416,6 +416,21 @@ public:
    *  @return The newly created terminal smt_ast of this real. */
   virtual smt_astt mk_smt_real(const std::string &str) = 0;
 
+  // Returns SMT AST representing real zero
+  smt_astt get_zero_real();
+  // Returns SMT AST representing double precision minimum normal value (2^-1022)
+  smt_astt get_double_min_normal();
+  // Returns SMT AST representing double precision minimum subnormal value (2^-1074)
+  smt_astt get_double_min_subnormal();
+  // Returns SMT AST representing double precision maximum normal value (~1.7976931348623157e+308)
+  smt_astt get_double_max_normal();
+  // Returns SMT AST representing single precision minimum normal value (2^-126)
+  smt_astt get_single_min_normal();
+  // Returns SMT AST representing single precision minimum subnormal value (2^-149)
+  smt_astt get_single_min_subnormal();
+  // Returns SMT AST representing single precision maximum normal value (~3.4028234663852886e+38)
+  smt_astt get_single_max_normal();
+
   /** Create a bitvector.
    *  @param theint Integer representation of the bitvector. Any excess bits
    *         in the stored integer should be ignored.
@@ -529,6 +544,26 @@ public:
    *  @param expr A neg2tc to test for overflows in.
    *  @return Boolean valued AST representing whether an overflow occurs. */
   virtual smt_astt overflow_neg(const expr2tc &expr);
+
+  /** Applies IEEE 754 floating-point semantics to a real arithmetic result.
+   *  Handles overflow, underflow, and subnormal number behaviors that are
+   *  missing when using integer/real encoding for floating-point operations.
+   *  Supports both IEEE 754 single precision (32-bit: 8 exponent, 23 fraction)
+   *  and double precision (64-bit: 11 exponent, 52 fraction) formats.
+   *  For double precision: overflow to ±1.798e+308, underflow below 4.941e-324,
+   *  subnormal range [4.941e-324, 2.225e-308). For single precision: overflow
+   *  to ±3.403e+38, underflow below 1.401e-45, subnormal range [1.401e-45, 1.175e-38).
+   *  Other formats return the original result unchanged.
+   *  @param real_result The result of exact real arithmetic operation
+   *  @param fbv_type The floating-point type information (exponent/fraction bits)
+   *  @param operand_zero_check Optional boolean AST for special zero handling
+   *         (e.g., multiplication where either operand is zero should yield zero
+   *         regardless of the other operand, even if it would cause underflow)
+   *  @return SMT AST representing the result with IEEE 754 semantics applied */
+  virtual smt_astt apply_ieee754_semantics(
+    smt_astt real_result,
+    const floatbv_type2t &fbv_type,
+    smt_astt operand_zero_check = nullptr);
 
   /** Method to dump the SMT formula */
   virtual std::string dump_smt();
