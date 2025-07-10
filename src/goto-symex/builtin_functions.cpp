@@ -1561,7 +1561,7 @@ void goto_symext::intrinsic_memcpy(
     expr2tc dst = func_call.operands[0];
     expr2tc src = func_call.operands[1];
     expr2tc n = func_call.operands[2];
-    
+
     cur_state->rename(dst);
     cur_state->rename(src);
     cur_state->rename(n);
@@ -1642,7 +1642,7 @@ void goto_symext::intrinsic_memcpy(
             dereference(value, dereferencet::READ);
             symex_assign(code_assign2tc(dst_idx, value), false, guard);    
         }
-        
+
 
     } else {
 

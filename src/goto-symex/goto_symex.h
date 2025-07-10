@@ -461,8 +461,6 @@ protected:
     reachability_treet &art,
     const code_function_call2t &func_call);
 
-  void intrinsic_memcpy(reachability_treet &art, const code_function_call2t &func_call);  
-
   // Function to call a symname function, in case where were not able to optimize it
   void
   bump_call(const code_function_call2t &func_call, const std::string &symname);
@@ -474,6 +472,8 @@ protected:
   void intrinsic_get_object_size(
     const code_function_call2t &func_call,
     reachability_treet &art);
+
+  void intrinsic_memcpy(reachability_treet &art, const code_function_call2t &func_call);  
 
   /* Handles dereferencing between threads and is used only in data race checks. **/
   void replace_races_check(expr2tc &expr);
