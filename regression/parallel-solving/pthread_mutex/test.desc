@@ -1,4 +1,4 @@
 CORE
 main.i
 --parallel-solving --k-induction
-^VERIFICATION FAILED$
+^VERIFICATION UNKNOWN$

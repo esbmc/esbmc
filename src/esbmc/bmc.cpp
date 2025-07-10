@@ -1413,11 +1413,10 @@ smt_convt::resultt bmct::multi_property_check(
         reached_claims.emplace(claim_sig);
       }
 
+      // update cex number
       size_t previous_ce_counter;
-      {
-        // update cex number
-        previous_ce_counter = ce_counter++;
-      }
+      previous_ce_counter = ce_counter++;
+
       // for verbose output of cond coverage
       if (is_vb)
         report_coverage_verbose(
