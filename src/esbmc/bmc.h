@@ -94,7 +94,7 @@ protected:
     const smt_convt::resultt &res,
     const std::unique_ptr<smt_convt> &solver,
     const symex_target_equationt &local_eq,
-    const size_t ce_counter,
+    const std::atomic<size_t> ce_counter,
     const goto_tracet &goto_trace,
     const std::string &msg);
 

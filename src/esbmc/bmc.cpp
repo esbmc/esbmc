@@ -44,6 +44,10 @@ std::unordered_set<std::string> goto_functionst::reached_claims;
 std::unordered_multiset<std::string> goto_functionst::reached_mul_claims;
 std::unordered_set<std::string> goto_functionst::verified_claims;
 
+std::mutex goto_functionst::reached_claims_mutex;
+std::mutex goto_functionst::reached_mul_claims_mutex;
+std::mutex goto_functionst::verified_claims_mutex;
+
 bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   : options(opts), context(_context), ns(context)
 {
@@ -355,7 +359,9 @@ void bmct::clear_verified_claims(
 {
   // first record that we have verified it
   std::string claim_sig = claim.claim_msg + "\t" + claim.claim_loc;
+  std::lock_guard lock(symex->goto_functions.verified_claims_mutex);
   symex->goto_functions.verified_claims.emplace(claim_sig);
+
 
   // then remove it by converting to SKIP
   for (auto &it : symex->goto_functions.function_map)
@@ -392,7 +398,7 @@ void bmct::report_multi_property_trace(
   const smt_convt::resultt &res,
   const std::unique_ptr<smt_convt> &solver,
   const symex_target_equationt &local_eq,
-  const size_t ce_counter,
+  const std::atomic<size_t> ce_counter,
   const goto_tracet &goto_trace,
   const std::string &msg)
 {
@@ -411,7 +417,7 @@ void bmct::report_multi_property_trace(
     std::string output_file = options.get_option("cex-output");
     if (output_file != "")
     {
-      std::ofstream out(fmt::format("{}-{}", ce_counter, output_file));
+      std::ofstream out(fmt::format("{}-{}", ce_counter.load(), output_file));
       show_goto_trace(out, ns, goto_trace);
     }
 
@@ -1227,14 +1233,18 @@ smt_convt::resultt bmct::multi_property_check(
 
   // Initial values
   smt_convt::resultt final_result = smt_convt::P_UNSATISFIABLE;
-  size_t ce_counter = 0;
-  std::unordered_set<size_t> jobs;
   std::mutex result_mutex;
+  std::atomic<size_t> ce_counter{0};
+  std::unordered_set<size_t> jobs;
 
   // For coverage info
   auto &reached_claims = symex->goto_functions.reached_claims;
   auto &reached_mul_claims = symex->goto_functions.reached_mul_claims;
   auto &verified_claims = symex->goto_functions.verified_claims;
+  auto &reached_claims_mutex = symex->goto_functions.reached_claims_mutex;
+  auto &reached_mul_claims_mutex = symex->goto_functions.reached_mul_claims_mutex;
+  auto &verified_claims_mutex = symex->goto_functions.verified_claims_mutex;
+
   // "Assertion Cov"
   bool is_assert_cov = options.get_bool_option("assertion-coverage") ||
                        options.get_bool_option("assertion-coverage-claims");
@@ -1264,7 +1274,7 @@ smt_convt::resultt bmct::multi_property_check(
   const std::string fail_fast = options.get_option("multi-fail-fast");
   const bool is_fail_fast = !fail_fast.empty() ? true : false;
   const int fail_fast_limit = is_fail_fast ? stoi(fail_fast) : 0;
-  int fail_fast_cnt = 0;
+  std::atomic<int> fail_fast_cnt{0};
 
   if (is_fail_fast && fail_fast_limit < 0)
   {
@@ -1296,6 +1306,9 @@ smt_convt::resultt bmct::multi_property_check(
                        &reached_claims,
                        &reached_mul_claims,
                        &verified_claims,
+                       &reached_claims_mutex,
+                       &reached_mul_claims_mutex,
+                       &verified_claims_mutex,
                        &is_assert_cov,
                        &is_cond_cov,
                        &is_vb,
@@ -1333,8 +1346,11 @@ smt_convt::resultt bmct::multi_property_check(
     else
       is_verified = reached_claims.count(claim_sig) ? true : false;
     if (is_assert_cov && is_verified)
+    {
       // insert to the multiset before skipping the verification process
+      std::lock_guard lock(reached_mul_claims_mutex);
       reached_mul_claims.emplace(claim_sig);
+    }
 
     if (verified_claims.count(claim_sig))
     {
@@ -1387,10 +1403,21 @@ smt_convt::resultt bmct::multi_property_check(
 
       // Store claim_sig
       if (is_assert_cov)
+      {
+        std::lock_guard lock(reached_mul_claims_mutex);
         reached_mul_claims.emplace(claim_sig);
+      }
       else
+      {
+        std::lock_guard lock(reached_claims_mutex);
         reached_claims.emplace(claim_sig);
+      }
 
+      size_t previous_ce_counter;
+      {
+        // update cex number
+        previous_ce_counter = ce_counter++;
+      }
       // for verbose output of cond coverage
       if (is_vb)
         report_coverage_verbose(
@@ -1403,18 +1430,20 @@ smt_convt::resultt bmct::multi_property_check(
           reached_claims,
           reached_mul_claims);
       else
+      {
         report_multi_property_trace(
           solver_result,
           runtime_solver,
           local_eq,
-          ce_counter,
+          previous_ce_counter,
           goto_trace,
           claim.claim_msg);
+      }
 
-      final_result = solver_result;
-
-      // update cex number
-      ++ce_counter;
+      {
+        std::lock_guard lock(result_mutex);
+        final_result = solver_result;
+      }
 
       // Update fail-fast-counter
       fail_fast_cnt++;
