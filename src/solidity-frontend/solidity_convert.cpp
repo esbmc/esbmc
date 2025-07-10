@@ -2905,13 +2905,25 @@ bool solidity_convertert::move_initializer_to_ctor(
         _assign = side_effect_exprt("assign", comp.type());
         _assign.location() = sym.location;
         assert(current_contract != nullptr);
-        convert_type_expr(ns, rhs, comp.type(), current_contract);
+        if (rhs.get("#zero_initializer") != "1")
+          convert_type_expr(ns, rhs, comp.type(), current_contract);
         _assign.copy_to_operands(lhs, rhs);
       }
       convert_expression_to_code(_assign);
 
       // insert before the sym.value.operands
       sym.value.operands().insert(sym.value.operands().begin(), _assign);
+
+      // we might need to insert some expression after convert_type_expr
+      if (ctor_frontBlockDecl.operands().size() != 0)
+      {
+        for (auto &op : ctor_frontBlockDecl.operands())
+        {
+          convert_expression_to_code(op);
+          sym.value.operands().insert(sym.value.operands().begin(), op);
+        }
+        ctor_frontBlockDecl.clear();
+      }
     }
     else
     {
@@ -2922,8 +2934,7 @@ bool solidity_convertert::move_initializer_to_ctor(
   }
 
   // insert parent ctor call in the front
-  if (move_inheritance_to_ctor(
-        based_contracts, current_contract, contract_name, ctor_id, sym))
+  if (move_inheritance_to_ctor(based_contracts, contract_name, ctor_id, sym))
     return true;
 
   if (is_aux_ctor)
@@ -2956,7 +2967,6 @@ void solidity_convertert::move_to_back_block(const exprt &expr)
 
 bool solidity_convertert::move_inheritance_to_ctor(
   const nlohmann::json *based_contracts,
-  const nlohmann::json &current_contract,
   const std::string contract_name,
   std::string ctor_id,
   symbolt &sym)
@@ -3092,7 +3102,7 @@ bool solidity_convertert::move_inheritance_to_ctor(
               else
               {
                 _assign = side_effect_exprt("assign", comp.type());
-                convert_type_expr(ns, rhs, comp.type(), current_contract);
+                //? convert_type_expr(ns, rhs, comp.type(), current_contract);
                 _assign.copy_to_operands(lhs, rhs);
               }
 
@@ -11271,6 +11281,10 @@ void solidity_convertert::convert_type_expr(
           "Unable to resolve current contract name during type conversion");
         abort();
       }
+      // prevent something like
+      // bytes_dynamic_from_uint({ .offset=0, .length=0, .initialized=0, .anon_pad$3=0 }, this->$dynamic_pool);
+      if (src_expr.is_struct())
+        src_expr = make_aux_var_for_bytes(src_expr, src_expr.location());
 
       exprt cur_this_expr;
       if (current_functionDecl)

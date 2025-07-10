@@ -241,7 +241,6 @@ protected:
   bool move_initializer_to_main(codet &func_body);
   bool move_inheritance_to_ctor(
     const nlohmann::json *based_contracts,
-    const nlohmann::json &current_contract,
     const std::string contract_name,
     std::string ctor_id,
     symbolt &sym);
