@@ -231,14 +231,17 @@ protected:
   void move_to_initializer(const exprt &expr);
   bool move_initializer_to_ctor(
     const nlohmann::json *based_contracts,
+    const nlohmann::json &current_contract,
     const std::string contract_name);
   bool move_initializer_to_ctor(
     const nlohmann::json *based_contracts,
+    const nlohmann::json &current_contract,
     const std::string contract_name,
     bool is_aux_ctor);
   bool move_initializer_to_main(codet &func_body);
   bool move_inheritance_to_ctor(
     const nlohmann::json *based_contracts,
+    const nlohmann::json &current_contract,
     const std::string contract_name,
     std::string ctor_id,
     symbolt &sym);

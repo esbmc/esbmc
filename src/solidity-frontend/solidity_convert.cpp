@@ -1898,11 +1898,11 @@ bool solidity_convertert::get_contract_definition(const std::string &c_name)
       bool has_inherit_from = inheritanceMap[c_name].size() > 1;
       if (
         has_inherit_from &&
-        move_initializer_to_ctor(based_contracts, c_name, true))
+        move_initializer_to_ctor(based_contracts, *itr, c_name, true))
         return true;
 
       // initialize state variable
-      if (move_initializer_to_ctor(based_contracts, c_name))
+      if (move_initializer_to_ctor(based_contracts, *itr, c_name))
         return true;
 
       symbolt s = *context.find_symbol(prefix + c_name);
@@ -2769,9 +2769,11 @@ void solidity_convertert::move_to_initializer(const exprt &expr)
 
 bool solidity_convertert::move_initializer_to_ctor(
   const nlohmann::json *based_contracts,
+  const nlohmann::json &current_contract,
   const std::string contract_name)
 {
-  return move_initializer_to_ctor(based_contracts, contract_name, false);
+  return move_initializer_to_ctor(
+    based_contracts, current_contract, contract_name, false);
 }
 
 // move library initializer and bind-name initializer to main
@@ -2803,6 +2805,7 @@ bool solidity_convertert::move_initializer_to_main(codet &func_body)
 // for inheritance_ctor, we skip the builtin assignment
 bool solidity_convertert::move_initializer_to_ctor(
   const nlohmann::json *based_contracts,
+  const nlohmann::json &current_contract,
   const std::string contract_name,
   bool is_aux_ctor)
 {
@@ -2901,8 +2904,8 @@ bool solidity_convertert::move_initializer_to_ctor(
       {
         _assign = side_effect_exprt("assign", comp.type());
         _assign.location() = sym.location;
-        rhs.dump();
-        convert_type_expr(ns, rhs, comp.type(), *based_contracts);
+        assert(current_contract != nullptr);
+        convert_type_expr(ns, rhs, comp.type(), current_contract);
         _assign.copy_to_operands(lhs, rhs);
       }
       convert_expression_to_code(_assign);
@@ -2919,7 +2922,8 @@ bool solidity_convertert::move_initializer_to_ctor(
   }
 
   // insert parent ctor call in the front
-  if (move_inheritance_to_ctor(based_contracts, contract_name, ctor_id, sym))
+  if (move_inheritance_to_ctor(
+        based_contracts, current_contract, contract_name, ctor_id, sym))
     return true;
 
   if (is_aux_ctor)
@@ -2952,6 +2956,7 @@ void solidity_convertert::move_to_back_block(const exprt &expr)
 
 bool solidity_convertert::move_inheritance_to_ctor(
   const nlohmann::json *based_contracts,
+  const nlohmann::json &current_contract,
   const std::string contract_name,
   std::string ctor_id,
   symbolt &sym)
@@ -3087,7 +3092,7 @@ bool solidity_convertert::move_inheritance_to_ctor(
               else
               {
                 _assign = side_effect_exprt("assign", comp.type());
-                convert_type_expr(ns, rhs, comp.type(), *based_contracts);
+                convert_type_expr(ns, rhs, comp.type(), current_contract);
                 _assign.copy_to_operands(lhs, rhs);
               }
 
@@ -11168,7 +11173,9 @@ bool solidity_convertert::is_byte_type(const typet &t)
 {
   if (t.get("#sol_type").as_string().find("Bytes") != std::string::npos)
     return true;
-  if (t.is_struct() && (t.tag() == "BytesDynamic" || t.tag() == "BytesStatic"))
+  if (
+    t.is_struct() &&
+    (t.type().tag() == "BytesDynamic" || t.type().tag() == "BytesStatic"))
     return true;
   return false;
 }
@@ -11178,7 +11185,7 @@ bool solidity_convertert::is_bytesN_type(const typet &t)
   std::string solt = t.get("#sol_type").as_string();
   if (solt == "BytesStatic")
     return true;
-  if (t.is_struct() && t.tag() == "BytesStatic")
+  if (t.is_struct() && t.type().tag() == "BytesStatic")
     return true;
   return false;
 }
@@ -11189,7 +11196,7 @@ bool solidity_convertert::is_bytes_type(const typet &t)
   std::string solt = t.get("#sol_type").as_string();
   if (solt == "BytesDynamic")
     return true;
-  if (t.is_struct() && t.tag() == "BytesDynamic")
+  if (t.is_struct() && t.type().tag() == "BytesDynamic")
     return true;
   return false;
 }
