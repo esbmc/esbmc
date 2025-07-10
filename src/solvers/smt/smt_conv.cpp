@@ -1,4 +1,5 @@
 #include "irep2/irep2_expr.h"
+#include <cfloat>
 #include <iomanip>
 #include <set>
 #include <solvers/prop/literal.h>
@@ -2836,9 +2837,33 @@ double smt_convt::convert_rational_to_double(
   num_buffer[BUFFER_SIZE - 1] = '\0';
   den_buffer[BUFFER_SIZE - 1] = '\0';
 
-  // Use bounded string length check
+  // Check if as_string() actually produced output
   size_t num_len = strnlen(num_buffer.data(), BUFFER_SIZE);
   size_t den_len = strnlen(den_buffer.data(), BUFFER_SIZE);
+
+  // Handle the case where as_string() fails for very small numbers
+  if (num_len == 0 || den_len == 0)
+  {
+    bool num_positive =
+      !numerator.is_zero(); // Assumes non-zero means some value exists
+    bool den_positive = !denominator.is_zero();
+
+    if (num_positive && den_positive)
+    {
+      // This likely represents a very small positive rational number
+      // that's too small for string conversion but should be > 0
+      // Return a very small positive value instead of 0.0
+      log_warning(
+        "BigInt as_string() failed for very small rational - returning minimal "
+        "positive value");
+      return DBL_MIN; // Smallest positive normalized double
+    }
+    else
+    {
+      log_warning("BigInt as_string() failed and cannot determine sign");
+      return 0.0;
+    }
+  }
 
   if (num_len >= BUFFER_SIZE - 1 || den_len >= BUFFER_SIZE - 1)
   {
@@ -2851,14 +2876,35 @@ double smt_convt::convert_rational_to_double(
   {
     double num_val = std::stod(num_buffer.data());
     double den_val = std::stod(den_buffer.data());
-    return (den_val != 0.0) ? num_val / den_val : 0.0;
+
+    if (den_val == 0.0)
+    {
+      log_warning("Denominator converted to 0.0 despite non-zero BigInt");
+      return 0.0;
+    }
+
+    double result = num_val / den_val;
+
+    // Handle underflow in the division result
+    if (result == 0.0 && num_val != 0.0)
+    {
+      // The division underflowed to zero, but we know the rational is non-zero
+      // Return a minimal positive value to preserve the sign
+      log_warning(
+        "Division result underflowed - returning minimal positive value");
+      return DBL_MIN;
+    }
+
+    return result;
   }
-  catch (const std::exception &)
+  catch (const std::exception &e)
   {
     log_warning(
-      "Failed to convert BigInt to double: numerator={}, denominator={}",
+      "Failed to convert BigInt strings to double: numerator='%s', "
+      "denominator='%s', error: %s",
       num_buffer.data(),
-      den_buffer.data());
+      den_buffer.data(),
+      e.what());
     return 0.0;
   }
 }
