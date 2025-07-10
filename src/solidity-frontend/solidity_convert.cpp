@@ -12237,7 +12237,7 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
   pool_sym.file_local = true;
   pool_sym.lvalue = true;
   pool_sym.static_lifetime = true;
-  move_symbol_to_context(pool_sym);
+  auto & added_pool_sym = *move_symbol_to_context(pool_sym);
 
   side_effect_expr_function_callt init_call;
   get_library_function_call_no_args(
@@ -12247,7 +12247,7 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
     l,
     init_call);
 
-  init_call.arguments().push_back(symbol_expr(pool_sym));
+  init_call.arguments().push_back(symbol_expr(added_pool_sym));
   get_builtin_symbol(
     "$dynamic_pool",
     sol_prefix + "$dynamic_pool#",
