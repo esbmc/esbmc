@@ -1886,7 +1886,7 @@ bool solidity_convertert::get_contract_definition(const std::string &c_name)
         return true;
 
       // add solidity built-in property like balance, codehash
-      if (add_auxiliary_members(c_name))
+      if (add_auxiliary_members(*itr, c_name))
         return true;
 
       // parse contract body
@@ -7304,6 +7304,7 @@ bool solidity_convertert::get_sol_builtin_ref(
         exprt base;
         if (get_expr(expr["expression"], base))
           return true;
+        
         typet base_t;
         if (get_type_description(
               expr["expression"]["typeDescriptions"], base_t))
@@ -8392,6 +8393,37 @@ void solidity_convertert::get_bytesN_size(
     len_expr = member_exprt(src_expr, "length", size_type());
 }
 
+// check if current contract have bytes (not bytesN) type
+bool solidity_convertert::has_contract_bytes(const nlohmann::json &node)
+{
+  if (node.is_object())
+  {
+    if (
+      node.contains("typeDescriptions") &&
+      node["typeDescriptions"].contains("typeString") &&
+      node["typeDescriptions"]["typeString"] == "bytes")
+    {
+      return true;
+    }
+
+    for (const auto &kv : node.items())
+    {
+      if (has_contract_bytes(kv.value()))
+        return true;
+    }
+  }
+  else if (node.is_array())
+  {
+    for (const auto &element : node)
+    {
+      if (has_contract_bytes(element))
+        return true;
+    }
+  }
+
+  return false;
+}
+
 /* 
   Create an auxiliary variable if the input is not already a symbol.
   This is necessary when taking the address of a non-symbol expression
@@ -9122,7 +9154,7 @@ bool solidity_convertert::get_elementary_type_name(
   case SolidityGrammar::ElementaryTypeNameT::BYTES:
   {
     new_type = symbol_typet(prefix + "BytesDynamic");
-    new_type.set("#sol_type", "BytesStatic");
+    new_type.set("#sol_type", "BytesDynamic");
     break;
   }
   case SolidityGrammar::ElementaryTypeNameT::STRING_LITERAL:
@@ -12162,7 +12194,9 @@ bool solidity_convertert::is_low_level_property(const std::string &name)
 //     tmp = &(struct A*)get_address_object_ptr(_addr);
 // A& x = tmp;
 
-bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
+bool solidity_convertert::add_auxiliary_members(
+  const nlohmann::json &json,
+  const std::string contract_name)
 {
   log_debug("solidity", "@@@ adding esbmc auxiliary members");
 
@@ -12228,33 +12262,39 @@ bool solidity_convertert::add_auxiliary_members(const std::string contract_name)
   // then we add symbol call $dynamic_pool
   // e.g. BytesPool pool = bytes_pool_init(base_pool);
   // 1. declare static base pool
-  symbolt pool_sym;
-  typet pool_t = array_typet(unsigned_char_type(), exprt("infinity"));
-  std::string pool_name = "$" + contract_name + "_pool#";
-  std::string pool_id = "sol:@C@" + contract_name + "@" + pool_name;
 
-  get_default_symbol(pool_sym, "C++", pool_t, pool_name, pool_id, l);
-  pool_sym.file_local = true;
-  pool_sym.lvalue = true;
-  pool_sym.static_lifetime = true;
-  auto & added_pool_sym = *move_symbol_to_context(pool_sym);
+  // however, this will affect the performance,
+  // so first check if we need to add this
+  if (has_contract_bytes(json))
+  {
+    symbolt pool_sym;
+    typet pool_t = array_typet(unsigned_char_type(), exprt("infinity"));
+    std::string pool_name = "$" + contract_name + "_pool#";
+    std::string pool_id = "sol:@C@" + contract_name + "@" + pool_name;
 
-  side_effect_expr_function_callt init_call;
-  get_library_function_call_no_args(
-    "bytes_pool_init",
-    "c:@F@bytes_pool_init",
-    symbol_typet("tag-BytesPool"),
-    l,
-    init_call);
+    get_default_symbol(pool_sym, "C++", pool_t, pool_name, pool_id, l);
+    pool_sym.file_local = true;
+    pool_sym.lvalue = true;
+    pool_sym.static_lifetime = true;
+    auto &added_pool_sym = *move_symbol_to_context(pool_sym);
 
-  init_call.arguments().push_back(symbol_expr(added_pool_sym));
-  get_builtin_symbol(
-    "$dynamic_pool",
-    sol_prefix + "$dynamic_pool#",
-    symbol_typet("tag-BytesPool"),
-    l,
-    init_call,
-    contract_name);
+    side_effect_expr_function_callt init_call;
+    get_library_function_call_no_args(
+      "bytes_pool_init",
+      "c:@F@bytes_pool_init",
+      symbol_typet("tag-BytesPool"),
+      l,
+      init_call);
+
+    init_call.arguments().push_back(symbol_expr(added_pool_sym));
+    get_builtin_symbol(
+      "$dynamic_pool",
+      sol_prefix + "$dynamic_pool#",
+      symbol_typet("tag-BytesPool"),
+      l,
+      init_call,
+      contract_name);
+  }
 
   if (is_reentry_check)
   {

@@ -415,7 +415,8 @@ protected:
     const nlohmann::json &ast_node,
     const exprt &lhs,
     const exprt &rhs);
-  void get_tuple_assignment(const nlohmann::json& expr, const exprt &lop, exprt rop);
+  void
+  get_tuple_assignment(const nlohmann::json &expr, const exprt &lop, exprt rop);
   void get_tuple_function_call(const exprt &op);
   void get_llc_ret_tuple(symbolt &sym);
 
@@ -519,7 +520,9 @@ protected:
     exprt &new_expr,
     const typet common_type,
     const locationt &l);
-  bool add_auxiliary_members(const std::string contract_name);
+  bool add_auxiliary_members(
+    const nlohmann::json &json,
+    const std::string contract_name);
   void get_builtin_symbol(
     const std::string name,
     const std::string id,
@@ -623,7 +626,11 @@ protected:
     std::string the_value,
     exprt &dest);
   bool convert_string_literal(std::string the_value, exprt &dest);
-  void convert_type_expr(const namespacet &ns, exprt &dest, const typet &type, const nlohmann::json &expr);
+  void convert_type_expr(
+    const namespacet &ns,
+    exprt &dest,
+    const typet &type,
+    const nlohmann::json &expr);
   bool
   convert_hex_literal(std::string the_value, exprt &dest, const int n = 256);
   // check if it's a bytes type
@@ -632,6 +639,7 @@ protected:
   bool is_bytesN_type(const typet &t);
   exprt make_aux_var_for_bytes(exprt &val, const locationt &location);
   void get_bytesN_size(const exprt &src_expr, exprt &len_expr);
+  bool has_contract_bytes(const nlohmann::json &json);
 
   contextt &context;
   namespacet ns;
