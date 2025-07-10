@@ -174,6 +174,9 @@ void goto_convertt::do_atomic_begin(
   if (
     function.location().function() != "pthread_create" &&
     function.location().function() != "pthread_join_noswitch" &&
+    function.location().function() != "pthread_mutex_initializer" &&
+    !has_prefix(function.location().function(), "pthread_") &&
+    function.location().function() != "__ESBMC_pthread_start_main_hook" &&
     function.location().function() != "pthread_trampoline")
   {
     code_function_callt call;

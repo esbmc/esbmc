@@ -165,6 +165,7 @@ execution_statet &execution_statet::operator=(const execution_statet &ex)
   dependency_chain = ex.dependency_chain;
   mpor_says_no = ex.mpor_says_no;
   cswitch_forced = ex.cswitch_forced;
+  dependency_exist = ex.dependency_exist;
 
   // Vastly irritatingly, we have to iterate through existing level2t objects
   // updating their ex_state references. There isn't an elegant way of updating
@@ -201,6 +202,7 @@ void execution_statet::symex_step(reachability_treet &art)
   const goto_programt::instructiont &instruction = *state.source.pc;
   last_insn = &instruction;
 
+  //log_status("{} {}", active_thread, instruction.location);
   merge_gotos();
 
   // If current state guard is false, it shouldn't perform further context switch.
@@ -307,6 +309,16 @@ void execution_statet::symex_assign(
 
   if (threads_state.size() >= thread_cswitch_threshold)
     analyze_assign(code);
+}
+
+void execution_statet::symex_assign_arguments(
+  const expr2tc &code,
+  const bool hidden,
+  const guardt &guard)
+{
+  pre_goto_guard = guardt();
+
+  goto_symext::symex_assign(code, hidden, guard);
 }
 
 void execution_statet::claim(const expr2tc &expr, const std::string &msg)
@@ -455,7 +467,7 @@ void execution_statet::update_after_switch_point()
   thread_last_writes[active_thread].clear();
 
   cswitch_forced = false;
-
+  //log_status("no force");
   // If we've context switched, then wipe out all symbolic paths in the source
   // thread that didn't context switch, otherwise they'll observe other thread
   // PCs advancing with no change in state. However if we've hit a context
@@ -853,8 +865,10 @@ void execution_statet::get_expr_globals(
       name == "c:@__ESBMC_alloc" || name == "c:@__ESBMC_alloc_size" ||
       name == "c:@__ESBMC_is_dynamic" ||
       name == "c:@__ESBMC_blocked_threads_count" ||
-      name.find("c:pthread_lib") != std::string::npos ||
+      (name.find("c:pthread_lib") != std::string::npos &&
+       name.find("mutex") == std::string::npos)||
       name == "c:@__ESBMC_rounding_mode" ||
+      name == "c:@F@__ESBMC_races_flag1" ||
       name.find("c:@__ESBMC_pthread_thread") != std::string::npos)
     {
       return;
@@ -887,9 +901,34 @@ void execution_statet::get_expr_globals(
             continue;
           point_to_global = s->static_lifetime || s->type.is_dynamic_set();
           p = to_object_descriptor2t(obj).object;
+      if (!point_to_global) {
+        //log_status("not global{}", name);
+        cur_state->top().level1.rename(p);
+        auto it_find = art1->vars_map.find(p);
+        if (it_find != art1->vars_map.end()) {
+          std::list<unsigned int> &accessed_threads = it_find->second;
+          if (
+            std::find(accessed_threads.begin(), accessed_threads.end(), active_thread)
+              == accessed_threads.end())
+          {
+            accessed_threads.push_back(active_thread);
+          }
+
+          if (accessed_threads.size() > 1) {
+            point_to_global = true;
+            art1->is_global.insert(p);
+            globals_list.insert(p);
+          }
+        } else {
+          std::list<unsigned int> thread_list;
+          thread_list.push_back(active_thread);
+          art1->vars_map[p] = thread_list;
+        }
+      }
           /* Stop when the global symbol is found */
-          if (point_to_global)
+          if (point_to_global){
             break;
+          }
         }
       }
     }
@@ -962,11 +1001,15 @@ void execution_statet::get_expr_globals(
   });
 }
 
+
 bool execution_statet::check_mpor_dependency(unsigned int j, unsigned int l)
   const
 {
   assert(j < threads_state.size());
   assert(l < threads_state.size());
+
+  if (dependency_exist)
+    return true;
 
   // Rules given on page 13 of MPOR paper, although they don't appear to
   // distinguish which thread is which correctly. Essentially, check that
@@ -1107,14 +1150,24 @@ bool execution_statet::has_cswitch_point_occured() const
 {
   // Context switches can occur due to being forced, or by global state access
 
-  if (cswitch_forced)
+  if (cswitch_forced){
+    //log_status("force");
     return true;
+  }
 
   if (
     thread_last_reads[active_thread].size() != 0 ||
-    thread_last_writes[active_thread].size() != 0)
-    return true;
+    thread_last_writes[active_thread].size() != 0){
+      // log_status("reads ");
+      // for(auto &a:thread_last_reads[active_thread])
+      //   a.get()->dump();
+      // log_status("writes ");
+      // for(auto &b:thread_last_writes[active_thread])
+      //   b.get()->dump(); 
+      return true;
+    }
 
+  //log_status("no switch");
   return false;
 }
 
@@ -1279,6 +1332,7 @@ void execution_statet::ex_state_level2t::rename(expr2tc &identifier)
 
 dfs_execution_statet::~dfs_execution_statet()
 {
+  //log_status("pop");
   // Delete target; or if we're encoding at runtime, pop a context.
   if (smt_during_symex)
     target->pop_ctx();
@@ -1286,6 +1340,7 @@ dfs_execution_statet::~dfs_execution_statet()
 
 std::shared_ptr<execution_statet> dfs_execution_statet::clone() const
 {
+  //log_status("push");
   std::shared_ptr<dfs_execution_statet> d =
     std::make_shared<dfs_execution_statet>(*this);
 

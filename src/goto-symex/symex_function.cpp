@@ -117,7 +117,7 @@ unsigned goto_symext::argument_assignments(
 
       // Assign value to function argument
       // TODO: Should we hide it (true means hidden)?
-      symex_assign(
+      symex_assign_arguments(
         code_assign2tc(lhs, rhs),
         !options.get_bool_option("generate-html-report"));
     }
@@ -274,9 +274,13 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
 
   // read the arguments -- before the locality renaming
   std::vector<expr2tc> arguments = call.operands;
+
+  
+  if (identifier.as_string() == "c:@F@pthread_join_noswitch")
+    depend_exist();
+
   for (auto &argument : arguments)
   {
-    analyze_args(argument);
     cur_state->rename(argument);
   }
 

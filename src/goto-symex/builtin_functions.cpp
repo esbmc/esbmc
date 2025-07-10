@@ -561,11 +561,11 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
 
   cur_state->source.pc--;
 
-  if (func_call.ret)
+  if (func_call.ret){
     symex_assign(code_assign2tc(
       func_call.ret,
       constant_int2tc(int_type2(), BigInt(number_of_format_args))));
-
+  }
   // TODO: fill / cut off the inputs stream based on the length limits.
 
   for (long unsigned int i = fmt_idx + 1; i <= number_of_format_args + fmt_idx;

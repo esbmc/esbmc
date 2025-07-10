@@ -582,6 +582,11 @@ protected:
     const bool hidden = false,
     const guardt &guard = guardt());
 
+    virtual void symex_assign_arguments(
+    const expr2tc &code,
+    const bool hidden = false,
+    const guardt &guard = guardt()) = 0;
+
   /** Recursively perform symex assign. @see symex_assign */
   void symex_assign_rec(
     const expr2tc &lhs,
@@ -964,6 +969,12 @@ protected:
    *  may be renamed to constant bool in symex_function_call_code(), while we need
    *  to get the information for context switch.*/
   virtual void analyze_args(const expr2tc &expr) = 0;
+
+  /** If there is any other threads that current thread is waiting to finish through
+   *  pthread_join(), then there is a happens-before relation and should be considered
+   *  in partial order reduction.
+   * */
+  virtual void depend_exist() = 0;
   friend void build_goto_symex_classes();
 };
 

@@ -239,6 +239,15 @@ public:
    *  re-reached through symbolic execution. Not going to document it until I
    *  know that it works.
    */
+
+  bool all_threads_ended()
+  {
+    for (const auto &thread_state : get_cur_state().threads_state)
+      if (!thread_state.thread_ended)
+        return 0;
+    return 1;
+  }
+
   class dfs_position
   {
   public:
