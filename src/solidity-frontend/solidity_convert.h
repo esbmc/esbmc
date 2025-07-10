@@ -438,7 +438,7 @@ protected:
     const std::string &c_name,
     exprt &pos,
     const locationt &l,
-    const std::string &key_sol_type);
+    const typet &key_type);
   bool get_new_mapping_index_access(
     const typet &value_t,
     const std::string &val_sol_type,
@@ -625,11 +625,11 @@ protected:
   bool
   convert_hex_literal(std::string the_value, exprt &dest, const int n = 256);
   // check if it's a bytes type
+  bool is_byte_type(const typet &t);
   bool is_bytes_type(const typet &t);
-  bool is_bytesN_type(const std::string &t) const;
-  bool is_bytesN_type(const typet &t) const;
+  bool is_bytesN_type(const typet &t);
   exprt make_aux_var_for_bytes(exprt &val, const locationt &location);
-  unsigned get_bytesN_size(const std::string &type_str);
+  void get_bytesN_size(const exprt &src_expr, exprt &len_expr);
 
   contextt &context;
   namespacet ns;
