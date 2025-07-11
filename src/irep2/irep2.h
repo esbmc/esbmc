@@ -866,7 +866,6 @@ public:
 
   mutable size_t crc_val;
   mutable std::mutex crc_mutex;
-
 };
 
 inline bool is_nil_expr(const expr2tc &exp)
