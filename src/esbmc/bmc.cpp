@@ -1263,7 +1263,7 @@ smt_convt::resultt bmct::multi_property_check(
   auto &reached_mul_claims = symex->goto_functions.reached_mul_claims;
   auto &verified_claims = symex->goto_functions.verified_claims;
   auto &reached_claims_mutex = symex->goto_functions.reached_claims_mutex;
-  auto &reached_mul_claims_mutex = 
+  auto &reached_mul_claims_mutex =
     symex->goto_functions.reached_mul_claims_mutex;
   auto &verified_claims_mutex = symex->goto_functions.verified_claims_mutex;
 
