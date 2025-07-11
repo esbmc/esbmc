@@ -58,7 +58,6 @@ void goto_loopst::find_function_loops()
       // Convert it into: assume(!g);
       if (loop_head->location_number == loop_exit->location_number)
       {
-        // In TACAS, this is a common setup for reaching a "dead state" (no violation)
         simplify(loop_head->guard);
         it->make_assumption(not2tc(loop_head->guard));
         continue;
