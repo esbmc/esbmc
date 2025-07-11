@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.c
---z3 --ir
+--ir
 ^VERIFICATION SUCCESSFUL$
