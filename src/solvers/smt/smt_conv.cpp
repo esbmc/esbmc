@@ -249,8 +249,12 @@ smt_astt smt_convt::convert_assign(const expr2tc &expr)
   // IMPORTANT: the cache is now a fundamental part of how some flatteners work,
   // in that one can choose to create a set of expressions and their ASTs, then
   // store them in the cache, rather than have a more sophisticated conversion.
-  smt_cache_entryt e = {eq.side_1, side2, ctx_level};
-  smt_cache.insert(e);
+  {
+    const smt_cache_entryt e = {eq.side_1, side2, ctx_level};
+    // Lock automatically released when it goes out of scope
+    std::lock_guard lock(smt_cache_mutex);
+    smt_cache.insert(e);
+  }
 
   return side2;
 }
@@ -396,10 +400,12 @@ smt_astt smt_convt::apply_ieee754_semantics(
 
 smt_astt smt_convt::convert_ast(const expr2tc &expr)
 {
-  smt_cachet::const_iterator cache_result = smt_cache.find(expr);
-  if (cache_result != smt_cache.end())
-    return (cache_result->ast);
-
+  {
+    std::lock_guard lock(smt_cache_mutex);
+    smt_cachet::const_iterator cache_result = smt_cache.find(expr);
+    if (cache_result != smt_cache.end())
+      return (cache_result->ast);
+  }
   /* Vectors!
    *
    * Here we need special attention for Vectors, because of the way
@@ -1506,9 +1512,11 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     abort();
   }
 
-  struct smt_cache_entryt entry = {expr, a, ctx_level};
-  smt_cache.insert(entry);
-
+  {
+    struct smt_cache_entryt entry = {expr, a, ctx_level};
+    std::lock_guard lock(smt_cache_mutex);
+    smt_cache.insert(entry);
+  }
   return a;
 }
 

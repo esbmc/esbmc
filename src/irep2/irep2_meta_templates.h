@@ -176,6 +176,7 @@ size_t
 esbmct::irep_methods2<derived, baseclass, traits, enable, fields>::do_crc()
   const
 {
+  std::lock_guard<std::mutex> lock(this->crc_mutex);
   if (this->crc_val != 0)
     return this->crc_val;
 

@@ -3,6 +3,7 @@
 
 #include <cassert>
 #include <list>
+#include <shared_mutex>
 #include <unordered_map>
 #include <string>
 #include <vector>
@@ -65,6 +66,7 @@ public:
   // the reference is guaranteed to be stable
   const std::string &get_string(size_t no) const
   {
+    std::shared_lock lock(string_container_mutex);
     assert(no < string_vector.size());
     return *string_vector[no];
   }
@@ -72,6 +74,7 @@ public:
 protected:
   typedef std::unordered_map<string_ptrt, size_t, string_ptr_hash> hash_tablet;
   hash_tablet hash_table;
+  mutable std::shared_mutex string_container_mutex;
 
   unsigned get(const char *s);
   unsigned get(const std::string &s);

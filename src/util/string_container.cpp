@@ -19,11 +19,15 @@ unsigned string_containert::get(const char *s)
 {
   string_ptrt string_ptr(s);
 
-  hash_tablet::iterator it = hash_table.find(string_ptr);
+  {
+    std::shared_lock lock(string_container_mutex);
+    hash_tablet::iterator it = hash_table.find(string_ptr);
 
-  if (it != hash_table.end())
-    return it->second;
+    if (it != hash_table.end())
+      return it->second;
+  }
 
+  std::unique_lock lock(string_container_mutex);
   size_t r = hash_table.size();
 
   // these are stable
@@ -42,11 +46,15 @@ unsigned string_containert::get(const std::string &s)
 {
   string_ptrt string_ptr(s);
 
-  hash_tablet::iterator it = hash_table.find(string_ptr);
+  {
+    std::shared_lock lock(string_container_mutex);
+    hash_tablet::iterator it = hash_table.find(string_ptr);
 
-  if (it != hash_table.end())
-    return it->second;
+    if (it != hash_table.end())
+      return it->second;
+  }
 
+  std::unique_lock lock(string_container_mutex);
   size_t r = hash_table.size();
 
   // these are stable

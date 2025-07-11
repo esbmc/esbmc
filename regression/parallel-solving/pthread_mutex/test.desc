@@ -1,0 +1,4 @@
+CORE
+main.i
+--parallel-solving --k-induction
+^VERIFICATION UNKNOWN$
