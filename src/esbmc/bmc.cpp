@@ -1263,7 +1263,8 @@ smt_convt::resultt bmct::multi_property_check(
   auto &reached_mul_claims = symex->goto_functions.reached_mul_claims;
   auto &verified_claims = symex->goto_functions.verified_claims;
   auto &reached_claims_mutex = symex->goto_functions.reached_claims_mutex;
-  auto &reached_mul_claims_mutex = symex->goto_functions.reached_mul_claims_mutex;
+  auto &reached_mul_claims_mutex = 
+    symex->goto_functions.reached_mul_claims_mutex;
   auto &verified_claims_mutex = symex->goto_functions.verified_claims_mutex;
 
   // "Assertion Cov"
@@ -1527,7 +1528,7 @@ smt_convt::resultt bmct::multi_property_check(
   };
 
   // PARALLEL
-  if(options.get_bool_option("parallel-solving"))
+  if (options.get_bool_option("parallel-solving"))
   {
     /* NOTE: I would love to use std::for_each here, but it is not giving
        * the result I would expect. My guess is either compiler version
@@ -1540,11 +1541,11 @@ smt_convt::resultt bmct::multi_property_check(
     // TODO: Running everything in parallel might be a bad idea.
     //       Should we also add a thread pool?
     std::vector<std::thread> parallel_jobs;
-    for(const auto &i : jobs)
+    for (const auto &i : jobs)
       parallel_jobs.push_back(std::thread(job_function, i));
 
     // Main driver
-    for(auto &t : parallel_jobs)
+    for (auto &t : parallel_jobs)
     {
       t.join();
     }
