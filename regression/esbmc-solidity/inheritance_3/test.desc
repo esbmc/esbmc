@@ -1,4 +1,4 @@
 CORE
 inheritance.solast 
---function test_override --sol inheritance.sol --no-standard-checks --k-induction
+--function test_override --sol inheritance.sol --no-standard-checks --k-induction --bound
 ^VERIFICATION SUCCESSFUL$

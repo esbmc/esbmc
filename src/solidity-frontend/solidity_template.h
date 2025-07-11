@@ -190,8 +190,16 @@ __ESBMC_HIDE:;
 }
 )";
 
-const std::string sol_funcs =
-  blockhash + gasleft + sol_abi + sol_math + sol_string + sol_byte;
+const std::string sol_destruct = R"(
+void selfdestruct()
+{
+__ESBMC_HIDE:;
+  exit(0);
+}
+)";
+
+const std::string sol_funcs = blockhash + gasleft + sol_abi + sol_math +
+                              sol_string + sol_byte + sol_destruct;
 
 /// data structure
 
@@ -203,7 +211,7 @@ struct _ESBMC_Mapping
   uint256_t key : 256;
   void *value;
   struct _ESBMC_Mapping *next;
-}__attribute__((packed));
+};
 
 struct mapping_t
 {
@@ -464,7 +472,7 @@ __ESBMC_HIDE:;
  * Fetches the length of a stored array.
  * Returns 0 if the array is not found.
  */
-unsigned int _ESBMC_get_array_length(void *array) {
+unsigned int _ESBMC_array_length(void *array) {
 __ESBMC_HIDE:;
     ArrayNode *current = array_list_head;
     while (current != NULL) {
@@ -487,6 +495,62 @@ __ESBMC_HIDE:;
   void *to_array = (void *)calloc(from_size, size_of);
   memcpy(to_array, from_array, from_size * size_of);
   return to_array;
+}
+
+void _ESBMC_array_push(void *array, void *element, size_t size_of_element) {
+__ESBMC_HIDE:;
+    if (array == NULL || element == NULL || size_of_element == 0)
+        abort();
+
+    ArrayNode *current = array_list_head;
+    while (current != NULL) {
+        if (current->array_ptr == array) {
+            size_t new_length = current->length + 1;
+            void *new_array = realloc(array, new_length * size_of_element);
+            if (new_array == NULL)
+                abort();
+            
+            memcpy((char *)new_array + (current->length * size_of_element), element, size_of_element);
+            current->array_ptr = new_array;
+            current->length = new_length;
+            return;
+        }
+        current = current->next;
+    }
+
+    // Array not found, treat as new
+    void *new_array = malloc(size_of_element);
+    if (new_array == NULL)
+        abort();
+    memcpy(new_array, element, size_of_element);
+    _ESBMC_store_array(new_array, 1);
+}
+
+void _ESBMC_array_pop(void *array, size_t size_of_element) {
+__ESBMC_HIDE:;
+    if (array == NULL || size_of_element == 0)
+        abort();
+
+    ArrayNode *current = array_list_head;
+    while (current != NULL) {
+        if (current->array_ptr == array) {
+            if (current->length == 0)
+                abort(); // Cannot pop from empty array
+
+            current->length -= 1;
+
+            if (current->length == 0) {
+                free(current->array_ptr);
+                current->array_ptr = NULL;
+            } else {
+                void *new_array = realloc(current->array_ptr, current->length * size_of_element);
+                if (new_array != NULL)
+                    current->array_ptr = new_array;
+            }
+            return;
+        }
+        current = current->next;
+    }
 }
 )";
 
@@ -742,7 +806,19 @@ __ESBMC_HIDE:;
     *str1 = (char *)malloc(len + 1);  
     strcpy(*str1, str2);  // force malloc success
 }
+__attribute__((annotate("__ESBMC_inf_size"))) char _ESBMC_rand_str[1];
+char *nondet_string() {
+__ESBMC_HIDE:;
+    size_t len = nondet_uint();
+    // __ESBMC_assume(len < SIZE_MAX);  
 
+    for (size_t i = 0; i < len; ++i) {
+        _ESBMC_rand_str[i] = nondet_char();
+        __ESBMC_assume(_ESBMC_rand_str[i] != '\0');
+    }
+    _ESBMC_rand_str[len] = '\0'; 
+    return _ESBMC_rand_str;
+}
 )";
 
 // get unique random address
