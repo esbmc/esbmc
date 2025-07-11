@@ -50,10 +50,8 @@ type2t::type2t(type_ids id) : type_id(id), crc_val(0)
 {
 }
 
-type2t::type2t(const type2t &ref) :
-    type_id(ref.type_id),
-    crc_val(ref.crc_val)
-    // NOTE: crc_mutex not mentioned here so fresh mutex is created.
++type2t::type2t(const type2t &ref) : type_id(ref.type_id), crc_val(ref.crc_val)
+// NOTE: crc_mutex not mentioned here so fresh mutex is created.
 {
 }
 
