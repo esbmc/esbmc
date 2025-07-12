@@ -4637,9 +4637,17 @@ bool solidity_convertert::get_expr(
     case SolidityGrammar::ElementaryTypeNameT::INT_LITERAL:
     {
       assert(literal_type != nullptr);
-      if (
-        the_value.length() >= 2 &&
-        the_value.substr(0, 2) == "0x") // meaning hex-string
+      bool is_hex = false;
+      if( the_value.length() >= 2 &&
+        the_value.substr(0, 2) == "0x")
+        is_hex = true;
+      else if(expr["kind"] == "hexString")
+      {
+        the_value = expr["hexValue"];
+        is_hex = true;
+      }
+
+      if (is_hex) // meaning hex-string
       {
         if (convert_hex_literal(the_value, new_expr))
           return true;
@@ -6175,8 +6183,8 @@ bool solidity_convertert::get_binary_operator_expr(
 
         lt_sol = lhs.type().get("#sol_type").as_string();
         rt_sol = rhs.type().get("#sol_type").as_string();
-        is_static = is_bytesN_type(lt) && is_bytesN_type(rt);
-        is_dynamic = is_bytes_type(lt) && is_bytes_type(rt);
+        is_static = is_bytesN_type(lhs.type()) && is_bytesN_type(rhs.type());
+        is_dynamic = is_bytes_type(lhs.type()) && is_bytes_type(rhs.type());
 
         if (is_static)
         {
@@ -11469,7 +11477,14 @@ void solidity_convertert::convert_type_expr(
 
         // e.g. bytes3(0x1234); "BYTES3" => 3
         exprt len_expr;
-        get_bytesN_size(src_expr, len_expr);
+        if(!dest_type.get("#sol_bytesn_size").empty())
+          len_expr = from_integer(std::stoul(dest_type.get("#sol_bytesn_size").as_string()), size_type());
+        else 
+        {
+          assert(len_expr.id() != "constant");
+          log_error("got unexpected bytes typecast");
+          abort();
+        }
         call.arguments().push_back(len_expr);
         src_expr = make_aux_var_for_bytes(call, loc);
         src_expr.type().set("#sol_type", "BytesStatic");
