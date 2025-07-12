@@ -103,6 +103,12 @@ solidity_convertert::solidity_convertert(
   bool_t = bool_type();
   bool_t.set("#sol_type", "BOOL");
   bool_t.set("#cpp_type", "bool");
+
+  byte_dynamic_t = symbol_typet(prefix + "BytesDynamic");
+  byte_dynamic_t.set("#sol_type", "BytesDynamic");
+
+  byte_static_t = symbol_typet(prefix + "BytesStatic");
+  byte_static_t.set("#sol_type", "BytesStatic");
 }
 
 // Convert smart contracts into symbol tables
@@ -4546,12 +4552,19 @@ bool solidity_convertert::get_expr(
       literal_type["typeString"].get<std::string>().find("bytes") !=
         std::string::npos)
     {
+      // e.g.
+      // bytes a = hex"1234";
+      // bytes2 b = hex"1234";
+      typet byte_t;
+      if (get_type_description(literal_type, byte_t))
+        return true;
+      assert(is_byte_type(byte_t));
+      std::string fname = is_bytesN_type(byte_t) ? "static" : "dynamic";
+      bool is_static = fname == "static";
+
       SolidityGrammar::ElementaryTypeNameT target_type =
         SolidityGrammar::get_elementary_type_name_t(literal_type);
 
-      const symbolt *bytes_static_sym = context.find_symbol("tag-BytesStatic");
-      assert(bytes_static_sym != nullptr);
-      typet bytes_static_type = bytes_static_sym->type;
       std::string sol_type_str =
         SolidityGrammar::elementary_type_name_to_str(target_type);
       if (
@@ -4560,16 +4573,18 @@ bool solidity_convertert::get_expr(
       {
         side_effect_expr_function_callt hex_call;
         get_library_function_call_no_args(
-          "bytes_static_from_hex",
-          "c:@F@bytes_static_from_hex",
-          bytes_static_type,
+          "bytes_" + fname + "_from_hex",
+          "c:@F@bytes" + fname + "from_hex",
+          byte_t,
           location,
           hex_call);
 
         string_constantt str(expr["value"].get<std::string>());
-        str.type().set("#sol_type", "STRING_LITERAL");
         hex_call.arguments().push_back(str);
-        hex_call.type().set("#sol_type", "BytesStatic");
+        if (is_static)
+          hex_call.type().set("#sol_type", "BytesStatic");
+        else
+          hex_call.type().set("#sol_type", "BytesDynamic");
         new_expr = hex_call;
 
         new_expr.type().set("#sol_type", sol_type_str); // e.g. "BYTES24"
@@ -4580,16 +4595,20 @@ bool solidity_convertert::get_expr(
       {
         side_effect_expr_function_callt str_call;
         get_library_function_call_no_args(
-          "bytes_static_from_string",
-          "c:@F@bytes_static_from_string",
-          bytes_static_type,
+          "bytes_" + fname + "_from_string",
+          "c:@F@bytes_" + fname + "_from_string",
+          byte_t,
           location,
           str_call);
 
-        string_constantt str(expr["value"].get<std::string>());
-        str.type().set("#sol_type", "STRING_LITERAL");
+        assert(expr.contains("hexValue"));
+        string_constantt str(expr["hexValue"].get<std::string>());
+        ;
         str_call.arguments().push_back(str);
-        str_call.type().set("#sol_type", "BytesStatic");
+        if (is_static)
+          str_call.type().set("#sol_type", "BytesStatic");
+        else
+          str_call.type().set("#sol_type", "BytesDynamic");
         new_expr = str_call;
 
         new_expr.type().set("#sol_type", sol_type_str); // e.g. "BYTES12"
@@ -5540,20 +5559,9 @@ bool solidity_convertert::get_expr(
           dyn_get_call);
         address_of_exprt arg_addr(array);
 
-        exprt cur_this_expr;
-        if (current_functionDecl)
-        {
-          if (get_func_decl_this_ref(*current_functionDecl, cur_this_expr))
-            return true;
-        }
-        else
-        {
-          if (get_ctor_decl_this_ref(c_name, cur_this_expr))
-            return true;
-        }
-
-        member_exprt dynamic_pool(
-          cur_this_expr, "$dynamic_pool", symbol_typet("tag-BytesPool"));
+        exprt dynamic_pool;
+        if (get_dynamic_pool(current_contractName, dynamic_pool))
+          return true;
 
         dyn_get_call.arguments().push_back(arg_addr);
         dyn_get_call.arguments().push_back(dynamic_pool);
@@ -6182,28 +6190,9 @@ bool solidity_convertert::get_binary_operator_expr(
 
       if (is_dynamic)
       {
-        std::string cname;
-        get_current_contract_name(expr, cname);
-        if (cname.empty())
-        {
-          log_error("Cannot resolve contract name for dynamic bytes");
+        exprt pool_member;
+        if (get_dynamic_pool(expr, pool_member))
           return true;
-        }
-
-        exprt this_expr;
-        if (current_functionDecl)
-        {
-          if (get_func_decl_this_ref(*current_functionDecl, this_expr))
-            return true;
-        }
-        else
-        {
-          if (get_ctor_decl_this_ref(cname, this_expr))
-            return true;
-        }
-
-        member_exprt pool_member(
-          this_expr, "$dynamic_pool", symbol_typet("tag-BytesPool"));
         call_expr.arguments().push_back(pool_member);
       }
 
@@ -7304,7 +7293,7 @@ bool solidity_convertert::get_sol_builtin_ref(
         exprt base;
         if (get_expr(expr["expression"], base))
           return true;
-        
+
         typet base_t;
         if (get_type_description(
               expr["expression"]["typeDescriptions"], base_t))
@@ -7390,26 +7379,9 @@ bool solidity_convertert::get_sol_builtin_ref(
           get_library_function_call_no_args(
             fname, "c:@F@" + fname, empty_typet(), l, mem);
 
-          exprt this_expr;
-          std::string cname;
-          get_current_contract_name(expr, cname);
-          if (cname.empty())
-          {
-            log_error("Cannot resolve contract name for bytes.{}", name);
+          exprt pool_member;
+          if (get_dynamic_pool(expr, pool_member))
             return true;
-          }
-          if (current_functionDecl)
-          {
-            if (get_func_decl_this_ref(*current_functionDecl, this_expr))
-              return true;
-          }
-          else
-          {
-            if (get_ctor_decl_this_ref(cname, this_expr))
-              return true;
-          }
-          member_exprt pool_member(
-            this_expr, "dynamic_pool", symbol_typet("tag-BytesPool"));
           mem.arguments().push_back(address_of_exprt(base));
           if (name == "push")
           {
@@ -8393,6 +8365,39 @@ void solidity_convertert::get_bytesN_size(
     len_expr = member_exprt(src_expr, "length", size_type());
 }
 
+bool solidity_convertert::get_dynamic_pool(
+  const std::string &c_name,
+  exprt &pool)
+{
+  exprt cur_this_expr;
+  if (current_functionDecl)
+  {
+    if (get_func_decl_this_ref(*current_functionDecl, cur_this_expr))
+      return true;
+  }
+  else
+  {
+    if (get_ctor_decl_this_ref(c_name, cur_this_expr))
+      return true;
+  }
+
+  pool =
+    member_exprt(cur_this_expr, "$dynamic_pool", symbol_typet("tag-BytesPool"));
+
+  return false;
+}
+
+bool solidity_convertert::get_dynamic_pool(
+  const nlohmann::json &expr,
+  exprt &pool)
+{
+  std::string c_name;
+  get_current_contract_name(expr, c_name);
+  if (c_name.empty())
+    return true;
+  return get_dynamic_pool(c_name, pool);
+}
+
 // check if current contract have bytes (not bytesN) type
 bool solidity_convertert::has_contract_bytes(const nlohmann::json &node)
 {
@@ -8451,6 +8456,7 @@ exprt solidity_convertert::make_aux_var_for_bytes(
   get_aux_var(aux_name, aux_id);
 
   typet t = val.type();
+  assert(is_byte_type(t));
   std::string debug_modulename = get_modulename_from_path(absolute_path);
 
   symbolt aux_sym;
@@ -8519,20 +8525,9 @@ void solidity_convertert::gen_mapping_key_typecast(
 
     // get dynamic_pool from current contract instance
     // get this
-    exprt this_ptr;
-    if (current_functionDecl)
-    {
-      if (get_func_decl_this_ref(*current_functionDecl, this_ptr))
-        abort();
-    }
-    else
-    {
-      if (get_func_decl_this_ref(c_name, this_ptr))
-        abort();
-    }
-
-    member_exprt dynamic_pool_member(
-      this_ptr, "$dynamic_pool", symbol_typet("tag-BytesPool"));
+    exprt dynamic_pool_member;
+    if (get_dynamic_pool(c_name, dynamic_pool_member))
+      abort();
 
     bytes_dynamic_call.arguments().push_back(dynamic_pool_member);
 
@@ -9146,15 +9141,13 @@ bool solidity_convertert::get_elementary_type_name(
   case SolidityGrammar::ElementaryTypeNameT::BYTES31:
   case SolidityGrammar::ElementaryTypeNameT::BYTES32:
   {
-    new_type = symbol_typet(prefix + "BytesStatic");
-    new_type.set("#sol_type", "BytesStatic");
+    new_type = byte_static_t;
     new_type.set("#sol_bytes_size", bytesn_type_name_to_size(type));
     break;
   }
   case SolidityGrammar::ElementaryTypeNameT::BYTES:
   {
-    new_type = symbol_typet(prefix + "BytesDynamic");
-    new_type.set("#sol_type", "BytesDynamic");
+    new_type = byte_dynamic_t;
     break;
   }
   case SolidityGrammar::ElementaryTypeNameT::STRING_LITERAL:
@@ -11305,33 +11298,14 @@ void solidity_convertert::convert_type_expr(
     }
     else if (is_byte_type(src_type) && is_byte_type(dest_type))
     {
-      std::string c_name;
-      get_current_contract_name(expr, c_name);
-      if (c_name.empty())
-      {
-        log_error(
-          "Unable to resolve current contract name during type conversion");
-        abort();
-      }
       // prevent something like
       // bytes_dynamic_from_uint({ .offset=0, .length=0, .initialized=0, .anon_pad$3=0 }, this->$dynamic_pool);
       if (src_expr.is_struct())
         src_expr = make_aux_var_for_bytes(src_expr, src_expr.location());
 
-      exprt cur_this_expr;
-      if (current_functionDecl)
-      {
-        if (get_func_decl_this_ref(*current_functionDecl, cur_this_expr))
-          abort();
-      }
-      else
-      {
-        if (get_ctor_decl_this_ref(c_name, cur_this_expr))
-          abort();
-      }
-
-      member_exprt pool_member(
-        cur_this_expr, "$dynamic_pool", symbol_typet("tag-BytesPool"));
+      exprt pool_member;
+      if (get_dynamic_pool(expr, pool_member))
+        abort();
 
       // e.g. Bytes2 x; Bytes4(x); -> bytes_static_truncate(&x, 2)
       if (is_bytesN_type(src_type) && is_bytesN_type(dest_type))
@@ -11423,7 +11397,7 @@ void solidity_convertert::convert_type_expr(
     {
       locationt loc = src_expr.location();
 
-      if (is_byte_type(dest_type))
+      if (is_bytes_type(dest_type))
       {
         // dynamic bytes: use bytes_dynamic_from_uint(...)
         side_effect_expr_function_callt call;
@@ -11437,28 +11411,9 @@ void solidity_convertert::convert_type_expr(
         call.type().set("#sol_type", "BytesDynamic");
 
         // resolve pool_data: this.dynamic_pool
-        std::string cname;
-        get_current_contract_name(expr, cname);
-        if (cname.empty())
-        {
-          log_error("Unable to resolve contract name in convert_type_expr");
+        exprt pool_member;
+        if (get_dynamic_pool(expr, pool_member))
           abort();
-        }
-
-        exprt this_expr;
-        if (current_functionDecl)
-        {
-          if (get_func_decl_this_ref(*current_functionDecl, this_expr))
-            abort();
-        }
-        else
-        {
-          if (get_ctor_decl_this_ref(cname, this_expr))
-            abort();
-        }
-
-        member_exprt pool_member(
-          this_expr, "$dynamic_pool", symbol_typet("tag-BytesPool"));
         call.arguments().push_back(pool_member);
 
         src_expr = make_aux_var_for_bytes(call, loc);

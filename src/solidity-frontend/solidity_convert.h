@@ -640,6 +640,8 @@ protected:
   exprt make_aux_var_for_bytes(exprt &val, const locationt &location);
   void get_bytesN_size(const exprt &src_expr, exprt &len_expr);
   bool has_contract_bytes(const nlohmann::json &json);
+  bool get_dynamic_pool(const std::string &c_name, exprt &pool);
+  bool get_dynamic_pool(const nlohmann::json &expr, exprt &pool);
 
   contextt &context;
   namespacet ns;
@@ -722,6 +724,8 @@ protected:
   typet addrp_t;
   typet string_t;
   typet bool_t;
+  typet byte_dynamic_t;
+  typet byte_static_t;
 
 private:
   bool get_elementary_type_name_uint(
