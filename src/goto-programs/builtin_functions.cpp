@@ -171,13 +171,7 @@ void goto_convertt::do_atomic_begin(
   // We should allow a context switch to happen before synchronization points.
   // In particular, here we force a context switch to happen before an atomic block
   // via the intrinsic function __ESBMC_yield();
-  if (
-    function.location().function() != "pthread_create" &&
-    function.location().function() != "pthread_join_noswitch" &&
-    function.location().function() != "pthread_mutex_initializer" &&
-    !has_prefix(function.location().function(), "pthread_") &&
-    function.location().function() != "__ESBMC_pthread_start_main_hook" &&
-    function.location().function() != "pthread_trampoline")
+  if (!has_prefix(function.location().function(), "pthread_"))
   {
     code_function_callt call;
     call.function() = symbol_expr(*context.find_symbol("c:@F@__ESBMC_yield"));

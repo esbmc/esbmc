@@ -202,7 +202,6 @@ void execution_statet::symex_step(reachability_treet &art)
   const goto_programt::instructiont &instruction = *state.source.pc;
   last_insn = &instruction;
 
-  //log_status("{} {}", active_thread, instruction.location);
   merge_gotos();
 
   // If current state guard is false, it shouldn't perform further context switch.
@@ -467,7 +466,7 @@ void execution_statet::update_after_switch_point()
   thread_last_writes[active_thread].clear();
 
   cswitch_forced = false;
-  //log_status("no force");
+
   // If we've context switched, then wipe out all symbolic paths in the source
   // thread that didn't context switch, otherwise they'll observe other thread
   // PCs advancing with no change in state. However if we've hit a context
@@ -868,7 +867,6 @@ void execution_statet::get_expr_globals(
       (name.find("c:pthread_lib") != std::string::npos &&
        name.find("mutex") == std::string::npos)||
       name == "c:@__ESBMC_rounding_mode" ||
-      name == "c:@F@__ESBMC_races_flag1" ||
       name.find("c:@__ESBMC_pthread_thread") != std::string::npos)
     {
       return;
@@ -902,7 +900,6 @@ void execution_statet::get_expr_globals(
           point_to_global = s->static_lifetime || s->type.is_dynamic_set();
           p = to_object_descriptor2t(obj).object;
       if (!point_to_global) {
-        //log_status("not global{}", name);
         cur_state->top().level1.rename(p);
         auto it_find = art1->vars_map.find(p);
         if (it_find != art1->vars_map.end()) {
@@ -926,9 +923,8 @@ void execution_statet::get_expr_globals(
         }
       }
           /* Stop when the global symbol is found */
-          if (point_to_global){
+          if (point_to_global)
             break;
-          }
         }
       }
     }
@@ -991,16 +987,13 @@ void execution_statet::get_expr_globals(
       }
     }
     else
-    {
       return;
-    }
   }
 
   expr->foreach_operand([this, &globals_list, &ns](const expr2tc &e) {
     get_expr_globals(ns, e, globals_list);
   });
 }
-
 
 bool execution_statet::check_mpor_dependency(unsigned int j, unsigned int l)
   const
@@ -1150,24 +1143,14 @@ bool execution_statet::has_cswitch_point_occured() const
 {
   // Context switches can occur due to being forced, or by global state access
 
-  if (cswitch_forced){
-    //log_status("force");
+  if (cswitch_forced)
     return true;
-  }
 
   if (
     thread_last_reads[active_thread].size() != 0 ||
-    thread_last_writes[active_thread].size() != 0){
-      // log_status("reads ");
-      // for(auto &a:thread_last_reads[active_thread])
-      //   a.get()->dump();
-      // log_status("writes ");
-      // for(auto &b:thread_last_writes[active_thread])
-      //   b.get()->dump(); 
+    thread_last_writes[active_thread].size() != 0)
       return true;
-    }
 
-  //log_status("no switch");
   return false;
 }
 
