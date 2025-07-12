@@ -218,26 +218,6 @@ __ESBMC_HIDE:;
     return b;
 }
 
-BytesDynamic bytes_dynamic_from_hex(const char* hex_str, BytesPool* pool) {
-__ESBMC_HIDE:;
-    assert(hex_str[0] == '0' && hex_str[1] == 'x');
-    size_t hex_len = strlen(hex_str) - 2;
-    assert(hex_len % 2 == 0);
-    size_t byte_len = hex_len / 2;
-    assert(byte_len <= 32); // Solidity dynamic bytes also limited to 32
-
-    unsigned char tmp[32] = {0};
-    for (size_t i = 0; i < byte_len; i++) {
-        unsigned char high = hex_char_to_nibble(hex_str[2 + i * 2]);
-        unsigned char low = hex_char_to_nibble(hex_str[2 + i * 2 + 1]);
-        tmp[i] = (high << 4) | low;
-    }
-
-    BytesDynamic b = {0};
-    bytes_dynamic_init(&b, tmp, byte_len, pool);
-    return b;
-}
-
 BytesStatic bytes_static_from_string(const char* str) {
 __ESBMC_HIDE:;
     size_t len = strlen(str);
@@ -359,6 +339,26 @@ __ESBMC_HIDE:;
     return b;
 }
 
+BytesDynamic bytes_dynamic_from_hex(const char* hex_str, BytesPool* pool) {
+__ESBMC_HIDE:;
+    assert(hex_str[0] == '0' && hex_str[1] == 'x');
+    size_t hex_len = strlen(hex_str) - 2;
+    assert(hex_len % 2 == 0);
+    size_t byte_len = hex_len / 2;
+    assert(byte_len <= 32); // Solidity dynamic bytes also limited to 32
+
+    unsigned char tmp[32] = {0};
+    for (size_t i = 0; i < byte_len; i++) {
+        unsigned char high = hex_char_to_nibble(hex_str[2 + i * 2]);
+        unsigned char low = hex_char_to_nibble(hex_str[2 + i * 2 + 1]);
+        tmp[i] = (high << 4) | low;
+    }
+
+    BytesDynamic b = {0};
+    bytes_dynamic_init(&b, tmp, byte_len, pool);
+    return b;
+}
+
 BytesStatic bytes_static_truncate_from_dynamic(const BytesDynamic* src, size_t new_len, const BytesPool* pool) {
 __ESBMC_HIDE:;
     assert(src->initialized);
@@ -452,13 +452,6 @@ __ESBMC_HIDE:;
     assert(b->initialized);
     assert(b->length > 0);
     --b->length;
-}
-
-BytesDynamic bytes_dynamic_from_uint(uint256_t val, size_t len, BytesPool* pool) {
-__ESBMC_HIDE:;
-    assert(len <= 32);
-    BytesStatic tmp = bytes_static_from_uint(val, len);
-    return bytes_dynamic_from_static(&tmp, pool);
 }
 
 BytesPool bytes_pool_init(unsigned char* pool_data) {

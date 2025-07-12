@@ -4571,47 +4571,63 @@ bool solidity_convertert::get_expr(
         type_name == SolidityGrammar::ElementaryTypeNameT::INT_LITERAL &&
         expr["value"].get<std::string>().rfind("0x", 0) == 0)
       {
+        // e.g. 0x12 => this can only be used for bytesN
         side_effect_expr_function_callt hex_call;
         get_library_function_call_no_args(
-          "bytes_" + fname + "_from_hex",
-          "c:@F@bytes" + fname + "from_hex",
+          "bytes_static_from_hex",
+          "c:@F@bytes_static_from_hex",
           byte_t,
           location,
           hex_call);
 
         string_constantt str(expr["value"].get<std::string>());
         hex_call.arguments().push_back(str);
-        if (is_static)
-          hex_call.type().set("#sol_type", "BytesStatic");
-        else
-          hex_call.type().set("#sol_type", "BytesDynamic");
-        new_expr = hex_call;
+        hex_call.type().set("#sol_type", "BytesStatic");
+        auto sol_size = byte_t.get("#sol_bytesn_size");
+        if (!sol_size.empty())
+          hex_call.set("#sol_bytesn_size", sol_size);
 
-        new_expr.type().set("#sol_type", sol_type_str); // e.g. "BYTES24"
+        new_expr = hex_call;
         break;
       }
       else if (
         type_name == SolidityGrammar::ElementaryTypeNameT::STRING_LITERAL)
       {
+        assert(expr.contains("kind") && expr.contains("hexValue"));
+        exprt str;
+        bool is_hex_string = expr["kind"] == "hexString";
+        if (is_hex_string)
+          str = string_constantt(expr["hexValue"].get<std::string>());
+        else
+          str = string_constantt(expr["value"].get<std::string>());
+        std::string posfix = is_hex_string ? "hex" : "string";
+
         side_effect_expr_function_callt str_call;
         get_library_function_call_no_args(
-          "bytes_" + fname + "_from_string",
-          "c:@F@bytes_" + fname + "_from_string",
+          "bytes_" + fname + "_from_" + posfix,
+          "c:@F@bytes_" + fname + "_from_" + posfix,
           byte_t,
           location,
           str_call);
 
-        assert(expr.contains("hexValue"));
-        string_constantt str(expr["hexValue"].get<std::string>());
-        ;
         str_call.arguments().push_back(str);
-        if (is_static)
-          str_call.type().set("#sol_type", "BytesStatic");
-        else
+        if (!is_static)
+        {
+          exprt dynamic_pool;
+          if (get_dynamic_pool(current_contractName, dynamic_pool))
+            return true;
+          str_call.arguments().push_back(dynamic_pool);
           str_call.type().set("#sol_type", "BytesDynamic");
-        new_expr = str_call;
+        }
+        else
+        {
+          str_call.type().set("#sol_type", "BytesStatic");
+          auto sol_size = byte_t.get("#sol_bytesn_size");
+          if (!sol_size.empty())
+            str_call.set("#sol_bytesn_size", sol_size);
+        }
 
-        new_expr.type().set("#sol_type", sol_type_str); // e.g. "BYTES12"
+        new_expr = str_call;
         break;
       }
 
@@ -8358,7 +8374,7 @@ void solidity_convertert::get_bytesN_size(
   const exprt &src_expr,
   exprt &len_expr)
 {
-  std::string byte_size = src_expr.type().get("#sol_bytes_size").as_string();
+  std::string byte_size = src_expr.type().get("#sol_bytesn_size").as_string();
   if (!byte_size.empty())
     len_expr = from_integer(std::stoul(byte_size), size_type());
   else
@@ -9142,7 +9158,7 @@ bool solidity_convertert::get_elementary_type_name(
   case SolidityGrammar::ElementaryTypeNameT::BYTES32:
   {
     new_type = byte_static_t;
-    new_type.set("#sol_bytes_size", bytesn_type_name_to_size(type));
+    new_type.set("#sol_bytesn_size", bytesn_type_name_to_size(type));
     break;
   }
   case SolidityGrammar::ElementaryTypeNameT::BYTES:
@@ -11395,15 +11411,20 @@ void solidity_convertert::convert_type_expr(
     // int/symbol to bytes or bytesN
     else if (!is_byte_type(src_type) && is_byte_type(dest_type))
     {
-      locationt loc = src_expr.location();
+      // this could be
+      // bytes(hex"1234") -> string literal
+      // bytes("1234") -> string literal (this can only be bytes)
+      // bytes(x)  -> string literal (this can only be bytes)
+      // bytes2(0x1234) -> int literal (this can only be bytesn)
 
+      locationt loc = src_expr.location();
       if (is_bytes_type(dest_type))
       {
         // dynamic bytes: use bytes_dynamic_from_uint(...)
         side_effect_expr_function_callt call;
         get_library_function_call_no_args(
-          "bytes_dynamic_from_uint",
-          "c:@F@bytes_dynamic_from_uint",
+          "bytes_dynamic_from_string",
+          "c:@F@bytes_dynamic_from_string",
           dest_type,
           loc,
           call);
@@ -11428,9 +11449,8 @@ void solidity_convertert::convert_type_expr(
           loc,
           call);
         call.arguments().push_back(src_expr);
-        call.type().set("#sol_type", "BytesStatic");
 
-        // e.g. bytes3 a = 0x1234; "BYTES3" => 3
+        // e.g. bytes3(0x1234); "BYTES3" => 3
         exprt len_expr;
         get_bytesN_size(src_expr, len_expr);
         call.arguments().push_back(len_expr);
