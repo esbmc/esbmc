@@ -6293,10 +6293,10 @@ bool solidity_convertert::get_binary_operator_expr(
         call_expr.arguments().push_back(pool_member);
       }
 
-      if(opcode == SolidityGrammar::ExpressionT::BO_EQ)
+      if (opcode == SolidityGrammar::ExpressionT::BO_EQ)
         new_expr = call_expr;
       else
-        new_expr =  not_exprt(call_expr);
+        new_expr = not_exprt(call_expr);
       new_expr.location() = l;
       return false;
     }
@@ -6368,7 +6368,19 @@ bool solidity_convertert::get_binary_operator_expr(
       new_expr.location() = l;
       return false;
     }
-
+    case SolidityGrammar::ExpressionT::BO_Assign:
+    {
+      // data2 = 0x0074657374;
+      if (!is_byte_type(rhs.type()))
+      {
+        auto l_json = expr.contains("commonType") ? expr["commonType"]
+                                                  : expr["typeDescriptions"];
+        // redo get expr
+        if (get_expr(expr["rightHandSide"], l_json, rhs))
+          return true;
+      }
+      break;
+    }
     default:
       break;
     }
