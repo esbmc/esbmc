@@ -2915,7 +2915,7 @@ bool solidity_convertert::move_initializer_to_ctor(
       // insert before the sym.value.operands
       sym.value.operands().insert(sym.value.operands().begin(), _assign);
 
-      // we might need to insert some expression 
+      // we might need to insert some expression
       // due to the convert_type_expr and get_string_assignment
       if (ctor_frontBlockDecl.operands().size() != 0)
       {
@@ -4638,10 +4638,9 @@ bool solidity_convertert::get_expr(
     {
       assert(literal_type != nullptr);
       bool is_hex = false;
-      if( the_value.length() >= 2 &&
-        the_value.substr(0, 2) == "0x")
+      if (the_value.length() >= 2 && the_value.substr(0, 2) == "0x")
         is_hex = true;
-      else if(expr["kind"] == "hexString")
+      else if (expr["kind"] == "hexString")
       {
         the_value = expr["hexValue"];
         is_hex = true;
@@ -5632,16 +5631,32 @@ bool solidity_convertert::get_expr(
         // populate 0x00 to bytes array
         // same process in case SolidityGrammar::ExpressionT::Literal
         assert(expr.contains("arguments") && expr["arguments"].size() == 1);
-
-        int byte_size = stoi(expr["arguments"][0]["value"].get<std::string>());
-        std::string hex_val = "";
-
-        for (int i = 0; i < byte_size; i++)
-          hex_val += "00";
-        hex_val.resize(byte_size * 2);
-
-        if (convert_hex_literal(hex_val, new_expr, byte_size * 8))
+        exprt size_expr;
+        if (get_expr(
+              expr["arguments"][0],
+              expr["expression"]["argumentTypes"][0],
+              size_expr))
           return true;
+
+        // Prepare function call: bytes_dynamic_init_zero(len, pool)
+        side_effect_expr_function_callt call;
+        get_library_function_call_no_args(
+          "bytes_dynamic_init_zero",
+          "c:@F@bytes_dynamic_init_zero",
+          byte_dynamic_t,
+          location,
+          call);
+
+        call.arguments().push_back(size_expr);
+
+        member_exprt pool_member;
+        if (get_dynamic_pool(expr, pool_member))
+          return true;
+        call.arguments().push_back(pool_member);
+
+        // assert(b[0] ==  (new bytes(4))[0]);
+        new_expr = make_aux_var_for_bytes(call, location);
+        new_expr.type().set("#sol_type", "BytesDynamic");
         break;
       }
     }
@@ -8223,11 +8238,11 @@ void solidity_convertert::get_string_assignment(
   const exprt &rhs,
   exprt &new_expr)
 {
-  if(rhs.id() == "string-constant")
+  if (rhs.id() == "string-constant")
   {
     side_effect_exprt _assign("assign", lhs.type());
     exprt new_rhs = rhs;
-    // pass a dump json as we will not reach bytes part anyway 
+    // pass a dump json as we will not reach bytes part anyway
     convert_type_expr(ns, new_rhs, lhs.type(), empty_json);
     _assign.copy_to_operands(lhs, new_rhs);
     new_expr = _assign;
@@ -8601,8 +8616,7 @@ bool solidity_convertert::get_new_mapping_index_access(
   if (
     val_sol_type.find("UINT") != std::string::npos ||
     val_sol_type.find("Bytes") != std::string::npos ||
-    val_sol_type.find("ADDRESS") != std::string::npos ||
-    val_sol_type == "ENUM")
+    val_sol_type.find("ADDRESS") != std::string::npos || val_sol_type == "ENUM")
   {
     val_flg = "uint";
     func_type = unsignedbv_typet(256);
@@ -8617,9 +8631,7 @@ bool solidity_convertert::get_new_mapping_index_access(
     val_flg = "bool";
     func_type = bool_typet();
   }
-  else if (
-    val_sol_type == "STRING" ||
-    val_sol_type == "STRING_LITERAL")
+  else if (val_sol_type == "STRING" || val_sol_type == "STRING_LITERAL")
   {
     val_flg = "string";
     func_type = value_t;
@@ -11247,7 +11259,7 @@ bool solidity_convertert::get_high_level_call_wrapper(
 
 bool solidity_convertert::is_byte_type(const typet &t)
 {
-  if (t.get("#sol_type").as_string().compare(0,5,"Bytes") == 0)
+  if (t.get("#sol_type").as_string().compare(0, 5, "Bytes") == 0)
     return true;
   if (
     t.is_struct() &&
@@ -11477,9 +11489,11 @@ void solidity_convertert::convert_type_expr(
 
         // e.g. bytes3(0x1234); "BYTES3" => 3
         exprt len_expr;
-        if(!dest_type.get("#sol_bytesn_size").empty())
-          len_expr = from_integer(std::stoul(dest_type.get("#sol_bytesn_size").as_string()), size_type());
-        else 
+        if (!dest_type.get("#sol_bytesn_size").empty())
+          len_expr = from_integer(
+            std::stoul(dest_type.get("#sol_bytesn_size").as_string()),
+            size_type());
+        else
         {
           assert(len_expr.id() != "constant");
           log_error("got unexpected bytes typecast");

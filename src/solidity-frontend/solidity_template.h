@@ -307,6 +307,19 @@ __ESBMC_HIDE:;
     return ((uint256_t)b->length << 248) | bytes_static_to_uint(b);
 }
 
+BytesDynamic bytes_dynamic_init_zero(size_t len, BytesPool* pool) {
+__ESBMC_HIDE:;
+    BytesDynamic b = {0};
+    b.offset = pool->pool_cursor;
+    b.length = len;
+    b.initialized = 1;
+    for (size_t i = 0; i < len; i++) {
+      pool->pool[b.offset + i] = 0;
+    }
+    pool->pool_cursor += len;
+    return b;
+}
+
 void bytes_dynamic_init(BytesDynamic* b, const unsigned char* input, size_t len, BytesPool* pool) {
 __ESBMC_HIDE:;
     b->offset = pool->pool_cursor;
