@@ -1332,7 +1332,6 @@ void execution_statet::ex_state_level2t::rename(expr2tc &identifier)
 
 dfs_execution_statet::~dfs_execution_statet()
 {
-  //log_status("pop");
   // Delete target; or if we're encoding at runtime, pop a context.
   if (smt_during_symex)
     target->pop_ctx();
@@ -1340,7 +1339,6 @@ dfs_execution_statet::~dfs_execution_statet()
 
 std::shared_ptr<execution_statet> dfs_execution_statet::clone() const
 {
-  //log_status("push");
   std::shared_ptr<dfs_execution_statet> d =
     std::make_shared<dfs_execution_statet>(*this);
 
