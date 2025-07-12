@@ -2893,18 +2893,13 @@ bool solidity_convertert::move_initializer_to_ctor(
       exprt _assign;
       if (
         lhs.type().get("#sol_type") == "STRING" &&
-        rhs.get("#zero_initializer") != "1")
+        rhs.get("#zero_initializer") != "1" && rhs.id() != "string-constant")
       {
         // p = NULL;
         // _str_assign(&p, "hello");
         // since it's in the intializer, there should be no memory leak
         get_string_assignment(lhs, rhs, _assign);
         convert_expression_to_code(_assign);
-        sym.value.operands().insert(sym.value.operands().begin(), _assign);
-        exprt null_str = gen_zero(pointer_typet(signed_char_type()));
-        _assign = side_effect_exprt("assign", comp.type());
-        _assign.location() = sym.location;
-        _assign.copy_to_operands(lhs, null_str);
       }
       else
       {
@@ -2920,7 +2915,8 @@ bool solidity_convertert::move_initializer_to_ctor(
       // insert before the sym.value.operands
       sym.value.operands().insert(sym.value.operands().begin(), _assign);
 
-      // we might need to insert some expression after convert_type_expr
+      // we might need to insert some expression 
+      // due to the convert_type_expr and get_string_assignment
       if (ctor_frontBlockDecl.operands().size() != 0)
       {
         for (auto &op : ctor_frontBlockDecl.operands())
@@ -4995,10 +4991,13 @@ bool solidity_convertert::get_expr(
 
       if (new_expr.id() == "sideeffect")
       {
-        std::string func_name = new_expr.op0().name().as_string();
+        std::string func_id = new_expr.op0().identifier().as_string();
         if (
-          func_name == "_ESBMC_array_push" || func_name == "_ESBMC_array_pop" ||
-          func_name == "_ESBMC_array_length")
+          func_id == "c:@F@_ESBMC_array_push" ||
+          func_id == "c:@F@_ESBMC_array_pop" ||
+          func_id == "c:@F@_ESBMC_array_length")
+          break;
+        if (func_id.compare(0, 11, "c:@F@bytes_") == 0)
           break;
       }
       if (new_expr.is_member() && new_expr.component_name() == "length")
@@ -7407,13 +7406,12 @@ bool solidity_convertert::get_sol_builtin_ref(
             assert(!func.empty());
 
             if (func["arguments"].size() == 0)
-            {
-              log_error("bytes.push requires argument");
-              return true;
-            }
-
-            if (get_expr(
-                  func["arguments"][0], expr["argumentTypes"][0], value_expr))
+              // x.push() == x.push(0x00)
+              value_expr = gen_zero(uint_type());
+            else if (get_expr(
+                       func["arguments"][0],
+                       expr["argumentTypes"][0],
+                       value_expr))
               return true;
 
             // push value must be byte-sized
@@ -8217,11 +8215,30 @@ void solidity_convertert::get_string_assignment(
   const exprt &rhs,
   exprt &new_expr)
 {
-  side_effect_expr_function_callt call;
-  get_str_assign_function_call(lhs.location(), call);
-  call.arguments().push_back(address_of_exprt(lhs));
-  call.arguments().push_back(rhs);
-  new_expr = call;
+  if(rhs.id() == "string-constant")
+  {
+    side_effect_exprt _assign("assign", lhs.type());
+    exprt new_rhs = rhs;
+    // pass a dump json as we will not reach bytes part anyway 
+    convert_type_expr(ns, new_rhs, lhs.type(), empty_json);
+    _assign.copy_to_operands(lhs, new_rhs);
+    new_expr = _assign;
+  }
+  else
+  {
+    //? always assign it to null first?
+    exprt null_str = gen_zero(pointer_typet(signed_char_type()));
+    side_effect_exprt _assign("assign", lhs.type());
+    _assign.location() = lhs.location();
+    _assign.copy_to_operands(lhs, null_str);
+    move_to_front_block(_assign);
+
+    side_effect_expr_function_callt call;
+    get_str_assign_function_call(lhs.location(), call);
+    call.arguments().push_back(address_of_exprt(lhs));
+    call.arguments().push_back(rhs);
+    new_expr = call;
+  }
 }
 
 /*
@@ -8577,7 +8594,7 @@ bool solidity_convertert::get_new_mapping_index_access(
     val_sol_type.find("UINT") != std::string::npos ||
     val_sol_type.find("Bytes") != std::string::npos ||
     val_sol_type.find("ADDRESS") != std::string::npos ||
-    val_sol_type.find("ENUM") != std::string::npos)
+    val_sol_type == "ENUM")
   {
     val_flg = "uint";
     func_type = unsignedbv_typet(256);
@@ -8587,14 +8604,14 @@ bool solidity_convertert::get_new_mapping_index_access(
     val_flg = "int";
     func_type = signedbv_typet(256);
   }
-  else if (val_sol_type.find("BOOL") != std::string::npos)
+  else if (val_sol_type == "BOOL")
   {
     val_flg = "bool";
     func_type = bool_typet();
   }
   else if (
-    val_sol_type.find("STRING") != std::string::npos ||
-    val_sol_type.find("STRING_LITERAL") != std::string::npos)
+    val_sol_type == "STRING" ||
+    val_sol_type == "STRING_LITERAL")
   {
     val_flg = "string";
     func_type = value_t;
@@ -11222,7 +11239,7 @@ bool solidity_convertert::get_high_level_call_wrapper(
 
 bool solidity_convertert::is_byte_type(const typet &t)
 {
-  if (t.get("#sol_type").as_string().find("Bytes") != std::string::npos)
+  if (t.get("#sol_type").as_string().compare(0,5,"Bytes") == 0)
     return true;
   if (
     t.is_struct() &&

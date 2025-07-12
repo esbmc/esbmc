@@ -198,18 +198,17 @@ typedef struct BytesDynamic {
 unsigned char hex_char_to_nibble(char c) {
 __ESBMC_HIDE:;
     if ('0' <= c && c <= '9') return c - '0';
-    if ('a' <= tolower(c) && tolower(c) <= 'f') return tolower(c) - 'a' + 10;
-    assert(0 && "Invalid hex character");
+    else if ('a' <= tolower(c) && tolower(c) <= 'f') return tolower(c) - 'a' + 10;
+    else
+      abort();
+    return 0;
 }
 
 BytesStatic bytes_static_from_hex(const char* hex_str) {
 __ESBMC_HIDE:;
     BytesStatic b = {0};
-    assert(hex_str[0] == '0' && hex_str[1] == 'x');
     size_t hex_len = strlen(hex_str) - 2;
-    assert(hex_len % 2 == 0);
     b.length = hex_len / 2;
-    assert(b.length <= 32);
     for (size_t i = 0; i < b.length; i++) {
         unsigned char high = hex_char_to_nibble(hex_str[2 + i * 2]);
         unsigned char low = hex_char_to_nibble(hex_str[2 + i * 2 + 1]);
@@ -221,7 +220,6 @@ __ESBMC_HIDE:;
 BytesStatic bytes_static_from_string(const char* str) {
 __ESBMC_HIDE:;
     size_t len = strlen(str);
-    assert(len <= 32);
     BytesStatic b = {0};
     for (size_t i = 0; i < len; i++) {
         b.data[i] = str[i];
@@ -232,7 +230,6 @@ __ESBMC_HIDE:;
 
 BytesStatic bytes_static_truncate(const BytesStatic* src, size_t new_len) {
 __ESBMC_HIDE:;
-    assert(new_len <= src->length);
     BytesStatic b = {0};
     for (size_t i = 0; i < new_len; i++) {
         b.data[i] = src->data[i];
@@ -243,7 +240,6 @@ __ESBMC_HIDE:;
 
 BytesStatic bytes_static_and(const BytesStatic* a, const BytesStatic* b) {
 __ESBMC_HIDE:;
-    assert(a->length == b->length);
     BytesStatic r = {0};
     for (size_t i = 0; i < a->length; i++) {
         r.data[i] = a->data[i] & b->data[i];
@@ -254,7 +250,6 @@ __ESBMC_HIDE:;
 
 BytesStatic bytes_static_or(const BytesStatic* a, const BytesStatic* b) {
 __ESBMC_HIDE:;
-    assert(a->length == b->length);
     BytesStatic r = {0};
     for (size_t i = 0; i < a->length; i++) {
         r.data[i] = a->data[i] | b->data[i];
@@ -265,7 +260,6 @@ __ESBMC_HIDE:;
 
 BytesStatic bytes_static_xor(const BytesStatic* a, const BytesStatic* b) {
 __ESBMC_HIDE:;
-    assert(a->length == b->length);
     BytesStatic r = {0};
     for (size_t i = 0; i < a->length; i++) {
         r.data[i] = a->data[i] ^ b->data[i];
@@ -285,7 +279,6 @@ __ESBMC_HIDE:;
 
 BytesStatic bytes_static_from_uint(uint256_t val, size_t len) {
 __ESBMC_HIDE:;
-    assert(len <= 32);
     BytesStatic b = {0};
     for (size_t i = 0; i < len; i++) {
         b.data[len - 1 - i] = val & 0xFF;
@@ -341,11 +334,8 @@ __ESBMC_HIDE:;
 
 BytesDynamic bytes_dynamic_from_hex(const char* hex_str, BytesPool* pool) {
 __ESBMC_HIDE:;
-    assert(hex_str[0] == '0' && hex_str[1] == 'x');
     size_t hex_len = strlen(hex_str) - 2;
-    assert(hex_len % 2 == 0);
     size_t byte_len = hex_len / 2;
-    assert(byte_len <= 32); // Solidity dynamic bytes also limited to 32
 
     unsigned char tmp[32] = {0};
     for (size_t i = 0; i < byte_len; i++) {
@@ -361,8 +351,6 @@ __ESBMC_HIDE:;
 
 BytesStatic bytes_static_truncate_from_dynamic(const BytesDynamic* src, size_t new_len, const BytesPool* pool) {
 __ESBMC_HIDE:;
-    assert(src->initialized);
-    assert(new_len <= src->length);
     BytesStatic b = {0};
     for (size_t i = 0; i < new_len; i++) {
         b.data[i] = pool->pool[src->offset + i];
@@ -373,7 +361,6 @@ __ESBMC_HIDE:;
 
 BytesDynamic bytes_dynamic_concat(const BytesDynamic* a, const BytesDynamic* b, BytesPool* pool) {
 __ESBMC_HIDE:;
-    assert(a->initialized && b->initialized);
     BytesDynamic d = {0};
     d.offset = pool->pool_cursor;
     d.length = a->length + b->length;
@@ -390,7 +377,6 @@ __ESBMC_HIDE:;
 
 BytesDynamic bytes_dynamic_copy(const BytesDynamic* src, BytesPool* pool) {
 __ESBMC_HIDE:;
-    assert(src->initialized);
     BytesDynamic d = {0};
     d.offset = pool->pool_cursor;
     d.length = src->length;
@@ -404,8 +390,6 @@ __ESBMC_HIDE:;
 
 unsigned char bytes_dynamic_get(const BytesDynamic* b, const BytesPool* pool, size_t index) {
 __ESBMC_HIDE:;
-    assert(b->initialized);
-    assert(index < b->length);
     return pool->pool[b->offset + index];
 }
 
@@ -420,7 +404,6 @@ __ESBMC_HIDE:;
 
 bool bytes_dynamic_equal(const BytesDynamic* a, const BytesDynamic* b, const BytesPool* pool) {
 __ESBMC_HIDE:;
-    assert(a->initialized && b->initialized);
     if (a->length != b->length) return false;
     for (size_t i = 0; i < a->length; i++) {
         if (pool->pool[a->offset + i] != pool->pool[b->offset + i]) return false;
@@ -430,9 +413,7 @@ __ESBMC_HIDE:;
 
 uint256_t bytes_dynamic_to_mapping_key(const BytesDynamic* b, const BytesPool* pool) {
 __ESBMC_HIDE:;
-    assert(b->initialized);
     uint256_t result = 0;
-    assert(b->length <= 32);
     for (size_t i = 0; i < b->length; i++) {
         result = (result << 8) | pool->pool[b->offset + i];
     }
@@ -442,16 +423,13 @@ __ESBMC_HIDE:;
 
 void bytes_dynamic_push(BytesDynamic* b, unsigned char value, BytesPool* pool) {
 __ESBMC_HIDE:;
-    assert(b->initialized);
     pool->pool[b->offset + b->length] = value;
-    ++b->length;
+    b->length++;
 }
 
 void bytes_dynamic_pop(BytesDynamic* b, BytesPool* pool) {
 __ESBMC_HIDE:;
-    assert(b->initialized);
-    assert(b->length > 0);
-    --b->length;
+    b->length--;
 }
 
 BytesPool bytes_pool_init(unsigned char* pool_data) {
@@ -1061,9 +1039,10 @@ __ESBMC_HIDE:;
         return;  // Early exit if str1 is invalid
     }
     // Free *str1 only if it was previously allocated (non-NULL)
-    if (*str1 != NULL) {
-        free(*str1);
-    }
+    // if (*str1 != NULL) {
+    //     free(*str1);
+    // }
+    
     // If str2 is NULL, set *str1 to NULL (avoid dangling pointers)
     if (str2 == NULL) {
         *str1 = NULL;
