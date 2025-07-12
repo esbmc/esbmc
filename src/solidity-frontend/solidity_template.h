@@ -401,9 +401,30 @@ __ESBMC_HIDE:;
     return d;
 }
 
-unsigned char bytes_dynamic_get(const BytesDynamic* b, const BytesPool* pool, size_t index) {
+void bytes_static_set(BytesStatic* b, size_t index, BytesStatic value) {
 __ESBMC_HIDE:;
-    return pool->pool[b->offset + index];
+    b->data[index] = value.data[0];
+}
+
+void bytes_dynamic_set(BytesDynamic* b, size_t index, BytesStatic value, BytesPool* pool) {
+__ESBMC_HIDE:;
+    pool->pool[b->offset + index] = value.data[0];
+}
+
+BytesStatic bytes_static_get(const BytesStatic* b, size_t index) {
+__ESBMC_HIDE:;
+    BytesStatic r = {0};
+    r.data[0] = b->data[index];
+    r.length = 1;
+    return r;
+}
+
+BytesStatic bytes_dynamic_get(const BytesDynamic* b, const BytesPool* pool, size_t index) {
+__ESBMC_HIDE:;
+    BytesStatic r = {0};
+    r.data[0] = pool->pool[b->offset + index];
+    r.length = 1;
+    return r;
 }
 
 bool bytes_static_equal(const BytesStatic* a, const BytesStatic* b) {

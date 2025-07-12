@@ -5456,7 +5456,7 @@ bool solidity_convertert::get_expr(
 
     // 3. get the position index
     exprt pos;
-    if (get_expr(index_json, expr["typeDescriptions"], pos))
+    if (get_expr(index_json, index_json["typeDescriptions"], pos))
       return true;
 
     // for MAPPING
@@ -5517,80 +5517,124 @@ bool solidity_convertert::get_expr(
     // for BYTESN or BYTES, read-only access
     if (is_byte_type(t))
     {
-      std::string c_name;
-      get_current_contract_name(expr, c_name);
-      if (c_name.empty())
+      bool is_bytes_set = is_mapping_set_lvalue(expr); // set vs get
+      typet result_type = byte_static_t;
+      result_type.set("#sol_bytesn_size", 1);
+
+      std::string aux_name, aux_id;
+      get_aux_var(aux_name, aux_id);
+      std::string mod_name = get_modulename_from_path(absolute_path);
+      symbolt aux_sym;
+      get_default_symbol(
+        aux_sym, mod_name, result_type, aux_name, aux_id, location);
+      aux_sym.file_local = true;
+      aux_sym.lvalue = true;
+      auto &added_sym = *move_symbol_to_context(aux_sym);
+
+      exprt arg_val = array;
+
+      if (!arg_val.is_symbol())
       {
-        log_error("Unable to determine current contract for IndexAccess");
-        return true;
+        std::string temp_name, temp_id;
+        get_aux_var(temp_name, temp_id);
+        symbolt temp_sym;
+        get_default_symbol(
+          temp_sym, mod_name, array.type(), temp_name, temp_id, location);
+        temp_sym.file_local = true;
+        temp_sym.lvalue = true;
+        auto &tmp_added_sym = *move_symbol_to_context(temp_sym);
+        tmp_added_sym.value = array;
+        code_declt decl(symbol_expr(tmp_added_sym));
+        decl.operands().push_back(array);
+        move_to_front_block(decl);
+        arg_val = symbol_expr(tmp_added_sym);
       }
 
-      // static bytes
+      // static bytes (bytesN)
       if (is_bytesN_type(t))
       {
-        exprt arg_val = array;
-
-        // handle func()[i] or expressions: need aux var
-        if (!arg_val.is_symbol())
+        if (!is_bytes_set)
         {
-          std::string aux_name, aux_id;
-          get_aux_var(aux_name, aux_id);
-          typet aux_type = array.type();
-          std::string mod_name = get_modulename_from_path(absolute_path);
-          symbolt aux_sym;
-          get_default_symbol(
-            aux_sym, mod_name, aux_type, aux_name, aux_id, location);
-          aux_sym.lvalue = true;
-          aux_sym.file_local = true;
-          auto &added_sym = *move_symbol_to_context(aux_sym);
+          side_effect_expr_function_callt get_call;
+          get_library_function_call_no_args(
+            "bytes_static_get",
+            "c:@F@bytes_static_get",
+            result_type,
+            location,
+            get_call);
+          get_call.arguments().push_back(address_of_exprt(arg_val));
+          get_call.arguments().push_back(pos);
+          added_sym.value = get_call;
 
-          // assign value to aux
-          added_sym.value = array;
           code_declt decl(symbol_expr(added_sym));
-          decl.operands().push_back(array);
+          decl.operands().push_back(get_call);
           move_to_front_block(decl);
-          arg_val = symbol_expr(added_sym);
-        }
 
-        // call: bytes_static_get(&val, index)
-        side_effect_expr_function_callt static_get_call;
-        get_library_function_call_no_args(
-          "bytes_static_get",
-          "c:@F@bytes_static_get",
-          unsignedbv_typet(8),
-          location,
-          static_get_call);
-        address_of_exprt arg_addr(arg_val);
-        static_get_call.arguments().push_back(arg_addr);
-        static_get_call.arguments().push_back(pos);
-        solidity_gen_typecast(ns, static_get_call, unsignedbv_typet(8));
-        new_expr = static_get_call;
+          new_expr = symbol_expr(added_sym);
+        }
+        else
+        {
+          side_effect_expr_function_callt set_call;
+          get_library_function_call_no_args(
+            "bytes_static_set",
+            "c:@F@bytes_static_set",
+            empty_typet(),
+            location,
+            set_call);
+          set_call.arguments().push_back(address_of_exprt(arg_val));
+          set_call.arguments().push_back(pos);
+          set_call.arguments().push_back(symbol_expr(added_sym));
+          move_to_back_block(set_call);
+
+          new_expr = symbol_expr(added_sym);
+        }
         break;
       }
 
       // dynamic bytes
       if (is_bytes_type(t))
       {
-        // call: bytes_dynamic_get(&val, &pool, index)
-        side_effect_expr_function_callt dyn_get_call;
-        get_library_function_call_no_args(
-          "bytes_dynamic_get",
-          "c:@F@bytes_dynamic_get",
-          unsignedbv_typet(8),
-          location,
-          dyn_get_call);
-        address_of_exprt arg_addr(array);
-
         exprt dynamic_pool;
         if (get_dynamic_pool(current_contractName, dynamic_pool))
           return true;
 
-        dyn_get_call.arguments().push_back(arg_addr);
-        dyn_get_call.arguments().push_back(dynamic_pool);
-        dyn_get_call.arguments().push_back(pos);
+        if (!is_bytes_set)
+        {
+          side_effect_expr_function_callt get_call;
+          get_library_function_call_no_args(
+            "bytes_dynamic_get",
+            "c:@F@bytes_dynamic_get",
+            result_type,
+            location,
+            get_call);
+          get_call.arguments().push_back(address_of_exprt(arg_val));
+          get_call.arguments().push_back(dynamic_pool);
+          get_call.arguments().push_back(pos);
+          added_sym.value = get_call;
 
-        solidity_gen_typecast(ns, dyn_get_call, unsignedbv_typet(8));
-        new_expr = dyn_get_call;
+          code_declt decl(symbol_expr(added_sym));
+          decl.operands().push_back(get_call);
+          move_to_front_block(decl);
+
+          new_expr = symbol_expr(added_sym);
+        }
+        else
+        {
+          side_effect_expr_function_callt set_call;
+          get_library_function_call_no_args(
+            "bytes_dynamic_set",
+            "c:@F@bytes_dynamic_set",
+            empty_typet(),
+            location,
+            set_call);
+          set_call.arguments().push_back(address_of_exprt(arg_val));
+          set_call.arguments().push_back(dynamic_pool);
+          set_call.arguments().push_back(pos);
+
+          set_call.arguments().push_back(symbol_expr(added_sym));
+          move_to_back_block(set_call);
+          new_expr = symbol_expr(added_sym);
+        }
         break;
       }
     }
