@@ -6143,15 +6143,16 @@ bool solidity_convertert::get_binary_operator_expr(
 
   if (expr.contains("leftHandSide"))
   {
-    nlohmann::json literalType = expr["leftHandSide"]["typeDescriptions"];
+    nlohmann::json literalType_l = expr["leftHandSide"]["typeDescriptions"];
+    nlohmann::json literalType_r = expr["rightHandSide"]["typeDescriptions"];
 
     current_lhsDecl = true;
-    if (get_expr(expr["leftHandSide"], lhs))
+    if (get_expr(expr["leftHandSide"], literalType_l, lhs))
       return true;
     current_lhsDecl = false;
 
     current_rhsDecl = true;
-    if (get_expr(expr["rightHandSide"], literalType, rhs))
+    if (get_expr(expr["rightHandSide"], literalType_r, rhs))
       return true;
     current_rhsDecl = false;
 
@@ -6234,11 +6235,25 @@ bool solidity_convertert::get_binary_operator_expr(
       }
       else
       {
+        assert(common_type.id() != "");
         // try to convert non-bytes operand to matching type
-        if (is_byte_type(lhs.type()) && !is_byte_type(rhs.type()))
-          convert_type_expr(ns, rhs, lhs.type(), expr);
-        else if (!is_byte_type(lhs.type()) && is_byte_type(rhs.type()))
-          convert_type_expr(ns, lhs, rhs.type(), expr);
+        // e.g. data2 == 0x00746573
+        if (!is_byte_type(rhs.type()))
+        {
+          current_rhsDecl = true;
+          if (get_expr(expr["rightExpression"], expr["commonType"], rhs))
+            return true;
+          current_rhsDecl = false;
+          convert_type_expr(ns, rhs, common_type, expr);
+        }
+        else
+        {
+          current_rhsDecl = true;
+          if (get_expr(expr["leftExpression"], expr["commonType"], lhs))
+            return true;
+          current_rhsDecl = false;
+          convert_type_expr(ns, lhs, common_type, expr);
+        }
 
         lt_sol = lhs.type().get("#sol_type").as_string();
         rt_sol = rhs.type().get("#sol_type").as_string();
@@ -6262,7 +6277,7 @@ bool solidity_convertert::get_binary_operator_expr(
         }
       }
 
-      get_library_function_call_no_args(fname, fid, bool_typet(), l, call_expr);
+      get_library_function_call_no_args(fname, fid, bool_t, l, call_expr);
 
       exprt lhs_tmp = make_aux_var_for_bytes(lhs, l);
       exprt rhs_tmp = make_aux_var_for_bytes(rhs, l);
@@ -6278,9 +6293,11 @@ bool solidity_convertert::get_binary_operator_expr(
         call_expr.arguments().push_back(pool_member);
       }
 
-      new_expr = (opcode == SolidityGrammar::ExpressionT::BO_EQ)
-                   ? static_cast<exprt>(call_expr)
-                   : not_exprt(call_expr);
+      if(opcode == SolidityGrammar::ExpressionT::BO_EQ)
+        new_expr = call_expr;
+      else
+        new_expr =  not_exprt(call_expr);
+      new_expr.location() = l;
       return false;
     }
 
@@ -6307,6 +6324,7 @@ bool solidity_convertert::get_binary_operator_expr(
       call_expr.arguments().push_back(rhs);
 
       new_expr = call_expr;
+      new_expr.location() = l;
       return false;
     }
 
@@ -6347,6 +6365,7 @@ bool solidity_convertert::get_binary_operator_expr(
       call_expr.arguments().push_back(address_of_exprt(rhs_tmp));
 
       new_expr = call_expr;
+      new_expr.location() = l;
       return false;
     }
 
@@ -6686,6 +6705,61 @@ bool solidity_convertert::get_compound_assign_expr(
   SolidityGrammar::ExpressionT opcode =
     SolidityGrammar::get_expr_operator_t(expr);
 
+  locationt location;
+  get_location_from_node(expr, location);
+
+  typet lt = lhs.type();
+
+  if (is_bytesN_type(lt))
+  {
+    std::string fname;
+    switch (opcode)
+    {
+    case SolidityGrammar::ExpressionT::BO_ShlAssign:
+      fname = "bytes_static_shl";
+      break;
+    case SolidityGrammar::ExpressionT::BO_ShrAssign:
+      fname = "bytes_static_shr";
+      break;
+    case SolidityGrammar::ExpressionT::BO_AndAssign:
+      fname = "bytes_static_and";
+      break;
+    case SolidityGrammar::ExpressionT::BO_OrAssign:
+      fname = "bytes_static_or";
+      break;
+    case SolidityGrammar::ExpressionT::BO_XorAssign:
+      fname = "bytes_static_xor";
+      break;
+    default:
+      log_error("Unsupported compound op for bytesN");
+      return true;
+    }
+
+    side_effect_expr_function_callt call_expr;
+    get_library_function_call_no_args(
+      fname, "c:@F@" + fname, lt, location, call_expr);
+
+    exprt lhs_tmp = make_aux_var_for_bytes(lhs, location);
+    call_expr.arguments().push_back(address_of_exprt(lhs_tmp));
+
+    if (
+      opcode == SolidityGrammar::ExpressionT::BO_ShlAssign ||
+      opcode == SolidityGrammar::ExpressionT::BO_ShrAssign)
+    {
+      call_expr.arguments().push_back(rhs);
+    }
+    else
+    {
+      exprt rhs_tmp = make_aux_var_for_bytes(rhs, location);
+      call_expr.arguments().push_back(address_of_exprt(rhs_tmp));
+    }
+
+    code_assignt assign(lhs, call_expr);
+    assign.location() = location;
+    new_expr = assign;
+    return false;
+  }
+
   switch (opcode)
   {
   case SolidityGrammar::ExpressionT::BO_AddAssign:
@@ -6749,6 +6823,7 @@ bool solidity_convertert::get_compound_assign_expr(
   }
 
   new_expr.copy_to_operands(lhs, rhs);
+  new_expr.location() = location;
   return false;
 }
 
@@ -11501,7 +11576,7 @@ void solidity_convertert::convert_type_expr(
       locationt loc = src_expr.location();
       if (is_bytes_type(dest_type))
       {
-        // dynamic bytes: use bytes_dynamic_from_uint(...)
+        // dynamic bytes: use bytes_dynamic_from_string(...)
         side_effect_expr_function_callt call;
         get_library_function_call_no_args(
           "bytes_dynamic_from_string",
@@ -11523,27 +11598,39 @@ void solidity_convertert::convert_type_expr(
       else if (is_bytesN_type(dest_type))
       {
         side_effect_expr_function_callt call;
-        get_library_function_call_no_args(
-          "bytes_static_from_uint",
-          "c:@F@bytes_static_from_uint",
-          dest_type,
-          loc,
-          call);
-        call.arguments().push_back(src_expr);
+        if (src_expr.is_constant())
+        {
+          get_library_function_call_no_args(
+            "bytes_static_from_uint",
+            "c:@F@bytes_static_from_uint",
+            dest_type,
+            loc,
+            call);
+          call.arguments().push_back(src_expr);
 
-        // e.g. bytes3(0x1234); "BYTES3" => 3
-        exprt len_expr;
-        if (!dest_type.get("#sol_bytesn_size").empty())
-          len_expr = from_integer(
-            std::stoul(dest_type.get("#sol_bytesn_size").as_string()),
-            size_type());
+          // e.g. bytes3(0x1234); "BYTES3" => 3
+          exprt len_expr;
+          if (!dest_type.get("#sol_bytesn_size").empty())
+            len_expr = from_integer(
+              std::stoul(dest_type.get("#sol_bytesn_size").as_string()),
+              size_type());
+          else
+          {
+            log_error("got unexpected bytes typecast");
+            abort();
+          }
+          call.arguments().push_back(len_expr);
+        }
         else
         {
-          assert(len_expr.id() != "constant");
-          log_error("got unexpected bytes typecast");
-          abort();
+          get_library_function_call_no_args(
+            "bytes_static_from_string",
+            "c:@F@bytes_static_from_string",
+            dest_type,
+            loc,
+            call);
+          call.arguments().push_back(src_expr);
         }
-        call.arguments().push_back(len_expr);
         src_expr = make_aux_var_for_bytes(call, loc);
         src_expr.type().set("#sol_type", "BytesStatic");
       }
