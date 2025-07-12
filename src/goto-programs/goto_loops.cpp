@@ -54,11 +54,12 @@ void goto_loopst::find_function_loops()
       goto_programt::instructionst::iterator &loop_exit = it;
 
       // This means something like:
-      // A: goto A;
+      // A: if(g) goto A;
+      // Convert it into: assume(!g);
       if (loop_head->location_number == loop_exit->location_number)
       {
-        // In TACAS, this is a common setup for reaching a "dead state" (no violation)
-        it->make_assumption(gen_false_expr());
+        simplify(loop_head->guard);
+        it->make_assumption(not2tc(loop_head->guard));
         continue;
       }
       create_function_loop(loop_head, loop_exit);
