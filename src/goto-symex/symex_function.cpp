@@ -117,6 +117,8 @@ unsigned goto_symext::argument_assignments(
 
       // Assign value to function argument
       // TODO: Should we hide it (true means hidden)?
+      // Tong: Don't be global variable analysis here because the arguments maynot actully be used
+      // in the function body.
       symex_assign_arguments(
         code_assign2tc(lhs, rhs),
         !options.get_bool_option("generate-html-report"));

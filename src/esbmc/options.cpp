@@ -456,7 +456,11 @@ const struct group_opt_templ all_cmd_options[] = {
     {"no-por", NULL, "do not do partial order reduction"},
     {"all-runs",
      NULL,
-     "check all interleavings, even if a bug was already found"}}},
+     "check all interleavings, even if a bug was already found"},
+    {"shared-switch-only",
+     NULL,
+     "only allow context switches on shared variable accesses."}
+     }},
   {"Interval Analysis",
    {{"interval-analysis",
      NULL,

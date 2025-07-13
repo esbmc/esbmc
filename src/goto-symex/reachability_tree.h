@@ -372,6 +372,7 @@ protected:
   /* Map to store the expression and thread ID,
    * which that expression belongs to. */
   std::unordered_map<expr2tc, std::list<unsigned int>, irep2_hash> vars_map;
+  std::unordered_map<expr2tc, std::list<unsigned int>, irep2_hash> vars_map_writes;
   /* associative container that contains global writes in */
   std::unordered_set<expr2tc, irep2_hash> is_global;
 

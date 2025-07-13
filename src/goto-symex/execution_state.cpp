@@ -102,6 +102,7 @@ execution_statet::execution_statet(
   mon_thread_warning = false;
 
   thread_cswitch_threshold = (options.get_bool_option("ltl")) ? 3 : 2;
+  shared_switch_only = (options.get_bool_option("shared-switch-only") ? 1 : 0);
 }
 
 execution_statet::execution_statet(const execution_statet &ex)
@@ -166,6 +167,7 @@ execution_statet &execution_statet::operator=(const execution_statet &ex)
   mpor_says_no = ex.mpor_says_no;
   cswitch_forced = ex.cswitch_forced;
   dependency_exist = ex.dependency_exist;
+  shared_switch_only = ex.shared_switch_only;
 
   // Vastly irritatingly, we have to iterate through existing level2t objects
   // updating their ex_state references. There isn't an elegant way of updating
@@ -306,7 +308,7 @@ void execution_statet::symex_assign(
 
   goto_symext::symex_assign(code, hidden, guard);
 
-  if (threads_state.size() >= thread_cswitch_threshold)
+  if (threads_state.size() >= thread_cswitch_threshold || shared_switch_only)
     analyze_assign(code);
 }
 
@@ -326,7 +328,7 @@ void execution_statet::claim(const expr2tc &expr, const std::string &msg)
 
   goto_symext::claim(expr, msg);
 
-  if (threads_state.size() >= thread_cswitch_threshold)
+  if (threads_state.size() >= thread_cswitch_threshold || shared_switch_only)
     analyze_read(expr);
 }
 
@@ -336,7 +338,7 @@ void execution_statet::symex_goto(const expr2tc &old_guard)
 
   goto_symext::symex_goto(old_guard);
 
-  if (threads_state.size() >= thread_cswitch_threshold)
+  if (threads_state.size() >= thread_cswitch_threshold || shared_switch_only)
     analyze_read(old_guard);
 }
 
@@ -346,7 +348,7 @@ void execution_statet::assume(const expr2tc &assumption)
 
   goto_symext::assume(assumption);
 
-  if (threads_state.size() >= thread_cswitch_threshold)
+  if (threads_state.size() >= thread_cswitch_threshold || shared_switch_only)
     analyze_read(assumption);
 }
 
@@ -800,6 +802,18 @@ void execution_statet::analyze_assign(const expr2tc &code)
   get_expr_globals(ns, assign.target, global_writes);
   get_expr_globals(ns, assign.source, global_reads);
 
+  if (shared_switch_only && global_writes.size() > 0)
+  {
+    for (const auto &expr : global_writes)
+    {
+      auto &thread_list = art1->vars_map_writes[expr];
+      if (
+        std::find(thread_list.begin(), thread_list.end(), active_thread) ==
+        thread_list.end())
+        thread_list.push_back(active_thread);
+    }
+  }
+
   if (global_reads.size() > 0 || global_writes.size() > 0)
   {
     // Record read/written data
@@ -828,7 +842,7 @@ void execution_statet::analyze_read(const expr2tc &code)
 
 void execution_statet::analyze_args(const expr2tc &expr)
 {
-  if (threads_state.size() >= thread_cswitch_threshold)
+  if (threads_state.size() >= thread_cswitch_threshold || shared_switch_only)
     analyze_read(expr);
 }
 
@@ -865,7 +879,7 @@ void execution_statet::get_expr_globals(
       name == "c:@__ESBMC_is_dynamic" ||
       name == "c:@__ESBMC_blocked_threads_count" ||
       (name.find("c:pthread_lib") != std::string::npos &&
-       name.find("mutex") == std::string::npos)||
+       name.find("mutex") == std::string::npos) ||
       name == "c:@__ESBMC_rounding_mode" ||
       name.find("c:@__ESBMC_pthread_thread") != std::string::npos)
     {
@@ -899,29 +913,39 @@ void execution_statet::get_expr_globals(
             continue;
           point_to_global = s->static_lifetime || s->type.is_dynamic_set();
           p = to_object_descriptor2t(obj).object;
-      if (!point_to_global) {
-        cur_state->top().level1.rename(p);
-        auto it_find = art1->vars_map.find(p);
-        if (it_find != art1->vars_map.end()) {
-          std::list<unsigned int> &accessed_threads = it_find->second;
-          if (
-            std::find(accessed_threads.begin(), accessed_threads.end(), active_thread)
-              == accessed_threads.end())
-          {
-            accessed_threads.push_back(active_thread);
-          }
 
-          if (accessed_threads.size() > 1) {
-            point_to_global = true;
-            art1->is_global.insert(p);
-            globals_list.insert(p);
+          // A local pointer might point to a local variable that is shared by another thread,
+          // we need to record it as a context switch point.
+          if (!point_to_global)
+          {
+            cur_state->top().level1.rename(p);
+            auto it_find = art1->vars_map.find(p);
+            if (it_find != art1->vars_map.end())
+            {
+              std::list<unsigned int> &accessed_threads = it_find->second;
+              if (
+                std::find(
+                  accessed_threads.begin(),
+                  accessed_threads.end(),
+                  active_thread) == accessed_threads.end())
+              {
+                accessed_threads.push_back(active_thread);
+              }
+
+              if (accessed_threads.size() > 1)
+              {
+                point_to_global = true;
+                art1->is_global.insert(p);
+                globals_list.insert(p);
+              }
+            }
+            else
+            {
+              std::list<unsigned int> thread_list;
+              thread_list.push_back(active_thread);
+              art1->vars_map[p] = thread_list;
+            }
           }
-        } else {
-          std::list<unsigned int> thread_list;
-          thread_list.push_back(active_thread);
-          art1->vars_map[p] = thread_list;
-        }
-      }
           /* Stop when the global symbol is found */
           if (point_to_global)
             break;
@@ -990,9 +1014,8 @@ void execution_statet::get_expr_globals(
       return;
   }
 
-  expr->foreach_operand([this, &globals_list, &ns](const expr2tc &e) {
-    get_expr_globals(ns, e, globals_list);
-  });
+  expr->foreach_operand([this, &globals_list, &ns](const expr2tc &e)
+                        { get_expr_globals(ns, e, globals_list); });
 }
 
 bool execution_statet::check_mpor_dependency(unsigned int j, unsigned int l)
@@ -1146,10 +1169,41 @@ bool execution_statet::has_cswitch_point_occured() const
   if (cswitch_forced)
     return true;
 
+  if (shared_switch_only)
+  {
+    for (const auto &var : thread_last_reads[active_thread])
+    {
+      auto it = art1->vars_map_writes.find(var);
+      if (it != art1->vars_map_writes.end())
+      {
+        for (unsigned int tid : it->second)
+        {
+          if (tid != active_thread)
+            return true;
+        }
+      }
+    }
+
+    for (const auto &var : thread_last_writes[active_thread])
+    {
+      auto it = art1->vars_map_writes.find(var);
+      if (it != art1->vars_map_writes.end())
+      {
+        for (unsigned int tid : it->second)
+        {
+          if (tid != active_thread)
+            return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
   if (
     thread_last_reads[active_thread].size() != 0 ||
     thread_last_writes[active_thread].size() != 0)
-      return true;
+    return true;
 
   return false;
 }
@@ -1210,8 +1264,7 @@ void execution_statet::print_stack_traces(unsigned int indent) const
   for (it = threads_state.begin(); it != threads_state.end(); it++)
   {
     std::ostringstream oss;
-    oss << spaces << "Thread " << i++ << ":"
-        << "\n";
+    oss << spaces << "Thread " << i++ << ":" << "\n";
     it->print_stack_trace(indent + 2, oss);
     oss << "\n";
     log_status("{}", oss.str());
