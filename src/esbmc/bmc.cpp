@@ -1445,7 +1445,7 @@ smt_convt::resultt bmct::multi_property_check(
     // Atomically update summary with timing and results
     double old_total_time_s = summary.total_time_s;
     double new_total_time_s;
-    do 
+    do
     {
       new_total_time_s = old_total_time_s + solve_time_s;
     } while (!summary.total_time_s.compare_exchange_weak(
