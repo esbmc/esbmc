@@ -1445,9 +1445,11 @@ smt_convt::resultt bmct::multi_property_check(
     // Atomically update summary with timing and results
     double old_total_time_s = summary.total_time_s;
     double new_total_time_s;
-    do {
+    do 
+    {
       new_total_time_s = old_total_time_s + solve_time_s;
-    } while (!summary.total_time_s.compare_exchange_weak(old_total_time_s, new_total_time_s));
+    } while (!summary.total_time_s.compare_exchange_weak(
+      old_total_time_s, new_total_time_s));
 
     if (solver_result == smt_convt::P_SATISFIABLE)
       summary.failed_properties++;
@@ -1532,7 +1534,7 @@ smt_convt::resultt bmct::multi_property_check(
   };
 
   // PARALLEL
-  if(options.get_bool_option("parallel-solving"))
+  if (options.get_bool_option("parallel-solving"))
   {
     /* NOTE: I would love to use std::for_each here, but it is not giving
        * the result I would expect. My guess is either compiler version
@@ -1545,11 +1547,11 @@ smt_convt::resultt bmct::multi_property_check(
     // TODO: Running everything in parallel might be a bad idea.
     //       Should we also add a thread pool?
     std::vector<std::thread> parallel_jobs;
-    for(const auto &i : jobs)
+    for (const auto &i : jobs)
       parallel_jobs.push_back(std::thread(job_function, i));
 
     // Main driver
-    for(auto &t : parallel_jobs)
+    for (auto &t : parallel_jobs)
     {
       t.join();
     }
