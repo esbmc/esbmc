@@ -228,9 +228,7 @@ BytesStatic bytes_static_from_string(const char* str) {
 __ESBMC_HIDE:;
     size_t len = strlen(str);
     BytesStatic b = {0};
-    for (size_t i = 0; i < len; i++) {
-        b.data[i] = str[i];
-    }
+    memcpy(b.data, str, len);
     b.length = len;
     return b;
 }
@@ -238,9 +236,7 @@ __ESBMC_HIDE:;
 BytesStatic bytes_static_truncate(const BytesStatic* src, size_t new_len) {
 __ESBMC_HIDE:;
     BytesStatic b = {0};
-    for (size_t i = 0; i < new_len; i++) {
-        b.data[i] = src->data[i];
-    }
+    memcpy(b.data, src->data, new_len);
     b.length = new_len;
     return b;
 }
@@ -318,9 +314,7 @@ BytesStatic bytes_static_init_zero(size_t len) {
 __ESBMC_HIDE:;
     BytesStatic b = {0};
     b.length = len;
-    for (size_t i = 0; i < len; i++) {
-        b.data[i] = 0;
-    }
+    memset(b.data, 0, len);
     return b;
 }
 
@@ -330,9 +324,7 @@ __ESBMC_HIDE:;
     b.offset = pool->pool_cursor;
     b.length = len;
     b.initialized = 1;
-    for (size_t i = 0; i < len; i++) {
-      pool->pool[b.offset + i] = 0;
-    }
+    memset(&pool->pool[b.offset], 0, len);
     pool->pool_cursor += len;
     return b;
 }
@@ -342,9 +334,7 @@ __ESBMC_HIDE:;
     b->offset = pool->pool_cursor;
     b->length = len;
     b->initialized = 1;
-    for (size_t i = 0; i < len; i++) {
-        pool->pool[b->offset + i] = input[i];
-    }
+    memcpy(&pool->pool[b->offset], input, len);
     pool->pool_cursor += len;
 }
 
@@ -383,9 +373,7 @@ BytesStatic bytes_static_truncate_from_dynamic(const BytesDynamic* src, size_t n
 __ESBMC_HIDE:;
     bytes_dynamic_init_check(src->initialized);
     BytesStatic b = {0};
-    for (size_t i = 0; i < new_len; i++) {
-        b.data[i] = pool->pool[src->offset + i];
-    }
+    memcpy(b.data, &pool->pool[src->offset], new_len);
     b.length = new_len;
     return b;
 }
@@ -398,12 +386,8 @@ __ESBMC_HIDE:;
     d.offset = pool->pool_cursor;
     d.length = a->length + b->length;
     d.initialized = 1;
-    for (size_t i = 0; i < a->length; i++) {
-        pool->pool[d.offset + i] = pool->pool[a->offset + i];
-    }
-    for (size_t i = 0; i < b->length; i++) {
-        pool->pool[d.offset + a->length + i] = pool->pool[b->offset + i];
-    }
+    memcpy(&pool->pool[d.offset], &pool->pool[a->offset], a->length);
+    memcpy(&pool->pool[d.offset + a->length], &pool->pool[b->offset], b->length);
     pool->pool_cursor += d.length;
     return d;
 }
@@ -415,9 +399,7 @@ __ESBMC_HIDE:;
     d.offset = pool->pool_cursor;
     d.length = src->length;
     d.initialized = 1;
-    for (size_t i = 0; i < src->length; i++) {
-        pool->pool[d.offset + i] = pool->pool[src->offset + i];
-    }
+    memcpy(&pool->pool[d.offset], &pool->pool[src->offset], src->length);
     pool->pool_cursor += d.length;
     return d;
 }
@@ -453,10 +435,7 @@ __ESBMC_HIDE:;
 bool bytes_static_equal(const BytesStatic* a, const BytesStatic* b) {
 __ESBMC_HIDE:;
     if (a->length != b->length) return false;
-    for (size_t i = 0; i < a->length; i++) {
-        if (a->data[i] != b->data[i]) return false;
-    }
-    return true;
+    return memcmp(a->data, b->data, a->length) == 0;
 }
 
 bool bytes_dynamic_equal(const BytesDynamic* a, const BytesDynamic* b, const BytesPool* pool) {
@@ -464,10 +443,7 @@ __ESBMC_HIDE:;
     bytes_dynamic_init_check(a->initialized);
     bytes_dynamic_init_check(b->initialized);
     if (a->length != b->length) return false;
-    for (size_t i = 0; i < a->length; i++) {
-        if (pool->pool[a->offset + i] != pool->pool[b->offset + i]) return false;
-    }
-    return true;
+    return memcmp(&pool->pool[a->offset], &pool->pool[b->offset], a->length) == 0;
 }
 
 uint256_t bytes_dynamic_to_mapping_key(const BytesDynamic* b, const BytesPool* pool) {

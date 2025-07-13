@@ -8406,8 +8406,6 @@ void solidity_convertert::get_string_assignment(
   const exprt &rhs,
   exprt &new_expr)
 {
-  lhs.dump();
-  rhs.dump();
   if (
     rhs.id() == "string-constant" ||
     (rhs.id() == "sideeffect" &&
