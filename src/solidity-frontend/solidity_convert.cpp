@@ -4563,27 +4563,53 @@ bool solidity_convertert::get_expr(
 
       std::string sol_type_str =
         SolidityGrammar::elementary_type_name_to_str(target_type);
-      if (
-        type_name == SolidityGrammar::ElementaryTypeNameT::INT_LITERAL &&
-        expr["value"].get<std::string>().rfind("0x", 0) == 0)
+      if (type_name == SolidityGrammar::ElementaryTypeNameT::INT_LITERAL)
       {
-        // e.g. 0x12 => this can only be used for bytesN
-        side_effect_expr_function_callt hex_call;
-        get_library_function_call_no_args(
-          "bytes_static_from_hex",
-          "c:@F@bytes_static_from_hex",
-          byte_t,
-          location,
-          hex_call);
+        assert(is_static);
+        side_effect_expr_function_callt call;
+        if (expr["value"].get<std::string>().rfind("0x", 0) == 0)
+        {
+          // e.g. 0x12 => this can only be used for bytesN
+          get_library_function_call_no_args(
+            "bytes_static_from_hex",
+            "c:@F@bytes_static_from_hex",
+            byte_t,
+            location,
+            call);
+          string_constantt str(expr["value"].get<std::string>());
+          call.arguments().push_back(str);
+          call.type().set("#sol_type", "BytesStatic");
+          auto sol_size = byte_t.get("#sol_bytesn_size");
+          if (!sol_size.empty())
+            call.type().set("#sol_bytesn_size", sol_size);
+        }
+        else if (expr["value"].get<std::string>() == "0")
+        {
+          // e.g. bytes32 data3 = 0;
+          get_library_function_call_no_args(
+            "bytes_static_from_uint",
+            "c:@F@bytes_static_from_uint",
+            byte_t,
+            location,
+            call);
+          exprt val = gen_zero(uint_type());
 
-        string_constantt str(expr["value"].get<std::string>());
-        hex_call.arguments().push_back(str);
-        hex_call.type().set("#sol_type", "BytesStatic");
-        auto sol_size = byte_t.get("#sol_bytesn_size");
-        if (!sol_size.empty())
-          hex_call.set("#sol_bytesn_size", sol_size);
+          assert(!byte_t.get("#sol_bytesn_size").empty());
+          exprt len = from_integer(
+            std::stoul(byte_t.get("#sol_bytesn_size").as_string()),
+            uint_type());
 
-        new_expr = hex_call;
+          call.arguments().push_back(val);
+          call.arguments().push_back(len);
+        }
+        else
+        {
+          log_error(
+            "Unsupported bytes literal type in expression: {}", expr.dump());
+          return true;
+        }
+
+        new_expr = call;
         break;
       }
       else if (
@@ -4620,7 +4646,7 @@ bool solidity_convertert::get_expr(
           str_call.type().set("#sol_type", "BytesStatic");
           auto sol_size = byte_t.get("#sol_bytesn_size");
           if (!sol_size.empty())
-            str_call.set("#sol_bytesn_size", sol_size);
+            str_call.type().set("#sol_bytesn_size", sol_size);
         }
 
         new_expr = str_call;
