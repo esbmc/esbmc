@@ -17,9 +17,8 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-#add_compile_features(cxx_std_17)
 
-#add_executable(esbmc 	main.cpp	esbmc_parseoptions.cpp...)
+#add_executable(esbmcmain.cpp	esbmc_parseoptions.cpp...)
 #target_compile_features(esbmc PUBLIC cxx_std_17)
 
 # The only default solver available is smtlib
@@ -152,7 +151,6 @@ if(NOT WIN32)
   find_package(PkgConfig REQUIRED)
   pkg_check_modules(GMP	REQUIRED IMPORTED_TARGET GLOBAL gmp)
   pkg_check_modules(GMPXX REQUIRED IMPORTED_TARGET GLOBAL gmpxx)
- # target_link_libraries(esbmc PUBLIC ${GMP_LIBRARIES} gmpxx)
 
   message(STATUS "GMP LIB DIRS: ${GMP_LIBRARY_DIRS}")
   message(STATUS "GMPXX LIB DIRS: ${GMPXX_LIBRARY_DIRS}")
