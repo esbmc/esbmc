@@ -44,6 +44,10 @@ std::unordered_set<std::string> goto_functionst::reached_claims;
 std::unordered_multiset<std::string> goto_functionst::reached_mul_claims;
 std::unordered_set<std::string> goto_functionst::verified_claims;
 
+std::mutex goto_functionst::reached_claims_mutex;
+std::mutex goto_functionst::reached_mul_claims_mutex;
+std::mutex goto_functionst::verified_claims_mutex;
+
 bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   : options(opts), context(_context), ns(context)
 {
@@ -411,7 +415,7 @@ void bmct::report_multi_property_trace(
   const smt_convt::resultt &res,
   const std::unique_ptr<smt_convt> &solver,
   const symex_target_equationt &local_eq,
-  const size_t ce_counter,
+  const std::atomic<size_t> ce_counter,
   const goto_tracet &goto_trace,
   const std::string &msg)
 {
@@ -430,7 +434,7 @@ void bmct::report_multi_property_trace(
     std::string output_file = options.get_option("cex-output");
     if (output_file != "")
     {
-      std::ofstream out(fmt::format("{}-{}", ce_counter, output_file));
+      std::ofstream out(fmt::format("{}-{}", ce_counter.load(), output_file));
       show_goto_trace(out, ns, goto_trace);
     }
 
@@ -1246,9 +1250,9 @@ smt_convt::resultt bmct::multi_property_check(
 
   // Initial values
   smt_convt::resultt final_result = smt_convt::P_UNSATISFIABLE;
-  size_t ce_counter = 0;
-  std::unordered_set<size_t> jobs;
   std::mutex result_mutex;
+  std::atomic<size_t> ce_counter{0};
+  std::unordered_set<size_t> jobs;
 
   // Add summary tracking
   SimpleSummary summary;
@@ -1258,6 +1262,11 @@ smt_convt::resultt bmct::multi_property_check(
   auto &reached_claims = symex->goto_functions.reached_claims;
   auto &reached_mul_claims = symex->goto_functions.reached_mul_claims;
   auto &verified_claims = symex->goto_functions.verified_claims;
+  auto &reached_claims_mutex = symex->goto_functions.reached_claims_mutex;
+  auto &reached_mul_claims_mutex =
+    symex->goto_functions.reached_mul_claims_mutex;
+  auto &verified_claims_mutex = symex->goto_functions.verified_claims_mutex;
+
   // "Assertion Cov"
   bool is_assert_cov = options.get_bool_option("assertion-coverage") ||
                        options.get_bool_option("assertion-coverage-claims");
@@ -1287,7 +1296,7 @@ smt_convt::resultt bmct::multi_property_check(
   const std::string fail_fast = options.get_option("multi-fail-fast");
   const bool is_fail_fast = !fail_fast.empty() ? true : false;
   const int fail_fast_limit = is_fail_fast ? stoi(fail_fast) : 0;
-  int fail_fast_cnt = 0;
+  std::atomic<int> fail_fast_cnt{0};
 
   if (is_fail_fast && fail_fast_limit < 0)
   {
@@ -1323,6 +1332,9 @@ smt_convt::resultt bmct::multi_property_check(
                        &reached_claims,
                        &reached_mul_claims,
                        &verified_claims,
+                       &reached_claims_mutex,
+                       &reached_mul_claims_mutex,
+                       &verified_claims_mutex,
                        &is_assert_cov,
                        &is_cond_cov,
                        &is_vb,
@@ -1361,8 +1373,11 @@ smt_convt::resultt bmct::multi_property_check(
     else
       is_verified = reached_claims.count(claim_sig) ? true : false;
     if (is_assert_cov && is_verified)
+    {
       // insert to the multiset before skipping the verification process
+      std::lock_guard lock(reached_mul_claims_mutex);
       reached_mul_claims.emplace(claim_sig);
+    }
 
     if (verified_claims.count(claim_sig))
     {
@@ -1427,8 +1442,14 @@ smt_convt::resultt bmct::multi_property_check(
 
     double solve_time_s = (solve_stop - solve_start);
 
-    // Update summary with timing and results
-    summary.total_time_s += solve_time_s;
+    // Atomically update summary with timing and results
+    double old_total_time_s = summary.total_time_s;
+    double new_total_time_s;
+    do
+    {
+      new_total_time_s = old_total_time_s + solve_time_s;
+    } while (!summary.total_time_s.compare_exchange_weak(
+      old_total_time_s, new_total_time_s));
 
     if (solver_result == smt_convt::P_SATISFIABLE)
       summary.failed_properties++;
@@ -1449,9 +1470,19 @@ smt_convt::resultt bmct::multi_property_check(
 
       // Store claim_sig
       if (is_assert_cov)
+      {
+        std::lock_guard lock(reached_mul_claims_mutex);
         reached_mul_claims.emplace(claim_sig);
+      }
       else
+      {
+        std::lock_guard lock(reached_claims_mutex);
         reached_claims.emplace(claim_sig);
+      }
+
+      // update cex number
+      size_t previous_ce_counter;
+      previous_ce_counter = ce_counter++;
 
       // for verbose output of cond coverage
       if (is_vb)
@@ -1465,18 +1496,20 @@ smt_convt::resultt bmct::multi_property_check(
           reached_claims,
           reached_mul_claims);
       else
+      {
         report_multi_property_trace(
           solver_result,
           runtime_solver,
           local_eq,
-          ce_counter,
+          previous_ce_counter,
           goto_trace,
           claim.claim_msg);
+      }
 
-      final_result = solver_result;
-
-      // update cex number
-      ++ce_counter;
+      {
+        std::lock_guard lock(result_mutex);
+        final_result = solver_result;
+      }
 
       // Update fail-fast-counter
       fail_fast_cnt++;
@@ -1500,7 +1533,34 @@ smt_convt::resultt bmct::multi_property_check(
       }
   };
 
-  std::for_each(std::begin(jobs), std::end(jobs), job_function);
+  // PARALLEL
+  if (options.get_bool_option("parallel-solving"))
+  {
+    /* NOTE: I would love to use std::for_each here, but it is not giving
+       * the result I would expect. My guess is either compiler version
+       * or some magic flag that we are not using.
+       *
+       * Nevertheless, we can achieve the same results by just creating
+       * threads.
+       */
+
+    // TODO: Running everything in parallel might be a bad idea.
+    //       Should we also add a thread pool?
+    std::vector<std::thread> parallel_jobs;
+    for (const auto &i : jobs)
+      parallel_jobs.push_back(std::thread(job_function, i));
+
+    // Main driver
+    for (auto &t : parallel_jobs)
+    {
+      t.join();
+    }
+    // We could remove joined jobs from the parallel_jobs vector.
+    // However, its probably not worth for small vectors.
+  }
+  // SEQUENTIAL
+  else
+    std::for_each(std::begin(jobs), std::end(jobs), job_function);
 
   // show summary
   report_simple_summary(summary);

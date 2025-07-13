@@ -112,7 +112,7 @@ public:
   result_type operator()()
   {
     result_type val = nondet_util::nondet_helper<result_type>::get();
-    __CPROVER_assume(val >= min() && val <= max());
+    __ESBMC_assume(val >= min() && val <= max());
     return val;
   }
 

@@ -234,6 +234,7 @@ else()
                     ltl
                     goto-coverage
                     goto-transcoder
+                    parallel-solving
        )
   else()
     set(REGRESSIONS $ENV{BENCHMARK_TO_RUN}) # run a single user-specified benchmark
