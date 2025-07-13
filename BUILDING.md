@@ -411,3 +411,14 @@ passing the CMake flags
 ```
 e.g. the 'path' should point to `$HOME/cheri/output/sdk/sysroot-riscv64-purecap`. As for the `sysroot-riscv64-purecap` part, you may want to use a diffrent directory if you used a different variant in the `cheribuild.py` command above.
 
+# ESBMC Fuzzing Tests
+
+ESBMC has a number of fuzzing test targets which are used with libFuzzer to test parts of ESBMC. Building these targets require additional CMake configuration.
+
+Using Clang to build the fuzzing targets is required due to the included libFuzzer support. Clang must therefore be installed and CMake configured to use Clang to build ESBMC. One way to do this is to pass the following options to CMake:
+```
+-DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+```
+Note that passing these options to CMake for the first time will result in the CMake cache being deleted, possibly requiring some variables to be reset.
+
+Fuzzing tests must also be enabled with `-DENABLE_FUZZER=1` before building.
