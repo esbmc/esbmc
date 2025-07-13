@@ -1168,27 +1168,33 @@ bool execution_statet::has_cswitch_point_occured() const
 
   if (cswitch_forced)
     return true;
-
-if (shared_switch_only)
-{
+  
+  if (shared_switch_only)
+  {
+    // If this thread wrote a shared variable, allow a context switch point.
     if (!thread_last_writes[active_thread].empty())
-        return true;
+      return true;
 
+    // If this thread read a shared variable, check whether other threads in
+    // current interleaving wrote this variable. If not then don't do switch.
     for (const auto &var : thread_last_reads[active_thread])
     {
-        auto it = art1->vars_map_writes.find(var);
-        if (it != art1->vars_map_writes.end())
+      const std::string &name = to_symbol2t(var).thename.as_string();
+      if (name == "c:@F@__ESBMC_races_flag")
+        return true;
+      auto it = art1->vars_map_writes.find(var);
+      if (it != art1->vars_map_writes.end())
+      {
+        for (unsigned int tid : it->second)
         {
-            for (unsigned int tid : it->second)
-            {
-                if (tid != active_thread)
-                    return true;
-            }
+          if (tid != active_thread)
+            return true;
         }
+      }
     }
 
     return false;
-}
+  }
 
   if (
     thread_last_reads[active_thread].size() != 0 ||
