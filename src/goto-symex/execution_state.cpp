@@ -308,7 +308,7 @@ void execution_statet::symex_assign(
 
   goto_symext::symex_assign(code, hidden, guard);
 
-  if (threads_state.size() >= thread_cswitch_threshold || shared_switch_only)
+  if (threads_state.size() >= thread_cswitch_threshold)
     analyze_assign(code);
 }
 
@@ -328,7 +328,7 @@ void execution_statet::claim(const expr2tc &expr, const std::string &msg)
 
   goto_symext::claim(expr, msg);
 
-  if (threads_state.size() >= thread_cswitch_threshold || shared_switch_only)
+  if (threads_state.size() >= thread_cswitch_threshold)
     analyze_read(expr);
 }
 
@@ -338,7 +338,7 @@ void execution_statet::symex_goto(const expr2tc &old_guard)
 
   goto_symext::symex_goto(old_guard);
 
-  if (threads_state.size() >= thread_cswitch_threshold || shared_switch_only)
+  if (threads_state.size() >= thread_cswitch_threshold)
     analyze_read(old_guard);
 }
 
@@ -348,7 +348,7 @@ void execution_statet::assume(const expr2tc &assumption)
 
   goto_symext::assume(assumption);
 
-  if (threads_state.size() >= thread_cswitch_threshold || shared_switch_only)
+  if (threads_state.size() >= thread_cswitch_threshold)
     analyze_read(assumption);
 }
 
@@ -842,7 +842,7 @@ void execution_statet::analyze_read(const expr2tc &code)
 
 void execution_statet::analyze_args(const expr2tc &expr)
 {
-  if (threads_state.size() >= thread_cswitch_threshold || shared_switch_only)
+  if (threads_state.size() >= thread_cswitch_threshold)
     analyze_read(expr);
 }
 
