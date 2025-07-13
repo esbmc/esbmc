@@ -1321,6 +1321,7 @@ bool solidity_convertert::get_var_decl(
     t.get("#sol_type").as_string() == "CONTRACT" ? true : false;
   bool is_mapping = t.get("#sol_type").as_string() == "MAPPING" ? true : false;
   bool is_new_expr = newContractSet.count(current_contractName);
+  bool is_byte_static = is_bytesN_type(t);
   if (is_new_expr)
   {
     // hack: check if it's unbound and the only verifying targets
@@ -1404,7 +1405,7 @@ bool solidity_convertert::get_var_decl(
   const nlohmann::json init_value =
     ast_node.contains("value") ? ast_node["value"] : initialValue;
   const nlohmann::json literal_type = ast_node["typeDescriptions"];
-  if (!set_init && !(is_mapping && is_new_expr))
+  if (!set_init && !(is_mapping && is_new_expr && is_byte_static))
   {
     // for both state and non-state variables, set default value as zero
     symbol.value = gen_zero(get_complete_type(t, ns), true);
@@ -1644,6 +1645,22 @@ bool solidity_convertert::get_var_decl(
 
     added_symbol.value = inits;
     decl.operands().push_back(inits);
+  }
+  else if (!set_init && is_byte_static)
+  {
+    side_effect_expr_function_callt call;
+    get_library_function_call_no_args(
+      "bytes_static_init_zero",
+      "c:@F@bytes_static_init_zero",
+      t,
+      location_begin,
+      call);
+    assert(!t.get("#sol_bytesn_size").empty());
+    exprt len = from_integer(
+      std::stoul(t.get("#sol_bytesn_size").as_string()), uint_type());
+    call.arguments().push_back(len);
+    added_symbol.value = call;
+    decl.operands().push_back(call);
   }
   // now we have rule out other special cases
   else if (set_init)
@@ -4587,19 +4604,15 @@ bool solidity_convertert::get_expr(
         {
           // e.g. bytes32 data3 = 0;
           get_library_function_call_no_args(
-            "bytes_static_from_uint",
-            "c:@F@bytes_static_from_uint",
+            "bytes_static_init_zero",
+            "c:@F@bytes_static_init_zero",
             byte_t,
             location,
             call);
-          exprt val = gen_zero(uint_type());
-
           assert(!byte_t.get("#sol_bytesn_size").empty());
           exprt len = from_integer(
             std::stoul(byte_t.get("#sol_bytesn_size").as_string()),
             uint_type());
-
-          call.arguments().push_back(val);
           call.arguments().push_back(len);
         }
         else
@@ -8395,8 +8408,15 @@ void solidity_convertert::get_string_assignment(
   const exprt &rhs,
   exprt &new_expr)
 {
-  if (rhs.id() == "string-constant")
+  lhs.dump();
+  rhs.dump();
+  if (
+    rhs.id() == "string-constant" ||
+    (rhs.id() == "sideeffect" &&
+     rhs.op0().identifier() == "c:@F@_ESBMC_get_nondet_cont_name"))
   {
+    // char * this->bind_name = (const char *)_ESBMC_get_nondet_cont_name"
+    // since we do not change the value of bind_name so we should be fine
     side_effect_exprt _assign("assign", lhs.type());
     exprt new_rhs = rhs;
     // pass a dump json as we will not reach bytes part anyway

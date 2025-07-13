@@ -307,6 +307,16 @@ __ESBMC_HIDE:;
     return ((uint256_t)b->length << 248) | bytes_static_to_uint(b);
 }
 
+BytesStatic bytes_static_init_zero(size_t len) {
+__ESBMC_HIDE:;
+    BytesStatic b = {0};
+    b.length = len;
+    for (size_t i = 0; i < len; i++) {
+        b.data[i] = 0;
+    }
+    return b;
+}
+
 BytesDynamic bytes_dynamic_init_zero(size_t len, BytesPool* pool) {
 __ESBMC_HIDE:;
     BytesDynamic b = {0};
