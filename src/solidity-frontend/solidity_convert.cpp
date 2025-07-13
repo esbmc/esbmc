@@ -5590,7 +5590,7 @@ bool solidity_convertert::get_expr(
       }
 
       // static bytes (bytesN)
-      if (is_bytesN_type(t))
+      if (is_bytesN_type(base_t))
       {
         if (!is_bytes_set)
         {
@@ -5627,11 +5627,9 @@ bool solidity_convertert::get_expr(
 
           new_expr = symbol_expr(added_sym);
         }
-        break;
       }
-
       // dynamic bytes
-      if (is_bytes_type(t))
+      else
       {
         exprt dynamic_pool;
         if (get_dynamic_pool(current_contractName, dynamic_pool))
@@ -5674,8 +5672,8 @@ bool solidity_convertert::get_expr(
           move_to_back_block(set_call);
           new_expr = symbol_expr(added_sym);
         }
-        break;
       }
+      break;
     }
 
     new_expr = index_exprt(array, pos, t);

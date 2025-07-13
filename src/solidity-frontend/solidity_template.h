@@ -195,6 +195,13 @@ typedef struct BytesDynamic {
     int initialized;
 } BytesDynamic;
 
+void bytes_dynamic_init_check(const int initialized)
+{
+__ESBMC_HIDE:;
+  if(initialized == 0)
+    assert(!"Uninitialized Dynamic Bytes");
+}
+
 unsigned char hex_char_to_nibble(char c) {
 __ESBMC_HIDE:;
     if ('0' <= c && c <= '9') return c - '0';
@@ -374,6 +381,7 @@ __ESBMC_HIDE:;
 
 BytesStatic bytes_static_truncate_from_dynamic(const BytesDynamic* src, size_t new_len, const BytesPool* pool) {
 __ESBMC_HIDE:;
+    bytes_dynamic_init_check(src->initialized);
     BytesStatic b = {0};
     for (size_t i = 0; i < new_len; i++) {
         b.data[i] = pool->pool[src->offset + i];
@@ -384,6 +392,8 @@ __ESBMC_HIDE:;
 
 BytesDynamic bytes_dynamic_concat(const BytesDynamic* a, const BytesDynamic* b, BytesPool* pool) {
 __ESBMC_HIDE:;
+    bytes_dynamic_init_check(a->initialized);
+    bytes_dynamic_init_check(b->initialized);
     BytesDynamic d = {0};
     d.offset = pool->pool_cursor;
     d.length = a->length + b->length;
@@ -400,6 +410,7 @@ __ESBMC_HIDE:;
 
 BytesDynamic bytes_dynamic_copy(const BytesDynamic* src, BytesPool* pool) {
 __ESBMC_HIDE:;
+    bytes_dynamic_init_check(src->initialized);
     BytesDynamic d = {0};
     d.offset = pool->pool_cursor;
     d.length = src->length;
@@ -418,6 +429,7 @@ __ESBMC_HIDE:;
 
 void bytes_dynamic_set(BytesDynamic* b, size_t index, BytesStatic value, BytesPool* pool) {
 __ESBMC_HIDE:;
+    bytes_dynamic_init_check(b->initialized);
     pool->pool[b->offset + index] = value.data[0];
 }
 
@@ -431,6 +443,7 @@ __ESBMC_HIDE:;
 
 BytesStatic bytes_dynamic_get(const BytesDynamic* b, const BytesPool* pool, size_t index) {
 __ESBMC_HIDE:;
+    bytes_dynamic_init_check(b->initialized);
     BytesStatic r = {0};
     r.data[0] = pool->pool[b->offset + index];
     r.length = 1;
@@ -448,6 +461,8 @@ __ESBMC_HIDE:;
 
 bool bytes_dynamic_equal(const BytesDynamic* a, const BytesDynamic* b, const BytesPool* pool) {
 __ESBMC_HIDE:;
+    bytes_dynamic_init_check(a->initialized);
+    bytes_dynamic_init_check(b->initialized);
     if (a->length != b->length) return false;
     for (size_t i = 0; i < a->length; i++) {
         if (pool->pool[a->offset + i] != pool->pool[b->offset + i]) return false;
@@ -457,6 +472,7 @@ __ESBMC_HIDE:;
 
 uint256_t bytes_dynamic_to_mapping_key(const BytesDynamic* b, const BytesPool* pool) {
 __ESBMC_HIDE:;
+    bytes_dynamic_init_check(b->initialized);
     uint256_t result = 0;
     for (size_t i = 0; i < b->length; i++) {
         result = (result << 8) | pool->pool[b->offset + i];
@@ -467,12 +483,14 @@ __ESBMC_HIDE:;
 
 void bytes_dynamic_push(BytesDynamic* b, unsigned char value, BytesPool* pool) {
 __ESBMC_HIDE:;
+    bytes_dynamic_init_check(b->initialized);
     pool->pool[b->offset + b->length] = value;
     b->length++;
 }
 
 void bytes_dynamic_pop(BytesDynamic* b, BytesPool* pool) {
 __ESBMC_HIDE:;
+    bytes_dynamic_init_check(b->initialized);
     b->length--;
 }
 
