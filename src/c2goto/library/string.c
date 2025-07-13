@@ -291,8 +291,9 @@ __ESBMC_HIDE:;
 void *memcpy(void *dst, const void *src, size_t n)
 {
 __ESBMC_HIDE:;
-  if (n == 0)
+  if (n == 0 || src == NULL)
     return dst;
+
   __ESBMC_assert(dst != NULL, "Destination pointer is NULL.");
   __ESBMC_assert(src!=NULL, "Source pointer is NULL.");
 
