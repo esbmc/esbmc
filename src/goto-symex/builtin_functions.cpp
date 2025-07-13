@@ -1566,12 +1566,20 @@ void goto_symext::intrinsic_memcpy(
     cur_state->rename(src);
     cur_state->rename(n);
 
+    simplify(dst);
+    simplify(src);
+    if (is_nil_expr(dst) || is_nil_expr(src)) {
+      log_debug("memcpy", "Source or destination is NULL, falling back");
+      bump_call(func_call, "c:@F@__memcpy_impl");
+      return;
+    }
+
     // Only handle constant-size copies for now
     simplify(n);
     if(!is_constant_int2t(n))
     {
       log_debug("memcpy", "Symbolic size not supported, falling back");
-      bump_call(func_call, "c:@F@memcpy");
+      bump_call(func_call, "c:@F@__memcpy_impl");
       return;
     }
 
@@ -1591,7 +1599,7 @@ void goto_symext::intrinsic_memcpy(
 
     if(dst_items.empty() || src_items.empty()){
       log_debug("memcpy", "Could not dereference src or dst");
-      bump_call(func_call, "c:@F@memcpy");
+      bump_call(func_call, "c:@F@__memcpy_impl");
       return;
     }
 
@@ -1614,7 +1622,7 @@ void goto_symext::intrinsic_memcpy(
     if(!is_constant_int2t(dst_item.offset) || !is_constant_int2t(src_item.offset))
     {
       log_debug("memcpy", "Symbolic offsets not supported");
-      bump_call(func_call, "c:@F@memcpy");
+      bump_call(func_call, "c:@F@__memcpy_impl");
       return;
     }
     uint64_t dst_offset = to_constant_int2t(dst_item.offset).value.to_uint64();
