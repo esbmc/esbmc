@@ -1169,36 +1169,26 @@ bool execution_statet::has_cswitch_point_occured() const
   if (cswitch_forced)
     return true;
 
-  if (shared_switch_only)
-  {
+if (shared_switch_only)
+{
+    if (!thread_last_writes[active_thread].empty())
+        return true;
+
     for (const auto &var : thread_last_reads[active_thread])
     {
-      auto it = art1->vars_map_writes.find(var);
-      if (it != art1->vars_map_writes.end())
-      {
-        for (unsigned int tid : it->second)
+        auto it = art1->vars_map_writes.find(var);
+        if (it != art1->vars_map_writes.end())
         {
-          if (tid != active_thread)
-            return true;
+            for (unsigned int tid : it->second)
+            {
+                if (tid != active_thread)
+                    return true;
+            }
         }
-      }
-    }
-
-    for (const auto &var : thread_last_writes[active_thread])
-    {
-      auto it = art1->vars_map_writes.find(var);
-      if (it != art1->vars_map_writes.end())
-      {
-        for (unsigned int tid : it->second)
-        {
-          if (tid != active_thread)
-            return true;
-        }
-      }
     }
 
     return false;
-  }
+}
 
   if (
     thread_last_reads[active_thread].size() != 0 ||
