@@ -25,8 +25,8 @@ void __ESBMC_set_thread_internal_data(
 #define __ESBMC_cond_lock_field(a) ((a).__lock)
 #define __ESBMC_cond_futex_field(a) ((a).__futex)
 #define __ESBMC_cond_nwaiters_field(a) ((a).__nwaiters)
-#define __ESBMC_rwlock_readers(a) ((a).__readers)
-#define __ESBMC_rwlock_writer(a) ((a).__writer)
+#define __ESBMC_rwlock_readers(a) ((a)->__readers)
+#define __ESBMC_rwlock_writer(a) ((a)->__writer)
 
 /* Global tracking data. Should all initialize to 0 / false */
 __attribute__((
@@ -494,8 +494,8 @@ int pthread_rwlock_init(
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-  __ESBMC_rwlock_readers(*lock) = 0;
-  __ESBMC_rwlock_writer(*lock) = 0;
+  __ESBMC_rwlock_readers(lock) = 0;
+  __ESBMC_rwlock_writer(lock) = 0;
   __ESBMC_atomic_end();
   return 0;
 }
@@ -504,8 +504,8 @@ int pthread_rwlock_rdlock(pthread_rwlock_t *lock)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-  __ESBMC_assume(!__ESBMC_rwlock_writer(*lock));
-  __ESBMC_rwlock_readers(*lock)++;
+  __ESBMC_assume(!__ESBMC_rwlock_writer(lock));
+  __ESBMC_rwlock_readers(lock)++;
   __ESBMC_atomic_end();
   return 0;
 }
@@ -515,13 +515,13 @@ int pthread_rwlock_tryrdlock(pthread_rwlock_t *lock)
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
 
-  if (__ESBMC_rwlock_writer(*lock) != 0)
+  if (__ESBMC_rwlock_writer(lock) != 0)
   {
     __ESBMC_atomic_end();
     return EBUSY;
   }
   else
-    __ESBMC_rwlock_readers(*lock)++;
+    __ESBMC_rwlock_readers(lock)++;
   __ESBMC_atomic_end();
 
   return 0;
@@ -531,12 +531,12 @@ int pthread_rwlock_trywrlock(pthread_rwlock_t *lock)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-  if (__ESBMC_rwlock_writer(*lock) != 0 || __ESBMC_rwlock_readers(*lock) != 0)
+  if (__ESBMC_rwlock_writer(lock) != 0 || __ESBMC_rwlock_readers(lock) != 0)
   {
     __ESBMC_atomic_end();
     return EBUSY;
   }
-  __ESBMC_rwlock_writer(*lock) = 1;
+  __ESBMC_rwlock_writer(lock) = 1;
   __ESBMC_atomic_end();
   return 0;
 }
@@ -545,10 +545,10 @@ int pthread_rwlock_unlock(pthread_rwlock_t *lock)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-  if (__ESBMC_rwlock_writer(*lock))
-    __ESBMC_rwlock_writer(*lock) = 0;
-  else if (__ESBMC_rwlock_readers(*lock) > 0)
-    __ESBMC_rwlock_readers(*lock)--;
+  if (__ESBMC_rwlock_writer(lock))
+    __ESBMC_rwlock_writer(lock) = 0;
+  else if (__ESBMC_rwlock_readers(lock) > 0)
+    __ESBMC_rwlock_readers(lock)--;
   __ESBMC_atomic_end();
   return 0;
 }
@@ -558,8 +558,8 @@ int pthread_rwlock_wrlock(pthread_rwlock_t *lock)
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   __ESBMC_assume(
-    !(__ESBMC_rwlock_writer(*lock) || __ESBMC_rwlock_readers(*lock)));
-  __ESBMC_rwlock_writer(*lock) = 1;
+    !(__ESBMC_rwlock_writer(lock) || __ESBMC_rwlock_readers(lock)));
+  __ESBMC_rwlock_writer(lock) = 1;
   __ESBMC_atomic_end();
   return 0;
 }
