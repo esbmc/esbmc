@@ -11,7 +11,6 @@
 #include <util/arith_tools.h>
 #include <util/ieee_float.h>
 #include <util/message.h>
-#include <iostream>
 
 using namespace json_utils;
 
@@ -360,10 +359,10 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
     }
 
     typet operand_type = sym->value.type();
+    std::string py_type = type_handler_.type_to_string(operand_type);
 
-    if (operand_type != char_type())
+    if (operand_type != char_type() && py_type != "str")
     {
-      std::string py_type = type_handler_.type_to_string(operand_type);
       throw std::runtime_error(
         "TypeError: ord() expected string of length 1, but "+ py_type + " found");
     }
