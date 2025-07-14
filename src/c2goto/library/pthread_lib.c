@@ -517,7 +517,7 @@ __ESBMC_HIDE:;
 
   if (__ESBMC_rwlock_writer(*lock) != 0) {
     __ESBMC_atomic_end();
-    return 1;
+    return EBUSY;
   }
   else
     __ESBMC_rwlock_readers(*lock)++;
@@ -532,7 +532,7 @@ __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
   if (__ESBMC_rwlock_writer(*lock) != 0 || __ESBMC_rwlock_readers(*lock) != 0) {
     __ESBMC_atomic_end();
-    return 1;
+    return EBUSY;
   }
   __ESBMC_rwlock_writer(*lock) = 1;
   __ESBMC_atomic_end();
