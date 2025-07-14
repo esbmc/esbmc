@@ -285,7 +285,6 @@ exprt function_call_expr::handle_oct(nlohmann::json &arg) const
   return converter_.make_char_array_expr(string_literal, t);
 }
 
-// Handle ord with constant
 exprt function_call_expr::handle_ord(nlohmann::json &arg) const
 {
   int code_point = 0;
@@ -350,12 +349,23 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
     }
   }
   // Handle ord with symbol
-  else if (arg["_type"]=="Name"&&arg.contains("id"))
+  else if (arg["_type"]=="Name" && arg.contains("id"))
   {
     const symbolt *sym = lookup_python_symbol(arg["id"]);
-    if (!sym || !sym->value.is_constant()){
-      throw std::runtime_error( // TODO improve error message
-        "TypeError: ord() expected a character, but string of length 0 found");
+
+    if (!sym){
+      std::string var_name = arg["id"].get<std::string>();
+      throw std::runtime_error(
+       "NameError: variable '" + var_name + "' is not defined");
+    }
+
+    // typet operand_type = converter_.get_expr(arg).operand_expr.type();
+    typet operand_type = sym->value.type();
+    std::string py_type = type_handler_.type_to_string(operand_type);
+    if (py_type != "str")
+    {
+      throw std::runtime_error(
+        "TypeError: ord() expected string of length 1, but "+ py_type + " found");
     }
     auto value_opt = extract_string_from_symbol(sym);
     const std::string &s = *value_opt;
