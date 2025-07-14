@@ -2920,7 +2920,7 @@ bool solidity_convertert::move_initializer_to_ctor(
         _assign.location() = sym.location;
         assert(current_contract != nullptr);
         if (rhs.get("#zero_initializer") != "1")
-          convert_type_expr(ns, rhs, comp.type(), current_contract);
+          convert_type_expr(ns, rhs, comp, current_contract);
         _assign.copy_to_operands(lhs, rhs);
       }
       convert_expression_to_code(_assign);
@@ -6443,7 +6443,7 @@ bool solidity_convertert::get_binary_operator_expr(
       if (rt_sol == "ARRAY_LITERAL")
         // construct aux_array while adding padding
         // e.g. data1 = [1,2] ==> data1 = aux_array$1
-        convert_type_expr(ns, rhs, lt, expr);
+        convert_type_expr(ns, rhs, lhs, expr);
 
       // get size
       exprt size_expr;
@@ -6739,7 +6739,7 @@ bool solidity_convertert::get_binary_operator_expr(
     convert_type_expr(ns, rhs, common_type, expr);
   }
   else if (lhs.type() != rhs.type())
-    convert_type_expr(ns, rhs, lhs.type(), expr);
+    convert_type_expr(ns, rhs, lhs, expr);
 
   // 4.2 Copy to operands
   new_expr.copy_to_operands(lhs, rhs);
@@ -6878,7 +6878,7 @@ bool solidity_convertert::get_compound_assign_expr(
     convert_type_expr(ns, rhs, common_type, expr);
   }
   else if (lhs.type() != rhs.type())
-    convert_type_expr(ns, rhs, lhs.type(), expr);
+    convert_type_expr(ns, rhs, lhs, expr);
 
   new_expr.copy_to_operands(lhs, rhs);
   new_expr.location() = location;
@@ -8427,7 +8427,7 @@ void solidity_convertert::get_string_assignment(
     side_effect_exprt _assign("assign", lhs.type());
     exprt new_rhs = rhs;
     // pass a dump json as we will not reach bytes part anyway
-    convert_type_expr(ns, new_rhs, lhs.type(), empty_json);
+    convert_type_expr(ns, new_rhs, lhs, empty_json);
     _assign.copy_to_operands(lhs, new_rhs);
     new_expr = _assign;
   }
@@ -8531,7 +8531,7 @@ void solidity_convertert::get_tuple_assignment(
   else
   {
     assign_expr = side_effect_exprt("assign", lop.type());
-    convert_type_expr(ns, rop, lop.type(), expr);
+    convert_type_expr(ns, rop, lop, expr);
     assign_expr.copy_to_operands(lop, rop);
   }
   convert_expression_to_code(assign_expr);
@@ -8602,7 +8602,10 @@ void solidity_convertert::get_bytesN_size(
   if (!byte_size.empty())
     len_expr = from_integer(std::stoul(byte_size), size_type());
   else
+  {
+    assert(!src_expr.is_nil());
     len_expr = member_exprt(src_expr, "length", size_type());
+  }
 }
 
 bool solidity_convertert::get_dynamic_pool(
@@ -11479,9 +11482,21 @@ void solidity_convertert::convert_type_expr(
   const typet &dest_type,
   const nlohmann::json &expr)
 {
+  exprt _null = nil_exprt();
+  _null.type() = dest_type;
+  convert_type_expr(ns, src_expr, _null, expr);
+}
+
+void solidity_convertert::convert_type_expr(
+  const namespacet &ns,
+  exprt &src_expr,
+  const exprt &dest_expr,
+  const nlohmann::json &expr)
+{
   log_debug("solidity", "\t@@@ Performing type conversion");
 
   typet src_type = src_expr.type();
+  typet dest_type = dest_expr.type();
   std::string src_sol_type = src_type.get("#sol_type").as_string();
   std::string dest_sol_type = dest_type.get("#sol_type").as_string();
 
@@ -11535,7 +11550,7 @@ void solidity_convertert::convert_type_expr(
           resize_call);
 
         exprt len_expr;
-        get_bytesN_size(src_expr, len_expr);
+        get_bytesN_size(dest_expr, len_expr);
         resize_call.arguments().push_back(src_expr);
         resize_call.arguments().push_back(len_expr);
 
@@ -11577,7 +11592,7 @@ void solidity_convertert::convert_type_expr(
           resize_dyn_call);
 
         exprt len_expr;
-        get_bytesN_size(src_expr, len_expr);
+        get_bytesN_size(dest_expr, len_expr);
         resize_dyn_call.arguments().push_back(src_expr);
         resize_dyn_call.arguments().push_back(len_expr);
         resize_dyn_call.arguments().push_back(pool_member);
@@ -13540,7 +13555,7 @@ bool solidity_convertert::get_high_level_member_access(
     if (!is_return_void && !is_revert)
     {
       exprt _assign = side_effect_exprt("assign", tmp.type());
-      convert_type_expr(ns, memcall, tmp.type(), expr);
+      convert_type_expr(ns, memcall, tmp, expr);
       _assign.copy_to_operands(tmp, memcall);
       rhs = _assign;
     }
