@@ -11516,22 +11516,23 @@ void solidity_convertert::convert_type_expr(
         abort();
 
       // e.g. Bytes2 x; Bytes4(x); -> bytes_static_truncate(&x, 2)
+      // Bytes2 y; Bytes4 x = Bytes4(y);
       if (is_bytesN_type(src_type) && is_bytesN_type(dest_type))
       {
-        exprt len_expr;
-        get_bytesN_size(src_expr, len_expr);
-        side_effect_expr_function_callt trunc_call;
-        assert(context.find_symbol("c:@F@bytes_static_truncate") != nullptr);
+        side_effect_expr_function_callt resize_call;
         get_library_function_call_no_args(
-          "bytes_static_truncate",
-          "c:@F@bytes_static_truncate",
+          "bytes_static_resize",
+          "c:@F@bytes_static_resize",
           dest_type,
           src_expr.location(),
-          trunc_call);
-        trunc_call.arguments().push_back(src_expr);
-        trunc_call.arguments().push_back(len_expr);
+          resize_call);
 
-        src_expr = make_aux_var_for_bytes(trunc_call, src_expr.location());
+        exprt len_expr;
+        get_bytesN_size(src_expr, len_expr);
+        resize_call.arguments().push_back(src_expr);
+        resize_call.arguments().push_back(len_expr);
+
+        src_expr = make_aux_var_for_bytes(resize_call, src_expr.location());
         src_expr.type().set("#sol_type", "BytesStatic");
         return;
       }
@@ -11560,26 +11561,25 @@ void solidity_convertert::convert_type_expr(
       // e.g. bytes x; bytes2 y = bytes2(x);
       else if (is_bytes_type(src_type) && is_bytesN_type(dest_type))
       {
-        exprt len_expr;
-        get_bytesN_size(src_expr, len_expr);
-        side_effect_expr_function_callt trunc_dyn_call;
-        assert(
-          context.find_symbol("c:@F@bytes_static_truncate_from_dynamic") !=
-          nullptr);
+        side_effect_expr_function_callt resize_dyn_call;
         get_library_function_call_no_args(
-          "bytes_static_truncate_from_dynamic",
-          "c:@F@bytes_static_truncate_from_dynamic",
+          "bytes_static_resize_from_dynamic",
+          "c:@F@bytes_static_resize_from_dynamic",
           dest_type,
           src_expr.location(),
-          trunc_dyn_call);
-        trunc_dyn_call.arguments().push_back(src_expr);
-        trunc_dyn_call.arguments().push_back(len_expr);
-        trunc_dyn_call.arguments().push_back(pool_member);
+          resize_dyn_call);
 
-        src_expr = make_aux_var_for_bytes(trunc_dyn_call, src_expr.location());
+        exprt len_expr;
+        get_bytesN_size(src_expr, len_expr);
+        resize_dyn_call.arguments().push_back(src_expr);
+        resize_dyn_call.arguments().push_back(len_expr);
+        resize_dyn_call.arguments().push_back(pool_member);
+
+        src_expr = make_aux_var_for_bytes(resize_dyn_call, src_expr.location());
         src_expr.type().set("#sol_type", "BytesStatic");
         return;
       }
+
 
       // e.g. bytes x; bytes y = bytes(x);
       else

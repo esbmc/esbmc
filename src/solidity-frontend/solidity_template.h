@@ -536,6 +536,43 @@ __ESBMC_HIDE:;
     return out;
 }
 
+BytesStatic bytes_static_extend(const BytesStatic* src, size_t new_len) {
+__ESBMC_HIDE:;
+    BytesStatic out = {0};
+    memcpy(out.data, src->data, src->length);
+    memset(out.data + src->length, 0, new_len - src->length);
+    out.length = new_len;
+    return out;
+}
+
+BytesStatic bytes_static_resize(const BytesStatic* src, size_t new_len) {
+__ESBMC_HIDE:;
+    if (new_len <= src->length) {
+        return bytes_static_truncate(src, new_len);
+    } else {
+        return bytes_static_extend(src, new_len);
+    }
+}
+
+BytesStatic bytes_static_extend_from_dynamic(const BytesDynamic* src, size_t new_len, const BytesPool* pool) {
+__ESBMC_HIDE:;
+    bytes_dynamic_init_check(src->initialized);
+    BytesStatic b = {0};
+    memcpy(b.data, &pool->pool[src->offset], src->length);
+    memset(b.data + src->length, 0, new_len - src->length);
+    b.length = new_len;
+    return b;
+}
+
+BytesStatic bytes_static_resize_from_dynamic(const BytesDynamic* src, size_t new_len, const BytesPool* pool) {
+__ESBMC_HIDE:;
+    if (new_len <= src->length) {
+        return bytes_static_truncate_from_dynamic(src, new_len, pool);
+    } else {
+        return bytes_static_extend_from_dynamic(src, new_len, pool);
+    }
+}
+
 BytesPool bytes_pool_init(unsigned char* pool_data) {
 __ESBMC_HIDE:;
     BytesPool pool = { pool_data, 0 };
