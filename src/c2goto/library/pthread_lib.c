@@ -558,7 +558,7 @@ __ESBMC_HIDE:;
   __ESBMC_assume(!(__ESBMC_rwlock_writer(*lock) || __ESBMC_rwlock_readers(*lock)));
   __ESBMC_rwlock_writer(*lock) = 1;
   __ESBMC_atomic_end();
-  return 0; // we never fail
+  return 0;
 }
 
 /************************ condvar mainpulation routines ***********************/
