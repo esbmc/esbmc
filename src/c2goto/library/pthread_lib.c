@@ -26,17 +26,17 @@ void __ESBMC_set_thread_internal_data(
 #define __ESBMC_cond_futex_field(a) ((a).__futex)
 #define __ESBMC_cond_nwaiters_field(a) ((a).__nwaiters)
 #define __ESBMC_rwlock_readers(a) ((a).__readers)
-#define __ESBMC_rwlock_writer(a)  ((a).__writer)
+#define __ESBMC_rwlock_writer(a) ((a).__writer)
 
 /* Global tracking data. Should all initialize to 0 / false */
-__attribute__((annotate("__ESBMC_inf_size")))
-_Bool __ESBMC_pthread_thread_running[1];
+__attribute__((
+  annotate("__ESBMC_inf_size"))) _Bool __ESBMC_pthread_thread_running[1];
 
-__attribute__((annotate("__ESBMC_inf_size")))
-_Bool __ESBMC_pthread_thread_ended[1];
+__attribute__((
+  annotate("__ESBMC_inf_size"))) _Bool __ESBMC_pthread_thread_ended[1];
 
-__attribute__((annotate("__ESBMC_inf_size")))
-_Bool __ESBMC_pthread_thread_detach[1];
+__attribute__((
+  annotate("__ESBMC_inf_size"))) _Bool __ESBMC_pthread_thread_detach[1];
 
 __attribute__((
   annotate("__ESBMC_inf_size"))) void *__ESBMC_pthread_end_values[1];
@@ -515,7 +515,8 @@ int pthread_rwlock_tryrdlock(pthread_rwlock_t *lock)
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
 
-  if (__ESBMC_rwlock_writer(*lock) != 0) {
+  if (__ESBMC_rwlock_writer(*lock) != 0)
+  {
     __ESBMC_atomic_end();
     return EBUSY;
   }
@@ -530,7 +531,8 @@ int pthread_rwlock_trywrlock(pthread_rwlock_t *lock)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-  if (__ESBMC_rwlock_writer(*lock) != 0 || __ESBMC_rwlock_readers(*lock) != 0) {
+  if (__ESBMC_rwlock_writer(*lock) != 0 || __ESBMC_rwlock_readers(*lock) != 0)
+  {
     __ESBMC_atomic_end();
     return EBUSY;
   }
@@ -555,7 +557,8 @@ int pthread_rwlock_wrlock(pthread_rwlock_t *lock)
 {
 __ESBMC_HIDE:;
   __ESBMC_atomic_begin();
-  __ESBMC_assume(!(__ESBMC_rwlock_writer(*lock) || __ESBMC_rwlock_readers(*lock)));
+  __ESBMC_assume(
+    !(__ESBMC_rwlock_writer(*lock) || __ESBMC_rwlock_readers(*lock)));
   __ESBMC_rwlock_writer(*lock) = 1;
   __ESBMC_atomic_end();
   return 0;
