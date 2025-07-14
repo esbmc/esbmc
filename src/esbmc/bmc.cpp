@@ -69,8 +69,10 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
     // Run cache if user has specified the option
     if (options.get_bool_option("cache-asserts"))
       // Store the set between runs
-      algorithms.emplace_back(std::make_unique<assertion_cache>(
-        config.ssa_caching_db, !options.get_bool_option("forward-condition")));
+      algorithms.emplace_back(
+        std::make_unique<assertion_cache>(
+          config.ssa_caching_db,
+          !options.get_bool_option("forward-condition")));
 
     if (opts.get_bool_option("ssa-features-dump"))
       algorithms.emplace_back(std::make_unique<ssa_features>());
@@ -1347,7 +1349,8 @@ smt_convt::resultt bmct::multi_property_check(
                        &bs,
                        &fc,
                        &is,
-                       &is_color](const size_t &i) {
+                       &is_color](const size_t &i)
+  {
     //"multi-fail-fast n": stop after first n SATs found.
     if (is_fail_fast && fail_fast_cnt >= fail_fast_limit)
       return;
@@ -1409,9 +1412,10 @@ smt_convt::resultt bmct::multi_property_check(
     // Initialize a solver
     std::unique_ptr<smt_convt> runtime_solver(create_solver("", ns, options));
 
-    // Store solver name
-    if (summary.solver_name.empty())
-      summary.solver_name = runtime_solver->solver_text();
+    // Store solver name initially but not again
+    std::call_once(
+      summary.solver_name_flag,
+      [&]() { summary.solver_name = runtime_solver->solver_text(); });
 
     log_status(
       "Solving claim '{}' with solver {}",
