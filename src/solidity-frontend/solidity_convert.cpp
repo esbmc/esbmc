@@ -49,6 +49,7 @@ solidity_convertert::solidity_convertert(
     is_bound(false),
     is_reentry_check(false),
     is_pointer_check(true),
+    is_array_member(true),
     nondet_bool_expr(),
     nondet_uint_expr()
 {
@@ -73,6 +74,9 @@ solidity_convertert::solidity_convertert(
       : config.options.get_option("no-standard-checks");
   if (!no_pointer_check.empty())
     is_pointer_check = false;
+
+  if (!has_array_push_pop_length(src_ast_json["nodes"]))
+    is_array_member = false;
 
   // initialize nondet_bool
   if (
@@ -1515,16 +1519,19 @@ bool solidity_convertert::get_var_decl(
         return true;
 
       // construct statement _ESBMC_store_array(zz, 10);
-      exprt func_call;
-      store_update_dyn_array(symbol_expr(added_symbol), size_expr, func_call);
-
-      if (is_state_var && !is_inherited)
+      if (is_array_member)
       {
-        // move to ctor initializer
-        move_to_initializer(func_call);
+        exprt func_call;
+        store_update_dyn_array(symbol_expr(added_symbol), size_expr, func_call);
+
+        if (is_state_var && !is_inherited)
+        {
+          // move to ctor initializer
+          move_to_initializer(func_call);
+        }
+        else
+          move_to_back_block(func_call);
       }
-      else
-        move_to_back_block(func_call);
     }
     else if (val.is_symbol())
     {
@@ -1560,16 +1567,19 @@ bool solidity_convertert::get_var_decl(
       decl.operands().push_back(acpy_call);
 
       // construct statement _ESBMC_store_array(zz, 10);
-      exprt func_call;
-      store_update_dyn_array(symbol_expr(added_symbol), size_expr, func_call);
-
-      if (is_state_var && !is_inherited)
+      if (is_array_member)
       {
-        // move to ctor initializer
-        move_to_initializer(func_call);
+        exprt func_call;
+        store_update_dyn_array(symbol_expr(added_symbol), size_expr, func_call);
+
+        if (is_state_var && !is_inherited)
+        {
+          // move to ctor initializer
+          move_to_initializer(func_call);
+        }
+        else
+          move_to_back_block(func_call);
       }
-      else
-        move_to_back_block(func_call);
     }
     else
     {
@@ -5041,8 +5051,26 @@ bool solidity_convertert::get_expr(
       if (new_expr.id() == "sideeffect")
       {
         std::string func_id = new_expr.op0().identifier().as_string();
+        if (func_id == "c:@F@_ESBMC_array_push")
+        {
+          // signed short _tmpzero#5 = 0;
+          // this->data1 = _ESBMC_array_push((void *)this->data1, (void *)&_tmpzero#5, 2);
+          exprt base;
+          if (get_expr(callee_expr_json["expression"], base))
+            return true;
+
+          typet base_t;
+          if (get_type_description(
+                callee_expr_json["expression"]["typeDescriptions"], base_t))
+            return true;
+
+          exprt tmp = side_effect_exprt("assign", base_t);
+          convert_type_expr(ns, new_expr, base_t, expr);
+          tmp.copy_to_operands(base, new_expr);
+          new_expr = tmp;
+          break;
+        }
         if (
-          func_id == "c:@F@_ESBMC_array_push" ||
           func_id == "c:@F@_ESBMC_array_pop" ||
           func_id == "c:@F@_ESBMC_array_length")
           break;
@@ -6466,7 +6494,7 @@ bool solidity_convertert::get_binary_operator_expr(
 
       rhs = acpy_call;
 
-      if (lt_sol == "DYNARRAY")
+      if (lt_sol == "DYNARRAY" && is_array_member)
       {
         exprt store_call;
         store_update_dyn_array(lhs, size_expr, store_call);
@@ -6504,7 +6532,7 @@ bool solidity_convertert::get_binary_operator_expr(
 
       rhs = acpy_call;
 
-      if (lt_sol == "DYNARRAY")
+      if (lt_sol == "DYNARRAY" && is_array_member)
       {
         exprt store_call;
         store_update_dyn_array(lhs, size_expr, store_call);
@@ -6545,7 +6573,7 @@ bool solidity_convertert::get_binary_operator_expr(
 
       rhs = acpy_call;
 
-      if (lt_sol == "DYNARRAY")
+      if (lt_sol == "DYNARRAY" && is_array_member)
       {
         exprt store_call;
         store_update_dyn_array(lhs, size_expr, store_call);
@@ -7534,7 +7562,39 @@ bool solidity_convertert::get_sol_builtin_ref(
           assert(!func.empty());
           exprt args;
           if (func["arguments"].size() == 0)
-            args = gen_zero(pointer_typet(empty_typet()));
+          {
+            // Generate a default value for the element type
+            exprt default_value = gen_zero(base_t.subtype());
+            std::string aux_name = "_tmpzero#" + std::to_string(aux_counter++);
+            std::string aux_id;
+            std::string cname;
+            get_current_contract_name(expr, cname);
+            assert(!cname.empty());
+            if (current_functionDecl)
+              aux_id = "sol:@C@" + cname + "@F@" + current_functionName + "@" +
+                       aux_name + "#" + std::to_string(aux_counter++);
+            else
+              aux_id = "sol:@C@" + cname + "@" + aux_name + "#" +
+                       std::to_string(aux_counter++);
+
+            symbolt aux_sym;
+            get_default_symbol(
+              aux_sym,
+              get_modulename_from_path(absolute_path),
+              base_t.subtype(),
+              aux_name,
+              aux_id,
+              l);
+
+            auto &inserted = *move_symbol_to_context(aux_sym);
+            inserted.value = default_value;
+
+            code_declt decl(symbol_expr(inserted));
+            decl.operands().push_back(default_value);
+            move_to_front_block(decl);
+
+            args = address_of_exprt(symbol_expr(inserted));
+          }
           else
           {
             if (get_expr(func["arguments"][0], expr["argumentTypes"][0], args))
@@ -7547,9 +7607,10 @@ bool solidity_convertert::get_sol_builtin_ref(
             assert(!cname.empty());
             if (current_functionDecl)
               aux_id = "sol:@C@" + cname + "@F@" + current_functionName + "@" +
-                       aux_name;
+                       aux_name + "#" + std::to_string(aux_counter++);
             else
-              aux_id = "sol:@C@" + cname + "@" + aux_name;
+              aux_id = "sol:@C@" + cname + "@" + aux_name + "#" +
+                       std::to_string(aux_counter++);
             symbolt aux_idx;
             get_default_symbol(
               aux_idx,
@@ -8639,6 +8700,74 @@ bool solidity_convertert::get_dynamic_pool(
   if (c_name.empty())
     return true;
   return get_dynamic_pool(c_name, pool);
+}
+
+/**
+ * @brief Recursively checks whether a Solidity AST node contains
+ *        any usage of array-specific operations: push, pop, or length,
+ *        excluding operations on the `bytes` type.
+ *
+ * This function traverses the AST (produced by solc in JSON format)
+ * and looks for `MemberAccess` nodes with member names "push", "pop",
+ * or "length". It ensures that these accesses are on array types
+ * (e.g., `int[]`, `uint256[]`) and not on the dynamic `bytes` type.
+ *
+ * @param node A JSON node from the Solidity AST.
+ * @return true if any array push/pop/length usage is found (excluding bytes).
+ * @return false otherwise.
+ */
+bool solidity_convertert::has_array_push_pop_length(const nlohmann::json &node)
+{
+  auto is_array_type_not_bytes = [](const nlohmann::json &type_desc) -> bool
+  {
+    if (!type_desc.is_object())
+      return false;
+    if (!type_desc.contains("typeString"))
+      return false;
+
+    std::string type_str = type_desc["typeString"];
+    if (type_str == "bytes")
+      return false;
+    if (type_str.find("[]") != std::string::npos)
+      return true;
+    return false;
+  };
+
+  if (node.is_object())
+  {
+    if (node.contains("nodeType") && node["nodeType"] == "MemberAccess")
+    {
+      if (
+        node.contains("memberName") &&
+        (node["memberName"] == "push" || node["memberName"] == "pop" ||
+         node["memberName"] == "length"))
+      {
+        if (
+          node.contains("expression") &&
+          node["expression"].contains("typeDescriptions") &&
+          is_array_type_not_bytes(node["expression"]["typeDescriptions"]))
+        {
+          return true;
+        }
+      }
+    }
+
+    for (const auto &kv : node.items())
+    {
+      if (has_array_push_pop_length(kv.value()))
+        return true;
+    }
+  }
+  else if (node.is_array())
+  {
+    for (const auto &element : node)
+    {
+      if (has_array_push_pop_length(element))
+        return true;
+    }
+  }
+
+  return false;
 }
 
 // check if current contract have bytes (not bytesN) type
@@ -12035,7 +12164,6 @@ void solidity_convertert::get_aux_array(
   std::string debug_modulename =
     get_modulename_from_path(loc.file().as_string());
 
-  assert(new_src_expr.is_array());
   assert(!new_src_expr.type().get("#sol_array_size").empty());
   typet t = new_src_expr.type();
 
@@ -12924,7 +13052,7 @@ void solidity_convertert::get_aux_property_function(
     exprt _cname;
     get_cname_expr(cname, _cname);
 
-    // get_object(_addr, "A")
+    // get_object(_addr, A)
     side_effect_expr_function_callt get_obj;
     get_library_function_call_no_args(
       "_ESBMC_get_obj",

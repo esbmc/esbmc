@@ -394,6 +394,7 @@ protected:
     const exprt &dyn_arr,
     const exprt &size_expr,
     exprt &store_call);
+  bool has_array_push_pop_length(const nlohmann::json &node);
 
   // tuple
   bool get_tuple_definition(const nlohmann::json &ast_node);
@@ -719,6 +720,9 @@ protected:
 
   // pointer-check setting
   bool is_pointer_check;
+
+  // dynamic array
+  bool is_array_member;
 
   // NONDET
   side_effect_expr_function_callt nondet_bool_expr;
