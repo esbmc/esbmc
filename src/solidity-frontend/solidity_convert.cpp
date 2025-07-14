@@ -11724,6 +11724,7 @@ void solidity_convertert::convert_type_expr(
       src_expr = call;
       return;
     }
+    // string(bytes)
     else if (
       is_byte_type(src_type) && dest_type.is_pointer() &&
       dest_type.subtype().is_signedbv())
@@ -11768,7 +11769,7 @@ void solidity_convertert::convert_type_expr(
         abort();
       }
 
-      src_expr = make_aux_var_for_bytes(call, loc);
+      src_expr = call;
       return;
     }
 
