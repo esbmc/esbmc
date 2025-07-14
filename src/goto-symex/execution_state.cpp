@@ -874,6 +874,9 @@ void execution_statet::get_expr_globals(
     if (!symbol)
       return;
 
+    if(!options.get_bool_option("deadlock-check") && name == "c:@__ESBMC_num_threads_running")
+      return;
+
     if (
       name == "c:@__ESBMC_alloc" || name == "c:@__ESBMC_alloc_size" ||
       name == "c:@__ESBMC_is_dynamic" ||
@@ -881,6 +884,7 @@ void execution_statet::get_expr_globals(
       (name.find("c:pthread_lib") != std::string::npos &&
        name.find("mutex") == std::string::npos) ||
       name == "c:@__ESBMC_rounding_mode" ||
+      name == "c:@__ESBMC_pthread_end_values" ||
       name.find("c:@__ESBMC_pthread_thread") != std::string::npos)
     {
       return;
@@ -1179,9 +1183,9 @@ bool execution_statet::has_cswitch_point_occured() const
     // current interleaving wrote this variable. If not then don't do switch.
     for (const auto &var : thread_last_reads[active_thread])
     {
-      // const std::string &name = to_symbol2t(var).thename.as_string();
-      // if (name == "c:@F@__ESBMC_races_flag")
-      //   return true;
+      const std::string &name = to_symbol2t(var).thename.as_string();
+      if (name == "c:@F@__ESBMC_races_flag")
+        return true;
       auto it = art1->vars_map_writes.find(var);
       if (it != art1->vars_map_writes.end())
       {
