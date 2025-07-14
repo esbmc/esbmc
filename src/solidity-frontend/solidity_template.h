@@ -505,6 +505,33 @@ __ESBMC_HIDE:;
     b->length--;
 }
 
+uint256_t bytes_dynamic_to_uint(const BytesDynamic* b, const BytesPool* pool) {
+__ESBMC_HIDE:;
+    bytes_dynamic_init_check(b->initialized);
+    uint256_t result = 0;
+    for (size_t i = 0; i < b->length; i++) {
+        result = (result << 8) | pool->pool[b->offset + i];
+    }
+    return result;
+}
+
+void bytes_static_to_string(const BytesStatic* b, char* out) {
+__ESBMC_HIDE:;
+    for (size_t i = 0; i < b->length; i++) {
+        out[i] = (char)b->data[i];
+    }
+    out[b->length] = '\0';
+}
+
+void bytes_dynamic_to_string(const BytesDynamic* b, const BytesPool* pool, char* out) {
+__ESBMC_HIDE:;
+    bytes_dynamic_init_check(b->initialized);
+    for (size_t i = 0; i < b->length; i++) {
+        out[i] = (char)pool->pool[b->offset + i];
+    }
+    out[b->length] = '\0';
+}
+
 BytesPool bytes_pool_init(unsigned char* pool_data) {
 __ESBMC_HIDE:;
     BytesPool pool = { pool_data, 0 };

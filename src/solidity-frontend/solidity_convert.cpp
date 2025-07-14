@@ -11512,37 +11512,7 @@ void solidity_convertert::convert_type_expr(
     if (dest_sol_type.empty())
       log_debug("solidity", "{}", dest_type.to_string());
 
-    if (
-      (dest_sol_type == "ADDRESS" || dest_sol_type == "ADDRESS_PAYABLE") &&
-      (src_sol_type == "CONTRACT" || src_sol_type.empty()))
-    {
-      // CONTRACT: address(instance) ==> instance.address
-      // EMPTY: address(this) ==> this.address
-      std::string comp_name = "$address";
-      typet t;
-      if (dest_sol_type == "ADDRESS")
-        t = addr_t;
-      else
-        t = addrp_t;
-
-      src_expr = member_exprt(src_expr, comp_name, t);
-    }
-    else if (
-      (src_sol_type == "ADDRESS" || src_sol_type == "ADDRESS_PAYABLE") &&
-      dest_sol_type == "CONTRACT")
-    {
-      // E.g. for `Derive x = Derive(_addr)`:
-      // => Derive* x = &_ESBMC_Obeject_Derive;
-      // because in trusted mode, the address has been limited to the set of _ESBMC_Object
-
-      exprt c_ins;
-      std::string _cname = dest_type.get("#sol_contract").as_string();
-      get_static_contract_instance_ref(_cname, c_ins);
-
-      // type conversion
-      src_expr = c_ins;
-    }
-    else if (is_byte_type(src_type) && is_byte_type(dest_type))
+    if (is_byte_type(src_type) && is_byte_type(dest_type))
     {
       // prevent something like
       // bytes_dynamic_from_uint({ .offset=0, .length=0, .initialized=0, .anon_pad$3=0 }, this->$dynamic_pool);
@@ -11643,9 +11613,10 @@ void solidity_convertert::convert_type_expr(
     {
       // this could be
       // bytes(hex"1234") -> string literal
-      // bytes("1234") -> string literal (this can only be bytes)
-      // bytes(x)  -> string literal (this can only be bytes)
-      // bytes2(0x1234) -> int literal (this can only be bytesn)
+      // bytes("1234") -> string literal
+      // byte4("123") -> string
+      // bytes(x)  -> string literal
+      // bytes2(0x1234) -> int literal
 
       locationt loc = src_expr.location();
       if (is_bytes_type(dest_type))
@@ -11713,6 +11684,123 @@ void solidity_convertert::convert_type_expr(
         log_error("Unknown bytes destination type: {}", dest_sol_type);
         abort();
       }
+    }
+    else if (is_byte_type(src_type) && dest_type.is_unsignedbv())
+    {
+      side_effect_expr_function_callt call;
+      locationt loc = src_expr.location();
+
+      if (is_bytesN_type(src_type))
+      {
+        get_library_function_call_no_args(
+          "bytes_static_to_uint",
+          "c:@F@bytes_static_to_uint",
+          dest_type,
+          loc,
+          call);
+        call.arguments().push_back(src_expr);
+      }
+      else if (is_bytes_type(src_type))
+      {
+        get_library_function_call_no_args(
+          "bytes_dynamic_to_uint",
+          "c:@F@bytes_dynamic_to_uint",
+          dest_type,
+          loc,
+          call);
+        call.arguments().push_back(src_expr);
+
+        exprt pool_member;
+        if (get_dynamic_pool(expr, pool_member))
+          abort();
+        call.arguments().push_back(pool_member);
+      }
+      else
+      {
+        log_error("Expected bytes or bytesN for to_uint conversion");
+        abort();
+      }
+
+      src_expr = call;
+      return;
+    }
+    else if (
+      is_byte_type(src_type) && dest_type.is_pointer() &&
+      dest_type.subtype().is_signedbv())
+    {
+      locationt loc = src_expr.location();
+      exprt call;
+
+      if (is_bytesN_type(src_type))
+      {
+        side_effect_expr_function_callt fn_call;
+        get_library_function_call_no_args(
+          "bytes_static_to_string",
+          "c:@F@bytes_static_to_string",
+          dest_type,
+          loc,
+          fn_call);
+        fn_call.arguments().push_back(src_expr);
+
+        call = fn_call;
+      }
+      else if (is_bytes_type(src_type))
+      {
+        side_effect_expr_function_callt fn_call;
+        get_library_function_call_no_args(
+          "bytes_dynamic_to_string",
+          "c:@F@bytes_dynamic_to_string",
+          dest_type,
+          loc,
+          fn_call);
+        fn_call.arguments().push_back(src_expr);
+
+        exprt pool_member;
+        if (get_dynamic_pool(expr, pool_member))
+          abort();
+        fn_call.arguments().push_back(pool_member);
+
+        call = fn_call;
+      }
+      else
+      {
+        log_error("Expected bytes or bytesN for to_string conversion");
+        abort();
+      }
+
+      src_expr = make_aux_var_for_bytes(call, loc);
+      return;
+    }
+
+    else if (
+      (dest_sol_type == "ADDRESS" || dest_sol_type == "ADDRESS_PAYABLE") &&
+      (src_sol_type == "CONTRACT" || src_sol_type.empty()))
+    {
+      // CONTRACT: address(instance) ==> instance.address
+      // EMPTY: address(this) ==> this.address
+      std::string comp_name = "$address";
+      typet t;
+      if (dest_sol_type == "ADDRESS")
+        t = addr_t;
+      else
+        t = addrp_t;
+
+      src_expr = member_exprt(src_expr, comp_name, t);
+    }
+    else if (
+      (src_sol_type == "ADDRESS" || src_sol_type == "ADDRESS_PAYABLE") &&
+      dest_sol_type == "CONTRACT")
+    {
+      // E.g. for `Derive x = Derive(_addr)`:
+      // => Derive* x = &_ESBMC_Obeject_Derive;
+      // because in trusted mode, the address has been limited to the set of _ESBMC_Object
+
+      exprt c_ins;
+      std::string _cname = dest_type.get("#sol_contract").as_string();
+      get_static_contract_instance_ref(_cname, c_ins);
+
+      // type conversion
+      src_expr = c_ins;
     }
     else if (
       (src_sol_type == "ARRAY_LITERAL") && src_type.id() == typet::id_array)
