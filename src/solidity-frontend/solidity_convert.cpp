@@ -839,7 +839,8 @@ bool solidity_convertert::populate_auxilary_vars()
         uint_type());
       exprt idx = index_exprt(arr, pos, ct);
       // rhs
-      exprt cname_str = symbol_expr(*context.find_symbol("sol:@" + str));
+      exprt cname_str;
+      get_cname_expr(str, cname_str);
       solidity_gen_typecast(ns, cname_str, ct);
       // assign
       exprt ass_expr = side_effect_exprt("assign", ct);
@@ -872,7 +873,7 @@ bool solidity_convertert::populate_auxilary_vars()
   symbolt is_init_sym;
   typet bool_type = bool_t;
   std::string is_init_name = "is_init";
-  std::string is_init_id = "sol:@_sol_init_";
+  std::string is_init_id = "sol:@is_init";
   std::string debug_modulename = get_modulename_from_path(absolute_path);
 
   get_default_symbol(
@@ -969,17 +970,12 @@ bool solidity_convertert::populate_auxilary_vars()
   return false;
 }
 
-/*
-class _ESBMC_sol_init_
+void solidity_convertert::get_cname_expr(
+  const std::string &cname,
+  exprt &new_expr)
 {
-  public:
-  _ESBMC_sol_init_()
-  {
-    initialize();
-    $_bind_cname_list();
-  }
+  new_expr = symbol_expr(*context.find_symbol("sol:@" + cname));
 }
-*/
 
 bool solidity_convertert::populate_low_level_functions(const std::string &cname)
 {
@@ -5561,7 +5557,7 @@ bool solidity_convertert::get_expr(
     }
 
     // for BYTESN or BYTES, read-only access
-    if (is_byte_type(t))
+    if (is_byte_type(base_t))
     {
       bool is_bytes_set = is_mapping_set_lvalue(expr); // set vs get
       typet result_type = byte_static_t;
@@ -5767,8 +5763,8 @@ bool solidity_convertert::get_expr(
       // rhs
       int ref_decl_id = callee_expr_json["typeName"]["referencedDeclaration"];
       const std::string contract_name = contractNamesMap[ref_decl_id];
-      string_constantt rhs(contract_name);
-      rhs.type().set("#sol_type", "STRING_LITERAL");
+      exprt rhs;
+      get_cname_expr(contract_name, rhs);
 
       // do assignment
       exprt _assign = side_effect_exprt("assign", lhs.type());
@@ -6742,6 +6738,8 @@ bool solidity_convertert::get_binary_operator_expr(
     convert_type_expr(ns, lhs, common_type, expr);
     convert_type_expr(ns, rhs, common_type, expr);
   }
+  else if (lhs.type() != rhs.type())
+    convert_type_expr(ns, rhs, lhs.type(), expr);
 
   // 4.2 Copy to operands
   new_expr.copy_to_operands(lhs, rhs);
@@ -6879,6 +6877,8 @@ bool solidity_convertert::get_compound_assign_expr(
     convert_type_expr(ns, lhs, common_type, expr);
     convert_type_expr(ns, rhs, common_type, expr);
   }
+  else if (lhs.type() != rhs.type())
+    convert_type_expr(ns, rhs, lhs.type(), expr);
 
   new_expr.copy_to_operands(lhs, rhs);
   new_expr.location() = location;
@@ -7799,7 +7799,6 @@ bool solidity_convertert::get_type_description(
       if (get_type_description(array_elementary_type, the_type))
         return true;
 
-      assert(the_type.is_unsignedbv()); // assuming array size is unsigned bv
       std::string the_size = get_array_size(type_name);
       unsigned z_ext_value = std::stoul(the_size, nullptr);
       new_type = array_typet(
@@ -8420,9 +8419,10 @@ void solidity_convertert::get_string_assignment(
 {
   if (
     rhs.id() == "string-constant" ||
-    (rhs.id() == "sideeffect" &&
-     rhs.op0().identifier() == "c:@F@_ESBMC_get_nondet_cont_name"))
+    (lhs.id() == "member" &&
+     lhs.component_name() == "_ESBMC_bind_cname"))
   {
+    // todo: for immutable var, we can just use assign
     // char * this->bind_name = (const char *)_ESBMC_get_nondet_cont_name"
     // since we do not change the value of bind_name so we should be fine
     side_effect_exprt _assign("assign", lhs.type());
@@ -8749,7 +8749,7 @@ void solidity_convertert::gen_mapping_key_typecast(
       location,
       call);
     call.arguments().push_back(pos);
-    pos = make_aux_var_for_bytes(call, location);
+    pos = call;
     return;
   }
   else if (is_bytes_type(key_type))
@@ -8772,7 +8772,7 @@ void solidity_convertert::gen_mapping_key_typecast(
 
     bytes_dynamic_call.arguments().push_back(dynamic_pool_member);
 
-    pos = make_aux_var_for_bytes(bytes_dynamic_call, location);
+    pos = bytes_dynamic_call;
     return;
   }
   // fallback for all others: keep old logic
@@ -11986,7 +11986,10 @@ void solidity_convertert::get_aux_array_name(
   } while (context.find_symbol(aux_id) != nullptr);
 }
 
-void solidity_convertert::get_aux_array(const exprt &src_expr, const typet &sub_t, exprt &new_expr)
+void solidity_convertert::get_aux_array(
+  const exprt &src_expr,
+  const typet &sub_t,
+  exprt &new_expr)
 {
   log_debug("solidity", "\t\t@@@ getting auxiliary array variable");
   if (src_expr.name().as_string().find("aux_array") != std::string::npos)
@@ -11998,9 +12001,9 @@ void solidity_convertert::get_aux_array(const exprt &src_expr, const typet &sub_
 
   // typecast for element
   exprt new_src_expr = src_expr;
-  new_src_expr.type().subtype()=sub_t;
-  new_src_expr.type().set("#sol_type","ARRAY");
-  for(exprt &op : new_src_expr.operands())
+  new_src_expr.type().subtype() = sub_t;
+  new_src_expr.type().set("#sol_type", "ARRAY");
+  for (exprt &op : new_src_expr.operands())
     solidity_gen_typecast(ns, op, sub_t);
 
   std::string aux_name;
@@ -12545,8 +12548,8 @@ bool solidity_convertert::add_auxiliary_members(
   if (get_func_decl_this_ref(contract_name, ctor_id, this_ptr))
     return true;
   _addr.arguments().push_back(this_ptr);
-  string_constantt cname_str(contract_name);
-  cname_str.type().set("#sol_type", "STRING_LITERAL");
+  exprt cname_str;
+  get_cname_expr(contract_name, cname_str);
   _addr.arguments().push_back(cname_str);
 
   // address
@@ -12632,11 +12635,7 @@ bool solidity_convertert::add_auxiliary_members(
   // binding
   exprt bind_expr;
   if (!is_bound)
-  {
-    string_constantt string(contract_name);
-    string.type().set("#sol_type", "STRING_LITERAL");
-    bind_expr = string;
-  }
+    get_cname_expr(contract_name, bind_expr);
   else
   {
     exprt call;
@@ -12901,8 +12900,8 @@ void solidity_convertert::get_aux_property_function(
     }
 
     // param
-    string_constantt _cname(cname);
-    _cname.type().set("#sol_type", "STRING_LITERAL");
+    exprt _cname;
+    get_cname_expr(cname, _cname);
 
     // get_object(_addr, "A")
     side_effect_expr_function_callt get_obj;
@@ -13037,6 +13036,18 @@ bool solidity_convertert::assign_nondet_contract_name(
   const std::string &_cname,
   exprt &new_expr)
 {
+  std::unordered_set<std::string> cname_set;
+  unsigned int length = 0;
+
+  cname_set = structureTypingMap[_cname];
+  assert(!cname_set.empty());
+  length = cname_set.size();
+  if (length == 1)
+  {
+    get_cname_expr(_cname, new_expr);
+    return false;
+  }
+
   locationt l;
   l.function(_cname);
 
@@ -13047,13 +13058,6 @@ bool solidity_convertert::assign_nondet_contract_name(
     string_t,
     l,
     _call);
-
-  std::unordered_set<std::string> cname_set;
-  unsigned int length = 0;
-
-  cname_set = structureTypingMap[_cname];
-  length = cname_set.size();
-  assert(!cname_set.empty());
 
   exprt size_expr;
   size_expr = constant_exprt(

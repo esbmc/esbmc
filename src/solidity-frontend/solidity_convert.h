@@ -113,6 +113,7 @@ protected:
   bool convert_ast_nodes(
     const nlohmann::json &contract_def,
     const std::string &cname);
+  void get_cname_expr(const std::string &cname, exprt &new_expr);
 
   // conversion functions
   // get decl in rule contract-body-element
