@@ -1179,9 +1179,9 @@ bool execution_statet::has_cswitch_point_occured() const
     // current interleaving wrote this variable. If not then don't do switch.
     for (const auto &var : thread_last_reads[active_thread])
     {
-      const std::string &name = to_symbol2t(var).thename.as_string();
-      if (name == "c:@F@__ESBMC_races_flag")
-        return true;
+      // const std::string &name = to_symbol2t(var).thename.as_string();
+      // if (name == "c:@F@__ESBMC_races_flag")
+      //   return true;
       auto it = art1->vars_map_writes.find(var);
       if (it != art1->vars_map_writes.end())
       {
