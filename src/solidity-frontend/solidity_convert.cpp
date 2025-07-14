@@ -627,7 +627,12 @@ bool solidity_convertert::populate_auxilary_vars()
 
       // store contract name
       contractNamesMap.insert(std::pair<int, std::string>(c_id, c_name));
-      contractNamesList.insert(c_name);
+      if (
+        std::find(contractNamesList.begin(), contractNamesList.end(), c_name) ==
+        contractNamesList.end())
+      {
+        contractNamesList.push_back(c_name); // Only push if not found
+      }
 
       // store linearizedBaseList: inherit from who?
       // this is esstinally the calling order of the constructor
@@ -847,12 +852,119 @@ bool solidity_convertert::populate_auxilary_vars()
     fsym.value = fbody;
   }
 
+  // pupulate a function call _sol_init_()
+  // 1. add a static var bool is_init = fasle
+  // 2. add body
+  // void _sol_init_()
+  // {
+  //   __ESBMC_hide;
+  //   if (!is_init)
+  //   {
+  //     initialize();
+  //     initialize_$A_cname_bind_list() // get_bind_cname_func_name
+  //     initialize_$B_cname_bind_list()
+  //     ...
+  //   }
+  //   is_init = true; // prevent re-init
+  // }
+
+  // 1. add a static var bool is_init = false
+  symbolt is_init_sym;
+  typet bool_type = bool_t;
+  std::string is_init_name = "is_init";
+  std::string is_init_id = "sol:@_sol_init_";
+  std::string debug_modulename = get_modulename_from_path(absolute_path);
+
+  get_default_symbol(
+    is_init_sym,
+    debug_modulename,
+    bool_type,
+    is_init_name,
+    is_init_id,
+    locationt());
+  is_init_sym.lvalue = true;
+  is_init_sym.file_local = true;
+  is_init_sym.static_lifetime = true;
+  is_init_sym.value = false_exprt();
+  symbolt &final_is_init_sym = *move_symbol_to_context(is_init_sym);
+
+  // 2. add body
+  // void _sol_init_()
+  symbolt init_func_sym;
+  code_typet init_func_type;
+  init_func_type.return_type() = empty_typet();
+  init_func_type.make_ellipsis();
+
+  std::string init_func_name = "_sol_init_";
+  std::string init_func_id = "sol:@F@_sol_init_";
+  get_default_symbol(
+    init_func_sym,
+    debug_modulename,
+    init_func_type,
+    init_func_name,
+    init_func_id,
+    locationt());
+  init_func_sym.file_local = true;
+  symbolt &final_init_func_sym = *move_symbol_to_context(init_func_sym);
+
+  // Function body
+  code_blockt init_func_body;
+
+  // Add __ESBMC_HIDE label
+  {
+    code_labelt label;
+    label.set_label("__ESBMC_HIDE");
+    label.code() = code_skipt();
+    init_func_body.copy_to_operands(label);
+  }
+
+  // if (!is_init)
+  exprt is_init_expr = symbol_expr(final_is_init_sym);
+  exprt not_is_init = not_exprt(is_init_expr);
+
+  // then block
+  code_blockt then_block;
+
+  // initialize(); — using helper to populate call
+  {
+    side_effect_expr_function_callt call;
+    get_library_function_call_no_args(
+      "initialize", "c:@F@initialize", empty_typet(), locationt(), call);
+    convert_expression_to_code(call);
+    then_block.move_to_operands(call);
+  }
+
+  // initialize_$A_cname_bind_list(); ...
+  for (const auto &contract_name : contractNamesList)
+  {
+    std::string fname, fid;
+    get_bind_cname_func_name(contract_name, fname, fid);
+    side_effect_expr_function_callt bind_call;
+    get_library_function_call_no_args(
+      fname, fid, empty_typet(), locationt(), bind_call);
+    convert_expression_to_code(bind_call);
+    then_block.move_to_operands(bind_call);
+  }
+
+  // is_init = true;
+  {
+    exprt true_expr = true_exprt();
+    code_assignt assign_is_init(is_init_expr, true_expr);
+    then_block.copy_to_operands(assign_is_init);
+  }
+
+  // wrap into codet "ifthenelse"
+  codet if_expr("ifthenelse");
+  if_expr.copy_to_operands(not_is_init, then_block);
+
+  // add to function body
+  init_func_body.move_to_operands(if_expr);
+
+  // assign body to function symbol
+  final_init_func_sym.value = init_func_body;
+
   // for mapping
   extract_new_contracts();
-
-  // create a _ESBMC_sol_init_ class and object
-  if (get_esbmc_sol_init())
-    return true;
 
   return false;
 }
@@ -868,111 +980,6 @@ class _ESBMC_sol_init_
   }
 }
 */
-bool solidity_convertert::get_esbmc_sol_init()
-{
-  std::string id, name;
-  struct_typet t = struct_typet();
-
-  name = "_ESBMC_sol_init_";
-  id = prefix + name;
-  t.tag(name);
-  symbolt s;
-  std::string debug = get_modulename_from_path(absolute_path);
-  get_default_symbol(s, debug, t, name, id, locationt());
-  s.is_type = true;
-  symbolt &added_sym = *move_symbol_to_context(s);
-
-  // constructor
-  std::string fname, fid;
-  fname = "_ESBMC_sol_init_";
-  fid = "sol:@C@_ESBMC_sol_init_@F@" + fname + "#";
-  code_typet ft;
-  typet tmp_rtn_type("constructor");
-  ft.return_type() = tmp_rtn_type;
-  ft.set("#member_name", fid);
-  ft.set("#inlined", true);
-
-  symbolt fs;
-  get_default_symbol(fs, debug, ft, fname, fid, locationt());
-  fs.lvalue = true;
-  fs.file_local = true;
-  symbolt &added_fs = *move_symbol_to_context(fs);
-
-  get_function_this_pointer_param(fname, fid, debug, locationt(), ft);
-  added_fs.type = ft;
-
-  code_blockt _block;
-  code_labelt label;
-  label.set_label("__ESBMC_HIDE");
-  label.code() = code_skipt();
-  _block.operands().push_back(label);
-  if (move_initializer_to_main(_block))
-    return true;
-  added_fs.value = _block;
-
-  exprt sym = symbol_expr(added_fs);
-
-  // add component to struct
-  struct_typet::componentt comp;
-  // construct comp
-  comp.type() = sym.type();
-  comp.identifier(sym.identifier());
-  comp.name(sym.name());
-  comp.pretty_name(sym.name());
-  comp.set_access("public");
-  comp.id("symbol");
-  to_struct_type(added_sym.type).methods().push_back(comp);
-
-  // add static contract instance
-  std::string ctor_ins_name, ctor_ins_id;
-  get_static_contract_instance_name(name, ctor_ins_name, ctor_ins_id);
-
-  locationt ctor_ins_loc;
-  ctor_ins_loc.file(absolute_path);
-  ctor_ins_loc.line(1);
-  std::string ctor_ins_debug_modulename =
-    get_modulename_from_path(absolute_path);
-  typet ctor_ins_typet = symbol_typet(prefix + name);
-
-  symbolt ctor_ins_symbol;
-  get_default_symbol(
-    ctor_ins_symbol,
-    ctor_ins_debug_modulename,
-    ctor_ins_typet,
-    ctor_ins_name,
-    ctor_ins_id,
-    ctor_ins_loc);
-  ctor_ins_symbol.lvalue = true;
-  ctor_ins_symbol.is_extern = false;
-  // the instance should be set as static
-  ctor_ins_symbol.static_lifetime = true;
-  ctor_ins_symbol.file_local = true;
-
-  auto &added_ins_sym = *move_symbol_to_context(ctor_ins_symbol);
-
-  exprt ctor;
-  side_effect_expr_function_callt call;
-  call.function() = sym;
-  call.type() = symbol_typet(prefix + name);
-
-  exprt this_object;
-  get_new_object(symbol_typet(prefix + name), this_object);
-  call.arguments().push_back(this_object);
-
-  // set constructor
-  call.set("constructor", 1);
-
-  side_effect_exprt tmp_obj("temporary_object", call.type());
-  codet code_expr("expression");
-  code_expr.operands().push_back(call);
-  tmp_obj.initializer(code_expr);
-  call.swap(tmp_obj);
-  ctor = call;
-
-  added_ins_sym.value = ctor;
-
-  return false;
-}
 
 bool solidity_convertert::populate_low_level_functions(const std::string &cname)
 {
@@ -1299,7 +1306,10 @@ bool solidity_convertert::get_var_decl(
   std::string current_contractName;
   get_current_contract_name(ast_node, current_contractName);
   bool is_library = !current_contractName.empty() &&
-                    contractNamesList.count(current_contractName) == 0;
+                    std::find(
+                      contractNamesList.begin(),
+                      contractNamesList.end(),
+                      current_contractName) == contractNamesList.end();
 
   // For Solidity rule state-variable-declaration:
   // 1. populate typet
@@ -2964,6 +2974,13 @@ bool solidity_convertert::move_initializer_to_ctor(
     label.code() = code_skipt();
     sym.value.operands().insert(sym.value.operands().begin(), label);
   }
+
+  // _sol_init_
+  side_effect_expr_function_callt init_call;
+  get_library_function_call_no_args(
+    "_sol_init_", "sol:@F@_sol_init_", empty_typet(), locationt(), init_call);
+  convert_expression_to_code(init_call);
+  sym.value.operands().insert(sym.value.operands().begin(), init_call);
 
   return false;
 }
@@ -7102,7 +7119,10 @@ bool solidity_convertert::get_var_decl_ref(
       // if so, no need to add the this pointer
       std::string c_name;
       get_current_contract_name(decl, c_name);
-      if (!c_name.empty() && contractNamesList.count(c_name) == 0)
+      if (
+        !c_name.empty() &&
+        std::find(contractNamesList.begin(), contractNamesList.end(), c_name) ==
+          contractNamesList.end())
       {
         assert(decl["mutability"] == "constant");
         return false;
@@ -12069,7 +12089,9 @@ bool solidity_convertert::multi_transaction_verification(
   // initialize
 
   // 1. get constructor call
-  if (contractNamesList.count(c_name) == 0)
+  if (
+    std::find(contractNamesList.begin(), contractNamesList.end(), c_name) ==
+    contractNamesList.end())
   {
     log_error("Cannot find the contract name {}", c_name);
     return true;
@@ -12158,7 +12180,8 @@ bool solidity_convertert::multi_contract_verification_bound(
   if (!tgt_set.empty())
     cname_set = tgt_set;
   else
-    cname_set = contractNamesList;
+    cname_set =
+      std::set<std::string>(contractNamesList.begin(), contractNamesList.end());
 
   for (const auto &c_name : cname_set)
   {
@@ -12293,8 +12316,8 @@ bool solidity_convertert::multi_contract_verification_unbound(
   if (!tgt_set.empty())
     cname_set = tgt_set;
   else
-    cname_set = contractNamesList;
-
+    cname_set =
+      std::set<std::string>(contractNamesList.begin(), contractNamesList.end());
   for (const auto &c_name : cname_set)
   {
     // construct multi-transaction verification entry function

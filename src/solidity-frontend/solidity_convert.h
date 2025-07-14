@@ -107,7 +107,6 @@ protected:
   bool contract_precheck();
   bool check_sol_ver();
   bool populate_auxilary_vars();
-  bool get_esbmc_sol_init();
   bool
   populate_function_signature(nlohmann::json &json, const std::string &cname);
   bool populate_low_level_functions(const std::string &cname);
@@ -687,7 +686,7 @@ protected:
 
   // contract name list
   std::unordered_map<int, std::string> contractNamesMap;
-  std::set<std::string> contractNamesList;
+  std::vector<std::string> contractNamesList;
   // for mapping hack
   std::set<std::string> newContractSet;
   // Store the ast_node["id"] of struct/error
