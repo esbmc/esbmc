@@ -6452,7 +6452,7 @@ bool solidity_convertert::get_binary_operator_expr(
       // get sizeof
       exprt size_of_expr;
       // e.g. uint[] public tt; t = [1, 2, 3];
-      // lt.subtype = uint256 
+      // lt.subtype = uint256
       // rt.subtype = uint8
       get_size_of_expr(lt.subtype(), size_of_expr);
 
@@ -8419,8 +8419,7 @@ void solidity_convertert::get_string_assignment(
 {
   if (
     rhs.id() == "string-constant" ||
-    (lhs.id() == "member" &&
-     lhs.component_name() == "_ESBMC_bind_cname"))
+    (lhs.id() == "member" && lhs.component_name() == "_ESBMC_bind_cname"))
   {
     // todo: for immutable var, we can just use assign
     // char * this->bind_name = (const char *)_ESBMC_get_nondet_cont_name"
@@ -11489,10 +11488,18 @@ void solidity_convertert::convert_type_expr(
   bool not_same_type = false;
   if (src_type != dest_type)
     not_same_type = true;
-  if (
-    !src_sol_type.empty() && !dest_sol_type.empty() &&
-    src_sol_type != dest_sol_type)
-    not_same_type = true;
+  else if (!src_sol_type.empty() && !dest_sol_type.empty())
+  {
+    if (src_sol_type != dest_sol_type)
+      not_same_type = true;
+    else if (
+      src_type.get("#sol_bytesn_size") != dest_type.get("#sol_bytesn_size"))
+      // including unset situation
+      not_same_type = true;
+    else if (
+      src_type.get("#sol_array_size") != dest_type.get("#sol_array_size"))
+      not_same_type = true;
+  }
 
   // only do conversion when the src.type != dest.type
   if (not_same_type)
@@ -11579,7 +11586,6 @@ void solidity_convertert::convert_type_expr(
         src_expr.type().set("#sol_type", "BytesStatic");
         return;
       }
-
 
       // e.g. bytes x; bytes y = bytes(x);
       else

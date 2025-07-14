@@ -547,7 +547,9 @@ __ESBMC_HIDE:;
 
 BytesStatic bytes_static_resize(const BytesStatic* src, size_t new_len) {
 __ESBMC_HIDE:;
-    if (new_len <= src->length) {
+    if (new_len == src->length) {
+        return *src;
+    } else if (new_len < src->length) {
         return bytes_static_truncate(src, new_len);
     } else {
         return bytes_static_extend(src, new_len);
@@ -566,7 +568,13 @@ __ESBMC_HIDE:;
 
 BytesStatic bytes_static_resize_from_dynamic(const BytesDynamic* src, size_t new_len, const BytesPool* pool) {
 __ESBMC_HIDE:;
-    if (new_len <= src->length) {
+    bytes_dynamic_init_check(src->initialized);
+    if (new_len == src->length) {
+        BytesStatic b = {0};
+        memcpy(b.data, &pool->pool[src->offset], new_len);
+        b.length = new_len;
+        return b;
+    } else if (new_len < src->length) {
         return bytes_static_truncate_from_dynamic(src, new_len, pool);
     } else {
         return bytes_static_extend_from_dynamic(src, new_len, pool);
