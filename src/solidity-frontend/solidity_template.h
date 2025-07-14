@@ -329,7 +329,7 @@ BytesDynamic bytes_dynamic_init_zero(size_t len, BytesPool* pool) {
 __ESBMC_HIDE:;
     BytesDynamic b = {0};
     b.offset = pool->pool_cursor;
-    b.length = 0;
+    b.length = len;
     b.capacity = len;
     b.initialized = 1;
     memset(&pool->pool[b.offset], 0, len);

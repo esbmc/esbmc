@@ -1495,16 +1495,6 @@ bool solidity_convertert::get_var_decl(
       added_symbol.value = calc_call;
       decl.operands().push_back(calc_call);
     }
-    exprt func_call;
-    store_update_dyn_array(symbol_expr(added_symbol), size_expr, func_call);
-
-    if (is_state_var && !is_inherited)
-    {
-      // move to ctor initializer
-      move_to_initializer(func_call);
-    }
-    else
-      move_to_back_block(func_call);
   }
   else if (t_sol_type == "DYNARRAY" && set_init)
   {
@@ -5682,10 +5672,9 @@ bool solidity_convertert::get_expr(
             location,
             set_call);
           set_call.arguments().push_back(address_of_exprt(arg_val));
-          set_call.arguments().push_back(dynamic_pool);
           set_call.arguments().push_back(pos);
-
           set_call.arguments().push_back(symbol_expr(added_sym));
+          set_call.arguments().push_back(dynamic_pool);
           move_to_back_block(set_call);
           new_expr = symbol_expr(added_sym);
         }
@@ -6466,7 +6455,10 @@ bool solidity_convertert::get_binary_operator_expr(
 
       // get sizeof
       exprt size_of_expr;
-      get_size_of_expr(rt.subtype(), size_of_expr);
+      // e.g. uint[] public tt; t = [1, 2, 3];
+      // lt.subtype = uint256 
+      // rt.subtype = uint8
+      get_size_of_expr(lt.subtype(), size_of_expr);
 
       // do array copy
       side_effect_expr_function_callt acpy_call;
@@ -11806,7 +11798,7 @@ void solidity_convertert::convert_type_expr(
     else if (
       (src_sol_type == "ARRAY_LITERAL") && src_type.id() == typet::id_array)
     {
-      // this means we are handling a src constant array
+      // this means we are handling a constant array
       // which should be assigned to an array pointer
       // e.g. data1 = [int8(6), 7, -8, 9, 10, -12, 12];
 
@@ -11864,6 +11856,8 @@ void solidity_convertert::convert_type_expr(
         // - src_expr: [1, z]
         // - dest_type: uint*
         array_typet arr_t = array_typet(dest_type.subtype(), dest_array_size);
+        arr_t.set("#sol_type", "ARRAY");
+        arr_t.set("#sol_array_size", src_size);
         exprt new_arr = exprt(irept::id_array, arr_t);
 
         exprt arr_comp;
@@ -11881,7 +11875,6 @@ void solidity_convertert::convert_type_expr(
         }
 
         src_expr = new_arr;
-        src_type = new_arr.type();
       }
 
       // allow fall-through
@@ -11919,6 +11912,7 @@ void solidity_convertert::convert_type_expr(
           to_array_type(src_expr.type()).size() = dest_array_size;
 
           // update "#sol_array_size"
+          assert(!dest_size.empty());
           src_expr.type().set("#sol_array_size", dest_size);
         }
       }
@@ -11931,7 +11925,7 @@ void solidity_convertert::convert_type_expr(
       // => static int[3] tmp1 = [1,2,3];
       // return: src_expr = symbol_expr(tmp1)
       exprt new_expr;
-      get_aux_array(src_expr, new_expr);
+      get_aux_array(src_expr, dest_type.subtype(), new_expr);
       src_expr = new_expr;
     }
     else
@@ -11992,24 +11986,34 @@ void solidity_convertert::get_aux_array_name(
   } while (context.find_symbol(aux_id) != nullptr);
 }
 
-void solidity_convertert::get_aux_array(const exprt &src_expr, exprt &new_expr)
+void solidity_convertert::get_aux_array(const exprt &src_expr, const typet &sub_t, exprt &new_expr)
 {
+  log_debug("solidity", "\t\t@@@ getting auxiliary array variable");
   if (src_expr.name().as_string().find("aux_array") != std::string::npos)
   {
     // skip if it's already a aux array
     new_expr = src_expr;
     return;
   }
+
+  // typecast for element
+  exprt new_src_expr = src_expr;
+  new_src_expr.type().subtype()=sub_t;
+  new_src_expr.type().set("#sol_type","ARRAY");
+  for(exprt &op : new_src_expr.operands())
+    solidity_gen_typecast(ns, op, sub_t);
+
   std::string aux_name;
   std::string aux_id;
   get_aux_array_name(aux_name, aux_id);
 
-  locationt loc = src_expr.location();
+  locationt loc = new_src_expr.location();
   std::string debug_modulename =
     get_modulename_from_path(loc.file().as_string());
 
-  typet t = src_expr.type();
-  t.set("#sol_type", "ARRAY");
+  assert(new_src_expr.is_array());
+  assert(!new_src_expr.type().get("#sol_array_size").empty());
+  typet t = new_src_expr.type();
 
   symbolt sym;
   get_default_symbol(sym, debug_modulename, t, aux_name, aux_id, loc);
@@ -12020,7 +12024,7 @@ void solidity_convertert::get_aux_array(const exprt &src_expr, exprt &new_expr)
 
   symbolt &added_symbol = *move_symbol_to_context(sym);
 
-  added_symbol.value = src_expr;
+  added_symbol.value = new_src_expr;
   new_expr = symbol_expr(added_symbol);
 }
 
