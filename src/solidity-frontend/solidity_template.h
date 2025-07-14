@@ -192,14 +192,21 @@ typedef struct BytesStatic {
 typedef struct BytesDynamic {
     size_t offset;
     size_t length;
+    size_t capacity;
     int initialized;
 } BytesDynamic;
 
 void bytes_dynamic_init_check(const int initialized)
 {
 __ESBMC_HIDE:;
-  if(initialized == 0)
-    assert(!"Uninitialized Dynamic Bytes");
+    if (initialized == 0)
+        assert(!"Uninitialized Dynamic Bytes");
+}
+
+void bytes_dynamic_bounds_check(size_t index, size_t length) {
+__ESBMC_HIDE:;
+    if (index >= length)
+        assert(!"Out-of-bounds access on Dynamic Bytes");
 }
 
 unsigned char hex_char_to_nibble(char c) {
@@ -207,7 +214,7 @@ __ESBMC_HIDE:;
     if ('0' <= c && c <= '9') return c - '0';
     else if ('a' <= tolower(c) && tolower(c) <= 'f') return tolower(c) - 'a' + 10;
     else
-      abort();
+        abort();
     return 0;
 }
 
@@ -322,7 +329,8 @@ BytesDynamic bytes_dynamic_init_zero(size_t len, BytesPool* pool) {
 __ESBMC_HIDE:;
     BytesDynamic b = {0};
     b.offset = pool->pool_cursor;
-    b.length = len;
+    b.length = 0;
+    b.capacity = len;
     b.initialized = 1;
     memset(&pool->pool[b.offset], 0, len);
     pool->pool_cursor += len;
@@ -333,9 +341,23 @@ void bytes_dynamic_init(BytesDynamic* b, const unsigned char* input, size_t len,
 __ESBMC_HIDE:;
     b->offset = pool->pool_cursor;
     b->length = len;
+    b->capacity = len;
     b->initialized = 1;
     memcpy(&pool->pool[b->offset], input, len);
     pool->pool_cursor += len;
+}
+
+void bytes_dynamic_ensure_capacity(BytesDynamic* b, size_t required, BytesPool* pool) {
+__ESBMC_HIDE:;
+    if (required <= b->capacity) return;
+    size_t new_capacity = b->capacity;
+    if (new_capacity == 0) new_capacity = 1;
+    while (new_capacity < required) new_capacity *= 2;
+    size_t new_offset = pool->pool_cursor;
+    memcpy(&pool->pool[new_offset], &pool->pool[b->offset], b->length);
+    b->offset = new_offset;
+    b->capacity = new_capacity;
+    pool->pool_cursor += new_capacity;
 }
 
 BytesDynamic bytes_dynamic_from_static(const BytesStatic* s, BytesPool* pool) {
@@ -356,14 +378,12 @@ BytesDynamic bytes_dynamic_from_hex(const char* hex_str, BytesPool* pool) {
 __ESBMC_HIDE:;
     size_t hex_len = strlen(hex_str) - 2;
     size_t byte_len = hex_len / 2;
-
     unsigned char tmp[32] = {0};
     for (size_t i = 0; i < byte_len; i++) {
         unsigned char high = hex_char_to_nibble(hex_str[2 + i * 2]);
         unsigned char low = hex_char_to_nibble(hex_str[2 + i * 2 + 1]);
         tmp[i] = (high << 4) | low;
     }
-
     BytesDynamic b = {0};
     bytes_dynamic_init(&b, tmp, byte_len, pool);
     return b;
@@ -385,6 +405,7 @@ __ESBMC_HIDE:;
     BytesDynamic d = {0};
     d.offset = pool->pool_cursor;
     d.length = a->length + b->length;
+    d.capacity = d.length;
     d.initialized = 1;
     memcpy(&pool->pool[d.offset], &pool->pool[a->offset], a->length);
     memcpy(&pool->pool[d.offset + a->length], &pool->pool[b->offset], b->length);
@@ -398,6 +419,7 @@ __ESBMC_HIDE:;
     BytesDynamic d = {0};
     d.offset = pool->pool_cursor;
     d.length = src->length;
+    d.capacity = src->length;
     d.initialized = 1;
     memcpy(&pool->pool[d.offset], &pool->pool[src->offset], src->length);
     pool->pool_cursor += d.length;
@@ -412,7 +434,11 @@ __ESBMC_HIDE:;
 void bytes_dynamic_set(BytesDynamic* b, size_t index, BytesStatic value, BytesPool* pool) {
 __ESBMC_HIDE:;
     bytes_dynamic_init_check(b->initialized);
+    bytes_dynamic_ensure_capacity(b, index + 1, pool);
     pool->pool[b->offset + index] = value.data[0];
+    if (index >= b->length) {
+        b->length = index + 1;
+    }
 }
 
 BytesStatic bytes_static_get(const BytesStatic* b, size_t index) {
@@ -426,6 +452,7 @@ __ESBMC_HIDE:;
 BytesStatic bytes_dynamic_get(const BytesDynamic* b, const BytesPool* pool, size_t index) {
 __ESBMC_HIDE:;
     bytes_dynamic_init_check(b->initialized);
+    bytes_dynamic_bounds_check(index, b->length);
     BytesStatic r = {0};
     r.data[0] = pool->pool[b->offset + index];
     r.length = 1;
@@ -459,7 +486,14 @@ __ESBMC_HIDE:;
 
 void bytes_dynamic_push(BytesDynamic* b, unsigned char value, BytesPool* pool) {
 __ESBMC_HIDE:;
-    bytes_dynamic_init_check(b->initialized);
+    if (!b->initialized) {
+        b->offset = pool->pool_cursor;
+        b->length = 0;
+        b->capacity = 4;
+        b->initialized = 1;
+        pool->pool_cursor += b->capacity;
+    }
+    bytes_dynamic_ensure_capacity(b, b->length + 1, pool);
     pool->pool[b->offset + b->length] = value;
     b->length++;
 }
@@ -467,6 +501,7 @@ __ESBMC_HIDE:;
 void bytes_dynamic_pop(BytesDynamic* b, BytesPool* pool) {
 __ESBMC_HIDE:;
     bytes_dynamic_init_check(b->initialized);
+    bytes_dynamic_bounds_check(0, b->length);
     b->length--;
 }
 
