@@ -207,7 +207,7 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     // we must first handle tuple
     // otherwise we might parse tuple(literal_string, literal_string)
     // as ElementaryTypeName
-    if (typeString.compare(0, 5,"type(") ==0)
+    if (typeString.compare(0, 5, "type(") == 0)
     {
       if (typeIdentifier.compare(0, 17, "t_magic_meta_type") == 0)
         return TypeProperty;
@@ -870,7 +870,7 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
     else if (is_address_member_call(expr))
       return AddressMemberCall;
     else if (type_name == SolidityGrammar::TypeNameT::TypeConversionName)
-    return TypeMemberCall;
+      return TypeMemberCall;
     else
       //TODO Assume it's a builtin member
       // due to that the BuiltinTypeName cannot cover all the builtin member

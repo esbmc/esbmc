@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --k-induction --contract UserContract --no-standard-check
+^VERIFICATION FAILED$
