@@ -759,7 +759,6 @@ bool solidity_convertert::populate_auxilary_vars()
     get_default_symbol(
       s, debug_modulename, ct, aux_cname, aux_cid, locationt());
     s.lvalue = true;
-    s.file_local = true;
     s.static_lifetime = true; // static
     symbolt &_sym = *move_symbol_to_context(s);
     solidity_gen_typecast(ns, string, ct);
@@ -1292,6 +1291,7 @@ bool solidity_convertert::get_var_decl(
 
 // rule state-variable-declaration
 // rule variable-declaration-statement
+// @initialValue: for declaration block
 bool solidity_convertert::get_var_decl(
   const nlohmann::json &ast_node,
   const nlohmann::json &initialValue,
@@ -7123,17 +7123,32 @@ bool solidity_convertert::get_var_decl_ref(
     new_expr = symbol_expr(*context.find_symbol(id));
   else
   {
-    // variable with no value
-    new_expr = exprt("symbol", type);
-    new_expr.identifier(id);
-    new_expr.cmt_lvalue(true);
-    new_expr.name(name);
-    new_expr.pretty_name(name);
+    // solidity allows something like:
+    // uint8[2] y = x;
+    // uint8[2] x = [1, 2];
+    // in state variable level
+    bool is_state_var = decl["stateVariable"].get<bool>();
+    if(is_state_var && is_this_ptr)
+    {
+      exprt decls;
+      if(get_var_decl(decl, decls))
+        return true;
+      new_expr = symbol_expr(*context.find_symbol(id));
+    }
+    else
+    {
+      // variable with no value
+      new_expr = exprt("symbol", type);
+      new_expr.identifier(id);
+      new_expr.cmt_lvalue(true);
+      new_expr.name(name);
+      new_expr.pretty_name(name);
+    }
   }
 
   if (is_this_ptr && !is_global_static_mapping)
   {
-    if (decl["stateVariable"] && current_functionDecl)
+    if (decl["stateVariable"])
     {
       // check if it's a constant in the library,
       // if so, no need to add the this pointer
@@ -7154,9 +7169,16 @@ bool solidity_convertert::get_var_decl_ref(
 
       // get function this pointer
       exprt this_ptr;
-      assert(current_functionDecl != nullptr);
+      if(current_functionDecl)
+      {
       if (get_func_decl_this_ref(*current_functionDecl, this_ptr))
         return true;
+      }
+      else
+      {
+        if (get_ctor_decl_this_ref(c_name, this_ptr))
+          return true;
+      }
 
       // construct member access this->data
       assert(!new_expr.name().empty());
@@ -12170,9 +12192,7 @@ void solidity_convertert::get_aux_array(
   symbolt sym;
   get_default_symbol(sym, debug_modulename, t, aux_name, aux_id, loc);
   sym.static_lifetime = true;
-  sym.is_extern = false;
   sym.lvalue = true;
-  sym.file_local = true;
 
   symbolt &added_symbol = *move_symbol_to_context(sym);
 
