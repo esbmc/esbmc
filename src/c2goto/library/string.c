@@ -273,11 +273,9 @@ void *__memcpy_impl(void *dst, const void *src, size_t n)
 __ESBMC_HIDE:;
   if (n == 0)
     return dst;
-    
+
   __ESBMC_assert(dst != NULL, "Destination pointer is NULL.");
   __ESBMC_assert(src != NULL, "Source pointer is NULL.");
-
-
 
   char *cdst = dst;
   const char *csrc = src;
@@ -295,7 +293,7 @@ __ESBMC_HIDE:;
     return dst;
 
   __ESBMC_assert(dst != NULL, "Destination pointer is NULL.");
-  __ESBMC_assert(src!=NULL, "Source pointer is NULL.");
+  __ESBMC_assert(src != NULL, "Source pointer is NULL.");
 
   void *hax = &__memcpy_impl;
   (void)hax;
