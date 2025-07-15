@@ -347,7 +347,7 @@ void goto_symext::symex_assign_symbol(
 
   expr2tc renamed_lhs = lhs;
   cur_state->rename_type(renamed_lhs);
-  cur_state->assignment(renamed_lhs, rhs);
+  cur_state->assignment(renamed_lhs, rhs, constant_propagation);
 
   // Special case when the lhs is an array access, we need to get the
   // right symbol for the index
