@@ -874,9 +874,6 @@ void execution_statet::get_expr_globals(
     if (!symbol)
       return;
 
-    if(!options.get_bool_option("deadlock-check") && name == "c:@__ESBMC_num_threads_running")
-      return;
-
     if (
       name == "c:@__ESBMC_alloc" || name == "c:@__ESBMC_alloc_size" ||
       name == "c:@__ESBMC_is_dynamic" ||
@@ -884,7 +881,6 @@ void execution_statet::get_expr_globals(
       (name.find("c:pthread_lib") != std::string::npos &&
        name.find("mutex") == std::string::npos) ||
       name == "c:@__ESBMC_rounding_mode" ||
-      name == "c:@__ESBMC_pthread_end_values" ||
       name.find("c:@__ESBMC_pthread_thread") != std::string::npos)
     {
       return;
