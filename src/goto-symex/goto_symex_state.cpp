@@ -283,16 +283,6 @@ void goto_symex_statet::rename_address(expr2tc &expr)
     type2tc origtype = expr->type;
     top().level1.rename(expr);
     fixup_renamed_type(expr, origtype);
-
-    // Realloc hacks: The l1 name may need to change slightly when we realloc
-    // a pointer, so that l2 renaming still points at the same piece of data,
-    // but so that the address compares differently to previous address-of's.
-    // Do this by bumping the l2 number in the l1 name, if it's been realloc'd.
-    if (realloc_map.find(expr) != realloc_map.end())
-    {
-      symbol2t &sym = to_symbol2t(expr);
-      sym.level2_num = realloc_map[expr];
-    }
   }
   else if (is_index2t(expr))
   {

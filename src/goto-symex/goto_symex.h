@@ -795,7 +795,7 @@ protected:
     const guardt &guard);
   /** Wrapper around for alloca and malloc. */
   expr2tc symex_mem(
-    const bool is_malloc,
+    const sideeffect2t::allockind &kind,
     const expr2tc &lhs,
     const sideeffect2t &code,
     const guardt &guard);

@@ -296,6 +296,7 @@ void goto_convertt::do_realloc(
   realloc_expr.statement("realloc");
   realloc_expr.copy_to_operands(arguments[0]);
   realloc_expr.cmt_size(arguments[1]);
+  realloc_expr.cmt_type(alloc_type);
   realloc_expr.location() = function.location();
 
   // Use conditional expression: (ptr == NULL) ? malloc(size) : realloc(ptr, size)

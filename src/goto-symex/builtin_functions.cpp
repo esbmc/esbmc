@@ -30,7 +30,7 @@ expr2tc goto_symext::symex_malloc(
   const sideeffect2t &code,
   const guardt &guard)
 {
-  return symex_mem(true, lhs, code, guard);
+  return symex_mem(sideeffect2t::malloc, lhs, code, guard);
 }
 
 expr2tc goto_symext::symex_alloca(
@@ -38,7 +38,7 @@ expr2tc goto_symext::symex_alloca(
   const sideeffect2t &code,
   const guardt &guard)
 {
-  return symex_mem(false, lhs, code, guard);
+  return symex_mem(sideeffect2t::alloca, lhs, code, guard);
 }
 
 void goto_symext::symex_realloc(
@@ -89,24 +89,7 @@ void goto_symext::symex_realloc(
     expr2tc g = item.guard;
     cur_state->rename_address(item.object);
     cur_state->guard.guard_expr(g);
-    target->renumber(g, item.object, realloc_size, cur_state->source);
-    type2tc new_ptr = pointer_type2tc(item.object->type);
-    expr2tc addrof = address_of2tc(new_ptr, item.object);
-    result_list.emplace_back(addrof, item.guard);
-
-    // Bump the realloc-numbering of the object. This ensures that, after
-    // renaming, the address_of we just generated compares differently to
-    // previous address_of's before the realloc.
-    unsigned int cur_num = 0;
-    if (
-      cur_state->realloc_map.find(item.object) != cur_state->realloc_map.end())
-    {
-      cur_num = cur_state->realloc_map[item.object];
-    }
-
-    cur_num++;
-    std::map<expr2tc, unsigned>::value_type v(item.object, cur_num);
-    cur_state->realloc_map.insert(v);
+    result_list.emplace_back(item.object, item.guard);
   }
 
   // Rebuild a gigantic if-then-else chain from the result list.
@@ -127,32 +110,54 @@ void goto_symext::symex_realloc(
       result = if2tc(result->type, it.second, it.first, result);
   }
 
-  // Introduce a symbolic condition to model allocation failure
-  expr2tc alloc_fail = sideeffect2tc(
-    get_bool_type(),
-    expr2tc(),
-    expr2tc(),
-    std::vector<expr2tc>(),
-    type2tc(),
-    sideeffect2t::nondet);
-  replace_nondet(alloc_fail);
+  expr2tc new_obj = symex_mem(sideeffect2t::realloc, lhs, code, guard);
+  // Use malloc to create a new dyn obj
+  // Get their sizes and compare them
+  expr2tc tgt = to_index2t(to_address_of2t(new_obj).ptr_obj).source_value;
+  unsigned int sz_result = type_byte_size_bits(result->type).to_uint64();
+  unsigned int sz_tgt = type_byte_size_bits(tgt->type).to_uint64();
+
+  // if realloc size less than original, cut the original
+  // Otherwise we will concatenate: SIZE 2 to 3 
+  // new obj {nondet, nondet, nondet}
+  // {1, 2} + {nondet} -> {1, 2, nondet}
+  // TODO: We should have an efficient array copy that use byte_extract.
+  // Currently byte_extract does not support array as far as I know
+  if (sz_result != sz_tgt)
+  {
+    unsigned int sz_min = std::min(sz_result, sz_tgt);
+    expr2tc ex_result = extract2tc(
+      get_uint_type(sz_min), bitcast2tc(get_uint_type(sz_result), result), sz_min - 1, 0);
+
+    expr2tc ex_tgt = extract2tc(
+      get_uint_type(sz_min), bitcast2tc(get_uint_type(sz_tgt), tgt), sz_min - 1, 0);
+
+    symex_assign(code_assign2tc(ex_tgt, ex_result), true, guard);
+  }
+  else
+    symex_assign(code_assign2tc(tgt, result), true, guard);
 
   if (!options.get_bool_option("force-realloc-success"))
   {
+    // Introduce a symbolic condition to model allocation failure
+    expr2tc alloc_fail = sideeffect2tc(
+      get_bool_type(),
+      expr2tc(),
+      expr2tc(),
+      std::vector<expr2tc>(),
+      type2tc(),
+      sideeffect2t::nondet);
+    replace_nondet(alloc_fail);
     // Model memory exhaustion: if alloc_fail is true, return NULL
     expr2tc null_ptr = symbol2tc(lhs->type, "NULL");
-    result = if2tc(result->type, alloc_fail, null_ptr, result);
+    new_obj = if2tc(new_obj->type, alloc_fail, null_ptr, new_obj);
   }
 
-  // Install pointer modelling data into the relevant arrays.
-  expr2tc ptr_obj = pointer_object2tc(pointer_type2(), result);
-  track_new_pointer(ptr_obj, type2tc(), guard, realloc_size);
-
-  symex_assign(code_assign2tc(lhs, result), true, guard);
+  symex_assign(code_assign2tc(lhs, new_obj), true, guard);
 }
 
 expr2tc goto_symext::symex_mem(
-  const bool is_malloc,
+  const sideeffect2t::allockind &kind,
   const expr2tc &lhs,
   const sideeffect2t &code,
   const guardt &guard)
@@ -193,7 +198,8 @@ expr2tc goto_symext::symex_mem(
   symbol.name = "dynamic_" + i2string(dynamic_counter) +
                 (size_is_one ? "_value" : "_array");
 
-  symbol.id = std::string("symex_dynamic::") + (!is_malloc ? "alloca::" : "") +
+  symbol.id = std::string("symex_dynamic::") +
+              (kind == sideeffect2t::alloca ? "alloca::" : "") +
               id2string(symbol.name);
   symbol.lvalue = true;
 
@@ -250,7 +256,9 @@ expr2tc goto_symext::symex_mem(
     rhs = if2tc(rhs->type, choice, rhs, null_sym);
   }
 
-  if (!options.get_bool_option("force-malloc-success") && is_malloc)
+  if (
+    !options.get_bool_option("force-malloc-success") &&
+    kind == sideeffect2t::malloc)
   {
     expr2tc null_sym = symbol2tc(rhs->type, "NULL");
     expr2tc choice = sideeffect2tc(
@@ -274,7 +282,8 @@ expr2tc goto_symext::symex_mem(
   cur_state->rename(rhs);
   expr2tc rhs_copy(rhs);
 
-  symex_assign(code_assign2tc(lhs, rhs), true, guard);
+  if (kind != sideeffect2t::realloc)
+    symex_assign(code_assign2tc(lhs, rhs), true, guard);
 
   expr2tc ptr_obj = pointer_object2tc(pointer_type2(), ptr_rhs);
 
@@ -285,9 +294,12 @@ expr2tc goto_symext::symex_mem(
 
   alloc_guard.append(guard);
   dynamic_memory.emplace_back(
-    rhs_copy, alloc_guard, !is_malloc, symbol.name.as_string());
+    rhs_copy,
+    alloc_guard,
+    kind == sideeffect2t::alloca,
+    symbol.name.as_string());
 
-  return to_address_of2t(rhs_addrof).ptr_obj;
+  return rhs_addrof;
 }
 
 void goto_symext::track_new_pointer(
@@ -486,11 +498,13 @@ void goto_symext::symex_printf(const expr2tc &lhs, expr2tc &rhs)
     new_rhs.operands.erase(new_rhs.operands.begin());
 
   std::list<expr2tc> args;
-  new_rhs.foreach_operand([this, &args](const expr2tc &e) {
-    expr2tc tmp = e;
-    do_simplify(tmp);
-    args.push_back(tmp);
-  });
+  new_rhs.foreach_operand(
+    [this, &args](const expr2tc &e)
+    {
+      expr2tc tmp = e;
+      do_simplify(tmp);
+      args.push_back(tmp);
+    });
 
   if (!is_nil_expr(lhs))
   {
@@ -1728,10 +1742,12 @@ void goto_symext::replace_races_check(expr2tc &expr)
 
   // replace RACE_CHECK(&x) with __ESBMC_races_flag[&x]
   // recursion is needed for this case: !RACE_CHECK(&x)
-  expr->Foreach_operand([this](expr2tc &e) {
-    if (!is_nil_expr(e))
-      replace_races_check(e);
-  });
+  expr->Foreach_operand(
+    [this](expr2tc &e)
+    {
+      if (!is_nil_expr(e))
+        replace_races_check(e);
+    });
 
   if (is_races_check2t(expr))
   {

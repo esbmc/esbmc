@@ -142,7 +142,7 @@ void goto_symext::handle_sideeffect(
     symex_cpp_new(lhs, effect, guard);
     break;
   case sideeffect2t::realloc:
-    symex_realloc(lhs, effect, guardt());
+    symex_realloc(lhs, effect, guard);
     break;
   case sideeffect2t::malloc:
     symex_malloc(lhs, effect, guard);
