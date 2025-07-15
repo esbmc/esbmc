@@ -7607,6 +7607,8 @@ bool solidity_convertert::get_sol_builtin_ref(
               aux_name,
               aux_id,
               l);
+            aux_sym.lvalue = true;
+            aux_sym.file_local = true;
 
             auto &inserted = *move_symbol_to_context(aux_sym);
             inserted.value = default_value;
