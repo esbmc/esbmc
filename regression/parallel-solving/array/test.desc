@@ -1,0 +1,4 @@
+CORE
+main.c
+--parallel-solving --array-flattener
+^VERIFICATION SUCCESSFUL$

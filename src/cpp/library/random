@@ -80,7 +80,7 @@ public:
 
   static constexpr result_type max()
   {
-    return 0x7FFFFFFF;
+    return 0xFFFFFFFFU;
   }
 };
 
