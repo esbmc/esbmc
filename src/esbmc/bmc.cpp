@@ -1580,9 +1580,10 @@ void bmct::report_simple_summary(const SimpleSummary &summary) const
     return;
 
   // ANSI color codes
-  const std::string GREEN = "\033[32m";
-  const std::string RED = "\033[31m";
-  const std::string RESET = "\033[0m";
+  bool is_color = options.get_bool_option("color");
+  const std::string GREEN = is_color ? "\033[32m" : "";
+  const std::string RED = is_color ? "\033[31m" : "";
+  const std::string RESET = is_color ? "\033[0m" : "";
 
   // Build the properties summary string with colors
   std::ostringstream properties_oss;
