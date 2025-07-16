@@ -207,11 +207,18 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     // we must first handle tuple
     // otherwise we might parse tuple(literal_string, literal_string)
     // as ElementaryTypeName
-    if (typeString.compare(0, 6, "tuple(") == 0)
+    if (typeString.compare(0, 5, "type(") == 0)
+    {
+      if (typeIdentifier.compare(0, 17, "t_magic_meta_type") == 0)
+        return TypeProperty;
+      // For type conversion
+      return TypeConversionName;
+    }
+    else if (typeString.compare(0, 6, "tuple(") == 0)
     {
       return TupleTypeName;
     }
-    if (typeIdentifier.find("t_mapping$") != std::string::npos)
+    else if (typeIdentifier.find("t_mapping$") != std::string::npos)
     {
       std::string target = "t_mapping$";
 
@@ -279,13 +286,7 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     {
       return ContractTypeName;
     }
-    else if (typeString.find("type(") != std::string::npos)
-    {
-      if (typeIdentifier.compare(0, 17, "t_magic_meta_type") == 0)
-        return TypeProperty;
-      // For type conversion
-      return TypeConversionName;
-    }
+
     else if (typeString.find("int_const") != std::string::npos)
     {
       // For Literal, their typeString is like "int_const 100".
@@ -868,6 +869,8 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
       return ContractMemberCall;
     else if (is_address_member_call(expr))
       return AddressMemberCall;
+    else if (type_name == SolidityGrammar::TypeNameT::TypeConversionName)
+      return TypeMemberCall;
     else
       //TODO Assume it's a builtin member
       // due to that the BuiltinTypeName cannot cover all the builtin member
@@ -1139,6 +1142,7 @@ const char *expression_to_str(ExpressionT type)
     ENUM_TO_STR(StructMemberCall)
     ENUM_TO_STR(EnumMemberCall)
     ENUM_TO_STR(BuiltinMemberCall)
+    ENUM_TO_STR(TypeMemberCall)
     ENUM_TO_STR(TypeConversionExpression)
     ENUM_TO_STR(TypePropertyExpression)
     ENUM_TO_STR(NullExpr)
