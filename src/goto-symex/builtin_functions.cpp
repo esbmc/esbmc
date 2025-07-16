@@ -1568,8 +1568,16 @@ void goto_symext::intrinsic_memcpy(
   cur_state->rename(src);
   cur_state->rename(n);
 
+  //if either operand is literally the constant 0 pointer, defer to our C memcpy
   simplify(dst);
   simplify(src);
+  if((is_constant_int2t(dst) &&  to_constant_int2t(dst).value.is_zero()) ||
+    (is_constant_int2t(src) && to_constant_int2t(src).value.is_zero()))
+  {
+    log_debug("memcpy", "NULL pointer operand, falling back");
+    bump_call(func_call, "c:@F@__memcpy_impl");
+    return;
+  }
   if (is_nil_expr(dst) || is_nil_expr(src))
   {
     log_debug("memcpy", "Source or destination is NULL, falling back");
