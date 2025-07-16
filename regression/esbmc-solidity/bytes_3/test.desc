@@ -1,4 +1,4 @@
 CORE
 contract.solast
---contract Dreive --sol contract.sol --k-induction --bound
+--contract Dreive --sol contract.sol --no-standard-checks --state-hash --unwind 11 --no-unwinding-assertions --bound
 ^VERIFICATION FAILED$
