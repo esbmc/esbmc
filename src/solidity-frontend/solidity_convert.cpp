@@ -625,6 +625,10 @@ bool solidity_convertert::populate_auxilary_vars()
     {
       std::string c_name = (*itr)["name"].get<std::string>();
       std::string kind = (*itr)["contractKind"].get<std::string>();
+      bool is_abstract = (*itr)["abstract"].get<bool>();
+      if (kind == "interface" || kind == "library" || is_abstract)
+        nonContractNamesList.insert(c_name);
+
       if (kind == "library")
         continue;
       auto c_id = (*itr)["id"].get<int>();
@@ -781,6 +785,20 @@ bool solidity_convertert::populate_auxilary_vars()
     cname_set = structureTypingMap[_cname];
     length = cname_set.size();
     assert(!cname_set.empty());
+    if (length > 1)
+    {
+      // remove non-contract
+      for (auto non_cname : nonContractNamesList)
+      {
+        if (non_cname == _cname)
+          // we don't remove itself
+          continue;
+        if (cname_set.count(non_cname) != 0)
+          cname_set.erase(non_cname);
+      }
+      // update length
+      length = cname_set.size();
+    }
 
     exprt size_expr;
     size_expr = constant_exprt(
@@ -7128,10 +7146,10 @@ bool solidity_convertert::get_var_decl_ref(
     // uint8[2] x = [1, 2];
     // in state variable level
     bool is_state_var = decl["stateVariable"].get<bool>();
-    if(is_state_var && is_this_ptr)
+    if (is_state_var && is_this_ptr)
     {
       exprt decls;
-      if(get_var_decl(decl, decls))
+      if (get_var_decl(decl, decls))
         return true;
       new_expr = symbol_expr(*context.find_symbol(id));
     }
@@ -7169,10 +7187,10 @@ bool solidity_convertert::get_var_decl_ref(
 
       // get function this pointer
       exprt this_ptr;
-      if(current_functionDecl)
+      if (current_functionDecl)
       {
-      if (get_func_decl_this_ref(*current_functionDecl, this_ptr))
-        return true;
+        if (get_func_decl_this_ref(*current_functionDecl, this_ptr))
+          return true;
       }
       else
       {
@@ -12578,7 +12596,6 @@ bool solidity_convertert::multi_contract_verification_unbound(
   func_body.operands().push_back(label);
 
   // initialize
-
   std::set<std::string> cname_set;
   if (!tgt_set.empty())
     cname_set = tgt_set;
@@ -13062,17 +13079,20 @@ void solidity_convertert::get_aux_property_function(
   label.code() = code_skipt();
   _block.move_to_operands(label);
 
-  for (auto cname : contractNamesList)
+  for (auto str : contractNamesList)
   {
     if (context.find_symbol("c:@F@_ESBMC_get_obj") == nullptr)
     {
       log_error("cannot find builtin library");
       abort();
     }
+    // skip interface/abstract contract/library
+    if (nonContractNamesList.count(str) != 0 && str != cname)
+      continue;
 
     // param
     exprt _cname;
-    get_cname_expr(cname, _cname);
+    get_cname_expr(str, _cname);
 
     // get_object(_addr, A)
     side_effect_expr_function_callt get_obj;
@@ -13087,7 +13107,7 @@ void solidity_convertert::get_aux_property_function(
     get_obj.arguments().push_back(_cname);
 
     // typecast
-    typet _struct = symbol_typet(prefix + cname);
+    typet _struct = symbol_typet(prefix + str);
     exprt tc = typecast_exprt(get_obj, pointer_typet(_struct));
 
     // member access
@@ -13213,6 +13233,20 @@ bool solidity_convertert::assign_nondet_contract_name(
   cname_set = structureTypingMap[_cname];
   assert(!cname_set.empty());
   length = cname_set.size();
+  if (length > 1)
+  {
+    // remove non-contract
+    for (auto non_cname : nonContractNamesList)
+    {
+      if (non_cname == _cname)
+        // we don't remove itself
+        continue;
+      if (cname_set.count(non_cname) != 0)
+        cname_set.erase(non_cname);
+    }
+    // update length
+    length = cname_set.size();
+  }
   if (length == 1)
   {
     get_cname_expr(_cname, new_expr);
@@ -13465,6 +13499,18 @@ bool solidity_convertert::get_high_level_member_access(
   get_location_from_node(expr, l);
   std::unordered_set<std::string> cname_set = structureTypingMap[_cname];
   assert(!cname_set.empty());
+  if (cname_set.size() > 1)
+  {
+    // remove non-contract
+    for (auto non_cname : nonContractNamesList)
+    {
+      if (non_cname == _cname)
+        // we don't remove itself
+        continue;
+      if (cname_set.count(non_cname) != 0)
+        cname_set.erase(non_cname);
+    }
+  }
 
   exprt balance;
   bool is_call_w_options = is_func_call && options.is_array();
@@ -14058,6 +14104,10 @@ bool solidity_convertert::get_call_definition(
 
   for (auto str : contractNamesList)
   {
+    // skip interface/abstract contract/library
+    if (nonContractNamesList.count(str) != 0 && str != cname)
+      continue;
+
     if (!has_callable_func(str))
       continue;
 
@@ -14358,6 +14408,9 @@ bool solidity_convertert::get_call_value_definition(
 
   for (auto str : contractNamesList)
   {
+    // skip interface/abstract contract/library
+    if (nonContractNamesList.count(str) != 0 && str != cname)
+      continue;
     // Here, we only consider if there is receive and fallback function
     // as the call with signature should be directly modelled.
     // order:
@@ -14582,6 +14635,9 @@ bool solidity_convertert::get_transfer_definition(
 
   for (auto str : contractNamesList)
   {
+    // skip interface/abstract contract/library
+    if (nonContractNamesList.count(str) != 0 && str != cname)
+      continue;
     // Here, we only consider if there is receive and fallback function
     // as the call with signature should be directly modelled.
     // order:
@@ -14807,6 +14863,9 @@ bool solidity_convertert::get_send_definition(
 
   for (auto str : contractNamesList)
   {
+    // skip interface/abstract contract/library
+    if (nonContractNamesList.count(str) != 0 && str != cname)
+      continue;
     // Here, we only consider if there is receive and fallback function
     // as the call with signature should be directly modelled.
     // order:

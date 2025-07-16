@@ -694,6 +694,8 @@ protected:
   // contract name list
   std::unordered_map<int, std::string> contractNamesMap;
   std::vector<std::string> contractNamesList;
+  // for Library/Interface/Abstract Contract
+  std::set<std::string> nonContractNamesList;
   // for mapping hack
   std::set<std::string> newContractSet;
   // Store the ast_node["id"] of struct/error
