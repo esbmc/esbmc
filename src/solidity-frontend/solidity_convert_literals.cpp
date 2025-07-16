@@ -144,7 +144,7 @@ bool solidity_convertert::convert_hex_literal(
     integer2binary(hex_addr, bv_width(type)), integer2string(hex_addr), type);
 
   dest.swap(the_val);
-  dest.type().set("#sol_bytesn_size", the_value.length()/2);
+  dest.type().set("#sol_bytesn_size", the_value.length() / 2);
   return false;
 }
 

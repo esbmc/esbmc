@@ -271,7 +271,8 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
       uint_string_to_type_map.count(typeString) ||
       int_string_to_type_map.count(typeString) || typeString == "bool" ||
       typeString == "string" || typeString.find("literal_string") == 0 ||
-      typeString == "string storage ref" || typeString == "string storage pointer" || typeString == "string memory" ||
+      typeString == "string storage ref" ||
+      typeString == "string storage pointer" || typeString == "string memory" ||
       typeString == "address payable" || typeString == "address" ||
       typeString.compare(0, 5, "bytes") == 0)
     {
