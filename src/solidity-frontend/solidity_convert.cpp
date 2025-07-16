@@ -5051,6 +5051,7 @@ bool solidity_convertert::get_expr(
 
     // * check if the function call has named arguments
     // e.g. func({a: 1, b: 2});
+    // reorder the arguments based on the parameter order
     auto it = expr.find("names");
     if (it != expr.end() && it->is_array() && !it->empty())
     {
@@ -5073,24 +5074,9 @@ bool solidity_convertert::get_expr(
         }
       }
 
-      bool needs_reorder = false;
-      for (size_t i = 0; i < param_order.size(); ++i)
-      {
-        if (i >= expr["names"].size() || expr["names"][i] != param_order[i])
-        {
-          needs_reorder = true;
-          break;
-        }
-      }
-
       nlohmann::json ordered_args = nlohmann::json::array();
       for (const auto &param : param_order)
       {
-        if (name_to_arg.find(param) == name_to_arg.end())
-        {
-          log_error("Missing argument for {}", param);
-          return true;
-        }
         ordered_args.push_back(name_to_arg[param]);
       }
 
