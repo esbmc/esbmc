@@ -4,6 +4,7 @@
 #include <python-frontend/python_converter.h>
 #include <python-frontend/symbol_id.h>
 #include <util/context.h>
+#include <util/c_types.h>
 #include <util/message.h>
 
 type_handler::type_handler(const python_converter &converter)
@@ -392,6 +393,10 @@ bool type_handler::has_multiple_types(const nlohmann::json &container) const
 
 typet type_handler::get_list_type(const nlohmann::json &list_value) const
 {
+  if (list_value.is_null() || (list_value.contains("elts") && list_value["elts"].empty()))
+  {
+    return build_array(empty_typet(), 0);
+  }
   if (list_value["_type"] == "arg" && list_value.contains("annotation"))
   {
     assert(list_value["annotation"]["value"]["id"] == "list");
