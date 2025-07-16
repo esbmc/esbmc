@@ -5048,6 +5048,63 @@ bool solidity_convertert::get_expr(
     // * we had ruled out all the special cases
     // * we now confirm it is called by aother contract inside current contract
     // * func() ==> current_func_this.func(&current_func_this);
+
+    // * check if the function call has named arguments
+    // e.g. func({a: 1, b: 2});
+    auto it = expr.find("names");
+    if (it != expr.end() && it->is_array() && !it->empty())
+    {
+      std::unordered_map<std::string, nlohmann::json> name_to_arg;
+      for (size_t i = 0; i < expr["names"].size(); ++i)
+        name_to_arg[expr["names"][i]] = expr["arguments"][i];
+
+      std::vector<std::string> param_order;
+      const auto &decl_ref =
+        find_decl_ref(src_ast_json, callee_expr_json["referencedDeclaration"]);
+
+      if (
+        decl_ref.contains("parameters") &&
+        decl_ref["parameters"].contains("parameters"))
+      {
+        for (const auto &param : decl_ref["parameters"]["parameters"])
+        {
+          if (param.contains("name"))
+            param_order.push_back(param["name"]);
+        }
+      }
+
+      bool needs_reorder = false;
+      for (size_t i = 0; i < param_order.size(); ++i)
+      {
+        if (i >= expr["names"].size() || expr["names"][i] != param_order[i])
+        {
+          needs_reorder = true;
+          break;
+        }
+      }
+
+      nlohmann::json ordered_args = nlohmann::json::array();
+      for (const auto &param : param_order)
+      {
+        if (name_to_arg.find(param) == name_to_arg.end())
+        {
+          log_error("Missing argument for {}", param);
+          return true;
+        }
+        ordered_args.push_back(name_to_arg[param]);
+      }
+
+      nlohmann::json clean_expr = expr;
+      clean_expr["arguments"] = ordered_args;
+      clean_expr.erase("names");
+
+      if (get_non_library_function_call(decl_ref, clean_expr, call))
+        return true;
+
+      new_expr = call;
+      break;
+    }
+
     if (get_non_library_function_call(decl_ref, expr, call))
       return true;
 
