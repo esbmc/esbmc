@@ -3178,7 +3178,7 @@ bool solidity_convertert::get_function_definition(
   assert(!name.empty());
   log_debug(
     "solidity",
-    "\t@@@ Parsing function {} in contract {}",
+    "@@@ Parsing function {} in contract {}",
     id.c_str(),
     current_baseContractName);
 
@@ -3229,7 +3229,7 @@ bool solidity_convertert::get_function_definition(
     {
       log_debug(
         "solidity",
-        "\t parsing function {}'s parameters",
+        "  @@@ parsing function {}'s parameters",
         current_functionName);
       const nlohmann::json &func_param_decl = decl.value();
 
@@ -4413,6 +4413,19 @@ bool solidity_convertert::get_expr(
         {
           if (get_noncontract_decl_ref(decl, new_expr))
             return true;
+        }
+        else if (decl["nodeType"] == "ContractDefinition")
+        {
+          if (current_functionDecl)
+          {
+            if (get_func_decl_this_ref(*current_functionDecl, new_expr))
+              return true;
+          }
+          else if (!expr.empty())
+          {
+            if (get_ctor_decl_this_ref(expr, new_expr))
+              return true;
+          }
         }
         else
         {
@@ -5711,20 +5724,56 @@ bool solidity_convertert::get_expr(
     break;
   }
   case SolidityGrammar::ExpressionT::LibraryMemberCall:
+  case SolidityGrammar::ExpressionT::TypeMemberCall:
   {
-    side_effect_expr_function_callt call;
+    // TypeMemberCall
+    // - A.call(); // A is a contract or library
+    // - enum ActionChoices { GoLeft, GoRight, GoStraight, SitStill }
+    //   ActionChoices constant defaultChoice = ActionChoices.GoStraight;
+    exprt base;
+    const nlohmann::json caller_expr_json = expr["expression"];
+    typet t;
+    if (get_type_description(caller_expr_json["typeDescriptions"], t))
+      return true;
     const auto &func_ref = find_decl_ref_unique_id(
       src_ast_json, expr["referencedDeclaration"].get<int>());
+
+    if (t.get("#sol_type") == "ENUM")
+    {
+      /*
+      "expression": {
+          "id": 12,
+          "name": "ActionChoices",
+          "nodeType": "Identifier",
+          "overloadedDeclarations": [],
+          "referencedDeclaration": 6,
+          "typeDescriptions": {
+              "typeIdentifier": "t_type$_t_enum$_ActionChoices_$6_$",
+              "typeString": "type(enum test.ActionChoices)"
+          }
+      },
+      "memberName": "GoStraight",
+      "nodeType": "MemberAccess",
+      "referencedDeclaration": 4,
+      "typeDescriptions": {
+          "typeIdentifier": "t_enum$_ActionChoices_$6",
+          "typeString": "enum test.ActionChoices"
+      }
+      */
+      if (get_enum_member_ref(func_ref, new_expr))
+        return true;
+      break;
+    };
+
+    if (get_expr(caller_expr_json, literal_type, base))
+      return true;
+
+    side_effect_expr_function_callt call;
 
     const nlohmann::json &args_json =
       find_last_parent(src_ast_json["nodes"], expr);
     assert(args_json.contains("arguments"));
     if (get_library_function_call(func_ref, args_json, call))
-      return true;
-
-    exprt base;
-    const nlohmann::json caller_expr_json = expr["expression"];
-    if (get_expr(caller_expr_json, literal_type, base))
       return true;
 
     if (!(base.is_code() && base.type().get("#sol_type") == "LIBRARY"))
@@ -10511,7 +10560,7 @@ void solidity_convertert::get_inherit_ctor_definition(
        (*current_functionDecl)["implemented"] == true))
     {
       log_debug(
-        "solidity", "\t parsing function {}'s body", current_functionName);
+        "solidity", "@@@ parsing function {}'s body", current_functionName);
       if (get_block((*current_functionDecl)["body"], func_body))
       {
         log_error("internal error in constructing inherit_ctor body");
