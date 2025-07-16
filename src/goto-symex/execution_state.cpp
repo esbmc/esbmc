@@ -874,6 +874,10 @@ void execution_statet::get_expr_globals(
     if (!symbol)
       return;
 
+    // Keep one to allow a switch happen in pthread_join_switch().
+    if (!options.get_bool_option("deadlock-check") && name == "__ESBMC_num_threads_running")
+      return;
+    
     if (
       name == "c:@__ESBMC_alloc" || name == "c:@__ESBMC_alloc_size" ||
       name == "c:@__ESBMC_is_dynamic" ||
@@ -881,6 +885,8 @@ void execution_statet::get_expr_globals(
       (name.find("c:pthread_lib") != std::string::npos &&
        name.find("mutex") == std::string::npos) ||
       name == "c:@__ESBMC_rounding_mode" ||
+      name == "c:@__ESBMC_thread_key_destructors" ||
+      name == "c:@__ESBMC_pthread_end_values" ||
       name.find("c:@__ESBMC_pthread_thread") != std::string::npos)
     {
       return;
@@ -1169,6 +1175,16 @@ bool execution_statet::has_cswitch_point_occured() const
   if (cswitch_forced)
     return true;
   
+  // for(auto &var : thread_last_writes[active_thread]){
+  //   const std::string &name = to_symbol2t(var).thename.as_string();
+  //   log_status("writes {} " , name);
+  // }
+
+  // for(auto &var : thread_last_reads[active_thread]){
+  //   const std::string &name = to_symbol2t(var).thename.as_string();
+  //   log_status("reads {} " , name);
+  // }
+
   if (shared_switch_only)
   {
     // If this thread wrote a shared variable, allow a context switch point.

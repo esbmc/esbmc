@@ -278,7 +278,7 @@ void goto_symext::symex_function_call_code(const expr2tc &expr)
   std::vector<expr2tc> arguments = call.operands;
 
   
-  if (identifier.as_string() == "c:@F@pthread_join_noswitch")
+  if(has_prefix(identifier.as_string(), "c:@F@pthread_join"))
     depend_exist();
 
   for (auto &argument : arguments)
