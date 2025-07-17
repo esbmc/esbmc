@@ -5134,23 +5134,20 @@ bool solidity_convertert::get_expr(
       break;
     }
     // * special: new D{value: amount}(4), handle the {value: amount} part
-    log_status("start");
     if (
       callee_expr_json["nodeType"] == "FunctionCallOptions" &&
       callee_expr_json["expression"]["nodeType"] == "NewExpression")
     {
-      log_status("111");
       exprt new_obj;
       // 1. construct new object
-      if (get_new_object_ctor_call(callee_expr_json["expression"], new_obj))
+      if (get_new_object_ctor_call(
+            callee_expr_json["expression"], true, new_obj))
         return true;
-      log_status("222");
       // 2. if it has value option, we need to model the transaction
       if (
         callee_expr_json["options"].contains("name") &&
         callee_expr_json["options"]["name"] == "value")
       {
-        log_status("333");
         for (const auto &opt : callee_expr_json["options"])
         {
           locationt loc;
