@@ -393,6 +393,9 @@ enum ExpressionT
   // Built-in Member Access
   BuiltinMemberCall,
 
+  // Contract Type Member Access
+  TypeMemberCall,
+
   // Null Expression
   NullExpr,
 

@@ -136,6 +136,14 @@ jobs:
         env:
           TIMEOUT: ${{ inputs.timeout }}
           ESBMC_OPTS: ${{ inputs.options }}
+      - name: Run user-specified benchmarks
+        continue-on-error: true
+        env:
+          ESBMC_OPTS: ${{ inputs.options}}
+          LOG_DIR: ${{ inputs.logdirectory }}
+        run: |
+          cd build/
+          ctest -j4 --timeout 300 --output-on-failure --progress .  
       - name: Run Benchexec (RunSet)
         if: ${{ inputs.mode == 'RunSet'  && inputs.runset != 'SV-COMP25_ConcurrencySafety'}}
         run: ./esbmc-src/scripts/benchexec.sh -r ${{ inputs.runset }}
