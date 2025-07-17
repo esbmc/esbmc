@@ -8,6 +8,9 @@
 #include <boost/date_time/posix_time/posix_time.hpp>
 
 #include <boost/version.hpp>
+#include <boost/uuid/uuid.hpp>
+#include <boost/uuid/uuid_generators.hpp>
+#include <boost/uuid/uuid_io.hpp>
 
 typedef boost::property_tree::ptree xmlnodet;
 
@@ -86,6 +89,24 @@ void grapht::create_initial_edge()
   first_edge.create_thread = std::to_string(0);
   this->threads.push_back(0);
   this->edges.push_back(first_edge);
+}
+
+void yamlt::generate_yaml(optionst &options)
+{
+  YAML::Node yaml_node;
+  if (this->witness_type == yamlt::VIOLATION)
+    log_error("{}", "ESBMC dont support YAML violation witness yet.");
+  else
+    create_correctness_yaml_node(this->verified_file, options, yaml_node);
+
+  const std::string witness_output = options.get_option("witness-output");
+  if (witness_output == "-")
+    std::cout << yaml_node;
+  else
+  {
+    std::ofstream fout(witness_output);
+    fout << yaml_node;
+  }
 }
 
 int generate_sha1_hash_for_file(const char *path, std::string &output)
@@ -607,6 +628,70 @@ void _create_graph_node(
   graphnode.add_child("data", p_creationTime);
 }
 
+void _create_yaml_metadate_node(
+  const std::string &verifiedfile,
+  const optionst &options,
+  YAML::Node &metadata)
+{
+  metadata["format_version"] = "2.0";
+  metadata["uuid"] =
+    boost::uuids::to_string(boost::uuids::random_generator()());
+
+  std::string creation_time = boost::posix_time::to_iso_extended_string(
+    boost::posix_time::microsec_clock::universal_time());
+  creation_time = creation_time.substr(0, creation_time.find('.'));
+  metadata["creation_time"] = creation_time;
+
+  std::string producer_str = options.get_option("witness-producer");
+  if (producer_str.empty())
+  {
+    producer_str = "ESBMC " + std::string(ESBMC_VERSION);
+    if (
+      options.get_bool_option("k-induction") ||
+      options.get_bool_option("k-induction-parallel"))
+      producer_str += " kind";
+    else if (options.get_bool_option("falsification"))
+      producer_str += " falsi";
+    else if (options.get_bool_option("incremental-bmc"))
+      producer_str += " incr";
+  }
+
+  YAML::Node producer;
+  producer["name"] = "ESBMC";
+  producer["version"] = ESBMC_VERSION;
+  producer["configuration"] = producer_str;
+  metadata["producer"] = producer;
+
+  YAML::Node task;
+  task["input_files"].push_back(verifiedfile);
+
+  std::string file_hash;
+  generate_sha1_hash_for_file(verifiedfile.c_str(), file_hash);
+
+  YAML::Node input_hashes;
+  input_hashes[verifiedfile] = file_hash;
+  task["input_file_hashes"] = input_hashes;
+
+  if (options.get_bool_option("overflow-check"))
+    task["specification"] = "CHECK( init(main()), LTL(G ! overflow) )";
+  else if (options.get_bool_option("memory-leak-check"))
+  {
+    if (options.get_bool_option("no-reachable-memory-leak"))
+      task["specification"] =
+        "CHECK( init(main()), LTL(G valid-free|valid-deref|valid-memtrack) )";
+    else
+      task["specification"] = "CHECK( init(main()), LTL(G valid-memcleanup) )";
+  }
+  else
+    task["specification"] =
+      "CHECK( init(main()), LTL(G ! call(__VERIFIER_error())) )";
+
+  task["data_model"] = (config.ansi_c.word_size == 32 ? "ILP32" : "LP64");
+  task["language"] = "C";
+
+  metadata["task"] = task;
+}
+
 void create_violation_graph_node(
   std::string &verifiedfile,
   optionst &options,
@@ -629,6 +714,20 @@ void create_correctness_graph_node(
   pWitnessType.add("<xmlattr>.key", "witness-type");
   pWitnessType.put_value("correctness_witness");
   graphnode.add_child("data", pWitnessType);
+}
+
+void create_correctness_yaml_node(
+  std::string &verifiedfile,
+  optionst &options,
+  YAML::Node &node)
+{
+  YAML::Node root;
+  root["entry_type"] = "invariant_set";
+  YAML::Node metadata;
+  _create_yaml_metadate_node(verifiedfile, options, metadata);
+  root["metadata"] = metadata;
+
+  node.push_back(root);
 }
 
 static const std::regex

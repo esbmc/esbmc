@@ -109,7 +109,10 @@ void bmct::successful_trace()
     goto_tracet goto_trace;
     log_progress("Building successful trace");
     /* build_successful_goto_trace(eq, ns, goto_trace); */
-    correctness_graphml_goto_trace(options, ns, goto_trace);
+    if (0)
+      correctness_graphml_goto_trace(options, ns, goto_trace);
+    else
+      correctness_yaml_goto_trace(options, ns, goto_trace);
   }
 }
 
