@@ -135,7 +135,8 @@ bool solidity_convertert::convert()
     return true;
 
   // for coverage and trace simplification: update include_files
-  auto add_unique = [](const std::string &file) {
+  auto add_unique = [](const std::string &file)
+  {
     if (
       std::find(
         config.ansi_c.include_files.begin(),
@@ -488,7 +489,8 @@ bool solidity_convertert::check_sol_ver()
   }
 
   auto parse_version =
-    [](const std::string &version_str) -> std::optional<versiont> {
+    [](const std::string &version_str) -> std::optional<versiont>
+  {
     std::regex ver_regex(R"((\d+)\.(\d+)\.(\d+))");
     std::smatch match;
     if (std::regex_match(version_str, match, ver_regex))
@@ -1079,14 +1081,15 @@ bool solidity_convertert::populate_function_signature(
       is_payable = func_node["stateMutability"] == "payable";
       is_inherit = func_node.contains("is_inherited");
 
-      funcSignatures[cname].push_back(solidity_convertert::func_sig(
-        func_name,
-        func_id,
-        visibility,
-        type,
-        is_payable,
-        is_inherit,
-        is_library));
+      funcSignatures[cname].push_back(
+        solidity_convertert::func_sig(
+          func_name,
+          func_id,
+          visibility,
+          type,
+          is_payable,
+          is_inherit,
+          is_library));
     }
   }
 
@@ -1094,9 +1097,8 @@ bool solidity_convertert::populate_function_signature(
   bool hasConstructor = std::any_of(
     funcSignatures[cname].begin(),
     funcSignatures[cname].end(),
-    [&cname](const solidity_convertert::func_sig &sig) {
-      return sig.name == cname;
-    });
+    [&cname](const solidity_convertert::func_sig &sig)
+    { return sig.name == cname; });
   if (!hasConstructor && !is_library)
   {
     func_name = cname;
@@ -1106,14 +1108,15 @@ bool solidity_convertert::populate_function_signature(
     type.return_type() = empty_typet();
     type.return_type().set("cpp_type", "void");
     is_inherit = false;
-    funcSignatures[cname].push_back(solidity_convertert::func_sig(
-      func_name,
-      func_id,
-      visibility,
-      type,
-      is_payable,
-      is_inherit,
-      is_library));
+    funcSignatures[cname].push_back(
+      solidity_convertert::func_sig(
+        func_name,
+        func_id,
+        visibility,
+        type,
+        is_payable,
+        is_inherit,
+        is_library));
   }
 
   return false;
@@ -4602,6 +4605,12 @@ bool solidity_convertert::get_expr(
       assert(is_byte_type(byte_t));
       std::string fname = is_bytesN_type(byte_t) ? "static" : "dynamic";
       bool is_static = fname == "static";
+      std::string expected_size;
+      if (is_static)
+      {
+        assert(!byte_t.get("#sol_bytesn_size").empty());
+        expected_size = byte_t.get("#sol_bytesn_size").as_string();
+      }
 
       SolidityGrammar::ElementaryTypeNameT target_type =
         SolidityGrammar::get_elementary_type_name_t(literal_type);
@@ -4612,23 +4621,36 @@ bool solidity_convertert::get_expr(
       {
         assert(is_static);
         side_effect_expr_function_callt call;
-        if (expr["value"].get<std::string>().rfind("0x", 0) == 0)
+        std::string val_str = expr["value"].get<std::string>();
+
+        if (val_str.rfind("0x", 0) == 0)
         {
-          // e.g. 0x12 => this can only be used for bytesN
+          // e.g. 0x12, expected size is 2 → pad to 0x0012
+          std::string hex_part = val_str.substr(2);
+          size_t actual_len = hex_part.length() / 2; // actual bytes
+          size_t expected_len = std::stoul(expected_size);
+
+          if (actual_len < expected_len)
+          {
+            size_t missing = expected_len - actual_len;
+            std::string padding(missing * 2, '0');
+            hex_part = padding + hex_part;
+            val_str = "0x" + hex_part;
+          }
+
           get_library_function_call_no_args(
             "bytes_static_from_hex",
             "c:@F@bytes_static_from_hex",
             byte_t,
             location,
             call);
-          string_constantt str(expr["value"].get<std::string>());
+
+          exprt str = string_constantt(val_str);
           call.arguments().push_back(str);
-          call.type().set("#sol_type", "BytesStatic");
-          auto sol_size = byte_t.get("#sol_bytesn_size");
-          if (!sol_size.empty())
-            call.type().set("#sol_bytesn_size", sol_size);
+          call.arguments().push_back(
+            from_integer(val_str.length(), uint_type()));
         }
-        else if (expr["value"].get<std::string>() == "0")
+        else if (val_str == "0")
         {
           // e.g. bytes32 data3 = 0;
           get_library_function_call_no_args(
@@ -4638,9 +4660,7 @@ bool solidity_convertert::get_expr(
             location,
             call);
           assert(!byte_t.get("#sol_bytesn_size").empty());
-          exprt len = from_integer(
-            std::stoul(byte_t.get("#sol_bytesn_size").as_string()),
-            uint_type());
+          exprt len = from_integer(std::stoul(expected_size), uint_type());
           call.arguments().push_back(len);
         }
         else
@@ -4649,20 +4669,48 @@ bool solidity_convertert::get_expr(
             "Unsupported bytes literal type in expression: {}", expr.dump());
           return true;
         }
-
-        new_expr = call;
+        call.type().set("#sol_type", "BytesStatic");
+        call.type().set("#sol_bytesn_size", expected_size);
+        new_expr = make_aux_var(call, location);
         break;
       }
       else if (
         type_name == SolidityGrammar::ElementaryTypeNameT::STRING_LITERAL)
       {
         assert(expr.contains("kind") && expr.contains("hexValue"));
-        exprt str;
+        std::string val_str;
         bool is_hex_string = expr["kind"] == "hexString";
         if (is_hex_string)
-          str = string_constantt(expr["hexValue"].get<std::string>());
+          val_str = expr["hexValue"].get<std::string>();
         else
-          str = string_constantt(expr["value"].get<std::string>());
+          val_str = expr["value"].get<std::string>();
+
+        // add padding
+        if (is_static && is_hex_string)
+        {
+          assert(!byte_t.get("#sol_bytesn_size").empty());
+          size_t actual_len = val_str.length() / 2;
+          size_t expected_len = std::stoul(expected_size);
+
+          if (actual_len < expected_len)
+          {
+            size_t missing = expected_len - actual_len;
+            std::string padding(missing * 2, '0');
+            val_str = padding + val_str;
+          }
+          else if (val_str.length() > expected_len)
+          {
+            log_error(
+              "String literal is longer than target bytesN size ({} > {})",
+              val_str.length(),
+              expected_len);
+            return true;
+          }
+        }
+        if (is_hex_string)
+          val_str = "0x" + val_str;
+
+        exprt str = string_constantt(val_str);
         std::string posfix = is_hex_string ? "hex" : "string";
 
         side_effect_expr_function_callt str_call;
@@ -4674,23 +4722,27 @@ bool solidity_convertert::get_expr(
           str_call);
 
         str_call.arguments().push_back(str);
+        if (is_static && is_hex_string)
+          str_call.arguments().push_back(
+            from_integer(val_str.length(), uint_type()));
+        else if (is_static && !is_hex_string)
+         str_call.arguments().push_back(
+          from_integer(std::stoul(expected_size), uint_type()));
         if (!is_static)
         {
           exprt dynamic_pool;
           if (get_dynamic_pool(current_contractName, dynamic_pool))
             return true;
-          str_call.arguments().push_back(dynamic_pool);
           str_call.type().set("#sol_type", "BytesDynamic");
+          str_call.arguments().push_back(dynamic_pool);
         }
         else
         {
           str_call.type().set("#sol_type", "BytesStatic");
-          auto sol_size = byte_t.get("#sol_bytesn_size");
-          if (!sol_size.empty())
-            str_call.type().set("#sol_bytesn_size", sol_size);
+          str_call.type().set(
+            "#sol_bytesn_size", byte_t.get("#sol_bytesn_size"));
         }
-
-        new_expr = str_call;
+        new_expr = make_aux_var(str_call, location);
         break;
       }
 
@@ -5781,16 +5833,16 @@ bool solidity_convertert::get_expr(
         call.arguments().push_back(pool_member);
 
         // assert(b[0] ==  (new bytes(4))[0]);
-        new_expr = make_aux_var_for_bytes(call, location);
+        new_expr = make_aux_var(call, location);
         new_expr.type().set("#sol_type", "BytesDynamic");
         break;
       }
     }
 
     // case 3
-    // is equal to Base x = base.base(x);
+    // is equal to Base *x = new base(x);
     exprt call;
-    if (get_new_object_ctor_call(expr, call))
+    if (get_new_object_ctor_call(expr, false, call))
       return true;
 
     new_expr = call;
@@ -6361,8 +6413,8 @@ bool solidity_convertert::get_binary_operator_expr(
 
       get_library_function_call_no_args(fname, fid, bool_t, l, call_expr);
 
-      exprt lhs_tmp = make_aux_var_for_bytes(lhs, l);
-      exprt rhs_tmp = make_aux_var_for_bytes(rhs, l);
+      exprt lhs_tmp = make_aux_var(lhs, l);
+      exprt rhs_tmp = make_aux_var(rhs, l);
 
       call_expr.arguments().push_back(address_of_exprt(lhs_tmp));
       call_expr.arguments().push_back(address_of_exprt(rhs_tmp));
@@ -6401,7 +6453,7 @@ bool solidity_convertert::get_binary_operator_expr(
       get_library_function_call_no_args(
         fname, "c:@F@" + fname, lhs.type(), l, call_expr);
 
-      exprt lhs_tmp = make_aux_var_for_bytes(lhs, l);
+      exprt lhs_tmp = make_aux_var(lhs, l);
       call_expr.arguments().push_back(address_of_exprt(lhs_tmp));
       call_expr.arguments().push_back(rhs);
 
@@ -6440,8 +6492,8 @@ bool solidity_convertert::get_binary_operator_expr(
       side_effect_expr_function_callt call_expr;
       get_library_function_call_no_args(fname, fid, lhs.type(), l, call_expr);
 
-      exprt lhs_tmp = make_aux_var_for_bytes(lhs, l);
-      exprt rhs_tmp = make_aux_var_for_bytes(rhs, l);
+      exprt lhs_tmp = make_aux_var(lhs, l);
+      exprt rhs_tmp = make_aux_var(rhs, l);
 
       call_expr.arguments().push_back(address_of_exprt(lhs_tmp));
       call_expr.arguments().push_back(address_of_exprt(rhs_tmp));
@@ -6838,7 +6890,7 @@ bool solidity_convertert::get_compound_assign_expr(
     get_library_function_call_no_args(
       fname, "c:@F@" + fname, lt, location, call_expr);
 
-    exprt lhs_tmp = make_aux_var_for_bytes(lhs, location);
+    exprt lhs_tmp = make_aux_var(lhs, location);
     call_expr.arguments().push_back(address_of_exprt(lhs_tmp));
 
     if (
@@ -6849,7 +6901,7 @@ bool solidity_convertert::get_compound_assign_expr(
     }
     else
     {
-      exprt rhs_tmp = make_aux_var_for_bytes(rhs, location);
+      exprt rhs_tmp = make_aux_var(rhs, location);
       call_expr.arguments().push_back(address_of_exprt(rhs_tmp));
     }
 
@@ -8757,7 +8809,8 @@ bool solidity_convertert::get_dynamic_pool(
  */
 bool solidity_convertert::has_array_push_pop_length(const nlohmann::json &node)
 {
-  auto is_array_type_not_bytes = [](const nlohmann::json &type_desc) -> bool {
+  auto is_array_type_not_bytes = [](const nlohmann::json &type_desc) -> bool
+  {
     if (!type_desc.is_object())
       return false;
     if (!type_desc.contains("typeString"))
@@ -8854,9 +8907,7 @@ bool solidity_convertert::has_contract_bytes(const nlohmann::json &node)
   Otherwise, the value is assigned to a new symbol inserted at the front
   of the current code block, and that symbol is returned.
 */
-exprt solidity_convertert::make_aux_var_for_bytes(
-  exprt &val,
-  const locationt &location)
+exprt solidity_convertert::make_aux_var(exprt &val, const locationt &location)
 {
   // If val is already a symbol, no need to create an aux variable
   if (val.is_symbol())
@@ -8866,7 +8917,6 @@ exprt solidity_convertert::make_aux_var_for_bytes(
   get_aux_var(aux_name, aux_id);
 
   typet t = val.type();
-  assert(is_byte_type(t));
   std::string debug_modulename = get_modulename_from_path(absolute_path);
 
   symbolt aux_sym;
@@ -10602,8 +10652,8 @@ bool solidity_convertert::is_func_sig_cover(
   const std::string &base)
 {
   // function signature coverage‐check lambda: name + ordered argument types
-  auto covers =
-    [&](const std::string &derived, const std::string &base) -> bool {
+  auto covers = [&](const std::string &derived, const std::string &base) -> bool
+  {
     const auto &dSigs = funcSignatures.at(derived);
     const auto &bSigs = funcSignatures.at(base);
 
@@ -10764,6 +10814,7 @@ bool solidity_convertert::get_ctor_call(
     // reset the this object
     exprt this_object;
     get_new_object(symbol_typet(prefix + c_name), this_object);
+    this_object = address_of_exprt(this_object);
     call.arguments().at(0) = this_object;
     // set constructor
     call.set("constructor", 1);
@@ -10980,7 +11031,8 @@ void solidity_convertert::extract_new_contracts()
     return;
 
   std::function<void(const nlohmann::json &)> process_node;
-  process_node = [&](const nlohmann::json &node) {
+  process_node = [&](const nlohmann::json &node)
+  {
     if (node.is_object())
     {
       if (node.contains("nodeType") && node["nodeType"] == "NewExpression")
@@ -11037,9 +11089,11 @@ void solidity_convertert::extract_new_contracts()
  - get the ctor call expr
  - construct a "temporary_object" and set the ctor call as the operands
  @ast_node: caller node whose nodeType is NewExpression
+ @is_object: true if it's a object, otherwise a pointer
 */
 bool solidity_convertert::get_new_object_ctor_call(
   const nlohmann::json &caller,
+  const bool is_object,
   exprt &new_expr)
 {
   log_debug("solidity", "generating new contract object");
@@ -11054,7 +11108,7 @@ bool solidity_convertert::get_new_object_ctor_call(
     log_error("cannot find the contract name");
     abort();
   }
-  if (get_new_object_ctor_call(contract_name, caller, new_expr))
+  if (get_new_object_ctor_call(contract_name, caller, is_object, new_expr))
     return true;
 
   return false;
@@ -11064,6 +11118,7 @@ bool solidity_convertert::get_new_object_ctor_call(
 bool solidity_convertert::get_new_object_ctor_call(
   const std::string &contract_name,
   const nlohmann::json caller,
+  const bool is_object,
   exprt &new_expr)
 {
   log_debug("solidity", "get_new_object_ctor_call");
@@ -11073,21 +11128,36 @@ bool solidity_convertert::get_new_object_ctor_call(
   side_effect_expr_function_callt call;
   const nlohmann::json &constructor_ref = find_constructor_ref(contract_name);
   if (constructor_ref.empty())
-    return get_implicit_ctor_ref(contract_name, new_expr);
+    return get_implicit_ctor_ref(contract_name, is_object, new_expr);
 
   if (get_ctor_call(constructor_ref, caller, call))
     return true;
 
   // construct temporary object
-  get_temporary_object(call, new_expr);
+  if (is_object)
+  {
+    // Base x = &sideefect(..)
+    get_temporary_object(call, new_expr);
+  }
+  else
+  {
+    // Base *x = new Base();
+    exprt tmp_obj;
+    get_temporary_object(call, tmp_obj);
+    convert_expression_to_code(tmp_obj);
+    new_expr = side_effect_exprt(
+      "cpp_new", pointer_typet(symbol_typet(prefix + contract_name)));
+    new_expr.initializer(tmp_obj);
+  }
   return false;
 }
 
 bool solidity_convertert::get_implicit_ctor_ref(
   const std::string &contract_name,
+  const bool is_object,
   exprt &new_expr)
 {
-  log_debug("solidity", "\t\tget_implicit_ctor_ref");
+  log_debug("solidity", "\t\tgetting implicit ctor call");
 
   // to obtain the type info
   std::string name, id;
@@ -11111,9 +11181,24 @@ bool solidity_convertert::get_implicit_ctor_ref(
 
   exprt this_object;
   get_new_object(symbol_typet(prefix + contract_name), this_object);
+  this_object = address_of_exprt(this_object);
   call.arguments().push_back(this_object);
 
-  get_temporary_object(call, new_expr);
+  if (is_object)
+  {
+    // Base x = &sideefect(..)
+    get_temporary_object(call, new_expr);
+  }
+  else
+  {
+    // Base *x = new Base();
+    exprt tmp_obj;
+    get_temporary_object(call, tmp_obj);
+    convert_expression_to_code(tmp_obj);
+    new_expr = side_effect_exprt(
+      "cpp_new", pointer_typet(symbol_typet(prefix + contract_name)));
+    new_expr.initializer(tmp_obj);
+  }
   return false;
 }
 
@@ -11235,7 +11320,7 @@ void solidity_convertert::add_static_contract_instance(const std::string c_name)
   }
 
   exprt ctor;
-  if (get_new_object_ctor_call(c_name, empty_json, ctor))
+  if (get_new_object_ctor_call(c_name, empty_json, true, ctor))
   {
     log_error("failed to construct a temporary object");
     abort();
@@ -11697,7 +11782,7 @@ void solidity_convertert::convert_type_expr(
       // prevent something like
       // bytes_dynamic_from_uint({ .offset=0, .length=0, .initialized=0, .anon_pad$3=0 }, this->$dynamic_pool);
       if (src_expr.is_struct())
-        src_expr = make_aux_var_for_bytes(src_expr, src_expr.location());
+        src_expr = make_aux_var(src_expr, src_expr.location());
 
       exprt pool_member;
       if (get_dynamic_pool(expr, pool_member))
@@ -11720,7 +11805,7 @@ void solidity_convertert::convert_type_expr(
         resize_call.arguments().push_back(src_expr);
         resize_call.arguments().push_back(len_expr);
 
-        src_expr = make_aux_var_for_bytes(resize_call, src_expr.location());
+        src_expr = make_aux_var(resize_call, src_expr.location());
         src_expr.type().set("#sol_type", "BytesStatic");
         return;
       }
@@ -11740,8 +11825,7 @@ void solidity_convertert::convert_type_expr(
         from_static_call.arguments().push_back(src_expr);
         from_static_call.arguments().push_back(pool_member);
 
-        src_expr =
-          make_aux_var_for_bytes(from_static_call, src_expr.location());
+        src_expr = make_aux_var(from_static_call, src_expr.location());
         src_expr.type().set("#sol_type", "BytesDynamic");
         return;
       }
@@ -11763,7 +11847,7 @@ void solidity_convertert::convert_type_expr(
         resize_dyn_call.arguments().push_back(len_expr);
         resize_dyn_call.arguments().push_back(pool_member);
 
-        src_expr = make_aux_var_for_bytes(resize_dyn_call, src_expr.location());
+        src_expr = make_aux_var(resize_dyn_call, src_expr.location());
         src_expr.type().set("#sol_type", "BytesStatic");
         return;
       }
@@ -11782,7 +11866,7 @@ void solidity_convertert::convert_type_expr(
         copy_call.arguments().push_back(src_expr);
         copy_call.arguments().push_back(pool_member);
 
-        src_expr = make_aux_var_for_bytes(copy_call, src_expr.location());
+        src_expr = make_aux_var(copy_call, src_expr.location());
         src_expr.type().set("#sol_type", "BytesDynamic");
         return;
       }
@@ -11800,7 +11884,6 @@ void solidity_convertert::convert_type_expr(
       locationt loc = src_expr.location();
       if (is_bytes_type(dest_type))
       {
-        // dynamic bytes: use bytes_dynamic_from_string(...)
         side_effect_expr_function_callt call;
         get_library_function_call_no_args(
           "bytes_dynamic_from_string",
@@ -11808,6 +11891,7 @@ void solidity_convertert::convert_type_expr(
           dest_type,
           loc,
           call);
+        src_expr = make_aux_var(src_expr, src_expr.location());
         call.arguments().push_back(src_expr);
         call.type().set("#sol_type", "BytesDynamic");
 
@@ -11817,7 +11901,7 @@ void solidity_convertert::convert_type_expr(
           abort();
         call.arguments().push_back(pool_member);
 
-        src_expr = make_aux_var_for_bytes(call, loc);
+        src_expr = make_aux_var(call, loc);
       }
       else if (is_bytesN_type(dest_type))
       {
@@ -11853,9 +11937,10 @@ void solidity_convertert::convert_type_expr(
             dest_type,
             loc,
             call);
+          src_expr = make_aux_var(src_expr, src_expr.location());
           call.arguments().push_back(src_expr);
         }
-        src_expr = make_aux_var_for_bytes(call, loc);
+        src_expr = make_aux_var(call, loc);
         src_expr.type().set("#sol_type", "BytesStatic");
       }
       else
@@ -12125,14 +12210,16 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
   dest = code_blockt();
 
   // call designated "initialization" functions
-  context.foreach_operand_in_order([&dest](const symbolt &s) {
-    if (s.type.initialization() && s.type.is_code())
+  context.foreach_operand_in_order(
+    [&dest](const symbolt &s)
     {
-      code_function_callt function_call;
-      function_call.function() = symbol_expr(s);
-      dest.move_to_operands(function_call);
-    }
-  });
+      if (s.type.initialization() && s.type.is_code())
+      {
+        code_function_callt function_call;
+        function_call.function() = symbol_expr(s);
+        dest.move_to_operands(function_call);
+      }
+    });
 }
 
 void solidity_convertert::get_aux_var(
@@ -12939,52 +13026,6 @@ void solidity_convertert::get_builtin_symbol(
     move_builtin_to_contract(c_name, symbol_expr(added_sym), false);
 }
 
-bool solidity_convertert::get_new_temporary_obj(
-  const std::string &c_name,
-  const std::string &ctor_ins_name,
-  const std::string &ctor_ins_id,
-  const locationt &ctor_ins_loc,
-  symbolt &added,
-  codet &decl)
-{
-  log_debug("solidity", "get new temporary object for contract {}", c_name);
-  std::string ctor_ins_debug_modulename =
-    get_modulename_from_path(absolute_path);
-  typet ctor_Ins_typet = symbol_typet(prefix + c_name);
-
-  symbolt ctor_ins_symbol;
-  get_default_symbol(
-    ctor_ins_symbol,
-    ctor_ins_debug_modulename,
-    ctor_Ins_typet,
-    ctor_ins_name,
-    ctor_ins_id,
-    ctor_ins_loc);
-
-  // since we might re-entry the sol_main_i, we
-  // should set it as static global var
-  ctor_ins_symbol.static_lifetime = true;
-  ctor_ins_symbol.lvalue = true;
-  ctor_ins_symbol.file_local = true;
-
-  symbolt &added_ctor_symbol = *move_symbol_to_context(ctor_ins_symbol);
-
-  exprt ctor;
-  if (get_new_object_ctor_call(c_name, empty_json, ctor))
-  {
-    log_error("Failed in get_new_object_ctor_call");
-    return true;
-  }
-
-  code_declt _decl(symbol_expr(added_ctor_symbol));
-  added_ctor_symbol.value = ctor;
-  _decl.operands().push_back(ctor);
-
-  added = added_ctor_symbol;
-  decl = _decl;
-  return false;
-}
-
 // create a function: get_{property_name}(addr)
 // this function is universal for every contract
 void solidity_convertert::get_aux_property_function(
@@ -13346,7 +13387,8 @@ bool solidity_convertert::has_callable_func(const std::string &cname)
   return std::any_of(
     funcSignatures[cname].begin(),
     funcSignatures[cname].end(),
-    [&cname](const solidity_convertert::func_sig &sig) {
+    [&cname](const solidity_convertert::func_sig &sig)
+    {
       // must be public or external, even if the address is itself
       return sig.name != cname &&
              (sig.visibility == "public" || sig.visibility == "external");
@@ -13363,9 +13405,9 @@ bool solidity_convertert::has_target_function(
     return false;
 
   return std::any_of(
-    it->second.begin(), it->second.end(), [&](const func_sig &sig) {
-      return sig.name == func_name;
-    });
+    it->second.begin(),
+    it->second.end(),
+    [&](const func_sig &sig) { return sig.name == func_name; });
 }
 
 solidity_convertert::func_sig solidity_convertert::get_target_function(
@@ -13386,9 +13428,8 @@ solidity_convertert::func_sig solidity_convertert::get_target_function(
   auto func_it = std::find_if(
     functions.begin(),
     functions.end(),
-    [&func_name](const solidity_convertert::func_sig &sig) {
-      return sig.name == func_name;
-    });
+    [&func_name](const solidity_convertert::func_sig &sig)
+    { return sig.name == func_name; });
 
   // If function is found, return it; otherwise, return an empty func_sig
   if (func_it != functions.end())
