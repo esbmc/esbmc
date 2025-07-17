@@ -3,6 +3,7 @@
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
 #include <python-frontend/json_utils.h>
+#include <util/base_type.h>
 #include <util/c_typecast.h>
 #include <util/expr_util.h>
 #include <util/message.h>
@@ -125,7 +126,8 @@ exprt function_call_expr::handle_isinstance() const {
   /* NOTE: Comparing the types directly may be insufficient.
            Inheritance or type aliases may require deeper analysis. */
 
-  bool matches = (obj_expr.type().id() == expected_type.id());
+  bool matches = base_type_eq(obj_expr.type(), expected_type, converter_.ns);
+
   return (matches) ? gen_boolean(true) : gen_boolean(false);
 }
 
@@ -794,7 +796,6 @@ exprt function_call_expr::get()
   // Handle introspection functions
   if (is_introspection_call())
   {
-    //throw std::runtime_error(function_id_.get_function() + "() is not supported yet.\n");
     return handle_isinstance();
   }
 
