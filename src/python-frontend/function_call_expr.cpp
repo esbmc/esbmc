@@ -348,14 +348,15 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
     }
   }
   // Handle ord with symbol
-  else if (arg["_type"]=="Name" && arg.contains("id"))
+  else if (arg["_type"] == "Name" && arg.contains("id"))
   {
     const symbolt *sym = lookup_python_symbol(arg["id"]);
 
-    if (!sym){
+    if (!sym)
+    {
       std::string var_name = arg["id"].get<std::string>();
       throw std::runtime_error(
-       "NameError: variable '" + var_name + "' is not defined");
+        "NameError: variable '" + var_name + "' is not defined");
     }
     typet operand_type = sym->value.type();
     std::string py_type = type_handler_.type_to_string(operand_type);
@@ -363,7 +364,8 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
     if (operand_type != char_type() && py_type != "str")
     {
       throw std::runtime_error(
-        "TypeError: ord() expected string of length 1, but "+ py_type + " found");
+        "TypeError: ord() expected string of length 1, but " + py_type +
+        " found");
     }
     auto value_opt = extract_string_from_symbol(sym);
     const std::string &s = *value_opt;
