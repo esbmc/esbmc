@@ -357,7 +357,6 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
       throw std::runtime_error(
        "NameError: variable '" + var_name + "' is not defined");
     }
-
     typet operand_type = sym->value.type();
     std::string py_type = type_handler_.type_to_string(operand_type);
 
@@ -422,6 +421,11 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
       throw std::runtime_error(
         "ValueError: ord() received invalid UTF-8 input");
     }
+    // Remove Name data
+    arg["_type"] = "Constant";
+    arg.erase("id");
+    arg.erase("ctx");
+    
   }
   else
   {
