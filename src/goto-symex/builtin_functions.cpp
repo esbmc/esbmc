@@ -1571,7 +1571,8 @@ void goto_symext::intrinsic_memcpy(
   //if either operand is literally the constant 0 pointer, defer to our C memcpy
   simplify(dst);
   simplify(src);
-  if((is_constant_int2t(dst) &&  to_constant_int2t(dst).value.is_zero()) ||
+  if (
+    (is_constant_int2t(dst) && to_constant_int2t(dst).value.is_zero()) ||
     (is_constant_int2t(src) && to_constant_int2t(src).value.is_zero()))
   {
     log_debug("memcpy", "NULL pointer operand, falling back");
