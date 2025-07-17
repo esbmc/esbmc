@@ -427,7 +427,6 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
     arg["_type"] = "Constant";
     arg.erase("id");
     arg.erase("ctx");
-    
   }
   else
   {
