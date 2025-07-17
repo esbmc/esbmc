@@ -192,7 +192,6 @@ void function_call_expr::handle_chr(nlohmann::json &arg) const
       "ValueError: chr() argument out of valid Unicode range: " +
       std::to_string(int_value));
   }
-
   // Replace the value with a single-character string
   arg["value"] = std::string(1, static_cast<char>(int_value));
 }
@@ -347,6 +346,87 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
       throw std::runtime_error(
         "ValueError: ord() received invalid UTF-8 input");
     }
+  }
+  // Handle ord with symbol
+  else if (arg["_type"] == "Name" && arg.contains("id"))
+  {
+    const symbolt *sym = lookup_python_symbol(arg["id"]);
+
+    if (!sym)
+    {
+      std::string var_name = arg["id"].get<std::string>();
+      throw std::runtime_error(
+        "NameError: variable '" + var_name + "' is not defined");
+    }
+    typet operand_type = sym->value.type();
+    std::string py_type = type_handler_.type_to_string(operand_type);
+
+    if (operand_type != char_type() && py_type != "str")
+    {
+      throw std::runtime_error(
+        "TypeError: ord() expected string of length 1, but " + py_type +
+        " found");
+    }
+    auto value_opt = extract_string_from_symbol(sym);
+    const std::string &s = *value_opt;
+    const unsigned char *bytes =
+      reinterpret_cast<const unsigned char *>(s.c_str());
+    size_t length = s.length();
+
+    if (length == 0)
+    {
+      throw std::runtime_error(
+        "TypeError: ord() expected a character, but string of length 0 found");
+    }
+
+    // Manual UTF-8 decoding
+    if ((bytes[0] & 0x80) == 0)
+    {
+      // 1-byte ASCII
+      if (length != 1)
+        throw std::runtime_error(
+          "TypeError: ord() expected a single character");
+
+      code_point = bytes[0];
+    }
+    else if ((bytes[0] & 0xE0) == 0xC0)
+    {
+      // 2-byte sequence
+      if (length != 2)
+        throw std::runtime_error(
+          "TypeError: ord() expected a single character");
+
+      code_point = ((bytes[0] & 0x1F) << 6) | (bytes[1] & 0x3F);
+    }
+    else if ((bytes[0] & 0xF0) == 0xE0)
+    {
+      // 3-byte sequence
+      if (length != 3)
+        throw std::runtime_error(
+          "TypeError: ord() expected a single character");
+
+      code_point = ((bytes[0] & 0x0F) << 12) | ((bytes[1] & 0x3F) << 6) |
+                   (bytes[2] & 0x3F);
+    }
+    else if ((bytes[0] & 0xF8) == 0xF0)
+    {
+      // 4-byte sequence
+      if (length != 4)
+        throw std::runtime_error(
+          "TypeError: ord() expected a single character");
+
+      code_point = ((bytes[0] & 0x07) << 18) | ((bytes[1] & 0x3F) << 12) |
+                   ((bytes[2] & 0x3F) << 6) | (bytes[3] & 0x3F);
+    }
+    else
+    {
+      throw std::runtime_error(
+        "ValueError: ord() received invalid UTF-8 input");
+    }
+    // Remove Name data
+    arg["_type"] = "Constant";
+    arg.erase("id");
+    arg.erase("ctx");
   }
   else
   {
