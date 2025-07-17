@@ -658,6 +658,12 @@ std::string function_call_expr::get_object_name() const
     obj_name = subelement["attr"].get<std::string>();
   else if (subelement["_type"] == "Constant" || subelement["_type"] == "BinOp")
     obj_name = function_id_.get_class();
+  else if (subelement["_type"] == "Call")
+  {
+    obj_name = subelement["func"]["id"];
+    if (obj_name == "super")
+      obj_name = "self";
+  }
   else
     obj_name = subelement["id"].get<std::string>();
 
