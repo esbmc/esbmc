@@ -4722,7 +4722,7 @@ bool solidity_convertert::get_expr(
           str_call);
 
         str_call.arguments().push_back(str);
-        if (is_static && is_hex_string)
+        if (is_hex_string)
           str_call.arguments().push_back(
             from_integer(val_str.length(), uint_type()));
         else if (is_static && !is_hex_string)
@@ -11906,40 +11906,27 @@ void solidity_convertert::convert_type_expr(
       else if (is_bytesN_type(dest_type))
       {
         side_effect_expr_function_callt call;
-        if (src_expr.is_constant())
-        {
-          get_library_function_call_no_args(
-            "bytes_static_from_uint",
-            "c:@F@bytes_static_from_uint",
-            dest_type,
-            loc,
-            call);
-          call.arguments().push_back(src_expr);
+        get_library_function_call_no_args(
+          "bytes_static_from_uint",
+          "c:@F@bytes_static_from_uint",
+          dest_type,
+          loc,
+          call);
+        call.arguments().push_back(src_expr);
 
-          // e.g. bytes3(0x1234); "BYTES3" => 3
-          exprt len_expr;
-          if (!dest_type.get("#sol_bytesn_size").empty())
-            len_expr = from_integer(
-              std::stoul(dest_type.get("#sol_bytesn_size").as_string()),
-              size_type());
-          else
-          {
-            log_error("got unexpected bytes typecast");
-            abort();
-          }
-          call.arguments().push_back(len_expr);
-        }
+        // e.g. bytes3(0x1234); "BYTES3" => 3
+        exprt len_expr;
+        if (!dest_type.get("#sol_bytesn_size").empty())
+          len_expr = from_integer(
+            std::stoul(dest_type.get("#sol_bytesn_size").as_string()),
+            size_type());
         else
         {
-          get_library_function_call_no_args(
-            "bytes_static_from_string",
-            "c:@F@bytes_static_from_string",
-            dest_type,
-            loc,
-            call);
-          src_expr = make_aux_var(src_expr, src_expr.location());
-          call.arguments().push_back(src_expr);
+          log_error("got unexpected bytes typecast");
+          abort();
         }
+        call.arguments().push_back(len_expr);
+        
         src_expr = make_aux_var(call, loc);
         src_expr.type().set("#sol_type", "BytesStatic");
       }
