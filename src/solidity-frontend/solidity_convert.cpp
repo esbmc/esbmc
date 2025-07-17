@@ -4946,6 +4946,57 @@ bool solidity_convertert::get_expr(
       new_expr = call;
       break;
     }
+    // * special: new D{value: amount}(4), handle the {value: amount} part
+    log_status("start");
+    if (
+      callee_expr_json["nodeType"] == "FunctionCallOptions" &&
+      callee_expr_json["expression"]["nodeType"] == "NewExpression")
+    {
+      log_status("111");
+      exprt new_obj;
+      // 1. construct new object
+      if (get_new_object_ctor_call(callee_expr_json["expression"], new_obj))
+        return true;
+      log_status("222");
+      // 2. if it has value option, we need to model the transaction
+      if (
+        callee_expr_json["options"].contains("name") &&
+        callee_expr_json["options"]["name"] == "value")
+      {
+        log_status("333");
+        for (const auto &opt : callee_expr_json["options"])
+        {
+          locationt loc;
+          get_location_from_node(expr, loc);
+
+          exprt this_obj;
+          if (get_ctor_decl_this_ref(expr, this_obj))
+            return true;
+
+          exprt value_expr;
+          nlohmann::json val_type = {
+            {"typeIdentifier", "t_uint256"}, {"typeString", "uint256"}};
+          if (get_expr(opt, val_type, value_expr))
+            return true;
+
+          exprt new_target = new_obj;
+          typet val_t = unsignedbv_typet(256);
+
+          exprt front, back;
+          if (model_transaction(
+                expr, this_obj, new_target, value_expr, loc, front, back))
+            return true;
+
+          convert_expression_to_code(front);
+          move_to_front_block(front);
+          convert_expression_to_code(back);
+          move_to_back_block(back);
+        }
+      }
+
+      new_expr = new_obj;
+      return false;
+    }
 
     // * check if its a call-with-options
     if (
@@ -10289,9 +10340,13 @@ bool solidity_convertert::get_new_object_ctor_call(
 {
   log_debug("solidity", "generating new contract object");
   // 1. get the ctor call expr
-  nlohmann::json callee_expr_json = caller["expression"];
+  // if the caller is a NewExpression, we can directly use it
+  nlohmann::json callee_expr_json = caller;
+  if (caller["nodeType"] == "NewExpression")
+    nlohmann::json callee_expr_json = caller;
+  else
+    callee_expr_json = caller["expression"];
   int ref_decl_id = callee_expr_json["typeName"]["referencedDeclaration"];
-
   // get contract name
   const std::string contract_name = contractNamesMap[ref_decl_id];
   if (contract_name.empty())

@@ -837,6 +837,8 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
   }
   else if (expr["nodeType"] == "FunctionCallOptions")
   {
+    if (expr["expression"]["nodeType"] == "NewExpression")
+      return NewExpression;
     return CallOptionsExprClass;
   }
   else if (expr["nodeType"] == "FunctionCall")
