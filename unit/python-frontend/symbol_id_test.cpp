@@ -3,8 +3,10 @@
 
 #include <python-frontend/symbol_id.h>
 
-TEST_CASE("symbol_id::from_string parses valid input", "[symbol_id]") {
-  SECTION("Full format: filename, class and function") {
+TEST_CASE("symbol_id::from_string parses valid input", "[symbol_id]")
+{
+  SECTION("Full format: filename, class and function")
+  {
     auto id = symbol_id::from_string("py:main.py@C@Animal@F@speak");
 
     REQUIRE(id.get_prefix() == "py:");
@@ -13,7 +15,8 @@ TEST_CASE("symbol_id::from_string parses valid input", "[symbol_id]") {
     REQUIRE(id.get_function() == "speak");
   }
 
-  SECTION("Only filename") {
+  SECTION("Only filename")
+  {
     auto id = symbol_id::from_string("py:script.py");
 
     REQUIRE(id.get_prefix() == "py:");
@@ -22,7 +25,8 @@ TEST_CASE("symbol_id::from_string parses valid input", "[symbol_id]") {
     REQUIRE(id.get_function().empty());
   }
 
-  SECTION("Filename and class only") {
+  SECTION("Filename and class only")
+  {
     auto id = symbol_id::from_string("py:module.py@C@MyClass");
 
     REQUIRE(id.get_prefix() == "py:");
@@ -31,7 +35,8 @@ TEST_CASE("symbol_id::from_string parses valid input", "[symbol_id]") {
     REQUIRE(id.get_function().empty());
   }
 
-  SECTION("Filename and function only") {
+  SECTION("Filename and function only")
+  {
     auto id = symbol_id::from_string("py:utils.py@F@helper");
 
     REQUIRE(id.get_prefix() == "py:");
@@ -40,7 +45,8 @@ TEST_CASE("symbol_id::from_string parses valid input", "[symbol_id]") {
     REQUIRE(id.get_function() == "helper");
   }
 
-  SECTION("Invalid prefix") {
+  SECTION("Invalid prefix")
+  {
     auto id = symbol_id::from_string("cpp:main.cpp@C@A@F@f");
 
     // Should return empty symbol_id (default-constructed)
@@ -50,11 +56,12 @@ TEST_CASE("symbol_id::from_string parses valid input", "[symbol_id]") {
     REQUIRE(id.get_function().empty());
   }
 
-  SECTION("Malformed string (missing values)") {
+  SECTION("Malformed string (missing values)")
+  {
     auto id = symbol_id::from_string("py:file.py@C@@F@");
 
     REQUIRE(id.get_filename() == "file.py");
-    REQUIRE(id.get_class().empty());      // nothing after @C@
-    REQUIRE(id.get_function().empty());   // nothing after @F@
+    REQUIRE(id.get_class().empty());    // nothing after @C@
+    REQUIRE(id.get_function().empty()); // nothing after @F@
   }
 }

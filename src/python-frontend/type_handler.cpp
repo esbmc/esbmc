@@ -393,7 +393,9 @@ bool type_handler::has_multiple_types(const nlohmann::json &container) const
 
 typet type_handler::get_list_type(const nlohmann::json &list_value) const
 {
-  if (list_value.is_null() || (list_value.contains("elts") && list_value["elts"].empty()))
+  if (
+    list_value.is_null() ||
+    (list_value.contains("elts") && list_value["elts"].empty()))
   {
     return build_array(empty_typet(), 0);
   }
