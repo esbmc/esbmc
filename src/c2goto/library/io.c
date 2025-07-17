@@ -81,32 +81,56 @@ __ESBMC_HIDE:;
   return str;
 }
 
-FILE *fopen(const char *filename, const char *m)
+FILE *fopen(const char *filename, const char *mode)
 {
 __ESBMC_HIDE:;
-#if __ESBMC_SVCOMP
-  FILE *f = (void *)1;
-#else
-  FILE *f = malloc(sizeof(FILE));
-#endif
+
+  if (filename == NULL || mode == NULL)
+    return NULL; // On error, returns a null pointer.
+
+  // Allocate memory for FILE structure
+  FILE *f = malloc(sizeof(FILE)); // Dynamically allocate FILE structure
+  if (f == NULL)
+    return NULL; // On error, returns a null pointer.
+
   return f;
 }
 
 int fclose(FILE *stream)
 {
 __ESBMC_HIDE:;
-#if __ESBMC_SVCOMP
-#else
-  free(stream);
-#endif
-  return nondet_int();
+  // Check for preconditions
+  __ESBMC_assert(stream != NULL, "Stream must not be NULL");
+  // Simulate possible success/failure
+  _Bool success = nondet_bool(); // Returns 0 (success) or 1 (failure)
+  __ESBMC_assume(
+    success == 0 || success == 1); // Ensure only valid return values
+  if (success)
+  {
+    free(stream);
+    return 0;
+  }
+  else
+    return EOF; // fclose failure
 }
 
-FILE *fdopen(int handle, const char *m)
+FILE *fdopen(int handle, const char *mode)
 {
 __ESBMC_HIDE:;
+  // Validate file descriptor
+  if (handle < 0)
+    return NULL; // Invalid file descriptor
+
+  // Validate mode
+  if (mode == NULL || *mode == '\0')
+    return NULL; // Invalid mode
+
+  // Allocate memory for FILE structure
   FILE *f = malloc(sizeof(FILE));
-  return f;
+  if (f == NULL)
+    return NULL; // Not enough memory
+
+  return f; // Successfully associated FILE* with handle
 }
 
 // fgets reads a line from the specified stream and stores it
@@ -190,22 +214,46 @@ __ESBMC_HIDE:;
 int feof(FILE *stream)
 {
 __ESBMC_HIDE:;
-  // just return nondet
-  return nondet_int();
+  __ESBMC_assert(stream != NULL, "Ensure *stream is valid");
+  // Returns either 0 (not EOF) or 1 (EOF reached)
+  _Bool eof_state = nondet_bool();
+  return eof_state;
 }
 
 int ferror(FILE *stream)
 {
 __ESBMC_HIDE:;
-  // just return nondet
-  return nondet_int();
+  __ESBMC_assert(stream != NULL, "Ensure *stream is valid");
+  // Model the error state correctly using nondeterminism
+  int error_state =
+    nondet_bool(); // Returns either 0 (no error) or 1 (error detected)
+  __ESBMC_assume(
+    error_state == 0 || error_state == 1); // Ensures only valid outputs
+  return error_state;
 }
 
 int fileno(FILE *stream)
 {
 __ESBMC_HIDE:;
-  // just return nondet
-  return nondet_int();
+
+  // Check for NULL or invalid stream
+  if (stream == NULL)
+    return -1; // Error: Invalid stream
+
+  // Handle standard streams correctly
+  if (stream == stdin)
+    return 0; // STDIN_FILENO
+  if (stream == stdout)
+    return 1; // STDOUT_FILENO
+  if (stream == stderr)
+    return 2; // STDERR_FILENO
+
+  // Return a nondeterministic file descriptor, but ensure it is non-negative
+  int fd = nondet_int();
+  if (fd < 0)
+    return -1;
+
+  return fd;
 }
 
 int fputs(const char *s, FILE *stream)
@@ -245,7 +293,13 @@ __ESBMC_HIDE:;
 int fgetc(FILE *stream)
 {
 __ESBMC_HIDE:;
-  return nondet_int();
+  // Ensure the stream is valid
+  __ESBMC_assert(stream != NULL, "fgetc: stream must not be NULL");
+  // Nondeterministically return a character or EOF
+  int c = nondet_int();
+  // Ensure the returned value is either a valid unsigned char or EOF
+  __ESBMC_assume(c == EOF || (c >= 0 && c <= 255));
+  return c;
 }
 
 int getc(FILE *stream)
