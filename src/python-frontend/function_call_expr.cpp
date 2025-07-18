@@ -3,14 +3,16 @@
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
 #include <python-frontend/json_utils.h>
+#include <util/base_type.h>
 #include <util/c_typecast.h>
 #include <util/expr_util.h>
 #include <util/message.h>
 #include <util/string_constant.h>
-#include <regex>
 #include <util/arith_tools.h>
 #include <util/ieee_float.h>
 #include <util/message.h>
+#include <regex>
+#include <stdexcept>
 
 using namespace json_utils;
 
@@ -84,6 +86,12 @@ bool function_call_expr::is_nondet_call() const
   return std::regex_match(function_id_.get_function(), pattern);
 }
 
+bool function_call_expr::is_introspection_call() const
+{
+  const std::string &func_name = function_id_.get_function();
+  return func_name == "isinstance";
+}
+
 exprt function_call_expr::build_nondet_call() const
 {
   const std::string &func_name = function_id_.get_function();
@@ -94,6 +102,34 @@ exprt function_call_expr::build_nondet_call() const
   exprt rhs = exprt("sideeffect", type_handler_.get_typet(type));
   rhs.statement("nondet");
   return rhs;
+}
+
+exprt function_call_expr::handle_isinstance() const
+{
+  const auto &args = call_["args"];
+
+  // Ensure isinstance() is called with exactly two arguments
+  if (args.size() != 2)
+    throw std::runtime_error("isinstance() expects 2 arguments");
+
+  // Convert the first argument (the object being checked) into an expression
+  exprt obj_expr = converter_.get_expr(args[0]);
+
+  // The second argument must be a simple type name (e.g., int, MyClass)
+  if (args[1]["_type"] != "Name")
+    throw std::runtime_error("Unsupported type format in isinstance()");
+
+  std::string type_name = args[1]["id"];
+
+  // Get the internal type representation from the type name
+  typet expected_type = type_handler_.get_typet(type_name, 0);
+
+  /* NOTE: Comparing the types directly may be insufficient.
+           Inheritance or type aliases may require deeper analysis. */
+
+  bool matches = base_type_eq(obj_expr.type(), expected_type, converter_.ns);
+
+  return (matches) ? gen_boolean(true) : gen_boolean(false);
 }
 
 exprt function_call_expr::handle_int_to_str(nlohmann::json &arg) const
@@ -756,6 +792,12 @@ exprt function_call_expr::get()
   if (is_nondet_call())
   {
     return build_nondet_call();
+  }
+
+  // Handle introspection functions
+  if (is_introspection_call())
+  {
+    return handle_isinstance();
   }
 
   const std::string &func_name = function_id_.get_function();

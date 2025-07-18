@@ -42,6 +42,8 @@ private:
    */
   bool is_nondet_call() const;
 
+  bool is_introspection_call() const;
+
   /*
    * Creates an expression for a non-deterministic function call.
    */
@@ -81,6 +83,8 @@ private:
    * current filename to construct the full scoped symbol name.
    */
   const symbolt *lookup_python_symbol(const std::string &var_name) const;
+
+  exprt handle_isinstance() const;
 
   /*
    * Handles str-to-int conversions (e.g., int('65')) by reconstructing
