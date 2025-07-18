@@ -90,6 +90,19 @@ symbol_id function_call_builder::build_function_id() const
 
       obj_name = lhs_type;
     }
+    else if (func_json["value"]["_type"] == "Call")
+    {
+      obj_name = func_json["value"]["func"]["id"];
+      if (obj_name == "super")
+      {
+        symbolt *base_class_func = converter_.find_function_in_base_classes(
+          current_class_name, function_id.to_string(), func_name, false);
+        if (base_class_func)
+        {
+          return symbol_id::from_string(base_class_func->id.as_string());
+        }
+      }
+    }
     else
     {
       obj_name = func_json["value"]["id"];

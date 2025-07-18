@@ -218,10 +218,10 @@ __ESBMC_HIDE:;
     return 0;
 }
 
-BytesStatic bytes_static_from_hex(const char* hex_str) {
+BytesStatic bytes_static_from_hex(const char* hex_str, size_t len) {
 __ESBMC_HIDE:;
     BytesStatic b = {0};
-    size_t hex_len = strlen(hex_str) - 2;
+    size_t hex_len = len - 2;
     b.length = hex_len / 2;
     for (size_t i = 0; i < b.length; i++) {
         unsigned char high = hex_char_to_nibble(hex_str[2 + i * 2]);
@@ -231,11 +231,14 @@ __ESBMC_HIDE:;
     return b;
 }
 
-BytesStatic bytes_static_from_string(const char* str) {
+BytesStatic bytes_static_from_string(const char* str, size_t len) {
 __ESBMC_HIDE:;
-    size_t len = strlen(str);
     BytesStatic b = {0};
-    memcpy(b.data, str, len);
+    if (len > 32) len = 32;
+    size_t copy_len = strlen(str);
+    if (copy_len > len) copy_len = len;
+    memcpy(b.data, str, copy_len);
+    memset(b.data + copy_len, 0, len - copy_len);
     b.length = len;
     return b;
 }
@@ -374,9 +377,9 @@ __ESBMC_HIDE:;
     return b;
 }
 
-BytesDynamic bytes_dynamic_from_hex(const char* hex_str, BytesPool* pool) {
+BytesDynamic bytes_dynamic_from_hex(const char* hex_str, size_t len, BytesPool* pool) {
 __ESBMC_HIDE:;
-    size_t hex_len = strlen(hex_str) - 2;
+    size_t hex_len = len - 2;
     size_t byte_len = hex_len / 2;
     unsigned char tmp[32] = {0};
     for (size_t i = 0; i < byte_len; i++) {

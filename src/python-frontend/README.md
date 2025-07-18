@@ -92,6 +92,7 @@ Below is an overview of ESBMC-Python's key capabilities:
 ### Object-Oriented Programming
 - **Classes**: Supports class definitions, methods, and attributes.
 - **Inheritance**: Handles inheritance and verifies scenarios involving inheritance issues.
+- **super() calls**: Supports the `super()` function to call methods from a superclass. This allows for the verification of behaviors where a derived class explicitly invokes base class methods, enabling the analysis of polymorphic behavior and the proper propagation of assertions or side effects.
 ### Data Types and Structures
 - **Dynamic Typing**: Accommodates Python's dynamic typing in variable assignments.
 - **Data Structures**: Supports operations on Python's built-in data structures, including lists and strings, with features such as concatenation and bounds checks.

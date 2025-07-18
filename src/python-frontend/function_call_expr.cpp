@@ -3,14 +3,16 @@
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
 #include <python-frontend/json_utils.h>
+#include <util/base_type.h>
 #include <util/c_typecast.h>
 #include <util/expr_util.h>
 #include <util/message.h>
 #include <util/string_constant.h>
-#include <regex>
 #include <util/arith_tools.h>
 #include <util/ieee_float.h>
 #include <util/message.h>
+#include <regex>
+#include <stdexcept>
 
 using namespace json_utils;
 
@@ -84,6 +86,12 @@ bool function_call_expr::is_nondet_call() const
   return std::regex_match(function_id_.get_function(), pattern);
 }
 
+bool function_call_expr::is_introspection_call() const
+{
+  const std::string &func_name = function_id_.get_function();
+  return func_name == "isinstance";
+}
+
 exprt function_call_expr::build_nondet_call() const
 {
   const std::string &func_name = function_id_.get_function();
@@ -94,6 +102,34 @@ exprt function_call_expr::build_nondet_call() const
   exprt rhs = exprt("sideeffect", type_handler_.get_typet(type));
   rhs.statement("nondet");
   return rhs;
+}
+
+exprt function_call_expr::handle_isinstance() const
+{
+  const auto &args = call_["args"];
+
+  // Ensure isinstance() is called with exactly two arguments
+  if (args.size() != 2)
+    throw std::runtime_error("isinstance() expects 2 arguments");
+
+  // Convert the first argument (the object being checked) into an expression
+  exprt obj_expr = converter_.get_expr(args[0]);
+
+  // The second argument must be a simple type name (e.g., int, MyClass)
+  if (args[1]["_type"] != "Name")
+    throw std::runtime_error("Unsupported type format in isinstance()");
+
+  std::string type_name = args[1]["id"];
+
+  // Get the internal type representation from the type name
+  typet expected_type = type_handler_.get_typet(type_name, 0);
+
+  /* NOTE: Comparing the types directly may be insufficient.
+           Inheritance or type aliases may require deeper analysis. */
+
+  bool matches = base_type_eq(obj_expr.type(), expected_type, converter_.ns);
+
+  return (matches) ? gen_boolean(true) : gen_boolean(false);
 }
 
 exprt function_call_expr::handle_int_to_str(nlohmann::json &arg) const
@@ -192,7 +228,6 @@ void function_call_expr::handle_chr(nlohmann::json &arg) const
       "ValueError: chr() argument out of valid Unicode range: " +
       std::to_string(int_value));
   }
-
   // Replace the value with a single-character string
   arg["value"] = std::string(1, static_cast<char>(int_value));
 }
@@ -347,6 +382,87 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
       throw std::runtime_error(
         "ValueError: ord() received invalid UTF-8 input");
     }
+  }
+  // Handle ord with symbol
+  else if (arg["_type"] == "Name" && arg.contains("id"))
+  {
+    const symbolt *sym = lookup_python_symbol(arg["id"]);
+
+    if (!sym)
+    {
+      std::string var_name = arg["id"].get<std::string>();
+      throw std::runtime_error(
+        "NameError: variable '" + var_name + "' is not defined");
+    }
+    typet operand_type = sym->value.type();
+    std::string py_type = type_handler_.type_to_string(operand_type);
+
+    if (operand_type != char_type() && py_type != "str")
+    {
+      throw std::runtime_error(
+        "TypeError: ord() expected string of length 1, but " + py_type +
+        " found");
+    }
+    auto value_opt = extract_string_from_symbol(sym);
+    const std::string &s = *value_opt;
+    const unsigned char *bytes =
+      reinterpret_cast<const unsigned char *>(s.c_str());
+    size_t length = s.length();
+
+    if (length == 0)
+    {
+      throw std::runtime_error(
+        "TypeError: ord() expected a character, but string of length 0 found");
+    }
+
+    // Manual UTF-8 decoding
+    if ((bytes[0] & 0x80) == 0)
+    {
+      // 1-byte ASCII
+      if (length != 1)
+        throw std::runtime_error(
+          "TypeError: ord() expected a single character");
+
+      code_point = bytes[0];
+    }
+    else if ((bytes[0] & 0xE0) == 0xC0)
+    {
+      // 2-byte sequence
+      if (length != 2)
+        throw std::runtime_error(
+          "TypeError: ord() expected a single character");
+
+      code_point = ((bytes[0] & 0x1F) << 6) | (bytes[1] & 0x3F);
+    }
+    else if ((bytes[0] & 0xF0) == 0xE0)
+    {
+      // 3-byte sequence
+      if (length != 3)
+        throw std::runtime_error(
+          "TypeError: ord() expected a single character");
+
+      code_point = ((bytes[0] & 0x0F) << 12) | ((bytes[1] & 0x3F) << 6) |
+                   (bytes[2] & 0x3F);
+    }
+    else if ((bytes[0] & 0xF8) == 0xF0)
+    {
+      // 4-byte sequence
+      if (length != 4)
+        throw std::runtime_error(
+          "TypeError: ord() expected a single character");
+
+      code_point = ((bytes[0] & 0x07) << 18) | ((bytes[1] & 0x3F) << 12) |
+                   ((bytes[2] & 0x3F) << 6) | (bytes[3] & 0x3F);
+    }
+    else
+    {
+      throw std::runtime_error(
+        "ValueError: ord() received invalid UTF-8 input");
+    }
+    // Remove Name data
+    arg["_type"] = "Constant";
+    arg.erase("id");
+    arg.erase("ctx");
   }
   else
   {
@@ -658,6 +774,12 @@ std::string function_call_expr::get_object_name() const
     obj_name = subelement["attr"].get<std::string>();
   else if (subelement["_type"] == "Constant" || subelement["_type"] == "BinOp")
     obj_name = function_id_.get_class();
+  else if (subelement["_type"] == "Call")
+  {
+    obj_name = subelement["func"]["id"];
+    if (obj_name == "super")
+      obj_name = "self";
+  }
   else
     obj_name = subelement["id"].get<std::string>();
 
@@ -670,6 +792,12 @@ exprt function_call_expr::get()
   if (is_nondet_call())
   {
     return build_nondet_call();
+  }
+
+  // Handle introspection functions
+  if (is_introspection_call())
+  {
+    return handle_isinstance();
   }
 
   const std::string &func_name = function_id_.get_function();
