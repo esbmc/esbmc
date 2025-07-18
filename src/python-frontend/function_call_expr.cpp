@@ -88,7 +88,7 @@ bool function_call_expr::is_nondet_call() const
 
 bool function_call_expr::is_introspection_call() const
 {
-  const std::string& func_name = function_id_.get_function();
+  const std::string &func_name = function_id_.get_function();
   return func_name == "isinstance";
 }
 
@@ -104,10 +104,11 @@ exprt function_call_expr::build_nondet_call() const
   return rhs;
 }
 
-exprt function_call_expr::handle_isinstance() const {
-   const auto &args = call_["args"];
+exprt function_call_expr::handle_isinstance() const
+{
+  const auto &args = call_["args"];
 
-   // Ensure isinstance() is called with exactly two arguments
+  // Ensure isinstance() is called with exactly two arguments
   if (args.size() != 2)
     throw std::runtime_error("isinstance() expects 2 arguments");
 
