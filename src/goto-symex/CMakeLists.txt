@@ -10,8 +10,8 @@ target_include_directories(symex
     PRIVATE ${Boost_INCLUDE_DIRS}
 )
 target_compile_definitions(symex PUBLIC BOOST_ALL_NO_LIB)
-target_link_libraries(symex nlohmann_json::nlohmann_json fmt::fmt)
+target_link_libraries(symex nlohmann_json::nlohmann_json yaml-cpp::yaml-cpp fmt::fmt)
 
 if(WIN32)
-  target_link_libraries(symex nlohmann_json::nlohmann_json fmt::fmt wsock32 ws2_32)
+  target_link_libraries(symex nlohmann_json::nlohmann_json yaml-cpp::yaml-cpp fmt::fmt wsock32 ws2_32)
 endif()

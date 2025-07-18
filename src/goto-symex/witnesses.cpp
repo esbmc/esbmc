@@ -8,6 +8,9 @@
 #include <boost/date_time/posix_time/posix_time.hpp>
 
 #include <boost/version.hpp>
+#include <boost/uuid/uuid.hpp>
+#include <boost/uuid/uuid_generators.hpp>
+#include <boost/uuid/uuid_io.hpp>
 
 typedef boost::property_tree::ptree xmlnodet;
 
@@ -86,6 +89,24 @@ void grapht::create_initial_edge()
   first_edge.create_thread = std::to_string(0);
   this->threads.push_back(0);
   this->edges.push_back(first_edge);
+}
+
+void yamlt::generate_yaml(optionst &options)
+{
+  YAML::Emitter yaml_emitter;
+  if (this->witness_type == yamlt::VIOLATION)
+    log_error("{}", "ESBMC dont support YAML violation witness yet.");
+  else
+    create_correctness_yaml_emitter(this->verified_file, options, yaml_emitter);
+
+  const std::string witness_output = options.get_option("witness-output");
+  if (witness_output == "-")
+    std::cout << yaml_emitter.c_str();
+  else
+  {
+    std::ofstream fout(witness_output);
+    fout << yaml_emitter.c_str();
+  }
 }
 
 int generate_sha1_hash_for_file(const char *path, std::string &output)
@@ -607,6 +628,89 @@ void _create_graph_node(
   graphnode.add_child("data", p_creationTime);
 }
 
+void _create_yaml_metadata_emitter(
+  const std::string &verifiedfile,
+  const optionst &options,
+  YAML::Emitter &metadata)
+{
+  metadata << YAML::BeginMap;
+  metadata << YAML::Key << "format_version" << YAML::Value << YAML::DoubleQuoted
+           << "2.0";
+
+  std::string uuid =
+    boost::uuids::to_string(boost::uuids::random_generator()());
+  metadata << YAML::Key << "uuid" << YAML::Value << YAML::DoubleQuoted << uuid;
+
+  std::string creation_time = boost::posix_time::to_iso_extended_string(
+    boost::posix_time::microsec_clock::universal_time());
+  creation_time.resize(creation_time.find('.'));
+  metadata << YAML::Key << "creation_time" << YAML::Value << YAML::DoubleQuoted
+           << creation_time;
+
+  metadata << YAML::Key << "producer" << YAML::BeginMap;
+  std::string producer_str = options.get_option("witness-producer");
+  if (producer_str.empty())
+  {
+    producer_str = "ESBMC";
+    if (
+      options.get_bool_option("k-induction") ||
+      options.get_bool_option("k-induction-parallel"))
+      producer_str += " kind";
+    else if (options.get_bool_option("falsification"))
+      producer_str += " falsi";
+    else if (options.get_bool_option("incremental-bmc"))
+      producer_str += " incr";
+  }
+  metadata << YAML::Key << "name" << YAML::Value << YAML::DoubleQuoted
+           << producer_str;
+  metadata << YAML::Key << "version" << YAML::Value << YAML::DoubleQuoted
+           << ESBMC_VERSION;
+  metadata << YAML::EndMap;
+
+  // Task node
+  metadata << YAML::Key << "task" << YAML::BeginMap;
+
+  // Input_files
+  metadata << YAML::Key << "input_files" << YAML::BeginSeq;
+  metadata << YAML::DoubleQuoted << verifiedfile;
+  metadata << YAML::EndSeq;
+
+  // Input_file_hashes
+  std::string file_hash;
+  // TODO: use sha256
+  generate_sha1_hash_for_file(verifiedfile.c_str(), file_hash);
+  metadata << YAML::Key << "input_file_hashes" << YAML::BeginMap;
+  metadata << YAML::Key << YAML::DoubleQuoted << verifiedfile << YAML::Value
+           << YAML::DoubleQuoted << file_hash;
+  metadata << YAML::EndMap;
+
+  // Specification
+  std::string spec;
+  if (options.get_bool_option("overflow-check"))
+    spec = "CHECK( init(main()), LTL(G ! overflow) )";
+  else if (options.get_bool_option("memory-leak-check"))
+  {
+    if (options.get_bool_option("no-reachable-memory-leak"))
+      spec =
+        "CHECK( init(main()), LTL(G valid-free|valid-deref|valid-memtrack) )";
+    else
+      spec = "CHECK( init(main()), LTL(G valid-memcleanup) )";
+  }
+  else
+    spec = "CHECK( init(main()), LTL(G ! call(__VERIFIER_error())) )";
+
+  metadata << YAML::Key << "specification" << YAML::Value << YAML::DoubleQuoted
+           << spec;
+
+  metadata << YAML::Key << "data_model" << YAML::Value << YAML::DoubleQuoted
+           << (config.ansi_c.word_size == 32 ? "ILP32" : "LP64");
+  metadata << YAML::Key << "language" << YAML::Value << YAML::DoubleQuoted
+           << "C";
+
+  metadata << YAML::EndMap;
+  metadata << YAML::EndMap;
+}
+
 void create_violation_graph_node(
   std::string &verifiedfile,
   optionst &options,
@@ -629,6 +733,22 @@ void create_correctness_graph_node(
   pWitnessType.add("<xmlattr>.key", "witness-type");
   pWitnessType.put_value("correctness_witness");
   graphnode.add_child("data", pWitnessType);
+}
+
+void create_correctness_yaml_emitter(
+  std::string &verifiedfile,
+  optionst &options,
+  YAML::Emitter &root)
+{
+  root << YAML::BeginSeq;
+  root << YAML::BeginMap;
+  root << YAML::Key << "entry_type" << YAML::Value << YAML::DoubleQuoted
+       << "invariant_set";
+
+  root << YAML::Key << "metadata";
+  _create_yaml_metadata_emitter(verifiedfile, options, root);
+
+  root << YAML::EndMap;
 }
 
 static const std::regex
