@@ -124,6 +124,14 @@ jobs:
       - name: Set up the Concurrency runset
         if: ${{ inputs.mode == 'RunSet' && inputs.runset == 'SV-COMP25_ConcurrencySafety' }}
         run: mv ./esbmc-src/scripts/competitions/svcomp/ConcurrencySafety.xml ./esbmc-src/scripts/competitions/svcomp/esbmc.xml
+      - name: Increase swapfile
+        run: |
+           sudo swapoff -a
+           sudo fallocate -l 15G /swapfile
+           sudo chmod 600 /swapfile
+           sudo mkswap /swapfile
+           sudo swapon /swapfile
+           sudo swapon --show  
       - name: Run Benchexec (Full)
         if: ${{ inputs.mode == 'Full' }}
         run: ./esbmc-src/scripts/benchexec.sh -f

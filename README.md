@@ -70,13 +70,13 @@ make -j4
 M1/M2/M3/M4 Macs are now supported.
 
 Given the common elements of OS X, run the script. It runs on both ARM and Intel macs. You do need homebrew installed.
-It creates the build folder, installs the Boolector SMT solver, and makes esbmc available globally. The script supports building the Python frontend as well. Note that the Python frontend is quite early in the support for Python.
+It creates the build folder, installs the Boolector SMT solver, and makes esbmc available globally. The script also supports building the Python frontend. Note that the Python frontend is quite early in its support for Python.
 
 ```
  ./build-esbmc-mac.sh
 ```
 
-The raw command is given here for reference.
+The raw command is provided here for your reference.
 
 ```
 cmake .. -DZ3_DIR=/opt/homebrew/Cellar/z3/4.13.4 -DENABLE_Z3=1 -DC2GOTO_SYSROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk -DLLVM_DIR=/opt/homebrew/opt/llvm/lib/cmake/llvm -DClang_DIR=/opt/homebrew/opt/llvm/lib/cmake/clang
@@ -97,7 +97,7 @@ Now rerun cmake,
 cmake .. -DENABLE_Z3=1 -DENABLE_BOOLECTOR=1 -DBoolector_DIR=<the folder you ran the above command from>/boolector-release
 ```
 
-#### We recommend using AMD64 via docker for a fully supported version on Mac OS X. We will soon remove this as native installations on Mac OS X ARM work well too. Sample docker-compose and docker files follow below.
+#### We recommend using AMD64 via Docker for a fully supported version on Mac OS. We will soon remove this, as native installations on Mac OS X ARM work well too. Sample Docker-Compose and Docker files are shown below.
 
 ```
 FROM node:18-slim
@@ -179,7 +179,7 @@ Here, ESBMC is invoked as follows:
 $esbmc file.c --incremental-bmc
 ````
 
-Where `file.c` is the C program to be checked, and --incremental-bmc selects the incremental BMC strategy. The user can choose the SMT solver, property, and verification strategy. Note that you need `math.h` installed on your system, especially if you run a release version; build-essential typically covers `math.h`.
+Where `file.c` is the C program to be checked, and --incremental-bmc selects the incremental BMC strategy. The user can choose the SMT solver, property, and verification strategy. Note that you need `math.h` installed on your system, especially if you are running a release version; build-essential typically includes `math.h`.
 
 For this particular C program, ESBMC provides the following output as the verification result:
 
@@ -222,8 +222,7 @@ If no environment file is specified, then the default locations will be checked:
 * Windows: `%userprofile%\esbmc.toml`
 * UNIX: `~/.config/esbmc.toml`
 
-If nothing is found, then nothing is loaded. If you set the environment variable to
-the empty string, then it disables the entire config file loading process.
+If nothing is found, then nothing is loaded. If you set the environment variable to the empty string, then it disables the entire config file loading process.
 
 ```sh
 export ESBMC_CONFIG_FILE=""
