@@ -3299,7 +3299,10 @@ bool solidity_convertert::get_function_definition(
 
   // 10. Add symbol into the context
   symbolt &added_symbol = *move_symbol_to_context(symbol);
-
+  // 10.1 set a code_blockt as the placeholder in advane
+  // to support the recursive function call
+  added_symbol.type = type;
+  added_symbol.value = code_blockt();
   // 11. Convert parameters, if no parameter, assume ellipis
   //  - Convert params before body as they may get referred by the statement in the body
 
@@ -5037,6 +5040,54 @@ bool solidity_convertert::get_expr(
   {
     side_effect_expr_function_callt call;
     const nlohmann::json &callee_expr_json = expr["expression"];
+
+    // * check if it's a recursive function call
+    if (
+      callee_expr_json.contains("referencedDeclaration") &&
+      callee_expr_json["referencedDeclaration"].is_number())
+    {
+      int referenced_decl =
+        callee_expr_json["referencedDeclaration"].get<int>();
+
+      int current_func_id = -1;
+      if (current_functionDecl && (*current_functionDecl).contains("id"))
+      {
+        current_func_id = (*current_functionDecl)["id"].get<int>();
+      }
+
+      if (referenced_decl == current_func_id)
+      {
+        std::string func_id;
+        if (current_functionDecl)
+        {
+          get_function_definition_name(
+            *current_functionDecl, current_functionName, func_id);
+        }
+
+        if (func_id.empty() || context.find_symbol(func_id) == nullptr)
+        {
+          log_error("Cannot find current function symbol");
+          return true;
+        }
+
+        call.function() = symbol_expr(*context.find_symbol(func_id));
+        call.type() = context.find_symbol(func_id)->type;
+
+        if (expr.contains("arguments"))
+        {
+          for (const auto &arg : expr["arguments"].items())
+          {
+            exprt arg_expr;
+            if (get_expr(arg.value(), arg_expr))
+              return true;
+            call.arguments().push_back(arg_expr);
+          }
+        }
+
+        new_expr = call;
+        break;
+      }
+    }
 
     // * check if it's a low-level call
     if (SolidityGrammar::is_address_member_call(callee_expr_json))
