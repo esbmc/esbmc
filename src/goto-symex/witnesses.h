@@ -139,10 +139,10 @@ void create_correctness_graph_node(
   optionst &options,
   xmlnodet &graphnode);
 
-void create_correctness_yaml_node(
+void create_correctness_yaml_emitter(
   std::string &verifiedfile,
   optionst &options,
-  YAML::Node &node);
+  YAML::Emitter &root);
 
 /**
  * Create a edge node.
