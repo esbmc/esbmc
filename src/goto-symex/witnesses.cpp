@@ -93,19 +93,19 @@ void grapht::create_initial_edge()
 
 void yamlt::generate_yaml(optionst &options)
 {
-  YAML::Node yaml_node;
+  YAML::Emitter yaml_emitter;
   if (this->witness_type == yamlt::VIOLATION)
     log_error("{}", "ESBMC dont support YAML violation witness yet.");
   else
-    create_correctness_yaml_node(this->verified_file, options, yaml_node);
+    create_correctness_yaml_emitter(this->verified_file, options, yaml_emitter);
 
   const std::string witness_output = options.get_option("witness-output");
   if (witness_output == "-")
-    std::cout << yaml_node;
+    std::cout << yaml_emitter.c_str();
   else
   {
     std::ofstream fout(witness_output);
-    fout << yaml_node;
+    fout << yaml_emitter.c_str();
   }
 }
 
@@ -628,24 +628,30 @@ void _create_graph_node(
   graphnode.add_child("data", p_creationTime);
 }
 
-void _create_yaml_metadate_node(
+void _create_yaml_metadata_emitter(
   const std::string &verifiedfile,
   const optionst &options,
-  YAML::Node &metadata)
+  YAML::Emitter &metadata)
 {
-  metadata["format_version"] = "2.0";
-  metadata["uuid"] =
+  metadata << YAML::BeginMap;
+  metadata << YAML::Key << "format_version" << YAML::Value << YAML::DoubleQuoted
+           << "2.0";
+
+  std::string uuid =
     boost::uuids::to_string(boost::uuids::random_generator()());
+  metadata << YAML::Key << "uuid" << YAML::Value << YAML::DoubleQuoted << uuid;
 
   std::string creation_time = boost::posix_time::to_iso_extended_string(
     boost::posix_time::microsec_clock::universal_time());
-  creation_time = creation_time.substr(0, creation_time.find('.'));
-  metadata["creation_time"] = creation_time;
+  creation_time.resize(creation_time.find('.'));
+  metadata << YAML::Key << "creation_time" << YAML::Value << YAML::DoubleQuoted
+           << creation_time;
 
+  metadata << YAML::Key << "producer" << YAML::BeginMap;
   std::string producer_str = options.get_option("witness-producer");
   if (producer_str.empty())
   {
-    producer_str = "ESBMC " + std::string(ESBMC_VERSION);
+    producer_str = "ESBMC";
     if (
       options.get_bool_option("k-induction") ||
       options.get_bool_option("k-induction-parallel"))
@@ -655,41 +661,54 @@ void _create_yaml_metadate_node(
     else if (options.get_bool_option("incremental-bmc"))
       producer_str += " incr";
   }
+  metadata << YAML::Key << "name" << YAML::Value << YAML::DoubleQuoted
+           << producer_str;
+  metadata << YAML::Key << "version" << YAML::Value << YAML::DoubleQuoted
+           << ESBMC_VERSION;
+  metadata << YAML::EndMap;
 
-  YAML::Node producer;
-  producer["name"] = "ESBMC";
-  producer["version"] = ESBMC_VERSION;
-  producer["configuration"] = producer_str;
-  metadata["producer"] = producer;
+  // Task node
+  metadata << YAML::Key << "task" << YAML::BeginMap;
 
-  YAML::Node task;
-  task["input_files"].push_back(verifiedfile);
+  // Input_files
+  metadata << YAML::Key << "input_files" << YAML::BeginSeq;
+  metadata << YAML::DoubleQuoted << verifiedfile;
+  metadata << YAML::EndSeq;
 
+  // Input_file_hashes
   std::string file_hash;
+  // TODO: use sha256
   generate_sha1_hash_for_file(verifiedfile.c_str(), file_hash);
+  metadata << YAML::Key << "input_file_hashes" << YAML::BeginMap;
+  metadata << YAML::Key << YAML::DoubleQuoted << verifiedfile << YAML::Value
+           << YAML::DoubleQuoted << file_hash;
+  metadata << YAML::EndMap;
 
-  YAML::Node input_hashes;
-  input_hashes[verifiedfile] = file_hash;
-  task["input_file_hashes"] = input_hashes;
-
+  // Specification
+  std::string spec;
   if (options.get_bool_option("overflow-check"))
-    task["specification"] = "CHECK( init(main()), LTL(G ! overflow) )";
+    spec = "CHECK( init(main()), LTL(G ! overflow) )";
   else if (options.get_bool_option("memory-leak-check"))
   {
     if (options.get_bool_option("no-reachable-memory-leak"))
-      task["specification"] =
+      spec =
         "CHECK( init(main()), LTL(G valid-free|valid-deref|valid-memtrack) )";
     else
-      task["specification"] = "CHECK( init(main()), LTL(G valid-memcleanup) )";
+      spec = "CHECK( init(main()), LTL(G valid-memcleanup) )";
   }
   else
-    task["specification"] =
-      "CHECK( init(main()), LTL(G ! call(__VERIFIER_error())) )";
+    spec = "CHECK( init(main()), LTL(G ! call(__VERIFIER_error())) )";
 
-  task["data_model"] = (config.ansi_c.word_size == 32 ? "ILP32" : "LP64");
-  task["language"] = "C";
+  metadata << YAML::Key << "specification" << YAML::Value << YAML::DoubleQuoted
+           << spec;
 
-  metadata["task"] = task;
+  metadata << YAML::Key << "data_model" << YAML::Value << YAML::DoubleQuoted
+           << (config.ansi_c.word_size == 32 ? "ILP32" : "LP64");
+  metadata << YAML::Key << "language" << YAML::Value << YAML::DoubleQuoted
+           << "C";
+
+  metadata << YAML::EndMap;
+  metadata << YAML::EndMap;
 }
 
 void create_violation_graph_node(
@@ -716,18 +735,20 @@ void create_correctness_graph_node(
   graphnode.add_child("data", pWitnessType);
 }
 
-void create_correctness_yaml_node(
+void create_correctness_yaml_emitter(
   std::string &verifiedfile,
   optionst &options,
-  YAML::Node &node)
+  YAML::Emitter &root)
 {
-  YAML::Node root;
-  root["entry_type"] = "invariant_set";
-  YAML::Node metadata;
-  _create_yaml_metadate_node(verifiedfile, options, metadata);
-  root["metadata"] = metadata;
+  root << YAML::BeginSeq;
+  root << YAML::BeginMap;
+  root << YAML::Key << "entry_type" << YAML::Value << YAML::DoubleQuoted
+       << "invariant_set";
 
-  node.push_back(root);
+  root << YAML::Key << "metadata";
+  _create_yaml_metadata_emitter(verifiedfile, options, root);
+
+  root << YAML::EndMap;
 }
 
 static const std::regex
