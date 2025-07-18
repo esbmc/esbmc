@@ -12,6 +12,8 @@ public:
 
   symbol_id() = default;
 
+  static symbol_id from_string(const std::string &str);
+
   void set_object(const std::string &obj)
   {
     object_ = obj;
@@ -40,6 +42,11 @@ public:
   void set_filename(const std::string &filename)
   {
     filename_ = filename;
+  }
+
+  const std::string &get_prefix() const
+  {
+    return prefix_;
   }
 
   const std::string &get_function() const

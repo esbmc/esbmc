@@ -224,7 +224,10 @@ protected:
     const nlohmann::json &ast_node,
     const std::string &contract_name);
   bool add_implicit_constructor(const std::string &contract_name);
-  bool get_implicit_ctor_ref(const std::string &contract_name, exprt &new_expr);
+  bool get_implicit_ctor_ref(
+    const std::string &contract_name,
+    const bool is_object,
+    exprt &new_expr);
   bool get_instantiation_ctor_call(
     const std::string &contract_name,
     exprt &new_expr);
@@ -343,11 +346,14 @@ protected:
     const nlohmann::json &decl_ref,
     const nlohmann::json &epxr,
     side_effect_expr_function_callt &call);
-  bool
-  get_new_object_ctor_call(const nlohmann::json &ast_node, exprt &new_expr);
+  bool get_new_object_ctor_call(
+    const nlohmann::json &ast_node,
+    const bool is_object,
+    exprt &new_expr);
   bool get_new_object_ctor_call(
     const std::string &contract_name,
     const nlohmann::json param_list,
+    const bool is_object,
     exprt &new_expr);
   void get_current_contract_name(
     const nlohmann::json &ast_node,
@@ -556,13 +562,6 @@ protected:
     const locationt &loc,
     const std::string &property_name,
     exprt &new_expr);
-  bool get_new_temporary_obj(
-    const std::string &c_name,
-    const std::string &ctor_ins_name,
-    const std::string &ctor_ins_id,
-    const locationt &ctor_ins_loc,
-    symbolt &added,
-    codet &decl);
   void
   get_addr_expr(const std::string &cname, const exprt &base, exprt &new_expr);
   void get_new_object(const typet &t, exprt &this_object);
@@ -644,7 +643,7 @@ protected:
   bool is_byte_type(const typet &t);
   bool is_bytes_type(const typet &t);
   bool is_bytesN_type(const typet &t);
-  exprt make_aux_var_for_bytes(exprt &val, const locationt &location);
+  exprt make_aux_var(exprt &val, const locationt &location);
   void get_bytesN_size(const exprt &src_expr, exprt &len_expr);
   bool has_contract_bytes(const nlohmann::json &json);
   bool get_dynamic_pool(const std::string &c_name, exprt &pool);

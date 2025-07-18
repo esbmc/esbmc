@@ -1,17 +1,15 @@
 pragma solidity >=0.5.0;
 
 contract Base {
-    bytes3 data3;
-
-    constructor() {
-        data3 = 0;
-    }
+    constructor() {}
 
     function test() public {
-        assert(data3 != 0x00); // should be 0
+        bytes3 data3 = "gg";
+        assert(data3 == hex"00");
+        assert(data3 == "00");
+        assert(data3 == 0x00);
     }
 }
-
 contract Dreive {
     Base x = new Base();
 
