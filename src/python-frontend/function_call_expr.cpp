@@ -13,6 +13,7 @@
 #include <util/message.h>
 #include <regex>
 #include <stdexcept>
+#include <iostream>
 
 using namespace json_utils;
 
@@ -228,8 +229,35 @@ void function_call_expr::handle_chr(nlohmann::json &arg) const
       "ValueError: chr() argument out of valid Unicode range: " +
       std::to_string(int_value));
   }
+
+  // Manual UTF-8 encoding
+  std::string char_out;
+
+  if (int_value <= 0x7f)
+      char_out.append(1, static_cast<char>(int_value));
+  else if (int_value <= 0x7ff)
+  {
+    char_out.append(1, static_cast<char>(0xc0 | ((int_value >> 6) & 0x1f)));
+    char_out.append(1, static_cast<char>(0x80 | (int_value & 0x3f)));
+  }
+  else if (int_value <= 0xffff)
+  {
+    char_out.append(1, static_cast<char>(0xe0 | ((int_value >> 12) & 0x0f)));
+    char_out.append(1, static_cast<char>(0x80 | ((int_value >> 6) & 0x3f)));
+    char_out.append(1, static_cast<char>(0x80 | (int_value & 0x3f)));
+  }
+  else
+  {
+    char_out.append(1, static_cast<char>(0xf0 | ((int_value >> 18) & 0x07)));
+    char_out.append(1, static_cast<char>(0x80 | ((int_value >> 12) & 0x3f)));
+    char_out.append(1, static_cast<char>(0x80 | ((int_value >> 6) & 0x3f)));
+    char_out.append(1, static_cast<char>(0x80 | (int_value & 0x3f)));
+  }
+
   // Replace the value with a single-character string
-  arg["value"] = std::string(1, static_cast<char>(int_value));
+  arg["value"] = char_out;
+
+  std::cout << arg["value"] << "\n";
 }
 
 exprt function_call_expr::handle_hex(nlohmann::json &arg) const
