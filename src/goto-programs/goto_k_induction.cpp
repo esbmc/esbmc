@@ -44,8 +44,7 @@ void goto_termination(goto_functionst &goto_functions)
   goto_programt::targett t = dest.add_instruction(ASSERT);
   // Always false - assertion always fails when reached
   t->guard = gen_false_expr();
-  // Mark as non-inductive to ensure it's processed during forward condition analysis
-  t->inductive_step_instruction = false;
+  t->inductive_step_instruction = true;
   t->inductive_assertion = false;
   t->location.comment("termination");
 
