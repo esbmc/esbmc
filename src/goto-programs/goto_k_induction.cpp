@@ -37,7 +37,7 @@ void goto_termination(goto_functionst &goto_functions)
   }
   assert(it != function->second.body.instructions.end());
 
-  // Create an unreachable assertion assert(0) as termination marker
+  // Create assert(0) as termination marker.
   // This assertion fails when reached, allowing reachability analysis
   // to detect program termination vs. infinite execution
   goto_programt dest;
