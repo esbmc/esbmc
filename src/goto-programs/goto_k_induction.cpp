@@ -37,11 +37,15 @@ void goto_termination(goto_functionst &goto_functions)
   }
   assert(it != function->second.body.instructions.end());
 
-  // Create an assert(0)
+  // Create an unreachable assertion assert(0) as termination marker
+  // This assertion fails when reached, allowing reachability analysis
+  // to detect program termination vs. infinite execution
   goto_programt dest;
   goto_programt::targett t = dest.add_instruction(ASSERT);
-  t->guard = gen_false_expr();
-  t->inductive_step_instruction = true;
+  // Always false - assertion always fails when reached
+  t->guard = gen_false_expr(); 
+  // Mark as non-inductive to ensure it's processed during forward condition analysis
+  t->inductive_step_instruction = false;
   t->inductive_assertion = false;
   t->location.comment("termination");
 

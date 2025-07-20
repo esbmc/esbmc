@@ -161,6 +161,7 @@ if(APPLE)
                     ${REGRESSIONS_JIMPLE}
                     k-induction
                     k-induction-parallel
+                    termination
                     nonz3
                     ${REGRESSIONS_BITWUZLA}
                     ${REGRESSIONS_CVC}
@@ -184,6 +185,7 @@ elseif(WIN32)
                     llvm
                     floats
                     k-induction
+                    termination
                     windows
                     ${REGRESSIONS_JIMPLE}
                     ${REGRESSIONS_BITWUZLA}
@@ -207,6 +209,7 @@ else()
                     floats
                     floats-regression
                     k-induction
+                    termination
                     csmith
                     k-induction-parallel
                     cuda/benchmarks
