@@ -5,6 +5,7 @@
 #include <fstream>
 #include <langapi/languages.h>
 #include <irep2/irep2.h>
+#include <util/picosha2.h>
 #include <boost/date_time/posix_time/posix_time.hpp>
 
 #include <boost/version.hpp>
@@ -99,6 +100,13 @@ void yamlt::generate_yaml(optionst &options)
   else
     create_correctness_yaml_emitter(this->verified_file, options, yaml_emitter);
 
+  // TODO: fill invariants.
+  yaml_emitter << YAML::Key << "content" << YAML::Value << YAML::BeginSeq
+               << YAML::EndSeq;
+
+  yaml_emitter << YAML::EndMap;
+  yaml_emitter << YAML::EndSeq;
+
   const std::string witness_output = options.get_option("witness-output");
   if (witness_output == "-")
     std::cout << yaml_emitter.c_str();
@@ -125,6 +133,29 @@ int generate_sha1_hash_for_file(const char *path, std::string &output)
 
   c.fin();
   output = c.to_string();
+
+  fclose(file);
+  return 0;
+}
+
+int generate_sha256_hash_for_file(const char *path, std::string &output)
+{
+  FILE *file = fopen(path, "rb");
+  if (!file)
+    return -1;
+
+  const size_t bufSize = 32768;
+  char *buffer = (char *)alloca(bufSize);
+
+  picosha2::hash256_one_by_one hasher;
+  hasher.init();
+
+  size_t bytesRead = 0;
+  while ((bytesRead = fread(buffer, 1, bufSize, file)))
+    hasher.process(buffer, buffer + bytesRead);
+
+  hasher.finish();
+  output = picosha2::get_hash_hex_string(hasher);
 
   fclose(file);
   return 0;
@@ -637,16 +668,26 @@ void _create_yaml_metadata_emitter(
   metadata << YAML::Key << "format_version" << YAML::Value << YAML::DoubleQuoted
            << "2.0";
 
+  // Uuid
   std::string uuid =
     boost::uuids::to_string(boost::uuids::random_generator()());
   metadata << YAML::Key << "uuid" << YAML::Value << YAML::DoubleQuoted << uuid;
 
-  std::string creation_time = boost::posix_time::to_iso_extended_string(
-    boost::posix_time::microsec_clock::universal_time());
-  creation_time.resize(creation_time.find('.'));
-  metadata << YAML::Key << "creation_time" << YAML::Value << YAML::DoubleQuoted
-           << creation_time;
+  // Creation_time ISO 8601
+  std::time_t t = std::time(nullptr);
+  std::tm local_tm = *std::localtime(&t);
 
+  char creation_time[64];
+  std::strftime(
+    creation_time, sizeof(creation_time), "%Y-%m-%dT%H:%M:%S%z", &local_tm);
+  std::string timestr(creation_time);
+
+  if (timestr.size() >= 5)
+    timestr.insert(timestr.size() - 2, ":");
+  metadata << YAML::Key << "creation_time" << YAML::Value << YAML::DoubleQuoted
+           << timestr;
+
+  // Producer
   metadata << YAML::Key << "producer" << YAML::BeginMap;
   std::string producer_str = options.get_option("witness-producer");
   if (producer_str.empty())
@@ -667,7 +708,7 @@ void _create_yaml_metadata_emitter(
            << ESBMC_VERSION;
   metadata << YAML::EndMap;
 
-  // Task node
+  // Task
   metadata << YAML::Key << "task" << YAML::BeginMap;
 
   // Input_files
@@ -677,8 +718,8 @@ void _create_yaml_metadata_emitter(
 
   // Input_file_hashes
   std::string file_hash;
-  // TODO: use sha256
-  generate_sha1_hash_for_file(verifiedfile.c_str(), file_hash);
+  // sha256
+  generate_sha256_hash_for_file(verifiedfile.c_str(), file_hash);
   metadata << YAML::Key << "input_file_hashes" << YAML::BeginMap;
   metadata << YAML::Key << YAML::DoubleQuoted << verifiedfile << YAML::Value
            << YAML::DoubleQuoted << file_hash;
@@ -687,17 +728,18 @@ void _create_yaml_metadata_emitter(
   // Specification
   std::string spec;
   if (options.get_bool_option("overflow-check"))
-    spec = "CHECK( init(main()), LTL(G ! overflow) )";
+    spec = "G ! overflow";
   else if (options.get_bool_option("memory-leak-check"))
   {
     if (options.get_bool_option("no-reachable-memory-leak"))
-      spec =
-        "CHECK( init(main()), LTL(G valid-free|valid-deref|valid-memtrack) )";
+      spec = "G valid-free|valid-deref|valid-memtrack";
     else
-      spec = "CHECK( init(main()), LTL(G valid-memcleanup) )";
+      spec = "G valid-memcleanup";
   }
+  else if (options.get_bool_option("data-races-check"))
+    spec = "G ! data-race";
   else
-    spec = "CHECK( init(main()), LTL(G ! call(__VERIFIER_error())) )";
+    spec = "G ! call(reach_error())";
 
   metadata << YAML::Key << "specification" << YAML::Value << YAML::DoubleQuoted
            << spec;
@@ -748,7 +790,7 @@ void create_correctness_yaml_emitter(
   root << YAML::Key << "metadata";
   _create_yaml_metadata_emitter(verifiedfile, options, root);
 
-  root << YAML::EndMap;
+  //root << YAML::EndMap;
 }
 
 static const std::regex

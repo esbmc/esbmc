@@ -98,18 +98,20 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   }
 }
 
-void bmct::successful_trace()
+void bmct::successful_trace(const symex_target_equationt &eq [[maybe_unused]])
 {
   if (options.get_bool_option("result-only"))
     return;
 
   std::string witness_output = options.get_option("witness-output");
+  std::string witness_yaml_output = options.get_option("witness-output-yaml");
   if (witness_output != "")
   {
     goto_tracet goto_trace;
     log_progress("Building successful trace");
-    /* build_successful_goto_trace(eq, ns, goto_trace); */
-    if (0)
+    // correctness witness, why did goto trace ignore it in the past?
+    // build_successful_goto_trace(eq, ns, goto_trace);
+    if (witness_yaml_output == "")
       correctness_graphml_goto_trace(options, ns, goto_trace);
     else
       correctness_yaml_goto_trace(options, ns, goto_trace);
@@ -331,7 +333,7 @@ void bmct::report_trace(
     }
     else if (!bs)
     {
-      successful_trace();
+      successful_trace(eq);
     }
     break;
 
