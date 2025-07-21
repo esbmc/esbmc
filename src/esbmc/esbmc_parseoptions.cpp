@@ -1964,9 +1964,6 @@ bool esbmc_parseoptionst::process_goto_program(
 #endif
     }
 
-    if (cmdline.isset("termination"))
-      goto_termination(goto_functions);
-
     goto_check(ns, options, goto_functions);
 
     // add re-evaluations of monitored properties
