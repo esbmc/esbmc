@@ -1,0 +1,4 @@
+CORE
+main.c
+--multi-property
+^\✓ PASSED: \'dereference failure: invalidated dynamic object freed\'$

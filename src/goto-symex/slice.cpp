@@ -177,12 +177,12 @@ bool claim_slicer::run(symex_target_equationt::SSA_stepst &steps)
       {
         it->ignore = false;
         if (!is_goto_cov)
-          // obtain the guard info from the assertions
-          claim_msg = from_expr(ns, "", it->source.pc->guard);
+          // obtain the comment from the assertions
+          claim_msg = it->comment;
         else
           // in goto-coverage mode, the assertions are converted to assert(0）
           // the original guards are stored in comment.
-          claim_msg = it->comment;
+          claim_msg = from_expr(ns, "", it->source.pc->guard);
         claim_loc = it->source.pc->location.as_string();
         continue;
       }
