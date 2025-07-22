@@ -37,13 +37,15 @@ public:
   {
   }
 
-  priority_queue(T &x, T &y) : _size(0), head(0), tail(0), comp(Compare())
+  template <typename Iterator>
+  priority_queue(
+    Iterator begin,
+    Iterator end,
+    const Compare &compare = Compare())
+    : _size(0), head(0), tail(0), comp(compare)
   {
-  }
-  priority_queue(T *x, T *y) : _size(0), head(0), tail(0), comp(Compare())
-  {
-    for (; x != y; x++)
-      this->push(*x);
+    for (auto it = begin; it != end; ++it)
+      this->push(*it);
   }
 
   void push(const T &x)
