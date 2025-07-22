@@ -1432,12 +1432,12 @@ smt_convt::resultt bmct::multi_property_check(
     if (solver_result == smt_convt::P_UNSATISFIABLE)
     {
       // Claim passed - show in green
-      log_status("{}✓ PASSED{}: '{}'", GREEN, RESET, claim.claim_msg);
+      log_status("{}✓ PASSED{}: '{}'", GREEN, RESET, claim.claim_cstr);
     }
     else if (solver_result == smt_convt::P_SATISFIABLE)
     {
       // Claim failed - show in red
-      log_status("{}✗ FAILED{}: '{}'", RED, RESET, claim.claim_msg);
+      log_status("{}✗ FAILED{}: '{}'", RED, RESET, claim.claim_cstr);
     }
 
     double solve_time_s = (solve_stop - solve_start);
