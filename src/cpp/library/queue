@@ -8,40 +8,50 @@
 
 namespace std
 {
-
 #define QUEUE_CAPACITY 1000
 
 template <
   class T,
   class Container = vector<T>,
-  class Compare = less<typename Container::value_type> >
+  class Compare = less<typename Container::value_type>>
 class priority_queue
 {
   T buf[QUEUE_CAPACITY];
   size_t _size;
   T head;
   T tail;
+  Compare comp; // Store the comparator
 
 public:
-  priority_queue() : _size(0), head(0), tail(0)
+  priority_queue() : _size(0), head(0), tail(0), comp(Compare())
   {
   }
-  priority_queue(T &x, T &y) : _size(0), head(0), tail(0)
+
+  // Constructor that takes const reference (handles temporaries)
+  priority_queue(const Compare &x) : _size(0), head(0), tail(0), comp(x)
   {
   }
-  priority_queue(T *x, T *y) : _size(0), head(0), tail(0)
+
+  // Constructor that takes reference (for existing code)
+  priority_queue(Compare &x) : _size(0), head(0), tail(0), comp(x)
+  {
+  }
+
+  priority_queue(T &x, T &y) : _size(0), head(0), tail(0), comp(Compare())
+  {
+  }
+  priority_queue(T *x, T *y) : _size(0), head(0), tail(0), comp(Compare())
   {
     for (; x != y; x++)
       this->push(*x);
   }
-  priority_queue(Compare &x)
-  {
-  }
+
   void push(const T &x)
   {
     size_t i = 0;
     T tmp = x, y;
-    while ((x < this->buf[i]) && (i != this->_size))
+    // Use the comparator instead of hardcoded comparison
+    while ((comp(x, this->buf[i])) && (i != this->_size))
     {
       i++;
     }
@@ -93,7 +103,7 @@ public:
   }
 };
 
-template <class T, class Container = deque<T> >
+template <class T, class Container = deque<T>>
 class queue
 {
   T buf[QUEUE_CAPACITY];
