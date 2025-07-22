@@ -8,12 +8,14 @@ int main () {
 
   cout << "Enter a bool value: ";
   cin >> boolalpha >> n;
-  assert(cin.flags() & ios::boolalpha == ios::boolalpha);
+  if (cin.flags() & ios::boolalpha == ios::boolalpha)
+    assert(0);
   cout << "You have entered: " << n << endl;
 
   cout << "Enter another bool value: ";
   cin >> boolalpha >> n;            // manipulator
-  assert(cin.flags() & ios::boolalpha == ios::boolalpha);
+  if (cin.flags() & ios::boolalpha == ios::boolalpha)
+    assert(0);
   cout << "You have entered: " << n << endl;
 
 
