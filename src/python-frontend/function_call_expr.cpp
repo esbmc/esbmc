@@ -262,21 +262,11 @@ void function_call_expr::handle_chr(nlohmann::json &arg) const
 
     const auto &const_expr = to_constant_expr(sym->value);
     std::string binary_str = id2string(const_expr.get_value());
-    unsigned c = std::stoul(binary_str, nullptr, 2);
-
-    // Validate Unicode range: [0, 0x10FFFF]
-    if (c > 0x10FFFF)
-    {
-      throw std::runtime_error(
-        "ValueError: chr() argument out of valid Unicode range: " +
-        std::to_string(c));
-    }
+    int_value = std::stoul(binary_str, nullptr, 2);
 
     arg["_type"] = "Constant";
     arg.erase("id");
     arg.erase("ctx");
-    arg["value"] = utf8_encode(c);
-    return;
   }
 
   // Validate Unicode range: [0, 0x10FFFF]
@@ -288,7 +278,7 @@ void function_call_expr::handle_chr(nlohmann::json &arg) const
   }
 
   // Replace the value with a single-character string
-  arg["value"] = utf8_encode(int_value);
+  arg["value"] = arg["n"] = arg["s"] = utf8_encode(int_value);
 }
 
 exprt function_call_expr::handle_hex(nlohmann::json &arg) const
