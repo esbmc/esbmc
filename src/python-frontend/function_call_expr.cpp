@@ -13,7 +13,6 @@
 #include <util/message.h>
 #include <regex>
 #include <stdexcept>
-#include <iostream>
 
 using namespace json_utils;
 
@@ -180,11 +179,12 @@ void function_call_expr::handle_int_to_float(nlohmann::json &arg) const
   arg["value"] = static_cast<double>(value);
 }
 
-std::string utf8_encode(int int_value)
+std::string utf8_encode(unsigned int int_value)
 {
   // Manual UTF-8 encoding
   std::string char_out;
 
+  // https://stackoverflow.com/revisions/19968992/1
   if (int_value <= 0x7f)
       char_out.append(1, static_cast<char>(int_value));
   else if (int_value <= 0x7ff)
@@ -260,25 +260,27 @@ void function_call_expr::handle_chr(nlohmann::json &arg) const
         "NameError: variable '" + var_name + "' is not defined");
     }
 
-    auto value_opt = extract_string_from_symbol(sym);
-    
-    if (!value_opt)
+    const auto &const_expr = to_constant_expr(sym->value);
+    std::string binary_str = id2string(const_expr.get_value());
+    unsigned c = std::stoul(binary_str, nullptr, 2);
+
+    // Validate Unicode range: [0, 0x10FFFF]
+    if (c > 0x10FFFF)
     {
-      
-      throw std::runtime_error("ValueError: chr() unable to decode argument");
+      throw std::runtime_error(
+        "ValueError: chr() argument out of valid Unicode range: " +
+        std::to_string(c));
     }
-    
-    const std::string &value = *value_opt;
+
     arg["_type"] = "Constant";
     arg.erase("id");
     arg.erase("ctx");
-    arg["value"] = value;
-    std::cout << value << "\n";
+    arg["value"] = utf8_encode(c);
     return;
   }
 
   // Validate Unicode range: [0, 0x10FFFF]
-  if (int_value < 0 || int_value > 0x10FFFF)
+  if (int_value < 0 ||int_value > 0x10FFFF)
   {
     throw std::runtime_error(
       "ValueError: chr() argument out of valid Unicode range: " +
@@ -287,8 +289,6 @@ void function_call_expr::handle_chr(nlohmann::json &arg) const
 
   // Replace the value with a single-character string
   arg["value"] = utf8_encode(int_value);
-
-  std::cout << arg["value"] << "\n";
 }
 
 exprt function_call_expr::handle_hex(nlohmann::json &arg) const
