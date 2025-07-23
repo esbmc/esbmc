@@ -180,6 +180,34 @@ void function_call_expr::handle_int_to_float(nlohmann::json &arg) const
   arg["value"] = static_cast<double>(value);
 }
 
+std::string utf8_encode(int int_value)
+{
+  // Manual UTF-8 encoding
+  std::string char_out;
+
+  if (int_value <= 0x7f)
+      char_out.append(1, static_cast<char>(int_value));
+  else if (int_value <= 0x7ff)
+  {
+    char_out.append(1, static_cast<char>(0xc0 | ((int_value >> 6) & 0x1f)));
+    char_out.append(1, static_cast<char>(0x80 | (int_value & 0x3f)));
+  }
+  else if (int_value <= 0xffff)
+  {
+    char_out.append(1, static_cast<char>(0xe0 | ((int_value >> 12) & 0x0f)));
+    char_out.append(1, static_cast<char>(0x80 | ((int_value >> 6) & 0x3f)));
+    char_out.append(1, static_cast<char>(0x80 | (int_value & 0x3f)));
+  }
+  else
+  {
+    char_out.append(1, static_cast<char>(0xf0 | ((int_value >> 18) & 0x07)));
+    char_out.append(1, static_cast<char>(0x80 | ((int_value >> 12) & 0x3f)));
+    char_out.append(1, static_cast<char>(0x80 | ((int_value >> 6) & 0x3f)));
+    char_out.append(1, static_cast<char>(0x80 | (int_value & 0x3f)));
+  }
+  return char_out;
+}
+
 void function_call_expr::handle_chr(nlohmann::json &arg) const
 {
   int int_value = 0;
@@ -221,6 +249,33 @@ void function_call_expr::handle_chr(nlohmann::json &arg) const
         "TypeError: invalid string passed to chr(): '" + s + "'");
     }
   }
+  
+  else if (arg.contains("_type") && arg["_type"] == "Name")
+  {
+    const symbolt *sym = lookup_python_symbol(arg["id"]);
+    if (!sym)
+    {
+      std::string var_name = arg["id"].get<std::string>();
+      throw std::runtime_error(
+        "NameError: variable '" + var_name + "' is not defined");
+    }
+
+    auto value_opt = extract_string_from_symbol(sym);
+    
+    if (!value_opt)
+    {
+      
+      throw std::runtime_error("ValueError: chr() unable to decode argument");
+    }
+    
+    const std::string &value = *value_opt;
+    arg["_type"] = "Constant";
+    arg.erase("id");
+    arg.erase("ctx");
+    arg["value"] = value;
+    std::cout << value << "\n";
+    return;
+  }
 
   // Validate Unicode range: [0, 0x10FFFF]
   if (int_value < 0 || int_value > 0x10FFFF)
@@ -230,32 +285,8 @@ void function_call_expr::handle_chr(nlohmann::json &arg) const
       std::to_string(int_value));
   }
 
-  // Manual UTF-8 encoding
-  std::string char_out;
-
-  if (int_value <= 0x7f)
-      char_out.append(1, static_cast<char>(int_value));
-  else if (int_value <= 0x7ff)
-  {
-    char_out.append(1, static_cast<char>(0xc0 | ((int_value >> 6) & 0x1f)));
-    char_out.append(1, static_cast<char>(0x80 | (int_value & 0x3f)));
-  }
-  else if (int_value <= 0xffff)
-  {
-    char_out.append(1, static_cast<char>(0xe0 | ((int_value >> 12) & 0x0f)));
-    char_out.append(1, static_cast<char>(0x80 | ((int_value >> 6) & 0x3f)));
-    char_out.append(1, static_cast<char>(0x80 | (int_value & 0x3f)));
-  }
-  else
-  {
-    char_out.append(1, static_cast<char>(0xf0 | ((int_value >> 18) & 0x07)));
-    char_out.append(1, static_cast<char>(0x80 | ((int_value >> 12) & 0x3f)));
-    char_out.append(1, static_cast<char>(0x80 | ((int_value >> 6) & 0x3f)));
-    char_out.append(1, static_cast<char>(0x80 | (int_value & 0x3f)));
-  }
-
   // Replace the value with a single-character string
-  arg["value"] = char_out;
+  arg["value"] = utf8_encode(int_value);
 
   std::cout << arg["value"] << "\n";
 }
