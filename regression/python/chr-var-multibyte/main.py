@@ -4,16 +4,16 @@ b = chr(a)
 assert b == 'a'
 
 # 2-Byte
-a = 200
-b = chr(a)
-assert b == 'È'
+c = 200
+d = chr(c)
+assert d == 'È'
 
 # 3-Byte
-a = 23383
-b = chr(a)
-assert b == '字'
+e = 23383
+f = chr(e)
+assert f == '字'
 
 # 4-Byte
-a = 65536
-b = chr(a)
-assert b == '𐀀'
+g = 65536
+h = chr(g)
+assert h == '𐀀'
