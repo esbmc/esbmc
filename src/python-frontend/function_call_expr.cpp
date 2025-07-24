@@ -208,7 +208,7 @@ std::string utf8_encode(unsigned int int_value)
   return char_out;
 }
 
-void function_call_expr::handle_chr(nlohmann::json &arg) const
+exprt function_call_expr::handle_chr(nlohmann::json &arg) const
 {
   int int_value = 0;
 
@@ -277,8 +277,14 @@ void function_call_expr::handle_chr(nlohmann::json &arg) const
       std::to_string(int_value));
   }
 
+  std::string utf8_encoded = utf8_encode(int_value);
   // Replace the value with a single-character string
-  arg["value"] = arg["n"] = arg["s"] = utf8_encode(int_value);
+  arg["value"] = arg["n"] = arg["s"] = utf8_encoded;
+  arg["type"] = "str";
+  // Build and return the string expression
+  exprt expr = converter_.get_expr(arg);
+  expr.type() = type_handler_.get_typet("str",utf8_encoded.size());
+  return expr;
 }
 
 exprt function_call_expr::handle_hex(nlohmann::json &arg) const
@@ -784,7 +790,7 @@ exprt function_call_expr::build_constant_from_arg() const
 
   // Handle chr(): convert integer to single-character string
   else if (func_name == "chr")
-    handle_chr(arg);
+    return handle_chr(arg);
 
   // Handle ord(): convert single-character string to integer Unicode code point
   else if (func_name == "ord")
