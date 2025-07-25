@@ -3299,7 +3299,10 @@ bool solidity_convertert::get_function_definition(
 
   // 10. Add symbol into the context
   symbolt &added_symbol = *move_symbol_to_context(symbol);
-
+  // 10.1 set a code_blockt as the placeholder in advane
+  // to support the recursive function call
+  added_symbol.type = type;
+  added_symbol.value = code_blockt();
   // 11. Convert parameters, if no parameter, assume ellipis
   //  - Convert params before body as they may get referred by the statement in the body
 
@@ -5087,6 +5090,54 @@ bool solidity_convertert::get_expr(
     side_effect_expr_function_callt call;
     const nlohmann::json &callee_expr_json = expr["expression"];
 
+    // * check if it's a recursive function call
+    if (
+      callee_expr_json.contains("referencedDeclaration") &&
+      callee_expr_json["referencedDeclaration"].is_number())
+    {
+      int referenced_decl =
+        callee_expr_json["referencedDeclaration"].get<int>();
+
+      int current_func_id = -1;
+      if (current_functionDecl && (*current_functionDecl).contains("id"))
+      {
+        current_func_id = (*current_functionDecl)["id"].get<int>();
+      }
+
+      if (referenced_decl == current_func_id)
+      {
+        std::string func_id;
+        if (current_functionDecl)
+        {
+          get_function_definition_name(
+            *current_functionDecl, current_functionName, func_id);
+        }
+
+        if (func_id.empty() || context.find_symbol(func_id) == nullptr)
+        {
+          log_error("Cannot find current function symbol");
+          return true;
+        }
+
+        call.function() = symbol_expr(*context.find_symbol(func_id));
+        call.type() = context.find_symbol(func_id)->type;
+
+        if (expr.contains("arguments"))
+        {
+          for (const auto &arg : expr["arguments"].items())
+          {
+            exprt arg_expr;
+            if (get_expr(arg.value(), arg_expr))
+              return true;
+            call.arguments().push_back(arg_expr);
+          }
+        }
+
+        new_expr = call;
+        break;
+      }
+    }
+
     // * check if it's a low-level call
     if (SolidityGrammar::is_address_member_call(callee_expr_json))
     {
@@ -5181,6 +5232,54 @@ bool solidity_convertert::get_expr(
 
       new_expr = call;
       break;
+    }
+    // * special: new D{value: amount}(4), handle the {value: amount} part
+    if (
+      callee_expr_json["nodeType"] == "FunctionCallOptions" &&
+      callee_expr_json["expression"]["nodeType"] == "NewExpression")
+    {
+      exprt new_obj;
+      // 1. construct new object
+      if (get_new_object_ctor_call(
+            callee_expr_json["expression"], true, new_obj))
+        return true;
+      // 2. if it has value option, we need to model the transaction
+      if (
+        callee_expr_json["options"].contains("name") &&
+        callee_expr_json["options"]["name"] == "value")
+      {
+        for (const auto &opt : callee_expr_json["options"])
+        {
+          locationt loc;
+          get_location_from_node(expr, loc);
+
+          exprt this_obj;
+          if (get_ctor_decl_this_ref(expr, this_obj))
+            return true;
+
+          exprt value_expr;
+          nlohmann::json val_type = {
+            {"typeIdentifier", "t_uint256"}, {"typeString", "uint256"}};
+          if (get_expr(opt, val_type, value_expr))
+            return true;
+
+          exprt new_target = new_obj;
+          typet val_t = unsignedbv_typet(256);
+
+          exprt front, back;
+          if (model_transaction(
+                expr, this_obj, new_target, value_expr, loc, front, back))
+            return true;
+
+          convert_expression_to_code(front);
+          move_to_front_block(front);
+          convert_expression_to_code(back);
+          move_to_back_block(back);
+        }
+      }
+
+      new_expr = new_obj;
+      return false;
     }
 
     // * check if its a call-with-options
@@ -5284,6 +5383,49 @@ bool solidity_convertert::get_expr(
     // * we had ruled out all the special cases
     // * we now confirm it is called by aother contract inside current contract
     // * func() ==> current_func_this.func(&current_func_this);
+
+    // * check if the function call has named arguments
+    // e.g. func({a: 1, b: 2});
+    // reorder the arguments based on the parameter order
+    auto it = expr.find("names");
+    if (it != expr.end() && it->is_array() && !it->empty())
+    {
+      std::unordered_map<std::string, nlohmann::json> name_to_arg;
+      for (size_t i = 0; i < expr["names"].size(); ++i)
+        name_to_arg[expr["names"][i]] = expr["arguments"][i];
+
+      std::vector<std::string> param_order;
+      const auto &decl_ref =
+        find_decl_ref(src_ast_json, callee_expr_json["referencedDeclaration"]);
+
+      if (
+        decl_ref.contains("parameters") &&
+        decl_ref["parameters"].contains("parameters"))
+      {
+        for (const auto &param : decl_ref["parameters"]["parameters"])
+        {
+          if (param.contains("name"))
+            param_order.push_back(param["name"]);
+        }
+      }
+
+      nlohmann::json ordered_args = nlohmann::json::array();
+      for (const auto &param : param_order)
+      {
+        ordered_args.push_back(name_to_arg[param]);
+      }
+
+      nlohmann::json clean_expr = expr;
+      clean_expr["arguments"] = ordered_args;
+      clean_expr.erase("names");
+
+      if (get_non_library_function_call(decl_ref, clean_expr, call))
+        return true;
+
+      new_expr = call;
+      break;
+    }
+
     if (get_non_library_function_call(decl_ref, expr, call))
       return true;
 
@@ -11093,9 +11235,13 @@ bool solidity_convertert::get_new_object_ctor_call(
 {
   log_debug("solidity", "generating new contract object");
   // 1. get the ctor call expr
-  nlohmann::json callee_expr_json = caller["expression"];
+  // if the caller is a NewExpression, we can directly use it
+  nlohmann::json callee_expr_json = caller;
+  if (caller["nodeType"] == "NewExpression")
+    nlohmann::json callee_expr_json = caller;
+  else
+    callee_expr_json = caller["expression"];
   int ref_decl_id = callee_expr_json["typeName"]["referencedDeclaration"];
-
   // get contract name
   const std::string contract_name = contractNamesMap[ref_decl_id];
   if (contract_name.empty())
