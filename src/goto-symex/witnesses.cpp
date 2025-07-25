@@ -100,10 +100,11 @@ void yamlt::generate_yaml(optionst &options)
   else
     create_correctness_yaml_emitter(this->verified_file, options, yaml_emitter);
 
-  // TODO: fill invariants.
+    // TODO: fill invariants.
+#if 0
   yaml_emitter << YAML::Key << "content" << YAML::Value << YAML::BeginSeq
                << YAML::EndSeq;
-
+#endif
   yaml_emitter << YAML::EndMap;
   yaml_emitter << YAML::EndSeq;
 
@@ -789,8 +790,6 @@ void create_correctness_yaml_emitter(
 
   root << YAML::Key << "metadata";
   _create_yaml_metadata_emitter(verifiedfile, options, root);
-
-  //root << YAML::EndMap;
 }
 
 static const std::regex
