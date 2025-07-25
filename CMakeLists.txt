@@ -1,7 +1,7 @@
 #################################
 # Project Information           #
 #################################
-cmake_minimum_required(VERSION 3.18)
+cmake_minimum_required (VERSION 3.18)
 
 # HACK: This msvc policy needs to be set before project()
 # This can be removed when we move to CMake >= 3.15
