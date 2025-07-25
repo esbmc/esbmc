@@ -193,9 +193,7 @@ expr2tc smt_convt::create_int_right_shift(expr2tc source, expr2tc shift_amount)
 
     BigInt divisor = BigInt(1);
     for (size_t j = 0; j < i; j++)
-    {
       divisor = divisor * BigInt(2);
-    }
 
     expr2tc divisor_expr = constant_int2tc(source->type, divisor);
     expr2tc shifted = div2tc(source->type, source, divisor_expr);
