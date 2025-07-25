@@ -89,11 +89,14 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
   // add assertion to the target equation
   assertion(new_expr, msg);
   
-  // add assumption for the claim
-  // provides additional constraints that help with unit propagation
-  // helps the solver make better branching decisions
-  // reduces the search space for subsequent assertions
-  assume(new_expr);
+  // add assumption for the claim to:
+  // - provide additional constraints that help with unit propagation
+  // - help the solver make better branching decisions
+  // - reduce the search space for subsequent assertions
+  if (!options.get_bool_option("multi-property") && 
+    (options.get_bool_option("incremental-bmc") || 
+    options.get_bool_option("k-induction")))
+    assume(new_expr);
 }
 
 void goto_symext::assertion(
