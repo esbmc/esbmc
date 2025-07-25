@@ -70,7 +70,7 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
   expr2tc new_expr = claim_expr;
   cur_state->rename(new_expr);
 
-  // simplify the renamed expression to potentially optimize the claim
+  // Simplify the renamed expression to potentially optimize the claim
   do_simplify(new_expr);
 
   if (is_true(new_expr))
@@ -86,18 +86,23 @@ void goto_symext::claim(const expr2tc &claim_expr, const std::string &msg)
     check_incremental(new_expr, msg))
     return; // Verification succeeded, no further action needed
 
-  // add assertion to the target equation
+  // Add assertion to the target equation
   assertion(new_expr, msg);
 
-  // add assumption for the claim to:
-  // - provide additional constraints that help with unit propagation
-  // - help the solver make better branching decisions
-  // - reduce the search space for subsequent assertions
+  // Add assumption for the claim to:
+  // - Provide additional constraints that help with unit propagation
+  // - Help the solver make better branching decisions
+  // - Reduce the search space for subsequent assertions
   if (
     !options.get_bool_option("multi-property") &&
-    (options.get_bool_option("incremental-bmc") ||
-     options.get_bool_option("k-induction")))
+    options.get_bool_option("k-induction"))
+  {
+    // Base case and forward condition:
+    // Proven assertions become assumptions for the next step
+    // Inductive step:
+    // Each assertion immediately strengthens the induction hypothesis
     assume(new_expr);
+  }
 }
 
 void goto_symext::assertion(
