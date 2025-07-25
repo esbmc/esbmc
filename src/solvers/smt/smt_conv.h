@@ -682,6 +682,20 @@ public:
   /** Convert a byte_extract2tc, pulling a byte from the byte representation
    *  of some piece of data. */
   smt_astt convert_byte_extract(const expr2tc &expr);
+  /* Integer mode byte extraction helper functions */
+  smt_astt convert_byte_extract_int_mode(const byte_extract2t &data, 
+                                         expr2tc source, 
+                                         expr2tc offs, 
+                                         unsigned int src_width);
+  
+  smt_astt convert_byte_extract_bv_mode(const byte_extract2t &data,
+                                        expr2tc source,
+                                        expr2tc offs,
+                                        unsigned int src_width);
+                                        
+  /* Helper function for integer arithmetic right shift simulation */
+  expr2tc create_int_right_shift(expr2tc source, expr2tc shift_amount);
+
   /** Convert a byte_update2tc, inserting a byte into the byte representation
    *  of some piece of data. */
   smt_astt convert_byte_update(const expr2tc &expr);
