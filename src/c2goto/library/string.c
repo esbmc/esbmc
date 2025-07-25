@@ -288,12 +288,10 @@ void *memcpy(void *dst, const void *src, size_t n)
 __ESBMC_HIDE:;
   if (n == 0 || src == NULL || dst == NULL)
     return dst;
-
-  __ESBMC_assume(dst != NULL);
-  __ESBMC_assume(src != NULL);
-
+ 
   void *hax = &__memcpy_impl;
   (void)hax;
+
   return __ESBMC_memcpy(dst, src, n);
 }
 
