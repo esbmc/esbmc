@@ -12,26 +12,21 @@ smt_astt smt_convt::convert_byte_extract(const expr2tc &expr)
   unsigned int src_width = source->type->get_width();
 
   if (int_encoding)
-  {
-    // Integer arithmetic mode implementation
     return convert_byte_extract_int_mode(data, source, offs, src_width);
-  }
   else
-  {
-    // Original bitvector mode implementation
     return convert_byte_extract_bv_mode(data, source, offs, src_width);
-  }
 }
 
-smt_astt smt_convt::convert_byte_extract_int_mode(const byte_extract2t &data, 
-                                                  expr2tc source, 
-                                                  expr2tc offs, 
-                                                  unsigned int src_width)
+smt_astt smt_convt::convert_byte_extract_int_mode(
+  const byte_extract2t &data,
+  expr2tc source,
+  expr2tc offs,
+  unsigned int src_width)
 {
   // Convert source to integer representation if needed
   if (!is_number_type(source->type))
   {
-    // For non-numeric types, we need to interpret them as integers
+    // For non-numeric types, we need to interpret them as mathematical integers
     source = typecast2tc(get_uint_type(src_width), source);
   }
 
@@ -39,7 +34,7 @@ smt_astt smt_convt::convert_byte_extract_int_mode(const byte_extract2t &data,
   {
     // Non-constant offset case - use mathematical operations
     // to simulate bit shifting and extraction
-    
+
     // Ensure offset is the same type as source for arithmetic operations
     if (offs->type->get_width() != source->type->get_width())
       offs = typecast2tc(source->type, offs);
@@ -52,16 +47,21 @@ smt_astt smt_convt::convert_byte_extract_int_mode(const byte_extract2t &data,
       offs = sub2tc(source->type, data_size_expr, offs);
     }
 
-    // Convert byte offset to bit offset (multiply by 8)
-    expr2tc bit_offset = mul2tc(offs->type, offs, constant_int2tc(offs->type, BigInt(8)));
-    
+    // Convert byte offset to bit offset (multiply by bits per byte)
+    expr2tc bit_offset = mul2tc(
+      offs->type,
+      offs,
+      constant_int2tc(offs->type, BigInt(config.ansi_c.char_width)));
+
     // Simulate right shift using division by 2^bit_offset
     expr2tc shifted_source = create_int_right_shift(source, bit_offset);
-    
-    // Extract bottom byte using bitwise AND with 255 (not 256)
-    expr2tc byte_mask = constant_int2tc(source->type, BigInt(255));
+
+    // Extract bottom byte using bitwise AND with byte mask (2^char_width - 1)
+    BigInt byte_mask_value =
+      (BigInt(1) << config.ansi_c.char_width) - BigInt(1);
+    expr2tc byte_mask = constant_int2tc(source->type, byte_mask_value);
     expr2tc extracted_byte = bitand2tc(source->type, shifted_source, byte_mask);
-    
+
     return convert_ast(extracted_byte);
   }
   else
@@ -69,56 +69,56 @@ smt_astt smt_convt::convert_byte_extract_int_mode(const byte_extract2t &data,
     // Constant offset case - can use direct mathematical operations
     const constant_int2t &intref = to_constant_int2t(offs);
     unsigned int byte_offset = intref.value.to_uint64();
-    
+
     // Calculate the divisor for extracting the specific byte
     BigInt divisor = BigInt(1);
     unsigned int shift_amount;
-    
+
     if (!data.big_endian)
     {
       // Little endian: byte 0 is least significant
-      shift_amount = byte_offset * 8;
+      shift_amount = byte_offset * config.ansi_c.char_width;
     }
     else
     {
       // Big endian: byte 0 is most significant
-      unsigned int total_bytes = src_width / 8;
+      unsigned int total_bytes = src_width / config.ansi_c.char_width;
       if (byte_offset >= total_bytes)
       {
         // Out of bounds access
         smt_sortt s = mk_int_sort();
         return mk_smt_symbol("out_of_bounds_byte_extract", s);
       }
-      shift_amount = (total_bytes - 1 - byte_offset) * 8;
+      shift_amount = (total_bytes - 1 - byte_offset) * config.ansi_c.char_width;
     }
-    
+
     // Calculate 2^shift_amount
     for (unsigned int i = 0; i < shift_amount; i++)
-    {
       divisor = divisor * BigInt(2);
-    }
-    
+
     // Perform integer division to simulate right shift
     if (shift_amount > 0)
     {
       expr2tc divisor_expr = constant_int2tc(source->type, divisor);
       source = div2tc(source->type, source, divisor_expr);
     }
-    
-    // Extract bottom byte using bitwise AND with 255
-    expr2tc byte_mask = constant_int2tc(source->type, BigInt(255));
+
+    // Extract bottom byte using bitwise AND with byte mask (2^char_width - 1)
+    BigInt byte_mask_value =
+      (BigInt(1) << config.ansi_c.char_width) - BigInt(1);
+    expr2tc byte_mask = constant_int2tc(source->type, byte_mask_value);
     expr2tc result = bitand2tc(source->type, source, byte_mask);
-    
+
     return convert_ast(result);
   }
 }
 
-smt_astt smt_convt::convert_byte_extract_bv_mode(const byte_extract2t &data,
-                                                 expr2tc source,
-                                                 expr2tc offs,
-                                                 unsigned int src_width)
+smt_astt smt_convt::convert_byte_extract_bv_mode(
+  const byte_extract2t &data,
+  expr2tc source,
+  expr2tc offs,
+  unsigned int src_width)
 {
-  // Original bitvector implementation
   if (!is_bv_type(source->type) && !is_fixedbv_type(source->type))
     source = bitcast2tc(get_uint_type(src_width), source);
 
@@ -177,32 +177,32 @@ smt_astt smt_convt::convert_byte_extract_bv_mode(const byte_extract2t &data,
   return mk_extract(source_ast, upper, lower);
 }
 
-// Helper function to simulate right shift in integer arithmetic
 expr2tc smt_convt::create_int_right_shift(expr2tc source, expr2tc shift_amount)
 {
   // For non-constant shift amounts, we use conditional expressions
   // for common shift amounts (bit-aligned shifts from 0 to 64)
-  
+
   expr2tc result = source;
-  
-  // Create conditional chain for shift amounts 0 to 64 (bit-aligned)
-  for (int i = 8; i <= 64; i += 8)  // Only byte-aligned shifts for efficiency
+
+  // Create conditional chain for shift amounts up to pointer width (architecture-dependent)
+  for (size_t i = config.ansi_c.char_width; i <= config.ansi_c.pointer_width();
+       i += config.ansi_c.char_width) // Only byte-aligned shifts for efficiency
   {
     expr2tc i_expr = constant_int2tc(shift_amount->type, BigInt(i));
     expr2tc condition = equality2tc(shift_amount, i_expr);
-    
+
     BigInt divisor = BigInt(1);
-    for (int j = 0; j < i; j++)
+    for (size_t j = 0; j < i; j++)
     {
       divisor = divisor * BigInt(2);
     }
-    
+
     expr2tc divisor_expr = constant_int2tc(source->type, divisor);
     expr2tc shifted = div2tc(source->type, source, divisor_expr);
-    
+
     result = if2tc(source->type, condition, shifted, result);
   }
-  
+
   return result;
 }
 
