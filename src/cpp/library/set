@@ -508,7 +508,7 @@ public:
   }
 
   template <class Iterator>
-  iterator insert(Iterator first, Iterator last)
+  void insert(Iterator first, Iterator last)
   {
     __ESBMC_assert(
       last > first,
@@ -518,48 +518,31 @@ public:
       insert(*first++);
   }
 
-  // modifiers:
-  std::pair<iterator, bool> insert(const value_type &x)
+  iterator insert(const value_type &x)
   {
-    iterator it = begin();
-    int i, aux;
-    while (it != end())
+    // Find the correct position to maintain sorted order
+    int insert_pos = 0;
+    while (insert_pos < _size && rule(buf[insert_pos], x))
     {
-      if (*it == x)
-      {
-        return make_pair(it, false);
-      }
-      it++;
+      insert_pos++;
     }
 
+    // Shift elements to make space
+    for (int i = _size; i > insert_pos; i--)
+    {
+      buf[i] = buf[i - 1];
+    }
+
+    // Insert the new element
+    buf[insert_pos] = x;
     _size++;
-    i = _size;
 
-    // it is equal to end() already.
-    while (it.pos - 1 < i)
-    {
-      aux = i + 1;
-      buf[aux] = buf[i];
-      i--;
-    }
-
-    buf[it.pos] = x;
-    return make_pair(it, true);
+    return iterator(buf, insert_pos);
   }
 
   iterator insert(iterator position, const value_type &x)
   {
-    _size++;
-    int i = _size;
-    int aux;
-    while (position.pos - 1 < i)
-    {
-      aux = i + 1;
-      buf[aux] = buf[i];
-      i--;
-    }
-    buf[position.pos] = x;
-    return position;
+    return insert(x);
   }
 
   void erase(iterator position)
