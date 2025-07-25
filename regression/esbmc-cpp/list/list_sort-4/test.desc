@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--unwind 3 --timeout 900 --no-bounds-check --no-pointer-check --no-div-by-zero-check
+^VERIFICATION SUCCESSFUL$

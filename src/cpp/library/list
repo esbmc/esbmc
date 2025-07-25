@@ -8,7 +8,6 @@
 
 namespace std
 {
-
 #if 0
 template<class T>
 class list {
@@ -633,7 +632,7 @@ public:
 			}
 		}
 
-#if 0
+#  if 0
 		node* tmp = this->head;
 		node* sec_temp = this->head;
 		int b = 0;
@@ -660,7 +659,7 @@ public:
 			sec_temp = this->head;
 			tmp = tmp->next;
 		}
-#endif
+#  endif
 	}
 
 	void unique(pred_double* x) {
@@ -684,7 +683,7 @@ public:
 				}
 			}
 		}
-#if 0
+#  if 0
 		node* tmp = this->head;
 		node* sec_temp = this->head;
 		int b = 0;
@@ -714,7 +713,7 @@ public:
 			sec_temp = this->head;
 			tmp = tmp->next;
 		}
-#endif
+#  endif
 	}
 
 	template<class Predicate>
@@ -1440,8 +1439,8 @@ public:
   template <class Predicate>
   void remove_if(Predicate pred)
   {
-	__ESBMC_assert(sizeof(pred) > 0, 
-	  "Predicate must be a valid callable object");
+    __ESBMC_assert(
+      sizeof(pred) > 0, "Predicate must be a valid callable object");
     for (iterator _it = this->begin(); _it.pos < this->_size;)
     {
       if (pred(*_it.it))
@@ -1592,6 +1591,27 @@ public:
       for (j = i; j < this->_size; j++)
       {
         if (this->_list[j] < _pivo)
+        {
+          _tmp = _pivo;
+          _pivo = this->_list[j];
+          this->_list[j] = _tmp;
+        }
+      }
+      this->_list[i] = _pivo;
+    }
+  }
+
+  template <class Compare>
+  void sort(Compare comp)
+  {
+    size_type i, j;
+    value_type _pivo, _tmp;
+    for (i = 0; i < this->_size; i++)
+    {
+      _pivo = this->_list[i];
+      for (j = i; j < this->_size; j++)
+      {
+        if (comp(this->_list[j], _pivo))
         {
           _tmp = _pivo;
           _pivo = this->_list[j];

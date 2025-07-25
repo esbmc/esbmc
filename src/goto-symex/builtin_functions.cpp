@@ -1588,6 +1588,8 @@ void goto_symext::intrinsic_memcpy(
 
   // Only handle constant-size copies for now
   simplify(n);
+  // Only proceed with this case when the size n is a compile-time constant.
+  // Otherwise, fall back to byte-by-byte copying in __memcpy_impl
   if (!is_constant_int2t(n))
   {
     log_debug("memcpy", "Symbolic size not supported, falling back");
@@ -1646,7 +1648,7 @@ void goto_symext::intrinsic_memcpy(
 
   if (aligned)
   {
-    for (unsigned i = 0; i + 8 <= num_bytes; i += 8)
+    for (size_t i = 0; i + 8 <= num_bytes; i += 8)
     {
       expr2tc dst_idx = index2tc(
         get_uint64_type(),
@@ -1660,7 +1662,7 @@ void goto_symext::intrinsic_memcpy(
       dereference(value, dereferencet::READ);
       symex_assign(code_assign2tc(dst_idx, value), false, guard);
     }
-    for (unsigned i = (num_bytes / 8) * 8; i < num_bytes; ++i)
+    for (size_t i = (num_bytes / 8) * 8; i < num_bytes; ++i)
     {
       expr2tc dst_idx = index2tc(
         get_uint64_type(),
@@ -1678,7 +1680,7 @@ void goto_symext::intrinsic_memcpy(
   else
   {
     //Copy byte-by-byte
-    for (unsigned i = 0; i < num_bytes; ++i)
+    for (size_t i = 0; i < num_bytes; ++i)
     {
       expr2tc offset = constant_int2tc(get_uint64_type(), BigInt(i));
       expr2tc dst_idx = index2tc(

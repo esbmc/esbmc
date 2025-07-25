@@ -1,7 +1,5 @@
 CORE
 main.c
-
---no-unwinding-assertions
---unwind 1
+--unwind 1 --no-unwinding-assertions
 
 ^VERIFICATION SUCCESSFUL$
