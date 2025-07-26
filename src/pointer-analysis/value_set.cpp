@@ -523,10 +523,19 @@ void value_sett::get_value_set_rec(
     // evaluate to what it points at. So, return this symbols value set.
     const symbol2t &sym = to_symbol2t(expr);
 
+    // If there ever is a L2/SSA-renamed global symbol here, just
+    // fall back to "unkown pointer" instead of crashing.
+    if (sym.rlevel == symbol2t::renaming_level::level2_global)
+    {
+      insert(dest, unknown2tc(original_type), BigInt(0));
+      return;
+    }
+
     // If it's null however, create a null_object2t with the appropriate type.
     if (sym.thename == "NULL" && is_pointer_type(expr))
     {
       const pointer_type2t &ptr_ref = to_pointer_type(expr->type);
+
       typet subtype = migrate_type_back(ptr_ref.subtype);
       if (subtype.id() == "symbol")
         subtype = ns.follow(subtype);
