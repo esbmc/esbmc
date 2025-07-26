@@ -6,6 +6,7 @@
 #include <string>
 #include <regex>
 #include <big-int/bigint.hh>
+#include <yaml-cpp/yaml.h>
 
 typedef boost::property_tree::ptree xmlnodet;
 
@@ -93,6 +94,24 @@ public:
   void check_create_new_thread(BigInt thread_id, nodet *prev_node);
 };
 
+class yamlt
+{
+public:
+  enum typet
+  {
+    VIOLATION,
+    CORRECTNESS
+  };
+  typet witness_type;
+  std::string verified_file;
+
+  yamlt(typet t)
+  {
+    witness_type = t;
+  }
+  void generate_yaml(optionst &options);
+};
+
 /**
  * Create a GraphML node, which is the most external
  * one and includes graph, edges, and nodes.
@@ -119,6 +138,11 @@ void create_correctness_graph_node(
   std::string &verifiedfile,
   optionst &options,
   xmlnodet &graphnode);
+
+void create_correctness_yaml_emitter(
+  std::string &verifiedfile,
+  optionst &options,
+  YAML::Emitter &root);
 
 /**
  * Create a edge node.
@@ -168,6 +192,7 @@ BigInt get_line_number(
  *
  */
 int generate_sha1_hash_for_file(const char *path, std::string &output);
+int generate_sha256_hash_for_file(const char *path, std::string &output);
 
 /**
  *

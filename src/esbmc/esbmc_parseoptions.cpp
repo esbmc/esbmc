@@ -504,6 +504,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   if (cmdline.isset("override-return-annotation"))
     options.set_option("override-return-annotation", true);
 
+  if (cmdline.isset("witness-output-yaml"))
+    options.set_option("witness-output", cmdline.getval("witness-output-yaml"));
+
   config.options = options;
 }
 
