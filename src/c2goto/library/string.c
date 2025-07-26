@@ -290,7 +290,7 @@ __ESBMC_HIDE:;
     return dst;
 
   __ESBMC_assume(dst != NULL);
-  __ESBMC_assume(src != NULL);  
+  __ESBMC_assume(src != NULL);
 
   return __ESBMC_memcpy(dst, src, n);
 }
