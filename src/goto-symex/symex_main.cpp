@@ -324,7 +324,7 @@ void goto_symext::symex_step(reachability_treet &art)
     if (is_symbol2t(call.function))
     {
       const irep_idt &id = to_symbol2t(call.function).thename;
-      if (has_prefix(id.as_string(), "c:@F@__ESBMC") || id == "c:@F@memcpy")
+      if (has_prefix(id.as_string(), "c:@F@__ESBMC"))
       {
         cur_state->source.pc++;
         run_intrinsic(call, art, id.as_string());
@@ -585,12 +585,6 @@ void goto_symext::run_intrinsic(
   if (symname == "c:@F@__ESBMC_memset")
   {
     intrinsic_memset(art, func_call);
-    return;
-  }
-
-  if (symname == "c:@F@memcpy")
-  {
-    intrinsic_memcpy(art, func_call);
     return;
   }
 
