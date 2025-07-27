@@ -3,7 +3,7 @@ int nondet_int();
 
 #define SIZE 1
 
-int main()
+main()
 {
   unsigned int j,k;
   int array[SIZE], menor;
