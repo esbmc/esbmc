@@ -1213,6 +1213,50 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     break;
   }
+  case clang::Stmt::UnaryOperatorClass:
+  {
+    if (auto *uop = llvm:dyn_cast<clang::UnaryOperator>(&stmt)) {
+      if(uop->isIncementDecremetOp()){
+        const::clang Expr *sub = uop->getSubExpr();
+        exprt operand;
+        if (get_expr(*sub, operand))
+          return true;
+        
+        if(sub->isLValue()) {
+          // Resolve nested references recursively
+          exprt target = operand;
+          while (target.type().id() == "reference")
+            target = dereference_exprt(target, target.type().subtype());
+
+          exprt old_value = target;
+          exprt one = gen_one(old_value.type());
+          
+          exprt new_value;
+          if(uop->IsIncrementOp())
+            new_value = plus_exprt(old_value, one);
+          else
+            new_value = minus_exprt(old_value, one);
+            
+          //Build assignment
+          side_effect_exprt assign("assign", target.type());
+          assign.copy_to_operands(target, new_value);
+          
+          if (uop->isPostfix()) {
+            side_effect_exprt comma("comma", old_value.type());
+            comma.copy_to_operands(assign, old_value);
+            new_expr = comma;
+          } else 
+          {
+            side_effect_exprt comma("comma", new_value.type());
+            comma.copy_to_operands(assign, new_value);
+            new_expr = comma;
+          }
+          return false;
+        }  
+      }
+    }
+    break;
+  }
 
   default:
     if (clang_c_convertert::get_expr(stmt, new_expr))
@@ -1336,7 +1380,7 @@ bool clang_cpp_convertert::get_function_body(
   const clang::FunctionDecl &fd,
   exprt &new_expr,
   const code_typet &ftype)
-{
+ {
   // do nothing if function body doesn't exist
   if (!fd.hasBody())
     return false;
@@ -1523,6 +1567,25 @@ bool clang_cpp_convertert::get_function_body(
         abort();
       }
     }
+    bool VisitUnaryOperator(clang::UnaryOperator *op) {
+        expr2tc base_expr = convert_expr(op->getSubExpr());
+  
+        // Add reference member handling:
+        if (op->isIncrementDecrementOp() && 
+              is_reference_type(op->getSubExpr()->getType())) {
+        // Desugar x++ to x = x + 1
+        expr2tc one = gen_one(base_expr->type);
+        expr2tc new_value = op->isIncrementOp() 
+          ? add2tc(base_expr->type, base_expr, one)
+          : sub2tc(base_expr->type, base_expr, one);
+    
+        if (op->isPostfix()) {
+        // For postfix, return original value but still perform assignment
+        return code_assign2tc(base_expr, new_value);
+      }
+      return code_assign2tc(base_expr, new_value);
+    }
+     
 
     for (exprt &initializer : initializers)
       convert_expression_to_code(initializer);
