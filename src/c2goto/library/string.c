@@ -23,6 +23,8 @@
 #undef memmove
 #undef memchr
 
+void *__ESBMC_memcpy(void *dst, const void *src, size_t n);
+
 char *strcpy(char *dst, const char *src)
 {
 __ESBMC_HIDE:;
@@ -266,14 +268,31 @@ __ESBMC_HIDE:;
   return cpy;
 }
 
+void *__memcpy_impl(void *dst, const void *src, size_t n)
+{
+__ESBMC_HIDE:;
+  if (n == 0)
+    return dst;
+
+  char *cdst = dst;
+  const char *csrc = src;
+
+  for (size_t i = 0; i < n; i++)
+    cdst[i] = csrc[i];
+
+  return dst;
+}
+
 void *memcpy(void *dst, const void *src, size_t n)
 {
 __ESBMC_HIDE:;
-  char *cdst = dst;
-  const char *csrc = src;
-  for (size_t i = 0; i < n; i++)
-    cdst[i] = csrc[i];
-  return dst;
+  if (n == 0 || src == NULL || dst == NULL)
+    return dst;
+
+  void *hax = &__memcpy_impl;
+  (void)hax;
+
+  return __ESBMC_memcpy(dst, src, n);
 }
 
 void *__memset_impl(void *s, int c, size_t n)
