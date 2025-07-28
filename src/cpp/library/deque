@@ -249,6 +249,12 @@ public:
     reverse_iterator()
     {
     }
+    reverse_iterator(T *ppointer, int ppos, T *pvec_pos)
+    {
+      pointer = ppointer;
+      pos = ppos;
+      vec_pos = pvec_pos;
+    }
     reverse_iterator &operator=(const reverse_iterator &i)
     {
       pointer = i.pointer;
