@@ -198,12 +198,17 @@ std::string utf8_encode(unsigned int int_value)
     char_out.append(1, static_cast<char>(0x80 | ((int_value >> 6) & 0x3f)));
     char_out.append(1, static_cast<char>(0x80 | (int_value & 0x3f)));
   }
-  else
+  else if (int_value <= 0x10ffff)
   {
     char_out.append(1, static_cast<char>(0xf0 | ((int_value >> 18) & 0x07)));
     char_out.append(1, static_cast<char>(0x80 | ((int_value >> 12) & 0x3f)));
     char_out.append(1, static_cast<char>(0x80 | ((int_value >> 6) & 0x3f)));
     char_out.append(1, static_cast<char>(0x80 | (int_value & 0x3f)));
+  } else {
+    // throw error if out of range, only conatins half of error message
+    throw std::out_of_range(
+      "argument '" + std::to_string(int_value) + "' outside of Unicode range: [0x000000, 0x10FFFF)"
+    );
   }
   return char_out;
 }
@@ -270,16 +275,18 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
     arg.erase("id");
     arg.erase("ctx");
   }
+  std::string utf8_encoded;
 
-  // Validate Unicode range: [0, 0x10FFFF]
-  if (int_value < 0 || int_value > 0x10FFFF)
+  try
+  {
+    utf8_encoded = utf8_encode(int_value);
+  }
+  catch (const std::out_of_range &e)
   {
     throw std::runtime_error(
-      "ValueError: chr() argument out of valid Unicode range: " +
-      std::to_string(int_value));
+      std::string("ValueError: chr() ") + e.what());
   }
 
-  std::string utf8_encoded = utf8_encode(int_value);
   // Replace the value with a single-character string
   arg["value"] = arg["n"] = arg["s"] = utf8_encoded;
   arg["type"] = "str";
