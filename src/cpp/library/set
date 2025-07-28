@@ -12,7 +12,6 @@
 
 namespace std
 {
-
 template <
   class Key,
   class Compare = less<Key> /*,class Allocator = allocator<Key> */>
@@ -76,7 +75,8 @@ public:
 
     iterator &operator++()
     {
-      return iterator(base, ++pos);
+      ++pos;
+      return *this;
     }
     iterator operator++(int b)
     {
@@ -90,7 +90,8 @@ public:
 
     iterator &operator--()
     {
-      return iterator(base, --pos);
+      --pos;
+      return *this;
     }
     iterator operator--(int b)
     {
@@ -166,7 +167,8 @@ public:
 
     const_iterator &operator++()
     {
-      return const_iterator(base, ++pos);
+      ++pos;
+      return *this;
     }
     const_iterator operator++(int b)
     {
@@ -180,7 +182,8 @@ public:
 
     const_iterator &operator--()
     {
-      return const_iterator(base, --pos);
+      --pos;
+      return *this;
     }
     const_iterator operator--(int b)
     {
@@ -249,7 +252,8 @@ public:
 
     reverse_iterator &operator++()
     {
-      return reverse_iterator(base, --pos);
+      --pos;
+      return *this;
     }
     reverse_iterator operator++(int b)
     {
@@ -263,7 +267,8 @@ public:
 
     reverse_iterator &operator--()
     {
-      return reverse_iterator(base, ++pos);
+      ++pos;
+      return *this;
     }
     reverse_iterator operator--(int b)
     {
@@ -316,6 +321,7 @@ public:
     {
       this->pos = i.pos;
       this->base = i.base;
+      return *this;
     }
 
     value_type *operator->()
@@ -330,7 +336,8 @@ public:
 
     const_reverse_iterator &operator++()
     {
-      return const_reverse_iterator(base, --pos);
+      --pos;
+      return *this;
     }
     const_reverse_iterator operator++(int b)
     {
@@ -344,7 +351,8 @@ public:
 
     const_reverse_iterator &operator--()
     {
-      return const_reverse_iterator(base, ++pos);
+      ++pos;
+      return *this;
     }
     const_reverse_iterator operator--(int b)
     {
@@ -372,7 +380,7 @@ public:
   };
 
   // construct/copy/destroy:
-  explicit multiset(const Compare &comp) : _size(0) 
+  explicit multiset(const Compare &comp) : _size(0), rule(comp)
   {
   }
 
@@ -429,7 +437,7 @@ public:
     buf[_size] = 0;
   }
 
-  multiset &operator=(multiset &x)
+  multiset &operator=(const multiset &x)
   {
     _size = 0;
     for (int i = 0; i < x._size; i++)
@@ -557,7 +565,7 @@ public:
   void erase(iterator position)
   {
     __ESBMC_assert(
-      (position.pos >= 0) && (position.pos < size() && (position.base != buf)),
+      (position.pos >= 0) && (position.pos < size() && (position.base == buf)),
       "Invalid argument: iterator out of range");
     int j;
     for (int i = position.pos + 1; i < _size; i++)
@@ -576,17 +584,20 @@ public:
     for (k = 0; k != _size; k++)
       if (buf[k] == x)
         break;
-    iterator position(buf, k);
 
-    int j;
-    for (int i = position.pos + 1; i < _size; i++)
+    if (k == _size)
     {
-      j = i - 1;
-      buf[j] = buf[i];
+      return 0; // Element not found, nothing erased
+    }
+
+    // Element found, erase it
+    for (int i = k + 1; i < _size; i++)
+    {
+      buf[i - 1] = buf[i];
     }
     _size--;
-    j = _size + 1;
-    buf[j] = Key();
+    buf[_size] = Key();
+    return 1; // One element erased
   }
 
   void erase(iterator first, iterator last)
@@ -713,7 +724,7 @@ public:
   }
 };
 
-template <class Key, class Compare = less<Key> >
+template <class Key, class Compare = less<Key>>
 class set
 {
 public:
@@ -770,7 +781,8 @@ public:
 
     iterator &operator++()
     {
-      return iterator(base, ++pos);
+      ++pos;
+      return *this;
     }
     iterator operator++(int b)
     {
@@ -784,7 +796,8 @@ public:
 
     iterator &operator--()
     {
-      return iterator(base, --pos);
+      --pos;
+      return *this;
     }
     iterator operator--(int b)
     {
@@ -860,7 +873,8 @@ public:
 
     const_iterator &operator++()
     {
-      return const_iterator(base, ++pos);
+      ++pos;
+      return *this;
     }
     const_iterator operator++(int b)
     {
@@ -874,7 +888,8 @@ public:
 
     const_iterator &operator--()
     {
-      return const_iterator(base, --pos);
+      --pos;
+      return *this;
     }
     const_iterator operator--(int b)
     {
@@ -942,7 +957,8 @@ public:
 
     reverse_iterator &operator++()
     {
-      return reverse_iterator(base, --pos);
+      --pos;
+      return *this;
     }
     reverse_iterator operator++(int b)
     {
@@ -956,7 +972,8 @@ public:
 
     reverse_iterator &operator--()
     {
-      return reverse_iterator(base, ++pos);
+      ++pos;
+      return *this;
     }
     reverse_iterator operator--(int b)
     {
@@ -1009,6 +1026,7 @@ public:
     {
       this->pos = i.pos;
       this->base = i.base;
+      return *this;
     }
 
     value_type *operator->()
@@ -1023,7 +1041,8 @@ public:
 
     const_reverse_iterator &operator++()
     {
-      return const_reverse_iterator(base, --pos);
+      --pos;
+      return *this;
     }
     const_reverse_iterator operator++(int b)
     {
@@ -1037,7 +1056,8 @@ public:
 
     const_reverse_iterator &operator--()
     {
-      return const_reverse_iterator(base, ++pos);
+      ++pos;
+      return *this;
     }
     const_reverse_iterator operator--(int b)
     {
@@ -1065,7 +1085,7 @@ public:
   };
 
   // construct/copy/destroy:
-  explicit set(const Compare &comp = Compare()) : _size(0), rule(comp)
+  explicit set(const Compare &comp) : _size(0), rule(comp)
   {
   }
 
@@ -1102,6 +1122,10 @@ public:
     std::sort(buf, buf + _size /*,rule*/);
   }
 
+  set() : _size(0), rule(Compare())
+  {
+  }
+
   set(const set &x)
   {
     _size = 0;
@@ -1113,7 +1137,7 @@ public:
     buf[_size] = 0;
   }
 
-  set &operator=(set &x)
+  set &operator=(const set &x)
   {
     _size = 0;
     for (int i = 0; i < x._size; i++)
@@ -1239,7 +1263,7 @@ public:
   void erase(iterator position)
   {
     __ESBMC_assert(
-      (position.pos >= 0) && (position.pos < size() && (position.base != buf)),
+      (position.pos >= 0) && (position.pos < size() && (position.base == buf)),
       "Invalid argument: iterator out of range");
     int j;
     for (int i = position.pos + 1; i < _size; i++)
@@ -1258,17 +1282,20 @@ public:
     for (k = 0; k != _size; k++)
       if (buf[k] == x)
         break;
-    iterator position(buf, k);
 
-    int j;
-    for (int i = position.pos + 1; i < _size; i++)
+    if (k == _size)
     {
-      j = i - 1;
-      buf[j] = buf[i];
+      return 0; // Element not found, nothing erased
+    }
+
+    // Element found, erase it
+    for (int i = k + 1; i < _size; i++)
+    {
+      buf[i - 1] = buf[i];
     }
     _size--;
-    j = _size + 1;
-    buf[j] = Key();
+    buf[_size] = Key();
+    return 1; // One element erased
   }
 
   void erase(iterator first, iterator last)

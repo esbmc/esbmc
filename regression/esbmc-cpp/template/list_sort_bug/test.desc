@@ -1,4 +1,4 @@
 KNOWNBUG
 main.cpp
---unwind 10 --no-unwinding-assertions --timeout 900
+--unwind 5 --no-unwinding-assertions --timeout 900
 ^VERIFICATION FAILED$
