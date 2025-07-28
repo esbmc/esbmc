@@ -253,13 +253,15 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
   else if (arg.contains("_type") && arg["_type"] == "Name")
   {
     const symbolt *sym = lookup_python_symbol(arg["id"]);
-    if (!sym)
+    if (!sym) 
     {
-      std::string var_name = arg["id"].get<std::string>();
-      throw std::runtime_error(
-        "NameError: variable '" + var_name + "' is not defined");
+      // if symbol not found revert to a variable assignment
+      arg["value"] = std::string(1, static_cast<char>(int_value));
+      typet t = type_handler_.get_typet("chr", 1);
+      exprt expr = converter_.get_expr(arg);
+      expr.type() = t;
+      return expr;
     }
-
     const auto &const_expr = to_constant_expr(sym->value);
     std::string binary_str = id2string(const_expr.get_value());
     int_value = std::stoul(binary_str, nullptr, 2);
@@ -283,7 +285,7 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
   arg["type"] = "str";
   
   bool null_terminated = int_value > 0x7f;
-  // Build and return the string expression
+    // Build and return the string expression
   exprt expr = converter_.get_expr(arg);
   expr.type() = type_handler_.get_typet("str",utf8_encoded.size()+null_terminated);
   return expr;
