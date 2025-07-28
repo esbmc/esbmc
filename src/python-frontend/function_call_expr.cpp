@@ -272,7 +272,7 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
   }
 
   // Validate Unicode range: [0, 0x10FFFF]
-  if (int_value < 0 ||int_value > 0x10FFFF)
+  if (int_value < 0 || int_value > 0x10FFFF)
   {
     throw std::runtime_error(
       "ValueError: chr() argument out of valid Unicode range: " +
@@ -287,7 +287,7 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
   bool null_terminated = int_value > 0x7f;
     // Build and return the string expression
   exprt expr = converter_.get_expr(arg);
-  expr.type() = type_handler_.get_typet("str",utf8_encoded.size()+null_terminated);
+  expr.type() = type_handler_.get_typet("str", utf8_encoded.size() + null_terminated);
   return expr;
 }
 
