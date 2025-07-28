@@ -387,6 +387,7 @@ TEST_SUITES = [
     "jimple",
     "k-induction",
     "k-induction-parallel",
+    "termination"
     "linux",
     "llvm",
     "mathsat",
