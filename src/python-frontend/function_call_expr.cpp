@@ -207,8 +207,7 @@ std::string utf8_encode(unsigned int int_value)
   } else {
     // throw error if out of range, only conatins half of error message
     throw std::out_of_range(
-      "argument '" + std::to_string(int_value) + "' outside of Unicode range: [0x000000, 0x10FFFF)"
-    );
+      "argument '" + std::to_string(int_value) + "' outside of Unicode range: [0x000000,  0x110000)");
   }
   return char_out;
 }
@@ -267,7 +266,15 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
       expr.type() = t;
       return expr;
     }
-    const auto &const_expr = to_constant_expr(sym->value);
+    exprt val = sym->value;
+
+    if(!val.is_constant())
+      val = converter_.get_resolved_value(val);
+
+    if(val.is_nil())
+      throw std::runtime_error("Unable to resolve symbol " + arg["id"].get<std::string>());
+
+    const auto &const_expr = to_constant_expr(val);
     std::string binary_str = id2string(const_expr.get_value());
     try
     {
@@ -277,7 +284,7 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
     {
       throw std::runtime_error(
         "ValueError: chr() argument '" + arg["id"].get<std::string>() +
-        "' outside of Unicode range: [0x000000, 0x10FFFF)");
+        "' outside of Unicode range: [0x000000, 0x110000)");
     }
     catch (std::invalid_argument &)
     {
