@@ -186,7 +186,7 @@ std::string utf8_encode(unsigned int int_value)
 
   // https://stackoverflow.com/revisions/19968992/1
   if (int_value <= 0x7f)
-      char_out.append(1, static_cast<char>(int_value));
+    char_out.append(1, static_cast<char>(int_value));
   else if (int_value <= 0x7ff)
   {
     char_out.append(1, static_cast<char>(0xc0 | ((int_value >> 6) & 0x1f)));
@@ -249,11 +249,11 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
         "TypeError: invalid string passed to chr(): '" + s + "'");
     }
   }
-  
+
   else if (arg.contains("_type") && arg["_type"] == "Name")
   {
     const symbolt *sym = lookup_python_symbol(arg["id"]);
-    if (!sym) 
+    if (!sym)
     {
       // if symbol not found revert to a variable assignment
       arg["value"] = std::string(1, static_cast<char>(int_value));
@@ -283,11 +283,12 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
   // Replace the value with a single-character string
   arg["value"] = arg["n"] = arg["s"] = utf8_encoded;
   arg["type"] = "str";
-  
+
   bool null_terminated = int_value > 0x7f;
-    // Build and return the string expression
+  // Build and return the string expression
   exprt expr = converter_.get_expr(arg);
-  expr.type() = type_handler_.get_typet("str", utf8_encoded.size() + null_terminated);
+  expr.type() = 
+    type_handler_.get_typet("str", utf8_encoded.size() + null_terminated);
   return expr;
 }
 
