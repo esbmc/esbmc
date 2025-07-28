@@ -269,7 +269,21 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
     }
     const auto &const_expr = to_constant_expr(sym->value);
     std::string binary_str = id2string(const_expr.get_value());
+    try
+    {
     int_value = std::stoul(binary_str, nullptr, 2);
+    }
+    catch (std::out_of_range &)
+    {
+      throw std::runtime_error(
+        "ValueError: chr() argument '" + arg["id"].get<std::string>() +
+        "' outside of Unicode range: [0x000000, 0x10FFFF)");
+    }
+    catch (std::invalid_argument &)
+    {
+      throw std::runtime_error(
+        "TypeError: chr() argument '" + arg["id"].get<std::string>() + "' must be of type int");
+    }
 
     arg["_type"] = "Constant";
     arg.erase("id");
