@@ -187,10 +187,11 @@ std::string utf8_encode(unsigned int int_value)
    */
 
   // Check for surrogate pairs (invalid in UTF-8)
-  if (int_value >= 0xD800 && int_value <= 0xDFFF) {
+  if (int_value >= 0xD800 && int_value <= 0xDFFF)
+  {
     std::ostringstream oss;
     oss << "Code point 0x" << std::hex << std::uppercase << int_value
-      << " is a surrogate pair, invalid in UTF-8";
+        << " is a surrogate pair, invalid in UTF-8";
     throw std::invalid_argument(oss.str());
   }
 
@@ -217,10 +218,12 @@ std::string utf8_encode(unsigned int int_value)
     char_out.append(1, static_cast<char>(0x80 | ((int_value >> 12) & 0x3f)));
     char_out.append(1, static_cast<char>(0x80 | ((int_value >> 6) & 0x3f)));
     char_out.append(1, static_cast<char>(0x80 | (int_value & 0x3f)));
-  } else {
+  }
+  else
+  {
     std::ostringstream oss;
     oss << "argument '0x" << std::hex << std::uppercase << int_value
-      << "' outside of Unicode range: [0x000000,  0x110000)";
+        << "' outside of Unicode range: [0x000000,  0x110000)";
     // throw error if out of range
     // only contains half of error message to allow caller to provide more context
     throw std::out_of_range(oss.str());
@@ -288,7 +291,8 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
       val = converter_.get_resolved_value(val);
 
     if (val.is_nil())
-      throw std::runtime_error("Unable to resolve symbol " + arg["id"].get<std::string>());
+      throw std::runtime_error(
+        "Unable to resolve symbol " + arg["id"].get<std::string>());
 
     const auto &const_expr = to_constant_expr(val);
     std::string binary_str = id2string(const_expr.get_value());
