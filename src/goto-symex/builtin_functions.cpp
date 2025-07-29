@@ -1579,6 +1579,8 @@ void goto_symext::intrinsic_memcpy(
     bump_call(func_call, "c:@F@__memcpy_impl");
     return;
   }
+  
+  //When the value of a pointer is unknown or NULL
   if (is_nil_expr(dst) || is_nil_expr(src))
   {
     log_debug("memcpy", "Source or destination is NULL, falling back");
@@ -1627,7 +1629,7 @@ void goto_symext::intrinsic_memcpy(
 
   cur_state->rename(dst_item.object);
   cur_state->rename(src_item.object);
-  cur_state->rename(src_item.offset);
+  cur_state->rename(dst_item.offset);
   cur_state->rename(src_item.offset);
 
   simplify(dst_item.object);
@@ -1647,8 +1649,9 @@ void goto_symext::intrinsic_memcpy(
   bool aligned = (dst_offset % 8 == 0) && (src_offset % 8 == 0);
 
   if (aligned)
-  {
-    for (size_t i = 0; i + 8 <= num_bytes; i += 8)
+    {
+    size_t i = 0;
+    for (; i + 8 <= num_bytes; i += 8)
     {
       expr2tc dst_idx = index2tc(
         get_uint64_type(),
@@ -1662,16 +1665,16 @@ void goto_symext::intrinsic_memcpy(
       dereference(value, dereferencet::READ);
       symex_assign(code_assign2tc(dst_idx, value), false, guard);
     }
-    for (size_t i = (num_bytes / 8) * 8; i < num_bytes; ++i)
+    for (; i < num_bytes; ++i)
     {
       expr2tc dst_idx = index2tc(
-        get_uint64_type(),
+        get_uint8_type(),
         dst_item.object,
-        constant_int2tc(get_uint64_type(), BigInt(dst_offset + i)));
+        constant_int2tc(get_uint8_type(), BigInt(dst_offset + i)));
       expr2tc src_idx = index2tc(
-        get_uint64_type(),
+        get_uint8_type(),
         src_item.object,
-        constant_int2tc(get_uint64_type(), BigInt(src_offset + i)));
+        constant_int2tc(get_uint8_type(), BigInt(src_offset + i)));
       expr2tc value = src_idx;
       dereference(value, dereferencet::READ);
       symex_assign(code_assign2tc(dst_idx, value), false, guard);
@@ -1701,6 +1704,38 @@ void goto_symext::intrinsic_memcpy(
   dereference(ret_ref, dereferencet::READ);
   symex_assign(code_assign2tc(ret_ref, dst), false, cur_state->guard);
 }
+
+/**
+ * @brief This function will try to identify if the offset of dst and src
+ * pointers are 8-byte alligned, case in which the bytes assignment per iteration
+ * from the standard memcpy function can be increased from 1 byte to 8 bytes per iteration,
+ * leading to a memory optimisation that leads to less iterations.
+ * initialize the object pointed by the address in a smarter way, minimizing the number of assignments.
+ * This is intended to imporve the behavior of a memcpy operation:
+ *
+ * __memcpy_impl(void *dst,(const)void *src, size_t n)
+ *
+ * - dst is the destination pointer in which bytes are copied each iteration from the src one
+ * - src is the source pointer which stores sequences of characters
+ * - n is generally known. If it is nondet, we will bump the call from intrinsic_memset to the standard _memcpy_impl
+ *
+ * In plain C, the objective of a call such as:
+ *
+ * void *src;
+ * const void *dst; 
+ * 
+ * memcpy(src, dst, num) (which points to __memcpy_impl if n is known and is constant or it can become constant after simplification, and the pointer are not NULL)
+ * 
+ * Would generate something as:
+ *
+ * char *cdst = dst;
+ * char *csrc = csrc; 
+ * for (size_t i=0; i<n; i++){
+ *   csrc[i] = cdst[i];
+ * }
+ * return dst;
+ *
+ */
 
 void goto_symext::intrinsic_get_object_size(
   const code_function_call2t &func_call,
