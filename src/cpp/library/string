@@ -2887,28 +2887,34 @@ __ESBMC_HIDE:
 
 template <typename CharT, typename Traits, typename Alloc>
 size_t basic_string<CharT, Traits, Alloc>::find_last_of(
-  const basic_string<CharT, Traits, Alloc> &s,
+  const char *s,
   size_t pos) const
 {
 __ESBMC_HIDE:
-  __ESBMC_assert((pos < this->length()) && (pos >= 0), "overflow");
-  __ESBMC_assert(s.str != NULL, "The parameter must be different than NULL");
+  __ESBMC_assert(s != NULL, "The parameter must be different than NULL");
+  
+  if (this->length() == 0)
+    return npos;
+  
   size_t i, j;
-
   int len = this->length();
-  int lim = pos;
+  
+  // Handle pos >= length() case by setting to last valid index
+  size_t start_pos = (pos >= len) ? len - 1 : pos;
+  
   char *s1 = new char[len + 1];
   strcpy(s1, this->str);
 
-  int slen = s.length();
+  int slen = strlen(s);
   char *s2 = new char[slen + 1];
   for (i = 0; i < slen; i++)
   {
-    s2[i] = s.str[i];
+    s2[i] = s[i];
   }
   s2[i] = '\0';
 
-  for (i = len; i > 0; i--)
+  // Search backwards from start_pos to 0
+  for (i = len-1; i >= 0; i--)
   {
     for (j = 0; j < slen; j++)
     {
@@ -2924,28 +2930,34 @@ __ESBMC_HIDE:
 
 template <typename CharT, typename Traits, typename Alloc>
 size_t basic_string<CharT, Traits, Alloc>::find_last_of(
-  const char *s,
+  const basic_string<CharT, Traits, Alloc> &s,
   size_t pos) const
 {
 __ESBMC_HIDE:
-  __ESBMC_assert((pos < this->length()) && (pos >= 0), "overflow");
-  __ESBMC_assert(s != NULL, "The parameter must be different than NULL");
+  __ESBMC_assert(s.str != NULL, "The parameter must be different than NULL");
+  
+  if (this->length() == 0)
+    return npos;
+  
   size_t i, j;
-
   int len = this->length();
-  int lim = pos;
+  
+  // Handle pos >= length() case by setting to last valid index
+  size_t start_pos = (pos >= len) ? len - 1 : pos;
+  
   char *s1 = new char[len + 1];
   strcpy(s1, this->str);
 
-  int slen = strlen(s);
+  int slen = s.length();
   char *s2 = new char[slen + 1];
   for (i = 0; i < slen; i++)
   {
-    s2[i] = s[i];
+    s2[i] = s.str[i];
   }
   s2[i] = '\0';
 
-  for (i = len; i > 0; i--)
+  // Search backwards from start_pos to 0
+  for (i = len-1; i >= 0; i--)
   {
     for (j = 0; j < slen; j++)
     {
@@ -2962,14 +2974,15 @@ __ESBMC_HIDE:
 template <typename CharT, typename Traits, typename Alloc>
 size_t basic_string<CharT, Traits, Alloc>::find_last_of(char *s) const
 {
-  //__ESBMC_HIDE: __ESBMC_assert((pos < this->length()) && (pos >= 0),
-  //"overflow");
+__ESBMC_HIDE:
   __ESBMC_assert(s != NULL, "The parameter must be different than NULL");
-  int pos = npos;
+  
+  if (this->length() == 0)
+    return npos;
+  
   size_t i, j;
-
   int len = this->length();
-  int lim = pos;
+  
   char *s1 = new char[len + 1];
   strcpy(s1, this->str);
 
@@ -2981,7 +2994,8 @@ size_t basic_string<CharT, Traits, Alloc>::find_last_of(char *s) const
   }
   s2[i] = '\0';
 
-  for (i = len; i > 0; i--)
+  // Search backwards from end to beginning
+  for (i = len-1; i >= 0; i--)
   {
     for (j = 0; j < slen; j++)
     {
@@ -3001,14 +3015,20 @@ basic_string<CharT, Traits, Alloc>::find_last_of(char c, size_t pos) const
 {
 __ESBMC_HIDE:
   __ESBMC_assert((pos < this->length()) && (pos >= 0), "overflow");
-  size_t i, j;
-
+  if (this->length() == 0)
+    return npos;
+  
+  size_t i;
   int len = this->length();
-  int lim = pos;
+  
+  // Handle pos >= length() case by setting to last valid index
+  size_t start_pos = (pos >= len) ? len - 1 : pos;
+  
   char *s1 = new char[len + 1];
   strcpy(s1, this->str);
 
-  for (i = len; i > 0; i--)
+  // Search backwards from start_pos to 0
+  for (i = len-1; i >= 0; i--)
   {
     if (s1[i] == c)
     {
