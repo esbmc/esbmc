@@ -1579,7 +1579,7 @@ void goto_symext::intrinsic_memcpy(
     bump_call(func_call, "c:@F@__memcpy_impl");
     return;
   }
-  
+
   //When the value of a pointer is unknown or NULL
   if (is_nil_expr(dst) || is_nil_expr(src))
   {
@@ -1649,7 +1649,7 @@ void goto_symext::intrinsic_memcpy(
   bool aligned = (dst_offset % 8 == 0) && (src_offset % 8 == 0);
 
   if (aligned)
-    {
+  {
     size_t i = 0;
     for (; i + 8 <= num_bytes; i += 8)
     {
