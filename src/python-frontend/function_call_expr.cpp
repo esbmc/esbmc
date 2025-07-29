@@ -205,9 +205,12 @@ std::string utf8_encode(unsigned int int_value)
     char_out.append(1, static_cast<char>(0x80 | ((int_value >> 6) & 0x3f)));
     char_out.append(1, static_cast<char>(0x80 | (int_value & 0x3f)));
   } else {
-    // throw error if out of range, only conatins half of error message
-    throw std::out_of_range(
-      "argument '" + std::to_string(int_value) + "' outside of Unicode range: [0x000000,  0x110000)");
+    std::ostringstream oss;
+    oss << "argument '0x" << std::hex << std::uppercase << int_value
+      << "' outside of Unicode range: [0x000000,  0x110000)";
+    // throw error if out of range
+    // only contains half of error message to allow caller to provide more context
+    throw std::out_of_range(oss.str());
   }
   return char_out;
 }
@@ -268,10 +271,10 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
     }
     exprt val = sym->value;
 
-    if(!val.is_constant())
+    if (!val.is_constant())
       val = converter_.get_resolved_value(val);
 
-    if(val.is_nil())
+    if (val.is_nil())
       throw std::runtime_error("Unable to resolve symbol " + arg["id"].get<std::string>());
 
     const auto &const_expr = to_constant_expr(val);
@@ -289,7 +292,8 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
     catch (std::invalid_argument &)
     {
       throw std::runtime_error(
-        "TypeError: chr() argument '" + arg["id"].get<std::string>() + "' must be of type int");
+        "TypeError: chr() argument '" + arg["id"].get<std::string>() +
+        "' must be of type int");
     }
 
     arg["_type"] = "Constant";
@@ -304,8 +308,7 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
   }
   catch (const std::out_of_range &e)
   {
-    throw std::runtime_error(
-      std::string("ValueError: chr() ") + e.what());
+    throw std::runtime_error(std::string("ValueError: chr() ") + e.what());
   }
 
   // Replace the value with a single-character string
