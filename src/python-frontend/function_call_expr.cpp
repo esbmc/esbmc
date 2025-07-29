@@ -181,6 +181,19 @@ void function_call_expr::handle_int_to_float(nlohmann::json &arg) const
 
 std::string utf8_encode(unsigned int int_value)
 {
+  /**
+   * Convert an integer value into its UTF-8 character equivalent
+   * similar to the python chr() function
+   */
+
+  // Check for surrogate pairs (invalid in UTF-8)
+  if (int_value >= 0xD800 && int_value <= 0xDFFF) {
+    std::ostringstream oss;
+    oss << "Code point 0x" << std::hex << std::uppercase << int_value
+      << " is a surrogate pair, invalid in UTF-8";
+    throw std::invalid_argument(oss.str());
+  }
+
   // Manual UTF-8 encoding
   std::string char_out;
 
@@ -281,7 +294,7 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
     std::string binary_str = id2string(const_expr.get_value());
     try
     {
-    int_value = std::stoul(binary_str, nullptr, 2);
+      int_value = std::stoul(binary_str, nullptr, 2);
     }
     catch (std::out_of_range &)
     {
