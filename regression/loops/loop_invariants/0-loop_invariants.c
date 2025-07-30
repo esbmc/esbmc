@@ -22,8 +22,9 @@
      {   
         //should havoc the variables: change the invovlved variables to non deterministic values
         //use assumption to set i >= 0 && i <= 5000000 && sum == i * 10;
-         sum += 10;
-         i++;
+        __ESBMC_loop_invariant(i >= 0 && i <= 5000000 && sum == i * 10);
+        sum += 10;
+        i++;
          // check the loop invariant after the update
          // assert the i >= 0 && i <= 5000000 && sum == i * 10;
          // if the assertion fails, then the loop invariant is not maintained
