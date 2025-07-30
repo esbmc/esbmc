@@ -15,10 +15,11 @@
      @*/
      
      while (i < 5000000)
-     {   
-         sum += 10;
-         i++;
-         secret = secret +1;
+     {  
+        __ESBMC_loop_invariant(i >= 0 && i <= 5000000 && sum == i * 10);
+        sum += 10;
+        i++;
+        secret = secret +1;
      }
      
      assert(sum == 50000000);     
