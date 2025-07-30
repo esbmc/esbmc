@@ -547,7 +547,7 @@ _Bool __ESBMC_exists(void*, _Bool);
  * 
  */
 
-void __ESBMC_loop_invariant(void*, _Bool);
+void __ESBMC_loop_invariant(_Bool);
 
 
     )";

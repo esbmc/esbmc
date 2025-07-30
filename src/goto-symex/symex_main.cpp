@@ -807,37 +807,6 @@ void goto_symext::run_intrinsic(
     return;
   }
 
-  void goto_symext::symex_loop_invariant()
-  {
-    // this aims to use esbmc to use a single step to prove the loop invariant
-    // Basic guard check - skip if guard is false
-    if (cur_state->guard.is_false())
-      return;
-
-    // Get the loop invariant
-    const goto_programt::instructiont &instruction = *cur_state->source.pc;
-
-    log_status("Processing {} loop invariant", instruction.get_loop_invariants().size());
-    for (const auto &invariant : instruction.get_loop_invariants())
-    { 
-      expr2tc rename_invariant = invariant;
-
-      // rename the vairables to match the current symbolic execution state
-      cur_state->rename(rename_invariant);
-      
-      // store invariant for later use
-      cur_state -> pending_invariants.push_back(rename_invariant);
-
-      log_status("Stored loop invariant: {}", rename_invariant);
-    }
-    cur_state -> has_loop_invariant = true;
-    
-    log_status("Successfully collected {} loop invariants, marked state for loop processing", 
-               cur_state->pending_invariants.size());
-  }
-  
-
-
   if (symname == "c:@F@__ESBMC_bitcast")
   {
     assert(func_call.operands.size() == 2 && "Wrong __ESBMC_bitcast signature");
@@ -1419,4 +1388,33 @@ void goto_symext::add_memory_leak_checks()
       cond,
       "dereference failure: forgotten memory: " + get_pretty_name(it.name));
   }
+}
+
+void goto_symext::symex_loop_invariant()
+{
+  // this aims to use esbmc to use a single step to prove the loop invariant
+  // Basic guard check - skip if guard is false
+  if (cur_state->guard.is_false())
+    return;
+
+  // Get the loop invariant
+  const goto_programt::instructiont &instruction = *cur_state->source.pc;
+
+  log_status("Processing {} loop invariant", instruction.get_loop_invariants().size());
+  for (const auto &invariant : instruction.get_loop_invariants())
+  { 
+    expr2tc rename_invariant = invariant;
+
+    // rename the vairables to match the current symbolic execution state
+    cur_state->rename(rename_invariant);
+    
+    // store invariant for later use
+    cur_state->pending_invariants.push_back(rename_invariant);
+
+    log_status("Stored loop invariant");
+  }
+  cur_state->has_loop_invariant = true;
+  
+  log_status("Successfully collected {} loop invariants, marked state for loop processing", 
+             cur_state->pending_invariants.size());
 }

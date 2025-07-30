@@ -339,6 +339,9 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   if (cmdline.isset("compact-trace"))
     options.set_option("no-slice", true);
 
+  // Set default value for loop-invariant option
+  options.set_option("loop-invariant", false);
+
   if (
     cmdline.isset("smt-thread-guard") || cmdline.isset("smt-symex-guard") ||
     cmdline.isset("smt-symex-assert") || cmdline.isset("smt-symex-assume"))
