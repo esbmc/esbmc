@@ -7,7 +7,7 @@
 namespace std
 {
 #define STACK_CAPACITY 20
-template <class T, class Container = deque<T> >
+template <class T, class Container = deque<T>>
 class stack
 {
   T buf[STACK_CAPACITY];
@@ -16,8 +16,17 @@ class stack
 public:
   stack(const Container &ctnr = Container()) : _top(0)
   {
-  }
+    // Copy elements from container to stack
+    size_t container_size = ctnr.size();
+    __ESBMC_assert(
+      container_size <= STACK_CAPACITY, "container too large for stack");
 
+    for (size_t i = 0; i < container_size; ++i)
+    {
+      buf[i] = ctnr[i];
+    }
+    _top = container_size;
+  }
   void inc_top()
   {
     _top++;
