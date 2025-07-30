@@ -263,6 +263,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"slice-assumes", NULL, "remove unused assume statements"},
     {"extended-try-analysis", NULL, ""},
     {"skip-bmc", NULL, "do not perform bounded model checking"},
+    {"loop-invariant", NULL, "enable loop invariant checking"},
     {"cache-asserts", NULL, "cache asserts that were already proven correct"}}},
   {"Incremental BMC",
    {{"incremental-bmc", NULL, "incremental loop unwinding verification"},

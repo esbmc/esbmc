@@ -574,15 +574,15 @@ void goto_convertt::do_function_call_symbol(
           log_error("invariants must be of bool type");
   
         goto_programt::instructiont &final_instruct = dest.instructions.back();
-        if (final_instruct.is_invariant())
+        if (final_instruct.is_loop_invariant())
         {
           multiple_invariants = true;
-          final_instruct.add_invariant(guard);
+          final_instruct.add_loop_invariant(guard);
         }
         else
         {
           t = dest.add_instruction(LOOP_INVARIANT);
-          t->add_invariant(guard);
+          t->add_loop_invariant(guard);
         }
       }
       else
