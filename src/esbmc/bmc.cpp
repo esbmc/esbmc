@@ -1409,10 +1409,10 @@ smt_convt::resultt bmct::multi_property_check(
     // Initialize a solver
     std::unique_ptr<smt_convt> runtime_solver(create_solver("", ns, options));
 
-    // Store solver name
-    if (summary.solver_name.empty())
+    // Store solver name initially but not again
+    std::call_once(summary.solver_name_flag, [&]() {
       summary.solver_name = runtime_solver->solver_text();
-
+    });
     log_status(
       "Solving claim '{}' with solver {}",
       claim.claim_msg,
