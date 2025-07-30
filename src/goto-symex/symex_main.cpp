@@ -243,6 +243,14 @@ void goto_symext::symex_step(reachability_treet &art)
     cur_state->source.pc++;
     break;
 
+  case LOOP_INVARIANT:
+    if (options.get_bool_option("loop-invariant"))
+    {
+      symex_loop_invariant();
+    }
+    cur_state->source.pc++;
+    break;
+
   case RETURN:
     if (!cur_state->guard.is_false())
     {
@@ -798,6 +806,37 @@ void goto_symext::run_intrinsic(
     add_memory_leak_checks();
     return;
   }
+
+  void goto_symext::symex_loop_invariant()
+  {
+    // this aims to use esbmc to use a single step to prove the loop invariant
+    // Basic guard check - skip if guard is false
+    if (cur_state->guard.is_false())
+      return;
+
+    // Get the loop invariant
+    const goto_programt::instructiont &instruction = *cur_state->source.pc;
+
+    log_status("Processing {} loop invariant", instruction.get_loop_invariants().size());
+    for (const auto &invariant : instruction.get_loop_invariants())
+    { 
+      expr2tc rename_invariant = invariant;
+
+      // rename the vairables to match the current symbolic execution state
+      cur_state->rename(rename_invariant);
+      
+      // store invariant for later use
+      cur_state -> pending_invariants.push_back(rename_invariant);
+
+      log_status("Stored loop invariant: {}", rename_invariant);
+    }
+    cur_state -> has_loop_invariant = true;
+    
+    log_status("Successfully collected {} loop invariants, marked state for loop processing", 
+               cur_state->pending_invariants.size());
+  }
+  
+
 
   if (symname == "c:@F@__ESBMC_bitcast")
   {
