@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--unwind 4 --timeout 900
+^VERIFICATION FAILED$
