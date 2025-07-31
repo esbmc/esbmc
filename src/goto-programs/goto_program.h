@@ -160,6 +160,7 @@ public:
       targets.clear();
       guard = gen_true_expr();
       code = expr2tc();
+      loop_invariants.clear();
       inductive_step_instruction = false;
       inductive_assertion = false;
       is_loop_head = false;
