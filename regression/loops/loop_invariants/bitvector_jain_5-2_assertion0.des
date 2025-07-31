@@ -1,0 +1,4 @@
+KNOWNBUG
+main.c
+--k-induction --loop-invariant
+^VERIFICATION SUCCESSFUL$
