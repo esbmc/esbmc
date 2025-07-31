@@ -34,8 +34,8 @@ protected:
     goto_programt::targett &loop_head,
     const std::vector<expr2tc> &invariants);
 
-  // Insert HAVOC and ASSUME after loop condition
-  void insert_havoc_and_assume_after_condition(
+  // Insert HAVOC and ASSUME before loop condition
+  void insert_havoc_and_assume_before_condition(
     goto_programt::targett &loop_head,
     const loopst &loop,
     const std::vector<expr2tc> &invariants);
