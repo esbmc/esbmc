@@ -1,4 +1,4 @@
-def return_none() -> None:
+def return_none() -> int:
     a = None
     return a
 
