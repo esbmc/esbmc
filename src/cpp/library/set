@@ -52,6 +52,13 @@ public:
       base = bbase;
     }
 
+    // Constructor that accepts const pointer (for const methods)
+    iterator(const key_type *bbase, int ppos)
+      : pos(ppos), base(const_cast<key_type *>(bbase))
+    {
+      __ESBMC_assert(bbase != NULL, "Invalid null pointer");
+    }
+
     iterator()
     {
     }
@@ -434,7 +441,7 @@ public:
       buf[i] = x.buf[i];
     }
     _size = x.size();
-    buf[_size] = 0;
+    buf[_size] = Key();
   }
 
   multiset &operator=(const multiset &x)
@@ -445,7 +452,7 @@ public:
       buf[i] = x.buf[i];
     }
     _size = x.size();
-    buf[_size] = 0;
+    buf[_size] = Key();
     return *this;
   }
 
@@ -458,7 +465,7 @@ public:
   iterator end()
   {
     iterator buffer;
-    buffer.base = &buf[0];
+    buffer.base = buf;
     buffer.pos = _size;
     return buffer;
   }
@@ -470,7 +477,7 @@ public:
   const_iterator end() const
   {
     const_iterator buffer;
-    buffer.base = &buf[0];
+    buffer.base = buf;
     buffer.pos = _size;
     return buffer;
   }
@@ -553,7 +560,8 @@ public:
   void erase(iterator position)
   {
     __ESBMC_assert(
-      (position.pos >= 0) && (position.pos < size() && (position.base == buf)),
+      (position.pos >= 0) && (position.pos < size()) &&
+        (position.base == buf),
       "Invalid argument: iterator out of range");
     int j;
     for (int i = position.pos + 1; i < _size; i++)
@@ -591,11 +599,16 @@ public:
   void erase(iterator first, iterator last)
   {
     __ESBMC_assert(
-      first < last,
-      "Invalid iterator range: the second argument must be greater than the "
-      "first one");
-    while (first != last)
-      erase(first++);
+      first.pos <= last.pos && first.base == last.base,
+      "Invalid iterator range");
+
+    // Calculate how many elements to erase
+    int num_to_erase = last.pos - first.pos;
+
+    // Erase elements by repeatedly erasing at the first position
+    // Always erase at the same position since elements shift left
+    for (int i = 0; i < num_to_erase; i++)
+      erase(first);
   }
 
   void swap(multiset &x)
@@ -623,13 +636,22 @@ public:
   }
   // set operations:
 
-  iterator find(const key_type &x) const
+  iterator find(const key_type &x)
   {
     int i;
     for (i = 0; i != _size; i++)
       if (buf[i] == x)
         break;
-    return iterator(buf, i);
+    return iterator(buf, i); // Non-const version
+  }
+
+  const_iterator find(const key_type &x) const
+  {
+    int i;
+    for (i = 0; i != _size; i++)
+      if (buf[i] == x)
+        break;
+    return const_iterator(buf, i);
   }
 
   size_type count(const key_type &x) const
@@ -737,6 +759,13 @@ public:
     }
 
     iterator(key_type *bbase, int ppos) : pos(ppos), base(bbase)
+    {
+      __ESBMC_assert(bbase != NULL, "Invalid null pointer");
+    }
+
+    // Constructor that accepts const pointer (for const methods)
+    iterator(const key_type *bbase, int ppos)
+      : pos(ppos), base(const_cast<key_type *>(bbase))
     {
       __ESBMC_assert(bbase != NULL, "Invalid null pointer");
     }
@@ -1117,7 +1146,7 @@ public:
       buf[i] = x.buf[i];
     }
     _size = x.size();
-    buf[_size] = 0;
+    buf[_size] = Key();
   }
 
   set &operator=(const set &x)
@@ -1141,7 +1170,7 @@ public:
   iterator end()
   {
     iterator buffer;
-    buffer.base = &buf[0];
+    buffer.base = buf;
     buffer.pos = _size;
     return buffer;
   }
@@ -1153,7 +1182,7 @@ public:
   const_iterator end() const
   {
     const_iterator buffer;
-    buffer.base = &buf[0];
+    buffer.base = buf;
     buffer.pos = _size;
     return buffer;
   }
@@ -1243,7 +1272,8 @@ public:
   void erase(iterator position)
   {
     __ESBMC_assert(
-      (position.pos >= 0) && (position.pos < size() && (position.base == buf)),
+      (position.pos >= 0) && (position.pos < size()) &&
+        (position.base == buf),
       "Invalid argument: iterator out of range");
     int j;
     for (int i = position.pos + 1; i < _size; i++)
@@ -1281,11 +1311,16 @@ public:
   void erase(iterator first, iterator last)
   {
     __ESBMC_assert(
-      first < last,
-      "Invalid iterator range: the second argument must be greater than the "
-      "first one");
-    while (first != last)
-      erase(first++);
+      first.pos <= last.pos && first.base == last.base,
+      "Invalid iterator range");
+
+    // Calculate how many elements to erase
+    int num_to_erase = last.pos - first.pos;
+
+    // Erase elements by repeatedly erasing at the first position
+    // Always erase at the same position since elements shift left
+    for (int i = 0; i < num_to_erase; i++)
+      erase(first);
   }
   void swap(set &x)
   {
@@ -1311,13 +1346,22 @@ public:
   }
   // set operations:
 
-  iterator find(const key_type &x) const
+  iterator find(const key_type &x)
   {
     int i;
     for (i = 0; i != _size; i++)
       if (buf[i] == x)
         break;
-    return iterator(buf, i);
+    return iterator(buf, i); // Non-const version
+  }
+
+  const_iterator find(const key_type &x) const
+  {
+    int i;
+    for (i = 0; i != _size; i++)
+      if (buf[i] == x)
+        break;
+    return const_iterator(buf, i);
   }
 
   size_type count(const key_type &x) const
