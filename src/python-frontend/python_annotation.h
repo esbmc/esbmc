@@ -287,6 +287,8 @@ private:
       return "bool";
     if (rhs.is_string())
       return "str";
+    if (rhs.is_null())
+      return "NoneType";
 
     return std::string();
   }
@@ -361,14 +363,7 @@ private:
         {
           std::string inferred_type;
           infer_type(return_node, elem, inferred_type);
-          if (inferred_type != "")
           return inferred_type;
-
-          if (
-            (return_node["_type"] == "Constant" && return_node["value"].is_null()) ||
-            (return_node["_type"] == "NameConstant" && return_node["value"].is_null()) ||
-            (return_node["_type"] == "Name" && return_node.contains("id") && return_node["id"] == "None"))
-            return "NoneType";
         }
 
         // Check if function has a return type annotation
