@@ -606,12 +606,9 @@ public:
     int num_to_erase = last.pos - first.pos;
 
     // Erase elements by repeatedly erasing at the first position
+    // Always erase at the same position since elements shift left
     for (int i = 0; i < num_to_erase; i++)
-    {
-      if (first.pos < _size)
-        erase(
-          first); // Always erase at the same position since elements shift left
-    }
+      erase(first);
   }
 
   void swap(multiset &x)
@@ -654,7 +651,7 @@ public:
     for (i = 0; i != _size; i++)
       if (buf[i] == x)
         break;
-    return const_iterator(buf, i); // Const version returns const_iterator
+    return const_iterator(buf, i);
   }
 
   size_type count(const key_type &x) const
@@ -1321,12 +1318,9 @@ public:
     int num_to_erase = last.pos - first.pos;
 
     // Erase elements by repeatedly erasing at the first position
+    // Always erase at the same position since elements shift left
     for (int i = 0; i < num_to_erase; i++)
-    {
-      if (first.pos < _size)
-        erase(
-          first); // Always erase at the same position since elements shift left
-    }
+      erase(first);
   }
   void swap(set &x)
   {
@@ -1367,7 +1361,7 @@ public:
     for (i = 0; i != _size; i++)
       if (buf[i] == x)
         break;
-    return const_iterator(buf, i); // Const version returns const_iterator
+    return const_iterator(buf, i);
   }
 
   size_type count(const key_type &x) const
