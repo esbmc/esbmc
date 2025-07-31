@@ -122,6 +122,7 @@ private:
     std::atomic<size_t> failed_properties = 0;
     std::atomic<double> total_time_s = 0.0;
     std::string solver_name;
+    std::once_flag solver_name_flag;
   };
 
   void report_simple_summary(const SimpleSummary &summary) const;
