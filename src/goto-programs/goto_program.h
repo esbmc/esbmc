@@ -359,45 +359,36 @@ public:
       guard = gen_true_expr();
     }
 
-    instructiont(const instructiont& other)
-    : code(other.code),
-      function(other.function),
-      location(other.location),
-      type(other.type),
-      guard(other.guard),
-      // `targets` list is intentionally not copied. The `copy_from` function
-      // is responsible for creating new instructions and then fixing up the
-      // target iterators to point within the new list.
-      labels(other.labels),
-      inductive_step_instruction(other.inductive_step_instruction),
-      inductive_assertion(other.inductive_assertion),
-      location_number(other.location_number),
-      loop_number(other.loop_number),
-      target_number(other.target_number),
-      scope_id(other.scope_id),
-      parent_scope_id(other.parent_scope_id)
+    instructiont(const instructiont &other)
+      : code(other.code),
+        function(other.function),
+        location(other.location),
+        type(other.type),
+        guard(other.guard),
+        labels(other.labels),
+        inductive_step_instruction(other.inductive_step_instruction),
+        inductive_assertion(other.inductive_assertion),
+        location_number(other.location_number),
+        loop_number(other.loop_number),
+        target_number(other.target_number),
+        scope_id(other.scope_id),
+        parent_scope_id(other.parent_scope_id)
     {
-        // The `instruction_mutex` is NOT copied. The new object's mutex
-        // is default-initialized to a fresh, unlocked state.
+      // instruction_mutex is not copied
     }
 
-    // 3. Custom Copy Assignment Operator (NEW)
-    instructiont& operator=(const instructiont& other)
+    instructiont &operator=(const instructiont &other)
     {
       if (this == &other)
         return *this;
 
-      // Lock our own mutex to make the assignment operation safe.
       std::lock_guard<std::mutex> lock(instruction_mutex);
 
-      // Copy data members. Do not touch the mutex itself.
       code = other.code;
       function = other.function;
       location = other.location;
       type = other.type;
       guard = other.guard;
-      // As with the copy constructor, `copy_from` will fix the targets.
-      // Clearing them here is the safest approach.
       targets.clear();
       labels = other.labels;
       inductive_step_instruction = other.inductive_step_instruction;
@@ -411,34 +402,33 @@ public:
       return *this;
     }
 
-    // 4. Custom Move Constructor (from previous fix)
-    instructiont(instructiont&& other) noexcept
-        : code(std::move(other.code)),
-          function(std::move(other.function)),
-          location(std::move(other.location)),
-          type(other.type),
-          guard(std::move(other.guard)),
-          targets(std::move(other.targets)),
-          labels(std::move(other.labels)),
-          inductive_step_instruction(other.inductive_step_instruction),
-          inductive_assertion(other.inductive_assertion),
-          location_number(other.location_number),
-          loop_number(other.loop_number),
-          target_number(other.target_number),
-          scope_id(other.scope_id),
-          parent_scope_id(other.parent_scope_id)
+    instructiont(instructiont &&other)
+      : code(std::move(other.code)),
+        function(std::move(other.function)),
+        location(std::move(other.location)),
+        type(other.type),
+        guard(std::move(other.guard)),
+        targets(std::move(other.targets)),
+        labels(std::move(other.labels)),
+        inductive_step_instruction(other.inductive_step_instruction),
+        inductive_assertion(other.inductive_assertion),
+        location_number(other.location_number),
+        loop_number(other.loop_number),
+        target_number(other.target_number),
+        scope_id(other.scope_id),
+        parent_scope_id(other.parent_scope_id)
     {
-        // The mutex is not moved; the new object gets its own.
     }
 
-    // 5. Custom Move Assignment Operator (from previous fix)
-    instructiont& operator=(instructiont&& other) noexcept
+    instructiont &operator=(instructiont &&other)
     {
       if (this != &other)
       {
         std::lock(instruction_mutex, other.instruction_mutex);
-        std::lock_guard<std::mutex> lhs_lock(instruction_mutex, std::adopt_lock);
-        std::lock_guard<std::mutex> rhs_lock(other.instruction_mutex, std::adopt_lock);
+        std::lock_guard<std::mutex> lhs_lock(
+          instruction_mutex, std::adopt_lock);
+        std::lock_guard<std::mutex> rhs_lock(
+          other.instruction_mutex, std::adopt_lock);
 
         code = std::move(other.code);
         function = std::move(other.function);
