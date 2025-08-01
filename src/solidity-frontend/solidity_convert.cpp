@@ -5089,55 +5089,6 @@ bool solidity_convertert::get_expr(
   {
     side_effect_expr_function_callt call;
     const nlohmann::json &callee_expr_json = expr["expression"];
-
-    // * check if it's a recursive function call
-    if (
-      callee_expr_json.contains("referencedDeclaration") &&
-      callee_expr_json["referencedDeclaration"].is_number())
-    {
-      int referenced_decl =
-        callee_expr_json["referencedDeclaration"].get<int>();
-
-      int current_func_id = -1;
-      if (current_functionDecl && (*current_functionDecl).contains("id"))
-      {
-        current_func_id = (*current_functionDecl)["id"].get<int>();
-      }
-
-      if (referenced_decl == current_func_id)
-      {
-        std::string func_id;
-        if (current_functionDecl)
-        {
-          get_function_definition_name(
-            *current_functionDecl, current_functionName, func_id);
-        }
-
-        if (func_id.empty() || context.find_symbol(func_id) == nullptr)
-        {
-          log_error("Cannot find current function symbol");
-          return true;
-        }
-
-        call.function() = symbol_expr(*context.find_symbol(func_id));
-        call.type() = context.find_symbol(func_id)->type;
-
-        if (expr.contains("arguments"))
-        {
-          for (const auto &arg : expr["arguments"].items())
-          {
-            exprt arg_expr;
-            if (get_expr(arg.value(), arg_expr))
-              return true;
-            call.arguments().push_back(arg_expr);
-          }
-        }
-
-        new_expr = call;
-        break;
-      }
-    }
-
     // * check if it's a low-level call
     if (SolidityGrammar::is_address_member_call(callee_expr_json))
     {
@@ -5232,54 +5183,6 @@ bool solidity_convertert::get_expr(
 
       new_expr = call;
       break;
-    }
-    // * special: new D{value: amount}(4), handle the {value: amount} part
-    if (
-      callee_expr_json["nodeType"] == "FunctionCallOptions" &&
-      callee_expr_json["expression"]["nodeType"] == "NewExpression")
-    {
-      exprt new_obj;
-      // 1. construct new object
-      if (get_new_object_ctor_call(
-            callee_expr_json["expression"], true, new_obj))
-        return true;
-      // 2. if it has value option, we need to model the transaction
-      if (
-        callee_expr_json["options"].contains("name") &&
-        callee_expr_json["options"]["name"] == "value")
-      {
-        for (const auto &opt : callee_expr_json["options"])
-        {
-          locationt loc;
-          get_location_from_node(expr, loc);
-
-          exprt this_obj;
-          if (get_ctor_decl_this_ref(expr, this_obj))
-            return true;
-
-          exprt value_expr;
-          nlohmann::json val_type = {
-            {"typeIdentifier", "t_uint256"}, {"typeString", "uint256"}};
-          if (get_expr(opt, val_type, value_expr))
-            return true;
-
-          exprt new_target = new_obj;
-          typet val_t = unsignedbv_typet(256);
-
-          exprt front, back;
-          if (model_transaction(
-                expr, this_obj, new_target, value_expr, loc, front, back))
-            return true;
-
-          convert_expression_to_code(front);
-          move_to_front_block(front);
-          convert_expression_to_code(back);
-          move_to_back_block(back);
-        }
-      }
-
-      new_expr = new_obj;
-      return false;
     }
 
     // * check if its a call-with-options
@@ -5390,35 +5293,8 @@ bool solidity_convertert::get_expr(
     auto it = expr.find("names");
     if (it != expr.end() && it->is_array() && !it->empty())
     {
-      std::unordered_map<std::string, nlohmann::json> name_to_arg;
-      for (size_t i = 0; i < expr["names"].size(); ++i)
-        name_to_arg[expr["names"][i]] = expr["arguments"][i];
-
-      std::vector<std::string> param_order;
-      const auto &decl_ref =
-        find_decl_ref(src_ast_json, callee_expr_json["referencedDeclaration"]);
-
-      if (
-        decl_ref.contains("parameters") &&
-        decl_ref["parameters"].contains("parameters"))
-      {
-        for (const auto &param : decl_ref["parameters"]["parameters"])
-        {
-          if (param.contains("name"))
-            param_order.push_back(param["name"]);
-        }
-      }
-
-      nlohmann::json ordered_args = nlohmann::json::array();
-      for (const auto &param : param_order)
-      {
-        ordered_args.push_back(name_to_arg[param]);
-      }
-
-      nlohmann::json clean_expr = expr;
-      clean_expr["arguments"] = ordered_args;
-      clean_expr.erase("names");
-
+      nlohmann::json clean_expr =
+        reorder_arguments(expr, src_ast_json, callee_expr_json);
       if (get_non_library_function_call(decl_ref, clean_expr, call))
         return true;
 
@@ -5924,8 +5800,20 @@ bool solidity_convertert::get_expr(
     //    bytes memory b = new bytes(7)
     // 3. new object, e.g.
     //    Base x = new Base(1, 2);
-
-    nlohmann::json callee_expr_json = expr["expression"];
+    // 4. new object with options, e.g.
+    //    Base x = new Base{value: 1 ether}(1, 2);
+    nlohmann::json callee_expr_json;
+    if (
+      expr.contains("expression") &&
+      expr["expression"]["nodeType"] == "FunctionCallOptions")
+    {
+      callee_expr_json = expr["expression"]["expression"];
+    }
+    else
+    {
+      callee_expr_json = expr["expression"];
+    }
+    // nlohmann::json callee_expr_json = expr["expression"];
     if (callee_expr_json.contains("typeName"))
     {
       // case 1
@@ -5977,7 +5865,6 @@ bool solidity_convertert::get_expr(
         break;
       }
     }
-
     // case 3
     // is equal to Base *x = new base(x);
     exprt call;
@@ -5985,6 +5872,49 @@ bool solidity_convertert::get_expr(
       return true;
 
     new_expr = call;
+    // check if the new expression has options
+    if (
+      expr.contains("options") && expr.contains("names") &&
+      !expr["options"].empty() && !expr["names"].empty())
+    {
+      const auto &options = expr["options"];
+      const auto &names = expr["names"];
+
+      for (size_t i = 0; i < options.size(); ++i)
+      {
+        const auto &opt = options[i];
+        std::string opt_name = names[i];
+        // model transaction when the option is "value"
+        if (opt_name == "value")
+        {
+          exprt value_expr;
+          nlohmann::json val_type = expr["expression"]["argumentTypes"][0];
+          if (get_expr(opt, val_type, value_expr))
+            return true;
+
+          exprt this_expr;
+          if (get_func_decl_this_ref(expr, this_expr))
+          {
+            if (get_ctor_decl_this_ref(expr, this_expr))
+              return true;
+          }
+          exprt front_block = code_blockt();
+          exprt back_block = code_blockt();
+          if (model_transaction(
+                expr,
+                this_expr,
+                new_expr,
+                value_expr,
+                location,
+                front_block,
+                back_block))
+            return true;
+
+          move_to_back_block(back_block);
+          break;
+        }
+      }
+    }
 
     if (is_bound)
     {
@@ -11235,12 +11165,13 @@ bool solidity_convertert::get_new_object_ctor_call(
 {
   log_debug("solidity", "generating new contract object");
   // 1. get the ctor call expr
-  // if the caller is a NewExpression, we can directly use it
-  nlohmann::json callee_expr_json = caller;
-  if (caller["nodeType"] == "NewExpression")
-    nlohmann::json callee_expr_json = caller;
-  else
+  nlohmann::json callee_expr_json;
+  // if the caller's nextnode is a NewExpression, we can use it's expression directly
+  // else, we need to use the expression's expression
+  if (caller["expression"]["nodeType"] == "NewExpression")
     callee_expr_json = caller["expression"];
+  else
+    callee_expr_json = caller["expression"]["expression"];
   int ref_decl_id = callee_expr_json["typeName"]["referencedDeclaration"];
   // get contract name
   const std::string contract_name = contractNamesMap[ref_decl_id];
@@ -11834,6 +11765,43 @@ bool solidity_convertert::get_high_level_call_wrapper(
   convert_expression_to_code(assign_sender_restore);
   back_block.move_to_operands(assign_sender_restore);
   return false;
+}
+
+nlohmann::json solidity_convertert::reorder_arguments(
+  const nlohmann::json &expr,
+  const nlohmann::json &src_ast_json,
+  const nlohmann::json &callee_expr_json)
+{
+  // build a map from name to argument
+  std::unordered_map<std::string, nlohmann::json> name_to_arg;
+  for (size_t i = 0; i < expr["names"].size(); ++i)
+    name_to_arg[expr["names"][i]] = expr["arguments"][i];
+
+  std::vector<std::string> param_order;
+  const auto &decl_ref =
+    find_decl_ref(src_ast_json, callee_expr_json["referencedDeclaration"]);
+  // check if the function has parameters and store the order
+  if (
+    decl_ref.contains("parameters") &&
+    decl_ref["parameters"].contains("parameters"))
+  {
+    for (const auto &param : decl_ref["parameters"]["parameters"])
+    {
+      if (param.contains("name"))
+        param_order.push_back(param["name"]);
+    }
+  }
+  // reorder the arguments based on the parameter order
+  nlohmann::json ordered_args = nlohmann::json::array();
+  for (const auto &param : param_order)
+  {
+    ordered_args.push_back(name_to_arg[param]);
+  }
+  // use the reordered arguments
+  nlohmann::json clean_expr = expr;
+  clean_expr["arguments"] = ordered_args;
+  clean_expr.erase("names");
+  return clean_expr;
 }
 
 bool solidity_convertert::is_byte_type(const typet &t)
