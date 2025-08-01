@@ -143,10 +143,6 @@ public:
 
     bool inductive_assertion;
 
-    // loop invariant replacement
-    bool is_loop_head;
-    bool is_break;
-
     //! is this node a branch target?
     inline bool is_target() const
     {
@@ -163,8 +159,6 @@ public:
       loop_invariants.clear();
       inductive_step_instruction = false;
       inductive_assertion = false;
-      is_loop_head = false;
-      is_break = false;
     }
 
     inline void make_goto()
@@ -353,8 +347,6 @@ public:
         type(NO_INSTRUCTION_TYPE),
         inductive_step_instruction(false),
         inductive_assertion(false),
-        is_loop_head(false),
-        is_break(false),
         location_number(0),
         loop_number(unsigned(0)),
         target_number(unsigned(-1))
@@ -367,8 +359,6 @@ public:
         type(_type),
         inductive_step_instruction(false),
         inductive_assertion(false),
-        is_loop_head(false),
-        is_break(false),
         location_number(0),
         loop_number(unsigned(0)),
         target_number(unsigned(-1))
@@ -389,8 +379,6 @@ public:
       std::swap(
         inductive_step_instruction, instruction.inductive_step_instruction);
       std::swap(inductive_assertion, instruction.inductive_assertion);
-      std::swap(is_loop_head, instruction.is_loop_head);
-      std::swap(is_break, instruction.is_break);
       std::swap(instruction.loop_number, loop_number);
     }
 
