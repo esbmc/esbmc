@@ -503,7 +503,7 @@ _Bool __ESBMC_exists(void*, _Bool);
  *   return -1;
  * }
  * 
- * We can find the loop invariant as: lb <= ub && ub < size && mid == ((unsigned int)lb + (unsigned int)ub) >> 1
+ * We can find the loop invariant as: lb - 1 <= ub && ub < size && mid == ((unsigned int)lb + (unsigned int)ub) >> 1
  * 
  * We can use the following steps to check the loop invariant:
  * 
@@ -511,7 +511,7 @@ _Bool __ESBMC_exists(void*, _Bool);
  *   int lb = 0;
  *   int ub = size - 1;
  *   // 1. Assert invariants before entering the loop
- *   assert(lb <= ub && ub < size && mid == ((unsigned int)lb + (unsigned int)ub) >> 1);
+ *   assert(lb -1 <= ub && ub < size && mid == ((unsigned int)lb + (unsigned int)ub) >> 1);
  * 
  *   // 2. Capture all related variables in the loop
  *   int mid = nondet_int();
@@ -519,9 +519,10 @@ _Bool __ESBMC_exists(void*, _Bool);
  *   int ub = nondet_int();
  * 
  *   // 3. Set the loop invariant as the assumption
- *   assume(lb <= ub && ub < size && mid == ((unsigned int)lb + (unsigned int)ub) >> 1); // Step k
+ *   assume(lb - 1 <= ub && ub < size && mid == ((unsigned int)lb + (unsigned int)ub) >> 1); // Step k
  * 
  *   // 4. Enter the loop (only run a single step of the loop)
+ *   // Branch 1: 
  *   if (lb <= ub) {
  *     int mid = (lb + ub) / 2;
  *     if (arr[mid] == target) {
@@ -534,14 +535,21 @@ _Bool __ESBMC_exists(void*, _Bool);
  *     }
  * 
  *     // 5. Check if the invariant is satisfiable after the loop // Step k
- *     assert(lb <= ub && ub < size && mid == ((unsigned int)lb + (unsigned int)ub) >> 1); //should use Multi-property for these assertion analysis
+ *     assert(lb - 1 <= ub && ub < size && mid == ((unsigned int)lb + (unsigned int)ub) >> 1); //should use Multi-property for these assertion analysis
  * 
  *     // 6. Terminate the loop
  *     assume (false);
  *   }
  *   return -1;
+ *   
+ * // Branch 2: 
+ *   else {
+ *     // invariant + !condition (need to add theloop exit condition)
+ *     assume (!(lb <= ub));
+ *     assume (lb - 1 <= ub && ub < size && mid == ((unsigned int)lb + (unsigned int)ub) >> 1);
+ *     // we assume the invariant is preserved after the loop, then we can continue on this branch to check the following assertions.
+ *   }
  * }
- * 
  * 
  * 
  * 
