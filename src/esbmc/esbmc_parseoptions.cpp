@@ -476,7 +476,6 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   // parallel solving activates "--multi-property"
   if (cmdline.isset("parallel-solving"))
   {
-    options.set_option("result-only", true);
     options.set_option("base-case", true);
     options.set_option("multi-property", true);
   }
@@ -1833,7 +1832,7 @@ bool esbmc_parseoptionst::process_goto_program(
   {
     namespacet ns(context);
 
-    bool is_mul = cmdline.isset("multi-property");
+    bool is_mul = cmdline.isset("multi-property") || cmdline.isset("parallel-solving");
     is_coverage = cmdline.isset("assertion-coverage") ||
                   cmdline.isset("assertion-coverage-claims") ||
                   cmdline.isset("condition-coverage") ||
