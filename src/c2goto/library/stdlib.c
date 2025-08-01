@@ -271,6 +271,14 @@ char *getenv(const char *name)
 {
 __ESBMC_HIDE:;
 
+  __ESBMC_assert(name != NULL, "getenv called with NULL pointer");
+
+  if (*name == '\0')
+    return NULL;
+
+  if (strchr(name, '=') != NULL)
+    return NULL;
+
   _Bool found;
   if (!found)
     return 0;
