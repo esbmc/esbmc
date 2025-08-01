@@ -46,8 +46,8 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
   // 2. Insert HAVOC and ASSUME before loop condition (after base case assert)
   insert_havoc_and_assume_before_condition(loop_head, loop, invariants);
 
-  // 3. Insert ASSERT invariant at loop body end (inductive step)
-  // Combined in the step 2
+  // 3. Insert inductive step verification and loop termination
+  insert_inductive_step_and_termination(loop, invariants);
 }
 
 std::vector<expr2tc> goto_loop_invariantt::extract_loop_invariants(const loopst &loop)
@@ -145,8 +145,6 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
   // Insert before the loop condition
   goto_function.body.insert_swap(insert_point, dest);
   
-  // 3. Insert inductive step verification and loop termination
-  insert_inductive_step_and_termination(loop, invariants);
 }
 
 void goto_loop_invariantt::insert_inductive_step_and_termination(
