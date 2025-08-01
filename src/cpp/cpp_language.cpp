@@ -63,7 +63,6 @@ void cpp_languaget::internal_additions(std::ostream &out)
          "bool assertion, const char *description);"
       << std::endl;
   out << "bool __ESBMC_same_object(const void *, const void *);" << std::endl;
-  out << "void __ESBMC_loop_invariant(void*, bool);" << std::endl;
 
   // pointers
   out << "unsigned __ESBMC_POINTER_OBJECT(const void *p);" << std::endl;

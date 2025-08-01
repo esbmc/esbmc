@@ -473,88 +473,11 @@ _Noreturn void __ESBMC_unreachable();
 _Bool __ESBMC_forall(void*, _Bool);
 _Bool __ESBMC_exists(void*, _Bool);
 
-/*
- * This function is used to check loop invariants.
- * It takes phases:
- * 1. Check if the invariants are satisfiable before entering the loop (Step 1)
- * 2. Capture all related variables in the loop (not done yet), then set all the variables to nondet
- * 3. Set the loop invariant as the assumption (Step k)
- * 4. Enter the loop (only run a single step of the loop)
- * 5. Check if the invariant is satisfiable after the loop (Step k+1)
- * 6. If the invariant is not satisfied, the function will return a warning (loop invariants are not preserved).
- * 7. If the invariant is satisfied, the function will return true.
- * 8. Use the loop invariants as assumptions in the following steps.
- * 
- * For example:
- * int binary_search(int *arr, int size, int target) {
- *   int lb = 0;
- *   int ub = size - 1;
- *   while (lb <= ub) {
- *     int mid = (lb + ub) / 2;
- *     if (arr[mid] == target) {
- *       return mid;
- *     }
- *     if (arr[mid] < target) {
- *       left = mid + 1;
- *     } else {
- *       right = mid - 1;
- *     }
- *   }
- *   return -1;
- * }
- * 
- * We can find the loop invariant as: lb - 1 <= ub && ub < size && mid == ((unsigned int)lb + (unsigned int)ub) >> 1
- * 
- * We can use the following steps to check the loop invariant:
- * 
- * int binary_search(int *arr, int size, int target) {
- *   int lb = 0;
- *   int ub = size - 1;
- *   // 1. Assert invariants before entering the loop
- *   assert(lb -1 <= ub && ub < size && mid == ((unsigned int)lb + (unsigned int)ub) >> 1);
- * 
- *   // 2. Capture all related variables in the loop
- *   int mid = nondet_int();
- *   int lb = nondet_int();
- *   int ub = nondet_int();
- * 
- *   // 3. Set the loop invariant as the assumption
- *   assume(lb - 1 <= ub && ub < size && mid == ((unsigned int)lb + (unsigned int)ub) >> 1); // Step k
- * 
- *   // 4. Enter the loop (only run a single step of the loop)
- *   // Branch 1: 
- *   if (lb <= ub) {
- *     int mid = (lb + ub) / 2;
- *     if (arr[mid] == target) {
- *       return mid;
- *     }
- *     if (arr[mid] < target) {
- *       lb = mid + 1;
- *     } else {
- *       ub = mid - 1;
- *     }
- * 
- *     // 5. Check if the invariant is satisfiable after the loop // Step k
- *     assert(lb - 1 <= ub && ub < size && mid == ((unsigned int)lb + (unsigned int)ub) >> 1); //should use Multi-property for these assertion analysis
- * 
- *     // 6. Terminate the loop
- *     assume (false);
- *   }
- *   return -1;
- *   
- * // Branch 2: 
- *   else {
- *     // invariant + !condition (need to add theloop exit condition)
- *     assume (!(lb <= ub));
- *     assume (lb - 1 <= ub && ub < size && mid == ((unsigned int)lb + (unsigned int)ub) >> 1);
- *     // we assume the invariant is preserved after the loop, then we can continue on this branch to check the following assertions.
- *   }
- * }
- * 
- * 
- * 
+/* This function is used to check loop invariants
+ * It should be run with multi-property:
+ * 1. Check if it is preserved in the loop
+ * 2. Use the invariants to help the following of the loop continue with a simple assumption
  */
-
 void __ESBMC_loop_invariant(_Bool);
 
 
