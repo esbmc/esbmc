@@ -47,7 +47,7 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
   insert_havoc_and_assume_before_condition(loop_head, loop, invariants);
 
   // 3. Insert ASSERT invariant at loop body end (inductive step)
-  // insert_assert_at_loop_end(loop_exit, invariants);
+  // Combined in the step 2
 }
 
 std::vector<expr2tc> goto_loop_invariantt::extract_loop_invariants(const loopst &loop)

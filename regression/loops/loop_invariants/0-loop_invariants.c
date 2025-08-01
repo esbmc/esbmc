@@ -1,6 +1,4 @@
 /*
- * Weiqi Wang
- * 
  * This program aims to allow ESBMC to take advantage of interactive verification 
  * with ESBMC using ACSL (ANSI/ISO C Specification Language) annotations.
  * The example features a simple loop with ACSL loop invariant annotations
