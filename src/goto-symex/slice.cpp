@@ -184,6 +184,7 @@ bool claim_slicer::run(symex_target_equationt::SSA_stepst &steps)
           // the original guards are stored in comment.
           claim_msg = it->comment;
         claim_loc = it->source.pc->location.as_string();
+        claim_cstr = it->comment + " at " + claim_loc;
         continue;
       }
 

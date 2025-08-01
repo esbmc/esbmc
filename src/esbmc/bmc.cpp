@@ -1409,10 +1409,10 @@ smt_convt::resultt bmct::multi_property_check(
     // Initialize a solver
     std::unique_ptr<smt_convt> runtime_solver(create_solver("", ns, options));
 
-    // Store solver name
-    if (summary.solver_name.empty())
+    // Store solver name initially but not again
+    std::call_once(summary.solver_name_flag, [&]() {
       summary.solver_name = runtime_solver->solver_text();
-
+    });
     log_status(
       "Solving claim '{}' with solver {}",
       claim.claim_msg,
@@ -1432,12 +1432,12 @@ smt_convt::resultt bmct::multi_property_check(
     if (solver_result == smt_convt::P_UNSATISFIABLE)
     {
       // Claim passed - show in green
-      log_status("{}✓ PASSED{}: '{}'", GREEN, RESET, claim.claim_msg);
+      log_status("{}✓ PASSED{}: '{}'", GREEN, RESET, claim.claim_cstr);
     }
     else if (solver_result == smt_convt::P_SATISFIABLE)
     {
       // Claim failed - show in red
-      log_status("{}✗ FAILED{}: '{}'", RED, RESET, claim.claim_msg);
+      log_status("{}✗ FAILED{}: '{}'", RED, RESET, claim.claim_cstr);
     }
 
     double solve_time_s = (solve_stop - solve_start);

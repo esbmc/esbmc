@@ -1,8 +1,8 @@
-ESBMC contains software from numerous different sources, and as a result the
+ESBMC contains software from numerous different sources, and as a result, the
 licensing situation is complex. It is paramount that you understand that many
 SMT solvers that ESBMC links against are not open source or freely
 distributable, and many contain non-commercial usage clauses in their licenses.
-If you plan on distributing ESBMC or using it commercially, have a care.
+If you plan to distribute ESBMC or use it commercially, be cautious.
 
 This file contains:
  * A brief description of solver licenses
@@ -15,7 +15,7 @@ license. Our modifications are distributed under the terms of the Apache 2.0
 license.
 
 Several pieces of software included in ESBMC are BSD 4-clause, making them
-incompatible with the GPL. If you compile with / link against a GPL licensed
+incompatible with the GPL. If you compile with / link against a GPL-licensed
 library, you're unable to distribute the results due to conflicting licenses.
 
 ~
@@ -23,15 +23,14 @@ library, you're unable to distribute the results due to conflicting licenses.
 To briefly summarise each solver:
   Boolector: MIT license, minimum version 3.2.2.
   Bitwzula: MIT license, minimum version smtcomp-2021.
-  CVC4: BSD 3-clause, however some builds incorporate software under different
+  CVC4: BSD 3-clause, however, some builds incorporate software under different
     licenses.
   IBEX-lib: GNU Lesser General Public License.
   MathSAT: Academic free, non-commercial.
   Yices: Personal use, non-commercial. Recently released GPL3.
   Z3: MIT license, minimum version 4.8.9.
 
-In all circumstances, you should refer to the specific license of the solver you
-are using.
+In all circumstances, you should refer to the specific license of the solver you are using.
 
 ~
 
@@ -179,8 +178,7 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ~
 
-The ESBMC code authored by ourselves and our modifications to the CBMC code
-base are distributed under the terms of the Apache license 2.0, below. A list of
+The ESBMC code, authored by us and our modifications to the CBMC codebase, is distributed under the terms of the Apache License 2.0, as outlined below. A list of
 copyright holders:
 
   Lucas Cordeiro
