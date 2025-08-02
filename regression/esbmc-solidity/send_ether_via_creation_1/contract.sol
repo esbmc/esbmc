@@ -17,9 +17,9 @@ contract C {
 
     function createAndEndowD(uint arg, uint amount) public payable {
         // Send ether along with the creation
-        uint balanceBefore = address(msg.sender).balance;
+        uint balanceBefore = address(this).balance;
         D newD = new D{value: amount}(arg);
-        uint balanceAfter = address(msg.sender).balance;
+        uint balanceAfter = address(this).balance;
         assert (balanceAfter == balanceBefore);
     }
 }
