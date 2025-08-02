@@ -1,4 +1,0 @@
-CORE
-main.c
---k-induction --interval-analysis
-^VERIFICATION FAILED$
