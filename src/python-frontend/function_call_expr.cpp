@@ -179,7 +179,59 @@ void function_call_expr::handle_int_to_float(nlohmann::json &arg) const
   arg["value"] = static_cast<double>(value);
 }
 
-void function_call_expr::handle_chr(nlohmann::json &arg) const
+std::string utf8_encode(unsigned int int_value)
+{
+  /**
+   * Convert an integer value into its UTF-8 character equivalent
+   * similar to the python chr() function
+   */
+
+  // Check for surrogate pairs (invalid in UTF-8)
+  if (int_value >= 0xD800 && int_value <= 0xDFFF)
+  {
+    std::ostringstream oss;
+    oss << "Code point 0x" << std::hex << std::uppercase << int_value
+        << " is a surrogate pair, invalid in UTF-8";
+    throw std::invalid_argument(oss.str());
+  }
+
+  // Manual UTF-8 encoding
+  std::string char_out;
+
+  // https://stackoverflow.com/revisions/19968992/1
+  if (int_value <= 0x7f)
+    char_out.append(1, static_cast<char>(int_value));
+  else if (int_value <= 0x7ff)
+  {
+    char_out.append(1, static_cast<char>(0xc0 | ((int_value >> 6) & 0x1f)));
+    char_out.append(1, static_cast<char>(0x80 | (int_value & 0x3f)));
+  }
+  else if (int_value <= 0xffff)
+  {
+    char_out.append(1, static_cast<char>(0xe0 | ((int_value >> 12) & 0x0f)));
+    char_out.append(1, static_cast<char>(0x80 | ((int_value >> 6) & 0x3f)));
+    char_out.append(1, static_cast<char>(0x80 | (int_value & 0x3f)));
+  }
+  else if (int_value <= 0x10ffff)
+  {
+    char_out.append(1, static_cast<char>(0xf0 | ((int_value >> 18) & 0x07)));
+    char_out.append(1, static_cast<char>(0x80 | ((int_value >> 12) & 0x3f)));
+    char_out.append(1, static_cast<char>(0x80 | ((int_value >> 6) & 0x3f)));
+    char_out.append(1, static_cast<char>(0x80 | (int_value & 0x3f)));
+  }
+  else
+  {
+    std::ostringstream oss;
+    oss << "argument '0x" << std::hex << std::uppercase << int_value
+        << "' outside of Unicode range: [0x000000,  0x110000)";
+    // throw error if out of range
+    // only contains half of error message to allow caller to provide more context
+    throw std::out_of_range(oss.str());
+  }
+  return char_out;
+}
+
+exprt function_call_expr::handle_chr(nlohmann::json &arg) const
 {
   int int_value = 0;
 
@@ -221,15 +273,71 @@ void function_call_expr::handle_chr(nlohmann::json &arg) const
     }
   }
 
-  // Validate Unicode range: [0, 0x10FFFF]
-  if (int_value < 0 || int_value > 0x10FFFF)
+  else if (arg.contains("_type") && arg["_type"] == "Name")
   {
-    throw std::runtime_error(
-      "ValueError: chr() argument out of valid Unicode range: " +
-      std::to_string(int_value));
+    const symbolt *sym = lookup_python_symbol(arg["id"]);
+    if (!sym)
+    {
+      // if symbol not found revert to a variable assignment
+      arg["value"] = std::string(1, static_cast<char>(int_value));
+      typet t = type_handler_.get_typet("chr", 1);
+      exprt expr = converter_.get_expr(arg);
+      expr.type() = t;
+      return expr;
+    }
+    exprt val = sym->value;
+
+    if (!val.is_constant())
+      val = converter_.get_resolved_value(val);
+
+    if (val.is_nil())
+      throw std::runtime_error(
+        "Unable to resolve symbol " + arg["id"].get<std::string>());
+
+    const auto &const_expr = to_constant_expr(val);
+    std::string binary_str = id2string(const_expr.get_value());
+    try
+    {
+      int_value = std::stoul(binary_str, nullptr, 2);
+    }
+    catch (std::out_of_range &)
+    {
+      throw std::runtime_error(
+        "ValueError: chr() argument '" + arg["id"].get<std::string>() +
+        "' outside of Unicode range: [0x000000, 0x110000)");
+    }
+    catch (std::invalid_argument &)
+    {
+      throw std::runtime_error(
+        "TypeError: chr() argument '" + arg["id"].get<std::string>() +
+        "' must be of type int");
+    }
+
+    arg["_type"] = "Constant";
+    arg.erase("id");
+    arg.erase("ctx");
   }
+  std::string utf8_encoded;
+
+  try
+  {
+    utf8_encoded = utf8_encode(int_value);
+  }
+  catch (const std::out_of_range &e)
+  {
+    throw std::runtime_error(std::string("ValueError: chr() ") + e.what());
+  }
+
   // Replace the value with a single-character string
-  arg["value"] = std::string(1, static_cast<char>(int_value));
+  arg["value"] = arg["n"] = arg["s"] = utf8_encoded;
+  arg["type"] = "str";
+
+  bool null_terminated = int_value > 0x7f;
+  // Build and return the string expression
+  exprt expr = converter_.get_expr(arg);
+  expr.type() =
+    type_handler_.get_typet("str", utf8_encoded.size() + null_terminated);
+  return expr;
 }
 
 exprt function_call_expr::handle_hex(nlohmann::json &arg) const
@@ -735,7 +843,7 @@ exprt function_call_expr::build_constant_from_arg() const
 
   // Handle chr(): convert integer to single-character string
   else if (func_name == "chr")
-    handle_chr(arg);
+    return handle_chr(arg);
 
   // Handle ord(): convert single-character string to integer Unicode code point
   else if (func_name == "ord")

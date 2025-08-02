@@ -52,6 +52,13 @@ public:
       base = bbase;
     }
 
+    // Constructor that accepts const pointer (for const methods)
+    iterator(const key_type *bbase, int ppos)
+      : pos(ppos), base(const_cast<key_type *>(bbase))
+    {
+      __ESBMC_assert(bbase != NULL, "Invalid null pointer");
+    }
+
     iterator()
     {
     }
@@ -434,7 +441,7 @@ public:
       buf[i] = x.buf[i];
     }
     _size = x.size();
-    buf[_size] = 0;
+    buf[_size] = Key();
   }
 
   multiset &operator=(const multiset &x)
@@ -445,7 +452,7 @@ public:
       buf[i] = x.buf[i];
     }
     _size = x.size();
-    buf[_size] = 0;
+    buf[_size] = Key();
     return *this;
   }
 
@@ -458,7 +465,7 @@ public:
   iterator end()
   {
     iterator buffer;
-    buffer.base = &buf[0];
+    buffer.base = buf;
     buffer.pos = _size;
     return buffer;
   }
@@ -470,7 +477,7 @@ public:
   const_iterator end() const
   {
     const_iterator buffer;
-    buffer.base = &buf[0];
+    buffer.base = buf;
     buffer.pos = _size;
     return buffer;
   }
@@ -519,53 +526,42 @@ public:
   }
 
   // modifiers:
+  // multiset insert should maintain sorted order and allow duplicates
   std::pair<iterator, bool> insert(const value_type &x)
   {
-    iterator it = begin();
-    int i, aux;
-    while (it != end())
+    // Find the correct position to insert while maintaining sorted order
+    int insert_pos = 0;
+    while (insert_pos < _size && buf[insert_pos] < x)
     {
-      if (*it == x)
-      {
-        return make_pair(it, false);
-      }
-      it++;
+      insert_pos++;
     }
 
+    // Shift elements to the right to make space
+    for (int i = _size; i > insert_pos; i--)
+    {
+      buf[i] = buf[i - 1];
+    }
+
+    // Insert the new element
+    buf[insert_pos] = x;
     _size++;
-    i = _size;
 
-    // it is equal to end() already.
-    while (it.pos - 1 < i)
-    {
-      aux = i + 1;
-      buf[aux] = buf[i];
-      i--;
-    }
-
-    buf[it.pos] = x;
-    return make_pair(it, true);
+    // For multiset, always return true (duplicates allowed)
+    return make_pair(iterator(buf, insert_pos), true);
   }
 
   iterator insert(iterator position, const value_type &x)
   {
-    _size++;
-    int i = _size;
-    int aux;
-    while (position.pos - 1 < i)
-    {
-      aux = i + 1;
-      buf[aux] = buf[i];
-      i--;
-    }
-    buf[position.pos] = x;
-    return position;
+    // For multiset, we ignore position hint and maintain sorted order
+    auto result = insert(x);
+    return result.first;
   }
 
   void erase(iterator position)
   {
     __ESBMC_assert(
-      (position.pos >= 0) && (position.pos < size() && (position.base == buf)),
+      (position.pos >= 0) && (position.pos < size()) &&
+        (position.base == buf),
       "Invalid argument: iterator out of range");
     int j;
     for (int i = position.pos + 1; i < _size; i++)
@@ -603,11 +599,16 @@ public:
   void erase(iterator first, iterator last)
   {
     __ESBMC_assert(
-      first < last,
-      "Invalid iterator range: the second argument must be greater than the "
-      "first one");
-    while (first != last)
-      erase(first++);
+      first.pos <= last.pos && first.base == last.base,
+      "Invalid iterator range");
+
+    // Calculate how many elements to erase
+    int num_to_erase = last.pos - first.pos;
+
+    // Erase elements by repeatedly erasing at the first position
+    // Always erase at the same position since elements shift left
+    for (int i = 0; i < num_to_erase; i++)
+      erase(first);
   }
 
   void swap(multiset &x)
@@ -635,13 +636,22 @@ public:
   }
   // set operations:
 
-  iterator find(const key_type &x) const
+  iterator find(const key_type &x)
   {
     int i;
     for (i = 0; i != _size; i++)
       if (buf[i] == x)
         break;
-    return iterator(buf, i);
+    return iterator(buf, i); // Non-const version
+  }
+
+  const_iterator find(const key_type &x) const
+  {
+    int i;
+    for (i = 0; i != _size; i++)
+      if (buf[i] == x)
+        break;
+    return const_iterator(buf, i);
   }
 
   size_type count(const key_type &x) const
@@ -657,70 +667,65 @@ public:
     return counter;
   }
 
+  // lower_bound returns iterator to first element >= x
   iterator lower_bound(const key_type &x)
   {
-    int first = 0, last = _size;
-    while (first != last)
+    for (int i = 0; i < _size; i++)
     {
-      //When the Compare() is used, may fail in some cases. Replace the operator < with it.
-      if ((x < buf[first]) || (x == buf[first]))
-        return iterator(buf, first);
-      else
-        first++;
+      if (buf[i] >= x)
+      {
+        return iterator(buf, i);
+      }
     }
-    return iterator(buf, first);
+    return end();
   }
 
   const_iterator lower_bound(const key_type &x) const
   {
-    int first = 0, last = _size;
-    while (first != last)
+    for (int i = 0; i < _size; i++)
     {
-      //When the Compare() is used, may fail in some cases. Replace the operator < with it.
-      if ((x < buf[first]) || (x == buf[first]))
-        return const_iterator(buf, first);
-      else
-        first++;
+      if (buf[i] >= x)
+      {
+        return const_iterator(buf, i);
+      }
     }
-    return const_iterator(buf, first);
+    return end();
   }
 
+  // upper_bound returns iterator to first element > x
   iterator upper_bound(const key_type &x)
   {
-    int first = 0, last = _size - 1;
-    while (first != last)
+    for (int i = 0; i < _size; i++)
     {
-      //When the Compare() is used, may fail in some cases. Replace the operator < with it.
-      if ((buf[last] < x) || (x == buf[last]))
-        return iterator(buf, last + 1);
-      else
-        last--;
+      if (buf[i] > x)
+      {
+        return iterator(buf, i);
+      }
     }
-    return iterator(buf, last);
+    return end();
   }
 
   const_iterator upper_bound(const key_type &x) const
   {
-    int first = 0, last = _size - 1;
-    while (first != last)
+    for (int i = 0; i < _size; i++)
     {
-      //When the Compare() is used, may fail in some cases. Replace the operator < with it.
-      if ((buf[last] < x) || (x == buf[last]))
-        return const_iterator(buf, last + 1);
-      else
-        last--;
+      if (buf[i] > x)
+      {
+        return const_iterator(buf, i);
+      }
     }
-    return const_iterator(buf, last);
+    return end();
   }
 
+  // equal_range returns pair<lower_bound, upper_bound>
   pair<iterator, iterator> equal_range(const key_type &x)
   {
-    return make_pair(upper_bound(x), lower_bound(x));
+    return make_pair(lower_bound(x), upper_bound(x));
   }
 
   pair<const_iterator, const_iterator> equal_range(const key_type &x) const
   {
-    return make_pair(upper_bound(x), lower_bound(x));
+    return make_pair(lower_bound(x), upper_bound(x));
   }
 };
 
@@ -754,6 +759,13 @@ public:
     }
 
     iterator(key_type *bbase, int ppos) : pos(ppos), base(bbase)
+    {
+      __ESBMC_assert(bbase != NULL, "Invalid null pointer");
+    }
+
+    // Constructor that accepts const pointer (for const methods)
+    iterator(const key_type *bbase, int ppos)
+      : pos(ppos), base(const_cast<key_type *>(bbase))
     {
       __ESBMC_assert(bbase != NULL, "Invalid null pointer");
     }
@@ -1134,7 +1146,7 @@ public:
       buf[i] = x.buf[i];
     }
     _size = x.size();
-    buf[_size] = 0;
+    buf[_size] = Key();
   }
 
   set &operator=(const set &x)
@@ -1158,7 +1170,7 @@ public:
   iterator end()
   {
     iterator buffer;
-    buffer.base = &buf[0];
+    buffer.base = buf;
     buffer.pos = _size;
     return buffer;
   }
@@ -1170,7 +1182,7 @@ public:
   const_iterator end() const
   {
     const_iterator buffer;
-    buffer.base = &buf[0];
+    buffer.base = buf;
     buffer.pos = _size;
     return buffer;
   }
@@ -1219,51 +1231,49 @@ public:
   }
 
   // modifiers:
+  // set insert should maintain sorted order and reject duplicates
   pair<iterator, bool> insert(const value_type &x)
   {
-    iterator it = begin();
-    int i, aux;
-    while (it != end())
+    // Check if element already exists (for set, duplicates not allowed)
+    for (int i = 0; i < _size; i++)
     {
-      if (*it == x)
+      if (buf[i] == x)
       {
-        return make_pair(it, false);
+        return make_pair(iterator(buf, i), false);
       }
-      it++;
     }
 
-    _size++;
-    i = _size;
-    while (it.pos - 1 < i)
+    // Find the correct position to insert while maintaining sorted order
+    int insert_pos = 0;
+    while (insert_pos < _size && buf[insert_pos] < x)
     {
-      aux = i + 1;
-      buf[aux] = buf[i];
-      i--;
+      insert_pos++;
     }
 
-    buf[it.pos] = x;
-    return make_pair(it, true);
+    // Shift elements to the right to make space
+    for (int i = _size; i > insert_pos; i--)
+    {
+      buf[i] = buf[i - 1];
+    }
+
+    // Insert the new element
+    buf[insert_pos] = x;
+    _size++;
+
+    return make_pair(iterator(buf, insert_pos), true);
   }
 
   iterator insert(iterator position, const value_type &x)
   {
-    _size++;
-    int i = _size;
-    int aux;
-    while (position.pos - 1 < i)
-    {
-      aux = i + 1;
-      buf[aux] = buf[i];
-      i--;
-    }
-    buf[position.pos] = x;
-    return position;
+    auto result = insert(x);
+    return result.first;
   }
 
   void erase(iterator position)
   {
     __ESBMC_assert(
-      (position.pos >= 0) && (position.pos < size() && (position.base == buf)),
+      (position.pos >= 0) && (position.pos < size()) &&
+        (position.base == buf),
       "Invalid argument: iterator out of range");
     int j;
     for (int i = position.pos + 1; i < _size; i++)
@@ -1301,11 +1311,16 @@ public:
   void erase(iterator first, iterator last)
   {
     __ESBMC_assert(
-      first < last,
-      "Invalid iterator range: the second argument must be greater than the "
-      "first one");
-    while (first != last)
-      erase(first++);
+      first.pos <= last.pos && first.base == last.base,
+      "Invalid iterator range");
+
+    // Calculate how many elements to erase
+    int num_to_erase = last.pos - first.pos;
+
+    // Erase elements by repeatedly erasing at the first position
+    // Always erase at the same position since elements shift left
+    for (int i = 0; i < num_to_erase; i++)
+      erase(first);
   }
   void swap(set &x)
   {
@@ -1331,13 +1346,22 @@ public:
   }
   // set operations:
 
-  iterator find(const key_type &x) const
+  iterator find(const key_type &x)
   {
     int i;
     for (i = 0; i != _size; i++)
       if (buf[i] == x)
         break;
-    return iterator(buf, i);
+    return iterator(buf, i); // Non-const version
+  }
+
+  const_iterator find(const key_type &x) const
+  {
+    int i;
+    for (i = 0; i != _size; i++)
+      if (buf[i] == x)
+        break;
+    return const_iterator(buf, i);
   }
 
   size_type count(const key_type &x) const
@@ -1353,76 +1377,65 @@ public:
     return counter;
   }
 
+  // lower_bound returns iterator to first element >= x
   iterator lower_bound(const key_type &x)
   {
-    int first = 0, last = _size;
-    int y;
-    while (first != last)
+    for (int i = 0; i < _size; i++)
     {
-      y = buf[first];
-      if (Compare()(x, y) || (x == y))
-        return iterator(buf, first);
-      else
-        first++;
+      if (buf[i] >= x)
+      {
+        return iterator(buf, i);
+      }
     }
-    return iterator(buf, first);
+    return end();
   }
 
   const_iterator lower_bound(const key_type &x) const
   {
-    int first = 0, last = _size;
-    int y;
-    while (first != last)
+    for (int i = 0; i < _size; i++)
     {
-      y = buf[first];
-      if (Compare()(x, y) || (x == y))
-        return const_iterator(buf, first);
-      else
-        first++;
+      if (buf[i] >= x)
+      {
+        return const_iterator(buf, i);
+      }
     }
-    return const_iterator(buf, first);
+    return end();
   }
 
+  // upper_bound returns iterator to first element > x
   iterator upper_bound(const key_type &x)
   {
-    int first = 0, last = _size;
-    last--;
-    int y;
-    while (first != last)
+    for (int i = 0; i < _size; i++)
     {
-      y = buf[first];
-      if (!Compare()(x, y))
-        return iterator(buf, last);
-      else
-        last--;
+      if (buf[i] > x)
+      {
+        return iterator(buf, i);
+      }
     }
-    return iterator(buf, last);
+    return end();
   }
 
   const_iterator upper_bound(const key_type &x) const
   {
-    int first = 0, last = _size;
-    last--;
-    int y;
-    while (first != last)
+    for (int i = 0; i < _size; i++)
     {
-      y = buf[first];
-      if (!Compare()(x, y))
-        return const_iterator(buf, last);
-      else
-        last--;
+      if (buf[i] > x)
+      {
+        return const_iterator(buf, i);
+      }
     }
-    return const_iterator(buf, last);
+    return end();
   }
 
+  // equal_range returns pair<lower_bound, upper_bound> (correct order!)
   pair<iterator, iterator> equal_range(const key_type &x)
   {
-    return make_pair(upper_bound(x), lower_bound(x));
+    return make_pair(lower_bound(x), upper_bound(x));
   }
 
   pair<const_iterator, const_iterator> equal_range(const key_type &x) const
   {
-    return make_pair(upper_bound(x), lower_bound(x));
+    return make_pair(lower_bound(x), upper_bound(x));
   }
 };
 
