@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.cpp
---no-library --unwind 10 --no-unwinding-assertions  --data-races-check --timeout 900
+--unwind 10 --no-unwinding-assertions  --data-races-check --timeout 900
 ^VERIFICATION FAILED$
