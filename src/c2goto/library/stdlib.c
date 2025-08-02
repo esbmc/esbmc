@@ -271,9 +271,21 @@ char *getenv(const char *name)
 {
 __ESBMC_HIDE:;
 
-  _Bool found;
+  __ESBMC_assert(name != NULL, "getenv called with NULL pointer");
+
+  // Return NULL when called with an empty string parameter
+  if (*name == '\0')
+    return NULL;
+
+  // Return NULL when the environment variable name
+  // contains an equals sign (=), per POSIX specification
+  if (strchr(name, '=') != NULL)
+    return NULL;
+
+  // Non-deterministically model whether the variable exists
+  _Bool found = nondet_bool();
   if (!found)
-    return 0;
+    return NULL;
 
   char *buffer;
   size_t buf_size;
