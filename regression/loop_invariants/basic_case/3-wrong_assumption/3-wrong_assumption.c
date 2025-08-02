@@ -9,9 +9,10 @@
         @*/
      
      //first check the base case
+     
+     __ESBMC_loop_invariant(i >= 0 && i < 5000000 && sum == i * 10);
      while (i < 5000000)//replace the condition to i <5000000
      {   
-        __ESBMC_loop_invariant(i >= 0 && i < 5000000 && sum == i * 10);
         sum += 10;
         i++;
      }

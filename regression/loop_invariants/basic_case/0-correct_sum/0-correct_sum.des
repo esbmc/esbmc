@@ -1,4 +1,4 @@
 CORE
 main.c
---k-induction --loop-invariant
+--loop-invariant
 ^VERIFICATION SUCCESSFUL$

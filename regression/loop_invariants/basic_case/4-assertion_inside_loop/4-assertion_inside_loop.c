@@ -1,3 +1,4 @@
+// this case is from SV-COMP bitvector/jain_5-2.c 
 void assert(int cond) { if (!(cond)) { ERROR : { reach_error(); abort(); } } }
 void assume(int cond) { if (!cond) { abort(); } }
 int main() {

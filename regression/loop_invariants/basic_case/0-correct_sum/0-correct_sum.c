@@ -16,11 +16,13 @@
      @*/
      
      //first check the base case
+
+    //should havoc the variables: change the invovlved variables to non deterministic values
+    //use assumption to set i >= 0 && i <= 5000000 && sum == i * 10;
+
+    __ESBMC_loop_invariant(i >= 0 && i <= 5000000 && sum == i * 10);
      while (i < 5000000)//replace the condition to i <5000000
      {   
-        //should havoc the variables: change the invovlved variables to non deterministic values
-        //use assumption to set i >= 0 && i <= 5000000 && sum == i * 10;
-        __ESBMC_loop_invariant(i >= 0 && i <= 5000000 && sum == i * 10);
         sum += 10;
         i++;
          // check the loop invariant after the update

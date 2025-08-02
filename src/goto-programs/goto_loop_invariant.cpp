@@ -125,33 +125,36 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
   // 1. Insert ASSERT invariant before loop (base case)
   insert_assert_before_loop(loop_head, invariants);
 
-  // 2. Insert HAVOC and ASSUME before loop condition (after base case assert)
-  insert_havoc_and_assume_before_condition(loop_head, loop, invariants);
+  // // 2. Insert HAVOC and ASSUME before loop condition (after base case assert)
+   insert_havoc_and_assume_before_condition(loop_head, loop, invariants);
 
-  // 3. Insert inductive step verification and loop termination
-  insert_inductive_step_and_termination(loop, invariants);
+  // // 3. Insert inductive step verification and loop termination
+   insert_inductive_step_and_termination(loop, invariants);
 }
 
 std::vector<expr2tc> goto_loop_invariantt::extract_loop_invariants(const loopst &loop)
 {
   std::vector<expr2tc> invariants;
-  
-  // Walk through the loop body to find LOOP_INVARIANT instructions
+
   goto_programt::targett loop_head = loop.get_original_loop_head();
-  goto_programt::targett loop_exit = loop.get_original_loop_exit();
-  
-  for (goto_programt::targett it = loop_head; it != loop_exit; ++it)
+
+  // Safety check: ensure we're not at the beginning of the function
+  if (loop_head == goto_function.body.instructions.begin())
+    return invariants;
+
+  // Check immediately preceding instruction
+  goto_programt::targett prev_it = loop_head;
+  --prev_it;
+
+  if (prev_it->is_loop_invariant())
   {
-    if (it->is_loop_invariant())
+
+    auto const& current_invariants = prev_it->get_loop_invariants();
+    for (const auto &invariant : current_invariants)
     {
-      // Extract all invariants from this instruction
-      for (const auto &invariant : it->get_loop_invariants())
-      {
-        invariants.push_back(invariant);
-      }
+      invariants.push_back(invariant);
     }
   }
-  
   return invariants;
 }
 
