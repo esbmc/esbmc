@@ -138,7 +138,7 @@ std::vector<expr2tc> goto_loop_invariantt::extract_loop_invariants(const loopst 
 
   goto_programt::targett loop_head = loop.get_original_loop_head();
 
-  // Safety check: ensure we're not at the beginning of the function
+  // Safety check: ensure the dest is not empty
   if (loop_head == goto_function.body.instructions.begin())
     return invariants;
 
@@ -150,11 +150,30 @@ std::vector<expr2tc> goto_loop_invariantt::extract_loop_invariants(const loopst 
   {
 
     auto const& current_invariants = prev_it->get_loop_invariants();
-    for (const auto &invariant : current_invariants)
+
+    if (current_invariants.size() == 1)
     {
-      invariants.push_back(invariant);
+      // add single invariant
+      invariants.push_back(current_invariants.front());
     }
+    else if (current_invariants.size() > 1)
+    {
+      // Combine to one && format invariant
+      auto it = current_invariants.begin();
+      auto combined_invariant = *it;  // first element
+      ++it;  // move to second element
+      
+      for (; it != current_invariants.end(); ++it)
+      {
+        combined_invariant = and2tc(combined_invariant, *it);
+      }
+      
+      // return one combined invariant
+      invariants.push_back(combined_invariant);
+    }
+    // if current_invariants.empty(), do nothing, return empty invariants
   }
+  
   return invariants;
 }
 
@@ -242,8 +261,8 @@ void goto_loop_invariantt::insert_inductive_step_and_termination(
   
   // Move back to find the last assignment in loop body
   // Add safety check to prevent going beyond beginning
-  int safety_counter = 0;
-  const int max_iterations = 1000; // Prevent infinite loop
+  size_t safety_counter = 0;
+  const size_t max_iterations = 10000; // Prevent infinite loop of searching. I did not provide a option now.
   
   while (insert_point != goto_function.body.instructions.begin() && 
          !insert_point->is_assign() && 
