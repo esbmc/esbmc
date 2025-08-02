@@ -331,11 +331,15 @@ void goto_symext::symex_step(reachability_treet &art)
         return;
       }
 
-      if (id.as_string() == "c:@F@memcpy" || has_prefix(id.as_string(), "c:@F@__builtin_memcpy$")) 
+      if (
+        id.as_string() == "c:@F@memcpy" ||
+        has_prefix(id.as_string(), "c:@F@__builtin_memcpy$"))
       {
         cur_state->source.pc++;
-        if(run_builtin(call, id.as_string())) {
-          return; }
+        if (run_builtin(call, id.as_string()))
+        {
+          return;
+        }
       }
 
       if (id == "c:@F@scanf" || id == "c:@F@sscanf" || id == "c:@F@fscanf")
