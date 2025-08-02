@@ -283,7 +283,7 @@ __ESBMC_HIDE:;
     return NULL;
 
   // Non-deterministically model whether the variable exists
-  _Bool found = __ESBMC_nondet_bool();
+  _Bool found = nondet_bool();
   if (!found)
     return NULL;
 
