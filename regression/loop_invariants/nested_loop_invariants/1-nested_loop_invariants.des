@@ -1,4 +1,4 @@
 FUTURE
 main.c
---k-induction ----loop-invariant
+--k-induction --loop-invariant
 ^VERIFICATION FAILED$
