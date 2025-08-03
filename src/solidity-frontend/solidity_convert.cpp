@@ -3299,10 +3299,6 @@ bool solidity_convertert::get_function_definition(
 
   // 10. Add symbol into the context
   symbolt &added_symbol = *move_symbol_to_context(symbol);
-  // 10.1 set a code_blockt as the placeholder in advane
-  // to support the recursive function call
-  added_symbol.type = type;
-  added_symbol.value = code_blockt();
   // 11. Convert parameters, if no parameter, assume ellipis
   //  - Convert params before body as they may get referred by the statement in the body
 
