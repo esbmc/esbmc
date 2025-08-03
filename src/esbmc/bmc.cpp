@@ -1477,7 +1477,10 @@ smt_convt::resultt bmct::multi_property_check(
       else
       {
         std::lock_guard lock(reached_claims_mutex);
-        reached_claims.emplace(claim.claim_cstr);
+        if (is_goto_cov)
+          reached_claims.emplace(claim_sig);
+        else
+          reached_claims.emplace(claim.claim_cstr);
       }
 
       // update cex number
