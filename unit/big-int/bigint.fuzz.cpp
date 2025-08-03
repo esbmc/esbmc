@@ -22,14 +22,14 @@ bool is_valid_input(const char *Data, size_t DataSize)
   const char low_bound = '0';
   const char high_bound = '9';
 
-  if (DataSize == 0) 
+  if (DataSize == 0)
     return false;
   if (Data[0] == '0')
     return false;
   // Last character must be a null terminator
-  if (Data[DataSize-1] != 0)
+  if (Data[DataSize - 1] != 0)
     return false;
-  for (size_t i = 0; i < DataSize-1; ++i)
+  for (size_t i = 0; i < DataSize - 1; ++i)
   {
     if (!((Data[i] >= low_bound) && (Data[i] <= high_bound)))
       return false;
@@ -44,7 +44,7 @@ void test_construct_bigint(const char *Data, size_t DataSize)
   std::vector<char> vec(obj.digits());
   const char *actual = obj.as_string(vec.data(), vec.size());
 
-  for (size_t i = 0; i < DataSize-1; ++i)
+  for (size_t i = 0; i < DataSize - 1; ++i)
   {
     assert(Data[i] == actual[i]);
   }
