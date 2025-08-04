@@ -361,10 +361,14 @@ enum ExpressionT
   // Solidity does NOT provide such rule
   IndexAccess,
 
-  // Create a temporary object by keywords 'ew'
+  // Create a temporary object by keywords 'new'
   // equivalent to clang::Stmt::CXXTemporaryObjectExprClass
   // i.e. Base x = new Base(args);
   NewExpression,
+
+  // Create a temporary object by keywords 'new' with options
+  // i.e. Base x = new Base{value: args}();
+  NewCallExpression,
 
   // Call member functions
   // equivalent toclang::Stmt::CXXMemberCallExprClass
