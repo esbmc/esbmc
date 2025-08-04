@@ -182,6 +182,10 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::string>()->value_name("{ path | - }"),
      "generate the verification result witness in GraphML format; use '-' for "
      "output to stdout"},
+    {"witness-output-yaml",
+     boost::program_options::value<std::string>()->value_name("{ path | - }"),
+     "generate the verification result witness in Yaml format; use '-' for "
+     "output to stdout"},
     {"witness-producer", boost::program_options::value<std::string>(), ""},
     {"witness-programfile", boost::program_options::value<std::string>(), ""},
     {"generate-testcase",

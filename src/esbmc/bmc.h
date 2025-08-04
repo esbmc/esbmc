@@ -58,7 +58,7 @@ protected:
   virtual void
   error_trace(smt_convt &smt_conv, const symex_target_equationt &eq);
 
-  virtual void successful_trace();
+  virtual void successful_trace(const symex_target_equationt &eq);
 
   virtual void show_vcc(const symex_target_equationt &eq);
 
