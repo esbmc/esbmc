@@ -2,7 +2,7 @@
 
 (The Efficient SMT-based Context-Bounded Model Checker (ESBMC) is a software model checker designed to automatically detect bugs or prove their absence in programs written across multiple programming languages. The figure below illustrates ESBMC's verification architecture.
 
-<img width="2004" height="1146" alt="image" src="https://github.com/user-attachments/assets/a98df385-193c-4717-a58b-9ae6cdc1e14f" />
+<img width="2016" height="1142" alt="image" src="https://github.com/user-attachments/assets/25c7325e-4b37-4f27-b6c9-7c3a7da56045" />
 
 Note that the verification process begins when ESBMC accepts source code written in any of its supported languages: C/C++, CUDA, CHERI-C, Java, Kotlin, Solidity, Python, or Rust. This multi-language support makes ESBMC valuable for software development environments where applications often integrate components written in different programming languages.
 
