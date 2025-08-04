@@ -142,36 +142,49 @@ std::vector<expr2tc> goto_loop_invariantt::extract_loop_invariants(const loopst 
   if (loop_head == goto_function.body.instructions.begin())
     return invariants;
 
-  // Check immediately preceding instruction
-  goto_programt::targett prev_it = loop_head;
-  --prev_it;
-
-  if (prev_it->is_loop_invariant())
+  // For for loops, the loop head might be the initialization (ASSIGN),
+  // and the LOOP_INVARIANT might be before the condition check (IF).
+  // We need to search more broadly to find LOOP_INVARIANT instructions.
+  
+  // Search backwards from loop head to find LOOP_INVARIANT
+  goto_programt::targett search_it = loop_head;
+  
+  // Search up to 10 instructions before the loop head
+  const size_t max_search_distance = 10;
+  size_t search_distance = 0;
+  
+  while (search_it != goto_function.body.instructions.begin() && 
+         search_distance < max_search_distance)
   {
-
-    auto const& current_invariants = prev_it->get_loop_invariants();
-
-    if (current_invariants.size() == 1)
+    --search_it;
+    ++search_distance;
+    
+    if (search_it->is_loop_invariant())
     {
-      // add single invariant
-      invariants.push_back(current_invariants.front());
-    }
-    else if (current_invariants.size() > 1)
-    {
-      // Combine to one && format invariant
-      auto it = current_invariants.begin();
-      auto combined_invariant = *it;  // first element
-      ++it;  // move to second element
-      
-      for (; it != current_invariants.end(); ++it)
+      auto const& current_invariants = search_it->get_loop_invariants();
+
+      if (current_invariants.size() == 1)
       {
-        combined_invariant = and2tc(combined_invariant, *it);
+        // add single invariant
+        invariants.push_back(current_invariants.front());
       }
-      
-      // return one combined invariant
-      invariants.push_back(combined_invariant);
+      else if (current_invariants.size() > 1)
+      {
+        // Combine to one && format invariant
+        auto it = current_invariants.begin();
+        auto combined_invariant = *it;  // first element
+        ++it;  // move to second element
+        
+        for (; it != current_invariants.end(); ++it)
+        {
+          combined_invariant = and2tc(combined_invariant, *it);
+        }
+        
+        // return one combined invariant
+        invariants.push_back(combined_invariant);
+      }
+      // if current_invariants.empty(), do nothing, continue searching
     }
-    // if current_invariants.empty(), do nothing, return empty invariants
   }
   
   return invariants;
