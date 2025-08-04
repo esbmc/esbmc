@@ -1371,7 +1371,7 @@ smt_convt::resultt bmct::multi_property_check(
       // C++20 reached_mul_claims.contains
       is_verified = reached_mul_claims.count(claim_sig) ? true : false;
     else
-      is_verified = reached_claims.count(claim_sig) ? true : false;
+      is_verified = reached_claims.count(claim.claim_cstr) ? true : false;
     if (is_assert_cov && is_verified)
     {
       // insert to the multiset before skipping the verification process
@@ -1379,7 +1379,7 @@ smt_convt::resultt bmct::multi_property_check(
       reached_mul_claims.emplace(claim_sig);
     }
 
-    if (verified_claims.count(claim_sig))
+    if (verified_claims.count(claim.claim_cstr))
     {
       clear_verified_claims_in_ssa(local_eq, claim, is_goto_cov);
       clear_verified_claims_in_goto(claim, is_goto_cov);
@@ -1415,7 +1415,7 @@ smt_convt::resultt bmct::multi_property_check(
     });
     log_status(
       "Solving claim '{}' with solver {}",
-      claim.claim_msg,
+      claim.claim_cstr,
       runtime_solver->solver_text());
 
     // Save current instance with timing
@@ -1468,7 +1468,7 @@ smt_convt::resultt bmct::multi_property_check(
       goto_tracet goto_trace;
       build_goto_trace(local_eq, *runtime_solver, goto_trace, is_compact_trace);
 
-      // Store claim_sig
+      // Store claim signature
       if (is_assert_cov)
       {
         std::lock_guard lock(reached_mul_claims_mutex);
@@ -1477,7 +1477,10 @@ smt_convt::resultt bmct::multi_property_check(
       else
       {
         std::lock_guard lock(reached_claims_mutex);
-        reached_claims.emplace(claim_sig);
+        if (is_goto_cov)
+          reached_claims.emplace(claim_sig);
+        else
+          reached_claims.emplace(claim.claim_cstr);
       }
 
       // update cex number
