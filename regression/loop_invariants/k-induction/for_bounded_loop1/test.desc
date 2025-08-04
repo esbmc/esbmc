@@ -1,0 +1,4 @@
+CORE
+main.c
+--k-induction -Wno-error=implicit-function-declaration
+^VERIFICATION FAILED$
