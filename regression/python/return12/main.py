@@ -1,4 +1,5 @@
 def return_none() -> int:
-    return None
+    a = None
+    return a
 
 result = return_none()
