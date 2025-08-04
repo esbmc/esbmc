@@ -1,4 +1,4 @@
 CORE
 main.c
---memory-leak-check --unwind 22
+--unwind 1
 ^VERIFICATION SUCCESSFUL$
