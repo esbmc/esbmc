@@ -1,3 +1,7 @@
+/*
+ * Case for there is a non-assigned variable away from the loop invariant
+ * Should fail line 25 and overflow in line 21
+*/
 
  #include <assert.h>
 
