@@ -386,6 +386,7 @@ TEST_SUITES = [
     "Interval-analysis-ibex-contractor",
     "jimple",
     "k-induction",
+    "goto-contractor",
     "k-induction-parallel",
     "termination"
     "linux",
