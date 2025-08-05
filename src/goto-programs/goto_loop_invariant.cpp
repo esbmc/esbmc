@@ -268,36 +268,9 @@ void goto_loop_invariantt::insert_inductive_step_and_termination(
   const loopst &loop,
   const std::vector<expr2tc> &invariants)
 {
-  // Find the end of loop body (before GOTO back to loop head)
+  // Insert at the end of loop body (before GOTO back to loop head)
   goto_programt::targett loop_exit = loop.get_original_loop_exit();
   goto_programt::targett insert_point = loop_exit;
-  
-  // Move back to find the last assignment in loop body
-  // Add safety check to prevent going beyond beginning
-  size_t safety_counter = 0;
-  const size_t max_iterations = 10000; // Prevent infinite loop of searching. I did not provide a option now.
-  
-  while (insert_point != goto_function.body.instructions.begin() && 
-         !insert_point->is_assign() && 
-         safety_counter < max_iterations)
-  {
-    --insert_point;
-    ++safety_counter;
-  }
-  
-  if (insert_point == goto_function.body.instructions.begin() || 
-      safety_counter >= max_iterations)
-  {
-    // No assignment found in loop body or too many iterations
-    // Insert at the beginning of loop body as fallback
-    insert_point = loop.get_original_loop_head();
-    ++insert_point;
-  }
-  else
-  {
-    // Move to AFTER the last assignment
-    ++insert_point;
-  }
   
   goto_programt dest;
   
