@@ -527,7 +527,7 @@ void goto_convertt::do_function_call_symbol(
 
   // If the symbol is not nil, i.e., the user defined the expected behavior of
   // the builtin function, we should honor the user function and call it
-  if (symbol->value.is_not_nil())
+  if (symbol->value.is_not_nil() && symbol->value.has_operands())
   {
     // insert function call
     code_function_callt function_call;
