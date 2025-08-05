@@ -861,11 +861,9 @@ void goto_symext::replace_nondet(expr2tc &expr)
   }
   else
   {
-    expr->Foreach_operand(
-      [this](expr2tc &e)
-      {
-        if (!is_nil_expr(e))
-          replace_nondet(e);
-      });
+    expr->Foreach_operand([this](expr2tc &e) {
+      if (!is_nil_expr(e))
+        replace_nondet(e);
+    });
   }
 }
