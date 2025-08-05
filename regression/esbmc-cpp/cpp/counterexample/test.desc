@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--unwind 2 --compact-trace
+^  arr\[\(signed long int\)i\] = -1 \(11111111\)$
