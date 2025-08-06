@@ -10,7 +10,6 @@
 #include <util/location.h>
 #include <util/namespace.h>
 #include <util/std_code.h>
-#include <mutex>
 
 #define forall_goto_program_instructions(it, program)                          \
   for (goto_programt::instructionst::const_iterator it =                       \
