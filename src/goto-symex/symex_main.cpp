@@ -176,6 +176,7 @@ void goto_symext::symex_step(reachability_treet &art)
   assert(!cur_state->call_stack.empty());
 
   const goto_programt::instructiont &instruction = *cur_state->source.pc;
+  std::lock_guard lock(instruction.instruction_mutex);
 
   // depth exceeded?
   {

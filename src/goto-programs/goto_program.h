@@ -88,7 +88,7 @@ public:
   class instructiont
   {
   public:
-    std::mutex instruction_mutex;
+    mutable std::recursive_mutex instruction_mutex;
 
     expr2tc code;
 
@@ -151,6 +151,7 @@ public:
     //! clear the node
     inline void clear(goto_program_instruction_typet _type)
     {
+      std::lock_guard lock(instruction_mutex);
       type = _type;
       targets.clear();
       guard = gen_true_expr();
@@ -382,7 +383,7 @@ public:
       if (this == &other)
         return *this;
 
-      std::lock_guard<std::mutex> lock(instruction_mutex);
+      std::lock_guard<std::recursive_mutex> lock(instruction_mutex);
 
       code = other.code;
       function = other.function;
@@ -424,11 +425,7 @@ public:
     {
       if (this != &other)
       {
-        std::lock(instruction_mutex, other.instruction_mutex);
-        std::lock_guard<std::mutex> lhs_lock(
-          instruction_mutex, std::adopt_lock);
-        std::lock_guard<std::mutex> rhs_lock(
-          other.instruction_mutex, std::adopt_lock);
+        std::scoped_lock lock(instruction_mutex, other.instruction_mutex);
 
         code = std::move(other.code);
         function = std::move(other.function);
