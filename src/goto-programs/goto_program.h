@@ -88,7 +88,7 @@ public:
   class instructiont
   {
   public:
-    mutable std::recursive_mutex instruction_mutex;
+    mutable std::mutex clear_claims_mutex;
 
     expr2tc code;
 
@@ -151,7 +151,6 @@ public:
     //! clear the node
     inline void clear(goto_program_instruction_typet _type)
     {
-      std::lock_guard lock(instruction_mutex);
       type = _type;
       targets.clear();
       guard = gen_true_expr();
@@ -366,8 +365,8 @@ public:
         location(other.location),
         type(other.type),
         guard(other.guard),
-        labels(other.labels),
         targets(other.targets),
+        labels(other.labels),
         inductive_step_instruction(other.inductive_step_instruction),
         inductive_assertion(other.inductive_assertion),
         location_number(other.location_number),
@@ -414,7 +413,6 @@ public:
     {
       if (this == &instruction)
         return;
-      std::scoped_lock lock(instruction_mutex, instruction.instruction_mutex);
 
       instruction.code.swap(code);
       instruction.location.swap(location);
