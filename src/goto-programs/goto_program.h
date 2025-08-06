@@ -367,6 +367,7 @@ public:
         type(other.type),
         guard(other.guard),
         labels(other.labels),
+        targets(other.targets),
         inductive_step_instruction(other.inductive_step_instruction),
         inductive_assertion(other.inductive_assertion),
         location_number(other.location_number),
@@ -380,26 +381,7 @@ public:
 
     instructiont &operator=(const instructiont &other)
     {
-      if (this == &other)
-        return *this;
-
-      std::lock_guard<std::recursive_mutex> lock(instruction_mutex);
-
-      code = other.code;
-      function = other.function;
-      location = other.location;
-      type = other.type;
-      guard = other.guard;
-      targets.clear();
-      labels = other.labels;
-      inductive_step_instruction = other.inductive_step_instruction;
-      inductive_assertion = other.inductive_assertion;
-      location_number = other.location_number;
-      loop_number = other.loop_number;
-      target_number = other.target_number;
-      scope_id = other.scope_id;
-      parent_scope_id = other.parent_scope_id;
-
+      instructiont(other).swap(*this);
       return *this;
     }
 
@@ -423,31 +405,17 @@ public:
 
     instructiont &operator=(instructiont &&other)
     {
-      if (this != &other)
-      {
-        std::scoped_lock lock(instruction_mutex, other.instruction_mutex);
-
-        code = std::move(other.code);
-        function = std::move(other.function);
-        location = std::move(other.location);
-        type = other.type;
-        guard = std::move(other.guard);
-        targets = std::move(other.targets);
-        labels = std::move(other.labels);
-        inductive_step_instruction = other.inductive_step_instruction;
-        inductive_assertion = other.inductive_assertion;
-        location_number = other.location_number;
-        loop_number = other.loop_number;
-        target_number = other.target_number;
-        scope_id = other.scope_id;
-        parent_scope_id = other.parent_scope_id;
-      }
+      swap(other);
       return *this;
     }
 
     //! swap two instructions
     void swap(instructiont &instruction)
     {
+      if (this == &instruction)
+        return;
+      std::scoped_lock lock(instruction_mutex, instruction.instruction_mutex);
+
       instruction.code.swap(code);
       instruction.location.swap(location);
       std::swap(instruction.type, type);
@@ -458,6 +426,9 @@ public:
         inductive_step_instruction, instruction.inductive_step_instruction);
       std::swap(inductive_assertion, instruction.inductive_assertion);
       std::swap(instruction.loop_number, loop_number);
+      std::swap(target_number, instruction.target_number);
+      std::swap(scope_id, instruction.scope_id);
+      std::swap(parent_scope_id, instruction.parent_scope_id);
     }
 
     //! A globally unique number to identify a program location.
