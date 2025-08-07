@@ -88,6 +88,8 @@ public:
   class instructiont
   {
   public:
+    mutable std::mutex clear_claims_mutex;
+
     expr2tc code;
 
     //! function this belongs to
@@ -366,9 +368,61 @@ public:
       guard = gen_true_expr();
     }
 
+    instructiont(const instructiont &other)
+      : code(other.code),
+        function(other.function),
+        location(other.location),
+        type(other.type),
+        guard(other.guard),
+        targets(other.targets),
+        labels(other.labels),
+        inductive_step_instruction(other.inductive_step_instruction),
+        inductive_assertion(other.inductive_assertion),
+        location_number(other.location_number),
+        loop_number(other.loop_number),
+        target_number(other.target_number),
+        scope_id(other.scope_id),
+        parent_scope_id(other.parent_scope_id)
+    {
+      // instruction_mutex is not copied
+    }
+
+    instructiont &operator=(const instructiont &other)
+    {
+      instructiont(other).swap(*this);
+      return *this;
+    }
+
+    instructiont(instructiont &&other)
+      : code(std::move(other.code)),
+        function(std::move(other.function)),
+        location(std::move(other.location)),
+        type(other.type),
+        guard(std::move(other.guard)),
+        targets(std::move(other.targets)),
+        labels(std::move(other.labels)),
+        inductive_step_instruction(other.inductive_step_instruction),
+        inductive_assertion(other.inductive_assertion),
+        location_number(other.location_number),
+        loop_number(other.loop_number),
+        target_number(other.target_number),
+        scope_id(other.scope_id),
+        parent_scope_id(other.parent_scope_id)
+    {
+    }
+
+    instructiont &operator=(instructiont &&other)
+    {
+      swap(other);
+      return *this;
+    }
+
     //! swap two instructions
     void swap(instructiont &instruction)
     {
+      if (this == &instruction)
+        return;
+
       instruction.code.swap(code);
       instruction.location.swap(location);
       std::swap(instruction.type, type);
@@ -380,6 +434,9 @@ public:
         inductive_step_instruction, instruction.inductive_step_instruction);
       std::swap(inductive_assertion, instruction.inductive_assertion);
       std::swap(instruction.loop_number, loop_number);
+      std::swap(target_number, instruction.target_number);
+      std::swap(scope_id, instruction.scope_id);
+      std::swap(parent_scope_id, instruction.parent_scope_id);
     }
 
     void add_loop_invariant(const expr2tc &invariant)

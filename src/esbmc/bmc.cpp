@@ -395,6 +395,7 @@ void bmct::clear_verified_claims_in_goto(
   {
     for (auto &instr : func.second.body.instructions)
     {
+      std::lock_guard lock(instr.clear_claims_mutex);
       if (!instr.is_assert())
         continue;
 
@@ -418,7 +419,7 @@ void bmct::clear_verified_claims_in_goto(
 
 void bmct::report_multi_property_trace(
   const smt_convt::resultt &res,
-  const std::unique_ptr<smt_convt> &solver,
+  smt_convt *&solver,
   const symex_target_equationt &local_eq,
   const std::atomic<size_t> ce_counter,
   const goto_tracet &goto_trace,
@@ -1155,7 +1156,8 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     if (
       options.get_bool_option("multi-property") &&
       options.get_bool_option("base-case"))
-      return multi_property_check(*eq, solver_result.remaining_claims);
+      return multi_property_check(
+        *eq, solver_result.remaining_claims, *runtime_solver);
 
     return run_decision_procedure(*runtime_solver, *eq);
   }
@@ -1246,7 +1248,8 @@ int bmct::ltl_run_thread(symex_target_equationt &equation) const
 
 smt_convt::resultt bmct::multi_property_check(
   const symex_target_equationt &eq,
-  size_t remaining_claims)
+  size_t remaining_claims,
+  smt_convt &runtime_solver)
 {
   // As of now, it only makes sense to do this for the base-case
   assert(
@@ -1352,7 +1355,8 @@ smt_convt::resultt bmct::multi_property_check(
                        &bs,
                        &fc,
                        &is,
-                       &is_color](const size_t &i) {
+                       &is_color,
+                       &runtime_solver](const size_t &i) {
     //"multi-fail-fast n": stop after first n SATs found.
     if (is_fail_fast && fail_fast_cnt >= fail_fast_limit)
       return;
@@ -1412,21 +1416,27 @@ smt_convt::resultt bmct::multi_property_check(
     }
 
     // Initialize a solver
-    std::unique_ptr<smt_convt> runtime_solver(create_solver("", ns, options));
+    smt_convt *solver_ptr = &runtime_solver;
+    std::unique_ptr<smt_convt> new_solver;
+    if (!options.get_bool_option("smt-during-symex"))
+    {
+      new_solver = std::unique_ptr<smt_convt>(create_solver("", ns, options));
+      solver_ptr = new_solver.get();
+    }
 
     // Store solver name initially but not again
     std::call_once(summary.solver_name_flag, [&]() {
-      summary.solver_name = runtime_solver->solver_text();
+      summary.solver_name = solver_ptr->solver_text();
     });
     log_status(
       "Solving claim '{}' with solver {}",
       claim.claim_cstr,
-      runtime_solver->solver_text());
+      solver_ptr->solver_text());
 
     // Save current instance with timing
     fine_timet solve_start = current_time();
     smt_convt::resultt solver_result =
-      run_decision_procedure(*runtime_solver, local_eq);
+      run_decision_procedure(*solver_ptr, local_eq);
     fine_timet solve_stop = current_time();
 
     // Show colored result after solving
@@ -1471,7 +1481,7 @@ smt_convt::resultt bmct::multi_property_check(
         is_compact_trace = false;
 
       goto_tracet goto_trace;
-      build_goto_trace(local_eq, *runtime_solver, goto_trace, is_compact_trace);
+      build_goto_trace(local_eq, *solver_ptr, goto_trace, is_compact_trace);
 
       // Store claim signature
       if (is_assert_cov)
@@ -1507,7 +1517,7 @@ smt_convt::resultt bmct::multi_property_check(
       {
         report_multi_property_trace(
           solver_result,
-          runtime_solver,
+          solver_ptr,
           local_eq,
           previous_ce_counter,
           goto_trace,
