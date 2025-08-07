@@ -1,4 +1,0 @@
-FUTURE
-main.c
---loop-invariant --multi-property
-^VERIFICATION FAILED$
