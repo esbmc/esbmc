@@ -1319,8 +1319,7 @@ void goto_symext::add_memory_leak_checks()
     if (has_unknown)
       maybe_global_target = [](expr2tc) { return gen_true_expr(); };
     else
-      maybe_global_target = [tgts = std::move(globals_point_to)](expr2tc obj)
-      {
+      maybe_global_target = [tgts = std::move(globals_point_to)](expr2tc obj){
         // Accumulator for OR-ing conditions
         expr2tc is_any;
         // Iterate over each (expression, condition) pair in tgts
