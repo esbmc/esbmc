@@ -128,8 +128,12 @@ exprt function_call_expr::handle_isinstance() const
            Inheritance or type aliases may require deeper analysis. */
 
   bool matches = base_type_eq(obj_expr.type(), expected_type, converter_.ns);
+  if (matches)
+    return gen_boolean(true);
 
-  return (matches) ? gen_boolean(true) : gen_boolean(false);
+  bool is_subtype =
+    is_subclass_of(obj_expr.type(), expected_type, converter_.ns);
+  return gen_boolean(is_subtype);
 }
 
 exprt function_call_expr::handle_int_to_str(nlohmann::json &arg) const

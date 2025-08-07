@@ -3043,6 +3043,7 @@ void python_converter::get_class_definition(
   symbolt *added_symbol = symbol_table_.move_symbol_to_context(symbol);
 
   // Iterate over base classes
+  irept::subt &base_ids = clazz.add("bases").get_sub();
   for (auto &base_class : class_node["bases"])
   {
     const std::string &base_class_name = base_class["id"].get<std::string>();
@@ -3060,6 +3061,8 @@ void python_converter::get_class_definition(
     {
       throw std::runtime_error("Base class not found: " + base_class_name);
     }
+
+    base_ids.emplace_back(class_symbol->id);
 
     struct_typet &class_type = static_cast<struct_typet &>(class_symbol->type);
     for (const auto &component : class_type.components())
