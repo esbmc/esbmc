@@ -1329,7 +1329,7 @@ void clang_cpp_convertert::build_member_from_component(
     component.name(),
     component.type());
 
-  component.swap(member);
+  component.swap(member);  
 }
 
 bool clang_cpp_convertert::get_function_body(

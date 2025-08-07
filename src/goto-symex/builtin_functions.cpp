@@ -1600,6 +1600,26 @@ void goto_symext::intrinsic_memcpy(
   }
 
   unsigned long num_bytes = to_constant_int2t(n).as_long();
+  // Struct copy handling
+  if (num_bytes == 32 && (is_struct_type(dst->type) || is_pointer_type(dst->type))) {
+    if (is_pointer_type(dst->type)) {
+      dst = dereference2tc(dst->type, dst);
+      src = dereference2tc(src->type, src);
+    }
+    const struct_type2t &struct_type = to_struct_type(dst->type);
+    for (unsigned i =0; i<struct_type.members.size(); i++) {
+      expr2tc dst_member = member2tc(struct_type.members[i], dst, struct_type.member_names[i]);
+      expr2tc src_member = member2tc(struct_type.members[i], src, struct_type.member_names[i]);
+      symex_assign(code_assign2tc(dst_member, src_member));
+    }
+    expr2tc ret_ref = func_call.ret;
+    if (!is_nil_expr(ret_ref)) {
+      expr2tc assign = code_assign2tc(ret_ref, dst); // create assignment
+      dereference(ret_ref, dereferencet::WRITE); 
+      symex_assign(assign, false, cur_state->guard); // perform assignment
+    }  
+    return;
+  }  
 
   //Dereference both src and dst
   internal_deref_items.clear();
@@ -1634,6 +1654,7 @@ void goto_symext::intrinsic_memcpy(
 
   simplify(dst_item.object);
   simplify(src_item.offset);
+
 
   if (
     !is_constant_int2t(dst_item.offset) || !is_constant_int2t(src_item.offset))

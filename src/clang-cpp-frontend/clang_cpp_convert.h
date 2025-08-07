@@ -6,6 +6,7 @@
 
 #include <clang-c-frontend/clang_c_convert.h>
 
+
 class clang_cpp_convertert : public clang_c_convertert
 {
 public:
@@ -22,6 +23,7 @@ protected:
   this_mapt this_map;
 
   bool get_decl(const clang::Decl &decl, exprt &new_expr) override;
+
 
   void get_decl_name(
     const clang::NamedDecl &nd,

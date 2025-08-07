@@ -335,11 +335,9 @@ void goto_symext::symex_step(reachability_treet &art)
         id.as_string() == "c:@F@memcpy" ||
         has_prefix(id.as_string(), "c:@F@__builtin_memcpy$"))
       {
+        log_status("Using intrinsic_memcpy for {}", id.as_string());
         cur_state->source.pc++;
-        if (run_builtin(call, id.as_string()))
-        {
-          return;
-        }
+        intrinsic_memcpy(art, call); 
       }
 
       if (id == "c:@F@scanf" || id == "c:@F@sscanf" || id == "c:@F@fscanf")
@@ -599,10 +597,16 @@ void goto_symext::run_intrinsic(
     return;
   }
 
+  if (symname == "c:@F@__ESBMC_memcpy")
+  {
+    intrinsic_memcpy(art, func_call);
+    return; 
+  }
+
   if (symname == "c:@F@memcpy")
   {
     intrinsic_memcpy(art, func_call);
-    return;
+    return; 
   }
 
   if (symname == "c:@F@__ESBMC_get_object_size")
