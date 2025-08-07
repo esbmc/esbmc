@@ -46,4 +46,4 @@ protected:
     const std::vector<expr2tc> &invariants);
 };
 
-#endif /* GOTO_PROGRAMS_GOTO_LOOP_INVARIANT_H_ */ 
+#endif /* GOTO_PROGRAMS_GOTO_LOOP_INVARIANT_H_ */

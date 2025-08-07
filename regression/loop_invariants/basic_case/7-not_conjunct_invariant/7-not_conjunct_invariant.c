@@ -6,7 +6,8 @@ int main()
   int sum = 0;
 
   __ESBMC_loop_invariant(i >= 0 && i <= 5000000 && sum == i * 10);
-  int j = 0; //should pass? should fail? Currently it is not supported and would cause continue unwinding
+  int j =
+    0; //should pass? should fail? Currently it is not supported and would cause continue unwinding
   while (i < 5000000)
   {
     sum += 10;

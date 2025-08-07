@@ -126,13 +126,14 @@ void goto_loop_invariantt::convert_loop_with_invariant(loopst &loop)
   insert_assert_before_loop(loop_head, invariants);
 
   // // 2. Insert HAVOC and ASSUME before loop condition (after base case assert)
-   insert_havoc_and_assume_before_condition(loop_head, loop, invariants);
+  insert_havoc_and_assume_before_condition(loop_head, loop, invariants);
 
   // // 3. Insert inductive step verification and loop termination
-   insert_inductive_step_and_termination(loop, invariants);
+  insert_inductive_step_and_termination(loop, invariants);
 }
 
-std::vector<expr2tc> goto_loop_invariantt::extract_loop_invariants(const loopst &loop)
+std::vector<expr2tc>
+goto_loop_invariantt::extract_loop_invariants(const loopst &loop)
 {
   std::vector<expr2tc> invariants;
 
@@ -145,23 +146,23 @@ std::vector<expr2tc> goto_loop_invariantt::extract_loop_invariants(const loopst 
   // For for loops, the loop head might be the initialization (ASSIGN),
   // and the LOOP_INVARIANT might be before the condition check (IF).
   // We need to search more broadly to find LOOP_INVARIANT instructions.
-  
+
   // Search backwards from loop head to find LOOP_INVARIANT
   goto_programt::targett search_it = loop_head;
-  
+
   // Search up to 10 instructions before the loop head
   const size_t max_search_distance = 10;
   size_t search_distance = 0;
-  
-  while (search_it != goto_function.body.instructions.begin() && 
+
+  while (search_it != goto_function.body.instructions.begin() &&
          search_distance < max_search_distance)
   {
     --search_it;
     ++search_distance;
-    
+
     if (search_it->is_loop_invariant())
     {
-      auto const& current_invariants = search_it->get_loop_invariants();
+      auto const &current_invariants = search_it->get_loop_invariants();
 
       if (current_invariants.size() == 1)
       {
@@ -172,21 +173,21 @@ std::vector<expr2tc> goto_loop_invariantt::extract_loop_invariants(const loopst 
       {
         // Combine to one && format invariant
         auto it = current_invariants.begin();
-        auto combined_invariant = *it;  // first element
-        ++it;  // move to second element
-        
+        auto combined_invariant = *it; // first element
+        ++it;                          // move to second element
+
         for (; it != current_invariants.end(); ++it)
         {
           combined_invariant = and2tc(combined_invariant, *it);
         }
-        
+
         // return one combined invariant
         invariants.push_back(combined_invariant);
       }
       // if current_invariants.empty(), do nothing, continue searching
     }
   }
-  
+
   return invariants;
 }
 
@@ -195,7 +196,7 @@ void goto_loop_invariantt::insert_assert_before_loop(
   const std::vector<expr2tc> &invariants)
 {
   goto_programt dest;
-  
+
   for (const auto &invariant : invariants)
   {
     // Create assert instruction for each invariant
@@ -204,11 +205,10 @@ void goto_loop_invariantt::insert_assert_before_loop(
     t->location = loop_head->location;
     t->location.comment("loop invariant base case");
   }
-  
+
   // Insert before the loop head
   goto_function.body.insert_swap(loop_head, dest);
 }
-
 
 void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
   goto_programt::targett &loop_head,
@@ -217,17 +217,18 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
 {
   // Find the loop condition (IF instruction) - this should be right at loop_head
   goto_programt::targett condition_it = loop_head;
-  while (condition_it != goto_function.body.instructions.end() && !condition_it->is_goto())
+  while (condition_it != goto_function.body.instructions.end() &&
+         !condition_it->is_goto())
     ++condition_it;
-  
+
   if (condition_it == goto_function.body.instructions.end())
     return; // No loop condition found
-  
+
   // Insert BEFORE the loop condition (after the base case assert)
   goto_programt::targett insert_point = condition_it;
-  
+
   goto_programt dest;
-  
+
   // 1. Insert HAVOC (nondet assignments) before the loop condition
   auto const &loop_vars = loop.get_modified_loop_vars();
   for (auto const &lhs : loop_vars)
@@ -248,7 +249,7 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
     t->location = loop_head->location;
     t->location.comment("loop invariant havoc");
   }
-  
+
   // 2. Insert ASSUME with invariants only (we'll assume we're entering the loop)
   for (const auto &invariant : invariants)
   {
@@ -258,10 +259,9 @@ void goto_loop_invariantt::insert_havoc_and_assume_before_condition(
     t->location = loop_head->location;
     t->location.comment("loop invariant step case");
   }
-  
+
   // Insert before the loop condition
   goto_function.body.insert_swap(insert_point, dest);
-  
 }
 
 void goto_loop_invariantt::insert_inductive_step_and_termination(
@@ -271,9 +271,9 @@ void goto_loop_invariantt::insert_inductive_step_and_termination(
   // Insert at the end of loop body (before GOTO back to loop head)
   goto_programt::targett loop_exit = loop.get_original_loop_exit();
   goto_programt::targett insert_point = loop_exit;
-  
+
   goto_programt dest;
-  
+
   // 1. Insert ASSERT for inductive step verification
   for (const auto &invariant : invariants)
   {
@@ -283,13 +283,13 @@ void goto_loop_invariantt::insert_inductive_step_and_termination(
     t->location = loop_exit->location;
     t->location.comment("loop invariant inductive step");
   }
-  
+
   // 2. Insert ASSUME(FALSE) to terminate the loop
   goto_programt::targett t = dest.add_instruction(ASSUME);
   t->guard = gen_false_expr();
   t->location = loop_exit->location;
   t->location.comment("loop termination");
-  
+
   // Insert at the insert point
   goto_function.body.insert_swap(insert_point, dest);
-} 
+}

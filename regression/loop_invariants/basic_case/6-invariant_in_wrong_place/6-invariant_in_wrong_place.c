@@ -6,7 +6,7 @@ int main()
   int sum = 0;
   while (i < 5000000)
   {
-    __ESBMC_loop_invariant(i >= 0 && i <= 5000000 && sum == i * 10); 
+    __ESBMC_loop_invariant(i >= 0 && i <= 5000000 && sum == i * 10);
     //should time out since the format is wrong but need to change to continue collecting invariants
     sum += 10;
     i++;

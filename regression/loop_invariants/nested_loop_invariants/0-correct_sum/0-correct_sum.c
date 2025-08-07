@@ -16,8 +16,8 @@ int main()
     __ESBMC_loop_invariant(j >= 0 && j <= 10 && sum == i * 10 + j);
     while (j < 10)
     {
-        sum++;
-        j++;
+      sum++;
+      j++;
     }
   }
 

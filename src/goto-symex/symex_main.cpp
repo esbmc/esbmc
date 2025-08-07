@@ -1319,7 +1319,8 @@ void goto_symext::add_memory_leak_checks()
     if (has_unknown)
       maybe_global_target = [](expr2tc) { return gen_true_expr(); };
     else
-      maybe_global_target = [tgts = std::move(globals_point_to)](expr2tc obj) {
+      maybe_global_target = [tgts = std::move(globals_point_to)](expr2tc obj)
+      {
         // Accumulator for OR-ing conditions
         expr2tc is_any;
         // Iterate over each (expression, condition) pair in tgts
@@ -1400,21 +1401,22 @@ void goto_symext::symex_loop_invariant()
   // Get the loop invariant
   const goto_programt::instructiont &instruction = *cur_state->source.pc;
 
-  log_status("Processing {} loop invariant", instruction.get_loop_invariants().size());
-  for (const auto &invariant : instruction.get_loop_invariants())
-  { 
-    expr2tc rename_invariant = invariant;
+  log_status(
+    "Processing {} loop invariant", instruction.get_loop_invariants().size());
+  for (auto &invariant : instruction.get_loop_invariants())
+  {
+    // rename the variables to match the current symbolic execution state
+    cur_state->rename(invariant);
 
-    // rename the vairables to match the current symbolic execution state
-    cur_state->rename(rename_invariant);
-    
     // store invariant for later use
-    cur_state->pending_invariants.push_back(rename_invariant);
+    cur_state->pending_invariants.push_back(invariant);
 
     log_status("Stored loop invariant");
   }
   cur_state->has_loop_invariant = true;
-  
-  log_status("Successfully collected {} loop invariants, marked state for loop processing", 
-             cur_state->pending_invariants.size());
+
+  log_status(
+    "Successfully collected {} loop invariants, marked state for loop "
+    "processing",
+    cur_state->pending_invariants.size());
 }
