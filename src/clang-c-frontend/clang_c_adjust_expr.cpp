@@ -939,9 +939,8 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
 
       expr.swap(infl_expr);
     }
-    else if ((compare_unscore_builtin(identifier, "nan") &&
-              (identifier != "nan") && (identifier != "__builtin_isnand") &&
-              (identifier != "__isnand")))
+    else if (
+      (identifier != "nan") && compare_unscore_builtin(identifier, "nan"))
     {
       typet t = expr.type();
 
