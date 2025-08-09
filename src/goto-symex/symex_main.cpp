@@ -243,6 +243,14 @@ void goto_symext::symex_step(reachability_treet &art)
     cur_state->source.pc++;
     break;
 
+  case LOOP_INVARIANT:
+    if (options.get_bool_option("loop-invariant"))
+    {
+      symex_loop_invariant();
+    }
+    cur_state->source.pc++;
+    break;
+
   case RETURN:
     if (!cur_state->guard.is_false())
     {
@@ -1380,4 +1388,34 @@ void goto_symext::add_memory_leak_checks()
       cond,
       "dereference failure: forgotten memory: " + get_pretty_name(it.name));
   }
+}
+
+void goto_symext::symex_loop_invariant()
+{
+  // this aims to use esbmc to use a single step to prove the loop invariant
+  // Basic guard check - skip if guard is false
+  if (cur_state->guard.is_false())
+    return;
+
+  // Get the loop invariant
+  const goto_programt::instructiont &instruction = *cur_state->source.pc;
+
+  log_status(
+    "Processing {} loop invariant", instruction.get_loop_invariants().size());
+  for (auto &invariant : instruction.get_loop_invariants())
+  {
+    // rename the variables to match the current symbolic execution state
+    cur_state->rename(invariant);
+
+    // store invariant for later use
+    cur_state->pending_invariants.push_back(invariant);
+
+    log_status("Stored loop invariant");
+  }
+  cur_state->has_loop_invariant = true;
+
+  log_status(
+    "Successfully collected {} loop invariants, marked state for loop "
+    "processing",
+    cur_state->pending_invariants.size());
 }

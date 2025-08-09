@@ -216,6 +216,11 @@ protected:
   void symex_assert();
 
   /**
+   *  Interpret a LOOP_INVARIANT instruction.
+   */
+  void symex_loop_invariant();
+
+  /**
    *  Perform incremental SMT solving for assert and assume statements.
    *  @param expr Expression that must be checked.
    *  @param msg Textual message explaining assertion.

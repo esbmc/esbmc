@@ -468,6 +468,12 @@ public:
    *  realloc number is. No need for special consideration when merging states
    *  at phi nodes: the renumbering update itself is guarded at the SMT layer.*/
   std::map<expr2tc, unsigned> realloc_map;
+
+  /** List of pending loop invariants to be processed. */
+  std::vector<expr2tc> pending_invariants;
+
+  /** Flag indicating if the current state has loop invariants. */
+  bool has_loop_invariant;
 };
 
 #endif
