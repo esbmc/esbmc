@@ -2670,6 +2670,36 @@ expr2tc smt_convt::get(const expr2tc &expr)
       decompose_store_chain(expr, update_val);
     }
 
+    /* Try to construct a constant struct when we handle  
+     * struct type "with" expr2tc
+     *
+     * Simplify the source value. If it is a constant,
+     * we will replace the corresponding update value
+     * i.e. S = {.x=0, .y=0}; S = S WITH [x:=1];
+     * Reduced to this: S = {.x=1, .y=0}
+     */
+    if (is_struct_type(with.type))
+    {
+      expr2tc source = get(with.source_value);
+      if (is_constant_struct2t(source))
+      {
+        std::vector<expr2tc> members;
+        constant_struct2t s = to_constant_struct2t(source);
+        const constant_string2t &update_name =
+          to_constant_string2t(with.update_field);
+        for (size_t i = 0; i < s.datatype_members.size(); i++)
+        {
+          irep_idt name = to_struct_type(with.type).member_names[i];
+          if (update_name.value == name)
+            members.push_back(update_val);
+          else
+            members.push_back(s.datatype_members[i]);
+        }
+
+        return get(constant_struct2tc(with.type, members));
+      }
+    }
+
     /* This function get() is only used to obtain assigned values to the RHS of
      * SSA_step assignments in order to generate counter-examples. with2t
      * expressions for these RHS are only generated during the transformations
