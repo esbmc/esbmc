@@ -61,24 +61,38 @@ public:
   {
   }
 
-  inline irept(const irept &irep) : data(irep.data)
+  inline irept(const irept &irep)
   {
-    if (data != nullptr)
+    // We only need to lock the source's data to safely read the pointer
+    // and increment its reference count.
+    dt *source_data = nullptr;
+    if (irep.data)
     {
-      assert(data->ref_count != 0);
-      data->ref_count++;
+      std::lock_guard<std::mutex> lock(irep.data->dt_mutex);
+      source_data = irep.data;
+      if(source_data)
+        source_data->ref_count++;
     }
+    data = source_data;
   }
 
   inline irept &operator=(const irept &irep)
   {
-    dt *tmp;
-    assert(&irep != this); // check if we assign to ourselves
-    tmp = data;
-    data = irep.data;
-    if (data != nullptr)
-      data->ref_count++;
-    remove_ref(tmp);
+    if (this == &irep) return *this;
+
+    dt *new_data = nullptr;
+    if (irep.data)
+    {
+        std::lock_guard<std::mutex> lock(irep.data->dt_mutex);
+        new_data = irep.data;
+        if(new_data)
+          new_data->ref_count++;
+    }
+
+    dt *old_data = data;
+    data = new_data;
+    remove_ref(old_data);
+
     return *this;
   }
 
@@ -1289,6 +1303,7 @@ public:
   public:
 #ifdef SHARING
     unsigned ref_count;
+    mutable std::mutex dt_mutex;
 #endif
 
     dstring data;
@@ -1315,6 +1330,14 @@ public:
 
 #ifdef SHARING
     dt() : ref_count(1)
+    {
+    }
+    dt(const irept::dt& other) :
+        ref_count(1),
+        data(other.data),
+        named_sub(other.named_sub),
+        comments(other.comments),
+        sub(other.sub)
     {
     }
 #else

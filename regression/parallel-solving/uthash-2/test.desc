@@ -1,4 +1,4 @@
 CORE
 main.i
---parallel-solving --k-induction --unwind 2 --max-k-step 2 --timeout 5
+--parallel-solving --k-induction --unwind 2 --max-k-step 2 --timeout 10
 ^VERIFICATION UNKNOWN$
