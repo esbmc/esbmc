@@ -1376,11 +1376,15 @@ smt_convt::resultt bmct::multi_property_check(
     //! This algo is unsound, need a better signature to distinguish claims
     bool is_verified = false;
     std::string claim_sig = claim.claim_msg + "\t" + claim.claim_loc;
-    if (is_assert_cov)
+    if (is_assert_cov) {
       // C++20 reached_mul_claims.contains
+      std::lock_guard lock(reached_mul_claims_mutex);
       is_verified = reached_mul_claims.count(claim_sig) ? true : false;
-    else
+    }
+    else {
+      std::lock_guard lock(reached_claims_mutex);
       is_verified = reached_claims.count(claim.claim_cstr) ? true : false;
+    }
     if (is_assert_cov && is_verified)
     {
       // insert to the multiset before skipping the verification process
