@@ -332,8 +332,7 @@ void goto_symext::symex_step(reachability_treet &art)
       }
 
       if (
-        id.as_string() == "c:@F@memcpy" ||
-        has_prefix(id.as_string(), "c:@F@__builtin_memcpy$"))
+        id.as_string() == "c:@F@__ESBMC_memcpy")
       {
         log_status("Using intrinsic_memcpy for {}", id.as_string());
         cur_state->source.pc++;
@@ -598,12 +597,6 @@ void goto_symext::run_intrinsic(
   }
 
   if (symname == "c:@F@__ESBMC_memcpy")
-  {
-    intrinsic_memcpy(art, func_call);
-    return; 
-  }
-
-  if (symname == "c:@F@memcpy")
   {
     intrinsic_memcpy(art, func_call);
     return; 

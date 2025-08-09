@@ -1473,7 +1473,7 @@ void goto_symext::intrinsic_memset(
        */
       log_debug(
         "memset", "TODO: some simplifications are missing, bumping call");
-      bump_call(func_call, "c:@F@__memset_impl");
+      bump_call(func_call, "c:@F@__memset_impl"); 
       return;
     }
 
@@ -1619,7 +1619,9 @@ void goto_symext::intrinsic_memcpy(
       symex_assign(assign, false, cur_state->guard); // perform assignment
     }  
     return;
-  }  
+  } 
+
+  log_status("Using intrinsic_memcpy for {}-byte copy", num_bytes);
 
   //Dereference both src and dst
   internal_deref_items.clear();
@@ -1663,13 +1665,72 @@ void goto_symext::intrinsic_memcpy(
     bump_call(func_call, "c:@F@__memcpy_impl");
     return;
   }
-  uint64_t dst_offset = to_constant_int2t(dst_item.offset).value.to_uint64();
-  uint64_t src_offset = to_constant_int2t(src_item.offset).value.to_uint64();
-
+  
   //Compute alingnment
-  bool aligned = (dst_offset % 8 == 0) && (src_offset % 8 == 0);
+  //bool aligned = (dst_offset % 8 == 0) && (src_offset % 8 == 0);
+  bool aligned = is_constant_int2t(dst_item.offset) && is_constant_int2t(src_item.offset);
 
-  if (aligned)
+  if (aligned){
+    uint64_t dst_offset = to_constant_int2t(dst_item.offset).value.to_uint64();
+    uint64_t src_offset = to_constant_int2t(src_item.offset).value.to_uint64();
+  
+    unsigned int chunk_size = 1;
+    if ((dst_offset % 8 == 0) && (src_offset % 8 ==0))
+      chunk_size = 8;
+    if ((dst_offset % 4 == 0) && (src_offset % 4 == 0))
+      chunk_size = 4;
+    if ((dst_offset % 2 ==0) && (src_offset % 2 == 0))
+      chunk_size = 2;
+  
+    size_t i = 0;
+    for (;i + chunk_size <= num_bytes; i += chunk_size){
+       type2tc chunk_type;
+       switch (chunk_size) {
+         case 8: chunk_type = get_uint64_type(); break;
+         case 4: chunk_type = get_uint32_type(); break;
+         case 2: chunk_type = get_uint16_type(); break;
+         default: chunk_type = get_uint8_type(); break;
+    }
+
+    expr2tc dst_idx = index2tc(chunk_type, dst_item.object, constant_int2tc(get_uint64_type(), BigInt(dst_offset + i)));
+    expr2tc src_idx = index2tc(chunk_type, src_item.object, constant_int2tc(get_uint64_type(), BigInt(src_offset+ i)));
+    expr2tc value = src_idx;
+    dereference(value, dereferencet::READ);
+    symex_assign(code_assign2tc(dst_idx, value), false, guard);
+  }
+  
+  
+  //Copy remaining bytes
+  for(; i<num_bytes; i++) {
+    expr2tc dst_idx = index2tc(get_uint8_type(), dst_item.object, constant_int2tc(get_uint64_type(), BigInt(dst_offset+i)));
+    expr2tc src_idx = index2tc(
+        get_uint8_type(),
+        src_item.object,
+        constant_int2tc(get_uint64_type(), BigInt(src_offset + i)));
+      expr2tc value = src_idx;
+      dereference(value, dereferencet::READ);
+      symex_assign(code_assign2tc(dst_idx, value), false, guard);
+      }
+  } else
+    {
+      for (size_t i = 0; i < num_bytes; i++) {
+        expr2tc dst_idx = index2tc(
+          get_uint8_type(),
+          dst_item.object,
+          add2tc(get_uint64_type(), dst_item.offset, 
+                constant_int2tc(get_uint64_type(), BigInt(i))));
+        expr2tc src_idx = index2tc(
+          get_uint8_type(),
+          src_item.object,
+          add2tc(get_uint64_type(), src_item.offset,
+                constant_int2tc(get_uint64_type(), BigInt(i))));
+        expr2tc value = src_idx;
+        dereference(value, dereferencet::READ);
+        symex_assign(code_assign2tc(dst_idx, value), false, guard);
+    } }
+
+    
+  /*if (aligned)
   {
     size_t i = 0;
     for (; i + 8 <= num_bytes; i += 8)
@@ -1710,7 +1771,7 @@ void goto_symext::intrinsic_memcpy(
       expr2tc dst_idx = index2tc(
         get_uint8_type(),
         dst_item.object,
-        constant_int2tc(get_uint64_type(), BigInt(src_offset + i)));
+        constant_int2tc(get_uint64_type(), BigInt(dst_offset + i)));
       expr2tc src_idx = index2tc(
         get_uint8_type(),
         src_item.object,
@@ -1719,11 +1780,14 @@ void goto_symext::intrinsic_memcpy(
       dereference(value, dereferencet::READ);
       symex_assign(code_assign2tc(dst_idx, value), false, guard);
     }
-  }
+  } */
   //Return dst
+  
   expr2tc ret_ref = func_call.ret;
-  dereference(ret_ref, dereferencet::READ);
-  symex_assign(code_assign2tc(ret_ref, dst), false, cur_state->guard);
+  if (!is_nil_expr(ret_ref)) {
+    dereference(ret_ref, dereferencet::READ);
+    symex_assign(code_assign2tc(ret_ref, dst), false, cur_state->guard);
+  }
 }
 
 /**
@@ -1863,12 +1927,12 @@ bool goto_symext::run_builtin(
     return true;
   }
 
-  if (symname == "c:@F@memcpy" || has_prefix(symname, "c:@F@__builtin_memcpy$"))
+  /*if (symname == "c:@F@memcpy" || has_prefix(symname, "c:@F@__builtin_memcpy$"))
   {
     log_status("Using intrinsic_memcpy for {}", symname);
     intrinsic_memcpy(*art1, func_call);
     return true;
-  }
+  }*/
 
   if (has_prefix(symname, "c:@F@__builtin_constant_p"))
   {
