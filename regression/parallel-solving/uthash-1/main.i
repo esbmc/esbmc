@@ -1,4 +1,4 @@
-main() {
+int main() {
   for (;;) {
     unsigned a;
     while (a)
