@@ -70,7 +70,7 @@ public:
     {
       std::lock_guard<std::mutex> lock(irep.data->dt_mutex);
       source_data = irep.data;
-      if(source_data)
+      if (source_data)
         source_data->ref_count++;
     }
     data = source_data;
@@ -78,15 +78,16 @@ public:
 
   inline irept &operator=(const irept &irep)
   {
-    if (this == &irep) return *this;
+    if (this == &irep)
+      return *this;
 
     dt *new_data = nullptr;
     if (irep.data)
     {
-        std::lock_guard<std::mutex> lock(irep.data->dt_mutex);
-        new_data = irep.data;
-        if(new_data)
-          new_data->ref_count++;
+      std::lock_guard<std::mutex> lock(irep.data->dt_mutex);
+      new_data = irep.data;
+      if (new_data)
+        new_data->ref_count++;
     }
 
     dt *old_data = data;
@@ -1332,8 +1333,8 @@ public:
     dt() : ref_count(1)
     {
     }
-    dt(const irept::dt& other) :
-        ref_count(1),
+    dt(const irept::dt &other)
+      : ref_count(1),
         data(other.data),
         named_sub(other.named_sub),
         comments(other.comments),

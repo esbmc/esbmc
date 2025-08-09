@@ -63,7 +63,8 @@ const BigInt &binary2bigint(irep_idt binary, bool is_signed)
 {
   std::map<irep_idt, BigInt> &ref =
     (is_signed) ? bin2int_map_signed : bin2int_map_unsigned;
-  std::mutex &ref_mutex = (is_signed) ? bin2int_map_signed_mutex : bin2int_map_unsigned_mutex;
+  std::mutex &ref_mutex =
+    (is_signed) ? bin2int_map_signed_mutex : bin2int_map_unsigned_mutex;
 
   std::lock_guard lock(ref_mutex);
 

@@ -44,13 +44,14 @@ void irept::detatch()
     return;
   }
 
-  dt* const old_data = data;
+  dt *const old_data = data;
   old_data->dt_mutex.lock();
-  if (old_data->ref_count == 1) {
+  if (old_data->ref_count == 1)
+  {
     old_data->dt_mutex.unlock();
     return;
   }
-  dt* new_data = new dt(*old_data);
+  dt *new_data = new dt(*old_data);
   this->data = new_data;
 
   data->ref_count = 1;
@@ -88,7 +89,8 @@ void irept::remove_ref(dt *old_data)
   }
 
   // Delete the data after releasing the lock.
-  if (should_delete) {
+  if (should_delete)
+  {
     delete old_data;
   }
 }
