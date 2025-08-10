@@ -24,7 +24,6 @@
 #undef memmove
 #undef memchr
 
-
 char *strcpy(char *dst, const char *src)
 {
 __ESBMC_HIDE:;
