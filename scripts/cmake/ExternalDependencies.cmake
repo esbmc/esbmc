@@ -12,6 +12,11 @@ FetchContent_MakeAvailable(fmt)
 FetchContent_Declare(json URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz)
 FetchContent_MakeAvailable(json)
 
+# yaml-cpp
+FetchContent_Declare(yaml-cpp
+  GIT_REPOSITORY https://github.com/jbeder/yaml-cpp.git)
+FetchContent_MakeAvailable(yaml-cpp)
+
 if(ESBMC_CHERI_CLANG)
   FetchContent_Declare(cheri_compressed_cap
     GIT_REPOSITORY https://github.com/CTSRD-CHERI/cheri-compressed-cap.git)

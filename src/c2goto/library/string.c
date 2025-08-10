@@ -24,7 +24,6 @@
 #undef memmove
 #undef memchr
 
-void *__ESBMC_memcpy(void *dst, const void *src, size_t n);
 
 char *strcpy(char *dst, const char *src)
 {

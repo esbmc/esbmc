@@ -287,6 +287,8 @@ private:
       return "bool";
     if (rhs.is_string())
       return "str";
+    if (rhs.is_null())
+      return "NoneType";
 
     return std::string();
   }

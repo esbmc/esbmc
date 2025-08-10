@@ -618,7 +618,6 @@ public:
   {
     __ESBMC_assert(_size != 0, "pop_back() on empty vector");
     _size--;
-    buf[_size] = T();
   }
 
   iterator insert(iterator position, const T &x)
@@ -688,7 +687,6 @@ public:
       buf[i] = buf[i + 1];
     }
     _size--;
-    buf[_size] = T();
     return position;
   }
 
@@ -713,7 +711,6 @@ public:
   void clear()
   {
     _size = 0;
-    buf[0] = T();
     return;
   }
 

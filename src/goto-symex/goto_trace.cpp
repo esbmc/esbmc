@@ -400,6 +400,43 @@ void correctness_graphml_goto_trace(
   graph.generate_graphml(options);
 }
 
+void correctness_yaml_goto_trace(
+  optionst &options,
+  const namespacet &ns [[maybe_unused]],
+  const goto_tracet &goto_trace [[maybe_unused]])
+{
+  yamlt yml(yamlt::CORRECTNESS);
+  yml.verified_file = options.get_option("input-file");
+  log_progress("Generating Correctness Witness for: {}", yml.verified_file);
+
+#if 0
+  for (const auto &step : goto_trace.steps)
+  {
+    /* checking restrictions for correctness yaml */
+    if (
+      (!(is_valid_witness_step(ns, step))) ||
+      (!(step.is_assume() || step.is_assert())))
+      continue;
+
+    std::string invariant = get_invariant(
+      yml.verified_file,
+      std::atoi(step.pc->location.get_line().c_str()),
+      options);
+
+    if (invariant.empty())
+      continue; /* we don't have to consider this invariant */
+
+    std::string function = step.pc->location.get_function().c_str();
+    get_line_number(
+      yml.verified_file,
+      std::atoi(step.pc->location.get_line().c_str()),
+      options);
+  }
+#endif
+
+  yml.generate_yaml(options);
+}
+
 void appendInfo(
   std::string &dest,
   const std::string &label,

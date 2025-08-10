@@ -387,7 +387,7 @@ _Bool __ESBMC_is_little_endian();
 
 int __ESBMC_rounding_mode = 0;
 
-void *__ESBMC_memcpy(void *dst, const void *src, size_t n);
+void *__ESBMC_memcpy(void *, const void *, unsigned int);
 
 void *__ESBMC_memset(void *, int, unsigned int);
 
