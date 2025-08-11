@@ -149,7 +149,8 @@ void symex_target_equationt::convert_internal_step(
   smt_convt::ast_vec &assertions,
   SSA_stept &step)
 {
-  static std::atomic<unsigned> output_count = 0; // Temporary hack; should become scoped.
+  // Temporary hack; should become scoped.
+  static std::atomic<unsigned> output_count = 0;
   smt_astt true_val = smt_conv.convert_ast(gen_true_expr());
   smt_astt false_val = smt_conv.convert_ast(gen_false_expr());
 
