@@ -1571,6 +1571,7 @@ void goto_symext::intrinsic_memcpy(
   //if either operand is literally the constant 0 pointer, defer to our C memcpy
   simplify(dst);
   simplify(src);
+
   if (
     (is_constant_int2t(dst) && to_constant_int2t(dst).value.is_zero()) ||
     (is_constant_int2t(src) && to_constant_int2t(src).value.is_zero()))
@@ -1601,22 +1602,24 @@ void goto_symext::intrinsic_memcpy(
 
   unsigned long num_bytes = to_constant_int2t(n).as_long();
   // Struct copy handling
-  if (
-    num_bytes == 32 &&
-    (is_struct_type(dst->type) || is_pointer_type(dst->type)))
+  if (is_struct_type(dst->type) || is_pointer_type(dst->type) &&
+      is_struct_type(to_pointer_type(dst->type).subtype))
   {
-    if (is_pointer_type(dst->type))
-    {
-      dst = dereference2tc(dst->type, dst);
-      src = dereference2tc(src->type, src);
-    }
-    const struct_type2t &struct_type = to_struct_type(dst->type);
+    expr2tc deref_dst = is_pointer_type(dst->type) ?
+        dereference2tc(dst->type, dst) : dst;
+    expr2tc deref_src = is_pointer_type(src->type) ?
+        dereference2tc(dst->type, src) : src;
+    
+    const struct_type2t &struct_type = is_struct_type(deref_dst->type) ?
+      to_struct_type(deref_dst->type) :
+      to_struct_type(to_pointer_type(dst->type).subtype);
+    
     for (unsigned i = 0; i < struct_type.members.size(); i++)
     {
       expr2tc dst_member =
-        member2tc(struct_type.members[i], dst, struct_type.member_names[i]);
+        member2tc(struct_type.members[i], deref_dst, struct_type.member_names[i]);
       expr2tc src_member =
-        member2tc(struct_type.members[i], src, struct_type.member_names[i]);
+        member2tc(struct_type.members[i], deref_src, struct_type.member_names[i]);
       symex_assign(code_assign2tc(dst_member, src_member));
     }
     expr2tc ret_ref = func_call.ret;
@@ -1663,9 +1666,9 @@ void goto_symext::intrinsic_memcpy(
   cur_state->rename(src_item.offset);
 
   simplify(dst_item.object);
-  simplify(src_item.object); 
-  simplify(dst_item.offset);
-  simplify(src_item.offset);
+  simplify(src_item.object);
+//  simplify(dst_item.offset);
+//  simplify(src_item.offset);
 
   if (
     !is_constant_int2t(dst_item.offset) || !is_constant_int2t(src_item.offset))
@@ -1765,59 +1768,6 @@ void goto_symext::intrinsic_memcpy(
       symex_assign(code_assign2tc(dst_idx, value), false, guard);
     }
   }
-
-  /*if (aligned)
-  {
-    size_t i = 0;
-    for (; i + 8 <= num_bytes; i += 8)
-    {
-      expr2tc dst_idx = index2tc(
-        get_uint64_type(),
-        dst_item.object,
-        constant_int2tc(get_uint64_type(), BigInt(dst_offset + i)));
-      expr2tc src_idx = index2tc(
-        get_uint64_type(),
-        src_item.object,
-        constant_int2tc(get_uint64_type(), BigInt(src_offset + i)));
-      expr2tc value = src_idx;
-      dereference(value, dereferencet::READ);
-      symex_assign(code_assign2tc(dst_idx, value), false, guard);
-    }
-    for (; i < num_bytes; ++i)
-    {
-      expr2tc dst_idx = index2tc(
-        get_uint8_type(),
-        dst_item.object,
-        constant_int2tc(get_uint8_type(), BigInt(dst_offset + i)));
-      expr2tc src_idx = index2tc(
-        get_uint8_type(),
-        src_item.object,
-        constant_int2tc(get_uint8_type(), BigInt(src_offset + i)));
-      expr2tc value = src_idx;
-      dereference(value, dereferencet::READ);
-      symex_assign(code_assign2tc(dst_idx, value), false, guard);
-    }
-  }
-  else
-  {
-    //Copy byte-by-byte
-    for (size_t i = 0; i < num_bytes; ++i)
-    {
-      expr2tc offset = constant_int2tc(get_uint64_type(), BigInt(i));
-      expr2tc dst_idx = index2tc(
-        get_uint8_type(),
-        dst_item.object,
-        constant_int2tc(get_uint64_type(), BigInt(dst_offset + i)));
-      expr2tc src_idx = index2tc(
-        get_uint8_type(),
-        src_item.object,
-        constant_int2tc(get_uint64_type(), BigInt(src_offset + i)));
-      expr2tc value = src_idx;
-      dereference(value, dereferencet::READ);
-      symex_assign(code_assign2tc(dst_idx, value), false, guard);
-    }
-  } */
-  //Return dst
 
   expr2tc ret_ref = func_call.ret;
   if (!is_nil_expr(ret_ref))
