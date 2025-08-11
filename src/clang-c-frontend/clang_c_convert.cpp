@@ -485,6 +485,11 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 
         t.set("alignment", alignment);
       }
+      else if (attr->getKind() == clang::attr::Section)
+      {
+        const clang::SectionAttr &sattr = static_cast<const clang::SectionAttr &>(*attr);
+        t.set("ld_sector", std::string(sattr.getName()));
+      }
       else
         continue;
     }
