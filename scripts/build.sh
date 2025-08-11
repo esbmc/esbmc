@@ -40,11 +40,11 @@ ubuntu_setup () {
     PKGS="\
         python-is-python3 csmith python3 \
         git ccache unzip wget curl libcsmith-dev gperf \
-        libgmp-dev cmake bison flex g++-multilib linux-libc-dev \
+        cmake bison flex g++-multilib linux-libc-dev \
         libboost-all-dev ninja-build python3-setuptools \
         libtinfo-dev pkg-config python3-pip python3-toml \
-        openjdk-11-jdk \
-    "
+        openjdk-11-jdk tar xz-utils \
+    "    
     if [ -z "$STATIC" ]; then STATIC=ON; fi
     if [ $STATIC = OFF ]; then
         PKGS="$PKGS \
@@ -70,6 +70,7 @@ ubuntu_setup () {
         SOLVER_FLAGS="$SOLVER_FLAGS \
             -DENABLE_Z3=On -DZ3_DIR=/usr \
             -DENABLE_GOTO_CONTRACTOR=OFF \
+            -DENABLE_BITWUZLA=OFF \
         "
         return
     fi
@@ -77,11 +78,38 @@ ubuntu_setup () {
     sudo apt-get update &&
     sudo apt-get install -y $PKGS &&
 
+    # Install GMP 6.3.0 from source (needed for bitwuzla)
+    echo "Installing GMP 6.3.0 from source..." &&
+    ORIGINAL_DIR="$PWD" &&
+    cd /tmp &&
+    # Try multiple mirrors for reliability
+    (wget https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz || \
+     wget https://gmplib.org/download/gmp/gmp-6.3.0.tar.xz || \
+     wget https://mirror.koddos.net/gnu/gmp/gmp-6.3.0.tar.xz) &&
+    tar -xf gmp-6.3.0.tar.xz &&
+    cd gmp-6.3.0 &&
+    ./configure --prefix=/usr/local --enable-cxx --enable-static &&
+    make -j$(nproc) &&
+    sudo make install &&
+    sudo ldconfig &&
+    echo "GMP 6.3.0 installed successfully" &&
+    cd "$ORIGINAL_DIR" &&  # Return to build directory
+
     echo "Installing Python dependencies" &&
     pip3 install --user meson ast2json &&
     pip3 install --user pyparsing toml &&
     pip3 install --user pyparsing tomli &&
     meson --version &&
+
+    # Set environment variables for cmake to find the new GMP
+    export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH" &&
+    export LD_LIBRARY_PATH="/usr/local/lib:$LD_LIBRARY_PATH" &&
+    export CMAKE_PREFIX_PATH="/usr/local:$CMAKE_PREFIX_PATH" &&
+
+    # Verify GMP installation
+    echo "Verifying GMP installation..." &&
+    pkg-config --modversion gmp || echo "Warning: GMP not found in pkg-config" &&
+    ls -la /usr/local/lib/libgmp* || echo "Warning: GMP libraries not found" &&
 
     BASE_ARGS="$BASE_ARGS \
         -DENABLE_OLD_FRONTEND=Off \
