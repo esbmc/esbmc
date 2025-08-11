@@ -89,7 +89,7 @@ bool function_call_expr::is_nondet_call() const
 bool function_call_expr::is_introspection_call() const
 {
   const std::string &func_name = function_id_.get_function();
-  return func_name == "isinstance";
+  return func_name == "isinstance" || func_name == "hasattr";
 }
 
 exprt function_call_expr::build_nondet_call() const
@@ -134,6 +134,16 @@ exprt function_call_expr::handle_isinstance() const
   bool is_subtype =
     is_subclass_of(obj_expr.type(), expected_type, converter_.ns);
   return gen_boolean(is_subtype);
+}
+
+exprt function_call_expr::handle_hasattr() const
+{
+  const auto &args = call_["args"];
+  symbol_id sid = converter_.create_symbol_id();
+  sid.set_object(args[0]["id"]);
+  bool has_attr = converter_.is_instance_attribute(
+    sid.to_string(), args[1]["value"], sid.get_object(), "");
+  return gen_boolean(has_attr);
 }
 
 exprt function_call_expr::handle_int_to_str(nlohmann::json &arg) const
@@ -909,7 +919,10 @@ exprt function_call_expr::get()
   // Handle introspection functions
   if (is_introspection_call())
   {
-    return handle_isinstance();
+    if (function_id_.get_function() == "isinstance")
+      return handle_isinstance();
+    else
+      return handle_hasattr();
   }
 
   const std::string &func_name = function_id_.get_function();
