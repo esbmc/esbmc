@@ -1667,9 +1667,7 @@ void goto_symext::intrinsic_memcpy(
   cur_state->rename(dst_item.offset);
   cur_state->rename(src_item.offset);
 
-  //simplify(dst_item.object);
-  //simplify(src_item.object);
-  //simplify(dst_item.offset);
+  simplify(dst_item.offset);
   simplify(src_item.offset);
 
   if (
@@ -1681,7 +1679,6 @@ void goto_symext::intrinsic_memcpy(
   }
 
   //Compute alingnment
-  //bool aligned = (dst_offset % 8 == 0) && (src_offset % 8 == 0);
   bool aligned =
     is_constant_int2t(dst_item.offset) && is_constant_int2t(src_item.offset);
 

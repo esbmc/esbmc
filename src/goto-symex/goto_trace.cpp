@@ -478,6 +478,7 @@ void show_goto_trace(
 
   for (const auto &step : goto_trace.steps)
   {
+    std::lock_guard lock(step.pc->type_mutex);
     // we only care about the counter example, which is only triggered by assert steps. Ignore all other steps.
     if (cex_only && step.type != goto_trace_stept::ASSERT)
       continue;
