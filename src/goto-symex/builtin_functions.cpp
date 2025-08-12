@@ -1667,9 +1667,9 @@ void goto_symext::intrinsic_memcpy(
   cur_state->rename(dst_item.offset);
   cur_state->rename(src_item.offset);
 
-  simplify(dst_item.object);
+  //simplify(dst_item.object);
   //simplify(src_item.object);
-  simplify(dst_item.offset);
+  //simplify(dst_item.offset);
   simplify(src_item.offset);
 
   if (
