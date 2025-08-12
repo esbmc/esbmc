@@ -82,10 +82,7 @@ ubuntu_setup () {
     echo "Installing GMP 6.3.0 from source..." &&
     ORIGINAL_DIR="$PWD" &&
     cd /tmp &&
-    # Try multiple mirrors for reliability
-    (wget https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz || \
-     wget https://gmplib.org/download/gmp/gmp-6.3.0.tar.xz || \
-     wget https://mirror.koddos.net/gnu/gmp/gmp-6.3.0.tar.xz) &&
+    wget https://ftpmirror.gnu.org/gmp/gmp-6.3.0.tar.xz &&
     tar -xf gmp-6.3.0.tar.xz &&
     cd gmp-6.3.0 &&
     ./configure --prefix=/usr/local --enable-cxx --enable-static &&
