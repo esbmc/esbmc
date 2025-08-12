@@ -87,7 +87,6 @@ public:
     return *this;
   }
 
-  // Add missing void* operator to resolve ambiguity
   ostream &operator<<(void *val)
   {
     char *temp = new char[NUM_SIZE];
@@ -106,7 +105,6 @@ public:
     return *this;
   }
 
-  // Add missing int operator to resolve ambiguity
   ostream &operator<<(int val)
   {
     char *temp = new char[NUM_SIZE];
@@ -179,28 +177,48 @@ public:
     strcat(temp, int_part);
     strcat(temp, ".");
 
-    // Convert fractional part with bounds checking
-    val = val - (float)n;
-    int decimal_places = 0;
-    const int max_decimal_places = 6; // Limit precision to avoid overflow
+    // Multiply by 10000 and use integer arithmetic
+    // This avoids accumulating floating-point errors
+    val = val - (float)n; // Get fractional part
+    long scaled =
+      (long)((val * 10000.0f) + 0.5f); // Scale to 4 decimal places and round
 
-    while (val > 0.0001f && decimal_places < max_decimal_places &&
-           strlen(temp) < NUM_SIZE - 2)
+    // Extract each decimal digit
+    int d1 = (scaled / 1000) % 10;
+    int d2 = (scaled / 100) % 10;
+    int d3 = (scaled / 10) % 10;
+    int d4 = scaled % 10;
+
+    // Append digits, removing trailing zeros
+    size_t len = strlen(temp);
+    if (d1 != 0 || d2 != 0 || d3 != 0 || d4 != 0)
     {
-      val = val * 10.0f;
-      n = (int)val;
-      if (n >= 0 && n <= 9)
-      { // Safety check
-        char digit = '0' + n;
-        size_t len = strlen(temp);
-        if (len < NUM_SIZE - 1)
-        {
-          temp[len] = digit;
-          temp[len + 1] = '\0';
-        }
+      temp[len++] = '0' + d1;
+      temp[len] = '\0';
+
+      if (d2 != 0 || d3 != 0 || d4 != 0)
+      {
+        temp[len++] = '0' + d2;
+        temp[len] = '\0';
       }
-      val = val - (float)n;
-      decimal_places++;
+
+      if (d3 != 0 || d4 != 0)
+      {
+        temp[len++] = '0' + d3;
+        temp[len] = '\0';
+      }
+
+      if (d4 != 0)
+      {
+        temp[len++] = '0' + d4;
+        temp[len] = '\0';
+      }
+    }
+    else
+    {
+      // No fractional part, add a single zero
+      temp[len++] = '0';
+      temp[len] = '\0';
     }
 
     _string.append(temp);
