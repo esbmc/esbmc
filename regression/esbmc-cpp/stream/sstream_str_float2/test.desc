@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--unwind 10 --parallel-solving --color --no-pointer-check --no-bounds-check
+^VERIFICATION SUCCESSFUL$
