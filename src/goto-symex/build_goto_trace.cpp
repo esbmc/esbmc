@@ -87,6 +87,11 @@ void build_goto_trace(
           goto_trace_step.value = build_rhs(smt_conv, SSA_step.rhs);
         else
           goto_trace_step.value = build_rhs(smt_conv, SSA_step.original_rhs);
+        if ((is_unsignedbv_type(SSA_step.lhs) || is_signedbv_type(SSA_step.lhs))
+          && !is_constant_expr(goto_trace_step.value))
+          // Make our life easier and ask the solver for the value!
+          goto_trace_step.value = smt_conv.get(SSA_step.lhs);
+
       }
       catch (const type2t::symbolic_type_excp &e)
       {
