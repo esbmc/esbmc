@@ -131,8 +131,7 @@ expr2t::expr2t(const type2tc &_type, expr_ids id)
 {
 }
 
-expr2t::expr2t(const expr2t &ref)
-  : expr_id(ref.expr_id), type(ref.type)
+expr2t::expr2t(const expr2t &ref) : expr_id(ref.expr_id), type(ref.type)
 {
   std::lock_guard lock(ref.crc_mutex);
   crc_val = ref.crc_val;
