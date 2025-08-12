@@ -8,11 +8,12 @@
 #include "string"
 #include "cstdio"
 #include "cstdlib"
+#include "cstring"
 
 #ifdef _WIN64
-#define NUM_SIZE 20
+#  define NUM_SIZE 32
 #else
-#define NUM_SIZE 20
+#  define NUM_SIZE 32
 #endif
 #define DEC 10
 
@@ -86,7 +87,8 @@ public:
     return *this;
   }
 
-  ostream &operator<<(void* val)
+  // Add missing void* operator to resolve ambiguity
+  ostream &operator<<(void *val)
   {
     char *temp = new char[NUM_SIZE];
     // Convert pointer to string representation (hexadecimal)
@@ -104,6 +106,7 @@ public:
     return *this;
   }
 
+  // Add missing int operator to resolve ambiguity
   ostream &operator<<(int val)
   {
     char *temp = new char[NUM_SIZE];
@@ -146,39 +149,125 @@ public:
 
   ostream &operator<<(float val)
   {
-    char *temp = new char[NUM_SIZE];
-    char *temp2 = new char[2];
-    int n = (int)val;
-    itoa(n, temp, DEC);
-    strcat(temp, ".");
-    val = val - (float)n;
-    for (int i = 0; i < NUM_SIZE && val != 0; i++)
-    {
-      val = val * DEC;
-      n = (int)val;
-      itoa(n, temp2, DEC);
-      strcat(temp, temp2);
+    // Handle special cases
+    if (val != val)
+    { // NaN check
+      _string.append("nan");
+      return *this;
     }
+
+    char *temp = new char[NUM_SIZE];
+    temp[0] = '\0'; // Initialize as empty string
+
+    // Handle negative values
+    bool negative = false;
+    if (val < 0)
+    {
+      negative = true;
+      val = -val;
+    }
+
+    // Convert integer part
+    int n = (int)val;
+    char *int_part = new char[NUM_SIZE / 2];
+    itoa(n, int_part, DEC);
+
+    if (negative)
+    {
+      strcat(temp, "-");
+    }
+    strcat(temp, int_part);
+    strcat(temp, ".");
+
+    // Convert fractional part with bounds checking
+    val = val - (float)n;
+    int decimal_places = 0;
+    const int max_decimal_places = 6; // Limit precision to avoid overflow
+
+    while (val > 0.0001f && decimal_places < max_decimal_places &&
+           strlen(temp) < NUM_SIZE - 2)
+    {
+      val = val * 10.0f;
+      n = (int)val;
+      if (n >= 0 && n <= 9)
+      { // Safety check
+        char digit = '0' + n;
+        size_t len = strlen(temp);
+        if (len < NUM_SIZE - 1)
+        {
+          temp[len] = digit;
+          temp[len + 1] = '\0';
+        }
+      }
+      val = val - (float)n;
+      decimal_places++;
+    }
+
     _string.append(temp);
+    delete[] temp;
+    delete[] int_part;
     return *this;
   }
 
   ostream &operator<<(double val)
   {
-    char *temp = new char[NUM_SIZE];
-    char *temp2 = new char[2];
-    int n = (int)val;
-    itoa(n, temp, DEC);
-    strcat(temp, ".");
-    val = val - (double)n;
-    for (int i = 0; i < NUM_SIZE && val != 0; i++)
-    {
-      val = val * DEC;
-      n = (int)val;
-      itoa(n, temp2, DEC);
-      strcat(temp, temp2);
+    // Handle special cases
+    if (val != val)
+    { // NaN check
+      _string.append("nan");
+      return *this;
     }
+
+    char *temp = new char[NUM_SIZE];
+    temp[0] = '\0'; // Initialize as empty string
+
+    // Handle negative values
+    bool negative = false;
+    if (val < 0)
+    {
+      negative = true;
+      val = -val;
+    }
+
+    // Convert integer part
+    int n = (int)val;
+    char *int_part = new char[NUM_SIZE / 2];
+    itoa(n, int_part, DEC);
+
+    if (negative)
+    {
+      strcat(temp, "-");
+    }
+    strcat(temp, int_part);
+    strcat(temp, ".");
+
+    // Convert fractional part with bounds checking
+    val = val - (double)n;
+    int decimal_places = 0;
+    const int max_decimal_places = 6; // Limit precision to avoid overflow
+
+    while (val > 0.0001 && decimal_places < max_decimal_places &&
+           strlen(temp) < NUM_SIZE - 2)
+    {
+      val = val * 10.0;
+      n = (int)val;
+      if (n >= 0 && n <= 9)
+      { // Safety check
+        char digit = '0' + n;
+        size_t len = strlen(temp);
+        if (len < NUM_SIZE - 1)
+        {
+          temp[len] = digit;
+          temp[len + 1] = '\0';
+        }
+      }
+      val = val - (double)n;
+      decimal_places++;
+    }
+
     _string.append(temp);
+    delete[] temp;
+    delete[] int_part;
     return *this;
   }
 
