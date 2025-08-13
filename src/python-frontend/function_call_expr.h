@@ -86,6 +86,8 @@ private:
 
   exprt handle_isinstance() const;
 
+  exprt handle_hasattr() const;
+
   /*
    * Handles str-to-int conversions (e.g., int('65')) by reconstructing
    * the string value from a symbol's internal representation and
