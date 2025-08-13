@@ -47,13 +47,16 @@ char *strncpy(char *dst, const char *src, size_t n)
 {
 __ESBMC_HIDE:;
   char *start = dst;
+  size_t copied = 0;
 
-  while (n && (*dst++ = *src++))
-    n--;
+  while (copied < n && src[copied] != '\0')
+  {
+    dst[copied] = src[copied];
+    copied++;
+  }
 
-  if (n)
-    while (--n)
-      *dst++ = '\0';
+  if (copied < n)
+    memset(dst + copied, 0, n - copied);
 
   return start;
 }
