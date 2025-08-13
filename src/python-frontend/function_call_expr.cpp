@@ -1100,8 +1100,8 @@ exprt function_call_expr::get()
   if (function_type_ == FunctionType::Constructor)
   {
     // Self is the LHS
-    assert(converter_.current_lhs);
-    call.arguments().push_back(gen_address_of(*converter_.current_lhs));
+    if (converter_.current_lhs)
+      call.arguments().push_back(gen_address_of(*converter_.current_lhs));
   }
   else if (function_type_ == FunctionType::InstanceMethod)
   {
