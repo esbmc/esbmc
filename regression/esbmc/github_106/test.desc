@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.c
---unwind 1
-^VERIFICATION SUCCESSFUL$
+--unwind 1 --multi-property
+^VERIFICATION FAILED$
