@@ -395,7 +395,7 @@ void bmct::clear_verified_claims_in_goto(
   {
     for (auto &instr : func.second.body.instructions)
     {
-      std::lock_guard lock(instr.type_mutex);
+      std::lock_guard lock(instr.clear_claims_mutex);
       if (!instr.is_assert())
         continue;
 
