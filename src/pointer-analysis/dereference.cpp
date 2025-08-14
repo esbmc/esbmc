@@ -612,6 +612,60 @@ bool dereferencet::dereference_type_compare(
   return false;
 }
 
+void dereferencet::check_pointer_alignment(
+  modet mode,
+  const type2tc &type,
+  const expr2tc &deref_expr,
+  const guardt &guard)
+{
+  // Only check alignment for scalar read/write operations (excluding code and pointer types)
+  if (
+    !(is_read(mode) || is_write(mode)) || !is_scalar_type(type) ||
+    is_code_type(type) || is_pointer_type(type))
+  {
+    return;
+  }
+
+  BigInt access_size_bits = type_byte_size_bits(type);
+
+  // Only check alignment for byte-aligned accesses
+  if (access_size_bits % 8 != 0)
+    return;
+
+  expr2tc ptr_offset_bits = create_pointer_offset_bits(deref_expr);
+  check_alignment(access_size_bits, ptr_offset_bits, guard);
+}
+
+expr2tc dereferencet::create_pointer_offset_bits(const expr2tc &deref_expr)
+{
+  // Handle constant integer expressions
+  if (is_constant_int2t(deref_expr))
+  {
+    return constant_int2tc(
+      bitsize_type2(), to_constant_int2t(deref_expr).value * 8);
+  }
+
+  // Handle typecast expressions with constant integer sources
+  if (
+    is_typecast2t(deref_expr) &&
+    is_constant_int2t(to_typecast2t(deref_expr).from))
+  {
+    return constant_int2tc(
+      bitsize_type2(),
+      to_constant_int2t(to_typecast2t(deref_expr).from).value * 8);
+  }
+
+  // Handle symbolic pointers - covers normal variable access
+  expr2tc byte_offset =
+    pointer_offset2tc(get_int_type(config.ansi_c.address_width), deref_expr);
+
+  // Convert from bytes to bits for check_alignment
+  return mul2tc(
+    bitsize_type2(),
+    typecast2tc(bitsize_type2(), byte_offset),
+    gen_long(bitsize_type2(), 8));
+}
+
 expr2tc dereferencet::build_reference_to(
   const expr2tc &what,
   modet mode,
@@ -624,41 +678,8 @@ expr2tc dereferencet::build_reference_to(
   expr2tc value;
   pointer_guard = gen_false_expr();
 
-  if (
-    (is_read(mode) || is_write(mode)) && is_scalar_type(type) &&
-    !is_code_type(type) && !is_pointer_type(type))
-  {
-    // Check alignment of the pointer value itself
-    BigInt access_size_bits = type_byte_size_bits(type);
-
-    // Only check alignment for byte-aligned accesses
-    if (access_size_bits % 8 == 0)
-    {
-      // Create offset expression from the pointer value for alignment checking
-      expr2tc ptr_offset_bits;
-      if (is_constant_int2t(deref_expr))
-        ptr_offset_bits = constant_int2tc(
-          bitsize_type2(), to_constant_int2t(deref_expr).value * 8);
-      else if (
-        is_typecast2t(deref_expr) &&
-        is_constant_int2t(to_typecast2t(deref_expr).from))
-        ptr_offset_bits = constant_int2tc(
-          bitsize_type2(),
-          to_constant_int2t(to_typecast2t(deref_expr).from).value * 8);
-      else
-      {
-        // Use pointer_offset for symbolic pointers - this covers normal variable access
-        expr2tc byte_offset = pointer_offset2tc(
-          get_int_type(config.ansi_c.address_width), deref_expr);
-        // Convert from bytes to bits for check_alignment
-        ptr_offset_bits = mul2tc(
-          bitsize_type2(),
-          typecast2tc(bitsize_type2(), byte_offset),
-          gen_long(bitsize_type2(), 8));
-      }
-      check_alignment(access_size_bits, ptr_offset_bits, guard);
-    }
-  }
+  // Perform alignment checking for applicable access patterns
+  check_pointer_alignment(mode, type, deref_expr, guard);
 
   if (is_unknown2t(what) || is_invalid2t(what))
   {
