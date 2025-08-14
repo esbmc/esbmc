@@ -2413,6 +2413,9 @@ void dereferencet::check_alignment(
   const expr2tc &offset_bits,
   const guardt &guard)
 {
+  if (options.get_bool_option("no-align-check"))
+    return;
+
   // If we are dealing with a bitfield, then
   // skip the alignment check
   if (minwidth % 8 != 0)

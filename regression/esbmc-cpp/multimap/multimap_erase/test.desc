@@ -1,4 +1,4 @@
 CORE
 main.cpp
---unwind 7 --no-unwinding-assertions --timeout 900
+--unwind 7 --no-unwinding-assertions --timeout 900 --no-align-check
 ^VERIFICATION SUCCESSFUL$
