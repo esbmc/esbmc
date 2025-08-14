@@ -52,6 +52,7 @@ extern "C"
 #include <pointer-analysis/value_set_analysis.h>
 #include <util/symbol.h>
 #include <util/time_stopping.h>
+#include <util/linker_script.h>
 #include <goto-programs/goto_cfg.h>
 
 #ifndef _WIN32
@@ -1777,6 +1778,11 @@ bool esbmc_parseoptionst::parse_goto_program(
     // we no longer need any parse trees or language files
     clear_parse();
 
+    // Linker script
+    linker_script linker("asd");
+    linker.parse("coiso");
+    linker.apply(context);
+
     if (cmdline.isset("symbol-table-too") || cmdline.isset("symbol-table-only"))
     {
       std::ostringstream oss;
@@ -1788,6 +1794,7 @@ bool esbmc_parseoptionst::parse_goto_program(
 
     log_progress("Generating GOTO Program");
     goto_convert(context, options, goto_functions);
+
   }
 
   catch (const char *e)
