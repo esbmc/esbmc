@@ -15,6 +15,8 @@ public:
     irep_idt _mode);
   virtual ~clang_cpp_convertert() = default;
 
+bool VisitUnaryOperator(clang::UnaryOperator *op, exprt &dest);
+
 protected:
   // this_map contains key-value pairs in the form of <method address, <identifier, type>>
   typedef std::unordered_map<std::size_t, std::pair<std::string, typet>>
@@ -127,7 +129,7 @@ protected:
 
   bool get_struct_union_class_methods_decls(
     const clang::RecordDecl &rd,
-    typet &type) override;
+    typet &type) override;  
 
   /*
    * Deal with ClassTemplateDecl or FunctionTemplateDecl or

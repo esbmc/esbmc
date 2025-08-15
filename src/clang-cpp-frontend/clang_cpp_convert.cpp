@@ -26,6 +26,7 @@ CC_DIAGNOSTIC_POP()
 #include <clang-c-frontend/typecast.h>
 #include <util/c_types.h>
 #include <util/string_constant.h>
+#include "clang_cpp_convert.h"
 
 clang_cpp_convertert::clang_cpp_convertert(
   contextt &_context,
@@ -1215,13 +1216,16 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   }
   case clang::Stmt::UnaryOperatorClass:
   {
-    if (auto *uop = llvm:dyn_cast<clang::UnaryOperator>(&stmt)) {
-      if(uop->isIncementDecremetOp()){
-        const::clang Expr *sub = uop->getSubExpr();
+    const clang::UnaryOperator &uop = static_cast<const clang::UnaryOperator&>(stmt); 
+    
+    if(uop.isIncrementDecrementOp())
+    {
+        const clang::Expr *sub = uop.getSubExpr();
         exprt operand;
         if (get_expr(*sub, operand))
           return true;
         
+        //Handle all lvalues (references, pointers, variables)
         if(sub->isLValue()) {
           // Resolve nested references recursively
           exprt target = operand;
@@ -1232,7 +1236,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           exprt one = gen_one(old_value.type());
           
           exprt new_value;
-          if(uop->IsIncrementOp())
+          if(uop.isIncrementOp())
             new_value = plus_exprt(old_value, one);
           else
             new_value = minus_exprt(old_value, one);
@@ -1241,7 +1245,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           side_effect_exprt assign("assign", target.type());
           assign.copy_to_operands(target, new_value);
           
-          if (uop->isPostfix()) {
+          if (uop.isPostfix()) {
             side_effect_exprt comma("comma", old_value.type());
             comma.copy_to_operands(assign, old_value);
             new_expr = comma;
@@ -1254,7 +1258,7 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
           return false;
         }  
       }
-    }
+    
     break;
   }
 
@@ -1567,25 +1571,6 @@ bool clang_cpp_convertert::get_function_body(
         abort();
       }
     }
-    bool VisitUnaryOperator(clang::UnaryOperator *op) {
-        expr2tc base_expr = convert_expr(op->getSubExpr());
-  
-        // Add reference member handling:
-        if (op->isIncrementDecrementOp() && 
-              is_reference_type(op->getSubExpr()->getType())) {
-        // Desugar x++ to x = x + 1
-        expr2tc one = gen_one(base_expr->type);
-        expr2tc new_value = op->isIncrementOp() 
-          ? add2tc(base_expr->type, base_expr, one)
-          : sub2tc(base_expr->type, base_expr, one);
-    
-        if (op->isPostfix()) {
-        // For postfix, return original value but still perform assignment
-        return code_assign2tc(base_expr, new_value);
-      }
-      return code_assign2tc(base_expr, new_value);
-    }
-     
 
     for (exprt &initializer : initializers)
       convert_expression_to_code(initializer);
@@ -1633,7 +1618,53 @@ bool clang_cpp_convertert::get_function_body(
   }
 
   return false;
-}
+  }
+
+bool clang_cpp_convertert::VisitUnaryOperator(clang::UnaryOperator *op, exprt &dest) {
+        
+        if (!op || !op->getSubExpr())
+            return true;
+
+        exprt operand;
+        if(get_expr(*op->getSubExpr(), operand)) //this->
+          return true;
+  
+        // Add reference member handling:
+        if (op && op->isIncrementDecrementOp() && 
+              op->getSubExpr()->getType()->isReferenceType()) {
+        
+            if(operand.id() == "member")
+                  operand = dereference_exprt(operand, operand.type().subtype());        
+            // Desugar x++ to x = x + 1
+            exprt one = gen_one(operand.type());
+            exprt new_value; 
+            if (op->isIncrementOp()){
+              new_value = plus_exprt(operand, one);
+            } else {
+              new_value = minus_exprt(operand, one);
+            }
+            if (op->isPostfix()) {
+                // For postfix: (tmp = old_val, assign new_val, return tmp)
+                exprt tmp = operand;
+                side_effect_exprt assign("assign", operand.type());
+                assign.copy_to_operands(operand, new_value);
+                
+                side_effect_exprt comma("comma", operand.type());
+                comma.copy_to_operands(assign, tmp);
+                dest = comma;
+            } else {
+                //Assign new value, return new value for prefix
+                side_effect_exprt assign("assign", operand.type());
+                assign.move_to_operands(operand, new_value);
+
+                side_effect_exprt comma("comma", new_value.type());
+                comma.move_to_operands(assign, new_value);
+                dest = comma;
+            }    
+            return false;
+      }
+      return clang_c_convertert::get_expr(*static_cast<const clang::Stmt*>(op), dest);
+    }  
 
 bool clang_cpp_convertert::get_function_this_pointer_param(
   const clang::CXXMethodDecl &cxxmd,
