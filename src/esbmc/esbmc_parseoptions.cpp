@@ -30,6 +30,7 @@ extern "C"
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
+#include <goto-programs/goto_loop_invariant.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 #include <goto-programs/abstract-interpretation/gcse.h>
 #include <goto-programs/loop_numbers.h>
@@ -1952,6 +1953,13 @@ bool esbmc_parseoptionst::process_goto_program(
       goto_k_induction(goto_functions);
     }
 
+    if (cmdline.isset("loop-invariant"))
+    {
+      // Process loop invariants and insert assert/assume/havoc
+      remove_no_op(goto_functions);
+      goto_loop_invariant(goto_functions);
+    }
+
     if (
       cmdline.isset("goto-contractor") ||
       cmdline.isset("goto-contractor-condition"))
@@ -2498,7 +2506,6 @@ static unsigned int calc_globals_used(const namespacet &ns, const expr2tc &expr)
     expr->foreach_operand([&globals, &ns](const expr2tc &e) {
       globals += calc_globals_used(ns, e);
     });
-
     return globals;
   }
 
@@ -2560,6 +2567,7 @@ void esbmc_parseoptionst::print_ileave_points(
       case CATCH:
       case THROW_DECL:
       case THROW_DECL_END:
+      case LOOP_INVARIANT:
         break;
       }
 
