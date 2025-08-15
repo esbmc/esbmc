@@ -26,24 +26,25 @@
 typedef enum
 {
   NO_INSTRUCTION_TYPE = 0,
-  GOTO = 1,           // branch, possibly guarded
-  ASSUME = 2,         // non-failing guarded self loop
-  ASSERT = 3,         // assertions
-  OTHER = 4,          // anything else
-  SKIP = 5,           // just advance the PC
-  LOCATION = 8,       // semantically like SKIP
-  END_FUNCTION = 9,   // exit point of a function
-  ATOMIC_BEGIN = 10,  // marks a block without interleavings
-  ATOMIC_END = 11,    // end of a block without interleavings
-  RETURN = 12,        // return from a function
-  ASSIGN = 13,        // assignment lhs:=rhs
-  DECL = 14,          // declare a local variable
-  DEAD = 15,          // marks the end-of-live of a local variable
-  FUNCTION_CALL = 16, // call a function
-  THROW = 17,         // throw an exception
-  CATCH = 18,         // catch an exception
-  THROW_DECL = 19,    // list of throws that a function can throw
-  THROW_DECL_END = 20 // end of throw declaration
+  GOTO = 1,            // branch, possibly guarded
+  ASSUME = 2,          // non-failing guarded self loop
+  ASSERT = 3,          // assertions
+  OTHER = 4,           // anything else
+  SKIP = 5,            // just advance the PC
+  LOCATION = 8,        // semantically like SKIP
+  END_FUNCTION = 9,    // exit point of a function
+  ATOMIC_BEGIN = 10,   // marks a block without interleavings
+  ATOMIC_END = 11,     // end of a block without interleavings
+  RETURN = 12,         // return from a function
+  ASSIGN = 13,         // assignment lhs:=rhs
+  DECL = 14,           // declare a local variable
+  DEAD = 15,           // marks the end-of-live of a local variable
+  FUNCTION_CALL = 16,  // call a function
+  THROW = 17,          // throw an exception
+  CATCH = 18,          // catch an exception
+  THROW_DECL = 19,     // list of throws that a function can throw
+  THROW_DECL_END = 20, // end of throw declaration
+  LOOP_INVARIANT = 21  // loop invariant
 } goto_program_instruction_typet;
 
 std::ostream &operator<<(std::ostream &, goto_program_instruction_typet);
@@ -87,7 +88,7 @@ public:
   class instructiont
   {
   public:
-    mutable std::mutex type_mutex;
+    mutable std::mutex clear_claims_mutex;
 
     expr2tc code;
 
@@ -102,6 +103,9 @@ public:
 
     //! guard for gotos, assume, assert
     expr2tc guard;
+
+    //! loop invariant for loop_invariant instruction
+    std::list<expr2tc> loop_invariants;
 
     //! the target for gotos and for start_thread nodes
     typedef std::list<class instructiont>::iterator targett;
@@ -154,6 +158,7 @@ public:
       targets.clear();
       guard = gen_true_expr();
       code = expr2tc();
+      loop_invariants.clear();
       inductive_step_instruction = false;
       inductive_assertion = false;
     }
@@ -319,6 +324,11 @@ public:
       return type == ASSERT;
     }
 
+    inline bool is_loop_invariant() const
+    {
+      return type == LOOP_INVARIANT;
+    }
+
     inline bool is_atomic_begin() const
     {
       return type == ATOMIC_BEGIN;
@@ -374,7 +384,7 @@ public:
         scope_id(other.scope_id),
         parent_scope_id(other.parent_scope_id)
     {
-      // type_mutex is not copied
+      // instruction_mutex is not copied
     }
 
     instructiont &operator=(const instructiont &other)
@@ -418,6 +428,7 @@ public:
       std::swap(instruction.type, type);
       instruction.guard.swap(guard);
       instruction.targets.swap(targets);
+      instruction.loop_invariants.swap(loop_invariants);
       instruction.function.swap(function);
       std::swap(
         inductive_step_instruction, instruction.inductive_step_instruction);
@@ -426,6 +437,16 @@ public:
       std::swap(target_number, instruction.target_number);
       std::swap(scope_id, instruction.scope_id);
       std::swap(parent_scope_id, instruction.parent_scope_id);
+    }
+
+    void add_loop_invariant(const expr2tc &invariant)
+    {
+      assert(is_loop_invariant());
+      loop_invariants.push_back(invariant);
+    }
+    std::list<expr2tc> get_loop_invariants() const
+    {
+      return loop_invariants;
     }
 
     //! A globally unique number to identify a program location.
