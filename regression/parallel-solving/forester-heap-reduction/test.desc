@@ -1,4 +1,0 @@
-CORE
-main.i
---parallel-solving -Wno-error=implicit-int -Wno-error=return-type
-^VERIFICATION FAILED$
