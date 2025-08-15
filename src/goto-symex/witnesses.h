@@ -144,6 +144,10 @@ void create_correctness_yaml_emitter(
   optionst &options,
   YAML::Emitter &root);
 
+void create_violation_yaml_emitter(
+  std::string &verifiedfile,
+  optionst &options,
+  YAML::Emitter &root);
 /**
  * Create a edge node.
  *

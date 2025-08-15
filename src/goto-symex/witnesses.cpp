@@ -96,11 +96,10 @@ void yamlt::generate_yaml(optionst &options)
 {
   YAML::Emitter yaml_emitter;
   if (this->witness_type == yamlt::VIOLATION)
-    log_error("{}", "ESBMC dont support YAML violation witness yet.");
+    create_violation_yaml_emitter(this->verified_file, options, yaml_emitter);
   else
     create_correctness_yaml_emitter(this->verified_file, options, yaml_emitter);
 
-    // TODO: fill invariants.
 #if 0
   yaml_emitter << YAML::Key << "content" << YAML::Value << YAML::BeginSeq
                << YAML::EndSeq;
@@ -787,6 +786,20 @@ void create_correctness_yaml_emitter(
   root << YAML::BeginMap;
   root << YAML::Key << "entry_type" << YAML::Value << YAML::DoubleQuoted
        << "invariant_set";
+
+  root << YAML::Key << "metadata";
+  _create_yaml_metadata_emitter(verifiedfile, options, root);
+}
+
+void create_violation_yaml_emitter(
+  std::string &verifiedfile,
+  optionst &options,
+  YAML::Emitter &root)
+{
+  root << YAML::BeginSeq;
+  root << YAML::BeginMap;
+  root << YAML::Key << "entry_type" << YAML::Value << YAML::DoubleQuoted
+       << "violation_sequence";
 
   root << YAML::Key << "metadata";
   _create_yaml_metadata_emitter(verifiedfile, options, root);

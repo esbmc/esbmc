@@ -353,6 +353,80 @@ void violation_graphml_goto_trace(
   }
 }
 
+void violation_yaml_goto_trace(
+  optionst &options,
+  const namespacet &ns [[maybe_unused]],
+  const goto_tracet &goto_trace [[maybe_unused]])
+{
+  yamlt yml(yamlt::VIOLATION);
+  yml.verified_file = options.get_option("input-file");
+  log_progress("Generating Violation Witness for: {}", yml.verified_file);
+
+#if 0
+  for (const auto &step : goto_trace.steps)
+  {
+    switch (step.type)
+    {
+    case goto_trace_stept::ASSERT:
+      if (!step.guard)
+      {
+        graph.check_create_new_thread(step.thread_nr, prev_node);
+        prev_node = graph.edges.back().to_node;
+
+        nodet *violation_node = new nodet();
+        violation_node->violation = true;
+
+        edget violation_edge(prev_node, violation_node);
+        violation_edge.thread_id = std::to_string(step.thread_nr);
+        violation_edge.start_line = get_line_number(
+          graph.verified_file,
+          std::atoi(step.pc->location.get_line().c_str()),
+          options);
+
+        graph.edges.push_back(violation_edge);
+
+        /* having printed a property violation, don't print more steps. */
+
+        graph.generate_graphml(options);
+        return;
+      }
+      break;
+
+    case goto_trace_stept::ASSIGNMENT:
+      if (
+        step.pc->is_assign() || step.pc->is_return() ||
+        (step.pc->is_other() && is_nil_expr(step.lhs)) ||
+        step.pc->is_function_call())
+      {
+        std::string assignment = get_formated_assignment(ns, step);
+
+        graph.check_create_new_thread(step.thread_nr, prev_node);
+        prev_node = graph.edges.back().to_node;
+
+        edget new_edge;
+        new_edge.thread_id = std::to_string(step.thread_nr);
+        new_edge.assumption = assignment;
+        new_edge.start_line = get_line_number(
+          graph.verified_file,
+          std::atoi(step.pc->location.get_line().c_str()),
+          options);
+
+        nodet *new_node = new nodet();
+        new_edge.from_node = prev_node;
+        new_edge.to_node = new_node;
+        prev_node = new_node;
+        graph.edges.push_back(new_edge);
+      }
+      break;
+
+    default:
+      continue;
+    }
+  }
+#endif
+  yml.generate_yaml(options);
+}
+
 void correctness_graphml_goto_trace(
   optionst &options,
   const namespacet &ns,
