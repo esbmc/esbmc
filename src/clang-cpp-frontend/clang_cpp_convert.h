@@ -106,6 +106,8 @@ protected:
 
   std::string constref_suffix = "ref";
 
+  bool VisitUnaryOperator(clang::UnaryOperator *op, exprt &dest) override;
+
   /**
    *  Add implicit `this' when parsing C++ class member functions, e.g:
    *  class t1 { int i; t1(){i = 1} };
@@ -127,7 +129,7 @@ protected:
 
   bool get_struct_union_class_methods_decls(
     const clang::RecordDecl &rd,
-    typet &type) override;
+    typet &type) override;  
 
   /*
    * Deal with ClassTemplateDecl or FunctionTemplateDecl or
