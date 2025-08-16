@@ -618,9 +618,6 @@ void dereferencet::check_pointer_alignment(
   const expr2tc &deref_expr,
   const guardt &guard)
 {
-  if (options.get_bool_option("no-align-check"))
-    return;
-
   // Only check alignment for scalar read/write operations (excluding code and pointer types)
   if (
     !(is_read(mode) || is_write(mode)) || !is_scalar_type(type) ||
