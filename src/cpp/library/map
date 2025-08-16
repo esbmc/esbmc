@@ -739,50 +739,28 @@ public:
 
   iterator find(const key_type &x)
   {
-    unsigned int s = this->_size;
-    iterator it = this->begin();
-    if (this->_size == 0)
+    for (unsigned int i = 0; i < this->_size; i++)
     {
-      return it;
-    }
-    else
-    {
-      for (int i = 0; i < s; i++)
+      if (this->_key[i] == x)
       {
-        if (this->_key[i] == x)
-        {
-          return it;
-        }
-        if (key_compare()((Key &)x, this->_key[i]))
-        {
-          int j;
-          Key y = x;
-          Key t;
-          T u, v;
-
-          for (j = i; j < s; j++)
-          {
-            t = this->_key[j];
-            this->_key[j] = y;
-            y = t;
-            u = this->_value[j];
-            this->_value[j] = v;
-            v = u;
-          }
-          this->_key[j] = y;
-          this->_value[j] = u;
-
-          this->_size++;
-          this->_value[i] = T();
-          return it;
-        }
-        it++;
+        // Found the key, construct iterator at position i
+        iterator it;
+        it.it_key = this->_key;
+        it.it_value = this->_value;
+        it.it_pos = i;
+        it.it_pair.first = this->_key[i];
+        it.it_pair.second = this->_value[i];
+        return it;
       }
-      this->_size++;
-      this->_key[s] = x;
-      this->_value[s] = T();
-      return this->end();
     }
+    // Key not found, return end iterator
+    iterator end_it;
+    end_it.it_key = this->_key;
+    end_it.it_value = this->_value;
+    end_it.it_pos = this->_size;
+    end_it.it_pair.first = key_type();
+    end_it.it_pair.second = mapped_type();
+    return end_it;
   }
 
   key_compare key_comp() const
