@@ -362,8 +362,7 @@ private:
 
   /** Construct an expression representing the pointer's offset, in bits, from
    *  the base of the containing object. This is used for alignment checking
-   *  and can handle both constant integer pointers and symbolic pointers. For
-   *  symbolic pointers, it uses the existing `pointer_offset2tc` mechanism to
+   *  and uses the existing `pointer_offset2tc` mechanism to
    *  extract the byte offset and then converts it to bits.
    *  @param deref_expr The pointer expression from which to extract the offset;
    *         may be a constant integer, a typecast of a constant integer, or a
