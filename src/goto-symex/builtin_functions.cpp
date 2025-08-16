@@ -1689,9 +1689,9 @@ void goto_symext::intrinsic_memcpy(
     unsigned int chunk_size = 1;
     if ((dst_offset % 8 == 0) && (src_offset % 8 == 0))
       chunk_size = 8;
-    if ((dst_offset % 4 == 0) && (src_offset % 4 == 0))
+    else if ((dst_offset % 4 == 0) && (src_offset % 4 == 0))
       chunk_size = 4;
-    if ((dst_offset % 2 == 0) && (src_offset % 2 == 0))
+    else if ((dst_offset % 2 == 0) && (src_offset % 2 == 0))
       chunk_size = 2;
 
     size_t i = 0;
