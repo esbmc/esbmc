@@ -639,24 +639,6 @@ void dereferencet::check_pointer_alignment(
 
 expr2tc dereferencet::create_pointer_offset_bits(const expr2tc &deref_expr)
 {
-  // Handle constant integer expressions
-  if (is_constant_int2t(deref_expr))
-  {
-    return constant_int2tc(
-      bitsize_type2(), to_constant_int2t(deref_expr).value * 8);
-  }
-
-  // Handle typecast expressions with constant integer sources
-  if (
-    is_typecast2t(deref_expr) &&
-    is_constant_int2t(to_typecast2t(deref_expr).from))
-  {
-    return constant_int2tc(
-      bitsize_type2(),
-      to_constant_int2t(to_typecast2t(deref_expr).from).value * 8);
-  }
-
-  // Handle symbolic pointers - covers normal variable access
   expr2tc byte_offset =
     pointer_offset2tc(get_int_type(config.ansi_c.address_width), deref_expr);
 
