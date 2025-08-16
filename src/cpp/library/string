@@ -1503,15 +1503,32 @@ basic_string<CharT, Traits, Alloc> &
 basic_string<CharT, Traits, Alloc>::operator=(
   basic_string<CharT, Traits, Alloc> &str)
 {
-  int i, len;
-  this->_size = str.size();
-  this->str = new char[this->_size + 1];
-  len = str.size();
-  for (i = 0; i < len; i++)
+  if (this == &str)
+    return *this;
+
+  // Store old pointer for cleanup
+  CharT *old_str = this->str;
+
+  // Calculate new size
+  size_t new_size = str.size();
+
+  // Allocate new memory
+  CharT *new_str = nullptr;
+  if (new_size > 0)
   {
-    this->str[i] = str.str[i];
+    new_str = new CharT[new_size + 1];
+    for (size_t i = 0; i < new_size; ++i)
+      new_str[i] = str.str[i];
+    new_str[new_size] = CharT{}; // Null terminator
   }
-  this->str[i] = '\0';
+
+  // Update object state only after successful allocation
+  this->str = new_str;
+  this->_size = new_size;
+
+  // Clean up old memory
+  delete[] old_str;
+
   return *this;
 }
 

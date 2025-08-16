@@ -5,7 +5,7 @@
 #include "vector"
 #include "functional"
 #if __cplusplus >= 201103L
-# include <initializer_list>
+#  include <initializer_list>
 #endif
 
 #define MAP_SIZE 15
@@ -318,54 +318,67 @@ public:
 
   T &operator[](const Key &x)
   {
-    unsigned int s = this->_size;
+    assert(this->_size >= 0); // Size should be non-negative
+
+    // Calculate array capacity dynamically
+    static const size_t CAPACITY = sizeof(this->_key) / sizeof(this->_key[0]);
+
+    // Handle empty container case
     if (this->_size == 0)
     {
       this->_key[0] = x;
-      this->_size++;
       this->_value[0] = T();
-      this->_key[this->_size + 1] = Key();
+      this->_size = 1;
+      // Initialize sentinel element for iterator safety
+      if (this->_size < CAPACITY)
+      {
+        this->_key[this->_size] = Key(); // Default key for end marker
+        this->_value[this->_size] = T(); // Default value
+      }
       return this->_value[0];
     }
-    else
+
+    // Linear search for existing key
+    for (size_t i = 0; i < this->_size; ++i)
+      if (this->_key[i] == x)
+        return this->_value[i]; // Found existing key
+
+    // Key not found - need to insert
+    assert(this->_size < CAPACITY); // Bounds check before insertion
+
+    size_t insert_pos = this->_size;
+
+    // Find insertion position for sorted order
+    for (size_t i = 0; i < this->_size; ++i)
     {
-      for (int i = 0; i < s; i++)
+      if (key_compare()(x, this->_key[i]))
       {
-        if (this->_key[i] == x)
-        {
-          return this->_value[i];
-        }
-        if (key_compare()((Key &)x, this->_key[i]))
-        {
-          int j;
-          Key y = x;
-          Key t;
-          T u, v;
-
-          for (j = i; j < s; j++)
-          {
-            t = this->_key[j];
-            this->_key[j] = y;
-            y = t;
-            u = this->_value[j];
-            this->_value[j] = v;
-            v = u;
-          }
-          this->_key[j] = y;
-          this->_value[j] = u;
-
-          this->_size++;
-          this->_value[i] = T();
-          this->_key[this->_size + 1] = Key();
-          return this->_value[i];
-        }
+        insert_pos = i;
+        break;
       }
-      this->_size++;
-      this->_key[s] = x;
-      this->_value[s] = T();
-      this->_key[this->_size + 1] = Key();
-      return this->_value[s];
     }
+
+    // Shift elements right from insertion position
+    for (size_t j = this->_size; j > insert_pos; --j)
+    {
+      assert(j > 0 && j < CAPACITY); // Bounds verification
+      this->_key[j] = this->_key[j - 1];
+      this->_value[j] = this->_value[j - 1];
+    }
+
+    // Insert new element
+    this->_key[insert_pos] = x;
+    this->_value[insert_pos] = T();
+    this->_size++;
+
+    // Maintain sentinel element for iterator safety
+    if (this->_size < CAPACITY)
+    {
+      this->_key[this->_size] = Key(); // Clear end marker
+      this->_value[this->_size] = T(); // Clear end value
+    }
+
+    return this->_value[insert_pos];
   }
 
   // iterators:
