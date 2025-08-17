@@ -2687,7 +2687,6 @@ void python_converter::get_compound_assign(
   is_converting_rhs = true;
 
   std::string var_name;
-  bool is_attribute_assignment = false;
 
   // Extract variable name based on target type
   if (ast_node["target"].contains("id"))
@@ -2697,8 +2696,6 @@ void python_converter::get_compound_assign(
   }
   else if (ast_node["target"]["_type"] == "Attribute")
   {
-    // Attribute assignment: self.x += 1
-    is_attribute_assignment = true;
     // Don't extract just the attribute name for type resolution
     // The type should come from the LHS expression we just created
     if (ast_node["target"].contains("attr"))
