@@ -98,10 +98,8 @@ class Preprocessor(ast.NodeTransformer):
         # Generate unique variable names for this loop level
         loop_id = self.range_loop_counter
         self.range_loop_counter += 1
-        
         start_var = f'start_{loop_id}'
         has_next_var = f'has_next_{loop_id}'
-        
         if len(node.iter.args) > 1:
             start = node.iter.args[0]  # Start of the range
             end = node.iter.args[1]    # End of the range
