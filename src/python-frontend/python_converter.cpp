@@ -2687,7 +2687,6 @@ void python_converter::get_compound_assign(
   is_converting_rhs = true;
 
   std::string var_name;
-  bool is_attribute_assignment = false;
 
   // Extract variable name based on target type
   if (ast_node["target"].contains("id"))
@@ -2697,8 +2696,6 @@ void python_converter::get_compound_assign(
   }
   else if (ast_node["target"]["_type"] == "Attribute")
   {
-    // Attribute assignment: self.x += 1
-    is_attribute_assignment = true;
     // Don't extract just the attribute name for type resolution
     // The type should come from the LHS expression we just created
     if (ast_node["target"].contains("attr"))
@@ -2719,14 +2716,13 @@ void python_converter::get_compound_assign(
 
   // For attribute assignments, use the type from the LHS expression
   // For other assignments, resolve the variable type
-  if (is_attribute_assignment)
+  if (!lhs.type().is_nil() && !lhs.type().id().empty())
   {
-    // The type should already be determined from the LHS expression
     current_element_type = lhs.type();
   }
   else
   {
-    // Resolve variable type using AST annotations or symbol table
+    // Fallback to resolving the variable type from AST or symbol table
     current_element_type = resolve_variable_type(var_name, loc);
   }
 
