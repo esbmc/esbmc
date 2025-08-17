@@ -9,6 +9,7 @@ class Preprocessor(ast.NodeTransformer):
         self.module_name = module_name # for errors
         self.is_range_loop = False  # Track if we're in a range loop transformation
         self.known_variable_types = {}
+        self.range_loop_counter = 0  # Counter for unique variable names in nested range loops
 
 
     def ensure_all_locations(self, node, source_node=None, line=1, col=0):
@@ -94,6 +95,13 @@ class Preprocessor(ast.NodeTransformer):
 
     def _transform_range_for(self, node):
         """Transform range-based for loops to while loops"""
+        # Generate unique variable names for this loop level
+        loop_id = self.range_loop_counter
+        self.range_loop_counter += 1
+        
+        start_var = f'start_{loop_id}'
+        has_next_var = f'has_next_{loop_id}'
+        
         if len(node.iter.args) > 1:
             start = node.iter.args[0]  # Start of the range
             end = node.iter.args[1]    # End of the range
@@ -119,7 +127,7 @@ class Preprocessor(ast.NodeTransformer):
 
         # Create assignment for the start variable
         start_assign = ast.AnnAssign(
-            target=ast.Name(id='start', ctx=ast.Store()),
+            target=ast.Name(id=start_var, ctx=ast.Store()),
             annotation=ast.Name(id='int', ctx=ast.Load()),
             value=start,
             simple=1
@@ -134,14 +142,14 @@ class Preprocessor(ast.NodeTransformer):
 
         # Create assignment for the has_next variable
         has_next_assign = ast.AnnAssign(
-            target=ast.Name(id='has_next', ctx=ast.Store()),
+            target=ast.Name(id=has_next_var, ctx=ast.Store()),
             annotation=ast.Name(id='bool', ctx=ast.Load()),
             value=has_next_call,
             simple=1
         )
 
         # Create condition for the while loop
-        has_next_name = ast.Name(id='has_next', ctx=ast.Load())
+        has_next_name = ast.Name(id=has_next_var, ctx=ast.Load())
         while_cond = ast.Compare(
             left=has_next_name,
             ops=[ast.Eq()],
@@ -151,7 +159,9 @@ class Preprocessor(ast.NodeTransformer):
         # Transform the body of the for loop
         transformed_body = []
         old_target_name = self.target_name
+        old_start_var = getattr(self, 'current_start_var', None)
         self.target_name = node.target.id # Store the target variable name for replacement
+        self.current_start_var = start_var  # Store current start variable for Name replacement
 
         for statement in node.body:
             transformed_statement = self.visit(statement)
@@ -160,22 +170,23 @@ class Preprocessor(ast.NodeTransformer):
             else:
                 transformed_body.append(transformed_statement)
         self.target_name = old_target_name
+        self.current_start_var = old_start_var
 
         # Create the body of the while loop, including updating the start and has_next variables
         while_body = transformed_body + [
             ast.Assign(
-                targets=[ast.Name(id='start', ctx=ast.Store())],
+                targets=[ast.Name(id=start_var, ctx=ast.Store())],
                 value=ast.Call(
                     func=ast.Name(id='ESBMC_range_next_', ctx=ast.Load()),
-                    args=[ast.Name(id='start', ctx=ast.Load()), step],
+                    args=[ast.Name(id=start_var, ctx=ast.Load()), step],
                     keywords=[]
                 )
             ),
             ast.Assign(
-                targets=[has_next_name],
+                targets=[ast.Name(id=has_next_var, ctx=ast.Store())],
                 value=ast.Call(
                     func=ast.Name(id='ESBMC_range_has_next_', ctx=ast.Load()),
-                    args=[ast.Name(id='start', ctx=ast.Load()), end, step],
+                    args=[ast.Name(id=start_var, ctx=ast.Load()), end, step],
                     keywords=[]
                 )
             )
@@ -322,8 +333,8 @@ class Preprocessor(ast.NodeTransformer):
     def visit_Name(self, node):
         # Replace variable names as needed in range-based for to while transformation
         # Replace variable names ONLY for range-based loops, not iterable loops
-        if self.is_range_loop and node.id == self.target_name:
-            node.id = 'start'  # Replace the variable name with 'start'
+        if self.is_range_loop and hasattr(self, 'current_start_var') and node.id == self.target_name:
+            node.id = self.current_start_var  # Replace with the current unique start variable
         return node
 
     def visit_Assign(self, node):
