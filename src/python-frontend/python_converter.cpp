@@ -2719,14 +2719,13 @@ void python_converter::get_compound_assign(
 
   // For attribute assignments, use the type from the LHS expression
   // For other assignments, resolve the variable type
-  if (is_attribute_assignment)
+  if (!lhs.type().is_nil() && !lhs.type().id().empty())
   {
-    // The type should already be determined from the LHS expression
     current_element_type = lhs.type();
   }
   else
   {
-    // Resolve variable type using AST annotations or symbol table
+    // Fallback to resolving the variable type from AST or symbol table
     current_element_type = resolve_variable_type(var_name, loc);
   }
 
