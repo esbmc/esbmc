@@ -171,20 +171,15 @@ private:
   bool is_min_max_call() const;
 
   /*
-   * Handles min() function calls by generating conditional expressions to find
-   * the minimum value among arguments. Currently supports up to 2 arguments.
-   * For min(a, b), generates the expression: a < b ? a : b
+   * Handles min() or max() function calls by generating conditional expressions.
+   * Currently supports exactly 2 arguments.
+   * @TODO: Support multiple arguments.
+   * For min(a, b), generates: a < b ? a : b
+   * For max(a, b), generates: a > b ? a : b
    * Performs type compatibility checking with automatic int-to-float promotion.
    */
-  exprt handle_min() const;
-
-  /*
-   * Handles max() function calls by generating conditional expressions to find
-   * the maximum value among arguments. Currently supports up to 2 arguments.
-   * For max(a, b), generates the expression: a > b ? a : b
-   * Performs type compatibility checking with automatic int-to-float promotion.
-   */
-  exprt handle_max() const;
+  exprt
+  handle_min_max(const std::string &func_name, irep_idt comparison_op) const;
 
 protected:
   symbol_id function_id_;

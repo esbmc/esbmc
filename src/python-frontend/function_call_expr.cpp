@@ -935,22 +935,25 @@ bool function_call_expr::is_min_max_call() const
   return func_name == "min" || func_name == "max";
 }
 
-exprt function_call_expr::handle_min() const
+exprt function_call_expr::handle_min_max(
+  const std::string &func_name,
+  irep_idt comparison_op) const
 {
   const auto &args = call_["args"];
 
   if (args.empty())
-    throw std::runtime_error("min expected at least 1 argument, got 0");
+    throw std::runtime_error(
+      func_name + " expected at least 1 argument, got 0");
 
   if (args.size() == 1)
     throw std::runtime_error(
-      "min() with single iterable argument not yet supported");
+      func_name + "() with single iterable argument not yet supported");
 
   if (args.size() > 2)
     throw std::runtime_error(
-      "min() with more than 2 arguments not yet supported");
+      func_name + "() with more than 2 arguments not yet supported");
 
-  // Two arguments case: min(a, b) -> a < b ? a : b
+  // Two arguments case: min/max(a, b)
   exprt arg1 = converter_.get_expr(args[0]);
   exprt arg2 = converter_.get_expr(args[1]);
 
@@ -963,53 +966,13 @@ exprt function_call_expr::handle_min() const
     else if (result_type.is_floatbv() && arg2.type().is_signedbv())
       ; // Keep float type
     else
-      throw std::runtime_error("min() arguments must be of comparable types");
+      throw std::runtime_error(
+        func_name + "() arguments must be of comparable types: got " +
+        result_type.pretty() + " and " + arg2.type().pretty());
   }
 
-  // Create condition: arg1 < arg2
-  exprt condition(exprt::i_lt, type_handler_.get_typet("bool", 0));
-  condition.copy_to_operands(arg1, arg2);
-
-  // Create if expression: condition ? arg1 : arg2
-  if_exprt result(condition, arg1, arg2);
-  result.type() = result_type;
-
-  return result;
-}
-
-exprt function_call_expr::handle_max() const
-{
-  const auto &args = call_["args"];
-
-  if (args.empty())
-    throw std::runtime_error("max expected at least 1 argument, got 0");
-
-  if (args.size() == 1)
-    throw std::runtime_error(
-      "max() with single iterable argument not yet supported");
-
-  if (args.size() > 2)
-    throw std::runtime_error(
-      "max() with more than 2 arguments not yet supported");
-
-  // Two arguments case: max(a, b) -> a > b ? a : b
-  exprt arg1 = converter_.get_expr(args[0]);
-  exprt arg2 = converter_.get_expr(args[1]);
-
-  // Determine result type (with basic type promotion)
-  typet result_type = arg1.type();
-  if (!base_type_eq(result_type, arg2.type(), converter_.ns))
-  {
-    if (result_type.is_signedbv() && arg2.type().is_floatbv())
-      result_type = arg2.type(); // Promote to float
-    else if (result_type.is_floatbv() && arg2.type().is_signedbv())
-      ; // Keep float type
-    else
-      throw std::runtime_error("max() arguments must be of comparable types");
-  }
-
-  // Create condition: arg1 > arg2
-  exprt condition(exprt::i_gt, type_handler_.get_typet("bool", 0));
+  // Create condition: arg1 < arg2 (for min) or arg1 > arg2 (for max)
+  exprt condition(comparison_op, type_handler_.get_typet("bool", 0));
   condition.copy_to_operands(arg1, arg2);
 
   // Create if expression: condition ? arg1 : arg2
@@ -1047,9 +1010,9 @@ exprt function_call_expr::get()
   {
     const std::string &func_name = function_id_.get_function();
     if (func_name == "min")
-      return handle_min();
+      return handle_min_max("min", exprt::i_lt);
     else
-      return handle_max();
+      return handle_min_max("max", exprt::i_gt);
   }
 
   const std::string &func_name = function_id_.get_function();
