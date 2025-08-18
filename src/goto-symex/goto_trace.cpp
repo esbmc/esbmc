@@ -362,7 +362,6 @@ void violation_yaml_goto_trace(
   yml.verified_file = options.get_option("input-file");
   log_progress("Generating Violation Witness for: {}", yml.verified_file);
 
-#if 0
   for (const auto &step : goto_trace.steps)
   {
     switch (step.type)
@@ -370,24 +369,20 @@ void violation_yaml_goto_trace(
     case goto_trace_stept::ASSERT:
       if (!step.guard)
       {
-        graph.check_create_new_thread(step.thread_nr, prev_node);
-        prev_node = graph.edges.back().to_node;
-
-        nodet *violation_node = new nodet();
-        violation_node->violation = true;
-
-        edget violation_edge(prev_node, violation_node);
-        violation_edge.thread_id = std::to_string(step.thread_nr);
-        violation_edge.start_line = get_line_number(
-          graph.verified_file,
+        waypoint wp;
+        wp.type = waypoint::target;
+        wp.file = yml.verified_file;
+        wp.line = get_line_number(
+          yml.verified_file,
           std::atoi(step.pc->location.get_line().c_str()),
           options);
-
-        graph.edges.push_back(violation_edge);
+        wp.column = step.pc->location.get_column().c_str();
+        wp.function = step.pc->location.function().c_str();
+        yml.segments.push_back(wp);
 
         /* having printed a property violation, don't print more steps. */
 
-        graph.generate_graphml(options);
+        yml.generate_yaml(options);
         return;
       }
       break;
@@ -400,22 +395,17 @@ void violation_yaml_goto_trace(
       {
         std::string assignment = get_formated_assignment(ns, step);
 
-        graph.check_create_new_thread(step.thread_nr, prev_node);
-        prev_node = graph.edges.back().to_node;
-
-        edget new_edge;
-        new_edge.thread_id = std::to_string(step.thread_nr);
-        new_edge.assumption = assignment;
-        new_edge.start_line = get_line_number(
-          graph.verified_file,
+        waypoint wp;
+        wp.type = waypoint::assumption;
+        wp.file = yml.verified_file;
+        wp.value = assignment;
+        wp.line = get_line_number(
+          yml.verified_file,
           std::atoi(step.pc->location.get_line().c_str()),
           options);
-
-        nodet *new_node = new nodet();
-        new_edge.from_node = prev_node;
-        new_edge.to_node = new_node;
-        prev_node = new_node;
-        graph.edges.push_back(new_edge);
+        wp.column = step.pc->location.get_column().c_str();
+        wp.function = step.pc->location.function().c_str();
+        yml.segments.push_back(wp);
       }
       break;
 
@@ -423,8 +413,6 @@ void violation_yaml_goto_trace(
       continue;
     }
   }
-#endif
-  yml.generate_yaml(options);
 }
 
 void correctness_graphml_goto_trace(
