@@ -929,6 +929,59 @@ std::string function_call_expr::get_object_name() const
   return json_utils::get_object_alias(converter_.ast(), obj_name);
 }
 
+bool function_call_expr::is_min_max_call() const
+{
+  const std::string &func_name = function_id_.get_function();
+  return func_name == "min" || func_name == "max";
+}
+
+exprt function_call_expr::handle_min_max(
+  const std::string &func_name,
+  irep_idt comparison_op) const
+{
+  const auto &args = call_["args"];
+
+  if (args.empty())
+    throw std::runtime_error(
+      func_name + " expected at least 1 argument, got 0");
+
+  if (args.size() == 1)
+    throw std::runtime_error(
+      func_name + "() with single iterable argument not yet supported");
+
+  if (args.size() > 2)
+    throw std::runtime_error(
+      func_name + "() with more than 2 arguments not yet supported");
+
+  // Two arguments case: min/max(a, b)
+  exprt arg1 = converter_.get_expr(args[0]);
+  exprt arg2 = converter_.get_expr(args[1]);
+
+  // Determine result type (with basic type promotion)
+  typet result_type = arg1.type();
+  if (!base_type_eq(result_type, arg2.type(), converter_.ns))
+  {
+    if (result_type.is_signedbv() && arg2.type().is_floatbv())
+      result_type = arg2.type(); // Promote to float
+    else if (result_type.is_floatbv() && arg2.type().is_signedbv())
+      ; // Keep float type
+    else
+      throw std::runtime_error(
+        func_name + "() arguments must be of comparable types: got " +
+        result_type.pretty() + " and " + arg2.type().pretty());
+  }
+
+  // Create condition: arg1 < arg2 (for min) or arg1 > arg2 (for max)
+  exprt condition(comparison_op, type_handler_.get_typet("bool", 0));
+  condition.copy_to_operands(arg1, arg2);
+
+  // Create if expression: condition ? arg1 : arg2
+  if_exprt result(condition, arg1, arg2);
+  result.type() = result_type;
+
+  return result;
+}
+
 exprt function_call_expr::get()
 {
   // Handle non-det functions
@@ -950,6 +1003,16 @@ exprt function_call_expr::get()
   if (is_input_call())
   {
     return handle_input();
+  }
+
+  // Handle min/max functions
+  if (is_min_max_call())
+  {
+    const std::string &func_name = function_id_.get_function();
+    if (func_name == "min")
+      return handle_min_max("min", exprt::i_lt);
+    else
+      return handle_min_max("max", exprt::i_gt);
   }
 
   const std::string &func_name = function_id_.get_function();
