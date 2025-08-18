@@ -31,7 +31,9 @@ bool is_valid_input(const char *Data, size_t DataSize)
   if (Data[DataSize - 1] != 0)
     return false;
   // Input could be negative
-  if (!((Data[0] >= low_bound) && (Data[0] <= high_bound)) && !(Data[0] == '-' && DataSize < 2))
+  if (
+    !((Data[0] >= low_bound) && (Data[0] <= high_bound)) &&
+    !(Data[0] == '-' && DataSize < 2))
     return false;
   for (size_t i = 1; i < DataSize - 1; ++i)
   {
