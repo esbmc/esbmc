@@ -89,14 +89,17 @@ Below is an overview of ESBMC-Python's key capabilities:
 ### Functions and Methods
 - **Function Handling**: This allows for defining, calling, and verifying functions, including parameter passing and return values.
 - **Annotations**: Supports type annotations.
+
 ### Object-Oriented Programming
 - **Classes**: Supports class definitions, methods, and attributes.
 - **Inheritance**: Handles inheritance and verifies scenarios involving inheritance issues.
 - **super() calls**: Supports the `super()` function to call methods from a superclass. This allows for the verification of behaviors where a derived class explicitly invokes base class methods, enabling the analysis of polymorphic behavior and the proper propagation of assertions or side effects.
+
 ### Data Types and Structures
 - **Dynamic Typing**: Accommodates Python's dynamic typing in variable assignments.
 - **Data Structures**: Supports operations on Python's built-in data structures, including lists and strings, with features such as concatenation and bounds checks.
 - **Bytes and Integers**: Supports byte and integer operations, such as conversions and bit length.
+
 ### Error Handling and Assertions
 - **Assertions**: Supports `assert` statements for program verification.
 - **Assumptions**: Supports `assume` statements for specifying assumptions for verification.
@@ -106,7 +109,10 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Recursion**: Supports and verifies recursive functions.
 - **Imports**: Handles import styles and validates their usage.
 - **Numeric Types**: Supports manipulation of numeric types (e.g., bytes, integers, floats).
-- **Built-in Functions**: Supports Python's built-in functions, such as `abs`, `int`, `float`, `chr`, `str`, `hex`, `oct`, `len`, and `range`.
+- **Built-in Functions**: 
+  - **Arithmetic and conversions**: Supports Python's built-in functions, such as `abs`, `int`, `float`, `chr`, `str`, `hex`, `oct`, `len`, and `range`.
+  - **Min/Max**: Supports `min(a, b)` and `max(a, b)` with type promotion (int-to-float). Currently limited to two arguments.
+  - **Input**: Models `input()` as a non-deterministic string of up to 256 characters. This allows verification of programs that depend on user input.
 - **Verification properties**: Division-by-zero, indexing errors, arithmetic overflow, and user-defined assertions.
 
 ### Limitations
@@ -116,6 +122,8 @@ The current version of ESBMC-Python has the following limitations:
 - Only `for` loops using the `range()` function are supported.
 - List and String support are partial and limited in functionality.
 - Dictionaries are not supported at all.
+- `min()` and `max()` currently support only two arguments and do not handle iterables or the key/default parameters.
+- `input()` is modeled as a nondeterministic string with a maximum length of 256 characters (under-approximation).
 
 ### Example: Division by Zero in Python
 
