@@ -7,6 +7,7 @@
 
  Fuzz Plan:
    - Constructors
+   - Subset of operators
  \*******************************************************************/
 
 #include <cctype>
@@ -29,7 +30,10 @@ bool is_valid_input(const char *Data, size_t DataSize)
   // Last character must be a null terminator
   if (Data[DataSize - 1] != 0)
     return false;
-  for (size_t i = 0; i < DataSize - 1; ++i)
+  // Input could be negative
+  if (!((Data[0] >= low_bound) && (Data[0] <= high_bound)) && !(Data[0] == '-' && DataSize < 2))
+    return false;
+  for (size_t i = 1; i < DataSize - 1; ++i)
   {
     if (!((Data[i] >= low_bound) && (Data[i] <= high_bound)))
       return false;
@@ -37,7 +41,7 @@ bool is_valid_input(const char *Data, size_t DataSize)
   return true;
 }
 
-void test_construct_bigint(const char *Data, size_t DataSize)
+BigInt test_construct_bigint(const char *Data, size_t DataSize)
 {
   BigInt obj(Data, 10);
 
@@ -48,12 +52,17 @@ void test_construct_bigint(const char *Data, size_t DataSize)
   {
     assert(Data[i] == actual[i]);
   }
+  return obj;
 }
 
 extern "C" int LLVMFuzzerTestOneInput(const char *Data, size_t Size)
 {
   if (!is_valid_input(Data, Size))
     return -1;
-  test_construct_bigint(Data, Size);
+  BigInt bigint_a = test_construct_bigint(Data, Size);
+  assert(bigint_a + bigint_a == bigint_a * 2);
+  assert(bigint_a - bigint_a == 0);
+  assert(bigint_a * 1 == bigint_a);
+  assert(bigint_a / 1 == bigint_a);
   return 0;
 }
