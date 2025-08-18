@@ -9,7 +9,118 @@ class Preprocessor(ast.NodeTransformer):
         self.module_name = module_name # for errors
         self.is_range_loop = False  # Track if we're in a range loop transformation
         self.known_variable_types = {}
+        self.range_loop_counter = 0  # Counter for unique variable names in nested range loops
+        self.helper_functions_added = False  # Track if helper functions have been added
 
+    def _create_helper_functions(self):
+        """Create the ESBMC helper function definitions"""
+        # ESBMC_range_next_ function
+        range_next_func = ast.FunctionDef(
+            name='ESBMC_range_next_',
+            args=ast.arguments(
+                posonlyargs=[],
+                args=[
+                    ast.arg(arg='curr', annotation=ast.Name(id='int', ctx=ast.Load())),
+                    ast.arg(arg='step', annotation=ast.Name(id='int', ctx=ast.Load()))
+                ],
+                vararg=None,
+                kwonlyargs=[],
+                kw_defaults=[],
+                kwarg=None,
+                defaults=[]
+            ),
+            body=[
+                ast.Return(
+                    value=ast.BinOp(
+                        left=ast.Name(id='curr', ctx=ast.Load()),
+                        op=ast.Add(),
+                        right=ast.Name(id='step', ctx=ast.Load())
+                    )
+                )
+            ],
+            decorator_list=[],
+            returns=ast.Name(id='int', ctx=ast.Load()),
+            lineno=1,
+            col_offset=0
+        )
+
+        # ESBMC_range_has_next_ function
+        range_has_next_func = ast.FunctionDef(
+            name='ESBMC_range_has_next_',
+            args=ast.arguments(
+                posonlyargs=[],
+                args=[
+                    ast.arg(arg='curr', annotation=ast.Name(id='int', ctx=ast.Load())),
+                    ast.arg(arg='end', annotation=ast.Name(id='int', ctx=ast.Load())),
+                    ast.arg(arg='step', annotation=ast.Name(id='int', ctx=ast.Load()))
+                ],
+                vararg=None,
+                kwonlyargs=[],
+                kw_defaults=[],
+                kwarg=None,
+                defaults=[]
+            ),
+            body=[
+                ast.If(
+                    test=ast.Compare(
+                        left=ast.Name(id='step', ctx=ast.Load()),
+                        ops=[ast.Gt()],
+                        comparators=[ast.Constant(value=0)]
+                    ),
+                    body=[
+                        ast.Return(
+                            value=ast.Compare(
+                                left=ast.Name(id='curr', ctx=ast.Load()),
+                                ops=[ast.Lt()],
+                                comparators=[ast.Name(id='end', ctx=ast.Load())]
+                            )
+                        )
+                    ],
+                    orelse=[
+                        ast.If(
+                            test=ast.Compare(
+                                left=ast.Name(id='step', ctx=ast.Load()),
+                                ops=[ast.Lt()],
+                                comparators=[ast.Constant(value=0)]
+                            ),
+                            body=[
+                                ast.Return(
+                                    value=ast.Compare(
+                                        left=ast.Name(id='curr', ctx=ast.Load()),
+                                        ops=[ast.Gt()],
+                                        comparators=[ast.Name(id='end', ctx=ast.Load())]
+                                    )
+                                )
+                            ],
+                            orelse=[
+                                ast.Return(value=ast.Constant(value=False))
+                            ]
+                        )
+                    ]
+                )
+            ],
+            decorator_list=[],
+            returns=ast.Name(id='bool', ctx=ast.Load()),
+            lineno=1,
+            col_offset=0
+        )
+
+        return [range_next_func, range_has_next_func]
+
+    def visit_Module(self, node):
+        """Visit the module and inject helper functions if needed"""
+        # Transform the module as usual
+        node = self.generic_visit(node)
+        # If we used range loops, inject helper functions at the beginning
+        if self.helper_functions_added:
+            helper_functions = self._create_helper_functions()
+            # Ensure all helper functions have proper location info
+            for func in helper_functions:
+                self.ensure_all_locations(func)
+                ast.fix_missing_locations(func)
+            node.body = helper_functions + node.body
+
+        return node
 
     def ensure_all_locations(self, node, source_node=None, line=1, col=0):
         """Recursively ensure all nodes in an AST tree have location information"""
@@ -84,6 +195,7 @@ class Preprocessor(ast.NodeTransformer):
         if is_range_call:
             # Handle range-based for loops
             self.is_range_loop = True
+            self.helper_functions_added = True  # Mark that we need helper functions
             result = self._transform_range_for(node)
             self.is_range_loop = False
             return result
@@ -94,6 +206,11 @@ class Preprocessor(ast.NodeTransformer):
 
     def _transform_range_for(self, node):
         """Transform range-based for loops to while loops"""
+        # Generate unique variable names for this loop level
+        loop_id = self.range_loop_counter
+        self.range_loop_counter += 1
+        start_var = f'start_{loop_id}'
+        has_next_var = f'has_next_{loop_id}'
         if len(node.iter.args) > 1:
             start = node.iter.args[0]  # Start of the range
             end = node.iter.args[1]    # End of the range
@@ -119,7 +236,7 @@ class Preprocessor(ast.NodeTransformer):
 
         # Create assignment for the start variable
         start_assign = ast.AnnAssign(
-            target=ast.Name(id='start', ctx=ast.Store()),
+            target=ast.Name(id=start_var, ctx=ast.Store()),
             annotation=ast.Name(id='int', ctx=ast.Load()),
             value=start,
             simple=1
@@ -134,14 +251,14 @@ class Preprocessor(ast.NodeTransformer):
 
         # Create assignment for the has_next variable
         has_next_assign = ast.AnnAssign(
-            target=ast.Name(id='has_next', ctx=ast.Store()),
+            target=ast.Name(id=has_next_var, ctx=ast.Store()),
             annotation=ast.Name(id='bool', ctx=ast.Load()),
             value=has_next_call,
             simple=1
         )
 
         # Create condition for the while loop
-        has_next_name = ast.Name(id='has_next', ctx=ast.Load())
+        has_next_name = ast.Name(id=has_next_var, ctx=ast.Load())
         while_cond = ast.Compare(
             left=has_next_name,
             ops=[ast.Eq()],
@@ -151,7 +268,9 @@ class Preprocessor(ast.NodeTransformer):
         # Transform the body of the for loop
         transformed_body = []
         old_target_name = self.target_name
+        old_start_var = getattr(self, 'current_start_var', None)
         self.target_name = node.target.id # Store the target variable name for replacement
+        self.current_start_var = start_var  # Store current start variable for Name replacement
 
         for statement in node.body:
             transformed_statement = self.visit(statement)
@@ -160,22 +279,23 @@ class Preprocessor(ast.NodeTransformer):
             else:
                 transformed_body.append(transformed_statement)
         self.target_name = old_target_name
+        self.current_start_var = old_start_var
 
         # Create the body of the while loop, including updating the start and has_next variables
         while_body = transformed_body + [
             ast.Assign(
-                targets=[ast.Name(id='start', ctx=ast.Store())],
+                targets=[ast.Name(id=start_var, ctx=ast.Store())],
                 value=ast.Call(
                     func=ast.Name(id='ESBMC_range_next_', ctx=ast.Load()),
-                    args=[ast.Name(id='start', ctx=ast.Load()), step],
+                    args=[ast.Name(id=start_var, ctx=ast.Load()), step],
                     keywords=[]
                 )
             ),
             ast.Assign(
-                targets=[has_next_name],
+                targets=[ast.Name(id=has_next_var, ctx=ast.Store())],
                 value=ast.Call(
                     func=ast.Name(id='ESBMC_range_has_next_', ctx=ast.Load()),
-                    args=[ast.Name(id='start', ctx=ast.Load()), end, step],
+                    args=[ast.Name(id=start_var, ctx=ast.Load()), end, step],
                     keywords=[]
                 )
             )
@@ -322,8 +442,8 @@ class Preprocessor(ast.NodeTransformer):
     def visit_Name(self, node):
         # Replace variable names as needed in range-based for to while transformation
         # Replace variable names ONLY for range-based loops, not iterable loops
-        if self.is_range_loop and node.id == self.target_name:
-            node.id = 'start'  # Replace the variable name with 'start'
+        if self.is_range_loop and hasattr(self, 'current_start_var') and node.id == self.target_name:
+            node.id = self.current_start_var  # Replace with the current unique start variable
         return node
 
     def visit_Assign(self, node):

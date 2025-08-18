@@ -92,6 +92,27 @@ bool function_call_expr::is_introspection_call() const
   return func_name == "isinstance" || func_name == "hasattr";
 }
 
+bool function_call_expr::is_input_call() const
+{
+  const std::string &func_name = function_id_.get_function();
+  return func_name == "input";
+}
+
+exprt function_call_expr::handle_input() const
+{
+  // input() returns a non-deterministic string
+  // We'll model input() as returning a non-deterministic string
+  // with a reasonable maximum length (e.g., 256 characters)
+  // This is an under-approximation to model the input
+  const size_t max_input_length = 256;
+
+  typet string_type = type_handler_.get_typet("str", max_input_length);
+  exprt rhs = exprt("sideeffect", string_type);
+  rhs.statement("nondet");
+
+  return rhs;
+}
+
 exprt function_call_expr::build_nondet_call() const
 {
   const std::string &func_name = function_id_.get_function();
@@ -923,6 +944,12 @@ exprt function_call_expr::get()
       return handle_isinstance();
     else
       return handle_hasattr();
+  }
+
+  // Handle input() function
+  if (is_input_call())
+  {
+    return handle_input();
   }
 
   const std::string &func_name = function_id_.get_function();

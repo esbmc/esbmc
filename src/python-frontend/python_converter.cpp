@@ -956,9 +956,12 @@ exprt python_converter::handle_string_comparison(
   if (!rhs_resolved.is_nil())
     rhs = rhs_resolved;
 
-  // If either side is a side effect, we cannot compare them
-  if (lhs.id() == "sideeffect" || rhs.id() == "sideeffect")
-    throw std::runtime_error("Cannot compare side effects");
+  // Allow function call side effects to proceed to strcmp handling
+  // Only reject side effects that are not function calls
+  if (lhs.id() == "sideeffect" && lhs.get("statement") != "function_call")
+    throw std::runtime_error("Cannot compare non-function side effects");
+  if (rhs.id() == "sideeffect" && rhs.get("statement") != "function_call")
+    throw std::runtime_error("Cannot compare non-function side effects");
 
   // Also try to resolve array elements if they are symbols
   if (lhs.is_constant() && lhs.type().is_array())

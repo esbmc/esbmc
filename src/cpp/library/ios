@@ -151,8 +151,6 @@ public:
 class ios : public ios_base
 {
 public:
-  //	typedef fpos<mbstate_t> streampos;
-  //	typedef fpos<mbstate_t> streamoff;
   typedef int streampos;
   typedef int streamoff;
 
@@ -184,8 +182,6 @@ public:
   iostate exceptions() const;
   void exceptions(iostate except);
   locale imbue(const locale &loc);
-  //  ostream *tie ( ) const;
-  //  ostream *tie ( ostream* tiestr );
   streambuf *rdbuf() const;
   streambuf *rdbuf(streambuf *sb);
   char narrow(char c, char dfault) const;
