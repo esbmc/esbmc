@@ -164,6 +164,28 @@ private:
    */
   exprt handle_abs(nlohmann::json &arg) const;
 
+  /*
+   * Checks if the current function call is a min() or max() built-in function.
+   * Returns true if the function name matches "min" or "max", false otherwise.
+   */
+  bool is_min_max_call() const;
+
+  /*
+   * Handles min() function calls by generating conditional expressions to find
+   * the minimum value among arguments. Currently supports up to 2 arguments.
+   * For min(a, b), generates the expression: a < b ? a : b
+   * Performs type compatibility checking with automatic int-to-float promotion.
+   */
+  exprt handle_min() const;
+
+  /*
+   * Handles max() function calls by generating conditional expressions to find
+   * the maximum value among arguments. Currently supports up to 2 arguments.
+   * For max(a, b), generates the expression: a > b ? a : b
+   * Performs type compatibility checking with automatic int-to-float promotion.
+   */
+  exprt handle_max() const;
+
 protected:
   symbol_id function_id_;
   const nlohmann::json &call_;
