@@ -355,8 +355,8 @@ void violation_graphml_goto_trace(
 
 void violation_yaml_goto_trace(
   optionst &options,
-  const namespacet &ns [[maybe_unused]],
-  const goto_tracet &goto_trace [[maybe_unused]])
+  const namespacet &ns,
+  const goto_tracet &goto_trace)
 {
   yamlt yml(yamlt::VIOLATION);
   yml.verified_file = options.get_option("input-file");
@@ -394,6 +394,8 @@ void violation_yaml_goto_trace(
         step.pc->is_function_call())
       {
         std::string assignment = get_formated_assignment(ns, step, true);
+        if (assignment.empty())
+          continue;
 
         waypoint wp;
         wp.type = waypoint::assumption;
