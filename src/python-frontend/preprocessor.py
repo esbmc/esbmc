@@ -10,7 +10,117 @@ class Preprocessor(ast.NodeTransformer):
         self.is_range_loop = False  # Track if we're in a range loop transformation
         self.known_variable_types = {}
         self.range_loop_counter = 0  # Counter for unique variable names in nested range loops
+        self.helper_functions_added = False  # Track if helper functions have been added
 
+    def _create_helper_functions(self):
+        """Create the ESBMC helper function definitions"""
+        # ESBMC_range_next_ function
+        range_next_func = ast.FunctionDef(
+            name='ESBMC_range_next_',
+            args=ast.arguments(
+                posonlyargs=[],
+                args=[
+                    ast.arg(arg='curr', annotation=ast.Name(id='int', ctx=ast.Load())),
+                    ast.arg(arg='step', annotation=ast.Name(id='int', ctx=ast.Load()))
+                ],
+                vararg=None,
+                kwonlyargs=[],
+                kw_defaults=[],
+                kwarg=None,
+                defaults=[]
+            ),
+            body=[
+                ast.Return(
+                    value=ast.BinOp(
+                        left=ast.Name(id='curr', ctx=ast.Load()),
+                        op=ast.Add(),
+                        right=ast.Name(id='step', ctx=ast.Load())
+                    )
+                )
+            ],
+            decorator_list=[],
+            returns=ast.Name(id='int', ctx=ast.Load()),
+            lineno=1,
+            col_offset=0
+        )
+
+        # ESBMC_range_has_next_ function
+        range_has_next_func = ast.FunctionDef(
+            name='ESBMC_range_has_next_',
+            args=ast.arguments(
+                posonlyargs=[],
+                args=[
+                    ast.arg(arg='curr', annotation=ast.Name(id='int', ctx=ast.Load())),
+                    ast.arg(arg='end', annotation=ast.Name(id='int', ctx=ast.Load())),
+                    ast.arg(arg='step', annotation=ast.Name(id='int', ctx=ast.Load()))
+                ],
+                vararg=None,
+                kwonlyargs=[],
+                kw_defaults=[],
+                kwarg=None,
+                defaults=[]
+            ),
+            body=[
+                ast.If(
+                    test=ast.Compare(
+                        left=ast.Name(id='step', ctx=ast.Load()),
+                        ops=[ast.Gt()],
+                        comparators=[ast.Constant(value=0)]
+                    ),
+                    body=[
+                        ast.Return(
+                            value=ast.Compare(
+                                left=ast.Name(id='curr', ctx=ast.Load()),
+                                ops=[ast.Lt()],
+                                comparators=[ast.Name(id='end', ctx=ast.Load())]
+                            )
+                        )
+                    ],
+                    orelse=[
+                        ast.If(
+                            test=ast.Compare(
+                                left=ast.Name(id='step', ctx=ast.Load()),
+                                ops=[ast.Lt()],
+                                comparators=[ast.Constant(value=0)]
+                            ),
+                            body=[
+                                ast.Return(
+                                    value=ast.Compare(
+                                        left=ast.Name(id='curr', ctx=ast.Load()),
+                                        ops=[ast.Gt()],
+                                        comparators=[ast.Name(id='end', ctx=ast.Load())]
+                                    )
+                                )
+                            ],
+                            orelse=[
+                                ast.Return(value=ast.Constant(value=False))
+                            ]
+                        )
+                    ]
+                )
+            ],
+            decorator_list=[],
+            returns=ast.Name(id='bool', ctx=ast.Load()),
+            lineno=1,
+            col_offset=0
+        )
+
+        return [range_next_func, range_has_next_func]
+
+    def visit_Module(self, node):
+        """Visit the module and inject helper functions if needed"""
+        # Transform the module as usual
+        node = self.generic_visit(node)
+        # If we used range loops, inject helper functions at the beginning
+        if self.helper_functions_added:
+            helper_functions = self._create_helper_functions()
+            # Ensure all helper functions have proper location info
+            for func in helper_functions:
+                self.ensure_all_locations(func)
+                ast.fix_missing_locations(func)
+            node.body = helper_functions + node.body
+
+        return node
 
     def ensure_all_locations(self, node, source_node=None, line=1, col=0):
         """Recursively ensure all nodes in an AST tree have location information"""
@@ -85,6 +195,7 @@ class Preprocessor(ast.NodeTransformer):
         if is_range_call:
             # Handle range-based for loops
             self.is_range_loop = True
+            self.helper_functions_added = True  # Mark that we need helper functions
             result = self._transform_range_for(node)
             self.is_range_loop = False
             return result
