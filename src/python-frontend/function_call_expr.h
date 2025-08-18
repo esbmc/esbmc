@@ -44,6 +44,11 @@ private:
 
   bool is_introspection_call() const;
 
+  bool is_input_call() const;
+
+  // Create an expression that represents non-deterministic string input
+  exprt handle_input() const;
+
   /*
    * Creates an expression for a non-deterministic function call.
    */
