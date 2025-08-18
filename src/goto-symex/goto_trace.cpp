@@ -326,7 +326,7 @@ void violation_graphml_goto_trace(
         (step.pc->is_other() && is_nil_expr(step.lhs)) ||
         step.pc->is_function_call())
       {
-        std::string assignment = get_formated_assignment(ns, step);
+        std::string assignment = get_formated_assignment(ns, step, false);
 
         graph.check_create_new_thread(step.thread_nr, prev_node);
         prev_node = graph.edges.back().to_node;
@@ -393,7 +393,7 @@ void violation_yaml_goto_trace(
         (step.pc->is_other() && is_nil_expr(step.lhs)) ||
         step.pc->is_function_call())
       {
-        std::string assignment = get_formated_assignment(ns, step);
+        std::string assignment = get_formated_assignment(ns, step, true);
 
         waypoint wp;
         wp.type = waypoint::assumption;

@@ -927,8 +927,10 @@ void check_replace_invalid_assignment(std::string &assignment)
     assignment.clear();
 }
 
-std::string
-get_formated_assignment(const namespacet &ns, const goto_trace_stept &step)
+std::string get_formated_assignment(
+  const namespacet &ns,
+  const goto_trace_stept &step,
+  bool yaml)
 {
   std::string assignment = "";
   if (
@@ -936,9 +938,10 @@ get_formated_assignment(const namespacet &ns, const goto_trace_stept &step)
     is_valid_witness_step(ns, step))
   {
     assignment += from_expr(ns, "", step.lhs, presentationt::WITNESS);
-    assignment += " = ";
+    assignment += " == ";
     assignment += from_expr(ns, "", step.value, presentationt::WITNESS);
-    assignment += ";";
+    if (!yaml)
+      assignment += ";";
 
     std::replace(assignment.begin(), assignment.end(), '$', '_');
     if (std::regex_match(assignment, regex_array))
