@@ -1912,13 +1912,6 @@ bool goto_symext::run_builtin(
     return true;
   }
 
-  /*if (symname == "c:@F@memcpy" || has_prefix(symname, "c:@F@__builtin_memcpy$"))
-  {
-    log_status("Using intrinsic_memcpy for {}", symname);
-    intrinsic_memcpy(*art1, func_call);
-    return true;
-  }*/
-
   if (has_prefix(symname, "c:@F@__builtin_constant_p"))
   {
     expr2tc op1 = func_call.operands[0];

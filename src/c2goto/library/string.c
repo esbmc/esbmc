@@ -1,7 +1,6 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
-//#include "../../goto-symex/goto_symex.h"
 
 #undef strcpy
 #undef strncpy
@@ -290,13 +289,7 @@ void *memcpy(void *dst, const void *src, size_t n)
 __ESBMC_HIDE:;
   if (n == 0 || src == NULL || dst == NULL)
     return dst;
-
-  // char *cdst = dst;
-  // const char *csrc = src;
-
-  //for (size_t i = 0; i < n; i++)
-  // cdst[i] = csrc[i];
-
+    
   void *hax = &__memcpy_impl;
   (void)hax;
 
