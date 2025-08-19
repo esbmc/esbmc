@@ -1073,6 +1073,7 @@ exprt function_call_expr::get()
       else if (function_type_ == FunctionType::InstanceMethod)
       {
         assert(obj_symbol);
+        assert(func_symbol);
 
         // Update obj attributes from self
         converter_.update_instance_from_self(
