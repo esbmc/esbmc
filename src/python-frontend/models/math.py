@@ -18,7 +18,6 @@ def comb(n: int, k: int) -> int:
     # Type checking
     if not isinstance(n, int) or not isinstance(k, int):
         assert False
-    
     # Handle negative inputs
     if n < 0 or k < 0:
         assert False
@@ -30,11 +29,11 @@ def comb(n: int, k: int) -> int:
         return 1
     if k == 1 or k == n - 1:
         return n
-    
+
     # Optimize by using the smaller of k and n-k
     if k > n - k:
         k = n - k
-    
+
     # Calculate C(n, k) using the multiplicative formula
     # C(n, k) = n * (n-1) * ... * (n-k+1) / (k * (k-1) * ... * 1)
     result: int = 1
@@ -42,5 +41,4 @@ def comb(n: int, k: int) -> int:
     while i < k:
         result = result * (n - i) // (i + 1)
         i = i + 1
-    
     return result
