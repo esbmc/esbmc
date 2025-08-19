@@ -326,6 +326,15 @@ private:
         if (left_op.empty() && body.contains("args"))
           left_op = find_annotated_assign(lhs["id"], body["args"]["args"]);
 
+        // Check current function scope for function parameters
+        if (
+          left_op.empty() && current_func != nullptr &&
+          (*current_func).contains("args"))
+        {
+          left_op =
+            find_annotated_assign(lhs["id"], (*current_func)["args"]["args"]);
+        }
+
         if (!left_op.empty())
           type = left_op["annotation"]["id"];
       }

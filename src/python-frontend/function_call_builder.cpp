@@ -150,7 +150,11 @@ symbol_id function_call_builder::build_function_id() const
   }
 
   // Insert class name in the symbol id
-  if (th.is_constructor_call(call_))
+  if (obj_name == "super")
+  {
+    class_name = current_class_name;
+  }
+  else if (th.is_constructor_call(call_))
   {
     class_name = func_name;
   }
