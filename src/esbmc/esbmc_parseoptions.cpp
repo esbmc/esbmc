@@ -505,7 +505,25 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("override-return-annotation", true);
 
   if (cmdline.isset("witness-output-yaml"))
-    options.set_option("witness-output", cmdline.getval("witness-output-yaml"));
+  {
+    std::string filename = cmdline.getval("witness-output-yaml");
+    boost::filesystem::path n(filename);
+
+    if (n.extension() == ".yaml" || n.extension() == ".yml")
+      options.set_option("witness-output", filename);
+    else if (!n.has_extension())
+    {
+      filename += ".yml";
+      options.set_option("witness-output", filename);
+    }
+    else
+    {
+      log_error(
+        "Output file has extension {}, expected yaml or yml.",
+        n.extension().string());
+      abort();
+    }
+  }
 
   config.options = options;
 }
