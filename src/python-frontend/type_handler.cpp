@@ -16,10 +16,15 @@ bool type_handler::is_constructor_call(const nlohmann::json &json) const
 {
   if (
     !json.contains("_type") || json["_type"] != "Call" ||
-    !json["func"].contains("id"))
+    (!json["func"].contains("id") && !json["func"].contains("attr")))
     return false;
 
-  const std::string &func_name = json["func"]["id"];
+  const std::string &func_name = json["func"]["_type"] == "Attribute"
+                                   ? json["func"]["attr"]
+                                   : json["func"]["id"];
+
+  if (func_name == "__init__")
+    return true;
 
   if (type_utils::is_builtin_type(func_name))
     return false;

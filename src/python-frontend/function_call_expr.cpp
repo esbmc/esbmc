@@ -1073,6 +1073,7 @@ exprt function_call_expr::get()
       else if (function_type_ == FunctionType::InstanceMethod)
       {
         assert(obj_symbol);
+        assert(func_symbol);
 
         // Update obj attributes from self
         converter_.update_instance_from_self(
@@ -1100,8 +1101,8 @@ exprt function_call_expr::get()
   if (function_type_ == FunctionType::Constructor)
   {
     // Self is the LHS
-    assert(converter_.current_lhs);
-    call.arguments().push_back(gen_address_of(*converter_.current_lhs));
+    if (converter_.current_lhs)
+      call.arguments().push_back(gen_address_of(*converter_.current_lhs));
   }
   else if (function_type_ == FunctionType::InstanceMethod)
   {
