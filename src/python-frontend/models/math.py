@@ -65,7 +65,7 @@ def floor(x: float) -> int:
             return int_x - 1
 
 def ceil(x: float) -> int:
-    # infinity and NaN inputs cause assertion failures 
+    # infinity and NaN inputs cause assertion failures
     # since they cannot be converted to integers.
     assert not isinf(x), "Input cannot be infinity"
     assert not isnan(x), "Input cannot be NaN"
