@@ -42,3 +42,6 @@ def comb(n: int, k: int) -> int:
         result = result * (n - i) // (i + 1)
         i = i + 1
     return result
+
+def isinf(x:float) -> bool:
+    return True
