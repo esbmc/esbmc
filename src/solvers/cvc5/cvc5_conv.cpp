@@ -1320,3 +1320,41 @@ void cvc5_smt_ast::dump() const
   std::ostringstream oss;
   log_status("{}", a.toString());
 }
+
+smt_astt
+cvc5_convt::mk_quantifier(bool is_forall, std::vector<smt_astt> lhs, smt_astt rhs)
+{ 
+  // Here the conversion of the respective cvc5 term occurs for all variables.
+  std::vector<cvc5::Term> vars;
+
+  for (auto &v : lhs)
+  {
+   // vars.push_back(to_solver_smt_ast<cvc5_smt_ast>(v)->a);
+   // Instead of reusing the constants as z3 can deal with that, cvc5 requires bounded variables of the same respective sort.
+    cvc5::Sort sortingQvar = to_solver_smt_ast<cvc5_smt_ast>(v)->a.getSort();
+    cvc5::Term var = slv.mkVar(sortingQvar, "qvar");  
+    vars.push_back(var);
+  }
+
+  // Here the variable list terms are built. 
+  // Note: BOUND_VAR_lIST IS FOR cvc4 NOT cvc5
+
+  cvc5::Term varList = slv.mkTerm(cvc5::Kind::VARIABLE_LIST, vars);
+
+  // Here the respective quantifier terms are converted.
+  cvc5::Term body = to_solver_smt_ast<cvc5_smt_ast>(rhs)->a;
+
+  cvc5::Term quantifiers; 
+
+  if (is_forall)
+  {
+    quantifiers = slv.mkTerm(cvc5::Kind::FORALL, {varList, body});
+  }
+  else
+  {
+    quantifiers =slv.mkTerm(cvc5::Kind::EXISTS, {varList, body});
+  }
+
+  return new_ast(quantifiers, rhs->sort);
+
+}
