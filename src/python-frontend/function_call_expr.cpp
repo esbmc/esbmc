@@ -725,7 +725,17 @@ function_call_expr::lookup_python_symbol(const std::string &var_name) const
   const symbolt *sym = converter_.find_symbol(var_symbol);
 
   if (!sym)
-    log_warning("Symbol not found: {}", var_name);
+  {
+    // Don't warn for built-in type constructors (int, float, str, etc.)
+    // as they may reference variables from our operational models
+    const std::string &func_name = function_id_.get_function();
+    if (
+      func_name != "int" && func_name != "float" && func_name != "str" &&
+      func_name != "bool" && func_name != "bytes")
+    {
+      log_warning("Symbol not found: {}", var_name);
+    }
+  }
 
   return sym;
 }
@@ -863,6 +873,58 @@ exprt function_call_expr::build_constant_from_arg() const
   // Handle int(): convert float to int
   if (func_name == "int" && arg["value"].is_number_float())
     handle_float_to_int(arg);
+
+  else if (func_name == "float" && arg["value"].is_string())
+  {
+    std::string str_val = arg["value"].get<std::string>();
+
+    // Convert to lowercase for case-insensitive comparison
+    std::transform(str_val.begin(), str_val.end(), str_val.begin(), ::tolower);
+
+    // Remove whitespace
+    str_val.erase(
+      std::remove_if(str_val.begin(), str_val.end(), ::isspace), str_val.end());
+
+    // Handle special float string values
+    if (str_val == "nan")
+    {
+      // Create NaN using IEEE float
+      ieee_floatt nan_val(ieee_float_spect::double_precision());
+      nan_val.make_NaN();
+      return nan_val.to_expr();
+    }
+    else if (
+      str_val == "inf" || str_val == "+inf" || str_val == "infinity" ||
+      str_val == "+infinity")
+    {
+      // Create positive infinity
+      ieee_floatt inf_val(ieee_float_spect::double_precision());
+      inf_val.make_plus_infinity();
+      return inf_val.to_expr();
+    }
+    else if (str_val == "-inf" || str_val == "-infinity")
+    {
+      // Create negative infinity
+      ieee_floatt inf_val(ieee_float_spect::double_precision());
+      inf_val.make_minus_infinity();
+      return inf_val.to_expr();
+    }
+    else
+    {
+      // Try to parse as regular float
+      try
+      {
+        double dval = std::stod(arg["value"].get<std::string>());
+        return from_double(dval, type_handler_.get_typet("float", 0));
+      }
+      catch (const std::exception &e)
+      {
+        throw std::runtime_error(
+          "ValueError: could not convert string to float: '" +
+          arg["value"].get<std::string>() + "'");
+      }
+    }
+  }
 
   // Handle float(): convert string (from symbol) to float
   else if (func_name == "float" && arg["_type"] == "Name")
@@ -1016,6 +1078,36 @@ exprt function_call_expr::get()
   }
 
   const std::string &func_name = function_id_.get_function();
+
+  // Handle math module functions using ESBMC's built-in operations
+  if (func_name == "__ESBMC_isnan")
+  {
+    const auto &args = call_["args"];
+    if (args.size() != 1)
+      throw std::runtime_error("isnan() expects exactly 1 argument");
+
+    exprt arg_expr = converter_.get_expr(args[0]);
+
+    // Use ESBMC's built-in isnan operation
+    exprt isnan_expr("isnan", bool_typet());
+    isnan_expr.copy_to_operands(arg_expr);
+
+    return isnan_expr;
+  }
+  else if (func_name == "__ESBMC_isinf")
+  {
+    const auto &args = call_["args"];
+    if (args.size() != 1)
+      throw std::runtime_error("isinf() expects exactly 1 argument");
+
+    exprt arg_expr = converter_.get_expr(args[0]);
+
+    // Use ESBMC's built-in isinf operation
+    exprt isinf_expr("isinf", bool_typet());
+    isinf_expr.copy_to_operands(arg_expr);
+
+    return isinf_expr;
+  }
 
   /* Calls to initialise variables using built-in type functions such as int(1), str("test"), bool(1)
    * are converted to simple variable assignments, simplifying the handling of built-in type objects.
