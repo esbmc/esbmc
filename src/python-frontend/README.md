@@ -111,9 +111,21 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Numeric Types**: Supports manipulation of numeric types (e.g., bytes, integers, floats).
 - **Built-in Functions**: 
   - **Arithmetic and conversions**: Supports Python's built-in functions, such as `abs`, `int`, `float`, `chr`, `str`, `hex`, `oct`, `len`, and `range`.
+  - **Enhanced float() constructor**: Supports conversion from strings including special values such as `nan`, `inf`, `-inf`, `infinity`, and `+infinity` (case-insensitive with whitespace handling).
   - **Min/Max**: Supports `min(a, b)` and `max(a, b)` with type promotion (int-to-float). Currently limited to two arguments.
   - **Input**: Models `input()` as a non-deterministic string of up to 256 characters. This allows verification of programs that depend on user input.
 - **Verification properties**: Division-by-zero, indexing errors, arithmetic overflow, and user-defined assertions.
+
+### Math Module Support
+- **math.floor(x)**: Returns the largest integer less than or equal to x.
+- **math.ceil(x)**: Returns the smallest integer greater than or equal to x
+- Both functions include built-in assertions to reject infinity and NaN inputs
+- Supports verification of edge cases, including very small values, large values (e.g., 1e12), and boundary conditions
+
+### Special Value Detection:
+- **math.isnan(x)**: Returns True if x is NaN (Not a Number)
+- **math.isinf(x)**: Returns True if x is positive or negative infinity
+- Both functions use ESBMC's internal operations for accurate verification according to the IEEE-754 standard.
 
 ### Limitations
 
