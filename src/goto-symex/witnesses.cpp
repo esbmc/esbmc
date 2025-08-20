@@ -96,25 +96,38 @@ void yamlt::generate_yaml(optionst &options)
 {
   YAML::Emitter yaml_emitter;
   if (this->witness_type == yamlt::VIOLATION)
-    log_error("{}", "ESBMC dont support YAML violation witness yet.");
+    create_violation_yaml_emitter(this->verified_file, options, yaml_emitter);
   else
     create_correctness_yaml_emitter(this->verified_file, options, yaml_emitter);
 
-    // TODO: fill invariants.
-#if 0
-  yaml_emitter << YAML::Key << "content" << YAML::Value << YAML::BeginSeq
-               << YAML::EndSeq;
-#endif
+  if (!this->segments.empty())
+  {
+    yaml_emitter << YAML::Key << "content" << YAML::Value << YAML::BeginSeq;
+
+    for (auto &waypoint : this->segments)
+    {
+      yaml_emitter << YAML::BeginMap;
+      yaml_emitter << YAML::Key << "segment" << YAML::Value << YAML::BeginSeq;
+
+      create_waypoint(waypoint, yaml_emitter);
+
+      yaml_emitter << YAML::EndSeq;
+      yaml_emitter << YAML::EndMap;
+    }
+
+    yaml_emitter << YAML::EndSeq;
+  }
+
   yaml_emitter << YAML::EndMap;
   yaml_emitter << YAML::EndSeq;
 
   const std::string witness_output = options.get_option("witness-output");
   if (witness_output == "-")
-    std::cout << yaml_emitter.c_str();
+    std::cout << yaml_emitter.c_str() << std::endl;
   else
   {
     std::ofstream fout(witness_output);
-    fout << yaml_emitter.c_str();
+    fout << yaml_emitter.c_str() << "\n";
   }
 }
 
@@ -179,6 +192,45 @@ std::string trim(const std::string &str)
   size_t last_non_whitespace = str.find_last_not_of(whitespace_characters);
   size_t length = last_non_whitespace - first_non_whitespace + 1;
   return str.substr(first_non_whitespace, length);
+}
+
+void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint)
+{
+  waypoint << YAML::BeginMap;
+  waypoint << YAML::Key << "waypoint" << YAML::Value << YAML::BeginMap;
+
+  if (wp.type == waypoint::target)
+    waypoint << YAML::Key << "type" << YAML::Value << YAML::DoubleQuoted
+             << "target";
+  else if (wp.type == waypoint::assumption)
+    waypoint << YAML::Key << "type" << YAML::Value << YAML::DoubleQuoted
+             << "assumption";
+
+  waypoint << YAML::Key << "action" << YAML::Value << YAML::DoubleQuoted
+           << "follow";
+
+  if (wp.type == waypoint::assumption)
+  {
+    waypoint << YAML::Key << "constraint" << YAML::Value << YAML::BeginMap;
+    waypoint << YAML::Key << "value" << YAML::Value << YAML::DoubleQuoted
+             << wp.value;
+    waypoint << YAML::Key << "format" << YAML::Value << YAML::DoubleQuoted
+             << "c_expression";
+    waypoint << YAML::EndMap;
+  }
+
+  // location
+  waypoint << YAML::Key << "location" << YAML::Value << YAML::BeginMap;
+  waypoint << YAML::Key << "file_name" << YAML::Value << YAML::DoubleQuoted
+           << wp.file;
+  waypoint << YAML::Key << "line" << YAML::Value << integer2string(wp.line);
+  waypoint << YAML::Key << "column" << YAML::Value << integer2string(wp.column);
+  waypoint << YAML::Key << "function" << YAML::Value << YAML::DoubleQuoted
+           << wp.function;
+  waypoint << YAML::EndMap;
+
+  waypoint << YAML::EndMap;
+  waypoint << YAML::EndMap;
 }
 
 void create_node_node(nodet &node, xmlnodet &nodenode)
@@ -792,6 +844,20 @@ void create_correctness_yaml_emitter(
   _create_yaml_metadata_emitter(verifiedfile, options, root);
 }
 
+void create_violation_yaml_emitter(
+  std::string &verifiedfile,
+  optionst &options,
+  YAML::Emitter &root)
+{
+  root << YAML::BeginSeq;
+  root << YAML::BeginMap;
+  root << YAML::Key << "entry_type" << YAML::Value << YAML::DoubleQuoted
+       << "violation_sequence";
+
+  root << YAML::Key << "metadata";
+  _create_yaml_metadata_emitter(verifiedfile, options, root);
+}
+
 static const std::regex
   regex_array("[a-zA-Z0-9_]+ = \\{ ?(-?[0-9]+(.[0-9]+)?,? ?)+ ?\\};");
 
@@ -861,8 +927,10 @@ void check_replace_invalid_assignment(std::string &assignment)
     assignment.clear();
 }
 
-std::string
-get_formated_assignment(const namespacet &ns, const goto_trace_stept &step)
+std::string get_formated_assignment(
+  const namespacet &ns,
+  const goto_trace_stept &step,
+  bool yaml)
 {
   std::string assignment = "";
   if (
@@ -870,9 +938,10 @@ get_formated_assignment(const namespacet &ns, const goto_trace_stept &step)
     is_valid_witness_step(ns, step))
   {
     assignment += from_expr(ns, "", step.lhs, presentationt::WITNESS);
-    assignment += " = ";
+    assignment += " == ";
     assignment += from_expr(ns, "", step.value, presentationt::WITNESS);
-    assignment += ";";
+    if (!yaml)
+      assignment += ";";
 
     std::replace(assignment.begin(), assignment.end(), '$', '_');
     if (std::regex_match(assignment, regex_array))
