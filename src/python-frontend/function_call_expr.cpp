@@ -1176,8 +1176,15 @@ exprt function_call_expr::get()
     }
     else
     {
-      log_warning("Undefined function: {}", func_name.c_str());
-      return exprt();
+      // Find in global scope
+      function_id_.set_class("");
+      func_symbol = converter_.find_symbol(function_id_.to_string().c_str());
+
+      if (!func_symbol)
+      {
+        log_warning("Undefined function: {}", func_name.c_str());
+        return exprt();
+      }
     }
   }
 
