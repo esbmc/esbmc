@@ -41,6 +41,7 @@ static const std::unordered_map<std::string, StatementType> statement_map = {
   {"If", StatementType::IF_STATEMENT},
   {"AugAssign", StatementType::COMPOUND_ASSIGN},
   {"While", StatementType::WHILE_STATEMENT},
+  {"For", StatementType::FOR_STATEMENT},
   {"Expr", StatementType::EXPR},
   {"Return", StatementType::RETURN},
   {"Assert", StatementType::ASSERT},
@@ -3202,6 +3203,13 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       exprt cond = get_conditional_stm(element);
       block.copy_to_operands(cond);
       break;
+    }
+    case StatementType::FOR_STATEMENT:
+    {
+      // For loops are transformed to while loops by the preprocessor
+      // This case should not be reached in normal operation
+      throw std::runtime_error(
+        "For loops should be preprocessed before reaching converter");
     }
     case StatementType::COMPOUND_ASSIGN:
     {
