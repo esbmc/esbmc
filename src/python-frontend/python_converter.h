@@ -211,6 +211,12 @@ private:
 
   exprt get_conditional_stm(const nlohmann::json &ast_node);
 
+  exprt get_for_statement(const nlohmann::json &ast_node);
+
+  exprt convert_range_for_to_while(const nlohmann::json &ast_node);
+
+  exprt convert_iterable_for_to_while(const nlohmann::json &ast_node);
+
   exprt get_function_call(const nlohmann::json &ast_block);
 
   exprt make_char_array_expr(

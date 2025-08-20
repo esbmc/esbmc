@@ -1,5 +1,4 @@
 from other import LoopClass
 
 x:LoopClass = LoopClass()
-assert x.looper() == 4
-
+assert x.looper() == 3

@@ -41,6 +41,7 @@ static const std::unordered_map<std::string, StatementType> statement_map = {
   {"If", StatementType::IF_STATEMENT},
   {"AugAssign", StatementType::COMPOUND_ASSIGN},
   {"While", StatementType::WHILE_STATEMENT},
+  {"For", StatementType::FOR_STATEMENT},
   {"Expr", StatementType::EXPR},
   {"Return", StatementType::RETURN},
   {"Assert", StatementType::ASSERT},
@@ -2804,6 +2805,232 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   return std::move(code);
 }
 
+exprt python_converter::get_for_statement(const nlohmann::json &ast_node)
+{
+  const auto &iter = ast_node["iter"];
+  
+  // Handle range() calls
+  if (iter["_type"] == "Call" && 
+      iter["func"]["_type"] == "Name" && 
+      iter["func"]["id"] == "range") {
+    return convert_range_for_to_while(ast_node);
+  }
+  
+  // Handle simple list/string iteration (basic support)
+  if (iter["_type"] == "Name" || iter["_type"] == "List") {
+    return convert_iterable_for_to_while(ast_node);
+  }
+  
+  // For unsupported iterables, log warning and create empty block
+  log_warning("For loop over '{}' not fully supported, creating empty block", 
+              iter["_type"].get<std::string>());
+  return code_blockt();
+}
+
+exprt python_converter::convert_range_for_to_while(const nlohmann::json &ast_node)
+{
+  const auto &target = ast_node["target"];
+  const auto &iter = ast_node["iter"];
+  const auto &args = iter["args"];
+  
+  std::string var_name = target["id"].get<std::string>();
+  
+  // Parse range(start, stop, step) - handle 1, 2, or 3 arguments
+  exprt start, stop, step;
+  if (args.size() == 1) {
+    start = from_integer(0, int_type());
+    stop = get_expr(args[0]);
+    step = from_integer(1, int_type());
+  } else if (args.size() == 2) {
+    start = get_expr(args[0]);
+    stop = get_expr(args[1]);
+    step = from_integer(1, int_type());
+  } else if (args.size() == 3) {
+    start = get_expr(args[0]);
+    stop = get_expr(args[1]);
+    step = get_expr(args[2]);
+  } else {
+    throw std::runtime_error("Invalid range() arguments");
+  }
+  
+  // Create/get loop variable symbol
+  symbol_id sid = create_symbol_id();
+  sid.set_object(var_name);
+  
+  symbolt *loop_var_symbol = symbol_table_.find_symbol(sid.to_string());
+  if (!loop_var_symbol) {
+    locationt location = get_location_from_decl(ast_node);
+    symbolt symbol = create_symbol(
+      location.get_file().as_string(),
+      var_name,
+      sid.to_string(),
+      location,
+      int_type()
+    );
+    symbol.lvalue = true;
+    // Python loop variables leak into outer scope
+    symbol.static_lifetime = (current_func_name_.empty());
+    symbol.file_local = true;
+    symbol.is_extern = false;
+    loop_var_symbol = symbol_table_.move_symbol_to_context(symbol);
+  }
+  
+  exprt loop_var = symbol_expr(*loop_var_symbol);
+  
+  // Create initialization: var = start
+  code_assignt init(loop_var, start);
+  init.location() = get_location_from_decl(ast_node);
+  
+  // Create condition based on step direction
+  exprt condition;
+  if (step.is_constant()) {
+    BigInt step_val = binary2integer(step.value().as_string(), step.type().is_signedbv());
+    if (step_val > 0) {
+      condition = exprt("<", bool_type());
+    } else if (step_val < 0) {
+      condition = exprt(">", bool_type());
+    } else {
+      throw std::runtime_error("range() step cannot be zero");
+    }
+  } else {
+    // For non-constant step, assume positive (most common case)
+    // TODO: Could generate runtime check here
+    condition = exprt("<", bool_type());
+    log_warning("Non-constant step in range(), assuming positive");
+  }
+  condition.copy_to_operands(loop_var, stop);
+  
+  // Get loop body and handle break/continue properly
+  exprt body = get_block(ast_node["body"]);
+  codet body_code = convert_expression_to_code(body);
+  
+  // Create increment: var += step
+  exprt increment("+", int_type());
+  increment.copy_to_operands(loop_var, step);
+  code_assignt increment_stmt(loop_var, increment);
+  increment_stmt.location() = get_location_from_decl(ast_node);
+  
+  // Wrap body and increment in a block to handle break/continue correctly
+  code_blockt loop_body_block;
+  loop_body_block.copy_to_operands(body_code);
+  loop_body_block.copy_to_operands(increment_stmt);
+  
+  // Create while loop
+  codet while_code;
+  while_code.set_statement("while");
+  while_code.location() = get_location_from_decl(ast_node);
+  while_code.copy_to_operands(condition, loop_body_block);
+  
+  // Create block with initialization + while loop
+  code_blockt block;
+  block.copy_to_operands(init);
+  block.copy_to_operands(while_code);
+  
+  return block;
+}
+
+exprt python_converter::convert_iterable_for_to_while(const nlohmann::json &ast_node)
+{
+  const auto &target = ast_node["target"];
+  const auto &iter = ast_node["iter"];
+  
+  std::string var_name = target["id"].get<std::string>();
+  
+  // Get the iterable expression
+  exprt iterable = get_expr(iter);
+  
+  // Handle simple cases like lists and strings
+  if (!iterable.type().is_array()) {
+    log_warning("Iterable for loop over non-array type not fully supported");
+    return code_blockt();
+  }
+  
+  // Create index variable
+  symbol_id idx_sid = create_symbol_id();
+  idx_sid.set_object("__for_idx_" + var_name);
+  
+  locationt location = get_location_from_decl(ast_node);
+  symbolt idx_symbol = create_symbol(
+    location.get_file().as_string(),
+    "__for_idx_" + var_name,
+    idx_sid.to_string(),
+    location,
+    int_type()
+  );
+  idx_symbol.lvalue = true;
+  idx_symbol.static_lifetime = false;
+  idx_symbol.file_local = true;
+  idx_symbol.is_extern = false;
+  symbolt *idx_symbol_ptr = symbol_table_.move_symbol_to_context(idx_symbol);
+  
+  exprt idx_var = symbol_expr(*idx_symbol_ptr);
+  
+  // Create loop variable
+  symbol_id loop_sid = create_symbol_id();
+  loop_sid.set_object(var_name);
+  
+  symbolt *loop_var_symbol = symbol_table_.find_symbol(loop_sid.to_string());
+  if (!loop_var_symbol) {
+    symbolt symbol = create_symbol(
+      location.get_file().as_string(),
+      var_name,
+      loop_sid.to_string(),
+      location,
+      iterable.type().subtype()
+    );
+    symbol.lvalue = true;
+    symbol.static_lifetime = (current_func_name_.empty());
+    symbol.file_local = true;
+    symbol.is_extern = false;
+    loop_var_symbol = symbol_table_.move_symbol_to_context(symbol);
+  }
+  
+  exprt loop_var = symbol_expr(*loop_var_symbol);
+  
+  // Initialize index: idx = 0
+  code_assignt idx_init(idx_var, from_integer(0, int_type()));
+  idx_init.location() = location;
+  
+  // Create condition: idx < len(array)
+  const array_typet &arr_type = to_array_type(iterable.type());
+  exprt condition("<", bool_type());
+  condition.copy_to_operands(idx_var, arr_type.size());
+  
+  // Create assignment: var = array[idx]
+  exprt array_access = index_exprt(iterable, idx_var, iterable.type().subtype());
+  code_assignt var_assign(loop_var, array_access);
+  var_assign.location() = location;
+  
+  // Get loop body
+  exprt body = get_block(ast_node["body"]);
+  codet body_code = convert_expression_to_code(body);
+  
+  // Create increment: idx += 1
+  exprt increment("+", int_type());
+  increment.copy_to_operands(idx_var, from_integer(1, int_type()));
+  code_assignt increment_stmt(idx_var, increment);
+  increment_stmt.location() = location;
+  
+  // Create loop body block
+  code_blockt loop_body_block;
+  loop_body_block.copy_to_operands(var_assign);
+  loop_body_block.copy_to_operands(body_code);
+  loop_body_block.copy_to_operands(increment_stmt);
+  
+  // Create while loop
+  codet while_code;
+  while_code.set_statement("while");
+  while_code.location() = location;
+  while_code.copy_to_operands(condition, loop_body_block);
+  
+  // Create block with initialization + while loop
+  code_blockt block;
+  block.copy_to_operands(idx_init);
+  block.copy_to_operands(while_code);
+  
+  return block;
+}
+
 void python_converter::get_function_definition(
   const nlohmann::json &function_node)
 {
@@ -3201,6 +3428,12 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     {
       exprt cond = get_conditional_stm(element);
       block.copy_to_operands(cond);
+      break;
+    }
+    case StatementType::FOR_STATEMENT:
+    {
+      exprt for_stmt = get_for_statement(element);
+      block.copy_to_operands(for_stmt);
       break;
     }
     case StatementType::COMPOUND_ASSIGN:
