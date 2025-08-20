@@ -338,6 +338,62 @@ private:
         if (!left_op.empty())
           type = left_op["annotation"]["id"];
       }
+      else if (lhs["_type"] == "Subscript")
+      {
+        // Handle subscript operations like dp[i-1], prices[i], etc.
+        if (lhs.contains("value") && lhs["value"]["_type"] == "Name")
+        {
+          const std::string &var_name = lhs["value"]["id"];
+
+          // Find the variable declaration
+          Json var_node = find_annotated_assign(var_name, body["body"]);
+
+          // If not found in current scope, search in current function body
+          if (var_node.empty() && current_func != nullptr)
+            var_node = find_annotated_assign(var_name, (*current_func)["body"]);
+
+          // Check function parameters if not found in function body
+          if (
+            var_node.empty() && current_func != nullptr &&
+            (*current_func).contains("args"))
+          {
+            var_node =
+              find_annotated_assign(var_name, (*current_func)["args"]["args"]);
+          }
+
+          // Check function args in body
+          if (var_node.empty() && body.contains("args"))
+            var_node = find_annotated_assign(var_name, body["args"]["args"]);
+
+          // Check global scope
+          if (var_node.empty())
+            var_node = find_annotated_assign(var_name, ast_["body"]);
+
+          if (!var_node.empty())
+          {
+            const std::string &var_type = var_node["annotation"]["id"];
+
+            // For list[T], return T. For other types, return the type itself
+            if (var_type == "list")
+            {
+              // Try to get subtype from list initialization
+              if (var_node.contains("value") && !var_node["value"].is_null())
+              {
+                std::string subtype = get_list_subtype(var_node["value"]);
+                type = subtype.empty() ? "Any" : subtype;
+              }
+              else
+              {
+                type = "Any"; // Unknown list element type
+              }
+            }
+            else
+            {
+              type = var_type;
+            }
+          }
+        }
+      }
       else if (lhs["_type"] == "Constant")
         type = get_type_from_constant(lhs);
       else if (lhs["_type"] == "Call" && lhs["func"]["_type"] == "Attribute")
@@ -545,6 +601,15 @@ private:
     if (rhs_node.empty() && current_func)
       rhs_node = find_annotated_assign(rhs_var_name, (*current_func)["body"]);
 
+    // Check current function scope for function parameters
+    if (
+      rhs_node.empty() && current_func != nullptr &&
+      (*current_func).contains("args"))
+    {
+      rhs_node =
+        find_annotated_assign(rhs_var_name, (*current_func)["args"]["args"]);
+    }
+
     // Find RHS variable in the current function args
     if (rhs_node.empty() && body.contains("args"))
       rhs_node = find_annotated_assign(rhs_var_name, body["args"]["args"]);
@@ -566,7 +631,10 @@ private:
 
     if (value_type == "Subscript")
     {
-      return get_list_subtype(rhs_node["value"]);
+      if (!rhs_node["value"].is_null())
+        return get_list_subtype(rhs_node["value"]);
+      else
+        return "Any"; // Default for unknown subscript types
     }
 
     return rhs_node["annotation"]["id"];
