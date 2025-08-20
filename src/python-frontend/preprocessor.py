@@ -206,6 +206,18 @@ class Preprocessor(ast.NodeTransformer):
 
     def _transform_range_for(self, node):
         """Transform range-based for loops to while loops"""
+        # Add validation for range arguments
+        if len(node.iter.args) == 0:
+            raise SyntaxError(f"range expected at least 1 argument, got 0", 
+                             (self.module_name, node.lineno, node.col_offset, ""))
+        if len(node.iter.args) > 3:
+            raise SyntaxError(f"range expected at most 3 arguments, got {len(node.iter.args)}", 
+                             (self.module_name, node.lineno, node.col_offset, ""))
+        # Check if step (third argument) is zero
+        if len(node.iter.args) == 3:
+            step = node.iter.args[2]
+            if isinstance(step, ast.Constant) and step.value == 0:
+                raise ValueError("range() arg 3 must not be zero")
         # Generate unique variable names for this loop level
         loop_id = self.range_loop_counter
         self.range_loop_counter += 1
