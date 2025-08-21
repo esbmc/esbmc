@@ -474,19 +474,19 @@ class Preprocessor(ast.NodeTransformer):
                         targets=[target],
                         value=node.value
                     )
-                
+
                     # Copy ALL location information from the original node
                     individual_assign.lineno = getattr(node, 'lineno', 1)
                     individual_assign.col_offset = getattr(node, 'col_offset', 0)
                     individual_assign.end_lineno = getattr(node, 'end_lineno', None)
                     individual_assign.end_col_offset = getattr(node, 'end_col_offset', None)
-                
+
                     # Ensure the target also has location info
                     target.lineno = getattr(node, 'lineno', 1)
                     target.col_offset = getattr(node, 'col_offset', 0)
                     target.end_lineno = getattr(node, 'end_lineno', None)
                     target.end_col_offset = getattr(node, 'end_col_offset', None)
-                
+
                     # Track variable type for this target
                     value = node.value
                     if isinstance(value, ast.List):
@@ -499,9 +499,9 @@ class Preprocessor(ast.NodeTransformer):
                         self.known_variable_types[var_name] = 'range'
                     elif isinstance(value, ast.Dict):
                         self.known_variable_types[var_name] = 'dict'
-                
+
                     assignments.append(individual_assign)
-        
+
             return assignments
 
         # Handle single assignment
