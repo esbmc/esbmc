@@ -181,6 +181,13 @@ private:
   exprt
   handle_min_max(const std::string &func_name, irep_idt comparison_op) const;
 
+  // List method detection and handling
+  bool is_list_method_call() const;
+  exprt handle_list_method() const;
+  exprt handle_list_append() const;
+  exprt handle_list_pop() const;
+  exprt handle_list_insert() const;
+  
 protected:
   symbol_id function_id_;
   const nlohmann::json &call_;

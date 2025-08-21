@@ -1044,6 +1044,180 @@ exprt function_call_expr::handle_min_max(
   return result;
 }
 
+bool function_call_expr::is_list_method_call() const
+{
+  if (call_["func"]["_type"] != "Attribute")
+    return false;
+    
+  const std::string &method_name = function_id_.get_function();
+  
+  // Check if this is a known list method
+  return method_name == "append" || method_name == "pop" || 
+         method_name == "insert" || method_name == "remove" || 
+         method_name == "clear" || method_name == "extend";
+}
+
+exprt function_call_expr::handle_list_method() const
+{
+  const std::string &method_name = function_id_.get_function();
+  
+  if (method_name == "append")
+    return handle_list_append();
+  else if (method_name == "pop")
+    return handle_list_pop();
+  else if (method_name == "insert")
+    return handle_list_insert();
+  // Add other methods as needed
+  
+  throw std::runtime_error("Unsupported list method: " + method_name);
+}
+
+exprt function_call_expr::handle_list_append() const
+{
+  const auto &args = call_["args"];
+  
+  if (args.size() != 1)
+    throw std::runtime_error("append() takes exactly one argument");
+    
+  // Get the list object name
+  std::string list_name = get_object_name();
+  
+  // Find the list symbol
+  symbol_id list_symbol_id = converter_.create_symbol_id();
+  list_symbol_id.set_object(list_name);
+  const symbolt *list_symbol = converter_.find_symbol(list_symbol_id.to_string());
+  
+  if (!list_symbol)
+    throw std::runtime_error("List variable not found: " + list_name);
+    
+  // Get the value to append
+  exprt value_to_append = converter_.get_expr(args[0]);
+  
+  // Create a function call to a dummy append function
+  code_function_callt call_expr;
+  call_expr.location() = converter_.get_location_from_decl(call_);
+  
+  // Create a dummy function symbol for list append
+  symbolt dummy_func;
+  dummy_func.name = "__ESBMC_list_append_dummy";
+  dummy_func.id = "c:@F@__ESBMC_list_append_dummy";
+  dummy_func.type = code_typet();
+  to_code_type(dummy_func.type).return_type() = empty_typet();
+  dummy_func.is_extern = true;
+  
+  // Add to symbol table if not already present
+  auto &symbol_table = converter_.symbol_table();
+  if (symbol_table.find_symbol(dummy_func.id) == nullptr)
+    symbol_table.add(dummy_func);
+  
+  // Set up the function call
+  call_expr.function() = symbol_expr(dummy_func);
+  call_expr.type() = empty_typet();
+  
+  // Add arguments
+  call_expr.arguments().push_back(
+    typecast_exprt(symbol_expr(*list_symbol), pointer_typet(empty_typet())));
+  call_expr.arguments().push_back(value_to_append);
+  
+  return call_expr;
+}
+
+exprt function_call_expr::handle_list_pop() const
+{
+  const auto &args = call_["args"];
+  
+  // pop() can take 0 or 1 argument (index)
+  if (args.size() > 1)
+    throw std::runtime_error("pop() takes at most 1 argument");
+    
+  std::string list_name = get_object_name();
+  
+  symbol_id list_symbol_id = converter_.create_symbol_id();
+  list_symbol_id.set_object(list_name);
+  const symbolt *list_symbol = converter_.find_symbol(list_symbol_id.to_string());
+  
+  if (!list_symbol)
+    throw std::runtime_error("List variable not found: " + list_name);
+  
+  // Create a function call to a dummy pop function that returns an int
+  code_function_callt call_expr;
+  call_expr.location() = converter_.get_location_from_decl(call_);
+  
+  // Create dummy function symbol
+  symbolt dummy_func;
+  dummy_func.name = "__ESBMC_list_pop_dummy";
+  dummy_func.id = dummy_func.name;
+  dummy_func.type = code_typet();
+  to_code_type(dummy_func.type).return_type() = type_handler_.get_typet("int", 0);
+  dummy_func.is_extern = true;
+  
+  // Add to symbol table if not already present
+  auto &symbol_table = converter_.symbol_table();
+  if (symbol_table.find_symbol(dummy_func.id) == nullptr)
+    symbol_table.add(dummy_func);
+  
+  call_expr.function() = symbol_expr(dummy_func);
+  call_expr.type() = type_handler_.get_typet("int", 0);
+  
+  // Add arguments
+  call_expr.arguments().push_back(symbol_expr(*list_symbol));
+  
+  if (args.size() == 1)
+  {
+    exprt index = converter_.get_expr(args[0]);
+    call_expr.arguments().push_back(index);
+  }
+  
+  return call_expr;
+}
+
+exprt function_call_expr::handle_list_insert() const
+{
+  const auto &args = call_["args"];
+  
+  if (args.size() != 2)
+    throw std::runtime_error("insert() takes exactly 2 arguments");
+    
+  std::string list_name = get_object_name();
+  
+  symbol_id list_symbol_id = converter_.create_symbol_id();
+  list_symbol_id.set_object(list_name);
+  const symbolt *list_symbol = converter_.find_symbol(list_symbol_id.to_string());
+  
+  if (!list_symbol)
+    throw std::runtime_error("List variable not found: " + list_name);
+    
+  exprt index = converter_.get_expr(args[0]);
+  exprt value = converter_.get_expr(args[1]);
+  
+  // Create a function call to a dummy insert function
+  code_function_callt call_expr;
+  call_expr.location() = converter_.get_location_from_decl(call_);
+  
+  // Create dummy function symbol
+  symbolt dummy_func;
+  dummy_func.name = "__ESBMC_list_insert_dummy";
+  dummy_func.id = dummy_func.name;
+  dummy_func.type = code_typet();
+  to_code_type(dummy_func.type).return_type() = empty_typet();
+  dummy_func.is_extern = true;
+  
+  // Add to symbol table if not already present
+  auto &symbol_table = converter_.symbol_table();
+  if (symbol_table.find_symbol(dummy_func.id) == nullptr)
+    symbol_table.add(dummy_func);
+  
+  call_expr.function() = symbol_expr(dummy_func);
+  call_expr.type() = empty_typet();
+  
+  // Add arguments
+  call_expr.arguments().push_back(symbol_expr(*list_symbol));
+  call_expr.arguments().push_back(index);
+  call_expr.arguments().push_back(value);
+  
+  return call_expr;
+}
+
 exprt function_call_expr::get()
 {
   // Handle non-det functions
@@ -1075,6 +1249,12 @@ exprt function_call_expr::get()
       return handle_min_max("min", exprt::i_lt);
     else
       return handle_min_max("max", exprt::i_gt);
+  }
+
+  // Handle list methods
+  if (is_list_method_call())
+  {
+    return handle_list_method();
   }
 
   const std::string &func_name = function_id_.get_function();
