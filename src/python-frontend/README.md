@@ -117,10 +117,13 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Verification properties**: Division-by-zero, indexing errors, arithmetic overflow, and user-defined assertions.
 
 ### Math Module Support
+- **math.comb(n, k)**: Calculates binomial coefficients `C(n, k) = n! / (k! * (n-k)!)`
+  - Supports verification of combinatorial properties such as symmetry: `C(n, k) = C(n, n-k)`
+  - Includes built-in type checking and input validation (assertion failures for negative inputs or non-integer types)
 - **math.floor(x)**: Returns the largest integer less than or equal to x.
 - **math.ceil(x)**: Returns the smallest integer greater than or equal to x
-- Both functions include built-in assertions to reject infinity and NaN inputs
-- Supports verification of edge cases, including very small values, large values (e.g., 1e12), and boundary conditions
+  - Both functions `math.floor(x)` and `math.ceil(x)`include built-in assertions to reject infinity and NaN inputs
+  - Supports verification of edge cases, including very small values, large values (e.g., 1e12), and boundary conditions
 
 ### Special Value Detection:
 - **math.isnan(x)**: Returns True if x is NaN (Not a Number)
