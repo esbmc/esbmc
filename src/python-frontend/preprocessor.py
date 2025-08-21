@@ -538,13 +538,17 @@ class Preprocessor(ast.NodeTransformer):
         return_nodes = []
 
         # add defaults to dictionary with tuple key (function name, parameter name)
-        for i in range(1,len(node.args.defaults)+1):
-            if isinstance(node.args.defaults[-i],ast.Constant):
-                self.functionDefaults[(node.name, node.args.args[-i].arg)] = node.args.defaults[-i].value
-            elif isinstance(node.args.defaults[-i],ast.Name):
-                assignment_node, target_var = self.generate_variable_copy(node.name,node.args.args[-i],node.args.defaults[-i])
-                self.functionDefaults[(node.name, node.args.args[-i].arg)] = target_var
-                return_nodes.append(assignment_node)
+        for i in range(1, len(node.args.defaults) + 1):
+            # Check bounds before accessing args array
+            arg_index = len(node.args.args) - i
+            if arg_index >= 0:
+                if isinstance(node.args.defaults[-i],ast.Constant):
+                    self.functionDefaults[(node.name, node.args.args[-i].arg)] = node.args.defaults[-i].value
+                elif isinstance(node.args.defaults[-i],ast.Name):
+                    assignment_node, target_var = self.generate_variable_copy(node.name,node.args.args[-i],node.args.defaults[-i])
+                    self.functionDefaults[(node.name, node.args.args[-i].arg)] = target_var
+                    return_nodes.append(assignment_node)
+
         self.generic_visit(node)
         return_nodes.append(node)
         return return_nodes
