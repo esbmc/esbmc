@@ -496,7 +496,7 @@ class Preprocessor(ast.NodeTransformer):
             return 'dict'
         elif isinstance(value, ast.Set):
             return 'set'
-        
+
         return 'Any'
 
     def _copy_location_info(self, source_node, target_node):
@@ -528,7 +528,7 @@ class Preprocessor(ast.NodeTransformer):
         Convert them into individual assignments with proper type inference
         """
         assignments = []
-        
+
         if isinstance(value, ast.Tuple) and len(target.elts) == len(value.elts):
             # Handle x, y = 1, 2 case - direct assignment of individual elements
             for i, (target_elem, value_elem) in enumerate(zip(target.elts, value.elts)):
@@ -537,14 +537,14 @@ class Preprocessor(ast.NodeTransformer):
                     self._update_variable_types_simple(target_elem, value_elem)
                     assignments.append(individual_assign)
         else:
-            # For all other cases (including lists and complex expressions), 
+            # For all other cases (including lists and complex expressions),
             # use temporary variable to avoid AST node sharing issues
             temp_var_name = f"ESBMC_unpack_temp_{id(source_node)}"
             temp_var = ast.Name(id=temp_var_name, ctx=ast.Store())
             self._copy_location_info(source_node, temp_var)
             temp_assign = self._create_individual_assignment(temp_var, value, source_node)
             assignments.append(temp_assign)
-            
+
             # Now create individual assignments from temp variable
             for i, target_elem in enumerate(target.elts):
                 if isinstance(target_elem, ast.Name):
@@ -556,11 +556,11 @@ class Preprocessor(ast.NodeTransformer):
                     self._copy_location_info(source_node, subscript)
                     self._copy_location_info(source_node, subscript.value)
                     self._copy_location_info(source_node, subscript.slice)
-                    
+
                     individual_assign = self._create_individual_assignment(target_elem, subscript, source_node)
                     self.known_variable_types[target_elem.id] = 'Any'
                     assignments.append(individual_assign)
-        
+
         return assignments
 
     def visit_Assign(self, node):
@@ -573,7 +573,7 @@ class Preprocessor(ast.NodeTransformer):
         # Handle single target (most common case)
         if len(node.targets) == 1:
             target = node.targets[0]
-            
+
             # Check if this is tuple unpacking (x, y = ...)
             if isinstance(target, (ast.Tuple, ast.List)):
                 return self._handle_tuple_unpacking(target, node.value, node)
@@ -581,7 +581,7 @@ class Preprocessor(ast.NodeTransformer):
                 # Simple assignment - just track the type
                 self._update_variable_types_simple(target, node.value)
                 return node
-        
+
         # Handle multiple assignment: convert ans = i = 0 into separate assignments
         else:
             assignments = []
