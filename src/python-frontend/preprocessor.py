@@ -461,7 +461,51 @@ class Preprocessor(ast.NodeTransformer):
     def visit_Assign(self, node):
         self.generic_visit(node)
 
-        if len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+        # Handle multiple assignment: convert ans = i = 0 into separate assignments
+        if len(node.targets) > 1:
+            # Create individual assignments for each target
+            assignments = []
+            for target in node.targets:
+                if isinstance(target, ast.Name):
+                    var_name = target.id
+                
+                    # Create a new Assign node for this target
+                    individual_assign = ast.Assign(
+                        targets=[target],
+                        value=node.value
+                    )
+                
+                    # Copy ALL location information from the original node
+                    individual_assign.lineno = getattr(node, 'lineno', 1)
+                    individual_assign.col_offset = getattr(node, 'col_offset', 0)
+                    individual_assign.end_lineno = getattr(node, 'end_lineno', None)
+                    individual_assign.end_col_offset = getattr(node, 'end_col_offset', None)
+                
+                    # Ensure the target also has location info
+                    target.lineno = getattr(node, 'lineno', 1)
+                    target.col_offset = getattr(node, 'col_offset', 0)
+                    target.end_lineno = getattr(node, 'end_lineno', None)
+                    target.end_col_offset = getattr(node, 'end_col_offset', None)
+                
+                    # Track variable type for this target
+                    value = node.value
+                    if isinstance(value, ast.List):
+                        self.known_variable_types[var_name] = 'list'
+                    elif isinstance(value, ast.Tuple):
+                        self.known_variable_types[var_name] = 'tuple'
+                    elif isinstance(value, ast.Str):
+                        self.known_variable_types[var_name] = 'str'
+                    elif isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and value.func.id == 'range':
+                        self.known_variable_types[var_name] = 'range'
+                    elif isinstance(value, ast.Dict):
+                        self.known_variable_types[var_name] = 'dict'
+                
+                    assignments.append(individual_assign)
+        
+            return assignments
+
+        # Handle single assignment
+        elif len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
             var_name = node.targets[0].id
             value = node.value
 
