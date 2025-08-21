@@ -1446,17 +1446,20 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     {
       array_typet list_type =
         static_cast<array_typet>(type_handler_.get_list_type(element));
+
       typet st = list_type.subtype();
       size_t list_size = type_handler_.get_array_type_shape(st)[0];
+
       st.subtype() = st.subtype();
       st.subtype() = st.subtype().subtype();
+
       exprt list = gen_zero(st);
       const exprt &e = (lhs.type().is_array()) ? get_expr(left["elts"][0])
                                                : get_expr(right["elts"][0]);
+
       for (size_t i = 0; i < list_size; ++i)
-      {
         list.operands().at(i) = e;
-      }
+
       return list;
     }
   }

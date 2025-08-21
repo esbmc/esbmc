@@ -276,6 +276,12 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
     return build_array(subtype, elem.size());
   }
 
+  if (
+    elem["_type"] == "Call" && type_utils::is_builtin_type(elem["func"]["id"]))
+  {
+    return get_typet(elem["func"]["id"].get<std::string>());
+  }
+
   throw std::runtime_error("Invalid type");
 }
 
@@ -431,9 +437,17 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
         subtype = get_typet(elem);
       }
       else
-      { // Multi-dimensional list
-        // Get sub-array type
-        subtype = get_typet(elts[0]["elts"]);
+      {
+        // Get sub-array type from multi-dimensional list
+        if (elts[0]["_type"] == "Call")
+        {
+          if (type_utils::is_builtin_type(elts[0]["func"]["id"]))
+          {
+            subtype = get_typet(elts[0]["func"]["id"].get<std::string>());
+          }
+        }
+        else
+          subtype = get_typet(elts[0]["elts"]);
       }
 
       return build_array(subtype, elts.size());
