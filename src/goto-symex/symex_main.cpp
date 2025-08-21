@@ -928,7 +928,8 @@ void goto_symext::run_intrinsic(
   if (
     has_prefix(symname, "c:@F@__ESBMC_pthread_start_main_hook") ||
     has_prefix(symname, "c:@F@__ESBMC_pthread_end_main_hook") ||
-    has_prefix(symname, "c:@F@__ESBMC_atexit_handler"))
+    has_prefix(symname, "c:@F@__ESBMC_atexit_handler") ||
+    has_prefix(symname, "c:@F@__ESBMC_list_append_dummy"))
   {
     bump_call(func_call, symname);
     return;

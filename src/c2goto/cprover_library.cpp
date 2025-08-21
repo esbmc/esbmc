@@ -134,7 +134,8 @@ const static std::vector<std::string> python_c_models = {
   "pow_by_squaring",
   "log2",
   "ldexp",
-  "log1p_taylor"};
+  "log1p_taylor",
+  "__ESBMC_list_append_dummy"};
 
 } // namespace
 
