@@ -468,7 +468,7 @@ class Preprocessor(ast.NodeTransformer):
             for target in node.targets:
                 if isinstance(target, ast.Name):
                     var_name = target.id
-                
+
                     # Create a new Assign node for this target
                     individual_assign = ast.Assign(
                         targets=[target],
