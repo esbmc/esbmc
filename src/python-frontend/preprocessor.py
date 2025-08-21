@@ -530,32 +530,18 @@ class Preprocessor(ast.NodeTransformer):
         assignments = []
         
         if isinstance(value, ast.Tuple) and len(target.elts) == len(value.elts):
-            # Handle x, y = 1, 2 case
+            # Handle x, y = 1, 2 case - direct assignment of individual elements
             for i, (target_elem, value_elem) in enumerate(zip(target.elts, value.elts)):
                 if isinstance(target_elem, ast.Name):
                     individual_assign = self._create_individual_assignment(target_elem, value_elem, source_node)
                     self._update_variable_types_simple(target_elem, value_elem)
                     assignments.append(individual_assign)
-        elif isinstance(value, (ast.List, ast.Tuple)):
-            # Handle a, b = [1, 2] case - need to create subscript access
-            for i, target_elem in enumerate(target.elts):
-                if isinstance(target_elem, ast.Name):
-                    # Create subscript access: value[i]
-                    subscript = ast.Subscript(
-                        value=value,
-                        slice=ast.Constant(value=i),
-                        ctx=ast.Load()
-                    )
-                    self._copy_location_info(source_node, subscript)
-                    
-                    individual_assign = self._create_individual_assignment(target_elem, subscript, source_node)
-                    # For unpacking, we set type as 'Any' since we can't easily infer individual types
-                    self.known_variable_types[target_elem.id] = 'Any'
-                    assignments.append(individual_assign)
         else:
-            # Fallback: create temporary variable for complex unpacking
-            temp_var_name = f"ESBMC_unpack_temp_{len(assignments)}"
+            # For all other cases (including lists and complex expressions), 
+            # use temporary variable to avoid AST node sharing issues
+            temp_var_name = f"ESBMC_unpack_temp_{id(source_node)}"
             temp_var = ast.Name(id=temp_var_name, ctx=ast.Store())
+            self._copy_location_info(source_node, temp_var)
             temp_assign = self._create_individual_assignment(temp_var, value, source_node)
             assignments.append(temp_assign)
             
@@ -568,6 +554,8 @@ class Preprocessor(ast.NodeTransformer):
                         ctx=ast.Load()
                     )
                     self._copy_location_info(source_node, subscript)
+                    self._copy_location_info(source_node, subscript.value)
+                    self._copy_location_info(source_node, subscript.slice)
                     
                     individual_assign = self._create_individual_assignment(target_elem, subscript, source_node)
                     self.known_variable_types[target_elem.id] = 'Any'
