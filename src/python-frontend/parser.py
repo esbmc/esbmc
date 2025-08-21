@@ -119,6 +119,8 @@ def process_imports(node, output_dir):
     try:
         with open(filename, "r") as source:
             tree = ast.parse(source.read())
+            preprocessor = Preprocessor(filename)
+            tree = preprocessor.visit(tree)
             generate_ast_json(tree, filename, imported_elements, output_dir)
     except UnicodeDecodeError:
         pass
@@ -140,9 +142,14 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir):
     if elements_to_import is not None and elements_to_import:
         for node in tree.body:
             if isinstance(node, (ast.ClassDef, ast.FunctionDef)):
-                for elem_info in elements_to_import:
-                    if node.name == elem_info.name:
-                        filtered_nodes.append(node)
+                # Always include ESBMC helper functions
+                if node.name in ['ESBMC_range_has_next_', 'ESBMC_range_next_']:
+                    filtered_nodes.append(node)
+                else:
+                    for elem_info in elements_to_import:
+                        if node.name == elem_info.name:
+                            filtered_nodes.append(node)
+                            break
 
 
     # Convert AST to JSON
