@@ -1439,6 +1439,31 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   assert(!op.empty());
 
+  if (lhs.type().is_array() || rhs.type().is_array())
+  {
+    // Compute resulting list
+    if (op == "Mult")
+    {
+      array_typet list_type =
+        static_cast<array_typet>(type_handler_.get_list_type(element));
+
+      typet st = list_type.subtype();
+      size_t list_size = type_handler_.get_array_type_shape(st)[0];
+
+      st.subtype() = st.subtype();
+      st.subtype() = st.subtype().subtype();
+
+      exprt list = gen_zero(st);
+      const exprt &e = (lhs.type().is_array()) ? get_expr(left["elts"][0])
+                                               : get_expr(right["elts"][0]);
+
+      for (size_t i = 0; i < list_size; ++i)
+        list.operands().at(i) = e;
+
+      return list;
+    }
+  }
+
   /// Handle 'is' and 'is not' Python identity comparisons
   if (op == "Is")
     return get_binary_operator_expr_for_is(lhs, rhs);
@@ -2324,10 +2349,11 @@ void python_converter::update_instance_from_self(
   }
 }
 
-size_t get_type_size(const nlohmann::json &ast_node)
+size_t python_converter::get_type_size(const nlohmann::json &ast_node)
 {
   size_t type_size = 0;
-  if (ast_node["value"].contains("value"))
+
+  if (ast_node.contains("value") && ast_node["value"].contains("value"))
   {
     // Handle bytes literals
     if (

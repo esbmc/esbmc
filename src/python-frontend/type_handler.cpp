@@ -276,6 +276,12 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
     return build_array(subtype, elem.size());
   }
 
+  if (
+    elem["_type"] == "Call" && type_utils::is_builtin_type(elem["func"]["id"]))
+  {
+    return get_typet(elem["func"]["id"].get<std::string>());
+  }
+
   throw std::runtime_error("Invalid type");
 }
 
@@ -404,6 +410,7 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
   {
     return build_array(empty_typet(), 0);
   }
+
   if (list_value["_type"] == "arg" && list_value.contains("annotation"))
   {
     const nlohmann::json &type_ann = list_value["annotation"]["value"]["id"];
@@ -430,9 +437,17 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
         subtype = get_typet(elem);
       }
       else
-      { // Multi-dimensional list
-        // Get sub-array type
-        subtype = get_typet(elts[0]["elts"]);
+      {
+        // Get sub-array type from multi-dimensional list
+        if (elts[0]["_type"] == "Call")
+        {
+          if (type_utils::is_builtin_type(elts[0]["func"]["id"]))
+          {
+            subtype = get_typet(elts[0]["func"]["id"].get<std::string>());
+          }
+        }
+        else
+          subtype = get_typet(elts[0]["elts"]);
       }
 
       return build_array(subtype, elts.size());
@@ -456,6 +471,42 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
 
     assert(func_symbol);
     return static_cast<code_typet &>(func_symbol->type).return_type();
+  }
+
+  if (list_value.contains("_type") && list_value["_type"] == "BinOp")
+  {
+    // Handle cases like x = [0] * 5
+    if (list_value["op"]["_type"] == "Mult")
+    {
+      const nlohmann::json &left = list_value["left"];
+      const nlohmann::json &right = list_value["right"];
+
+      typet left_type = get_typet(left);
+      typet right_type = get_typet(right);
+      size_t left_size = 0;
+      size_t right_size = 0;
+      typet subtype;
+
+      // Get left size
+      if (left_type.is_array())
+      {
+        subtype = left_type;
+        left_size = get_array_type_shape(left_type)[0];
+      }
+      else
+        left_size = left["value"].get<size_t>();
+
+      // Get right size
+      if (right_type.is_array())
+      {
+        subtype = right_type;
+        right_size = get_array_type_shape(right_type)[0];
+      }
+      else
+        right_size = right["value"].get<size_t>();
+
+      return build_array(subtype, left_size * right_size);
+    }
   }
 
   return typet();

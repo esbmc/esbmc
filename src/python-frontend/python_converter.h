@@ -251,6 +251,8 @@ private:
     const std::string &func_name,
     const std::string &obj_symbol_id);
 
+  size_t get_type_size(const nlohmann::json &ast_node);
+
   void append_models_from_directory(
     std::list<std::string> &file_list,
     const std::string &dir_path);
