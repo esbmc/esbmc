@@ -460,44 +460,66 @@ class Preprocessor(ast.NodeTransformer):
 
     def _infer_type_from_value(self, value):
         """Infer the type string from an AST value node"""
-        if isinstance(value, ast.List):
-            return 'list'
-        elif isinstance(value, ast.Tuple):
-            return 'tuple'
-        elif isinstance(value, ast.Constant):
-            if isinstance(value.value, str):
-                return 'str'
-            elif isinstance(value.value, int):
-                return 'int'
-            elif isinstance(value.value, float):
-                return 'float'
-            elif isinstance(value.value, bool):
-                return 'bool'
-        elif isinstance(value, ast.Str):  # For older Python versions
-            return 'str'
-        elif isinstance(value, ast.Num):  # For older Python versions
-            if isinstance(value.n, int):
-                return 'int'
-            elif isinstance(value.n, float):
-                return 'float'
-        elif isinstance(value, ast.Call):
-            if isinstance(value.func, ast.Name):
-                if value.func.id == 'range':
-                    return 'range'
-                elif value.func.id == 'list':
-                    return 'list'
-                elif value.func.id == 'dict':
-                    return 'dict'
-                elif value.func.id == 'set':
-                    return 'set'
-                elif value.func.id == 'tuple':
-                    return 'tuple'
-        elif isinstance(value, ast.Dict):
-            return 'dict'
-        elif isinstance(value, ast.Set):
-            return 'set'
+        # Handle direct AST node types
+        node_type_map = {
+            ast.List: 'list',
+            ast.Tuple: 'tuple',
+            ast.Dict: 'dict',
+            ast.Set: 'set'
+        }
+
+        value_type = type(value)
+        if value_type in node_type_map:
+            return node_type_map[value_type]
+
+        # Handle constant values
+        if isinstance(value, ast.Constant):
+            return self._infer_type_from_constant(value)
+
+        # Handle legacy AST nodes (older Python versions)
+        if isinstance(value, (ast.Str, ast.Num)):
+            return self._infer_type_from_legacy_node(value)
+
+        # Handle function calls
+        if isinstance(value, ast.Call):
+            return self._infer_type_from_call(value)
 
         return 'Any'
+
+    def _infer_type_from_constant(self, constant_node):
+        """Infer type from ast.Constant node"""
+        value = constant_node.value
+        constant_type_map = {
+            str: 'str',
+            int: 'int',
+            float: 'float',
+            bool: 'bool'
+        }
+        return constant_type_map.get(type(value), 'Any')
+
+    def _infer_type_from_legacy_node(self, node):
+        """Infer type from legacy AST nodes (ast.Str, ast.Num)"""
+        if isinstance(node, ast.Str):
+            return 'str'
+        elif isinstance(node, ast.Num):
+            return 'int' if isinstance(node.n, int) else 'float'
+        return 'Any'
+
+    def _infer_type_from_call(self, call_node):
+        """Infer type from function call nodes"""
+        if not isinstance(call_node.func, ast.Name):
+            return 'Any'
+
+        call_type_map = {
+            'range': 'range',
+            'list': 'list',
+            'dict': 'dict',
+            'set': 'set',
+            'tuple': 'tuple'
+        }
+
+        func_name = call_node.func.id
+        return call_type_map.get(func_name, 'Any')
 
     def _copy_location_info(self, source_node, target_node):
         """Copy all location information from source to target node"""
