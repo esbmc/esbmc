@@ -1,4 +1,4 @@
 CORE
 main.c
---loop-invariant --multi-property
+--loop-invariant
 ^VERIFICATION SUCCESSFUL$
