@@ -1,6 +1,4 @@
-// this version is ignoring the integer overflow
-// other tool also handle without integer overflow.
-// need disscussion
+
 int main()
 {
   unsigned int x, y;
