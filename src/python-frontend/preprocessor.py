@@ -458,69 +458,165 @@ class Preprocessor(ast.NodeTransformer):
             node.id = self.current_start_var  # Replace with the current unique start variable
         return node
 
-    def visit_Assign(self, node):
-        self.generic_visit(node)
+    def _infer_type_from_value(self, value):
+        """Infer the type string from an AST value node"""
+        # Handle direct AST node types
+        node_type_map = {
+            ast.List: 'list',
+            ast.Tuple: 'tuple',
+            ast.Dict: 'dict',
+            ast.Set: 'set'
+        }
 
-        # Handle multiple assignment: convert ans = i = 0 into separate assignments
-        if len(node.targets) > 1:
-            # Create individual assignments for each target
-            assignments = []
-            for target in node.targets:
-                if isinstance(target, ast.Name):
-                    var_name = target.id
+        value_type = type(value)
+        if value_type in node_type_map:
+            return node_type_map[value_type]
 
-                    # Create a new Assign node for this target
-                    individual_assign = ast.Assign(
-                        targets=[target],
-                        value=node.value
+        # Handle constant values
+        if isinstance(value, ast.Constant):
+            return self._infer_type_from_constant(value)
+
+        # Handle legacy AST nodes (older Python versions)
+        if isinstance(value, (ast.Str, ast.Num)):
+            return self._infer_type_from_legacy_node(value)
+
+        # Handle function calls
+        if isinstance(value, ast.Call):
+            return self._infer_type_from_call(value)
+
+        return 'Any'
+
+    def _infer_type_from_constant(self, constant_node):
+        """Infer type from ast.Constant node"""
+        value = constant_node.value
+        constant_type_map = {
+            str: 'str',
+            int: 'int',
+            float: 'float',
+            bool: 'bool'
+        }
+        return constant_type_map.get(type(value), 'Any')
+
+    def _infer_type_from_legacy_node(self, node):
+        """Infer type from legacy AST nodes (ast.Str, ast.Num)"""
+        if isinstance(node, ast.Str):
+            return 'str'
+        elif isinstance(node, ast.Num):
+            return 'int' if isinstance(node.n, int) else 'float'
+        return 'Any'
+
+    def _infer_type_from_call(self, call_node):
+        """Infer type from function call nodes"""
+        if not isinstance(call_node.func, ast.Name):
+            return 'Any'
+
+        call_type_map = {
+            'range': 'range',
+            'list': 'list',
+            'dict': 'dict',
+            'set': 'set',
+            'tuple': 'tuple'
+        }
+
+        func_name = call_node.func.id
+        return call_type_map.get(func_name, 'Any')
+
+    def _copy_location_info(self, source_node, target_node):
+        """Copy all location information from source to target node"""
+        target_node.lineno = getattr(source_node, 'lineno', 1)
+        target_node.col_offset = getattr(source_node, 'col_offset', 0)
+        if hasattr(source_node, 'end_lineno'):
+            target_node.end_lineno = source_node.end_lineno
+        if hasattr(source_node, 'end_col_offset'):
+            target_node.end_col_offset = source_node.end_col_offset
+        return target_node
+
+    def _create_individual_assignment(self, target, value, source_node):
+        """Create a single assignment node with proper location info"""
+        individual_assign = ast.Assign(targets=[target], value=value)
+        self._copy_location_info(source_node, individual_assign)
+        self._copy_location_info(source_node, target)
+        return individual_assign
+
+    def _update_variable_types_simple(self, target, value):
+        """Update known variable types for a simple assignment target"""
+        if isinstance(target, ast.Name):
+            inferred_type = self._infer_type_from_value(value)
+            self.known_variable_types[target.id] = inferred_type
+
+    def _handle_tuple_unpacking(self, target, value, source_node):
+        """
+        Handle tuple unpacking assignments like x, y = 1, 2 or a, b = [1, 2]
+        Convert them into individual assignments with proper type inference
+        """
+        assignments = []
+
+        if isinstance(value, ast.Tuple) and len(target.elts) == len(value.elts):
+            # Handle x, y = 1, 2 case - direct assignment of individual elements
+            for i, (target_elem, value_elem) in enumerate(zip(target.elts, value.elts)):
+                if isinstance(target_elem, ast.Name):
+                    individual_assign = self._create_individual_assignment(target_elem, value_elem, source_node)
+                    self._update_variable_types_simple(target_elem, value_elem)
+                    assignments.append(individual_assign)
+        else:
+            # For all other cases (including lists and complex expressions),
+            # use temporary variable to avoid AST node sharing issues
+            temp_var_name = f"ESBMC_unpack_temp_{id(source_node)}"
+            temp_var = ast.Name(id=temp_var_name, ctx=ast.Store())
+            self._copy_location_info(source_node, temp_var)
+            temp_assign = self._create_individual_assignment(temp_var, value, source_node)
+            assignments.append(temp_assign)
+
+            # Now create individual assignments from temp variable
+            for i, target_elem in enumerate(target.elts):
+                if isinstance(target_elem, ast.Name):
+                    subscript = ast.Subscript(
+                        value=ast.Name(id=temp_var_name, ctx=ast.Load()),
+                        slice=ast.Constant(value=i),
+                        ctx=ast.Load()
                     )
+                    self._copy_location_info(source_node, subscript)
+                    self._copy_location_info(source_node, subscript.value)
+                    self._copy_location_info(source_node, subscript.slice)
 
-                    # Copy ALL location information from the original node
-                    individual_assign.lineno = getattr(node, 'lineno', 1)
-                    individual_assign.col_offset = getattr(node, 'col_offset', 0)
-                    individual_assign.end_lineno = getattr(node, 'end_lineno', None)
-                    individual_assign.end_col_offset = getattr(node, 'end_col_offset', None)
-
-                    # Ensure the target also has location info
-                    target.lineno = getattr(node, 'lineno', 1)
-                    target.col_offset = getattr(node, 'col_offset', 0)
-                    target.end_lineno = getattr(node, 'end_lineno', None)
-                    target.end_col_offset = getattr(node, 'end_col_offset', None)
-
-                    # Track variable type for this target
-                    value = node.value
-                    if isinstance(value, ast.List):
-                        self.known_variable_types[var_name] = 'list'
-                    elif isinstance(value, ast.Tuple):
-                        self.known_variable_types[var_name] = 'tuple'
-                    elif isinstance(value, ast.Str):
-                        self.known_variable_types[var_name] = 'str'
-                    elif isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and value.func.id == 'range':
-                        self.known_variable_types[var_name] = 'range'
-                    elif isinstance(value, ast.Dict):
-                        self.known_variable_types[var_name] = 'dict'
-
+                    individual_assign = self._create_individual_assignment(target_elem, subscript, source_node)
+                    self.known_variable_types[target_elem.id] = 'Any'
                     assignments.append(individual_assign)
 
+        return assignments
+
+    def visit_Assign(self, node):
+        """
+        Handle assignment nodes, including multiple assignments and tuple unpacking.
+        """
+        # First visit child nodes
+        self.generic_visit(node)
+
+        # Handle single target (most common case)
+        if len(node.targets) == 1:
+            target = node.targets[0]
+
+            # Check if this is tuple unpacking (x, y = ...)
+            if isinstance(target, (ast.Tuple, ast.List)):
+                return self._handle_tuple_unpacking(target, node.value, node)
+            else:
+                # Simple assignment - just track the type
+                self._update_variable_types_simple(target, node.value)
+                return node
+
+        # Handle multiple assignment: convert ans = i = 0 into separate assignments
+        else:
+            assignments = []
+            for target in node.targets:
+                if isinstance(target, (ast.Tuple, ast.List)):
+                    # This is tuple unpacking in a chain assignment - handle specially
+                    unpacked_assignments = self._handle_tuple_unpacking(target, node.value, node)
+                    assignments.extend(unpacked_assignments)
+                else:
+                    individual_assign = self._create_individual_assignment(target, node.value, node)
+                    self._update_variable_types_simple(target, node.value)
+                    assignments.append(individual_assign)
             return assignments
-
-        # Handle single assignment
-        elif len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
-            var_name = node.targets[0].id
-            value = node.value
-
-            if isinstance(value, ast.List):
-                self.known_variable_types[var_name] = 'list'
-            elif isinstance(value, ast.Tuple):
-                self.known_variable_types[var_name] = 'tuple'
-            elif isinstance(value, ast.Str):
-                self.known_variable_types[var_name] = 'str'
-            elif isinstance(value, ast.Call) and isinstance(value.func, ast.Name) and value.func.id == 'range':
-                self.known_variable_types[var_name] = 'range'
-            elif isinstance(value, ast.Dict):
-                self.known_variable_types[var_name] = 'dict'
-
-        return node
 
 
     # This method is responsible for visiting and transforming Call nodes in the AST.
