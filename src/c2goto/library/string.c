@@ -289,7 +289,7 @@ void *memcpy(void *dst, const void *src, size_t n)
 __ESBMC_HIDE:;
   if (n == 0 || src == NULL || dst == NULL)
     return dst;
-    
+
   void *hax = &__memcpy_impl;
   (void)hax;
 
