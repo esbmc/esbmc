@@ -182,7 +182,7 @@ class Preprocessor(ast.NodeTransformer):
     def visit_For(self, node):
         """
         Transform for loops into while loops.
-        Handles both range() calls and general iterables (strings, lists, etc.)
+        Handles range() calls, enumerate() calls, and general iterables.
         """
         # First, recursively visit any nested nodes
         node = self.generic_visit(node)
@@ -192,6 +192,11 @@ class Preprocessor(ast.NodeTransformer):
                         isinstance(node.iter.func, ast.Name) and
                         node.iter.func.id == "range")
 
+        # Check if iter is a Call to enumerate
+        is_enumerate_call = (isinstance(node.iter, ast.Call) and
+                            isinstance(node.iter.func, ast.Name) and
+                            node.iter.func.id == "enumerate")
+
         if is_range_call:
             # Handle range-based for loops
             self.is_range_loop = True
@@ -199,10 +204,183 @@ class Preprocessor(ast.NodeTransformer):
             result = self._transform_range_for(node)
             self.is_range_loop = False
             return result
+        elif is_enumerate_call:
+            # Handle enumerate-based for loops
+            self.is_range_loop = False
+            return self._transform_enumerate_for(node)
         else:
             # Handle general iteration over iterables (strings, lists, etc.)
             self.is_range_loop = False
             return self._transform_iterable_for(node)
+
+    def _transform_enumerate_for(self, node):
+        """
+        Transform enumerate-based for loops to while loops.
+
+        Transforms:
+            for index, value in enumerate(iterable, start):
+                # body
+   
+        Into:
+            ESBMC_iter = iterable
+            ESBMC_index = start  # or 0 if not provided
+            ESBMC_length = len(ESBMC_iter)
+            while ESBMC_index < ESBMC_length:
+                index = ESBMC_index
+                value = ESBMC_iter[ESBMC_index]
+                ESBMC_index = ESBMC_index + 1
+                # body
+        """
+        # Validate enumerate call arguments
+        enumerate_call = node.iter
+        if len(enumerate_call.args) == 0:
+            raise SyntaxError(f"enumerate expected at least 1 argument, got 0", 
+                            (self.module_name, node.lineno, node.col_offset, ""))
+        if len(enumerate_call.args) > 2:
+            raise SyntaxError(f"enumerate expected at most 2 arguments, got {len(enumerate_call.args)}", 
+                            (self.module_name, node.lineno, node.col_offset, ""))
+
+        # Extract target variables (should be a Tuple with 2 elements)
+        if not isinstance(node.target, ast.Tuple) or len(node.target.elts) != 2:
+            raise SyntaxError(f"enumerate() requires exactly 2 target variables, got {len(node.target.elts) if isinstance(node.target, ast.Tuple) else 1}", 
+                            (self.module_name, node.lineno, node.col_offset, ""))
+
+        index_var = node.target.elts[0].id
+        value_var = node.target.elts[1].id
+
+        # Get the iterable and start value from enumerate call
+        iterable = enumerate_call.args[0]
+
+        # Get start value (default 0 if not provided)
+        if len(enumerate_call.args) > 1:
+            start_value = enumerate_call.args[1]
+        else:
+            start_value = self.create_constant_node(0, node)
+
+        # Determine annotation type based on the iterable
+        if isinstance(iterable, ast.Constant) and isinstance(iterable.value, str):
+            annotation_id = 'str'
+        elif isinstance(iterable, ast.List):
+            annotation_id = 'list'
+        elif isinstance(iterable, ast.Tuple):
+            annotation_id = 'tuple'
+        elif isinstance(iterable, ast.Name):
+            annotation_id = self.known_variable_types.get(iterable.id, 'Any')
+        else:
+            annotation_id = 'Any'
+
+        # Create assignment for the iterable variable
+        iter_target = self.create_name_node('ESBMC_iter', ast.Store(), node)
+        iter_annotation = self.create_name_node(annotation_id, ast.Load(), node)
+        iter_assign = ast.AnnAssign(
+            target=iter_target,
+            annotation=iter_annotation,
+            value=iterable,
+            simple=1
+        )
+        self.ensure_all_locations(iter_assign, node)
+
+        # Create assignment for the index variable (using start value)
+        index_target = self.create_name_node('ESBMC_index', ast.Store(), node)
+        int_annotation = self.create_name_node('int', ast.Load(), node)
+        index_assign = ast.AnnAssign(
+            target=index_target,
+            annotation=int_annotation,
+            value=start_value,
+            simple=1
+        )
+        self.ensure_all_locations(index_assign, node)
+
+        # Create assignment for the length variable
+        length_target = self.create_name_node('ESBMC_length', ast.Store(), node)
+        len_func = self.create_name_node('len', ast.Load(), node)
+        iter_arg = self.create_name_node('ESBMC_iter', ast.Load(), node)
+        len_call = ast.Call(func=len_func, args=[iter_arg], keywords=[])
+        self.ensure_all_locations(len_call, node)
+        int_annotation2 = self.create_name_node('int', ast.Load(), node)
+        length_assign = ast.AnnAssign(
+            target=length_target,
+            annotation=int_annotation2,
+            value=len_call,
+            simple=1
+        )
+        self.ensure_all_locations(length_assign, node)
+
+        # Create condition for the while loop
+        index_left = self.create_name_node('ESBMC_index', ast.Load(), node)
+        length_right = self.create_name_node('ESBMC_length', ast.Load(), node)
+        lt_op = ast.Lt()
+        self.ensure_all_locations(lt_op, node)
+        while_cond = ast.Compare(left=index_left, ops=[lt_op], comparators=[length_right])
+        self.ensure_all_locations(while_cond, node)
+
+        # Create assignment for index variable (user's index variable)
+        user_index_target = self.create_name_node(index_var, ast.Store(), node)
+        user_index_value = self.create_name_node('ESBMC_index', ast.Load(), node)
+        user_index_assign = ast.AnnAssign(
+            target=user_index_target,
+            annotation=self.create_name_node('int', ast.Load(), node),
+            value=user_index_value,
+            simple=1
+        )
+        self.ensure_all_locations(user_index_assign, node)
+
+        # Create assignment for value variable (user's value variable)
+        user_value_target = self.create_name_node(value_var, ast.Store(), node)
+        iter_value = self.create_name_node('ESBMC_iter', ast.Load(), node)
+        index_slice = self.create_name_node('ESBMC_index', ast.Load(), node)
+        subscript = ast.Subscript(value=iter_value, slice=index_slice, ctx=ast.Load())
+        self.ensure_all_locations(subscript, node)
+        # Use 'Any' for value annotation since it could be different types
+        value_annotation = self.create_name_node('Any', ast.Load(), node)
+        user_value_assign = ast.AnnAssign(
+            target=user_value_target,
+            annotation=value_annotation,
+            value=subscript,
+            simple=1
+        )
+        self.ensure_all_locations(user_value_assign, node)
+
+        # Create increment of ESBMC_index
+        inc_target = self.create_name_node('ESBMC_index', ast.Store(), node)
+        inc_left = self.create_name_node('ESBMC_index', ast.Load(), node)
+        inc_right = self.create_constant_node(1, node)
+        add_op = ast.Add()
+        self.ensure_all_locations(add_op, node)
+        inc_binop = ast.BinOp(left=inc_left, op=add_op, right=inc_right)
+        self.ensure_all_locations(inc_binop, node)
+        int_annotation_inc = self.create_name_node('int', ast.Load(), node)
+        index_increment = ast.AnnAssign(
+            target=inc_target,
+            annotation=int_annotation_inc,
+            value=inc_binop,
+            simple=1
+        )
+        self.ensure_all_locations(index_increment, node)
+
+        # Transform the body of the for loop
+        transformed_body = [user_index_assign, user_value_assign, index_increment]
+
+        # Transform the original body statements
+        for statement in node.body:
+            transformed_statement = self.visit(statement)
+            if isinstance(transformed_statement, list):
+                transformed_body.extend(transformed_statement)
+            else:
+                transformed_body.append(transformed_statement)
+
+        # Create the while statement
+        while_stmt = ast.While(test=while_cond, body=transformed_body, orelse=[])
+        self.ensure_all_locations(while_stmt, node)
+
+        result = [iter_assign, index_assign, length_assign, while_stmt]
+
+        # Ensure all nodes in the result have proper location info
+        for stmt in result:
+            self.ensure_all_locations(stmt, node)
+            ast.fix_missing_locations(stmt)
+
+        return result
 
     def _transform_range_for(self, node):
         """Transform range-based for loops to while loops"""
