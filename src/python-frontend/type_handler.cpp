@@ -251,7 +251,9 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   }
 
   // Custom user-defined types / classes
-  if (json_utils::is_class(ast_type, converter_.ast()))
+  if (
+    json_utils::is_class(ast_type, converter_.ast()) ||
+    type_utils::is_python_exceptions(ast_type))
     return symbol_typet("tag-" + ast_type);
 
   if (ast_type != "Any")

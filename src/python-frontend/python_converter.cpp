@@ -1,4 +1,5 @@
 #include <python-frontend/python_converter.h>
+#include <python-frontend/python_annotation.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/type_utils.h>
 #include <python-frontend/symbol_id.h>
@@ -52,7 +53,9 @@ static const std::unordered_map<std::string, StatementType> statement_map = {
   {"ImportFrom", StatementType::IMPORT},
   {"Import", StatementType::IMPORT},
   {"Raise", StatementType::RAISE},
-  {"Global", StatementType::GLOBAL}};
+  {"Global", StatementType::GLOBAL},
+  {"Try", StatementType::TRY},
+  {"ExceptHandler", StatementType::EXCEPTHANDLER}};
 
 static bool is_char_type(const typet &t)
 {
@@ -3105,6 +3108,9 @@ void python_converter::get_function_definition(
   symbol.file_local = false;
 
   symbolt *added_symbol = symbol_table_.move_symbol_to_context(symbol);
+  // std::ostringstream out;
+  // out << function_node.dump(4) << std::endl;
+  // log_status("{}", out.str());
 
   // Function body
   exprt function_body = get_block(function_node["body"]);
@@ -3515,6 +3521,51 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       }
       break;
     }
+    case StatementType::TRY:
+    {
+      exprt try_block = get_block(element["body"]);
+      exprt handler = get_block(element["handlers"]);
+
+      codet try_code = convert_expression_to_code(try_block);
+      codet trycatch = convert_expression_to_code(handler);
+
+      codet::operandst &ops = trycatch.operands();
+      ops.insert(ops.begin(), try_code);
+
+      block = to_code_block(trycatch);
+      block.set_statement("cpp-catch");
+      break;
+    }
+    case StatementType::EXCEPTHANDLER:
+    {
+      exprt catch_block = get_block(element["body"]);
+
+      symbol_id sid = create_symbol_id();
+      std::string name = element["name"].get<std::string>();
+      sid.set_object(name);
+      locationt location = get_location_from_decl(element);
+      std::string module_name = location.get_file().as_string();
+      typet type =
+        type_handler_.get_typet(element["type"]["id"].get<std::string>());
+      symbolt symbol = create_symbol(
+        module_name, current_func_name_, sid.to_string(), location, type);
+      symbol.name = name;
+      symbol.lvalue = true;
+      symbol.is_extern = false;
+      symbol.file_local = false;
+      symbolt *s = symbol_table_.move_symbol_to_context(symbol);
+
+      exprt sym = symbol_expr(*s);
+      catch_block.type() = type;
+      code_declt decl(sym);
+      exprt decl_code = convert_expression_to_code(decl);
+      codet::operandst &ops = catch_block.operands();
+      ops.insert(ops.begin(), decl_code);
+
+      block.move_to_operands(catch_block);
+      break;
+    }
+
     /* "https://docs.python.org/3/tutorial/controlflow.html:
      * "The pass statement does nothing. It can be used when a statement
      *  is required syntactically but the program requires no action." */
@@ -3539,7 +3590,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
 python_converter::python_converter(
   contextt &_context,
   const nlohmann::json *ast,
-  const global_scope &gs)
+  global_scope &gs)
   : symbol_table_(_context),
     ast_json(ast),
     global_scope_(gs),
@@ -3622,7 +3673,7 @@ void python_converter::convert()
     const std::string &ast_output_dir =
       (*ast_json)["ast_output_dir"].get<std::string>();
     std::list<std::string> model_files = {
-      "range", "int", "consensus", "random"};
+      "range", "int", "consensus", "random", "exceptions"};
     std::list<std::string> model_folders = {"os", "numpy"};
 
     for (const auto &folder : model_folders)
@@ -3649,6 +3700,9 @@ void python_converter::convert()
         if (imported_modules.find(filename) != imported_modules.end())
           current_python_file = imported_modules[filename];
       }
+
+      python_annotation<nlohmann::json> ann(model_json, global_scope_);
+      ann.add_type_annotation();
 
       exprt model_code =
         with_ast(&model_json, [&]() { return get_block((*ast_json)["body"]); });
