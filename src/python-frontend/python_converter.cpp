@@ -1070,8 +1070,7 @@ exprt python_converter::handle_string_comparison(
   if (is_zero_length_array(lhs) && is_zero_length_array(rhs))
     return gen_boolean(op == "Eq");
 
-  if (
-    lhs.id() == "index" && rhs.is_constant() && rhs.type().is_array())
+  if (lhs.id() == "index" && rhs.is_constant() && rhs.type().is_array())
   {
     // Extract index value using existing pattern
     const exprt &index = lhs.operands()[1];

@@ -346,19 +346,22 @@ bool type_handler::has_multiple_types(const nlohmann::json &container) const
 
   // Helper lambda that leverages existing get_typet method
   auto get_element_type = [this](const nlohmann::json &element) -> typet {
-    try {
+    try
+    {
       typet elem_type = get_typet(element);
       // For array types, we want the element type, not the container type
       return elem_type.is_array() ? elem_type.subtype() : elem_type;
     }
-    catch (const std::exception &) {
+    catch (const std::exception &)
+    {
       return empty_typet();
     }
   };
 
   // Get canonical type of first element
-  typet canonical_first_type = get_canonical_type(get_element_type(container[0]));
-  
+  typet canonical_first_type =
+    get_canonical_type(get_element_type(container[0]));
+
   if (canonical_first_type == empty_typet())
     return false; // Couldn't determine type, assume homogeneous
 
@@ -366,18 +369,22 @@ bool type_handler::has_multiple_types(const nlohmann::json &container) const
   for (const auto &element : container)
   {
     // Handle nested lists recursively
-    if (element["_type"] == "List" && element.contains("elts") && !element["elts"].empty())
+    if (
+      element["_type"] == "List" && element.contains("elts") &&
+      !element["elts"].empty())
     {
       if (has_multiple_types(element["elts"]))
         return true;
     }
-    
+
     // Check type compatibility
     typet element_type = get_canonical_type(get_element_type(element));
-    if (element_type != empty_typet() && !are_types_compatible(canonical_first_type, element_type))
+    if (
+      element_type != empty_typet() &&
+      !are_types_compatible(canonical_first_type, element_type))
       return true;
   }
-  
+
   return false;
 }
 
