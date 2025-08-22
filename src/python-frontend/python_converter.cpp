@@ -942,6 +942,24 @@ bool python_converter::is_zero_length_array(const exprt &expr)
   return size == 0;
 }
 
+std::string python_converter::extract_string_from_array_operands(
+  const exprt &array_expr) const
+{
+  std::string result;
+  for (const auto &op : array_expr.operands())
+  {
+    if (op.is_constant())
+    {
+      BigInt val =
+        binary2integer(op.value().as_string(), op.type().is_signedbv());
+      if (val == 0)
+        break;
+      result += static_cast<char>(val.to_uint64());
+    }
+  }
+  return result;
+}
+
 exprt python_converter::handle_string_comparison(
   const std::string &op,
   exprt &lhs,
@@ -1051,6 +1069,54 @@ exprt python_converter::handle_string_comparison(
   // Check for zero-length arrays
   if (is_zero_length_array(lhs) && is_zero_length_array(rhs))
     return gen_boolean(op == "Eq");
+
+  if (
+    lhs.id() == "index" && rhs.is_constant() && rhs.type().is_array())
+  {
+    // Extract index value using existing pattern
+    const exprt &index = lhs.operands()[1];
+    BigInt idx =
+      binary2integer(index.value().as_string(), index.type().is_signedbv());
+
+    // Extract RHS string
+    std::string rhs_str = extract_string_from_array_operands(rhs);
+
+    // Try to resolve array contents using existing resolution method
+    const exprt &array = lhs.operands()[0];
+    exprt resolved_array = get_resolved_value(array);
+
+    // If resolution didn't work, fall back to direct symbol lookup
+    if (resolved_array.is_nil() && array.is_symbol())
+    {
+      const symbolt *symbol = symbol_table_.find_symbol(array.identifier());
+      if (symbol)
+      {
+        resolved_array = symbol->value;
+
+        // Follow compound literal reference if needed
+        if (symbol->value.is_symbol())
+        {
+          const symbolt *compound =
+            symbol_table_.find_symbol(symbol->value.identifier());
+          if (compound && compound->value.is_constant())
+            resolved_array = compound->value;
+        }
+      }
+    }
+
+    // Extract and compare array element if valid
+    if (
+      !resolved_array.is_nil() && resolved_array.is_constant() &&
+      resolved_array.type().is_array() && idx >= 0 &&
+      idx < (BigInt)resolved_array.operands().size())
+    {
+      const exprt &string_element = resolved_array.operands()[idx.to_uint64()];
+      std::string lhs_str = extract_string_from_array_operands(string_element);
+
+      bool strings_equal = (lhs_str == rhs_str);
+      return gen_boolean((op == "Eq") ? strings_equal : !strings_equal);
+    }
+  }
 
   // Handle type mismatches to prevent crashes/array out of bounds
   if (!(lhs.is_member() || rhs.is_member()) && lhs.type() != rhs.type())
