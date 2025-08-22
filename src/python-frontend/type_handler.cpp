@@ -282,6 +282,20 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
     return get_typet(elem["func"]["id"].get<std::string>());
   }
 
+  if (elem["_type"] == "Name")
+  {
+    const nlohmann::json &var = json_utils::find_var_decl(
+      elem["id"], converter_.current_function_name(), converter_.ast());
+
+    if (var["value"]["_type"] == "Call")
+    {
+      throw std::runtime_error(
+        "Cannot determine the type from " +
+        var["value"]["func"]["id"].get<std::string>() + " call");
+    }
+    return get_typet(var["value"]["value"]);
+  }
+
   throw std::runtime_error("Invalid type");
 }
 
@@ -494,7 +508,18 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
         left_size = get_array_type_shape(left_type)[0];
       }
       else
-        left_size = left["value"].get<size_t>();
+      {
+        if (left["_type"] == "Name")
+        {
+          const nlohmann::json &var = json_utils::find_var_decl(
+            left["id"], converter_.current_function_name(), converter_.ast());
+          left_size = var["value"]["value"];
+        }
+        else
+        {
+          left_size = left["value"].get<size_t>();
+        }
+      }
 
       // Get right size
       if (right_type.is_array())
@@ -502,8 +527,16 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
         subtype = right_type;
         right_size = get_array_type_shape(right_type)[0];
       }
+      else if (right["_type"] == "Name")
+      {
+        const nlohmann::json &var = json_utils::find_var_decl(
+          right["id"], converter_.current_function_name(), converter_.ast());
+        right_size = var["value"]["value"];
+      }
       else
+      {
         right_size = right["value"].get<size_t>();
+      }
 
       return build_array(subtype, left_size * right_size);
     }
