@@ -1,3 +1,8 @@
+def foo() -> None:
+    x = 1
+    dp = [1] * x
+    assert dp[0] == 1
+
 a = [1] * 5
 assert a[0] == 1
 assert a[1] == 1
@@ -18,7 +23,7 @@ assert c[2] == float("inf")
 assert c[3] == float("inf")
 
 n = 3
-d = [2] * 3
+d = [2] * n
 assert d[0] == 2
 assert d[1] == 2
 assert d[2] == 2
