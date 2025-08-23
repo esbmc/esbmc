@@ -847,3 +847,13 @@ smt_sortt boolector_convt::mk_bvfp_rm_sort()
   return new solver_smt_sort<BoolectorSort>(
     SMT_SORT_BVFP_RM, boolector_bitvec_sort(btor, 3), 3);
 }
+
+smt_astt boolector_convt::mk_quantifier(
+  [[maybe_unused]] bool is_forall,
+  [[maybe_unused]] std::vector<smt_astt> lhs,
+  [[maybe_unused]] smt_astt rhs)
+{
+  log_error("Boolector does not support quantifiers");
+  abort();
+  return nullptr;
+}
