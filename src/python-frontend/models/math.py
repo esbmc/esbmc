@@ -1,4 +1,5 @@
-pi:float = 3.14153
+pi: float = 3.14153
+
 
 def comb(n: int, k: int) -> int:
     """
@@ -43,11 +44,14 @@ def comb(n: int, k: int) -> int:
         i = i + 1
     return result
 
+
 def isinf(x: float) -> bool:
     return __ESBMC_isinf(x)
 
+
 def isnan(x: float) -> bool:
     return __ESBMC_isnan(x)
+
 
 def floor(x: float) -> int:
     # infinity and NaN inputs cause assertion failures
@@ -63,6 +67,7 @@ def floor(x: float) -> int:
             return int_x
         else:
             return int_x - 1
+
 
 def ceil(x: float) -> int:
     # infinity and NaN inputs cause assertion failures
