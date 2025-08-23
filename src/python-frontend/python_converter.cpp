@@ -1948,8 +1948,9 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     return from_integer(static_cast<unsigned char>(str_val[0]), t);
   }
 
-  // Handle empty strings or docstrings (often beginning with a newline)
-  if (!str_val.empty() && str_val[0] == '\n' && !is_bytes_literal(element))
+  if (
+    !str_val.empty() && (str_val[0] == '\n' || str_val[0] == ' ') &&
+    !is_bytes_literal(element))
   {
     return exprt(); // Return empty expression
   }
