@@ -120,8 +120,8 @@ bool type_handler::are_types_compatible(const typet &t1, const typet &t2) const
     const array_typet &arr1 = to_array_type(t1);
     const array_typet &arr2 = to_array_type(t2);
 
-    // If both have char subtype, they're both strings
-    if (arr1.subtype() == char_type() && arr2.subtype() == char_type())
+    // If subtypes match, consider them compatible regardless of size
+    if (arr1.subtype() == arr2.subtype())
       return true;
   }
 
@@ -130,7 +130,7 @@ bool type_handler::are_types_compatible(const typet &t1, const typet &t2) const
 
 /// Get a normalized/canonical type for list element type inference
 /// This ensures all strings use the same representative type regardless of length
-typet type_handler::get_canonical_type(const typet &t) const
+typet type_handler::get_canonical_string_type(const typet &t) const
 {
   // For string types (char arrays), return a canonical string type
   if (t.is_array())
@@ -360,7 +360,7 @@ bool type_handler::has_multiple_types(const nlohmann::json &container) const
 
   // Get canonical type of first element
   typet canonical_first_type =
-    get_canonical_type(get_element_type(container[0]));
+    get_canonical_string_type(get_element_type(container[0]));
 
   if (canonical_first_type == empty_typet())
     return false; // Couldn't determine type, assume homogeneous
@@ -378,7 +378,7 @@ bool type_handler::has_multiple_types(const nlohmann::json &container) const
     }
 
     // Check type compatibility
-    typet element_type = get_canonical_type(get_element_type(element));
+    typet element_type = get_canonical_string_type(get_element_type(element));
     if (
       element_type != empty_typet() &&
       !are_types_compatible(canonical_first_type, element_type))

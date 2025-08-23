@@ -91,7 +91,7 @@ private:
   bool are_types_compatible(const typet &t1, const typet &t2) const;
 
   /// Get a normalized/canonical type for list element type inference
-  typet get_canonical_type(const typet &t) const;
+  typet get_canonical_string_type(const typet &t) const;
 
   const python_converter &converter_;
 };
