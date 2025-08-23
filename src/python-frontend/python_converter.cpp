@@ -1948,6 +1948,7 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     return from_integer(static_cast<unsigned char>(str_val[0]), t);
   }
 
+  // Skip Python docstrings or string literals that should not be treated as code.
   if (
     !str_val.empty() && (str_val[0] == '\n' || str_val[0] == ' ') &&
     !is_bytes_literal(element))
