@@ -1506,6 +1506,12 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   if (lhs.type().is_array() || rhs.type().is_array())
   {
+    // Check for zero-length arrays
+    if (
+      is_zero_length_array(lhs) && is_zero_length_array(rhs) &&
+      (op == "Eq" || op == "NotEq"))
+      return gen_boolean(op == "Eq");
+
     // Compute resulting list
     if (op == "Mult")
     {
