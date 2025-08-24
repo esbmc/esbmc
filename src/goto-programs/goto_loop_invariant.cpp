@@ -71,8 +71,9 @@
  * // Branch 2: 
  *   else {
  *     // invariant + !condition (need to add theloop exit condition)
- *     assume (!(lb <= ub));
- *     assume (lb - 1 <= ub && ub < size && mid == ((unsigned int)lb + (unsigned int)ub) >> 1);
+ *     // we did not extra explicitly add the loop exit condition, it is from the previous step
+ *     //assume (!(lb <= ub)); from if-else branch
+ *     //assume (lb - 1 <= ub && ub < size && mid == ((unsigned int)lb + (unsigned int)ub) >> 1); from the previous assumption
  *     // we assume the invariant is preserved after the loop, then we can continue on this branch to check the following assertions.
  *   }
  * }
@@ -143,10 +144,7 @@ goto_loop_invariantt::extract_loop_invariants(const loopst &loop)
   if (loop_head == goto_function.body.instructions.begin())
     return invariants;
 
-  // For for loops, the loop head might be the initialization (ASSIGN),
-  // and the LOOP_INVARIANT might be before the condition check (IF).
-  // We need to search more broadly to find LOOP_INVARIANT instructions.
-
+  // because we have already combined the loop invariant into one, we should be easy to say it is safe to break.
   // Search backwards from loop head to find LOOP_INVARIANT
   goto_programt::targett search_it = loop_head;
 
@@ -164,10 +162,13 @@ goto_loop_invariantt::extract_loop_invariants(const loopst &loop)
     {
       auto const &current_invariants = search_it->get_loop_invariants();
 
+      // Simple approach: take the first LOOP_INVARIANT found before this loop
+      // This works because LOOP_INVARIANT should be placed immediately before its loop
       if (current_invariants.size() == 1)
       {
         // add single invariant
         invariants.push_back(current_invariants.front());
+        break; // Found the invariant for this loop, stop searching
       }
       else if (current_invariants.size() > 1)
       {
@@ -183,8 +184,9 @@ goto_loop_invariantt::extract_loop_invariants(const loopst &loop)
 
         // return one combined invariant
         invariants.push_back(combined_invariant);
+        break; // Found the invariant for this loop, stop searching
       }
-      // if current_invariants.empty(), do nothing, continue searching
+      // if current_invariants.empty(), continue searching
     }
   }
 

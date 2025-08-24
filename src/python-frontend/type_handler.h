@@ -87,5 +87,11 @@ public:
   int get_array_dimensions(const nlohmann::json &arr) const;
 
 private:
+  /// Check if two types are compatible for list homogeneity checking
+  bool are_types_compatible(const typet &t1, const typet &t2) const;
+
+  /// Get a normalized/canonical type for list element type inference
+  typet get_canonical_string_type(const typet &t) const;
+
   const python_converter &converter_;
 };

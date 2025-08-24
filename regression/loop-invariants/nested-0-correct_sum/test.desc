@@ -1,4 +1,4 @@
-KNOWNBUG
+CORE
 main.c
-----loop-invariant
+--loop-invariant
 ^VERIFICATION SUCCESSFUL$
