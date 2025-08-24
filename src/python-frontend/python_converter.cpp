@@ -2,6 +2,7 @@
 #include <python-frontend/json_utils.h>
 #include <python-frontend/type_utils.h>
 #include <python-frontend/symbol_id.h>
+#include <python-frontend/symbol_finder.h>
 #include <python-frontend/function_call_builder.h>
 #include <ansi-c/convert_float_literal.h>
 #include <util/std_code.h>
@@ -1703,8 +1704,8 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
   }
   else if (element["operand"]["_type"] == "Name")
   {
-    const std::string var_type =
-      type_handler_.get_var_type(element["operand"]["id"].get<std::string>(), current_func_name_);
+    const std::string var_type = type_handler_.get_var_type(
+      element["operand"]["id"].get<std::string>(), current_func_name_);
     type = type_handler_.get_typet(var_type);
   }
 
@@ -1773,54 +1774,10 @@ symbolt *python_converter::find_function_in_base_classes(
   return func;
 }
 
-symbolt *
-python_converter::find_imported_symbol(const std::string &symbol_id) const
-{
-  for (const auto &obj : (*ast_json)["body"])
-  {
-    if (obj["_type"] == "ImportFrom" || obj["_type"] == "Import")
-    {
-      std::regex pattern("py:(.*?)@");
-      std::string imported_symbol = std::regex_replace(
-        symbol_id, pattern, "py:" + obj["full_path"].get<std::string>() + "@");
-
-      if (
-        symbolt *func_symbol =
-          symbol_table_.find_symbol(imported_symbol.c_str()))
-        return func_symbol;
-    }
-  }
-  return nullptr;
-}
-
 symbolt *python_converter::find_symbol(const std::string &symbol_id) const
 {
-  if (symbolt *symbol = symbol_table_.find_symbol(symbol_id))
-    return symbol;
-  if (symbolt *symbol = find_symbol_in_global_scope(symbol_id))
-    return symbol;
-  return find_imported_symbol(symbol_id);
-}
-
-symbolt *python_converter::find_symbol_in_global_scope(
-  const std::string &symbol_id) const
-{
-  std::size_t class_start_pos = symbol_id.find("@C@");
-  std::size_t func_start_pos = symbol_id.find("@F@");
-  std::string sid = symbol_id;
-
-  // Remove class name from symbol
-  if (class_start_pos != std::string::npos)
-    sid.erase(class_start_pos, func_start_pos - class_start_pos);
-
-  func_start_pos = sid.find("@F@");
-  std::size_t func_end_pos = sid.rfind("@");
-
-  // Remove function name from symbol
-  if (func_start_pos != std::string::npos)
-    sid.erase(func_start_pos, func_end_pos - func_start_pos);
-
-  return symbol_table_.find_symbol(sid);
+  symbol_finder finder(symbol_table_, *ast_json);
+  return const_cast<symbolt *>(finder.find_symbol(symbol_id));
 }
 
 bool python_converter::is_imported_module(const std::string &module_name) const

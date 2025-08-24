@@ -250,9 +250,6 @@ private:
     std::string method_name,
     bool is_ctor) const;
 
-  symbolt *find_imported_symbol(const std::string &symbol_id) const;
-  symbolt *find_symbol_in_global_scope(const std::string &symbol_id) const;
-
   void update_instance_from_self(
     const std::string &class_name,
     const std::string &func_name,

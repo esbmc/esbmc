@@ -9,7 +9,7 @@
 class symbol_finder
 {
 public:
-  symbol_finder(const contextt &symbol_table, const nlohmann::json ast)
+  symbol_finder(const contextt &symbol_table, const nlohmann::json &ast)
     : symbol_table_(symbol_table), ast_(ast)
   {
   }
