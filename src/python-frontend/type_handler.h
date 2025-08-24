@@ -1,14 +1,27 @@
 #pragma once
 
+#include <python-frontend/symbol_id.h>
 #include <util/c_types.h>
 #include <nlohmann/json.hpp>
 
-class python_converter;
+class contextt;
 
 class type_handler
 {
 public:
-  type_handler(const python_converter &converter);
+  type_handler(
+    const contextt &symbol_table,
+    const nlohmann::json &current_file_ast,
+    const symbol_id &current_function_id);
+
+  type_handler(
+    const contextt &symbol_table,
+    const nlohmann::json &current_file_ast);
+
+  void set_current_function(const symbol_id &current_func)
+  {
+    current_function_id_ = current_func;
+  }
 
   /*
    * Checks if the AST node represents a constructor call.
@@ -29,7 +42,8 @@ public:
    * @param var_name The name of the variable.
    * @return A string representing the variable's type.
    */
-  std::string get_var_type(const std::string &var_name) const;
+  std::string
+  get_var_type(const std::string &var_name, const std::string &from_func) const;
 
   /*
    * Creates an array_typet.
@@ -93,5 +107,8 @@ private:
   /// Get a normalized/canonical type for list element type inference
   typet get_canonical_string_type(const typet &t) const;
 
-  const python_converter &converter_;
+  /*const python_converter &converter_;*/
+  const contextt &symbol_table_;
+  const nlohmann::json &current_file_ast_;
+  symbol_id current_function_id_;
 };

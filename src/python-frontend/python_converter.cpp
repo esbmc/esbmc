@@ -1704,7 +1704,7 @@ exprt python_converter::get_unary_operator_expr(const nlohmann::json &element)
   else if (element["operand"]["_type"] == "Name")
   {
     const std::string var_type =
-      type_handler_.get_var_type(element["operand"]["id"].get<std::string>());
+      type_handler_.get_var_type(element["operand"]["id"].get<std::string>(), current_func_name_);
     type = type_handler_.get_typet(var_type);
   }
 
@@ -3033,6 +3033,8 @@ void python_converter::get_function_definition(
     type.return_type() = ctor_type;
   }
 
+  type_handler_.set_current_function(create_symbol_id());
+
   symbol_id id = create_symbol_id();
 
   std::string module_name =
@@ -3112,6 +3114,7 @@ void python_converter::get_function_definition(
 
   // Restore caller function name
   current_func_name_ = caller_func_name;
+  type_handler_.set_current_function(create_symbol_id());
 }
 
 void python_converter::get_attributes_from_self(
@@ -3213,6 +3216,8 @@ void python_converter::get_class_definition(
         method_name = current_class_name_;
 
       current_func_name_ = method_name;
+      type_handler_.set_current_function(create_symbol_id());
+
       get_function_definition(class_member);
 
       exprt added_method =
@@ -3543,7 +3548,7 @@ python_converter::python_converter(
   : symbol_table_(_context),
     ast_json(ast),
     global_scope_(gs),
-    type_handler_(*this),
+    type_handler_(symbol_table_, *ast),
     sym_generator_("python_converter::"),
     ns(_context),
     current_func_name_(""),

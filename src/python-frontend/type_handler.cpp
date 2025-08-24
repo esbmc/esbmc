@@ -3,12 +3,25 @@
 #include <python-frontend/type_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/symbol_id.h>
+#include <python-frontend/symbol_finder.h>
 #include <util/context.h>
 #include <util/c_types.h>
 #include <util/message.h>
 
-type_handler::type_handler(const python_converter &converter)
-  : converter_(converter)
+type_handler::type_handler(
+  const contextt &symbol_table,
+  const nlohmann::json &current_file_ast,
+  const symbol_id &current_function_id)
+  : symbol_table_(symbol_table),
+    current_file_ast_(current_file_ast),
+    current_function_id_(current_function_id)
+{
+}
+
+type_handler::type_handler(
+  const contextt &symbol_table,
+  const nlohmann::json &current_file_ast)
+  : symbol_table_(symbol_table), current_file_ast_(current_file_ast)
 {
 }
 
@@ -34,9 +47,9 @@ bool type_handler::is_constructor_call(const nlohmann::json &json) const
 
   bool is_ctor_call = false;
 
-  const contextt &symbol_table = converter_.symbol_table();
+  //  const contextt &symbol_table = converter_.symbol_table();
 
-  symbol_table.foreach_operand([&](const symbolt &s) {
+  symbol_table_.foreach_operand([&](const symbolt &s) {
     if (s.type.id() == "struct" && s.name == func_name)
     {
       is_ctor_call = true;
@@ -88,10 +101,12 @@ std::string type_handler::type_to_string(const typet &t) const
   return "";
 }
 
-std::string type_handler::get_var_type(const std::string &var_name) const
+std::string type_handler::get_var_type(
+  const std::string &var_name,
+  const std::string &from_func) const
 {
-  nlohmann::json ref = json_utils::find_var_decl(
-    var_name, converter_.current_function_name(), converter_.ast());
+  nlohmann::json ref =
+    json_utils::find_var_decl(var_name, from_func, current_file_ast_);
 
   if (ref.empty())
     return std::string();
@@ -251,7 +266,7 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   }
 
   // Custom user-defined types / classes
-  if (json_utils::is_class(ast_type, converter_.ast()))
+  if (json_utils::is_class(ast_type, current_file_ast_))
     return symbol_typet("tag-" + ast_type);
 
   if (ast_type != "Any")
@@ -322,10 +337,11 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
     return get_typet(elem["func"]["id"].get<std::string>());
   }
 
+  /*
   if (elem["_type"] == "Name")
   {
     const nlohmann::json &var = json_utils::find_var_decl(
-      elem["id"], converter_.current_function_name(), converter_.ast());
+      elem["id"], converter_.current_function_name(), current_file_ast_);
 
     if (var["value"]["_type"] == "Call")
     {
@@ -335,6 +351,7 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
     }
     return get_typet(var["value"]["value"]);
   }
+  */
 
   throw std::runtime_error("Invalid type");
 }
@@ -443,20 +460,24 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
 
   if (list_value["_type"] == "Call") // Get list type from function return type
   {
-    symbol_id sid(
-      converter_.python_file(),
-      converter_.current_classname(),
-      converter_.current_function_name());
+    //    symbol_id sid(
+    //      converter_.python_file(),
+    //      converter_.current_classname(),
+    //      converter_.current_function_name());
+
+    symbol_id sid = current_function_id_;
 
     if (list_value["func"]["_type"] == "Attribute")
       sid.set_function(list_value["func"]["attr"]);
     else
       sid.set_function(list_value["func"]["id"]);
 
-    symbolt *func_symbol = converter_.find_symbol(sid.to_string());
+    //symbolt *func_symbol = converter_.find_symbol(sid.to_string());
+    symbol_finder finder(symbol_table_, current_file_ast_);
+    const symbolt *func_symbol = finder.find_symbol(sid.to_string());
 
     assert(func_symbol);
-    return static_cast<code_typet &>(func_symbol->type).return_type();
+    return static_cast<const code_typet &>(func_symbol->type).return_type();
   }
 
   if (list_value.contains("_type") && list_value["_type"] == "BinOp")
@@ -484,7 +505,10 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
         if (left["_type"] == "Name")
         {
           const nlohmann::json &var = json_utils::find_var_decl(
-            left["id"], converter_.current_function_name(), converter_.ast());
+            left["id"],
+            /*converter_.current_function_name()*/
+            current_function_id_.get_function(),
+            /*converter_.ast()*/ current_file_ast_);
           left_size = var["value"]["value"];
         }
         else
@@ -502,7 +526,10 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
       else if (right["_type"] == "Name")
       {
         const nlohmann::json &var = json_utils::find_var_decl(
-          right["id"], converter_.current_function_name(), converter_.ast());
+          right["id"],
+          /*converter_.current_function_name()*/
+          current_function_id_.get_function(),
+          /*converter_.ast()*/ current_file_ast_);
         right_size = var["value"]["value"];
       }
       else
@@ -527,7 +554,7 @@ std::string type_handler::get_operand_type(const nlohmann::json &operand) const
   if (
     operand.contains("_type") && operand["_type"] == "Name" &&
     operand.contains("id"))
-    return get_var_type(operand["id"]);
+    return get_var_type(operand["id"], current_function_id_.get_function());
 
   // Handle constant/literal values (e.g., 42, "hello", True, 3.14)
   else if (operand["_type"] == "Constant" && operand.contains("value"))
@@ -555,7 +582,10 @@ std::string type_handler::get_operand_type(const nlohmann::json &operand) const
 
       // Find the declaration of the list variable
       nlohmann::json list_node = json_utils::find_var_decl(
-        list_id, converter_.current_function_name(), converter_.ast());
+        list_id,
+        /*converter_.current_function_name(), converter_.ast()*/
+        current_function_id_.get_function(),
+        current_file_ast_);
 
       // Get the type of the list and return the subtype (element type)
       array_typet list_type = get_list_type(list_node["value"]);

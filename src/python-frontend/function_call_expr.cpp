@@ -67,7 +67,7 @@ void function_call_expr::get_function_type()
     if (
       is_class(caller, converter_.ast()) ||
       type_utils::is_builtin_type(caller) ||
-      type_utils::is_builtin_type(type_handler_.get_var_type(caller)))
+      type_utils::is_builtin_type(type_handler_.get_var_type(caller, converter_.current_func_name_)))
     {
       function_type_ = FunctionType::ClassMethod;
     }
@@ -1220,7 +1220,7 @@ exprt function_call_expr::get()
     // For example, if x is an int instance, x.bit_length() call becomes bit_length(x)
     if (
       obj_symbol &&
-      type_handler_.get_var_type(obj_symbol->name.as_string()) == "int" &&
+      type_handler_.get_var_type(obj_symbol->name.as_string(), converter_.current_func_name_) == "int" &&
       call_["args"].empty())
     {
       call.arguments().push_back(symbol_expr(*obj_symbol));

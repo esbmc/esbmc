@@ -49,7 +49,7 @@ symbol_id function_call_builder::build_function_id() const
   const std::string &current_class_name = converter_.current_classname();
   const std::string &current_function_name = converter_.current_function_name();
   const auto &ast = converter_.ast();
-  type_handler th(converter_);
+  type_handler th(/*converter_*/converter_.symbol_table(), ast, converter_.create_symbol_id());
 
   bool is_member_function_call = false;
 
@@ -132,7 +132,7 @@ symbol_id function_call_builder::build_function_id() const
       func_name = kGetObjectSize;
     else if (arg["_type"] == "Name")
     {
-      const std::string &var_type = th.get_var_type(arg["id"]);
+      const std::string &var_type = th.get_var_type(arg["id"], converter_.current_func_name_);
       if (
         var_type == "bytes" || var_type == "list" || var_type == "List" ||
         var_type.empty())
