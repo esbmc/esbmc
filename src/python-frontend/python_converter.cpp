@@ -2475,6 +2475,34 @@ size_t python_converter::get_type_size(const nlohmann::json &ast_node)
   return type_size;
 }
 
+symbolt python_converter::create_return_temp_variable(
+  const typet &return_type,
+  const locationt &location,
+  const std::string &func_name)
+{
+  static int temp_counter = 0;
+  temp_counter++;
+
+  symbol_id temp_sid = create_symbol_id();
+  std::string temp_name =
+    "return_value$_" + func_name + "$" + std::to_string(temp_counter);
+  temp_sid.set_object(temp_name);
+
+  symbolt temp_symbol;
+  temp_symbol.id = temp_sid.to_string();
+  temp_symbol.name = temp_sid.to_string();
+  temp_symbol.type = return_type;
+  temp_symbol.lvalue = true;
+  temp_symbol.static_lifetime = false;
+  temp_symbol.location = location;
+  temp_symbol.mode = "Python";
+  temp_symbol.module = location.get_file().as_string();
+  temp_symbol.file_local = true;
+  temp_symbol.is_extern = false;
+
+  return temp_symbol;
+}
+
 const nlohmann::json &get_return_statement(const nlohmann::json &function)
 {
   for (const auto &stmt : function["body"])
@@ -3232,10 +3260,61 @@ void python_converter::get_return_statements(
   const nlohmann::json &ast_node,
   codet &target_block)
 {
-  code_returnt return_code;
-  return_code.return_value() = get_expr(ast_node["value"]);
-  return_code.location() = get_location_from_decl(ast_node);
-  target_block.copy_to_operands(return_code);
+  exprt return_value = get_expr(ast_node["value"]);
+  locationt location = get_location_from_decl(ast_node);
+
+  // Check if return value is a function call
+  if (return_value.is_function_call() && ast_node["value"]["_type"] == "Call")
+  {
+    // Extract function name for temporary variable naming
+    std::string func_name;
+    if (ast_node["value"]["func"]["_type"] == "Name")
+    {
+      func_name = ast_node["value"]["func"]["id"].get<std::string>();
+    }
+    else if (ast_node["value"]["func"]["_type"] == "Attribute")
+    {
+      func_name = ast_node["value"]["func"]["attr"].get<std::string>();
+    }
+    else
+    {
+      func_name = "func"; // fallback
+    }
+
+    // Create temporary variable to store function call result
+    symbolt temp_symbol =
+      create_return_temp_variable(return_value.type(), location, func_name);
+    symbol_table_.add(temp_symbol);
+    exprt temp_var_expr = symbol_expr(temp_symbol);
+
+    // Create declaration for temporary variable
+    code_declt temp_decl(temp_var_expr);
+    temp_decl.location() = location;
+    target_block.copy_to_operands(temp_decl);
+
+    // Set the LHS of the function call to our temporary variable
+    if (!return_value.type().is_empty())
+    {
+      return_value.op0() = temp_var_expr;
+    }
+
+    // Add the function call statement to the block
+    target_block.copy_to_operands(return_value);
+
+    // Return the temporary variable
+    code_returnt return_code;
+    return_code.return_value() = temp_var_expr;
+    return_code.location() = location;
+    target_block.copy_to_operands(return_code);
+  }
+  else
+  {
+    // Original behavior for non-function-call returns
+    code_returnt return_code;
+    return_code.return_value() = return_value;
+    return_code.location() = location;
+    target_block.copy_to_operands(return_code);
+  }
 }
 
 // Helper function to create temporary variable for function call results

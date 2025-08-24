@@ -158,6 +158,11 @@ private:
 
   std::string extract_string_from_array_operands(const exprt &array_expr) const;
 
+  symbolt create_return_temp_variable(
+    const typet &return_type,
+    const locationt &location,
+    const std::string &func_name);
+
   void register_instance_attribute(
     const std::string &symbol_id,
     const std::string &attr_name,
