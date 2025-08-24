@@ -1562,15 +1562,16 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
             symbolt *create_list_func = symbol_table_.find_symbol("c:@F@ESBMC_py_create_list");
             assert(create_list_func);
 
-            side_effect_expr_function_callt func_call_expr;
+            //side_effect_expr_function_callt func_call_expr;
+            code_function_callt func_call_expr;
             func_call_expr.function() = symbol_expr(*create_list_func);
             func_call_expr.arguments().push_back(*current_lhs);
             func_call_expr.arguments().push_back(symbol->value);
             func_call_expr.arguments().push_back(list_elem);
             func_call_expr.location() = get_location_from_decl(element);
-            func_call_expr.type() = int_type();
+            func_call_expr.type() = empty_typet();
 
-            exit(0);
+//            exit(0);
 //            lhs = strncmp_call;
 //            rhs = gen_zero(int_type());
             return func_call_expr;
@@ -2788,6 +2789,8 @@ void python_converter::get_var_assign(
       if (!rhs.type().is_empty() && !is_ctor_call)
         lhs_symbol->value = rhs;
     }
+
+    rhs.dump();
 
     /* If the right-hand side (rhs) of the assignment is a function call, such as: x : int = func()
      * we need to adjust the left-hand side (lhs) of the function call to refer to the lhs of the current assignment.
