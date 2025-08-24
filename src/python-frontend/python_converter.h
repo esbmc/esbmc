@@ -156,6 +156,8 @@ private:
 
   symbolt create_assert_temp_variable(const locationt &location);
 
+  std::string extract_string_from_array_operands(const exprt &array_expr) const;
+
   void register_instance_attribute(
     const std::string &symbol_id,
     const std::string &attr_name,
@@ -250,6 +252,8 @@ private:
     const std::string &class_name,
     const std::string &func_name,
     const std::string &obj_symbol_id);
+
+  size_t get_type_size(const nlohmann::json &ast_node);
 
   void append_models_from_directory(
     std::list<std::string> &file_list,

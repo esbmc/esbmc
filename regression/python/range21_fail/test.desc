@@ -1,0 +1,4 @@
+CORE
+main.py
+
+^SyntaxError\: range expected at most 3 arguments, got 4$

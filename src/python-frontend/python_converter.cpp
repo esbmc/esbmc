@@ -41,6 +41,7 @@ static const std::unordered_map<std::string, StatementType> statement_map = {
   {"If", StatementType::IF_STATEMENT},
   {"AugAssign", StatementType::COMPOUND_ASSIGN},
   {"While", StatementType::WHILE_STATEMENT},
+  {"For", StatementType::FOR_STATEMENT},
   {"Expr", StatementType::EXPR},
   {"Return", StatementType::RETURN},
   {"Assert", StatementType::ASSERT},
@@ -941,6 +942,24 @@ bool python_converter::is_zero_length_array(const exprt &expr)
   return size == 0;
 }
 
+std::string python_converter::extract_string_from_array_operands(
+  const exprt &array_expr) const
+{
+  std::string result;
+  for (const auto &op : array_expr.operands())
+  {
+    if (op.is_constant())
+    {
+      BigInt val =
+        binary2integer(op.value().as_string(), op.type().is_signedbv());
+      if (val == 0)
+        break;
+      result += static_cast<char>(val.to_uint64());
+    }
+  }
+  return result;
+}
+
 exprt python_converter::handle_string_comparison(
   const std::string &op,
   exprt &lhs,
@@ -1050,6 +1069,53 @@ exprt python_converter::handle_string_comparison(
   // Check for zero-length arrays
   if (is_zero_length_array(lhs) && is_zero_length_array(rhs))
     return gen_boolean(op == "Eq");
+
+  if (lhs.id() == "index" && rhs.is_constant() && rhs.type().is_array())
+  {
+    // Extract index value using existing pattern
+    const exprt &index = lhs.operands()[1];
+    BigInt idx =
+      binary2integer(index.value().as_string(), index.type().is_signedbv());
+
+    // Extract RHS string
+    std::string rhs_str = extract_string_from_array_operands(rhs);
+
+    // Try to resolve array contents using existing resolution method
+    const exprt &array = lhs.operands()[0];
+    exprt resolved_array = get_resolved_value(array);
+
+    // If resolution didn't work, fall back to direct symbol lookup
+    if (resolved_array.is_nil() && array.is_symbol())
+    {
+      const symbolt *symbol = symbol_table_.find_symbol(array.identifier());
+      if (symbol)
+      {
+        resolved_array = symbol->value;
+
+        // Follow compound literal reference if needed
+        if (symbol->value.is_symbol())
+        {
+          const symbolt *compound =
+            symbol_table_.find_symbol(symbol->value.identifier());
+          if (compound && compound->value.is_constant())
+            resolved_array = compound->value;
+        }
+      }
+    }
+
+    // Extract and compare array element if valid
+    if (
+      !resolved_array.is_nil() && resolved_array.is_constant() &&
+      resolved_array.type().is_array() && idx >= 0 &&
+      idx < (BigInt)resolved_array.operands().size())
+    {
+      const exprt &string_element = resolved_array.operands()[idx.to_uint64()];
+      std::string lhs_str = extract_string_from_array_operands(string_element);
+
+      bool strings_equal = (lhs_str == rhs_str);
+      return gen_boolean((op == "Eq") ? strings_equal : !strings_equal);
+    }
+  }
 
   // Handle type mismatches to prevent crashes/array out of bounds
   if (!(lhs.is_member() || rhs.is_member()) && lhs.type() != rhs.type())
@@ -1437,6 +1503,37 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     op = element["ops"][0]["_type"].get<std::string>();
 
   assert(!op.empty());
+
+  if (lhs.type().is_array() || rhs.type().is_array())
+  {
+    // Check for zero-length arrays
+    if (
+      is_zero_length_array(lhs) && is_zero_length_array(rhs) &&
+      (op == "Eq" || op == "NotEq"))
+      return gen_boolean(op == "Eq");
+
+    // Compute resulting list
+    if (op == "Mult")
+    {
+      array_typet list_type =
+        static_cast<array_typet>(type_handler_.get_list_type(element));
+
+      typet st = list_type.subtype();
+      size_t list_size = type_handler_.get_array_type_shape(st)[0];
+
+      st.subtype() = st.subtype();
+      st.subtype() = st.subtype().subtype();
+
+      exprt list = gen_zero(st);
+      const exprt &e = (lhs.type().is_array()) ? get_expr(left["elts"][0])
+                                               : get_expr(right["elts"][0]);
+
+      for (size_t i = 0; i < list_size; ++i)
+        list.operands().at(i) = e;
+
+      return list;
+    }
+  }
 
   /// Handle 'is' and 'is not' Python identity comparisons
   if (op == "Is")
@@ -1851,8 +1948,10 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     return from_integer(static_cast<unsigned char>(str_val[0]), t);
   }
 
-  // Handle empty strings or docstrings (often beginning with a newline)
-  if (!str_val.empty() && str_val[0] == '\n' && !is_bytes_literal(element))
+  // Skip Python docstrings or string literals that should not be treated as code.
+  if (
+    !str_val.empty() && (str_val[0] == '\n' || str_val[0] == ' ') &&
+    !is_bytes_literal(element))
   {
     return exprt(); // Return empty expression
   }
@@ -2323,10 +2422,11 @@ void python_converter::update_instance_from_self(
   }
 }
 
-size_t get_type_size(const nlohmann::json &ast_node)
+size_t python_converter::get_type_size(const nlohmann::json &ast_node)
 {
   size_t type_size = 0;
-  if (ast_node["value"].contains("value"))
+
+  if (ast_node.contains("value") && ast_node["value"].contains("value"))
   {
     // Handle bytes literals
     if (
@@ -3202,6 +3302,13 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       exprt cond = get_conditional_stm(element);
       block.copy_to_operands(cond);
       break;
+    }
+    case StatementType::FOR_STATEMENT:
+    {
+      // For loops are transformed to while loops by the preprocessor
+      // This case should not be reached in normal operation
+      throw std::runtime_error(
+        "For loops should be preprocessed before reaching converter");
     }
     case StatementType::COMPOUND_ASSIGN:
     {

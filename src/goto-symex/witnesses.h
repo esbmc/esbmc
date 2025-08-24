@@ -70,6 +70,27 @@ public:
   }
 };
 
+class waypoint
+{
+public:
+  enum Type
+  {
+    assumption,
+    target,
+    function_enter,
+    function_return,
+    branching
+  };
+
+  Type type;
+  std::string file;
+  std::string value;
+  std::string format;
+  BigInt line = c_nonset;
+  BigInt column = c_nonset;
+  std::string function;
+};
+
 class grapht
 {
 private:
@@ -104,6 +125,7 @@ public:
   };
   typet witness_type;
   std::string verified_file;
+  std::vector<waypoint> segments;
 
   yamlt(typet t)
   {
@@ -144,6 +166,13 @@ void create_correctness_yaml_emitter(
   optionst &options,
   YAML::Emitter &root);
 
+void create_violation_yaml_emitter(
+  std::string &verifiedfile,
+  optionst &options,
+  YAML::Emitter &root);
+
+void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint);
+
 /**
  * Create a edge node.
  *
@@ -170,8 +199,10 @@ bool is_valid_witness_step(const namespacet &ns, const goto_trace_stept &step);
  * will return the lhs and rhs formated in a way expected
  * by the assumption field.
  */
-std::string
-get_formated_assignment(const namespacet &ns, const goto_trace_stept &step);
+std::string get_formated_assignment(
+  const namespacet &ns,
+  const goto_trace_stept &step,
+  bool yaml);
 
 /**
  *

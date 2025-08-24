@@ -1149,15 +1149,7 @@ static inline expr2tc gen_value_by_byte(
   /* TODO: Bitwise operations are valid for floats, but we don't have an
    * implementation, yet. Give up. */
   if (is_floatbv_type(type) || is_fixedbv_type(type))
-  {
-    unsigned int type_size = type_byte_size(type).to_uint64();
-    // HACK: this should fix the NN-benchmarks (see #1508)
-    if (
-      is_constant_int2t(value) && to_constant_int2t(value).value.is_zero() &&
-      num_of_bytes == type_size && offset == 0)
-      return gen_zero(type);
     return expr2tc();
-  }
 
   if (is_scalar_type(type) && type->get_width() == 8 && offset == 0)
     return typecast2tc(type, value);

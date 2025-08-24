@@ -142,8 +142,15 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
   }
 
   std::string witness_output = options.get_option("witness-output");
+  std::string witness_yaml_output = options.get_option("witness-output-yaml");
   if (witness_output != "")
-    violation_graphml_goto_trace(options, ns, goto_trace);
+  {
+    log_progress("Building error trace");
+    if (witness_yaml_output == "")
+      violation_graphml_goto_trace(options, ns, goto_trace);
+    else
+      violation_yaml_goto_trace(options, ns, goto_trace);
+  }
 
   if (options.get_bool_option("generate-testcase"))
   {
