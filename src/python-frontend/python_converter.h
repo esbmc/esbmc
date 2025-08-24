@@ -15,6 +15,7 @@ class struct_typet;
 class function_id;
 class symbol_id;
 class function_call_expr;
+class type_handler;
 
 class python_converter
 {
@@ -92,6 +93,7 @@ private:
   friend class function_call_expr;
   friend class numpy_call_expr;
   friend class function_call_builder;
+  friend class type_handler;
 
   template <typename Func>
   decltype(auto) with_ast(const nlohmann::json *new_ast, Func &&f)

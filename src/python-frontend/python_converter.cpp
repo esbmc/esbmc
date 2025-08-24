@@ -1517,21 +1517,64 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     // Compute resulting list
     if (op == "Mult")
     {
-      array_typet list_type =
-        static_cast<array_typet>(type_handler_.get_list_type(element));
+      BigInt list_size;
+      exprt list_elem;
 
-      typet st = list_type.subtype();
-      size_t list_size = type_handler_.get_array_type_shape(st)[0];
+      // Get list size from lhs (e.g.: 3 * [1])
+      if (!lhs.type().is_array())
+      {
+        if (lhs.is_symbol())
+        {
+          symbolt *symbol =
+            find_symbol(to_symbol_expr(lhs).get_identifier().as_string());
+          assert(symbol);
+          list_size = std::stoi(symbol->value.value().as_string(), nullptr, 2);
+        }
+        else if (lhs.is_constant())
+        {
+          list_size = std::stoi(lhs.value().as_string(), nullptr, 2);
+        }
 
-      st.subtype() = st.subtype();
-      st.subtype() = st.subtype().subtype();
+        // List element is the rhs
+        list_elem = get_expr(right["elts"][0]);
+      }
 
-      exprt list = gen_zero(st);
-      const exprt &e = (lhs.type().is_array()) ? get_expr(left["elts"][0])
-                                               : get_expr(right["elts"][0]);
+      // Get list size from rhs (e.g.: 3 * [1])
+      if (!rhs.type().is_array())
+      {
+        if (rhs.is_symbol())
+        {
+          symbolt *symbol =
+            find_symbol(to_symbol_expr(rhs).get_identifier().as_string());
 
-      for (size_t i = 0; i < list_size; ++i)
-        list.operands().at(i) = e;
+          assert(symbol);
+
+          if (symbol->value.is_code()) {
+        	  // Build array dynamically via model
+        	  printf("building function\n");
+        	  exit(0);
+          }
+
+          list_size = std::stoi(symbol->value.value().as_string(), nullptr, 2);
+        }
+        else if (rhs.is_constant())
+        {
+          list_size = std::stoi(rhs.value().as_string(), nullptr, 2);
+        }
+
+        // List element is the rhs
+        list_elem = get_expr(left["elts"][0]);
+      }
+
+      typet st =
+        (lhs.type().is_array()) ? lhs.type().subtype() : rhs.type().subtype();
+
+      typet list_type = array_typet(st, from_integer(list_size, int_type()));
+
+      exprt list = gen_zero(list_type);
+
+      for (int64_t i = 0; i < list_size.to_int64(); ++i)
+        list.operands().at(i) = list_elem;
 
       return list;
     }
