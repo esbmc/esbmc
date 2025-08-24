@@ -337,11 +337,10 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
     return get_typet(elem["func"]["id"].get<std::string>());
   }
 
-  /*
   if (elem["_type"] == "Name")
   {
     const nlohmann::json &var = json_utils::find_var_decl(
-      elem["id"], converter_.current_function_name(), current_file_ast_);
+      elem["id"], current_function_id_.get_function(), current_file_ast_);
 
     if (var["value"]["_type"] == "Call")
     {
@@ -351,7 +350,6 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
     }
     return get_typet(var["value"]["value"]);
   }
-  */
 
   throw std::runtime_error("Invalid type");
 }
