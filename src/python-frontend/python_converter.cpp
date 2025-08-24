@@ -1542,6 +1542,9 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       // Get list size from rhs (e.g.: 3 * [1])
       if (!rhs.type().is_array())
       {
+        // List element is the rhs
+        list_elem = get_expr(left["elts"][0]);
+
         if (rhs.is_symbol())
         {
           symbolt *symbol =
@@ -1549,10 +1552,30 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
           assert(symbol);
 
-          if (symbol->value.is_code()) {
-        	  // Build array dynamically via model
-        	  printf("building function\n");
-        	  exit(0);
+          if (symbol->value.is_code())
+          {
+            // Build array dynamically via model
+            printf("building function\n");
+
+            // Add array as VLA
+
+            symbolt *create_list_func = symbol_table_.find_symbol("c:@F@ESBMC_py_create_list");
+            assert(create_list_func);
+
+            side_effect_expr_function_callt func_call_expr;
+            func_call_expr.function() = symbol_expr(*create_list_func);
+            func_call_expr.arguments().push_back(*current_lhs);
+            func_call_expr.arguments().push_back(symbol->value);
+            func_call_expr.arguments().push_back(list_elem);
+            func_call_expr.location() = get_location_from_decl(element);
+            func_call_expr.type() = int_type();
+
+            exit(0);
+//            lhs = strncmp_call;
+//            rhs = gen_zero(int_type());
+            return func_call_expr;
+
+            //return nil_exprt(); // continue with lhs OP rhs
           }
 
           list_size = std::stoi(symbol->value.value().as_string(), nullptr, 2);
@@ -1561,9 +1584,6 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
         {
           list_size = std::stoi(rhs.value().as_string(), nullptr, 2);
         }
-
-        // List element is the rhs
-        list_elem = get_expr(left["elts"][0]);
       }
 
       typet st =
