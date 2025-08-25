@@ -83,8 +83,9 @@ public:
   static bool is_python_exceptions(const std::string &name)
   {
     return (
-      name == "BaseExecption" || name == "ValueError" || name == "TypeError" ||
-      name == "IndexError" || name == "KeyError");
+      name == "BaseException" || name == "ValueError" || name == "TypeError" ||
+      name == "IndexError" || name == "KeyError" ||
+      name == "ZeroDivisionError");
   }
 
   static bool is_c_model_func(const std::string &func_name)

@@ -46,3 +46,12 @@ class KeyError(BaseException):
 
     def __str__(self) -> str:
         return self.message
+
+class ZeroDivisionError(BaseException):
+    message: str = ""
+
+    def __init__(self, message: str):
+        self.message = message
+
+    def __str__(self) -> str:
+        return self.message
