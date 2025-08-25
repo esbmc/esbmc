@@ -155,6 +155,11 @@ public:
 
   std::string dump_smt() override;
 
+  smt_astt mk_quantifier(
+  bool is_forall, 
+  std::vector<smt_astt> lhs, 
+  smt_astt rhs) override;
+
   unsigned int to_bv_counter;
 
   cvc5::Solver slv;
