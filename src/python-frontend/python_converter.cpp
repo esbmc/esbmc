@@ -1558,20 +1558,23 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
             // Add array as VLA
             code_declt decl(*current_lhs);
-            symbolt* lhs_symbol = find_symbol(to_symbol_expr(*current_lhs).get_identifier().as_string());
+            symbolt *lhs_symbol = find_symbol(
+              to_symbol_expr(*current_lhs).get_identifier().as_string());
             assert(lhs_symbol);
 
             decl.location() = get_location_from_decl(element);
             current_block->copy_to_operands(decl);
 
-            symbolt *create_list_func = symbol_table_.find_symbol("c:@F@ESBMC_py_create_list");
+            symbolt *create_list_func =
+              symbol_table_.find_symbol("c:@F@ESBMC_py_create_list");
             assert(create_list_func);
 
             code_function_callt func_call_expr;
             func_call_expr.function() = symbol_expr(*create_list_func);
 
             exprt vla = address_of_exprt(*current_lhs);
-            func_call_expr.arguments() = {vla, /*symbol->value*/ list_elem, list_elem};
+            func_call_expr.arguments() = {
+              vla, /*symbol->value*/ list_elem, list_elem};
             func_call_expr.location() = get_location_from_decl(element);
             func_call_expr.type() = empty_typet();
 
@@ -2782,10 +2785,11 @@ void python_converter::get_var_assign(
          * create the LHS type as a zero-size array: "current_element_type = get_typet(lhs_type, type_size);"
          * After parsing the RHS, we need to adjust the LHS type size to match
          * the size of the resulting RHS string.*/
-    	if (!rhs.type().is_empty()) {
+        if (!rhs.type().is_empty())
+        {
           lhs_symbol->type = rhs.type();
           lhs.type() = rhs.type();
-    	}
+        }
       }
       if (!rhs.type().is_empty() && !is_ctor_call)
         lhs_symbol->value = rhs;
@@ -3718,11 +3722,32 @@ void python_converter::append_models_from_directory(
   }
 }
 
+static void
+add_global_static_variable(contextt &ctx, const typet t, std::string name)
+{
+  std::string id = "c:@" + name;
+  symbolt symbol;
+  symbol.mode = "C";
+  symbol.type = std::move(t);
+  symbol.name = name;
+  symbol.id = id;
+
+  symbol.lvalue = true;
+  symbol.static_lifetime = true;
+  symbol.is_extern = false;
+  symbol.file_local = false;
+  symbol.value = gen_zero(t, true);
+  symbol.value.zero_initializer(true);
+
+  symbolt *added_symbol = ctx.move_symbol_to_context(symbol);
+  assert(added_symbol);
+}
+
 void python_converter::load_c_intrisics()
 {
   // Add symbols required by the C models
 
-  typet t = long_long_int_type();
+  /*typet t = long_long_int_type();
   locationt l;
   l.set_file("esbmc_intrinsics.h");
   symbolt symbol;
@@ -3738,6 +3763,17 @@ void python_converter::load_c_intrisics()
   symbolt *new_symbol = symbol_table_.move_symbol_to_context(symbol);
   exprt value = from_integer(BigInt(0), t);
   new_symbol->value = value;
+*/
+  add_global_static_variable(
+    symbol_table_, long_long_int_type(), "__ESBMC_rounding_mode");
+
+  auto type1 = array_typet(bool_type(), exprt("infinity"));
+  add_global_static_variable(symbol_table_, type1, "__ESBMC_alloc");
+  add_global_static_variable(symbol_table_, type1, "__ESBMC_deallocated");
+  add_global_static_variable(symbol_table_, type1, "__ESBMC_is_dynamic");
+
+  auto type2 = array_typet(size_type(), exprt("infinity"));
+  add_global_static_variable(symbol_table_, type2, "__ESBMC_alloc_size");
 }
 
 void python_converter::convert()
