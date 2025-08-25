@@ -329,7 +329,8 @@ void goto_symext::update_throw_target(
     }
 
     assert(
-      i != cur_state->call_stack.rend() &&
+      (i != cur_state->call_stack.rend() ||
+       target->function == "__ESBMC_main") &&
       "Target instruction in throw "
       "handler not in any function frame on the stack");
   }
