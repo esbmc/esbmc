@@ -1567,7 +1567,6 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
             symbolt *create_list_func = symbol_table_.find_symbol("c:@F@ESBMC_py_create_list");
             assert(create_list_func);
 
-            //side_effect_expr_function_callt func_call_expr;
             code_function_callt func_call_expr;
             func_call_expr.function() = symbol_expr(*create_list_func);
 
@@ -2679,8 +2678,8 @@ void python_converter::get_var_assign(
         location_begin,
         current_element_type);
       symbol.lvalue = true;
-      symbol.static_lifetime =
-        (current_class_name_ == "" && current_func_name_ == "") ? true : false;
+      /*symbol.static_lifetime =
+        (current_class_name_ == "" && current_func_name_ == "") ? true : false;*/
       symbol.file_local = true;
       symbol.is_extern = false;
 
