@@ -1555,19 +1555,14 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
           if (symbol->value.is_code())
           {
             // Build array dynamically via model
-            printf("building function\n");
 
             // Add array as VLA
             code_declt decl(*current_lhs);
             symbolt* lhs_symbol = find_symbol(to_symbol_expr(*current_lhs).get_identifier().as_string());
             assert(lhs_symbol);
 
-            lhs_symbol->dump();
-
             decl.location() = get_location_from_decl(element);
-            decl.dump();
             current_block->copy_to_operands(decl);
-            printf("current_block addr1: %p\n", current_block);
 
             symbolt *create_list_func = symbol_table_.find_symbol("c:@F@ESBMC_py_create_list");
             assert(create_list_func);
@@ -1579,16 +1574,9 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
             exprt vla = address_of_exprt(*current_lhs);
             func_call_expr.arguments() = {vla, /*symbol->value*/ list_elem, list_elem};
             func_call_expr.location() = get_location_from_decl(element);
-            func_call_expr.type() = /*int_type()*/empty_typet();
+            func_call_expr.type() = empty_typet();
 
-            func_call_expr.dump();
-
-//            exit(0);
-//            lhs = strncmp_call;
-//            rhs = gen_zero(int_type());
             return func_call_expr;
-
-            //return nil_exprt(); // continue with lhs OP rhs
           }
 
           list_size = std::stoi(symbol->value.value().as_string(), nullptr, 2);
