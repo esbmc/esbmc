@@ -124,6 +124,17 @@ public:
     }
   }
 
+  void add_model_annotation()
+  {
+    // Add type annotation to all class methods
+    for (Json &element : ast_["body"])
+    {
+      // Process classes and their methods
+      if (element["_type"] == "ClassDef")
+        annotate_class(element);
+    }
+  }
+
   void add_type_annotation(const std::string &func_name)
   {
     current_line_ = 0;
@@ -912,7 +923,8 @@ private:
     element.erase("type_comment");
 
     // Update value fields with the correct offsets
-    auto update_offsets = [&inferred_type](Json &value) {
+    auto update_offsets = [&inferred_type](Json &value)
+    {
       value["col_offset"] =
         value["col_offset"].template get<int>() + inferred_type.size() + 1;
       value["end_col_offset"] =

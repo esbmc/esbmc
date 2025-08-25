@@ -318,7 +318,9 @@ void goto_symext::update_throw_target(
     for (i = cur_state->call_stack.rbegin(); i != cur_state->call_stack.rend();
          i++)
     {
-      if (i->function_identifier == target->function)
+      irep_idt id = i->function_identifier.empty() ? "__ESBMC_main"
+                                                   : i->function_identifier;
+      if (id == target->function)
       {
         statet::goto_state_listt &goto_state_list = i->goto_state_map[target];
 
