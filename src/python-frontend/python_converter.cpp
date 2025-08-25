@@ -2792,8 +2792,6 @@ void python_converter::get_var_assign(
         lhs_symbol->value = rhs;
     }
 
-    rhs.dump();
-
     /* If the right-hand side (rhs) of the assignment is a function call, such as: x : int = func()
      * we need to adjust the left-hand side (lhs) of the function call to refer to the lhs of the current assignment.
      */
@@ -2821,10 +2819,7 @@ void python_converter::get_var_assign(
         rhs.op0() = lhs;
       }
 
-      printf("target block addr: %p\n", &target_block);
-
       target_block.copy_to_operands(rhs);
-      target_block.dump();
       return;
     }
 
