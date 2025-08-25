@@ -114,6 +114,7 @@ Below is an overview of ESBMC-Python's key capabilities:
   - **Enhanced float() constructor**: Supports conversion from strings including special values such as `nan`, `inf`, `-inf`, `infinity`, and `+infinity` (case-insensitive with whitespace handling).
   - **Min/Max**: Supports `min(a, b)` and `max(a, b)` with type promotion (int-to-float). Currently limited to two arguments.
   - **Input**: Models `input()` as a non-deterministic string of up to 256 characters. This allows verification of programs that depend on user input.
+  - **Enumerate**: Supports `enumerate(iterable, start=0)` for iterating over sequences with automatic indexing. Handles both tuple unpacking `(for i, x in enumerate(...))` and single variable assignment `(for item in enumerate(...))`. Supports an optional `start` parameter and works with lists, strings, and other iterables.
 - **Verification properties**: Division-by-zero, indexing errors, arithmetic overflow, and user-defined assertions.
 
 ### Math Module Support
@@ -139,6 +140,7 @@ The current version of ESBMC-Python has the following limitations:
 - Dictionaries are not supported at all.
 - `min()` and `max()` currently support only two arguments and do not handle iterables or the key/default parameters.
 - `input()` is modeled as a nondeterministic string with a maximum length of 256 characters (under-approximation).
+- `enumerate()` supports standard usage patterns but may have limitations with complex nested iterables or advanced parameter combinations.
 
 ### Example: Division by Zero in Python
 
