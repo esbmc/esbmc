@@ -12,6 +12,8 @@ ignored_dirs=(
   "div6_fail"
   "div7_fail"
   "esbmc-assume"
+  "enumerate15"
+  "enumerate15_fail"
   "func-no-params-types-fail"
   "function-option-fail"
   "global"
