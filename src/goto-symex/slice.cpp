@@ -103,19 +103,20 @@ void symex_slicet::run_on_assignment(
           return;
       }
     }
+
+    const symbol2t &lhs = to_symbol2t(SSA_step.lhs);
+    auto it = indexes.find(lhs.get_symbol_name());
     // WITH(symbol[constant_index] := constant_value)
     if (
       is_with2t(SSA_step.rhs) &&
       is_symbol2t(to_with2t(SSA_step.rhs).source_value) &&
       is_constant_int2t(to_with2t(SSA_step.rhs).update_field))
     {
-      const symbol2t &lhs = to_symbol2t(SSA_step.lhs);
       const with2t &with = to_with2t(SSA_step.rhs);
       const symbol2t &rhs_symbol = to_symbol2t(with.source_value);
       const constant_int2t &rhs_index = to_constant_int2t(with.update_field);
 
       // Is lhs in the watch list?
-      auto it = indexes.find(lhs.get_symbol_name());
       if (it != indexes.end())
       {
         // Found an array in the dependency list! Its guard should be added to the dependency list
@@ -144,6 +145,14 @@ void symex_slicet::run_on_assignment(
         }
         return;
       }
+    }
+
+    // We might be trying to initialize an array in a weird way
+    if (it != indexes.end())
+    {
+      get_symbols<true>(SSA_step.guard);
+      get_symbols<true>(SSA_step.rhs);
+      return;
     }
 
     // we don't really need it
