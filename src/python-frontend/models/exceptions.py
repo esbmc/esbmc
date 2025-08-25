@@ -47,6 +47,7 @@ class KeyError(BaseException):
     def __str__(self) -> str:
         return self.message
 
+
 class ZeroDivisionError(BaseException):
     message: str = ""
 
