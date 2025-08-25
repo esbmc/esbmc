@@ -19,7 +19,7 @@ assert grade == "pass" or grade == "fail"
 access: str = "granted" if level == 5 else "denied"       # == operator
 assert access == "granted" or "denied"
 result: str = "different" if a != b else "same"           # != operator
-assert result == "different"
+assert result == "different" # this assertion should fail
 
 # Complex conditions with logical operators
 category: str = "special" if (age >= 65 and income < 30000) else "regular"

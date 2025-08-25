@@ -240,13 +240,6 @@ private:
 
   void handle_float_division(exprt &lhs, exprt &rhs, exprt &bin_expr) const;
 
-  bool evaluate_constant_comparison(
-    const std::string &op,
-    const exprt &lhs,
-    const exprt &rhs) const;
-
-  exprt evaluate_if_expression(const exprt &if_expr);
-
   void get_attributes_from_self(
     const nlohmann::json &method_body,
     struct_typet &clazz);
