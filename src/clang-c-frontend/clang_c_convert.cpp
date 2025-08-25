@@ -633,7 +633,6 @@ bool clang_c_convertert::get_function(
     // Continue for virtual method as we need its type to make virtual function table
     if (!is_fd_virtual_or_overriding(fd))
       return false;
-
   }
 
   // per https://eel.is/c++draft/dcl.spec.auto#general-14 return types of template functions are
