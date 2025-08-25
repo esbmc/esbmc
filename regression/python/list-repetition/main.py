@@ -28,6 +28,6 @@ assert d[0] == 2
 assert d[1] == 2
 assert d[2] == 2
 
-e = [1,2,3]
-f = len(e)
-g = [3] * f
+# e = [1,2,3]
+# f = len(e)
+# g = [3] * f
