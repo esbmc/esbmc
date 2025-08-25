@@ -52,7 +52,9 @@ static const std::unordered_map<std::string, StatementType> statement_map = {
   {"ImportFrom", StatementType::IMPORT},
   {"Import", StatementType::IMPORT},
   {"Raise", StatementType::RAISE},
-  {"Global", StatementType::GLOBAL}};
+  {"Global", StatementType::GLOBAL},
+  {"Try", StatementType::TRY},
+  {"ExceptHandler", StatementType::EXCEPTHANDLER}};
 
 static bool is_char_type(const typet &t)
 {
@@ -3515,14 +3517,87 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       }
       break;
     }
+    case StatementType::TRY:
+    {
+      exprt new_expr = codet("cpp-catch");
+      exprt try_block = get_block(element["body"]);
+      exprt handler = get_block(element["handlers"]);
+      new_expr.move_to_operands(try_block);
+
+      for (const auto &op : handler.operands())
+        new_expr.copy_to_operands(op);
+
+      block.move_to_operands(new_expr);
+      break;
+    }
+    case StatementType::EXCEPTHANDLER:
+    {
+      exprt catch_block = get_block(element["body"]);
+
+      symbol_id sid = create_symbol_id();
+      std::string name = element["name"].get<std::string>();
+      sid.set_object(name);
+      locationt location = get_location_from_decl(element);
+      std::string module_name = location.get_file().as_string();
+      typet type =
+        type_handler_.get_typet(element["type"]["id"].get<std::string>());
+      symbolt symbol = create_symbol(
+        module_name, current_func_name_, sid.to_string(), location, type);
+      symbol.name = name;
+      symbol.lvalue = true;
+      symbol.is_extern = false;
+      symbol.file_local = false;
+      symbolt *s = symbol_table_.move_symbol_to_context(symbol);
+
+      exprt sym = symbol_expr(*s);
+      catch_block.type() = type;
+      code_declt decl(sym);
+      exprt decl_code = convert_expression_to_code(decl);
+      decl_code.location() = location;
+      codet::operandst &ops = catch_block.operands();
+      ops.insert(ops.begin(), decl_code);
+
+      block.move_to_operands(catch_block);
+      break;
+    }
+    case StatementType::RAISE:
+    {
+      exprt raise = get_expr(element["exc"]);
+      typet type = type_handler_.get_typet(
+        element["exc"]["func"]["id"].get<std::string>());
+      locationt location = get_location_from_decl(element);
+      if (raise.is_function_call() && raise.type().id() == "constructor")
+      {
+        // This logic should be applied to all constructor calls
+        // Using sideeffect will convert class(); into
+        // DECL tmp; class(tmp);
+        code_function_callt call =
+          to_code_function_call(convert_expression_to_code(raise));
+        side_effect_expr_function_callt tmp;
+        tmp.function() = call.function();
+        tmp.arguments() = call.arguments();
+        tmp.type() = type;
+        tmp.location() = location;
+        raise = tmp;
+      }
+
+      exprt side = side_effect_exprt("cpp-throw", type);
+      side.location() = location;
+      side.move_to_operands(raise);
+
+      codet code_expr("expression");
+      code_expr.operands().push_back(side);
+      block.move_to_operands(code_expr);
+      break;
+    }
+
     /* "https://docs.python.org/3/tutorial/controlflow.html:
      * "The pass statement does nothing. It can be used when a statement
      *  is required syntactically but the program requires no action." */
     case StatementType::PASS:
     // Imports are handled by parser.py so we can just ignore here.
     case StatementType::IMPORT:
-    // TODO: Raises are ignored for now. Handling case to avoid calling abort() on default.
-    case StatementType::RAISE:
+      // TODO: Raises are ignored for now. Handling case to avoid calling abort() on default.
       break;
     case StatementType::UNKNOWN:
     default:
@@ -3622,7 +3697,7 @@ void python_converter::convert()
     const std::string &ast_output_dir =
       (*ast_json)["ast_output_dir"].get<std::string>();
     std::list<std::string> model_files = {
-      "range", "int", "consensus", "random"};
+      "range", "int", "consensus", "random", "exceptions"};
     std::list<std::string> model_folders = {"os", "numpy"};
 
     for (const auto &folder : model_folders)

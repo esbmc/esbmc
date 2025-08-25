@@ -618,7 +618,8 @@ private:
     if (
       json_utils::is_class<Json>(func_id, ast_) ||
       type_utils::is_builtin_type(func_id) ||
-      type_utils::is_consensus_type(func_id))
+      type_utils::is_consensus_type(func_id) ||
+      type_utils::is_python_exceptions(func_id))
       return func_id;
 
     if (type_utils::is_consensus_func(func_id))
