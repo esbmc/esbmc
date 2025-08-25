@@ -1572,11 +1572,14 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
             //side_effect_expr_function_callt func_call_expr;
             code_function_callt func_call_expr;
             func_call_expr.function() = symbol_expr(*create_list_func);
-            func_call_expr.arguments().push_back(*current_lhs);
+            /*func_call_expr.arguments().push_back(*current_lhs);
             func_call_expr.arguments().push_back(symbol->value);
-            func_call_expr.arguments().push_back(list_elem);
+            func_call_expr.arguments().push_back(list_elem);*/
+            func_call_expr.arguments() = {*current_lhs, symbol->value, list_elem};
             func_call_expr.location() = get_location_from_decl(element);
-            func_call_expr.type() = int_type();
+            func_call_expr.type() = /*int_type()*/empty_typet();
+
+            func_call_expr.dump();
 
 //            exit(0);
 //            lhs = strncmp_call;

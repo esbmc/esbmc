@@ -619,6 +619,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
     }
 
     new_expr = decl;
+    new_expr.dump();
   }
   return false;
 }
@@ -989,6 +990,7 @@ bool clang_c_convertert::get_type(const clang::Type &the_type, typet &new_type)
         return true;
 
       new_type = array_typet(subtype, size_expr);
+      new_type.dump();
     }
     else
       new_type = empty_typet();
