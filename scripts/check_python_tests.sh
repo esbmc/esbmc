@@ -31,6 +31,7 @@ ignored_dirs=(
   "random1-fail"
   "random2-fail"
   "range19-fail"
+  "ternary_symbolic"
   "try-fail"
   "verifier-assume"
   "while-random-fail"

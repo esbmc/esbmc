@@ -2872,6 +2872,56 @@ void python_converter::get_compound_assign(
   target_block.copy_to_operands(code_assign);
 }
 
+typet resolve_ternary_type(
+  const typet &then_type,
+  const typet &else_type,
+  const typet &default_type)
+{
+  if (then_type == else_type)
+    return then_type;
+
+  // Enhanced numeric promotion: int < float
+  if (
+    (then_type.is_signedbv() || then_type.is_unsignedbv()) &&
+    else_type.is_floatbv())
+    return else_type;
+  if (
+    (else_type.is_signedbv() || else_type.is_unsignedbv()) &&
+    then_type.is_floatbv())
+    return then_type;
+
+  // Both signed integers
+  if (then_type.is_signedbv() && else_type.is_signedbv())
+    return then_type;
+
+  // Both unsigned integers
+  if (then_type.is_unsignedbv() && else_type.is_unsignedbv())
+    return then_type;
+
+  // Both arrays (strings)
+  if (then_type.is_array() && else_type.is_array())
+    return then_type;
+
+  // Both booleans
+  if (then_type.is_bool() && else_type.is_bool())
+    return then_type;
+
+  // Mixed signed/unsigned integers - prefer signed for safety
+  if (then_type.is_signedbv() && else_type.is_unsignedbv())
+    return then_type;
+  if (then_type.is_unsignedbv() && else_type.is_signedbv())
+    return else_type;
+
+  // Incompatible types
+  log_warning(
+    "Ternary branches have incompatible types: {} vs {}, using default {}",
+    then_type.id_string(),
+    else_type.id_string(),
+    default_type.id_string());
+
+  return default_type;
+}
+
 exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 {
   // Copy current type
@@ -2911,7 +2961,12 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   // ternary operator
   if (type == "IfExp")
   {
-    exprt if_expr("if", current_element_type);
+    // Resolve result type based on branch types
+    typet result_type =
+      resolve_ternary_type(then.type(), else_expr.type(), current_element_type);
+
+    // Create fully symbolic if expression
+    exprt if_expr("if", result_type);
     if_expr.copy_to_operands(cond, then, else_expr);
     return if_expr;
   }
