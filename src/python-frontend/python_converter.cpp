@@ -74,11 +74,45 @@ static bool is_ordered_comparison(const std::string &op)
   return op == "Lt" || op == "Gt" || op == "LtE" || op == "GtE";
 }
 
-static bool is_relational_op(const std::string &op)
+static bool is_comparison_op(const std::string &op)
 {
   return (
+    // Python AST format
     op == "Eq" || op == "Lt" || op == "LtE" || op == "NotEq" || op == "Gt" ||
-    op == "GtE" || op == "And" || op == "Or");
+    op == "GtE" ||
+    // Symbol format
+    op == "==" || op == "=" || op == "<" || op == "<=" || op == "!=" ||
+    op == "notequal" || op == ">" || op == ">=");
+}
+
+static bool is_logical_op(const std::string &op)
+{
+  return op == "And" || op == "Or" || op == "and" || op == "or";
+}
+
+static bool is_relational_op(const std::string &op)
+{
+  return is_comparison_op(op) || is_logical_op(op);
+}
+
+template <typename T>
+static bool
+perform_comparison(const std::string &op, const T &lhs_val, const T &rhs_val)
+{
+  if (op == ">=" || op == "GtE")
+    return lhs_val >= rhs_val;
+  if (op == "<=" || op == "LtE")
+    return lhs_val <= rhs_val;
+  if (op == ">" || op == "Gt")
+    return lhs_val > rhs_val;
+  if (op == "<" || op == "Lt")
+    return lhs_val < rhs_val;
+  if (op == "==" || op == "=" || op == "Eq")
+    return lhs_val == rhs_val;
+  if (op == "!=" || op == "notequal" || op == "NotEq")
+    return lhs_val != rhs_val;
+
+  throw std::runtime_error("Unhandled comparison operator: " + op);
 }
 
 static StatementType get_statement_type(const nlohmann::json &element)
@@ -1159,6 +1193,117 @@ exprt python_converter::handle_string_comparison(
   return nil_exprt(); // continue with lhs OP rhs
 }
 
+bool python_converter::evaluate_constant_comparison(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs) const
+{
+  if (!is_comparison_op(op))
+    throw std::runtime_error("Invalid operator for constant comparison");
+
+  // Validate inputs
+  if (!lhs.is_constant() || !rhs.is_constant())
+    throw std::runtime_error("Non-constant operands in constant evaluation");
+
+  try
+  {
+    // Skip floating-point comparisons
+    if (lhs.type().is_floatbv() || rhs.type().is_floatbv())
+    {
+      throw std::runtime_error("Floating-point constant evaluation skipped");
+    }
+    // Integer comparisons
+    else if (
+      (lhs.type().is_signedbv() || lhs.type().is_unsignedbv()) &&
+      (rhs.type().is_signedbv() || rhs.type().is_unsignedbv()))
+    {
+      BigInt lhs_val =
+        binary2integer(lhs.value().as_string(), lhs.type().is_signedbv());
+      BigInt rhs_val =
+        binary2integer(rhs.value().as_string(), rhs.type().is_signedbv());
+      return perform_comparison(op, lhs_val, rhs_val);
+    }
+    // String comparisons
+    else if (lhs.type().is_array() && rhs.type().is_array())
+    {
+      std::string lhs_str = extract_string_from_array_operands(lhs);
+      std::string rhs_str = extract_string_from_array_operands(rhs);
+      return perform_comparison(op, lhs_str, rhs_str);
+    }
+    // Boolean comparisons
+    else if (lhs.type().is_bool() && rhs.type().is_bool())
+    {
+      bool lhs_val = !lhs.is_false();
+      bool rhs_val = !rhs.is_false();
+      return perform_comparison(op, lhs_val, rhs_val);
+    }
+    else
+    {
+      throw std::runtime_error(
+        "Unsupported comparison types in constant evaluation");
+    }
+  }
+  catch (const std::exception &e)
+  {
+    throw std::runtime_error("Comparison evaluation error");
+  }
+}
+
+exprt python_converter::evaluate_if_expression(const exprt &if_expr)
+{
+  if (if_expr.id() != "if" || if_expr.operands().size() != 3)
+    return nil_exprt();
+
+  const exprt &condition = if_expr.operands()[0];
+  const exprt &then_expr = if_expr.operands()[1];
+  const exprt &else_expr = if_expr.operands()[2];
+
+  // Handle direct boolean constants/variables
+  exprt resolved_condition =
+    condition.is_symbol() ? get_resolved_value(condition) : condition;
+  if (
+    !resolved_condition.is_nil() && resolved_condition.is_constant() &&
+    resolved_condition.type().is_bool())
+  {
+    bool result = !resolved_condition.is_false();
+    const exprt &selected = result ? then_expr : else_expr;
+    return selected.is_constant() ? selected : get_resolved_value(selected);
+  }
+
+  // Handle relational comparisons using the shared helper
+  if (condition.operands().size() == 2)
+  {
+    const std::string op = condition.id().as_string();
+    exprt lhs = condition.operands()[0].is_symbol()
+                  ? get_resolved_value(condition.operands()[0])
+                  : condition.operands()[0];
+    exprt rhs = condition.operands()[1].is_symbol()
+                  ? get_resolved_value(condition.operands()[1])
+                  : condition.operands()[1];
+
+    if (lhs.is_constant() && rhs.is_constant())
+    {
+      try
+      {
+        // Use the shared comparison logic
+        bool condition_result = evaluate_constant_comparison(op, lhs, rhs);
+
+        // Return appropriate branch
+        const exprt &selected = condition_result ? then_expr : else_expr;
+        return selected.is_constant() ? selected : get_resolved_value(selected);
+      }
+      catch (...)
+      {
+        // Fall through to return nil_exprt() if comparison fails
+        log_warning(
+          "evaluate_if_expression: failed to evaluate '{}' comparison", op);
+      }
+    }
+  }
+
+  return nil_exprt();
+}
+
 // Helper method to resolve symbol values to constants
 exprt python_converter::get_resolved_value(const exprt &expr)
 {
@@ -1180,6 +1325,13 @@ exprt python_converter::get_resolved_value(const exprt &expr)
 
   const symbol_exprt &sym = to_symbol_expr(expr);
   const symbolt *symbol = symbol_table_.find_symbol(sym.get_identifier());
+
+  if (symbol->value.id() == "if")
+  {
+    exprt evaluated = evaluate_if_expression(symbol->value);
+    if (!evaluated.is_nil())
+      return evaluated;
+  }
 
   if (!symbol || symbol->value.is_nil())
     return nil_exprt();
@@ -2872,6 +3024,37 @@ void python_converter::get_compound_assign(
   target_block.copy_to_operands(code_assign);
 }
 
+typet resolve_ternary_type(
+  const typet &then_type,
+  const typet &else_type,
+  const typet &default_type)
+{
+  if (then_type == else_type)
+    return then_type;
+
+  // Numeric promotion: int < float
+  if (
+    (then_type.is_signedbv() || then_type.is_unsignedbv()) &&
+    else_type.is_floatbv())
+    return else_type;
+  if (
+    (else_type.is_signedbv() || else_type.is_unsignedbv()) &&
+    then_type.is_floatbv())
+    return then_type;
+
+  // Both strings (arrays of char)
+  if (then_type.is_array() && else_type.is_array())
+    return then_type; // normalize to array<character>
+
+  // Otherwise: incompatible
+  log_warning(
+    "Ternary branches have incompatible types ({} vs {}), using default {}",
+    then_type.id_string(),
+    else_type.id_string(),
+    default_type.id_string());
+  return default_type;
+}
+
 exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 {
   // Copy current type
@@ -2911,7 +3094,9 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   // ternary operator
   if (type == "IfExp")
   {
-    exprt if_expr("if", current_element_type);
+    typet result_type =
+      resolve_ternary_type(then.type(), else_expr.type(), current_element_type);
+    exprt if_expr("if", result_type);
     if_expr.copy_to_operands(cond, then, else_expr);
     return if_expr;
   }
