@@ -154,7 +154,7 @@ class Preprocessor(ast.NodeTransformer):
         """Extract a simplified type string from a type annotation AST node"""
         if annotation is None:
             return 'Any'
-        
+
         if isinstance(annotation, ast.Name):
             return annotation.id
         elif isinstance(annotation, ast.Subscript):
@@ -165,7 +165,7 @@ class Preprocessor(ast.NodeTransformer):
             if isinstance(annotation.value, str):
                 # Handle string annotations like "list[int]"
                 return annotation.value.split('[')[0]
-        
+
         return 'Any'
 
     def _get_iterable_type_annotation(self, iterable):
@@ -269,7 +269,7 @@ class Preprocessor(ast.NodeTransformer):
         Transforms:
             for index, value in enumerate(iterable, start):
                 # body
-    
+
         Into:
             ESBMC_iter = iterable
             ESBMC_index = start  # or 0 if not provided (enumeration index)
@@ -311,7 +311,7 @@ class Preprocessor(ast.NodeTransformer):
         for stmt in result:
             self.ensure_all_locations(stmt, node)
             ast.fix_missing_locations(stmt)
-        
+
         return result
 
     def _validate_enumerate_call(self, enumerate_call):
@@ -324,7 +324,7 @@ class Preprocessor(ast.NodeTransformer):
     def _parse_enumerate_target(self, target):
         """Parse and validate the for loop target, return target information."""
         # Check if this is tuple/list unpacking or single variable assignment
-        is_unpacking = (isinstance(target, (ast.Tuple, ast.List)) and 
+        is_unpacking = (isinstance(target, (ast.Tuple, ast.List)) and
                     len(target.elts) == 2)
 
         if is_unpacking:
@@ -352,13 +352,13 @@ class Preprocessor(ast.NodeTransformer):
     def _parse_enumerate_arguments(self, enumerate_call, node):
         """Extract and validate iterable and start value from enumerate call."""
         iterable = enumerate_call.args[0]
-        
+
         if len(enumerate_call.args) > 1:
             start_value = enumerate_call.args[1]
             self._validate_start_value(start_value)
         else:
             start_value = self.create_constant_node(0, node)
-        
+
         return iterable, start_value
 
     def _validate_start_value(self, start_value):
@@ -368,7 +368,7 @@ class Preprocessor(ast.NodeTransformer):
             if isinstance(start_val, float):
                 raise TypeError("'float' object cannot be interpreted as an integer")
             elif isinstance(start_val, str):
-                raise TypeError("'str' object cannot be interpreted as an integer")  
+                raise TypeError("'str' object cannot be interpreted as an integer")
             elif isinstance(start_val, bool):
                 # Python accepts bool since bool is a subclass of int
                 pass
@@ -449,7 +449,7 @@ class Preprocessor(ast.NodeTransformer):
         # Create the while statement
         while_stmt = ast.While(test=while_cond, body=loop_body, orelse=[])
         self.ensure_all_locations(while_stmt, node)
-        
+
         return while_stmt
 
     def _create_unpacking_loop_body(self, node, target_info):
@@ -475,7 +475,7 @@ class Preprocessor(ast.NodeTransformer):
             ctx=ast.Load()
         )
         self.ensure_all_locations(subscript, node)
-        
+
         element_type = self._get_element_type_from_container(annotation_id)
         user_value_assign = ast.AnnAssign(
             target=self.create_name_node(target_info['value_var'], ast.Store(), node),
