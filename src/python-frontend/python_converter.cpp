@@ -1558,6 +1558,13 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
             printf("building function\n");
 
             // Add array as VLA
+            code_declt decl(*current_lhs);
+            symbolt* lhs_symbol = find_symbol(to_symbol_expr(*current_lhs).get_identifier().as_string());
+            assert(lhs_symbol);
+            decl.location() = get_location_from_decl(element);
+            decl.dump();
+            current_block->copy_to_operands(decl);
+            printf("current_block addr1: %p\n", current_block);
 
             symbolt *create_list_func = symbol_table_.find_symbol("c:@F@ESBMC_py_create_list");
             assert(create_list_func);
@@ -1569,7 +1576,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
             func_call_expr.arguments().push_back(symbol->value);
             func_call_expr.arguments().push_back(list_elem);
             func_call_expr.location() = get_location_from_decl(element);
-            func_call_expr.type() = empty_typet();
+            func_call_expr.type() = int_type();
 
 //            exit(0);
 //            lhs = strncmp_call;
@@ -2819,7 +2826,10 @@ void python_converter::get_var_assign(
         rhs.op0() = lhs;
       }
 
+      printf("target block addr: %p\n", &target_block);
+
       target_block.copy_to_operands(rhs);
+      target_block.dump();
       return;
     }
 
