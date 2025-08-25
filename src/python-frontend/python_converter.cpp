@@ -1561,6 +1561,9 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
             code_declt decl(*current_lhs);
             symbolt* lhs_symbol = find_symbol(to_symbol_expr(*current_lhs).get_identifier().as_string());
             assert(lhs_symbol);
+
+            lhs_symbol->dump();
+
             decl.location() = get_location_from_decl(element);
             decl.dump();
             current_block->copy_to_operands(decl);
@@ -2792,8 +2795,10 @@ void python_converter::get_var_assign(
          * create the LHS type as a zero-size array: "current_element_type = get_typet(lhs_type, type_size);"
          * After parsing the RHS, we need to adjust the LHS type size to match
          * the size of the resulting RHS string.*/
-        lhs_symbol->type = rhs.type();
-        lhs.type() = rhs.type();
+    	if (!rhs.type().is_empty()) {
+          lhs_symbol->type = rhs.type();
+          lhs.type() = rhs.type();
+    	}
       }
       if (!rhs.type().is_empty() && !is_ctor_call)
         lhs_symbol->value = rhs;
