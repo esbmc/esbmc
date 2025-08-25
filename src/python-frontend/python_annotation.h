@@ -124,17 +124,6 @@ public:
     }
   }
 
-  void add_model_annotation()
-  {
-    // Add type annotation to all class methods
-    for (Json &element : ast_["body"])
-    {
-      // Process classes and their methods
-      if (element["_type"] == "ClassDef")
-        annotate_class(element);
-    }
-  }
-
   void add_type_annotation(const std::string &func_name)
   {
     current_line_ = 0;

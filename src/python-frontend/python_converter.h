@@ -22,7 +22,7 @@ public:
   python_converter(
     contextt &_context,
     const nlohmann::json *ast,
-    global_scope &gs);
+    const global_scope &gs);
 
   void convert();
 
@@ -266,7 +266,7 @@ private:
 
   contextt &symbol_table_;
   const nlohmann::json *ast_json;
-  global_scope &global_scope_;
+  const global_scope &global_scope_;
   type_handler type_handler_;
   symbol_generator sym_generator_;
 

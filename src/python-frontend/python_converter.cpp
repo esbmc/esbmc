@@ -1,5 +1,4 @@
 #include <python-frontend/python_converter.h>
-#include <python-frontend/python_annotation.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/type_utils.h>
 #include <python-frontend/symbol_id.h>
@@ -3615,7 +3614,7 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
 python_converter::python_converter(
   contextt &_context,
   const nlohmann::json *ast,
-  global_scope &gs)
+  const global_scope &gs)
   : symbol_table_(_context),
     ast_json(ast),
     global_scope_(gs),
@@ -3725,9 +3724,6 @@ void python_converter::convert()
         if (imported_modules.find(filename) != imported_modules.end())
           current_python_file = imported_modules[filename];
       }
-
-      python_annotation<nlohmann::json> ann(model_json, global_scope_);
-      ann.add_model_annotation();
 
       exprt model_code =
         with_ast(&model_json, [&]() { return get_block((*ast_json)["body"]); });
