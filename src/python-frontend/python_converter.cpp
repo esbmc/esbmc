@@ -2890,20 +2890,8 @@ typet resolve_ternary_type(
     then_type.is_floatbv())
     return then_type;
 
-  // Both signed integers
-  if (then_type.is_signedbv() && else_type.is_signedbv())
-    return then_type;
-
-  // Both unsigned integers
-  if (then_type.is_unsignedbv() && else_type.is_unsignedbv())
-    return then_type;
-
   // Both arrays (strings)
   if (then_type.is_array() && else_type.is_array())
-    return then_type;
-
-  // Both booleans
-  if (then_type.is_bool() && else_type.is_bool())
     return then_type;
 
   // Mixed signed/unsigned integers - prefer signed for safety
