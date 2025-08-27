@@ -240,6 +240,23 @@ private:
 
   void handle_float_division(exprt &lhs, exprt &rhs, exprt &bin_expr) const;
 
+  std::pair<exprt, exprt>
+  resolve_comparison_operands_internal(const exprt &lhs, const exprt &rhs);
+  bool
+  has_unsupported_side_effects_internal(const exprt &lhs, const exprt &rhs);
+  exprt compare_constants_internal(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs);
+  exprt handle_indexed_comparison_internal(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs);
+  exprt handle_type_mismatches(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs);
+
   void get_attributes_from_self(
     const nlohmann::json &method_body,
     struct_typet &clazz);

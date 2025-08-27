@@ -962,32 +962,21 @@ std::string python_converter::extract_string_from_array_operands(
   return result;
 }
 
-exprt python_converter::handle_string_comparison(
-  const std::string &op,
-  exprt &lhs,
-  exprt &rhs,
-  const nlohmann::json &element)
+std::pair<exprt, exprt> python_converter::resolve_comparison_operands_internal(
+  const exprt &lhs,
+  const exprt &rhs)
 {
   // Try to resolve symbols to their constant values
   exprt lhs_resolved = get_resolved_value(lhs);
   exprt rhs_resolved = get_resolved_value(rhs);
 
-  if (!lhs_resolved.is_nil())
-    lhs = lhs_resolved;
-  if (!rhs_resolved.is_nil())
-    rhs = rhs_resolved;
+  exprt final_lhs = lhs_resolved.is_nil() ? lhs : lhs_resolved;
+  exprt final_rhs = rhs_resolved.is_nil() ? rhs : rhs_resolved;
 
-  // Allow function call side effects to proceed to strcmp handling
-  // Only reject side effects that are not function calls
-  if (lhs.id() == "sideeffect" && lhs.get("statement") != "function_call")
-    throw std::runtime_error("Cannot compare non-function side effects");
-  if (rhs.id() == "sideeffect" && rhs.get("statement") != "function_call")
-    throw std::runtime_error("Cannot compare non-function side effects");
-
-  // Also try to resolve array elements if they are symbols
-  if (lhs.is_constant() && lhs.type().is_array())
+  // Resolve array element symbols
+  if (final_lhs.is_constant() && final_lhs.type().is_array())
   {
-    exprt::operandst &lhs_ops = lhs.operands();
+    exprt::operandst &lhs_ops = final_lhs.operands();
     for (size_t i = 0; i < lhs_ops.size(); ++i)
     {
       if (lhs_ops[i].is_symbol())
@@ -999,9 +988,9 @@ exprt python_converter::handle_string_comparison(
     }
   }
 
-  if (rhs.is_constant() && rhs.type().is_array())
+  if (final_rhs.is_constant() && final_rhs.type().is_array())
   {
-    exprt::operandst &rhs_ops = rhs.operands();
+    exprt::operandst &rhs_ops = final_rhs.operands();
     for (size_t i = 0; i < rhs_ops.size(); ++i)
     {
       if (rhs_ops[i].is_symbol())
@@ -1013,9 +1002,31 @@ exprt python_converter::handle_string_comparison(
     }
   }
 
-  // Handle single character comparisons (represented as integers)
+  return {final_lhs, final_rhs};
+}
+
+bool python_converter::has_unsupported_side_effects_internal(
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  auto has_unsupported_side_effect = [](const exprt &expr) {
+    return expr.id() == "sideeffect" &&
+           expr.get("statement") != "function_call";
+  };
+
+  return has_unsupported_side_effect(lhs) || has_unsupported_side_effect(rhs);
+}
+
+exprt python_converter::compare_constants_internal(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  if (!lhs.is_constant() || !rhs.is_constant())
+    return nil_exprt();
+
+  // Single character comparisons
   if (
-    lhs.is_constant() && rhs.is_constant() &&
     (lhs.type().is_unsignedbv() || lhs.type().is_signedbv()) &&
     (rhs.type().is_unsignedbv() || rhs.type().is_signedbv()))
   {
@@ -1023,133 +1034,169 @@ exprt python_converter::handle_string_comparison(
     return gen_boolean((op == "Eq") ? chars_equal : !chars_equal);
   }
 
-  // Handle mixed single char vs array comparisons
-  if (lhs.is_constant() && rhs.is_constant())
+  // Mixed character vs array comparisons
+  if (
+    (lhs.type().is_unsignedbv() || lhs.type().is_signedbv()) &&
+    rhs.type().is_array())
   {
-    // Single char (int) vs array comparison
-    if (
-      (lhs.type().is_unsignedbv() || lhs.type().is_signedbv()) &&
-      rhs.type().is_array())
+    const exprt::operandst &rhs_ops = rhs.operands();
+    if (rhs_ops.size() == 1)
     {
-      const exprt::operandst &rhs_ops = rhs.operands();
-      if (rhs_ops.size() == 1)
-      {
-        // Compare single char with single element array
-        bool chars_equal = (lhs == rhs_ops[0]);
-        // Try value-based comparison if direct comparison fails
-        if (!chars_equal && lhs.get("value") == rhs_ops[0].get("value"))
-          chars_equal = true;
-        return gen_boolean((op == "Eq") ? chars_equal : !chars_equal);
-      }
-      else
-      {
-        return gen_boolean(op == "NotEq");
-      }
+      bool chars_equal =
+        (lhs == rhs_ops[0]) || (lhs.get("value") == rhs_ops[0].get("value"));
+      return gen_boolean((op == "Eq") ? chars_equal : !chars_equal);
     }
-    // Array vs single char (int) comparison
-    else if (
-      lhs.type().is_array() &&
-      (rhs.type().is_unsignedbv() || rhs.type().is_signedbv()))
+    return gen_boolean(op == "NotEq");
+  }
+
+  if (
+    lhs.type().is_array() &&
+    (rhs.type().is_unsignedbv() || rhs.type().is_signedbv()))
+  {
+    const exprt::operandst &lhs_ops = lhs.operands();
+    if (lhs_ops.size() == 1)
     {
-      const exprt::operandst &lhs_ops = lhs.operands();
-      if (lhs_ops.size() == 1)
+      bool chars_equal =
+        (lhs_ops[0] == rhs) || (lhs_ops[0].get("value") == rhs.get("value"));
+      return gen_boolean((op == "Eq") ? chars_equal : !chars_equal);
+    }
+    return gen_boolean(op == "NotEq");
+  }
+
+  return nil_exprt();
+}
+
+exprt python_converter::handle_indexed_comparison_internal(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  if (lhs.id() != "index" || !rhs.is_constant() || !rhs.type().is_array())
+    return nil_exprt();
+
+  const exprt &index = lhs.operands()[1];
+  BigInt idx =
+    binary2integer(index.value().as_string(), index.type().is_signedbv());
+
+  std::string rhs_str = extract_string_from_array_operands(rhs);
+
+  const exprt &array = lhs.operands()[0];
+  exprt resolved_array = get_resolved_value(array);
+
+  if (resolved_array.is_nil() && array.is_symbol())
+  {
+    const symbolt *symbol = symbol_table_.find_symbol(array.identifier());
+    if (symbol)
+    {
+      resolved_array = symbol->value;
+      if (symbol->value.is_symbol())
       {
-        // Compare single element array with single char
-        bool chars_equal = (lhs_ops[0] == rhs);
-        // Try value-based comparison if direct comparison fails
-        if (!chars_equal && lhs_ops[0].get("value") == rhs.get("value"))
-          chars_equal = true;
-        return gen_boolean((op == "Eq") ? chars_equal : !chars_equal);
-      }
-      else
-      {
-        return gen_boolean(op == "NotEq");
+        const symbolt *compound =
+          symbol_table_.find_symbol(symbol->value.identifier());
+        if (compound && compound->value.is_constant())
+          resolved_array = compound->value;
       }
     }
   }
 
-  // Check for zero-length arrays
-  if (is_zero_length_array(lhs) && is_zero_length_array(rhs))
+  if (
+    !resolved_array.is_nil() && resolved_array.is_constant() &&
+    resolved_array.type().is_array() && idx >= 0 &&
+    idx < (BigInt)resolved_array.operands().size())
+  {
+    const exprt &string_element = resolved_array.operands()[idx.to_uint64()];
+    std::string lhs_str = extract_string_from_array_operands(string_element);
+    bool strings_equal = (lhs_str == rhs_str);
+    return gen_boolean((op == "Eq") ? strings_equal : !strings_equal);
+  }
+
+  return nil_exprt();
+}
+
+exprt python_converter::handle_type_mismatches(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  // Skip if either operand is a member expression or types match exactly
+  if (lhs.is_member() || rhs.is_member() || lhs.type() == rhs.type())
+    return nil_exprt();
+
+  // Both operands are arrays - need to distinguish between lists and strings
+  if (lhs.type().is_array() && rhs.type().is_array())
+  {
+    // Check if these are different semantic types (list vs string)
+    bool lhs_is_string = (lhs.type().subtype() == char_type());
+    bool rhs_is_string = (rhs.type().subtype() == char_type());
+
+    // If one is a string array and the other is not, they're different types
+    if (lhs_is_string != rhs_is_string)
+      return gen_boolean(op == "NotEq");
+
+    // Both are strings: compare based on content
+    // check if empty
+    bool lhs_empty = is_zero_length_array(lhs) ||
+                     (lhs.is_constant() && lhs.operands().size() <= 1);
+    bool rhs_empty = is_zero_length_array(rhs) ||
+                     (rhs.is_constant() && rhs.operands().size() <= 1);
+
+    if (lhs_empty && rhs_empty)
+      return gen_boolean(op == "Eq");
+  }
+
+  // Mixed types (array vs non-array) = not equal
+  return gen_boolean(op == "NotEq");
+}
+
+exprt python_converter::handle_string_comparison(
+  const std::string &op,
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &element)
+{
+  // Resolve symbols to their constant values using helper
+  auto [resolved_lhs, resolved_rhs] =
+    resolve_comparison_operands_internal(lhs, rhs);
+
+  // Check for unsupported side effects using helper
+  if (has_unsupported_side_effects_internal(resolved_lhs, resolved_rhs))
+    throw std::runtime_error("Cannot compare non-function side effects");
+
+  // Handle zero-length arrays early
+  if (is_zero_length_array(resolved_lhs) && is_zero_length_array(resolved_rhs))
     return gen_boolean(op == "Eq");
 
-  if (lhs.id() == "index" && rhs.is_constant() && rhs.type().is_array())
-  {
-    // Extract index value using existing pattern
-    const exprt &index = lhs.operands()[1];
-    BigInt idx =
-      binary2integer(index.value().as_string(), index.type().is_signedbv());
+  // Try constant comparisons using helper
+  exprt constant_result =
+    compare_constants_internal(op, resolved_lhs, resolved_rhs);
+  if (!constant_result.is_nil())
+    return constant_result;
 
-    // Extract RHS string
-    std::string rhs_str = extract_string_from_array_operands(rhs);
+  // Try indexed string comparison using helper
+  exprt indexed_result =
+    handle_indexed_comparison_internal(op, resolved_lhs, resolved_rhs);
+  if (!indexed_result.is_nil())
+    return indexed_result;
 
-    // Try to resolve array contents using existing resolution method
-    const exprt &array = lhs.operands()[0];
-    exprt resolved_array = get_resolved_value(array);
-
-    // If resolution didn't work, fall back to direct symbol lookup
-    if (resolved_array.is_nil() && array.is_symbol())
-    {
-      const symbolt *symbol = symbol_table_.find_symbol(array.identifier());
-      if (symbol)
-      {
-        resolved_array = symbol->value;
-
-        // Follow compound literal reference if needed
-        if (symbol->value.is_symbol())
-        {
-          const symbolt *compound =
-            symbol_table_.find_symbol(symbol->value.identifier());
-          if (compound && compound->value.is_constant())
-            resolved_array = compound->value;
-        }
-      }
-    }
-
-    // Extract and compare array element if valid
-    if (
-      !resolved_array.is_nil() && resolved_array.is_constant() &&
-      resolved_array.type().is_array() && idx >= 0 &&
-      idx < (BigInt)resolved_array.operands().size())
-    {
-      const exprt &string_element = resolved_array.operands()[idx.to_uint64()];
-      std::string lhs_str = extract_string_from_array_operands(string_element);
-
-      bool strings_equal = (lhs_str == rhs_str);
-      return gen_boolean((op == "Eq") ? strings_equal : !strings_equal);
-    }
-  }
-
-  // Handle type mismatches to prevent crashes/array out of bounds
-  if (!(lhs.is_member() || rhs.is_member()) && lhs.type() != rhs.type())
-  {
-    // If one is a constant array and the other is empty, compare based on size
-    if (lhs.is_constant() && lhs.is_array() && is_zero_length_array(rhs))
-    {
-      const exprt::operandst &lhs_ops = lhs.operands();
-      bool lhs_empty = (lhs_ops.size() == 0);
-      return gen_boolean((op == "Eq") ? lhs_empty : !lhs_empty);
-    }
-    else if (rhs.is_constant() && rhs.is_array() && is_zero_length_array(lhs))
-    {
-      const exprt::operandst &rhs_ops = rhs.operands();
-      bool rhs_empty = (rhs_ops.size() == 0);
-      return gen_boolean((op == "Eq") ? rhs_empty : !rhs_empty);
-    }
-    else
-    {
-      return gen_boolean(op == "NotEq");
-    }
-  }
+  // Handle type mismatches
+  exprt mismatch_result =
+    handle_type_mismatches(op, resolved_lhs, resolved_rhs);
+  if (!mismatch_result.is_nil())
+    return mismatch_result;
+  else
+    log_error("Type mismatch in string comparison");
 
   symbolt *strncmp_symbol = symbol_table_.find_symbol("c:@F@strcmp");
-  assert(strncmp_symbol);
+  if (!strncmp_symbol)
+    throw std::runtime_error(
+      "strcmp function not found in symbol table for string comparison");
 
-  if (rhs.type().is_array())
-    rhs = get_array_base_address(rhs);
+  if (resolved_rhs.type().is_array())
+    resolved_rhs = get_array_base_address(resolved_rhs);
 
   side_effect_expr_function_callt strncmp_call;
   strncmp_call.function() = symbol_expr(*strncmp_symbol);
-  strncmp_call.arguments() = {lhs, rhs};
+  strncmp_call.arguments() = {resolved_lhs, resolved_rhs};
   strncmp_call.location() = get_location_from_decl(element);
   strncmp_call.type() = int_type();
 
@@ -1950,14 +1997,6 @@ exprt python_converter::get_literal(const nlohmann::json &element)
     return from_integer(static_cast<unsigned char>(str_val[0]), t);
   }
 
-  // Skip Python docstrings or string literals that should not be treated as code.
-  if (
-    !str_val.empty() && (str_val[0] == '\n' || str_val[0] == ' ') &&
-    !is_bytes_literal(element))
-  {
-    return exprt(); // Return empty expression
-  }
-
   // Handle string or byte literals
   typet t = current_element_type;
   std::vector<uint8_t> string_literal;
@@ -2693,10 +2732,25 @@ void python_converter::get_var_assign(
   {
     if (lhs_symbol)
     {
+      // Handle string-to-string variable assignments
+      if (lhs_type == "str" && rhs.is_symbol())
+      {
+        symbolt *rhs_symbol = symbol_table_.find_symbol(rhs.identifier());
+        if (
+          rhs_symbol && rhs_symbol->value.is_constant() &&
+          rhs_symbol->value.type().is_array() &&
+          rhs_symbol->value.type().subtype() == char_type())
+        {
+          // Copy the string content from the RHS symbol's value
+          rhs = rhs_symbol->value;
+          lhs_symbol->type = rhs.type();
+          lhs.type() = rhs.type();
+        }
+      }
       // If the LHS type is currently unspecified (i.e., no type assigned),
       // and the RHS is an array, we perform normalization to convert the RHS
       // array into a pointer to its first element, and update the LHS accordingly.
-      if (lhs.type().id().empty() && rhs.type().is_array())
+      else if (lhs.type().id().empty() && rhs.type().is_array())
       {
         // Extract the type of the elements in the RHS array
         const typet &element_type = to_array_type(rhs.type()).subtype();
