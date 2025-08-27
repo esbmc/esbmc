@@ -19,7 +19,7 @@ bool symex_slicet::get_symbols(const expr2tc &expr)
   if (is_index2t(expr))
   {
     const index2t &index = to_index2t(expr);
-    if (is_symbol2t(index.source_value) && is_constant_number(index.index))
+    if (is_symbol2t(index.source_value) && is_constant_number(index.index) && !to_constant_int2t(index.index).value.is_negative() )
     {
       const symbol2t &s = to_symbol2t(index.source_value);
       const constant_int2t &i = to_constant_int2t(index.index);
@@ -110,7 +110,8 @@ void symex_slicet::run_on_assignment(
     if (
       is_with2t(SSA_step.rhs) &&
       is_symbol2t(to_with2t(SSA_step.rhs).source_value) &&
-      is_constant_int2t(to_with2t(SSA_step.rhs).update_field))
+	is_constant_int2t(to_with2t(SSA_step.rhs).update_field) &&
+	!to_constant_int2t(to_with2t(SSA_step.rhs).update_field).value.is_negative())
     {
       const with2t &with = to_with2t(SSA_step.rhs);
       const symbol2t &rhs_symbol = to_symbol2t(with.source_value);
