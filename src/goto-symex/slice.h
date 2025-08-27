@@ -119,9 +119,9 @@ public:
    */
   std::unordered_set<std::string> depends;
 
-/**
+  /**
  * Hold a map of array symbols and indexes. All other indexes can be cut */
-std::unordered_map<std::string, std::unordered_set<size_t>> indexes;
+  std::unordered_map<std::string, std::unordered_set<size_t>> indexes;
 
   static expr2tc get_nondet_symbol(const expr2tc &expr);
 
