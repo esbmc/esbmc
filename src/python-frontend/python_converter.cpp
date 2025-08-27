@@ -3529,7 +3529,10 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
       exprt empty;
       exprt expr = get_expr(element["value"]);
       if (expr != empty)
-        block.move_to_operands(expr);
+      {
+        codet code_stmt = convert_expression_to_code(expr);
+        block.move_to_operands(code_stmt);
+      }
 
       break;
     }
