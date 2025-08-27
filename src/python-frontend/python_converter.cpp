@@ -1030,8 +1030,8 @@ exprt python_converter::compare_constants_internal(
     (lhs.type().is_unsignedbv() || lhs.type().is_signedbv()) &&
     (rhs.type().is_unsignedbv() || rhs.type().is_signedbv()))
   {
-    bool chars_equal = (lhs == rhs);
-    return gen_boolean((op == "Eq") ? chars_equal : !chars_equal);
+    bool equal = (lhs == rhs);
+    return gen_boolean((op == "Eq") ? equal : !equal);
   }
 
   // Mixed character vs array comparisons
@@ -1042,9 +1042,9 @@ exprt python_converter::compare_constants_internal(
     const exprt::operandst &rhs_ops = rhs.operands();
     if (rhs_ops.size() == 1)
     {
-      bool chars_equal =
+      bool equal =
         (lhs == rhs_ops[0]) || (lhs.get("value") == rhs_ops[0].get("value"));
-      return gen_boolean((op == "Eq") ? chars_equal : !chars_equal);
+      return gen_boolean((op == "Eq") ? equal : !equal);
     }
     return gen_boolean(op == "NotEq");
   }
@@ -1056,9 +1056,9 @@ exprt python_converter::compare_constants_internal(
     const exprt::operandst &lhs_ops = lhs.operands();
     if (lhs_ops.size() == 1)
     {
-      bool chars_equal =
+      bool equal =
         (lhs_ops[0] == rhs) || (lhs_ops[0].get("value") == rhs.get("value"));
-      return gen_boolean((op == "Eq") ? chars_equal : !chars_equal);
+      return gen_boolean((op == "Eq") ? equal : !equal);
     }
     return gen_boolean(op == "NotEq");
   }
@@ -1154,11 +1154,11 @@ exprt python_converter::handle_string_comparison(
   exprt &rhs,
   const nlohmann::json &element)
 {
-  // Resolve symbols to their constant values using helper
+  // Resolve symbols to their constant values
   auto [resolved_lhs, resolved_rhs] =
     resolve_comparison_operands_internal(lhs, rhs);
 
-  // Check for unsupported side effects using helper
+  // Check for unsupported side effects
   if (has_unsupported_side_effects_internal(resolved_lhs, resolved_rhs))
     throw std::runtime_error("Cannot compare non-function side effects");
 
@@ -1166,13 +1166,13 @@ exprt python_converter::handle_string_comparison(
   if (is_zero_length_array(resolved_lhs) && is_zero_length_array(resolved_rhs))
     return gen_boolean(op == "Eq");
 
-  // Try constant comparisons using helper
+  // Try constant comparisons
   exprt constant_result =
     compare_constants_internal(op, resolved_lhs, resolved_rhs);
   if (!constant_result.is_nil())
     return constant_result;
 
-  // Try indexed string comparison using helper
+  // Try indexed string comparison
   exprt indexed_result =
     handle_indexed_comparison_internal(op, resolved_lhs, resolved_rhs);
   if (!indexed_result.is_nil())
@@ -1183,16 +1183,17 @@ exprt python_converter::handle_string_comparison(
     handle_type_mismatches(op, resolved_lhs, resolved_rhs);
   if (!mismatch_result.is_nil())
     return mismatch_result;
-  else
-    log_error("Type mismatch in string comparison");
+
+  // At this point, both operands should be strings (arrays of char)
+  if (resolved_lhs.type().is_array())
+    resolved_lhs = get_array_base_address(resolved_lhs);
+  if (resolved_rhs.type().is_array())
+    resolved_rhs = get_array_base_address(resolved_rhs);
 
   symbolt *strncmp_symbol = symbol_table_.find_symbol("c:@F@strcmp");
   if (!strncmp_symbol)
     throw std::runtime_error(
       "strcmp function not found in symbol table for string comparison");
-
-  if (resolved_rhs.type().is_array())
-    resolved_rhs = get_array_base_address(resolved_rhs);
 
   side_effect_expr_function_callt strncmp_call;
   strncmp_call.function() = symbol_expr(*strncmp_symbol);
@@ -2738,8 +2739,7 @@ void python_converter::get_var_assign(
         symbolt *rhs_symbol = symbol_table_.find_symbol(rhs.identifier());
         if (
           rhs_symbol && rhs_symbol->value.is_constant() &&
-          rhs_symbol->value.type().is_array() &&
-          rhs_symbol->value.type().subtype() == char_type())
+          rhs_symbol->value.type().is_array())
         {
           // Copy the string content from the RHS symbol's value
           rhs = rhs_symbol->value;

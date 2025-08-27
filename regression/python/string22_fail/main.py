@@ -7,7 +7,7 @@ def test_basic_string_equality() -> None:
     
     assert a == b  # Should be True
     assert a != c  # Should be True
-    assert not (a == c)  # Should be True
+    assert (a == c)  # Should be False
 
 test_basic_string_equality()
 
@@ -19,7 +19,7 @@ def test_single_characters() -> None:
     char3: str = "b"
     
     assert char1 == char2  # Should be True
-    assert char1 != char3  # Should be True
+    assert char1 == char3  # Should be False
 
 test_single_characters()
 
@@ -31,7 +31,7 @@ def test_empty_strings() -> None:
     non_empty: str = "test"
     
     assert empty1 == empty2  # Should be True
-    assert empty1 != non_empty  # Should be True
+    assert empty1 == non_empty  # Should be False
 
 test_empty_strings()
 
@@ -43,7 +43,7 @@ def test_string_concatenation() -> None:
     combined: str = part1 + part2
     expected: str = "hello world"
     
-    assert combined == expected  # Should be True
+    assert combined != expected  # Should be False
 
 test_string_concatenation()
 
@@ -54,7 +54,7 @@ def test_mixed_length_strings() -> None:
     long: str = "hello world"
     
     assert short != long  # Should be True
-    assert len(short) != len(long)  # Should be True
+    assert len(short) == len(long)  # Should be False
 
 test_mixed_length_strings()
 
@@ -66,7 +66,7 @@ def test_special_characters() -> None:
     normal: str = "hello"
     
     assert special1 == special2  # Should be True
-    assert special1 != normal  # Should be True
+    assert special1 == normal  # Should be False
 
 test_special_characters()
 
@@ -78,7 +78,7 @@ def test_numeric_strings() -> None:
     num3: str = "456"
     
     assert num1 == num2  # Should be True
-    assert num1 != num3  # Should be True
+    assert num1 == num3  # Should be False
 
 test_numeric_strings()
 
@@ -89,7 +89,7 @@ def test_case_sensitivity() -> None:
     upper: str = "HELLO"
     mixed: str = "Hello"
     
-    assert lower != upper  # Should be True
+    assert lower == upper  # Should be False
     assert lower != mixed  # Should be True
     assert upper != mixed  # Should be True
 
@@ -104,7 +104,7 @@ def test_whitespace_strings() -> None:
     empty: str = ""
     
     assert with_space != without_space  # Should be True
-    assert just_space != empty  # Should be True
+    assert just_space == empty  # Should be False
 
 test_whitespace_strings()
 
@@ -120,7 +120,7 @@ def test_string_assignments() -> None:
     
     # Modify copy and test
     copy = "modified"
-    assert original != copy  # Should be True
+    assert original == copy  # Should be False
 
 test_string_assignments()
 
@@ -133,7 +133,7 @@ def test_multiple_equality() -> None:
     d: str = "different"
     
     assert a == b == c  # Should be True
-    assert not (a == b == d)  # Should be True
+    assert not (a != b == d)  # Should be False
 
 test_multiple_equality()
 
@@ -145,7 +145,7 @@ def test_very_short_strings() -> None:
     single3: str = "y"
     
     assert single1 == single2  # Should be True
-    assert single1 != single3  # Should be True
+    assert single1 == single3  # Should be False
 
 test_very_short_strings()
 
@@ -157,7 +157,7 @@ def test_longer_strings() -> None:
     long3: str = "This is a different longer string for testing"
     
     assert long1 == long2  # Should be True
-    assert long1 != long3  # Should be True
+    assert long1 == long3  # Should be False
 
 test_longer_strings()
 
@@ -171,7 +171,7 @@ def test_string_conditional() -> None:
     else:
         result: bool = False
     
-    assert result  # Should be True
+    assert not result  # Should be False
 
 test_string_conditional()
 
@@ -186,7 +186,7 @@ def test_string_variables() -> None:
     
     # Modify variable
     variable = "changed"
-    assert constant != variable  # Should be True
+    assert constant == variable  # Should be False
 
 test_string_variables()
 
@@ -212,7 +212,7 @@ def test_escape_sequences() -> None:
     quote3: str = "He said 'hello'"
     
     assert quote1 == quote2  # Should be True
-    assert quote1 != quote3  # Should be True
+    assert quote1 == quote3  # Should be False
 
 # Test Case 17: Whitespace Variations
 def test_whitespace_variations() -> None:
@@ -233,7 +233,7 @@ def test_whitespace_variations() -> None:
     mixed: str = " \t "
     
     assert spaces != tabs  # Should be True
-    assert spaces != mixed  # Should be True
+    assert spaces == mixed  # Should be False
 
 # Test Case 18: String Indexing Comparisons
 def test_string_indexing() -> None:
@@ -241,7 +241,7 @@ def test_string_indexing() -> None:
     text: str = "hello"
     
     assert text[0] == "h"  # Should be True
-    assert text[1] == "e"  # Should be True
+    assert text[1] != "e"  # Should be False
     assert text[0] != "e"  # Should be True
 
 test_string_indexing()
@@ -262,7 +262,7 @@ def test_null_and_special_chars() -> None:
     ascii_only: str = "cafe"
     
     assert special1 == special2  # Should be True
-    assert special1 != ascii_only  # Should be True
+    assert special1 == ascii_only  # Should be False
 
 test_null_and_special_chars()
 
@@ -279,7 +279,7 @@ def test_leading_trailing_whitespace() -> None:
     assert normal != both  # Should be True
     assert leading != trailing  # Should be True
     assert leading != both  # Should be True
-    assert trailing != both  # Should be True
+    assert trailing == both  # Should be False
 
 # Test Case 21: Complex Equality Chains
 def test_complex_equality_chains() -> None:
@@ -292,7 +292,7 @@ def test_complex_equality_chains() -> None:
     # Mixed chain with inequality
     assert (a == b) and (b != c) and (c != d)  # Should be True
     assert not (a == b == c)  # Should be True
-    assert a == b == d  # Should be True
+    assert a == b != d  # Should be False
 
 test_complex_equality_chains()
 
@@ -314,7 +314,7 @@ def test_empty_vs_whitespace_detailed() -> None:
     # All should be different from each other
     assert single_space != single_tab  # Should be True
     assert single_space != single_newline  # Should be True
-    assert single_tab != single_newline  # Should be True
+    assert single_tab == single_newline  # Should be False
 
 # Test Case 23: Case Variations with Unicode
 def test_unicode_case_variations() -> None:
@@ -329,10 +329,10 @@ def test_unicode_case_variations() -> None:
     unicode_lower: str = "héllo"
     unicode_mixed: str = "Héllo"
     
-    assert unicode_lower != unicode_mixed  # Should be True
+    assert unicode_lower == unicode_mixed  # Should be False
 
 test_unicode_case_variations()
 
-assert "a" == "a"   # True
-assert "a" != "b"   # True
-assert "a" != "ab"  # True
+assert "a" != "a"   # False
+assert "a" == "b"   # False
+assert "a" == "ab"  # False
