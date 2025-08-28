@@ -593,8 +593,52 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::CXXMemberCallExpr &member_call =
       static_cast<const clang::CXXMemberCallExpr &>(stmt);
 
-    const clang::Stmt *callee = member_call.getCallee();
+    // Get the method declaration (NOT Stmt*)
+    const clang::CXXMethodDecl *method = member_call.getMethodDecl();
+    
+    // Check if we have reference bindings for this method
+    auto it = method_reference_bindings.find(method);
+    if (it != method_reference_bindings.end()) {
+      // This method uses reference members 
+      exprt &ref_target = it->second;
+      
+      // For increment/decrement methods, create the operation directly
+      std::string method_name = method->getNameAsString();
+      if (method_name == "increment") {
+        exprt one = gen_one(ref_target.type());
+        exprt new_value = plus_exprt(ref_target, one);
+        
+        side_effect_exprt assign("assign", ref_target.type());
+        assign.move_to_operands(ref_target, new_value);
+        new_expr = assign;
+        return false;
+      }
+      else if (method_name == "decrement") {
+        exprt one = gen_one(ref_target.type());
+        exprt new_value = minus_exprt(ref_target, one);
+        
+        side_effect_exprt assign("assign", ref_target.type());
+        assign.move_to_operands(ref_target, new_value);
+        new_expr = assign;
+        return false;
+      }
+      else if (method_name == "add"){
+            if (member_call.getNumArgs() == 1) {
+            exprt value;
+            if (get_expr(*member_call.getArg(0), value))
+              return true;
+            exprt new_value = plus_exprt(ref_target, value);
+            side_effect_exprt assign("assign", ref_target.type());
+            assign.move_to_operands(ref_target, new_value);
+            new_expr = assign;
+            return false;
+      }
 
+      }
+    }
+
+    // Default handling for non-reference methods
+    const clang::Stmt *callee = member_call.getCallee();
     exprt callee_expr;
     if (get_expr(*callee, callee_expr))
       return true;
@@ -613,7 +657,12 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     if (get_expr(*member_call.getImplicitObjectArgument(), implicit_object))
       return true;
 
-    call.arguments().push_back(implicit_object);
+    // Resolve references in implicit object
+    exprt resolved_object = implicit_object;  
+    while(resolved_object.type().id() == "reference")
+      resolved_object = dereference_exprt(resolved_object, resolved_object.type().subtype());
+          
+    call.arguments().push_back(resolved_object);
 
     // Do args
     for (const clang::Expr *arg : member_call.arguments())
@@ -818,10 +867,36 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
     const clang::CXXConstructExpr &cxxc =
       static_cast<const clang::CXXConstructExpr &>(stmt);
 
-    if (get_constructor_call(cxxc, new_expr))
-      return true;
+    //if (get_constructor_call(cxxc, new_expr))
+     // return true;
+    //Track reference bindings for methods of this class 
+    const clang::CXXConstructorDecl *ctor = cxxc.getConstructor();
+    const clang::CXXRecordDecl *class_decl = ctor->getParent();
 
-    break;
+    //Process reference arguments and store them 
+    //std::vector<exprt> processed_args;
+    for (uint32_t i = 0; i < cxxc.getNumArgs(); i++) {
+      const clang::Expr *arg = cxxc.getArg(i);
+      if (arg->getType()->isReferenceType()) {
+        exprt arg_expr;
+        if (get_expr(*arg, arg_expr))
+          return true;
+      // Store the actual object for reference parameters
+      exprt dereferenced = dereference_exprt(arg_expr, arg_expr.type().subtype());
+      
+      // Bind to all methods of this class that might use the reference
+      for (auto *method : class_decl->methods()) {
+        if (method->isInstance()) {
+          method_reference_bindings[method] = dereferenced;
+        }
+      }
+    }
+  }
+
+  if (get_constructor_call(cxxc, new_expr))
+    return true;
+
+  break;
   }
 
   case clang::Stmt::CXXThisExprClass:
@@ -1630,11 +1705,17 @@ bool clang_cpp_convertert::VisitUnaryOperator(clang::UnaryOperator *op, exprt &d
           return true;
   
         // Add reference member handling:
-        if (op && op->isIncrementDecrementOp() && 
+        if (op->isIncrementDecrementOp() && 
               op->getSubExpr()->getType()->isReferenceType()) {
         
-            if(operand.id() == "member")
-                  operand = dereference_exprt(operand, operand.type().subtype());        
+            if(operand.id() == "member") {
+                const member_exprt &member = to_member_expr(operand);
+                if(member.struct_op().type().id() == "reference"){ 
+                  operand = dereference_exprt(member.struct_op(), member.struct_op().type().subtype());
+                  
+                  operand = member_exprt(operand, member.get_component_name());
+                 }
+            }              
             // Desugar x++ to x = x + 1
             exprt one = gen_one(operand.type());
             exprt new_value; 
