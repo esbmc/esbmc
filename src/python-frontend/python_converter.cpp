@@ -3903,6 +3903,8 @@ void python_converter::load_c_intrisics()
   add_global_static_variable(symbol_table_, type2, "__ESBMC_alloc_size");
 }
 
+///  Only addresses __name__; other Python built-ins such as
+/// __file__, __doc__, __package__ are unsupported
 void python_converter::create_builtin_symbols()
 {
   // Create __name__ symbol
