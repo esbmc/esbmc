@@ -3903,6 +3903,60 @@ void python_converter::load_c_intrisics()
   add_global_static_variable(symbol_table_, type2, "__ESBMC_alloc_size");
 }
 
+void python_converter::create_builtin_symbols()
+{
+  // Create __name__ symbol
+  symbol_id name_sid(current_python_file, "", "");
+  name_sid.set_object("__name__");
+
+  locationt location;
+  location.set_file(current_python_file.c_str());
+  location.set_line(1);
+
+  std::string module_name =
+    current_python_file.substr(0, current_python_file.find_last_of("."));
+
+  // Create string type for __name__
+  std::string name_value = "__main__";
+  typet string_type =
+    type_handler_.build_array(char_type(), name_value.size() + 1);
+
+  // Create the symbol
+  symbolt name_symbol = create_symbol(
+    module_name, "__name__", name_sid.to_string(), location, string_type);
+
+  name_symbol.lvalue = true;
+  name_symbol.static_lifetime = true;
+  name_symbol.is_extern = false;
+  name_symbol.file_local = false;
+
+  // Set the value to "__main__"
+  exprt name_expr = gen_zero(string_type);
+  const typet &char_type_ref = string_type.subtype();
+
+  for (size_t i = 0; i < name_value.size(); ++i)
+  {
+    uint8_t ch = name_value[i];
+    exprt char_value = constant_exprt(
+      integer2binary(BigInt(ch), bv_width(char_type_ref)),
+      integer2string(BigInt(ch)),
+      char_type_ref);
+    name_expr.operands().at(i) = char_value;
+  }
+
+  // Add null terminator
+  exprt null_char = constant_exprt(
+    integer2binary(BigInt(0), bv_width(char_type_ref)),
+    integer2string(BigInt(0)),
+    char_type_ref);
+  name_expr.operands().at(name_value.size()) = null_char;
+
+  name_symbol.value = name_expr;
+
+  // Add to symbol table
+  symbol_table_.add(name_symbol);
+}
+
 void python_converter::convert()
 {
   code_typet main_type;
@@ -3918,6 +3972,9 @@ void python_converter::convert()
 
   main_python_file = (*ast_json)["filename"].get<std::string>();
   current_python_file = main_python_file;
+
+  // Create built-in symbols such as __name__
+  create_builtin_symbols();
 
   if (!config.options.get_bool_option("no-library"))
   {
