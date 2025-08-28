@@ -219,7 +219,7 @@ private:
   symbolt &create_tmp_symbol(
     const nlohmann::json &element,
     const std::string var_name,
-	const typet& symbol_type,
+    const typet &symbol_type,
     const exprt &symbol_value);
 
   exprt get_logical_operator_expr(const nlohmann::json &element);

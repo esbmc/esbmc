@@ -114,7 +114,7 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
     expr2tc obj_expr = pointer_object2tc(pointer_type2(), size.value);
 
     expr2tc alloc_arr_2;
-    const symbolt* alloc_size_symbol = ns.lookup(alloc_size_arr_name);
+    const symbolt *alloc_size_symbol = ns.lookup(alloc_size_arr_name);
     assert(alloc_size_symbol);
     migrate_expr(symbol_expr(*alloc_size_symbol), alloc_arr_2);
 
