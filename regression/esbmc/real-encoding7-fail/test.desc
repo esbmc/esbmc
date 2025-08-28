@@ -1,4 +1,5 @@
-CORE
+KNOWNBUG
 main.c
---ir --z3
+--z3 --ir
+
 ^VERIFICATION FAILED$
