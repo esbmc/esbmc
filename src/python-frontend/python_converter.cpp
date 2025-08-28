@@ -4090,9 +4090,15 @@ void python_converter::convert()
     // Convert function arguments types
     for (const auto &arg : function_node["args"]["args"])
     {
-      auto node = find_class((*ast_json)["body"], arg["annotation"]["id"]);
-      if (!node.empty())
-        get_class_definition(node, block);
+      // Check if annotation exists and is not null before accessing "id"
+      if (
+        arg.contains("annotation") && !arg["annotation"].is_null() &&
+        arg["annotation"].contains("id"))
+      {
+        auto node = find_class((*ast_json)["body"], arg["annotation"]["id"]);
+        if (!node.empty())
+          get_class_definition(node, block);
+      }
     }
 
     // Convert a single function
