@@ -1120,27 +1120,14 @@ exprt function_call_expr::handle_list_append() const
   // Get the value to append
   exprt value_to_append = converter_.get_expr(args[0]);
   
-  // Create a function call to a dummy append function
+  symbolt& append_func = *converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_append_dummy");
+  
+  // Create a function call to append function
   code_function_callt call_expr;
+  call_expr.function() = symbol_expr(append_func);
   call_expr.location() = converter_.get_location_from_decl(call_);
-  
-  // Create a dummy function symbol for list append
-  symbolt dummy_func;
-  dummy_func.name = "__ESBMC_list_append_dummy";
-  dummy_func.id = "c:@F@__ESBMC_list_append_dummy";
-  dummy_func.type = code_typet();
-  to_code_type(dummy_func.type).return_type() = empty_typet();
-  dummy_func.is_extern = true;
-  
-  // Add to symbol table if not already present
-  auto &symbol_table = converter_.symbol_table();
-  if (symbol_table.find_symbol(dummy_func.id) == nullptr)
-    symbol_table.add(dummy_func);
-  
-  // Set up the function call
-  call_expr.function() = symbol_expr(dummy_func);
-  call_expr.type() = empty_typet();
-  
+  call_expr.type() = pointer_typet(empty_typet());
+
   // Add arguments
   call_expr.arguments().push_back(
     typecast_exprt(symbol_expr(*list_symbol), pointer_typet(empty_typet())));
