@@ -104,6 +104,15 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Assertions**: Supports `assert` statements for program verification.
 - **Assumptions**: Supports `assume` statements for specifying assumptions for verification.
 
+### Module System and Built-in Variables
+
+- **Module Imports**: Handles import styles and validates their usage.
+- **name Variable**: Supports Python's built-in __name__ variable that contains the name of the current module:
+  - Set to "__main__" when the module is run directly as the main program
+  - Set to the module name when the module is imported
+  - Enables verification of the common Python idiom if __name__ == "__main__":
+  - Supports proper distinction between main module execution and imported module behavior
+
 ### Additional Capabilities
 - **Nondeterministic Variables**: Models nondeterminism to explore multiple execution paths.
 - **Recursion**: Supports and verifies recursive functions.
@@ -158,6 +167,7 @@ The current version of ESBMC-Python has the following limitations:
 - `input()` is modeled as a nondeterministic string with a maximum length of 256 characters (under-approximation).
 - `enumerate()` supports standard usage patterns but may have limitations with complex nested iterables or advanced parameter combinations.
 - Exception handling supports the core built-in exception types but may not cover all Python standard library exceptions or custom exception hierarchies with complex inheritance patterns.
+- Built-in variables support is limited to __name__; other Python built-ins such as __file__, __doc__, __package__ are not yet supported.
 
 ### Example: Division by Zero in Python
 

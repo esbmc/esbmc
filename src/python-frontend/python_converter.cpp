@@ -3903,6 +3903,82 @@ void python_converter::load_c_intrisics()
   add_global_static_variable(symbol_table_, type2, "__ESBMC_alloc_size");
 }
 
+///  Only addresses __name__; other Python built-ins such as
+/// __file__, __doc__, __package__ are unsupported
+void python_converter::create_builtin_symbols()
+{
+  // Create __name__ symbol
+  symbol_id name_sid(current_python_file, "", "");
+  name_sid.set_object("__name__");
+
+  locationt location;
+  location.set_file(current_python_file.c_str());
+  location.set_line(1);
+
+  std::string module_name =
+    current_python_file.substr(0, current_python_file.find_last_of("."));
+
+  // Determine the value of __name__ based on whether this is the main module or imported
+  std::string name_value;
+  if (current_python_file == main_python_file)
+    name_value = "__main__";
+  else
+  {
+    // Extract module name from filename (e.g., "/path/to/other.py" -> "other")
+    size_t last_slash = current_python_file.find_last_of("/\\");
+    size_t last_dot = current_python_file.find_last_of(".");
+    if (
+      last_slash != std::string::npos && last_dot != std::string::npos &&
+      last_dot > last_slash)
+    {
+      name_value =
+        current_python_file.substr(last_slash + 1, last_dot - last_slash - 1);
+    }
+    else if (last_dot != std::string::npos)
+      name_value = current_python_file.substr(0, last_dot);
+    else
+      name_value = current_python_file; // fallback
+  }
+
+  typet string_type =
+    type_handler_.build_array(char_type(), name_value.size() + 1);
+
+  // Create the symbol
+  symbolt name_symbol = create_symbol(
+    module_name, "__name__", name_sid.to_string(), location, string_type);
+
+  name_symbol.lvalue = true;
+  name_symbol.static_lifetime = true;
+  name_symbol.is_extern = false;
+  name_symbol.file_local = false;
+
+  // Set the value
+  exprt name_expr = gen_zero(string_type);
+  const typet &char_type_ref = string_type.subtype();
+
+  for (size_t i = 0; i < name_value.size(); ++i)
+  {
+    uint8_t ch = name_value[i];
+    exprt char_value = constant_exprt(
+      integer2binary(BigInt(ch), bv_width(char_type_ref)),
+      integer2string(BigInt(ch)),
+      char_type_ref);
+    name_expr.operands().at(i) = char_value;
+  }
+
+  // Add null terminator
+  exprt null_char = constant_exprt(
+    integer2binary(BigInt(0), bv_width(char_type_ref)),
+    integer2string(BigInt(0)),
+    char_type_ref);
+  name_expr.operands().at(name_value.size()) = null_char;
+
+  name_symbol.value = name_expr;
+
+  // Add to symbol table
+  symbol_table_.add(name_symbol);
+}
+
 void python_converter::convert()
 {
   code_typet main_type;
@@ -3918,6 +3994,9 @@ void python_converter::convert()
 
   main_python_file = (*ast_json)["filename"].get<std::string>();
   current_python_file = main_python_file;
+
+  // Create built-in symbols for main module (__name__ = "__main__")
+  create_builtin_symbols();
 
   if (!config.options.get_bool_option("no-library"))
   {
@@ -4011,9 +4090,15 @@ void python_converter::convert()
     // Convert function arguments types
     for (const auto &arg : function_node["args"]["args"])
     {
-      auto node = find_class((*ast_json)["body"], arg["annotation"]["id"]);
-      if (!node.empty())
-        get_class_definition(node, block);
+      // Check if annotation exists and is not null before accessing "id"
+      if (
+        arg.contains("annotation") && !arg["annotation"].is_null() &&
+        arg["annotation"].contains("id"))
+      {
+        auto node = find_class((*ast_json)["body"], arg["annotation"]["id"]);
+        if (!node.empty())
+          get_class_definition(node, block);
+      }
     }
 
     // Convert a single function
@@ -4072,6 +4157,9 @@ void python_converter::convert()
         current_python_file =
           imported_module_json["filename"].get<std::string>();
         imported_modules.emplace(module_name, current_python_file);
+
+        // Create built-in symbols for imported module (__name__ = module_name)
+        create_builtin_symbols();
 
         exprt imported_code = get_block(imported_module_json["body"]);
         convert_expression_to_code(imported_code);

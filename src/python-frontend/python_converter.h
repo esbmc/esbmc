@@ -273,6 +273,8 @@ private:
     const nlohmann::json &method_body,
     struct_typet &clazz);
 
+  void create_builtin_symbols();
+
   symbolt *find_function_in_base_classes(
     const std::string &class_name,
     const std::string &symbol_id,
