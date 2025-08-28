@@ -9,7 +9,8 @@
 class clang_cpp_convertert : public clang_c_convertert
 {
 private:
-  std::unordered_map<const clang::CXXMethodDecl*, exprt> method_reference_bindings; //track reference bindings  
+  std::unordered_map<const clang::CXXMethodDecl *, exprt>
+    method_reference_bindings; //track reference bindings
 public:
   clang_cpp_convertert(
     contextt &_context,
@@ -131,7 +132,7 @@ protected:
 
   bool get_struct_union_class_methods_decls(
     const clang::RecordDecl &rd,
-    typet &type) override;  
+    typet &type) override;
 
   /*
    * Deal with ClassTemplateDecl or FunctionTemplateDecl or

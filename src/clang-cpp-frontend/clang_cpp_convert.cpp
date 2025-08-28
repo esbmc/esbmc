@@ -595,45 +595,49 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
 
     // Get the method declaration (NOT Stmt*)
     const clang::CXXMethodDecl *method = member_call.getMethodDecl();
-    
+
     // Check if we have reference bindings for this method
     auto it = method_reference_bindings.find(method);
-    if (it != method_reference_bindings.end()) {
-      // This method uses reference members 
+    if (it != method_reference_bindings.end())
+    {
+      // This method uses reference members
       exprt &ref_target = it->second;
-      
+
       // For increment/decrement methods, create the operation directly
       std::string method_name = method->getNameAsString();
-      if (method_name == "increment") {
+      if (method_name == "increment")
+      {
         exprt one = gen_one(ref_target.type());
         exprt new_value = plus_exprt(ref_target, one);
-        
+
         side_effect_exprt assign("assign", ref_target.type());
         assign.move_to_operands(ref_target, new_value);
         new_expr = assign;
         return false;
       }
-      else if (method_name == "decrement") {
+      else if (method_name == "decrement")
+      {
         exprt one = gen_one(ref_target.type());
         exprt new_value = minus_exprt(ref_target, one);
-        
+
         side_effect_exprt assign("assign", ref_target.type());
         assign.move_to_operands(ref_target, new_value);
         new_expr = assign;
         return false;
       }
-      else if (method_name == "add"){
-            if (member_call.getNumArgs() == 1) {
-            exprt value;
-            if (get_expr(*member_call.getArg(0), value))
-              return true;
-            exprt new_value = plus_exprt(ref_target, value);
-            side_effect_exprt assign("assign", ref_target.type());
-            assign.move_to_operands(ref_target, new_value);
-            new_expr = assign;
-            return false;
-      }
-
+      else if (method_name == "add")
+      {
+        if (member_call.getNumArgs() == 1)
+        {
+          exprt value;
+          if (get_expr(*member_call.getArg(0), value))
+            return true;
+          exprt new_value = plus_exprt(ref_target, value);
+          side_effect_exprt assign("assign", ref_target.type());
+          assign.move_to_operands(ref_target, new_value);
+          new_expr = assign;
+          return false;
+        }
       }
     }
 
@@ -658,10 +662,11 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       return true;
 
     // Resolve references in implicit object
-    exprt resolved_object = implicit_object;  
-    while(resolved_object.type().id() == "reference")
-      resolved_object = dereference_exprt(resolved_object, resolved_object.type().subtype());
-          
+    exprt resolved_object = implicit_object;
+    while (resolved_object.type().id() == "reference")
+      resolved_object =
+        dereference_exprt(resolved_object, resolved_object.type().subtype());
+
     call.arguments().push_back(resolved_object);
 
     // Do args
@@ -868,35 +873,40 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       static_cast<const clang::CXXConstructExpr &>(stmt);
 
     //if (get_constructor_call(cxxc, new_expr))
-     // return true;
-    //Track reference bindings for methods of this class 
+    // return true;
+    //Track reference bindings for methods of this class
     const clang::CXXConstructorDecl *ctor = cxxc.getConstructor();
     const clang::CXXRecordDecl *class_decl = ctor->getParent();
 
-    //Process reference arguments and store them 
+    //Process reference arguments and store them
     //std::vector<exprt> processed_args;
-    for (uint32_t i = 0; i < cxxc.getNumArgs(); i++) {
+    for (uint32_t i = 0; i < cxxc.getNumArgs(); i++)
+    {
       const clang::Expr *arg = cxxc.getArg(i);
-      if (arg->getType()->isReferenceType()) {
+      if (arg->getType()->isReferenceType())
+      {
         exprt arg_expr;
         if (get_expr(*arg, arg_expr))
           return true;
-      // Store the actual object for reference parameters
-      exprt dereferenced = dereference_exprt(arg_expr, arg_expr.type().subtype());
-      
-      // Bind to all methods of this class that might use the reference
-      for (auto *method : class_decl->methods()) {
-        if (method->isInstance()) {
-          method_reference_bindings[method] = dereferenced;
+        // Store the actual object for reference parameters
+        exprt dereferenced =
+          dereference_exprt(arg_expr, arg_expr.type().subtype());
+
+        // Bind to all methods of this class that might use the reference
+        for (auto *method : class_decl->methods())
+        {
+          if (method->isInstance())
+          {
+            method_reference_bindings[method] = dereferenced;
+          }
         }
       }
     }
-  }
 
-  if (get_constructor_call(cxxc, new_expr))
-    return true;
+    if (get_constructor_call(cxxc, new_expr))
+      return true;
 
-  break;
+    break;
   }
 
   case clang::Stmt::CXXThisExprClass:
@@ -1291,49 +1301,53 @@ bool clang_cpp_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
   }
   case clang::Stmt::UnaryOperatorClass:
   {
-    const clang::UnaryOperator &uop = static_cast<const clang::UnaryOperator&>(stmt); 
-    
-    if(uop.isIncrementDecrementOp())
-    {
-        const clang::Expr *sub = uop.getSubExpr();
-        exprt operand;
-        if (get_expr(*sub, operand))
-          return true;
-        
-        //Handle all lvalues (references, pointers, variables)
-        if(sub->isLValue()) {
-          // Resolve nested references recursively
-          exprt target = operand;
-          while (target.type().id() == "reference")
-            target = dereference_exprt(target, target.type().subtype());
+    const clang::UnaryOperator &uop =
+      static_cast<const clang::UnaryOperator &>(stmt);
 
-          exprt old_value = target;
-          exprt one = gen_one(old_value.type());
-          
-          exprt new_value;
-          if(uop.isIncrementOp())
-            new_value = plus_exprt(old_value, one);
-          else
-            new_value = minus_exprt(old_value, one);
-            
-          //Build assignment
-          side_effect_exprt assign("assign", target.type());
-          assign.copy_to_operands(target, new_value);
-          
-          if (uop.isPostfix()) {
-            side_effect_exprt comma("comma", old_value.type());
-            comma.copy_to_operands(assign, old_value);
-            new_expr = comma;
-          } else 
-          {
-            side_effect_exprt comma("comma", new_value.type());
-            comma.copy_to_operands(assign, new_value);
-            new_expr = comma;
-          }
-          return false;
-        }  
+    if (uop.isIncrementDecrementOp())
+    {
+      const clang::Expr *sub = uop.getSubExpr();
+      exprt operand;
+      if (get_expr(*sub, operand))
+        return true;
+
+      //Handle all lvalues (references, pointers, variables)
+      if (sub->isLValue())
+      {
+        // Resolve nested references recursively
+        exprt target = operand;
+        while (target.type().id() == "reference")
+          target = dereference_exprt(target, target.type().subtype());
+
+        exprt old_value = target;
+        exprt one = gen_one(old_value.type());
+
+        exprt new_value;
+        if (uop.isIncrementOp())
+          new_value = plus_exprt(old_value, one);
+        else
+          new_value = minus_exprt(old_value, one);
+
+        //Build assignment
+        side_effect_exprt assign("assign", target.type());
+        assign.copy_to_operands(target, new_value);
+
+        if (uop.isPostfix())
+        {
+          side_effect_exprt comma("comma", old_value.type());
+          comma.copy_to_operands(assign, old_value);
+          new_expr = comma;
+        }
+        else
+        {
+          side_effect_exprt comma("comma", new_value.type());
+          comma.copy_to_operands(assign, new_value);
+          new_expr = comma;
+        }
+        return false;
       }
-    
+    }
+
     break;
   }
 
@@ -1459,7 +1473,7 @@ bool clang_cpp_convertert::get_function_body(
   const clang::FunctionDecl &fd,
   exprt &new_expr,
   const code_typet &ftype)
- {
+{
   // do nothing if function body doesn't exist
   if (!fd.hasBody())
     return false;
@@ -1693,59 +1707,72 @@ bool clang_cpp_convertert::get_function_body(
   }
 
   return false;
-  }
+}
 
-bool clang_cpp_convertert::VisitUnaryOperator(clang::UnaryOperator *op, exprt &dest) {
-        
-        if (!op || !op->getSubExpr())
-            return true;
+bool clang_cpp_convertert::VisitUnaryOperator(
+  clang::UnaryOperator *op,
+  exprt &dest)
+{
+  if (!op || !op->getSubExpr())
+    return true;
 
-        exprt operand;
-        if(get_expr(*op->getSubExpr(), operand)) //this->
-          return true;
-  
-        // Add reference member handling:
-        if (op->isIncrementDecrementOp() && 
-              op->getSubExpr()->getType()->isReferenceType()) {
-        
-            if(operand.id() == "member") {
-                const member_exprt &member = to_member_expr(operand);
-                if(member.struct_op().type().id() == "reference"){ 
-                  operand = dereference_exprt(member.struct_op(), member.struct_op().type().subtype());
-                  
-                  operand = member_exprt(operand, member.get_component_name());
-                 }
-            }              
-            // Desugar x++ to x = x + 1
-            exprt one = gen_one(operand.type());
-            exprt new_value; 
-            if (op->isIncrementOp()){
-              new_value = plus_exprt(operand, one);
-            } else {
-              new_value = minus_exprt(operand, one);
-            }
-            if (op->isPostfix()) {
-                // For postfix: (tmp = old_val, assign new_val, return tmp)
-                exprt tmp = operand;
-                side_effect_exprt assign("assign", operand.type());
-                assign.copy_to_operands(operand, new_value);
-                
-                side_effect_exprt comma("comma", operand.type());
-                comma.copy_to_operands(assign, tmp);
-                dest = comma;
-            } else {
-                //Assign new value, return new value for prefix
-                side_effect_exprt assign("assign", operand.type());
-                assign.move_to_operands(operand, new_value);
+  exprt operand;
+  if (get_expr(*op->getSubExpr(), operand)) //this->
+    return true;
 
-                side_effect_exprt comma("comma", new_value.type());
-                comma.move_to_operands(assign, new_value);
-                dest = comma;
-            }    
-            return false;
+  // Add reference member handling:
+  if (
+    op->isIncrementDecrementOp() &&
+    op->getSubExpr()->getType()->isReferenceType())
+  {
+    if (operand.id() == "member")
+    {
+      const member_exprt &member = to_member_expr(operand);
+      if (member.struct_op().type().id() == "reference")
+      {
+        operand = dereference_exprt(
+          member.struct_op(), member.struct_op().type().subtype());
+
+        operand = member_exprt(operand, member.get_component_name());
       }
-      return clang_c_convertert::get_expr(*static_cast<const clang::Stmt*>(op), dest);
-    }  
+    }
+    // Desugar x++ to x = x + 1
+    exprt one = gen_one(operand.type());
+    exprt new_value;
+    if (op->isIncrementOp())
+    {
+      new_value = plus_exprt(operand, one);
+    }
+    else
+    {
+      new_value = minus_exprt(operand, one);
+    }
+    if (op->isPostfix())
+    {
+      // For postfix: (tmp = old_val, assign new_val, return tmp)
+      exprt tmp = operand;
+      side_effect_exprt assign("assign", operand.type());
+      assign.copy_to_operands(operand, new_value);
+
+      side_effect_exprt comma("comma", operand.type());
+      comma.copy_to_operands(assign, tmp);
+      dest = comma;
+    }
+    else
+    {
+      //Assign new value, return new value for prefix
+      side_effect_exprt assign("assign", operand.type());
+      assign.move_to_operands(operand, new_value);
+
+      side_effect_exprt comma("comma", new_value.type());
+      comma.move_to_operands(assign, new_value);
+      dest = comma;
+    }
+    return false;
+  }
+  return clang_c_convertert::get_expr(
+    *static_cast<const clang::Stmt *>(op), dest);
+}
 
 bool clang_cpp_convertert::get_function_this_pointer_param(
   const clang::CXXMethodDecl &cxxmd,
