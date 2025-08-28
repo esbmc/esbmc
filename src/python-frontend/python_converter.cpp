@@ -3916,8 +3916,28 @@ void python_converter::create_builtin_symbols()
   std::string module_name =
     current_python_file.substr(0, current_python_file.find_last_of("."));
 
-  // Create string type for __name__
-  std::string name_value = "__main__";
+  // Determine the value of __name__ based on whether this is the main module or imported
+  std::string name_value;
+  if (current_python_file == main_python_file)
+    name_value = "__main__";
+  else
+  {
+    // Extract module name from filename (e.g., "/path/to/other.py" -> "other")
+    size_t last_slash = current_python_file.find_last_of("/\\");
+    size_t last_dot = current_python_file.find_last_of(".");
+    if (
+      last_slash != std::string::npos && last_dot != std::string::npos &&
+      last_dot > last_slash)
+    {
+      name_value =
+        current_python_file.substr(last_slash + 1, last_dot - last_slash - 1);
+    }
+    else if (last_dot != std::string::npos)
+      name_value = current_python_file.substr(0, last_dot);
+    else
+      name_value = current_python_file; // fallback
+  }
+
   typet string_type =
     type_handler_.build_array(char_type(), name_value.size() + 1);
 
@@ -3930,7 +3950,7 @@ void python_converter::create_builtin_symbols()
   name_symbol.is_extern = false;
   name_symbol.file_local = false;
 
-  // Set the value to "__main__"
+  // Set the value
   exprt name_expr = gen_zero(string_type);
   const typet &char_type_ref = string_type.subtype();
 
@@ -3973,7 +3993,7 @@ void python_converter::convert()
   main_python_file = (*ast_json)["filename"].get<std::string>();
   current_python_file = main_python_file;
 
-  // Create built-in symbols such as __name__
+  // Create built-in symbols for main module (__name__ = "__main__")
   create_builtin_symbols();
 
   if (!config.options.get_bool_option("no-library"))
@@ -4129,6 +4149,9 @@ void python_converter::convert()
         current_python_file =
           imported_module_json["filename"].get<std::string>();
         imported_modules.emplace(module_name, current_python_file);
+
+        // Create built-in symbols for imported module (__name__ = module_name)
+        create_builtin_symbols();
 
         exprt imported_code = get_block(imported_module_json["body"]);
         convert_expression_to_code(imported_code);
