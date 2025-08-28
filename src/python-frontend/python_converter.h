@@ -15,6 +15,7 @@ class struct_typet;
 class function_id;
 class symbol_id;
 class function_call_expr;
+class type_handler;
 
 class python_converter
 {
@@ -92,6 +93,7 @@ private:
   friend class function_call_expr;
   friend class numpy_call_expr;
   friend class function_call_builder;
+  friend class type_handler;
 
   template <typename Func>
   decltype(auto) with_ast(const nlohmann::json *new_ast, Func &&f)
@@ -213,6 +215,12 @@ private:
     const nlohmann::json &left,
     const nlohmann::json &right,
     const nlohmann::json &element);
+
+  symbolt &create_tmp_symbol(
+    const nlohmann::json &element,
+    const std::string var_name,
+    const typet &symbol_type,
+    const exprt &symbol_value);
 
   exprt get_logical_operator_expr(const nlohmann::json &element);
 

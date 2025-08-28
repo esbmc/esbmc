@@ -466,53 +466,15 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
     // Handle cases like x = [0] * 5
     if (list_value["op"]["_type"] == "Mult")
     {
-      const nlohmann::json &left = list_value["left"];
-      const nlohmann::json &right = list_value["right"];
+      exprt left_expr =
+        const_cast<python_converter &>(converter_).get_expr(list_value["left"]);
+      exprt right_expr = const_cast<python_converter &>(converter_)
+                           .get_expr(list_value["right"]);
 
-      typet left_type = get_typet(left);
-      typet right_type = get_typet(right);
-      size_t left_size = 0;
-      size_t right_size = 0;
-      typet subtype;
-
-      // Get left size
-      if (left_type.is_array())
-      {
-        subtype = left_type;
-        left_size = get_array_type_shape(left_type)[0];
-      }
-      else
-      {
-        if (left["_type"] == "Name")
-        {
-          const nlohmann::json &var = json_utils::find_var_decl(
-            left["id"], converter_.current_function_name(), converter_.ast());
-          left_size = var["value"]["value"];
-        }
-        else
-        {
-          left_size = left["value"].get<size_t>();
-        }
-      }
-
-      // Get right size
-      if (right_type.is_array())
-      {
-        subtype = right_type;
-        right_size = get_array_type_shape(right_type)[0];
-      }
-      else if (right["_type"] == "Name")
-      {
-        const nlohmann::json &var = json_utils::find_var_decl(
-          right["id"], converter_.current_function_name(), converter_.ast());
-        right_size = var["value"]["value"];
-      }
-      else
-      {
-        right_size = right["value"].get<size_t>();
-      }
-
-      return build_array(subtype, left_size * right_size);
+      typet list_type = (left_expr.is_symbol()) ? left_expr.type().subtype()
+                                                : right_expr.type().subtype();
+      exprt size = (left_expr.is_symbol()) ? right_expr : left_expr;
+      return array_typet(list_type, size);
     }
   }
 

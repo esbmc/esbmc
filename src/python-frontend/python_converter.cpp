@@ -1565,21 +1565,116 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     // Compute resulting list
     if (op == "Mult")
     {
-      array_typet list_type =
-        static_cast<array_typet>(type_handler_.get_list_type(element));
+      if (is_right)
+        return nil_exprt();
 
-      typet st = list_type.subtype();
-      size_t list_size = type_handler_.get_array_type_shape(st)[0];
+      BigInt list_size;
+      exprt list_elem;
 
-      st.subtype() = st.subtype();
-      st.subtype() = st.subtype().subtype();
+      // Get list size from lhs (e.g.: 3 * [1])
+      if (!lhs.type().is_array())
+      {
+        if (lhs.is_symbol())
+        {
+          symbolt *symbol =
+            find_symbol(to_symbol_expr(lhs).get_identifier().as_string());
+          assert(symbol);
+          list_size = std::stoi(symbol->value.value().as_string(), nullptr, 2);
+        }
+        else if (lhs.is_constant())
+        {
+          list_size = std::stoi(lhs.value().as_string(), nullptr, 2);
+        }
 
-      exprt list = gen_zero(st);
-      const exprt &e = (lhs.type().is_array()) ? get_expr(left["elts"][0])
-                                               : get_expr(right["elts"][0]);
+        // List element is the rhs
+        list_elem = get_expr(right["elts"][0]);
+      }
 
-      for (size_t i = 0; i < list_size; ++i)
-        list.operands().at(i) = e;
+      // Get list size from rhs (e.g.: 3 * [1])
+      if (!rhs.type().is_array())
+      {
+        // List element is the rhs
+        list_elem = get_expr(left["elts"][0]);
+
+        if (rhs.is_symbol())
+        {
+          symbolt *symbol =
+            find_symbol(to_symbol_expr(rhs).get_identifier().as_string());
+
+          assert(symbol);
+
+          if (symbol->value.is_code())
+          {
+            // Build array and initialize VLA
+
+            symbolt &vla_symbol = create_tmp_symbol(
+              element,
+              "vla",
+              current_lhs->type(),
+              gen_zero(current_lhs->type()));
+
+            code_declt vla_decl(symbol_expr(vla_symbol));
+            vla_decl.location() = get_location_from_decl(element);
+            current_block->copy_to_operands(vla_decl);
+
+            // Add counter for while loop
+            symbolt &counter = create_tmp_symbol(
+              element, "counter", int_type(), gen_zero(int_type()));
+
+            code_assignt counter_code(
+              symbol_expr(counter), gen_zero(int_type()));
+            current_block->copy_to_operands(counter_code);
+
+            // Build conditional for while loop (counter < len(arr))
+            exprt cond("<", bool_type());
+            cond.operands().push_back(symbol_expr(counter));
+            cond.operands().push_back(symbol_expr(*symbol));
+
+            // Build block with arr[i] assignment and counter increment
+            code_blockt then;
+
+            // arr[counter] assignment
+            index_exprt arr_index(
+              symbol_expr(vla_symbol),
+              symbol_expr(counter),
+              symbol_expr(vla_symbol).type().subtype());
+            code_assignt arr_assign(arr_index, list_elem);
+            then.copy_to_operands(arr_assign);
+
+            // increment counter
+            exprt incr("+");
+            incr.copy_to_operands(symbol_expr(counter));
+            incr.copy_to_operands(gen_one(int_type()));
+            code_assignt update(symbol_expr(counter), incr);
+            then.copy_to_operands(update);
+
+            // add while block to initialize vla
+            codet while_cod;
+            while_cod.set_statement("while");
+            while_cod.copy_to_operands(cond, then);
+            current_block->copy_to_operands(while_cod);
+
+            // return initialized vla
+            return symbol_expr(vla_symbol);
+          }
+
+          list_size = std::stoi(symbol->value.value().as_string(), nullptr, 2);
+        }
+        else if (rhs.is_constant())
+        {
+          list_size = std::stoi(rhs.value().as_string(), nullptr, 2);
+        }
+      }
+
+      typet st =
+        (lhs.type().is_array()) ? lhs.type().subtype() : rhs.type().subtype();
+
+      typet list_type = array_typet(st, from_integer(list_size, int_type()));
+
+      exprt list = gen_zero(list_type);
+
+      for (int64_t i = 0; i < list_size.to_int64(); ++i)
+        list.operands().at(i) = list_elem;
 
       return list;
     }
@@ -2157,6 +2252,29 @@ bool python_converter::is_instance_attribute(
   return false;
 }
 
+symbolt &python_converter::create_tmp_symbol(
+  const nlohmann::json &element,
+  const std::string var_name,
+  const typet &symbol_type,
+  const exprt &symbol_value)
+{
+  locationt location = get_location_from_decl(element);
+  std::string path = location.file().as_string();
+  std::string name_prefix =
+    path + ":" + location.get_line().as_string() + var_name;
+  symbolt &cl =
+    sym_generator_.new_symbol(symbol_table_, symbol_type, name_prefix);
+  cl.mode = "Python";
+  std::string module_name = location.get_file().as_string();
+  cl.module = module_name;
+  cl.location = location;
+  cl.static_lifetime = false;
+  cl.is_extern = false;
+  cl.file_local = true;
+  cl.value = symbol_value;
+  return cl;
+}
+
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
   exprt expr;
@@ -2203,20 +2321,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       list.operands().at(i++) = get_expr(e);
     }
 
-    locationt location = get_location_from_decl(element);
-    std::string path = location.file().as_string();
-    std::string name_prefix =
-      path + ":" + location.get_line().as_string() + "$compound-literal$";
     symbolt &cl =
-      sym_generator_.new_symbol(symbol_table_, list_type, name_prefix);
-    cl.mode = "Python";
-    std::string module_name = location.get_file().as_string();
-    cl.module = module_name;
-    cl.location = location;
-    cl.static_lifetime = false;
-    cl.is_extern = false;
-    cl.file_local = true;
-    cl.value = list;
+      create_tmp_symbol(element, "$compound-literal$", list_type, list);
 
     expr = symbol_expr(cl);
     code_declt decl(expr);
@@ -2655,8 +2761,8 @@ void python_converter::get_var_assign(
         location_begin,
         current_element_type);
       symbol.lvalue = true;
-      symbol.static_lifetime =
-        (current_class_name_ == "" && current_func_name_ == "") ? true : false;
+      /*symbol.static_lifetime =
+        (current_class_name_ == "" && current_func_name_ == "") ? true : false;*/
       symbol.file_local = true;
       symbol.is_extern = false;
 
@@ -2724,7 +2830,9 @@ void python_converter::get_var_assign(
   if (!ast_node["value"].is_null())
   {
     is_converting_rhs = true;
+
     rhs = get_expr(ast_node["value"]);
+
     has_value = true;
     is_converting_rhs = false;
   }
@@ -2773,8 +2881,11 @@ void python_converter::get_var_assign(
          * create the LHS type as a zero-size array: "current_element_type = get_typet(lhs_type, type_size);"
          * After parsing the RHS, we need to adjust the LHS type size to match
          * the size of the resulting RHS string.*/
-        lhs_symbol->type = rhs.type();
-        lhs.type() = rhs.type();
+        if (!rhs.type().is_empty())
+        {
+          lhs_symbol->type = rhs.type();
+          lhs.type() = rhs.type();
+        }
       }
       if (!rhs.type().is_empty() && !is_ctor_call)
         lhs_symbol->value = rhs;
@@ -3753,26 +3864,43 @@ void python_converter::append_models_from_directory(
   }
 }
 
+static void add_global_static_variable(
+  contextt &ctx,
+  const typet t,
+  const std::string &name)
+{
+  std::string id = "c:@" + name;
+  symbolt symbol;
+  symbol.mode = "C";
+  symbol.type = std::move(t);
+  symbol.name = name;
+  symbol.id = id;
+
+  symbol.lvalue = true;
+  symbol.static_lifetime = true;
+  symbol.is_extern = false;
+  symbol.file_local = false;
+  symbol.value = gen_zero(t, true);
+  symbol.value.zero_initializer(true);
+
+  symbolt *added_symbol = ctx.move_symbol_to_context(symbol);
+  assert(added_symbol);
+}
+
 void python_converter::load_c_intrisics()
 {
   // Add symbols required by the C models
 
-  typet t = long_long_int_type();
-  locationt l;
-  l.set_file("esbmc_intrinsics.h");
-  symbolt symbol;
-  symbol.mode = "C";
-  symbol.module = "esbmc_intrinsics";
-  symbol.location = l;
-  symbol.type = t;
-  symbol.name = "__ESBMC_rounding_mode";
-  symbol.id = "c:@__ESBMC_rounding_mode";
-  symbol.lvalue = true;
-  symbol.static_lifetime = true;
+  add_global_static_variable(
+    symbol_table_, long_long_int_type(), "__ESBMC_rounding_mode");
 
-  symbolt *new_symbol = symbol_table_.move_symbol_to_context(symbol);
-  exprt value = from_integer(BigInt(0), t);
-  new_symbol->value = value;
+  auto type1 = array_typet(bool_type(), exprt("infinity"));
+  add_global_static_variable(symbol_table_, type1, "__ESBMC_alloc");
+  add_global_static_variable(symbol_table_, type1, "__ESBMC_deallocated");
+  add_global_static_variable(symbol_table_, type1, "__ESBMC_is_dynamic");
+
+  auto type2 = array_typet(size_type(), exprt("infinity"));
+  add_global_static_variable(symbol_table_, type2, "__ESBMC_alloc_size");
 }
 
 void python_converter::convert()
