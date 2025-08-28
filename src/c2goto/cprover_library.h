@@ -3,6 +3,7 @@
 
 #include <util/context.h>
 #include <util/message.h>
+#include <util/irep.h>
 
 class languaget;
 
@@ -22,5 +23,10 @@ void add_bundled_library_sources(
 void add_cprover_library(
   contextt &context,
   const languaget *language = nullptr);
+
+void generate_symbol_deps(
+  irep_idt name,
+  irept irep,
+  std::multimap<irep_idt, irep_idt> &deps);
 
 #endif
