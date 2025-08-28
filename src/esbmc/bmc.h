@@ -58,7 +58,7 @@ protected:
   virtual void
   error_trace(smt_convt &smt_conv, const symex_target_equationt &eq);
 
-  virtual void successful_trace();
+  virtual void successful_trace(const symex_target_equationt &eq);
 
   virtual void show_vcc(const symex_target_equationt &eq);
 
@@ -78,7 +78,8 @@ protected:
 
   smt_convt::resultt multi_property_check(
     const symex_target_equationt &eq,
-    size_t remaining_claims);
+    size_t remaining_claims,
+    smt_convt &runtime_solver);
 
   std::vector<std::unique_ptr<ssa_step_algorithm>> algorithms;
 
@@ -97,7 +98,7 @@ protected:
 
   virtual void report_multi_property_trace(
     const smt_convt::resultt &res,
-    const std::unique_ptr<smt_convt> &solver,
+    smt_convt *&solver,
     const symex_target_equationt &local_eq,
     const std::atomic<size_t> ce_counter,
     const goto_tracet &goto_trace,
@@ -122,6 +123,7 @@ private:
     std::atomic<size_t> failed_properties = 0;
     std::atomic<double> total_time_s = 0.0;
     std::string solver_name;
+    std::once_flag solver_name_flag;
   };
 
   void report_simple_summary(const SimpleSummary &summary) const;

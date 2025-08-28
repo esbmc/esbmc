@@ -90,6 +90,19 @@ symbol_id function_call_builder::build_function_id() const
 
       obj_name = lhs_type;
     }
+    else if (func_json["value"]["_type"] == "Call")
+    {
+      obj_name = func_json["value"]["func"]["id"];
+      if (obj_name == "super")
+      {
+        symbolt *base_class_func = converter_.find_function_in_base_classes(
+          current_class_name, function_id.to_string(), func_name, false);
+        if (base_class_func)
+        {
+          return symbol_id::from_string(base_class_func->id.as_string());
+        }
+      }
+    }
     else
     {
       obj_name = func_json["value"]["id"];
@@ -120,7 +133,9 @@ symbol_id function_call_builder::build_function_id() const
     else if (arg["_type"] == "Name")
     {
       const std::string &var_type = th.get_var_type(arg["id"]);
-      if (var_type == "bytes" || var_type == "list" || var_type.empty())
+      if (
+        var_type == "bytes" || var_type == "list" || var_type == "List" ||
+        var_type.empty())
         func_name = kGetObjectSize;
     }
     function_id.clear();
@@ -137,7 +152,11 @@ symbol_id function_call_builder::build_function_id() const
   }
 
   // Insert class name in the symbol id
-  if (th.is_constructor_call(call_))
+  if (obj_name == "super")
+  {
+    class_name = current_class_name;
+  }
+  else if (th.is_constructor_call(call_))
   {
     class_name = func_name;
   }

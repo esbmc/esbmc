@@ -1,0 +1,4 @@
+CORE
+main.c
+--parallel-solving --k-induction --max-k-step 5 -Wno-error=implicit-int
+^VERIFICATION UNKNOWN$

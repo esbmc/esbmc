@@ -966,3 +966,13 @@ smt_sortt bitwuzla_convt::mk_bvfp_rm_sort()
   return new solver_smt_sort<BitwuzlaSort>(
     SMT_SORT_BVFP_RM, bitwuzla_mk_bv_sort(bitw_term_manager, 3), 3);
 }
+
+smt_astt bitwuzla_convt::mk_quantifier(
+  [[maybe_unused]] bool is_forall,
+  [[maybe_unused]] std::vector<smt_astt> lhs,
+  [[maybe_unused]] smt_astt rhs)
+{
+  log_error("Bitwuzla does not support quantifiers");
+  abort();
+  return nullptr;
+}

@@ -209,6 +209,15 @@ void goto_programt::instructiont::output_instruction(
     out << "\n";
     break;
 
+  case LOOP_INVARIANT:
+    out << "LOOP_INVARIANT";
+    for (const auto &invariant : loop_invariants)
+    {
+      out << " " << from_expr(ns, identifier, invariant);
+    }
+    out << "\n";
+    break;
+
   default:
     throw "unknown statement";
   }

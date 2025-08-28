@@ -42,6 +42,13 @@ private:
    */
   bool is_nondet_call() const;
 
+  bool is_introspection_call() const;
+
+  bool is_input_call() const;
+
+  // Create an expression that represents non-deterministic string input
+  exprt handle_input() const;
+
   /*
    * Creates an expression for a non-deterministic function call.
    */
@@ -81,6 +88,10 @@ private:
    * current filename to construct the full scoped symbol name.
    */
   const symbolt *lookup_python_symbol(const std::string &var_name) const;
+
+  exprt handle_isinstance() const;
+
+  exprt handle_hasattr() const;
 
   /*
    * Handles str-to-int conversions (e.g., int('65')) by reconstructing
@@ -124,7 +135,7 @@ private:
    * Handles chr(int) conversions by creating a single-character
    * string expression from an integer.
    */
-  void handle_chr(nlohmann::json &arg) const;
+  exprt handle_chr(nlohmann::json &arg) const;
 
   /*
    * Handles hexadecimal string arguments (e.g., hex(255) -> "0xff")
@@ -152,6 +163,23 @@ private:
    * the __abs__() method. The function returns an expression representing the absolute value.
    */
   exprt handle_abs(nlohmann::json &arg) const;
+
+  /*
+   * Checks if the current function call is a min() or max() built-in function.
+   * Returns true if the function name matches "min" or "max", false otherwise.
+   */
+  bool is_min_max_call() const;
+
+  /*
+   * Handles min() or max() function calls by generating conditional expressions.
+   * Currently supports exactly 2 arguments.
+   * @TODO: Support multiple arguments.
+   * For min(a, b), generates: a < b ? a : b
+   * For max(a, b), generates: a > b ? a : b
+   * Performs type compatibility checking with automatic int-to-float promotion.
+   */
+  exprt
+  handle_min_max(const std::string &func_name, irep_idt comparison_op) const;
 
 protected:
   symbol_id function_id_;

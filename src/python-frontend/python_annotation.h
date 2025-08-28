@@ -287,6 +287,8 @@ private:
       return "bool";
     if (rhs.is_string())
       return "str";
+    if (rhs.is_null())
+      return "NoneType";
 
     return std::string();
   }
@@ -324,8 +326,44 @@ private:
         if (left_op.empty() && body.contains("args"))
           left_op = find_annotated_assign(lhs["id"], body["args"]["args"]);
 
+        // Check current function scope for function parameters
+        if (
+          left_op.empty() && current_func != nullptr &&
+          (*current_func).contains("args"))
+        {
+          left_op =
+            find_annotated_assign(lhs["id"], (*current_func)["args"]["args"]);
+        }
+
         if (!left_op.empty())
           type = left_op["annotation"]["id"];
+      }
+      else if (lhs["_type"] == "Subscript")
+      {
+        // Handle subscript operations like dp[i-1], prices[i], etc.
+        const std::string &var_name = lhs["value"]["id"];
+        Json var_node =
+          json_utils::find_var_decl(var_name, get_current_func_name(), ast_);
+
+        if (!var_node.empty())
+        {
+          const std::string &var_type = var_node["annotation"]["id"];
+
+          // For list[T], return T. For other types, return the type itself
+          if (var_type == "list")
+          {
+            // Try to get subtype from list initialization
+            if (var_node.contains("value") && !var_node["value"].is_null())
+            {
+              std::string subtype = get_list_subtype(var_node["value"]);
+              type = subtype.empty() ? "Any" : subtype;
+            }
+            else
+            {
+              type = "Any"; // Unknown list element type
+            }
+          }
+        }
       }
       else if (lhs["_type"] == "Constant")
         type = get_type_from_constant(lhs);
@@ -534,6 +572,15 @@ private:
     if (rhs_node.empty() && current_func)
       rhs_node = find_annotated_assign(rhs_var_name, (*current_func)["body"]);
 
+    // Check current function scope for function parameters
+    if (
+      rhs_node.empty() && current_func != nullptr &&
+      (*current_func).contains("args"))
+    {
+      rhs_node =
+        find_annotated_assign(rhs_var_name, (*current_func)["args"]["args"]);
+    }
+
     // Find RHS variable in the current function args
     if (rhs_node.empty() && body.contains("args"))
       rhs_node = find_annotated_assign(rhs_var_name, body["args"]["args"]);
@@ -555,7 +602,10 @@ private:
 
     if (value_type == "Subscript")
     {
-      return get_list_subtype(rhs_node["value"]);
+      if (!rhs_node["value"].is_null())
+        return get_list_subtype(rhs_node["value"]);
+      else
+        return "Any"; // Default for unknown subscript types
     }
 
     return rhs_node["annotation"]["id"];
@@ -568,7 +618,8 @@ private:
     if (
       json_utils::is_class<Json>(func_id, ast_) ||
       type_utils::is_builtin_type(func_id) ||
-      type_utils::is_consensus_type(func_id))
+      type_utils::is_consensus_type(func_id) ||
+      type_utils::is_python_exceptions(func_id))
       return func_id;
 
     if (type_utils::is_consensus_func(func_id))

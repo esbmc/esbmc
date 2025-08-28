@@ -182,6 +182,10 @@ const struct group_opt_templ all_cmd_options[] = {
      boost::program_options::value<std::string>()->value_name("{ path | - }"),
      "generate the verification result witness in GraphML format; use '-' for "
      "output to stdout"},
+    {"witness-output-yaml",
+     boost::program_options::value<std::string>()->value_name("{ path | - }"),
+     "generate the verification result witness in Yaml format; use '-' for "
+     "output to stdout"},
     {"witness-producer", boost::program_options::value<std::string>(), ""},
     {"witness-programfile", boost::program_options::value<std::string>(), ""},
     {"generate-testcase",
@@ -263,6 +267,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"slice-assumes", NULL, "remove unused assume statements"},
     {"extended-try-analysis", NULL, ""},
     {"skip-bmc", NULL, "do not perform bounded model checking"},
+    {"loop-invariant", NULL, "enable loop invariant checking"},
     {"cache-asserts", NULL, "cache asserts that were already proven correct"}}},
   {"Incremental BMC",
    {{"incremental-bmc", NULL, "incremental loop unwinding verification"},

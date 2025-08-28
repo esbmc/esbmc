@@ -51,3 +51,5 @@ def bar(x:list[int]) -> None:
 
 x = 0    
 bar([1,2,3])
+
+l9 = []

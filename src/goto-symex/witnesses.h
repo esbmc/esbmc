@@ -6,6 +6,7 @@
 #include <string>
 #include <regex>
 #include <big-int/bigint.hh>
+#include <yaml-cpp/yaml.h>
 
 typedef boost::property_tree::ptree xmlnodet;
 
@@ -69,6 +70,27 @@ public:
   }
 };
 
+class waypoint
+{
+public:
+  enum Type
+  {
+    assumption,
+    target,
+    function_enter,
+    function_return,
+    branching
+  };
+
+  Type type;
+  std::string file;
+  std::string value;
+  std::string format;
+  BigInt line = c_nonset;
+  BigInt column = c_nonset;
+  std::string function;
+};
+
 class grapht
 {
 private:
@@ -91,6 +113,25 @@ public:
   }
   void generate_graphml(optionst &options);
   void check_create_new_thread(BigInt thread_id, nodet *prev_node);
+};
+
+class yamlt
+{
+public:
+  enum typet
+  {
+    VIOLATION,
+    CORRECTNESS
+  };
+  typet witness_type;
+  std::string verified_file;
+  std::vector<waypoint> segments;
+
+  yamlt(typet t)
+  {
+    witness_type = t;
+  }
+  void generate_yaml(optionst &options);
 };
 
 /**
@@ -120,6 +161,18 @@ void create_correctness_graph_node(
   optionst &options,
   xmlnodet &graphnode);
 
+void create_correctness_yaml_emitter(
+  std::string &verifiedfile,
+  optionst &options,
+  YAML::Emitter &root);
+
+void create_violation_yaml_emitter(
+  std::string &verifiedfile,
+  optionst &options,
+  YAML::Emitter &root);
+
+void create_waypoint(const waypoint &wp, YAML::Emitter &waypoint);
+
 /**
  * Create a edge node.
  *
@@ -146,8 +199,10 @@ bool is_valid_witness_step(const namespacet &ns, const goto_trace_stept &step);
  * will return the lhs and rhs formated in a way expected
  * by the assumption field.
  */
-std::string
-get_formated_assignment(const namespacet &ns, const goto_trace_stept &step);
+std::string get_formated_assignment(
+  const namespacet &ns,
+  const goto_trace_stept &step,
+  bool yaml);
 
 /**
  *
@@ -168,6 +223,7 @@ BigInt get_line_number(
  *
  */
 int generate_sha1_hash_for_file(const char *path, std::string &output);
+int generate_sha256_hash_for_file(const char *path, std::string &output);
 
 /**
  *

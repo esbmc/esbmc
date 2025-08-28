@@ -1,0 +1,4 @@
+CORE
+main.c
+--ir --no-simplify --incremental-bmc
+^VERIFICATION SUCCESSFUL$

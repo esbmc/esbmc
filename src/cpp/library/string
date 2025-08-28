@@ -13,7 +13,6 @@ extern "C" void itoa(int value, char *str, int base);
 
 namespace std
 {
-
 template <class charT>
 struct char_traits
 {
@@ -171,7 +170,7 @@ public:
     CC_DIAGNOSTIC_PUSH()
     DO_PRAGMA(GCC diagnostic ignored "-Wreturn-stack-address")
 
-    iterator &operator-(int n) const
+    iterator operator-(int n) const
     {
       iterator buffer;
       buffer.pointer = pointer - sizeof(char) * n;
@@ -180,7 +179,7 @@ public:
       return buffer;
     }
 
-    iterator &operator+(int n) const
+    iterator operator+(int n) const
     {
       iterator buffer;
       buffer.pointer = pointer + sizeof(char) * n;
@@ -193,35 +192,27 @@ public:
     //It's like "++c"
     iterator &operator++()
     {
-      iterator buffer;
-      buffer.pointer = pointer;
-      buffer.pos = pos;
       pointer = pointer + sizeof(char);
       pos++;
-      return buffer;
+      return *this;
     }
 
     //operator increases pointer address and returns new value
     //It's like "c++"
     iterator operator++(int _b)
     {
-      iterator buffer;
-      buffer.pointer = pointer + sizeof(char);
-      buffer.pos++;
-      pos++;
+      iterator buffer = *this;
       pointer = pointer + sizeof(char);
+      pos++;
       return buffer;
     }
     //operator decreases pointer address, but returns old value.
     //It's like "--c"
     iterator &operator--()
     {
-      iterator buffer;
-      buffer.pointer = pointer;
-      buffer.pos = pos;
       pointer = pointer - sizeof(char);
       pos--;
-      return buffer;
+      return *this;
     }
 
     CC_DIAGNOSTIC_POP()
@@ -230,11 +221,9 @@ public:
     //It's like "c--"
     iterator operator--(int _b)
     {
-      iterator buffer;
-      buffer.pointer = pointer + sizeof(char);
-      buffer.pos--;
-      pos--;
+      iterator buffer = *this;
       pointer = pointer - sizeof(char);
+      pos--;
       return buffer;
     }
 
@@ -314,22 +303,18 @@ public:
 
     iterator &operator+=(int n)
     {
-      iterator buffer;
-      buffer = buffer + n;
       pointer = pointer + sizeof(char) * n;
       pos += n;
-      return buffer;
+      return *this;
     }
 
     //operator subtracts n positions on pointer address, and returns its address value
 
     iterator operator-=(int n)
     {
-      iterator buffer;
-      buffer = buffer - n;
       pointer = pointer - sizeof(char) * n;
-      pos += n;
-      return buffer;
+      pos -= n;
+      return *this;
     }
 
     CC_DIAGNOSTIC_POP()
@@ -378,24 +363,37 @@ public:
     DO_PRAGMA(GCC diagnostic ignored "-Wreturn-stack-address")
 
     //operator subtracts n positions on pointer address of this
-    const_iterator &operator-(int n) const
+    const_iterator operator-(int n) const
     {
       const_iterator buffer;
       buffer.pointer = pointer - sizeof(char) * n;
+      buffer.pos = pos - n;
       return buffer;
     }
 
-    const_iterator &operator+(int n) const
+    const_iterator operator+(int n) const
     {
       const_iterator buffer;
       buffer.pointer = pointer + sizeof(char) * n;
+      buffer.pos = pos + n;
       return buffer;
     }
 
     CC_DIAGNOSTIC_POP()
 
-    const_iterator &operator++();
-    const_iterator operator++(int);
+    const_iterator &operator++()
+    {
+      pointer = pointer + sizeof(char);
+      pos++;
+      return *this;
+    }
+    const_iterator operator++(int)
+    {
+      const_iterator buffer = *this;
+      pointer = pointer + sizeof(char);
+      pos++;
+      return buffer;
+    }
 
     //operator returns true if both members point to the same address
     //returns false if not happen
@@ -495,17 +493,6 @@ public:
   explicit basic_string(int len);
   basic_string(const_iterator begin, const_iterator end);
   char *c_str() const;
-  //bool operator==(basic_string& b);
-  //bool operator==(basic_string& a) const;
-  //bool operator==(const char* lhs);
-  //bool operator==(basic_string& a, basic_string& b);
-  //bool operator==(const char* lhs, basic_string& rhs);
-  //bool operator==(basic_string& lhs, const char* rhs);
-  //bool operator!=(basic_string& a);
-  //bool operator!=(const basic_string& a);
-  //bool operator!=(const char* lhs);
-  //bool operator!=(const char* lhs, basic_string& rhs);
-  //bool operator!=(basic_string& lhs, const char* rhs);
   bool operator>(basic_string<CharT, Traits, Alloc> &a);
   bool operator>(const char *a);
   friend bool
@@ -572,7 +559,6 @@ public:
     char *s = one.it_str;
     int pos = one.pos;
     int n = two.pos, i, k;
-    //__ESBMC_assert( (pos >= 0) && (pos < s.length()) && ((pos+n) < s.length()) && (n > 0), "basic_string overflow");
     __ESBMC_assert(s != NULL, "The parameter must be different than NULL");
     this->_size = n - pos + 1;
     this->str = new char[this->_size + 1];
@@ -624,21 +610,6 @@ public:
     this->_size = totalLength;
     this->str = result.str;
     return *this;
-    /*
-		int rhsLen = n;
-		int totalLen = this->_size + (rhsLen - pos);
-		basic_string temp(totalLen);
-		int i, j, k;
-		for (i = 0; i < this->_size; i++)
-			temp[i] = this->str[i];
-		for (j = i, k = pos; j < temp._size; j++, k++)
-			temp.str[j] = s[k];
-		// *this = temp;
-		this->_size = temp._size;
-		this->str = temp.str;
-		//assert(this->_size != 16);
-		return *this;
-		*/
   }
   void swap(basic_string<CharT, Traits, Alloc> &s);
   void resize(size_t n, char c);
@@ -1532,17 +1503,32 @@ basic_string<CharT, Traits, Alloc> &
 basic_string<CharT, Traits, Alloc>::operator=(
   basic_string<CharT, Traits, Alloc> &str)
 {
-  //	__ESBMC_HIDE: __ESBMC_assert(str.str != NULL,
-  //		"The parameter must be different than NULL");
-  int i, len;
-  this->_size = str.size();
-  this->str = new char[this->_size + 1];
-  len = str.size();
-  for (i = 0; i < len; i++)
+  if (this == &str)
+    return *this;
+
+  // Store old pointer for cleanup
+  CharT *old_str = this->str;
+
+  // Calculate new size
+  size_t new_size = str.size();
+
+  // Allocate new memory
+  CharT *new_str = nullptr;
+  if (new_size > 0)
   {
-    this->str[i] = str.str[i];
+    new_str = new CharT[new_size + 1];
+    for (size_t i = 0; i < new_size; ++i)
+      new_str[i] = str.str[i];
+    new_str[new_size] = CharT{}; // Null terminator
   }
-  this->str[i] = '\0';
+
+  // Update object state only after successful allocation
+  this->str = new_str;
+  this->_size = new_size;
+
+  // Clean up old memory
+  delete[] old_str;
+
   return *this;
 }
 
@@ -1570,62 +1556,6 @@ __ESBMC_HIDE:
   return *this;
 }
 
-//TODO: fix operator+ issues
-/*	basic_string& basic_string::operator+ ( basic_string& lhs, basic_string& rhs)
- {
- __ESBMC_assert( (lhs.str != NULL) || (rhs.str != NULL), "The parameter must be different than NULL");
- int rhsLen = rhs._size;
- int lhsLen = lhs._size;
- int totalLen = lhsLen + rhsLen;
- char temp[totalLen+1];
- int i, j, k;
- for (i=0; i<lhsLen; i++)
- temp[i] = lhs.str[i];
- temp[i]='\0';
- for(j=i, k=0; j<totalLen; j++, k++)
- temp[j] = rhs.str[k];
- temp[j]='\0';
- basic_string next(totalLen);
- strcpy(next.str, temp);
- return next;
- }
-
- basic_string& basic_string::operator+ ( const char* s)
- {
- __ESBMC_HIDE:
- __ESBMC_assert( s != NULL, "The parameter must be different than NULL");
- int rhsLen = strlen(s);
- int totalLen = this->_size + rhsLen;
- char temp[totalLen+1];
- int i, j, k;
- for (i=0; i<this->_size; i++)
- temp[i] = this->str[i];
- temp[i]='\0';
- for(j=i, k=0; j<totalLen; j++, k++)
- temp[j] = s[k];
- temp[j]='\0';
- basic_string next(totalLen);
- strcpy(next.str, temp);
- return next;
- }
-
- basic_string& basic_string::operator+ ( char s)
- {
- __ESBMC_HIDE:
- __ESBMC_assert( s != NULL, "The parameter must be different than NULL");
- int totalLen = this->_size +1;
- char temp[totalLen+1];
- int i=0, j, k;
- if(this->_size!=0)
- for (i=0; i<this->_size; i++)
- temp[i] = this->str[i];
- temp[i] = s;
- temp[i++] = '\0';
- basic_string next(totalLen);
- strcpy(next.str, temp);
- return next;
- }
- */
 template <typename CharT, typename Traits, typename Alloc>
 basic_string<CharT, Traits, Alloc> &
 basic_string<CharT, Traits, Alloc>::operator+=(
@@ -3123,40 +3053,47 @@ size_t basic_string<CharT, Traits, Alloc>::rfind(
   size_t pos) const
 {
 __ESBMC_HIDE:
-  __ESBMC_assert((pos < this->length()) && (pos >= 0), "overflow");
+  // Early returns for edge cases
+  if (s._size == 0)
+    return (pos < this->_size) ? pos : this->_size;
+  if (s._size > this->_size)
+    return npos;
+
   __ESBMC_assert(s.str != NULL, "The parameter must be different than NULL");
-  size_t i, j, k;
-  int num = 0;
-  int lim = pos;
 
-  int len = this->length();
-  char *s1 = new char[len + 1];
-  strcpy(s1, this->str);
+  size_t len = this->_size;
+  size_t slen = s._size;
 
-  int slen = s.length();
-  char *s2 = new char[slen + 1];
-  strcpy(s2, s.str);
+  // Calculate the rightmost valid starting position
+  size_t max_start;
+  if (pos >= len)
+    max_start = len - slen;
+  else if (pos + 1 >= slen)
+    max_start = pos - slen + 1;
+  else
+    return npos;
 
-  for (i = len - 1; i >= lim; i--)
+  // Search backward from rightmost valid position
+  for (size_t start = max_start + 1; start > 0; start--)
   {
-    for (k = i, j = slen - 1; j >= 0; j--)
+    size_t i = start - 1;
+    bool match = true;
+
+    // Simple forward comparison at position i
+    for (size_t j = 0; j < slen; j++)
     {
-      if (s1[k] != s2[j])
+      if (this->str[i + j] != s.str[j])
       {
+        match = false;
         break;
       }
-      else
-      {
-        num++;
-        if (num == slen)
-        {
-          return k;
-        }
-        k--;
-      }
     }
+
+    if (match)
+      return i;
   }
-  return -1;
+
+  return npos;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -3417,71 +3354,7 @@ operator+(char lhc, basic_string<CharT, Traits, Alloc> rhs)
   result._size = totalLength;
   return result;
 }
-/*
- * The following operator overloading is really obfuscating on standard types (char*, char).
- * Clang would generate parse error for such thing. For the time being, let's just
- * comment them to avoid the parse error so that we can progress further.
- * The purpose of such overloading may become clear when we run benchmarks.
- * Remove them if they are not affecting the pass rate in our benchmarks
- */
-#if 0
-basic_string<CharT, Traits, Alloc> operator+(char lhc, char * rhs) {
-	int totalLength = 1;
-	totalLength += strlen(rhs);
-	int i,j,k;
-	basic_string result;
-	result.str = new char[totalLength + 1];
-	result.str[0] = lhc;
-	for(j = 1, k = 0; j < totalLength; j++,k++){
-		result.str[j] = rhs[k];
-	}
-	result.str[j] = '\0';
-	result._size = totalLength;
-	return result;
-}
-basic_string operator+(char lhc, char rhc) {
-	int totalLength = 2;
-	int i,j,k;
-	basic_string result;
-	result.str = new char[totalLength + 1];
-	result.str[0] = lhc;
-	result.str[1] = rhc;
-	result.str[2] = '\0';
-	result._size = totalLength;
-	return result;
-}
-#endif
-/*
-bool basic_string::operator==(basic_string& b) {
-	__ESBMC_HIDE: __ESBMC_assert(b.str != NULL,
-			"The parameter must be different than NULL");
-	if (strcmp(this->str, b.str) == 0)
-		return true;
-	else
-		return false;
-}
 
-bool basic_string::operator==(basic_string& b) const {
-	__ESBMC_HIDE: __ESBMC_assert(b.str != NULL,
-			"The parameter must be different than NULL");
-	if (strcmp(this->str, b.str) == 0)
-		return true;
-	else
-		return false;
-}
-
-bool basic_string::operator==(const char* lhs) {
-	__ESBMC_HIDE: __ESBMC_assert(lhs != NULL,
-			"The parameter must be different than NULL");
-	int aux;
-	aux = strcmp((char*) lhs, this->str);
-	if (aux == 0) {
-		return true;
-	} else {
-		return false;
-	}
-}
-*/
 template <typename CharT, typename Traits, typename Alloc>
 bool operator==(
   const basic_string<CharT, Traits, Alloc> a,
@@ -3549,43 +3422,6 @@ __ESBMC_HIDE:
     return false;
   }
 }
-/*
-bool basic_string::operator!=(basic_string& a) {
-	__ESBMC_HIDE: __ESBMC_assert(a.str != NULL,
-			"The parameter must be different than NULL");
-	int aux;
-	aux = strcmp(a.c_str(), this->c_str());
-	if (aux == 0) {
-		return false;
-	} else {
-		return true;
-	}
-}
-
-bool basic_string::operator!=(const basic_string& a) {
-	__ESBMC_HIDE: __ESBMC_assert(a.str != NULL,
-			"The parameter must be different than NULL");
-	int aux;
-	aux = strcmp(a.c_str(), this->c_str());
-	if (aux == 0) {
-		return false;
-	} else {
-		return true;
-	}
-}
-
-bool basic_string::operator!=(const char* lhs) {
-	__ESBMC_HIDE: __ESBMC_assert(lhs != NULL,
-			"The parameter must be different than NULL");
-	int aux;
-	aux = strcmp((char*) lhs, this->c_str());
-	if (aux == 0) {
-		return false;
-	} else {
-		return true;
-	}
-}
-*/
 template <typename CharT, typename Traits, typename Alloc>
 bool operator!=(
   basic_string<CharT, Traits, Alloc> a,

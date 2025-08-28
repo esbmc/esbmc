@@ -1,4 +1,4 @@
 CORE
 contract.solast
---sol contract.sol --contract test --incremental-bmc --16
+--sol contract.sol --contract test --no-standard-check --k-induction --k-step 2
 ^VERIFICATION FAILED$

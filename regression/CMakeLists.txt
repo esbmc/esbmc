@@ -161,6 +161,7 @@ if(APPLE)
                     ${REGRESSIONS_JIMPLE}
                     k-induction
                     k-induction-parallel
+                    termination
                     nonz3
                     ${REGRESSIONS_BITWUZLA}
                     ${REGRESSIONS_CVC}
@@ -175,6 +176,7 @@ if(APPLE)
                     ${REGRESSIONS_NUMPY}
                     ltl
                     goto-transcoder
+                    loop-invariants
        )
 elseif(WIN32)
     # FUTURE: Add floats-regression esbmc-cpp/cpp
@@ -184,6 +186,7 @@ elseif(WIN32)
                     llvm
                     floats
                     k-induction
+                    termination
                     windows
                     ${REGRESSIONS_JIMPLE}
                     ${REGRESSIONS_BITWUZLA}
@@ -207,6 +210,7 @@ else()
                     floats
                     floats-regression
                     k-induction
+                    termination
                     csmith
                     k-induction-parallel
                     cuda/benchmarks
@@ -235,6 +239,7 @@ else()
                     goto-coverage
                     goto-transcoder
                     parallel-solving
+                    loop-invariants
        )
   else()
     set(REGRESSIONS $ENV{BENCHMARK_TO_RUN}) # run a single user-specified benchmark

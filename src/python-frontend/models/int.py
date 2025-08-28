@@ -1,8 +1,7 @@
 class int:
 
     @classmethod
-    def from_bytes(cls, bytes_data: bytes, big_endian: bool,
-                   signed: bool) -> int:
+    def from_bytes(cls, bytes_data: bytes, big_endian: bool, signed: bool) -> int:
         result: int = 0
         index: int = 0
         step: int = 1

@@ -238,6 +238,58 @@ smt_astt smt_convt::imply_ast(smt_astt a, smt_astt b)
   return mk_implies(a, b);
 }
 
+smt_astt smt_convt::convert_concat_int_mode(
+  smt_astt left_ast,
+  smt_astt right_ast,
+  const expr2tc &expr)
+{
+  const concat2t &concat_expr = to_concat2t(expr);
+
+  // Get the widths of the operands
+  unsigned int left_width = concat_expr.side_1->type->get_width();
+  unsigned int right_width = concat_expr.side_2->type->get_width();
+  unsigned int result_width = left_width + right_width;
+
+  // Create the result type
+  type2tc result_type = get_uint_type(result_width);
+
+  // Convert concatenation to mathematical operations:
+  // result = left * (2^right_width) + right
+
+  // Calculate 2^right_width
+  BigInt multiplier = BigInt(1);
+  for (unsigned int i = 0; i < right_width; i++)
+    multiplier = multiplier * BigInt(2);
+
+  // Create the multiplier constant
+  expr2tc multiplier_expr = constant_int2tc(result_type, multiplier);
+  smt_astt multiplier_ast = convert_ast(multiplier_expr);
+
+  // Convert operands to the result type if needed
+  smt_astt left_converted = left_ast;
+  smt_astt right_converted = right_ast;
+
+  if (concat_expr.side_1->type->get_width() != result_width)
+  {
+    expr2tc left_extended = typecast2tc(result_type, concat_expr.side_1);
+    left_converted = convert_ast(left_extended);
+  }
+
+  if (concat_expr.side_2->type->get_width() != result_width)
+  {
+    expr2tc right_extended = typecast2tc(result_type, concat_expr.side_2);
+    right_converted = convert_ast(right_extended);
+  }
+
+  // Perform left * multiplier
+  smt_astt shifted_left = mk_mul(left_converted, multiplier_ast);
+
+  // Add the right operand: (left * 2^right_width) + right
+  smt_astt result = mk_add(shifted_left, right_converted);
+
+  return result;
+}
+
 smt_astt smt_convt::convert_assign(const expr2tc &expr)
 {
   const equality2t &eq = to_equality2t(expr);
@@ -1332,10 +1384,10 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::concat_id:
   {
-    assert(
-      !int_encoding &&
-      "Concatenate encountered in integer mode; unimplemented (and funky)");
-    a = mk_concat(args[0], args[1]);
+    if (int_encoding)
+      return convert_concat_int_mode(args[0], args[1], expr);
+    else
+      a = mk_concat(args[0], args[1]);
     break;
   }
   case expr2t::implies_id:
@@ -2616,6 +2668,36 @@ expr2tc smt_convt::get(const expr2tc &expr)
       is_array_type(to_array_type(with.type).subtype))
     {
       decompose_store_chain(expr, update_val);
+    }
+
+    /* Try to construct a constant struct when we handle  
+     * struct type "with" expr2tc
+     *
+     * Simplify the source value. If it is a constant,
+     * we will replace the corresponding update value
+     * i.e. S = {.x=0, .y=0}; S = S WITH [x:=1];
+     * Reduced to this: S = {.x=1, .y=0}
+     */
+    if (is_struct_type(with.type))
+    {
+      expr2tc source = get(with.source_value);
+      if (is_constant_struct2t(source))
+      {
+        std::vector<expr2tc> members;
+        constant_struct2t s = to_constant_struct2t(source);
+        const constant_string2t &update_name =
+          to_constant_string2t(with.update_field);
+        for (size_t i = 0; i < s.datatype_members.size(); i++)
+        {
+          irep_idt name = to_struct_type(with.type).member_names[i];
+          if (update_name.value == name)
+            members.push_back(update_val);
+          else
+            members.push_back(s.datatype_members[i]);
+        }
+
+        return get(constant_struct2tc(with.type, members));
+      }
     }
 
     /* This function get() is only used to obtain assigned values to the RHS of

@@ -107,13 +107,13 @@ protected:
   bool contract_precheck();
   bool check_sol_ver();
   bool populate_auxilary_vars();
-  bool get_esbmc_sol_init();
   bool
   populate_function_signature(nlohmann::json &json, const std::string &cname);
   bool populate_low_level_functions(const std::string &cname);
   bool convert_ast_nodes(
     const nlohmann::json &contract_def,
     const std::string &cname);
+  void get_cname_expr(const std::string &cname, exprt &new_expr);
 
   // conversion functions
   // get decl in rule contract-body-element
@@ -202,6 +202,10 @@ protected:
     exprt &front_block,
     exprt &back_block);
   bool is_sol_builin_symbol(const std::string &cname, const std::string &name);
+  nlohmann::json reorder_arguments(
+    const nlohmann::json &expr,
+    const nlohmann::json &src_ast_json,
+    const nlohmann::json &callee_expr_json);
 
   // handle the non-contract definition, including struct/enum/error/event/abstract/...
   bool get_noncontract_defition(nlohmann::json &ast_node);
@@ -224,16 +228,21 @@ protected:
     const nlohmann::json &ast_node,
     const std::string &contract_name);
   bool add_implicit_constructor(const std::string &contract_name);
-  bool get_implicit_ctor_ref(const std::string &contract_name, exprt &new_expr);
+  bool get_implicit_ctor_ref(
+    const std::string &contract_name,
+    const bool is_object,
+    exprt &new_expr);
   bool get_instantiation_ctor_call(
     const std::string &contract_name,
     exprt &new_expr);
   void move_to_initializer(const exprt &expr);
   bool move_initializer_to_ctor(
     const nlohmann::json *based_contracts,
+    const nlohmann::json &current_contract,
     const std::string contract_name);
   bool move_initializer_to_ctor(
     const nlohmann::json *based_contracts,
+    const nlohmann::json &current_contract,
     const std::string contract_name,
     bool is_aux_ctor);
   bool move_initializer_to_main(codet &func_body);
@@ -302,6 +311,7 @@ protected:
     const std::string &func_id,
     exprt &new_expr);
   bool get_ctor_decl_this_ref(const nlohmann::json &caller, exprt &this_object);
+  bool get_ctor_decl_this_ref(const std::string &c_name, exprt &this_object);
   bool get_enum_member_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_esbmc_builtin_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_type_description(const nlohmann::json &type_name, typet &new_type);
@@ -340,11 +350,14 @@ protected:
     const nlohmann::json &decl_ref,
     const nlohmann::json &epxr,
     side_effect_expr_function_callt &call);
-  bool
-  get_new_object_ctor_call(const nlohmann::json &ast_node, exprt &new_expr);
+  bool get_new_object_ctor_call(
+    const nlohmann::json &ast_node,
+    const bool is_object,
+    exprt &new_expr);
   bool get_new_object_ctor_call(
     const std::string &contract_name,
     const nlohmann::json param_list,
+    const bool is_object,
     exprt &new_expr);
   void get_current_contract_name(
     const nlohmann::json &ast_node,
@@ -383,7 +396,8 @@ protected:
   bool is_esbmc_library_function(const std::string &id);
   bool get_empty_array_ref(const nlohmann::json &ast_node, exprt &new_expr);
   void get_aux_array_name(std::string &aux_name, std::string &aux_id);
-  void get_aux_array(const exprt &src_expr, exprt &new_expr);
+  void
+  get_aux_array(const exprt &src_expr, const typet &sub_t, exprt &new_expr);
   void get_aux_var(std::string &aux_name, std::string &aux_id);
   void get_aux_function(std::string &aux_name, std::string &aux_id);
   void get_size_expr(const exprt &rhs, exprt &size_expr);
@@ -391,6 +405,7 @@ protected:
     const exprt &dyn_arr,
     const exprt &size_expr,
     exprt &store_call);
+  bool has_array_push_pop_length(const nlohmann::json &node);
 
   // tuple
   bool get_tuple_definition(const nlohmann::json &ast_node);
@@ -412,7 +427,8 @@ protected:
     const nlohmann::json &ast_node,
     const exprt &lhs,
     const exprt &rhs);
-  void get_tuple_assignment(const exprt &lop, exprt rop);
+  void
+  get_tuple_assignment(const nlohmann::json &expr, const exprt &lop, exprt rop);
   void get_tuple_function_call(const exprt &op);
   void get_llc_ret_tuple(symbolt &sym);
 
@@ -434,9 +450,10 @@ protected:
     std::string &key_sol_type,
     std::string &val_sol_type);
   void gen_mapping_key_typecast(
+    const std::string &c_name,
     exprt &pos,
     const locationt &l,
-    const std::string &key_sol_type);
+    const typet &key_type);
   bool get_new_mapping_index_access(
     const typet &value_t,
     const std::string &val_sol_type,
@@ -515,7 +532,9 @@ protected:
     exprt &new_expr,
     const typet common_type,
     const locationt &l);
-  bool add_auxiliary_members(const std::string contract_name);
+  bool add_auxiliary_members(
+    const nlohmann::json &json,
+    const std::string contract_name);
   void get_builtin_symbol(
     const std::string name,
     const std::string id,
@@ -547,13 +566,6 @@ protected:
     const locationt &loc,
     const std::string &property_name,
     exprt &new_expr);
-  bool get_new_temporary_obj(
-    const std::string &c_name,
-    const std::string &ctor_ins_name,
-    const std::string &ctor_ins_id,
-    const locationt &ctor_ins_loc,
-    symbolt &added,
-    codet &decl);
   void
   get_addr_expr(const std::string &cname, const exprt &base, exprt &new_expr);
   void get_new_object(const typet &t, exprt &this_object);
@@ -619,11 +631,27 @@ protected:
     std::string the_value,
     exprt &dest);
   bool convert_string_literal(std::string the_value, exprt &dest);
-  void convert_type_expr(const namespacet &ns, exprt &dest, const typet &type);
+  void convert_type_expr(
+    const namespacet &ns,
+    exprt &src_expr,
+    const typet &dest_type,
+    const nlohmann::json &expr);
+  void convert_type_expr(
+    const namespacet &ns,
+    exprt &src_expr,
+    const exprt &dest_expr,
+    const nlohmann::json &expr);
   bool
   convert_hex_literal(std::string the_value, exprt &dest, const int n = 256);
   // check if it's a bytes type
+  bool is_byte_type(const typet &t);
   bool is_bytes_type(const typet &t);
+  bool is_bytesN_type(const typet &t);
+  exprt make_aux_var(exprt &val, const locationt &location);
+  void get_bytesN_size(const exprt &src_expr, exprt &len_expr);
+  bool has_contract_bytes(const nlohmann::json &json);
+  bool get_dynamic_pool(const std::string &c_name, exprt &pool);
+  bool get_dynamic_pool(const nlohmann::json &expr, exprt &pool);
 
   contextt &context;
   namespacet ns;
@@ -669,7 +697,9 @@ protected:
 
   // contract name list
   std::unordered_map<int, std::string> contractNamesMap;
-  std::set<std::string> contractNamesList;
+  std::vector<std::string> contractNamesList;
+  // for Library/Interface/Abstract Contract
+  std::set<std::string> nonContractNamesList;
   // for mapping hack
   std::set<std::string> newContractSet;
   // Store the ast_node["id"] of struct/error
@@ -697,9 +727,20 @@ protected:
   // pointer-check setting
   bool is_pointer_check;
 
+  // dynamic array
+  bool is_array_member;
+
   // NONDET
   side_effect_expr_function_callt nondet_bool_expr;
   side_effect_expr_function_callt nondet_uint_expr;
+
+  // type
+  typet addr_t;
+  typet addrp_t;
+  typet string_t;
+  typet bool_t;
+  typet byte_dynamic_t;
+  typet byte_static_t;
 
 private:
   bool get_elementary_type_name_uint(

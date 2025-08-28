@@ -3,31 +3,41 @@
 
 #include "deque"
 #include "vector"
+#include "list"
 
 namespace std
 {
 #define STACK_CAPACITY 20
-template <class T, class Container = deque<T> >
+
+// Forward declarations for specializations
+template <class T, class Container = deque<T>>
+class stack;
+
+// Base template
+template <class T, class Container>
 class stack
 {
+protected:
   T buf[STACK_CAPACITY];
   size_t _top;
 
 public:
   stack(const Container &ctnr = Container()) : _top(0)
   {
+    size_t container_size = ctnr.size();
+    __ESBMC_assert(
+      container_size <= STACK_CAPACITY, "container too large for stack");
+    _top = 0;
   }
 
   void inc_top()
   {
     _top++;
   }
-
   void dec_top()
   {
     _top--;
   }
-
   int get_top()
   {
     return _top;
@@ -63,12 +73,225 @@ public:
     assert(!empty());
     return buf[_top - 1];
   }
+
   const T &top() const
   {
     assert(!empty());
     return (const T &)buf[_top - 1];
   }
 };
+
+// Specialization for list
+template <class T>
+class stack<T, list<T>>
+{
+  T buf[STACK_CAPACITY];
+  size_t _top;
+
+public:
+  stack(const list<T> &ctnr = list<T>()) : _top(0)
+  {
+    size_t container_size = ctnr.size();
+    __ESBMC_assert(
+      container_size <= STACK_CAPACITY, "container too large for stack");
+    _top = 0;
+  }
+
+  void inc_top()
+  {
+    _top++;
+  }
+  void dec_top()
+  {
+    _top--;
+  }
+  int get_top()
+  {
+    return _top;
+  }
+
+  void push(const T &t)
+  {
+    __ESBMC_assert(0 <= _top, "invalid top");
+    __ESBMC_assert(_top < STACK_CAPACITY, "stack overflow");
+    buf[get_top()] = t;
+    inc_top();
+  }
+
+  bool empty() const
+  {
+    return (_top == 0) ? true : false;
+  }
+
+  int size() const
+  {
+    __ESBMC_assert(0 <= _top && _top <= STACK_CAPACITY, "invalid top");
+    return _top;
+  }
+
+  void pop()
+  {
+    __ESBMC_assert(_top > 0, "stack underflow");
+    dec_top();
+  }
+
+  T &top()
+  {
+    assert(!empty());
+    return buf[_top - 1];
+  }
+
+  const T &top() const
+  {
+    assert(!empty());
+    return (const T &)buf[_top - 1];
+  }
+};
+
+// Specialization for vector
+template <class T>
+class stack<T, vector<T>>
+{
+  T buf[STACK_CAPACITY];
+  size_t _top;
+
+public:
+  stack(const vector<T> &ctnr = vector<T>()) : _top(0)
+  {
+    size_t container_size = ctnr.size();
+    __ESBMC_assert(
+      container_size <= STACK_CAPACITY, "container too large for stack");
+
+    for (size_t i = 0; i < container_size; ++i)
+    {
+      buf[i] = ctnr[i];
+    }
+    _top = container_size;
+  }
+
+  void inc_top()
+  {
+    _top++;
+  }
+  void dec_top()
+  {
+    _top--;
+  }
+  int get_top()
+  {
+    return _top;
+  }
+
+  void push(const T &t)
+  {
+    __ESBMC_assert(0 <= _top, "invalid top");
+    __ESBMC_assert(_top < STACK_CAPACITY, "stack overflow");
+    buf[get_top()] = t;
+    inc_top();
+  }
+
+  bool empty() const
+  {
+    return (_top == 0) ? true : false;
+  }
+
+  int size() const
+  {
+    __ESBMC_assert(0 <= _top && _top <= STACK_CAPACITY, "invalid top");
+    return _top;
+  }
+
+  void pop()
+  {
+    __ESBMC_assert(_top > 0, "stack underflow");
+    dec_top();
+  }
+
+  T &top()
+  {
+    assert(!empty());
+    return buf[_top - 1];
+  }
+
+  const T &top() const
+  {
+    assert(!empty());
+    return (const T &)buf[_top - 1];
+  }
+};
+
+// Specialization for deque
+template <class T>
+class stack<T, deque<T>>
+{
+  T buf[STACK_CAPACITY];
+  size_t _top;
+
+public:
+  stack(const deque<T> &ctnr = deque<T>()) : _top(0)
+  {
+    size_t container_size = ctnr.size();
+    __ESBMC_assert(
+      container_size <= STACK_CAPACITY, "container too large for stack");
+
+    for (size_t i = 0; i < container_size; ++i)
+    {
+      buf[i] = ctnr[i];
+    }
+    _top = container_size;
+  }
+
+  void inc_top()
+  {
+    _top++;
+  }
+  void dec_top()
+  {
+    _top--;
+  }
+  int get_top()
+  {
+    return _top;
+  }
+
+  void push(const T &t)
+  {
+    __ESBMC_assert(0 <= _top, "invalid top");
+    __ESBMC_assert(_top < STACK_CAPACITY, "stack overflow");
+    buf[get_top()] = t;
+    inc_top();
+  }
+
+  bool empty() const
+  {
+    return (_top == 0) ? true : false;
+  }
+
+  int size() const
+  {
+    __ESBMC_assert(0 <= _top && _top <= STACK_CAPACITY, "invalid top");
+    return _top;
+  }
+
+  void pop()
+  {
+    __ESBMC_assert(_top > 0, "stack underflow");
+    dec_top();
+  }
+
+  T &top()
+  {
+    assert(!empty());
+    return buf[_top - 1];
+  }
+
+  const T &top() const
+  {
+    assert(!empty());
+    return (const T &)buf[_top - 1];
+  }
+};
+
 } // namespace std
 
 #endif

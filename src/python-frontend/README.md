@@ -89,24 +89,72 @@ Below is an overview of ESBMC-Python's key capabilities:
 ### Functions and Methods
 - **Function Handling**: This allows for defining, calling, and verifying functions, including parameter passing and return values.
 - **Annotations**: Supports type annotations.
+
 ### Object-Oriented Programming
 - **Classes**: Supports class definitions, methods, and attributes.
 - **Inheritance**: Handles inheritance and verifies scenarios involving inheritance issues.
+- **super() calls**: Supports the `super()` function to call methods from a superclass. This allows for the verification of behaviors where a derived class explicitly invokes base class methods, enabling the analysis of polymorphic behavior and the proper propagation of assertions or side effects.
+
 ### Data Types and Structures
 - **Dynamic Typing**: Accommodates Python's dynamic typing in variable assignments.
 - **Data Structures**: Supports operations on Python's built-in data structures, including lists and strings, with features such as concatenation and bounds checks.
 - **Bytes and Integers**: Supports byte and integer operations, such as conversions and bit length.
+
 ### Error Handling and Assertions
 - **Assertions**: Supports `assert` statements for program verification.
 - **Assumptions**: Supports `assume` statements for specifying assumptions for verification.
+
+### Module System and Built-in Variables
+
+- **Module Imports**: Handles import styles and validates their usage.
+- **name Variable**: Supports Python's built-in __name__ variable that contains the name of the current module:
+  - Set to "__main__" when the module is run directly as the main program
+  - Set to the module name when the module is imported
+  - Enables verification of the common Python idiom if __name__ == "__main__":
+  - Supports proper distinction between main module execution and imported module behavior
 
 ### Additional Capabilities
 - **Nondeterministic Variables**: Models nondeterminism to explore multiple execution paths.
 - **Recursion**: Supports and verifies recursive functions.
 - **Imports**: Handles import styles and validates their usage.
 - **Numeric Types**: Supports manipulation of numeric types (e.g., bytes, integers, floats).
-- **Built-in Functions**: Supports Python's built-in functions, such as `abs`, `int`, `float`, `chr`, `str`, `hex`, `oct`, `len`, and `range`.
+- **Built-in Functions**: 
+  - **Arithmetic and conversions**: Supports Python's built-in functions, such as `abs`, `int`, `float`, `chr`, `str`, `hex`, `oct`, `len`, and `range`.
+  - **Enhanced float() constructor**: Supports conversion from strings including special values such as `nan`, `inf`, `-inf`, `infinity`, and `+infinity` (case-insensitive with whitespace handling).
+  - **Min/Max**: Supports `min(a, b)` and `max(a, b)` with type promotion (int-to-float). Currently limited to two arguments.
+  - **Input**: Models `input()` as a non-deterministic string of up to 256 characters. This allows verification of programs that depend on user input.
+  - **Enumerate**: Supports `enumerate(iterable, start=0)` for iterating over sequences with automatic indexing. Handles both tuple unpacking `(for i, x in enumerate(...))` and single variable assignment `(for item in enumerate(...))`. Supports an optional `start` parameter and works with lists, strings, and other iterables.
 - **Verification properties**: Division-by-zero, indexing errors, arithmetic overflow, and user-defined assertions.
+
+### Math Module Support
+- **math.comb(n, k)**: Calculates binomial coefficients `C(n, k) = n! / (k! * (n-k)!)`
+  - Supports verification of combinatorial properties such as symmetry: `C(n, k) = C(n, n-k)`
+  - Includes built-in type checking and input validation (assertion failures for negative inputs or non-integer types)
+- **math.floor(x)**: Returns the largest integer less than or equal to x.
+- **math.ceil(x)**: Returns the smallest integer greater than or equal to x
+  - Both functions `math.floor(x)` and `math.ceil(x)`include built-in assertions to reject infinity and NaN inputs
+  - Supports verification of edge cases, including very small values, large values (e.g., 1e12), and boundary conditions
+
+### Special Value Detection:
+- **math.isnan(x)**: Returns True if x is NaN (Not a Number)
+- **math.isinf(x)**: Returns True if x is positive or negative infinity
+- Both functions use ESBMC's internal operations for accurate verification according to the IEEE-754 standard.
+
+### Exception Handling
+
+- **Try-Except Blocks**: Supports comprehensive exception handling with try-except syntax for controlling program flow and verifying error conditions.
+- **Multiple Exception Handlers**: Supports multiple except clauses to handle different exception types.
+- **Exception Catching**: Supports catching exceptions with variable binding using except ExceptionType as variable syntax.
+- **Exception Hierarchy**: Implements Python's exception hierarchy where all exceptions inherit from BaseException.
+- **Built-in Exception Classes**:
+  - **BaseException**: Base class for all exceptions.
+  - **ValueError**: Raised for inappropriate argument values.
+  - **TypeError**: Raised for inappropriate argument types.
+  - **IndexError**: Raised for sequence index out of range.
+  - **KeyError**: Raised for missing dictionary keys.
+  - **ZeroDivisionError**: Raised for division by zero operations.
+- **Exception Objects**: Exception instances contain message attributes and support string representation via __str__() method.
+- **Exception Raising**: Supports raise statements with exception instantiation and custom error messages.
 
 ### Limitations
 
@@ -115,6 +163,11 @@ The current version of ESBMC-Python has the following limitations:
 - Only `for` loops using the `range()` function are supported.
 - List and String support are partial and limited in functionality.
 - Dictionaries are not supported at all.
+- `min()` and `max()` currently support only two arguments and do not handle iterables or the key/default parameters.
+- `input()` is modeled as a nondeterministic string with a maximum length of 256 characters (under-approximation).
+- `enumerate()` supports standard usage patterns but may have limitations with complex nested iterables or advanced parameter combinations.
+- Exception handling supports the core built-in exception types but may not cover all Python standard library exceptions or custom exception hierarchies with complex inheritance patterns.
+- Built-in variables support is limited to __name__; other Python built-ins such as __file__, __doc__, __package__ are not yet supported.
 
 ### Example: Division by Zero in Python
 
