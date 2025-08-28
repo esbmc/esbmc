@@ -127,7 +127,9 @@ bool base_type_eqt::base_type_eq_rec(const type2tc &type1, const type2tc &type2)
     return base_type_eq_rec(type1, tmp);
   }
 
-  if (type1->type_id != type2->type_id)
+  if (
+    !is_array_type(type1) && !is_array_type(type2) &&
+    type1->type_id != type2->type_id)
     return false;
 
   if (is_struct_type(type1) || is_union_type(type1))
@@ -187,15 +189,22 @@ bool base_type_eqt::base_type_eq_rec(const type2tc &type1, const type2tc &type2)
     return base_type_eq_rec(
       to_pointer_type(type1).subtype, to_pointer_type(type2).subtype);
   }
-  else if (is_array_type(type1))
+  else if (is_array_type(type1) && is_array_type(type2))
   {
     if (!base_type_eq_rec(
           to_array_type(type1).subtype, to_array_type(type2).subtype))
       return false;
 
     // TODO: check size
-
     return true;
+  }
+  else if (is_array_type(type1) && !is_array_type(type2))
+  {
+    return base_type_eq_rec(to_array_type(type1).subtype, type2);
+  }
+  else if (is_array_type(type2) && !is_array_type(type1))
+  {
+    return base_type_eq_rec(type1, to_array_type(type2).subtype);
   }
 
   type2tc tmp1(type1), tmp2(type2);
