@@ -150,6 +150,55 @@ class Preprocessor(ast.NodeTransformer):
         node = ast.Constant(value=value)
         return self.ensure_all_locations(node, source_node)
 
+    def _extract_type_from_annotation(self, annotation):
+        """Extract a simplified type string from a type annotation AST node"""
+        if annotation is None:
+            return 'Any'
+
+        if isinstance(annotation, ast.Name):
+            return annotation.id
+        elif isinstance(annotation, ast.Subscript):
+            # Handle types like list[int], dict[str, int], etc.
+            if isinstance(annotation.value, ast.Name):
+                return annotation.value.id  # Return just 'list', 'dict', etc.
+        elif isinstance(annotation, ast.Constant):
+            if isinstance(annotation.value, str):
+                # Handle string annotations like "list[int]"
+                return annotation.value.split('[')[0]
+
+        return 'Any'
+
+    def _get_iterable_type_annotation(self, iterable):
+        """Get the appropriate type annotation for an iterable"""
+        if isinstance(iterable, ast.Constant) and isinstance(iterable.value, str):
+            return 'str'
+        elif isinstance(iterable, ast.List):
+            return 'list'
+        elif isinstance(iterable, ast.Tuple):
+            return 'tuple'
+        elif isinstance(iterable, ast.Name):
+            # Check if we know the type of this variable
+            known_type = self.known_variable_types.get(iterable.id)
+            if known_type and known_type != 'Any':
+                return known_type
+            else:
+                return 'list'  # Default to list for ESBMC compatibility
+        else:
+            return 'list'
+
+    def _get_element_type_from_container(self, container_type, iterable_node=None):
+        """Get the element type from a container type with better inference"""
+        if container_type == 'str':
+            return 'str'
+        elif isinstance(iterable_node, ast.List) and iterable_node.elts:
+            # Infer from first element if available
+            first_elem = iterable_node.elts[0]
+            if isinstance(first_elem, ast.Constant):
+                return type(first_elem.value).__name__
+        elif container_type in ['list', 'tuple']:
+            return 'Any'
+        return 'Any'
+
     def generate_variable_copy(self, node_name: str, argument: ast.arg, default_val):
         target = ast.Name(id=f"ESBMC_DEFAULT_{node_name}_{argument.arg}", ctx=ast.Store())
         assign_node = ast.AnnAssign(
@@ -182,7 +231,7 @@ class Preprocessor(ast.NodeTransformer):
     def visit_For(self, node):
         """
         Transform for loops into while loops.
-        Handles both range() calls and general iterables (strings, lists, etc.)
+        Handles range() calls, enumerate() calls, and general iterables.
         """
         # First, recursively visit any nested nodes
         node = self.generic_visit(node)
@@ -192,6 +241,11 @@ class Preprocessor(ast.NodeTransformer):
                         isinstance(node.iter.func, ast.Name) and
                         node.iter.func.id == "range")
 
+        # Check if iter is a Call to enumerate
+        is_enumerate_call = (isinstance(node.iter, ast.Call) and
+                            isinstance(node.iter.func, ast.Name) and
+                            node.iter.func.id == "enumerate")
+
         if is_range_call:
             # Handle range-based for loops
             self.is_range_loop = True
@@ -199,10 +253,310 @@ class Preprocessor(ast.NodeTransformer):
             result = self._transform_range_for(node)
             self.is_range_loop = False
             return result
+        elif is_enumerate_call:
+            # Handle enumerate-based for loops
+            self.is_range_loop = False
+            return self._transform_enumerate_for(node)
         else:
             # Handle general iteration over iterables (strings, lists, etc.)
             self.is_range_loop = False
             return self._transform_iterable_for(node)
+
+    def _transform_enumerate_for(self, node):
+        """
+        Transform enumerate-based for loops to while loops.
+
+        Transforms:
+            for index, value in enumerate(iterable, start):
+                # body
+
+        Into:
+            ESBMC_iter = iterable
+            ESBMC_index = start  # or 0 if not provided (enumeration index)
+            ESBMC_array_index = 0  # always starts at 0 (array access index)
+            ESBMC_length = len(ESBMC_iter)
+            while ESBMC_array_index < ESBMC_length:
+                index = ESBMC_index
+                value = ESBMC_iter[ESBMC_array_index]
+                ESBMC_index = ESBMC_index + 1
+                ESBMC_array_index = ESBMC_array_index + 1
+                # body
+        Handles both cases:
+            1. for index, value in enumerate(iterable, start):  # tuple unpacking
+            2. for item in enumerate(iterable, start):          # single variable gets tuple
+        """
+        enumerate_call = node.iter
+
+        # Step 1: Validate the enumerate call
+        self._validate_enumerate_call(enumerate_call)
+
+        # Step 2: Parse and validate the target structure
+        target_info = self._parse_enumerate_target(node.target)
+
+        # Step 3: Extract and validate arguments
+        iterable, start_value = self._parse_enumerate_arguments(enumerate_call, node)
+
+        # Step 4: Create setup statements (variable declarations)
+        setup_statements = self._create_enumerate_setup_statements(
+            node, iterable, start_value
+        )
+
+        # Step 5: Create the while loop
+        while_stmt = self._create_enumerate_while_loop(
+            node, target_info, setup_statements
+        )
+
+        # Step 6: Combine everything and ensure proper AST locations
+        result = setup_statements + [while_stmt]
+        for stmt in result:
+            self.ensure_all_locations(stmt, node)
+            ast.fix_missing_locations(stmt)
+
+        return result
+
+    def _validate_enumerate_call(self, enumerate_call):
+        """Validate enumerate() call arguments."""
+        if len(enumerate_call.args) == 0:
+            raise TypeError("enumerate() missing required argument 'iterable' (pos 1)")
+        if len(enumerate_call.args) > 2:
+            raise TypeError(f"enumerate() takes at most 2 arguments ({len(enumerate_call.args)} given)")
+
+    def _parse_enumerate_target(self, target):
+        """Parse and validate the for loop target, return target information."""
+        # Check if this is tuple/list unpacking or single variable assignment
+        is_unpacking = (isinstance(target, (ast.Tuple, ast.List)) and
+                    len(target.elts) == 2)
+
+        if is_unpacking:
+            return {
+                'type': 'unpacking',
+                'index_var': target.elts[0].id,
+                'value_var': target.elts[1].id
+            }
+        elif isinstance(target, ast.Name):
+            return {
+                'type': 'single',
+                'var_name': target.id
+            }
+        else:
+            # Handle error cases
+            if isinstance(target, (ast.Tuple, ast.List)):
+                expected = len(target.elts)
+                if expected > 2:
+                    raise ValueError(f"not enough values to unpack (expected {expected}, got 2)")
+                elif expected < 2:
+                    raise ValueError(f"too many values to unpack (expected {expected})")
+            else:
+                raise ValueError("enumerate target must be a name, tuple, or list")
+
+    def _parse_enumerate_arguments(self, enumerate_call, node):
+        """Extract and validate iterable and start value from enumerate call."""
+        iterable = enumerate_call.args[0]
+
+        if len(enumerate_call.args) > 1:
+            start_value = enumerate_call.args[1]
+            self._validate_start_value(start_value)
+        else:
+            start_value = self.create_constant_node(0, node)
+
+        return iterable, start_value
+
+    def _validate_start_value(self, start_value):
+        """Validate that the start value is an integer (matching Python's behavior)."""
+        if isinstance(start_value, ast.Constant):
+            start_val = start_value.value
+            if isinstance(start_val, float):
+                raise TypeError("'float' object cannot be interpreted as an integer")
+            elif isinstance(start_val, str):
+                raise TypeError("'str' object cannot be interpreted as an integer")
+            elif isinstance(start_val, bool):
+                # Python accepts bool since bool is a subclass of int
+                pass
+            elif not isinstance(start_val, int):
+                type_name = type(start_val).__name__
+                raise TypeError(f"'{type_name}' object cannot be interpreted as an integer")
+
+    def _create_enumerate_setup_statements(self, node, iterable, start_value):
+        """Create the initial variable assignments for enumerate transformation."""
+        annotation_id = self._get_iterable_type_annotation(iterable)
+
+        # Create: ESBMC_iter: <type> = iterable
+        iter_assign = ast.AnnAssign(
+            target=self.create_name_node('ESBMC_iter', ast.Store(), node),
+            annotation=self.create_name_node(annotation_id, ast.Load(), node),
+            value=iterable,
+            simple=1
+        )
+        self.ensure_all_locations(iter_assign, node)
+
+        # Create: ESBMC_index: int = start_value (enumeration index)
+        index_assign = ast.AnnAssign(
+            target=self.create_name_node('ESBMC_index', ast.Store(), node),
+            annotation=self.create_name_node('int', ast.Load(), node),
+            value=start_value,
+            simple=1
+        )
+        self.ensure_all_locations(index_assign, node)
+
+        # Create: ESBMC_array_index: int = 0 (array access index)
+        array_index_assign = ast.AnnAssign(
+            target=self.create_name_node('ESBMC_array_index', ast.Store(), node),
+            annotation=self.create_name_node('int', ast.Load(), node),
+            value=self.create_constant_node(0, node),
+            simple=1
+        )
+        self.ensure_all_locations(array_index_assign, node)
+
+        # Create: ESBMC_length: int = len(ESBMC_iter)
+        len_call = ast.Call(
+            func=self.create_name_node('len', ast.Load(), node),
+            args=[self.create_name_node('ESBMC_iter', ast.Load(), node)],
+            keywords=[]
+        )
+        self.ensure_all_locations(len_call, node)
+        length_assign = ast.AnnAssign(
+            target=self.create_name_node('ESBMC_length', ast.Store(), node),
+            annotation=self.create_name_node('int', ast.Load(), node),
+            value=len_call,
+            simple=1
+        )
+        self.ensure_all_locations(length_assign, node)
+
+        return [iter_assign, index_assign, array_index_assign, length_assign]
+
+    def _create_enumerate_while_loop(self, node, target_info, setup_statements):
+        """Create the while loop for enumerate transformation."""
+        # Create while condition: ESBMC_array_index < ESBMC_length
+        while_cond = ast.Compare(
+            left=self.create_name_node('ESBMC_array_index', ast.Load(), node),
+            ops=[ast.Lt()],
+            comparators=[self.create_name_node('ESBMC_length', ast.Load(), node)]
+        )
+        self.ensure_all_locations(while_cond, node)
+
+        # Create loop body based on target type
+        if target_info['type'] == 'unpacking':
+            loop_body = self._create_unpacking_loop_body(node, target_info)
+        else:  # single variable
+            loop_body = self._create_single_var_loop_body(node, target_info)
+
+        # Add increment statements
+        loop_body.extend(self._create_increment_statements(node))
+
+        # Transform the original body
+        loop_body.extend(self._transform_original_body(node))
+
+        # Create the while statement
+        while_stmt = ast.While(test=while_cond, body=loop_body, orelse=[])
+        self.ensure_all_locations(while_stmt, node)
+
+        return while_stmt
+
+    def _create_unpacking_loop_body(self, node, target_info):
+        """Create loop body for unpacking case: for i, x in enumerate(...)"""
+        annotation_id = self._get_iterable_type_annotation(
+            # We need to reconstruct this - could be improved by passing it through
+            node.iter.args[0] if hasattr(node.iter, 'args') else None
+        )
+
+        # index_var: int = ESBMC_index
+        user_index_assign = ast.AnnAssign(
+            target=self.create_name_node(target_info['index_var'], ast.Store(), node),
+            annotation=self.create_name_node('int', ast.Load(), node),
+            value=self.create_name_node('ESBMC_index', ast.Load(), node),
+            simple=1
+        )
+        self.ensure_all_locations(user_index_assign, node)
+
+        # value_var: <element_type> = ESBMC_iter[ESBMC_array_index]
+        subscript = ast.Subscript(
+            value=self.create_name_node('ESBMC_iter', ast.Load(), node),
+            slice=self.create_name_node('ESBMC_array_index', ast.Load(), node),
+            ctx=ast.Load()
+        )
+        self.ensure_all_locations(subscript, node)
+
+        element_type = self._get_element_type_from_container(annotation_id)
+        user_value_assign = ast.AnnAssign(
+            target=self.create_name_node(target_info['value_var'], ast.Store(), node),
+            annotation=self.create_name_node(element_type, ast.Load(), node),
+            value=subscript,
+            simple=1
+        )
+        self.ensure_all_locations(user_value_assign, node)
+
+        return [user_index_assign, user_value_assign]
+
+    def _create_single_var_loop_body(self, node, target_info):
+        """Create loop body for single variable case: for item in enumerate(...)"""
+        # Create tuple: (ESBMC_index, ESBMC_iter[ESBMC_array_index])
+        subscript = ast.Subscript(
+            value=self.create_name_node('ESBMC_iter', ast.Load(), node),
+            slice=self.create_name_node('ESBMC_array_index', ast.Load(), node),
+            ctx=ast.Load()
+        )
+        self.ensure_all_locations(subscript, node)
+
+        tuple_value = ast.Tuple(
+            elts=[
+                self.create_name_node('ESBMC_index', ast.Load(), node),
+                subscript
+            ],
+            ctx=ast.Load()
+        )
+        self.ensure_all_locations(tuple_value, node)
+
+        # single_var: tuple = (ESBMC_index, ESBMC_iter[ESBMC_array_index])
+        user_tuple_assign = ast.AnnAssign(
+            target=self.create_name_node(target_info['var_name'], ast.Store(), node),
+            annotation=self.create_name_node('tuple', ast.Load(), node),
+            value=tuple_value,
+            simple=1
+        )
+        self.ensure_all_locations(user_tuple_assign, node)
+
+        return [user_tuple_assign]
+
+    def _create_increment_statements(self, node):
+        """Create the increment statements for both indices."""
+        # ESBMC_index: int = ESBMC_index + 1
+        index_increment = ast.AnnAssign(
+            target=self.create_name_node('ESBMC_index', ast.Store(), node),
+            annotation=self.create_name_node('int', ast.Load(), node),
+            value=ast.BinOp(
+                left=self.create_name_node('ESBMC_index', ast.Load(), node),
+                op=ast.Add(),
+                right=self.create_constant_node(1, node)
+            ),
+            simple=1
+        )
+        self.ensure_all_locations(index_increment, node)
+
+        # ESBMC_array_index: int = ESBMC_array_index + 1
+        array_index_increment = ast.AnnAssign(
+            target=self.create_name_node('ESBMC_array_index', ast.Store(), node),
+            annotation=self.create_name_node('int', ast.Load(), node),
+            value=ast.BinOp(
+                left=self.create_name_node('ESBMC_array_index', ast.Load(), node),
+                op=ast.Add(),
+                right=self.create_constant_node(1, node)
+            ),
+            simple=1
+        )
+        self.ensure_all_locations(array_index_increment, node)
+
+        return [index_increment, array_index_increment]
+
+    def _transform_original_body(self, node):
+        """Transform the original for loop body statements."""
+        transformed_body = []
+        for statement in node.body:
+            transformed_statement = self.visit(statement)
+            if isinstance(transformed_statement, list):
+                transformed_body.extend(transformed_statement)
+            else:
+                transformed_body.append(transformed_statement)
+        return transformed_body
 
     def _transform_range_for(self, node):
         """Transform range-based for loops to while loops"""
@@ -337,16 +691,7 @@ class Preprocessor(ast.NodeTransformer):
             target_var_name = 'ESBMC_loop_var'
 
         # Determine annotation type based on the iterable value
-        if isinstance(node.iter, ast.Str):
-            annotation_id = 'str'
-        elif isinstance(node.iter, ast.List):
-            annotation_id = 'list'
-        elif isinstance(node.iter, ast.Tuple):
-            annotation_id = 'tuple'
-        elif isinstance(node.iter, ast.Name):
-            annotation_id = self.known_variable_types.get(node.iter.id, 'Any')
-        else:
-            annotation_id = 'Any'
+        annotation_id = self._get_iterable_type_annotation(node.iter)
 
         # Create assignment for the iterable variable
         iter_target = self.create_name_node('ESBMC_iter', ast.Store(), node)
@@ -400,10 +745,11 @@ class Preprocessor(ast.NodeTransformer):
         index_slice = self.create_name_node('ESBMC_index', ast.Load(), node)
         subscript = ast.Subscript(value=iter_value, slice=index_slice, ctx=ast.Load())
         self.ensure_all_locations(subscript, node)
-        str_annotation_item = self.create_name_node('str', ast.Load(), node)
+        element_type = self._get_element_type_from_container(annotation_id)
+        item_annotation = self.create_name_node(element_type, ast.Load(), node)
         item_assign = ast.AnnAssign(
             target=item_target,
-            annotation=str_annotation_item,
+            annotation=item_annotation,
             value=subscript,
             simple=1
         )
@@ -668,6 +1014,12 @@ class Preprocessor(ast.NodeTransformer):
         return node # transformed node
 
     def visit_FunctionDef(self, node):
+        # Extract parameter type annotations and store them
+        for arg in node.args.args:
+            if arg.annotation is not None:
+                param_type = self._extract_type_from_annotation(arg.annotation)
+                self.known_variable_types[arg.arg] = param_type
+
         # Preserve order of parameters
         self.functionParams[node.name] = [i.arg for i in node.args.args]
 

@@ -15,6 +15,7 @@ class struct_typet;
 class function_id;
 class symbol_id;
 class function_call_expr;
+class type_handler;
 
 class python_converter
 {
@@ -92,6 +93,7 @@ private:
   friend class function_call_expr;
   friend class numpy_call_expr;
   friend class function_call_builder;
+  friend class type_handler;
 
   template <typename Func>
   decltype(auto) with_ast(const nlohmann::json *new_ast, Func &&f)
@@ -158,6 +160,11 @@ private:
 
   std::string extract_string_from_array_operands(const exprt &array_expr) const;
 
+  symbolt create_return_temp_variable(
+    const typet &return_type,
+    const locationt &location,
+    const std::string &func_name);
+
   void register_instance_attribute(
     const std::string &symbol_id,
     const std::string &attr_name,
@@ -209,6 +216,12 @@ private:
     const nlohmann::json &right,
     const nlohmann::json &element);
 
+  symbolt &create_tmp_symbol(
+    const nlohmann::json &element,
+    const std::string var_name,
+    const typet &symbol_type,
+    const exprt &symbol_value);
+
   exprt get_logical_operator_expr(const nlohmann::json &element);
 
   exprt get_conditional_stm(const nlohmann::json &ast_node);
@@ -234,6 +247,23 @@ private:
   void promote_int_to_float(exprt &op, const typet &target_type) const;
 
   void handle_float_division(exprt &lhs, exprt &rhs, exprt &bin_expr) const;
+
+  std::pair<exprt, exprt>
+  resolve_comparison_operands_internal(const exprt &lhs, const exprt &rhs);
+  bool
+  has_unsupported_side_effects_internal(const exprt &lhs, const exprt &rhs);
+  exprt compare_constants_internal(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs);
+  exprt handle_indexed_comparison_internal(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs);
+  exprt handle_type_mismatches(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs);
 
   void get_attributes_from_self(
     const nlohmann::json &method_body,

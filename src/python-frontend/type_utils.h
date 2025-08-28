@@ -21,7 +21,9 @@ enum class StatementType
   CONTINUE,
   RAISE,
   UNKNOWN,
-  GLOBAL
+  GLOBAL,
+  TRY,
+  EXCEPTHANDLER
 };
 
 enum class ExpressionType
@@ -76,6 +78,14 @@ public:
       name == "ESBMC_range_next_" || name == "ESBMC_range_has_next_" ||
       name == "bit_length" || name == "from_bytes" || name == "to_bytes" ||
       name == "randint" || name == "random");
+  }
+
+  static bool is_python_exceptions(const std::string &name)
+  {
+    return (
+      name == "BaseException" || name == "ValueError" || name == "TypeError" ||
+      name == "IndexError" || name == "KeyError" ||
+      name == "ZeroDivisionError");
   }
 
   static bool is_c_model_func(const std::string &func_name)

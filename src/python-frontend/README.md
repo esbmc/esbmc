@@ -114,6 +114,7 @@ Below is an overview of ESBMC-Python's key capabilities:
   - **Enhanced float() constructor**: Supports conversion from strings including special values such as `nan`, `inf`, `-inf`, `infinity`, and `+infinity` (case-insensitive with whitespace handling).
   - **Min/Max**: Supports `min(a, b)` and `max(a, b)` with type promotion (int-to-float). Currently limited to two arguments.
   - **Input**: Models `input()` as a non-deterministic string of up to 256 characters. This allows verification of programs that depend on user input.
+  - **Enumerate**: Supports `enumerate(iterable, start=0)` for iterating over sequences with automatic indexing. Handles both tuple unpacking `(for i, x in enumerate(...))` and single variable assignment `(for item in enumerate(...))`. Supports an optional `start` parameter and works with lists, strings, and other iterables.
 - **Verification properties**: Division-by-zero, indexing errors, arithmetic overflow, and user-defined assertions.
 
 ### Math Module Support
@@ -130,6 +131,22 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **math.isinf(x)**: Returns True if x is positive or negative infinity
 - Both functions use ESBMC's internal operations for accurate verification according to the IEEE-754 standard.
 
+### Exception Handling
+
+- **Try-Except Blocks**: Supports comprehensive exception handling with try-except syntax for controlling program flow and verifying error conditions.
+- **Multiple Exception Handlers**: Supports multiple except clauses to handle different exception types.
+- **Exception Catching**: Supports catching exceptions with variable binding using except ExceptionType as variable syntax.
+- **Exception Hierarchy**: Implements Python's exception hierarchy where all exceptions inherit from BaseException.
+- **Built-in Exception Classes**:
+  - **BaseException**: Base class for all exceptions.
+  - **ValueError**: Raised for inappropriate argument values.
+  - **TypeError**: Raised for inappropriate argument types.
+  - **IndexError**: Raised for sequence index out of range.
+  - **KeyError**: Raised for missing dictionary keys.
+  - **ZeroDivisionError**: Raised for division by zero operations.
+- **Exception Objects**: Exception instances contain message attributes and support string representation via __str__() method.
+- **Exception Raising**: Supports raise statements with exception instantiation and custom error messages.
+
 ### Limitations
 
 The current version of ESBMC-Python has the following limitations:
@@ -139,6 +156,8 @@ The current version of ESBMC-Python has the following limitations:
 - Dictionaries are not supported at all.
 - `min()` and `max()` currently support only two arguments and do not handle iterables or the key/default parameters.
 - `input()` is modeled as a nondeterministic string with a maximum length of 256 characters (under-approximation).
+- `enumerate()` supports standard usage patterns but may have limitations with complex nested iterables or advanced parameter combinations.
+- Exception handling supports the core built-in exception types but may not cover all Python standard library exceptions or custom exception hierarchies with complex inheritance patterns.
 
 ### Example: Division by Zero in Python
 
