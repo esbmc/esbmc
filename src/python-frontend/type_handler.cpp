@@ -65,6 +65,9 @@ std::string type_handler::type_to_string(const typet &t) const
   if (t == uint256_type())
     return "uint256";
 
+  if (t == char_type())
+	return "str";
+
   if (t.is_array())
   {
     const array_typet &arr_type = to_array_type(t); // Safer than static_cast

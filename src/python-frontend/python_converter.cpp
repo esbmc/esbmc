@@ -880,6 +880,9 @@ exprt python_converter::handle_string_concatenation(
   const nlohmann::json &left,
   const nlohmann::json &right)
 {
+  if (!lhs.type().is_array() || !rhs.type().is_array())
+    return nil_exprt();
+
   BigInt lhs_size = get_string_size(lhs) - 1;
   BigInt rhs_size = get_string_size(rhs) - 1;
   BigInt total_size = lhs_size + rhs_size + 1;
@@ -948,6 +951,26 @@ std::string python_converter::extract_string_from_array_operands(
   const exprt &array_expr) const
 {
   std::string result;
+
+  // Handling strings with a single char
+  if ((array_expr.type().is_array() &&
+       static_cast<const array_typet &>(array_expr.type()).size() ==
+         gen_one(size_type())))
+  {
+    char c = static_cast<char>(
+      std::stoi(array_expr.op0().value().as_string(), nullptr, 2));
+    std::string s(1, c);
+    return s;
+  }
+
+  if (array_expr.is_constant() && !array_expr.type().is_array())
+  {
+    char c =
+      static_cast<char>(std::stoi(array_expr.value().as_string(), nullptr, 2));
+    std::string s(1, c);
+    return s;
+  }
+
   for (const auto &op : array_expr.operands())
   {
     if (op.is_constant())
@@ -1235,6 +1258,9 @@ exprt python_converter::get_resolved_value(const exprt &expr)
   // Return constant values directly
   if (symbol->value.is_constant())
     return symbol->value;
+
+  if (symbol->value.is_symbol())
+    return get_resolved_value(symbol->value);
 
   // Handle function calls stored as code
   if (symbol->value.is_code())
@@ -2493,6 +2519,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   {
     exprt array = get_expr(element["value"]);
     typet t = array.type().subtype();
+    /*while (t.is_array())
+    	t = t.subtype();*/
 
     const nlohmann::json &slice = element["slice"];
 

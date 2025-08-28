@@ -7,8 +7,8 @@ def pass_through(s: str) -> str:
     return s
 
 # Non-identity function (should not be optimized)
-def modify_string(x: str) -> str:
-    return x + "!"
+# def modify_string(x: str) -> str:
+#     return x + "!"
 
 # Identity function with multiple parameters (returns first)
 def first_param(a: str, b: str) -> str:
