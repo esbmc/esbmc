@@ -3864,8 +3864,10 @@ void python_converter::append_models_from_directory(
   }
 }
 
-static void
-add_global_static_variable(contextt &ctx, const typet t, std::string name)
+static void add_global_static_variable(
+  contextt &ctx,
+  const typet t,
+  const std::string &name)
 {
   std::string id = "c:@" + name;
   symbolt symbol;
