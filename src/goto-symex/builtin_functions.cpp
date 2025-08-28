@@ -25,7 +25,6 @@
 #include <algorithm>
 #include <util/array2string.h>
 
-
 expr2tc goto_symext::symex_malloc(
   const expr2tc &lhs,
   const sideeffect2t &code,
@@ -1594,22 +1593,26 @@ void goto_symext::intrinsic_memcpy(
   }
   unsigned long num_bytes = to_constant_int2t(n).as_long();
 
-
-  if (num_bytes >=4 && (is_struct_type(dst->type) || is_pointer_type(dst->type)))
+  if (
+    num_bytes >= 4 && (is_struct_type(dst->type) || is_pointer_type(dst->type)))
   {
-     type2tc target_type;
+    type2tc target_type;
 
-     if(is_pointer_type(dst->type)) {
+    if (is_pointer_type(dst->type))
+    {
       target_type = to_pointer_type(dst->type).subtype;
       dst = dereference2tc(target_type, dst);
       src = dereference2tc(target_type, src);
-     } else {
+    }
+    else
+    {
       target_type = dst->type;
-     }
+    }
 
     log_debug("memcpy", "Using struct copy for {}-byte struct", num_bytes);
 
-    if (!is_struct_type(target_type) || !is_struct_type(src->type)) {
+    if (!is_struct_type(target_type) || !is_struct_type(src->type))
+    {
       log_debug("memcpy", "Not a struct type after dereference");
       bump_call(func_call, "c:@F@__memcpy_impl");
       return;
@@ -1619,149 +1622,144 @@ void goto_symext::intrinsic_memcpy(
     const struct_type2t &src_struct = to_struct_type(src->type);
 
     // Verify struct sizes match the copy size
-    if (dst_struct.get_width() != num_bytes || src_struct.get_width() != num_bytes) {
+    if (
+      dst_struct.get_width() != num_bytes ||
+      src_struct.get_width() != num_bytes)
+    {
       log_debug("memcpy", "Struct size mismatch, falling back");
       bump_call(func_call, "c:@F@__memcpy_impl");
       return;
     }
-    
-    
-    for (unsigned i = 0; i < dst_struct.members.size(); i++) 
-      {
-        // Create member expressions for both source and destination
-        expr2tc dst_member = member2tc(
-          dst_struct.members[i], 
-          dst, 
-          dst_struct.member_names[i]
-        );
-        
-        expr2tc src_member = member2tc(
-          src_struct.members[i], 
-          src, 
-          src_struct.member_names[i]
-        );
 
-        // Copy member by member - this avoids byte loops!
-        symex_assign(code_assign2tc(dst_member, src_member));
-      }
-  
+    for (unsigned i = 0; i < dst_struct.members.size(); i++)
+    {
+      // Create member expressions for both source and destination
+      expr2tc dst_member =
+        member2tc(dst_struct.members[i], dst, dst_struct.member_names[i]);
+
+      expr2tc src_member =
+        member2tc(src_struct.members[i], src, src_struct.member_names[i]);
+
+      // Copy member by member - this avoids byte loops!
+      symex_assign(code_assign2tc(dst_member, src_member));
+    }
+
     // Handle return value if exists
     if (!is_nil_expr(func_call.ret))
     {
       symex_assign(code_assign2tc(func_call.ret, dst));
     }
     return;
-    }
+  }
 
+  log_status("Using intrinsic_memcpy for {}-byte copy", num_bytes);
 
-    log_status("Using intrinsic_memcpy for {}-byte copy", num_bytes);
+  //Dereference both src and dst
+  internal_deref_items.clear();
+  expr2tc deref_dst = dereference2tc(get_empty_type(), dst);
+  dereference(deref_dst, dereferencet::INTERNAL);
+  auto dst_items = internal_deref_items;
 
-    //Dereference both src and dst
-    internal_deref_items.clear();
-    expr2tc deref_dst = dereference2tc(get_empty_type(), dst);
-    dereference(deref_dst, dereferencet::INTERNAL);
-    auto dst_items = internal_deref_items;
+  internal_deref_items.clear();
+  expr2tc deref_src = dereference2tc(get_empty_type(), src);
+  dereference(deref_src, dereferencet::INTERNAL);
+  auto src_items = internal_deref_items;
 
-    internal_deref_items.clear();
-    expr2tc deref_src = dereference2tc(get_empty_type(), src);
-    dereference(deref_src, dereferencet::INTERNAL);
-    auto src_items = internal_deref_items;
+  if (dst_items.empty() || src_items.empty())
+  {
+    log_debug("memcpy", "Could not dereference src or dst");
+    bump_call(func_call, "c:@F@__memcpy_impl");
+    return;
+  }
 
-    if (dst_items.empty() || src_items.empty())
+  //For now, only support single-object copies
+  auto &dst_item = dst_items.front();
+  auto &src_item = src_items.front();
+
+  guardt guard = ex_state.cur_state->guard;
+  guard.add(dst_item.guard);
+  guard.add(src_item.guard);
+
+  cur_state->rename(dst_item.object);
+  cur_state->rename(src_item.object);
+  cur_state->rename(dst_item.offset);
+  cur_state->rename(src_item.offset);
+
+  simplify(src_item.offset);
+
+  //Compute alingnment
+  bool aligned =
+    is_constant_int2t(dst_item.offset) && is_constant_int2t(src_item.offset);
+
+  if (aligned)
+  {
+    uint64_t dst_offset = to_constant_int2t(dst_item.offset).value.to_uint64();
+    uint64_t src_offset = to_constant_int2t(src_item.offset).value.to_uint64();
+
+    unsigned int chunk_size = 1;
+    if ((dst_offset % 8 == 0) && (src_offset % 8 == 0))
+      chunk_size = 8;
+    else if ((dst_offset % 4 == 0) && (src_offset % 4 == 0))
+      chunk_size = 4;
+    else if ((dst_offset % 2 == 0) && (src_offset % 2 == 0))
+      chunk_size = 2;
+
+    size_t i = 0;
+    for (; i + chunk_size <= num_bytes; i += chunk_size)
     {
-      log_debug("memcpy", "Could not dereference src or dst");
-      bump_call(func_call, "c:@F@__memcpy_impl");
-      return;
-    }
-
-    //For now, only support single-object copies
-    auto &dst_item = dst_items.front();
-    auto &src_item = src_items.front();
-
-    guardt guard = ex_state.cur_state->guard;
-    guard.add(dst_item.guard);
-    guard.add(src_item.guard);
-
-    cur_state->rename(dst_item.object);
-    cur_state->rename(src_item.object);
-    cur_state->rename(dst_item.offset);
-    cur_state->rename(src_item.offset);
-
-    simplify(src_item.offset);
-
-    //Compute alingnment
-    bool aligned =
-      is_constant_int2t(dst_item.offset) && is_constant_int2t(src_item.offset);
-
-    if (aligned)
-    {
-      uint64_t dst_offset = to_constant_int2t(dst_item.offset).value.to_uint64();
-      uint64_t src_offset = to_constant_int2t(src_item.offset).value.to_uint64();
-
-      unsigned int chunk_size = 1;
-      if ((dst_offset % 8 == 0) && (src_offset % 8 == 0))
-        chunk_size = 8;
-      else if ((dst_offset % 4 == 0) && (src_offset % 4 == 0))
-        chunk_size = 4;
-      else if ((dst_offset % 2 == 0) && (src_offset % 2 == 0))
-        chunk_size = 2;
-
-      size_t i = 0;
-      for (; i + chunk_size <= num_bytes; i += chunk_size)
+      type2tc chunk_type;
+      switch (chunk_size)
       {
-        type2tc chunk_type;
-        switch (chunk_size)
-        {
-        case 8:
-          chunk_type = get_uint64_type();
-          break;
-        case 4:
-          chunk_type = get_uint32_type();
-          break;
-        case 2:
-          chunk_type = get_uint16_type();
-          break;
-        default:
-          chunk_type = get_uint8_type();
-          break;
-        }
-
-        expr2tc dst_idx = index2tc(
-          chunk_type,
-          dst_item.object,
-          constant_int2tc(get_uint64_type(), BigInt(dst_offset + i)));
-        expr2tc src_idx = index2tc(
-          chunk_type,
-          src_item.object,
-          constant_int2tc(get_uint64_type(), BigInt(src_offset + i)));
-        expr2tc value = src_idx;
-        dereference(value, dereferencet::READ);
-        symex_assign(code_assign2tc(dst_idx, value), false, guard);
+      case 8:
+        chunk_type = get_uint64_type();
+        break;
+      case 4:
+        chunk_type = get_uint32_type();
+        break;
+      case 2:
+        chunk_type = get_uint16_type();
+        break;
+      default:
+        chunk_type = get_uint8_type();
+        break;
       }
 
-      //Copy remaining bytes
-      for (; i < num_bytes; i++)
-      {
-        expr2tc dst_idx = index2tc(
-          get_uint8_type(),
-          dst_item.object,
-          constant_int2tc(get_uint64_type(), BigInt(dst_offset + i)));
-        expr2tc src_idx = index2tc(
-          get_uint8_type(),
-          src_item.object,
-          constant_int2tc(get_uint64_type(), BigInt(src_offset + i)));
-        expr2tc value = src_idx;
-        dereference(value, dereferencet::READ);
-        symex_assign(code_assign2tc(dst_idx, value), false, guard);
-      }
+      expr2tc dst_idx = index2tc(
+        chunk_type,
+        dst_item.object,
+        constant_int2tc(get_uint64_type(), BigInt(dst_offset + i)));
+      expr2tc src_idx = index2tc(
+        chunk_type,
+        src_item.object,
+        constant_int2tc(get_uint64_type(), BigInt(src_offset + i)));
+      expr2tc value = src_idx;
+      dereference(value, dereferencet::READ);
+      symex_assign(code_assign2tc(dst_idx, value), false, guard);
     }
 
-    expr2tc ret_ref = func_call.ret;
-    if (!is_nil_expr(ret_ref))
+    //Copy remaining bytes
+    for (; i < num_bytes; i++)
     {
-      dereference(ret_ref, dereferencet::READ);
-      symex_assign(code_assign2tc(ret_ref, dst), false, cur_state->guard);
+      expr2tc dst_idx = index2tc(
+        get_uint8_type(),
+        dst_item.object,
+        constant_int2tc(get_uint64_type(), BigInt(dst_offset + i)));
+      expr2tc src_idx = index2tc(
+        get_uint8_type(),
+        src_item.object,
+        constant_int2tc(get_uint64_type(), BigInt(src_offset + i)));
+      expr2tc value = src_idx;
+      dereference(value, dereferencet::READ);
+      symex_assign(code_assign2tc(dst_idx, value), false, guard);
     }
+  }
+
+  expr2tc ret_ref = func_call.ret;
+  if (!is_nil_expr(ret_ref))
+  {
+    dereference(ret_ref, dereferencet::READ);
+    symex_assign(code_assign2tc(ret_ref, dst), false, cur_state->guard);
+  }
 }
 
 /**
