@@ -2939,6 +2939,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     if (element["_type"] == "Name")
     {
       var_name = element["id"].get<std::string>();
+      if (find_function((*ast_json)["body"], var_name) != nlohmann::json())
+        var_name = "F@" + var_name;
     }
     else if (element["_type"] == "Attribute")
     {
