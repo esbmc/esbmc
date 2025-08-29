@@ -195,7 +195,8 @@ static ExpressionType get_expression_type(const nlohmann::json &element)
     {"Call", ExpressionType::FUNC_CALL},
     {"IfExp", ExpressionType::IF_EXPR},
     {"Subscript", ExpressionType::SUBSCRIPT},
-    {"List", ExpressionType::LIST}};
+    {"List", ExpressionType::LIST},
+    {"Lambda", ExpressionType::FUNC_CALL}};
 
   const auto &type = element["_type"];
   auto it = type_map.find(type);
@@ -1983,6 +1984,49 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     throw std::runtime_error("Invalid function call");
   }
 
+  // Handle indirect calls through function pointer variables
+  if (element["func"]["_type"] == "Name")
+  {
+    std::string func_name = element["func"]["id"].get<std::string>();
+
+    // Try to find as a variable first
+    symbol_id var_sid = create_symbol_id();
+    var_sid.set_object(func_name);
+    symbolt *var_symbol = find_symbol(var_sid.to_string());
+
+    if (var_symbol && var_symbol->type.is_pointer())
+    {
+      // This is an indirect call through function pointer
+      code_function_callt call;
+      call.location() = get_location_from_decl(element);
+
+      // Dereference the function pointer
+      exprt func_ptr_expr = symbol_expr(*var_symbol);
+      exprt deref_func =
+        dereference_exprt(func_ptr_expr, var_symbol->type.subtype());
+      call.function() = deref_func;
+
+      // Set return type
+      if (var_symbol->type.subtype().is_code())
+      {
+        const code_typet &func_type = to_code_type(var_symbol->type.subtype());
+        call.type() = func_type.return_type();
+      }
+
+      // Process arguments
+      if (element.contains("args"))
+      {
+        for (const auto &arg_element : element["args"])
+        {
+          exprt arg_expr = get_expr(arg_element);
+          call.arguments().push_back(arg_expr);
+        }
+      }
+
+      return call;
+    }
+  }
+
   const std::string function = config.options.get_option("function");
   // To verify a specific function, it is necessary to load the definitions of functions it calls.
   if (!function.empty() && !is_loading_models)
@@ -2275,6 +2319,105 @@ symbolt &python_converter::create_tmp_symbol(
   return cl;
 }
 
+exprt python_converter::get_lambda_expr(const nlohmann::json &element)
+{
+  // Generate unique lambda name
+  static int lambda_counter = 0;
+  std::string lambda_name = "lam" + std::to_string(++lambda_counter);
+
+  locationt location = get_location_from_decl(element);
+
+  // Save current context and set lambda context
+  std::string old_func_name = current_func_name_;
+  current_func_name_ = lambda_name;
+
+  // Create function type with proper return type detection
+  code_typet lambda_type;
+  typet return_type = double_type();
+  // TODO: Try to infer better return type from the body if possible
+  if (element.contains("body"))
+    current_element_type = return_type;
+  lambda_type.return_type() = return_type;
+
+  std::string module_name = location.get_file().as_string();
+  std::string lambda_id = "py:" + module_name + "@F@" + lambda_name;
+
+  // Process arguments and create parameter symbols
+  if (element.contains("args") && element["args"].contains("args"))
+  {
+    for (const auto &arg : element["args"]["args"])
+    {
+      std::string arg_name = arg["arg"].get<std::string>();
+
+      // Determine parameter type
+      // TODO: try to infer from usage or default to double
+      typet param_type = double_type();
+
+      // Create function argument
+      code_typet::argumentt argument;
+      argument.type() = param_type;
+      argument.cmt_base_name(arg_name);
+
+      std::string param_id = lambda_id + "@" + arg_name;
+      argument.cmt_identifier(param_id);
+      argument.location() = location;
+      lambda_type.arguments().push_back(argument);
+
+      // Create parameter symbol with all necessary fields
+      symbolt param_symbol;
+      param_symbol.id = param_id;
+      param_symbol.name = arg_name;
+      param_symbol.type = param_type;
+      param_symbol.location = location;
+      param_symbol.mode = "Python";
+      param_symbol.module = module_name;
+      param_symbol.lvalue = true;
+      param_symbol.is_parameter = true;
+      param_symbol.file_local = true;
+      param_symbol.static_lifetime = false;
+      param_symbol.is_extern = false;
+      symbol_table_.add(param_symbol);
+    }
+  }
+
+  // Create lambda function symbol
+  symbolt lambda_symbol;
+  lambda_symbol.id = lambda_id;
+  lambda_symbol.name = lambda_name;
+  lambda_symbol.type = lambda_type;
+  lambda_symbol.location = location;
+  lambda_symbol.mode = "Python";
+  lambda_symbol.module = module_name;
+  lambda_symbol.lvalue = true;
+  lambda_symbol.is_extern = false;
+  lambda_symbol.file_local = false;
+  lambda_symbol.static_lifetime = false;
+
+  symbolt *added_symbol = symbol_table_.move_symbol_to_context(lambda_symbol);
+
+  // Process lambda body
+  if (element.contains("body"))
+  {
+    code_blockt lambda_block;
+
+    // Process the body expression
+    exprt body_expr = get_expr(element["body"]);
+
+    // Create return statement
+    code_returnt return_stmt;
+    return_stmt.return_value() = body_expr;
+    return_stmt.location() = location;
+
+    lambda_block.copy_to_operands(return_stmt);
+    added_symbol->value = lambda_block;
+  }
+
+  // Restore context
+  current_func_name_ = old_func_name;
+
+  return symbol_expr(*added_symbol);
+}
+
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
   exprt expr;
@@ -2480,7 +2623,11 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   case ExpressionType::FUNC_CALL:
   {
-    expr = get_function_call(element);
+    // Check if this is a lambda expression
+    if (element["_type"] == "Lambda")
+      expr = get_lambda_expr(element);
+    else
+      expr = get_function_call(element);
     break;
   }
   // Ternary operator
@@ -2574,6 +2721,12 @@ size_t python_converter::get_type_size(const nlohmann::json &ast_node)
 {
   size_t type_size = 0;
 
+  // Handle lambda functions - they don't have a meaningful size
+  if (
+    ast_node.contains("value") && ast_node["value"].contains("_type") &&
+    ast_node["value"]["_type"] == "Lambda")
+    return 0;
+
   if (ast_node.contains("value") && ast_node["value"].contains("value"))
   {
     // Handle bytes literals
@@ -2600,6 +2753,7 @@ size_t python_converter::get_type_size(const nlohmann::json &ast_node)
   }
   else if (
     ast_node["value"].contains("args") &&
+    ast_node["value"]["args"].is_array() &&
     ast_node["value"]["args"].size() > 0 &&
     ast_node["value"]["args"][0].contains("value") &&
     ast_node["value"]["args"][0]["value"].is_string())
@@ -2839,7 +2993,26 @@ void python_converter::get_var_assign(
 
   if (has_value && rhs != exprt("_init_undefined"))
   {
-    if (lhs_symbol)
+    // Handle lambda assignments
+    if (
+      ast_node.contains("value") && ast_node["value"].contains("_type") &&
+      ast_node["value"]["_type"] == "Lambda" && rhs.is_symbol())
+    {
+      // Get the lambda function symbol
+      const symbolt *lambda_func_symbol =
+        symbol_table_.find_symbol(rhs.identifier());
+      if (lambda_func_symbol && lhs_symbol)
+      {
+        // Create function pointer type
+        typet func_ptr_type = gen_pointer_type(lambda_func_symbol->type);
+        lhs_symbol->type = func_ptr_type;
+        lhs.type() = func_ptr_type;
+
+        // Create address-of expression for the function
+        rhs = address_of_exprt(rhs);
+      }
+    }
+    else if (lhs_symbol)
     {
       // Handle string-to-string variable assignments
       if (lhs_type == "str" && rhs.is_symbol())
