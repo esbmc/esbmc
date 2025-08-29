@@ -11,6 +11,25 @@ template <bool Add>
 bool symex_slicet::get_symbols(const expr2tc &expr)
 {
   bool res = false;
+
+  /* Array slicer, extract dependencies of the form arr_symbol[constant_index]
+     Needs to come before the symbols as it short circuits.
+     This should be safe as if some symbolic index is eventually added, it will go to the next case. So the full symbol will go to the dependency tree
+   */
+  if (is_index2t(expr))
+  {
+    const index2t &index = to_index2t(expr);
+    if (
+      is_symbol2t(index.source_value) && is_constant_number(index.index) &&
+      !to_constant_int2t(index.index).value.is_negative())
+    {
+      const symbol2t &s = to_symbol2t(index.source_value);
+      const constant_int2t &i = to_constant_int2t(index.index);
+      if constexpr (Add)
+        return indexes[s.get_symbol_name()].insert(i.as_ulong()).second;
+    }
+  }
+
   // Recursively look if any of the operands has a inner symbol
   expr->foreach_operand([this, &res](const expr2tc &e) {
     if (!is_nil_expr(e))
@@ -83,6 +102,59 @@ void symex_slicet::run_on_assignment(
         if (has_prefix(sym.thename.as_string(), "nondet$"))
           return;
       }
+    }
+
+    const symbol2t &lhs = to_symbol2t(SSA_step.lhs);
+    auto it = indexes.find(lhs.get_symbol_name());
+    // WITH(symbol[constant_index] := constant_value)
+    if (
+      is_with2t(SSA_step.rhs) &&
+      is_symbol2t(to_with2t(SSA_step.rhs).source_value) &&
+      is_constant_int2t(to_with2t(SSA_step.rhs).update_field) &&
+      !to_constant_int2t(to_with2t(SSA_step.rhs).update_field)
+         .value.is_negative())
+    {
+      const with2t &with = to_with2t(SSA_step.rhs);
+      const symbol2t &rhs_symbol = to_symbol2t(with.source_value);
+      const constant_int2t &rhs_index = to_constant_int2t(with.update_field);
+
+      // Is lhs in the watch list?
+      if (it != indexes.end())
+      {
+        // Found an array in the dependency list! Its guard should be added to the dependency list
+        get_symbols<true>(SSA_step.guard);
+
+        // Is this updating a watched index?
+        if (it->second.count(rhs_index.as_ulong()) > 0)
+        {
+          // Add next array as a dependency and remove one index.
+          indexes[rhs_symbol.get_symbol_name()] = it->second;
+          indexes[rhs_symbol.get_symbol_name()].erase(rhs_index.as_ulong());
+
+          // Finally, the update_value becomes a dependency as well
+          get_symbols<true>(with.update_value);
+        }
+        else
+        {
+          log_debug(
+            "slice",
+            "slice ignoring update to array {} at index {}",
+            rhs_symbol.get_symbol_name(),
+            rhs_index.as_ulong());
+          // Don't need the update, transform into ID and propagate dependences
+          SSA_step.cond = equality2tc(SSA_step.lhs, with.source_value);
+          indexes[rhs_symbol.get_symbol_name()] = it->second;
+        }
+        return;
+      }
+    }
+
+    // We might be trying to initialize an array in a weird way
+    if (it != indexes.end())
+    {
+      get_symbols<true>(SSA_step.guard);
+      get_symbols<true>(SSA_step.rhs);
+      return;
     }
 
     // we don't really need it
