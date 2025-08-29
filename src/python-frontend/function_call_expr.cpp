@@ -1092,10 +1092,22 @@ exprt function_call_expr::handle_list_append() const
     
   // Get the value to append
   exprt value_to_append = converter_.get_expr(args[0]);
-  if (!value_to_append.is_constant()) {
-	  value_to_append = typecast_exprt(value_to_append, pointer_typet(empty_typet()));
+  if (value_to_append.is_constant())
+  {
+    // Create tmp variable to hold value
+    symbolt &append_value_symbol = converter_.create_tmp_symbol(
+      call_, "append_value", size_type(), gen_zero(size_type()));
+    code_declt append_value(symbol_expr(append_value_symbol));
+    append_value.copy_to_operands(value_to_append);
+    converter_.current_block->copy_to_operands(append_value);
+    value_to_append = typecast_exprt(symbol_expr(append_value_symbol), pointer_typet(empty_typet()));
   }
-  
+  else
+  {
+    value_to_append =
+      typecast_exprt(value_to_append, pointer_typet(empty_typet()));
+  }
+
   // Add a tmp variable for getting the current array size
   symbolt& arr_len_symbol = converter_.create_tmp_symbol(call_, "arr_len", size_type(), gen_zero(size_type()));
   code_declt arr_len(symbol_expr(arr_len_symbol));
@@ -1130,11 +1142,11 @@ exprt function_call_expr::handle_list_append() const
   // Get the number of elements to add
   symbolt& elems_to_add_symbol = converter_.create_tmp_symbol(call_, "n", size_type(), gen_zero(size_type()));
   code_declt elems_to_add(symbol_expr(elems_to_add_symbol));
-  elems_to_add.copy_to_operands(gen_one(int_type()));
+  elems_to_add.copy_to_operands(gen_one(int_type())); //TODO: Get n from value to append size
   converter_.current_block->copy_to_operands(elems_to_add);
 
   // Get the append function
-  symbolt& append_func = *converter_.symbol_table().find_symbol("c:@F@__ESBMC_list_append_dummy");
+  symbolt& append_func = *converter_.symbol_table().find_symbol("c:@F@__list_append__");
   
   // Create a function call to append function
   code_function_callt call_expr;

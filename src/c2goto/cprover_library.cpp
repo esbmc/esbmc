@@ -133,7 +133,7 @@ const static std::vector<std::string> python_c_models = {
   "log2",
   "ldexp",
   "log1p_taylor",
-  "__ESBMC_list_append_dummy"};
+  "__list_append__"};
 
 } // namespace
 
