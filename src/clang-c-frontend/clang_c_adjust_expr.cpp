@@ -222,6 +222,7 @@ void clang_c_adjust::adjust_side_effect(side_effect_exprt &expr)
       statement == "preincrement" || statement == "predecrement" ||
       statement == "postincrement" || statement == "postdecrement")
     {
+      adjust_reference(expr);
     }
     else if (has_prefix(id2string(statement), "assign"))
     {
