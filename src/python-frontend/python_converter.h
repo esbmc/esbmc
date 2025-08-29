@@ -160,6 +160,8 @@ private:
 
   std::string extract_string_from_array_operands(const exprt &array_expr) const;
 
+  exprt get_lambda_expr(const nlohmann::json &element);
+
   symbolt create_return_temp_variable(
     const typet &return_type,
     const locationt &location,
