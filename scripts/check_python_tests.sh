@@ -22,6 +22,7 @@ ignored_dirs=(
   "input"
   "input2"
   "input3"
+  "input4"
   "input4_fail"
   "list9"
   "list10"
