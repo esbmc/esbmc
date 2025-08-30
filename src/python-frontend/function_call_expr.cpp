@@ -866,6 +866,16 @@ exprt function_call_expr::build_constant_from_arg() const
     const symbolt *sym = lookup_python_symbol(arg["id"]);
     if (sym && sym->value.is_constant())
       return handle_str_symbol_to_int(sym);
+    else
+    {
+      // Symbol not found or not constant (e.g., from input())
+      // TODO: raise an exception to match Python behavior
+      std::string var_name = arg["id"].get<std::string>();
+      log_warning(
+        "ValueError: int() conversion may fail - variable '{}' may contain "
+        "non-integer string",
+        var_name);
+    }
   }
 
   // Handle int(): convert string literal to int with validation
