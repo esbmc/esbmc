@@ -8184,6 +8184,12 @@ bool solidity_convertert::get_type_description(
     new_type.set("#sol_type", "TUPLE_RETURNS");
     break;
   }
+  case SolidityGrammar::TypeNameT::ErrorTypeName:
+  {
+    new_type = empty_typet();
+    new_type.set("#cpp_type", "void");
+    break;
+  }
   case SolidityGrammar::TypeNameT::UserDefinedTypeName:
   {
     new_type = UserDefinedVarMap[typeString];

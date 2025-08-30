@@ -74,6 +74,9 @@ enum TypeNameT
   // built-in member
   BuiltinTypeName,
 
+  // error
+  ErrorTypeName,
+
   // user-defined
   UserDefinedTypeName,
 
