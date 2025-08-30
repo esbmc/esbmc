@@ -868,6 +868,35 @@ exprt function_call_expr::build_constant_from_arg() const
       return handle_str_symbol_to_int(sym);
   }
 
+  // Handle int(): convert string literal to int with validation
+  else if (
+    func_name == "int" && arg.contains("value") && arg["value"].is_string())
+  {
+    const std::string &str_val = arg["value"].get<std::string>();
+
+    // check if string contains only digits (and optional leading sign)
+    bool is_valid = !str_val.empty();
+    size_t start_pos = 0;
+    if (str_val[0] == '+' || str_val[0] == '-')
+    {
+      start_pos = 1;
+      if (str_val.length() == 1)
+        is_valid = false;
+    }
+    for (size_t i = start_pos; i < str_val.length() && is_valid; i++)
+      if (!std::isdigit(str_val[i]))
+        is_valid = false;
+
+    if (!is_valid)
+      throw std::runtime_error(
+        "ValueError: invalid literal for int() with base 10: '" + str_val +
+        "'");
+
+    // If valid, convert normally
+    int int_val = std::stoi(str_val);
+    arg["value"] = int_val;
+  }
+
   size_t arg_size = 1;
 
   // Handle int(): convert float to int
