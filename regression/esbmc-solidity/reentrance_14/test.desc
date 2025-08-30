@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --contract Piggy_Bank --no-standard-checks --incremental-bmc
+^VERIFICATION FAILED$
