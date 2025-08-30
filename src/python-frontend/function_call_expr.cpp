@@ -868,13 +868,24 @@ exprt function_call_expr::build_constant_from_arg() const
       return handle_str_symbol_to_int(sym);
     else
     {
-      // Symbol not found or not constant (e.g., from input())
-      // TODO: raise an exception to match Python behavior
-      std::string var_name = arg["id"].get<std::string>();
-      log_warning(
-        "ValueError: int() conversion may fail - variable '{}' may contain "
-        "non-integer string",
-        var_name);
+      // Try to get the expression type directly, even if symbol lookup failed
+      exprt expr = converter_.get_expr(arg);
+      if (expr.type().is_floatbv() || expr.type().is_signedbv())
+      {
+        // This is a numeric type (float or int) - no warning needed
+        // int(float) and int(int) are well-defined operations
+      }
+      else if (expr.type().is_array()) // strings are arrays
+      {
+        // This is a string type
+        // TODO: raise an exception to match Python semantics
+        std::string var_name = arg["id"].get<std::string>();
+        log_warning(
+          "ValueError: int() conversion may fail - variable '{}' may contain "
+          "non-integer string",
+          var_name);
+      }
+      // For other types, continue without warning
     }
   }
 
