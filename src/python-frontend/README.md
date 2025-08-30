@@ -89,6 +89,7 @@ Below is an overview of ESBMC-Python's key capabilities:
 ### Functions and Methods
 - **Function Handling**: This allows for defining, calling, and verifying functions, including parameter passing and return values.
 - **Annotations**: Supports type annotations.
+- **Lambda Expressions**: Supports basic lambda expressions that are converted to regular functions and stored as function pointers. Lambda functions can be assigned to variables and called indirectly. Supports single-expression lambdas with multiple parameters.
 
 ### Object-Oriented Programming
 - **Classes**: Supports class definitions, methods, and attributes.
@@ -168,6 +169,10 @@ The current version of ESBMC-Python has the following limitations:
 - `enumerate()` supports standard usage patterns but may have limitations with complex nested iterables or advanced parameter combinations.
 - Exception handling supports the core built-in exception types but may not cover all Python standard library exceptions or custom exception hierarchies with complex inheritance patterns.
 - Built-in variables support is limited to __name__; other Python built-ins such as __file__, __doc__, __package__ are not yet supported.
+- Lambda expressions have the following limitations:
+  - Return type inference is currently naive (defaults to double type)
+  - Higher-order and nested lambda expressions are not supported
+  - Parameter types are assumed to be double for simplicity
 
 ### Example: Division by Zero in Python
 
