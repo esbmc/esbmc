@@ -314,7 +314,7 @@ This example shows how ESBMC can verify exception handling behavior:
 ````python
 def safe_divide(a: int, b: int) -> int:
     try:
-        result = a // b
+        result:int = a // b
         return result
     except ZeroDivisionError as e:
         return -1
