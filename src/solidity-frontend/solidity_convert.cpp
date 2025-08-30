@@ -12158,7 +12158,6 @@ void solidity_convertert::convert_type_expr(
       src_expr = call;
       return;
     }
-
     else if (
       (dest_sol_type == "ADDRESS" || dest_sol_type == "ADDRESS_PAYABLE") &&
       (src_sol_type == "CONTRACT" || src_sol_type.empty()))
@@ -12187,7 +12186,8 @@ void solidity_convertert::convert_type_expr(
       get_static_contract_instance_ref(_cname, c_ins);
 
       // type conversion
-      src_expr = c_ins;
+      src_expr = address_of_exprt(c_ins);
+      src_expr.type().set("#sol_type", "CONTRACT");
     }
     else if (
       (src_sol_type == "ARRAY_LITERAL") && src_type.id() == typet::id_array)
