@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --contract Vulnerable --k-induction --no-standard-checks
+^VERIFICATION FAILED$
