@@ -70,9 +70,10 @@ static std::string get_op(const std::string &op, const typet &type)
   // Convert the operator to lowercase to allow case-insensitive comparison.
   std::string lower_op = op;
   std::transform(
-    lower_op.begin(), lower_op.end(), lower_op.begin(), [](unsigned char c) {
-      return std::tolower(c);
-    });
+    lower_op.begin(),
+    lower_op.end(),
+    lower_op.begin(),
+    [](unsigned char c) { return std::tolower(c); });
 
   // Special case: if the type is floating-point, use IEEE-specific operators.
   if (type.is_floatbv())
@@ -482,7 +483,8 @@ symbol_id python_converter::create_symbol_id() const
 
 exprt python_converter::compute_math_expr(const exprt &expr) const
 {
-  auto resolve_symbol = [this](const exprt &operand) -> exprt {
+  auto resolve_symbol = [this](const exprt &operand) -> exprt
+  {
     if (operand.is_symbol())
     {
       symbolt *s = symbol_table_.find_symbol(operand.identifier());
@@ -775,9 +777,10 @@ exprt handle_float_vs_string(exprt &bin_expr, const std::string &op)
     // Python-style error: float < str → TypeError
     std::string lower_op = op;
     std::transform(
-      lower_op.begin(), lower_op.end(), lower_op.begin(), [](unsigned char c) {
-        return std::tolower(c);
-      });
+      lower_op.begin(),
+      lower_op.end(),
+      lower_op.begin(),
+      [](unsigned char c) { return std::tolower(c); });
 
     const auto &loc = bin_expr.location();
     const auto it = operator_map.find(lower_op);
@@ -805,7 +808,8 @@ void python_converter::handle_float_division(
 {
   const typet float_type = double_type();
 
-  auto promote_to_float = [&](exprt &e) {
+  auto promote_to_float = [&](exprt &e)
+  {
     const typet &t = e.type();
     const bool is_integer = t.is_signedbv() || t.is_unsignedbv();
 
@@ -864,7 +868,8 @@ exprt python_converter::handle_string_concatenation(
   exprt result = gen_zero(t);
   unsigned int i = 0;
 
-  auto append_from_symbol = [&](const std::string &id) {
+  auto append_from_symbol = [&](const std::string &id)
+  {
     symbolt *symbol = symbol_table_.find_symbol(id);
     assert(symbol);
     for (const exprt &ch : symbol->value.operands())
@@ -874,7 +879,8 @@ exprt python_converter::handle_string_concatenation(
     }
   };
 
-  auto append_from_json = [&](const nlohmann::json &json) {
+  auto append_from_json = [&](const nlohmann::json &json)
+  {
     std::string value = json["value"].get<std::string>();
     typet &char_type = t.subtype();
 
@@ -985,7 +991,8 @@ bool python_converter::has_unsupported_side_effects_internal(
   const exprt &lhs,
   const exprt &rhs)
 {
-  auto has_unsupported_side_effect = [](const exprt &expr) {
+  auto has_unsupported_side_effect = [](const exprt &expr)
+  {
     return expr.id() == "sideeffect" &&
            expr.get("statement") != "function_call";
   };
@@ -1505,7 +1512,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   attach_symbol_location(lhs, symbol_table());
   attach_symbol_location(rhs, symbol_table());
 
-  auto to_side_effect_call = [](exprt &expr) {
+  auto to_side_effect_call = [](exprt &expr)
+  {
     side_effect_expr_function_callt side_effect;
     code_function_callt &code = static_cast<code_function_callt &>(expr);
     side_effect.function() = code.function();
@@ -1558,9 +1566,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
           list_size = std::stoi(symbol->value.value().as_string(), nullptr, 2);
         }
         else if (lhs.is_constant())
-        {
           list_size = std::stoi(lhs.value().as_string(), nullptr, 2);
-        }
 
         // List element is the rhs
         list_elem = get_expr(right["elts"][0]);
@@ -1637,16 +1643,12 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
           list_size = std::stoi(symbol->value.value().as_string(), nullptr, 2);
         }
         else if (rhs.is_constant())
-        {
           list_size = std::stoi(rhs.value().as_string(), nullptr, 2);
-        }
       }
 
       typet st =
         (lhs.type().is_array()) ? lhs.type().subtype() : rhs.type().subtype();
-
       typet list_type = array_typet(st, from_integer(list_size, int_type()));
-
       exprt list = gen_zero(list_type);
 
       for (int64_t i = 0; i < list_size.to_int64(); ++i)
@@ -1739,18 +1741,9 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   // Add lhs and rhs as operands to the binary expression.
   bin_expr.copy_to_operands(lhs, rhs);
 
-  // According to the Python 3 Language Reference (Section 6.10, "Comparisons"):
-  // - Equality comparisons (==, !=) between built-in incompatible types like float and str do not raise an exception.
-  //   Instead, they typically evaluate to False for `==` and True for `!=`.
-  // - However, ordered comparisons (<, <=, >, >=) between incompatible types such as float and str
-  //   raise a TypeError at runtime.
-  //
-  // References:
-  // - https://docs.python.org/3/reference/expressions.html#comparisons
-  // - https://docs.python.org/3/library/stdtypes.html#typeerror
-  //
-  // This block emulates that behavior in ESBMC's symbolic execution: converting equality comparisons to
-  // constants (false or true), and rejecting invalid ordered comparisons with a runtime error.
+  // Python 3 comparison behavior: equality (==, !=) between incompatible types
+  // returns False/True, but ordered comparisons (<, >, etc.) raise TypeError.
+  // This emulates that behavior in ESBMC's symbolic execution.
   if (type_utils::is_float_vs_char(lhs, rhs))
     return handle_float_vs_string(bin_expr, op);
 
@@ -1955,9 +1948,7 @@ bool python_converter::is_imported_module(const std::string &module_name) const
 exprt python_converter::get_function_call(const nlohmann::json &element)
 {
   if (!element.contains("func") || element["_type"] != "Call")
-  {
     throw std::runtime_error("Invalid function call");
-  }
 
   // Handle indirect calls through function pointer variables
   if (element["func"]["_type"] == "Name")
@@ -2048,24 +2039,9 @@ exprt python_converter::make_char_array_expr(
 
   return expr;
 }
-
-/// Convert a Python AST literal element to an expression.
-/// This function handles various Python 3 literal types, including:
-///   - Integers (e.g., `42`)
-///   - Booleans (`True`, `False`)
-///   - Floats (e.g., `3.14`)
-///   - Characters (e.g., `'a'`)
-///   - Strings (e.g., `"hello"`)
-///   - Byte literals (e.g., `b"data"`)
-///   - Ignores docstrings or other unsupported formats
-///
-/// Example JSON input:
-/// { "_type": "Constant", "value": 42 }               → returns integer constant expr
-/// { "_type": "Constant", "value": "a" }              → returns char literal expr
-/// { "_type": "Constant", "value": "hello" }          → returns string literal expr
-/// { "_type": "Constant", "value": true }             → returns boolean expr
-/// { "_type": "UnaryOp", "op": "USub", "operand":
-/// { "_type": "Constant", "value": 42 } }           → returns -42 as integer expr
+/// Convert Python AST literal to expression.
+/// Handles integers, booleans, floats, chars, strings, and byte literals.
+/// Example: {"_type": "Constant", "value": 42} -> integer constant expr
 exprt python_converter::get_literal(const nlohmann::json &element)
 {
   // Determine the source of the literal's value.
@@ -2120,14 +2096,10 @@ exprt python_converter::get_literal(const nlohmann::json &element)
   {
     // Handle bytes literal - check for encoded_bytes field first
     if (element.contains("encoded_bytes"))
-    {
       string_literal =
         base64_decode(element["encoded_bytes"].get<std::string>());
-    }
     else
-    {
       string_literal.assign(str_val.begin(), str_val.end());
-    }
 
     // Set appropriate bytes type
     t = type_handler_.get_typet("bytes", string_literal.size());
@@ -2427,17 +2399,13 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     typet list_type = type_handler_.get_list_type(element);
 
     if (list_size == zero)
-    {
       current_element_type = list_type;
-    }
 
     exprt list = gen_zero(list_type);
 
     unsigned int i = 0;
     for (auto &e : element["elts"])
-    {
       list.operands().at(i++) = get_expr(e);
-    }
 
     symbolt &cl =
       create_tmp_symbol(element, "$compound-literal$", list_type, list);
@@ -2783,10 +2751,8 @@ symbolt python_converter::create_return_temp_variable(
 const nlohmann::json &get_return_statement(const nlohmann::json &function)
 {
   for (const auto &stmt : function["body"])
-  {
     if (get_statement_type(stmt) == StatementType::RETURN)
       return stmt;
-  }
 
   throw std::runtime_error(
     "Function " + function["name"].get<std::string>() +
@@ -3166,9 +3132,7 @@ void python_converter::get_compound_assign(
   // For attribute assignments, use the type from the LHS expression
   // For other assignments, resolve the variable type
   if (!lhs.type().is_nil() && !lhs.type().id().empty())
-  {
     current_element_type = lhs.type();
-  }
   else
   {
     // Fallback to resolving the variable type from AST or symbol table
@@ -3493,14 +3457,10 @@ void python_converter::get_attributes_from_self(
         stmt["annotation"]["id"].get<std::string>();
       typet type;
       if (annotated_type == "str")
-      {
         type = gen_pointer_type(char_type());
-      }
       else
-      {
         type =
           type_handler_.get_typet(stmt["annotation"]["id"].get<std::string>());
-      }
 
       struct_typet::componentt comp =
         build_component(current_class_name_, attr_name, type);
@@ -3633,17 +3593,11 @@ void python_converter::get_return_statements(
     // Extract function name for temporary variable naming
     std::string func_name;
     if (ast_node["value"]["func"]["_type"] == "Name")
-    {
       func_name = ast_node["value"]["func"]["id"].get<std::string>();
-    }
     else if (ast_node["value"]["func"]["_type"] == "Attribute")
-    {
       func_name = ast_node["value"]["func"]["attr"].get<std::string>();
-    }
     else
-    {
       func_name = "func"; // fallback
-    }
 
     // Create temporary variable to store function call result
     symbolt temp_symbol =
@@ -3658,9 +3612,7 @@ void python_converter::get_return_statements(
 
     // Set the LHS of the function call to our temporary variable
     if (!return_value.type().is_empty())
-    {
       return_value.op0() = temp_var_expr;
-    }
 
     // Add the function call statement to the block
     target_block.copy_to_operands(return_value);
@@ -4173,9 +4125,7 @@ void python_converter::convert()
     std::list<std::string> model_folders = {"os", "numpy"};
 
     for (const auto &folder : model_folders)
-    {
       append_models_from_directory(model_files, ast_output_dir + "/" + folder);
-    }
 
     is_loading_models = true;
 
@@ -4232,9 +4182,7 @@ void python_converter::convert()
     }
 
     if (function_node.empty())
-    {
       throw std::runtime_error("Function " + function + " not found");
-    }
 
     code_blockt block;
     // Convert classes referenced by the function
@@ -4275,9 +4223,7 @@ void python_converter::convert()
     symbolt *symbol = symbol_table_.find_symbol(sid.to_string());
 
     if (!symbol)
-    {
       throw std::runtime_error("Symbol " + sid.to_string() + " not found");
-    }
 
     // Create function call
     code_function_callt call;
