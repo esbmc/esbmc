@@ -3913,30 +3913,31 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
           type_handler_.get_typet(element["type"]["id"].get<std::string>());
         catch_block.type() = type;
 
+        std::string name;
+        symbol_id sid = create_symbol_id();
+        locationt location = get_location_from_decl(element);
+        std::string module_name = location.get_file().as_string();
         // Check if the exception handler binds the exception to a variable
         if (!element["name"].is_null())
-        {
-          symbol_id sid = create_symbol_id();
-          std::string name = element["name"].get<std::string>();
-          sid.set_object(name);
-          locationt location = get_location_from_decl(element);
-          std::string module_name = location.get_file().as_string();
+          name = element["name"].get<std::string>();
+        else
+          name = "__anon_exc_var_" + location.get_line().as_string();
 
-          symbolt symbol = create_symbol(
-            module_name, current_func_name_, sid.to_string(), location, type);
-          symbol.name = name;
-          symbol.lvalue = true;
-          symbol.is_extern = false;
-          symbol.file_local = false;
-          symbolt *s = symbol_table_.move_symbol_to_context(symbol);
+        sid.set_object(name);
+        symbolt symbol = create_symbol(
+          module_name, current_func_name_, sid.to_string(), location, type);
+        symbol.name = name;
+        symbol.lvalue = true;
+        symbol.is_extern = false;
+        symbol.file_local = false;
+        symbolt *s = symbol_table_.move_symbol_to_context(symbol);
 
-          exprt sym = symbol_expr(*s);
-          code_declt decl(sym);
-          exprt decl_code = convert_expression_to_code(decl);
-          decl_code.location() = location;
-          codet::operandst &ops = catch_block.operands();
-          ops.insert(ops.begin(), decl_code);
-        }
+        exprt sym = symbol_expr(*s);
+        code_declt decl(sym);
+        exprt decl_code = convert_expression_to_code(decl);
+        decl_code.location() = location;
+        codet::operandst &ops = catch_block.operands();
+        ops.insert(ops.begin(), decl_code);
       }
 
       block.move_to_operands(catch_block);
