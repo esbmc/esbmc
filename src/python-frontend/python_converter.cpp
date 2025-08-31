@@ -3352,7 +3352,7 @@ void python_converter::get_function_definition(
     else
     {
       type.return_type() =
-        type_handler_.get_typet(return_node["id"].get<std::string>());
+        type_handler_.get_typet(return_type.get<std::string>());
     }
   }
   else if (return_node["_type"] == "Tuple")
