@@ -262,21 +262,32 @@ This example illustrates how symbolic model checking can reveal subtle bugs that
 This example demonstrates ESBMC-Python's support for lambda expressions:
 
 ````Python
-def test_lambda() -> None:
-    # Basic lambda with arithmetic
-    add_ten: int = lambda x: x + 10
-    assert add_ten(5) == 15
-    
-    # Lambda with multiple parameters
-    multiply: int = lambda a, b, c: a * b * c
-    assert multiply(2, 3, 4) == 24
-    
-    # Lambda with boolean logic
-    is_positive: bool = lambda x: x > 0
-    assert is_positive(5) == True
-    assert is_positive(-3) == False
+def test_lambda_expressions():
+    """Comprehensive lambda expression testing"""
 
-test_lambda()
+    # Basic arithmetic lambda
+    add_ten = lambda x: x + 10
+    result1:int = add_ten(5)
+    assert result1 == 15
+
+    # Multi-parameter lambda
+    calculate_volume = lambda length, width, height: length * width * height
+    volume:float = calculate_volume(2.0, 3.0, 4.0)
+    assert volume == 24.0
+
+    # Lambda with conditional logic
+    absolute_diff = lambda a, b: a - b if a > b else b - a
+    diff1:int = absolute_diff(10, 3)
+    diff2:int = absolute_diff(3, 10)
+    assert diff1 == 7
+    assert diff2 == 7
+
+    # Lambda for boolean operations
+    is_in_range:bool = lambda x, lower, upper: lower <= x <= upper
+    assert is_in_range(5, 1, 10) == True
+    assert is_in_range(15, 1, 10) == False
+
+test_lambda_expressions()
 ````
 
 **Command:**
@@ -291,18 +302,18 @@ $ esbmc main.py
 Parsing main.py
 Converting
 Generating GOTO Program
-GOTO program creation time: 0.673s
-GOTO program processing time: 0.012s
+GOTO program creation time: 0.637s
+GOTO program processing time: 0.015s
 Starting Bounded Model Checking
-Symex completed in: 0.004s (23 assignments)
-Slicing time: 0.002s (removed 16 assignments)
-Generated 8 VCC(s), 4 remaining after simplification (7 assignments)
+Symex completed in: 0.007s (36 assignments)
+Slicing time: 0.002s (removed 26 assignments)
+Generated 12 VCC(s), 6 remaining after simplification (10 assignments)
 No solver specified; defaulting to Boolector
 Encoding remaining VCC(s) using bit-vector/floating-point arithmetic
-Encoding to solver time: 0.011s
+Encoding to solver time: 0.005s
 Solving with solver Boolector 3.2.2
 Runtime decision procedure: 0.000s
-BMC program time: 0.015s
+BMC program time: 0.014s
 
 VERIFICATION SUCCESSFUL
 ````
