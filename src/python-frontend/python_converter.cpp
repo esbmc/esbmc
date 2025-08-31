@@ -1905,14 +1905,12 @@ exprt python_converter::get_function_call(const nlohmann::json &element)
     if (var_symbol && var_symbol->type.is_pointer())
     {
       // This is an indirect call through function pointer
-      code_function_callt call;
+      side_effect_expr_function_callt call;
       call.location() = get_location_from_decl(element);
 
-      // Dereference the function pointer
+      // The function pointer itself, not dereferenced
       exprt func_ptr_expr = symbol_expr(*var_symbol);
-      exprt deref_func =
-        dereference_exprt(func_ptr_expr, var_symbol->type.subtype());
-      call.function() = deref_func;
+      call.function() = func_ptr_expr;
 
       // Set return type
       if (var_symbol->type.subtype().is_code())
@@ -2849,6 +2847,29 @@ void python_converter::get_var_assign(
       }
     }
 
+    // Special handling for lambda assignments - create symbol dynamically
+    if (
+      !lhs_symbol && !is_global && ast_node.contains("value") &&
+      ast_node["value"].contains("_type") &&
+      ast_node["value"]["_type"] == "Lambda")
+    {
+      // For lambda assignments, we need to create the variable symbol
+      // The type will be set to function pointer later when processing the RHS
+      locationt location = get_location_from_decl(target);
+      std::string module_name = location.get_file().as_string();
+
+      // Create with placeholder type that will be updated later
+      typet placeholder_type = pointer_typet(empty_typet());
+
+      symbolt symbol = create_symbol(
+        module_name, name, sid.to_string(), location, placeholder_type);
+      symbol.lvalue = true;
+      symbol.file_local = true;
+      symbol.is_extern = false;
+
+      lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
+    }
+
     if (!lhs_symbol && !is_global)
       throw std::runtime_error("Type undefined for \"" + name + "\"");
 
@@ -2886,13 +2907,22 @@ void python_converter::get_var_assign(
         symbol_table_.find_symbol(rhs.identifier());
       if (lambda_func_symbol && lhs_symbol)
       {
-        // Create function pointer type
-        typet func_ptr_type = gen_pointer_type(lambda_func_symbol->type);
-        lhs_symbol->type = func_ptr_type;
-        lhs.type() = func_ptr_type;
+        // Ensure the lambda function type is a proper code_typet
+        if (lambda_func_symbol->type.is_code())
+        {
+          // Create function pointer type properly
+          typet func_ptr_type = gen_pointer_type(lambda_func_symbol->type);
+          lhs_symbol->type = func_ptr_type;
+          lhs.type() = func_ptr_type;
 
-        // Create address-of expression for the function
-        rhs = address_of_exprt(rhs);
+          // Create address-of expression for the function
+          rhs = address_of_exprt(rhs);
+        }
+        else
+        {
+          throw std::runtime_error(
+            "Lambda function symbol does not have code type");
+        }
       }
     }
     else if (lhs_symbol)
