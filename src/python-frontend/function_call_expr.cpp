@@ -999,6 +999,13 @@ exprt function_call_expr::build_constant_from_arg() const
     }
   }
 
+  // Handle float(): convert bool to float
+  else if (func_name == "float" && arg["value"].is_boolean())
+  {
+    bool bool_val = arg["value"].get<bool>();
+    arg["value"] = bool_val ? 1.0 : 0.0;
+  }
+
   // Handle float(): convert int to float
   else if (func_name == "float" && arg["value"].is_number_integer())
     handle_int_to_float(arg);
