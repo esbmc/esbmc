@@ -3321,7 +3321,8 @@ void python_converter::get_function_definition(
     const nlohmann::json &return_type = (return_node["_type"] == "Subscript")
                                           ? return_node["value"]["id"]
                                           : return_node["id"];
-    if (return_type == "list")
+    // Handles both cases
+    if (return_type == "list" || return_type == "List")
     {
       const auto &return_stmt = get_return_statement(function_node);
       if (
@@ -3347,6 +3348,11 @@ void python_converter::get_function_definition(
         }
         else
           type.return_type() = type_handler_.get_list_type(return_var["value"]);
+      }
+      else if (return_stmt["value"]["_type"] == "List")
+      {
+        // Handle direct list literal returns like "return [1, 2, 3]"
+        type.return_type() = type_handler_.get_list_type(return_stmt["value"]);
       }
     }
     else
