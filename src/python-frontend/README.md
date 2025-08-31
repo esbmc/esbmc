@@ -123,7 +123,7 @@ Below is an overview of ESBMC-Python's key capabilities:
   - **Arithmetic and conversions**: Supports Python's built-in functions, such as `abs`, `int`, `float`, `chr`, `str`, `hex`, `oct`, `len`, and `range`.
   - **Enhanced float() constructor**: Supports conversion from strings including special values such as `nan`, `inf`, `-inf`, `infinity`, and `+infinity` (case-insensitive with whitespace handling).
   - **Min/Max**: Supports `min(a, b)` and `max(a, b)` with type promotion (int-to-float). Currently limited to two arguments.
-  - **Input**: Models `input()` as a non-deterministic string of up to 256 characters. This allows verification of programs that depend on user input.
+  - **Input**: Models `input()` as a non-deterministic string of up to 256 characters. This enables the verification of programs that rely on user input.
   - **Enumerate**: Supports `enumerate(iterable, start=0)` for iterating over sequences with automatic indexing. Handles both tuple unpacking `(for i, x in enumerate(...))` and single variable assignment `(for item in enumerate(...))`. Supports an optional `start` parameter and works with lists, strings, and other iterables.
 - **Verification properties**: Division-by-zero, indexing errors, arithmetic overflow, and user-defined assertions.
 
@@ -224,7 +224,7 @@ Violated property:
 VERIFICATION FAILED
 ```
 
-ESBMC successfully identifies a path where the randomly generated variable x evaluates to zero (or very close to zero, causing integer division by zero). This triggers a property violation, and ESBMC generates a counterexample showing the precise values of `x` and `cond` that lead to the failure. An executable test case can be created from this counterexample to expose this implementation error as follows:
+ESBMC successfully identifies a path where the randomly generated variable x evaluates to zero (or very close to zero), causing an integer division by zero. This triggers a property violation, and ESBMC generates a counterexample showing the precise values of `x` and `cond` that lead to the failure. An executable test case can be created from this counterexample to expose this implementation error as follows:
 
 ````python
 def div1(cond: int, x: int) -> int:
