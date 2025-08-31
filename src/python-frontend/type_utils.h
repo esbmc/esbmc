@@ -105,6 +105,18 @@ public:
            func_name == "ldexp";
   }
 
+  static bool is_ordered_comparison(const std::string &op)
+  {
+    return op == "Lt" || op == "Gt" || op == "LtE" || op == "GtE";
+  }
+
+  static bool is_relational_op(const std::string &op)
+  {
+    return (
+      op == "Eq" || op == "Lt" || op == "LtE" || op == "NotEq" || op == "Gt" ||
+      op == "GtE" || op == "And" || op == "Or");
+  }
+
 private:
   static const std::map<std::string, std::string> &consensus_func_to_type()
   {

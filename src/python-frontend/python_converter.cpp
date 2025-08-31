@@ -69,18 +69,6 @@ static bool is_float_vs_char(const exprt &a, const exprt &b)
          (type_b.is_floatbv() && is_char_type(type_a));
 }
 
-static bool is_ordered_comparison(const std::string &op)
-{
-  return op == "Lt" || op == "Gt" || op == "LtE" || op == "GtE";
-}
-
-static bool is_relational_op(const std::string &op)
-{
-  return (
-    op == "Eq" || op == "Lt" || op == "LtE" || op == "NotEq" || op == "Gt" ||
-    op == "GtE" || op == "And" || op == "Or");
-}
-
 static StatementType get_statement_type(const nlohmann::json &element)
 {
   if (!element.contains("_type"))
@@ -795,7 +783,7 @@ exprt handle_float_vs_string(exprt &bin_expr, const std::string &op)
     // float != str → True (no exception)
     bin_expr.make_true();
   }
-  else if (is_ordered_comparison(op))
+  else if (type_utils::is_ordered_comparison(op))
   {
     // Python-style error: float < str → TypeError
     std::string lower_op = op;
@@ -1735,7 +1723,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   // For Python division ("/"), the result is always a float regardless of operand types.
   // Otherwise, it inherits the type of the left-hand side (lhs).
   typet type;
-  if (is_relational_op(op))
+  if (type_utils::is_relational_op(op))
     type = bool_type();
   else if (op == "Div" || op == "div")
     type = double_type(); // Python division always returns float
