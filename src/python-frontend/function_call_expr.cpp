@@ -850,6 +850,14 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
 exprt function_call_expr::build_constant_from_arg() const
 {
   const std::string &func_name = function_id_.get_function();
+
+  // Check if there are no arguments
+  if (call_["args"].empty())
+  {
+    typet t = type_handler_.get_typet(func_name, 0);
+    return exprt("constant", t);
+  }
+
   auto arg = call_["args"][0];
 
   // Handle str(): convert int to str
@@ -870,14 +878,8 @@ exprt function_call_expr::build_constant_from_arg() const
     {
       // Try to get the expression type directly, even if symbol lookup failed
       exprt expr = converter_.get_expr(arg);
-      if (expr.type().is_floatbv() || expr.type().is_signedbv())
+      if (expr.type().is_array()) // strings are arrays
       {
-        // This is a numeric type (float or int) - no warning needed
-        // int(float) and int(int) are well-defined operations
-      }
-      else if (expr.type().is_array()) // strings are arrays
-      {
-        // This is a string type
         // TODO: raise an exception to match Python semantics
         std::string var_name = arg["id"].get<std::string>();
         log_warning(
@@ -885,7 +887,6 @@ exprt function_call_expr::build_constant_from_arg() const
           "non-integer string",
           var_name);
       }
-      // For other types, continue without warning
     }
   }
 
@@ -982,6 +983,27 @@ exprt function_call_expr::build_constant_from_arg() const
     const symbolt *sym = lookup_python_symbol(arg["id"]);
     if (sym && sym->value.is_constant())
       return handle_str_symbol_to_float(sym);
+    else
+    {
+      // Try to get the expression type directly, even if symbol lookup failed
+      exprt expr = converter_.get_expr(arg);
+      if (expr.type().is_array()) // strings are arrays
+      {
+        // TODO: raise an exception to match Python semantics
+        std::string var_name = arg["id"].get<std::string>();
+        log_warning(
+          "ValueError: float() conversion may fail - variable '{}' may contain "
+          "non-float string",
+          var_name);
+      }
+    }
+  }
+
+  // Handle float(): convert bool to float
+  else if (func_name == "float" && arg["value"].is_boolean())
+  {
+    bool bool_val = arg["value"].get<bool>();
+    arg["value"] = bool_val ? 1.0 : 0.0;
   }
 
   // Handle float(): convert int to float
