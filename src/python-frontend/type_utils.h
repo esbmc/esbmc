@@ -1,5 +1,8 @@
 #pragma once
 
+#include <util/expr.h>
+#include <util/type.h>
+
 #include <map>
 #include <string>
 
@@ -115,6 +118,20 @@ public:
     return (
       op == "Eq" || op == "Lt" || op == "LtE" || op == "NotEq" || op == "Gt" ||
       op == "GtE" || op == "And" || op == "Or");
+  }
+
+  static bool is_char_type(const typet &t)
+  {
+    return (t.is_signedbv() || t.is_unsignedbv()) &&
+           t.get("#cpp_type") == "char";
+  }
+
+  static bool is_float_vs_char(const exprt &a, const exprt &b)
+  {
+    const auto &type_a = a.type();
+    const auto &type_b = b.type();
+    return (type_a.is_floatbv() && is_char_type(type_b)) ||
+           (type_b.is_floatbv() && is_char_type(type_a));
   }
 
 private:

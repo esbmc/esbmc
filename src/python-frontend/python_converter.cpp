@@ -56,19 +56,6 @@ static const std::unordered_map<std::string, StatementType> statement_map = {
   {"Try", StatementType::TRY},
   {"ExceptHandler", StatementType::EXCEPTHANDLER}};
 
-static bool is_char_type(const typet &t)
-{
-  return (t.is_signedbv() || t.is_unsignedbv()) && t.get("#cpp_type") == "char";
-}
-
-static bool is_float_vs_char(const exprt &a, const exprt &b)
-{
-  const auto &type_a = a.type();
-  const auto &type_b = b.type();
-  return (type_a.is_floatbv() && is_char_type(type_b)) ||
-         (type_b.is_floatbv() && is_char_type(type_a));
-}
-
 static StatementType get_statement_type(const nlohmann::json &element)
 {
   if (!element.contains("_type"))
@@ -1764,7 +1751,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   //
   // This block emulates that behavior in ESBMC's symbolic execution: converting equality comparisons to
   // constants (false or true), and rejecting invalid ordered comparisons with a runtime error.
-  if (is_float_vs_char(lhs, rhs))
+  if (type_utils::is_float_vs_char(lhs, rhs))
     return handle_float_vs_string(bin_expr, op);
 
   // floor division (//) operation corresponds to an int division with floor rounding
