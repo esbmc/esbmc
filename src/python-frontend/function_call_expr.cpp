@@ -850,6 +850,14 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
 exprt function_call_expr::build_constant_from_arg() const
 {
   const std::string &func_name = function_id_.get_function();
+
+  // Check if there are no arguments
+  if (call_["args"].empty())
+  {
+    typet t = type_handler_.get_typet(func_name, 0);
+    return exprt("constant", t);
+  }
+
   auto arg = call_["args"][0];
 
   // Handle str(): convert int to str
