@@ -14,6 +14,7 @@ ignored_dirs=(
   "esbmc-assume"
   "enumerate15"
   "enumerate15_fail"
+  "float1_fail"
   "func-no-params-types-fail"
   "function-option-fail"
   "global"
