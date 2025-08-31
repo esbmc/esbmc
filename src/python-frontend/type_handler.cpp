@@ -401,6 +401,33 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
 
   if (list_value["_type"] == "arg" && list_value.contains("annotation"))
   {
+    // Handle case where annotation is directly a Subscript (e.g., List['Action'])
+    if (list_value["annotation"]["_type"] == "Subscript")
+    {
+      const nlohmann::json &slice = list_value["annotation"]["slice"];
+      typet t;
+      
+      if (slice.contains("id"))
+      {
+        // Regular identifier like List[int]
+        t = get_typet(slice["id"].get<std::string>());
+      }
+      else if (slice["_type"] == "Constant" && slice.contains("value"))
+      {
+        // String constant like List['Action'] (forward reference)
+        std::string type_string = slice["value"].get<std::string>();
+        // Remove quotes if present
+        if (type_string.length() >= 2 && type_string.front() == '\'' && type_string.back() == '\'')
+          type_string = type_string.substr(1, type_string.length() - 2);
+        else if (type_string.length() >= 2 && type_string.front() == '"' && type_string.back() == '"')
+          type_string = type_string.substr(1, type_string.length() - 2);
+        t = get_typet(type_string);
+      }
+      else
+        t = empty_typet();
+      return build_array(t, 0);
+    }
+
     const nlohmann::json &type_ann = list_value["annotation"]["value"]["id"];
     assert(type_ann == "list" || type_ann == "List");
     typet t =
