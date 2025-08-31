@@ -8039,7 +8039,25 @@ bool solidity_convertert::get_type_description(
       std::string temp = typeString;
       auto pos = temp.find("[]"); // e.g. "uint256[] memory"
       const std::string new_typeString = temp.substr(0, pos);
-      const std::string new_typeIdentifier = "t_" + new_typeString;
+
+      // e.g. "t_array$_t_struct$_Message_$11_storage_$dyn_storage" =>
+      //      "$_t_struct$_Message_$11_storage_$"
+      auto extract = [](const std::string &s) -> std::string {
+        const std::string anchor = "$_t_struct";
+        size_t a = s.find(anchor);
+        if (a == std::string::npos)
+          return "";
+        size_t start = a + 2;
+        size_t dyn = s.rfind("$dyn");
+        if (dyn == std::string::npos || dyn < start)
+          return "";
+        size_t cut = s.rfind("_$", dyn);
+        if (cut == std::string::npos || cut < start)
+          return "";
+        return s.substr(start, cut - start);
+      };
+      const std::string new_typeIdentifier = extract(typeIdentifier);
+      log_debug("solidity", "new_typeIdentifier = {}", new_typeIdentifier);
       new_json["typeString"] = new_typeString;
       new_json["typeIdentifier"] = new_typeIdentifier;
 
@@ -12134,7 +12152,6 @@ void solidity_convertert::convert_type_expr(
       src_expr = call;
       return;
     }
-
     else if (
       (dest_sol_type == "ADDRESS" || dest_sol_type == "ADDRESS_PAYABLE") &&
       (src_sol_type == "CONTRACT" || src_sol_type.empty()))
@@ -12163,7 +12180,8 @@ void solidity_convertert::convert_type_expr(
       get_static_contract_instance_ref(_cname, c_ins);
 
       // type conversion
-      src_expr = c_ins;
+      src_expr = address_of_exprt(c_ins);
+      src_expr.type().set("#sol_type", "CONTRACT");
     }
     else if (
       (src_sol_type == "ARRAY_LITERAL") && src_type.id() == typet::id_array)
