@@ -4,6 +4,7 @@
 #include <util/type.h>
 
 #include <map>
+#include <regex>
 #include <string>
 
 enum class StatementType
@@ -132,6 +133,55 @@ public:
     const auto &type_b = b.type();
     return (type_a.is_floatbv() && is_char_type(type_b)) ||
            (type_b.is_floatbv() && is_char_type(type_a));
+  }
+
+  // Helper function to get numeric width from type
+  static size_t get_type_width(const typet &type)
+  {
+    // First try to parse width directly
+    try
+    {
+      return std::stoi(type.width().c_str());
+    }
+    catch (const std::exception &)
+    {
+      // If direct parsing fails, try to infer from type name
+      std::string type_str = type.width().as_string();
+
+      // Handle common Python/ESBMC type mappings
+      if (type_str == "int" || type_str == "int32")
+        return 32;
+      else if (type_str == "int64" || type_str == "long")
+        return 64;
+      else if (type_str == "int16" || type_str == "short")
+        return 16;
+      else if (type_str == "int8" || type_str == "char")
+        return 8;
+      else if (type_str == "float" || type_str == "float32")
+        return 32;
+      else if (type_str == "double" || type_str == "float64")
+        return 64;
+      else if (type_str == "bool")
+        return 1;
+
+      // Try to extract number from string like "int32", "uint64", etc.
+      std::regex width_regex(R"(\d+)");
+      std::smatch match;
+      if (std::regex_search(type_str, match, width_regex))
+      {
+        try
+        {
+          return std::stoi(match.str());
+        }
+        catch (const std::exception &)
+        {
+          // Fall through to default
+        }
+      }
+
+      // Default to 32 for unknown types
+      return 32;
+    }
   }
 
 private:
