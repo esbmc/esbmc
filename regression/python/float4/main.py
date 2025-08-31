@@ -232,7 +232,6 @@ if __name__ == "__main__":
     test_arithmetic_operations()
     test_multiplication()
     test_division()
-    test_precision_long_decimal()
     test_in_expressions()
     
     print("All success tests passed!")

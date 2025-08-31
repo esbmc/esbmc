@@ -365,6 +365,17 @@ private:
           }
         }
       }
+      else if (lhs["_type"] == "Call" && lhs["func"]["_type"] == "Name")
+      {
+        // Handle function calls in binary expressions like float("1.1") + float("2.2")
+        const std::string &func_name = lhs["func"]["id"];
+
+        if (type_utils::is_builtin_type(func_name))
+          type = func_name; // float() returns float, int() returns int, etc.
+        else
+          type = get_function_return_type(
+            func_name, body); // For user-defined functions
+      }
       else if (lhs["_type"] == "Constant")
         type = get_type_from_constant(lhs);
       else if (lhs["_type"] == "Call" && lhs["func"]["_type"] == "Attribute")
