@@ -829,7 +829,7 @@ private:
 
       auto &stmt_type = element["_type"];
 
-      if (stmt_type == "If" || stmt_type == "While")
+      if (stmt_type == "If" || stmt_type == "While" || stmt_type == "Try")
       {
         add_annotation(element);
         continue;
