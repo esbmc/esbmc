@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <fstream>
+#include <regex>
 #include <unordered_map>
 
 #include <boost/filesystem.hpp>
