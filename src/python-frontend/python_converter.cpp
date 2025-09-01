@@ -393,8 +393,8 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
   {
     try
     {
-      const int lhs_width = type_utils::get_type_width(lhs_type);
-      const int rhs_width = type_utils::get_type_width(rhs_type);
+      const int lhs_width = type_handler_.get_type_width(lhs_type);
+      const int rhs_width = type_handler_.get_type_width(rhs_type);
 
       if (lhs_width > rhs_width)
       {

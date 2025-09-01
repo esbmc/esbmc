@@ -81,10 +81,17 @@ public:
    * Checks whether the given JSON object represents a 2D array (list of lists).
    * @param arr The JSON object to check.
    * @return true if it's a 2D array, false otherwise.
-  */
+   */
   bool is_2d_array(const nlohmann::json &arr) const;
 
   int get_array_dimensions(const nlohmann::json &arr) const;
+
+  /*
+   * Determines the numeric width (in bits) of a given type.
+   * @param type The type object to analyze for width determination.
+   * @return The width of the type in bits as a size_t value.
+   */
+  static size_t get_type_width(const typet &type);
 
 private:
   /// Check if two types are compatible for list homogeneity checking

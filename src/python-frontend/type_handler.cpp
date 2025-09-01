@@ -7,6 +7,8 @@
 #include <util/c_types.h>
 #include <util/message.h>
 
+#include <regex>
+
 type_handler::type_handler(const python_converter &converter)
   : converter_(converter)
 {
@@ -406,7 +408,7 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
     {
       const nlohmann::json &slice = list_value["annotation"]["slice"];
       typet t;
-      
+
       if (slice.contains("id"))
       {
         // Regular identifier like List[int]
@@ -417,9 +419,13 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
         // String constant like List['Action'] (forward reference)
         std::string type_string = slice["value"].get<std::string>();
         // Remove quotes if present
-        if (type_string.length() >= 2 && type_string.front() == '\'' && type_string.back() == '\'')
+        if (
+          type_string.length() >= 2 && type_string.front() == '\'' &&
+          type_string.back() == '\'')
           type_string = type_string.substr(1, type_string.length() - 2);
-        else if (type_string.length() >= 2 && type_string.front() == '"' && type_string.back() == '"')
+        else if (
+          type_string.length() >= 2 && type_string.front() == '"' &&
+          type_string.back() == '"')
           type_string = type_string.substr(1, type_string.length() - 2);
         t = get_typet(type_string);
       }
@@ -593,5 +599,53 @@ int type_handler::get_array_dimensions(const nlohmann::json &arr) const
   {
     // Base case: first element is not a list, so this is 1D
     return 1;
+  }
+}
+
+size_t type_handler::get_type_width(const typet &type)
+{
+  // First try to parse width directly
+  try
+  {
+    return std::stoi(type.width().c_str());
+  }
+  catch (const std::exception &)
+  {
+    // If direct parsing fails, try to infer from type name
+    std::string type_str = type.width().as_string();
+
+    // Handle common Python/ESBMC type mappings
+    if (type_str == "int" || type_str == "int32")
+      return 32;
+    else if (type_str == "int64" || type_str == "long")
+      return 64;
+    else if (type_str == "int16" || type_str == "short")
+      return 16;
+    else if (type_str == "int8" || type_str == "char")
+      return 8;
+    else if (type_str == "float" || type_str == "float32")
+      return 32;
+    else if (type_str == "double" || type_str == "float64")
+      return 64;
+    else if (type_str == "bool")
+      return 1;
+
+    // Try to extract number from string like "int32", "uint64", etc.
+    std::regex width_regex(R"(\d+)");
+    std::smatch match;
+    if (std::regex_search(type_str, match, width_regex))
+    {
+      try
+      {
+        return std::stoi(match.str());
+      }
+      catch (const std::exception &)
+      {
+        // Fall through to default
+      }
+    }
+
+    // Default to 32 for unknown types
+    return 32;
   }
 }
