@@ -162,6 +162,15 @@ private:
 
   exprt get_lambda_expr(const nlohmann::json &element);
 
+  exprt convert_to_string(const exprt &expr);
+
+  exprt get_fstring_expr(const nlohmann::json &element);
+
+  std::string process_format_spec(const nlohmann::json &format_spec);
+
+  exprt
+  apply_format_specification(const exprt &expr, const std::string &format);
+
   symbolt create_return_temp_variable(
     const typet &return_type,
     const locationt &location,

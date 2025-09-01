@@ -40,7 +40,8 @@ enum class ExpressionType
   SUBSCRIPT,
   VARIABLE_REF,
   LIST,
-  UNKNOWN
+  UNKNOWN,
+  FSTRING
 };
 
 class type_utils
