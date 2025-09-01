@@ -86,6 +86,20 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Identity Comparisons**: Supports `is` and `is not` operators for identity-based comparisons, including `x is None`, `x is y`, or `x is not None`.
 - **Global Variables:** Recognises the `global` keyword for accessing and modifying variables in the global scope from within functions.
 
+### String Formatting and Literals
+
+- **F-String Support**: Comprehensive support for Python's f-string (formatted string literal) syntax, including:
+  - **Basic Variable Interpolation**: f"Hello {name}!" with support for multiple variables in a single f-string
+  - **Built-in Variable Access**: Supports built-in variables like __name__ within f-strings: f"Running as: {__name__}"
+  - **Format Specifications**:
+    - **Integer formatting**: f"{num:d}" and f"{num:i}"
+    - **Float formatting with precision**: f"{val:.2f}", f"{price:.1f}"
+    - **Mixed format specifications**: f"Items: {count:d}, Price: {price:.1f}"
+  - **Boolean Formatting**: Automatic conversion of boolean values to strings (True/False)
+  - **Empty and Literal F-strings**: Support for f"" (empty) and f"Just a string" (literal-only)
+  - **String Concatenation**: F-string results can be concatenated with other strings
+  - **IEEE 754 Compliance**: Proper handling of 32-bit and 64-bit floating point numbers with accurate string conversion
+
 ### Functions and Methods
 - **Function Handling**: This allows for defining, calling, and verifying functions, including parameter passing and return values.
 - **Annotations**: Supports type annotations.
@@ -173,6 +187,12 @@ The current version of ESBMC-Python has the following limitations:
   - Return type inference is currently naive (defaults to double type)
   - Higher-order and nested lambda expressions are not supported
   - Parameter types are assumed to be double for simplicity
+- F-String Limitations:
+  - Complex expressions within f-strings may have limited support
+  - Advanced format specifications beyond basic integer `(:d, :i)` and float `(:.Nf)` formatting may not be fully supported
+  - Nested f-strings are not supported
+  - String alignment and padding format specifications (e.g., `:>10`, `:<5`) are not supported
+  - Custom format specifications for user-defined types are not supported
 
 ### Example 1: Division by Zero in Python
 
