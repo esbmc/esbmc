@@ -545,12 +545,9 @@ private:
       list_subtype = get_type_from_json(list["elts"][0]["value"]);
 
     for (const auto &elem : list["elts"])
-    {
       if (get_type_from_json(elem["value"]) != list_subtype)
-      {
         throw std::runtime_error("Multiple typed lists are not supported\n");
-      }
-    }
+
     return list_subtype;
   }
 
@@ -577,9 +574,7 @@ private:
       auto var = json_utils::get_var_node(rhs_var_name, body);
       std::string type;
       if (infer_type(var, body, type) == InferResult::OK && !type.empty())
-      {
         return type;
-      }
     }
 
     // Find RHS variable declaration in the current function
@@ -616,10 +611,31 @@ private:
 
     if (value_type == "Subscript")
     {
-      if (!rhs_node["value"].is_null())
-        return get_list_subtype(rhs_node["value"]);
+      // Check if annotation exists and is not null before accessing
+      if (rhs_node.contains("annotation") && 
+          !rhs_node["annotation"].is_null() && 
+          rhs_node["annotation"].contains("id"))
+      {
+        // Get the type of the variable being subscripted
+        const std::string &var_type = rhs_node["annotation"]["id"];
+        
+        // Handle string subscript: str[index] returns str
+        if (var_type == "str")
+          return "str";
+        // Handle list subscript: use existing logic
+        else if (var_type == "list")
+        {
+          if (!rhs_node["value"].is_null())
+            return get_list_subtype(rhs_node["value"]);
+          else
+            return "Any"; // Default for unknown list element types
+        }
+        // Handle other subscript operations
+        else
+          return "Any"; // Default for unknown subscript types
+      }
       else
-        return "Any"; // Default for unknown subscript types
+        return "Any"; // Default for unknown subscript types when annotation is missing
     }
 
     return rhs_node["annotation"]["id"];
