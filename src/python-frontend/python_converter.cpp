@@ -13,8 +13,12 @@
 #include <util/encoding.h>
 
 #include <algorithm>
+#include <cmath>
+#include <cstring>
+#include <iomanip>
 #include <fstream>
 #include <regex>
+#include <sstream>
 #include <unordered_map>
 
 #include <boost/filesystem.hpp>
@@ -171,7 +175,8 @@ static ExpressionType get_expression_type(const nlohmann::json &element)
     {"IfExp", ExpressionType::IF_EXPR},
     {"Subscript", ExpressionType::SUBSCRIPT},
     {"List", ExpressionType::LIST},
-    {"Lambda", ExpressionType::FUNC_CALL}};
+    {"Lambda", ExpressionType::FUNC_CALL},
+    {"JoinedStr", ExpressionType::FSTRING}};
 
   const auto &type = element["_type"];
   auto it = type_map.find(type);
@@ -797,8 +802,363 @@ void python_converter::handle_float_division(
 
 BigInt python_converter::get_string_size(const exprt &expr)
 {
+  if (!expr.type().is_array())
+  {
+    // For non-array types in f-strings, convert them first to get actual size
+    if (
+      expr.is_constant() &&
+      (expr.type().is_signedbv() || expr.type().is_unsignedbv()))
+    {
+      // Convert the actual integer to string to get real size
+      BigInt value =
+        binary2integer(expr.value().as_string(), expr.type().is_signedbv());
+      std::string str_repr = std::to_string(value.to_int64());
+      return BigInt(str_repr.size() + 1); // +1 for null terminator
+    }
+
+    if (expr.is_symbol())
+    {
+      const symbolt *symbol = symbol_table_.find_symbol(expr.identifier());
+      if (symbol && symbol->type.is_array())
+      {
+        const auto &arr_type = to_array_type(symbol->type);
+        return binary2integer(arr_type.size().value().as_string(), false);
+      }
+      // For non-array symbols, we need a reasonable default since we can't compute actual size
+      return BigInt(20); // Conservative default
+    }
+
+    // For other types, use conservative defaults
+    if (expr.type().is_bool())
+      return BigInt(6); // "False" + null terminator
+
+    // Default fallback
+    return BigInt(20);
+  }
+
   const auto &arr_type = to_array_type(expr.type());
   return binary2integer(arr_type.size().value().as_string(), false);
+}
+
+std::string
+python_converter::process_format_spec(const nlohmann::json &format_spec)
+{
+  if (format_spec.is_null() || !format_spec.contains("_type"))
+    return "";
+
+  // Handle direct Constant format spec
+  if (format_spec["_type"] == "Constant" && format_spec.contains("value"))
+    return format_spec["value"].get<std::string>();
+
+  // Handle JoinedStr format spec (which contains Constant values)
+  if (format_spec["_type"] == "JoinedStr" && format_spec.contains("values"))
+  {
+    std::string result;
+    for (const auto &value : format_spec["values"])
+      if (value["_type"] == "Constant" && value.contains("value"))
+        result += value["value"].get<std::string>();
+    return result;
+  }
+
+  // Log warning for unsupported format specifications
+  std::string spec_type = format_spec.contains("_type")
+                            ? format_spec["_type"].get<std::string>()
+                            : "unknown";
+  log_warning("Unsupported f-string format specification type: {}", spec_type);
+
+  return "";
+}
+
+exprt python_converter::apply_format_specification(
+  const exprt &expr,
+  const std::string &format)
+{
+  // Basic format specification handling
+  if (format.empty())
+    return convert_to_string(expr);
+
+  // Handle integer formatting
+  if (format == "d" || format == "i")
+    return convert_to_string(expr);
+
+  // Handle float formatting with precision
+  else if (format.find(".") != std::string::npos && format.back() == 'f')
+  {
+    // Extract precision from format string (e.g., ".2f" -> 2)
+    size_t dot_pos = format.find(".");
+    size_t f_pos = format.find("f");
+    if (
+      dot_pos != std::string::npos && f_pos != std::string::npos &&
+      f_pos > dot_pos)
+    {
+      std::string precision_str =
+        format.substr(dot_pos + 1, f_pos - dot_pos - 1);
+      int precision = 6; // default
+      try
+      {
+        precision = std::stoi(precision_str);
+      }
+      catch (...)
+      {
+        precision = 6;
+      }
+
+      // Handle floatbv expressions (both constant and symbols)
+      if (expr.type().is_floatbv())
+      {
+        const typet &t = expr.type();
+        const std::size_t float_width = bv_width(t);
+
+        // Support common floating point widths
+        if (t.is_floatbv() && (float_width == 32 || float_width == 64))
+        {
+          const std::string *float_bits = nullptr;
+
+          // Handle constant expressions
+          if (expr.is_constant())
+            float_bits = &expr.value().as_string();
+          // Handle symbol expressions
+          else if (expr.is_symbol())
+          {
+            const symbol_exprt &sym_expr = to_symbol_expr(expr);
+            const symbolt *symbol =
+              symbol_table_.find_symbol(sym_expr.get_identifier());
+
+            if (symbol && symbol->value.is_constant())
+              float_bits = &symbol->value.value().as_string();
+          }
+
+          if (float_bits && float_bits->length() == float_width)
+          {
+            double val = 0.0;
+
+            // Handle different floating point widths
+            if (float_width == 32)
+            {
+              // IEEE 754 single precision
+              uint32_t bits = 0;
+              for (std::size_t i = 0; i < float_width; ++i)
+                if ((*float_bits)[i] == '1')
+                  bits |= (1U << (float_width - 1 - i));
+
+              float float_val;
+              std::memcpy(&float_val, &bits, sizeof(float));
+              val = static_cast<double>(float_val);
+            }
+            else if (float_width == 64)
+            {
+              // IEEE 754 double precision
+              uint64_t bits = 0;
+              for (std::size_t i = 0; i < float_width; ++i)
+                if ((*float_bits)[i] == '1')
+                  bits |= (1ULL << (float_width - 1 - i));
+
+              std::memcpy(&val, &bits, sizeof(double));
+            }
+
+            // Use proper rounding to avoid IEEE 754 precision issues
+            double multiplier = std::pow(10.0, precision);
+            double rounded = std::round(val * multiplier) / multiplier;
+
+            std::ostringstream oss;
+            oss << std::fixed << std::setprecision(precision) << rounded;
+            std::string formatted_str = oss.str();
+
+            typet string_type =
+              type_handler_.build_array(char_type(), formatted_str.size() + 1);
+            std::vector<unsigned char> chars(
+              formatted_str.begin(), formatted_str.end());
+            chars.push_back('\0');
+
+            return make_char_array_expr(chars, string_type);
+          }
+        }
+      }
+    }
+  }
+
+  // Default: just convert to string
+  return convert_to_string(expr);
+}
+
+exprt python_converter::convert_to_string(const exprt &expr)
+{
+  const typet &t = expr.type();
+
+  // Already a string/char array - return as is
+  if (t.is_array() && t.subtype() == char_type())
+    return expr;
+
+  // Handle symbol references
+  if (expr.is_symbol())
+  {
+    const symbolt *symbol = symbol_table_.find_symbol(expr.identifier());
+    if (symbol)
+    {
+      // If symbol has string type, return it
+      if (symbol->type.is_array() && symbol->type.subtype() == char_type())
+        return expr;
+
+      // If symbol has a constant value, convert that
+      if (symbol->value.is_constant())
+        return convert_to_string(symbol->value);
+    }
+  }
+
+  // Handle constants
+  if (expr.is_constant())
+  {
+    if (t.is_signedbv() || t.is_unsignedbv())
+    {
+      BigInt value = binary2integer(expr.value().as_string(), t.is_signedbv());
+      std::string str_value = std::to_string(value.to_int64());
+
+      typet string_type =
+        type_handler_.build_array(char_type(), str_value.size() + 1);
+      std::vector<unsigned char> chars(str_value.begin(), str_value.end());
+      chars.push_back('\0'); // null terminator
+
+      return make_char_array_expr(chars, string_type);
+    }
+    else if (t.is_floatbv())
+    {
+      std::string str_value = "0.0";
+      if (expr.is_constant() && !expr.value().empty())
+      {
+        const std::string &float_bits = expr.value().as_string();
+        if (t.is_floatbv() && bv_width(t) == 64 && float_bits.length() == 64)
+        {
+          uint64_t bits = 0;
+          for (size_t i = 0; i < 64; ++i)
+          {
+            if (float_bits[i] == '1')
+              bits |= (1ULL << (63 - i));
+          }
+          double val;
+          std::memcpy(&val, &bits, sizeof(double));
+
+          // Use proper rounding for default precision (6 decimal places)
+          double multiplier = std::pow(10.0, 6);
+          double rounded = std::round(val * multiplier) / multiplier;
+
+          std::ostringstream oss;
+          oss << std::fixed << std::setprecision(6) << rounded;
+          str_value = oss.str();
+        }
+      }
+
+      typet string_type =
+        type_handler_.build_array(char_type(), str_value.size() + 1);
+      std::vector<unsigned char> chars(str_value.begin(), str_value.end());
+      chars.push_back('\0');
+
+      return make_char_array_expr(chars, string_type);
+    }
+    else if (t.is_bool())
+    {
+      // Convert boolean to string
+      bool value = expr.is_true();
+      std::string str_value = value ? "True" : "False";
+
+      typet string_type =
+        type_handler_.build_array(char_type(), str_value.size() + 1);
+      std::vector<unsigned char> chars(str_value.begin(), str_value.end());
+      chars.push_back('\0');
+
+      return make_char_array_expr(chars, string_type);
+    }
+  }
+
+  // For non-constant expressions, we'd need runtime conversion
+  // For now, create a placeholder string
+  std::string placeholder = "<expr>";
+  typet string_type =
+    type_handler_.build_array(char_type(), placeholder.size() + 1);
+  std::vector<unsigned char> chars(placeholder.begin(), placeholder.end());
+  chars.push_back('\0');
+
+  return make_char_array_expr(chars, string_type);
+}
+
+exprt python_converter::get_fstring_expr(const nlohmann::json &element)
+{
+  if (!element.contains("values") || element["values"].empty())
+  {
+    // Empty f-string
+    typet empty_string_type = type_handler_.build_array(char_type(), 1);
+    exprt empty_str = gen_zero(empty_string_type);
+    empty_str.operands().at(0) = from_integer(0, char_type());
+    return empty_str;
+  }
+
+  const auto &values = element["values"];
+  std::vector<exprt> parts;
+  BigInt total_estimated_size = BigInt(1); // Start with 1 for null terminator
+
+  for (const auto &value : values)
+  {
+    exprt part_expr;
+
+    try
+    {
+      if (value["_type"] == "Constant")
+      {
+        // String literal part
+        part_expr = get_literal(value);
+      }
+      else if (value["_type"] == "FormattedValue")
+      {
+        // Expression to be formatted
+        exprt expr = get_expr(value["value"]);
+
+        // Handle format specification if present
+        if (value.contains("format_spec") && !value["format_spec"].is_null())
+        {
+          std::string format = process_format_spec(value["format_spec"]);
+          part_expr = apply_format_specification(expr, format);
+        }
+        else
+          part_expr = convert_to_string(expr);
+      }
+      else
+      {
+        // Other expression types
+        exprt expr = get_expr(value);
+        part_expr = convert_to_string(expr);
+      }
+
+      parts.push_back(part_expr);
+      total_estimated_size += get_string_size(part_expr) -
+                              1; // -1 to avoid double counting terminators
+    }
+    catch (const std::exception &e)
+    {
+      log_warning("Error processing f-string part: {}", e.what());
+      // Create error placeholder
+      std::string error_str = "<error>";
+      typet error_type =
+        type_handler_.build_array(char_type(), error_str.size() + 1);
+      std::vector<unsigned char> chars(error_str.begin(), error_str.end());
+      chars.push_back('\0');
+      parts.push_back(make_char_array_expr(chars, error_type));
+      total_estimated_size += BigInt(error_str.size());
+    }
+  }
+
+  // If only one part, return it directly
+  if (parts.size() == 1)
+    return parts[0];
+
+  // Concatenate all parts
+  exprt result = parts[0];
+  for (size_t i = 1; i < parts.size(); ++i)
+  {
+    nlohmann::json empty_left, empty_right;
+    result =
+      handle_string_concatenation(result, parts[i], empty_left, empty_right);
+  }
+
+  return result;
 }
 
 exprt python_converter::handle_string_concatenation(
@@ -840,17 +1200,43 @@ exprt python_converter::handle_string_concatenation(
     }
   };
 
-  if (left["_type"] == "Name")
-    append_from_symbol(lhs.identifier().as_string());
-  else if (left["_type"] == "Constant")
-    append_from_json(left);
+  auto append_from_expr = [&](const exprt &expr) {
+    if (expr.is_constant() && expr.type().is_array())
+    {
+      for (const auto &ch : expr.operands())
+      {
+        if (ch.is_constant() && ch != gen_zero(ch.type()))
+          if (i < result.operands().size())
+            result.operands().at(i++) = ch;
+      }
+    }
+    else if (expr.is_symbol())
+      append_from_symbol(expr.identifier().as_string());
+  };
 
-  if (right["_type"] == "Name")
-    append_from_symbol(rhs.identifier().as_string());
-  else if (right["_type"] == "Constant")
-    append_from_json(right);
+  auto append_from_json_or_expr =
+    [&](const nlohmann::json &node, const exprt &expr) {
+      if (!node.contains("_type"))
+      {
+        append_from_expr(expr);
+        return;
+      }
+      const std::string type = node["_type"].get<std::string>();
+      if (type == "Name")
+        append_from_symbol(expr.identifier().as_string());
+      else if (type == "Constant" && node.contains("value"))
+        append_from_json(node);
+      else
+        append_from_expr(expr);
+    };
 
-  result.operands().push_back(gen_zero(t.subtype()));
+  // Use the helper for both operands
+  append_from_json_or_expr(left, lhs);
+  append_from_json_or_expr(right, rhs);
+
+  // Add null terminator
+  if (i < result.operands().size())
+    result.operands().at(i) = gen_zero(t.subtype());
 
   return result;
 }
@@ -2567,6 +2953,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     }
     break;
   }
+  case ExpressionType::FSTRING:
+    expr = get_fstring_expr(element);
+    break;
   default:
   {
     const auto &lineno = element["lineno"].template get<int>();
