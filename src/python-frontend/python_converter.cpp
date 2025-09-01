@@ -70,8 +70,7 @@ static std::string get_op(const std::string &op, const typet &type)
   // Convert the operator to lowercase to allow case-insensitive comparison.
   std::string lower_op = op;
   std::transform(
-    lower_op.begin(), lower_op.end(), lower_op.begin(), [](unsigned char c) 
-    {
+    lower_op.begin(), lower_op.end(), lower_op.begin(), [](unsigned char c) {
       return std::tolower(c);
     });
 
@@ -434,8 +433,7 @@ symbol_id python_converter::create_symbol_id() const
 
 exprt python_converter::compute_math_expr(const exprt &expr) const
 {
-  auto resolve_symbol = [this](const exprt &operand) -> exprt 
-  {
+  auto resolve_symbol = [this](const exprt &operand) -> exprt {
     if (operand.is_symbol())
     {
       symbolt *s = symbol_table_.find_symbol(operand.identifier());
@@ -728,8 +726,7 @@ exprt handle_float_vs_string(exprt &bin_expr, const std::string &op)
     // Python-style error: float < str → TypeError
     std::string lower_op = op;
     std::transform(
-      lower_op.begin(), lower_op.end(), lower_op.begin(), [](unsigned char c) 
-      {
+      lower_op.begin(), lower_op.end(), lower_op.begin(), [](unsigned char c) {
         return std::tolower(c);
       });
 
@@ -759,8 +756,7 @@ void python_converter::handle_float_division(
 {
   const typet float_type = double_type();
 
-  auto promote_to_float = [&](exprt &e) 
-  {
+  auto promote_to_float = [&](exprt &e) {
     const typet &t = e.type();
     const bool is_integer = t.is_signedbv() || t.is_unsignedbv();
 
@@ -819,8 +815,7 @@ exprt python_converter::handle_string_concatenation(
   exprt result = gen_zero(t);
   unsigned int i = 0;
 
-  auto append_from_symbol = [&](const std::string &id) 
-  {
+  auto append_from_symbol = [&](const std::string &id) {
     symbolt *symbol = symbol_table_.find_symbol(id);
     assert(symbol);
     for (const exprt &ch : symbol->value.operands())
@@ -830,8 +825,7 @@ exprt python_converter::handle_string_concatenation(
     }
   };
 
-  auto append_from_json = [&](const nlohmann::json &json) 
-  {
+  auto append_from_json = [&](const nlohmann::json &json) {
     std::string value = json["value"].get<std::string>();
     typet &char_type = t.subtype();
 
@@ -942,8 +936,7 @@ bool python_converter::has_unsupported_side_effects_internal(
   const exprt &lhs,
   const exprt &rhs)
 {
-  auto has_unsupported_side_effect = [](const exprt &expr) 
-  {
+  auto has_unsupported_side_effect = [](const exprt &expr) {
     return expr.id() == "sideeffect" &&
            expr.get("statement") != "function_call";
   };
@@ -1463,8 +1456,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   attach_symbol_location(lhs, symbol_table());
   attach_symbol_location(rhs, symbol_table());
 
-  auto to_side_effect_call = [](exprt &expr) 
-  {
+  auto to_side_effect_call = [](exprt &expr) {
     side_effect_expr_function_callt side_effect;
     code_function_callt &code = static_cast<code_function_callt &>(expr);
     side_effect.function() = code.function();
