@@ -532,7 +532,10 @@ private:
   {
     std::string list_subtype;
 
-    if (list["_type"] == "Call" && list["func"]["attr"] == "array")
+    if (list["_type"] == "Call" && 
+      list.contains("func") && 
+      list["func"].contains("attr") && 
+      list["func"]["attr"] == "array")
       return get_list_subtype(list["args"][0]);
 
     if (!list.contains("elts"))
