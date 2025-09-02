@@ -1254,8 +1254,88 @@ exprt function_call_expr::get()
 
       if (!func_symbol)
       {
-        log_warning("Undefined function: {}", func_name.c_str());
-        return exprt();
+        // Check if this function is defined anywhere in the current Python source
+        // by searching the AST directly
+        bool is_forward_reference = false;
+
+        // Lambda to recursively search for FunctionDef nodes
+        std::function<bool(const nlohmann::json &)> search_ast =
+          [&](const nlohmann::json &node) -> bool {
+          if (!node.is_object())
+            return false;
+
+          // Check if this is a function definition with matching name
+          if (
+            node.contains("_type") && node["_type"] == "FunctionDef" &&
+            node.contains("name") && node["name"] == func_name)
+          {
+            return true;
+          }
+
+          // Recursively search all child nodes
+          for (const auto &[key, value] : node.items())
+          {
+            if (value.is_array())
+            {
+              for (const auto &item : value)
+              {
+                if (search_ast(item))
+                  return true;
+              }
+            }
+            else if (value.is_object())
+            {
+              if (search_ast(value))
+                return true;
+            }
+          }
+          return false;
+        };
+
+        is_forward_reference = search_ast(converter_.ast());
+
+        if (is_forward_reference)
+        {
+          // Create a forward reference that can be resolved later
+          locationt location = converter_.get_location_from_decl(call_);
+
+          code_function_callt call;
+          call.location() = location;
+
+          // Create symbol expression for the function (forward reference)
+          symbol_exprt func_sym(function_id_.to_string(), code_typet());
+          call.function() = func_sym;
+          call.type() = empty_typet(); // Will be resolved later
+
+          // Process arguments normally
+          for (const auto &arg_node : call_["args"])
+          {
+            exprt arg = converter_.get_expr(arg_node);
+            if (arg.type().is_array())
+            {
+              if (
+                arg_node["_type"] == "Constant" &&
+                arg_node["value"].is_string())
+              {
+                arg = string_constantt(
+                  arg_node["value"].get<std::string>(),
+                  arg.type(),
+                  string_constantt::k_default);
+              }
+              call.arguments().push_back(address_of_exprt(arg));
+            }
+            else
+              call.arguments().push_back(arg);
+          }
+
+          return std::move(call);
+        }
+        else
+        {
+          // Not a forward reference - use existing behavior for built-ins/imports/undefined functions
+          log_warning("Undefined function: {}", func_name.c_str());
+          return exprt();
+        }
       }
     }
   }
