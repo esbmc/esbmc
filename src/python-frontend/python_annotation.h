@@ -113,14 +113,10 @@ public:
     {
       // Process top-level functions
       if (element["_type"] == "FunctionDef")
-      {
         annotate_function(element);
-      }
       // Process classes and their methods
       else if (element["_type"] == "ClassDef")
-      {
         annotate_class(element);
-      }
     }
   }
 
@@ -301,19 +297,13 @@ private:
       stmt.contains("value") ? stmt["value"]["left"] : stmt["left"];
 
     if (lhs["_type"] == "BinOp")
-    {
       type = get_type_from_binary_expr(lhs, body);
-    }
     else if (lhs["_type"] == "List")
-    {
       type = "list";
-    }
     // Floor division (//) operations always result in an integer value
     else if (
       stmt.contains("value") && stmt["value"]["op"]["_type"] == "FloorDiv")
-    {
       type = "int";
-    }
     else
     {
       // If the LHS of the binary operation is a variable, its type is retrieved
@@ -359,9 +349,7 @@ private:
               type = subtype.empty() ? "Any" : subtype;
             }
             else
-            {
               type = "Any"; // Unknown list element type
-            }
           }
         }
       }
@@ -705,9 +693,7 @@ private:
 
     // Split the string using "." as the delimiter
     while (std::getline(stream, token, '.'))
-    {
       substrings.push_back(token);
-    }
 
     // Reverse the order of the substrings
     std::reverse(substrings.begin(), substrings.end());
@@ -717,9 +703,7 @@ private:
     for (size_t i = 0; i < substrings.size(); ++i)
     {
       if (i != 0)
-      {
         result += "."; // Add the dot separator
-      }
       result += substrings[i];
     }
 
@@ -797,13 +781,9 @@ private:
 
     // Get type from RHS constant
     if (value_type == "Constant")
-    {
       inferred_type = get_type_from_constant(stmt["value"]);
-    }
     else if (value_type == "List")
-    {
       inferred_type = "list";
-    }
     else if (value_type == "UnaryOp") // Handle negative numbers
     {
       const auto &operand = stmt["value"]["operand"];
@@ -816,9 +796,7 @@ private:
 
     // Get type from RHS variable
     else if (value_type == "Name" || value_type == "Subscript")
-    {
       inferred_type = get_type_from_rhs_variable(stmt, body);
-    }
 
     // Get type from RHS binary expression
     else if (value_type == "BinOp")
@@ -935,9 +913,7 @@ private:
 
     // Determine the ID based on the target type
     if (target.contains("id"))
-    {
       id = target["id"];
-    }
     // Get LHS from members access on assignments. e.g.: x.data = 10
     else if (target["_type"] == "Attribute")
     {
@@ -945,9 +921,7 @@ private:
            target["attr"].template get<std::string>();
     }
     else if (target.contains("slice"))
-    {
       return; // No need to annotate assignments to array elements.
-    }
 
     assert(!id.empty());
 
@@ -991,16 +965,12 @@ private:
     if (element["value"].contains("args"))
     {
       for (auto &arg : element["value"]["args"])
-      {
         update_offsets(arg);
-      }
     }
 
     // Adjust column offsets in function call node
     if (element["value"].contains("func"))
-    {
       update_offsets(element["value"]["func"]);
-    }
   }
 
   void update_end_col_offset(Json &ast)
