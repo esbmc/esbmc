@@ -765,8 +765,16 @@ private:
     if (obj_node.empty())
       throw std::runtime_error("Object \"" + obj + "\" not found.");
 
-    const std::string &obj_type =
-      obj_node["annotation"]["id"].template get<std::string>();
+    std::string obj_type;
+    if (
+      obj_node.contains("annotation") && !obj_node["annotation"].is_null() &&
+      obj_node["annotation"].contains("id") &&
+      !obj_node["annotation"]["id"].is_null())
+    {
+      obj_type = obj_node["annotation"]["id"].template get<std::string>();
+    }
+    else
+      obj_type = "Any"; // Default fallback type
 
     if (type_utils::is_builtin_type(obj_type))
       type = obj_type;
