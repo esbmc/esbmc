@@ -61,15 +61,15 @@ double exp(double x)
 
 static double log1p_taylor(double x)
 {
-  /* Compute truncated Taylor series of ln(x+1) around 0:
-   * x - x^2/2! + x^3/3! - x^4/4! + ... +- x^n/n! */
+  /* Compute truncated Taylor series of ln(1+x) around 0:
+   * x - x^2/2 + x^3/3 - x^4/4 + ... +- x^n/n */
   double acc = x;
   double smd = x;
-  acc += (smd *= x / -2);
-  acc += (smd *= x / -3);
-  acc += (smd *= x / -4);
-  acc += (smd *= x / -5);
-  // acc += (smd *= x / -6);
+  acc += (smd *= x) / -2;
+  acc += (smd *= x) / -3;
+  acc += (smd *= x) / -4;
+  acc += (smd *= x) / -5;
+  acc += (smd *= x) / -6;
   // acc += (smd *= x / -7);
   // acc += (smd *= x / -8);
   return acc;
