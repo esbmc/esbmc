@@ -701,13 +701,7 @@ void execution_statet::execute_guard()
   {
     // A context switch happens, add last thread state guard to assumption.
     if (active_thread != last_active_thread)
-    {
-      target->assumption(
-        guardt().as_expr(),
-        parent_guard,
-        get_active_state().source,
-        first_loop);
-    }
+      assume(parent_guard);
     cur_state->guard.make_false();
     return;
   }
@@ -720,8 +714,7 @@ void execution_statet::execute_guard()
   do_simplify(parent_guard);
 
   if (active_thread != last_active_thread)
-    target->assumption(
-      guardt().as_expr(), parent_guard, get_active_state().source, first_loop);
+    assume(parent_guard);
 }
 
 unsigned int execution_statet::add_thread(const goto_programt *prog)
