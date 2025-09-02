@@ -1258,41 +1258,8 @@ exprt function_call_expr::get()
         // by searching the AST directly
         bool is_forward_reference = false;
 
-        // Lambda to recursively search for FunctionDef nodes
-        std::function<bool(const nlohmann::json &)> search_ast =
-          [&](const nlohmann::json &node) -> bool {
-          if (!node.is_object())
-            return false;
-
-          // Check if this is a function definition with matching name
-          if (
-            node.contains("_type") && node["_type"] == "FunctionDef" &&
-            node.contains("name") && node["name"] == func_name)
-          {
-            return true;
-          }
-
-          // Recursively search all child nodes
-          for (const auto &[key, value] : node.items())
-          {
-            if (value.is_array())
-            {
-              for (const auto &item : value)
-              {
-                if (search_ast(item))
-                  return true;
-              }
-            }
-            else if (value.is_object())
-            {
-              if (search_ast(value))
-                return true;
-            }
-          }
-          return false;
-        };
-
-        is_forward_reference = search_ast(converter_.ast());
+        is_forward_reference =
+          json_utils::search_function_in_ast(converter_.ast(), func_name);
 
         if (is_forward_reference)
         {
