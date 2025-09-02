@@ -667,7 +667,15 @@ private:
         return "Any"; // Default for unknown subscript types when annotation is missing
     }
 
-    return rhs_node["annotation"]["id"];
+    if (
+      rhs_node.contains("annotation") && !rhs_node["annotation"].is_null() &&
+      rhs_node["annotation"].contains("id") &&
+      !rhs_node["annotation"]["id"].is_null())
+    {
+      return rhs_node["annotation"]["id"];
+    }
+    else
+      return "Any"; // Default for cases where annotation is missing or null
   }
 
   std::string get_type_from_call(const Json &element)
@@ -774,6 +782,9 @@ private:
 
     if (stmt["_type"] == "arg")
     {
+      if (!stmt.contains("annotation") || stmt["annotation"].is_null())
+        return InferResult::UNKNOWN;
+
       if (stmt["annotation"].contains("value"))
         inferred_type =
           stmt["annotation"]["value"]["id"].template get<std::string>();
@@ -957,7 +968,8 @@ private:
     element.erase("type_comment");
 
     // Update value fields with the correct offsets
-    auto update_offsets = [&inferred_type](Json &value) {
+    auto update_offsets = [&inferred_type](Json &value)
+    {
       value["col_offset"] =
         value["col_offset"].template get<int>() + inferred_type.size() + 1;
       value["end_col_offset"] =
