@@ -10,6 +10,40 @@
 namespace json_utils
 {
 template <typename JsonType>
+bool search_function_in_ast(const JsonType &node, const std::string &func_name)
+{
+  if (!node.is_object())
+    return false;
+
+  // Check if this is a function definition with matching name
+  if (
+    node.contains("_type") && node["_type"] == "FunctionDef" &&
+    node.contains("name") && node["name"] == func_name)
+  {
+    return true;
+  }
+
+  // Recursively search all child nodes
+  for (const auto &[key, value] : node.items())
+  {
+    if (value.is_array())
+    {
+      for (const auto &item : value)
+      {
+        if (search_function_in_ast(item, func_name))
+          return true;
+      }
+    }
+    else if (value.is_object())
+    {
+      if (search_function_in_ast(value, func_name))
+        return true;
+    }
+  }
+  return false;
+}
+
+template <typename JsonType>
 JsonType find_class(const JsonType &ast_json, const std::string &class_name)
 {
   auto it =
