@@ -113,14 +113,10 @@ public:
     {
       // Process top-level functions
       if (element["_type"] == "FunctionDef")
-      {
         annotate_function(element);
-      }
       // Process classes and their methods
       else if (element["_type"] == "ClassDef")
-      {
         annotate_class(element);
-      }
     }
   }
 
@@ -301,19 +297,13 @@ private:
       stmt.contains("value") ? stmt["value"]["left"] : stmt["left"];
 
     if (lhs["_type"] == "BinOp")
-    {
       type = get_type_from_binary_expr(lhs, body);
-    }
     else if (lhs["_type"] == "List")
-    {
       type = "list";
-    }
     // Floor division (//) operations always result in an integer value
     else if (
       stmt.contains("value") && stmt["value"]["op"]["_type"] == "FloorDiv")
-    {
       type = "int";
-    }
     else
     {
       // If the LHS of the binary operation is a variable, its type is retrieved
@@ -359,11 +349,20 @@ private:
               type = subtype.empty() ? "Any" : subtype;
             }
             else
-            {
               type = "Any"; // Unknown list element type
-            }
           }
         }
+      }
+      else if (lhs["_type"] == "Call" && lhs["func"]["_type"] == "Name")
+      {
+        // Handle function calls in binary expressions like float("1.1") + float("2.2")
+        const std::string &func_name = lhs["func"]["id"];
+
+        if (type_utils::is_builtin_type(func_name))
+          type = func_name; // float() returns float, int() returns int, etc.
+        else
+          type = get_function_return_type(
+            func_name, body); // For user-defined functions
       }
       else if (lhs["_type"] == "Constant")
         type = get_type_from_constant(lhs);
@@ -372,6 +371,33 @@ private:
     }
 
     return type;
+  }
+
+  Json find_lambda_in_body(const std::string &func_name, const Json &body) const
+  {
+    for (const Json &elem : body)
+    {
+      if (
+        elem["_type"] == "Assign" && !elem["targets"].empty() &&
+        elem["targets"][0].contains("id") &&
+        elem["targets"][0]["id"] == func_name && elem.contains("value") &&
+        elem["value"]["_type"] == "Lambda")
+      {
+        return elem;
+      }
+    }
+    return Json();
+  }
+
+  std::string infer_lambda_return_type(const Json &lambda_elem) const
+  {
+    const Json &lambda_body = lambda_elem["value"]["body"];
+    if (lambda_body["_type"] == "BinOp")
+      return "float"; // Match converter's default of double_type()
+    else if (lambda_body["_type"] == "Compare")
+      return "bool";
+    else
+      return "Any"; // Default for other lambda expressions
   }
 
   std::string
@@ -451,6 +477,16 @@ private:
       }
     }
 
+    // Check for lambda assignments when regular function not found
+    Json lambda_elem = find_lambda_in_body(func_name, ast["body"]);
+
+    // Also check current function scope if not found globally
+    if (lambda_elem.empty() && current_func != nullptr)
+      lambda_elem = find_lambda_in_body(func_name, (*current_func)["body"]);
+
+    if (!lambda_elem.empty())
+      return infer_lambda_return_type(lambda_elem);
+
     // Get type from imported functions
     try
     {
@@ -521,7 +557,9 @@ private:
   {
     std::string list_subtype;
 
-    if (list["_type"] == "Call" && list["func"]["attr"] == "array")
+    if (
+      list["_type"] == "Call" && list.contains("func") &&
+      list["func"].contains("attr") && list["func"]["attr"] == "array")
       return get_list_subtype(list["args"][0]);
 
     if (!list.contains("elts"))
@@ -531,12 +569,9 @@ private:
       list_subtype = get_type_from_json(list["elts"][0]["value"]);
 
     for (const auto &elem : list["elts"])
-    {
       if (get_type_from_json(elem["value"]) != list_subtype)
-      {
         throw std::runtime_error("Multiple typed lists are not supported\n");
-      }
-    }
+
     return list_subtype;
   }
 
@@ -563,9 +598,7 @@ private:
       auto var = json_utils::get_var_node(rhs_var_name, body);
       std::string type;
       if (infer_type(var, body, type) == InferResult::OK && !type.empty())
-      {
         return type;
-      }
     }
 
     // Find RHS variable declaration in the current function
@@ -602,10 +635,31 @@ private:
 
     if (value_type == "Subscript")
     {
-      if (!rhs_node["value"].is_null())
-        return get_list_subtype(rhs_node["value"]);
+      // Check if annotation exists and is not null before accessing
+      if (
+        rhs_node.contains("annotation") && !rhs_node["annotation"].is_null() &&
+        rhs_node["annotation"].contains("id"))
+      {
+        // Get the type of the variable being subscripted
+        const std::string &var_type = rhs_node["annotation"]["id"];
+
+        // Handle string subscript: str[index] returns str
+        if (var_type == "str")
+          return "str";
+        // Handle list subscript: use existing logic
+        else if (var_type == "list")
+        {
+          if (!rhs_node["value"].is_null())
+            return get_list_subtype(rhs_node["value"]);
+          else
+            return "Any"; // Default for unknown list element types
+        }
+        // Handle other subscript operations
+        else
+          return "Any"; // Default for unknown subscript types
+      }
       else
-        return "Any"; // Default for unknown subscript types
+        return "Any"; // Default for unknown subscript types when annotation is missing
     }
 
     return rhs_node["annotation"]["id"];
@@ -639,9 +693,7 @@ private:
 
     // Split the string using "." as the delimiter
     while (std::getline(stream, token, '.'))
-    {
       substrings.push_back(token);
-    }
 
     // Reverse the order of the substrings
     std::reverse(substrings.begin(), substrings.end());
@@ -651,9 +703,7 @@ private:
     for (size_t i = 0; i < substrings.size(); ++i)
     {
       if (i != 0)
-      {
         result += "."; // Add the dot separator
-      }
       result += substrings[i];
     }
 
@@ -731,13 +781,9 @@ private:
 
     // Get type from RHS constant
     if (value_type == "Constant")
-    {
       inferred_type = get_type_from_constant(stmt["value"]);
-    }
     else if (value_type == "List")
-    {
       inferred_type = "list";
-    }
     else if (value_type == "UnaryOp") // Handle negative numbers
     {
       const auto &operand = stmt["value"]["operand"];
@@ -750,9 +796,7 @@ private:
 
     // Get type from RHS variable
     else if (value_type == "Name" || value_type == "Subscript")
-    {
       inferred_type = get_type_from_rhs_variable(stmt, body);
-    }
 
     // Get type from RHS binary expression
     else if (value_type == "BinOp")
@@ -799,7 +843,7 @@ private:
 
       auto &stmt_type = element["_type"];
 
-      if (stmt_type == "If" || stmt_type == "While")
+      if (stmt_type == "If" || stmt_type == "While" || stmt_type == "Try")
       {
         add_annotation(element);
         continue;
@@ -869,9 +913,7 @@ private:
 
     // Determine the ID based on the target type
     if (target.contains("id"))
-    {
       id = target["id"];
-    }
     // Get LHS from members access on assignments. e.g.: x.data = 10
     else if (target["_type"] == "Attribute")
     {
@@ -879,9 +921,7 @@ private:
            target["attr"].template get<std::string>();
     }
     else if (target.contains("slice"))
-    {
       return; // No need to annotate assignments to array elements.
-    }
 
     assert(!id.empty());
 
@@ -925,16 +965,12 @@ private:
     if (element["value"].contains("args"))
     {
       for (auto &arg : element["value"]["args"])
-      {
         update_offsets(arg);
-      }
     }
 
     // Adjust column offsets in function call node
     if (element["value"].contains("func"))
-    {
       update_offsets(element["value"]["func"]);
-    }
   }
 
   void update_end_col_offset(Json &ast)

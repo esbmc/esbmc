@@ -13,8 +13,12 @@
 #include <util/encoding.h>
 
 #include <algorithm>
+#include <cmath>
+#include <cstring>
+#include <iomanip>
 #include <fstream>
 #include <regex>
+#include <sstream>
 #include <unordered_map>
 
 #include <boost/filesystem.hpp>
@@ -55,31 +59,6 @@ static const std::unordered_map<std::string, StatementType> statement_map = {
   {"Global", StatementType::GLOBAL},
   {"Try", StatementType::TRY},
   {"ExceptHandler", StatementType::EXCEPTHANDLER}};
-
-static bool is_char_type(const typet &t)
-{
-  return (t.is_signedbv() || t.is_unsignedbv()) && t.get("#cpp_type") == "char";
-}
-
-static bool is_float_vs_char(const exprt &a, const exprt &b)
-{
-  const auto &type_a = a.type();
-  const auto &type_b = b.type();
-  return (type_a.is_floatbv() && is_char_type(type_b)) ||
-         (type_b.is_floatbv() && is_char_type(type_a));
-}
-
-static bool is_ordered_comparison(const std::string &op)
-{
-  return op == "Lt" || op == "Gt" || op == "LtE" || op == "GtE";
-}
-
-static bool is_relational_op(const std::string &op)
-{
-  return (
-    op == "Eq" || op == "Lt" || op == "LtE" || op == "NotEq" || op == "Gt" ||
-    op == "GtE" || op == "And" || op == "Or");
-}
 
 static StatementType get_statement_type(const nlohmann::json &element)
 {
@@ -195,7 +174,9 @@ static ExpressionType get_expression_type(const nlohmann::json &element)
     {"Call", ExpressionType::FUNC_CALL},
     {"IfExp", ExpressionType::IF_EXPR},
     {"Subscript", ExpressionType::SUBSCRIPT},
-    {"List", ExpressionType::LIST}};
+    {"List", ExpressionType::LIST},
+    {"Lambda", ExpressionType::FUNC_CALL},
+    {"JoinedStr", ExpressionType::FSTRING}};
 
   const auto &type = element["_type"];
   auto it = type_map.find(type);
@@ -314,55 +295,6 @@ void python_converter::promote_int_to_float(exprt &op, const typet &target_type)
     update_symbol(op);
 }
 
-// Helper function to get numeric width from type
-size_t get_type_width(const typet &type)
-{
-  // First try to parse width directly
-  try
-  {
-    return std::stoi(type.width().c_str());
-  }
-  catch (const std::exception &)
-  {
-    // If direct parsing fails, try to infer from type name
-    std::string type_str = type.width().as_string();
-
-    // Handle common Python/ESBMC type mappings
-    if (type_str == "int" || type_str == "int32")
-      return 32;
-    else if (type_str == "int64" || type_str == "long")
-      return 64;
-    else if (type_str == "int16" || type_str == "short")
-      return 16;
-    else if (type_str == "int8" || type_str == "char")
-      return 8;
-    else if (type_str == "float" || type_str == "float32")
-      return 32;
-    else if (type_str == "double" || type_str == "float64")
-      return 64;
-    else if (type_str == "bool")
-      return 1;
-
-    // Try to extract number from string like "int32", "uint64", etc.
-    std::regex width_regex(R"(\d+)");
-    std::smatch match;
-    if (std::regex_search(type_str, match, width_regex))
-    {
-      try
-      {
-        return std::stoi(match.str());
-      }
-      catch (const std::exception &)
-      {
-        // Fall through to default
-      }
-    }
-
-    // Default to 32 for unknown types
-    return 32;
-  }
-}
-
 void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
 {
   typet &lhs_type = lhs.type();
@@ -467,8 +399,8 @@ void python_converter::adjust_statement_types(exprt &lhs, exprt &rhs) const
   {
     try
     {
-      const int lhs_width = get_type_width(lhs_type);
-      const int rhs_width = get_type_width(rhs_type);
+      const int lhs_width = type_handler_.get_type_width(lhs_type);
+      const int rhs_width = type_handler_.get_type_width(rhs_type);
 
       if (lhs_width > rhs_width)
       {
@@ -794,7 +726,7 @@ exprt handle_float_vs_string(exprt &bin_expr, const std::string &op)
     // float != str → True (no exception)
     bin_expr.make_true();
   }
-  else if (is_ordered_comparison(op))
+  else if (type_utils::is_ordered_comparison(op))
   {
     // Python-style error: float < str → TypeError
     std::string lower_op = op;
@@ -870,8 +802,363 @@ void python_converter::handle_float_division(
 
 BigInt python_converter::get_string_size(const exprt &expr)
 {
+  if (!expr.type().is_array())
+  {
+    // For non-array types in f-strings, convert them first to get actual size
+    if (
+      expr.is_constant() &&
+      (expr.type().is_signedbv() || expr.type().is_unsignedbv()))
+    {
+      // Convert the actual integer to string to get real size
+      BigInt value =
+        binary2integer(expr.value().as_string(), expr.type().is_signedbv());
+      std::string str_repr = std::to_string(value.to_int64());
+      return BigInt(str_repr.size() + 1); // +1 for null terminator
+    }
+
+    if (expr.is_symbol())
+    {
+      const symbolt *symbol = symbol_table_.find_symbol(expr.identifier());
+      if (symbol && symbol->type.is_array())
+      {
+        const auto &arr_type = to_array_type(symbol->type);
+        return binary2integer(arr_type.size().value().as_string(), false);
+      }
+      // For non-array symbols, we need a reasonable default since we can't compute actual size
+      return BigInt(20); // Conservative default
+    }
+
+    // For other types, use conservative defaults
+    if (expr.type().is_bool())
+      return BigInt(6); // "False" + null terminator
+
+    // Default fallback
+    return BigInt(20);
+  }
+
   const auto &arr_type = to_array_type(expr.type());
   return binary2integer(arr_type.size().value().as_string(), false);
+}
+
+std::string
+python_converter::process_format_spec(const nlohmann::json &format_spec)
+{
+  if (format_spec.is_null() || !format_spec.contains("_type"))
+    return "";
+
+  // Handle direct Constant format spec
+  if (format_spec["_type"] == "Constant" && format_spec.contains("value"))
+    return format_spec["value"].get<std::string>();
+
+  // Handle JoinedStr format spec (which contains Constant values)
+  if (format_spec["_type"] == "JoinedStr" && format_spec.contains("values"))
+  {
+    std::string result;
+    for (const auto &value : format_spec["values"])
+      if (value["_type"] == "Constant" && value.contains("value"))
+        result += value["value"].get<std::string>();
+    return result;
+  }
+
+  // Log warning for unsupported format specifications
+  std::string spec_type = format_spec.contains("_type")
+                            ? format_spec["_type"].get<std::string>()
+                            : "unknown";
+  log_warning("Unsupported f-string format specification type: {}", spec_type);
+
+  return "";
+}
+
+exprt python_converter::apply_format_specification(
+  const exprt &expr,
+  const std::string &format)
+{
+  // Basic format specification handling
+  if (format.empty())
+    return convert_to_string(expr);
+
+  // Handle integer formatting
+  if (format == "d" || format == "i")
+    return convert_to_string(expr);
+
+  // Handle float formatting with precision
+  else if (format.find(".") != std::string::npos && format.back() == 'f')
+  {
+    // Extract precision from format string (e.g., ".2f" -> 2)
+    size_t dot_pos = format.find(".");
+    size_t f_pos = format.find("f");
+    if (
+      dot_pos != std::string::npos && f_pos != std::string::npos &&
+      f_pos > dot_pos)
+    {
+      std::string precision_str =
+        format.substr(dot_pos + 1, f_pos - dot_pos - 1);
+      int precision = 6; // default
+      try
+      {
+        precision = std::stoi(precision_str);
+      }
+      catch (...)
+      {
+        precision = 6;
+      }
+
+      // Handle floatbv expressions (both constant and symbols)
+      if (expr.type().is_floatbv())
+      {
+        const typet &t = expr.type();
+        const std::size_t float_width = bv_width(t);
+
+        // Support common floating point widths
+        if (t.is_floatbv() && (float_width == 32 || float_width == 64))
+        {
+          const std::string *float_bits = nullptr;
+
+          // Handle constant expressions
+          if (expr.is_constant())
+            float_bits = &expr.value().as_string();
+          // Handle symbol expressions
+          else if (expr.is_symbol())
+          {
+            const symbol_exprt &sym_expr = to_symbol_expr(expr);
+            const symbolt *symbol =
+              symbol_table_.find_symbol(sym_expr.get_identifier());
+
+            if (symbol && symbol->value.is_constant())
+              float_bits = &symbol->value.value().as_string();
+          }
+
+          if (float_bits && float_bits->length() == float_width)
+          {
+            double val = 0.0;
+
+            // Handle different floating point widths
+            if (float_width == 32)
+            {
+              // IEEE 754 single precision
+              uint32_t bits = 0;
+              for (std::size_t i = 0; i < float_width; ++i)
+                if ((*float_bits)[i] == '1')
+                  bits |= (1U << (float_width - 1 - i));
+
+              float float_val;
+              std::memcpy(&float_val, &bits, sizeof(float));
+              val = static_cast<double>(float_val);
+            }
+            else if (float_width == 64)
+            {
+              // IEEE 754 double precision
+              uint64_t bits = 0;
+              for (std::size_t i = 0; i < float_width; ++i)
+                if ((*float_bits)[i] == '1')
+                  bits |= (1ULL << (float_width - 1 - i));
+
+              std::memcpy(&val, &bits, sizeof(double));
+            }
+
+            // Use proper rounding to avoid IEEE 754 precision issues
+            double multiplier = std::pow(10.0, precision);
+            double rounded = std::round(val * multiplier) / multiplier;
+
+            std::ostringstream oss;
+            oss << std::fixed << std::setprecision(precision) << rounded;
+            std::string formatted_str = oss.str();
+
+            typet string_type =
+              type_handler_.build_array(char_type(), formatted_str.size() + 1);
+            std::vector<unsigned char> chars(
+              formatted_str.begin(), formatted_str.end());
+            chars.push_back('\0');
+
+            return make_char_array_expr(chars, string_type);
+          }
+        }
+      }
+    }
+  }
+
+  // Default: just convert to string
+  return convert_to_string(expr);
+}
+
+exprt python_converter::convert_to_string(const exprt &expr)
+{
+  const typet &t = expr.type();
+
+  // Already a string/char array - return as is
+  if (t.is_array() && t.subtype() == char_type())
+    return expr;
+
+  // Handle symbol references
+  if (expr.is_symbol())
+  {
+    const symbolt *symbol = symbol_table_.find_symbol(expr.identifier());
+    if (symbol)
+    {
+      // If symbol has string type, return it
+      if (symbol->type.is_array() && symbol->type.subtype() == char_type())
+        return expr;
+
+      // If symbol has a constant value, convert that
+      if (symbol->value.is_constant())
+        return convert_to_string(symbol->value);
+    }
+  }
+
+  // Handle constants
+  if (expr.is_constant())
+  {
+    if (t.is_signedbv() || t.is_unsignedbv())
+    {
+      BigInt value = binary2integer(expr.value().as_string(), t.is_signedbv());
+      std::string str_value = std::to_string(value.to_int64());
+
+      typet string_type =
+        type_handler_.build_array(char_type(), str_value.size() + 1);
+      std::vector<unsigned char> chars(str_value.begin(), str_value.end());
+      chars.push_back('\0'); // null terminator
+
+      return make_char_array_expr(chars, string_type);
+    }
+    else if (t.is_floatbv())
+    {
+      std::string str_value = "0.0";
+      if (expr.is_constant() && !expr.value().empty())
+      {
+        const std::string &float_bits = expr.value().as_string();
+        if (t.is_floatbv() && bv_width(t) == 64 && float_bits.length() == 64)
+        {
+          uint64_t bits = 0;
+          for (size_t i = 0; i < 64; ++i)
+          {
+            if (float_bits[i] == '1')
+              bits |= (1ULL << (63 - i));
+          }
+          double val;
+          std::memcpy(&val, &bits, sizeof(double));
+
+          // Use proper rounding for default precision (6 decimal places)
+          double multiplier = std::pow(10.0, 6);
+          double rounded = std::round(val * multiplier) / multiplier;
+
+          std::ostringstream oss;
+          oss << std::fixed << std::setprecision(6) << rounded;
+          str_value = oss.str();
+        }
+      }
+
+      typet string_type =
+        type_handler_.build_array(char_type(), str_value.size() + 1);
+      std::vector<unsigned char> chars(str_value.begin(), str_value.end());
+      chars.push_back('\0');
+
+      return make_char_array_expr(chars, string_type);
+    }
+    else if (t.is_bool())
+    {
+      // Convert boolean to string
+      bool value = expr.is_true();
+      std::string str_value = value ? "True" : "False";
+
+      typet string_type =
+        type_handler_.build_array(char_type(), str_value.size() + 1);
+      std::vector<unsigned char> chars(str_value.begin(), str_value.end());
+      chars.push_back('\0');
+
+      return make_char_array_expr(chars, string_type);
+    }
+  }
+
+  // For non-constant expressions, we'd need runtime conversion
+  // For now, create a placeholder string
+  std::string placeholder = "<expr>";
+  typet string_type =
+    type_handler_.build_array(char_type(), placeholder.size() + 1);
+  std::vector<unsigned char> chars(placeholder.begin(), placeholder.end());
+  chars.push_back('\0');
+
+  return make_char_array_expr(chars, string_type);
+}
+
+exprt python_converter::get_fstring_expr(const nlohmann::json &element)
+{
+  if (!element.contains("values") || element["values"].empty())
+  {
+    // Empty f-string
+    typet empty_string_type = type_handler_.build_array(char_type(), 1);
+    exprt empty_str = gen_zero(empty_string_type);
+    empty_str.operands().at(0) = from_integer(0, char_type());
+    return empty_str;
+  }
+
+  const auto &values = element["values"];
+  std::vector<exprt> parts;
+  BigInt total_estimated_size = BigInt(1); // Start with 1 for null terminator
+
+  for (const auto &value : values)
+  {
+    exprt part_expr;
+
+    try
+    {
+      if (value["_type"] == "Constant")
+      {
+        // String literal part
+        part_expr = get_literal(value);
+      }
+      else if (value["_type"] == "FormattedValue")
+      {
+        // Expression to be formatted
+        exprt expr = get_expr(value["value"]);
+
+        // Handle format specification if present
+        if (value.contains("format_spec") && !value["format_spec"].is_null())
+        {
+          std::string format = process_format_spec(value["format_spec"]);
+          part_expr = apply_format_specification(expr, format);
+        }
+        else
+          part_expr = convert_to_string(expr);
+      }
+      else
+      {
+        // Other expression types
+        exprt expr = get_expr(value);
+        part_expr = convert_to_string(expr);
+      }
+
+      parts.push_back(part_expr);
+      total_estimated_size += get_string_size(part_expr) -
+                              1; // -1 to avoid double counting terminators
+    }
+    catch (const std::exception &e)
+    {
+      log_warning("Error processing f-string part: {}", e.what());
+      // Create error placeholder
+      std::string error_str = "<error>";
+      typet error_type =
+        type_handler_.build_array(char_type(), error_str.size() + 1);
+      std::vector<unsigned char> chars(error_str.begin(), error_str.end());
+      chars.push_back('\0');
+      parts.push_back(make_char_array_expr(chars, error_type));
+      total_estimated_size += BigInt(error_str.size());
+    }
+  }
+
+  // If only one part, return it directly
+  if (parts.size() == 1)
+    return parts[0];
+
+  // Concatenate all parts
+  exprt result = parts[0];
+  for (size_t i = 1; i < parts.size(); ++i)
+  {
+    nlohmann::json empty_left, empty_right;
+    result =
+      handle_string_concatenation(result, parts[i], empty_left, empty_right);
+  }
+
+  return result;
 }
 
 exprt python_converter::handle_string_concatenation(
@@ -913,17 +1200,43 @@ exprt python_converter::handle_string_concatenation(
     }
   };
 
-  if (left["_type"] == "Name")
-    append_from_symbol(lhs.identifier().as_string());
-  else if (left["_type"] == "Constant")
-    append_from_json(left);
+  auto append_from_expr = [&](const exprt &expr) {
+    if (expr.is_constant() && expr.type().is_array())
+    {
+      for (const auto &ch : expr.operands())
+      {
+        if (ch.is_constant() && ch != gen_zero(ch.type()))
+          if (i < result.operands().size())
+            result.operands().at(i++) = ch;
+      }
+    }
+    else if (expr.is_symbol())
+      append_from_symbol(expr.identifier().as_string());
+  };
 
-  if (right["_type"] == "Name")
-    append_from_symbol(rhs.identifier().as_string());
-  else if (right["_type"] == "Constant")
-    append_from_json(right);
+  auto append_from_json_or_expr =
+    [&](const nlohmann::json &node, const exprt &expr) {
+      if (!node.contains("_type"))
+      {
+        append_from_expr(expr);
+        return;
+      }
+      const std::string type = node["_type"].get<std::string>();
+      if (type == "Name")
+        append_from_symbol(expr.identifier().as_string());
+      else if (type == "Constant" && node.contains("value"))
+        append_from_json(node);
+      else
+        append_from_expr(expr);
+    };
 
-  result.operands().push_back(gen_zero(t.subtype()));
+  // Use the helper for both operands
+  append_from_json_or_expr(left, lhs);
+  append_from_json_or_expr(right, rhs);
+
+  // Add null terminator
+  if (i < result.operands().size())
+    result.operands().at(i) = gen_zero(t.subtype());
 
   return result;
 }
@@ -1582,9 +1895,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
           list_size = std::stoi(symbol->value.value().as_string(), nullptr, 2);
         }
         else if (lhs.is_constant())
-        {
           list_size = std::stoi(lhs.value().as_string(), nullptr, 2);
-        }
 
         // List element is the rhs
         list_elem = get_expr(right["elts"][0]);
@@ -1661,16 +1972,12 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
           list_size = std::stoi(symbol->value.value().as_string(), nullptr, 2);
         }
         else if (rhs.is_constant())
-        {
           list_size = std::stoi(rhs.value().as_string(), nullptr, 2);
-        }
       }
 
       typet st =
         (lhs.type().is_array()) ? lhs.type().subtype() : rhs.type().subtype();
-
       typet list_type = array_typet(st, from_integer(list_size, int_type()));
-
       exprt list = gen_zero(list_type);
 
       for (int64_t i = 0; i < list_size.to_int64(); ++i)
@@ -1734,7 +2041,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   // For Python division ("/"), the result is always a float regardless of operand types.
   // Otherwise, it inherits the type of the left-hand side (lhs).
   typet type;
-  if (is_relational_op(op))
+  if (type_utils::is_relational_op(op))
     type = bool_type();
   else if (op == "Div" || op == "div")
     type = double_type(); // Python division always returns float
@@ -1763,19 +2070,10 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   // Add lhs and rhs as operands to the binary expression.
   bin_expr.copy_to_operands(lhs, rhs);
 
-  // According to the Python 3 Language Reference (Section 6.10, "Comparisons"):
-  // - Equality comparisons (==, !=) between built-in incompatible types like float and str do not raise an exception.
-  //   Instead, they typically evaluate to False for `==` and True for `!=`.
-  // - However, ordered comparisons (<, <=, >, >=) between incompatible types such as float and str
-  //   raise a TypeError at runtime.
-  //
-  // References:
-  // - https://docs.python.org/3/reference/expressions.html#comparisons
-  // - https://docs.python.org/3/library/stdtypes.html#typeerror
-  //
-  // This block emulates that behavior in ESBMC's symbolic execution: converting equality comparisons to
-  // constants (false or true), and rejecting invalid ordered comparisons with a runtime error.
-  if (is_float_vs_char(lhs, rhs))
+  // Python 3 comparison behavior: equality (==, !=) between incompatible types
+  // returns False/True, but ordered comparisons (<, >, etc.) raise TypeError.
+  // This emulates that behavior in ESBMC's symbolic execution.
+  if (type_utils::is_float_vs_char(lhs, rhs))
     return handle_float_vs_string(bin_expr, op);
 
   // floor division (//) operation corresponds to an int division with floor rounding
@@ -1979,8 +2277,47 @@ bool python_converter::is_imported_module(const std::string &module_name) const
 exprt python_converter::get_function_call(const nlohmann::json &element)
 {
   if (!element.contains("func") || element["_type"] != "Call")
-  {
     throw std::runtime_error("Invalid function call");
+
+  // Handle indirect calls through function pointer variables
+  if (element["func"]["_type"] == "Name")
+  {
+    std::string func_name = element["func"]["id"].get<std::string>();
+
+    // Try to find as a variable first
+    symbol_id var_sid = create_symbol_id();
+    var_sid.set_object(func_name);
+    symbolt *var_symbol = find_symbol(var_sid.to_string());
+
+    if (var_symbol && var_symbol->type.is_pointer())
+    {
+      // This is an indirect call through function pointer
+      side_effect_expr_function_callt call;
+      call.location() = get_location_from_decl(element);
+
+      // The function pointer itself, not dereferenced
+      exprt func_ptr_expr = symbol_expr(*var_symbol);
+      call.function() = func_ptr_expr;
+
+      // Set return type
+      if (var_symbol->type.subtype().is_code())
+      {
+        const code_typet &func_type = to_code_type(var_symbol->type.subtype());
+        call.type() = func_type.return_type();
+      }
+
+      // Process arguments
+      if (element.contains("args"))
+      {
+        for (const auto &arg_element : element["args"])
+        {
+          exprt arg_expr = get_expr(arg_element);
+          call.arguments().push_back(arg_expr);
+        }
+      }
+
+      return call;
+    }
   }
 
   const std::string function = config.options.get_option("function");
@@ -2029,24 +2366,9 @@ exprt python_converter::make_char_array_expr(
 
   return expr;
 }
-
-/// Convert a Python AST literal element to an expression.
-/// This function handles various Python 3 literal types, including:
-///   - Integers (e.g., `42`)
-///   - Booleans (`True`, `False`)
-///   - Floats (e.g., `3.14`)
-///   - Characters (e.g., `'a'`)
-///   - Strings (e.g., `"hello"`)
-///   - Byte literals (e.g., `b"data"`)
-///   - Ignores docstrings or other unsupported formats
-///
-/// Example JSON input:
-/// { "_type": "Constant", "value": 42 }               → returns integer constant expr
-/// { "_type": "Constant", "value": "a" }              → returns char literal expr
-/// { "_type": "Constant", "value": "hello" }          → returns string literal expr
-/// { "_type": "Constant", "value": true }             → returns boolean expr
-/// { "_type": "UnaryOp", "op": "USub", "operand":
-/// { "_type": "Constant", "value": 42 } }           → returns -42 as integer expr
+/// Convert Python AST literal to expression.
+/// Handles integers, booleans, floats, chars, strings, and byte literals.
+/// Example: {"_type": "Constant", "value": 42} -> integer constant expr
 exprt python_converter::get_literal(const nlohmann::json &element)
 {
   // Determine the source of the literal's value.
@@ -2101,14 +2423,10 @@ exprt python_converter::get_literal(const nlohmann::json &element)
   {
     // Handle bytes literal - check for encoded_bytes field first
     if (element.contains("encoded_bytes"))
-    {
       string_literal =
         base64_decode(element["encoded_bytes"].get<std::string>());
-    }
     else
-    {
       string_literal.assign(str_val.begin(), str_val.end());
-    }
 
     // Set appropriate bytes type
     t = type_handler_.get_typet("bytes", string_literal.size());
@@ -2275,6 +2593,105 @@ symbolt &python_converter::create_tmp_symbol(
   return cl;
 }
 
+exprt python_converter::get_lambda_expr(const nlohmann::json &element)
+{
+  // Generate unique lambda name
+  static int lambda_counter = 0;
+  std::string lambda_name = "lam" + std::to_string(++lambda_counter);
+
+  locationt location = get_location_from_decl(element);
+
+  // Save current context and set lambda context
+  std::string old_func_name = current_func_name_;
+  current_func_name_ = lambda_name;
+
+  // Create function type with proper return type detection
+  code_typet lambda_type;
+  typet return_type = double_type();
+  // TODO: Try to infer better return type from the body if possible
+  if (element.contains("body"))
+    current_element_type = return_type;
+  lambda_type.return_type() = return_type;
+
+  std::string module_name = location.get_file().as_string();
+  std::string lambda_id = "py:" + module_name + "@F@" + lambda_name;
+
+  // Process arguments and create parameter symbols
+  if (element.contains("args") && element["args"].contains("args"))
+  {
+    for (const auto &arg : element["args"]["args"])
+    {
+      std::string arg_name = arg["arg"].get<std::string>();
+
+      // Determine parameter type
+      // TODO: try to infer from usage or default to double
+      typet param_type = double_type();
+
+      // Create function argument
+      code_typet::argumentt argument;
+      argument.type() = param_type;
+      argument.cmt_base_name(arg_name);
+
+      std::string param_id = lambda_id + "@" + arg_name;
+      argument.cmt_identifier(param_id);
+      argument.location() = location;
+      lambda_type.arguments().push_back(argument);
+
+      // Create parameter symbol with all necessary fields
+      symbolt param_symbol;
+      param_symbol.id = param_id;
+      param_symbol.name = arg_name;
+      param_symbol.type = param_type;
+      param_symbol.location = location;
+      param_symbol.mode = "Python";
+      param_symbol.module = module_name;
+      param_symbol.lvalue = true;
+      param_symbol.is_parameter = true;
+      param_symbol.file_local = true;
+      param_symbol.static_lifetime = false;
+      param_symbol.is_extern = false;
+      symbol_table_.add(param_symbol);
+    }
+  }
+
+  // Create lambda function symbol
+  symbolt lambda_symbol;
+  lambda_symbol.id = lambda_id;
+  lambda_symbol.name = lambda_name;
+  lambda_symbol.type = lambda_type;
+  lambda_symbol.location = location;
+  lambda_symbol.mode = "Python";
+  lambda_symbol.module = module_name;
+  lambda_symbol.lvalue = true;
+  lambda_symbol.is_extern = false;
+  lambda_symbol.file_local = false;
+  lambda_symbol.static_lifetime = false;
+
+  symbolt *added_symbol = symbol_table_.move_symbol_to_context(lambda_symbol);
+
+  // Process lambda body
+  if (element.contains("body"))
+  {
+    code_blockt lambda_block;
+
+    // Process the body expression
+    exprt body_expr = get_expr(element["body"]);
+
+    // Create return statement
+    code_returnt return_stmt;
+    return_stmt.return_value() = body_expr;
+    return_stmt.location() = location;
+
+    lambda_block.copy_to_operands(return_stmt);
+    added_symbol->value = lambda_block;
+  }
+
+  // Restore context
+  current_func_name_ = old_func_name;
+
+  return symbol_expr(*added_symbol);
+}
+
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
   exprt expr;
@@ -2309,17 +2726,13 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     typet list_type = type_handler_.get_list_type(element);
 
     if (list_size == zero)
-    {
       current_element_type = list_type;
-    }
 
     exprt list = gen_zero(list_type);
 
     unsigned int i = 0;
     for (auto &e : element["elts"])
-    {
       list.operands().at(i++) = get_expr(e);
-    }
 
     symbolt &cl =
       create_tmp_symbol(element, "$compound-literal$", list_type, list);
@@ -2480,7 +2893,11 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   case ExpressionType::FUNC_CALL:
   {
-    expr = get_function_call(element);
+    // Check if this is a lambda expression
+    if (element["_type"] == "Lambda")
+      expr = get_lambda_expr(element);
+    else
+      expr = get_function_call(element);
     break;
   }
   // Ternary operator
@@ -2536,6 +2953,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     }
     break;
   }
+  case ExpressionType::FSTRING:
+    expr = get_fstring_expr(element);
+    break;
   default:
   {
     const auto &lineno = element["lineno"].template get<int>();
@@ -2574,6 +2994,12 @@ size_t python_converter::get_type_size(const nlohmann::json &ast_node)
 {
   size_t type_size = 0;
 
+  // Handle lambda functions - they don't have a meaningful size
+  if (
+    ast_node.contains("value") && ast_node["value"].contains("_type") &&
+    ast_node["value"]["_type"] == "Lambda")
+    return 0;
+
   if (ast_node.contains("value") && ast_node["value"].contains("value"))
   {
     // Handle bytes literals
@@ -2600,6 +3026,7 @@ size_t python_converter::get_type_size(const nlohmann::json &ast_node)
   }
   else if (
     ast_node["value"].contains("args") &&
+    ast_node["value"]["args"].is_array() &&
     ast_node["value"]["args"].size() > 0 &&
     ast_node["value"]["args"][0].contains("value") &&
     ast_node["value"]["args"][0]["value"].is_string())
@@ -2654,10 +3081,8 @@ symbolt python_converter::create_return_temp_variable(
 const nlohmann::json &get_return_statement(const nlohmann::json &function)
 {
   for (const auto &stmt : function["body"])
-  {
     if (get_statement_type(stmt) == StatementType::RETURN)
       return stmt;
-  }
 
   throw std::runtime_error(
     "Function " + function["name"].get<std::string>() +
@@ -2812,6 +3237,29 @@ void python_converter::get_var_assign(
       }
     }
 
+    // Special handling for lambda assignments - create symbol dynamically
+    if (
+      !lhs_symbol && !is_global && ast_node.contains("value") &&
+      ast_node["value"].contains("_type") &&
+      ast_node["value"]["_type"] == "Lambda")
+    {
+      // For lambda assignments, we need to create the variable symbol
+      // The type will be set to function pointer later when processing the RHS
+      locationt location = get_location_from_decl(target);
+      std::string module_name = location.get_file().as_string();
+
+      // Create with placeholder type that will be updated later
+      typet placeholder_type = pointer_typet(empty_typet());
+
+      symbolt symbol = create_symbol(
+        module_name, name, sid.to_string(), location, placeholder_type);
+      symbol.lvalue = true;
+      symbol.file_local = true;
+      symbol.is_extern = false;
+
+      lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
+    }
+
     if (!lhs_symbol && !is_global)
       throw std::runtime_error("Type undefined for \"" + name + "\"");
 
@@ -2839,7 +3287,35 @@ void python_converter::get_var_assign(
 
   if (has_value && rhs != exprt("_init_undefined"))
   {
-    if (lhs_symbol)
+    // Handle lambda assignments
+    if (
+      ast_node.contains("value") && ast_node["value"].contains("_type") &&
+      ast_node["value"]["_type"] == "Lambda" && rhs.is_symbol())
+    {
+      // Get the lambda function symbol
+      const symbolt *lambda_func_symbol =
+        symbol_table_.find_symbol(rhs.identifier());
+      if (lambda_func_symbol && lhs_symbol)
+      {
+        // Ensure the lambda function type is a proper code_typet
+        if (lambda_func_symbol->type.is_code())
+        {
+          // Create function pointer type properly
+          typet func_ptr_type = gen_pointer_type(lambda_func_symbol->type);
+          lhs_symbol->type = func_ptr_type;
+          lhs.type() = func_ptr_type;
+
+          // Create address-of expression for the function
+          rhs = address_of_exprt(rhs);
+        }
+        else
+        {
+          throw std::runtime_error(
+            "Lambda function symbol does not have code type");
+        }
+      }
+    }
+    else if (lhs_symbol)
     {
       // Handle string-to-string variable assignments
       if (lhs_type == "str" && rhs.is_symbol())
@@ -3018,9 +3494,7 @@ void python_converter::get_compound_assign(
   // For attribute assignments, use the type from the LHS expression
   // For other assignments, resolve the variable type
   if (!lhs.type().is_nil() && !lhs.type().id().empty())
-  {
     current_element_type = lhs.type();
-  }
   else
   {
     // Fallback to resolving the variable type from AST or symbol table
@@ -3160,7 +3634,8 @@ void python_converter::get_function_definition(
     const nlohmann::json &return_type = (return_node["_type"] == "Subscript")
                                           ? return_node["value"]["id"]
                                           : return_node["id"];
-    if (return_type == "list")
+    // Handles both cases
+    if (return_type == "list" || return_type == "List")
     {
       const auto &return_stmt = get_return_statement(function_node);
       if (
@@ -3187,11 +3662,16 @@ void python_converter::get_function_definition(
         else
           type.return_type() = type_handler_.get_list_type(return_var["value"]);
       }
+      else if (return_stmt["value"]["_type"] == "List")
+      {
+        // Handle direct list literal returns like "return [1, 2, 3]"
+        type.return_type() = type_handler_.get_list_type(return_stmt["value"]);
+      }
     }
     else
     {
       type.return_type() =
-        type_handler_.get_typet(return_node["id"].get<std::string>());
+        type_handler_.get_typet(return_type.get<std::string>());
     }
   }
   else if (return_node["_type"] == "Tuple")
@@ -3339,14 +3819,10 @@ void python_converter::get_attributes_from_self(
         stmt["annotation"]["id"].get<std::string>();
       typet type;
       if (annotated_type == "str")
-      {
         type = gen_pointer_type(char_type());
-      }
       else
-      {
         type =
           type_handler_.get_typet(stmt["annotation"]["id"].get<std::string>());
-      }
 
       struct_typet::componentt comp =
         build_component(current_class_name_, attr_name, type);
@@ -3479,17 +3955,11 @@ void python_converter::get_return_statements(
     // Extract function name for temporary variable naming
     std::string func_name;
     if (ast_node["value"]["func"]["_type"] == "Name")
-    {
       func_name = ast_node["value"]["func"]["id"].get<std::string>();
-    }
     else if (ast_node["value"]["func"]["_type"] == "Attribute")
-    {
       func_name = ast_node["value"]["func"]["attr"].get<std::string>();
-    }
     else
-    {
       func_name = "func"; // fallback
-    }
 
     // Create temporary variable to store function call result
     symbolt temp_symbol =
@@ -3504,9 +3974,7 @@ void python_converter::get_return_statements(
 
     // Set the LHS of the function call to our temporary variable
     if (!return_value.type().is_empty())
-    {
       return_value.op0() = temp_var_expr;
-    }
 
     // Add the function call statement to the block
     target_block.copy_to_operands(return_value);
@@ -3745,28 +4213,39 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     {
       exprt catch_block = get_block(element["body"]);
 
-      symbol_id sid = create_symbol_id();
-      std::string name = element["name"].get<std::string>();
-      sid.set_object(name);
-      locationt location = get_location_from_decl(element);
-      std::string module_name = location.get_file().as_string();
-      typet type =
-        type_handler_.get_typet(element["type"]["id"].get<std::string>());
-      symbolt symbol = create_symbol(
-        module_name, current_func_name_, sid.to_string(), location, type);
-      symbol.name = name;
-      symbol.lvalue = true;
-      symbol.is_extern = false;
-      symbol.file_local = false;
-      symbolt *s = symbol_table_.move_symbol_to_context(symbol);
+      // Check if the exception handler specifies an exception type
+      if (!element["type"].is_null())
+      {
+        typet type =
+          type_handler_.get_typet(element["type"]["id"].get<std::string>());
+        catch_block.type() = type;
 
-      exprt sym = symbol_expr(*s);
-      catch_block.type() = type;
-      code_declt decl(sym);
-      exprt decl_code = convert_expression_to_code(decl);
-      decl_code.location() = location;
-      codet::operandst &ops = catch_block.operands();
-      ops.insert(ops.begin(), decl_code);
+        std::string name;
+        symbol_id sid = create_symbol_id();
+        locationt location = get_location_from_decl(element);
+        std::string module_name = location.get_file().as_string();
+        // Check if the exception handler binds the exception to a variable
+        if (!element["name"].is_null())
+          name = element["name"].get<std::string>();
+        else
+          name = "__anon_exc_var_" + location.get_line().as_string();
+
+        sid.set_object(name);
+        symbolt symbol = create_symbol(
+          module_name, current_func_name_, sid.to_string(), location, type);
+        symbol.name = name;
+        symbol.lvalue = true;
+        symbol.is_extern = false;
+        symbol.file_local = false;
+        symbolt *s = symbol_table_.move_symbol_to_context(symbol);
+
+        exprt sym = symbol_expr(*s);
+        code_declt decl(sym);
+        exprt decl_code = convert_expression_to_code(decl);
+        decl_code.location() = location;
+        codet::operandst &ops = catch_block.operands();
+        ops.insert(ops.begin(), decl_code);
+      }
 
       block.move_to_operands(catch_block);
       break;
@@ -4008,9 +4487,7 @@ void python_converter::convert()
     std::list<std::string> model_folders = {"os", "numpy"};
 
     for (const auto &folder : model_folders)
-    {
       append_models_from_directory(model_files, ast_output_dir + "/" + folder);
-    }
 
     is_loading_models = true;
 
@@ -4067,9 +4544,7 @@ void python_converter::convert()
     }
 
     if (function_node.empty())
-    {
       throw std::runtime_error("Function " + function + " not found");
-    }
 
     code_blockt block;
     // Convert classes referenced by the function
@@ -4110,9 +4585,7 @@ void python_converter::convert()
     symbolt *symbol = symbol_table_.find_symbol(sid.to_string());
 
     if (!symbol)
-    {
       throw std::runtime_error("Symbol " + sid.to_string() + " not found");
-    }
 
     // Create function call
     code_function_callt call;

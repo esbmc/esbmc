@@ -850,6 +850,14 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
 exprt function_call_expr::build_constant_from_arg() const
 {
   const std::string &func_name = function_id_.get_function();
+
+  // Check if there are no arguments
+  if (call_["args"].empty())
+  {
+    typet t = type_handler_.get_typet(func_name, 0);
+    return exprt("constant", t);
+  }
+
   auto arg = call_["args"][0];
 
   // Handle str(): convert int to str
@@ -866,6 +874,49 @@ exprt function_call_expr::build_constant_from_arg() const
     const symbolt *sym = lookup_python_symbol(arg["id"]);
     if (sym && sym->value.is_constant())
       return handle_str_symbol_to_int(sym);
+    else
+    {
+      // Try to get the expression type directly, even if symbol lookup failed
+      exprt expr = converter_.get_expr(arg);
+      if (expr.type().is_array()) // strings are arrays
+      {
+        // TODO: raise an exception to match Python semantics
+        std::string var_name = arg["id"].get<std::string>();
+        log_warning(
+          "ValueError: int() conversion may fail - variable '{}' may contain "
+          "non-integer string",
+          var_name);
+      }
+    }
+  }
+
+  // Handle int(): convert string literal to int with validation
+  else if (
+    func_name == "int" && arg.contains("value") && arg["value"].is_string())
+  {
+    const std::string &str_val = arg["value"].get<std::string>();
+
+    // check if string contains only digits (and optional leading sign)
+    bool is_valid = !str_val.empty();
+    size_t start_pos = 0;
+    if (str_val[0] == '+' || str_val[0] == '-')
+    {
+      start_pos = 1;
+      if (str_val.length() == 1)
+        is_valid = false;
+    }
+    for (size_t i = start_pos; i < str_val.length() && is_valid; i++)
+      if (!std::isdigit(str_val[i]))
+        is_valid = false;
+
+    if (!is_valid)
+      throw std::runtime_error(
+        "ValueError: invalid literal for int() with base 10: '" + str_val +
+        "'");
+
+    // If valid, convert normally
+    int int_val = std::stoi(str_val);
+    arg["value"] = int_val;
   }
 
   size_t arg_size = 1;
@@ -932,6 +983,27 @@ exprt function_call_expr::build_constant_from_arg() const
     const symbolt *sym = lookup_python_symbol(arg["id"]);
     if (sym && sym->value.is_constant())
       return handle_str_symbol_to_float(sym);
+    else
+    {
+      // Try to get the expression type directly, even if symbol lookup failed
+      exprt expr = converter_.get_expr(arg);
+      if (expr.type().is_array()) // strings are arrays
+      {
+        // TODO: raise an exception to match Python semantics
+        std::string var_name = arg["id"].get<std::string>();
+        log_warning(
+          "ValueError: float() conversion may fail - variable '{}' may contain "
+          "non-float string",
+          var_name);
+      }
+    }
+  }
+
+  // Handle float(): convert bool to float
+  else if (func_name == "float" && arg["value"].is_boolean())
+  {
+    bool bool_val = arg["value"].get<bool>();
+    arg["value"] = bool_val ? 1.0 : 0.0;
   }
 
   // Handle float(): convert int to float
@@ -1182,8 +1254,55 @@ exprt function_call_expr::get()
 
       if (!func_symbol)
       {
-        log_warning("Undefined function: {}", func_name.c_str());
-        return exprt();
+        // Check if this function is defined anywhere in the current Python source
+        // by searching the AST directly
+        bool is_forward_reference = false;
+
+        is_forward_reference =
+          json_utils::search_function_in_ast(converter_.ast(), func_name);
+
+        if (is_forward_reference)
+        {
+          // Create a forward reference that can be resolved later
+          locationt location = converter_.get_location_from_decl(call_);
+
+          code_function_callt call;
+          call.location() = location;
+
+          // Create symbol expression for the function (forward reference)
+          symbol_exprt func_sym(function_id_.to_string(), code_typet());
+          call.function() = func_sym;
+          call.type() = empty_typet(); // Will be resolved later
+
+          // Process arguments normally
+          for (const auto &arg_node : call_["args"])
+          {
+            exprt arg = converter_.get_expr(arg_node);
+            if (arg.type().is_array())
+            {
+              if (
+                arg_node["_type"] == "Constant" &&
+                arg_node["value"].is_string())
+              {
+                arg = string_constantt(
+                  arg_node["value"].get<std::string>(),
+                  arg.type(),
+                  string_constantt::k_default);
+              }
+              call.arguments().push_back(address_of_exprt(arg));
+            }
+            else
+              call.arguments().push_back(arg);
+          }
+
+          return std::move(call);
+        }
+        else
+        {
+          // Not a forward reference - use existing behavior for built-ins/imports/undefined functions
+          log_warning("Undefined function: {}", func_name.c_str());
+          return exprt();
+        }
       }
     }
   }

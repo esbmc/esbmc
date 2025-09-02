@@ -86,9 +86,24 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Identity Comparisons**: Supports `is` and `is not` operators for identity-based comparisons, including `x is None`, `x is y`, or `x is not None`.
 - **Global Variables:** Recognises the `global` keyword for accessing and modifying variables in the global scope from within functions.
 
+### String Formatting and Literals
+
+- **F-String Support**: Comprehensive support for Python's f-string (formatted string literal) syntax, including:
+  - **Basic Variable Interpolation**: f"Hello {name}!" with support for multiple variables in a single f-string
+  - **Built-in Variable Access**: Supports built-in variables like __name__ within f-strings: f"Running as: {__name__}"
+  - **Format Specifications**:
+    - **Integer formatting**: f"{num:d}" and f"{num:i}"
+    - **Float formatting with precision**: f"{val:.2f}", f"{price:.1f}"
+    - **Mixed format specifications**: f"Items: {count:d}, Price: {price:.1f}"
+  - **Boolean Formatting**: Automatic conversion of boolean values to strings (True/False)
+  - **Empty and Literal F-strings**: Support for f"" (empty) and f"Just a string" (literal-only)
+  - **String Concatenation**: F-string results can be concatenated with other strings
+  - **IEEE 754 Compliance**: Proper handling of 32-bit and 64-bit floating point numbers with accurate string conversion
+
 ### Functions and Methods
 - **Function Handling**: This allows for defining, calling, and verifying functions, including parameter passing and return values.
 - **Annotations**: Supports type annotations.
+- **Lambda Expressions**: Supports basic lambda expressions that are converted to regular functions and stored as function pointers. Lambda functions can be assigned to variables and called indirectly. Supports single-expression lambdas with multiple parameters.
 
 ### Object-Oriented Programming
 - **Classes**: Supports class definitions, methods, and attributes.
@@ -122,7 +137,7 @@ Below is an overview of ESBMC-Python's key capabilities:
   - **Arithmetic and conversions**: Supports Python's built-in functions, such as `abs`, `int`, `float`, `chr`, `str`, `hex`, `oct`, `len`, and `range`.
   - **Enhanced float() constructor**: Supports conversion from strings including special values such as `nan`, `inf`, `-inf`, `infinity`, and `+infinity` (case-insensitive with whitespace handling).
   - **Min/Max**: Supports `min(a, b)` and `max(a, b)` with type promotion (int-to-float). Currently limited to two arguments.
-  - **Input**: Models `input()` as a non-deterministic string of up to 256 characters. This allows verification of programs that depend on user input.
+  - **Input**: Models `input()` as a non-deterministic string of up to 256 characters. This enables the verification of programs that rely on user input.
   - **Enumerate**: Supports `enumerate(iterable, start=0)` for iterating over sequences with automatic indexing. Handles both tuple unpacking `(for i, x in enumerate(...))` and single variable assignment `(for item in enumerate(...))`. Supports an optional `start` parameter and works with lists, strings, and other iterables.
 - **Verification properties**: Division-by-zero, indexing errors, arithmetic overflow, and user-defined assertions.
 
@@ -168,8 +183,18 @@ The current version of ESBMC-Python has the following limitations:
 - `enumerate()` supports standard usage patterns but may have limitations with complex nested iterables or advanced parameter combinations.
 - Exception handling supports the core built-in exception types but may not cover all Python standard library exceptions or custom exception hierarchies with complex inheritance patterns.
 - Built-in variables support is limited to __name__; other Python built-ins such as __file__, __doc__, __package__ are not yet supported.
+- Lambda expressions have the following limitations:
+  - Return type inference is currently naive (defaults to double type)
+  - Higher-order and nested lambda expressions are not supported
+  - Parameter types are assumed to be double for simplicity
+- F-String Limitations:
+  - Complex expressions within f-strings may have limited support
+  - Advanced format specifications beyond basic integer `(:d, :i)` and float `(:.Nf)` formatting may not be fully supported
+  - Nested f-strings are not supported
+  - String alignment and padding format specifications (e.g., `:>10`, `:<5`) are not supported
+  - Custom format specifications for user-defined types are not supported
 
-### Example: Division by Zero in Python
+### Example 1: Division by Zero in Python
 
 The following Python program executes without issues in standard Python 3. However, when analyzed using ESBMC, it reveals a hidden bug: a possible division by zero.
 
@@ -219,7 +244,7 @@ Violated property:
 VERIFICATION FAILED
 ```
 
-ESBMC successfully identifies a path where the randomly generated variable x evaluates to zero (or very close to zero, causing integer division by zero). This triggers a property violation, and ESBMC generates a counterexample showing the precise values of `x` and `cond` that lead to the failure. An executable test case can be created from this counterexample to expose this implementation error as follows:
+ESBMC successfully identifies a path where the randomly generated variable x evaluates to zero (or very close to zero), causing an integer division by zero. This triggers a property violation, and ESBMC generates a counterexample showing the precise values of `x` and `cond` that lead to the failure. An executable test case can be created from this counterexample to expose this implementation error as follows:
 
 ````python
 def div1(cond: int, x: int) -> int:
@@ -250,7 +275,241 @@ Traceback (most recent call last):
 ZeroDivisionError: integer division or modulo by zero
 ````
 
-This example highlights how symbolic model checking can uncover subtle bugs that may not be triggered during regular testing.
+This example illustrates how symbolic model checking can reveal subtle bugs that may not be detected during regular testing.
+
+### Example 2: Lambda Expression Verification
+
+This example demonstrates ESBMC-Python's support for lambda expressions:
+
+````Python
+def test_lambda_expressions():
+    # Basic arithmetic lambda
+    add_ten = lambda x: x + 10
+    result1:int = add_ten(5)
+    assert result1 == 15
+
+    # Multi-parameter lambda
+    calculate_volume = lambda length, width, height: length * width * height
+    volume:float = calculate_volume(2.0, 3.0, 4.0)
+    assert volume == 24.0
+
+    # Lambda with conditional logic
+    absolute_diff = lambda a, b: a - b if a > b else b - a
+    diff1:int = absolute_diff(10, 3)
+    diff2:int = absolute_diff(3, 10)
+    assert diff1 == 7
+    assert diff2 == 7
+
+    # Lambda for boolean operations
+    is_in_range:bool = lambda x, lower, upper: lower <= x <= upper
+    assert is_in_range(5, 1, 10) == True
+    assert is_in_range(15, 1, 10) == False
+
+test_lambda_expressions()
+````
+
+**Command:**
+
+```bash
+$ esbmc main.py
+```
+
+**ESBMC Output:**
+
+```
+Parsing main.py
+Converting
+Generating GOTO Program
+GOTO program creation time: 0.637s
+GOTO program processing time: 0.015s
+Starting Bounded Model Checking
+Symex completed in: 0.007s (36 assignments)
+Slicing time: 0.002s (removed 26 assignments)
+Generated 12 VCC(s), 6 remaining after simplification (10 assignments)
+No solver specified; defaulting to Boolector
+Encoding remaining VCC(s) using bit-vector/floating-point arithmetic
+Encoding to solver time: 0.005s
+Solving with solver Boolector 3.2.2
+Runtime decision procedure: 0.000s
+BMC program time: 0.014s
+
+VERIFICATION SUCCESSFUL
+````
+
+### Example 3: Exception Handling Verification
+
+This example shows how ESBMC can verify exception handling behavior:
+
+````python
+def safe_divide(a: int, b: int) -> int:
+    try:
+        result = a // b
+        return result
+    except ZeroDivisionError as e:
+        return -1
+
+def test_exception_handling() -> None:
+    # Normal case
+    assert safe_divide(10, 2) == 5
+    
+    # Division by zero case
+    assert safe_divide(10, 0) == -1
+    
+    # This assertion will fail - demonstrating ESBMC can verify exception paths
+    assert safe_divide(8, 0) == 0  # Should be -1, not 0
+
+test_exception_handling()
+````
+
+**Command:**
+
+```bash
+$ esbmc main.py --multi-property
+```
+
+**ESBMC Output:**
+
+```
+[Counterexample]
+
+
+State 1 file main.py line 3 column 8 function safe_divide thread 0
+----------------------------------------------------
+  result = 8 / 0
+
+State 2 file main.py line 16 column 4 function test_exception_handling thread 0
+----------------------------------------------------
+Violated property:
+  file main.py line 16 column 4 function test_exception_handling
+  assertion
+  return_value$_safe_divide$3 == 0
+
+[Counterexample]
+
+
+State 1 file main.py line 3 column 8 function safe_divide thread 0
+----------------------------------------------------
+Violated property:
+  file main.py line 3 column 8 function safe_divide
+  division by zero
+  b != 0
+````
+
+### Example 4: List Bounds Checking
+
+This example demonstrates ESBMC's ability to detect array/list bounds violations:
+
+````python
+def access_list_element(index: int) -> int:
+    my_list = [10, 20, 30, 40, 50]
+    return my_list[index]
+
+def test_bounds() -> None:
+    # Valid access
+    assert access_list_element(2) == 30
+    
+    # This will trigger a bounds violation
+    result = access_list_element(10)  # Index out of bounds
+    assert result == 0
+
+test_bounds()
+````
+
+**Command:**
+
+```bash
+$ esbmc main.py --multi-property
+```
+
+**ESBMC Output:**
+
+```
+[Counterexample]
+
+
+State 1 file main.py line 11 column 4 function test_bounds thread 0
+----------------------------------------------------
+Violated property:
+  file main.py line 11 column 4 function test_bounds
+  assertion
+  result == 0
+
+[Counterexample]
+
+
+State 1 file main.py line 3 column 4 function access_list_element thread 0
+----------------------------------------------------
+Violated property:
+  file main.py line 3 column 4 function access_list_element
+  array bounds violated: array `my_list' upper bound
+  index < 5
+````
+
+### Example 5: Math Module Verification
+
+This example showcases ESBMC's support for math module functions:
+
+````python
+import math
+
+def test_math_functions() -> None:
+    # Test floor and ceil functions
+    assert math.floor(3.7) == 3
+    assert math.ceil(3.2) == 4
+    
+    # Test combinatorial function
+    assert math.comb(5, 2) == 10  # C(5,2) = 5!/(2!*3!) = 10
+    
+    # Test symmetry property of combinations
+    n = 6
+    k = 2
+    assert math.comb(n, k) == math.comb(n, n - k)
+    
+    # Test special value detection
+    nan_value = float('nan')
+    inf_value = float('inf')
+    
+    assert math.isnan(nan_value) == True
+    assert math.isinf(inf_value) == True
+    assert math.isnan(5.0) == False
+
+test_math_functions()
+````
+
+**Command:**
+
+```bash
+$ esbmc main.py
+```
+
+**ESBMC Output:**
+
+```
+Parsing main.py
+Converting
+Generating GOTO Program
+GOTO program creation time: 0.896s
+GOTO program processing time: 0.014s
+Starting Bounded Model Checking
+Unwinding loop 22 iteration 1   file /tmp/esbmc-python-astgen-72d0-61bd-f6b1/models/math.py line 42 column 4 function comb
+Unwinding loop 22 iteration 2   file /tmp/esbmc-python-astgen-72d0-61bd-f6b1/models/math.py line 42 column 4 function comb
+Unwinding loop 22 iteration 1   file /tmp/esbmc-python-astgen-72d0-61bd-f6b1/models/math.py line 42 column 4 function comb
+Unwinding loop 22 iteration 2   file /tmp/esbmc-python-astgen-72d0-61bd-f6b1/models/math.py line 42 column 4 function comb
+Unwinding loop 22 iteration 1   file /tmp/esbmc-python-astgen-72d0-61bd-f6b1/models/math.py line 42 column 4 function comb
+Unwinding loop 22 iteration 2   file /tmp/esbmc-python-astgen-72d0-61bd-f6b1/models/math.py line 42 column 4 function comb
+Symex completed in: 0.014s (51 assignments)
+Slicing time: 0.000s (removed 47 assignments)
+Generated 23 VCC(s), 2 remaining after simplification (4 assignments)
+No solver specified; defaulting to Boolector
+Encoding remaining VCC(s) using bit-vector/floating-point arithmetic
+Encoding to solver time: 0.003s
+Solving with solver Boolector 3.2.2
+Runtime decision procedure: 0.000s
+BMC program time: 0.017s
+
+VERIFICATION SUCCESSFUL
+````
+
 
 # Numpy Formal Verification with ESBMC
 

@@ -301,6 +301,34 @@ inline bool simplify(expr2tc &expr)
 
   return false;
 }
+inline bool has_bitfields(const type2tc &type){
+  if(!is_struct_type(type)){
+    return false;
+  }
+  const struct_type2t &struct_type = to_struct_type(type);
+  for (const auto &member: struct_type.members){
+    if(member->get_width() % 8 != 0){
+      return true;
+    }
+  }
+  return false;
+}
+inline bool is_packed_struct(const type2tc &type) {
+  if(!is_struct_type(type))
+    return false;
+  
+  const struct_type2t & struct_type = to_struct_type(type);
+  
+  size_t normal_size = 0;
+  for (const auto &member: struct_type.members){
+    normal_size += member ->get_width();
+
+    if (member->get_width()<8) {
+      normal_size += (8 - member->get_width() % 8);
+    }
+  }
+  return struct_type.get_width() < normal_size;
+}
 
 inline void make_not(expr2tc &expr)
 {
