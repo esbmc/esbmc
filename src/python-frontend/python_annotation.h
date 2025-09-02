@@ -385,6 +385,33 @@ private:
     return type;
   }
 
+  Json find_lambda_in_body(const std::string &func_name, const Json &body) const
+  {
+    for (const Json &elem : body)
+    {
+      if (
+        elem["_type"] == "Assign" && !elem["targets"].empty() &&
+        elem["targets"][0].contains("id") &&
+        elem["targets"][0]["id"] == func_name && elem.contains("value") &&
+        elem["value"]["_type"] == "Lambda")
+      {
+        return elem;
+      }
+    }
+    return Json();
+  }
+
+  std::string infer_lambda_return_type(const Json &lambda_elem) const
+  {
+    const Json &lambda_body = lambda_elem["value"]["body"];
+    if (lambda_body["_type"] == "BinOp")
+      return "float"; // Match converter's default of double_type()
+    else if (lambda_body["_type"] == "Compare")
+      return "bool";
+    else
+      return "Any"; // Default for other lambda expressions
+  }
+
   std::string
   get_function_return_type(const std::string &func_name, const Json &ast)
   {
@@ -462,6 +489,16 @@ private:
       }
     }
 
+    // Check for lambda assignments when regular function not found
+    Json lambda_elem = find_lambda_in_body(func_name, ast["body"]);
+
+    // Also check current function scope if not found globally
+    if (lambda_elem.empty() && current_func != nullptr)
+      lambda_elem = find_lambda_in_body(func_name, (*current_func)["body"]);
+
+    if (!lambda_elem.empty())
+      return infer_lambda_return_type(lambda_elem);
+
     // Get type from imported functions
     try
     {
@@ -532,10 +569,9 @@ private:
   {
     std::string list_subtype;
 
-    if (list["_type"] == "Call" && 
-      list.contains("func") && 
-      list["func"].contains("attr") && 
-      list["func"]["attr"] == "array")
+    if (
+      list["_type"] == "Call" && list.contains("func") &&
+      list["func"].contains("attr") && list["func"]["attr"] == "array")
       return get_list_subtype(list["args"][0]);
 
     if (!list.contains("elts"))
@@ -612,13 +648,13 @@ private:
     if (value_type == "Subscript")
     {
       // Check if annotation exists and is not null before accessing
-      if (rhs_node.contains("annotation") && 
-          !rhs_node["annotation"].is_null() && 
-          rhs_node["annotation"].contains("id"))
+      if (
+        rhs_node.contains("annotation") && !rhs_node["annotation"].is_null() &&
+        rhs_node["annotation"].contains("id"))
       {
         // Get the type of the variable being subscripted
         const std::string &var_type = rhs_node["annotation"]["id"];
-        
+
         // Handle string subscript: str[index] returns str
         if (var_type == "str")
           return "str";
