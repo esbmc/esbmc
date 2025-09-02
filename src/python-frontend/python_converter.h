@@ -171,6 +171,12 @@ private:
   exprt
   apply_format_specification(const exprt &expr, const std::string &format);
 
+  std::string remove_quotes_from_type_string(const std::string &type_string);
+
+  typet get_type_from_annotation(
+    const nlohmann::json &annotation_node,
+    const nlohmann::json &element);
+
   symbolt create_return_temp_variable(
     const typet &return_type,
     const locationt &location,

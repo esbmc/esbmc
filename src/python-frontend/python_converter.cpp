@@ -3616,6 +3616,45 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   return std::move(code);
 }
 
+std::string
+python_converter::remove_quotes_from_type_string(const std::string &type_string)
+{
+  if (type_string.length() >= 2)
+  {
+    if (
+      (type_string.front() == '"' && type_string.back() == '"') ||
+      (type_string.front() == '\'' && type_string.back() == '\''))
+    {
+      return type_string.substr(1, type_string.length() - 2);
+    }
+  }
+  return type_string;
+}
+
+typet python_converter::get_type_from_annotation(
+  const nlohmann::json &annotation_node,
+  const nlohmann::json &element)
+{
+  if (annotation_node["_type"] == "Subscript")
+    return type_handler_.get_list_type(element);
+  else if (
+    annotation_node["_type"] == "Constant" || annotation_node["_type"] == "Str")
+  {
+    // Handle string annotations like "CoordinateData | None" (forward references)
+    std::string type_string = annotation_node["value"].get<std::string>();
+    type_string = remove_quotes_from_type_string(type_string);
+    return type_handler_.get_typet(type_string);
+  }
+  else if (annotation_node.contains("id"))
+    return type_handler_.get_typet(annotation_node["id"].get<std::string>());
+  else
+  {
+    throw std::runtime_error(
+      "Unsupported annotation type: " +
+      annotation_node["_type"].get<std::string>());
+  }
+}
+
 void python_converter::get_function_definition(
   const nlohmann::json &function_node)
 {
@@ -3682,29 +3721,13 @@ void python_converter::get_function_definition(
   }
   else if (return_node["_type"] == "Constant" || return_node["_type"] == "Str")
   {
-    // Handle string annotations like -> "int" (legacy forward references)
+    // Handle string annotations using the helper method
     std::string type_string = return_node["value"].get<std::string>();
-
-    // Remove surrounding quotes if present
-    if (
-      type_string.length() >= 2 && type_string.front() == '"' &&
-      type_string.back() == '"')
-    {
-      type_string = type_string.substr(1, type_string.length() - 2);
-    }
-    else if (
-      type_string.length() >= 2 && type_string.front() == '\'' &&
-      type_string.back() == '\'')
-    {
-      type_string = type_string.substr(1, type_string.length() - 2);
-    }
-
+    type_string = remove_quotes_from_type_string(type_string);
     type.return_type() = type_handler_.get_typet(type_string);
   }
   else
-  {
     throw std::runtime_error("Return type undefined");
-  }
 
   // Copy caller function name
   const std::string caller_func_name = current_func_name_;
@@ -3735,6 +3758,7 @@ void python_converter::get_function_definition(
     std::string arg_name = element["arg"].get<std::string>();
     // Argument type
     typet arg_type;
+
     if (arg_name == "self")
       arg_type = gen_pointer_type(type_handler_.get_typet(current_class_name_));
     else if (arg_name == "cls")
@@ -3748,11 +3772,8 @@ void python_converter::get_function_definition(
           "\" must be type annotated");
       }
 
-      if (element["annotation"]["_type"] == "Subscript")
-        arg_type = type_handler_.get_list_type(element);
-      else
-        arg_type = type_handler_.get_typet(
-          element["annotation"]["id"].get<std::string>());
+      // Use the helper method to get type from annotation
+      arg_type = get_type_from_annotation(element["annotation"], element);
     }
 
     if (arg_type.is_array())
