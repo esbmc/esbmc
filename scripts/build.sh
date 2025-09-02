@@ -130,7 +130,7 @@ macos_setup () {
         error "static macOS build is currently not supported"
     fi
     brew install \
-        z3 gmp csmith cmake boost ninja python3 automake bison flex \
+        z3 gmp csmith boost ninja python3 automake bison flex \
         llvm@$CLANG_VERSION &&
     BASE_ARGS="\
         -DLLVM_DIR=/opt/homebrew/opt/llvm@$CLANG_VERSION \

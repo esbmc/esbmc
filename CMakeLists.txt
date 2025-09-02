@@ -100,7 +100,11 @@ endif()
 
 
 # This MUST be executed after BuildStatic since it sets Boost Static flags
-find_package(Boost REQUIRED COMPONENTS filesystem system date_time program_options iostreams)
+# In boost-1.89, system and filesystem has been remove
+# To support the older version, added "optional" here
+find_package(Boost REQUIRED 
+  COMPONENTS date_time program_options iostreams
+  OPTIONAL_COMPONENTS system filesystem)
 include(FindLocalLLVM)
 
 include(ExternalDependencies)
