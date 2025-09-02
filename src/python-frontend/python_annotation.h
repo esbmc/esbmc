@@ -325,8 +325,13 @@ private:
             find_annotated_assign(lhs["id"], (*current_func)["args"]["args"]);
         }
 
-        if (!left_op.empty())
+        if (
+          !left_op.empty() && left_op.contains("annotation") &&
+          left_op["annotation"].contains("id") &&
+          left_op["annotation"]["id"].is_string())
+        {
           type = left_op["annotation"]["id"];
+        }
       }
       else if (lhs["_type"] == "Subscript")
       {
