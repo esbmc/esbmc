@@ -12,8 +12,8 @@ static double expm1_taylor(double x)
   acc += (smd *= x / 4);
   acc += (smd *= x / 5);
   acc += (smd *= x / 6);
-  // acc += (smd *= x / 7);
-  // acc += (smd *= x / 8);
+  acc += (smd *= x / 7);
+  acc += (smd *= x / 8);
   return acc;
 }
 
@@ -66,12 +66,12 @@ static double log1p_taylor(double x)
   double acc = x;
   double smd = x;
   acc += (smd *= x) / -2;
-  acc += (smd *= x) / -3;
+  acc += (smd *= x) / 3;
   acc += (smd *= x) / -4;
-  acc += (smd *= x) / -5;
+  acc += (smd *= x) / 5;
   acc += (smd *= x) / -6;
-  // acc += (smd *= x) / -7;
-  // acc += (smd *= x) / -8;
+  acc += (smd *= x) / 7;
+  acc += (smd *= x) / -8;
   return acc;
 }
 
