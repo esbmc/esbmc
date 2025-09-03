@@ -142,6 +142,272 @@ public:
   }
 
 private:
+  // Method to infer and annotate unannotated function parameters
+  void infer_parameter_types(Json &function_element)
+  {
+    const std::string &func_name = function_element["name"];
+
+    // Find all calls to this function in the AST
+    std::vector<Json> function_calls =
+      find_function_calls(func_name, ast_["body"]);
+
+    if (function_calls.empty())
+      return; // No calls found, cannot infer
+
+    // For each parameter, try to infer its type from the function calls
+    if (
+      function_element.contains("args") &&
+      function_element["args"].contains("args"))
+    {
+      Json &params = function_element["args"]["args"];
+
+      for (size_t i = 0; i < params.size(); ++i)
+      {
+        Json &param = params[i];
+
+        // Skip if parameter is already annotated
+        if (param.contains("annotation") && !param["annotation"].is_null())
+          continue;
+
+        // Try to infer type from function calls
+        std::string inferred_type =
+          infer_parameter_type_from_calls(i, function_calls);
+
+        if (!inferred_type.empty())
+        {
+          // Add annotation to parameter
+          add_parameter_annotation(param, inferred_type);
+        }
+      }
+    }
+  }
+
+  // Method to find all function calls to a specific function
+  std::vector<Json>
+  find_function_calls(const std::string &func_name, const Json &body)
+  {
+    std::vector<Json> calls;
+    find_function_calls_recursive(func_name, body, calls);
+    return calls;
+  }
+
+  // Recursive helper to find function calls
+  void find_function_calls_recursive(
+    const std::string &func_name,
+    const Json &node,
+    std::vector<Json> &calls)
+  {
+    if (node.is_object())
+    {
+      // Check if this is a function call to our target function
+      if (
+        node.contains("_type") && node["_type"] == "Call" &&
+        node.contains("func") && node["func"]["_type"] == "Name" &&
+        node["func"]["id"] == func_name)
+      {
+        calls.push_back(node);
+      }
+
+      // Recursively search all fields
+      for (auto it = node.begin(); it != node.end(); ++it)
+        find_function_calls_recursive(func_name, it.value(), calls);
+    }
+    else if (node.is_array())
+    {
+      for (const auto &element : node)
+        find_function_calls_recursive(func_name, element, calls);
+    }
+  }
+
+  // Method to infer parameter type from function calls
+  std::string infer_parameter_type_from_calls(
+    size_t param_index,
+    const std::vector<Json> &function_calls)
+  {
+    std::string inferred_type;
+
+    for (const Json &call : function_calls)
+    {
+      if (call.contains("args") && param_index < call["args"].size())
+      {
+        const Json &arg = call["args"][param_index];
+        std::string arg_type = get_argument_type(arg);
+
+        if (!arg_type.empty())
+        {
+          if (inferred_type.empty())
+            inferred_type = arg_type;
+          else if (inferred_type != arg_type)
+          {
+            // Type conflict between calls, use int as safe fallback
+            log_warning(
+              "Type inference conflict for parameter {}: {} vs {}. Using 'int' "
+              "as fallback ({}:{})",
+              param_index,
+              inferred_type,
+              arg_type,
+              python_filename_,
+              current_line_);
+            return "int";
+          }
+        }
+      }
+    }
+
+    return inferred_type;
+  }
+
+  // Method to get the type of an argument in a function call
+  std::string get_argument_type(const Json &arg)
+  {
+    if (arg["_type"] == "Constant")
+      return get_type_from_constant(arg);
+    else if (arg["_type"] == "UnaryOp")
+    {
+      // Handle unary operations like -5, +3, not True
+      if (arg.contains("operand"))
+        return get_argument_type(arg["operand"]);
+    }
+    else if (arg["_type"] == "Name")
+    {
+      // Try to find the type of the variable
+      Json var_node =
+        json_utils::find_var_decl(arg["id"], get_current_func_name(), ast_);
+      if (
+        !var_node.empty() && var_node.contains("annotation") &&
+        !var_node["annotation"].is_null() &&
+        var_node["annotation"].contains("id"))
+      {
+        return var_node["annotation"]["id"];
+      }
+    }
+    else if (arg["_type"] == "BinOp")
+    {
+      // For binary operations, try to infer from operands
+      Json dummy_stmt = {{"value", arg}};
+      return get_type_from_binary_expr(dummy_stmt, ast_);
+    }
+    else if (arg["_type"] == "List")
+    {
+      // Handle list literals like [-5, 1, 3, 5, 7, 10]
+      return get_list_type_from_literal(arg);
+    }
+    else if (arg["_type"] == "Dict")
+      return "dict";
+    else if (arg["_type"] == "Set")
+      return "set";
+    else if (arg["_type"] == "Tuple")
+      return "tuple";
+
+    return ""; // Cannot determine type
+  }
+
+  // Method to get the full type of a list literal
+  std::string get_list_type_from_literal(const Json &list_arg)
+  {
+    if (!list_arg.contains("elts") || list_arg["elts"].empty())
+    {
+      log_warning(
+        "Empty or malformed list literal detected. Using 'list[int]' as "
+        "default ({}:{})",
+        python_filename_,
+        current_line_);
+      return "list[int]"; // Default fallback
+    }
+
+    // Get the type of the first element
+    std::string element_type = get_argument_type(list_arg["elts"][0]);
+
+    if (element_type.empty())
+    {
+      log_warning(
+        "Could not determine list element type. Using 'list[int]' as fallback "
+        "({}:{})",
+        python_filename_,
+        current_line_);
+      return "list[int]"; // Fallback for numeric contexts
+    }
+
+    // Check if all elements have the same type
+    for (size_t i = 1; i < list_arg["elts"].size(); ++i)
+    {
+      std::string current_type = get_argument_type(list_arg["elts"][i]);
+      if (current_type != element_type && !current_type.empty())
+      {
+        log_warning(
+          "Mixed types detected in list literal: {} vs {}. Using 'list[int]' "
+          "as fallback ({}:{})",
+          element_type,
+          current_type,
+          python_filename_,
+          current_line_);
+        return "list[int]"; // Fallback for mixed numeric types
+      }
+    }
+
+    // Return the full generic type notation
+    return "list[" + element_type + "]";
+  }
+
+  // Method to add annotation to a parameter
+  void add_parameter_annotation(Json &param, const std::string &type)
+  {
+    int col_offset = param["col_offset"].template get<int>() +
+                     param["arg"].template get<std::string>().length() + 1;
+
+    // Check if this is a generic type (e.g., list[int])
+    size_t bracket_pos = type.find('[');
+    if (bracket_pos != std::string::npos)
+    {
+      // Extract base type and element type
+      std::string base_type = type.substr(0, bracket_pos);
+      std::string element_type =
+        type.substr(bracket_pos + 1, type.length() - bracket_pos - 2);
+
+      // Create Subscript annotation for generic types
+      param["annotation"] = {
+        {"_type", "Subscript"},
+        {"value",
+         {{"_type", "Name"},
+          {"id", base_type},
+          {"ctx", {{"_type", "Load"}}},
+          {"lineno", param["lineno"]},
+          {"col_offset", col_offset},
+          {"end_lineno", param["lineno"]},
+          {"end_col_offset", col_offset + base_type.size()}}},
+        {"slice",
+         {{"_type", "Name"},
+          {"id", element_type},
+          {"ctx", {{"_type", "Load"}}},
+          {"lineno", param["lineno"]},
+          {"col_offset", col_offset + base_type.size() + 1},
+          {"end_lineno", param["lineno"]},
+          {"end_col_offset",
+           col_offset + base_type.size() + 1 + element_type.size()}}},
+        {"ctx", {{"_type", "Load"}}},
+        {"lineno", param["lineno"]},
+        {"col_offset", col_offset},
+        {"end_lineno", param["lineno"]},
+        {"end_col_offset", col_offset + type.size()}};
+    }
+    else
+    {
+      // Create simple Name annotation for basic types
+      param["annotation"] = {
+        {"_type", "Name"},
+        {"id", type},
+        {"ctx", {{"_type", "Load"}}},
+        {"lineno", param["lineno"]},
+        {"col_offset", col_offset},
+        {"end_lineno", param["lineno"]},
+        {"end_col_offset", col_offset + type.size()}};
+    }
+
+    // Update the parameter's end_col_offset to account for the annotation
+    param["end_col_offset"] =
+      param["end_col_offset"].template get<int>() + type.size() + 1;
+  }
+
   /* Get the global elements referenced by a function */
   void get_global_elements(const Json &node)
   {
@@ -212,6 +478,9 @@ private:
   void annotate_function(Json &function_element)
   {
     current_func = &function_element;
+
+    // Infer types for unannotated parameters based on function calls
+    infer_parameter_types(function_element);
 
     // Add type annotations within the function
     add_annotation(function_element);
@@ -325,8 +594,13 @@ private:
             find_annotated_assign(lhs["id"], (*current_func)["args"]["args"]);
         }
 
-        if (!left_op.empty())
+        if (
+          !left_op.empty() && left_op.contains("annotation") &&
+          left_op["annotation"].contains("id") &&
+          left_op["annotation"]["id"].is_string())
+        {
           type = left_op["annotation"]["id"];
+        }
       }
       else if (lhs["_type"] == "Subscript")
       {
@@ -335,21 +609,50 @@ private:
         Json var_node =
           json_utils::find_var_decl(var_name, get_current_func_name(), ast_);
 
-        if (!var_node.empty())
+        if (!var_node.empty() && var_node.contains("annotation"))
         {
-          const std::string &var_type = var_node["annotation"]["id"];
+          std::string var_type;
 
-          // For list[T], return T. For other types, return the type itself
-          if (var_type == "list")
+          // Handle generic type annotations like list[int] (Subscript nodes)
+          if (
+            var_node["annotation"].contains("_type") &&
+            var_node["annotation"]["_type"] == "Subscript" &&
+            var_node["annotation"].contains("value") &&
+            var_node["annotation"]["value"].contains("id"))
           {
-            // Try to get subtype from list initialization
-            if (var_node.contains("value") && !var_node["value"].is_null())
+            var_type = var_node["annotation"]["value"]["id"];
+
+            // For list[T], return T directly from slice
+            if (
+              var_type == "list" && var_node["annotation"].contains("slice") &&
+              var_node["annotation"]["slice"].contains("id"))
             {
-              std::string subtype = get_list_subtype(var_node["value"]);
-              type = subtype.empty() ? "Any" : subtype;
+              type = var_node["annotation"]["slice"]["id"];
+            }
+          }
+          // Handle simple type annotations like int, str (Name nodes)
+          else if (
+            var_node["annotation"].contains("id") &&
+            var_node["annotation"]["id"].is_string())
+          {
+            var_type = var_node["annotation"]["id"];
+
+            // For list[T], return T. For other types, return the type itself
+            if (var_type == "list")
+            {
+              // Try to get subtype from list initialization
+              if (var_node.contains("value") && !var_node["value"].is_null())
+              {
+                std::string subtype = get_list_subtype(var_node["value"]);
+                type = subtype.empty() ? "Any" : subtype;
+              }
+              else
+                type = "Any"; // Unknown list element type
             }
             else
-              type = "Any"; // Unknown list element type
+            {
+              type = var_type;
+            }
           }
         }
       }
@@ -662,7 +965,15 @@ private:
         return "Any"; // Default for unknown subscript types when annotation is missing
     }
 
-    return rhs_node["annotation"]["id"];
+    if (
+      rhs_node.contains("annotation") && !rhs_node["annotation"].is_null() &&
+      rhs_node["annotation"].contains("id") &&
+      !rhs_node["annotation"]["id"].is_null())
+    {
+      return rhs_node["annotation"]["id"];
+    }
+    else
+      return "Any"; // Default for cases where annotation is missing or null
   }
 
   std::string get_type_from_call(const Json &element)
@@ -752,8 +1063,16 @@ private:
     if (obj_node.empty())
       throw std::runtime_error("Object \"" + obj + "\" not found.");
 
-    const std::string &obj_type =
-      obj_node["annotation"]["id"].template get<std::string>();
+    std::string obj_type;
+    if (
+      obj_node.contains("annotation") && !obj_node["annotation"].is_null() &&
+      obj_node["annotation"].contains("id") &&
+      !obj_node["annotation"]["id"].is_null())
+    {
+      obj_type = obj_node["annotation"]["id"].template get<std::string>();
+    }
+    else
+      obj_type = "Any"; // Default fallback type
 
     if (type_utils::is_builtin_type(obj_type))
       type = obj_type;
@@ -769,6 +1088,9 @@ private:
 
     if (stmt["_type"] == "arg")
     {
+      if (!stmt.contains("annotation") || stmt["annotation"].is_null())
+        return InferResult::UNKNOWN;
+
       if (stmt["annotation"].contains("value"))
         inferred_type =
           stmt["annotation"]["value"]["id"].template get<std::string>();
