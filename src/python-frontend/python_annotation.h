@@ -160,6 +160,7 @@ private:
       function_element["args"].contains("args"))
     {
       Json &params = function_element["args"]["args"];
+
       for (size_t i = 0; i < params.size(); ++i)
       {
         Json &param = params[i];
@@ -238,8 +239,16 @@ private:
             inferred_type = arg_type;
           else if (inferred_type != arg_type)
           {
-            // Type conflict between calls, use Any as fallback
-            return "Any";
+            // Type conflict between calls, use int as safe fallback
+            log_warning(
+              "Type inference conflict for parameter {}: {} vs {}. Using 'int' "
+              "as fallback ({}:{})",
+              param_index,
+              inferred_type,
+              arg_type,
+              python_filename_,
+              current_line_);
+            return "int";
           }
         }
       }
@@ -253,6 +262,12 @@ private:
   {
     if (arg["_type"] == "Constant")
       return get_type_from_constant(arg);
+    else if (arg["_type"] == "UnaryOp")
+    {
+      // Handle unary operations like -5, +3, not True
+      if (arg.contains("operand"))
+        return get_argument_type(arg["operand"]);
+    }
     else if (arg["_type"] == "Name")
     {
       // Try to find the type of the variable
@@ -272,8 +287,66 @@ private:
       Json dummy_stmt = {{"value", arg}};
       return get_type_from_binary_expr(dummy_stmt, ast_);
     }
+    else if (arg["_type"] == "List")
+    {
+      // Handle list literals like [-5, 1, 3, 5, 7, 10]
+      return get_list_type_from_literal(arg);
+    }
+    else if (arg["_type"] == "Dict")
+      return "dict";
+    else if (arg["_type"] == "Set")
+      return "set";
+    else if (arg["_type"] == "Tuple")
+      return "tuple";
 
     return ""; // Cannot determine type
+  }
+
+  // Method to get the full type of a list literal
+  std::string get_list_type_from_literal(const Json &list_arg)
+  {
+    if (!list_arg.contains("elts") || list_arg["elts"].empty())
+    {
+      log_warning(
+        "Empty or malformed list literal detected. Using 'list[int]' as "
+        "default ({}:{})",
+        python_filename_,
+        current_line_);
+      return "list[int]"; // Default fallback
+    }
+
+    // Get the type of the first element
+    std::string element_type = get_argument_type(list_arg["elts"][0]);
+
+    if (element_type.empty())
+    {
+      log_warning(
+        "Could not determine list element type. Using 'list[int]' as fallback "
+        "({}:{})",
+        python_filename_,
+        current_line_);
+      return "list[int]"; // Fallback for numeric contexts
+    }
+
+    // Check if all elements have the same type
+    for (size_t i = 1; i < list_arg["elts"].size(); ++i)
+    {
+      std::string current_type = get_argument_type(list_arg["elts"][i]);
+      if (current_type != element_type && !current_type.empty())
+      {
+        log_warning(
+          "Mixed types detected in list literal: {} vs {}. Using 'list[int]' "
+          "as fallback ({}:{})",
+          element_type,
+          current_type,
+          python_filename_,
+          current_line_);
+        return "list[int]"; // Fallback for mixed numeric types
+      }
+    }
+
+    // Return the full generic type notation
+    return "list[" + element_type + "]";
   }
 
   // Method to add annotation to a parameter
@@ -282,14 +355,53 @@ private:
     int col_offset = param["col_offset"].template get<int>() +
                      param["arg"].template get<std::string>().length() + 1;
 
-    param["annotation"] = {
-      {"_type", "Name"},
-      {"id", type},
-      {"ctx", {{"_type", "Load"}}},
-      {"lineno", param["lineno"]},
-      {"col_offset", col_offset},
-      {"end_lineno", param["lineno"]},
-      {"end_col_offset", col_offset + type.size()}};
+    // Check if this is a generic type (e.g., list[int])
+    size_t bracket_pos = type.find('[');
+    if (bracket_pos != std::string::npos)
+    {
+      // Extract base type and element type
+      std::string base_type = type.substr(0, bracket_pos);
+      std::string element_type =
+        type.substr(bracket_pos + 1, type.length() - bracket_pos - 2);
+
+      // Create Subscript annotation for generic types
+      param["annotation"] = {
+        {"_type", "Subscript"},
+        {"value",
+         {{"_type", "Name"},
+          {"id", base_type},
+          {"ctx", {{"_type", "Load"}}},
+          {"lineno", param["lineno"]},
+          {"col_offset", col_offset},
+          {"end_lineno", param["lineno"]},
+          {"end_col_offset", col_offset + base_type.size()}}},
+        {"slice",
+         {{"_type", "Name"},
+          {"id", element_type},
+          {"ctx", {{"_type", "Load"}}},
+          {"lineno", param["lineno"]},
+          {"col_offset", col_offset + base_type.size() + 1},
+          {"end_lineno", param["lineno"]},
+          {"end_col_offset",
+           col_offset + base_type.size() + 1 + element_type.size()}}},
+        {"ctx", {{"_type", "Load"}}},
+        {"lineno", param["lineno"]},
+        {"col_offset", col_offset},
+        {"end_lineno", param["lineno"]},
+        {"end_col_offset", col_offset + type.size()}};
+    }
+    else
+    {
+      // Create simple Name annotation for basic types
+      param["annotation"] = {
+        {"_type", "Name"},
+        {"id", type},
+        {"ctx", {{"_type", "Load"}}},
+        {"lineno", param["lineno"]},
+        {"col_offset", col_offset},
+        {"end_lineno", param["lineno"]},
+        {"end_col_offset", col_offset + type.size()}};
+    }
 
     // Update the parameter's end_col_offset to account for the annotation
     param["end_col_offset"] =
