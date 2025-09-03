@@ -1245,8 +1245,7 @@ private:
     element.erase("type_comment");
 
     // Update value fields with the correct offsets
-    auto update_offsets = [&inferred_type](Json &value)
-    {
+    auto update_offsets = [&inferred_type](Json &value) {
       value["col_offset"] =
         value["col_offset"].template get<int>() + inferred_type.size() + 1;
       value["end_col_offset"] =
