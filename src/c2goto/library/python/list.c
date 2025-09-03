@@ -1,20 +1,93 @@
+#include <stdbool.h>
 #include <stdlib.h>
 #include <stdint.h> // SIZE_MAX
 #include <string.h>
 
-//void *__ESBMC_list_append_dummy(
-//  void *array,
-//  size_t *len,
-//  size_t elem_size,
-//  void *elem)
-//{
-//  void *tmp = realloc(array, (*len + 1) * elem_size);
-//  if (!tmp)
-//    return NULL;
-//  memcpy((char *)tmp + (*len * elem_size), elem, elem_size);
-//  (*len)++;
-//  return tmp;
-//}
+
+typedef struct
+{
+  const void *value; // data pointer
+  size_t type_id;    // hashed type name
+} Object;
+
+typedef struct
+{
+  Object *items;
+  size_t size; // elements in use
+} List;
+
+/* ---------- init ---------- */
+static inline bool list_init(List *l, Object *backing)
+{
+  l->items = backing;
+  l->size = 0;
+  return true;
+}
+
+/* ---------- bounds check ---------- */
+static inline bool list_in_bounds(const List *l, size_t index)
+{
+  return index < l->size;
+}
+
+/* ---------- getters ---------- */
+static inline Object *list_at(List *l, size_t index)
+{
+  return list_in_bounds(l, index) ? &l->items[index] : NULL;
+}
+
+static inline const Object *list_cat(const List *l, size_t index)
+{
+  return list_in_bounds(l, index) ? &l->items[index] : NULL;
+}
+
+static inline void *list_get_as(const List *l, size_t i, size_t expect_type)
+{
+  const Object *o = list_cat(l, i);
+  return (o && o->type_id == expect_type) ? (void *)o->value : NULL;
+}
+
+/* ---------- push element ---------- */
+static inline bool list_push(List *l, const void *value, size_t type_id)
+{
+  l->items[l->size].value = value;
+  l->items[l->size].type_id = type_id;
+  l->size++;
+  return true;
+}
+
+/* ---------- replace element ---------- */
+static inline bool
+list_replace(List *l, size_t index, const void *new_value, size_t type_id)
+{
+  if (index >= l->size)
+    return false;
+  l->items[index].value = new_value;
+  l->items[index].type_id = type_id;
+  return true;
+}
+
+/* ---------- pop / erase ---------- */
+static inline bool list_pop(List *l)
+{
+  if (l->size == 0)
+    return false;
+  l->size--;
+  return true;
+}
+
+/* ---------- type hashing ---------- */
+static inline size_t list_hash_string(const char *str)
+{
+  size_t hash = 5381;
+  int c;
+  while ((c = *str++))
+  {
+    hash = ((hash << 5) + hash) + c;
+  }
+  return hash;
+}
+
 
 // Append N elements, keeping the buffer ALWAYS with the exact size.
 // - array: current pointer (can be NULL when len == 0)
@@ -70,49 +143,3 @@ void* __list_append__(
 
   return newbuf;
 }
-
-#if 0
-void *list_append_exact(void *array, size_t len, size_t elem_size,
-                        const void *src, size_t n)
-{
-  if (n == 0) return array;
-  if (!src || elem_size == 0) return NULL;
-
-  // overflow checks
-  if (len > SIZE_MAX - n) return NULL;
-  size_t new_len = len + n;
-  if (elem_size != 0 && new_len > SIZE_MAX / elem_size) return NULL;
-
-  size_t old_bytes = len * elem_size;
-  size_t new_bytes = new_len * elem_size;
-
-  // realloc works with NULL too
-  void *tmp = realloc(array, new_bytes);
-  if (!tmp) return NULL;
-
-  memcpy((char *)tmp + old_bytes, src, n * elem_size);
-  return tmp;
-}
-
-
-int main(void) {
-  int *arr = NULL;
-  size_t len = 0;
-
-  int one = 1;
-  arr = __list_append__(arr, len, sizeof(int), &one, 1);
-  assert(arr);
-  len += 1;
-
-  int two = 2;
-  arr = __list_append__(arr, len, sizeof(int), &two, 1);
-  assert(arr); len += 1;
-
-  assert(len == 2);
-  assert(arr[0] == 1);
-  assert(arr[1] == 2);
-
-  free(arr);
-  return 0;
-}
-#endif
