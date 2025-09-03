@@ -609,24 +609,50 @@ private:
         Json var_node =
           json_utils::find_var_decl(var_name, get_current_func_name(), ast_);
 
-        if (
-          !var_node.empty() && var_node.contains("annotation") &&
-          var_node["annotation"].contains("id") &&
-          var_node["annotation"]["id"].is_string())
+        if (!var_node.empty() && var_node.contains("annotation"))
         {
-          const std::string &var_type = var_node["annotation"]["id"];
+          std::string var_type;
 
-          // For list[T], return T. For other types, return the type itself
-          if (var_type == "list")
+          // Handle generic type annotations like list[int] (Subscript nodes)
+          if (
+            var_node["annotation"].contains("_type") &&
+            var_node["annotation"]["_type"] == "Subscript" &&
+            var_node["annotation"].contains("value") &&
+            var_node["annotation"]["value"].contains("id"))
           {
-            // Try to get subtype from list initialization
-            if (var_node.contains("value") && !var_node["value"].is_null())
+            var_type = var_node["annotation"]["value"]["id"];
+
+            // For list[T], return T directly from slice
+            if (
+              var_type == "list" && var_node["annotation"].contains("slice") &&
+              var_node["annotation"]["slice"].contains("id"))
             {
-              std::string subtype = get_list_subtype(var_node["value"]);
-              type = subtype.empty() ? "Any" : subtype;
+              type = var_node["annotation"]["slice"]["id"];
+            }
+          }
+          // Handle simple type annotations like int, str (Name nodes)
+          else if (
+            var_node["annotation"].contains("id") &&
+            var_node["annotation"]["id"].is_string())
+          {
+            var_type = var_node["annotation"]["id"];
+
+            // For list[T], return T. For other types, return the type itself
+            if (var_type == "list")
+            {
+              // Try to get subtype from list initialization
+              if (var_node.contains("value") && !var_node["value"].is_null())
+              {
+                std::string subtype = get_list_subtype(var_node["value"]);
+                type = subtype.empty() ? "Any" : subtype;
+              }
+              else
+                type = "Any"; // Unknown list element type
             }
             else
-              type = "Any"; // Unknown list element type
+            {
+              type = var_type;
+            }
           }
         }
       }

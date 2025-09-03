@@ -331,13 +331,19 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
     const nlohmann::json &var = json_utils::find_var_decl(
       elem["id"], converter_.current_function_name(), converter_.ast());
 
-    if (var["value"]["_type"] == "Call")
+    if (!var.empty() && var.contains("value") && !var["value"].is_null())
     {
-      throw std::runtime_error(
-        "Cannot determine the type from " +
-        var["value"]["func"]["id"].get<std::string>() + " call");
+      if (var["value"]["_type"] == "Call")
+      {
+        throw std::runtime_error(
+          "Cannot determine the type from " +
+          var["value"]["func"]["id"].get<std::string>() + " call");
+      }
+      return get_typet(var["value"]["value"]);
     }
-    return get_typet(var["value"]["value"]);
+
+    // Fallback for cases where variable declaration has no value or is null
+    return empty_typet();
   }
 
   throw std::runtime_error("Invalid type");
@@ -463,12 +469,15 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
         if (elts[0]["_type"] == "Call")
         {
           if (type_utils::is_builtin_type(elts[0]["func"]["id"]))
-          {
             subtype = get_typet(elts[0]["func"]["id"].get<std::string>());
-          }
         }
-        else
+        else if (elts[0].contains("elts"))
           subtype = get_typet(elts[0]["elts"]);
+        else
+        {
+          // Handle other element types directly
+          subtype = get_typet(elts[0]);
+        }
       }
 
       return build_array(subtype, elts.size());
