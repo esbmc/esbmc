@@ -1609,7 +1609,8 @@ void goto_symext::intrinsic_memcpy(
       target_type = dst->type;
     }
 
-    if(has_bitfields(target_type) || is_packed_struct(target_type)){
+    if (has_bitfields(target_type) || is_packed_struct(target_type))
+    {
       log_debug("memcpy", "Bitfield or packed struct, falling back");
       bump_call(func_call, "c:@F@__memcpy_impl");
       return;
