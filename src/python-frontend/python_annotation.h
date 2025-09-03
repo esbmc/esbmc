@@ -142,6 +142,160 @@ public:
   }
 
 private:
+  // Method to infer and annotate unannotated function parameters
+  void infer_parameter_types(Json &function_element)
+  {
+    const std::string &func_name = function_element["name"];
+
+    // Find all calls to this function in the AST
+    std::vector<Json> function_calls =
+      find_function_calls(func_name, ast_["body"]);
+
+    if (function_calls.empty())
+      return; // No calls found, cannot infer
+
+    // For each parameter, try to infer its type from the function calls
+    if (
+      function_element.contains("args") &&
+      function_element["args"].contains("args"))
+    {
+      Json &params = function_element["args"]["args"];
+      for (size_t i = 0; i < params.size(); ++i)
+      {
+        Json &param = params[i];
+
+        // Skip if parameter is already annotated
+        if (param.contains("annotation") && !param["annotation"].is_null())
+          continue;
+
+        // Try to infer type from function calls
+        std::string inferred_type =
+          infer_parameter_type_from_calls(i, function_calls);
+
+        if (!inferred_type.empty())
+        {
+          // Add annotation to parameter
+          add_parameter_annotation(param, inferred_type);
+        }
+      }
+    }
+  }
+
+  // Method to find all function calls to a specific function
+  std::vector<Json>
+  find_function_calls(const std::string &func_name, const Json &body)
+  {
+    std::vector<Json> calls;
+    find_function_calls_recursive(func_name, body, calls);
+    return calls;
+  }
+
+  // Recursive helper to find function calls
+  void find_function_calls_recursive(
+    const std::string &func_name,
+    const Json &node,
+    std::vector<Json> &calls)
+  {
+    if (node.is_object())
+    {
+      // Check if this is a function call to our target function
+      if (
+        node.contains("_type") && node["_type"] == "Call" &&
+        node.contains("func") && node["func"]["_type"] == "Name" &&
+        node["func"]["id"] == func_name)
+      {
+        calls.push_back(node);
+      }
+
+      // Recursively search all fields
+      for (auto it = node.begin(); it != node.end(); ++it)
+        find_function_calls_recursive(func_name, it.value(), calls);
+    }
+    else if (node.is_array())
+    {
+      for (const auto &element : node)
+        find_function_calls_recursive(func_name, element, calls);
+    }
+  }
+
+  // Method to infer parameter type from function calls
+  std::string infer_parameter_type_from_calls(
+    size_t param_index,
+    const std::vector<Json> &function_calls)
+  {
+    std::string inferred_type;
+
+    for (const Json &call : function_calls)
+    {
+      if (call.contains("args") && param_index < call["args"].size())
+      {
+        const Json &arg = call["args"][param_index];
+        std::string arg_type = get_argument_type(arg);
+
+        if (!arg_type.empty())
+        {
+          if (inferred_type.empty())
+            inferred_type = arg_type;
+          else if (inferred_type != arg_type)
+          {
+            // Type conflict between calls, use Any as fallback
+            return "Any";
+          }
+        }
+      }
+    }
+
+    return inferred_type;
+  }
+
+  // Method to get the type of an argument in a function call
+  std::string get_argument_type(const Json &arg)
+  {
+    if (arg["_type"] == "Constant")
+      return get_type_from_constant(arg);
+    else if (arg["_type"] == "Name")
+    {
+      // Try to find the type of the variable
+      Json var_node =
+        json_utils::find_var_decl(arg["id"], get_current_func_name(), ast_);
+      if (
+        !var_node.empty() && var_node.contains("annotation") &&
+        !var_node["annotation"].is_null() &&
+        var_node["annotation"].contains("id"))
+      {
+        return var_node["annotation"]["id"];
+      }
+    }
+    else if (arg["_type"] == "BinOp")
+    {
+      // For binary operations, try to infer from operands
+      Json dummy_stmt = {{"value", arg}};
+      return get_type_from_binary_expr(dummy_stmt, ast_);
+    }
+
+    return ""; // Cannot determine type
+  }
+
+  // Method to add annotation to a parameter
+  void add_parameter_annotation(Json &param, const std::string &type)
+  {
+    int col_offset = param["col_offset"].template get<int>() +
+                     param["arg"].template get<std::string>().length() + 1;
+
+    param["annotation"] = {
+      {"_type", "Name"},
+      {"id", type},
+      {"ctx", {{"_type", "Load"}}},
+      {"lineno", param["lineno"]},
+      {"col_offset", col_offset},
+      {"end_lineno", param["lineno"]},
+      {"end_col_offset", col_offset + type.size()}};
+
+    // Update the parameter's end_col_offset to account for the annotation
+    param["end_col_offset"] =
+      param["end_col_offset"].template get<int>() + type.size() + 1;
+  }
+
   /* Get the global elements referenced by a function */
   void get_global_elements(const Json &node)
   {
@@ -212,6 +366,9 @@ private:
   void annotate_function(Json &function_element)
   {
     current_func = &function_element;
+
+    // Infer types for unannotated parameters based on function calls
+    infer_parameter_types(function_element);
 
     // Add type annotations within the function
     add_annotation(function_element);
