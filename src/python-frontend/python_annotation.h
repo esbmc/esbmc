@@ -609,7 +609,10 @@ private:
         Json var_node =
           json_utils::find_var_decl(var_name, get_current_func_name(), ast_);
 
-        if (!var_node.empty())
+        if (
+          !var_node.empty() && var_node.contains("annotation") &&
+          var_node["annotation"].contains("id") &&
+          var_node["annotation"]["id"].is_string())
         {
           const std::string &var_type = var_node["annotation"]["id"];
 

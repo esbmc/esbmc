@@ -181,14 +181,18 @@ const JsonType get_var_node(const std::string &var_name, const JsonType &block)
 {
   for (auto &element : block["body"])
   {
+    // Check for annotated assignment (AnnAssign)
     if (
-      element["_type"] == "AnnAssign" && element["target"].contains("id") &&
-      element["target"]["id"] == var_name)
+      element["_type"] == "AnnAssign" && element.contains("target") &&
+      element["target"].contains("id") && element["target"]["id"] == var_name)
       return element;
 
+    // Check for regular assignment (Assign)
     if (
-      element["_type"] == "Assign" &&
+      element["_type"] == "Assign" && element.contains("targets") &&
+      !element["targets"].empty() && element["targets"][0].contains("_type") &&
       element["targets"][0]["_type"] == "Name" &&
+      element["targets"][0].contains("id") &&
       element["targets"][0]["id"] == var_name)
       return element;
   }
@@ -196,10 +200,8 @@ const JsonType get_var_node(const std::string &var_name, const JsonType &block)
   if (block.contains("args"))
   {
     for (auto &arg : block["args"]["args"])
-    {
-      if (arg["arg"] == var_name)
+      if (arg.contains("arg") && arg["arg"] == var_name)
         return arg;
-    }
   }
 
   return JsonType();
