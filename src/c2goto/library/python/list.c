@@ -97,6 +97,7 @@ static inline size_t list_hash_string(const char *str)
 // - n:     number of elements to append
 // Returns a new pointer on success (old block is freed);
 // NULL on failure (old array is left untouched).
+/*
 void* __list_append__(
   void *array, size_t len, size_t elem_size, const void *src, size_t n)
 {
@@ -143,3 +144,4 @@ void* __list_append__(
 
   return newbuf;
 }
+*/

@@ -6,6 +6,9 @@
 #include <util/irep_serialization.h>
 #include <util/namespace.h>
 #include <util/symbol_serialization.h>
+#include <c2goto/cprover_library.h>
+#include <util/dstring.h> // ou
+#include <util/irep.h>
 
 #define BINARY_VERSION 1
 
@@ -61,6 +64,17 @@ bool read_bin_goto_object(
     }
   }
 
+  std::multimap<irep_idt, irep_idt> symbol_deps;
+  std::unordered_map<irep_idt, std::unique_ptr<symbolt>, irep_id_hash>
+    ignored_symbols;
+
+  // Build function filter once (if filtering is active)
+  std::unordered_set<std::string> function_set;
+  if (!functions.empty())
+  {
+    function_set.insert(functions.begin(), functions.end());
+  }
+
   unsigned count = irepconverter.read_long(in);
 
   for (unsigned i = 0; i < count; i++)
@@ -83,12 +97,45 @@ bool read_bin_goto_object(
     }
 
     // Add functions only from the list
-    if (!functions.empty())
+    if (!function_set.empty())
     {
-      auto it = std::find(
-        functions.begin(), functions.end(), symbol.get_function_name().c_str());
-      if (it == functions.end())
+      const auto &fname = symbol.get_function_name();
+
+      if (function_set.find(id2string(fname)) == function_set.end())
+      {
+        // Storing skipped symbols as it can be a dependency for a next function.
+        ignored_symbols.emplace(
+          symbol.id, std::make_unique<symbolt>(std::move(symbol)));
         continue;
+      }
+      else
+      {
+        // deps for the current function
+        symbol_deps.clear();
+        generate_symbol_deps(symbol.id, symbol.value, symbol_deps);
+
+        // Collect unique dependency ids
+        std::unordered_set<irep_idt, irep_id_hash> dep_ids;
+        dep_ids.reserve(symbol_deps.size());
+        for (const auto &d : symbol_deps)
+        {
+          dep_ids.insert(d.first);
+          dep_ids.insert(d.second);
+        }
+
+        // Pull in only the missing ones, erase as we go
+        for (const auto &id : dep_ids)
+        {
+          if (context.find_symbol(id.c_str()) == nullptr)
+          {
+            if (auto it = ignored_symbols.find(id); it != ignored_symbols.end())
+            {
+              context.add(*it->second);
+              ignored_symbols.erase(it);
+            }
+          }
+        }
+      }
     }
 
     context.add(symbol);
