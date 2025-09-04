@@ -252,12 +252,10 @@ __ESBMC_HIDE:;
   // to the reader.
   __ESBMC_assume(__ESBMC_blocked_threads_count == 0);
 
-  // Terminate thread
-  __ESBMC_terminate_thread();
-  __ESBMC_atomic_end();
-
   // Ensure that there is no subsequent execution path
   __ESBMC_assume(0);
+  
+  __ESBMC_atomic_end();
 }
 #pragma clang diagnostic pop
 
