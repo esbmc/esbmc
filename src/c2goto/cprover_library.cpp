@@ -89,6 +89,7 @@ static const struct buffer
 };
 
 const static std::vector<std::string> python_c_models = {
+  "list_init",
   "strncmp",
   "strcmp",
   "strlen",
@@ -132,12 +133,12 @@ const static std::vector<std::string> python_c_models = {
   "pow_by_squaring",
   "log2",
   "ldexp",
-  "log1p_taylor",
-  "__list_append__"};
+  "log1p_taylor"/*,
+  "__list_append__"*/};
 
 } // namespace
 
-static void generate_symbol_deps(
+/*static*/ void generate_symbol_deps(
   irep_idt name,
   irept irep,
   std::multimap<irep_idt, irep_idt> &deps)
