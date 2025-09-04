@@ -627,6 +627,12 @@ private:
           type = left_op["annotation"]["id"];
         }
       }
+      else if (lhs["_type"] == "UnaryOp")
+      {
+        const auto &operand = lhs["operand"];
+        if (operand["_type"] == "Constant")
+          type = get_type_from_constant(operand);
+      }
       else if (lhs["_type"] == "Subscript")
       {
         // Handle subscript operations like dp[i-1], prices[i], etc.
