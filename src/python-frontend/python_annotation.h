@@ -1023,20 +1023,59 @@ private:
 
   std::string get_type_from_call(const Json &element)
   {
-    const std::string &func_id = element["value"]["func"]["id"];
+    const Json &func = element["value"]["func"];
 
-    if (
-      json_utils::is_class<Json>(func_id, ast_) ||
-      type_utils::is_builtin_type(func_id) ||
-      type_utils::is_consensus_type(func_id) ||
-      type_utils::is_python_exceptions(func_id))
-      return func_id;
+    // Handle regular function calls like func_name()
+    if (func["_type"] == "Name")
+    {
+      const std::string &func_id = func["id"];
 
-    if (type_utils::is_consensus_func(func_id))
-      return type_utils::get_type_from_consensus_func(func_id);
+      if (
+        json_utils::is_class<Json>(func_id, ast_) ||
+        type_utils::is_builtin_type(func_id) ||
+        type_utils::is_consensus_type(func_id) ||
+        type_utils::is_python_exceptions(func_id))
+        return func_id;
 
-    if (!type_utils::is_python_model_func(func_id))
-      return get_function_return_type(func_id, ast_);
+      if (type_utils::is_consensus_func(func_id))
+        return type_utils::get_type_from_consensus_func(func_id);
+
+      if (!type_utils::is_python_model_func(func_id))
+        return get_function_return_type(func_id, ast_);
+    }
+
+    // Handle class method calls like int.from_bytes(), str.join(), etc.
+    else if (func["_type"] == "Attribute" && func["value"]["_type"] == "Name")
+    {
+      const std::string &class_name = func["value"]["id"];
+      const std::string &method_name = func["attr"];
+
+      // Handle built-in type class methods
+      if (type_utils::is_builtin_type(class_name))
+      {
+        // Map specific class methods to their return types
+        if (class_name == "int" && method_name == "from_bytes")
+          return "int";
+        else if (
+          class_name == "str" &&
+          (method_name == "join" || method_name == "format"))
+          return "str";
+        else if (
+          class_name == "bytes" &&
+          (method_name == "decode" || method_name == "hex"))
+          return "str";
+        else if (class_name == "bytes" && method_name == "fromhex")
+          return "bytes";
+        else if (class_name == "list" && method_name == "copy")
+          return "list";
+        else if (
+          class_name == "dict" &&
+          (method_name == "copy" || method_name == "fromkeys"))
+          return "dict";
+        else
+          return class_name; // Default: method returns same type as class
+      }
+    }
 
     return "";
   }
@@ -1243,11 +1282,16 @@ private:
       inferred_type = get_type_from_call(stmt);
     }
 
-    // Get type from methods
+    // Get type from methods and class methods
     else if (
       value_type == "Call" && stmt["value"]["func"]["_type"] == "Attribute")
     {
-      inferred_type = get_type_from_method(stmt["value"]);
+      // Try get_type_from_call first (for class methods)
+      inferred_type = get_type_from_call(stmt);
+
+      // If that didn't work, try get_type_from_method
+      if (inferred_type.empty())
+        inferred_type = get_type_from_method(stmt["value"]);
     }
     else
       return InferResult::UNKNOWN;
@@ -1354,8 +1398,22 @@ private:
 
     assert(!id.empty());
 
-    // Calculate column offset
-    int col_offset = target["col_offset"].template get<int>() + id.size() + 1;
+    // Calculate column offset with null safety
+    int target_col_offset =
+      target.contains("col_offset") && !target["col_offset"].is_null()
+        ? target["col_offset"].template get<int>()
+        : 0;
+    int col_offset = target_col_offset + id.size() + 1;
+
+    // Get line number with null safety
+    int target_lineno = target.contains("lineno") && !target["lineno"].is_null()
+                          ? target["lineno"].template get<int>()
+                          : current_line_;
+
+    int target_end_lineno =
+      target.contains("end_lineno") && !target["end_lineno"].is_null()
+        ? target["end_lineno"].template get<int>()
+        : target_lineno;
 
     // Create the annotation field
     element["annotation"] = {
@@ -1363,14 +1421,19 @@ private:
       {"col_offset", col_offset},
       {"ctx", {{"_type", "Load"}}},
       {"end_col_offset", col_offset + inferred_type.size()},
-      {"end_lineno", target["end_lineno"]},
+      {"end_lineno", target_end_lineno},
       {"id", inferred_type},
-      {"lineno", target["lineno"]}};
+      {"lineno", target_lineno}};
 
-    // Update element properties
+    // Update element properties with null safety
+    int element_end_col_offset =
+      element.contains("end_col_offset") && !element["end_col_offset"].is_null()
+        ? element["end_col_offset"].template get<int>()
+        : col_offset + inferred_type.size();
+
     element["end_col_offset"] =
-      element["end_col_offset"].template get<int>() + inferred_type.size() + 1;
-    element["end_lineno"] = element["lineno"];
+      element_end_col_offset + inferred_type.size() + 1;
+    element["end_lineno"] = target_lineno;
     element["simple"] = 1;
 
     // Replace "targets" array with "target" object
@@ -1380,22 +1443,27 @@ private:
     // Remove unnecessary field
     element.erase("type_comment");
 
-    // Update value fields with the correct offsets
+    // Update value fields with the correct offsets - with null safety
     auto update_offsets = [&inferred_type](Json &value) {
-      value["col_offset"] =
-        value["col_offset"].template get<int>() + inferred_type.size() + 1;
-      value["end_col_offset"] =
-        value["end_col_offset"].template get<int>() + inferred_type.size() + 1;
+      if (value.contains("col_offset") && !value["col_offset"].is_null())
+      {
+        value["col_offset"] =
+          value["col_offset"].template get<int>() + inferred_type.size() + 1;
+      }
+      if (
+        value.contains("end_col_offset") && !value["end_col_offset"].is_null())
+      {
+        value["end_col_offset"] = value["end_col_offset"].template get<int>() +
+                                  inferred_type.size() + 1;
+      }
     };
 
     update_offsets(element["value"]);
 
     // Adjust column offsets for function calls with arguments
     if (element["value"].contains("args"))
-    {
       for (auto &arg : element["value"]["args"])
         update_offsets(arg);
-    }
 
     // Adjust column offsets in function call node
     if (element["value"].contains("func"))
