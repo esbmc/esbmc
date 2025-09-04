@@ -253,7 +253,7 @@ __ESBMC_HIDE:;
   __ESBMC_assume(__ESBMC_blocked_threads_count == 0);  
   __ESBMC_atomic_end();
 
-    // Ensure that there is no subsequent execution path
+  // Ensure that there is no subsequent execution path
   __ESBMC_assume(0);
 }
 #pragma clang diagnostic pop

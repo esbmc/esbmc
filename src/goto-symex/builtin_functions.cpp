@@ -848,7 +848,7 @@ void goto_symext::intrinsic_spawn_thread(
 
 void goto_symext::intrinsic_terminate_thread(reachability_treet &art)
 {
-    art.get_cur_state().end_thread();
+  art.get_cur_state().end_thread();
   // No need to force a context switch; an ended thread will cause the run to
   // end and the switcher to be invoked.
 }
