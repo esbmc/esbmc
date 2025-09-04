@@ -1125,6 +1125,64 @@ private:
     return type;
   }
 
+  // Method to infer type from conditional expressions (IfExp)
+  std::string get_type_from_ifexp(const Json &ifexp_node, const Json &body)
+  {
+    // For conditional expressions like "x + y if x > y else x * y"
+    // We need to infer the type from both the body and orelse branches
+
+    // Create temporary statement nodes for type inference
+    Json body_stmt = {
+      {"_type", "Assign"},
+      {"value", ifexp_node["body"]},
+      {"lineno", current_line_}};
+
+    Json orelse_stmt = {
+      {"_type", "Assign"},
+      {"value", ifexp_node["orelse"]},
+      {"lineno", current_line_}};
+
+    std::string body_type, orelse_type;
+
+    // Infer type from the body (true branch)
+    InferResult body_result = infer_type(body_stmt, body, body_type);
+
+    // Infer type from the orelse (false branch)
+    InferResult orelse_result = infer_type(orelse_stmt, body, orelse_type);
+
+    // If both branches have the same type, return that type
+    if (body_result == InferResult::OK && orelse_result == InferResult::OK)
+    {
+      if (body_type == orelse_type)
+        return body_type;
+
+      // Handle numeric type promotion: if one is int and other is float, result is float
+      if (
+        (body_type == "int" && orelse_type == "float") ||
+        (body_type == "float" && orelse_type == "int"))
+        return "float";
+
+      // For different types, use a safe fallback
+      log_warning(
+        "Conditional expression has different types in branches: {} vs {}. "
+        "Using 'Any' as fallback ({}:{})",
+        body_type,
+        orelse_type,
+        python_filename_,
+        current_line_);
+      return "Any";
+    }
+
+    // If only one branch succeeded, use that type
+    if (body_result == InferResult::OK)
+      return body_type;
+    if (orelse_result == InferResult::OK)
+      return orelse_type;
+
+    // If neither branch could be inferred, return empty string
+    return "";
+  }
+
   InferResult
   infer_type(const Json &stmt, const Json &body, std::string &inferred_type)
   {
@@ -1172,6 +1230,10 @@ private:
       if (!got_type.empty())
         inferred_type = got_type;
     }
+
+    // Get type from conditional expressions (ternary operator)
+    else if (value_type == "IfExp")
+      inferred_type = get_type_from_ifexp(stmt["value"], body);
 
     // Get type from top-level functions
     else if (
