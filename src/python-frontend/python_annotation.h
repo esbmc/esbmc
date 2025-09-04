@@ -821,7 +821,7 @@ private:
 
   std::string get_type_from_lhs(const std::string &id, Json &body)
   {
-    // Search for LHS annotation in the current scope (e.g. while/if block)
+    // Search for LHS annotation in the current scope (e.g., while/if block)
     Json node = find_annotated_assign(id, body["body"]);
 
     // Fall back to the current function
@@ -832,7 +832,21 @@ private:
     if (node.empty())
       node = find_annotated_assign(id, ast_["body"]);
 
-    return node.empty() ? "" : node["annotation"]["id"];
+    // Check if node is empty first
+    if (node.empty())
+      return "";
+
+    // Check if "annotation" field exists and is not null
+    if (!node.contains("annotation") || node["annotation"].is_null())
+      return "";
+
+    // Check if "annotation"."id" field exists and is not null
+    if (
+      !node["annotation"].contains("id") || node["annotation"]["id"].is_null())
+      return "";
+
+    // Safe to access the nested field now
+    return node["annotation"]["id"];
   }
 
   std::string get_type_from_json(const Json &value)
