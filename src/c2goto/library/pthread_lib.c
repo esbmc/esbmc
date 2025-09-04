@@ -250,12 +250,11 @@ __ESBMC_HIDE:;
   // A thread terminating during a search for a deadlock means there's no
   // deadlock or it can be found down a different path. Proof left as exercise
   // to the reader.
-  __ESBMC_assume(__ESBMC_blocked_threads_count == 0);
-
-  // Ensure that there is no subsequent execution path
-  __ESBMC_assume(0);
-  
+  __ESBMC_assume(__ESBMC_blocked_threads_count == 0);  
   __ESBMC_atomic_end();
+
+    // Ensure that there is no subsequent execution path
+  __ESBMC_assume(0);
 }
 #pragma clang diagnostic pop
 
