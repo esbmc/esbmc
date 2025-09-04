@@ -275,10 +275,35 @@ private:
         json_utils::find_var_decl(arg["id"], get_current_func_name(), ast_);
       if (
         !var_node.empty() && var_node.contains("annotation") &&
-        !var_node["annotation"].is_null() &&
-        var_node["annotation"].contains("id"))
+        !var_node["annotation"].is_null())
       {
-        return var_node["annotation"]["id"];
+        // Handle generic type annotations like list[int] (Subscript nodes)
+        if (
+          var_node["annotation"].contains("_type") &&
+          var_node["annotation"]["_type"] == "Subscript" &&
+          var_node["annotation"].contains("value") &&
+          var_node["annotation"]["value"].contains("id"))
+        {
+          std::string base_type = var_node["annotation"]["value"]["id"];
+
+          // Get the element type from slice
+          if (
+            var_node["annotation"].contains("slice") &&
+            var_node["annotation"]["slice"].contains("id"))
+          {
+            std::string element_type = var_node["annotation"]["slice"]["id"];
+            return base_type + "[" + element_type + "]";
+          }
+          else
+          {
+            return base_type; // Return base type if slice info unavailable
+          }
+        }
+        // Handle simple type annotations like int, str (Name nodes)
+        else if (var_node["annotation"].contains("id"))
+        {
+          return var_node["annotation"]["id"];
+        }
       }
     }
     else if (arg["_type"] == "BinOp")
