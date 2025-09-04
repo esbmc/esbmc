@@ -28,6 +28,7 @@ ignored_dirs=(
   "input4_fail"
   "input5_fail"
   "input6"
+  "insertion_fail"
   "jpl"
   "list9"
   "list10"

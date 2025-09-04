@@ -335,9 +335,29 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
     {
       if (var["value"]["_type"] == "Call")
       {
-        throw std::runtime_error(
-          "Cannot determine the type from " +
-          var["value"]["func"]["id"].get<std::string>() + " call");
+        // Try to handle known patterns before giving up
+        if (var["value"].contains("func"))
+        {
+          const auto &func = var["value"]["func"];
+
+          // Handle simple function calls: func_name()
+          if (func.contains("id") && type_utils::is_builtin_type(func["id"]))
+            return get_typet(func["id"].get<std::string>());
+
+          // Handle attribute calls: module.func_name()
+          if (func["_type"] == "Attribute" && func.contains("attr"))
+          {
+            std::string attr_name = func["attr"].get<std::string>();
+            // Handle common cases like random.randint, math.sqrt, etc.
+            if (attr_name == "randint" || attr_name == "randrange")
+              return long_long_int_type();
+            if (attr_name == "random" || attr_name == "uniform")
+              return double_type();
+            if (type_utils::is_builtin_type(attr_name))
+              return get_typet(attr_name);
+          }
+        }
+        throw std::runtime_error("Invalid type");
       }
       return get_typet(var["value"]["value"]);
     }
