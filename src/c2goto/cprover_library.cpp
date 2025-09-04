@@ -90,6 +90,14 @@ static const struct buffer
 
 const static std::vector<std::string> python_c_models = {
   "list_init",
+  "list_in_bounds",
+  "list_at",
+  "list_cat",
+  "list_get_as",
+  "list_push",
+  "list_replace",
+  "list_pop",
+  "list_hash_string",
   "strncmp",
   "strcmp",
   "strlen",
