@@ -1,5 +1,5 @@
-x:int=1
-y:int=2
+x = 1
+y = 2
 
 def return_prod(a:int=x,b:int=y)->int:
     return a * b
