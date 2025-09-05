@@ -3616,21 +3616,6 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
   return std::move(code);
 }
 
-std::string
-python_converter::remove_quotes_from_type_string(const std::string &type_string)
-{
-  if (type_string.length() >= 2)
-  {
-    if (
-      (type_string.front() == '"' && type_string.back() == '"') ||
-      (type_string.front() == '\'' && type_string.back() == '\''))
-    {
-      return type_string.substr(1, type_string.length() - 2);
-    }
-  }
-  return type_string;
-}
-
 typet python_converter::get_type_from_annotation(
   const nlohmann::json &annotation_node,
   const nlohmann::json &element)
@@ -3642,7 +3627,7 @@ typet python_converter::get_type_from_annotation(
   {
     // Handle string annotations like "CoordinateData | None" (forward references)
     std::string type_string = annotation_node["value"].get<std::string>();
-    type_string = remove_quotes_from_type_string(type_string);
+    type_string = type_utils::remove_quotes(type_string);
     return type_handler_.get_typet(type_string);
   }
   else if (annotation_node.contains("id"))
@@ -3723,7 +3708,7 @@ void python_converter::get_function_definition(
   {
     // Handle string annotations using the helper method
     std::string type_string = return_node["value"].get<std::string>();
-    type_string = remove_quotes_from_type_string(type_string);
+    type_string = type_utils::remove_quotes(type_string);
     type.return_type() = type_handler_.get_typet(type_string);
   }
   else

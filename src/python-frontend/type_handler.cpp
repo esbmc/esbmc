@@ -384,6 +384,7 @@ bool type_handler::has_multiple_types(const nlohmann::json &container) const
     }
     catch (const std::exception &)
     {
+      log_warning("Failed to determine element type in has_multiple_types");
       return empty_typet();
     }
   };
@@ -444,16 +445,7 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
       {
         // String constant like List['Action'] (forward reference)
         std::string type_string = slice["value"].get<std::string>();
-        // Remove quotes if present
-        if (
-          type_string.length() >= 2 && type_string.front() == '\'' &&
-          type_string.back() == '\'')
-          type_string = type_string.substr(1, type_string.length() - 2);
-        else if (
-          type_string.length() >= 2 && type_string.front() == '"' &&
-          type_string.back() == '"')
-          type_string = type_string.substr(1, type_string.length() - 2);
-        t = get_typet(type_string);
+        t = get_typet(type_utils::remove_quotes(type_string));
       }
       else
         t = empty_typet();

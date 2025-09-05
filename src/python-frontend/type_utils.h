@@ -135,6 +135,23 @@ public:
            (type_b.is_floatbv() && is_char_type(type_a));
   }
 
+  static std::string remove_quotes(const std::string &str)
+  {
+    if (str.length() < 2)
+      return str;
+
+    // Check for single quotes
+    if (str.front() == '\'' && str.back() == '\'')
+      return str.substr(1, str.length() - 2);
+      
+    // Check for double quotes  
+    if (str.front() == '"' && str.back() == '"')
+      return str.substr(1, str.length() - 2);
+      
+    // No quotes found, return original string
+    return str;
+  }
+
 private:
   static const std::map<std::string, std::string> &consensus_func_to_type()
   {
