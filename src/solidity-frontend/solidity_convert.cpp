@@ -3030,6 +3030,10 @@ bool solidity_convertert::move_inheritance_to_ctor(
   }
   exprt this_expr = symbol_expr(*context.find_symbol(this_id));
 
+  // As we are handling the constructor
+  const std::string old_fname = current_functionName;
+  current_functionName = contract_name;
+
   // queue insert the ctor initializaiton based on the linearizedBaseList
   if (based_contracts != nullptr && context.find_symbol(this_id) != nullptr)
   {
@@ -3168,6 +3172,8 @@ bool solidity_convertert::move_inheritance_to_ctor(
       }
     }
   }
+  
+  current_functionName = old_fname;
   return false;
 }
 
@@ -9853,12 +9859,14 @@ void solidity_convertert::get_local_var_decl_name(
   assert(ast_node.contains("name"));
 
   name = ast_node["name"].get<std::string>();
-  if (current_functionDecl && !cname.empty() && !current_functionName.empty())
+  if ((current_functionDecl || !current_functionName.empty()) && !cname.empty() )
   {
     // converting local variable inside a function
     // For non-state functions, we give it different id.
     // E.g. for local variable i in function nondet(), it's "sol:@C@Base@F@nondet@i#55".
-
+    if(current_functionName.empty())
+      current_functionName = (*current_functionDecl)["name"];
+    assert(!current_functionName.empty());
     // As the local variable inside the function will not be inherited, we can use current_functionName
     id = "sol:@C@" + cname + "@F@" + current_functionName + "@" + name + "#" +
          i2string(ast_node["id"].get<std::int16_t>());
@@ -11671,6 +11679,8 @@ void solidity_convertert::get_inherit_static_contract_instance(
   get_temporary_object(call, val);
   added_ctor_symbol.value = val;
   sym = added_ctor_symbol;
+
+  log_debug("solidity", "finish get_inherit_static_contract_instance");
 }
 
 void solidity_convertert::get_contract_mutex_name(
