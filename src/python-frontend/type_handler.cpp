@@ -14,6 +14,12 @@ type_handler::type_handler(const python_converter &converter)
 {
 }
 
+exprt type_handler::get_expr_helper(const nlohmann::json &json) const
+{
+  // This is safe because get_expr doesn't modify the converter's logical state
+  return const_cast<python_converter &>(converter_).get_expr(json);
+}
+
 bool type_handler::is_constructor_call(const nlohmann::json &json) const
 {
   if (
@@ -520,10 +526,8 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
     // Handle cases like x = [0] * 5
     if (list_value["op"]["_type"] == "Mult")
     {
-      exprt left_expr =
-        const_cast<python_converter &>(converter_).get_expr(list_value["left"]);
-      exprt right_expr = const_cast<python_converter &>(converter_)
-                           .get_expr(list_value["right"]);
+      exprt left_expr = get_expr_helper(list_value["left"]);
+      exprt right_expr = get_expr_helper(list_value["right"]);
 
       typet list_type = (left_expr.is_symbol()) ? left_expr.type().subtype()
                                                 : right_expr.type().subtype();

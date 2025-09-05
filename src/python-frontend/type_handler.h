@@ -94,6 +94,9 @@ public:
   static size_t get_type_width(const typet &type);
 
 private:
+  /// Encapsulate the const_cast in one place with clear documentation
+  exprt get_expr_helper(const nlohmann::json &json) const;
+
   /// Check if two types are compatible for list homogeneity checking
   bool are_types_compatible(const typet &t1, const typet &t2) const;
 
