@@ -1,7 +1,7 @@
-x: int = 90
+x = 90
 
 while True:
-      n:int = nondet_int()
+      n = nondet_int()
       __ESBMC_assume(n == 0 or n == 1);
 
       if n == 0 and x <= 100:

@@ -41,7 +41,7 @@ def test_valid_multiple_digits():
 
 def test_valid_in_expressions():
     """Valid int() calls used in expressions"""
-    result:int = int("10") + int("20")
+    result = int("10") + int("20")
     assert result == 30
 
 def test_valid_sequential():
