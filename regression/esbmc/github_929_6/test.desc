@@ -1,4 +1,4 @@
 CORE
 main.c
---z3 --smt-formula-too --output -
+--smtlib --smt-formula-only --output -
 ^\(set-option :produce-models true\)$

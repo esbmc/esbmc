@@ -789,9 +789,33 @@ boolector_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 
 std::string boolector_convt::dump_smt()
 {
-  boolector_dump_smt2(btor, messaget::state.out);
-  log_status("SMT formula dumped successfully");
-  return "SMT formula dumped successfully";
+  FILE *temp_file = tmpfile();
+  if (!temp_file)
+  {
+    log_error("Failed to create temporary file for SMT dump");
+    return "";
+  }
+
+  boolector_dump_smt2(btor, temp_file);
+
+  // Get file size and read entire content
+  fseek(temp_file, 0, SEEK_END);
+  long file_size = ftell(temp_file);
+  fseek(temp_file, 0, SEEK_SET);
+
+  if (file_size <= 0)
+  {
+    fclose(temp_file);
+    return "";
+  }
+
+  // Allocate buffer for entire file content
+  std::vector<char> buffer(file_size + 1);
+  size_t bytes_read = fread(buffer.data(), 1, file_size, temp_file);
+  buffer[bytes_read] = '\0'; // Null terminate
+
+  fclose(temp_file);
+  return std::string(buffer.data(), bytes_read);
 }
 
 void btor_smt_ast::dump() const

@@ -255,6 +255,7 @@ smt_convt::resultt bmct::run_decision_procedure(
         {
           fprintf(file, "%s", smt_formula.c_str());
           fclose(file);
+          log_status("SMT formula dumped to file: {}", output_path);
         }
       }
     }
