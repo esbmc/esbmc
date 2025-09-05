@@ -1,4 +1,4 @@
-def search(x:int, seq:list[int]):
+def search(x, seq:list[int]):
     """ Takes in a value x and a sorted sequence seq, and returns the
     position that x should go to such that the sequence remains sorted """
     output = 0

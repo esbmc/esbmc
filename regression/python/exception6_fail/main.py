@@ -1,4 +1,4 @@
-x:int = 0
+x = 0
 try:
     # some code
     x = x + 1
