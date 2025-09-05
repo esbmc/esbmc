@@ -91,7 +91,7 @@ public:
    * @param type The type object to analyze for width determination.
    * @return The width of the type in bits as a size_t value.
    */
-  static size_t get_type_width(const typet &type);
+  size_t get_type_width(const typet &type) const;
 
 private:
   /// Encapsulate the const_cast in one place with clear documentation

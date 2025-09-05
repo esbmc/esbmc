@@ -627,7 +627,7 @@ int type_handler::get_array_dimensions(const nlohmann::json &arr) const
   }
 }
 
-size_t type_handler::get_type_width(const typet &type)
+size_t type_handler::get_type_width(const typet &type) const
 {
   // First try to parse width directly
   try
