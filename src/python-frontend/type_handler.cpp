@@ -464,7 +464,7 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
     assert(type_ann == "list" || type_ann == "List");
     typet t =
       get_typet(list_value["annotation"]["slice"]["id"].get<std::string>());
-    return build_array(t, 0);
+    return pointer_typet(t);
   }
 
   if (list_value["_type"] == "List") // Get list value type from elements
