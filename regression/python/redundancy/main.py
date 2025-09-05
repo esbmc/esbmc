@@ -1,4 +1,4 @@
-def redundancy_examples(x:int, a:int, b:int, c:int):
+def redundancy_examples(x, a, b, c):
     # (1) Defensive programming redundancy
     # Multiple equivalent constraints instead of a single on
     assert (x >= 0 and x >= 0 and x > -1) == (x >= 0)
