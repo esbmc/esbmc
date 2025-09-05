@@ -1256,6 +1256,12 @@ private:
         inferred_type = get_type_from_constant(operand);
       else if (operand_type == "Name")
         inferred_type = get_type_from_rhs_variable(stmt, body);
+      else if (operand_type == "BinOp")
+      {
+        // Handle unary operations on binary expressions like -a ** b
+        Json temp_stmt = {{"value", operand}};
+        inferred_type = get_type_from_binary_expr(temp_stmt, body);
+      }
     }
 
     // Get type from RHS variable
