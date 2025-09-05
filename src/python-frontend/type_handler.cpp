@@ -644,16 +644,20 @@ size_t type_handler::get_type_width(const typet &type)
     std::string type_str = type.width().as_string();
 
     // Handle common Python/ESBMC type mappings
-    if (type_str == "int" || type_str == "int32")
+    if (type_str == "int32")
       return 32;
+    else if (type_str == "int")
+      return 64;
     else if (type_str == "int64" || type_str == "long")
       return 64;
     else if (type_str == "int16" || type_str == "short")
       return 16;
     else if (type_str == "int8" || type_str == "char")
       return 8;
-    else if (type_str == "float" || type_str == "float32")
+    else if (type_str == "float32")
       return 32;
+    else if (type_str == "float")
+      return 64;
     else if (type_str == "double" || type_str == "float64")
       return 64;
     else if (type_str == "bool")
