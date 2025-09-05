@@ -233,7 +233,13 @@ smt_convt::resultt bmct::run_decision_procedure(
     options.get_bool_option("smt-formula-too") ||
     options.get_bool_option("smt-formula-only"))
   {
-    smt_conv.dump_smt();
+    std::string smt_formula = smt_conv.dump_smt();
+    
+    // Print the SMT formula to stdout
+    if (!smt_formula.empty()) {
+      fprintf(stdout, "%s\n", smt_formula.c_str());
+    }
+    
     if (options.get_bool_option("smt-formula-only"))
       return smt_convt::P_SMTLIB;
   }

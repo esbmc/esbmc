@@ -1,0 +1,4 @@
+CORE
+main.c
+--z3 --smt-formula-only
+^\(set-option :produce-models true\)$
