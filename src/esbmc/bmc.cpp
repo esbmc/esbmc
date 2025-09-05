@@ -235,9 +235,29 @@ smt_convt::resultt bmct::run_decision_procedure(
   {
     std::string smt_formula = smt_conv.dump_smt();
 
-    // Print the SMT formula to stdout
+    // Print the SMT formula to stdout or file
     if (!smt_formula.empty())
-      fprintf(stdout, "%s\n", smt_formula.c_str());
+    {
+      const std::string &output_path = options.get_option("output");
+
+      if (output_path.empty() || output_path == "-")
+      {
+        // Print to stdout
+        fprintf(stdout, "%s", smt_formula.c_str());
+      }
+      else
+      {
+        // Print to file
+        FILE *file = fopen(output_path.c_str(), "w");
+        if (!file)
+          log_error("Could not open output file '{}'", output_path);
+        else
+        {
+          fprintf(file, "%s", smt_formula.c_str());
+          fclose(file);
+        }
+      }
+    }
 
     if (options.get_bool_option("smt-formula-only"))
       return smt_convt::P_SMTLIB;
