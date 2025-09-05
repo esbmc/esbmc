@@ -457,7 +457,7 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
       }
       else
         t = empty_typet();
-      return build_array(t, 0);
+      return pointer_typet(t);
     }
 
     const nlohmann::json &type_ann = list_value["annotation"]["value"]["id"];
