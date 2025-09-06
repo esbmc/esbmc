@@ -3278,8 +3278,11 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       current_block->copy_to_operands(list_at_call);
 
       // Get obj->value
-      member_exprt obj_value(symbol_expr(obj_decl_symbol), "value");
+      member_exprt obj_value(symbol_expr(obj_decl_symbol), "value", pointer_typet(empty_typet()));
       symbolt& tmp_value_ptr_symbol = create_tmp_symbol(element, "tmp_value_ptr", pointer_typet(empty_typet()), obj_value);
+
+      tmp_value_ptr_symbol.dump();
+
       code_declt tmp_value_ptr_decl(symbol_expr(tmp_value_ptr_symbol));
       tmp_value_ptr_decl.copy_to_operands(obj_value);
       current_block->copy_to_operands(tmp_value_ptr_decl);
