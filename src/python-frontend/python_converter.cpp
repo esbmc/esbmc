@@ -3002,8 +3002,6 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     // 3.1 Add list_init call to the block
     current_block->copy_to_operands(list_init_func_call);
 
-    // Fix this:
-    //expr = exprt("_init_undefined");
     expr = symbol_expr(list_symbol);
 
     break;
