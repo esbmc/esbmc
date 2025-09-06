@@ -1,0 +1,4 @@
+CORE
+main.c
+--floatbv --unwind 5 --multi-property
+^Properties\: 8 verified \✓ 3 passed, \✗ 5 failed$
