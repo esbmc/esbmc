@@ -3289,7 +3289,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
       pointer_typet list_elem_ptr_type(list_elem.type());
       typecast_exprt tc(symbol_expr(tmp_value_ptr_symbol), list_elem_ptr_type);
-      dereference_exprt deref(tc, list_elem_ptr_type);
+      dereference_exprt deref(list_elem.type());
+      deref.op0() = tc;
       return deref;
     }
 
