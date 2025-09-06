@@ -2988,8 +2988,21 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     list_decl.location() = get_location_from_decl(element);
     current_block->copy_to_operands(list_decl);
 
-    // Fix this:
-    expr = exprt("_init_undefined");
+    /* 3 - Build call to initialize the list with the infinity array */
+    const symbolt* list_init_func_sym = symbol_table_.find_symbol("c:list.c@F@list_init");
+    assert(list_init_func_sym);
+
+    code_function_callt list_init_func_call;
+    list_init_func_call.function() = symbol_expr(*list_init_func_sym);
+    list_init_func_call.arguments().push_back(address_of_exprt(symbol_expr(list_symbol)));
+    list_init_func_call.arguments().push_back(get_array_base_address(symbol_expr(inf_array_symbol)));
+    list_init_func_call.type() = bool_type();
+    list_init_func_call.location() = get_location_from_decl(element);
+
+    // 3.1 Add list_init call to the block
+    current_block->copy_to_operands(list_init_func_call);
+
+    expr = symbol_expr(list_symbol);
 
     break;
   }
