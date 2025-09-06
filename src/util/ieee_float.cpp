@@ -661,6 +661,21 @@ void ieee_floatt::divide_and_round(BigInt &fraction, const BigInt &factor)
     }
     break;
 
+    case ROUND_TO_AWAY:
+    {
+      BigInt factor_middle = factor / 2;
+      if (remainder > factor_middle)
+      {
+        ++fraction;
+      }
+      else if (remainder == factor_middle)
+      {
+        ++fraction;  // always round away from zero for ties
+      }
+      // remainder < factor_middle: crop (do nothing)
+    }
+    break;
+
     case ROUND_TO_ZERO:
       // this means just crop
       break;
