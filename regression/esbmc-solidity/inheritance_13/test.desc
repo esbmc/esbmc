@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --k-induction --overflow-check --no-standard-checks --no-bounds-check --no-div-by-zero
+^VERIFICATION FAILED$
