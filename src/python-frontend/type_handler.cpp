@@ -458,11 +458,17 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
       return pointer_typet(t);
     }
 
-    const nlohmann::json &type_ann = list_value["annotation"]["value"]["id"];
-    assert(type_ann == "list" || type_ann == "List");
-    typet t =
-      get_typet(list_value["annotation"]["slice"]["id"].get<std::string>());
-    return pointer_typet(t);
+    // Check if the nested structure exists before accessing
+    if (
+      list_value["annotation"].contains("value") &&
+      list_value["annotation"]["value"].contains("id"))
+    {
+      const nlohmann::json &type_ann = list_value["annotation"]["value"]["id"];
+      assert(type_ann == "list" || type_ann == "List");
+      typet t =
+        get_typet(list_value["annotation"]["slice"]["id"].get<std::string>());
+      return pointer_typet(t);
+    }
   }
 
   if (list_value["_type"] == "List") // Get list value type from elements
