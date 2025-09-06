@@ -670,7 +670,7 @@ void ieee_floatt::divide_and_round(BigInt &fraction, const BigInt &factor)
       }
       else if (remainder == factor_middle)
       {
-        ++fraction;  // always round away from zero for ties
+        ++fraction; // always round away from zero for ties
       }
       // remainder < factor_middle: crop (do nothing)
     }
