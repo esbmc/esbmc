@@ -542,12 +542,7 @@ exprt python_converter::handle_power_operator_sym(exprt base, exprt exp)
   // Find the pow function symbol
   symbolt *pow_symbol = symbol_table_.find_symbol("c:@F@pow");
   if (!pow_symbol)
-  {
-    log_warning(
-      "pow function not found in symbol table, falling back to symbolic "
-      "representation");
-    return from_integer(1, base.type());
-  }
+    throw std::runtime_error("pow function not found in symbol table");
 
   // Convert arguments to double type if needed
   exprt double_base = base;
