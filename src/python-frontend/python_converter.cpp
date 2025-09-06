@@ -2764,7 +2764,9 @@ symbolt &python_converter::create_tmp_symbol(
   cl.static_lifetime = false;
   cl.is_extern = false;
   cl.file_local = true;
-  cl.value = symbol_value;
+  if (symbol_value != exprt())
+    cl.value = symbol_value;
+
   return cl;
 }
 
@@ -2923,17 +2925,19 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     // Reset flag
     processing_list_elements = false;
 
-    symbolt &cl =
+    symbolt &inf_array_symbol =
       create_tmp_symbol(element, "$compound-literal$", list_type, list);
 
-    expr = symbol_expr(cl);
-    code_declt decl(expr);
-    decl.operands().push_back(list);
+    expr = symbol_expr(inf_array_symbol);
+    code_declt inf_array_decl(expr);
+    inf_array_decl.operands().push_back(list);
     assert(current_block);
-    current_block->copy_to_operands(decl);
+    current_block->copy_to_operands(inf_array_decl);
 #endif
 
-    // Create infinity objects array
+    /* 1 - Create infinity objects array */
+
+    // 1.1 Get object type
     const symbolt *inf_array_subtype = nullptr;
     symbol_table_.foreach_operand([this, &inf_array_subtype](const symbolt &s) {
       const std::string &symbol_id = s.id.as_string();
@@ -2943,20 +2947,46 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         inf_array_subtype = &s;
       }
     });
-
     assert(inf_array_subtype);
-    array_typet t(
+
+    // 1.2 Build infinity array type
+    array_typet inf_array_type(
       symbol_typet(inf_array_subtype->id), exprt("infinity", size_type()));
 
-    exprt inf_array_value = gen_zero(get_complete_type(t, ns), true);
-    symbolt &cl = create_tmp_symbol(element, "$storage$", t, inf_array_value);
-    cl.value.zero_initializer(true);
-    cl.static_lifetime = true;
+    // 1.3 Build infinity array symbol
+    exprt inf_array_value = gen_zero(get_complete_type(inf_array_type, ns), true);
+    symbolt &inf_array_symbol = create_tmp_symbol(element, "$storage$", inf_array_type, inf_array_value);
+    inf_array_symbol.value.zero_initializer(true);
+    inf_array_symbol.static_lifetime = true;
 
-    code_declt decl(symbol_expr(cl));
-    decl.location() = get_location_from_decl(element);
+    // 1.4 Add infinity array declaration to the block
+    code_declt inf_array_decl(symbol_expr(inf_array_symbol));
+    inf_array_decl.location() = get_location_from_decl(element);
+    current_block->copy_to_operands(inf_array_decl);
 
-    current_block->copy_to_operands(decl);
+
+    /* 2 - Add List declaration */
+
+    // 2.1 Get List type
+    const symbolt *list_type_symbol = nullptr;
+    symbol_table_.foreach_operand([this, &list_type_symbol](const symbolt &s) {
+      const std::string &symbol_id = s.id.as_string();
+      if (
+        symbol_id.find("tag-struct __anon_typedef_List_at_") != symbol_id.npos)
+      {
+        list_type_symbol = &s;
+      }
+    });
+    assert(list_type_symbol);
+
+    // 2.2 Build list symbol
+    typet list_type(symbol_typet(list_type_symbol->id));
+    symbolt &list_symbol = create_tmp_symbol(element, "$list$", list_type, exprt());
+
+    // 2.3 Add list declaration to the block
+    code_declt list_decl(symbol_expr(list_symbol));
+    list_decl.location() = get_location_from_decl(element);
+    current_block->copy_to_operands(list_decl);
 
     // Fix this:
     expr = exprt("_init_undefined");
