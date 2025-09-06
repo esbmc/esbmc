@@ -1705,7 +1705,7 @@ bool solidity_convertert::get_var_decl(
   new_expr = decl;
 
   log_debug(
-    "solidity", "Finish parsing symbol {}", added_symbol.name.as_string());
+    "solidity", "@@@ Finish parsing symbol {}", added_symbol.name.as_string());
   return false;
 }
 
@@ -1936,7 +1936,7 @@ bool solidity_convertert::get_contract_definition(const std::string &c_name)
       // parse contract body
       if (convert_ast_nodes(*itr, c_name))
         return true;
-      log_debug("solidity", "Finish parsing contract {}'s body", c_name);
+      log_debug("solidity", "@@@ Finish parsing contract {}'s body", c_name);
 
       // for inheritance
       bool has_inherit_from = inheritanceMap[c_name].size() > 1;
@@ -2443,6 +2443,9 @@ void solidity_convertert::merge_inheritance_ast(
                   for cases above, there must be an override inside D if B and C both override A.
                 */
                 is_conflict = true;
+                if (c_i.contains("id") && i.contains("id"))
+                  overrideMap[c_name][i["id"].get<int>()] =
+                    c_i["id"].get<int>();
                 break;
               }
             }
@@ -3030,6 +3033,10 @@ bool solidity_convertert::move_inheritance_to_ctor(
   }
   exprt this_expr = symbol_expr(*context.find_symbol(this_id));
 
+  // As we are handling the constructor
+  const std::string old_fname = current_functionName;
+  current_functionName = contract_name;
+
   // queue insert the ctor initializaiton based on the linearizedBaseList
   if (based_contracts != nullptr && context.find_symbol(this_id) != nullptr)
   {
@@ -3168,6 +3175,8 @@ bool solidity_convertert::move_inheritance_to_ctor(
       }
     }
   }
+
+  current_functionName = old_fname;
   return false;
 }
 
@@ -3281,6 +3290,11 @@ bool solidity_convertert::get_function_definition(
   {
     current_functionDecl = old_functionDecl;
     current_functionName = old_functionName;
+    log_debug(
+      "solidity",
+      "@@@ Already parsed function {} in contract {}",
+      id.c_str(),
+      current_baseContractName);
     return false;
   }
 
@@ -3375,11 +3389,10 @@ bool solidity_convertert::get_function_definition(
   //assert(!"done - finished all expr stmt in function?");
 
   // 13. Restore current_functionDecl
-  log_debug("solidity", "Finish parsing function {}", current_functionName);
+  log_debug("solidity", "@@@ Finish parsing function {}", current_functionName);
   current_functionDecl =
     old_functionDecl; // for __ESBMC_assume, old_functionDecl == null
   current_functionName = old_functionName;
-
   return false;
 }
 
@@ -4470,7 +4483,7 @@ bool solidity_convertert::get_expr(
     if (expr["referencedDeclaration"] > 0)
     {
       // Soldity uses +ve odd numbers to refer to var or functions declared in the contract
-      const nlohmann::json &decl =
+      nlohmann::json decl =
         find_decl_ref(src_ast_json, expr["referencedDeclaration"]);
       if (decl.empty())
       {
@@ -9853,12 +9866,14 @@ void solidity_convertert::get_local_var_decl_name(
   assert(ast_node.contains("name"));
 
   name = ast_node["name"].get<std::string>();
-  if (current_functionDecl && !cname.empty() && !current_functionName.empty())
+  if ((current_functionDecl || !current_functionName.empty()) && !cname.empty())
   {
     // converting local variable inside a function
     // For non-state functions, we give it different id.
     // E.g. for local variable i in function nondet(), it's "sol:@C@Base@F@nondet@i#55".
-
+    if (current_functionName.empty())
+      current_functionName = (*current_functionDecl)["name"];
+    assert(!current_functionName.empty());
     // As the local variable inside the function will not be inherited, we can use current_functionName
     id = "sol:@C@" + cname + "@F@" + current_functionName + "@" + name + "#" +
          i2string(ast_node["id"].get<std::int16_t>());
@@ -10382,7 +10397,12 @@ solidity_convertert::find_decl_ref(const nlohmann::json &j, int ref_id)
     "\tcurrent base contract name {}, ref_id {}",
     current_baseContractName,
     std::to_string(ref_id));
-  return find_decl_ref_global(j, ref_id);
+  const auto &json = find_decl_ref_global(j, ref_id);
+  if (json.empty() && overrideMap[current_baseContractName].count(ref_id) > 0)
+    return find_decl_ref_global(
+      j, overrideMap[current_baseContractName][ref_id]);
+  else
+    return json;
 }
 
 // return construcor node based on the *contract* id
@@ -11671,6 +11691,8 @@ void solidity_convertert::get_inherit_static_contract_instance(
   get_temporary_object(call, val);
   added_ctor_symbol.value = val;
   sym = added_ctor_symbol;
+
+  log_debug("solidity", "finish get_inherit_static_contract_instance");
 }
 
 void solidity_convertert::get_contract_mutex_name(
