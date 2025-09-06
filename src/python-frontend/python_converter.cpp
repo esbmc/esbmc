@@ -2278,6 +2278,19 @@ symbolt &python_converter::create_tmp_symbol(
   return cl;
 }
 
+const symbolt& python_converter::get_list_element_type()
+{
+  const symbolt* type = nullptr;
+  symbol_table_.foreach_operand([&type](const symbolt &s) {
+    const std::string &symbol_id = s.id.as_string();
+    if (symbol_id.find("tag-struct __anon_typedef_Object_at") != symbol_id.npos)
+    {
+      type = &s;
+    }
+  });
+  return *type;
+}
+
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
   exprt expr;
@@ -2338,20 +2351,11 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     /* 1 - Create infinity objects array */
 
     // 1.1 Get object type
-    const symbolt *inf_array_subtype = nullptr;
-    symbol_table_.foreach_operand([this, &inf_array_subtype](const symbolt &s) {
-      const std::string &symbol_id = s.id.as_string();
-      if (
-        symbol_id.find("tag-struct __anon_typedef_Object_at") != symbol_id.npos)
-      {
-        inf_array_subtype = &s;
-      }
-    });
-    assert(inf_array_subtype);
+    const symbolt &inf_array_subtype = get_list_element_type();
 
     // 1.2 Build infinity array type
     array_typet inf_array_type(
-      symbol_typet(inf_array_subtype->id), exprt("infinity", size_type()));
+      symbol_typet(inf_array_subtype.id), exprt("infinity", size_type()));
 
     // 1.3 Build infinity array symbol
     exprt inf_array_value = gen_zero(get_complete_type(inf_array_type, ns), true);
@@ -2635,9 +2639,54 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   case ExpressionType::SUBSCRIPT:
   {
     exprt array = get_expr(element["value"]);
-    typet t = array.type().subtype();
-
     const nlohmann::json &slice = element["slice"];
+
+    // lists are modelled as tag-struct __anon_typedef_List
+    if (array.type().is_symbol())
+    {
+      DUMP_OBJECT(element);
+      const auto &list_decl = json_utils::find_var_decl(
+        element["value"]["id"], current_func_name_, *ast_json);
+      int i = slice["value"].get<int>();
+      exprt index = from_integer(BigInt(i), size_type());
+      exprt list_elem = get_expr(list_decl["value"]["elts"][i]);
+
+      // Add tmp variable to hold object*
+      pointer_typet obj_type(symbol_typet(get_list_element_type().id));
+      symbolt &obj_decl_symbol =
+        create_tmp_symbol(element, "tmp_obj", obj_type, exprt());
+      code_declt tmp_obj_decl(symbol_expr(obj_decl_symbol));
+      current_block->copy_to_operands(tmp_obj_decl);
+
+      // Initialise tmp_obj with list_at() call return
+      const symbolt *list_at_func_sym = symbol_table_.find_symbol("c:list.c@F@list_at");
+      assert(list_at_func_sym);
+
+      code_function_callt list_at_call;
+      list_at_call.function() = symbol_expr(*list_at_func_sym);
+      list_at_call.arguments().push_back(address_of_exprt(array)); // &l
+      list_at_call.arguments().push_back(index);
+      list_at_call.lhs() = symbol_expr(obj_decl_symbol);
+      list_at_call.type() = obj_type;
+      list_at_call.location() = get_location_from_decl(element);
+
+      // 4.2.4 Add list_at call to the block
+      current_block->copy_to_operands(list_at_call);
+
+      // Get obj->value
+      member_exprt obj_value(symbol_expr(obj_decl_symbol), "value");
+      symbolt& tmp_value_ptr_symbol = create_tmp_symbol(element, "tmp_value_ptr", pointer_typet(empty_typet()), obj_value);
+      code_declt tmp_value_ptr_decl(symbol_expr(tmp_value_ptr_symbol));
+      tmp_value_ptr_decl.copy_to_operands(obj_value);
+      current_block->copy_to_operands(tmp_value_ptr_decl);
+
+      pointer_typet list_elem_ptr_type(list_elem.type());
+      typecast_exprt tc(symbol_expr(tmp_value_ptr_symbol), list_elem_ptr_type);
+      dereference_exprt deref(tc, list_elem_ptr_type);
+      return deref;
+    }
+
+    typet t = array.type().subtype();
 
     if (slice["_type"] == "Slice")
     {
