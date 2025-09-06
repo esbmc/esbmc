@@ -566,14 +566,7 @@ exprt python_converter::handle_power_operator_sym(exprt base, exprt exp)
   pow_call.arguments() = {double_base, double_exp};
   pow_call.type() = double_type();
 
-  // If result type is not double, add typecast
-  if (!base.type().is_floatbv())
-  {
-    exprt result = exprt("typecast", base.type());
-    result.copy_to_operands(pow_call);
-    return result;
-  }
-
+  // Always return double result: Python power with float operands returns float
   return pow_call;
 }
 
