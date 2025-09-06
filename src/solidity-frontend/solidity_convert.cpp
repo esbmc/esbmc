@@ -135,7 +135,8 @@ bool solidity_convertert::convert()
     return true;
 
   // for coverage and trace simplification: update include_files
-  auto add_unique = [](const std::string &file) {
+  auto add_unique = [](const std::string &file)
+  {
     if (
       std::find(
         config.ansi_c.include_files.begin(),
@@ -488,7 +489,8 @@ bool solidity_convertert::check_sol_ver()
   }
 
   auto parse_version =
-    [](const std::string &version_str) -> std::optional<versiont> {
+    [](const std::string &version_str) -> std::optional<versiont>
+  {
     std::regex ver_regex(R"((\d+)\.(\d+)\.(\d+))");
     std::smatch match;
     if (std::regex_match(version_str, match, ver_regex))
@@ -1079,14 +1081,15 @@ bool solidity_convertert::populate_function_signature(
       is_payable = func_node["stateMutability"] == "payable";
       is_inherit = func_node.contains("is_inherited");
 
-      funcSignatures[cname].push_back(solidity_convertert::func_sig(
-        func_name,
-        func_id,
-        visibility,
-        type,
-        is_payable,
-        is_inherit,
-        is_library));
+      funcSignatures[cname].push_back(
+        solidity_convertert::func_sig(
+          func_name,
+          func_id,
+          visibility,
+          type,
+          is_payable,
+          is_inherit,
+          is_library));
     }
   }
 
@@ -1094,9 +1097,8 @@ bool solidity_convertert::populate_function_signature(
   bool hasConstructor = std::any_of(
     funcSignatures[cname].begin(),
     funcSignatures[cname].end(),
-    [&cname](const solidity_convertert::func_sig &sig) {
-      return sig.name == cname;
-    });
+    [&cname](const solidity_convertert::func_sig &sig)
+    { return sig.name == cname; });
   if (!hasConstructor && !is_library)
   {
     func_name = cname;
@@ -1106,14 +1108,15 @@ bool solidity_convertert::populate_function_signature(
     type.return_type() = empty_typet();
     type.return_type().set("cpp_type", "void");
     is_inherit = false;
-    funcSignatures[cname].push_back(solidity_convertert::func_sig(
-      func_name,
-      func_id,
-      visibility,
-      type,
-      is_payable,
-      is_inherit,
-      is_library));
+    funcSignatures[cname].push_back(
+      solidity_convertert::func_sig(
+        func_name,
+        func_id,
+        visibility,
+        type,
+        is_payable,
+        is_inherit,
+        is_library));
   }
 
   return false;
@@ -1705,7 +1708,7 @@ bool solidity_convertert::get_var_decl(
   new_expr = decl;
 
   log_debug(
-    "solidity", "Finish parsing symbol {}", added_symbol.name.as_string());
+    "solidity", "@@@ Finish parsing symbol {}", added_symbol.name.as_string());
   return false;
 }
 
@@ -1936,7 +1939,7 @@ bool solidity_convertert::get_contract_definition(const std::string &c_name)
       // parse contract body
       if (convert_ast_nodes(*itr, c_name))
         return true;
-      log_debug("solidity", "Finish parsing contract {}'s body", c_name);
+      log_debug("solidity", "@@@ Finish parsing contract {}'s body", c_name);
 
       // for inheritance
       bool has_inherit_from = inheritanceMap[c_name].size() > 1;
@@ -2443,6 +2446,9 @@ void solidity_convertert::merge_inheritance_ast(
                   for cases above, there must be an override inside D if B and C both override A.
                 */
                 is_conflict = true;
+                if (c_i.contains("id") && i.contains("id"))
+                  overrideMap[c_name][i["id"].get<int>()] =
+                    c_i["id"].get<int>();
                 break;
               }
             }
@@ -3172,7 +3178,7 @@ bool solidity_convertert::move_inheritance_to_ctor(
       }
     }
   }
-  
+
   current_functionName = old_fname;
   return false;
 }
@@ -3287,6 +3293,11 @@ bool solidity_convertert::get_function_definition(
   {
     current_functionDecl = old_functionDecl;
     current_functionName = old_functionName;
+    log_debug(
+      "solidity",
+      "@@@ Already parsed function {} in contract {}",
+      id.c_str(),
+      current_baseContractName);
     return false;
   }
 
@@ -3381,11 +3392,10 @@ bool solidity_convertert::get_function_definition(
   //assert(!"done - finished all expr stmt in function?");
 
   // 13. Restore current_functionDecl
-  log_debug("solidity", "Finish parsing function {}", current_functionName);
+  log_debug("solidity", "@@@ Finish parsing function {}", current_functionName);
   current_functionDecl =
     old_functionDecl; // for __ESBMC_assume, old_functionDecl == null
   current_functionName = old_functionName;
-
   return false;
 }
 
@@ -4476,7 +4486,7 @@ bool solidity_convertert::get_expr(
     if (expr["referencedDeclaration"] > 0)
     {
       // Soldity uses +ve odd numbers to refer to var or functions declared in the contract
-      const nlohmann::json &decl =
+      nlohmann::json decl =
         find_decl_ref(src_ast_json, expr["referencedDeclaration"]);
       if (decl.empty())
       {
@@ -8048,7 +8058,8 @@ bool solidity_convertert::get_type_description(
 
       // e.g. "t_array$_t_struct$_Message_$11_storage_$dyn_storage" =>
       //      "$_t_struct$_Message_$11_storage_$"
-      auto extract = [](const std::string &s) -> std::string {
+      auto extract = [](const std::string &s) -> std::string
+      {
         const std::string anchor = "$_t_struct";
         size_t a = s.find(anchor);
         if (a == std::string::npos)
@@ -8904,7 +8915,8 @@ bool solidity_convertert::get_dynamic_pool(
  */
 bool solidity_convertert::has_array_push_pop_length(const nlohmann::json &node)
 {
-  auto is_array_type_not_bytes = [](const nlohmann::json &type_desc) -> bool {
+  auto is_array_type_not_bytes = [](const nlohmann::json &type_desc) -> bool
+  {
     if (!type_desc.is_object())
       return false;
     if (!type_desc.contains("typeString"))
@@ -9859,12 +9871,12 @@ void solidity_convertert::get_local_var_decl_name(
   assert(ast_node.contains("name"));
 
   name = ast_node["name"].get<std::string>();
-  if ((current_functionDecl || !current_functionName.empty()) && !cname.empty() )
+  if ((current_functionDecl || !current_functionName.empty()) && !cname.empty())
   {
     // converting local variable inside a function
     // For non-state functions, we give it different id.
     // E.g. for local variable i in function nondet(), it's "sol:@C@Base@F@nondet@i#55".
-    if(current_functionName.empty())
+    if (current_functionName.empty())
       current_functionName = (*current_functionDecl)["name"];
     assert(!current_functionName.empty());
     // As the local variable inside the function will not be inherited, we can use current_functionName
@@ -10390,7 +10402,12 @@ solidity_convertert::find_decl_ref(const nlohmann::json &j, int ref_id)
     "\tcurrent base contract name {}, ref_id {}",
     current_baseContractName,
     std::to_string(ref_id));
-  return find_decl_ref_global(j, ref_id);
+  const auto &json = find_decl_ref_global(j, ref_id);
+  if (json.empty() && overrideMap[current_baseContractName].count(ref_id) > 0)
+    return find_decl_ref_global(
+      j, overrideMap[current_baseContractName][ref_id]);
+  else
+    return json;
 }
 
 // return construcor node based on the *contract* id
@@ -10748,8 +10765,8 @@ bool solidity_convertert::is_func_sig_cover(
   const std::string &base)
 {
   // function signature coverage‐check lambda: name + ordered argument types
-  auto covers =
-    [&](const std::string &derived, const std::string &base) -> bool {
+  auto covers = [&](const std::string &derived, const std::string &base) -> bool
+  {
     const auto &dSigs = funcSignatures.at(derived);
     const auto &bSigs = funcSignatures.at(base);
 
@@ -11127,7 +11144,8 @@ void solidity_convertert::extract_new_contracts()
     return;
 
   std::function<void(const nlohmann::json &)> process_node;
-  process_node = [&](const nlohmann::json &node) {
+  process_node = [&](const nlohmann::json &node)
+  {
     if (node.is_object())
     {
       if (node.contains("nodeType") && node["nodeType"] == "NewExpression")
@@ -12336,14 +12354,16 @@ static inline void static_lifetime_init(const contextt &context, codet &dest)
   dest = code_blockt();
 
   // call designated "initialization" functions
-  context.foreach_operand_in_order([&dest](const symbolt &s) {
-    if (s.type.initialization() && s.type.is_code())
+  context.foreach_operand_in_order(
+    [&dest](const symbolt &s)
     {
-      code_function_callt function_call;
-      function_call.function() = symbol_expr(s);
-      dest.move_to_operands(function_call);
-    }
-  });
+      if (s.type.initialization() && s.type.is_code())
+      {
+        code_function_callt function_call;
+        function_call.function() = symbol_expr(s);
+        dest.move_to_operands(function_call);
+      }
+    });
 }
 
 void solidity_convertert::get_aux_var(
@@ -13511,7 +13531,8 @@ bool solidity_convertert::has_callable_func(const std::string &cname)
   return std::any_of(
     funcSignatures[cname].begin(),
     funcSignatures[cname].end(),
-    [&cname](const solidity_convertert::func_sig &sig) {
+    [&cname](const solidity_convertert::func_sig &sig)
+    {
       // must be public or external, even if the address is itself
       return sig.name != cname &&
              (sig.visibility == "public" || sig.visibility == "external");
@@ -13528,9 +13549,9 @@ bool solidity_convertert::has_target_function(
     return false;
 
   return std::any_of(
-    it->second.begin(), it->second.end(), [&](const func_sig &sig) {
-      return sig.name == func_name;
-    });
+    it->second.begin(),
+    it->second.end(),
+    [&](const func_sig &sig) { return sig.name == func_name; });
 }
 
 solidity_convertert::func_sig solidity_convertert::get_target_function(
@@ -13551,9 +13572,8 @@ solidity_convertert::func_sig solidity_convertert::get_target_function(
   auto func_it = std::find_if(
     functions.begin(),
     functions.end(),
-    [&func_name](const solidity_convertert::func_sig &sig) {
-      return sig.name == func_name;
-    });
+    [&func_name](const solidity_convertert::func_sig &sig)
+    { return sig.name == func_name; });
 
   // If function is found, return it; otherwise, return an empty func_sig
   if (func_it != functions.end())
