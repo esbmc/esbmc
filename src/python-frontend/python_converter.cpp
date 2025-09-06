@@ -3008,11 +3008,45 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     const symbolt* list_push_func_sym = symbol_table_.find_symbol("c:list.c@F@list_push");
     assert(list_push_func_sym);
 
+    // 4.1 Get type hash function symbol
+    const symbolt* type_hash_func_sym = symbol_table_.find_symbol("c:list.c@F@list_hash_string");
+    assert(type_hash_func_sym);
+
     // 4.2 Push function calls
     for (auto &e : element["elts"])
     {
       // Get expr for list element value
       exprt list_elem_value_expr = get_expr(e);
+
+      // Build type hash function call
+      const std::string elem_type_name = type_handler_.get_operand_type(e);
+
+      typet type_name_t =
+        type_handler_.build_array(char_type(), elem_type_name.size() + 1);
+
+      std::vector<unsigned char> type_name_str(elem_type_name.begin(), elem_type_name.end());
+      type_name_str.push_back('\0');
+
+      exprt type_name = make_char_array_expr(type_name_str, type_name_t);
+
+      // Add a tmp variable to hold the type name as str
+      symbolt &tmp_list_elem_type_symbol = create_tmp_symbol(
+        element, "$list_elem_type$", size_type(), type_name);
+
+      code_declt tmp_list_elem_type_decl(symbol_expr(tmp_list_elem_type_symbol));
+      tmp_list_elem_type_decl.location() = get_location_from_decl(element);
+      current_block->copy_to_operands(tmp_list_elem_type_decl);
+
+      // Initialize list_elem_type with return from hash function
+      code_function_callt list_type_hash_func_call;
+      list_type_hash_func_call.function() = symbol_expr(*type_hash_func_sym);
+      list_type_hash_func_call.arguments().push_back(get_array_base_address(type_name)); // &type_name[0]
+      list_type_hash_func_call.lhs() = symbol_expr(tmp_list_elem_type_symbol);
+      list_type_hash_func_call.type() = size_type();
+      list_type_hash_func_call.location() = get_location_from_decl(element);
+
+      // Add list_hash_string call to the block
+      current_block->copy_to_operands(list_type_hash_func_call);
 
       // 4.2.1 Build tmp variable for list element
       symbolt &tmp_list_elem_symbol =
@@ -3029,7 +3063,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       list_push_func_call.function() = symbol_expr(*list_push_func_sym);
       list_push_func_call.arguments().push_back(address_of_exprt(symbol_expr(list_symbol))); // &l
       list_push_func_call.arguments().push_back(address_of_exprt(symbol_expr(tmp_list_elem_symbol))); // &var
-      list_push_func_call.arguments().push_back(gen_one(size_type())); // type hash FIXME: Replace by list_hash_string() call
+      list_push_func_call.arguments().push_back(symbol_expr(tmp_list_elem_type_symbol)); // type hash
       list_push_func_call.type() = bool_type();
       list_push_func_call.location() = get_location_from_decl(element);
 
