@@ -14,7 +14,7 @@
 #include <nlohmann/json.hpp>
 #include <solidity-frontend/solidity_grammar.h>
 #include <solidity-frontend/pattern_check.h>
-#include <clang-c-frontend/symbolic_types.h>
+#include <util/symbolic_types.h>
 
 class solidity_convertert
 {
