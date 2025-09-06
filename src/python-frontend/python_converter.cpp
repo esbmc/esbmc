@@ -3002,6 +3002,41 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     // 3.1 Add list_init call to the block
     current_block->copy_to_operands(list_init_func_call);
 
+    /* 4 - Sequence of push function calls to initialize list with elements */
+
+    // 4.1 Get push function symbol
+    const symbolt* list_push_func_sym = symbol_table_.find_symbol("c:list.c@F@list_push");
+    assert(list_push_func_sym);
+
+    // 4.2 Push function calls
+    for (auto &e : element["elts"])
+    {
+      // Get expr for list element value
+      exprt list_elem_value_expr = get_expr(e);
+
+      // 4.2.1 Build tmp variable for list element
+      symbolt &tmp_list_elem_symbol =
+        create_tmp_symbol(element, "$list_elem$", list_elem_value_expr.type(), list_elem_value_expr);
+
+      // 4.2.2 Add tmp variable for list element in the block
+      code_declt tmp_list_elem_decl(symbol_expr(tmp_list_elem_symbol));
+      tmp_list_elem_decl.copy_to_operands(list_elem_value_expr);
+      tmp_list_elem_decl.location() = get_location_from_decl(element);
+      current_block->copy_to_operands(tmp_list_elem_decl);
+
+      // 4.2.3 Add push function call
+      code_function_callt list_push_func_call;
+      list_push_func_call.function() = symbol_expr(*list_push_func_sym);
+      list_push_func_call.arguments().push_back(address_of_exprt(symbol_expr(list_symbol))); // &l
+      list_push_func_call.arguments().push_back(address_of_exprt(symbol_expr(tmp_list_elem_symbol))); // &var
+      list_push_func_call.arguments().push_back(gen_one(size_type())); // type hash FIXME: Replace by list_hash_string() call
+      list_push_func_call.type() = bool_type();
+      list_push_func_call.location() = get_location_from_decl(element);
+
+      // 4.2.4 Add list_init call to the block
+      current_block->copy_to_operands(list_push_func_call);
+    }
+
     expr = symbol_expr(list_symbol);
 
     break;
