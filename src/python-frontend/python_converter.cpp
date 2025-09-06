@@ -2869,6 +2869,19 @@ exprt python_converter::get_lambda_expr(const nlohmann::json &element)
   return symbol_expr(*added_symbol);
 }
 
+const symbolt& python_converter::get_list_element_type()
+{
+  const symbolt* type = nullptr;
+  symbol_table_.foreach_operand([&type](const symbolt &s) {
+    const std::string &symbol_id = s.id.as_string();
+    if (symbol_id.find("tag-struct __anon_typedef_Object_at") != symbol_id.npos)
+    {
+      type = &s;
+    }
+  });
+  return *type;
+}
+
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
   exprt expr;
@@ -2938,20 +2951,11 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     /* 1 - Create infinity objects array */
 
     // 1.1 Get object type
-    const symbolt *inf_array_subtype = nullptr;
-    symbol_table_.foreach_operand([this, &inf_array_subtype](const symbolt &s) {
-      const std::string &symbol_id = s.id.as_string();
-      if (
-        symbol_id.find("tag-struct __anon_typedef_Object_at") != symbol_id.npos)
-      {
-        inf_array_subtype = &s;
-      }
-    });
-    assert(inf_array_subtype);
+    const symbolt &inf_array_subtype = get_list_element_type();
 
     // 1.2 Build infinity array type
     array_typet inf_array_type(
-      symbol_typet(inf_array_subtype->id), exprt("infinity", size_type()));
+      symbol_typet(inf_array_subtype.id), exprt("infinity", size_type()));
 
     // 1.3 Build infinity array symbol
     exprt inf_array_value = gen_zero(get_complete_type(inf_array_type, ns), true);
@@ -3239,6 +3243,53 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   case ExpressionType::SUBSCRIPT:
   {
     exprt array = get_expr(element["value"]);
+    const nlohmann::json &slice = element["slice"];
+
+    // lists are modelled as tag-struct __anon_typedef_List
+    if (array.type().is_symbol())
+    {
+      DUMP_OBJECT(element);
+      const auto &list_decl = json_utils::find_var_decl(
+        element["value"]["id"], current_func_name_, *ast_json);
+      int i = slice["value"].get<int>();
+      exprt index = from_integer(BigInt(i), size_type());
+      exprt list_elem = get_expr(list_decl["value"]["elts"][i]);
+
+      // Add tmp variable to hold object*
+      pointer_typet obj_type(symbol_typet(get_list_element_type().id));
+      symbolt &obj_decl_symbol =
+        create_tmp_symbol(element, "tmp_obj", obj_type, exprt());
+      code_declt tmp_obj_decl(symbol_expr(obj_decl_symbol));
+      current_block->copy_to_operands(tmp_obj_decl);
+
+      // Initialise tmp_obj with list_at() call return
+      const symbolt *list_at_func_sym = symbol_table_.find_symbol("c:list.c@F@list_at");
+      assert(list_at_func_sym);
+
+      code_function_callt list_at_call;
+      list_at_call.function() = symbol_expr(*list_at_func_sym);
+      list_at_call.arguments().push_back(address_of_exprt(array)); // &l
+      list_at_call.arguments().push_back(index);
+      list_at_call.lhs() = symbol_expr(obj_decl_symbol);
+      list_at_call.type() = obj_type;
+      list_at_call.location() = get_location_from_decl(element);
+
+      // 4.2.4 Add list_at call to the block
+      current_block->copy_to_operands(list_at_call);
+
+      // Get obj->value
+      member_exprt obj_value(symbol_expr(obj_decl_symbol), "value");
+      symbolt& tmp_value_ptr_symbol = create_tmp_symbol(element, "tmp_value_ptr", pointer_typet(empty_typet()), obj_value);
+      code_declt tmp_value_ptr_decl(symbol_expr(tmp_value_ptr_symbol));
+      tmp_value_ptr_decl.copy_to_operands(obj_value);
+      current_block->copy_to_operands(tmp_value_ptr_decl);
+
+      pointer_typet list_elem_ptr_type(list_elem.type());
+      typecast_exprt tc(symbol_expr(tmp_value_ptr_symbol), list_elem_ptr_type);
+      dereference_exprt deref(tc, list_elem_ptr_type);
+      return deref;
+    }
+
     typet t = array.type().subtype();
 
     const nlohmann::json &slice = element["slice"];
@@ -3411,8 +3462,10 @@ symbolt python_converter::create_return_temp_variable(
 const nlohmann::json &get_return_statement(const nlohmann::json &function)
 {
   for (const auto &stmt : function["body"])
+  {
     if (get_statement_type(stmt) == StatementType::RETURN)
       return stmt;
+  }
 
   throw std::runtime_error(
     "Function " + function["name"].get<std::string>() +
@@ -3428,6 +3481,7 @@ python_converter::extract_type_info(const nlohmann::json &ast_node)
 
   if (ast_node.contains("annotation"))
   {
+    // Get type from annotation node
     size_t type_size = get_type_size(ast_node);
     if (ast_node["annotation"]["_type"] == "Subscript")
       lhs_type = ast_node["annotation"]["value"]["id"];
@@ -3569,6 +3623,7 @@ void python_converter::get_var_assign(
         name = target["value"]["id"];
 
       assert(!name.empty());
+
       sid.set_object(name);
     }
 
@@ -3583,15 +3638,18 @@ void python_converter::get_var_assign(
       {
         if (ast_node["_type"] != "Call")
           rhs = get_expr(ast_node["value"]);
+        }
       }
       is_right = false;
     }
 
     // Location and symbol lookup
     location_begin = get_location_from_decl(target);
+
     lhs_symbol = symbol_table_.find_symbol(sid.to_string().c_str());
 
     bool is_global = false;
+
     for (std::string &s : global_declarations)
     {
       if (s == sid.global_to_string())
@@ -3605,7 +3663,10 @@ void python_converter::get_var_assign(
     // Symbol creation
     if (!lhs_symbol || !is_global)
     {
+      // Debug module name
       std::string module_name = location_begin.get_file().as_string();
+
+      // Create/init symbol
       symbolt symbol = create_symbol(
         module_name,
         name,
@@ -3637,6 +3698,7 @@ void python_converter::get_var_assign(
   {
     // Assign logic
     const auto &target = ast_node["targets"][0];
+
     const auto &name = (target["_type"] == "Subscript")
                          ? target["value"]["id"].get<std::string>()
                          : target["id"].get<std::string>();
@@ -3645,6 +3707,7 @@ void python_converter::get_var_assign(
     lhs_symbol = symbol_table_.find_symbol(sid.to_string());
 
     bool is_global = false;
+
     for (std::string &s : global_declarations)
     {
       if (s == sid.global_to_string())
@@ -3747,9 +3810,11 @@ void python_converter::get_var_assign(
     // Function call handling
     if (rhs.is_function_call())
     {
+      // If rhs is a constructor call so it is necessary to update lhs instance attributes with members added in self
       if (is_ctor_call)
       {
         std::string func_name = ast_node["value"]["func"]["id"];
+
         if (base_ctor_called)
         {
           auto class_node =
@@ -3757,12 +3822,14 @@ void python_converter::get_var_assign(
           func_name = class_node["bases"][0]["id"].get<std::string>();
           base_ctor_called = false;
         }
+
         update_instance_from_self(
           func_name, func_name, lhs_symbol->id.as_string());
       }
 
       if (!rhs.type().is_pointer() && !rhs.type().is_empty())
         rhs.op0() = lhs;
+      }
 
       target_block.copy_to_operands(rhs);
       current_lhs = nullptr;
@@ -5018,7 +5085,9 @@ void python_converter::convert()
     std::list<std::string> model_folders = {"os", "numpy"};
 
     for (const auto &folder : model_folders)
+    {
       append_models_from_directory(model_files, ast_output_dir + "/" + folder);
+    }
 
     is_loading_models = true;
 
@@ -5076,7 +5145,9 @@ void python_converter::convert()
     }
 
     if (function_node.empty())
+    {
       throw std::runtime_error("Function " + function + " not found");
+    }
 
     code_blockt block;
 
@@ -5121,7 +5192,9 @@ void python_converter::convert()
     symbolt *symbol = symbol_table_.find_symbol(sid.to_string());
 
     if (!symbol)
+    {
       throw std::runtime_error("Symbol " + sid.to_string() + " not found");
+    }
 
     // Create function call
     code_function_callt call;
