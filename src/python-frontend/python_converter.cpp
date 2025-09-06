@@ -3384,10 +3384,9 @@ void python_converter::get_var_assign(
           func_name, func_name, lhs_symbol->id.as_string());
       }
       // op0() refers to the left-hand side (lhs) of the function call
-      if (!rhs.type().is_empty())
-      {
+      // Only apply direct assignment optimization for scalar and array types
+      if (!rhs.type().is_pointer() && !rhs.type().is_empty())
         rhs.op0() = lhs;
-      }
 
       target_block.copy_to_operands(rhs);
       return;
