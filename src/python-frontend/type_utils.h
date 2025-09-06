@@ -143,11 +143,11 @@ public:
     // Check for single quotes
     if (str.front() == '\'' && str.back() == '\'')
       return str.substr(1, str.length() - 2);
-      
-    // Check for double quotes  
+
+    // Check for double quotes
     if (str.front() == '"' && str.back() == '"')
       return str.substr(1, str.length() - 2);
-      
+
     // No quotes found, return original string
     return str;
   }
