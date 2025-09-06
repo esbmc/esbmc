@@ -11,6 +11,7 @@
 #include <util/expr_util.h>
 #include <util/message.h>
 #include <util/encoding.h>
+#include <util/symbolic_types.h>
 
 #include <algorithm>
 #include <cmath>
@@ -2895,6 +2896,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   case ExpressionType::LIST:
   {
+#if 0
     exprt zero = gen_zero(size_type());
     exprt &list_size = static_cast<array_typet &>(current_element_type).size();
     typet list_type = type_handler_.get_list_type_improved(element);
@@ -2929,6 +2931,35 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     decl.operands().push_back(list);
     assert(current_block);
     current_block->copy_to_operands(decl);
+#endif
+
+    // Create infinity objects array
+    const symbolt *inf_array_subtype = nullptr;
+    symbol_table_.foreach_operand([this, &inf_array_subtype](const symbolt &s) {
+      const std::string &symbol_id = s.id.as_string();
+      if (
+        symbol_id.find("tag-struct __anon_typedef_Object_at") != symbol_id.npos)
+      {
+        inf_array_subtype = &s;
+      }
+    });
+
+    assert(inf_array_subtype);
+    array_typet t(
+      symbol_typet(inf_array_subtype->id), exprt("infinity", size_type()));
+
+    exprt inf_array_value = gen_zero(get_complete_type(t, ns), true);
+    symbolt &cl = create_tmp_symbol(element, "$storage$", t, inf_array_value);
+    cl.value.zero_initializer(true);
+    cl.static_lifetime = true;
+
+    code_declt decl(symbol_expr(cl));
+    decl.location() = get_location_from_decl(element);
+
+    current_block->copy_to_operands(decl);
+
+    // Fix this:
+    expr = exprt("_init_undefined");
 
     break;
   }
