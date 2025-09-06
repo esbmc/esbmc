@@ -3257,9 +3257,10 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
       // Add tmp variable to hold object*
       pointer_typet obj_type(symbol_typet(get_list_element_type().id));
-      symbolt &obj_decl_symbol =
-        create_tmp_symbol(element, "tmp_obj", obj_type, exprt());
-      code_declt tmp_obj_decl(symbol_expr(obj_decl_symbol));
+
+      symbolt &tmp_obj_symbol = create_tmp_symbol(element, "tmp_obj", obj_type, exprt());
+
+      code_declt tmp_obj_decl(symbol_expr(tmp_obj_symbol));
       current_block->copy_to_operands(tmp_obj_decl);
 
       // Initialise tmp_obj with list_at() call return
@@ -3270,15 +3271,22 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       list_at_call.function() = symbol_expr(*list_at_func_sym);
       list_at_call.arguments().push_back(address_of_exprt(array)); // &l
       list_at_call.arguments().push_back(index);
-      list_at_call.lhs() = symbol_expr(obj_decl_symbol);
+      list_at_call.lhs() = symbol_expr(tmp_obj_symbol);
       list_at_call.type() = obj_type;
       list_at_call.location() = get_location_from_decl(element);
 
       // 4.2.4 Add list_at call to the block
       current_block->copy_to_operands(list_at_call);
 
+//      exprt cond("notequal");
+//      cond.copy_to_operands(symbol_expr(tmp_obj_symbol));
+//      cond.copy_to_operands(nil_exprt());
+//      code_assertt assert_obj_valid;
+//      assert_obj_valid.assertion() = cond;
+//      current_block->copy_to_operands(assert_obj_valid);
+
       // Get obj->value
-      member_exprt obj_value(symbol_expr(obj_decl_symbol), "value", pointer_typet(empty_typet()));
+      member_exprt obj_value(symbol_expr(tmp_obj_symbol), "value", pointer_typet(empty_typet()));
       symbolt& tmp_value_ptr_symbol = create_tmp_symbol(element, "tmp_value_ptr", pointer_typet(empty_typet()), obj_value);
 
       tmp_value_ptr_symbol.dump();
@@ -3287,8 +3295,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       tmp_value_ptr_decl.copy_to_operands(obj_value);
       current_block->copy_to_operands(tmp_value_ptr_decl);
 
-      pointer_typet list_elem_ptr_type(list_elem.type());
-      typecast_exprt tc(symbol_expr(tmp_value_ptr_symbol), list_elem_ptr_type);
+      typecast_exprt tc(symbol_expr(tmp_value_ptr_symbol), pointer_typet(list_elem.type()));
       dereference_exprt deref(list_elem.type());
       deref.op0() = tc;
       return deref;
