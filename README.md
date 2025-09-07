@@ -70,7 +70,7 @@ make -j4
 
 M1/M2/M3/M4 Macs are now supported.
 
-Given the common elements of OS X, run the script. It runs on both ARM and Intel macs. You do need homebrew installed.
+Given the common elements of OS X, run the script. It runs on both ARM and Intel macs. You do need Homebrew installed.
 It creates the build folder, installs the Boolector SMT solver, and makes esbmc available globally. The script also supports building the Python frontend. Note that the Python frontend is quite early in its support for Python.
 
 ```
@@ -293,7 +293,7 @@ We offer a post-graduate course in software security that explains the internals
 
 https://ssvlab.github.io/lucasccordeiro/courses/2020/01/software-security/index.html
 
-This course unit introduces students to basic and advanced approaches to formally building verified trustworthy software systems, where trustworthiness comprises five attributes: *reliability*, *availability*, *safety*, *resilience* and *security*.
+This course unit introduces students to basic and advanced approaches to formally building verified trustworthy software systems, where trustworthiness comprises five attributes: *reliability*, *availability*, *safety*, *resilience*, and *security*.
 
 ### Selected Publications
 
