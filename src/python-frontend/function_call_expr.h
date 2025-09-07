@@ -49,6 +49,9 @@ private:
   // Create an expression that represents non-deterministic string input
   exprt handle_input() const;
 
+  // Helper method for UTF-8 logic
+  int decode_utf8_codepoint(const std::string &utf8_str) const;
+
   /*
    * Creates an expression for a non-deterministic function call.
    */
