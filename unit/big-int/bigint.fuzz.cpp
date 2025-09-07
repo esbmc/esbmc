@@ -15,7 +15,6 @@
 #include <big-int/bigint.hh>
 #include <vector>
 #include <stddef.h>
-#include <iostream>
 
 // Checks whether the input contains digits only
 bool is_valid_input(const char *Data, size_t DataSize)
