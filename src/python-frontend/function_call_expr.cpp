@@ -19,6 +19,14 @@ namespace
 // Constants for input handling
 constexpr size_t MAX_INPUT_LENGTH = 256;
 
+// Constants for UTF-8 encoding
+constexpr unsigned int UTF8_1_BYTE_MAX = 0x7F;
+constexpr unsigned int UTF8_2_BYTE_MAX = 0x7FF;
+constexpr unsigned int UTF8_3_BYTE_MAX = 0xFFFF;
+constexpr unsigned int UTF8_4_BYTE_MAX = 0x10FFFF;
+constexpr unsigned int SURROGATE_START = 0xD800;
+constexpr unsigned int SURROGATE_END = 0xDFFF;
+
 // Constants for symbol parsing
 constexpr const char *CLASS_MARKER = "@C@";
 constexpr const char *FUNCTION_MARKER = "@F@";
@@ -280,7 +288,7 @@ std::string utf8_encode(unsigned int int_value)
    */
 
   // Check for surrogate pairs (invalid in UTF-8)
-  if (int_value >= 0xD800 && int_value <= 0xDFFF)
+  if (int_value >= SURROGATE_START && int_value <= SURROGATE_END)
   {
     std::ostringstream oss;
     oss << "Code point 0x" << std::hex << std::uppercase << int_value
@@ -291,21 +299,20 @@ std::string utf8_encode(unsigned int int_value)
   // Manual UTF-8 encoding
   std::string char_out;
 
-  // https://stackoverflow.com/revisions/19968992/1
-  if (int_value <= 0x7f)
+  if (int_value <= UTF8_1_BYTE_MAX)
     char_out.append(1, static_cast<char>(int_value));
-  else if (int_value <= 0x7ff)
+  else if (int_value <= UTF8_2_BYTE_MAX)
   {
     char_out.append(1, static_cast<char>(0xc0 | ((int_value >> 6) & 0x1f)));
     char_out.append(1, static_cast<char>(0x80 | (int_value & 0x3f)));
   }
-  else if (int_value <= 0xffff)
+  else if (int_value <= UTF8_3_BYTE_MAX)
   {
     char_out.append(1, static_cast<char>(0xe0 | ((int_value >> 12) & 0x0f)));
     char_out.append(1, static_cast<char>(0x80 | ((int_value >> 6) & 0x3f)));
     char_out.append(1, static_cast<char>(0x80 | (int_value & 0x3f)));
   }
-  else if (int_value <= 0x10ffff)
+  else if (int_value <= UTF8_4_BYTE_MAX)
   {
     char_out.append(1, static_cast<char>(0xf0 | ((int_value >> 18) & 0x07)));
     char_out.append(1, static_cast<char>(0x80 | ((int_value >> 12) & 0x3f)));
@@ -316,9 +323,7 @@ std::string utf8_encode(unsigned int int_value)
   {
     std::ostringstream oss;
     oss << "argument '0x" << std::hex << std::uppercase << int_value
-        << "' outside of Unicode range: [0x000000,  0x110000)";
-    // throw error if out of range
-    // only contains half of error message to allow caller to provide more context
+        << "' outside of Unicode range: [0x000000, 0x110000)";
     throw std::out_of_range(oss.str());
   }
   return char_out;
