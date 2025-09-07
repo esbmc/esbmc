@@ -14,6 +14,11 @@
 #include <stdexcept>
 
 using namespace json_utils;
+namespace
+{
+// Constants for input handling
+constexpr size_t MAX_INPUT_LENGTH = 256;
+} // namespace
 
 function_call_expr::function_call_expr(
   const symbol_id &function_id,
@@ -102,10 +107,9 @@ exprt function_call_expr::handle_input() const
   // input() returns a non-deterministic string
   // We'll model input() as returning a non-deterministic string
   // with a reasonable maximum length (e.g., 256 characters)
-  // This is an under-approximation to model the input
-  const size_t max_input_length = 256;
+  // This is an under-approximation to model the input function
 
-  typet string_type = type_handler_.get_typet("str", max_input_length);
+  typet string_type = type_handler_.get_typet("str", MAX_INPUT_LENGTH);
   exprt rhs = exprt("sideeffect", string_type);
   rhs.statement("nondet");
 
