@@ -18,6 +18,10 @@ namespace
 {
 // Constants for input handling
 constexpr size_t MAX_INPUT_LENGTH = 256;
+
+// Constants for symbol parsing
+constexpr const char *CLASS_MARKER = "@C@";
+constexpr const char *FUNCTION_MARKER = "@F@";
 } // namespace
 
 function_call_expr::function_call_expr(
@@ -38,14 +42,18 @@ static std::string get_classname_from_symbol_id(const std::string &symbol_id)
   // This function might return "Base" for a symbol_id as: py:main.py@C@Base@F@foo@self
 
   std::string class_name;
-  size_t class_pos = symbol_id.find("@C@");
-  size_t func_pos = symbol_id.find("@F@");
+  size_t class_pos = symbol_id.find(CLASS_MARKER);
+  size_t func_pos = symbol_id.find(FUNCTION_MARKER);
 
-  if (class_pos != std::string::npos && func_pos != std::string::npos)
+  if (
+    class_pos != std::string::npos && func_pos != std::string::npos &&
+    func_pos > class_pos)
   {
-    size_t length = func_pos - (class_pos + 3); // "+3" to ignore "@C@"
-    // Extract substring between "@C@" and "@F@"
-    class_name = symbol_id.substr(class_pos + 3, length);
+    size_t start = class_pos + strlen(CLASS_MARKER);
+    size_t length = func_pos - start;
+
+    if (length > 0)
+      class_name = symbol_id.substr(start, length);
   }
   return class_name;
 }
