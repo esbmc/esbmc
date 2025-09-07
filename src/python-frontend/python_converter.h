@@ -312,6 +312,21 @@ private:
     std::list<std::string> &file_list,
     const std::string &dir_path);
 
+  // helper methods for get_var_assign
+  std::pair<std::string, typet>
+  extract_type_info(const nlohmann::json &ast_node);
+  exprt create_lhs_expression(
+    const nlohmann::json &target,
+    symbolt *lhs_symbol,
+    const locationt &location);
+  void handle_assignment_type_adjustments(
+    symbolt *lhs_symbol,
+    exprt &lhs,
+    exprt &rhs,
+    const std::string &lhs_type,
+    const nlohmann::json &ast_node,
+    bool is_ctor_call);
+
   contextt &symbol_table_;
   const nlohmann::json *ast_json;
   const global_scope &global_scope_;

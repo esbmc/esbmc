@@ -3084,14 +3084,15 @@ const nlohmann::json &get_return_statement(const nlohmann::json &function)
     " has no return statement");
 }
 
-void python_converter::get_var_assign(
-  const nlohmann::json &ast_node,
-  codet &target_block)
+// Helper method to extract type information from annotations
+std::pair<std::string, typet>
+python_converter::extract_type_info(const nlohmann::json &ast_node)
 {
   std::string lhs_type("");
+  typet element_type;
+
   if (ast_node.contains("annotation"))
   {
-    // Get type from annotation node
     size_t type_size = get_type_size(ast_node);
     if (ast_node["annotation"]["_type"] == "Subscript")
       lhs_type = ast_node["annotation"]["value"]["id"];
@@ -3099,10 +3100,116 @@ void python_converter::get_var_assign(
       lhs_type = ast_node["annotation"]["id"];
 
     if (lhs_type == "list")
-      current_element_type = type_handler_.get_list_type(ast_node["value"]);
+      element_type = type_handler_.get_list_type(ast_node["value"]);
     else
-      current_element_type = type_handler_.get_typet(lhs_type, type_size);
+      element_type = type_handler_.get_typet(lhs_type, type_size);
   }
+
+  return {lhs_type, element_type};
+}
+
+// Helper method to create LHS expression based on target type
+exprt python_converter::create_lhs_expression(
+  const nlohmann::json &target,
+  symbolt *lhs_symbol,
+  const locationt &location)
+{
+  exprt lhs;
+  const auto &target_type = target["_type"];
+
+  if (target_type == "Attribute" || target_type == "Subscript")
+  {
+    is_converting_lhs = true;
+    lhs = get_expr(target);
+    is_converting_lhs = false;
+  }
+  else
+    lhs = symbol_expr(*lhs_symbol);
+
+  lhs.location() = location;
+  return lhs;
+}
+
+// Helper method to handle post-assignment type adjustments
+void python_converter::handle_assignment_type_adjustments(
+  symbolt *lhs_symbol,
+  exprt &lhs,
+  exprt &rhs,
+  const std::string &lhs_type,
+  const nlohmann::json &ast_node,
+  bool is_ctor_call)
+{
+  // Handle lambda assignments
+  if (
+    ast_node.contains("value") && ast_node["value"].contains("_type") &&
+    ast_node["value"]["_type"] == "Lambda" && rhs.is_symbol())
+  {
+    const symbolt *lambda_func_symbol =
+      symbol_table_.find_symbol(rhs.identifier());
+    if (lambda_func_symbol && lhs_symbol)
+    {
+      if (lambda_func_symbol->type.is_code())
+      {
+        typet func_ptr_type = gen_pointer_type(lambda_func_symbol->type);
+        lhs_symbol->type = func_ptr_type;
+        lhs.type() = func_ptr_type;
+        rhs = address_of_exprt(rhs);
+      }
+      else
+      {
+        throw std::runtime_error(
+          "Lambda function symbol does not have code type");
+      }
+    }
+  }
+  else if (lhs_symbol)
+  {
+    // Handle string-to-string variable assignments
+    if (lhs_type == "str" && rhs.is_symbol())
+    {
+      symbolt *rhs_symbol = symbol_table_.find_symbol(rhs.identifier());
+      if (
+        rhs_symbol && rhs_symbol->value.is_constant() &&
+        rhs_symbol->value.type().is_array())
+      {
+        rhs = rhs_symbol->value;
+        lhs_symbol->type = rhs.type();
+        lhs.type() = rhs.type();
+      }
+    }
+    // Array to pointer decay
+    else if (lhs.type().id().empty() && rhs.type().is_array())
+    {
+      const typet &element_type = to_array_type(rhs.type()).subtype();
+      typet pointer_type = gen_pointer_type(element_type);
+      lhs_symbol->type = pointer_type;
+      lhs.type() = pointer_type;
+      rhs = get_array_base_address(rhs);
+    }
+    // String and list type size adjustments
+    else if (
+      lhs_type == "str" || lhs_type == "chr" || lhs_type == "ord" ||
+      lhs_type == "list" || rhs.type().is_array())
+    {
+      if (!rhs.type().is_empty())
+      {
+        lhs_symbol->type = rhs.type();
+        lhs.type() = rhs.type();
+      }
+    }
+
+    if (!rhs.type().is_empty() && !is_ctor_call)
+      lhs_symbol->value = rhs;
+  }
+}
+
+void python_converter::get_var_assign(
+  const nlohmann::json &ast_node,
+  codet &target_block)
+{
+  // Extract type information
+  auto [lhs_type, element_type] = extract_type_info(ast_node);
+  current_element_type = element_type;
 
   exprt lhs;
   symbolt *lhs_symbol = nullptr;
@@ -3115,9 +3222,8 @@ void python_converter::get_var_assign(
 
   if (ast_node["_type"] == "AnnAssign")
   {
-    // Id and name
+    // Extract name and set in symbol ID
     std::string name;
-
     if (!target.is_null())
     {
       if (target_type == "Name")
@@ -3128,11 +3234,10 @@ void python_converter::get_var_assign(
         name = target["value"]["id"];
 
       assert(!name.empty());
-
       sid.set_object(name);
     }
 
-    // Process RHS before LHS if code is in a Function, to update local_load
+    // Process RHS before LHS if in function scope
     exprt rhs;
     if (
       sid.to_string().find("@F") != std::string::npos &&
@@ -3141,23 +3246,17 @@ void python_converter::get_var_assign(
       is_right = true;
       if (!ast_node["value"].is_null())
       {
-        if (
-          ast_node["_type"] !=
-          "Call") // Test cases showed that some types cannot be processed here
-        {
+        if (ast_node["_type"] != "Call")
           rhs = get_expr(ast_node["value"]);
-        }
       }
       is_right = false;
     }
 
-    // Location
+    // Location and symbol lookup
     location_begin = get_location_from_decl(target);
-
     lhs_symbol = symbol_table_.find_symbol(sid.to_string().c_str());
 
     bool is_global = false;
-
     for (std::string &s : global_declarations)
     {
       if (s == sid.global_to_string())
@@ -3168,12 +3267,10 @@ void python_converter::get_var_assign(
       }
     }
 
+    // Symbol creation
     if (!lhs_symbol || !is_global)
     {
-      // Debug module name
       std::string module_name = location_begin.get_file().as_string();
-
-      // Create/init symbol
       symbolt symbol = create_symbol(
         module_name,
         name,
@@ -3181,14 +3278,12 @@ void python_converter::get_var_assign(
         location_begin,
         current_element_type);
       symbol.lvalue = true;
-      /*symbol.static_lifetime =
-        (current_class_name_ == "" && current_func_name_ == "") ? true : false;*/
       symbol.file_local = true;
       symbol.is_extern = false;
-
       lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
     }
 
+    // Check for uninitialized usage
     for (std::string &s : local_loads)
     {
       if (lhs_symbol->id.as_string() == s)
@@ -3200,20 +3295,13 @@ void python_converter::get_var_assign(
       continue;
     }
 
-    if (target_type == "Attribute" || target_type == "Subscript")
-    {
-      is_converting_lhs = true;
-      lhs = get_expr(target); // lhs is a obj.member expression
-    }
-    else
-      lhs = symbol_expr(*lhs_symbol); // lhs is a simple variable
-
-    lhs.location() = location_begin;
+    // Create LHS expression
+    lhs = create_lhs_expression(target, lhs_symbol, location_begin);
   }
   else if (ast_node["_type"] == "Assign")
   {
+    // Assign logic
     const auto &target = ast_node["targets"][0];
-
     const auto &name = (target["_type"] == "Subscript")
                          ? target["value"]["id"].get<std::string>()
                          : target["id"].get<std::string>();
@@ -3222,7 +3310,6 @@ void python_converter::get_var_assign(
     lhs_symbol = symbol_table_.find_symbol(sid.to_string());
 
     bool is_global = false;
-
     for (std::string &s : global_declarations)
     {
       if (s == sid.global_to_string())
@@ -3232,18 +3319,14 @@ void python_converter::get_var_assign(
       }
     }
 
-    // Special handling for lambda assignments - create symbol dynamically
+    // Special handling for lambda assignments
     if (
       !lhs_symbol && !is_global && ast_node.contains("value") &&
       ast_node["value"].contains("_type") &&
       ast_node["value"]["_type"] == "Lambda")
     {
-      // For lambda assignments, we need to create the variable symbol
-      // The type will be set to function pointer later when processing the RHS
       locationt location = get_location_from_decl(target);
       std::string module_name = location.get_file().as_string();
-
-      // Create with placeholder type that will be updated later
       typet placeholder_type = pointer_typet(empty_typet());
 
       symbolt symbol = create_symbol(
@@ -3251,7 +3334,6 @@ void python_converter::get_var_assign(
       symbol.lvalue = true;
       symbol.file_local = true;
       symbol.is_extern = false;
-
       lhs_symbol = symbol_table_.move_symbol_to_context(symbol);
     }
 
@@ -3262,9 +3344,7 @@ void python_converter::get_var_assign(
   }
 
   bool is_ctor_call = type_handler_.is_constructor_call(ast_node["value"]);
-
   current_lhs = &lhs;
-
   is_converting_lhs = false;
 
   // Get RHS
@@ -3273,105 +3353,23 @@ void python_converter::get_var_assign(
   if (!ast_node["value"].is_null())
   {
     is_converting_rhs = true;
-
     rhs = get_expr(ast_node["value"]);
-
     has_value = true;
     is_converting_rhs = false;
   }
 
   if (has_value && rhs != exprt("_init_undefined"))
   {
-    // Handle lambda assignments
-    if (
-      ast_node.contains("value") && ast_node["value"].contains("_type") &&
-      ast_node["value"]["_type"] == "Lambda" && rhs.is_symbol())
-    {
-      // Get the lambda function symbol
-      const symbolt *lambda_func_symbol =
-        symbol_table_.find_symbol(rhs.identifier());
-      if (lambda_func_symbol && lhs_symbol)
-      {
-        // Ensure the lambda function type is a proper code_typet
-        if (lambda_func_symbol->type.is_code())
-        {
-          // Create function pointer type properly
-          typet func_ptr_type = gen_pointer_type(lambda_func_symbol->type);
-          lhs_symbol->type = func_ptr_type;
-          lhs.type() = func_ptr_type;
+    // Handle type adjustments
+    handle_assignment_type_adjustments(
+      lhs_symbol, lhs, rhs, lhs_type, ast_node, is_ctor_call);
 
-          // Create address-of expression for the function
-          rhs = address_of_exprt(rhs);
-        }
-        else
-        {
-          throw std::runtime_error(
-            "Lambda function symbol does not have code type");
-        }
-      }
-    }
-    else if (lhs_symbol)
-    {
-      // Handle string-to-string variable assignments
-      if (lhs_type == "str" && rhs.is_symbol())
-      {
-        symbolt *rhs_symbol = symbol_table_.find_symbol(rhs.identifier());
-        if (
-          rhs_symbol && rhs_symbol->value.is_constant() &&
-          rhs_symbol->value.type().is_array())
-        {
-          // Copy the string content from the RHS symbol's value
-          rhs = rhs_symbol->value;
-          lhs_symbol->type = rhs.type();
-          lhs.type() = rhs.type();
-        }
-      }
-      // If the LHS type is currently unspecified (i.e., no type assigned),
-      // and the RHS is an array, we perform normalization to convert the RHS
-      // array into a pointer to its first element, and update the LHS accordingly.
-      else if (lhs.type().id().empty() && rhs.type().is_array())
-      {
-        // Extract the type of the elements in the RHS array
-        const typet &element_type = to_array_type(rhs.type()).subtype();
-
-        // Generate a pointer type to the element type (e.g., int[] -> int*)
-        typet pointer_type = gen_pointer_type(element_type);
-
-        // Update the symbol table entry and LHS expression to use the new pointer type
-        lhs_symbol->type = pointer_type;
-        lhs.type() = pointer_type;
-
-        // Replace RHS with the address of its first element (decay to pointer)
-        rhs = get_array_base_address(rhs);
-      }
-      else if (
-        lhs_type == "str" || lhs_type == "chr" || lhs_type == "ord" ||
-        lhs_type == "list" || rhs.type().is_array())
-      {
-        /* When a string is assigned the result of a concatenation, we initially
-         * create the LHS type as a zero-size array: "current_element_type = get_typet(lhs_type, type_size);"
-         * After parsing the RHS, we need to adjust the LHS type size to match
-         * the size of the resulting RHS string.*/
-        if (!rhs.type().is_empty())
-        {
-          lhs_symbol->type = rhs.type();
-          lhs.type() = rhs.type();
-        }
-      }
-      if (!rhs.type().is_empty() && !is_ctor_call)
-        lhs_symbol->value = rhs;
-    }
-
-    /* If the right-hand side (rhs) of the assignment is a function call, such as: x : int = func()
-     * we need to adjust the left-hand side (lhs) of the function call to refer to the lhs of the current assignment.
-     */
+    // Function call handling
     if (rhs.is_function_call())
     {
-      // If rhs is a constructor call so it is necessary to update lhs instance attributes with members added in self
       if (is_ctor_call)
       {
         std::string func_name = ast_node["value"]["func"]["id"];
-
         if (base_ctor_called)
         {
           auto class_node =
@@ -3379,16 +3377,15 @@ void python_converter::get_var_assign(
           func_name = class_node["bases"][0]["id"].get<std::string>();
           base_ctor_called = false;
         }
-
         update_instance_from_self(
           func_name, func_name, lhs_symbol->id.as_string());
       }
-      // op0() refers to the left-hand side (lhs) of the function call
-      // Only apply direct assignment optimization for scalar and array types
+
       if (!rhs.type().is_pointer() && !rhs.type().is_empty())
         rhs.op0() = lhs;
 
       target_block.copy_to_operands(rhs);
+      current_lhs = nullptr;
       return;
     }
 
