@@ -6,7 +6,6 @@
 #include <util/base_type.h>
 #include <util/c_typecast.h>
 #include <util/expr_util.h>
-#include <util/message.h>
 #include <util/string_constant.h>
 #include <util/arith_tools.h>
 #include <util/ieee_float.h>
