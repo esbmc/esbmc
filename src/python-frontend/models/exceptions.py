@@ -56,3 +56,12 @@ class ZeroDivisionError(BaseException):
 
     def __str__(self) -> str:
         return self.message
+
+class AssertionError(BaseException):
+    message: str = ""
+
+    def __init__(self, message: str):
+        self.message: str = message
+
+    def __str__(self) -> str:
+        return self.message

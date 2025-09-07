@@ -89,7 +89,7 @@ public:
     return (
       name == "BaseException" || name == "ValueError" || name == "TypeError" ||
       name == "IndexError" || name == "KeyError" ||
-      name == "ZeroDivisionError");
+      name == "ZeroDivisionError" || name == "AssertionError");
   }
 
   static bool is_c_model_func(const std::string &func_name)

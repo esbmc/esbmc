@@ -6,6 +6,8 @@ all_passed=true
 
 # List of directories to ignore
 ignored_dirs=(
+  "AssertionError1_fail"
+  "AssertionError2_fail"
   "branch_coverage-fail"
   "built-in-functions"
   "constants"
@@ -29,6 +31,7 @@ ignored_dirs=(
   "input5_fail"
   "input6"
   "insertion_fail"
+  "insertion3_fail"
   "jpl"
   "list9"
   "list10"
