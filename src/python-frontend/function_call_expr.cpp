@@ -745,7 +745,7 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     return expr;
   }
 
-  // Try to infer type for composite expressions like BinOp
+  // Try to infer type for composite expressions such as BinOp
   if (!arg.contains("type"))
   {
     try
@@ -783,29 +783,26 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     else
     {
       // Variable could not be resolved
-      log_error("NameError: variable '{}' is not defined", var_name);
-      abort();
+      throw std::runtime_error(
+        "NameError: variable '" + var_name + "' is not defined");
     }
   }
 
   // Final fallback if no type is available
   std::string arg_type = arg.value("type", "");
   if (arg_type.empty())
-  {
-    log_error("TypeError: operand to abs() is missing a type");
-    abort();
-  }
+    throw std::runtime_error("TypeError: operand to abs() is missing a type");
 
   // Only numeric types are valid operands for abs()
   if (arg_type != "int" && arg_type != "float" && arg_type != "complex")
   {
-    log_error("TypeError: bad operand type for abs(): {}", arg_type);
-    abort();
+    throw std::runtime_error(
+      "TypeError: bad operand type for abs(): '" + arg_type + "'");
   }
 
   // Fallback for unsupported symbolic expressions (e.g., complex)
   // Currently returns a nil expression to signal unsupported cases
-  log_warning("Returning nil expression for abs()");
+  log_warning("Returning nil expression for abs() with type: {}", arg_type);
   return nil_exprt();
 }
 
