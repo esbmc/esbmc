@@ -184,6 +184,21 @@ private:
   exprt
   handle_min_max(const std::string &func_name, irep_idt comparison_op) const;
 
+  /*
+   * Handles round() function calls by rounding numeric values to the nearest integer.
+   * Only supports single-argument form: round(x)
+   * - round(x): returns nearest integer as int type
+   * - round(x, ndigits): NOT SUPPORTED - throws error
+   * Uses "round half to even" (banker's rounding) for tie-breaking.
+   */
+  exprt handle_round(const nlohmann::json &args) const;
+
+  /*
+   * Helper function to create symbolic round expression using C round() function.
+   * Converts the operand to double, calls C round(), then casts result back to int.
+   */
+  exprt handle_round_symbolic(exprt operand) const;
+
 protected:
   symbol_id function_id_;
   const nlohmann::json &call_;

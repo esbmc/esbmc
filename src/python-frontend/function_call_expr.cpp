@@ -806,6 +806,153 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
   return nil_exprt();
 }
 
+exprt function_call_expr::handle_round_symbolic(exprt operand) const
+{
+  // Create function identifier for round
+  irep_idt round_id("c:@F@round");
+  typet double_type = type_handler_.get_typet("float", 0);
+
+  // Convert argument to double type if needed
+  exprt double_operand = operand;
+  if (!operand.type().is_floatbv())
+  {
+    double_operand = exprt("typecast", double_type);
+    double_operand.copy_to_operands(operand);
+  }
+
+  // Create the function call
+  side_effect_expr_function_callt round_call;
+
+  // Create symbol expression for round function
+  symbol_exprt round_symbol(round_id, double_type);
+  round_call.function() = round_symbol;
+  round_call.arguments().resize(1);
+  round_call.arguments()[0] = double_operand;
+  round_call.type() = double_type;
+
+  // Convert result back to int since Python's round() returns int
+  typet int_type = type_handler_.get_typet("int", 0);
+  exprt result = exprt("typecast", int_type);
+  result.copy_to_operands(round_call);
+
+  return result;
+}
+
+exprt function_call_expr::handle_round(const nlohmann::json &args) const
+{
+  // Validate argument count (only 1 argument allowed)
+  if (args.empty())
+  {
+    throw std::runtime_error(
+      "TypeError: round() missing required argument: 'number' (pos 1)");
+  }
+
+  if (args.size() > 1)
+  {
+    throw std::runtime_error(
+      "TypeError: round() with ndigits argument is not supported");
+  }
+
+  auto arg = args[0];
+
+  // Reject non-numeric types early
+  if (arg.contains("type") && arg["type"] == "str")
+    throw std::runtime_error("TypeError: must be real number, not str");
+
+  if (arg.contains("value") && arg["value"].is_string())
+    throw std::runtime_error("TypeError: must be real number, not str");
+
+  // Handle numeric constants - evaluate at compile time
+  if (arg.contains("value") && arg["value"].is_number())
+  {
+    if (arg["value"].is_number_integer())
+    {
+      // round(int) returns the same int
+      arg["type"] = "int";
+      typet t = type_handler_.get_typet("int", 0);
+      exprt expr = converter_.get_expr(arg);
+      expr.type() = t;
+      return expr;
+    }
+    else if (arg["value"].is_number_float())
+    {
+      double value = arg["value"].get<double>();
+
+      // round(float) returns int - use "round half to even" (banker's rounding)
+      double rounded = std::round(value);
+      // Handle banker's rounding for .5 cases
+      if (std::abs(value - std::floor(value) - 0.5) < 1e-10)
+      {
+        int floor_val = static_cast<int>(std::floor(value));
+        if (floor_val % 2 == 0)
+          rounded = floor_val;
+        else
+          rounded = floor_val + (value > 0 ? 1 : -1);
+      }
+
+      arg["value"] = static_cast<int>(rounded);
+      arg["type"] = "int";
+      typet t = type_handler_.get_typet("int", 0);
+      exprt expr = converter_.get_expr(arg);
+      expr.type() = t;
+      return expr;
+    }
+  }
+
+  // Handle variable references and symbolic expressions
+  if (arg["_type"] == "Name" && arg.contains("id"))
+  {
+    std::string var_name = arg["id"].get<std::string>();
+    const symbolt *sym = lookup_python_symbol(var_name);
+    if (sym)
+    {
+      exprt operand_expr = converter_.get_expr(arg);
+      return handle_round_symbolic(operand_expr);
+    }
+    else
+    {
+      throw std::runtime_error(
+        "NameError: variable '" + var_name + "' is not defined");
+    }
+  }
+
+  // Handle complex expressions
+  if (!arg.contains("type"))
+  {
+    try
+    {
+      exprt inferred_expr = converter_.get_expr(arg);
+      typet inferred_type = inferred_expr.type();
+
+      // Ensure the type is numeric
+      if (!inferred_type.is_signedbv() && !inferred_type.is_floatbv())
+        throw std::runtime_error("TypeError: must be real number");
+
+      return handle_round_symbolic(inferred_expr);
+    }
+    catch (const std::exception &e)
+    {
+      throw std::runtime_error(
+        std::string("TypeError: failed to infer operand type for round(): ") +
+        e.what());
+    }
+  }
+
+  // Final validation
+  std::string arg_type = arg.value("type", "");
+  if (arg_type.empty())
+    throw std::runtime_error("TypeError: operand to round() is missing a type");
+
+  if (arg_type != "int" && arg_type != "float")
+  {
+    throw std::runtime_error(
+      "TypeError: must be real number, not '" + arg_type + "'");
+  }
+
+  log_warning("Returning nil expression for round() with type: {}", arg_type);
+  return nil_exprt();
+}
+
 exprt function_call_expr::build_constant_from_arg() const
 {
   const std::string &func_name = function_id_.get_function();
@@ -988,6 +1135,10 @@ exprt function_call_expr::build_constant_from_arg() const
   // Handle abs: Returns the absolute value of an integer or float literal
   else if (func_name == "abs")
     return handle_abs(arg);
+
+  // Handle round: Returns the rounded value of a number
+  else if (func_name == "round")
+    return handle_round(call_["args"]);
 
   else if (func_name == "str")
     arg_size = handle_str(arg);

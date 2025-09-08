@@ -245,9 +245,11 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   // oct(): Converts an integer to a lowercase octal string
   // ord(): Converts a 1-character string to its Unicode code point (as integer)
   // abs(): Return the absolute value of a number
+  // round(): Return the rounded value of a number
   if (
     ast_type == "str" || ast_type == "chr" || ast_type == "hex" ||
-    ast_type == "oct" || ast_type == "ord" || ast_type == "abs")
+    ast_type == "oct" || ast_type == "ord" || ast_type == "abs" ||
+    ast_type == "round")
   {
     if (type_size == 1)
     {

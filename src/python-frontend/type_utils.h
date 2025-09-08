@@ -52,7 +52,7 @@ public:
     return (
       name == "int" || name == "float" || name == "bool" || name == "str" ||
       name == "chr" || name == "hex" || name == "oct" || name == "ord" ||
-      name == "abs");
+      name == "abs" || name == "round");
   }
 
   static bool is_consensus_type(const std::string &name)
