@@ -3499,8 +3499,7 @@ void python_converter::get_var_assign(
       current_lhs = nullptr;
       return;
     }
-
-    if (rhs.statement() == "cpp-throw")
+    else if (rhs.statement() == "cpp-throw")
     {
       rhs.location() = location_begin;
       codet code_expr("expression");
