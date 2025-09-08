@@ -93,7 +93,7 @@ ubuntu_setup () {
     cd "$ORIGINAL_DIR" &&  # Return to build directory
 
     echo "Installing Python dependencies" &&
-    pip3 install --user meson ast2json &&
+    pip3 install --user meson ast2json mypy &&
     pip3 install --user pyparsing toml &&
     pip3 install --user pyparsing tomli &&
     meson --version &&
