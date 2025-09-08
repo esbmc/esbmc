@@ -208,7 +208,10 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "NoneType")
     return pointer_type();
 
-  // float — represents IEEE 754 double-precision
+  // Python float type: IEEE 754 double-precision mapping
+  // Python floats are implemented using C double (IEEE 754 double-precision)
+  // as per Python documentation. This ensures proper precision, range, and
+  // compatibility with Python's numeric type promotion (int -> float -> complex).
   if (ast_type == "float")
     return double_type();
 
