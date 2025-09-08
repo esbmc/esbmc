@@ -344,7 +344,7 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
       operand["value"].is_number_integer())
       int_value = -operand["value"].get<int>();
     else
-      throw std::runtime_error("TypeError: Unsupported UnaryOp in chr()");
+      return gen_exception_raise("TypeError", "Unsupported UnaryOp in chr()");
   }
 
   // Handle integer input
@@ -353,8 +353,8 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
 
   // Reject float input
   else if (arg.contains("value") && arg["value"].is_number_float())
-    throw std::runtime_error(
-      "TypeError: chr() argument must be int, not float");
+    return gen_exception_raise(
+      "TypeError", "chr() argument must be int, not float");
 
   // Try converting string input to integer
   else if (arg.contains("value") && arg["value"].is_string())
@@ -366,8 +366,7 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
     }
     catch (const std::invalid_argument &)
     {
-      throw std::runtime_error(
-        "TypeError: invalid string passed to chr(): '" + s + "'");
+      return gen_exception_raise("TypeError", "invalid string passed to chr()");
     }
   }
 
@@ -400,15 +399,12 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
     }
     catch (std::out_of_range &)
     {
-      throw std::runtime_error(
-        "ValueError: chr() argument '" + arg["id"].get<std::string>() +
-        "' outside of Unicode range: [0x000000, 0x110000)");
+      return gen_exception_raise(
+        "ValueError", "chr() argument outside of Unicode range");
     }
     catch (std::invalid_argument &)
     {
-      throw std::runtime_error(
-        "TypeError: chr() argument '" + arg["id"].get<std::string>() +
-        "' must be of type int");
+      return gen_exception_raise("TypeError", "must be of type int");
     }
 
     arg["_type"] = "Constant";
@@ -423,7 +419,7 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
   }
   catch (const std::out_of_range &e)
   {
-    throw std::runtime_error(std::string("ValueError: chr() ") + e.what());
+    return gen_exception_raise("ValueError", "chr()");
   }
 
   // Replace the value with a single-character string
@@ -456,7 +452,7 @@ exprt function_call_expr::handle_hex(nlohmann::json &arg) const
       int_value = operand["value"].get<long long>();
     }
     else
-      throw std::runtime_error("TypeError: Unsupported UnaryOp in hex()");
+      return gen_exception_raise("TypeError", "Unsupported UnaryOp in hex()");
   }
   else if (arg.contains("value") && arg["value"].is_number_integer())
   {
@@ -465,7 +461,8 @@ exprt function_call_expr::handle_hex(nlohmann::json &arg) const
       is_negative = true;
   }
   else
-    throw std::runtime_error("TypeError: hex() argument must be an integer");
+    return gen_exception_raise(
+      "TypeError", "hex() argument must be an integer");
 
   std::ostringstream oss;
   oss << (is_negative ? "-0x" : "0x") << std::hex << std::nouppercase
@@ -500,7 +497,7 @@ exprt function_call_expr::handle_oct(nlohmann::json &arg) const
         is_negative = true;
     }
     else
-      throw std::runtime_error("TypeError: Unsupported UnaryOp in oct()");
+      return gen_exception_raise("TypeError", "Unsupported UnaryOp in oct()");
   }
   // If it's not a unary operation, expect a plain integer literal
   else if (arg.contains("value") && arg["value"].is_number_integer())
@@ -512,7 +509,8 @@ exprt function_call_expr::handle_oct(nlohmann::json &arg) const
   else
   {
     // Invalid argument type for oct()
-    throw std::runtime_error("TypeError: oct() argument must be an integer");
+    return gen_exception_raise(
+      "TypeError", "oct() argument must be an integer");
   }
 
   // Convert the absolute value to octal and prepend "0o" (or "-0o")
@@ -543,8 +541,8 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
     if (!sym)
     {
       std::string var_name = arg["id"].get<std::string>();
-      throw std::runtime_error(
-        "NameError: variable '" + var_name + "' is not defined");
+      return gen_exception_raise(
+        "NameError", "variable '" + var_name + "' is not defined");
     }
 
     typet operand_type = sym->value.type();
@@ -552,16 +550,16 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
 
     if (operand_type != char_type() && py_type != "str")
     {
-      throw std::runtime_error(
-        "TypeError: ord() expected string of length 1, but " + py_type +
-        " found");
+      return gen_exception_raise(
+        "TypeError",
+        "ord() expected string of length 1, but " + py_type + " found");
     }
 
     auto value_opt = extract_string_from_symbol(sym);
     if (!value_opt)
     {
-      throw std::runtime_error(
-        "ValueError: failed to extract string from symbol");
+      return gen_exception_raise(
+        "ValueError", "failed to extract string from symbol");
     }
 
     code_point = decode_utf8_codepoint(*value_opt);
@@ -572,7 +570,7 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
     arg.erase("ctx");
   }
   else
-    throw std::runtime_error("TypeError: ord() argument must be a string");
+    return gen_exception_raise("TypeError", "ord() argument must be a string");
 
   // Replace the arg with the integer value
   arg["value"] = code_point;
@@ -716,11 +714,13 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
 
   // Reject strings early
   if (arg.contains("type") && arg["type"] == "str")
-    throw std::runtime_error("TypeError: bad operand type for abs(): 'str'");
+    return gen_exception_raise(
+      "TypeError", "bad operand type for abs(): 'str'");
 
   // Also catch string constants without "type" annotation
   if (arg.contains("value") && arg["value"].is_string())
-    throw std::runtime_error("TypeError: bad operand type for abs(): 'str'");
+    return gen_exception_raise(
+      "TypeError", "bad operand type for abs(): 'str'");
 
   // If the argument is a numeric literal, evaluate abs() at compile time
   if (arg.contains("value") && arg["value"].is_number())
@@ -758,9 +758,8 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     }
     catch (const std::exception &e)
     {
-      throw std::runtime_error(
-        std::string("TypeError: failed to infer operand type for abs(): ") +
-        e.what());
+      return gen_exception_raise(
+        "TypeError", "failed to infer operand type for abs()");
     }
   }
 
@@ -783,22 +782,21 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     else
     {
       // Variable could not be resolved
-      throw std::runtime_error(
-        "NameError: variable '" + var_name + "' is not defined");
+      return gen_exception_raise(
+        "NameError", "variable '" + var_name + "' is not defined");
     }
   }
 
   // Final fallback if no type is available
   std::string arg_type = arg.value("type", "");
   if (arg_type.empty())
-    throw std::runtime_error("TypeError: operand to abs() is missing a type");
+    return gen_exception_raise(
+      "TypeError", "operand to abs() is missing a type");
 
   // Only numeric types are valid operands for abs()
   if (arg_type != "int" && arg_type != "float" && arg_type != "complex")
-  {
-    throw std::runtime_error(
-      "TypeError: bad operand type for abs(): '" + arg_type + "'");
-  }
+    return gen_exception_raise(
+      "TypeError", "bad operand type for abs(): '" + arg_type + "'");
 
   // Fallback for unsupported symbolic expressions (e.g., complex)
   // Currently returns a nil expression to signal unsupported cases
@@ -839,12 +837,11 @@ exprt function_call_expr::build_constant_from_arg() const
       exprt expr = converter_.get_expr(arg);
       if (expr.type().is_array()) // strings are arrays
       {
-        // TODO: raise an exception to match Python semantics
         std::string var_name = arg["id"].get<std::string>();
-        log_warning(
-          "ValueError: int() conversion may fail - variable '{}' may contain "
-          "non-integer string",
-          var_name);
+        std::string m = "int() conversion may fail - variable" + var_name +
+                        "may contain non-float string";
+
+        return gen_exception_raise("ValueError", m);
       }
     }
   }
@@ -929,9 +926,9 @@ exprt function_call_expr::build_constant_from_arg() const
       }
       catch (const std::exception &e)
       {
-        throw std::runtime_error(
-          "ValueError: could not convert string to float: '" +
-          arg["value"].get<std::string>() + "'");
+        std::string m = "could not convert string to float : " +
+                        arg["value"].get<std::string>() + "'";
+        return gen_exception_raise("ValueError", m);
       }
     }
   }
@@ -948,12 +945,11 @@ exprt function_call_expr::build_constant_from_arg() const
       exprt expr = converter_.get_expr(arg);
       if (expr.type().is_array()) // strings are arrays
       {
-        // TODO: raise an exception to match Python semantics
         std::string var_name = arg["id"].get<std::string>();
-        log_warning(
-          "ValueError: float() conversion may fail - variable '{}' may contain "
-          "non-float string",
-          var_name);
+        std::string m = "float() conversion may fail - variable" + var_name +
+                        "may contain non-float string";
+
+        return gen_exception_raise("ValueError", m);
       }
     }
   }
@@ -1364,4 +1360,38 @@ exprt function_call_expr::get()
   }
 
   return std::move(call);
+}
+
+exprt function_call_expr::gen_exception_raise(
+  std::string exc,
+  std::string message) const
+{
+  if (!type_utils::is_python_exceptions(exc))
+  {
+    log_error("This exception type is not supported: {}", exc);
+    abort();
+  }
+
+  std::string file = converter_.python_file();
+  symbol_id function_id(file, exc, exc);
+  const symbolt *sym = converter_.find_symbol(function_id.to_string());
+  typet type = type_handler_.get_typet(exc);
+
+  side_effect_expr_function_callt call;
+  call.function() = symbol_expr(*sym);
+  call.type() = type;
+
+  exprt size = constant_exprt(
+    integer2binary(message.size(), bv_width(size_type())),
+    integer2string(message.size()),
+    size_type());
+  typet t = array_typet(char_type(), size);
+  string_constantt string_name(message, t, string_constantt::k_default);
+
+  call.arguments().push_back(address_of_exprt(string_name));
+
+  exprt raise = side_effect_exprt("cpp-throw", type);
+  raise.move_to_operands(call);
+
+  return raise;
 }

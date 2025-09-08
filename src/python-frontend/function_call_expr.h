@@ -184,6 +184,8 @@ private:
   exprt
   handle_min_max(const std::string &func_name, irep_idt comparison_op) const;
 
+  exprt gen_exception_raise(std::string exc, std::string message) const;
+
 protected:
   symbol_id function_id_;
   const nlohmann::json &call_;

@@ -3500,6 +3500,16 @@ void python_converter::get_var_assign(
       return;
     }
 
+    if (rhs.statement() == "cpp-throw")
+    {
+      rhs.location() = location_begin;
+      codet code_expr("expression");
+      code_expr.operands().push_back(rhs);
+      target_block.copy_to_operands(code_expr);
+      current_lhs = nullptr;
+      return;
+    }
+
     adjust_statement_types(lhs, rhs);
 
     code_assignt code_assign(lhs, rhs);
