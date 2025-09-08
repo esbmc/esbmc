@@ -3665,7 +3665,6 @@ void python_converter::get_var_assign(
       {
         if (ast_node["_type"] != "Call")
           rhs = get_expr(ast_node["value"]);
-        }
       }
       is_right = false;
     }
@@ -3856,7 +3855,6 @@ void python_converter::get_var_assign(
 
       if (!rhs.type().is_pointer() && !rhs.type().is_empty())
         rhs.op0() = lhs;
-      }
 
       target_block.copy_to_operands(rhs);
       current_lhs = nullptr;
