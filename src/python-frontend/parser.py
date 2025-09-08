@@ -1,4 +1,5 @@
 import sys
+import subprocess
 
 # Detect the Python version
 PY3 = sys.version_info[0] == 3
@@ -249,6 +250,17 @@ def main():
     check_usage()
     filename = sys.argv[1]
     output_dir = sys.argv[2]
+
+    # Check input program syntax
+    result = subprocess.run(
+    ["python3", filename],
+    capture_output=True,
+    text=True)
+
+    if result.returncode != 0:
+        print("❌ Syntax or runtime error:")
+        print(result.stderr)
+        exit(3)
 
     # Add the script directory to the import search path
     sys.path.append(os.path.dirname(filename))
