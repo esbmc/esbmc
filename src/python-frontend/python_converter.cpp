@@ -3022,6 +3022,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       // Get expr for list element value
       exprt list_elem_value_expr = get_expr(e);
 
+      // Map element types
+      list_type_map[current_lhs->identifier().as_string()].push_back(list_elem_value_expr.type());
+
       // Build type hash function call
       const std::string elem_type_name = type_handler_.get_operand_type(e);
 
@@ -3248,12 +3251,22 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     // lists are modelled as tag-struct __anon_typedef_List
     if (array.type().is_symbol())
     {
-      DUMP_OBJECT(element);
-      const auto &list_decl = json_utils::find_var_decl(
-        element["value"]["id"], current_func_name_, *ast_json);
       int i = slice["value"].get<int>();
       exprt index = from_integer(BigInt(i), size_type());
-      exprt list_elem = get_expr(list_decl["value"]["elts"][i]);
+
+      const std::string& list_name = array.identifier().as_string();
+      typet list_elem_type;
+      try
+      {
+        list_elem_type = list_type_map[list_name].at(i);
+      }
+      catch (const std::out_of_range &)
+      {
+        const locationt l = get_location_from_decl(element);
+        throw std::runtime_error(
+          "Out of bounds at " + l.get_file().as_string() +
+          " line: " + l.get_line().as_string());
+      }
 
       // Add tmp variable to hold object*
       pointer_typet obj_type(symbol_typet(get_list_element_type().id));
@@ -3278,25 +3291,16 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       // 4.2.4 Add list_at call to the block
       current_block->copy_to_operands(list_at_call);
 
-//      exprt cond("notequal");
-//      cond.copy_to_operands(symbol_expr(tmp_obj_symbol));
-//      cond.copy_to_operands(nil_exprt());
-//      code_assertt assert_obj_valid;
-//      assert_obj_valid.assertion() = cond;
-//      current_block->copy_to_operands(assert_obj_valid);
-
       // Get obj->value
       member_exprt obj_value(symbol_expr(tmp_obj_symbol), "value", pointer_typet(empty_typet()));
       symbolt& tmp_value_ptr_symbol = create_tmp_symbol(element, "tmp_value_ptr", pointer_typet(empty_typet()), obj_value);
-
-      tmp_value_ptr_symbol.dump();
 
       code_declt tmp_value_ptr_decl(symbol_expr(tmp_value_ptr_symbol));
       tmp_value_ptr_decl.copy_to_operands(obj_value);
       current_block->copy_to_operands(tmp_value_ptr_decl);
 
-      typecast_exprt tc(symbol_expr(tmp_value_ptr_symbol), pointer_typet(list_elem.type()));
-      dereference_exprt deref(list_elem.type());
+      typecast_exprt tc(symbol_expr(tmp_value_ptr_symbol), pointer_typet(list_elem_type));
+      dereference_exprt deref(list_elem_type);
       deref.op0() = tc;
       return deref;
     }

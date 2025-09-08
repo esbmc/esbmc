@@ -25,21 +25,29 @@ static inline bool list_init(List *l, Object *backing)
 }
 
 /* ---------- bounds check ---------- */
+/*
 static inline bool list_in_bounds(const List *l, size_t index)
 {
   return index < l->size;
 }
+*/
 
 /* ---------- getters ---------- */
 static inline Object *list_at(List *l, size_t index)
 {
-  return list_in_bounds(l, index) ? &l->items[index] : NULL;
+  //return list_in_bounds(l, index) ? &l->items[index] : NULL;
+  assert(index < l->size);
+  return &l->items[index];
 }
+
 
 static inline const Object *list_cat(const List *l, size_t index)
 {
-  return list_in_bounds(l, index) ? &l->items[index] : NULL;
+//  return list_in_bounds(l, index) ? &l->items[index] : NULL;
+  assert(index < l->size);
+  return &l->items[index];
 }
+
 
 static inline void *list_get_as(const List *l, size_t i, size_t expect_type)
 {
