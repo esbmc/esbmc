@@ -173,6 +173,8 @@ private:
 
   std::string remove_quotes_from_type_string(const std::string &type_string);
 
+  bool function_has_missing_return_paths(const nlohmann::json &function_node);
+
   typet get_type_from_annotation(
     const nlohmann::json &annotation_node,
     const nlohmann::json &element);

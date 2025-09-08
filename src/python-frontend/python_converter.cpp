@@ -3624,6 +3624,45 @@ typet python_converter::get_type_from_annotation(
   }
 }
 
+bool python_converter::function_has_missing_return_paths(
+  const nlohmann::json &function_node)
+{
+  const auto &body = function_node["body"];
+  if (body.empty())
+    return true;
+
+  // Check if the last statement is a return
+  const auto &last_stmt = body.back();
+  if (last_stmt["_type"] == "Return")
+    return false;
+
+  // Check for if-else structures at the end
+  if (last_stmt["_type"] == "If")
+  {
+    // Check if both if and else branches have returns
+    bool if_has_return = false;
+    bool else_has_return = false;
+
+    // Check if branch
+    if (!last_stmt["body"].empty())
+    {
+      const auto &if_last = last_stmt["body"].back();
+      if_has_return = (if_last["_type"] == "Return");
+    }
+
+    // Check else branch
+    if (last_stmt.contains("orelse") && !last_stmt["orelse"].empty())
+    {
+      const auto &else_last = last_stmt["orelse"].back();
+      else_has_return = (else_last["_type"] == "Return");
+    }
+
+    return !(if_has_return && else_has_return);
+  }
+
+  return true; // No explicit return found
+}
+
 void python_converter::get_function_definition(
   const nlohmann::json &function_node)
 {
@@ -3788,6 +3827,33 @@ void python_converter::get_function_definition(
 
   // Function body
   exprt function_body = get_block(function_node["body"]);
+
+  // Add missing return statement validation
+  // Check if function has non-void return type and missing return paths
+  // Skip constructors (they don't need explicit returns)
+  if (
+    !type.return_type().is_empty() &&
+    type.return_type().id() != typet::t_empty &&
+    type.return_type().id() != "constructor" && // Skip constructors
+    function_has_missing_return_paths(function_node))
+  {
+    // Add assertion that fails to indicate missing return statement
+    locationt missing_return_loc = get_location_from_decl(function_node);
+
+    // Create a false assertion
+    exprt false_expr = gen_boolean(false);
+    code_assertt missing_return_assert;
+    missing_return_assert.assertion() = false_expr;
+    missing_return_assert.location() = missing_return_loc;
+
+    // Add descriptive comment to help users understand the error
+    missing_return_assert.location().comment(
+      "Missing return statement detected in function '" + current_func_name_ +
+      "'");
+
+    function_body.copy_to_operands(missing_return_assert);
+  }
+
   added_symbol->value = function_body;
 
   // Restore caller function name
