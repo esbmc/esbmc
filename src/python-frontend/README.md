@@ -203,8 +203,6 @@ The current version of ESBMC-Python has the following limitations:
   - String alignment and padding format specifications (e.g., `:>10`, `:<5`) are not supported
   - Custom format specifications for user-defined types are not supported
 - Missing Return Statement Detection Limitations:
-  - Analysis is performed at the statement level and may not catch all complex control flow scenarios.
-  - Recursive function analysis focuses on direct return paths and may not detect all edge cases in deeply nested conditional structures.
   - Does not analyze return statements inside nested functions or lambda expressions within the main function body.
 
 ### Example 1: Division by Zero in Python
