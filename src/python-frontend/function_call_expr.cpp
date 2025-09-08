@@ -839,7 +839,7 @@ exprt function_call_expr::build_constant_from_arg() const
       {
         std::string var_name = arg["id"].get<std::string>();
         std::string m = "int() conversion may fail - variable" + var_name +
-                        "may contain non-float string";
+                        "may contain non-integer string";
 
         return gen_exception_raise("ValueError", m);
       }
