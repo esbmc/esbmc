@@ -1,0 +1,4 @@
+CORE
+main.c
+--floatbv --unwind 5 --multi-property
+^VERIFICATION FAILED$
