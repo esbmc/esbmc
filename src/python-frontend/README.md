@@ -523,6 +523,130 @@ BMC program time: 0.017s
 VERIFICATION SUCCESSFUL
 ````
 
+### Example 6: Missing Return Statement Detection
+
+This example demonstrates ESBMC-Python's ability to detect missing return statements in functions with return type annotations:
+
+````python
+def calculate_grade(score: int) -> str:
+    """Function with missing return statement for some execution paths"""
+    if score >= 90:
+        return "A"
+    elif score >= 80:
+        return "B"
+    elif score >= 70:
+        return "C"
+    elif score >= 60:
+        return "D"
+    # Missing return statement for score < 60!
+
+def process_number(x: int) -> int:
+    """Another function with missing return for positive numbers"""
+    if x == 0:
+        return 0
+    if x < 0:
+        return -x
+    # Missing return for positive numbers - just has expression without return
+    x * 2
+
+def safe_divide(a: int, b: int) -> int:
+    """Correctly implemented function with all paths covered"""
+    if b == 0:
+        return 0
+    else:
+        return a // b
+
+# Test the functions
+score = 50
+result = calculate_grade(score)  # This will trigger missing return detection
+
+value = process_number(5)  # This will also trigger missing return detection
+
+safe_result = safe_divide(10, 2)  # This should work fine
+````
+
+**Command:**
+
+```bash
+$ esbmc main.py --multi-property
+```
+
+**ESBMC Output:**
+
+```
+Parsing main.py
+
+Type checking warning:
+main.py:1: error: Missing return statement
+main.py:13: error: Missing return statement
+Found 2 errors in 1 file (checked 1 source file)
+
+Converting
+Generating GOTO Program
+GOTO program creation time: 1.156s
+GOTO program processing time: 0.016s
+Starting Bounded Model Checking
+Symex completed in: 0.004s (17 assignments)
+Slicing time: 0.000s (removed 15 assignments)
+Generated 3 VCC(s), 2 remaining after simplification (2 assignments)
+No solver specified; defaulting to Boolector
+Slicing time: 0.000s (removed 0 assignments)
+No solver specified; defaulting to Boolector
+Solving claim 'Missing return statement detected in function 'process_number' at file main.py line 13 column 0 function process_number' with solver Boolector 3.2.2
+Encoding remaining VCC(s) using bit-vector/floating-point arithmetic
+Encoding to solver time: 0.000s
+Solving with solver Boolector 3.2.2
+Runtime decision procedure: 0.007s
+✗ FAILED: 'Missing return statement detected in function 'process_number' at file main.py line 13 column 0 function process_number'
+
+[Counterexample]
+
+
+State 1 file main.py line 13 column 0 function process_number thread 0
+----------------------------------------------------
+Violated property:
+  file main.py line 13 column 0 function process_number
+  Missing return statement detected in function 'process_number'
+  0
+
+Slicing time: 0.000s (removed 0 assignments)
+No solver specified; defaulting to Boolector
+Solving claim 'Missing return statement detected in function 'calculate_grade' at file main.py line 1 column 0 function calculate_grade' with solver Boolector 3.2.2
+Encoding remaining VCC(s) using bit-vector/floating-point arithmetic
+Encoding to solver time: 0.000s
+Solving with solver Boolector 3.2.2
+Runtime decision procedure: 0.000s
+✗ FAILED: 'Missing return statement detected in function 'calculate_grade' at file main.py line 1 column 0 function calculate_grade'
+
+[Counterexample]
+
+
+State 1 file main.py line 1 column 0 function calculate_grade thread 0
+----------------------------------------------------
+Violated property:
+  file main.py line 1 column 0 function calculate_grade
+  Missing return statement detected in function 'calculate_grade'
+  0
+
+Properties: 2 verified, ✗ 2 failed
+Solver: Boolector 3.2.2 • Decision procedure total time: 0.008s • Avg: 0.004s/property
+
+VERIFICATION FAILED
+````
+
+In this example, ESBMC successfully identifies two functions with missing return statements:
+- `calculate_grade`: Missing a return statement for scores below 60.
+- `process_number`: Missing a return statement for positive numbers (line 19 has an expression x * 2 but no return keyword).
+
+The `safe_divide` function passes verification because it properly handles all execution paths with appropriate return statements.
+
+Key Benefits of Missing Return Detection:
+- **Early Bug Detection**: Catches potential None return values before runtime.
+- **Type Safety**: Ensures functions with return type annotations actually return values on all paths.
+- **Code Quality**: Improves code reliability by enforcing complete return coverage.
+- **Constructor Awareness**: Automatically excludes __init__ methods which don't need explicit returns.
+
+This analysis helps prevent `TypeError` exceptions that would occur at runtime when the missing return path is executed, as Python implicitly returns None for functions without explicit return statements.
 
 # Numpy Formal Verification with ESBMC
 
