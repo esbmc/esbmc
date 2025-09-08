@@ -253,7 +253,7 @@ def main():
 
     # Type checking input program with mypy
     result = subprocess.run(
-    ["mypy", filename],
+    ["mypy", "--strict", filename],
     capture_output=True,
     text=True)
 
