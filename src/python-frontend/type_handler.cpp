@@ -547,7 +547,8 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
 
       return build_array(subtype, elts.size());
     }
-    throw std::runtime_error("Multiple type lists are not supported yet");
+    //throw std::runtime_error("Multiple type lists are not supported yet");
+    return build_array(empty_typet(), elts.size());
   }
 
   if (list_value["_type"] == "Call") // Get list type from function return type

@@ -99,6 +99,7 @@ const static std::vector<std::string> python_c_models = {
   "list_push",
   "list_replace",
   "list_pop",
+  "list_size",
   "list_hash_string",
   "strncmp",
   "strcmp",

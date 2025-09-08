@@ -1480,6 +1480,35 @@ exprt function_call_expr::get()
   {
     exprt arg = converter_.get_expr(arg_node);
 
+    if (
+      function_id_.get_function() == "__ESBMC_get_object_size" &&
+      (arg.type() == converter_.get_list_type() ||
+       (arg.type().is_pointer() &&
+        arg.type().subtype() == converter_.get_list_type())))
+    {
+      symbolt *list_symbol = converter_.find_symbol(arg.identifier().c_str());
+      assert(list_symbol);
+
+      const symbolt *list_size_func_sym =
+        converter_.find_symbol("c:list.c@F@list_size");
+      assert(list_size_func_sym);
+
+      code_function_callt list_size_func_call;
+      list_size_func_call.function() = symbol_expr(*list_size_func_sym);
+
+      // passing arguments to list_size
+      if (list_symbol->type.is_pointer())
+        list_size_func_call.arguments().push_back(symbol_expr(*list_symbol));
+      else
+        list_size_func_call.arguments().push_back(
+          address_of_exprt(symbol_expr(*list_symbol))); // &l
+
+      // setting return type
+      list_size_func_call.type() = size_type();
+
+      return list_size_func_call;
+    }
+
     // Handle function calls used as arguments
     if (arg.is_code() && arg.is_function_call())
     {
@@ -1514,7 +1543,7 @@ exprt function_call_expr::get()
     }
 
     // All array function arguments (e.g. bytes type) are handled as pointers.
-    if (arg.type().is_array())
+    if (arg.type().is_array() || arg.type() == converter_.get_list_type())
     {
       if (arg_node["_type"] == "Constant" && arg_node["value"].is_string())
       {

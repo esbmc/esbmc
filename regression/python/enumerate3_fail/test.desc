@@ -1,4 +1,0 @@
-CORE
-main.py
-
-^TypeError\: enumerate\(\) missing required argument 'iterable' \(pos 1\)$

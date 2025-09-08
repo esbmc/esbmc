@@ -295,7 +295,10 @@ private:
 
   void create_builtin_symbols();
 
-  exprt build_push_list_call(const symbolt& list, const nlohmann::json& op, const exprt& elem);
+  exprt build_push_list_call(
+    const symbolt &list,
+    const nlohmann::json &op,
+    const exprt &elem);
 
   symbolt *find_function_in_base_classes(
     const std::string &class_name,
@@ -313,7 +316,9 @@ private:
 
   size_t get_type_size(const nlohmann::json &ast_node);
 
-  const symbolt& get_list_element_type();
+  const typet get_list_element_type();
+
+  const typet get_list_type();
 
   void append_models_from_directory(
     std::list<std::string> &file_list,
