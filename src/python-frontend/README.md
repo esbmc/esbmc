@@ -171,6 +171,15 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Exception Objects**: Exception instances contain message attributes and support string representation via __str__() method.
 - **Exception Raising**: Supports raise statements with exception instantiation and custom error messages.
 
+### Code Quality and Control Flow Analysis
+
+- **Missing Return Statement Detection**: ESBMC-Python performs static analysis to detect functions with missing return statements:
+  - **Type-Aware Analysis**: Only flags functions with non-void return type annotations that lack proper return statements.
+  - **Control Flow Analysis**: Analyzes all execution paths through conditional statements (if-else structures) to ensure comprehensive return coverage.
+  - **Constructor Exception**: Automatically excludes class constructors (__init__ methods) from missing return analysis since they don't require explicit return statements.
+  - **Descriptive Error Messages**: Provides clear error messages indicating which function has missing return paths.
+  - **Verification Integration**: Missing return statements are detected as verification failures, enabling early detection of potential runtime errors.
+
 ### Limitations
 
 The current version of ESBMC-Python has the following limitations:
@@ -193,6 +202,10 @@ The current version of ESBMC-Python has the following limitations:
   - Nested f-strings are not supported
   - String alignment and padding format specifications (e.g., `:>10`, `:<5`) are not supported
   - Custom format specifications for user-defined types are not supported
+- Missing Return Statement Detection Limitations:
+  - Analysis is performed at the statement level and may not catch all complex control flow scenarios.
+  - Recursive function analysis focuses on direct return paths and may not detect all edge cases in deeply nested conditional structures.
+  - Does not analyze return statements inside nested functions or lambda expressions within the main function body.
 
 ### Example 1: Division by Zero in Python
 
