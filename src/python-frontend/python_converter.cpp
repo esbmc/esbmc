@@ -2869,9 +2869,9 @@ exprt python_converter::get_lambda_expr(const nlohmann::json &element)
   return symbol_expr(*added_symbol);
 }
 
-const symbolt& python_converter::get_list_element_type()
+const symbolt &python_converter::get_list_element_type()
 {
-  const symbolt* type = nullptr;
+  const symbolt *type = nullptr;
   symbol_table_.foreach_operand([&type](const symbolt &s) {
     const std::string &symbol_id = s.id.as_string();
     if (symbol_id.find("tag-struct __anon_typedef_Object_at") != symbol_id.npos)
@@ -2880,6 +2880,73 @@ const symbolt& python_converter::get_list_element_type()
     }
   });
   return *type;
+}
+
+exprt python_converter::build_push_list_call(const symbolt& list, const nlohmann::json& op, const exprt &elem)
+{
+  // Build type hash function call
+  const std::string elem_type_name = type_handler_.type_to_string(elem.type());
+
+  typet type_name_t =
+    type_handler_.build_array(char_type(), elem_type_name.size() + 1);
+
+  std::vector<unsigned char> type_name_str(
+    elem_type_name.begin(), elem_type_name.end());
+  type_name_str.push_back('\0');
+
+  exprt type_name = make_char_array_expr(type_name_str, type_name_t);
+
+  // Add a tmp variable to hold the type name as str
+  symbolt &tmp_list_elem_type_symbol =
+    create_tmp_symbol(op, "$list_elem_type$", size_type(), type_name);
+
+  code_declt tmp_list_elem_type_decl(symbol_expr(tmp_list_elem_type_symbol));
+  tmp_list_elem_type_decl.location() = get_location_from_decl(op);
+  current_block->copy_to_operands(tmp_list_elem_type_decl);
+
+  const symbolt *type_hash_func_sym =
+    symbol_table_.find_symbol("c:list.c@F@list_hash_string");
+  assert(type_hash_func_sym);
+
+  // Initialize list_elem_type with return from hash function
+  code_function_callt list_type_hash_func_call;
+  list_type_hash_func_call.function() = symbol_expr(*type_hash_func_sym);
+  list_type_hash_func_call.arguments().push_back(
+    get_array_base_address(type_name)); // &type_name[0]
+  list_type_hash_func_call.lhs() = symbol_expr(tmp_list_elem_type_symbol);
+  list_type_hash_func_call.type() = size_type();
+  list_type_hash_func_call.location() = get_location_from_decl(op);
+
+  // Add list_hash_string call to the block
+  current_block->copy_to_operands(list_type_hash_func_call);
+
+  // 4.2.1 Build tmp variable for list element
+  symbolt &tmp_list_elem_symbol =
+    create_tmp_symbol(op, "$list_elem$", elem.type(), elem);
+
+  // 4.2.2 Add tmp variable for list element in the block
+  code_declt tmp_list_elem_decl(symbol_expr(tmp_list_elem_symbol));
+  tmp_list_elem_decl.copy_to_operands(elem);
+  tmp_list_elem_decl.location() = get_location_from_decl(op);
+  current_block->copy_to_operands(tmp_list_elem_decl);
+
+  // Get push function symbol
+  const symbolt *list_push_func_sym = symbol_table_.find_symbol("c:list.c@F@list_push");
+  assert(list_push_func_sym);
+
+  // 4.2.3 Add push function call
+  code_function_callt list_push_func_call;
+  list_push_func_call.function() = symbol_expr(*list_push_func_sym);
+  list_push_func_call.arguments().push_back(
+    address_of_exprt(symbol_expr(list))); // &l
+  list_push_func_call.arguments().push_back(
+    address_of_exprt(symbol_expr(tmp_list_elem_symbol))); // &var
+  list_push_func_call.arguments().push_back(
+    symbol_expr(tmp_list_elem_type_symbol)); // type hash
+  list_push_func_call.type() = bool_type();
+  list_push_func_call.location() = get_location_from_decl(op);
+
+  return list_push_func_call;
 }
 
 exprt python_converter::get_expr(const nlohmann::json &element)
@@ -2958,8 +3025,10 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       symbol_typet(inf_array_subtype.id), exprt("infinity", size_type()));
 
     // 1.3 Build infinity array symbol
-    exprt inf_array_value = gen_zero(get_complete_type(inf_array_type, ns), true);
-    symbolt &inf_array_symbol = create_tmp_symbol(element, "$storage$", inf_array_type, inf_array_value);
+    exprt inf_array_value =
+      gen_zero(get_complete_type(inf_array_type, ns), true);
+    symbolt &inf_array_symbol =
+      create_tmp_symbol(element, "$storage$", inf_array_type, inf_array_value);
     inf_array_symbol.value.zero_initializer(true);
     inf_array_symbol.static_lifetime = true;
 
@@ -2967,7 +3036,6 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     code_declt inf_array_decl(symbol_expr(inf_array_symbol));
     inf_array_decl.location() = get_location_from_decl(element);
     current_block->copy_to_operands(inf_array_decl);
-
 
     /* 2 - Add List declaration */
 
@@ -2985,7 +3053,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
     // 2.2 Build list symbol
     typet list_type(symbol_typet(list_type_symbol->id));
-    symbolt &list_symbol = create_tmp_symbol(element, "$list$", list_type, exprt());
+    symbolt &list_symbol =
+      create_tmp_symbol(element, "$list$", list_type, exprt());
 
     // 2.3 Add list declaration to the block
     code_declt list_decl(symbol_expr(list_symbol));
@@ -2993,89 +3062,29 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     current_block->copy_to_operands(list_decl);
 
     /* 3 - Build call to initialize the list with the infinity array */
-    const symbolt* list_init_func_sym = symbol_table_.find_symbol("c:list.c@F@list_init");
+    const symbolt *list_init_func_sym =
+      symbol_table_.find_symbol("c:list.c@F@list_init");
     assert(list_init_func_sym);
 
     code_function_callt list_init_func_call;
     list_init_func_call.function() = symbol_expr(*list_init_func_sym);
-    list_init_func_call.arguments().push_back(address_of_exprt(symbol_expr(list_symbol)));
-    list_init_func_call.arguments().push_back(get_array_base_address(symbol_expr(inf_array_symbol)));
+    list_init_func_call.arguments().push_back(
+      address_of_exprt(symbol_expr(list_symbol)));
+    list_init_func_call.arguments().push_back(
+      get_array_base_address(symbol_expr(inf_array_symbol)));
     list_init_func_call.type() = bool_type();
     list_init_func_call.location() = get_location_from_decl(element);
 
     // 3.1 Add list_init call to the block
     current_block->copy_to_operands(list_init_func_call);
 
-    /* 4 - Sequence of push function calls to initialize list with elements */
-
-    // 4.1 Get push function symbol
-    const symbolt* list_push_func_sym = symbol_table_.find_symbol("c:list.c@F@list_push");
-    assert(list_push_func_sym);
-
-    // 4.1 Get type hash function symbol
-    const symbolt* type_hash_func_sym = symbol_table_.find_symbol("c:list.c@F@list_hash_string");
-    assert(type_hash_func_sym);
-
-    // 4.2 Push function calls
+    // 4 - Push list elements by list_push calls
     for (auto &e : element["elts"])
     {
-      // Get expr for list element value
-      exprt list_elem_value_expr = get_expr(e);
-
-      // Map element types
-      list_type_map[current_lhs->identifier().as_string()].push_back(list_elem_value_expr.type());
-
-      // Build type hash function call
-      const std::string elem_type_name = type_handler_.get_operand_type(e);
-
-      typet type_name_t =
-        type_handler_.build_array(char_type(), elem_type_name.size() + 1);
-
-      std::vector<unsigned char> type_name_str(elem_type_name.begin(), elem_type_name.end());
-      type_name_str.push_back('\0');
-
-      exprt type_name = make_char_array_expr(type_name_str, type_name_t);
-
-      // Add a tmp variable to hold the type name as str
-      symbolt &tmp_list_elem_type_symbol = create_tmp_symbol(
-        element, "$list_elem_type$", size_type(), type_name);
-
-      code_declt tmp_list_elem_type_decl(symbol_expr(tmp_list_elem_type_symbol));
-      tmp_list_elem_type_decl.location() = get_location_from_decl(element);
-      current_block->copy_to_operands(tmp_list_elem_type_decl);
-
-      // Initialize list_elem_type with return from hash function
-      code_function_callt list_type_hash_func_call;
-      list_type_hash_func_call.function() = symbol_expr(*type_hash_func_sym);
-      list_type_hash_func_call.arguments().push_back(get_array_base_address(type_name)); // &type_name[0]
-      list_type_hash_func_call.lhs() = symbol_expr(tmp_list_elem_type_symbol);
-      list_type_hash_func_call.type() = size_type();
-      list_type_hash_func_call.location() = get_location_from_decl(element);
-
-      // Add list_hash_string call to the block
-      current_block->copy_to_operands(list_type_hash_func_call);
-
-      // 4.2.1 Build tmp variable for list element
-      symbolt &tmp_list_elem_symbol =
-        create_tmp_symbol(element, "$list_elem$", list_elem_value_expr.type(), list_elem_value_expr);
-
-      // 4.2.2 Add tmp variable for list element in the block
-      code_declt tmp_list_elem_decl(symbol_expr(tmp_list_elem_symbol));
-      tmp_list_elem_decl.copy_to_operands(list_elem_value_expr);
-      tmp_list_elem_decl.location() = get_location_from_decl(element);
-      current_block->copy_to_operands(tmp_list_elem_decl);
-
-      // 4.2.3 Add push function call
-      code_function_callt list_push_func_call;
-      list_push_func_call.function() = symbol_expr(*list_push_func_sym);
-      list_push_func_call.arguments().push_back(address_of_exprt(symbol_expr(list_symbol))); // &l
-      list_push_func_call.arguments().push_back(address_of_exprt(symbol_expr(tmp_list_elem_symbol))); // &var
-      list_push_func_call.arguments().push_back(symbol_expr(tmp_list_elem_type_symbol)); // type hash
-      list_push_func_call.type() = bool_type();
-      list_push_func_call.location() = get_location_from_decl(element);
-
-      // 4.2.4 Add list_init call to the block
+      exprt elem = get_expr(e);
+      exprt list_push_func_call = build_push_list_call(list_symbol, element, elem);
       current_block->copy_to_operands(list_push_func_call);
+      list_type_map[current_lhs->identifier().as_string()].push_back(elem.type());
     }
 
     expr = symbol_expr(list_symbol);
@@ -3254,7 +3263,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       int i = slice["value"].get<int>();
       exprt index = from_integer(BigInt(i), size_type());
 
-      const std::string& list_name = array.identifier().as_string();
+      const std::string &list_name = array.identifier().as_string();
       typet list_elem_type;
       try
       {
@@ -3271,13 +3280,15 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       // Add tmp variable to hold object*
       pointer_typet obj_type(symbol_typet(get_list_element_type().id));
 
-      symbolt &tmp_obj_symbol = create_tmp_symbol(element, "tmp_obj", obj_type, exprt());
+      symbolt &tmp_obj_symbol =
+        create_tmp_symbol(element, "tmp_obj", obj_type, exprt());
 
       code_declt tmp_obj_decl(symbol_expr(tmp_obj_symbol));
       current_block->copy_to_operands(tmp_obj_decl);
 
       // Initialise tmp_obj with list_at() call return
-      const symbolt *list_at_func_sym = symbol_table_.find_symbol("c:list.c@F@list_at");
+      const symbolt *list_at_func_sym =
+        symbol_table_.find_symbol("c:list.c@F@list_at");
       assert(list_at_func_sym);
 
       code_function_callt list_at_call;
@@ -3292,22 +3303,23 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       current_block->copy_to_operands(list_at_call);
 
       // Get obj->value
-      member_exprt obj_value(symbol_expr(tmp_obj_symbol), "value", pointer_typet(empty_typet()));
-      symbolt& tmp_value_ptr_symbol = create_tmp_symbol(element, "tmp_value_ptr", pointer_typet(empty_typet()), obj_value);
+      member_exprt obj_value(
+        symbol_expr(tmp_obj_symbol), "value", pointer_typet(empty_typet()));
+      symbolt &tmp_value_ptr_symbol = create_tmp_symbol(
+        element, "tmp_value_ptr", pointer_typet(empty_typet()), obj_value);
 
       code_declt tmp_value_ptr_decl(symbol_expr(tmp_value_ptr_symbol));
       tmp_value_ptr_decl.copy_to_operands(obj_value);
       current_block->copy_to_operands(tmp_value_ptr_decl);
 
-      typecast_exprt tc(symbol_expr(tmp_value_ptr_symbol), pointer_typet(list_elem_type));
+      typecast_exprt tc(
+        symbol_expr(tmp_value_ptr_symbol), pointer_typet(list_elem_type));
       dereference_exprt deref(list_elem_type);
       deref.op0() = tc;
       return deref;
     }
 
     typet t = array.type().subtype();
-
-    const nlohmann::json &slice = element["slice"];
 
     if (slice["_type"] == "Slice")
     {
