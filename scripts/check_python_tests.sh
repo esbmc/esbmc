@@ -37,6 +37,7 @@ ignored_dirs=(
   "list10"
   "list15_fail"
   "min_max_3_fail"
+  "missing-return_fail"
   "random1"
   "random1-fail"
   "random2-fail"
