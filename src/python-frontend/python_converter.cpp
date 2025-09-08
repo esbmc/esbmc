@@ -3255,7 +3255,18 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       exprt index = from_integer(BigInt(i), size_type());
 
       const std::string& list_name = array.identifier().as_string();
-      typet list_elem_type = list_type_map[list_name].at(i);
+      typet list_elem_type;
+      try
+      {
+        list_elem_type = list_type_map[list_name].at(i);
+      }
+      catch (const std::out_of_range &)
+      {
+        const locationt l = get_location_from_decl(element);
+        throw std::runtime_error(
+          "Out of bounds at " + l.get_file().as_string() +
+          " line: " + l.get_line().as_string());
+      }
 
       // Add tmp variable to hold object*
       pointer_typet obj_type(symbol_typet(get_list_element_type().id));
@@ -3283,8 +3294,6 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       // Get obj->value
       member_exprt obj_value(symbol_expr(tmp_obj_symbol), "value", pointer_typet(empty_typet()));
       symbolt& tmp_value_ptr_symbol = create_tmp_symbol(element, "tmp_value_ptr", pointer_typet(empty_typet()), obj_value);
-
-      tmp_value_ptr_symbol.dump();
 
       code_declt tmp_value_ptr_decl(symbol_expr(tmp_value_ptr_symbol));
       tmp_value_ptr_decl.copy_to_operands(obj_value);
