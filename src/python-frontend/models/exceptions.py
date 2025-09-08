@@ -67,6 +67,7 @@ class AssertionError(BaseException):
     def __str__(self) -> str:
         return self.message
 
+
 class Exception(BaseException):
     message: str = ""
 
