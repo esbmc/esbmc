@@ -3851,19 +3851,7 @@ void python_converter::get_function_definition(
       "Missing return statement detected in function '" + current_func_name_ +
       "'");
 
-    // Add the assertion to the function body
-    if (function_body.id() == "block")
-    {
-      function_body.copy_to_operands(missing_return_assert);
-    }
-    else
-    {
-      // Create a new block if function body is not already a block
-      code_blockt new_block;
-      new_block.copy_to_operands(function_body);
-      new_block.copy_to_operands(missing_return_assert);
-      function_body = new_block;
-    }
+    function_body.copy_to_operands(missing_return_assert);
   }
 
   added_symbol->value = function_body;
