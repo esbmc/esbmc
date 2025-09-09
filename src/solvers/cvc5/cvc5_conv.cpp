@@ -1322,123 +1322,50 @@ void cvc5_smt_ast::dump() const
   log_status("{}", a.toString());
 }
 
-smt_astt cvc5_convt::mk_quantifier(
-    bool is_forall, 
-    std::vector<smt_astt> lhs, 
-    smt_astt rhs) 
+smt_astt
+cvc5_convt::mk_quantifier(bool is_forall, std::vector<smt_astt> lhs, smt_astt rhs)
 {
-    using namespace cvc5;
+  if (lhs.empty()) 
+  {
+    return rhs;
+  }
+  using namespace cvc5;
+  // Here the respective bound variables with names are created, these are unique to avoid any confusion.
+  static int quantifier_counter = 0;
+  quantifier_counter++;
+  
+  std::vector<Term> bound_vars;
+  std::vector<Term> original_vars;
+  
+  for (size_t i = 0; i < lhs.size(); i++)
+  {
+    Term orig = to_solver_smt_ast<cvc5_smt_ast>(lhs[i])->a;
+    original_vars.push_back(orig);
     
-    if (lhs.empty()) {
-        return rhs;
-    }
-    
-    // BOUNDED QUANTIFIER INSTANTIATION APPROACH
-    // Instead of creating actual quantifiers (which CVC5 struggles with),
-    // we'll create bounded instantiations for a reasonable domain
-    
-    try {
-        // For array indices, we typically need to consider values from 0 to array_size-1
-        // Since we know from the test cases that n < 10, we'll bound our instantiation
-        const int MAX_INSTANTIATIONS = 10;  // Reasonable bound for array indices
-        
-        const cvc5_smt_ast* body_ast = to_solver_smt_ast<cvc5_smt_ast>(rhs);
-        if (!body_ast) {
-            return rhs;
-        }
-        
-        Term body_template = body_ast->a;
-        
-        // Get the quantified variable (assuming single variable for array indices)
-        if (lhs.size() != 1) {
-            // For multiple variables, fall back to original quantifier approach
-            std::vector<Term> bound_vars;
-            std::vector<Term> original_vars;
-            
-            for (auto& var_smt : lhs) {
-                const cvc5_smt_ast* var_ast = to_solver_smt_ast<cvc5_smt_ast>(var_smt);
-                if (!var_ast) continue;
-                
-                Term orig_var = var_ast->a;
-                Term bound_var = slv.mkVar(orig_var.getSort());
-                
-                original_vars.push_back(orig_var);
-                bound_vars.push_back(bound_var);
-            }
-            
-            if (!bound_vars.empty()) {
-                Term body = body_template.substitute(original_vars, bound_vars);
-                Term var_list = slv.mkTerm(Kind::VARIABLE_LIST, bound_vars);
-                Term quantifier = is_forall ? 
-                    slv.mkTerm(Kind::FORALL, {var_list, body}) :
-                    slv.mkTerm(Kind::EXISTS, {var_list, body});
-                return new_ast(quantifier, rhs->sort);
-            }
-            return rhs;
-        }
-        
-        // Single variable case - use bounded instantiation
-        const cvc5_smt_ast* var_ast = to_solver_smt_ast<cvc5_smt_ast>(lhs[0]);
-        if (!var_ast) {
-            return rhs;
-        }
-        
-        Term original_var = var_ast->a;
-        Sort var_sort = original_var.getSort();
-        
-        std::vector<Term> instantiated_formulas;
-        
-        // Create instantiations for bounded domain
-        for (int i = 0; i < MAX_INSTANTIATIONS; i++) {
-            // Create concrete value for this instantiation
-            Term concrete_value;
-            
-            if (var_sort.isBitVector()) {
-                // For bitvector sorts (like unsigned int)
-                uint32_t bv_size = var_sort.getBitVectorSize();
-                concrete_value = slv.mkBitVector(bv_size, i);
-            } else if (var_sort.isInteger()) {
-                // For integer sorts
-                concrete_value = slv.mkInteger(i);
-            } else {
-                // Unsupported sort, fall back to original approach
-                Term bound_var = slv.mkVar(var_sort);
-                Term body = body_template.substitute({original_var}, {bound_var});
-                Term var_list = slv.mkTerm(Kind::VARIABLE_LIST, {bound_var});
-                Term quantifier = is_forall ? 
-                    slv.mkTerm(Kind::FORALL, {var_list, body}) :
-                    slv.mkTerm(Kind::EXISTS, {var_list, body});
-                return new_ast(quantifier, rhs->sort);
-            }
-            
-            // Substitute the original variable with the concrete value
-            Term instantiated_body = body_template.substitute({original_var}, {concrete_value});
-            instantiated_formulas.push_back(instantiated_body);
-        }
-        
-        // Combine instantiated formulas
-        Term result;
-        if (is_forall) {
-            // Universal quantifier: ∀x.φ(x) ≈ φ(0) ∧ φ(1) ∧ ... ∧ φ(n)
-            if (instantiated_formulas.size() == 1) {
-                result = instantiated_formulas[0];
-            } else {
-                result = slv.mkTerm(Kind::AND, instantiated_formulas);
-            }
-        } else {
-            // Existential quantifier: ∃x.φ(x) ≈ φ(0) ∨ φ(1) ∨ ... ∨ φ(n)  
-            if (instantiated_formulas.size() == 1) {
-                result = instantiated_formulas[0];
-            } else {
-                result = slv.mkTerm(Kind::OR, instantiated_formulas);
-            }
-        }
-        
-        return new_ast(result, rhs->sort);
-        
-    } catch (const std::exception& e) {
-        std::cerr << "Bounded instantiation failed: " << e.what() << std::endl;
-        // Fall back to unquantified body
-        return rhs;
-    }
+    Sort sort = orig.getSort();
+    std::string name = "qvar_" + std::to_string(quantifier_counter) + "_" + std::to_string(i);
+    Term bound = slv.mkVar(sort, name);
+    bound_vars.push_back(bound);
+  }
+
+  // Here the body term is created. 
+  Term body = to_solver_smt_ast<cvc5_smt_ast>(rhs)->a;
+  
+  // Here the substitution is performed.
+  Term substituted_body = body.substitute(original_vars, bound_vars);
+
+  // Here the respective quantifier is created.
+  Term vars_list = slv.mkTerm(cvc5::Kind::VARIABLE_LIST, bound_vars);
+  
+  Term quantifier;
+  if (is_forall)
+  {
+    quantifier = slv.mkTerm(cvc5::Kind::FORALL, {vars_list, substituted_body});
+  }
+  else
+  {
+    quantifier = slv.mkTerm(cvc5::Kind::EXISTS, {vars_list, substituted_body});
+  }
+
+  return new_ast(quantifier, rhs->sort);
 }
