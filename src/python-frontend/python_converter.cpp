@@ -1158,11 +1158,10 @@ exprt python_converter::handle_string_concatenation(
   // Validate inputs and calculate sizes safely
   BigInt lhs_size = get_string_size(lhs);
   BigInt rhs_size = get_string_size(rhs);
-  
-  if (lhs_size < 1 || rhs_size < 1) {
+
+  if (lhs_size < 1 || rhs_size < 1)
     throw std::runtime_error("Invalid string size in concatenation");
-  }
-  
+
   // Account for null terminators properly
   BigInt content_size = (lhs_size - 1) + (rhs_size - 1);
   BigInt total_size = content_size + 1; // +1 for final null terminator
@@ -1171,14 +1170,34 @@ exprt python_converter::handle_string_concatenation(
   exprt result = gen_zero(t);
   unsigned int i = 0;
 
-  auto append_from_symbol = [&](const std::string &id) {
+  // Helper function with consistent bounds checking and null handling
+  auto safe_append_char = [&](const exprt &ch) -> bool {
+    if (i >= result.operands().size())
+    {
+      return false; // Buffer full
+    }
+    if (ch != gen_zero(ch.type()))
+    {
+      result.operands().at(i++) = ch;
+    }
+    return true;
+  };
+
+  auto append_from_symbol = [&](const std::string &id) -> bool {
     symbolt *symbol = symbol_table_.find_symbol(id);
-    assert(symbol);
+    if (!symbol)
+    {
+      return false;
+    }
+
     for (const exprt &ch : symbol->value.operands())
     {
-      if (ch != gen_zero(ch.type()))
-        result.operands().at(i++) = ch;
+      if (!safe_append_char(ch))
+      {
+        return false;
+      }
     }
+    return true;
   };
 
   auto append_from_json = [&](const nlohmann::json &json) {
