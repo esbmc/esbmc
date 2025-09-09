@@ -1,4 +1,0 @@
-CORE
-main.py
-
-^TypeError\: enumerate\(\) takes at most 2 arguments \(3 given\)$
