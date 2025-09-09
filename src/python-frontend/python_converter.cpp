@@ -1192,19 +1192,26 @@ exprt python_converter::handle_string_concatenation(
     return true;
   };
 
-  auto append_from_json = [&](const nlohmann::json &json) {
+  auto append_from_json = [&](const nlohmann::json &json) -> bool {
+    if (!json.contains("value"))
+      return false;
+
     std::string value = json["value"].get<std::string>();
-    typet &char_type = t.subtype();
+    typet char_type = t.subtype();
 
     for (char ch : value)
     {
       if (ch == 0)
-        break;
+        break; // Stop at null terminator
+      if (i >= result.operands().size())
+        return false; // Buffer full
+
       BigInt v(ch);
       exprt char_expr = constant_exprt(
         integer2binary(v, bv_width(char_type)), integer2string(v), char_type);
       result.operands().at(i++) = char_expr;
     }
+    return true;
   };
 
   auto append_from_expr = [&](const exprt &expr) {
