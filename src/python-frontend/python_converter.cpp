@@ -1155,9 +1155,17 @@ exprt python_converter::handle_string_concatenation(
   const nlohmann::json &left,
   const nlohmann::json &right)
 {
-  BigInt lhs_size = get_string_size(lhs) - 1;
-  BigInt rhs_size = get_string_size(rhs) - 1;
-  BigInt total_size = lhs_size + rhs_size + 1;
+  // Validate inputs and calculate sizes safely
+  BigInt lhs_size = get_string_size(lhs);
+  BigInt rhs_size = get_string_size(rhs);
+  
+  if (lhs_size < 1 || rhs_size < 1) {
+    throw std::runtime_error("Invalid string size in concatenation");
+  }
+  
+  // Account for null terminators properly
+  BigInt content_size = (lhs_size - 1) + (rhs_size - 1);
+  BigInt total_size = content_size + 1; // +1 for final null terminator
 
   typet t = type_handler_.get_typet("str", total_size.to_uint64());
   exprt result = gen_zero(t);
