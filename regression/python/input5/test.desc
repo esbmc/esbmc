@@ -1,4 +1,4 @@
 CORE
 main.py
 
-^Throwing an exception of type ValueError but there is not catch for it$
+^\s*Throwing an exception of type ValueError but there is not catch for it.$
