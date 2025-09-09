@@ -1,4 +1,4 @@
 CORE
 main.py
 
-^WARNING\: ValueError: float\(\) conversion may fail - variable \'user_input\' may contain non-float string$
+^Throwing an exception of type ValueError but there is not catch for it.$
