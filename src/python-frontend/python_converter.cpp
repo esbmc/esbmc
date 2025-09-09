@@ -1241,13 +1241,20 @@ exprt python_converter::handle_string_concatenation(
     return append_from_expr(expr);
   };
 
-  // Use the helper for both operands
-  append_from_json_or_expr(left, lhs);
-  append_from_json_or_expr(right, rhs);
+  // Process both operands with error handling
+  if (!append_from_json_or_expr(left, lhs))
+    throw std::runtime_error(
+      "Failed to process left operand in string concatenation");
 
-  // Add null terminator
+  if (!append_from_json_or_expr(right, rhs))
+    throw std::runtime_error(
+      "Failed to process right operand in string concatenation");
+
+  // Ensure null terminator is added
   if (i < result.operands().size())
     result.operands().at(i) = gen_zero(t.subtype());
+  else
+    throw std::runtime_error("String concatenation buffer overflow");
 
   return result;
 }
