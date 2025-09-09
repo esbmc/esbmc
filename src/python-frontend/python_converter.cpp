@@ -3333,9 +3333,19 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       }
       else if (slice["_type"] == "Name")
       {
-        const auto &list_node = json_utils::find_var_decl(
+        nlohmann::json list_node = json_utils::find_var_decl(
           element["value"]["id"], current_func_name_, *ast_json);
         assert(!list_node.empty());
+
+        while (!list_node["value"].contains("elts") || !list_node["value"]["elts"].is_array())
+        {
+          list_node = json_utils::find_var_decl(
+            list_node["value"]["id"], current_func_name_, *ast_json);
+          DUMP_OBJECT(list_node);
+        }
+
+        assert(list_node["value"].is_array() || list_node["value"]["elts"].is_array());
+
         if (type_handler_.has_multiple_types(list_node["value"]["elts"]))
         {
           throw std::runtime_error(
