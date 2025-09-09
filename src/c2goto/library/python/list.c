@@ -56,9 +56,35 @@ static inline void *list_get_as(const List *l, size_t i, size_t expect_type)
 }
 
 /* ---------- push element ---------- */
+
+/*
 static inline bool list_push(List *l, const void *value, size_t type_id)
 {
   l->items[l->size].value = value;
+  l->items[l->size].type_id = type_id;
+  l->size++;
+  return true;
+}
+*/
+
+
+static inline bool list_push(List *l, const void *value, size_t type_id, size_t type_size)
+{
+  void *copied_value = malloc(type_size);
+  if (copied_value == NULL) {
+    return false;
+  }
+
+  // memcpy
+  const char *src = (const char *)value;
+  char *dst = (char *)copied_value;
+  size_t i = 0;
+  while (i < type_size) {
+    dst[i] = src[i];
+    i++;
+  }
+
+  l->items[l->size].value = copied_value;
   l->items[l->size].type_id = type_id;
   l->size++;
   return true;

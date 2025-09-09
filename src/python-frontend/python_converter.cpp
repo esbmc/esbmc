@@ -2952,15 +2952,28 @@ exprt python_converter::build_push_list_call(const symbolt& list, const nlohmann
   const symbolt *list_push_func_sym = symbol_table_.find_symbol("c:list.c@F@list_push");
   assert(list_push_func_sym);
 
+  //size_t list_elem_size = std::stoi(tmp_list_elem_symbol.type.width().as_string(), nullptr, 2);
+  size_t list_elem_size = 0;
+  try {
+    list_elem_size = std::stoull(tmp_list_elem_symbol.type.width().as_string(), nullptr, 10) / 8;
+  } catch(std::invalid_argument&) {
+	  list_elem_size = 1;
+  }
+  assert(list_elem_size);
+  exprt e_size = from_integer(BigInt(list_elem_size), size_type());
+
   // 4.2.3 Add push function call
   code_function_callt list_push_func_call;
   list_push_func_call.function() = symbol_expr(*list_push_func_sym);
+  // passing arguments
   list_push_func_call.arguments().push_back(
     address_of_exprt(symbol_expr(list))); // &l
   list_push_func_call.arguments().push_back(
     address_of_exprt(symbol_expr(tmp_list_elem_symbol))); // &var
   list_push_func_call.arguments().push_back(
     symbol_expr(tmp_list_elem_type_symbol)); // type hash
+  list_push_func_call.arguments().push_back(e_size); // sizeof(value_to_append)
+
   list_push_func_call.type() = bool_type();
   list_push_func_call.location() = get_location_from_decl(op);
 
