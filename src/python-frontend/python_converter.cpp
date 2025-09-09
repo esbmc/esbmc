@@ -3580,6 +3580,38 @@ void python_converter::get_compound_assign(
     current_element_type = resolve_variable_type(var_name, loc);
   }
 
+  std::string op = ast_node["op"]["_type"].get<std::string>();
+  if (
+    op == "Add" && lhs.type().is_array() && lhs.type().subtype() == char_type())
+  {
+    exprt rhs_expr = get_expr(ast_node["value"]);
+    nlohmann::json left = ast_node["target"];
+    nlohmann::json right = ast_node["value"];
+    exprt concatenated =
+      handle_string_concatenation(lhs, rhs_expr, left, right);
+
+    // Update the variable's type to match the concatenated result
+    if (!var_name.empty() && concatenated.type().is_array())
+    {
+      symbol_id sid = create_symbol_id();
+      sid.set_object(var_name);
+      symbolt *symbol = symbol_table_.find_symbol(sid.to_string());
+      if (symbol)
+      {
+        // Update both the symbol's type and the LHS expression type
+        symbol->type = concatenated.type();
+        lhs.type() = concatenated.type();
+        // Also update the symbol's value to maintain consistency
+        symbol->value = concatenated;
+      }
+    }
+
+    code_assignt code_assign(lhs, concatenated);
+    code_assign.location() = loc;
+    target_block.copy_to_operands(code_assign);
+    return;
+  }
+
   exprt rhs = get_binary_operator_expr(ast_node);
 
   // Reset RHS flag
