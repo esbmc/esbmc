@@ -1173,29 +1173,21 @@ exprt python_converter::handle_string_concatenation(
   // Helper function with consistent bounds checking and null handling
   auto safe_append_char = [&](const exprt &ch) -> bool {
     if (i >= result.operands().size())
-    {
       return false; // Buffer full
-    }
     if (ch != gen_zero(ch.type()))
-    {
       result.operands().at(i++) = ch;
-    }
     return true;
   };
 
   auto append_from_symbol = [&](const std::string &id) -> bool {
     symbolt *symbol = symbol_table_.find_symbol(id);
     if (!symbol)
-    {
       return false;
-    }
 
     for (const exprt &ch : symbol->value.operands())
     {
       if (!safe_append_char(ch))
-      {
         return false;
-      }
     }
     return true;
   };
