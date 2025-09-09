@@ -1214,35 +1214,32 @@ exprt python_converter::handle_string_concatenation(
     return true;
   };
 
-  auto append_from_expr = [&](const exprt &expr) {
+  auto append_from_expr = [&](const exprt &expr) -> bool {
     if (expr.is_constant() && expr.type().is_array())
     {
       for (const auto &ch : expr.operands())
       {
-        if (ch.is_constant() && ch != gen_zero(ch.type()))
-          if (i < result.operands().size())
-            result.operands().at(i++) = ch;
+        if (ch.is_constant() && !safe_append_char(ch))
+          return false;
       }
     }
     else if (expr.is_symbol())
-      append_from_symbol(expr.identifier().as_string());
+      return append_from_symbol(expr.identifier().as_string());
+    return true;
   };
 
   auto append_from_json_or_expr =
-    [&](const nlohmann::json &node, const exprt &expr) {
-      if (!node.contains("_type"))
-      {
-        append_from_expr(expr);
-        return;
-      }
+    [&](const nlohmann::json &node, const exprt &expr) -> bool {
+    if (node.contains("_type"))
+    {
       const std::string type = node["_type"].get<std::string>();
-      if (type == "Name")
-        append_from_symbol(expr.identifier().as_string());
-      else if (type == "Constant" && node.contains("value"))
-        append_from_json(node);
-      else
-        append_from_expr(expr);
-    };
+      if (type == "Constant" && node.contains("value"))
+        return append_from_json(node);
+    }
+
+    // Handle all other cases (including symbols) consistently
+    return append_from_expr(expr);
+  };
 
   // Use the helper for both operands
   append_from_json_or_expr(left, lhs);
