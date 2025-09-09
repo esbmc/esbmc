@@ -2869,7 +2869,7 @@ exprt python_converter::get_lambda_expr(const nlohmann::json &element)
   return symbol_expr(*added_symbol);
 }
 
-const symbolt &python_converter::get_list_element_type()
+const typet python_converter::get_list_element_type()
 {
   const symbolt *type = nullptr;
   symbol_table_.foreach_operand([&type](const symbolt &s) {
@@ -2879,7 +2879,25 @@ const symbolt &python_converter::get_list_element_type()
       type = &s;
     }
   });
-  return *type;
+
+  assert(type);
+  return symbol_typet(type->id);
+}
+
+const typet python_converter::get_list_type()
+{
+  const symbolt *list_type_symbol = nullptr;
+  symbol_table_.foreach_operand([this, &list_type_symbol](const symbolt &s) {
+    const std::string &symbol_id = s.id.as_string();
+    if (symbol_id.find("tag-struct __anon_typedef_List_at_") != symbol_id.npos)
+    {
+      list_type_symbol = &s;
+    }
+  });
+  assert(list_type_symbol);
+
+  // 2.2 Build list symbol
+  return symbol_typet(list_type_symbol->id);
 }
 
 exprt python_converter::build_push_list_call(const symbolt& list, const nlohmann::json& op, const exprt &elem)
@@ -3017,12 +3035,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
     /* 1 - Create infinity objects array */
 
-    // 1.1 Get object type
-    const symbolt &inf_array_subtype = get_list_element_type();
-
     // 1.2 Build infinity array type
-    array_typet inf_array_type(
-      symbol_typet(inf_array_subtype.id), exprt("infinity", size_type()));
+    array_typet inf_array_type(get_list_element_type(), exprt("infinity", size_type()));
 
     // 1.3 Build infinity array symbol
     exprt inf_array_value =
@@ -3039,20 +3053,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
     /* 2 - Add List declaration */
 
-    // 2.1 Get List type
-    const symbolt *list_type_symbol = nullptr;
-    symbol_table_.foreach_operand([this, &list_type_symbol](const symbolt &s) {
-      const std::string &symbol_id = s.id.as_string();
-      if (
-        symbol_id.find("tag-struct __anon_typedef_List_at_") != symbol_id.npos)
-      {
-        list_type_symbol = &s;
-      }
-    });
-    assert(list_type_symbol);
-
     // 2.2 Build list symbol
-    typet list_type(symbol_typet(list_type_symbol->id));
+    typet list_type = get_list_type();
+
     symbolt &list_symbol =
       create_tmp_symbol(element, "$list$", list_type, exprt());
 
@@ -3281,7 +3284,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       }
 
       // Add tmp variable to hold object*
-      pointer_typet obj_type(symbol_typet(get_list_element_type().id));
+      pointer_typet obj_type(get_list_element_type());
 
       symbolt &tmp_obj_symbol =
         create_tmp_symbol(element, "tmp_obj", obj_type, exprt());
@@ -4229,6 +4232,8 @@ void python_converter::get_function_definition(
     // Handles both cases
     if (return_type == "list" || return_type == "List")
     {
+      type.return_type() = get_list_type();
+#if 0
       const auto &return_stmt = get_return_statement(function_node);
       if (
         return_stmt["value"]["_type"] == "Name" ||
@@ -4259,6 +4264,7 @@ void python_converter::get_function_definition(
         // Handle direct list literal returns like "return [1, 2, 3]"
         type.return_type() = type_handler_.get_list_type(return_stmt["value"]);
       }
+#endif
     }
     else
     {
