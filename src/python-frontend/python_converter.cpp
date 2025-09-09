@@ -2900,7 +2900,10 @@ const typet python_converter::get_list_type()
   return symbol_typet(list_type_symbol->id);
 }
 
-exprt python_converter::build_push_list_call(const symbolt& list, const nlohmann::json& op, const exprt &elem)
+exprt python_converter::build_push_list_call(
+  const symbolt &list,
+  const nlohmann::json &op,
+  const exprt &elem)
 {
   // Build type hash function call
   const std::string elem_type_name = type_handler_.type_to_string(elem.type());
@@ -2949,16 +2952,38 @@ exprt python_converter::build_push_list_call(const symbolt& list, const nlohmann
   current_block->copy_to_operands(tmp_list_elem_decl);
 
   // Get push function symbol
-  const symbolt *list_push_func_sym = symbol_table_.find_symbol("c:list.c@F@list_push");
+  const symbolt *list_push_func_sym =
+    symbol_table_.find_symbol("c:list.c@F@list_push");
   assert(list_push_func_sym);
 
-  //size_t list_elem_size = std::stoi(tmp_list_elem_symbol.type.width().as_string(), nullptr, 2);
   size_t list_elem_size = 0;
-  try {
-    list_elem_size = std::stoull(tmp_list_elem_symbol.type.width().as_string(), nullptr, 10) / 8;
-  } catch(std::invalid_argument&) {
-	  list_elem_size = 1;
+  try
+  {
+    if (tmp_list_elem_symbol.type.is_array())
+    {
+      size_t subtype_size =
+        std::stoull(elem.type().subtype().width().as_string(), nullptr, 10);
+
+      const array_typet &arr_type =
+        static_cast<const array_typet &>(tmp_list_elem_symbol.type);
+
+      list_elem_size =
+        std::stoull(arr_type.size().value().as_string(), nullptr, 2) *
+        subtype_size / 8;
+    }
+    else
+    {
+      list_elem_size =
+        std::stoull(
+          tmp_list_elem_symbol.type.width().as_string(), nullptr, 10) /
+        8;
+    }
   }
+  catch (std::invalid_argument &)
+  {
+    list_elem_size = 1;
+  }
+
   assert(list_elem_size);
   exprt e_size = from_integer(BigInt(list_elem_size), size_type());
 
@@ -2971,7 +2996,7 @@ exprt python_converter::build_push_list_call(const symbolt& list, const nlohmann
   list_push_func_call.arguments().push_back(
     address_of_exprt(symbol_expr(tmp_list_elem_symbol))); // &var
   list_push_func_call.arguments().push_back(
-    symbol_expr(tmp_list_elem_type_symbol)); // type hash
+    symbol_expr(tmp_list_elem_type_symbol));         // type hash
   list_push_func_call.arguments().push_back(e_size); // sizeof(value_to_append)
 
   list_push_func_call.type() = bool_type();
@@ -3009,7 +3034,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   case ExpressionType::LIST:
   {
-	if (!is_converting_rhs) return exprt();
+    if (!is_converting_rhs)
+      return exprt();
 #if 0
     exprt zero = gen_zero(size_type());
     exprt &list_size = static_cast<array_typet &>(current_element_type).size();
@@ -3050,7 +3076,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     /* 1 - Create infinity objects array */
 
     // 1.2 Build infinity array type
-    array_typet inf_array_type(get_list_element_type(), exprt("infinity", size_type()));
+    array_typet inf_array_type(
+      get_list_element_type(), exprt("infinity", size_type()));
 
     // 1.3 Build infinity array symbol
     exprt inf_array_value =
@@ -3099,10 +3126,13 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     for (auto &e : element["elts"])
     {
       exprt elem = get_expr(e);
-      exprt list_push_func_call = build_push_list_call(list_symbol, element, elem);
+      exprt list_push_func_call =
+        build_push_list_call(list_symbol, element, elem);
       current_block->copy_to_operands(list_push_func_call);
 
-      const std::string& list_id = (current_lhs) ? current_lhs->identifier().as_string() : list_symbol.id.as_string();
+      const std::string &list_id = (current_lhs)
+                                     ? current_lhs->identifier().as_string()
+                                     : list_symbol.id.as_string();
 
       list_type_map[list_id].push_back(elem.type());
     }
