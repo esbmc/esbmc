@@ -1945,6 +1945,13 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   exprt lhs = get_expr(left);
   exprt rhs = get_expr(right);
 
+  // Was an exception thrown? It has nothing to do with the following part
+  if (lhs.statement() == "cpp-throw")
+    return lhs;
+
+  if (rhs.statement() == "cpp-throw")
+    return rhs;
+
   attach_symbol_location(lhs, symbol_table());
   attach_symbol_location(rhs, symbol_table());
 
@@ -3471,6 +3478,20 @@ void python_converter::get_var_assign(
 
   if (has_value && rhs != exprt("_init_undefined"))
   {
+    if (rhs.statement() == "cpp-throw")
+    {
+      rhs.location() = location_begin;
+      codet code_expr("expression");
+      code_expr.operands().push_back(rhs);
+      code_declt decl(symbol_expr(*lhs_symbol));
+      decl.location() = location_begin;
+
+      target_block.copy_to_operands(code_expr);
+      target_block.copy_to_operands(decl);
+      current_lhs = nullptr;
+      return;
+    }
+
     // Handle type adjustments
     handle_assignment_type_adjustments(
       lhs_symbol, lhs, rhs, lhs_type, ast_node, is_ctor_call);
@@ -3496,15 +3517,6 @@ void python_converter::get_var_assign(
         rhs.op0() = lhs;
 
       target_block.copy_to_operands(rhs);
-      current_lhs = nullptr;
-      return;
-    }
-    else if (rhs.statement() == "cpp-throw")
-    {
-      rhs.location() = location_begin;
-      codet code_expr("expression");
-      code_expr.operands().push_back(rhs);
-      target_block.copy_to_operands(code_expr);
       current_lhs = nullptr;
       return;
     }
@@ -4303,6 +4315,15 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
     {
       current_element_type = bool_type();
       exprt test = get_expr(element["test"]);
+      if (test.statement() == "cpp-throw")
+      {
+        test.location() = get_location_from_decl(element);
+        codet code_expr("expression");
+        code_expr.operands().push_back(test);
+        block.move_to_operands(code_expr);
+        break;
+      }
+
       if (!test.type().is_bool())
         test.make_typecast(current_element_type);
 
