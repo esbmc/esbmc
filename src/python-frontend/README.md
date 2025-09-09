@@ -205,7 +205,7 @@ The current version of ESBMC-Python has the following limitations:
   - String alignment and padding format specifications (e.g., `:>10`, `:<5`) are not supported
   - Custom format specifications for user-defined types are not supported
 - Missing Return Statement Detection Limitations:
-  - Does not analyze return statements inside nested functions or lambda expressions within the main function body.
+  - Does not analyze return statements inside lambda expressions within the main function body.
 
 ### Example 1: Division by Zero in Python
 
