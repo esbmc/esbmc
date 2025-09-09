@@ -1155,19 +1155,41 @@ exprt python_converter::handle_string_concatenation(
   const nlohmann::json &left,
   const nlohmann::json &right)
 {
-  // Validate inputs and calculate sizes safely
+  // Handle edge case: empty string + empty string = empty string
+  bool lhs_is_empty =
+    is_zero_length_array(lhs) ||
+    (lhs.is_constant() && lhs.type().is_array() && lhs.operands().size() <= 1);
+  bool rhs_is_empty =
+    is_zero_length_array(rhs) ||
+    (rhs.is_constant() && rhs.type().is_array() && rhs.operands().size() <= 1);
+
+  // if both are empty, return the first one (already an empty string)
+  if (lhs_is_empty && rhs_is_empty)
+    return lhs;
+
+  // if LHS is empty and RHS is not, return RHS
+  if (lhs_is_empty && !rhs_is_empty)
+    return rhs;
+
+  // if RHS is empty and LHS is not, return LHS
+  if (!lhs_is_empty && rhs_is_empty)
+    return lhs;
+
+  // Continue with regular concatenation logic for non-empty cases
   BigInt lhs_size = get_string_size(lhs);
   BigInt rhs_size = get_string_size(rhs);
 
-  // Handle edge case: if size calculation fails, use conservative defaults
+  // if size calculation fails, use conservative defaults
   if (lhs_size < 1)
     lhs_size = 1; // At least null terminator
   if (rhs_size < 1)
     rhs_size = 1; // At least null terminator
 
-  // Account for null terminators properly
-  BigInt content_size = (lhs_size - 1) + (rhs_size - 1);
-  BigInt total_size = content_size + 1; // +1 for final null terminator
+  // Calculate content size (excluding null terminators)
+  BigInt lhs_content = lhs_size - 1;
+  BigInt rhs_content = rhs_size - 1;
+  BigInt total_size =
+    lhs_content + rhs_content + 1; // +1 for final null terminator
 
   typet t = type_handler_.get_typet("str", total_size.to_uint64());
   exprt result = gen_zero(t);
@@ -1190,6 +1212,7 @@ exprt python_converter::handle_string_concatenation(
       log_warning("String concatenation buffer overflow at position {}", i);
       return false; // Buffer full
     }
+    // Only append non-null characters
     if (ch != gen_zero(ch.type()))
       result.operands().at(i++) = ch;
     return true;
