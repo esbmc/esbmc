@@ -45,6 +45,7 @@ ignored_dirs=(
   "missing-return11_fail"
   "missing-return12_fail"
   "missing-return13_fail"
+  "missing-return14_fail"
   "random1"
   "random1-fail"
   "random2-fail"
