@@ -3310,22 +3310,43 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     // lists are modelled as tag-struct __anon_typedef_List
     if (array.type().is_symbol())
     {
-      int i = slice["value"].get<int>();
-      exprt index = from_integer(BigInt(i), size_type());
-
-      const std::string &list_name = array.identifier().as_string();
       typet list_elem_type;
-      try
+      exprt index;
+
+      if (slice["_type"] == "Constant")
       {
-        list_elem_type = list_type_map[list_name].at(i);
+        int i = slice["value"].get<int>();
+        index = from_integer(BigInt(i), size_type());
+
+        const std::string &list_name = array.identifier().as_string();
+        try
+        {
+          list_elem_type = list_type_map[list_name].at(i);
+        }
+        catch (const std::out_of_range &)
+        {
+          const locationt l = get_location_from_decl(element);
+          throw std::runtime_error(
+            "Out of bounds at " + l.get_file().as_string() +
+            " line: " + l.get_line().as_string());
+        }
       }
-      catch (const std::out_of_range &)
+      else if (slice["_type"] == "Name")
       {
-        const locationt l = get_location_from_decl(element);
-        throw std::runtime_error(
-          "Out of bounds at " + l.get_file().as_string() +
-          " line: " + l.get_line().as_string());
+        const auto &list_node = json_utils::find_var_decl(
+          element["value"]["id"], current_func_name_, *ast_json);
+        assert(!list_node.empty());
+        if (type_handler_.has_multiple_types(list_node["value"]["elts"]))
+        {
+          throw std::runtime_error(
+            "Indexing list with symbolic values are not supported yet.");
+        }
+        list_elem_type = get_expr(list_node["value"]["elts"][0]).type();
+        index = get_expr(slice);
       }
+
+      assert(index != exprt());
+      assert(list_elem_type != typet());
 
       // Add tmp variable to hold object*
       pointer_typet obj_type(get_list_element_type());
