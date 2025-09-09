@@ -3084,7 +3084,10 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       exprt elem = get_expr(e);
       exprt list_push_func_call = build_push_list_call(list_symbol, element, elem);
       current_block->copy_to_operands(list_push_func_call);
-      list_type_map[current_lhs->identifier().as_string()].push_back(elem.type());
+
+      const std::string& list_id = (current_lhs) ? current_lhs->identifier().as_string() : list_symbol.id.as_string();
+
+      list_type_map[list_id].push_back(elem.type());
     }
 
     expr = symbol_expr(list_symbol);
