@@ -1,4 +1,5 @@
 CORE
 main.py
+--incremental-bmc --no-pointer-check --force-malloc-success
 
 ^VERIFICATION FAILED$
