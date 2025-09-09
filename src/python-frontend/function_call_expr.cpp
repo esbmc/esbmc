@@ -1525,6 +1525,13 @@ exprt function_call_expr::get()
       }
       call.arguments().push_back(address_of_exprt(arg));
     }
+    else if (arg.type() == converter_.get_list_type())
+    {
+      symbolt *list_symbol = converter_.find_symbol(arg.identifier().c_str());
+      assert(list_symbol);
+      member_exprt list_size(symbol_expr(*list_symbol), "size", size_type());
+      return list_size;
+    }
     else
       call.arguments().push_back(arg);
   }
