@@ -1222,22 +1222,22 @@ exprt python_converter::handle_string_concatenation(
     symbolt *symbol = symbol_table_.find_symbol(id);
     if (!symbol)
     {
-      // For debugging: log which symbol wasn't found
+      // log which symbol wasn't found
       log_warning("Symbol not found in string concatenation: {}", id);
-      return true; // Continue processing - treat as empty string
+      return true; // Continue processing: treat as empty string
     }
 
     // Handle empty string symbols or uninitialized symbols
     if (symbol->value.is_nil() || !symbol->value.type().is_array())
     {
-      // Empty string - no characters to append
+      // Empty string: no characters to append
       return true;
     }
 
     // Handle symbols with no operands (empty strings)
     if (symbol->value.operands().empty())
     {
-      // Empty string - no characters to append
+      // Empty string: no characters to append
       return true;
     }
 
@@ -1251,7 +1251,7 @@ exprt python_converter::handle_string_concatenation(
 
   auto append_from_json = [&](const nlohmann::json &json) -> bool {
     if (!json.contains("value"))
-      return true; // Empty - continue processing
+      return true; // Empty: continue processing
 
     std::string value = json["value"].get<std::string>();
     typet char_type = t.subtype();
@@ -1292,7 +1292,7 @@ exprt python_converter::handle_string_concatenation(
     // Handle symbol expressions
     else if (expr.is_symbol())
       return append_from_symbol(expr.identifier().as_string());
-    // Handle other expression types - treat as empty for now
+    // Handle other expression types: treat as empty for now
     else
     {
       log_warning(
@@ -1316,7 +1316,7 @@ exprt python_converter::handle_string_concatenation(
     return append_from_expr(expr);
   };
 
-  // Process both operands - don't fail if one fails, continue processing
+  // Process both operands: don't fail if one fails, continue processing
   bool left_success = append_from_json_or_expr(left, lhs);
   bool right_success = append_from_json_or_expr(right, rhs);
 
