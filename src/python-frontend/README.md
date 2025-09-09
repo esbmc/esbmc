@@ -163,6 +163,8 @@ Below is an overview of ESBMC-Python's key capabilities:
 - **Exception Hierarchy**: Implements Python's exception hierarchy where all exceptions inherit from BaseException.
 - **Built-in Exception Classes**:
   - **BaseException**: Base class for all exceptions.
+  - **Exception**: Base class for all built-in exceptions (inherits from BaseException).
+  - **AssertionError**: Raised when an assert statement fails.
   - **ValueError**: Raised for inappropriate argument values.
   - **TypeError**: Raised for inappropriate argument types.
   - **IndexError**: Raised for sequence index out of range.
