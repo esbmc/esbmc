@@ -2996,6 +2996,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   }
   case ExpressionType::LIST:
   {
+	if (!is_converting_rhs) return exprt();
 #if 0
     exprt zero = gen_zero(size_type());
     exprt &list_size = static_cast<array_typet &>(current_element_type).size();
@@ -3861,6 +3862,32 @@ void python_converter::get_var_assign(
 
       if (!rhs.type().is_pointer() && !rhs.type().is_empty())
         rhs.op0() = lhs;
+
+      if (rhs.type() == get_list_type())
+      {
+        // update lhs list element types with returning symbol values
+        // FIXME!: Ideally we should update to consider the reachable return for this call.
+        // Here we are getting the last return.
+        symbolt *func_symbol =
+          symbol_table_.find_symbol(rhs.op1().identifier().c_str());
+        assert(func_symbol);
+        const auto &operands = func_symbol->value.operands();
+        for (std::vector<exprt>::const_reverse_iterator it = operands.rbegin();
+             it != operands.rend();
+             ++it)
+        {
+          const codet &c = to_code(*it);
+          if (c.statement() == "return")
+          {
+            const std::string &return_symbol_id =
+              c.op0().identifier().as_string();
+            assert(!list_type_map[return_symbol_id].empty());
+            list_type_map[lhs.identifier().as_string()] =
+              list_type_map[return_symbol_id];
+            break;
+          }
+        }
+      }
 
       target_block.copy_to_operands(rhs);
       current_lhs = nullptr;
