@@ -1,0 +1,4 @@
+KNOWNBUG
+main.py
+--unwind 5 --no-slice
+^VERIFICATION FAILED$
