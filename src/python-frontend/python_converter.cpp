@@ -1487,24 +1487,24 @@ exprt python_converter::compare_constants_internal(
   {
     // Check if expression represents null terminator
     auto is_null_terminator = [](const exprt &expr) -> bool {
-      return expr.is_constant() && 
+      return expr.is_constant() &&
              (expr.get("value") == "0" || expr.get("value") == "00000000");
     };
-    
+
     const exprt::operandst &lhs_ops = lhs.operands();
     const exprt::operandst &rhs_ops = rhs.operands();
-    
+
     // Handle empty arrays
     if (lhs_ops.empty() && rhs_ops.empty())
       return gen_boolean(op == "Eq");
     if (lhs_ops.empty() || rhs_ops.empty())
       return gen_boolean(op == "NotEq");
-    
+
     // Compare strings up to null terminator
     // We actually should fix the char-string format problem. But it is similar from result. And change on char maybe affect other staff.
     const size_t min_size = std::min(lhs_ops.size(), rhs_ops.size());
     size_t effective_len = 0;
-    
+
     // Check for null terminator while comparing
     for (size_t i = 0; i < min_size; ++i)
     {
@@ -1527,18 +1527,19 @@ exprt python_converter::compare_constants_internal(
         // RHS is shorter
         return gen_boolean(op == "NotEq");
       }
-      
+
       // Compare current character
       if (lhs_ops[i] != rhs_ops[i])
         return gen_boolean(op == "NotEq");
-      
+
       effective_len++;
     }
-    
+
     // No null terminator found in common length, check remaining part
     if (lhs_ops.size() != rhs_ops.size())
     {
-      const exprt::operandst &longer_ops = (lhs_ops.size() > rhs_ops.size()) ? lhs_ops : rhs_ops;
+      const exprt::operandst &longer_ops =
+        (lhs_ops.size() > rhs_ops.size()) ? lhs_ops : rhs_ops;
       for (size_t i = min_size; i < longer_ops.size(); ++i)
       {
         if (is_null_terminator(longer_ops[i]))
@@ -1548,7 +1549,7 @@ exprt python_converter::compare_constants_internal(
         }
       }
     }
-    
+
     // All characters match and no null terminator found
     return gen_boolean(op == "Eq");
   }
