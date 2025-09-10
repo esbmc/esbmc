@@ -4694,6 +4694,21 @@ void python_converter::create_builtin_symbols()
   symbol_table_.add(name_symbol);
 }
 
+void python_converter::add_intrinsic_assignments(code_blockt &block)
+{
+  // Add assignment for intrinsic variable to match C frontend behavior
+  locationt location;
+  location.set_file("esbmc_intrinsics.h");
+  
+  // ASSIGN __ESBMC_rounding_mode = 0;
+  {
+    symbol_exprt rounding_symbol("c:@__ESBMC_rounding_mode", int_type());
+    code_assignt rounding_assign(rounding_symbol, gen_zero(int_type()));
+    rounding_assign.location() = location;
+    block.copy_to_operands(rounding_assign);
+  }
+}
+
 void python_converter::convert()
 {
   code_typet main_type;
@@ -4760,6 +4775,10 @@ void python_converter::convert()
   // Load C intrisics
   load_c_intrisics();
 
+  // Create a block to hold intrinsic assignments
+  code_blockt intrinsic_block;
+  add_intrinsic_assignments(intrinsic_block);
+
   // Handle --function option
   const std::string function = config.options.get_option("function");
   if (!function.empty())
@@ -4783,6 +4802,10 @@ void python_converter::convert()
       throw std::runtime_error("Function " + function + " not found");
 
     code_blockt block;
+
+    // Add intrinsic assignments first
+    block.copy_to_operands(intrinsic_block);
+
     // Convert classes referenced by the function
     for (const auto &clazz : global_scope_.classes())
     {
@@ -4886,10 +4909,19 @@ void python_converter::convert()
     exprt main_block = get_block((*ast_json)["body"]);
     codet main_code = convert_expression_to_code(main_block);
 
+    // Create the final main block with intrinsic assignments first
+    code_blockt final_block;
+    final_block.copy_to_operands(intrinsic_block);
+
     if (main_symbol.value.is_code())
-      main_symbol.value.copy_to_operands(main_code);
+    {
+      final_block.copy_to_operands(main_symbol.value);
+      final_block.copy_to_operands(main_code);
+    }
     else
-      main_symbol.value.swap(main_code);
+      final_block.copy_to_operands(main_code);
+
+    main_symbol.value.swap(final_block);
   }
 
   if (symbol_table_.move(main_symbol))
