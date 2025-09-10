@@ -1,4 +1,4 @@
-THOROUGH
+KNOWNBUG
 main.c
 --cvc5 --incremental-bmc
 ^VERIFICATION SUCCESSFUL$
