@@ -1,4 +1,4 @@
 CORE
 main.py
 
-^ERROR: TypeError: chr\(\) argument must be int, not float$
+^\s*Throwing an exception of type TypeError but there is not catch for it.$
