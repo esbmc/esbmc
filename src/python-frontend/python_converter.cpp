@@ -4607,7 +4607,7 @@ void python_converter::load_c_intrisics()
   // Add symbols required by the C models
 
   add_global_static_variable(
-    symbol_table_, long_long_int_type(), "__ESBMC_rounding_mode");
+    symbol_table_, int_type(), "__ESBMC_rounding_mode");
 
   auto type1 = array_typet(bool_type(), exprt("infinity"));
   add_global_static_variable(symbol_table_, type1, "__ESBMC_alloc");
