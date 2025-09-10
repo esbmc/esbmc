@@ -1482,6 +1482,77 @@ exprt python_converter::compare_constants_internal(
     return gen_boolean(op == "NotEq");
   }
 
+  // Compare two arrays (strings) element by element
+  if (lhs.type().is_array() && rhs.type().is_array())
+  {
+    // Check if expression represents null terminator
+    auto is_null_terminator = [](const exprt &expr) -> bool {
+      return expr.is_constant() && 
+             (expr.get("value") == "0" || expr.get("value") == "00000000");
+    };
+    
+    const exprt::operandst &lhs_ops = lhs.operands();
+    const exprt::operandst &rhs_ops = rhs.operands();
+    
+    // Handle empty arrays
+    if (lhs_ops.empty() && rhs_ops.empty())
+      return gen_boolean(op == "Eq");
+    if (lhs_ops.empty() || rhs_ops.empty())
+      return gen_boolean(op == "NotEq");
+    
+    // Compare strings up to null terminator
+    // We actually should fix the char-string format problem. But it is similar from result. And change on char maybe affect other staff.
+    const size_t min_size = std::min(lhs_ops.size(), rhs_ops.size());
+    size_t effective_len = 0;
+    
+    // Check for null terminator while comparing
+    for (size_t i = 0; i < min_size; ++i)
+    {
+      if (is_null_terminator(lhs_ops[i]))
+      {
+        // LHS ends at position i, check if RHS also ends here
+        if (is_null_terminator(rhs_ops[i]))
+        {
+          // Both strings have same length and content
+          return gen_boolean(op == "Eq");
+        }
+        else
+        {
+          // LHS is shorter
+          return gen_boolean(op == "NotEq");
+        }
+      }
+      else if (is_null_terminator(rhs_ops[i]))
+      {
+        // RHS is shorter
+        return gen_boolean(op == "NotEq");
+      }
+      
+      // Compare current character
+      if (lhs_ops[i] != rhs_ops[i])
+        return gen_boolean(op == "NotEq");
+      
+      effective_len++;
+    }
+    
+    // No null terminator found in common length, check remaining part
+    if (lhs_ops.size() != rhs_ops.size())
+    {
+      const exprt::operandst &longer_ops = (lhs_ops.size() > rhs_ops.size()) ? lhs_ops : rhs_ops;
+      for (size_t i = min_size; i < longer_ops.size(); ++i)
+      {
+        if (is_null_terminator(longer_ops[i]))
+        {
+          // Longer string has null terminator, different lengths
+          return gen_boolean(op == "NotEq");
+        }
+      }
+    }
+    
+    // All characters match and no null terminator found
+    return gen_boolean(op == "Eq");
+  }
+
   return nil_exprt();
 }
 
