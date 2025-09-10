@@ -3036,46 +3036,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   {
     if (!is_converting_rhs)
       return exprt();
-#if 0
-    exprt zero = gen_zero(size_type());
-    exprt &list_size = static_cast<array_typet &>(current_element_type).size();
-    typet list_type = type_handler_.get_list_type_improved(element);
-
-    if (list_size == zero)
-      current_element_type = list_type;
-
-    exprt list = gen_zero(list_type);
-
-    // Set flag to prevent single-character optimization
-    processing_list_elements = true;
-
-    unsigned int i = 0;
-    for (auto &e : element["elts"])
-    {
-      // Set element type for proper string processing
-      if (list_type.is_array() && list_type.subtype().is_array())
-        current_element_type = list_type.subtype();
-
-      exprt element_expr = get_expr(e);
-      list.operands().at(i++) = element_expr;
-    }
-
-    // Reset flag
-    processing_list_elements = false;
-
-    symbolt &inf_array_symbol =
-      create_tmp_symbol(element, "$compound-literal$", list_type, list);
-
-    expr = symbol_expr(inf_array_symbol);
-    code_declt inf_array_decl(expr);
-    inf_array_decl.operands().push_back(list);
-    assert(current_block);
-    current_block->copy_to_operands(inf_array_decl);
-#endif
 
     /* 1 - Create infinity objects array */
 
-    // 1.2 Build infinity array type
     array_typet inf_array_type(
       get_list_element_type(), exprt("infinity", size_type()));
 
@@ -3307,21 +3270,50 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     exprt array = get_expr(element["value"]);
     const nlohmann::json &slice = element["slice"];
 
+    nlohmann::json list_node = json_utils::find_var_decl(
+      element["value"]["id"], current_func_name_, *ast_json);
+
+    exprt pos = get_expr(slice);
+    int index = 0;
+
+    // Adjust negative indexes
+    if (slice.contains("op") && slice["op"]["_type"] == "USub")
+    {
+      if (list_node.is_null() || list_node["value"]["_type"] != "List")
+      {
+        BigInt v = binary2integer(pos.op0().value().c_str(), true);
+        v *= -1;
+
+        array_typet t = static_cast<array_typet &>(array.type());
+        BigInt s = binary2integer(t.size().value().c_str(), true);
+
+        v += s;
+        pos = from_integer(v, pos.type());
+      }
+      else
+      {
+        index = slice["operand"]["value"].get<int>();
+        index = list_node["value"]["elts"].size() - index;
+        pos = from_integer(index, size_type());
+      }
+    }
+    else if (slice["_type"] == "Constant")
+    {
+      DUMP_OBJECT(slice);
+      index = slice["value"].get<int>();
+    }
+
     // lists are modelled as tag-struct __anon_typedef_List
     if (array.type().is_symbol())
     {
       typet list_elem_type;
-      exprt index;
 
-      if (slice["_type"] == "Constant")
+      if (slice["_type"] == "Constant" || (slice["_type"] == "UnaryOp" && slice["operand"]["_type"] == "Constant"))
       {
-        int i = slice["value"].get<int>();
-        index = from_integer(BigInt(i), size_type());
-
         const std::string &list_name = array.identifier().as_string();
         try
         {
-          list_elem_type = list_type_map[list_name].at(i);
+          list_elem_type = list_type_map[list_name].at(index);
         }
         catch (const std::out_of_range &)
         {
@@ -3333,18 +3325,17 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       }
       else if (slice["_type"] == "Name")
       {
-        nlohmann::json list_node = json_utils::find_var_decl(
-          element["value"]["id"], current_func_name_, *ast_json);
-        assert(!list_node.empty());
-
-        while (!list_node["value"].contains("elts") || !list_node["value"]["elts"].is_array())
+        while (!list_node["value"].contains("elts") ||
+               !list_node["value"]["elts"].is_array())
         {
           list_node = json_utils::find_var_decl(
             list_node["value"]["id"], current_func_name_, *ast_json);
-          DUMP_OBJECT(list_node);
         }
+        assert(!list_node.empty());
 
-        assert(list_node["value"].is_array() || list_node["value"]["elts"].is_array());
+        assert(
+          list_node["value"].is_array() ||
+          list_node["value"]["elts"].is_array());
 
         if (type_handler_.has_multiple_types(list_node["value"]["elts"]))
         {
@@ -3352,10 +3343,9 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             "Indexing list with symbolic values are not supported yet.");
         }
         list_elem_type = get_expr(list_node["value"]["elts"][0]).type();
-        index = get_expr(slice);
       }
 
-      assert(index != exprt());
+      assert(pos != exprt());
       assert(list_elem_type != typet());
 
       // Add tmp variable to hold object*
@@ -3375,7 +3365,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       code_function_callt list_at_call;
       list_at_call.function() = symbol_expr(*list_at_func_sym);
       list_at_call.arguments().push_back(address_of_exprt(array)); // &l
-      list_at_call.arguments().push_back(index);
+      list_at_call.arguments().push_back(pos);
       list_at_call.lhs() = symbol_expr(tmp_obj_symbol);
       list_at_call.type() = obj_type;
       list_at_call.location() = get_location_from_decl(element);
@@ -3423,21 +3413,6 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     }
     else
     {
-      exprt pos = get_expr(slice);
-
-      // Adjust negative indexes
-      if (slice.contains("op") && slice["op"]["_type"] == "USub")
-      {
-        BigInt v = binary2integer(pos.op0().value().c_str(), true);
-        v *= -1;
-
-        array_typet t = static_cast<array_typet &>(array.type());
-        BigInt s = binary2integer(t.size().value().c_str(), true);
-
-        v += s;
-        pos = from_integer(v, pos.type());
-      }
-
       expr = index_exprt(array, pos, t);
     }
     break;
@@ -4334,38 +4309,6 @@ void python_converter::get_function_definition(
     if (return_type == "list" || return_type == "List")
     {
       type.return_type() = get_list_type();
-#if 0
-      const auto &return_stmt = get_return_statement(function_node);
-      if (
-        return_stmt["value"]["_type"] == "Name" ||
-        return_stmt["value"]["_type"] == "Subscript")
-      {
-        const std::string &var_name =
-          (return_stmt["value"]["_type"].get<std::string>() == "Subscript")
-            ? return_stmt["value"]["value"]["id"].get<std::string>()
-            : return_stmt["value"]["id"].get<std::string>();
-
-        const auto &return_var = get_var_node(var_name, function_node);
-
-        assert(!return_var.empty());
-
-        if (return_var["_type"] == "arg")
-        {
-          if (return_stmt["value"]["_type"] == "Subscript")
-            type.return_type() = type_handler_.get_typet(
-              return_var["annotation"]["slice"]["id"].get<std::string>());
-          else
-            type.return_type() = type_handler_.get_list_type(return_var);
-        }
-        else
-          type.return_type() = type_handler_.get_list_type(return_var["value"]);
-      }
-      else if (return_stmt["value"]["_type"] == "List")
-      {
-        // Handle direct list literal returns like "return [1, 2, 3]"
-        type.return_type() = type_handler_.get_list_type(return_stmt["value"]);
-      }
-#endif
     }
     else
     {
