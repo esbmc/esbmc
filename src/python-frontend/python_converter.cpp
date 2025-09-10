@@ -4699,7 +4699,7 @@ void python_converter::add_intrinsic_assignments(code_blockt &block)
   // Add assignment for intrinsic variable to match C frontend behavior
   locationt location;
   location.set_file("esbmc_intrinsics.h");
-  
+
   // ASSIGN __ESBMC_rounding_mode = 0;
   {
     symbol_exprt rounding_symbol("c:@__ESBMC_rounding_mode", int_type());
