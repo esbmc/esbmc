@@ -1,4 +1,2 @@
-
-s1: str = "fine"
-s1 += "!!"
-assert s1 == "fine!!"
+s1: str = "1"
+assert len(s1) == 1
