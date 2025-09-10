@@ -457,14 +457,23 @@ void goto_symext::symex_assume()
   // of constant propagation in some cases
   if (is_equality2t(c))
   {
+    // In the IEEE-754 floating-point number semantics,
+    // there can be situations where the numerical comparison is equal,
+    // but the internal bit patterns are different: +0.0 and -0.0
+
+    // We don't perform constant propagation on it.
+    expr2tc lhs = to_equality2t(c).side_1;
+    expr2tc rhs = to_equality2t(c).side_2;
     if (
-      is_symbol2t(to_equality2t(c).side_1) &&
-      is_constant_expr(to_equality2t(c).side_2))
-      cur_state->assignment(to_equality2t(c).side_1, to_equality2t(c).side_2);
+      is_symbol2t(lhs) && is_constant_expr(rhs) &&
+      !(is_constant_floatbv2t(rhs) &&
+        to_constant_floatbv2t(rhs).value.is_zero()))
+      cur_state->assignment(lhs, rhs);
     else if (
-      is_symbol2t(to_equality2t(c).side_2) &&
-      is_constant_expr(to_equality2t(c).side_1))
-      cur_state->assignment(to_equality2t(c).side_2, to_equality2t(c).side_1);
+      is_symbol2t(rhs) && is_constant_expr(lhs) &&
+      !(is_constant_floatbv2t(lhs) &&
+        to_constant_floatbv2t(lhs).value.is_zero()))
+      cur_state->assignment(rhs, lhs);
   }
 }
 
