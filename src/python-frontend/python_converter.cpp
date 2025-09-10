@@ -3276,6 +3276,13 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     exprt pos = get_expr(slice);
     int index = 0;
 
+    if (pos.type().is_array()) {
+      locationt l = get_location_from_decl(element);
+      throw std::runtime_error(
+        "TypeError at " + l.get_file().as_string() + " " + l.get_line().as_string() +
+        ": list indices must be integers or slices, not str");
+    }
+
     // Adjust negative indexes
     if (slice.contains("op") && slice["op"]["_type"] == "USub")
     {
@@ -3299,7 +3306,6 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     }
     else if (slice["_type"] == "Constant")
     {
-      DUMP_OBJECT(slice);
       index = slice["value"].get<int>();
     }
 
