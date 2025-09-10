@@ -3325,7 +3325,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         {
           const locationt l = get_location_from_decl(element);
           throw std::runtime_error(
-            "Out of bounds at " + l.get_file().as_string() +
+            "List out of bounds at " + l.get_file().as_string() +
             " line: " + l.get_line().as_string());
         }
       }
