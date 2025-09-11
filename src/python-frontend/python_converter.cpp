@@ -1986,7 +1986,40 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     if (
       is_zero_length_array(lhs) && is_zero_length_array(rhs) &&
       (op == "Eq" || op == "NotEq"))
+    {
       return gen_boolean(op == "Eq");
+    }
+
+    // Handle string concatenation with type promotion
+    if (op == "Add")
+    {
+      // After the string concatenation section, before the type determination:
+      if (lhs.type().is_array() && !rhs.type().is_array())
+      {
+        // LHS is array, RHS is single char - promote RHS to string array
+        if (rhs.type().is_signedbv() || rhs.type().is_unsignedbv())
+        {
+          typet string_type = type_handler_.build_array(char_type(), 2);
+          exprt str_array = gen_zero(string_type);
+          str_array.operands().at(0) = rhs;
+          str_array.operands().at(1) = gen_zero(char_type()); // null terminator
+          rhs = str_array;
+        }
+      }
+      else if (!lhs.type().is_array() && rhs.type().is_array())
+      {
+        // RHS is array, LHS is single char - promote LHS to string array
+        if (lhs.type().is_signedbv() || lhs.type().is_unsignedbv())
+        {
+          typet string_type = type_handler_.build_array(char_type(), 2);
+          exprt str_array = gen_zero(string_type);
+          str_array.operands().at(0) = lhs;
+          str_array.operands().at(1) = gen_zero(char_type()); // null terminator
+          lhs = str_array;
+        }
+      }
+      return handle_string_concatenation(lhs, rhs, left, right);
+    }
 
     // Compute resulting list
     if (op == "Mult")
@@ -2105,6 +2138,38 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     return get_binary_operator_expr_for_is(lhs, rhs);
   else if (op == "IsNot")
     return get_negated_is_expr(lhs, rhs);
+
+  // Handle type mismatches for relational operations
+  if (type_utils::is_relational_op(op))
+  {
+    // Check for float vs string comparisons
+    bool lhs_is_float = lhs.type().is_floatbv();
+    bool rhs_is_float = rhs.type().is_floatbv();
+    bool lhs_is_string =
+      lhs.type().is_array() && lhs.type().subtype() == char_type();
+    bool rhs_is_string =
+      rhs.type().is_array() && rhs.type().subtype() == char_type();
+
+    if ((lhs_is_float && rhs_is_string) || (lhs_is_string && rhs_is_float))
+    {
+      // Create a binary expression for handle_float_vs_string with proper location
+      exprt binary_expr(get_op(op, bool_type()), bool_type());
+
+      // Set location from the AST element or operands
+      locationt loc = get_location_from_decl(element);
+      if (loc.is_nil() || loc.get_line().empty())
+      {
+        // Fallback to operand locations
+        if (!lhs.location().is_nil())
+          loc = lhs.location();
+        else if (!rhs.location().is_nil())
+          loc = rhs.location();
+      }
+      binary_expr.location() = loc;
+
+      return handle_float_vs_string(binary_expr, op);
+    }
+  }
 
   // Get LHS and RHS types
   std::string lhs_type = type_handler_.type_to_string(lhs.type());
