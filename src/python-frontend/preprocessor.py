@@ -693,7 +693,48 @@ class Preprocessor(ast.NodeTransformer):
         # Determine annotation type based on the iterable value
         annotation_id = self._get_iterable_type_annotation(node.iter)
 
-        # Create assignment for the iterable variable
+        # Determine iterator variable name and whether to create ESBMC_iter
+        is_string_param = (isinstance(node.iter, ast.Name) and 
+                        annotation_id == 'str' and 
+                        node.iter.id in self.known_variable_types and
+                        self.known_variable_types[node.iter.id] == 'str')
+
+        if is_string_param:
+            # For string parameters, use original parameter directly
+            iter_var_name = node.iter.id
+            setup_statements = []
+        else:
+            # For other iterables, create ESBMC_iter copy
+            iter_var_name = 'ESBMC_iter'
+            iter_assign = self._create_iter_assignment(node, annotation_id)
+            setup_statements = [iter_assign]
+
+        # Create common setup statements (index and length)
+        index_assign = self._create_index_assignment(node)
+        length_assign = self._create_length_assignment(node, iter_var_name)
+        setup_statements.extend([index_assign, length_assign])
+
+        # Create while loop condition
+        while_cond = self._create_while_condition(node)
+
+        # Create loop body
+        transformed_body = self._create_loop_body(node, target_var_name, iter_var_name, annotation_id)
+
+        # Create the while statement
+        while_stmt = ast.While(test=while_cond, body=transformed_body, orelse=[])
+        self.ensure_all_locations(while_stmt, node)
+
+        result = setup_statements + [while_stmt]
+
+        # Ensure all nodes have proper location info
+        for stmt in result:
+            self.ensure_all_locations(stmt, node)
+            ast.fix_missing_locations(stmt)
+
+        return result
+
+    def _create_iter_assignment(self, node, annotation_id):
+        """Create ESBMC_iter assignment for non-string parameters."""
         iter_target = self.create_name_node('ESBMC_iter', ast.Store(), node)
         str_annotation = self.create_name_node(annotation_id, ast.Load(), node)
         iter_assign = ast.AnnAssign(
@@ -703,8 +744,10 @@ class Preprocessor(ast.NodeTransformer):
             simple=1
         )
         self.ensure_all_locations(iter_assign, node)
+        return iter_assign
 
-        # Create assignment for the index variable
+    def _create_index_assignment(self, node):
+        """Create ESBMC_index assignment."""
         index_target = self.create_name_node('ESBMC_index', ast.Store(), node)
         index_value = self.create_constant_node(0, node)
         int_annotation = self.create_name_node('int', ast.Load(), node)
@@ -715,33 +758,58 @@ class Preprocessor(ast.NodeTransformer):
             simple=1
         )
         self.ensure_all_locations(index_assign, node)
+        return index_assign
 
-        # Create assignment for the length variable
+    def _create_length_assignment(self, node, iter_var_name):
+        """Create ESBMC_length assignment."""
         length_target = self.create_name_node('ESBMC_length', ast.Store(), node)
         len_func = self.create_name_node('len', ast.Load(), node)
-        iter_arg = self.create_name_node('ESBMC_iter', ast.Load(), node)
+        iter_arg = self.create_name_node(iter_var_name, ast.Load(), node)
         len_call = ast.Call(func=len_func, args=[iter_arg], keywords=[])
         self.ensure_all_locations(len_call, node)
-        int_annotation2 = self.create_name_node('int', ast.Load(), node)
+        int_annotation = self.create_name_node('int', ast.Load(), node)
         length_assign = ast.AnnAssign(
             target=length_target,
-            annotation=int_annotation2,
+            annotation=int_annotation,
             value=len_call,
             simple=1
         )
         self.ensure_all_locations(length_assign, node)
+        return length_assign
 
-        # Create a condition for the while loop
+    def _create_while_condition(self, node):
+        """Create while loop condition."""
         index_left = self.create_name_node('ESBMC_index', ast.Load(), node)
         length_right = self.create_name_node('ESBMC_length', ast.Load(), node)
         lt_op = ast.Lt()
         self.ensure_all_locations(lt_op, node)
         while_cond = ast.Compare(left=index_left, ops=[lt_op], comparators=[length_right])
         self.ensure_all_locations(while_cond, node)
+        return while_cond
 
-        # Add assignment to get current item from iterable
+    def _create_loop_body(self, node, target_var_name, iter_var_name, annotation_id):
+        """Create the complete loop body."""
+        # Item assignment
+        item_assign = self._create_item_assignment(node, target_var_name, iter_var_name, annotation_id)
+
+        # Index increment
+        index_increment = self._create_index_increment(node)
+
+        # Transform original body
+        transformed_original_body = []
+        for statement in node.body:
+            transformed_statement = self.visit(statement)
+            if isinstance(transformed_statement, list):
+                transformed_original_body.extend(transformed_statement)
+            else:
+                transformed_original_body.append(transformed_statement)
+
+        return [item_assign, index_increment] + transformed_original_body
+
+    def _create_item_assignment(self, node, target_var_name, iter_var_name, annotation_id):
+        """Create assignment to get current item from iterable."""
         item_target = self.create_name_node(target_var_name, ast.Store(), node)
-        iter_value = self.create_name_node('ESBMC_iter', ast.Load(), node)
+        iter_value = self.create_name_node(iter_var_name, ast.Load(), node)
         index_slice = self.create_name_node('ESBMC_index', ast.Load(), node)
         subscript = ast.Subscript(value=iter_value, slice=index_slice, ctx=ast.Load())
         self.ensure_all_locations(subscript, node)
@@ -754,8 +822,10 @@ class Preprocessor(ast.NodeTransformer):
             simple=1
         )
         self.ensure_all_locations(item_assign, node)
+        return item_assign
 
-        # Add increment of index BEFORE the body (so continue can't skip it)
+    def _create_index_increment(self, node):
+        """Create index increment statement."""
         inc_target = self.create_name_node('ESBMC_index', ast.Store(), node)
         inc_left = self.create_name_node('ESBMC_index', ast.Load(), node)
         inc_right = self.create_constant_node(1, node)
@@ -763,39 +833,15 @@ class Preprocessor(ast.NodeTransformer):
         self.ensure_all_locations(add_op, node)
         inc_binop = ast.BinOp(left=inc_left, op=add_op, right=inc_right)
         self.ensure_all_locations(inc_binop, node)
-        int_annotation_inc = self.create_name_node('int', ast.Load(), node)
+        int_annotation = self.create_name_node('int', ast.Load(), node)
         index_increment = ast.AnnAssign(
             target=inc_target,
-            annotation=int_annotation_inc,
+            annotation=int_annotation,
             value=inc_binop,
             simple=1
         )
         self.ensure_all_locations(index_increment, node)
-
-        # Transform the body of the for loop
-        # Order: item_assign, index_increment, then original body
-        transformed_body = [item_assign, index_increment]
-
-        # Transform the original body statements
-        for statement in node.body:
-            transformed_statement = self.visit(statement)
-            if isinstance(transformed_statement, list):
-                transformed_body.extend(transformed_statement)
-            else:
-                transformed_body.append(transformed_statement)
-
-        # Create the while statement
-        while_stmt = ast.While(test=while_cond, body=transformed_body, orelse=[])
-        self.ensure_all_locations(while_stmt, node)
-
-        result = [iter_assign, index_assign, length_assign, while_stmt]
-
-        # Ensure all nodes in the result have proper location info
-        for stmt in result:
-            self.ensure_all_locations(stmt, node)
-            ast.fix_missing_locations(stmt)
-
-        return result
+        return index_increment
 
     def visit_Name(self, node):
         # Replace variable names as needed in range-based for to while transformation
