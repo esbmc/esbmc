@@ -4,27 +4,31 @@
 def get_integer():
     return 1
 
+
 def get_float():
     return 0.5
 
+
 def get_boolean():
     return True
+
 
 # ===============================================
 # Functions with wrong return annotations
 # to test type inference
 # ===============================================
 
-def int_float() -> int: # Should infer to float
-  return 0.5
+
+def int_float() -> int:  # Should infer to float
+    return 0.5
 
 
-def float_bool() -> float: # Should infer to bool
-  return False
+def float_bool() -> float:  # Should infer to bool
+    return False
 
 
-def bool_int() -> bool: # Should infer to int
-  return 3
+def bool_int() -> bool:  # Should infer to int
+    return 3
 
 
 # ==============================

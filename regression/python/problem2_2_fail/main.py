@@ -1,5 +1,6 @@
 from math import comb
 
+
 def distributeCandies_v2(n: int, limit: int) -> int:
     res = comb(n + 2, 2)
     if n >= limit + 1:
@@ -10,4 +11,5 @@ def distributeCandies_v2(n: int, limit: int) -> int:
         res -= comb(n - 3 * limit - 1, 2)
     return res
 
-assert  distributeCandies_v2(2, 2) == 5
+
+assert distributeCandies_v2(2, 2) == 5

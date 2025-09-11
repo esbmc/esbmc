@@ -1,4 +1,4 @@
-def search(x:int, seq:list[int]):
+def search(x: int, seq: list[int]):
     """ Takes in a value x and a sorted sequence seq, and returns the
     position that x should go to such that the sequence remains sorted """
     output = 0
@@ -9,13 +9,14 @@ def search(x:int, seq:list[int]):
             break
     return output
 
+
 # Test case 1: Empty sequence
 result = search(5, [])
 assert result == 0
 
 # Test case 2: Insert at beginning
 result = search(1, [2, 3, 4, 5])
-assert result == 0    
+assert result == 0
 
 # Test case 3: Insert at end
 result = search(6, [1, 2, 3, 4])
@@ -40,4 +41,3 @@ assert result == 2
 # Test case 8: Multiple duplicates
 result = search(3, [1, 2, 3, 3, 3, 4])
 assert result == 2
-

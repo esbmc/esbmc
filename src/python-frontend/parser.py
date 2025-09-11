@@ -5,10 +5,10 @@ import subprocess
 PY3 = sys.version_info[0] == 3
 
 if not PY3:
-    print("Python version: {}.{}.{}".format(sys.version_info.major, sys.version_info.minor, sys.version_info.micro))
+    print("Python version: {}.{}.{}".format(sys.version_info.major, sys.version_info.minor,
+                                            sys.version_info.micro))
     print("ERROR: Please ensure Python 3 is available in your environment.")
     sys.exit(1)
-
 
 import ast
 import importlib.util
@@ -24,9 +24,11 @@ def check_usage():
         print("Usage: python astgen.py <file path> <output directory>")
         sys.exit(2)
 
+
 def is_imported_model(module_name):
     models = ["math", "os", "numpy"]
     return module_name in models
+
 
 def is_unsupported_module(module_name):
     unsuported_modules = ["blah"]
@@ -58,7 +60,6 @@ def import_module_by_name(module_name, output_dir):
         print("Please install it with: pip3 install {}".format(module_name))
         sys.exit(4)
 
-
     try:
         module = importlib.import_module(module_name)
         return module
@@ -70,6 +71,7 @@ def import_module_by_name(module_name, output_dir):
 
 def encode_bytes(value):
     return base64.b64encode(value).decode('ascii')
+
 
 def add_type_annotation(node):
     value_node = node.value
@@ -91,6 +93,7 @@ def is_standard_library_file(filename):
 
 import_aliases = {}
 
+
 def process_imports(node, output_dir):
     """
     Process import statements in the AST node.
@@ -108,7 +111,7 @@ def process_imports(node, output_dir):
             alias = alias_node.asname or module_name
             import_aliases[alias] = module_name
         imported_elements = None
-    else: #ImportFrom
+    else:  #ImportFrom
         module_name = node.module
         imported_elements = node.names
         if module_name:
@@ -130,8 +133,8 @@ def process_imports(node, output_dir):
         with open(filename, "r") as source:
             tree = ast.parse(source.read())
             if not is_standard_library_file(filename):
-              preprocessor = Preprocessor(filename)
-              tree = preprocessor.visit(tree)
+                preprocessor = Preprocessor(filename)
+                tree = preprocessor.visit(tree)
             generate_ast_json(tree, filename, imported_elements, output_dir)
     except UnicodeDecodeError:
         pass
@@ -161,7 +164,6 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir):
                         if node.name == elem_info.name:
                             filtered_nodes.append(node)
                             break
-
 
     # Convert AST to JSON
     ast2json_module = import_module_by_name("ast2json", "")
@@ -242,9 +244,11 @@ def detect_and_process_submodules(node, processed_submodules, output_dir):
                         try:
                             with open(full_path, "r") as f:
                                 tree = ast.parse(f.read())
-                                generate_ast_json(tree, full_path, None, output_dir + "/" + base_module)
+                                generate_ast_json(tree, full_path, None,
+                                                  output_dir + "/" + base_module)
                         except UnicodeDecodeError:
                             continue
+
 
 def main():
     check_usage()
@@ -252,10 +256,7 @@ def main():
     output_dir = sys.argv[2]
 
     # Type checking input program with mypy
-    result = subprocess.run(
-    ["mypy", "--strict", filename],
-    capture_output=True,
-    text=True)
+    result = subprocess.run(["mypy", "--strict", filename], capture_output=True, text=True)
 
     if result.returncode != 0:
         print("\033[93m\nType checking warning:\033[0m")
@@ -301,7 +302,7 @@ def main():
         module_name = filename[:-3]
 
         if is_imported_model(module_name):
-            continue;
+            continue
 
         with open(python_file) as model:
             model_tree = ast.parse(model.read())

@@ -4,4 +4,5 @@ def empty_identity(x: str, y: int) -> str:
     else:
         return x
 
+
 assert empty_identity("", 1) == ""

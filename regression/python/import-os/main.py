@@ -11,4 +11,4 @@ listdir(p)
 exists = os.path.exists(f)
 base = os.path.basename(f)
 if exists:
-  remove(f)
+    remove(f)

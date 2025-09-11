@@ -1,10 +1,10 @@
 numbers = [10, 20, 30, 40, 50]
 
 # Test various negative indices
-assert numbers[-1] == 50    # Last element
-assert numbers[-5] == 10    # First element via negative index
-assert numbers[-3] == 30    # Middle element
-assert numbers[-2] == 40    # Second to last
+assert numbers[-1] == 50  # Last element
+assert numbers[-5] == 10  # First element via negative index
+assert numbers[-3] == 30  # Middle element
+assert numbers[-2] == 40  # Second to last
 
 # Test negative indexing with strings
 names = ['Alice', 'Bob', 'Charlie']
@@ -30,7 +30,6 @@ assert special_chars[0] == 'α'
 assert special_chars[3] == '🚀'
 assert special_chars[-1] == '★'
 
-
 words = ['hello', 'world', 'test']
 target = 'hello'
 
@@ -43,5 +42,3 @@ assert words[1] != 'hello'
 short = ['hi']
 long_word = 'hello'
 assert short[0] != long_word
-
-

@@ -1,2 +1,2 @@
-for i, x in enumerate([1,2,3], 1):
-    assert i == x 
+for i, x in enumerate([1, 2, 3], 1):
+    assert i == x

@@ -1,25 +1,26 @@
 class Person:
     # Class variable (shared by all instances)
     species = "Homo sapiens"
-    
+
     # Constructor method
     def __init__(self, weight: int, age: int):
-        self.weight = weight    # Instance variable
-        self.age = age          # Instance variable
-    
+        self.weight = weight  # Instance variable
+        self.age = age  # Instance variable
+
     # Instance method
     def gain_weight(self) -> int:
         self.weight += 1
         return self.weight
-    
+
     # Another instance method
     def have_birthday(self) -> int:
         self.age += 1
         return self.age
-    
+
     # Additional method for better functionality
     def introduce(self) -> str:
         return "I am {self.age} years old and weigh {self.weight} kg"
+
 
 # Creating instances
 person1 = Person(90, 25)

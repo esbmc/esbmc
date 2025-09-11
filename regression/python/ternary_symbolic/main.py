@@ -1,6 +1,6 @@
 # Symbolic inputs for comprehensive verification
 a: int = int(input())
-b: int = int(input())  
+b: int = int(input())
 age: int = int(input())
 score: int = int(input())
 level: int = int(input())
@@ -57,7 +57,7 @@ is_eligible: bool = True if (age >= 21 and score >= 75) else False
 assert is_eligible == True or is_eligible == False
 
 # Mixed type promotion with symbolic values
-priority_weight: float = 2.5 if urgent else 1    # int 1 promoted to float 1.0
+priority_weight: float = 2.5 if urgent else 1  # int 1 promoted to float 1.0
 assert priority_weight == 2.5 or priority_weight == 1.0
 
 temperature_category: float = 3.0 if temperature > 100.0 else (2.0 if temperature > 98.6 else 1.0)
@@ -69,4 +69,3 @@ assert zero_temperature == 1 or zero_temperature == 0
 
 negative_score: int = 1 if score < 0 else 0
 assert negative_score == 1 or negative_score == 0
-

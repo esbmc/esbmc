@@ -9,4 +9,3 @@ assert math.ceil(x) == 3
 y = -2.0000000000001
 assert math.floor(y) == -3
 assert math.ceil(y) == -2
-

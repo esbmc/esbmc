@@ -1,9 +1,9 @@
-def foo(arg:bytes) -> None:
-  assert arg[0] == 72
-  assert arg[1] == 101
-  assert arg[2] == 108
-  assert arg[3] == 108
-  assert arg[4] == 111
+def foo(arg: bytes) -> None:
+    assert arg[0] == 72
+    assert arg[1] == 101
+    assert arg[2] == 108
+    assert arg[3] == 108
+    assert arg[4] == 111
 
 
 data_arr = b'Hello'

@@ -1,9 +1,11 @@
 class MyClass:
-    def __init__(self,x:int):
+
+    def __init__(self, x: int):
         self.x = x
 
-    def return_x(self)->int:
+    def return_x(self) -> int:
         return self.x
+
 
 myInstance = MyClass(5)
 

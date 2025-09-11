@@ -4,4 +4,5 @@ def test_no_arguments():
     assert x == 0
     assert isinstance(x, int)
 
+
 test_no_arguments()

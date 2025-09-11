@@ -6,4 +6,5 @@ def distributeCandies_v3(n: int, limit: int) -> int:
         answer += max(c1_max - c1_min + 1, 0)
     return answer
 
-assert distributeCandies_v3(2,3) == 6
+
+assert distributeCandies_v3(2, 3) == 6

@@ -8,4 +8,5 @@ def alternatingSubarray(nums: list[int]) -> int:
             ans = max(ans, j - i + 1)
     return ans
 
+
 assert alternatingSubarray([1, 2, 3]) == 2

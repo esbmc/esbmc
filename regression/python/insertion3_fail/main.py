@@ -1,5 +1,6 @@
 import random
 
+
 def insertion_sort(arr: list[int]):
     # Traverse from 1 to len(arr)
     for i in range(1, len(arr)):
@@ -8,7 +9,7 @@ def insertion_sort(arr: list[int]):
 
         # Move elements of arr[0..i-1], that are greater than key,
         # to one position ahead of their current position
-        while j > 0 and key < arr[j]: # BUG: it should be j>=0 instead of j>0 
+        while j > 0 and key < arr[j]:  # BUG: it should be j>=0 instead of j>0
             arr[j + 1] = arr[j]
             j -= 1
 
@@ -39,11 +40,10 @@ def insertion_sort(arr: list[int]):
 
 
 # Example usage
-x = random.randint(1,1000)
-y = random.randint(1,1000)
-z = random.randint(1,1000)
+x = random.randint(1, 1000)
+y = random.randint(1, 1000)
+z = random.randint(1, 1000)
 nums = [x, y, z]
 print("Unsorted:", nums)
 sorted_nums = insertion_sort(nums)
 print("Sorted:", sorted_nums)
-

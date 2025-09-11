@@ -2,9 +2,11 @@
 def func() -> int:
     return 2
 
+
 # Function with parameter
 def id(x: int) -> int:
     return x
+
 
 # Recursive (bounded) factorial
 def fact(n: int) -> int:
@@ -12,11 +14,13 @@ def fact(n: int) -> int:
         return 1
     return n * fact(n - 1)
 
+
 # Conditional return
 def threshold(x: int) -> int:
     if x > 10:
         return 100
     return 1
+
 
 # Call func, check nonzero
 x: int = func()

@@ -12,4 +12,5 @@ def minimumCoins_v1(prices: list[int]) -> int:
             dp[j] = min(dp[j], price)
     return dp[-1]
 
+
 assert minimumCoins_v1([1, 2, 3]) == 3

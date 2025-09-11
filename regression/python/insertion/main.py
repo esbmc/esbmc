@@ -1,5 +1,6 @@
 import random
 
+
 def insertion_sort(arr: list[int]):
     # Traverse from 1 to len(arr)
     for i in range(1, len(arr)):
@@ -31,11 +32,10 @@ def insertion_sort(arr: list[int]):
 
 
 # Example usage
-x = random.randint(1,1000)
-y = random.randint(1,1000)
-z = random.randint(1,1000)
+x = random.randint(1, 1000)
+y = random.randint(1, 1000)
+z = random.randint(1, 1000)
 nums = [x, y, z]
 print("Unsorted:", nums)
 sorted_nums = insertion_sort(nums)
 print("Sorted:", sorted_nums)
-

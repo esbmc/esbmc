@@ -7,4 +7,5 @@ def distributeCandies_v1(n: int, limit: int) -> int:
                     c += 1
     return c
 
+
 assert distributeCandies_v1(2, 3) == 6

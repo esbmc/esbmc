@@ -25,5 +25,3 @@ assert (f == 'A') == False
 val = float(66)
 char = 'B'
 assert not (val == char)  # False
-
-

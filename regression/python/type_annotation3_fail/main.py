@@ -5,6 +5,7 @@ def safe_divide(a: int, b: int) -> int:
     except ZeroDivisionError as e:
         return -1
 
+
 def test_exception_handling() -> None:
     # Normal case
     assert safe_divide(10, 2) == 5
@@ -14,5 +15,6 @@ def test_exception_handling() -> None:
 
     # This assertion will fail - demonstrating ESBMC can verify exception paths
     assert safe_divide(8, 0) == 0  # Should be -1, not 0
+
 
 test_exception_handling()

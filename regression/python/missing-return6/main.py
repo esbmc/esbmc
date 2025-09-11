@@ -4,6 +4,7 @@ def safe_divide(a: int, b: int) -> int:
     else:
         return a // b
 
+
 result = safe_divide(10, 2)
 assert result == 5
 

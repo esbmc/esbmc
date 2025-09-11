@@ -3,6 +3,7 @@ def check_index(idx):
         raise IndexError("Index out of range")
     return idx
 
+
 result = 1
 try:
     result = check_index(15)

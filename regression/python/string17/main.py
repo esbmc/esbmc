@@ -2,21 +2,26 @@
 def identity_string(x: str) -> str:
     return x
 
+
 # Identity function with different parameter name
 def pass_through(s: str) -> str:
     return s
+
 
 # Non-identity function (should not be optimized)
 def modify_string(x: str) -> str:
     return x + "!"
 
+
 # Identity function with multiple parameters (returns first)
 def first_param(a: str, b: str) -> str:
     return a
 
+
 # Identity function with multiple parameters (returns second)
 def second_param(a: str, b: str) -> str:
     return b
+
 
 empty_str = ""
 assert identity_string(empty_str) == empty_str
@@ -84,4 +89,3 @@ chain_str = "chain_test"
 assert identity_string(chain_str) == pass_through(chain_str) == chain_str
 
 print("All string comparison tests passed!")
-

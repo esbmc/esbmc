@@ -3,10 +3,10 @@ b = 4
 c = 8
 
 # Exponentiation
-assert a ** b == 16
-x =  -a ** b
+assert a**b == 16
+x = -a**b
 assert x == -16  # Unary minus binds less tightly than **
-assert (-a) ** b == 16
+assert (-a)**b == 16
 assert x is not b
 
 # Unary operations
@@ -21,17 +21,17 @@ assert a * b == 8
 assert c / b == 2.0
 assert c // b == 2
 assert c % b == 0
-assert 3 * 2 % 4 == 2     # * binds tighter than %
+assert 3 * 2 % 4 == 2  # * binds tighter than %
 assert a * b is 8
 
 # Addition and Subtraction
 assert a + b == 6
 assert c - a == 6
-assert a + b * c == 34    # * has higher precedence than +
+assert a + b * c == 34  # * has higher precedence than +
 assert (a + b) * c == 48
 
 # Mixed arithmetic and bitwise
-assert 1 << 2 + 1 == 8    # 2 + 1 = 3; 1 << 3 = 8
+assert 1 << 2 + 1 == 8  # 2 + 1 = 3; 1 << 3 = 8
 assert (1 << 2) + 1 == 5
 
 # Bitwise Operations
@@ -40,7 +40,7 @@ assert a ^ b == 6
 assert a & b == 0
 assert b >> 1 == 2
 assert a << 1 == 4
-assert 1 | 2 & 3 == 3     # & binds tighter than |
+assert 1 | 2 & 3 == 3  # & binds tighter than |
 assert (1 | 2) & 3 == 3
 
 # Comparison Operations

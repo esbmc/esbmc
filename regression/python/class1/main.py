@@ -4,8 +4,8 @@ class Person:
 
     # Constructor method
     def __init__(self, weight: int, age: int):
-        self.weight = weight    # Instance variable
-        self.age = age          # Instance variable
+        self.weight = weight  # Instance variable
+        self.age = age  # Instance variable
 
     # Instance method
     def gain_weight(self) -> int:
@@ -20,6 +20,7 @@ class Person:
     # Additional method for better functionality
     def introduce(self) -> str:
         return "I am {self.age} years old and weigh {self.weight} kg"
+
 
 # Creating instances
 person1 = Person(90, 25)

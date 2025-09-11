@@ -1,6 +1,6 @@
 import random
 
-x = random.randint(10,100)
+x = random.randint(10, 100)
 y = random.randint(1, 9)
 
 try:
@@ -9,4 +9,3 @@ except AssertionError as e:
     print("Caught an AssertionError:", e)
 
 print("Program continues running after handling the error.")
-

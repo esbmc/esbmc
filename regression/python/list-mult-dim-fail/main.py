@@ -4,4 +4,3 @@ matrix = [
 ]
 
 assert matrix[0][0] == 2
-

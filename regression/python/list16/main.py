@@ -18,4 +18,3 @@ assert ['Zebra'] > quarter
 empty = []
 assert empty < quarter
 assert quarter > empty
-

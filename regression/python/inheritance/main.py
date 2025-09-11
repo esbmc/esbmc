@@ -34,4 +34,4 @@ assert c == 2  # Asserting that the overridden 'bar' method returns the expected
 
 
 class MyFloat(float):
-  pass
+    pass

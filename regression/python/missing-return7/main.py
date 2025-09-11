@@ -1,6 +1,6 @@
-def absolute(x:int) -> int:
+def absolute(x: int) -> int:
     if (x < 0): return -x
     else: x
 
-a = absolute(-1)
 
+a = absolute(-1)

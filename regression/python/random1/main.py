@@ -1,7 +1,9 @@
 import random
 
+
 def nondet_int():
     return random.choice([0, 1])  # Simulate non-deterministic choice
+
 
 x: int = 90
 

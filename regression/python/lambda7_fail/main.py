@@ -7,5 +7,5 @@ def test() -> None:
     f_bool = lambda a: a and True
     assert f_bool(False) is True  # should fail
 
-test()
 
+test()

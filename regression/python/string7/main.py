@@ -19,7 +19,7 @@ assert ws1 != ""
 # Identity vs equality
 a = str("duplicate")
 b = str("duplicate")
-assert a == b          # same content, different objects
+assert a == b  # same content, different objects
 
 # Empty string comparisons
 empty = str("")
