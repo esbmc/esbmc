@@ -1372,14 +1372,7 @@ exprt function_call_expr::gen_exception_raise(
     abort();
   }
 
-  std::string file = converter_.python_file();
-  symbol_id function_id(file, exc, exc);
-  const symbolt *sym = converter_.find_symbol(function_id.to_string());
   typet type = type_handler_.get_typet(exc);
-
-  side_effect_expr_function_callt call;
-  call.function() = symbol_expr(*sym);
-  call.type() = type;
 
   exprt size = constant_exprt(
     integer2binary(message.size(), bv_width(size_type())),
@@ -1388,10 +1381,14 @@ exprt function_call_expr::gen_exception_raise(
   typet t = array_typet(char_type(), size);
   string_constantt string_name(message, t, string_constantt::k_default);
 
-  call.arguments().push_back(address_of_exprt(string_name));
+  // Construct a constant struct to throw:
+  // raise VauleError{ .message=&"Error message" }
+  // If the exception model is modified, it might be necessary to make changes
+  exprt sym("struct", type);
+  sym.copy_to_operands(address_of_exprt(string_name));
 
   exprt raise = side_effect_exprt("cpp-throw", type);
-  raise.move_to_operands(call);
+  raise.move_to_operands(sym);
 
   return raise;
 }
