@@ -1175,173 +1175,145 @@ exprt python_converter::handle_string_concatenation(
   if (!lhs_is_empty && rhs_is_empty)
     return lhs;
 
-  // Continue with regular concatenation logic for non-empty cases
-  BigInt lhs_size = get_string_size(lhs);
-  BigInt rhs_size = get_string_size(rhs);
+  // Helper function to extract characters from any source
+  auto extract_chars =
+    [this](
+      const exprt &expr,
+      const nlohmann::json &json_node) -> std::vector<exprt> {
+    std::vector<exprt> chars;
 
-  // if size calculation fails, use conservative defaults
-  if (lhs_size < 1)
-    lhs_size = 1; // At least null terminator
-  if (rhs_size < 1)
-    rhs_size = 1; // At least null terminator
-
-  // Calculate content size (excluding null terminators)
-  BigInt lhs_content = lhs_size - 1;
-  BigInt rhs_content = rhs_size - 1;
-  BigInt total_size =
-    lhs_content + rhs_content + 1; // +1 for final null terminator
-
-  typet t = type_handler_.get_typet("str", total_size.to_uint64());
-  exprt result = gen_zero(t);
-
-  // Ensure result has the correct number of operands allocated
-  if (result.operands().size() != total_size.to_uint64())
-  {
-    result.operands().resize(total_size.to_uint64());
-    // Initialize all operands to zero characters
-    for (size_t j = 0; j < result.operands().size(); ++j)
-      result.operands().at(j) = gen_zero(t.subtype());
-  }
-
-  unsigned int i = 0;
-
-  // Helper function with consistent bounds checking and null handling
-  auto safe_append_char = [&](const exprt &ch) -> bool {
-    if (i >= result.operands().size())
+    // Handle JSON string constants first
+    if (
+      json_node.contains("_type") && json_node["_type"] == "Constant" &&
+      json_node.contains("value"))
     {
-      log_warning("String concatenation buffer overflow at position {}", i);
-      return false; // Buffer full
-    }
-    // Only append non-null characters
-    if (ch != gen_zero(ch.type()))
-      result.operands().at(i++) = ch;
-    return true;
-  };
-
-  auto append_from_symbol = [&](const std::string &id) -> bool {
-    symbolt *symbol = symbol_table_.find_symbol(id);
-    if (!symbol)
-    {
-      // log which symbol wasn't found
-      log_warning("Symbol not found in string concatenation: {}", id);
-      return true; // Continue processing: treat as empty string
+      std::string str_value = json_node["value"].get<std::string>();
+      for (char c : str_value)
+      {
+        if (c == 0)
+          break; // Stop at null terminator
+        BigInt char_val(static_cast<unsigned char>(c));
+        exprt char_expr = constant_exprt(
+          integer2binary(char_val, 8), integer2string(char_val), char_type());
+        chars.push_back(char_expr);
+      }
+      return chars;
     }
 
-    // Handle empty string symbols or uninitialized symbols
-    if (symbol->value.is_nil() || !symbol->value.type().is_array())
+    // Handle symbol expressions
+    if (expr.is_symbol())
     {
-      // Empty string: no characters to append
-      return true;
+      symbolt *symbol =
+        symbol_table_.find_symbol(expr.identifier().as_string());
+      if (
+        symbol && symbol->value.is_constant() &&
+        symbol->value.type().is_array())
+      {
+        // Extract characters from symbol value, excluding null terminator
+        const exprt &value = symbol->value;
+        for (size_t i = 0; i < value.operands().size(); ++i)
+        {
+          const exprt &ch = value.operands()[i];
+          if (ch.is_constant())
+          {
+            try
+            {
+              BigInt char_val =
+                binary2integer(ch.value().as_string(), ch.type().is_signedbv());
+              if (char_val == 0)
+                break; // Stop at null terminator
+              chars.push_back(ch);
+            }
+            catch (...)
+            {
+              // If we can't parse the value, just include the character
+              chars.push_back(ch);
+            }
+          }
+        }
+      }
+      return chars;
     }
 
-    // Handle symbols with no operands (empty strings)
-    if (symbol->value.operands().empty())
-    {
-      // Empty string: no characters to append
-      return true;
-    }
-
-    for (const exprt &ch : symbol->value.operands())
-    {
-      if (!safe_append_char(ch))
-        return false;
-    }
-    return true;
-  };
-
-  auto append_from_json = [&](const nlohmann::json &json) -> bool {
-    if (!json.contains("value"))
-      return true; // Empty: continue processing
-
-    std::string value = json["value"].get<std::string>();
-    typet char_type = t.subtype();
-
-    // Handle empty strings explicitly
-    if (value.empty())
-      return true;
-
-    for (char ch : value)
-    {
-      if (ch == 0)
-        break; // Stop at null terminator
-      if (i >= result.operands().size())
-        return false; // Buffer full
-
-      BigInt v(ch);
-      exprt char_expr = constant_exprt(
-        integer2binary(v, bv_width(char_type)), integer2string(v), char_type);
-      result.operands().at(i++) = char_expr;
-    }
-    return true;
-  };
-
-  auto append_from_expr = [&](const exprt &expr) -> bool {
-    // Handle constant array expressions
+    // Handle constant arrays
     if (expr.is_constant() && expr.type().is_array())
     {
-      // Handle empty arrays (empty strings)
-      if (expr.operands().empty())
-        return true;
-
-      for (const auto &ch : expr.operands())
+      for (size_t i = 0; i < expr.operands().size(); ++i)
       {
-        if (ch.is_constant() && !safe_append_char(ch))
-          return false;
+        const exprt &ch = expr.operands()[i];
+        if (ch.is_constant())
+        {
+          try
+          {
+            BigInt char_val =
+              binary2integer(ch.value().as_string(), ch.type().is_signedbv());
+            if (char_val == 0)
+              break; // Stop at null terminator
+            chars.push_back(ch);
+          }
+          catch (...)
+          {
+            // If we can't parse the value, just include the character
+            chars.push_back(ch);
+          }
+        }
       }
+      return chars;
     }
-    // Handle symbol expressions
-    else if (expr.is_symbol())
-      return append_from_symbol(expr.identifier().as_string());
-    // Handle other expression types: treat as empty for now
-    else
+
+    // Handle single character constants
+    if (
+      expr.is_constant() &&
+      (expr.type().is_signedbv() || expr.type().is_unsignedbv()))
     {
-      log_warning(
-        "Unhandled expression type in string concatenation: {}",
-        expr.id_string());
-      return true;
+      try
+      {
+        BigInt char_val =
+          binary2integer(expr.value().as_string(), expr.type().is_signedbv());
+        if (char_val != 0) // Don't include null characters
+          chars.push_back(expr);
+      }
+      catch (...)
+      {
+        // If we can't parse, include it anyway
+        chars.push_back(expr);
+      }
+      return chars;
     }
-    return true;
+
+    return chars;
   };
 
-  auto append_from_json_or_expr =
-    [&](const nlohmann::json &node, const exprt &expr) -> bool {
-    if (node.contains("_type"))
-    {
-      const std::string type = node["_type"].get<std::string>();
-      if (type == "Constant" && node.contains("value"))
-        return append_from_json(node);
-    }
+  // Extract characters from both operands
+  std::vector<exprt> lhs_chars = extract_chars(lhs, left);
+  std::vector<exprt> rhs_chars = extract_chars(rhs, right);
 
-    // Handle all other cases (including symbols) consistently
-    return append_from_expr(expr);
-  };
+  // Calculate total size: lhs_chars + rhs_chars + null terminator
+  size_t total_size = lhs_chars.size() + rhs_chars.size() + 1;
 
-  // Process both operands: don't fail if one fails, continue processing
-  bool left_success = append_from_json_or_expr(left, lhs);
-  bool right_success = append_from_json_or_expr(right, rhs);
+  // Create result array
+  typet result_type = type_handler_.build_array(char_type(), total_size);
+  exprt result = constant_exprt(
+    array_typet(char_type(), from_integer(total_size, size_type())));
+  result.type() = result_type;
+  result.operands().resize(total_size);
 
-  // Only fail if both operands fail to process
-  if (!left_success && !right_success)
+  // Copy LHS characters
+  size_t pos = 0;
+  for (const exprt &ch : lhs_chars)
+    result.operands().at(pos++) = ch;
+
+  // Copy RHS characters
+  for (const exprt &ch : rhs_chars)
+    result.operands().at(pos++) = ch;
+
+  // Add null terminator
+  if (pos < total_size)
   {
-    log_error("Failed to process both operands in string concatenation");
-    // Return empty string instead of throwing
-    typet empty_str_type = type_handler_.get_typet("str", 1);
-    exprt empty_result = gen_zero(empty_str_type);
-
-    // Ensure the empty result has proper operands
-    if (empty_result.operands().size() == 0)
-      empty_result.operands().resize(1);
-    empty_result.operands().at(0) = gen_zero(empty_str_type.subtype());
-    return empty_result;
-  }
-
-  // Ensure null terminator is added - with bounds check
-  if (i < result.operands().size())
-    result.operands().at(i) = gen_zero(t.subtype());
-  else
-  {
-    // This shouldn't happen with correct size calculation, but handle gracefully
-    log_warning("No space for null terminator in string concatenation result");
+    BigInt zero(0);
+    exprt null_char = constant_exprt(
+      integer2binary(zero, 8), integer2string(zero), char_type());
+    result.operands().at(pos) = null_char;
   }
 
   return result;
