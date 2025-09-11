@@ -3,6 +3,7 @@
 #include <python-frontend/type_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/symbol_id.h>
+#include <util/arith_tools.h>
 #include <util/context.h>
 #include <util/c_types.h>
 #include <util/message.h>
@@ -426,6 +427,43 @@ bool type_handler::has_multiple_types(const nlohmann::json &container) const
   }
 
   return false;
+}
+
+typet type_handler::get_list_type_improved(const nlohmann::json &element)
+{
+  if (!element.contains("elts") || element["elts"].empty())
+    return array_typet(empty_typet(), from_integer(0, size_type()));
+
+  const auto &elements = element["elts"];
+
+  // Check if all elements are string constants
+  bool all_strings = true;
+  size_t max_string_length = 0;
+
+  for (const auto &elem : elements)
+  {
+    if (elem["_type"] == "Constant" && elem["value"].is_string())
+    {
+      std::string str_val = elem["value"].get<std::string>();
+      max_string_length = std::max(
+        max_string_length, str_val.size() + 1); // +1 for null terminator
+    }
+    else
+    {
+      all_strings = false;
+      break;
+    }
+  }
+
+  if (all_strings)
+  {
+    // Create array of string arrays (char arrays)
+    typet string_type = build_array(char_type(), max_string_length);
+    return array_typet(string_type, from_integer(elements.size(), size_type()));
+  }
+
+  // Fallback to original implementation
+  return get_list_type(element);
 }
 
 typet type_handler::get_list_type(const nlohmann::json &list_value) const

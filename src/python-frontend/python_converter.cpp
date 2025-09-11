@@ -2521,8 +2521,10 @@ exprt python_converter::get_literal(const nlohmann::json &element)
 
   const std::string &str_val = value.get<std::string>();
 
-  // Handle single-character string as char literal
-  if (str_val.size() == 1 && !is_bytes_literal(element))
+  // Handle single-character string as char literal ONLY if not processing list elements
+  if (
+    str_val.size() == 1 && !is_bytes_literal(element) &&
+    !processing_list_elements)
   {
     typet t = type_handler_.get_typet("str", str_val.size());
     return from_integer(static_cast<unsigned char>(str_val[0]), t);
@@ -2836,16 +2838,29 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   {
     exprt zero = gen_zero(size_type());
     exprt &list_size = static_cast<array_typet &>(current_element_type).size();
-    typet list_type = type_handler_.get_list_type(element);
+    typet list_type = type_handler_.get_list_type_improved(element);
 
     if (list_size == zero)
       current_element_type = list_type;
 
     exprt list = gen_zero(list_type);
 
+    // Set flag to prevent single-character optimization
+    processing_list_elements = true;
+
     unsigned int i = 0;
     for (auto &e : element["elts"])
-      list.operands().at(i++) = get_expr(e);
+    {
+      // Set element type for proper string processing
+      if (list_type.is_array() && list_type.subtype().is_array())
+        current_element_type = list_type.subtype();
+
+      exprt element_expr = get_expr(e);
+      list.operands().at(i++) = element_expr;
+    }
+
+    // Reset flag
+    processing_list_elements = false;
 
     symbolt &cl =
       create_tmp_symbol(element, "$compound-literal$", list_type, list);
