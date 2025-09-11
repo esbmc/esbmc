@@ -3276,10 +3276,12 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     exprt pos = get_expr(slice);
     int index = 0;
 
-    if (pos.type().is_array()) {
+    if (pos.type().is_array())
+    {
       locationt l = get_location_from_decl(element);
       throw std::runtime_error(
-        "TypeError at " + l.get_file().as_string() + " " + l.get_line().as_string() +
+        "TypeError at " + l.get_file().as_string() + " " +
+        l.get_line().as_string() +
         ": list indices must be integers or slices, not str");
     }
 
@@ -3310,11 +3312,19 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     }
 
     // lists are modelled as tag-struct __anon_typedef_List
-    if (array.type().is_symbol())
+    if (array.type().is_symbol() || array.type().subtype().is_symbol())
     {
       typet list_elem_type;
 
-      if (slice["_type"] == "Constant" || (slice["_type"] == "UnaryOp" && slice["operand"]["_type"] == "Constant"))
+      if (list_node["_type"] == "arg")
+      {
+        list_elem_type = type_handler_.get_typet(
+          list_node["annotation"]["slice"]["id"].get<std::string>());
+      }
+      else if (
+        slice["_type"] == "Constant" ||
+        (slice["_type"] == "UnaryOp" &&
+         slice["operand"]["_type"] == "Constant"))
       {
         const std::string &list_name = array.identifier().as_string();
         try
@@ -3331,24 +3341,39 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       }
       else if (slice["_type"] == "Name")
       {
-        while (!list_node["value"].contains("elts") ||
-               !list_node["value"]["elts"].is_array())
+        if (list_node["_type"] == "arg")
         {
-          list_node = json_utils::find_var_decl(
-            list_node["value"]["id"], current_func_name_, *ast_json);
+          list_elem_type = type_handler_.get_typet(
+            list_node["annotation"]["slice"]["id"].get<std::string>());
         }
-        assert(!list_node.empty());
-
-        assert(
-          list_node["value"].is_array() ||
-          list_node["value"]["elts"].is_array());
-
-        if (type_handler_.has_multiple_types(list_node["value"]["elts"]))
+        else
         {
-          throw std::runtime_error(
-            "Indexing list with symbolic values are not supported yet.");
+          while (!list_node["value"].contains("elts") ||
+                 !list_node["value"]["elts"].is_array())
+          {
+            if (
+              list_node.contains("value") && list_node["value"].contains("id"))
+              list_node = json_utils::find_var_decl(
+                list_node["value"]["id"], current_func_name_, *ast_json);
+            else
+            {
+              break;
+            }
+          }
+
+          assert(!list_node.empty());
+
+          assert(
+            list_node["value"].is_array() ||
+            list_node["value"]["elts"].is_array());
+
+          if (type_handler_.has_multiple_types(list_node["value"]["elts"]))
+          {
+            throw std::runtime_error(
+              "Indexing list with symbolic values are not supported yet.");
+          }
+          list_elem_type = get_expr(list_node["value"]["elts"][0]).type();
         }
-        list_elem_type = get_expr(list_node["value"]["elts"][0]).type();
       }
 
       assert(pos != exprt());
@@ -3370,7 +3395,10 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
       code_function_callt list_at_call;
       list_at_call.function() = symbol_expr(*list_at_func_sym);
-      list_at_call.arguments().push_back(address_of_exprt(array)); // &l
+      if (array.type().is_pointer())
+        list_at_call.arguments().push_back(array); // &l
+      else
+        list_at_call.arguments().push_back(address_of_exprt(array)); // &l
       list_at_call.arguments().push_back(pos);
       list_at_call.lhs() = symbol_expr(tmp_obj_symbol);
       list_at_call.type() = obj_type;
@@ -4235,7 +4263,14 @@ typet python_converter::get_type_from_annotation(
   const nlohmann::json &element)
 {
   if (annotation_node["_type"] == "Subscript")
+  {
+    if (
+      annotation_node.contains("value") &&
+      annotation_node["value"]["id"] == "list")
+      return get_list_type();
+
     return type_handler_.get_list_type(element);
+  }
   else if (
     annotation_node["_type"] == "Constant" || annotation_node["_type"] == "Str")
   {
@@ -4387,6 +4422,8 @@ void python_converter::get_function_definition(
 
     if (arg_type.is_array())
       arg_type = gen_pointer_type(arg_type.subtype());
+    else if (arg_type == get_list_type())
+      arg_type = gen_pointer_type(arg_type);
 
     assert(arg_type != typet());
 
