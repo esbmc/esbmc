@@ -1321,39 +1321,42 @@ void cvc5_smt_ast::dump() const
   log_status("{}", a.toString());
 }
 
-smt_astt
-cvc5_convt::mk_quantifier(bool is_forall, std::vector<smt_astt> lhs, smt_astt rhs)
+smt_astt cvc5_convt::mk_quantifier(
+  bool is_forall,
+  std::vector<smt_astt> lhs,
+  smt_astt rhs)
 {
-  if (lhs.empty()) 
+  if (lhs.empty())
   {
     return rhs;
   }
   using namespace cvc5;
-  
+
   quantifier_counter++;
-    
+
   std::vector<Term> bound_vars;
   std::vector<Term> original_vars;
-    
+
   for (size_t i = 0; i < lhs.size(); i++)
   {
     Term orig = to_solver_smt_ast<cvc5_smt_ast>(lhs[i])->a;
     original_vars.push_back(orig);
     Sort sort = orig.getSort();
-    std::string name = "qvar_" + std::to_string(quantifier_counter) + "_" + std::to_string(i);
+    std::string name =
+      "qvar_" + std::to_string(quantifier_counter) + "_" + std::to_string(i);
     Term bound = slv.mkVar(sort, name);
     bound_vars.push_back(bound);
   }
 
-  // Here the body term is created. 
+  // Here the body term is created.
   Term body = to_solver_smt_ast<cvc5_smt_ast>(rhs)->a;
-  
+
   // Here the substitution is performed.
   Term substituted_body = body.substitute(original_vars, bound_vars);
 
   // Here the respective quantifier is created.
   Term vars_list = slv.mkTerm(cvc5::Kind::VARIABLE_LIST, bound_vars);
-  
+
   Term quantifier;
   if (is_forall)
   {

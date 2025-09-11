@@ -15,8 +15,8 @@ public:
 class cvc5_convt : public smt_convt, public array_iface, public fp_convt
 {
 private:
-    unsigned quantifier_counter = 0;
-    
+  unsigned quantifier_counter = 0;
+
 public:
   cvc5_convt(const namespacet &ns, const optionst &options);
   ~cvc5_convt() override = default;
@@ -159,9 +159,9 @@ public:
   std::string dump_smt() override;
 
   smt_astt mk_quantifier(
-  bool is_forall, 
-  std::vector<smt_astt> lhs, 
-  smt_astt rhs) override;
+    bool is_forall,
+    std::vector<smt_astt> lhs,
+    smt_astt rhs) override;
 
   unsigned int to_bv_counter;
 
