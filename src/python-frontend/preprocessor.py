@@ -694,8 +694,8 @@ class Preprocessor(ast.NodeTransformer):
         annotation_id = self._get_iterable_type_annotation(node.iter)
 
         # Determine iterator variable name and whether to create ESBMC_iter
-        is_string_param = (isinstance(node.iter, ast.Name) and 
-                        annotation_id == 'str' and 
+        is_string_param = (isinstance(node.iter, ast.Name) and
+                        annotation_id == 'str' and
                         node.iter.id in self.known_variable_types and
                         self.known_variable_types[node.iter.id] == 'str')
 
