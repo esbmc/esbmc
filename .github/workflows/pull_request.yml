@@ -108,7 +108,7 @@ jobs:
         - name: Checkout PR branch (not merge ref)
           uses: actions/checkout@v4
           with:
-            ref: ${{ github.head_ref }}
+            ref: ${{ github.event.pull_request.head.sha }}
             fetch-depth: 0
             persist-credentials: true
 
