@@ -1329,18 +1329,16 @@ cvc5_convt::mk_quantifier(bool is_forall, std::vector<smt_astt> lhs, smt_astt rh
     return rhs;
   }
   using namespace cvc5;
-  // Here the respective bound variables with names are created, these are unique to avoid any confusion.
-  static int quantifier_counter = 0;
-  quantifier_counter++;
   
+  quantifier_counter++;
+    
   std::vector<Term> bound_vars;
   std::vector<Term> original_vars;
-  
+    
   for (size_t i = 0; i < lhs.size(); i++)
   {
     Term orig = to_solver_smt_ast<cvc5_smt_ast>(lhs[i])->a;
     original_vars.push_back(orig);
-    
     Sort sort = orig.getSort();
     std::string name = "qvar_" + std::to_string(quantifier_counter) + "_" + std::to_string(i);
     Term bound = slv.mkVar(sort, name);
