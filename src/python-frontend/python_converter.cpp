@@ -1930,6 +1930,154 @@ exprt python_converter::get_negated_is_expr(const exprt &lhs, const exprt &rhs)
   return not_expr;
 }
 
+/// Helper method to convert function calls to side effects
+void python_converter::convert_function_calls_to_side_effects(
+  exprt &lhs,
+  exprt &rhs)
+{
+  auto to_side_effect_call = [](exprt &expr) {
+    side_effect_expr_function_callt side_effect;
+    code_function_callt &code = static_cast<code_function_callt &>(expr);
+    side_effect.function() = code.function();
+    side_effect.location() = code.location();
+    side_effect.type() = code.type();
+    side_effect.arguments() = code.arguments();
+    expr = side_effect;
+  };
+
+  if (lhs.is_function_call())
+    to_side_effect_call(lhs);
+  if (rhs.is_function_call())
+    to_side_effect_call(rhs);
+}
+
+/// Helper method to handle string concatenation with type promotion
+exprt python_converter::handle_string_concatenation_with_promotion(
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &left,
+  const nlohmann::json &right)
+{
+  // After the string concatenation section, before the type determination:
+  if (lhs.type().is_array() && !rhs.type().is_array())
+  {
+    // LHS is array, RHS is single char - promote RHS to string array
+    if (rhs.type().is_signedbv() || rhs.type().is_unsignedbv())
+    {
+      typet string_type = type_handler_.build_array(char_type(), 2);
+      exprt str_array = gen_zero(string_type);
+      str_array.operands().at(0) = rhs;
+      str_array.operands().at(1) = gen_zero(char_type()); // null terminator
+      rhs = str_array;
+    }
+  }
+  else if (!lhs.type().is_array() && rhs.type().is_array())
+  {
+    // RHS is array, LHS is single char - promote LHS to string array
+    if (lhs.type().is_signedbv() || lhs.type().is_unsignedbv())
+    {
+      typet string_type = type_handler_.build_array(char_type(), 2);
+      exprt str_array = gen_zero(string_type);
+      str_array.operands().at(0) = lhs;
+      str_array.operands().at(1) = gen_zero(char_type()); // null terminator
+      lhs = str_array;
+    }
+  }
+
+  return handle_string_concatenation(lhs, rhs, left, right);
+}
+
+/// Helper method to create variable-length arrays
+exprt python_converter::create_variable_length_array_for_multiplication(
+  const nlohmann::json &element,
+  symbolt *symbol,
+  const exprt &list_elem)
+{
+  // Build array and initialize VLA
+  symbolt &vla_symbol = create_tmp_symbol(
+    element, "vla", current_lhs->type(), gen_zero(current_lhs->type()));
+
+  code_declt vla_decl(symbol_expr(vla_symbol));
+  vla_decl.location() = get_location_from_decl(element);
+  current_block->copy_to_operands(vla_decl);
+
+  // Add counter for while loop
+  symbolt &counter =
+    create_tmp_symbol(element, "counter", int_type(), gen_zero(int_type()));
+
+  code_assignt counter_code(symbol_expr(counter), gen_zero(int_type()));
+  current_block->copy_to_operands(counter_code);
+
+  // Build conditional for while loop (counter < len(arr))
+  exprt cond("<", bool_type());
+  cond.operands().push_back(symbol_expr(counter));
+  cond.operands().push_back(symbol_expr(*symbol));
+
+  // Build block with arr[i] assignment and counter increment
+  code_blockt then;
+
+  // arr[counter] assignment
+  index_exprt arr_index(
+    symbol_expr(vla_symbol),
+    symbol_expr(counter),
+    symbol_expr(vla_symbol).type().subtype());
+  code_assignt arr_assign(arr_index, list_elem);
+  then.copy_to_operands(arr_assign);
+
+  // increment counter
+  exprt incr("+");
+  incr.copy_to_operands(symbol_expr(counter));
+  incr.copy_to_operands(gen_one(int_type()));
+  code_assignt update(symbol_expr(counter), incr);
+  then.copy_to_operands(update);
+
+  // add while block to initialize vla
+  codet while_cod;
+  while_cod.set_statement("while");
+  while_cod.copy_to_operands(cond, then);
+  current_block->copy_to_operands(while_cod);
+
+  return symbol_expr(vla_symbol);
+}
+
+/// Helper method to handle chained comparisons
+exprt python_converter::handle_chained_comparisons_logic(
+  const nlohmann::json &element,
+  exprt &bin_expr)
+{
+  exprt cond("and", bool_type());
+  cond.move_to_operands(bin_expr); // bin_expr compares left and comparators[0]
+
+  for (size_t i = 0; i + 1 < element["comparators"].size(); i += 2)
+  {
+    std::string op(element["ops"][i + 1]["_type"].get<std::string>());
+    exprt logical_expr(get_op(op, bool_type()), bool_type());
+    exprt op1 = get_expr(element["comparators"][i]);
+    exprt op2 = get_expr(element["comparators"][i + 1]);
+
+    convert_function_calls_to_side_effects(op1, op2);
+
+    std::string op1_type = type_handler_.type_to_string(op1.type());
+    std::string op2_type = type_handler_.type_to_string(op2.type());
+
+    if (op1_type == "str" && op2_type == "str")
+    {
+      handle_string_comparison(op, op1, op2, element);
+      exprt expr(get_op(op, bool_type()), bool_type());
+      expr.copy_to_operands(op1, op2);
+      cond.move_to_operands(expr);
+    }
+    else
+    {
+      logical_expr.copy_to_operands(op1);
+      logical_expr.copy_to_operands(op2);
+      cond.move_to_operands(logical_expr);
+    }
+  }
+  return cond;
+}
+
+// Main method with minimal refactoring to preserve original logic
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
   auto left = (element.contains("left")) ? element["left"] : element["target"];
@@ -1955,24 +2103,10 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   attach_symbol_location(lhs, symbol_table());
   attach_symbol_location(rhs, symbol_table());
 
-  auto to_side_effect_call = [](exprt &expr) {
-    side_effect_expr_function_callt side_effect;
-    code_function_callt &code = static_cast<code_function_callt &>(expr);
-    side_effect.function() = code.function();
-    side_effect.location() = code.location();
-    side_effect.type() = code.type();
-    side_effect.arguments() = code.arguments();
-    expr = side_effect;
-  };
-
   // Function calls in expressions like "fib(n-1) + fib(n-2)" need to be converted to side effects
-  if (lhs.is_function_call())
-    to_side_effect_call(lhs);
-  if (rhs.is_function_call())
-    to_side_effect_call(rhs);
+  convert_function_calls_to_side_effects(lhs, rhs);
 
   std::string op;
-
   if (element.contains("op"))
     op = element["op"]["_type"].get<std::string>();
   else if (element.contains("ops"))
@@ -1992,34 +2126,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
     // Handle string concatenation with type promotion
     if (op == "Add")
-    {
-      // After the string concatenation section, before the type determination:
-      if (lhs.type().is_array() && !rhs.type().is_array())
-      {
-        // LHS is array, RHS is single char - promote RHS to string array
-        if (rhs.type().is_signedbv() || rhs.type().is_unsignedbv())
-        {
-          typet string_type = type_handler_.build_array(char_type(), 2);
-          exprt str_array = gen_zero(string_type);
-          str_array.operands().at(0) = rhs;
-          str_array.operands().at(1) = gen_zero(char_type()); // null terminator
-          rhs = str_array;
-        }
-      }
-      else if (!lhs.type().is_array() && rhs.type().is_array())
-      {
-        // RHS is array, LHS is single char - promote LHS to string array
-        if (lhs.type().is_signedbv() || lhs.type().is_unsignedbv())
-        {
-          typet string_type = type_handler_.build_array(char_type(), 2);
-          exprt str_array = gen_zero(string_type);
-          str_array.operands().at(0) = lhs;
-          str_array.operands().at(1) = gen_zero(char_type()); // null terminator
-          lhs = str_array;
-        }
-      }
-      return handle_string_concatenation(lhs, rhs, left, right);
-    }
+      return handle_string_concatenation_with_promotion(lhs, rhs, left, right);
 
     // Compute resulting list
     if (op == "Mult")
@@ -2061,59 +2168,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
           assert(symbol);
 
           if (symbol->value.is_code())
-          {
-            // Build array and initialize VLA
-
-            symbolt &vla_symbol = create_tmp_symbol(
-              element,
-              "vla",
-              current_lhs->type(),
-              gen_zero(current_lhs->type()));
-
-            code_declt vla_decl(symbol_expr(vla_symbol));
-            vla_decl.location() = get_location_from_decl(element);
-            current_block->copy_to_operands(vla_decl);
-
-            // Add counter for while loop
-            symbolt &counter = create_tmp_symbol(
-              element, "counter", int_type(), gen_zero(int_type()));
-
-            code_assignt counter_code(
-              symbol_expr(counter), gen_zero(int_type()));
-            current_block->copy_to_operands(counter_code);
-
-            // Build conditional for while loop (counter < len(arr))
-            exprt cond("<", bool_type());
-            cond.operands().push_back(symbol_expr(counter));
-            cond.operands().push_back(symbol_expr(*symbol));
-
-            // Build block with arr[i] assignment and counter increment
-            code_blockt then;
-
-            // arr[counter] assignment
-            index_exprt arr_index(
-              symbol_expr(vla_symbol),
-              symbol_expr(counter),
-              symbol_expr(vla_symbol).type().subtype());
-            code_assignt arr_assign(arr_index, list_elem);
-            then.copy_to_operands(arr_assign);
-
-            // increment counter
-            exprt incr("+");
-            incr.copy_to_operands(symbol_expr(counter));
-            incr.copy_to_operands(gen_one(int_type()));
-            code_assignt update(symbol_expr(counter), incr);
-            then.copy_to_operands(update);
-
-            // add while block to initialize vla
-            codet while_cod;
-            while_cod.set_statement("while");
-            while_cod.copy_to_operands(cond, then);
-            current_block->copy_to_operands(while_cod);
-
-            // return initialized vla
-            return symbol_expr(vla_symbol);
-          }
+            return create_variable_length_array_for_multiplication(
+              element, symbol, list_elem);
 
           list_size = std::stoi(symbol->value.value().as_string(), nullptr, 2);
         }
@@ -2274,41 +2330,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   // Handle chained comparisons like: assert 0 <= x <= 1
   if (element.contains("comparators") && element["comparators"].size() > 1)
-  {
-    exprt cond("and", bool_type());
-    cond.move_to_operands(
-      bin_expr); // bin_expr compares left and comparators[0]
-    for (size_t i = 0; i + 1 < element["comparators"].size(); i += 2)
-    {
-      std::string op(element["ops"][i + 1]["_type"].get<std::string>());
-      exprt logical_expr(get_op(op, bool_type()), bool_type());
-      exprt op1 = get_expr(element["comparators"][i]);
-      exprt op2 = get_expr(element["comparators"][i + 1]);
-
-      if (op1.is_function_call())
-        to_side_effect_call(op1);
-      if (op2.is_function_call())
-        to_side_effect_call(op2);
-
-      std::string op1_type = type_handler_.type_to_string(op1.type());
-      std::string op2_type = type_handler_.type_to_string(op2.type());
-
-      if (op1_type == "str" && op2_type == "str")
-      {
-        handle_string_comparison(op, op1, op2, element);
-        exprt expr(get_op(op, bool_type()), type);
-        expr.copy_to_operands(op1, op2);
-        cond.move_to_operands(expr);
-      }
-      else
-      {
-        logical_expr.copy_to_operands(op1);
-        logical_expr.copy_to_operands(op2);
-        cond.move_to_operands(logical_expr);
-      }
-    }
-    return cond;
-  }
+    return handle_chained_comparisons_logic(element, bin_expr);
 
   return bin_expr;
 }

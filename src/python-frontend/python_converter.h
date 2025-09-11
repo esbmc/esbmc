@@ -330,6 +330,24 @@ private:
     const nlohmann::json &ast_node,
     bool is_ctor_call);
 
+  // Helper methods for binary operator expression handling
+  void convert_function_calls_to_side_effects(exprt &lhs, exprt &rhs);
+
+  exprt handle_string_concatenation_with_promotion(
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
+
+  exprt create_variable_length_array_for_multiplication(
+    const nlohmann::json &element,
+    symbolt *symbol,
+    const exprt &list_elem);
+
+  exprt handle_chained_comparisons_logic(
+    const nlohmann::json &element,
+    exprt &bin_expr);
+
   contextt &symbol_table_;
   const nlohmann::json *ast_json;
   const global_scope &global_scope_;
