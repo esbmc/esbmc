@@ -14,6 +14,9 @@ public:
 
 class cvc5_convt : public smt_convt, public array_iface, public fp_convt
 {
+private:
+    unsigned quantifier_counter = 0;
+    
 public:
   cvc5_convt(const namespacet &ns, const optionst &options);
   ~cvc5_convt() override = default;
