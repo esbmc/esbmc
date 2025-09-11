@@ -5,6 +5,7 @@
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/type_utils.h>
+#include <util/arith_tools.h>
 
 #include <boost/algorithm/string/predicate.hpp>
 
@@ -128,6 +129,23 @@ symbol_id function_call_builder::build_function_id() const
   {
     const auto &arg = call_["args"][0];
     func_name = kStrlen;
+
+    // Special case: single character string literals should return 1 directly
+    if (arg["_type"] == "Constant" && arg["value"].is_string())
+    {
+      std::string str_val = arg["value"].get<std::string>();
+      if (str_val.size() == 1)
+      {
+        // For single character strings, we'll handle this specially in build()
+        // by returning 1 directly instead of calling a C function
+        func_name = "__ESBMC_len_single_char";
+        function_id.clear();
+        function_id.set_prefix("esbmc:");
+        function_id.set_function(func_name);
+        return function_id;
+      }
+    }
+
     if (arg["_type"] == "List")
       func_name = kGetObjectSize;
     else if (arg["_type"] == "Name")
@@ -137,6 +155,27 @@ symbol_id function_call_builder::build_function_id() const
         var_type == "bytes" || var_type == "list" || var_type == "List" ||
         var_type.empty())
         func_name = kGetObjectSize;
+      else if (var_type == "str")
+      {
+        // Check if this is a single character by looking up the variable
+        symbol_id var_sid(
+          python_file, current_class_name, current_function_name);
+        var_sid.set_object(arg["id"].get<std::string>());
+        symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
+
+        if (
+          var_symbol && var_symbol->value.is_constant() &&
+          (var_symbol->value.type().is_unsignedbv() ||
+           var_symbol->value.type().is_signedbv()))
+        {
+          // This is a single character variable
+          func_name = "__ESBMC_len_single_char";
+          function_id.clear();
+          function_id.set_prefix("esbmc:");
+          function_id.set_function(func_name);
+          return function_id;
+        }
+      }
     }
     function_id.clear();
     function_id.set_prefix("c:");
@@ -192,6 +231,10 @@ symbol_id function_call_builder::build_function_id() const
 exprt function_call_builder::build() const
 {
   symbol_id function_id = build_function_id();
+
+  // Special handling for single character len() calls
+  if (function_id.get_function() == "__ESBMC_len_single_char")
+    return from_integer(1, int_type());
 
   // Add assume and len functions to symbol table
   if (is_assume_call(function_id) || is_len_call(function_id))

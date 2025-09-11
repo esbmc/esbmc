@@ -28,5 +28,5 @@ val = compute()
 assert abs(val) == 7
 
 # Abs on expression
-z:int = -3 + 1
+z = -3 + 1
 assert abs(z) == 2

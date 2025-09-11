@@ -275,10 +275,35 @@ private:
         json_utils::find_var_decl(arg["id"], get_current_func_name(), ast_);
       if (
         !var_node.empty() && var_node.contains("annotation") &&
-        !var_node["annotation"].is_null() &&
-        var_node["annotation"].contains("id"))
+        !var_node["annotation"].is_null())
       {
-        return var_node["annotation"]["id"];
+        // Handle generic type annotations like list[int] (Subscript nodes)
+        if (
+          var_node["annotation"].contains("_type") &&
+          var_node["annotation"]["_type"] == "Subscript" &&
+          var_node["annotation"].contains("value") &&
+          var_node["annotation"]["value"].contains("id"))
+        {
+          std::string base_type = var_node["annotation"]["value"]["id"];
+
+          // Get the element type from slice
+          if (
+            var_node["annotation"].contains("slice") &&
+            var_node["annotation"]["slice"].contains("id"))
+          {
+            std::string element_type = var_node["annotation"]["slice"]["id"];
+            return base_type + "[" + element_type + "]";
+          }
+          else
+          {
+            return base_type; // Return base type if slice info unavailable
+          }
+        }
+        // Handle simple type annotations like int, str (Name nodes)
+        else if (var_node["annotation"].contains("id"))
+        {
+          return var_node["annotation"]["id"];
+        }
       }
     }
     else if (arg["_type"] == "BinOp")
@@ -602,6 +627,12 @@ private:
           type = left_op["annotation"]["id"];
         }
       }
+      else if (lhs["_type"] == "UnaryOp")
+      {
+        const auto &operand = lhs["operand"];
+        if (operand["_type"] == "Constant")
+          type = get_type_from_constant(operand);
+      }
       else if (lhs["_type"] == "Subscript")
       {
         // Handle subscript operations like dp[i-1], prices[i], etc.
@@ -821,7 +852,7 @@ private:
 
   std::string get_type_from_lhs(const std::string &id, Json &body)
   {
-    // Search for LHS annotation in the current scope (e.g. while/if block)
+    // Search for LHS annotation in the current scope (e.g., while/if block)
     Json node = find_annotated_assign(id, body["body"]);
 
     // Fall back to the current function
@@ -832,7 +863,21 @@ private:
     if (node.empty())
       node = find_annotated_assign(id, ast_["body"]);
 
-    return node.empty() ? "" : node["annotation"]["id"];
+    // Check if node is empty first
+    if (node.empty())
+      return "";
+
+    // Check if "annotation" field exists and is not null
+    if (!node.contains("annotation") || node["annotation"].is_null())
+      return "";
+
+    // Check if "annotation"."id" field exists and is not null
+    if (
+      !node["annotation"].contains("id") || node["annotation"]["id"].is_null())
+      return "";
+
+    // Safe to access the nested field now
+    return node["annotation"]["id"];
   }
 
   std::string get_type_from_json(const Json &value)
@@ -978,20 +1023,59 @@ private:
 
   std::string get_type_from_call(const Json &element)
   {
-    const std::string &func_id = element["value"]["func"]["id"];
+    const Json &func = element["value"]["func"];
 
-    if (
-      json_utils::is_class<Json>(func_id, ast_) ||
-      type_utils::is_builtin_type(func_id) ||
-      type_utils::is_consensus_type(func_id) ||
-      type_utils::is_python_exceptions(func_id))
-      return func_id;
+    // Handle regular function calls like func_name()
+    if (func["_type"] == "Name")
+    {
+      const std::string &func_id = func["id"];
 
-    if (type_utils::is_consensus_func(func_id))
-      return type_utils::get_type_from_consensus_func(func_id);
+      if (
+        json_utils::is_class<Json>(func_id, ast_) ||
+        type_utils::is_builtin_type(func_id) ||
+        type_utils::is_consensus_type(func_id) ||
+        type_utils::is_python_exceptions(func_id))
+        return func_id;
 
-    if (!type_utils::is_python_model_func(func_id))
-      return get_function_return_type(func_id, ast_);
+      if (type_utils::is_consensus_func(func_id))
+        return type_utils::get_type_from_consensus_func(func_id);
+
+      if (!type_utils::is_python_model_func(func_id))
+        return get_function_return_type(func_id, ast_);
+    }
+
+    // Handle class method calls like int.from_bytes(), str.join(), etc.
+    else if (func["_type"] == "Attribute" && func["value"]["_type"] == "Name")
+    {
+      const std::string &class_name = func["value"]["id"];
+      const std::string &method_name = func["attr"];
+
+      // Handle built-in type class methods
+      if (type_utils::is_builtin_type(class_name))
+      {
+        // Map specific class methods to their return types
+        if (class_name == "int" && method_name == "from_bytes")
+          return "int";
+        else if (
+          class_name == "str" &&
+          (method_name == "join" || method_name == "format"))
+          return "str";
+        else if (
+          class_name == "bytes" &&
+          (method_name == "decode" || method_name == "hex"))
+          return "str";
+        else if (class_name == "bytes" && method_name == "fromhex")
+          return "bytes";
+        else if (class_name == "list" && method_name == "copy")
+          return "list";
+        else if (
+          class_name == "dict" &&
+          (method_name == "copy" || method_name == "fromkeys"))
+          return "dict";
+        else
+          return class_name; // Default: method returns same type as class
+      }
+    }
 
     return "";
   }
@@ -1080,6 +1164,64 @@ private:
     return type;
   }
 
+  // Method to infer type from conditional expressions (IfExp)
+  std::string get_type_from_ifexp(const Json &ifexp_node, const Json &body)
+  {
+    // For conditional expressions like "x + y if x > y else x * y"
+    // We need to infer the type from both the body and orelse branches
+
+    // Create temporary statement nodes for type inference
+    Json body_stmt = {
+      {"_type", "Assign"},
+      {"value", ifexp_node["body"]},
+      {"lineno", current_line_}};
+
+    Json orelse_stmt = {
+      {"_type", "Assign"},
+      {"value", ifexp_node["orelse"]},
+      {"lineno", current_line_}};
+
+    std::string body_type, orelse_type;
+
+    // Infer type from the body (true branch)
+    InferResult body_result = infer_type(body_stmt, body, body_type);
+
+    // Infer type from the orelse (false branch)
+    InferResult orelse_result = infer_type(orelse_stmt, body, orelse_type);
+
+    // If both branches have the same type, return that type
+    if (body_result == InferResult::OK && orelse_result == InferResult::OK)
+    {
+      if (body_type == orelse_type)
+        return body_type;
+
+      // Handle numeric type promotion: if one is int and other is float, result is float
+      if (
+        (body_type == "int" && orelse_type == "float") ||
+        (body_type == "float" && orelse_type == "int"))
+        return "float";
+
+      // For different types, use a safe fallback
+      log_warning(
+        "Conditional expression has different types in branches: {} vs {}. "
+        "Using 'Any' as fallback ({}:{})",
+        body_type,
+        orelse_type,
+        python_filename_,
+        current_line_);
+      return "Any";
+    }
+
+    // If only one branch succeeded, use that type
+    if (body_result == InferResult::OK)
+      return body_type;
+    if (orelse_result == InferResult::OK)
+      return orelse_type;
+
+    // If neither branch could be inferred, return empty string
+    return "";
+  }
+
   InferResult
   infer_type(const Json &stmt, const Json &body, std::string &inferred_type)
   {
@@ -1114,6 +1256,12 @@ private:
         inferred_type = get_type_from_constant(operand);
       else if (operand_type == "Name")
         inferred_type = get_type_from_rhs_variable(stmt, body);
+      else if (operand_type == "BinOp")
+      {
+        // Handle unary operations on binary expressions like -a ** b
+        Json temp_stmt = {{"value", operand}};
+        inferred_type = get_type_from_binary_expr(temp_stmt, body);
+      }
     }
 
     // Get type from RHS variable
@@ -1128,6 +1276,10 @@ private:
         inferred_type = got_type;
     }
 
+    // Get type from conditional expressions (ternary operator)
+    else if (value_type == "IfExp")
+      inferred_type = get_type_from_ifexp(stmt["value"], body);
+
     // Get type from top-level functions
     else if (
       value_type == "Call" && stmt["value"]["func"]["_type"] == "Name" &&
@@ -1136,11 +1288,16 @@ private:
       inferred_type = get_type_from_call(stmt);
     }
 
-    // Get type from methods
+    // Get type from methods and class methods
     else if (
       value_type == "Call" && stmt["value"]["func"]["_type"] == "Attribute")
     {
-      inferred_type = get_type_from_method(stmt["value"]);
+      // Try get_type_from_call first (for class methods)
+      inferred_type = get_type_from_call(stmt);
+
+      // If that didn't work, try get_type_from_method
+      if (inferred_type.empty())
+        inferred_type = get_type_from_method(stmt["value"]);
     }
     else
       return InferResult::UNKNOWN;
@@ -1247,8 +1404,22 @@ private:
 
     assert(!id.empty());
 
-    // Calculate column offset
-    int col_offset = target["col_offset"].template get<int>() + id.size() + 1;
+    // Calculate column offset with null safety
+    int target_col_offset =
+      target.contains("col_offset") && !target["col_offset"].is_null()
+        ? target["col_offset"].template get<int>()
+        : 0;
+    int col_offset = target_col_offset + id.size() + 1;
+
+    // Get line number with null safety
+    int target_lineno = target.contains("lineno") && !target["lineno"].is_null()
+                          ? target["lineno"].template get<int>()
+                          : current_line_;
+
+    int target_end_lineno =
+      target.contains("end_lineno") && !target["end_lineno"].is_null()
+        ? target["end_lineno"].template get<int>()
+        : target_lineno;
 
     // Create the annotation field
     element["annotation"] = {
@@ -1256,14 +1427,19 @@ private:
       {"col_offset", col_offset},
       {"ctx", {{"_type", "Load"}}},
       {"end_col_offset", col_offset + inferred_type.size()},
-      {"end_lineno", target["end_lineno"]},
+      {"end_lineno", target_end_lineno},
       {"id", inferred_type},
-      {"lineno", target["lineno"]}};
+      {"lineno", target_lineno}};
 
-    // Update element properties
+    // Update element properties with null safety
+    int element_end_col_offset =
+      element.contains("end_col_offset") && !element["end_col_offset"].is_null()
+        ? element["end_col_offset"].template get<int>()
+        : col_offset + inferred_type.size();
+
     element["end_col_offset"] =
-      element["end_col_offset"].template get<int>() + inferred_type.size() + 1;
-    element["end_lineno"] = element["lineno"];
+      element_end_col_offset + inferred_type.size() + 1;
+    element["end_lineno"] = target_lineno;
     element["simple"] = 1;
 
     // Replace "targets" array with "target" object
@@ -1273,22 +1449,27 @@ private:
     // Remove unnecessary field
     element.erase("type_comment");
 
-    // Update value fields with the correct offsets
+    // Update value fields with the correct offsets - with null safety
     auto update_offsets = [&inferred_type](Json &value) {
-      value["col_offset"] =
-        value["col_offset"].template get<int>() + inferred_type.size() + 1;
-      value["end_col_offset"] =
-        value["end_col_offset"].template get<int>() + inferred_type.size() + 1;
+      if (value.contains("col_offset") && !value["col_offset"].is_null())
+      {
+        value["col_offset"] =
+          value["col_offset"].template get<int>() + inferred_type.size() + 1;
+      }
+      if (
+        value.contains("end_col_offset") && !value["end_col_offset"].is_null())
+      {
+        value["end_col_offset"] = value["end_col_offset"].template get<int>() +
+                                  inferred_type.size() + 1;
+      }
     };
 
     update_offsets(element["value"]);
 
     // Adjust column offsets for function calls with arguments
     if (element["value"].contains("args"))
-    {
       for (auto &arg : element["value"]["args"])
         update_offsets(arg);
-    }
 
     // Adjust column offsets in function call node
     if (element["value"].contains("func"))

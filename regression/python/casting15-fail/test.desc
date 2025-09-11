@@ -1,4 +1,4 @@
 CORE
 main.py
 
-^ERROR: ValueError: chr\(\) argument
+^\s*Throwing an exception of type ValueError but there is not catch for it.$

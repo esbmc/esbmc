@@ -3,6 +3,7 @@
 #include <python-frontend/type_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/symbol_id.h>
+#include <util/arith_tools.h>
 #include <util/context.h>
 #include <util/c_types.h>
 #include <util/message.h>
@@ -12,6 +13,12 @@
 type_handler::type_handler(const python_converter &converter)
   : converter_(converter)
 {
+}
+
+exprt type_handler::get_expr_helper(const nlohmann::json &json) const
+{
+  // This is safe because get_expr doesn't modify the converter's logical state
+  return const_cast<python_converter &>(converter_).get_expr(json);
 }
 
 bool type_handler::is_constructor_call(const nlohmann::json &json) const
@@ -202,7 +209,10 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "NoneType")
     return pointer_type();
 
-  // float — represents IEEE 754 double-precision
+  // Python float type: IEEE 754 double-precision mapping
+  // Python floats are implemented using C double (IEEE 754 double-precision)
+  // as per Python documentation. This ensures proper precision, range, and
+  // compatibility with Python's numeric type promotion (int -> float -> complex).
   if (ast_type == "float")
     return double_type();
 
@@ -335,9 +345,29 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
     {
       if (var["value"]["_type"] == "Call")
       {
-        throw std::runtime_error(
-          "Cannot determine the type from " +
-          var["value"]["func"]["id"].get<std::string>() + " call");
+        // Try to handle known patterns before giving up
+        if (var["value"].contains("func"))
+        {
+          const auto &func = var["value"]["func"];
+
+          // Handle simple function calls: func_name()
+          if (func.contains("id") && type_utils::is_builtin_type(func["id"]))
+            return get_typet(func["id"].get<std::string>());
+
+          // Handle attribute calls: module.func_name()
+          if (func["_type"] == "Attribute" && func.contains("attr"))
+          {
+            std::string attr_name = func["attr"].get<std::string>();
+            // Handle common cases like random.randint, math.sqrt, etc.
+            if (attr_name == "randint" || attr_name == "randrange")
+              return long_long_int_type();
+            if (attr_name == "random" || attr_name == "uniform")
+              return double_type();
+            if (type_utils::is_builtin_type(attr_name))
+              return get_typet(attr_name);
+          }
+        }
+        throw std::runtime_error("Invalid type");
       }
       return get_typet(var["value"]["value"]);
     }
@@ -364,6 +394,7 @@ bool type_handler::has_multiple_types(const nlohmann::json &container) const
     }
     catch (const std::exception &)
     {
+      log_warning("Failed to determine element type in has_multiple_types");
       return empty_typet();
     }
   };
@@ -398,6 +429,43 @@ bool type_handler::has_multiple_types(const nlohmann::json &container) const
   return false;
 }
 
+typet type_handler::get_list_type_improved(const nlohmann::json &element)
+{
+  if (!element.contains("elts") || element["elts"].empty())
+    return array_typet(empty_typet(), from_integer(0, size_type()));
+
+  const auto &elements = element["elts"];
+
+  // Check if all elements are string constants
+  bool all_strings = true;
+  size_t max_string_length = 0;
+
+  for (const auto &elem : elements)
+  {
+    if (elem["_type"] == "Constant" && elem["value"].is_string())
+    {
+      std::string str_val = elem["value"].get<std::string>();
+      max_string_length = std::max(
+        max_string_length, str_val.size() + 1); // +1 for null terminator
+    }
+    else
+    {
+      all_strings = false;
+      break;
+    }
+  }
+
+  if (all_strings)
+  {
+    // Create array of string arrays (char arrays)
+    typet string_type = build_array(char_type(), max_string_length);
+    return array_typet(string_type, from_integer(elements.size(), size_type()));
+  }
+
+  // Fallback to original implementation
+  return get_list_type(element);
+}
+
 typet type_handler::get_list_type(const nlohmann::json &list_value) const
 {
   if (
@@ -424,27 +492,24 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
       {
         // String constant like List['Action'] (forward reference)
         std::string type_string = slice["value"].get<std::string>();
-        // Remove quotes if present
-        if (
-          type_string.length() >= 2 && type_string.front() == '\'' &&
-          type_string.back() == '\'')
-          type_string = type_string.substr(1, type_string.length() - 2);
-        else if (
-          type_string.length() >= 2 && type_string.front() == '"' &&
-          type_string.back() == '"')
-          type_string = type_string.substr(1, type_string.length() - 2);
-        t = get_typet(type_string);
+        t = get_typet(type_utils::remove_quotes(type_string));
       }
       else
         t = empty_typet();
-      return build_array(t, 0);
+      return pointer_typet(t);
     }
 
-    const nlohmann::json &type_ann = list_value["annotation"]["value"]["id"];
-    assert(type_ann == "list" || type_ann == "List");
-    typet t =
-      get_typet(list_value["annotation"]["slice"]["id"].get<std::string>());
-    return build_array(t, 0);
+    // Check if the nested structure exists before accessing
+    if (
+      list_value["annotation"].contains("value") &&
+      list_value["annotation"]["value"].contains("id"))
+    {
+      const nlohmann::json &type_ann = list_value["annotation"]["value"]["id"];
+      assert(type_ann == "list" || type_ann == "List");
+      typet t =
+        get_typet(list_value["annotation"]["slice"]["id"].get<std::string>());
+      return pointer_typet(t);
+    }
   }
 
   if (list_value["_type"] == "List") // Get list value type from elements
@@ -508,10 +573,8 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
     // Handle cases like x = [0] * 5
     if (list_value["op"]["_type"] == "Mult")
     {
-      exprt left_expr =
-        const_cast<python_converter &>(converter_).get_expr(list_value["left"]);
-      exprt right_expr = const_cast<python_converter &>(converter_)
-                           .get_expr(list_value["right"]);
+      exprt left_expr = get_expr_helper(list_value["left"]);
+      exprt right_expr = get_expr_helper(list_value["right"]);
 
       typet list_type = (left_expr.is_symbol()) ? left_expr.type().subtype()
                                                 : right_expr.type().subtype();
@@ -611,7 +674,7 @@ int type_handler::get_array_dimensions(const nlohmann::json &arr) const
   }
 }
 
-size_t type_handler::get_type_width(const typet &type)
+size_t type_handler::get_type_width(const typet &type) const
 {
   // First try to parse width directly
   try
@@ -624,16 +687,20 @@ size_t type_handler::get_type_width(const typet &type)
     std::string type_str = type.width().as_string();
 
     // Handle common Python/ESBMC type mappings
-    if (type_str == "int" || type_str == "int32")
+    if (type_str == "int32")
       return 32;
+    else if (type_str == "int")
+      return 64;
     else if (type_str == "int64" || type_str == "long")
       return 64;
     else if (type_str == "int16" || type_str == "short")
       return 16;
     else if (type_str == "int8" || type_str == "char")
       return 8;
-    else if (type_str == "float" || type_str == "float32")
+    else if (type_str == "float32")
       return 32;
+    else if (type_str == "float")
+      return 64;
     else if (type_str == "double" || type_str == "float64")
       return 64;
     else if (type_str == "bool")

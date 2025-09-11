@@ -91,9 +91,24 @@ public:
    * @param type The type object to analyze for width determination.
    * @return The width of the type in bits as a size_t value.
    */
-  static size_t get_type_width(const typet &type);
+  size_t get_type_width(const typet &type) const;
+
+  /**
+   * Determines the appropriate type for a list with improved string handling.
+   * This method provides improved type inference for lists containing string literals,
+   * ensuring that strings within lists are properly represented as null-terminated
+   * character arrays rather than single character values.
+   * 
+   * @param element The JSON element representing a Python list literal from the AST.
+   * @return The typet representing an array type suitable for the list, with proper
+   *         string array handling for lists containing string constants.
+   */
+  typet get_list_type_improved(const nlohmann::json &element);
 
 private:
+  /// Encapsulate the const_cast in one place with clear documentation
+  exprt get_expr_helper(const nlohmann::json &json) const;
+
   /// Check if two types are compatible for list homogeneity checking
   bool are_types_compatible(const typet &t1, const typet &t2) const;
 

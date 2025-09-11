@@ -1,8 +1,8 @@
 import random
 
-result:int = 0
+result = 0
 
-def factorial (n: int) -> int:
+def factorial (n):
   if n < 0:
     assert(0)
   
@@ -13,5 +13,5 @@ def factorial (n: int) -> int:
   
   return result
 
-x:int = 4
+x = 4
 assert factorial (x) == 24

@@ -1,4 +1,4 @@
-def search(x:int, seq:list[int]) -> int:
+def search(x, seq) -> int:
     if len(seq) == 0:
         return 0
     if x < seq[0]:

@@ -87,9 +87,10 @@ public:
   static bool is_python_exceptions(const std::string &name)
   {
     return (
-      name == "BaseException" || name == "ValueError" || name == "TypeError" ||
-      name == "IndexError" || name == "KeyError" ||
-      name == "ZeroDivisionError");
+      name == "BaseException" || name == "Exception" || name == "ValueError" ||
+      name == "TypeError" || name == "IndexError" || name == "KeyError" ||
+      name == "ZeroDivisionError" || name == "AssertionError" ||
+      name == "NameError");
   }
 
   static bool is_c_model_func(const std::string &func_name)
@@ -133,6 +134,23 @@ public:
     const auto &type_b = b.type();
     return (type_a.is_floatbv() && is_char_type(type_b)) ||
            (type_b.is_floatbv() && is_char_type(type_a));
+  }
+
+  static std::string remove_quotes(const std::string &str)
+  {
+    if (str.length() < 2)
+      return str;
+
+    // Check for single quotes
+    if (str.front() == '\'' && str.back() == '\'')
+      return str.substr(1, str.length() - 2);
+
+    // Check for double quotes
+    if (str.front() == '"' && str.back() == '"')
+      return str.substr(1, str.length() - 2);
+
+    // No quotes found, return original string
+    return str;
   }
 
 private:

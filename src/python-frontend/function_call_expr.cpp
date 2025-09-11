@@ -6,7 +6,6 @@
 #include <util/base_type.h>
 #include <util/c_typecast.h>
 #include <util/expr_util.h>
-#include <util/message.h>
 #include <util/string_constant.h>
 #include <util/arith_tools.h>
 #include <util/ieee_float.h>
@@ -15,6 +14,23 @@
 #include <stdexcept>
 
 using namespace json_utils;
+namespace
+{
+// Constants for input handling
+constexpr size_t MAX_INPUT_LENGTH = 256;
+
+// Constants for UTF-8 encoding
+constexpr unsigned int UTF8_1_BYTE_MAX = 0x7F;
+constexpr unsigned int UTF8_2_BYTE_MAX = 0x7FF;
+constexpr unsigned int UTF8_3_BYTE_MAX = 0xFFFF;
+constexpr unsigned int UTF8_4_BYTE_MAX = 0x10FFFF;
+constexpr unsigned int SURROGATE_START = 0xD800;
+constexpr unsigned int SURROGATE_END = 0xDFFF;
+
+// Constants for symbol parsing
+constexpr const char *CLASS_MARKER = "@C@";
+constexpr const char *FUNCTION_MARKER = "@F@";
+} // namespace
 
 function_call_expr::function_call_expr(
   const symbol_id &function_id,
@@ -34,16 +50,67 @@ static std::string get_classname_from_symbol_id(const std::string &symbol_id)
   // This function might return "Base" for a symbol_id as: py:main.py@C@Base@F@foo@self
 
   std::string class_name;
-  size_t class_pos = symbol_id.find("@C@");
-  size_t func_pos = symbol_id.find("@F@");
+  size_t class_pos = symbol_id.find(CLASS_MARKER);
+  size_t func_pos = symbol_id.find(FUNCTION_MARKER);
 
-  if (class_pos != std::string::npos && func_pos != std::string::npos)
+  if (
+    class_pos != std::string::npos && func_pos != std::string::npos &&
+    func_pos > class_pos)
   {
-    size_t length = func_pos - (class_pos + 3); // "+3" to ignore "@C@"
-    // Extract substring between "@C@" and "@F@"
-    class_name = symbol_id.substr(class_pos + 3, length);
+    size_t start = class_pos + strlen(CLASS_MARKER);
+    size_t length = func_pos - start;
+
+    if (length > 0)
+      class_name = symbol_id.substr(start, length);
   }
   return class_name;
+}
+
+int function_call_expr::decode_utf8_codepoint(const std::string &utf8_str) const
+{
+  if (utf8_str.empty())
+  {
+    throw std::runtime_error(
+      "TypeError: expected a character, but string of length 0 found");
+  }
+
+  const unsigned char *bytes =
+    reinterpret_cast<const unsigned char *>(utf8_str.c_str());
+  size_t length = utf8_str.length();
+
+  // Manual UTF-8 decoding
+  if ((bytes[0] & 0x80) == 0)
+  {
+    // 1-byte ASCII
+    if (length != 1)
+      throw std::runtime_error("TypeError: expected a single character");
+    return bytes[0];
+  }
+  else if ((bytes[0] & 0xE0) == 0xC0)
+  {
+    // 2-byte sequence
+    if (length != 2)
+      throw std::runtime_error("TypeError: expected a single character");
+    return ((bytes[0] & 0x1F) << 6) | (bytes[1] & 0x3F);
+  }
+  else if ((bytes[0] & 0xF0) == 0xE0)
+  {
+    // 3-byte sequence
+    if (length != 3)
+      throw std::runtime_error("TypeError: expected a single character");
+    return ((bytes[0] & 0x0F) << 12) | ((bytes[1] & 0x3F) << 6) |
+           (bytes[2] & 0x3F);
+  }
+  else if ((bytes[0] & 0xF8) == 0xF0)
+  {
+    // 4-byte sequence
+    if (length != 4)
+      throw std::runtime_error("TypeError: expected a single character");
+    return ((bytes[0] & 0x07) << 18) | ((bytes[1] & 0x3F) << 12) |
+           ((bytes[2] & 0x3F) << 6) | (bytes[3] & 0x3F);
+  }
+  else
+    throw std::runtime_error("ValueError: received invalid UTF-8 input");
 }
 
 void function_call_expr::get_function_type()
@@ -80,7 +147,7 @@ void function_call_expr::get_function_type()
 
 bool function_call_expr::is_nondet_call() const
 {
-  std::regex pattern(
+  static std::regex pattern(
     R"(nondet_(int|char|bool|float)|__VERIFIER_nondet_(int|char|bool|float))");
 
   return std::regex_match(function_id_.get_function(), pattern);
@@ -103,10 +170,9 @@ exprt function_call_expr::handle_input() const
   // input() returns a non-deterministic string
   // We'll model input() as returning a non-deterministic string
   // with a reasonable maximum length (e.g., 256 characters)
-  // This is an under-approximation to model the input
-  const size_t max_input_length = 256;
+  // This is an under-approximation to model the input function
 
-  typet string_type = type_handler_.get_typet("str", max_input_length);
+  typet string_type = type_handler_.get_typet("str", MAX_INPUT_LENGTH);
   exprt rhs = exprt("sideeffect", string_type);
   rhs.statement("nondet");
 
@@ -222,7 +288,7 @@ std::string utf8_encode(unsigned int int_value)
    */
 
   // Check for surrogate pairs (invalid in UTF-8)
-  if (int_value >= 0xD800 && int_value <= 0xDFFF)
+  if (int_value >= SURROGATE_START && int_value <= SURROGATE_END)
   {
     std::ostringstream oss;
     oss << "Code point 0x" << std::hex << std::uppercase << int_value
@@ -233,21 +299,20 @@ std::string utf8_encode(unsigned int int_value)
   // Manual UTF-8 encoding
   std::string char_out;
 
-  // https://stackoverflow.com/revisions/19968992/1
-  if (int_value <= 0x7f)
+  if (int_value <= UTF8_1_BYTE_MAX)
     char_out.append(1, static_cast<char>(int_value));
-  else if (int_value <= 0x7ff)
+  else if (int_value <= UTF8_2_BYTE_MAX)
   {
     char_out.append(1, static_cast<char>(0xc0 | ((int_value >> 6) & 0x1f)));
     char_out.append(1, static_cast<char>(0x80 | (int_value & 0x3f)));
   }
-  else if (int_value <= 0xffff)
+  else if (int_value <= UTF8_3_BYTE_MAX)
   {
     char_out.append(1, static_cast<char>(0xe0 | ((int_value >> 12) & 0x0f)));
     char_out.append(1, static_cast<char>(0x80 | ((int_value >> 6) & 0x3f)));
     char_out.append(1, static_cast<char>(0x80 | (int_value & 0x3f)));
   }
-  else if (int_value <= 0x10ffff)
+  else if (int_value <= UTF8_4_BYTE_MAX)
   {
     char_out.append(1, static_cast<char>(0xf0 | ((int_value >> 18) & 0x07)));
     char_out.append(1, static_cast<char>(0x80 | ((int_value >> 12) & 0x3f)));
@@ -258,9 +323,7 @@ std::string utf8_encode(unsigned int int_value)
   {
     std::ostringstream oss;
     oss << "argument '0x" << std::hex << std::uppercase << int_value
-        << "' outside of Unicode range: [0x000000,  0x110000)";
-    // throw error if out of range
-    // only contains half of error message to allow caller to provide more context
+        << "' outside of Unicode range: [0x000000, 0x110000)";
     throw std::out_of_range(oss.str());
   }
   return char_out;
@@ -281,7 +344,7 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
       operand["value"].is_number_integer())
       int_value = -operand["value"].get<int>();
     else
-      throw std::runtime_error("TypeError: Unsupported UnaryOp in chr()");
+      return gen_exception_raise("TypeError", "Unsupported UnaryOp in chr()");
   }
 
   // Handle integer input
@@ -290,8 +353,8 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
 
   // Reject float input
   else if (arg.contains("value") && arg["value"].is_number_float())
-    throw std::runtime_error(
-      "TypeError: chr() argument must be int, not float");
+    return gen_exception_raise(
+      "TypeError", "chr() argument must be int, not float");
 
   // Try converting string input to integer
   else if (arg.contains("value") && arg["value"].is_string())
@@ -303,8 +366,7 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
     }
     catch (const std::invalid_argument &)
     {
-      throw std::runtime_error(
-        "TypeError: invalid string passed to chr(): '" + s + "'");
+      return gen_exception_raise("TypeError", "invalid string passed to chr()");
     }
   }
 
@@ -337,15 +399,12 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
     }
     catch (std::out_of_range &)
     {
-      throw std::runtime_error(
-        "ValueError: chr() argument '" + arg["id"].get<std::string>() +
-        "' outside of Unicode range: [0x000000, 0x110000)");
+      return gen_exception_raise(
+        "ValueError", "chr() argument outside of Unicode range");
     }
     catch (std::invalid_argument &)
     {
-      throw std::runtime_error(
-        "TypeError: chr() argument '" + arg["id"].get<std::string>() +
-        "' must be of type int");
+      return gen_exception_raise("TypeError", "must be of type int");
     }
 
     arg["_type"] = "Constant";
@@ -360,7 +419,7 @@ exprt function_call_expr::handle_chr(nlohmann::json &arg) const
   }
   catch (const std::out_of_range &e)
   {
-    throw std::runtime_error(std::string("ValueError: chr() ") + e.what());
+    return gen_exception_raise("ValueError", "chr()");
   }
 
   // Replace the value with a single-character string
@@ -393,7 +452,7 @@ exprt function_call_expr::handle_hex(nlohmann::json &arg) const
       int_value = operand["value"].get<long long>();
     }
     else
-      throw std::runtime_error("TypeError: Unsupported UnaryOp in hex()");
+      return gen_exception_raise("TypeError", "Unsupported UnaryOp in hex()");
   }
   else if (arg.contains("value") && arg["value"].is_number_integer())
   {
@@ -402,7 +461,8 @@ exprt function_call_expr::handle_hex(nlohmann::json &arg) const
       is_negative = true;
   }
   else
-    throw std::runtime_error("TypeError: hex() argument must be an integer");
+    return gen_exception_raise(
+      "TypeError", "hex() argument must be an integer");
 
   std::ostringstream oss;
   oss << (is_negative ? "-0x" : "0x") << std::hex << std::nouppercase
@@ -437,7 +497,7 @@ exprt function_call_expr::handle_oct(nlohmann::json &arg) const
         is_negative = true;
     }
     else
-      throw std::runtime_error("TypeError: Unsupported UnaryOp in oct()");
+      return gen_exception_raise("TypeError", "Unsupported UnaryOp in oct()");
   }
   // If it's not a unary operation, expect a plain integer literal
   else if (arg.contains("value") && arg["value"].is_number_integer())
@@ -449,7 +509,8 @@ exprt function_call_expr::handle_oct(nlohmann::json &arg) const
   else
   {
     // Invalid argument type for oct()
-    throw std::runtime_error("TypeError: oct() argument must be an integer");
+    return gen_exception_raise(
+      "TypeError", "oct() argument must be an integer");
   }
 
   // Convert the absolute value to octal and prepend "0o" (or "-0o")
@@ -471,146 +532,45 @@ exprt function_call_expr::handle_ord(nlohmann::json &arg) const
   if (arg.contains("value") && arg["value"].is_string())
   {
     const std::string &s = arg["value"].get<std::string>();
-    const unsigned char *bytes =
-      reinterpret_cast<const unsigned char *>(s.c_str());
-    size_t length = s.length();
-
-    if (length == 0)
-    {
-      throw std::runtime_error(
-        "TypeError: ord() expected a character, but string of length 0 found");
-    }
-
-    // Manual UTF-8 decoding
-    if ((bytes[0] & 0x80) == 0)
-    {
-      // 1-byte ASCII
-      if (length != 1)
-        throw std::runtime_error(
-          "TypeError: ord() expected a single character");
-
-      code_point = bytes[0];
-    }
-    else if ((bytes[0] & 0xE0) == 0xC0)
-    {
-      // 2-byte sequence
-      if (length != 2)
-        throw std::runtime_error(
-          "TypeError: ord() expected a single character");
-
-      code_point = ((bytes[0] & 0x1F) << 6) | (bytes[1] & 0x3F);
-    }
-    else if ((bytes[0] & 0xF0) == 0xE0)
-    {
-      // 3-byte sequence
-      if (length != 3)
-        throw std::runtime_error(
-          "TypeError: ord() expected a single character");
-
-      code_point = ((bytes[0] & 0x0F) << 12) | ((bytes[1] & 0x3F) << 6) |
-                   (bytes[2] & 0x3F);
-    }
-    else if ((bytes[0] & 0xF8) == 0xF0)
-    {
-      // 4-byte sequence
-      if (length != 4)
-        throw std::runtime_error(
-          "TypeError: ord() expected a single character");
-
-      code_point = ((bytes[0] & 0x07) << 18) | ((bytes[1] & 0x3F) << 12) |
-                   ((bytes[2] & 0x3F) << 6) | (bytes[3] & 0x3F);
-    }
-    else
-    {
-      throw std::runtime_error(
-        "ValueError: ord() received invalid UTF-8 input");
-    }
+    code_point = decode_utf8_codepoint(s);
   }
   // Handle ord with symbol
   else if (arg["_type"] == "Name" && arg.contains("id"))
   {
     const symbolt *sym = lookup_python_symbol(arg["id"]);
-
     if (!sym)
     {
       std::string var_name = arg["id"].get<std::string>();
-      throw std::runtime_error(
-        "NameError: variable '" + var_name + "' is not defined");
+      return gen_exception_raise(
+        "NameError", "variable '" + var_name + "' is not defined");
     }
+
     typet operand_type = sym->value.type();
     std::string py_type = type_handler_.type_to_string(operand_type);
 
     if (operand_type != char_type() && py_type != "str")
     {
-      throw std::runtime_error(
-        "TypeError: ord() expected string of length 1, but " + py_type +
-        " found");
+      return gen_exception_raise(
+        "TypeError",
+        "ord() expected string of length 1, but " + py_type + " found");
     }
+
     auto value_opt = extract_string_from_symbol(sym);
-    const std::string &s = *value_opt;
-    const unsigned char *bytes =
-      reinterpret_cast<const unsigned char *>(s.c_str());
-    size_t length = s.length();
-
-    if (length == 0)
+    if (!value_opt)
     {
-      throw std::runtime_error(
-        "TypeError: ord() expected a character, but string of length 0 found");
+      return gen_exception_raise(
+        "ValueError", "failed to extract string from symbol");
     }
 
-    // Manual UTF-8 decoding
-    if ((bytes[0] & 0x80) == 0)
-    {
-      // 1-byte ASCII
-      if (length != 1)
-        throw std::runtime_error(
-          "TypeError: ord() expected a single character");
+    code_point = decode_utf8_codepoint(*value_opt);
 
-      code_point = bytes[0];
-    }
-    else if ((bytes[0] & 0xE0) == 0xC0)
-    {
-      // 2-byte sequence
-      if (length != 2)
-        throw std::runtime_error(
-          "TypeError: ord() expected a single character");
-
-      code_point = ((bytes[0] & 0x1F) << 6) | (bytes[1] & 0x3F);
-    }
-    else if ((bytes[0] & 0xF0) == 0xE0)
-    {
-      // 3-byte sequence
-      if (length != 3)
-        throw std::runtime_error(
-          "TypeError: ord() expected a single character");
-
-      code_point = ((bytes[0] & 0x0F) << 12) | ((bytes[1] & 0x3F) << 6) |
-                   (bytes[2] & 0x3F);
-    }
-    else if ((bytes[0] & 0xF8) == 0xF0)
-    {
-      // 4-byte sequence
-      if (length != 4)
-        throw std::runtime_error(
-          "TypeError: ord() expected a single character");
-
-      code_point = ((bytes[0] & 0x07) << 18) | ((bytes[1] & 0x3F) << 12) |
-                   ((bytes[2] & 0x3F) << 6) | (bytes[3] & 0x3F);
-    }
-    else
-    {
-      throw std::runtime_error(
-        "ValueError: ord() received invalid UTF-8 input");
-    }
     // Remove Name data
     arg["_type"] = "Constant";
     arg.erase("id");
     arg.erase("ctx");
   }
   else
-  {
-    throw std::runtime_error("TypeError: ord() argument must be a string");
-  }
+    return gen_exception_raise("TypeError", "ord() argument must be a string");
 
   // Replace the arg with the integer value
   arg["value"] = code_point;
@@ -754,11 +714,13 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
 
   // Reject strings early
   if (arg.contains("type") && arg["type"] == "str")
-    throw std::runtime_error("TypeError: bad operand type for abs(): 'str'");
+    return gen_exception_raise(
+      "TypeError", "bad operand type for abs(): 'str'");
 
   // Also catch string constants without "type" annotation
   if (arg.contains("value") && arg["value"].is_string())
-    throw std::runtime_error("TypeError: bad operand type for abs(): 'str'");
+    return gen_exception_raise(
+      "TypeError", "bad operand type for abs(): 'str'");
 
   // If the argument is a numeric literal, evaluate abs() at compile time
   if (arg.contains("value") && arg["value"].is_number())
@@ -783,7 +745,7 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     return expr;
   }
 
-  // Try to infer type for composite expressions like BinOp
+  // Try to infer type for composite expressions such as BinOp
   if (!arg.contains("type"))
   {
     try
@@ -796,9 +758,8 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     }
     catch (const std::exception &e)
     {
-      throw std::runtime_error(
-        std::string("TypeError: failed to infer operand type for abs(): ") +
-        e.what());
+      return gen_exception_raise(
+        "TypeError", "failed to infer operand type for abs()");
     }
   }
 
@@ -821,29 +782,25 @@ exprt function_call_expr::handle_abs(nlohmann::json &arg) const
     else
     {
       // Variable could not be resolved
-      log_error("NameError: variable '{}' is not defined", var_name);
-      abort();
+      return gen_exception_raise(
+        "NameError", "variable '" + var_name + "' is not defined");
     }
   }
 
   // Final fallback if no type is available
   std::string arg_type = arg.value("type", "");
   if (arg_type.empty())
-  {
-    log_error("TypeError: operand to abs() is missing a type");
-    abort();
-  }
+    return gen_exception_raise(
+      "TypeError", "operand to abs() is missing a type");
 
   // Only numeric types are valid operands for abs()
   if (arg_type != "int" && arg_type != "float" && arg_type != "complex")
-  {
-    log_error("TypeError: bad operand type for abs(): {}", arg_type);
-    abort();
-  }
+    return gen_exception_raise(
+      "TypeError", "bad operand type for abs(): '" + arg_type + "'");
 
   // Fallback for unsupported symbolic expressions (e.g., complex)
   // Currently returns a nil expression to signal unsupported cases
-  log_warning("Returning nil expression for abs()");
+  log_warning("Returning nil expression for abs() with type: {}", arg_type);
   return nil_exprt();
 }
 
@@ -880,12 +837,11 @@ exprt function_call_expr::build_constant_from_arg() const
       exprt expr = converter_.get_expr(arg);
       if (expr.type().is_array()) // strings are arrays
       {
-        // TODO: raise an exception to match Python semantics
         std::string var_name = arg["id"].get<std::string>();
-        log_warning(
-          "ValueError: int() conversion may fail - variable '{}' may contain "
-          "non-integer string",
-          var_name);
+        std::string m = "int() conversion may fail - variable" + var_name +
+                        "may contain non-integer string";
+
+        return gen_exception_raise("ValueError", m);
       }
     }
   }
@@ -970,9 +926,9 @@ exprt function_call_expr::build_constant_from_arg() const
       }
       catch (const std::exception &e)
       {
-        throw std::runtime_error(
-          "ValueError: could not convert string to float: '" +
-          arg["value"].get<std::string>() + "'");
+        std::string m = "could not convert string to float : " +
+                        arg["value"].get<std::string>() + "'";
+        return gen_exception_raise("ValueError", m);
       }
     }
   }
@@ -989,12 +945,11 @@ exprt function_call_expr::build_constant_from_arg() const
       exprt expr = converter_.get_expr(arg);
       if (expr.type().is_array()) // strings are arrays
       {
-        // TODO: raise an exception to match Python semantics
         std::string var_name = arg["id"].get<std::string>();
-        log_warning(
-          "ValueError: float() conversion may fail - variable '{}' may contain "
-          "non-float string",
-          var_name);
+        std::string m = "float() conversion may fail - variable" + var_name +
+                        "may contain non-float string";
+
+        return gen_exception_raise("ValueError", m);
       }
     }
   }
@@ -1405,4 +1360,35 @@ exprt function_call_expr::get()
   }
 
   return std::move(call);
+}
+
+exprt function_call_expr::gen_exception_raise(
+  std::string exc,
+  std::string message) const
+{
+  if (!type_utils::is_python_exceptions(exc))
+  {
+    log_error("This exception type is not supported: {}", exc);
+    abort();
+  }
+
+  typet type = type_handler_.get_typet(exc);
+
+  exprt size = constant_exprt(
+    integer2binary(message.size(), bv_width(size_type())),
+    integer2string(message.size()),
+    size_type());
+  typet t = array_typet(char_type(), size);
+  string_constantt string_name(message, t, string_constantt::k_default);
+
+  // Construct a constant struct to throw:
+  // raise VauleError{ .message=&"Error message" }
+  // If the exception model is modified, it might be necessary to make changes
+  exprt sym("struct", type);
+  sym.copy_to_operands(address_of_exprt(string_name));
+
+  exprt raise = side_effect_exprt("cpp-throw", type);
+  raise.move_to_operands(sym);
+
+  return raise;
 }

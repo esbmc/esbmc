@@ -1312,9 +1312,7 @@ std::string cvc5_convt::dump_smt()
   auto const &assertions = slv.getAssertions();
   for (auto const &a : assertions)
     oss << a.toString();
-  std::string smt_output = oss.str();
-  log_status("{}", smt_output);
-  return smt_output;
+  return oss.str();
 }
 
 void cvc5_smt_ast::dump() const

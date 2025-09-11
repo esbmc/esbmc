@@ -94,6 +94,7 @@ private:
   friend class numpy_call_expr;
   friend class function_call_builder;
   friend class type_handler;
+  bool processing_list_elements = false;
 
   template <typename Func>
   decltype(auto) with_ast(const nlohmann::json *new_ast, Func &&f)
@@ -105,7 +106,7 @@ private:
     return result;
   }
 
-  void load_c_intrisics();
+  void load_c_intrisics(code_blockt &block);
 
   void get_var_assign(const nlohmann::json &ast_node, codet &target_block);
 
@@ -172,6 +173,8 @@ private:
   apply_format_specification(const exprt &expr, const std::string &format);
 
   std::string remove_quotes_from_type_string(const std::string &type_string);
+
+  bool function_has_missing_return_paths(const nlohmann::json &function_node);
 
   typet get_type_from_annotation(
     const nlohmann::json &annotation_node,
@@ -311,6 +314,39 @@ private:
   void append_models_from_directory(
     std::list<std::string> &file_list,
     const std::string &dir_path);
+
+  // helper methods for get_var_assign
+  std::pair<std::string, typet>
+  extract_type_info(const nlohmann::json &ast_node);
+  exprt create_lhs_expression(
+    const nlohmann::json &target,
+    symbolt *lhs_symbol,
+    const locationt &location);
+  void handle_assignment_type_adjustments(
+    symbolt *lhs_symbol,
+    exprt &lhs,
+    exprt &rhs,
+    const std::string &lhs_type,
+    const nlohmann::json &ast_node,
+    bool is_ctor_call);
+
+  // Helper methods for binary operator expression handling
+  void convert_function_calls_to_side_effects(exprt &lhs, exprt &rhs);
+
+  exprt handle_string_concatenation_with_promotion(
+    exprt &lhs,
+    exprt &rhs,
+    const nlohmann::json &left,
+    const nlohmann::json &right);
+
+  exprt create_variable_length_array_for_multiplication(
+    const nlohmann::json &element,
+    symbolt *symbol,
+    const exprt &list_elem);
+
+  exprt handle_chained_comparisons_logic(
+    const nlohmann::json &element,
+    exprt &bin_expr);
 
   contextt &symbol_table_;
   const nlohmann::json *ast_json;

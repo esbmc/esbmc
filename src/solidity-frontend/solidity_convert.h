@@ -43,8 +43,7 @@ public:
   find_decl_ref_global(const nlohmann::json &j, int ref_id);
   static const nlohmann::json &
   find_decl_ref_unique_id(const nlohmann::json &json, int ref_id);
-  static const nlohmann::json &
-  find_decl_ref(const nlohmann::json &json, int ref_id);
+  const nlohmann::json &find_decl_ref(const nlohmann::json &json, int ref_id);
   static const nlohmann::json &find_constructor_ref(int ref_decl_id);
   static const nlohmann::json &
   find_constructor_ref(const std::string &contract_name);
@@ -694,6 +693,8 @@ protected:
   // structural typing indentical
   std::unordered_map<std::string, std::unordered_set<std::string>>
     structureTypingMap;
+  // virtual-override
+  std::unordered_map<std::string, std::unordered_map<int, int>> overrideMap;
 
   // contract name list
   std::unordered_map<int, std::string> contractNamesMap;

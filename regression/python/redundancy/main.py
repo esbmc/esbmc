@@ -1,3 +1,5 @@
+import random
+
 def redundancy_examples(x:int, a:int, b:int, c:int):
     # (1) Defensive programming redundancy
     # Multiple equivalent constraints instead of a single on
@@ -16,4 +18,8 @@ def redundancy_examples(x:int, a:int, b:int, c:int):
     assert (x < 10 and x <= 9) == (x <= 9)
 
 
-redundancy_examples(x=5, a=2, b=3, c=4)
+x = random.randint(1, 1000)
+a = random.randint(1, 1000)
+b = random.randint(1, 1000)
+c = random.randint(1, 1000)
+redundancy_examples(x, a, b, c)

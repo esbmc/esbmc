@@ -38,7 +38,7 @@ if [[ $use_python =~ ^[Yy]$ ]]; then
     echo "Setting up Python environment..."
     python3 -m venv ../esbmc-venv
     source ../esbmc-venv/bin/activate
-    pip install ast2json
+    pip install ast2json mypy
     deactivate
 fi
 

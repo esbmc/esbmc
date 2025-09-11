@@ -1,4 +1,5 @@
 import sys
+import subprocess
 
 # Detect the Python version
 PY3 = sys.version_info[0] == 3
@@ -249,6 +250,16 @@ def main():
     check_usage()
     filename = sys.argv[1]
     output_dir = sys.argv[2]
+
+    # Type checking input program with mypy
+    result = subprocess.run(
+    ["mypy", "--strict", filename],
+    capture_output=True,
+    text=True)
+
+    if result.returncode != 0:
+        print("\033[93m\nType checking warning:\033[0m")
+        print(result.stdout)
 
     # Add the script directory to the import search path
     sys.path.append(os.path.dirname(filename))

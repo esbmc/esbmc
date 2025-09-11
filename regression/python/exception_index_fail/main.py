@@ -1,4 +1,4 @@
-def check_index(idx:int) -> int:
+def check_index(idx):
     if idx < 0 or idx > 10:
         raise IndexError("Index out of range")
     return idx

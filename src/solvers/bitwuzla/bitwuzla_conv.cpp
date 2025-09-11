@@ -828,26 +828,33 @@ bitwuzla_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
 
 std::string bitwuzla_convt::dump_smt()
 {
-  const std::string &path = options.get_option("output");
+  FILE *temp_file = tmpfile();
+  if (!temp_file)
+  {
+    log_error("Failed to create temporary file for SMT dump");
+    return "";
+  }
 
-  // Print formulas using binary bit-vector output format
-  if (path.empty() || path == "-")
+  bitwuzla_print_formula(bitw, "smt2", temp_file, 2);
+
+  // Get file size and read entire content
+  fseek(temp_file, 0, SEEK_END);
+  long file_size = ftell(temp_file);
+  fseek(temp_file, 0, SEEK_SET);
+
+  if (file_size <= 0)
   {
-    bitwuzla_print_formula(bitw, "smt2", stdout, 2);
+    fclose(temp_file);
+    return "";
   }
-  else
-  {
-    FILE *file = fopen(path.c_str(), "w");
-    if (!file)
-    {
-      log_error("Could not open output file '{}'", path);
-      return "Failed to open output file.";
-    }
-    bitwuzla_print_formula(bitw, "smt2", file, 2);
-    fclose(file);
-  }
-  log_status("SMT formula dumped successfully");
-  return "SMT formula dumped successfully";
+
+  // Allocate buffer for entire file content
+  std::vector<char> buffer(file_size + 1);
+  size_t bytes_read = fread(buffer.data(), 1, file_size, temp_file);
+  buffer[bytes_read] = '\0'; // Null terminate
+
+  fclose(temp_file);
+  return std::string(buffer.data(), bytes_read);
 }
 
 void bitw_smt_ast::dump() const
