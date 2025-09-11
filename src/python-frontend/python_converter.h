@@ -106,9 +106,7 @@ private:
     return result;
   }
 
-  void load_c_intrisics();
-
-  void add_intrinsic_assignments(code_blockt &block);
+  void load_c_intrisics(code_blockt &block);
 
   void get_var_assign(const nlohmann::json &ast_node, codet &target_block);
 

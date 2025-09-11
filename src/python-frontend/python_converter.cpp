@@ -4617,7 +4617,7 @@ static void add_global_static_variable(
   assert(added_symbol);
 }
 
-void python_converter::load_c_intrisics()
+void python_converter::load_c_intrisics(code_blockt &block)
 {
   // Add symbols required by the C models
 
@@ -4631,6 +4631,22 @@ void python_converter::load_c_intrisics()
 
   auto type2 = array_typet(size_type(), exprt("infinity"));
   add_global_static_variable(symbol_table_, type2, "__ESBMC_alloc_size");
+
+  // Initialize intrinsic variables to match C frontend behavior
+  locationt location;
+  location.set_file("esbmc_intrinsics.h");
+
+  // ASSIGN __ESBMC_rounding_mode = 0;
+  symbol_exprt rounding_symbol("c:@__ESBMC_rounding_mode", int_type());
+  code_assignt rounding_assign(rounding_symbol, gen_zero(int_type()));
+  rounding_assign.location() = location;
+  block.copy_to_operands(rounding_assign);
+
+  // TODO: Consider initializing other intrinsic variables if needed:
+  // - __ESBMC_alloc
+  // - __ESBMC_deallocated
+  // - __ESBMC_is_dynamic
+  // - __ESBMC_alloc_size
 }
 
 ///  Only addresses __name__; other Python built-ins such as
@@ -4709,21 +4725,6 @@ void python_converter::create_builtin_symbols()
   symbol_table_.add(name_symbol);
 }
 
-void python_converter::add_intrinsic_assignments(code_blockt &block)
-{
-  // Add assignment for intrinsic variable to match C frontend behavior
-  locationt location;
-  location.set_file("esbmc_intrinsics.h");
-
-  // ASSIGN __ESBMC_rounding_mode = 0;
-  {
-    symbol_exprt rounding_symbol("c:@__ESBMC_rounding_mode", int_type());
-    code_assignt rounding_assign(rounding_symbol, gen_zero(int_type()));
-    rounding_assign.location() = location;
-    block.copy_to_operands(rounding_assign);
-  }
-}
-
 void python_converter::convert()
 {
   code_typet main_type;
@@ -4787,12 +4788,9 @@ void python_converter::convert()
     is_loading_models = false;
   }
 
-  // Load C intrisics
-  load_c_intrisics();
-
-  // Create a block to hold intrinsic assignments
+  // Create a block to hold intrinsic assignments and load C intrinsics
   code_blockt intrinsic_block;
-  add_intrinsic_assignments(intrinsic_block);
+  load_c_intrisics(intrinsic_block);
 
   // Handle --function option
   const std::string function = config.options.get_option("function");
