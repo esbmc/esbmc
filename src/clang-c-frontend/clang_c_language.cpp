@@ -480,7 +480,7 @@ _Bool __ESBMC_exists(void*, _Bool);
  */
 void __ESBMC_loop_invariant(_Bool);
 
-
+#define __builtin_offsetof(type, member) ((size_t)&((type*)0)->member)
     )";
 
   if (config.ansi_c.cheri)
