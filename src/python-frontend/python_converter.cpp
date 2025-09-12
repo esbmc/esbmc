@@ -3548,26 +3548,34 @@ void python_converter::get_var_assign(
     rhs = get_expr(ast_node["value"]);
     has_value = true;
     is_converting_rhs = false;
-    
+
     // Fix for single character string constant assigned to str type variables
-    if (lhs_type == "str" && (rhs.type().is_signedbv() || rhs.type().is_unsignedbv())) {
+    if (
+      lhs_type == "str" &&
+      (rhs.type().is_signedbv() || rhs.type().is_unsignedbv()))
+    {
       // Check if this is a string constant assignment like s: str = "h"
-      if (ast_node["value"]["_type"] == "Constant" && ast_node["value"]["value"].is_string()) {
+      if (
+        ast_node["value"]["_type"] == "Constant" &&
+        ast_node["value"]["value"].is_string())
+      {
         std::string str_value = ast_node["value"]["value"].get<std::string>();
-        
+
         // Create proper string array with null terminator
-        typet string_type = type_handler_.build_array(char_type(), str_value.length() + 1);
+        typet string_type =
+          type_handler_.build_array(char_type(), str_value.length() + 1);
         exprt str_array = gen_zero(string_type);
-        
+
         // Fill the array with characters
-        for (size_t i = 0; i < str_value.length(); ++i) {
+        for (size_t i = 0; i < str_value.length(); ++i)
+        {
           BigInt char_val(static_cast<unsigned char>(str_value[i]));
           exprt char_expr = constant_exprt(
             integer2binary(char_val, 8), integer2string(char_val), char_type());
           str_array.operands().at(i) = char_expr;
         }
         // Null terminator is already zero-initialized
-        
+
         rhs = str_array;
       }
     }
@@ -3724,26 +3732,36 @@ void python_converter::get_compound_assign(
   std::string op = ast_node["op"]["_type"].get<std::string>();
 
   // Check if this is a string concatenation based on variable annotation
-  bool is_string_concat = false; // use to check if the operation is a string concatenation
-  if (op == "Add") {
+  bool is_string_concat =
+    false; // use to check if the operation is a string concatenation
+  if (op == "Add")
+  {
     // Standard array-based string concatenation
-    if ((lhs.type().is_array() && lhs.type().subtype() == char_type()) ||
-        (current_element_type.is_array() && current_element_type.subtype() == char_type())) {
+    if (
+      (lhs.type().is_array() && lhs.type().subtype() == char_type()) ||
+      (current_element_type.is_array() &&
+       current_element_type.subtype() == char_type()))
+    {
       is_string_concat = true;
     }
     // Check if variable is annotated as str but implemented as single char
-    else if ((lhs.type().is_signedbv() || lhs.type().is_unsignedbv()) && 
-             (current_element_type.is_signedbv() || current_element_type.is_unsignedbv())) {
+    else if (
+      (lhs.type().is_signedbv() || lhs.type().is_unsignedbv()) &&
+      (current_element_type.is_signedbv() ||
+       current_element_type.is_unsignedbv()))
+    {
       // Check if the variable was declared with str annotation
-      nlohmann::json decl_node = get_var_node(var_name, *ast_json); 
-      if (!decl_node.empty() && decl_node.contains("annotation") && 
-          decl_node["annotation"].contains("id") && 
-          decl_node["annotation"]["id"] == "str") {
+      nlohmann::json decl_node = get_var_node(var_name, *ast_json);
+      if (
+        !decl_node.empty() && decl_node.contains("annotation") &&
+        decl_node["annotation"].contains("id") &&
+        decl_node["annotation"]["id"] == "str")
+      {
         is_string_concat = true;
       }
     }
   }
-  
+
   if (is_string_concat)
   {
     exprt rhs_expr = get_expr(ast_node["value"]);
