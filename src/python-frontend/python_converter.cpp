@@ -3605,8 +3605,8 @@ python_converter::extract_type_info(const nlohmann::json &ast_node)
     else
       lhs_type = ast_node["annotation"]["id"];
 
-    if (lhs_type == "list")
-      element_type = type_handler_.get_list_type(ast_node["value"]);
+    if (lhs_type == "list" || lhs_type == "List")
+      element_type = get_list_type();
     else
       element_type = type_handler_.get_typet(lhs_type, type_size);
   }
