@@ -105,7 +105,7 @@ public:
            func_name == "subtract" || func_name == "multiply" ||
            func_name == "divide" || func_name == "transpose" ||
            func_name == "det" || func_name == "matmul" || func_name == "pow" ||
-           func_name == "log" || func_name == "log2" || 
+           func_name == "log" || func_name == "log2" ||
            func_name == "log1p_taylor" || func_name == "ldexp";
   }
 
