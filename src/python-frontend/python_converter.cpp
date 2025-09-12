@@ -3735,7 +3735,7 @@ void python_converter::get_compound_assign(
     else if ((lhs.type().is_signedbv() || lhs.type().is_unsignedbv()) && 
              (current_element_type.is_signedbv() || current_element_type.is_unsignedbv())) {
       // Check if the variable was declared with str annotation
-      nlohmann::json decl_node = get_var_node(var_name, *ast_json); // could be better
+      nlohmann::json decl_node = get_var_node(var_name, *ast_json); 
       if (!decl_node.empty() && decl_node.contains("annotation") && 
           decl_node["annotation"].contains("id") && 
           decl_node["annotation"]["id"] == "str") {
