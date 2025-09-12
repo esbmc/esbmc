@@ -3329,7 +3329,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       else if (
         slice["_type"] == "Constant" ||
         (slice["_type"] == "UnaryOp" &&
-        slice["operand"]["_type"] == "Constant"))
+         slice["operand"]["_type"] == "Constant"))
       {
         const std::string &list_name = array.identifier().as_string();
         try
@@ -3354,14 +3354,13 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         else
         {
           // Handle case where we need to find the variable declaration
-          while (!list_node.is_null() && 
-                (!list_node.contains("value") || 
+          while (!list_node.is_null() &&
+                 (!list_node.contains("value") ||
                   !list_node["value"].contains("elts") ||
                   !list_node["value"]["elts"].is_array()))
           {
             if (
-              list_node.contains("value") && 
-              list_node["value"].contains("id"))
+              list_node.contains("value") && list_node["value"].contains("id"))
               list_node = json_utils::find_var_decl(
                 list_node["value"]["id"], current_func_name_, *ast_json);
             else
@@ -3371,11 +3370,11 @@ exprt python_converter::get_expr(const nlohmann::json &element)
           }
 
           // Check if we found a valid list node with the expected structure
-          if (list_node.is_null() || 
-              !list_node.contains("value") || 
-              (!list_node["value"].is_array() && 
-              (!list_node["value"].contains("elts") || 
-                !list_node["value"]["elts"].is_array())))
+          if (
+            list_node.is_null() || !list_node.contains("value") ||
+            (!list_node["value"].is_array() &&
+             (!list_node["value"].contains("elts") ||
+              !list_node["value"]["elts"].is_array())))
           {
             throw std::runtime_error(
               "Indexing list with symbolic values are not supported yet.");
@@ -3418,10 +3417,10 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       // Get obj->value and cast it to the correct type
       member_exprt obj_value(
         symbol_expr(tmp_obj_symbol), "value", pointer_typet(empty_typet()));
-      
+
       // Direct typecast from obj->value (which is void*) to target type pointer
       typecast_exprt tc(obj_value, pointer_typet(list_elem_type));
-      
+
       // Dereference to get the actual value
       dereference_exprt deref(list_elem_type);
       deref.op0() = tc;
