@@ -108,7 +108,7 @@ private:
   friend class python_list;
   bool processing_list_elements = false;
 
-  // Add an extra flage to track ord/chr function
+  // Add an extra flag to track ord/chr function
   std::set<std::string> ord_chr_used_variables;
 
   // Pre-scan to check if the ord/chr is used with char type
