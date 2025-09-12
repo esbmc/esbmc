@@ -1553,6 +1553,17 @@ exprt function_call_expr::get()
           string_constantt::k_default);
       }
       call.arguments().push_back(address_of_exprt(arg));
+
+      if (arg.type() == converter_.get_list_type())
+      {
+        // Update list element type mapping for function parameters
+        const code_typet &type =
+          static_cast<const code_typet &>(func_symbol->type);
+        const std::string &arg_id =
+          type.arguments().at(0).identifier().as_string();
+        converter_.list_type_map[arg_id] =
+          converter_.list_type_map[arg.identifier().as_string()];
+      }
     }
     else
       call.arguments().push_back(arg);

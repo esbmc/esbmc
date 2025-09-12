@@ -3421,6 +3421,13 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       // Direct typecast from obj->value (which is void*) to target type pointer
       typecast_exprt tc(obj_value, pointer_typet(list_elem_type));
 
+      symbolt &tmp_func_ret_symbol = create_tmp_symbol(
+        element, "tmp_func_ret", list_elem_type, gen_zero(list_elem_type));
+
+      code_declt tmp_func_ret_decl(symbol_expr(tmp_func_ret_symbol));
+      tmp_func_ret_decl.location() = get_location_from_decl(element);
+      current_block->copy_to_operands(tmp_func_ret_decl);
+
       // Dereference to get the actual value
       dereference_exprt deref(list_elem_type);
       deref.op0() = tc;
@@ -3973,6 +3980,25 @@ void python_converter::get_var_assign(
             break;
           }
         }
+
+        typet l_type = pointer_typet(get_list_type());
+        symbolt &tmp_var_symbol =
+          create_tmp_symbol(ast_node, "tmp_var", l_type, gen_zero(l_type));
+
+        code_declt tmp_var_decl(symbol_expr(tmp_var_symbol));
+        tmp_var_decl.location() = get_location_from_decl(ast_node);
+        target_block.copy_to_operands(tmp_var_decl);
+
+        rhs.op0() = symbol_expr(tmp_var_symbol);
+        target_block.copy_to_operands(rhs);
+
+        dereference_exprt deref(l_type.subtype());
+        deref.op0() = symbol_expr(tmp_var_symbol);
+        rhs = deref;
+
+        code_assignt code_assign(lhs, rhs);
+        code_assign.location() = location_begin;
+        rhs = code_assign;
       }
 
       target_block.copy_to_operands(rhs);
