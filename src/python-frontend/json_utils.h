@@ -10,6 +10,40 @@
 namespace json_utils
 {
 template <typename JsonType>
+bool search_function_in_ast(const JsonType &node, const std::string &func_name)
+{
+  if (!node.is_object())
+    return false;
+
+  // Check if this is a function definition with matching name
+  if (
+    node.contains("_type") && node["_type"] == "FunctionDef" &&
+    node.contains("name") && node["name"] == func_name)
+  {
+    return true;
+  }
+
+  // Recursively search all child nodes
+  for (const auto &[key, value] : node.items())
+  {
+    if (value.is_array())
+    {
+      for (const auto &item : value)
+      {
+        if (search_function_in_ast(item, func_name))
+          return true;
+      }
+    }
+    else if (value.is_object())
+    {
+      if (search_function_in_ast(value, func_name))
+        return true;
+    }
+  }
+  return false;
+}
+
+template <typename JsonType>
 JsonType find_class(const JsonType &ast_json, const std::string &class_name)
 {
   auto it =
@@ -127,6 +161,18 @@ get_object_alias(const JsonType &ast, const std::string &obj_name)
       }
     }
   }
+
+  std::size_t dot_pos = obj_name.rfind('.');
+  if (dot_pos == std::string::npos)
+    return obj_name;
+
+  std::string prefix = obj_name.substr(0, dot_pos);
+  std::string suffix = obj_name.substr(dot_pos);
+  std::string resolved_prefix = get_object_alias(ast, prefix);
+
+  if (resolved_prefix != prefix)
+    return resolved_prefix + suffix;
+
   return obj_name;
 }
 
@@ -135,14 +181,18 @@ const JsonType get_var_node(const std::string &var_name, const JsonType &block)
 {
   for (auto &element : block["body"])
   {
+    // Check for annotated assignment (AnnAssign)
     if (
-      element["_type"] == "AnnAssign" && element["target"].contains("id") &&
-      element["target"]["id"] == var_name)
+      element["_type"] == "AnnAssign" && element.contains("target") &&
+      element["target"].contains("id") && element["target"]["id"] == var_name)
       return element;
 
+    // Check for regular assignment (Assign)
     if (
-      element["_type"] == "Assign" &&
+      element["_type"] == "Assign" && element.contains("targets") &&
+      !element["targets"].empty() && element["targets"][0].contains("_type") &&
       element["targets"][0]["_type"] == "Name" &&
+      element["targets"][0].contains("id") &&
       element["targets"][0]["id"] == var_name)
       return element;
   }
@@ -150,10 +200,8 @@ const JsonType get_var_node(const std::string &var_name, const JsonType &block)
   if (block.contains("args"))
   {
     for (auto &arg : block["args"]["args"])
-    {
-      if (arg["arg"] == var_name)
+      if (arg.contains("arg") && arg["arg"] == var_name)
         return arg;
-    }
   }
 
   return JsonType();
@@ -181,6 +229,17 @@ const JsonType find_var_decl(
     ref = get_var_node(var_name, ast);
 
   return ref;
+}
+
+template <typename JsonType>
+const JsonType find_return_node(const JsonType &block)
+{
+  for (const auto &stmt : block)
+  {
+    if (stmt.contains("_type") && stmt["_type"] == "Return")
+      return stmt;
+  }
+  return JsonType();
 }
 
 } // namespace json_utils

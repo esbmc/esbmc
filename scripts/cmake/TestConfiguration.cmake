@@ -42,8 +42,10 @@ function (new_fuzz_test TARGET SRC LIBS)
   endif()
   add_executable(${TARGET} ${SRC})
   add_test(NAME ${TARGET}-Fuzz COMMAND ${TARGET} -runs=6500000)
-  target_compile_options(${TARGET} PRIVATE $<$<C_COMPILER_ID:Clang>:-g -O1 -fsanitize=fuzzer>)
-  target_link_libraries(${TARGET} PRIVATE $<$<C_COMPILER_ID:Clang>:-fsanitize=fuzzer> ${LIBS})
+  target_compile_options(${TARGET} PRIVATE $<$<COMPILE_LANG_AND_ID:C,Clang>:-g -O1 -fsanitize=fuzzer>
+                                           $<$<COMPILE_LANG_AND_ID:CXX,Clang>:-g -O1 -fsanitize=fuzzer>)
+  target_link_libraries(${TARGET} PRIVATE $<$<LINK_LANG_AND_ID:C,Clang>:-fsanitize=fuzzer> ${LIBS}
+                                          $<$<LINK_LANG_AND_ID:CXX,Clang>:-fsanitize=fuzzer> ${LIBS})
 endfunction()
 
 # Add a new Fuzz based test (this will execute less runs)
@@ -53,6 +55,8 @@ function (new_fast_fuzz_test TARGET SRC LIBS)
   endif()
   add_executable(${TARGET} ${SRC})
   add_test(NAME ${TARGET}-Fuzz COMMAND ${TARGET} -runs=1000)
-  target_compile_options(${TARGET} PRIVATE $<$<C_COMPILER_ID:Clang>:-g -O1 -fsanitize=fuzzer>)
-  target_link_libraries(${TARGET} PRIVATE $<$<C_COMPILER_ID:Clang>:-fsanitize=fuzzer> ${LIBS})
+  target_compile_options(${TARGET} PRIVATE $<$<COMPILE_LANG_AND_ID:C,Clang>:-g -O1 -fsanitize=fuzzer>
+                                           $<$<COMPILE_LANG_AND_ID:CXX,Clang>:-g -O1 -fsanitize=fuzzer>)
+  target_link_libraries(${TARGET} PRIVATE $<$<LINK_LANG_AND_ID:C,Clang>:-fsanitize=fuzzer> ${LIBS}
+                                          $<$<LINK_LANG_AND_ID:CXX,Clang>:-fsanitize=fuzzer> ${LIBS})
 endfunction()

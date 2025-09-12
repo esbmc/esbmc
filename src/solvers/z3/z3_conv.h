@@ -39,6 +39,8 @@ public:
   bool get_bool(smt_astt a) override;
   BigInt get_bv(smt_astt a, bool is_signed) override;
   ieee_floatt get_fpbv(smt_astt a) override;
+  bool
+  get_rational(smt_astt a, BigInt &numerator, BigInt &denominator) override;
   expr2tc get_array_elem(smt_astt array, uint64_t index, const type2tc &subtype)
     override;
 
@@ -201,13 +203,20 @@ public:
     return ss.str();
   }
 
-  void dump_smt() override;
+  std::string dump_smt() override;
   void print_model() override;
+  smt_astt mk_quantifier(
+    bool is_forall,
+    std::vector<smt_astt> lhs,
+    smt_astt rhs) override;
 
 private:
   void print_smt_formulae(std::ostream &dest);
+  bool
+  parse_rational_bigint(Z3_string str, BigInt &numerator, BigInt &denominator);
 
 public:
+  virtual void output_smt();
   //  Must be first member; that way it's the last to be destroyed.
   z3::context z3_ctx;
   z3::solver solver;

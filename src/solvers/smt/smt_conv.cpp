@@ -1,3 +1,5 @@
+#include "irep2/irep2_expr.h"
+#include <cfloat>
 #include <iomanip>
 #include <set>
 #include <solvers/prop/literal.h>
@@ -177,6 +179,27 @@ void smt_convt::push_ctx()
   ctx_level++;
 }
 
+/* Iterate over "body" expression looking for symbols with the same name
+   as lhs. Then, replaces it. */
+void replace_name_in_body(
+  const expr2tc &lhs,
+  const expr2tc &replacement,
+  expr2tc &body)
+{
+  // TODO: lhs and replacement should be a list of pairs to deal with multiple symbols
+  assert(is_symbol2t(lhs));
+  if (is_symbol2t(body))
+  {
+    if (to_symbol2t(body).thename == to_symbol2t(lhs).thename)
+      body = replacement;
+
+    return;
+  }
+  body->Foreach_operand([lhs, replacement](expr2tc &e) {
+    replace_name_in_body(lhs, replacement, e);
+  });
+}
+
 void smt_convt::pop_ctx()
 {
   // Erase everything in caches added in the current context level. Everything
@@ -215,6 +238,58 @@ smt_astt smt_convt::imply_ast(smt_astt a, smt_astt b)
   return mk_implies(a, b);
 }
 
+smt_astt smt_convt::convert_concat_int_mode(
+  smt_astt left_ast,
+  smt_astt right_ast,
+  const expr2tc &expr)
+{
+  const concat2t &concat_expr = to_concat2t(expr);
+
+  // Get the widths of the operands
+  unsigned int left_width = concat_expr.side_1->type->get_width();
+  unsigned int right_width = concat_expr.side_2->type->get_width();
+  unsigned int result_width = left_width + right_width;
+
+  // Create the result type
+  type2tc result_type = get_uint_type(result_width);
+
+  // Convert concatenation to mathematical operations:
+  // result = left * (2^right_width) + right
+
+  // Calculate 2^right_width
+  BigInt multiplier = BigInt(1);
+  for (unsigned int i = 0; i < right_width; i++)
+    multiplier = multiplier * BigInt(2);
+
+  // Create the multiplier constant
+  expr2tc multiplier_expr = constant_int2tc(result_type, multiplier);
+  smt_astt multiplier_ast = convert_ast(multiplier_expr);
+
+  // Convert operands to the result type if needed
+  smt_astt left_converted = left_ast;
+  smt_astt right_converted = right_ast;
+
+  if (concat_expr.side_1->type->get_width() != result_width)
+  {
+    expr2tc left_extended = typecast2tc(result_type, concat_expr.side_1);
+    left_converted = convert_ast(left_extended);
+  }
+
+  if (concat_expr.side_2->type->get_width() != result_width)
+  {
+    expr2tc right_extended = typecast2tc(result_type, concat_expr.side_2);
+    right_converted = convert_ast(right_extended);
+  }
+
+  // Perform left * multiplier
+  smt_astt shifted_left = mk_mul(left_converted, multiplier_ast);
+
+  // Add the right operand: (left * 2^right_width) + right
+  smt_astt result = mk_add(shifted_left, right_converted);
+
+  return result;
+}
+
 smt_astt smt_convt::convert_assign(const expr2tc &expr)
 {
   const equality2t &eq = to_equality2t(expr);
@@ -226,18 +301,163 @@ smt_astt smt_convt::convert_assign(const expr2tc &expr)
   // IMPORTANT: the cache is now a fundamental part of how some flatteners work,
   // in that one can choose to create a set of expressions and their ASTs, then
   // store them in the cache, rather than have a more sophisticated conversion.
-  smt_cache_entryt e = {eq.side_1, side2, ctx_level};
-  smt_cache.insert(e);
+  {
+    const smt_cache_entryt e = {eq.side_1, side2, ctx_level};
+    // Lock automatically released when it goes out of scope
+    std::lock_guard lock(smt_cache_mutex);
+    smt_cache.insert(e);
+  }
 
   return side2;
 }
 
+smt_astt smt_convt::get_zero_real()
+{
+  // Returns SMT representation of zero (0.0)
+  return mk_smt_real("0");
+}
+
+smt_astt smt_convt::get_double_min_normal()
+{
+  // IEEE 754 double precision minimum normal positive value (2^-1022)
+  return mk_smt_real("2.2250738585072014e-308");
+}
+
+smt_astt smt_convt::get_double_min_subnormal()
+{
+  // IEEE 754 double precision minimum positive subnormal value (2^-1074)
+  return mk_smt_real("4.9406564584124654e-324");
+}
+
+smt_astt smt_convt::get_double_max_normal()
+{
+  // IEEE 754 double precision maximum normal positive value (~(2-2^-52)*2^1023)
+  return mk_smt_real("1.7976931348623157e+308");
+}
+
+smt_astt smt_convt::get_single_min_normal()
+{
+  // IEEE 754 single precision minimum normal positive value (2^-126)
+  return mk_smt_real("1.1754943508222875e-38");
+}
+
+smt_astt smt_convt::get_single_min_subnormal()
+{
+  // IEEE 754 single precision minimum positive subnormal value (2^-149)
+  return mk_smt_real("1.4012984643248171e-45");
+}
+
+smt_astt smt_convt::get_single_max_normal()
+{
+  // IEEE 754 single precision maximum normal positive value (~(2-2^-23)*2^127)
+  return mk_smt_real("3.4028234663852886e+38");
+}
+
+// Apply IEEE 754 semantics to a real arithmetic result
+smt_astt smt_convt::apply_ieee754_semantics(
+  smt_astt real_result,
+  const floatbv_type2t &fbv_type,
+  smt_astt operand_zero_check)
+{
+  unsigned int fraction_bits = fbv_type.fraction;
+  unsigned int exponent_bits = fbv_type.exponent;
+
+  auto double_spec = ieee_float_spect::double_precision();
+  auto single_spec = ieee_float_spect::single_precision();
+
+  smt_astt min_normal, min_subnormal, max_normal;
+
+  // IEEE 754 double precision (64-bit): 11 exponent bits, 52 fraction bits
+  if (exponent_bits == double_spec.e && fraction_bits == double_spec.f)
+  {
+    min_normal = get_double_min_normal();
+    min_subnormal = get_double_min_subnormal();
+    max_normal = get_double_max_normal();
+  }
+  // IEEE 754 single precision (32-bit): 8 exponent bits, 23 fraction bits
+  else if (exponent_bits == single_spec.e && fraction_bits == single_spec.f)
+  {
+    min_normal = get_single_min_normal();
+    min_subnormal = get_single_min_subnormal();
+    max_normal = get_single_max_normal();
+  }
+  // Unsupported format - return original result
+  else
+  {
+    log_warning(
+      "Unsupported IEEE 754 format: exponent bits = {}, fraction bits = {}",
+      exponent_bits,
+      fraction_bits);
+    return real_result;
+  }
+
+  // Get absolute value of result
+  smt_astt abs_result = mk_ite(
+    mk_lt(real_result, get_zero_real()),
+    mk_sub(get_zero_real(), real_result),
+    real_result);
+
+  // Check for overflow
+  smt_astt overflows = mk_gt(abs_result, max_normal);
+
+  // Check for underflow to zero
+  smt_astt underflows_to_zero = mk_and(
+    mk_lt(abs_result, min_subnormal),
+    mk_not(mk_eq(real_result, get_zero_real())));
+
+  // If we have a special zero check (like for multiplication), use it
+  if (operand_zero_check)
+    underflows_to_zero = mk_and(underflows_to_zero, mk_not(operand_zero_check));
+
+  // Check if result is in subnormal range
+  smt_astt is_subnormal =
+    mk_and(mk_ge(abs_result, min_subnormal), mk_lt(abs_result, min_normal));
+
+  // Handle subnormal rounding (simplified round-to-nearest)
+  // Use the appropriate subnormal step for the format
+  smt_astt subnormal_step =
+    (exponent_bits == double_spec.e && fraction_bits == double_spec.f)
+      ? get_double_min_subnormal()  // Double precision
+      : get_single_min_subnormal(); // Single precision
+  smt_astt quotient = mk_div(abs_result, subnormal_step);
+  smt_astt rounded_quotient = mk_add(quotient, mk_smt_real("0.5"));
+  smt_astt subnormal_magnitude = mk_mul(rounded_quotient, subnormal_step);
+
+  smt_astt subnormal_result = mk_ite(
+    mk_lt(real_result, get_zero_real()),
+    mk_sub(get_zero_real(), subnormal_magnitude),
+    subnormal_magnitude);
+
+  // Overflow result (approximate infinity)
+  smt_astt overflow_result = mk_ite(
+    mk_lt(real_result, get_zero_real()),
+    mk_sub(get_zero_real(), max_normal),
+    max_normal);
+
+  // Apply IEEE 754 semantics with priority: overflow > underflow > subnormal > normal
+  smt_astt ieee_result = mk_ite(
+    overflows,
+    overflow_result,
+    mk_ite(
+      underflows_to_zero,
+      get_zero_real(),
+      mk_ite(is_subnormal, subnormal_result, real_result)));
+
+  // Handle special operand zero case for multiplication
+  if (operand_zero_check)
+    return mk_ite(operand_zero_check, get_zero_real(), ieee_result);
+
+  return ieee_result;
+}
+
 smt_astt smt_convt::convert_ast(const expr2tc &expr)
 {
-  smt_cachet::const_iterator cache_result = smt_cache.find(expr);
-  if (cache_result != smt_cache.end())
-    return (cache_result->ast);
-
+  {
+    std::lock_guard lock(smt_cache_mutex);
+    smt_cachet::const_iterator cache_result = smt_cache.find(expr);
+    if (cache_result != smt_cache.end())
+      return (cache_result->ast);
+  }
   /* Vectors!
    *
    * Here we need special attention for Vectors, because of the way
@@ -280,7 +500,6 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
 
   std::vector<smt_astt> args;
-  args.reserve(expr->get_num_sub_exprs());
 
   switch (expr->expr_id)
   {
@@ -304,9 +523,9 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   default:
   {
     // Convert all the arguments and store them in 'args'.
-    unsigned int i = 0;
+    args.reserve(expr->get_num_sub_exprs());
     expr->foreach_operand(
-      [this, &args, &i](const expr2tc &e) { args[i++] = convert_ast(e); });
+      [this, &args](const expr2tc &e) { args.push_back(convert_ast(e)); });
   }
   }
 
@@ -504,9 +723,12 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   {
     if (int_encoding)
     {
-      a = mk_add(
-        convert_ast(to_ieee_add2t(expr).side_1),
-        convert_ast(to_ieee_add2t(expr).side_2));
+      smt_astt side1 = convert_ast(to_ieee_add2t(expr).side_1);
+      smt_astt side2 = convert_ast(to_ieee_add2t(expr).side_2);
+      smt_astt real_result = mk_add(side1, side2);
+
+      const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
+      a = apply_ieee754_semantics(real_result, fbv_type, nullptr);
     }
     else
     {
@@ -523,9 +745,12 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     assert(is_floatbv_type(expr));
     if (int_encoding)
     {
-      a = mk_sub(
-        convert_ast(to_ieee_sub2t(expr).side_1),
-        convert_ast(to_ieee_sub2t(expr).side_2));
+      smt_astt side1 = convert_ast(to_ieee_sub2t(expr).side_1);
+      smt_astt side2 = convert_ast(to_ieee_sub2t(expr).side_2);
+      smt_astt real_result = mk_sub(side1, side2);
+
+      const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
+      a = apply_ieee754_semantics(real_result, fbv_type, nullptr);
     }
     else
     {
@@ -541,9 +766,16 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     assert(is_floatbv_type(expr));
     if (int_encoding)
     {
-      a = mk_mul(
-        convert_ast(to_ieee_mul2t(expr).side_1),
-        convert_ast(to_ieee_mul2t(expr).side_2));
+      smt_astt side1 = convert_ast(to_ieee_mul2t(expr).side_1);
+      smt_astt side2 = convert_ast(to_ieee_mul2t(expr).side_2);
+      smt_astt real_result = mk_mul(side1, side2);
+
+      // Special handling for multiplication: check if either operand is zero
+      smt_astt zero = mk_smt_real("0.0");
+      smt_astt operand_is_zero = mk_or(mk_eq(side1, zero), mk_eq(side2, zero));
+
+      const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
+      a = apply_ieee754_semantics(real_result, fbv_type, operand_is_zero);
     }
     else
     {
@@ -559,9 +791,51 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     assert(is_floatbv_type(expr));
     if (int_encoding)
     {
-      a = mk_div(
-        convert_ast(to_ieee_div2t(expr).side_1),
-        convert_ast(to_ieee_div2t(expr).side_2));
+      smt_astt side1 = convert_ast(to_ieee_div2t(expr).side_1);
+      smt_astt side2 = convert_ast(to_ieee_div2t(expr).side_2);
+      smt_astt div_by_zero = mk_eq(side2, get_zero_real());
+
+      // Handle division by zero specially
+      const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
+
+      auto double_spec = ieee_float_spect::double_precision();
+      auto single_spec = ieee_float_spect::single_precision();
+
+      // Check if we support this IEEE 754 format
+      if (
+        (fbv_type.exponent == double_spec.e &&
+         fbv_type.fraction == double_spec.f) || // Double precision
+        (fbv_type.exponent == single_spec.e &&
+         fbv_type.fraction == single_spec.f)) // Single precision
+      {
+        // Get the appropriate max value for infinity approximation
+        smt_astt max_val = (fbv_type.exponent == double_spec.e &&
+                            fbv_type.fraction == double_spec.f)
+                             ? get_double_max_normal()  // Double precision max
+                             : get_single_max_normal(); // Single precision max
+
+        // Return signed infinity for division by zero
+        smt_astt inf_result = mk_ite(
+          mk_lt(side1, get_zero_real()),
+          mk_sub(get_zero_real(), max_val), // -infinity (approximate)
+          max_val                           // +infinity (approximate)
+        );
+
+        smt_astt real_result = mk_div(side1, side2);
+        smt_astt ieee_result =
+          apply_ieee754_semantics(real_result, fbv_type, nullptr);
+
+        a = mk_ite(div_by_zero, inf_result, ieee_result);
+      }
+      else
+      {
+        log_error(
+          "Unsupported IEEE 754 format for division: exponent bits = {}, "
+          "fraction bits = {}",
+          fbv_type.exponent,
+          fbv_type.fraction);
+        abort();
+      }
     }
     else
     {
@@ -577,11 +851,17 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     assert(is_floatbv_type(expr));
     if (int_encoding)
     {
-      a = mk_add(
-        mk_mul(
-          convert_ast(to_ieee_fma2t(expr).value_1),
-          convert_ast(to_ieee_fma2t(expr).value_2)),
-        convert_ast(to_ieee_fma2t(expr).value_3));
+      smt_astt val1 = convert_ast(to_ieee_fma2t(expr).value_1);
+      smt_astt val2 = convert_ast(to_ieee_fma2t(expr).value_2);
+      smt_astt val3 = convert_ast(to_ieee_fma2t(expr).value_3);
+
+      // Fused multiply-add: (val1 * val2) + val3
+      // In true FMA, the intermediate result isn't rounded
+      smt_astt intermediate = mk_mul(val1, val2);
+      smt_astt real_result = mk_add(intermediate, val3);
+
+      const floatbv_type2t &fbv_type = to_floatbv_type(expr->type);
+      a = apply_ieee754_semantics(real_result, fbv_type, nullptr);
     }
     else
     {
@@ -701,8 +981,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     while (is_typecast2t(*ptr) && !is_pointer_type(*ptr))
       ptr = &to_typecast2t(*ptr).from;
 
-    args[0] = convert_ast(*ptr);
-    a = args[0]->project(this, 1);
+    a = convert_ast(*ptr)->project(this, 1);
     break;
   }
   case expr2t::pointer_object_id:
@@ -713,8 +992,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     while (is_typecast2t(*ptr) && !is_pointer_type((*ptr)))
       ptr = &to_typecast2t(*ptr).from;
 
-    args[0] = convert_ast(*ptr);
-    a = args[0]->project(this, 0);
+    a = convert_ast(*ptr)->project(this, 0);
     break;
   }
   case expr2t::pointer_capability_id:
@@ -726,8 +1004,7 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     while (is_typecast2t(*ptr) && !is_pointer_type((*ptr)))
       ptr = &to_typecast2t(*ptr).from;
 
-    args[0] = convert_ast(*ptr);
-    a = args[0]->project(this, 2);
+    a = convert_ast(*ptr)->project(this, 2);
     break;
   }
   case expr2t::typecast_id:
@@ -1107,10 +1384,10 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::concat_id:
   {
-    assert(
-      !int_encoding &&
-      "Concatenate encountered in integer mode; unimplemented (and funky)");
-    a = mk_concat(args[0], args[1]);
+    if (int_encoding)
+      return convert_concat_int_mode(args[0], args[1], expr);
+    else
+      a = mk_concat(args[0], args[1]);
     break;
   }
   case expr2t::implies_id:
@@ -1118,45 +1395,44 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     a = mk_implies(args[0], args[1]);
     break;
   }
+  /* According to the SMT-lib, LIRA focuses on arithmetic operations
+     involving integers and reals. Still, it does not inherently handle
+     bitwise operations, as these fall under the domain of bit-vector theories.
+     Here, we combine LIRA and bitwise operations (such as &, |, ^)
+     in a way that aligns with arithmetic constraints.
+  */
   case expr2t::bitand_id:
   {
-    assert(!int_encoding);
     a = mk_bvand(args[0], args[1]);
     break;
   }
   case expr2t::bitor_id:
   {
-    assert(!int_encoding);
     a = mk_bvor(args[0], args[1]);
     break;
   }
   case expr2t::bitxor_id:
   {
-    assert(!int_encoding);
     a = mk_bvxor(args[0], args[1]);
     break;
   }
   case expr2t::bitnand_id:
   {
-    assert(!int_encoding);
     a = mk_bvnand(args[0], args[1]);
     break;
   }
   case expr2t::bitnor_id:
   {
-    assert(!int_encoding);
     a = mk_bvnor(args[0], args[1]);
     break;
   }
   case expr2t::bitnxor_id:
   {
-    assert(!int_encoding);
     a = mk_bvnxor(args[0], args[1]);
     break;
   }
   case expr2t::bitnot_id:
   {
-    assert(!int_encoding);
     a = mk_bvnot(args[0]);
     break;
   }
@@ -1231,14 +1507,68 @@ smt_astt smt_convt::convert_ast(const expr2tc &expr)
     a = convert_ast(cm.side_2);
     break;
   }
+  case expr2t::forall_id:
+  case expr2t::exists_id:
+  {
+    // TODO: We should detect (and forbid) recursive calls to any quantifier (eg., forall i . forall j. i < j).
+    // TODO: technically the forall could be a list of symbols
+    // TODO: how to support other assertions inside it? e.g., buffer-overflow, arithmetic-overflow, etc...
+    expr2tc symbol;
+    expr2tc predicate;
+
+    if (is_forall2t(expr))
+    {
+      symbol = to_forall2t(expr).side_1;
+      predicate = to_forall2t(expr).side_2;
+    }
+    else
+    {
+      symbol = to_exists2t(expr).side_1;
+      predicate = to_exists2t(expr).side_2;
+    }
+
+    // We only want expressions of typecast(address_of(symbol)).
+    if (is_typecast2t(symbol) && is_address_of2t(to_typecast2t(symbol).from))
+      symbol = to_address_of2t(to_typecast2t(symbol).from).ptr_obj;
+
+    if (!is_symbol2t(symbol))
+    {
+      log_error("Can only use quantifiers with one symbol");
+      expr->dump();
+      abort();
+    }
+
+    /* A bit of spaghetti here: the RHS might have different names due to SSA magic.
+     * int i = 0;
+     * i = 1;
+     * forall(&i . i + 1 > i)
+     *
+     * We are mixing references and values so "i" has different meanings:
+     * i0 = 0
+     * i1 = 1
+     * forall(address-of(i), i1 + 1 > i1)
+     *
+     * Even worse though, we need to create a new function (smt) for all bounded symbols
+     * Some solvers have direct support (Z3) but we may do ourselfes
+     */
+
+    const expr2tc bound_symbol = symbol2tc(
+      symbol->type, fmt::format("__ESBMC_quantifier_{}", quantifier_counter++));
+    replace_name_in_body(symbol, bound_symbol, predicate);
+    a = mk_quantifier(
+      is_forall2t(expr), {convert_ast(bound_symbol)}, convert_ast(predicate));
+    break;
+  }
   default:
     log_error("Couldn't convert expression in unrecognised format\n{}", *expr);
     abort();
   }
 
-  struct smt_cache_entryt entry = {expr, a, ctx_level};
-  smt_cache.insert(entry);
-
+  {
+    struct smt_cache_entryt entry = {expr, a, ctx_level};
+    std::lock_guard lock(smt_cache_mutex);
+    smt_cache.insert(entry);
+  }
   return a;
 }
 
@@ -1457,6 +1787,9 @@ smt_astt smt_convt::convert_terminal(const expr2tc &expr)
     if (sym.thename == "c:@__ESBMC_alloc")
       current_valid_objects_sym = expr;
 
+    if (sym.thename == "c:@__ESBMC_is_dynamic")
+      cur_dynamic = expr;
+
     // Special case for tuple symbols
     if (is_tuple_ast_type(expr))
       return tuple_api->mk_tuple_symbol(
@@ -1581,9 +1914,21 @@ smt_astt smt_convt::convert_signbit(const expr2tc &expr)
   // Extract the top bit
   auto value = convert_ast(signbit.operand);
 
-  const auto width = value->sort->get_data_width();
-  smt_astt is_neg =
-    mk_eq(mk_extract(value, width - 1, width - 1), mk_smt_bv(BigInt(1), 1));
+  smt_astt is_neg;
+
+  if (int_encoding)
+  {
+    // In integer/real encoding mode, floating-point values are represented as reals
+    // We can't extract bits, so check the sign mathematically
+    is_neg = mk_lt(value, mk_smt_real("0"));
+  }
+  else
+  {
+    // In bitvector mode, extract the sign bit
+    const auto width = value->sort->get_data_width();
+    is_neg =
+      mk_eq(mk_extract(value, width - 1, width - 1), mk_smt_bv(BigInt(1), 1));
+  }
 
   // If it's true, return 1. Return 0, othewise.
   return mk_ite(
@@ -2325,6 +2670,36 @@ expr2tc smt_convt::get(const expr2tc &expr)
       decompose_store_chain(expr, update_val);
     }
 
+    /* Try to construct a constant struct when we handle  
+     * struct type "with" expr2tc
+     *
+     * Simplify the source value. If it is a constant,
+     * we will replace the corresponding update value
+     * i.e. S = {.x=0, .y=0}; S = S WITH [x:=1];
+     * Reduced to this: S = {.x=1, .y=0}
+     */
+    if (is_struct_type(with.type))
+    {
+      expr2tc source = get(with.source_value);
+      if (is_constant_struct2t(source))
+      {
+        std::vector<expr2tc> members;
+        constant_struct2t s = to_constant_struct2t(source);
+        const constant_string2t &update_name =
+          to_constant_string2t(with.update_field);
+        for (size_t i = 0; i < s.datatype_members.size(); i++)
+        {
+          irep_idt name = to_struct_type(with.type).member_names[i];
+          if (update_name.value == name)
+            members.push_back(update_val);
+          else
+            members.push_back(s.datatype_members[i]);
+        }
+
+        return get(constant_struct2tc(with.type, members));
+      }
+    }
+
     /* This function get() is only used to obtain assigned values to the RHS of
      * SSA_step assignments in order to generate counter-examples. with2t
      * expressions for these RHS are only generated during the transformations
@@ -2414,18 +2789,31 @@ expr2tc smt_convt::get(const expr2tc &expr)
 
   // Recurse on operands
   bool have_all = true;
-  res->Foreach_operand([this, &have_all](expr2tc &e) {
-    expr2tc new_e;
-    if (e)
-      new_e = get(e);
-    e = new_e;
+  bool has_null_operands = false;
+
+  res->Foreach_operand([this, &have_all, &has_null_operands](expr2tc &e) {
     if (!e)
+    {
+      has_null_operands = true;
+      have_all = false;
+      return;
+    }
+
+    expr2tc new_e = get(e);
+    if (new_e)
+      e = new_e;
+    else
       have_all = false;
   });
 
-  // And simplify
+  // If we have null operands, return early to avoid crashes in simplify()
+  if (has_null_operands)
+    return expr;
+
+  // Only simplify if all operands are valid
   if (have_all)
     simplify(res);
+
   return res;
 }
 
@@ -2444,8 +2832,33 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
   case type2t::floatbv_id:
     if (int_encoding)
     {
-      /* TODO: how to retrieve an floatbv from a rational or algebraic real
-       * number in a meaningful way? */
+      BigInt numerator, denominator;
+      if (get_rational(a, numerator, denominator))
+      {
+        double value = convert_rational_to_double(numerator, denominator);
+        unsigned int type_width = type->get_width();
+
+        if (type_width == ieee_float_spect::single_precision().width())
+        {
+          // Single precision (32-bit float)
+          ieee_floatt ieee_val(ieee_float_spect::single_precision());
+          ieee_val.from_float(static_cast<float>(value));
+          return constant_floatbv2tc(ieee_val);
+        }
+        else if (type_width == ieee_float_spect::double_precision().width())
+        {
+          // Double precision (64-bit double)
+          ieee_floatt ieee_val(ieee_float_spect::double_precision());
+          ieee_val.from_double(value);
+          return constant_floatbv2tc(ieee_val);
+        }
+        else
+        {
+          log_error(
+            "Unsupported floatbv width ({}) for rational conversion",
+            type_width);
+        }
+      }
       return expr2tc();
     }
     return constant_floatbv2tc(fp_api->get_fpbv(a));
@@ -2495,6 +2908,94 @@ expr2tc smt_convt::get_by_ast(const type2tc &type, smt_astt a)
         fmt::underlying(type->type_id));
       return gen_zero(type);
     }
+  }
+}
+
+double smt_convt::convert_rational_to_double(
+  const BigInt &numerator,
+  const BigInt &denominator)
+{
+  constexpr size_t BUFFER_SIZE = 1024;
+
+  std::vector<char> num_buffer(BUFFER_SIZE, '\0');
+  std::vector<char> den_buffer(BUFFER_SIZE, '\0');
+
+  numerator.as_string(num_buffer.data(), BUFFER_SIZE, 10);
+  denominator.as_string(den_buffer.data(), BUFFER_SIZE, 10);
+
+  // Force null termination to prevent over-read
+  num_buffer[BUFFER_SIZE - 1] = '\0';
+  den_buffer[BUFFER_SIZE - 1] = '\0';
+
+  // Check if as_string() actually produced output
+  size_t num_len = strnlen(num_buffer.data(), BUFFER_SIZE);
+  size_t den_len = strnlen(den_buffer.data(), BUFFER_SIZE);
+
+  // Handle the case where as_string() fails for very small numbers
+  if (num_len == 0 || den_len == 0)
+  {
+    bool num_positive =
+      !numerator.is_zero(); // Assumes non-zero means some value exists
+    bool den_positive = !denominator.is_zero();
+
+    if (num_positive && den_positive)
+    {
+      // This likely represents a very small positive rational number
+      // that's too small for string conversion but should be > 0
+      // Return a very small positive value instead of 0.0
+      log_warning(
+        "BigInt as_string() failed for very small rational - returning minimal "
+        "positive value");
+      return DBL_MIN; // Smallest positive normalized double
+    }
+    else
+    {
+      log_warning("BigInt as_string() failed and cannot determine sign");
+      return 0.0;
+    }
+  }
+
+  if (num_len >= BUFFER_SIZE - 1 || den_len >= BUFFER_SIZE - 1)
+  {
+    log_warning(
+      "BigInt to string conversion may have been truncated - buffer too small");
+    return 0.0;
+  }
+
+  try
+  {
+    double num_val = std::stod(num_buffer.data());
+    double den_val = std::stod(den_buffer.data());
+
+    if (den_val == 0.0)
+    {
+      log_warning("Denominator converted to 0.0 despite non-zero BigInt");
+      return 0.0;
+    }
+
+    double result = num_val / den_val;
+
+    // Handle underflow in the division result
+    if (result == 0.0 && num_val != 0.0)
+    {
+      // The division underflowed to zero, but we know the rational is non-zero
+      // Return a minimal positive value to preserve the sign
+      log_warning(
+        "Division result underflowed - returning minimal positive value");
+      return DBL_MIN;
+    }
+
+    return result;
+  }
+  catch (const std::exception &e)
+  {
+    log_warning(
+      "Failed to convert BigInt strings to double: numerator='%s', "
+      "denominator='%s', error: %s",
+      num_buffer.data(),
+      den_buffer.data(),
+      e.what());
+    return 0.0;
   }
 }
 
@@ -2909,7 +3410,7 @@ smt_astt smt_ast::project(
   abort();
 }
 
-void smt_convt::dump_smt()
+std::string smt_convt::dump_smt()
 {
   log_error("SMT dump not implemented for {}", solver_text());
   abort();

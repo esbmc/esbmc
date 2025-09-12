@@ -1,3 +1,11 @@
+# Membership Operators
+lst = [1, 2, 3, 4, 5]
+a = 1
+c = 6
+assert a in lst
+assert c not in lst
+
+
 class Person:
     def __init__(self, name, age):
         self.name = name

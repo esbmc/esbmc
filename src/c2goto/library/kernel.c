@@ -17,6 +17,7 @@ char kernel_memory[KERNEL_MEMORY_SPACE]; //mock user memory
 
 static void check_gfp_flags(gfp_t flags)
 {
+__ESBMC_HIDE:;
   // Define all valid flags
   gfp_t valid_flags =
     __GFP_DMA | __GFP_HIGHMEM | __GFP_DMA32 | __GFP_ZERO | __GFP_NOWARN |
@@ -31,17 +32,20 @@ static void check_gfp_flags(gfp_t flags)
 }
 static void *__kmalloc(size_t size, gfp_t flags)
 {
+__ESBMC_HIDE:;
   return malloc(size);
 }
 
 static void *__kmalloc_large(size_t size, gfp_t flags)
 {
+__ESBMC_HIDE:;
   (void)flags; // Ignore flags.
   return malloc(size);
 }
 
 void *kmalloc(int size, int flags)
 {
+__ESBMC_HIDE:;
   // Check size greater than  zero and less than max
   assert(size > 0 && size <= MAX_ALLOC_SIZE);
   //check flags greater than zero
@@ -62,21 +66,25 @@ void *kmalloc(int size, int flags)
 
 void kfree(const void *ptr)
 {
+__ESBMC_HIDE:;
   free((void *)ptr);
 }
 void *kmalloc_array(size_t n, size_t size, gfp_t flags)
 {
+__ESBMC_HIDE:;
   return __kmalloc(n * size, flags);
 }
 
 void *kcalloc(size_t n, size_t size, gfp_t flags)
 {
+__ESBMC_HIDE:;
   (void)flags;
   return calloc(n, size);
 }
 
 unsigned long copy_to_user(void *to, void *from, unsigned long size)
 {
+__ESBMC_HIDE:;
   //checking on the passed parameters of kernel function
   //the source in kernel space and destination in user space must be valid
   assert(to != NULL);
@@ -95,6 +103,7 @@ unsigned long copy_to_user(void *to, void *from, unsigned long size)
 
 unsigned long copy_from_user(void *to, void *from, unsigned long size)
 {
+__ESBMC_HIDE:;
   //the source in user space and destination in kernel space must be valid
   //avoid dereferencing null pointer
   assert(to != NULL);
@@ -112,6 +121,7 @@ unsigned long copy_from_user(void *to, void *from, unsigned long size)
 
 void spin_lock_init(spinlock_t *lock)
 {
+__ESBMC_HIDE:;
   //check if the lock is valid
   assert(lock != NULL);
   //initialize the lock
@@ -120,6 +130,7 @@ void spin_lock_init(spinlock_t *lock)
 
 bool spin_lock(spinlock_t *lock)
 {
+__ESBMC_HIDE:;
   __ESBMC_assert(lock != NULL, "The lock is null, verfication failed");
 
   int retries = 0;
@@ -141,6 +152,7 @@ bool spin_lock(spinlock_t *lock)
 
 void spin_unlock(spinlock_t *lock)
 {
+__ESBMC_HIDE:;
   __ESBMC_assert(lock != NULL, "The lock is null, verfication failed");
   lock->locked = false;
 }

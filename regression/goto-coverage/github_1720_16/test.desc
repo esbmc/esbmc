@@ -1,8 +1,9 @@
 CORE
 main.c
  --condition-coverage-claims --no-cov-asserts --unwind 10 --no-unwinding-assertions 
-^Reached Conditions:  2
+^Reached Conditions:  4
 ^Short Circuited Conditions:  2
-^Total Conditions:  4
-^Condition Coverage: 25%
+^Total Conditions:  6
+^Condition Properties - SATISFIED:  2
+^Condition Properties - UNSATISFIED:  2
 ^VERIFICATION FAILED$

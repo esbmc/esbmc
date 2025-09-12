@@ -44,8 +44,13 @@ double expm1(double x) /* exp(x) - 1 */
   xe += 3;                         // |xm| in [2^-4,2^-3)
   double r = expm1_taylor(xm) + 1; // r = exp(xm)
   /* xe is > 0 and xe < 1025+3, square xe times to account for 2^xe */
-  for (int i = 0; i < xe; i++)
+  int i = 0;
+  while (i < xe)
+  {
     r *= r;
+    ++i;
+  }
+
   return r - 1;
 }
 
@@ -57,16 +62,16 @@ double exp(double x)
 static double log1p_taylor(double x)
 {
   /* Compute truncated Taylor series of ln(x+1) around 0:
-   * x - x^2/2! + x^3/3! - x^4/4! + ... +- x^n/n! */
+   * x - x^2/2 + x^3/3 - x^4/4 + ... +- x^n/n */
   double acc = x;
   double smd = x;
-  acc += (smd *= x / -2);
-  acc += (smd *= x / -3);
-  acc += (smd *= x / -4);
-  acc += (smd *= x / -5);
-  // acc += (smd *= x / -6);
-  // acc += (smd *= x / -7);
-  // acc += (smd *= x / -8);
+  acc += (smd *= x) / -2;
+  acc += (smd *= x) / 3;
+  acc += (smd *= x) / -4;
+  acc += (smd *= x) / 5;
+  // acc += (smd *= x) / -6;
+  // acc += (smd *= x) / 7;
+  // acc += (smd *= x) / -8;
   return acc;
 }
 

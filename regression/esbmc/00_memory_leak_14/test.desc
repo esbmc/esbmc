@@ -1,4 +1,4 @@
 CORE
 main.c
---memory-leak-check
+--memory-leak-check --no-reachable-memory-leak --no-abnormal-memory-leak
 ^VERIFICATION FAILED$

@@ -1,9 +1,15 @@
 # Module to find LLVM and checks it's version
 
 if(DOWNLOAD_DEPENDENCIES AND ("${LLVM_DIR}" STREQUAL ""))
+  if(ESBMC_CHERI)
+    download_zip_and_extract(LLVM ${ESBMC_CHERI_LLVM_URL})
+    set(LLVM_DIR ${CMAKE_BINARY_DIR}/LLVM/${ESBMC_CHERI_LLVM_NAME})
+    set(Clang_DIR ${CMAKE_BINARY_DIR}/LLVM/${ESBMC_CHERI_LLVM_NAME})  
+  else()
     download_zip_and_extract(LLVM ${ESBMC_LLVM_URL})
     set(LLVM_DIR ${CMAKE_BINARY_DIR}/LLVM/${ESBMC_LLVM_NAME})
-    set(Clang_DIR ${CMAKE_BINARY_DIR}/LLVM/${ESBMC_LLVM_NAME})    
+    set(Clang_DIR ${CMAKE_BINARY_DIR}/LLVM/${ESBMC_LLVM_NAME})   
+  endif() 
 endif()
 
 if(NOT (("${LLVM_DIR}" STREQUAL "LLVM_DIR-NOTFOUND") OR ("${LLVM_DIR}" STREQUAL "")))

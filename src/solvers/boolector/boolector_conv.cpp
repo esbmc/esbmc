@@ -787,9 +787,35 @@ boolector_convt::convert_array_of(smt_astt init_val, unsigned long domain_width)
     arrsort);
 }
 
-void boolector_convt::dump_smt()
+std::string boolector_convt::dump_smt()
 {
-  boolector_dump_smt2(btor, messaget::state.out);
+  FILE *temp_file = tmpfile();
+  if (!temp_file)
+  {
+    log_error("Failed to create temporary file for SMT dump");
+    return "";
+  }
+
+  boolector_dump_smt2(btor, temp_file);
+
+  // Get file size and read entire content
+  fseek(temp_file, 0, SEEK_END);
+  long file_size = ftell(temp_file);
+  fseek(temp_file, 0, SEEK_SET);
+
+  if (file_size <= 0)
+  {
+    fclose(temp_file);
+    return "";
+  }
+
+  // Allocate buffer for entire file content
+  std::vector<char> buffer(file_size + 1);
+  size_t bytes_read = fread(buffer.data(), 1, file_size, temp_file);
+  buffer[bytes_read] = '\0'; // Null terminate
+
+  fclose(temp_file);
+  return std::string(buffer.data(), bytes_read);
 }
 
 void btor_smt_ast::dump() const
@@ -844,4 +870,14 @@ smt_sortt boolector_convt::mk_bvfp_rm_sort()
 {
   return new solver_smt_sort<BoolectorSort>(
     SMT_SORT_BVFP_RM, boolector_bitvec_sort(btor, 3), 3);
+}
+
+smt_astt boolector_convt::mk_quantifier(
+  [[maybe_unused]] bool is_forall,
+  [[maybe_unused]] std::vector<smt_astt> lhs,
+  [[maybe_unused]] smt_astt rhs)
+{
+  log_error("Boolector does not support quantifiers");
+  abort();
+  return nullptr;
 }

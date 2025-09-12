@@ -1,0 +1,4 @@
+THOROUGH
+main.c
+--smtlib --smt-formula-only --output -
+^\(set-option :produce-models true\)$

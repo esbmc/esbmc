@@ -358,7 +358,7 @@ bool clang_c_convertert::get_struct_union_class(const clang::RecordDecl &rd)
    * infinite recursion if the type we're defining refers to itself
    * (via pointers): it either is already being defined (up the stack somewhere)
    * or it's already a complete struct or union in the context. */
-  if (!sym->type.incomplete())
+  if (!sym->type.incomplete() && sym->type.id() != "incomplete_struct")
     return false;
   sym->type.remove(irept::a_incomplete);
 
@@ -517,7 +517,7 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
                       (!vd.isExternallyVisible() && !vd.hasGlobalStorage());
 
   if (
-    symbol.static_lifetime && !symbol.is_extern &&
+    symbol.static_lifetime &&
     (!vd.hasInit() || is_aggregate_type(vd.getType())))
   {
     // the type might contains symbolic types,
@@ -525,8 +525,17 @@ bool clang_c_convertert::get_var(const clang::VarDecl &vd, exprt &new_expr)
 
     // Initialize with zero value, if the symbol has initial value,
     // it will be added later on in this method
-    symbol.value = gen_zero(get_complete_type(t, ns), true);
-    symbol.value.zero_initializer(true);
+    if (symbol.is_extern)
+    {
+      exprt value = exprt("sideeffect", get_complete_type(t, ns));
+      value.statement("nondet");
+      symbol.value = value;
+    }
+    else
+    {
+      symbol.value = gen_zero(get_complete_type(t, ns), true);
+      symbol.value.zero_initializer(true);
+    }
   }
 
   symbolt *added_symbol = nullptr;
@@ -1538,6 +1547,25 @@ bool clang_c_convertert::get_expr(const clang::Stmt &stmt, exprt &new_expr)
       static_cast<const clang::DeclRefExpr &>(stmt);
 
     const clang::Decl &dcl = static_cast<const clang::Decl &>(*decl.getDecl());
+
+    // pull in the type that is used to qualify the decl. This is needed so that
+    // `C<0>::f()` where `C<0>` is a template specialization and `f` is a static member function
+    // works correctly when `C<0>::f` is the only use of `C<0>`.
+    // When parsing the template `C` we do not parse the specializations, so there
+    // is no other code that could parse the type of `C<0>`.
+    // (Yes, clang allows us to get all specializations of a template, but that leads to other problems.
+    // See #1782 or #2284)
+
+    if (const auto nns = decl.getQualifier())
+    {
+      if (const auto type = nns->getAsType())
+      {
+        assert(!nns->isDependent());
+        typet ignored;
+        if (get_type(*type, ignored))
+          return true;
+      }
+    }
 
     if (get_decl_ref(dcl, new_expr))
       return true;
@@ -2857,6 +2885,7 @@ void clang_c_convertert::rewrite_builtin_ref(
     "__builtin_memcpy",
     "__builtin_memmove",
     "__builtin_strcpy",
+    "__builtin_strcmp",
     "__builtin_free",
     "__builtin_strlen",
   };
@@ -3109,35 +3138,35 @@ bool clang_c_convertert::get_binary_operator_expr(
     break;
 
   case clang::BO_LT:
-    new_expr = exprt("<", t);
+    new_expr = exprt("<", bool_type());
     break;
 
   case clang::BO_GT:
-    new_expr = exprt(">", t);
+    new_expr = exprt(">", bool_type());
     break;
 
   case clang::BO_LE:
-    new_expr = exprt("<=", t);
+    new_expr = exprt("<=", bool_type());
     break;
 
   case clang::BO_GE:
-    new_expr = exprt(">=", t);
+    new_expr = exprt(">=", bool_type());
     break;
 
   case clang::BO_EQ:
-    new_expr = exprt("=", t);
+    new_expr = exprt("=", bool_type());
     break;
 
   case clang::BO_NE:
-    new_expr = exprt("notequal", t);
+    new_expr = exprt("notequal", bool_type());
     break;
 
   case clang::BO_LAnd:
-    new_expr = exprt("and", t);
+    new_expr = exprt("and", bool_type());
     break;
 
   case clang::BO_LOr:
-    new_expr = exprt("or", t);
+    new_expr = exprt("or", bool_type());
     break;
 
   case clang::BO_Assign:

@@ -1,4 +1,4 @@
 CORE
 inheritance.solast 
---function test_inheritance --sol inheritance.sol
+--function test_inheritance --sol inheritance.sol --k-induction --bound
 ^VERIFICATION FAILED$

@@ -44,6 +44,10 @@ std::unordered_set<std::string> goto_functionst::reached_claims;
 std::unordered_multiset<std::string> goto_functionst::reached_mul_claims;
 std::unordered_set<std::string> goto_functionst::verified_claims;
 
+std::mutex goto_functionst::reached_claims_mutex;
+std::mutex goto_functionst::reached_mul_claims_mutex;
+std::mutex goto_functionst::verified_claims_mutex;
+
 bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   : options(opts), context(_context), ns(context)
 {
@@ -94,18 +98,23 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   }
 }
 
-void bmct::successful_trace()
+void bmct::successful_trace(const symex_target_equationt &eq [[maybe_unused]])
 {
   if (options.get_bool_option("result-only"))
     return;
 
   std::string witness_output = options.get_option("witness-output");
+  std::string witness_yaml_output = options.get_option("witness-output-yaml");
   if (witness_output != "")
   {
     goto_tracet goto_trace;
     log_progress("Building successful trace");
-    /* build_successful_goto_trace(eq, ns, goto_trace); */
-    correctness_graphml_goto_trace(options, ns, goto_trace);
+    // correctness witness, why did goto trace ignore it in the past?
+    // build_successful_goto_trace(eq, ns, goto_trace);
+    if (witness_yaml_output == "")
+      correctness_graphml_goto_trace(options, ns, goto_trace);
+    else
+      correctness_yaml_goto_trace(options, ns, goto_trace);
   }
 }
 
@@ -133,8 +142,15 @@ void bmct::error_trace(smt_convt &smt_conv, const symex_target_equationt &eq)
   }
 
   std::string witness_output = options.get_option("witness-output");
+  std::string witness_yaml_output = options.get_option("witness-output-yaml");
   if (witness_output != "")
-    violation_graphml_goto_trace(options, ns, goto_trace);
+  {
+    log_progress("Building error trace");
+    if (witness_yaml_output == "")
+      violation_graphml_goto_trace(options, ns, goto_trace);
+    else
+      violation_yaml_goto_trace(options, ns, goto_trace);
+  }
 
   if (options.get_bool_option("generate-testcase"))
   {
@@ -217,7 +233,33 @@ smt_convt::resultt bmct::run_decision_procedure(
     options.get_bool_option("smt-formula-too") ||
     options.get_bool_option("smt-formula-only"))
   {
-    smt_conv.dump_smt();
+    std::string smt_formula = smt_conv.dump_smt();
+
+    // Print the SMT formula to stdout or file
+    if (!smt_formula.empty())
+    {
+      const std::string &output_path = options.get_option("output");
+
+      if (output_path.empty() || output_path == "-")
+      {
+        // Print to stdout
+        fprintf(stdout, "%s", smt_formula.c_str());
+      }
+      else
+      {
+        // Print to file
+        FILE *file = fopen(output_path.c_str(), "w");
+        if (!file)
+          log_error("Could not open output file '{}'", output_path);
+        else
+        {
+          fprintf(file, "%s", smt_formula.c_str());
+          fclose(file);
+          log_status("SMT formula dumped to file: {}", output_path);
+        }
+      }
+    }
+
     if (options.get_bool_option("smt-formula-only"))
       return smt_convt::P_SMTLIB;
   }
@@ -324,7 +366,7 @@ void bmct::report_trace(
     }
     else if (!bs)
     {
-      successful_trace();
+      successful_trace(eq);
     }
     break;
 
@@ -349,41 +391,60 @@ void bmct::report_trace(
   Whenever an error_trace or successful_trace is reported
   we finish reasoning this claims, thereby converting it to SKIP
 */
-void bmct::clear_verified_claims(
+void bmct::clear_verified_claims_in_ssa(
+  symex_target_equationt &local_eq,
   const claim_slicer &claim,
   const bool &is_goto_cov)
 {
-  // first record that we have verified it
-  std::string claim_sig = claim.claim_msg + "\t" + claim.claim_loc;
-  symex->goto_functions.verified_claims.emplace(claim_sig);
-
-  auto temp = symex->goto_functions;
-  // then remove it by converting to SKIP
-  for (auto &it : symex->goto_functions.function_map)
+  for (auto &step : local_eq.SSA_steps)
   {
-    for (auto &instruction : it.second.body.instructions)
+    if (!step.is_assert())
+      continue;
+
+    if (!step.source.is_set)
+      continue;
+
+    bool loc_match = (step.source.pc->location.as_string() == claim.claim_loc);
+    bool expr_match = false;
+
+    if (is_goto_cov)
+      expr_match =
+        (step.source.pc->location.comment().as_string() == claim.claim_msg);
+    else
+      expr_match = (from_expr(ns, "", step.guard) == claim.claim_msg);
+
+    if (loc_match && expr_match)
     {
+      step.cond = step.cond = gen_true_expr();
+    }
+  }
+}
+
+void bmct::clear_verified_claims_in_goto(
+  const claim_slicer &claim,
+  const bool &is_goto_cov)
+{
+  for (auto &func : symex->goto_functions.function_map)
+  {
+    for (auto &instr : func.second.body.instructions)
+    {
+      std::lock_guard lock(instr.clear_claims_mutex);
+      if (!instr.is_assert())
+        continue;
+
+      bool loc_match = (instr.location.as_string() == claim.claim_loc);
+      bool expr_match = false;
+
+      std::string guard_str = from_expr(ns, "", instr.guard);
+
       if (is_goto_cov)
-      {
-        if (
-          instruction.is_assert() &&
-          instruction.location.as_string() == claim.claim_loc &&
-          instruction.location.comment().as_string() == claim.claim_msg)
-        {
-          instruction.make_skip();
-          break;
-        }
-      }
+        expr_match = (instr.location.comment().as_string() == claim.claim_msg);
       else
+        expr_match = (guard_str == claim.claim_msg);
+
+      if (loc_match && expr_match)
       {
-        if (
-          instruction.is_assert() &&
-          instruction.location.as_string() == claim.claim_loc &&
-          from_expr(ns, "", instruction.guard) == claim.claim_msg)
-        {
-          instruction.make_skip();
-          break;
-        }
+        instr.make_skip();
       }
     }
   }
@@ -391,9 +452,9 @@ void bmct::clear_verified_claims(
 
 void bmct::report_multi_property_trace(
   const smt_convt::resultt &res,
-  const std::unique_ptr<smt_convt> &solver,
+  smt_convt *&solver,
   const symex_target_equationt &local_eq,
-  const size_t ce_counter,
+  const std::atomic<size_t> ce_counter,
   const goto_tracet &goto_trace,
   const std::string &msg)
 {
@@ -412,7 +473,7 @@ void bmct::report_multi_property_trace(
     std::string output_file = options.get_option("cex-output");
     if (output_file != "")
     {
-      std::ofstream out(fmt::format("{}-{}", ce_counter, output_file));
+      std::ofstream out(fmt::format("{}-{}", ce_counter.load(), output_file));
       show_goto_trace(out, ns, goto_trace);
     }
 
@@ -1128,7 +1189,8 @@ smt_convt::resultt bmct::run_thread(std::shared_ptr<symex_target_equationt> &eq)
     if (
       options.get_bool_option("multi-property") &&
       options.get_bool_option("base-case"))
-      return multi_property_check(*eq, solver_result.remaining_claims);
+      return multi_property_check(
+        *eq, solver_result.remaining_claims, *runtime_solver);
 
     return run_decision_procedure(*runtime_solver, *eq);
   }
@@ -1219,7 +1281,8 @@ int bmct::ltl_run_thread(symex_target_equationt &equation) const
 
 smt_convt::resultt bmct::multi_property_check(
   const symex_target_equationt &eq,
-  size_t remaining_claims)
+  size_t remaining_claims,
+  smt_convt &runtime_solver)
 {
   // As of now, it only makes sense to do this for the base-case
   assert(
@@ -1228,14 +1291,23 @@ smt_convt::resultt bmct::multi_property_check(
 
   // Initial values
   smt_convt::resultt final_result = smt_convt::P_UNSATISFIABLE;
-  size_t ce_counter = 0;
-  std::unordered_set<size_t> jobs;
   std::mutex result_mutex;
+  std::atomic<size_t> ce_counter{0};
+  std::unordered_set<size_t> jobs;
+
+  // Add summary tracking
+  SimpleSummary summary;
+  summary.total_properties = remaining_claims;
 
   // For coverage info
   auto &reached_claims = symex->goto_functions.reached_claims;
   auto &reached_mul_claims = symex->goto_functions.reached_mul_claims;
   auto &verified_claims = symex->goto_functions.verified_claims;
+  auto &reached_claims_mutex = symex->goto_functions.reached_claims_mutex;
+  auto &reached_mul_claims_mutex =
+    symex->goto_functions.reached_mul_claims_mutex;
+  auto &verified_claims_mutex = symex->goto_functions.verified_claims_mutex;
+
   // "Assertion Cov"
   bool is_assert_cov = options.get_bool_option("assertion-coverage") ||
                        options.get_bool_option("assertion-coverage-claims");
@@ -1265,13 +1337,16 @@ smt_convt::resultt bmct::multi_property_check(
   const std::string fail_fast = options.get_option("multi-fail-fast");
   const bool is_fail_fast = !fail_fast.empty() ? true : false;
   const int fail_fast_limit = is_fail_fast ? stoi(fail_fast) : 0;
-  int fail_fast_cnt = 0;
+  std::atomic<int> fail_fast_cnt{0};
 
   if (is_fail_fast && fail_fast_limit < 0)
   {
     log_error("the value of multi-fail-fast should be positive!");
     abort();
   }
+
+  // For color output
+  bool is_color = options.get_bool_option("color");
 
   // TODO: This is the place to check a cache
   for (size_t i = 1; i <= remaining_claims; i++)
@@ -1294,9 +1369,13 @@ smt_convt::resultt bmct::multi_property_check(
                        &ce_counter,
                        &final_result,
                        &result_mutex,
+                       &summary,
                        &reached_claims,
                        &reached_mul_claims,
                        &verified_claims,
+                       &reached_claims_mutex,
+                       &reached_mul_claims_mutex,
+                       &verified_claims_mutex,
                        &is_assert_cov,
                        &is_cond_cov,
                        &is_vb,
@@ -1308,7 +1387,9 @@ smt_convt::resultt bmct::multi_property_check(
                        &fail_fast_cnt,
                        &bs,
                        &fc,
-                       &is](const size_t &i) {
+                       &is,
+                       &is_color,
+                       &runtime_solver](const size_t &i) {
     //"multi-fail-fast n": stop after first n SATs found.
     if (is_fail_fast && fail_fast_cnt >= fail_fast_limit)
       return;
@@ -1329,23 +1410,34 @@ smt_convt::resultt bmct::multi_property_check(
     bool is_verified = false;
     std::string claim_sig = claim.claim_msg + "\t" + claim.claim_loc;
     if (is_assert_cov)
-      // C++20 reached_mul_claims.contains
-      is_verified = reached_mul_claims.count(claim_sig) ? true : false;
-    else
-      is_verified = reached_claims.count(claim_sig) ? true : false;
-    if (is_assert_cov && is_verified)
-      // insert to the multiset before skipping the verification process
-      reached_mul_claims.emplace(claim_sig);
-
-    if (verified_claims.count(claim_sig))
     {
-      clear_verified_claims(claim, is_goto_cov);
+      // C++20 reached_mul_claims.contains
+      std::lock_guard lock(reached_mul_claims_mutex);
+      is_verified = reached_mul_claims.count(claim_sig) ? true : false;
+    }
+    else
+    {
+      std::lock_guard lock(reached_claims_mutex);
+      is_verified = reached_claims.count(claim.claim_cstr) ? true : false;
+    }
+    if (is_assert_cov && is_verified)
+    {
+      // insert to the multiset before skipping the verification process
+      std::lock_guard lock(reached_mul_claims_mutex);
+      reached_mul_claims.emplace(claim_sig);
+    }
+
+    if (verified_claims.count(claim.claim_cstr))
+    {
+      clear_verified_claims_in_ssa(local_eq, claim, is_goto_cov);
+      clear_verified_claims_in_goto(claim, is_goto_cov);
       is_verified = true;
     }
 
     // skip if we have already verified
     if (is_verified && !is_keep_verified)
     {
+      ++summary.skipped_properties;
       return;
     }
 
@@ -1363,16 +1455,60 @@ smt_convt::resultt bmct::multi_property_check(
     }
 
     // Initialize a solver
-    std::unique_ptr<smt_convt> runtime_solver(create_solver("", ns, options));
+    smt_convt *solver_ptr = &runtime_solver;
+    std::unique_ptr<smt_convt> new_solver;
+    if (!options.get_bool_option("smt-during-symex"))
+    {
+      new_solver = std::unique_ptr<smt_convt>(create_solver("", ns, options));
+      solver_ptr = new_solver.get();
+    }
 
+    // Store solver name initially but not again
+    std::call_once(summary.solver_name_flag, [&]() {
+      summary.solver_name = solver_ptr->solver_text();
+    });
     log_status(
       "Solving claim '{}' with solver {}",
-      claim.claim_msg,
-      runtime_solver->solver_text());
+      claim.claim_cstr,
+      solver_ptr->solver_text());
 
-    // Save current instance
+    // Save current instance with timing
+    fine_timet solve_start = current_time();
     smt_convt::resultt solver_result =
-      run_decision_procedure(*runtime_solver, local_eq);
+      run_decision_procedure(*solver_ptr, local_eq);
+    fine_timet solve_stop = current_time();
+
+    // Show colored result after solving
+    const std::string GREEN = is_color ? "\033[32m" : "";
+    const std::string RED = is_color ? "\033[31m" : "";
+    const std::string RESET = is_color ? "\033[0m" : "";
+
+    if (solver_result == smt_convt::P_UNSATISFIABLE)
+    {
+      // Claim passed - show in green
+      log_status("{}✓ PASSED{}: '{}'", GREEN, RESET, claim.claim_cstr);
+    }
+    else if (solver_result == smt_convt::P_SATISFIABLE)
+    {
+      // Claim failed - show in red
+      log_status("{}✗ FAILED{}: '{}'", RED, RESET, claim.claim_cstr);
+    }
+
+    double solve_time_s = (solve_stop - solve_start);
+
+    // Atomically update summary with timing and results
+    double old_total_time_s = summary.total_time_s;
+    double new_total_time_s;
+    do
+    {
+      new_total_time_s = old_total_time_s + solve_time_s;
+    } while (!summary.total_time_s.compare_exchange_weak(
+      old_total_time_s, new_total_time_s));
+
+    if (solver_result == smt_convt::P_SATISFIABLE)
+      summary.failed_properties++;
+    else if (solver_result == smt_convt::P_UNSATISFIABLE)
+      summary.passed_properties++;
 
     // If an assertion instance is verified to be violated
     if (solver_result == smt_convt::P_SATISFIABLE)
@@ -1384,13 +1520,26 @@ smt_convt::resultt bmct::multi_property_check(
         is_compact_trace = false;
 
       goto_tracet goto_trace;
-      build_goto_trace(local_eq, *runtime_solver, goto_trace, is_compact_trace);
+      build_goto_trace(local_eq, *solver_ptr, goto_trace, is_compact_trace);
 
-      // Store claim_sig
+      // Store claim signature
       if (is_assert_cov)
+      {
+        std::lock_guard lock(reached_mul_claims_mutex);
         reached_mul_claims.emplace(claim_sig);
+      }
       else
-        reached_claims.emplace(claim_sig);
+      {
+        std::lock_guard lock(reached_claims_mutex);
+        if (is_goto_cov)
+          reached_claims.emplace(claim_sig);
+        else
+          reached_claims.emplace(claim.claim_cstr);
+      }
+
+      // update cex number
+      size_t previous_ce_counter;
+      previous_ce_counter = ce_counter++;
 
       // for verbose output of cond coverage
       if (is_vb)
@@ -1404,18 +1553,20 @@ smt_convt::resultt bmct::multi_property_check(
           reached_claims,
           reached_mul_claims);
       else
+      {
         report_multi_property_trace(
           solver_result,
-          runtime_solver,
+          solver_ptr,
           local_eq,
-          ce_counter,
+          previous_ce_counter,
           goto_trace,
           claim.claim_msg);
+      }
 
-      final_result = solver_result;
-
-      // update cex number
-      ++ce_counter;
+      {
+        std::lock_guard lock(result_mutex);
+        final_result = solver_result;
+      }
 
       // Update fail-fast-counter
       fail_fast_cnt++;
@@ -1423,17 +1574,53 @@ smt_convt::resultt bmct::multi_property_check(
       // for kind && incr: remove verified claims
       // whenever we find a property violation, we remove the claim
       if (!is_keep_verified && (bs || fc || is))
-        clear_verified_claims(claim, is_goto_cov);
+      {
+        clear_verified_claims_in_ssa(local_eq, claim, is_goto_cov);
+        clear_verified_claims_in_goto(claim, is_goto_cov);
+      }
     }
     else if (solver_result == smt_convt::P_UNSATISFIABLE)
       // for kind && incr: remove verified claims
       // when we find a property proven correct in
       // either forward condition or inductive step
       if (!is_keep_verified && !bs)
-        clear_verified_claims(claim, is_goto_cov);
+      {
+        clear_verified_claims_in_ssa(local_eq, claim, is_goto_cov);
+        clear_verified_claims_in_goto(claim, is_goto_cov);
+      }
   };
 
-  std::for_each(std::begin(jobs), std::end(jobs), job_function);
+  // PARALLEL
+  if (options.get_bool_option("parallel-solving"))
+  {
+    /* NOTE: I would love to use std::for_each here, but it is not giving
+       * the result I would expect. My guess is either compiler version
+       * or some magic flag that we are not using.
+       *
+       * Nevertheless, we can achieve the same results by just creating
+       * threads.
+       */
+
+    // TODO: Running everything in parallel might be a bad idea.
+    //       Should we also add a thread pool?
+    std::vector<std::thread> parallel_jobs;
+    for (const auto &i : jobs)
+      parallel_jobs.push_back(std::thread(job_function, i));
+
+    // Main driver
+    for (auto &t : parallel_jobs)
+    {
+      t.join();
+    }
+    // We could remove joined jobs from the parallel_jobs vector.
+    // However, its probably not worth for small vectors.
+  }
+  // SEQUENTIAL
+  else
+    std::for_each(std::begin(jobs), std::end(jobs), job_function);
+
+  // show summary
+  report_simple_summary(summary);
 
   // For coverage with fixed bound unwinding
   if (
@@ -1442,4 +1629,48 @@ smt_convt::resultt bmct::multi_property_check(
     report_coverage(options, reached_claims, reached_mul_claims);
 
   return final_result;
+}
+
+void bmct::report_simple_summary(const SimpleSummary &summary) const
+{
+  if (options.get_bool_option("result-only"))
+    return;
+
+  // ANSI color codes
+  bool is_color = options.get_bool_option("color");
+  const std::string GREEN = is_color ? "\033[32m" : "";
+  const std::string RED = is_color ? "\033[31m" : "";
+  const std::string RESET = is_color ? "\033[0m" : "";
+
+  // Build the properties summary string with colors
+  std::ostringstream properties_oss;
+  properties_oss << "Properties: " << summary.total_properties << " verified";
+
+  if (summary.passed_properties > 0)
+    properties_oss << " " << GREEN << "✓ " << summary.passed_properties
+                   << " passed" << RESET;
+
+  if (summary.skipped_properties > 0)
+    properties_oss << ", " << GREEN << "✓ " << summary.skipped_properties
+                   << " skipped" << RESET;
+
+  if (summary.failed_properties > 0)
+    properties_oss << ", " << RED << "✗ " << summary.failed_properties
+                   << " failed" << RESET;
+
+  // Build the timing summary string
+  double avg_time = summary.total_properties > 0
+                      ? summary.total_time_s / summary.total_properties
+                      : 0.0;
+
+  std::ostringstream timing_oss;
+  timing_oss << "Solver: " << summary.solver_name
+             << " • Decision procedure total time: "
+             << time2string(summary.total_time_s) << "s"
+             << " • Avg: " << std::fixed << std::setprecision(1)
+             << time2string(avg_time) << "s/property";
+
+  // Output the summary
+  log_result("{}", properties_oss.str());
+  log_result("{}", timing_oss.str());
 }

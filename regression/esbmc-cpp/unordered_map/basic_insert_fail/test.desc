@@ -1,0 +1,4 @@
+CORE
+main.cpp
+--incremental-bmc --z3
+^VERIFICATION FAILED$

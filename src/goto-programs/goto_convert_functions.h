@@ -42,6 +42,12 @@ protected:
   // function calls
   //
   void add_return(goto_functiont &f, const locationt &location);
+
+  void wallop_type_impl(
+    irep_idt name,
+    typename_mapt &typenames,
+    const irep_idt &sname,
+    std::set<irep_idt> &in_progress);
 };
 
 #endif

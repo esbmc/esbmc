@@ -216,6 +216,11 @@ protected:
   void symex_assert();
 
   /**
+   *  Interpret a LOOP_INVARIANT instruction.
+   */
+  void symex_loop_invariant();
+
+  /**
    *  Perform incremental SMT solving for assert and assume statements.
    *  @param expr Expression that must be checked.
    *  @param msg Textual message explaining assertion.
@@ -537,6 +542,35 @@ protected:
   bool is_valid_object(const symbolt &symbol);
 
   /**
+   * Handle side effects in the symbolic execution.
+   * 
+   * @param lhs The left-hand side expression (target of the assignment).
+   * @param effect The side effect expression to be handled, typically one of
+   *        the `sideeffect2t` kinds like `malloc`, `realloc`, etc.
+   * 
+   * This function does not return any value; it modifies the symbolic execution state
+   * based on the side effect encountered.
+   */
+  void handle_sideeffect(
+    const expr2tc &lhs,
+    const sideeffect2t &effect,
+    const guardt &guard);
+
+  /**
+   * Handle conditional expressions (if2t) in the symbolic execution.
+   * 
+   * @param lhs The left-hand side expression (target of the assignment).
+   * @param if_effect The conditional expression (`if2t`) to be handled, containing
+   *        the condition, true branch, and false branch.
+   * 
+   * This function returns true if there is a sideeffect.
+   */
+  bool handle_conditional(
+    const expr2tc &lhs,
+    const if2t &if_effect,
+    const guardt &guard);
+
+  /**
    *  Make symbolic assignment.
    *  Renames things; records assignment in symex target, and all the relevant
    *  renaming and value set tracking objects. The primary task of this routine
@@ -750,31 +784,50 @@ protected:
     const bool hidden);
 
   /** Symbolic implementation of malloc. */
-  expr2tc symex_malloc(const expr2tc &lhs, const sideeffect2t &code);
+  expr2tc symex_malloc(
+    const expr2tc &lhs,
+    const sideeffect2t &code,
+    const guardt &guard);
   /** Implementation of realloc. */
-  void symex_realloc(const expr2tc &lhs, const sideeffect2t &code);
+  void symex_realloc(
+    const expr2tc &lhs,
+    const sideeffect2t &code,
+    const guardt &guard);
   /** Symbolic implementation of alloca. */
-  expr2tc symex_alloca(const expr2tc &lhs, const sideeffect2t &code);
+  expr2tc symex_alloca(
+    const expr2tc &lhs,
+    const sideeffect2t &code,
+    const guardt &guard);
   /** Wrapper around for alloca and malloc. */
-  expr2tc
-  symex_mem(const bool is_malloc, const expr2tc &lhs, const sideeffect2t &code);
+  expr2tc symex_mem(
+    const bool is_malloc,
+    const expr2tc &lhs,
+    const sideeffect2t &code,
+    const guardt &guard);
   /** Pointer modelling update function */
   void track_new_pointer(
     const expr2tc &ptr_obj,
     const type2tc &new_type,
+    const guardt &guard,
     const expr2tc &size = expr2tc());
   /** Symbolic implementation of free */
   void symex_free(const expr2tc &expr);
   /** Symbolic implementation of c++'s delete. */
   void symex_cpp_delete(const expr2tc &code);
   /** Symbolic implementation of c++'s new. */
-  void symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code);
+  void symex_cpp_new(
+    const expr2tc &lhs,
+    const sideeffect2t &code,
+    const guardt &guard);
   /** Symbolic implementation of printf */
   void symex_printf(const expr2tc &lhs, expr2tc &code);
   /** Symbolic implementation of scanf and fscanf */
   void symex_input(const code_function_call2t &expr);
   /** Symbolic implementation of va_arg */
-  void symex_va_arg(const expr2tc &lhs, const sideeffect2t &code);
+  void symex_va_arg(
+    const expr2tc &lhs,
+    const sideeffect2t &code,
+    const guardt &guard);
 
   /**
    *  Replace nondet func calls with nondeterminism.
@@ -864,6 +917,8 @@ protected:
 
   /** Flag to indicate if we are go into the unexpected flow. */
   bool inside_unexpected;
+  /** Store the unexpected function end */
+  irep_idt unexpected_end;
 
   /** Disable return value optimization */
   bool no_return_value_opt;

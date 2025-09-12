@@ -1,0 +1,4 @@
+KNOWNBUG
+main.py
+
+^ERROR: TypeError: invalid string passed to chr\(\): 'hello'$

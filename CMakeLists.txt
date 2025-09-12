@@ -10,8 +10,8 @@ cmake_policy(SET CMP0091 NEW)
 project (ESBMC)
 
 set (ESBMC_VERSION_MAJOR 7)
-set (ESBMC_VERSION_MINOR 8)
-set (ESBMC_VERSION_PATCH 1)
+set (ESBMC_VERSION_MINOR 10)
+set (ESBMC_VERSION_PATCH 0)
 set (ESBMC_VERSION "${ESBMC_VERSION_MAJOR}.${ESBMC_VERSION_MINOR}.${ESBMC_VERSION_PATCH}")
 
 # The only default solver available is smtlib
@@ -100,7 +100,11 @@ endif()
 
 
 # This MUST be executed after BuildStatic since it sets Boost Static flags
-find_package(Boost REQUIRED COMPONENTS filesystem system date_time program_options iostreams)
+# In boost-1.89, system and filesystem has been remove
+# To support the older version, added "optional" here
+find_package(Boost REQUIRED 
+  COMPONENTS date_time program_options iostreams
+  OPTIONAL_COMPONENTS system filesystem)
 include(FindLocalLLVM)
 
 include(ExternalDependencies)

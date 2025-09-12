@@ -25,20 +25,49 @@
 #include <algorithm>
 #include <util/array2string.h>
 
-expr2tc goto_symext::symex_malloc(const expr2tc &lhs, const sideeffect2t &code)
+expr2tc goto_symext::symex_malloc(
+  const expr2tc &lhs,
+  const sideeffect2t &code,
+  const guardt &guard)
 {
-  return symex_mem(true, lhs, code);
+  return symex_mem(true, lhs, code, guard);
 }
 
-expr2tc goto_symext::symex_alloca(const expr2tc &lhs, const sideeffect2t &code)
+expr2tc goto_symext::symex_alloca(
+  const expr2tc &lhs,
+  const sideeffect2t &code,
+  const guardt &guard)
 {
-  return symex_mem(false, lhs, code);
+  return symex_mem(false, lhs, code, guard);
 }
 
-void goto_symext::symex_realloc(const expr2tc &lhs, const sideeffect2t &code)
+void goto_symext::symex_realloc(
+  const expr2tc &lhs,
+  const sideeffect2t &code,
+  const guardt &guard)
 {
   expr2tc src_ptr = code.operand;
   expr2tc realloc_size = code.size;
+
+  // Check if realloc size is zero
+  expr2tc zero_size = gen_zero(realloc_size->type);
+
+  // Create equality expression
+  expr2tc is_zero_size = equality2tc(realloc_size, zero_size);
+  do_simplify(is_zero_size);
+
+  // If realloc size is 0, free ptr and return NULL
+  if (is_true(is_zero_size))
+  {
+    // Free the pointer
+    expr2tc fr = code_free2tc(src_ptr);
+    symex_free(fr);
+
+    // Assign NULL to lhs
+    expr2tc null_ptr = gen_zero(lhs->type);
+    symex_assign(code_assign2tc(lhs, null_ptr), true, guard);
+    return;
+  }
 
   internal_deref_items.clear();
   expr2tc deref = dereference2tc(get_empty_type(), src_ptr);
@@ -57,10 +86,10 @@ void goto_symext::symex_realloc(const expr2tc &lhs, const sideeffect2t &code)
   std::list<std::pair<expr2tc, expr2tc>> result_list;
   for (auto &item : internal_deref_items)
   {
-    expr2tc guard = item.guard;
+    expr2tc g = item.guard;
     cur_state->rename_address(item.object);
-    cur_state->guard.guard_expr(guard);
-    target->renumber(guard, item.object, realloc_size, cur_state->source);
+    cur_state->guard.guard_expr(g);
+    target->renumber(g, item.object, realloc_size, cur_state->source);
     type2tc new_ptr = pointer_type2tc(item.object->type);
     expr2tc addrof = address_of2tc(new_ptr, item.object);
     result_list.emplace_back(addrof, item.guard);
@@ -98,17 +127,35 @@ void goto_symext::symex_realloc(const expr2tc &lhs, const sideeffect2t &code)
       result = if2tc(result->type, it.second, it.first, result);
   }
 
+  // Introduce a symbolic condition to model allocation failure
+  expr2tc alloc_fail = sideeffect2tc(
+    get_bool_type(),
+    expr2tc(),
+    expr2tc(),
+    std::vector<expr2tc>(),
+    type2tc(),
+    sideeffect2t::nondet);
+  replace_nondet(alloc_fail);
+
+  if (!options.get_bool_option("force-realloc-success"))
+  {
+    // Model memory exhaustion: if alloc_fail is true, return NULL
+    expr2tc null_ptr = symbol2tc(lhs->type, "NULL");
+    result = if2tc(result->type, alloc_fail, null_ptr, result);
+  }
+
   // Install pointer modelling data into the relevant arrays.
   expr2tc ptr_obj = pointer_object2tc(pointer_type2(), result);
-  track_new_pointer(ptr_obj, type2tc(), realloc_size);
+  track_new_pointer(ptr_obj, type2tc(), guard, realloc_size);
 
-  symex_assign(code_assign2tc(lhs, result), true);
+  symex_assign(code_assign2tc(lhs, result), true, guard);
 }
 
 expr2tc goto_symext::symex_mem(
   const bool is_malloc,
   const expr2tc &lhs,
-  const sideeffect2t &code)
+  const sideeffect2t &code,
+  const guardt &guard)
 {
   if (is_nil_expr(lhs))
     return expr2tc(); // ignore
@@ -227,11 +274,16 @@ expr2tc goto_symext::symex_mem(
   cur_state->rename(rhs);
   expr2tc rhs_copy(rhs);
 
-  symex_assign(code_assign2tc(lhs, rhs), true);
+  symex_assign(code_assign2tc(lhs, rhs), true, guard);
 
   expr2tc ptr_obj = pointer_object2tc(pointer_type2(), ptr_rhs);
-  track_new_pointer(ptr_obj, new_type);
 
+  if (size_is_one)
+    track_new_pointer(ptr_obj, new_type, guard);
+  else
+    track_new_pointer(ptr_obj, new_type, guard, size);
+
+  alloc_guard.append(guard);
   dynamic_memory.emplace_back(
     rhs_copy, alloc_guard, !is_malloc, symbol.name.as_string());
 
@@ -241,6 +293,7 @@ expr2tc goto_symext::symex_mem(
 void goto_symext::track_new_pointer(
   const expr2tc &ptr_obj,
   const type2tc &new_type,
+  const guardt &guard,
   const expr2tc &size)
 {
   // Also update all the accounting data.
@@ -251,12 +304,12 @@ void goto_symext::track_new_pointer(
 
   expr2tc idx = index2tc(get_bool_type(), sym, ptr_obj);
   expr2tc truth = gen_true_expr();
-  symex_assign(code_assign2tc(idx, truth), true);
+  symex_assign(code_assign2tc(idx, truth), true, guard);
 
   expr2tc valid_sym = symbol2tc(sym_type, valid_ptr_arr_name);
   expr2tc valid_index_expr = index2tc(get_bool_type(), valid_sym, ptr_obj);
   truth = gen_true_expr();
-  symex_assign(code_assign2tc(valid_index_expr, truth), true);
+  symex_assign(code_assign2tc(valid_index_expr, truth), true, guard);
 
   type2tc sz_sym_type = array_type2tc(size_type2(), expr2tc(), true);
   expr2tc sz_sym = symbol2tc(sz_sym_type, alloc_size_arr_name);
@@ -265,7 +318,7 @@ void goto_symext::track_new_pointer(
   expr2tc object_size_exp =
     is_nil_expr(size) ? type_byte_size_expr(new_type) : size;
 
-  symex_assign(code_assign2tc(sz_index_expr, object_size_exp), true);
+  symex_assign(code_assign2tc(sz_index_expr, object_size_exp), true, guard);
 }
 
 void goto_symext::symex_free(const expr2tc &expr)
@@ -543,7 +596,10 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
   cur_state->source.pc++;
 }
 
-void goto_symext::symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code)
+void goto_symext::symex_cpp_new(
+  const expr2tc &lhs,
+  const sideeffect2t &code,
+  const guardt &guard)
 {
   expr2tc size = code.size;
 
@@ -596,10 +652,11 @@ void goto_symext::symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code)
   symex_assign(code_assign2tc(lhs, rhs), true);
 
   expr2tc ptr_obj = pointer_object2tc(pointer_type2(), ptr_rhs);
-  track_new_pointer(ptr_obj, newtype, size);
+  track_new_pointer(ptr_obj, newtype, guard, size);
 
-  dynamic_memory.emplace_back(
-    rhs_copy, cur_state->guard, false, symbol.name.as_string());
+  guardt g(cur_state->guard);
+  g.append(guard);
+  dynamic_memory.emplace_back(rhs_copy, g, false, symbol.name.as_string());
 }
 
 void goto_symext::symex_cpp_delete(const expr2tc &expr)
@@ -891,7 +948,8 @@ void goto_symext::intrinsic_kill_monitor(reachability_treet &art)
 
 void goto_symext::symex_va_arg(
   const expr2tc &lhs,
-  const sideeffect2t &code [[maybe_unused]])
+  const sideeffect2t &code [[maybe_unused]],
+  const guardt &guard)
 {
   std::string base =
     id2string(cur_state->top().function_identifier) + "::va_arg";
@@ -915,7 +973,7 @@ void goto_symext::symex_va_arg(
     va_rhs = gen_zero(lhs->type);
   }
 
-  symex_assign(code_assign2tc(lhs, va_rhs), true);
+  symex_assign(code_assign2tc(lhs, va_rhs), true, guard);
 }
 
 // Computes the equivalent object value when considering a memset operation on it
@@ -1091,15 +1149,7 @@ static inline expr2tc gen_value_by_byte(
   /* TODO: Bitwise operations are valid for floats, but we don't have an
    * implementation, yet. Give up. */
   if (is_floatbv_type(type) || is_fixedbv_type(type))
-  {
-    unsigned int type_size = type_byte_size(type).to_uint64();
-    // HACK: this should fix the NN-benchmarks (see #1508)
-    if (
-      is_constant_int2t(value) && to_constant_int2t(value).value.is_zero() &&
-      num_of_bytes == type_size && offset == 0)
-      return gen_zero(type);
     return expr2tc();
-  }
 
   if (is_scalar_type(type) && type->get_width() == 8 && offset == 0)
     return typecast2tc(type, value);
@@ -1605,6 +1655,58 @@ bool goto_symext::run_builtin(
     symex_assign(code_assign2tc(
       func_call.ret,
       is_constant_int2t(op1) ? gen_one(int_type2()) : gen_zero(int_type2())));
+    return true;
+  }
+
+  if (has_prefix(symname, "c:@F@__builtin_clzll"))
+  {
+    assert(
+      func_call.operands.size() == 1 &&
+      "__builtin_clzll must have one argument");
+
+    expr2tc arg = func_call.operands[0];
+    expr2tc ret = func_call.ret;
+
+    expr2tc zero = constant_int2tc(get_uint64_type(), 0);
+    expr2tc one = constant_int2tc(get_uint64_type(), 1);
+    expr2tc upper = constant_int2tc(get_uint64_type(), 63);
+
+    claim(notequal2tc(arg, zero), "__builtin_clzll: UB for x equal to 0");
+
+    // Introduce a nondet symbolic variable clz_sym to stand for the number of leading zeros
+    unsigned int &nondet_count = get_nondet_counter();
+    expr2tc clz_sym =
+      symbol2tc(get_uint64_type(), "nondet$symex::" + i2string(nondet_count++));
+
+    // Constrain the range 0 <= clz_sym <= 63
+    expr2tc ge = greaterthanequal2tc(clz_sym, zero);
+    expr2tc le = lessthanequal2tc(clz_sym, upper);
+    expr2tc in_range = and2tc(ge, le);
+    assume(in_range);
+
+    // This idx is the bit‐position where the first 1 should occur.
+    // 63 - clz_sym
+    expr2tc idx = sub2tc(get_uint64_type(), upper, clz_sym);
+
+    // Shifting arg right by idx
+    // Masking with & 1 to extract single bit
+    // ((x >> idx) & 1) != 0
+    expr2tc shift = lshr2tc(get_uint64_type(), arg, idx);
+    expr2tc bit1 = bitand2tc(get_uint64_type(), shift, one);
+    expr2tc is_one = notequal2tc(bit1, zero);
+    assume(is_one);
+
+    // Requiring (x >> (idx + 1)) == 0 forces every bit from idx + 1 up
+    // to bit 63 to be zero, All bits above index idx must be 0
+    // (x >> (idx+1)) == 0
+    expr2tc next = add2tc(get_uint64_type(), idx, one);
+    expr2tc shift2 = lshr2tc(get_uint64_type(), arg, next);
+    expr2tc above_zero = equality2tc(shift2, zero);
+    assume(above_zero);
+
+    if (!is_nil_expr(ret))
+      symex_assign(code_assign2tc(ret, typecast2tc(ret->type, clz_sym)));
+
     return true;
   }
 

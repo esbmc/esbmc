@@ -23,37 +23,28 @@ extern _Thread_local int errno;
 typedef struct atexit_key
 {
   void (*atexit_func)();
-  struct atexit_key *next;
 } __ESBMC_atexit_key;
 
-static __ESBMC_atexit_key *__ESBMC_atexits = NULL;
+// Infinite array for atexit functions
+__attribute__((annotate(
+  "__ESBMC_inf_size"))) static __ESBMC_atexit_key __ESBMC_stdlib_atexit_key[1];
+static size_t __ESBMC_atexit_count = 0;
 
 void __ESBMC_atexit_handler()
 {
 __ESBMC_HIDE:;
-  // This is here to prevent k-induction from unwind the next loop unnecessarily
-  if (__ESBMC_atexits == NULL)
-    return;
-
-  while (__ESBMC_atexits)
+  while (__ESBMC_atexit_count > 0)
   {
-    __ESBMC_atexits->atexit_func();
-    __ESBMC_atexit_key *__ESBMC_tmp = __ESBMC_atexits->next;
-    free(__ESBMC_atexits);
-    __ESBMC_atexits = __ESBMC_tmp;
+    __ESBMC_atexit_count--;
+    __ESBMC_stdlib_atexit_key[__ESBMC_atexit_count].atexit_func();
   }
 }
 
 int atexit(void (*func)(void))
 {
 __ESBMC_HIDE:;
-  __ESBMC_atexit_key *l =
-    (__ESBMC_atexit_key *)malloc(sizeof(__ESBMC_atexit_key));
-  if (l == NULL)
-    return -1;
-  l->atexit_func = func;
-  l->next = __ESBMC_atexits;
-  __ESBMC_atexits = l;
+  __ESBMC_stdlib_atexit_key[__ESBMC_atexit_count].atexit_func = func;
+  __ESBMC_atexit_count++;
   return 0;
 }
 
@@ -226,18 +217,23 @@ __ESBMC_HIDE:;
 }
 
 /* one plus the numeric value, rest is zero */
-static const unsigned char ATOI_MAP[256] = {
-  ['0'] = 1,
-  ['1'] = 2,
-  ['2'] = 3,
-  ['3'] = 4,
-  ['4'] = 5,
-  ['5'] = 6,
-  ['6'] = 7,
-  ['7'] = 8,
-  ['8'] = 9,
-  ['9'] = 10,
-};
+static const unsigned char get_atoi_map(unsigned char pos)
+{
+__ESBMC_HIDE:;
+  const unsigned char ATOI_MAP[256] = {
+    ['0'] = 1,
+    ['1'] = 2,
+    ['2'] = 3,
+    ['3'] = 4,
+    ['4'] = 5,
+    ['5'] = 6,
+    ['6'] = 7,
+    ['7'] = 8,
+    ['8'] = 9,
+    ['9'] = 10,
+  };
+  return ATOI_MAP[pos];
+}
 
 #define ATOI_DEF(name, type, TYPE)                                             \
   type name(const char *s)                                                     \
@@ -254,7 +250,7 @@ static const unsigned char ATOI_MAP[256] = {
     else if (*s == '+')                                                        \
       s++;                                                                     \
     unsigned type r = 0;                                                       \
-    for (unsigned char c; (c = ATOI_MAP[(unsigned char)*s]); s++)              \
+    for (unsigned char c; (c = get_atoi_map((unsigned char)*s)); s++)          \
     {                                                                          \
       c--;                                                                     \
       if (r > (TYPE##_MAX - c) / 10)                                           \
@@ -275,9 +271,21 @@ char *getenv(const char *name)
 {
 __ESBMC_HIDE:;
 
-  _Bool found;
+  __ESBMC_assert(name != NULL, "getenv called with NULL pointer");
+
+  // Return NULL when called with an empty string parameter
+  if (*name == '\0')
+    return NULL;
+
+  // Return NULL when the environment variable name
+  // contains an equals sign (=), per POSIX specification
+  if (strchr(name, '=') != NULL)
+    return NULL;
+
+  // Non-deterministically model whether the variable exists
+  _Bool found = nondet_bool();
   if (!found)
-    return 0;
+    return NULL;
 
   char *buffer;
   size_t buf_size;
@@ -290,16 +298,19 @@ __ESBMC_HIDE:;
 
 void *ldv_malloc(size_t size)
 {
+__ESBMC_HIDE:;
   return malloc(size);
 }
 
 void *ldv_zalloc(size_t size)
 {
+__ESBMC_HIDE:;
   return malloc(size);
 }
 
 size_t strlcat(char *dst, const char *src, size_t siz)
 {
+__ESBMC_HIDE:;
   char *d = dst;
   const char *s = src;
   size_t n = siz;
@@ -355,11 +366,13 @@ __ESBMC_HIDE:;
 
 int rand(void)
 {
+__ESBMC_HIDE:;
   return nondet_uint() % ((unsigned)RAND_MAX + 1);
 }
 
 long random(void)
 {
+__ESBMC_HIDE:;
   return nondet_ulong() % ((unsigned)INT32_MAX + 1);
 }
 
@@ -372,6 +385,7 @@ void srand (unsigned int s)
 
 void rev(char *p)
 {
+__ESBMC_HIDE:;
   char *q = &p[strlen(p) - 1];
   char *r = p;
   for (; q > r; q--, r++)
@@ -384,6 +398,7 @@ void rev(char *p)
 
 char *itoa(int value, char *str, int base)
 {
+__ESBMC_HIDE:;
   int count = 0;
   bool flag = true;
   if (value < 0 && base == 10)

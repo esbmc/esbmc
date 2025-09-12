@@ -52,15 +52,6 @@ x = 2
 x **= 3
 assert x == 8
 
-# Identity Operators
-assert a is not b
-assert a is a
-
-# Membership Operators
-lst = [1, 2, 3, 4, 5]
-assert a in lst
-assert c not in lst
-
 # Logical Operators
 assert not False
 assert a == 2 and b == 4

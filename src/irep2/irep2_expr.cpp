@@ -113,6 +113,10 @@ static const char *expr_names[] = {
   "signbit",
   "concat",
   "extract",
+  "capability_base",
+  "capability_top",
+  "forall",
+  "exists",
 };
 // If this fires, you've added/removed an expr id, and need to update the list
 // above (which is ordered according to the enum list)
@@ -127,9 +131,10 @@ expr2t::expr2t(const type2tc &_type, expr_ids id)
 {
 }
 
-expr2t::expr2t(const expr2t &ref)
-  : expr_id(ref.expr_id), type(ref.type), crc_val(ref.crc_val)
+expr2t::expr2t(const expr2t &ref) : expr_id(ref.expr_id), type(ref.type)
 {
+  std::lock_guard lock(ref.crc_mutex);
+  crc_val = ref.crc_val;
 }
 
 bool expr2t::operator==(const expr2t &ref) const

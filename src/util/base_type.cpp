@@ -424,26 +424,20 @@ static bool is_subclass_of_rec(
   const std::string &subname,
   const namespacet &ns)
 {
-  const symbolt *symbol = ns.lookup(supername);
+  const symbolt *symbol = ns.lookup(subname);
   if (symbol)
   {
     // look at the list of bases; see if the subclass name is a base of this
     // object. Currently, old-irep.
     forall_irep (it, symbol->type.find("bases").get_sub())
     {
-      const typet &base_type = (const typet &)*it;
-      assert(base_type.id() == "base");
-      assert(base_type.type().id() == "struct");
-      const std::string &basename = base_type.type().name().as_string();
-
-      // Is this a C++ class?
-
-      if (basename == subname)
+      const std::string &basename = it->id_string();
+      if (basename == supername)
       {
-        // Success
         return true;
       }
-      if (is_subclass_of_rec(basename, subname, ns))
+
+      if (is_subclass_of_rec(supername, basename, ns))
       {
         return true;
       }
@@ -466,4 +460,14 @@ bool is_subclass_of(
   std::string supername = reformat_class_name(superclass_r.name.as_string());
   std::string subname = reformat_class_name(subclass_r.name.as_string());
   return is_subclass_of_rec(subname, supername, ns);
+}
+
+bool is_subclass_of(
+  const typet &subclass,
+  const typet &superclass,
+  const namespacet &ns)
+{
+  const std::string &subname = subclass.identifier().as_string();
+  const std::string &supername = superclass.identifier().as_string();
+  return is_subclass_of_rec(supername, subname, ns);
 }

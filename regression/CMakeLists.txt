@@ -58,6 +58,9 @@ endif()
 if(ENABLE_CVC4)
     set(REGRESSIONS_CVC cvc)
 endif()
+if(ENABLE_CVC5)
+    set(REGRESSIONS_CVC cvc)
+endif()
 if(ENABLE_MATHSAT)
     set(REGRESSIONS_MATHSAT mathsat)
 endif()
@@ -107,15 +110,19 @@ set(REGRESSIONS_CPP03 esbmc-cpp/cpp
                       esbmc-cpp/deque
                       esbmc-cpp/list
                       esbmc-cpp/map
+                      esbmc-cpp/unordered_map
                       esbmc-cpp/multimap
                       esbmc-cpp/multiset
                       esbmc-cpp/priority_queue
                       esbmc-cpp/queue
                       esbmc-cpp/set
+                      esbmc-cpp/unordered_set
                       esbmc-cpp/stack
                       esbmc-cpp/unix
                       esbmc-cpp/vector
                       esbmc-cpp/try_catch
+                      esbmc-cpp/functional
+                      esbmc-cpp/bitset
                       )
 # list of C++11 test suites
 set(REGRESSIONS_CPP11 esbmc-cpp11/cpp
@@ -136,7 +143,9 @@ set(REGRESSIONS_CPP14 esbmc-cpp14/cpp
                       )
 
 # list of C++17 test suites
-set(REGRESSIONS_CPP17 esbmc-cpp17/lambda)
+set(REGRESSIONS_CPP17 esbmc-cpp17/cpp
+                      esbmc-cpp17/lambda
+                      )
 
 # list of C++20 test suites
 set(REGRESSIONS_CPP20 esbmc-cpp20/cpp)
@@ -155,6 +164,7 @@ if(APPLE)
                     ${REGRESSIONS_JIMPLE}
                     k-induction
                     k-induction-parallel
+                    termination
                     nonz3
                     ${REGRESSIONS_BITWUZLA}
                     ${REGRESSIONS_CVC}
@@ -168,6 +178,8 @@ if(APPLE)
                     ${REGRESSIONS_PYTHON}
                     ${REGRESSIONS_NUMPY}
                     ltl
+                    goto-transcoder
+                    loop-invariants
        )
 elseif(WIN32)
     # FUTURE: Add floats-regression esbmc-cpp/cpp
@@ -177,6 +189,7 @@ elseif(WIN32)
                     llvm
                     floats
                     k-induction
+                    termination
                     windows
                     ${REGRESSIONS_JIMPLE}
                     ${REGRESSIONS_BITWUZLA}
@@ -185,6 +198,7 @@ elseif(WIN32)
                     ${REGRESSIONS_SMTLIB}
                     ${REGRESSIONS_Z3}
                     ltl
+                    goto-transcoder
        )
 else()
   if(NOT BENCHBRINGUP)
@@ -199,6 +213,7 @@ else()
                     floats
                     floats-regression
                     k-induction
+                    termination
                     csmith
                     k-induction-parallel
                     cuda/benchmarks
@@ -225,6 +240,9 @@ else()
                     ${REGRESSIONS_NUMPY}
                     ltl
                     goto-coverage
+                    goto-transcoder
+                    parallel-solving
+                    loop-invariants
        )
   else()
     set(REGRESSIONS $ENV{BENCHMARK_TO_RUN}) # run a single user-specified benchmark

@@ -1,0 +1,4 @@
+CORE
+contract3.solast
+--sol contract3.sol --k-induction --bound
+^VERIFICATION FAILED$

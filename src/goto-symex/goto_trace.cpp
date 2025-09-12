@@ -225,17 +225,57 @@ void show_goto_trace_gui(
   }
 }
 
+/* 
+   Return true if 
+   - the location's file_name matches the user input
+   - the location is explicitly labeled as user_provided
+   - the location is empty
+*/
+bool input_file_check(const locationt &l)
+{
+  // probably esbmc internally converted stuff
+  if (l.as_string() == "" || l.location().user_provided())
+    return true;
+  const irep_idt &f_name = l.get_file();
+  if (f_name.empty())
+    return true;
+  if (f_name == config.options.get_option("input-file"))
+    return true;
+  for (const auto &inc : config.ansi_c.include_files)
+  {
+    if (f_name == inc)
+      return true;
+  }
+
+  // exception
+  if (f_name == "esbmc_intrinsics.h")
+    return true;
+
+  return false;
+}
+
 void show_state_header(
   std::ostream &out,
   const goto_trace_stept &state,
   const locationt &location,
-  unsigned step_nr)
+  unsigned step_nr,
+  const bool simplify_trace)
 {
   out << "\n";
-  out << "State " << step_nr;
-  out << " " << location << " thread " << state.thread_nr << "\n";
-  out << "----------------------------------------------------"
-      << "\n";
+  if (simplify_trace)
+  {
+    show_simplified_location(out, location);
+    out << "------------------------"
+        << "\n";
+  }
+  else
+  {
+    out << "State " << step_nr;
+    out << " " << location << " thread " << state.thread_nr << "\n";
+
+    out << "----------------------------------------------------"
+        << "\n";
+  }
 }
 
 void violation_graphml_goto_trace(
@@ -286,7 +326,7 @@ void violation_graphml_goto_trace(
         (step.pc->is_other() && is_nil_expr(step.lhs)) ||
         step.pc->is_function_call())
       {
-        std::string assignment = get_formated_assignment(ns, step);
+        std::string assignment = get_formated_assignment(ns, step, false);
 
         graph.check_create_new_thread(step.thread_nr, prev_node);
         prev_node = graph.edges.back().to_node;
@@ -304,6 +344,70 @@ void violation_graphml_goto_trace(
         new_edge.to_node = new_node;
         prev_node = new_node;
         graph.edges.push_back(new_edge);
+      }
+      break;
+
+    default:
+      continue;
+    }
+  }
+}
+
+void violation_yaml_goto_trace(
+  optionst &options,
+  const namespacet &ns,
+  const goto_tracet &goto_trace)
+{
+  yamlt yml(yamlt::VIOLATION);
+  yml.verified_file = options.get_option("input-file");
+  log_progress("Generating Violation Witness for: {}", yml.verified_file);
+
+  for (const auto &step : goto_trace.steps)
+  {
+    switch (step.type)
+    {
+    case goto_trace_stept::ASSERT:
+      if (!step.guard)
+      {
+        waypoint wp;
+        wp.type = waypoint::target;
+        wp.file = yml.verified_file;
+        wp.line = get_line_number(
+          yml.verified_file,
+          std::atoi(step.pc->location.get_line().c_str()),
+          options);
+        wp.column = step.pc->location.get_column().c_str();
+        wp.function = step.pc->location.function().c_str();
+        yml.segments.push_back(wp);
+
+        /* having printed a property violation, don't print more steps. */
+
+        yml.generate_yaml(options);
+        return;
+      }
+      break;
+
+    case goto_trace_stept::ASSIGNMENT:
+      if (
+        step.pc->is_assign() || step.pc->is_return() ||
+        (step.pc->is_other() && is_nil_expr(step.lhs)) ||
+        step.pc->is_function_call())
+      {
+        std::string assignment = get_formated_assignment(ns, step, true);
+        if (assignment.empty())
+          continue;
+
+        waypoint wp;
+        wp.type = waypoint::assumption;
+        wp.file = yml.verified_file;
+        wp.value = assignment;
+        wp.line = get_line_number(
+          yml.verified_file,
+          std::atoi(step.pc->location.get_line().c_str()),
+          options);
+        wp.column = step.pc->location.get_column().c_str();
+        wp.function = step.pc->location.function().c_str();
+        yml.segments.push_back(wp);
       }
       break;
 
@@ -360,6 +464,72 @@ void correctness_graphml_goto_trace(
   graph.generate_graphml(options);
 }
 
+void correctness_yaml_goto_trace(
+  optionst &options,
+  const namespacet &ns [[maybe_unused]],
+  const goto_tracet &goto_trace [[maybe_unused]])
+{
+  yamlt yml(yamlt::CORRECTNESS);
+  yml.verified_file = options.get_option("input-file");
+  log_progress("Generating Correctness Witness for: {}", yml.verified_file);
+
+#if 0
+  for (const auto &step : goto_trace.steps)
+  {
+    /* checking restrictions for correctness yaml */
+    if (
+      (!(is_valid_witness_step(ns, step))) ||
+      (!(step.is_assume() || step.is_assert())))
+      continue;
+
+    std::string invariant = get_invariant(
+      yml.verified_file,
+      std::atoi(step.pc->location.get_line().c_str()),
+      options);
+
+    if (invariant.empty())
+      continue; /* we don't have to consider this invariant */
+
+    std::string function = step.pc->location.get_function().c_str();
+    get_line_number(
+      yml.verified_file,
+      std::atoi(step.pc->location.get_line().c_str()),
+      options);
+  }
+#endif
+
+  yml.generate_yaml(options);
+}
+
+void appendInfo(
+  std::string &dest,
+  const std::string &label,
+  const std::string &value)
+{
+  if (!value.empty())
+  {
+    if (!dest.empty())
+      dest += " ";
+    dest += label + " " + id2string(value);
+  }
+}
+
+void show_simplified_location(std::ostream &out, const locationt &location)
+{
+  std::string dest;
+  const irep_idt &file = location.get_file();
+  const irep_idt &line = location.get_line();
+  const irep_idt &function = location.get_function();
+
+  if (file != "")
+    appendInfo(dest, "file", id2string(file));
+  if (line != "")
+    appendInfo(dest, "line", id2string(line));
+  if (function != "")
+    appendInfo(dest, "function", id2string(function));
+  out << dest << "\n";
+}
+
 void show_goto_trace(
   std::ostream &out,
   const namespacet &ns,
@@ -367,19 +537,33 @@ void show_goto_trace(
 {
   unsigned prev_step_nr = 0;
   bool first_step = true;
+  bool cex_only = config.options.get_bool_option("cex-only");
+  bool simplify_trace = config.options.get_bool_option("simplify-trace");
 
   for (const auto &step : goto_trace.steps)
   {
+    // we only care about the counter example, which is only triggered by assert steps. Ignore all other steps.
+    if (cex_only && step.type != goto_trace_stept::ASSERT)
+      continue;
     switch (step.type)
     {
     case goto_trace_stept::ASSERT:
       if (!step.guard)
       {
-        show_state_header(out, step, step.pc->location, step.step_nr);
+        show_state_header(
+          out, step, step.pc->location, step.step_nr, simplify_trace);
         out << "Violated property:"
             << "\n";
         if (!step.pc->location.is_nil())
-          out << "  " << step.pc->location << "\n";
+        {
+          if (simplify_trace)
+          {
+            out << "  ";
+            show_simplified_location(out, step.pc->location);
+          }
+          else
+            out << "  " << step.pc->location << "\n";
+        }
         if (config.options.get_bool_option("show-stacktrace"))
         {
           // Print stack trace
@@ -415,11 +599,18 @@ void show_goto_trace(
         (step.pc->is_other() && is_nil_expr(step.lhs)) ||
         step.pc->is_function_call())
       {
+        if (simplify_trace)
+        {
+          // if the file is empty then it's probably internally created and should not print out
+          if (!input_file_check(step.pc->location))
+            break;
+        }
         if (prev_step_nr != step.step_nr || first_step)
         {
           first_step = false;
           prev_step_nr = step.step_nr;
-          show_state_header(out, step, step.pc->location, step.step_nr);
+          show_state_header(
+            out, step, step.pc->location, step.step_nr, simplify_trace);
         }
         counterexample_value(out, ns, step.lhs, step.value);
       }

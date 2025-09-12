@@ -2381,6 +2381,16 @@ std::string c_expr2stringt::convert(const exprt &src, unsigned &precedence)
     return convert_function(src, "RACE_CHECK", precedence = 15);
   }
 
+  else if (src.id() == "capability_base")
+  {
+    return convert_function(src, "CAPABILITY_BASE", precedence = 15);
+  }
+
+  else if (src.id() == "capability_top")
+  {
+    return convert_function(src, "CAPABILITY_TOP", precedence = 15);
+  }
+
   else if (src.id() == "deallocated_object" || src.id() == "memory-leak")
   {
     return convert_function(src, "DEALLOCATED_OBJECT", precedence = 15);

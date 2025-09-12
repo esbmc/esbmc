@@ -88,9 +88,9 @@ typedef int pthread_once_t;
 
 //#if defined __USE_UNIX98 || defined __USE_XOPEN2K
 //jmorse - we always want this, regardless of feature flags.
-typedef struct
-{
-  int __lock;
+typedef struct {
+  int __readers;
+  int __writer;
 } pthread_rwlock_t;
 
 /* Read-write lock initializer. */
@@ -296,6 +296,10 @@ extern pthread_t pthread_self (void) __attribute__ ((__const__));
 /* Compare two thread identifiers.  */
 extern int pthread_equal (pthread_t __thread1, pthread_t __thread2);
 
+/* push and pop thread cancellation clean-up handlers */
+void pthread_cleanup_push(void (*routine)(void *),
+                          void *arg);
+void pthread_cleanup_pop(int execute);
 
 /* Thread attribute handling.  */
 

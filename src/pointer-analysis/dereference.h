@@ -339,6 +339,39 @@ private:
     modet mode,
     const expr2tc &base);
 
+  /** Check whether the given pointer expression satisfies the alignment
+   *  requirements for accessing a value of the specified type. This uses the
+   *  type's size to determine the required alignment (in bits) and verifies
+   *  that the pointer offset is an integer multiple of that alignment. If the
+   *  pointer is misaligned, an alignment violation is recorded.
+   *  @param mode The dereference mode (read or write) to determine whether
+   *         alignment checks should be applied.
+   *  @param type The type of the value being accessed; used to determine the
+   *         required alignment.
+   *  @param deref_expr The pointer expression to be checked, which may be a
+   *         constant or symbolic pointer.
+   *  @param guard A guard expression representing the execution conditions
+   *         under which the dereference occurs; violations are only triggered
+   *         when the guard holds.
+   */
+  void check_pointer_alignment(
+    modet mode,
+    const type2tc &type,
+    const expr2tc &deref_expr,
+    const guardt &guard);
+
+  /** Construct an expression representing the pointer's offset, in bits, from
+   *  the base of the containing object. This is used for alignment checking
+   *  and uses the existing `pointer_offset2tc` mechanism to
+   *  extract the byte offset and then converts it to bits.
+   *  @param deref_expr The pointer expression from which to extract the offset;
+   *         may be a constant integer, a typecast of a constant integer, or a
+   *         symbolic pointer.
+   *  @return An expression of integer type representing the pointer offset in
+   *          bits, suitable for use in alignment checks.
+   */
+  expr2tc create_pointer_offset_bits(const expr2tc &deref_expr);
+
   /** Check whether an (aggregate) type is compatible with the desired
    *  dereference type. This looks at various things, such as whether the given
    *  struct is a subclass of the desired type, and inserts typecasts as
@@ -403,7 +436,8 @@ private:
     const expr2tc &expr,
     const expr2tc &offset,
     const type2tc &type,
-    const guardt &guard);
+    const guardt &guard,
+    const expr2tc &deref = expr2tc());
   void valid_check(const expr2tc &expr, const guardt &guard, modet mode);
   std::vector<expr2tc> extract_bytes(
     const expr2tc &object,

@@ -1,7 +1,7 @@
 pragma solidity >=0.5.0;
 
 contract Base {
-    bytes32 data3;
+    bytes3 data3;
 
     constructor() {
         data3 = 0;

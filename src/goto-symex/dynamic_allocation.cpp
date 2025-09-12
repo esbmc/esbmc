@@ -7,6 +7,27 @@
 #include <irep2/irep2.h>
 #include <util/std_expr.h>
 
+static inline void convert_capability_member(
+  expr2tc &expr,
+  const expr2tc &value,
+  const irep_idt &field_name,
+  const namespacet &ns)
+{
+  // Construct POINTER_CAPABILITY(...) from original value
+  expr2tc cap_expr = pointer_capability2tc(ptraddr_type2(), value);
+
+  expr2tc capability_arr;
+  migrate_expr(
+    symbol_expr(*ns.lookup("c:@__ESBMC_cheri_info")), capability_arr);
+
+  // Get cheri_info[cap_expr]
+  expr2tc index_expr = index2tc(
+    to_array_type(capability_arr->type).subtype, capability_arr, cap_expr);
+
+  // Access .base or .top member
+  expr = member2tc(size_type2(), index_expr, field_name);
+}
+
 void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
 {
   expr->Foreach_operand([this](expr2tc &e) {
@@ -93,9 +114,25 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
     expr2tc obj_expr = pointer_object2tc(pointer_type2(), size.value);
 
     expr2tc alloc_arr_2;
-    migrate_expr(symbol_expr(*ns.lookup(alloc_size_arr_name)), alloc_arr_2);
+    const symbolt *alloc_size_symbol = ns.lookup(alloc_size_arr_name);
+    assert(alloc_size_symbol);
+    migrate_expr(symbol_expr(*alloc_size_symbol), alloc_arr_2);
 
     expr2tc index_expr = index2tc(size_type2(), alloc_arr_2, obj_expr);
     expr = index_expr;
+  }
+  else if (is_capability_base2t(expr))
+  {
+    // replace with cheri_info[POINTER_CAPABILITY(...)].base
+    const capability_base2t &size = to_capability_base2t(expr);
+
+    convert_capability_member(expr, size.value, irep_idt("base"), ns);
+  }
+  else if (is_capability_top2t(expr))
+  {
+    // replace with cheri_info[POINTER_CAPABILITY(...)].top
+    const capability_top2t &size = to_capability_top2t(expr);
+
+    convert_capability_member(expr, size.value, irep_idt("top"), ns);
   }
 }

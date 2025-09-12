@@ -1,4 +1,4 @@
 CORE
 contract.solast
---function test1 --sol contract.sol
-^VERIFICATION SUCCESSFUL$
+--contract Dreive --sol contract.sol --no-standard-checks --state-hash --unwind 20 --no-unwinding-assertions --bound 
+^VERIFICATION FAILED$

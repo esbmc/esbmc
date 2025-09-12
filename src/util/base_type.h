@@ -32,6 +32,11 @@ bool is_subclass_of(
   const type2tc &superclass,
   const namespacet &ns);
 
+bool is_subclass_of(
+  const typet &subclass,
+  const typet &superclass,
+  const namespacet &ns);
+
 class base_type_eqt
 {
 public:

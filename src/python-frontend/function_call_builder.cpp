@@ -5,8 +5,12 @@
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/json_utils.h>
 #include <python-frontend/type_utils.h>
+#include <util/arith_tools.h>
+
+#include <boost/algorithm/string/predicate.hpp>
 
 const std::string kGetObjectSize = "__ESBMC_get_object_size";
+const std::string kStrlen = "strlen";
 const std::string kEsbmcAssume = "__ESBMC_assume";
 const std::string kVerifierAssume = "__VERIFIER_assume";
 
@@ -19,10 +23,13 @@ function_call_builder::function_call_builder(
 
 bool function_call_builder::is_numpy_call(const symbol_id &function_id) const
 {
-  const std::string &filename = function_id.get_filename();
-  const std::string &suffix = "/models/numpy.py";
+  if (type_utils::is_builtin_type(function_id.get_function()))
+    return false;
 
-  return (filename.rfind(suffix) == (filename.size() - suffix.size()));
+  const std::string &filename = function_id.get_filename();
+
+  return boost::algorithm::ends_with(filename, "/models/numpy.py") ||
+         filename.find("/numpy/linalg") != std::string::npos;
 }
 
 bool function_call_builder::is_assume_call(const symbol_id &function_id) const
@@ -34,7 +41,7 @@ bool function_call_builder::is_assume_call(const symbol_id &function_id) const
 bool function_call_builder::is_len_call(const symbol_id &function_id) const
 {
   const std::string &func_name = function_id.get_function();
-  return func_name == kGetObjectSize;
+  return func_name == kGetObjectSize || func_name == kStrlen;
 }
 
 symbol_id function_call_builder::build_function_id() const
@@ -84,6 +91,19 @@ symbol_id function_call_builder::build_function_id() const
 
       obj_name = lhs_type;
     }
+    else if (func_json["value"]["_type"] == "Call")
+    {
+      obj_name = func_json["value"]["func"]["id"];
+      if (obj_name == "super")
+      {
+        symbolt *base_class_func = converter_.find_function_in_base_classes(
+          current_class_name, function_id.to_string(), func_name, false);
+        if (base_class_func)
+        {
+          return symbol_id::from_string(base_class_func->id.as_string());
+        }
+      }
+    }
     else
     {
       obj_name = func_json["value"]["id"];
@@ -107,7 +127,56 @@ symbol_id function_call_builder::build_function_id() const
   // build symbol_id
   if (func_name == "len")
   {
-    func_name = kGetObjectSize;
+    const auto &arg = call_["args"][0];
+    func_name = kStrlen;
+
+    // Special case: single character string literals should return 1 directly
+    if (arg["_type"] == "Constant" && arg["value"].is_string())
+    {
+      std::string str_val = arg["value"].get<std::string>();
+      if (str_val.size() == 1)
+      {
+        // For single character strings, we'll handle this specially in build()
+        // by returning 1 directly instead of calling a C function
+        func_name = "__ESBMC_len_single_char";
+        function_id.clear();
+        function_id.set_prefix("esbmc:");
+        function_id.set_function(func_name);
+        return function_id;
+      }
+    }
+
+    if (arg["_type"] == "List")
+      func_name = kGetObjectSize;
+    else if (arg["_type"] == "Name")
+    {
+      const std::string &var_type = th.get_var_type(arg["id"]);
+      if (
+        var_type == "bytes" || var_type == "list" || var_type == "List" ||
+        var_type.empty())
+        func_name = kGetObjectSize;
+      else if (var_type == "str")
+      {
+        // Check if this is a single character by looking up the variable
+        symbol_id var_sid(
+          python_file, current_class_name, current_function_name);
+        var_sid.set_object(arg["id"].get<std::string>());
+        symbolt *var_symbol = converter_.find_symbol(var_sid.to_string());
+
+        if (
+          var_symbol && var_symbol->value.is_constant() &&
+          (var_symbol->value.type().is_unsignedbv() ||
+           var_symbol->value.type().is_signedbv()))
+        {
+          // This is a single character variable
+          func_name = "__ESBMC_len_single_char";
+          function_id.clear();
+          function_id.set_prefix("esbmc:");
+          function_id.set_function(func_name);
+          return function_id;
+        }
+      }
+    }
     function_id.clear();
     function_id.set_prefix("c:");
   }
@@ -122,7 +191,11 @@ symbol_id function_call_builder::build_function_id() const
   }
 
   // Insert class name in the symbol id
-  if (th.is_constructor_call(call_))
+  if (obj_name == "super")
+  {
+    class_name = current_class_name;
+  }
+  else if (th.is_constructor_call(call_))
   {
     class_name = func_name;
   }
@@ -157,7 +230,11 @@ symbol_id function_call_builder::build_function_id() const
 
 exprt function_call_builder::build() const
 {
-  const symbol_id &function_id = build_function_id();
+  symbol_id function_id = build_function_id();
+
+  // Special handling for single character len() calls
+  if (function_id.get_function() == "__ESBMC_len_single_char")
+    return from_integer(1, int_type());
 
   // Add assume and len functions to symbol table
   if (is_assume_call(function_id) || is_len_call(function_id))
@@ -170,7 +247,7 @@ exprt function_call_builder::build() const
       code_typet code_type;
       if (is_len_call(function_id))
       {
-        code_type.return_type() = int_type();
+        code_type.return_type() = long_long_int_type();
         code_type.arguments().push_back(pointer_typet(empty_typet()));
       }
 
@@ -188,6 +265,13 @@ exprt function_call_builder::build() const
   // Handle NumPy functions
   if (is_numpy_call(function_id))
   {
+    // Adjust the function ID when reusing functions from the C models
+    if (type_utils::is_c_model_func(function_id.get_function()))
+    {
+      function_id.set_prefix("c:");
+      function_id.set_filename("");
+    }
+
     numpy_call_expr numpy_call(function_id, call_, converter_);
     return numpy_call.get();
   }

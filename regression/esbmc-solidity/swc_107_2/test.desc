@@ -1,0 +1,4 @@
+CORE
+contract.solast
+--sol contract.sol --k-induction --no-standard-checks --contract EtherStore --unbound --reentry-check
+^VERIFICATION FAILED$

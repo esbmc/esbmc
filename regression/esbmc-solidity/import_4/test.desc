@@ -1,4 +1,4 @@
 CORE
 contract.solast 
---sol contract.sol --k-induction --overflow-check
+--sol contract.sol --k-induction --overflow-check --bound
 ^VERIFICATION FAILED$

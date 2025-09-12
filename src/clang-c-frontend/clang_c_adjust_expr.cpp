@@ -222,6 +222,7 @@ void clang_c_adjust::adjust_side_effect(side_effect_exprt &expr)
       statement == "preincrement" || statement == "predecrement" ||
       statement == "postincrement" || statement == "postdecrement")
     {
+      adjust_reference(expr);
     }
     else if (has_prefix(id2string(statement), "assign"))
     {
@@ -264,6 +265,14 @@ void clang_c_adjust::adjust_member(member_exprt &expr)
     deref.type() = base.type().subtype();
     deref.move_to_operands(base);
     base.swap(deref);
+  }
+  else if (base.type().is_array())
+  {
+    exprt index("index");
+    index.type() = base.type().subtype();
+    index.move_to_operands(base);
+    index.copy_to_operands(gen_zero(index_type()));
+    base.swap(index);
   }
 }
 
@@ -932,8 +941,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       expr.swap(infl_expr);
     }
     else if (
-      compare_float_suffix(identifier, "nan") ||
-      compare_unscore_builtin(identifier, "nan"))
+      (identifier != "nan") && compare_unscore_builtin(identifier, "nan"))
     {
       typet t = expr.type();
 
@@ -1132,6 +1140,11 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
         t.is_floatbv() || t.is_vector() || t.is_signedbv() ||
         t.is_unsignedbv());
       expr.type() = t;
+    }
+    else if (identifier == "__builtin_is_constant_evaluated")
+    {
+      exprt new_expr = false_exprt();
+      expr.swap(new_expr);
     }
   }
 
@@ -1360,8 +1373,11 @@ void clang_c_adjust::adjust_if(exprt &expr)
 
   // Typecast both the true and false results
   // If the types are inconsistent
-  gen_typecast(ns, expr.op1(), expr.type());
-  gen_typecast(ns, expr.op2(), expr.type());
+  if (expr.type() != expr.op1().type() || expr.type() != expr.op2().type())
+  {
+    gen_typecast(ns, expr.op1(), expr.type());
+    gen_typecast(ns, expr.op2(), expr.type());
+  }
 }
 
 void clang_c_adjust::align_se_function_call_return_type(

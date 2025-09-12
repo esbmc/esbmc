@@ -39,6 +39,8 @@ public:
    */
   typet build_array(const typet &sub_type, const size_t size) const;
 
+  std::vector<int> get_array_type_shape(const typet &array_type) const;
+
   /*
    * Creates a typet based on a Python type.
    * @param ast_type The name of the Python type (e.g., "int", "str").
@@ -75,6 +77,43 @@ public:
    */
   std::string get_operand_type(const nlohmann::json &operand) const;
 
+  /*
+   * Checks whether the given JSON object represents a 2D array (list of lists).
+   * @param arr The JSON object to check.
+   * @return true if it's a 2D array, false otherwise.
+   */
+  bool is_2d_array(const nlohmann::json &arr) const;
+
+  int get_array_dimensions(const nlohmann::json &arr) const;
+
+  /*
+   * Determines the numeric width (in bits) of a given type.
+   * @param type The type object to analyze for width determination.
+   * @return The width of the type in bits as a size_t value.
+   */
+  size_t get_type_width(const typet &type) const;
+
+  /**
+   * Determines the appropriate type for a list with improved string handling.
+   * This method provides improved type inference for lists containing string literals,
+   * ensuring that strings within lists are properly represented as null-terminated
+   * character arrays rather than single character values.
+   * 
+   * @param element The JSON element representing a Python list literal from the AST.
+   * @return The typet representing an array type suitable for the list, with proper
+   *         string array handling for lists containing string constants.
+   */
+  typet get_list_type_improved(const nlohmann::json &element);
+
 private:
+  /// Encapsulate the const_cast in one place with clear documentation
+  exprt get_expr_helper(const nlohmann::json &json) const;
+
+  /// Check if two types are compatible for list homogeneity checking
+  bool are_types_compatible(const typet &t1, const typet &t2) const;
+
+  /// Get a normalized/canonical type for list element type inference
+  typet get_canonical_string_type(const typet &t) const;
+
   const python_converter &converter_;
 };
