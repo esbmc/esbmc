@@ -1175,173 +1175,145 @@ exprt python_converter::handle_string_concatenation(
   if (!lhs_is_empty && rhs_is_empty)
     return lhs;
 
-  // Continue with regular concatenation logic for non-empty cases
-  BigInt lhs_size = get_string_size(lhs);
-  BigInt rhs_size = get_string_size(rhs);
+  // Helper function to extract characters from any source
+  auto extract_chars =
+    [this](
+      const exprt &expr,
+      const nlohmann::json &json_node) -> std::vector<exprt> {
+    std::vector<exprt> chars;
 
-  // if size calculation fails, use conservative defaults
-  if (lhs_size < 1)
-    lhs_size = 1; // At least null terminator
-  if (rhs_size < 1)
-    rhs_size = 1; // At least null terminator
-
-  // Calculate content size (excluding null terminators)
-  BigInt lhs_content = lhs_size - 1;
-  BigInt rhs_content = rhs_size - 1;
-  BigInt total_size =
-    lhs_content + rhs_content + 1; // +1 for final null terminator
-
-  typet t = type_handler_.get_typet("str", total_size.to_uint64());
-  exprt result = gen_zero(t);
-
-  // Ensure result has the correct number of operands allocated
-  if (result.operands().size() != total_size.to_uint64())
-  {
-    result.operands().resize(total_size.to_uint64());
-    // Initialize all operands to zero characters
-    for (size_t j = 0; j < result.operands().size(); ++j)
-      result.operands().at(j) = gen_zero(t.subtype());
-  }
-
-  unsigned int i = 0;
-
-  // Helper function with consistent bounds checking and null handling
-  auto safe_append_char = [&](const exprt &ch) -> bool {
-    if (i >= result.operands().size())
+    // Handle JSON string constants first
+    if (
+      json_node.contains("_type") && json_node["_type"] == "Constant" &&
+      json_node.contains("value"))
     {
-      log_warning("String concatenation buffer overflow at position {}", i);
-      return false; // Buffer full
-    }
-    // Only append non-null characters
-    if (ch != gen_zero(ch.type()))
-      result.operands().at(i++) = ch;
-    return true;
-  };
-
-  auto append_from_symbol = [&](const std::string &id) -> bool {
-    symbolt *symbol = symbol_table_.find_symbol(id);
-    if (!symbol)
-    {
-      // log which symbol wasn't found
-      log_warning("Symbol not found in string concatenation: {}", id);
-      return true; // Continue processing: treat as empty string
+      std::string str_value = json_node["value"].get<std::string>();
+      for (char c : str_value)
+      {
+        if (c == 0)
+          break; // Stop at null terminator
+        BigInt char_val(static_cast<unsigned char>(c));
+        exprt char_expr = constant_exprt(
+          integer2binary(char_val, 8), integer2string(char_val), char_type());
+        chars.push_back(char_expr);
+      }
+      return chars;
     }
 
-    // Handle empty string symbols or uninitialized symbols
-    if (symbol->value.is_nil() || !symbol->value.type().is_array())
+    // Handle symbol expressions
+    if (expr.is_symbol())
     {
-      // Empty string: no characters to append
-      return true;
+      symbolt *symbol =
+        symbol_table_.find_symbol(expr.identifier().as_string());
+      if (
+        symbol && symbol->value.is_constant() &&
+        symbol->value.type().is_array())
+      {
+        // Extract characters from symbol value, excluding null terminator
+        const exprt &value = symbol->value;
+        for (size_t i = 0; i < value.operands().size(); ++i)
+        {
+          const exprt &ch = value.operands()[i];
+          if (ch.is_constant())
+          {
+            try
+            {
+              BigInt char_val =
+                binary2integer(ch.value().as_string(), ch.type().is_signedbv());
+              if (char_val == 0)
+                break; // Stop at null terminator
+              chars.push_back(ch);
+            }
+            catch (...)
+            {
+              // If we can't parse the value, just include the character
+              chars.push_back(ch);
+            }
+          }
+        }
+      }
+      return chars;
     }
 
-    // Handle symbols with no operands (empty strings)
-    if (symbol->value.operands().empty())
-    {
-      // Empty string: no characters to append
-      return true;
-    }
-
-    for (const exprt &ch : symbol->value.operands())
-    {
-      if (!safe_append_char(ch))
-        return false;
-    }
-    return true;
-  };
-
-  auto append_from_json = [&](const nlohmann::json &json) -> bool {
-    if (!json.contains("value"))
-      return true; // Empty: continue processing
-
-    std::string value = json["value"].get<std::string>();
-    typet char_type = t.subtype();
-
-    // Handle empty strings explicitly
-    if (value.empty())
-      return true;
-
-    for (char ch : value)
-    {
-      if (ch == 0)
-        break; // Stop at null terminator
-      if (i >= result.operands().size())
-        return false; // Buffer full
-
-      BigInt v(ch);
-      exprt char_expr = constant_exprt(
-        integer2binary(v, bv_width(char_type)), integer2string(v), char_type);
-      result.operands().at(i++) = char_expr;
-    }
-    return true;
-  };
-
-  auto append_from_expr = [&](const exprt &expr) -> bool {
-    // Handle constant array expressions
+    // Handle constant arrays
     if (expr.is_constant() && expr.type().is_array())
     {
-      // Handle empty arrays (empty strings)
-      if (expr.operands().empty())
-        return true;
-
-      for (const auto &ch : expr.operands())
+      for (size_t i = 0; i < expr.operands().size(); ++i)
       {
-        if (ch.is_constant() && !safe_append_char(ch))
-          return false;
+        const exprt &ch = expr.operands()[i];
+        if (ch.is_constant())
+        {
+          try
+          {
+            BigInt char_val =
+              binary2integer(ch.value().as_string(), ch.type().is_signedbv());
+            if (char_val == 0)
+              break; // Stop at null terminator
+            chars.push_back(ch);
+          }
+          catch (...)
+          {
+            // If we can't parse the value, just include the character
+            chars.push_back(ch);
+          }
+        }
       }
+      return chars;
     }
-    // Handle symbol expressions
-    else if (expr.is_symbol())
-      return append_from_symbol(expr.identifier().as_string());
-    // Handle other expression types: treat as empty for now
-    else
+
+    // Handle single character constants
+    if (
+      expr.is_constant() &&
+      (expr.type().is_signedbv() || expr.type().is_unsignedbv()))
     {
-      log_warning(
-        "Unhandled expression type in string concatenation: {}",
-        expr.id_string());
-      return true;
+      try
+      {
+        BigInt char_val =
+          binary2integer(expr.value().as_string(), expr.type().is_signedbv());
+        if (char_val != 0) // Don't include null characters
+          chars.push_back(expr);
+      }
+      catch (...)
+      {
+        // If we can't parse, include it anyway
+        chars.push_back(expr);
+      }
+      return chars;
     }
-    return true;
+
+    return chars;
   };
 
-  auto append_from_json_or_expr =
-    [&](const nlohmann::json &node, const exprt &expr) -> bool {
-    if (node.contains("_type"))
-    {
-      const std::string type = node["_type"].get<std::string>();
-      if (type == "Constant" && node.contains("value"))
-        return append_from_json(node);
-    }
+  // Extract characters from both operands
+  std::vector<exprt> lhs_chars = extract_chars(lhs, left);
+  std::vector<exprt> rhs_chars = extract_chars(rhs, right);
 
-    // Handle all other cases (including symbols) consistently
-    return append_from_expr(expr);
-  };
+  // Calculate total size: lhs_chars + rhs_chars + null terminator
+  size_t total_size = lhs_chars.size() + rhs_chars.size() + 1;
 
-  // Process both operands: don't fail if one fails, continue processing
-  bool left_success = append_from_json_or_expr(left, lhs);
-  bool right_success = append_from_json_or_expr(right, rhs);
+  // Create result array
+  typet result_type = type_handler_.build_array(char_type(), total_size);
+  exprt result = constant_exprt(
+    array_typet(char_type(), from_integer(total_size, size_type())));
+  result.type() = result_type;
+  result.operands().resize(total_size);
 
-  // Only fail if both operands fail to process
-  if (!left_success && !right_success)
+  // Copy LHS characters
+  size_t pos = 0;
+  for (const exprt &ch : lhs_chars)
+    result.operands().at(pos++) = ch;
+
+  // Copy RHS characters
+  for (const exprt &ch : rhs_chars)
+    result.operands().at(pos++) = ch;
+
+  // Add null terminator
+  if (pos < total_size)
   {
-    log_error("Failed to process both operands in string concatenation");
-    // Return empty string instead of throwing
-    typet empty_str_type = type_handler_.get_typet("str", 1);
-    exprt empty_result = gen_zero(empty_str_type);
-
-    // Ensure the empty result has proper operands
-    if (empty_result.operands().size() == 0)
-      empty_result.operands().resize(1);
-    empty_result.operands().at(0) = gen_zero(empty_str_type.subtype());
-    return empty_result;
-  }
-
-  // Ensure null terminator is added - with bounds check
-  if (i < result.operands().size())
-    result.operands().at(i) = gen_zero(t.subtype());
-  else
-  {
-    // This shouldn't happen with correct size calculation, but handle gracefully
-    log_warning("No space for null terminator in string concatenation result");
+    BigInt zero(0);
+    exprt null_char = constant_exprt(
+      integer2binary(zero, 8), integer2string(zero), char_type());
+    result.operands().at(pos) = null_char;
   }
 
   return result;
@@ -1930,6 +1902,154 @@ exprt python_converter::get_negated_is_expr(const exprt &lhs, const exprt &rhs)
   return not_expr;
 }
 
+/// Helper method to convert function calls to side effects
+void python_converter::convert_function_calls_to_side_effects(
+  exprt &lhs,
+  exprt &rhs)
+{
+  auto to_side_effect_call = [](exprt &expr) {
+    side_effect_expr_function_callt side_effect;
+    code_function_callt &code = static_cast<code_function_callt &>(expr);
+    side_effect.function() = code.function();
+    side_effect.location() = code.location();
+    side_effect.type() = code.type();
+    side_effect.arguments() = code.arguments();
+    expr = side_effect;
+  };
+
+  if (lhs.is_function_call())
+    to_side_effect_call(lhs);
+  if (rhs.is_function_call())
+    to_side_effect_call(rhs);
+}
+
+/// Helper method to handle string concatenation with type promotion
+exprt python_converter::handle_string_concatenation_with_promotion(
+  exprt &lhs,
+  exprt &rhs,
+  const nlohmann::json &left,
+  const nlohmann::json &right)
+{
+  // After the string concatenation section, before the type determination:
+  if (lhs.type().is_array() && !rhs.type().is_array())
+  {
+    // LHS is array, RHS is single char - promote RHS to string array
+    if (rhs.type().is_signedbv() || rhs.type().is_unsignedbv())
+    {
+      typet string_type = type_handler_.build_array(char_type(), 2);
+      exprt str_array = gen_zero(string_type);
+      str_array.operands().at(0) = rhs;
+      str_array.operands().at(1) = gen_zero(char_type()); // null terminator
+      rhs = str_array;
+    }
+  }
+  else if (!lhs.type().is_array() && rhs.type().is_array())
+  {
+    // RHS is array, LHS is single char - promote LHS to string array
+    if (lhs.type().is_signedbv() || lhs.type().is_unsignedbv())
+    {
+      typet string_type = type_handler_.build_array(char_type(), 2);
+      exprt str_array = gen_zero(string_type);
+      str_array.operands().at(0) = lhs;
+      str_array.operands().at(1) = gen_zero(char_type()); // null terminator
+      lhs = str_array;
+    }
+  }
+
+  return handle_string_concatenation(lhs, rhs, left, right);
+}
+
+/// Helper method to create variable-length arrays
+exprt python_converter::create_variable_length_array_for_multiplication(
+  const nlohmann::json &element,
+  symbolt *symbol,
+  const exprt &list_elem)
+{
+  // Build array and initialize VLA
+  symbolt &vla_symbol = create_tmp_symbol(
+    element, "vla", current_lhs->type(), gen_zero(current_lhs->type()));
+
+  code_declt vla_decl(symbol_expr(vla_symbol));
+  vla_decl.location() = get_location_from_decl(element);
+  current_block->copy_to_operands(vla_decl);
+
+  // Add counter for while loop
+  symbolt &counter =
+    create_tmp_symbol(element, "counter", int_type(), gen_zero(int_type()));
+
+  code_assignt counter_code(symbol_expr(counter), gen_zero(int_type()));
+  current_block->copy_to_operands(counter_code);
+
+  // Build conditional for while loop (counter < len(arr))
+  exprt cond("<", bool_type());
+  cond.operands().push_back(symbol_expr(counter));
+  cond.operands().push_back(symbol_expr(*symbol));
+
+  // Build block with arr[i] assignment and counter increment
+  code_blockt then;
+
+  // arr[counter] assignment
+  index_exprt arr_index(
+    symbol_expr(vla_symbol),
+    symbol_expr(counter),
+    symbol_expr(vla_symbol).type().subtype());
+  code_assignt arr_assign(arr_index, list_elem);
+  then.copy_to_operands(arr_assign);
+
+  // increment counter
+  exprt incr("+");
+  incr.copy_to_operands(symbol_expr(counter));
+  incr.copy_to_operands(gen_one(int_type()));
+  code_assignt update(symbol_expr(counter), incr);
+  then.copy_to_operands(update);
+
+  // add while block to initialize vla
+  codet while_cod;
+  while_cod.set_statement("while");
+  while_cod.copy_to_operands(cond, then);
+  current_block->copy_to_operands(while_cod);
+
+  return symbol_expr(vla_symbol);
+}
+
+/// Helper method to handle chained comparisons
+exprt python_converter::handle_chained_comparisons_logic(
+  const nlohmann::json &element,
+  exprt &bin_expr)
+{
+  exprt cond("and", bool_type());
+  cond.move_to_operands(bin_expr); // bin_expr compares left and comparators[0]
+
+  for (size_t i = 0; i + 1 < element["comparators"].size(); i += 2)
+  {
+    std::string op(element["ops"][i + 1]["_type"].get<std::string>());
+    exprt logical_expr(get_op(op, bool_type()), bool_type());
+    exprt op1 = get_expr(element["comparators"][i]);
+    exprt op2 = get_expr(element["comparators"][i + 1]);
+
+    convert_function_calls_to_side_effects(op1, op2);
+
+    std::string op1_type = type_handler_.type_to_string(op1.type());
+    std::string op2_type = type_handler_.type_to_string(op2.type());
+
+    if (op1_type == "str" && op2_type == "str")
+    {
+      handle_string_comparison(op, op1, op2, element);
+      exprt expr(get_op(op, bool_type()), bool_type());
+      expr.copy_to_operands(op1, op2);
+      cond.move_to_operands(expr);
+    }
+    else
+    {
+      logical_expr.copy_to_operands(op1);
+      logical_expr.copy_to_operands(op2);
+      cond.move_to_operands(logical_expr);
+    }
+  }
+  return cond;
+}
+
+// Main method with minimal refactoring to preserve original logic
 exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 {
   auto left = (element.contains("left")) ? element["left"] : element["target"];
@@ -1955,24 +2075,10 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   attach_symbol_location(lhs, symbol_table());
   attach_symbol_location(rhs, symbol_table());
 
-  auto to_side_effect_call = [](exprt &expr) {
-    side_effect_expr_function_callt side_effect;
-    code_function_callt &code = static_cast<code_function_callt &>(expr);
-    side_effect.function() = code.function();
-    side_effect.location() = code.location();
-    side_effect.type() = code.type();
-    side_effect.arguments() = code.arguments();
-    expr = side_effect;
-  };
-
   // Function calls in expressions like "fib(n-1) + fib(n-2)" need to be converted to side effects
-  if (lhs.is_function_call())
-    to_side_effect_call(lhs);
-  if (rhs.is_function_call())
-    to_side_effect_call(rhs);
+  convert_function_calls_to_side_effects(lhs, rhs);
 
   std::string op;
-
   if (element.contains("op"))
     op = element["op"]["_type"].get<std::string>();
   else if (element.contains("ops"))
@@ -1986,7 +2092,13 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     if (
       is_zero_length_array(lhs) && is_zero_length_array(rhs) &&
       (op == "Eq" || op == "NotEq"))
+    {
       return gen_boolean(op == "Eq");
+    }
+
+    // Handle string concatenation with type promotion
+    if (op == "Add")
+      return handle_string_concatenation_with_promotion(lhs, rhs, left, right);
 
     // Compute resulting list
     if (op == "Mult")
@@ -2028,59 +2140,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
           assert(symbol);
 
           if (symbol->value.is_code())
-          {
-            // Build array and initialize VLA
-
-            symbolt &vla_symbol = create_tmp_symbol(
-              element,
-              "vla",
-              current_lhs->type(),
-              gen_zero(current_lhs->type()));
-
-            code_declt vla_decl(symbol_expr(vla_symbol));
-            vla_decl.location() = get_location_from_decl(element);
-            current_block->copy_to_operands(vla_decl);
-
-            // Add counter for while loop
-            symbolt &counter = create_tmp_symbol(
-              element, "counter", int_type(), gen_zero(int_type()));
-
-            code_assignt counter_code(
-              symbol_expr(counter), gen_zero(int_type()));
-            current_block->copy_to_operands(counter_code);
-
-            // Build conditional for while loop (counter < len(arr))
-            exprt cond("<", bool_type());
-            cond.operands().push_back(symbol_expr(counter));
-            cond.operands().push_back(symbol_expr(*symbol));
-
-            // Build block with arr[i] assignment and counter increment
-            code_blockt then;
-
-            // arr[counter] assignment
-            index_exprt arr_index(
-              symbol_expr(vla_symbol),
-              symbol_expr(counter),
-              symbol_expr(vla_symbol).type().subtype());
-            code_assignt arr_assign(arr_index, list_elem);
-            then.copy_to_operands(arr_assign);
-
-            // increment counter
-            exprt incr("+");
-            incr.copy_to_operands(symbol_expr(counter));
-            incr.copy_to_operands(gen_one(int_type()));
-            code_assignt update(symbol_expr(counter), incr);
-            then.copy_to_operands(update);
-
-            // add while block to initialize vla
-            codet while_cod;
-            while_cod.set_statement("while");
-            while_cod.copy_to_operands(cond, then);
-            current_block->copy_to_operands(while_cod);
-
-            // return initialized vla
-            return symbol_expr(vla_symbol);
-          }
+            return create_variable_length_array_for_multiplication(
+              element, symbol, list_elem);
 
           list_size = std::stoi(symbol->value.value().as_string(), nullptr, 2);
         }
@@ -2105,6 +2166,38 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     return get_binary_operator_expr_for_is(lhs, rhs);
   else if (op == "IsNot")
     return get_negated_is_expr(lhs, rhs);
+
+  // Handle type mismatches for relational operations
+  if (type_utils::is_relational_op(op))
+  {
+    // Check for float vs string comparisons
+    bool lhs_is_float = lhs.type().is_floatbv();
+    bool rhs_is_float = rhs.type().is_floatbv();
+    bool lhs_is_string =
+      lhs.type().is_array() && lhs.type().subtype() == char_type();
+    bool rhs_is_string =
+      rhs.type().is_array() && rhs.type().subtype() == char_type();
+
+    if ((lhs_is_float && rhs_is_string) || (lhs_is_string && rhs_is_float))
+    {
+      // Create a binary expression for handle_float_vs_string with proper location
+      exprt binary_expr(get_op(op, bool_type()), bool_type());
+
+      // Set location from the AST element or operands
+      locationt loc = get_location_from_decl(element);
+      if (loc.is_nil() || loc.get_line().empty())
+      {
+        // Fallback to operand locations
+        if (!lhs.location().is_nil())
+          loc = lhs.location();
+        else if (!rhs.location().is_nil())
+          loc = rhs.location();
+      }
+      binary_expr.location() = loc;
+
+      return handle_float_vs_string(binary_expr, op);
+    }
+  }
 
   // Get LHS and RHS types
   std::string lhs_type = type_handler_.type_to_string(lhs.type());
@@ -2209,41 +2302,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   // Handle chained comparisons like: assert 0 <= x <= 1
   if (element.contains("comparators") && element["comparators"].size() > 1)
-  {
-    exprt cond("and", bool_type());
-    cond.move_to_operands(
-      bin_expr); // bin_expr compares left and comparators[0]
-    for (size_t i = 0; i + 1 < element["comparators"].size(); i += 2)
-    {
-      std::string op(element["ops"][i + 1]["_type"].get<std::string>());
-      exprt logical_expr(get_op(op, bool_type()), bool_type());
-      exprt op1 = get_expr(element["comparators"][i]);
-      exprt op2 = get_expr(element["comparators"][i + 1]);
-
-      if (op1.is_function_call())
-        to_side_effect_call(op1);
-      if (op2.is_function_call())
-        to_side_effect_call(op2);
-
-      std::string op1_type = type_handler_.type_to_string(op1.type());
-      std::string op2_type = type_handler_.type_to_string(op2.type());
-
-      if (op1_type == "str" && op2_type == "str")
-      {
-        handle_string_comparison(op, op1, op2, element);
-        exprt expr(get_op(op, bool_type()), type);
-        expr.copy_to_operands(op1, op2);
-        cond.move_to_operands(expr);
-      }
-      else
-      {
-        logical_expr.copy_to_operands(op1);
-        logical_expr.copy_to_operands(op2);
-        cond.move_to_operands(logical_expr);
-      }
-    }
-    return cond;
-  }
+    return handle_chained_comparisons_logic(element, bin_expr);
 
   return bin_expr;
 }
@@ -2521,8 +2580,10 @@ exprt python_converter::get_literal(const nlohmann::json &element)
 
   const std::string &str_val = value.get<std::string>();
 
-  // Handle single-character string as char literal
-  if (str_val.size() == 1 && !is_bytes_literal(element))
+  // Handle single-character string as char literal ONLY if not processing list elements
+  if (
+    str_val.size() == 1 && !is_bytes_literal(element) &&
+    !processing_list_elements)
   {
     typet t = type_handler_.get_typet("str", str_val.size());
     return from_integer(static_cast<unsigned char>(str_val[0]), t);
@@ -2836,16 +2897,29 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   {
     exprt zero = gen_zero(size_type());
     exprt &list_size = static_cast<array_typet &>(current_element_type).size();
-    typet list_type = type_handler_.get_list_type(element);
+    typet list_type = type_handler_.get_list_type_improved(element);
 
     if (list_size == zero)
       current_element_type = list_type;
 
     exprt list = gen_zero(list_type);
 
+    // Set flag to prevent single-character optimization
+    processing_list_elements = true;
+
     unsigned int i = 0;
     for (auto &e : element["elts"])
-      list.operands().at(i++) = get_expr(e);
+    {
+      // Set element type for proper string processing
+      if (list_type.is_array() && list_type.subtype().is_array())
+        current_element_type = list_type.subtype();
+
+      exprt element_expr = get_expr(e);
+      list.operands().at(i++) = element_expr;
+    }
+
+    // Reset flag
+    processing_list_elements = false;
 
     symbolt &cl =
       create_tmp_symbol(element, "$compound-literal$", list_type, list);
@@ -3474,6 +3548,37 @@ void python_converter::get_var_assign(
     rhs = get_expr(ast_node["value"]);
     has_value = true;
     is_converting_rhs = false;
+
+    // Fix for single character string constant assigned to str type variables
+    if (
+      lhs_type == "str" &&
+      (rhs.type().is_signedbv() || rhs.type().is_unsignedbv()))
+    {
+      // Check if this is a string constant assignment like s: str = "h"
+      if (
+        ast_node["value"]["_type"] == "Constant" &&
+        ast_node["value"]["value"].is_string())
+      {
+        std::string str_value = ast_node["value"]["value"].get<std::string>();
+
+        // Create proper string array with null terminator
+        typet string_type =
+          type_handler_.build_array(char_type(), str_value.length() + 1);
+        exprt str_array = gen_zero(string_type);
+
+        // Fill the array with characters
+        for (size_t i = 0; i < str_value.length(); ++i)
+        {
+          BigInt char_val(static_cast<unsigned char>(str_value[i]));
+          exprt char_expr = constant_exprt(
+            integer2binary(char_val, 8), integer2string(char_val), char_type());
+          str_array.operands().at(i) = char_expr;
+        }
+        // Null terminator is already zero-initialized
+
+        rhs = str_array;
+      }
+    }
   }
 
   if (has_value && rhs != exprt("_init_undefined"))
@@ -3625,8 +3730,39 @@ void python_converter::get_compound_assign(
   }
 
   std::string op = ast_node["op"]["_type"].get<std::string>();
-  if (
-    op == "Add" && lhs.type().is_array() && lhs.type().subtype() == char_type())
+
+  // Check if this is a string concatenation based on variable annotation
+  bool is_string_concat =
+    false; // use to check if the operation is a string concatenation
+  if (op == "Add")
+  {
+    // Standard array-based string concatenation
+    if (
+      (lhs.type().is_array() && lhs.type().subtype() == char_type()) ||
+      (current_element_type.is_array() &&
+       current_element_type.subtype() == char_type()))
+    {
+      is_string_concat = true;
+    }
+    // Check if variable is annotated as str but implemented as single char
+    else if (
+      (lhs.type().is_signedbv() || lhs.type().is_unsignedbv()) &&
+      (current_element_type.is_signedbv() ||
+       current_element_type.is_unsignedbv()))
+    {
+      // Check if the variable was declared with str annotation
+      nlohmann::json decl_node = get_var_node(var_name, *ast_json);
+      if (
+        !decl_node.empty() && decl_node.contains("annotation") &&
+        decl_node["annotation"].contains("id") &&
+        decl_node["annotation"]["id"] == "str")
+      {
+        is_string_concat = true;
+      }
+    }
+  }
+
+  if (is_string_concat)
   {
     exprt rhs_expr = get_expr(ast_node["value"]);
     nlohmann::json left = ast_node["target"];
@@ -4602,7 +4738,7 @@ static void add_global_static_variable(
   assert(added_symbol);
 }
 
-void python_converter::load_c_intrisics()
+void python_converter::load_c_intrisics(code_blockt &block)
 {
   // Add symbols required by the C models
 
@@ -4616,6 +4752,22 @@ void python_converter::load_c_intrisics()
 
   auto type2 = array_typet(size_type(), exprt("infinity"));
   add_global_static_variable(symbol_table_, type2, "__ESBMC_alloc_size");
+
+  // Initialize intrinsic variables to match C frontend behavior
+  locationt location;
+  location.set_file("esbmc_intrinsics.h");
+
+  // ASSIGN __ESBMC_rounding_mode = 0;
+  symbol_exprt rounding_symbol("c:@__ESBMC_rounding_mode", int_type());
+  code_assignt rounding_assign(rounding_symbol, gen_zero(int_type()));
+  rounding_assign.location() = location;
+  block.copy_to_operands(rounding_assign);
+
+  // TODO: Consider initializing other intrinsic variables if needed:
+  // - __ESBMC_alloc
+  // - __ESBMC_deallocated
+  // - __ESBMC_is_dynamic
+  // - __ESBMC_alloc_size
 }
 
 ///  Only addresses __name__; other Python built-ins such as
@@ -4757,8 +4909,9 @@ void python_converter::convert()
     is_loading_models = false;
   }
 
-  // Load C intrisics
-  load_c_intrisics();
+  // Create a block to hold intrinsic assignments and load C intrinsics
+  code_blockt intrinsic_block;
+  load_c_intrisics(intrinsic_block);
 
   // Handle --function option
   const std::string function = config.options.get_option("function");
@@ -4783,6 +4936,10 @@ void python_converter::convert()
       throw std::runtime_error("Function " + function + " not found");
 
     code_blockt block;
+
+    // Add intrinsic assignments first
+    block.copy_to_operands(intrinsic_block);
+
     // Convert classes referenced by the function
     for (const auto &clazz : global_scope_.classes())
     {
@@ -4886,10 +5043,19 @@ void python_converter::convert()
     exprt main_block = get_block((*ast_json)["body"]);
     codet main_code = convert_expression_to_code(main_block);
 
+    // Create the final main block with intrinsic assignments first
+    code_blockt final_block;
+    final_block.copy_to_operands(intrinsic_block);
+
     if (main_symbol.value.is_code())
-      main_symbol.value.copy_to_operands(main_code);
+    {
+      final_block.copy_to_operands(main_symbol.value);
+      final_block.copy_to_operands(main_code);
+    }
     else
-      main_symbol.value.swap(main_code);
+      final_block.copy_to_operands(main_code);
+
+    main_symbol.value.swap(final_block);
   }
 
   if (symbol_table_.move(main_symbol))

@@ -93,6 +93,18 @@ public:
    */
   size_t get_type_width(const typet &type) const;
 
+  /**
+   * Determines the appropriate type for a list with improved string handling.
+   * This method provides improved type inference for lists containing string literals,
+   * ensuring that strings within lists are properly represented as null-terminated
+   * character arrays rather than single character values.
+   * 
+   * @param element The JSON element representing a Python list literal from the AST.
+   * @return The typet representing an array type suitable for the list, with proper
+   *         string array handling for lists containing string constants.
+   */
+  typet get_list_type_improved(const nlohmann::json &element);
+
 private:
   /// Encapsulate the const_cast in one place with clear documentation
   exprt get_expr_helper(const nlohmann::json &json) const;
