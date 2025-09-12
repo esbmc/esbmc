@@ -3,7 +3,6 @@
 #include <stdint.h> // SIZE_MAX
 #include <string.h>
 
-
 typedef struct
 {
   const void *value; // data pointer
@@ -32,7 +31,8 @@ static inline bool list_in_bounds(const List *l, size_t index)
 }
 */
 
-static size_t list_size(const List *l) {
+static size_t list_size(const List *l)
+{
   assert(l);
   return l->size;
 }
@@ -45,14 +45,12 @@ static inline Object *list_at(List *l, size_t index)
   return &l->items[index];
 }
 
-
 static inline const Object *list_cat(const List *l, size_t index)
 {
-//  return list_in_bounds(l, index) ? &l->items[index] : NULL;
+  //  return list_in_bounds(l, index) ? &l->items[index] : NULL;
   assert(index < l->size);
   return &l->items[index];
 }
-
 
 static inline void *list_get_as(const List *l, size_t i, size_t expect_type)
 {
@@ -72,11 +70,12 @@ static inline bool list_push(List *l, const void *value, size_t type_id)
 }
 */
 
-
-static inline bool list_push(List *l, const void *value, size_t type_id, size_t type_size)
+static inline bool
+list_push(List *l, const void *value, size_t type_id, size_t type_size)
 {
   void *copied_value = malloc(type_size);
-  if (copied_value == NULL) {
+  if (copied_value == NULL)
+  {
     return false;
   }
 
@@ -84,7 +83,8 @@ static inline bool list_push(List *l, const void *value, size_t type_id, size_t 
   const char *src = (const char *)value;
   char *dst = (char *)copied_value;
   size_t i = 0;
-  while (i < type_size) {
+  while (i < type_size)
+  {
     dst[i] = src[i];
     i++;
   }
