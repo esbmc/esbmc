@@ -3316,7 +3316,12 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     {
       typet list_elem_type;
 
-      if (list_node["_type"] == "arg")
+      if (list_node.is_null())
+      {
+        // Handle case where list_node is not found - use default element type
+        list_elem_type = get_list_element_type();
+      }
+      else if (list_node["_type"] == "arg")
       {
         list_elem_type = type_handler_.get_typet(
           list_node["annotation"]["slice"]["id"].get<std::string>());
@@ -3324,7 +3329,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       else if (
         slice["_type"] == "Constant" ||
         (slice["_type"] == "UnaryOp" &&
-         slice["operand"]["_type"] == "Constant"))
+        slice["operand"]["_type"] == "Constant"))
       {
         const std::string &list_name = array.identifier().as_string();
         try
@@ -3341,18 +3346,22 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       }
       else if (slice["_type"] == "Name")
       {
-        if (list_node["_type"] == "arg")
+        if (!list_node.is_null() && list_node["_type"] == "arg")
         {
           list_elem_type = type_handler_.get_typet(
             list_node["annotation"]["slice"]["id"].get<std::string>());
         }
         else
         {
-          while (!list_node["value"].contains("elts") ||
-                 !list_node["value"]["elts"].is_array())
+          // Handle case where we need to find the variable declaration
+          while (!list_node.is_null() && 
+                (!list_node.contains("value") || 
+                  !list_node["value"].contains("elts") ||
+                  !list_node["value"]["elts"].is_array()))
           {
             if (
-              list_node.contains("value") && list_node["value"].contains("id"))
+              list_node.contains("value") && 
+              list_node["value"].contains("id"))
               list_node = json_utils::find_var_decl(
                 list_node["value"]["id"], current_func_name_, *ast_json);
             else
@@ -3361,13 +3370,12 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             }
           }
 
-          assert(!list_node.empty());
-
-          assert(
-            list_node["value"].is_array() ||
-            list_node["value"]["elts"].is_array());
-
-          if (type_handler_.has_multiple_types(list_node["value"]["elts"]))
+          // Check if we found a valid list node with the expected structure
+          if (list_node.is_null() || 
+              !list_node.contains("value") || 
+              (!list_node["value"].is_array() && 
+              (!list_node["value"].contains("elts") || 
+                !list_node["value"]["elts"].is_array())))
           {
             throw std::runtime_error(
               "Indexing list with symbolic values are not supported yet.");
@@ -3407,18 +3415,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       // 4.2.4 Add list_at call to the block
       current_block->copy_to_operands(list_at_call);
 
-      // Get obj->value
+      // Get obj->value and cast it to the correct type
       member_exprt obj_value(
         symbol_expr(tmp_obj_symbol), "value", pointer_typet(empty_typet()));
-      symbolt &tmp_value_ptr_symbol = create_tmp_symbol(
-        element, "tmp_value_ptr", pointer_typet(empty_typet()), obj_value);
-
-      code_declt tmp_value_ptr_decl(symbol_expr(tmp_value_ptr_symbol));
-      tmp_value_ptr_decl.copy_to_operands(obj_value);
-      current_block->copy_to_operands(tmp_value_ptr_decl);
-
-      typecast_exprt tc(
-        symbol_expr(tmp_value_ptr_symbol), pointer_typet(list_elem_type));
+      
+      // Direct typecast from obj->value (which is void*) to target type pointer
+      typecast_exprt tc(obj_value, pointer_typet(list_elem_type));
+      
+      // Dereference to get the actual value
       dereference_exprt deref(list_elem_type);
       deref.op0() = tc;
       return deref;
