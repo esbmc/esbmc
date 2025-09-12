@@ -1963,17 +1963,10 @@ exprt python_converter::handle_string_concatenation_with_promotion(
 /// Helper method to create variable-length arrays
 exprt python_converter::create_variable_length_array_for_multiplication(
   const nlohmann::json &element,
-  symbolt *symbol,
+  const symbolt *list,
+  symbolt *size_var,
   const exprt &list_elem)
 {
-  // Build array and initialize VLA
-  symbolt &vla_symbol = create_tmp_symbol(
-    element, "vla", current_lhs->type(), gen_zero(current_lhs->type()));
-
-  code_declt vla_decl(symbol_expr(vla_symbol));
-  vla_decl.location() = get_location_from_decl(element);
-  current_block->copy_to_operands(vla_decl);
-
   // Add counter for while loop
   symbolt &counter =
     create_tmp_symbol(element, "counter", int_type(), gen_zero(int_type()));
@@ -1984,18 +1977,12 @@ exprt python_converter::create_variable_length_array_for_multiplication(
   // Build conditional for while loop (counter < len(arr))
   exprt cond("<", bool_type());
   cond.operands().push_back(symbol_expr(counter));
-  cond.operands().push_back(symbol_expr(*symbol));
+  cond.operands().push_back(symbol_expr(*size_var));
 
-  // Build block with arr[i] assignment and counter increment
+  // Build block with lish_push() calls and counter increment
   code_blockt then;
-
-  // arr[counter] assignment
-  index_exprt arr_index(
-    symbol_expr(vla_symbol),
-    symbol_expr(counter),
-    symbol_expr(vla_symbol).type().subtype());
-  code_assignt arr_assign(arr_index, list_elem);
-  then.copy_to_operands(arr_assign);
+  exprt list_push_call = build_push_list_call(*list, element, list_elem);
+  then.copy_to_operands(list_push_call);
 
   // increment counter
   exprt incr("+");
@@ -2004,13 +1991,13 @@ exprt python_converter::create_variable_length_array_for_multiplication(
   code_assignt update(symbol_expr(counter), incr);
   then.copy_to_operands(update);
 
-  // add while block to initialize vla
+  // add while block for list_push() calls
   codet while_cod;
   while_cod.set_statement("while");
   while_cod.copy_to_operands(cond, then);
   current_block->copy_to_operands(while_cod);
 
-  return symbol_expr(vla_symbol);
+  return symbol_expr(*list);
 }
 
 /// Helper method to handle chained comparisons
@@ -2100,66 +2087,75 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     // Handle string concatenation with type promotion
     if (op == "Add")
       return handle_string_concatenation_with_promotion(lhs, rhs, left, right);
+  }
 
+  typet list_type = get_list_type();
+
+  if ((lhs.type() == list_type || rhs.type() == list_type) && op == "Mult")
+  {
     // Compute resulting list
-    if (op == "Mult")
+    if (is_right)
+      return nil_exprt();
+
+    BigInt list_size;
+    exprt list_elem;
+
+    // Get list size from lhs (e.g.: 3 * [1])
+    if (lhs.type() != list_type)
     {
-      if (is_right)
-        return nil_exprt();
-
-      BigInt list_size;
-      exprt list_elem;
-
-      // Get list size from lhs (e.g.: 3 * [1])
-      if (!lhs.type().is_array())
+      if (lhs.is_symbol())
       {
-        if (lhs.is_symbol())
-        {
-          symbolt *symbol =
-            find_symbol(to_symbol_expr(lhs).get_identifier().as_string());
-          assert(symbol);
-          list_size = std::stoi(symbol->value.value().as_string(), nullptr, 2);
-        }
-        else if (lhs.is_constant())
-          list_size = std::stoi(lhs.value().as_string(), nullptr, 2);
-
-        // List element is the rhs
-        list_elem = get_expr(right["elts"][0]);
+        symbolt *size_var =
+          find_symbol(to_symbol_expr(lhs).get_identifier().as_string());
+        assert(size_var);
+        list_size = std::stoi(size_var->value.value().as_string(), nullptr, 2);
       }
+      else if (lhs.is_constant())
+        list_size = std::stoi(lhs.value().as_string(), nullptr, 2);
 
-      // Get list size from rhs (e.g.: 3 * [1])
-      if (!rhs.type().is_array())
-      {
-        // List element is the rhs
-        list_elem = get_expr(left["elts"][0]);
-
-        if (rhs.is_symbol())
-        {
-          symbolt *symbol =
-            find_symbol(to_symbol_expr(rhs).get_identifier().as_string());
-
-          assert(symbol);
-
-          if (symbol->value.is_code())
-            return create_variable_length_array_for_multiplication(
-              element, symbol, list_elem);
-
-          list_size = std::stoi(symbol->value.value().as_string(), nullptr, 2);
-        }
-        else if (rhs.is_constant())
-          list_size = std::stoi(rhs.value().as_string(), nullptr, 2);
-      }
-
-      typet st =
-        (lhs.type().is_array()) ? lhs.type().subtype() : rhs.type().subtype();
-      typet list_type = array_typet(st, from_integer(list_size, int_type()));
-      exprt list = gen_zero(list_type);
-
-      for (int64_t i = 0; i < list_size.to_int64(); ++i)
-        list.operands().at(i) = list_elem;
-
-      return list;
+      // List element is the rhs
+      list_elem = get_expr(right["elts"][0]);
     }
+
+    // Get list size from rhs (e.g.: [1] * 3)
+    if (rhs.type() != list_type)
+    {
+      // List element is the rhs
+      list_elem = get_expr(left["elts"][0]);
+
+      if (rhs.is_symbol()) // (e.g.: [1] * n)
+      {
+        symbolt *size_var =
+          find_symbol(to_symbol_expr(rhs).get_identifier().as_string());
+
+        assert(size_var);
+
+        symbolt *list_symbol = find_symbol(lhs.identifier().as_string());
+        assert(list_symbol);
+
+        if (size_var->value.is_code())
+          return create_variable_length_array_for_multiplication(
+            element, list_symbol, size_var, list_elem);
+
+        list_size = std::stoi(size_var->value.value().as_string(), nullptr, 2);
+      }
+      else if (rhs.is_constant())
+        list_size = std::stoi(rhs.value().as_string(), nullptr, 2);
+    }
+
+    symbolt *list_symbol = find_symbol(lhs.identifier().as_string());
+    assert(list_symbol);
+
+    const std::string &list_id = current_lhs->identifier().as_string();
+
+    for (int64_t i = 0; i < list_size.to_int64() - 1; ++i)
+    {
+      current_block->copy_to_operands(
+        build_push_list_call(*list_symbol, element, list_elem));
+      list_type_map[list_id].push_back(list_elem.type());
+    }
+
+    return symbol_expr(*list_symbol);
   }
 
   /// Handle 'is' and 'is not' Python identity comparisons
@@ -3316,7 +3312,12 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     {
       typet list_elem_type;
 
-      if (list_node["_type"] == "arg")
+      if (list_node.is_null())
+      {
+        // Handle case where list_node is not found - use default element type
+        list_elem_type = get_list_element_type();
+      }
+      else if (list_node["_type"] == "arg")
       {
         list_elem_type = type_handler_.get_typet(
           list_node["annotation"]["slice"]["id"].get<std::string>());
@@ -3341,15 +3342,18 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       }
       else if (slice["_type"] == "Name")
       {
-        if (list_node["_type"] == "arg")
+        if (!list_node.is_null() && list_node["_type"] == "arg")
         {
           list_elem_type = type_handler_.get_typet(
             list_node["annotation"]["slice"]["id"].get<std::string>());
         }
         else
         {
-          while (!list_node["value"].contains("elts") ||
-                 !list_node["value"]["elts"].is_array())
+          // Handle case where we need to find the variable declaration
+          while (!list_node.is_null() &&
+                 (!list_node.contains("value") ||
+                  !list_node["value"].contains("elts") ||
+                  !list_node["value"]["elts"].is_array()))
           {
             if (
               list_node.contains("value") && list_node["value"].contains("id"))
@@ -3361,13 +3365,12 @@ exprt python_converter::get_expr(const nlohmann::json &element)
             }
           }
 
-          assert(!list_node.empty());
-
-          assert(
-            list_node["value"].is_array() ||
-            list_node["value"]["elts"].is_array());
-
-          if (type_handler_.has_multiple_types(list_node["value"]["elts"]))
+          // Check if we found a valid list node with the expected structure
+          if (
+            list_node.is_null() || !list_node.contains("value") ||
+            (!list_node["value"].is_array() &&
+             (!list_node["value"].contains("elts") ||
+              !list_node["value"]["elts"].is_array())))
           {
             throw std::runtime_error(
               "Indexing list with symbolic values are not supported yet.");
@@ -3407,18 +3410,14 @@ exprt python_converter::get_expr(const nlohmann::json &element)
       // 4.2.4 Add list_at call to the block
       current_block->copy_to_operands(list_at_call);
 
-      // Get obj->value
+      // Get obj->value and cast it to the correct type
       member_exprt obj_value(
         symbol_expr(tmp_obj_symbol), "value", pointer_typet(empty_typet()));
-      symbolt &tmp_value_ptr_symbol = create_tmp_symbol(
-        element, "tmp_value_ptr", pointer_typet(empty_typet()), obj_value);
 
-      code_declt tmp_value_ptr_decl(symbol_expr(tmp_value_ptr_symbol));
-      tmp_value_ptr_decl.copy_to_operands(obj_value);
-      current_block->copy_to_operands(tmp_value_ptr_decl);
+      // Direct typecast from obj->value (which is void*) to target type pointer
+      typecast_exprt tc(obj_value, pointer_typet(list_elem_type));
 
-      typecast_exprt tc(
-        symbol_expr(tmp_value_ptr_symbol), pointer_typet(list_elem_type));
+      // Dereference to get the actual value
       dereference_exprt deref(list_elem_type);
       deref.op0() = tc;
       return deref;
@@ -3970,6 +3969,25 @@ void python_converter::get_var_assign(
             break;
           }
         }
+
+        typet l_type = pointer_typet(get_list_type());
+        symbolt &tmp_var_symbol =
+          create_tmp_symbol(ast_node, "tmp_var", l_type, gen_zero(l_type));
+
+        code_declt tmp_var_decl(symbol_expr(tmp_var_symbol));
+        tmp_var_decl.location() = get_location_from_decl(ast_node);
+        target_block.copy_to_operands(tmp_var_decl);
+
+        rhs.op0() = symbol_expr(tmp_var_symbol);
+        target_block.copy_to_operands(rhs);
+
+        dereference_exprt deref(l_type.subtype());
+        deref.op0() = symbol_expr(tmp_var_symbol);
+        rhs = deref;
+
+        code_assignt code_assign(lhs, rhs);
+        code_assign.location() = location_begin;
+        rhs = code_assign;
       }
 
       target_block.copy_to_operands(rhs);
@@ -4436,6 +4454,7 @@ void python_converter::get_function_definition(
     // Argument id
     std::string arg_id = id.to_string() + "@" + arg_name;
     arg.cmt_identifier(arg_id);
+    arg.identifier(arg_id);
 
     // Location
     locationt location = get_location_from_decl(element);
