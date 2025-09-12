@@ -129,7 +129,6 @@ const static std::vector<std::string> python_c_models = {
   "matmul",
   "pow",
   "log",
-  "pow_by_squaring",
   "log2",
   "ldexp",
   "log1p_taylor"};
