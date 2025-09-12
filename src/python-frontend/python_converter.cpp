@@ -2153,7 +2153,7 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
         list_size = std::stoi(rhs.value().as_string(), nullptr, 2);
     }
 
-    symbolt* list_symbol = find_symbol(lhs.identifier().as_string());
+    symbolt *list_symbol = find_symbol(lhs.identifier().as_string());
     assert(list_symbol);
 
     const std::string &list_id = current_lhs->identifier().as_string();
