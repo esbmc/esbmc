@@ -4266,7 +4266,8 @@ typet python_converter::get_type_from_annotation(
   {
     if (
       annotation_node.contains("value") &&
-      (annotation_node["value"]["id"] == "list" || annotation_node["value"]["id"] == "List"))
+      (annotation_node["value"]["id"] == "list" ||
+       annotation_node["value"]["id"] == "List"))
       return get_list_type();
 
     return type_handler_.get_list_type(element);
