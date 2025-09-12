@@ -4465,6 +4465,7 @@ void python_converter::get_function_definition(
     // Argument id
     std::string arg_id = id.to_string() + "@" + arg_name;
     arg.cmt_identifier(arg_id);
+    arg.identifier(arg_id);
 
     // Location
     locationt location = get_location_from_decl(element);
