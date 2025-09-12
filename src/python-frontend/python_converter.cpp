@@ -2100,66 +2100,72 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     // Handle string concatenation with type promotion
     if (op == "Add")
       return handle_string_concatenation_with_promotion(lhs, rhs, left, right);
+  }
 
+  typet list_type = get_list_type();
+
+  if ((lhs.type() == list_type || rhs.type() == list_type) && op == "Mult")
+  {
     // Compute resulting list
-    if (op == "Mult")
+    if (is_right)
+      return nil_exprt();
+
+    BigInt list_size;
+    exprt list_elem;
+
+    // Get list size from lhs (e.g.: 3 * [1])
+    if (lhs.type() != list_type)
     {
-      if (is_right)
-        return nil_exprt();
-
-      BigInt list_size;
-      exprt list_elem;
-
-      // Get list size from lhs (e.g.: 3 * [1])
-      if (!lhs.type().is_array())
+      if (lhs.is_symbol())
       {
-        if (lhs.is_symbol())
-        {
-          symbolt *symbol =
-            find_symbol(to_symbol_expr(lhs).get_identifier().as_string());
-          assert(symbol);
-          list_size = std::stoi(symbol->value.value().as_string(), nullptr, 2);
-        }
-        else if (lhs.is_constant())
-          list_size = std::stoi(lhs.value().as_string(), nullptr, 2);
-
-        // List element is the rhs
-        list_elem = get_expr(right["elts"][0]);
+        symbolt *symbol =
+          find_symbol(to_symbol_expr(lhs).get_identifier().as_string());
+        assert(symbol);
+        list_size = std::stoi(symbol->value.value().as_string(), nullptr, 2);
       }
+      else if (lhs.is_constant())
+        list_size = std::stoi(lhs.value().as_string(), nullptr, 2);
 
-      // Get list size from rhs (e.g.: 3 * [1])
-      if (!rhs.type().is_array())
-      {
-        // List element is the rhs
-        list_elem = get_expr(left["elts"][0]);
-
-        if (rhs.is_symbol())
-        {
-          symbolt *symbol =
-            find_symbol(to_symbol_expr(rhs).get_identifier().as_string());
-
-          assert(symbol);
-
-          if (symbol->value.is_code())
-            return create_variable_length_array_for_multiplication(
-              element, symbol, list_elem);
-
-          list_size = std::stoi(symbol->value.value().as_string(), nullptr, 2);
-        }
-        else if (rhs.is_constant())
-          list_size = std::stoi(rhs.value().as_string(), nullptr, 2);
-      }
-
-      typet st =
-        (lhs.type().is_array()) ? lhs.type().subtype() : rhs.type().subtype();
-      typet list_type = array_typet(st, from_integer(list_size, int_type()));
-      exprt list = gen_zero(list_type);
-
-      for (int64_t i = 0; i < list_size.to_int64(); ++i)
-        list.operands().at(i) = list_elem;
-
-      return list;
+      // List element is the rhs
+      list_elem = get_expr(right["elts"][0]);
     }
+
+    // Get list size from rhs (e.g.: [1] * 3)
+    if (rhs.type() != list_type)
+    {
+      // List element is the rhs
+      list_elem = get_expr(left["elts"][0]);
+
+      if (rhs.is_symbol())
+      {
+        symbolt *symbol =
+          find_symbol(to_symbol_expr(rhs).get_identifier().as_string());
+
+        assert(symbol);
+
+        if (symbol->value.is_code())
+          return create_variable_length_array_for_multiplication(
+            element, symbol, list_elem);
+
+        list_size = std::stoi(symbol->value.value().as_string(), nullptr, 2);
+      }
+      else if (rhs.is_constant())
+        list_size = std::stoi(rhs.value().as_string(), nullptr, 2);
+    }
+
+    symbolt* list_symbol = find_symbol(lhs.identifier().as_string());
+    assert(list_symbol);
+
+    const std::string &list_id = current_lhs->identifier().as_string();
+
+    for (int64_t i = 0; i < list_size.to_int64() - 1; ++i)
+    {
+      current_block->copy_to_operands(
+        build_push_list_call(*list_symbol, element, list_elem));
+      list_type_map[list_id].push_back(list_elem.type());
+    }
+
+    return symbol_expr(*list_symbol);
   }
 
   /// Handle 'is' and 'is not' Python identity comparisons
@@ -3420,13 +3426,6 @@ exprt python_converter::get_expr(const nlohmann::json &element)
 
       // Direct typecast from obj->value (which is void*) to target type pointer
       typecast_exprt tc(obj_value, pointer_typet(list_elem_type));
-
-      symbolt &tmp_func_ret_symbol = create_tmp_symbol(
-        element, "tmp_func_ret", list_elem_type, gen_zero(list_elem_type));
-
-      code_declt tmp_func_ret_decl(symbol_expr(tmp_func_ret_symbol));
-      tmp_func_ret_decl.location() = get_location_from_decl(element);
-      current_block->copy_to_operands(tmp_func_ret_decl);
 
       // Dereference to get the actual value
       dereference_exprt deref(list_elem_type);
