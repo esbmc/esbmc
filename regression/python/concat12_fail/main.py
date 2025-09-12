@@ -1,4 +1,3 @@
 s: str = "hello"
-s += " world"
-assert s != "hello world"
-
+s += "  world"
+assert s == "hello world"
