@@ -58,6 +58,9 @@ endif()
 if(ENABLE_CVC4)
     set(REGRESSIONS_CVC cvc)
 endif()
+if(ENABLE_CVC5)
+    set(REGRESSIONS_CVC cvc)
+endif()
 if(ENABLE_MATHSAT)
     set(REGRESSIONS_MATHSAT mathsat)
 endif()
@@ -176,6 +179,7 @@ if(APPLE)
                     ${REGRESSIONS_NUMPY}
                     ltl
                     goto-transcoder
+                    loop-invariants
        )
 elseif(WIN32)
     # FUTURE: Add floats-regression esbmc-cpp/cpp
@@ -238,6 +242,7 @@ else()
                     goto-coverage
                     goto-transcoder
                     parallel-solving
+                    loop-invariants
        )
   else()
     set(REGRESSIONS $ENV{BENCHMARK_TO_RUN}) # run a single user-specified benchmark

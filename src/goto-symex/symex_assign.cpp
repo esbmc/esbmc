@@ -524,6 +524,9 @@ void goto_symext::symex_assign_array(
   if (new_rhs->type != index.type)
     new_rhs = typecast2tc(index.type, new_rhs);
 
+  if (!is_nil_expr(full_rhs) && full_rhs->type != index.type)
+    full_rhs = typecast2tc(index.type, full_rhs);
+
   new_rhs =
     with2tc(index.source_value->type, index.source_value, index.index, new_rhs);
 

@@ -23,33 +23,33 @@ This ``manual'' is supposed to be an introduction to how the ESBMC model
 checkers internals are arranged and operate. It is not supposed to be a
 comprehensive piece of documentation on the exact behavior of particular
 functions or facilities; nor will it ever, ever be up to date. Exact
-documentation on a particular function or method should be written in
+documentation on a specific function or method should be written in
 doxygen in headers; this documentation can be built to HTML by executing
-\texttt{make doxygen} in the top level directory of ESBMCs source tree.
+\texttt{make doxygen} in the top-level directory of ESBMC's source tree.
 
 When referencing portions of code from within this manual, I'll probably
 end up referring to class names and methods within them. Source files and
-line numbers are liable to change, wheras the code layout of the project
+line numbers are liable to change, whereas the code layout of the project
 is the least likely to suffer significant churn. The location of such a
 class or method should be obvious from the context, or discoverable with
 grep. Numerous references will also be made to the \textit{Internal
 representation}, or \textit{irep} of something. This refers to how some piece
-of data is structured or stored, see the 'Misc' section for detail.
+of data is structured or stored; see the 'Misc' section for details.
 
 A huge amount of the code base is derived from the CBMC project. CBMC is
 open source (BSD 4-clause, ish), and available over SVN at
 \url{http://www.cprover.org/svn/cbmc}. A large number of design decisions
 are down to the development of CBMC; changes to ESBMC that cause
-significant divergance from CBMCs design should be carefully thought
+significant divergence from CBMC's design should be carefully thought
 about, seeing how it's more mature than ESBMC. Likewise, code being
 pulled in from CBMC should be examined to see whether it'll actually fit
-into what ESBMC is doing nowdays.
+into what ESBMC is doing nowadays.
 
 All additional gunge, queries, complaints, to \url{jeremy.morse@gmail.com}
 
 \section{Source tree structure}
 
-In an order vaguely related to how ESBMCs execution order occurs, the
+In an order vaguely related to how ESBMC's execution order occurs, the
 following describes the contents of directories in the source tree.
 
 FIXME: This is ugly, make it a table.
@@ -57,10 +57,10 @@ FIXME: This is ugly, make it a table.
 \begin{description}
 \item[docs] Directory for not-in-code documentation.
 \item[papers] Self explanatory.
-\item[scripts] Various scripts and auxilary files related to building ESBMC
+\item[scripts] Various scripts and auxiliary files related to building ESBMC
                and dealing with things that aren't source files. Makefile
                scripts and release/binary manipulating scripts.
-\item[esbmc] Top level model checking control code. Process entry point,
+\item[esbmc] Top-level model checking control code. Process entry point,
              option handling, general direction and invocation of the rest
              of the code base.
 \item[langapi] Abstractions for handling input source files. Links a variety
@@ -75,7 +75,7 @@ FIXME: This is ugly, make it a table.
                       that we seek to model.
 \item[cpp] Parser for C++ language. Code for all compilation steps of C++.
 \item[cpp/library] Implementation / models of various C++ template libraries.
-\item[big-int] Arbitary length integer library. Used internally to avoid any
+\item[big-int] Arbitrary length integer library. Used internally to avoid any
                kind of problems modelling large machine integers using small
                machine integers.
 \item[goto-programs] Routines for general operations on GOTO instructions, as
@@ -83,7 +83,7 @@ FIXME: This is ugly, make it a table.
                      GOTO instructions.
 \item[pointer-analysis] Code for interpreting the execution of GOTO instructions
                         and the analysis of their effect upon pointer tracking.
-                        Basically a static analysis of pointer assignment and
+                        Basically, a static analysis of pointer assignment and
                         reachability. Also, contains code for resolving pointer
                         indirection in dereferences.
 \item[goto-symex] Symbolic execution of GOTO instructions into an SSA program.
@@ -91,12 +91,12 @@ FIXME: This is ugly, make it a table.
                the produced SMT formula.
 \item[util] Miscellaneous functions, classes, and whatever to glue everything
             else together.
-\item[regression] Regression tests for various different facets of ESBMC.
+\item[regression] Regression tests for various facets of ESBMC.
 \end{description}
 
 \section{Command line options}
 
-What follows is a short description of each command line option to ESBMC that
+What follows is a short description of each command-line option to ESBMC that
 exists. All are prefixed with \url{--} when given. Some information is also
 available by running \url{esbmc --help}.
 
@@ -113,7 +113,7 @@ print the SSA program textually, then exit.\\
 program-too & Like program-only, but don't exit, instead continue
 verification.\\
 \hline
-function & Specify function to begin execution at. If function takes arguments,
+function & Specify function to begin execution at. If a function takes arguments,
 horrible undefined behavior occurs.\\
 \hline
 preprocess & Run the input source files through preprocessing, write the output
@@ -123,7 +123,7 @@ no-simplify & Disable simplification of expressions; effectively neuters
 constant propagation so that no fact is statically determined to be true or
 false, and we end up always exploring to the top of the unwind bound.\\
 \hline
-unwind & Takes integer parameter. Specifies the general unwind bound to apply
+unwind & Takes an integer parameter. Specifies the general unwind bound to apply
 to all loops in the program.\\
 \hline
 unwindset & Takes string parameter, a comma separate list of loopidnum:bound

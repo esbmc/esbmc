@@ -44,6 +44,14 @@ private:
 
   bool is_introspection_call() const;
 
+  bool is_input_call() const;
+
+  // Create an expression that represents non-deterministic string input
+  exprt handle_input() const;
+
+  // Helper method for UTF-8 logic
+  int decode_utf8_codepoint(const std::string &utf8_str) const;
+
   /*
    * Creates an expression for a non-deterministic function call.
    */
@@ -85,6 +93,8 @@ private:
   const symbolt *lookup_python_symbol(const std::string &var_name) const;
 
   exprt handle_isinstance() const;
+
+  exprt handle_hasattr() const;
 
   /*
    * Handles str-to-int conversions (e.g., int('65')) by reconstructing
@@ -156,6 +166,29 @@ private:
    * the __abs__() method. The function returns an expression representing the absolute value.
    */
   exprt handle_abs(nlohmann::json &arg) const;
+
+  /*
+   * Checks if the current function call is a min() or max() built-in function.
+   * Returns true if the function name matches "min" or "max", false otherwise.
+   */
+  bool is_min_max_call() const;
+
+  /*
+   * Handles min() or max() function calls by generating conditional expressions.
+   * Currently supports exactly 2 arguments.
+   * @TODO: Support multiple arguments.
+   * For min(a, b), generates: a < b ? a : b
+   * For max(a, b), generates: a > b ? a : b
+   * Performs type compatibility checking with automatic int-to-float promotion.
+   */
+  exprt
+  handle_min_max(const std::string &func_name, irep_idt comparison_op) const;
+
+  /*
+   * Convert the exception type to the constructor call
+   * Returns cpp-throw
+   */
+  exprt gen_exception_raise(std::string exc, std::string message) const;
 
 protected:
   symbol_id function_id_;

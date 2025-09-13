@@ -124,7 +124,17 @@ void violation_graphml_goto_trace(
   const namespacet &ns,
   const goto_tracet &goto_trace);
 
+void violation_yaml_goto_trace(
+  optionst &options,
+  const namespacet &ns,
+  const goto_tracet &goto_trace);
+
 void correctness_graphml_goto_trace(
+  optionst &options,
+  const namespacet &ns,
+  const goto_tracet &goto_trace);
+
+void correctness_yaml_goto_trace(
   optionst &options,
   const namespacet &ns,
   const goto_tracet &goto_trace);

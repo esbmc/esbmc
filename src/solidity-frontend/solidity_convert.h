@@ -43,8 +43,7 @@ public:
   find_decl_ref_global(const nlohmann::json &j, int ref_id);
   static const nlohmann::json &
   find_decl_ref_unique_id(const nlohmann::json &json, int ref_id);
-  static const nlohmann::json &
-  find_decl_ref(const nlohmann::json &json, int ref_id);
+  const nlohmann::json &find_decl_ref(const nlohmann::json &json, int ref_id);
   static const nlohmann::json &find_constructor_ref(int ref_decl_id);
   static const nlohmann::json &
   find_constructor_ref(const std::string &contract_name);
@@ -202,6 +201,10 @@ protected:
     exprt &front_block,
     exprt &back_block);
   bool is_sol_builin_symbol(const std::string &cname, const std::string &name);
+  nlohmann::json reorder_arguments(
+    const nlohmann::json &expr,
+    const nlohmann::json &src_ast_json,
+    const nlohmann::json &callee_expr_json);
 
   // handle the non-contract definition, including struct/enum/error/event/abstract/...
   bool get_noncontract_defition(nlohmann::json &ast_node);
@@ -690,6 +693,8 @@ protected:
   // structural typing indentical
   std::unordered_map<std::string, std::unordered_set<std::string>>
     structureTypingMap;
+  // virtual-override
+  std::unordered_map<std::string, std::unordered_map<int, int>> overrideMap;
 
   // contract name list
   std::unordered_map<int, std::string> contractNamesMap;

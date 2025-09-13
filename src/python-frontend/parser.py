@@ -1,4 +1,5 @@
 import sys
+import subprocess
 
 # Detect the Python version
 PY3 = sys.version_info[0] == 3
@@ -79,6 +80,15 @@ def add_type_annotation(node):
         value_node.encoded_bytes = encode_bytes(value_node.value)
 
 
+def is_standard_library_file(filename):
+    stdlib_paths = [
+        '/usr/lib/python',
+        '/usr/local/lib/python',
+        '/Library/Frameworks/Python.framework',
+    ]
+    return any(filename.startswith(path) for path in stdlib_paths)
+
+
 import_aliases = {}
 
 def process_imports(node, output_dir):
@@ -119,6 +129,9 @@ def process_imports(node, output_dir):
     try:
         with open(filename, "r") as source:
             tree = ast.parse(source.read())
+            if not is_standard_library_file(filename):
+              preprocessor = Preprocessor(filename)
+              tree = preprocessor.visit(tree)
             generate_ast_json(tree, filename, imported_elements, output_dir)
     except UnicodeDecodeError:
         pass
@@ -140,9 +153,14 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir):
     if elements_to_import is not None and elements_to_import:
         for node in tree.body:
             if isinstance(node, (ast.ClassDef, ast.FunctionDef)):
-                for elem_info in elements_to_import:
-                    if node.name == elem_info.name:
-                        filtered_nodes.append(node)
+                # Always include ESBMC helper functions
+                if node.name in ['ESBMC_range_has_next_', 'ESBMC_range_next_']:
+                    filtered_nodes.append(node)
+                else:
+                    for elem_info in elements_to_import:
+                        if node.name == elem_info.name:
+                            filtered_nodes.append(node)
+                            break
 
 
     # Convert AST to JSON
@@ -232,6 +250,16 @@ def main():
     check_usage()
     filename = sys.argv[1]
     output_dir = sys.argv[2]
+
+    # Type checking input program with mypy
+    result = subprocess.run(
+    ["mypy", "--strict", filename],
+    capture_output=True,
+    text=True)
+
+    if result.returncode != 0:
+        print("\033[93m\nType checking warning:\033[0m")
+        print(result.stdout)
 
     # Add the script directory to the import search path
     sys.path.append(os.path.dirname(filename))

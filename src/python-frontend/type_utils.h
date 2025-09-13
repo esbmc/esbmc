@@ -1,5 +1,8 @@
 #pragma once
 
+#include <util/expr.h>
+#include <util/type.h>
+
 #include <map>
 #include <string>
 
@@ -10,6 +13,7 @@ enum class StatementType
   FUNC_DEFINITION,
   IF_STATEMENT,
   WHILE_STATEMENT,
+  FOR_STATEMENT,
   EXPR,
   RETURN,
   ASSERT,
@@ -20,7 +24,9 @@ enum class StatementType
   CONTINUE,
   RAISE,
   UNKNOWN,
-  GLOBAL
+  GLOBAL,
+  TRY,
+  EXCEPTHANDLER
 };
 
 enum class ExpressionType
@@ -34,7 +40,8 @@ enum class ExpressionType
   SUBSCRIPT,
   VARIABLE_REF,
   LIST,
-  UNKNOWN
+  UNKNOWN,
+  FSTRING
 };
 
 class type_utils
@@ -77,6 +84,15 @@ public:
       name == "randint" || name == "random");
   }
 
+  static bool is_python_exceptions(const std::string &name)
+  {
+    return (
+      name == "BaseException" || name == "Exception" || name == "ValueError" ||
+      name == "TypeError" || name == "IndexError" || name == "KeyError" ||
+      name == "ZeroDivisionError" || name == "AssertionError" ||
+      name == "NameError");
+  }
+
   static bool is_c_model_func(const std::string &func_name)
   {
     return func_name == "ceil" || func_name == "floor" || func_name == "fabs" ||
@@ -92,6 +108,49 @@ public:
            func_name == "log" || func_name == "pow_by_squaring" ||
            func_name == "log2" || func_name == "log1p_taylor" ||
            func_name == "ldexp";
+  }
+
+  static bool is_ordered_comparison(const std::string &op)
+  {
+    return op == "Lt" || op == "Gt" || op == "LtE" || op == "GtE";
+  }
+
+  static bool is_relational_op(const std::string &op)
+  {
+    return (
+      op == "Eq" || op == "Lt" || op == "LtE" || op == "NotEq" || op == "Gt" ||
+      op == "GtE" || op == "And" || op == "Or");
+  }
+
+  static bool is_char_type(const typet &t)
+  {
+    return (t.is_signedbv() || t.is_unsignedbv()) &&
+           t.get("#cpp_type") == "char";
+  }
+
+  static bool is_float_vs_char(const exprt &a, const exprt &b)
+  {
+    const auto &type_a = a.type();
+    const auto &type_b = b.type();
+    return (type_a.is_floatbv() && is_char_type(type_b)) ||
+           (type_b.is_floatbv() && is_char_type(type_a));
+  }
+
+  static std::string remove_quotes(const std::string &str)
+  {
+    if (str.length() < 2)
+      return str;
+
+    // Check for single quotes
+    if (str.front() == '\'' && str.back() == '\'')
+      return str.substr(1, str.length() - 2);
+
+    // Check for double quotes
+    if (str.front() == '"' && str.back() == '"')
+      return str.substr(1, str.length() - 2);
+
+    // No quotes found, return original string
+    return str;
   }
 
 private:

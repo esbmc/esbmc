@@ -71,15 +71,14 @@ public:
     return _string;
   }
 
-  ostream &operator<<(string &val)
+  ostream &operator<<(const string &val)
   {
-    _string.append(val);
+    _string.append(val.c_str());
     return *this;
   }
 
-  ostream &operator<<(bool &val)
+  ostream &operator<<(bool val)
   {
-    char temp;
     if (val)
       _string.append("1");
     else
@@ -87,25 +86,51 @@ public:
     return *this;
   }
 
-  ostream &operator<<(short &val)
+  ostream &operator<<(void* val)
   {
-    char *temp = new char[NUM_SIZE];
+    char temp[NUM_SIZE];
+    // Convert pointer to string representation (hexadecimal)
+    // For simplicity, just convert the pointer value to decimal
+    itoa(reinterpret_cast<unsigned long long>(val), temp, DEC);
+    _string.append(temp);
+    return *this;
+  }
+
+  ostream &operator<<(short val)
+  {
+    char temp[NUM_SIZE];
     itoa(val, temp, DEC);
     _string.append(temp);
     return *this;
   }
 
-  ostream &operator<<(long &val)
+  ostream &operator<<(int val)
   {
-    char *temp = new char[NUM_SIZE];
+    char temp[NUM_SIZE];
     itoa(val, temp, DEC);
     _string.append(temp);
     return *this;
   }
 
-  ostream &operator<<(unsigned int &val)
+  ostream &operator<<(long val)
   {
-    char *temp = new char[NUM_SIZE];
+    char temp[NUM_SIZE];
+    itoa(val, temp, DEC);
+    _string.append(temp);
+    return *this;
+  }
+
+  ostream &operator<<(unsigned short val)
+  {
+    char temp[NUM_SIZE];
+    itoa(val, temp, DEC);
+    _string.append(temp);
+    return *this;
+  }
+
+  ostream &operator<<(unsigned int val)
+  {
+    char temp[NUM_SIZE];
     itoa(val, temp, DEC);
     _string.append(temp);
     return *this;
@@ -113,7 +138,7 @@ public:
 
   ostream &operator<<(unsigned long val)
   {
-    char *temp = new char[NUM_SIZE];
+    char temp[NUM_SIZE];
     itoa(val, temp, DEC);
     _string.append(temp);
     return *this;
@@ -121,8 +146,8 @@ public:
 
   ostream &operator<<(float val)
   {
-    char *temp = new char[NUM_SIZE];
-    char *temp2 = new char[2];
+    char temp[NUM_SIZE];
+    char temp2[2];
     int n = (int)val;
     itoa(n, temp, DEC);
     strcat(temp, ".");
@@ -140,8 +165,8 @@ public:
 
   ostream &operator<<(double val)
   {
-    char *temp = new char[NUM_SIZE];
-    char *temp2 = new char[2];
+    char temp[NUM_SIZE];
+    char temp2[2];
     int n = (int)val;
     itoa(n, temp, DEC);
     strcat(temp, ".");
@@ -157,31 +182,21 @@ public:
     return *this;
   }
 
-  ostream &operator<<(char &val)
+  ostream &operator<<(char val)
   {
     _string.append(&val, 1);
     return *this;
   }
 
-  ostream &operator<<(unsigned char &val)
+  ostream &operator<<(unsigned char val)
   {
     _string.append(reinterpret_cast<const char *>(&val), 1);
     return *this;
   }
 
-  ostream &operator<<(char *val)
+  ostream &operator<<(const char *val)
   {
-    int tam = strlen(val);
-    _string.append(val, tam);
-    return *this;
-  }
-
-  ostream &operator<<(unsigned short &val)
-  {
-    char *temp = new char[NUM_SIZE];
-    itoa(val, temp, DEC);
-    _string.append(temp);
-    _string._size = strlen(_string.str) + strlen(temp);
+    _string.append(val);
     return *this;
   }
 };

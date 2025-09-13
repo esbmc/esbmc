@@ -40,3 +40,6 @@ assert obj1.class_attr == 2
 
 # Checking that obj2 now refers to the updated class attribute
 assert obj2.class_attr == 3
+
+def foo():
+    MyClass.class_attr = 3

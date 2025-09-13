@@ -417,17 +417,17 @@ void clang_cpp_adjust::convert_exception_id(
       if (bases.is_not_nil() && bases.get_sub().size())
       {
         // record the derived class
-        ids.emplace_back(id2string(identifier) + suffix);
+        ids.emplace_back(id2string(identifier).substr(4) + suffix);
 
         // record all the base classes id
         for (const auto &i : bases.get_sub())
         {
           identifier = i.id();
-          ids.emplace_back(id2string(identifier) + suffix);
+          ids.emplace_back(id2string(identifier).substr(4) + suffix);
         }
       }
       else
-        ids.emplace_back(id2string(identifier) + suffix);
+        ids.emplace_back(id2string(identifier).substr(4) + suffix);
     }
     else
       ids.emplace_back(id2string(identifier) + suffix);

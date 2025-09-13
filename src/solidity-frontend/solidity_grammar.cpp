@@ -310,6 +310,10 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
     {
       return BuiltinTypeName;
     }
+    else if (typeIdentifier.compare(0, 7, "t_error") == 0)
+    {
+      return ErrorTypeName;
+    }
     else if (solidity_convertert::UserDefinedVarMap.count(typeString) > 0)
     {
       return UserDefinedTypeName;
@@ -362,6 +366,7 @@ const char *type_name_to_str(TypeNameT type)
     ENUM_TO_STR(TupleTypeName)
     ENUM_TO_STR(MappingTypeName)
     ENUM_TO_STR(BuiltinTypeName)
+    ENUM_TO_STR(ErrorTypeName)
     ENUM_TO_STR(UserDefinedTypeName)
     ENUM_TO_STR(TypeNameTError)
   default:
@@ -838,11 +843,16 @@ ExpressionT get_expression_t(const nlohmann::json &expr)
   }
   else if (expr["nodeType"] == "FunctionCallOptions")
   {
+    // if (expr["expression"]["nodeType"] == "NewExpression")
+    //   return NewExpression;
     return CallOptionsExprClass;
   }
   else if (expr["nodeType"] == "FunctionCall")
   {
-    if (expr["expression"]["nodeType"] == "NewExpression")
+    if (
+      expr["expression"]["nodeType"] == "NewExpression" ||
+      (expr["expression"]["nodeType"] == "FunctionCallOptions" &&
+       expr["expression"]["expression"]["nodeType"] == "NewExpression"))
       return NewExpression;
     if (expr["kind"] == "typeConversion")
       return TypeConversionExpression;

@@ -1,4 +1,4 @@
 CORE
 main.c
---incremental-bmc --context-bound 2 -Wno-error=implicit-function-declaration
+--unwind 2 --no-unwinding-assertions --context-bound 3 -Wno-error=implicit-function-declaration
 ^VERIFICATION FAILED$

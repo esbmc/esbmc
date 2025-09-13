@@ -3,23 +3,37 @@
 #include <python-frontend/type_utils.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/symbol_id.h>
+#include <util/arith_tools.h>
 #include <util/context.h>
 #include <util/c_types.h>
 #include <util/message.h>
+
+#include <regex>
 
 type_handler::type_handler(const python_converter &converter)
   : converter_(converter)
 {
 }
 
+exprt type_handler::get_expr_helper(const nlohmann::json &json) const
+{
+  // This is safe because get_expr doesn't modify the converter's logical state
+  return const_cast<python_converter &>(converter_).get_expr(json);
+}
+
 bool type_handler::is_constructor_call(const nlohmann::json &json) const
 {
   if (
     !json.contains("_type") || json["_type"] != "Call" ||
-    !json["func"].contains("id"))
+    (!json["func"].contains("id") && !json["func"].contains("attr")))
     return false;
 
-  const std::string &func_name = json["func"]["id"];
+  const std::string &func_name = json["func"]["_type"] == "Attribute"
+                                   ? json["func"]["attr"]
+                                   : json["func"]["id"];
+
+  if (func_name == "__init__")
+    return true;
 
   if (type_utils::is_builtin_type(func_name))
     return false;
@@ -101,6 +115,46 @@ std::string type_handler::get_var_type(const std::string &var_name) const
   return std::string();
 }
 
+/// Check if two types are compatible for list homogeneity
+/// This considers strings of different lengths as the same type
+bool type_handler::are_types_compatible(const typet &t1, const typet &t2) const
+{
+  // Exact match
+  if (t1 == t2)
+    return true;
+
+  // Both are character arrays (strings) - consider them compatible
+  if (t1.is_array() && t2.is_array())
+  {
+    const array_typet &arr1 = to_array_type(t1);
+    const array_typet &arr2 = to_array_type(t2);
+
+    // If subtypes match, consider them compatible regardless of size
+    if (arr1.subtype() == arr2.subtype())
+      return true;
+  }
+
+  return false;
+}
+
+/// Get a normalized/canonical type for list element type inference
+/// This ensures all strings use the same representative type regardless of length
+typet type_handler::get_canonical_string_type(const typet &t) const
+{
+  // For string types (char arrays), return a canonical string type
+  if (t.is_array())
+  {
+    const array_typet &arr_type = to_array_type(t);
+    if (arr_type.subtype() == char_type())
+    {
+      // Return a canonical string type (size 0 array indicates variable length string)
+      return build_array(char_type(), 0);
+    }
+  }
+
+  return t;
+}
+
 /// This method creates a `typet` representing a statically sized array.
 /// It is typically used to model Python sequences like strings and byte arrays
 typet type_handler::build_array(const typet &sub_type, const size_t size) const
@@ -155,7 +209,10 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   if (ast_type == "NoneType")
     return pointer_type();
 
-  // float — represents IEEE 754 double-precision
+  // Python float type: IEEE 754 double-precision mapping
+  // Python floats are implemented using C double (IEEE 754 double-precision)
+  // as per Python documentation. This ensures proper precision, range, and
+  // compatibility with Python's numeric type promotion (int -> float -> complex).
   if (ast_type == "float")
     return double_type();
 
@@ -206,7 +263,9 @@ typet type_handler::get_typet(const std::string &ast_type, size_t type_size)
   }
 
   // Custom user-defined types / classes
-  if (json_utils::is_class(ast_type, converter_.ast()))
+  if (
+    json_utils::is_class(ast_type, converter_.ast()) ||
+    type_utils::is_python_exceptions(ast_type))
     return symbol_typet("tag-" + ast_type);
 
   if (ast_type != "Any")
@@ -271,6 +330,52 @@ typet type_handler::get_typet(const nlohmann::json &elem) const
     return build_array(subtype, elem.size());
   }
 
+  if (
+    elem["_type"] == "Call" && type_utils::is_builtin_type(elem["func"]["id"]))
+  {
+    return get_typet(elem["func"]["id"].get<std::string>());
+  }
+
+  if (elem["_type"] == "Name")
+  {
+    const nlohmann::json &var = json_utils::find_var_decl(
+      elem["id"], converter_.current_function_name(), converter_.ast());
+
+    if (!var.empty() && var.contains("value") && !var["value"].is_null())
+    {
+      if (var["value"]["_type"] == "Call")
+      {
+        // Try to handle known patterns before giving up
+        if (var["value"].contains("func"))
+        {
+          const auto &func = var["value"]["func"];
+
+          // Handle simple function calls: func_name()
+          if (func.contains("id") && type_utils::is_builtin_type(func["id"]))
+            return get_typet(func["id"].get<std::string>());
+
+          // Handle attribute calls: module.func_name()
+          if (func["_type"] == "Attribute" && func.contains("attr"))
+          {
+            std::string attr_name = func["attr"].get<std::string>();
+            // Handle common cases like random.randint, math.sqrt, etc.
+            if (attr_name == "randint" || attr_name == "randrange")
+              return long_long_int_type();
+            if (attr_name == "random" || attr_name == "uniform")
+              return double_type();
+            if (type_utils::is_builtin_type(attr_name))
+              return get_typet(attr_name);
+          }
+        }
+        throw std::runtime_error("Invalid type");
+      }
+      return get_typet(var["value"]["value"]);
+    }
+
+    // Fallback for cases where variable declaration has no value or is null
+    return empty_typet();
+  }
+
   throw std::runtime_error("Invalid type");
 }
 
@@ -279,116 +384,86 @@ bool type_handler::has_multiple_types(const nlohmann::json &container) const
   if (container.empty())
     return false;
 
-  // Determine the type of the first element
-  typet t;
-  if (container[0]["_type"] == "List")
-  {
-    // Check if the sublist exists and has elements
-    if (!container[0].contains("elts") || container[0]["elts"].empty())
-      return false; // Empty or missing sublists are considered consistent
+  // Helper lambda that leverages existing get_typet method
+  auto get_element_type = [this](const nlohmann::json &element) -> typet {
+    try
+    {
+      typet elem_type = get_typet(element);
+      // For array types, we want the element type, not the container type
+      return elem_type.is_array() ? elem_type.subtype() : elem_type;
+    }
+    catch (const std::exception &)
+    {
+      log_warning("Failed to determine element type in has_multiple_types");
+      return empty_typet();
+    }
+  };
 
-    // Check the type of elements within the sublist
-    if (has_multiple_types(container[0]["elts"]))
-      return true;
+  // Get canonical type of first element
+  typet canonical_first_type =
+    get_canonical_string_type(get_element_type(container[0]));
 
-    // Get the type of the elements in the sublist
-    const auto &first_elt = container[0]["elts"][0];
-    if (first_elt["_type"] == "UnaryOp")
-    {
-      if (
-        first_elt.contains("operand") && first_elt["operand"].contains("value"))
-        t = get_typet(first_elt["operand"]["value"]);
-      else
-        return false; // Can't determine type, assume consistent
-    }
-    else
-    {
-      if (first_elt.contains("value"))
-        t = get_typet(first_elt["value"]);
-      else
-        return false; // Can't determine type, assume consistent
-    }
-  }
-  else
-  {
-    // Get the type of the first element if it is not a sublist
-    if (container[0]["_type"] == "UnaryOp")
-    {
-      if (
-        container[0].contains("operand") &&
-        container[0]["operand"].contains("value"))
-        t = get_typet(container[0]["operand"]["value"]);
-      else
-        return false; // Can't determine type, assume consistent
-    }
-    else
-    {
-      if (container[0].contains("value"))
-        t = get_typet(container[0]["value"]);
-      else
-        return false; // Can't determine type, assume consistent
-    }
-  }
+  if (canonical_first_type == empty_typet())
+    return false; // Couldn't determine type, assume homogeneous
 
+  // Check all elements for type compatibility
   for (const auto &element : container)
   {
-    if (element["_type"] == "List")
+    // Handle nested lists recursively
+    if (
+      element["_type"] == "List" && element.contains("elts") &&
+      !element["elts"].empty())
     {
-      // Check if the sublist exists and has elements
-      if (!element.contains("elts") || element["elts"].empty())
-        continue; // Empty or missing sublists are consistent with any type
-
-      // Check the consistency of the sublist
       if (has_multiple_types(element["elts"]))
         return true;
+    }
 
-      // Compare the type of internal elements in the sublist with the type `t`
-      const auto &first_elt = element["elts"][0];
-      if (first_elt["_type"] == "UnaryOp")
-      {
-        if (
-          first_elt.contains("operand") &&
-          first_elt["operand"].contains("value"))
-        {
-          if (get_typet(first_elt["operand"]["value"]) != t)
-            return true;
-        }
-        // If we can't determine the type, skip this element (assume consistent)
-      }
-      else
-      {
-        if (first_elt.contains("value"))
-        {
-          if (get_typet(first_elt["value"]) != t)
-            return true;
-        }
-        // If we can't determine the type, skip this element (assume consistent)
-      }
+    // Check type compatibility
+    typet element_type = get_canonical_string_type(get_element_type(element));
+    if (
+      element_type != empty_typet() &&
+      !are_types_compatible(canonical_first_type, element_type))
+      return true;
+  }
+
+  return false;
+}
+
+typet type_handler::get_list_type_improved(const nlohmann::json &element)
+{
+  if (!element.contains("elts") || element["elts"].empty())
+    return array_typet(empty_typet(), from_integer(0, size_type()));
+
+  const auto &elements = element["elts"];
+
+  // Check if all elements are string constants
+  bool all_strings = true;
+  size_t max_string_length = 0;
+
+  for (const auto &elem : elements)
+  {
+    if (elem["_type"] == "Constant" && elem["value"].is_string())
+    {
+      std::string str_val = elem["value"].get<std::string>();
+      max_string_length = std::max(
+        max_string_length, str_val.size() + 1); // +1 for null terminator
     }
     else
     {
-      // Compare the type of the current element with `t`
-      if (element["_type"] == "UnaryOp")
-      {
-        if (element.contains("operand") && element["operand"].contains("value"))
-        {
-          if (get_typet(element["operand"]["value"]) != t)
-            return true;
-        }
-        // If we can't determine the type, skip this element (assume consistent)
-      }
-      else
-      {
-        if (element.contains("value"))
-        {
-          if (get_typet(element["value"]) != t)
-            return true;
-        }
-        // If we can't determine the type, skip this element (assume consistent)
-      }
+      all_strings = false;
+      break;
     }
   }
-  return false;
+
+  if (all_strings)
+  {
+    // Create array of string arrays (char arrays)
+    typet string_type = build_array(char_type(), max_string_length);
+    return array_typet(string_type, from_integer(elements.size(), size_type()));
+  }
+
+  // Fallback to original implementation
+  return get_list_type(element);
 }
 
 typet type_handler::get_list_type(const nlohmann::json &list_value) const
@@ -399,12 +474,42 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
   {
     return build_array(empty_typet(), 0);
   }
+
   if (list_value["_type"] == "arg" && list_value.contains("annotation"))
   {
-    assert(list_value["annotation"]["value"]["id"] == "list");
-    typet t =
-      get_typet(list_value["annotation"]["slice"]["id"].get<std::string>());
-    return build_array(t, 0);
+    // Handle case where annotation is directly a Subscript (e.g., List['Action'])
+    if (list_value["annotation"]["_type"] == "Subscript")
+    {
+      const nlohmann::json &slice = list_value["annotation"]["slice"];
+      typet t;
+
+      if (slice.contains("id"))
+      {
+        // Regular identifier like List[int]
+        t = get_typet(slice["id"].get<std::string>());
+      }
+      else if (slice["_type"] == "Constant" && slice.contains("value"))
+      {
+        // String constant like List['Action'] (forward reference)
+        std::string type_string = slice["value"].get<std::string>();
+        t = get_typet(type_utils::remove_quotes(type_string));
+      }
+      else
+        t = empty_typet();
+      return pointer_typet(t);
+    }
+
+    // Check if the nested structure exists before accessing
+    if (
+      list_value["annotation"].contains("value") &&
+      list_value["annotation"]["value"].contains("id"))
+    {
+      const nlohmann::json &type_ann = list_value["annotation"]["value"]["id"];
+      assert(type_ann == "list" || type_ann == "List");
+      typet t =
+        get_typet(list_value["annotation"]["slice"]["id"].get<std::string>());
+      return pointer_typet(t);
+    }
   }
 
   if (list_value["_type"] == "List") // Get list value type from elements
@@ -424,9 +529,20 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
         subtype = get_typet(elem);
       }
       else
-      { // Multi-dimensional list
-        // Get sub-array type
-        subtype = get_typet(elts[0]["elts"]);
+      {
+        // Get sub-array type from multi-dimensional list
+        if (elts[0]["_type"] == "Call")
+        {
+          if (type_utils::is_builtin_type(elts[0]["func"]["id"]))
+            subtype = get_typet(elts[0]["func"]["id"].get<std::string>());
+        }
+        else if (elts[0].contains("elts"))
+          subtype = get_typet(elts[0]["elts"]);
+        else
+        {
+          // Handle other element types directly
+          subtype = get_typet(elts[0]);
+        }
       }
 
       return build_array(subtype, elts.size());
@@ -450,6 +566,21 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
 
     assert(func_symbol);
     return static_cast<code_typet &>(func_symbol->type).return_type();
+  }
+
+  if (list_value.contains("_type") && list_value["_type"] == "BinOp")
+  {
+    // Handle cases like x = [0] * 5
+    if (list_value["op"]["_type"] == "Mult")
+    {
+      exprt left_expr = get_expr_helper(list_value["left"]);
+      exprt right_expr = get_expr_helper(list_value["right"]);
+
+      typet list_type = (left_expr.is_symbol()) ? left_expr.type().subtype()
+                                                : right_expr.type().subtype();
+      exprt size = (left_expr.is_symbol()) ? right_expr : left_expr;
+      return array_typet(list_type, size);
+    }
   }
 
   return typet();
@@ -540,5 +671,57 @@ int type_handler::get_array_dimensions(const nlohmann::json &arr) const
   {
     // Base case: first element is not a list, so this is 1D
     return 1;
+  }
+}
+
+size_t type_handler::get_type_width(const typet &type) const
+{
+  // First try to parse width directly
+  try
+  {
+    return std::stoi(type.width().c_str());
+  }
+  catch (const std::exception &)
+  {
+    // If direct parsing fails, try to infer from type name
+    std::string type_str = type.width().as_string();
+
+    // Handle common Python/ESBMC type mappings
+    if (type_str == "int32")
+      return 32;
+    else if (type_str == "int")
+      return 64;
+    else if (type_str == "int64" || type_str == "long")
+      return 64;
+    else if (type_str == "int16" || type_str == "short")
+      return 16;
+    else if (type_str == "int8" || type_str == "char")
+      return 8;
+    else if (type_str == "float32")
+      return 32;
+    else if (type_str == "float")
+      return 64;
+    else if (type_str == "double" || type_str == "float64")
+      return 64;
+    else if (type_str == "bool")
+      return 1;
+
+    // Try to extract number from string like "int32", "uint64", etc.
+    std::regex width_regex(R"(\d+)");
+    std::smatch match;
+    if (std::regex_search(type_str, match, width_regex))
+    {
+      try
+      {
+        return std::stoi(match.str());
+      }
+      catch (const std::exception &)
+      {
+        // Fall through to default
+      }
+    }
+
+    // Default to 32 for unknown types
+    return 32;
   }
 }

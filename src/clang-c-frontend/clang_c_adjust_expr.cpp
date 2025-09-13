@@ -222,6 +222,7 @@ void clang_c_adjust::adjust_side_effect(side_effect_exprt &expr)
       statement == "preincrement" || statement == "predecrement" ||
       statement == "postincrement" || statement == "postdecrement")
     {
+      adjust_reference(expr);
     }
     else if (has_prefix(id2string(statement), "assign"))
     {
@@ -940,9 +941,7 @@ void clang_c_adjust::do_special_functions(side_effect_expr_function_callt &expr)
       expr.swap(infl_expr);
     }
     else if (
-      (compare_float_suffix(identifier, "nan") && (identifier != "nand")) ||
-      (compare_unscore_builtin(identifier, "nan") &&
-       (identifier != "__builtin_isnand") && (identifier != "__isnand")))
+      (identifier != "nan") && compare_unscore_builtin(identifier, "nan"))
     {
       typet t = expr.type();
 

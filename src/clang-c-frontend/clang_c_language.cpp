@@ -472,6 +472,15 @@ _Noreturn void __ESBMC_unreachable();
 
 _Bool __ESBMC_forall(void*, _Bool);
 _Bool __ESBMC_exists(void*, _Bool);
+
+/* This function is used to check loop invariants
+ * It should be run with multi-property:
+ * 1. Check if it is preserved in the loop
+ * 2. Use the invariants to help the following of the loop continue with a simple assumption
+ */
+void __ESBMC_loop_invariant(_Bool);
+
+
     )";
 
   if (config.ansi_c.cheri)

@@ -1,0 +1,4 @@
+CORE
+gh-1782.cc
+--incremental-bmc
+^VERIFICATION SUCCESSFUL$

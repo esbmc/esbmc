@@ -1503,15 +1503,32 @@ basic_string<CharT, Traits, Alloc> &
 basic_string<CharT, Traits, Alloc>::operator=(
   basic_string<CharT, Traits, Alloc> &str)
 {
-  int i, len;
-  this->_size = str.size();
-  this->str = new char[this->_size + 1];
-  len = str.size();
-  for (i = 0; i < len; i++)
+  if (this == &str)
+    return *this;
+
+  // Store old pointer for cleanup
+  CharT *old_str = this->str;
+
+  // Calculate new size
+  size_t new_size = str.size();
+
+  // Allocate new memory
+  CharT *new_str = nullptr;
+  if (new_size > 0)
   {
-    this->str[i] = str.str[i];
+    new_str = new CharT[new_size + 1];
+    for (size_t i = 0; i < new_size; ++i)
+      new_str[i] = str.str[i];
+    new_str[new_size] = CharT{}; // Null terminator
   }
-  this->str[i] = '\0';
+
+  // Update object state only after successful allocation
+  this->str = new_str;
+  this->_size = new_size;
+
+  // Clean up old memory
+  delete[] old_str;
+
   return *this;
 }
 
@@ -3036,40 +3053,47 @@ size_t basic_string<CharT, Traits, Alloc>::rfind(
   size_t pos) const
 {
 __ESBMC_HIDE:
-  __ESBMC_assert((pos < this->length()) && (pos >= 0), "overflow");
+  // Early returns for edge cases
+  if (s._size == 0)
+    return (pos < this->_size) ? pos : this->_size;
+  if (s._size > this->_size)
+    return npos;
+
   __ESBMC_assert(s.str != NULL, "The parameter must be different than NULL");
-  size_t i, j, k;
-  int num = 0;
-  int lim = pos;
 
-  int len = this->length();
-  char *s1 = new char[len + 1];
-  strcpy(s1, this->str);
+  size_t len = this->_size;
+  size_t slen = s._size;
 
-  int slen = s.length();
-  char *s2 = new char[slen + 1];
-  strcpy(s2, s.str);
+  // Calculate the rightmost valid starting position
+  size_t max_start;
+  if (pos >= len)
+    max_start = len - slen;
+  else if (pos + 1 >= slen)
+    max_start = pos - slen + 1;
+  else
+    return npos;
 
-  for (i = len - 1; i >= lim; i--)
+  // Search backward from rightmost valid position
+  for (size_t start = max_start + 1; start > 0; start--)
   {
-    for (k = i, j = slen - 1; j >= 0; j--)
+    size_t i = start - 1;
+    bool match = true;
+
+    // Simple forward comparison at position i
+    for (size_t j = 0; j < slen; j++)
     {
-      if (s1[k] != s2[j])
+      if (this->str[i + j] != s.str[j])
       {
+        match = false;
         break;
       }
-      else
-      {
-        num++;
-        if (num == slen)
-        {
-          return k;
-        }
-        k--;
-      }
     }
+
+    if (match)
+      return i;
   }
-  return -1;
+
+  return npos;
 }
 
 template <typename CharT, typename Traits, typename Alloc>
@@ -3330,71 +3354,7 @@ operator+(char lhc, basic_string<CharT, Traits, Alloc> rhs)
   result._size = totalLength;
   return result;
 }
-/*
- * The following operator overloading is really obfuscating on standard types (char*, char).
- * Clang would generate parse error for such thing. For the time being, let's just
- * comment them to avoid the parse error so that we can progress further.
- * The purpose of such overloading may become clear when we run benchmarks.
- * Remove them if they are not affecting the pass rate in our benchmarks
- */
-#if 0
-basic_string<CharT, Traits, Alloc> operator+(char lhc, char * rhs) {
-	int totalLength = 1;
-	totalLength += strlen(rhs);
-	int i,j,k;
-	basic_string result;
-	result.str = new char[totalLength + 1];
-	result.str[0] = lhc;
-	for(j = 1, k = 0; j < totalLength; j++,k++){
-		result.str[j] = rhs[k];
-	}
-	result.str[j] = '\0';
-	result._size = totalLength;
-	return result;
-}
-basic_string operator+(char lhc, char rhc) {
-	int totalLength = 2;
-	int i,j,k;
-	basic_string result;
-	result.str = new char[totalLength + 1];
-	result.str[0] = lhc;
-	result.str[1] = rhc;
-	result.str[2] = '\0';
-	result._size = totalLength;
-	return result;
-}
-#endif
-/*
-bool basic_string::operator==(basic_string& b) {
-	__ESBMC_HIDE: __ESBMC_assert(b.str != NULL,
-			"The parameter must be different than NULL");
-	if (strcmp(this->str, b.str) == 0)
-		return true;
-	else
-		return false;
-}
 
-bool basic_string::operator==(basic_string& b) const {
-	__ESBMC_HIDE: __ESBMC_assert(b.str != NULL,
-			"The parameter must be different than NULL");
-	if (strcmp(this->str, b.str) == 0)
-		return true;
-	else
-		return false;
-}
-
-bool basic_string::operator==(const char* lhs) {
-	__ESBMC_HIDE: __ESBMC_assert(lhs != NULL,
-			"The parameter must be different than NULL");
-	int aux;
-	aux = strcmp((char*) lhs, this->str);
-	if (aux == 0) {
-		return true;
-	} else {
-		return false;
-	}
-}
-*/
 template <typename CharT, typename Traits, typename Alloc>
 bool operator==(
   const basic_string<CharT, Traits, Alloc> a,

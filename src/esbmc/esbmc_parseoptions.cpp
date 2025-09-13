@@ -30,6 +30,7 @@ extern "C"
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_inline.h>
 #include <goto-programs/goto_k_induction.h>
+#include <goto-programs/goto_loop_invariant.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 #include <goto-programs/abstract-interpretation/gcse.h>
 #include <goto-programs/loop_numbers.h>
@@ -476,7 +477,6 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
   // parallel solving activates "--multi-property"
   if (cmdline.isset("parallel-solving"))
   {
-    options.set_option("result-only", true);
     options.set_option("base-case", true);
     options.set_option("multi-property", true);
   }
@@ -503,6 +503,27 @@ void esbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if (cmdline.isset("override-return-annotation"))
     options.set_option("override-return-annotation", true);
+
+  if (cmdline.isset("witness-output-yaml"))
+  {
+    std::string filename = cmdline.getval("witness-output-yaml");
+    boost::filesystem::path n(filename);
+
+    if (n.extension() == ".yaml" || n.extension() == ".yml")
+      options.set_option("witness-output", filename);
+    else if (!n.has_extension())
+    {
+      filename += ".yml";
+      options.set_option("witness-output", filename);
+    }
+    else
+    {
+      log_error(
+        "Output file has extension {}, expected yaml or yml.",
+        n.extension().string());
+      abort();
+    }
+  }
 
   config.options = options;
 }
@@ -1830,7 +1851,8 @@ bool esbmc_parseoptionst::process_goto_program(
   {
     namespacet ns(context);
 
-    bool is_mul = cmdline.isset("multi-property");
+    bool is_mul =
+      cmdline.isset("multi-property") || cmdline.isset("parallel-solving");
     is_coverage = cmdline.isset("assertion-coverage") ||
                   cmdline.isset("assertion-coverage-claims") ||
                   cmdline.isset("condition-coverage") ||
@@ -1947,6 +1969,13 @@ bool esbmc_parseoptionst::process_goto_program(
       // It seems to fix some issues for now
       remove_no_op(goto_functions);
       goto_k_induction(goto_functions);
+    }
+
+    if (cmdline.isset("loop-invariant"))
+    {
+      // Process loop invariants and insert assert/assume/havoc
+      remove_no_op(goto_functions);
+      goto_loop_invariant(goto_functions);
     }
 
     if (
@@ -2495,7 +2524,6 @@ static unsigned int calc_globals_used(const namespacet &ns, const expr2tc &expr)
     expr->foreach_operand([&globals, &ns](const expr2tc &e) {
       globals += calc_globals_used(ns, e);
     });
-
     return globals;
   }
 
@@ -2557,6 +2585,7 @@ void esbmc_parseoptionst::print_ileave_points(
       case CATCH:
       case THROW_DECL:
       case THROW_DECL_END:
+      case LOOP_INVARIANT:
         break;
       }
 
