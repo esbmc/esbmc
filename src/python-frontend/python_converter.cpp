@@ -1963,17 +1963,10 @@ exprt python_converter::handle_string_concatenation_with_promotion(
 /// Helper method to create variable-length arrays
 exprt python_converter::create_variable_length_array_for_multiplication(
   const nlohmann::json &element,
-  symbolt *symbol,
+  const symbolt* list,
+  symbolt *size_var,
   const exprt &list_elem)
 {
-  // Build array and initialize VLA
-  symbolt &vla_symbol = create_tmp_symbol(
-    element, "vla", current_lhs->type(), gen_zero(current_lhs->type()));
-
-  code_declt vla_decl(symbol_expr(vla_symbol));
-  vla_decl.location() = get_location_from_decl(element);
-  current_block->copy_to_operands(vla_decl);
-
   // Add counter for while loop
   symbolt &counter =
     create_tmp_symbol(element, "counter", int_type(), gen_zero(int_type()));
@@ -1984,18 +1977,12 @@ exprt python_converter::create_variable_length_array_for_multiplication(
   // Build conditional for while loop (counter < len(arr))
   exprt cond("<", bool_type());
   cond.operands().push_back(symbol_expr(counter));
-  cond.operands().push_back(symbol_expr(*symbol));
+  cond.operands().push_back(symbol_expr(*size_var));
 
-  // Build block with arr[i] assignment and counter increment
+  // Build block with lish_push() calls and counter increment
   code_blockt then;
-
-  // arr[counter] assignment
-  index_exprt arr_index(
-    symbol_expr(vla_symbol),
-    symbol_expr(counter),
-    symbol_expr(vla_symbol).type().subtype());
-  code_assignt arr_assign(arr_index, list_elem);
-  then.copy_to_operands(arr_assign);
+  exprt list_push_call = build_push_list_call(*list, element, list_elem);
+  then.copy_to_operands(list_push_call);
 
   // increment counter
   exprt incr("+");
@@ -2004,13 +1991,13 @@ exprt python_converter::create_variable_length_array_for_multiplication(
   code_assignt update(symbol_expr(counter), incr);
   then.copy_to_operands(update);
 
-  // add while block to initialize vla
+  // add while block for list_push() calls
   codet while_cod;
   while_cod.set_statement("while");
   while_cod.copy_to_operands(cond, then);
   current_block->copy_to_operands(while_cod);
 
-  return symbol_expr(vla_symbol);
+  return symbol_expr(*list);
 }
 
 /// Helper method to handle chained comparisons
@@ -2118,10 +2105,10 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     {
       if (lhs.is_symbol())
       {
-        symbolt *symbol =
+        symbolt *size_var =
           find_symbol(to_symbol_expr(lhs).get_identifier().as_string());
-        assert(symbol);
-        list_size = std::stoi(symbol->value.value().as_string(), nullptr, 2);
+        assert(size_var);
+        list_size = std::stoi(size_var->value.value().as_string(), nullptr, 2);
       }
       else if (lhs.is_constant())
         list_size = std::stoi(lhs.value().as_string(), nullptr, 2);
@@ -2136,18 +2123,21 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       // List element is the rhs
       list_elem = get_expr(left["elts"][0]);
 
-      if (rhs.is_symbol())
+      if (rhs.is_symbol()) // (e.g.: [1] * n)
       {
-        symbolt *symbol =
+        symbolt *size_var =
           find_symbol(to_symbol_expr(rhs).get_identifier().as_string());
 
-        assert(symbol);
+        assert(size_var);
 
-        if (symbol->value.is_code())
+        symbolt* list_symbol = find_symbol(lhs.identifier().as_string());
+            assert(list_symbol);
+
+        if (size_var->value.is_code())
           return create_variable_length_array_for_multiplication(
-            element, symbol, list_elem);
+            element, list_symbol, size_var, list_elem);
 
-        list_size = std::stoi(symbol->value.value().as_string(), nullptr, 2);
+        list_size = std::stoi(size_var->value.value().as_string(), nullptr, 2);
       }
       else if (rhs.is_constant())
         list_size = std::stoi(rhs.value().as_string(), nullptr, 2);
