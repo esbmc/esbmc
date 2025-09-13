@@ -599,10 +599,13 @@ void value_sett::get_value_set_rec(
       for (const auto &it : o)
       {
         auto expr = object_numbering[it.first];
-        if (is_symbol2t(expr) || is_constant_string2t(expr))
+        if (
+          is_symbol2t(expr) || is_constant_string2t(expr) ||
+          is_constant_array2t(expr))
+        {
           return true;
+        }
       }
-
       return false;
     };
 
