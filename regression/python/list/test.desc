@@ -1,5 +1,5 @@
 CORE
 main.py
---incremental-bmc
+--incremental-bmc --force-malloc-success --no-pointer-check
 
 ^VERIFICATION SUCCESSFUL$

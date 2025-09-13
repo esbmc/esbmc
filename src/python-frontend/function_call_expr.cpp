@@ -1131,7 +1131,8 @@ exprt function_call_expr::handle_list_append() const
   }
 
   converter_.list_type_map[list_symbol->id.as_string()].push_back(
-    value_to_append.type());
+    std::make_pair(
+      value_to_append.identifier().as_string(), value_to_append.type()));
 
   return converter_.build_push_list_call(*list_symbol, call_, value_to_append);
 }
@@ -1497,14 +1498,10 @@ exprt function_call_expr::get()
       list_size_func_call.function() = symbol_expr(*list_size_func_sym);
 
       // passing arguments to list_size
-      if (list_symbol->type.is_pointer())
-        list_size_func_call.arguments().push_back(symbol_expr(*list_symbol));
-      else
-        list_size_func_call.arguments().push_back(
-          address_of_exprt(symbol_expr(*list_symbol))); // &l
+      list_size_func_call.arguments().push_back(symbol_expr(*list_symbol));
 
       // setting return type
-      list_size_func_call.type() = size_type();
+      list_size_func_call.type() = signedbv_typet(64);
 
       return list_size_func_call;
     }
@@ -1542,8 +1539,20 @@ exprt function_call_expr::get()
       arg = func_call;
     }
 
+    // TODO: ### MOVE THIS PART TO LIST CLASS
+    if (arg.type() == converter_.get_list_type())
+    {
+      // Update list element type mapping for function parameters
+      const code_typet &type =
+        static_cast<const code_typet &>(func_symbol->type);
+      const std::string &arg_id =
+        type.arguments().at(0).identifier().as_string();
+      converter_.list_type_map[arg_id] =
+        converter_.list_type_map[arg.identifier().as_string()];
+    }
+
     // All array function arguments (e.g. bytes type) are handled as pointers.
-    if (arg.type().is_array() || arg.type() == converter_.get_list_type())
+    if (arg.type().is_array())
     {
       if (arg_node["_type"] == "Constant" && arg_node["value"].is_string())
       {
@@ -1553,17 +1562,6 @@ exprt function_call_expr::get()
           string_constantt::k_default);
       }
       call.arguments().push_back(address_of_exprt(arg));
-
-      if (arg.type() == converter_.get_list_type())
-      {
-        // Update list element type mapping for function parameters
-        const code_typet &type =
-          static_cast<const code_typet &>(func_symbol->type);
-        const std::string &arg_id =
-          type.arguments().at(0).identifier().as_string();
-        converter_.list_type_map[arg_id] =
-          converter_.list_type_map[arg.identifier().as_string()];
-      }
     }
     else
       call.arguments().push_back(arg);

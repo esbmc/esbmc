@@ -16,12 +16,16 @@ typedef struct
   size_t size; // elements in use
 } List;
 
-/* ---------- init ---------- */
-static inline bool list_init(List *l, Object *backing)
+/* ---------- create ---------- */
+static inline List *list_create(Object *backing)
 {
+  List *l = malloc(sizeof(List));
+
+  __ESBMC_assume(l != NULL);
+
   l->items = backing;
   l->size = 0;
-  return true;
+  return l;
 }
 
 /* ---------- bounds check ---------- */
@@ -77,7 +81,7 @@ static bool list_eq(const List *l1, const List *l2)
   return true;
 }
 
-static size_t list_size(const List *l)
+static long long int list_size(const List *l)
 {
   assert(l);
   return l->size;
@@ -144,6 +148,13 @@ list_push(List *l, const void *value, size_t type_id, size_t type_size)
   l->items[l->size].size = type_size;
   l->size++;
   return true;
+}
+
+static inline bool list_push_object(List *l, Object *o)
+{
+  assert(l != NULL);
+  assert(o != NULL);
+  return list_push(l, o->value, o->type_id, o->size);
 }
 
 /* ---------- replace element ---------- */

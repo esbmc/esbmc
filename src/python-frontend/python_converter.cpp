@@ -2114,10 +2114,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     list_eq_func_call.function() = symbol_expr(*list_eq_func_sym);
     list_eq_func_call.lhs() = symbol_expr(eq_ret);
     // passing arguments
-    list_eq_func_call.arguments().push_back(
-      address_of_exprt(symbol_expr(*lhs_symbol))); // &l1
-    list_eq_func_call.arguments().push_back(
-      address_of_exprt(symbol_expr(*rhs_symbol))); // &l2
+    list_eq_func_call.arguments().push_back(symbol_expr(*lhs_symbol)); // l1
+    list_eq_func_call.arguments().push_back(symbol_expr(*rhs_symbol)); // l2
 
     list_eq_func_call.type() = bool_type();
     list_eq_func_call.location() = get_location_from_decl(element);
@@ -2177,8 +2175,10 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
         assert(list_symbol);
 
         if (size_var->value.is_code())
+        {
           return create_variable_length_array_for_multiplication(
             element, list_symbol, size_var, list_elem);
+        }
 
         list_size = std::stoi(size_var->value.value().as_string(), nullptr, 2);
       }
@@ -2195,7 +2195,9 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     {
       current_block->copy_to_operands(
         build_push_list_call(*list_symbol, element, list_elem));
-      list_type_map[list_id].push_back(list_elem.type());
+
+      list_type_map[list_id].push_back(
+        std::make_pair(list_elem.identifier().as_string(), list_elem.type()));
     }
 
     return symbol_expr(*list_symbol);
@@ -2935,8 +2937,7 @@ const typet python_converter::get_list_type()
   });
   assert(list_type_symbol);
 
-  // 2.2 Build list symbol
-  return symbol_typet(list_type_symbol->id);
+  return pointer_typet(symbol_typet(list_type_symbol->id));
 }
 
 exprt python_converter::build_push_list_call(
@@ -3030,8 +3031,7 @@ exprt python_converter::build_push_list_call(
   code_function_callt list_push_func_call;
   list_push_func_call.function() = symbol_expr(*list_push_func_sym);
   // passing arguments
-  list_push_func_call.arguments().push_back(
-    address_of_exprt(symbol_expr(list))); // &l
+  list_push_func_call.arguments().push_back(symbol_expr(list)); // l
   list_push_func_call.arguments().push_back(
     address_of_exprt(symbol_expr(tmp_list_elem_symbol))); // &var
   list_push_func_call.arguments().push_back(
@@ -3044,9 +3044,84 @@ exprt python_converter::build_push_list_call(
   return list_push_func_call;
 }
 
+symbolt &python_converter::create_list(const nlohmann::json &element)
+{
+  array_typet inf_array_type(
+    get_list_element_type(), exprt("infinity", size_type()));
+
+  // 1.3 Build infinity array symbol
+  exprt inf_array_value = gen_zero(get_complete_type(inf_array_type, ns), true);
+  symbolt &inf_array_symbol =
+    create_tmp_symbol(element, "$storage$", inf_array_type, inf_array_value);
+  inf_array_symbol.value.zero_initializer(true);
+  inf_array_symbol.static_lifetime = true;
+
+  // 1.4 Add infinity array declaration to the block
+  code_declt inf_array_decl(symbol_expr(inf_array_symbol));
+  inf_array_decl.location() = get_location_from_decl(element);
+  current_block->copy_to_operands(inf_array_decl);
+
+  /* 2 - Add List declaration */
+
+  // 2.2 Build list symbol
+  typet list_type = get_list_type();
+
+  symbolt &list_symbol =
+    create_tmp_symbol(element, "$list$", list_type, exprt());
+
+  // 2.3 Add list declaration to the block
+  code_declt list_decl(symbol_expr(list_symbol));
+  list_decl.location() = get_location_from_decl(element);
+  current_block->copy_to_operands(list_decl);
+
+  /* 3 - Build call to initialise the list with the infinity array */
+  const symbolt *list_create_func_sym =
+    symbol_table_.find_symbol("c:list.c@F@list_create");
+  assert(list_create_func_sym);
+
+  code_function_callt list_create_func_call;
+  list_create_func_call.function() = symbol_expr(*list_create_func_sym);
+  list_create_func_call.lhs() = symbol_expr(list_symbol);
+  list_create_func_call.arguments().push_back(
+    get_array_base_address(symbol_expr(inf_array_symbol)));
+  list_create_func_call.type() = list_type;
+  list_create_func_call.location() = get_location_from_decl(element);
+
+  // 3.1 Add list_create call to the block
+  current_block->copy_to_operands(list_create_func_call);
+
+  return list_symbol;
+}
+
+exprt python_converter::build_list_at_call(
+  const exprt &list,
+  const exprt &index,
+  const nlohmann::json &element)
+{
+  pointer_typet obj_type(get_list_element_type());
+
+  const symbolt *list_at_func_sym =
+    symbol_table_.find_symbol("c:list.c@F@list_at");
+  assert(list_at_func_sym);
+
+  side_effect_expr_function_callt list_at_call;
+  list_at_call.function() = symbol_expr(*list_at_func_sym);
+  if (list.type().is_pointer())
+    list_at_call.arguments().push_back(list); // &l
+  else
+    list_at_call.arguments().push_back(address_of_exprt(list)); // &l
+
+  list_at_call.arguments().push_back(index);
+  list_at_call.type() = obj_type;
+  list_at_call.location() = get_location_from_decl(element);
+
+  return list_at_call;
+}
+
 exprt python_converter::get_expr(const nlohmann::json &element)
 {
   exprt expr;
+
   ExpressionType type = get_expression_type(element);
 
   switch (type)
@@ -3076,53 +3151,16 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     /*if (!is_converting_rhs)
       return exprt();*/
 
+    if (build_static_lists)
+    {
+      typet size = type_handler_.get_typet(element["elts"]);
+      return get_static_array(element, size);
+    }
+
     /* 1 - Create infinity objects array */
+    symbolt &list_symbol = create_list(element);
 
-    array_typet inf_array_type(
-      get_list_element_type(), exprt("infinity", size_type()));
-
-    // 1.3 Build infinity array symbol
-    exprt inf_array_value =
-      gen_zero(get_complete_type(inf_array_type, ns), true);
-    symbolt &inf_array_symbol =
-      create_tmp_symbol(element, "$storage$", inf_array_type, inf_array_value);
-    inf_array_symbol.value.zero_initializer(true);
-    inf_array_symbol.static_lifetime = true;
-
-    // 1.4 Add infinity array declaration to the block
-    code_declt inf_array_decl(symbol_expr(inf_array_symbol));
-    inf_array_decl.location() = get_location_from_decl(element);
-    current_block->copy_to_operands(inf_array_decl);
-
-    /* 2 - Add List declaration */
-
-    // 2.2 Build list symbol
-    typet list_type = get_list_type();
-
-    symbolt &list_symbol =
-      create_tmp_symbol(element, "$list$", list_type, exprt());
-
-    // 2.3 Add list declaration to the block
-    code_declt list_decl(symbol_expr(list_symbol));
-    list_decl.location() = get_location_from_decl(element);
-    current_block->copy_to_operands(list_decl);
-
-    /* 3 - Build call to initialize the list with the infinity array */
-    const symbolt *list_init_func_sym =
-      symbol_table_.find_symbol("c:list.c@F@list_init");
-    assert(list_init_func_sym);
-
-    code_function_callt list_init_func_call;
-    list_init_func_call.function() = symbol_expr(*list_init_func_sym);
-    list_init_func_call.arguments().push_back(
-      address_of_exprt(symbol_expr(list_symbol)));
-    list_init_func_call.arguments().push_back(
-      get_array_base_address(symbol_expr(inf_array_symbol)));
-    list_init_func_call.type() = bool_type();
-    list_init_func_call.location() = get_location_from_decl(element);
-
-    // 3.1 Add list_init call to the block
-    current_block->copy_to_operands(list_init_func_call);
+    const std::string &list_id = list_symbol.id.as_string();
 
     // 4 - Push list elements by list_push calls
     for (auto &e : element["elts"])
@@ -3132,11 +3170,8 @@ exprt python_converter::get_expr(const nlohmann::json &element)
         build_push_list_call(list_symbol, element, elem);
       current_block->copy_to_operands(list_push_func_call);
 
-      const std::string &list_id = (current_lhs)
-                                     ? current_lhs->identifier().as_string()
-                                     : list_symbol.id.as_string();
-
-      list_type_map[list_id].push_back(elem.type());
+      list_type_map[list_id].push_back(
+        std::make_pair(elem.identifier().as_string(), elem.type()));
     }
 
     expr = symbol_expr(list_symbol);
@@ -3309,186 +3344,274 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     exprt array = get_expr(element["value"]);
     const nlohmann::json &slice = element["slice"];
 
-    nlohmann::json list_node = json_utils::find_var_decl(
-      element["value"]["id"], current_func_name_, *ast_json);
-
-    exprt pos = get_expr(slice);
-    int index = 0;
-
-    if (pos.type().is_array())
+    if (slice["_type"] == "Slice") // arr[lower:upper]
     {
-      locationt l = get_location_from_decl(element);
-      throw std::runtime_error(
-        "TypeError at " + l.get_file().as_string() + " " +
-        l.get_line().as_string() +
-        ": list indices must be integers or slices, not str");
+      symbolt &sliced_list = create_list(element);
+      exprt lower_expr = get_expr(slice["lower"]);
+      exprt upper_expr = get_expr(slice["upper"]);
+
+      // int counter = lower
+      symbolt &counter =
+        create_tmp_symbol(element, "counter", size_type(), lower_expr);
+      code_assignt counter_code(symbol_expr(counter), lower_expr);
+      current_block->copy_to_operands(counter_code);
+
+      // Build conditional for while loop (counter < upper)
+      exprt cond("<", bool_type());
+      cond.operands().push_back(symbol_expr(counter));
+      cond.operands().push_back(upper_expr);
+
+      // Build block with lish_push() calls and counter increment
+      code_blockt then;
+
+      // list_at call to get the element to insert
+      exprt list_at_call =
+        build_list_at_call(array, symbol_expr(counter), element);
+
+      const symbolt &list_at_ret = create_tmp_symbol(
+        element,
+        "tmp_list_at",
+        pointer_typet(get_list_element_type()),
+        exprt());
+
+      code_declt tmp_list_at(symbol_expr(list_at_ret));
+      tmp_list_at.copy_to_operands(list_at_call);
+      then.copy_to_operands(tmp_list_at);
+
+      // call list_push_object to insert the retrieved object
+      const symbolt *list_push_object_func_sym =
+        symbol_table_.find_symbol("c:list.c@F@list_push_object");
+      assert(list_push_object_func_sym);
+
+      side_effect_expr_function_callt list_push_object_call;
+      list_push_object_call.function() =
+        symbol_expr(*list_push_object_func_sym);
+      list_push_object_call.arguments().push_back(
+        symbol_expr(sliced_list)); // &l
+      list_push_object_call.arguments().push_back(symbol_expr(list_at_ret));
+      list_push_object_call.type() = bool_type();
+      list_push_object_call.location() = get_location_from_decl(element);
+
+      then.copy_to_operands(convert_expression_to_code(list_push_object_call));
+
+      // increment counter
+      exprt incr("+");
+      incr.copy_to_operands(symbol_expr(counter));
+      incr.copy_to_operands(gen_one(int_type()));
+      code_assignt update(symbol_expr(counter), incr);
+      then.copy_to_operands(update);
+
+      // add while block for list_push() calls
+      codet while_cod;
+      while_cod.set_statement("while");
+      while_cod.copy_to_operands(cond, then);
+      current_block->copy_to_operands(while_cod);
+
+      // add type mapping for created sliced array
+      const auto &list_node = json_utils::get_var_value(
+        element["value"]["id"], current_func_name_, *ast_json);
+
+      for (size_t i = slice["lower"]["value"].get<size_t>();
+           i < slice["upper"]["value"].get<size_t>();
+           ++i)
+      {
+        exprt elt = get_expr(list_node["value"]["elts"][i]);
+        list_type_map[sliced_list.id.as_string()].push_back(
+          std::make_pair(elt.identifier().as_string(), elt.type()));
+      }
+
+      return symbol_expr(sliced_list);
     }
-
-    // Adjust negative indexes
-    if (slice.contains("op") && slice["op"]["_type"] == "USub")
+    else
     {
-      if (list_node.is_null() || list_node["value"]["_type"] != "List")
+      nlohmann::json list_node;
+      if (element["value"].contains("id"))
       {
-        BigInt v = binary2integer(pos.op0().value().c_str(), true);
-        v *= -1;
-
-        array_typet t = static_cast<array_typet &>(array.type());
-        BigInt s = binary2integer(t.size().value().c_str(), true);
-
-        v += s;
-        pos = from_integer(v, pos.type());
+        list_node = json_utils::find_var_decl(
+          element["value"]["id"], current_func_name_, *ast_json);
       }
-      else
-      {
-        index = slice["operand"]["value"].get<int>();
-        index = list_node["value"]["elts"].size() - index;
-        pos = from_integer(index, size_type());
-      }
-    }
-    else if (slice["_type"] == "Constant")
-    {
-      index = slice["value"].get<int>();
-    }
 
-    // lists are modelled as tag-struct __anon_typedef_List
-    if (array.type().is_symbol() || array.type().subtype().is_symbol())
-    {
-      typet list_elem_type;
+      exprt pos = get_expr(slice);
+      size_t index = 0;
 
-      if (list_node.is_null())
+      if (pos.type().is_array())
       {
-        // Handle case where list_node is not found - use default element type
-        list_elem_type = get_list_element_type();
+        locationt l = get_location_from_decl(element);
+        throw std::runtime_error(
+          "TypeError at " + l.get_file().as_string() + " " +
+          l.get_line().as_string() +
+          ": list indices must be integers or slices, not str");
       }
-      else if (list_node["_type"] == "arg")
+
+      // Adjust negative indexes
+      if (slice.contains("op") && slice["op"]["_type"] == "USub")
       {
-        list_elem_type = type_handler_.get_typet(
-          list_node["annotation"]["slice"]["id"].get<std::string>());
-      }
-      else if (
-        slice["_type"] == "Constant" ||
-        (slice["_type"] == "UnaryOp" &&
-         slice["operand"]["_type"] == "Constant"))
-      {
-        const std::string &list_name = array.identifier().as_string();
-        try
+        if (list_node.is_null() || list_node["value"]["_type"] != "List")
         {
-          list_elem_type = list_type_map[list_name].at(index);
+          BigInt v = binary2integer(pos.op0().value().c_str(), true);
+          v *= -1;
+
+          array_typet t = static_cast<array_typet &>(array.type());
+          BigInt s = binary2integer(t.size().value().c_str(), true);
+
+          v += s;
+          pos = from_integer(v, pos.type());
         }
-        catch (const std::out_of_range &)
+        else
         {
-          const locationt l = get_location_from_decl(element);
-          throw std::runtime_error(
-            "List out of bounds at " + l.get_file().as_string() +
-            " line: " + l.get_line().as_string());
+          index = slice["operand"]["value"].get<size_t>();
+          index = list_node["value"]["elts"].size() - index;
+          pos = from_integer(index, size_type());
         }
       }
-      else if (slice["_type"] == "Name")
+      else if (slice["_type"] == "Constant")
       {
-        if (!list_node.is_null() && list_node["_type"] == "arg")
+        index = slice["value"].get<size_t>();
+      }
+
+      // lists are modelled as tag-struct __anon_typedef_List
+      if (array.type().is_symbol() || array.type().subtype().is_symbol())
+      {
+        typet list_elem_type;
+
+        if (array.type() == get_list_type()) // Handle arrays of arrays
+        {
+          const auto &key = array.identifier().as_string();
+          auto it = list_type_map.find(key);
+          if (it != list_type_map.end())
+          {
+            if (index < it->second.size())
+            {
+              std::string &arr_elem_id = it->second.at(index).first;
+              list_elem_type = it->second.at(index).second;
+
+              if (list_elem_type == get_list_type())
+              {
+                symbolt *l = find_symbol(arr_elem_id);
+                assert(l);
+                return symbol_expr(*l);
+              }
+            }
+          }
+        }
+
+        if (list_elem_type == typet() && list_node.is_null())
+        {
+          // Handle case where list_node is not found - use default element type
+          list_elem_type = get_list_element_type();
+        }
+        else if (list_node["_type"] == "arg")
         {
           list_elem_type = type_handler_.get_typet(
             list_node["annotation"]["slice"]["id"].get<std::string>());
         }
-        else
+        else if (
+          slice["_type"] == "Constant" || slice["_type"] == "BinOp" ||
+          (slice["_type"] == "UnaryOp" &&
+           slice["operand"]["_type"] == "Constant"))
         {
-          // Handle case where we need to find the variable declaration
-          while (!list_node.is_null() &&
-                 (!list_node.contains("value") ||
-                  !list_node["value"].contains("elts") ||
-                  !list_node["value"]["elts"].is_array()))
+          const std::string &list_name = array.identifier().as_string();
+          if (list_type_map[list_name].empty())
           {
-            if (
-              list_node.contains("value") && list_node["value"].contains("id"))
-              list_node = json_utils::find_var_decl(
-                list_node["value"]["id"], current_func_name_, *ast_json);
-            else
+            /* (Bruno): The referenced variable points to a list whose type map hasn’t been
+           * resolved yet (e.g., for function parameters). In this case, fall back
+           * to the node’s annotation. */
+            const nlohmann::json list_value_node = json_utils::get_var_value(
+              element["value"]["id"], current_func_name_, *ast_json);
+
+            list_elem_type = type_handler_.get_typet(
+              list_value_node["annotation"]["slice"]["id"].get<std::string>());
+          }
+          else
+          {
+            size_t i = index;
+
+            /* For list-multiplication initializations (e.g., [1] * f), we can
+           * simply use the type of the first element for now.*/
+            if (!list_node.is_null() && list_node["value"]["_type"] == "BinOp")
+              i = 0;
+
+            try
             {
-              break;
+              list_elem_type = list_type_map[list_name].at(i).second;
+            }
+            catch (const std::out_of_range &)
+            {
+              const locationt l = get_location_from_decl(element);
+              throw std::runtime_error(
+                "List out of bounds at " + l.get_file().as_string() +
+                " line: " + l.get_line().as_string());
             }
           }
-
-          // Check if we found a valid list node with the expected structure
-          if (
-            list_node.is_null() || !list_node.contains("value") ||
-            (!list_node["value"].is_array() &&
-             (!list_node["value"].contains("elts") ||
-              !list_node["value"]["elts"].is_array())))
-          {
-            throw std::runtime_error(
-              "Indexing list with symbolic values are not supported yet.");
-          }
-          list_elem_type = get_expr(list_node["value"]["elts"][0]).type();
         }
+        else if (slice["_type"] == "Name") // Handling slicing with variables
+        {
+          if (!list_node.is_null() && list_node["_type"] == "arg")
+          {
+            list_elem_type = type_handler_.get_typet(
+              list_node["annotation"]["slice"]["id"].get<std::string>());
+          }
+          else
+          {
+            // Handle case where we need to find the variable declaration
+            while (!list_node.is_null() &&
+                   (!list_node.contains("value") ||
+                    !list_node["value"].contains("elts") ||
+                    !list_node["value"]["elts"].is_array()))
+            {
+              if (
+                list_node.contains("value") &&
+                list_node["value"].contains("id"))
+                list_node = json_utils::find_var_decl(
+                  list_node["value"]["id"], current_func_name_, *ast_json);
+              else
+              {
+                break;
+              }
+            }
+
+            if (!list_node.is_null() && list_node["_type"] == "arg")
+            {
+              list_elem_type = type_handler_.get_typet(
+                list_node["annotation"]["slice"]["id"].get<std::string>());
+            }
+            else if (list_elem_type == typet() && list_node.contains("value"))
+            {
+              list_elem_type =
+                get_expr(json_utils::get_list_element(list_node["value"], 0))
+                  .type();
+            }
+          }
+        }
+
+        assert(pos != exprt());
+        assert(list_elem_type != typet());
+
+        // Build list_at() call
+        exprt list_at_call = build_list_at_call(array, pos, element);
+
+        // Get obj->value and cast it to the correct type
+        member_exprt obj_value(
+          list_at_call, "value", pointer_typet(empty_typet()));
+
+        {
+          exprt &base = obj_value.struct_op();
+          exprt deref("dereference");
+          deref.type() = base.type().subtype();
+          deref.move_to_operands(base);
+          base.swap(deref);
+        }
+
+        // Direct typecast from obj->value (which is void*) to target type pointer
+        typecast_exprt tc(obj_value, pointer_typet(list_elem_type));
+
+        // Dereference to get the actual value
+        dereference_exprt deref(list_elem_type);
+        deref.op0() = tc;
+        return deref;
       }
 
-      assert(pos != exprt());
-      assert(list_elem_type != typet());
-
-      // Add tmp variable to hold object*
-      pointer_typet obj_type(get_list_element_type());
-
-      symbolt &tmp_obj_symbol =
-        create_tmp_symbol(element, "tmp_obj", obj_type, exprt());
-
-      code_declt tmp_obj_decl(symbol_expr(tmp_obj_symbol));
-      current_block->copy_to_operands(tmp_obj_decl);
-
-      // Initialise tmp_obj with list_at() call return
-      const symbolt *list_at_func_sym =
-        symbol_table_.find_symbol("c:list.c@F@list_at");
-      assert(list_at_func_sym);
-
-      code_function_callt list_at_call;
-      list_at_call.function() = symbol_expr(*list_at_func_sym);
-      if (array.type().is_pointer())
-        list_at_call.arguments().push_back(array); // &l
-      else
-        list_at_call.arguments().push_back(address_of_exprt(array)); // &l
-      list_at_call.arguments().push_back(pos);
-      list_at_call.lhs() = symbol_expr(tmp_obj_symbol);
-      list_at_call.type() = obj_type;
-      list_at_call.location() = get_location_from_decl(element);
-
-      // 4.2.4 Add list_at call to the block
-      current_block->copy_to_operands(list_at_call);
-
-      // Get obj->value and cast it to the correct type
-      member_exprt obj_value(
-        symbol_expr(tmp_obj_symbol), "value", pointer_typet(empty_typet()));
-
-      // Direct typecast from obj->value (which is void*) to target type pointer
-      typecast_exprt tc(obj_value, pointer_typet(list_elem_type));
-
-      // Dereference to get the actual value
-      dereference_exprt deref(list_elem_type);
-      deref.op0() = tc;
-      return deref;
-    }
-
-    typet t = array.type().subtype();
-
-    if (slice["_type"] == "Slice")
-    {
-      const size_t &upper = slice["upper"]["value"].get<size_t>();
-      const size_t &lower = slice["lower"]["value"].get<size_t>();
-
-      typet list_type = type_handler_.build_array(t, upper - lower);
-
-      expr = constant_exprt(list_type);
-
-      const auto &list = json_utils::find_var_decl(
-        element["value"]["id"], current_func_name_, *ast_json);
-
-      assert(!list.empty());
-
-      const auto &list_elts = list["value"]["elts"];
-
-      for (size_t j = lower; j < upper; ++j)
-        expr.operands().push_back(get_expr(list_elts[j]));
-    }
-    else
-    {
+      typet t = array.type().subtype();
       expr = index_exprt(array, pos, t);
     }
     break;
@@ -3737,7 +3860,8 @@ void python_converter::handle_assignment_type_adjustments(
     // String and list type size adjustments
     else if (
       lhs_type == "str" || lhs_type == "chr" || lhs_type == "ord" ||
-      lhs_type == "list" || rhs.type().is_array())
+      lhs_type == "list" || rhs.type().is_array() ||
+      rhs.type() == get_list_type())
     {
       if (!rhs.type().is_empty())
       {
@@ -4013,7 +4137,7 @@ void python_converter::get_var_assign(
           }
         }
 
-        typet l_type = pointer_typet(get_list_type());
+        typet l_type = get_list_type();
         symbolt &tmp_var_symbol =
           create_tmp_symbol(ast_node, "tmp_var", l_type, gen_zero(l_type));
 
@@ -4024,11 +4148,7 @@ void python_converter::get_var_assign(
         rhs.op0() = symbol_expr(tmp_var_symbol);
         target_block.copy_to_operands(rhs);
 
-        dereference_exprt deref(l_type.subtype());
-        deref.op0() = symbol_expr(tmp_var_symbol);
-        rhs = deref;
-
-        code_assignt code_assign(lhs, rhs);
+        code_assignt code_assign(lhs, symbol_expr(tmp_var_symbol));
         code_assign.location() = location_begin;
         rhs = code_assign;
       }
@@ -4039,6 +4159,18 @@ void python_converter::get_var_assign(
     }
 
     adjust_statement_types(lhs, rhs);
+
+    // TODO: ## MOVE THIS PART TO LIST CLASS
+    // Update list t
+    if (lhs.type() == rhs.type() && lhs.type() == get_list_type())
+    {
+      const std::string &rhs_identifier = rhs.identifier().as_string();
+      if (!list_type_map[rhs_identifier].empty())
+      {
+        const std::string &lhs_identifier = lhs.identifier().as_string();
+        list_type_map[lhs_identifier] = list_type_map[rhs_identifier];
+      }
+    }
 
     code_assignt code_assign(lhs, rhs);
     code_assign.location() = location_begin;
@@ -4484,8 +4616,6 @@ void python_converter::get_function_definition(
 
     if (arg_type.is_array())
       arg_type = gen_pointer_type(arg_type.subtype());
-    else if (arg_type == get_list_type())
-      arg_type = gen_pointer_type(arg_type);
 
     assert(arg_type != typet());
 
@@ -5065,6 +5195,31 @@ exprt python_converter::get_block(const nlohmann::json &ast_block)
   current_block = old_block;
 
   return std::move(block);
+}
+
+exprt python_converter::get_static_array(
+  const nlohmann::json &arr,
+  const typet &shape)
+{
+  exprt zero = gen_zero(size_type());
+  exprt list = gen_zero(shape);
+
+  unsigned int i = 0;
+  for (auto &e : arr["elts"])
+  {
+    exprt element_expr = get_expr(e);
+    list.operands().at(i++) = element_expr;
+  }
+
+  symbolt &cl = create_tmp_symbol(arr, "$compound-literal$", shape, list);
+
+  exprt expr = symbol_expr(cl);
+  code_declt decl(expr);
+  decl.operands().push_back(list);
+  assert(current_block);
+  current_block->copy_to_operands(decl);
+
+  return expr;
 }
 
 python_converter::python_converter(

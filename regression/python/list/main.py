@@ -42,14 +42,14 @@ def func1(x:float) -> float:
 def func2(l: list[float]) -> None:
     l[0] = func1(l[0]) # Updating list element within a function
 
-# l8 = [1.0]
-# func2(l8)
-# assert l8[0] == 2.0
+l8 = [1.0]
+func2(l8)
+assert l8[0] == 2.0
 
-# def bar(x:list[int]) -> None:
-#     assert x[0] == 1
+def bar(x:list[int]) -> None:
+    assert x[0] == 1
 
-# x = 0    
-# bar([1,2,3])
+x = 0
+bar([1,2,3])
 
-# l9 = []
+l9 = []

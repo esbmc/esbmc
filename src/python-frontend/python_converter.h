@@ -9,6 +9,7 @@
 #include <nlohmann/json.hpp>
 #include <map>
 #include <set>
+#include <utility>
 
 class codet;
 class struct_typet;
@@ -256,6 +257,8 @@ private:
 
   exprt get_block(const nlohmann::json &ast_block);
 
+  exprt get_static_array(const nlohmann::json &arr, const typet &shape);
+
   void adjust_statement_types(exprt &lhs, exprt &rhs) const;
 
   symbol_id create_symbol_id() const;
@@ -300,6 +303,11 @@ private:
     const nlohmann::json &op,
     const exprt &elem);
 
+  exprt build_list_at_call(
+    const exprt &list,
+    const exprt &index,
+    const nlohmann::json &element);
+
   symbolt *find_function_in_base_classes(
     const std::string &class_name,
     const std::string &symbol_id,
@@ -342,6 +350,8 @@ private:
   // Helper methods for binary operator expression handling
   void convert_function_calls_to_side_effects(exprt &lhs, exprt &rhs);
 
+  symbolt &create_list(const nlohmann::json &element);
+
   exprt handle_string_concatenation_with_promotion(
     exprt &lhs,
     exprt &rhs,
@@ -379,13 +389,15 @@ private:
   bool is_loading_models = false;
   bool is_importing_module = false;
   bool base_ctor_called = false;
+  bool build_static_lists = false;
 
   // Map object to list of instance attributes
   std::map<std::string, std::set<std::string>> instance_attr_map;
   // Map imported modules to their corresponding paths
   std::unordered_map<std::string, std::string> imported_modules;
-  // Registry for list elements types
-  std::unordered_map<std::string, std::vector<typet>> list_type_map;
+  // <list_id, <elem_id, elem_type>>
+  std::unordered_map<std::string, std::vector<std::pair<std::string, typet>>>
+    list_type_map;
 
   std::vector<std::string> global_declarations;
   std::vector<std::string> local_loads;
