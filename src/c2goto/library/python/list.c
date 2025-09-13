@@ -7,6 +7,7 @@ typedef struct
 {
   const void *value; // data pointer
   size_t type_id;    // hashed type name
+  size_t size;       // number of bytes in value
 } Object;
 
 typedef struct
@@ -30,6 +31,39 @@ static inline bool list_in_bounds(const List *l, size_t index)
   return index < l->size;
 }
 */
+
+static bool list_eq(const List *l1, const List *l2)
+{
+  assert(l1 && l2);
+  if (l1->size != l2->size)
+    return false;
+
+  size_t i = 0;
+
+  while (i < l1->size)
+  {
+    const Object *a = &l1->items[i];
+    const Object *b = &l2->items[i];
+
+    if (a->type_id != b->type_id)
+      return false;
+
+    if (a->size != b->size)
+      return false;
+
+    if (!a->value || !b->value)
+      return false;
+
+    if (a->value == b->value)
+      return true; // same pointer => equal
+
+    if (memcmp(a->value, b->value, a->size) != 0)
+      return false;
+
+    ++i;
+  }
+  return true;
+}
 
 static size_t list_size(const List *l)
 {
@@ -95,6 +129,7 @@ list_push(List *l, const void *value, size_t type_id, size_t type_size)
 
   l->items[l->size].value = copied_value;
   l->items[l->size].type_id = type_id;
+  l->items[l->size].size = type_size;
   l->size++;
   return true;
 }
