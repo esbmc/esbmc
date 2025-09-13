@@ -601,7 +601,7 @@ void value_sett::get_value_set_rec(
         auto expr = object_numbering[it.first];
         if (
           is_symbol2t(expr) || is_constant_string2t(expr) ||
-          is_constant_array2t(expr))
+          is_constant_array2t(expr) || is_null_object2t(expr))
         {
           return true;
         }
