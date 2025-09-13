@@ -39,7 +39,6 @@ static bool list_eq(const List *l1, const List *l2)
     return false;
 
   size_t i = 0;
-
   while (i < l1->size)
   {
     const Object *a = &l1->items[i];
@@ -47,18 +46,31 @@ static bool list_eq(const List *l1, const List *l2)
 
     if (a->type_id != b->type_id)
       return false;
-
     if (a->size != b->size)
       return false;
 
+    // Same address => element equal; keep checking the rest.
+    if (a->value == b->value)
+    {
+      ++i;
+      continue;
+    }
+
+    // If either is NULL (and not the same address), not equal.
     if (!a->value || !b->value)
       return false;
 
-    if (a->value == b->value)
-      return true; // same pointer => equal
+    // memcmp
+    const unsigned char *pa = (const unsigned char *)a->value;
+    const unsigned char *pb = (const unsigned char *)b->value;
 
-    if (memcmp(a->value, b->value, a->size) != 0)
-      return false;
+    size_t j = 0;
+    while (j < a->size)
+    {
+      if (pa[j] != pb[j])
+        return false;
+      ++j;
+    }
 
     ++i;
   }
