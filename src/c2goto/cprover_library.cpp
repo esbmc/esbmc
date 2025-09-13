@@ -136,10 +136,10 @@ const static std::vector<std::string> python_c_models = {
   "zeroinfnan",
   "eval_as_double",
   "fp_barrier",
-  "fp_force_eval"
+  "fp_force_eval",
   "__math_invalid",
   "__math_oflow",
-  "__math_xflow"
+  "__math_xflow",
   "__math_uflow",
   "log",
   "log2",
