@@ -2089,7 +2089,50 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
       return handle_string_concatenation_with_promotion(lhs, rhs, left, right);
   }
 
+  // TODO: ### MOVE THIS LIST BLOCK TO ANOTHER CLASS ####
   typet list_type = get_list_type();
+
+  if (
+    lhs.type() == list_type && rhs.type() == list_type &&
+    (op == "Eq" || op == "NotEq"))
+  {
+    const symbolt *list_eq_func_sym =
+      symbol_table_.find_symbol("c:list.c@F@list_eq");
+    assert(list_eq_func_sym);
+
+    const symbolt *lhs_symbol = find_symbol(lhs.identifier().as_string());
+    const symbolt *rhs_symbol = find_symbol(rhs.identifier().as_string());
+    assert(lhs_symbol);
+    assert(rhs_symbol);
+
+    symbolt &eq_ret =
+      create_tmp_symbol(element, "eq_tmp", bool_type(), gen_boolean(false));
+    code_declt eq_ret_decl(symbol_expr(eq_ret));
+    current_block->copy_to_operands(eq_ret_decl);
+
+    code_function_callt list_eq_func_call;
+    list_eq_func_call.function() = symbol_expr(*list_eq_func_sym);
+    list_eq_func_call.lhs() = symbol_expr(eq_ret);
+    // passing arguments
+    list_eq_func_call.arguments().push_back(
+      address_of_exprt(symbol_expr(*lhs_symbol))); // &l1
+    list_eq_func_call.arguments().push_back(
+      address_of_exprt(symbol_expr(*rhs_symbol))); // &l2
+
+    list_eq_func_call.type() = bool_type();
+    list_eq_func_call.location() = get_location_from_decl(element);
+    current_block->copy_to_operands(list_eq_func_call);
+
+    //return list_eq_func_call;
+    exprt cond("=", bool_type());
+    cond.copy_to_operands(symbol_expr(eq_ret));
+    if (op == "Eq")
+      cond.copy_to_operands(gen_boolean(true));
+    else
+      cond.copy_to_operands(gen_boolean(false));
+
+    return cond;
+  }
 
   if ((lhs.type() == list_type || rhs.type() == list_type) && op == "Mult")
   {
