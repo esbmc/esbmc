@@ -1963,7 +1963,7 @@ exprt python_converter::handle_string_concatenation_with_promotion(
 /// Helper method to create variable-length arrays
 exprt python_converter::create_variable_length_array_for_multiplication(
   const nlohmann::json &element,
-  const symbolt* list,
+  const symbolt *list,
   symbolt *size_var,
   const exprt &list_elem)
 {
@@ -2130,8 +2130,8 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
         assert(size_var);
 
-        symbolt* list_symbol = find_symbol(lhs.identifier().as_string());
-            assert(list_symbol);
+        symbolt *list_symbol = find_symbol(lhs.identifier().as_string());
+        assert(list_symbol);
 
         if (size_var->value.is_code())
           return create_variable_length_array_for_multiplication(

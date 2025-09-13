@@ -350,7 +350,7 @@ private:
 
   exprt create_variable_length_array_for_multiplication(
     const nlohmann::json &element,
-	const symbolt* list,
+    const symbolt *list,
     symbolt *size_var,
     const exprt &list_elem);
 
