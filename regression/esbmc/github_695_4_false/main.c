@@ -15,7 +15,7 @@ struct obj {
 
 int main() {
     struct obj A[4];
-    unsigned int obj_ptr = &A[0];
+    unsigned int obj_ptr = (unsigned int)&A[0];
 
     for (int i = 0; i < 4; i++)
     {
