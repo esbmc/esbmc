@@ -27,6 +27,7 @@ ulperr_exp: 0.509 ULP (ULP error of exp, 0.511 ULP without fma)
 /* Top 12 bits of a double (sign and exponent bits).  */
 static inline uint32_t top12(double x)
 {
+__ESBMC_HIDE:;
 	return asuint64(x) >> 52;
 }
 
@@ -35,6 +36,7 @@ static inline uint32_t top12(double x)
    normalized in the subnormal range using the sign bit for the exponent.  */
 static inline double_t log_inline(uint64_t ix, double_t *tail)
 {
+__ESBMC_HIDE:;
 	/* double_t for better performance on targets with FLT_EVAL_METHOD==2.  */
 	double_t z, r, y, invc, logc, logctail, kd, hi, t1, t2, lo, lo1, lo2, p;
 	uint64_t iz, tmp;
@@ -123,6 +125,7 @@ static inline double_t log_inline(uint64_t ix, double_t *tail)
    negative k means the result may underflow.  */
 static inline double specialcase(double_t tmp, uint64_t sbits, uint64_t ki)
 {
+__ESBMC_HIDE:;
 	double_t scale, y;
 
 	if ((ki & 0x80000000) == 0) {
@@ -165,6 +168,7 @@ static inline double specialcase(double_t tmp, uint64_t sbits, uint64_t ki)
    The sign_bias argument is SIGN_BIAS or 0 and sets the sign to -1 or 1.  */
 static inline double exp_inline(double_t x, double_t xtail, uint32_t sign_bias)
 {
+__ESBMC_HIDE:;
 	uint32_t abstop;
 	uint64_t ki, idx, top, sbits;
 	/* double_t for better performance on targets with FLT_EVAL_METHOD==2.  */
@@ -234,6 +238,7 @@ static inline double exp_inline(double_t x, double_t xtail, uint32_t sign_bias)
    the bit representation of a non-zero finite floating-point value.  */
 static inline int checkint(uint64_t iy)
 {
+__ESBMC_HIDE:;
 	int e = iy >> 52 & 0x7ff;
 	if (e < 0x3ff)
 		return 0;
@@ -249,11 +254,13 @@ static inline int checkint(uint64_t iy)
 /* Returns 1 if input is the bit representation of 0, infinity or nan.  */
 static inline int zeroinfnan(uint64_t i)
 {
+__ESBMC_HIDE:;
 	return 2 * i - 1 >= 2 * asuint64(INFINITY) - 1;
 }
 
 double pow(double x, double y)
 {
+__ESBMC_HIDE:;
 	uint32_t sign_bias = 0;
 	uint64_t ix, iy;
 	uint32_t topx, topy;
@@ -340,4 +347,11 @@ double pow(double x, double y)
 	elo = ylo * lhi + y * llo; /* |elo| < |ehi| * 2^-25.  */
 #endif
 	return exp_inline(ehi, elo, sign_bias);
+}
+
+// Keep old __pow for compatibility if needed
+double __pow(double base, double exponent)
+{
+__ESBMC_HIDE:;
+	return pow(base, exponent);
 }
