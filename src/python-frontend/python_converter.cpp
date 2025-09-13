@@ -2092,18 +2092,21 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   // TODO: ### MOVE THIS LIST BLOCK TO ANOTHER CLASS ####
   typet list_type = get_list_type();
 
-  if (lhs.type() == list_type && rhs.type() == list_type && op == "Eq")
+  if (
+    lhs.type() == list_type && rhs.type() == list_type &&
+    (op == "Eq" || op == "NotEq"))
   {
     const symbolt *list_eq_func_sym =
       symbol_table_.find_symbol("c:list.c@F@list_eq");
     assert(list_eq_func_sym);
 
-    const symbolt* lhs_symbol = find_symbol(lhs.identifier().as_string());
-    const symbolt* rhs_symbol = find_symbol(rhs.identifier().as_string());
+    const symbolt *lhs_symbol = find_symbol(lhs.identifier().as_string());
+    const symbolt *rhs_symbol = find_symbol(rhs.identifier().as_string());
     assert(lhs_symbol);
     assert(rhs_symbol);
 
-    symbolt& eq_ret = create_tmp_symbol(element, "eq_tmp", bool_type(), gen_boolean(false));
+    symbolt &eq_ret =
+      create_tmp_symbol(element, "eq_tmp", bool_type(), gen_boolean(false));
     code_declt eq_ret_decl(symbol_expr(eq_ret));
     current_block->copy_to_operands(eq_ret_decl);
 
@@ -2123,7 +2126,11 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
     //return list_eq_func_call;
     exprt cond("=", bool_type());
     cond.copy_to_operands(symbol_expr(eq_ret));
-    cond.copy_to_operands(gen_boolean(true));
+    if (op == "Eq")
+      cond.copy_to_operands(gen_boolean(true));
+    else
+      cond.copy_to_operands(gen_boolean(false));
+
     return cond;
   }
 
