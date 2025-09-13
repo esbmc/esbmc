@@ -1,4 +1,0 @@
-CORE
-main.py
-
-^TypeError\: 'float' object cannot be interpreted as an integer$

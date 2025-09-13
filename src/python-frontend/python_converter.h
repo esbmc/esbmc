@@ -295,6 +295,11 @@ private:
 
   void create_builtin_symbols();
 
+  exprt build_push_list_call(
+    const symbolt &list,
+    const nlohmann::json &op,
+    const exprt &elem);
+
   symbolt *find_function_in_base_classes(
     const std::string &class_name,
     const std::string &symbol_id,
@@ -310,6 +315,10 @@ private:
     const std::string &obj_symbol_id);
 
   size_t get_type_size(const nlohmann::json &ast_node);
+
+  const typet get_list_element_type();
+
+  const typet get_list_type();
 
   void append_models_from_directory(
     std::list<std::string> &file_list,
@@ -341,7 +350,8 @@ private:
 
   exprt create_variable_length_array_for_multiplication(
     const nlohmann::json &element,
-    symbolt *symbol,
+    const symbolt *list,
+    symbolt *size_var,
     const exprt &list_elem);
 
   exprt handle_chained_comparisons_logic(
@@ -374,6 +384,8 @@ private:
   std::map<std::string, std::set<std::string>> instance_attr_map;
   // Map imported modules to their corresponding paths
   std::unordered_map<std::string, std::string> imported_modules;
+  // Registry for list elements types
+  std::unordered_map<std::string, std::vector<typet>> list_type_map;
 
   std::vector<std::string> global_declarations;
   std::vector<std::string> local_loads;

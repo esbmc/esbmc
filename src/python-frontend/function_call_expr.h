@@ -190,6 +190,13 @@ private:
    */
   exprt gen_exception_raise(std::string exc, std::string message) const;
 
+  // List method detection and handling
+  bool is_list_method_call() const;
+  exprt handle_list_method() const;
+  exprt handle_list_append() const;
+  exprt handle_list_pop() const;
+  exprt handle_list_insert() const;
+
 protected:
   symbol_id function_id_;
   const nlohmann::json &call_;
