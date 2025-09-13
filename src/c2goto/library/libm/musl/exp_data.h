@@ -5,7 +5,6 @@
 #ifndef _EXP_DATA_H
 #define _EXP_DATA_H
 
-#include <features.h>
 #include <stdint.h>
 
 #define EXP_TABLE_BITS 7
