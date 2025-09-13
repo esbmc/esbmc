@@ -82,15 +82,30 @@ ubuntu_setup () {
     echo "Installing GMP 6.3.0 from source..." &&
     ORIGINAL_DIR="$PWD" &&
     cd /tmp &&
-    wget https://ftpmirror.gnu.org/gmp/gmp-6.3.0.tar.xz &&
+
+    URLS="https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz \
+        https://mirrors.kernel.org/gnu/gmp/gmp-6.3.0.tar.xz \
+        https://ftpmirror.gnu.org/gmp/gmp-6.3.0.tar.xz \
+    "
+
+    for url in $URLS; do
+        echo "Trying $url ..."
+        if wget -q --show-progress "$url"; then
+            SUCCESS=1
+            break
+        fi
+    done &&
+
+    [ "$SUCCESS" -eq 1 ] || { echo "ERROR: Failed to download GMP"; exit 1; } &&
+
     tar -xf gmp-6.3.0.tar.xz &&
     cd gmp-6.3.0 &&
     ./configure --prefix=/usr/local --enable-cxx --enable-static &&
-    make -j$(nproc) &&
+    make -j"$(nproc)" &&
     sudo make install &&
     sudo ldconfig &&
     echo "GMP 6.3.0 installed successfully" &&
-    cd "$ORIGINAL_DIR" &&  # Return to build directory
+    cd "$ORIGINAL_DIR" &&
 
     echo "Installing Python dependencies" &&
     pip3 install --user meson ast2json mypy &&
