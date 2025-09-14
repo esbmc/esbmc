@@ -823,7 +823,7 @@ void clang_c_adjust::adjust_function_call_arguments(
 }
 
 static inline bool
-compare_float_suffix(const irep_idt &identifier, const std::string name)
+compare_float_suffix(const irep_idt &identifier, const std::string &name)
 {
   return (identifier == name) || ((identifier == (name + "f"))) ||
          ((identifier == (name + "d"))) || ((identifier == (name + "l")));
