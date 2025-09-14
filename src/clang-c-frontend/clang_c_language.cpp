@@ -483,6 +483,10 @@ void __ESBMC_loop_invariant(_Bool);
 
 #define __builtin_offsetof(type, member) \
     ((size_t)__ESBMC_POINTER_OFFSET(&((type*)0)->member))
+
+
+#define __builtin_object_size(ptr, type) \
+    __ESBMC_builtin_object_size(ptr, type)
     )";
 
   if (config.ansi_c.cheri)
