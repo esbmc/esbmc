@@ -1556,7 +1556,16 @@ void goto_symext::intrinsic_builtin_object_size(
   size_t type_value = 0;
   cur_state->rename(type_param);
   if (is_constant_int2t(type_param))
-    type_value = to_constant_int2t(type_param).value.to_int64();
+  {
+    int64_t param_val = to_constant_int2t(type_param).value.to_int64();
+    if (param_val < 0 || param_val > 3)
+    {
+      // Invalid type parameter - treat as type 0 (GCC behavior)
+      type_value = 0;
+    }
+    else
+      type_value = static_cast<size_t>(param_val);
+  }
 
   // Work out what the ptr points at.
   internal_deref_items.clear();
