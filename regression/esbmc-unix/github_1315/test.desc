@@ -1,0 +1,4 @@
+CORE
+main.c
+--context-bound 3 --smt-symex-assume --z3
+^VERIFICATION FAILED$
