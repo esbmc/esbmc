@@ -370,7 +370,7 @@ unsigned int symex_target_equationt::clear_assertions()
     if (it->type == goto_trace_stept::ASSERT)
     {
       SSA_stepst::iterator it2 = it;
-      it--;
+      --it;
       SSA_steps.erase(it2);
       num_asserts++;
     }
