@@ -163,8 +163,7 @@ void parse_conversion_specifier(
       }
     }
 
-    for (; it != arg_string.end() && *it != ']'; it++)
-      tmp += *it;
+    for (; it != arg_string.end() && *it != ']'; ++it);
 
     break;
   }
