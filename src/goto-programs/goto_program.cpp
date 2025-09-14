@@ -341,7 +341,7 @@ void goto_programt::compute_target_numbers()
 
   for (instructionst::const_iterator it = instructions.begin();
        it != instructions.end();
-       it++)
+       ++it)
   {
     for (auto t : it->targets)
     {
