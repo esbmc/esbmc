@@ -830,7 +830,7 @@ compare_float_suffix(const irep_idt &identifier, const std::string &name)
 }
 
 static inline bool
-compare_unscore_builtin(const irep_idt &identifier, const std::string name)
+compare_unscore_builtin(const irep_idt &identifier, const std::string &name)
 {
   // compare a given identifier with a set of possible names, e.g,
   //
