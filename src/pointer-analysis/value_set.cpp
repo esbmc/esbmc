@@ -94,7 +94,7 @@ void value_sett::output(std::ostream &out) const
       width += result.size();
 
       object_mapt::const_iterator next(o_it);
-      next++;
+      ++next;
 
       if (next != e.object_map.end())
       {
