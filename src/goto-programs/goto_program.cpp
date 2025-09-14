@@ -165,7 +165,7 @@ void goto_programt::instructiont::output_instruction(
 
       for (instructiont::targetst::const_iterator gt_it = targets.begin();
            gt_it != targets.end();
-           gt_it++, i++)
+           ++gt_it, ++i)
       {
         if (gt_it != targets.begin())
           out << ", ";
