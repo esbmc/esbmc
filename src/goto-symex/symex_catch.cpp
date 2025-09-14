@@ -33,7 +33,7 @@ void goto_symext::symex_catch()
     for (goto_programt::targetst::const_iterator it =
            instruction.targets.begin();
          it != instruction.targets.end();
-         it++, i++)
+         ++it, ++i)
     {
       exception.catch_map[catch_ref.exception_list[i]] = *it;
       exception.catch_order[catch_ref.exception_list[i]] = i;

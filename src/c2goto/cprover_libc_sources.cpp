@@ -98,7 +98,7 @@ const std::string *internal_libc_header_dir()
 }
 
 /* copy of clang_c_convertert::get_filename_from_path(); TODO: unify */
-static std::string get_filename_from_path(std::string path)
+static std::string get_filename_from_path(const std::string& path)
 {
   if (path.find_last_of('/') != std::string::npos)
     return path.substr(path.find_last_of('/') + 1);
