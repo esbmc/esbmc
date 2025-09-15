@@ -298,6 +298,8 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
   # Add strategy
   if concurrency: # Concurrency only works with incremental
     command_line += "--incremental-bmc "
+  elif prop == Property.overflow: # Overflow only works with incremental
+    command_line += "--incremental-bmc "
   elif strat == "fixed":
     command_line += "--k-induction --max-inductive-step 3 "
   elif strat == "kinduction":
