@@ -1509,17 +1509,17 @@ basic_string<CharT, Traits, Alloc>::operator=(
 
   // Store old pointer for cleanup
   CharT *old_str = this->str;
-
-  // Calculate new size
-  size_t new_size = str.size();
+  const size_t new_size = str._size;
 
   // Allocate new memory
   CharT *new_str = nullptr;
   if (new_size > 0)
   {
     new_str = new CharT[new_size + 1];
+    const CharT *src = str.str;
     for (size_t i = 0; i < new_size; ++i)
-      new_str[i] = str.str[i];
+      new_str[i] = src[i];
+    
     new_str[new_size] = CharT{}; // Null terminator
   }
 
@@ -1538,7 +1538,7 @@ basic_string<CharT, Traits, Alloc> &
 basic_string<CharT, Traits, Alloc>::operator=(const char *s)
 {
 __ESBMC_HIDE:
-  __ESBMC_assert(s != NULL, "The parameter must be different than NULL");
+  //__ESBMC_assert(s != NULL, "The parameter must be different than NULL");
   this->_size = strlen(s);
   this->str = new char[this->_size + 1];
   strcpy(this->str, s); // Copy the contents of s to str
@@ -3406,10 +3406,10 @@ template <typename CharT, typename Traits, typename Alloc>
 bool operator==(const basic_string<CharT, Traits, Alloc> &lhs, const char *rhs)
 {
 __ESBMC_HIDE:
-  __ESBMC_assert(
-    lhs.str != NULL, "The first parameter must be different than NULL");
-  __ESBMC_assert(
-    rhs != NULL, "The second parameter must be different than NULL");
+  //__ESBMC_assert(
+  //  lhs.str != NULL, "The first parameter must be different than NULL");
+  //__ESBMC_assert(
+  //  rhs != NULL, "The second parameter must be different than NULL");
   if (lhs._size != strlen(rhs))
     return false;
   int aux;

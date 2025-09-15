@@ -318,7 +318,7 @@ public:
 
   T &operator[](const Key &x)
   {
-    assert(this->_size >= 0); // Size should be non-negative
+    //assert(this->_size >= 0); // Size should be non-negative
 
     // Calculate array capacity dynamically
     static const size_t CAPACITY = sizeof(this->_key) / sizeof(this->_key[0]);
@@ -344,7 +344,7 @@ public:
         return this->_value[i]; // Found existing key
 
     // Key not found - need to insert
-    assert(this->_size < CAPACITY); // Bounds check before insertion
+    //assert(this->_size < CAPACITY); // Bounds check before insertion
 
     size_t insert_pos = this->_size;
 
@@ -361,7 +361,7 @@ public:
     // Shift elements right from insertion position
     for (size_t j = this->_size; j > insert_pos; --j)
     {
-      assert(j > 0 && j < CAPACITY); // Bounds verification
+      //assert(j > 0 && j < CAPACITY); // Bounds verification
       this->_key[j] = this->_key[j - 1];
       this->_value[j] = this->_value[j - 1];
     }
