@@ -1486,15 +1486,16 @@ basic_string<CharT, Traits, Alloc> &
 basic_string<CharT, Traits, Alloc>::operator=(
   const basic_string<CharT, Traits, Alloc> &str)
 {
-  int i, len;
-  this->_size = str.length();
+  // Self-assignment check
+  if (this == &str)
+    return *this;
+  // Get length once and cache it
+  const int len = str.length();
+  this->_size = len;
   this->str = new char[this->_size + 1];
-  len = str.length();
-  for (i = 0; i < len; i++)
-  {
+  for (int i = 0; i < len; ++i)
     this->str[i] = str.str[i];
-  }
-  this->str[i] = '\0';
+  this->str[len] = '\0';
   return *this;
 }
 
