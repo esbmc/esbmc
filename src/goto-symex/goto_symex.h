@@ -478,6 +478,27 @@ protected:
     const code_function_call2t &func_call,
     reachability_treet &art);
 
+  /** Implements GCC's __builtin_object_size intrinsic for object size determination
+   *
+   * @param func_call Function call with 2 operands: pointer and type parameter
+   * @param art Reachability tree (unused)
+   *
+   * Returns the size in bytes of the object pointed to by the first argument.
+   *
+   * The type parameter (0–3) controls the result:
+   *   - type 0: maximum accessible size of the whole object
+   *   - type 1: remaining size after the current pointer offset
+   *   - type 2: like type 0, but returns 0 instead of (size_t)-1 if unknown
+   *   - type 3: like type 1, but returns 0 instead of (size_t)-1 if unknown
+   *
+   * Fallback behavior when the object cannot be determined:
+   *   - For type 0/1 → returns (size_t)-1
+   *   - For type 2/3 → returns 0
+   */
+  void intrinsic_builtin_object_size(
+    const code_function_call2t &func_call,
+    reachability_treet &art);
+
   /* Handles dereferencing between threads and is used only in data race checks. **/
   void replace_races_check(expr2tc &expr);
 
