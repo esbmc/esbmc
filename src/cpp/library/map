@@ -475,6 +475,18 @@ public:
       return this->_value[s];
     }
   }
+  const mapped_type &at(const Key &x) const
+  {
+    size_t s = this->_size;
+    for (size_t i = 0; i < s; i++)
+    {
+      if (this->_key[i] == x)
+        return this->_value[i];
+    }
+    // Key not found - in a proper implementation this should throw std::out_of_range
+    // Here, we'll assert
+    assert(false && "Key not found in const at()");
+  }
 
   bool empty() const
   {
