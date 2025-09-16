@@ -49,6 +49,7 @@ private:
   std::string ast_output_dir;
   nlohmann::json ast;
   global_scope global_scope_;
+  contextt cpp_context;
 };
 
 languaget *new_python_language();

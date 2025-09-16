@@ -5060,9 +5060,9 @@ void python_converter::convert()
     main_symbol.value.swap(final_block);
   }
 
-  if (symbol_table_.move(main_symbol))
-  {
-    throw std::runtime_error(
-      "The main function is already defined in another module");
-  }
+  // if (symbol_table_.move(main_symbol))
+  // {
+  //   throw std::runtime_error(
+  //     "The main function is already defined in another module");
+  // }
 }

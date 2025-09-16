@@ -9,6 +9,7 @@ CC_DIAGNOSTIC_POP()
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_annotation.h>
 #include <python-frontend/global_scope.h>
+#include <clang-cpp-frontend/clang_cpp_main.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
 #include <clang-cpp-frontend/clang_cpp_convert.h>
 #include <util/message.h>
@@ -76,7 +77,7 @@ bool python_languaget::parse(const std::string &path)
   auto old = std::move(config.language);
   config.language = {language_idt::CPP, ""};
   languaget *l = new_clang_cpp_language();
-  if (l->parse(write_cpp_lib_file()))
+  if (l->parse(write_cpp_lib_file()) || l->typecheck(cpp_context, ""))
     return true;
   config.language = std::move(old);
 
@@ -149,25 +150,24 @@ bool python_languaget::parse(const std::string &path)
   return false;
 }
 
-bool python_languaget::final(contextt &)
+bool python_languaget::final(contextt &context)
 {
+  add_cprover_library(context);
+  clang_cpp_maint c_main(context);
+  if (c_main.clang_main())
+    return true;
+
   return false;
 }
 
 bool python_languaget::typecheck(contextt &context, const std::string &)
 {
-  // contextt new_context;
-  // clang_cpp_convertert converter(new_context, AST, "C++");
-  // if (converter.convert())
-  //   return true;
-
   // Load c models
-  add_cprover_library(context, this);
-
+  //add_cprover_library(context, this);
   try
   {
     // Generate symbol table
-    python_converter converter(context, &ast, global_scope_);
+    python_converter converter(cpp_context, &ast, global_scope_);
     converter.convert();
   }
   catch (const std::runtime_error &e)
@@ -176,9 +176,11 @@ bool python_languaget::typecheck(contextt &context, const std::string &)
     exit(-2);
   }
 
-  clang_cpp_adjust adjuster(context);
+  clang_cpp_adjust adjuster(cpp_context);
   if (adjuster.adjust())
     return true;
+
+  context.swap(cpp_context);
 
   return false;
 }
