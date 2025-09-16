@@ -75,7 +75,8 @@ bool python_languaget::parse(const std::string &path)
 
   auto old = std::move(config.language);
   config.language = {language_idt::CPP, ""};
-  if (clang_cpp_languaget::parse(write_cpp_lib_file()))
+  languaget *l = new_clang_cpp_language();
+  if (l->parse(write_cpp_lib_file()))
     return true;
   config.language = std::move(old);
 
@@ -155,10 +156,10 @@ bool python_languaget::final(contextt &)
 
 bool python_languaget::typecheck(contextt &context, const std::string &)
 {
-  contextt new_context;
-  clang_cpp_convertert converter(new_context, AST, "C++");
-  if (converter.convert())
-    return true;
+  // contextt new_context;
+  // clang_cpp_convertert converter(new_context, AST, "C++");
+  // if (converter.convert())
+  //   return true;
 
   // Load c models
   add_cprover_library(context, this);

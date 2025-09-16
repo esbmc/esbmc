@@ -6,7 +6,7 @@
 #include <clang-cpp-frontend/clang_cpp_language.h>
 #include <nlohmann/json.hpp>
 
-class python_languaget : public clang_cpp_languaget
+class python_languaget : public languaget
 {
 public:
   bool parse(const std::string &path) override;
