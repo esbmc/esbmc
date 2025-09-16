@@ -27,6 +27,7 @@ target_include_directories(pythonfrontend
     PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
     PRIVATE ${CMAKE_BINARY_DIR}/src/python-frontend
     PUBLIC ${Boost_INCLUDE_DIRS}
+    PRIVATE ${CLANG_INCLUDE_DIRS}
 )
 
 target_link_libraries(pythonfrontend fmt::fmt nlohmann_json::nlohmann_json bigint)

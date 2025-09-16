@@ -2,10 +2,11 @@
 
 #include <util/language.h>
 #include <python-frontend/global_scope.h>
-
+#include <clang-c-frontend/clang_c_language.h>
+#include <clang-cpp-frontend/clang_cpp_language.h>
 #include <nlohmann/json.hpp>
 
-class python_languaget : public languaget
+class python_languaget : public clang_cpp_languaget
 {
 public:
   bool parse(const std::string &path) override;
@@ -39,6 +40,10 @@ public:
   {
     return new python_languaget;
   }
+
+  std::string intrinsics_file() const;
+
+  std::string write_cpp_lib_file() const;
 
 private:
   std::string ast_output_dir;

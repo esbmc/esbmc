@@ -1,8 +1,16 @@
+#include <util/compiler_defs.h>
+// Remove warnings from Clang headers
+CC_DIAGNOSTIC_PUSH()
+CC_DIAGNOSTIC_IGNORE_LLVM_CHECKS()
+#include <clang/Frontend/ASTUnit.h>
+CC_DIAGNOSTIC_POP()
+
 #include <python-frontend/python_language.h>
 #include <python-frontend/python_converter.h>
 #include <python-frontend/python_annotation.h>
 #include <python-frontend/global_scope.h>
 #include <clang-cpp-frontend/clang_cpp_adjust.h>
+#include <clang-cpp-frontend/clang_cpp_convert.h>
 #include <util/message.h>
 #include <util/filesystem.h>
 #include <util/c_expr2string.h>
@@ -64,6 +72,12 @@ bool python_languaget::parse(const std::string &path)
   ast_output_dir = dump_python_script();
   fs::path parser_path(ast_output_dir);
   parser_path /= "parser.py";
+
+  auto old = std::move(config.language);
+  config.language = {language_idt::CPP, ""};
+  if (clang_cpp_languaget::parse(write_cpp_lib_file()))
+    return true;
+  config.language = std::move(old);
 
   // Execute Python script to generate JSON file from AST
   std::vector<std::string> args = {parser_path.string(), path, ast_output_dir};
@@ -141,6 +155,11 @@ bool python_languaget::final(contextt &)
 
 bool python_languaget::typecheck(contextt &context, const std::string &)
 {
+  contextt new_context;
+  clang_cpp_convertert converter(new_context, AST, "C++");
+  if (converter.convert())
+    return true;
+
   // Load c models
   add_cprover_library(context, this);
 
@@ -220,4 +239,24 @@ unsigned python_languaget::default_flags(presentationt target) const
     break;
   }
   return f;
+}
+
+std::string python_languaget::intrinsics_file() const
+{
+  std::string content = R"(int main() { return 0; })";
+  return content;
+}
+
+std::string python_languaget::write_cpp_lib_file() const
+{
+  std::string lib_path = ast_output_dir + "/py_lib.cpp";
+  std::ofstream file(lib_path.c_str());
+  if (!file)
+  {
+    log_error("Python temporary lib file cannot be found!");
+    abort();
+  }
+  file << intrinsics_file();
+
+  return lib_path;
 }
