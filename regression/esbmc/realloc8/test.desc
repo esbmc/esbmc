@@ -1,0 +1,4 @@
+CORE
+main.c
+--force-realloc-success --force-malloc-success --compact-trace main.c --incremental-bmc --max-k-step 6
+^VERIFICATION UNKNOWN$
