@@ -1923,6 +1923,49 @@ static expr2tc simplify_relations(
 
       return typecast_check_return(type, new_op);
     }
+    else if (
+      is_add2t(simplied_side_1) && is_add2t(simplied_side_2) &&
+      is_pointer_type(simplied_side_1) && is_pointer_type(simplied_side_2))
+    {
+      // Simplification of pointer comparison:
+      // address = pointer + offset
+      // When the pointer objects are the same, comparing the addresses is equivalent
+      // to comparing the offsets.
+      // (&x + 1 == &x + 2) => (1 == 2) => false
+      add2t lhs = to_add2t(simplied_side_1);
+      add2t rhs = to_add2t(simplied_side_2);
+
+      if (
+        lhs.side_1 == rhs.side_1 && is_constant(lhs.side_2) &&
+        is_constant(rhs.side_2))
+      {
+        expr2tc new_op(std::make_shared<constructor>(lhs.side_2, rhs.side_2));
+        return typecast_check_return(type, new_op);
+      }
+      else if (
+        lhs.side_2 == rhs.side_2 && is_constant(lhs.side_1) &&
+        is_constant(rhs.side_1))
+      {
+        expr2tc new_op(std::make_shared<constructor>(lhs.side_1, rhs.side_1));
+        return typecast_check_return(type, new_op);
+      }
+      else if (
+        lhs.side_1 == rhs.side_2 && is_constant(lhs.side_2) &&
+        is_constant(rhs.side_1))
+      {
+        expr2tc new_op(std::make_shared<constructor>(lhs.side_2, rhs.side_1));
+        return typecast_check_return(type, new_op);
+      }
+      else if (
+        lhs.side_2 == rhs.side_1 && is_constant(lhs.side_1) &&
+        is_constant(rhs.side_2))
+      {
+        expr2tc new_op(std::make_shared<constructor>(lhs.side_1, rhs.side_2));
+        return typecast_check_return(type, new_op);
+      }
+
+      return expr2tc();
+    }
 
     return expr2tc();
   }
