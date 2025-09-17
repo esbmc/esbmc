@@ -351,6 +351,17 @@ void add_cprover_library(contextt &context, const languaget *language)
     if (s != nullptr)
     {
       store_ctx.add(*s);
+
+      /* Python frontend hasn't looked for dependencies for symbols that aren't in
+       * the function whitelist, (since they're not put in new_ctx); other frontends
+       * have these dependencies already available in symbol_deps.
+       * Therefore add dependencies that result from this new symbol
+       */
+      if (language && language->id() == "python") {
+        generate_symbol_deps(s->id, s->value, symbol_deps);
+        generate_symbol_deps(s->id, s->type, symbol_deps);
+      }
+
       ingest_symbol(*nameit, symbol_deps, to_include);
     }
   }
