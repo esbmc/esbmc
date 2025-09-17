@@ -300,23 +300,25 @@ void add_cprover_library(contextt &context, const languaget *language)
    * store_ctx is what actually gets merged into the existing, final context
    */
 
-  new_ctx.foreach_operand(
-    [&context, &store_ctx, &symbol_deps, &to_include, &language](
-      const symbolt &s) {
-      const symbolt *symbol = context.find_symbol(s.id);
-      if (
-        (language && language->id() == "python") ||
-        (symbol != nullptr && symbol->value.is_nil()))
-      {
-        store_ctx.add(s);
+  new_ctx.foreach_operand([&context,
+                           &store_ctx,
+                           &symbol_deps,
+                           &to_include,
+                           &language](const symbolt &s) {
+    const symbolt *symbol = context.find_symbol(s.id);
+    if (
+      (language && language->id() == "python") ||
+      (symbol != nullptr && symbol->value.is_nil()))
+    {
+      store_ctx.add(s);
 
-        // ingest_symbol takes this added symbol and goes through symbol_deps
-        // it only moves dependencies from symbol_deps to to_include
-        //    if they're dependencies for a symbol that is definitely being included
-        //    (i.e. in store_ctx)
-        ingest_symbol(s.id, symbol_deps, to_include);
-      }
-    });
+      // ingest_symbol takes this added symbol and goes through symbol_deps
+      // it only moves dependencies from symbol_deps to to_include
+      //    if they're dependencies for a symbol that is definitely being included
+      //    (i.e. in store_ctx)
+      ingest_symbol(s.id, symbol_deps, to_include);
+    }
+  });
 
   /* Now iterate through the dependencies that we know we want to add (due to ingest_symbol filter)
    * These will be symbols that didn't make it into store_ctx
@@ -337,9 +339,12 @@ void add_cprover_library(contextt &context, const languaget *language)
     symbolt *s;
 
     // Look in the appropriate place for this symbol
-    if ((language && language->id() == "python")){
+    if ((language && language->id() == "python"))
+    {
       s = ignored_ctx.find_symbol(*nameit);
-    } else{
+    }
+    else
+    {
       s = new_ctx.find_symbol(*nameit);
     }
 
