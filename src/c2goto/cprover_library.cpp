@@ -357,7 +357,8 @@ void add_cprover_library(contextt &context, const languaget *language)
        * have these dependencies already available in symbol_deps.
        * Therefore add dependencies that result from this new symbol
        */
-      if (language && language->id() == "python") {
+      if (language && language->id() == "python")
+      {
         generate_symbol_deps(s->id, s->value, symbol_deps);
         generate_symbol_deps(s->id, s->type, symbol_deps);
       }
