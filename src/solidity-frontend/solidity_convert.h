@@ -516,6 +516,8 @@ protected:
     std::string name,
     std::string id,
     locationt location);
+  
+  bool get_constant_value(const int ref_id, std::string &value);
 
   bool get_ctor_call_id(const std::string &contract_name, std::string &ctor_id);
   std::string get_explicit_ctor_call_id(const std::string &contract_name);
