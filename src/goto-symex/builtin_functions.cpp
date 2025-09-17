@@ -90,20 +90,11 @@ void goto_symext::copy_memory_content(
     old_elem_count,
     new_elem_count);
 
-  uint64_t max_symbolic_copy = 128; // default value
+  // default value
+  uint64_t max_symbolic_copy = 128;
   std::string option_value = options.get_option("max-symbolic-realloc-copy");
   if (!option_value.empty())
-  {
-    try
-    {
-      max_symbolic_copy = std::stoull(option_value);
-    }
-    catch (const std::exception &e)
-    {
-      // If conversion fails, keep default value
-      max_symbolic_copy = 128;
-    }
-  }
+    max_symbolic_copy = std::stoull(option_value);
 
   if (is_constant_int2t(copy_count))
   {

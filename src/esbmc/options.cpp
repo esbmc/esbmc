@@ -408,7 +408,7 @@ const struct group_opt_templ all_cmd_options[] = {
     {"max-symbolic-realloc-copy",
      boost::program_options::value<int>()->default_value(128)->value_name("nr"),
      "set maximum number of elements to copy symbolically in realloc (default "
-     "is 64)"},
+     "is 128)"},
     {"enable-unreachability-intrinsic",
      NULL,
      "enable the functionality of the __ESBMC_unreachable() intrinsic, which "
