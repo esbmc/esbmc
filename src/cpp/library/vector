@@ -597,18 +597,19 @@ public:
       return;
     }
 
-    // Rather than repeatedly pushing back, bump up the size of the vector
-    // once, and then fill it with default data.
-    unsigned int difference = sz - _size;
-    buf = static_cast<T *>(realloc(buf, sizeof(T) * sz));
-    __ESBMC_assume(buf);
-    // XXX -- really we should be initializing with a nondeterministic value
-    // to model the fact that these new elements are undefined.
+    // Only reallocate if new size exceeds current capacity
+    if (sz > _capacity)
+    {
+      buf = static_cast<T *>(realloc(buf, sizeof(T) * sz));
+      __ESBMC_assume(buf);
+      _capacity = sz;
+    }
+
+    // Initialize new elements with default values
     for (unsigned int n = _size; n < sz; n++)
       buf[n] = T();
 
     _size = sz;
-    _capacity = _size;
     return;
   }
 
@@ -620,13 +621,19 @@ public:
       return;
     }
 
-    buf = static_cast<T *>(realloc(buf, sizeof(T) * sz));
-    __ESBMC_assume(buf);
+    // Only reallocate if new size exceeds current capacity
+    if (sz > _capacity)
+    {
+      buf = static_cast<T *>(realloc(buf, sizeof(T) * sz));
+      __ESBMC_assume(buf);
+      _capacity = sz;
+    }
+
+    // Initialize new elements with the provided value
     for (unsigned int n = _size; n < sz; n++)
       buf[n] = t;
 
     _size = sz;
-    _capacity = sz;
   }
 
   size_type capacity() const
@@ -758,7 +765,10 @@ public:
     // We need to shift all fields at or above the position iterator up
     // one place. Backwards copy to avoid overwriting existing data.
     for (int i = (int)_size - 1; i >= (int)at; i--)
+    {
       buf[i + 1] = buf[i];
+    }
+
     // And now install the new value.
     buf[at] = x;
     _size++;
@@ -784,7 +794,9 @@ public:
     __ESBMC_assume(temp_array);
 
     for (size_type i = 0; i < count; i++)
+    {
       temp_array[i] = *(first + i);
+    }
 
     // Insert from the temporary array
     for (size_type i = 0; i < count; i++)
@@ -854,7 +866,9 @@ public:
   {
     iterator it;
     while (first != last)
+    {
       it = erase(last--);
+    }
     return it;
   }
 
