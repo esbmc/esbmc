@@ -405,6 +405,10 @@ const struct group_opt_templ all_cmd_options[] = {
     {"force-malloc-success", NULL, "do not check for malloc/new failure"},
     {"force-realloc-success", NULL, "do not check for realloc failure"},
     {"malloc-zero-is-null", NULL, "force malloc(0) to return NULL"},
+    {"max-symbolic-realloc-copy",
+     boost::program_options::value<int>()->default_value(128)->value_name("nr"),
+     "set maximum number of elements to copy symbolically in realloc (default "
+     "is 128)"},
     {"enable-unreachability-intrinsic",
      NULL,
      "enable the functionality of the __ESBMC_unreachable() intrinsic, which "
