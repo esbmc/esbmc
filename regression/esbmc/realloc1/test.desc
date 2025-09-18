@@ -1,4 +1,4 @@
 CORE
-main.cpp
---incremental-bmc
+main.c
+
 ^VERIFICATION SUCCESSFUL$
