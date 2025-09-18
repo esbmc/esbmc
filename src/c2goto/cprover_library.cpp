@@ -1,10 +1,12 @@
+#include <c2goto/cprover_library.h>
 #include <ac_config.h>
 #include <boost/filesystem.hpp>
-#include <c2goto/cprover_library.h>
 #include <cstdlib>
 #include <fstream>
 #include <goto-programs/goto_binary_reader.h>
 #include <goto-programs/goto_functions.h>
+#include <util/context.h>
+#include <util/message.h>
 #include <util/c_link.h>
 #include <util/config.h>
 #include <util/language.h>
@@ -150,7 +152,7 @@ const static std::vector<std::string> python_c_models = {
 
 } // namespace
 
-/*static*/ void generate_symbol_deps(
+static void generate_symbol_deps(
   irep_idt name,
   irept irep,
   std::multimap<irep_idt, irep_idt> &deps)

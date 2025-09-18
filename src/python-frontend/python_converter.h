@@ -68,6 +68,12 @@ public:
     symbol_table_.add(s);
   }
 
+  void add_instruction(const exprt &expr)
+  {
+    if (current_block)
+      current_block->copy_to_operands(expr);
+  }
+
   void update_symbol(const exprt &expr) const;
 
   symbolt *find_symbol(const std::string &symbol_id) const;
@@ -90,11 +96,16 @@ public:
     const locationt &location,
     const typet &type) const;
 
+  exprt make_char_array_expr(
+    const std::vector<unsigned char> &string_literal,
+    const typet &t);
+
 private:
   friend class function_call_expr;
   friend class numpy_call_expr;
   friend class function_call_builder;
   friend class type_handler;
+  friend class python_list;
   bool processing_list_elements = false;
 
   template <typename Func>
@@ -169,6 +180,8 @@ private:
   exprt get_fstring_expr(const nlohmann::json &element);
 
   std::string process_format_spec(const nlohmann::json &format_spec);
+
+  codet convert_expression_to_code(exprt &expr);
 
   exprt
   apply_format_specification(const exprt &expr, const std::string &format);
@@ -249,10 +262,6 @@ private:
 
   exprt get_function_call(const nlohmann::json &ast_block);
 
-  exprt make_char_array_expr(
-    const std::vector<unsigned char> &string_literal,
-    const typet &t);
-
   exprt get_literal(const nlohmann::json &element);
 
   exprt get_block(const nlohmann::json &ast_block);
@@ -298,16 +307,6 @@ private:
 
   void create_builtin_symbols();
 
-  exprt build_push_list_call(
-    const symbolt &list,
-    const nlohmann::json &op,
-    const exprt &elem);
-
-  exprt build_list_at_call(
-    const exprt &list,
-    const exprt &index,
-    const nlohmann::json &element);
-
   symbolt *find_function_in_base_classes(
     const std::string &class_name,
     const std::string &symbol_id,
@@ -323,10 +322,6 @@ private:
     const std::string &obj_symbol_id);
 
   size_t get_type_size(const nlohmann::json &ast_node);
-
-  const typet get_list_element_type();
-
-  const typet get_list_type();
 
   void append_models_from_directory(
     std::list<std::string> &file_list,
@@ -350,19 +345,11 @@ private:
   // Helper methods for binary operator expression handling
   void convert_function_calls_to_side_effects(exprt &lhs, exprt &rhs);
 
-  symbolt &create_list(const nlohmann::json &element);
-
   exprt handle_string_concatenation_with_promotion(
     exprt &lhs,
     exprt &rhs,
     const nlohmann::json &left,
     const nlohmann::json &right);
-
-  exprt create_variable_length_array_for_multiplication(
-    const nlohmann::json &element,
-    const symbolt *list,
-    symbolt *size_var,
-    const exprt &list_elem);
 
   exprt handle_chained_comparisons_logic(
     const nlohmann::json &element,
@@ -395,9 +382,6 @@ private:
   std::map<std::string, std::set<std::string>> instance_attr_map;
   // Map imported modules to their corresponding paths
   std::unordered_map<std::string, std::string> imported_modules;
-  // <list_id, <elem_id, elem_type>>
-  std::unordered_map<std::string, std::vector<std::pair<std::string, typet>>>
-    list_type_map;
 
   std::vector<std::string> global_declarations;
   std::vector<std::string> local_loads;

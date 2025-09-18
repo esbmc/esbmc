@@ -5,6 +5,7 @@
 #include <fstream>
 #include <util/language.h>
 #include <util/filesystem.h>
+#include <util/message.h>
 
 extern "C"
 {
