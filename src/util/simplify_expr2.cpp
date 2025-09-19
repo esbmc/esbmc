@@ -1487,6 +1487,25 @@ expr2tc bitand2t::do_simplify() const
   if (is_bitnot2t(side_2) && to_bitnot2t(side_2).value == side_1)
     return gen_zero(type);
 
+  // x & 0 = 0, x & -1 = x
+  if (is_constant_int2t(side_1))
+  {
+    const BigInt &val = to_constant_int2t(side_1).value;
+    if (val.is_zero())
+      return side_1; // 0 & x = 0
+    if (val.to_int64() == -1)
+      return side_2; // -1 & x = x (all bits set)
+  }
+
+  if (is_constant_int2t(side_2))
+  {
+    const BigInt &val = to_constant_int2t(side_2).value;
+    if (val.is_zero())
+      return side_2; // x & 0 = 0
+    if (val.to_int64() == -1)
+      return side_1; // x & -1 = x (all bits set)
+  }
+
   // Check for identity and zero patterns
   if (is_constant_int2t(side_1))
   {
