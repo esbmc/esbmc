@@ -2986,7 +2986,7 @@ exprt python_converter::get_expr(const nlohmann::json &element)
     exprt array = get_expr(element["value"]);
     const nlohmann::json &slice = element["slice"];
     python_list list(*this, element);
-    expr = list.slice(array, slice);
+    expr = list.index(array, slice);
     break;
   }
   case ExpressionType::FSTRING:
@@ -3487,13 +3487,14 @@ void python_converter::get_var_assign(
 
       if (rhs.type() == type_handler_.get_list_type())
       {
-        // update lhs list element types with returning symbol values
-        // FIXME!: Ideally we should update to consider the reachable return for this call.
-        // Here we are getting the last return.
+        /* Update the element types of the LHS list with the value returned.
+         * We should refine this to consider all reachable returns for this call.*/
         symbolt *func_symbol =
           symbol_table_.find_symbol(rhs.op1().identifier().c_str());
         assert(func_symbol);
+
         const auto &operands = func_symbol->value.operands();
+
         for (std::vector<exprt>::const_reverse_iterator it = operands.rbegin();
              it != operands.rend();
              ++it)

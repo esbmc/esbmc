@@ -21,7 +21,7 @@ public:
 
   exprt get();
 
-  exprt slice(const exprt &array, const nlohmann::json &slice_node);
+  exprt index(const exprt &array, const nlohmann::json &slice_node);
 
   exprt compare(const exprt &l1, const exprt &l2, const std::string &op);
 
@@ -66,6 +66,12 @@ private:
     const nlohmann::json &element);
 
   symbolt &create_list();
+
+  exprt
+  handle_range_slice(const exprt &array, const nlohmann::json &slice_node);
+
+  exprt
+  handle_index_access(const exprt &array, const nlohmann::json &slice_node);
 
   python_converter &converter_;
   const nlohmann::json &list_value_;
