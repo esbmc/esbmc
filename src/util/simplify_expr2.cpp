@@ -2342,6 +2342,10 @@ expr2tc lessthan2t::do_simplify() const
   if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
     return gen_false_expr();
 
+  // unsigned < 0 is always false
+  if (is_unsignedbv_type(side_1) && is_false(side_2))
+    return gen_false_expr();
+
   return simplify_relations<Lessthantor, lessthan2t>(type, side_1, side_2);
 }
 
