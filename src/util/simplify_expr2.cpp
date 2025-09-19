@@ -502,6 +502,10 @@ struct Subtor
 
 expr2tc sub2t::do_simplify() const
 {
+  // x - x = 0 (self-subtraction)
+  if (side_1 == side_2)
+    return gen_zero(side_1->type);
+
   return simplify_arith_2ops<Subtor, sub2t>(type, side_1, side_2);
 }
 
@@ -1477,6 +1481,32 @@ expr2tc bitand2t::do_simplify() const
   if (side_1 == side_2)
     return side_1; // x & x = x
 
+  // x & ~x = 0
+  if (is_bitnot2t(side_1) && to_bitnot2t(side_1).value == side_2)
+    return gen_zero(type);
+  if (is_bitnot2t(side_2) && to_bitnot2t(side_2).value == side_1)
+    return gen_zero(type);
+
+  // 0 & x = 0, -1 & x = x
+  if (is_constant_int2t(side_1))
+  {
+    const BigInt &val = to_constant_int2t(side_1).value;
+    if (val.is_zero())
+      return side_1; // 0 & x = 0
+    if (val == BigInt(-1))
+      return side_2; // -1 & x = x (all bits set)
+  }
+
+  // x & 0 = 0, x & -1 = x
+  if (is_constant_int2t(side_2))
+  {
+    const BigInt &val = to_constant_int2t(side_2).value;
+    if (val.is_zero())
+      return side_2; // x & 0 = 0
+    if (val == BigInt(-1))
+      return side_1; // x & -1 = x (all bits set)
+  }
+
   // Check for identity and zero patterns
   if (is_constant_int2t(side_1))
   {
@@ -1511,6 +1541,32 @@ expr2tc bitor2t::do_simplify() const
   if (side_1 == side_2)
     return side_1; // x | x = x
 
+  // x | ~x = -1 (all bits set)
+  if (is_bitnot2t(side_1) && to_bitnot2t(side_1).value == side_2)
+    return constant_int2tc(type, -1);
+  if (is_bitnot2t(side_2) && to_bitnot2t(side_2).value == side_1)
+    return constant_int2tc(type, -1);
+
+  // 0 | x = x, -1 | x = -1
+  if (is_constant_int2t(side_1))
+  {
+    const BigInt &val = to_constant_int2t(side_1).value;
+    if (val.is_zero())
+      return side_2; // 0 | x = x
+    if (val == BigInt(-1))
+      return side_1; // -1 | x = -1
+  }
+
+  // x | 0 = x, x | -1 = -1
+  if (is_constant_int2t(side_2))
+  {
+    const BigInt &val = to_constant_int2t(side_2).value;
+    if (val.is_zero())
+      return side_1; // x | 0 = x
+    if (val == BigInt(-1))
+      return side_2; // x | -1 = -1
+  }
+
   auto op = [](uint64_t op1, uint64_t op2) { return (op1 | op2); };
 
   // Is a vector operation ? Apply the op
@@ -1527,6 +1583,17 @@ expr2tc bitor2t::do_simplify() const
 
 expr2tc bitxor2t::do_simplify() const
 {
+  // x ^ x = 0
+  if (side_1 == side_2)
+    return gen_zero(type);
+
+  // x ^ 0 = x
+  if (is_constant_int2t(side_1) && to_constant_int2t(side_1).value.is_zero())
+    return side_2;
+  // 0 ^ x = x
+  if (is_constant_int2t(side_2) && to_constant_int2t(side_2).value.is_zero())
+    return side_1;
+
   auto op = [](uint64_t op1, uint64_t op2) { return (op1 ^ op2); };
 
   // Is a vector operation ? Apply the op
@@ -1591,6 +1658,10 @@ expr2tc bitnxor2t::do_simplify() const
 
 expr2tc bitnot2t::do_simplify() const
 {
+  // ~(~x) = x (double complement)
+  if (is_bitnot2t(value))
+    return to_bitnot2t(value).value;
+
   auto op = [](uint64_t op1, uint64_t) { return ~(op1); };
 
   if (is_constant_vector2t(value))
@@ -2272,6 +2343,12 @@ expr2tc lessthan2t::do_simplify() const
 {
   // Self-comparison: x < x is always false (except for floats with NaN)
   if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
+    return gen_false_expr();
+
+  // unsigned < 0 is always false
+  if (
+    is_unsignedbv_type(side_1) && is_constant_int2t(side_2) &&
+    to_constant_int2t(side_2).value.is_zero())
     return gen_false_expr();
 
   return simplify_relations<Lessthantor, lessthan2t>(type, side_1, side_2);
