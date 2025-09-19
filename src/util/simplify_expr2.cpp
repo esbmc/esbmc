@@ -1481,6 +1481,12 @@ expr2tc bitand2t::do_simplify() const
   if (side_1 == side_2)
     return side_1; // x & x = x
 
+  // x & ~x = 0
+  if (is_bitnot2t(side_1) && to_bitnot2t(side_1).value == side_2)
+    return gen_zero(type);
+  if (is_bitnot2t(side_2) && to_bitnot2t(side_2).value == side_1)
+    return gen_zero(type);
+
   // Check for identity and zero patterns
   if (is_constant_int2t(side_1))
   {
