@@ -1581,6 +1581,16 @@ expr2tc bitor2t::do_simplify() const
 
 expr2tc bitxor2t::do_simplify() const
 {
+  // x ^ x = 0
+  if (side_1 == side_2)
+    return gen_zero(type);
+
+  // x ^ 0 = x
+  if (is_false(side_1))
+    return side_2;
+  if (is_false(side_2))
+    return side_1;
+
   auto op = [](uint64_t op1, uint64_t op2) { return (op1 ^ op2); };
 
   // Is a vector operation ? Apply the op
