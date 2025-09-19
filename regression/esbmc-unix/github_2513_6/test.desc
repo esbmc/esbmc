@@ -1,0 +1,4 @@
+CORE
+main.c
+--k-induction --force-malloc-success --max-k-step 4
+^VERIFICATION UNKNOWN$
