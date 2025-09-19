@@ -1,10 +1,12 @@
+#include <c2goto/cprover_library.h>
 #include <ac_config.h>
 #include <boost/filesystem.hpp>
-#include <c2goto/cprover_library.h>
 #include <cstdlib>
 #include <fstream>
 #include <goto-programs/goto_binary_reader.h>
 #include <goto-programs/goto_functions.h>
+#include <util/context.h>
+#include <util/message.h>
 #include <util/c_link.h>
 #include <util/config.h>
 #include <util/language.h>
@@ -91,6 +93,18 @@ static const struct buffer
 // The goto reader will only pick up symbols for these functions and their dependencies
 // This is a Python-specific whitelist invoked when you use set_functions_to_read
 const static std::vector<std::string> python_c_models = {
+  "list_create",
+  "list_in_bounds",
+  "list_at",
+  "list_cat",
+  "list_get_as",
+  "list_push",
+  "list_push_object",
+  "list_replace",
+  "list_pop",
+  "list_size",
+  "list_hash_string",
+  "list_eq",
   "strncmp",
   "strcmp",
   "strlen",

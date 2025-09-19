@@ -9,6 +9,7 @@
 #include <nlohmann/json.hpp>
 #include <map>
 #include <set>
+#include <utility>
 
 class codet;
 class struct_typet;
@@ -67,6 +68,12 @@ public:
     symbol_table_.add(s);
   }
 
+  void add_instruction(const exprt &expr)
+  {
+    if (current_block)
+      current_block->copy_to_operands(expr);
+  }
+
   void update_symbol(const exprt &expr) const;
 
   symbolt *find_symbol(const std::string &symbol_id) const;
@@ -89,11 +96,16 @@ public:
     const locationt &location,
     const typet &type) const;
 
+  exprt make_char_array_expr(
+    const std::vector<unsigned char> &string_literal,
+    const typet &t);
+
 private:
   friend class function_call_expr;
   friend class numpy_call_expr;
   friend class function_call_builder;
   friend class type_handler;
+  friend class python_list;
   bool processing_list_elements = false;
 
   template <typename Func>
@@ -168,6 +180,8 @@ private:
   exprt get_fstring_expr(const nlohmann::json &element);
 
   std::string process_format_spec(const nlohmann::json &format_spec);
+
+  codet convert_expression_to_code(exprt &expr);
 
   exprt
   apply_format_specification(const exprt &expr, const std::string &format);
@@ -248,13 +262,11 @@ private:
 
   exprt get_function_call(const nlohmann::json &ast_block);
 
-  exprt make_char_array_expr(
-    const std::vector<unsigned char> &string_literal,
-    const typet &t);
-
   exprt get_literal(const nlohmann::json &element);
 
   exprt get_block(const nlohmann::json &ast_block);
+
+  exprt get_static_array(const nlohmann::json &arr, const typet &shape);
 
   void adjust_statement_types(exprt &lhs, exprt &rhs) const;
 
@@ -339,11 +351,6 @@ private:
     const nlohmann::json &left,
     const nlohmann::json &right);
 
-  exprt create_variable_length_array_for_multiplication(
-    const nlohmann::json &element,
-    symbolt *symbol,
-    const exprt &list_elem);
-
   exprt handle_chained_comparisons_logic(
     const nlohmann::json &element,
     exprt &bin_expr);
@@ -369,6 +376,7 @@ private:
   bool is_loading_models = false;
   bool is_importing_module = false;
   bool base_ctor_called = false;
+  bool build_static_lists = false;
 
   // Map object to list of instance attributes
   std::map<std::string, std::set<std::string>> instance_attr_map;

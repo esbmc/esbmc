@@ -70,6 +70,10 @@ public:
    */
   typet get_list_type(const nlohmann::json &list_value) const;
 
+  const typet get_list_type() const;
+
+  typet get_list_element_type() const;
+
   /*
    * Determines the type of an operand in binary operations.
    * @param operand The JSON node representing the operand.

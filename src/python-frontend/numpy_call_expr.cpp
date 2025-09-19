@@ -19,6 +19,12 @@ numpy_call_expr::numpy_call_expr(
   python_converter &converter)
   : function_call_expr(function_id, call, converter)
 {
+  converter_.build_static_lists = true;
+}
+
+numpy_call_expr::~numpy_call_expr()
+{
+  converter_.build_static_lists = false;
 }
 
 template <typename T>
@@ -531,7 +537,9 @@ exprt numpy_call_expr::create_expr_from_call()
       {
         code_function_callt call =
           to_code_function_call(to_code(function_call_expr::get()));
-        typet t = converter_.get_expr(lhs).type();
+        typet size = type_handler_.get_typet(lhs["elts"]);
+        typet t = converter_.get_static_array(lhs, size).type();
+
         converter_.current_lhs->type() = t;
         converter_.update_symbol(*converter_.current_lhs);
         auto &args = call.arguments();
@@ -565,8 +573,6 @@ exprt numpy_call_expr::get()
   // Create array from numpy.array()
   if (function == "array")
   {
-    auto expr = converter_.get_expr(call_["args"][0]);
-
     // Check for 3D+ arrays and reject them early
     int array_dims = type_handler_.get_array_dimensions(call_["args"][0]);
 
@@ -580,7 +586,8 @@ exprt numpy_call_expr::get()
         "Please use 1D or 2D arrays only.");
     }
 
-    return expr;
+    typet size = type_handler_.get_typet(call_["args"][0]["elts"]);
+    return converter_.get_static_array(call_["args"][0], size);
   }
 
   static const std::unordered_map<std::string, float> array_creation_funcs = {

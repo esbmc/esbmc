@@ -3,6 +3,7 @@
 #include <python-frontend/type_handler.h>
 #include <python-frontend/type_utils.h>
 #include <python-frontend/json_utils.h>
+#include <python-frontend/python_list.h>
 #include <util/base_type.h>
 #include <util/c_typecast.h>
 #include <util/expr_util.h>
@@ -1071,6 +1072,71 @@ exprt function_call_expr::handle_min_max(
   return result;
 }
 
+bool function_call_expr::is_list_method_call() const
+{
+  if (call_["func"]["_type"] != "Attribute")
+    return false;
+
+  const std::string &method_name = function_id_.get_function();
+
+  // Check if this is a known list method
+  return method_name == "append" || method_name == "pop" ||
+         method_name == "insert" || method_name == "remove" ||
+         method_name == "clear" || method_name == "extend";
+}
+
+exprt function_call_expr::handle_list_method() const
+{
+  const std::string &method_name = function_id_.get_function();
+
+  if (method_name == "append")
+    return handle_list_append();
+  // Add other methods as needed
+
+  throw std::runtime_error("Unsupported list method: " + method_name);
+}
+
+exprt function_call_expr::handle_list_append() const
+{
+  const auto &args = call_["args"];
+
+  if (args.size() != 1)
+    throw std::runtime_error("append() takes exactly one argument");
+
+  // Get the list object name
+  std::string list_name = get_object_name();
+
+  // Find the list symbol
+  symbol_id list_symbol_id = converter_.create_symbol_id();
+  list_symbol_id.set_object(list_name);
+  const symbolt *list_symbol =
+    converter_.find_symbol(list_symbol_id.to_string());
+
+  if (!list_symbol)
+    throw std::runtime_error("List variable not found: " + list_name);
+
+  // Get the value to append
+  exprt value_to_append = converter_.get_expr(args[0]);
+  if (value_to_append.is_constant())
+  {
+    // Create tmp variable to hold value
+    symbolt &append_value_symbol = converter_.create_tmp_symbol(
+      call_, "append_value", size_type(), gen_zero(size_type()));
+    code_declt append_value(symbol_expr(append_value_symbol));
+    append_value.copy_to_operands(value_to_append);
+    converter_.current_block->copy_to_operands(append_value);
+  }
+
+  python_list list(converter_, nlohmann::json());
+
+  list.add_type_info(
+    list_symbol->id.as_string(),
+    value_to_append.identifier().as_string(),
+    value_to_append.type());
+
+  return list.build_push_list_call(*list_symbol, call_, value_to_append);
+}
+
 exprt function_call_expr::get()
 {
   // Handle non-det functions
@@ -1102,6 +1168,12 @@ exprt function_call_expr::get()
       return handle_min_max("min", exprt::i_lt);
     else
       return handle_min_max("max", exprt::i_gt);
+  }
+
+  // Handle list methods
+  if (is_list_method_call())
+  {
+    return handle_list_method();
   }
 
   const std::string &func_name = function_id_.get_function();
@@ -1310,6 +1382,31 @@ exprt function_call_expr::get()
   {
     exprt arg = converter_.get_expr(arg_node);
 
+    if (
+      function_id_.get_function() == "__ESBMC_get_object_size" &&
+      (arg.type() == type_handler_.get_list_type() ||
+       (arg.type().is_pointer() &&
+        arg.type().subtype() == type_handler_.get_list_type())))
+    {
+      symbolt *list_symbol = converter_.find_symbol(arg.identifier().c_str());
+      assert(list_symbol);
+
+      const symbolt *list_size_func_sym =
+        converter_.find_symbol("c:list.c@F@list_size");
+      assert(list_size_func_sym);
+
+      code_function_callt list_size_func_call;
+      list_size_func_call.function() = symbol_expr(*list_size_func_sym);
+
+      // passing arguments to list_size
+      list_size_func_call.arguments().push_back(symbol_expr(*list_symbol));
+
+      // setting return type
+      list_size_func_call.type() = signedbv_typet(64);
+
+      return list_size_func_call;
+    }
+
     // Handle function calls used as arguments
     if (arg.is_code() && arg.is_function_call())
     {
@@ -1341,6 +1438,17 @@ exprt function_call_expr::get()
 
       // Use the side effect expression as the argument
       arg = func_call;
+    }
+
+    if (arg.type() == type_handler_.get_list_type())
+    {
+      // Update list element type mapping for function parameters
+      const code_typet &type =
+        static_cast<const code_typet &>(func_symbol->type);
+      const std::string &arg_id =
+        type.arguments().at(0).identifier().as_string();
+
+      python_list::copy_type_info(arg.identifier().as_string(), arg_id);
     }
 
     // All array function arguments (e.g. bytes type) are handled as pointers.

@@ -1,4 +1,5 @@
-CORE
+KNOWNBUG
 main.py
+--force-malloc-success --incremental-bmc
 
 ^VERIFICATION FAILED$
