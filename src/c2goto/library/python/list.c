@@ -127,21 +127,10 @@ list_push(List *l, const void *value, size_t type_id, size_t type_size)
 
   // Force malloc to succeed for verification
   __ESBMC_assume(copied_value != NULL);
-
   if (copied_value == NULL)
-  {
     return false;
-  }
 
-  // memcpy
-  const char *src = (const char *)value;
-  char *dst = (char *)copied_value;
-  size_t i = 0;
-  while (i < type_size)
-  {
-    dst[i] = src[i];
-    i++;
-  }
+  memcpy(copied_value, value, type_size);
 
   l->items[l->size].value = copied_value;
   l->items[l->size].type_id = type_id;
