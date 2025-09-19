@@ -1482,14 +1482,14 @@ expr2tc bitand2t::do_simplify() const
   {
     const BigInt &val = to_constant_int2t(side_1).value;
     if (val.is_zero())
-      return side_1;  // 0 & x = 0
+      return side_1; // 0 & x = 0
   }
 
   if (is_constant_int2t(side_2))
   {
     const BigInt &val = to_constant_int2t(side_2).value;
     if (val.is_zero())
-      return side_2;  // x & 0 = 0
+      return side_2; // x & 0 = 0
   }
 
   auto op = [](uint64_t op1, uint64_t op2) { return (op1 & op2); };
