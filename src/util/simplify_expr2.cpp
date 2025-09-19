@@ -1540,6 +1540,12 @@ expr2tc bitor2t::do_simplify() const
   if (side_1 == side_2)
     return side_1; // x | x = x
 
+  // x | ~x = -1 (all bits set)
+  if (is_bitnot2t(side_1) && to_bitnot2t(side_1).value == side_2)
+    return constant_int2tc(type, -1);
+  if (is_bitnot2t(side_2) && to_bitnot2t(side_2).value == side_1)
+    return constant_int2tc(type, -1);
+
   auto op = [](uint64_t op1, uint64_t op2) { return (op1 | op2); };
 
   // Is a vector operation ? Apply the op
