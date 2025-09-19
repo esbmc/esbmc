@@ -1,4 +1,5 @@
 #include <assert.h>
+#include <limits.h>
 
 typedef unsigned v4 __attribute__((vector_size(16)));
 
@@ -73,6 +74,11 @@ int main()
 
   // Mix AND/OR/NOT with constants
   assert(((x & 0) | ~x) == ~x);
+
+  assert((1 * x) == x);
+
+  x = INT_MIN;
+  assert(x - x == 0);
 
   return 0;
 }
