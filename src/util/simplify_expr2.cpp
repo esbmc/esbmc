@@ -1546,6 +1546,25 @@ expr2tc bitor2t::do_simplify() const
   if (is_bitnot2t(side_2) && to_bitnot2t(side_2).value == side_1)
     return constant_int2tc(type, -1);
 
+  // x | 0 = x, x | -1 = -1
+  if (is_constant_int2t(side_1))
+  {
+    const BigInt &val = to_constant_int2t(side_1).value;
+    if (val.is_zero())
+      return side_2; // 0 | x = x
+    if (val.to_int64() == -1)
+      return side_1; // -1 | x = -1
+  }
+
+  if (is_constant_int2t(side_2))
+  {
+    const BigInt &val = to_constant_int2t(side_2).value;
+    if (val.is_zero())
+      return side_1; // x | 0 = x
+    if (val.to_int64() == -1)
+      return side_2; // x | -1 = -1
+  }
+
   auto op = [](uint64_t op1, uint64_t op2) { return (op1 | op2); };
 
   // Is a vector operation ? Apply the op
