@@ -1655,6 +1655,10 @@ expr2tc bitnxor2t::do_simplify() const
 
 expr2tc bitnot2t::do_simplify() const
 {
+  // ~(~x) = x (double complement)
+  if (is_bitnot2t(value))
+    return to_bitnot2t(value).value;
+
   auto op = [](uint64_t op1, uint64_t) { return ~(op1); };
 
   if (is_constant_vector2t(value))
