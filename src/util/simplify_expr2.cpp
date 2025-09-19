@@ -502,6 +502,10 @@ struct Subtor
 
 expr2tc sub2t::do_simplify() const
 {
+  // x - x = 0 (self-subtraction)
+  if (side_1 == side_2)
+    return gen_zero(side_1->type);
+
   return simplify_arith_2ops<Subtor, sub2t>(type, side_1, side_2);
 }
 
