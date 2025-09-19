@@ -427,6 +427,579 @@ void goto_symext::finalize_realloc_result(
   dynamic_memory.emplace_back(result_copy, alloc_guard, false, symbol_name);
 }
 
+static inline expr2tc copy_memory_by_byte(
+  const type2tc &dest_type,
+  const expr2tc &dest_obj,
+  const expr2tc &src_obj,
+  const type2tc &src_type,
+  const size_t num_of_bytes,
+  const size_t dest_offset,
+  const size_t src_offset,
+  const namespacet &ns,
+  bool big_endian)
+{
+  if (num_of_bytes == 0)
+    return dest_obj;
+
+  // Handle floating point types: fall back to byte operations
+  if (is_floatbv_type(dest_type) || is_fixedbv_type(dest_type))
+    return expr2tc();
+
+  // Handle scalar types
+  if (
+    is_scalar_type(dest_type) && dest_type->get_width() == 8 &&
+    dest_offset == 0 && src_offset == 0 && num_of_bytes == 1)
+  {
+    if (is_scalar_type(src_type) && src_type->get_width() == 8)
+      return typecast2tc(dest_type, src_obj);
+  }
+
+  // Handle arrays
+  if (is_array_type(dest_type))
+  {
+    // Check if source and destination have compatible element types 
+    // for direct copying
+    bool can_copy_elements = false;
+    if (is_array_type(src_type))
+    {
+      type2tc dest_elem_type = to_array_type(dest_type).subtype;
+      type2tc src_elem_type = to_array_type(src_type).subtype;
+
+      // Only allow direct element copying if types are identical
+      // This prevents issues when copying between char[] and short[].
+      can_copy_elements = base_type_eq(dest_elem_type, src_elem_type, ns);
+    }
+
+    // If we can't copy elements directly, fall back to operational model
+    if (!can_copy_elements)
+      return expr2tc();
+
+    // Original element-by-element copying logic (only for compatible types)
+    expr2tc result = gen_zero(dest_type);
+    constant_array2t &dest_data = to_constant_array2t(result);
+
+    uint64_t dest_elem_size =
+      type_byte_size(to_array_type(dest_type).subtype).to_uint64();
+    uint64_t bytes_left = num_of_bytes;
+    uint64_t dest_offset_left = dest_offset;
+    uint64_t src_offset_left = src_offset;
+
+    for (unsigned i = 0; i < dest_data.datatype_members.size(); i++)
+    {
+      BigInt position(i);
+      expr2tc dest_member = index2tc(
+        to_array_type(dest_type).subtype,
+        dest_obj,
+        constant_int2tc(get_uint32_type(), position));
+
+      expr2tc src_member;
+      if (is_array_type(src_type))
+      {
+        src_member = index2tc(
+          to_array_type(src_type).subtype,
+          src_obj,
+          constant_int2tc(get_uint32_type(), position));
+      }
+      else
+        src_member = src_obj; // Copy from non-array source
+
+      // Skip destination offset
+      if (dest_offset_left >= dest_elem_size)
+      {
+        dest_data.datatype_members[i] = dest_member;
+        dest_offset_left -= dest_elem_size;
+        if (src_offset_left >= dest_elem_size)
+          src_offset_left -= dest_elem_size;
+      }
+      else if (bytes_left > 0)
+      {
+        uint64_t bytes_to_copy =
+          std::min(bytes_left, dest_elem_size - dest_offset_left);
+
+        dest_data.datatype_members[i] = copy_memory_by_byte(
+          to_array_type(dest_type).subtype,
+          dest_member,
+          src_member,
+          is_array_type(src_type) ? to_array_type(src_type).subtype : src_type,
+          bytes_to_copy,
+          dest_offset_left,
+          src_offset_left,
+          ns,
+          big_endian);
+
+        if (!dest_data.datatype_members[i])
+          return expr2tc();
+
+        bytes_left -= bytes_to_copy;
+        dest_offset_left = 0;
+        src_offset_left = 0;
+      }
+      else
+        dest_data.datatype_members[i] = dest_member;
+    }
+    return result;
+  }
+
+  // Handle structs
+  if (is_struct_type(dest_type))
+  {
+    expr2tc result = gen_zero(dest_type);
+    constant_struct2t &dest_data = to_constant_struct2t(result);
+    uint64_t bytes_left = num_of_bytes;
+    uint64_t dest_offset_left = dest_offset;
+    uint64_t src_offset_left = src_offset;
+
+    // Check for bitfields:
+    // if any member is a bitfield, fall back to byte operations
+    for (unsigned i = 0; i < dest_data.datatype_members.size(); i++)
+    {
+      irep_idt name = to_struct_type(dest_type).member_names[i];
+
+      // Detect bitfields by name patterns or other indicators
+      if (
+        has_prefix(name.as_string(), "bit_field_pad$") ||
+        name.as_string().find("$bf") != std::string::npos ||
+        name.as_string().find(":") != std::string::npos)
+      {
+        return expr2tc();
+      }
+
+      // Also check if the type suggests bitfield usage
+      type2tc member_type = to_struct_type(dest_type).members[i];
+      if (is_signedbv_type(member_type) || is_unsignedbv_type(member_type))
+      {
+        unsigned width = member_type->get_width();
+        // If we have small odd-sized integers, likely bitfields
+        if (
+          width < 8 || (width > 8 && width < 16) || (width > 16 && width < 32))
+          return expr2tc();
+      }
+    }
+
+    for (unsigned i = 0; i < dest_data.datatype_members.size(); i++)
+    {
+      irep_idt name = to_struct_type(dest_type).member_names[i];
+
+      expr2tc dest_member =
+        member2tc(to_struct_type(dest_type).members[i], dest_obj, name);
+
+      expr2tc src_member;
+      if (
+        is_struct_type(src_type) && i < to_struct_type(src_type).members.size())
+      {
+        irep_idt src_name = to_struct_type(src_type).member_names[i];
+        src_member =
+          member2tc(to_struct_type(src_type).members[i], src_obj, src_name);
+      }
+      else
+        src_member = src_obj; // Fallback
+
+      type2tc current_member_type = dest_data.datatype_members[i]->type;
+      uint64_t member_size = type_byte_size(current_member_type).to_uint64();
+
+      // Skip destination offset
+      if (dest_offset_left >= member_size)
+      {
+        dest_data.datatype_members[i] = dest_member;
+        dest_offset_left -= member_size;
+        if (src_offset_left >= member_size)
+          src_offset_left -= member_size;
+      }
+      else if (bytes_left > 0)
+      {
+        uint64_t bytes_to_copy = std::min(bytes_left, member_size);
+
+        dest_data.datatype_members[i] = copy_memory_by_byte(
+          current_member_type,
+          dest_member,
+          src_member,
+          is_struct_type(src_type) &&
+              i < to_struct_type(src_type).members.size()
+            ? to_struct_type(src_type).members[i]
+            : src_type,
+          bytes_to_copy,
+          dest_offset_left,
+          src_offset_left,
+          ns,
+          big_endian);
+
+        if (!dest_data.datatype_members[i])
+          return expr2tc();
+
+        bytes_left -= bytes_to_copy;
+        dest_offset_left = 0;
+        src_offset_left = 0;
+      }
+      else
+        dest_data.datatype_members[i] = dest_member;
+    }
+    return result;
+  }
+
+  // Handle unions - use largest member
+  if (is_union_type(dest_type))
+  {
+    expr2tc result = gen_zero(dest_type);
+    constant_union2t &dest_data = to_constant_union2t(result);
+
+    uint64_t union_size = type_byte_size(dest_type).to_uint64();
+    size_t selected_member = to_union_type(dest_type).members.size();
+
+    for (size_t i = 0; i < to_union_type(dest_type).members.size(); i++)
+    {
+      if (
+        type_byte_size(to_union_type(dest_type).members[i]).to_uint64() ==
+        union_size)
+      {
+        selected_member = i;
+        break;
+      }
+    }
+
+    if (selected_member >= to_union_type(dest_type).members.size())
+      return expr2tc();
+
+    const irep_idt &name =
+      to_union_type(dest_type).member_names[selected_member];
+    const type2tc &member_type =
+      to_union_type(dest_type).members[selected_member];
+
+    expr2tc dest_member = member2tc(member_type, dest_obj, name);
+    expr2tc src_member;
+
+    if (is_union_type(src_type))
+    {
+      // Find corresponding member in source union
+      src_member = member2tc(member_type, src_obj, name);
+    }
+    else
+      src_member = src_obj;
+
+    dest_data.init_field = name;
+    dest_data.datatype_members[0] = copy_memory_by_byte(
+      member_type,
+      dest_member,
+      src_member,
+      is_union_type(src_type) ? member_type : src_type,
+      num_of_bytes,
+      dest_offset,
+      src_offset,
+      ns,
+      big_endian);
+
+    return dest_data.datatype_members[0] ? result : expr2tc();
+  }
+
+  // Handle primitives - use byte operations for copying
+  if (is_scalar_type(dest_type))
+  {
+    // Check if source is array type: if so, fall back to operational model
+    if (is_array_type(src_type))
+      return expr2tc();
+
+    // Special case: if both types are 8-bit and we're copying the whole thing
+    if (
+      dest_type->get_width() == 8 && is_scalar_type(src_type) &&
+      src_type->get_width() == 8 && num_of_bytes == 1 && dest_offset == 0 &&
+      src_offset == 0)
+    {
+      return typecast2tc(dest_type, src_obj);
+    }
+
+    // For single-byte types, avoid byte operations if copying the entire value
+    if (dest_type->get_width() == 8 && num_of_bytes == 1 && dest_offset == 0)
+    {
+      if (
+        src_offset == 0 && is_scalar_type(src_type) &&
+        src_type->get_width() == 8)
+        return typecast2tc(dest_type, src_obj);
+      else if (src_offset == 0)
+        return typecast2tc(dest_type, src_obj);
+    }
+
+    // For multi-byte primitives or partial updates, use byte operations
+    expr2tc result = dest_obj;
+
+    for (size_t i = 0; i < num_of_bytes; i++)
+    {
+      expr2tc src_byte_offset =
+        constant_int2tc(get_int32_type(), BigInt(src_offset + i));
+      expr2tc dest_byte_offset =
+        constant_int2tc(get_int32_type(), BigInt(dest_offset + i));
+
+      expr2tc src_byte =
+        byte_extract2tc(get_uint8_type(), src_obj, src_byte_offset, big_endian);
+
+      // Avoid byte_update on 8-bit types - it's the entire value
+      if (dest_type->get_width() == 8 && num_of_bytes == 1)
+        return typecast2tc(dest_type, src_byte);
+
+      result = byte_update2tc(
+        dest_type, result, dest_byte_offset, src_byte, big_endian);
+    }
+
+    return result;
+  }
+
+  return expr2tc();
+}
+
+void goto_symext::intrinsic_memcpy(
+  reachability_treet &art,
+  const code_function_call2t &func_call)
+{
+  assert(func_call.operands.size() == 3 && "Wrong memcpy signature");
+  const execution_statet &ex_state = art.get_cur_state();
+  if (ex_state.cur_state->guard.is_false())
+    return;
+
+  // Determine endianness from configuration
+  bool big_endian = false;
+  if (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN)
+    big_endian = true;
+  else if (config.ansi_c.endianess == configt::ansi_ct::IS_LITTLE_ENDIAN)
+    big_endian = false;
+  else
+  {
+    // Default to little endian if not specified
+    big_endian = false;
+  }
+
+  // Get arguments: dest, src, num_bytes
+  expr2tc dest_ptr = func_call.operands[0];
+  expr2tc src_ptr = func_call.operands[1];
+  expr2tc num_bytes = func_call.operands[2];
+
+  // Rename arguments
+  cur_state->rename(dest_ptr);
+  cur_state->rename(src_ptr);
+  cur_state->rename(num_bytes);
+
+  // Check preconditions for optimization
+  if (
+    !dest_ptr || !src_ptr || !num_bytes || is_symbol2t(num_bytes) ||
+    options.get_bool_option("no-simplify"))
+  {
+    log_debug("memcpy", "Couldn't optimize memcpy due to preconditions");
+    bump_call(func_call, "c:@F@__memcpy_impl");
+    return;
+  }
+
+  simplify(num_bytes);
+  if (!is_constant_int2t(num_bytes))
+  {
+    log_debug("memcpy", "Non-constant size, falling back to operational model");
+    bump_call(func_call, "c:@F@__memcpy_impl");
+    return;
+  }
+
+  unsigned long number_of_bytes = to_constant_int2t(num_bytes).as_ulong();
+  if (number_of_bytes == 0)
+  {
+    // Zero-byte copy is a no-op, just return dest
+    if (func_call.ret)
+    {
+      expr2tc ret_ref = func_call.ret;
+      dereference(ret_ref, dereferencet::READ);
+      symex_assign(code_assign2tc(ret_ref, dest_ptr), false, cur_state->guard);
+    }
+    return;
+  }
+
+  // Analyze destination
+  internal_deref_items.clear();
+  expr2tc dest_deref = dereference2tc(get_uint8_type(), dest_ptr);
+  dereference(dest_deref, dereferencet::INTERNAL);
+
+  if (internal_deref_items.empty())
+  {
+    log_debug("memcpy", "Couldn't analyze destination pointer");
+    bump_call(func_call, "c:@F@__memcpy_impl");
+    return;
+  }
+
+  std::list<dereference_callbackt::internal_item> dest_items =
+    internal_deref_items;
+
+  // Analyze source
+  internal_deref_items.clear();
+  expr2tc src_deref = dereference2tc(get_uint8_type(), src_ptr);
+  dereference(src_deref, dereferencet::INTERNAL);
+
+  if (internal_deref_items.empty())
+  {
+    log_debug("memcpy", "Couldn't analyze source pointer");
+    bump_call(func_call, "c:@F@__memcpy_impl");
+    return;
+  }
+
+  std::list<dereference_callbackt::internal_item> src_items =
+    internal_deref_items;
+
+  // Perform the copy for each destination item
+  for (const auto &dest_item : dest_items)
+  {
+    guardt guard = ex_state.cur_state->guard;
+    guard.add(dest_item.guard);
+
+    expr2tc dest_object = dest_item.object;
+    expr2tc dest_offset = dest_item.offset;
+
+    cur_state->rename(dest_object);
+    cur_state->rename(dest_offset);
+
+    if (!dest_object || !dest_offset)
+    {
+      log_debug("memcpy", "Invalid destination object/offset");
+      bump_call(func_call, "c:@F@__memcpy_impl");
+      return;
+    }
+
+    simplify(dest_offset);
+    if (!is_constant_int2t(dest_offset))
+    {
+      log_debug("memcpy", "Symbolic destination offset");
+      bump_call(func_call, "c:@F@__memcpy_impl");
+      return;
+    }
+
+    uint64_t dest_offset_val = to_constant_int2t(dest_offset).value.to_uint64();
+
+    // Check destination bounds
+    uint64_t dest_type_size;
+    try
+    {
+      dest_type_size = type_byte_size(dest_object->type).to_uint64();
+    }
+    catch (const array_type2t::dyn_sized_array_excp &)
+    {
+      bump_call(func_call, "c:@F@__memcpy_impl");
+      return;
+    }
+    catch (const array_type2t::inf_sized_array_excp &)
+    {
+      bump_call(func_call, "c:@F@__memcpy_impl");
+      return;
+    }
+
+    bool dest_out_of_bounds =
+      ((dest_type_size - dest_offset_val) < number_of_bytes) ||
+      (dest_offset_val > dest_type_size);
+
+    if (
+      dest_out_of_bounds && !options.get_bool_option("no-pointer-check") &&
+      !options.get_bool_option("no-bounds-check"))
+    {
+      std::string error_msg =
+        fmt::format("dereference failure: memcpy destination overflow");
+      expr2tc check = implies2tc(dest_item.guard, gen_false_expr());
+      claim(check, error_msg);
+      continue;
+    }
+
+    // Find matching source item
+    for (const auto &src_item : src_items)
+    {
+      expr2tc src_object = src_item.object;
+      expr2tc src_offset = src_item.offset;
+
+      cur_state->rename(src_object);
+      cur_state->rename(src_offset);
+
+      if (!src_object || !src_offset)
+        continue;
+
+      simplify(src_offset);
+      if (!is_constant_int2t(src_offset))
+        continue;
+
+      uint64_t src_offset_val = to_constant_int2t(src_offset).value.to_uint64();
+
+      // Check source bounds
+      uint64_t src_type_size;
+      try
+      {
+        src_type_size = type_byte_size(src_object->type).to_uint64();
+      }
+      catch (const array_type2t::dyn_sized_array_excp &)
+      {
+        continue;
+      }
+      catch (const array_type2t::inf_sized_array_excp &)
+      {
+        continue;
+      }
+
+      bool src_out_of_bounds =
+        ((src_type_size - src_offset_val) < number_of_bytes) ||
+        (src_offset_val > src_type_size);
+
+      if (
+        src_out_of_bounds && !options.get_bool_option("no-pointer-check") &&
+        !options.get_bool_option("no-bounds-check"))
+      {
+        std::string error_msg =
+          fmt::format("dereference failure: memcpy source overflow");
+        expr2tc check = implies2tc(src_item.guard, gen_false_expr());
+        claim(check, error_msg);
+        continue;
+      }
+
+      // Perform the copy
+      expr2tc new_dest_object = copy_memory_by_byte(
+        dest_object->type,
+        dest_object,
+        src_object,
+        src_object->type,
+        number_of_bytes,
+        dest_offset_val,
+        src_offset_val,
+        ns,
+        big_endian);
+
+      if (!new_dest_object)
+      {
+        log_debug("memcpy", "copy_memory_by_byte failed");
+        bump_call(func_call, "c:@F@__memcpy_impl");
+        return;
+      }
+
+      // Assign the new object
+      guardt copy_guard = guard;
+      copy_guard.add(src_item.guard);
+      symex_assign(
+        code_assign2tc(dest_item.object, new_dest_object), false, copy_guard);
+      break; // Use first valid source match
+    }
+  }
+
+  // Add null pointer checks
+  if (!options.get_bool_option("no-pointer-check"))
+  {
+    expr2tc null_sym = symbol2tc(dest_ptr->type, "NULL");
+
+    // Check destination pointer
+    expr2tc dest_null_check = not2tc(same_object2tc(dest_ptr, null_sym));
+    ex_state.cur_state->guard.guard_expr(dest_null_check);
+    claim(
+      dest_null_check,
+      "dereference failure: NULL destination pointer in memcpy");
+
+    // Check source pointer
+    expr2tc src_null_check = not2tc(same_object2tc(src_ptr, null_sym));
+    ex_state.cur_state->guard.guard_expr(src_null_check);
+    claim(src_null_check, "dereference failure: NULL source pointer in memcpy");
+  }
+
+  // Return destination pointer
+  if (func_call.ret)
+  {
+    expr2tc ret_ref = func_call.ret;
+    dereference(ret_ref, dereferencet::READ);
+    symex_assign(code_assign2tc(ret_ref, dest_ptr), false, cur_state->guard);
+  }
+}
+
 expr2tc goto_symext::symex_mem(
   const bool is_malloc,
   const expr2tc &lhs,

@@ -7,6 +7,14 @@ struct incomplete;
 
 extern struct incomplete JJ;
 
+/*
+The verification failure is the correct behavior because:
+- The program uses extern struct incomplete JJ with no definition
+- Memory operations on incomplete types have undefined behavior  
+- ESBMC conservatively treats the memory contents as non-deterministic
+- The assertion j == 42 cannot be guaranteed to hold
+*/
+
 int main()
 {
 	int k = 42;

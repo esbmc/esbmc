@@ -720,6 +720,23 @@ protected:
     const std::string &name_prefix);
 
   /**
+   *  Intrinsic implementation of memcpy function call.
+   *  Optimizes memcpy calls by directly computing the result when possible,
+   *  avoiding the overhead of the operational model loop. Handles copying
+   *  between various data types (arrays, structs, unions, primitives) while
+   *  respecting target architecture endianness. Performs bounds checking,
+   *  null pointer validation, and handles edge cases like incomplete types.
+   *  Falls back to the operational model (__memcpy_impl) when optimization
+   *  is not feasible, such as with non-constant sizes, symbolic offsets,
+   *  or complex type combinations.
+   *  @param art Reachability tree we're working with.
+   *  @param func_call The memcpy function call with dest, src, and size operands.
+   */
+  void intrinsic_memcpy(
+    reachability_treet &art,
+    const code_function_call2t &func_call);
+
+  /**
    * Call terminate function handler when needed.
    */
   bool terminate_handler();

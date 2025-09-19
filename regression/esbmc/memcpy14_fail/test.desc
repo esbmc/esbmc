@@ -1,4 +1,4 @@
 CORE
-incomplete.c
+main.c 
 
 ^VERIFICATION FAILED$
