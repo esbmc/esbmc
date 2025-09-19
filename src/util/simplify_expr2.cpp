@@ -1487,7 +1487,7 @@ expr2tc bitand2t::do_simplify() const
   if (is_bitnot2t(side_2) && to_bitnot2t(side_2).value == side_1)
     return gen_zero(type);
 
-  // x & 0 = 0, x & -1 = x
+  // 0 & x = 0, -1 & x = x
   if (is_constant_int2t(side_1))
   {
     const BigInt &val = to_constant_int2t(side_1).value;
@@ -1497,6 +1497,7 @@ expr2tc bitand2t::do_simplify() const
       return side_2; // -1 & x = x (all bits set)
   }
 
+  // x & 0 = 0, x & -1 = x
   if (is_constant_int2t(side_2))
   {
     const BigInt &val = to_constant_int2t(side_2).value;
@@ -1546,7 +1547,7 @@ expr2tc bitor2t::do_simplify() const
   if (is_bitnot2t(side_2) && to_bitnot2t(side_2).value == side_1)
     return constant_int2tc(type, -1);
 
-  // x | 0 = x, x | -1 = -1
+  // 0 | x = x, -1 | x = -1
   if (is_constant_int2t(side_1))
   {
     const BigInt &val = to_constant_int2t(side_1).value;
@@ -1556,6 +1557,7 @@ expr2tc bitor2t::do_simplify() const
       return side_1; // -1 | x = -1
   }
 
+  // x | 0 = x, x | -1 = -1
   if (is_constant_int2t(side_2))
   {
     const BigInt &val = to_constant_int2t(side_2).value;
@@ -1586,9 +1588,10 @@ expr2tc bitxor2t::do_simplify() const
     return gen_zero(type);
 
   // x ^ 0 = x
-  if (is_false(side_1))
+  if (is_constant_int2t(side_1) && to_constant_int2t(side_1).value.is_zero())
     return side_2;
-  if (is_false(side_2))
+  // 0 ^ x = x
+  if (is_constant_int2t(side_2) && to_constant_int2t(side_2).value.is_zero())
     return side_1;
 
   auto op = [](uint64_t op1, uint64_t op2) { return (op1 ^ op2); };
@@ -2343,7 +2346,9 @@ expr2tc lessthan2t::do_simplify() const
     return gen_false_expr();
 
   // unsigned < 0 is always false
-  if (is_unsignedbv_type(side_1) && is_false(side_2))
+  if (
+    is_unsignedbv_type(side_1) && is_constant_int2t(side_2) &&
+    to_constant_int2t(side_2).value.is_zero())
     return gen_false_expr();
 
   return simplify_relations<Lessthantor, lessthan2t>(type, side_1, side_2);
