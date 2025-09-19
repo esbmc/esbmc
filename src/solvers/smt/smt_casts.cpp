@@ -298,7 +298,7 @@ smt_convt::convert_typecast_to_ints_from_fbv_sint(const typecast2t &cast)
       // Operands have differing signs (and same width). Just return.
       return convert_ast(cast.from);
 
-    std::runtime_error("Unrecognized equal-width int typecast format");
+    throw std::runtime_error("Unrecognized equal-width int typecast format");
   }
 
   if (from_width < to_width)

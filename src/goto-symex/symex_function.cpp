@@ -59,7 +59,7 @@ unsigned goto_symext::argument_assignments(
 
   // iterates over the types of the arguments
   for (unsigned int name_idx = 0; name_idx < function_type.arguments.size();
-       ++name_idx, it1++)
+       ++name_idx, ++it1)
   {
     // if you run out of actual arguments there was a mismatch
     if (it1 == arguments.end())

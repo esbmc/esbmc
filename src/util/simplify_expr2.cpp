@@ -1242,6 +1242,9 @@ struct Andtor
 
 expr2tc and2t::do_simplify() const
 {
+  if (side_1 == side_2)
+    return side_1; // x && x = x
+
   return simplify_logic_2ops<Andtor, and2t>(type, side_1, side_2);
 }
 
@@ -1281,6 +1284,9 @@ struct Ortor
 
 expr2tc or2t::do_simplify() const
 {
+  if (side_1 == side_2)
+    return side_1; // x || x = x
+
   // Special case: if one side is a not of the other, and they're otherwise
   // identical, simplify to true
   if (is_not2t(side_1))
@@ -1468,6 +1474,24 @@ static expr2tc do_bit_munge_operation(
 
 expr2tc bitand2t::do_simplify() const
 {
+  if (side_1 == side_2)
+    return side_1; // x & x = x
+
+  // Check for identity and zero patterns
+  if (is_constant_int2t(side_1))
+  {
+    const BigInt &val = to_constant_int2t(side_1).value;
+    if (val.is_zero())
+      return side_1; // 0 & x = 0
+  }
+
+  if (is_constant_int2t(side_2))
+  {
+    const BigInt &val = to_constant_int2t(side_2).value;
+    if (val.is_zero())
+      return side_2; // x & 0 = 0
+  }
+
   auto op = [](uint64_t op1, uint64_t op2) { return (op1 & op2); };
 
   // Is a vector operation ? Apply the op
@@ -1484,6 +1508,9 @@ expr2tc bitand2t::do_simplify() const
 
 expr2tc bitor2t::do_simplify() const
 {
+  if (side_1 == side_2)
+    return side_1; // x | x = x
+
   auto op = [](uint64_t op1, uint64_t op2) { return (op1 | op2); };
 
   // Is a vector operation ? Apply the op
@@ -1923,6 +1950,49 @@ static expr2tc simplify_relations(
 
       return typecast_check_return(type, new_op);
     }
+    else if (
+      is_add2t(simplied_side_1) && is_add2t(simplied_side_2) &&
+      is_pointer_type(simplied_side_1) && is_pointer_type(simplied_side_2))
+    {
+      // Simplification of pointer comparison:
+      // address = pointer + offset
+      // When the pointer objects are the same, comparing the addresses is equivalent
+      // to comparing the offsets.
+      // (&x + 1 == &x + 2) => (1 == 2) => false
+      add2t lhs = to_add2t(simplied_side_1);
+      add2t rhs = to_add2t(simplied_side_2);
+
+      if (
+        lhs.side_1 == rhs.side_1 && is_constant(lhs.side_2) &&
+        is_constant(rhs.side_2))
+      {
+        expr2tc new_op(std::make_shared<constructor>(lhs.side_2, rhs.side_2));
+        return typecast_check_return(type, new_op);
+      }
+      else if (
+        lhs.side_2 == rhs.side_2 && is_constant(lhs.side_1) &&
+        is_constant(rhs.side_1))
+      {
+        expr2tc new_op(std::make_shared<constructor>(lhs.side_1, rhs.side_1));
+        return typecast_check_return(type, new_op);
+      }
+      else if (
+        lhs.side_1 == rhs.side_2 && is_constant(lhs.side_2) &&
+        is_constant(rhs.side_1))
+      {
+        expr2tc new_op(std::make_shared<constructor>(lhs.side_2, rhs.side_1));
+        return typecast_check_return(type, new_op);
+      }
+      else if (
+        lhs.side_2 == rhs.side_1 && is_constant(lhs.side_1) &&
+        is_constant(rhs.side_2))
+      {
+        expr2tc new_op(std::make_shared<constructor>(lhs.side_1, rhs.side_2));
+        return typecast_check_return(type, new_op);
+      }
+
+      return expr2tc();
+    }
 
     return expr2tc();
   }
@@ -2099,6 +2169,10 @@ struct Equalitytor
 
 expr2tc equality2t::do_simplify() const
 {
+  // Self-comparison: x == x is always true (except for floats with NaN)
+  if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
+    return gen_true_expr();
+
   // If we're dealing with floatbvs, call IEEE_equalitytor instead
   if (is_floatbv_type(side_1) || is_floatbv_type(side_2))
     return simplify_floatbv_relations<IEEE_equalitytor, equality2t>(
@@ -2155,6 +2229,10 @@ struct Notequaltor
 
 expr2tc notequal2t::do_simplify() const
 {
+  // Self-comparison: x != x is always false (except for floats with NaN)
+  if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
+    return gen_false_expr();
+
   // If we're dealing with floatbvs, call IEEE_notequalitytor instead
   if (is_floatbv_type(side_1) || is_floatbv_type(side_2))
     return simplify_floatbv_relations<IEEE_notequalitytor, equality2t>(
@@ -2192,6 +2270,10 @@ struct Lessthantor
 
 expr2tc lessthan2t::do_simplify() const
 {
+  // Self-comparison: x < x is always false (except for floats with NaN)
+  if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
+    return gen_false_expr();
+
   return simplify_relations<Lessthantor, lessthan2t>(type, side_1, side_2);
 }
 
@@ -2224,6 +2306,10 @@ struct Greaterthantor
 
 expr2tc greaterthan2t::do_simplify() const
 {
+  // Self-comparison: x > x is always false (except for floats with NaN)
+  if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
+    return gen_false_expr();
+
   return simplify_relations<Greaterthantor, greaterthan2t>(
     type, side_1, side_2);
 }
@@ -2257,6 +2343,10 @@ struct Lessthanequaltor
 
 expr2tc lessthanequal2t::do_simplify() const
 {
+  // Self-comparison: x <= x is always true (except for floats with NaN)
+  if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
+    return gen_true_expr();
+
   return simplify_relations<Lessthanequaltor, lessthanequal2t>(
     type, side_1, side_2);
 }
@@ -2290,6 +2380,10 @@ struct Greaterthanequaltor
 
 expr2tc greaterthanequal2t::do_simplify() const
 {
+  // Self-comparison: x >= x is always true (except for floats with NaN)
+  if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
+    return gen_true_expr();
+
   return simplify_relations<Greaterthanequaltor, greaterthanequal2t>(
     type, side_1, side_2);
 }
