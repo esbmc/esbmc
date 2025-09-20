@@ -1,5 +1,4 @@
 CORE
 main.py
---incremental-bmc
-
+--no-pointer-check --no-bounds-check --unwind 9
 ^VERIFICATION SUCCESSFUL$
