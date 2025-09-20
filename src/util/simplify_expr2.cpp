@@ -1129,6 +1129,13 @@ expr2tc not2t::do_simplify() const
     return or2tc(not2tc(and_expr.side_1), not2tc(and_expr.side_2));
   }
 
+  // !(x || y) = !x && !y  
+  if (is_or2t(simp))
+  {
+    const or2t &or_expr = to_or2t(simp);
+    return and2tc(not2tc(or_expr.side_1), not2tc(or_expr.side_2));
+  }
+
   if (!is_constant_bool2t(simp))
     return expr2tc();
 
