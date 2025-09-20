@@ -1534,8 +1534,13 @@ exprt python_converter::handle_type_mismatches(
     bool rhs_empty = is_zero_length_array(rhs) ||
                      (rhs.is_constant() && rhs.operands().size() <= 1);
 
-    if (lhs_empty && rhs_empty)
-      return gen_boolean(op == "Eq");
+    if (lhs_empty != rhs_empty)
+      return gen_boolean(op == "NotEq");
+
+    if (lhs.size() != rhs.size())
+      return gen_boolean(op == "NotEq");
+
+    return nil_exprt();
   }
 
   // Mixed types (array vs non-array) = not equal
@@ -3796,12 +3801,22 @@ exprt python_converter::get_conditional_stm(const nlohmann::json &ast_node)
 
   // Recover type
   current_element_type = t;
+
   // Extract 'then' block from AST
   exprt then;
-  if (ast_node["body"].is_array())
-    then = get_block(ast_node["body"]);
+
+  // Skip the 'then' block when the condition evaluates to false.
+  if (cond.is_constant() && cond.value() == "false")
+  {
+    then = code_blockt();
+  }
   else
-    then = get_expr(ast_node["body"]);
+  {
+    if (ast_node["body"].is_array())
+      then = get_block(ast_node["body"]);
+    else
+      then = get_expr(ast_node["body"]);
+  }
 
   locationt location = get_location_from_decl(ast_node);
   then.location() = location;
