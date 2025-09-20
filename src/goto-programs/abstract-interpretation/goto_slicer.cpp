@@ -277,7 +277,7 @@ void goto_slicer::set_forward_slicer()
     {ASSUME, ASSERT, FUNCTION_CALL, RETURN, GOTO});
 
   sliceable_instruction_type.clear();
-  sliceable_instruction_type.insert({DECL, DEAD, ASSUME, ASSERT, ASSIGN});
+  sliceable_instruction_type.insert({DECL, DEAD,  ASSIGN});
 
   forward_analysis = true;
 }
