@@ -1116,9 +1116,18 @@ expr2tc not2t::do_simplify() const
 {
   expr2tc simp = try_simplification(value);
 
+  // !!x = x (double negation)
   if (is_not2t(simp))
     // These negate.
     return to_not2t(simp).value;
+
+  // De Morgan's laws for logical operations
+  // !(x && y) = !x || !y
+  if (is_and2t(simp)) 
+  {
+    const and2t &and_expr = to_and2t(simp);
+    return or2tc(not2tc(and_expr.side_1), not2tc(and_expr.side_2));
+  }
 
   if (!is_constant_bool2t(simp))
     return expr2tc();
