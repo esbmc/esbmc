@@ -1,4 +1,4 @@
 CORE
 main.py
-
+--no-pointer-check --no-bounds-check --no-div-by-zero-check --unwind 10
 ^VERIFICATION FAILED$
