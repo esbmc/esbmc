@@ -4073,6 +4073,16 @@ void python_converter::get_function_definition(
   // Function body
   exprt function_body = get_block(function_node["body"]);
 
+  if (is_loading_models || is_importing_module)
+  {
+    // Add __ESBMC_Hide as the first statement of the block
+    code_labelt esbmc_hide;
+    esbmc_hide.set_label("__ESBMC_HIDE");
+    esbmc_hide.code() = code_skipt();
+    auto &func_body_ops = function_body.operands();
+    func_body_ops.insert(func_body_ops.begin(), esbmc_hide);
+  }
+
   // Add missing return statement validation
   // Check if function has non-void return type and missing return paths
   // Skip constructors (they don't need explicit returns)
