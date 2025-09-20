@@ -1340,6 +1340,34 @@ expr2tc or2t::do_simplify() const
       return gen_true_expr();
   }
 
+  // (x || a) || (x || b) = x || (a || b)
+  if (is_or2t(side_1) && is_or2t(side_2)) 
+  {
+    const or2t &or1 = to_or2t(side_1);
+    const or2t &or2 = to_or2t(side_2);
+    
+    if (or1.side_1 == or2.side_1) 
+    {
+      expr2tc combined = or2tc(or1.side_2, or2.side_2);
+      return typecast_check_return(type, or2tc(or1.side_1, combined));
+    }
+    if (or1.side_1 == or2.side_2) 
+    {
+      expr2tc combined = or2tc(or1.side_2, or2.side_1);
+      return typecast_check_return(type, or2tc(or1.side_1, combined));
+    }
+    if (or1.side_2 == or2.side_1) 
+    {
+      expr2tc combined = or2tc(or1.side_1, or2.side_2);
+      return typecast_check_return(type, or2tc(or1.side_2, combined));
+    }
+    if (or1.side_2 == or2.side_2) 
+    {
+      expr2tc combined = or2tc(or1.side_1, or2.side_1);
+      return typecast_check_return(type, or2tc(or1.side_2, combined));
+    }
+  }
+
   // Otherwise, default
   return simplify_logic_2ops<Ortor, or2t>(type, side_1, side_2);
 }
