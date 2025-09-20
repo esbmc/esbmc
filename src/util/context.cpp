@@ -54,6 +54,8 @@ symbolt *contextt::find_symbol(irep_idt name)
 
 const symbolt *contextt::find_symbol(irep_idt name) const
 {
+  if (!symbols.count(name))
+    return nullptr;
   auto it = symbols.find(name);
   if (it != symbols.end())
     return &(it->second);

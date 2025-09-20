@@ -160,3 +160,22 @@ irep_idt symbolt::get_function_name() const
   return symbol_id.substr(
     posF); // If there is no '@' after the function name (e.g: c:string.c@1290@F@strcmp), return from "F@"
 }
+
+void symbolt::get_expr2_symbols(
+  const expr2tc &expr,
+  std::set<std::string> &values)
+{
+  if(!expr)
+    return;
+  switch(expr->expr_id)
+  {
+  case expr2t::symbol_id:
+
+    values.insert(to_symbol2t(expr).get_symbol_name());
+    return;
+
+  default:
+    expr->foreach_operand([&values](auto &e) { get_expr2_symbols(e, values); });
+    return;
+  }
+}

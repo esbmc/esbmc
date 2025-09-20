@@ -37,6 +37,9 @@ public:
   void to_irep(irept &dest) const;
   void from_irep(const irept &src);
 
+  static void
+  get_expr2_symbols(const expr2tc &expr, std::set<std::string> &values);
+
   irep_idt get_function_name() const;
 };
 

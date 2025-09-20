@@ -23,7 +23,7 @@
        it != (program).instructions.end();                                     \
        it++)
 
-typedef enum
+typedef enum GOTO_INSTRUCTION_TYPE
 {
   NO_INSTRUCTION_TYPE = 0,
   GOTO = 1,            // branch, possibly guarded

@@ -29,6 +29,8 @@ public:
   void dump_loop_vars() const;
   void output_to(std::ostream &oss) const;
   void output_loop_vars_to(std::ostream &oss) const;
+  /// Replace all loops instructions (including head/exit) into skips
+  void make_skip();
 
   void set_size(std::size_t size)
   {

@@ -20,17 +20,18 @@ public:
   unsound_loop_unroller() : goto_functions_algorithm(true)
   {
   }
-
-protected:
-  bool runOnLoop(loopst &loop, goto_programt &goto_program) override;
-
-  /**
+   /**
    * @brief Get the number of iteractions to unroll the loop
    *
    * @param loop
    * @return int negative means error, positive is the quantity to unroll
    */
-  virtual int get_loop_bounds(loopst &loop) = 0;
+  virtual int get_loop_bounds(const loopst &loop) = 0;
+
+protected:
+  bool runOnLoop(loopst &loop, goto_programt &goto_program) override;
+
+
 };
 
 /**
@@ -77,10 +78,11 @@ public:
     return number_of_bounded_loops;
   }
 
+  int get_loop_bounds(const loopst &loop) override;
 protected:
   // Sets an upper limit for the quantity of loops
   const size_t unroll_limit;
-  int get_loop_bounds(loopst &loop) override;
+  
 
 private:
   unsigned number_of_bounded_loops = 0;

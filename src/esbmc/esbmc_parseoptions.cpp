@@ -33,6 +33,7 @@ extern "C"
 #include <goto-programs/goto_loop_invariant.h>
 #include <goto-programs/abstract-interpretation/interval_analysis.h>
 #include <goto-programs/abstract-interpretation/gcse.h>
+#include <goto-programs/abstract-interpretation/goto_slicer.h>
 #include <goto-programs/loop_numbers.h>
 #include <goto-programs/goto_binary_reader.h>
 #include <goto-programs/write_goto_binary.h>
@@ -579,6 +580,7 @@ int esbmc_parseoptionst::doit()
 
   // Initialize goto_functions algorithms
   {
+    
     // Loop unrolling
     if (cmdline.isset("goto-unwind") && !cmdline.isset("unwind"))
     {
@@ -1454,6 +1456,16 @@ tvt esbmc_parseoptionst::does_forward_condition_hold(
   options.set_option("no-assertions", true);
   options.set_option("unwind", integer2string(k_step));
 
+  if(options.get_bool_option("forward-slicer"))
+      {
+    log_status("Applying Forward Slicer");
+    namespacet ns(context);
+    goto_slicer slicer(context, false);
+    slicer.run(goto_functions);
+    remove_unreachable(goto_functions);
+    goto_functions.update();
+  }
+
   bmct bmc(goto_functions, options, context);
 
   log_progress("Checking forward condition, k = {:d}", k_step);
@@ -1954,6 +1966,12 @@ bool esbmc_parseoptionst::process_goto_program(
         goto_cse cse(context, vsa);
         cse.run(goto_functions);
       }
+    }
+
+    if (cmdline.isset("goto-slicer"))
+    {
+        goto_slicer slicer(context);
+        slicer.run(goto_functions);
     }
 
     if (cmdline.isset("interval-analysis") || cmdline.isset("goto-contractor"))
