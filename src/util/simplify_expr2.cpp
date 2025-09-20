@@ -1255,6 +1255,34 @@ expr2tc and2t::do_simplify() const
   if (is_not2t(side_2) && to_not2t(side_2).value == side_1)
     return gen_false_expr();
 
+  // (x && a) && (x && b) = x && (a && b)
+  if (is_and2t(side_1) && is_and2t(side_2)) 
+  {
+    const and2t &and1 = to_and2t(side_1);
+    const and2t &and2 = to_and2t(side_2);
+    
+    if (and1.side_1 == and2.side_1) 
+    {
+      expr2tc combined = and2tc(and1.side_2, and2.side_2);
+      return typecast_check_return(type, and2tc(and1.side_1, combined));
+    }
+    if (and1.side_1 == and2.side_2) 
+    {
+      expr2tc combined = and2tc(and1.side_2, and2.side_1);
+      return typecast_check_return(type, and2tc(and1.side_1, combined));
+    }
+    if (and1.side_2 == and2.side_1) 
+    {
+      expr2tc combined = and2tc(and1.side_1, and2.side_2);
+      return typecast_check_return(type, and2tc(and1.side_2, combined));
+    }
+    if (and1.side_2 == and2.side_2) 
+    {
+      expr2tc combined = and2tc(and1.side_1, and2.side_1);
+      return typecast_check_return(type, and2tc(and1.side_2, combined));
+    }
+  }
+
   return simplify_logic_2ops<Andtor, and2t>(type, side_1, side_2);
 }
 
