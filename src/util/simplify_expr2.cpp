@@ -1123,13 +1123,13 @@ expr2tc not2t::do_simplify() const
 
   // De Morgan's laws for logical operations
   // !(x && y) = !x || !y
-  if (is_and2t(simp)) 
+  if (is_and2t(simp))
   {
     const and2t &and_expr = to_and2t(simp);
     return or2tc(not2tc(and_expr.side_1), not2tc(and_expr.side_2));
   }
 
-  // !(x || y) = !x && !y  
+  // !(x || y) = !x && !y
   if (is_or2t(simp))
   {
     const or2t &or_expr = to_or2t(simp);
@@ -1138,21 +1138,21 @@ expr2tc not2t::do_simplify() const
 
   // Comparison negations
   // !(x == y) = x != y
-  if (is_equality2t(simp)) 
+  if (is_equality2t(simp))
   {
     const equality2t &eq = to_equality2t(simp);
     return notequal2tc(eq.side_1, eq.side_2);
   }
 
   // !(x != y) = x == y
-  if (is_notequal2t(simp)) 
+  if (is_notequal2t(simp))
   {
     const notequal2t &neq = to_notequal2t(simp);
     return equality2tc(neq.side_1, neq.side_2);
   }
 
   // !(x < y) = x >= y
-  if (is_lessthan2t(simp)) 
+  if (is_lessthan2t(simp))
   {
     const lessthan2t &lt = to_lessthan2t(simp);
     return greaterthanequal2tc(lt.side_1, lt.side_2);
@@ -1166,7 +1166,7 @@ expr2tc not2t::do_simplify() const
   }
 
   // !(x > y) = x <= y
-  if (is_greaterthan2t(simp)) 
+  if (is_greaterthan2t(simp))
   {
     const greaterthan2t &gt = to_greaterthan2t(simp);
     return lessthanequal2tc(gt.side_1, gt.side_2);
@@ -1358,13 +1358,13 @@ expr2tc and2t::do_simplify() const
     return gen_false_expr();
 
   // Absorption: x && (x || y) = x
-  if (is_or2t(side_2)) 
+  if (is_or2t(side_2))
   {
     const or2t &or_expr = to_or2t(side_2);
     if (or_expr.side_1 == side_1 || or_expr.side_2 == side_1)
       return side_1;
   }
-  if (is_or2t(side_1)) 
+  if (is_or2t(side_1))
   {
     const or2t &or_expr = to_or2t(side_1);
     if (or_expr.side_1 == side_2 || or_expr.side_2 == side_2)
@@ -1443,13 +1443,13 @@ expr2tc or2t::do_simplify() const
   }
 
   // Absorption: x || (x && y) = x
-  if (is_and2t(side_2)) 
+  if (is_and2t(side_2))
   {
     const and2t &and_expr = to_and2t(side_2);
     if (and_expr.side_1 == side_1 || and_expr.side_2 == side_1)
       return side_1;
   }
-  if (is_and2t(side_1)) 
+  if (is_and2t(side_1))
   {
     const and2t &and_expr = to_and2t(side_1);
     if (and_expr.side_1 == side_2 || and_expr.side_2 == side_2)
@@ -1687,13 +1687,13 @@ expr2tc bitand2t::do_simplify() const
   }
 
   // Absorption: x & (x | y) = x
-  if (is_bitor2t(side_2)) 
+  if (is_bitor2t(side_2))
   {
     const bitor2t &bor = to_bitor2t(side_2);
     if (bor.side_1 == side_1 || bor.side_2 == side_1)
       return side_1;
   }
-  if (is_bitor2t(side_1)) 
+  if (is_bitor2t(side_1))
   {
     const bitor2t &bor = to_bitor2t(side_1);
     if (bor.side_1 == side_2 || bor.side_2 == side_2)
@@ -1746,13 +1746,13 @@ expr2tc bitor2t::do_simplify() const
   }
 
   // Absorption: x | (x & y) = x
-  if (is_bitand2t(side_2)) 
+  if (is_bitand2t(side_2))
   {
     const bitand2t &band = to_bitand2t(side_2);
     if (band.side_1 == side_1 || band.side_2 == side_1)
       return side_1;
   }
-  if (is_bitand2t(side_1)) 
+  if (is_bitand2t(side_1))
   {
     const bitand2t &band = to_bitand2t(side_1);
     if (band.side_1 == side_2 || band.side_2 == side_2)
@@ -1855,21 +1855,23 @@ expr2tc bitnot2t::do_simplify() const
     return to_bitnot2t(value).value;
 
   // De Morgan's law: ~(x & y) = (~x) | (~y)
-  if (is_bitand2t(value)) 
+  if (is_bitand2t(value))
   {
     const bitand2t &band = to_bitand2t(value);
-    return bitor2tc(type, 
-                    bitnot2tc(band.side_1->type, band.side_1),
-                    bitnot2tc(band.side_2->type, band.side_2));
+    return bitor2tc(
+      type,
+      bitnot2tc(band.side_1->type, band.side_1),
+      bitnot2tc(band.side_2->type, band.side_2));
   }
 
   // De Morgan's law: ~(x | y) = (~x) & (~y)
-  if (is_bitor2t(value)) 
+  if (is_bitor2t(value))
   {
     const bitor2t &bor = to_bitor2t(value);
-    return bitand2tc(type,
-                     bitnot2tc(bor.side_1->type, bor.side_1),
-                     bitnot2tc(bor.side_2->type, bor.side_2));
+    return bitand2tc(
+      type,
+      bitnot2tc(bor.side_1->type, bor.side_1),
+      bitnot2tc(bor.side_2->type, bor.side_2));
   }
 
   auto op = [](uint64_t op1, uint64_t) { return ~(op1); };
@@ -2669,17 +2671,6 @@ struct Greaterthanequaltor
   }
 };
 
-static bool is_zero_constant(const expr2tc &expr)
-{
-  if (is_constant_int2t(expr))
-    return to_constant_int2t(expr).value.is_zero();
-  if (is_constant_bool2t(expr))
-    return !to_constant_bool2t(expr).value;
-  if (is_constant_floatbv2t(expr))
-    return to_constant_floatbv2t(expr).value.is_zero();
-  return false;
-}
-
 expr2tc greaterthanequal2t::do_simplify() const
 {
   // Self-comparison: x >= x is always true (except for floats with NaN)
@@ -2687,7 +2678,9 @@ expr2tc greaterthanequal2t::do_simplify() const
     return gen_true_expr();
 
   // unsigned >= 0 = true
-  if (is_unsignedbv_type(side_1) && is_zero_constant(side_2))
+  if (
+    is_unsignedbv_type(side_1) && is_constant_int2t(side_2) &&
+    to_constant_int2t(side_2).value.is_zero())
     return gen_true_expr();
 
   return simplify_relations<Greaterthanequaltor, greaterthanequal2t>(
