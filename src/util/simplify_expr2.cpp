@@ -1256,27 +1256,27 @@ expr2tc and2t::do_simplify() const
     return gen_false_expr();
 
   // (x && a) && (x && b) = x && (a && b)
-  if (is_and2t(side_1) && is_and2t(side_2)) 
+  if (is_and2t(side_1) && is_and2t(side_2))
   {
     const and2t &and1 = to_and2t(side_1);
     const and2t &and2 = to_and2t(side_2);
-    
-    if (and1.side_1 == and2.side_1) 
+
+    if (and1.side_1 == and2.side_1)
     {
       expr2tc combined = and2tc(and1.side_2, and2.side_2);
       return typecast_check_return(type, and2tc(and1.side_1, combined));
     }
-    if (and1.side_1 == and2.side_2) 
+    if (and1.side_1 == and2.side_2)
     {
       expr2tc combined = and2tc(and1.side_2, and2.side_1);
       return typecast_check_return(type, and2tc(and1.side_1, combined));
     }
-    if (and1.side_2 == and2.side_1) 
+    if (and1.side_2 == and2.side_1)
     {
       expr2tc combined = and2tc(and1.side_1, and2.side_2);
       return typecast_check_return(type, and2tc(and1.side_2, combined));
     }
-    if (and1.side_2 == and2.side_2) 
+    if (and1.side_2 == and2.side_2)
     {
       expr2tc combined = and2tc(and1.side_1, and2.side_1);
       return typecast_check_return(type, and2tc(and1.side_2, combined));
@@ -1341,27 +1341,27 @@ expr2tc or2t::do_simplify() const
   }
 
   // (x || a) || (x || b) = x || (a || b)
-  if (is_or2t(side_1) && is_or2t(side_2)) 
+  if (is_or2t(side_1) && is_or2t(side_2))
   {
     const or2t &or1 = to_or2t(side_1);
     const or2t &or2 = to_or2t(side_2);
-    
-    if (or1.side_1 == or2.side_1) 
+
+    if (or1.side_1 == or2.side_1)
     {
       expr2tc combined = or2tc(or1.side_2, or2.side_2);
       return typecast_check_return(type, or2tc(or1.side_1, combined));
     }
-    if (or1.side_1 == or2.side_2) 
+    if (or1.side_1 == or2.side_2)
     {
       expr2tc combined = or2tc(or1.side_2, or2.side_1);
       return typecast_check_return(type, or2tc(or1.side_1, combined));
     }
-    if (or1.side_2 == or2.side_1) 
+    if (or1.side_2 == or2.side_1)
     {
       expr2tc combined = or2tc(or1.side_1, or2.side_2);
       return typecast_check_return(type, or2tc(or1.side_2, combined));
     }
-    if (or1.side_2 == or2.side_2) 
+    if (or1.side_2 == or2.side_2)
     {
       expr2tc combined = or2tc(or1.side_1, or2.side_1);
       return typecast_check_return(type, or2tc(or1.side_2, combined));
