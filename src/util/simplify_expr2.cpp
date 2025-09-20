@@ -1298,7 +1298,6 @@ expr2tc and2t::do_simplify() const
   if (is_not2t(side_2) && to_not2t(side_2).value == side_1)
     return gen_false_expr();
 
-  // (x && a) && (x && b) = x && (a && b)
   // Try associative simplification: (x && a) && (x && b) = x && (a && b)
   expr2tc simplified = simplify_associative_binary_op<and2t>(
     type,
