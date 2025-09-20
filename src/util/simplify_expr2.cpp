@@ -1833,6 +1833,10 @@ expr2tc lshr2t::do_simplify() const
 
 expr2tc ashr2t::do_simplify() const
 {
+  // x >> 0 = x
+  if (is_constant_int2t(side_2) && to_constant_int2t(side_2).value.is_zero())
+    return side_1;
+
   auto op = [](uint64_t op1, uint64_t op2) {
     /* simulating the arithmetic right shift in C++ requires LHS to be signed */
     return (int64_t)op1 >> op2;
