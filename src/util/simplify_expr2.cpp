@@ -1658,6 +1658,20 @@ expr2tc bitor2t::do_simplify() const
       return side_2; // x | -1 = -1
   }
 
+  // Absorption: x | (x & y) = x
+  if (is_bitand2t(side_2)) 
+  {
+    const bitand2t &band = to_bitand2t(side_2);
+    if (band.side_1 == side_1 || band.side_2 == side_1)
+      return side_1;
+  }
+  if (is_bitand2t(side_1)) 
+  {
+    const bitand2t &band = to_bitand2t(side_1);
+    if (band.side_1 == side_2 || band.side_2 == side_2)
+      return side_2;
+  }
+
   auto op = [](uint64_t op1, uint64_t op2) { return (op1 | op2); };
 
   // Is a vector operation ? Apply the op
