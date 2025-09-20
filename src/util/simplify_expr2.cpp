@@ -1298,6 +1298,20 @@ expr2tc and2t::do_simplify() const
   if (is_not2t(side_2) && to_not2t(side_2).value == side_1)
     return gen_false_expr();
 
+  // Absorption: x && (x || y) = x
+  if (is_or2t(side_2)) 
+  {
+    const or2t &or_expr = to_or2t(side_2);
+    if (or_expr.side_1 == side_1 || or_expr.side_2 == side_1)
+      return side_1;
+  }
+  if (is_or2t(side_1)) 
+  {
+    const or2t &or_expr = to_or2t(side_1);
+    if (or_expr.side_1 == side_2 || or_expr.side_2 == side_2)
+      return side_2;
+  }
+
   // Try associative simplification: (x && a) && (x && b) = x && (a && b)
   expr2tc simplified = simplify_associative_binary_op<and2t>(
     type,
