@@ -177,7 +177,7 @@ void goto_symext::symex_goto(const expr2tc &old_guard)
       new_rhs = not2tc(new_rhs);
       do_simplify(new_rhs);
 
-      cur_state->assignment(guard_expr, new_rhs);
+      cur_state->assignment(guard_expr, new_rhs, constant_propagation);
 
       target->assignment(
         gen_true_expr(),
@@ -390,7 +390,7 @@ void goto_symext::phi_function(const statet::goto_statet &goto_state)
 
     cur_state->rename_type(new_lhs);
     cur_state->rename_type(rhs);
-    cur_state->assignment(new_lhs, rhs);
+    cur_state->assignment(new_lhs, rhs, constant_propagation);
 
     target->assignment(
       gen_true_expr(),
