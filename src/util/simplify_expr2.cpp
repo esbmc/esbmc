@@ -1748,6 +1748,15 @@ expr2tc bitnot2t::do_simplify() const
                     bitnot2tc(band.side_2->type, band.side_2));
   }
 
+  // De Morgan's law: ~(x | y) = (~x) & (~y)
+  if (is_bitor2t(value)) 
+  {
+    const bitor2t &bor = to_bitor2t(value);
+    return bitand2tc(type,
+                     bitnot2tc(bor.side_1->type, bor.side_1),
+                     bitnot2tc(bor.side_2->type, bor.side_2));
+  }
+
   auto op = [](uint64_t op1, uint64_t) { return ~(op1); };
 
   if (is_constant_vector2t(value))
