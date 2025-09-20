@@ -586,6 +586,47 @@ typet type_handler::get_list_type(const nlohmann::json &list_value) const
   return typet();
 }
 
+const typet type_handler::get_list_type() const
+{
+  static const symbolt *list_type_symbol = nullptr;
+  const char *list_type_id = "tag-struct __anon_typedef_List_at_";
+
+  if (!list_type_symbol)
+  {
+    converter_.symbol_table().foreach_operand(
+      [&list_type_id](const symbolt &s) {
+        const std::string &symbol_id = s.id.as_string();
+        if (symbol_id.find(list_type_id) != std::string::npos)
+        {
+          list_type_symbol = &s;
+        }
+      });
+  }
+
+  assert(list_type_symbol);
+  return pointer_typet(symbol_typet(list_type_symbol->id));
+}
+
+typet type_handler::get_list_element_type() const
+{
+  static const symbolt *type = nullptr;
+  const char *type_id = "tag-struct __anon_typedef_Object_at";
+
+  if (!type)
+  {
+    converter_.symbol_table().foreach_operand([&type_id](const symbolt &s) {
+      const std::string &symbol_id = s.id.as_string();
+      if (symbol_id.find(type_id) != symbol_id.npos)
+      {
+        type = &s;
+      }
+    });
+  }
+
+  assert(type);
+  return symbol_typet(type->id);
+}
+
 /// This method inspects the JSON representation of a Python operand node and attempts to
 /// infer its type based on its AST node type (`_type`). It currently supports variable
 /// names, constants (literals), and list subscripts. This type information is used for

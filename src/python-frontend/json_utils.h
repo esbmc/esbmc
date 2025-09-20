@@ -232,6 +232,42 @@ const JsonType find_var_decl(
 }
 
 template <typename JsonType>
+const JsonType get_var_value(
+  const std::string &var_name,
+  const std::string &function,
+  const JsonType &ast)
+{
+  JsonType value = find_var_decl(var_name, function, ast);
+  while (!value.empty() && value["_type"] != "arg" &&
+         value["value"]["_type"] == "Name")
+  {
+    value = find_var_decl(value["value"]["id"], function, ast);
+  }
+  return value;
+}
+
+template <typename JsonType>
+const JsonType get_list_element(const JsonType &list_value, int pos)
+{
+  if (
+    list_value["_type"] == "List" && list_value.contains("elts") &&
+    !list_value["elts"].empty())
+  {
+    return list_value["elts"][pos];
+  }
+
+  if (list_value["_type"] == "BinOp")
+  {
+    if (list_value["left"]["_type"] == "List")
+      return list_value["left"]["elts"][pos];
+    if (list_value["rigth"]["_type"] == "List")
+      return list_value["right"]["elts"][pos];
+  }
+
+  return JsonType();
+}
+
+template <typename JsonType>
 const JsonType find_return_node(const JsonType &block)
 {
   for (const auto &stmt : block)

@@ -215,7 +215,7 @@ bool reachability_treet::is_has_complete_formula()
 void reachability_treet::switch_to_next_execution_state()
 {
   std::list<std::shared_ptr<execution_statet>>::iterator it = cur_state_it;
-  it++;
+  ++it;
 
   if (it != execution_states.end())
   {

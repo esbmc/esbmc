@@ -13,7 +13,8 @@ bool read_bin_goto_object(
   std::istream &in,
   const std::string &filename,
   contextt &context,
-  std::vector<std::string> &functions,
+  contextt &ignored,
+  std::unordered_set<std::string> &function_set,
   goto_functionst &goto_functions)
 {
   std::ostringstream str;
@@ -82,16 +83,22 @@ bool read_bin_goto_object(
         to_code_type(symbol.type);
     }
 
-    // Add functions only from the list
-    if (!functions.empty())
+    // Add functions only from the list if there is a whitelist
+    if (!function_set.empty())
     {
-      auto it = std::find(
-        functions.begin(), functions.end(), symbol.get_function_name().c_str());
-      if (it == functions.end())
-        continue;
+      const auto &fname = symbol.get_function_name();
+
+      // Symbol is not in the function set
+      if (function_set.find(id2string(fname)) == function_set.end())
+      {
+        // Keep this symbol in case we end up needing it as a dependency later on
+        ignored.add(symbol);
+        continue; // skip to next symbol
+      }
     }
 
-    context.add(symbol);
+    context.add(
+      symbol); // add symbol if no function whitelist or in function whitelist
   }
 
   assert(migrate_namespace_lookup);
@@ -119,6 +126,10 @@ bool read_bin_goto_object(
   contextt &context,
   goto_functionst &goto_functions)
 {
-  std::vector<std::string> empty;
-  return read_bin_goto_object(in, filename, context, empty, goto_functions);
+  contextt
+    empt_ignored; // empty context to put ignored symbols in; will not be used since empty function filter
+  std::unordered_set<std::string>
+    empt_function_set; // empty function filter; no function whitelist
+  return read_bin_goto_object(
+    in, filename, context, empt_ignored, empt_function_set, goto_functions);
 }
