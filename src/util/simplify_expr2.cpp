@@ -2669,10 +2669,25 @@ struct Greaterthanequaltor
   }
 };
 
+static bool is_zero_constant(const expr2tc &expr)
+{
+  if (is_constant_int2t(expr))
+    return to_constant_int2t(expr).value.is_zero();
+  if (is_constant_bool2t(expr))
+    return !to_constant_bool2t(expr).value;
+  if (is_constant_floatbv2t(expr))
+    return to_constant_floatbv2t(expr).value.is_zero();
+  return false;
+}
+
 expr2tc greaterthanequal2t::do_simplify() const
 {
   // Self-comparison: x >= x is always true (except for floats with NaN)
   if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
+    return gen_true_expr();
+
+  // unsigned >= 0 = true
+  if (is_unsignedbv_type(side_1) && is_zero_constant(side_2))
     return gen_true_expr();
 
   return simplify_relations<Greaterthanequaltor, greaterthanequal2t>(
