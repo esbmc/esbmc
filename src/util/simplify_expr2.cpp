@@ -1249,6 +1249,12 @@ expr2tc and2t::do_simplify() const
   if (side_1 == side_2)
     return side_1; // x && x = x
 
+  // x && !x = false
+  if (is_not2t(side_1) && to_not2t(side_1).value == side_2)
+    return gen_false_expr();
+  if (is_not2t(side_2) && to_not2t(side_2).value == side_1)
+    return gen_false_expr();
+
   return simplify_logic_2ops<Andtor, and2t>(type, side_1, side_2);
 }
 
