@@ -7,6 +7,7 @@
 #include <ansi-c/convert_float_literal.h>
 #include <util/std_code.h>
 #include <util/c_types.h>
+#include <util/python_types.h>
 #include <util/c_typecast.h>
 #include <util/arith_tools.h>
 #include <util/expr_util.h>
@@ -1600,6 +1601,22 @@ exprt python_converter::handle_string_comparison(
   return nil_exprt(); // continue with lhs OP rhs
 }
 
+exprt python_converter::handle_none_comparison(
+  const std::string &op,
+  const exprt &lhs,
+  const exprt &rhs)
+{
+  bool is_eq = (op == "Eq" || op == "Is") ? true : false;
+  if (lhs.type().is_pointer() && lhs.type().subtype().is_empty())
+  {
+    const symbolt &lhs_symbol = *find_symbol(lhs.identifier().as_string());
+    if (lhs_symbol.value == rhs)
+      return (is_eq) ? gen_boolean(1) : gen_boolean(0);
+    return (is_eq) ? gen_boolean(0) : gen_boolean(1);
+  }
+  return is_eq ? gen_boolean(0) : gen_boolean(1);
+}
+
 // Helper method to resolve symbol values to constants
 exprt python_converter::get_resolved_value(const exprt &expr)
 {
@@ -2014,6 +2031,20 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
   exprt lhs = get_expr(left);
   exprt rhs = get_expr(right);
 
+  std::string op;
+  if (element.contains("op"))
+    op = element["op"]["_type"].get<std::string>();
+  else if (element.contains("ops"))
+    op = element["ops"][0]["_type"].get<std::string>();
+
+  assert(!op.empty());
+
+  // Simplify comparison with NoneType
+  if ((lhs.type() == none_type()) || (rhs.type() == none_type()))
+  {
+    return handle_none_comparison(op, lhs, rhs);
+  }
+
   // Was an exception thrown? It has nothing to do with the following part
   if (lhs.statement() == "cpp-throw")
     return lhs;
@@ -2026,14 +2057,6 @@ exprt python_converter::get_binary_operator_expr(const nlohmann::json &element)
 
   // Function calls in expressions like "fib(n-1) + fib(n-2)" need to be converted to side effects
   convert_function_calls_to_side_effects(lhs, rhs);
-
-  std::string op;
-  if (element.contains("op"))
-    op = element["op"]["_type"].get<std::string>();
-  else if (element.contains("ops"))
-    op = element["ops"][0]["_type"].get<std::string>();
-
-  assert(!op.empty());
 
   if (lhs.type().is_array() || rhs.type().is_array())
   {
@@ -2460,9 +2483,8 @@ exprt python_converter::get_literal(const nlohmann::json &element)
   if (value.is_null())
   {
     // Create a null pointer expression to represent NoneType
-    constant_exprt null_expr(pointer_type());
-    // Sets the value to "NULL"
-    null_expr.set_value("0");
+    constant_exprt null_expr(none_type());
+    null_expr.set_value("NULL");
     return null_expr;
   }
 
@@ -3129,27 +3151,27 @@ const nlohmann::json &get_return_statement(const nlohmann::json &function)
 
 // Helper method to extract type information from annotations
 std::pair<std::string, typet>
-python_converter::extract_type_info(const nlohmann::json &ast_node)
+python_converter::extract_type_info(const nlohmann::json &var_node)
 {
-  std::string lhs_type("");
-  typet element_type;
+  typet var_typet;
+  std::string var_type_str("");
 
-  if (ast_node.contains("annotation"))
+  if (var_node.contains("annotation"))
   {
     // Get type from annotation node
-    size_t type_size = get_type_size(ast_node);
-    if (ast_node["annotation"]["_type"] == "Subscript")
-      lhs_type = ast_node["annotation"]["value"]["id"];
+    size_t type_size = get_type_size(var_node);
+    if (var_node["annotation"]["_type"] == "Subscript")
+      var_type_str = var_node["annotation"]["value"]["id"];
     else
-      lhs_type = ast_node["annotation"]["id"];
+      var_type_str = var_node["annotation"]["id"];
 
-    if (lhs_type == "list" || lhs_type == "List")
-      element_type = type_handler_.get_list_type();
+    if (var_type_str == "list" || var_type_str == "List")
+      var_typet = type_handler_.get_list_type();
     else
-      element_type = type_handler_.get_typet(lhs_type, type_size);
+      var_typet = type_handler_.get_typet(var_type_str, type_size);
   }
 
-  return {lhs_type, element_type};
+  return {var_type_str, var_typet};
 }
 
 // Helper method to create LHS expression based on target type
@@ -3241,6 +3263,12 @@ void python_converter::handle_assignment_type_adjustments(
         lhs_symbol->type = rhs.type();
         lhs.type() = rhs.type();
       }
+    }
+    else if (rhs.type() == none_type())
+    {
+      // Adjust pointer_type() to pointer_typet(empty_typet())
+      lhs_symbol->type = rhs.type();
+      lhs.type() = rhs.type();
     }
 
     if (!rhs.type().is_empty() && !is_ctor_call)
