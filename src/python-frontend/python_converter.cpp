@@ -3410,34 +3410,52 @@ void python_converter::get_var_assign(
     has_value = true;
     is_converting_rhs = false;
 
-    // Fix for single character string constant assigned to str type variables
+    // Fix for single character string literals assigned to str type variables
     if (
       lhs_type == "str" &&
       (rhs.type().is_signedbv() || rhs.type().is_unsignedbv()))
     {
-      // Check if this is a string constant assignment like s: str = "h"
+      // Get variable name from target
+      std::string var_name = "";
+      if (ast_node.contains("target") && ast_node["target"].contains("id"))
+      {
+        var_name = ast_node["target"]["id"].get<std::string>();
+      }
+
+      // Check if this is a string constant assignment
       if (
         ast_node["value"]["_type"] == "Constant" &&
         ast_node["value"]["value"].is_string())
       {
         std::string str_value = ast_node["value"]["value"].get<std::string>();
 
-        // Create proper string array with null terminator
-        typet string_type =
-          type_handler_.build_array(char_type(), str_value.length() + 1);
-        exprt str_array = gen_zero(string_type);
-
-        // Fill the array with characters
-        for (size_t i = 0; i < str_value.length(); ++i)
+        // Skip fix if this variable is used with ord/chr functions
+        bool should_apply_fix = true;
+        if (!var_name.empty() && ord_chr_used_variables.count(var_name) > 0)
         {
-          BigInt char_val(static_cast<unsigned char>(str_value[i]));
-          exprt char_expr = constant_exprt(
-            integer2binary(char_val, 8), integer2string(char_val), char_type());
-          str_array.operands().at(i) = char_expr;
+          should_apply_fix = false;
         }
-        // Null terminator is already zero-initialized
 
-        rhs = str_array;
+        if (should_apply_fix)
+        {
+          // Create proper string array with null terminator
+          typet string_type =
+            type_handler_.build_array(char_type(), str_value.length() + 1);
+          exprt str_array = gen_zero(string_type);
+
+          // Fill array with string characters
+          for (size_t i = 0; i < str_value.length(); ++i)
+          {
+            BigInt char_val(static_cast<unsigned char>(str_value[i]));
+            exprt char_expr = constant_exprt(
+              integer2binary(char_val, 8),
+              integer2string(char_val),
+              char_type());
+            str_array.operands().at(i) = char_expr;
+          }
+
+          rhs = str_array;
+        }
       }
     }
   }
@@ -3647,8 +3665,7 @@ void python_converter::get_compound_assign(
   std::string op = ast_node["op"]["_type"].get<std::string>();
 
   // Check if this is a string concatenation based on variable annotation
-  bool is_string_concat =
-    false; // use to check if the operation is a string concatenation
+  bool is_string_concat = false;
   if (op == "Add")
   {
     // Standard array-based string concatenation
@@ -4766,8 +4783,58 @@ void python_converter::create_builtin_symbols()
   symbol_table_.add(name_symbol);
 }
 
+// Pre-scan AST to find all ord/chr function calls
+void python_converter::prescan_ord_chr_usage(const nlohmann::json &node)
+{
+  if (node.is_object())
+  {
+    // Check if this is a function call
+    if (
+      node.contains("_type") && node["_type"] == "Call" &&
+      node.contains("func") && node["func"].contains("_type") &&
+      node["func"]["_type"] == "Name" && node["func"].contains("id"))
+    {
+      std::string func_name = node["func"]["id"].get<std::string>();
+      if (func_name == "ord" || func_name == "chr")
+      {
+        // Record variables used as arguments
+        if (node.contains("args") && node["args"].is_array())
+        {
+          for (const auto &arg : node["args"])
+          {
+            if (
+              arg.contains("_type") && arg["_type"] == "Name" &&
+              arg.contains("id"))
+            {
+              std::string var_name = arg["id"].get<std::string>();
+              ord_chr_used_variables.insert(var_name);
+            }
+          }
+        }
+      }
+    }
+
+    // Recursively scan all children
+    for (const auto &[key, child] : node.items())
+    {
+      prescan_ord_chr_usage(child);
+    }
+  }
+  else if (node.is_array())
+  {
+    // Recursively scan array elements
+    for (const auto &child : node)
+    {
+      prescan_ord_chr_usage(child);
+    }
+  }
+}
+
 void python_converter::convert()
 {
+  // Pre-scan AST to find all ord/chr function calls before processing assignments
+  prescan_ord_chr_usage(*ast_json);
+
   code_typet main_type;
   main_type.return_type() = empty_typet();
 
