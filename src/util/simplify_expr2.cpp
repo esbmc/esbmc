@@ -1244,10 +1244,73 @@ struct Andtor
   }
 };
 
+template <typename OpType, typename OpConstructor>
+expr2tc simplify_associative_binary_op(
+  const type2tc &result_type,
+  const expr2tc &side_1,
+  const expr2tc &side_2,
+  bool (*is_op_type)(const expr2tc &),
+  const OpType &(*to_op_type)(const expr2tc &),
+  OpConstructor op_constructor)
+{
+  if (is_op_type(side_1) && is_op_type(side_2))
+  {
+    const OpType &op1 = to_op_type(side_1);
+    const OpType &op2 = to_op_type(side_2);
+
+    // Check all four possible combinations for common factors
+    if (op1.side_1 == op2.side_1)
+    {
+      expr2tc combined = op_constructor(op1.side_2, op2.side_2);
+      return typecast_check_return(
+        result_type, op_constructor(op1.side_1, combined));
+    }
+    if (op1.side_1 == op2.side_2)
+    {
+      expr2tc combined = op_constructor(op1.side_2, op2.side_1);
+      return typecast_check_return(
+        result_type, op_constructor(op1.side_1, combined));
+    }
+    if (op1.side_2 == op2.side_1)
+    {
+      expr2tc combined = op_constructor(op1.side_1, op2.side_2);
+      return typecast_check_return(
+        result_type, op_constructor(op1.side_2, combined));
+    }
+    if (op1.side_2 == op2.side_2)
+    {
+      expr2tc combined = op_constructor(op1.side_1, op2.side_1);
+      return typecast_check_return(
+        result_type, op_constructor(op1.side_2, combined));
+    }
+  }
+  return expr2tc(); // Return empty expr2tc to indicate no simplification was performed
+}
+
 expr2tc and2t::do_simplify() const
 {
   if (side_1 == side_2)
     return side_1; // x && x = x
+
+  // x && !x = false
+  if (is_not2t(side_1) && to_not2t(side_1).value == side_2)
+    return gen_false_expr();
+  if (is_not2t(side_2) && to_not2t(side_2).value == side_1)
+    return gen_false_expr();
+
+  // Try associative simplification: (x && a) && (x && b) = x && (a && b)
+  expr2tc simplified = simplify_associative_binary_op<and2t>(
+    type,
+    side_1,
+    side_2,
+    is_and2t,
+    to_and2t,
+    [](const expr2tc &left, const expr2tc &right) {
+      return and2tc(left, right);
+    });
+
+  if (!is_nil_expr(simplified))
+    return simplified;
 
   return simplify_logic_2ops<Andtor, and2t>(type, side_1, side_2);
 }
@@ -1305,6 +1368,20 @@ expr2tc or2t::do_simplify() const
     if (ref.value == side_1)
       return gen_true_expr();
   }
+
+  // Try associative simplification: (x || a) || (x || b) = x || (a || b)
+  expr2tc simplified = simplify_associative_binary_op<or2t>(
+    type,
+    side_1,
+    side_2,
+    is_or2t,
+    to_or2t,
+    [](const expr2tc &left, const expr2tc &right) {
+      return or2tc(left, right);
+    });
+
+  if (!is_nil_expr(simplified))
+    return simplified;
 
   // Otherwise, default
   return simplify_logic_2ops<Ortor, or2t>(type, side_1, side_2);
