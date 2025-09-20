@@ -242,6 +242,11 @@ private:
     exprt &rhs,
     const nlohmann::json &element);
 
+  exprt handle_none_comparison(
+    const std::string &op,
+    const exprt &lhs,
+    const exprt &rhs);
+
   exprt handle_string_operations(
     const std::string &op,
     exprt &lhs,

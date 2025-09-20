@@ -30,7 +30,7 @@ add_library(util_esbmc xml_irep.cpp xml.cpp
         irep_serialization.cpp symbol_serialization.cpp fixedbv.cpp
         signal_catcher.cpp migrate.cpp show_symbol_table.cpp
         type_byte_size.cpp goto_expr_factory.cpp
-        string_constant.cpp c_types.cpp ieee_float.cpp c_qualifiers.cpp
+        string_constant.cpp c_types.cpp python_types.cpp ieee_float.cpp c_qualifiers.cpp
         c_sizeof.cpp c_link.cpp c_typecast.cpp fix_symbol.cpp destructor.cpp
         c_expr2string.cpp cpp_expr2string.cpp type2name.cpp
         message.cpp encoding.cpp

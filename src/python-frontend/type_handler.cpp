@@ -603,7 +603,9 @@ const typet type_handler::get_list_type() const
       });
   }
 
-  assert(list_type_symbol);
+  if (!list_type_symbol)
+    return typet();
+
   return pointer_typet(symbol_typet(list_type_symbol->id));
 }
 
