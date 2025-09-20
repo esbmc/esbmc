@@ -427,6 +427,340 @@ void goto_symext::finalize_realloc_result(
   dynamic_memory.emplace_back(result_copy, alloc_guard, false, symbol_name);
 }
 
+static bool has_bitfields(const type2tc &struct_type)
+{
+  if (!is_struct_type(struct_type))
+    return false;
+
+  const struct_type2t &st = to_struct_type(struct_type);
+  for (unsigned i = 0; i < st.members.size(); i++)
+  {
+    const irep_idt &name = st.member_names[i];
+    const type2tc &member_type = st.members[i];
+
+    // Check for bitfield naming patterns
+    if (
+      has_prefix(name.as_string(), "bit_field_pad$") ||
+      name.as_string().find("$bf") != std::string::npos ||
+      name.as_string().find(":") != std::string::npos)
+    {
+      return true;
+    }
+
+    // Check for non-standard integer widths (likely bitfields)
+    if (is_signedbv_type(member_type) || is_unsignedbv_type(member_type))
+    {
+      unsigned width = member_type->get_width();
+      if (width < 8 || (width > 8 && width < 16) || (width > 16 && width < 32))
+        return true;
+    }
+  }
+  return false;
+}
+
+static bool types_compatible_for_copy(
+  const type2tc &dest_type,
+  const type2tc &src_type,
+  const namespacet &ns)
+{
+  return base_type_eq(dest_type, src_type, ns);
+}
+
+static expr2tc copy_memory_by_byte(
+  const type2tc &dest_type,
+  const expr2tc &dest_obj,
+  const expr2tc &src_obj,
+  const type2tc &src_type,
+  const size_t num_of_bytes,
+  const size_t dest_offset,
+  const size_t src_offset,
+  const namespacet &ns,
+  bool big_endian);
+
+static expr2tc copy_scalar_type(
+  const type2tc &dest_type,
+  const expr2tc &dest_obj,
+  const expr2tc &src_obj,
+  const type2tc &src_type,
+  const size_t num_of_bytes,
+  const size_t dest_offset,
+  const size_t src_offset,
+  bool big_endian)
+{
+  // Simple case: 8-bit types with full copy
+  if (
+    dest_type->get_width() == 8 && is_scalar_type(src_type) &&
+    src_type->get_width() == 8 && num_of_bytes == 1 && dest_offset == 0 &&
+    src_offset == 0)
+  {
+    return typecast2tc(dest_type, src_obj);
+  }
+
+  // For single-byte types, avoid byte operations if copying entire value
+  if (dest_type->get_width() == 8 && num_of_bytes == 1 && dest_offset == 0)
+  {
+    if (
+      src_offset == 0 && is_scalar_type(src_type) && src_type->get_width() == 8)
+      return typecast2tc(dest_type, src_obj);
+    else if (src_offset == 0)
+      return typecast2tc(dest_type, src_obj);
+  }
+
+  // Handle multi-byte primitives or partial updates with byte operations
+  expr2tc result = dest_obj;
+  for (size_t i = 0; i < num_of_bytes; i++)
+  {
+    expr2tc src_byte_offset =
+      constant_int2tc(get_int32_type(), BigInt(src_offset + i));
+    expr2tc dest_byte_offset =
+      constant_int2tc(get_int32_type(), BigInt(dest_offset + i));
+
+    expr2tc src_byte =
+      byte_extract2tc(get_uint8_type(), src_obj, src_byte_offset, big_endian);
+
+    // Avoid byte_update on 8-bit types - it's the entire value
+    if (dest_type->get_width() == 8 && num_of_bytes == 1)
+      return typecast2tc(dest_type, src_byte);
+
+    result =
+      byte_update2tc(dest_type, result, dest_byte_offset, src_byte, big_endian);
+  }
+
+  return result;
+}
+
+static expr2tc copy_array_type(
+  const type2tc &dest_type,
+  const expr2tc &dest_obj,
+  const expr2tc &src_obj,
+  const type2tc &src_type,
+  const size_t num_of_bytes,
+  const size_t dest_offset,
+  const size_t src_offset,
+  const namespacet &ns,
+  bool big_endian)
+{
+  // Check if source and destination have compatible element types
+  bool can_copy_elements = false;
+  if (is_array_type(src_type))
+  {
+    type2tc dest_elem_type = to_array_type(dest_type).subtype;
+    type2tc src_elem_type = to_array_type(src_type).subtype;
+    can_copy_elements =
+      types_compatible_for_copy(dest_elem_type, src_elem_type, ns);
+  }
+
+  if (!can_copy_elements)
+    return expr2tc();
+
+  expr2tc result = gen_zero(dest_type);
+  constant_array2t &dest_data = to_constant_array2t(result);
+
+  uint64_t dest_elem_size =
+    type_byte_size(to_array_type(dest_type).subtype).to_uint64();
+  uint64_t bytes_left = num_of_bytes;
+  uint64_t dest_offset_left = dest_offset;
+  uint64_t src_offset_left = src_offset;
+
+  for (unsigned i = 0; i < dest_data.datatype_members.size(); i++)
+  {
+    BigInt position(i);
+    expr2tc dest_member = index2tc(
+      to_array_type(dest_type).subtype,
+      dest_obj,
+      constant_int2tc(get_uint32_type(), position));
+
+    expr2tc src_member;
+    if (is_array_type(src_type))
+    {
+      src_member = index2tc(
+        to_array_type(src_type).subtype,
+        src_obj,
+        constant_int2tc(get_uint32_type(), position));
+    }
+    else
+      src_member = src_obj;
+
+    // Handle offset and remaining bytes
+    if (dest_offset_left >= dest_elem_size)
+    {
+      dest_data.datatype_members[i] = dest_member;
+      dest_offset_left -= dest_elem_size;
+      if (src_offset_left >= dest_elem_size)
+        src_offset_left -= dest_elem_size;
+    }
+    else if (bytes_left > 0)
+    {
+      uint64_t bytes_to_copy =
+        std::min(bytes_left, dest_elem_size - dest_offset_left);
+
+      dest_data.datatype_members[i] = copy_memory_by_byte(
+        to_array_type(dest_type).subtype,
+        dest_member,
+        src_member,
+        is_array_type(src_type) ? to_array_type(src_type).subtype : src_type,
+        bytes_to_copy,
+        dest_offset_left,
+        src_offset_left,
+        ns,
+        big_endian);
+
+      if (!dest_data.datatype_members[i])
+        return expr2tc();
+
+      bytes_left -= bytes_to_copy;
+      dest_offset_left = 0;
+      src_offset_left = 0;
+    }
+    else
+      dest_data.datatype_members[i] = dest_member;
+  }
+
+  return result;
+}
+
+static expr2tc copy_struct_type(
+  const type2tc &dest_type,
+  const expr2tc &dest_obj,
+  const expr2tc &src_obj,
+  const type2tc &src_type,
+  const size_t num_of_bytes,
+  const size_t dest_offset,
+  const size_t src_offset,
+  const namespacet &ns,
+  bool big_endian)
+{
+  // Reject structs with bitfields
+  if (has_bitfields(dest_type))
+    return expr2tc();
+
+  expr2tc result = gen_zero(dest_type);
+  constant_struct2t &dest_data = to_constant_struct2t(result);
+
+  uint64_t bytes_left = num_of_bytes;
+  uint64_t dest_offset_left = dest_offset;
+  uint64_t src_offset_left = src_offset;
+
+  for (unsigned i = 0; i < dest_data.datatype_members.size(); i++)
+  {
+    const irep_idt &name = to_struct_type(dest_type).member_names[i];
+    const type2tc &member_type = to_struct_type(dest_type).members[i];
+
+    expr2tc dest_member = member2tc(member_type, dest_obj, name);
+    expr2tc src_member;
+
+    // Get corresponding source member if available
+    if (is_struct_type(src_type) && i < to_struct_type(src_type).members.size())
+    {
+      const irep_idt &src_name = to_struct_type(src_type).member_names[i];
+      src_member =
+        member2tc(to_struct_type(src_type).members[i], src_obj, src_name);
+    }
+    else
+    {
+      src_member = src_obj; // Fallback
+    }
+
+    uint64_t member_size = type_byte_size(member_type).to_uint64();
+
+    // Handle offset and remaining bytes
+    if (dest_offset_left >= member_size)
+    {
+      dest_data.datatype_members[i] = dest_member;
+      dest_offset_left -= member_size;
+      if (src_offset_left >= member_size)
+        src_offset_left -= member_size;
+    }
+    else if (bytes_left > 0)
+    {
+      uint64_t bytes_to_copy = std::min(bytes_left, member_size);
+
+      dest_data.datatype_members[i] = copy_memory_by_byte(
+        member_type,
+        dest_member,
+        src_member,
+        is_struct_type(src_type) && i < to_struct_type(src_type).members.size()
+          ? to_struct_type(src_type).members[i]
+          : src_type,
+        bytes_to_copy,
+        dest_offset_left,
+        src_offset_left,
+        ns,
+        big_endian);
+
+      if (!dest_data.datatype_members[i])
+        return expr2tc();
+
+      bytes_left -= bytes_to_copy;
+      dest_offset_left = 0;
+      src_offset_left = 0;
+    }
+    else
+      dest_data.datatype_members[i] = dest_member;
+  }
+
+  return result;
+}
+
+static expr2tc copy_union_type(
+  const type2tc &dest_type,
+  const expr2tc &dest_obj,
+  const expr2tc &src_obj,
+  const type2tc &src_type,
+  const size_t num_of_bytes,
+  const size_t dest_offset,
+  const size_t src_offset,
+  const namespacet &ns,
+  bool big_endian)
+{
+  expr2tc result = gen_zero(dest_type);
+  constant_union2t &dest_data = to_constant_union2t(result);
+
+  // Find the largest member that matches union size
+  uint64_t union_size = type_byte_size(dest_type).to_uint64();
+  size_t selected_member = to_union_type(dest_type).members.size();
+
+  for (size_t i = 0; i < to_union_type(dest_type).members.size(); i++)
+  {
+    if (
+      type_byte_size(to_union_type(dest_type).members[i]).to_uint64() ==
+      union_size)
+    {
+      selected_member = i;
+      break;
+    }
+  }
+
+  if (selected_member >= to_union_type(dest_type).members.size())
+    return expr2tc();
+
+  const irep_idt &name = to_union_type(dest_type).member_names[selected_member];
+  const type2tc &member_type =
+    to_union_type(dest_type).members[selected_member];
+
+  expr2tc dest_member = member2tc(member_type, dest_obj, name);
+  expr2tc src_member;
+
+  if (is_union_type(src_type))
+    src_member = member2tc(member_type, src_obj, name);
+  else
+    src_member = src_obj;
+
+  dest_data.init_field = name;
+  dest_data.datatype_members[0] = copy_memory_by_byte(
+    member_type,
+    dest_member,
+    src_member,
+    is_union_type(src_type) ? member_type : src_type,
+    num_of_bytes,
+    dest_offset,
+    src_offset,
+    ns,
+    big_endian);
+
+  return dest_data.datatype_members[0] ? result : expr2tc();
+}
+
 static inline expr2tc copy_memory_by_byte(
   const type2tc &dest_type,
   const expr2tc &dest_obj,
@@ -438,309 +772,69 @@ static inline expr2tc copy_memory_by_byte(
   const namespacet &ns,
   bool big_endian)
 {
+  // Early exit for zero bytes
   if (num_of_bytes == 0)
     return dest_obj;
 
-  // Handle floating point types: fall back to byte operations
+  // Reject floating point types early
   if (is_floatbv_type(dest_type) || is_fixedbv_type(dest_type))
     return expr2tc();
 
-  // Handle scalar types
-  if (
-    is_scalar_type(dest_type) && dest_type->get_width() == 8 &&
-    dest_offset == 0 && src_offset == 0 && num_of_bytes == 1)
-  {
-    if (is_scalar_type(src_type) && src_type->get_width() == 8)
-      return typecast2tc(dest_type, src_obj);
-  }
-
-  // Handle arrays
+  // Dispatch to appropriate type handler
   if (is_array_type(dest_type))
-  {
-    // Check if source and destination have compatible element types 
-    // for direct copying
-    bool can_copy_elements = false;
-    if (is_array_type(src_type))
-    {
-      type2tc dest_elem_type = to_array_type(dest_type).subtype;
-      type2tc src_elem_type = to_array_type(src_type).subtype;
-
-      // Only allow direct element copying if types are identical
-      // This prevents issues when copying between char[] and short[].
-      can_copy_elements = base_type_eq(dest_elem_type, src_elem_type, ns);
-    }
-
-    // If we can't copy elements directly, fall back to operational model
-    if (!can_copy_elements)
-      return expr2tc();
-
-    // Original element-by-element copying logic (only for compatible types)
-    expr2tc result = gen_zero(dest_type);
-    constant_array2t &dest_data = to_constant_array2t(result);
-
-    uint64_t dest_elem_size =
-      type_byte_size(to_array_type(dest_type).subtype).to_uint64();
-    uint64_t bytes_left = num_of_bytes;
-    uint64_t dest_offset_left = dest_offset;
-    uint64_t src_offset_left = src_offset;
-
-    for (unsigned i = 0; i < dest_data.datatype_members.size(); i++)
-    {
-      BigInt position(i);
-      expr2tc dest_member = index2tc(
-        to_array_type(dest_type).subtype,
-        dest_obj,
-        constant_int2tc(get_uint32_type(), position));
-
-      expr2tc src_member;
-      if (is_array_type(src_type))
-      {
-        src_member = index2tc(
-          to_array_type(src_type).subtype,
-          src_obj,
-          constant_int2tc(get_uint32_type(), position));
-      }
-      else
-        src_member = src_obj; // Copy from non-array source
-
-      // Skip destination offset
-      if (dest_offset_left >= dest_elem_size)
-      {
-        dest_data.datatype_members[i] = dest_member;
-        dest_offset_left -= dest_elem_size;
-        if (src_offset_left >= dest_elem_size)
-          src_offset_left -= dest_elem_size;
-      }
-      else if (bytes_left > 0)
-      {
-        uint64_t bytes_to_copy =
-          std::min(bytes_left, dest_elem_size - dest_offset_left);
-
-        dest_data.datatype_members[i] = copy_memory_by_byte(
-          to_array_type(dest_type).subtype,
-          dest_member,
-          src_member,
-          is_array_type(src_type) ? to_array_type(src_type).subtype : src_type,
-          bytes_to_copy,
-          dest_offset_left,
-          src_offset_left,
-          ns,
-          big_endian);
-
-        if (!dest_data.datatype_members[i])
-          return expr2tc();
-
-        bytes_left -= bytes_to_copy;
-        dest_offset_left = 0;
-        src_offset_left = 0;
-      }
-      else
-        dest_data.datatype_members[i] = dest_member;
-    }
-    return result;
-  }
-
-  // Handle structs
-  if (is_struct_type(dest_type))
-  {
-    expr2tc result = gen_zero(dest_type);
-    constant_struct2t &dest_data = to_constant_struct2t(result);
-    uint64_t bytes_left = num_of_bytes;
-    uint64_t dest_offset_left = dest_offset;
-    uint64_t src_offset_left = src_offset;
-
-    // Check for bitfields:
-    // if any member is a bitfield, fall back to byte operations
-    for (unsigned i = 0; i < dest_data.datatype_members.size(); i++)
-    {
-      irep_idt name = to_struct_type(dest_type).member_names[i];
-
-      // Detect bitfields by name patterns or other indicators
-      if (
-        has_prefix(name.as_string(), "bit_field_pad$") ||
-        name.as_string().find("$bf") != std::string::npos ||
-        name.as_string().find(":") != std::string::npos)
-      {
-        return expr2tc();
-      }
-
-      // Also check if the type suggests bitfield usage
-      type2tc member_type = to_struct_type(dest_type).members[i];
-      if (is_signedbv_type(member_type) || is_unsignedbv_type(member_type))
-      {
-        unsigned width = member_type->get_width();
-        // If we have small odd-sized integers, likely bitfields
-        if (
-          width < 8 || (width > 8 && width < 16) || (width > 16 && width < 32))
-          return expr2tc();
-      }
-    }
-
-    for (unsigned i = 0; i < dest_data.datatype_members.size(); i++)
-    {
-      irep_idt name = to_struct_type(dest_type).member_names[i];
-
-      expr2tc dest_member =
-        member2tc(to_struct_type(dest_type).members[i], dest_obj, name);
-
-      expr2tc src_member;
-      if (
-        is_struct_type(src_type) && i < to_struct_type(src_type).members.size())
-      {
-        irep_idt src_name = to_struct_type(src_type).member_names[i];
-        src_member =
-          member2tc(to_struct_type(src_type).members[i], src_obj, src_name);
-      }
-      else
-        src_member = src_obj; // Fallback
-
-      type2tc current_member_type = dest_data.datatype_members[i]->type;
-      uint64_t member_size = type_byte_size(current_member_type).to_uint64();
-
-      // Skip destination offset
-      if (dest_offset_left >= member_size)
-      {
-        dest_data.datatype_members[i] = dest_member;
-        dest_offset_left -= member_size;
-        if (src_offset_left >= member_size)
-          src_offset_left -= member_size;
-      }
-      else if (bytes_left > 0)
-      {
-        uint64_t bytes_to_copy = std::min(bytes_left, member_size);
-
-        dest_data.datatype_members[i] = copy_memory_by_byte(
-          current_member_type,
-          dest_member,
-          src_member,
-          is_struct_type(src_type) &&
-              i < to_struct_type(src_type).members.size()
-            ? to_struct_type(src_type).members[i]
-            : src_type,
-          bytes_to_copy,
-          dest_offset_left,
-          src_offset_left,
-          ns,
-          big_endian);
-
-        if (!dest_data.datatype_members[i])
-          return expr2tc();
-
-        bytes_left -= bytes_to_copy;
-        dest_offset_left = 0;
-        src_offset_left = 0;
-      }
-      else
-        dest_data.datatype_members[i] = dest_member;
-    }
-    return result;
-  }
-
-  // Handle unions - use largest member
-  if (is_union_type(dest_type))
-  {
-    expr2tc result = gen_zero(dest_type);
-    constant_union2t &dest_data = to_constant_union2t(result);
-
-    uint64_t union_size = type_byte_size(dest_type).to_uint64();
-    size_t selected_member = to_union_type(dest_type).members.size();
-
-    for (size_t i = 0; i < to_union_type(dest_type).members.size(); i++)
-    {
-      if (
-        type_byte_size(to_union_type(dest_type).members[i]).to_uint64() ==
-        union_size)
-      {
-        selected_member = i;
-        break;
-      }
-    }
-
-    if (selected_member >= to_union_type(dest_type).members.size())
-      return expr2tc();
-
-    const irep_idt &name =
-      to_union_type(dest_type).member_names[selected_member];
-    const type2tc &member_type =
-      to_union_type(dest_type).members[selected_member];
-
-    expr2tc dest_member = member2tc(member_type, dest_obj, name);
-    expr2tc src_member;
-
-    if (is_union_type(src_type))
-    {
-      // Find corresponding member in source union
-      src_member = member2tc(member_type, src_obj, name);
-    }
-    else
-      src_member = src_obj;
-
-    dest_data.init_field = name;
-    dest_data.datatype_members[0] = copy_memory_by_byte(
-      member_type,
-      dest_member,
-      src_member,
-      is_union_type(src_type) ? member_type : src_type,
+    return copy_array_type(
+      dest_type,
+      dest_obj,
+      src_obj,
+      src_type,
       num_of_bytes,
       dest_offset,
       src_offset,
       ns,
       big_endian);
 
-    return dest_data.datatype_members[0] ? result : expr2tc();
-  }
+  if (is_struct_type(dest_type))
+    return copy_struct_type(
+      dest_type,
+      dest_obj,
+      src_obj,
+      src_type,
+      num_of_bytes,
+      dest_offset,
+      src_offset,
+      ns,
+      big_endian);
 
-  // Handle primitives - use byte operations for copying
+  if (is_union_type(dest_type))
+    return copy_union_type(
+      dest_type,
+      dest_obj,
+      src_obj,
+      src_type,
+      num_of_bytes,
+      dest_offset,
+      src_offset,
+      ns,
+      big_endian);
+
   if (is_scalar_type(dest_type))
   {
-    // Check if source is array type: if so, fall back to operational model
+    // Don't try to copy from arrays to scalars
     if (is_array_type(src_type))
       return expr2tc();
 
-    // Special case: if both types are 8-bit and we're copying the whole thing
-    if (
-      dest_type->get_width() == 8 && is_scalar_type(src_type) &&
-      src_type->get_width() == 8 && num_of_bytes == 1 && dest_offset == 0 &&
-      src_offset == 0)
-    {
-      return typecast2tc(dest_type, src_obj);
-    }
-
-    // For single-byte types, avoid byte operations if copying the entire value
-    if (dest_type->get_width() == 8 && num_of_bytes == 1 && dest_offset == 0)
-    {
-      if (
-        src_offset == 0 && is_scalar_type(src_type) &&
-        src_type->get_width() == 8)
-        return typecast2tc(dest_type, src_obj);
-      else if (src_offset == 0)
-        return typecast2tc(dest_type, src_obj);
-    }
-
-    // For multi-byte primitives or partial updates, use byte operations
-    expr2tc result = dest_obj;
-
-    for (size_t i = 0; i < num_of_bytes; i++)
-    {
-      expr2tc src_byte_offset =
-        constant_int2tc(get_int32_type(), BigInt(src_offset + i));
-      expr2tc dest_byte_offset =
-        constant_int2tc(get_int32_type(), BigInt(dest_offset + i));
-
-      expr2tc src_byte =
-        byte_extract2tc(get_uint8_type(), src_obj, src_byte_offset, big_endian);
-
-      // Avoid byte_update on 8-bit types - it's the entire value
-      if (dest_type->get_width() == 8 && num_of_bytes == 1)
-        return typecast2tc(dest_type, src_byte);
-
-      result = byte_update2tc(
-        dest_type, result, dest_byte_offset, src_byte, big_endian);
-    }
-
-    return result;
+    return copy_scalar_type(
+      dest_type,
+      dest_obj,
+      src_obj,
+      src_type,
+      num_of_bytes,
+      dest_offset,
+      src_offset,
+      big_endian);
   }
 
+  // Unsupported type combination
   return expr2tc();
 }
 
