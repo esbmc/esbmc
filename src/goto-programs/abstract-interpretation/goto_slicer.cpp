@@ -26,13 +26,25 @@ void slicer_domaint::output(std::ostream &out) const
 
 void slicer_domaint::assign(const expr2tc &e)
 {
-  auto assignment = to_code_assign2t(e);
+  const code_assign2t &assignment = to_code_assign2t(e);
 
   // We do not support pointers
   if(is_index2t(assignment.target))
   {
-    log_warning("Slicer does not support arrays: {}", *e);
-    throw "TODO: array support";
+    const index2t &array = to_index2t(assignment.target);
+    if(!is_symbol2t(array.source_value))
+      return;
+
+    if(should_skip_symbol(to_symbol2t(array.source_value).get_symbol_name()))
+      return;
+
+    std::set<std::string> vars;
+    symbolt::get_expr2_symbols(to_array_type(array.source_value->type).array_size, vars);
+    symbolt::get_expr2_symbols(array.index, vars);    
+    symbolt::get_expr2_symbols(assignment.source, vars);
+    dependencies[to_symbol2t(array.source_value).get_symbol_name()] = vars;
+
+    return;
   }
 
   
@@ -53,6 +65,10 @@ void slicer_domaint::assign(const expr2tc &e)
   std::set<std::string> vars;
   // Build-up dependencies over the RHS
   symbolt::get_expr2_symbols(assignment.source, vars);
+  if (is_array_type(assignment.source->type))
+  {
+      symbolt::get_expr2_symbols(to_array_type(assignment.source->type).array_size, vars);
+  }
   dependencies[to_symbol2t(assignment.target).get_symbol_name()] = vars;
 }
 
@@ -75,7 +91,13 @@ void slicer_domaint::declaration(const expr2tc &e)
   }
 
   std::set<std::string> vars;
+  if (is_array_type(A.type))
+  {
+      symbolt::get_expr2_symbols(to_array_type(A.type).array_size, vars);
+  }
+  
   dependencies[A.value.as_string()] = vars;
+
 }
 
 void slicer_domaint::transform(
