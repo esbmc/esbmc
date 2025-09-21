@@ -28,6 +28,14 @@ void slicer_domaint::assign(const expr2tc &e)
 {
   auto assignment = to_code_assign2t(e);
 
+  // We do not support pointers
+  if(is_index2t(assignment.target))
+  {
+    log_warning("Slicer does not support arrays: {}", *e);
+    throw "TODO: array support";
+  }
+
+  
   // We don't care about non-symbolic LHS
   if(!is_symbol2t(assignment.target))
     return;
