@@ -1136,47 +1136,65 @@ expr2tc not2t::do_simplify() const
     return and2tc(not2tc(or_expr.side_1), not2tc(or_expr.side_2));
   }
 
-  // Comparison negations
+  // Comparison negations - only for non-floating point types
   // !(x == y) = x != y
   if (is_equality2t(simp))
   {
     const equality2t &eq = to_equality2t(simp);
-    return notequal2tc(eq.side_1, eq.side_2);
+    if (is_floatbv_type(eq.side_1) || is_floatbv_type(eq.side_2))
+      return expr2tc();
+    else
+      return notequal2tc(eq.side_1, eq.side_2);
   }
 
   // !(x != y) = x == y
   if (is_notequal2t(simp))
   {
     const notequal2t &neq = to_notequal2t(simp);
-    return equality2tc(neq.side_1, neq.side_2);
+    if (is_floatbv_type(neq.side_1) || is_floatbv_type(neq.side_2))
+      return expr2tc();
+    else
+      return equality2tc(neq.side_1, neq.side_2);
   }
 
   // !(x < y) = x >= y
   if (is_lessthan2t(simp))
   {
     const lessthan2t &lt = to_lessthan2t(simp);
-    return greaterthanequal2tc(lt.side_1, lt.side_2);
+    if (is_floatbv_type(lt.side_1) || is_floatbv_type(lt.side_2))
+      return expr2tc();
+    else
+      return greaterthanequal2tc(lt.side_1, lt.side_2);
   }
 
   // !(x <= y) = x > y
   if (is_lessthanequal2t(simp))
   {
     const lessthanequal2t &lte = to_lessthanequal2t(simp);
-    return greaterthan2tc(lte.side_1, lte.side_2);
+    if (is_floatbv_type(lte.side_1) || is_floatbv_type(lte.side_2))
+      return expr2tc();
+    else
+      return greaterthan2tc(lte.side_1, lte.side_2);
   }
 
   // !(x > y) = x <= y
   if (is_greaterthan2t(simp))
   {
     const greaterthan2t &gt = to_greaterthan2t(simp);
-    return lessthanequal2tc(gt.side_1, gt.side_2);
+    if (is_floatbv_type(gt.side_1) || is_floatbv_type(gt.side_2))
+      return expr2tc();
+    else
+      return lessthanequal2tc(gt.side_1, gt.side_2);
   }
 
   // !(x >= y) = x < y
   if (is_greaterthanequal2t(simp))
   {
     const greaterthanequal2t &gte = to_greaterthanequal2t(simp);
-    return lessthan2tc(gte.side_1, gte.side_2);
+    if (is_floatbv_type(gte.side_1) || is_floatbv_type(gte.side_2))
+      return expr2tc();
+    else
+      return lessthan2tc(gte.side_1, gte.side_2);
   }
 
   if (!is_constant_bool2t(simp))
