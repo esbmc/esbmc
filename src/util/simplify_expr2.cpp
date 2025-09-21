@@ -1116,9 +1116,86 @@ expr2tc not2t::do_simplify() const
 {
   expr2tc simp = try_simplification(value);
 
+  // !!x = x (double negation)
   if (is_not2t(simp))
     // These negate.
     return to_not2t(simp).value;
+
+  // De Morgan's laws for logical operations
+  // !(x && y) = !x || !y
+  if (is_and2t(simp))
+  {
+    const and2t &and_expr = to_and2t(simp);
+    return or2tc(not2tc(and_expr.side_1), not2tc(and_expr.side_2));
+  }
+
+  // !(x || y) = !x && !y
+  if (is_or2t(simp))
+  {
+    const or2t &or_expr = to_or2t(simp);
+    return and2tc(not2tc(or_expr.side_1), not2tc(or_expr.side_2));
+  }
+
+  // Comparison negations - only for non-floating point types
+  // !(x == y) = x != y
+  if (is_equality2t(simp))
+  {
+    const equality2t &eq = to_equality2t(simp);
+    if (is_floatbv_type(eq.side_1) || is_floatbv_type(eq.side_2))
+      return expr2tc();
+    else
+      return notequal2tc(eq.side_1, eq.side_2);
+  }
+
+  // !(x != y) = x == y
+  if (is_notequal2t(simp))
+  {
+    const notequal2t &neq = to_notequal2t(simp);
+    if (is_floatbv_type(neq.side_1) || is_floatbv_type(neq.side_2))
+      return expr2tc();
+    else
+      return equality2tc(neq.side_1, neq.side_2);
+  }
+
+  // !(x < y) = x >= y
+  if (is_lessthan2t(simp))
+  {
+    const lessthan2t &lt = to_lessthan2t(simp);
+    if (is_floatbv_type(lt.side_1) || is_floatbv_type(lt.side_2))
+      return expr2tc();
+    else
+      return greaterthanequal2tc(lt.side_1, lt.side_2);
+  }
+
+  // !(x <= y) = x > y
+  if (is_lessthanequal2t(simp))
+  {
+    const lessthanequal2t &lte = to_lessthanequal2t(simp);
+    if (is_floatbv_type(lte.side_1) || is_floatbv_type(lte.side_2))
+      return expr2tc();
+    else
+      return greaterthan2tc(lte.side_1, lte.side_2);
+  }
+
+  // !(x > y) = x <= y
+  if (is_greaterthan2t(simp))
+  {
+    const greaterthan2t &gt = to_greaterthan2t(simp);
+    if (is_floatbv_type(gt.side_1) || is_floatbv_type(gt.side_2))
+      return expr2tc();
+    else
+      return lessthanequal2tc(gt.side_1, gt.side_2);
+  }
+
+  // !(x >= y) = x < y
+  if (is_greaterthanequal2t(simp))
+  {
+    const greaterthanequal2t &gte = to_greaterthanequal2t(simp);
+    if (is_floatbv_type(gte.side_1) || is_floatbv_type(gte.side_2))
+      return expr2tc();
+    else
+      return lessthan2tc(gte.side_1, gte.side_2);
+  }
 
   if (!is_constant_bool2t(simp))
     return expr2tc();
@@ -1298,6 +1375,20 @@ expr2tc and2t::do_simplify() const
   if (is_not2t(side_2) && to_not2t(side_2).value == side_1)
     return gen_false_expr();
 
+  // Absorption: x && (x || y) = x
+  if (is_or2t(side_2))
+  {
+    const or2t &or_expr = to_or2t(side_2);
+    if (or_expr.side_1 == side_1 || or_expr.side_2 == side_1)
+      return side_1;
+  }
+  if (is_or2t(side_1))
+  {
+    const or2t &or_expr = to_or2t(side_1);
+    if (or_expr.side_1 == side_2 || or_expr.side_2 == side_2)
+      return side_2;
+  }
+
   // Try associative simplification: (x && a) && (x && b) = x && (a && b)
   expr2tc simplified = simplify_associative_binary_op<and2t>(
     type,
@@ -1367,6 +1458,20 @@ expr2tc or2t::do_simplify() const
     const not2t &ref = to_not2t(side_2);
     if (ref.value == side_1)
       return gen_true_expr();
+  }
+
+  // Absorption: x || (x && y) = x
+  if (is_and2t(side_2))
+  {
+    const and2t &and_expr = to_and2t(side_2);
+    if (and_expr.side_1 == side_1 || and_expr.side_2 == side_1)
+      return side_1;
+  }
+  if (is_and2t(side_1))
+  {
+    const and2t &and_expr = to_and2t(side_1);
+    if (and_expr.side_1 == side_2 || and_expr.side_2 == side_2)
+      return side_2;
   }
 
   // Try associative simplification: (x || a) || (x || b) = x || (a || b)
@@ -1599,6 +1704,20 @@ expr2tc bitand2t::do_simplify() const
       return side_2; // x & 0 = 0
   }
 
+  // Absorption: x & (x | y) = x
+  if (is_bitor2t(side_2))
+  {
+    const bitor2t &bor = to_bitor2t(side_2);
+    if (bor.side_1 == side_1 || bor.side_2 == side_1)
+      return side_1;
+  }
+  if (is_bitor2t(side_1))
+  {
+    const bitor2t &bor = to_bitor2t(side_1);
+    if (bor.side_1 == side_2 || bor.side_2 == side_2)
+      return side_2;
+  }
+
   auto op = [](uint64_t op1, uint64_t op2) { return (op1 & op2); };
 
   // Is a vector operation ? Apply the op
@@ -1642,6 +1761,20 @@ expr2tc bitor2t::do_simplify() const
       return side_1; // x | 0 = x
     if (val == BigInt(-1))
       return side_2; // x | -1 = -1
+  }
+
+  // Absorption: x | (x & y) = x
+  if (is_bitand2t(side_2))
+  {
+    const bitand2t &band = to_bitand2t(side_2);
+    if (band.side_1 == side_1 || band.side_2 == side_1)
+      return side_1;
+  }
+  if (is_bitand2t(side_1))
+  {
+    const bitand2t &band = to_bitand2t(side_1);
+    if (band.side_1 == side_2 || band.side_2 == side_2)
+      return side_2;
   }
 
   auto op = [](uint64_t op1, uint64_t op2) { return (op1 | op2); };
@@ -1739,6 +1872,26 @@ expr2tc bitnot2t::do_simplify() const
   if (is_bitnot2t(value))
     return to_bitnot2t(value).value;
 
+  // De Morgan's law: ~(x & y) = (~x) | (~y)
+  if (is_bitand2t(value))
+  {
+    const bitand2t &band = to_bitand2t(value);
+    return bitor2tc(
+      type,
+      bitnot2tc(band.side_1->type, band.side_1),
+      bitnot2tc(band.side_2->type, band.side_2));
+  }
+
+  // De Morgan's law: ~(x | y) = (~x) & (~y)
+  if (is_bitor2t(value))
+  {
+    const bitor2t &bor = to_bitor2t(value);
+    return bitand2tc(
+      type,
+      bitnot2tc(bor.side_1->type, bor.side_1),
+      bitnot2tc(bor.side_2->type, bor.side_2));
+  }
+
   auto op = [](uint64_t op1, uint64_t) { return ~(op1); };
 
   if (is_constant_vector2t(value))
@@ -1787,6 +1940,10 @@ expr2tc lshr2t::do_simplify() const
 
 expr2tc ashr2t::do_simplify() const
 {
+  // x >> 0 = x
+  if (is_constant_int2t(side_2) && to_constant_int2t(side_2).value.is_zero())
+    return side_1;
+
   auto op = [](uint64_t op1, uint64_t op2) {
     /* simulating the arithmetic right shift in C++ requires LHS to be signed */
     return (int64_t)op1 >> op2;
@@ -2536,6 +2693,12 @@ expr2tc greaterthanequal2t::do_simplify() const
 {
   // Self-comparison: x >= x is always true (except for floats with NaN)
   if (side_1 == side_2 && !is_floatbv_type(side_1) && !is_floatbv_type(side_2))
+    return gen_true_expr();
+
+  // unsigned >= 0 = true
+  if (
+    is_unsignedbv_type(side_1) && is_constant_int2t(side_2) &&
+    to_constant_int2t(side_2).value.is_zero())
     return gen_true_expr();
 
   return simplify_relations<Greaterthanequaltor, greaterthanequal2t>(
