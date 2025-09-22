@@ -1,7 +1,7 @@
 /*
 
 ESBMC PARAMETERS
---no-unwinding-assertions --unwind 15 --no-div-by-zero-check --no-slice --memstats --ssa-no-location --interactive-ileaves --schedule --i386-macos --unroll-loops --document-subgoals --symex-trace
+--no-unwinding-assertions --unwind 15 --no-div-by-zero-check --no-slice --memstats --ssa-no-location --interactive-ileaves --schedule --i386-macos --document-subgoals --symex-trace
 
  * This is a RANDOMLY GENERATED PROGRAM.
  *
