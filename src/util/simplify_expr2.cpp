@@ -1132,7 +1132,7 @@ static bool index_values_equal(const expr2tc &idx1, const expr2tc &idx2)
   // Direct equality check first
   if (idx1 == idx2)
     return true;
-  
+
   // For constant integers, compare values regardless of signedness
   if (is_constant_int2t(idx1) && is_constant_int2t(idx2))
   {
@@ -1140,7 +1140,7 @@ static bool index_values_equal(const expr2tc &idx1, const expr2tc &idx2)
     const BigInt &val2 = to_constant_int2t(idx2).value;
     return val1 == val2;
   }
-    
+
   return false;
 }
 
