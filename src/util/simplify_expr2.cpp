@@ -2827,9 +2827,18 @@ static expr2tc obj_equals_addr_of(const expr2tc &a, const expr2tc &b)
 
 expr2tc same_object2t::do_simplify() const
 {
-  if (is_address_of2t(side_1) && is_address_of2t(side_2))
+  expr2tc op1 = side_1;
+  expr2tc op2 = side_2;
+
+  // Look through typecast expressions to find address_of expressions
+  if (is_typecast2t(op1))
+    op1 = to_typecast2t(op1).from;
+  if (is_typecast2t(op2))
+    op2 = to_typecast2t(op2).from;
+
+  if (is_address_of2t(op1) && is_address_of2t(op2))
     return obj_equals_addr_of(
-      to_address_of2t(side_1).ptr_obj, to_address_of2t(side_2).ptr_obj);
+      to_address_of2t(op1).ptr_obj, to_address_of2t(op2).ptr_obj);
 
   if (
     is_symbol2t(side_1) && is_symbol2t(side_2) &&
