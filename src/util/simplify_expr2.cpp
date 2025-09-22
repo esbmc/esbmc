@@ -2831,9 +2831,9 @@ expr2tc same_object2t::do_simplify() const
   expr2tc op2 = side_2;
 
   // Look through typecast expressions to find address_of expressions
-  if (is_typecast2t(op1))
+  while (is_typecast2t(op1))
     op1 = to_typecast2t(op1).from;
-  if (is_typecast2t(op2))
+  while (is_typecast2t(op2))
     op2 = to_typecast2t(op2).from;
 
   if (is_address_of2t(op1) && is_address_of2t(op2))
