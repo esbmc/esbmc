@@ -2840,10 +2840,11 @@ expr2tc same_object2t::do_simplify() const
     return obj_equals_addr_of(
       to_address_of2t(op1).ptr_obj, to_address_of2t(op2).ptr_obj);
 
+  // Check for NULL pointers
   if (
-    is_symbol2t(side_1) && is_symbol2t(side_2) &&
-    to_symbol2t(side_1).get_symbol_name() == "NULL" &&
-    to_symbol2t(side_1).get_symbol_name() == "NULL")
+    is_symbol2t(op1) && is_symbol2t(op2) &&
+    to_symbol2t(op1).get_symbol_name() == "NULL" &&
+    to_symbol2t(op2).get_symbol_name() == "NULL")
     return gen_true_expr();
 
   return expr2tc();
