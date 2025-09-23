@@ -889,6 +889,7 @@ __ESBMC_HIDE:;
             return esbmc_array_lengths[i];
     }
 
+    // not registered
     return 0;
 }
 
@@ -897,15 +898,22 @@ __ESBMC_HIDE:;
     _ESBMC_element_null_check(from_array != 0);
     _ESBMC_zero_size_check(size_of != 0);
     _ESBMC_zero_size_check(from_size != 0);
+    size_t bytes = from_size * size_of;
+    void *to_array = malloc(bytes);
+    __builtin_memcpy(to_array, from_array, bytes);
 
-    void *to_array = calloc(from_size, size_of);
+    _ESBMC_store_array(to_array, from_size);
+    return to_array;
+}
 
-    for (size_t i = 0; i < from_size; ++i) {
-        for (size_t j = 0; j < size_of; ++j) {
-            ((char *)to_array)[i * size_of + j] = ((char *)from_array)[i * size_of + j];
-        }
-    }
-
+void *_ESBMC_arrcpy_static(const void *from_array, size_t elem_count, size_t size_of) {
+__ESBMC_HIDE:;
+    _ESBMC_element_null_check(from_array != 0);
+    _ESBMC_zero_size_check(size_of != 0);
+    _ESBMC_zero_size_check(elem_count != 0);
+    size_t bytes = elem_count * size_of;
+    void *to_array = malloc(bytes);
+    __builtin_memcpy(to_array, from_array, bytes);
     return to_array;
 }
 

@@ -5,10 +5,8 @@ uint constant x = 1;
 uint constant y = x;
 
 contract Base {
-    uint[1][2] arr;
-    uint8[2] arr2 = [1, 2];
+    int[y] arr;
     constructor() {
-        assert(arr[0].length == 1);
-        assert(arr.length == 2);
+        assert(arr[y] == 0);
     }
 }

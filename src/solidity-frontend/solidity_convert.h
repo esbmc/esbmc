@@ -386,6 +386,9 @@ protected:
   void get_arrcpy_function_call(
     const locationt &loc,
     side_effect_expr_function_callt &calc_call);
+  void get_arrcpy_static_function_call(
+    const locationt &loc,
+    side_effect_expr_function_callt &calc_call);
   void get_str_assign_function_call(
     const locationt &loc,
     side_effect_expr_function_callt &_call);
@@ -404,7 +407,7 @@ protected:
     const exprt &dyn_arr,
     const exprt &size_expr,
     exprt &store_call);
-  bool has_array_push_pop_length(const nlohmann::json &node);
+  bool check_array_push_pop_length(const nlohmann::json &node);
 
   // tuple
   bool get_tuple_definition(const nlohmann::json &ast_node);
@@ -518,6 +521,7 @@ protected:
     locationt location);
   
   bool get_constant_value(const int ref_id, std::string &value);
+  bool get_array_pointer_type(const typet& base_type, typet &new_type);
 
   bool get_ctor_call_id(const std::string &contract_name, std::string &ctor_id);
   std::string get_explicit_ctor_call_id(const std::string &contract_name);
@@ -731,7 +735,7 @@ protected:
   bool is_pointer_check;
 
   // dynamic array
-  bool is_array_member;
+  bool has_array_push_pop_length;
 
   // NONDET
   side_effect_expr_function_callt nondet_bool_expr;
