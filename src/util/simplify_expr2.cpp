@@ -968,9 +968,21 @@ expr2tc pointer_offset2t::do_simplify() const
           return offs;
       }
     }
+
     if (is_member2t(addrof.ptr_obj))
     {
       const member2t &member = to_member2t(addrof.ptr_obj);
+
+      // First, try to use our existing compute_pointer_offset function
+      // This should handle most struct member cases
+      expr2tc offs = try_simplification(compute_pointer_offset(addrof.ptr_obj));
+      if (is_constant_int2t(offs))
+        return offs;
+
+      // Handle union members - all have offset 0 relative to union base
+      if (is_union_type(member.source_value->type))
+        return pointer_offset2tc(type, member.source_value);
+
       if (is_struct_type(member.source_value->type))
       {
         const struct_union_data &struct_data =
