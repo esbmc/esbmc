@@ -49,7 +49,6 @@ solidity_convertert::solidity_convertert(
     is_bound(false),
     is_reentry_check(false),
     is_pointer_check(true),
-    has_array_push_pop_length(true),
     nondet_bool_expr(),
     nondet_uint_expr()
 {
@@ -74,9 +73,6 @@ solidity_convertert::solidity_convertert(
       : config.options.get_option("no-standard-checks");
   if (!no_pointer_check.empty())
     is_pointer_check = false;
-
-  if (!check_array_push_pop_length(src_ast_json["nodes"]))
-    has_array_push_pop_length = false;
 
   // initialize nondet_bool
   if (
@@ -1544,19 +1540,17 @@ bool solidity_convertert::get_var_decl(
         return true;
 
       // construct statement _ESBMC_store_array(zz, 10);
-      if (has_array_push_pop_length)
-      {
-        exprt func_call;
-        store_update_dyn_array(symbol_expr(added_symbol), size_expr, func_call);
+      exprt func_call;
+      store_update_dyn_array(symbol_expr(added_symbol), size_expr, func_call);
 
-        if (is_state_var && !is_inherited)
-        {
-          // move to ctor initializer
-          move_to_initializer(func_call);
-        }
-        else
-          move_to_back_block(func_call);
+      if (is_state_var && !is_inherited)
+      {
+        // move to ctor initializer
+        move_to_initializer(func_call);
       }
+      else
+        move_to_back_block(func_call);
+      
     }
     else if (val.is_symbol())
     {
@@ -6676,9 +6670,7 @@ bool solidity_convertert::get_binary_operator_expr(
 
       // do array copy
       side_effect_expr_function_callt acpy_call;
-      if (
-        lt_sol == "ARRAY" ||
-        (lt_sol == "DYNARRAY" && !has_array_push_pop_length))
+      if (lt_sol == "ARRAY")
         get_arrcpy_static_function_call(lhs.location(), acpy_call);
       else if (lt_sol == "DYNARRAY")
         get_arrcpy_function_call(lhs.location(), acpy_call);
@@ -6716,10 +6708,7 @@ bool solidity_convertert::get_binary_operator_expr(
 
       // do array copy
       side_effect_expr_function_callt acpy_call;
-      if (has_array_push_pop_length)
-        get_arrcpy_function_call(lhs.location(), acpy_call);
-      else
-        get_arrcpy_static_function_call(lhs.location(), acpy_call);
+      get_arrcpy_function_call(lhs.location(), acpy_call);
       acpy_call.arguments().push_back(rhs);
       acpy_call.arguments().push_back(size_expr);
       acpy_call.arguments().push_back(size_of_expr);
@@ -6750,10 +6739,8 @@ bool solidity_convertert::get_binary_operator_expr(
 
       // do array copy
       side_effect_expr_function_callt acpy_call;
-      if (has_array_push_pop_length)
-        get_arrcpy_function_call(lhs.location(), acpy_call);
-      else
-        get_arrcpy_static_function_call(lhs.location(), acpy_call);
+      get_arrcpy_function_call(lhs.location(), acpy_call);
+
       acpy_call.arguments().push_back(rhs);
       acpy_call.arguments().push_back(size_expr);
       acpy_call.arguments().push_back(size_of_expr);

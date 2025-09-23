@@ -734,9 +734,6 @@ protected:
   // pointer-check setting
   bool is_pointer_check;
 
-  // dynamic array
-  bool has_array_push_pop_length;
-
   // NONDET
   side_effect_expr_function_callt nondet_bool_expr;
   side_effect_expr_function_callt nondet_uint_expr;
