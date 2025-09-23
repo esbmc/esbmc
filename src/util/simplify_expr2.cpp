@@ -951,13 +951,7 @@ expr2tc pointer_offset2t::do_simplify() const
   // XXX - this could be better. But the current implementation catches most
   // cases that ESBMC produces internally.
 
-  if (is_symbol2t(ptr_obj))
-  {
-    const symbol2t &sym = to_symbol2t(ptr_obj);
-    if (sym.get_symbol_name() == "NULL")
-      return gen_zero(type);
-  }
-  else if (is_address_of2t(ptr_obj))
+  if (is_address_of2t(ptr_obj))
   {
     const address_of2t &addrof = to_address_of2t(ptr_obj);
     if (is_symbol2t(addrof.ptr_obj) || is_constant_string2t(addrof.ptr_obj))
