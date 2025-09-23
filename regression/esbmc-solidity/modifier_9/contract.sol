@@ -1,23 +1,17 @@
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-contract Test {
+contract D {
+    uint x;
+    uint y;
 
-    uint public x;
-
-    function checkValue() internal view returns (bool) {
-        return x == 1;
-    }
-
-    modifier onlyWhenXIsOne() {
-        require(checkValue(), "x is not 1");
+    modifier check() {
         _;
+        assert(0 == 1);
     }
 
-    function setX(uint _x) public {
-        x = _x;
-    }
-
-    function restrictedFunction() public onlyWhenXIsOne {
-        assert(1==0);
+    function func2() public check returns (uint) {
+        x = 1;
+        return 0;
     }
 }
