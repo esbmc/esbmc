@@ -3672,11 +3672,61 @@ bool solidity_convertert::get_func_modifier(
     if (get_block(mod_def["body"], mod_body))
       return true;
 
-    for (auto &stmt : mod_body.operands())
+    // merge the body
+    auto stmt = mod_body.operands().begin();
+    while (stmt != mod_body.operands().end())
     {
-      if (stmt.get_bool("#is_modifier_placeholder"))
-        stmt = body_exprt;
+      if (stmt->get_bool("#is_modifier_placeholder"))
+      {
+        stmt = mod_body.operands().erase(stmt);
+        stmt = mod_body.operands().insert(
+          stmt, body_exprt.operands().begin(), body_exprt.operands().end());
+      }
+      else
+        ++stmt;
     }
+
+    if (has_return)
+    {
+      // int ret
+      // ...
+      // ret = func_modifier();
+      // ...
+      // return ret // insert in the end
+
+      // 1. add the aux decl in the front
+      std::string ret_name, ret_id;
+      get_aux_var(ret_name, ret_id);
+      symbolt ret_symbol;
+      get_default_symbol(
+        ret_symbol, debug_mode, aux_type.return_type(), ret_name, ret_id, loc);
+      // move the symbol to the context
+      symbolt &ret_sym = *move_symbol_to_context(ret_symbol);
+      code_declt ret_decl(symbol_expr(ret_sym));
+      //ret_sym.value = func_modifier;
+      // ret_decl.operands().push_back(func_modifier);
+      mod_body.operands().insert(mod_body.operands().begin(), ret_decl);
+
+      // 2. replace every "return x" to "aux_var = x"
+      for (auto op = mod_body.operands().begin();
+           op != mod_body.operands().end();
+           ++op)
+      {
+        if (op->is_code() && op->statement() == "return")
+        {
+          // make assignment
+          exprt rhs = op->op0();
+          code_assignt assign(symbol_expr(ret_sym), rhs);
+          *op = assign;
+        }
+      }
+
+      // 3. insert "return aux_var" in the end
+      code_returnt return_expr = code_returnt();
+      return_expr.return_value() = symbol_expr(ret_sym);
+      mod_body.move_to_operands(return_expr);
+    }
+
     a_sym.value = mod_body;
 
     // reset
@@ -8979,7 +9029,8 @@ bool solidity_convertert::get_dynamic_pool(
  * @return true if any array push/pop/length usage is found (excluding bytes).
  * @return false otherwise.
  */
-bool solidity_convertert::check_array_push_pop_length(const nlohmann::json &node)
+bool solidity_convertert::check_array_push_pop_length(
+  const nlohmann::json &node)
 {
   auto is_array_type_not_bytes = [](const nlohmann::json &type_desc) -> bool
   {
