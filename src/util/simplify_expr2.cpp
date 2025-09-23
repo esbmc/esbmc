@@ -50,8 +50,16 @@ expr2tc expr2t::simplify() const
 
     for (unsigned int idx = 0; idx < get_num_sub_exprs(); idx++)
     {
-      const expr2tc *e = get_sub_expr(idx);
       expr2tc tmp;
+      const expr2tc *e = get_sub_expr(idx);
+
+      if (expr_id == with_id && idx == 0)
+      {
+        // Don't simplifying all the sub-operands for with
+        // as they have already been simplified
+        newoperands.push_back(tmp);
+        continue;
+      }
 
       if (!is_nil_expr(*e))
       {
