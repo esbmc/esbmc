@@ -2887,21 +2887,57 @@ expr2tc overflow2t::do_simplify() const
   return expr2tc();
 }
 
-// Heavily inspired by cbmc's simplify_exprt::objects_equal_address_of
+static expr2tc obj_equals_addr_of(const expr2tc &a, const expr2tc &b);
+
+static expr2tc handle_symmetric_cases(const expr2tc &a, const expr2tc &b)
+{
+  // Array element vs base symbol
+  if (is_index2t(a) && is_symbol2t(b))
+    return obj_equals_addr_of(to_index2t(a).source_value, b);
+  if (is_symbol2t(a) && is_index2t(b))
+    return obj_equals_addr_of(to_index2t(b).source_value, a);
+
+  // Struct member vs base symbol
+  if (is_member2t(a) && is_symbol2t(b))
+    return obj_equals_addr_of(to_member2t(a).source_value, b);
+  if (is_symbol2t(a) && is_member2t(b))
+    return obj_equals_addr_of(to_member2t(b).source_value, a);
+
+  // Array element vs struct member
+  if (is_index2t(a) && is_member2t(b))
+    return obj_equals_addr_of(
+      to_index2t(a).source_value, to_member2t(b).source_value);
+  if (is_member2t(a) && is_index2t(b))
+    return obj_equals_addr_of(
+      to_member2t(a).source_value, to_index2t(b).source_value);
+
+  return expr2tc(); // no match
+}
+
 static expr2tc obj_equals_addr_of(const expr2tc &a, const expr2tc &b)
 {
   if (is_symbol2t(a) && is_symbol2t(b))
   {
     if (a == b)
       return gen_true_expr();
+    else
+      // In symbolic execution, different symbols could potentially
+      // have the same value, so let the SMT solver decide
+      return expr2tc();
   }
   else if (is_index2t(a) && is_index2t(b))
   {
+    // For array elements, check if they belong to the same base array
+    // In ESBMC's semantics, different elements of the same array
+    // are considered part of the same object
     return obj_equals_addr_of(
       to_index2t(a).source_value, to_index2t(b).source_value);
   }
   else if (is_member2t(a) && is_member2t(b))
   {
+    // For struct members, check if they belong to the same base struct
+    // In ESBMC's semantics, different members of the same struct
+    // are considered part of the same object
     return obj_equals_addr_of(
       to_member2t(a).source_value, to_member2t(b).source_value);
   }
@@ -2914,7 +2950,21 @@ static expr2tc obj_equals_addr_of(const expr2tc &a, const expr2tc &b)
     return gen_false_expr();
   }
 
+  expr2tc res = handle_symmetric_cases(a, b);
+  if (!is_nil_expr(res))
+    return res;
+
+  // We can't determine if they are the same object
   return expr2tc();
+}
+
+static bool is_null_pointer(const expr2tc &expr)
+{
+  // Check for explicit NULL symbol
+  if (is_symbol2t(expr) && to_symbol2t(expr).get_symbol_name() == "NULL")
+    return true;
+
+  return false;
 }
 
 expr2tc same_object2t::do_simplify() const
@@ -2922,23 +2972,51 @@ expr2tc same_object2t::do_simplify() const
   expr2tc op1 = side_1;
   expr2tc op2 = side_2;
 
-  // Look through typecast expressions to find address_of expressions
+  // Look through typecast expressions to find the actual operands
   while (is_typecast2t(op1))
     op1 = to_typecast2t(op1).from;
   while (is_typecast2t(op2))
     op2 = to_typecast2t(op2).from;
 
+  // Handle NULL pointer comparisons first
+  bool op1_is_null = is_null_pointer(op1);
+  bool op2_is_null = is_null_pointer(op2);
+
+  if (op1_is_null && op2_is_null)
+    return gen_true_expr(); // Both NULL
+
+  // Handle address-of expressions
   if (is_address_of2t(op1) && is_address_of2t(op2))
     return obj_equals_addr_of(
       to_address_of2t(op1).ptr_obj, to_address_of2t(op2).ptr_obj);
 
-  // Check for NULL pointers
-  if (
-    is_symbol2t(op1) && is_symbol2t(op2) &&
-    to_symbol2t(op1).get_symbol_name() == "NULL" &&
-    to_symbol2t(op2).get_symbol_name() == "NULL")
-    return gen_true_expr();
+  // Handle direct pointer comparisons (symbols that represent pointers)
+  if (is_symbol2t(op1) && is_symbol2t(op2))
+  {
+    if (op1 == op2)
+      return gen_true_expr();
+    else
+      // In symbolic execution, different symbols could potentially
+      // have the same value, so let the SMT solver decide
+      return expr2tc();
+  }
 
+  // Handle mixed cases where one is address_of and other is symbol
+  if (is_address_of2t(op1) && is_symbol2t(op2))
+  {
+    // This would be comparing &x with some pointer variable p
+    // They can only be the same if p points to x, but we can't determine
+    // that statically in general case
+    return expr2tc();
+  }
+
+  if (is_symbol2t(op1) && is_address_of2t(op2))
+  {
+    // Same as above, reversed
+    return expr2tc();
+  }
+
+  // If we can't simplify, return empty expression
   return expr2tc();
 }
 
