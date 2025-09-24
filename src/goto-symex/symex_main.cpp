@@ -14,7 +14,6 @@
 #include <util/migrate.h>
 #include <util/prefix.h>
 #include <util/pretty.h>
-#include <util/simplify_expr.h>
 #include <util/std_expr.h>
 #include <util/time_stopping.h>
 

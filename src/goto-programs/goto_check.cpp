@@ -7,7 +7,6 @@
 #include <util/guard.h>
 #include <util/i2string.h>
 #include <util/location.h>
-#include <util/simplify_expr.h>
 #include <util/mp_arith.h>
 
 class goto_checkt
