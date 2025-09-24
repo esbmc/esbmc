@@ -952,20 +952,10 @@ static expr2tc simplify_object(const expr2tc &expr)
   {
     if (is_pointer_type(expr->type))
     {
-      expr2tc left_op, right_op;
-
-      if (is_add2t(expr))
-      {
-        const add2t &add_expr = to_add2t(expr);
-        left_op = add_expr.side_1;
-        right_op = add_expr.side_2;
-      }
-      else // is_sub2t
-      {
-        const sub2t &sub_expr = to_sub2t(expr);
-        left_op = sub_expr.side_1;
-        right_op = sub_expr.side_2;
-      }
+      expr2tc left_op =
+        is_add2t(expr) ? to_add2t(expr).side_1 : to_sub2t(expr).side_1;
+      expr2tc right_op =
+        is_add2t(expr) ? to_add2t(expr).side_2 : to_sub2t(expr).side_2;
 
       // Look for pointer operands - prioritize left side, then right side
       if (is_pointer_type(left_op->type))
@@ -973,8 +963,7 @@ static expr2tc simplify_object(const expr2tc &expr)
         expr2tc simplified = simplify_object(left_op);
         return is_nil_expr(simplified) ? left_op : simplified;
       }
-
-      if (is_pointer_type(right_op->type))
+      else if (is_pointer_type(right_op->type))
       {
         expr2tc simplified = simplify_object(right_op);
         return is_nil_expr(simplified) ? right_op : simplified;
