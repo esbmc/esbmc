@@ -946,6 +946,64 @@ expr2tc member2t::do_simplify() const
   return expr2tc();
 }
 
+static expr2tc simplify_object(const expr2tc &expr)
+{
+  if (is_add2t(expr) || is_sub2t(expr))
+  {
+    if (is_pointer_type(expr->type))
+    {
+      expr2tc left_op, right_op;
+
+      if (is_add2t(expr))
+      {
+        const add2t &add_expr = to_add2t(expr);
+        left_op = add_expr.side_1;
+        right_op = add_expr.side_2;
+      }
+      else // is_sub2t
+      {
+        const sub2t &sub_expr = to_sub2t(expr);
+        left_op = sub_expr.side_1;
+        right_op = sub_expr.side_2;
+      }
+
+      // Look for pointer operands - prioritize left side, then right side
+      if (is_pointer_type(left_op->type))
+      {
+        expr2tc simplified = simplify_object(left_op);
+        return is_nil_expr(simplified) ? left_op : simplified;
+      }
+
+      if (is_pointer_type(right_op->type))
+      {
+        expr2tc simplified = simplify_object(right_op);
+        return is_nil_expr(simplified) ? right_op : simplified;
+      }
+    }
+  }
+  else if (is_typecast2t(expr))
+  {
+    const typecast2t &cast_expr = to_typecast2t(expr);
+    if (is_pointer_type(cast_expr.from->type))
+    {
+      expr2tc simplified = simplify_object(cast_expr.from);
+      return is_nil_expr(simplified) ? cast_expr.from : simplified;
+    }
+  }
+
+  return expr2tc();
+}
+
+expr2tc pointer_object2t::do_simplify() const
+{
+  expr2tc simplified_obj = simplify_object(ptr_obj);
+
+  if (!is_nil_expr(simplified_obj))
+    return pointer_object2tc(type, simplified_obj);
+
+  return expr2tc();
+}
+
 expr2tc pointer_offset2t::do_simplify() const
 {
   // XXX - this could be better. But the current implementation catches most
