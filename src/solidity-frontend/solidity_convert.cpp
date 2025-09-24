@@ -35,7 +35,6 @@ solidity_convertert::solidity_convertert(
     contract_path(_contract_path),
     current_functionDecl(nullptr),
     current_forStmt(nullptr),
-    current_typeName(nullptr),
     expr_frontBlockDecl(code_blockt()),
     expr_backBlockDecl(code_blockt()),
     ctor_frontBlockDecl(code_blockt()),
@@ -1335,11 +1334,9 @@ bool solidity_convertert::get_var_decl(
   // For array, do NOT use ["typeName"]. Otherwise, it will cause problem
   // when populating typet in get_cast
 
-  const nlohmann::json *old_typeName = current_typeName;
-  current_typeName = &ast_node["typeName"];
-  if (get_type_description(ast_node["typeName"]["typeDescriptions"], t))
+  if (get_type_description(
+        ast_node, ast_node["typeName"]["typeDescriptions"], t))
     return true;
-  current_typeName = old_typeName;
 
   bool is_contract =
     t.get("#sol_type").as_string() == "CONTRACT" ? true : false;
@@ -1447,6 +1444,20 @@ bool solidity_convertert::get_var_decl(
   // 7. populate init value if there is any
   // special handling for array/dynarray
   std::string t_sol_type = t.get("#sol_type").as_string();
+
+  // this pointer
+  exprt this_expr;
+  if (current_functionDecl)
+  {
+    if (get_func_decl_this_ref(*current_functionDecl, this_expr))
+      return true;
+  }
+  else
+  {
+    if (get_ctor_decl_this_ref(ast_node, this_expr))
+      return true;
+  }
+
   exprt val;
   if (t_sol_type == "ARRAY" || t_sol_type == "ARRAY_LITERAL")
   {
@@ -1541,16 +1552,14 @@ bool solidity_convertert::get_var_decl(
 
       // construct statement _ESBMC_store_array(zz, 10);
       exprt func_call;
-      store_update_dyn_array(symbol_expr(added_symbol), size_expr, func_call);
-
-      if (is_state_var && !is_inherited)
-      {
-        // move to ctor initializer
-        move_to_initializer(func_call);
-      }
+      if (is_state_var)
+        store_update_dyn_array(
+          member_exprt(this_expr, added_symbol.name, added_symbol.type),
+          size_expr,
+          func_call);
       else
-        move_to_back_block(func_call);
-      
+        store_update_dyn_array(symbol_expr(added_symbol), size_expr, func_call);
+      move_to_back_block(func_call);
     }
     else if (val.is_symbol())
     {
@@ -1574,7 +1583,6 @@ bool solidity_convertert::get_var_decl(
 
       side_effect_expr_function_callt acpy_call;
       // we will store the array inside the copy function
-      // so no need for store_update_dyn_array
       get_arrcpy_function_call(location_begin, acpy_call);
       acpy_call.arguments().push_back(val);
       acpy_call.arguments().push_back(size_expr);
@@ -1584,6 +1592,17 @@ bool solidity_convertert::get_var_decl(
       // set as rvalue
       added_symbol.value = acpy_call;
       decl.operands().push_back(acpy_call);
+
+      // store length
+      exprt func_call;
+      if (is_state_var)
+        store_update_dyn_array(
+          member_exprt(this_expr, added_symbol.name, added_symbol.type),
+          size_expr,
+          func_call);
+      else
+        store_update_dyn_array(symbol_expr(added_symbol), size_expr, func_call);
+      move_to_back_block(func_call);
     }
     else
     {
@@ -1637,17 +1656,6 @@ bool solidity_convertert::get_var_decl(
     inits.op0() = op0;
 
     // address => this->
-    exprt this_expr;
-    if (current_functionDecl)
-    {
-      if (get_func_decl_this_ref(*current_functionDecl, this_expr))
-        return true;
-    }
-    else
-    {
-      if (get_ctor_decl_this_ref(ast_node, this_expr))
-        return true;
-    }
     exprt addr_expr = member_exprt(this_expr, "$address", addr_t);
     solidity_gen_typecast(
       ns, addr_expr, to_struct_type(map_t).components().at(1).type());
@@ -1865,7 +1873,6 @@ bool solidity_convertert::get_contract_definition(const std::string &c_name)
   auto old_current_functionName = current_functionName;
   auto old_current_functionDecl = current_functionDecl;
   auto old_current_forStmt = current_forStmt;
-  auto old_current_typeName = current_typeName;
   auto old_initializers = initializers;
 
   // reset
@@ -1947,7 +1954,6 @@ bool solidity_convertert::get_contract_definition(const std::string &c_name)
   current_functionName = old_current_functionName;
   current_functionDecl = old_current_functionDecl;
   current_forStmt = old_current_forStmt;
-  current_typeName = old_current_typeName;
   initializers = old_initializers;
 
   return false;
@@ -3815,7 +3821,6 @@ void solidity_convertert::reset_auxiliary_vars()
   current_functionName = "";
   current_functionDecl = nullptr;
   current_forStmt = nullptr;
-  current_typeName = nullptr;
   initializers.clear();
 }
 
@@ -7278,11 +7283,8 @@ bool solidity_convertert::get_var_decl_ref(
     return true;
 
   typet type;
-  const nlohmann::json *old_typeName = current_typeName;
-  current_typeName = &decl["typeName"];
-  if (get_type_description(decl["typeName"]["typeDescriptions"], type))
+  if (get_type_description(decl, decl["typeName"]["typeDescriptions"], type))
     return true;
-  current_typeName = old_typeName;
 
   bool is_global_static_mapping =
     type.get("#sol_type") == "MAPPING" && type.is_array();
@@ -7946,6 +7948,14 @@ bool solidity_convertert::get_type_description(
   const nlohmann::json &type_name,
   typet &new_type)
 {
+  return get_type_description(empty_json, type_name, new_type);
+}
+
+bool solidity_convertert::get_type_description(
+  const nlohmann::json &decl,
+  const nlohmann::json &type_name,
+  typet &new_type)
+{
   // For Solidity rule type-name:
   SolidityGrammar::TypeNameT type = SolidityGrammar::get_type_name_t(type_name);
 
@@ -8081,23 +8091,18 @@ bool solidity_convertert::get_type_description(
             * width: 32
             * #cpp_type: signed_int
     */
-
-    // For now we assume the current_typeName is set corretly
-    assert(current_typeName != nullptr);
-    assert((*current_typeName).contains("baseType"));
-
-    auto old = current_typeName;
-    current_typeName = &((*current_typeName)["baseType"]);
+    assert(decl["typeName"].contains("baseType"));
 
     // get base: e.g. int256[4]
     typet base_type;
     if (get_type_description(
-          (*current_typeName)["baseType"]["typeDescriptions"], base_type))
+          decl["typeName"],
+          decl["typeName"]["baseType"]["typeDescriptions"],
+          base_type))
       return true;
-    current_typeName = old;
 
     // wrap it:
-    if (get_array_pointer_type(base_type, new_type))
+    if (get_array_type(decl, base_type, new_type))
       return true;
 
     break;
@@ -8114,16 +8119,15 @@ bool solidity_convertert::get_type_description(
 
     typet the_type;
     exprt the_size;
-    if (current_typeName != nullptr)
+    if (!decl.empty())
     {
       // access from get_var_decl
-      assert((*current_typeName).contains("baseType"));
+      assert(decl["typeName"].contains("baseType"));
       if (get_type_description(
-            (*current_typeName)["baseType"]["typeDescriptions"], the_type))
+            decl["typeName"]["baseType"]["typeDescriptions"], the_type))
         return true;
 
-      new_type = gen_pointer_type(the_type);
-      if (get_array_pointer_type(the_type, new_type))
+      if (get_array_type(decl, the_type, new_type))
         return true;
     }
     else if (type == SolidityGrammar::TypeNameT::ArrayTypeName)
@@ -9900,12 +9904,9 @@ bool solidity_convertert::get_parameter_list(
     const nlohmann::json &rtn_type = type_name["parameters"].at(0);
     if (rtn_type.contains("typeName"))
     {
-      const nlohmann::json *old_typeName = current_typeName;
-      current_typeName = &rtn_type["typeName"];
       if (get_type_description(
-            rtn_type["typeName"]["typeDescriptions"], new_type))
+            rtn_type, rtn_type["typeName"]["typeDescriptions"], new_type))
         return true;
-      current_typeName = old_typeName;
     }
     else
     {
@@ -10611,22 +10612,23 @@ bool solidity_convertert::get_constant_value(
   return true;
 }
 
-bool solidity_convertert::get_array_pointer_type(
+bool solidity_convertert::get_array_type(
+  const nlohmann::json &decl,
   const typet &base_type,
   typet &new_type)
 {
   new_type = gen_pointer_type(base_type);
-  if ((*current_typeName).contains("length"))
+  if (decl["typeName"].contains("length"))
   {
     std::string length;
-    if ((*current_typeName)["length"].contains("value"))
-      length = (*current_typeName)["length"]["value"].get<std::string>();
+    if (decl["typeName"]["length"].contains("value"))
+      length = decl["typeName"]["length"]["value"].get<std::string>();
     else
     {
       // assume it's a constant
-      assert((*current_typeName)["length"].contains("referencedDeclaration"));
+      assert(decl["typeName"]["length"].contains("referencedDeclaration"));
       if (get_constant_value(
-            (*current_typeName)["length"]["referencedDeclaration"], length))
+            decl["typeName"]["length"]["referencedDeclaration"], length))
         return true;
     }
     new_type.set("#sol_array_size", length);
