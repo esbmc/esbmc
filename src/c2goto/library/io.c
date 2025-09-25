@@ -25,6 +25,8 @@
 #undef getchar
 
 static size_t __esbmc_buffer_pending = 0;
+static int __esbmc_error_state = 0;
+static int __esbmc_stream_mode = 0; // 0=read-only, 1=write-only, 2=read-write
 
 int putchar(int c)
 {
@@ -200,8 +202,7 @@ __ESBMC_HIDE:;
 int ferror(FILE *stream)
 {
 __ESBMC_HIDE:;
-  // just return nondet
-  return nondet_int();
+  return __esbmc_error_state;
 }
 
 int fileno(FILE *stream)
@@ -214,13 +215,26 @@ __ESBMC_HIDE:;
 int fputs(const char *s, FILE *stream)
 {
 __ESBMC_HIDE:;
-  // Always set pending data when fputs is called with valid parameters
-  if (stream != NULL)
+  // Check if stream is writable (mode 1 or 2)
+  if (__esbmc_stream_mode == 0)
   {
-    __esbmc_buffer_pending = nondet_uint();
-    __ESBMC_assume(__esbmc_buffer_pending > 0);
+    // Read-only stream - always fail
+    __esbmc_error_state = nondet_int();
+    __ESBMC_assume(__esbmc_error_state != 0);
+    return EOF;
   }
-  return nondet_int();
+  else
+  {
+    // Writable stream - succeed
+    if (stream != NULL)
+    {
+      __esbmc_buffer_pending = nondet_uint();
+      __ESBMC_assume(__esbmc_buffer_pending > 0);
+    }
+    int ret = nondet_int();
+    __ESBMC_assume(ret >= 0);
+    return ret;
+  }
 }
 
 int fflush(FILE *stream)
@@ -316,6 +330,26 @@ FILE *fmemopen(void *buf, size_t size, const char *mode)
 {
 __ESBMC_HIDE:;
   __esbmc_buffer_pending = 0; // Initialize to empty buffer
+  __esbmc_error_state = 0;    // Initialize to no error
+
+  // Parse mode to determine stream capabilities
+  if (mode != NULL)
+  {
+    if (mode[0] == 'r' && mode[1] == '\0')
+      __esbmc_stream_mode = 0; // read-only
+    else if (mode[0] == 'w')
+    {
+      __esbmc_stream_mode =
+        (mode[1] == '+') ? 2 : 1; // write-only or read-write
+    }
+    else if (mode[0] == 'r' && mode[1] == '+')
+      __esbmc_stream_mode = 2; // read-write
+    else
+      __esbmc_stream_mode = 2; // default to read-write for other modes
+  }
+  else
+    __esbmc_stream_mode = 2; // default to read-write if mode is NULL
+
   FILE *f = malloc(sizeof(FILE));
   return f;
 }
@@ -324,4 +358,28 @@ size_t __fpending(FILE *stream)
 {
 __ESBMC_HIDE:;
   return __esbmc_buffer_pending;
+}
+
+int ferror_unlocked(FILE *stream)
+{
+__ESBMC_HIDE:;
+  return __esbmc_error_state;
+}
+
+int fputc(int c, FILE *stream)
+{
+__ESBMC_HIDE:;
+  // Check if stream is writable (mode 1 or 2)
+  if (__esbmc_stream_mode == 0)
+  {
+    // Read-only stream - always fail
+    __esbmc_error_state = nondet_int();
+    __ESBMC_assume(__esbmc_error_state != 0);
+    return EOF;
+  }
+  else
+  {
+    // Writable stream - succeed
+    return nondet_int();
+  }
 }
