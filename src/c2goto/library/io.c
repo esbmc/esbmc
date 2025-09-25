@@ -2,9 +2,12 @@
 #  define _MT /* Don't define putchar/getc/getchar for us */
 #endif
 
+#include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 #ifdef _MSVC
 #  include <BaseTsd.h>
@@ -28,6 +31,8 @@ static size_t __esbmc_buffer_pending = 0;
 static int __esbmc_error_state = 0;
 static int __esbmc_stream_mode = 0; // 0=read-only, 1=write-only, 2=read-write
 static int __esbmc_currently_reading = 0; // 0=not reading, 1=currently reading
+static int __esbmc_errno = 0;
+static int __esbmc_pipe_fds[2] = {-1, -1}; // track pipe file descriptors
 
 int putchar(int c)
 {
@@ -128,41 +133,55 @@ __ESBMC_HIDE:;
 
   // (rest of existing fgets implementation...)
   _Bool early_termination = 0;
+  // check for pre-conditions
   __ESBMC_assert(
     stream == stdin || stream != NULL,
     "the pointer to a file object must be a valid argument");
 
+  //do nothing, report error
   if (size < 2)
     return NULL;
 
   int i = 0;
+  // add non-deterministic characters to str
   for (i = 0; i <= (size - 1); i++)
   {
     int character = getc(stream);
     if (character == '\n')
     {
+      // A newline character makes fgets stop reading,
+      // but it is considered a valid character by the function
+      // and included in the string copied to str
       str[i] = '\n';
       early_termination = 1;
       break;
     }
     else if (character == EOF)
     {
+      // we end the loop based on non-determinism
       early_termination = 1;
       break;
     }
+    // this should store the character
     str[i] = character;
   }
 
+  // has the loop terminated before filling in all positions?
+  // note that the loop can stop at any iteration
   if (early_termination)
   {
+    // didn't we reach the total buffer size?
     if (i < (size - 1))
     {
+      // append a terminating '\0' to the next position and return
       str[++i] = '\0';
       return str;
     }
   }
 
+  // append a terminating '\0' to the last position and return
   str[size - 1] = '\0';
+
   return str;
 }
 
@@ -244,14 +263,22 @@ __ESBMC_HIDE:;
 ssize_t read(int fildes, void *buf, size_t nbyte)
 {
 __ESBMC_HIDE:;
-  ssize_t nread;
-  size_t i;
-  __ESBMC_assume(nread <= nbyte);
+  // For valid file descriptors, succeed with positive bytes read
+  if (fildes >= 0 && buf != NULL && nbyte > 0)
+  {
+    ssize_t nread = nondet_long();
+    __ESBMC_assume(nread > 0 && nread <= nbyte);
 
-  for (i = 0; i < nbyte; i++)
-    ((char *)buf)[i] = nondet_char();
+    size_t i;
+    for (i = 0; i < nread; i++)
+      ((char *)buf)[i] = nondet_char();
 
-  return nread;
+    return nread;
+  }
+  else
+  {
+    return -1; // error case for invalid parameters
+  }
 }
 
 int fgetc(FILE *stream)
@@ -392,4 +419,90 @@ int __freading(FILE *stream)
 {
 __ESBMC_HIDE:;
   return __esbmc_currently_reading;
+}
+
+off_t lseek(int fd, off_t offset, int whence)
+{
+__ESBMC_HIDE:;
+  // Check if this is a pipe file descriptor
+  if (fd == __esbmc_pipe_fds[0] || fd == __esbmc_pipe_fds[1])
+  {
+    __esbmc_errno = 29; // ESPIPE
+    return -1;
+  }
+
+  // For regular valid file descriptors
+  if (fd >= 0)
+  {
+    if (whence == SEEK_SET)
+    {
+      if (offset < 0)
+      {
+        __esbmc_errno = 22; // EINVAL - Invalid argument
+        return -1;
+      }
+      return offset; // return the requested offset for valid SEEK_SET
+    }
+    else
+    {
+      off_t new_offset = nondet_long();
+      __ESBMC_assume(new_offset >= 0);
+      return new_offset;
+    }
+  }
+  else
+    return -1;
+}
+
+int open(const char *pathname, int flags, ...)
+{
+__ESBMC_HIDE:;
+  int fd = nondet_int();
+  __ESBMC_assume(fd >= 0); // open returns non-negative fd on success
+  return fd;
+}
+
+ssize_t write(int fd, const void *buf, size_t count)
+{
+__ESBMC_HIDE:;
+  // For valid file descriptors, always succeed
+  if (fd >= 0 && buf != NULL)
+    return count; // success case - write all requested bytes
+  else
+    return -1; // error case for invalid parameters
+}
+
+int close(int fd)
+{
+__ESBMC_HIDE:;
+  return nondet_int(); // can succeed (0) or fail (-1)
+}
+
+int *__errno_location(void)
+{
+__ESBMC_HIDE:;
+  return &__esbmc_errno;
+}
+
+int pipe(int pipefd[2])
+{
+__ESBMC_HIDE:;
+  // Always succeed for valid input
+  if (pipefd != NULL)
+  {
+    // Success - assign positive file descriptors for pipes
+    pipefd[0] = nondet_int();
+    pipefd[1] = nondet_int();
+    __ESBMC_assume(pipefd[0] > 2 && pipefd[1] > 2);
+    __ESBMC_assume(pipefd[0] != pipefd[1]);
+    __esbmc_pipe_fds[0] = pipefd[0];
+    __esbmc_pipe_fds[1] = pipefd[1];
+
+    return 0;
+  }
+  else
+  {
+    __esbmc_errno = nondet_int();
+    return -1;
+  }
 }
