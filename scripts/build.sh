@@ -6,6 +6,7 @@ BASE_ARGS="\
     -GNinja \
     -DENABLE_CSMITH=On \
     -DBUILD_TESTING=On \
+    -DENABLE_COVERAGE=On \
     -DENABLE_REGRESSION=On \
     -DENABLE_SOLIDITY_FRONTEND=On \
     -DENABLE_JIMPLE_FRONTEND=On \
@@ -38,7 +39,7 @@ error() {
 ubuntu_setup () {
     # Tested on ubuntu 22.04
     PKGS="\
-        python-is-python3 csmith python3 \
+        python-is-python3 csmith python3 lcov \
         git ccache unzip wget curl libcsmith-dev gperf \
         cmake bison flex g++-multilib linux-libc-dev \
         libboost-all-dev ninja-build python3-setuptools \
