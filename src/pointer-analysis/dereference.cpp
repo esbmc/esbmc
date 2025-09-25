@@ -1747,7 +1747,7 @@ void dereferencet::construct_struct_ref_from_dyn_offset(
   for (std::list<std::pair<expr2tc, expr2tc>>::const_iterator it =
          resolved_list.begin();
        it != resolved_list.end();
-       it++)
+       ++it)
   {
     result = if2tc(type, it->first, it->second, result);
   }
@@ -1760,7 +1760,7 @@ void dereferencet::construct_struct_ref_from_dyn_offset(
   for (std::list<std::pair<expr2tc, expr2tc>>::const_iterator it =
          resolved_list.begin();
        it != resolved_list.end();
-       it++)
+       ++it)
   {
     accuml = or2tc(accuml, it->first);
   }
