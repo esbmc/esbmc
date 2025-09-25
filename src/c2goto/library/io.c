@@ -290,3 +290,16 @@ __ESBMC_HIDE:;
   __ESBMC_assume(nwrite <= nitems);
   return nwrite;
 }
+
+int fputs_unlocked(const char *s, FILE *stream)
+{
+__ESBMC_HIDE:;
+  return nondet_int();
+}
+
+FILE *fmemopen(void *buf, size_t size, const char *mode)
+{
+__ESBMC_HIDE:;
+  FILE *f = malloc(sizeof(FILE));
+  return f;
+}
