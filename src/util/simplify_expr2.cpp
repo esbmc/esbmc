@@ -53,7 +53,7 @@ expr2tc expr2t::simplify() const
       expr2tc tmp;
       const expr2tc *e = get_sub_expr(idx);
 
-      if (expr_id == with_id && idx == 0)
+      if (expr_id == with_id && idx == 0 && is_with2t(*e))
       {
         // Don't simplifying all the sub-operands for with
         // as they have already been simplified
