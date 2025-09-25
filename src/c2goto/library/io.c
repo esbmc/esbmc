@@ -146,7 +146,9 @@ __ESBMC_HIDE:;
   // add non-deterministic characters to str
   for (i = 0; i <= (size - 1); i++)
   {
+    // produce non-deterministic character
     int character = getc(stream);
+    // stop if we get a new line character or an EOF
     if (character == '\n')
     {
       // A newline character makes fgets stop reading,
