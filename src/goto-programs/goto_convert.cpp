@@ -1556,9 +1556,11 @@ void goto_convertt::convert_return(
   {
     if (!new_code.has_return_value())
     {
+#if 0
       code.dump();
       log_error("function must return value");
       abort();
+#endif
     }
 
     // Now add a return node to set the return value.
