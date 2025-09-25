@@ -216,13 +216,6 @@ void goto_k_inductiont::make_nondet_assign(
   goto_programt dest;
   for (auto const &lhs : loop_vars)
   {
-    // do not assign nondeterministic value to pointers if we assume
-    // objects extracted from the value set analysis
-    if (
-      config.options.get_bool_option("add-symex-value-sets") &&
-      is_pointer_type(lhs))
-      continue;
-
     // Generate a nondeterministic value for the loop variable
     expr2tc rhs = gen_nondet(lhs->type);
 

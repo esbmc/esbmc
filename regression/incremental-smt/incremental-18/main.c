@@ -8,6 +8,7 @@ int main()
   int z = nondet_int(); // input
   int *r1 = &x;
   int *r2 = &y;
+  __ESBMC_loop_invariant((r1 == &x && r2 == &y) || (r1 == &y && r2 == &x));
   while(z > 0)
   {
     int *tmp = r1;

@@ -7,6 +7,7 @@ int main()
   int sum = a + b;
   int *c = &a;
   int *d = &b;
+  __ESBMC_loop_invariant(c == &a && d == &b && *c + *d == sum);
   while(a > 0)
   {
     *c = *c - 1;
