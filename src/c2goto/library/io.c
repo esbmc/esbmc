@@ -27,6 +27,7 @@
 static size_t __esbmc_buffer_pending = 0;
 static int __esbmc_error_state = 0;
 static int __esbmc_stream_mode = 0; // 0=read-only, 1=write-only, 2=read-write
+static int __esbmc_currently_reading = 0; // 0=not reading, 1=currently reading
 
 int putchar(int c)
 {
@@ -122,59 +123,46 @@ __ESBMC_HIDE:;
 char *fgets(char *str, int size, FILE *stream)
 {
 __ESBMC_HIDE:;
-  // this is used to check for early loop termination
+  // Set currently reading state
+  __esbmc_currently_reading = 1;
+
+  // (rest of existing fgets implementation...)
   _Bool early_termination = 0;
-  // check for pre-conditions
   __ESBMC_assert(
     stream == stdin || stream != NULL,
     "the pointer to a file object must be a valid argument");
 
-  //do nothing, report error
   if (size < 2)
     return NULL;
 
   int i = 0;
-  // add non-deterministic characters to str
   for (i = 0; i <= (size - 1); i++)
   {
-    // produce non-deterministic character
     int character = getc(stream);
-    // stop if we get a new line character or an EOF
     if (character == '\n')
     {
-      // A newline character makes fgets stop reading,
-      // but it is considered a valid character by the function
-      // and included in the string copied to str
       str[i] = '\n';
       early_termination = 1;
       break;
     }
     else if (character == EOF)
     {
-      // we end the loop based on non-determinism
       early_termination = 1;
       break;
     }
-    // this should store the character
     str[i] = character;
   }
 
-  // has the loop terminated before filling in all positions?
-  // note that the loop can stop at any iteration
   if (early_termination)
   {
-    // didn't we reach the total buffer size?
     if (i < (size - 1))
     {
-      // append a terminating '\0' to the next position and return
       str[++i] = '\0';
       return str;
     }
   }
 
-  // append a terminating '\0' to the last position and return
   str[size - 1] = '\0';
-
   return str;
 }
 
@@ -215,17 +203,18 @@ __ESBMC_HIDE:;
 int fputs(const char *s, FILE *stream)
 {
 __ESBMC_HIDE:;
+  // Clear reading state when writing
+  __esbmc_currently_reading = 0;
+
   // Check if stream is writable (mode 1 or 2)
   if (__esbmc_stream_mode == 0)
   {
-    // Read-only stream - always fail
     __esbmc_error_state = nondet_int();
     __ESBMC_assume(__esbmc_error_state != 0);
     return EOF;
   }
   else
   {
-    // Writable stream - succeed
     if (stream != NULL)
     {
       __esbmc_buffer_pending = nondet_uint();
@@ -304,6 +293,7 @@ __ESBMC_HIDE:;
 void rewind(FILE *stream)
 {
 __ESBMC_HIDE:;
+  __esbmc_currently_reading = 0; // Reset reading state
 }
 
 size_t fwrite(const void *ptr, size_t size, size_t nitems, FILE *stream)
@@ -332,23 +322,37 @@ __ESBMC_HIDE:;
   __esbmc_buffer_pending = 0; // Initialize to empty buffer
   __esbmc_error_state = 0;    // Initialize to no error
 
-  // Parse mode to determine stream capabilities
+  // Parse mode to determine stream capabilities and initial reading state
   if (mode != NULL)
   {
     if (mode[0] == 'r' && mode[1] == '\0')
+    {
       __esbmc_stream_mode = 0; // read-only
+      __esbmc_currently_reading =
+        1; // read-only streams are always in read mode
+    }
     else if (mode[0] == 'w')
     {
       __esbmc_stream_mode =
-        (mode[1] == '+') ? 2 : 1; // write-only or read-write
+        (mode[1] == '+') ? 2 : 1;    // write-only or read-write
+      __esbmc_currently_reading = 0; // write streams start not reading
     }
     else if (mode[0] == 'r' && mode[1] == '+')
-      __esbmc_stream_mode = 2; // read-write
+    {
+      __esbmc_stream_mode = 2;       // read-write
+      __esbmc_currently_reading = 0; // read-write streams start not reading
+    }
     else
+    {
       __esbmc_stream_mode = 2; // default to read-write for other modes
+      __esbmc_currently_reading = 0;
+    }
   }
   else
+  {
     __esbmc_stream_mode = 2; // default to read-write if mode is NULL
+    __esbmc_currently_reading = 0;
+  }
 
   FILE *f = malloc(sizeof(FILE));
   return f;
@@ -382,4 +386,10 @@ __ESBMC_HIDE:;
     // Writable stream - succeed
     return nondet_int();
   }
+}
+
+int __freading(FILE *stream)
+{
+__ESBMC_HIDE:;
+  return __esbmc_currently_reading;
 }
