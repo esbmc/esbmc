@@ -968,6 +968,31 @@ expr2tc pointer_offset2t::do_simplify() const
           return offs;
       }
     }
+
+    if (is_member2t(addrof.ptr_obj))
+    {
+      const member2t &member = to_member2t(addrof.ptr_obj);
+
+      // First, try to use our existing compute_pointer_offset function
+      // This should handle most struct member cases
+      expr2tc offs = try_simplification(compute_pointer_offset(addrof.ptr_obj));
+      if (is_constant_int2t(offs))
+        return offs;
+
+      // Handle union members - all have offset 0 relative to union base
+      if (is_union_type(member.source_value->type))
+        return pointer_offset2tc(type, member.source_value);
+
+      if (is_struct_type(member.source_value->type))
+      {
+        const struct_union_data &struct_data =
+          static_cast<const struct_union_data &>(
+            *member.source_value->type.get());
+        unsigned member_no = struct_data.get_component_number(member.member);
+        if (member_no == 0)
+          return gen_zero(type);
+      }
+    }
   }
   else if (is_typecast2t(ptr_obj))
   {
@@ -975,17 +1000,9 @@ expr2tc pointer_offset2t::do_simplify() const
     expr2tc new_ptr_offs = pointer_offset2tc(type, cast.from);
     expr2tc reduced = new_ptr_offs->simplify();
 
-    // No good simplification -> return nothing
-    if (is_nil_expr(reduced))
+    // If we got a good simplification, return it
+    if (!is_nil_expr(reduced))
       return reduced;
-
-    // If it simplified to zero, that's fine, return that.
-    if (
-      is_constant_int2t(reduced) && to_constant_int2t(reduced).value.is_zero())
-      return reduced;
-
-    // If it didn't reduce to zero, give up. Not sure why this is the case,
-    // but it's what the old irep code does.
   }
   else if (is_add2t(ptr_obj))
   {
@@ -1030,6 +1047,34 @@ expr2tc pointer_offset2t::do_simplify() const
       return new_add;
 
     return tmp;
+  }
+  else if (is_sub2t(ptr_obj))
+  {
+    const sub2t &sub = to_sub2t(ptr_obj);
+
+    // Handle ptr - offset
+    if (is_pointer_type(sub.side_1) && !is_pointer_type(sub.side_2))
+    {
+      expr2tc ptr_op = sub.side_1;
+      expr2tc offset_op = sub.side_2;
+
+      if (is_symbol_type(to_pointer_type(ptr_op->type).subtype))
+        return expr2tc();
+
+      expr2tc ptr_offset = pointer_offset2tc(type, ptr_op);
+      type2tc ptr_subtype = to_pointer_type(ptr_op->type).subtype;
+      expr2tc type_size =
+        type_byte_size_expr(ptr_subtype, migrate_namespace_lookup);
+
+      if (offset_op->type != type)
+        offset_op = typecast2tc(type, offset_op);
+
+      expr2tc scaled_offset = mul2tc(type, offset_op, type_size);
+      expr2tc result = sub2tc(type, ptr_offset, scaled_offset);
+
+      expr2tc simplified = result->simplify();
+      return is_nil_expr(simplified) ? result : simplified;
+    }
   }
 
   return expr2tc();
