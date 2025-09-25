@@ -24,6 +24,8 @@
 #undef fileno
 #undef getchar
 
+static size_t __esbmc_buffer_pending = 0;
+
 int putchar(int c)
 {
 __ESBMC_HIDE:;
@@ -95,6 +97,7 @@ __ESBMC_HIDE:;
 int fclose(FILE *stream)
 {
 __ESBMC_HIDE:;
+// Don't clear pending state here - let it remain for verification
 #if __ESBMC_SVCOMP
 #else
   free(stream);
@@ -211,14 +214,20 @@ __ESBMC_HIDE:;
 int fputs(const char *s, FILE *stream)
 {
 __ESBMC_HIDE:;
-  // just return nondet
+  // Always set pending data when fputs is called with valid parameters
+  if (stream != NULL)
+  {
+    __esbmc_buffer_pending = nondet_uint();
+    __ESBMC_assume(__esbmc_buffer_pending > 0);
+  }
   return nondet_int();
 }
 
 int fflush(FILE *stream)
 {
 __ESBMC_HIDE:;
-  // just return nondet
+  // Clear pending data when flushing
+  __esbmc_buffer_pending = 0;
   return nondet_int();
 }
 
@@ -294,12 +303,25 @@ __ESBMC_HIDE:;
 int fputs_unlocked(const char *s, FILE *stream)
 {
 __ESBMC_HIDE:;
+  // Always set pending data when fputs_unlocked is called with valid parameters
+  if (stream != NULL)
+  {
+    __esbmc_buffer_pending = nondet_uint();
+    __ESBMC_assume(__esbmc_buffer_pending > 0);
+  }
   return nondet_int();
 }
 
 FILE *fmemopen(void *buf, size_t size, const char *mode)
 {
 __ESBMC_HIDE:;
+  __esbmc_buffer_pending = 0; // Initialize to empty buffer
   FILE *f = malloc(sizeof(FILE));
   return f;
+}
+
+size_t __fpending(FILE *stream)
+{
+__ESBMC_HIDE:;
+  return __esbmc_buffer_pending;
 }
