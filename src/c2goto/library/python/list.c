@@ -38,7 +38,10 @@ static inline bool list_in_bounds(const List *l, size_t index)
 
 static bool list_eq(const List *l1, const List *l2)
 {
-  if (!l1 || !l2) return false;
+  if (!l1 || !l2)
+    return false;
+  if (__ESBMC_same_object(l1, l2))
+    return true;
   if (l1->size != l2->size)
     return false;
 
