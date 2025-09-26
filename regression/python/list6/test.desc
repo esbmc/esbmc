@@ -1,5 +1,4 @@
 CORE
 main.py
---incremental-bmc --force-malloc-success
-
+--force-malloc-success --unwind 10
 ^VERIFICATION SUCCESSFUL$

@@ -50,8 +50,16 @@ expr2tc expr2t::simplify() const
 
     for (unsigned int idx = 0; idx < get_num_sub_exprs(); idx++)
     {
-      const expr2tc *e = get_sub_expr(idx);
       expr2tc tmp;
+      const expr2tc *e = get_sub_expr(idx);
+
+      if (expr_id == with_id && idx == 0 && is_with2t(*e))
+      {
+        // Don't simplifying all the sub-operands for with
+        // as they have already been simplified
+        newoperands.push_back(tmp);
+        continue;
+      }
 
       if (!is_nil_expr(*e))
       {
@@ -1127,6 +1135,48 @@ expr2tc pointer_offset2t::do_simplify() const
   return expr2tc();
 }
 
+static bool index_values_equal(const expr2tc &idx1, const expr2tc &idx2)
+{
+  // Direct equality check first
+  if (idx1 == idx2)
+    return true;
+
+  // For constant integers, compare values regardless of signedness
+  if (is_constant_int2t(idx1) && is_constant_int2t(idx2))
+  {
+    const BigInt &val1 = to_constant_int2t(idx1).value;
+    const BigInt &val2 = to_constant_int2t(idx2).value;
+    return val1 == val2;
+  }
+
+  return false;
+}
+
+static expr2tc
+resolve_with_chain_lookup(const expr2tc &source, const expr2tc &lookup_index)
+{
+  expr2tc current = source;
+
+  // Collect all WITH operations in reverse order (most recent first)
+  std::vector<std::pair<expr2tc, expr2tc>> updates; // field, value pairs
+
+  while (is_with2t(current))
+  {
+    const with2t &with_op = to_with2t(current);
+    updates.push_back({with_op.update_field, with_op.update_value});
+    current = with_op.source_value;
+  }
+
+  // Look for the most recent update to the requested index using value comparison
+  for (const auto &update : updates)
+  {
+    if (index_values_equal(update.first, lookup_index))
+      return update.second;
+  }
+
+  return expr2tc();
+}
+
 expr2tc index2t::do_simplify() const
 {
   expr2tc new_index = try_simplification(index);
@@ -1134,12 +1184,9 @@ expr2tc index2t::do_simplify() const
 
   if (is_with2t(src))
   {
-    // Index is the same as an update to the thing we're indexing; we can
-    // just take the update value from the "with" below.
-    if (new_index == to_with2t(src).update_field)
-      return to_with2t(src).update_value;
-
-    return expr2tc();
+    expr2tc resolved = resolve_with_chain_lookup(src, new_index);
+    if (!is_nil_expr(resolved))
+      return resolved;
   }
 
   if (is_constant_array2t(src) && is_constant_int2t(new_index))

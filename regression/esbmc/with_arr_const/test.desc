@@ -1,4 +1,4 @@
 CORE
 main.c
---incremental-bmc --base-k-step 2
+--force-malloc-success
 ^VERIFICATION FAILED$

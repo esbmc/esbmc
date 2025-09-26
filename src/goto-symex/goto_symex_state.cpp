@@ -136,6 +136,16 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   // important benchmarks (i.e. TACAS) work better with some propagation
   if (is_with2t(expr))
   {
+    if (
+      config.options.get_bool_option("incremental-bmc") ||
+      config.options.get_bool_option("k-induction"))
+      // When this option is enabled, the constant propagation
+      // with feature will significantly impact performance.
+      // More importantly, the use of incremental-BMC / k-induction does not heavily
+      // rely on constants to determine the boundaries. Even if there is a known
+      // loop size, esbmc starts unwinding from min k
+      return false;
+
     const with2t &with = to_with2t(expr);
     // For now, we focus on propagating constants for structs only.
     // TODO: enable other type will regress performance, need a TC
@@ -143,6 +153,9 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
     if (
       is_symbol2t(with.source_value) && is_struct_type(with.source_value) &&
       is_constant_expr(with.update_value))
+      return true;
+
+    if (is_array_type(with.source_value) && is_constant_expr(with.update_value))
       return true;
 
     return false;

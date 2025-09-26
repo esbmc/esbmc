@@ -38,7 +38,10 @@ static inline bool list_in_bounds(const List *l, size_t index)
 
 static bool list_eq(const List *l1, const List *l2)
 {
-  assert(l1 && l2);
+  if (!l1 || !l2)
+    return false;
+  if (__ESBMC_same_object(l1, l2))
+    return true;
   if (l1->size != l2->size)
     return false;
 
@@ -64,27 +67,17 @@ static bool list_eq(const List *l1, const List *l2)
     if (!a->value || !b->value)
       return false;
 
-    // memcmp
-    const unsigned char *pa = (const unsigned char *)a->value;
-    const unsigned char *pb = (const unsigned char *)b->value;
-
-    size_t j = 0;
-    while (j < a->size)
-    {
-      if (pa[j] != pb[j])
-        return false;
-      ++j;
-    }
+    if (memcmp(a->value, b->value, a->size) != 0)
+      return false;
 
     ++i;
   }
   return true;
 }
 
-static long long int list_size(const List *l)
+static inline size_t list_size(const List *l)
 {
-  assert(l);
-  return l->size;
+  return l ? l->size : 0;
 }
 
 /* ---------- getters ---------- */
@@ -160,9 +153,10 @@ list_replace(List *l, size_t index, const void *new_value, size_t type_id)
 /* ---------- pop / erase ---------- */
 static inline bool list_pop(List *l)
 {
-  if (l->size == 0)
+  if (l->size == 0) 
     return false;
   l->size--;
+  free((void*)l->items[l->size].value);  // Free the copied data
   return true;
 }
 
