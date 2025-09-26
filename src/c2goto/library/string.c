@@ -323,11 +323,12 @@ int memcmp(const void *s1, const void *s2, size_t n)
 __ESBMC_HIDE:;
   int res = 0;
   const unsigned char *sc1 = s1, *sc2 = s2;
-  for (; n != 0; n--)
+  while (n != 0)
   {
     res = (*sc1++) - (*sc2++);
     if (res != 0)
       return res;
+    n--;
   }
   return res;
 }
