@@ -75,7 +75,7 @@ static bool list_eq(const List *l1, const List *l2)
   return true;
 }
 
-static long long int list_size(const List *l)
+static inline size_t list_size(const List *l)
 {
   return l ? l->size : 0;
 }
