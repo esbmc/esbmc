@@ -1,0 +1,5 @@
+CORE
+main.cpp
+--force-malloc-success --force-realloc-success
+
+^VERIFICATION FAILED$
