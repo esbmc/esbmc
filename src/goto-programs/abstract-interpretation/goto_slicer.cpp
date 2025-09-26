@@ -73,6 +73,16 @@ void slicer_domaint::assign(const expr2tc &e)
   {
       symbolt::get_expr2_symbols(to_array_type(assignment.source->type).array_size, vars);
   }
+
+  if (vars.count(to_symbol2t(assignment.target).get_symbol_name()))
+    {
+      if (dependencies.count(to_symbol2t(assignment.target).get_symbol_name()))
+      {
+        for (auto &d :
+          dependencies[to_symbol2t(assignment.target).get_symbol_name()])
+          vars.insert(d);
+      }
+  }
   dependencies[to_symbol2t(assignment.target).get_symbol_name()] = vars;
 }
 
@@ -191,6 +201,11 @@ bool goto_slicer::runOnProgram(goto_functionst &F)
     log_status("Unable to slice the program");
     slicer_failed = true;
   }
+
+  std::ostringstream oss;
+  slicer.output(F, oss);
+  //log_status("Teste {}", oss.str());
+  
   return true;
 }
 
@@ -250,7 +265,6 @@ bool goto_slicer::runOnLoop(loopst &loop, goto_programt &goto_program)
   loop_exit++;
   while(loop_head != loop_exit)
   {
-    loop_head->dump();
     if(loop_head->is_function_call() || loop_head->is_return())
     {
       symbolt::get_expr2_symbols(
