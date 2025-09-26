@@ -4383,6 +4383,11 @@ bool solidity_convertert::get_statement(
     new_expr = placeholder;
     break;
   }
+  case SolidityGrammar::StatementT::TryStatement:
+  {
+    log_error("Try/Catch is not fully supported yet. Aborting...");
+    return true;
+  }
   case SolidityGrammar::StatementT::StatementTError:
   default:
   {
@@ -6844,9 +6849,9 @@ bool solidity_convertert::get_binary_operator_expr(
     exprt new_lhs = lhs;
     exprt new_rhs = rhs;
     // remove typecast
-    while (lhs.id() == "typecast")
+    while (new_lhs.id() == "typecast")
       new_lhs = new_lhs.op0();
-    while (rhs.id() == "typecast")
+    while (new_rhs.id() == "typecast")
       new_rhs = new_rhs.op0();
     if (new_lhs.is_constant() && new_rhs.is_constant())
     {
