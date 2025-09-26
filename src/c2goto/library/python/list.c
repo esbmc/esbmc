@@ -64,17 +64,8 @@ static bool list_eq(const List *l1, const List *l2)
     if (!a->value || !b->value)
       return false;
 
-    // memcmp
-    const unsigned char *pa = (const unsigned char *)a->value;
-    const unsigned char *pb = (const unsigned char *)b->value;
-
-    size_t j = 0;
-    while (j < a->size)
-    {
-      if (pa[j] != pb[j])
-        return false;
-      ++j;
-    }
+    if (memcmp(a->value, b->value, a->size) != 0)
+      return false;
 
     ++i;
   }
