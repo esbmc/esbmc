@@ -153,10 +153,10 @@ list_replace(List *l, size_t index, const void *new_value, size_t type_id)
 /* ---------- pop / erase ---------- */
 static inline bool list_pop(List *l)
 {
-  if (l->size == 0) 
+  if (l->size == 0)
     return false;
   l->size--;
-  free((void*)l->items[l->size].value);  // Free the copied data
+  free((void *)l->items[l->size].value); // Free the copied data
   return true;
 }
 
