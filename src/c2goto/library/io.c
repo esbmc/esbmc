@@ -525,10 +525,4 @@ __ESBMC_HIDE:;
   return &__esbmc_errno;
 }
 
-// Some Windows builds use this variant
-int *_get_errno(void)
-{
-__ESBMC_HIDE:;
-  return &__esbmc_errno;
-}
 #endif
