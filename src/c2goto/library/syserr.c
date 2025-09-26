@@ -1,5 +1,3 @@
-#include <error.h>
-
 char *strerror(int errnum)
 {
 __ESBMC_HIDE:;
