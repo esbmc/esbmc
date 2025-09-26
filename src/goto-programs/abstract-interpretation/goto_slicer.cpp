@@ -1,5 +1,9 @@
+#include "goto-programs/goto_program.h"
+#include "irep2/irep2_expr.h"
+#include "irep2/irep2_type.h"
 #include <goto-programs/abstract-interpretation/goto_slicer.h>
 #include <goto-programs/loop_unroll.h>
+#include <sstream>
 #include <util/prefix.h> // namespace
 
 void slicer_domaint::output(std::ostream &out) const
@@ -102,7 +106,7 @@ void slicer_domaint::declaration(const expr2tc &e)
 
 void slicer_domaint::transform(
   goto_programt::const_targett from,
-  goto_programt::const_targett,
+  goto_programt::const_targett to,
   ai_baset &,
   const namespacet &ns)
 {
@@ -118,6 +122,16 @@ void slicer_domaint::transform(
   case ASSIGN:
     assign(instruction.code);
     break;
+
+  case FUNCTION_CALL:
+    {
+      const code_function_call2t &foo =
+        to_code_function_call2t(instruction.code);
+      // Is this rec?
+      if (foo.ret)
+        if (to->location.get_function() == from->location.get_function())
+	  throw "TODO: recursive functions";
+    }
 
   default:;
   }
