@@ -38,7 +38,7 @@ static inline bool list_in_bounds(const List *l, size_t index)
 
 static bool list_eq(const List *l1, const List *l2)
 {
-  assert(l1 && l2);
+  if (!l1 || !l2) return false;
   if (l1->size != l2->size)
     return false;
 
