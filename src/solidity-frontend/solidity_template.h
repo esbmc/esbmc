@@ -906,17 +906,6 @@ __ESBMC_HIDE:;
     return to_array;
 }
 
-void *_ESBMC_arrcpy_static(const void *from_array, size_t elem_count, size_t size_of) {
-__ESBMC_HIDE:;
-    _ESBMC_element_null_check(from_array != 0);
-    _ESBMC_zero_size_check(size_of != 0);
-    _ESBMC_zero_size_check(elem_count != 0);
-    size_t bytes = elem_count * size_of;
-    void *to_array = malloc(bytes);
-    __builtin_memcpy(to_array, from_array, bytes);
-    return to_array;
-}
-
 void *_ESBMC_array_push(void *array, void *element, size_t size_of_element) {
 __ESBMC_HIDE:;
     _ESBMC_zero_size_check(size_of_element != 0);

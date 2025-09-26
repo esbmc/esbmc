@@ -1447,15 +1447,18 @@ bool solidity_convertert::get_var_decl(
 
   // this pointer
   exprt this_expr;
-  if (current_functionDecl)
+  if (!current_contractName.empty())
   {
-    if (get_func_decl_this_ref(*current_functionDecl, this_expr))
-      return true;
-  }
-  else
-  {
-    if (get_ctor_decl_this_ref(ast_node, this_expr))
-      return true;
+    if (current_functionDecl)
+    {
+      if (get_func_decl_this_ref(*current_functionDecl, this_expr))
+        return true;
+    }
+    else
+    {
+      if (get_ctor_decl_this_ref(ast_node, this_expr))
+        return true;
+    }
   }
 
   exprt val;
@@ -1500,7 +1503,7 @@ bool solidity_convertert::get_var_decl(
         return true;
 
       side_effect_expr_function_callt acpy_call;
-      get_arrcpy_static_function_call(location_begin, acpy_call);
+      get_arrcpy_function_call(location_begin, acpy_call);
       acpy_call.arguments().push_back(val);
       acpy_call.arguments().push_back(size_expr);
       acpy_call.arguments().push_back(size_of_expr);
@@ -6675,15 +6678,8 @@ bool solidity_convertert::get_binary_operator_expr(
 
       // do array copy
       side_effect_expr_function_callt acpy_call;
-      if (lt_sol == "ARRAY")
-        get_arrcpy_static_function_call(lhs.location(), acpy_call);
-      else if (lt_sol == "DYNARRAY")
-        get_arrcpy_function_call(lhs.location(), acpy_call);
-      else
-      {
-        log_error("unexpected array assignment, got lhs {}", lt_sol);
-        return true;
-      }
+      get_arrcpy_function_call(lhs.location(), acpy_call);
+
       acpy_call.arguments().push_back(rhs);
       acpy_call.arguments().push_back(size_expr);
       acpy_call.arguments().push_back(size_of_expr);
@@ -8102,7 +8098,7 @@ bool solidity_convertert::get_type_description(
       return true;
 
     // wrap it:
-    if (get_array_type(decl, base_type, new_type))
+    if (get_array_pointer_type(decl, base_type, new_type))
       return true;
 
     break;
@@ -8127,7 +8123,7 @@ bool solidity_convertert::get_type_description(
             decl["typeName"]["baseType"]["typeDescriptions"], the_type))
         return true;
 
-      if (get_array_type(decl, the_type, new_type))
+      if (get_array_pointer_type(decl, the_type, new_type))
         return true;
     }
     else if (type == SolidityGrammar::TypeNameT::ArrayTypeName)
@@ -9569,17 +9565,6 @@ void solidity_convertert::get_arrcpy_function_call(
     calc_name, calc_id, symbol_expr(calc_sym).type(), loc, calc_call);
 }
 
-void solidity_convertert::get_arrcpy_static_function_call(
-  const locationt &loc,
-  side_effect_expr_function_callt &calc_call)
-{
-  const std::string calc_name = "_ESBMC_arrcpy_static";
-  const std::string calc_id = "c:@F@_ESBMC_arrcpy_static";
-  const symbolt &calc_sym = *context.find_symbol(calc_id);
-  get_library_function_call_no_args(
-    calc_name, calc_id, symbol_expr(calc_sym).type(), loc, calc_call);
-}
-
 void solidity_convertert::get_str_assign_function_call(
   const locationt &loc,
   side_effect_expr_function_callt &_call)
@@ -10612,7 +10597,7 @@ bool solidity_convertert::get_constant_value(
   return true;
 }
 
-bool solidity_convertert::get_array_type(
+bool solidity_convertert::get_array_pointer_type(
   const nlohmann::json &decl,
   const typet &base_type,
   typet &new_type)

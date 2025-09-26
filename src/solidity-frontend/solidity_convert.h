@@ -390,9 +390,6 @@ protected:
   void get_arrcpy_function_call(
     const locationt &loc,
     side_effect_expr_function_callt &calc_call);
-  void get_arrcpy_static_function_call(
-    const locationt &loc,
-    side_effect_expr_function_callt &calc_call);
   void get_str_assign_function_call(
     const locationt &loc,
     side_effect_expr_function_callt &_call);
@@ -525,7 +522,7 @@ protected:
     locationt location);
 
   bool get_constant_value(const int ref_id, std::string &value);
-  bool get_array_type(
+  bool get_array_pointer_type(
     const nlohmann::json &decl,
     const typet &base_type,
     typet &new_type);
