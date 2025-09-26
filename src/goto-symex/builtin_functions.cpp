@@ -160,6 +160,7 @@ void goto_symext::symex_realloc(
 {
   expr2tc src_ptr = code.operand;
   expr2tc realloc_size = code.size; // This is in bytes
+  cur_state->rename(realloc_size);
 
   // ===== handle reallocC(ptr, 0) - free and return NULL =====
   if (handle_realloc_zero_size(lhs, code, guard, realloc_size))
