@@ -83,8 +83,7 @@ static bool list_eq(const List *l1, const List *l2)
 
 static long long int list_size(const List *l)
 {
-  assert(l);
-  return l->size;
+  return l ? l->size : 0;
 }
 
 /* ---------- getters ---------- */
