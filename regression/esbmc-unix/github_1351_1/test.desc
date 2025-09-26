@@ -1,4 +1,4 @@
 CORE
 main.c
---unwind 1
+--unwind 2
 ^VERIFICATION FAILED$
