@@ -115,8 +115,6 @@ list_push(List *l, const void *value, size_t type_id, size_t type_size)
 
   // Force malloc to succeed for verification
   __ESBMC_assume(copied_value != NULL);
-  if (copied_value == NULL)
-    return false;
 
   memcpy(copied_value, value, type_size);
 

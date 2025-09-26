@@ -1,4 +1,4 @@
 CORE
 main.py
---incremental-bmc --unwind 9
+--unwind 9
 ^VERIFICATION FAILED$
