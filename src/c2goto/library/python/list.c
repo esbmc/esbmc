@@ -51,11 +51,6 @@ static bool list_eq(const List *l1, const List *l2)
     const Object *a = &l1->items[i];
     const Object *b = &l2->items[i];
 
-    if (a->type_id != b->type_id)
-      return false;
-    if (a->size != b->size)
-      return false;
-
     // Same address => element equal; keep checking the rest.
     if (a->value == b->value)
     {
@@ -63,12 +58,12 @@ static bool list_eq(const List *l1, const List *l2)
       continue;
     }
 
-    // If either is NULL (and not the same address), not equal.
-    if (!a->value || !b->value)
+    if (
+      !a->value || !b->value || a->type_id != b->type_id ||
+      a->size != b->size || memcmp(a->value, b->value, a->size) != 0)
+    {
       return false;
-
-    if (memcmp(a->value, b->value, a->size) != 0)
-      return false;
+    }
 
     ++i;
   }
@@ -153,10 +148,10 @@ list_replace(List *l, size_t index, const void *new_value, size_t type_id)
 /* ---------- pop / erase ---------- */
 static inline bool list_pop(List *l)
 {
-  if (l->size == 0) 
+  if (l->size == 0)
     return false;
   l->size--;
-  free((void*)l->items[l->size].value);  // Free the copied data
+  free((void *)l->items[l->size].value); // Free the copied data
   return true;
 }
 
