@@ -26,6 +26,9 @@
 #undef ferror
 #undef fileno
 #undef getchar
+#undef ferror_unlocked
+#undef fputs_unlocked
+#undef __freading
 
 static size_t __esbmc_buffer_pending = 0;
 static int __esbmc_error_state = 0;
