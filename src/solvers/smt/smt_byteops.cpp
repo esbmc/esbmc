@@ -206,12 +206,6 @@ expr2tc smt_convt::create_int_right_shift(expr2tc source, expr2tc shift_amount)
 
 smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
 {
-  if (int_encoding)
-  {
-    log_error("Can't byte update in integer mode; rerun in bitvector mode");
-    abort();
-  }
-
   const byte_update2t &data = to_byte_update2t(expr);
   assert(data.type == data.source_value->type);
 
@@ -235,6 +229,207 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
     return convert_ast(with);
   }
 
+  if (int_encoding)
+    return convert_byte_update_int_mode(data);
+  else
+    return convert_byte_update_bv_mode(data);
+}
+
+smt_astt smt_convt::convert_byte_update_int_mode(const byte_update2t &data)
+{
+  expr2tc source = data.source_value;
+  expr2tc offs = data.source_offset;
+  expr2tc update_value = data.update_value;
+
+  unsigned int src_width = source->type->get_width();
+
+  // Preserve original source type for conversion back
+  type2tc original_source_type = source->type;
+  bool need_type_conversion_back = false;
+
+  if (!is_number_type(source->type))
+  {
+    source = typecast2tc(get_uint_type(src_width), source);
+    need_type_conversion_back = true;
+  }
+
+  // Ensure update value is properly sized
+  if (!is_number_type(update_value->type))
+    update_value = typecast2tc(get_uint_type(8), update_value);
+  else if (update_value->type->get_width() != 8)
+    update_value = typecast2tc(get_uint_type(8), update_value);
+
+  expr2tc result;
+  if (!is_constant_int2t(offs))
+  {
+    result = convert_byte_update_int_mode_non_constant_expr(
+      data, source, offs, update_value, src_width);
+  }
+  else
+  {
+    result = convert_byte_update_int_mode_constant_expr(
+      data, source, offs, update_value, src_width);
+  }
+
+  // Convert back to original type if we converted from non-numeric
+  if (need_type_conversion_back)
+    result = typecast2tc(original_source_type, result);
+
+  return convert_ast(result);
+}
+
+expr2tc smt_convt::convert_byte_update_int_mode_constant_expr(
+  const byte_update2t &data,
+  expr2tc source,
+  expr2tc offs,
+  expr2tc update_value,
+  unsigned int src_width)
+{
+  const constant_int2t &intref = to_constant_int2t(offs);
+  unsigned int byte_offset = intref.value.to_uint64();
+
+  // Calculate bit offset and validate bounds
+  unsigned int total_bytes = src_width / config.ansi_c.char_width;
+  if (byte_offset >= total_bytes)
+    throw std::runtime_error("Out of bounds access");
+
+  unsigned int shift_amount;
+  if (!data.big_endian)
+  {
+    // Little endian: byte 0 is least significant
+    shift_amount = byte_offset * config.ansi_c.char_width;
+  }
+  else
+  {
+    // Big endian: byte 0 is most significant
+    shift_amount = (total_bytes - 1 - byte_offset) * config.ansi_c.char_width;
+  }
+
+  // Step 1: Create mask to clear the target byte using expressions
+  BigInt byte_mask_value = (BigInt(1) << config.ansi_c.char_width) - BigInt(1);
+  expr2tc byte_mask = constant_int2tc(source->type, byte_mask_value);
+
+  // Create positioned mask by shifting the byte mask
+  expr2tc positioned_mask;
+  if (shift_amount > 0)
+  {
+    BigInt shift_multiplier = BigInt(1) << shift_amount;
+    expr2tc shift_expr = constant_int2tc(source->type, shift_multiplier);
+    positioned_mask = mul2tc(source->type, byte_mask, shift_expr);
+  }
+  else
+    positioned_mask = byte_mask;
+
+  // Create clear mask by inverting the positioned mask
+  expr2tc clear_mask = bitnot2tc(source->type, positioned_mask);
+
+  // Step 2: Clear the target byte in source
+  expr2tc cleared_source = bitand2tc(source->type, source, clear_mask);
+
+  // Step 3: Prepare update value - extend to source width and shift to position
+  expr2tc extended_update = typecast2tc(source->type, update_value);
+
+  expr2tc positioned_update;
+  if (shift_amount > 0)
+  {
+    // Left shift the update value to the correct position using multiplication
+    BigInt shift_multiplier = BigInt(1) << shift_amount;
+    expr2tc shift_expr = constant_int2tc(source->type, shift_multiplier);
+    positioned_update = mul2tc(source->type, extended_update, shift_expr);
+  }
+  else
+    positioned_update = extended_update;
+
+  // Step 4: Combine cleared source with positioned update value
+  expr2tc result = bitor2tc(source->type, cleared_source, positioned_update);
+
+  return result;
+}
+
+expr2tc smt_convt::convert_byte_update_int_mode_non_constant_expr(
+  const byte_update2t &data,
+  expr2tc source,
+  expr2tc offs,
+  expr2tc update_value,
+  unsigned int src_width)
+{
+  // For non-constant offsets, we use conditional expressions to handle
+  // different possible offset values (similar to create_int_right_shift)
+
+  // Ensure offset is the same type as source for arithmetic operations
+  if (offs->type->get_width() != source->type->get_width())
+    offs = typecast2tc(source->type, offs);
+
+  // Handle endianness by adjusting the offset
+  if (data.big_endian)
+  {
+    auto data_size = type_byte_size(source->type);
+    expr2tc data_size_expr = constant_int2tc(source->type, data_size - 1);
+    offs = sub2tc(source->type, data_size_expr, offs);
+  }
+
+  expr2tc result = source; // Default case - no change
+
+  // Create conditional chain for byte offsets up to the maximum possible
+  unsigned int max_bytes = src_width / config.ansi_c.char_width;
+
+  for (unsigned int byte_pos = 0; byte_pos < max_bytes; byte_pos++)
+  {
+    expr2tc byte_pos_expr = constant_int2tc(offs->type, BigInt(byte_pos));
+    expr2tc condition = equality2tc(offs, byte_pos_expr);
+
+    // Calculate bit offset for this byte position
+    unsigned int shift_amount = byte_pos * config.ansi_c.char_width;
+
+    // Create mask to clear the target byte using expressions
+    BigInt byte_mask_value =
+      (BigInt(1) << config.ansi_c.char_width) - BigInt(1);
+    expr2tc byte_mask = constant_int2tc(source->type, byte_mask_value);
+
+    // Create positioned mask by shifting the byte mask
+    expr2tc positioned_mask;
+    if (shift_amount > 0)
+    {
+      BigInt shift_multiplier = BigInt(1) << shift_amount;
+      expr2tc shift_expr = constant_int2tc(source->type, shift_multiplier);
+      positioned_mask = mul2tc(source->type, byte_mask, shift_expr);
+    }
+    else
+      positioned_mask = byte_mask;
+
+    // Create clear mask by inverting the positioned mask
+    expr2tc clear_mask = bitnot2tc(source->type, positioned_mask);
+
+    // Clear the target byte in source
+    expr2tc cleared_source = bitand2tc(source->type, source, clear_mask);
+
+    // Prepare update value - extend to source width and shift to position
+    expr2tc extended_update = typecast2tc(source->type, update_value);
+
+    expr2tc positioned_update;
+    if (shift_amount > 0)
+    {
+      // Left shift the update value to the correct position using multiplication
+      BigInt shift_multiplier = BigInt(1) << shift_amount;
+      expr2tc shift_expr = constant_int2tc(source->type, shift_multiplier);
+      positioned_update = mul2tc(source->type, extended_update, shift_expr);
+    }
+    else
+      positioned_update = extended_update;
+
+    // Combine cleared source with positioned update value
+    expr2tc updated_value =
+      bitor2tc(source->type, cleared_source, positioned_update);
+
+    // Add this case to the conditional chain
+    result = if2tc(source->type, condition, updated_value, result);
+  }
+
+  return result;
+}
+
+smt_astt smt_convt::convert_byte_update_bv_mode(const byte_update2t &data)
+{
   if (!is_bv_type(data.type) && !is_fixedbv_type(data.type))
   {
     // This is a pointer or a bool, or something. We don't want to handle
@@ -265,7 +460,7 @@ smt_astt smt_convt::convert_byte_update(const expr2tc &expr)
 
     expr2tc offs = data.source_offset;
     if (!is_unsignedbv_type(offs) || offs->type->get_width() != src_width)
-      offs = typecast2tc(get_uint_type(src_width), offs);
+      offs = typecast2tc(get_uint_type(src_width), data.source_offset);
 
     // Endian-ness: if we're in non-"native" endian-ness mode, then flip the
     // offset distance. The rest of these calculations will still apply.
