@@ -30,18 +30,18 @@ language_uit &language_uit::operator=(language_uit &&o) noexcept
   return *this;
 }
 
-bool language_uit::parse(const cmdlinet &cmdline)
+bool language_uit::parse(cmdlinet &cmdline)
 {
   for (const auto &arg : cmdline.args)
   {
-    if (parse(arg))
+    if (parse(arg, cmdline))
       return true;
   }
 
   return false;
 }
 
-bool language_uit::parse(const std::string &filename)
+bool language_uit::parse(const std::string &filename, cmdlinet &cmdline)
 {
   language_idt lang = language_id_by_path(filename);
   if (lang == language_idt::NONE)
@@ -83,6 +83,11 @@ bool language_uit::parse(const std::string &filename)
   {
     log_error("PARSING ERROR");
     return true;
+  }
+
+  if (it->second->id() == "python")
+  {
+    cmdline.set_option("force-malloc-success", true);
   }
 
   return false;

@@ -16,12 +16,12 @@ public:
   language_uit();
   virtual ~language_uit() noexcept = default;
 
-  virtual bool parse(const cmdlinet &cmdline);
-  virtual bool parse(const std::string &filename);
-  virtual bool typecheck();
-  virtual bool final();
+  bool parse(cmdlinet &cmdline);
+  bool parse(const std::string &filename, cmdlinet &cmdline);
+  bool typecheck();
+  bool final();
 
-  virtual void clear_parse()
+  void clear_parse()
   {
     langmap.clear();
   }

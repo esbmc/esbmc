@@ -49,7 +49,7 @@ public:
   static optionst get_default_options(cmdlinet cmd);
 
 private:
-  static bool parse(const cmdlinet &cmdline, language_uit &l);
+  static bool parse(cmdlinet &cmdline, language_uit &l);
   static void
   create_file_from(std::istream &c_inputstream, std::string filename);
   static void create_file_from(std::string &str, std::string filename);

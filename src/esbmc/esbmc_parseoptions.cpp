@@ -1787,6 +1787,11 @@ bool esbmc_parseoptionst::parse_goto_program(
         exit(0);
     }
 
+    if (cmdline.isset("force-malloc-success"))
+    {
+      options.set_option("force-malloc-success", true);
+    }
+
     // Typechecking (old frontend) or adjust (clang frontend)
     if (typecheck())
       return true;
