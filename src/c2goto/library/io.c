@@ -524,5 +524,23 @@ int *__errno(void)
 __ESBMC_HIDE:;
   return &__esbmc_errno;
 }
+#endif
 
+// Windows-specific I/O functions
+#if defined(_WIN32) || defined(_MSVC)
+FILE *__acrt_iob_func(unsigned index)
+{
+__ESBMC_HIDE:;
+  // Windows uses this to get stdin(0), stdout(1), stderr(2)
+  static FILE stdin_file, stdout_file, stderr_file;
+
+  if (index == 0)
+    return &stdin_file; // stdin
+  if (index == 1)
+    return &stdout_file; // stdout
+  if (index == 2)
+    return &stderr_file; // stderr
+
+  return NULL; // invalid index
+}
 #endif

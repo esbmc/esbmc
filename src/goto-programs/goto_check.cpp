@@ -396,10 +396,16 @@ void goto_checkt::input_overflow_check(
     arg_names.push_back(arg_name);
   }
 
-  if (limits.size() != arg_names.size())
+  if (limits.size() > arg_names.size())
   {
-    log_error("the format specifiers do not match with the arguments");
+    log_error("too few arguments for format specifiers");
     return;
+  }
+  else if (limits.size() < arg_names.size())
+  {
+    log_debug(
+      "scanf", "extra arguments provided beyond format specifiers (ignored)");
+    arg_names.resize(limits.size());
   }
 
   // do checks
