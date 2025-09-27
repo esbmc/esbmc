@@ -35,7 +35,6 @@ solidity_convertert::solidity_convertert(
     contract_path(_contract_path),
     current_functionDecl(nullptr),
     current_forStmt(nullptr),
-    current_typeName(nullptr),
     expr_frontBlockDecl(code_blockt()),
     expr_backBlockDecl(code_blockt()),
     ctor_frontBlockDecl(code_blockt()),
@@ -49,7 +48,6 @@ solidity_convertert::solidity_convertert(
     is_bound(false),
     is_reentry_check(false),
     is_pointer_check(true),
-    is_array_member(true),
     nondet_bool_expr(),
     nondet_uint_expr()
 {
@@ -74,9 +72,6 @@ solidity_convertert::solidity_convertert(
       : config.options.get_option("no-standard-checks");
   if (!no_pointer_check.empty())
     is_pointer_check = false;
-
-  if (!has_array_push_pop_length(src_ast_json["nodes"]))
-    is_array_member = false;
 
   // initialize nondet_bool
   if (
@@ -1336,11 +1331,9 @@ bool solidity_convertert::get_var_decl(
   // For array, do NOT use ["typeName"]. Otherwise, it will cause problem
   // when populating typet in get_cast
 
-  const nlohmann::json *old_typeName = current_typeName;
-  current_typeName = &ast_node["typeName"];
-  if (get_type_description(ast_node["typeName"]["typeDescriptions"], t))
+  if (get_type_description(
+        ast_node, ast_node["typeName"]["typeDescriptions"], t))
     return true;
-  current_typeName = old_typeName;
 
   bool is_contract =
     t.get("#sol_type").as_string() == "CONTRACT" ? true : false;
@@ -1426,6 +1419,9 @@ bool solidity_convertert::get_var_decl(
   // For state var decl, we look for "value".
   // For local var decl, we look for "initialValue"
   bool has_init = (ast_node.contains("value") || !initialValue.empty());
+  // For inherited ones, the initial value will be set in "move_inheritance_to_ctor()"
+  // e.g. D.x = B.x
+  // Therefore, even if the copied json nodes contain init_value (has_init = true), we still skip such settings.
   bool set_init = has_init && !is_inherited;
   const nlohmann::json init_value =
     ast_node.contains("value") ? ast_node["value"] : initialValue;
@@ -1445,6 +1441,23 @@ bool solidity_convertert::get_var_decl(
   // 7. populate init value if there is any
   // special handling for array/dynarray
   std::string t_sol_type = t.get("#sol_type").as_string();
+
+  // this pointer
+  exprt this_expr;
+  if (!current_contractName.empty())
+  {
+    if (current_functionDecl)
+    {
+      if (get_func_decl_this_ref(*current_functionDecl, this_expr))
+        return true;
+    }
+    else
+    {
+      if (get_ctor_decl_this_ref(ast_node, this_expr))
+        return true;
+    }
+  }
+
   exprt val;
   if (t_sol_type == "ARRAY" || t_sol_type == "ARRAY_LITERAL")
   {
@@ -1493,6 +1506,7 @@ bool solidity_convertert::get_var_decl(
       acpy_call.arguments().push_back(size_of_expr);
       // typecast
       solidity_gen_typecast(ns, acpy_call, t);
+      acpy_call.type().set("#sol_array_size", arr_size);
       // set as rvalue
       added_symbol.value = acpy_call;
       decl.operands().push_back(acpy_call);
@@ -1513,15 +1527,18 @@ bool solidity_convertert::get_var_decl(
   }
   else if (t_sol_type == "DYNARRAY" && set_init)
   {
+    // Note for inherited dynamic array, they will be registered in
+    // D.dyn_arr = _ESBMC_arrcpy(B.dyn_ar)
     exprt val;
     if (get_init_expr(init_value, literal_type, t, val))
       return true;
 
-    if (val.is_typecast() || val.type().get("#sol_type") == "NEW_ARRAY")
+    if (val.is_typecast() || val.type().get("#sol_type") == "ARRAY_CALLOC")
     {
       // uint[] zz = new uint(10);
       // uint[] zz = new uint(len);
       //=> uint* zz = (uint *)calloc(10, sizeof(uint));
+      //=> uint* zz = (uint *)calloc(len, sizeof(uint));
       solidity_gen_typecast(ns, val, t);
       added_symbol.value = val;
       decl.operands().push_back(val);
@@ -1534,19 +1551,15 @@ bool solidity_convertert::get_var_decl(
         return true;
 
       // construct statement _ESBMC_store_array(zz, 10);
-      if (is_array_member)
-      {
-        exprt func_call;
+      exprt func_call;
+      if (is_state_var)
+        store_update_dyn_array(
+          member_exprt(this_expr, added_symbol.name, added_symbol.type),
+          size_expr,
+          func_call);
+      else
         store_update_dyn_array(symbol_expr(added_symbol), size_expr, func_call);
-
-        if (is_state_var && !is_inherited)
-        {
-          // move to ctor initializer
-          move_to_initializer(func_call);
-        }
-        else
-          move_to_back_block(func_call);
-      }
+      move_to_back_block(func_call);
     }
     else if (val.is_symbol())
     {
@@ -1554,8 +1567,6 @@ bool solidity_convertert::get_var_decl(
       uint[] zzz;           // uint* zzz; // will not reach here actually
                             // 
       uint[] zzzz = [1,2];  // memcpy(zzzz, tmp2, 2*sizeof(uint));
-                            // uint* zzzzz = 0;
-      uint[2] zzzzz = z;    // memcpy(zzzzz, z, 2*sizeof(uint));
                             // uint* zzzzz = 0;
       uint[] zzzzzz = zzz;  // memcpy(zzzzzz, zzz, zzz.size * sizeof(uint));
 
@@ -1571,6 +1582,7 @@ bool solidity_convertert::get_var_decl(
       get_size_of_expr(t.subtype(), size_of_expr);
 
       side_effect_expr_function_callt acpy_call;
+      // we will store the array inside the copy function
       get_arrcpy_function_call(location_begin, acpy_call);
       acpy_call.arguments().push_back(val);
       acpy_call.arguments().push_back(size_expr);
@@ -1581,20 +1593,16 @@ bool solidity_convertert::get_var_decl(
       added_symbol.value = acpy_call;
       decl.operands().push_back(acpy_call);
 
-      // construct statement _ESBMC_store_array(zz, 10);
-      if (is_array_member)
-      {
-        exprt func_call;
+      // store length
+      exprt func_call;
+      if (is_state_var)
+        store_update_dyn_array(
+          member_exprt(this_expr, added_symbol.name, added_symbol.type),
+          size_expr,
+          func_call);
+      else
         store_update_dyn_array(symbol_expr(added_symbol), size_expr, func_call);
-
-        if (is_state_var && !is_inherited)
-        {
-          // move to ctor initializer
-          move_to_initializer(func_call);
-        }
-        else
-          move_to_back_block(func_call);
-      }
+      move_to_back_block(func_call);
     }
     else
     {
@@ -1648,17 +1656,6 @@ bool solidity_convertert::get_var_decl(
     inits.op0() = op0;
 
     // address => this->
-    exprt this_expr;
-    if (current_functionDecl)
-    {
-      if (get_func_decl_this_ref(*current_functionDecl, this_expr))
-        return true;
-    }
-    else
-    {
-      if (get_ctor_decl_this_ref(ast_node, this_expr))
-        return true;
-    }
     exprt addr_expr = member_exprt(this_expr, "$address", addr_t);
     solidity_gen_typecast(
       ns, addr_expr, to_struct_type(map_t).components().at(1).type());
@@ -1876,7 +1873,6 @@ bool solidity_convertert::get_contract_definition(const std::string &c_name)
   auto old_current_functionName = current_functionName;
   auto old_current_functionDecl = current_functionDecl;
   auto old_current_forStmt = current_forStmt;
-  auto old_current_typeName = current_typeName;
   auto old_initializers = initializers;
 
   // reset
@@ -1958,7 +1954,6 @@ bool solidity_convertert::get_contract_definition(const std::string &c_name)
   current_functionName = old_current_functionName;
   current_functionDecl = old_current_functionDecl;
   current_forStmt = old_current_forStmt;
-  current_typeName = old_current_typeName;
   initializers = old_initializers;
 
   return false;
@@ -3677,11 +3672,61 @@ bool solidity_convertert::get_func_modifier(
     if (get_block(mod_def["body"], mod_body))
       return true;
 
-    for (auto &stmt : mod_body.operands())
+    // merge the body
+    auto stmt = mod_body.operands().begin();
+    while (stmt != mod_body.operands().end())
     {
-      if (stmt.get_bool("#is_modifier_placeholder"))
-        stmt = body_exprt;
+      if (stmt->get_bool("#is_modifier_placeholder"))
+      {
+        stmt = mod_body.operands().erase(stmt);
+        stmt = mod_body.operands().insert(
+          stmt, body_exprt.operands().begin(), body_exprt.operands().end());
+      }
+      else
+        ++stmt;
     }
+
+    if (has_return)
+    {
+      // int ret
+      // ...
+      // ret = func_modifier();
+      // ...
+      // return ret // insert in the end
+
+      // 1. add the aux decl in the front
+      std::string ret_name, ret_id;
+      get_aux_var(ret_name, ret_id);
+      symbolt ret_symbol;
+      get_default_symbol(
+        ret_symbol, debug_mode, aux_type.return_type(), ret_name, ret_id, loc);
+      // move the symbol to the context
+      symbolt &ret_sym = *move_symbol_to_context(ret_symbol);
+      code_declt ret_decl(symbol_expr(ret_sym));
+      //ret_sym.value = func_modifier;
+      // ret_decl.operands().push_back(func_modifier);
+      mod_body.operands().insert(mod_body.operands().begin(), ret_decl);
+
+      // 2. replace every "return x" to "aux_var = x"
+      for (auto op = mod_body.operands().begin();
+           op != mod_body.operands().end();
+           ++op)
+      {
+        if (op->is_code() && op->statement() == "return")
+        {
+          // make assignment
+          exprt rhs = op->op0();
+          code_assignt assign(symbol_expr(ret_sym), rhs);
+          *op = assign;
+        }
+      }
+
+      // 3. insert "return aux_var" in the end
+      code_returnt return_expr = code_returnt();
+      return_expr.return_value() = symbol_expr(ret_sym);
+      mod_body.move_to_operands(return_expr);
+    }
+
     a_sym.value = mod_body;
 
     // reset
@@ -3776,7 +3821,6 @@ void solidity_convertert::reset_auxiliary_vars()
   current_functionName = "";
   current_functionDecl = nullptr;
   current_forStmt = nullptr;
-  current_typeName = nullptr;
   initializers.clear();
 }
 
@@ -6637,19 +6681,13 @@ bool solidity_convertert::get_binary_operator_expr(
       // do array copy
       side_effect_expr_function_callt acpy_call;
       get_arrcpy_function_call(lhs.location(), acpy_call);
+
       acpy_call.arguments().push_back(rhs);
       acpy_call.arguments().push_back(size_expr);
       acpy_call.arguments().push_back(size_of_expr);
       solidity_gen_typecast(ns, acpy_call, lt);
 
       rhs = acpy_call;
-
-      if (lt_sol == "DYNARRAY" && is_array_member)
-      {
-        exprt store_call;
-        store_update_dyn_array(lhs, size_expr, store_call);
-        move_to_back_block(store_call);
-      }
     }
     else if (rt_sol == "DYNARRAY")
     {
@@ -6661,7 +6699,6 @@ bool solidity_convertert::get_binary_operator_expr(
 
       we convert it as 
         data1 = _ESBMC_arrcpy(ac, get_array_size(ac), type_size); 
-        _ESBMC_store_array(data1, ac_size);
       */
 
       // get size
@@ -6681,31 +6718,21 @@ bool solidity_convertert::get_binary_operator_expr(
       solidity_gen_typecast(ns, acpy_call, lt);
 
       rhs = acpy_call;
-
-      if (lt_sol == "DYNARRAY" && is_array_member)
-      {
-        exprt store_call;
-        store_update_dyn_array(lhs, size_expr, store_call);
-        move_to_back_block(store_call);
-      }
       // fall through to do assignment
     }
-    else if (rt_sol == "NEW_ARRAY")
+    else if (rt_sol == "ARRAY_CALLOC")
     {
       /* e.g. 
-        int[] public data1;
         int[] memory ac;
         ac = new int[](10);
-
-      we convert it as 
-        ac = new int[](10);
-        _ESBMC_store_array(ac, ac_size); 
-        */
+      */
       exprt size_expr;
       if (!rhs_json.contains("arguments"))
         abort();
       nlohmann::json callee_arg_json = rhs_json["arguments"][0];
       const nlohmann::json literal_type = callee_arg_json["typeDescriptions"];
+
+      // get new array
       if (get_expr(callee_arg_json, literal_type, size_expr))
         return true;
 
@@ -6716,19 +6743,13 @@ bool solidity_convertert::get_binary_operator_expr(
       // do array copy
       side_effect_expr_function_callt acpy_call;
       get_arrcpy_function_call(lhs.location(), acpy_call);
+
       acpy_call.arguments().push_back(rhs);
       acpy_call.arguments().push_back(size_expr);
       acpy_call.arguments().push_back(size_of_expr);
       solidity_gen_typecast(ns, acpy_call, lt);
 
       rhs = acpy_call;
-
-      if (lt_sol == "DYNARRAY" && is_array_member)
-      {
-        exprt store_call;
-        store_update_dyn_array(lhs, size_expr, store_call);
-        move_to_back_block(store_call);
-      }
     }
     else if (lt_sol == "STRING")
     {
@@ -7260,11 +7281,8 @@ bool solidity_convertert::get_var_decl_ref(
     return true;
 
   typet type;
-  const nlohmann::json *old_typeName = current_typeName;
-  current_typeName = &decl["typeName"];
-  if (get_type_description(decl["typeName"]["typeDescriptions"], type))
+  if (get_type_description(decl, decl["typeName"]["typeDescriptions"], type))
     return true;
-  current_typeName = old_typeName;
 
   bool is_global_static_mapping =
     type.get("#sol_type") == "MAPPING" && type.is_array();
@@ -7683,15 +7701,29 @@ bool solidity_convertert::get_sol_builtin_ref(
         std::string solt = base_t.get("#sol_type").as_string();
         if (solt.find("ARRAY") != std::string::npos)
         {
-          side_effect_expr_function_callt length_expr;
-          get_library_function_call_no_args(
-            "_ESBMC_array_length",
-            "c:@F@_ESBMC_array_length",
-            uint_type(),
-            l,
-            length_expr);
-          length_expr.arguments().push_back(base);
-          new_expr = length_expr;
+          // dynamic array
+          if (solt.find("DYNARRAY") != std::string::npos)
+          {
+            side_effect_expr_function_callt length_expr;
+            get_library_function_call_no_args(
+              "_ESBMC_array_length",
+              "c:@F@_ESBMC_array_length",
+              uint_type(),
+              l,
+              length_expr);
+            length_expr.arguments().push_back(base);
+            new_expr = length_expr;
+          }
+          else
+          {
+            // static array:  uint[2] arr; arr.length = 2;
+            std::string arr_size = base_t.get("#sol_array_size").as_string();
+            assert(!arr_size.empty());
+            new_expr = constant_exprt(
+              integer2binary(string2integer(arr_size), bv_width(uint_type())),
+              arr_size,
+              uint_type());
+          }
         }
         else if (is_byte_type(base_t))
         {
@@ -7914,6 +7946,14 @@ bool solidity_convertert::get_type_description(
   const nlohmann::json &type_name,
   typet &new_type)
 {
+  return get_type_description(empty_json, type_name, new_type);
+}
+
+bool solidity_convertert::get_type_description(
+  const nlohmann::json &decl,
+  const nlohmann::json &type_name,
+  typet &new_type)
+{
   // For Solidity rule type-name:
   SolidityGrammar::TypeNameT type = SolidityGrammar::get_type_name_t(type_name);
 
@@ -7990,6 +8030,81 @@ bool solidity_convertert::get_type_description(
     new_type = gen_pointer_type(sub_type);
     break;
   }
+  case SolidityGrammar::TypeNameT::NestedArrayTypeName:
+  {
+    /* e.g.
+    "typeDescriptions": {
+        "typeIdentifier": "t_array$_t_array$_t_int256_$4_storage_$dyn_storage",
+        "typeString": "int256[4][]"
+    },
+    "typeName": {
+        "baseType": {
+            "baseType": {
+                "id": 2,
+                "name": "int",
+                "nodeType": "ElementaryTypeName",
+                "typeDescriptions": {
+                    "typeIdentifier": "t_int256",
+                    "typeString": "int256"
+                }
+            },
+            "id": 4,
+            "length": {
+                "hexValue": "34",
+                "id": 3,
+                "isConstant": false,
+                "isLValue": false,
+                "isPure": true,
+                "kind": "number",
+                "lValueRequested": false,
+                "nodeType": "Literal",
+                "typeDescriptions": {
+                    "typeIdentifier": "t_rational_4_by_1",
+                    "typeString": "int_const 4"
+                },
+                "value": "4"
+            },
+            "nodeType": "ArrayTypeName",
+            "typeDescriptions": {
+                "typeIdentifier": "t_array$_t_int256_$4_storage_ptr",
+                "typeString": "int256[4]"
+            }
+        },
+        "id": 5,
+        "nodeType": "ArrayTypeName",
+        "typeDescriptions": {
+            "typeIdentifier": "t_array$_t_array$_t_int256_$4_storage_$dyn_storage_ptr",
+            "typeString": "int256[4][]"
+        }
+    convert it to: 
+
+    pointer
+    * subtype: array
+        * size: constant
+            * type: unsignedbv
+                * width: 64
+            * value: 0000000000000000000000000000000000000000000000000000000000000100
+            * #cformat: 4
+        * subtype: signedbv
+            * width: 32
+            * #cpp_type: signed_int
+    */
+    assert(decl["typeName"].contains("baseType"));
+
+    // get base: e.g. int256[4]
+    typet base_type;
+    if (get_type_description(
+          decl["typeName"],
+          decl["typeName"]["baseType"]["typeDescriptions"],
+          base_type))
+      return true;
+
+    // wrap it:
+    if (get_array_pointer_type(decl, base_type, new_type))
+      return true;
+
+    break;
+  }
   case SolidityGrammar::TypeNameT::ArrayTypeName:
   case SolidityGrammar::TypeNameT::DynArrayTypeName:
   {
@@ -8002,28 +8117,16 @@ bool solidity_convertert::get_type_description(
 
     typet the_type;
     exprt the_size;
-    if (current_typeName != nullptr)
+    if (!decl.empty())
     {
       // access from get_var_decl
-      assert((*current_typeName).contains("baseType"));
+      assert(decl["typeName"].contains("baseType"));
       if (get_type_description(
-            (*current_typeName)["baseType"]["typeDescriptions"], the_type))
+            decl["typeName"]["baseType"]["typeDescriptions"], the_type))
         return true;
 
-      new_type = gen_pointer_type(the_type);
-      if ((*current_typeName).contains("length"))
-      {
-        assert(type == SolidityGrammar::TypeNameT::ArrayTypeName);
-        std::string length =
-          (*current_typeName)["length"]["value"].get<std::string>();
-        new_type.set("#sol_array_size", length);
-        new_type.set("#sol_type", "ARRAY");
-      }
-      else
-      {
-        assert(type == SolidityGrammar::TypeNameT::DynArrayTypeName);
-        new_type.set("#sol_type", "DYNARRAY");
-      }
+      if (get_array_pointer_type(decl, the_type, new_type))
+        return true;
     }
     else if (type == SolidityGrammar::TypeNameT::ArrayTypeName)
     {
@@ -8914,7 +9017,8 @@ bool solidity_convertert::get_dynamic_pool(
  * @return true if any array push/pop/length usage is found (excluding bytes).
  * @return false otherwise.
  */
-bool solidity_convertert::has_array_push_pop_length(const nlohmann::json &node)
+bool solidity_convertert::check_array_push_pop_length(
+  const nlohmann::json &node)
 {
   auto is_array_type_not_bytes = [](const nlohmann::json &type_desc) -> bool {
     if (!type_desc.is_object())
@@ -8951,7 +9055,7 @@ bool solidity_convertert::has_array_push_pop_length(const nlohmann::json &node)
 
     for (const auto &kv : node.items())
     {
-      if (has_array_push_pop_length(kv.value()))
+      if (check_array_push_pop_length(kv.value()))
         return true;
     }
   }
@@ -8959,7 +9063,7 @@ bool solidity_convertert::has_array_push_pop_length(const nlohmann::json &node)
   {
     for (const auto &element : node)
     {
-      if (has_array_push_pop_length(element))
+      if (check_array_push_pop_length(element))
         return true;
     }
   }
@@ -9785,12 +9889,9 @@ bool solidity_convertert::get_parameter_list(
     const nlohmann::json &rtn_type = type_name["parameters"].at(0);
     if (rtn_type.contains("typeName"))
     {
-      const nlohmann::json *old_typeName = current_typeName;
-      current_typeName = &rtn_type["typeName"];
       if (get_type_description(
-            rtn_type["typeName"]["typeDescriptions"], new_type))
+            rtn_type, rtn_type["typeName"]["typeDescriptions"], new_type))
         return true;
-      current_typeName = old_typeName;
     }
     else
     {
@@ -10462,6 +10563,65 @@ solidity_convertert::find_constructor_ref(const std::string &contract_name)
   log_debug("solidity", "\t@@@ Failed to find explicit constructor");
   // implicit constructor call
   return empty_json;
+}
+
+/*
+  e.g.
+  uint constant x = 1;
+  uint constant y = x;
+=>
+  value = "1"
+*/
+bool solidity_convertert::get_constant_value(
+  const int ref_id,
+  std::string &value)
+{
+  log_debug("solidity", "get constant var's value");
+  nlohmann::json tmp = find_decl_ref_unique_id(src_ast_json, ref_id);
+  while (!tmp.empty() && tmp.contains("value"))
+  {
+    auto val_json = tmp["value"];
+    if (!val_json.contains("value"))
+    {
+      assert(val_json.contains("referencedDeclaration"));
+      int new_ref_id = val_json["referencedDeclaration"].get<int>();
+      tmp = find_decl_ref_unique_id(src_ast_json, new_ref_id);
+    }
+    else
+    {
+      value = tmp["value"]["value"].get<std::string>();
+      return false;
+    }
+  }
+
+  return true;
+}
+
+bool solidity_convertert::get_array_pointer_type(
+  const nlohmann::json &decl,
+  const typet &base_type,
+  typet &new_type)
+{
+  new_type = gen_pointer_type(base_type);
+  if (decl["typeName"].contains("length"))
+  {
+    std::string length;
+    if (decl["typeName"]["length"].contains("value"))
+      length = decl["typeName"]["length"]["value"].get<std::string>();
+    else
+    {
+      // assume it's a constant
+      assert(decl["typeName"]["length"].contains("referencedDeclaration"));
+      if (get_constant_value(
+            decl["typeName"]["length"]["referencedDeclaration"], length))
+        return true;
+    }
+    new_type.set("#sol_array_size", length);
+    new_type.set("#sol_type", "ARRAY");
+  }
+  else
+    new_type.set("#sol_type", "DYNARRAY");
+  return false;
 }
 
 void solidity_convertert::get_default_symbol(
@@ -12537,8 +12697,7 @@ bool solidity_convertert::get_empty_array_ref(
   calc_call.arguments().push_back(size);
   calc_call.arguments().push_back(size_of_expr);
   new_expr = calc_call;
-
-  new_expr.type().set("#sol_type", "NEW_ARRAY");
+  new_expr.type().set("#sol_type", "ARRAY_CALLOC");
 
   return false;
 }

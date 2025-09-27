@@ -314,6 +314,10 @@ protected:
   bool get_enum_member_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_esbmc_builtin_ref(const nlohmann::json &decl, exprt &new_expr);
   bool get_type_description(const nlohmann::json &type_name, typet &new_type);
+  bool get_type_description(
+    const nlohmann::json &decl,
+    const nlohmann::json &type_name,
+    typet &new_type);
   bool get_func_decl_ref_type(const nlohmann::json &decl, typet &new_type);
   bool get_array_to_pointer_type(const nlohmann::json &decl, typet &new_type);
   bool
@@ -404,7 +408,7 @@ protected:
     const exprt &dyn_arr,
     const exprt &size_expr,
     exprt &store_call);
-  bool has_array_push_pop_length(const nlohmann::json &node);
+  bool check_array_push_pop_length(const nlohmann::json &node);
 
   // tuple
   bool get_tuple_definition(const nlohmann::json &ast_node);
@@ -516,6 +520,12 @@ protected:
     std::string name,
     std::string id,
     locationt location);
+
+  bool get_constant_value(const int ref_id, std::string &value);
+  bool get_array_pointer_type(
+    const nlohmann::json &decl,
+    const typet &base_type,
+    typet &new_type);
 
   bool get_ctor_call_id(const std::string &contract_name, std::string &ctor_id);
   std::string get_explicit_ctor_call_id(const std::string &contract_name);
@@ -668,7 +678,6 @@ protected:
 
   const nlohmann::json *current_functionDecl;
   const nlohmann::json *current_forStmt;
-  const nlohmann::json *current_typeName;
   // store multiple exprt and flatten the block
   code_blockt expr_frontBlockDecl;
   code_blockt expr_backBlockDecl;
@@ -727,9 +736,6 @@ protected:
 
   // pointer-check setting
   bool is_pointer_check;
-
-  // dynamic array
-  bool is_array_member;
 
   // NONDET
   side_effect_expr_function_callt nondet_bool_expr;

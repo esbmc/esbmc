@@ -46,6 +46,9 @@ enum TypeNameT
   // dynamic array type
   DynArrayTypeName,
 
+  // Multi-Dimensional Arrays
+  NestedArrayTypeName,
+
   // Address type
   AddressTypeName,
   AddressPayableTypeName,
