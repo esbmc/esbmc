@@ -283,6 +283,7 @@ def get_command_line(strat, prop, arch, benchmark, concurrency, dargs, esbmc_ci)
     command_line += "--no-pointer-check --no-bounds-check --memory-leak-check --no-assertions "
     strat = "incr"
   elif prop == Property.reach:
+    strat = "incr"
     command_line += "--enable-unreachability-intrinsic "
     if concurrency:
       command_line += "--no-pointer-check --no-bounds-check "
