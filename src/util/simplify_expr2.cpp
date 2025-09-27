@@ -1018,7 +1018,15 @@ expr2tc pointer_offset2t::do_simplify() const
     if (is_index2t(addrof.ptr_obj))
     {
       const index2t &index = to_index2t(addrof.ptr_obj);
-      if (is_constant_int2t(index.index))
+
+      // check if index is constant, looking through typecasts
+      expr2tc index_value = index.index;
+
+      // Look through typecast to find the underlying constant
+      if (is_typecast2t(index_value))
+        index_value = to_typecast2t(index_value).from;
+
+      if (is_constant_int2t(index_value))
       {
         expr2tc offs =
           try_simplification(compute_pointer_offset(addrof.ptr_obj));

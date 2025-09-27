@@ -22,7 +22,6 @@ union TestUnion {
 
 int main()
 {
-#if 1
   int *p, *q;
   int x = 10, y = -1;
 
@@ -134,7 +133,7 @@ int main()
 
   assert(__ESBMC_POINTER_OFFSET(char_array) == 0);
   assert(__ESBMC_POINTER_OFFSET(double_array) == 0);
-#endif
+  
   // Arrays inside structs
   struct ArrayStruct {
     int prefix;
@@ -146,7 +145,6 @@ int main()
          offsetof(struct ArrayStruct, data));
   assert(__ESBMC_POINTER_OFFSET(&array_struct.data[5]) ==
          offsetof(struct ArrayStruct, data) + 5 * sizeof(int));
-#if 1
   // Pointer casts should preserve offsets
   char *char_ptr = (char*)(&arr[4]);
   assert(__ESBMC_POINTER_OFFSET(char_ptr) == 4 * sizeof(int));
@@ -160,7 +158,7 @@ int main()
   int symbolic_offset_neg = -100;
 
   assert(__ESBMC_POINTER_OFFSET(mid_ptr - symbolic_offset_neg) == 600 * sizeof(int));
-#endif
+  
   return 0;
 }
 
