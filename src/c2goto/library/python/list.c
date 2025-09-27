@@ -51,11 +51,6 @@ static bool list_eq(const List *l1, const List *l2)
     const Object *a = &l1->items[i];
     const Object *b = &l2->items[i];
 
-    if (a->type_id != b->type_id)
-      return false;
-    if (a->size != b->size)
-      return false;
-
     // Same address => element equal; keep checking the rest.
     if (a->value == b->value)
     {
@@ -63,12 +58,12 @@ static bool list_eq(const List *l1, const List *l2)
       continue;
     }
 
-    // If either is NULL (and not the same address), not equal.
-    if (!a->value || !b->value)
+    if (
+      !a->value || !b->value || a->type_id != b->type_id ||
+      a->size != b->size || memcmp(a->value, b->value, a->size) != 0)
+    {
       return false;
-
-    if (memcmp(a->value, b->value, a->size) != 0)
-      return false;
+    }
 
     ++i;
   }
@@ -120,8 +115,6 @@ list_push(List *l, const void *value, size_t type_id, size_t type_size)
 
   // Force malloc to succeed for verification
   __ESBMC_assume(copied_value != NULL);
-  if (copied_value == NULL)
-    return false;
 
   memcpy(copied_value, value, type_size);
 

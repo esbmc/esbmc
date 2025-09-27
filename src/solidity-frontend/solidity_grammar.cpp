@@ -718,6 +718,10 @@ StatementT get_statement_t(const nlohmann::json &stmt)
   {
     return PlaceholderStatement;
   }
+  else if (stmt["nodeType"] == "TryStatement")
+  {
+    return TryStatement;
+  }
   else
   {
     log_error(
@@ -745,6 +749,7 @@ const char *statement_to_str(StatementT type)
     ENUM_TO_STR(RevertStatement)
     ENUM_TO_STR(EmitStatement)
     ENUM_TO_STR(PlaceholderStatement)
+    ENUM_TO_STR(TryStatement)
   default:
   {
     assert(!"Unknown statement type");
