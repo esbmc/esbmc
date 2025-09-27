@@ -20,6 +20,14 @@ union TestUnion {
   double d;
 };
 
+struct OuterStruct {
+    int data[10];
+    struct InnerStruct {
+        double x[5];
+        char y;
+    } inner;
+};
+
 int main()
 {
   int *p, *q;
@@ -158,7 +166,21 @@ int main()
   int symbolic_offset_neg = -100;
 
   assert(__ESBMC_POINTER_OFFSET(mid_ptr - symbolic_offset_neg) == 600 * sizeof(int));
-  
+ 
+  // Complex typecasting scenarios with pointer arithmetic
+  int arr2[10];
+  int symbolic_index = 7;
+  assert(__ESBMC_POINTER_OFFSET(&arr2[symbolic_index]) == symbolic_index * sizeof(int));
+
+  // Handling NULL Pointer
+  assert(__ESBMC_POINTER_OFFSET(nullp) == 0);
+
+  // Symbolic Pointer Arithmetic on Struct with Nested Arrays
+  struct OuterStruct outer;
+  symbolic_index = 7;
+  assert(__ESBMC_POINTER_OFFSET(&outer.data[symbolic_index]) == symbolic_index * sizeof(int));
+  assert(__ESBMC_POINTER_OFFSET(&outer.inner.x[symbolic_index]) != symbolic_index * sizeof(double));
+ 
   return 0;
 }
 
