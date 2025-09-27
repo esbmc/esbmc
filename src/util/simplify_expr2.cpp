@@ -1006,6 +1006,17 @@ expr2tc pointer_offset2t::do_simplify() const
   // XXX - this could be better. But the current implementation catches most
   // cases that ESBMC produces internally.
 
+  if (is_symbol2t(ptr_obj) && to_symbol2t(ptr_obj).thename == "NULL")
+  {
+    if (is_pointer_type(ptr_obj->type))
+    {
+      const pointer_type2t &ptr_type = to_pointer_type(ptr_obj->type);
+      // Allow NULL simplification for pointer types to primitives
+      if (!is_symbol_type(ptr_type.subtype))
+        return gen_zero(type);
+    }
+  }
+
   if (is_address_of2t(ptr_obj))
   {
     const address_of2t &addrof = to_address_of2t(ptr_obj);
@@ -1015,7 +1026,15 @@ expr2tc pointer_offset2t::do_simplify() const
     if (is_index2t(addrof.ptr_obj))
     {
       const index2t &index = to_index2t(addrof.ptr_obj);
-      if (is_constant_int2t(index.index))
+
+      // check if index is constant, looking through typecasts
+      expr2tc index_value = index.index;
+
+      // Look through typecast to find the underlying constant
+      if (is_typecast2t(index_value))
+        index_value = to_typecast2t(index_value).from;
+
+      if (is_constant_int2t(index_value))
       {
         expr2tc offs =
           try_simplification(compute_pointer_offset(addrof.ptr_obj));
