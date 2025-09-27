@@ -1,6 +1,5 @@
 #include <goto-programs/goto_functions.h>
 #include <goto-programs/goto_convert_class.h>
-#include <goto-programs/loop_unroll.h>
 #include <langapi/language_util.h>
 #include <unordered_set>
 

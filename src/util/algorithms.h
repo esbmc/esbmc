@@ -51,6 +51,8 @@ public:
   {
   }
 
+  virtual ~goto_functions_algorithm() = default;
+
   unsigned get_number_of_functions()
   {
     return number_of_functions;
