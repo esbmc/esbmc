@@ -1007,7 +1007,15 @@ expr2tc pointer_offset2t::do_simplify() const
   // cases that ESBMC produces internally.
 
   if (is_symbol2t(ptr_obj) && to_symbol2t(ptr_obj).thename == "NULL")
-    return gen_zero(type);
+  {
+    if (is_pointer_type(ptr_obj->type))
+    {
+      const pointer_type2t &ptr_type = to_pointer_type(ptr_obj->type);
+      // Allow NULL simplification for pointer types to primitives
+      if (!is_symbol_type(ptr_type.subtype))
+        return gen_zero(type);
+    }
+  }
 
   if (is_address_of2t(ptr_obj))
   {
