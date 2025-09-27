@@ -1,5 +1,4 @@
 CORE
 main.py
---force-malloc-success --incremental-bmc
-
+--force-malloc-success --unwind 9  --no-pointer-check --no-unwinding-assertions
 ^VERIFICATION FAILED$
