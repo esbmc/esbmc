@@ -1,4 +1,4 @@
 CORE
 main.c
---fixedbv --no-slice --ir --z3
+--fixedbv --incremental-bmc --ir --z3
 ^VERIFICATION FAILED$
