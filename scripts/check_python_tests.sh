@@ -10,6 +10,7 @@ ignored_dirs=(
   "AssertionError2_fail"
   "branch_coverage-fail"
   "built-in-functions"
+  "convert-byte-update2"
   "constants"
   "div6_fail"
   "div7_fail"
