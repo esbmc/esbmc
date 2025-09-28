@@ -30,37 +30,45 @@ smt_astt smt_convt::convert_byte_extract_int_mode(
     source = typecast2tc(get_uint_type(src_width), source);
   }
 
+  // Ensure we work with integer types only in int_encoding mode
+  type2tc target_type = get_uint_type(src_width);
+  if (!is_bv_type(source->type) && !is_fixedbv_type(source->type))
+  {
+    source = typecast2tc(target_type, source);
+  }
+
   if (!is_constant_int2t(offs))
   {
     // Non-constant offset case - use mathematical operations
     // to simulate bit shifting and extraction
 
-    // Ensure offset is the same type as source for arithmetic operations
-    if (offs->type->get_width() != source->type->get_width())
-      offs = typecast2tc(source->type, offs);
+    // Ensure offset is integer type and same width as source
+    if (
+      !is_bv_type(offs->type) ||
+      offs->type->get_width() != source->type->get_width())
+      offs = typecast2tc(target_type, offs);
 
     // Handle endianness by adjusting the offset
     if (data.big_endian)
     {
       auto data_size = type_byte_size(source->type);
-      expr2tc data_size_expr = constant_int2tc(source->type, data_size - 1);
-      offs = sub2tc(source->type, data_size_expr, offs);
+      expr2tc data_size_expr = constant_int2tc(target_type, data_size - 1);
+      offs = sub2tc(target_type, data_size_expr, offs);
     }
 
     // Convert byte offset to bit offset (multiply by bits per byte)
     expr2tc bit_offset = mul2tc(
-      offs->type,
+      target_type,
       offs,
-      constant_int2tc(offs->type, BigInt(config.ansi_c.char_width)));
+      constant_int2tc(target_type, BigInt(config.ansi_c.char_width)));
 
     // Simulate right shift using division by 2^bit_offset
     expr2tc shifted_source = create_int_right_shift(source, bit_offset);
 
-    // Extract bottom byte using bitwise AND with byte mask (2^char_width - 1)
-    BigInt byte_mask_value =
-      (BigInt(1) << config.ansi_c.char_width) - BigInt(1);
-    expr2tc byte_mask = constant_int2tc(source->type, byte_mask_value);
-    expr2tc extracted_byte = bitand2tc(source->type, shifted_source, byte_mask);
+    // Extract bottom byte using modulo
+    BigInt byte_modulus = BigInt(1) << config.ansi_c.char_width;
+    expr2tc byte_mod = constant_int2tc(target_type, byte_modulus);
+    expr2tc extracted_byte = modulus2tc(target_type, shifted_source, byte_mod);
 
     return convert_ast(extracted_byte);
   }
@@ -99,15 +107,14 @@ smt_astt smt_convt::convert_byte_extract_int_mode(
     // Perform integer division to simulate right shift
     if (shift_amount > 0)
     {
-      expr2tc divisor_expr = constant_int2tc(source->type, divisor);
-      source = div2tc(source->type, source, divisor_expr);
+      expr2tc divisor_expr = constant_int2tc(target_type, divisor);
+      source = div2tc(target_type, source, divisor_expr);
     }
 
-    // Extract bottom byte using bitwise AND with byte mask (2^char_width - 1)
-    BigInt byte_mask_value =
-      (BigInt(1) << config.ansi_c.char_width) - BigInt(1);
-    expr2tc byte_mask = constant_int2tc(source->type, byte_mask_value);
-    expr2tc result = bitand2tc(source->type, source, byte_mask);
+    // Extract bottom byte using modulo
+    BigInt byte_modulus = BigInt(1) << config.ansi_c.char_width;
+    expr2tc byte_mod = constant_int2tc(target_type, byte_modulus);
+    expr2tc result = modulus2tc(target_type, source, byte_mod);
 
     return convert_ast(result);
   }
@@ -182,23 +189,36 @@ expr2tc smt_convt::create_int_right_shift(expr2tc source, expr2tc shift_amount)
   // For non-constant shift amounts, we use conditional expressions
   // for common shift amounts (bit-aligned shifts from 0 to 64)
 
+  // Ensure both operands are the same integer type
+  type2tc target_type = source->type;
+  if (!is_bv_type(target_type))
+    target_type = get_uint_type(source->type->get_width());
+
+  // Ensure shift_amount has the same type as source
+  if (shift_amount->type != target_type)
+    shift_amount = typecast2tc(target_type, shift_amount);
+
+  // Ensure source has the target type
+  if (source->type != target_type)
+    source = typecast2tc(target_type, source);
+
   expr2tc result = source;
 
   // Create conditional chain for shift amounts up to pointer width (architecture-dependent)
   for (size_t i = config.ansi_c.char_width; i <= config.ansi_c.pointer_width();
        i += config.ansi_c.char_width) // Only byte-aligned shifts for efficiency
   {
-    expr2tc i_expr = constant_int2tc(shift_amount->type, BigInt(i));
+    expr2tc i_expr = constant_int2tc(target_type, BigInt(i));
     expr2tc condition = equality2tc(shift_amount, i_expr);
 
     BigInt divisor = BigInt(1);
     for (size_t j = 0; j < i; j++)
       divisor = divisor * BigInt(2);
 
-    expr2tc divisor_expr = constant_int2tc(source->type, divisor);
-    expr2tc shifted = div2tc(source->type, source, divisor_expr);
+    expr2tc divisor_expr = constant_int2tc(target_type, divisor);
+    expr2tc shifted = div2tc(target_type, source, divisor_expr);
 
-    result = if2tc(source->type, condition, shifted, result);
+    result = if2tc(target_type, condition, shifted, result);
   }
 
   return result;
@@ -247,13 +267,22 @@ smt_astt smt_convt::convert_byte_update_int_mode(const byte_update2t &data)
   type2tc original_source_type = source->type;
   bool need_type_conversion_back = false;
 
-  if (!is_number_type(source->type))
+  // Use consistent integer type for all operations
+  type2tc target_type = get_uint_type(src_width);
+
+  if (!is_number_type(source->type) || !is_bv_type(source->type))
   {
-    source = typecast2tc(get_uint_type(src_width), source);
+    source = typecast2tc(target_type, source);
     need_type_conversion_back = true;
   }
+  else if (source->type != target_type)
+  {
+    source = typecast2tc(target_type, source);
+    if (!is_bv_type(original_source_type))
+      need_type_conversion_back = true;
+  }
 
-  // Ensure update value is properly sized
+  // Ensure update value is properly sized and typed
   if (!is_number_type(update_value->type))
     update_value = typecast2tc(get_uint_type(8), update_value);
   else if (update_value->type->get_width() != 8)
@@ -278,16 +307,22 @@ expr2tc smt_convt::convert_byte_update_int_mode_expr(
   expr2tc update_value,
   unsigned int src_width)
 {
-  // Ensure offset is the same type as source for arithmetic operations
-  if (offs->type->get_width() != source->type->get_width())
-    offs = typecast2tc(source->type, offs);
+  // Use consistent integer type for all operations
+  type2tc target_type = get_uint_type(src_width);
+
+  // Ensure all operands have the same integer type
+  if (source->type != target_type)
+    source = typecast2tc(target_type, source);
+
+  if (offs->type != target_type)
+    offs = typecast2tc(target_type, offs);
 
   // Handle endianness by adjusting the offset
   if (data.big_endian)
   {
     auto data_size = type_byte_size(source->type);
-    expr2tc data_size_expr = constant_int2tc(source->type, data_size - 1);
-    offs = sub2tc(source->type, data_size_expr, offs);
+    expr2tc data_size_expr = constant_int2tc(target_type, data_size - 1);
+    offs = sub2tc(target_type, data_size_expr, offs);
   }
 
   expr2tc result = source; // Default case
@@ -297,54 +332,52 @@ expr2tc smt_convt::convert_byte_update_int_mode_expr(
 
   for (unsigned int byte_pos = 0; byte_pos < max_bytes; byte_pos++)
   {
-    expr2tc byte_pos_expr = constant_int2tc(offs->type, BigInt(byte_pos));
+    expr2tc byte_pos_expr = constant_int2tc(target_type, BigInt(byte_pos));
     expr2tc condition = equality2tc(offs, byte_pos_expr);
 
     // Calculate bit offset for this byte position
     unsigned int shift_amount = byte_pos * config.ansi_c.char_width;
 
-    // Create mask to clear the target byte using expressions
-    BigInt byte_mask_value =
-      (BigInt(1) << config.ansi_c.char_width) - BigInt(1);
-    expr2tc byte_mask = constant_int2tc(source->type, byte_mask_value);
+    // For integer encoding, we use mathematical operations instead of bitwise operations
+    // to clear and set bytes
 
-    // Create positioned mask by shifting the byte mask
-    expr2tc positioned_mask;
+    // Calculate the value of the byte at the target position
+    expr2tc byte_divisor;
     if (shift_amount > 0)
     {
-      BigInt shift_multiplier = BigInt(1) << shift_amount;
-      expr2tc shift_expr = constant_int2tc(source->type, shift_multiplier);
-      positioned_mask = mul2tc(source->type, byte_mask, shift_expr);
+      BigInt divisor_value = BigInt(1) << shift_amount;
+      byte_divisor = constant_int2tc(target_type, divisor_value);
     }
     else
-      positioned_mask = byte_mask;
-
-    // Create clear mask by inverting the positioned mask
-    expr2tc clear_mask = bitnot2tc(source->type, positioned_mask);
-
-    // Clear the target byte in source
-    expr2tc cleared_source = bitand2tc(source->type, source, clear_mask);
-
-    // Prepare update value - extend to source width and shift to position
-    expr2tc extended_update = typecast2tc(source->type, update_value);
-
-    expr2tc positioned_update;
-    if (shift_amount > 0)
     {
-      // Left shift the update value to the correct position using multiplication
-      BigInt shift_multiplier = BigInt(1) << shift_amount;
-      expr2tc shift_expr = constant_int2tc(source->type, shift_multiplier);
-      positioned_update = mul2tc(source->type, extended_update, shift_expr);
+      byte_divisor = constant_int2tc(target_type, BigInt(1));
     }
-    else
-      positioned_update = extended_update;
 
-    // Combine cleared source with positioned update value
+    // Extract the current byte at this position
+    expr2tc shifted_source = div2tc(target_type, source, byte_divisor);
+    BigInt byte_modulus = BigInt(1) << config.ansi_c.char_width;
+    expr2tc byte_mod = constant_int2tc(target_type, byte_modulus);
+    expr2tc current_byte = modulus2tc(target_type, shifted_source, byte_mod);
+
+    // Calculate the contribution of this byte to the source value
+    expr2tc current_byte_contribution =
+      mul2tc(target_type, current_byte, byte_divisor);
+
+    // Remove the current byte from source
+    expr2tc source_without_byte =
+      sub2tc(target_type, source, current_byte_contribution);
+
+    // Prepare the new byte value - extend to target type
+    expr2tc extended_update = typecast2tc(target_type, update_value);
+    expr2tc new_byte_contribution =
+      mul2tc(target_type, extended_update, byte_divisor);
+
+    // Add the new byte to the source
     expr2tc updated_value =
-      bitor2tc(source->type, cleared_source, positioned_update);
+      add2tc(target_type, source_without_byte, new_byte_contribution);
 
     // Add this case to the conditional chain
-    result = if2tc(source->type, condition, updated_value, result);
+    result = if2tc(target_type, condition, updated_value, result);
   }
 
   return result;
