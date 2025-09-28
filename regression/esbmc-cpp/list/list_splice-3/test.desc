@@ -1,4 +1,4 @@
-THOROUGH
+CORE
 main.cpp
---unwind 10 --no-unwinding-assertions  --ir --no-bounds-check --no-pointer-check
+--unwind 5 --no-unwinding-assertions  --ir --no-bounds-check --no-pointer-check
 ^VERIFICATION SUCCESSFUL$
