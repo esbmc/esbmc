@@ -817,37 +817,122 @@ void goto_symext::symex_input(const code_function_call2t &func_call)
 {
   assert(is_symbol2t(func_call.function));
 
-  unsigned number_of_format_args, fmt_idx;
+  unsigned fmt_idx;
   const irep_idt func_name = to_symbol2t(func_call.function).thename;
 
   if (func_name == "c:@F@scanf")
   {
     assert(func_call.operands.size() >= 2 && "Wrong scanf signature");
     fmt_idx = 0;
-    number_of_format_args = func_call.operands.size() - 1;
   }
   else if (func_name == "c:@F@fscanf" || func_name == "c:@F@sscanf")
   {
     assert(func_call.operands.size() >= 3 && "Wrong fscanf/sscanf signature");
     fmt_idx = 1;
-    number_of_format_args = func_call.operands.size() - 2;
   }
   else
     abort();
 
   cur_state->source.pc--;
 
+  // Get the format string and count actual format specifiers
+  expr2tc fmt_operand = func_call.operands[fmt_idx];
+  cur_state->rename(fmt_operand);
+
+  unsigned actual_format_count = 0;
+
+  // Try to get the format string value to count specifiers
+  const expr2tc &base_expr = get_base_object(fmt_operand);
+  if (is_constant_string2t(base_expr))
+  {
+    std::string format_str = to_constant_string2t(base_expr).value.as_string();
+
+    // Count format specifiers in the string
+    // This is a simplified parser - handles %d, %s, %c, %f, etc.
+    // but not complex cases like %*d (ignored), %10d (width), etc.
+    for (size_t i = 0; i < format_str.length(); ++i)
+    {
+      if (format_str[i] == '%')
+      {
+        if (i + 1 < format_str.length())
+        {
+          if (format_str[i + 1] == '%')
+          {
+            // %% is an escaped %, not a format specifier
+            ++i; // skip the second %
+            continue;
+          }
+          else
+          {
+            // Skip any flags, width, precision specifiers
+            ++i;
+            while (i < format_str.length() &&
+                   (format_str[i] == '-' || format_str[i] == '+' ||
+                    format_str[i] == ' ' || format_str[i] == '#' ||
+                    format_str[i] == '0'))
+              ++i;
+
+            // Skip width
+            while (i < format_str.length() && isdigit(format_str[i]))
+              ++i;
+
+            // Skip precision
+            if (i < format_str.length() && format_str[i] == '.')
+            {
+              ++i;
+              while (i < format_str.length() && isdigit(format_str[i]))
+                ++i;
+            }
+
+            // Skip length modifiers (h, l, ll, etc.)
+            while (i < format_str.length() &&
+                   (format_str[i] == 'h' || format_str[i] == 'l' ||
+                    format_str[i] == 'L' || format_str[i] == 'z' ||
+                    format_str[i] == 'j' || format_str[i] == 't'))
+              ++i;
+            // Check for actual conversion specifier
+            if (i < format_str.length())
+            {
+              char spec = format_str[i];
+              if (
+                spec == 'd' || spec == 'i' || spec == 'o' || spec == 'u' ||
+                spec == 'x' || spec == 'X' || spec == 'f' || spec == 'F' ||
+                spec == 'e' || spec == 'E' || spec == 'g' || spec == 'G' ||
+                spec == 'a' || spec == 'A' || spec == 'c' || spec == 's' ||
+                spec == 'p' || spec == 'n')
+              {
+                // Skip %n since it doesn't consume input but still needs a pointer
+                if (spec != 'n')
+                  actual_format_count++;
+                else
+                  actual_format_count++; // %n still needs a parameter
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  else
+  {
+    // If we can't determine the format string statically,
+    // fall back to processing all provided arguments
+    actual_format_count = func_call.operands.size() - (fmt_idx + 1);
+  }
+
+  // Limit to available arguments
+  unsigned available_args = func_call.operands.size() - (fmt_idx + 1);
+  unsigned args_to_process = std::min(actual_format_count, available_args);
+
   if (func_call.ret)
     symex_assign(code_assign2tc(
-      func_call.ret,
-      constant_int2tc(int_type2(), BigInt(number_of_format_args))));
+      func_call.ret, constant_int2tc(int_type2(), BigInt(args_to_process))));
 
   // TODO: fill / cut off the inputs stream based on the length limits.
 
-  for (long unsigned int i = fmt_idx + 1; i <= number_of_format_args + fmt_idx;
-       i++)
+  for (unsigned i = 0; i < args_to_process; i++)
   {
-    expr2tc operand = func_call.operands[i];
+    expr2tc operand = func_call.operands[fmt_idx + 1 + i];
     internal_deref_items.clear();
     expr2tc deref = dereference2tc(get_empty_type(), operand);
     dereference(deref, dereferencet::INTERNAL);
