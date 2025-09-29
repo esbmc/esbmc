@@ -1,4 +1,4 @@
 CORE
 main.py
 
-^VERIFICATION FAILED$
+^ERROR: List out of bounds at\b

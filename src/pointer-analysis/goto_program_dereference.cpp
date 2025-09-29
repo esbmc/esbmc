@@ -3,7 +3,6 @@
 #include <irep2/irep2.h>
 #include <util/migrate.h>
 #include <util/prefix.h>
-#include <util/simplify_expr.h>
 #include <util/std_code.h>
 
 bool goto_program_dereferencet::has_failed_symbol(
@@ -124,7 +123,7 @@ void goto_program_dereferencet::dereference_program(
   for (goto_programt::instructionst::iterator it =
          goto_program.instructions.begin();
        it != goto_program.instructions.end();
-       it++)
+       ++it)
   {
     new_code.clear();
     assertions.clear();

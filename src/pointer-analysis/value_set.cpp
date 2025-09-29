@@ -13,7 +13,6 @@
 #include <util/message.h>
 #include <util/message/format.h>
 #include <util/prefix.h>
-#include <util/simplify_expr.h>
 #include <util/std_code.h>
 #include <util/std_expr.h>
 #include <util/type_byte_size.h>
@@ -172,7 +171,7 @@ bool value_sett::make_union(object_mapt &dest, const object_mapt &src) const
   bool result = false;
 
   // Merge the pointed at objects in src into dest.
-  for (object_mapt::const_iterator it = src.begin(); it != src.end(); it++)
+  for (object_mapt::const_iterator it = src.begin(); it != src.end(); ++it)
   {
     if (insert(dest, it))
       result = true;
@@ -191,7 +190,7 @@ void value_sett::get_value_set(const expr2tc &expr, value_setst::valuest &dest)
   // Convert values into expressions to return.
   for (object_mapt::const_iterator it = object_map.begin();
        it != object_map.end();
-       it++)
+       ++it)
     dest.push_back(to_expr(it));
 }
 
@@ -783,7 +782,7 @@ void value_sett::get_reference_set(
   // Then convert to expressions into the destination list.
   for (object_mapt::const_iterator it = object_map.begin();
        it != object_map.end();
-       it++)
+       ++it)
     dest.push_back(to_expr(it));
 }
 

@@ -1,10 +1,12 @@
+#include <c2goto/cprover_library.h>
 #include <ac_config.h>
 #include <boost/filesystem.hpp>
-#include <c2goto/cprover_library.h>
 #include <cstdlib>
 #include <fstream>
 #include <goto-programs/goto_binary_reader.h>
 #include <goto-programs/goto_functions.h>
+#include <util/context.h>
+#include <util/message.h>
 #include <util/c_link.h>
 #include <util/config.h>
 #include <util/language.h>
@@ -88,7 +90,21 @@ static const struct buffer
 #endif
 };
 
+// The goto reader will only pick up symbols for these functions and their dependencies
+// This is a Python-specific whitelist invoked when you use set_functions_to_read
 const static std::vector<std::string> python_c_models = {
+  "list_create",
+  "list_in_bounds",
+  "list_at",
+  "list_cat",
+  "list_get_as",
+  "list_push",
+  "list_push_object",
+  "list_replace",
+  "list_pop",
+  "list_size",
+  "list_hash_string",
+  "list_eq",
   "strncmp",
   "strcmp",
   "strlen",
@@ -147,28 +163,37 @@ static void generate_symbol_deps(
   {
     type = std::pair<irep_idt, irep_idt>(name, irep.identifier());
     deps.insert(type);
-    return;
+
+    /* Cannot return here just yet
+     * Symbol identifier may point to variable identifier
+     * Further traversal needed to find type identifier if exists
+     */
   }
 
   forall_irep (irep_it, irep.get_sub())
   {
-    if (irep_it->id() == "symbol")
-    {
-      type = std::pair<irep_idt, irep_idt>(name, irep_it->identifier());
-      deps.insert(type);
-      generate_symbol_deps(name, *irep_it, deps);
-    }
-    else if (irep_it->id() == "argument")
+    if (irep_it->id() == "argument")
     {
       type = std::pair<irep_idt, irep_idt>(name, irep_it->cmt_identifier());
       deps.insert(type);
     }
     else
     {
+      /* Even if symbol & identifier found, further traversal might be needed for type identifier
+       * Continue traversing to find symbol dependencies
+       * The subcall will add the symbol identifier before traversing named and unnamed ireps so does not need to be done explicitly here
+       */
       generate_symbol_deps(name, *irep_it, deps);
     }
   }
 
+  /* The case where symbol identifier is reached but there are more nested type symbols
+   * has only been seen so far when these higher-level symbols are unnamed ireps.
+   *        (in particular inside an "operands" named_irep the layer above that)
+   * Therefore named_irep iterator should be able to terminate on named_irep symbols
+   * If there are future symbol resolution issues, consider changing this to also keep traversing
+   *        For debugging, you can look at the nested structure via irept::pretty()
+   */
   forall_named_irep (irep_it, irep.get_named_sub())
   {
     if (irep_it->second.id() == "symbol")
@@ -251,10 +276,19 @@ void add_cprover_library(contextt &context, const languaget *language)
   if (language && language->id() == "python")
     goto_reader.set_functions_to_read(python_c_models);
 
+  /* Python: actively has a function filter
+   *    - not everything makes it into new_ctx
+   *    - ignored symbols go into ignored_ctx
+   * Other languages: no function filter
+   *    - everything makes it into new_ctx
+   *    - ignored_ctx empty
+   */
+  contextt ignored_ctx;
   if (goto_reader.read_goto_binary_array(
-        clib->start, clib->size, new_ctx, goto_functions))
+        clib->start, clib->size, new_ctx, ignored_ctx, goto_functions))
     abort();
 
+  // Traverse symbols and get dependencies from both their nested types and values
   new_ctx.foreach_operand([&symbol_deps](const symbolt &s) {
     generate_symbol_deps(s.id, s.value, symbol_deps);
     generate_symbol_deps(s.id, s.type, symbol_deps);
@@ -274,36 +308,80 @@ void add_cprover_library(contextt &context, const languaget *language)
     dstring("pthread_join"), dstring("pthread_join_noswitch"));
   symbol_deps.insert(joincheck);
 
-  /* The code just pulled into store_ctx might use other symbols in the C
-   * library. So, repeatedly search for new C library symbols that we use but
-   * haven't pulled in, then pull them in. We finish when we've made a pass
-   * that adds no new symbols. */
+  /* Iterate through the new_ctx symbols, figure out which ones to go into store_ctx
+   *    For Python this is everything: new_ctx already has a filtering layer
+   *    For other frontends, only add symbols that exist already in context but value empty
+   * store_ctx is what actually gets merged into the existing, final context
+   */
 
-  new_ctx.foreach_operand(
-    [&context, &store_ctx, &symbol_deps, &to_include, &language](
-      const symbolt &s) {
-      const symbolt *symbol = context.find_symbol(s.id);
-      if (
-        (language && language->id() == "python") ||
-        (symbol != nullptr && symbol->value.is_nil()))
-      {
-        store_ctx.add(s);
-        ingest_symbol(s.id, symbol_deps, to_include);
-      }
-    });
+  new_ctx.foreach_operand([&context,
+                           &store_ctx,
+                           &symbol_deps,
+                           &to_include,
+                           &language](const symbolt &s) {
+    const symbolt *symbol = context.find_symbol(s.id);
+    if (
+      (language && language->id() == "python") ||
+      (symbol != nullptr && symbol->value.is_nil()))
+    {
+      store_ctx.add(s);
 
+      // ingest_symbol takes this added symbol and goes through symbol_deps
+      // it only moves dependencies from symbol_deps to to_include
+      //    if they're dependencies for a symbol that is definitely being included
+      //    (i.e. in store_ctx)
+      ingest_symbol(s.id, symbol_deps, to_include);
+    }
+  });
+
+  /* Now iterate through the dependencies that we know we want to add (due to ingest_symbol filter)
+   * These will be symbols that didn't make it into store_ctx
+   * 
+   * For Python:
+   *    - symbols that didn't make it into store_ctx didn't make it because they're not in new_ctx
+   *    - they will be found in ignored_ctx
+   * 
+   * For other frontends:
+   *    - every symbol made it into new_ctx (no ignored_ctx)
+   *    - not every symbol made it into store_ctx from new_ctx
+   *    - they will be found in new_ctx
+   */
   for (std::list<irep_idt>::const_iterator nameit = to_include.begin();
        nameit != to_include.end();
        nameit++)
   {
-    symbolt *s = new_ctx.find_symbol(*nameit);
+    symbolt *s;
+
+    // Look in the appropriate place for this symbol
+    if ((language && language->id() == "python"))
+    {
+      s = ignored_ctx.find_symbol(*nameit);
+    }
+    else
+    {
+      s = new_ctx.find_symbol(*nameit);
+    }
+
     if (s != nullptr)
     {
       store_ctx.add(*s);
+
+      /* Python frontend hasn't looked for dependencies for symbols that aren't in
+       * the function whitelist, (since they're not put in new_ctx); other frontends
+       * have these dependencies already available in symbol_deps.
+       * Therefore add dependencies that result from this new symbol
+       */
+      if (language && language->id() == "python")
+      {
+        generate_symbol_deps(s->id, s->value, symbol_deps);
+        generate_symbol_deps(s->id, s->type, symbol_deps);
+      }
+
       ingest_symbol(*nameit, symbol_deps, to_include);
     }
   }
 
+  // Bring store_ctx symbols into context
   if (c_link(context, store_ctx, "<built-in-library>"))
   {
     // Merging failed
