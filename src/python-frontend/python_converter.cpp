@@ -18,9 +18,10 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
-#include <iomanip>
 #include <fstream>
+#include <iomanip>
 #include <regex>
+#include <stdexcept>
 #include <sstream>
 #include <unordered_map>
 
@@ -4997,6 +4998,8 @@ void python_converter::convert()
         module_path << (*ast_json)["ast_output_dir"].get<std::string>() << "/"
                     << module_name << ".json";
         std::ifstream imported_file(module_path.str());
+        if (!imported_file.is_open())
+          throw std::runtime_error("Cannot open file: " + module_path.str());
         imported_file >> imported_module_json;
 
         current_python_file =
