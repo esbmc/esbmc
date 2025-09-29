@@ -3790,7 +3790,6 @@ expr2tc byte_extract2t::do_simplify() const
     const BigInt &off_value = to_constant_int2t(off).value;
     if (src->type == type && off_value.is_zero())
       return src;
-
     if (off_value.is_uint64() && is_constant_expr(src))
     {
       uint64_t off64 = off_value.to_uint64();

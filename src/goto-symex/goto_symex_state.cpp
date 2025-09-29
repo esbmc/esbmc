@@ -151,7 +151,8 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
     // TODO: enable other type will regress performance, need a TC
     // to reproduce
     if (
-      is_struct_type(with.source_value) && is_constant_expr(with.update_value))
+      is_struct_type(with.source_value) && !is_member2t(with.source_value) &&
+      is_constant_expr(with.update_value))
       return true;
 
     if (is_array_type(with.source_value) && is_constant_expr(with.update_value))

@@ -447,12 +447,7 @@ void value_sett::get_value_set_rec(
     object_mapt tmp_map0;
     get_value_set_rec(with.source_value, tmp_map0, suffix, original_type);
 
-    // this is the update value -- note NO SUFFIX
-    object_mapt tmp_map2;
-    get_value_set_rec(with.update_value, tmp_map2, "", original_type);
-
     make_union(dest, tmp_map0);
-    make_union(dest, tmp_map2);
     return;
   }
 
