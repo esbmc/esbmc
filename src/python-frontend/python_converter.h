@@ -108,6 +108,12 @@ private:
   friend class python_list;
   bool processing_list_elements = false;
 
+  // Add an extra flag to track ord/chr function
+  std::set<std::string> ord_chr_used_variables;
+
+  // Pre-scan to check if the ord/chr is used with char type
+  void prescan_ord_chr_usage(const nlohmann::json &node);
+
   template <typename Func>
   decltype(auto) with_ast(const nlohmann::json *new_ast, Func &&f)
   {
