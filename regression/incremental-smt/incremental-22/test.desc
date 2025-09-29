@@ -1,4 +1,4 @@
 CORE
 main.c
---k-induction --add-symex-value-sets --smt-during-symex --smt-symex-guard --smt-symex-assert
+--k-induction --add-symex-value-sets --smt-during-symex --smt-symex-guard --smt-symex-assert --loop-invariant
 ^VERIFICATION SUCCESSFUL$
