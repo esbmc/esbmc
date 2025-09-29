@@ -1,4 +1,4 @@
 CORE
 main.py
---force-malloc-success --unwind 9
+--force-malloc-success --unwind 9 --ir
 ^VERIFICATION FAILED$
