@@ -1,4 +1,4 @@
-THOROUGH
+CORE
 main.py
---force-malloc-success --unwind 9 --no-pointer-check --no-bounds-check --parallel-solving
+--force-malloc-success --unwind 9 --no-pointer-check --no-bounds-check --ir
 ^VERIFICATION SUCCESSFUL$
