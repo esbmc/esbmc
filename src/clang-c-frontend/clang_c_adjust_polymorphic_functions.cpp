@@ -427,6 +427,8 @@ code_blockt clang_c_adjust::instantiate_gcc_polymorphic_builtin(
   }
   else if (has_prefix(identifier.as_string(), "c:@F@__atomic_exchange_n"))
   {
+    // This atomic builtin follows GCC's __atomic built-in functions specification.
+    // See https://gcc.gnu.org/onlinedocs/gcc/_005f_005fatomic-Builtins.html.
     const typet &type = code_type.return_type();
 
     const exprt &result =
