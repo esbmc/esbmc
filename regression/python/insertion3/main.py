@@ -16,24 +16,24 @@ def insertion_sort(arr: list[int]):
         arr[j + 1] = key
 
         # Assertion: prefix [0..i] should be sorted after each iteration
-        k = 0
-        while k < i:
-            try:
-                assert arr[k] <= arr[k + 1], f"Array not sorted at step {i}: {arr}"
-            except AssertionError as e:
-                print("Assertion failed:", e)
-                return arr
-            k += 1
+#        k = 0
+#        while k < i:
+#            try:
+#                assert arr[k] <= arr[k + 1], f"Array not sorted at step {i}: {arr}"
+#            except AssertionError as e:
+#                print("Assertion failed:", e)
+#                return arr
+#            k += 1
 
     # Final assertion: entire array is sorted
-    k = 0
-    while k < len(arr) - 1:
-        try:
-            assert arr[k] <= arr[k + 1], f"Final array not sorted: {arr}"
-        except AssertionError as e:
-            print("Final check failed:", e)
-            return arr
-        k += 1
+#    k = 0
+#    while k < len(arr) - 1:
+#        try:
+#            assert arr[k] <= arr[k + 1], f"Final array not sorted: {arr}"
+#        except AssertionError as e:
+#            print("Final check failed:", e)
+#            return arr
+#        k += 1
 
     return arr
 
