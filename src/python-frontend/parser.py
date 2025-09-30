@@ -89,6 +89,12 @@ def is_standard_library_file(filename):
     return any(filename.startswith(path) for path in stdlib_paths)
 
 
+def expand_star_import(module) -> list[str] | None:
+    names = getattr(module, '__all__', None)
+    if names is None:
+        names = [n for n in dir(module) if not n.startswith('_')]
+    return names
+
 import_aliases = {}
 
 def process_imports(node, output_dir):
@@ -108,9 +114,13 @@ def process_imports(node, output_dir):
             alias = alias_node.asname or module_name
             import_aliases[alias] = module_name
         imported_elements = None
-    else: #ImportFrom
+    elif isinstance(node, ast.ImportFrom):
         module_name = node.module
-        imported_elements = node.names
+        # If it's a star import, set the list to None to import everything
+        if any(a.name == '*' for a in node.names):
+            imported_elements = None
+        else:
+            imported_elements = node.names
         if module_name:
             import_aliases[module_name] = module_name
 
@@ -122,22 +132,29 @@ def process_imports(node, output_dir):
         module = import_module_by_name(module_name, output_dir)
         filename = module.__file__
 
+    if imported_elements is None:  # handle import *
+        try:
+            resolved_import_names = expand_star_import(module) # from __all__ or fallback
+            imported_elements = [ast.alias(n, None) for n in resolved_import_names]
+        except Exception:
+            imported_elements = None  # if it fails, keep None to import everything in the JSON
+
+
     # Add the full path recovered from importlib to the import node
     node.full_path = filename
 
-    # Generate JSON file for imported elements
-    try:
-        with open(filename, "r") as source:
-            tree = ast.parse(source.read())
-            if not is_standard_library_file(filename):
-              preprocessor = Preprocessor(filename)
-              tree = preprocessor.visit(tree)
-            generate_ast_json(tree, filename, imported_elements, output_dir)
-    except UnicodeDecodeError:
-        pass
+    if filename and not is_standard_library_file(filename):
+        try:
+            with open(filename, "r", encoding="utf-8") as source:
+                tree = ast.parse(source.read())
+                preprocessor = Preprocessor(filename)
+                tree = preprocessor.visit(tree)
+                generate_ast_json(tree, filename, imported_elements, output_dir, module_qualname=module_name)
+        except UnicodeDecodeError:
+            pass
 
 
-def generate_ast_json(tree, python_filename, elements_to_import, output_dir):
+def generate_ast_json(tree, python_filename, elements_to_import, output_dir, module_qualname=None):
     """
     Generate AST JSON from the given Python AST tree.
 
@@ -147,6 +164,8 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir):
         - elements_to_import: The elements (classes or functions) to be imported from the module.
         - output_dir: The directory to save the generated JSON file.
     """
+
+
 
     # Filter elements to be imported from the module
     filtered_nodes = []
@@ -169,18 +188,21 @@ def generate_ast_json(tree, python_filename, elements_to_import, output_dir):
     ast_json["filename"] = python_filename
     ast_json["ast_output_dir"] = output_dir
 
-    # Construct JSON filename
-    if python_filename.endswith('__init__.py'):
-        # Use the parent directory name instead of the filename
-        dir_name = os.path.basename(os.path.dirname(python_filename))
-        json_filename = os.path.join(output_dir, f"{dir_name}.json")
+     # Build JSON path
+    if module_qualname:
+        parts = module_qualname.split(".")
+        json_dir = os.path.join(output_dir, *parts[:-1])  # package subdirs
+        json_filename = os.path.join(json_dir, f"{parts[-1]}.json")
     else:
-        # Otherwise, use the filename without the '.py' extension
-        json_filename = os.path.join(output_dir, f"{os.path.basename(python_filename[:-3])}.json")
+        if python_filename.endswith('__init__.py'):
+            dir_name = os.path.basename(os.path.dirname(python_filename))
+            json_filename = os.path.join(output_dir, f"{dir_name}.json")
+        else:
+            json_filename = os.path.join(
+                output_dir, f"{os.path.basename(python_filename[:-3])}.json"
+            )
 
-    json_dir = os.path.dirname(json_filename)
-    if not os.path.exists(json_dir):
-        os.makedirs(json_dir)
+    os.makedirs(os.path.dirname(json_filename), exist_ok=True)
 
     # Write AST JSON to file
     try:
