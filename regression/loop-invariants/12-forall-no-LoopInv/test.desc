@@ -1,0 +1,4 @@
+CORE
+main.c
+--unwind 21 --z3 --loop-invariant
+^VERIFICATION SUCCESSFUL$
