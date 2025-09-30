@@ -4296,6 +4296,7 @@ void python_converter::get_return_statements(
         static_cast<code_function_callt &>(return_value);
       call.arguments().emplace(
         call.arguments().begin(), gen_address_of(temp_var_expr));
+      update_instance_from_self(func_name, func_name, temp_var_expr.id().as_string());
     }
 
     // Add the function call statement to the block
