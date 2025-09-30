@@ -3037,6 +3037,19 @@ exprt python_converter::get_expr(const nlohmann::json &element)
   return expr;
 }
 
+void python_converter::copy_instance_attributes(
+  const std::string &src_obj_id,
+  const std::string &target_obj_id)
+{
+  auto src_attrs = instance_attr_map.find(src_obj_id);
+
+  if (src_attrs != instance_attr_map.end())
+  {
+    std::set<std::string> &target_attrs = instance_attr_map[target_obj_id];
+    target_attrs.insert(src_attrs->second.begin(), src_attrs->second.end());
+  }
+}
+
 void python_converter::update_instance_from_self(
   const std::string &class_name,
   const std::string &func_name,
@@ -3044,15 +3057,7 @@ void python_converter::update_instance_from_self(
 {
   symbol_id sid(current_python_file, class_name, func_name);
   sid.set_object("self");
-
-  auto self_instance = instance_attr_map.find(sid.to_string());
-
-  if (self_instance != instance_attr_map.end())
-  {
-    std::set<std::string> &attr_list = instance_attr_map[obj_symbol_id];
-    attr_list.insert(
-      self_instance->second.begin(), self_instance->second.end());
-  }
+  copy_instance_attributes(sid.to_string(), obj_symbol_id);
 }
 
 size_t python_converter::get_type_size(const nlohmann::json &ast_node)
@@ -3281,6 +3286,26 @@ void python_converter::handle_assignment_type_adjustments(
     if (!rhs.type().is_empty() && !is_ctor_call)
       lhs_symbol->value = rhs;
   }
+}
+
+exprt python_converter::get_return_from_func(const char *func_symbol_id)
+{
+  symbolt *func_symbol = symbol_table_.find_symbol(func_symbol_id);
+  assert(func_symbol);
+
+  const auto &operands = func_symbol->value.operands();
+
+  for (std::vector<exprt>::const_reverse_iterator it = operands.rbegin();
+       it != operands.rend();
+       ++it)
+  {
+    const codet &c = to_code(*it);
+    if (c.statement() == "return")
+    {
+      return c;
+    }
+  }
+  return nil_exprt();
 }
 
 void python_converter::get_var_assign(
@@ -3516,6 +3541,24 @@ void python_converter::get_var_assign(
         update_instance_from_self(
           func_name, func_name, lhs_symbol->id.as_string());
       }
+      else
+      {
+        // update lhs attributes with attributes from the return node
+        symbolt *func_symbol =
+          symbol_table_.find_symbol(rhs.op1().identifier().c_str());
+        assert(func_symbol);
+        if (!static_cast<code_typet &>(func_symbol->type)
+               .return_type()
+               .is_empty())
+        {
+          if (auto ret = get_return_from_func(func_symbol->id.c_str());
+              !ret.is_nil())
+          {
+            copy_instance_attributes(
+              ret.op0().identifier().as_string(), lhs_symbol->id.as_string());
+          }
+        }
+      }
 
       if (!rhs.type().is_pointer() && !rhs.type().is_empty())
         rhs.op0() = lhs;
@@ -3524,27 +3567,11 @@ void python_converter::get_var_assign(
       {
         /* Update the element types of the LHS list with the value returned.
          * We should refine this to consider all reachable returns for this call.*/
-        symbolt *func_symbol =
-          symbol_table_.find_symbol(rhs.op1().identifier().c_str());
-        assert(func_symbol);
-
-        const auto &operands = func_symbol->value.operands();
-
-        for (std::vector<exprt>::const_reverse_iterator it = operands.rbegin();
-             it != operands.rend();
-             ++it)
+        if (auto ret = get_return_from_func(rhs.op1().identifier().c_str());
+            !ret.is_nil())
         {
-          const codet &c = to_code(*it);
-          if (c.statement() == "return")
-          {
-            const std::string &return_symbol_id =
-              c.op0().identifier().as_string();
-
-            python_list::copy_type_info(
-              return_symbol_id, lhs.identifier().as_string());
-
-            break;
-          }
+          python_list::copy_type_info(
+            ret.op0().identifier().as_string(), lhs.identifier().as_string());
         }
 
         typet l_type = type_handler_.get_list_type();
@@ -4296,7 +4323,8 @@ void python_converter::get_return_statements(
         static_cast<code_function_callt &>(return_value);
       call.arguments().emplace(
         call.arguments().begin(), gen_address_of(temp_var_expr));
-      update_instance_from_self(func_name, func_name, temp_var_expr.id().as_string());
+      update_instance_from_self(
+        func_name, func_name, temp_var_expr.identifier().as_string());
     }
 
     // Add the function call statement to the block
