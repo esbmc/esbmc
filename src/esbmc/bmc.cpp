@@ -924,6 +924,11 @@ smt_convt::resultt bmct::run(std::shared_ptr<symex_target_equationt> &eq)
     if (++interleaving_number > 1)
       log_status("Thread interleavings {}", interleaving_number);
 
+    // Clear the cache between thread interleavings to prevent
+    // incorrect caching of assertions with different thread contexts
+    if (!options.get_bool_option("no-cache-asserts"))
+      config.ssa_caching_db.clear();
+
     fine_timet bmc_start = current_time();
     res = run_thread(eq);
 
