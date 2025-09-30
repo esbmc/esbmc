@@ -65,7 +65,8 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
     if (
       !options.get_bool_option("no-cache-asserts") &&
       !options.get_bool_option("forward-condition") &&
-      !options.get_bool_option("k-induction"))
+      !options.get_bool_option("k-induction") &&
+      !options.get_bool_option("ltl"))
       // Store the set between runs
       algorithms.emplace_back(
         std::make_unique<assertion_cache>(config.ssa_caching_db));
