@@ -62,10 +62,12 @@ bmct::bmct(goto_functionst &funcs, optionst &opts, contextt &_context)
   // The next block will initialize the algorithms used for the analysis.
   {
     // Run cache if user has specified the option
-    if (!options.get_bool_option("no-cache-asserts"))
+    if (
+      !options.get_bool_option("no-cache-asserts") &&
+      !options.get_bool_option("forward-condition"))
       // Store the set between runs
-      algorithms.emplace_back(std::make_unique<assertion_cache>(
-        config.ssa_caching_db, !options.get_bool_option("forward-condition")));
+      algorithms.emplace_back(
+        std::make_unique<assertion_cache>(config.ssa_caching_db));
 
     if (opts.get_bool_option("no-slice"))
       algorithms.emplace_back(std::make_unique<simple_slice>());
