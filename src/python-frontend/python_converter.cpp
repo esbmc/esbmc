@@ -4,6 +4,7 @@
 #include <python-frontend/symbol_id.h>
 #include <python-frontend/function_call_builder.h>
 #include <python-frontend/python_list.h>
+#include <python-frontend/module_locator.h>
 #include <ansi-c/convert_float_literal.h>
 #include <util/std_code.h>
 #include <util/c_types.h>
@@ -18,9 +19,10 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
-#include <iomanip>
 #include <fstream>
+#include <iomanip>
 #include <regex>
+#include <stdexcept>
 #include <sstream>
 #include <unordered_map>
 
@@ -4985,6 +4987,8 @@ void python_converter::convert()
   else
   {
     // Convert imported modules
+    module_locator locator((*ast_json)["ast_output_dir"].get<std::string>());
+
     for (const auto &elem : (*ast_json)["body"])
     {
       if (elem["_type"] == "ImportFrom" || elem["_type"] == "Import")
@@ -4996,7 +5000,14 @@ void python_converter::convert()
         std::stringstream module_path;
         module_path << (*ast_json)["ast_output_dir"].get<std::string>() << "/"
                     << module_name << ".json";
-        std::ifstream imported_file(module_path.str());
+
+        std::ifstream imported_file = locator.open_module_file(module_name);
+        if (!imported_file.is_open())
+        {
+          throw std::runtime_error(
+            "Cannot open file: " + locator.module_path(module_name));
+        }
+
         imported_file >> imported_module_json;
 
         current_python_file =

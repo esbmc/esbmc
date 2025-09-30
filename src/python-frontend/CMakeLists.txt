@@ -16,6 +16,7 @@ add_library(pythonfrontend STATIC
             python_list.cpp
             pythonastgen.c
             module_manager.cpp
+            module_locator.cpp
             symbol_id.cpp
             type_handler.cpp
             function_call_expr.cpp
