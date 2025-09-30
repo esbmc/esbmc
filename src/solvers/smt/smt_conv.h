@@ -704,6 +704,20 @@ public:
   /** Convert a byte_update2tc, inserting a byte into the byte representation
    *  of some piece of data. */
   smt_astt convert_byte_update(const expr2tc &expr);
+  /** Convert a byte_update2tc in integer arithmetic mode, handling both
+   *  constant and non-constant offsets with proper type preservation. */
+  smt_astt convert_byte_update_int_mode(const byte_update2t &data);
+  /** Convert a byte_update2tc with offset in integer mode,
+   *  using conditional expressions for all possible byte positions. */
+  expr2tc convert_byte_update_int_mode_expr(
+    const byte_update2t &data,
+    expr2tc source,
+    expr2tc offs,
+    expr2tc update_value,
+    unsigned int src_width);
+  /** Convert a byte_update2tc using bitvector operations, preserving
+   *  the original bitvector-based implementation. */
+  smt_astt convert_byte_update_bv_mode(const byte_update2t &data);
   /** Convert a bitcast2tc, converting an expr to its bit representation. */
   smt_astt convert_bitcast(const expr2tc &expr);
   /** Convert the given expr to AST, then assert that AST */

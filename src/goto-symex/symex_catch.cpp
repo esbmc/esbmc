@@ -1,7 +1,6 @@
 #include <goto-symex/goto_symex.h>
 #include <irep2/irep2.h>
 #include <util/migrate.h>
-#include <util/simplify_expr.h>
 
 void goto_symext::symex_catch()
 {

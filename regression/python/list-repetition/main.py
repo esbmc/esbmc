@@ -2,8 +2,8 @@ def foo() -> None:
     x = 1
     arr = [1] * x
     assert arr[0] == 1
-    x = [1,2,3]
-    n = len(x)
+    y = [1,2,3]
+    n = len(y)
     z = [2] * n
     assert z[0] == 2
 
@@ -34,6 +34,7 @@ assert d[2] == 2
 
 e = [1,2,3]
 f = len(e)
+assert f == 3
 g = [3] * f
 assert g[0] == 3
 assert g[1] == 3

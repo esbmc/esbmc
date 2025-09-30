@@ -430,3 +430,12 @@ __ESBMC_HIDE:;
 
   return str;
 }
+
+void _exit(int status)
+{
+__ESBMC_HIDE:;
+  // Immediate process termination - end execution path
+  __ESBMC_assume(0);
+  while (1)
+    ; // Ensure function never returns to satisfy noreturn attribute
+}

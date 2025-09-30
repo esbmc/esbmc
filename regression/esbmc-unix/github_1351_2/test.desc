@@ -1,4 +1,4 @@
 CORE
 main.c
---incremental-bmc
+--incremental-bmc --base-k-step 2
 ^VERIFICATION FAILED$

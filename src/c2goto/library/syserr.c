@@ -105,3 +105,15 @@ __ESBMC_HIDE:;
 
   return sys_errlist[errnum];
 }
+
+void error(int status, int errnum, const char *format, ...)
+{
+__ESBMC_HIDE:;
+  // Print error message (modeled as no-op for verification)
+  // If status is non-zero, the function would normally exit
+  if (status != 0)
+  {
+    // Terminate execution path for verification
+    __ESBMC_assume(0);
+  }
+}

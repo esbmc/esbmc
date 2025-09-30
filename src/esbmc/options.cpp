@@ -246,7 +246,6 @@ const struct group_opt_templ all_cmd_options[] = {
      NULL,
      "disable the removal of NO-OP instructions in GOTO programs"},
     {"partial-loops", NULL, "permit paths with partial loops"},
-    {"unroll-loops", NULL, ""},
     {"no-slice", NULL, "do not remove unused equations"},
     {"multi-fail-fast",
      boost::program_options::value<int>()->value_name("n"),

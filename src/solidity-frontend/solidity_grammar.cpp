@@ -246,10 +246,11 @@ TypeNameT get_type_name_t(const nlohmann::json &type_name)
       //   Memory Array
 
       // Multi-Dimensional Arrays
-      if (typeIdentifier.find("t_array$_t_array$") != std::string::npos)
+      if (typeIdentifier.compare(0, 17, "t_array$_t_array$") == 0)
       {
-        log_error("Multi-Dimensional Arrays are not supported.");
-        abort();
+        log_debug(
+          "solidity", "Experimental support for multi-dimensional arrays.");
+        return NestedArrayTypeName;
       }
 
       if (typeIdentifier.find("$dyn") != std::string::npos)
@@ -356,6 +357,7 @@ const char *type_name_to_str(TypeNameT type)
     ENUM_TO_STR(PointerArrayToPtr)
     ENUM_TO_STR(ArrayTypeName)
     ENUM_TO_STR(DynArrayTypeName)
+    ENUM_TO_STR(NestedArrayTypeName)
     ENUM_TO_STR(ContractTypeName)
     ENUM_TO_STR(AddressTypeName)
     ENUM_TO_STR(AddressPayableTypeName)
@@ -718,6 +720,10 @@ StatementT get_statement_t(const nlohmann::json &stmt)
   {
     return PlaceholderStatement;
   }
+  else if (stmt["nodeType"] == "TryStatement")
+  {
+    return TryStatement;
+  }
   else
   {
     log_error(
@@ -745,6 +751,7 @@ const char *statement_to_str(StatementT type)
     ENUM_TO_STR(RevertStatement)
     ENUM_TO_STR(EmitStatement)
     ENUM_TO_STR(PlaceholderStatement)
+    ENUM_TO_STR(TryStatement)
   default:
   {
     assert(!"Unknown statement type");

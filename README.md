@@ -229,7 +229,7 @@ If nothing is found, then nothing is loaded. If you set the environment variable
 export ESBMC_CONFIG_FILE=""
 ```
 
-An example of a config file:
+This is an example of a config file:
 
 ```toml
 interval-analysis = true
