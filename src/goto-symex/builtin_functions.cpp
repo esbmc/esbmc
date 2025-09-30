@@ -2120,11 +2120,13 @@ void goto_symext::intrinsic_memcpy(
       expr2tc dst_idx = index2tc(
         chunk_type,
         dst_item.object,
-        constant_int2tc(get_uint64_type(), BigInt((dst_offset+i)/chunk_size)));  
+        constant_int2tc(
+          get_uint64_type(), BigInt((dst_offset + i) / chunk_size)));
       expr2tc src_idx = index2tc(
         chunk_type,
         src_item.object,
-        constant_int2tc(get_uint64_type(), BigInt((src_offset + i)/chunk_size)));
+        constant_int2tc(
+          get_uint64_type(), BigInt((src_offset + i) / chunk_size)));
       expr2tc value = src_idx;
       dereference(value, dereferencet::READ);
       symex_assign(code_assign2tc(dst_idx, value), false, guard);
