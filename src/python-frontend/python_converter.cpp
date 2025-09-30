@@ -4292,8 +4292,10 @@ void python_converter::get_return_statements(
     // If a constructor is being invoked, the temporary variable is passed as 'self'
     if (type_handler_.is_constructor_call(ast_node["value"]))
     {
-      code_function_callt& call = static_cast<code_function_callt&>(return_value);
-      call.arguments().emplace(call.arguments().begin(), gen_address_of(temp_var_expr));
+      code_function_callt &call =
+        static_cast<code_function_callt &>(return_value);
+      call.arguments().emplace(
+        call.arguments().begin(), gen_address_of(temp_var_expr));
     }
 
     // Add the function call statement to the block
