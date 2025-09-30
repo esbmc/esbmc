@@ -343,6 +343,7 @@ void goto_symext::symex_step(reachability_treet &art)
         log_status("Using intrinsic_memcpy for {}", id.as_string());
         cur_state->source.pc++;
         intrinsic_memcpy(art, call);
+        return;
       }
 
       if (id == "c:@F@scanf" || id == "c:@F@sscanf" || id == "c:@F@fscanf")

@@ -1926,14 +1926,14 @@ void goto_symext::intrinsic_memcpy(
   simplify(dst);
   simplify(src);
 
-  if (
+  /*if (
     (is_constant_int2t(dst) && to_constant_int2t(dst).value.is_zero()) ||
     (is_constant_int2t(src) && to_constant_int2t(src).value.is_zero()))
   {
     log_debug("memcpy", "NULL pointer operand, falling back");
     bump_call(func_call, "c:@F@__memcpy_impl");
     return;
-  }
+  }*/
 
   //When the value of a pointer is unknown or NULL
   if (is_nil_expr(dst) || is_nil_expr(src))
@@ -1956,7 +1956,7 @@ void goto_symext::intrinsic_memcpy(
   unsigned long num_bytes = to_constant_int2t(n).as_long();
 
   if (
-    num_bytes >= 4 && (is_struct_type(dst->type) || is_pointer_type(dst->type)))
+    num_bytes >= 2 && (is_struct_type(dst->type) || is_pointer_type(dst->type)))
   {
     type2tc target_type;
 
@@ -2056,6 +2056,31 @@ void goto_symext::intrinsic_memcpy(
 
   simplify(src_item.offset);
 
+  /*if (
+    (is_constant_int2t(dst) && to_constant_int2t(dst).value.is_zero()) ||
+    (is_constant_int2t(src) && to_constant_int2t(src).value.is_zero()))
+  {
+    log_debug("memcpy", "NULL pointer operand, falling back");
+    bump_call(func_call, "c:@F@__memcpy_impl");
+    return;
+  }
+  if (is_nil_expr(dst_item.object) || is_nil_expr(src_item.object)) {
+     bump_call(func_call, "c:@F@__memcpy_impl"); 
+     return;
+  }
+  if (is_constant_int2t(dst_item.object) && to_constant_int2t(dst_item.object).value.is_zero()) {
+     bump_call(func_call, "c:@F@__memcpy_impl"); 
+     return;
+  }
+  if (is_constant_int2t(src_item.object) && to_constant_int2t(src_item.object).value.is_zero()) {
+    bump_call(func_call, "c:@F@__memcpy_impl"); 
+    return;
+  }
+  if (!is_constant_int2t(dst_item.offset) || !is_constant_int2t(src_item.offset)){
+    bump_call(func_call, "c:@F@__memcpy_impl");
+    return;
+  }*/
+
   //Compute alingnment
   bool aligned =
     is_constant_int2t(dst_item.offset) && is_constant_int2t(src_item.offset);
@@ -2092,15 +2117,14 @@ void goto_symext::intrinsic_memcpy(
         chunk_type = get_uint8_type();
         break;
       }
-
       expr2tc dst_idx = index2tc(
         chunk_type,
         dst_item.object,
-        constant_int2tc(get_uint64_type(), BigInt(dst_offset + i)));
+        constant_int2tc(get_uint64_type(), BigInt((dst_offset+i)/chunk_size)));  
       expr2tc src_idx = index2tc(
         chunk_type,
         src_item.object,
-        constant_int2tc(get_uint64_type(), BigInt(src_offset + i)));
+        constant_int2tc(get_uint64_type(), BigInt((src_offset + i)/chunk_size)));
       expr2tc value = src_idx;
       dereference(value, dereferencet::READ);
       symex_assign(code_assign2tc(dst_idx, value), false, guard);
